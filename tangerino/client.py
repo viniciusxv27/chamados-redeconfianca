@@ -184,6 +184,56 @@ def limpar_base64(valor):
     return texto.strip()
 
 
+def para_wire(quando):
+    """Formata a data do jeito que a API do Tangerino espera: **em UTC**.
+
+    Descoberto na marra, comparando o que foi enviado com o que ficou gravado:
+    um clique às 15:54:50 (São Paulo) enviado como "2026-08-17T15:54:50"
+    virou 12:54:50 lá dentro. Ou seja, eles leem a string sem fuso como UTC e
+    exibem convertido para o fuso da empresa — o que subtraía 3 horas de toda
+    marcação. Mandando o horário já em UTC, grava certo.
+    """
+    if timezone.is_naive(quando):
+        quando = timezone.make_aware(quando)
+    return quando.astimezone(dt_timezone.utc).strftime('%Y-%m-%dT%H:%M:%S')
+
+
+def enviar_foto(foto_base64):
+    """Sobe a foto e devolve a URL dela no storage do Tangerino.
+
+    O ponto não guarda os bytes da imagem: guarda uma referência
+    (``photoIn.photoURL``). Mandar só ``photoContent`` passava na validação de
+    "tem foto?", mas a imagem não ficava anexada à marcação — era o que fazia a
+    foto sumir. O caminho certo é subir aqui e depois registrar o ponto com o
+    ``photoURL`` devolvido.
+
+    O corpo vai como text/plain puro, não JSON: é o que o endpoint aceita
+    (com JSON ele responde 406).
+    """
+    conteudo = limpar_base64(foto_base64)
+    if not conteudo:
+        return ''
+    if not integracao_ativa():
+        raise TangerinoDesligado('Integração com o Tangerino está desligada.')
+
+    token = getattr(settings, 'TANGERINO_TOKEN', '')
+    try:
+        resp = requests.post(
+            f'{PUNCH_BASE}/upload-pic-files',
+            headers={'Authorization': token, 'Content-Type': 'text/plain;charset=UTF-8'},
+            data=conteudo.encode('utf-8'), timeout=TIMEOUT)
+    except requests.RequestException as exc:
+        raise TangerinoError(f'Falha ao enviar a foto: {exc}') from exc
+
+    if resp.status_code >= 400:
+        raise TangerinoError(f'O Tangerino recusou a foto ({resp.status_code}): '
+                             f'{resp.text[:200]}')
+    url = (resp.text or '').strip()
+    if not url.startswith('http'):
+        raise TangerinoError('O Tangerino não devolveu a URL da foto.')
+    return url
+
+
 def registrar_ponto(employee_id, quando=None, latitude=None, longitude=None,
                     endereco='', origem='PORTAL RC', foto_base64=''):
     """Registra uma marcação AGORA (ou no horário informado).
@@ -198,17 +248,31 @@ def registrar_ponto(employee_id, quando=None, latitude=None, longitude=None,
     quando = quando or timezone.localtime()
     corpo = {
         'employeeId': employee_id,
-        'date': quando.strftime('%Y-%m-%dT%H:%M:%S'),
+        'date': para_wire(quando),
         'origin': origem,
         'timezoneId': str(timezone.get_current_timezone()),
         'validTimezone': True,
         'platform': 'WEB',
     }
+
+    # Foto: sobe primeiro e referencia pela URL. O photoContent segue junto
+    # porque é o que satisfaz a validação de "marcação web precisa de foto";
+    # a URL é o que faz a imagem realmente ficar anexada ao registro.
+    foto_url = ''
     foto = limpar_base64(foto_base64)
     if foto:
         corpo['photoContent'] = foto
+        try:
+            foto_url = enviar_foto(foto)
+            corpo['photoURL'] = foto_url
+        except TangerinoError as exc:
+            # Não trava a marcação por causa do storage de imagem: o ponto é o
+            # que não pode se perder. Quem chamou recebe o aviso e decide.
+            logger.warning('Foto não subiu, seguindo só com photoContent: %s', exc)
+
     if latitude is not None and longitude is not None:
-        corpo.update({'latitude': latitude, 'longitude': longitude, 'gpsDisable': False})
+        corpo.update({'latitude': latitude, 'longitude': longitude, 'gpsDisable': False,
+                      'mockLocationEnabled': False})
     else:
         corpo['gpsDisable'] = True
     if endereco:
@@ -217,6 +281,8 @@ def registrar_ponto(employee_id, quando=None, latitude=None, longitude=None,
     resposta = _post(PUNCH_BASE, '/register/web/1.1', corpo) or {}
     if resposta.get('success') is False:
         raise TangerinoError(resposta.get('message') or 'O Tangerino recusou a marcação.')
+    resposta['_foto_url'] = foto_url
+    resposta['_enviou_local'] = latitude is not None and longitude is not None
     return resposta
 
 
@@ -225,7 +291,7 @@ def registrar_ponto_atrasado(employee_id, quando, justificativa_id, observacao='
     """Marcação retroativa (ponto esquecido), que exige justificativa."""
     corpo = {
         'employeeId': employee_id,
-        'date': quando.strftime('%Y-%m-%dT%H:%M:%S'),
+        'date': para_wire(quando),          # em UTC, mesmo motivo do ponto normal
         'manualEditingJustificationId': justificativa_id,
         'latePunch': True,
         'origin': 'PORTAL RC',
@@ -236,6 +302,10 @@ def registrar_ponto_atrasado(employee_id, quando, justificativa_id, observacao='
     foto = limpar_base64(foto_base64)
     if foto:
         corpo['photoContent'] = foto
+        try:
+            corpo['photoURL'] = enviar_foto(foto)
+        except TangerinoError as exc:
+            logger.warning('Foto da marcação retroativa não subiu: %s', exc)
     if observacao:
         corpo['observationEmployee'] = observacao[:250]
     resposta = _post(PUNCH_BASE, '/register/late/1.1', corpo) or {}

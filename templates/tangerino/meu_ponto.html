@@ -405,7 +405,13 @@
                 if (d.sucesso) {
                     fecharCamera();
                     avisar('Ponto registrado às ' + d.hora + (d.nsr ? ' (NSR ' + d.nsr + ')' : ''), 'success');
-                    setTimeout(function () { location.reload(); }, 900);
+                    // Se algo do registro não foi junto, a pessoa fica sabendo agora.
+                    if (d.avisos && d.avisos.length) {
+                        setTimeout(function () {
+                            avisar('Atenção: ' + d.avisos.join(' e ') + '.', 'error');
+                        }, 400);
+                    }
+                    setTimeout(function () { location.reload(); }, 1800);
                 } else {
                     confirmar.disabled = false;
                     confirmar.innerHTML = '<i class="fas fa-check mr-1"></i>Registrar ponto';
@@ -419,11 +425,13 @@
             });
         }
 
+        // A localização acompanha a marcação. Negar não impede o ponto — mas o
+        // servidor devolve o aviso de que ela não foi junto.
         if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
                 function (pos) { enviar({latitude: pos.coords.latitude, longitude: pos.coords.longitude}); },
                 function () { enviar({}); },
-                {timeout: 6000, maximumAge: 60000}
+                {timeout: 12000, maximumAge: 30000, enableHighAccuracy: true}
             );
         } else { enviar({}); }
     }

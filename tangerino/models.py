@@ -220,6 +220,12 @@ class RegistroPontoPortal(models.Model):
     criado_em = models.DateTimeField(auto_now_add=True)
     atrasado = models.BooleanField(default=False, verbose_name='Marcação retroativa')
     com_foto = models.BooleanField(default=False, verbose_name='Enviou foto')
+    # Guardados para conseguir responder "a foto/localização chegaram?" sem
+    # precisar bater outro ponto de teste — foi exatamente o que faltou da
+    # primeira vez que a marcação saiu sem foto e sem local.
+    foto_url = models.URLField(blank=True, max_length=500, verbose_name='URL da foto no Tangerino')
+    latitude = models.FloatField(null=True, blank=True)
+    longitude = models.FloatField(null=True, blank=True)
     justificativa = models.CharField(max_length=200, blank=True)
     ip = models.GenericIPAddressField(null=True, blank=True)
     user_agent = models.TextField(blank=True)

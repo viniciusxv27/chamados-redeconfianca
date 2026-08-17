@@ -253,6 +253,7 @@ def api_bater_ponto(request):
     registro = RegistroPontoPortal(
         usuario=request.user, employee_id=request.user.tangerino_employee_id,
         momento=timezone.localtime(), atrasado=atrasado, com_foto=bool(foto),
+        latitude=latitude, longitude=longitude,
         ip=_ip(request), user_agent=request.META.get('HTTP_USER_AGENT', '')[:500])
 
     try:
@@ -279,9 +280,18 @@ def api_bater_ponto(request):
                 endereco=corpo.get('endereco', ''), foto_base64=foto)
 
         registro.sucesso = True
+        registro.foto_url = (resposta or {}).get('_foto_url', '') or ''
         registro.retorno = json.dumps(resposta, ensure_ascii=False)[:2000]
         registro.save()
         invalidar_cache_marcacoes(request.user.tangerino_employee_id)
+
+        # Avisos honestos: o ponto entrou, mas se a foto ou a localização não
+        # foram junto a pessoa precisa saber na hora, não no fim do mês.
+        avisos = []
+        if foto and not registro.foto_url:
+            avisos.append('a foto não subiu')
+        if not atrasado and latitude is None:
+            avisos.append('a localização não foi enviada (o navegador não liberou)')
 
         status = ponto_svc.resumo_para_usuario(request.user)
         return JsonResponse({
@@ -289,6 +299,7 @@ def api_bater_ponto(request):
             'mensagem': 'Ponto registrado no Tangerino.',
             'nsr': (resposta or {}).get('nsr'),
             'hora': registro.momento.strftime('%H:%M'),
+            'avisos': avisos,
             'situacao': status.get('situacao'),
             'rotulo': status.get('rotulo'),
         })

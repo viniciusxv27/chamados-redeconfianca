@@ -24,16 +24,21 @@
     }
     .tg-scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
     .tg-dot { width: .5rem; height: .5rem; border-radius: 9999px; display: inline-block; }
-    /* Linha do tempo das marcações do dia */
-    .tg-linha { position: relative; padding-left: 1.6rem; }
+    /* Linha do tempo das marcações do dia.
+       A calha tem 1.5rem: a linha fica centrada em .5rem e as bolinhas (1rem)
+       são puxadas para dentro dela com left negativo. Sem esse deslocamento a
+       bolinha nasce no início do texto — era o que escondia o primeiro dígito
+       da hora e empurrava o resto para baixo. */
+    .tg-linha { position: relative; padding-left: 1.5rem; }
     .tg-linha::before {
-        content: ''; position: absolute; left: .42rem; top: .35rem; bottom: .35rem;
-        width: 2px; background: #E5E7EB; border-radius: 2px;
+        content: ''; position: absolute; left: .4375rem; top: .4rem; bottom: .4rem;
+        width: .125rem; background: #E5E7EB; border-radius: 2px;
     }
+    .tg-marco { position: relative; }
     .tg-marco::before {
-        content: ''; position: absolute; left: 0; margin-top: .3rem;
-        width: .9rem; height: .9rem; border-radius: 9999px;
-        border: 2px solid #fff; box-shadow: 0 0 0 1px #D1D5DB;
+        content: ''; position: absolute; left: -1.5rem; top: .28rem;
+        width: 1rem; height: 1rem; border-radius: 9999px;
+        background: #fff; border: 2px solid #fff; box-shadow: 0 0 0 1px #D1D5DB;
     }
     .tg-marco-entrada::before { background: #059669; box-shadow: 0 0 0 1px #059669; }
     .tg-marco-saida::before { background: #DC2626; box-shadow: 0 0 0 1px #DC2626; }
