@@ -57,6 +57,60 @@ def _ip(request):
             else request.META.get('REMOTE_ADDR'))
 
 
+# ─── Filtro por setor ────────────────────────────────────────────────────────
+# O Tangerino não tem setor: o `workplaceList` dele só devolve ids sem nome.
+# O setor vem do cadastro do portal, pelo usuário vinculado — cobre 164 dos
+# 168 funcionários. Os quatro restantes caem em "Sem setor", que é uma opção
+# de verdade no filtro em vez de sumirem da lista.
+
+SEM_SETOR = '__sem__'
+
+
+def _setores_por_employee():
+    """{employee_id: Sector} a partir dos usuários vinculados."""
+    return {u.tangerino_employee_id: u.sector
+            for u in (User.objects.exclude(tangerino_employee_id__isnull=True)
+                      .select_related('sector'))}
+
+
+def _aplicar_filtro_setor(linhas, setor_escolhido, mapa=None):
+    """Anota o setor em cada linha, monta as opções e filtra.
+
+    Devolve (linhas_filtradas, opções_para_o_select). As opções saem da lista
+    inteira, antes do filtro — senão, ao escolher um setor, os outros sumiriam
+    do próprio seletor e não teria como voltar.
+    """
+    mapa = _setores_por_employee() if mapa is None else mapa
+
+    opcoes, sem_setor = {}, False
+    for linha in linhas:
+        setor = mapa.get(linha.get('employee_id'))
+        linha['setor'] = setor
+        if setor:
+            opcoes[setor.id] = setor.name
+        else:
+            sem_setor = True
+
+    lista = sorted(({'valor': str(i), 'nome': n} for i, n in opcoes.items()),
+                   key=lambda o: o['nome'].upper())
+    if sem_setor:
+        lista.append({'valor': SEM_SETOR, 'nome': 'Sem setor'})
+
+    if setor_escolhido == SEM_SETOR:
+        linhas = [l for l in linhas if not l['setor']]
+    elif setor_escolhido and setor_escolhido.isdigit():
+        alvo = int(setor_escolhido)
+        linhas = [l for l in linhas if l['setor'] and l['setor'].id == alvo]
+
+    return linhas, lista
+
+
+def _nome_do_setor(opcoes, escolhido):
+    if not escolhido:
+        return ''
+    return next((o['nome'] for o in opcoes if o['valor'] == escolhido), '')
+
+
 # ─── Ponto ───────────────────────────────────────────────────────────────────
 
 @modulo_liberado
@@ -168,9 +222,26 @@ def ponto_equipe(request):
             for f in funcionarios.values() if f['id'] not in painel
         ]
 
+        # Filtro por setor: aplicado ANTES dos contadores, senão os números do
+        # topo continuariam falando da empresa inteira enquanto a tabela mostra
+        # um setor só.
+        escolhido = request.GET.get('setor') or ''
+        mapa = _setores_por_employee()
+        linhas, opcoes = _aplicar_filtro_setor(linhas, escolhido, mapa)
+        sem_marcacao, opcoes_sem = _aplicar_filtro_setor(sem_marcacao, escolhido, mapa)
+        # As opções saem das duas listas juntas: quem não bateu ponto no dia
+        # também precisa poder ser filtrado pelo setor dele.
+        vistos = {o['valor']: o for o in opcoes}
+        vistos.update({o['valor']: o for o in opcoes_sem})
+        opcoes = sorted(vistos.values(),
+                        key=lambda o: ('zzz' if o['valor'] == SEM_SETOR else o['nome'].upper()))
+
         contexto.update({
             'linhas': sorted(linhas, key=lambda l: l['nome']),
             'sem_marcacao': sorted(sem_marcacao, key=lambda l: l['nome']),
+            'setores': opcoes,
+            'setor_escolhido': escolhido,
+            'setor_nome': _nome_do_setor(opcoes, escolhido),
             'total_trabalhando': sum(1 for l in linhas if l['status']['situacao'] == 'TRABALHANDO'),
             'total_intervalo': sum(1 for l in linhas if l['status']['situacao'] == 'EM_INTERVALO'),
             'total_encerrado': sum(1 for l in linhas if l['status']['situacao'] == 'ENCERRADO'),
@@ -336,7 +407,23 @@ def ferias_equipe(request):
 
     contexto = {'aba': 'ferias_equipe', 'e_gestor': True, 'hoje': timezone.localdate()}
     try:
-        contexto['panorama'] = ferias_svc.panorama_da_empresa()
+        panorama = ferias_svc.panorama_da_empresa()
+        escolhido = request.GET.get('setor') or ''
+        linhas, opcoes = _aplicar_filtro_setor(panorama['linhas'], escolhido)
+
+        # Os agrupamentos do topo são recalculados a partir das linhas já
+        # filtradas — "3 de férias hoje" precisa ser 3 no setor escolhido.
+        panorama = dict(panorama, linhas=linhas, total_pessoas=len(linhas))
+        panorama['em_gozo'] = [l for l in linhas if l['situacao']['em_gozo']]
+        panorama['vencidas'] = sorted([l for l in linhas if l['situacao']['vencidos']],
+                                      key=lambda l: -l['situacao']['dias_vencidos'])
+        panorama['vencendo'] = [l for l in linhas if l['situacao']['vencendo']]
+        panorama['programadas'] = [l for l in linhas if l['situacao']['programadas']]
+
+        contexto['panorama'] = panorama
+        contexto['setores'] = opcoes
+        contexto['setor_escolhido'] = escolhido
+        contexto['setor_nome'] = _nome_do_setor(opcoes, escolhido)
     except TangerinoError as exc:
         contexto['erro'] = str(exc)
     return render(request, 'tangerino/ferias_equipe.html', contexto)

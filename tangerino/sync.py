@@ -11,6 +11,7 @@ Estratégia, nesta ordem:
 
 O que sobrar vai para a tela de vínculo manual.
 """
+import logging
 import re
 import unicodedata
 
@@ -23,6 +24,7 @@ from .client import (MOTIVO_FERIAS_ID, de_millis, listar_ferias, listar_funciona
                      listar_marcacoes)
 from .models import FeriasLancamento, MarcacaoPonto
 
+logger = logging.getLogger(__name__)
 User = get_user_model()
 
 
@@ -120,26 +122,36 @@ def _mapa_usuarios():
             User.objects.exclude(tangerino_employee_id__isnull=True)}
 
 
-def _gravar_em_lote(modelo, registros, campos):
+def _gravar_em_lote(modelo, registros, campos, chave=('tangerino_id',), escopo=None):
     """Grava uma leva de registros com o mínimo de idas ao banco.
 
-    `update_or_create` por item custa duas viagens cada; com ~3 mil marcações
+    `update_or_create` por item custa duas viagens cada; com milhares de linhas
     contra o Postgres remoto isso passava de dez minutos. Aqui são poucas
     consultas: uma para saber o que já existe, um bulk_create e um bulk_update.
+
+    ``chave`` são os campos que identificam a linha (para o ponto é o par
+    funcionário+data) e ``escopo`` limita a busca do que já existe ao período
+    sincronizado, para não varrer a tabela inteira a cada rodada.
     """
     if not registros:
         return {'criados': 0, 'atualizados': 0}
 
-    por_id = {r.tangerino_id: r for r in registros}          # dedup na própria leva
-    existentes = dict(modelo.objects
-                      .filter(tangerino_id__in=list(por_id))
-                      .values_list('tangerino_id', 'id'))
+    def chave_de(obj):
+        return tuple(getattr(obj, c) for c in chave)
 
-    novos = [r for tid, r in por_id.items() if tid not in existentes]
+    por_chave = {chave_de(r): r for r in registros}          # dedup na própria leva
+    qs = modelo.objects.all() if escopo is None else escopo
+    existentes = {}
+    for valores in qs.values_list(*chave, 'id'):
+        k = tuple(valores[:-1])
+        if k in por_chave:
+            existentes[k] = valores[-1]
+
+    novos = [r for k, r in por_chave.items() if k not in existentes]
     alterados = []
-    for tid, r in por_id.items():
-        if tid in existentes:
-            r.id = existentes[tid]
+    for k, r in por_chave.items():
+        if k in existentes:
+            r.id = existentes[k]
             alterados.append(r)
 
     if novos:
@@ -162,36 +174,73 @@ def sincronizar_marcacoes(dias=30, employee_id=None):
     usuarios = _mapa_usuarios()
 
     agora = timezone.now()
-    registros = []
+
+    # Junta os pares do Tangerino por (funcionário, dia) para virar uma linha só.
+    #
+    # O `vistos` não é zelo excessivo: a paginação da API repete registros entre
+    # páginas (4400 itens lidos para 4197 pares reais). Enquanto a chave da
+    # tabela era o id do par, a duplicata se resolvia sozinha; agrupando por dia
+    # ela viraria um par fantasma — entrada1 e entrada2 idênticas, e o total de
+    # horas dobrado. Por isso o id é conferido antes de entrar no grupo.
+    vistos = set()
+    por_dia = {}
     for par in pares:
         tid = par.get('id')
         entrada = de_millis(par.get('dateIn'))
-        if not tid or not entrada:
+        if not tid or not entrada or tid in vistos:
             continue
-        eid = par.get('employeeId')
+        vistos.add(tid)
+        por_dia.setdefault((par.get('employeeId'), entrada.date()), []).append(par)
+
+    registros = []
+    for (eid, dia), do_dia in por_dia.items():
+        do_dia.sort(key=lambda p: p['dateIn'])
+        campos = {}
+        total = 0
+        extras = []
+        aberto = False
+
+        for i, par in enumerate(do_dia, start=1):
+            entrada, saida = de_millis(par.get('dateIn')), de_millis(par.get('dateOut'))
+            if saida and entrada:
+                total += max(0, int((saida - entrada).total_seconds()))
+            if not saida:
+                aberto = True
+            if i <= 3:
+                campos[f'entrada{i}'] = entrada
+                campos[f'saida{i}'] = saida
+            else:
+                # Além do 3º par: guarda o horário em vez de jogar fora.
+                extras.append(entrada.strftime('%H:%M'))
+                if saida:
+                    extras.append(saida.strftime('%H:%M'))
+
+        if extras:
+            logger.warning('%s em %s teve %d pares de ponto; o excedente foi para '
+                           'marcacoes_extras.', do_dia[0].get('employeeName'), dia, len(do_dia))
+
         registros.append(MarcacaoPonto(
-            tangerino_id=tid,
             employee_id=eid,
             usuario=usuarios.get(eid),
-            nome_funcionario=(par.get('employeeName') or '')[:200],
-            dia=entrada.date(),
-            entrada=entrada,
-            saida=de_millis(par.get('dateOut')),
-            nsr_entrada=par.get('nsrIn'),
-            nsr_saida=par.get('nsrOut'),
-            status=(par.get('status') or '')[:20],
-            plataforma=(par.get('plataform') or '')[:30],
-            editado=bool(par.get('edited')),
-            ajuste=bool(par.get('adjust')),
-            observacao=(par.get('comments') or '')[:2000],
-            sincronizado_em=agora,     # auto_now não vale em bulk_update
-        ))
+            nome=(do_dia[0].get('employeeName') or '')[:200],
+            data=dia,
+            total_segundos=total,
+            em_aberto=aberto,
+            plataforma=(do_dia[0].get('plataform') or '')[:30],
+            editado=any(bool(p.get('edited')) for p in do_dia),
+            marcacoes_extras=extras,
+            tangerino_ids=[p['id'] for p in do_dia],
+            sincronizado_em=agora,
+            **campos))
 
     resultado = _gravar_em_lote(MarcacaoPonto, registros, [
-        'employee_id', 'usuario', 'nome_funcionario', 'dia', 'entrada', 'saida',
-        'nsr_entrada', 'nsr_saida', 'status', 'plataforma', 'editado', 'ajuste',
-        'observacao', 'sincronizado_em'])
+        'employee_id', 'usuario', 'nome', 'entrada1', 'saida1', 'entrada2', 'saida2',
+        'entrada3', 'saida3', 'marcacoes_extras', 'total_segundos', 'em_aberto',
+        'plataforma', 'editado', 'tangerino_ids', 'sincronizado_em'],
+        chave=('employee_id', 'data'),
+        escopo=MarcacaoPonto.objects.filter(data__gte=inicio, data__lte=hoje))
     resultado['lidos'] = len(pares)
+    resultado['dias'] = len(registros)
     return resultado
 
 
@@ -213,7 +262,7 @@ def sincronizar_ferias():
             tangerino_id=tid,
             employee_id=eid,
             usuario=usuarios.get(eid),
-            nome_funcionario=(emp.get('name') or '')[:200],
+            nome=(emp.get('name') or '')[:200],
             inicio=inicio.date(),
             fim=(fim or inicio).date(),
             status=(item.get('status') or '')[:20],
@@ -224,7 +273,7 @@ def sincronizar_ferias():
         ))
 
     resultado = _gravar_em_lote(FeriasLancamento, registros, [
-        'employee_id', 'usuario', 'nome_funcionario', 'inicio', 'fim', 'status',
+        'employee_id', 'usuario', 'nome', 'inicio', 'fim', 'status',
         'observacao', 'origem', 'dia_inteiro', 'sincronizado_em'])
     resultado['lidos'] = len(itens)
     return resultado

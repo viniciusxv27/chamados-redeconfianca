@@ -4,6 +4,24 @@
 {% block tg_cabecalho %}Férias da equipe{% endblock %}
 {% block tg_subtitulo %}Quem está fora, quem está vencendo e quem já venceu{% endblock %}
 
+{% block tg_acoes %}
+<form method="get" class="flex items-end gap-2 flex-wrap">
+    <div>
+        <label class="block text-xs text-gray-500 mb-1">Setor</label>
+        <select name="setor" onchange="this.form.submit()"
+                class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm max-w-[220px]">
+            <option value="">Todos os setores</option>
+            {% for s in setores %}
+            <option value="{{ s.valor }}" {% if setor_escolhido == s.valor %}selected{% endif %}>{{ s.nome }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    {% if setor_escolhido %}
+    <a href="?" class="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-800 mb-0.5">Limpar</a>
+    {% endif %}
+</form>
+{% endblock %}
+
 {% block tg_conteudo %}
 {% with p=panorama %}
 
@@ -35,6 +53,7 @@
         {% for l in p.em_gozo %}
         <div class="p-3 rounded-xl border border-cyan-100 bg-cyan-50/40">
             <p class="text-sm font-semibold text-gray-800">{{ l.nome }}</p>
+            {% if l.setor %}<p class="text-[11px] text-gray-400">{{ l.setor.name }}</p>{% endif %}
             <p class="text-xs text-gray-600 mt-0.5">
                 {{ l.situacao.em_gozo.inicio|date:"d/m" }} a {{ l.situacao.em_gozo.fim|date:"d/m" }}
                 · {{ l.situacao.dias_em_gozo }} dias
@@ -51,7 +70,7 @@
 <div class="tg-card overflow-hidden">
     <div class="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between flex-wrap gap-2">
         <h2 class="font-semibold text-gray-800 text-sm">
-            <i class="fas fa-table-list text-cyan-600 mr-1.5"></i>Todos os colaboradores
+            <i class="fas fa-table-list text-cyan-600 mr-1.5"></i>{% if setor_nome %}{{ setor_nome }}{% else %}Todos os colaboradores{% endif %}
             <span class="text-gray-400 font-normal">({{ p.total_pessoas }})</span>
         </h2>
         <div class="flex items-center gap-2 flex-wrap">
@@ -70,6 +89,7 @@
             <thead class="bg-gray-50/70 text-gray-500 text-xs uppercase tracking-wide">
                 <tr>
                     <th class="text-left px-5 py-2.5 font-medium">Colaborador</th>
+                    <th class="text-left px-3 py-2.5 font-medium">Setor</th>
                     <th class="text-left px-3 py-2.5 font-medium">Admissão</th>
                     <th class="text-left px-3 py-2.5 font-medium">Situação</th>
                     <th class="text-right px-3 py-2.5 font-medium">Saldo</th>
@@ -85,6 +105,7 @@
                     data-vencendo="{% if l.situacao.vencendo %}1{% else %}0{% endif %}"
                     data-ferias="{% if l.situacao.em_gozo %}1{% else %}0{% endif %}">
                     <td class="px-5 py-2.5 text-gray-800">{{ l.nome }}</td>
+                    <td class="px-3 py-2.5 text-gray-500 text-xs">{{ l.setor.name|default:"—" }}</td>
                     <td class="px-3 py-2.5 text-gray-500 tabular">{{ l.admissao|date:"d/m/Y"|default:"—" }}</td>
                     <td class="px-3 py-2.5">
                         {% if l.situacao.em_gozo %}

@@ -124,52 +124,70 @@ class SincronizacaoTangerino(models.Model):
 # entre uma sincronização e outra.
 
 class MarcacaoPonto(models.Model):
-    """Um par entrada/saída vindo do Tangerino.
+    """O dia de ponto de uma pessoa em **uma linha só**.
 
-    A API entrega o dia já pareado (`dateIn`/`dateOut`); a chave `tangerino_id`
-    é a do próprio par, então uma nova sincronização atualiza o registro em vez
-    de duplicá-lo — inclusive quando a saída é batida depois da entrada.
+    A API entrega o dia fatiado em pares entrada/saída; aqui eles são achatados
+    em colunas, que é como se lê um cartão de ponto: entrada1/saída1 (manhã),
+    entrada2/saída2 (tarde).
+
+    O terceiro par existe porque a realidade tem 0,7% de dias assim — turno que
+    vira a madrugada, retorno tarde da noite. Sem ele, essas marcações sumiriam
+    em silêncio. E se algum dia aparecer um quarto par, ele vai para
+    ``marcacoes_extras`` em vez de ser descartado.
+
+    A chave é (funcionário, dia): ressincronizar o mesmo período atualiza a
+    linha em vez de duplicar.
     """
 
-    tangerino_id = models.BigIntegerField(unique=True, verbose_name='ID no Tangerino')
     employee_id = models.IntegerField(db_index=True, verbose_name='ID do funcionário')
     usuario = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='marcacoes_ponto', verbose_name='Usuário do portal')
-    nome_funcionario = models.CharField(max_length=200, blank=True, verbose_name='Nome no Tangerino')
+    nome = models.CharField(max_length=200, blank=True, db_index=True, verbose_name='Nome')
+    data = models.DateField(db_index=True, verbose_name='Data')
 
-    dia = models.DateField(db_index=True, verbose_name='Dia')
-    entrada = models.DateTimeField(null=True, blank=True, verbose_name='Entrada')
-    saida = models.DateTimeField(null=True, blank=True, verbose_name='Saída')
-    nsr_entrada = models.BigIntegerField(null=True, blank=True, verbose_name='NSR da entrada')
-    nsr_saida = models.BigIntegerField(null=True, blank=True, verbose_name='NSR da saída')
+    entrada1 = models.DateTimeField(null=True, blank=True, verbose_name='Entrada 1')
+    saida1 = models.DateTimeField(null=True, blank=True, verbose_name='Saída 1')
+    entrada2 = models.DateTimeField(null=True, blank=True, verbose_name='Entrada 2')
+    saida2 = models.DateTimeField(null=True, blank=True, verbose_name='Saída 2')
+    entrada3 = models.DateTimeField(null=True, blank=True, verbose_name='Entrada 3')
+    saida3 = models.DateTimeField(null=True, blank=True, verbose_name='Saída 3')
+    marcacoes_extras = models.JSONField(
+        default=list, blank=True, verbose_name='Marcações além do 3º par',
+        help_text='Rede de segurança: nada é descartado se o dia tiver mais pares.')
 
-    status = models.CharField(max_length=20, blank=True, verbose_name='Status')
+    total_segundos = models.PositiveIntegerField(default=0, verbose_name='Trabalhado (segundos)')
+    em_aberto = models.BooleanField(default=False, verbose_name='Tem entrada sem saída')
     plataforma = models.CharField(max_length=30, blank=True, verbose_name='Plataforma')
     editado = models.BooleanField(default=False, verbose_name='Editado no Tangerino')
-    ajuste = models.BooleanField(default=False, verbose_name='É ajuste/afastamento')
-    observacao = models.TextField(blank=True, verbose_name='Observação')
-
-    sincronizado_em = models.DateTimeField(auto_now=True, verbose_name='Sincronizado em')
+    tangerino_ids = models.JSONField(default=list, blank=True,
+                                     verbose_name='IDs dos pares no Tangerino')
+    sincronizado_em = models.DateTimeField(verbose_name='Sincronizado em')
 
     class Meta:
-        verbose_name = 'Marcação de ponto (sincronizada)'
-        verbose_name_plural = 'Marcações de ponto (sincronizadas)'
-        ordering = ['-dia', '-entrada']
-        indexes = [models.Index(fields=['employee_id', 'dia'])]
+        verbose_name = 'Ponto do dia (sincronizado)'
+        verbose_name_plural = 'Pontos do dia (sincronizados)'
+        ordering = ['-data', 'nome']
+        constraints = [
+            models.UniqueConstraint(fields=['employee_id', 'data'],
+                                    name='tangerino_ponto_unico_por_dia'),
+        ]
+        indexes = [models.Index(fields=['data', 'nome'])]
 
     def __str__(self):
-        return f"{self.nome_funcionario or self.employee_id} — {self.dia:%d/%m/%Y}"
+        return f"{self.nome or self.employee_id} — {self.data:%d/%m/%Y}"
 
     @property
-    def em_aberto(self):
-        return bool(self.entrada and not self.saida)
+    def total_hhmm(self):
+        s = self.total_segundos or 0
+        return f"{s // 3600:02d}:{(s % 3600) // 60:02d}"
 
     @property
-    def segundos_trabalhados(self):
-        if not (self.entrada and self.saida):
-            return 0
-        return max(0, int((self.saida - self.entrada).total_seconds()))
+    def horarios(self):
+        """Marcações do dia em ordem, já formatadas — para listar na tela."""
+        campos = (self.entrada1, self.saida1, self.entrada2,
+                  self.saida2, self.entrada3, self.saida3)
+        return [d.strftime('%H:%M') for d in campos if d]
 
 
 class FeriasLancamento(models.Model):
@@ -180,7 +198,7 @@ class FeriasLancamento(models.Model):
     usuario = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='ferias_lancamentos', verbose_name='Usuário do portal')
-    nome_funcionario = models.CharField(max_length=200, blank=True, verbose_name='Nome no Tangerino')
+    nome = models.CharField(max_length=200, blank=True, db_index=True, verbose_name='Nome')
 
     inicio = models.DateField(db_index=True, verbose_name='Início')
     fim = models.DateField(db_index=True, verbose_name='Fim')
@@ -197,7 +215,7 @@ class FeriasLancamento(models.Model):
         ordering = ['-inicio']
 
     def __str__(self):
-        return f"{self.nome_funcionario or self.employee_id}: {self.inicio:%d/%m/%Y}–{self.fim:%d/%m/%Y}"
+        return f"{self.nome or self.employee_id}: {self.inicio:%d/%m/%Y}–{self.fim:%d/%m/%Y}"
 
     @property
     def dias(self):
