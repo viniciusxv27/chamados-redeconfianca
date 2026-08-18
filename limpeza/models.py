@@ -117,9 +117,23 @@ class LimpezaTodo(models.Model):
     launched_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
+        null=True,
+        blank=True,
         related_name='limpeza_todos_launched',
         verbose_name='Lançado por',
     )
+    # Quem passou a limpeza e quando. É o que a checklist precisa registrar —
+    # antes só existia "enviado por", que era quem preenchia o formulário.
+    realizada_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='limpezas_realizadas',
+        verbose_name='Limpeza feita por',
+    )
+    realizada_em = models.DateTimeField(
+        null=True, blank=True, verbose_name='Data da limpeza')
     submitted_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -149,16 +163,13 @@ class LimpezaTodo(models.Model):
     class Meta:
         verbose_name = 'To-Do Limpeza'
         verbose_name_plural = 'To-Dos Limpeza'
-        ordering = ['-year', '-month', 'sector__name']
-        constraints = [
-            models.UniqueConstraint(
-                fields=['sector', 'month', 'year', 'template'],
-                name='unique_limpeza_todo_sector_month_template',
-            )
-        ]
+        # Sem UniqueConstraint por mês: a limpeza é feita quantas vezes for
+        # preciso, e cada passagem é um registro próprio com data e responsável.
+        ordering = ['-realizada_em', '-year', '-month', 'sector__name']
 
     def __str__(self):
-        return f"{self.sector.name} - {self.month:02d}/{self.year} - {self.template.name}"
+        quando = self.realizada_em.strftime('%d/%m/%Y %H:%M') if self.realizada_em else 'em aberto'
+        return f"{self.sector.name} — {quando}"
 
     @property
     def month_year_display(self):

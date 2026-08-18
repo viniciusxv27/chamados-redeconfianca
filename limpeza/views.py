@@ -4,6 +4,7 @@ from django.contrib.auth.decorators import login_required
 from django.db import models
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.db import transaction
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
@@ -11,12 +12,17 @@ from users.models import Sector, User
 
 from .models import (
     LimpezaAnswer,
-    LimpezaAnswerPhoto,
-    LimpezaEvaluator,
     LimpezaQuestion,
     LimpezaTemplate,
     LimpezaTodo,
 )
+
+
+OPCOES_RESPOSTA = [
+    ('sim', 'Sim', 'peer-checked:bg-green-600'),
+    ('nao', 'Não', 'peer-checked:bg-red-600'),
+    ('nao_se_aplica', 'Não se aplica', 'peer-checked:bg-gray-500'),
+]
 
 
 def _is_gerente_or_superadmin(user):
@@ -33,15 +39,6 @@ def _is_superadmin(user):
     return user.hierarchy == 'SUPERADMIN' or user.is_superuser
 
 
-def _is_evaluator_for(user, sector):
-    """Verifica se o usuário é avaliador para o setor."""
-    if _is_superadmin(user):
-        return True
-    return LimpezaEvaluator.objects.filter(
-        user=user, is_active=True, sectors=sector
-    ).exists()
-
-
 def _get_user_sectors(user):
     """Retorna os setores do usuário."""
     sectors = list(user.sectors.all())
@@ -54,41 +51,186 @@ def _get_user_sectors(user):
 
 @login_required
 def dashboard(request):
-    user = request.user
+    """Lista as limpezas já feitas e dá o atalho para registrar uma nova.
 
+    Sem avaliação e sem to-do mensal: quem limpa registra, e o registro já
+    nasce concluído com o nome e a data de quem passou a limpeza.
+    """
+    user = request.user
     is_superadmin = _is_superadmin(user)
     is_gerente = _is_gerente_or_superadmin(user)
-
-    # To-dos do usuário (setores dele)
     user_sectors = _get_user_sectors(user)
 
-    if is_superadmin:
-        todos = LimpezaTodo.objects.all()
-    else:
-        todos = LimpezaTodo.objects.filter(sector__in=user_sectors)
+    registros = (LimpezaTodo.objects
+                 .filter(realizada_em__isnull=False)
+                 .select_related('sector', 'template', 'realizada_por'))
+    if not is_gerente:
+        # Quem não é gestor vê os setores dele e o que ele mesmo registrou.
+        registros = registros.filter(
+            models.Q(sector__in=user_sectors) | models.Q(realizada_por=user))
 
-    now = timezone.now()
-    current_todos = todos.filter(month=now.month, year=now.year)
-    pending_evaluation = todos.filter(status='enviado')
+    setor_id = request.GET.get('setor') or ''
+    if setor_id.isdigit():
+        registros = registros.filter(sector_id=int(setor_id))
 
-    # Verificar se é avaliador
-    is_evaluator = is_superadmin or LimpezaEvaluator.objects.filter(
-        user=user, is_active=True
-    ).exists()
+    hoje = timezone.localdate()
+    inicio_mes = hoje.replace(day=1)
 
     context = {
-        'current_todos': current_todos.select_related('sector', 'template', 'launched_by'),
-        'pending_evaluation': pending_evaluation.select_related('sector', 'template') if is_evaluator else [],
+        'registros': registros[:100],
+        'total_registros': registros.count(),
+        'registros_mes': registros.filter(realizada_em__date__gte=inicio_mes).count(),
+        'registros_hoje': registros.filter(realizada_em__date=hoje).count(),
         'is_superadmin': is_superadmin,
         'is_gerente': is_gerente,
-        'is_evaluator': is_evaluator,
-        'total_todos': todos.count(),
-        'approved_todos': todos.filter(status='finalizado').count(),
+        'setores': (Sector.objects.all().order_by('name')
+                    if is_gerente else user_sectors),
+        'setor_id': setor_id,
+        'tem_template': LimpezaTemplate.objects.filter(is_active=True).exists(),
     }
     return render(request, 'limpeza/dashboard.html', context)
 
 
-# ─── Gestão de Templates (Perguntas) ──────────────────────────────────────────
+# ─── Registrar uma limpeza ────────────────────────────────────────────────────
+
+@login_required
+def registro_novo(request):
+    """Checklist da limpeza: uma pergunta, três opções, e pronto."""
+    template = (LimpezaTemplate.objects.filter(is_active=True)
+                .order_by('-created_at').first())
+    if not template:
+        messages.error(request, 'Nenhum checklist de limpeza cadastrado ainda.')
+        return redirect('limpeza:dashboard')
+
+    is_gerente = _is_gerente_or_superadmin(request.user)
+    setores = (Sector.objects.all().order_by('name')
+               if is_gerente else _get_user_sectors(request.user))
+    if not setores:
+        messages.error(request, 'Seu usuário não está ligado a nenhum setor. Fale com o RH.')
+        return redirect('limpeza:dashboard')
+
+    perguntas = list(template.questions.all())
+
+    if request.method == 'POST':
+        setor = None
+        setor_enviado = (request.POST.get('setor') or '').strip()
+        if setor_enviado.isdigit():
+            setor = next((s for s in setores if s.id == int(setor_enviado)), None)
+        if not setor:
+            messages.error(request, 'Escolha o setor onde a limpeza foi feita.')
+            return redirect('limpeza:registro_novo')
+
+        # Todas as perguntas precisam de resposta. Sem isso, uma pergunta em
+        # branco viraria "não" silenciosamente — o mesmo defeito que já foi
+        # corrigido no módulo de Experiência.
+        respostas = {}
+        faltando = []
+        for q in perguntas:
+            valor = request.POST.get(f'resposta_{q.id}', '')
+            if valor not in ('sim', 'nao', 'nao_se_aplica'):
+                faltando.append(q)
+            else:
+                respostas[q.id] = valor
+        if faltando:
+            ids_faltando = {q.id for q in faltando}
+            messages.error(
+                request,
+                f'{len(faltando)} pergunta(s) ficaram sem resposta e nada foi salvo. '
+                f'Responda todas e envie novamente.')
+            return render(request, 'limpeza/registro_form.html', {
+                'template': template,
+                'perguntas': _perguntas_para_tela(perguntas, respostas, ids_faltando,
+                                                  request.POST),
+                'opcoes': OPCOES_RESPOSTA,
+                'setores': setores,
+                'setor_escolhido': setor_enviado,
+            })
+
+        agora = timezone.now()
+        with transaction.atomic():
+            registro = LimpezaTodo.objects.create(
+                template=template,
+                sector=setor,
+                month=timezone.localdate().month,
+                year=timezone.localdate().year,
+                status='finalizado',
+                launched_by=request.user,
+                submitted_by=request.user,
+                realizada_por=request.user,
+                realizada_em=agora,
+            )
+            LimpezaAnswer.objects.bulk_create([
+                LimpezaAnswer(
+                    todo=registro, question=q, response=respostas[q.id],
+                    observation=(request.POST.get(f'obs_{q.id}') or '').strip()[:2000],
+                    status='aprovado',          # não há validação: já nasce aceita
+                    answered_by=request.user, answered_at=agora,
+                ) for q in perguntas
+            ])
+
+        messages.success(
+            request,
+            f'Limpeza de {setor.name} registrada em {timezone.localtime(agora):%d/%m/%Y às %H:%M}.')
+        return redirect('limpeza:registro_detalhe', registro_id=registro.id)
+
+    return render(request, 'limpeza/registro_form.html', {
+        'template': template,
+        'perguntas': _perguntas_para_tela(perguntas, {}, set(), {}),
+        'opcoes': OPCOES_RESPOSTA,
+        'setores': setores,
+        'setor_escolhido': str(setores[0].id) if len(setores) == 1 else '',
+    })
+
+
+def _perguntas_para_tela(perguntas, respostas, ids_faltando, dados_post):
+    """Anota cada pergunta com o que já foi marcado.
+
+    O template do Django não busca chave dinâmica em dicionário, então as
+    opções e a resposta atual vêm prontas daqui — assim um reenvio com erro
+    não perde o que a pessoa já tinha marcado.
+    """
+    montadas = []
+    for q in perguntas:
+        atual = respostas.get(q.id, '')
+        montadas.append({
+            'id': q.id,
+            'texto': q.text,
+            'detalhamento': q.detalhamento,
+            'observacao': (dados_post.get(f'obs_{q.id}') or '') if dados_post else '',
+            'faltando': q.id in ids_faltando,
+            'opcoes': [
+                {'valor': v, 'rotulo': r, 'cor': c, 'marcada': atual == v}
+                for v, r, c in OPCOES_RESPOSTA
+            ],
+        })
+    return montadas
+
+
+@login_required
+def registro_detalhe(request, registro_id):
+    """Ver uma limpeza registrada: quem fez, quando e o checklist."""
+    registro = get_object_or_404(
+        LimpezaTodo.objects.select_related('sector', 'template', 'realizada_por'),
+        id=registro_id)
+
+    if not _is_gerente_or_superadmin(request.user):
+        permitido = (registro.realizada_por_id == request.user.id
+                     or registro.sector in _get_user_sectors(request.user))
+        if not permitido:
+            messages.error(request, 'Você não tem acesso a este registro.')
+            return redirect('limpeza:dashboard')
+
+    respostas = registro.answers.select_related('question').all()
+    return render(request, 'limpeza/registro_detalhe.html', {
+        'registro': registro,
+        'respostas': respostas,
+        'total_sim': sum(1 for r in respostas if r.response == 'sim'),
+        'total_nao': sum(1 for r in respostas if r.response == 'nao'),
+        'total_na': sum(1 for r in respostas if r.response == 'nao_se_aplica'),
+        'is_gerente': _is_gerente_or_superadmin(request.user),
+    })
+
+
 
 @login_required
 def template_list(request):
@@ -323,370 +465,6 @@ def import_template_pdf(request):
     })
 
 
-# ─── Lançar To-Do (Gestor seleciona template + mês + setor) ──────────────────
-
-@login_required
-def launch_todo(request):
-    user = request.user
-    if not _is_gerente_or_superadmin(user):
-        messages.error(request, 'Você não tem permissão.')
-        return redirect('limpeza:dashboard')
-
-    is_superadmin = _is_superadmin(user)
-
-    if is_superadmin:
-        templates = LimpezaTemplate.objects.filter(is_active=True)
-        sectors = Sector.objects.all().order_by('name')
-    else:
-        templates = LimpezaTemplate.objects.filter(is_active=True, created_by=user)
-        sectors = Sector.objects.filter(
-            models.Q(users=user) | models.Q(primary_users=user)
-        ).distinct().order_by('name')
-
-    if request.method == 'POST':
-        template_id = request.POST.get('template_id')
-        sector_ids = request.POST.getlist('sector_ids')
-        month = request.POST.get('month')
-        year = request.POST.get('year')
-
-        try:
-            template = LimpezaTemplate.objects.get(id=template_id, is_active=True)
-            month = int(month)
-            year = int(year)
-        except (LimpezaTemplate.DoesNotExist, ValueError, TypeError):
-            messages.error(request, 'Dados inválidos.')
-            return redirect('limpeza:launch_todo')
-
-        if month < 1 or month > 12:
-            messages.error(request, 'Mês inválido.')
-            return redirect('limpeza:launch_todo')
-
-        created_count = 0
-        skipped_count = 0
-        for sid in sector_ids:
-            try:
-                sector = Sector.objects.get(id=sid)
-            except Sector.DoesNotExist:
-                continue
-
-            if LimpezaTodo.objects.filter(
-                template=template, sector=sector, month=month, year=year
-            ).exists():
-                skipped_count += 1
-                continue
-
-            LimpezaTodo.objects.create(
-                template=template,
-                sector=sector,
-                month=month,
-                year=year,
-                launched_by=user,
-            )
-            created_count += 1
-
-        if created_count:
-            messages.success(request, f'{created_count} to-do(s) lançado(s) com sucesso!')
-        if skipped_count:
-            messages.warning(request, f'{skipped_count} setor(es) já possuíam to-do para este mês/template.')
-
-        return redirect('limpeza:dashboard')
-
-    now = timezone.now()
-    return render(request, 'limpeza/launch_todo.html', {
-        'templates': templates,
-        'sectors': sectors,
-        'current_month': now.month,
-        'current_year': now.year,
-        'is_superadmin': is_superadmin,
-    })
-
-
-# ─── Preencher / Responder o To-Do ───────────────────────────────────────────
-
-@login_required
-def fill_todo(request, todo_id):
-    user = request.user
-    todo = get_object_or_404(
-        LimpezaTodo.objects.select_related('template', 'sector'),
-        id=todo_id,
-    )
-
-    # Verificar se o usuário pertence ao setor (ou é gerente/superadmin)
-    if not _is_superadmin(user):
-        user_sectors = _get_user_sectors(user)
-        is_gerente = user.groups.filter(name='Gerentes').exists()
-        if todo.sector not in user_sectors and not is_gerente:
-            messages.error(request, 'Você não pertence a este setor.')
-            return redirect('limpeza:dashboard')
-
-    if not todo.can_be_filled():
-        messages.error(request, 'Este to-do não pode ser preenchido no momento.')
-        return redirect('limpeza:dashboard')
-
-    questions = todo.template.questions.all()
-    existing_answers = {a.question_id: a for a in todo.answers.all()}
-
-    # Se recusado parcialmente, filtrar só as recusadas
-    if todo.status == 'recusado':
-        rejected_ids = [
-            a.question_id for a in todo.answers.filter(status='recusado')
-        ]
-        questions = questions.filter(id__in=rejected_ids)
-
-    if request.method == 'POST':
-        action = request.POST.get('action', 'submit')
-
-        for question in questions:
-            response = request.POST.get(f'response_{question.id}', '')
-            if response not in ('sim', 'nao', 'nao_se_aplica'):
-                if action == 'draft':
-                    response = ''
-                else:
-                    response = 'nao'
-            observation = request.POST.get(f'observation_{question.id}', '').strip()
-            ticket_number = request.POST.get(f'ticket_number_{question.id}', '').strip()
-            photos = request.FILES.getlist(f'photos_{question.id}')
-
-            # Número do chamado só faz sentido quando a resposta é "Não"
-            effective_response = response or 'nao'
-            if effective_response != 'nao':
-                ticket_number = ''
-
-            # Skip empty answers in draft mode
-            if action == 'draft' and not response and not observation and not ticket_number and not photos:
-                continue
-
-            answer, created = LimpezaAnswer.objects.get_or_create(
-                todo=todo,
-                question=question,
-                defaults={
-                    'response': response or 'nao',
-                    'observation': observation,
-                    'ticket_number': ticket_number,
-                    'answered_by': user,
-                    'answered_at': timezone.now(),
-                    'status': 'pendente',
-                },
-            )
-            if not created:
-                if response:
-                    answer.response = response
-                answer.observation = observation
-                answer.ticket_number = ticket_number if answer.response == 'nao' else ''
-                answer.answered_by = user
-                answer.answered_at = timezone.now()
-                if action != 'draft':
-                    answer.status = 'pendente'
-                    answer.rejection_reason = ''
-                answer.save()
-
-            # Save multiple photos
-            for photo_file in photos:
-                LimpezaAnswerPhoto.objects.create(
-                    answer=answer,
-                    photo=photo_file,
-                )
-
-        if action == 'draft':
-            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                return JsonResponse({'success': True, 'message': 'Rascunho salvo'})
-            messages.success(request, 'Rascunho salvo com sucesso!')
-            return redirect('limpeza:fill_todo', todo_id=todo.id)
-
-        todo.status = 'enviado'
-        todo.submitted_by = user
-        todo.save()
-
-        messages.success(request, 'To-do enviado para avaliação!')
-        return redirect('limpeza:dashboard')
-
-    # Preparar dados para o template
-    questions_with_answers = []
-    for q in questions:
-        existing = existing_answers.get(q.id)
-        existing_photos = []
-        if existing:
-            existing_photos = list(existing.photos.all())
-        questions_with_answers.append({
-            'question': q,
-            'answer': existing,
-            'photos': existing_photos,
-        })
-
-    return render(request, 'limpeza/fill_todo.html', {
-        'todo': todo,
-        'questions_with_answers': questions_with_answers,
-        'total_points': todo.template.total_points(),
-    })
-
-
-# ─── Visualizar To-Do (leitura) ──────────────────────────────────────────────
-
-@login_required
-def view_todo(request, todo_id):
-    user = request.user
-    todo = get_object_or_404(
-        LimpezaTodo.objects.select_related('template', 'sector', 'launched_by', 'submitted_by', 'evaluated_by'),
-        id=todo_id,
-    )
-
-    # Verificar se o usuário pertence ao setor (ou é gerente/superadmin)
-    if not _is_superadmin(user):
-        user_sectors = _get_user_sectors(user)
-        is_gerente = user.groups.filter(name='Gerentes').exists()
-        if todo.sector not in user_sectors and not is_gerente:
-            messages.error(request, 'Sem permissão.')
-            return redirect('limpeza:dashboard')
-
-    answers = todo.answers.select_related('question', 'answered_by').all()
-
-    # Pontuação: 100 - (pontos de cada NÃO)
-    if todo.status in ('enviado', 'aberto', 'recusado'):
-        score = todo.calculate_partial_score()
-        deductions = sum(a.question.points for a in answers if a.response == 'nao')
-    else:
-        score = todo.score_percentage
-        deductions = sum(a.question.points for a in answers if a.response == 'nao' and a.status == 'aprovado')
-
-    # Filter by response
-    response_filter = request.GET.get('response', '')
-    filtered_answers = answers
-    if response_filter in ('sim', 'nao', 'nao_se_aplica'):
-        filtered_answers = [a for a in answers if a.response == response_filter]
-
-    return render(request, 'limpeza/view_todo.html', {
-        'todo': todo,
-        'answers': filtered_answers,
-        'all_answers': answers,
-        'deductions': deductions,
-        'score': score,
-        'is_partial': todo.status in ('enviado', 'aberto', 'recusado'),
-        'response_filter': response_filter,
-        'count_sim': sum(1 for a in answers if a.response == 'sim'),
-        'count_nao': sum(1 for a in answers if a.response == 'nao'),
-        'count_nao_se_aplica': sum(1 for a in answers if a.response == 'nao_se_aplica'),
-        'is_superadmin': _is_superadmin(user),
-    })
-
-
-# ─── Avaliar To-Do ───────────────────────────────────────────────────────────
-
-@login_required
-def evaluate_todo(request, todo_id):
-    user = request.user
-    todo = get_object_or_404(
-        LimpezaTodo.objects.select_related('template', 'sector'),
-        id=todo_id,
-        status='enviado',
-    )
-
-    if not _is_evaluator_for(user, todo.sector):
-        messages.error(request, 'Você não é avaliador para este setor.')
-        return redirect('limpeza:dashboard')
-
-    answers = todo.answers.select_related('question', 'answered_by').all()
-
-    if request.method == 'POST':
-        has_rejection = False
-
-        for answer in answers:
-            action = request.POST.get(f'action_{answer.id}')
-            if action == 'aprovar':
-                answer.status = 'aprovado'
-                answer.rejection_reason = ''
-            elif action == 'recusar':
-                answer.status = 'recusado'
-                answer.rejection_reason = request.POST.get(
-                    f'rejection_reason_{answer.id}', ''
-                ).strip()
-                has_rejection = True
-            answer.save()
-
-        todo.evaluated_by = user
-        todo.evaluation_date = timezone.now()
-
-        if has_rejection:
-            todo.status = 'recusado'
-            messages.warning(request, 'To-do devolvido com itens recusados.')
-        else:
-            todo.status = 'finalizado'
-            messages.success(request, 'To-do aprovado com sucesso!')
-
-        todo.update_score()
-        todo.save()
-
-        return redirect('limpeza:dashboard')
-
-    return render(request, 'limpeza/evaluate_todo.html', {
-        'todo': todo,
-        'answers': answers,
-        'total_points': todo.template.total_points(),
-    })
-
-
-# ─── Gerenciar Avaliadores (Superadmin) ──────────────────────────────────────
-
-@login_required
-def manage_evaluators(request):
-    user = request.user
-    if not _is_superadmin(user):
-        messages.error(request, 'Apenas superadmins podem gerenciar avaliadores.')
-        return redirect('limpeza:dashboard')
-
-    evaluators = LimpezaEvaluator.objects.filter(is_active=True).select_related('user')
-    sectors = Sector.objects.all().order_by('name')
-    users_list = User.objects.filter(
-        is_active=True,
-    ).exclude(
-        hierarchy='PADRAO',
-    ).order_by('first_name', 'last_name')
-
-    if request.method == 'POST':
-        action = request.POST.get('action')
-
-        if action == 'add':
-            user_id = request.POST.get('user_id')
-            sector_ids = request.POST.getlist('sector_ids')
-            try:
-                eval_user = User.objects.get(id=user_id, is_active=True)
-            except User.DoesNotExist:
-                messages.error(request, 'Usuário não encontrado.')
-                return redirect('limpeza:manage_evaluators')
-
-            evaluator, created = LimpezaEvaluator.objects.get_or_create(
-                user=eval_user,
-                defaults={'is_active': True},
-            )
-            if not evaluator.is_active:
-                evaluator.is_active = True
-                evaluator.save()
-
-            if sector_ids:
-                evaluator.sectors.set(Sector.objects.filter(id__in=sector_ids))
-            else:
-                evaluator.sectors.clear()
-
-            messages.success(request, f'Avaliador {eval_user.get_full_name()} configurado!')
-
-        elif action == 'remove':
-            evaluator_id = request.POST.get('evaluator_id')
-            try:
-                evaluator = LimpezaEvaluator.objects.get(id=evaluator_id)
-                evaluator.is_active = False
-                evaluator.save()
-                messages.success(request, 'Avaliador removido.')
-            except LimpezaEvaluator.DoesNotExist:
-                messages.error(request, 'Avaliador não encontrado.')
-
-        return redirect('limpeza:manage_evaluators')
-
-    return render(request, 'limpeza/manage_evaluators.html', {
-        'evaluators': evaluators,
-        'sectors': sectors,
-        'users_list': users_list,
-    })
-
-
 # ─── Relatórios ──────────────────────────────────────────────────────────────
 
 @login_required
@@ -855,22 +633,3 @@ def archive(request):
     })
 
 
-# ─── API Upload de Foto (para captura de câmera via JS) ──────────────────────
-
-@login_required
-@require_POST
-def api_upload_photo(request, answer_id):
-    user = request.user
-    if not _is_gerente_or_superadmin(user):
-        return JsonResponse({'error': 'Sem permissão'}, status=403)
-
-    answer = get_object_or_404(LimpezaAnswer, id=answer_id)
-    photo = request.FILES.get('photo')
-
-    if not photo:
-        return JsonResponse({'error': 'Nenhuma foto enviada'}, status=400)
-
-    answer.photo = photo
-    answer.save()
-
-    return JsonResponse({'success': True, 'url': answer.photo.url})
