@@ -139,7 +139,7 @@
         os registros — nunca duplica.
     </p>
 
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
         <div class="p-4 rounded-xl bg-gray-50 border border-gray-100">
             <p class="text-xs text-gray-500">Dias de ponto gravados</p>
             <p class="text-3xl font-bold text-gray-900 tabular">{{ marcacoes_no_banco }}</p>
@@ -166,6 +166,17 @@
             <p class="text-xs text-gray-400 mt-1">nunca sincronizado</p>
             {% endif %}
         </div>
+        <div class="p-4 rounded-xl bg-gray-50 border border-gray-100">
+            <p class="text-xs text-gray-500">Saldos de horas gravados</p>
+            <p class="text-3xl font-bold text-gray-900 tabular">{{ saldos_no_banco }}</p>
+            {% if saldo_exemplo %}
+            <p class="text-xs text-gray-400 mt-1">
+                período {{ saldo_exemplo.periodo_inicio|date:"d/m/Y" }} a {{ saldo_exemplo.periodo_fim|date:"d/m/Y" }}
+            </p>
+            {% else %}
+            <p class="text-xs text-gray-400 mt-1">nunca sincronizado</p>
+            {% endif %}
+        </div>
     </div>
 
     <form method="post" action="{% url 'tangerino:sincronizar_dados' %}" class="flex items-end gap-2 flex-wrap">
@@ -173,9 +184,10 @@
         <div>
             <label class="block text-xs text-gray-500 mb-1">O que sincronizar</label>
             <select name="alvo" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                <option value="tudo">Marcações e férias</option>
+                <option value="tudo">Marcações, férias e saldo</option>
                 <option value="ponto">Somente marcações</option>
                 <option value="ferias">Somente férias</option>
+                <option value="saldo">Somente saldo de horas</option>
             </select>
         </div>
         <div>

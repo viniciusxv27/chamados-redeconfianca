@@ -158,6 +158,34 @@ def listar_marcacoes(inicio, fim, employee_id=None, usar_cache=True, ttl=60):
     return itens
 
 
+def listar_saldo_horas(inicio, fim, employee_id=None, tentativas=3):
+    """Saldo de banco de horas de cada funcionário no período.
+
+    Devolve o cálculo do próprio Tangerino (``hoursBalanceInMinutes``).
+
+    A retentativa não é decorativa: este endpoint às vezes responde com um XML
+    de erro do storage em vez do JSON — foi visto voltando vazio numa chamada e
+    completo na seguinte, com os mesmos parâmetros. Sem isso, uma sincronização
+    gravaria "sem saldo" para a empresa inteira por causa de um soluço.
+    """
+    params = {'startDate': para_millis(inicio), 'endDate': fim_do_dia_millis(fim)}
+    if employee_id:
+        params['employeeId'] = employee_id
+
+    ultimo_erro = None
+    for tentativa in range(tentativas):
+        try:
+            dados = _get(PUNCH_BASE, '/hoursBalance', params)
+            if isinstance(dados, list):
+                return dados
+            ultimo_erro = TangerinoError('Resposta inesperada no saldo de horas.')
+        except TangerinoError as exc:
+            ultimo_erro = exc
+        logger.warning('Saldo de horas falhou (tentativa %d/%d): %s',
+                       tentativa + 1, tentativas, ultimo_erro)
+    raise ultimo_erro
+
+
 def justificativas_edicao():
     """Motivos válidos para uma marcação retroativa."""
     chave = 'tangerino:justificativas'

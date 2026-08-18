@@ -1,7 +1,7 @@
 from django.contrib import admin
 
 from .models import (ConfiguracaoTangerino, FeriasLancamento, MarcacaoPonto,
-                     RegistroPontoPortal, SincronizacaoTangerino)
+                     RegistroPontoPortal, SaldoHoras, SincronizacaoTangerino)
 
 
 @admin.register(ConfiguracaoTangerino)
@@ -48,6 +48,26 @@ class MarcacaoPontoAdmin(admin.ModelAdmin):
     @admin.display(description='Trabalhado')
     def total_hhmm(self, obj):
         return obj.total_hhmm
+
+
+@admin.register(SaldoHoras)
+class SaldoHorasAdmin(admin.ModelAdmin):
+    list_display = ('nome', 'saldo', 'periodo', 'usuario', 'sincronizado_em')
+    list_filter = ('periodo_inicio', 'periodo_fim')
+    search_fields = ('nome', 'email', 'usuario__first_name', 'usuario__last_name')
+    ordering = ('saldo_minutos',)          # os mais devedores primeiro
+    readonly_fields = [f.name for f in SaldoHoras._meta.fields]
+
+    def has_add_permission(self, request):
+        return False
+
+    @admin.display(description='Saldo', ordering='saldo_minutos')
+    def saldo(self, obj):
+        return obj.saldo_hhmm
+
+    @admin.display(description='Período')
+    def periodo(self, obj):
+        return f'{obj.periodo_inicio:%d/%m/%Y} a {obj.periodo_fim:%d/%m/%Y}'
 
 
 @admin.register(FeriasLancamento)

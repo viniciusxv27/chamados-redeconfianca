@@ -62,12 +62,14 @@ class Command(BaseCommand):
 
     def _sincronizar_dados(self, dias):
         """Espelha marcações e férias nas tabelas locais (bom para cron)."""
-        from tangerino.sync import sincronizar_ferias, sincronizar_marcacoes
+        from tangerino.sync import (sincronizar_ferias, sincronizar_marcacoes,
+                                    sincronizar_saldos)
 
         for tipo, rotulo, funcao in (
                 (SincronizacaoTangerino.Tipo.PONTO, 'Marcações',
                  lambda: sincronizar_marcacoes(dias=dias)),
-                (SincronizacaoTangerino.Tipo.FERIAS, 'Férias', sincronizar_ferias)):
+                (SincronizacaoTangerino.Tipo.FERIAS, 'Férias', sincronizar_ferias),
+                (SincronizacaoTangerino.Tipo.SALDO, 'Saldo de horas', sincronizar_saldos)):
             registro = SincronizacaoTangerino(tipo=tipo)
             try:
                 resultado = funcao()

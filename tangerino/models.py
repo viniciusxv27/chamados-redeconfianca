@@ -88,6 +88,7 @@ class SincronizacaoTangerino(models.Model):
         VINCULO = 'VINCULO', 'Vínculo de funcionários'
         PONTO = 'PONTO', 'Marcações de ponto'
         FERIAS = 'FERIAS', 'Lançamentos de férias'
+        SALDO = 'SALDO', 'Saldo de banco de horas'
 
     tipo = models.CharField(max_length=20, choices=Tipo.choices, default=Tipo.VINCULO)
     executada_em = models.DateTimeField(auto_now_add=True)
@@ -188,6 +189,58 @@ class MarcacaoPonto(models.Model):
         campos = (self.entrada1, self.saida1, self.entrada2,
                   self.saida2, self.entrada3, self.saida3)
         return [d.strftime('%H:%M') for d in campos if d]
+
+
+class SaldoHoras(models.Model):
+    """Saldo de banco de horas por pessoa, calculado pelo próprio Tangerino.
+
+    O número vem pronto do endpoint deles (``hoursBalanceInMinutes``) em vez de
+    ser recalculado aqui: o saldo depende da escala contratada de cada um, que
+    a API não expõe. Refazer a conta por fora daria um número diferente do que
+    o colaborador vê no app — e num assunto de banco de horas, dois números
+    divergentes é pior do que nenhum.
+
+    O saldo é **sempre relativo a um período**: a mesma pessoa tem saldo
+    diferente em 30 dias e no ano. Por isso o período fica gravado na linha —
+    sem ele o número não significa nada.
+    """
+
+    employee_id = models.IntegerField(unique=True, verbose_name='ID do funcionário')
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='saldos_horas', verbose_name='Usuário do portal')
+    nome = models.CharField(max_length=200, blank=True, db_index=True, verbose_name='Nome')
+    email = models.EmailField(blank=True, verbose_name='E-mail no Tangerino')
+
+    saldo_minutos = models.IntegerField(
+        default=0, verbose_name='Saldo (minutos)',
+        help_text='Positivo = horas a favor do colaborador; negativo = horas devidas.')
+    periodo_inicio = models.DateField(verbose_name='Período — início')
+    periodo_fim = models.DateField(verbose_name='Período — fim')
+    sincronizado_em = models.DateTimeField(verbose_name='Sincronizado em')
+
+    class Meta:
+        verbose_name = 'Saldo de horas (sincronizado)'
+        verbose_name_plural = 'Saldos de horas (sincronizados)'
+        ordering = ['nome']
+
+    def __str__(self):
+        return f"{self.nome or self.employee_id}: {self.saldo_hhmm}"
+
+    @property
+    def saldo_hhmm(self):
+        """Saldo em +HH:MM / -HH:MM, que é como banco de horas se lê."""
+        minutos = self.saldo_minutos or 0
+        horas, resto = divmod(abs(minutos), 60)
+        return f"{'-' if minutos < 0 else '+'}{horas}:{resto:02d}"
+
+    @property
+    def saldo_horas(self):
+        return round((self.saldo_minutos or 0) / 60, 2)
+
+    @property
+    def devedor(self):
+        return (self.saldo_minutos or 0) < 0
 
 
 class FeriasLancamento(models.Model):

@@ -18,9 +18,9 @@ from .client import (TangerinoError, de_millis, integracao_ativa, listar_funcion
                      listar_marcacoes, invalidar_cache_marcacoes, justificativas_edicao,
                      registrar_ponto, registrar_ponto_atrasado, testar_conexao)
 from .models import (ConfiguracaoTangerino, FeriasLancamento, MarcacaoPonto,
-                     RegistroPontoPortal, SincronizacaoTangerino)
+                     RegistroPontoPortal, SaldoHoras, SincronizacaoTangerino)
 from .sync import (funcionarios_disponiveis, sincronizar_ferias, sincronizar_marcacoes,
-                   sincronizar_vinculos)
+                   sincronizar_saldos, sincronizar_vinculos)
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
@@ -626,6 +626,10 @@ def configuracao(request):
         'grupos': CommunicationGroup.objects.all().order_by('name'),
         'marcacoes_no_banco': MarcacaoPonto.objects.count(),
         'ferias_no_banco': FeriasLancamento.objects.count(),
+        'saldos_no_banco': SaldoHoras.objects.count(),
+        'saldo_exemplo': SaldoHoras.objects.order_by('saldo_minutos').first(),
+        'ultima_saldo': SincronizacaoTangerino.objects.filter(
+            tipo=SincronizacaoTangerino.Tipo.SALDO).first(),
         'ultima_ponto': SincronizacaoTangerino.objects.filter(
             tipo=SincronizacaoTangerino.Tipo.PONTO).first(),
         'ultima_ferias': SincronizacaoTangerino.objects.filter(
@@ -656,6 +660,8 @@ def sincronizar_dados(request):
                         lambda: sincronizar_marcacoes(dias=dias)))
     if alvo in ('ferias', 'tudo'):
         tarefas.append((SincronizacaoTangerino.Tipo.FERIAS, 'Férias', sincronizar_ferias))
+    if alvo in ('saldo', 'tudo'):
+        tarefas.append((SincronizacaoTangerino.Tipo.SALDO, 'Saldo de horas', sincronizar_saldos))
     if not tarefas:
         messages.error(request, 'Escolha o que sincronizar.')
         return redirect('tangerino:configuracao')

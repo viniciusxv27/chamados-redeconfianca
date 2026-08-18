@@ -21,8 +21,8 @@ from django.contrib.auth import get_user_model
 from django.utils import timezone
 
 from .client import (MOTIVO_FERIAS_ID, de_millis, listar_ferias, listar_funcionarios,
-                     listar_marcacoes)
-from .models import FeriasLancamento, MarcacaoPonto
+                     listar_marcacoes, listar_saldo_horas)
+from .models import FeriasLancamento, MarcacaoPonto, SaldoHoras
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
@@ -241,6 +241,47 @@ def sincronizar_marcacoes(dias=30, employee_id=None):
         escopo=MarcacaoPonto.objects.filter(data__gte=inicio, data__lte=hoje))
     resultado['lidos'] = len(pares)
     resultado['dias'] = len(registros)
+    return resultado
+
+
+def sincronizar_saldos(inicio=None, fim=None):
+    """Traz o saldo de banco de horas para a tabela SaldoHoras.
+
+    O padrão é do 1º de janeiro até hoje — "saldo do ano". O saldo do Tangerino
+    é sempre relativo ao período consultado, então a janela escolhida vai
+    gravada junto: sem ela, o número não se interpreta.
+    """
+    hoje = timezone.localdate()
+    fim = fim or hoje
+    inicio = inicio or hoje.replace(month=1, day=1)
+
+    itens = listar_saldo_horas(inicio, fim)
+    usuarios = _mapa_usuarios()
+    agora = timezone.now()
+
+    registros = []
+    vistos = set()
+    for item in itens:
+        eid = item.get('employeeId')
+        if not eid or eid in vistos:
+            continue
+        vistos.add(eid)
+        registros.append(SaldoHoras(
+            employee_id=eid,
+            usuario=usuarios.get(eid),
+            nome=(item.get('name') or '')[:200],
+            email=(item.get('email') or '')[:254],
+            saldo_minutos=int(item.get('hoursBalanceInMinutes') or 0),
+            periodo_inicio=inicio,
+            periodo_fim=fim,
+            sincronizado_em=agora,
+        ))
+
+    resultado = _gravar_em_lote(SaldoHoras, registros, [
+        'usuario', 'nome', 'email', 'saldo_minutos', 'periodo_inicio',
+        'periodo_fim', 'sincronizado_em'], chave=('employee_id',))
+    resultado['lidos'] = len(itens)
+    resultado['periodo'] = (inicio, fim)
     return resultado
 
 
