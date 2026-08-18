@@ -1953,17 +1953,31 @@ def process_commission_data(data, is_gerente=False, metas_pilar=None, iq_data=No
             'pct_3': convert_percentage(pct_3_raw),
             'pct_2': convert_percentage(pct_2_raw),
             'pct_1': convert_percentage(pct_1_raw),
-            'carteira': safe_float(data.get(cart_key) or data.get(f'ATING_CART_{key}')),
+            # Atingimento da LOJA no pilar. Na planilha é sempre ATING_CART_{PILAR}
+            # (a aba do CN não tem ATING_{PILAR}_PDV), e vem como fração — 1.0463
+            # é 104,63%. Sem o convert_percentage a barra receberia "1" e ficaria
+            # sempre vazia.
+            'carteira': convert_percentage(
+                safe_float(data.get(f'ATING_CART_{key}') or data.get(cart_key))),
             'habilitado': data.get(f'H_{pilar["nome"].upper()}') or data.get(f'H_{key}'),
             # Dados de metas: Total, Pago, Exclusão
             'total': pilar_metas.get('total', 0),
             'pago': pilar_metas.get('pago', 0),
             'exclusao': pilar_metas.get('exclusao', 0),
         }
-        
+
         ating_values = [pilar_data['pct_3'], pilar_data['pct_2'], pilar_data['pct_1']]
         valid_values = [v for v in ating_values if v > 0]
         pilar_data['media'] = sum(valid_values) / len(valid_values) if valid_values else 0
+
+        # Largura da barra do atingimento da loja. O valor real passa de 100%
+        # com frequência (196% no Seguro), então a barra satura em 100 para não
+        # estourar o cartão — o número cheio continua no rótulo embaixo dela.
+        pilar_data['carteira_barra'] = round(min(100.0, max(0.0, pilar_data['carteira'])), 2)
+
+        # Id. Hunter do pilar, para o template não precisar de um if por pilar.
+        pilar_data['hunter'] = (data.get(f'H_{pilar["nome"].upper()}')
+                                or data.get(f'H_{key}') or '')
         
         processed['pilares'].append(pilar_data)
     
