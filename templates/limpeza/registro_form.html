@@ -22,11 +22,29 @@
         <div class="bg-white rounded-2xl border border-gray-200 p-5 mb-4">
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                    <label class="block text-xs text-gray-500 mb-1">Limpeza feita por</label>
-                    <div class="px-3 py-2 rounded-lg bg-gray-50 border border-gray-200 text-sm text-gray-800">
-                        {{ user.full_name }}
-                        {% if user.job_title %}<span class="text-gray-400">· {{ user.job_title }}</span>{% endif %}
-                    </div>
+                    <label class="block text-xs text-gray-500 mb-1">
+                        Limpeza feita por <span class="text-red-500">*</span>
+                    </label>
+                    <select name="realizada_por" required
+                            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                        <optgroup label="Serviços gerais">
+                            {% for u in auxiliares %}
+                            <option value="{{ u.id }}" {% if responsavel_escolhido == u.id|stringformat:"s" %}selected{% endif %}>
+                                {{ u.full_name }}{% if u.job_title %} — {{ u.job_title }}{% endif %}
+                            </option>
+                            {% endfor %}
+                        </optgroup>
+                        <optgroup label="Outros colaboradores">
+                            {% for u in demais_usuarios %}
+                            <option value="{{ u.id }}" {% if responsavel_escolhido == u.id|stringformat:"s" %}selected{% endif %}>
+                                {{ u.full_name }}{% if u.job_title %} — {{ u.job_title }}{% endif %}
+                            </option>
+                            {% endfor %}
+                        </optgroup>
+                    </select>
+                    <p class="text-[11px] text-gray-400 mt-1">
+                        Se você está lançando por outra pessoa, escolha o nome dela.
+                    </p>
                 </div>
                 <div>
                     <label class="block text-xs text-gray-500 mb-1">Setor <span class="text-red-500">*</span></label>

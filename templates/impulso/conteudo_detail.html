@@ -12,9 +12,31 @@
             <span class="text-xs uppercase px-2 py-0.5 rounded bg-gray-100 text-gray-600 flex-shrink-0">{{ conteudo.get_tipo_display }}</span>
         </div>
         {% if conteudo.descricao %}<p class="text-sm text-gray-700 mt-2 whitespace-pre-wrap">{{ conteudo.descricao }}</p>{% endif %}
+        {% if conteudo.video_reproduzivel %}
+        <!-- Vídeo obrigatório: toca aqui, sem download e sem pular à frente -->
+        <div class="mt-4">
+            <video id="impVideo" class="w-full rounded-xl bg-black" controls controlsList="nodownload"
+                   preload="metadata" playsinline
+                   data-assistido="{{ conclusao.video_assistido_ate|default:0|floatformat:'-2' }}"
+                   data-concluido="{% if conclusao.video_concluido %}1{% else %}0{% endif %}">
+                <source src="{{ conteudo.arquivo.url }}">
+                Seu navegador não consegue tocar este vídeo.
+            </video>
+            <div class="flex items-center justify-between gap-3 mt-2 flex-wrap">
+                <p id="impVideoAviso" class="text-xs text-gray-500">
+                    <i class="fas fa-circle-info mr-1"></i>É preciso assistir o vídeo inteiro para concluir.
+                </p>
+                <span id="impVideoPct" class="text-xs font-semibold text-gray-400 tabular-nums"></span>
+            </div>
+            <div class="w-full h-1.5 rounded-full bg-gray-200 mt-1.5 overflow-hidden">
+                <div id="impVideoBarra" class="h-full bg-emerald-500 rounded-full transition-all" style="width: 0%"></div>
+            </div>
+        </div>
+        {% endif %}
+
         <div class="flex flex-wrap gap-3 mt-4">
             {% if conteudo.url %}<a href="{{ conteudo.url }}" target="_blank" rel="noopener" class="px-3 py-2 rounded-lg bg-emerald-500 text-white text-sm hover:bg-emerald-600"><i class="fas fa-external-link mr-1"></i>Acessar link</a>{% endif %}
-            {% if conteudo.arquivo %}<a href="{{ conteudo.arquivo.url }}" target="_blank" rel="noopener" class="px-3 py-2 rounded-lg bg-gray-800 text-white text-sm hover:bg-gray-900"><i class="fas fa-download mr-1"></i>Baixar arquivo</a>{% endif %}
+            {% if conteudo.arquivo and not conteudo.video_reproduzivel %}<a href="{{ conteudo.arquivo.url }}" target="_blank" rel="noopener" class="px-3 py-2 rounded-lg bg-gray-800 text-white text-sm hover:bg-gray-900"><i class="fas fa-download mr-1"></i>Baixar arquivo</a>{% endif %}
         </div>
     </div>
 
@@ -29,7 +51,13 @@
             {% csrf_token %}
             <label class="block text-sm font-medium text-gray-700">Anexar certificado (opcional)</label>
             <input type="file" name="certificado" class="w-full text-sm">
-            <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-500 text-white text-sm hover:bg-emerald-600">{% if conclusao and conclusao.concluido %}Atualizar{% else %}Marcar como concluído{% endif %}</button>
+            <button type="submit" id="impBtnConcluir"
+                    {% if conteudo.video_reproduzivel and not conclusao.video_concluido %}disabled{% endif %}
+                    class="px-4 py-2 rounded-lg bg-emerald-500 text-white text-sm hover:bg-emerald-600
+                           disabled:bg-gray-300 disabled:cursor-not-allowed">{% if conclusao and conclusao.concluido %}Atualizar{% else %}Marcar como concluído{% endif %}</button>
+            {% if conteudo.video_reproduzivel and not conclusao.video_concluido %}
+            <p id="impBtnAviso" class="text-xs text-gray-400">Disponível assim que o vídeo terminar.</p>
+            {% endif %}
         </form>
     </div>
 
@@ -53,4 +81,102 @@
     </div>
     {% endif %}
 </div>
+
+{% if conteudo.video_reproduzivel %}
+<script>
+(function () {
+    var video = document.getElementById('impVideo');
+    if (!video) return;
+
+    var URL_PROGRESSO = '{% url "impulso:conteudo_progresso_video" conteudo.id %}';
+    var assistido = parseFloat(video.dataset.assistido || '0') || 0;
+    var concluido = video.dataset.concluido === '1';
+    var ultimoEnvio = 0;
+
+    function csrf() {
+        var m = document.cookie.match(/csrftoken=([^;]+)/);
+        return m ? m[1] : '';
+    }
+
+    function pintar() {
+        var dur = video.duration || 0;
+        if (!dur) return;
+        var pct = Math.min(100, (assistido / dur) * 100);
+        document.getElementById('impVideoBarra').style.width = pct.toFixed(2) + '%';
+        document.getElementById('impVideoPct').textContent = Math.floor(pct) + '% assistido';
+    }
+
+    function liberar() {
+        concluido = true;
+        var btn = document.getElementById('impBtnConcluir');
+        if (btn) btn.disabled = false;
+        var aviso = document.getElementById('impBtnAviso');
+        if (aviso) aviso.remove();
+        var texto = document.getElementById('impVideoAviso');
+        if (texto) texto.innerHTML = '<i class="fas fa-circle-check text-emerald-500 mr-1"></i>Vídeo assistido. Já pode concluir.';
+    }
+
+    function enviar(forcado) {
+        var agora = Date.now();
+        if (!forcado && agora - ultimoEnvio < 8000) return;
+        ultimoEnvio = agora;
+        var corpo = new FormData();
+        corpo.append('posicao', assistido);
+        corpo.append('duracao', video.duration || 0);
+        corpo.append('csrfmiddlewaretoken', csrf());
+        fetch(URL_PROGRESSO, {method: 'POST', headers: {'X-CSRFToken': csrf()}, body: corpo})
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (d && d.ok) {
+                    // O servidor manda o valor que ele aceitou — se o navegador
+                    // reportou mais do que o tempo real permitia, volta atrás.
+                    assistido = d.assistido_ate;
+                    if (d.video_concluido) liberar();
+                    pintar();
+                }
+            })
+            .catch(function () { /* silencioso: tenta de novo no próximo aviso */ });
+    }
+
+    // Retoma de onde parou.
+    video.addEventListener('loadedmetadata', function () {
+        if (assistido > 1 && assistido < (video.duration || 0) - 1) {
+            try { video.currentTime = assistido; } catch (e) {}
+        }
+        pintar();
+        if (concluido) liberar();
+    });
+
+    // Trava de avanço: não dá para arrastar a barra além do que já foi visto.
+    video.addEventListener('seeking', function () {
+        if (concluido) return;
+        if (video.currentTime > assistido + 1.5) {
+            video.currentTime = assistido;
+            var aviso = document.getElementById('impVideoAviso');
+            if (aviso) {
+                aviso.innerHTML = '<i class="fas fa-lock text-amber-500 mr-1"></i>Não dá para pular à frente: é preciso assistir o vídeo inteiro.';
+                setTimeout(function () {
+                    if (!concluido) aviso.innerHTML = '<i class="fas fa-circle-info mr-1"></i>É preciso assistir o vídeo inteiro para concluir.';
+                }, 3000);
+            }
+        }
+    });
+
+    video.addEventListener('timeupdate', function () {
+        if (video.currentTime > assistido) {
+            assistido = video.currentTime;
+            pintar();
+            enviar(false);
+        }
+    });
+
+    video.addEventListener('ended', function () {
+        assistido = video.duration || assistido;
+        enviar(true);
+    });
+    video.addEventListener('pause', function () { enviar(true); });
+    window.addEventListener('beforeunload', function () { enviar(true); });
+})();
+</script>
+{% endif %}
 {% endblock %}

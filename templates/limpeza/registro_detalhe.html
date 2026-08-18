@@ -33,6 +33,12 @@
         <div class="mt-4 pt-4 border-t border-gray-100 flex items-center gap-4 flex-wrap text-sm">
             <span class="text-gray-500">Setor: <strong class="text-gray-800">{{ registro.sector.name }}</strong></span>
             <span class="text-gray-500">Checklist: <strong class="text-gray-800">{{ registro.template.name }}</strong></span>
+            {# Quando alguém lança por outra pessoa, os dois nomes ficam visíveis. #}
+            {% if registro.submitted_by and registro.submitted_by_id != registro.realizada_por_id %}
+            <span class="text-gray-400 text-xs">
+                <i class="fas fa-pen-to-square mr-1"></i>Registrado por {{ registro.submitted_by.full_name }}
+            </span>
+            {% endif %}
         </div>
     </div>
 

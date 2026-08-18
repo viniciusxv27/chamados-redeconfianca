@@ -3,30 +3,52 @@
 {% block impulso_content %}
 <div class="max-w-2xl">
     <div class="mb-4">
-        <a href="{% url 'impulso:projeto_foco_list' %}" class="text-sm text-gray-500 hover:text-gray-800"><i class="fas fa-arrow-left mr-1"></i>Voltar</a>
+        <a href="{% if projeto %}{% url 'impulso:projeto_foco_detail' projeto.id %}{% else %}{% url 'impulso:projeto_foco_list' %}{% endif %}"
+           class="text-sm text-gray-500 hover:text-gray-800"><i class="fas fa-arrow-left mr-1"></i>Voltar</a>
     </div>
     <div class="imp-card p-5">
-        <h2 class="text-lg font-semibold text-gray-800 mb-4"><i class="fas fa-diagram-project text-emerald-500 mr-2"></i>Novo projeto foco</h2>
+        <h2 class="text-lg font-semibold text-gray-800 mb-4">
+            <i class="fas fa-diagram-project text-emerald-500 mr-2"></i>
+            {% if projeto %}Editar projeto foco{% else %}Novo projeto foco{% endif %}
+        </h2>
         <form method="post" class="space-y-4">
             {% csrf_token %}
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Nome *</label>
-                <input type="text" name="nome" required maxlength="200" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <input type="text" name="nome" required maxlength="200" value="{{ projeto.nome|default:'' }}"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
             </div>
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
-                <textarea name="descricao" rows="3" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></textarea>
+                <textarea name="descricao" rows="3"
+                          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">{{ projeto.descricao|default:'' }}</textarea>
             </div>
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Equipe do projeto</label>
-                <select name="membros" multiple size="6" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                    {% for c in colaboradores %}<option value="{{ c.id }}">{{ c.get_full_name|default:c.email }}</option>{% endfor %}
+                <select name="membros" multiple size="8" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    {% for c in colaboradores %}
+                    <option value="{{ c.id }}" {% if c.id in membros_ids %}selected{% endif %}>{{ c.get_full_name|default:c.email }}</option>
+                    {% endfor %}
                 </select>
-                <p class="text-xs text-gray-400 mt-1">Segure Ctrl/Cmd para selecionar vários.</p>
+                <p class="text-xs text-gray-400 mt-1">
+                    Segure Ctrl/Cmd para selecionar vários.
+                    {% if projeto %}Quem sair da equipe mantém as tarefas já feitas — só deixa de ver o projeto.{% endif %}
+                </p>
             </div>
+
+            {% if projeto %}
+            <label class="flex items-center gap-2 text-sm text-gray-700">
+                <input type="checkbox" name="ativo" class="rounded border-gray-300" {% if projeto.ativo %}checked{% endif %}>
+                Projeto ativo
+            </label>
+            {% endif %}
+
             <div class="flex justify-end gap-2 pt-2">
-                <a href="{% url 'impulso:projeto_foco_list' %}" class="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 text-sm hover:bg-gray-200">Cancelar</a>
-                <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-500 text-white text-sm hover:bg-emerald-600">Criar projeto</button>
+                <a href="{% if projeto %}{% url 'impulso:projeto_foco_detail' projeto.id %}{% else %}{% url 'impulso:projeto_foco_list' %}{% endif %}"
+                   class="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 text-sm hover:bg-gray-200">Cancelar</a>
+                <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-500 text-white text-sm hover:bg-emerald-600">
+                    {% if projeto %}Salvar alterações{% else %}Criar projeto{% endif %}
+                </button>
             </div>
         </form>
     </div>

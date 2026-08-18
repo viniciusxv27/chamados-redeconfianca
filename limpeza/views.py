@@ -144,7 +144,20 @@ def registro_novo(request):
                 'opcoes': OPCOES_RESPOSTA,
                 'setores': setores,
                 'setor_escolhido': setor_enviado,
+                'auxiliares': _usuarios_para_escolher(request.user)[0],
+                'demais_usuarios': _usuarios_para_escolher(request.user)[1],
+                'responsavel_escolhido': (request.POST.get('realizada_por') or ''),
             })
+
+        # Quem fez a limpeza pode ser outra pessoa que não a que está
+        # registrando. Guardamos os dois: `realizada_por` é quem limpou e
+        # `submitted_by` continua sendo quem digitou.
+        realizada_por = request.user
+        escolhido = (request.POST.get('realizada_por') or '').strip()
+        if escolhido.isdigit():
+            achado = User.objects.filter(id=int(escolhido), is_active=True).first()
+            if achado:
+                realizada_por = achado
 
         agora = timezone.now()
         with transaction.atomic():
@@ -156,7 +169,7 @@ def registro_novo(request):
                 status='finalizado',
                 launched_by=request.user,
                 submitted_by=request.user,
-                realizada_por=request.user,
+                realizada_por=realizada_por,
                 realizada_em=agora,
             )
             LimpezaAnswer.objects.bulk_create([
@@ -168,18 +181,47 @@ def registro_novo(request):
                 ) for q in perguntas
             ])
 
+        quem = ('' if realizada_por == request.user
+                else f' em nome de {realizada_por.full_name}')
         messages.success(
             request,
-            f'Limpeza de {setor.name} registrada em {timezone.localtime(agora):%d/%m/%Y às %H:%M}.')
+            f'Limpeza de {setor.name}{quem} registrada em '
+            f'{timezone.localtime(agora):%d/%m/%Y às %H:%M}.')
         return redirect('limpeza:registro_detalhe', registro_id=registro.id)
 
+    auxiliares, demais = _usuarios_para_escolher(request.user)
     return render(request, 'limpeza/registro_form.html', {
         'template': template,
         'perguntas': _perguntas_para_tela(perguntas, {}, set(), {}),
         'opcoes': OPCOES_RESPOSTA,
         'setores': setores,
         'setor_escolhido': str(setores[0].id) if len(setores) == 1 else '',
+        'auxiliares': auxiliares,
+        'demais_usuarios': demais,
+        'responsavel_escolhido': str(request.user.id),
     })
+
+
+def _usuarios_para_escolher(usuario_atual):
+    """Quem pode ser apontado como responsável pela limpeza.
+
+    Quem passa a limpeza nem sempre é quem registra — muitas vezes o auxiliar
+    não tem acesso ao portal e outra pessoa lança por ele. Por isso a lista é
+    aberta, com os auxiliares de serviços gerais em cima para não precisar
+    procurar no meio de todos.
+    """
+    ativos = (User.objects.filter(is_active=True)
+              .only('id', 'first_name', 'last_name', 'email', 'job_title')
+              .order_by('first_name', 'last_name'))
+    auxiliares, demais = [], []
+    for u in ativos:
+        alvo = auxiliares if 'SERVIÇOS GERAIS' in (u.job_title or '').upper() else demais
+        alvo.append(u)
+    # O usuário logado entra no grupo de cima também, para virar o padrão fácil.
+    if usuario_atual not in auxiliares:
+        auxiliares.insert(0, usuario_atual)
+        demais = [u for u in demais if u.id != usuario_atual.id]
+    return auxiliares, demais
 
 
 def _perguntas_para_tela(perguntas, respostas, ids_faltando, dados_post):

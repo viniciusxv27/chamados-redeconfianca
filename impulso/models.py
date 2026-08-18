@@ -437,6 +437,19 @@ class ConteudoConectar(models.Model):
     def __str__(self):
         return f"[{self.get_tipo_display()}] {self.titulo}"
 
+    # Extensões que o <video> do navegador toca. Um "vídeo" enviado como .avi
+    # ou por link externo não dá para controlar, então não vira obrigatório.
+    EXTENSOES_VIDEO = ('.mp4', '.webm', '.ogg', '.ogv', '.m4v', '.mov')
+
+    @property
+    def video_reproduzivel(self):
+        """True quando o conteúdo é um vídeo hospedado que o portal consegue
+        acompanhar do início ao fim."""
+        if self.tipo != self.Tipo.VIDEO or not self.arquivo:
+            return False
+        nome = (self.arquivo.name or '').lower()
+        return nome.endswith(self.EXTENSOES_VIDEO)
+
     def periodo_ativo(self):
         hoje = timezone.localdate()
         if self.inicio and hoje < self.inicio:
@@ -460,6 +473,21 @@ class ConclusaoConteudo(models.Model):
         upload_to=upload_certificado, storage=get_media_storage(),
         null=True, blank=True, verbose_name='Certificado')
     concluido_em = models.DateTimeField(null=True, blank=True, verbose_name='Concluído em')
+
+    # Acompanhamento do vídeo. Guardado no servidor porque a checagem no
+    # navegador sozinha não vale nada: bastaria um POST direto para "concluir"
+    # sem ter assistido.
+    video_assistido_ate = models.FloatField(
+        default=0, verbose_name='Assistido até (segundos)',
+        help_text='Maior ponto do vídeo alcançado sem pular à frente.')
+    video_duracao = models.FloatField(default=0, verbose_name='Duração do vídeo (segundos)')
+    video_concluido = models.BooleanField(default=False, verbose_name='Vídeo assistido até o fim')
+    video_atualizado_em = models.DateTimeField(
+        null=True, blank=True, verbose_name='Último aviso de progresso')
+
+    # Considera assistido a partir daqui: os segundos finais costumam ser
+    # créditos/encerramento, e exigir 100% trava quem tem vídeo com fade out.
+    FRACAO_PARA_CONCLUIR = 0.95
 
     class Meta:
         verbose_name = 'Conclusão de Conteúdo'

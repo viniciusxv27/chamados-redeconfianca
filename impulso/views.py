@@ -704,10 +704,72 @@ def conteudo_detail(request, conteudo_id):
 
 @require_POST
 @impulso_member_required
+def conteudo_progresso_video(request, conteudo_id):
+    """Recebe o avanço da reprodução e guarda até onde a pessoa assistiu.
+
+    O navegador avisa a cada poucos segundos. O servidor só aceita avanço
+    compatível com o tempo real decorrido: sem isso, bastaria mandar
+    "assisti tudo" de uma vez e o vídeo obrigatório viraria enfeite.
+    """
+    conteudo = get_object_or_404(ConteudoConectar, id=conteudo_id)
+    if not conteudo.video_reproduzivel:
+        return JsonResponse({'ok': False, 'erro': 'Conteúdo não é um vídeo do portal.'}, status=400)
+
+    try:
+        posicao = float(request.POST.get('posicao') or 0)
+        duracao = float(request.POST.get('duracao') or 0)
+    except (TypeError, ValueError):
+        return JsonResponse({'ok': False, 'erro': 'Progresso inválido.'}, status=400)
+
+    conclusao, _ = ConclusaoConteudo.objects.get_or_create(
+        conteudo=conteudo, user=request.user)
+
+    agora = timezone.now()
+    if duracao > 0:
+        conclusao.video_duracao = duracao
+
+    # Quanto tempo real passou desde o último aviso? O avanço não pode ser
+    # maior que isso (com folga para latência e para o primeiro aviso).
+    if conclusao.video_atualizado_em:
+        decorrido = (agora - conclusao.video_atualizado_em).total_seconds()
+    else:
+        decorrido = 30
+    teto = conclusao.video_assistido_ate + max(decorrido * 1.5, 5)
+
+    if posicao > conclusao.video_assistido_ate:
+        conclusao.video_assistido_ate = min(posicao, teto)
+
+    alvo = (conclusao.video_duracao or 0) * ConclusaoConteudo.FRACAO_PARA_CONCLUIR
+    if alvo and conclusao.video_assistido_ate >= alvo:
+        conclusao.video_concluido = True
+
+    conclusao.video_atualizado_em = agora
+    conclusao.save(update_fields=['video_assistido_ate', 'video_duracao',
+                                  'video_concluido', 'video_atualizado_em'])
+    return JsonResponse({
+        'ok': True,
+        'assistido_ate': round(conclusao.video_assistido_ate, 1),
+        'video_concluido': conclusao.video_concluido,
+    })
+
+
+@require_POST
+@impulso_member_required
 def conteudo_concluir(request, conteudo_id):
     conteudo = get_object_or_404(ConteudoConectar, id=conteudo_id)
     conclusao, _ = ConclusaoConteudo.objects.get_or_create(
         conteudo=conteudo, user=request.user)
+
+    # Vídeo do portal só conclui depois de assistido — conferido aqui, não só
+    # escondendo o botão na tela.
+    if conteudo.video_reproduzivel and not conclusao.video_concluido:
+        falta = max(0, (conclusao.video_duracao or 0) - conclusao.video_assistido_ate)
+        messages.error(
+            request,
+            'Assista o vídeo até o fim para concluir.'
+            + (f' Faltam cerca de {int(falta // 60)}min{int(falta % 60):02d}s.' if falta else ''))
+        return redirect('impulso:conteudo_detail', conteudo_id=conteudo.id)
+
     conclusao.concluido = True
     conclusao.concluido_em = timezone.now()
     certificado = request.FILES.get('certificado')
@@ -762,6 +824,58 @@ def projeto_foco_create(request):
         'active_tab': 'conectar',
     }
     return render(request, 'impulso/projeto_form.html', context)
+
+
+@impulso_manager_required
+def projeto_foco_edit(request, projeto_id):
+    """Altera nome, descrição e equipe do projeto foco.
+
+    Quem sai da equipe perde as tarefas do projeto? Não: as tarefas ficam,
+    porque são histórico de trabalho feito. O que muda é quem passa a ver o
+    projeto e a receber tarefas novas.
+    """
+    projeto = get_object_or_404(ProjetoFoco, id=projeto_id)
+
+    if request.method == 'POST':
+        nome = (request.POST.get('nome') or '').strip()
+        if not nome:
+            messages.error(request, 'Informe o nome do projeto.')
+            return redirect('impulso:projeto_foco_edit', projeto_id=projeto.id)
+
+        projeto.nome = nome
+        projeto.descricao = (request.POST.get('descricao') or '').strip()
+        projeto.ativo = request.POST.get('ativo') == 'on'
+        projeto.save(update_fields=['nome', 'descricao', 'ativo'])
+
+        antes = set(projeto.membros.values_list('id', flat=True))
+        ids = request.POST.getlist('membros')
+        novos_membros = get_colaboradores().filter(id__in=ids)
+        projeto.membros.set(novos_membros)
+        depois = {u.id for u in novos_membros}
+
+        # Só avisa quem entrou agora — quem já estava não precisa de aviso.
+        entraram = [u for u in novos_membros if u.id not in antes]
+        if entraram:
+            _notify(entraram, 'Adicionado a projeto foco',
+                    f'Você faz parte do projeto "{projeto.nome}".',
+                    f'/impulso/conectar/projetos/{projeto.id}/')
+        sairam = antes - depois
+        if sairam:
+            from django.contrib.auth import get_user_model
+            _notify(list(get_user_model().objects.filter(id__in=sairam)),
+                    'Removido de projeto foco',
+                    f'Você não faz mais parte do projeto "{projeto.nome}".',
+                    '/impulso/conectar/projetos/')
+
+        messages.success(request, 'Projeto atualizado.')
+        return redirect('impulso:projeto_foco_detail', projeto_id=projeto.id)
+
+    return render(request, 'impulso/projeto_form.html', {
+        'projeto': projeto,
+        'colaboradores': get_colaboradores(),
+        'membros_ids': set(projeto.membros.values_list('id', flat=True)),
+        'active_tab': 'conectar',
+    })
 
 
 @impulso_member_required
@@ -844,11 +958,23 @@ def minhas_tarefas(request):
 # ---------------------------------------------------------------------------
 @impulso_member_required
 def inovar_list(request):
+    """Ideias: cada um vê as suas; o gestor avalia sem saber de quem é.
+
+    O colaborador nunca vê ideia de outro. O gestor precisa ver o conteúdo
+    para aprovar — mas não a autoria: assim a avaliação é da ideia, não de
+    quem escreveu. O nome só aparece na própria ideia de quem está olhando.
+    """
     user = request.user
     gestor = is_impulso_manager(user)
     ideias = Ideia.objects.all() if gestor else Ideia.objects.filter(autor=user)
+
+    lista = list(ideias.select_related('autor'))
+    for ideia in lista:
+        # Único caso em que o nome aparece: a ideia é de quem está vendo.
+        ideia.mostrar_autor = (ideia.autor_id == user.id)
+
     context = {
-        'ideias': ideias.select_related('autor'),
+        'ideias': lista,
         'is_gestor': gestor,
         'status_choices': Ideia.Status.choices,
         'active_tab': 'inovar',

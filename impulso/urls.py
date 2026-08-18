@@ -32,11 +32,14 @@ urlpatterns = [
     path('conectar/novo/', views.conteudo_create, name='conteudo_create'),
     path('conectar/<int:conteudo_id>/', views.conteudo_detail, name='conteudo_detail'),
     path('conectar/<int:conteudo_id>/concluir/', views.conteudo_concluir, name='conteudo_concluir'),
+    path('conectar/<int:conteudo_id>/progresso/', views.conteudo_progresso_video,
+         name='conteudo_progresso_video'),
 
     # CONECTAR — projeto foco
     path('conectar/projetos/', views.projeto_foco_list, name='projeto_foco_list'),
     path('conectar/projetos/novo/', views.projeto_foco_create, name='projeto_foco_create'),
     path('conectar/projetos/<int:projeto_id>/', views.projeto_foco_detail, name='projeto_foco_detail'),
+    path('conectar/projetos/<int:projeto_id>/editar/', views.projeto_foco_edit, name='projeto_foco_edit'),
     path('conectar/projetos/<int:projeto_id>/tarefa/', views.tarefa_create, name='tarefa_create'),
     path('conectar/tarefa/<int:tarefa_id>/status/', views.tarefa_update_status, name='tarefa_update_status'),
     path('minhas-tarefas/', views.minhas_tarefas, name='minhas_tarefas'),
