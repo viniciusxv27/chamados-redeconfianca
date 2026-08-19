@@ -570,6 +570,15 @@
                                         <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-emerald-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                                     </a>
                                 </li>
+                                {% if caixa_liberado %}
+                                <li>
+                                    <a href="{% url 'contagem_caixa:dashboard' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Contagem de Caixa">
+                                        <i class="fas fa-cash-register text-violet-400 flex-shrink-0"></i>
+                                        <span>Contagem de Caixa</span>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-violet-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
+                                </li>
+                                {% endif %}
                                 <li>
                                     <a href="{% url 'contracheque:my_payslips' %}" class="flex items-center space-x-2 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Contracheque">
                                         <i class="fas fa-file-invoice-dollar text-green-400 flex-shrink-0"></i>

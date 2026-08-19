@@ -15,6 +15,8 @@ urlpatterns = [
     path('admin/', views.admin_documents, name='admin_documents'),
     path('admin/novo/', views.admin_document_create, name='admin_document_create'),
     path('admin/<int:pk>/', views.admin_document_detail, name='admin_document_detail'),
+    path('admin/<int:pk>/obrigatoriedade/', views.admin_toggle_obrigatoriedade,
+         name='admin_toggle_obrigatoriedade'),
     path('admin/<int:pk>/excluir/', views.admin_delete_document, name='admin_delete_document'),
     path('admin/<int:pk>/adicionar-signatarios/', views.admin_add_signers, name='admin_add_signers'),
     path('admin/signatario/<int:pk>/remover/', views.admin_remove_signer, name='admin_remove_signer'),

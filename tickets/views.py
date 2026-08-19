@@ -141,10 +141,10 @@ def tickets_list_view(request):
         if 'abertos' in status_filter:
             tickets = tickets.filter(status='ABERTO')
         elif 'nao_resolvidos' in status_filter:
-            tickets = tickets.exclude(status__in=['RESOLVIDO', 'FECHADO'])
+            tickets = tickets.exclude(status__in=['RESOLVIDO', 'FECHADO', 'ENCERRADO_SEM_SOLUCAO'])
         else:
             # Filtrar por múltiplos status específicos
-            valid_statuses = [s for s in status_filter if s in ['ABERTO', 'EM_ANDAMENTO', 'RESOLVIDO', 'FECHADO']]
+            valid_statuses = [s for s in status_filter if s in ['ABERTO', 'EM_ANDAMENTO', 'RESOLVIDO', 'FECHADO', 'ENCERRADO_SEM_SOLUCAO']]
             if valid_statuses:
                 tickets = tickets.filter(status__in=valid_statuses)
     
@@ -290,13 +290,13 @@ def tickets_list_view(request):
                 # Tickets em atraso (não resolvidos e com data de vencimento passada)
                 tickets = tickets.filter(
                     models.Q(due_date__lt=now) & 
-                    ~models.Q(status__in=['RESOLVIDO', 'FECHADO'])
+                    ~models.Q(status__in=['RESOLVIDO', 'FECHADO', 'ENCERRADO_SEM_SOLUCAO'])
                 )
             elif overdue_filter == 'no':
                 # Tickets no prazo
                 tickets = tickets.filter(
                     models.Q(due_date__gte=now) | 
-                    models.Q(status__in=['RESOLVIDO', 'FECHADO'])
+                    models.Q(status__in=['RESOLVIDO', 'FECHADO', 'ENCERRADO_SEM_SOLUCAO'])
                 )
         
         # Filtro por títulos duplicados
@@ -945,6 +945,7 @@ def ticket_detail_view(request, ticket_id):
         'additional_assignments': ticket.additional_assignments.filter(is_active=True).select_related('user', 'assigned_by'),
         'sector_users': sector_users,
         'next_url': next_url,
+        'motivos_encerramento': Ticket.MOTIVO_ENCERRAMENTO_CHOICES,
     }
     return render(request, 'tickets/detail.html', context)
 
@@ -1228,11 +1229,38 @@ def update_ticket_status_view(request, ticket_id):
                 ticket.closed_at = timezone.now()
         elif new_status == 'FECHADO':
             ticket.closed_at = timezone.now()
-        elif new_status == 'EM_ANDAMENTO' and old_status in ['RESOLVIDO', 'FECHADO', 'AGUARDANDO_APROVACAO']:
+        elif new_status == 'ENCERRADO_SEM_SOLUCAO':
+            # Encerra sem entrar na conta de resolvidos. O motivo é obrigatório:
+            # um chamado que some da fila sem explicação vira dúvida depois.
+            motivo = request.POST.get('motivo_encerramento', '')
+            validos = dict(Ticket.MOTIVO_ENCERRAMENTO_CHOICES)
+            if motivo not in validos:
+                messages.error(request, 'Escolha o motivo do encerramento sem solução.')
+                return redirect('ticket_detail', ticket_id=ticket.id)
+            detalhe = (request.POST.get('detalhe_encerramento') or '').strip()
+            if motivo == 'OUTRO' and not detalhe:
+                messages.error(request, 'Descreva o motivo quando escolher "Outro motivo".')
+                return redirect('ticket_detail', ticket_id=ticket.id)
+
+            ticket.motivo_encerramento = motivo
+            ticket.detalhe_encerramento = detalhe
+            ticket.encerrado_sem_solucao_em = timezone.now()
+            ticket.encerrado_sem_solucao_por = request.user
+            ticket.closed_at = timezone.now()
+            ticket.resolved_at = None        # não é resolução
+            if not observation:
+                observation = f'Encerrado sem solução: {validos[motivo]}' + (
+                    f' — {detalhe}' if detalhe else '')
+        elif new_status in ('EM_ANDAMENTO', 'REABERTO') and old_status in [
+                'RESOLVIDO', 'FECHADO', 'AGUARDANDO_APROVACAO', 'ENCERRADO_SEM_SOLUCAO']:
             # Reabertura do chamado - limpar campos de resolução se necessário
-            if old_status in ['RESOLVIDO', 'FECHADO']:
+            if old_status in ['RESOLVIDO', 'FECHADO', 'ENCERRADO_SEM_SOLUCAO']:
                 ticket.resolved_at = None
                 ticket.closed_at = None
+                ticket.motivo_encerramento = ''
+                ticket.detalhe_encerramento = ''
+                ticket.encerrado_sem_solucao_em = None
+                ticket.encerrado_sem_solucao_por = None
         
         ticket.save()
         
@@ -2523,9 +2551,9 @@ def tickets_export_view(request):
         if 'abertos' in status_filter:
             tickets = tickets.filter(status='ABERTO')
         elif 'nao_resolvidos' in status_filter:
-            tickets = tickets.exclude(status__in=['RESOLVIDO', 'FECHADO'])
+            tickets = tickets.exclude(status__in=['RESOLVIDO', 'FECHADO', 'ENCERRADO_SEM_SOLUCAO'])
         else:
-            valid_statuses = [s for s in status_filter if s in ['ABERTO', 'EM_ANDAMENTO', 'RESOLVIDO', 'FECHADO']]
+            valid_statuses = [s for s in status_filter if s in ['ABERTO', 'EM_ANDAMENTO', 'RESOLVIDO', 'FECHADO', 'ENCERRADO_SEM_SOLUCAO']]
             if valid_statuses:
                 tickets = tickets.filter(status__in=valid_statuses)
     
@@ -2623,12 +2651,12 @@ def tickets_export_view(request):
             if overdue_filter == 'yes':
                 tickets = tickets.filter(
                     models.Q(due_date__lt=now) & 
-                    ~models.Q(status__in=['RESOLVIDO', 'FECHADO'])
+                    ~models.Q(status__in=['RESOLVIDO', 'FECHADO', 'ENCERRADO_SEM_SOLUCAO'])
                 )
             elif overdue_filter == 'no':
                 tickets = tickets.filter(
                     models.Q(due_date__gte=now) | 
-                    models.Q(status__in=['RESOLVIDO', 'FECHADO'])
+                    models.Q(status__in=['RESOLVIDO', 'FECHADO', 'ENCERRADO_SEM_SOLUCAO'])
                 )
     
     # Ordenar por data de atualização

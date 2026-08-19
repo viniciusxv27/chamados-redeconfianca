@@ -40,8 +40,24 @@ class Ticket(models.Model):
         ('RESOLVIDO', 'Resolvido'),
         ('AGUARDANDO_APROVACAO', 'Aguardando Aprovação do Usuário'),
         ('FECHADO', 'Fechado'),
+        ('ENCERRADO_SEM_SOLUCAO', 'Encerrado sem solução'),
         ('REABERTO', 'Reaberto'),
         ('REJEITADO', 'Rejeitado'),
+    ]
+
+    # Motivos de encerramento sem solução. O chamado sai da fila sem ser
+    # contado como resolvido: a loja pediu pintura, o orçamento veio caro e a
+    # obra não vai acontecer agora — o chamado não pode ficar boiando nem
+    # entrar na conta de "resolvidos".
+    MOTIVO_ENCERRAMENTO_CHOICES = [
+        ('CUSTO', 'Custo inviável / orçamento reprovado'),
+        ('SEM_NECESSIDADE', 'Sem necessidade no momento'),
+        ('ADIADO', 'Adiado para outro período'),
+        ('DUPLICADO', 'Chamado duplicado'),
+        ('FORA_ESCOPO', 'Fora do escopo da equipe'),
+        ('SEM_RETORNO', 'Sem retorno do solicitante'),
+        ('RESOLVIDO_FORA', 'Resolvido por fora do chamado'),
+        ('OUTRO', 'Outro motivo'),
     ]
     
     id = models.AutoField(primary_key=True)
@@ -50,6 +66,18 @@ class Ticket(models.Model):
     sector = models.ForeignKey(Sector, on_delete=models.CASCADE, verbose_name="Setor")
     category = models.ForeignKey(Category, on_delete=models.CASCADE, null=True, blank=True, verbose_name="Categoria")
     status = models.CharField(max_length=25, choices=STATUS_CHOICES, default='ABERTO', verbose_name="Status")
+    motivo_encerramento = models.CharField(
+        max_length=20, blank=True, choices=MOTIVO_ENCERRAMENTO_CHOICES,
+        verbose_name="Motivo do encerramento sem solução")
+    detalhe_encerramento = models.TextField(
+        blank=True, verbose_name="Detalhe do encerramento",
+        help_text="Explicação do porquê o chamado foi encerrado sem ser resolvido.")
+    encerrado_sem_solucao_em = models.DateTimeField(
+        null=True, blank=True, verbose_name="Encerrado sem solução em")
+    encerrado_sem_solucao_por = models.ForeignKey(
+        'users.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='tickets_encerrados_sem_solucao',
+        verbose_name="Encerrado sem solução por")
     priority = models.CharField(max_length=15, choices=PRIORITY_CHOICES, default='MEDIA', verbose_name="Prioridade")
     solution = models.TextField(blank=True, verbose_name="Solução")
     solution_time_hours = models.IntegerField(default=24, verbose_name="Tempo para Solução (horas)")

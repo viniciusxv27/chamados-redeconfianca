@@ -80,7 +80,38 @@
                 <textarea name="descricao" required rows="4" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Descreva a meta de forma clara e objetiva…"></textarea>
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
+                {% if sou_gestor %}
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Outros responsáveis</label>
+                <select name="participantes" multiple size="5"
+                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    {% for c in colaboradores %}
+                    <option value="{{ c.id }}">{{ c.get_full_name|default:c.email }}</option>
+                    {% endfor %}
+                </select>
+                <p class="text-xs text-gray-400 mt-1">
+                    Opcional. A meta continua no nome do colaborador principal — estes acompanham e
+                    podem marcar os itens do to-do. Segure Ctrl/Cmd para escolher vários.
+                </p>
+            </div>
+            {% endif %}
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">To-do da meta</label>
+                <div id="impItens" class="space-y-2">
+                    <input type="text" name="itens" maxlength="300" placeholder="1º passo (opcional)"
+                           class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                </div>
+                <button type="button" id="impAddItem"
+                        class="mt-2 text-xs text-orange-600 hover:underline">
+                    <i class="fas fa-plus mr-1"></i>adicionar outro passo
+                </button>
+                <p class="text-xs text-gray-400 mt-1">
+                    Quem executa vai marcando cada passo; o gestor acompanha o avanço pelo card.
+                </p>
+            </div>
+
+<div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Recorrência *</label>
                     <select name="recorrencia" id="impRecorrencia" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                         {% for value, label in recorrencias %}
@@ -124,6 +155,23 @@
     if (!sel || !ajuda) return;
     sel.addEventListener('change', function () {
         ajuda.textContent = TEXTOS[sel.value] || '';
+    });
+})();
+</script>
+
+<script>
+(function () {
+    var botao = document.getElementById('impAddItem');
+    if (!botao) return;
+    botao.addEventListener('click', function () {
+        var campo = document.createElement('input');
+        campo.type = 'text';
+        campo.name = 'itens';
+        campo.maxLength = 300;
+        campo.placeholder = 'próximo passo';
+        campo.className = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm';
+        document.getElementById('impItens').appendChild(campo);
+        campo.focus();
     });
 })();
 </script>

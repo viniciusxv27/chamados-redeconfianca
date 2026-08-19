@@ -94,6 +94,21 @@ class Document(models.Model):
         help_text='Desmarque para preparar o documento sem que as pessoas o vejam.',
     )
 
+    # Assinatura obrigatória: enquanto ligada, quem ainda não assinou recebe o
+    # popup de pendência a cada acesso ao portal. Desligada, o documento
+    # continua disponível para assinar — só para de cobrar.
+    assinatura_obrigatoria = models.BooleanField(
+        default=True,
+        verbose_name='Assinatura obrigatória',
+        help_text='Desligue para parar de cobrar a assinatura com popup e pendência.',
+    )
+    obrigatoriedade_alterada_em = models.DateTimeField(
+        null=True, blank=True, verbose_name='Obrigatoriedade alterada em')
+    obrigatoriedade_alterada_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='documentos_obrigatoriedade_alterada',
+        verbose_name='Obrigatoriedade alterada por')
+
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

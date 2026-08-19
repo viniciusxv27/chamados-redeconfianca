@@ -572,6 +572,11 @@ select[multiple] option:hover {
                     <button onclick="showResolveModal()" class="w-full bg-success text-white py-2 px-3 rounded text-sm hover:bg-green-600 transition-colors">
                         <i class="fas fa-check mr-2"></i>Marcar como Resolvido
                     </button>
+                    {% if ticket.status != 'ENCERRADO_SEM_SOLUCAO' %}
+                    <button onclick="mostrarEncerrarModal()" class="w-full bg-gray-600 text-white py-2 px-3 rounded text-sm hover:bg-gray-700 transition-colors">
+                        <i class="fas fa-circle-xmark mr-2"></i>Encerrar sem solução
+                    </button>
+                    {% endif %}
                 {% endif %}
                 
                 <!-- Botão de Reabrir para quem está respondendo -->
@@ -700,6 +705,55 @@ select[multiple] option:hover {
             </h3>
         </div>
     {% endif %}
+</div>
+
+
+<!-- Modal: encerrar sem solução -->
+<div id="encerrarModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+    <div class="relative top-20 mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
+        <div class="mt-2">
+            <h3 class="text-lg font-medium text-gray-900 mb-1">Encerrar sem solução</h3>
+            <p class="text-sm text-gray-500 mb-4">
+                O chamado sai da fila sem ser contado como resolvido. Fica registrado o motivo,
+                quem encerrou e quando.
+            </p>
+            <form method="post" action="{% url 'update_ticket_status' ticket.id %}">
+                {% csrf_token %}
+                <input type="hidden" name="status" value="ENCERRADO_SEM_SOLUCAO">
+
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Motivo <span class="text-red-500">*</span>
+                    </label>
+                    <select name="motivo_encerramento" id="encMotivo" required
+                            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                        <option value="">Selecione…</option>
+                        {% for valor, rotulo in motivos_encerramento %}
+                        <option value="{{ valor }}">{{ rotulo }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Detalhe <span id="encDetalheObrig" class="hidden text-red-500">*</span>
+                        <span class="text-gray-400 text-xs">(explique para quem abriu o chamado)</span>
+                    </label>
+                    <textarea name="detalhe_encerramento" id="encDetalhe" rows="3"
+                              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                              placeholder="Ex.: orçamento de R$ 4.200 reprovado pela diretoria; refazer no próximo trimestre."></textarea>
+                </div>
+
+                <div class="flex justify-end gap-2">
+                    <button type="button" onclick="fecharEncerrarModal()"
+                            class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancelar</button>
+                    <button type="submit" class="px-4 py-2 bg-gray-700 text-white rounded text-sm hover:bg-gray-800">
+                        <i class="fas fa-circle-xmark mr-1"></i>Encerrar chamado
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
 </div>
 
 <!-- Modal para Marcar como Resolvido -->
@@ -966,6 +1020,23 @@ function toggleAssignField() {
         document.getElementById('assigned_to').required = false;
     }
 }
+
+function mostrarEncerrarModal() {
+    document.getElementById('encerrarModal').classList.remove('hidden');
+}
+function fecharEncerrarModal() {
+    document.getElementById('encerrarModal').classList.add('hidden');
+}
+// "Outro motivo" exige explicação — o servidor também cobra.
+document.addEventListener('DOMContentLoaded', function () {
+    var motivo = document.getElementById('encMotivo');
+    if (!motivo) return;
+    motivo.addEventListener('change', function () {
+        var outro = motivo.value === 'OUTRO';
+        document.getElementById('encDetalhe').required = outro;
+        document.getElementById('encDetalheObrig').classList.toggle('hidden', !outro);
+    });
+});
 
 function showResolveModal() {
     document.getElementById('resolveModal').classList.remove('hidden');

@@ -19,7 +19,8 @@ from .ai import generate_feedback_summary
 from . import ciclos as ciclos_service
 from .models import (
     Ciclo, CicloMes, ConclusaoConteudo, ConteudoConectar, Ideia, ImpulsoFeedback,
-    Meta, MetaAnexo, MetaComentario, PontuacaoMensal, ProjetoFoco, TarefaProjeto,
+    Meta, MetaAnexo, MetaComentario, MetaItem, MetaVisualizacao, PontuacaoMensal,
+    ProjetoFoco, TarefaProjeto,
 )
 from .scoring import calcular_pontuacao, linhas_detalhadas
 from .utils import (
@@ -62,16 +63,21 @@ def _metas_do_usuario(user, so_aprovadas=True):
     if user.is_superuser:
         qs = Meta.objects.all()
     elif is_impulso_manager(user):
-        qs = Meta.objects.filter(Q(gestor=user) | Q(colaborador=user))
+        qs = Meta.objects.filter(Q(gestor=user) | Q(colaborador=user)
+                                 | Q(participantes=user)).distinct()
     else:
-        qs = Meta.objects.filter(colaborador=user)
+        # Meta compartilhada aparece no Kanban de quem participa dela também.
+        qs = Meta.objects.filter(Q(colaborador=user) | Q(participantes=user)).distinct()
     return qs.filter(aprovacao=Meta.Aprovacao.APROVADA) if so_aprovadas else qs
 
 
 def _pode_ver_meta(user, meta):
     return (user.is_superuser or meta.gestor_id == user.id
             or meta.colaborador_id == user.id
-            or meta.solicitada_por_id == user.id)
+            or meta.solicitada_por_id == user.id
+            # Participante também é responsável pela meta: precisa abrir,
+            # comentar e marcar os itens do to-do.
+            or meta.participantes.filter(id=user.id).exists())
 
 
 # ---------------------------------------------------------------------------
@@ -133,8 +139,13 @@ def metas_kanban(request):
     # O template não passa argumentos para métodos, então a permissão de
     # exclusão é resolvida aqui, uma vez por card.
     metas = list(metas)
+    vistas = {v.meta_id: v.visto_em for v in
+              MetaVisualizacao.objects.filter(user=user, meta__in=metas)}
     for m in metas:
         m.pode_apagar = m.pode_excluir(user)
+        m.novidades = m.novidades_para(user)
+        m.tem_novidade = any(m.novidades.values())
+        m.feitos, m.total_itens = m.progresso_itens
 
     colunas = []
     for status in Meta.KANBAN_STATUSES:
@@ -204,6 +215,24 @@ def meta_create(request):
             created_by=request.user,
         )
 
+        # Outros responsáveis pela mesma meta (só o gestor escolhe).
+        if sou_gestor:
+            outros = get_colaboradores().filter(
+                id__in=request.POST.getlist('participantes')).exclude(id=colaborador.id)
+            if outros:
+                meta.participantes.set(outros)
+                _notify(outros, 'Você foi incluído em uma meta',
+                        f'"{meta.titulo}" também é sua responsabilidade.',
+                        f'/impulso/metas/{meta.id}/')
+
+        # To-do da meta: uma linha por passo, na ordem em que foram digitados.
+        passos = [t.strip() for t in request.POST.getlist('itens') if t.strip()]
+        if passos:
+            MetaItem.objects.bulk_create([
+                MetaItem(meta=meta, texto=p[:300], ordem=n, criado_por=request.user)
+                for n, p in enumerate(passos)
+            ])
+
         if sou_gestor:
             _notify([colaborador], 'Nova meta atribuída',
                     f'"{meta.titulo}" foi atribuída a você.',
@@ -259,6 +288,46 @@ def meta_decidir(request, meta_id):
                              'decidida_em', 'updated_at'])
     _notify([meta.colaborador], aviso[0], aviso[1], f'/impulso/metas/{meta.id}/')
     messages.success(request, retorno)
+    return redirect('impulso:meta_detail', meta_id=meta.id)
+
+
+@require_POST
+@impulso_member_required
+def meta_item_toggle(request, item_id):
+    """Marca/desmarca um passo do to-do da meta."""
+    item = get_object_or_404(MetaItem.objects.select_related('meta'), id=item_id)
+    meta = item.meta
+    responsaveis = {u.id for u in meta.responsaveis}
+    if not (request.user.id in responsaveis or meta.gestor_id == request.user.id
+            or request.user.is_superuser):
+        return JsonResponse({'ok': False, 'error': 'sem permissão'}, status=403)
+
+    item.concluido = not item.concluido
+    item.concluido_em = timezone.now() if item.concluido else None
+    item.concluido_por = request.user if item.concluido else None
+    item.save(update_fields=['concluido', 'concluido_em', 'concluido_por'])
+
+    feitos, total = meta.progresso_itens
+    return JsonResponse({'ok': True, 'concluido': item.concluido,
+                         'feitos': feitos, 'total': total})
+
+
+@require_POST
+@impulso_member_required
+def meta_item_add(request, meta_id):
+    """Acrescenta um passo ao to-do de uma meta já criada."""
+    meta = get_object_or_404(Meta, id=meta_id)
+    if not (meta.gestor_id == request.user.id or meta.colaborador_id == request.user.id
+            or request.user.is_superuser):
+        messages.error(request, 'Sem permissão.')
+        return redirect('impulso:meta_detail', meta_id=meta.id)
+
+    texto = (request.POST.get('texto') or '').strip()
+    if texto:
+        ultima = meta.itens.order_by('-ordem').first()
+        MetaItem.objects.create(meta=meta, texto=texto[:300], criado_por=request.user,
+                                ordem=(ultima.ordem + 1) if ultima else 0)
+        messages.success(request, 'Item adicionado ao to-do.')
     return redirect('impulso:meta_detail', meta_id=meta.id)
 
 
@@ -329,8 +398,15 @@ def meta_detail(request, meta_id):
         messages.error(request, 'Você não tem acesso a esta meta.')
         return redirect('impulso:metas_kanban')
 
+    # Abriu a meta = viu o que havia até agora. É o marco que apaga o aviso
+    # de novidade no card do Kanban.
+    MetaVisualizacao.objects.update_or_create(
+        meta=meta, user=request.user, defaults={'visto_em': timezone.now()})
+
     context = {
         'meta': meta,
+        'itens': meta.itens.select_related('concluido_por'),
+        'participantes': meta.participantes.all(),
         'anexos': meta.anexos.select_related('enviado_por'),
         'comentarios': meta.comentarios.select_related('autor'),
         'is_gestor_da_meta': meta.gestor_id == request.user.id or request.user.is_superuser,

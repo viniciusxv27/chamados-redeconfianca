@@ -16,6 +16,10 @@ def no_pending_documents(user):
     todos os documentos atribuídos a ela.
     """
     from .models import DocumentSignature
+    # Só cobra o que é obrigatório e está visível: documento com a
+    # obrigatoriedade desligada continua assinável, mas não gera popup.
     return not DocumentSignature.objects.filter(
-        user=user, signed_at__isnull=True
+        user=user, signed_at__isnull=True,
+        document__assinatura_obrigatoria=True,
+        document__is_visible=True,
     ).exists()

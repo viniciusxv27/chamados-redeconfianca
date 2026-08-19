@@ -1,0 +1,86 @@
+{% extends 'base.html' %}
+
+{% block title %}{% block cx_titulo %}Contagem de Caixa{% endblock %}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .cx-card { background:#fff; border:1px solid #EDEDF0; border-radius:1rem;
+               box-shadow:0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.06); }
+    .cx-hero { background:
+        radial-gradient(1100px 200px at 0% 0%, rgba(88,28,135,.10), transparent 60%),
+        radial-gradient(900px 200px at 100% 0%, rgba(16,185,129,.08), transparent 60%),
+        linear-gradient(180deg,#FFFFFF 0%, #FBFBFC 100%); }
+    .cx-tab { position:relative; white-space:nowrap; }
+    .cx-tab-active { color:#6D28D9; background:#F5F3FF; }
+    .cx-tab-active::after { content:''; position:absolute; left:.75rem; right:.75rem; bottom:-1px;
+        height:2px; background:#7C3AED; border-radius:2px; }
+    .tabular { font-variant-numeric: tabular-nums; }
+
+    /* Planilha da loja: cabeçalho roxo como o arquivo original, colunas
+       estreitas e a primeira coluna fixa ao rolar na horizontal. */
+    .cx-planilha { border-collapse:separate; border-spacing:0; }
+    .cx-planilha thead th { background:#4C1D95; color:#fff; font-weight:600; font-size:11px;
+        text-transform:none; padding:.5rem .5rem; position:sticky; top:0; z-index:2;
+        white-space:nowrap; }
+    .cx-planilha td { padding:.25rem .5rem; border-bottom:1px solid #F3F4F6; font-size:12px;
+        white-space:nowrap; }
+    .cx-planilha tbody tr:hover td { background:#FAFAFA; }
+    .cx-data { position:sticky; left:0; background:#fff; z-index:1; font-weight:600;
+        box-shadow:1px 0 0 #F3F4F6; }
+    .cx-planilha tbody tr:hover .cx-data { background:#FAFAFA; }
+    .cx-entrada { width:5.75rem; border:1px solid transparent; border-radius:.25rem;
+        padding:.15rem .35rem; text-align:right; background:transparent; font-size:12px; }
+    .cx-entrada:hover { border-color:#E5E7EB; }
+    .cx-entrada:focus { border-color:#7C3AED; background:#fff; outline:none;
+        box-shadow:0 0 0 2px rgba(124,58,237,.15); }
+    .cx-ok { background:#DCFCE7; color:#166534; }
+    .cx-atencao { background:#FEF3C7; color:#92400E; }
+    .cx-pendente { background:#EFF6FF; color:#1D4ED8; }
+    .cx-sem_movimento { background:#F4F4F5; color:#A1A1AA; }
+    .cx-negativo { color:#B91C1C; }
+    .cx-salvo { animation: cxflash 1.2s ease; }
+    @keyframes cxflash { 0% { background:#DCFCE7; } 100% { background:transparent; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="cx-hero -mx-2 sm:-mx-4 lg:-mx-6 -mt-2 sm:-mt-4 lg:-mt-6 px-2 sm:px-4 lg:px-6 pt-5 pb-0 mb-5 border-b border-gray-100">
+    <div class="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">{% block cx_cabecalho %}Contagem de Caixa{% endblock %}</h1>
+            <p class="text-sm text-gray-500 mt-0.5">{% block cx_subtitulo %}Controle diário por loja{% endblock %}</p>
+        </div>
+        {% block cx_acoes %}{% endblock %}
+    </div>
+
+    <nav class="flex items-center gap-1 mt-4 overflow-x-auto -mb-px">
+        <a href="{% url 'contagem_caixa:dashboard' %}"
+           class="cx-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'dashboard' %}cx-tab-active{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
+            <i class="fas fa-chart-pie mr-1.5"></i>Visão geral
+        </a>
+
+        {# São 21 lojas: lista em caixa de seleção em vez de 21 abas. #}
+        {% if lojas %}
+        <select onchange="if(this.value) window.location = this.value;"
+                class="ml-1 mb-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-600
+                       bg-white hover:border-gray-300 focus:border-violet-400 focus:outline-none">
+            <option value="">Abrir uma loja…</option>
+            {% for l in lojas %}
+            <option value="{% url 'contagem_caixa:loja_detalhe' l.id %}"
+                    {% if loja.id == l.id %}selected{% endif %}>{{ l.name }}</option>
+            {% endfor %}
+        </select>
+        {% endif %}
+
+        {% if e_gestor %}
+        <span class="w-px bg-gray-200 mx-1 my-2"></span>
+        <a href="{% url 'contagem_caixa:importacao' %}"
+           class="cx-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'importacao' %}cx-tab-active{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
+            <i class="fas fa-file-import mr-1.5"></i>Importar base
+        </a>
+        {% endif %}
+    </nav>
+</div>
+
+{% block cx_conteudo %}{% endblock %}
+{% endblock %}

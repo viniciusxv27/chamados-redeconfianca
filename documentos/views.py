@@ -7,6 +7,7 @@ from django.contrib import messages
 from django.http import JsonResponse, HttpResponse, Http404
 from django.utils import timezone
 from django.db.models import Q, Count
+from django.views.decorators.http import require_POST
 from django.core.files.base import ContentFile
 from django.views.decorators.clickjacking import xframe_options_sameorigin
 
@@ -525,6 +526,39 @@ def admin_remind_signer(request, pk):
         )
 
     return redirect('documentos:admin_document_detail', pk=document_pk)
+
+
+@login_required
+@require_POST
+def admin_toggle_obrigatoriedade(request, pk):
+    """Liga/desliga a obrigatoriedade de assinatura do documento.
+
+    Desligada, quem ainda não assinou para de receber o popup de pendência —
+    o documento continua lá e pode ser assinado, só não cobra mais. Serve para
+    o caso em que a assinatura deixou de fazer sentido mas o documento não
+    deve sumir.
+    """
+    if not _require_admin(request):
+        return redirect('documentos:my_documents')
+
+    documento = get_object_or_404(Document, pk=pk)
+    documento.assinatura_obrigatoria = not documento.assinatura_obrigatoria
+    documento.obrigatoriedade_alterada_em = timezone.now()
+    documento.obrigatoriedade_alterada_por = request.user
+    documento.save(update_fields=['assinatura_obrigatoria', 'obrigatoriedade_alterada_em',
+                                  'obrigatoriedade_alterada_por'])
+
+    pendentes = documento.signatures.filter(signed_at__isnull=True).count()
+    if documento.assinatura_obrigatoria:
+        messages.success(
+            request,
+            f'Assinatura voltou a ser obrigatória. {pendentes} pessoa(s) voltam a receber o aviso.')
+    else:
+        messages.success(
+            request,
+            f'Obrigatoriedade removida. {pendentes} pessoa(s) deixam de receber o popup de '
+            f'pendência — o documento continua disponível para assinatura.')
+    return redirect('documentos:admin_document_detail', pk=documento.pk)
 
 
 @login_required

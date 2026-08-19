@@ -75,6 +75,7 @@ INSTALLED_APPS = [
     'impulso',  # Impulso ADM (metas, conexão, inovação, faixas)
     'cartoes',  # Cartões de crédito corporativos
     'tangerino',  # Integração com o Tangerino / Sólides Ponto
+    'contagem_caixa',  # Contagem de Caixa (controle diário por loja)
     # 'webpush',  # Django WebPush (temporariamente removido)
 ]
 
@@ -122,6 +123,7 @@ TEMPLATES = [
                 'impulso.context_processors.impulso_menu',
                 'cartoes.context_processors.cartoes_menu',
                 'tangerino.context_processors.tangerino_gate',
+                'contagem_caixa.context_processors.caixa_menu',
             ],
         },
     },

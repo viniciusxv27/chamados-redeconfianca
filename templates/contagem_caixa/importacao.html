@@ -1,0 +1,180 @@
+{% extends 'contagem_caixa/base_caixa.html' %}
+{% load caixa_tags %}
+
+{% block cx_titulo %}Importar base{% endblock %}
+{% block cx_cabecalho %}Importar a base de vendas{% endblock %}
+{% block cx_subtitulo %}Atualiza o Valor SAP de cada loja por dia{% endblock %}
+
+{% block cx_conteudo %}
+
+<form method="post" enctype="multipart/form-data" class="space-y-4">
+    {% csrf_token %}
+
+    <div class="cx-card p-5">
+        <h2 class="text-sm font-semibold text-gray-700 mb-3">
+            <i class="fas fa-file-excel text-emerald-600 mr-1.5"></i>Planilha do dia
+        </h2>
+        <input type="file" name="planilha" accept=".xlsx,.xls" required
+               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        <p class="text-xs text-gray-400 mt-2">
+            A importação manda no <strong>Valor SAP</strong>. Os campos preenchidos na tela
+            (Vivo go, sangria, valor real…) não são tocados — reimportar o mesmo dia só atualiza o SAP.
+        </p>
+    </div>
+
+    <div class="cx-card p-5">
+        <h2 class="text-sm font-semibold text-gray-700 mb-1">
+            <i class="fas fa-sliders text-violet-600 mr-1.5"></i>Como ler a planilha
+        </h2>
+        <p class="text-xs text-gray-400 mb-4">
+            Numa contagem de caixa o que interessa é o dinheiro. A base não tem coluna de dinheiro:
+            a forma de pagamento vem escrita dentro de <code>DS_COND_PGTO</code>
+            (“DINHEIRO - R$ 300,00”) e a mesma condição se repete em cada item do pedido — a leitura
+            já desconta essa repetição. Confira sempre na prévia antes de gravar.
+        </p>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Valor SAP é</label>
+                <select name="modo" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    {% for valor, rotulo in modos %}
+                    <option value="{{ valor }}" {% if config.modo == valor %}selected{% endif %}>{{ rotulo }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Forma de pagamento</label>
+                <input type="text" name="forma_pagamento" value="{{ config.forma_pagamento }}"
+                       placeholder="DINHEIRO" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            </div>
+        </div>
+
+        <details class="text-sm">
+            <summary class="cursor-pointer text-xs text-violet-700 hover:underline mb-3">
+                colunas da planilha (só mexa se o layout do arquivo mudar)
+            </summary>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">Aba</label>
+                    <input type="text" name="aba" value="{{ config.aba }}" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">Código da loja (ADABAS)</label>
+                    <input type="text" name="coluna_codigo" value="{{ config.coluna_codigo }}" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">Nome da loja</label>
+                    <input type="text" name="coluna_loja" value="{{ config.coluna_loja }}" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">Data</label>
+                    <input type="text" name="coluna_data" value="{{ config.coluna_data }}" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                </div>
+                <div class="lg:col-span-2">
+                    <label class="block text-xs text-gray-500 mb-1">Colunas de condição de pagamento</label>
+                    <input type="text" name="colunas_condicao" value="{{ config.colunas_condicao }}" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">Pedido (evita contar 2x)</label>
+                    <input type="text" name="coluna_pedido" value="{{ config.coluna_pedido }}" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">Coluna do valor (modo coluna)</label>
+                    <input type="text" name="coluna_valor" value="{{ config.coluna_valor }}" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">Filtrar pela coluna (opcional)</label>
+                    <input type="text" name="filtro_coluna" value="{{ config.filtro_coluna }}"
+                           placeholder="ex.: CENARIO" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">Somente quando for</label>
+                    <input type="text" name="filtro_valor" value="{{ config.filtro_valor }}"
+                           placeholder="ex.: EA" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                </div>
+            </div>
+        </details>
+
+        <label class="flex items-center gap-2 text-sm text-gray-700 mt-4 pt-3 border-t border-gray-100">
+            <input type="checkbox" name="notificar_gerente" class="rounded border-gray-300"
+                   {% if config.notificar_gerente %}checked{% endif %}>
+            Avisar o gerente da loja quando o dia ficar em Atenção
+        </label>
+    </div>
+
+    <div class="flex items-center justify-end gap-3">
+        <button type="submit" class="px-5 py-2.5 rounded-xl border border-gray-300 text-gray-700 text-sm font-semibold hover:bg-gray-50">
+            <i class="fas fa-eye mr-1.5"></i>Ver prévia
+        </button>
+        <button type="submit" name="confirmar" value="1"
+                class="px-5 py-2.5 rounded-xl bg-violet-700 text-white text-sm font-semibold hover:bg-violet-800">
+            <i class="fas fa-file-import mr-1.5"></i>Importar
+        </button>
+    </div>
+</form>
+
+{% if previa %}
+<div class="cx-card overflow-hidden mt-4">
+    <div class="px-5 py-3.5 border-b border-gray-100">
+        <h2 class="font-semibold text-gray-800 text-sm">
+            <i class="fas fa-eye text-violet-600 mr-1.5"></i>Prévia — nada foi gravado ainda
+        </h2>
+        <p class="text-xs text-gray-400 mt-0.5">
+            {{ previa.linhas }} dia(s) de loja · {{ previa.inicio|date:"d/m/Y" }} a {{ previa.fim|date:"d/m/Y" }} ·
+            total {{ previa.total|brl_zero }}
+        </p>
+    </div>
+    {% if previa.sem_setor %}
+    <div class="px-5 py-3 bg-amber-50 border-b border-amber-100">
+        <p class="text-sm text-amber-800">
+            <i class="fas fa-triangle-exclamation mr-1.5"></i>
+            {{ previa.sem_setor|length }} loja(s) da planilha não têm setor correspondente no portal
+            e ficariam de fora: {{ previa.sem_setor|join:", " }}
+        </p>
+    </div>
+    {% endif %}
+    <table class="min-w-full text-sm">
+        <thead class="bg-gray-50/70 text-gray-500 text-xs uppercase">
+            <tr>
+                <th class="text-left px-5 py-2.5 font-medium">Loja</th>
+                <th class="text-right px-3 py-2.5 font-medium">Dias</th>
+                <th class="text-right px-5 py-2.5 font-medium">Total no período</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-50">
+            {% for nome, item in previa.por_loja %}
+            <tr class="{% if not item.setor %}bg-amber-50/40{% endif %}">
+                <td class="px-5 py-2 text-gray-800">{{ nome }}</td>
+                <td class="px-3 py-2 text-right tabular text-gray-600">{{ item.dias }}</td>
+                <td class="px-5 py-2 text-right tabular font-semibold text-gray-900">{{ item.total|brl_zero }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+{% if historico %}
+<div class="cx-card overflow-hidden mt-4">
+    <div class="px-5 py-3.5 border-b border-gray-100">
+        <h2 class="font-semibold text-gray-800 text-sm">
+            <i class="fas fa-clock-rotate-left text-gray-400 mr-1.5"></i>Importações anteriores
+        </h2>
+    </div>
+    <div class="divide-y divide-gray-50">
+        {% for h in historico %}
+        <div class="px-5 py-2.5 flex items-center justify-between gap-3 flex-wrap text-sm">
+            <span class="text-gray-600">
+                {{ h.executada_em|date:"d/m/Y H:i" }}
+                {% if h.executada_por %}<span class="text-gray-400">por {{ h.executada_por.full_name }}</span>{% endif %}
+                <span class="text-gray-400">· {{ h.arquivo|truncatechars:40 }}</span>
+            </span>
+            <span class="text-xs text-gray-500 tabular">
+                {{ h.dias_criados }} novos · {{ h.dias_atualizados }} atualizados
+            </span>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}

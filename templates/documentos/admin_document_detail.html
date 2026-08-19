@@ -24,6 +24,16 @@
                    class="inline-flex items-center px-3 py-2 text-sm bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">
                     <i class="fas fa-file-pdf text-red-500 mr-2"></i> PDF original
                 </a>
+                <form method="post" action="{% url 'documentos:admin_toggle_obrigatoriedade' document.pk %}"
+                      onsubmit="return confirm({% if document.assinatura_obrigatoria %}'Tirar a obrigatoriedade? Quem ainda não assinou deixa de receber o popup de pendência.'{% else %}'Voltar a exigir assinatura? Quem não assinou volta a receber o popup.'{% endif %});">
+                    {% csrf_token %}
+                    <button type="submit"
+                            class="inline-flex items-center px-3 py-2 text-sm rounded-md
+                                   {% if document.assinatura_obrigatoria %}bg-amber-50 text-amber-700 hover:bg-amber-100{% else %}bg-gray-100 text-gray-600 hover:bg-gray-200{% endif %}">
+                        <i class="fas {% if document.assinatura_obrigatoria %}fa-bell-slash{% else %}fa-bell{% endif %} mr-2"></i>
+                        Obrigatoriedade: {% if document.assinatura_obrigatoria %}ligada{% else %}desligada{% endif %}
+                    </button>
+                </form>
                 <form method="post" action="{% url 'documentos:admin_delete_document' document.pk %}"
                       onsubmit="return confirm('Excluir este documento e todas as assinaturas? Esta ação não pode ser desfeita.');">
                     {% csrf_token %}
@@ -40,6 +50,21 @@
 
     <!-- Signatários -->
     <div class="bg-white shadow rounded-lg overflow-hidden">
+        {% if not document.assinatura_obrigatoria %}
+        <div class="px-5 py-3 bg-amber-50 border-b border-amber-100">
+            <p class="text-sm text-amber-800">
+                <i class="fas fa-bell-slash mr-1.5"></i>
+                <strong>Assinatura não obrigatória.</strong>
+                Quem ainda não assinou não recebe o popup de pendência — o documento continua
+                disponível para assinatura.
+                {% if document.obrigatoriedade_alterada_por %}
+                <span class="text-amber-700/80">Alterado por {{ document.obrigatoriedade_alterada_por.full_name }}
+                em {{ document.obrigatoriedade_alterada_em|date:"d/m/Y H:i" }}.</span>
+                {% endif %}
+            </p>
+        </div>
+        {% endif %}
+
         <div class="px-5 py-3 border-b flex items-center justify-between">
             <h3 class="text-sm font-semibold text-gray-700">
                 <i class="fas fa-users mr-1"></i> Signatários

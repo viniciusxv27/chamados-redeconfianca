@@ -183,7 +183,67 @@
 
     <!-- Coluna lateral: anexos -->
     <div class="space-y-4">
-        <div class="imp-card p-5">
+        <!-- To-do da meta -->
+<div class="imp-card p-5 mb-4">
+    <div class="flex items-center justify-between gap-2 mb-3 flex-wrap">
+        <h3 class="font-semibold text-gray-800">
+            <i class="fas fa-list-check text-emerald-500 mr-2"></i>To-do da meta
+        </h3>
+        {% if itens %}
+        <span class="text-xs text-gray-400" id="impProgresso">
+            {{ meta.progresso_itens.0 }} de {{ meta.progresso_itens.1 }} feitos
+        </span>
+        {% endif %}
+    </div>
+
+    <ul class="space-y-1.5" id="impListaItens">
+        {% for item in itens %}
+        <li class="flex items-start gap-2.5 p-2 rounded-lg hover:bg-gray-50">
+            <input type="checkbox" class="imp-check mt-0.5 rounded border-gray-300 text-emerald-600"
+                   data-item="{{ item.id }}" {% if item.concluido %}checked{% endif %}>
+            <span class="flex-1 min-w-0">
+                <span class="text-sm {% if item.concluido %}text-gray-400 line-through{% else %}text-gray-800{% endif %}">{{ item.texto }}</span>
+                {% if item.concluido and item.concluido_por %}
+                <span class="block text-[11px] text-gray-400">
+                    por {{ item.concluido_por.get_full_name|default:item.concluido_por.email }}
+                    em {{ item.concluido_em|date:"d/m H:i" }}
+                </span>
+                {% endif %}
+            </span>
+        </li>
+        {% empty %}
+        <li class="text-sm text-gray-400 py-2">Nenhum passo cadastrado.</li>
+        {% endfor %}
+    </ul>
+
+    {% if is_gestor_da_meta or is_colaborador_da_meta %}
+    <form method="post" action="{% url 'impulso:meta_item_add' meta.id %}" class="flex gap-2 mt-3">
+        {% csrf_token %}
+        <input type="text" name="texto" maxlength="300" placeholder="Adicionar passo…"
+               class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        <button class="px-3 py-2 rounded-lg bg-gray-800 text-white text-sm hover:bg-gray-900">
+            <i class="fas fa-plus"></i>
+        </button>
+    </form>
+    {% endif %}
+</div>
+
+{% if participantes %}
+<div class="imp-card p-5 mb-4">
+    <h3 class="font-semibold text-gray-800 mb-2">
+        <i class="fas fa-users text-orange-500 mr-2"></i>Também responsáveis
+    </h3>
+    <div class="flex flex-wrap gap-2">
+        {% for p in participantes %}
+        <span class="px-2.5 py-1 rounded-full bg-orange-50 text-orange-700 text-xs">
+            {{ p.get_full_name|default:p.email }}
+        </span>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<div class="imp-card p-5">
             <h3 class="font-semibold text-gray-800 mb-3"><i class="fas fa-paperclip text-gray-500 mr-2"></i>Anexos</h3>
             <ul class="space-y-2 mb-4">
                 {% for a in anexos %}
@@ -227,4 +287,40 @@
 })();
 </script>
 {% endwith %}
+
+<script>
+(function () {
+    function csrf() {
+        var m = document.cookie.match(/csrftoken=([^;]+)/);
+        return m ? m[1] : '';
+    }
+    document.querySelectorAll('.imp-check').forEach(function (chk) {
+        chk.addEventListener('change', function () {
+            var texto = chk.parentElement.querySelector('span span') || chk.nextElementSibling.firstElementChild;
+            chk.disabled = true;
+            fetch('/impulso/metas/item/' + chk.dataset.item + '/check/', {
+                method: 'POST',
+                headers: {'X-CSRFToken': csrf(), 'Content-Type': 'application/x-www-form-urlencoded'}
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                chk.disabled = false;
+                if (!d.ok) { chk.checked = !chk.checked; alert(d.error || 'Não foi possível marcar.'); return; }
+                var alvo = chk.closest('li').querySelector('span > span');
+                if (alvo) {
+                    alvo.classList.toggle('line-through', d.concluido);
+                    alvo.classList.toggle('text-gray-400', d.concluido);
+                    alvo.classList.toggle('text-gray-800', !d.concluido);
+                }
+                var prog = document.getElementById('impProgresso');
+                if (prog) prog.textContent = d.feitos + ' de ' + d.total + ' feitos';
+            })
+            .catch(function () {
+                chk.disabled = false; chk.checked = !chk.checked;
+                alert('Erro de conexão ao marcar o item.');
+            });
+        });
+    });
+})();
+</script>
 {% endblock %}

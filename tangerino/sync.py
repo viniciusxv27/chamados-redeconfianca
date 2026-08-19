@@ -244,16 +244,28 @@ def sincronizar_marcacoes(dias=30, employee_id=None):
     return resultado
 
 
+def inicio_do_historico():
+    """Data de admissão mais antiga da empresa — o começo real do histórico.
+
+    Sem isso o saldo sairia cortado: consultando só o ano corrente vinham 127
+    pessoas e -5.726h; desde a primeira admissão vêm 130 pessoas e -4.995h. A
+    diferença é o saldo acumulado de anos anteriores, que ficava de fora.
+    """
+    admissoes = [de_millis(f.get('admissionDate')).date()
+                 for f in listar_funcionarios() if f.get('admissionDate')]
+    return min(admissoes) if admissoes else timezone.localdate().replace(month=1, day=1)
+
+
 def sincronizar_saldos(inicio=None, fim=None):
     """Traz o saldo de banco de horas para a tabela SaldoHoras.
 
-    O padrão é do 1º de janeiro até hoje — "saldo do ano". O saldo do Tangerino
-    é sempre relativo ao período consultado, então a janela escolhida vai
-    gravada junto: sem ela, o número não se interpreta.
+    O padrão cobre o **período todo**: da admissão mais antiga até hoje. O saldo
+    do Tangerino é sempre relativo à janela consultada, então ela vai gravada
+    junto — sem o período, o número não se interpreta.
     """
     hoje = timezone.localdate()
     fim = fim or hoje
-    inicio = inicio or hoje.replace(month=1, day=1)
+    inicio = inicio or inicio_do_historico()
 
     itens = listar_saldo_horas(inicio, fim)
     usuarios = _mapa_usuarios()

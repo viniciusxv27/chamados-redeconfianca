@@ -56,6 +56,13 @@
                 <div class="flex items-start justify-between gap-2">
                     <a href="{% url 'impulso:meta_detail' m.id %}" class="text-sm font-semibold text-gray-800 hover:text-orange-600 leading-snug">{{ m.titulo }}</a>
                     <div class="flex items-center gap-1 flex-shrink-0">
+                        {% if m.tem_novidade %}
+                        {# Aviso de novidade: o gestor vê no card o que mudou desde a última vez #}
+                        <span class="relative flex h-2.5 w-2.5" title="Tem novidade nesta meta">
+                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+                            <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-orange-500"></span>
+                        </span>
+                        {% endif %}
                         <span class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{{ m.get_recorrencia_display }}</span>
                         {% if m.pode_apagar %}
                         {% with imp=m.impacto_da_exclusao %}
@@ -79,6 +86,43 @@
                 <div class="flex items-center gap-1.5 mt-2">
                     <span class="w-5 h-5 rounded-full bg-orange-100 text-orange-700 flex items-center justify-center text-[10px] font-bold flex-shrink-0">{{ m.colaborador.get_full_name|default:m.colaborador.email|slice:":1"|upper }}</span>
                     <span class="text-xs text-gray-500 truncate">{{ m.colaborador.get_full_name|default:m.colaborador.email }}</span>
+                </div>
+                {% endif %}
+
+                {% if m.tem_novidade %}
+                <div class="flex flex-wrap gap-1 mt-2">
+                    {% if m.novidades.entregue %}
+                    <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-800 font-semibold">
+                        <i class="fas fa-inbox mr-0.5"></i>entregue
+                    </span>
+                    {% endif %}
+                    {% if m.novidades.comentarios %}
+                    <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700">
+                        <i class="fas fa-comment mr-0.5"></i>{{ m.novidades.comentarios }} novo{{ m.novidades.comentarios|pluralize }}
+                    </span>
+                    {% endif %}
+                    {% if m.novidades.anexos %}
+                    <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-50 text-violet-700">
+                        <i class="fas fa-paperclip mr-0.5"></i>{{ m.novidades.anexos }} anexo{{ m.novidades.anexos|pluralize }}
+                    </span>
+                    {% endif %}
+                    {% if m.novidades.itens %}
+                    <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700">
+                        <i class="fas fa-check mr-0.5"></i>{{ m.novidades.itens }} item{{ m.novidades.itens|pluralize:"ns" }}
+                    </span>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                {% if m.total_itens %}
+                <div class="mt-2">
+                    <div class="flex items-center justify-between text-[10px] text-gray-400 mb-1">
+                        <span>To-do</span><span>{{ m.feitos }}/{{ m.total_itens }}</span>
+                    </div>
+                    <div class="imp-bar-track h-1.5">
+                        <div class="imp-bar-fill h-full bg-emerald-500"
+                             style="width: {% widthratio m.feitos m.total_itens 100 %}%"></div>
+                    </div>
                 </div>
                 {% endif %}
 

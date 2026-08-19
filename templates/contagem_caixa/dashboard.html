@@ -1,0 +1,170 @@
+{% extends 'contagem_caixa/base_caixa.html' %}
+{% load caixa_tags %}
+
+{% block cx_titulo %}Contagem de Caixa{% endblock %}
+{% block cx_subtitulo %}{{ inicio|date:"d/m/Y" }} a {{ hoje|date:"d/m/Y" }}{% endblock %}
+
+{% block cx_acoes %}
+<form method="get" class="flex items-end gap-2">
+    <div>
+        <label class="block text-xs text-gray-500 mb-1">Período</label>
+        <select name="dias" onchange="this.form.submit()"
+                class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm">
+            <option value="7" {% if dias == 7 %}selected{% endif %}>Últimos 7 dias</option>
+            <option value="30" {% if dias == 30 %}selected{% endif %}>Últimos 30 dias</option>
+            <option value="90" {% if dias == 90 %}selected{% endif %}>Últimos 90 dias</option>
+            <option value="365" {% if dias == 365 %}selected{% endif %}>Último ano</option>
+        </select>
+    </div>
+</form>
+{% endblock %}
+
+{% block cx_conteudo %}
+
+<!-- Números do período -->
+<div class="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
+    <div class="cx-card p-4">
+        <p class="text-xs text-gray-500">Dias em atenção</p>
+        <p class="text-3xl font-bold {% if total_atencao %}text-amber-600{% else %}text-emerald-600{% endif %} tabular">{{ total_atencao }}</p>
+        <p class="text-[11px] text-gray-400 mt-0.5">de {{ resumo.dias|default:0 }} lançados</p>
+    </div>
+    <div class="cx-card p-4">
+        <p class="text-xs text-gray-500">Dias a contar</p>
+        <p class="text-3xl font-bold {% if total_a_contar %}text-blue-600{% else %}text-emerald-600{% endif %} tabular">{{ total_a_contar }}</p>
+        <p class="text-[11px] text-gray-400 mt-0.5">com venda e sem Vivo go</p>
+    </div>
+    <div class="cx-card p-4">
+        <p class="text-xs text-gray-500">Saldo em caixa</p>
+        <p class="text-2xl font-bold text-gray-900 tabular">{{ saldo_total|brl_zero }}</p>
+        <p class="text-[11px] text-gray-400 mt-0.5">somando as lojas</p>
+    </div>
+    <div class="cx-card p-4">
+        <p class="text-xs text-gray-500">Valor SAP</p>
+        <p class="text-2xl font-bold text-violet-700 tabular">{{ resumo.total_sap|brl_zero }}</p>
+        <p class="text-[11px] text-gray-400 mt-0.5">no período</p>
+    </div>
+    <div class="cx-card p-4">
+        <p class="text-xs text-gray-500">Vivo go EA</p>
+        <p class="text-2xl font-bold text-gray-700 tabular">{{ resumo.total_vivogo|brl_zero }}</p>
+        <p class="text-[11px] text-gray-400 mt-0.5">o que as lojas contaram</p>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    <!-- Lojas -->
+    <div class="cx-card overflow-hidden lg:col-span-2 self-start">
+        <div class="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between flex-wrap gap-2">
+            <h2 class="font-semibold text-gray-800 text-sm">
+                <i class="fas fa-store text-violet-600 mr-1.5"></i>Lojas
+                <span class="text-gray-400 font-normal">({{ por_loja|length }})</span>
+            </h2>
+            <span class="text-xs text-gray-400">as com divergência aparecem primeiro</span>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full text-sm">
+                <thead class="bg-gray-50/70 text-gray-500 text-xs uppercase tracking-wide">
+                    <tr>
+                        <th class="text-left px-5 py-2.5 font-medium">Loja</th>
+                        <th class="text-right px-3 py-2.5 font-medium">Dias</th>
+                        <th class="text-center px-3 py-2.5 font-medium">Situação</th>
+                        <th class="text-right px-3 py-2.5 font-medium">Divergência</th>
+                        <th class="text-right px-3 py-2.5 font-medium">Saldo</th>
+                        <th class="text-right px-5 py-2.5 font-medium"></th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-50">
+                    {% for l in por_loja %}
+                    <tr class="hover:bg-violet-50/30">
+                        <td class="px-5 py-2.5">
+                            <a href="{% url 'contagem_caixa:loja_detalhe' l.loja.id %}"
+                               class="text-gray-800 hover:text-violet-700 font-medium">{{ l.loja.name }}</a>
+                            {% if l.ultima_data %}
+                            <span class="block text-[11px] text-gray-400">último lançamento {{ l.ultima_data|date:"d/m/Y" }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-3 py-2.5 text-right tabular text-gray-500">{{ l.dias }}</td>
+                        <td class="px-3 py-2.5 text-center whitespace-nowrap">
+                            {% if l.atencao %}
+                            <span class="px-2 py-0.5 rounded text-[11px] font-semibold cx-atencao">
+                                {{ l.atencao }} em atenção
+                            </span>
+                            {% endif %}
+                            {% if l.a_contar %}
+                            <span class="px-2 py-0.5 rounded text-[11px] font-semibold cx-pendente">
+                                {{ l.a_contar }} a contar
+                            </span>
+                            {% endif %}
+                            {% if not l.atencao and not l.a_contar %}
+                                {% if l.dias %}
+                                <span class="px-2 py-0.5 rounded text-[11px] font-semibold cx-ok">tudo OK</span>
+                                {% else %}
+                                <span class="text-[11px] text-gray-300">sem lançamento</span>
+                                {% endif %}
+                            {% endif %}
+                        </td>
+                        <td class="px-3 py-2.5 text-right tabular {% if l.divergencia_total %}text-red-600 font-semibold{% else %}text-gray-300{% endif %}">
+                            {{ l.divergencia_total|brl }}
+                        </td>
+                        <td class="px-3 py-2.5 text-right tabular font-semibold text-gray-900">{{ l.saldo|brl_zero }}</td>
+                        <td class="px-5 py-2.5 text-right">
+                            <a href="{% url 'contagem_caixa:loja_detalhe' l.loja.id %}"
+                               class="text-xs text-violet-700 hover:underline">abrir</a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="6" class="px-5 py-12 text-center text-gray-400">
+                        <i class="fas fa-store-slash text-gray-200 text-3xl mb-2 block"></i>
+                        Nenhuma loja disponível para você.
+                    </td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Alertas -->
+    <div class="cx-card overflow-hidden">
+        <div class="px-5 py-3.5 border-b border-gray-100">
+            <h2 class="font-semibold text-gray-800 text-sm">
+                <i class="fas fa-triangle-exclamation text-amber-500 mr-1.5"></i>Divergências recentes
+            </h2>
+        </div>
+        <div class="divide-y divide-gray-50 max-h-[26rem] overflow-y-auto">
+            {% for d in ultimos_alertas %}
+            <a href="{% url 'contagem_caixa:loja_detalhe' d.loja.id %}?mes={{ d.data|date:'n' }}&ano={{ d.data|date:'Y' }}"
+               class="block px-5 py-3 hover:bg-amber-50/50">
+                <div class="flex items-center justify-between gap-2">
+                    <span class="text-sm font-medium text-gray-800">{{ d.loja.name }}</span>
+                    <span class="text-xs text-gray-400">{{ d.data|date:"d/m" }}</span>
+                </div>
+                <p class="text-xs text-gray-500 mt-0.5">
+                    SAP {{ d.valor_sap|brl_zero }} × Vivo go {{ d.valor_vivogo|brl_zero }}
+                </p>
+                <p class="text-xs font-semibold text-red-600">
+                    divergência de {{ d.divergencia|brl }}
+                    {% if d.notificado_em %}<span class="text-gray-400 font-normal">· gerente avisado</span>{% endif %}
+                </p>
+            </a>
+            {% empty %}
+            <p class="px-5 py-12 text-center text-sm text-gray-400">
+                <i class="fas fa-circle-check text-emerald-400 text-2xl mb-2 block"></i>
+                Nenhuma divergência no período.
+            </p>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+{% if e_gestor %}
+<p class="text-xs text-gray-400 mt-4">
+    <i class="fas fa-circle-info mr-1"></i>
+    {% if ultima_importacao %}
+    Última importação em {{ ultima_importacao.executada_em|date:"d/m/Y H:i" }}
+    ({{ ultima_importacao.dias_criados }} dias novos, {{ ultima_importacao.dias_atualizados }} atualizados).
+    {% else %}
+    A base de vendas ainda não foi importada.
+    {% endif %}
+    <a href="{% url 'contagem_caixa:importacao' %}" class="text-violet-700 hover:underline ml-1">importar agora</a>
+</p>
+{% endif %}
+{% endblock %}

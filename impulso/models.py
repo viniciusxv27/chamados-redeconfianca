@@ -98,6 +98,12 @@ class Meta(models.Model):
     colaborador = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
         related_name='impulso_metas', verbose_name='Colaborador')
+    # Meta compartilhada: além do responsável principal (colaborador), outras
+    # pessoas podem tocar a mesma meta. O campo antigo continua sendo o dono —
+    # é ele que aparece no Kanban e conta na pontuação individual.
+    participantes = models.ManyToManyField(
+        settings.AUTH_USER_MODEL, blank=True,
+        related_name='impulso_metas_participando', verbose_name='Outros responsáveis')
 
     titulo = models.CharField(max_length=200, verbose_name='Título da meta')
     descricao = models.TextField(
@@ -209,6 +215,45 @@ class Meta(models.Model):
             return False
         return user.is_superuser or self.gestor_id == user.id
 
+    @property
+    def responsaveis(self):
+        """Quem toca a meta: o dono mais os participantes."""
+        pessoas = [self.colaborador]
+        pessoas += [u for u in self.participantes.all() if u.id != self.colaborador_id]
+        return pessoas
+
+    @property
+    def progresso_itens(self):
+        """(feitos, total) do to-do interno."""
+        itens = list(self.itens.all())
+        return sum(1 for i in itens if i.concluido), len(itens)
+
+    def novidades_para(self, user):
+        """O que mudou desde a última vez que esta pessoa abriu a meta.
+
+        Sem isso o gestor precisa entrar meta por meta para descobrir se algo
+        andou. O card passa a avisar o que tem de novo.
+        """
+        visto = self.visualizacoes.filter(user=user).first()
+        desde = visto.visto_em if visto else None
+
+        comentarios = self.comentarios.exclude(autor=user)
+        anexos = self.anexos.exclude(enviado_por=user)
+        itens = self.itens.filter(concluido=True).exclude(concluido_por=user)
+        if desde:
+            comentarios = comentarios.filter(criado_em__gt=desde)
+            anexos = anexos.filter(enviado_em__gt=desde)
+            itens = itens.filter(concluido_em__gt=desde)
+
+        entregue = bool(self.entregue_em and (not desde or self.entregue_em > desde)
+                        and self.status == self.Status.ENTREGUE)
+        return {
+            'comentarios': comentarios.count(),
+            'anexos': anexos.count(),
+            'itens': itens.count(),
+            'entregue': entregue,
+        }
+
     def pode_excluir(self, user):
         """Quem apaga a meta: só gestor, e só o que ele criou ou aprovou.
 
@@ -292,6 +337,38 @@ class Meta(models.Model):
         return numero
 
 
+class MetaItem(models.Model):
+    """Item de to-do dentro de uma meta, com check.
+
+    Serve para quebrar a meta em passos: quem executa marca cada um conforme
+    faz, e o gestor acompanha o avanço sem precisar perguntar.
+    """
+
+    meta = models.ForeignKey(
+        Meta, on_delete=models.CASCADE, related_name='itens', verbose_name='Meta')
+    texto = models.CharField(max_length=300, verbose_name='O que fazer')
+    ordem = models.PositiveIntegerField(default=0, verbose_name='Ordem')
+
+    concluido = models.BooleanField(default=False, verbose_name='Concluído')
+    concluido_em = models.DateTimeField(null=True, blank=True, verbose_name='Concluído em')
+    concluido_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='impulso_itens_concluidos', verbose_name='Marcado por')
+
+    criado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='impulso_itens_criados', verbose_name='Criado por')
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Item da meta'
+        verbose_name_plural = 'Itens da meta'
+        ordering = ['ordem', 'id']
+
+    def __str__(self):
+        return self.texto
+
+
 class MetaAnexo(models.Model):
     """Anexo de uma meta: arquivo enviado OU link externo."""
 
@@ -328,6 +405,30 @@ class MetaAnexo(models.Model):
         if self.tipo == self.Tipo.LINK:
             return self.url
         return os.path.basename(self.arquivo.name) if self.arquivo else 'Arquivo'
+
+
+class MetaVisualizacao(models.Model):
+    """Quando cada pessoa viu a meta pela última vez.
+
+    É o marco que define o que é "novo" no card. Uma linha por (meta, usuário).
+    """
+
+    meta = models.ForeignKey(
+        Meta, on_delete=models.CASCADE, related_name='visualizacoes', verbose_name='Meta')
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name='impulso_metas_vistas', verbose_name='Usuário')
+    visto_em = models.DateTimeField(auto_now=True, verbose_name='Visto em')
+
+    class Meta:
+        verbose_name = 'Visualização de meta'
+        verbose_name_plural = 'Visualizações de metas'
+        constraints = [
+            models.UniqueConstraint(fields=['meta', 'user'], name='impulso_meta_vista_unica'),
+        ]
+
+    def __str__(self):
+        return f'{self.user} viu {self.meta_id} em {self.visto_em:%d/%m/%Y %H:%M}'
 
 
 class MetaComentario(models.Model):

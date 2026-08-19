@@ -194,7 +194,7 @@
                              value="{{ simulator_inputs.fixa__qty|default:'' }}"
                              placeholder="0"
                              class="w-full px-2 py-1 border border-gray-300 rounded text-right">
-                      <div class="sim-daily-hint text-[10px] text-teal-700 mt-0.5 text-left leading-tight" data-pillar="fixa"></div>
+                      <div class="sim-daily-hint text-[10px] text-teal-700 mt-1 text-left leading-tight w-full" data-pillar="fixa"></div>
                     </div>
                     <div>
                       <label class="block text-[10px] text-gray-500 text-left leading-tight">Receita (base do %)</label>
@@ -238,7 +238,7 @@
                            placeholder="0,00"
                            class="brl-mask w-full pl-8 pr-2 py-1 border border-gray-300 rounded text-right">
                   </div>
-                  <div class="sim-daily-hint text-[10px] text-teal-700 mt-0.5 text-right leading-tight" data-pillar="{{ pilar_key }}"></div>
+                  <div class="sim-daily-hint text-[10px] text-teal-700 mt-1 text-right leading-tight w-full" data-pillar="{{ pilar_key }}"></div>
                 </td>
                 {% if target_role != 'coordenador' %}
                 <td class="px-3 py-2 text-right">
@@ -371,11 +371,36 @@
     var real = parseFieldNumber(input);
     var metaField = document.querySelector('[name="sim__' + pillar + '__meta"]');
     var meta = (metaField && metaField.value) ? parseFieldNumber(metaField) : (SIM_METAS[pillar] || 0);
-    if (!meta || REMAINING <= 0) { hint.textContent = ''; return; }
+    if (!meta) { hint.textContent = ''; return; }
+
+    var fmt = isFixa ? fmtQty : fmtMoney;
+
+    // Linha das faixas: a meta à esquerda, os degraus de 100/125/150% à direita.
+    // Cada degrau fica verde assim que o realizado alcança aquele patamar.
+    function degrau(rotulo, fator) {
+        var alvo = meta * fator;
+        var batido = real >= alvo;
+        return '<span class="' + (batido ? 'text-green-600 font-semibold' : 'text-gray-400') + '">'
+             + rotulo + ' ' + fmt(alvo) + (batido ? ' ✓' : '') + '</span>';
+    }
+    var faixas = '<div class="flex items-center justify-between gap-2 flex-wrap">'
+               + '<span class="text-gray-600">Meta: <strong class="text-gray-800">' + fmt(meta) + '</strong></span>'
+               + '<span class="flex items-center gap-2 flex-wrap">'
+               + degrau('100%', 1) + '<span class="text-gray-300">·</span>'
+               + degrau('125%', 1.25) + '<span class="text-gray-300">·</span>'
+               + degrau('150%', 1.5)
+               + '</span></div>';
+
     var gap = meta - real;
-    if (gap <= 0) { hint.innerHTML = '<span class="text-green-600 font-semibold">meta batida ✓</span>'; return; }
-    var perDay = gap / REMAINING;
-    hint.textContent = 'faltam ' + (isFixa ? fmtQty(perDay) : fmtMoney(perDay)) + '/dia · ' + REMAINING + ' dias úteis';
+    var aviso;
+    if (gap <= 0) {
+        aviso = '<span class="text-green-600 font-semibold">meta batida ✓</span>';
+    } else if (REMAINING > 0) {
+        aviso = 'faltam ' + fmt(gap / REMAINING) + '/dia · ' + REMAINING + ' dias úteis';
+    } else {
+        aviso = 'faltam ' + fmt(gap);
+    }
+    hint.innerHTML = faixas + '<div class="mt-0.5">' + aviso + '</div>';
   }
   function attachDaily() {
     document.querySelectorAll('[data-daily-real]').forEach(function (inp) {

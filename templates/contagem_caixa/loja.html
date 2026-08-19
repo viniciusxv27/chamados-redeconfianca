@@ -1,0 +1,230 @@
+{% extends 'contagem_caixa/base_caixa.html' %}
+{% load caixa_tags %}
+
+{% block cx_titulo %}{{ loja.name }} — Caixa{% endblock %}
+{% block cx_cabecalho %}{{ loja.name }}{% endblock %}
+{% block cx_subtitulo %}{{ primeiro|date:"F \d\e Y" }}{% endblock %}
+
+{% block cx_acoes %}
+<form method="get" class="flex items-end gap-2 flex-wrap">
+    <div>
+        <label class="block text-xs text-gray-500 mb-1">Mês</label>
+        <select name="mes" class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm">
+            {% for n, nome in meses %}
+            <option value="{{ n }}" {% if n == mes %}selected{% endif %}>{{ nome }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div>
+        <label class="block text-xs text-gray-500 mb-1">Ano</label>
+        <select name="ano" class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm">
+            {% for a in anos %}<option value="{{ a }}" {% if a == ano %}selected{% endif %}>{{ a }}</option>{% endfor %}
+        </select>
+    </div>
+    <button class="px-4 py-1.5 bg-violet-700 text-white rounded-lg text-sm hover:bg-violet-800">Ver</button>
+</form>
+{% endblock %}
+
+{% block cx_conteudo %}
+
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+    <div class="cx-card p-4">
+        <p class="text-xs text-gray-500">Saldo atual</p>
+        <p class="text-2xl font-bold text-gray-900 tabular" id="cxSaldoAtual">—</p>
+    </div>
+    <div class="cx-card p-4">
+        <p class="text-xs text-gray-500">Dias em atenção</p>
+        <p class="text-2xl font-bold {% if total_atencao %}text-amber-600{% else %}text-gray-300{% endif %} tabular">{{ total_atencao }}</p>
+    </div>
+    <div class="cx-card p-4">
+        <p class="text-xs text-gray-500">Saldo anterior</p>
+        <p class="text-2xl font-bold text-gray-500 tabular">{{ saldo_anterior|brl_zero }}</p>
+    </div>
+    <div class="cx-card p-4">
+        <p class="text-xs text-gray-500">Período</p>
+        <p class="text-sm font-semibold text-gray-700 mt-1">{{ primeiro|date:"d/m" }} a {{ ultimo|date:"d/m/Y" }}</p>
+    </div>
+</div>
+
+<div class="cx-card overflow-hidden">
+    <div class="px-5 py-3 border-b border-gray-100 flex items-center justify-between flex-wrap gap-2">
+        <h2 class="font-semibold text-gray-800 text-sm">
+            <i class="fas fa-table-cells text-violet-600 mr-1.5"></i>{{ loja.name }}
+        </h2>
+        <p class="text-xs text-gray-400">
+            <i class="fas fa-circle-info mr-1"></i>
+            O <strong>Valor SAP</strong> vem da importação. Os demais campos são digitados aqui e salvam sozinhos.
+        </p>
+    </div>
+
+    <div class="overflow-x-auto" style="max-height: 70vh;">
+        <table class="min-w-full cx-planilha">
+            <thead>
+                <tr>
+                    <th class="text-left cx-data" style="background:#4C1D95;">Data</th>
+                    <th class="text-right">Valor SAP</th>
+                    <th class="text-right">Vivo go EA</th>
+                    <th class="text-right">DIVERG.</th>
+                    <th class="text-center">STATUS</th>
+                    <th class="text-right">allied</th>
+                    <th class="text-right">recarga</th>
+                    <th class="text-right">Agoracred</th>
+                    <th class="text-right">Renova</th>
+                    <th class="text-right">sangria/erro</th>
+                    <th class="text-right">Transferências</th>
+                    <th class="text-right">Valor real</th>
+                    <th class="text-right">Entrada</th>
+                    <th class="text-right">Diferença</th>
+                    <th class="text-right">Depósito</th>
+                    <th class="text-right">saldo</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for d in dias %}
+                <tr data-data="{{ d.data|date:'Y-m-d' }}"
+                    class="cx-linha {% if d.data == hoje %}bg-emerald-50/40{% endif %}">
+                    <td class="cx-data {% if d.data == hoje %}text-emerald-700{% endif %}">{{ d.data|date:"d/m/Y" }}</td>
+                    <td class="text-right tabular text-gray-800 cx-sap">{{ d.valor_sap|brl }}</td>
+                    <td class="text-right">
+                        <input type="text" class="cx-entrada" data-campo="valor_vivogo" value="{{ d.valor_vivogo|campo }}" placeholder="—">
+                    </td>
+                    <td class="text-right tabular cx-diverg {% if d.divergencia %}cx-negativo font-semibold{% else %}text-gray-300{% endif %}">{{ d.divergencia|brl }}</td>
+                    <td class="text-center">
+                        <span class="cx-status inline-block px-2 py-0.5 rounded text-[11px] font-semibold cx-{{ d.status|lower }}">{{ d.status_rotulo }}</span>
+                    </td>
+                    <td class="text-right"><input type="text" class="cx-entrada" data-campo="allied" value="{{ d.allied|campo }}" placeholder="—"></td>
+                    <td class="text-right"><input type="text" class="cx-entrada" data-campo="recarga" value="{{ d.recarga|campo }}" placeholder="—"></td>
+                    <td class="text-right"><input type="text" class="cx-entrada" data-campo="agoracred" value="{{ d.agoracred|campo }}" placeholder="—"></td>
+                    <td class="text-right"><input type="text" class="cx-entrada" data-campo="renova" value="{{ d.renova|campo }}" placeholder="—"></td>
+                    <td class="text-right"><input type="text" class="cx-entrada" data-campo="sangria_erro" value="{{ d.sangria_erro|campo }}" placeholder="—"></td>
+                    <td class="text-right"><input type="text" class="cx-entrada" data-campo="transferencias" value="{{ d.transferencias|campo }}" placeholder="—"></td>
+                    <td class="text-right"><input type="text" class="cx-entrada font-semibold" data-campo="valor_real" value="{{ d.valor_real|campo }}" placeholder="—"></td>
+                    <td class="text-right"><input type="text" class="cx-entrada" data-campo="entrada" value="{{ d.entrada|campo }}" placeholder="—"></td>
+                    <td class="text-right tabular cx-diferenca {% if d.diferenca < 0 %}cx-negativo{% else %}text-gray-600{% endif %}">{{ d.diferenca|brl }}</td>
+                    <td class="text-right"><input type="text" class="cx-entrada" data-campo="deposito" value="{{ d.deposito|campo }}" placeholder="—"></td>
+                    <td class="text-right tabular cx-saldo font-semibold text-gray-900">{{ d.saldo|brl_zero }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<p class="text-xs text-gray-400 mt-3">
+    <i class="fas fa-circle-info mr-1"></i>
+    <strong>DIVERG.</strong> = Valor SAP − Vivo go EA · <strong>STATUS</strong> fica em ATENÇÃO quando os dois
+    não batem (e o gerente da loja é avisado) · <strong>Diferença</strong> = Entrada − Valor real ·
+    <strong>saldo</strong> = saldo do dia anterior + Valor real.
+</p>
+
+<script>
+(function () {
+    var URL_SALVAR = '{% url "contagem_caixa:salvar_dia" loja.id %}';
+
+    function csrf() {
+        var m = document.cookie.match(/csrftoken=([^;]+)/);
+        return m ? m[1] : '';
+    }
+    function brl(v) {
+        var n = parseFloat(v);
+        if (isNaN(n) || n === 0) return null;
+        return 'R$ ' + n.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    }
+
+    function salvar(linha, alterado) {
+        var corpo = new FormData();
+        corpo.append('data', linha.dataset.data);
+        corpo.append('csrfmiddlewaretoken', csrf());
+        linha.querySelectorAll('.cx-entrada').forEach(function (inp) {
+            corpo.append(inp.dataset.campo, inp.value);
+        });
+
+        fetch(URL_SALVAR, {method: 'POST', headers: {'X-CSRFToken': csrf()}, body: corpo})
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            if (!d.ok) {
+                alert(d.erro || 'Não foi possível salvar.');
+                // Desfaz o que não entrou, para o campo não ficar mostrando
+                // um valor que o banco não tem.
+                var alvo = d.campo ? linha.querySelector('[data-campo="' + d.campo + '"]') : alterado;
+                if (alvo) { alvo.value = alvo.dataset.anterior || ''; alvo.dataset.original = alvo.value; }
+                return;
+            }
+
+            var div = linha.querySelector('.cx-diverg');
+            var txt = brl(d.divergencia);
+            div.textContent = txt || '—';
+            div.classList.toggle('cx-negativo', !!txt);
+            div.classList.toggle('font-semibold', !!txt);
+            div.classList.toggle('text-gray-300', !txt);
+
+            var st = linha.querySelector('.cx-status');
+            st.textContent = d.status_rotulo;
+            st.className = 'cx-status inline-block px-2 py-0.5 rounded text-[11px] font-semibold '
+                         + 'cx-' + d.status.toLowerCase();
+
+            var dif = linha.querySelector('.cx-diferenca');
+            dif.textContent = brl(d.diferenca) || '—';
+            dif.classList.toggle('cx-negativo', parseFloat(d.diferenca) < 0);
+            dif.classList.toggle('text-gray-600', !(parseFloat(d.diferenca) < 0));
+
+            // O saldo é encadeado: mudou um dia, os seguintes mudam junto.
+            // Recarrega só a coluna de saldo, sem perder o que está digitado.
+            atualizarSaldos();
+
+            linha.classList.remove('cx-salvo');
+            void linha.offsetWidth;
+            linha.classList.add('cx-salvo');
+
+            if (d.avisados && d.avisados.length) {
+                if (typeof window.showToast === 'function') {
+                    window.showToast('Divergência registrada. Avisamos: ' + d.avisados.join(', '), 'info');
+                }
+            }
+        })
+        .catch(function () { alert('Erro de conexão ao salvar.'); });
+    }
+
+    function atualizarSaldos() {
+        fetch(window.location.href, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
+        .then(function (r) { return r.text(); })
+        .then(function (html) {
+            var doc = new DOMParser().parseFromString(html, 'text/html');
+            var novas = doc.querySelectorAll('.cx-linha');
+            document.querySelectorAll('.cx-linha').forEach(function (linha, i) {
+                if (novas[i]) {
+                    linha.querySelector('.cx-saldo').textContent =
+                        novas[i].querySelector('.cx-saldo').textContent;
+                }
+            });
+            var saldos = document.querySelectorAll('.cx-saldo');
+            if (saldos.length) {
+                document.getElementById('cxSaldoAtual').textContent =
+                    saldos[saldos.length - 1].textContent.trim();
+            }
+        })
+        .catch(function () {});
+    }
+
+    // Salva ao sair do campo, só se mudou.
+    document.querySelectorAll('.cx-entrada').forEach(function (inp) {
+        inp.dataset.original = inp.value;
+        inp.addEventListener('blur', function () {
+            if (inp.value === inp.dataset.original) return;
+            inp.dataset.anterior = inp.dataset.original;
+            inp.dataset.original = inp.value;
+            salvar(inp.closest('.cx-linha'), inp);
+        });
+        inp.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') { e.preventDefault(); inp.blur(); }
+        });
+    });
+
+    // Saldo atual no cartão do topo = saldo do último dia com lançamento.
+    var saldos = document.querySelectorAll('.cx-saldo');
+    if (saldos.length) {
+        document.getElementById('cxSaldoAtual').textContent = saldos[saldos.length - 1].textContent.trim();
+    }
+})();
+</script>
+{% endblock %}
