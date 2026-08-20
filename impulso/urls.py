@@ -20,6 +20,10 @@ urlpatterns = [
     path('metas/<int:meta_id>/entregar/', views.meta_entregar, name='meta_entregar'),
     path('metas/<int:meta_id>/avaliar/', views.meta_avaliar, name='meta_avaliar'),
     path('metas/<int:meta_id>/anexo/', views.meta_add_anexo, name='meta_add_anexo'),
+    path('metas/<int:meta_id>/anexo/<int:anexo_id>/editar/',
+         views.meta_anexo_editar, name='meta_anexo_editar'),
+    path('metas/<int:meta_id>/anexo/<int:anexo_id>/excluir/',
+         views.meta_anexo_excluir, name='meta_anexo_excluir'),
     path('metas/<int:meta_id>/comentar/', views.meta_add_comentario, name='meta_add_comentario'),
     path('atividades/', views.minhas_atividades, name='minhas_atividades'),
 

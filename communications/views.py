@@ -1,3 +1,4 @@
+import re
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -367,6 +368,20 @@ def communication_detail_view(request, communication_id):
     return render(request, 'communications/detail.html', context)
 
 
+COR_HEX = re.compile(r'^#[0-9A-Fa-f]{6}$')
+
+
+def _cor_do_titulo(request):
+    """Lê a cor escolhida para o título, aceitando só hex válido.
+
+    O valor é escrito dentro de um atributo ``style`` no template, então
+    qualquer coisa fora de ``#RRGGBB`` é descartada em vez de ser confiada.
+    Vazio significa "usa a cor padrão do tema".
+    """
+    bruto = (request.POST.get('title_color') or '').strip()
+    return bruto if COR_HEX.match(bruto) else ''
+
+
 @login_required
 def create_communication_view(request):
     """Criar novo comunicado"""
@@ -390,6 +405,7 @@ def create_communication_view(request):
         try:
             communication = Communication.objects.create(
                 title=title,
+                title_color=_cor_do_titulo(request),
                 message=message,
                 sender=request.user,
                 send_to_all=send_to_all,
@@ -526,6 +542,7 @@ def edit_communication_view(request, communication_id):
     
     if request.method == 'POST':
         communication.title = request.POST.get('title')
+        communication.title_color = _cor_do_titulo(request)
         communication.message = request.POST.get('message')
         communication.send_to_all = request.POST.get('send_to_all') == 'on'
         communication.is_pinned = request.POST.get('is_pinned') == 'on'

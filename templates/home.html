@@ -280,7 +280,7 @@
                     </div>
                     <div class="flex-1 min-w-0">
                         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-2">
-                            <h3 class="text-lg font-semibold text-gray-900">{{ comm.title }}</h3>
+                            <h3 class="text-lg font-semibold text-gray-900"{% if comm.title_color %} style="color: {{ comm.title_color }}"{% endif %}>{{ comm.title }}</h3>
                             <span class="text-xs text-red-600 font-medium">FIXADO</span>
                         </div>
                         {% if comm.image %}
@@ -424,7 +424,7 @@
 
                 <!-- Post Content -->
                 <div class="p-4 sm:p-6">
-                    <h2 class="text-lg sm:text-xl font-semibold text-gray-900 mb-3">{{ comm.title }}</h2>
+                    <h2 class="text-lg sm:text-xl font-semibold text-gray-900 mb-3"{% if comm.title_color %} style="color: {{ comm.title_color }}"{% endif %}>{{ comm.title }}</h2>
                     
                     {% if comm.image or comm.images.all %}
                     <div class="mb-4">

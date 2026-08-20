@@ -319,7 +319,7 @@
                         
                         <div class="flex justify-between items-center text-sm text-gray-500">
                             <span>{{ assignment.start_date|date:"d/m" }} - {{ assignment.end_date|date:"d/m" }}</span>
-                            <span>{{ assignment.template.tasks.count }} tarefas</span>
+                            <span>{{ assignment.qtd_tarefas_template }} tarefas</span>
                         </div>
                     </div>
                     {% endfor %}
@@ -393,7 +393,7 @@
                             
                             <div class="flex justify-between items-center">
                                 <span class="text-sm text-gray-500">
-                                    {{ execution.task_executions.count }} tarefas
+                                    {{ execution.total_tarefas }} tarefas
                                 </span>
                                 {% if execution.assignment.assigned_to == user %}
                                 <a href="{% url 'checklists:view_execution' execution.id %}" 
@@ -472,7 +472,7 @@
                             
                             <div class="flex justify-between items-center">
                                 <span class="text-sm text-gray-500">
-                                    {{ execution.task_executions.count }} tarefas
+                                    {{ execution.total_tarefas }} tarefas
                                 </span>
                                 {% if execution.assignment.assigned_to == user %}
                                 <a href="{% url 'checklists:view_execution' execution.id %}" 
@@ -515,7 +515,7 @@
                             <p class="text-sm text-gray-600 mt-1">{{ template.description|truncatewords:8 }}</p>
                         </div>
                         <span class="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded-full">
-                            {{ template.tasks.count }} tarefas
+                            {{ template.qtd_tarefas }} tarefas
                         </span>
                     </div>
                     

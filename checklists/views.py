@@ -5,6 +5,7 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 from django.db import transaction
 from django.db.models import Q, Count, Sum, Case, When, IntegerField, F, Max
+from django.core.cache import caches
 from django.core.paginator import Paginator, PageNotAnInteger, EmptyPage
 from django.utils import timezone
 from datetime import datetime, timedelta, date
@@ -16,6 +17,10 @@ from .models import (
     ChecklistTaskExecution, ChecklistAssignmentApprover, ChecklistPendingAssignment
 )
 from users.models import User, Sector
+
+# Cache de processo (LocMemCache), não o Redis remoto — ver a nota em
+# CACHE_SETORES_SEGUNDOS.
+cache_local = caches['local']
 
 
 def _is_admins_group_user(user):
@@ -49,20 +54,40 @@ def is_above_default_user(user):
     return user.is_superuser or getattr(user, 'hierarchy', None) in ['ADMINISTRATIVO', 'SUPERVISOR', 'ADMIN', 'SUPERADMIN']
 
 
+# Quanto tempo a lista de setores do usuário fica em memória. Vale a pena
+# porque a mesma resposta é pedida até quatro vezes na mesma tela e trinta
+# vezes ao longo do módulo. Fica no cache 'local' (memória do processo) e não
+# no Redis de propósito: o Redis é remoto (~130 ms por operação) e a consulta
+# que ele substituiria custa ~30 ms — iria na direção contrária.
+CACHE_SETORES_SEGUNDOS = 60
+
+
 def get_user_visible_sector_ids(user, include_adm_for_admin_plus=False):
     """Setores visíveis para o usuário.
 
     Quando include_adm_for_admin_plus=True e o usuário está acima de PADRAO, retorna todos os setores.
+
+    O resultado fica ~1 minuto em memória. Mudança de setor de alguém demora
+    no máximo esse tempo para aparecer, o que é aceitável para uma informação
+    que muda raramente e é lida o tempo todo.
     """
+    chave = f'checklists:setores:{user.pk}:{int(bool(include_adm_for_admin_plus))}'
+    guardado = cache_local.get(chave)
+    if guardado is not None:
+        return guardado
+
     sector_ids = set(user.sectors.values_list('id', flat=True))
 
     if getattr(user, 'sector_id', None):
         sector_ids.add(user.sector_id)
 
     if include_adm_for_admin_plus and is_above_default_user(user):
-        return list(Sector.objects.values_list('id', flat=True))
+        visiveis = list(Sector.objects.values_list('id', flat=True))
+    else:
+        visiveis = list(sector_ids)
 
-    return list(sector_ids)
+    cache_local.set(chave, visiveis, CACHE_SETORES_SEGUNDOS)
+    return visiveis
 
 
 @login_required
@@ -78,7 +103,8 @@ def checklist_dashboard(request):
     my_assignments = ChecklistAssignment.objects.filter(
         assigned_to=user,
         is_active=True
-    ).select_related('template', 'assigned_by')
+    ).select_related('template', 'assigned_by', 'assigned_to', 'assigned_to__sector'
+    ).annotate(qtd_tarefas_template=Count('template__tasks', distinct=True))
     
     # Para supervisores: mostrar checklists dos seus setores
     # Para superadmin: mostrar todos
@@ -89,7 +115,8 @@ def checklist_dashboard(request):
             is_active=True
         ).exclude(
             assigned_to=user  # Não duplicar os que já estão em my_assignments
-        ).select_related('template', 'assigned_to', 'assigned_by')
+        ).select_related('template', 'assigned_to', 'assigned_to__sector', 'assigned_by'
+        ).annotate(qtd_tarefas_template=Count('template__tasks', distinct=True))
     elif is_supervisor:
         # SUPERVISOR vê checklists cujo TEMPLATE é do seu setor
         user_sector_ids = get_user_visible_sector_ids(user, include_adm_for_admin_plus=True)
@@ -100,14 +127,15 @@ def checklist_dashboard(request):
                 is_active=True
             ).exclude(
                 assigned_to=user  # Não duplicar
-            ).select_related('template', 'assigned_to', 'assigned_by')
+            ).select_related('template', 'assigned_to', 'assigned_to__sector', 'assigned_by'
+        ).annotate(qtd_tarefas_template=Count('template__tasks', distinct=True))
     
     # Execuções pendentes de hoje
     today = timezone.now().date()
     today_executions = ChecklistExecution.objects.filter(
         assignment__assigned_to=user,
         execution_date=today
-    ).select_related('assignment__template')
+    ).para_listagem()
     
     # Para supervisores: incluir execuções dos checklists cujo TEMPLATE é do seu setor
     # Para superadmin: incluir todas as execuções
@@ -116,7 +144,7 @@ def checklist_dashboard(request):
             execution_date=today
         ).exclude(
             assignment__assigned_to=user  # Não duplicar
-        ).select_related('assignment__template', 'assignment__assigned_to')
+        ).para_listagem()
         
         # Combinar as querysets
         from itertools import chain
@@ -130,7 +158,7 @@ def checklist_dashboard(request):
                 execution_date=today
             ).exclude(
                 assignment__assigned_to=user  # Não duplicar
-            ).select_related('assignment__template', 'assignment__assigned_to')
+            ).para_listagem()
             
             # Combinar as querysets
             from itertools import chain
@@ -175,7 +203,7 @@ def checklist_dashboard(request):
         available_templates = ChecklistTemplate.objects.filter(
             sector_id__in=user_sector_ids,
             is_active=True
-        ).prefetch_related('tasks')
+        ).select_related('sector').com_qtd_tarefas()
     
     # Execuções do calendário (mês atual + próximo mês + mês anterior)
     current_month = today.replace(day=1)
@@ -190,7 +218,7 @@ def checklist_dashboard(request):
         assignment__assigned_to=user,
         execution_date__gte=calendar_start,
         execution_date__lte=calendar_end
-    ).select_related('assignment__template').order_by('execution_date')
+    ).para_listagem().order_by('execution_date')
     
     # Para supervisores: incluir execuções dos checklists cujo TEMPLATE é do seu setor
     # Para superadmin: incluir todas as execuções
@@ -200,7 +228,7 @@ def checklist_dashboard(request):
             execution_date__lte=calendar_end
         ).exclude(
             assignment__assigned_to=user  # Não duplicar
-        ).select_related('assignment__template', 'assignment__assigned_to').order_by('execution_date')
+        ).para_listagem().order_by('execution_date')
         
         from itertools import chain
         calendar_executions = list(chain(calendar_executions, supervisor_calendar_executions))
@@ -215,7 +243,7 @@ def checklist_dashboard(request):
                 execution_date__lte=calendar_end
             ).exclude(
                 assignment__assigned_to=user  # Não duplicar
-            ).select_related('assignment__template', 'assignment__assigned_to').order_by('execution_date')
+            ).para_listagem().order_by('execution_date')
             
             from itertools import chain
             calendar_executions = list(chain(calendar_executions, supervisor_calendar_executions))
@@ -1568,9 +1596,12 @@ def admin_approvals(request):
         'assignment__template__sector',
         'assignment__assigned_to'
     ).prefetch_related(
-        'task_executions__task'
-    )
-    
+        'task_executions__task',
+        # Sem isto, cada tarefa da tela fazia duas consultas de evidência
+        # (o `.exists` e o `.all` do template) — 218 idas ao banco por página.
+        'task_executions__evidences',
+    ).com_progresso()
+
     # Filtrar por setores do usuário (exceto superuser que vê tudo)
     if not request.user.is_superuser:
         user_sector_ids = get_user_visible_sector_ids(request.user, include_adm_for_admin_plus=True)
@@ -2583,13 +2614,13 @@ def admin_executions_macro(request):
         users_with_assignments = User.objects.filter(
             is_active=True,
             checklist_assignments__isnull=False
-        ).distinct()
+        ).select_related('sector').distinct()
     else:
         users_with_assignments = User.objects.filter(
             is_active=True,
             checklist_assignments__isnull=False,
             checklist_assignments__template__sector_id__in=user_sector_ids
-        ).distinct()
+        ).select_related('sector').distinct()
     
     if sector_filter:
         users_with_assignments = users_with_assignments.filter(
@@ -2597,40 +2628,39 @@ def admin_executions_macro(request):
         ).distinct()
     
     users_with_assignments = users_with_assignments.order_by('first_name', 'last_name')
-    
+
+    # Os números de todo mundo saem em duas consultas agrupadas, não em nove
+    # por pessoa. Com ~46 usuários eram 414 COUNTs (12 s só nisso).
+    FEITO = ['completed', 'awaiting_approval']
+    ATRASAVEL = ['pending', 'in_progress', 'overdue']
+
+    def _conta(turno):
+        return {
+            'total': Count('id', filter=Q(period=turno)),
+            'pending': Count('id', filter=Q(period=turno, status='pending')),
+            'in_progress': Count('id', filter=Q(period=turno, status='in_progress')),
+            'completed': Count('id', filter=Q(period=turno, status__in=FEITO)),
+        }
+
+    do_dia = {
+        linha['assignment__assigned_to']: linha
+        for linha in executions_qs.filter(execution_date=selected_date)
+        .values('assignment__assigned_to')
+        .annotate(**{f'manha_{k}': v for k, v in _conta('morning').items()},
+                  **{f'tarde_{k}': v for k, v in _conta('afternoon').items()})
+    }
+    atrasados = dict(
+        executions_qs.filter(execution_date__lte=delay_threshold, status__in=ATRASAVEL)
+        .values_list('assignment__assigned_to').annotate(n=Count('id')))
+
     for user in users_with_assignments:
-        # Execuções do dia selecionado para este usuário
-        user_executions = executions_qs.filter(
-            assignment__assigned_to=user,
-            execution_date=selected_date
-        )
-        
-        # Separar por turno
-        morning = user_executions.filter(period='morning')
-        afternoon = user_executions.filter(period='afternoon')
-        
-        # Contar status por turno
-        morning_stats = {
-            'total': morning.count(),
-            'pending': morning.filter(status='pending').count(),
-            'in_progress': morning.filter(status='in_progress').count(),
-            'completed': morning.filter(status__in=['completed', 'awaiting_approval']).count(),
-        }
-        
-        afternoon_stats = {
-            'total': afternoon.count(),
-            'pending': afternoon.filter(status='pending').count(),
-            'in_progress': afternoon.filter(status='in_progress').count(),
-            'completed': afternoon.filter(status__in=['completed', 'awaiting_approval']).count(),
-        }
-        
-        # Execuções atrasadas (2 dias atrás ou mais, não concluídas)
-        delayed = executions_qs.filter(
-            assignment__assigned_to=user,
-            execution_date__lte=delay_threshold,
-            status__in=['pending', 'in_progress', 'overdue']
-        ).count()
-        
+        numeros = do_dia.get(user.id, {})
+        morning_stats = {k: numeros.get(f'manha_{k}', 0)
+                         for k in ('total', 'pending', 'in_progress', 'completed')}
+        afternoon_stats = {k: numeros.get(f'tarde_{k}', 0)
+                           for k in ('total', 'pending', 'in_progress', 'completed')}
+        delayed = atrasados.get(user.id, 0)
+
         # Total do dia
         day_total = morning_stats['total'] + afternoon_stats['total']
         day_completed = morning_stats['completed'] + afternoon_stats['completed']

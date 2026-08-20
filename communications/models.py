@@ -1,3 +1,4 @@
+from django.core.validators import RegexValidator
 from django.db import models
 from django.conf import settings
 import requests
@@ -45,6 +46,14 @@ class Communication(models.Model):
     ]
     
     title = models.CharField(max_length=200, verbose_name="Título")
+    # Cor livre do título, escolhida por quem escreve. Guardada como hex e
+    # validada na entrada — o valor vai para dentro de um `style`, então não
+    # pode aceitar texto qualquer. Vazio = cor padrão do tema.
+    title_color = models.CharField(
+        max_length=7, blank=True, default='',
+        validators=[RegexValidator(r'^#[0-9A-Fa-f]{6}$',
+                                   'Use uma cor no formato #RRGGBB.')],
+        verbose_name="Cor do título")
     message = models.TextField(verbose_name="Mensagem")
     image = models.ImageField(upload_to=upload_communication_attachment, storage=get_media_storage(), null=True, blank=True, verbose_name="Imagem")
     sender = models.ForeignKey(

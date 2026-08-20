@@ -144,7 +144,7 @@
                             {% endif %}
                         </div>
                         
-                        <h3 class="text-lg sm:text-xl font-bold text-gray-900 mb-2 leading-tight">{{ communication.title }}</h3>
+                        <h3 class="text-lg sm:text-xl font-bold text-gray-900 mb-2 leading-tight"{% if communication.title_color %} style="color: {{ communication.title_color }}"{% endif %}>{{ communication.title }}</h3>
                         {% endif %}
                         
                         {% if communication.image %}

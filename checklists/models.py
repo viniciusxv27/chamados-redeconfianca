@@ -40,9 +40,18 @@ def upload_checklist_evidence_video(instance, filename):
     return os.path.join('checklists', 'evidences', 'videos', new_filename)
 
 
+class ChecklistTemplateQuerySet(models.QuerySet):
+
+    def com_qtd_tarefas(self):
+        """Traz a contagem de tarefas junto, em vez de um COUNT por card."""
+        return self.annotate(_qtd_tarefas=models.Count('tasks', distinct=True))
+
+
 class ChecklistTemplate(models.Model):
     """Template para criação de checklists"""
-    
+
+    objects = ChecklistTemplateQuerySet.as_manager()
+
     name = models.CharField(max_length=200, verbose_name='Nome do Checklist')
     description = models.TextField(blank=True, verbose_name='Descrição')
     
@@ -64,9 +73,19 @@ class ChecklistTemplate(models.Model):
         verbose_name = 'Template de Checklist'
         verbose_name_plural = 'Templates de Checklist'
         ordering = ['name']
-        
+
     def __str__(self):
         return f'{self.name} - {self.sector.name}'
+
+    @property
+    def qtd_tarefas(self):
+        """Quantas tarefas o template tem.
+
+        Usa a anotação de ``com_qtd_tarefas()`` quando ela veio junto; sem ela,
+        cada card da lista faria um COUNT próprio.
+        """
+        anotado = getattr(self, '_qtd_tarefas', None)
+        return anotado if anotado is not None else self.tasks.count()
 
 
 class ChecklistTask(models.Model):
@@ -365,9 +384,45 @@ class ChecklistAssignment(models.Model):
         return today in self.get_active_dates()
 
 
+class ChecklistExecutionQuerySet(models.QuerySet):
+    """Consultas de execução que já trazem o que a tela precisa."""
+
+    def com_progresso(self):
+        """Traz o total e o concluído de tarefas junto, em vez de contar por linha.
+
+        ``progress_percentage`` fazia dois COUNT por execução. Numa tela com
+        2.600 execuções isso virava 5.200 idas ao banco — o que travava o
+        dashboard. Com a anotação, o mesmo número sai em uma consulta só.
+        """
+        return self.annotate(
+            _total_tarefas=models.Count('task_executions', distinct=True),
+            _tarefas_feitas=models.Count(
+                'task_executions',
+                filter=models.Q(task_executions__is_completed=True),
+                distinct=True),
+        )
+
+    def com_contexto(self):
+        """Puxa atribuição, template e responsável na mesma consulta."""
+        return self.select_related(
+            'assignment',
+            'assignment__template',
+            'assignment__template__sector',
+            'assignment__assigned_to',
+            'assignment__assigned_to__sector',
+            'assignment__assigned_by',
+        )
+
+    def para_listagem(self):
+        """O par que toda tela de listagem quer: contexto + progresso."""
+        return self.com_contexto().com_progresso()
+
+
 class ChecklistExecution(models.Model):
     """Execução de um checklist em uma data específica"""
-    
+
+    objects = ChecklistExecutionQuerySet.as_manager()
+
     STATUS_CHOICES = [
         ('pending', 'Pendente'),
         ('in_progress', 'Em Andamento'),
@@ -421,13 +476,31 @@ class ChecklistExecution(models.Model):
         return f'{self.assignment.template.name} - {self.execution_date} {period_display} ({self.get_status_display()})'
     
     @property
+    def total_tarefas(self):
+        """Usa a anotação de ``com_progresso()`` quando ela veio junto."""
+        anotado = getattr(self, '_total_tarefas', None)
+        return anotado if anotado is not None else self.task_executions.count()
+
+    @property
+    def tarefas_feitas(self):
+        anotado = getattr(self, '_tarefas_feitas', None)
+        if anotado is not None:
+            return anotado
+        return self.task_executions.filter(is_completed=True).count()
+
+    @property
     def progress_percentage(self):
-        """Calcula a porcentagem de conclusão"""
-        total_tasks = self.task_executions.count()
-        if total_tasks == 0:
+        """Porcentagem de conclusão.
+
+        Prefere os números anotados por ``ChecklistExecution.objects.com_progresso()``
+        e só vai ao banco quando a consulta não os trouxe — assim as telas de
+        listagem não disparam dois COUNT por linha e o resto do código que usa
+        a propriedade continua funcionando sem mudança.
+        """
+        total = self.total_tarefas
+        if not total:
             return 0
-        completed_tasks = self.task_executions.filter(is_completed=True).count()
-        return round((completed_tasks / total_tasks) * 100)
+        return round((self.tarefas_feitas / total) * 100)
     
     def update_status(self):
         """Atualiza o status baseado no progresso"""

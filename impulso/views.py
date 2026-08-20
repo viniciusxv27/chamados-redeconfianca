@@ -403,11 +403,18 @@ def meta_detail(request, meta_id):
     MetaVisualizacao.objects.update_or_create(
         meta=meta, user=request.user, defaults={'visto_em': timezone.now()})
 
+    # O template não consegue chamar método com argumento, então cada anexo já
+    # chega sabendo se esta pessoa pode mexer nele.
+    anexos = list(meta.anexos.select_related('enviado_por'))
+    for anexo in anexos:
+        anexo.meta = meta  # a meta já está carregada; evita uma consulta por anexo
+        anexo.pode_mexer = _pode_mexer_no_anexo(request.user, anexo)
+
     context = {
         'meta': meta,
         'itens': meta.itens.select_related('concluido_por'),
         'participantes': meta.participantes.all(),
-        'anexos': meta.anexos.select_related('enviado_por'),
+        'anexos': anexos,
         'comentarios': meta.comentarios.select_related('autor'),
         'is_gestor_da_meta': meta.gestor_id == request.user.id or request.user.is_superuser,
         'is_colaborador_da_meta': meta.colaborador_id == request.user.id,
@@ -543,6 +550,77 @@ def meta_add_anexo(request, meta_id):
         messages.success(request, 'Link anexado.')
     else:
         messages.error(request, 'Envie um arquivo ou informe um link.')
+    return redirect('impulso:meta_detail', meta_id=meta.id)
+
+
+def _pode_mexer_no_anexo(user, anexo):
+    """Quem edita ou apaga um anexo.
+
+    Quem anexou mexe no que é seu; o gestor da meta e o superusuário mexem em
+    qualquer um, porque respondem pela meta. Colega participante não apaga
+    anexo de outro — remover arquivo é irreversível.
+    """
+    return (user.is_superuser
+            or anexo.enviado_por_id == user.id
+            or anexo.meta.gestor_id == user.id)
+
+
+@require_POST
+@impulso_member_required
+def meta_anexo_editar(request, meta_id, anexo_id):
+    """Renomeia o anexo e, se for link, permite corrigir a URL."""
+    meta = get_object_or_404(Meta, id=meta_id)
+    anexo = get_object_or_404(MetaAnexo, id=anexo_id, meta=meta)
+
+    if not _pode_ver_meta(request.user, meta) or not _pode_mexer_no_anexo(request.user, anexo):
+        messages.error(request, 'Você não pode editar este anexo.')
+        return redirect('impulso:meta_detail', meta_id=meta.id)
+
+    anexo.titulo = (request.POST.get('titulo') or '').strip()[:200]
+
+    if anexo.tipo == MetaAnexo.Tipo.LINK:
+        nova_url = (request.POST.get('url') or '').strip()
+        if not nova_url:
+            messages.error(request, 'O link não pode ficar vazio.')
+            return redirect('impulso:meta_detail', meta_id=meta.id)
+        anexo.url = nova_url
+
+    # Troca do arquivo: o antigo sai do storage para não virar lixo.
+    novo_arquivo = request.FILES.get('arquivo')
+    if novo_arquivo and anexo.tipo == MetaAnexo.Tipo.ARQUIVO:
+        antigo = anexo.arquivo
+        anexo.arquivo = novo_arquivo
+        anexo.save()
+        if antigo:
+            antigo.delete(save=False)
+        messages.success(request, 'Arquivo substituído.')
+        return redirect('impulso:meta_detail', meta_id=meta.id)
+
+    anexo.save()
+    messages.success(request, 'Anexo atualizado.')
+    return redirect('impulso:meta_detail', meta_id=meta.id)
+
+
+@require_POST
+@impulso_member_required
+def meta_anexo_excluir(request, meta_id, anexo_id):
+    """Remove o anexo e o arquivo correspondente do storage."""
+    meta = get_object_or_404(Meta, id=meta_id)
+    anexo = get_object_or_404(MetaAnexo, id=anexo_id, meta=meta)
+
+    if not _pode_ver_meta(request.user, meta) or not _pode_mexer_no_anexo(request.user, anexo):
+        messages.error(request, 'Você não pode excluir este anexo.')
+        return redirect('impulso:meta_detail', meta_id=meta.id)
+
+    nome = anexo.nome_exibicao
+    arquivo = anexo.arquivo if anexo.tipo == MetaAnexo.Tipo.ARQUIVO else None
+    anexo.delete()
+    if arquivo:
+        # Só depois de apagar a linha: se o delete do banco falhar, o arquivo
+        # continua lá e nada fica órfão pelo contrário.
+        arquivo.delete(save=False)
+
+    messages.success(request, f'“{nome}” foi excluído.')
     return redirect('impulso:meta_detail', meta_id=meta.id)
 
 

@@ -245,15 +245,59 @@
 
 <div class="imp-card p-5">
             <h3 class="font-semibold text-gray-800 mb-3"><i class="fas fa-paperclip text-gray-500 mr-2"></i>Anexos</h3>
-            <ul class="space-y-2 mb-4">
+            <ul class="space-y-1 mb-4">
                 {% for a in anexos %}
-                <li class="flex items-center gap-2 text-sm">
-                    {% if a.tipo == 'LINK' %}
-                    <i class="fas fa-link text-orange-500"></i>
-                    <a href="{{ a.url }}" target="_blank" rel="noopener" class="text-orange-600 hover:underline break-all">{{ a.nome_exibicao }}</a>
-                    {% else %}
-                    <i class="fas fa-file text-gray-400"></i>
-                    <a href="{{ a.arquivo.url }}" target="_blank" rel="noopener" class="text-gray-700 hover:underline break-all">{{ a.nome_exibicao }}</a>
+                <li class="group rounded-lg hover:bg-gray-50 -mx-2 px-2 py-1.5" id="anexo{{ a.id }}">
+                    <div class="flex items-start gap-2 text-sm">
+                        {% if a.tipo == 'LINK' %}
+                        <i class="fas fa-link text-orange-500 mt-1"></i>
+                        <a href="{{ a.url }}" target="_blank" rel="noopener" class="text-orange-600 hover:underline break-all flex-1">{{ a.nome_exibicao }}</a>
+                        {% else %}
+                        <i class="fas fa-file text-gray-400 mt-1"></i>
+                        <a href="{{ a.arquivo.url }}" target="_blank" rel="noopener" class="text-gray-700 hover:underline break-all flex-1">{{ a.nome_exibicao }}</a>
+                        {% endif %}
+
+                        {% if a.pode_mexer %}
+                        <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                            <button type="button" class="imp-anexo-editar text-gray-400 hover:text-gray-700 px-1"
+                                    data-alvo="anexoForm{{ a.id }}" title="Editar">
+                                <i class="fas fa-pen text-xs"></i>
+                            </button>
+                            <form method="post" action="{% url 'impulso:meta_anexo_excluir' meta.id a.id %}"
+                                  onsubmit="return confirm('Excluir “{{ a.nome_exibicao|escapejs }}”? Isso não tem volta.');">
+                                {% csrf_token %}
+                                <button type="submit" class="text-gray-400 hover:text-red-600 px-1" title="Excluir">
+                                    <i class="fas fa-trash text-xs"></i>
+                                </button>
+                            </form>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <p class="text-[11px] text-gray-400 ml-6">
+                        {{ a.enviado_por.get_full_name|default:"—" }} · {{ a.enviado_em|date:"d/m/Y H:i" }}
+                    </p>
+
+                    {% if a.pode_mexer %}
+                    <form method="post" enctype="multipart/form-data" id="anexoForm{{ a.id }}"
+                          action="{% url 'impulso:meta_anexo_editar' meta.id a.id %}"
+                          class="hidden mt-2 ml-6 space-y-2 border-l-2 border-orange-200 pl-3">
+                        {% csrf_token %}
+                        <input type="text" name="titulo" value="{{ a.titulo }}" placeholder="Título"
+                               class="w-full border border-gray-300 rounded-lg px-2 py-1 text-xs">
+                        {% if a.tipo == 'LINK' %}
+                        <input type="url" name="url" value="{{ a.url }}" required
+                               class="w-full border border-gray-300 rounded-lg px-2 py-1 text-xs">
+                        {% else %}
+                        <label class="block text-[11px] text-gray-400">Trocar o arquivo (opcional)</label>
+                        <input type="file" name="arquivo" class="w-full text-xs">
+                        {% endif %}
+                        <div class="flex gap-2">
+                            <button type="submit" class="px-3 py-1 rounded-lg bg-gray-800 text-white text-xs hover:bg-gray-900">Salvar</button>
+                            <button type="button" class="imp-anexo-cancelar px-3 py-1 rounded-lg border border-gray-300 text-gray-600 text-xs hover:bg-gray-50"
+                                    data-alvo="anexoForm{{ a.id }}">Cancelar</button>
+                        </div>
+                    </form>
                     {% endif %}
                 </li>
                 {% empty %}
@@ -273,6 +317,28 @@
 </div>
 
 <script>
+(function () {
+    // Editar anexo abre o formulário embaixo dele, sem sair da tela.
+    function alterna(alvo, mostrar) {
+        var form = document.getElementById(alvo);
+        if (!form) return;
+        form.classList.toggle('hidden', !mostrar);
+        if (mostrar) {
+            var primeiro = form.querySelector('input[type="text"], input[type="url"]');
+            if (primeiro) primeiro.focus();
+        }
+    }
+    document.querySelectorAll('.imp-anexo-editar').forEach(function (b) {
+        b.addEventListener('click', function () {
+            var form = document.getElementById(b.dataset.alvo);
+            alterna(b.dataset.alvo, form && form.classList.contains('hidden'));
+        });
+    });
+    document.querySelectorAll('.imp-anexo-cancelar').forEach(function (b) {
+        b.addEventListener('click', function () { alterna(b.dataset.alvo, false); });
+    });
+})();
+
 (function () {
     // Recusar abre o campo de motivo em vez de recusar direto: o gestor tem a
     // chance de explicar, e a explicação vai na notificação do colaborador.

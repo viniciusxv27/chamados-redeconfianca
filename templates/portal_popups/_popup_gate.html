@@ -34,7 +34,7 @@
                class="flex items-start gap-3 rounded-lg border border-gray-200 px-3 py-2.5 hover:border-primary hover:bg-orange-50 transition-colors group">
               <i class="fas fa-envelope-open-text text-gray-400 group-hover:text-primary mt-0.5"></i>
               <span class="min-w-0 flex-1">
-                <span class="block text-sm font-medium text-gray-800 group-hover:text-primary truncate">{{ c.title }}</span>
+                <span class="block text-sm font-medium text-gray-800 group-hover:text-primary truncate"{% if c.title_color %} style="color: {{ c.title_color }}"{% endif %}>{{ c.title }}</span>
                 <span class="block text-xs text-gray-400">
                   {{ c.created_at|date:"d/m/Y" }}{% if c.sender %} · {{ c.sender.full_name|default:c.sender.email }}{% endif %}
                 </span>
