@@ -31,24 +31,64 @@
         </div>
     </div>
 
+    <!-- Nota da IA -->
+    {% if fb.nota_ia is not None %}
+    {% with faixa=fb.faixa_da_nota %}
+    <div class="rounded-xl border {{ faixa.borda }} {{ faixa.fundo }} p-5">
+        <div class="flex items-center gap-5 flex-wrap">
+            <div class="w-20 h-20 rounded-full bg-white border-4 {{ faixa.borda }} flex items-center justify-center flex-shrink-0">
+                <span class="text-2xl font-bold {{ faixa.texto_forte }} tabular-nums">{{ fb.nota_ia }}</span>
+            </div>
+            <div class="flex-1 min-w-[200px]">
+                <p class="text-xs text-gray-500">Nota atribuída pela IA</p>
+                <p class="text-lg font-bold {{ faixa.texto_forte }}">
+                    <i class="fas {{ faixa.icone }} mr-1.5"></i>{{ faixa.rotulo }}
+                </p>
+                <div class="imp-bar-track h-2 mt-2">
+                    <div class="imp-bar-fill h-2 {{ faixa.barra }}" style="width: {{ fb.nota_percentual }}%"></div>
+                </div>
+                <p class="text-[11px] text-gray-400 mt-1.5">
+                    Leitura da IA sobre o que o gestor escreveu, de 0 a 10. Não substitui a
+                    avaliação das metas.
+                </p>
+            </div>
+        </div>
+    </div>
+    {% endwith %}
+    {% endif %}
+
     <!-- Resumo IA -->
     <div class="rounded-xl border border-indigo-200 bg-indigo-50/50 p-5">
-        <div class="flex items-center justify-between mb-2">
-            <h3 class="font-semibold text-indigo-800"><i class="fas fa-robot mr-2"></i>Resumo da IA — pontos a melhorar</h3>
+        <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
+            <h3 class="font-semibold text-indigo-800"><i class="fas fa-robot mr-2"></i>Análise da IA</h3>
             {% if is_gestor_do_fb %}
             <form method="post" action="{% url 'impulso:feedback_regenerar_ia' fb.id %}">
                 {% csrf_token %}
-                <button type="submit" class="text-xs text-indigo-600 hover:underline"><i class="fas fa-rotate mr-1"></i>Regenerar</button>
+                <button type="submit" class="text-xs text-indigo-600 hover:underline">
+                    <i class="fas fa-rotate mr-1"></i>{% if fb.ai_summary %}Regenerar{% else %}Tentar de novo{% endif %}
+                </button>
             </form>
             {% endif %}
         </div>
         {% if fb.ai_summary %}
         <div class="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">{{ fb.ai_summary }}</div>
-        {% if fb.ai_summary_generated_at %}<p class="text-xs text-gray-400 mt-2">Gerado em {{ fb.ai_summary_generated_at|date:"d/m/Y H:i" }}</p>{% endif %}
+        <p class="text-xs text-gray-400 mt-2">
+            {% if fb.ai_summary_generated_at %}Gerado em {{ fb.ai_summary_generated_at|date:"d/m/Y H:i" }}{% endif %}
+            {% if fb.ai_tentativas %} · {{ fb.ai_tentativas }} chamada{{ fb.ai_tentativas|pluralize:"s" }} à IA{% endif %}
+        </p>
+        {% if fb.ai_summary_error %}
+        <p class="text-xs text-amber-600 mt-1"><i class="fas fa-triangle-exclamation mr-1"></i>{{ fb.ai_summary_error }}</p>
+        {% endif %}
         {% elif fb.ai_summary_error %}
-        <p class="text-sm text-red-500"><i class="fas fa-triangle-exclamation mr-1"></i>Não foi possível gerar o resumo: {{ fb.ai_summary_error }}</p>
+        <p class="text-sm text-red-600"><i class="fas fa-triangle-exclamation mr-1"></i>
+            Não foi possível gerar a análise: {{ fb.ai_summary_error }}
+        </p>
+        <p class="text-xs text-gray-500 mt-1">
+            Cada tentativa já repete a chamada algumas vezes antes de desistir. Abrir este
+            feedback de novo dispara outra tentativa.
+        </p>
         {% else %}
-        <p class="text-sm text-gray-500">Resumo ainda não disponível.</p>
+        <p class="text-sm text-gray-500">Análise ainda não disponível.</p>
         {% endif %}
     </div>
 </div>

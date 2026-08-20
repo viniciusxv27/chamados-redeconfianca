@@ -1,7 +1,8 @@
 from django.contrib import admin
 
-from .models import (ConfiguracaoTangerino, FeriasLancamento, MarcacaoPonto,
-                     RegistroPontoPortal, SaldoHoras, SincronizacaoTangerino)
+from .models import (ConfiguracaoTangerino, FeriasLancamento, JornadaTrabalho,
+                     MarcacaoPonto, RegistroPontoPortal, SaldoHoras,
+                     SincronizacaoTangerino)
 
 
 @admin.register(ConfiguracaoTangerino)
@@ -19,7 +20,7 @@ class ConfiguracaoTangerinoAdmin(admin.ModelAdmin):
 @admin.register(MarcacaoPonto)
 class MarcacaoPontoAdmin(admin.ModelAdmin):
     list_display = ('nome', 'data', 'hora_entrada1', 'hora_saida1', 'hora_entrada2',
-                    'hora_saida2', 'total_hhmm', 'em_aberto')
+                    'hora_saida2', 'previsto', 'total_hhmm', 'em_aberto')
     list_filter = ('data', 'em_aberto', 'plataforma', 'editado')
     search_fields = ('nome', 'usuario__first_name', 'usuario__last_name')
     date_hierarchy = 'data'
@@ -45,6 +46,12 @@ class MarcacaoPontoAdmin(admin.ModelAdmin):
     def hora_saida2(self, obj):
         return obj.saida2.strftime('%H:%M') if obj.saida2 else '—'
 
+    @admin.display(description='Previsto', ordering='previsto_segundos')
+    def previsto(self, obj):
+        if not obj.previsto_segundos:
+            return 'folga'
+        return f'{obj.previsto_segundos // 3600:02d}:{obj.previsto_segundos % 3600 // 60:02d}'
+
     @admin.display(description='Trabalhado')
     def total_hhmm(self, obj):
         return obj.total_hhmm
@@ -52,8 +59,9 @@ class MarcacaoPontoAdmin(admin.ModelAdmin):
 
 @admin.register(SaldoHoras)
 class SaldoHorasAdmin(admin.ModelAdmin):
-    list_display = ('nome', 'saldo', 'periodo', 'usuario', 'sincronizado_em')
-    list_filter = ('periodo_inicio', 'periodo_fim')
+    list_display = ('nome', 'previsto', 'trabalhado', 'diferenca', 'aproveita',
+                    'saldo', 'janela', 'usuario')
+    list_filter = ('periodo_inicio', 'periodo_fim', 'analise_inicio')
     search_fields = ('nome', 'email', 'usuario__first_name', 'usuario__last_name')
     ordering = ('saldo_minutos',)          # os mais devedores primeiro
     readonly_fields = [f.name for f in SaldoHoras._meta.fields]
@@ -68,6 +76,29 @@ class SaldoHorasAdmin(admin.ModelAdmin):
     @admin.display(description='Período')
     def periodo(self, obj):
         return f'{obj.periodo_inicio:%d/%m/%Y} a {obj.periodo_fim:%d/%m/%Y}'
+
+    @admin.display(description='Tinha que trabalhar', ordering='previsto_minutos')
+    def previsto(self, obj):
+        return obj.previsto_hhmm if obj.tem_analise else '—'
+
+    @admin.display(description='Trabalhou', ordering='trabalhado_minutos')
+    def trabalhado(self, obj):
+        return obj.trabalhado_hhmm if obj.tem_analise else '—'
+
+    @admin.display(description='Diferença')
+    def diferenca(self, obj):
+        return obj.diferenca_hhmm if obj.tem_analise else '—'
+
+    @admin.display(description='%')
+    def aproveita(self, obj):
+        pct = obj.aproveitamento
+        return f'{pct}%' if pct is not None else '—'
+
+    @admin.display(description='Janela do previsto')
+    def janela(self, obj):
+        if not obj.tem_analise:
+            return 'sem marcações'
+        return f'{obj.analise_inicio:%d/%m} a {obj.analise_fim:%d/%m/%Y}'
 
 
 @admin.register(FeriasLancamento)
@@ -101,3 +132,24 @@ class RegistroPontoPortalAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request):
         return False
+
+
+@admin.register(JornadaTrabalho)
+class JornadaTrabalhoAdmin(admin.ModelAdmin):
+    """As escalas contratadas, espelhadas do Tangerino.
+
+    É a base do "quantas horas deveria ter trabalhado". Só leitura: quem manda
+    na escala é o Tangerino.
+    """
+
+    list_display = ('nome', 'horas_semana', 'semana', 'tangerino_id', 'sincronizado_em')
+    search_fields = ('nome',)
+    ordering = ('-segundos_semana',)
+    readonly_fields = [f.name for f in JornadaTrabalho._meta.fields]
+
+    def has_add_permission(self, request):
+        return False
+
+    @admin.display(description='Semana')
+    def semana(self, obj):
+        return obj.resumo_semana

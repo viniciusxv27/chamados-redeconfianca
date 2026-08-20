@@ -13,14 +13,16 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from . import ferias as ferias_svc
+from . import jornada as jornada_svc
 from . import ponto as ponto_svc
 from .client import (TangerinoError, de_millis, integracao_ativa, listar_funcionarios,
                      listar_marcacoes, invalidar_cache_marcacoes, justificativas_edicao,
                      registrar_ponto, registrar_ponto_atrasado, testar_conexao)
-from .models import (ConfiguracaoTangerino, FeriasLancamento, MarcacaoPonto,
-                     RegistroPontoPortal, SaldoHoras, SincronizacaoTangerino)
-from .sync import (funcionarios_disponiveis, sincronizar_ferias, sincronizar_marcacoes,
-                   sincronizar_saldos, sincronizar_vinculos)
+from .models import (ConfiguracaoTangerino, FeriasLancamento, JornadaTrabalho,
+                     MarcacaoPonto, RegistroPontoPortal, SaldoHoras,
+                     SincronizacaoTangerino)
+from .sync import (funcionarios_disponiveis, sincronizar_ferias, sincronizar_jornadas,
+                   sincronizar_marcacoes, sincronizar_saldos, sincronizar_vinculos)
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
@@ -145,10 +147,17 @@ def meu_ponto(request):
             ]
             contexto['pendencias'] = ponto_svc.pendencias(
                 request.user.tangerino_employee_id, pares=pares)
-            contexto['dias'] = _dias_com_marcacoes(pares, inicio - timedelta(days=28), hoje)
+            grade = _jornada_do_usuario(request.user)
+            contexto['tem_jornada'] = bool(grade)
+            contexto['dias'] = _dias_com_marcacoes(
+                pares, inicio - timedelta(days=28), hoje,
+                grade=grade, employee_id=request.user.tangerino_employee_id)
             contexto['semana'] = [d for d in contexto['dias'] if d['dia'] >= inicio]
             contexto['total_semana'] = ponto_svc.formata_hhmm(
                 sum(d['segundos'] for d in contexto['semana']))
+            contexto.update(_previsto_x_feito(contexto['semana'], hoje, rotulo='semana'))
+            contexto.update(_previsto_x_feito(contexto['dias'], hoje, rotulo='periodo'))
+            contexto['jornada'] = _resumo_da_jornada(request.user)
             contexto['justificativas'] = justificativas_edicao()
         except TangerinoError as exc:
             contexto['erro'] = str(exc)
@@ -156,14 +165,82 @@ def meu_ponto(request):
     return render(request, 'tangerino/meu_ponto.html', contexto)
 
 
-def _dias_com_marcacoes(pares, inicio, fim):
-    """Agrupa os pares por dia, do mais recente para o mais antigo."""
+def _previsto_x_feito(dias, hoje, rotulo):
+    """Totais de previsto e realizado de uma lista de dias.
+
+    O dia de hoje fica **fora do previsto**: a jornada ainda está correndo, e
+    somá-la inteira faria a pessoa parecer devendo horas às nove da manhã. O
+    trabalhado de hoje continua contando, que é o que ela já fez.
+    """
+    previsto = sum(d['previsto_segundos'] or 0 for d in dias
+                   if d['previsto_segundos'] is not None and d['dia'] < hoje)
+    feito = sum(d['segundos'] for d in dias)
+    tem = any(d['previsto_segundos'] is not None for d in dias)
+    return {
+        f'previsto_{rotulo}_segundos': previsto if tem else None,
+        f'previsto_{rotulo}': jornada_svc.formata_hhmm(previsto) if tem else None,
+        f'feito_{rotulo}': jornada_svc.formata_hhmm(feito),
+        f'diferenca_{rotulo}': jornada_svc.formata_hhmm(feito - previsto) if tem else None,
+        f'diferenca_{rotulo}_segundos': (feito - previsto) if tem else None,
+    }
+
+
+def _resumo_da_jornada(usuario):
+    """A escala contratada da pessoa, para a tela dizer de onde vem o previsto."""
+    eid = getattr(usuario, 'tangerino_employee_id', None)
+    if not eid:
+        return None
+    try:
+        escala = next(((f.get('currentWorkSchedule') or {}).get('id')
+                       for f in listar_funcionarios() if f.get('id') == eid), None)
+    except TangerinoError:
+        return None
+    return JornadaTrabalho.objects.filter(tangerino_id=escala).first() if escala else None
+
+
+def _jornada_do_usuario(usuario):
+    """Grade contratada da pessoa: {dia_tangerino: segundos}, ou None.
+
+    Lê da tabela local (JornadaTrabalho), sincronizada de
+    ``/work-schedule/{id}``. Se ainda não foi sincronizada, devolve None e a
+    tela mostra só o realizado — melhor não exibir previsto do que exibir um
+    previsto inventado.
+    """
+    eid = getattr(usuario, 'tangerino_employee_id', None)
+    if not eid:
+        return None
+    try:
+        escala = next(((f.get('currentWorkSchedule') or {}).get('id')
+                       for f in listar_funcionarios() if f.get('id') == eid), None)
+        if not escala:
+            return None
+        registro = JornadaTrabalho.objects.filter(tangerino_id=escala).first()
+        if not registro:
+            return None
+        return {int(dia): seg for dia, seg in (registro.horas_por_dia or {}).items()}
+    except TangerinoError:
+        return None
+
+
+def _dias_com_marcacoes(pares, inicio, fim, grade=None, employee_id=None):
+    """Agrupa os pares por dia, do mais recente para o mais antigo.
+
+    Com ``grade``, cada dia também informa quanto a pessoa **deveria** ter
+    trabalhado, já descontando feriado, férias e abonos.
+    """
     por_dia = {}
     for par in pares:
         entrada = de_millis(par.get('dateIn'))
         if not entrada:
             continue
         por_dia.setdefault(entrada.date(), []).append(par)
+
+    abonos = {}
+    if grade:
+        try:
+            abonos = jornada_svc.carregar_abonos(inicio, fim)
+        except TangerinoError:
+            abonos = {}
 
     dias = []
     atual = fim
@@ -173,11 +250,17 @@ def _dias_com_marcacoes(pares, inicio, fim):
         segundos = ponto_svc._segundos_trabalhados(do_dia)
         aberto = any(de_millis(p.get('dateIn')) and not de_millis(p.get('dateOut'))
                      for p in do_dia)
+        previsto = (jornada_svc.previsto_liquido(
+            grade, atual, abonos.get((employee_id, atual), 0)) if grade else None)
         dias.append({
             'dia': atual,
             'eventos': eventos,
             'segundos': segundos,
             'horas': ponto_svc.formata_hhmm(segundos),
+            'previsto_segundos': previsto,
+            'previsto': jornada_svc.formata_hhmm(previsto) if previsto else None,
+            # Só faz sentido comparar dia já encerrado: o de hoje ainda corre.
+            'diferenca': (segundos - previsto) if previsto is not None else None,
             'aberto': aberto and atual < timezone.localdate(),
             'fim_de_semana': atual.weekday() >= 5,
             'sem_marcacao': not eventos,
@@ -521,11 +604,16 @@ def folhas_sincronizadas(request):
 
     if contexto['vinculado'] and contexto['integracao_ativa']:
         try:
+            grade = _jornada_do_usuario(alvo)
             pares = listar_marcacoes(primeiro, min(ultimo, hoje),
                                      employee_id=alvo.tangerino_employee_id, ttl=300)
-            dias = _dias_com_marcacoes(pares, primeiro, min(ultimo, hoje))
+            dias = _dias_com_marcacoes(pares, primeiro, min(ultimo, hoje),
+                                       grade=grade, employee_id=alvo.tangerino_employee_id)
             dias.reverse()                       # do dia 1 para o fim do mês
             contexto['dias'] = dias
+            contexto['tem_jornada'] = bool(grade)
+            contexto['jornada'] = _resumo_da_jornada(alvo)
+            contexto.update(_previsto_x_feito(dias, hoje, rotulo='mes'))
             contexto['total_segundos'] = sum(d['segundos'] for d in dias)
             contexto['total_horas'] = ponto_svc.formata_hhmm(contexto['total_segundos'])
             contexto['dias_trabalhados'] = sum(1 for d in dias if d['segundos'] > 0)
@@ -655,6 +743,10 @@ def sincronizar_dados(request):
         dias = 30
 
     tarefas = []
+    # A jornada vem primeiro: o previsto de cada dia depende dela.
+    if alvo in ('jornada', 'ponto', 'tudo'):
+        tarefas.append((SincronizacaoTangerino.Tipo.JORNADA, 'Jornadas contratadas',
+                        sincronizar_jornadas))
     if alvo in ('ponto', 'tudo'):
         tarefas.append((SincronizacaoTangerino.Tipo.PONTO, 'Marcações',
                         lambda: sincronizar_marcacoes(dias=dias)))
@@ -676,8 +768,8 @@ def sincronizar_dados(request):
             registro.save()
             messages.success(
                 request,
-                f"{rotulo}: {resultado['lidos']} lidos, {resultado['criados']} novos, "
-                f"{resultado['atualizados']} atualizados.")
+                f"{rotulo}: {resultado.get('lidos', resultado.get('escalas', 0))} lidos, "
+                f"{resultado['criados']} novos, {resultado['atualizados']} atualizados.")
         except TangerinoError as exc:
             registro.sucesso = False
             registro.detalhe = str(exc)[:2000]

@@ -4,12 +4,15 @@
 
 {% block content %}
 <div class="max-w-3xl mx-auto py-4 sm:py-6 px-4 sm:px-0">
-    <nav class="flex mb-4">
-        <ol class="inline-flex items-center space-x-1 md:space-x-3">
-            <li><a href="{% url 'folhaponto:my_folhas' %}" class="text-sm text-gray-500 hover:text-teal-600"><i class="fas fa-fingerprint mr-1"></i> Folhas de Ponto</a></li>
-            <li><div class="flex items-center"><i class="fas fa-chevron-right text-gray-400 mx-2 text-xs"></i><span class="text-sm text-gray-700">{{ folha.period_display }}</span></div></li>
-        </ol>
-    </nav>
+    <div class="flex items-center justify-between gap-3 mb-4 flex-wrap">
+        <nav class="flex">
+            <ol class="inline-flex items-center space-x-1 md:space-x-3">
+                <li><a href="{% url 'folhaponto:my_folhas' %}" class="text-sm text-gray-500 hover:text-teal-600"><i class="fas fa-fingerprint mr-1"></i> Folhas de Ponto</a></li>
+                <li><div class="flex items-center"><i class="fas fa-chevron-right text-gray-400 mx-2 text-xs"></i><span class="text-sm text-gray-700">{{ folha.period_display }}</span></div></li>
+            </ol>
+        </nav>
+        {% include 'folhaponto/_botao_voltar.html' with padrao=url_voltar_padrao %}
+    </div>
 
     <div class="bg-white shadow rounded-lg overflow-hidden mb-4">
         <!-- Header -->

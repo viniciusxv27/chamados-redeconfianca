@@ -1,35 +1,208 @@
 {% extends 'impulso/base_impulso.html' %}
 
 {% block impulso_content %}
-<div class="flex items-center justify-between mb-4">
-    <h2 class="font-semibold text-gray-800"><i class="fas fa-comment-dots text-indigo-500 mr-2"></i>{% if is_gestor %}Feedbacks aplicados{% else %}Meus feedbacks{% endif %}</h2>
+
+<div class="flex items-start justify-between gap-3 mb-4 flex-wrap">
+    <div>
+        <h2 class="font-semibold text-gray-800 text-lg">
+            <i class="fas fa-comment-dots text-indigo-500 mr-2"></i>
+            {% if ve_tudo %}Feedbacks da empresa{% elif is_gestor %}Feedbacks aplicados{% else %}Meus feedbacks{% endif %}
+        </h2>
+        <p class="text-xs text-gray-400 mt-0.5">
+            {% if ve_tudo %}Você vê todos os feedbacks do Impulso.
+            {% elif is_gestor %}Os feedbacks que você aplicou.
+            {% else %}Os feedbacks que você recebeu.{% endif %}
+        </p>
+    </div>
     {% if is_gestor %}
-    <a href="{% url 'impulso:feedback_create' %}" class="px-3 py-2 rounded-lg bg-indigo-500 text-white text-sm hover:bg-indigo-600"><i class="fas fa-plus mr-1"></i>Novo feedback</a>
+    <a href="{% url 'impulso:feedback_create' %}"
+       class="px-4 py-2 rounded-lg bg-indigo-500 text-white text-sm font-semibold hover:bg-indigo-600 shadow-sm">
+        <i class="fas fa-plus mr-1.5"></i>Novo feedback
+    </a>
     {% endif %}
 </div>
 
-<div class="imp-card overflow-hidden">
-    <table class="min-w-full text-sm">
-        <thead class="bg-gray-50 text-gray-500 text-xs uppercase">
-            <tr>
-                <th class="text-left px-4 py-2">Mês</th>
-                <th class="text-left px-4 py-2">{% if is_gestor %}Colaborador{% else %}Gestor{% endif %}</th>
-                <th class="text-left px-4 py-2">Resumo IA</th>
-                <th class="px-4 py-2"></th>
-            </tr>
-        </thead>
-        <tbody class="divide-y divide-gray-100">
-            {% for fb in feedbacks %}
-            <tr class="hover:bg-gray-50">
-                <td class="px-4 py-2 text-gray-700">{{ fb.referencia_mes|date:"m/Y" }}</td>
-                <td class="px-4 py-2 text-gray-700">{% if is_gestor %}{{ fb.colaborador.get_full_name|default:fb.colaborador.email }}{% else %}{{ fb.gestor.get_full_name|default:fb.gestor.email }}{% endif %}</td>
-                <td class="px-4 py-2">{% if fb.ai_summary %}<span class="text-xs text-emerald-600"><i class="fas fa-check mr-1"></i>disponível</span>{% else %}<span class="text-xs text-gray-400">—</span>{% endif %}</td>
-                <td class="px-4 py-2 text-right"><a href="{% url 'impulso:feedback_detail' fb.id %}" class="text-indigo-600 hover:underline text-sm">Ver</a></td>
-            </tr>
-            {% empty %}
-            <tr><td colspan="4" class="px-4 py-8 text-center text-gray-400">Nenhum feedback ainda.</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
+<!-- Panorama -->
+<div class="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
+    <div class="imp-card imp-card-hover p-4">
+        <p class="text-xs text-gray-500">Feedbacks</p>
+        <p class="text-3xl font-bold text-gray-900 tabular-nums">{{ resumo.total }}</p>
+        <p class="text-[11px] text-gray-400 mt-0.5">{{ resumo.pessoas }} pessoa{{ resumo.pessoas|pluralize:"s" }}</p>
+    </div>
+
+    <div class="imp-card imp-card-hover p-4">
+        <p class="text-xs text-gray-500">Nota média da IA</p>
+        {% if resumo.media %}
+        <p class="text-3xl font-bold tabular-nums {{ resumo.faixa_media.texto }}">
+            {{ resumo.media }}<span class="text-base font-normal text-gray-300">/10</span>
+        </p>
+        <div class="imp-bar-track h-1.5 mt-2">
+            <div class="imp-bar-fill h-1.5 {{ resumo.faixa_media.barra }}"
+                 style="width: {{ resumo.media_percentual }}%"></div>
+        </div>
+        {% else %}
+        <p class="text-3xl font-bold text-gray-300">—</p>
+        <p class="text-[11px] text-gray-400 mt-0.5">nenhuma análise ainda</p>
+        {% endif %}
+    </div>
+
+    <div class="imp-card imp-card-hover p-4">
+        <p class="text-xs text-gray-500">Com análise</p>
+        <p class="text-3xl font-bold text-emerald-600 tabular-nums">{{ resumo.com_analise }}</p>
+        <p class="text-[11px] text-gray-400 mt-0.5">de {{ resumo.total }}</p>
+    </div>
+
+    <div class="imp-card imp-card-hover p-4">
+        <p class="text-xs text-gray-500">Sem análise</p>
+        <p class="text-3xl font-bold {% if resumo.sem_analise %}text-amber-600{% else %}text-gray-300{% endif %} tabular-nums">{{ resumo.sem_analise }}</p>
+        <p class="text-[11px] text-gray-400 mt-0.5">a IA tenta de novo ao abrir</p>
+    </div>
+
+    <div class="imp-card imp-card-hover p-4">
+        <p class="text-xs text-gray-500">Abaixo do esperado</p>
+        <p class="text-3xl font-bold {% if resumo.abaixo %}text-red-600{% else %}text-gray-300{% endif %} tabular-nums">{{ resumo.abaixo }}</p>
+        <p class="text-[11px] text-gray-400 mt-0.5">nota menor que 5</p>
+    </div>
 </div>
+
+{% if resumo.media %}
+<!-- Distribuição das notas -->
+<div class="imp-card p-4 mb-4">
+    <div class="flex items-center justify-between mb-2">
+        <p class="text-xs font-semibold text-gray-600">Distribuição das notas</p>
+        <p class="text-[11px] text-gray-400">clique numa faixa para filtrar</p>
+    </div>
+    <div class="flex h-3 rounded-full overflow-hidden bg-gray-100">
+        {% for f in resumo.faixas %}{% if f.n %}
+        <div class="{{ f.barra }} transition-all" style="width: {{ f.pct }}%"
+             title="{{ f.rotulo }}: {{ f.n }}"></div>
+        {% endif %}{% endfor %}
+    </div>
+    <div class="flex flex-wrap gap-x-4 gap-y-1 mt-2.5">
+        {% for f in resumo.faixas %}
+        <a href="?situacao={% if f.chave == 'abaixo' %}atencao{% else %}com_analise{% endif %}"
+           class="flex items-center gap-1.5 text-[11px] hover:underline {% if f.n %}text-gray-600{% else %}text-gray-300 pointer-events-none{% endif %}">
+            <span class="w-2 h-2 rounded-full {{ f.ponto }} {% if not f.n %}opacity-30{% endif %}"></span>
+            {{ f.rotulo }} <span class="tabular-nums font-semibold">{{ f.n }}</span>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Filtros -->
+<form method="get" class="imp-card p-3 mb-4 flex flex-wrap items-end gap-2">
+    <div class="flex-1 min-w-[180px]">
+        <label class="block text-[11px] text-gray-500 mb-1">Buscar</label>
+        <input type="text" name="q" value="{{ f_busca }}" placeholder="nome ou trecho do texto…"
+               class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm">
+    </div>
+    {% if colaboradores %}
+    <div>
+        <label class="block text-[11px] text-gray-500 mb-1">Colaborador</label>
+        <select name="colaborador" class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm">
+            <option value="">Todos</option>
+            {% for c in colaboradores %}
+            <option value="{{ c.id }}" {% if f_colaborador == c.id %}selected{% endif %}>{{ c.get_full_name|default:c.email }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    {% endif %}
+    {% if gestores %}
+    <div>
+        <label class="block text-[11px] text-gray-500 mb-1">Gestor</label>
+        <select name="gestor" class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm">
+            <option value="">Todos</option>
+            {% for g in gestores %}
+            <option value="{{ g.id }}" {% if f_gestor == g.id %}selected{% endif %}>{{ g.get_full_name|default:g.email }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    {% endif %}
+    <div>
+        <label class="block text-[11px] text-gray-500 mb-1">Mês</label>
+        <select name="mes" class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm">
+            <option value="">Todos</option>
+            {% for m in meses %}<option value="{{ m }}" {% if f_mes == m %}selected{% endif %}>{{ m }}</option>{% endfor %}
+        </select>
+    </div>
+    <div>
+        <label class="block text-[11px] text-gray-500 mb-1">Situação</label>
+        <select name="situacao" class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm">
+            <option value="">Todas</option>
+            <option value="com_analise" {% if f_situacao == 'com_analise' %}selected{% endif %}>Com análise</option>
+            <option value="sem_analise" {% if f_situacao == 'sem_analise' %}selected{% endif %}>Sem análise</option>
+            <option value="atencao" {% if f_situacao == 'atencao' %}selected{% endif %}>Abaixo do esperado</option>
+        </select>
+    </div>
+    <button class="px-4 py-1.5 rounded-lg bg-gray-800 text-white text-sm hover:bg-gray-900">Filtrar</button>
+    {% if tem_filtro %}
+    <a href="{% url 'impulso:feedback_list' %}" class="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-800">limpar</a>
+    {% endif %}
+</form>
+
+<!-- Cards -->
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+    {% for fb in feedbacks %}
+    <a href="{% url 'impulso:feedback_detail' fb.id %}"
+       class="imp-card imp-card-hover p-4 block group">
+        <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+                <p class="font-semibold text-gray-900 truncate group-hover:text-indigo-700">
+                    {{ fb.colaborador.get_full_name|default:fb.colaborador.email }}
+                </p>
+                <p class="text-[11px] text-gray-400 mt-0.5">
+                    {{ fb.referencia_mes|date:"F/Y" }} · por {{ fb.gestor.get_full_name|default:fb.gestor.email }}
+                </p>
+            </div>
+
+            {% if fb.nota_ia is not None %}
+            {% with faixa=fb.faixa_da_nota %}
+            <div class="flex-shrink-0 text-center">
+                <div class="w-12 h-12 rounded-full flex items-center justify-center {{ faixa.fundo }} border-2 {{ faixa.borda }}">
+                    <span class="text-base font-bold {{ faixa.texto_forte }} tabular-nums">{{ fb.nota_ia }}</span>
+                </div>
+                <span class="block text-[10px] {{ faixa.texto }} mt-1 font-medium">
+                    <i class="fas {{ faixa.icone }}"></i>
+                </span>
+            </div>
+            {% endwith %}
+            {% else %}
+            <div class="flex-shrink-0 w-12 h-12 rounded-full border-2 border-dashed border-gray-200 flex items-center justify-center">
+                <i class="fas fa-robot text-gray-300 text-xs"></i>
+            </div>
+            {% endif %}
+        </div>
+
+        {% if fb.nota_ia is not None %}
+        {% with faixa=fb.faixa_da_nota %}
+        <div class="imp-bar-track h-1.5 mt-3">
+            <div class="imp-bar-fill h-1.5 {{ faixa.barra }}" style="width: {{ fb.nota_percentual }}%"></div>
+        </div>
+        <p class="text-[11px] {{ faixa.texto }} mt-1.5 font-medium">{{ faixa.rotulo }}</p>
+        {% endwith %}
+        {% endif %}
+
+        <p class="text-xs text-gray-500 mt-3 line-clamp-3 leading-relaxed">
+            {% if fb.ai_summary %}{{ fb.resumo_curto|truncatewords:28 }}
+            {% else %}<span class="text-amber-600"><i class="fas fa-hourglass-half mr-1"></i>Análise da IA ainda não gerada — abrir o feedback dispara uma nova tentativa.</span>
+            {% endif %}
+        </p>
+    </a>
+    {% empty %}
+    <div class="imp-card p-10 text-center text-gray-400 md:col-span-2 xl:col-span-3">
+        <i class="fas fa-comment-slash text-gray-200 text-4xl mb-3 block"></i>
+        {% if tem_filtro %}
+        Nenhum feedback com esses filtros.
+        <a href="{% url 'impulso:feedback_list' %}" class="text-indigo-600 hover:underline">limpar filtros</a>
+        {% else %}
+        Nenhum feedback ainda.
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+
+<style>
+    .line-clamp-3 { display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+</style>
 {% endblock %}

@@ -6,6 +6,7 @@ INOVAR (ideias) e ACOMPANHAMENTO (faixas).
 from datetime import date
 
 from django.contrib import messages
+from django.contrib.auth import get_user_model
 from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -15,9 +16,11 @@ from django.views.decorators.http import require_POST
 
 from core.models import NotificationMixin
 
+from . import ai
 from .ai import generate_feedback_summary
 from . import ciclos as ciclos_service
 from .models import (
+    FAIXAS_DA_NOTA,
     Ciclo, CicloMes, ConclusaoConteudo, ConteudoConectar, Ideia, ImpulsoFeedback,
     Meta, MetaAnexo, MetaComentario, MetaItem, MetaVisualizacao, PontuacaoMensal,
     ProjetoFoco, TarefaProjeto,
@@ -27,6 +30,8 @@ from .utils import (
     FAIXAS, calcular_faixa, faixa_info, get_colaboradores, get_gestores_do_setor,
     is_impulso_manager, impulso_manager_required, impulso_member_required,
 )
+
+User = get_user_model()
 
 
 # ---------------------------------------------------------------------------
@@ -331,6 +336,56 @@ def meta_item_add(request, meta_id):
     return redirect('impulso:meta_detail', meta_id=meta.id)
 
 
+def _pode_mexer_no_item(user, item):
+    """Quem edita ou apaga um passo do to-do.
+
+    O to-do é o combinado da meta: quem responde por ela (gestor, colaborador,
+    participante) mexe nos passos. Quem só olha, não — apagar um passo some com
+    o registro de quem o marcou e quando.
+    """
+    meta = item.meta
+    return (user.is_superuser
+            or meta.gestor_id == user.id
+            or meta.colaborador_id == user.id
+            or meta.participantes.filter(id=user.id).exists())
+
+
+@require_POST
+@impulso_member_required
+def meta_item_editar(request, item_id):
+    """Corrige o texto de um passo do to-do."""
+    item = get_object_or_404(MetaItem.objects.select_related('meta'), id=item_id)
+    if not _pode_mexer_no_item(request.user, item):
+        messages.error(request, 'Você não pode editar este passo.')
+        return redirect('impulso:meta_detail', meta_id=item.meta_id)
+
+    texto = (request.POST.get('texto') or '').strip()
+    if not texto:
+        messages.error(request, 'O passo não pode ficar sem texto.')
+        return redirect('impulso:meta_detail', meta_id=item.meta_id)
+
+    item.texto = texto[:300]
+    item.save(update_fields=['texto'])
+    messages.success(request, 'Passo atualizado.')
+    return redirect('impulso:meta_detail', meta_id=item.meta_id)
+
+
+@require_POST
+@impulso_member_required
+def meta_item_excluir(request, item_id):
+    """Remove um passo do to-do."""
+    item = get_object_or_404(MetaItem.objects.select_related('meta'), id=item_id)
+    if not _pode_mexer_no_item(request.user, item):
+        messages.error(request, 'Você não pode excluir este passo.')
+        return redirect('impulso:meta_detail', meta_id=item.meta_id)
+
+    meta_id = item.meta_id
+    texto = item.texto
+    item.delete()
+    messages.success(request, f'Passo “{texto}” removido.')
+    return redirect('impulso:meta_detail', meta_id=meta_id)
+
+
 @require_POST
 @impulso_member_required
 def meta_excluir(request, meta_id):
@@ -410,9 +465,16 @@ def meta_detail(request, meta_id):
         anexo.meta = meta  # a meta já está carregada; evita uma consulta por anexo
         anexo.pode_mexer = _pode_mexer_no_anexo(request.user, anexo)
 
+    itens = list(meta.itens.select_related('concluido_por', 'criado_por'))
+    pode_mexer_itens = (request.user.is_superuser
+                        or meta.gestor_id == request.user.id
+                        or meta.colaborador_id == request.user.id
+                        or meta.participantes.filter(id=request.user.id).exists())
+
     context = {
         'meta': meta,
-        'itens': meta.itens.select_related('concluido_por'),
+        'itens': itens,
+        'pode_mexer_itens': pode_mexer_itens,
         'participantes': meta.participantes.all(),
         'anexos': anexos,
         'comentarios': meta.comentarios.select_related('autor'),
@@ -667,15 +729,107 @@ def minhas_atividades(request):
 # ---------------------------------------------------------------------------
 @impulso_member_required
 def feedback_list(request):
+    """Lista de feedbacks, com filtros e o panorama das notas da IA.
+
+    Quem vê o quê: superadmin enxerga a empresa inteira; gestor vê os que
+    aplicou; colaborador vê os que recebeu.
+    """
     user = request.user
     gestor = is_impulso_manager(user)
-    if gestor:
+    tudo = user.is_superuser
+
+    if tudo:
+        feedbacks = ImpulsoFeedback.objects.all()
+    elif gestor:
         feedbacks = ImpulsoFeedback.objects.filter(gestor=user)
     else:
         feedbacks = ImpulsoFeedback.objects.filter(colaborador=user)
+    feedbacks = feedbacks.select_related('colaborador', 'gestor')
+
+    # ── Filtros ─────────────────────────────────────────────────────────────
+    colaborador_id = _int_or_none(request.GET.get('colaborador'))
+    gestor_id = _int_or_none(request.GET.get('gestor'))
+    mes = (request.GET.get('mes') or '').strip()          # 'YYYY-MM'
+    situacao = (request.GET.get('situacao') or '').strip()
+    busca = (request.GET.get('q') or '').strip()
+
+    if colaborador_id:
+        feedbacks = feedbacks.filter(colaborador_id=colaborador_id)
+    if gestor_id:
+        feedbacks = feedbacks.filter(gestor_id=gestor_id)
+    if mes:
+        try:
+            ano_f, mes_f = mes.split('-')
+            feedbacks = feedbacks.filter(referencia_mes__year=int(ano_f),
+                                         referencia_mes__month=int(mes_f))
+        except (ValueError, TypeError):
+            mes = ''
+    if situacao == 'sem_analise':
+        feedbacks = feedbacks.filter(ai_summary='')
+    elif situacao == 'com_analise':
+        feedbacks = feedbacks.exclude(ai_summary='')
+    elif situacao == 'atencao':
+        feedbacks = feedbacks.filter(nota_ia__lt=5)
+    if busca:
+        feedbacks = feedbacks.filter(
+            Q(colaborador__first_name__icontains=busca)
+            | Q(colaborador__last_name__icontains=busca)
+            | Q(colaborador__email__icontains=busca)
+            | Q(pontos_fortes__icontains=busca)
+            | Q(pontos_melhoria__icontains=busca))
+
+    lista = list(feedbacks)
+
+    # ── Panorama ────────────────────────────────────────────────────────────
+    notas = [float(f.nota_ia) for f in lista if f.nota_ia is not None]
+    resumo = {
+        'total': len(lista),
+        'com_analise': sum(1 for f in lista if f.ai_summary),
+        'sem_analise': sum(1 for f in lista if not f.ai_summary),
+        'media': round(sum(notas) / len(notas), 1) if notas else None,
+        'abaixo': sum(1 for n in notas if n < 5),
+        'pessoas': len({f.colaborador_id for f in lista}),
+    }
+    resumo['media_percentual'] = int(resumo['media'] * 10) if resumo['media'] else 0
+
+    # Distribuição por faixa, para a barra do topo.
+    contagens = {
+        'abaixo': sum(1 for n in notas if n < 5),
+        'parcial': sum(1 for n in notas if 5 <= n < 7),
+        'esperado': sum(1 for n in notas if 7 <= n < 9),
+        'acima': sum(1 for n in notas if n >= 9),
+    }
+    total_notas = len(notas) or 1
+    resumo['faixas'] = [dict(FAIXAS_DA_NOTA[chave], n=n,
+                             pct=round(n / total_notas * 100))
+                        for chave, n in contagens.items()]
+    resumo['faixa_media'] = (
+        FAIXAS_DA_NOTA['abaixo'] if resumo['media'] and resumo['media'] < 5 else
+        FAIXAS_DA_NOTA['parcial'] if resumo['media'] and resumo['media'] < 7 else
+        FAIXAS_DA_NOTA['esperado'] if resumo['media'] and resumo['media'] < 9 else
+        FAIXAS_DA_NOTA['acima'] if resumo['media'] else None)
+
+    # Opções dos filtros saem do universo visível, não da lista já filtrada —
+    # senão, ao escolher alguém, os outros sumiriam do próprio seletor.
+    universo = (ImpulsoFeedback.objects.all() if tudo
+                else ImpulsoFeedback.objects.filter(gestor=user) if gestor
+                else ImpulsoFeedback.objects.filter(colaborador=user))
     context = {
-        'feedbacks': feedbacks.select_related('colaborador', 'gestor'),
+        'feedbacks': lista,
+        'resumo': resumo,
         'is_gestor': gestor,
+        've_tudo': tudo,
+        'colaboradores': (User.objects.filter(
+            id__in=universo.values_list('colaborador_id', flat=True))
+            .order_by('first_name', 'last_name')),
+        'gestores': (User.objects.filter(
+            id__in=universo.values_list('gestor_id', flat=True))
+            .order_by('first_name', 'last_name')) if (tudo or gestor) else None,
+        'meses': sorted({f.referencia_mes.strftime('%Y-%m')
+                         for f in universo.only('referencia_mes')}, reverse=True),
+        'f_colaborador': colaborador_id, 'f_gestor': gestor_id,
+        'f_mes': mes, 'f_situacao': situacao, 'f_busca': busca,
+        'tem_filtro': any([colaborador_id, gestor_id, mes, situacao, busca]),
         'active_tab': 'confiar',
     }
     return render(request, 'impulso/feedback_list.html', context)
@@ -734,12 +888,13 @@ def feedback_detail(request, fb_id):
         messages.error(request, 'Você não tem acesso a este feedback.')
         return redirect('impulso:feedback_list')
 
-    # Gera o resumo IA sob demanda se ainda não existir.
-    if not fb.ai_summary and not fb.ai_summary_error:
-        try:
-            generate_feedback_summary(fb)
-        except Exception:
-            pass
+    # Gera a análise sob demanda sempre que ainda não houver uma.
+    #
+    # Antes a condição também exigia `not fb.ai_summary_error`: bastava uma
+    # falha para o feedback ficar sem análise para sempre, porque toda visita
+    # seguinte via o erro gravado e desistia. Agora abrir o feedback é uma nova
+    # chance — e a própria geração já tenta várias vezes por dentro.
+    ai.garantir_resumo(fb)
 
     context = {
         'fb': fb,
@@ -757,10 +912,17 @@ def feedback_regenerar_ia(request, fb_id):
         messages.error(request, 'Sem permissão.')
         return redirect('impulso:feedback_detail', fb_id=fb.id)
     try:
-        generate_feedback_summary(fb, force=True)
-        messages.success(request, 'Resumo IA atualizado.')
-    except Exception:
-        messages.error(request, 'Não foi possível gerar o resumo IA agora.')
+        if generate_feedback_summary(fb, force=True):
+            fb.refresh_from_db()
+            nota = f' Nota da IA: {fb.nota_ia}.' if fb.nota_ia is not None else ''
+            messages.success(request, f'Análise da IA atualizada.{nota}')
+        else:
+            messages.error(
+                request,
+                f'A IA não respondeu depois de {ai.TENTATIVAS} tentativas. '
+                f'Último erro: {fb.ai_summary_error or "desconhecido"}')
+    except Exception as exc:
+        messages.error(request, f'Não foi possível gerar a análise agora: {exc}')
     return redirect('impulso:feedback_detail', fb_id=fb.id)
 
 

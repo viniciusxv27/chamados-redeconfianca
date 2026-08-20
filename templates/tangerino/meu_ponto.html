@@ -152,6 +152,71 @@
 </div>
 {% endif %}
 
+{% if not tem_jornada and jornada %}
+<div class="tg-card p-4 mb-4 bg-gray-50/60">
+    <p class="text-sm text-gray-500">
+        <i class="fas fa-circle-info text-gray-400 mr-1.5"></i>
+        Sua escala no Tangerino é <strong>{{ jornada.nome }}</strong>, que
+        <strong>não registra ponto</strong> — por isso não há horas previstas para comparar.
+    </p>
+</div>
+{% endif %}
+
+{% if tem_jornada %}
+<!-- Previsto x realizado -->
+<div class="tg-card p-5 mb-4">
+    <div class="flex items-start justify-between flex-wrap gap-3 mb-4">
+        <div>
+            <h2 class="font-semibold text-gray-800 text-sm">
+                <i class="fas fa-scale-balanced text-cyan-600 mr-1.5"></i>Previsto x realizado
+            </h2>
+            {% if jornada %}
+            <p class="text-xs text-gray-400 mt-0.5">
+                {{ jornada.nome }} — {{ jornada.horas_semana }}h por semana ({{ jornada.resumo_semana }})
+            </p>
+            {% endif %}
+        </div>
+        <span class="text-xs text-gray-400">últimos 28 dias · o dia de hoje ainda não conta no previsto</span>
+    </div>
+
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div class="rounded-xl bg-gray-50 p-4">
+            <p class="text-xs text-gray-500">Tinha que ter trabalhado</p>
+            <p class="text-2xl font-bold text-gray-700 tabular">{{ previsto_periodo }}</p>
+            <p class="text-[11px] text-gray-400 mt-0.5">jornada contratada</p>
+        </div>
+        <div class="rounded-xl bg-cyan-50 p-4">
+            <p class="text-xs text-cyan-700">Trabalhou</p>
+            <p class="text-2xl font-bold text-cyan-800 tabular">{{ feito_periodo }}</p>
+            <p class="text-[11px] text-cyan-600/70 mt-0.5">marcações registradas</p>
+        </div>
+        <div class="rounded-xl p-4 {% if diferenca_periodo_segundos < 0 %}bg-red-50{% else %}bg-emerald-50{% endif %}">
+            <p class="text-xs {% if diferenca_periodo_segundos < 0 %}text-red-700{% else %}text-emerald-700{% endif %}">Diferença</p>
+            <p class="text-2xl font-bold tabular {% if diferenca_periodo_segundos < 0 %}text-red-700{% else %}text-emerald-700{% endif %}">
+                {% if diferenca_periodo_segundos > 0 %}+{% endif %}{{ diferenca_periodo }}
+            </p>
+            <p class="text-[11px] mt-0.5 {% if diferenca_periodo_segundos < 0 %}text-red-600/70{% else %}text-emerald-600/70{% endif %}">
+                {% if diferenca_periodo_segundos < 0 %}abaixo do previsto{% else %}acima do previsto{% endif %}
+            </p>
+        </div>
+        <div class="rounded-xl bg-gray-50 p-4">
+            <p class="text-xs text-gray-500">Nesta semana</p>
+            <p class="text-lg font-bold text-gray-800 tabular">{{ feito_semana }} <span class="text-sm font-normal text-gray-400">de {{ previsto_semana }}</span></p>
+            <p class="text-[11px] text-gray-400 mt-0.5">
+                {% if diferenca_semana_segundos < 0 %}faltam {{ diferenca_semana|cut:"-" }}{% else %}{{ diferenca_semana }} a mais{% endif %}
+            </p>
+        </div>
+    </div>
+
+    <p class="text-[11px] text-gray-400 mt-3">
+        <i class="fas fa-circle-info mr-1"></i>
+        O previsto vem da escala contratada no Tangerino, já sem feriado, férias e abonos.
+        Não é o saldo de banco de horas — esse é calculado pela Sólides e considera
+        compensações que a API não entrega.
+    </p>
+</div>
+{% endif %}
+
 <!-- Semana + histórico -->
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
     <div class="tg-card p-5">
@@ -166,6 +231,7 @@
                 </span>
                 <span class="tabular {% if d.aberto %}text-amber-600{% elif d.segundos %}text-gray-800{% else %}text-gray-300{% endif %}">
                     {% if d.segundos %}{{ d.horas }}{% else %}—{% endif %}
+                    {% if d.previsto %}<span class="text-gray-300 text-xs">/ {{ d.previsto }}</span>{% endif %}
                 </span>
             </div>
             {% endfor %}
@@ -198,8 +264,13 @@
                     <span class="px-2 py-0.5 rounded text-xs bg-amber-100 text-amber-800">em aberto</span>
                     {% endif %}
                 </div>
-                <span class="text-sm tabular flex-shrink-0 {% if d.segundos %}text-gray-800 font-medium{% else %}text-gray-300{% endif %}">
+                <span class="text-sm tabular flex-shrink-0 text-right {% if d.segundos %}text-gray-800 font-medium{% else %}text-gray-300{% endif %}">
                     {% if d.segundos %}{{ d.horas }}{% else %}—{% endif %}
+                    {% if d.previsto %}
+                    <span class="block text-[11px] font-normal text-gray-400">de {{ d.previsto }}</span>
+                    {% elif d.previsto_segundos == 0 and d.segundos %}
+                    <span class="block text-[11px] font-normal text-emerald-600">folga</span>
+                    {% endif %}
                 </span>
             </div>
             {% endfor %}

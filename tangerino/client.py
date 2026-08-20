@@ -361,6 +361,45 @@ def listar_ferias(usar_cache=True, ttl=60 * 10):
     return itens
 
 
+def jornada(schedule_id, usar_cache=True, ttl=60 * 60 * 6):
+    """A escala contratada de uma pessoa, com os turnos de cada dia da semana.
+
+    Este endpoint não aparece junto dos outros ``find-all``: ele responde por
+    ``/work-schedule/{id}``, e o id vem em ``currentWorkSchedule`` do
+    funcionário. É o que permite dizer quantas horas alguém **deveria** ter
+    trabalhado — sem ele, só dava para mostrar o que a pessoa fez.
+
+    Os horários vêm em milissegundos contados do início do dia
+    (``54000000`` = 15:00) e o campo ``day`` segue o padrão do Java:
+    1 = domingo … 7 = sábado. Dia sem linha na grade é folga.
+    """
+    chave = f'tangerino:jornada:{schedule_id}'
+    if usar_cache:
+        em_cache = cache.get(chave)
+        if em_cache is not None:
+            return em_cache
+    dados = _get(EMPLOYER_BASE, f'/work-schedule/{schedule_id}')
+    cache.set(chave, dados, ttl)
+    return dados
+
+
+def listar_ajustes(motivo_id, usar_cache=True, ttl=60 * 10):
+    """Lançamentos de um motivo de ajuste (feriado, atestado, folga…).
+
+    Mesmo endpoint das férias, trocando o motivo. Serve para descontar do
+    previsto os dias em que a pessoa não devia mesmo estar trabalhando.
+    """
+    chave = f'tangerino:ajustes:{motivo_id}'
+    if usar_cache:
+        em_cache = cache.get(chave)
+        if em_cache is not None:
+            return em_cache
+    itens = _paginar(EMPLOYER_BASE, '/adjustment/find-all',
+                     {'adjustmentReasonId': motivo_id, 'ignoreExcluded': True})
+    cache.set(chave, itens, ttl)
+    return itens
+
+
 def motivos_de_ajuste():
     chave = 'tangerino:motivos'
     em_cache = cache.get(chave)

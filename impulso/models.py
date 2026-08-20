@@ -14,8 +14,10 @@ import calendar
 import os
 import uuid
 from datetime import date, timedelta
+from decimal import Decimal
 
 from django.conf import settings
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
 
@@ -451,6 +453,25 @@ class MetaComentario(models.Model):
         return f"Comentário de {self.autor} em {self.meta_id}"
 
 
+# Como a nota da IA é apresentada. Classes completas: o Tailwind precisa
+# encontrar o nome inteiro no template para gerar o CSS.
+FAIXAS_DA_NOTA = {
+    'abaixo': {'chave': 'abaixo', 'rotulo': 'Abaixo do esperado', 'icone': 'fa-arrow-down',
+               'texto': 'text-red-600', 'texto_forte': 'text-red-700', 'fundo': 'bg-red-50',
+               'borda': 'border-red-200', 'barra': 'bg-red-500', 'ponto': 'bg-red-500'},
+    'parcial': {'chave': 'parcial', 'rotulo': 'Parcial', 'icone': 'fa-minus',
+                'texto': 'text-amber-600', 'texto_forte': 'text-amber-700', 'fundo': 'bg-amber-50',
+                'borda': 'border-amber-200', 'barra': 'bg-amber-500', 'ponto': 'bg-amber-500'},
+    'esperado': {'chave': 'esperado', 'rotulo': 'Dentro do esperado', 'icone': 'fa-check',
+                 'texto': 'text-emerald-600', 'texto_forte': 'text-emerald-700',
+                 'fundo': 'bg-emerald-50', 'borda': 'border-emerald-200',
+                 'barra': 'bg-emerald-500', 'ponto': 'bg-emerald-500'},
+    'acima': {'chave': 'acima', 'rotulo': 'Acima do esperado', 'icone': 'fa-arrow-up',
+              'texto': 'text-violet-600', 'texto_forte': 'text-violet-700', 'fundo': 'bg-violet-50',
+              'borda': 'border-violet-200', 'barra': 'bg-violet-500', 'ponto': 'bg-violet-500'},
+}
+
+
 class ImpulsoFeedback(models.Model):
     """Feedback mensal do gestor para o colaborador, com resumo gerado por IA."""
 
@@ -469,10 +490,22 @@ class ImpulsoFeedback(models.Model):
     pontos_melhoria = models.TextField(verbose_name='Pontos a melhorar')
     comentario = models.TextField(blank=True, verbose_name='Comentário geral')
 
+    # Nota que a IA atribui ao feedback, de 0 a 10. Fica separada dos textos
+    # do gestor de propósito: é leitura da IA sobre o que foi escrito, não algo
+    # que o gestor digitou. Vazia quando a análise ainda não rodou ou quando a
+    # IA respondeu sem uma nota utilizável.
+    nota_ia = models.DecimalField(
+        max_digits=3, decimal_places=1, null=True, blank=True,
+        validators=[MinValueValidator(Decimal('0')), MaxValueValidator(Decimal('10'))],
+        verbose_name='Nota da IA')
+
     # Resumo IA (padrão reaproveitado de feedback/ai.py)
     ai_summary = models.TextField(blank=True, verbose_name='Resumo IA')
     ai_summary_generated_at = models.DateTimeField(null=True, blank=True)
     ai_summary_error = models.TextField(blank=True)
+    ai_tentativas = models.PositiveIntegerField(
+        default=0, verbose_name='Tentativas de geração',
+        help_text='Quantas chamadas à IA já foram feitas para este feedback.')
 
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
@@ -484,6 +517,59 @@ class ImpulsoFeedback(models.Model):
 
     def __str__(self):
         return f"Feedback {self.referencia_mes:%m/%Y} — {self.colaborador}"
+
+    @property
+    def tem_analise(self):
+        return bool(self.ai_summary)
+
+    @property
+    def resumo_curto(self):
+        """Só o parágrafo do resumo, sem os títulos markdown.
+
+        O card da listagem mostrava "## Pontos a Melhorar" no meio do texto
+        quando o corte caía ali. Aqui o texto sai limpo para ser truncado.
+        """
+        if not self.ai_summary:
+            return ''
+        linhas = []
+        dentro_do_resumo = False
+        for linha in self.ai_summary.splitlines():
+            crua = linha.strip()
+            if crua.startswith('##'):
+                # Entra no bloco do resumo e para no título seguinte.
+                if dentro_do_resumo:
+                    break
+                dentro_do_resumo = 'resumo' in crua.lower()
+                continue
+            if dentro_do_resumo and crua:
+                linhas.append(crua)
+        # Sem o título esperado, devolve o texto inteiro sem marcação.
+        return ' '.join(linhas) or ' '.join(
+            l.strip() for l in self.ai_summary.splitlines()
+            if l.strip() and not l.strip().startswith('##'))
+
+    @property
+    def nota_percentual(self):
+        """A nota em 0-100, para barras e anéis na tela."""
+        return int(round(float(self.nota_ia) * 10)) if self.nota_ia is not None else None
+
+    @property
+    def faixa_da_nota(self):
+        """Como ler a nota: abaixo / parcial / esperado / acima.
+
+        As classes vêm escritas por extenso porque o Tailwind não enxerga
+        nome montado no template (``bg-{{ cor }}-500`` não vira CSS).
+        """
+        if self.nota_ia is None:
+            return None
+        nota = float(self.nota_ia)
+        if nota < 5:
+            return FAIXAS_DA_NOTA['abaixo']
+        if nota < 7:
+            return FAIXAS_DA_NOTA['parcial']
+        if nota < 9:
+            return FAIXAS_DA_NOTA['esperado']
+        return FAIXAS_DA_NOTA['acima']
 
 
 # ==========================================================================

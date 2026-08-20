@@ -1,0 +1,73 @@
+{% comment %}
+Guarda de onde a pessoa saiu ao abrir uma folha, para o botão "Voltar" da tela
+de detalhe devolver a lista **como estava**: mesmos filtros (que vivem na query
+string) e mesma rolagem.
+
+Fica no sessionStorage e não no histórico do navegador de propósito: depois de
+assinar, a folha redireciona para ela mesma, e um `history.back()` levaria de
+volta para a folha não assinada em vez da lista.
+{% endcomment %}
+<script>
+(function () {
+    var CHAVE = 'folhaponto:volta';
+    var CHAVE_ROLAGEM = 'folhaponto:rolagem';
+
+    // Ao clicar numa folha, anota a lista atual e onde a página estava.
+    document.addEventListener('click', function (e) {
+        var link = e.target.closest('a[href]');
+        if (!link) return;
+        var destino;
+        try { destino = new URL(link.href, location.href); } catch (err) { return; }
+        if (!/^\/folha-ponto\/\d+\/$/.test(destino.pathname)) return;
+
+        try {
+            sessionStorage.setItem(CHAVE, JSON.stringify({
+                url: location.pathname + location.search,
+                rolagem: window.scrollY || 0
+            }));
+        } catch (err) { /* aba anônima com storage bloqueado: segue sem lembrar */ }
+    });
+
+    // Voltando para cá, devolve a rolagem de onde a pessoa parou.
+    //
+    // Uma tentativa só não basta: quando o script roda, a lista ainda não tem
+    // altura (imagens e ícones por carregar) e o navegador corta o scrollTo
+    // para o fim da página — que naquele instante é 0. Por isso insiste até a
+    // página crescer o suficiente, e desiste depois de ~2s para não ficar
+    // brigando com a rolagem de quem já começou a ler.
+    var alvo = null;
+    try {
+        var guardado = sessionStorage.getItem(CHAVE_ROLAGEM);
+        if (guardado !== null) {
+            sessionStorage.removeItem(CHAVE_ROLAGEM);
+            alvo = parseInt(guardado, 10) || 0;
+        }
+    } catch (err) { /* idem */ }
+
+    if (alvo) {
+        var tentativas = 0;
+        var comportamento = document.documentElement.style.scrollBehavior;
+        document.documentElement.style.scrollBehavior = 'auto';   // sem animação
+
+        var restaurar = function () {
+            window.scrollTo(0, alvo);
+            tentativas++;
+            var chegou = Math.abs(window.scrollY - alvo) <= 2;
+            // Se a pessoa já rolou por conta própria, para de insistir.
+            var mexeu = window.scrollY > 2 && !chegou && tentativas > 3;
+            if (chegou || mexeu || tentativas >= 20) {
+                document.documentElement.style.scrollBehavior = comportamento;
+                return;
+            }
+            setTimeout(restaurar, 100);
+        };
+
+        if (document.readyState === 'complete') {
+            restaurar();
+        } else {
+            window.addEventListener('load', restaurar);
+            document.addEventListener('DOMContentLoaded', restaurar);
+        }
+    }
+})();
+</script>

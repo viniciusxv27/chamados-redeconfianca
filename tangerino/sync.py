@@ -18,11 +18,13 @@ import unicodedata
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
+from django.db.models import Max, Min, Sum
 from django.utils import timezone
 
+from . import jornada as jornada_svc
 from .client import (MOTIVO_FERIAS_ID, de_millis, listar_ferias, listar_funcionarios,
                      listar_marcacoes, listar_saldo_horas)
-from .models import FeriasLancamento, MarcacaoPonto, SaldoHoras
+from .models import FeriasLancamento, JornadaTrabalho, MarcacaoPonto, SaldoHoras
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
@@ -161,6 +163,57 @@ def _gravar_em_lote(modelo, registros, campos, chave=('tangerino_id',), escopo=N
     return {'criados': len(novos), 'atualizados': len(alterados)}
 
 
+def sincronizar_jornadas():
+    """Traz as escalas contratadas para a tabela JornadaTrabalho.
+
+    São poucas escalas (~30) para muita gente, então a sincronização é barata
+    e o resultado serve de base para todo cálculo de "horas previstas".
+    """
+    carga = jornada_svc.carregar_jornadas()
+    agora = timezone.now()
+
+    registros = []
+    for escala in carga['grades'].values():
+        grade = escala['grade']
+        registros.append(JornadaTrabalho(
+            tangerino_id=escala['id'],
+            nome=escala['nome'],
+            # JSON só aceita chave string; a leitura trata os dois formatos.
+            horas_por_dia={str(dia): seg for dia, seg in grade.items()},
+            segundos_semana=sum(grade.values()),
+            sincronizado_em=agora,
+        ))
+
+    resultado = _gravar_em_lote(JornadaTrabalho, registros, [
+        'nome', 'horas_por_dia', 'segundos_semana', 'sincronizado_em'])
+    resultado['escalas'] = len(registros)
+    resultado['sem_jornada'] = sum(1 for r in registros if not r.segundos_semana)
+    return resultado
+
+
+def _grades_por_funcionario():
+    """{employee_id: {dia: segundos}} lendo do banco, sem ir na API.
+
+    Cai para a API só quando a tabela de jornadas ainda não foi sincronizada,
+    para a primeira execução não sair com previsto zerado.
+    """
+    ligacao = {f.get('id'): (f.get('currentWorkSchedule') or {}).get('id')
+               for f in listar_funcionarios()}
+
+    guardadas = {j.tangerino_id: j for j in JornadaTrabalho.objects.all()}
+    if not guardadas:
+        sincronizar_jornadas()
+        guardadas = {j.tangerino_id: j for j in JornadaTrabalho.objects.all()}
+
+    grades = {}
+    for eid, escala in ligacao.items():
+        registro = guardadas.get(escala)
+        if not registro:
+            continue
+        grades[eid] = {int(dia): seg for dia, seg in (registro.horas_por_dia or {}).items()}
+    return grades
+
+
 def sincronizar_marcacoes(dias=30, employee_id=None):
     """Traz as marcações dos últimos N dias para a tabela MarcacaoPonto.
 
@@ -192,6 +245,10 @@ def sincronizar_marcacoes(dias=30, employee_id=None):
         vistos.add(tid)
         por_dia.setdefault((par.get('employeeId'), entrada.date()), []).append(par)
 
+    # Quanto cada um devia ter trabalhado nesses dias, já sem feriado e abono.
+    grades = _grades_por_funcionario()
+    abonos = jornada_svc.carregar_abonos(inicio, hoje)
+
     registros = []
     for (eid, dia), do_dia in por_dia.items():
         do_dia.sort(key=lambda p: p['dateIn'])
@@ -219,12 +276,16 @@ def sincronizar_marcacoes(dias=30, employee_id=None):
             logger.warning('%s em %s teve %d pares de ponto; o excedente foi para '
                            'marcacoes_extras.', do_dia[0].get('employeeName'), dia, len(do_dia))
 
+        previsto = jornada_svc.previsto_liquido(
+            grades.get(eid), dia, abonos.get((eid, dia), 0))
+
         registros.append(MarcacaoPonto(
             employee_id=eid,
             usuario=usuarios.get(eid),
             nome=(do_dia[0].get('employeeName') or '')[:200],
             data=dia,
             total_segundos=total,
+            previsto_segundos=previsto,
             em_aberto=aberto,
             plataforma=(do_dia[0].get('plataform') or '')[:30],
             editado=any(bool(p.get('edited')) for p in do_dia),
@@ -235,13 +296,51 @@ def sincronizar_marcacoes(dias=30, employee_id=None):
 
     resultado = _gravar_em_lote(MarcacaoPonto, registros, [
         'employee_id', 'usuario', 'nome', 'entrada1', 'saida1', 'entrada2', 'saida2',
-        'entrada3', 'saida3', 'marcacoes_extras', 'total_segundos', 'em_aberto',
-        'plataforma', 'editado', 'tangerino_ids', 'sincronizado_em'],
+        'entrada3', 'saida3', 'marcacoes_extras', 'total_segundos', 'previsto_segundos',
+        'em_aberto', 'plataforma', 'editado', 'tangerino_ids', 'sincronizado_em'],
         chave=('employee_id', 'data'),
         escopo=MarcacaoPonto.objects.filter(data__gte=inicio, data__lte=hoje))
     resultado['lidos'] = len(pares)
     resultado['dias'] = len(registros)
+    # Linhas de sincronizações anteriores ficaram fora da janela e sem previsto.
+    # O cálculo é local e barato, então elas são acertadas junto.
+    resultado['previsto_recalculado'] = recalcular_previsto(
+        grades=grades, ate=inicio - timedelta(days=1))
     return resultado
+
+
+def recalcular_previsto(grades=None, de=None, ate=None):
+    """Refaz o previsto das marcações já gravadas.
+
+    Serve para dois casos: linhas antigas, gravadas antes de existir o campo, e
+    mudança de escala, que muda o previsto de tudo dali para frente. Não toca
+    na API além do que já está em cache — a conta é feita aqui.
+    """
+    alvo = MarcacaoPonto.objects.all()
+    if de:
+        alvo = alvo.filter(data__gte=de)
+    if ate:
+        alvo = alvo.filter(data__lte=ate)
+    linhas = list(alvo)
+    if not linhas:
+        return 0
+
+    grades = grades if grades is not None else _grades_por_funcionario()
+    limites = alvo.aggregate(ini=Min('data'), fim=Max('data'))
+    abonos = jornada_svc.carregar_abonos(limites['ini'], limites['fim'])
+
+    mudaram = []
+    for linha in linhas:
+        novo = jornada_svc.previsto_liquido(
+            grades.get(linha.employee_id), linha.data,
+            abonos.get((linha.employee_id, linha.data), 0))
+        if linha.previsto_segundos != novo:
+            linha.previsto_segundos = novo
+            mudaram.append(linha)
+
+    if mudaram:
+        MarcacaoPonto.objects.bulk_update(mudaram, ['previsto_segundos'], batch_size=500)
+    return len(mudaram)
 
 
 def inicio_do_historico():
@@ -271,6 +370,8 @@ def sincronizar_saldos(inicio=None, fim=None):
     usuarios = _mapa_usuarios()
     agora = timezone.now()
 
+    previsto, trabalhado, janela = _previsto_e_trabalhado()
+
     registros = []
     vistos = set()
     for item in itens:
@@ -284,17 +385,43 @@ def sincronizar_saldos(inicio=None, fim=None):
             nome=(item.get('name') or '')[:200],
             email=(item.get('email') or '')[:254],
             saldo_minutos=int(item.get('hoursBalanceInMinutes') or 0),
+            previsto_minutos=previsto.get(eid, 0),
+            trabalhado_minutos=trabalhado.get(eid, 0),
+            analise_inicio=janela[0],
+            analise_fim=janela[1],
             periodo_inicio=inicio,
             periodo_fim=fim,
             sincronizado_em=agora,
         ))
 
     resultado = _gravar_em_lote(SaldoHoras, registros, [
-        'usuario', 'nome', 'email', 'saldo_minutos', 'periodo_inicio',
+        'usuario', 'nome', 'email', 'saldo_minutos', 'previsto_minutos',
+        'trabalhado_minutos', 'analise_inicio', 'analise_fim', 'periodo_inicio',
         'periodo_fim', 'sincronizado_em'], chave=('employee_id',))
     resultado['lidos'] = len(itens)
     resultado['periodo'] = (inicio, fim)
+    resultado['janela_analise'] = janela
     return resultado
+
+
+def _previsto_e_trabalhado():
+    """Previsto e trabalhado por pessoa, lidos das marcações já espelhadas.
+
+    Sai do banco, não da API: o histórico inteiro não cabe numa consulta (a
+    paginação corta em 8.000 registros e leva minutos), e as marcações locais
+    já trazem o previsto calculado dia a dia. A janela devolvida é exatamente
+    a que existe na tabela — quem quiser mais fundo roda
+    ``sincronizar_marcacoes`` com mais dias.
+    """
+    agregado = (MarcacaoPonto.objects
+                .values('employee_id')
+                .annotate(previsto=Sum('previsto_segundos'),
+                          feito=Sum('total_segundos')))
+    previsto = {l['employee_id']: int((l['previsto'] or 0) / 60) for l in agregado}
+    trabalhado = {l['employee_id']: int((l['feito'] or 0) / 60) for l in agregado}
+
+    limites = MarcacaoPonto.objects.aggregate(ini=Min('data'), fim=Max('data'))
+    return previsto, trabalhado, (limites['ini'], limites['fim'])
 
 
 def sincronizar_ferias():

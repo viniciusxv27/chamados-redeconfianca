@@ -3,6 +3,7 @@ from io import BytesIO
 
 from django.conf import settings
 from django.shortcuts import render, get_object_or_404, redirect
+from django.urls import reverse
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import JsonResponse, HttpResponse
@@ -171,9 +172,18 @@ def folha_detail(request, pk):
 
     annotate_periodicity([folha])
 
+    # Destino do botão "Voltar" quando o navegador não guardou de onde a pessoa
+    # veio (primeiro acesso, link colado, storage bloqueado). Folha de outra
+    # pessoa só se abre pela lista administrativa; a própria, pela lista pessoal.
+    pode_gerenciar = can_manage_folhaponto(request.user)
+    url_voltar_padrao = reverse(
+        'folhaponto:admin_folhas' if (pode_gerenciar and folha.user_id != request.user.id)
+        else 'folhaponto:my_folhas')
+
     return render(request, 'folhaponto/folha_detail.html', {
         'folha': folha,
-        'can_manage_folha': can_manage_folhaponto(request.user),
+        'can_manage_folha': pode_gerenciar,
+        'url_voltar_padrao': url_voltar_padrao,
     })
 
 

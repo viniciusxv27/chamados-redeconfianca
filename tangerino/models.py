@@ -2,6 +2,14 @@ from django.conf import settings
 from django.db import models
 
 
+def _hhmm(minutos, com_sinal=False):
+    """Minutos em HH:MM. Horas de trabalho passam de 24h, então não usa data."""
+    minutos = int(minutos or 0)
+    sinal = '-' if minutos < 0 else ('+' if com_sinal else '')
+    minutos = abs(minutos)
+    return f"{sinal}{minutos // 60:02d}:{minutos % 60:02d}"
+
+
 # ─── Configuração / liga-desliga ─────────────────────────────────────────────
 
 class ConfiguracaoTangerino(models.Model):
@@ -89,6 +97,7 @@ class SincronizacaoTangerino(models.Model):
         PONTO = 'PONTO', 'Marcações de ponto'
         FERIAS = 'FERIAS', 'Lançamentos de férias'
         SALDO = 'SALDO', 'Saldo de banco de horas'
+        JORNADA = 'JORNADA', 'Jornadas contratadas'
 
     tipo = models.CharField(max_length=20, choices=Tipo.choices, default=Tipo.VINCULO)
     executada_em = models.DateTimeField(auto_now_add=True)
@@ -158,6 +167,11 @@ class MarcacaoPonto(models.Model):
         help_text='Rede de segurança: nada é descartado se o dia tiver mais pares.')
 
     total_segundos = models.PositiveIntegerField(default=0, verbose_name='Trabalhado (segundos)')
+    # Quanto a escala contratada previa para esse dia, já sem feriado, férias e
+    # abonos. Zero em folga. Guardado por dia porque a escala pode mudar e o
+    # previsto de um dia passado tem que continuar sendo o daquele dia.
+    previsto_segundos = models.PositiveIntegerField(
+        default=0, verbose_name='Previsto (segundos)')
     em_aberto = models.BooleanField(default=False, verbose_name='Tem entrada sem saída')
     plataforma = models.CharField(max_length=30, blank=True, verbose_name='Plataforma')
     editado = models.BooleanField(default=False, verbose_name='Editado no Tangerino')
@@ -191,6 +205,62 @@ class MarcacaoPonto(models.Model):
         return [d.strftime('%H:%M') for d in campos if d]
 
 
+class JornadaTrabalho(models.Model):
+    """Espelho de uma escala contratada do Tangerino (``/work-schedule/{id}``).
+
+    Guardada localmente porque é a base do "quantas horas deveria ter
+    trabalhado": são ~30 escalas para 170 pessoas, e consultar a API a cada
+    tela seria caro para um dado que muda uma vez por ano.
+
+    ``horas_por_dia`` usa a numeração do Tangerino (1 = domingo … 7 = sábado);
+    dia ausente é folga.
+    """
+
+    tangerino_id = models.IntegerField(unique=True, verbose_name='ID no Tangerino')
+    nome = models.CharField(max_length=200, blank=True, verbose_name='Nome da escala')
+    horas_por_dia = models.JSONField(
+        default=dict, blank=True, verbose_name='Segundos previstos por dia da semana')
+    segundos_semana = models.PositiveIntegerField(
+        default=0, verbose_name='Total previsto na semana (segundos)')
+    sincronizado_em = models.DateTimeField(verbose_name='Sincronizado em')
+
+    class Meta:
+        verbose_name = 'Jornada contratada (sincronizada)'
+        verbose_name_plural = 'Jornadas contratadas (sincronizadas)'
+        ordering = ['nome']
+
+    def __str__(self):
+        return f"{self.nome or self.tangerino_id} ({self.horas_semana}h/semana)"
+
+    @property
+    def horas_semana(self):
+        return round((self.segundos_semana or 0) / 3600, 1)
+
+    @property
+    def registra_ponto(self):
+        """Escala sem nenhuma hora é de quem não bate ponto."""
+        return bool(self.segundos_semana)
+
+    def segundos_no_dia(self, dia_tangerino):
+        """Aceita a chave como int ou string — o JSON guarda string."""
+        grade = self.horas_por_dia or {}
+        return grade.get(str(dia_tangerino)) or grade.get(dia_tangerino) or 0
+
+    @property
+    def resumo_semana(self):
+        """A semana em texto: 'seg 8h · ter 7h20 · … · sáb 4h'."""
+        nomes = {1: 'dom', 2: 'seg', 3: 'ter', 4: 'qua', 5: 'qui', 6: 'sex', 7: 'sáb'}
+        partes = []
+        for dia in range(1, 8):
+            segundos = self.segundos_no_dia(dia)
+            if not segundos:
+                continue
+            horas, minutos = divmod(int(segundos) // 60, 60)
+            partes.append(f"{nomes[dia]} {horas}h{minutos:02d}" if minutos
+                          else f"{nomes[dia]} {horas}h")
+        return ' · '.join(partes) or 'sem jornada'
+
+
 class SaldoHoras(models.Model):
     """Saldo de banco de horas por pessoa, calculado pelo próprio Tangerino.
 
@@ -215,6 +285,26 @@ class SaldoHoras(models.Model):
     saldo_minutos = models.IntegerField(
         default=0, verbose_name='Saldo (minutos)',
         help_text='Positivo = horas a favor do colaborador; negativo = horas devidas.')
+
+    # A conta por trás do saldo. O Tangerino não devolve estes dois números:
+    # o previsto vem da escala contratada e o trabalhado, da soma das
+    # marcações. Servem para mostrar de onde o saldo veio — o saldo oficial
+    # continua sendo `saldo_minutos`, que é o que o colaborador vê no app.
+    previsto_minutos = models.IntegerField(
+        default=0, verbose_name='Previsto no período (minutos)',
+        help_text='Jornada contratada no período, descontados feriados, férias e abonos.')
+    trabalhado_minutos = models.IntegerField(
+        default=0, verbose_name='Trabalhado no período (minutos)',
+        help_text='Soma das marcações registradas no período.')
+    # Previsto e trabalhado saem das marcações já espelhadas no banco, que
+    # cobrem uma janela menor que o saldo (o histórico inteiro não cabe numa
+    # consulta à API). A janela fica gravada para o número não ser lido como
+    # se fosse do período todo.
+    analise_inicio = models.DateField(
+        null=True, blank=True, verbose_name='Previsto/trabalhado — início')
+    analise_fim = models.DateField(
+        null=True, blank=True, verbose_name='Previsto/trabalhado — fim')
+
     periodo_inicio = models.DateField(verbose_name='Período — início')
     periodo_fim = models.DateField(verbose_name='Período — fim')
     sincronizado_em = models.DateTimeField(verbose_name='Sincronizado em')
@@ -237,6 +327,39 @@ class SaldoHoras(models.Model):
     @property
     def saldo_horas(self):
         return round((self.saldo_minutos or 0) / 60, 2)
+
+    @property
+    def previsto_hhmm(self):
+        return _hhmm(self.previsto_minutos)
+
+    @property
+    def trabalhado_hhmm(self):
+        return _hhmm(self.trabalhado_minutos)
+
+    @property
+    def diferenca_minutos(self):
+        """Trabalhado menos previsto — a conta que dá para conferir na tela.
+
+        Não é o mesmo que ``saldo_minutos``: o saldo oficial do Tangerino
+        também considera compensações e acordos que a API não expõe. Quando os
+        dois divergem muito, a diferença está aí.
+        """
+        return (self.trabalhado_minutos or 0) - (self.previsto_minutos or 0)
+
+    @property
+    def diferenca_hhmm(self):
+        return _hhmm(self.diferenca_minutos, com_sinal=True)
+
+    @property
+    def aproveitamento(self):
+        """Percentual do previsto que foi de fato trabalhado."""
+        if not self.previsto_minutos:
+            return None
+        return round((self.trabalhado_minutos or 0) / self.previsto_minutos * 100)
+
+    @property
+    def tem_analise(self):
+        return bool(self.analise_inicio and self.analise_fim)
 
     @property
     def devedor(self):
