@@ -124,6 +124,7 @@ urlpatterns = [
     path('documentos/', include('documentos.urls')),  # Documentos para assinatura digital
     path('impulso/', include('impulso.urls')),  # Impulso ADM (metas, conexão, inovação, faixas)
     path('cartoes/', include('cartoes.urls')),  # Cartões de crédito corporativos
+    path('vendas/', include('vendas.urls')),  # Lançamento de vendas + tabela de preços
     path('contagem-caixa/', include('contagem_caixa.urls')),  # Contagem de Caixa
     path('', include('tangerino.urls')),  # Ponto e Férias (integração Tangerino)
     path('reports/', include('core.reports_urls')),  # Sistema de denúncias

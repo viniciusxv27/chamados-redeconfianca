@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+
+{% block title %}Lançar venda{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto p-4 sm:p-6 lg:p-8">
+  <nav class="mb-4 text-sm">
+    <a href="{% url 'vendas:dashboard' %}" class="text-gray-500 hover:text-purple-600"><i class="fas fa-arrow-left mr-1"></i> Vendas</a>
+  </nav>
+
+  <form id="venda-form" method="post" action="{% url 'vendas:venda_create' %}" class="space-y-6">
+    {% csrf_token %}
+    <input type="hidden" name="produtos_json" id="produtos_json" value="[]">
+    <input type="hidden" name="servicos_json" id="servicos_json" value="[]">
+
+    <!-- Cabeçalho (estilo do sistema de PDV) -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      <div class="px-6 py-4 border-b bg-purple-50">
+        <h1 class="text-xl font-bold text-gray-900 flex items-center gap-2"><i class="fas fa-cart-plus text-purple-600"></i> Lançar venda</h1>
+      </div>
+      <div class="p-6 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">PDV / Loja</label>
+          <select name="loja" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+            <option value="">Selecione...</option>
+            {% for l in lojas %}<option value="{{ l.id }}">{{ l.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">Venda Estoque Avançado?</label>
+          <select name="estoque_avancado" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+            <option value="nao">Não</option><option value="sim">Sim</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">Vendedor</label>
+          <select name="vendedor" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+            <option value="">Escolha...</option>
+            {% for v in vendedores %}<option value="{{ v.id }}">{{ v.get_full_name|default:v.email }}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">Data da venda</label>
+          <input type="datetime-local" name="data_venda" value="{{ now }}" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">Cliente</label>
+          <input type="text" name="cliente_nome" maxlength="200" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">CPF/CNPJ</label>
+          <input type="text" name="cliente_cpf" maxlength="20" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">Tipo de Venda</label>
+          <input type="text" name="tipo_venda" maxlength="80" placeholder="Ex.: Habilitação, Migração..." class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-2">Tipo de Comprovante Fiscal</label>
+          <div class="flex gap-4 pt-1">
+            {% for code, label in comprovante_choices %}
+            <label class="inline-flex items-center gap-2 text-sm"><input type="radio" name="comprovante_fiscal" value="{{ code }}" {% if forloop.first %}checked{% endif %} class="text-purple-600 focus:ring-purple-500"> {{ label }}</label>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="sm:col-span-2">
+          <label class="block text-sm font-semibold text-gray-700 mb-1">Observação</label>
+          <textarea name="observacao" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- Itens: Produtos -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      <div class="px-6 py-3 border-b bg-gray-50 font-bold text-gray-800 flex items-center gap-2"><i class="fas fa-box text-gray-400"></i> Produtos <span class="text-xs font-normal text-gray-400">(Produto Vivo / Acessório / Recarga)</span></div>
+      <div class="p-4">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2" data-item="produto">
+          <input placeholder="Produto *" data-f="nome_produto" class="px-2 py-1.5 border border-gray-300 rounded text-sm">
+          <input placeholder="Marca" data-f="marca" class="px-2 py-1.5 border border-gray-300 rounded text-sm">
+          <input placeholder="Modelo" data-f="modelo" class="px-2 py-1.5 border border-gray-300 rounded text-sm">
+          <input placeholder="Categoria" data-f="categoria" class="px-2 py-1.5 border border-gray-300 rounded text-sm">
+          <input placeholder="Plano" data-f="plano" class="px-2 py-1.5 border border-gray-300 rounded text-sm">
+          <input placeholder="Pilar" data-f="pilar" class="px-2 py-1.5 border border-gray-300 rounded text-sm">
+          <input placeholder="Qtde" data-f="qtde" type="number" min="1" value="1" class="px-2 py-1.5 border border-gray-300 rounded text-sm text-right">
+          <input placeholder="Valor (R$)" data-f="valor_venda" type="number" step="0.01" min="0" class="px-2 py-1.5 border border-gray-300 rounded text-sm text-right">
+        </div>
+        <button type="button" data-add="produto" class="text-sm px-3 py-1.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700"><i class="fas fa-plus mr-1"></i> Adicionar produto</button>
+        <table class="w-full text-sm mt-3 hidden" data-table="produto">
+          <thead class="bg-gray-100 text-gray-600"><tr><th class="px-3 py-1.5 text-left">Produto</th><th class="px-3 py-1.5 text-left">Marca/Modelo</th><th class="px-3 py-1.5 text-center">Qtde</th><th class="px-3 py-1.5 text-right">Valor</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Itens: Serviços -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      <div class="px-6 py-3 border-b bg-gray-50 font-bold text-gray-800 flex items-center gap-2"><i class="fas fa-headset text-gray-400"></i> Serviços <span class="text-xs font-normal text-gray-400">(Serviço Vivo / Outros Serviços)</span></div>
+      <div class="p-4">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2" data-item="servico">
+          <input placeholder="Serviço *" data-f="servico" class="px-2 py-1.5 border border-gray-300 rounded text-sm">
+          <input placeholder="Plano" data-f="plano_novo" class="px-2 py-1.5 border border-gray-300 rounded text-sm">
+          <input placeholder="Tipo do Plano" data-f="tipo_plano" class="px-2 py-1.5 border border-gray-300 rounded text-sm">
+          <input placeholder="Nº de Acesso" data-f="numero_acesso" class="px-2 py-1.5 border border-gray-300 rounded text-sm">
+          <input placeholder="Pilar" data-f="pilar" class="px-2 py-1.5 border border-gray-300 rounded text-sm">
+          <input placeholder="Valor Plano (R$)" data-f="valor_plano" type="number" step="0.01" min="0" class="px-2 py-1.5 border border-gray-300 rounded text-sm text-right">
+          <input placeholder="Receita (R$)" data-f="receita" type="number" step="0.01" min="0" class="px-2 py-1.5 border border-gray-300 rounded text-sm text-right">
+        </div>
+        <button type="button" data-add="servico" class="text-sm px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700"><i class="fas fa-plus mr-1"></i> Adicionar serviço</button>
+        <table class="w-full text-sm mt-3 hidden" data-table="servico">
+          <thead class="bg-gray-100 text-gray-600"><tr><th class="px-3 py-1.5 text-left">Serviço</th><th class="px-3 py-1.5 text-left">Plano</th><th class="px-3 py-1.5 text-right">Valor</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="flex items-center justify-between bg-white rounded-xl shadow-sm border border-gray-200 px-6 py-4">
+      <div class="text-lg font-bold text-gray-900">Total: <span class="text-purple-700">R$ <span id="total-geral">0,00</span></span></div>
+      <button type="submit" class="inline-flex items-center gap-2 px-6 py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg"><i class="fas fa-check"></i> Lançar venda</button>
+    </div>
+  </form>
+</div>
+
+<script>
+(function () {
+  var produtos = [], servicos = [];
+
+  function brl(n) { return (Number(n) || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
+
+  function coletar(tipo) {
+    var wrap = document.querySelector('[data-item="' + tipo + '"]');
+    var obj = {};
+    wrap.querySelectorAll('[data-f]').forEach(function (inp) { obj[inp.getAttribute('data-f')] = inp.value.trim(); });
+    return obj;
+  }
+  function limpar(tipo) {
+    document.querySelector('[data-item="' + tipo + '"]').querySelectorAll('[data-f]').forEach(function (inp) {
+      inp.value = (inp.getAttribute('data-f') === 'qtde') ? '1' : '';
+    });
+  }
+  function atualizarTotais() {
+    var t = 0;
+    produtos.forEach(function (p) { t += (Number(p.valor_venda) || 0) * (Number(p.qtde) || 1); });
+    servicos.forEach(function (s) { t += (Number(s.valor_plano) || 0); });
+    document.getElementById('total-geral').textContent = brl(t);
+    document.getElementById('produtos_json').value = JSON.stringify(produtos);
+    document.getElementById('servicos_json').value = JSON.stringify(servicos);
+  }
+  function render(tipo) {
+    var lista = tipo === 'produto' ? produtos : servicos;
+    var table = document.querySelector('[data-table="' + tipo + '"]');
+    var tbody = table.querySelector('tbody');
+    table.classList.toggle('hidden', lista.length === 0);
+    tbody.innerHTML = '';
+    lista.forEach(function (it, idx) {
+      var tr = document.createElement('tr');
+      tr.className = 'border-t border-gray-100';
+      if (tipo === 'produto') {
+        tr.innerHTML = '<td class="px-3 py-1.5">' + esc(it.nome_produto) + '</td><td class="px-3 py-1.5 text-gray-500">' + esc((it.marca || '') + ' ' + (it.modelo || '')) + '</td><td class="px-3 py-1.5 text-center">' + (it.qtde || 1) + '</td><td class="px-3 py-1.5 text-right">R$ ' + brl((Number(it.valor_venda) || 0) * (Number(it.qtde) || 1)) + '</td>';
+      } else {
+        tr.innerHTML = '<td class="px-3 py-1.5">' + esc(it.servico) + '</td><td class="px-3 py-1.5 text-gray-500">' + esc(it.plano_novo || '') + '</td><td class="px-3 py-1.5 text-right">R$ ' + brl(it.valor_plano) + '</td>';
+      }
+      var td = document.createElement('td');
+      td.className = 'px-3 py-1.5 text-right';
+      var btn = document.createElement('button');
+      btn.type = 'button'; btn.className = 'text-red-500 hover:text-red-700'; btn.innerHTML = '<i class="fas fa-trash"></i>';
+      btn.onclick = function () { lista.splice(idx, 1); render(tipo); atualizarTotais(); };
+      td.appendChild(btn); tr.appendChild(td); tbody.appendChild(tr);
+    });
+  }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]; }); }
+
+  document.querySelectorAll('[data-add]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var tipo = btn.getAttribute('data-add');
+      var obj = coletar(tipo);
+      var chave = tipo === 'produto' ? 'nome_produto' : 'servico';
+      if (!obj[chave]) { alert('Informe o nome do ' + tipo + '.'); return; }
+      (tipo === 'produto' ? produtos : servicos).push(obj);
+      limpar(tipo); render(tipo); atualizarTotais();
+    });
+  });
+
+  document.getElementById('venda-form').addEventListener('submit', function (e) {
+    atualizarTotais();
+    if (produtos.length === 0 && servicos.length === 0) {
+      e.preventDefault();
+      alert('Adicione ao menos um produto ou serviço.');
+    }
+  });
+})();
+</script>
+{% endblock %}

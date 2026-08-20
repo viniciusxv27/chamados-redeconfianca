@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}Venda #{{ venda.id }}{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto p-4 sm:p-6 lg:p-8">
+  <nav class="mb-4 text-sm">
+    <a href="{% url 'vendas:dashboard' %}" class="text-gray-500 hover:text-purple-600"><i class="fas fa-arrow-left mr-1"></i> Vendas</a>
+  </nav>
+
+  <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-6">
+    <div class="px-6 py-4 border-b bg-purple-50 flex items-center justify-between">
+      <h1 class="text-xl font-bold text-gray-900">Venda #{{ venda.id }}</h1>
+      <span class="text-lg font-bold text-purple-700">R$ {{ venda.total|floatformat:2 }}</span>
+    </div>
+    <div class="p-6 grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
+      <div><p class="text-xs text-gray-400">Data</p><p class="font-medium text-gray-800">{{ venda.data_venda|date:"d/m/Y H:i" }}</p></div>
+      <div><p class="text-xs text-gray-400">Loja / PDV</p><p class="font-medium text-gray-800">{{ venda.loja.name|default:venda.pdv_nome|default:"—" }}</p></div>
+      <div><p class="text-xs text-gray-400">UF</p><p class="font-medium text-gray-800">{{ venda.uf|default:"—" }}</p></div>
+      <div><p class="text-xs text-gray-400">Vendedor</p><p class="font-medium text-gray-800">{{ venda.vendedor.get_full_name|default:"—" }}</p></div>
+      <div><p class="text-xs text-gray-400">Cliente</p><p class="font-medium text-gray-800">{{ venda.cliente_nome|default:"—" }}</p></div>
+      <div><p class="text-xs text-gray-400">CPF/CNPJ</p><p class="font-medium text-gray-800">{{ venda.cliente_cpf|default:"—" }}</p></div>
+      <div><p class="text-xs text-gray-400">Tipo de Venda</p><p class="font-medium text-gray-800">{{ venda.tipo_venda|default:"—" }}</p></div>
+      <div><p class="text-xs text-gray-400">Comprovante</p><p class="font-medium text-gray-800">{{ venda.get_comprovante_fiscal_display }}</p></div>
+      <div><p class="text-xs text-gray-400">Estoque Avançado</p><p class="font-medium text-gray-800">{{ venda.estoque_avancado|yesno:"Sim,Não" }}</p></div>
+    </div>
+    {% if venda.observacao %}<div class="px-6 pb-4 text-sm"><p class="text-xs text-gray-400">Observação</p><p class="text-gray-700">{{ venda.observacao }}</p></div>{% endif %}
+  </div>
+
+  {% if venda.produtos.all %}
+  <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-6">
+    <div class="px-5 py-3 border-b bg-gray-50 font-bold text-gray-800"><i class="fas fa-box text-gray-400 mr-2"></i>Produtos</div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="bg-gray-100 text-gray-600"><tr>
+          <th class="px-4 py-2 text-left">Produto</th><th class="px-4 py-2 text-left">Marca/Modelo</th>
+          <th class="px-4 py-2 text-left">Plano</th><th class="px-4 py-2 text-center">Qtde</th><th class="px-4 py-2 text-right">Valor</th>
+        </tr></thead>
+        <tbody class="divide-y divide-gray-100">
+          {% for p in venda.produtos.all %}
+          <tr><td class="px-4 py-2 text-gray-900">{{ p.nome_produto }}{% if p.pilar %}<span class="ml-1 text-[10px] text-gray-400">({{ p.pilar }})</span>{% endif %}</td>
+            <td class="px-4 py-2 text-gray-600">{{ p.marca }} {{ p.modelo }}</td>
+            <td class="px-4 py-2 text-gray-600">{{ p.plano|default:"—" }}</td>
+            <td class="px-4 py-2 text-center">{{ p.qtde }}</td>
+            <td class="px-4 py-2 text-right font-semibold">R$ {{ p.valor_total|floatformat:2 }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if venda.servicos.all %}
+  <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+    <div class="px-5 py-3 border-b bg-gray-50 font-bold text-gray-800"><i class="fas fa-headset text-gray-400 mr-2"></i>Serviços</div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="bg-gray-100 text-gray-600"><tr>
+          <th class="px-4 py-2 text-left">Serviço</th><th class="px-4 py-2 text-left">Plano</th>
+          <th class="px-4 py-2 text-left">Nº Acesso</th><th class="px-4 py-2 text-right">Valor</th><th class="px-4 py-2 text-right">Receita</th>
+        </tr></thead>
+        <tbody class="divide-y divide-gray-100">
+          {% for s in venda.servicos.all %}
+          <tr><td class="px-4 py-2 text-gray-900">{{ s.servico }}{% if s.pilar %}<span class="ml-1 text-[10px] text-gray-400">({{ s.pilar }})</span>{% endif %}</td>
+            <td class="px-4 py-2 text-gray-600">{{ s.plano_novo|default:"—" }}</td>
+            <td class="px-4 py-2 text-gray-600">{{ s.numero_acesso|default:"—" }}</td>
+            <td class="px-4 py-2 text-right font-semibold">R$ {{ s.valor_plano|floatformat:2 }}</td>
+            <td class="px-4 py-2 text-right text-gray-600">{% if s.receita is not None %}R$ {{ s.receita|floatformat:2 }}{% else %}—{% endif %}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

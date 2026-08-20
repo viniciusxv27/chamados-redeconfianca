@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block title %}Vendas{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+  <!-- Cabeçalho -->
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+    <div>
+      <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 flex items-center gap-3">
+        <i class="fas fa-cart-shopping text-purple-600"></i> Vendas
+      </h1>
+      <p class="text-gray-600 mt-1">Todas as vendas lançadas — {{ paginator.count }} registro{{ paginator.count|pluralize }}.</p>
+    </div>
+    <div class="flex flex-wrap gap-2">
+      <a href="{% url 'vendas:precos' %}" class="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium">
+        <i class="fas fa-tags"></i> Tabela de preços
+      </a>
+      <a href="{% url 'vendas:venda_create' %}" class="inline-flex items-center gap-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg">
+        <i class="fas fa-plus"></i> Lançar venda
+      </a>
+    </div>
+  </div>
+
+  <!-- Filtros -->
+  <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-5 mb-6">
+    <form method="get" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div class="lg:col-span-2">
+        <label class="block text-xs font-semibold text-gray-600 mb-1">Buscar (cliente, CPF, PDV, nº)</label>
+        <input type="text" name="search" value="{{ filtros.search }}" placeholder="Digite para buscar..."
+               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1">De</label>
+        <input type="date" name="date_from" value="{{ filtros.date_from }}" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1">Até</label>
+        <input type="date" name="date_to" value="{{ filtros.date_to }}" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1">Loja</label>
+        <select name="loja" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+          <option value="">Todas</option>
+          {% for l in lojas %}<option value="{{ l.id }}" {% if filtros.loja == l.id|stringformat:'s' %}selected{% endif %}>{{ l.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1">Vendedor</label>
+        <select name="vendedor" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+          <option value="">Todos</option>
+          {% for v in vendedores %}<option value="{{ v.id }}" {% if filtros.vendedor == v.id|stringformat:'s' %}selected{% endif %}>{{ v.get_full_name|default:v.email }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1">Comprovante</label>
+        <select name="comprovante" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+          <option value="">Todos</option>
+          {% for code, label in comprovante_choices %}<option value="{{ code }}" {% if filtros.comprovante == code %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="sm:col-span-2 lg:col-span-4 flex flex-wrap items-center gap-2 pt-1">
+        <button type="submit" class="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg"><i class="fas fa-filter mr-1"></i> Filtrar</button>
+        <a href="{% url 'vendas:dashboard' %}" class="px-4 py-2 text-gray-600 hover:text-gray-900">Limpar</a>
+        <span class="mx-2 text-gray-300">|</span>
+        <span class="text-xs text-gray-500">Exportar:</span>
+        <a href="?{{ filter_query_string }}{% if filter_query_string %}&{% endif %}export=csv&tipo=produto" class="px-3 py-1.5 text-sm bg-emerald-50 text-emerald-700 rounded-lg hover:bg-emerald-100"><i class="fas fa-file-csv mr-1"></i> Produtos CSV</a>
+        <a href="?{{ filter_query_string }}{% if filter_query_string %}&{% endif %}export=xlsx&tipo=produto" class="px-3 py-1.5 text-sm bg-emerald-50 text-emerald-700 rounded-lg hover:bg-emerald-100"><i class="fas fa-file-excel mr-1"></i> Produtos XLSX</a>
+        <a href="?{{ filter_query_string }}{% if filter_query_string %}&{% endif %}export=csv&tipo=servico" class="px-3 py-1.5 text-sm bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100"><i class="fas fa-file-csv mr-1"></i> Serviços CSV</a>
+        <a href="?{{ filter_query_string }}{% if filter_query_string %}&{% endif %}export=xlsx&tipo=servico" class="px-3 py-1.5 text-sm bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100"><i class="fas fa-file-excel mr-1"></i> Serviços XLSX</a>
+      </div>
+    </form>
+  </div>
+
+  <!-- Tabela -->
+  <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="bg-gray-100 text-gray-600">
+          <tr>
+            <th class="px-4 py-2 text-left font-semibold">#</th>
+            <th class="px-4 py-2 text-left font-semibold">Data</th>
+            <th class="px-4 py-2 text-left font-semibold">Loja</th>
+            <th class="px-4 py-2 text-left font-semibold">Vendedor</th>
+            <th class="px-4 py-2 text-left font-semibold">Cliente</th>
+            <th class="px-4 py-2 text-left font-semibold">Comprovante</th>
+            <th class="px-4 py-2 text-center font-semibold">Itens</th>
+            <th class="px-4 py-2 text-right font-semibold">Total</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          {% for v in vendas %}
+          <tr class="hover:bg-gray-50 cursor-pointer" onclick="window.location='{% url 'vendas:venda_detail' v.pk %}'">
+            <td class="px-4 py-2 font-semibold text-purple-700">#{{ v.id }}</td>
+            <td class="px-4 py-2 whitespace-nowrap text-gray-700">{{ v.data_venda|date:"d/m/Y H:i" }}</td>
+            <td class="px-4 py-2 text-gray-700">{{ v.loja.name|default:v.pdv_nome|default:"—" }}</td>
+            <td class="px-4 py-2 text-gray-700">{{ v.vendedor.get_full_name|default:"—" }}</td>
+            <td class="px-4 py-2 text-gray-900">{{ v.cliente_nome|default:"—" }}</td>
+            <td class="px-4 py-2 text-gray-600">{{ v.get_comprovante_fiscal_display }}</td>
+            <td class="px-4 py-2 text-center text-gray-600">{{ v.produtos.count }}P / {{ v.servicos.count }}S</td>
+            <td class="px-4 py-2 text-right font-semibold text-gray-900 whitespace-nowrap">R$ {{ v.total|floatformat:2 }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="8" class="px-4 py-10 text-center text-gray-400"><i class="fas fa-cart-shopping text-3xl mb-2 block"></i>Nenhuma venda encontrada.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if vendas.has_other_pages %}
+    <div class="flex items-center justify-between px-4 py-3 border-t bg-gray-50 text-sm">
+      <span class="text-gray-500">Página {{ vendas.number }} de {{ paginator.num_pages }}</span>
+      <div class="flex gap-1">
+        {% if vendas.has_previous %}<a href="?{{ filter_query_string }}{% if filter_query_string %}&{% endif %}page={{ vendas.previous_page_number }}" class="px-3 py-1 border rounded hover:bg-gray-100">Anterior</a>{% endif %}
+        {% if vendas.has_next %}<a href="?{{ filter_query_string }}{% if filter_query_string %}&{% endif %}page={{ vendas.next_page_number }}" class="px-3 py-1 border rounded hover:bg-gray-100">Próxima</a>{% endif %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

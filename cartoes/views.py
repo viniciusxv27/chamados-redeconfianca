@@ -1,7 +1,12 @@
+import hmac
 import json
 import os
+import re
 from decimal import Decimal, InvalidOperation
+from urllib.error import URLError
+from urllib.request import Request, urlopen
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.files.base import ContentFile
@@ -10,6 +15,7 @@ from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.dateparse import parse_date
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
 from tickets.models import Category, Ticket, TicketAttachment, TicketLog
@@ -207,8 +213,11 @@ def gasto_create(request, pk):
             foto=foto, origem=('FOTO' if foto else 'MANUAL'), ia_dados=ia_dados,
         )
 
-        _abrir_chamado(request, cartao, gasto)
-        messages.success(request, 'Gasto lançado e chamado aberto com sucesso.')
+        ticket = abrir_chamado_do_gasto(cartao, gasto, request.user)
+        if ticket:
+            messages.success(request, 'Gasto lançado e chamado aberto com sucesso.')
+        else:
+            messages.warning(request, 'Gasto lançado, mas a categoria de chamados (99) não foi encontrada — chamado não aberto.')
         return redirect('cartoes:extrato', pk=cartao.pk)
 
     context = {
@@ -219,14 +228,17 @@ def gasto_create(request, pk):
     return render(request, 'cartoes/gasto_form.html', context)
 
 
-def _abrir_chamado(request, cartao, gasto):
+def abrir_chamado_do_gasto(cartao, gasto, ator_user):
     """Abre um chamado na categoria 99 (Compras no Cartão de Crédito → Financeiro)
-    com a descrição padronizada e anexa a foto do comprovante. Vincula ao Gasto."""
+    com a descrição padronizada e anexa a foto do comprovante. Vincula ao Gasto.
+
+    Sem dependência de request/messages: serve tanto a tela quanto o endpoint.
+    ``ator_user`` é quem consta como autor do chamado. Devolve o Ticket criado
+    (ou None se a categoria 99 não existir)."""
     try:
         cat = Category.objects.get(id=CARTAO_CATEGORY_ID)
     except Category.DoesNotExist:
-        messages.warning(request, 'Categoria de chamados (99) não encontrada — o gasto foi salvo, mas sem chamado.')
-        return
+        return None
 
     responsavel_nome = cartao.responsavel.get_full_name() or cartao.responsavel.email
     apelido_txt = f' ({cartao.apelido})' if cartao.apelido else ''
@@ -247,7 +259,7 @@ def _abrir_chamado(request, cartao, gasto):
         description=descricao,
         sector=cat.sector,            # setor derivado da categoria (Financeiro)
         category=cat,
-        created_by=request.user,
+        created_by=ator_user,
         priority='MEDIA',
     )
 
@@ -265,14 +277,14 @@ def _abrir_chamado(request, cartao, gasto):
                 original_filename=base,
                 file_size=len(content),
                 content_type=content_type,
-                uploaded_by=request.user,
+                uploaded_by=ator_user,
             )
         except Exception:
             pass  # anexo é best-effort; não bloqueia a abertura do chamado
 
     try:
         TicketLog.objects.create(
-            ticket=ticket, user=request.user, new_status='ABERTO',
+            ticket=ticket, user=ator_user, new_status='ABERTO',
             observation='Chamado criado (Cartões)',
         )
     except Exception:
@@ -280,3 +292,171 @@ def _abrir_chamado(request, cartao, gasto):
 
     gasto.ticket = ticket
     gasto.save(update_fields=['ticket'])
+    return ticket
+
+
+# ---------------------------------------------------------------------------
+# Endpoint programático: lançar gasto por API (foto_url + descrição + telefone)
+# ---------------------------------------------------------------------------
+
+def _only_digits(value):
+    return re.sub(r'\D', '', value or '')
+
+
+def _norm_br_phone(value):
+    """Só dígitos, removendo o código do país (55) quando presente."""
+    d = _only_digits(value)
+    if len(d) >= 12 and d.startswith('55'):
+        d = d[2:]
+    return d
+
+
+def _check_api_token(request):
+    """Valida o token estático (Authorization: Bearer <token> ou X-API-Key)."""
+    expected = getattr(settings, 'CARTOES_API_TOKEN', '') or ''
+    if not expected:
+        return False  # sem token configurado, o endpoint fica desligado
+    provided = ''
+    auth = request.headers.get('Authorization', '') or ''
+    if auth.startswith('Bearer '):
+        provided = auth[7:].strip()
+    if not provided:
+        provided = (request.headers.get('X-API-Key', '') or '').strip()
+    return bool(provided) and hmac.compare_digest(provided, expected)
+
+
+def _download_image(url, max_bytes=10 * 1024 * 1024, timeout=15):
+    """Baixa uma imagem de uma URL http/https (best-effort). (bytes, mime) ou (None, None)."""
+    if not url or not isinstance(url, str):
+        return None, None
+    if not (url.startswith('http://') or url.startswith('https://')):
+        return None, None
+    try:
+        req = Request(url, headers={'User-Agent': 'redeconfianca-cartoes/1.0'})
+        with urlopen(req, timeout=timeout) as resp:
+            ctype = (resp.headers.get('Content-Type') or '').split(';')[0].strip().lower()
+            if ctype and not ctype.startswith('image/'):
+                return None, None
+            data = resp.read(max_bytes + 1)
+            if len(data) > max_bytes:
+                return None, None
+            return data, (ctype or 'image/jpeg')
+    except (URLError, ValueError, OSError):
+        return None, None
+
+
+@csrf_exempt
+@require_POST
+def api_lancar_gasto(request):
+    """Lança um gasto e abre o chamado automaticamente, via API.
+
+    Auth: token estático no header. Corpo (JSON ou form):
+      - telefone (ou numero): telefone do usuário responsável (obrigatório)
+      - foto_url (ou foto): link do comprovante (opcional)
+      - descricao: descrição da compra (opcional; obrigatório se não houver foto)
+      - valor: valor do gasto (opcional; fallback se a IA não extrair)
+      - cartao_last4: desempate quando o usuário tem mais de um cartão
+    """
+    if not _check_api_token(request):
+        return JsonResponse({'error': 'Não autorizado.'}, status=401)
+
+    if (request.content_type or '').startswith('application/json'):
+        try:
+            payload = json.loads(request.body or b'{}')
+            if not isinstance(payload, dict):
+                payload = {}
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({'error': 'JSON inválido.'}, status=400)
+    else:
+        payload = request.POST
+
+    telefone = (payload.get('telefone') or payload.get('numero') or '').strip()
+    descricao = (payload.get('descricao') or '').strip()
+    foto_url = (payload.get('foto_url') or payload.get('foto') or '').strip()
+    cartao_last4 = (payload.get('cartao_last4') or '').strip()
+    valor_payload = _parse_valor(payload.get('valor'))
+
+    if not telefone:
+        return JsonResponse({'error': 'Informe o telefone do usuário.'}, status=400)
+    if not foto_url and not descricao:
+        return JsonResponse({'error': 'Informe foto_url ou descricao.'}, status=400)
+
+    # Identifica o usuário pelo telefone (comparando só os dígitos).
+    alvo = _norm_br_phone(telefone)
+    match_id = None
+    if len(alvo) >= 8:
+        for uid, phone in User.objects.filter(is_active=True).exclude(phone='').values_list('id', 'phone'):
+            if _norm_br_phone(phone) == alvo:
+                match_id = uid
+                break
+    user = User.objects.filter(id=match_id).first() if match_id else None
+    if not user:
+        return JsonResponse({'error': 'Usuário não encontrado para este telefone.'}, status=404)
+
+    # Cartão do usuário (responsável).
+    qs = Cartao.objects.filter(responsavel=user, ativo=True)
+    if cartao_last4:
+        qs = qs.filter(last4=cartao_last4)
+    cartoes = list(qs[:3])
+    if not cartoes:
+        return JsonResponse({'error': 'Nenhum cartão ativo para este usuário.'}, status=400)
+    if len(cartoes) > 1:
+        return JsonResponse({'error': 'Usuário tem mais de um cartão; informe cartao_last4.'}, status=400)
+    cartao = cartoes[0]
+
+    # Baixa a foto (best-effort — não trava se falhar).
+    image_bytes, mime = None, 'image/jpeg'
+    if foto_url:
+        image_bytes, dl_mime = _download_image(foto_url)
+        if dl_mime:
+            mime = dl_mime
+
+    # IA (degrada graciosamente; a chave pode estar indisponível).
+    ia = analyze_expense(image_bytes=image_bytes, manual_text=descricao, mime=mime)
+    ia_ok = not ia.get('error')
+
+    # Valor: IA -> payload -> 0 (a confirmar).
+    valor = _parse_valor(ia.get('valor')) if ia_ok else None
+    aviso = None
+    if valor is None or valor <= 0:
+        valor = valor_payload
+    if valor is None or valor <= 0:
+        valor = Decimal('0')
+        aviso = 'Valor não identificado — chamado aberto com "valor a confirmar".'
+
+    estabelecimento = (ia.get('estabelecimento') if ia_ok else '') or ''
+    categoria_gasto = (ia.get('categoria') if ia_ok else '') or ''
+    data_ia = ia.get('data') if ia_ok else ''
+    data_gasto = parse_date(data_ia) if data_ia else None
+    if not data_gasto:
+        data_gasto = timezone.localdate()
+
+    descricao_final = descricao or ((ia.get('descricao') if ia_ok else '') or '')
+    if aviso:
+        descricao_final = (descricao_final + '\n[Valor a confirmar]').strip()
+
+    foto_file = None
+    if image_bytes:
+        ext = '.png' if mime == 'image/png' else ('.webp' if mime == 'image/webp' else '.jpg')
+        foto_file = ContentFile(image_bytes, name=f'comprovante{ext}')
+
+    gasto = Gasto.objects.create(
+        cartao=cartao, criado_por=user, valor=valor,
+        estabelecimento=estabelecimento, data_gasto=data_gasto,
+        categoria_gasto=categoria_gasto, descricao=descricao_final,
+        foto=foto_file, origem=('FOTO' if image_bytes else 'MANUAL'),
+        ia_dados=(ia if isinstance(ia, dict) else {}),
+    )
+
+    ticket = abrir_chamado_do_gasto(cartao, gasto, user)
+
+    return JsonResponse({
+        'success': True,
+        'gasto_id': gasto.id,
+        'ticket_id': ticket.id if ticket else None,
+        'valor': str(valor),
+        'usuario': user.get_full_name() or user.username,
+        'cartao': f'••••{cartao.last4}',
+        'ia_ok': ia_ok,
+        'aviso': aviso,
+    })

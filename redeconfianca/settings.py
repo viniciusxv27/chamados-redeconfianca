@@ -76,6 +76,7 @@ INSTALLED_APPS = [
     'cartoes',  # Cartões de crédito corporativos
     'tangerino',  # Integração com o Tangerino / Sólides Ponto
     'contagem_caixa',  # Contagem de Caixa (controle diário por loja)
+    'vendas',  # Lançamento de vendas (Postgres) + tabela de preços
     # 'webpush',  # Django WebPush (temporariamente removido)
 ]
 
@@ -377,3 +378,8 @@ BASE_URL = config('BASE_URL', default='https://chamados.redeconfianca.com.br')
 
 # OpenAI Configuration (para transcrição de reuniões e IA)
 OPENAI_API_KEY = config('OPENAI_API_KEY', default='')
+
+# Token do endpoint programático de Cartões (POST /cartoes/api/gasto/).
+# Vazio desliga o endpoint (retorna 401). Enviar no header Authorization: Bearer
+# <token> ou X-API-Key: <token>.
+CARTOES_API_TOKEN = config('CARTOES_API_TOKEN', default='')
