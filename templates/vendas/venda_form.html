@@ -75,7 +75,10 @@
       <div class="px-6 py-3 border-b bg-gray-50 font-bold text-gray-800 flex items-center gap-2"><i class="fas fa-box text-gray-400"></i> Produtos <span class="text-xs font-normal text-gray-400">(Produto Vivo / Acessório / Recarga)</span></div>
       <div class="p-4">
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2" data-item="produto">
-          <input placeholder="Produto *" data-f="nome_produto" class="px-2 py-1.5 border border-gray-300 rounded text-sm">
+          <input type="hidden" data-f="preco_id">
+          <div class="relative">
+            <input placeholder="Produto * (busca na tabela)" data-f="nome_produto" autocomplete="off" class="w-full px-2 py-1.5 border border-gray-300 rounded text-sm">
+          </div>
           <input placeholder="Marca" data-f="marca" class="px-2 py-1.5 border border-gray-300 rounded text-sm">
           <input placeholder="Modelo" data-f="modelo" class="px-2 py-1.5 border border-gray-300 rounded text-sm">
           <input placeholder="Categoria" data-f="categoria" class="px-2 py-1.5 border border-gray-300 rounded text-sm">
@@ -97,7 +100,10 @@
       <div class="px-6 py-3 border-b bg-gray-50 font-bold text-gray-800 flex items-center gap-2"><i class="fas fa-headset text-gray-400"></i> Serviços <span class="text-xs font-normal text-gray-400">(Serviço Vivo / Outros Serviços)</span></div>
       <div class="p-4">
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2" data-item="servico">
-          <input placeholder="Serviço *" data-f="servico" class="px-2 py-1.5 border border-gray-300 rounded text-sm">
+          <input type="hidden" data-f="preco_id">
+          <div class="relative">
+            <input placeholder="Serviço * (busca na tabela)" data-f="servico" autocomplete="off" class="w-full px-2 py-1.5 border border-gray-300 rounded text-sm">
+          </div>
           <input placeholder="Plano" data-f="plano_novo" class="px-2 py-1.5 border border-gray-300 rounded text-sm">
           <input placeholder="Tipo do Plano" data-f="tipo_plano" class="px-2 py-1.5 border border-gray-300 rounded text-sm">
           <input placeholder="Nº de Acesso" data-f="numero_acesso" class="px-2 py-1.5 border border-gray-300 rounded text-sm">
@@ -120,9 +126,19 @@
   </form>
 </div>
 
+<style>
+  .ac-box { position: absolute; left: 0; right: 0; top: 100%; z-index: 30; background: #fff;
+    border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.12);
+    max-height: 260px; overflow-y: auto; margin-top: 2px; }
+  .ac-opt { padding: 6px 10px; cursor: pointer; display: flex; flex-direction: column; }
+  .ac-opt:hover { background: #f5f3ff; }
+  .ac-nome { font-size: .82rem; color: #111827; }
+  .ac-meta { font-size: .68rem; color: #9ca3af; }
+</style>
 <script>
 (function () {
   var produtos = [], servicos = [];
+  var buscarUrl = "{% url 'vendas:precos_buscar' %}";
 
   function brl(n) { return (Number(n) || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
 
@@ -187,6 +203,71 @@
       alert('Adicione ao menos um produto ou serviço.');
     }
   });
+
+  // ---- Autocomplete da tabela de preços ----
+  function setF(tipo, field, val) {
+    var el = document.querySelector('[data-item="' + tipo + '"] [data-f="' + field + '"]');
+    if (el && val != null && val !== '') el.value = val;
+  }
+  function extraGet(extra, kws) {
+    if (!extra) return '';
+    for (var k in extra) {
+      var K = k.toUpperCase();
+      for (var i = 0; i < kws.length; i++) { if (K.indexOf(kws[i]) >= 0 && extra[k]) return extra[k]; }
+    }
+    return '';
+  }
+  function aplicar(it, tipo) {
+    setF(tipo, 'preco_id', String(it.id));
+    if (tipo === 'produto') {
+      setF('produto', 'nome_produto', it.nome);
+      setF('produto', 'categoria', it.categoria);
+      setF('produto', 'plano', it.plano);
+      setF('produto', 'valor_venda', it.valor);
+      setF('produto', 'marca', extraGet(it.extra, ['MARCA']));
+      setF('produto', 'modelo', extraGet(it.extra, ['MODELO']));
+    } else {
+      setF('servico', 'servico', it.nome);
+      setF('servico', 'plano_novo', it.plano);
+      setF('servico', 'tipo_plano', it.grupamento);
+      setF('servico', 'valor_plano', it.valor);
+    }
+  }
+  function setupAC(input, tipo) {
+    if (!input) return;
+    var box = document.createElement('div');
+    box.className = 'ac-box';
+    box.style.display = 'none';
+    input.parentNode.appendChild(box);
+    var timer;
+    input.addEventListener('input', function () {
+      setF(tipo, 'preco_id', '');  // edição manual desfaz o vínculo
+      var q = input.value.trim();
+      clearTimeout(timer);
+      if (q.length < 2) { box.style.display = 'none'; return; }
+      timer = setTimeout(function () {
+        fetch(buscarUrl + '?q=' + encodeURIComponent(q), { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            var results = (d && d.results) || [];
+            box.innerHTML = '';
+            if (!results.length) { box.style.display = 'none'; return; }
+            results.forEach(function (it) {
+              var opt = document.createElement('div');
+              opt.className = 'ac-opt';
+              opt.innerHTML = '<span class="ac-nome">' + esc(it.nome) + '</span><span class="ac-meta">' + esc(it.categoria) + (it.valor ? (' · R$ ' + it.valor) : '') + '</span>';
+              opt.addEventListener('mousedown', function (ev) { ev.preventDefault(); aplicar(it, tipo); box.style.display = 'none'; });
+              box.appendChild(opt);
+            });
+            box.style.display = 'block';
+          })
+          .catch(function () { box.style.display = 'none'; });
+      }, 250);
+    });
+    input.addEventListener('blur', function () { setTimeout(function () { box.style.display = 'none'; }, 150); });
+  }
+  setupAC(document.querySelector('[data-item="produto"] [data-f="nome_produto"]'), 'produto');
+  setupAC(document.querySelector('[data-item="servico"] [data-f="servico"]'), 'servico');
 })();
 </script>
 {% endblock %}

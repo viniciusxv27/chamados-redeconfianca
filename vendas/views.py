@@ -416,3 +416,27 @@ def precos_create(request):
     return render(request, 'vendas/precos_form.html', {
         'categorias': list(ItemPreco.objects.values_list('categoria', flat=True).distinct().order_by('categoria')),
     })
+
+
+@login_required
+def precos_buscar(request):
+    """Autocomplete da tabela de preços (JSON) para o formulário de venda."""
+    if not can_access_vendas(request.user):
+        return HttpResponse(status=403)
+    from django.http import JsonResponse
+
+    q = request.GET.get('q', '').strip()
+    if len(q) < 2:
+        return JsonResponse({'results': []})
+    qs = (
+        ItemPreco.objects.filter(ativo=True)
+        .filter(Q(nome__icontains=q) | Q(plano__icontains=q) | Q(cod_sap__icontains=q))
+        .order_by('categoria', 'nome')[:20]
+    )
+    results = [{
+        'id': it.id, 'categoria': it.categoria, 'nome': it.nome, 'plano': it.plano,
+        'sistema': it.sistema, 'grupamento': it.grupamento, 'cod_sap': it.cod_sap,
+        'valor': (str(it.valor) if it.valor is not None else ''),
+        'extra': it.extra if isinstance(it.extra, dict) else {},
+    } for it in qs]
+    return JsonResponse({'results': results})
