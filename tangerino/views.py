@@ -10,11 +10,14 @@ from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
+from django.utils.dateparse import parse_time
 from django.views.decorators.http import require_POST
 
 from . import ferias as ferias_svc
 from . import jornada as jornada_svc
 from . import ponto as ponto_svc
+from . import regras_jornada as regras
+from .middleware import limpar_decisao
 from .client import (TangerinoError, de_millis, integracao_ativa, listar_funcionarios,
                      listar_marcacoes, invalidar_cache_marcacoes, justificativas_edicao,
                      registrar_ponto, registrar_ponto_atrasado, testar_conexao)
@@ -269,6 +272,41 @@ def _dias_com_marcacoes(pares, inicio, fim, grade=None, employee_id=None):
     return dias
 
 
+@login_required
+def bloqueado(request):
+    """Tela que a pessoa vê enquanto a jornada do dia estiver irregular.
+
+    Sempre oferece uma saída: bater a marcação (quando o portal permite) ou
+    reconferir depois de bater no relógio/app. Uma tela de bloqueio sem saída
+    seria uma porta trancada por dentro.
+    """
+    from .middleware import decidir_bloqueio, limpar_decisao
+
+    if request.GET.get('reconferir'):
+        # A pessoa diz que bateu: derruba o cache e olha de novo na API.
+        limpar_decisao(request.user)
+        invalidar_cache_marcacoes(request.user.tangerino_employee_id)
+        # O portal libera na hora, sem esperar o cache da decisão expirar.
+        limpar_decisao(request.user)
+
+    try:
+        motivo = decidir_bloqueio(request.user)
+    except Exception:
+        motivo = None
+
+    if not motivo:
+        messages.success(request, 'Ponto em dia. Bom trabalho!')
+        return redirect('home')
+
+    config = ConfiguracaoTangerino.get()
+    return render(request, 'tangerino/bloqueado.html', {
+        'motivo': motivo,
+        'config': config,
+        'pode_bater_ponto': config.permitir_bater_ponto,
+        'exige_foto': config.exigir_foto,
+    })
+
+
 @modulo_liberado
 @login_required
 def ponto_equipe(request):
@@ -363,6 +401,10 @@ def api_ponto_status(request):
         'pendencias': [{'dia': p['dia'].strftime('%d/%m'),
                         'entrada': p['entrada'].strftime('%H:%M')}
                        for p in resumo['pendencias']],
+        # Popups de intervalo: almoço esquecido e almoço passando do limite.
+        'avisos': regras.avisos(resumo, config),
+        'volta_liberada': regras.volta_do_almoco_liberada(resumo, config)[0],
+        'falta_para_volta': regras.volta_do_almoco_liberada(resumo, config)[1],
         'url_ponto': '/ponto/',
     })
 
@@ -403,6 +445,21 @@ def api_bater_ponto(request):
              'erro': 'Esta empresa exige foto para registrar ponto pela web. '
                      'Autorize a câmera e tente de novo.'},
             status=400)
+
+    # A volta do almoço tem duração mínima: bater antes disso cria um intervalo
+    # inválido na folha, que alguém vai ter de ajustar à mão depois.
+    if not atrasado:
+        resumo = ponto_svc.resumo_para_usuario(request.user)
+        if resumo.get('disponivel'):
+            liberado, faltam = regras.volta_do_almoco_liberada(resumo, config)
+            if not liberado:
+                return JsonResponse(
+                    {'sucesso': False, 'motivo': 'ALMOCO_CURTO', 'faltam_minutos': faltam,
+                     'erro': f'O intervalo precisa ter pelo menos '
+                             f'{config.almoco_minimo_minutos} minutos. '
+                             f'Faltam {faltam} minuto(s) para você poder '
+                             f'registrar a volta.'},
+                    status=400)
 
     registro = RegistroPontoPortal(
         usuario=request.user, employee_id=request.user.tangerino_employee_id,
@@ -698,8 +755,23 @@ def configuracao(request):
     if request.method == 'POST':
         for campo in ('ativo', 'restrito_ao_grupo', 'permitir_bater_ponto', 'exigir_foto',
                       'permitir_ponto_atrasado', 'mostrar_widget_home',
-                      'mostrar_popup_ferias', 'bloquear_navegacao_ferias'):
+                      'mostrar_popup_ferias', 'bloquear_navegacao_ferias',
+                      'bloquear_sem_entrada', 'bloquear_durante_almoco',
+                      'bloquear_saida_pendente', 'avisar_almoco'):
             setattr(config, campo, request.POST.get(campo) == 'on')
+
+        # Parâmetros do intervalo: número inválido não pode virar zero em
+        # silêncio — zero desligaria a duração mínima sem ninguém perceber.
+        for campo, minimo, maximo in (('almoco_minimo_minutos', 1, 240),
+                                      ('almoco_maximo_minutos', 1, 240)):
+            bruto = (request.POST.get(campo) or '').strip()
+            if bruto.isdigit() and minimo <= int(bruto) <= maximo:
+                setattr(config, campo, int(bruto))
+        for campo in ('lembrete_almoco_hora', 'entrada_manha_de', 'entrada_manha_ate'):
+            hora = parse_time(request.POST.get(campo) or '')
+            if hora:
+                setattr(config, campo, hora)
+
         grupo_id = request.POST.get('grupo') or ''
         config.grupo_id = int(grupo_id) if grupo_id.isdigit() else None
         config.atualizado_por = request.user

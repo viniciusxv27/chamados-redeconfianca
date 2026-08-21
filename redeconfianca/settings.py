@@ -101,6 +101,7 @@ MIDDLEWARE = [
     'users.session_tracking.ActiveSessionMiddleware',
     'users.pre_registration_middleware.PreRegistrationAdjustmentMiddleware',
     'tangerino.middleware.BloqueioFeriasMiddleware',
+    'tangerino.middleware.BloqueioJornadaMiddleware',
 ]
 
 ROOT_URLCONF = 'redeconfianca.urls'

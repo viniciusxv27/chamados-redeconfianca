@@ -523,11 +523,19 @@ def meta_detail(request, meta_id):
                         or meta.colaborador_id == request.user.id
                         or meta.participantes.filter(id=request.user.id).exists())
 
+    pode_editar_participantes = (meta.gestor_id == request.user.id
+                                 or request.user.is_superuser)
+
     context = {
         'meta': meta,
         'itens': itens,
         'pode_mexer_itens': pode_mexer_itens,
         'participantes': meta.participantes.all(),
+        'pode_editar_participantes': pode_editar_participantes,
+        # Só o gestor precisa da lista inteira de gente para o seletor.
+        'candidatos': (get_colaboradores().exclude(id=meta.colaborador_id)
+                       if pode_editar_participantes else None),
+        'participantes_ids': list(meta.participantes.values_list('id', flat=True)),
         'anexos': anexos,
         'comentarios': meta.comentarios.select_related('autor'),
         'is_gestor_da_meta': meta.gestor_id == request.user.id or request.user.is_superuser,
@@ -677,6 +685,56 @@ def _pode_mexer_no_anexo(user, anexo):
     return (user.is_superuser
             or anexo.enviado_por_id == user.id
             or anexo.meta.gestor_id == user.id)
+
+
+@require_POST
+@impulso_member_required
+def meta_participantes_editar(request, meta_id):
+    """Troca quem mais responde pela meta. Só o gestor dela (ou superusuário).
+
+    A troca vira comentário na meta: entrar e sair de uma responsabilidade é o
+    tipo de mudança que ninguém deve descobrir por acaso.
+    """
+    meta = get_object_or_404(Meta, id=meta_id)
+    if not (meta.gestor_id == request.user.id or request.user.is_superuser):
+        messages.error(request, 'Apenas o gestor da meta muda os responsáveis.')
+        return redirect('impulso:meta_detail', meta_id=meta.id)
+
+    antes = set(meta.participantes.values_list('id', flat=True))
+    escolhidos = get_colaboradores().filter(
+        id__in=request.POST.getlist('participantes')).exclude(id=meta.colaborador_id)
+    depois = {u.id for u in escolhidos}
+
+    if antes == depois:
+        messages.info(request, 'Nada mudou nos responsáveis.')
+        return redirect('impulso:meta_detail', meta_id=meta.id)
+
+    meta.participantes.set(escolhidos)
+
+    User = get_user_model()
+    entraram = list(User.objects.filter(id__in=depois - antes))
+    sairam = list(User.objects.filter(id__in=antes - depois))
+
+    if entraram:
+        _notify(entraram, 'Você foi incluído em uma meta',
+                f'"{meta.titulo}" também é sua responsabilidade.',
+                f'/impulso/metas/{meta.id}/')
+    if sairam:
+        _notify(sairam, 'Você saiu de uma meta',
+                f'Você não é mais responsável por "{meta.titulo}".',
+                '/impulso/metas/')
+
+    partes = []
+    if entraram:
+        partes.append('incluiu ' + ', '.join(u.get_full_name() or u.email for u in entraram))
+    if sairam:
+        partes.append('removeu ' + ', '.join(u.get_full_name() or u.email for u in sairam))
+    MetaComentario.objects.create(
+        meta=meta, autor=request.user,
+        mensagem='Responsáveis: ' + ' e '.join(partes) + '.')
+
+    messages.success(request, 'Responsáveis atualizados.')
+    return redirect('impulso:meta_detail', meta_id=meta.id)
 
 
 @require_POST

@@ -26,6 +26,8 @@ urlpatterns = [
          views.meta_anexo_editar, name='meta_anexo_editar'),
     path('metas/<int:meta_id>/anexo/<int:anexo_id>/excluir/',
          views.meta_anexo_excluir, name='meta_anexo_excluir'),
+    path('metas/<int:meta_id>/responsaveis/',
+         views.meta_participantes_editar, name='meta_participantes_editar'),
     path('metas/<int:meta_id>/comentar/', views.meta_add_comentario, name='meta_add_comentario'),
     path('atividades/', views.minhas_atividades, name='minhas_atividades'),
 

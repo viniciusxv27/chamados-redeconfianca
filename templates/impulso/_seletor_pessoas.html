@@ -1,0 +1,127 @@
+{% comment %}
+Seletor de várias pessoas: busca, chips do que já foi escolhido e lista com
+iniciais.
+
+É um <fieldset> de checkboxes de verdade por baixo — sem JavaScript ele vira
+uma lista comum e continua enviando o formulário. O script só acrescenta a
+busca, os chips e o contador.
+
+Parâmetros:
+  nome       — name dos checkboxes (ex.: 'participantes')
+  pessoas    — queryset/lista de usuários
+  escolhidos — lista de ids já marcados (opcional)
+  rotulo     — título do campo
+  ajuda      — texto de apoio (opcional)
+{% endcomment %}
+<div class="imp-pessoas" data-seletor="{{ nome }}">
+    <div class="flex items-center justify-between gap-2 mb-1">
+        <label class="block text-sm font-medium text-gray-700">{{ rotulo }}</label>
+        <span class="text-xs text-gray-400" data-contador></span>
+    </div>
+
+    <div class="border border-gray-300 rounded-lg overflow-hidden bg-white">
+        <div class="flex flex-wrap gap-1.5 p-2 border-b border-gray-100 min-h-[2.75rem]"
+             data-chips>
+            <span class="text-xs text-gray-300 self-center px-1" data-vazio>Ninguém selecionado</span>
+        </div>
+
+        <div class="p-2 border-b border-gray-100">
+            <div class="relative">
+                <i class="fas fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-300 text-xs"></i>
+                <input type="text" data-busca placeholder="Buscar pessoa…"
+                       class="w-full border border-gray-200 rounded-lg pl-8 pr-3 py-1.5 text-sm focus:border-orange-400 focus:outline-none">
+            </div>
+        </div>
+
+        <div class="max-h-56 overflow-y-auto p-1" data-lista>
+            {% for p in pessoas %}
+            <label class="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-orange-50 cursor-pointer"
+                   data-opcao data-nome="{{ p.get_full_name|default:p.email|lower }}">
+                <input type="checkbox" name="{{ nome }}" value="{{ p.id }}"
+                       class="rounded border-gray-300 text-orange-600 focus:ring-orange-400"
+                       data-rotulo="{{ p.get_full_name|default:p.email }}"
+                       {% if p.id in escolhidos %}checked{% endif %}>
+                <span class="w-7 h-7 rounded-full bg-orange-100 text-orange-700 text-[11px] font-bold
+                             flex items-center justify-center flex-shrink-0">
+                    {{ p.get_full_name|default:p.email|slice:":1"|upper }}
+                </span>
+                <span class="text-sm text-gray-700 truncate">{{ p.get_full_name|default:p.email }}</span>
+            </label>
+            {% empty %}
+            <p class="text-xs text-gray-400 px-2 py-3 text-center">Nenhuma pessoa disponível.</p>
+            {% endfor %}
+            <p class="hidden text-xs text-gray-400 px-2 py-3 text-center" data-sem-resultado>
+                Ninguém com esse nome.
+            </p>
+        </div>
+    </div>
+
+    {% if ajuda %}<p class="text-xs text-gray-400 mt-1">{{ ajuda }}</p>{% endif %}
+</div>
+
+<script>
+(function () {
+    document.querySelectorAll('.imp-pessoas').forEach(function (caixa) {
+        if (caixa.dataset.pronto) return;      // o include pode aparecer 2x na página
+        caixa.dataset.pronto = '1';
+
+        var chips = caixa.querySelector('[data-chips]');
+        var vazio = caixa.querySelector('[data-vazio]');
+        var contador = caixa.querySelector('[data-contador]');
+        var busca = caixa.querySelector('[data-busca]');
+        var opcoes = [].slice.call(caixa.querySelectorAll('[data-opcao]'));
+        var semResultado = caixa.querySelector('[data-sem-resultado]');
+
+        function marcados() {
+            return [].slice.call(caixa.querySelectorAll('input[type=checkbox]:checked'));
+        }
+
+        function pintar() {
+            var lista = marcados();
+            chips.querySelectorAll('[data-chip]').forEach(function (c) { c.remove(); });
+
+            lista.forEach(function (inp) {
+                var chip = document.createElement('span');
+                chip.setAttribute('data-chip', '');
+                chip.className = 'inline-flex items-center gap-1.5 pl-2 pr-1 py-1 rounded-full ' +
+                                 'bg-orange-100 text-orange-800 text-xs';
+                chip.textContent = inp.dataset.rotulo;
+
+                var x = document.createElement('button');
+                x.type = 'button';
+                x.className = 'w-4 h-4 rounded-full hover:bg-orange-200 flex items-center justify-center';
+                x.innerHTML = '<i class="fas fa-xmark text-[10px]"></i>';
+                x.title = 'Remover ' + inp.dataset.rotulo;
+                x.addEventListener('click', function () {
+                    inp.checked = false;
+                    pintar();
+                });
+                chip.appendChild(x);
+                chips.appendChild(chip);
+            });
+
+            vazio.classList.toggle('hidden', lista.length > 0);
+            contador.textContent = lista.length
+                ? lista.length + (lista.length === 1 ? ' selecionada' : ' selecionadas')
+                : '';
+        }
+
+        function filtrar() {
+            var termo = (busca.value || '').trim().toLowerCase();
+            var visiveis = 0;
+            opcoes.forEach(function (op) {
+                var bate = !termo || op.dataset.nome.indexOf(termo) !== -1;
+                op.classList.toggle('hidden', !bate);
+                if (bate) visiveis++;
+            });
+            if (semResultado) semResultado.classList.toggle('hidden', visiveis > 0);
+        }
+
+        caixa.addEventListener('change', function (e) {
+            if (e.target.type === 'checkbox') pintar();
+        });
+        if (busca) busca.addEventListener('input', filtrar);
+        pintar();
+    });
+})();
+</script>

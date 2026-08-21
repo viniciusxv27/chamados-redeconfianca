@@ -133,8 +133,48 @@
   function carregar() {
     fetch('/api/tangerino/ponto/status/', {headers: {'X-Requested-With': 'XMLHttpRequest'}})
       .then(function (r) { return r.json(); })
-      .then(pintar)
+      .then(function (d) { pintar(d); avisarSobreOAlmoco(d); })
       .catch(function () { /* silencioso: a home nunca sofre por causa do ponto */ });
+  }
+
+  // Popups do intervalo. Cada aviso aparece uma vez por dia: repetir a cada
+  // clique viraria ruído e a pessoa passaria a fechar sem ler.
+  function avisarSobreOAlmoco(d) {
+    if (!d || !d.avisos || !d.avisos.length) return;
+    var hoje = new Date().toISOString().slice(0, 10);
+    d.avisos.forEach(function (aviso) {
+      var chave = 'tgAviso:' + aviso.chave + ':' + hoje;
+      try { if (localStorage.getItem(chave)) return; } catch (e) { /* sem storage */ }
+      mostrarAviso(aviso, chave);
+    });
+  }
+
+  function mostrarAviso(aviso, chave) {
+    var fundo = document.createElement('div');
+    fundo.className = 'fixed inset-0 z-[9998] bg-black/40 flex items-center justify-center p-4';
+    fundo.innerHTML =
+      '<div class="bg-white rounded-2xl shadow-xl max-w-sm w-full overflow-hidden">' +
+        '<div class="px-5 py-4 bg-amber-50 border-b border-amber-100 text-center">' +
+          '<div class="w-12 h-12 rounded-full bg-amber-100 text-amber-600 mx-auto flex items-center justify-center mb-2">' +
+            '<i class="fas fa-utensils text-xl"></i></div>' +
+          '<h3 class="font-bold text-gray-900">' + aviso.titulo + '</h3>' +
+        '</div>' +
+        '<div class="p-5">' +
+          '<p class="text-sm text-gray-600">' + aviso.texto + '</p>' +
+          '<div class="flex gap-2 mt-4">' +
+            '<a href="/ponto/" class="flex-1 text-center px-4 py-2.5 rounded-lg bg-cyan-600 text-white text-sm font-semibold hover:bg-cyan-700">Ver meu ponto</a>' +
+            '<button type="button" class="px-4 py-2.5 rounded-lg border border-gray-300 text-gray-600 text-sm hover:bg-gray-50" data-fechar>Entendi</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(fundo);
+
+    function fechar() {
+      try { localStorage.setItem(chave, '1'); } catch (e) { /* sem storage */ }
+      fundo.remove();
+    }
+    fundo.querySelector('[data-fechar]').addEventListener('click', fechar);
+    fundo.addEventListener('click', function (e) { if (e.target === fundo) fechar(); });
   }
 
   if (document.readyState === 'loading') {

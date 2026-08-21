@@ -7,6 +7,7 @@ app_name = 'tangerino'
 urlpatterns = [
     # Ponto
     path('ponto/', views.meu_ponto, name='meu_ponto'),
+    path('ponto/bloqueado/', views.bloqueado, name='bloqueado'),
     path('ponto/equipe/', views.ponto_equipe, name='ponto_equipe'),
     path('ponto/folhas/', views.folhas_sincronizadas, name='folhas_sincronizadas'),
 

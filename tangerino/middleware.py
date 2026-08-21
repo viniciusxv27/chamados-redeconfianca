@@ -56,3 +56,123 @@ class BloqueioFeriasMiddleware:
             logger.warning('Bloqueio de férias ignorado por erro: %s', exc)
 
         return self.get_response(request)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Bloqueio por jornada: entrada não batida, almoço em andamento, saída em aberto
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Além dos caminhos de sempre, a tela de bloqueio precisa das APIs de ponto —
+# é por elas que a pessoa registra a marcação que a destrava.
+LIBERADOS_JORNADA = LIBERADOS + (
+    '/ponto/bloqueado', '/api/tangerino/ponto/',
+)
+
+# Quanto tempo a decisão fica em memória do processo. Sem isto, cada clique no
+# portal viraria uma consulta ao Tangerino. Um minuto é curto o bastante para a
+# liberação parecer imediata — e a marcação pelo portal limpa o cache na hora.
+CACHE_DECISAO_SEGUNDOS = 60
+
+
+def _cache():
+    from django.core.cache import caches
+    return caches['local']
+
+
+def chave_da_decisao(user):
+    from django.utils import timezone
+    return f'tangerino:jornada:{user.pk}:{timezone.localdate()}'
+
+
+def limpar_decisao(user):
+    """Chamado depois de bater ponto, para o portal liberar na hora."""
+    try:
+        _cache().delete(chave_da_decisao(user))
+    except Exception:                                  # cache indisponível
+        pass
+
+
+def _trabalha_hoje(user):
+    """A pessoa tem jornada prevista para hoje?
+
+    Quem está na escala "não registra ponto", de folga ou de férias não pode
+    ser travado por não ter batido um ponto que ninguém espera dela.
+    """
+    from django.utils import timezone
+    from .jornada import previsto_no_dia
+    from .models import JornadaTrabalho
+
+    chave = f'tangerino:trabalha:{user.tangerino_employee_id}:{timezone.localdate()}'
+    guardado = _cache().get(chave)
+    if guardado is not None:
+        return guardado
+
+    from .client import listar_funcionarios
+    escala = next((( f.get('currentWorkSchedule') or {}).get('id')
+                   for f in listar_funcionarios()
+                   if f.get('id') == user.tangerino_employee_id), None)
+    jornada = JornadaTrabalho.objects.filter(tangerino_id=escala).first() if escala else None
+    grade = {int(d): s for d, s in (jornada.horas_por_dia or {}).items()} if jornada else {}
+    resposta = bool(previsto_no_dia(grade, timezone.localdate()))
+
+    _cache().set(chave, resposta, 60 * 60)
+    return resposta
+
+
+def decidir_bloqueio(user):
+    """O bloqueio que se aplica a esta pessoa agora, ou None."""
+    from . import ponto as ponto_svc
+    from .models import ConfiguracaoTangerino
+    from .regras_jornada import bloqueio
+
+    config = ConfiguracaoTangerino.get()
+    regras_ligadas = (config.bloquear_sem_entrada or config.bloquear_durante_almoco
+                      or config.bloquear_saida_pendente)
+    if not regras_ligadas or not config.libera(user):
+        return None
+    if not getattr(user, 'tangerino_employee_id', None):
+        return None
+    if not _trabalha_hoje(user):
+        return None
+
+    resumo = ponto_svc.resumo_para_usuario(user)
+    if not resumo.get('disponivel'):                   # API fora: não tranca
+        return None
+    return bloqueio(resumo, resumo.get('pendencias') or [], config)
+
+
+class BloqueioJornadaMiddleware:
+    """Tranca o portal enquanto a jornada do dia estiver irregular.
+
+    Falha aberta em qualquer erro: o preço de deixar de aplicar a regra é bem
+    menor que o de trancar a empresa inteira do lado de fora por um timeout.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        usuario = getattr(request, 'user', None)
+        if usuario is None or not usuario.is_authenticated:
+            return self.get_response(request)
+
+        if any(request.path.startswith(p) for p in LIBERADOS_JORNADA):
+            return self.get_response(request)
+
+        # Quem administra o portal não pode ficar preso do lado de fora — é
+        # quem desliga a regra se ela sair errada.
+        if usuario.is_superuser or getattr(usuario, 'hierarchy', '') == 'SUPERADMIN':
+            return self.get_response(request)
+
+        try:
+            chave = chave_da_decisao(usuario)
+            decisao = _cache().get(chave)
+            if decisao is None:
+                decisao = decidir_bloqueio(usuario) or {}
+                _cache().set(chave, decisao, CACHE_DECISAO_SEGUNDOS)
+            if decisao:
+                return redirect(reverse('tangerino:bloqueado'))
+        except Exception as exc:                       # nunca derruba a navegação
+            logger.warning('Bloqueio de jornada ignorado por erro: %s', exc)
+
+        return self.get_response(request)

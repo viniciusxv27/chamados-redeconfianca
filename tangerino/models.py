@@ -1,3 +1,5 @@
+from datetime import time
+
 from django.conf import settings
 from django.db import models
 
@@ -47,6 +49,37 @@ class ConfiguracaoTangerino(models.Model):
         default=True, verbose_name='Mostrar o popup de férias')
     bloquear_navegacao_ferias = models.BooleanField(
         default=False, verbose_name='Bloquear o portal para quem está de férias')
+
+    # ── Regras de jornada ───────────────────────────────────────────────────
+    # Cada uma tranca a navegação de alguém, então todas nascem desligadas e
+    # são ligadas uma a uma, quando o RH pedir.
+    bloquear_sem_entrada = models.BooleanField(
+        default=False, verbose_name='Bloquear o portal antes da entrada do dia',
+        help_text='Quem ainda não registrou a entrada só vê a tela de aviso.')
+    bloquear_durante_almoco = models.BooleanField(
+        default=False, verbose_name='Bloquear o portal durante o intervalo',
+        help_text='Libera de volta assim que a volta do almoço for registrada.')
+    bloquear_saida_pendente = models.BooleanField(
+        default=False, verbose_name='Bloquear o portal com saída em aberto',
+        help_text='Entrada de um dia anterior sem a saída correspondente.')
+    avisar_almoco = models.BooleanField(
+        default=False, verbose_name='Avisar sobre o intervalo',
+        help_text='Popup de almoço esquecido e de intervalo passando do limite.')
+
+    almoco_minimo_minutos = models.PositiveSmallIntegerField(
+        default=60, verbose_name='Duração mínima do intervalo (minutos)',
+        help_text='A volta do almoço é recusada antes disso.')
+    almoco_maximo_minutos = models.PositiveSmallIntegerField(
+        default=65, verbose_name='Intervalo considerado longo (minutos)',
+        help_text='Acima disso o portal avisa que o almoço passou da hora.')
+    lembrete_almoco_hora = models.TimeField(
+        default=time(16, 0), verbose_name='Hora do lembrete de almoço',
+        help_text='Se não houver saída para o intervalo até esta hora, avisa.')
+    entrada_manha_de = models.TimeField(
+        default=time(7, 0), verbose_name='Entrada da manhã — de',
+        help_text='O lembrete de almoço só vale para quem entrou nesta faixa.')
+    entrada_manha_ate = models.TimeField(
+        default=time(10, 0), verbose_name='Entrada da manhã — até')
 
     atualizado_em = models.DateTimeField(auto_now=True)
     atualizado_por = models.ForeignKey(

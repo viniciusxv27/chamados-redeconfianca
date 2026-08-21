@@ -259,18 +259,49 @@
     {% endif %}
 </div>
 
-{% if participantes %}
+{% if participantes or pode_editar_participantes %}
 <div class="imp-card p-5 mb-4">
-    <h3 class="font-semibold text-gray-800 mb-2">
-        <i class="fas fa-users text-orange-500 mr-2"></i>Também responsáveis
-    </h3>
-    <div class="flex flex-wrap gap-2">
+    <div class="flex items-center justify-between gap-2 mb-2 flex-wrap">
+        <h3 class="font-semibold text-gray-800">
+            <i class="fas fa-users text-orange-500 mr-2"></i>Também responsáveis
+        </h3>
+        {% if pode_editar_participantes %}
+        <button type="button" id="impBotaoResponsaveis"
+                class="text-xs text-orange-600 hover:text-orange-700 font-semibold">
+            <i class="fas fa-pen mr-1"></i>Editar
+        </button>
+        {% endif %}
+    </div>
+
+    <div class="flex flex-wrap gap-2" id="impListaResponsaveis">
         {% for p in participantes %}
         <span class="px-2.5 py-1 rounded-full bg-orange-50 text-orange-700 text-xs">
             {{ p.get_full_name|default:p.email }}
         </span>
+        {% empty %}
+        <span class="text-sm text-gray-400">Só o colaborador principal responde por esta meta.</span>
         {% endfor %}
     </div>
+
+    {% if pode_editar_participantes %}
+    <form method="post" action="{% url 'impulso:meta_participantes_editar' meta.id %}"
+          id="impFormResponsaveis" class="hidden mt-4 pt-4 border-t border-gray-100">
+        {% csrf_token %}
+        {% include 'impulso/_seletor_pessoas.html' with nome='participantes' pessoas=candidatos escolhidos=participantes_ids rotulo='Quem mais responde por esta meta' ajuda='A meta continua no nome do colaborador principal. Quem estiver aqui acompanha e pode marcar os itens do to-do.' %}
+        <div class="flex gap-2 mt-3">
+            <button type="submit" class="px-4 py-2 rounded-lg bg-orange-600 text-white text-sm font-semibold hover:bg-orange-700">
+                Salvar responsáveis
+            </button>
+            <button type="button" id="impCancelaResponsaveis"
+                    class="px-4 py-2 rounded-lg border border-gray-300 text-gray-600 text-sm hover:bg-gray-50">
+                Cancelar
+            </button>
+        </div>
+        <p class="text-xs text-gray-400 mt-2">
+            Quem entrar e quem sair recebe notificação, e a mudança fica registrada nos comentários.
+        </p>
+    </form>
+    {% endif %}
 </div>
 {% endif %}
 
@@ -368,6 +399,27 @@
     document.querySelectorAll('.imp-anexo-cancelar').forEach(function (b) {
         b.addEventListener('click', function () { alterna(b.dataset.alvo, false); });
     });
+
+    // Editar responsáveis: abre o seletor embaixo da lista.
+    var botaoResp = document.getElementById('impBotaoResponsaveis');
+    var formResp = document.getElementById('impFormResponsaveis');
+    var listaResp = document.getElementById('impListaResponsaveis');
+    if (botaoResp && formResp) {
+        botaoResp.addEventListener('click', function () {
+            var abrindo = formResp.classList.contains('hidden');
+            formResp.classList.toggle('hidden', !abrindo);
+            if (listaResp) listaResp.classList.toggle('hidden', abrindo);
+            botaoResp.innerHTML = abrindo
+                ? '<i class="fas fa-xmark mr-1"></i>Fechar'
+                : '<i class="fas fa-pen mr-1"></i>Editar';
+            if (abrindo) {
+                var busca = formResp.querySelector('[data-busca]');
+                if (busca) busca.focus();
+            }
+        });
+        var cancela = document.getElementById('impCancelaResponsaveis');
+        if (cancela) cancela.addEventListener('click', function () { botaoResp.click(); });
+    }
 
     // Mesmo comportamento para os passos do to-do.
     document.querySelectorAll('.imp-passo-editar').forEach(function (b) {

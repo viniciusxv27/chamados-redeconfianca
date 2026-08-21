@@ -1,0 +1,91 @@
+{% extends 'base.html' %}
+{% block title %}Ponto pendente{% endblock %}
+
+{% block content %}
+<div class="max-w-lg mx-auto px-4 py-10">
+  <div class="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+    <div class="px-6 py-5 text-center
+                {% if motivo.motivo == 'EM_ALMOCO' %}bg-amber-50 border-b border-amber-100
+                {% elif motivo.motivo == 'SAIDA_PENDENTE' %}bg-red-50 border-b border-red-100
+                {% else %}bg-cyan-50 border-b border-cyan-100{% endif %}">
+      <div class="w-14 h-14 rounded-full mx-auto flex items-center justify-center mb-3
+                  {% if motivo.motivo == 'EM_ALMOCO' %}bg-amber-100 text-amber-600
+                  {% elif motivo.motivo == 'SAIDA_PENDENTE' %}bg-red-100 text-red-600
+                  {% else %}bg-cyan-100 text-cyan-600{% endif %}">
+        <i class="fas {% if motivo.motivo == 'EM_ALMOCO' %}fa-utensils
+                      {% elif motivo.motivo == 'SAIDA_PENDENTE' %}fa-triangle-exclamation
+                      {% else %}fa-fingerprint{% endif %} text-2xl"></i>
+      </div>
+      <h1 class="text-xl font-bold text-gray-900">{{ motivo.titulo }}</h1>
+      <p class="text-sm text-gray-600 mt-1.5">{{ motivo.texto }}</p>
+    </div>
+
+    <div class="p-6 space-y-4">
+      {% if motivo.motivo == 'EM_ALMOCO' %}
+      <div class="text-center">
+        <p class="text-xs text-gray-400 uppercase font-semibold">Fora há</p>
+        <p class="text-4xl font-bold text-gray-900 tabular-nums" id="tgCronometro"
+           data-minutos="{{ motivo.minutos }}">{{ motivo.minutos }} min</p>
+        {% if motivo.falta_para_o_minimo %}
+        <p class="text-sm text-amber-700 mt-2">
+          <i class="fas fa-hourglass-half mr-1"></i>
+          A volta libera em {{ motivo.falta_para_o_minimo }} minuto(s) —
+          o intervalo precisa ter pelo menos {{ config.almoco_minimo_minutos }} minutos.
+        </p>
+        {% else %}
+        <p class="text-sm text-emerald-700 mt-2">
+          <i class="fas fa-circle-check mr-1"></i>Você já pode registrar a volta.
+        </p>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      {% if pode_bater_ponto %}
+      <a href="{% url 'tangerino:meu_ponto' %}"
+         class="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl
+                bg-cyan-600 hover:bg-cyan-700 text-white font-semibold">
+        <i class="fas fa-fingerprint"></i>
+        {% if motivo.motivo == 'EM_ALMOCO' %}Registrar a volta do intervalo
+        {% elif motivo.motivo == 'SAIDA_PENDENTE' %}Regularizar o ponto em aberto
+        {% else %}Registrar minha entrada{% endif %}
+      </a>
+      {% else %}
+      <div class="rounded-xl bg-gray-50 border border-gray-200 p-4">
+        <p class="text-sm text-gray-600">
+          <i class="fas fa-mobile-screen text-gray-400 mr-1.5"></i>
+          O registro pelo portal está desligado. Bata o ponto no relógio ou no
+          app do Tangerino e use o botão abaixo.
+        </p>
+      </div>
+      {% endif %}
+
+      <a href="?reconferir=1"
+         class="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl
+                border border-gray-300 text-gray-700 font-semibold hover:bg-gray-50">
+        <i class="fas fa-rotate"></i> Já bati — verificar de novo
+      </a>
+
+      <p class="text-xs text-gray-400 text-center">
+        Está travado por engano? Fale com o RH — a regra pode ser desligada em
+        <span class="text-gray-500">Ponto &rsaquo; Configuração</span>.
+      </p>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  // O contador continua andando sem recarregar a página, e a página se
+  // reconfere sozinha de tempos em tempos para liberar assim que a pessoa bate.
+  var alvo = document.getElementById('tgCronometro');
+  if (alvo) {
+    var minutos = parseInt(alvo.dataset.minutos, 10) || 0;
+    setInterval(function () {
+      minutos += 1;
+      alvo.textContent = minutos + ' min';
+    }, 60000);
+  }
+  setTimeout(function () { window.location.search = '?reconferir=1'; }, 90000);
+})();
+</script>
+{% endblock %}

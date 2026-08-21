@@ -117,6 +117,82 @@
         </label>
     </div>
 
+    <div class="border border-amber-200 bg-amber-50/40 rounded-2xl p-4 mb-5">
+        <h3 class="text-sm font-bold text-amber-900 mb-1">
+            <i class="fas fa-lock mr-1.5"></i>Regras de jornada
+        </h3>
+        <p class="text-xs text-amber-800/80 mb-3">
+            Estas chaves <strong>trancam o portal</strong> do colaborador até ele
+            regularizar o ponto. Ligue uma de cada vez. Nunca valem para
+            superusuários, para quem não bate ponto, nem em dia de folga — e se o
+            Tangerino estiver fora do ar, ninguém é trancado.
+        </p>
+
+        <label class="flex items-start gap-3 p-3 rounded-xl hover:bg-white/70 cursor-pointer">
+            <input type="checkbox" name="bloquear_sem_entrada" class="mt-1 rounded border-gray-300" {% if config.bloquear_sem_entrada %}checked{% endif %}>
+            <span>
+                <span class="block text-sm font-medium text-gray-800">Bloquear antes da entrada do dia</span>
+                <span class="block text-xs text-gray-500">Sem a marcação de entrada, o portal não abre.</span>
+            </span>
+        </label>
+        <label class="flex items-start gap-3 p-3 rounded-xl hover:bg-white/70 cursor-pointer">
+            <input type="checkbox" name="bloquear_durante_almoco" class="mt-1 rounded border-gray-300" {% if config.bloquear_durante_almoco %}checked{% endif %}>
+            <span>
+                <span class="block text-sm font-medium text-gray-800">Bloquear durante o intervalo</span>
+                <span class="block text-xs text-gray-500">Libera assim que a volta do almoço for registrada.</span>
+            </span>
+        </label>
+        <label class="flex items-start gap-3 p-3 rounded-xl hover:bg-white/70 cursor-pointer">
+            <input type="checkbox" name="bloquear_saida_pendente" class="mt-1 rounded border-gray-300" {% if config.bloquear_saida_pendente %}checked{% endif %}>
+            <span>
+                <span class="block text-sm font-medium text-gray-800">Bloquear com saída em aberto</span>
+                <span class="block text-xs text-gray-500">Entrada de um dia anterior sem a saída correspondente.</span>
+            </span>
+        </label>
+        <label class="flex items-start gap-3 p-3 rounded-xl hover:bg-white/70 cursor-pointer">
+            <input type="checkbox" name="avisar_almoco" class="mt-1 rounded border-gray-300" {% if config.avisar_almoco %}checked{% endif %}>
+            <span>
+                <span class="block text-sm font-medium text-gray-800">Avisar sobre o intervalo</span>
+                <span class="block text-xs text-gray-500">
+                    Popup de almoço esquecido e de intervalo passando do limite. Só avisa, não tranca.
+                </span>
+            </span>
+        </label>
+
+        <div class="grid grid-cols-2 lg:grid-cols-5 gap-3 mt-3 pt-3 border-t border-amber-200/60">
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Intervalo mínimo (min)</label>
+                <input type="number" name="almoco_minimo_minutos" min="1" max="240"
+                       value="{{ config.almoco_minimo_minutos }}"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Intervalo longo (min)</label>
+                <input type="number" name="almoco_maximo_minutos" min="1" max="240"
+                       value="{{ config.almoco_maximo_minutos }}"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Lembrete às</label>
+                <input type="time" name="lembrete_almoco_hora"
+                       value="{{ config.lembrete_almoco_hora|time:'H:i' }}"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Entrada manhã — de</label>
+                <input type="time" name="entrada_manha_de"
+                       value="{{ config.entrada_manha_de|time:'H:i' }}"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">até</label>
+                <input type="time" name="entrada_manha_ate"
+                       value="{{ config.entrada_manha_ate|time:'H:i' }}"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            </div>
+        </div>
+    </div>
+
     <div class="flex items-center justify-between gap-3 flex-wrap">
         <p class="text-xs text-gray-400">
             {% if config.atualizado_por %}Última alteração por {{ config.atualizado_por.full_name }}{% endif %}
