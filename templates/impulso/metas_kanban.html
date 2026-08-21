@@ -50,101 +50,40 @@
 
         <div class="p-2.5 space-y-2.5 flex-1 kanban-dropzone" data-status="{{ col.status }}"
              {% if col.status == 'CONCLUIDA' %}data-droppable="false"{% else %}data-droppable="true"{% endif %}>
-            {% for m in col.metas %}
-            <div class="kanban-card imp-card p-3.5 {% if col.status != 'CONCLUIDA' %}cursor-grab active:cursor-grabbing{% endif %}"
-                 draggable="{% if col.status == 'CONCLUIDA' %}false{% else %}true{% endif %}" data-meta-id="{{ m.id }}">
-                <div class="flex items-start justify-between gap-2">
-                    <a href="{% url 'impulso:meta_detail' m.id %}" class="text-sm font-semibold text-gray-800 hover:text-orange-600 leading-snug">{{ m.titulo }}</a>
-                    <div class="flex items-center gap-1 flex-shrink-0">
-                        {% if m.tem_novidade %}
-                        {# Aviso de novidade: o gestor vê no card o que mudou desde a última vez #}
-                        <span class="relative flex h-2.5 w-2.5" title="Tem novidade nesta meta">
-                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
-                            <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-orange-500"></span>
-                        </span>
-                        {% endif %}
-                        <span class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{{ m.get_recorrencia_display }}</span>
-                        {% if m.pode_apagar %}
-                        {% with imp=m.impacto_da_exclusao %}
-                        <button type="button" class="imp-excluir w-6 h-6 rounded-md text-gray-300 hover:text-red-600 hover:bg-red-50 flex items-center justify-center transition-colors"
-                                title="Excluir meta"
-                                data-id="{{ m.id }}"
-                                data-titulo="{{ m.titulo }}"
-                                data-colaborador="{{ m.colaborador.get_full_name|default:m.colaborador.email }}"
-                                data-anexos="{{ imp.anexos }}"
-                                data-comentarios="{{ imp.comentarios }}"
-                                data-ocorrencias="{{ imp.ocorrencias }}"
-                                data-avaliada="{% if imp.avaliada %}1{% else %}0{% endif %}">
-                            <i class="fas fa-trash-can text-xs"></i>
-                        </button>
-                        {% endwith %}
-                        {% endif %}
-                    </div>
-                </div>
-
-                {% if is_gestor %}
-                <div class="flex items-center gap-1.5 mt-2">
-                    <span class="w-5 h-5 rounded-full bg-orange-100 text-orange-700 flex items-center justify-center text-[10px] font-bold flex-shrink-0">{{ m.colaborador.get_full_name|default:m.colaborador.email|slice:":1"|upper }}</span>
-                    <span class="text-xs text-gray-500 truncate">{{ m.colaborador.get_full_name|default:m.colaborador.email }}</span>
-                </div>
-                {% endif %}
-
-                {% if m.tem_novidade %}
-                <div class="flex flex-wrap gap-1 mt-2">
-                    {% if m.novidades.entregue %}
-                    <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-800 font-semibold">
-                        <i class="fas fa-inbox mr-0.5"></i>entregue
-                    </span>
-                    {% endif %}
-                    {% if m.novidades.comentarios %}
-                    <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700">
-                        <i class="fas fa-comment mr-0.5"></i>{{ m.novidades.comentarios }} novo{{ m.novidades.comentarios|pluralize }}
-                    </span>
-                    {% endif %}
-                    {% if m.novidades.anexos %}
-                    <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-50 text-violet-700">
-                        <i class="fas fa-paperclip mr-0.5"></i>{{ m.novidades.anexos }} anexo{{ m.novidades.anexos|pluralize }}
-                    </span>
-                    {% endif %}
-                    {% if m.novidades.itens %}
-                    <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700">
-                        <i class="fas fa-check mr-0.5"></i>{{ m.novidades.itens }} item{{ m.novidades.itens|pluralize:"ns" }}
-                    </span>
-                    {% endif %}
-                </div>
-                {% endif %}
-
-                {% if m.total_itens %}
-                <div class="mt-2">
-                    <div class="flex items-center justify-between text-[10px] text-gray-400 mb-1">
-                        <span>To-do</span><span>{{ m.feitos }}/{{ m.total_itens }}</span>
-                    </div>
-                    <div class="imp-bar-track h-1.5">
-                        <div class="imp-bar-fill h-full bg-emerald-500"
-                             style="width: {% widthratio m.feitos m.total_itens 100 %}%"></div>
-                    </div>
-                </div>
-                {% endif %}
-
-                <div class="flex items-center justify-between mt-3 pt-2.5 border-t border-gray-50">
-                    <span class="text-xs tabular-nums {% if m.is_overdue %}text-red-600 font-semibold{% else %}text-gray-400{% endif %}">
-                        <i class="far fa-clock mr-1"></i>{{ m.prazo|date:"d/m" }}
-                        {% if m.is_overdue %}<span class="ml-1">atrasada</span>{% endif %}
-                    </span>
-                    {% if m.is_avaliada %}
-                    <span class="flex items-center gap-1.5 text-xs" title="Qualidade / Prazo">
-                        <span class="inline-flex items-center gap-0.5 text-emerald-600 font-semibold"><i class="fas fa-star text-[10px]"></i>{{ m.nota_qualidade }}</span>
-                        <span class="inline-flex items-center gap-0.5 text-emerald-600 font-semibold"><i class="fas fa-clock text-[10px]"></i>{{ m.nota_prazo }}</span>
-                    </span>
-                    {% endif %}
-                </div>
+            {% if col.grupos %}
+            {% comment %}
+            "A Fazer" agrupada por vencimento: a pergunta de quem abre o Kanban
+            é "o que vence hoje?". Os cartões continuam dentro da dropzone,
+            então arrastar entre colunas segue funcionando.
+            {% endcomment %}
+            {% for g in col.grupos %}
+            <div class="rounded-lg border {{ g.borda }} {{ g.fundo }} px-2.5 py-1.5 flex items-center justify-between">
+                <span class="text-[11px] font-semibold {{ g.cor }}">
+                    <i class="fas {{ g.icone }} mr-1"></i>{{ g.titulo }}
+                </span>
+                <span class="text-[11px] font-bold {{ g.cor }} tabular-nums">{{ g.n }}</span>
             </div>
+            {% for m in g.metas %}
+            {% include "impulso/_card_meta.html" %}
+            {% endfor %}
+            {% endfor %}
+            {% if not col.grupos %}
+            <div class="flex flex-col items-center justify-center py-8 text-center">
+                <i class="fas fa-inbox text-gray-200 text-xl mb-1"></i>
+                <p class="text-xs text-gray-300">Vazio</p>
+            </div>
+            {% endif %}
+
+            {% else %}
+            {% for m in col.metas %}
+            {% include "impulso/_card_meta.html" %}
             {% empty %}
             <div class="flex flex-col items-center justify-center py-8 text-center">
                 <i class="fas fa-inbox text-gray-200 text-xl mb-1"></i>
                 <p class="text-xs text-gray-300">Vazio</p>
             </div>
             {% endfor %}
+            {% endif %}
         </div>
     </div>
     {% endfor %}

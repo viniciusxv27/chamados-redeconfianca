@@ -3,7 +3,7 @@
 Blocos: dashboard, CONFIAR (metas/kanban/feedback), CONECTAR (conteúdos/projeto foco),
 INOVAR (ideias) e ACOMPANHAMENTO (faixas).
 """
-from datetime import date
+from datetime import date, timedelta
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
@@ -131,6 +131,53 @@ def dashboard(request):
 # ---------------------------------------------------------------------------
 # CONFIAR — Metas / Kanban
 # ---------------------------------------------------------------------------
+def _por_prazo(metas, hoje=None):
+    """Reparte as metas em faixas de vencimento, para a pessoa se organizar.
+
+    Não é agenda: é o corte que responde "o que vence hoje, o que vence amanhã
+    e o que já passou do prazo". As faixas vazias não aparecem na tela — uma
+    coluna cheia de títulos sem nada embaixo atrapalha mais do que ajuda.
+    """
+    hoje = hoje or timezone.localdate()
+    amanha = hoje + timedelta(days=1)
+    fim_da_semana = hoje + timedelta(days=7)
+
+    faixas = [
+        {'chave': 'atrasadas', 'titulo': 'Atrasadas', 'icone': 'fa-triangle-exclamation',
+         'cor': 'text-red-700', 'fundo': 'bg-red-50', 'borda': 'border-red-200',
+         'teste': lambda p: p < hoje},
+        {'chave': 'hoje', 'titulo': 'Vence hoje', 'icone': 'fa-bolt',
+         'cor': 'text-orange-700', 'fundo': 'bg-orange-50', 'borda': 'border-orange-200',
+         'teste': lambda p: p == hoje},
+        {'chave': 'amanha', 'titulo': 'Vence amanhã', 'icone': 'fa-sun',
+         'cor': 'text-amber-700', 'fundo': 'bg-amber-50', 'borda': 'border-amber-200',
+         'teste': lambda p: p == amanha},
+        {'chave': 'semana', 'titulo': 'Próximos 7 dias', 'icone': 'fa-calendar-week',
+         'cor': 'text-blue-700', 'fundo': 'bg-blue-50', 'borda': 'border-blue-200',
+         'teste': lambda p: amanha < p <= fim_da_semana},
+        {'chave': 'depois', 'titulo': 'Mais para frente', 'icone': 'fa-calendar',
+         'cor': 'text-gray-500', 'fundo': 'bg-gray-50', 'borda': 'border-gray-200',
+         'teste': lambda p: p > fim_da_semana},
+    ]
+
+    grupos = []
+    for faixa in faixas:
+        do_grupo = sorted((m for m in metas if m.prazo and faixa['teste'](m.prazo)),
+                          key=lambda m: (m.prazo, m.titulo))
+        if not do_grupo:
+            continue
+        for m in do_grupo:
+            m.dias_para_o_prazo = (m.prazo - hoje).days
+        grupos.append(dict(faixa, metas=do_grupo, n=len(do_grupo)))
+
+    sem_prazo = [m for m in metas if not m.prazo]
+    if sem_prazo:
+        grupos.append({'chave': 'sem_prazo', 'titulo': 'Sem prazo', 'icone': 'fa-circle-question',
+                       'cor': 'text-gray-400', 'fundo': 'bg-gray-50', 'borda': 'border-gray-200',
+                       'metas': sem_prazo, 'n': len(sem_prazo)})
+    return grupos
+
+
 @impulso_member_required
 def metas_kanban(request):
     user = request.user
@@ -154,10 +201,15 @@ def metas_kanban(request):
 
     colunas = []
     for status in Meta.KANBAN_STATUSES:
+        do_status = [m for m in metas if m.status == status.value]
         colunas.append({
             'status': status.value,
             'label': status.label,
-            'metas': [m for m in metas if m.status == status.value],
+            'metas': do_status,
+            # A coluna "A Fazer" ganha o corte por prazo: a pergunta de quem
+            # abre o Kanban de manhã é "o que vence hoje?", e uma pilha única
+            # não responde isso.
+            'grupos': _por_prazo(do_status) if status == Meta.Status.A_FAZER else None,
         })
 
     # Contador do sino de solicitações: o gestor vê o que precisa decidir; o
