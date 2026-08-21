@@ -65,6 +65,58 @@
     </div>
 </div>
 
+{% if formal.com_nota %}
+<!-- Nota do feedback formal (módulo /feedback/) -->
+<div class="imp-card p-5 mb-4">
+    <div class="flex items-start justify-between gap-4 flex-wrap mb-3">
+        <div>
+            <h3 class="font-semibold text-gray-800 text-sm">
+                <i class="fas fa-clipboard-check text-emerald-600 mr-1.5"></i>
+                Feedback formal de {{ formal.mes|date:"F/Y" }}
+            </h3>
+            <p class="text-xs text-gray-400 mt-0.5">
+                Vem do módulo <a href="/feedback/" class="text-indigo-600 hover:underline">Feedback</a> (FM-005).
+                É esta nota que vale os {{ formal.pontos }} pontos do Impulso — mínimo {{ formal.minimo }}.
+            </p>
+        </div>
+        <div class="flex items-center gap-6 text-center">
+            <div>
+                <p class="text-2xl font-bold text-gray-900 tabular-nums">{{ formal.com_nota }}</p>
+                <p class="text-[11px] text-gray-400">com nota</p>
+            </div>
+            <div>
+                <p class="text-2xl font-bold text-emerald-600 tabular-nums">{{ formal.atingiram }}</p>
+                <p class="text-[11px] text-gray-400">atingiram</p>
+            </div>
+            {% if formal.media %}
+            <div>
+                <p class="text-2xl font-bold text-gray-700 tabular-nums">{{ formal.media }}</p>
+                <p class="text-[11px] text-gray-400">média</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if formal.sem_registro %}
+    <div class="border-t border-gray-100 pt-3">
+        <p class="text-xs text-gray-500 mb-2">
+            <i class="fas fa-triangle-exclamation text-amber-500 mr-1"></i>
+            Com nota no mês e ainda sem feedback registrado aqui:
+        </p>
+        <div class="flex flex-wrap gap-2">
+            {% for d in formal.sem_registro %}
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border
+                         {% if d.atingiu %}bg-emerald-50 border-emerald-200 text-emerald-800{% else %}bg-amber-50 border-amber-200 text-amber-800{% endif %}">
+                {{ d.colaborador.get_full_name|default:d.colaborador.email }}
+                <strong class="tabular-nums">{{ d.nota }}</strong>
+            </span>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
 {% if resumo.media %}
 <!-- Distribuição das notas -->
 <div class="imp-card p-4 mb-4">
@@ -181,6 +233,23 @@
         </div>
         <p class="text-[11px] {{ faixa.texto }} mt-1.5 font-medium">{{ faixa.rotulo }}</p>
         {% endwith %}
+        {% endif %}
+
+        {% if fb.formal %}
+        <div class="mt-3 rounded-lg px-3 py-2 border {% if fb.formal.atingiu %}bg-emerald-50 border-emerald-100{% else %}bg-amber-50 border-amber-100{% endif %}">
+            <div class="flex items-center justify-between gap-2">
+                <span class="text-[11px] {% if fb.formal.atingiu %}text-emerald-800{% else %}text-amber-800{% endif %} font-semibold">
+                    <i class="fas fa-clipboard-check mr-1"></i>Feedback formal do mês
+                </span>
+                <span class="text-sm font-bold {% if fb.formal.atingiu %}text-emerald-700{% else %}text-amber-700{% endif %} tabular-nums">
+                    {{ fb.formal.nota }}<span class="text-[10px] font-normal">/100</span>
+                </span>
+            </div>
+            <p class="text-[11px] {% if fb.formal.atingiu %}text-emerald-700/80{% else %}text-amber-700/80{% endif %} mt-0.5">
+                {% if fb.formal.atingiu %}garante{% else %}não atinge{% endif %}
+                {{ formal.pontos }} pts · mínimo {{ formal.minimo }}
+            </p>
+        </div>
         {% endif %}
 
         <p class="text-xs text-gray-500 mt-3 line-clamp-3 leading-relaxed">

@@ -194,6 +194,20 @@ def _nota_inovar(user, inicio, fim):
     return p_ideias, PT_IDEIAS, p_aprovada, PT_IDEIA_APROVADA, detalhes
 
 
+def _info_assiduidade(detalhe):
+    """Uma linha explicando de onde saiu a nota de assiduidade."""
+    if detalhe.get('fonte') == 'ponto':
+        if detalhe.get('sem_dias_avaliaveis'):
+            return 'Sem dias de trabalho no mês'
+        return detalhe.get('motivo') or (
+            '%s marcação(ões) esquecida(s) de %s dia(s) úteis' % (
+                detalhe.get('total_falhas', 0), detalhe.get('dias_uteis', 0)))
+    if detalhe.get('sem_folha'):
+        return 'Ponto não sincronizado e folha não importada'
+    return '%s de %s semana(s) com problema' % (
+        detalhe.get('semanas_com_problema', 0), detalhe.get('semanas_avaliadas', 0))
+
+
 # ---------------------------------------------------------------------------
 # Cálculo completo
 # ---------------------------------------------------------------------------
@@ -302,12 +316,12 @@ def linhas_detalhadas(dados):
          'info': ('nota %s (mínimo %s)' % (
              d['feedback'].get('nota'), d['feedback'].get('minimo')))
          if not d['feedback'].get('sem_feedback') else 'Sem feedback no mês'},
-        {'bloco': 'CONFIAR', 'item': 'Assiduidade (folha de ponto)',
+        {'bloco': 'CONFIAR',
+         'item': ('Assiduidade (ponto eletrônico)'
+                  if d['assiduidade'].get('fonte') == 'ponto'
+                  else 'Assiduidade (folha de ponto)'),
          'pontos': dados['p_assiduidade'], 'max': PT_ASSIDUIDADE,
-         'info': ('%s de %s semana(s) com problema' % (
-             d['assiduidade'].get('semanas_com_problema', 0),
-             d['assiduidade'].get('semanas_avaliadas', 0)))
-         if not d['assiduidade'].get('sem_folha') else 'Folha de ponto não importada'},
+         'info': _info_assiduidade(d['assiduidade'])},
         {'bloco': 'CONECTAR', 'item': 'Curso do mês',
          'pontos': dados['p_curso'], 'max': PT_CURSO,
          'info': ('%s de %s concluído(s)' % (

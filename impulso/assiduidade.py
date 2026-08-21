@@ -162,7 +162,20 @@ def avaliar_folha(folha):
 
 
 def nota_assiduidade(user, ano, mes):
-    """(pontos, pontos_aplicaveis, detalhes) da assiduidade no mês."""
+    """(pontos, pontos_aplicaveis, detalhes) da assiduidade no mês.
+
+    O ponto eletrônico manda quando existe: ele é o dado do dia, com a jornada
+    contratada de cada um. A folha em PDF continua respondendo pelos meses em
+    que o ponto ainda não foi sincronizado, para nenhum histórico ficar sem nota.
+    """
+    try:
+        from .assiduidade_ponto import nota_assiduidade_ponto
+        pelo_ponto = nota_assiduidade_ponto(user, ano, mes)
+        if pelo_ponto is not None:
+            return pelo_ponto
+    except Exception:                       # ponto fora do ar não derruba a nota
+        pass
+
     try:
         from folhaponto.models import FolhaPonto
     except Exception:

@@ -10,6 +10,9 @@ urlpatterns = [
     # Endpoint programático (token no header) — antes de <int:pk>/ para não colidir.
     path('api/gasto/', views.api_lancar_gasto, name='api_lancar_gasto'),
     path('<int:pk>/', views.cartao_extrato, name='extrato'),
+    path('<int:pk>/exportar/', views.extrato_exportar, name='extrato_exportar'),
+    path('<int:pk>/fatura/', views.fatura_conciliar, name='fatura_conciliar'),
+    path('<int:pk>/fatura/exportar/', views.fatura_exportar, name='fatura_exportar'),
     path('<int:pk>/gasto/', views.gasto_create, name='gasto_create'),
     path('<int:pk>/gasto/analisar/', views.gasto_analyze, name='gasto_analyze'),
 ]

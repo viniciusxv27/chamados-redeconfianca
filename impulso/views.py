@@ -809,6 +809,66 @@ def feedback_list(request):
         FAIXAS_DA_NOTA['esperado'] if resumo['media'] and resumo['media'] < 9 else
         FAIXAS_DA_NOTA['acima'] if resumo['media'] else None)
 
+    # ── Feedback formal do mês (módulo /feedback/) ──────────────────────────
+    # São dois registros da mesma conversa: aqui fica o texto do gestor, e no
+    # /feedback/ fica o formulário FM-005, que tem as notas. É a nota de lá que
+    # vira ponto de feedback no Impulso — mostrá-la aqui evita abrir outro
+    # módulo só para entender de onde saiu a pontuação.
+    from .scoring import FEEDBACK_NOTA_MINIMA, PT_FEEDBACK, periodo_do_mes
+
+    inicio_mes, fim_mes = periodo_do_mes()
+
+    formais = {}
+    try:
+        from feedback.models import Feedback as FeedbackFormal
+        do_mes = FeedbackFormal.objects.filter(data__gte=inicio_mes, data__lte=fim_mes)
+        if not tudo:
+            # Gestor vê a nota de quem ele acompanha; colaborador, só a sua.
+            alvos = {f.colaborador_id for f in lista}
+            if gestor:
+                alvos |= {u.id for u in get_colaboradores()}
+            alvos.add(user.id)
+            do_mes = do_mes.filter(evaluatee_id__in=alvos)
+
+        for fb in (do_mes
+                   .select_related('evaluatee', 'evaluator')
+                   .order_by('-data', '-created_at')):
+            media = fb.average_score()
+            if media is None:
+                continue
+            nota = round(float(media) * 10, 1)             # escala 0-10 -> 0-100
+            anterior = formais.get(fb.evaluatee_id)
+            # Mesma regra da pontuação: vale a melhor nota do mês.
+            if anterior and anterior['nota'] >= nota:
+                continue
+            formais[fb.evaluatee_id] = {
+                'colaborador': fb.evaluatee, 'feedback': fb,
+                'media': media, 'nota': nota,
+                'atingiu': nota >= FEEDBACK_NOTA_MINIMA,
+                'pontos': PT_FEEDBACK if nota >= FEEDBACK_NOTA_MINIMA else 0,
+            }
+    except Exception:                                       # módulo indisponível
+        formais = {}
+
+    for f in lista:
+        f.formal = formais.get(f.colaborador_id)
+
+    com_nota = list(formais.values())
+    resumo_formal = {
+        'com_nota': len(com_nota),
+        'atingiram': sum(1 for d in com_nota if d['atingiu']),
+        'media': round(sum(d['nota'] for d in com_nota) / len(com_nota), 1)
+        if com_nota else None,
+        'minimo': FEEDBACK_NOTA_MINIMA,
+        'pontos': PT_FEEDBACK,
+        'mes': inicio_mes,
+        # Tem nota no mês e ainda não tem feedback do Impulso registrado.
+        'sem_registro': sorted(
+            (d for uid, d in formais.items()
+             if uid not in {f.colaborador_id for f in lista}),
+            key=lambda d: -d['nota'])[:12],
+    }
+
     # Opções dos filtros saem do universo visível, não da lista já filtrada —
     # senão, ao escolher alguém, os outros sumiriam do próprio seletor.
     universo = (ImpulsoFeedback.objects.all() if tudo
@@ -817,6 +877,7 @@ def feedback_list(request):
     context = {
         'feedbacks': lista,
         'resumo': resumo,
+        'formal': resumo_formal,
         'is_gestor': gestor,
         've_tudo': tudo,
         'colaboradores': (User.objects.filter(

@@ -25,13 +25,121 @@
     {% endif %}
   </div>
 
-  {% if is_superadmin and cartoes %}
-  <div class="mb-6 inline-flex items-center gap-3 bg-white border border-gray-200 rounded-lg px-5 py-3 shadow-sm">
-    <i class="fas fa-coins text-amber-500 text-xl"></i>
-    <div>
-      <p class="text-xs text-gray-500 uppercase font-semibold">Total lançado (todos os cartões)</p>
-      <p class="text-xl font-bold text-gray-900">R$ {{ total_geral|floatformat:2 }}</p>
+  <!-- Filtros -->
+  <form method="get" class="bg-white border border-gray-200 rounded-xl p-4 mb-5 shadow-sm">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 items-end">
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 mb-1">De</label>
+        <input type="date" name="de" value="{{ inicio|date:'Y-m-d' }}"
+               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 mb-1">Até</label>
+        <input type="date" name="ate" value="{{ fim|date:'Y-m-d' }}"
+               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+      </div>
+      {% if is_superadmin %}
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 mb-1">Responsável</label>
+        <select name="responsavel" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+          <option value="">Todos</option>
+          {% for r in responsaveis %}
+          <option value="{{ r.id }}" {% if filtro.responsavel == r.id|stringformat:"s" %}selected{% endif %}>{{ r.full_name|default:r.email }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 mb-1">Bandeira</label>
+        <select name="bandeira" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+          <option value="">Todas</option>
+          {% for valor, rotulo in bandeiras %}
+          <option value="{{ valor }}" {% if filtro.bandeira == valor %}selected{% endif %}>{{ rotulo }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 mb-1">Situação</label>
+        <select name="situacao" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+          <option value="">Todas</option>
+          <option value="ativos" {% if filtro.situacao == 'ativos' %}selected{% endif %}>Ativos</option>
+          <option value="inativos" {% if filtro.situacao == 'inativos' %}selected{% endif %}>Inativos</option>
+        </select>
+      </div>
+      <div class="flex gap-2">
+        <input type="text" name="q" value="{{ filtro.q }}" placeholder="Apelido, final, pessoa…"
+               class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        <button class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-semibold whitespace-nowrap">
+          <i class="fas fa-filter"></i>
+        </button>
+      </div>
     </div>
+    {% if filtro.q or filtro.bandeira or filtro.situacao or filtro.responsavel %}
+    <a href="{% url 'cartoes:dashboard' %}" class="inline-block mt-3 text-xs text-gray-500 hover:text-purple-700">
+      <i class="fas fa-xmark mr-1"></i>limpar filtros
+    </a>
+    {% endif %}
+  </form>
+
+  <!-- Mini dashboard do período -->
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+    <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+      <p class="text-xs text-gray-500 uppercase font-semibold">Gasto no período</p>
+      <p class="text-2xl font-bold text-gray-900 mt-1">R$ {{ total_geral|floatformat:2 }}</p>
+      <p class="text-[11px] text-gray-400 mt-0.5">{{ inicio|date:"d/m/Y" }} a {{ fim|date:"d/m/Y" }}</p>
+    </div>
+    <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+      <p class="text-xs text-gray-500 uppercase font-semibold">Lançamentos</p>
+      <p class="text-2xl font-bold text-gray-900 mt-1">{{ quantidade_gastos }}</p>
+      <p class="text-[11px] text-gray-400 mt-0.5">em {{ cartoes|length }} cartão(ões)</p>
+    </div>
+    <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+      <p class="text-xs text-gray-500 uppercase font-semibold">Ticket médio</p>
+      <p class="text-2xl font-bold text-gray-900 mt-1">R$ {{ ticket_medio|floatformat:2 }}</p>
+    </div>
+    <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+      <p class="text-xs text-gray-500 uppercase font-semibold">Sem comprovante</p>
+      <p class="text-2xl font-bold {% if sem_comprovante %}text-amber-600{% else %}text-emerald-600{% endif %} mt-1">{{ sem_comprovante }}</p>
+      <p class="text-[11px] text-gray-400 mt-0.5">gastos sem foto anexada</p>
+    </div>
+  </div>
+
+  {% if por_categoria or ultimos %}
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+    {% if por_categoria %}
+    <div class="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+      <h2 class="text-sm font-bold text-gray-800 mb-3"><i class="fas fa-chart-simple text-purple-600 mr-1.5"></i>Onde foi o dinheiro</h2>
+      <div class="space-y-2.5">
+        {% for c in por_categoria %}
+        <div>
+          <div class="flex items-center justify-between text-xs mb-1">
+            <span class="text-gray-700 truncate">{{ c.categoria_gasto }}</span>
+            <span class="text-gray-900 font-semibold whitespace-nowrap ml-2">R$ {{ c.total|floatformat:2 }}</span>
+          </div>
+          <div class="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+            <div class="h-full bg-purple-500 rounded-full" style="width: {{ c.fatia }}%"></div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+    {% if ultimos %}
+    <div class="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+      <h2 class="text-sm font-bold text-gray-800 mb-3"><i class="fas fa-clock-rotate-left text-purple-600 mr-1.5"></i>Últimos lançamentos</h2>
+      <div class="divide-y divide-gray-50">
+        {% for g in ultimos %}
+        <a href="{% url 'cartoes:extrato' g.cartao_id %}" class="flex items-center justify-between gap-3 py-2 hover:bg-gray-50 -mx-2 px-2 rounded">
+          <span class="min-w-0">
+            <span class="block text-sm text-gray-800 truncate">{{ g.estabelecimento|default:"Sem estabelecimento" }}</span>
+            <span class="block text-[11px] text-gray-400">{{ g.data_gasto|date:"d/m/Y" }} · ••••{{ g.cartao.last4 }}{% if g.criado_por %} · {{ g.criado_por.full_name }}{% endif %}</span>
+          </span>
+          <span class="text-sm font-semibold text-gray-900 whitespace-nowrap">R$ {{ g.valor|floatformat:2 }}</span>
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
   </div>
   {% endif %}
 

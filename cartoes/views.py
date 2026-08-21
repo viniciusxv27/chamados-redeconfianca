@@ -2,6 +2,8 @@ import hmac
 import json
 import os
 import re
+import logging
+from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 from urllib.error import URLError
 from urllib.request import Request, urlopen
@@ -10,7 +12,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.files.base import ContentFile
-from django.db.models import Count, Sum
+from django.db.models import Count, Q, Sum
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -22,6 +24,8 @@ from tickets.models import Category, Ticket, TicketAttachment, TicketLog
 from users.models import User
 
 from .ai import analyze_expense
+from .exportacao import conciliacao_excel, extrato_excel
+from .fatura import TOLERANCIA_DIAS, conciliar, ler_fatura
 from .models import Cartao, Gasto
 from .permissions import (
     can_access_cartoes,
@@ -29,6 +33,8 @@ from .permissions import (
     cartoes_do_usuario,
     is_superadmin,
 )
+
+logger = logging.getLogger(__name__)
 
 CARTAO_CATEGORY_ID = 99
 
@@ -50,22 +56,83 @@ def _parse_valor(raw):
         return None
 
 
+def _periodo_do_request(request, padrao_dias=90):
+    """Início e fim vindos da querystring, com um padrão sensato."""
+    hoje = timezone.localdate()
+    inicio = parse_date(request.GET.get('de') or '') or (hoje - timedelta(days=padrao_dias))
+    fim = parse_date(request.GET.get('ate') or '') or hoje
+    if inicio > fim:
+        inicio, fim = fim, inicio
+    return inicio, fim
+
+
 @login_required
 def dashboard(request):
     if not can_access_cartoes(request.user):
         messages.error(request, 'Acesso restrito ao módulo de Cartões.')
         return redirect('home')
 
-    cartoes = list(
-        cartoes_do_usuario(request.user).annotate(
-            total_gasto=Sum('gastos__valor'),
-            num_gastos=Count('gastos'),
-        )
-    )
+    inicio, fim = _periodo_do_request(request)
+    visiveis = cartoes_do_usuario(request.user)
+
+    # Filtros da tela. O período vale para os números; responsável, bandeira e
+    # situação recortam quais cartões aparecem.
+    responsavel_id = request.GET.get('responsavel') or ''
+    bandeira = request.GET.get('bandeira') or ''
+    situacao = request.GET.get('situacao') or ''
+    busca = (request.GET.get('q') or '').strip()
+
+    if responsavel_id.isdigit():
+        visiveis = visiveis.filter(responsavel_id=int(responsavel_id))
+    if bandeira in dict(Cartao.BANDEIRA_CHOICES):
+        visiveis = visiveis.filter(bandeira=bandeira)
+    if situacao == 'ativos':
+        visiveis = visiveis.filter(ativo=True)
+    elif situacao == 'inativos':
+        visiveis = visiveis.filter(ativo=False)
+    if busca:
+        visiveis = visiveis.filter(
+            Q(apelido__icontains=busca) | Q(last4__icontains=busca)
+            | Q(responsavel__first_name__icontains=busca)
+            | Q(responsavel__last_name__icontains=busca))
+
+    no_periodo = Q(gastos__data_gasto__gte=inicio, gastos__data_gasto__lte=fim)
+    cartoes = list(visiveis.annotate(
+        total_gasto=Sum('gastos__valor', filter=no_periodo),
+        num_gastos=Count('gastos', filter=no_periodo),
+    ))
+
+    gastos = Gasto.objects.filter(
+        cartao__in=[c.id for c in cartoes], data_gasto__gte=inicio, data_gasto__lte=fim)
+
+    resumo = gastos.aggregate(total=Sum('valor'), quantidade=Count('id'))
+    total = resumo['total'] or Decimal('0')
+    quantidade = resumo['quantidade'] or 0
+
+    por_categoria = list(
+        gastos.exclude(categoria_gasto='')
+        .values('categoria_gasto').annotate(total=Sum('valor'), n=Count('id'))
+        .order_by('-total')[:6])
+    maior = total and max((c['total'] for c in por_categoria), default=Decimal('0'))
+    for linha in por_categoria:
+        linha['fatia'] = round(linha['total'] / maior * 100) if maior else 0
+
     context = {
         'cartoes': cartoes,
         'is_superadmin': is_superadmin(request.user),
-        'total_geral': sum((c.total_gasto or 0) for c in cartoes),
+        'total_geral': total,
+        'quantidade_gastos': quantidade,
+        'ticket_medio': (total / quantidade) if quantidade else Decimal('0'),
+        'sem_comprovante': gastos.filter(foto='').count(),
+        'por_categoria': por_categoria,
+        'ultimos': list(gastos.select_related('cartao', 'criado_por')
+                        .order_by('-data_gasto', '-created_at')[:8]),
+        'inicio': inicio, 'fim': fim,
+        'responsaveis': User.objects.filter(cartoes__isnull=False).distinct()
+                                    .order_by('first_name', 'last_name'),
+        'bandeiras': Cartao.BANDEIRA_CHOICES,
+        'filtro': {'responsavel': responsavel_id, 'bandeira': bandeira,
+                   'situacao': situacao, 'q': busca},
     }
     return render(request, 'cartoes/dashboard.html', context)
 
@@ -141,6 +208,142 @@ def cartao_extrato(request, pk):
         'is_superadmin': is_superadmin(request.user),
     }
     return render(request, 'cartoes/extrato.html', context)
+
+
+@login_required
+def extrato_exportar(request, pk):
+    """Extrato do cartão em Excel, no período escolhido."""
+    cartao = get_object_or_404(Cartao, pk=pk)
+    if not can_manage_cartao(request.user, cartao):
+        messages.error(request, 'Você não tem acesso a este cartão.')
+        return redirect('cartoes:dashboard')
+
+    inicio, fim = _periodo_do_request(request, padrao_dias=365)
+    gastos = (cartao.gastos.select_related('criado_por', 'ticket')
+              .filter(data_gasto__gte=inicio, data_gasto__lte=fim)
+              .order_by('data_gasto', 'id'))
+    return extrato_excel(cartao, list(gastos), inicio, fim)
+
+
+def _fatura_da_sessao(request, cartao):
+    """Relatório guardado na sessão pela última conciliação deste cartão.
+
+    A conciliação não grava nada: é uma conferência. Guardar na sessão evita
+    pedir o PDF de novo só para exportar o mesmo relatório em Excel.
+    """
+    guardado = (request.session.get('cartoes_conciliacao') or {}).get(str(cartao.pk))
+    if not guardado:
+        return None
+    try:
+        referencia = date.fromisoformat(guardado['referencia'])
+        lancamentos = [{
+            'last4': i['last4'],
+            'data': date.fromisoformat(i['data']),
+            'estabelecimento': i['estabelecimento'],
+            'valor': Decimal(i['valor']),
+            'parcela': i.get('parcela', ''),
+        } for i in guardado['lancamentos']]
+    except (KeyError, ValueError, TypeError, InvalidOperation):
+        return None
+    return referencia, lancamentos
+
+
+def _guardar_fatura(request, cartao, referencia, lancamentos):
+    guardadas = request.session.get('cartoes_conciliacao') or {}
+    guardadas[str(cartao.pk)] = {
+        'referencia': referencia.isoformat(),
+        'lancamentos': [{
+            'last4': i['last4'], 'data': i['data'].isoformat(),
+            'estabelecimento': i['estabelecimento'], 'valor': str(i['valor']),
+            'parcela': i['parcela'],
+        } for i in lancamentos],
+    }
+    request.session['cartoes_conciliacao'] = guardadas
+
+
+def _gastos_do_periodo(cartao, lancamentos):
+    """Gastos do portal na janela coberta pela fatura, com folga da tolerância."""
+    if not lancamentos:
+        return []
+    datas = [i['data'] for i in lancamentos]
+    folga = timedelta(days=TOLERANCIA_DIAS)
+    return list(cartao.gastos.select_related('criado_por')
+                .filter(data_gasto__gte=min(datas) - folga,
+                        data_gasto__lte=max(datas) + folga)
+                .order_by('data_gasto', 'id'))
+
+
+@login_required
+def fatura_conciliar(request, pk):
+    """Sobe a fatura em PDF e mostra o que bate, o que diverge e o que falta."""
+    cartao = get_object_or_404(Cartao, pk=pk)
+    if not can_manage_cartao(request.user, cartao):
+        messages.error(request, 'Você não tem acesso a este cartão.')
+        return redirect('cartoes:dashboard')
+
+    contexto = {'cartao': cartao, 'is_superadmin': is_superadmin(request.user),
+                'hoje': timezone.localdate()}
+
+    if request.method == 'POST':
+        arquivo = request.FILES.get('fatura')
+        if not arquivo:
+            messages.error(request, 'Escolha o PDF da fatura.')
+            return redirect('cartoes:fatura_conciliar', pk=cartao.pk)
+
+        referencia = parse_date(request.POST.get('referencia') or '') or \
+            timezone.localdate().replace(day=1)
+
+        try:
+            leitura = ler_fatura(arquivo, referencia=referencia)
+        except Exception as exc:
+            logger.warning('Falha lendo a fatura do cartão %s: %s', cartao.pk, exc)
+            messages.error(request, f'Não consegui ler esta fatura: {exc}')
+            return redirect('cartoes:fatura_conciliar', pk=cartao.pk)
+
+        do_cartao = [i for i in leitura['lancamentos'] if i['last4'] == cartao.last4]
+        conferencia = leitura['cartoes'].get(cartao.last4)
+
+        if not do_cartao:
+            messages.warning(
+                request,
+                f'A fatura não tem lançamentos do final {cartao.last4}. '
+                f'Cartões encontrados no arquivo: '
+                f"{', '.join(sorted(leitura['cartoes'])) or 'nenhum'}.")
+            return redirect('cartoes:fatura_conciliar', pk=cartao.pk)
+
+        _guardar_fatura(request, cartao, referencia, do_cartao)
+        contexto.update({
+            'relatorio': conciliar(do_cartao, _gastos_do_periodo(cartao, do_cartao)),
+            'referencia': referencia,
+            'conferencia': conferencia,
+            'arquivo': arquivo.name,
+        })
+        if conferencia and not conferencia['confere']:
+            messages.warning(
+                request,
+                'A soma dos lançamentos lidos não bateu com o total que a fatura '
+                f"declara para o final {cartao.last4} (diferença de "
+                f"R$ {conferencia['diferenca']}). Confira o relatório antes de usá-lo.")
+
+    return render(request, 'cartoes/fatura_conciliar.html', contexto)
+
+
+@login_required
+def fatura_exportar(request, pk):
+    """Exporta em Excel a última conciliação feita para este cartão."""
+    cartao = get_object_or_404(Cartao, pk=pk)
+    if not can_manage_cartao(request.user, cartao):
+        messages.error(request, 'Você não tem acesso a este cartão.')
+        return redirect('cartoes:dashboard')
+
+    guardado = _fatura_da_sessao(request, cartao)
+    if not guardado:
+        messages.error(request, 'Envie a fatura primeiro para gerar o relatório.')
+        return redirect('cartoes:fatura_conciliar', pk=cartao.pk)
+
+    referencia, lancamentos = guardado
+    relatorio = conciliar(lancamentos, _gastos_do_periodo(cartao, lancamentos))
+    return conciliacao_excel(cartao, relatorio, referencia)
 
 
 @login_required
