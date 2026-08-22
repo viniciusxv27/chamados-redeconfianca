@@ -8,6 +8,7 @@ urlpatterns = [
     path('', views.dashboard, name='dashboard'),
     path('nova/', views.venda_create, name='venda_create'),
     path('exportar/', views.venda_export, name='venda_export'),
+    path('cliente/', views.cliente_historico, name='cliente_historico'),
     path('precos/', views.precos, name='precos'),
     path('precos/buscar/', views.precos_buscar, name='precos_buscar'),
     path('precos/importar/', views.precos_import, name='precos_import'),

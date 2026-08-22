@@ -41,8 +41,13 @@
                 </div>
                 <div class="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                        <label class="vd-rotulo">Data da venda <span class="text-red-500">*</span></label>
-                        <input type="datetime-local" name="data_venda" required class="vd-campo">
+                        <label class="vd-rotulo">Data da venda</label>
+                        <div class="relative">
+                            <i class="fas fa-lock absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 text-xs"></i>
+                            <input type="text" value="{{ agora|date:'d/m/Y H:i' }}" readonly
+                                   class="vd-campo bg-gray-50 text-gray-600 cursor-not-allowed pr-9">
+                        </div>
+                        <p class="vd-ajuda">A venda é registrada com a data de hoje.</p>
                     </div>
                     <div>
                         <label class="vd-rotulo">Comprovante fiscal</label>
@@ -51,21 +56,36 @@
                         </select>
                     </div>
                     <div>
-                        <label class="vd-rotulo">Loja / PDV</label>
-                        <select name="loja" class="vd-campo">
-                            <option value="">Selecione…</option>
-                            {% for l in lojas %}<option value="{{ l.id }}">{{ l.name }}</option>{% endfor %}
+                        <label class="vd-rotulo">Loja / PDV {% if not is_superadmin %}<span class="text-red-500">*</span>{% endif %}</label>
+                        <select name="loja" class="vd-campo" {% if not is_superadmin %}required{% endif %}>
+                            {% if lojas|length != 1 %}<option value="">Selecione…</option>{% endif %}
+                            {% for l in lojas %}<option value="{{ l.id }}" {% if lojas|length == 1 %}selected{% endif %}>{{ l.name }}</option>{% endfor %}
                         </select>
+                        {% if not lojas %}
+                        <p class="vd-ajuda text-amber-600">
+                            <i class="fas fa-triangle-exclamation mr-1"></i>Você não está lotado em nenhum setor — fale com o RH.
+                        </p>
+                        {% elif not is_superadmin %}
+                        <p class="vd-ajuda">Apenas os seus setores.</p>
+                        {% endif %}
                     </div>
                     <div>
                         <label class="vd-rotulo">Vendedor</label>
+                        {% if is_superadmin %}
                         <select name="vendedor" class="vd-campo">
-                            <option value="">Selecione…</option>
                             {% for v in vendedores %}
                             <option value="{{ v.id }}" {% if v.id == request.user.id %}selected{% endif %}>{{ v.full_name|default:v.email }}</option>
                             {% endfor %}
                         </select>
-                        <p class="vd-ajuda">Vem preenchido com você.</p>
+                        <p class="vd-ajuda">Como administrador, você pode lançar no nome de outra pessoa.</p>
+                        {% else %}
+                        <div class="relative">
+                            <i class="fas fa-lock absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 text-xs"></i>
+                            <input type="text" value="{{ request.user.full_name|default:request.user.email }}" readonly
+                                   class="vd-campo bg-gray-50 text-gray-600 cursor-not-allowed pr-9">
+                        </div>
+                        <p class="vd-ajuda">A venda sai no seu nome.</p>
+                        {% endif %}
                     </div>
                     <div>
                         <label class="vd-rotulo">PDV (texto livre)</label>
@@ -101,8 +121,14 @@
                     </div>
                     <div>
                         <label class="vd-rotulo">CPF / CNPJ</label>
-                        <input type="text" name="cliente_cpf" maxlength="20" class="vd-campo" inputmode="numeric">
+                        <div class="relative">
+                            <input type="text" name="cliente_cpf" id="vdCpf" maxlength="20" class="vd-campo pr-9"
+                                   inputmode="numeric" autocomplete="off" placeholder="000.000.000-00">
+                            <i id="vdCpfIcone" class="hidden fas fa-spinner fa-spin absolute right-3 top-1/2 -translate-y-1/2 text-purple-400 text-xs"></i>
+                        </div>
+                        <p class="vd-ajuda">Ao completar, procuramos compras anteriores deste cliente.</p>
                     </div>
+                    <div class="sm:col-span-3" id="vdHistorico"></div>
                     <div class="sm:col-span-3">
                         <label class="vd-rotulo">Tipo de venda</label>
                         <input type="text" name="tipo_venda" maxlength="80" class="vd-campo" placeholder="Ex.: Migração, Nova linha, Portabilidade">
@@ -410,6 +436,137 @@
   }
   setupAC(document.querySelector('[data-item="produto"] [data-f="nome_produto"]'), 'produto');
   setupAC(document.querySelector('[data-item="servico"] [data-f="servico"]'), 'servico');
+
+  // ---- Histórico do cliente (MySQL do Vivo GO) ----
+  // A consulta varre a tabela inteira e leva segundos, então só dispara com o
+  // documento completo — e uma vez por documento, não a cada tecla.
+  (function () {
+    var campo = document.getElementById('vdCpf');
+    var painel = document.getElementById('vdHistorico');
+    var girando = document.getElementById('vdCpfIcone');
+    if (!campo || !painel) return;
+
+    var ultimoConsultado = '';
+    var dadosAtuais = null;
+
+    function digitos(v) { return String(v || '').replace(/\D/g, ''); }
+
+    campo.addEventListener('input', function () {
+      var d = digitos(campo.value);
+      if (d.length !== 11 && d.length !== 14) {
+        painel.innerHTML = '';
+        ultimoConsultado = '';
+        return;
+      }
+      if (d === ultimoConsultado) return;
+      ultimoConsultado = d;
+      procurar(d);
+    });
+
+    function procurar(d) {
+      girando.classList.remove('hidden');
+      painel.innerHTML = '';
+      fetch('{% url "vendas:cliente_historico" %}?cpf=' + encodeURIComponent(d),
+            { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+        .then(function (r) { return r.json(); })
+        .then(function (dados) {
+          girando.classList.add('hidden');
+          dadosAtuais = dados;
+          pintar(dados);
+        })
+        .catch(function () {
+          girando.classList.add('hidden');
+          // Falhar aqui não pode atrapalhar quem está lançando a venda.
+          painel.innerHTML = '';
+        });
+    }
+
+    function pintar(d) {
+      if (!d.disponivel) {
+        painel.innerHTML = '<div class="rounded-xl bg-gray-50 border border-gray-200 p-3 text-xs text-gray-500">' +
+          '<i class="fas fa-plug-circle-xmark mr-1"></i>Não consegui consultar o histórico agora. ' +
+          'Pode seguir com a venda normalmente.</div>';
+        return;
+      }
+      if (!d.encontrado) {
+        painel.innerHTML = '<div class="rounded-xl bg-blue-50 border border-blue-100 p-3 text-xs text-blue-800">' +
+          '<i class="fas fa-user-plus mr-1"></i><strong>Cliente novo.</strong> ' +
+          'Nenhuma compra encontrada para este documento.</div>';
+        return;
+      }
+
+      painel.innerHTML =
+        '<div class="rounded-xl bg-emerald-50 border border-emerald-200 p-3.5">' +
+          '<div class="flex items-start justify-between gap-3 flex-wrap">' +
+            '<div class="min-w-0">' +
+              '<p class="text-sm font-semibold text-emerald-900">' +
+                '<i class="fas fa-user-check mr-1.5"></i>Cliente já comprou na rede' +
+              '</p>' +
+              '<p class="text-xs text-emerald-800/80 mt-0.5">' +
+                (d.nome ? esc(d.nome) + ' · ' : '') +
+                '<strong>' + d.total + '</strong> compra' + (d.total === 1 ? '' : 's') +
+                ' · de ' + d.primeira + ' a ' + d.ultima +
+              '</p>' +
+            '</div>' +
+            '<button type="button" id="vdVerCompras" ' +
+                    'class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold whitespace-nowrap">' +
+              '<i class="fas fa-list mr-1"></i>Ver compras' +
+            '</button>' +
+          '</div>' +
+        '</div>';
+
+      // Preenche o nome do cliente se ainda estiver vazio.
+      var campoNome = document.querySelector('input[name="cliente_nome"]');
+      if (campoNome && !campoNome.value && d.nome) campoNome.value = d.nome;
+
+      document.getElementById('vdVerCompras').addEventListener('click', abrirCompras);
+    }
+
+    function abrirCompras() {
+      if (!dadosAtuais || !dadosAtuais.compras) return;
+      var linhas = dadosAtuais.compras.map(function (c) {
+        return '<tr class="border-t border-gray-50">' +
+          '<td class="px-3 py-2 text-gray-600 whitespace-nowrap">' + esc(c.data) + '</td>' +
+          '<td class="px-3 py-2 text-gray-800">' + esc(c.item) +
+            '<span class="block text-[10px] text-gray-400">' + esc(c.tipo) + ' · ' + esc(c.pdv) + '</span></td>' +
+          '<td class="px-3 py-2 text-center text-gray-500">' + (c.qtde || 1) + '</td>' +
+          '<td class="px-3 py-2 text-right font-semibold text-gray-900 whitespace-nowrap">R$ ' + brl(c.valor) + '</td>' +
+        '</tr>';
+      }).join('');
+
+      var fundo = document.createElement('div');
+      fundo.className = 'fixed inset-0 z-[9999] bg-black/40 flex items-center justify-center p-4';
+      fundo.innerHTML =
+        '<div class="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">' +
+          '<div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between gap-3">' +
+            '<div class="min-w-0">' +
+              '<h3 class="font-bold text-gray-900 truncate">' + esc(dadosAtuais.nome || 'Cliente') + '</h3>' +
+              '<p class="text-xs text-gray-400">' + esc(dadosAtuais.cpf) + ' · ' + dadosAtuais.total + ' compra(s)</p>' +
+            '</div>' +
+            '<button type="button" data-fechar class="w-8 h-8 rounded-lg text-gray-400 hover:bg-gray-100">' +
+              '<i class="fas fa-xmark"></i></button>' +
+          '</div>' +
+          '<div class="overflow-y-auto">' +
+            '<table class="min-w-full text-sm">' +
+              '<thead class="bg-gray-50 text-gray-500 text-xs uppercase sticky top-0">' +
+                '<tr><th class="text-left px-3 py-2 font-medium">Data</th>' +
+                '<th class="text-left px-3 py-2 font-medium">Item</th>' +
+                '<th class="text-center px-3 py-2 font-medium">Qtde</th>' +
+                '<th class="text-right px-3 py-2 font-medium">Valor</th></tr>' +
+              '</thead><tbody>' + linhas + '</tbody>' +
+            '</table>' +
+          '</div>' +
+          '<div class="px-5 py-3 border-t border-gray-100 text-right">' +
+            '<button type="button" data-fechar class="px-4 py-2 rounded-lg border border-gray-300 text-gray-600 text-sm font-semibold hover:bg-gray-50">Fechar</button>' +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(fundo);
+      fundo.querySelectorAll('[data-fechar]').forEach(function (b) {
+        b.addEventListener('click', function () { fundo.remove(); });
+      });
+      fundo.addEventListener('click', function (e) { if (e.target === fundo) fundo.remove(); });
+    }
+  })();
 })();
 </script>
 {% endblock %}

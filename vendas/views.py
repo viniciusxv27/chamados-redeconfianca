@@ -11,7 +11,7 @@ from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db import transaction
 from django.db.models import Count, DecimalField, F, Q, Sum
 from django.db.models.functions import TruncDate
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
@@ -24,6 +24,7 @@ from users.models import Sector, User
 from .models import ItemPreco, Venda, VendaProduto, VendaServico
 from .permissions import (can_access_vendas, is_superadmin, pode_gerenciar_precos,
                           vendas_do_usuario)
+from .clientes import buscar_historico
 from .services import importar_tabela_precos
 
 
@@ -228,19 +229,18 @@ def venda_create(request):
         return _deny(request)
 
     if request.method == 'POST':
-        data_raw = request.POST.get('data_venda', '').strip()
-        data_venda = parse_datetime(data_raw) if data_raw else None
-        if data_venda is None and data_raw:
-            d = parse_date(data_raw)
-            if d:
-                data_venda = timezone.datetime(d.year, d.month, d.day)
-        if data_venda is None:
-            data_venda = timezone.now()
-        if timezone.is_naive(data_venda):
-            data_venda = timezone.make_aware(data_venda)
+        # A venda é sempre de agora. O campo na tela é só leitura, e aqui o
+        # valor nem é lido do POST — assim um POST forjado não consegue
+        # lançar venda com data de ontem para cair noutro fechamento.
+        data_venda = timezone.now()
 
         loja_id = request.POST.get('loja')
-        vendedor_id = request.POST.get('vendedor')
+        # O vendedor é quem está lançando. O superadmin pode lançar no nome de
+        # outra pessoa; para os demais o campo é fixo.
+        if is_superadmin(request.user):
+            vendedor_id = request.POST.get('vendedor') or str(request.user.id)
+        else:
+            vendedor_id = str(request.user.id)
 
         try:
             produtos = json.loads(request.POST.get('produtos_json') or '[]')
@@ -256,9 +256,16 @@ def venda_create(request):
             messages.error(request, 'Adicione ao menos um produto ou serviço à venda.')
             return render(request, 'vendas/venda_form.html', _venda_form_context(request))
 
+        # A loja escolhida precisa ser uma das que a pessoa enxerga.
+        permitidas = {l.id for l in _lojas_do_vendedor(request.user)}
+        loja_final = int(loja_id) if (loja_id or '').isdigit() else None
+        if loja_final is not None and loja_final not in permitidas:
+            messages.error(request, 'Escolha um PDV entre os seus.')
+            return render(request, 'vendas/venda_form.html', _venda_form_context(request))
+
         with transaction.atomic():
             venda = Venda.objects.create(
-                loja_id=int(loja_id) if (loja_id or '').isdigit() else None,
+                loja_id=loja_final,
                 pdv_nome=request.POST.get('pdv_nome', '').strip(),
                 uf=request.POST.get('uf', '').strip()[:2],
                 vendedor_id=int(vendedor_id) if (vendedor_id or '').isdigit() else None,
@@ -315,11 +322,27 @@ def venda_create(request):
     return render(request, 'vendas/venda_form.html', _venda_form_context(request))
 
 
+def _lojas_do_vendedor(user):
+    """Os PDVs que a pessoa pode escolher: os setores dela.
+
+    Deixar a lista dos 38 setores aberta convidava a lançar venda na loja
+    errada — e venda na loja errada é comissão na pessoa errada. O superadmin
+    continua vendo todas, porque lança em nome de qualquer loja.
+    """
+    if is_superadmin(user):
+        return Sector.objects.all().order_by('name')
+    ids = {s.id for s in user.sectors.all()}
+    if user.sector_id:
+        ids.add(user.sector_id)
+    return Sector.objects.filter(id__in=ids).order_by('name')
+
+
 def _venda_form_context(request):
     return {
         'aba': 'nova',
         'is_superadmin': is_superadmin(request.user),
-        'lojas': Sector.objects.all().order_by('name'),
+        'agora': timezone.localtime(),
+        'lojas': _lojas_do_vendedor(request.user),
         'vendedores': User.objects.filter(is_active=True).order_by('first_name', 'last_name'),
         'comprovante_choices': Venda.COMPROVANTE_CHOICES,
         'now': timezone.localtime().strftime('%Y-%m-%dT%H:%M'),
@@ -507,6 +530,40 @@ def precos_create(request):
     return render(request, 'vendas/precos_form.html', {
         'aba': 'precos',
         'categorias': list(ItemPreco.objects.values_list('categoria', flat=True).distinct().order_by('categoria')),
+    })
+
+
+@login_required
+def cliente_historico(request):
+    """JSON com o que este CPF já comprou na rede.
+
+    Só responde com o documento completo: a consulta varre a tabela inteira
+    (não há índice de CPF no MySQL), e disparar a cada tecla digitada seria
+    um ataque ao banco de vendas da empresa.
+    """
+    if not can_access_vendas(request.user):
+        return JsonResponse({'disponivel': False, 'erro': 'Acesso restrito.'}, status=403)
+
+    dados = buscar_historico(request.GET.get('cpf', ''))
+    compras = [{
+        'data': c['data'].strftime('%d/%m/%Y') if c.get('data') else '',
+        'item': c.get('item') or '—',
+        'tipo': c.get('tipo') or '',
+        'pdv': c.get('pdv') or '—',
+        'qtde': c.get('qtde') or 1,
+        'valor': float(c['valor']) if c.get('valor') is not None else 0.0,
+        'vendedor': c.get('vendedor') or '',
+    } for c in dados.get('compras', [])]
+
+    return JsonResponse({
+        'disponivel': dados.get('disponivel', False),
+        'encontrado': dados.get('encontrado', False),
+        'cpf': dados.get('cpf', ''),
+        'nome': dados.get('nome', ''),
+        'total': dados.get('total', 0),
+        'primeira': dados['primeira'].strftime('%d/%m/%Y') if dados.get('primeira') else '',
+        'ultima': dados['ultima'].strftime('%d/%m/%Y') if dados.get('ultima') else '',
+        'compras': compras,
     })
 
 
