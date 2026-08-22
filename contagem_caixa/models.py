@@ -19,6 +19,18 @@ from users.models import Sector
 
 ZERO = Decimal('0.00')
 
+# ── As três contas do caixa ─────────────────────────────────────────────────
+# Estão aqui, com nome, porque são a régua do financeiro: mudar uma delas muda
+# o que a loja deve ter na gaveta.
+
+# Some no SAP mas não vira dinheiro na gaveta: serviço de parceiro, faturado
+# junto e repassado depois.
+COLUNAS_NAO_SAO_CAIXA = ('allied', 'recarga', 'agoracred', 'renova')
+
+# Fora da comparação com o Vivo go: o Vivo go não registra estes lançamentos,
+# então mantê-los no SAP faria toda loja parecer divergente todo dia.
+COLUNAS_FORA_DA_DIVERGENCIA = ('agoracred', 'renova', 'transferencias')
+
 
 def _dec(campo_verbose, **extra):
     return models.DecimalField(
@@ -57,7 +69,9 @@ class ContagemCaixaDia(models.Model):
     sangria_erro = _dec('sangria/erro')
     transferencias = _dec('Transferências')
     valor_real = _dec('Valor real')
-    entrada = _dec('Entrada')
+    # A Entrada virou conta (ver a property `entrada`). O campo antigo continua
+    # aqui para não descartar o que já tiver sido digitado à mão.
+    entrada_manual = _dec('Entrada (digitada)')
     deposito = _dec('Depósito')
     observacao = models.TextField(blank=True, verbose_name='Observação')
 
@@ -93,15 +107,41 @@ class ContagemCaixaDia(models.Model):
         """A loja já lançou o Vivo go deste dia?"""
         return self.valor_vivogo is not None
 
+    def _soma(self, colunas):
+        return sum((getattr(self, c) or ZERO) for c in colunas)
+
+    @property
+    def sap_comparavel(self):
+        """O SAP na mesma régua do Vivo go.
+
+        Agoracred, Renova e Transferências entram no SAP mas não aparecem no
+        Vivo go. Comparar sem descontá-los acusaria divergência todo dia em
+        toda loja — e um alerta que sempre dispara deixa de ser alerta.
+        """
+        return (self.valor_sap or ZERO) - self._soma(COLUNAS_FORA_DA_DIVERGENCIA)
+
+    @property
+    def entrada(self):
+        """O que de fato entrou na gaveta.
+
+        Do que o SAP faturou saem os serviços de parceiro (que são repasse, não
+        dinheiro em caixa), a sangria e as transferências — dinheiro que saiu
+        antes mesmo de ser contado.
+        """
+        return ((self.valor_sap or ZERO)
+                - self._soma(COLUNAS_NAO_SAO_CAIXA)
+                - (self.sangria_erro or ZERO)
+                - (self.transferencias or ZERO))
+
     @property
     def divergencia(self):
-        """Valor SAP menos Vivo go EA. Negativo quando o Vivo go veio maior.
+        """SAP comparável menos Vivo go EA. Negativo quando o Vivo go veio maior.
 
         Sem contagem não há divergência: o dia está em branco, não errado.
         """
         if not self.contado:
             return ZERO
-        return (self.valor_sap or ZERO) - self.valor_vivogo
+        return self.sap_comparavel - self.valor_vivogo
 
     @property
     def status(self):
@@ -130,8 +170,14 @@ class ContagemCaixaDia(models.Model):
         return (self.entrada or ZERO) - (self.valor_real or ZERO)
 
     def calcular_saldo(self, saldo_anterior):
-        """Saldo do dia = saldo do dia anterior + valor real."""
-        return (saldo_anterior or ZERO) + (self.valor_real or ZERO)
+        """Saldo do dia = saldo anterior + valor real − depósito.
+
+        O que foi depositado saiu da gaveta e foi para o banco; continuar
+        somando no saldo faria o caixa parecer ter dinheiro que não tem.
+        """
+        return ((saldo_anterior or ZERO)
+                + (self.valor_real or ZERO)
+                - (self.deposito or ZERO))
 
 
 class ConfiguracaoContagem(models.Model):

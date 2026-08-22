@@ -99,7 +99,7 @@
                     <td class="text-right"><input type="text" class="cx-entrada" data-campo="sangria_erro" value="{{ d.sangria_erro|campo }}" placeholder="—"></td>
                     <td class="text-right"><input type="text" class="cx-entrada" data-campo="transferencias" value="{{ d.transferencias|campo }}" placeholder="—"></td>
                     <td class="text-right"><input type="text" class="cx-entrada font-semibold" data-campo="valor_real" value="{{ d.valor_real|campo }}" placeholder="—"></td>
-                    <td class="text-right"><input type="text" class="cx-entrada" data-campo="entrada" value="{{ d.entrada|campo }}" placeholder="—"></td>
+                    <td class="text-right tabular cx-entrada-calc text-gray-700">{{ d.entrada|brl }}</td>
                     <td class="text-right tabular cx-diferenca {% if d.diferenca < 0 %}cx-negativo{% else %}text-gray-600{% endif %}">{{ d.diferenca|brl }}</td>
                     <td class="text-right"><input type="text" class="cx-entrada" data-campo="deposito" value="{{ d.deposito|campo }}" placeholder="—"></td>
                     <td class="text-right tabular cx-saldo font-semibold text-gray-900">{{ d.saldo|brl_zero }}</td>
@@ -112,9 +112,11 @@
 
 <p class="text-xs text-gray-400 mt-3">
     <i class="fas fa-circle-info mr-1"></i>
-    <strong>DIVERG.</strong> = Valor SAP − Vivo go EA · <strong>STATUS</strong> fica em ATENÇÃO quando os dois
-    não batem (e o gerente da loja é avisado) · <strong>Diferença</strong> = Entrada − Valor real ·
-    <strong>saldo</strong> = saldo do dia anterior + Valor real.
+    <strong>Entrada</strong> = Valor SAP − allied − recarga − Agoracred − Renova − sangria − Transferências ·
+    <strong>DIVERG.</strong> = (Valor SAP − Agoracred − Renova − Transferências) − Vivo go EA ·
+    <strong>STATUS</strong> fica em ATENÇÃO quando os dois não batem (e o gerente da loja é avisado) ·
+    <strong>Diferença</strong> = Entrada − Valor real ·
+    <strong>saldo</strong> = saldo do dia anterior + Valor real − Depósito.
 </p>
 
 <script>
@@ -162,6 +164,9 @@
             st.textContent = d.status_rotulo;
             st.className = 'cx-status inline-block px-2 py-0.5 rounded text-[11px] font-semibold '
                          + 'cx-' + d.status.toLowerCase();
+
+            var ent = linha.querySelector('.cx-entrada-calc');
+            if (ent) ent.textContent = brl(d.entrada) || '—';
 
             var dif = linha.querySelector('.cx-diferenca');
             dif.textContent = brl(d.diferenca) || '—';

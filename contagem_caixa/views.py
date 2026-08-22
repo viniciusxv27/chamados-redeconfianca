@@ -22,8 +22,9 @@ logger = logging.getLogger(__name__)
 ZERO = Decimal('0.00')
 
 # Campos que a tela preenche. O Valor SAP não entra: ele vem da importação.
+# A Entrada saiu daqui: virou conta (SAP − parceiros − sangria − transferências).
 CAMPOS_EDITAVEIS = ('valor_vivogo', 'allied', 'recarga', 'agoracred', 'renova',
-                    'sangria_erro', 'transferencias', 'valor_real', 'entrada', 'deposito')
+                    'sangria_erro', 'transferencias', 'valor_real', 'deposito')
 
 # Campo em branco aqui significa "ainda não contei", e não "contei e deu zero".
 # É o que separa um dia pendente de uma divergência que alerta o gerente.
@@ -73,8 +74,13 @@ def dashboard(request):
     # Status é calculado. O banco já separa os dias divergentes, então só os
     # que interessam sobem para a memória. Dia sem Vivo go lançado não é
     # divergência: é dia que a loja ainda não contou.
+    #
+    # A conta precisa ser a mesma da property `divergencia`: o SAP comparável
+    # desconta Agoracred, Renova e Transferências, que o Vivo go não registra.
+    # Se as duas divergirem, a tela mostra um número e o alerta usa outro.
+    sap_comparavel = F('valor_sap') - F('agoracred') - F('renova') - F('transferencias')
     divergentes = list(base.filter(valor_vivogo__isnull=False)
-                       .exclude(valor_sap=F('valor_vivogo')).select_related('loja'))
+                       .exclude(valor_vivogo=sap_comparavel).select_related('loja'))
     a_contar = base.filter(valor_vivogo__isnull=True).exclude(valor_sap=ZERO)
 
     por_dia_da_loja = {}
@@ -228,6 +234,7 @@ def salvar_dia(request, loja_id):
 
     return JsonResponse({
         'ok': True,
+        'entrada': str(registro.entrada),
         'divergencia': str(registro.divergencia),
         'status': registro.status,
         'status_rotulo': registro.status_rotulo,
