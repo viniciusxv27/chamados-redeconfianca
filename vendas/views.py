@@ -1,5 +1,6 @@
 import csv
 import json
+from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 from io import BytesIO
 from urllib.parse import urlencode
@@ -8,7 +9,8 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, DecimalField, F, Q, Sum
+from django.db.models.functions import TruncDate
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -20,7 +22,8 @@ from openpyxl.utils import get_column_letter
 from users.models import Sector, User
 
 from .models import ItemPreco, Venda, VendaProduto, VendaServico
-from .permissions import can_access_vendas, is_superadmin
+from .permissions import (can_access_vendas, is_superadmin, pode_gerenciar_precos,
+                          vendas_do_usuario)
 from .services import importar_tabela_precos
 
 
@@ -45,7 +48,10 @@ def _parse_decimal(raw):
 
 def _filtrar_vendas(request):
     """Aplica os filtros de GET e devolve (queryset, filtros_dict, filter_query_string)."""
-    qs = Venda.objects.select_related('loja', 'vendedor').all()
+    # O recorte vem antes de qualquer filtro: vendedor só enxerga o que é dele,
+    # e nenhum parâmetro de URL contorna isso.
+    qs = vendas_do_usuario(
+        request.user, Venda.objects.select_related('loja', 'vendedor').all())
 
     search = request.GET.get('search', '').strip()
     date_from = request.GET.get('date_from', '').strip()
@@ -121,18 +127,99 @@ def dashboard(request):
         'vendedores': User.objects.filter(is_active=True).order_by('first_name', 'last_name'),
         'comprovante_choices': Venda.COMPROVANTE_CHOICES,
         'is_superadmin': is_superadmin(request.user),
+        'pode_gerenciar_precos': pode_gerenciar_precos(request.user),
+        'aba': 'vendas',
     }
+    context.update(_indicadores(qs, request.user))
     return render(request, 'vendas/dashboard.html', context)
+
+
+def _indicadores(qs, user):
+    """Os números do topo do dashboard, já no recorte de quem está olhando.
+
+    Tudo sai do mesmo queryset filtrado da listagem — o painel e a tabela
+    contam a mesma coisa, senão o total do topo brigaria com a soma da tabela.
+    """
+    ids = list(qs.values_list('id', flat=True))
+
+    produtos = VendaProduto.objects.filter(venda_id__in=ids)
+    servicos = VendaServico.objects.filter(venda_id__in=ids)
+
+    receita_produtos = produtos.aggregate(
+        t=Sum(F('valor_venda') * F('qtde'), output_field=DecimalField()))['t'] or Decimal('0')
+    receita_servicos = servicos.aggregate(t=Sum('valor_plano'))['t'] or Decimal('0')
+    total = receita_produtos + receita_servicos
+
+    quantidade = len(ids)
+    pecas = produtos.aggregate(n=Sum('qtde'))['n'] or 0
+
+    hoje = timezone.localdate()
+    inicio_mes = hoje.replace(day=1)
+
+    # Série dos últimos 30 dias, para o gráfico de barras.
+    serie = {}
+    for linha in (qs.filter(data_venda__date__gte=hoje - timedelta(days=29))
+                  .annotate(dia=TruncDate('data_venda'))
+                  .values('dia').annotate(n=Count('id')).order_by('dia')):
+        serie[linha['dia']] = linha['n']
+    dias_serie = []
+    for i in range(29, -1, -1):
+        d = hoje - timedelta(days=i)
+        dias_serie.append({'dia': d, 'n': serie.get(d, 0)})
+    pico = max((x['n'] for x in dias_serie), default=0) or 1
+    for x in dias_serie:
+        x['altura'] = round(x['n'] / pico * 100)
+
+    def _ranking(campo, rotulo, limite=6):
+        linhas = list(qs.exclude(**{f'{campo}__isnull': True})
+                      .values(campo, rotulo).annotate(n=Count('id')).order_by('-n')[:limite])
+        maior = max((l['n'] for l in linhas), default=0) or 1
+        for l in linhas:
+            l['fatia'] = round(l['n'] / maior * 100)
+            l['nome'] = l.get(rotulo) or '—'
+        return linhas
+
+    indicadores = {
+        'kpi_total': total,
+        'kpi_quantidade': quantidade,
+        'kpi_ticket': (total / quantidade) if quantidade else Decimal('0'),
+        'kpi_pecas': pecas,
+        'kpi_produtos': receita_produtos,
+        'kpi_servicos': receita_servicos,
+        'kpi_no_mes': qs.filter(data_venda__date__gte=inicio_mes).count(),
+        'kpi_hoje': qs.filter(data_venda__date=hoje).count(),
+        'serie_dias': dias_serie,
+        'top_produtos': list(produtos.values('nome_produto')
+                             .annotate(n=Sum('qtde'),
+                                       total=Sum(F('valor_venda') * F('qtde'),
+                                                 output_field=DecimalField()))
+                             .order_by('-total')[:6]),
+        'top_servicos': list(servicos.values('servico')
+                             .annotate(n=Count('id'), total=Sum('valor_plano'))
+                             .order_by('-total')[:6]),
+    }
+    # O ranking de gente e de loja só faz sentido para quem vê mais de uma.
+    if is_superadmin(user):
+        indicadores['por_loja'] = _ranking('loja', 'loja__name')
+        indicadores['por_vendedor'] = _ranking('vendedor', 'vendedor__first_name')
+    return indicadores
 
 
 @login_required
 def venda_detail(request, pk):
     if not can_access_vendas(request.user):
         return _deny(request)
+    # O recorte vale aqui também: sem isso, trocar o número na URL abriria a
+    # venda de qualquer um.
     venda = get_object_or_404(
-        Venda.objects.select_related('loja', 'vendedor').prefetch_related('produtos', 'servicos'), pk=pk,
+        vendas_do_usuario(request.user, Venda.objects.select_related('loja', 'vendedor')
+                          .prefetch_related('produtos', 'servicos')), pk=pk,
     )
-    return render(request, 'vendas/venda_detail.html', {'venda': venda})
+    return render(request, 'vendas/venda_detail.html', {
+        'venda': venda,
+        'is_superadmin': is_superadmin(request.user),
+        'aba': 'vendas',
+    })
 
 
 @login_required
@@ -230,6 +317,8 @@ def venda_create(request):
 
 def _venda_form_context(request):
     return {
+        'aba': 'nova',
+        'is_superadmin': is_superadmin(request.user),
         'lojas': Sector.objects.all().order_by('name'),
         'vendedores': User.objects.filter(is_active=True).order_by('first_name', 'last_name'),
         'comprovante_choices': Venda.COMPROVANTE_CHOICES,
@@ -357,6 +446,8 @@ def precos(request):
         page = paginator.page(paginator.num_pages)
 
     context = {
+        'aba': 'precos',
+        'pode_gerenciar_precos': pode_gerenciar_precos(request.user),
         'itens': page,
         'paginator': paginator,
         'categoria': categoria,
@@ -369,7 +460,7 @@ def precos(request):
 
 @login_required
 def precos_import(request):
-    if not can_access_vendas(request.user):
+    if not pode_gerenciar_precos(request.user):
         return _deny(request)
 
     if request.method == 'POST':
@@ -387,12 +478,12 @@ def precos_import(request):
             messages.error(request, f'Falha ao importar: {exc}')
         return redirect('vendas:precos')
 
-    return render(request, 'vendas/precos_import.html', {})
+    return render(request, 'vendas/precos_import.html', {'aba': 'precos'})
 
 
 @login_required
 def precos_create(request):
-    if not can_access_vendas(request.user):
+    if not pode_gerenciar_precos(request.user):
         return _deny(request)
 
     if request.method == 'POST':
@@ -414,6 +505,7 @@ def precos_create(request):
             return redirect('vendas:precos')
 
     return render(request, 'vendas/precos_form.html', {
+        'aba': 'precos',
         'categorias': list(ItemPreco.objects.values_list('categoria', flat=True).distinct().order_by('categoria')),
     })
 

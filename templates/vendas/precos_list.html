@@ -1,63 +1,147 @@
-{% extends "base.html" %}
+{% extends "vendas/_base_vendas.html" %}
+{% load vendas_tags %}
 
 {% block title %}Tabela de Preços{% endblock %}
+{% block vd_icone %}fa-tags{% endblock %}
+{% block vd_cabecalho %}Tabela de preços{% endblock %}
+{% block vd_subtitulo %}{{ total }} item{{ total|pluralize:"ns" }} cadastrado{{ total|pluralize }}{% endblock %}
 
-{% block content %}
-<div class="max-w-6xl mx-auto p-4 sm:p-6 lg:p-8">
-  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
-    <div>
-      <nav class="mb-1 text-sm"><a href="{% url 'vendas:dashboard' %}" class="text-gray-500 hover:text-purple-600"><i class="fas fa-arrow-left mr-1"></i> Vendas</a></nav>
-      <h1 class="text-2xl font-bold text-gray-900 flex items-center gap-3"><i class="fas fa-tags text-purple-600"></i> Tabela de Preços</h1>
-      <p class="text-gray-600 mt-1">{{ total }} itens cadastrados.</p>
-    </div>
-    <div class="flex flex-wrap gap-2">
-      <a href="{% url 'vendas:precos_import' %}" class="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium"><i class="fas fa-file-import"></i> Importar planilha</a>
-      <a href="{% url 'vendas:precos_create' %}" class="inline-flex items-center gap-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg"><i class="fas fa-plus"></i> Novo item</a>
-    </div>
-  </div>
+{% block vd_acoes %}
+{% if pode_gerenciar_precos %}
+<a href="{% url 'vendas:precos_import' %}"
+   class="inline-flex items-center gap-2 px-3.5 py-2 vd-card text-gray-700 text-sm font-semibold hover:bg-gray-50">
+    <i class="fas fa-file-import text-emerald-600"></i><span class="hidden sm:inline">Importar</span>
+</a>
+<a href="{% url 'vendas:precos_create' %}"
+   class="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-lg shadow-sm">
+    <i class="fas fa-plus"></i> Novo item
+</a>
+{% endif %}
+{% endblock %}
 
-  <form method="get" class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6 flex flex-col sm:flex-row gap-3">
-    <select name="categoria" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
-      <option value="">Todas as categorias</option>
-      {% for c in categorias %}<option value="{{ c }}" {% if categoria == c %}selected{% endif %}>{{ c }}</option>{% endfor %}
-    </select>
-    <input type="text" name="search" value="{{ search }}" placeholder="Buscar por nome, plano, cód. SAP..." class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
-    <button type="submit" class="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg">Filtrar</button>
-  </form>
+{% block vd_conteudo %}
 
-  <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-    <div class="overflow-x-auto">
-      <table class="w-full text-sm">
-        <thead class="bg-gray-100 text-gray-600"><tr>
-          <th class="px-4 py-2 text-left">Categoria</th><th class="px-4 py-2 text-left">Nome</th>
-          <th class="px-4 py-2 text-left">Plano</th><th class="px-4 py-2 text-left">Sistema</th>
-          <th class="px-4 py-2 text-left">Cód. SAP</th><th class="px-4 py-2 text-right">Valor</th>
-        </tr></thead>
-        <tbody class="divide-y divide-gray-100">
-          {% for i in itens %}
-          <tr class="hover:bg-gray-50">
-            <td class="px-4 py-2"><span class="text-xs bg-purple-50 text-purple-700 px-2 py-0.5 rounded">{{ i.categoria }}</span></td>
-            <td class="px-4 py-2 text-gray-900">{{ i.nome }}</td>
-            <td class="px-4 py-2 text-gray-600">{{ i.plano|default:"—" }}</td>
-            <td class="px-4 py-2 text-gray-600">{{ i.sistema|default:"—" }}</td>
-            <td class="px-4 py-2 text-gray-500">{{ i.cod_sap|default:"—" }}</td>
-            <td class="px-4 py-2 text-right font-semibold">{% if i.valor is not None %}R$ {{ i.valor|floatformat:2 }}{% else %}—{% endif %}</td>
-          </tr>
-          {% empty %}
-          <tr><td colspan="6" class="px-4 py-10 text-center text-gray-400">Nenhum item. Importe a planilha ou cadastre manualmente.</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
+<form method="get" class="vd-card p-4 mb-4">
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div class="sm:col-span-2">
+            <label class="vd-rotulo">Buscar</label>
+            <div class="relative">
+                <i class="fas fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-300 text-xs"></i>
+                <input type="text" name="search" value="{{ search }}" class="vd-campo pl-8"
+                       placeholder="Nome, plano, código SAP…">
+            </div>
+        </div>
+        <div>
+            <label class="vd-rotulo">Categoria</label>
+            <div class="flex gap-2">
+                <select name="categoria" class="vd-campo">
+                    <option value="">Todas</option>
+                    {% for c in categorias %}<option value="{{ c }}" {% if categoria == c %}selected{% endif %}>{{ c }}</option>{% endfor %}
+                </select>
+                <button class="px-4 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-semibold whitespace-nowrap">
+                    <i class="fas fa-filter"></i>
+                </button>
+            </div>
+        </div>
     </div>
-    {% if itens.has_other_pages %}
-    <div class="flex items-center justify-between px-4 py-3 border-t bg-gray-50 text-sm">
-      <span class="text-gray-500">Página {{ itens.number }} de {{ paginator.num_pages }}</span>
-      <div class="flex gap-1">
-        {% if itens.has_previous %}<a href="?categoria={{ categoria }}&search={{ search }}&page={{ itens.previous_page_number }}" class="px-3 py-1 border rounded hover:bg-gray-100">Anterior</a>{% endif %}
-        {% if itens.has_next %}<a href="?categoria={{ categoria }}&search={{ search }}&page={{ itens.next_page_number }}" class="px-3 py-1 border rounded hover:bg-gray-100">Próxima</a>{% endif %}
-      </div>
+    {% if search or categoria %}
+    <a href="{% url 'vendas:precos' %}" class="inline-block mt-3 text-xs text-gray-500 hover:text-purple-700">
+        <i class="fas fa-xmark mr-1"></i>limpar filtros
+    </a>
+    {% endif %}
+</form>
+
+<!-- Atalhos por categoria -->
+{% if categorias %}
+<div class="flex flex-wrap gap-2 mb-4">
+    <a href="{% url 'vendas:precos' %}"
+       class="px-3 py-1.5 rounded-full text-xs font-medium border {% if not categoria %}bg-purple-600 text-white border-purple-600{% else %}bg-white text-gray-600 border-gray-200 hover:border-purple-300{% endif %}">
+        Todas
+    </a>
+    {% for c in categorias %}
+    <a href="?categoria={{ c|urlencode }}"
+       class="px-3 py-1.5 rounded-full text-xs font-medium border {% if categoria == c %}bg-purple-600 text-white border-purple-600{% else %}bg-white text-gray-600 border-gray-200 hover:border-purple-300{% endif %}">
+        {{ c }}
+    </a>
+    {% endfor %}
+</div>
+{% endif %}
+
+<div class="vd-card overflow-hidden">
+    <div class="hidden md:block overflow-x-auto">
+        <table class="min-w-full text-sm">
+            <thead class="bg-gray-50/70 text-gray-500 text-xs uppercase tracking-wide">
+                <tr>
+                    <th class="text-left px-5 py-2.5 font-medium">Item</th>
+                    <th class="text-left px-3 py-2.5 font-medium">Categoria</th>
+                    <th class="text-left px-3 py-2.5 font-medium">Plano</th>
+                    <th class="text-left px-3 py-2.5 font-medium">Códigos</th>
+                    <th class="text-right px-5 py-2.5 font-medium">Valor</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-50">
+                {% for i in itens %}
+                <tr class="hover:bg-purple-50/30">
+                    <td class="px-5 py-2.5">
+                        <span class="text-gray-800 font-medium">{{ i.nome }}</span>
+                        {% if not i.ativo %}<span class="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">inativo</span>{% endif %}
+                        {% if i.grupamento %}<span class="block text-[11px] text-gray-400">{{ i.grupamento }}</span>{% endif %}
+                    </td>
+                    <td class="px-3 py-2.5">
+                        <span class="px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 text-[11px] font-medium">{{ i.categoria }}</span>
+                    </td>
+                    <td class="px-3 py-2.5 text-gray-600">{{ i.plano|default:"—" }}</td>
+                    <td class="px-3 py-2.5 text-[11px] text-gray-400">
+                        {% if i.cod_sap %}SAP {{ i.cod_sap }}{% endif %}
+                        {% if i.cod_sistema %}<span class="block">SIS {{ i.cod_sistema }}</span>{% endif %}
+                        {% if not i.cod_sap and not i.cod_sistema %}—{% endif %}
+                    </td>
+                    <td class="px-5 py-2.5 text-right font-semibold text-gray-900 tabular whitespace-nowrap">
+                        {% if i.valor is not None %}{{ i.valor|brl }}{% else %}<span class="text-gray-300">—</span>{% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5" class="px-5 py-14 text-center text-gray-400">
+                    <i class="fas fa-tags text-gray-200 text-3xl mb-2 block"></i>
+                    Nenhum item com esse filtro.
+                </td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="md:hidden divide-y divide-gray-50">
+        {% for i in itens %}
+        <div class="px-4 py-3">
+            <div class="flex items-start justify-between gap-2">
+                <span class="text-sm text-gray-800 font-medium min-w-0">{{ i.nome }}</span>
+                <span class="text-sm font-semibold text-gray-900 tabular whitespace-nowrap">
+                    {% if i.valor is not None %}{{ i.valor|brl }}{% else %}—{% endif %}
+                </span>
+            </div>
+            <p class="text-[11px] text-gray-400 mt-0.5">
+                {{ i.categoria }}{% if i.plano %} · {{ i.plano }}{% endif %}
+            </p>
+        </div>
+        {% empty %}
+        <p class="px-4 py-12 text-center text-gray-400 text-sm">Nenhum item com esse filtro.</p>
+        {% endfor %}
+    </div>
+
+    {% if paginator.num_pages > 1 %}
+    <div class="px-5 py-3 border-t border-gray-100 flex items-center justify-between gap-2 flex-wrap">
+        <span class="text-xs text-gray-400">Página {{ itens.number }} de {{ paginator.num_pages }}</span>
+        <div class="flex gap-1">
+            {% if itens.has_previous %}
+            <a href="?search={{ search|urlencode }}&categoria={{ categoria|urlencode }}&page={{ itens.previous_page_number }}"
+               class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">Anterior</a>
+            {% endif %}
+            {% if itens.has_next %}
+            <a href="?search={{ search|urlencode }}&categoria={{ categoria|urlencode }}&page={{ itens.next_page_number }}"
+               class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">Próxima</a>
+            {% endif %}
+        </div>
     </div>
     {% endif %}
-  </div>
 </div>
 {% endblock %}

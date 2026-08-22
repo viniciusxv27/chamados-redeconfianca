@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% comment %}
+Casca comum do módulo de Vendas: cabeçalho, abas e o CSS que as três telas
+usam. Ficar num só lugar é o que mantém o módulo parecendo um módulo, e não
+três páginas que por acaso falam de venda.
+{% endcomment %}
+
+{% block extra_css %}
+<style>
+    .vd-card { background:#fff; border:1px solid #ECECF1; border-radius:1rem;
+               box-shadow:0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.06); }
+    .vd-card-hover { transition: box-shadow .18s ease, transform .18s ease; }
+    .vd-card-hover:hover { box-shadow:0 6px 18px rgba(16,24,40,.09); transform:translateY(-1px); }
+
+    .vd-hero { background:
+        radial-gradient(1100px 220px at 0% 0%, rgba(147,51,234,.10), transparent 60%),
+        radial-gradient(900px 220px at 100% 0%, rgba(236,72,153,.08), transparent 60%),
+        linear-gradient(180deg,#FFFFFF 0%, #FBFBFC 100%); }
+
+    .vd-tab { position:relative; white-space:nowrap; }
+    .vd-tab-ativa { color:#7E22CE; background:#FAF5FF; }
+    .vd-tab-ativa::after { content:''; position:absolute; left:.75rem; right:.75rem; bottom:-1px;
+        height:2px; background:#9333EA; border-radius:2px; }
+
+    .tabular { font-variant-numeric: tabular-nums; }
+
+    /* Campos: um só desenho em todo formulário do módulo. */
+    .vd-campo { width:100%; border:1px solid #D9D9E3; border-radius:.625rem;
+        padding:.6rem .75rem; font-size:.875rem; background:#fff; transition:border-color .15s, box-shadow .15s; }
+    .vd-campo:hover { border-color:#C4C4D0; }
+    .vd-campo:focus { outline:none; border-color:#9333EA; box-shadow:0 0 0 3px rgba(147,51,234,.14); }
+    .vd-campo::placeholder { color:#B6B6C2; }
+    .vd-rotulo { display:block; font-size:.75rem; font-weight:600; color:#5B5B6B; margin-bottom:.3rem; }
+    .vd-ajuda { font-size:.6875rem; color:#9A9AA8; margin-top:.25rem; }
+
+    .vd-secao { border:1px solid #ECECF1; border-radius:1rem; overflow:hidden; background:#fff; }
+    .vd-secao-cabeca { padding:.85rem 1.15rem; background:#FAFAFC; border-bottom:1px solid #ECECF1;
+        display:flex; align-items:center; gap:.6rem; }
+
+    /* Barras dos rankings: sem biblioteca, sem requisição extra. */
+    .vd-barra { height:.375rem; background:#F1F1F5; border-radius:999px; overflow:hidden; }
+    .vd-barra > span { display:block; height:100%; border-radius:999px; background:#9333EA; }
+
+    /* Gráfico de 30 dias.
+       A coluna precisa esticar na altura toda: com o contêiner alinhando pelo
+       fim, ela encolhia para o tamanho do conteúdo e a barra de 60% virava
+       60% de 2px — o gráfico saía achatado numa linha. */
+    .vd-grafico { align-items: stretch; }
+    .vd-coluna { flex:1; display:flex; align-items:flex-end; min-width:0; height:100%; }
+    .vd-coluna > span { width:100%; background:#C084FC; border-radius:3px 3px 0 0;
+        transition:background .15s; min-height:2px; }
+    .vd-coluna:hover > span { background:#7E22CE; }
+
+    @media (max-width: 640px) {
+        .vd-rolagem-x { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="vd-hero -mx-2 sm:-mx-4 lg:-mx-6 -mt-2 sm:-mt-4 lg:-mt-6 px-2 sm:px-4 lg:px-6 pt-5 pb-0 mb-5 border-b border-gray-100">
+    <div class="max-w-7xl mx-auto">
+        <div class="flex items-start justify-between gap-4 flex-wrap">
+            <div class="min-w-0">
+                <h1 class="text-2xl font-bold text-gray-900 flex items-center gap-2.5">
+                    <span class="w-9 h-9 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center">
+                        <i class="fas {% block vd_icone %}fa-cart-shopping{% endblock %}"></i>
+                    </span>
+                    {% block vd_cabecalho %}Vendas{% endblock %}
+                </h1>
+                <p class="text-sm text-gray-500 mt-1">{% block vd_subtitulo %}{% endblock %}</p>
+            </div>
+            <div class="flex items-center gap-2 flex-wrap">{% block vd_acoes %}{% endblock %}</div>
+        </div>
+
+        <nav class="flex gap-1 mt-4 overflow-x-auto -mb-px">
+            <a href="{% url 'vendas:dashboard' %}"
+               class="vd-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'vendas' %}vd-tab-ativa{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
+                <i class="fas fa-chart-line mr-1.5"></i>Vendas
+            </a>
+            <a href="{% url 'vendas:venda_create' %}"
+               class="vd-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'nova' %}vd-tab-ativa{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
+                <i class="fas fa-plus mr-1.5"></i>Lançar venda
+            </a>
+            <a href="{% url 'vendas:precos' %}"
+               class="vd-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'precos' %}vd-tab-ativa{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
+                <i class="fas fa-tags mr-1.5"></i>Tabela de preços
+            </a>
+        </nav>
+    </div>
+</div>
+
+<div class="max-w-7xl mx-auto px-2 sm:px-4 lg:px-6 pb-10">
+    {% block vd_conteudo %}{% endblock %}
+</div>
+{% endblock %}

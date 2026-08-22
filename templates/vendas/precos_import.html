@@ -1,21 +1,93 @@
-{% extends "base.html" %}
+{% extends "vendas/_base_vendas.html" %}
 
-{% block title %}Importar Tabela de Preços{% endblock %}
+{% block title %}Importar tabela de preços{% endblock %}
+{% block vd_icone %}fa-file-import{% endblock %}
+{% block vd_cabecalho %}Importar tabela de preços{% endblock %}
+{% block vd_subtitulo %}Planilha oficial — cada aba vira uma categoria{% endblock %}
 
-{% block content %}
-<div class="max-w-xl mx-auto p-4 sm:p-6 lg:p-8">
-  <nav class="mb-4 text-sm"><a href="{% url 'vendas:precos' %}" class="text-gray-500 hover:text-purple-600"><i class="fas fa-arrow-left mr-1"></i> Tabela de preços</a></nav>
-  <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-    <div class="px-6 py-4 border-b bg-purple-50"><h1 class="text-xl font-bold text-gray-900 flex items-center gap-2"><i class="fas fa-file-import text-purple-600"></i> Importar planilha de preços</h1></div>
-    <form method="post" enctype="multipart/form-data" class="p-6 space-y-4">
-      {% csrf_token %}
-      <p class="text-sm text-gray-600">Envie a planilha oficial (.xlsx). As abas de dados (PLANOS, PRODUTOS, SMARTPHONES, ELETRÔNICOS, WATCHES, VITRINE, DEVICES, B2B) são lidas automaticamente. Reimportar atualiza os itens existentes.</p>
-      <input type="file" name="arquivo" accept=".xlsx,.xlsm" required class="w-full text-sm border border-gray-300 rounded-lg file:mr-3 file:py-2 file:px-4 file:border-0 file:bg-purple-50 file:text-purple-700 file:font-semibold hover:file:bg-purple-100 cursor-pointer">
-      <div class="flex items-center justify-end gap-3 pt-2 border-t">
-        <a href="{% url 'vendas:precos' %}" class="px-5 py-2 text-gray-600 hover:text-gray-900">Cancelar</a>
-        <button type="submit" class="inline-flex items-center gap-2 px-6 py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg"><i class="fas fa-upload"></i> Importar</button>
-      </div>
-    </form>
-  </div>
-</div>
+{% block vd_acoes %}
+<a href="{% url 'vendas:precos' %}"
+   class="inline-flex items-center gap-2 px-3.5 py-2 vd-card text-gray-700 text-sm font-semibold hover:bg-gray-50">
+    <i class="fas fa-arrow-left"></i> Voltar
+</a>
+{% endblock %}
+
+{% block vd_conteudo %}
+<form method="post" enctype="multipart/form-data" class="max-w-2xl">
+    {% csrf_token %}
+
+    <div class="vd-secao mb-4">
+        <div class="vd-secao-cabeca">
+            <i class="fas fa-file-excel text-emerald-600"></i>
+            <span class="text-sm font-semibold text-gray-800">Planilha</span>
+        </div>
+        <div class="p-5">
+            <label id="vdSolta"
+                   class="flex flex-col items-center justify-center w-full py-10 px-4 border-2 border-dashed
+                          border-gray-300 rounded-xl cursor-pointer bg-gray-50/60 hover:bg-purple-50/50
+                          hover:border-purple-300 transition-colors text-center">
+                <i class="fas fa-cloud-arrow-up text-gray-300 text-4xl mb-3"></i>
+                <span class="text-sm text-gray-600"><strong class="text-purple-700">Clique para escolher</strong> ou arraste o arquivo</span>
+                <span class="text-xs text-gray-400 mt-1">.xlsx ou .xls</span>
+                <span id="vdNomeArquivo" class="hidden mt-3 px-3 py-1.5 rounded-lg bg-purple-100 text-purple-800 text-xs font-medium"></span>
+                <input type="file" name="arquivo" accept=".xlsx,.xls" required class="hidden" id="vdArquivo">
+            </label>
+
+            <div class="mt-4 rounded-xl bg-blue-50 border border-blue-100 p-3.5">
+                <p class="text-xs text-blue-800">
+                    <i class="fas fa-circle-info mr-1"></i>
+                    Cada aba da planilha vira uma <strong>categoria</strong>. Item já existente é
+                    atualizado pelo par categoria + nome; o que não tiver coluna própria fica
+                    guardado assim mesmo, em “outros campos”.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex items-center justify-end gap-3">
+        <a href="{% url 'vendas:precos' %}" class="px-5 py-2.5 rounded-lg border border-gray-300 text-gray-700 text-sm font-semibold hover:bg-gray-50">
+            Cancelar
+        </a>
+        <button type="submit" class="px-5 py-2.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold shadow-sm">
+            <i class="fas fa-file-import mr-1.5"></i>Importar
+        </button>
+    </div>
+</form>
+
+<script>
+(function () {
+    var campo = document.getElementById('vdArquivo');
+    var alvo = document.getElementById('vdSolta');
+    var nome = document.getElementById('vdNomeArquivo');
+    if (!campo || !alvo) return;
+
+    function mostrar() {
+        if (campo.files && campo.files.length) {
+            nome.textContent = campo.files[0].name;
+            nome.classList.remove('hidden');
+        }
+    }
+    campo.addEventListener('change', mostrar);
+
+    // Arrastar o arquivo para cima da área também funciona.
+    ['dragenter', 'dragover'].forEach(function (ev) {
+        alvo.addEventListener(ev, function (e) {
+            e.preventDefault();
+            alvo.classList.add('border-purple-400', 'bg-purple-50');
+        });
+    });
+    ['dragleave', 'drop'].forEach(function (ev) {
+        alvo.addEventListener(ev, function (e) {
+            e.preventDefault();
+            alvo.classList.remove('border-purple-400', 'bg-purple-50');
+        });
+    });
+    alvo.addEventListener('drop', function (e) {
+        if (e.dataTransfer && e.dataTransfer.files.length) {
+            campo.files = e.dataTransfer.files;
+            mostrar();
+        }
+    });
+})();
+</script>
 {% endblock %}

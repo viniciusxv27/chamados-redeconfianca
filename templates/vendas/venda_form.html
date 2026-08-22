@@ -1,146 +1,282 @@
-{% extends "base.html" %}
+{% extends "vendas/_base_vendas.html" %}
 
 {% block title %}Lançar venda{% endblock %}
+{% block vd_icone %}fa-cart-plus{% endblock %}
+{% block vd_cabecalho %}Lançar venda{% endblock %}
+{% block vd_subtitulo %}Preencha os dados, adicione os itens e confirme{% endblock %}
 
-{% block content %}
-<div class="max-w-4xl mx-auto p-4 sm:p-6 lg:p-8">
-  <nav class="mb-4 text-sm">
-    <a href="{% url 'vendas:dashboard' %}" class="text-gray-500 hover:text-purple-600"><i class="fas fa-arrow-left mr-1"></i> Vendas</a>
-  </nav>
+{% block vd_acoes %}
+<a href="{% url 'vendas:dashboard' %}"
+   class="inline-flex items-center gap-2 px-3.5 py-2 vd-card text-gray-700 text-sm font-semibold hover:bg-gray-50">
+    <i class="fas fa-arrow-left"></i> Voltar
+</a>
+{% endblock %}
 
-  <form id="venda-form" method="post" action="{% url 'vendas:venda_create' %}" class="space-y-6">
+{% block vd_conteudo %}
+<style>
+    /* Sugestões da tabela de preços */
+    .ac-box { position:absolute; z-index:40; left:0; right:0; top:100%; margin-top:.25rem;
+        background:#fff; border:1px solid #E6E6EE; border-radius:.75rem; max-height:15rem;
+        overflow-y:auto; box-shadow:0 10px 25px rgba(16,24,40,.10); }
+    .ac-opt { padding:.55rem .75rem; cursor:pointer; border-bottom:1px solid #F5F5F8; }
+    .ac-opt:last-child { border-bottom:0; }
+    .ac-opt:hover { background:#FAF5FF; }
+    .ac-nome { display:block; font-size:.8125rem; color:#27273A; font-weight:500; }
+    .ac-meta { display:block; font-size:.6875rem; color:#9A9AA8; }
+</style>
+
+<form id="venda-form" method="post" action="{% url 'vendas:venda_create' %}">
     {% csrf_token %}
     <input type="hidden" name="produtos_json" id="produtos_json" value="[]">
     <input type="hidden" name="servicos_json" id="servicos_json" value="[]">
 
-    <!-- Cabeçalho (estilo do sistema de PDV) -->
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-      <div class="px-6 py-4 border-b bg-purple-50">
-        <h1 class="text-xl font-bold text-gray-900 flex items-center gap-2"><i class="fas fa-cart-plus text-purple-600"></i> Lançar venda</h1>
-      </div>
-      <div class="p-6 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
-        <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-1">PDV / Loja</label>
-          <select name="loja" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
-            <option value="">Selecione...</option>
-            {% for l in lojas %}<option value="{{ l.id }}">{{ l.name }}</option>{% endfor %}
-          </select>
-        </div>
-        <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-1">Venda Estoque Avançado?</label>
-          <select name="estoque_avancado" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
-            <option value="nao">Não</option><option value="sim">Sim</option>
-          </select>
-        </div>
-        <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-1">Vendedor</label>
-          <select name="vendedor" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
-            <option value="">Escolha...</option>
-            {% for v in vendedores %}<option value="{{ v.id }}">{{ v.get_full_name|default:v.email }}</option>{% endfor %}
-          </select>
-        </div>
-        <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-1">Data da venda</label>
-          <input type="datetime-local" name="data_venda" value="{{ now }}" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
-        </div>
-        <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-1">Cliente</label>
-          <input type="text" name="cliente_nome" maxlength="200" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
-        </div>
-        <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-1">CPF/CNPJ</label>
-          <input type="text" name="cliente_cpf" maxlength="20" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
-        </div>
-        <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-1">Tipo de Venda</label>
-          <input type="text" name="tipo_venda" maxlength="80" placeholder="Ex.: Habilitação, Migração..." class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
-        </div>
-        <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-2">Tipo de Comprovante Fiscal</label>
-          <div class="flex gap-4 pt-1">
-            {% for code, label in comprovante_choices %}
-            <label class="inline-flex items-center gap-2 text-sm"><input type="radio" name="comprovante_fiscal" value="{{ code }}" {% if forloop.first %}checked{% endif %} class="text-purple-600 focus:ring-purple-500"> {{ label }}</label>
-            {% endfor %}
-          </div>
-        </div>
-        <div class="sm:col-span-2">
-          <label class="block text-sm font-semibold text-gray-700 mb-1">Observação</label>
-          <textarea name="observacao" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"></textarea>
-        </div>
-      </div>
-    </div>
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div class="lg:col-span-2 space-y-4">
 
-    <!-- Itens: Produtos -->
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-      <div class="px-6 py-3 border-b bg-gray-50 font-bold text-gray-800 flex items-center gap-2"><i class="fas fa-box text-gray-400"></i> Produtos <span class="text-xs font-normal text-gray-400">(Produto Vivo / Acessório / Recarga)</span></div>
-      <div class="p-4">
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2" data-item="produto">
-          <input type="hidden" data-f="preco_id">
-          <div class="relative">
-            <input placeholder="Produto * (busca na tabela)" data-f="nome_produto" autocomplete="off" class="w-full px-2 py-1.5 border border-gray-300 rounded text-sm">
-          </div>
-          <input placeholder="Marca" data-f="marca" class="px-2 py-1.5 border border-gray-300 rounded text-sm">
-          <input placeholder="Modelo" data-f="modelo" class="px-2 py-1.5 border border-gray-300 rounded text-sm">
-          <input placeholder="Categoria" data-f="categoria" class="px-2 py-1.5 border border-gray-300 rounded text-sm">
-          <input placeholder="Plano" data-f="plano" class="px-2 py-1.5 border border-gray-300 rounded text-sm">
-          <input placeholder="Pilar" data-f="pilar" class="px-2 py-1.5 border border-gray-300 rounded text-sm">
-          <input placeholder="Qtde" data-f="qtde" type="number" min="1" value="1" class="px-2 py-1.5 border border-gray-300 rounded text-sm text-right">
-          <input placeholder="Valor (R$)" data-f="valor_venda" type="number" step="0.01" min="0" class="px-2 py-1.5 border border-gray-300 rounded text-sm text-right">
+            <!-- 1. Dados da venda -->
+            <div class="vd-secao">
+                <div class="vd-secao-cabeca">
+                    <span class="w-6 h-6 rounded-full bg-purple-600 text-white text-xs font-bold flex items-center justify-center">1</span>
+                    <span class="text-sm font-semibold text-gray-800">Dados da venda</span>
+                </div>
+                <div class="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="vd-rotulo">Data da venda <span class="text-red-500">*</span></label>
+                        <input type="datetime-local" name="data_venda" required class="vd-campo">
+                    </div>
+                    <div>
+                        <label class="vd-rotulo">Comprovante fiscal</label>
+                        <select name="comprovante_fiscal" class="vd-campo">
+                            {% for valor, rotulo in comprovante_choices %}<option value="{{ valor }}">{{ rotulo }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="vd-rotulo">Loja / PDV</label>
+                        <select name="loja" class="vd-campo">
+                            <option value="">Selecione…</option>
+                            {% for l in lojas %}<option value="{{ l.id }}">{{ l.name }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="vd-rotulo">Vendedor</label>
+                        <select name="vendedor" class="vd-campo">
+                            <option value="">Selecione…</option>
+                            {% for v in vendedores %}
+                            <option value="{{ v.id }}" {% if v.id == request.user.id %}selected{% endif %}>{{ v.full_name|default:v.email }}</option>
+                            {% endfor %}
+                        </select>
+                        <p class="vd-ajuda">Vem preenchido com você.</p>
+                    </div>
+                    <div>
+                        <label class="vd-rotulo">PDV (texto livre)</label>
+                        <input type="text" name="pdv_nome" maxlength="120" class="vd-campo" placeholder="Se não estiver na lista">
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="vd-rotulo">UF</label>
+                            <input type="text" name="uf" maxlength="2" class="vd-campo uppercase" placeholder="ES">
+                        </div>
+                        <div>
+                            <label class="vd-rotulo">Estoque avançado</label>
+                            <select name="estoque_avancado" class="vd-campo">
+                                <option value="nao">Não</option>
+                                <option value="sim">Sim</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. Cliente -->
+            <div class="vd-secao">
+                <div class="vd-secao-cabeca">
+                    <span class="w-6 h-6 rounded-full bg-purple-600 text-white text-xs font-bold flex items-center justify-center">2</span>
+                    <span class="text-sm font-semibold text-gray-800">Cliente</span>
+                    <span class="text-xs text-gray-400 ml-auto">opcional</span>
+                </div>
+                <div class="p-5 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div class="sm:col-span-2">
+                        <label class="vd-rotulo">Nome</label>
+                        <input type="text" name="cliente_nome" maxlength="200" class="vd-campo" placeholder="Nome do cliente">
+                    </div>
+                    <div>
+                        <label class="vd-rotulo">CPF / CNPJ</label>
+                        <input type="text" name="cliente_cpf" maxlength="20" class="vd-campo" inputmode="numeric">
+                    </div>
+                    <div class="sm:col-span-3">
+                        <label class="vd-rotulo">Tipo de venda</label>
+                        <input type="text" name="tipo_venda" maxlength="80" class="vd-campo" placeholder="Ex.: Migração, Nova linha, Portabilidade">
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. Produtos -->
+            <div class="vd-secao" data-item="produto">
+                <div class="vd-secao-cabeca">
+                    <span class="w-6 h-6 rounded-full bg-purple-600 text-white text-xs font-bold flex items-center justify-center">3</span>
+                    <span class="text-sm font-semibold text-gray-800">Produtos</span>
+                    <span class="text-xs text-gray-400 ml-auto">busque na tabela de preços</span>
+                </div>
+                <div class="p-5">
+                    <input type="hidden" data-f="preco_id" value="">
+                    <div class="grid grid-cols-1 sm:grid-cols-6 gap-3">
+                        <div class="sm:col-span-6 relative">
+                            <label class="vd-rotulo">Produto</label>
+                            <input type="text" data-f="nome_produto" class="vd-campo" autocomplete="off"
+                                   placeholder="Digite 2 letras para buscar na tabela de preços…">
+                        </div>
+                        <div class="sm:col-span-2"><label class="vd-rotulo">Marca</label><input type="text" data-f="marca" class="vd-campo"></div>
+                        <div class="sm:col-span-2"><label class="vd-rotulo">Modelo</label><input type="text" data-f="modelo" class="vd-campo"></div>
+                        <div class="sm:col-span-2"><label class="vd-rotulo">Categoria</label><input type="text" data-f="categoria" class="vd-campo"></div>
+                        <div class="sm:col-span-2"><label class="vd-rotulo">Plano</label><input type="text" data-f="plano" class="vd-campo"></div>
+                        <div><label class="vd-rotulo">Pilar</label><input type="text" data-f="pilar" class="vd-campo"></div>
+                        <div><label class="vd-rotulo">Qtde</label><input type="number" data-f="qtde" value="1" min="1" class="vd-campo"></div>
+                        <div class="sm:col-span-2">
+                            <label class="vd-rotulo">Valor unitário</label>
+                            <div class="relative">
+                                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">R$</span>
+                                <input type="text" data-f="valor_venda" class="vd-campo pl-9" inputmode="decimal" placeholder="0,00">
+                            </div>
+                        </div>
+                    </div>
+                    <button type="button" data-add="produto"
+                            class="mt-4 w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg
+                                   bg-purple-50 text-purple-700 text-sm font-semibold hover:bg-purple-100 border border-purple-200">
+                        <i class="fas fa-plus"></i> Adicionar produto
+                    </button>
+
+                    <div data-table="produto" class="hidden mt-4 border border-gray-100 rounded-xl overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full text-sm">
+                                <thead class="bg-gray-50 text-gray-500 text-xs uppercase">
+                                    <tr>
+                                        <th class="text-left px-3 py-2 font-medium">Produto</th>
+                                        <th class="text-left px-3 py-2 font-medium">Marca / Modelo</th>
+                                        <th class="text-center px-3 py-2 font-medium">Qtde</th>
+                                        <th class="text-right px-3 py-2 font-medium">Total</th>
+                                        <th class="px-3 py-2"></th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 4. Serviços -->
+            <div class="vd-secao" data-item="servico">
+                <div class="vd-secao-cabeca">
+                    <span class="w-6 h-6 rounded-full bg-pink-600 text-white text-xs font-bold flex items-center justify-center">4</span>
+                    <span class="text-sm font-semibold text-gray-800">Serviços</span>
+                    <span class="text-xs text-gray-400 ml-auto">planos, linhas, assinaturas</span>
+                </div>
+                <div class="p-5">
+                    <input type="hidden" data-f="preco_id" value="">
+                    <div class="grid grid-cols-1 sm:grid-cols-6 gap-3">
+                        <div class="sm:col-span-6 relative">
+                            <label class="vd-rotulo">Serviço</label>
+                            <input type="text" data-f="servico" class="vd-campo" autocomplete="off"
+                                   placeholder="Digite 2 letras para buscar na tabela de preços…">
+                        </div>
+                        <div class="sm:col-span-3"><label class="vd-rotulo">Plano</label><input type="text" data-f="plano_novo" class="vd-campo"></div>
+                        <div class="sm:col-span-3"><label class="vd-rotulo">Tipo do plano</label><input type="text" data-f="tipo_plano" class="vd-campo"></div>
+                        <div class="sm:col-span-2"><label class="vd-rotulo">Nº de acesso</label><input type="text" data-f="numero_acesso" class="vd-campo" inputmode="numeric"></div>
+                        <div><label class="vd-rotulo">Pilar</label><input type="text" data-f="pilar" class="vd-campo"></div>
+                        <div class="sm:col-span-2">
+                            <label class="vd-rotulo">Valor do plano</label>
+                            <div class="relative">
+                                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">R$</span>
+                                <input type="text" data-f="valor_plano" class="vd-campo pl-9" inputmode="decimal" placeholder="0,00">
+                            </div>
+                        </div>
+                        <div><label class="vd-rotulo">Receita</label><input type="text" data-f="receita" class="vd-campo" inputmode="decimal"></div>
+                    </div>
+                    <button type="button" data-add="servico"
+                            class="mt-4 w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg
+                                   bg-pink-50 text-pink-700 text-sm font-semibold hover:bg-pink-100 border border-pink-200">
+                        <i class="fas fa-plus"></i> Adicionar serviço
+                    </button>
+
+                    <div data-table="servico" class="hidden mt-4 border border-gray-100 rounded-xl overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full text-sm">
+                                <thead class="bg-gray-50 text-gray-500 text-xs uppercase">
+                                    <tr>
+                                        <th class="text-left px-3 py-2 font-medium">Serviço</th>
+                                        <th class="text-left px-3 py-2 font-medium">Plano</th>
+                                        <th class="text-right px-3 py-2 font-medium">Valor</th>
+                                        <th class="px-3 py-2"></th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="vd-secao">
+                <div class="p-5">
+                    <label class="vd-rotulo">Observação</label>
+                    <textarea name="observacao" rows="3" class="vd-campo" placeholder="Algo que precise ficar registrado…"></textarea>
+                </div>
+            </div>
         </div>
-        <button type="button" data-add="produto" class="text-sm px-3 py-1.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700"><i class="fas fa-plus mr-1"></i> Adicionar produto</button>
-        <table class="w-full text-sm mt-3 hidden" data-table="produto">
-          <thead class="bg-gray-100 text-gray-600"><tr><th class="px-3 py-1.5 text-left">Produto</th><th class="px-3 py-1.5 text-left">Marca/Modelo</th><th class="px-3 py-1.5 text-center">Qtde</th><th class="px-3 py-1.5 text-right">Valor</th><th></th></tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </div>
 
-    <!-- Itens: Serviços -->
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-      <div class="px-6 py-3 border-b bg-gray-50 font-bold text-gray-800 flex items-center gap-2"><i class="fas fa-headset text-gray-400"></i> Serviços <span class="text-xs font-normal text-gray-400">(Serviço Vivo / Outros Serviços)</span></div>
-      <div class="p-4">
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2" data-item="servico">
-          <input type="hidden" data-f="preco_id">
-          <div class="relative">
-            <input placeholder="Serviço * (busca na tabela)" data-f="servico" autocomplete="off" class="w-full px-2 py-1.5 border border-gray-300 rounded text-sm">
-          </div>
-          <input placeholder="Plano" data-f="plano_novo" class="px-2 py-1.5 border border-gray-300 rounded text-sm">
-          <input placeholder="Tipo do Plano" data-f="tipo_plano" class="px-2 py-1.5 border border-gray-300 rounded text-sm">
-          <input placeholder="Nº de Acesso" data-f="numero_acesso" class="px-2 py-1.5 border border-gray-300 rounded text-sm">
-          <input placeholder="Pilar" data-f="pilar" class="px-2 py-1.5 border border-gray-300 rounded text-sm">
-          <input placeholder="Valor Plano (R$)" data-f="valor_plano" type="number" step="0.01" min="0" class="px-2 py-1.5 border border-gray-300 rounded text-sm text-right">
-          <input placeholder="Receita (R$)" data-f="receita" type="number" step="0.01" min="0" class="px-2 py-1.5 border border-gray-300 rounded text-sm text-right">
+        <!-- Resumo fixo -->
+        <div class="lg:col-span-1">
+            <div class="vd-card p-5 lg:sticky lg:top-4">
+                <h3 class="text-sm font-bold text-gray-800 mb-3">
+                    <i class="fas fa-receipt text-purple-600 mr-1.5"></i>Resumo
+                </h3>
+                <div class="space-y-2 text-sm border-b border-gray-100 pb-3 mb-3">
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Produtos</span>
+                        <span class="text-gray-800 tabular">R$ <span id="total-produtos">0,00</span></span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Serviços</span>
+                        <span class="text-gray-800 tabular">R$ <span id="total-servicos">0,00</span></span>
+                    </div>
+                </div>
+                <div class="flex justify-between items-baseline mb-4">
+                    <span class="text-sm font-semibold text-gray-700">Total</span>
+                    <span class="text-2xl font-bold text-purple-700 tabular">R$ <span id="total-geral">0,00</span></span>
+                </div>
+
+                <button type="submit"
+                        class="w-full px-5 py-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold shadow-sm">
+                    <i class="fas fa-check mr-1.5"></i>Lançar venda
+                </button>
+                <a href="{% url 'vendas:dashboard' %}"
+                   class="block text-center mt-2 px-5 py-2.5 rounded-xl border border-gray-300 text-gray-600 text-sm font-semibold hover:bg-gray-50">
+                    Cancelar
+                </a>
+                <p class="vd-ajuda text-center mt-3">Adicione pelo menos um produto ou serviço.</p>
+            </div>
         </div>
-        <button type="button" data-add="servico" class="text-sm px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700"><i class="fas fa-plus mr-1"></i> Adicionar serviço</button>
-        <table class="w-full text-sm mt-3 hidden" data-table="servico">
-          <thead class="bg-gray-100 text-gray-600"><tr><th class="px-3 py-1.5 text-left">Serviço</th><th class="px-3 py-1.5 text-left">Plano</th><th class="px-3 py-1.5 text-right">Valor</th><th></th></tr></thead>
-          <tbody></tbody>
-        </table>
-      </div>
     </div>
+</form>
 
-    <div class="flex items-center justify-between bg-white rounded-xl shadow-sm border border-gray-200 px-6 py-4">
-      <div class="text-lg font-bold text-gray-900">Total: <span class="text-purple-700">R$ <span id="total-geral">0,00</span></span></div>
-      <button type="submit" class="inline-flex items-center gap-2 px-6 py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg"><i class="fas fa-check"></i> Lançar venda</button>
-    </div>
-  </form>
-</div>
-
-<style>
-  .ac-box { position: absolute; left: 0; right: 0; top: 100%; z-index: 30; background: #fff;
-    border: 1px solid #e5e7eb; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.12);
-    max-height: 260px; overflow-y: auto; margin-top: 2px; }
-  .ac-opt { padding: 6px 10px; cursor: pointer; display: flex; flex-direction: column; }
-  .ac-opt:hover { background: #f5f3ff; }
-  .ac-nome { font-size: .82rem; color: #111827; }
-  .ac-meta { font-size: .68rem; color: #9ca3af; }
-</style>
 <script>
 (function () {
   var produtos = [], servicos = [];
   var buscarUrl = "{% url 'vendas:precos_buscar' %}";
 
-  function brl(n) { return (Number(n) || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
+  function brl(n) { return numero(n).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
+
+  // '8.999,00' e '8999.00' viram número. Sem isto, Number('8999,00') é NaN e o
+  // resumo mostrava R$ 0,00 mesmo com item na lista — o valor certo só
+  // aparecia depois de salvar, porque quem converte é o servidor.
+  function numero(v) {
+    if (v === null || v === undefined || v === '') return 0;
+    if (typeof v === 'number') return v;
+    var txt = String(v).replace(/[R$\s]/g, '');
+    if (txt.indexOf(',') >= 0) txt = txt.replace(/\./g, '').replace(',', '.');
+    var n = parseFloat(txt);
+    return isNaN(n) ? 0 : n;
+  }
 
   function coletar(tipo) {
     var wrap = document.querySelector('[data-item="' + tipo + '"]');
@@ -154,9 +290,15 @@
     });
   }
   function atualizarTotais() {
+    var tProdutos = 0, tServicos = 0;
     var t = 0;
-    produtos.forEach(function (p) { t += (Number(p.valor_venda) || 0) * (Number(p.qtde) || 1); });
-    servicos.forEach(function (s) { t += (Number(s.valor_plano) || 0); });
+    produtos.forEach(function (p) { tProdutos += numero(p.valor_venda) * (parseInt(p.qtde, 10) || 1); });
+    servicos.forEach(function (s) { tServicos += numero(s.valor_plano); });
+    t = tProdutos + tServicos;
+    var elP = document.getElementById('total-produtos');
+    var elS = document.getElementById('total-servicos');
+    if (elP) elP.textContent = brl(tProdutos);
+    if (elS) elS.textContent = brl(tServicos);
     document.getElementById('total-geral').textContent = brl(t);
     document.getElementById('produtos_json').value = JSON.stringify(produtos);
     document.getElementById('servicos_json').value = JSON.stringify(servicos);
@@ -171,7 +313,7 @@
       var tr = document.createElement('tr');
       tr.className = 'border-t border-gray-100';
       if (tipo === 'produto') {
-        tr.innerHTML = '<td class="px-3 py-1.5">' + esc(it.nome_produto) + '</td><td class="px-3 py-1.5 text-gray-500">' + esc((it.marca || '') + ' ' + (it.modelo || '')) + '</td><td class="px-3 py-1.5 text-center">' + (it.qtde || 1) + '</td><td class="px-3 py-1.5 text-right">R$ ' + brl((Number(it.valor_venda) || 0) * (Number(it.qtde) || 1)) + '</td>';
+        tr.innerHTML = '<td class="px-3 py-1.5">' + esc(it.nome_produto) + '</td><td class="px-3 py-1.5 text-gray-500">' + esc((it.marca || '') + ' ' + (it.modelo || '')) + '</td><td class="px-3 py-1.5 text-center">' + (it.qtde || 1) + '</td><td class="px-3 py-1.5 text-right">R$ ' + brl(numero(it.valor_venda) * (parseInt(it.qtde, 10) || 1)) + '</td>';
       } else {
         tr.innerHTML = '<td class="px-3 py-1.5">' + esc(it.servico) + '</td><td class="px-3 py-1.5 text-gray-500">' + esc(it.plano_novo || '') + '</td><td class="px-3 py-1.5 text-right">R$ ' + brl(it.valor_plano) + '</td>';
       }
