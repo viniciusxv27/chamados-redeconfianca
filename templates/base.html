@@ -341,7 +341,7 @@
                                 <i class="fas fa-id-badge text-orange-400 flex-shrink-0 w-5 text-center"></i>
                                 <span class="text-sm flex-1 sidebar-text">Área do Colaborador</span>
                                 <i class="fas fa-chevron-down text-gray-500 text-[10px] submenu-toggle transition-transform duration-300" id="colaborador-menu-icon"></i>
-                                <div class="tooltip-collapsed">Área do Colaborador</div>
+                                <div class="tooltip-collapsed">Gestão Comercial</div>
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-orange-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </div>
                         </li>
@@ -470,9 +470,9 @@
                             <div class="menu-grupo flex items-center gap-2.5 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group cursor-pointer"
                                  onclick="toggleSubmenu('gestao-menu')" title="Gestão">
                                 <i class="fas fa-layer-group text-orange-400 flex-shrink-0 w-5 text-center"></i>
-                                <span class="text-sm flex-1 sidebar-text">Gestão</span>
+                                <span class="text-sm flex-1 sidebar-text">Gestão Administrativa</span>
                                 <i class="fas fa-chevron-down text-gray-500 text-[10px] submenu-toggle transition-transform duration-300" id="gestao-menu-icon"></i>
-                                <div class="tooltip-collapsed">Gestão</div>
+                                <div class="tooltip-collapsed">Gestão Administrativa</div>
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-orange-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </div>
                         </li>
@@ -872,6 +872,37 @@
                             </ul>
                         </li>
                             </ul>
+
+                    <script>
+                    // Grupo sem nenhum item liberado some junto com o cabeçalho.
+                    // A decisão de mostrar cada item já foi tomada no servidor,
+                    // pelas permissões; aqui só se observa o resultado — repetir
+                    // as regras de acesso no template daria duas verdades.
+                    //
+                    // Roda aqui, logo depois do menu, e não no DOMContentLoaded,
+                    // para o grupo vazio não chegar a piscar na tela.
+                    (function () {
+                        document.querySelectorAll('#sidebar .submenu-content').forEach(function (sub) {
+                            if (sub.querySelector('li')) return;
+                            var cabecalho = sub.previousElementSibling;
+                            if (cabecalho && cabecalho.querySelector('.menu-grupo')) cabecalho.remove();
+                            sub.remove();
+                        });
+
+                        // Rótulo de seção que ficou sem nada embaixo também sai.
+                        document.querySelectorAll('#sidebar .tracking-wider').forEach(function (rotulo) {
+                            var bloco = rotulo.closest('li');
+                            var proximo = bloco && bloco.nextElementSibling;
+                            var temConteudo = false;
+                            while (proximo) {
+                                if (proximo.querySelector('.tracking-wider')) break;   // próxima seção
+                                if (proximo.querySelector('a, .menu-grupo')) { temConteudo = true; break; }
+                                proximo = proximo.nextElementSibling;
+                            }
+                            if (!temConteudo && bloco) bloco.remove();
+                        });
+                    })();
+                    </script>
                         </nav>
             </aside>
             
