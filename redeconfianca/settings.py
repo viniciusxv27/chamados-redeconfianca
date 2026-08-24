@@ -77,6 +77,7 @@ INSTALLED_APPS = [
     'tangerino',  # Integração com o Tangerino / Sólides Ponto
     'contagem_caixa',  # Contagem de Caixa (controle diário por loja)
     'vendas',  # Lançamento de vendas (Postgres) + tabela de preços
+    'maps',  # Mapa de localização (módulo oculto, restrito à administração)
     # 'webpush',  # Django WebPush (temporariamente removido)
 ]
 
@@ -126,6 +127,7 @@ TEMPLATES = [
                 'cartoes.context_processors.cartoes_menu',
                 'tangerino.context_processors.tangerino_gate',
                 'contagem_caixa.context_processors.caixa_menu',
+                'maps.context_processors.coleta_posicao',
             ],
         },
     },

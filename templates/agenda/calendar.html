@@ -249,13 +249,23 @@
                     <div class="relative">
                         <input type="text" id="participantSearch" autocomplete="off"
                                class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-orange-500 focus:border-orange-500"
-                               placeholder="Digite o nome para buscar..."
+                               placeholder="Busque uma pessoa ou um grupo..."
                                oninput="filterParticipantSuggestions()" onfocus="showParticipantSuggestions()">
-                        <div id="participantSuggestions" class="hidden absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-40 overflow-y-auto">
+                        <div id="participantSuggestions" class="hidden absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
                         </div>
                     </div>
-                    <div id="selectedParticipants" class="flex flex-wrap gap-1 mt-2"></div>
-                    <p class="text-xs text-gray-400 mt-1">Participantes precisam aceitar o convite.</p>
+                    <div class="flex items-center justify-between gap-2 mt-2">
+                        <span id="participantCount" class="text-xs text-gray-500"></span>
+                        <button type="button" id="participantClear" onclick="clearParticipants()"
+                                class="hidden text-xs text-gray-400 hover:text-red-600">
+                            <i class="fas fa-times-circle mr-0.5"></i> limpar todos
+                        </button>
+                    </div>
+                    <div id="selectedParticipants" class="flex flex-wrap gap-1 mt-2 max-h-32 overflow-y-auto"></div>
+                    <p id="participantGroupHint" class="hidden text-xs text-orange-600 mt-1"></p>
+                    <p class="text-xs text-gray-400 mt-1">
+                        Escolher um grupo convida todas as pessoas dele. Participantes precisam aceitar o convite.
+                    </p>
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-2">Cor</label>
@@ -549,35 +559,119 @@ const ALL_USERS = [
     {% endfor %}
 ];
 
+// Grupos de comunicação (/users/manage/groups/). Cada um já traz os ids de
+// quem será convidado — a filtragem de ativo/criador é feita no servidor.
+const ALL_GROUPS = [
+    {% for g in grupos_convite %}
+    { id: {{ g.id }}, name: "{{ g.nome|escapejs }}", members: [{{ g.membros|join:", " }}] },
+    {% endfor %}
+];
+
 let selectedParticipantIds = [];
+
+// Quantos do grupo ainda não estão na lista — é o número que o botão promete
+// convidar, então tem que descontar quem já foi escolhido antes.
+function faltamDoGrupo(grupo) {
+    const jaEscolhidos = selectedParticipantIds.map(p => p.id);
+    return grupo.members.filter(id => !jaEscolhidos.includes(id));
+}
+
+function linhaGrupo(g) {
+    const faltam = faltamDoGrupo(g).length;
+    const total = g.members.length;
+    const detalhe = faltam === 0
+        ? 'todos já convidados'
+        : (faltam === total
+            ? `${total} ${total === 1 ? 'pessoa' : 'pessoas'}`
+            : `+${faltam} de ${total}`);
+    return `
+        <div class="px-3 py-2 text-sm cursor-pointer hover:bg-orange-50 flex items-center gap-2 ${faltam === 0 ? 'opacity-50' : ''}"
+             onclick="addGroup(${g.id})">
+            <div class="w-6 h-6 rounded-md bg-orange-600 text-white flex items-center justify-center text-[10px] flex-shrink-0">
+                <i class="fas fa-users"></i>
+            </div>
+            <div class="flex-1 min-w-0">
+                <span class="text-gray-800 font-medium">${escapeHtml(g.name)}</span>
+                <span class="text-xs text-gray-400 ml-1">${detalhe}</span>
+            </div>
+            <span class="text-[10px] uppercase tracking-wide text-orange-600 font-semibold">grupo</span>
+        </div>`;
+}
+
+function linhaPessoa(u) {
+    return `
+        <div class="px-3 py-2 text-sm cursor-pointer hover:bg-orange-50 flex items-center gap-2" onclick="addParticipant(${u.id})">
+            <div class="w-6 h-6 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-xs font-bold flex-shrink-0">${u.initials}</div>
+            <div class="flex-1 min-w-0">
+                <span class="text-gray-800 font-medium">${escapeHtml(u.name)}</span>
+                <span class="text-xs text-gray-400 ml-1">${escapeHtml(u.sector)}</span>
+            </div>
+        </div>`;
+}
 
 function filterParticipantSuggestions() {
     const q = document.getElementById('participantSearch').value.toLowerCase().trim();
     const container = document.getElementById('participantSuggestions');
-    if (!q) { container.classList.add('hidden'); return; }
-    
+
     const selectedIds = selectedParticipantIds.map(p => p.id);
-    const filtered = ALL_USERS.filter(u => !selectedIds.includes(u.id) && u.name.toLowerCase().includes(q));
-    
-    if (filtered.length === 0) {
-        container.innerHTML = '<div class="px-3 py-2 text-sm text-gray-400">Nenhum resultado</div>';
-    } else {
-        container.innerHTML = filtered.slice(0, 8).map(u => `
-            <div class="px-3 py-2 text-sm cursor-pointer hover:bg-orange-50 flex items-center gap-2" onclick="addParticipant(${u.id})">
-                <div class="w-6 h-6 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-xs font-bold flex-shrink-0">${u.initials}</div>
-                <div class="flex-1 min-w-0">
-                    <span class="text-gray-800 font-medium">${escapeHtml(u.name)}</span>
-                    <span class="text-xs text-gray-400 ml-1">${escapeHtml(u.sector)}</span>
-                </div>
-            </div>
-        `).join('');
+    // Sem busca mostramos os grupos: eles são o atalho, e ficariam escondidos
+    // se só aparecessem depois de a pessoa adivinhar o nome.
+    const grupos = q ? ALL_GROUPS.filter(g => g.name.toLowerCase().includes(q)) : ALL_GROUPS;
+    const pessoas = q
+        ? ALL_USERS.filter(u => !selectedIds.includes(u.id) && u.name.toLowerCase().includes(q))
+        : [];
+
+    let html = '';
+    if (grupos.length) {
+        html += '<div class="px-3 pt-2 pb-1 text-[10px] uppercase tracking-wide text-gray-400 font-semibold">Grupos</div>';
+        html += grupos.slice(0, 8).map(linhaGrupo).join('');
     }
+    if (pessoas.length) {
+        if (grupos.length) {
+            html += '<div class="px-3 pt-2 pb-1 text-[10px] uppercase tracking-wide text-gray-400 font-semibold border-t border-gray-100">Pessoas</div>';
+        }
+        html += pessoas.slice(0, 8).map(linhaPessoa).join('');
+    }
+    if (!html) {
+        html = '<div class="px-3 py-2 text-sm text-gray-400">Nenhum resultado</div>';
+    }
+
+    container.innerHTML = html;
     container.classList.remove('hidden');
 }
 
 function showParticipantSuggestions() {
-    const q = document.getElementById('participantSearch').value.trim();
-    if (q) filterParticipantSuggestions();
+    filterParticipantSuggestions();
+}
+
+// Escolher o grupo convida todo mundo dele. Os convidados viram etiquetas
+// individuais de propósito: é isso que vai ser salvo, e assim dá para tirar
+// uma pessoa sem desfazer o grupo inteiro.
+function addGroup(groupId) {
+    const grupo = ALL_GROUPS.find(g => g.id === groupId);
+    if (!grupo) return;
+
+    const novos = faltamDoGrupo(grupo);
+    novos.forEach(function (id) {
+        const user = ALL_USERS.find(u => u.id === id);
+        if (user) {
+            selectedParticipantIds.push({ id: user.id, name: user.name, sector: user.sector });
+        }
+    });
+
+    renderSelectedParticipants();
+    avisoGrupo(grupo.name, novos.length);
+    document.getElementById('participantSearch').value = '';
+    document.getElementById('participantSuggestions').classList.add('hidden');
+}
+
+function avisoGrupo(nome, quantidade) {
+    const alvo = document.getElementById('participantGroupHint');
+    if (!alvo) return;
+    alvo.textContent = quantidade
+        ? `Grupo ${nome}: ${quantidade} ${quantidade === 1 ? 'pessoa adicionada' : 'pessoas adicionadas'}.`
+        : `Todos do grupo ${nome} já estavam na lista.`;
+    alvo.classList.remove('hidden');
 }
 
 function addParticipant(userId) {
@@ -595,9 +689,32 @@ function removeParticipant(userId) {
     renderSelectedParticipants();
 }
 
+function clearParticipants() {
+    selectedParticipantIds = [];
+    renderSelectedParticipants();
+}
+
 function renderSelectedParticipants() {
     const container = document.getElementById('selectedParticipants');
-    if (selectedParticipantIds.length === 0) {
+    const total = selectedParticipantIds.length;
+
+    // O aviso do grupo some a cada redesenho e é reposto logo depois por
+    // addGroup(); assim ele nunca sobrevive à abertura de outro evento.
+    const hint = document.getElementById('participantGroupHint');
+    if (hint) hint.classList.add('hidden');
+
+    // Com um grupo grande a lista de etiquetas fica longa; o contador é o que
+    // deixa claro quantos convites vão sair de verdade.
+    const contador = document.getElementById('participantCount');
+    if (contador) {
+        contador.textContent = total
+            ? `${total} ${total === 1 ? 'convidado' : 'convidados'}`
+            : '';
+    }
+    const limpar = document.getElementById('participantClear');
+    if (limpar) limpar.classList.toggle('hidden', total === 0);
+
+    if (total === 0) {
         container.innerHTML = '';
         return;
     }

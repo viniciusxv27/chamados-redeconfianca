@@ -1,0 +1,388 @@
+{% extends "base.html" %}
+
+{% block title %}Mapa de localização{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+    .mp-card { background:#fff; border:1px solid #ECECF1; border-radius:1rem;
+               box-shadow:0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.06); }
+    #mpMapa { height: 68vh; min-height: 26rem; border-radius: 1rem; z-index: 0; }
+    @media (max-width: 768px) { #mpMapa { height: 55vh; } }
+
+    .mp-pessoa { cursor:pointer; }
+    .mp-pessoa:hover { background:#F5F3FF; }
+    .mp-pessoa.selecionada { background:#EDE9FE; }
+
+    /* A borda colorida é o que diz se a posição é de agora ou de ontem — a
+       foto sozinha não conta isso. */
+    .mp-ponto { border-radius:50%; border:3px solid #94A3B8; background:#94A3B8;
+                box-shadow:0 1px 5px rgba(0,0,0,.35); overflow:hidden;
+                display:flex; align-items:center; justify-content:center;
+                font-size:11px; font-weight:700; color:#fff; }
+    .mp-ponto img { width:100%; height:100%; object-fit:cover; display:block; }
+    .mp-recente { border-color:#059669; background:#059669; }
+    .mp-antigo  { border-color:#94A3B8; background:#94A3B8; }
+    /* Pulsa só quem está mandando posição ao vivo agora. */
+    .mp-vivo { border-color:#059669; animation:mpPulso 2s ease-out infinite; }
+    @keyframes mpPulso {
+        0%   { box-shadow:0 1px 5px rgba(0,0,0,.35), 0 0 0 0 rgba(5,150,105,.55); }
+        70%  { box-shadow:0 1px 5px rgba(0,0,0,.35), 0 0 0 12px rgba(5,150,105,0); }
+        100% { box-shadow:0 1px 5px rgba(0,0,0,.35), 0 0 0 0 rgba(5,150,105,0); }
+    }
+    .mp-foto { border-radius:50%; object-fit:cover; background:#E2E8F0; }
+
+    .tabular { font-variant-numeric: tabular-nums; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto p-3 sm:p-5">
+
+    <div class="flex items-start justify-between gap-3 mb-4 flex-wrap">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900 flex items-center gap-2.5">
+                <span class="w-9 h-9 rounded-xl bg-violet-100 text-violet-700 flex items-center justify-center">
+                    <i class="fas fa-map-location-dot"></i>
+                </span>
+                Mapa de localização
+            </h1>
+            <p class="text-sm text-gray-500 mt-1">
+                Onde cada pessoa foi vista pela última vez · atualizado às
+                <span id="mpAtualizado" class="tabular">{{ agora|date:"H:i:s" }}</span>
+            </p>
+        </div>
+        <label class="flex items-center gap-2 text-sm text-gray-600 mp-card px-3.5 py-2">
+            <input type="checkbox" id="mpAuto" checked class="rounded border-gray-300 text-violet-600">
+            Atualizar sozinho
+        </label>
+    </div>
+
+    <!-- Números -->
+    {% if not coleta_ativa %}
+    <div class="mp-card p-3.5 mb-4 border-l-4 border-amber-400 bg-amber-50/60">
+        <p class="text-sm text-amber-900">
+            <i class="fas fa-triangle-exclamation mr-1.5"></i>
+            <strong>Localização ao vivo desligada.</strong>
+            O mapa está mostrando a última marcação de ponto de cada pessoa — que pode ser de horas ou dias atrás.
+        </p>
+        <p class="text-[11px] text-amber-800/80 mt-1">
+            Para ligar, ative a coleta em Configuração do mapa no admin. Ligue depois de comunicar a rede:
+            acompanhar a posição durante o expediente é diferente de registrar onde a pessoa bateu o ponto.
+        </p>
+    </div>
+    {% endif %}
+
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+        <div class="mp-card p-4">
+            <p class="text-xs text-gray-500">No mapa</p>
+            <p class="text-2xl font-bold text-gray-900 tabular mt-0.5" id="mpTotal">{{ total }}</p>
+        </div>
+        <div class="mp-card p-4">
+            <p class="text-xs text-gray-500">Ao vivo</p>
+            <p class="text-2xl font-bold text-emerald-600 tabular mt-0.5" id="mpAoVivo">{{ ao_vivo }}</p>
+            <p class="text-[11px] text-gray-400">enviando agora</p>
+        </div>
+        <div class="mp-card p-4">
+            <p class="text-xs text-gray-500">Posição recente</p>
+            <p class="text-2xl font-bold text-emerald-600 tabular mt-0.5" id="mpRecentes">{{ recentes }}</p>
+            <p class="text-[11px] text-gray-400">últimos {{ fresco_minutos }} min</p>
+        </div>
+        <div class="mp-card p-4">
+            <p class="text-xs text-gray-500">Sem posição</p>
+            <p class="text-2xl font-bold text-gray-300 tabular mt-0.5">{{ sem_posicao }}</p>
+            <p class="text-[11px] text-gray-400">no filtro atual</p>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <form method="get" class="mp-card p-4 mb-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
+            <div class="lg:col-span-2">
+                <label class="block text-xs font-semibold text-gray-500 mb-1">Buscar pessoa</label>
+                <div class="relative">
+                    <i class="fas fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-300 text-xs"></i>
+                    <input type="text" name="q" value="{{ filtros.q }}"
+                           class="w-full border border-gray-300 rounded-lg pl-8 pr-3 py-2 text-sm"
+                           placeholder="Nome, e-mail ou cargo">
+                </div>
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-gray-500 mb-1">Setor</label>
+                <select name="setor" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    <option value="">Todos</option>
+                    {% for s in setores %}
+                    <option value="{{ s.id }}" {% if filtros.setor == s.id|stringformat:"s" %}selected{% endif %}>{{ s.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-gray-500 mb-1">Pessoa</label>
+                <select name="usuario" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    <option value="">Todas</option>
+                    {% for p in pessoas %}
+                    <option value="{{ p.id }}" {% if filtros.usuario == p.id|stringformat:"s" %}selected{% endif %}>{{ p.full_name|default:p.email }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex gap-2">
+                <div class="flex-1">
+                    <label class="block text-xs font-semibold text-gray-500 mb-1">Período</label>
+                    <select name="dias" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                        <option value="1" {% if dias == 1 %}selected{% endif %}>Hoje</option>
+                        <option value="7" {% if dias == 7 %}selected{% endif %}>7 dias</option>
+                        <option value="30" {% if dias == 30 %}selected{% endif %}>30 dias</option>
+                        <option value="90" {% if dias == 90 %}selected{% endif %}>90 dias</option>
+                    </select>
+                </div>
+                <button class="self-end px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm font-semibold">
+                    <i class="fas fa-filter"></i>
+                </button>
+            </div>
+        </div>
+        {% if filtros.q or filtros.setor or filtros.usuario %}
+        <a href="{% url 'maps:mapa' %}" class="inline-block mt-3 text-xs text-gray-500 hover:text-violet-700">
+            <i class="fas fa-xmark mr-1"></i>limpar filtros
+        </a>
+        {% endif %}
+    </form>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div class="lg:col-span-2">
+            <div class="mp-card p-1.5">
+                <div id="mpMapa"></div>
+            </div>
+            <p class="text-[11px] text-gray-400 mt-2">
+                <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-600 align-middle"></span>
+                posição dos últimos {{ fresco_minutos }} min ·
+                <span class="inline-block w-2.5 h-2.5 rounded-full bg-slate-400 align-middle ml-1"></span>
+                mais antiga · o círculo em volta mostra a precisão informada pelo aparelho
+            </p>
+        </div>
+
+        <!-- Lista -->
+        <div class="mp-card overflow-hidden flex flex-col">
+            <div class="px-4 py-3 border-b border-gray-100">
+                <h2 class="text-sm font-bold text-gray-800">
+                    <i class="fas fa-users text-violet-600 mr-1.5"></i>Pessoas
+                </h2>
+            </div>
+            <div class="divide-y divide-gray-50 overflow-y-auto" style="max-height: 68vh;" id="mpLista">
+                {% for p in posicoes %}
+                <div class="mp-pessoa px-4 py-2.5 flex items-center gap-3" data-id="{{ p.id }}"
+                     data-lat="{{ p.latitude }}" data-lon="{{ p.longitude }}">
+                    {% if p.foto %}
+                        <img src="{{ p.foto }}" alt=""
+                             class="w-9 h-9 rounded-full object-cover flex-shrink-0 ring-2 {% if p.recente %}ring-emerald-500{% else %}ring-gray-200{% endif %}">
+                    {% else %}
+                        <span class="w-9 h-9 rounded-full flex-shrink-0 flex items-center justify-center text-[11px] font-bold text-white ring-2 ring-white {% if p.recente %}bg-emerald-600{% else %}bg-gray-400{% endif %}">
+                            {{ p.nome|slice:":1"|upper }}
+                        </span>
+                    {% endif %}
+                    <div class="min-w-0 flex-1">
+                        <div class="flex items-center justify-between gap-2">
+                            <span class="text-sm text-gray-800 truncate">{{ p.nome }}</span>
+                            <span class="text-[11px] whitespace-nowrap {% if p.recente %}text-emerald-600 font-semibold{% else %}text-gray-400{% endif %}">
+                                {% if p.ao_vivo %}● ao vivo{% else %}{{ p.quando }}{% endif %}
+                            </span>
+                        </div>
+                        <p class="text-[11px] text-gray-400 truncate">
+                            {{ p.setor|default:"sem setor" }}{% if p.cargo %} · {{ p.cargo }}{% endif %}
+                        </p>
+                    </div>
+                </div>
+                {% empty %}
+                <div class="px-4 py-12 text-center text-gray-400">
+                    <i class="fas fa-location-crosshairs text-gray-200 text-3xl mb-2 block"></i>
+                    <p class="text-sm">Nenhuma posição no filtro atual.</p>
+                    <p class="text-xs mt-1">As posições vêm da localização ao vivo ou do ponto batido pelo portal.</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <p class="text-xs text-gray-400 mt-4 leading-relaxed">
+        <i class="fas fa-circle-info mr-1"></i>
+        As posições vêm da <strong>marcação de ponto pelo portal</strong>, em que o navegador pede
+        autorização à pessoa no momento de bater. Cada ponto mostra <strong>quando</strong> foi
+        capturado — uma marca no mapa não quer dizer que a pessoa está ali agora.
+    </p>
+</div>
+
+{{ posicoes_json|json_script:"mpDados" }}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(function () {
+    // O servidor já mandou as posições nesta página. Desenhar a partir daí faz
+    // o mapa aparecer preenchido no primeiro quadro — e, se a consulta de
+    // atualização falhar, ele continua mostrando algo em vez de ficar cinza.
+    var dadosIniciais = [];
+    try { dadosIniciais = JSON.parse(document.getElementById('mpDados').textContent) || []; }
+    catch (e) { dadosIniciais = []; }
+    var mapa = L.map('mpMapa', { zoomControl: true });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap'
+    }).addTo(mapa);
+
+    var camada = L.layerGroup().addTo(mapa);
+    var marcadores = {};
+    var jaEnquadrou = false;
+
+    function iniciaisDe(nome) {
+        return (nome || '?').trim().split(/\s+/).slice(0, 2)
+            .map(function (x) { return x[0]; }).join('').toUpperCase();
+    }
+
+    function icone(p) {
+        var estado = p.ao_vivo ? 'mp-vivo' : (p.recente ? 'mp-recente' : 'mp-antigo');
+        // Sem foto — ou com a foto quebrada no storage — caímos nas iniciais,
+        // que é melhor do que um buraco branco no meio do mapa.
+        var miolo = p.foto
+            ? '<img src="' + escapar(p.foto) + '" alt="" ' +
+              'onerror="this.parentNode.textContent=\'' + iniciaisDe(p.nome) + '\'">'
+            : iniciaisDe(p.nome);
+        return L.divIcon({
+            className: '',
+            html: '<div class="mp-ponto ' + estado + '" style="width:38px;height:38px">' +
+                  miolo + '</div>',
+            iconSize: [38, 38],
+            iconAnchor: [19, 19],
+        });
+    }
+
+    function balao(p) {
+        var foto = p.foto
+            ? '<img src="' + escapar(p.foto) + '" class="mp-foto" width="40" height="40" ' +
+              'style="width:40px;height:40px;float:left;margin-right:8px" alt="">'
+            : '';
+        return '<div style="min-width:200px">' + foto +
+            '<strong>' + escapar(p.nome) + '</strong>' +
+            (p.ao_vivo ? ' <span style="color:#059669;font-size:11px;font-weight:700">● ao vivo</span>' : '') +
+            (p.cargo ? '<br><span style="color:#6b7280;font-size:12px">' + escapar(p.cargo) + '</span>' : '') +
+            (p.setor ? '<br><span style="color:#6b7280;font-size:12px">' + escapar(p.setor) + '</span>' : '') +
+            '<hr style="margin:6px 0;border:0;border-top:1px solid #eee">' +
+            '<span style="font-size:12px">' + escapar(p.momento) + ' · <strong>' + escapar(p.quando) + '</strong></span>' +
+            (p.precisao ? '<br><span style="font-size:11px;color:#9ca3af">precisão ~' + Math.round(p.precisao) + ' m</span>' : '') +
+            '<br><span style="font-size:11px;color:#9ca3af">origem: ' + escapar(p.origem) + '</span>' +
+            '</div>';
+    }
+
+    function escapar(t) {
+        return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) {
+            return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c];
+        });
+    }
+
+    function desenhar(lista) {
+        camada.clearLayers();
+        marcadores = {};
+        var pontos = [];
+
+        lista.forEach(function (p) {
+            if (p.lat == null || p.lon == null) return;
+            // O círculo de precisão evita ler 2 km de incerteza como se fosse
+            // o endereço exato da pessoa.
+            if (p.precisao && p.precisao > 30) {
+                L.circle([p.lat, p.lon], {
+                    radius: p.precisao, color: p.recente ? '#059669' : '#94A3B8',
+                    fillOpacity: 0.08, weight: 1
+                }).addTo(camada);
+            }
+            var m = L.marker([p.lat, p.lon], { icon: icone(p) })
+                .bindPopup(balao(p)).addTo(camada);
+            marcadores[p.id] = m;
+            pontos.push([p.lat, p.lon]);
+        });
+
+        enquadrar(pontos);
+    }
+
+    // Sem enquadramento o Leaflet não desenha nem os ladrilhos: um mapa sem
+    // centro é um retângulo cinza. E enquadrar antes do CSS dar altura ao
+    // container joga o zoom no máximo (tudo "cabe" numa caixa de altura zero),
+    // então só damos o enquadramento por bom quando o mapa já tem tamanho.
+    var ultimosPontos = [];
+    function enquadrar(pontos) {
+        if (pontos && pontos.length) { ultimosPontos = pontos; }
+        if (jaEnquadrou) { return; }
+
+        var caixa = document.getElementById('mpMapa');
+        if (!caixa || caixa.offsetHeight < 80) { return; }
+        mapa.invalidateSize();
+
+        if (ultimosPontos.length) {
+            mapa.fitBounds(ultimosPontos, { padding: [40, 40], maxZoom: 16 });
+            // Todo mundo no mesmo prédio cola o zoom no teto e some a rua em
+            // volta; abrir um pouco dá a referência de onde é aquilo. Depois
+            // disso o zoom é do usuário — não mexemos mais.
+            if (mapa.getZoom() > 17) { mapa.setZoom(17); }
+        } else {
+            mapa.setView([-20.3155, -40.3128], 11);   // Grande Vitória
+        }
+        jaEnquadrou = true;
+    }
+
+    window.addEventListener('load', function () { enquadrar(ultimosPontos); });
+    window.addEventListener('resize', function () { mapa.invalidateSize(); });
+
+    function atualizar() {
+        var busca = window.location.search;
+        fetch('{% url "maps:api_posicoes" %}' + busca,
+              { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (!d || !d.posicoes) return;
+                desenhar(d.posicoes);
+                document.getElementById('mpAtualizado').textContent = d.atualizado_em;
+                document.getElementById('mpTotal').textContent = d.total;
+                document.getElementById('mpRecentes').textContent = d.recentes;
+                var elVivo = document.getElementById('mpAoVivo');
+                if (elVivo && d.ao_vivo !== undefined) { elVivo.textContent = d.ao_vivo; }
+            })
+            .catch(function () { /* o mapa fica com a última posição conhecida */ });
+    }
+
+    // Clicar no nome centraliza no mapa.
+    document.querySelectorAll('.mp-pessoa').forEach(function (linha) {
+        linha.addEventListener('click', function () {
+            document.querySelectorAll('.mp-pessoa').forEach(function (o) {
+                o.classList.remove('selecionada');
+            });
+            linha.classList.add('selecionada');
+            var m = marcadores[linha.dataset.id];
+            if (m) {
+                mapa.setView(m.getLatLng(), 17, { animate: true });
+                m.openPopup();
+            }
+        });
+    });
+
+    desenhar(dadosIniciais);
+    // O Tailwind vem por CDN: a altura do container pode chegar depois deste
+    // script. Tentamos enquadrar por ~2s até o mapa ter tamanho de verdade.
+    var tentativas = 0;
+    var aguardaAltura = setInterval(function () {
+        enquadrar(ultimosPontos);
+        if (jaEnquadrou || ++tentativas > 20) { clearInterval(aguardaAltura); }
+    }, 100);
+    atualizar();
+
+    // Recarrega sozinho, e para quando a aba sai da frente — mapa aberto numa
+    // aba esquecida não precisa consultar o servidor a cada 30 segundos.
+    var relogio = null;
+    function ligar() {
+        if (relogio) return;
+        relogio = setInterval(function () {
+            if (!document.hidden) atualizar();
+        }, 30000);
+    }
+    function desligar() { clearInterval(relogio); relogio = null; }
+
+    var chave = document.getElementById('mpAuto');
+    chave.addEventListener('change', function () { chave.checked ? ligar() : desligar(); });
+    ligar();
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,74 @@
+{% comment %}
+Envia a posição do navegador para o portal enquanto a pessoa está logada.
+
+Duas coisas são deliberadas aqui:
+
+1. o navegador pede a autorização — sem ela nada é enviado e nada é insistido;
+2. enquanto envia, aparece um selo na tela. Uma coleta silenciosa seria fácil de
+   escrever e é exatamente o que não queremos: a pessoa tem que conseguir ver
+   que a posição dela está sendo compartilhada.
+{% endcomment %}
+<style>
+  #mpSelo { position:fixed; left:12px; bottom:12px; z-index:60; display:none;
+            align-items:center; gap:7px; padding:7px 12px; border-radius:999px;
+            background:#0f172a; color:#fff; font-size:12px; line-height:1.2;
+            box-shadow:0 4px 14px rgba(0,0,0,.25); max-width:min(92vw,340px); }
+  #mpSelo .mp-bolha { width:8px; height:8px; border-radius:50%; background:#10b981;
+                      flex:0 0 8px; animation:mpSeloPulso 2s ease-out infinite; }
+  @keyframes mpSeloPulso { 0%{box-shadow:0 0 0 0 rgba(16,185,129,.6);} 70%{box-shadow:0 0 0 8px rgba(16,185,129,0);} 100%{box-shadow:0 0 0 0 rgba(16,185,129,0);} }
+</style>
+<div id="mpSelo" role="status">
+  <span class="mp-bolha"></span>
+  <span>{{ mapa_coleta.aviso|default:"Sua localização está sendo compartilhada com a gestão." }}</span>
+</div>
+<script>
+(function () {
+    if (!navigator.geolocation) { return; }
+
+    var URL_ENVIO = '{% url "maps:api_minha_posicao" %}';
+    var INTERVALO = {{ mapa_coleta.intervalo|default:5 }} * 60 * 1000;
+    var selo = document.getElementById('mpSelo');
+
+    function csrf() {
+        var m = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+        return m ? m[1] : '';
+    }
+
+    function enviar(pos) {
+        var corpo = new URLSearchParams({
+            lat: pos.coords.latitude,
+            lon: pos.coords.longitude,
+            precisao: pos.coords.accuracy || ''
+        });
+        fetch(URL_ENVIO, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded',
+                       'X-CSRFToken': csrf(), 'X-Requested-With': 'XMLHttpRequest' },
+            body: corpo.toString()
+        }).then(function (r) {
+            // 409 = a coleta foi desligada no meio do caminho; paramos e tiramos o selo.
+            if (r.status === 409) { parar(); return; }
+            if (r.ok && selo) { selo.style.display = 'flex'; }
+        }).catch(function () { /* rede caiu; tenta no próximo ciclo */ });
+    }
+
+    var relogio = null;
+    function parar() {
+        if (relogio) { clearInterval(relogio); relogio = null; }
+        if (selo) { selo.style.display = 'none'; }
+    }
+
+    function medir() {
+        // Sem autorização o navegador chama o erro e não insistimos: não há
+        // como forçar, e ficar pedindo a cada ciclo só irrita.
+        navigator.geolocation.getCurrentPosition(enviar, function (e) {
+            if (e && e.code === 1) { parar(); }
+        }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
+    }
+
+    medir();
+    relogio = setInterval(function () {
+        if (!document.hidden) { medir(); }
+    }, INTERVALO);
+})();
+</script>

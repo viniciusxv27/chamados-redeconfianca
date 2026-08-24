@@ -647,6 +647,32 @@ def _generate_transcription_analysis(client, meeting_title, source_text, analysi
 # CALENDÁRIO PRINCIPAL
 # =========================================================================
 
+def grupos_para_convite(usuario):
+    """Grupos de comunicação (/users/manage/groups/) prontos para virar convite.
+
+    Cada grupo já vem com os ids dos membros que de fato serão convidados: só
+    gente ativa e sem quem está criando o evento — quem cria não se convida, e
+    contar essa pessoa faria o "N pessoas" da tela mentir.
+
+    Grupo que sobra vazio depois desse corte não aparece: um botão que não
+    convida ninguém só gera dúvida.
+    """
+    from communications.models import CommunicationGroup
+
+    grupos = (CommunicationGroup.objects
+              .filter(is_active=True)
+              .prefetch_related('members')
+              .order_by('name'))
+
+    saida = []
+    for grupo in grupos:
+        ids = [m.pk for m in grupo.members.all()
+               if m.is_active and m.pk != usuario.pk]
+        if ids:
+            saida.append({'id': grupo.pk, 'nome': grupo.name, 'membros': ids})
+    return saida
+
+
 @login_required
 def calendar_view(request):
     """Página principal da agenda com FullCalendar"""
@@ -669,6 +695,7 @@ def calendar_view(request):
         'pending_invitations': pending_invitations,
         'users_list': users_list,
         'sectors': sectors,
+        'grupos_convite': grupos_para_convite(request.user),
     }
     return render(request, 'agenda/calendar.html', context)
 
