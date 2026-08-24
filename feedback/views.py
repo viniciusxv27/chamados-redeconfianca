@@ -1001,6 +1001,16 @@ EXIT_INTERVIEW_SECTIONS = [
 
 EXIT_SCALE_OPTIONS = [1, 2, 3, 4, 5]
 
+# Campo de observação que acompanha cada nota. O prefixo evita colisão com o
+# nome da própria pergunta no POST.
+EXIT_OBS_PREFIX = 'obs_'
+EXIT_OBS_MAX = 2000
+
+# Vídeo da entrevista: o que aceitamos e até onde.
+EXIT_VIDEO_EXTS = ('.mp4', '.mov', '.m4v', '.webm', '.mkv', '.avi',
+                   '.mp3', '.m4a', '.wav', '.ogg', '.opus')
+EXIT_VIDEO_MAX_BYTES = 500 * 1024 * 1024
+
 
 def _exit_questions():
     """Lista achatada de todas as perguntas do formulário."""
@@ -1008,6 +1018,53 @@ def _exit_questions():
     for section in EXIT_INTERVIEW_SECTIONS:
         out.extend(section['questions'])
     return out
+
+
+def _validar_video_entrevista(arquivo):
+    """Devolve a mensagem de erro, ou string vazia se o arquivo serve.
+
+    Checagem por extensão e tamanho: o suficiente para barrar o engano comum
+    (mandar o PDF do desligamento) sem prometer uma validação de conteúdo que
+    não fazemos.
+    """
+    import os as _os
+
+    nome = getattr(arquivo, 'name', '') or ''
+    extensao = _os.path.splitext(nome)[1].lower()
+    if extensao not in EXIT_VIDEO_EXTS:
+        aceitos = ', '.join(EXIT_VIDEO_EXTS)
+        return f'formato {extensao or "desconhecido"} não aceito. Envie um destes: {aceitos}.'
+    if arquivo.size > EXIT_VIDEO_MAX_BYTES:
+        limite = EXIT_VIDEO_MAX_BYTES // (1024 * 1024)
+        return f'o arquivo tem {arquivo.size // (1024 * 1024)} MB e o limite é {limite} MB.'
+    if not arquivo.size:
+        return 'o arquivo chegou vazio.'
+    return ''
+
+
+def _iniciar_analise_video(resposta, arquivo, usuario):
+    """Guarda o vídeo e manda a IA ler, sem segurar quem enviou."""
+    from .entrevista_ia import processar_em_segundo_plano
+    from .models import ExitInterviewRecording
+
+    gravacao, _criada = ExitInterviewRecording.objects.update_or_create(
+        response=resposta,
+        defaults={
+            'video': arquivo,
+            'original_name': (getattr(arquivo, 'name', '') or '')[:255],
+            'uploaded_by': usuario,
+            'status': ExitInterviewRecording.Status.PENDING,
+            'error': '',
+            # Vídeo novo invalida a leitura do anterior.
+            'transcription': '',
+            'summary': '',
+            'highlights': {},
+            'score': None,
+            'score_reason': '',
+        },
+    )
+    processar_em_segundo_plano(gravacao.pk)
+    return gravacao
 
 
 @exit_interview_access_required
@@ -1028,12 +1085,14 @@ def exit_interview(request):
             except ValueError:
                 dismissal_date = None
 
-        answers = {'scale': {}, 'choice': {}, 'text': {}}
+        answers = {'scale': {}, 'choice': {}, 'text': {}, 'scale_obs': {}}
         missing = []
         for question in _exit_questions():
             raw = (request.POST.get(question['key']) or '').strip()
             qtype = question['type']
             if qtype == 'scale':
+                # A observação acompanha a nota mesmo quando a nota não é
+                # válida? Não: sem nota ela não tem a que se referir.
                 try:
                     value = int(raw)
                 except (TypeError, ValueError):
@@ -1043,6 +1102,9 @@ def exit_interview(request):
                         missing.append(question['key'])
                     continue
                 answers['scale'][question['key']] = value
+                observacao = (request.POST.get(f'{EXIT_OBS_PREFIX}{question["key"]}') or '').strip()
+                if observacao:
+                    answers['scale_obs'][question['key']] = observacao[:EXIT_OBS_MAX]
             elif qtype == 'choice':
                 if not raw:
                     if question['required']:
@@ -1071,7 +1133,7 @@ def exit_interview(request):
         subject_sector = _primary_sector_for_user(subject)
         now = timezone.now()
 
-        ExitInterviewResponse.objects.create(
+        resposta = ExitInterviewResponse.objects.create(
             survey_key=EXIT_INTERVIEW_KEY,
             user=subject,
             interviewer=request.user,
@@ -1079,6 +1141,17 @@ def exit_interview(request):
             answers=answers,
             duration_seconds=None,
         )
+
+        video = request.FILES.get('entrevista_video')
+        aviso_video = ''
+        if video:
+            erro_video = _validar_video_entrevista(video)
+            if erro_video:
+                # A entrevista já está registrada; recusar tudo por causa do
+                # arquivo faria perder as respostas digitadas.
+                aviso_video = erro_video
+            else:
+                _iniciar_analise_video(resposta, video, request.user)
 
         participation, _ = ExitInterviewParticipation.objects.get_or_create(
             survey_key=EXIT_INTERVIEW_KEY,
@@ -1098,6 +1171,11 @@ def exit_interview(request):
             f'Entrevista de {subject.get_full_name() or subject.username} registrada. '
             'Confira abaixo e efetue o desligamento de acesso quando desejar.',
         )
+        if aviso_video:
+            messages.warning(request, f'A entrevista foi salva, mas o vídeo não: {aviso_video}')
+        elif video:
+            messages.info(request, 'O vídeo entrou na fila de análise. '
+                                   'O resumo aparece aqui assim que a IA terminar.')
         return redirect('feedback:exit_interview')
 
     # GET — formulário + colaboradores com entrevista feita aguardando desligamento
@@ -1119,10 +1197,19 @@ def exit_interview(request):
         .order_by('first_name', 'last_name')
     )
 
+    from .models import ExitInterviewRecording
+    gravacoes = (ExitInterviewRecording.objects
+                 .select_related('response', 'response__user', 'response__sector')
+                 .order_by('-created_at')[:15])
+
     return render(request, 'feedback/exit_interview.html', {
         'survey_key': EXIT_INTERVIEW_KEY,
         'intro': EXIT_INTERVIEW_INTRO,
         'sections': EXIT_INTERVIEW_SECTIONS,
+        'gravacoes': gravacoes,
+        'obs_prefix': EXIT_OBS_PREFIX,
+        'video_exts': ','.join(EXIT_VIDEO_EXTS),
+        'video_max_mb': EXIT_VIDEO_MAX_BYTES // (1024 * 1024),
         'scale_options': EXIT_SCALE_OPTIONS,
         'candidate_users': candidate_users,
         'pending_dismissal': pending_dismissal,
@@ -1315,6 +1402,7 @@ def exit_interview_report(request):
         scale = ans.get('scale', {})
         choice = ans.get('choice', {})
         text = ans.get('text', {})
+        scale_obs = ans.get('scale_obs', {})
         scores = [v for v in scale.values() if isinstance(v, int)]
         avg = round(sum(scores) / len(scores), 2) if scores else None
         if response.duration_seconds:
@@ -1323,7 +1411,8 @@ def exit_interview_report(request):
         for q in _exit_questions():
             k = q['key']
             if q['type'] == 'scale' and k in scale:
-                items.append({'label': q['label'], 'value': scale[k], 'kind': 'scale'})
+                items.append({'label': q['label'], 'value': scale[k], 'kind': 'scale',
+                              'obs': scale_obs.get(k, '')})
             elif q['type'] == 'choice' and k in choice:
                 items.append({'label': q['label'], 'value': choice[k], 'kind': 'choice'})
             elif q['type'] in ('text', 'paragraph') and text.get(k):
@@ -1336,6 +1425,7 @@ def exit_interview_report(request):
             'avg': avg,
             'duration_display': response.duration_display(),
             'items': items,
+            'gravacao': getattr(response, 'recording', None),
         })
 
     avg_duration_seconds = round(sum(duration_values) / len(duration_values)) if duration_values else None
@@ -1996,3 +2086,128 @@ def api_dismiss_reminder(request):
         return JsonResponse({'ok': False, 'error': 'key requerido'}, status=400)
     FeedbackReminderDismissal.objects.get_or_create(user=request.user, key=key)
     return JsonResponse({'ok': True})
+
+
+# =========================================================================
+# GRAVAÇÃO DA ENTREVISTA DE DESLIGAMENTO — vídeo, análise da IA e link público
+# =========================================================================
+
+@exit_interview_access_required
+@require_POST
+def exit_interview_video_upload(request, response_id):
+    """Anexa (ou substitui) o vídeo de uma entrevista já registrada."""
+    resposta = get_object_or_404(
+        ExitInterviewResponse, pk=response_id, survey_key=EXIT_INTERVIEW_KEY)
+
+    arquivo = request.FILES.get('entrevista_video')
+    if not arquivo:
+        messages.error(request, 'Selecione o arquivo do vídeo.')
+        return redirect('feedback:exit_interview')
+
+    erro = _validar_video_entrevista(arquivo)
+    if erro:
+        messages.error(request, f'Vídeo não enviado: {erro}')
+        return redirect('feedback:exit_interview')
+
+    _iniciar_analise_video(resposta, arquivo, request.user)
+    messages.success(request, 'Vídeo enviado. A IA já começou a analisar.')
+    return redirect('feedback:exit_interview')
+
+
+@exit_interview_access_required
+@require_POST
+def exit_interview_video_retry(request, recording_id):
+    """Manda a IA tentar de novo — usado quando a análise falhou."""
+    from .entrevista_ia import processar_em_segundo_plano
+    from .models import ExitInterviewRecording
+
+    gravacao = get_object_or_404(ExitInterviewRecording, pk=recording_id)
+    if gravacao.em_andamento:
+        messages.info(request, 'Esta análise ainda está rodando.')
+        return redirect('feedback:exit_interview')
+
+    processar_em_segundo_plano(gravacao.pk)
+    messages.success(request, 'Análise reiniciada.')
+    return redirect('feedback:exit_interview')
+
+
+@exit_interview_access_required
+@require_POST
+def exit_interview_video_link(request, recording_id):
+    """Liga, desliga ou troca o endereço público do resumo.
+
+    Trocar gera um token novo: é o que realmente derruba um link que já foi
+    repassado adiante — só desativar e reativar devolveria o mesmo endereço.
+    """
+    import uuid as _uuid
+
+    from .models import ExitInterviewRecording
+
+    gravacao = get_object_or_404(ExitInterviewRecording, pk=recording_id)
+    acao = (request.POST.get('acao') or '').strip()
+
+    if acao == 'desligar':
+        gravacao.public_enabled = False
+        gravacao.save(update_fields=['public_enabled'])
+        messages.success(request, 'Link público desativado. Quem tiver o endereço não abre mais.')
+    elif acao == 'ligar':
+        gravacao.public_enabled = True
+        gravacao.save(update_fields=['public_enabled'])
+        messages.success(request, 'Link público reativado.')
+    elif acao == 'novo':
+        gravacao.public_token = _uuid.uuid4()
+        gravacao.public_enabled = True
+        gravacao.save(update_fields=['public_token', 'public_enabled'])
+        messages.success(request, 'Endereço novo gerado. O anterior deixou de funcionar.')
+    else:
+        messages.error(request, 'Ação desconhecida.')
+
+    return redirect('feedback:exit_interview')
+
+
+@require_http_methods(['GET'])
+def exit_interview_public_summary(request, token):
+    """Resumo da entrevista aberto por endereço, sem login.
+
+    Sai apenas o **resumo** e a nota. A transcrição fica de fora de propósito:
+    o texto corrido costuma citar gestor pelo nome e relatar episódios que não
+    devem circular por um endereço que qualquer um pode repassar.
+    """
+    from .models import ExitInterviewRecording
+
+    gravacao = (ExitInterviewRecording.objects
+                .select_related('response', 'response__sector')
+                .filter(public_token=token).first())
+
+    # Link desligado, análise não concluída e token inexistente respondem a
+    # mesma coisa: quem tem o endereço não deve conseguir distinguir os casos.
+    if (gravacao is None or not gravacao.public_enabled
+            or gravacao.status != gravacao.Status.DONE):
+        return render(request, 'feedback/exit_interview_public.html',
+                      {'indisponivel': True}, status=404)
+
+    destaques = gravacao.highlights or {}
+    return render(request, 'feedback/exit_interview_public.html', {
+        'gravacao': gravacao,
+        'resposta': gravacao.response,
+        'positivos': destaques.get('pontos_positivos') or [],
+        'atencao': destaques.get('pontos_atencao') or [],
+        'temas': destaques.get('temas') or [],
+        'risco': destaques.get('risco_saida') or '',
+    })
+
+
+@exit_interview_access_required
+def exit_interview_video_status(request):
+    """Situação das análises em andamento, para a tela se atualizar sozinha."""
+    from .models import ExitInterviewRecording
+
+    itens = (ExitInterviewRecording.objects
+             .order_by('-created_at')
+             .values('id', 'status', 'score', 'error')[:15])
+    return JsonResponse({'gravacoes': [{
+        'id': i['id'],
+        'status': i['status'],
+        'nota': float(i['score']) if i['score'] is not None else None,
+        'erro': i['error'],
+    } for i in itens]})

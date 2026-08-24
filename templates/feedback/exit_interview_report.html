@@ -186,10 +186,15 @@
                 {% for item in r.items %}
                   <div>
                     {% if item.kind == 'scale' %}
-                      <div class="flex items-center justify-between gap-3 text-sm border-b border-gray-50 py-1">
+                      <div class="flex items-center justify-between gap-3 text-sm {% if not item.obs %}border-b border-gray-50{% endif %} py-1">
                         <span class="text-gray-600">{{ item.label }}</span>
                         <span class="shrink-0 w-7 h-7 rounded-md flex items-center justify-center text-xs font-bold {% if item.value >= 4 %}bg-green-100 text-green-700{% elif item.value >= 3 %}bg-yellow-100 text-yellow-700{% else %}bg-red-100 text-red-700{% endif %}">{{ item.value }}</span>
                       </div>
+                      {% if item.obs %}
+                        <p class="text-sm text-gray-700 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 mb-2 whitespace-pre-line">
+                          <i class="fas fa-quote-left text-gray-300 mr-1"></i>{{ item.obs }}
+                        </p>
+                      {% endif %}
                     {% elif item.kind == 'choice' %}
                       <div class="flex items-center justify-between gap-3 text-sm border-b border-gray-50 py-1">
                         <span class="text-gray-600">{{ item.label }}</span>

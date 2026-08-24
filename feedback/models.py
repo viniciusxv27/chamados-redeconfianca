@@ -1,6 +1,11 @@
+import uuid
+
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
+
+from core.storage import get_media_storage
+from core.utils import upload_exit_interview_video
 
 
 SCALE_CHOICES = [(i, str(i)) for i in range(0, 11)]
@@ -618,3 +623,76 @@ class FeedbackReminderDismissal(models.Model):
 
     def __str__(self):
         return f'{self.user} dispensou {self.key}'
+
+
+class ExitInterviewRecording(models.Model):
+    """Vídeo da entrevista de desligamento, com a leitura feita pela IA.
+
+    O vídeo é transcrito e resumido; o resumo ganha um endereço público de
+    leitura para ser compartilhado com quem não tem acesso ao portal.
+
+    O que é público e o que não é foi escolhido de propósito: o **resumo** e a
+    nota saem; a **transcrição** não. Uma entrevista de desligamento costuma
+    trazer nome de gestor e acusação direta, e isso não deve viajar por um link
+    que qualquer um pode repassar.
+    """
+
+    class Status(models.TextChoices):
+        PENDING = 'PENDING', 'Na fila'
+        PROCESSING = 'PROCESSING', 'Analisando'
+        DONE = 'DONE', 'Pronto'
+        ERROR = 'ERROR', 'Falhou'
+
+    response = models.OneToOneField(
+        'feedback.ExitInterviewResponse',
+        on_delete=models.CASCADE,
+        related_name='recording',
+        verbose_name='Entrevista',
+    )
+    video = models.FileField(
+        upload_to=upload_exit_interview_video,
+        storage=get_media_storage(),
+        verbose_name='Vídeo da entrevista',
+    )
+    original_name = models.CharField(max_length=255, blank=True, verbose_name='Arquivo enviado')
+    status = models.CharField(
+        max_length=12, choices=Status.choices, default=Status.PENDING, db_index=True)
+    error = models.TextField(blank=True, verbose_name='Erro')
+    attempts = models.PositiveSmallIntegerField(default=0, verbose_name='Tentativas')
+
+    transcription = models.TextField(blank=True, verbose_name='Transcrição')
+    summary = models.TextField(blank=True, verbose_name='Resumo da IA')
+    highlights = models.JSONField(default=dict, blank=True, verbose_name='Pontos destacados')
+    # Mesma escala das notas da entrevista (1 a 5), para poder comparar a
+    # leitura da IA com o que o entrevistador registrou.
+    score = models.DecimalField(
+        max_digits=3, decimal_places=1, null=True, blank=True,
+        verbose_name='Nota da IA (1 a 5)')
+    score_reason = models.TextField(blank=True, verbose_name='Justificativa da nota')
+
+    public_token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False, db_index=True)
+    public_enabled = models.BooleanField(
+        default=True, verbose_name='Link público ativo',
+        help_text='Desligue para invalidar o endereço já compartilhado.')
+
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='exit_interview_recordings', verbose_name='Enviado por')
+    created_at = models.DateTimeField(auto_now_add=True)
+    processed_at = models.DateTimeField(null=True, blank=True, verbose_name='Analisado em')
+
+    class Meta:
+        verbose_name = 'Gravação da Entrevista de Desligamento'
+        verbose_name_plural = 'Gravações da Entrevista de Desligamento'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'Gravação de {self.response}'
+
+    @property
+    def em_andamento(self):
+        return self.status in (self.Status.PENDING, self.Status.PROCESSING)
+
+    def public_url(self):
+        from django.urls import reverse
+        return reverse('feedback:exit_interview_public_summary', args=[self.public_token])

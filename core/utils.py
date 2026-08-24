@@ -86,3 +86,10 @@ def upload_tutorial_pdf(instance, filename):
     ext = os.path.splitext(filename)[1].lower()
     unique_filename = f"tutorial_{uuid.uuid4()}{ext}"
     return f"tutorials/{unique_filename}"
+
+
+def upload_exit_interview_video(instance, filename):
+    """Upload path para vídeos de entrevista de desligamento"""
+    ext = os.path.splitext(filename)[1].lower()
+    unique_filename = f"entrevista_{uuid.uuid4()}{ext}"
+    return f"entrevistas_desligamento/{unique_filename}"

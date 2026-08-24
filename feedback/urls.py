@@ -17,6 +17,18 @@ urlpatterns = [
     path('entrevista-desligamento/relatorio/', views.exit_interview_report, name='exit_interview_report'),
     path('entrevista-desligamento/<int:user_id>/desligar/', views.exit_interview_dismiss, name='exit_interview_dismiss'),
     path('entrevista-desligamento/<int:user_id>/zerar/', views.exit_interview_reset, name='exit_interview_reset'),
+    # Vídeo da entrevista + leitura da IA
+    path('entrevista-desligamento/<int:response_id>/video/',
+         views.exit_interview_video_upload, name='exit_interview_video_upload'),
+    path('entrevista-desligamento/gravacao/<int:recording_id>/reprocessar/',
+         views.exit_interview_video_retry, name='exit_interview_video_retry'),
+    path('entrevista-desligamento/gravacao/<int:recording_id>/link/',
+         views.exit_interview_video_link, name='exit_interview_video_link'),
+    path('entrevista-desligamento/gravacoes/status/',
+         views.exit_interview_video_status, name='exit_interview_video_status'),
+    # Resumo aberto por endereço, sem login. Só o resumo — ver a view.
+    path('resumo-entrevista/<uuid:token>/',
+         views.exit_interview_public_summary, name='exit_interview_public_summary'),
 
     path('pendentes/', views.my_pending, name='pending'),
     path('historico/<int:user_id>/', views.user_history, name='user_history'),

@@ -1,0 +1,129 @@
+{% comment %}
+Resumo da entrevista de desligamento aberto por endereço, sem login.
+
+Página independente do base.html de propósito: quem abre este link não está no
+portal, e carregar o menu/sessão aqui só criaria confusão.
+
+Sai o resumo e a nota. A transcrição completa fica no portal — ver a docstring
+de exit_interview_public_summary.
+{% endcomment %}
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  {# Endereço não divulgado não é segredo: pelo menos que não seja indexado. #}
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <meta name="referrer" content="no-referrer">
+  <title>{% if indisponivel %}Resumo indisponível{% else %}Resumo da entrevista de desligamento{% endif %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    @media print { .nao-imprime { display: none !important; } body { background: #fff; } }
+  </style>
+</head>
+<body class="bg-gray-100 text-gray-900">
+<div class="min-h-screen py-8 px-4">
+  <div class="max-w-3xl mx-auto">
+
+  {% if indisponivel %}
+    <div class="bg-white rounded-2xl shadow p-10 text-center">
+      <div class="w-14 h-14 rounded-2xl bg-gray-100 text-gray-400 flex items-center justify-center mx-auto mb-4 text-2xl">
+        &#128274;
+      </div>
+      <h1 class="text-xl font-bold text-gray-900">Resumo indisponível</h1>
+      <p class="text-sm text-gray-500 mt-2 max-w-md mx-auto">
+        Este endereço não está mais válido, ou o resumo ainda não ficou pronto.
+        Peça um link novo a quem compartilhou.
+      </p>
+    </div>
+  {% else %}
+    <div class="bg-white rounded-2xl shadow overflow-hidden">
+      <div class="bg-gray-900 text-white p-6">
+        <p class="text-xs uppercase tracking-widest text-gray-400">Rede Confiança · Recursos Humanos</p>
+        <h1 class="text-xl sm:text-2xl font-bold mt-1">Resumo da entrevista de desligamento</h1>
+        <p class="text-sm text-gray-300 mt-2">
+          {% if resposta.sector %}{{ resposta.sector.name }} · {% endif %}
+          Entrevista de {{ resposta.submitted_at|date:"d/m/Y" }}
+          · resumo gerado por IA em {{ gravacao.processed_at|date:"d/m/Y H:i" }}
+        </p>
+      </div>
+
+      {% if gravacao.score is not None %}
+        <div class="flex items-center gap-4 p-6 border-b bg-gray-50">
+          <div class="w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-bold shrink-0
+              {% if gravacao.score >= 4 %}bg-emerald-100 text-emerald-700
+              {% elif gravacao.score >= 3 %}bg-amber-100 text-amber-700
+              {% else %}bg-rose-100 text-rose-700{% endif %}">
+            {{ gravacao.score }}
+          </div>
+          <div class="min-w-0">
+            <p class="text-sm font-semibold text-gray-800">Nota da experiência (1 a 5)</p>
+            {% if gravacao.score_reason %}
+              <p class="text-sm text-gray-600 mt-0.5">{{ gravacao.score_reason }}</p>
+            {% endif %}
+          </div>
+        </div>
+      {% endif %}
+
+      <div class="p-6 space-y-6">
+        <div>
+          <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Resumo</h2>
+          <p class="text-[15px] leading-relaxed text-gray-800 whitespace-pre-line">{{ gravacao.summary }}</p>
+        </div>
+
+        {% if positivos %}
+          <div>
+            <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Pontos positivos</h2>
+            <ul class="space-y-1.5">
+              {% for item in positivos %}
+                <li class="flex gap-2 text-[15px] text-gray-800">
+                  <span class="text-emerald-500 mt-0.5">&#10003;</span><span>{{ item }}</span>
+                </li>
+              {% endfor %}
+            </ul>
+          </div>
+        {% endif %}
+
+        {% if atencao %}
+          <div>
+            <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Pontos de atenção</h2>
+            <ul class="space-y-1.5">
+              {% for item in atencao %}
+                <li class="flex gap-2 text-[15px] text-gray-800">
+                  <span class="text-rose-500 mt-0.5">&#9679;</span><span>{{ item }}</span>
+                </li>
+              {% endfor %}
+            </ul>
+          </div>
+        {% endif %}
+
+        {% if temas %}
+          <div>
+            <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Temas</h2>
+            <div class="flex flex-wrap gap-1.5">
+              {% for t in temas %}
+                <span class="text-xs px-2.5 py-1 rounded-full bg-gray-100 text-gray-600">{{ t }}</span>
+              {% endfor %}
+            </div>
+          </div>
+        {% endif %}
+      </div>
+
+      <div class="px-6 py-4 bg-gray-50 border-t">
+        <p class="text-xs text-gray-500">
+          Texto produzido automaticamente a partir da gravação da entrevista. É um apoio à leitura,
+          não a transcrição oficial — a gravação e a transcrição completa ficam no portal, com o RH.
+        </p>
+      </div>
+    </div>
+
+    <p class="text-center text-xs text-gray-400 mt-4 nao-imprime">
+      Documento interno. Compartilhe apenas com quem precisa.
+    </p>
+  {% endif %}
+
+  </div>
+</div>
+</body>
+</html>
