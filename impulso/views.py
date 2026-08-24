@@ -838,6 +838,58 @@ def minhas_atividades(request):
 # CONFIAR — Feedback mensal
 # ---------------------------------------------------------------------------
 @impulso_member_required
+def assiduidade(request):
+    """A assiduidade do mês, lida do ponto eletrônico.
+
+    Mostra a conta inteira — dias completos, ajustes usados e o que ainda dá
+    para corrigir. O colaborador vê a dele; o gestor vê a equipe, porque
+    ajuste vencendo é coisa que alguém precisa cobrar antes de virar perda.
+    """
+    from .assiduidade_ponto import (LIMITE_AJUSTES_MES, PONTOS_ASSIDUIDADE,
+                                    nota_assiduidade_ponto)
+
+    hoje = timezone.localdate()
+    mes = _int_or_none(request.GET.get('mes'), 1, 12) or hoje.month
+    ano = _int_or_none(request.GET.get('ano'), 2000, 2100) or hoje.year
+
+    def _linha(pessoa):
+        resposta = nota_assiduidade_ponto(pessoa, ano, mes)
+        if resposta is None:
+            return {'pessoa': pessoa, 'sem_ponto': True}
+        pontos, maximo, detalhe = resposta
+        return {'pessoa': pessoa, 'pontos': pontos, 'maximo': maximo,
+                'detalhe': detalhe, 'sem_ponto': False}
+
+    minha = _linha(request.user)
+
+    equipe = None
+    if is_impulso_manager(request.user) or request.user.is_superuser:
+        equipe = [_linha(u) for u in get_colaboradores()
+                  if u.id != request.user.id and u.tangerino_employee_id]
+        equipe = [l for l in equipe if not l['sem_ponto']]
+        # Quem perdeu ponto aparece primeiro; depois quem está no limite.
+        equipe.sort(key=lambda l: (l['pontos'] > 0,
+                                   -(l['detalhe'].get('total_ajustes') or 0),
+                                   l['pessoa'].first_name))
+
+    return render(request, 'impulso/assiduidade.html', {
+        'minha': minha,
+        'equipe': equipe,
+        'mes': mes, 'ano': ano,
+        'hoje': hoje,
+        'primeiro_do_mes': date(ano, mes, 1),
+        'meses': list(enumerate(
+            ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho',
+             'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'], start=1)),
+        'anos': list(range(hoje.year - 1, hoje.year + 1)),
+        'limite_ajustes': LIMITE_AJUSTES_MES,
+        'pontos_max': PONTOS_ASSIDUIDADE,
+        'is_gestor': is_impulso_manager(request.user),
+        'active_tab': 'confiar',
+    })
+
+
+@impulso_member_required
 def feedback_list(request):
     """Lista de feedbacks, com filtros e o panorama das notas da IA.
 

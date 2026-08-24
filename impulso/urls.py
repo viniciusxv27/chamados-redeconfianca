@@ -31,6 +31,8 @@ urlpatterns = [
     path('metas/<int:meta_id>/comentar/', views.meta_add_comentario, name='meta_add_comentario'),
     path('atividades/', views.minhas_atividades, name='minhas_atividades'),
 
+    path('assiduidade/', views.assiduidade, name='assiduidade'),
+
     # CONFIAR — feedback
     path('feedbacks/', views.feedback_list, name='feedback_list'),
     path('feedbacks/novo/', views.feedback_create, name='feedback_create'),

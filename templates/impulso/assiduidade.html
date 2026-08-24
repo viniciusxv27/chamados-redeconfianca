@@ -1,0 +1,224 @@
+{% extends 'impulso/base_impulso.html' %}
+
+{% block impulso_content %}
+
+<div class="flex items-start justify-between gap-3 mb-4 flex-wrap">
+    <div>
+        <h2 class="font-semibold text-gray-800">
+            <i class="fas fa-fingerprint text-cyan-600 mr-2"></i>Assiduidade
+        </h2>
+        <p class="text-xs text-gray-400 mt-0.5">
+            Vem do <a href="/ponto/" class="text-orange-600 hover:underline">ponto eletrônico</a> ·
+            {{ primeiro_do_mes|date:"F/Y" }}
+        </p>
+    </div>
+    <form method="get" class="flex items-end gap-2">
+        <select name="mes" class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm">
+            {% for n, nome in meses %}<option value="{{ n }}" {% if n == mes %}selected{% endif %}>{{ nome }}</option>{% endfor %}
+        </select>
+        <select name="ano" class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm">
+            {% for a in anos %}<option value="{{ a }}" {% if a == ano %}selected{% endif %}>{{ a }}</option>{% endfor %}
+        </select>
+        <button class="px-4 py-1.5 bg-orange-600 text-white rounded-lg text-sm hover:bg-orange-700">Ver</button>
+    </form>
+</div>
+
+<!-- Como funciona -->
+<div class="imp-card p-4 mb-4 bg-gray-50/60">
+    <p class="text-xs text-gray-600 leading-relaxed">
+        <i class="fas fa-circle-info text-gray-400 mr-1"></i>
+        <strong>Como os {{ pontos_max|floatformat:0 }} pontos são calculados:</strong>
+        o dia útil precisa das <strong>4 batidas</strong> (entrada, saída para o intervalo, volta e saída).
+        Esqueceu alguma? Dá para ajustar em até <strong>24 horas</strong>.
+        São <strong>{{ limite_ajustes }} ajustes por mês</strong> — passando disso, os pontos vão a zero.
+        <strong>Falta injustificada</strong> também zera. Folga, feriado, férias e atestado não entram na conta.
+    </p>
+</div>
+
+{% if minha.sem_ponto %}
+<div class="imp-card p-8 text-center">
+    <i class="fas fa-fingerprint text-gray-200 text-4xl mb-3 block"></i>
+    <p class="text-sm text-gray-500">Seu ponto ainda não está sincronizado neste mês.</p>
+    <p class="text-xs text-gray-400 mt-1">A nota de assiduidade sai da folha de ponto enquanto isso.</p>
+</div>
+{% else %}
+{% with d=minha.detalhe %}
+
+<!-- Meu resultado -->
+<div class="imp-card p-5 mb-4 {% if minha.pontos %}border-emerald-200{% else %}border-red-200{% endif %}">
+    <div class="flex items-start justify-between gap-5 flex-wrap">
+        <div class="min-w-0">
+            <p class="text-xs text-gray-500 uppercase font-semibold">Seus pontos de assiduidade</p>
+            <p class="text-4xl font-bold {% if minha.pontos %}text-emerald-600{% else %}text-red-600{% endif %} tabular-nums mt-1">
+                {{ minha.pontos|floatformat:0 }}<span class="text-lg text-gray-300 font-normal">/{{ pontos_max|floatformat:0 }}</span>
+            </p>
+            <p class="text-sm {% if minha.pontos %}text-emerald-700{% else %}text-red-700{% endif %} mt-1.5">
+                {{ d.motivo }}
+            </p>
+        </div>
+
+        <div class="grid grid-cols-3 gap-4 text-center">
+            <div>
+                <p class="text-2xl font-bold text-gray-900 tabular-nums">{{ d.dias_completos }}<span class="text-gray-300 text-base">/{{ d.dias_uteis }}</span></p>
+                <p class="text-[11px] text-gray-400">dias completos</p>
+            </div>
+            <div>
+                <p class="text-2xl font-bold {% if d.total_ajustes > d.limite_ajustes %}text-red-600{% elif d.total_ajustes %}text-amber-600{% else %}text-gray-900{% endif %} tabular-nums">
+                    {{ d.total_ajustes }}<span class="text-gray-300 text-base">/{{ d.limite_ajustes }}</span>
+                </p>
+                <p class="text-[11px] text-gray-400">ajustes usados</p>
+            </div>
+            <div>
+                <p class="text-2xl font-bold {% if d.total_faltas %}text-red-600{% else %}text-gray-300{% endif %} tabular-nums">{{ d.total_faltas }}</p>
+                <p class="text-[11px] text-gray-400">falta{{ d.total_faltas|pluralize }}</p>
+            </div>
+        </div>
+    </div>
+
+    {% if d.faltas_indisponiveis %}
+    <p class="text-[11px] text-amber-600 mt-3 pt-3 border-t border-gray-100">
+        <i class="fas fa-triangle-exclamation mr-1"></i>
+        Não consegui consultar as faltas no Tangerino agora — este número pode estar incompleto.
+    </p>
+    {% endif %}
+</div>
+
+<!-- Dá para corrigir ainda -->
+{% if d.no_prazo %}
+<div class="imp-card p-5 mb-4 border-amber-200 bg-amber-50/40">
+    <h3 class="text-sm font-bold text-amber-900 mb-2">
+        <i class="fas fa-hourglass-half mr-1.5"></i>Ainda dá tempo de ajustar
+    </h3>
+    <p class="text-xs text-amber-800/80 mb-3">
+        Estes dias estão sem as {{ d.batidas_esperadas }} batidas, mas ainda dentro das
+        {{ d.prazo_horas }} horas. Ajuste no Tangerino antes que o prazo feche.
+    </p>
+    <div class="flex flex-wrap gap-2">
+        {% for i in d.no_prazo %}
+        <span class="px-2.5 py-1 rounded-full bg-white border border-amber-200 text-amber-800 text-xs">
+            {{ i.data|date:"d/m" }} · {{ i.batidas }} de {{ d.batidas_esperadas }} batidas
+        </span>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+    <!-- Dias que pesaram -->
+    <div class="imp-card p-5">
+        <h3 class="text-sm font-bold text-gray-800 mb-3">
+            <i class="fas fa-calendar-xmark text-red-500 mr-1.5"></i>Dias fora do prazo
+        </h3>
+        {% if d.incompletos %}
+        <div class="space-y-1.5">
+            {% for i in d.incompletos %}
+            <div class="flex items-center justify-between text-sm py-1.5 border-b border-gray-50 last:border-0">
+                <span class="text-gray-700">{{ i.data|date:"d/m/Y (D)" }}</span>
+                <span class="text-xs text-red-600 font-medium">
+                    {{ i.batidas }} de {{ d.batidas_esperadas }} · faltou {{ i.faltam }}
+                </span>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-sm text-gray-400 py-4 text-center">
+            <i class="fas fa-circle-check text-emerald-400 text-xl mb-1.5 block"></i>
+            Nenhum dia incompleto fora do prazo.
+        </p>
+        {% endif %}
+    </div>
+
+    <!-- Ajustes -->
+    <div class="imp-card p-5">
+        <div class="flex items-center justify-between gap-2 mb-3">
+            <h3 class="text-sm font-bold text-gray-800">
+                <i class="fas fa-pen-to-square text-amber-500 mr-1.5"></i>Ajustes do mês
+            </h3>
+            {% if not d.perdeu and d.ajustes_restantes is not None %}
+            <span class="text-[11px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-medium">
+                {{ d.ajustes_restantes }} restante{{ d.ajustes_restantes|pluralize }}
+            </span>
+            {% endif %}
+        </div>
+        {% if d.ajustes %}
+        <div class="space-y-1.5">
+            {% for a in d.ajustes %}
+            <div class="flex items-center justify-between text-sm py-1.5 border-b border-gray-50 last:border-0">
+                <span class="text-gray-700">{{ a.data|date:"d/m/Y (D)" }}</span>
+                <span class="text-xs text-gray-400">{{ a.batidas }} batidas</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% if d.total_ajustes > d.limite_ajustes %}
+        <p class="text-xs text-red-600 mt-3 pt-3 border-t border-gray-100">
+            <i class="fas fa-triangle-exclamation mr-1"></i>
+            Passou do limite de {{ d.limite_ajustes }} ajustes — os {{ pontos_max|floatformat:0 }} pontos foram zerados.
+        </p>
+        {% endif %}
+        {% else %}
+        <p class="text-sm text-gray-400 py-4 text-center">
+            <i class="fas fa-thumbs-up text-emerald-400 text-xl mb-1.5 block"></i>
+            Nenhum ajuste usado neste mês.
+        </p>
+        {% endif %}
+    </div>
+</div>
+{% endwith %}
+{% endif %}
+
+<!-- Equipe (gestor) -->
+{% if equipe %}
+<div class="imp-card overflow-hidden">
+    <div class="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between gap-2 flex-wrap">
+        <h3 class="text-sm font-bold text-gray-800">
+            <i class="fas fa-users text-orange-500 mr-1.5"></i>Assiduidade da equipe
+        </h3>
+        <span class="text-xs text-gray-400">quem perdeu ponto aparece primeiro</span>
+    </div>
+    <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+            <thead class="bg-gray-50/70 text-gray-500 text-xs uppercase tracking-wide">
+                <tr>
+                    <th class="text-left px-5 py-2.5 font-medium">Colaborador</th>
+                    <th class="text-center px-3 py-2.5 font-medium">Dias completos</th>
+                    <th class="text-center px-3 py-2.5 font-medium">Ajustes</th>
+                    <th class="text-center px-3 py-2.5 font-medium">Faltas</th>
+                    <th class="text-right px-5 py-2.5 font-medium">Pontos</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-50">
+                {% for l in equipe %}
+                {% with d=l.detalhe %}
+                <tr class="hover:bg-orange-50/30">
+                    <td class="px-5 py-2.5">
+                        <span class="text-gray-800">{{ l.pessoa.get_full_name|default:l.pessoa.email }}</span>
+                        {% if d.no_prazo %}
+                        <span class="block text-[11px] text-amber-600">
+                            <i class="fas fa-hourglass-half mr-1"></i>{{ d.no_prazo|length }} dia(s) ainda dá para ajustar
+                        </span>
+                        {% elif not l.pontos and d.motivo %}
+                        <span class="block text-[11px] text-red-600">{{ d.motivo|truncatechars:70 }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-3 py-2.5 text-center text-gray-600 tabular-nums">{{ d.dias_completos }}/{{ d.dias_uteis }}</td>
+                    <td class="px-3 py-2.5 text-center tabular-nums {% if d.total_ajustes > d.limite_ajustes %}text-red-600 font-semibold{% elif d.total_ajustes %}text-amber-600{% else %}text-gray-400{% endif %}">
+                        {{ d.total_ajustes }}/{{ d.limite_ajustes }}
+                    </td>
+                    <td class="px-3 py-2.5 text-center tabular-nums {% if d.total_faltas %}text-red-600 font-semibold{% else %}text-gray-300{% endif %}">{{ d.total_faltas }}</td>
+                    <td class="px-5 py-2.5 text-right">
+                        <span class="px-2.5 py-1 rounded-full text-xs font-bold
+                                     {% if l.pontos %}bg-emerald-50 text-emerald-700{% else %}bg-red-50 text-red-700{% endif %}">
+                            {{ l.pontos|floatformat:0 }}/{{ pontos_max|floatformat:0 }}
+                        </span>
+                    </td>
+                </tr>
+                {% endwith %}
+                {% empty %}
+                <tr><td colspan="5" class="px-5 py-10 text-center text-gray-400">Ninguém com ponto sincronizado.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

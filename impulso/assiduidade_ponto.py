@@ -1,31 +1,44 @@
-"""Assiduidade a partir do ponto eletrônico (Tangerino), não da folha em PDF.
+"""Assiduidade do Impulso lida do ponto eletrônico (Tangerino).
 
-A regra, como o gestor a descreve: **até 3 marcações esquecidas no mês, a
-pessoa mantém os 10 pontos de assiduidade; passando disso, perde.** E manter
-os pontos também exige ter cumprido o horário — quem bateu tudo mas ficou
-muito abaixo da jornada contratada não está assíduo, está devendo hora.
+A regra, como o RH a descreve:
 
-O que conta como marcação esquecida, sobre os dias em que a pessoa **devia**
-trabalhar (``previsto_segundos > 0``, então folga e feriado ficam de fora):
+* o dia útil precisa ter as **4 batidas** (entrada, saída para o intervalo,
+  volta e saída);
+* esqueceu uma? dá para **ajustar em até 24 horas**;
+* são **3 ajustes por mês** — passou disso, perde os 10 pontos;
+* **falta injustificada** (sem motivo lançado) zera os 10 pontos.
 
-* dia sem nenhuma marcação;
-* dia com entrada sem a saída correspondente (``em_aberto``).
+Três coisas moldam a leitura:
 
-O dia corrente nunca conta: quem entrou e ainda não saiu está trabalhando,
-não esqueceu de bater.
+* **Só dia útil entra na conta.** Folga, feriado, férias e atestado têm
+  ``previsto_segundos = 0`` na marcação, então saem sozinhos — ninguém é
+  cobrado por não bater ponto em dia que não trabalha.
+* **O dia corrente nunca conta**, e o de ontem também não enquanto estiver
+  dentro das 24 horas: quem esqueceu ontem à noite ainda tem prazo para
+  ajustar hoje. Punir antes do prazo seria cobrar uma regra que a própria
+  regra não cobra ainda.
+* **Ajuste é marcação editada no Tangerino** (``MarcacaoPonto.editado``), que
+  é como a correção de ponto esquecido aparece de lá.
 """
+from datetime import timedelta
 from decimal import Decimal
 
 from django.utils import timezone
 
 PONTOS_ASSIDUIDADE = Decimal('10')
 
-# Quantas marcações esquecidas o mês tolera antes de zerar a assiduidade.
-LIMITE_FALHAS = 3
+BATIDAS_ESPERADAS = 4          # entrada, saída para o intervalo, volta, saída
+LIMITE_AJUSTES_MES = 3         # ajustes de ponto esquecido tolerados no mês
+PRAZO_AJUSTE_HORAS = 24        # tempo para corrigir uma batida esquecida
 
-# Quanto a jornada pode ficar abaixo do previsto no mês sem deixar de ser
-# "horário certo". Uma hora cobre atraso pontual sem premiar quem deve o mês.
-TOLERANCIA_MINUTOS = 60
+# Motivo de ajuste no Tangerino que caracteriza falta sem justificativa.
+MOTIVO_FALTA_INJUSTIFICADA = 8
+
+
+def _batidas(marcacao):
+    return len([x for x in (marcacao.entrada1, marcacao.saida1,
+                            marcacao.entrada2, marcacao.saida2,
+                            marcacao.entrada3, marcacao.saida3) if x])
 
 
 def _marcacoes_do_mes(user, ano, mes):
@@ -39,77 +52,135 @@ def _marcacoes_do_mes(user, ano, mes):
                 .order_by('data'))
 
 
-def avaliar(marcacoes, hoje=None):
-    """Conta as falhas de marcação e compara o trabalhado com o previsto."""
-    hoje = hoje or timezone.localdate()
+def faltas_injustificadas(employee_id, ano, mes):
+    """Dias com FALTA NÃO JUSTIFICADA lançada no Tangerino.
 
-    falhas = []
-    previsto = trabalhado = 0
+    Vem da API porque falta é lançamento de gestor, não marcação de ponto —
+    não existe na tabela de marcações. Se a API estiver fora, devolve vazio: a
+    nota sai sem essa penalidade em vez de sair errada para o outro lado.
+    """
+    from tangerino.client import de_millis, listar_ajustes
+
+    try:
+        lancamentos = listar_ajustes(MOTIVO_FALTA_INJUSTIFICADA)
+    except Exception:
+        return None
+
+    dias = set()
+    for item in lancamentos:
+        if (item.get('employeeDTO') or {}).get('id') != employee_id:
+            continue
+        inicio = de_millis(item.get('startDate'))
+        fim = de_millis(item.get('endDate')) or inicio
+        if not inicio:
+            continue
+        dia = inicio.date()
+        ultimo = fim.date()
+        while dia <= ultimo:
+            if dia.year == ano and dia.month == mes:
+                dias.add(dia)
+            dia += timedelta(days=1)
+    return sorted(dias)
+
+
+def avaliar(marcacoes, faltas=None, agora=None):
+    """Percorre o mês e separa o que conta contra a assiduidade."""
+    agora = agora or timezone.localtime()
+    hoje = agora.date()
+    limite_prazo = agora - timedelta(hours=PRAZO_AJUSTE_HORAS)
+
+    faltas = set(faltas or [])
     dias_uteis = 0
+    incompletos, no_prazo, ajustes, dias_completos = [], [], [], []
 
     for m in marcacoes:
         if m.data >= hoje:
-            continue                      # dia em andamento não se julga
-        previsto += m.previsto_segundos or 0
-        trabalhado += m.total_segundos or 0
+            continue                                  # dia em andamento
         if not (m.previsto_segundos or 0):
-            continue                      # folga, feriado, férias
+            continue                                  # folga, feriado, férias
 
         dias_uteis += 1
-        tem_marcacao = any([m.entrada1, m.saida1, m.entrada2, m.saida2,
-                            m.entrada3, m.saida3])
-        if not tem_marcacao:
-            falhas.append({'data': m.data, 'motivo': 'Nenhuma marcação no dia'})
-        elif m.em_aberto:
-            falhas.append({'data': m.data, 'motivo': 'Entrada sem a saída correspondente'})
+        batidas = _batidas(m)
 
-    saldo_minutos = (trabalhado - previsto) // 60
+        if m.editado:
+            ajustes.append({'data': m.data, 'batidas': batidas})
+
+        if batidas >= BATIDAS_ESPERADAS:
+            dias_completos.append(m.data)
+            continue
+
+        # Fim do dia + prazo: só vira falha quando o prazo de ajuste passa.
+        fim_do_prazo = timezone.make_aware(
+            timezone.datetime.combine(m.data, timezone.datetime.min.time())) \
+            + timedelta(days=1, hours=PRAZO_AJUSTE_HORAS)
+        registro = {'data': m.data, 'batidas': batidas,
+                    'faltam': BATIDAS_ESPERADAS - batidas}
+        if fim_do_prazo > agora:
+            no_prazo.append(registro)                 # ainda dá tempo de ajustar
+        else:
+            incompletos.append(registro)
+
     return {
         'dias_uteis': dias_uteis,
-        'falhas': falhas,
-        'total_falhas': len(falhas),
-        'limite': LIMITE_FALHAS,
-        'previsto_segundos': previsto,
-        'trabalhado_segundos': trabalhado,
-        'saldo_minutos': saldo_minutos,
-        'horario_ok': saldo_minutos >= -TOLERANCIA_MINUTOS,
+        'dias_completos': len(dias_completos),
+        'incompletos': incompletos,
+        'no_prazo': no_prazo,
+        'ajustes': ajustes,
+        'total_ajustes': len(ajustes),
+        'limite_ajustes': LIMITE_AJUSTES_MES,
+        'faltas': sorted(faltas),
+        'total_faltas': len(faltas),
+        'batidas_esperadas': BATIDAS_ESPERADAS,
+        'prazo_horas': PRAZO_AJUSTE_HORAS,
     }
 
 
-def nota_assiduidade_ponto(user, ano, mes, hoje=None):
-    """(pontos, pontos_aplicáveis, detalhes) da assiduidade pelo ponto.
+def nota_assiduidade_ponto(user, ano, mes, agora=None):
+    """(pontos, pontos_aplicáveis, detalhes) da assiduidade no mês.
 
-    Devolve ``None`` quando não há ponto sincronizado para essa pessoa nesse
-    mês — aí quem responde é a folha de ponto importada, como antes.
+    Devolve ``None`` quando não há ponto sincronizado — aí quem responde é a
+    folha de ponto importada, como antes.
     """
     marcacoes = _marcacoes_do_mes(user, ano, mes)
     if not marcacoes:
         return None
 
-    resultado = avaliar(marcacoes, hoje=hoje)
+    faltas = faltas_injustificadas(user.tangerino_employee_id, ano, mes)
+    resultado = avaliar(marcacoes, faltas=faltas, agora=agora)
     resultado['fonte'] = 'ponto'
+    resultado['faltas_indisponiveis'] = faltas is None
 
     if not resultado['dias_uteis']:
         resultado['sem_dias_avaliaveis'] = True
         return Decimal('0'), Decimal('0'), resultado
 
-    dentro_do_limite = resultado['total_falhas'] <= LIMITE_FALHAS
-    resultado['dentro_do_limite'] = dentro_do_limite
+    # Cada motivo é reportado, não só o primeiro: quem perdeu os pontos merece
+    # ver tudo o que pesou, e não descobrir o segundo motivo no mês seguinte.
+    motivos = []
+    if resultado['total_faltas']:
+        dias = ', '.join(d.strftime('%d/%m') for d in resultado['faltas'])
+        motivos.append(f"falta injustificada em {dias}")
+    if resultado['total_ajustes'] > LIMITE_AJUSTES_MES:
+        motivos.append(f"{resultado['total_ajustes']} ajustes de ponto — o limite "
+                       f"do mês é {LIMITE_AJUSTES_MES}")
+    if resultado['incompletos']:
+        dias = ', '.join(d['data'].strftime('%d/%m') for d in resultado['incompletos'][:4])
+        resto = len(resultado['incompletos']) - 4
+        motivos.append(f"dia sem as {BATIDAS_ESPERADAS} batidas e fora do prazo de "
+                       f"ajuste: {dias}" + (f" e mais {resto}" if resto > 0 else ''))
 
-    if dentro_do_limite and resultado['horario_ok']:
-        resultado['motivo'] = (
-            f"{resultado['total_falhas']} marcação(ões) esquecida(s), dentro do "
-            f"limite de {LIMITE_FALHAS}, e jornada cumprida.")
-        return PONTOS_ASSIDUIDADE, PONTOS_ASSIDUIDADE, resultado
+    resultado['motivos'] = motivos
+    resultado['perdeu'] = bool(motivos)
 
-    if not dentro_do_limite:
-        resultado['motivo'] = (
-            f"{resultado['total_falhas']} marcações esquecidas no mês — acima do "
-            f"limite de {LIMITE_FALHAS}.")
-    else:
-        horas = abs(resultado['saldo_minutos']) // 60
-        minutos = abs(resultado['saldo_minutos']) % 60
-        resultado['motivo'] = (
-            f"Marcações em dia, mas a jornada ficou {horas}h{minutos:02d} abaixo "
-            f"do previsto no mês.")
-    return Decimal('0'), PONTOS_ASSIDUIDADE, resultado
+    if motivos:
+        resultado['motivo'] = '; '.join(motivos).capitalize() + '.'
+        return Decimal('0'), PONTOS_ASSIDUIDADE, resultado
+
+    restantes = LIMITE_AJUSTES_MES - resultado['total_ajustes']
+    resultado['motivo'] = (
+        f"{resultado['dias_completos']} de {resultado['dias_uteis']} dias úteis com as "
+        f"{BATIDAS_ESPERADAS} batidas"
+        + (f", {resultado['total_ajustes']} ajuste(s) usado(s) de {LIMITE_AJUSTES_MES}."
+           if resultado['total_ajustes'] else ', sem ajustes.'))
+    resultado['ajustes_restantes'] = restantes
+    return PONTOS_ASSIDUIDADE, PONTOS_ASSIDUIDADE, resultado
