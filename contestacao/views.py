@@ -15,6 +15,7 @@ from django.db import models
 from django.db.models import Count, F, Min, Q, Sum
 from django.core.paginator import Paginator
 from django.utils import timezone
+from django.views.decorators.http import require_POST
 
 from .models import (ExclusionRecord, ExclusionSyncBatch, Contestation,
                      ContestationHistory, ContestationCartDraft, TipoBase)
@@ -33,6 +34,9 @@ QUALITY_ISLAND_SECTOR_ID = 8
 
 DEFAULT_EXCEL_BASE_EXCLUSAO_URL = "https://1drv.ms/x/c/871ee1819c7e2faa/IQBryBteOg4sS4cBwU1tIgKoATfi6qmYB8eRrIaTpyP8Qhc?e=pye3Sj"
 SYNC_VALIDITY_DAYS = 3
+# Teto do envio em lote de contestação de valores. Não é limite de negócio: é
+# para um POST com milhares de linhas não derrubar o worker no meio.
+LOTE_VALORES_MAX = 300
 SECTOR_PENDING_DEADLINE_DAYS = 1
 
 
@@ -2489,6 +2493,12 @@ def export_contested_sales(request):
         'IMEI',
         'Numero Acesso',
         'Observacao',
+        # As três a seguir só têm conteúdo nas contestações de valor. Ficam
+        # vazias nas de exclusão em vez de virarem zero: zero em "Recebido"
+        # seria lido como "não recebeu nada".
+        'Origem',
+        'Recebido',
+        'Divergencia',
         'ID Contestacao',
         'Motivo Contestacao',
         'Parecer Gestor',
@@ -2528,6 +2538,9 @@ def export_contested_sales(request):
             c.exclusion.imei,
             c.exclusion.numero_acesso,
             c.exclusion.observacao,
+            c.exclusion.get_record_type_display(),
+            '' if c.exclusion.recebido is None else f'{c.exclusion.recebido:.2f}',
+            '' if c.exclusion.divergencia is None else f'{c.exclusion.divergencia:.2f}',
             c.pk,
             c.reason,
             c.review_notes,
@@ -2857,12 +2870,20 @@ def valores_list(request):
     paginator = Paginator(qs, 50)
     pagina = paginator.get_page(request.GET.get('page'))
 
-    # Contestações já abertas, penduradas na própria linha: o template só
-    # precisa perguntar `r.contestacao` em vez de procurar num dicionário.
+    # Contestações abertas **nesta rodada**, penduradas na própria linha: o
+    # template só pergunta `r.contestacao`.
+    #
+    # O recorte por ciclo é o mesmo da tela de exclusões e não é detalhe: sem
+    # ele, uma base re-sincronizada continuaria mostrando a contestação da
+    # rodada anterior, a linha não ganharia caixa de seleção e ninguém
+    # conseguiria contestar de novo — mesmo com o servidor permitindo.
+    ciclo = (Contestation.objects
+             .filter(exclusion_id__in=[r.pk for r in pagina])
+             .filter(_open_contestation_filter(janela['last_sync_at']))
+             if janela['has_sync'] else Contestation.objects.none())
+
     abertas = {}
-    for c in (Contestation.objects
-              .filter(exclusion_id__in=[r.pk for r in pagina])
-              .order_by('-created_at')):
+    for c in ciclo.order_by('-created_at'):
         abertas.setdefault(c.exclusion_id, c)
     for registro in pagina:
         registro.contestacao = abertas.get(registro.pk)
@@ -2884,6 +2905,7 @@ def valores_list(request):
         'can_manage': _can_manage_contestations(request.user),
         'base_configurada': bool(
             (SystemConfig.get_config().excel_contestacao_base_pagamento_url or '').strip()),
+        'lote_max': LOTE_VALORES_MAX,
     })
 
 
@@ -2966,3 +2988,169 @@ def contestar_valor(request, record_id):
         'registro': registro,
         'janela': janela,
     })
+
+
+@login_required
+@require_POST
+def contestar_valores_lote(request):
+    """Cria as contestações de valor do carrinho de uma vez.
+
+    Diferente do carrinho das exclusões, aqui a evidência é opcional: a prova
+    já está na própria planilha — receita, recebido e a diferença entre as duas
+    saem do arquivo que a operadora mandou. Exigir anexo por linha impediria
+    contestar duzentas divergências de uma vez, que é justamente o caso de uso.
+    """
+    if not _can_create_contestations(request.user):
+        return JsonResponse({'success': False, 'error': 'Sem permissão para contestar.'}, status=403)
+
+    janela = _pagamento_window_state()
+    if janela['is_blocked']:
+        return JsonResponse({'success': False, 'error': (
+            'Prazo encerrado para esta base. Sincronize a BASE_PAGAMENTO para abrir outra rodada.'
+            if janela['has_sync'] else
+            'Sincronize a BASE_PAGAMENTO antes de contestar valores.')}, status=400)
+
+    try:
+        quantidade = int(request.POST.get('count', 0))
+    except (TypeError, ValueError):
+        return JsonResponse({'success': False, 'error': 'Dados inválidos.'}, status=400)
+    if quantidade <= 0:
+        return JsonResponse({'success': False, 'error': 'Nenhum item enviado.'}, status=400)
+    if quantidade > LOTE_VALORES_MAX:
+        return JsonResponse({'success': False, 'error':
+                             f'Envie no máximo {LOTE_VALORES_MAX} vendas por vez.'}, status=400)
+
+    motivo_geral = (request.POST.get('reason') or '').strip()
+    anexo_geral = request.FILES.get('attachment')
+
+    itens = {}
+    for i in range(quantidade):
+        bruto = request.POST.get(f'record_id_{i}')
+        try:
+            rid = int(bruto)
+        except (TypeError, ValueError):
+            continue
+        motivo = (request.POST.get(f'reason_{i}') or '').strip() or motivo_geral
+        if motivo:
+            itens[rid] = motivo
+
+    if not itens:
+        return JsonResponse({'success': False, 'error': 'Informe o motivo da contestação.'}, status=400)
+
+    # O escopo entra na consulta, e não numa checagem depois: uma venda de outra
+    # loja simplesmente não é encontrada.
+    permitidos = {r.pk: r for r in _apply_exclusion_scope_for_user(
+        _pagamentos().filter(pk__in=itens.keys()), request.user)}
+
+    ja_contestadas = set(
+        Contestation.objects.filter(exclusion_id__in=permitidos.keys())
+        .filter(_open_contestation_filter(janela['last_sync_at']))
+        .values_list('exclusion_id', flat=True))
+
+    criadas, ignoradas = [], {'fora_escopo': 0, 'sem_divergencia': 0, 'ja_contestada': 0}
+    for rid, motivo in itens.items():
+        registro = permitidos.get(rid)
+        if registro is None:
+            ignoradas['fora_escopo'] += 1
+            continue
+        if not registro.tem_divergencia:
+            ignoradas['sem_divergencia'] += 1
+            continue
+        if rid in ja_contestadas:
+            ignoradas['ja_contestada'] += 1
+            continue
+
+        contestacao = Contestation.objects.create(
+            exclusion=registro,
+            requester=request.user,
+            reason=motivo,
+            attachment=anexo_geral,
+        )
+        ContestationHistory.objects.create(
+            contestation=contestacao,
+            action='created',
+            user=request.user,
+            notes=motivo,
+            extra_data={
+                'exclusion_id': registro.pk, 'vendedor': registro.vendedor,
+                'tipo': 'valor', 'lote': True,
+                'receita': str(registro.receita), 'recebido': str(registro.recebido),
+                'divergencia': str(registro.divergencia),
+            },
+        )
+        criadas.append(registro.pk)
+        ja_contestadas.add(rid)
+
+    if not criadas:
+        return JsonResponse({'success': False, 'error':
+                             'Nenhuma contestação criada. As vendas selecionadas já foram '
+                             'contestadas, não têm divergência ou estão fora do seu escopo.',
+                             'ignoradas': ignoradas})
+
+    return JsonResponse({'success': True, 'created': len(criadas),
+                         'ids': criadas, 'ignoradas': ignoradas})
+
+
+@login_required
+def export_valores(request):
+    """Relatório só da contestação de valores: a base atual com a divergência.
+
+    Sai a base inteira do lote, não apenas o que foi contestado — quem negocia
+    com a operadora precisa mostrar o total conferido junto com o que divergiu;
+    um arquivo só com as divergências não prova que o resto fechou.
+    """
+    if not _can_access_contestation_module(request.user):
+        messages.error(request, 'Sem permissão para exportar.')
+        return redirect('contestacao:valores_list')
+
+    lote = _get_latest_sync_batch(TipoBase.PAGAMENTO)
+    if lote is None:
+        messages.error(request, 'Nenhuma base de pagamento sincronizada para exportar.')
+        return redirect('contestacao:valores_list')
+
+    qs = _apply_exclusion_scope_for_user(
+        _pagamentos().filter(sync_batch=lote), request.user)
+
+    somente = (request.GET.get('somente') or '').strip()
+    if somente == 'divergentes':
+        qs = qs.filter(recebido__isnull=False).exclude(recebido=F('receita'))
+    elif somente == 'contestadas':
+        qs = qs.filter(contestations__isnull=False).distinct()
+
+    qs = qs.prefetch_related('contestations').order_by('filial', 'vendedor', 'numero_venda')
+
+    resposta = HttpResponse(content_type='text/csv; charset=utf-8')
+    sufixo = f'_{somente}' if somente else ''
+    resposta['Content-Disposition'] = f'attachment; filename="contestacao_valores{sufixo}.csv"'
+
+    resposta.write('﻿')
+    writer = csv.writer(resposta, delimiter=';')
+    writer.writerow([
+        'FILIAL', 'Vendedor', 'Pilar', 'Coordenacao', 'Nº da Venda', 'Data da Venda',
+        'Nome Cliente', 'CPF/CNPJ', 'Plano/Produto', 'Numero Acesso',
+        'Receita', 'Recebido', 'Divergencia',
+        'ID Contestacao', 'Status Contestacao', 'Status Pagamento',
+        'Motivo', 'Solicitante', 'Data Abertura',
+    ])
+
+    for registro in qs:
+        # A mais recente é a que vale — as anteriores são de rodadas passadas.
+        contestacao = max(registro.contestations.all(),
+                          key=lambda c: c.created_at, default=None)
+        writer.writerow([
+            registro.filial, registro.vendedor, registro.pilar, registro.coordenacao,
+            registro.numero_venda, registro.data_venda, registro.nome_cliente,
+            registro.cpf_cnpj, registro.plano_produto, registro.numero_acesso,
+            f'{registro.receita:.2f}',
+            '' if registro.recebido is None else f'{registro.recebido:.2f}',
+            '' if registro.divergencia is None else f'{registro.divergencia:.2f}',
+            contestacao.pk if contestacao else '',
+            _status_label(contestacao.status) if contestacao else 'Não contestada',
+            contestacao.get_payment_status_display() if contestacao else '',
+            (contestacao.reason or '').replace('\n', ' ') if contestacao else '',
+            (contestacao.requester.get_full_name() or contestacao.requester.username)
+            if contestacao and contestacao.requester else '',
+            contestacao.created_at.strftime('%d/%m/%Y %H:%M') if contestacao else '',
+        ])
+
+    return resposta

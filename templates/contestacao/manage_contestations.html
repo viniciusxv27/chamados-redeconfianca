@@ -273,6 +273,9 @@
                             {% endif %}
                         </div>
                         <p class="text-sm text-gray-700"><strong>{{ c.exclusion.vendedor }}</strong> &middot; {{ c.exclusion.filial }} &middot; {{ c.exclusion.pilar }} &middot; <span class="font-mono">R$ {{ c.exclusion.receita|floatformat:2 }}</span></p>
+                        {% if c.exclusion.plano_produto %}
+                          <p class="text-xs text-gray-500"><i class="fas fa-box text-gray-300 mr-1"></i>{{ c.exclusion.plano_produto }}</p>
+                        {% endif %}
                         {% if c.exclusion.record_type == 'pagamento' %}
                           {# Sem isto o gestor não sabe se está julgando uma exclusão ou uma diferença de pagamento. #}
                           <p class="text-xs mt-1">
