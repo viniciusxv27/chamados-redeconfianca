@@ -1,0 +1,245 @@
+{% extends 'base.html' %}
+
+{% block title %}Contestação de Valores{% endblock %}
+
+{% block extra_css %}
+<style>
+  .vl-card { background:#fff; border:1px solid #e9ecef; border-radius:.75rem; }
+  .vl-num { font-variant-numeric: tabular-nums; }
+  /* A linha com divergência precisa saltar aos olhos numa tabela longa. */
+  .vl-diverge { background:#fff7ed; }
+  .vl-diverge:hover { background:#ffedd5; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50 p-3 sm:p-6">
+  <div class="max-w-7xl mx-auto">
+
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-900">
+          <i class="fas fa-scale-unbalanced text-orange-500 mr-2"></i>Contestação de Valores
+        </h1>
+        <p class="text-sm text-gray-500 mt-1">
+          O que a venda gerou de receita contra o que foi efetivamente pago.
+          {% if lote %}Base de {{ lote.created_at|date:"d/m/Y H:i" }}.{% endif %}
+        </p>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <a href="{% url 'contestacao:exclusion_list' %}" class="px-3 py-2 bg-white border rounded-lg text-sm hover:bg-gray-50">
+          <i class="fas fa-ban mr-1"></i>Exclusões
+        </a>
+        <a href="{% url 'contestacao:my_contestations' %}" class="px-3 py-2 bg-white border rounded-lg text-sm hover:bg-gray-50">
+          <i class="fas fa-folder-open mr-1"></i>Minhas contestações
+        </a>
+        {% if can_sync %}
+          <form method="post" action="{% url 'contestacao:sync_valores' %}"
+                onsubmit="return confirm('Sincronizar a BASE_PAGAMENTO? Isso cria uma nova rodada e reabre o prazo de contestação de valores.');">
+            {% csrf_token %}
+            <button class="px-3 py-2 bg-orange-600 text-white rounded-lg text-sm hover:bg-orange-700">
+              <i class="fas fa-rotate mr-1"></i>Sincronizar planilha
+            </button>
+          </form>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if not base_configurada %}
+      <div class="vl-card p-4 mb-5 border-l-4 border-amber-400 bg-amber-50/70">
+        <p class="text-sm text-amber-900">
+          <i class="fas fa-triangle-exclamation mr-1.5"></i>
+          <strong>Planilha BASE_PAGAMENTO (Contestação) não configurada.</strong>
+        </p>
+        <p class="text-xs text-amber-800/90 mt-1">
+          Cadastre a URL em <a href="{% url 'system_config' %}" class="underline font-medium">Configurações do Sistema</a>.
+          A planilha precisa ter a coluna <strong>RECEBIDO</strong> além de RECEITA.
+        </p>
+      </div>
+    {% elif not janela.has_sync %}
+      <div class="vl-card p-4 mb-5 border-l-4 border-sky-400 bg-sky-50/70">
+        <p class="text-sm text-sky-900">
+          <i class="fas fa-circle-info mr-1.5"></i>
+          Nenhuma sincronização feita ainda. Clique em <strong>Sincronizar planilha</strong> para trazer a base.
+        </p>
+      </div>
+    {% elif janela.is_expired %}
+      <div class="vl-card p-4 mb-5 border-l-4 border-rose-400 bg-rose-50/70">
+        <p class="text-sm text-rose-900">
+          <i class="fas fa-clock mr-1.5"></i>
+          <strong>Prazo encerrado.</strong> A base foi sincronizada em {{ janela.last_sync_at|date:"d/m/Y H:i" }} e o
+          período de contestação terminou. Sincronize de novo para abrir outra rodada.
+        </p>
+      </div>
+    {% else %}
+      <div class="vl-card p-3 mb-5 border-l-4 border-emerald-400 bg-emerald-50/60">
+        <p class="text-sm text-emerald-900">
+          <i class="fas fa-hourglass-half mr-1.5"></i>
+          Contestação aberta — resta <strong>{{ janela.remaining_label }}</strong>
+          (até {{ janela.sync_deadline_at|date:"d/m/Y H:i" }}).
+        </p>
+      </div>
+    {% endif %}
+
+    <!-- Resumo -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+      <div class="vl-card p-4">
+        <p class="text-xs text-gray-500">Receita</p>
+        <p class="text-xl font-bold text-gray-900 vl-num mt-0.5">R$ {{ resumo.receita|floatformat:2 }}</p>
+        <p class="text-[11px] text-gray-400">{{ resumo.linhas }} venda{{ resumo.linhas|pluralize }}</p>
+      </div>
+      <div class="vl-card p-4">
+        <p class="text-xs text-gray-500">Recebido</p>
+        <p class="text-xl font-bold text-gray-900 vl-num mt-0.5">R$ {{ resumo.recebido|floatformat:2 }}</p>
+        {% if resumo.sem_recebido %}
+          <p class="text-[11px] text-amber-600">{{ resumo.sem_recebido }} sem valor informado</p>
+        {% else %}
+          <p class="text-[11px] text-gray-400">todas as linhas informadas</p>
+        {% endif %}
+      </div>
+      <div class="vl-card p-4">
+        <p class="text-xs text-gray-500">Divergência</p>
+        <p class="text-xl font-bold vl-num mt-0.5 {% if resumo.divergencia > 0 %}text-rose-600{% elif resumo.divergencia < 0 %}text-sky-600{% else %}text-gray-900{% endif %}">
+          R$ {{ resumo.divergencia|floatformat:2 }}
+        </p>
+        <p class="text-[11px] text-gray-400">receita menos recebido</p>
+      </div>
+      <div class="vl-card p-4">
+        <p class="text-xs text-gray-500">Contestáveis</p>
+        <p class="text-xl font-bold text-orange-600 vl-num mt-0.5">{{ resumo.divergentes }}</p>
+        <p class="text-[11px] text-gray-400">vendas com diferença</p>
+      </div>
+    </div>
+
+    <!-- Filtros -->
+    <form method="get" class="vl-card p-4 mb-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
+        <div class="lg:col-span-2">
+          <label class="block text-xs font-medium text-gray-600 mb-1">Buscar</label>
+          <input type="text" name="q" value="{{ search }}" placeholder="Vendedor, cliente, CPF ou nº da venda"
+                 class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Filial</label>
+          <select name="filial" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+            <option value="">Todas</option>
+            {% for f in filiais %}<option value="{{ f }}" {% if f == filial_filter %}selected{% endif %}>{{ f }}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Pilar</label>
+          <select name="pilar" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+            <option value="">Todos</option>
+            {% for p in pilares %}<option value="{{ p }}" {% if p == pilar_filter %}selected{% endif %}>{{ p }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="flex gap-2">
+          <select name="mostrar" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm">
+            <option value="divergentes" {% if mostrar == 'divergentes' %}selected{% endif %}>Só divergentes</option>
+            <option value="todas" {% if mostrar == 'todas' %}selected{% endif %}>Todas as vendas</option>
+            <option value="sem_recebido" {% if mostrar == 'sem_recebido' %}selected{% endif %}>Sem recebido</option>
+          </select>
+          <button class="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm hover:bg-orange-700">
+            <i class="fas fa-filter"></i>
+          </button>
+        </div>
+      </div>
+    </form>
+
+    <!-- Tabela -->
+    <div class="vl-card overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200 text-sm">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Venda</th>
+              <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Vendedor</th>
+              <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Filial / Pilar</th>
+              <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Receita</th>
+              <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Recebido</th>
+              <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Divergência</th>
+              <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">Contestação</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            {% for r in records %}
+            <tr class="{% if r.tem_divergencia %}vl-diverge{% else %}hover:bg-gray-50{% endif %}">
+              <td class="px-3 py-2">
+                <p class="font-medium text-gray-900">{{ r.numero_venda|default:"—" }}</p>
+                <p class="text-[11px] text-gray-400">{{ r.data_venda|default:"" }} {{ r.nome_cliente|truncatechars:26 }}</p>
+              </td>
+              <td class="px-3 py-2 text-gray-700">{{ r.vendedor }}</td>
+              <td class="px-3 py-2">
+                <p class="text-gray-700">{{ r.filial }}</p>
+                <p class="text-[11px] text-gray-400">{{ r.pilar }}</p>
+              </td>
+              <td class="px-3 py-2 text-right vl-num text-gray-800">R$ {{ r.receita|floatformat:2 }}</td>
+              <td class="px-3 py-2 text-right vl-num {% if r.recebido is None %}text-amber-600{% else %}text-gray-800{% endif %}">
+                {% if r.recebido is None %}não informado{% else %}R$ {{ r.recebido|floatformat:2 }}{% endif %}
+              </td>
+              <td class="px-3 py-2 text-right vl-num font-semibold
+                  {% if r.divergencia is None %}text-gray-300
+                  {% elif r.divergencia > 0 %}text-rose-600
+                  {% elif r.divergencia < 0 %}text-sky-600
+                  {% else %}text-emerald-600{% endif %}">
+                {% if r.divergencia is None %}—{% else %}R$ {{ r.divergencia|floatformat:2 }}{% endif %}
+              </td>
+              <td class="px-3 py-2 text-right">
+                {% if r.contestacao %}
+                  <a href="{% url 'contestacao:contestation_detail' r.contestacao.pk %}"
+                     class="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-semibold
+                     {% if r.contestacao.status == 'confirmed' %}bg-emerald-100 text-emerald-700
+                     {% elif r.contestacao.status == 'rejected' or r.contestacao.status == 'denied' %}bg-rose-100 text-rose-700
+                     {% else %}bg-sky-100 text-sky-700{% endif %}">
+                    #{{ r.contestacao.pk }} · {{ r.contestacao.get_status_display }}
+                  </a>
+                {% elif r.tem_divergencia and not janela.is_blocked %}
+                  <a href="{% url 'contestacao:contestar_valor' r.id %}"
+                     class="inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded-lg bg-orange-600 text-white hover:bg-orange-700">
+                    <i class="fas fa-flag"></i> Contestar
+                  </a>
+                {% elif r.tem_divergencia %}
+                  <span class="text-xs text-gray-400">prazo encerrado</span>
+                {% else %}
+                  <span class="text-xs text-gray-300">—</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="7" class="px-4 py-12 text-center text-gray-400">
+                <i class="fas fa-scale-balanced text-gray-200 text-3xl mb-2 block"></i>
+                {% if mostrar == 'divergentes' %}
+                  <p class="text-sm">Nenhuma venda com divergência entre Receita e Recebido.</p>
+                  <p class="text-xs mt-1">Troque o filtro para "Todas as vendas" para ver a base inteira.</p>
+                {% else %}
+                  <p class="text-sm">Nenhuma venda nesta base.</p>
+                  <p class="text-xs mt-1">Sincronize a BASE_PAGAMENTO para trazer os dados.</p>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      {% if page_obj.has_other_pages %}
+      <div class="flex items-center justify-between px-4 py-3 border-t bg-gray-50 text-sm">
+        <span class="text-gray-500">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+        <div class="flex gap-2">
+          {% if page_obj.has_previous %}
+            <a href="?{{ request.GET.urlencode }}&page={{ page_obj.previous_page_number }}"
+               class="px-3 py-1.5 bg-white border rounded-lg hover:bg-gray-50">Anterior</a>
+          {% endif %}
+          {% if page_obj.has_next %}
+            <a href="?{{ request.GET.urlencode }}&page={{ page_obj.next_page_number }}"
+               class="px-3 py-1.5 bg-white border rounded-lg hover:bg-gray-50">Próxima</a>
+          {% endif %}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+  </div>
+</div>
+{% endblock %}

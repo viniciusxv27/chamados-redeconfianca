@@ -3217,6 +3217,7 @@ def system_config_view(request):
                 config.excel_base_pagamento_url = commission_urls['excel_base_pagamento_url']
                 config.excel_base_exclusao_url = commission_urls['excel_base_exclusao_url']
                 config.excel_contestacao_base_exclusao_url = request.POST.get('excel_contestacao_base_exclusao_url', '').strip()
+                config.excel_contestacao_base_pagamento_url = request.POST.get('excel_contestacao_base_pagamento_url', '').strip()
                 config.display_reference_month = display_month_int
                 config.display_reference_year = display_year_int
                 config.updated_by = request.user

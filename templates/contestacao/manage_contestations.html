@@ -273,6 +273,18 @@
                             {% endif %}
                         </div>
                         <p class="text-sm text-gray-700"><strong>{{ c.exclusion.vendedor }}</strong> &middot; {{ c.exclusion.filial }} &middot; {{ c.exclusion.pilar }} &middot; <span class="font-mono">R$ {{ c.exclusion.receita|floatformat:2 }}</span></p>
+                        {% if c.exclusion.record_type == 'pagamento' %}
+                          {# Sem isto o gestor não sabe se está julgando uma exclusão ou uma diferença de pagamento. #}
+                          <p class="text-xs mt-1">
+                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 font-semibold">
+                              <i class="fas fa-scale-unbalanced"></i> Contestação de valor
+                            </span>
+                            <span class="ml-2 text-gray-600 font-mono">
+                              Recebido R$ {{ c.exclusion.recebido|floatformat:2 }} &middot;
+                              divergência R$ {{ c.exclusion.divergencia|floatformat:2 }}
+                            </span>
+                          </p>
+                        {% endif %}
                         {% if c.exclusion.numero_venda or c.exclusion.imei %}
                         <p class="text-xs text-gray-500">
                             {% if c.exclusion.numero_venda %}Nº da Venda: <span class="font-mono">{{ c.exclusion.numero_venda }}</span>{% endif %}

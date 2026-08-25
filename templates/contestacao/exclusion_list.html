@@ -153,6 +153,11 @@
                 <i class="fas fa-chart-bar mr-2"></i> Dashboard
             </a>
             {% endif %}
+            <a href="{% url 'contestacao:valores_list' %}" class="inline-flex items-center px-4 py-2 text-sm font-medium text-white rounded-lg hover:opacity-90 transition" style="background-color: #f97316"
+               title="Receita x Recebido — contestação de valores">
+                <i class="fas fa-scale-unbalanced mr-2"></i> Contestar Valores
+                {% if valores_divergentes %}<span class="ml-2 px-1.5 py-0.5 rounded-full bg-white/25 text-xs">{{ valores_divergentes }}</span>{% endif %}
+            </a>
             <a href="{% url 'contestacao:my_contestations' %}" class="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition">
                 <i class="fas fa-list mr-2"></i> Minhas Contestações
             </a>

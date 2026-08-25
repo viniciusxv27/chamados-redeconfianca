@@ -1,7 +1,7 @@
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Q
 
-from contestacao.models import Contestation, ContestationCartDraft, ContestationHistory, ExclusionRecord
+from contestacao.models import Contestation, ContestationCartDraft, ContestationHistory, ExclusionRecord, TipoBase
 from users.models import Sector, User
 
 
@@ -104,7 +104,8 @@ class Command(BaseCommand):
             raise CommandError('Nenhum usuario encontrado para recuperar carrinho.')
 
         exclusions = [
-            e for e in ExclusionRecord.objects.all().order_by('-imported_at')
+            e for e in ExclusionRecord.objects
+            .filter(record_type=TipoBase.EXCLUSAO).order_by('-imported_at')
             if match_sector_to_filial(sector.name, e.filial)
         ]
         if limit > 0:

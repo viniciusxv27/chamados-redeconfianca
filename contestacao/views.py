@@ -12,11 +12,12 @@ from django.contrib import messages
 from django.core.cache import cache
 from django.http import JsonResponse, HttpResponse
 from django.db import models
-from django.db.models import Count, Min, Q, Sum
+from django.db.models import Count, F, Min, Q, Sum
 from django.core.paginator import Paginator
 from django.utils import timezone
 
-from .models import ExclusionRecord, ExclusionSyncBatch, Contestation, ContestationHistory, ContestationCartDraft
+from .models import (ExclusionRecord, ExclusionSyncBatch, Contestation,
+                     ContestationHistory, ContestationCartDraft, TipoBase)
 from users.models import SystemConfig, User
 
 
@@ -357,7 +358,7 @@ def _parse_currency_to_decimal(value):
 
 def _resolve_exclusion_for_draft_item(user, exclusion_id=None, summary=None):
     """Tenta resolver um item local para uma venda existente no escopo do usuário."""
-    scoped_qs = _apply_exclusion_scope_for_user(ExclusionRecord.objects.all(), user)
+    scoped_qs = _apply_exclusion_scope_for_user(_exclusoes(), user)
 
     if exclusion_id:
         try:
@@ -433,9 +434,27 @@ def _get_last_sync_at():
     return last_sync.created_at if last_sync else None
 
 
-def _get_latest_sync_batch():
+def _exclusoes():
+    """Só as linhas da BASE_EXCLUSAO.
+
+    A tabela guarda também as linhas da base de pagamento (contestação de
+    valores). Toda consulta do fluxo de exclusão passa por aqui — deixar um
+    ``ExclusionRecord.objects.all()`` solto faria linha de pagamento aparecer
+    na tela de exclusões.
+    """
+    return ExclusionRecord.objects.filter(record_type=TipoBase.EXCLUSAO)
+
+
+def _pagamentos():
+    """Só as linhas da BASE_PAGAMENTO (contestação de valores)."""
+    return ExclusionRecord.objects.filter(record_type=TipoBase.PAGAMENTO)
+
+
+def _get_latest_sync_batch(record_type=TipoBase.EXCLUSAO):
     """Retorna o lote de sincronização mais recente (ou None)."""
-    return ExclusionSyncBatch.objects.order_by('-created_at').first()
+    return (ExclusionSyncBatch.objects
+            .filter(record_type=record_type)
+            .order_by('-created_at').first())
 
 
 def _get_sync_window_state():
@@ -487,7 +506,30 @@ def _download_exclusion_spreadsheet():
     except Exception:
         url = DEFAULT_EXCEL_BASE_EXCLUSAO_URL
 
-    cache_key = 'contestacao_base_exclusao_content'
+    return _baixar_planilha(url, 'contestacao_base_exclusao_content')
+
+
+def _download_pagamento_spreadsheet():
+    """Baixa a BASE_PAGAMENTO (Contestação) e retorna um DataFrame.
+
+    Sem URL configurada não há fallback: apontar para a base de pagamento do
+    comissionamento traria uma planilha sem a coluna RECEBIDO e a tela mostraria
+    divergência zero em tudo, o que é pior do que dizer que falta configurar.
+    """
+    try:
+        url = (SystemConfig.get_config().excel_contestacao_base_pagamento_url or '').strip()
+    except Exception:
+        url = ''
+
+    if not url:
+        return None, ('Planilha BASE_PAGAMENTO (Contestação) não configurada. '
+                      'Cadastre a URL em /users/manage/system-config/.')
+
+    return _baixar_planilha(url, 'contestacao_base_pagamento_content')
+
+
+def _baixar_planilha(url, cache_key):
+    """Download + leitura de uma planilha do OneDrive, com cache de 5 min."""
     cached = cache.get(cache_key)
     if cached:
         return pd.read_excel(io.BytesIO(cached), sheet_name='Planilha1', engine='openpyxl'), None
@@ -617,6 +659,43 @@ def _row_to_exclusion_fields(row, cols):
     }
 
 
+def _detect_pagamento_columns(df):
+    """Localiza as colunas da BASE_PAGAMENTO (Contestação).
+
+    É a BASE_EXCLUSAO com uma coluna a mais: RECEBIDO. Ela é obrigatória —
+    sem RECEBIDO não existe divergência para contestar, e a tela inteira
+    perderia o sentido.
+    """
+    cols, missing = _detect_exclusion_columns(df)
+    cols['recebido'] = (_find_column(df, 'RECEBIDO')
+                        or _find_column(df, 'VALOR RECEBIDO')
+                        or _find_column(df, 'PAGO'))
+    if not cols['recebido']:
+        missing = list(missing) + ['recebido']
+    return cols, missing
+
+
+def _row_to_pagamento_fields(row, cols):
+    """Linha da BASE_PAGAMENTO -> campos do ExclusionRecord (tipo pagamento)."""
+    fields = _row_to_exclusion_fields(row, cols)
+    if fields is None:
+        return None
+
+    bruto = row.get(cols['recebido'])
+    if pd.isna(bruto):
+        # Célula vazia vira "não informado", não zero: a diferença muda a
+        # divergência de nada para o valor cheio da receita.
+        fields['recebido'] = None
+    else:
+        try:
+            fields['recebido'] = Decimal(str(float(bruto))).quantize(Decimal('0.01'))
+        except (ValueError, TypeError, InvalidOperation):
+            fields['recebido'] = None
+
+    fields['record_type'] = TipoBase.PAGAMENTO
+    return fields
+
+
 def _exclusion_match_key(numero_venda, pilar, vendedor, filial, receita, data_venda):
     """Chave para casar uma linha da planilha com um ExclusionRecord existente.
 
@@ -678,7 +757,8 @@ def sync_exclusions(request):
     # do lote mais recente, reabrindo automaticamente todas as lojas para uma
     # nova rodada de contestação (as contestações antigas permanecem
     # vinculadas aos registros do lote anterior).
-    sync_batch = ExclusionSyncBatch.objects.create(created_by=request.user)
+    sync_batch = ExclusionSyncBatch.objects.create(
+        created_by=request.user, record_type=TipoBase.EXCLUSAO)
 
     records = []
     for _, row in df.iterrows():
@@ -741,7 +821,7 @@ def update_exclusions(request):
     # Indexa os registros do lote atual por chave de correspondência. Chaves
     # repetidas viram uma fila para casar 1-para-1 com as linhas da planilha.
     existing_by_key = {}
-    for record in ExclusionRecord.objects.filter(sync_batch=latest_batch):
+    for record in _exclusoes().filter(sync_batch=latest_batch):
         existing_by_key.setdefault(_record_match_key(record), []).append(record)
 
     to_update = []
@@ -781,7 +861,7 @@ def update_exclusions(request):
     # Registros do lote que não vieram na planilha nova — mantidos como estão.
     kept_count = sum(len(bucket) for bucket in existing_by_key.values())
 
-    latest_batch.record_count = ExclusionRecord.objects.filter(sync_batch=latest_batch).count()
+    latest_batch.record_count = _exclusoes().filter(sync_batch=latest_batch).count()
     author = getattr(request.user, 'full_name', '') or request.user.get_username()
     stamp = timezone.localtime(timezone.now()).strftime('%d/%m/%Y %H:%M')
     note_line = (
@@ -810,7 +890,7 @@ def exclusion_list(request):
         messages.error(request, 'Sem permissão para acessar contestações.')
         return redirect('home')
 
-    qs = ExclusionRecord.objects.all()
+    qs = _exclusoes()
 
     # Mostra apenas os registros importados no lote mais recente
     # (última "Sincronizar Planilha"). Lotes anteriores ficam preservados no
@@ -826,7 +906,7 @@ def exclusion_list(request):
             qs = qs.exclude(sync_batch=latest_batch)
         else:
             qs = qs.filter(sync_batch=latest_batch)
-            old_records_count = ExclusionRecord.objects.exclude(sync_batch=latest_batch).count()
+            old_records_count = _exclusoes().exclude(sync_batch=latest_batch).count()
     else:
         if not show_old:
             qs = qs.none()
@@ -898,6 +978,9 @@ def exclusion_list(request):
         'sync_remaining_label': sync_state['remaining_label'],
         'showing_old_records': show_old,
         'old_records_count': old_records_count,
+        # Quantas vendas estão esperando contestação de valor — o número no
+        # botão é o que faz alguém lembrar de olhar a outra aba.
+        'valores_divergentes': _contagem_valores_divergentes(request.user),
     }
     return render(request, 'contestacao/exclusion_list.html', context)
 
@@ -929,7 +1012,7 @@ def contestation_cart_items_summary(request):
 
     # Recuperação por ID para reparar carrinhos antigos/inconsistentes,
     # independente de filtros atuais da listagem.
-    scoped_qs = ExclusionRecord.objects.filter(pk__in=valid_ids)
+    scoped_qs = _exclusoes().filter(pk__in=valid_ids)
     items = {}
     for r in scoped_qs:
         items[str(r.pk)] = {
@@ -957,7 +1040,7 @@ def cart_draft_list(request):
     drafts = ContestationCartDraft.objects.select_related('exclusion').filter(user=request.user).order_by('-updated_at')
 
     scoped_exclusions = _apply_exclusion_scope_for_user(
-        ExclusionRecord.objects.filter(pk__in=drafts.values_list('exclusion_id', flat=True)),
+        _exclusoes().filter(pk__in=drafts.values_list('exclusion_id', flat=True)),
         request.user,
     )
     allowed_ids = set(scoped_exclusions.values_list('pk', flat=True))
@@ -989,7 +1072,7 @@ def cart_draft_upsert(request):
         return JsonResponse({'success': False, 'error': 'Registro invalido.'}, status=400)
 
     scoped_exclusions = _apply_exclusion_scope_for_user(
-        ExclusionRecord.objects.filter(pk=exclusion_id),
+        _exclusoes().filter(pk=exclusion_id),
         request.user,
     )
     exclusion = scoped_exclusions.first()
@@ -1272,7 +1355,7 @@ def bulk_create_contestation(request):
         return JsonResponse({'success': False, 'error': 'Nenhum item válido. Motivo e evidência são obrigatórios.'}, status=400)
 
     exclusion_ids = [item['exclusion_id'] for item in items]
-    exclusions_by_id = {e.pk: e for e in ExclusionRecord.objects.filter(pk__in=exclusion_ids)}
+    exclusions_by_id = {e.pk: e for e in _exclusoes().filter(pk__in=exclusion_ids)}
     draft_map = {
         d.exclusion_id: d for d in ContestationCartDraft.objects.filter(user=request.user, exclusion_id__in=exclusion_ids)
     }
@@ -1394,26 +1477,28 @@ def manage_contestations(request):
     # Filtro de status
     status_filter = request.GET.get('status', 'pending')
 
-    # Mostrar apenas contestações do mês da última sincronização por padrão.
-    # Com ?antigas=1, mostra somente as de meses anteriores ("Contestações antigas").
+    # Mostrar apenas contestações da rodada corrente por padrão; com ?antigas=1,
+    # somente as anteriores.
+    #
+    # "Rodada corrente" é o mês da última sincronização — de qualquer uma das
+    # duas bases. Ancorar só na BASE_EXCLUSAO escondia as contestações de valor
+    # sempre que as duas planilhas fossem sincronizadas em meses diferentes: a
+    # contestação nascia direto em "antigas" e ninguém analisava.
     last_sync_at = _get_last_sync_at()
+    meses_ativos = {(d.year, d.month) for d in
+                    (last_sync_at, _get_last_pagamento_sync_at()) if d is not None}
+
     show_old = request.GET.get('antigas') == '1'
     old_contestations_count = 0
-    if last_sync_at is not None:
+    if meses_ativos:
+        rodada = Q()
+        for ano, mes in meses_ativos:
+            rodada |= Q(created_at__year=ano, created_at__month=mes)
         if show_old:
-            base_qs = base_qs.exclude(
-                created_at__year=last_sync_at.year,
-                created_at__month=last_sync_at.month,
-            )
+            base_qs = base_qs.exclude(rodada)
         else:
-            old_contestations_count = base_qs.exclude(
-                created_at__year=last_sync_at.year,
-                created_at__month=last_sync_at.month,
-            ).count()
-            base_qs = base_qs.filter(
-                created_at__year=last_sync_at.year,
-                created_at__month=last_sync_at.month,
-            )
+            old_contestations_count = base_qs.exclude(rodada).count()
+            base_qs = base_qs.filter(rodada)
 
     # Filtro por mês de abertura (aplicado apenas em "todas").
     # Quando "Todas" está selecionado e nenhum mês foi informado, usa o mês corrente
@@ -1524,7 +1609,7 @@ def manage_contestations(request):
     confirmed_count = confirmed_metrics['lines']
     awaiting_manager_count = awaiting_manager_metrics['lines']
 
-    exclusions_qs = _apply_exclusion_visibility_filter(ExclusionRecord.objects.all(), request.user)
+    exclusions_qs = _apply_exclusion_visibility_filter(_exclusoes(), request.user)
     if filial_filter:
         exclusions_qs = exclusions_qs.filter(filial__iexact=filial_filter)
 
@@ -2247,7 +2332,7 @@ def dashboard(request):
             qs = qs.filter(requester=request.user)
 
     # Total na base (ExclusionRecord) com mesmo filtro de setor
-    base_qs = ExclusionRecord.objects.all()
+    base_qs = _exclusoes()
     if sel_year:
         base_qs = base_qs.filter(imported_at__year=sel_year, imported_at__month=sel_month)
     if not can_view_all_scope:
@@ -2525,7 +2610,7 @@ def export_all_sales(request):
     ).order_by('-created_at')
 
     records = (
-        ExclusionRecord.objects
+        _exclusoes()
         .prefetch_related(models.Prefetch('contestations', queryset=contestations_qs))
         .order_by('filial', 'vendedor', '-imported_at')
     )
@@ -2611,3 +2696,273 @@ def export_all_sales(request):
             writer.writerow(base_columns + ['Nao'] + [''] * 14)
 
     return response
+
+
+# =========================================================================
+# CONTESTAÇÃO DE VALORES — BASE_PAGAMENTO (Contestação)
+#
+# Mesma tabela e mesmo fluxo de aprovação das exclusões; o que muda é a
+# origem (planilha de pagamento) e o motivo: aqui não se contesta a venda ter
+# sido excluída, e sim a diferença entre o que a venda gerou de receita e o
+# que de fato foi pago.
+# =========================================================================
+
+def _contagem_valores_divergentes(user):
+    """Vendas com divergência no escopo da pessoa, no lote atual de pagamento.
+
+    Nunca deixa a tela de exclusões cair por causa desta contagem: é um
+    indicador, não a razão de a página existir.
+    """
+    try:
+        lote = _get_latest_sync_batch(TipoBase.PAGAMENTO)
+        if lote is None:
+            return 0
+        qs = _apply_exclusion_scope_for_user(
+            _pagamentos().filter(sync_batch=lote, recebido__isnull=False), user)
+        return qs.exclude(recebido=F('receita')).count()
+    except Exception:
+        return 0
+
+
+def _get_last_pagamento_sync_at():
+    ultimo = (ContestationHistory.objects
+              .filter(action='synced_pagamento').only('created_at')
+              .order_by('-created_at').first())
+    return ultimo.created_at if ultimo else None
+
+
+def _pagamento_window_state():
+    """Mesma regra de validade das exclusões, com o relógio próprio."""
+    agora = timezone.now()
+    ultimo = _get_last_pagamento_sync_at()
+    if not ultimo:
+        return {'has_sync': False, 'is_blocked': True, 'is_expired': True,
+                'last_sync_at': None, 'sync_deadline_at': None,
+                'remaining_seconds': 0, 'remaining_label': 'Sem sincronização'}
+
+    prazo = ultimo + timezone.timedelta(days=SYNC_VALIDITY_DAYS)
+    restante = int((prazo - agora).total_seconds())
+    expirou = restante <= 0
+    return {
+        'has_sync': True, 'is_blocked': expirou, 'is_expired': expirou,
+        'last_sync_at': ultimo, 'sync_deadline_at': prazo,
+        'remaining_seconds': max(restante, 0),
+        'remaining_label': _format_remaining_duration(restante) if restante > 0 else 'Expirado',
+    }
+
+
+@login_required
+def sync_valores(request):
+    """Importa a BASE_PAGAMENTO (Contestação) num lote novo."""
+    if not _can_sync_exclusions(request.user):
+        messages.error(request, 'Sem permissão para sincronizar.')
+        return redirect('contestacao:valores_list')
+
+    if request.method != 'POST':
+        return redirect('contestacao:valores_list')
+
+    df, erro = _download_pagamento_spreadsheet()
+    if erro or df is None:
+        messages.error(request, erro or 'Não foi possível ler a planilha.')
+        return redirect('contestacao:valores_list')
+
+    cols, faltando = _detect_pagamento_columns(df)
+    if faltando:
+        nomes = ', '.join(c.upper() for c in faltando)
+        messages.error(request, f'Colunas obrigatórias não encontradas na planilha: {nomes}.')
+        return redirect('contestacao:valores_list')
+
+    lote = ExclusionSyncBatch.objects.create(
+        created_by=request.user, record_type=TipoBase.PAGAMENTO)
+
+    registros = []
+    for _, row in df.iterrows():
+        campos = _row_to_pagamento_fields(row, cols)
+        if campos is None:
+            continue
+        registros.append(ExclusionRecord(sync_batch=lote, **campos))
+
+    ExclusionRecord.objects.bulk_create(registros, batch_size=500)
+    lote.record_count = len(registros)
+    lote.save(update_fields=['record_count'])
+
+    com_divergencia = sum(1 for r in registros if r.recebido is not None
+                          and (r.receita or 0) != r.recebido)
+    ContestationHistory.objects.create(
+        action='synced_pagamento',
+        user=request.user,
+        notes=f'{len(registros)} linhas importadas, {com_divergencia} com divergência',
+        extra_data={'sync_batch_id': lote.pk, 'divergentes': com_divergencia},
+    )
+    messages.success(
+        request,
+        f'{len(registros)} linhas importadas da BASE_PAGAMENTO. '
+        f'{com_divergencia} com divergência entre Receita e Recebido.')
+    return redirect('contestacao:valores_list')
+
+
+@login_required
+def valores_list(request):
+    """Receita x Recebido, a divergência de cada venda e o que dá para contestar."""
+    if not _can_access_contestation_module(request.user):
+        messages.error(request, 'Sem permissão para acessar contestações.')
+        return redirect('home')
+
+    qs = _pagamentos()
+    lote = _get_latest_sync_batch(TipoBase.PAGAMENTO)
+    qs = qs.filter(sync_batch=lote) if lote is not None else qs.none()
+    qs = _apply_exclusion_scope_for_user(qs, request.user)
+
+    busca = (request.GET.get('q') or '').strip()
+    pilar = (request.GET.get('pilar') or '').strip()
+    filial = (request.GET.get('filial') or '').strip()
+    # 'divergentes' é o padrão: a tela existe por causa da divergência, e abrir
+    # em "todas" enterraria as poucas linhas que importam no meio das milhares
+    # que fecharam certo.
+    mostrar = (request.GET.get('mostrar') or 'divergentes').strip()
+
+    if busca:
+        qs = qs.filter(Q(vendedor__icontains=busca) | Q(nome_cliente__icontains=busca)
+                       | Q(cpf_cnpj__icontains=busca) | Q(numero_venda__icontains=busca))
+    if pilar:
+        qs = qs.filter(pilar__iexact=pilar)
+    if filial:
+        qs = qs.filter(filial__iexact=filial)
+
+    pilares = qs.values_list('pilar', flat=True).distinct().order_by('pilar')
+    filiais = qs.values_list('filial', flat=True).distinct().order_by('filial')
+
+    # Totais e contagens saem do conjunto inteiro, não da página: o rodapé
+    # precisa responder "quanto falta no total", não "quanto falta nestas 50".
+    divergentes_qs = qs.filter(recebido__isnull=False).exclude(recebido=F('receita'))
+    resumo = {
+        'linhas': qs.count(),
+        'receita': qs.aggregate(v=Sum('receita'))['v'] or Decimal('0'),
+        'recebido': qs.filter(recebido__isnull=False).aggregate(v=Sum('recebido'))['v'] or Decimal('0'),
+        'divergentes': divergentes_qs.count(),
+        'sem_recebido': qs.filter(recebido__isnull=True).count(),
+    }
+    resumo['divergencia'] = (
+        divergentes_qs.aggregate(v=Sum(F('receita') - F('recebido')))['v'] or Decimal('0'))
+
+    if mostrar == 'divergentes':
+        qs = divergentes_qs
+    elif mostrar == 'sem_recebido':
+        qs = qs.filter(recebido__isnull=True)
+
+    qs = qs.order_by('filial', 'vendedor', 'numero_venda')
+
+    janela = _pagamento_window_state()
+
+    paginator = Paginator(qs, 50)
+    pagina = paginator.get_page(request.GET.get('page'))
+
+    # Contestações já abertas, penduradas na própria linha: o template só
+    # precisa perguntar `r.contestacao` em vez de procurar num dicionário.
+    abertas = {}
+    for c in (Contestation.objects
+              .filter(exclusion_id__in=[r.pk for r in pagina])
+              .order_by('-created_at')):
+        abertas.setdefault(c.exclusion_id, c)
+    for registro in pagina:
+        registro.contestacao = abertas.get(registro.pk)
+
+    return render(request, 'contestacao/valores_list.html', {
+        'records': pagina,
+        'page_obj': pagina,
+        'resumo': resumo,
+        'pilares': pilares,
+        'filiais': filiais,
+        'search': busca,
+        'pilar_filter': pilar,
+        'filial_filter': filial,
+        'mostrar': mostrar,
+        'total_contestadas': len(abertas),
+        'lote': lote,
+        'janela': janela,
+        'can_sync': _can_sync_exclusions(request.user),
+        'can_manage': _can_manage_contestations(request.user),
+        'base_configurada': bool(
+            (SystemConfig.get_config().excel_contestacao_base_pagamento_url or '').strip()),
+    })
+
+
+@login_required
+def contestar_valor(request, record_id):
+    """Abre contestação sobre a diferença entre Receita e Recebido.
+
+    Vira um ``Contestation`` igual ao das exclusões — por isso passa pelo mesmo
+    caminho de gestor, gerente e pagamento, sem fluxo paralelo.
+    """
+    if not _can_create_contestations(request.user):
+        messages.error(request, 'Sem permissão para contestar.')
+        return redirect('contestacao:valores_list')
+
+    janela = _pagamento_window_state()
+    if janela['is_blocked']:
+        messages.error(request, (
+            'Prazo encerrado para esta base. Sincronize a BASE_PAGAMENTO para abrir uma nova rodada.'
+            if janela['has_sync'] else
+            'Sincronize a BASE_PAGAMENTO antes de contestar valores.'))
+        return redirect('contestacao:valores_list')
+
+    # O escopo entra na própria consulta: assim não existe o caminho de carregar
+    # a venda de outra loja e só depois conferir se podia.
+    registro = _apply_exclusion_scope_for_user(
+        _pagamentos().filter(pk=record_id), request.user).first()
+    if registro is None:
+        messages.error(request, 'Venda não encontrada no seu escopo.')
+        return redirect('contestacao:valores_list')
+
+    if not registro.tem_divergencia:
+        messages.warning(request, (
+            'Esta venda não tem divergência entre Receita e Recebido — não há valor a contestar.'
+            if registro.recebido is not None else
+            'Esta venda não tem valor recebido informado na planilha.'))
+        return redirect('contestacao:valores_list')
+
+    existente = (Contestation.objects
+                 .filter(exclusion=registro)
+                 .filter(_open_contestation_filter(janela['last_sync_at']))
+                 .first())
+    if existente:
+        messages.warning(request, f'Já existe a contestação #{existente.pk} para esta venda.')
+        return redirect('contestacao:valores_list')
+
+    if request.method == 'POST':
+        motivo = (request.POST.get('reason') or '').strip()
+        anexo = request.FILES.get('attachment')
+        if not motivo:
+            messages.error(request, 'Informe o motivo da contestação.')
+        else:
+            contestacao = Contestation.objects.create(
+                exclusion=registro,
+                requester=request.user,
+                reason=motivo,
+                attachment=anexo,
+            )
+            ContestationHistory.objects.create(
+                contestation=contestacao,
+                action='created',
+                user=request.user,
+                notes=motivo,
+                # Guardar os valores do momento importa: a próxima sincronização
+                # sobrescreve o registro, e sem isto ninguém saberia qual era a
+                # diferença que originou a contestação.
+                extra_data={
+                    'exclusion_id': registro.pk,
+                    'vendedor': registro.vendedor,
+                    'tipo': 'valor',
+                    'receita': str(registro.receita),
+                    'recebido': str(registro.recebido),
+                    'divergencia': str(registro.divergencia),
+                },
+            )
+            messages.success(request, f'Contestação #{contestacao.pk} aberta sobre a diferença de '
+                                      f'R$ {registro.divergencia}.')
+            return redirect('contestacao:valores_list')
+
+    return render(request, 'contestacao/contestar_valor.html', {
+        'registro': registro,
+        'janela': janela,
+    })

@@ -9,6 +9,10 @@ urlpatterns = [
     path('sincronizar/', views.sync_exclusions, name='sync_exclusions'),
     path('atualizar/', views.update_exclusions, name='update_exclusions'),
     path('historico/', views.contestation_history, name='contestation_history'),
+    # Contestação de valores (BASE_PAGAMENTO)
+    path('valores/', views.valores_list, name='valores_list'),
+    path('valores/sincronizar/', views.sync_valores, name='sync_valores'),
+    path('valores/<int:record_id>/contestar/', views.contestar_valor, name='contestar_valor'),
     path('contestar/<int:exclusion_id>/', views.create_contestation, name='create_contestation'),
     path('contestar-lote/', views.bulk_create_contestation, name='bulk_create_contestation'),
     path('carrinho/rascunho/', views.cart_draft_list, name='cart_draft_list'),

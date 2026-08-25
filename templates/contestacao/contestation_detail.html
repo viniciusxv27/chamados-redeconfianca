@@ -49,6 +49,10 @@
                 {% if c.exclusion.numero_venda %}<div><span class="text-gray-500 block text-xs">Nº da Venda</span><span class="font-medium text-gray-900 font-mono">{{ c.exclusion.numero_venda }}</span></div>{% endif %}
                 {% if c.exclusion.data_venda %}<div><span class="text-gray-500 block text-xs">Data da Venda</span><span class="font-medium text-gray-900">{{ c.exclusion.data_venda }}</span></div>{% endif %}
                 <div><span class="text-gray-500 block text-xs">Receita</span><span class="font-mono font-bold text-gray-900">R$ {{ c.exclusion.receita|floatformat:2 }}</span></div>
+                {% if c.exclusion.record_type == 'pagamento' %}
+                <div><span class="text-gray-500 block text-xs">Recebido</span><span class="font-mono font-bold text-gray-900">R$ {{ c.exclusion.recebido|floatformat:2 }}</span></div>
+                <div><span class="text-gray-500 block text-xs">Divergência</span><span class="font-mono font-bold {% if c.exclusion.divergencia > 0 %}text-rose-600{% else %}text-sky-600{% endif %}">R$ {{ c.exclusion.divergencia|floatformat:2 }}</span></div>
+                {% endif %}
                 {% if c.exclusion.cpf_cnpj %}<div><span class="text-gray-500 block text-xs">CPF</span><span class="font-medium text-gray-900">{{ c.exclusion.cpf_cnpj|digits_only }}</span></div>{% endif %}
                 {% if c.exclusion.numero_acesso %}<div><span class="text-gray-500 block text-xs">Número</span><span class="font-medium text-gray-900">{{ c.exclusion.numero_acesso|digits_only }}</span></div>{% endif %}
                 {% if c.exclusion.imei %}<div><span class="text-gray-500 block text-xs">IMEI</span><span class="font-medium text-gray-900 font-mono">{{ c.exclusion.imei }}</span></div>{% endif %}

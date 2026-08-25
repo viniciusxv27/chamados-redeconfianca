@@ -1,0 +1,88 @@
+{% extends 'base.html' %}
+
+{% block title %}Contestar valor{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-50 p-3 sm:p-6">
+  <div class="max-w-3xl mx-auto">
+
+    <div class="mb-5">
+      <a href="{% url 'contestacao:valores_list' %}" class="text-sm text-gray-500 hover:text-gray-800">
+        <i class="fas fa-arrow-left mr-1"></i>Voltar para a lista
+      </a>
+      <h1 class="text-2xl font-bold text-gray-900 mt-2">
+        <i class="fas fa-scale-unbalanced text-orange-500 mr-2"></i>Contestar valor da venda
+      </h1>
+    </div>
+
+    <div class="bg-white border border-gray-200 rounded-xl overflow-hidden mb-5">
+      <div class="p-5 border-b bg-gray-50">
+        <p class="font-semibold text-gray-900">{{ registro.numero_venda|default:"Venda sem número" }}</p>
+        <p class="text-sm text-gray-500">
+          {{ registro.vendedor }} · {{ registro.filial }} · {{ registro.pilar }}
+          {% if registro.data_venda %} · {{ registro.data_venda }}{% endif %}
+        </p>
+        {% if registro.nome_cliente %}
+          <p class="text-sm text-gray-500">{{ registro.nome_cliente }}{% if registro.cpf_cnpj %} — {{ registro.cpf_cnpj }}{% endif %}</p>
+        {% endif %}
+      </div>
+
+      <div class="grid grid-cols-3 divide-x divide-gray-100">
+        <div class="p-4 text-center">
+          <p class="text-xs text-gray-500">Receita</p>
+          <p class="text-lg font-bold text-gray-900 mt-0.5">R$ {{ registro.receita|floatformat:2 }}</p>
+        </div>
+        <div class="p-4 text-center">
+          <p class="text-xs text-gray-500">Recebido</p>
+          <p class="text-lg font-bold text-gray-900 mt-0.5">R$ {{ registro.recebido|floatformat:2 }}</p>
+        </div>
+        <div class="p-4 text-center {% if registro.divergencia > 0 %}bg-rose-50{% else %}bg-sky-50{% endif %}">
+          <p class="text-xs text-gray-500">Divergência</p>
+          <p class="text-lg font-bold mt-0.5 {% if registro.divergencia > 0 %}text-rose-600{% else %}text-sky-600{% endif %}">
+            R$ {{ registro.divergencia|floatformat:2 }}
+          </p>
+        </div>
+      </div>
+
+      {% if registro.divergencia < 0 %}
+        <p class="px-5 py-3 text-xs text-sky-800 bg-sky-50 border-t border-sky-100">
+          <i class="fas fa-circle-info mr-1"></i>
+          O valor recebido foi <strong>maior</strong> que a receita da venda. Explique no motivo o que
+          precisa ser conferido — quem analisa vai ver o mesmo número que você.
+        </p>
+      {% endif %}
+    </div>
+
+    <form method="post" enctype="multipart/form-data" class="bg-white border border-gray-200 rounded-xl p-5">
+      {% csrf_token %}
+
+      <label for="reason" class="block text-sm font-medium text-gray-800 mb-1">
+        Motivo da contestação <span class="text-rose-500">*</span>
+      </label>
+      <textarea name="reason" id="reason" rows="5" required
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                placeholder="Explique por que o valor pago está errado e qual valor você entende como correto."></textarea>
+      <p class="text-xs text-gray-400 mt-1">
+        Quem analisa vê a receita, o recebido e a diferença — use este campo para o que os números não dizem.
+      </p>
+
+      <label for="attachment" class="block text-sm font-medium text-gray-800 mt-4 mb-1">Anexo (opcional)</label>
+      <input type="file" name="attachment" id="attachment"
+             class="w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0
+                    file:text-sm file:font-medium file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100
+                    border border-gray-200 rounded-lg p-2">
+      <p class="text-xs text-gray-400 mt-1">Print do sistema, contrato, comprovante — o que sustentar a contestação.</p>
+
+      <div class="flex items-center justify-end gap-2 mt-6 pt-4 border-t">
+        <a href="{% url 'contestacao:valores_list' %}" class="px-4 py-2 bg-white border rounded-lg text-sm text-gray-700 hover:bg-gray-50">
+          Cancelar
+        </a>
+        <button type="submit" class="px-5 py-2 bg-orange-600 text-white rounded-lg text-sm font-medium hover:bg-orange-700">
+          <i class="fas fa-flag mr-1"></i>Abrir contestação
+        </button>
+      </div>
+    </form>
+
+  </div>
+</div>
+{% endblock %}

@@ -6,6 +6,22 @@ from decimal import Decimal
 from core.storage import get_media_storage
 
 
+class TipoBase(models.TextChoices):
+    """De qual planilha veio a linha.
+
+    As duas convivem na mesma tabela porque o fluxo de contestação (abrir,
+    gestor aprova, gerente confirma, pagar) é idêntico nos dois casos — o que
+    muda é só a origem e o motivo. Separar em tabelas obrigaria a duplicar
+    todo esse fluxo.
+
+    Toda consulta do fluxo antigo precisa filtrar por EXCLUSAO: sem isso, uma
+    linha de pagamento apareceria na tela de exclusões.
+    """
+
+    EXCLUSAO = 'exclusao', 'BASE_EXCLUSAO'
+    PAGAMENTO = 'pagamento', 'BASE_PAGAMENTO (valores)'
+
+
 class ExclusionSyncBatch(models.Model):
     """Lote de importação da planilha BASE_EXCLUSAO.
 
@@ -29,6 +45,10 @@ class ExclusionSyncBatch(models.Model):
     )
     record_count = models.PositiveIntegerField(default=0, verbose_name='Registros importados')
     notes = models.TextField(blank=True, default='', verbose_name='Observações')
+    # Lotes antigos são todos de exclusão; o default preserva isso.
+    record_type = models.CharField(
+        max_length=12, choices=TipoBase.choices, default=TipoBase.EXCLUSAO,
+        db_index=True, verbose_name='Origem')
 
     class Meta:
         verbose_name = 'Lote de Sincronização de Exclusões'
@@ -63,6 +83,14 @@ class ExclusionRecord(models.Model):
     imei = models.CharField(max_length=120, blank=True, default='', verbose_name='IMEI')
     numero_acesso = models.CharField(max_length=100, blank=True, default='', verbose_name='Número Acesso')
     observacao = models.TextField(blank=True, default='', verbose_name='Observação')
+    record_type = models.CharField(
+        max_length=12, choices=TipoBase.choices, default=TipoBase.EXCLUSAO,
+        db_index=True, verbose_name='Origem')
+    # Só a base de pagamento traz este valor. Nulo não é zero: "não veio na
+    # planilha" e "recebeu zero" são coisas diferentes, e tratar um como o
+    # outro inventaria divergência do tamanho da receita inteira.
+    recebido = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True, verbose_name='Recebido')
     imported_at = models.DateTimeField(auto_now_add=True, verbose_name='Importado em')
 
     class Meta:
@@ -74,10 +102,28 @@ class ExclusionRecord(models.Model):
             models.Index(fields=['vendedor']),
             models.Index(fields=['pilar']),
             models.Index(fields=['sync_batch']),
+            models.Index(fields=['record_type', 'sync_batch']),
         ]
 
     def __str__(self):
         return f'{self.vendedor} – {self.pilar} R${self.receita} ({self.filial})'
+
+    @property
+    def divergencia(self):
+        """Receita menos recebido. ``None`` quando não há recebido informado.
+
+        Positivo = recebeu menos do que a receita da venda, que é o caso que
+        interessa contestar. Negativo aparece na tela como está: se recebeu a
+        mais, quem confere precisa ver isso e não um zero maquiado.
+        """
+        if self.recebido is None:
+            return None
+        return (self.receita or Decimal('0')) - self.recebido
+
+    @property
+    def tem_divergencia(self):
+        divergencia = self.divergencia
+        return divergencia is not None and divergencia != 0
 
 
 class Contestation(models.Model):
@@ -232,6 +278,10 @@ class ContestationHistory(models.Model):
         ('denied', 'Negada pelo Gerente'),
         ('paid', 'Marcada como Paga'),
         ('synced', 'Planilha Sincronizada'),
+        # Ação separada de propósito: a janela de contestação das exclusões é
+        # calculada a partir do último 'synced', e sincronizar a base de
+        # pagamento não pode reabrir aquele prazo.
+        ('synced_pagamento', 'Base de Pagamento Sincronizada'),
     ]
 
     contestation = models.ForeignKey(

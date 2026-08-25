@@ -52,6 +52,15 @@ class SystemConfig(models.Model):
         help_text="URL de compartilhamento do OneDrive para base de exclusão da contestação",
         default="https://1drv.ms/x/c/871ee1819c7e2faa/IQBryBteOg4sS4cBwU1tIgKoATfi6qmYB8eRrIaTpyP8Qhc?e=pye3Sj"
     )
+    excel_contestacao_base_pagamento_url = models.URLField(
+        max_length=500,
+        blank=True,
+        default='',
+        verbose_name="Planilha BASE_PAGAMENTO (Contestação)",
+        help_text=("URL do OneDrive para a base de pagamento usada na contestação de valores. "
+                   "Precisa ter a coluna RECEBIDO além de RECEITA — é a diferença entre as duas "
+                   "que abre a contestação.")
+    )
     contestacao_global_managers = models.ManyToManyField(
         'User',
         blank=True,
