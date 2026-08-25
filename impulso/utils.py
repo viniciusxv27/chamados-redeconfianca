@@ -3,6 +3,7 @@ from functools import wraps
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
+from django.db.models import Q
 from django.shortcuts import redirect
 
 from .models import GRUPO_ADM, GRUPO_GESTOR, Faixa
@@ -49,18 +50,60 @@ def get_gestores():
             .distinct().order_by('first_name', 'last_name'))
 
 
+def setores_do_usuario(user):
+    """Todos os setores da pessoa: o principal e os vinculados.
+
+    O cadastro tem os dois campos — ``sector`` (principal, por compatibilidade)
+    e ``sectors`` (os vinculados). Olhar só o principal fazia um gestor de três
+    lojas responder por uma; quem está atrelado a um setor responde por ele.
+    """
+    if not (user and getattr(user, 'is_authenticated', False)):
+        return set()
+
+    ids = set()
+    principal = getattr(user, 'sector_id', None)
+    if principal:
+        ids.add(principal)
+    try:
+        ids.update(user.sectors.values_list('id', flat=True))
+    except Exception:
+        pass
+    return ids
+
+
 def get_gestores_do_setor(user):
-    """Gestores do Impulso que estão no MESMO setor do usuário.
+    """Gestores do Impulso que dividem ALGUM setor com o usuário.
 
     É a regra de quem pode receber a solicitação de meta de um colaborador.
-    Usuário sem setor, ou setor sem gestor cadastrado, devolve vazio — a tela
-    trata esse caso explicando o que fazer, em vez de oferecer um gestor de
-    outro setor.
+    Basta um setor em comum — de qualquer um dos lados, principal ou vinculado.
+    Usuário sem setor nenhum, ou setor sem gestor cadastrado, devolve vazio: a
+    tela explica o que fazer em vez de oferecer um gestor de outra área.
     """
-    setor_id = getattr(user, 'sector_id', None)
-    if not setor_id:
+    ids = setores_do_usuario(user)
+    if not ids:
         return User.objects.none()
-    return get_gestores().filter(sector_id=setor_id).exclude(id=user.id)
+    return (get_gestores()
+            .filter(Q(sector_id__in=ids) | Q(sectors__id__in=ids))
+            .exclude(id=user.id)
+            .distinct())
+
+
+def get_colaboradores_do_gestor(gestor):
+    """Colaboradores que o gestor atende: os de qualquer setor atrelado a ele.
+
+    Superadmin e gestor sem setor nenhum atendem todo mundo — tirar o acesso de
+    quem não tem setor preenchido quebraria o módulo para o administrador.
+    """
+    base = get_colaboradores()
+    if not (gestor and getattr(gestor, 'is_authenticated', False)):
+        return base.none()
+    if gestor.is_superuser:
+        return base
+
+    ids = setores_do_usuario(gestor)
+    if not ids:
+        return base
+    return base.filter(Q(sector_id__in=ids) | Q(sectors__id__in=ids)).distinct()
 
 
 def impulso_member_required(view_func):

@@ -2845,18 +2845,40 @@ def valores_list(request):
     pilares = qs.values_list('pilar', flat=True).distinct().order_by('pilar')
     filiais = qs.values_list('filial', flat=True).distinct().order_by('filial')
 
-    # Totais e contagens saem do conjunto inteiro, não da página: o rodapé
-    # precisa responder "quanto falta no total", não "quanto falta nestas 50".
-    divergentes_qs = qs.filter(recebido__isnull=False).exclude(recebido=F('receita'))
+    # Totais do conjunto inteiro, não da página: o topo precisa responder
+    # "quanto falta no total", não "quanto falta nestas 50".
+    #
+    # Os três cartões usam a MESMA base — só as linhas com recebido informado.
+    # Antes, receita somava tudo, recebido somava só as informadas e a
+    # divergência só as que divergiam: três denominadores diferentes lado a
+    # lado, e receita menos recebido não dava a divergência exibida.
+    comparaveis = qs.filter(recebido__isnull=False)
+    sem_recebido_qs = qs.filter(recebido__isnull=True)
+    divergentes_qs = comparaveis.exclude(recebido=F('receita'))
+
+    receita_comparavel = comparaveis.aggregate(v=Sum('receita'))['v'] or Decimal('0')
+    recebido = comparaveis.aggregate(v=Sum('recebido'))['v'] or Decimal('0')
+
     resumo = {
         'linhas': qs.count(),
-        'receita': qs.aggregate(v=Sum('receita'))['v'] or Decimal('0'),
-        'recebido': qs.filter(recebido__isnull=False).aggregate(v=Sum('recebido'))['v'] or Decimal('0'),
+        'receita_total': qs.aggregate(v=Sum('receita'))['v'] or Decimal('0'),
+        'receita': receita_comparavel,
+        'recebido': recebido,
+        'divergencia': receita_comparavel - recebido,
         'divergentes': divergentes_qs.count(),
-        'sem_recebido': qs.filter(recebido__isnull=True).count(),
+        'comparaveis': comparaveis.count(),
+        'sem_recebido': sem_recebido_qs.count(),
+        'sem_recebido_valor': sem_recebido_qs.aggregate(v=Sum('receita'))['v'] or Decimal('0'),
     }
-    resumo['divergencia'] = (
-        divergentes_qs.aggregate(v=Sum(F('receita') - F('recebido')))['v'] or Decimal('0'))
+
+    # Somar +100 com -40 dá 60 e esconde as duas pontas. Quem vai contestar
+    # precisa saber quanto está faltando receber, separado do que veio a mais.
+    a_menos = (divergentes_qs.filter(recebido__lt=F('receita'))
+               .aggregate(v=Sum(F('receita') - F('recebido')))['v'] or Decimal('0'))
+    a_mais = (divergentes_qs.filter(recebido__gt=F('receita'))
+              .aggregate(v=Sum(F('recebido') - F('receita')))['v'] or Decimal('0'))
+    resumo['a_menos'] = a_menos
+    resumo['a_mais'] = a_mais
 
     if mostrar == 'divergentes':
         qs = divergentes_qs

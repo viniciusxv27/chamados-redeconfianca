@@ -1,11 +1,14 @@
 {% extends 'base.html' %}
+{% load contestacao_extras %}
 
 {% block title %}Contestação de Valores{% endblock %}
 
 {% block extra_css %}
 <style>
   .vl-card { background:#fff; border:1px solid #e9ecef; border-radius:.75rem; }
-  .vl-num { font-variant-numeric: tabular-nums; }
+  /* Dinheiro quebrando em duas linhas ("R$" numa, o valor na outra) atrapalha
+     a leitura de uma coluna de números. */
+  .vl-num { font-variant-numeric: tabular-nums; white-space: nowrap; }
   /* A linha com divergência precisa saltar aos olhos numa tabela longa. */
   .vl-diverge { background:#fff7ed; }
   .vl-diverge:hover { background:#ffedd5; }
@@ -108,35 +111,52 @@
       </div>
     {% endif %}
 
-    <!-- Resumo -->
+    <!-- Resumo. Os três primeiros cartões contam a mesma história: receita e
+         recebido das linhas comparáveis, e a diferença entre eles. Somar a
+         receita de linhas sem recebido informado faria a conta não fechar. -->
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
       <div class="vl-card p-4">
         <p class="text-xs text-gray-500">Receita</p>
-        <p class="text-xl font-bold text-gray-900 vl-num mt-0.5">R$ {{ resumo.receita|floatformat:2 }}</p>
-        <p class="text-[11px] text-gray-400">{{ resumo.linhas }} venda{{ resumo.linhas|pluralize }}</p>
+        <p class="text-xl font-bold text-gray-900 vl-num mt-0.5">{{ resumo.receita|moeda }}</p>
+        <p class="text-[11px] text-gray-400">{{ resumo.comparaveis }} venda{{ resumo.comparaveis|pluralize }} conferida{{ resumo.comparaveis|pluralize }}</p>
       </div>
       <div class="vl-card p-4">
         <p class="text-xs text-gray-500">Recebido</p>
-        <p class="text-xl font-bold text-gray-900 vl-num mt-0.5">R$ {{ resumo.recebido|floatformat:2 }}</p>
-        {% if resumo.sem_recebido %}
-          <p class="text-[11px] text-amber-600">{{ resumo.sem_recebido }} sem valor informado</p>
-        {% else %}
-          <p class="text-[11px] text-gray-400">todas as linhas informadas</p>
-        {% endif %}
+        <p class="text-xl font-bold text-gray-900 vl-num mt-0.5">{{ resumo.recebido|moeda }}</p>
+        <p class="text-[11px] text-gray-400">pago pela operadora</p>
       </div>
       <div class="vl-card p-4">
         <p class="text-xs text-gray-500">Divergência</p>
-        <p class="text-xl font-bold vl-num mt-0.5 {% if resumo.divergencia > 0 %}text-rose-600{% elif resumo.divergencia < 0 %}text-sky-600{% else %}text-gray-900{% endif %}">
-          R$ {{ resumo.divergencia|floatformat:2 }}
+        <p class="text-xl font-bold vl-num mt-0.5 {% if resumo.divergencia > 0 %}text-rose-600{% elif resumo.divergencia < 0 %}text-sky-600{% else %}text-emerald-600{% endif %}">
+          {{ resumo.divergencia|moeda }}
         </p>
-        <p class="text-[11px] text-gray-400">receita menos recebido</p>
+        <p class="text-[11px] text-gray-400">
+          {% if resumo.a_menos or resumo.a_mais %}
+            <span class="text-rose-600 font-medium">{{ resumo.a_menos|moeda }}</span> a menos ·
+            <span class="text-sky-600 font-medium">{{ resumo.a_mais|moeda }}</span> a mais
+          {% else %}receita menos recebido{% endif %}
+        </p>
       </div>
       <div class="vl-card p-4">
         <p class="text-xs text-gray-500">Contestáveis</p>
         <p class="text-xl font-bold text-orange-600 vl-num mt-0.5">{{ resumo.divergentes }}</p>
-        <p class="text-[11px] text-gray-400">vendas com diferença</p>
+        <p class="text-[11px] text-gray-400">de {{ resumo.linhas }} venda{{ resumo.linhas|pluralize }} na base</p>
       </div>
     </div>
+
+    {% if resumo.sem_recebido %}
+      <div class="vl-card p-3 mb-5 border-l-4 border-amber-400 bg-amber-50/60">
+        <p class="text-sm text-amber-900">
+          <i class="fas fa-circle-question mr-1.5"></i>
+          <strong>{{ resumo.sem_recebido }} venda{{ resumo.sem_recebido|pluralize }}</strong>
+          ({{ resumo.sem_recebido_valor|moeda }} de receita)
+          {{ resumo.sem_recebido|pluralize:"chegou,chegaram" }} sem o valor recebido na planilha e
+          {{ resumo.sem_recebido|pluralize:"fica,ficam" }} de fora da conta acima — não dá para dizer se
+          {{ resumo.sem_recebido|pluralize:"diverge,divergem" }}.
+          <a href="?mostrar=sem_recebido" class="underline font-medium">Ver quais são</a>.
+        </p>
+      </div>
+    {% endif %}
 
     <!-- Filtros -->
     <form method="get" class="vl-card p-4 mb-4">
@@ -220,16 +240,16 @@
                 <p class="text-gray-700">{{ r.filial }}</p>
                 <p class="text-[11px] text-gray-400">{{ r.pilar }}</p>
               </td>
-              <td class="px-3 py-2 text-right vl-num text-gray-800">R$ {{ r.receita|floatformat:2 }}</td>
+              <td class="px-3 py-2 text-right vl-num text-gray-800">{{ r.receita|moeda }}</td>
               <td class="px-3 py-2 text-right vl-num {% if r.recebido is None %}text-amber-600{% else %}text-gray-800{% endif %}">
-                {% if r.recebido is None %}não informado{% else %}R$ {{ r.recebido|floatformat:2 }}{% endif %}
+                {% if r.recebido is None %}não informado{% else %}{{ r.recebido|moeda }}{% endif %}
               </td>
               <td class="px-3 py-2 text-right vl-num font-semibold
                   {% if r.divergencia is None %}text-gray-300
                   {% elif r.divergencia > 0 %}text-rose-600
                   {% elif r.divergencia < 0 %}text-sky-600
                   {% else %}text-emerald-600{% endif %}">
-                {% if r.divergencia is None %}—{% else %}R$ {{ r.divergencia|floatformat:2 }}{% endif %}
+                {{ r.divergencia|moeda }}
               </td>
               <td class="px-3 py-2 text-right">
                 {% if r.contestacao %}
@@ -377,7 +397,13 @@
   const modal = document.getElementById('vlModal');
 
   function moeda(v) {
-    return 'R$ ' + Number(v || 0).toFixed(2).replace('.', ',');
+    // Mesmo formato do filtro `moeda` do servidor: milhar com ponto, centavos
+    // com vírgula, sinal antes do R$. Um formato no carrinho e outro na tabela
+    // faria a pessoa conferir duas vezes o mesmo número.
+    const n = Number(v || 0);
+    const partes = Math.abs(n).toFixed(2).split('.');
+    const inteiro = partes[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    return (n < 0 ? '-' : '') + 'R$ ' + inteiro + ',' + partes[1];
   }
 
   function salvar() {

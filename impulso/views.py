@@ -27,7 +27,8 @@ from .models import (
 )
 from .scoring import calcular_pontuacao, linhas_detalhadas
 from .utils import (
-    FAIXAS, calcular_faixa, faixa_info, get_colaboradores, get_gestores_do_setor,
+    FAIXAS, calcular_faixa, faixa_info, get_colaboradores,
+    get_colaboradores_do_gestor, get_gestores_do_setor,
     is_impulso_manager, impulso_manager_required, impulso_member_required,
 )
 
@@ -864,7 +865,11 @@ def assiduidade(request):
 
     equipe = None
     if is_impulso_manager(request.user) or request.user.is_superuser:
-        equipe = [_linha(u) for u in get_colaboradores()
+        # A equipe do gestor são os colaboradores dos setores atrelados a ele —
+        # todos eles, não só o setor principal. Gestor sem setor cadastrado (e o
+        # superadmin) continua vendo a rede inteira, senão a tela nasceria vazia
+        # para quem administra o módulo.
+        equipe = [_linha(u) for u in get_colaboradores_do_gestor(request.user)
                   if u.id != request.user.id and u.tangerino_employee_id]
         equipe = [l for l in equipe if not l['sem_ponto']]
         # Quem perdeu ponto aparece primeiro; depois quem está no limite.
