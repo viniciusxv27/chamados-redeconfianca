@@ -171,8 +171,8 @@
                           hover:file:bg-rose-100 border border-gray-200 rounded-lg p-2">
             <p id="entrevistaVideoInfo" class="hidden text-xs text-gray-600 mt-2"></p>
             <p class="text-xs text-gray-400 mt-2">
-              Vídeo ou áudio, até {{ video_max_mb }} MB. O envio pode demorar; não feche a página até a
-              confirmação. A análise continua rodando sozinha depois disso.
+              Vídeo ou áudio, até {{ video_max_label }}. Arquivo grande demora para subir — não feche a
+              página até a confirmação. A análise da IA continua rodando sozinha depois disso.
             </p>
             <p class="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mt-3">
               <i class="fas fa-triangle-exclamation mr-1"></i>
@@ -389,22 +389,33 @@
 
   // Tamanho conferido antes do envio: descobrir que passou do limite depois de
   // subir 600 MB é o pior jeito de descobrir.
-  const LIMITE_MB = {{ video_max_mb }};
+  const LIMITE_BYTES = {{ video_max_bytes }};
+  const LIMITE_TEXTO = '{{ video_max_label }}';
+
+  function tamanhoLegivel(bytes) {
+    const mb = bytes / (1024 * 1024);
+    return mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${mb.toFixed(1)} MB`;
+  }
   const campoVideo = document.getElementById('entrevistaVideo');
   const infoVideo = document.getElementById('entrevistaVideoInfo');
   if (campoVideo && infoVideo) {
     campoVideo.addEventListener('change', () => {
       const arquivo = campoVideo.files[0];
       if (!arquivo) { infoVideo.classList.add('hidden'); return; }
-      const mb = arquivo.size / (1024 * 1024);
       infoVideo.classList.remove('hidden');
-      if (mb > LIMITE_MB) {
+      if (arquivo.size > LIMITE_BYTES) {
         infoVideo.className = 'text-xs text-red-600 mt-2';
-        infoVideo.textContent = `${arquivo.name} tem ${mb.toFixed(0)} MB e o limite é ${LIMITE_MB} MB. Escolha outro arquivo.`;
+        infoVideo.textContent = `${arquivo.name} tem ${tamanhoLegivel(arquivo.size)} e o limite é ${LIMITE_TEXTO}. Escolha outro arquivo.`;
         campoVideo.value = '';
-      } else {
-        infoVideo.className = 'text-xs text-gray-600 mt-2';
-        infoVideo.textContent = `${arquivo.name} · ${mb.toFixed(1)} MB`;
+        return;
+      }
+      infoVideo.className = 'text-xs text-gray-600 mt-2';
+      infoVideo.textContent = `${arquivo.name} · ${tamanhoLegivel(arquivo.size)}`;
+      // Acima de ~1 GB o envio leva vários minutos numa conexão comum. Dizer
+      // isso antes evita que alguém ache que travou e feche a página no meio.
+      if (arquivo.size > 1024 * 1024 * 1024) {
+        infoVideo.className = 'text-xs text-amber-700 mt-2';
+        infoVideo.textContent += ' — arquivo grande, o envio pode levar vários minutos.';
       }
     });
   }

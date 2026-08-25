@@ -304,8 +304,14 @@ CSRF_TRUSTED_ORIGINS = [
 ]
 
 # Configurações adicionais para uploads e formulários
+# Vale só para os campos do formulário, não para os arquivos: um vídeo de 4 GB
+# passa por aqui sem esbarrar neste limite.
 DATA_UPLOAD_MAX_MEMORY_SIZE = 500 * 1024 * 1024  # 500MB
-FILE_UPLOAD_MAX_MEMORY_SIZE = 500 * 1024 * 1024  # 500MB
+# Este é o ponto em que o arquivo deixa de ser guardado na memória e passa a ir
+# para um temporário em disco. Estava em 500MB, o que fazia um vídeo de 400MB
+# ocupar 400MB de RAM por upload simultâneo — com 3 workers, três envios
+# derrubavam o container. Em 10MB, qualquer vídeo vai direto para o disco.
+FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10MB
 DATA_UPLOAD_MAX_NUMBER_FIELDS = 10000  # Suportar muitos campos (muitas fotos/perguntas)
 
 # Configurações de sessão - usar DB para aguentar sessões grandes

@@ -1009,7 +1009,9 @@ EXIT_OBS_MAX = 2000
 # Vídeo da entrevista: o que aceitamos e até onde.
 EXIT_VIDEO_EXTS = ('.mp4', '.mov', '.m4v', '.webm', '.mkv', '.avi',
                    '.mp3', '.m4a', '.wav', '.ogg', '.opus')
-EXIT_VIDEO_MAX_BYTES = 500 * 1024 * 1024
+# 4 GB cobre uma entrevista longa gravada em alta qualidade. Este é o limite da
+# aplicação; o caminho de rede (proxy/gateway) pode ter um teto próprio menor.
+EXIT_VIDEO_MAX_BYTES = 4 * 1024 * 1024 * 1024
 
 
 def _exit_questions():
@@ -1018,6 +1020,15 @@ def _exit_questions():
     for section in EXIT_INTERVIEW_SECTIONS:
         out.extend(section['questions'])
     return out
+
+
+def _tamanho_legivel(bytes_):
+    """4294967296 não diz nada para ninguém; "4 GB" diz."""
+    mb = bytes_ / (1024 * 1024)
+    if mb >= 1024:
+        gb = mb / 1024
+        return f'{gb:.0f} GB' if gb == int(gb) else f'{gb:.1f} GB'
+    return f'{mb:.0f} MB'
 
 
 def _validar_video_entrevista(arquivo):
@@ -1035,8 +1046,8 @@ def _validar_video_entrevista(arquivo):
         aceitos = ', '.join(EXIT_VIDEO_EXTS)
         return f'formato {extensao or "desconhecido"} não aceito. Envie um destes: {aceitos}.'
     if arquivo.size > EXIT_VIDEO_MAX_BYTES:
-        limite = EXIT_VIDEO_MAX_BYTES // (1024 * 1024)
-        return f'o arquivo tem {arquivo.size // (1024 * 1024)} MB e o limite é {limite} MB.'
+        return (f'o arquivo tem {_tamanho_legivel(arquivo.size)} e o limite é '
+                f'{_tamanho_legivel(EXIT_VIDEO_MAX_BYTES)}.')
     if not arquivo.size:
         return 'o arquivo chegou vazio.'
     return ''
@@ -1209,7 +1220,8 @@ def exit_interview(request):
         'gravacoes': gravacoes,
         'obs_prefix': EXIT_OBS_PREFIX,
         'video_exts': ','.join(EXIT_VIDEO_EXTS),
-        'video_max_mb': EXIT_VIDEO_MAX_BYTES // (1024 * 1024),
+        'video_max_bytes': EXIT_VIDEO_MAX_BYTES,
+        'video_max_label': _tamanho_legivel(EXIT_VIDEO_MAX_BYTES),
         'scale_options': EXIT_SCALE_OPTIONS,
         'candidate_users': candidate_users,
         'pending_dismissal': pending_dismissal,

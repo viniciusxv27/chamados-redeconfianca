@@ -92,15 +92,18 @@ echo "🌐 Iniciando servidor Gunicorn..."
 echo "📊 Configurações:"
 echo "   - Porta: ${PORT:-8000}"
 echo "   - Workers: ${WEB_CONCURRENCY:-3}"
-echo "   - Timeout: 600s"
+echo "   - Timeout: 1800s (uploads grandes)"
 echo "   - Database: ${DATABASE_URL:0:20}..."
 
 # Iniciar servidor com logs detalhados
+# --timeout 1800: enviar um vídeo de entrevista de 4 GB ocupa o worker enquanto
+# o corpo da requisição sobe. Em 600s o arbiter matava o worker no meio do
+# upload. O custo é que um worker de fato travado só é reciclado em 30min.
 exec gunicorn redeconfianca.wsgi:application \
     --bind 0.0.0.0:${PORT:-8000} \
     --workers ${WEB_CONCURRENCY:-3} \
     --worker-class sync \
-    --timeout 600 \
+    --timeout 1800 \
     --keep-alive 2 \
     --max-requests 1000 \
     --max-requests-jitter 100 \
