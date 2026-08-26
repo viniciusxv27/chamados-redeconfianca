@@ -43,11 +43,16 @@
                     <div class="flex items-center justify-between">
                         <div>
                             <h4 class="text-sm font-medium text-gray-900">Tema Escuro</h4>
-                            <p class="text-sm text-gray-600">Usar tema escuro para interface (Em breve)</p>
+                            <p class="text-sm text-gray-600">
+                                Vale em todo o portal e fica guardado no seu cadastro —
+                                acompanha você no celular e no computador.
+                            </p>
+                            <p id="temaAviso" class="text-xs text-emerald-600 mt-1 hidden"></p>
                         </div>
-                        <label class="relative inline-flex items-center cursor-pointer opacity-50">
-                            <input type="checkbox" class="sr-only peer" disabled>
-                            <div class="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="temaEscuro" class="sr-only peer"
+                                   {% if user.theme == 'dark' %}checked{% endif %}>
+                            <div class="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-primary peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
                         </label>
                     </div>
                     
@@ -125,4 +130,61 @@
         </div>
     </div>
 </div>
+
+<script>
+(function () {
+    const toggle = document.getElementById('temaEscuro');
+    if (!toggle) return;
+    const aviso = document.getElementById('temaAviso');
+
+    function csrf() {
+        const m = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+        return m ? m[1] : '';
+    }
+
+    toggle.addEventListener('change', function () {
+        const tema = toggle.checked ? 'dark' : 'light';
+
+        // Aplica na hora: esperar a resposta do servidor para trocar a cor
+        // faria o interruptor parecer quebrado numa conexão lenta.
+        document.documentElement.classList.toggle('dark', tema === 'dark');
+        try { localStorage.setItem('rcTema', tema); } catch (e) { /* sem storage */ }
+
+        toggle.disabled = true;
+        fetch('{% url "set_theme" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRFToken': csrf(),
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            body: 'theme=' + tema,
+        })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (!d.success) { throw new Error('recusado'); }
+                if (aviso) {
+                    aviso.textContent = tema === 'dark'
+                        ? 'Tema escuro ativado e salvo no seu cadastro.'
+                        : 'Tema claro ativado e salvo no seu cadastro.';
+                    aviso.className = 'text-xs text-emerald-600 mt-1';
+                    setTimeout(function () { aviso.classList.add('hidden'); }, 4000);
+                }
+            })
+            .catch(function () {
+                // Não salvou: desfaz a aparência para a tela não mentir que salvou.
+                const volta = tema === 'dark' ? 'light' : 'dark';
+                document.documentElement.classList.toggle('dark', volta === 'dark');
+                try { localStorage.setItem('rcTema', volta); } catch (e) {}
+                toggle.checked = !toggle.checked;
+                if (aviso) {
+                    aviso.textContent = 'Não foi possível salvar a preferência. Tente de novo.';
+                    aviso.className = 'text-xs text-red-600 mt-1';
+                }
+            })
+            .finally(function () { toggle.disabled = false; });
+    });
+})();
+</script>
+
 {% endblock %}

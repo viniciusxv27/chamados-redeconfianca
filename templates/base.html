@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 {% load static %}
-<html lang="pt-br">
+<html lang="pt-br"{% if user.is_authenticated and user.theme == 'dark' %} class="dark"{% endif %}>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -49,6 +49,17 @@
         }
     </script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="{% static 'css/tema-escuro.css' %}" rel="stylesheet">
+    <script>
+        // A classe do tema já vem no <html> renderizado pelo servidor — é o que
+        // evita a página piscar branco antes do CSS. Aqui só espelhamos a
+        // escolha no navegador, para a tela de configurações e o interruptor
+        // partirem do mesmo valor sem precisar consultar o servidor de novo.
+        (function () {
+            var tema = '{% if user.is_authenticated and user.theme == "dark" %}dark{% else %}light{% endif %}';
+            try { localStorage.setItem('rcTema', tema); } catch (e) { /* sem storage */ }
+        })();
+    </script>
     
     <!-- Custom CSS for sidebar collapse -->
     <style>

@@ -1,0 +1,253 @@
+/* ==========================================================================
+   Tema escuro do portal.
+   
+   O portal foi escrito inteiro em utilitários claros do Tailwind (bg-white,
+   text-gray-900, border-gray-200...). Reescrever cada template com variantes
+   `dark:` seriam milhares de edições espalhadas por dezenas de módulos, com
+   risco alto de esquecer telas.
+   
+   Aqui a abordagem é outra: uma camada que remapeia os utilitários usados no
+   projeto quando o <html> tem a classe `dark`. Um arquivo, todas as telas.
+   
+   Especificidade: `html.dark .bg-white` (0,2,1) ganha de `.bg-white` (0,1,0)
+   do Tailwind sem precisar de !important — exceto onde o próprio Tailwind usa
+   variantes (hover:, focus:), que também ficam cobertas por serem prefixadas
+   pelo mesmo seletor.
+   ========================================================================== */
+
+html.dark {
+    /* Superfícies, da mais funda para a mais alta */
+    --tema-fundo:        #12161f;   /* fundo da página */
+    --tema-superficie:   #1b2130;   /* cartões, tabelas, modais */
+    --tema-superficie-2: #232a3b;   /* zebra, cabeçalho de tabela, hover */
+    --tema-superficie-3: #2b3346;   /* campos e realces */
+
+    /* Texto */
+    --tema-texto:        #e7eaf0;
+    --tema-texto-2:      #b6bdcc;
+    --tema-texto-3:      #8b93a5;
+
+    --tema-borda:        #313a4f;
+    --tema-borda-suave:  #262e40;
+
+    color-scheme: dark;
+}
+
+/* --------------------------------------------------------------------------
+   Base
+   -------------------------------------------------------------------------- */
+/* O body carrega `bg-gray-100` no template. Sem repetir a classe aqui, aquela
+   regra (mais específica) venceria e o fundo da página ficaria mais claro que
+   os cartões — o contrário do que se espera. */
+html.dark body,
+html.dark body.bg-gray-100,
+html.dark body.bg-gray-50,
+html.dark body.bg-white { background-color: var(--tema-fundo); color: var(--tema-texto); }
+
+html.dark .bg-white,
+html.dark .bg-gray-50\/50,
+html.dark .bg-white\/90 { background-color: var(--tema-superficie); }
+
+html.dark .bg-gray-50  { background-color: var(--tema-superficie-2); }
+html.dark .bg-gray-100 { background-color: var(--tema-superficie-2); }
+html.dark .bg-gray-200 { background-color: var(--tema-superficie-3); }
+
+/* O fundo da página vem do body; um main com bg-gray-100 não pode ficar mais
+   claro que os cartões que ele carrega. */
+html.dark main.bg-gray-100,
+html.dark main.bg-gray-50 { background-color: var(--tema-fundo); }
+
+/* --------------------------------------------------------------------------
+   Texto
+   -------------------------------------------------------------------------- */
+html.dark .text-gray-900,
+html.dark .text-gray-800,
+html.dark .text-black    { color: var(--tema-texto); }
+html.dark .text-gray-700,
+html.dark .text-gray-600 { color: var(--tema-texto-2); }
+html.dark .text-gray-500,
+html.dark .text-gray-400,
+html.dark .text-gray-300 { color: var(--tema-texto-3); }
+
+/* Ícones decorativos muito apagados sumiriam no escuro. */
+html.dark .text-gray-200,
+html.dark .text-gray-100 { color: #4a5468; }
+
+/* --------------------------------------------------------------------------
+   Bordas e divisórias
+   -------------------------------------------------------------------------- */
+html.dark .border-gray-100,
+html.dark .border-gray-200,
+html.dark .border-gray-300,
+html.dark .border          { border-color: var(--tema-borda); }
+html.dark .border-gray-50  { border-color: var(--tema-borda-suave); }
+
+html.dark .divide-gray-100 > :not([hidden]) ~ :not([hidden]),
+html.dark .divide-gray-200 > :not([hidden]) ~ :not([hidden]),
+html.dark .divide-gray-50  > :not([hidden]) ~ :not([hidden]) {
+    border-color: var(--tema-borda);
+}
+
+/* --------------------------------------------------------------------------
+   Interação
+   -------------------------------------------------------------------------- */
+html.dark .hover\:bg-gray-50:hover,
+html.dark .hover\:bg-gray-100:hover { background-color: var(--tema-superficie-2); }
+html.dark .hover\:bg-gray-200:hover { background-color: var(--tema-superficie-3); }
+html.dark .hover\:bg-white:hover    { background-color: var(--tema-superficie-2); }
+html.dark .hover\:text-gray-900:hover,
+html.dark .hover\:text-gray-800:hover { color: var(--tema-texto); }
+html.dark .hover\:text-gray-700:hover { color: var(--tema-texto-2); }
+
+/* --------------------------------------------------------------------------
+   Formulários — o ponto onde tema escuro costuma falhar: campo branco com
+   texto branco. Cor de fundo e de texto vão juntas, sempre.
+   -------------------------------------------------------------------------- */
+html.dark input[type="text"], html.dark input[type="email"], html.dark input[type="password"],
+html.dark input[type="number"], html.dark input[type="search"], html.dark input[type="tel"],
+html.dark input[type="url"], html.dark input[type="date"], html.dark input[type="time"],
+html.dark input[type="datetime-local"], html.dark input[type="month"], html.dark input[type="file"],
+html.dark textarea, html.dark select {
+    background-color: var(--tema-superficie-3);
+    color: var(--tema-texto);
+    border-color: var(--tema-borda);
+}
+html.dark input::placeholder, html.dark textarea::placeholder { color: var(--tema-texto-3); }
+html.dark option { background-color: var(--tema-superficie-3); color: var(--tema-texto); }
+html.dark input[type="file"]::file-selector-button {
+    background-color: var(--tema-superficie-2);
+    color: var(--tema-texto-2);
+    border: 0;
+}
+html.dark input:disabled, html.dark textarea:disabled, html.dark select:disabled {
+    background-color: var(--tema-superficie-2);
+    color: var(--tema-texto-3);
+}
+
+/* --------------------------------------------------------------------------
+   Etiquetas coloridas (bg-*-50 / bg-*-100 com texto escuro).
+   No claro são pastéis; no escuro viram fundo translúcido da mesma cor, com o
+   texto puxado para o tom claro — a informação da cor se mantém.
+   -------------------------------------------------------------------------- */
+html.dark .bg-red-50,    html.dark .bg-red-100    { background-color: rgba(239, 68, 68, .16); }
+html.dark .bg-rose-50,   html.dark .bg-rose-100   { background-color: rgba(244, 63, 94, .16); }
+html.dark .bg-orange-50, html.dark .bg-orange-100 { background-color: rgba(249, 115, 22, .16); }
+html.dark .bg-amber-50,  html.dark .bg-amber-100  { background-color: rgba(245, 158, 11, .16); }
+html.dark .bg-yellow-50, html.dark .bg-yellow-100 { background-color: rgba(234, 179, 8, .16); }
+html.dark .bg-green-50,  html.dark .bg-green-100  { background-color: rgba(34, 197, 94, .16); }
+html.dark .bg-emerald-50,html.dark .bg-emerald-100{ background-color: rgba(16, 185, 129, .16); }
+html.dark .bg-teal-50,   html.dark .bg-teal-100   { background-color: rgba(20, 184, 166, .16); }
+html.dark .bg-cyan-50,   html.dark .bg-cyan-100   { background-color: rgba(6, 182, 212, .16); }
+html.dark .bg-sky-50,    html.dark .bg-sky-100    { background-color: rgba(14, 165, 233, .16); }
+html.dark .bg-blue-50,   html.dark .bg-blue-100   { background-color: rgba(59, 130, 246, .16); }
+html.dark .bg-indigo-50, html.dark .bg-indigo-100 { background-color: rgba(99, 102, 241, .16); }
+html.dark .bg-violet-50, html.dark .bg-violet-100 { background-color: rgba(139, 92, 246, .16); }
+html.dark .bg-purple-50, html.dark .bg-purple-100 { background-color: rgba(168, 85, 247, .16); }
+html.dark .bg-pink-50,   html.dark .bg-pink-100   { background-color: rgba(236, 72, 153, .16); }
+html.dark .bg-slate-50,  html.dark .bg-slate-100  { background-color: var(--tema-superficie-2); }
+
+html.dark .text-red-600,     html.dark .text-red-700,     html.dark .text-red-800     { color: #f87171; }
+html.dark .text-rose-600,    html.dark .text-rose-700,    html.dark .text-rose-800    { color: #fb7185; }
+html.dark .text-orange-600,  html.dark .text-orange-700,  html.dark .text-orange-800  { color: #fb923c; }
+html.dark .text-amber-600,   html.dark .text-amber-700,   html.dark .text-amber-800,
+html.dark .text-amber-900 { color: #fbbf24; }
+html.dark .text-yellow-600,  html.dark .text-yellow-700,  html.dark .text-yellow-800  { color: #facc15; }
+html.dark .text-green-600,   html.dark .text-green-700,   html.dark .text-green-800   { color: #4ade80; }
+html.dark .text-emerald-600, html.dark .text-emerald-700, html.dark .text-emerald-800,
+html.dark .text-emerald-900 { color: #34d399; }
+html.dark .text-teal-600,    html.dark .text-teal-700,    html.dark .text-teal-800    { color: #2dd4bf; }
+html.dark .text-cyan-600,    html.dark .text-cyan-700,    html.dark .text-cyan-800    { color: #22d3ee; }
+html.dark .text-sky-600,     html.dark .text-sky-700,     html.dark .text-sky-800,
+html.dark .text-sky-900 { color: #38bdf8; }
+html.dark .text-blue-600,    html.dark .text-blue-700,    html.dark .text-blue-800    { color: #60a5fa; }
+html.dark .text-indigo-600,  html.dark .text-indigo-700,  html.dark .text-indigo-800  { color: #818cf8; }
+html.dark .text-violet-600,  html.dark .text-violet-700,  html.dark .text-violet-800  { color: #a78bfa; }
+html.dark .text-purple-600,  html.dark .text-purple-700,  html.dark .text-purple-800  { color: #c084fc; }
+html.dark .text-pink-600,    html.dark .text-pink-700,    html.dark .text-pink-800    { color: #f472b6; }
+html.dark .text-slate-700,   html.dark .text-slate-800,   html.dark .text-slate-900   { color: var(--tema-texto); }
+html.dark .text-slate-500,   html.dark .text-slate-600    { color: var(--tema-texto-2); }
+
+/* Bordas claras das mesmas etiquetas */
+html.dark .border-red-100,     html.dark .border-red-200     { border-color: rgba(239, 68, 68, .3); }
+html.dark .border-orange-100,  html.dark .border-orange-200  { border-color: rgba(249, 115, 22, .3); }
+html.dark .border-amber-100,   html.dark .border-amber-200   { border-color: rgba(245, 158, 11, .3); }
+html.dark .border-green-100,   html.dark .border-green-200   { border-color: rgba(34, 197, 94, .3); }
+html.dark .border-emerald-100, html.dark .border-emerald-200 { border-color: rgba(16, 185, 129, .3); }
+html.dark .border-sky-100,     html.dark .border-sky-200     { border-color: rgba(14, 165, 233, .3); }
+html.dark .border-blue-100,    html.dark .border-blue-200    { border-color: rgba(59, 130, 246, .3); }
+html.dark .border-teal-100,    html.dark .border-teal-200    { border-color: rgba(20, 184, 166, .3); }
+html.dark .border-rose-100,    html.dark .border-rose-200    { border-color: rgba(244, 63, 94, .3); }
+html.dark .border-purple-100,  html.dark .border-purple-200  { border-color: rgba(168, 85, 247, .3); }
+
+/* --------------------------------------------------------------------------
+   Degradês claros (bg-gradient-to-* com paradas -50/-100).
+   O Tailwind os desenha como background-image, então as regras de cor de fundo
+   acima não os alcançam: sem isto, esses cartões continuariam brancos e
+   brilhando no meio de uma tela escura.
+   -------------------------------------------------------------------------- */
+html.dark [class*="bg-gradient-to-"].from-red-50,    html.dark [class*="bg-gradient-to-"].from-red-100,
+html.dark [class*="bg-gradient-to-"].from-orange-50, html.dark [class*="bg-gradient-to-"].from-orange-100,
+html.dark [class*="bg-gradient-to-"].from-amber-50,  html.dark [class*="bg-gradient-to-"].from-amber-100,
+html.dark [class*="bg-gradient-to-"].from-yellow-50, html.dark [class*="bg-gradient-to-"].from-yellow-100,
+html.dark [class*="bg-gradient-to-"].from-green-50,  html.dark [class*="bg-gradient-to-"].from-green-100,
+html.dark [class*="bg-gradient-to-"].from-emerald-50,html.dark [class*="bg-gradient-to-"].from-emerald-100,
+html.dark [class*="bg-gradient-to-"].from-teal-50,   html.dark [class*="bg-gradient-to-"].from-cyan-50,
+html.dark [class*="bg-gradient-to-"].from-sky-50,    html.dark [class*="bg-gradient-to-"].from-sky-100,
+html.dark [class*="bg-gradient-to-"].from-blue-50,   html.dark [class*="bg-gradient-to-"].from-blue-100,
+html.dark [class*="bg-gradient-to-"].from-indigo-50, html.dark [class*="bg-gradient-to-"].from-violet-50,
+html.dark [class*="bg-gradient-to-"].from-purple-50, html.dark [class*="bg-gradient-to-"].from-purple-100,
+html.dark [class*="bg-gradient-to-"].from-pink-50,   html.dark [class*="bg-gradient-to-"].from-gray-50,
+html.dark [class*="bg-gradient-to-"].from-slate-50 {
+    background-image: none;
+    background-color: var(--tema-superficie-2);
+}
+
+/* --------------------------------------------------------------------------
+   Conteúdo escrito pelas pessoas (comunicados, descrições ricas).
+   
+   Esse HTML vem com cor embutida no próprio texto — inclusive a cor que o
+   autor escolheu no editor. Estilo embutido ganha de qualquer folha, então
+   tentar clarear esse texto seria inútil e ainda destruiria a escolha de quem
+   escreveu. A saída é dar a ele o fundo claro para o qual foi escrito: vira
+   uma folha de papel dentro da tela escura, e continua legível.
+   -------------------------------------------------------------------------- */
+html.dark .prose {
+    background-color: #f6f7f9;
+    color: #1f2937;
+    border-radius: .5rem;
+    padding: .75rem 1rem;
+}
+html.dark .prose a { color: #1d4ed8; }
+
+/* --------------------------------------------------------------------------
+   Sombras: no escuro, sombra preta não separa nada de um fundo preto.
+   Trocadas por um contorno sutil, que é o que dá o relevo.
+   -------------------------------------------------------------------------- */
+html.dark .shadow-sm { box-shadow: 0 0 0 1px var(--tema-borda-suave); }
+html.dark .shadow,
+html.dark .shadow-md { box-shadow: 0 1px 3px rgba(0,0,0,.5), 0 0 0 1px var(--tema-borda-suave); }
+html.dark .shadow-lg,
+html.dark .shadow-xl,
+html.dark .shadow-2xl { box-shadow: 0 8px 24px rgba(0,0,0,.6), 0 0 0 1px var(--tema-borda); }
+
+/* --------------------------------------------------------------------------
+   Detalhes
+   -------------------------------------------------------------------------- */
+/* O menu lateral já é escuro no tema claro: fica como está. */
+html.dark #sidebar { background-color: #0b0e15; }
+
+/* Barras de rolagem acompanham, senão viram duas faixas brancas na tela. */
+html.dark ::-webkit-scrollbar { width: 10px; height: 10px; }
+html.dark ::-webkit-scrollbar-track { background: var(--tema-fundo); }
+html.dark ::-webkit-scrollbar-thumb { background: #3a4358; border-radius: 6px; }
+html.dark ::-webkit-scrollbar-thumb:hover { background: #4a5470; }
+
+/* Imagens e gráficos ficam intocados de propósito: inverter foto de pessoa ou
+   logo produz resultado pior que deixar como está. */
+html.dark img, html.dark canvas, html.dark svg image { filter: none; }
+
+/* Impressão sai sempre no claro: papel é branco. */
+@media print {
+    html.dark, html.dark body { background: #fff !important; color: #000 !important; }
+    html.dark .bg-white, html.dark .bg-gray-50, html.dark .bg-gray-100 { background: #fff !important; }
+}

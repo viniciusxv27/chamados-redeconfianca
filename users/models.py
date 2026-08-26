@@ -463,6 +463,10 @@ class User(AbstractUser):
     ]
     
     email = models.EmailField(unique=True)
+    theme = models.CharField(
+        max_length=5, default='light', verbose_name="Tema do portal",
+        choices=[('light', 'Claro'), ('dark', 'Escuro')],
+        help_text="Preferência de aparência. Fica no cadastro para acompanhar a pessoa em qualquer aparelho.")
     sectors = models.ManyToManyField(Sector, blank=True, verbose_name="Setores", related_name="users")
     sector = models.ForeignKey(Sector, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Setor Principal", help_text="Setor principal para compatibilidade", related_name="primary_users")
     hierarchy = models.CharField(max_length=20, choices=HIERARCHY_CHOICES, default='PADRAO', verbose_name="Hierarquia")
@@ -909,6 +913,13 @@ class User(AbstractUser):
     def can_manage_required_documents(self):
         """Somente SUPERADMIN configura quais documentos são exigidos no pré-cadastro."""
         return self.hierarchy == 'SUPERADMIN'
+
+    THEME_LIGHT = 'light'
+    THEME_DARK = 'dark'
+    THEME_CHOICES = [
+        (THEME_LIGHT, 'Claro'),
+        (THEME_DARK, 'Escuro'),
+    ]
 
     def can_manage_user_photos(self):
         """Somente SUPERADMIN troca a foto de perfil de outra pessoa.

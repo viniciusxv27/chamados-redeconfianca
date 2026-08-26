@@ -3861,6 +3861,31 @@ def update_settings_view(request):
 
 
 @login_required
+@require_POST
+def set_theme_view(request):
+    """Grava a preferência de tema da pessoa.
+
+    Fica no cadastro, não só no navegador: assim a escolha acompanha quem entra
+    do celular e do computador. O `localStorage` do lado do cliente é só para o
+    tema já valer no primeiro quadro da próxima página, sem piscar branco.
+
+    Valor desconhecido cai para claro, em vez de gravar lixo no cadastro.
+    """
+    tema = (request.POST.get('theme') or '').strip().lower()
+    if tema not in (User.THEME_LIGHT, User.THEME_DARK):
+        tema = User.THEME_LIGHT
+
+    request.user.theme = tema
+    request.user.save(update_fields=['theme'])
+
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return JsonResponse({'success': True, 'theme': tema})
+
+    messages.success(request, 'Tema atualizado.')
+    return redirect('settings')
+
+
+@login_required
 def help_view(request):
     """Visualizar central de ajuda e tutoriais"""
     from core.models import Tutorial, TrainingCategory, TutorialProgress

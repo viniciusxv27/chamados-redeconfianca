@@ -21,6 +21,7 @@ urlpatterns = [
     path('profile/photo/', views.upload_profile_photo_ajax, name='upload_profile_photo'),
     path('settings/', views.settings_view, name='settings'),
     path('settings/update/', views.update_settings_view, name='update_settings'),
+    path('settings/tema/', views.set_theme_view, name='set_theme'),
     path('my-cs/', views.my_cs_statement_view, name='my_cs_statement'),
     path('help/', views.help_view, name='help_tutorials'),
     path('help/tutorial/<int:tutorial_id>/', views.tutorial_detail_view, name='tutorial_detail'),
