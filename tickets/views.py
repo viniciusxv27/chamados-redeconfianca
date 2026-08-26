@@ -34,9 +34,35 @@ def _arquivo_e_video(arquivo):
     return tipo.startswith('video/')
 
 
+# Chave da lista filtrada guardada na sessão. O botão "Voltar" do detalhe
+# precisa dela porque as ações do chamado (concluir, mudar status, comentar)
+# redirecionam para o próprio detalhe e derrubam o `?next=` da URL — sem isso,
+# depois de concluir um chamado a pessoa voltava para a lista sem os filtros.
+SESSAO_LISTA_CHAMADOS = 'tickets_ultima_lista'
+
+
+def _retorno_seguro(url, padrao='/tickets/'):
+    """Só devolve caminho interno do próprio portal.
+
+    O `next` chega pela URL e é usado tanto em href quanto em redirect: aceitar
+    endereço absoluto abriria um redirecionamento para fora do site.
+    """
+    if not url:
+        return padrao
+    url = url.strip()
+    # Barra dupla ou barra invertida no começo viram "//site.com" no navegador.
+    if not url.startswith('/') or url.startswith('//') or url.startswith('/\\'):
+        return padrao
+    return url
+
+
 @login_required
 def tickets_list_view(request):
     user = request.user
+
+    # Guarda a lista como ela está agora (filtros, busca, página) para o
+    # detalhe saber para onde voltar depois de qualquer ação.
+    request.session[SESSAO_LISTA_CHAMADOS] = request.get_full_path()
     
     # Filtros de pesquisa
     search = request.GET.get('search', '')
@@ -551,6 +577,10 @@ def tickets_list_view(request):
 def tickets_history_view(request):
     """View para mostrar histórico de chamados concluídos"""
     user = request.user
+
+    # O histórico também é uma lista com filtros: quem abre um chamado a partir
+    # daqui espera voltar para cá, e não para a lista de ativos.
+    request.session[SESSAO_LISTA_CHAMADOS] = request.get_full_path()
     
     # Filtro base: TODOS os usuários sempre veem seus próprios chamados fechados
     base_filter = models.Q(created_by=user, status='FECHADO')
@@ -636,7 +666,7 @@ def ticket_delete_view(request, ticket_id):
         # Retornar para a página anterior se especificado, senão para a lista
         next_url = request.POST.get('next') or request.GET.get('next')
         if next_url:
-            return redirect(next_url)
+            return redirect(_retorno_seguro(next_url))
         return redirect('tickets_list')
     
     # Para GET, redireciona para a lista (exclusão deve ser via POST)
@@ -793,7 +823,7 @@ def ticket_edit_view(request, ticket_id):
         
         next_url = request.POST.get('next') or request.GET.get('next')
         if next_url:
-            return redirect(next_url)
+            return redirect(_retorno_seguro(next_url))
         return redirect('ticket_detail', ticket_id=ticket.id)
     
     # GET - Carregar formulário de edição
@@ -924,13 +954,13 @@ def ticket_detail_view(request, ticket_id):
     # Buscar usuários para atribuição (todos os setores) - sempre disponível
     sector_users = User.objects.filter(is_active=True).exclude(id=user.id).order_by('sector__name', 'first_name')
     
-    # Obter URL de retorno (para o botão voltar manter filtros/busca/página)
+    # URL de retorno do botão "Voltar": o `next` da vez, e na falta dele a
+    # última lista que a pessoa viu. É a sessão que segura os filtros depois de
+    # concluir o chamado, porque aí o redirect volta ao detalhe sem `next`.
     from urllib.parse import unquote
-    next_url = request.GET.get('next', '')
-    if next_url:
-        next_url = unquote(next_url)
-    else:
-        next_url = '/tickets/'  # URL padrão se não houver parâmetro next
+    next_url = _retorno_seguro(
+        unquote(request.GET.get('next', '') or '')
+        or request.session.get(SESSAO_LISTA_CHAMADOS, ''))
     
     context = {
         'ticket': ticket,
