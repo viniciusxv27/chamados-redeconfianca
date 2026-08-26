@@ -1179,9 +1179,49 @@ def _document_is_valid(uploaded_file):
     return True, ''
 
 
+# Só estes formatos podem virar foto de perfil. Um PDF continua sendo um
+# documento válido — ele só não substitui a foto.
+PROFILE_PHOTO_EXTENSIONS = ('.jpg', '.jpeg', '.png', '.webp')
+
+
+def _aplicar_como_foto_de_perfil(target_user, uploaded_file):
+    """Copia o arquivo enviado para a foto de perfil do colaborador.
+
+    Uma cópia, não o mesmo arquivo: documento e foto de perfil vivem em pastas
+    diferentes no storage, e apagar um não pode deixar o outro sem imagem.
+
+    Falha aqui nunca derruba o envio do documento — o documento é o que a
+    pessoa precisava entregar; a foto é a conveniência.
+    """
+    import os
+
+    from django.core.files.base import ContentFile
+
+    nome = getattr(uploaded_file, 'name', '') or ''
+    extensao = os.path.splitext(nome)[1].lower()
+    if extensao not in PROFILE_PHOTO_EXTENSIONS:
+        return False
+
+    try:
+        uploaded_file.seek(0)
+        conteudo = uploaded_file.read()
+        uploaded_file.seek(0)
+        if not conteudo:
+            return False
+        target_user.profile_picture.save(
+            f'perfil_{target_user.pk}{extensao}', ContentFile(conteudo), save=True)
+        return True
+    except Exception:
+        return False
+
+
 def _store_user_document(target_user, uploaded_file, document_type=None, document_name='', uploaded_by=None):
-    """Cria um UserDocument a partir de um arquivo enviado."""
-    return UserDocument.objects.create(
+    """Cria um UserDocument a partir de um arquivo enviado.
+
+    Quando o tipo do documento está marcado como "usar como foto de perfil",
+    a imagem também vira a foto do colaborador.
+    """
+    documento = UserDocument.objects.create(
         user=target_user,
         document_type=document_type,
         document_name=document_name or (document_type.name if document_type else ''),
@@ -1191,6 +1231,11 @@ def _store_user_document(target_user, uploaded_file, document_type=None, documen
         content_type=getattr(uploaded_file, 'content_type', '') or '',
         uploaded_by=uploaded_by,
     )
+
+    if document_type is not None and getattr(document_type, 'use_as_profile_photo', False):
+        _aplicar_como_foto_de_perfil(target_user, uploaded_file)
+
+    return documento
 
 
 @login_required
@@ -2122,6 +2167,7 @@ def manage_required_documents_view(request):
                 description=description,
                 is_required=is_required,
                 is_active=is_active,
+                use_as_profile_photo=request.POST.get('use_as_profile_photo') == 'on',
                 order=int(order) if str(order).isdigit() else 0,
             )
             messages.success(request, f'Documento "{name}" adicionado.')
@@ -2149,6 +2195,7 @@ def edit_required_document_view(request, doc_id):
     doc.description = request.POST.get('description', '').strip()
     doc.is_required = request.POST.get('is_required') == 'on'
     doc.is_active = request.POST.get('is_active') == 'on'
+    doc.use_as_profile_photo = request.POST.get('use_as_profile_photo') == 'on'
     order = request.POST.get('order', '')
     if str(order).isdigit():
         doc.order = int(order)

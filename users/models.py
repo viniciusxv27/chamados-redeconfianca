@@ -950,6 +950,12 @@ class RequiredDocument(models.Model):
     description = models.CharField(max_length=255, blank=True, default='', verbose_name="Descrição")
     is_required = models.BooleanField(default=True, verbose_name="Obrigatório")
     is_active = models.BooleanField(default=True, verbose_name="Ativo")
+    use_as_profile_photo = models.BooleanField(
+        default=False,
+        verbose_name="Usar como foto de perfil",
+        help_text=("Quando o colaborador enviar este documento, a imagem vira a foto de perfil "
+                   "dele. Vale só para imagem (JPG, PNG, WEBP) — um PDF é guardado como "
+                   "documento e a foto não muda."))
     order = models.PositiveIntegerField(default=0, verbose_name="Ordem de Exibição")
     created_at = models.DateTimeField(auto_now_add=True)
 

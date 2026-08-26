@@ -4,15 +4,51 @@ Regras (herdadas do gate original da Pesquisa de Clima):
 - Enquanto um popup ainda pode ser pulado, ele aparece apenas na home.
 - Quando um popup passa a bloquear, ele aparece em qualquer página (menos as
   essenciais), sem opção de pular — travando a navegação de quem não concluiu.
+- Nada aparece enquanto a pessoa ainda precisa bater o ponto: a jornada vem
+  primeiro, o comunicado depois.
 """
 
 # Prefixos de caminho onde um popup bloqueante nunca pode aparecer, senão o
 # usuário não conseguiria concluir a tarefa nem sair do portal.
 ESSENTIAL_PREFIXES = ('/admin', '/login', '/logout', '/static', '/media')
 
+# A tela de ponto e a de bloqueio de jornada entram na mesma lista por um
+# motivo concreto: sem isso as duas travas se mordiam. O popup exigia o "de
+# acordo" para liberar o portal, o bloqueio de jornada exigia a batida do ponto
+# para liberar o portal, e a batida ficava atrás do popup. Ninguém entrava.
+PONTO_PREFIXES = ('/ponto/', '/api/tangerino/')
+
 
 def _is_essential(path):
-    return any(path.startswith(p) for p in ESSENTIAL_PREFIXES)
+    return any(path.startswith(p) for p in ESSENTIAL_PREFIXES + PONTO_PREFIXES)
+
+
+def _deve_bater_ponto(user):
+    """A pessoa está com a jornada trancada agora (falta bater o ponto)?
+
+    Lê a mesma decisão que o middleware de jornada guardou em cache, então na
+    prática não custa consulta nenhuma. Em qualquer erro responde ``False`` —
+    é o mesmo lado para o qual `decidir_bloqueio` já falha: sem dado confiável,
+    não se inventa bloqueio.
+    """
+    try:
+        from django.core.cache import caches
+
+        from tangerino.middleware import (CACHE_DECISAO_SEGUNDOS, chave_da_decisao,
+                                          decidir_bloqueio)
+
+        if user.is_superuser or getattr(user, 'hierarchy', '') == 'SUPERADMIN':
+            return False
+
+        cache = caches['local']
+        chave = chave_da_decisao(user)
+        decisao = cache.get(chave)
+        if decisao is None:
+            decisao = decidir_bloqueio(user) or {}
+            cache.set(chave, decisao, CACHE_DECISAO_SEGUNDOS)
+        return bool(decisao)
+    except Exception:
+        return False
 
 
 def portal_popup_gate(request):
@@ -24,6 +60,11 @@ def portal_popup_gate(request):
 
     path = request.path or ''
     if _is_essential(path):
+        return empty
+
+    # Comunicado só depois do ponto batido: primeiro a pessoa regulariza a
+    # jornada, aí o portal cobra o "de acordo".
+    if _deve_bater_ponto(user):
         return empty
 
     resolver = getattr(request, 'resolver_match', None)

@@ -295,6 +295,11 @@ def bloqueado(request):
         motivo = None
 
     if not motivo:
+        # Esta tela consulta ao vivo; o middleware decide por um cache de até
+        # 60s. Sem derrubar o cache aqui, quem bateu no relógio físico entrava
+        # em pingue-pongue: a tela mandava para a home e o middleware mandava
+        # de volta, até o cache vencer sozinho.
+        limpar_decisao(request.user)
         messages.success(request, 'Ponto em dia. Bom trabalho!')
         return redirect('home')
 

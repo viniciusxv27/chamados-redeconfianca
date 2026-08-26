@@ -68,6 +68,15 @@ LIBERADOS_JORNADA = LIBERADOS + (
     '/ponto/bloqueado', '/api/tangerino/ponto/',
 )
 
+# `/ponto/` é a tela onde a marcação é batida — bloqueá-la fazia o botão
+# "Registrar a volta do intervalo" devolver a pessoa para a tela de bloqueio,
+# que era o efeito de "fica recarregando a página".
+#
+# A liberação é por igualdade exata, e não por prefixo: `/ponto/equipe/`,
+# `/ponto/folhas/` e `/ponto/configuracao/` continuam trancados, senão o
+# bloqueio viraria um convite a passear pelo módulo inteiro.
+EXATOS_JORNADA = ('/ponto/',)
+
 # Quanto tempo a decisão fica em memória do processo. Sem isto, cada clique no
 # portal viraria uma consulta ao Tangerino. Um minuto é curto o bastante para a
 # liberação parecer imediata — e a marcação pelo portal limpa o cache na hora.
@@ -156,7 +165,8 @@ class BloqueioJornadaMiddleware:
         if usuario is None or not usuario.is_authenticated:
             return self.get_response(request)
 
-        if any(request.path.startswith(p) for p in LIBERADOS_JORNADA):
+        if (request.path in EXATOS_JORNADA
+                or any(request.path.startswith(p) for p in LIBERADOS_JORNADA)):
             return self.get_response(request)
 
         # Quem administra o portal não pode ficar preso do lado de fora — é

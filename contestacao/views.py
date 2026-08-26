@@ -2764,6 +2764,39 @@ def _pagamento_window_state():
     }
 
 
+def _envio_de_valores_da_rodada(user, janela):
+    """As contestações de valor que esta pessoa já abriu na rodada atual.
+
+    "Rodada" = desde a última sincronização da BASE_PAGAMENTO. Sincronizar de
+    novo abre uma rodada nova e devolve o direito de contestar — é assim que a
+    regra se reabre, sem precisar de ninguém destravando na mão.
+    """
+    if not janela.get('has_sync') or not janela.get('last_sync_at'):
+        return Contestation.objects.none()
+    return (Contestation.objects
+            .filter(requester=user,
+                    exclusion__record_type=TipoBase.PAGAMENTO,
+                    created_at__gte=janela['last_sync_at'])
+            .order_by('created_at'))
+
+
+def _bloqueio_de_envio_unico(user, janela):
+    """Mensagem de recusa quando a pessoa já usou o envio da rodada, ou ``''``.
+
+    A regra é por pessoa e por sincronização: quem envia revisa a base inteira
+    de uma vez. Por isso a tela avisa antes de mandar, e não depois.
+    """
+    ja = _envio_de_valores_da_rodada(user, janela)
+    quantidade = ja.count()
+    if not quantidade:
+        return ''
+    primeira = ja.first()
+    return (f'Você já contestou nesta rodada em {primeira.created_at:%d/%m/%Y às %H:%M} '
+            f'({quantidade} venda{"s" if quantidade > 1 else ""}). '
+            'Cada pessoa tem um envio por sincronização da planilha — '
+            'o próximo abre quando a BASE_PAGAMENTO for sincronizada de novo.')
+
+
 @login_required
 def sync_valores(request):
     """Importa a BASE_PAGAMENTO (Contestação) num lote novo."""
@@ -2928,6 +2961,8 @@ def valores_list(request):
         'base_configurada': bool(
             (SystemConfig.get_config().excel_contestacao_base_pagamento_url or '').strip()),
         'lote_max': LOTE_VALORES_MAX,
+        'envio_usado': _envio_de_valores_da_rodada(request.user, janela).count(),
+        'envio_aviso': _bloqueio_de_envio_unico(request.user, janela),
     })
 
 
@@ -2948,6 +2983,11 @@ def contestar_valor(request, record_id):
             'Prazo encerrado para esta base. Sincronize a BASE_PAGAMENTO para abrir uma nova rodada.'
             if janela['has_sync'] else
             'Sincronize a BASE_PAGAMENTO antes de contestar valores.'))
+        return redirect('contestacao:valores_list')
+
+    travado = _bloqueio_de_envio_unico(request.user, janela)
+    if travado:
+        messages.error(request, travado)
         return redirect('contestacao:valores_list')
 
     # O escopo entra na própria consulta: assim não existe o caminho de carregar
@@ -3031,6 +3071,10 @@ def contestar_valores_lote(request):
             'Prazo encerrado para esta base. Sincronize a BASE_PAGAMENTO para abrir outra rodada.'
             if janela['has_sync'] else
             'Sincronize a BASE_PAGAMENTO antes de contestar valores.')}, status=400)
+
+    travado = _bloqueio_de_envio_unico(request.user, janela)
+    if travado:
+        return JsonResponse({'success': False, 'error': travado, 'rodada_usada': True}, status=409)
 
     try:
         quantidade = int(request.POST.get('count', 0))
