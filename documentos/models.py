@@ -190,6 +190,27 @@ class DocumentSignature(models.Model):
         verbose_name='PDF assinado',
     )
 
+    # Assinatura por link público ---------------------------------------------
+    # Existe para quem não entra no portal — tipicamente ex-colaborador que
+    # precisa assinar o próprio desligamento. O endereço é o que dá acesso, e
+    # vale para UM signatário: um link por pessoa, nunca um para o documento
+    # inteiro, senão não haveria como saber quem de fato assinou.
+    public_token = models.UUIDField(
+        default=uuid.uuid4, unique=True, editable=False, db_index=True,
+        verbose_name='Token do link público')
+    public_enabled = models.BooleanField(
+        default=True, verbose_name='Link público ativo',
+        help_text='Desligue para invalidar o endereço já enviado.')
+    signed_via_link = models.BooleanField(
+        default=False, verbose_name='Assinado pelo link público',
+        help_text='Assinatura feita sem login no portal. Fica registrado para '
+                  'nunca ser confundida com uma assinatura autenticada.')
+    signer_declared_name = models.CharField(
+        max_length=150, blank=True, verbose_name='Nome declarado por quem assinou',
+        help_text='Digitado por quem abriu o link, como afirmação de identidade.')
+    signer_declared_doc = models.CharField(
+        max_length=30, blank=True, verbose_name='CPF declarado por quem assinou')
+
     # Metadados ----------------------------------------------------------------
     assigned_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,

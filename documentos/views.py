@@ -1,5 +1,6 @@
 import hashlib
 import json
+import uuid
 
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
@@ -7,7 +8,7 @@ from django.contrib import messages
 from django.http import JsonResponse, HttpResponse, Http404
 from django.utils import timezone
 from django.db.models import Q, Count
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_POST, require_http_methods
 from django.core.files.base import ContentFile
 from django.views.decorators.clickjacking import xframe_options_sameorigin
 
@@ -333,7 +334,10 @@ def admin_document_create(request):
         return redirect('documentos:my_documents')
 
     categories = DocumentCategory.objects.filter(is_active=True)
-    users = User.objects.filter(is_active=True).order_by('first_name', 'last_name')
+    # Inativos entram na lista: o caso mais comum de assinatura por link é
+    # justamente o ex-colaborador, que já perdeu o acesso ao portal e mesmo
+    # assim precisa assinar (rescisão, termo de devolução).
+    users = User.objects.all().order_by('-is_active', 'first_name', 'last_name')
 
     if request.method == 'POST':
         title = (request.POST.get('title') or '').strip()
@@ -374,7 +378,7 @@ def admin_document_create(request):
             created_by=request.user,
         )
 
-        selected = User.objects.filter(id__in=user_ids, is_active=True)
+        selected = User.objects.filter(id__in=user_ids)
         created_sigs = [
             DocumentSignature.objects.create(
                 document=document, user=u, assigned_by=request.user)
@@ -383,7 +387,10 @@ def admin_document_create(request):
         # Só avisa quem já pode abrir o documento — notificar sobre algo
         # invisível levaria a pessoa a uma tela de "não liberado".
         if document.is_visible:
-            _notify_assignment(created_sigs, document, request.user)
+            # Notificar quem está inativo não leva a lugar nenhum: ele não
+            # entra no portal. Para essa pessoa a via é o link público.
+            _notify_assignment([s for s in created_sigs if s.user.is_active],
+                               document, request.user)
 
         messages.success(
             request,
@@ -433,7 +440,7 @@ def admin_add_signers(request, pk):
 
     if request.method == 'POST':
         user_ids = request.POST.getlist('users')
-        selected = User.objects.filter(id__in=user_ids, is_active=True)
+        selected = User.objects.filter(id__in=user_ids)
         created_sigs = []
         for u in selected:
             sig, created = DocumentSignature.objects.get_or_create(
@@ -443,7 +450,8 @@ def admin_add_signers(request, pk):
             if created:
                 created_sigs.append(sig)
         if created_sigs:
-            _notify_assignment(created_sigs, document, request.user)
+            _notify_assignment([g for g in created_sigs if g.user.is_active],
+                               document, request.user)
             messages.success(request, f'{len(created_sigs)} signatário(s) adicionado(s).')
         else:
             messages.info(request, 'Nenhum novo signatário adicionado.')
@@ -654,3 +662,159 @@ def admin_category_delete(request, pk):
             messages.success(request, f'Categoria "{name}" excluída.')
 
     return redirect('documentos:admin_categories')
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ASSINATURA POR LINK PÚBLICO
+#
+# Para quem não entra no portal — na prática, o ex-colaborador que precisa
+# assinar a própria rescisão. O endereço é a credencial, e vale para UM
+# signatário: um link por pessoa, nunca um para o documento inteiro.
+#
+# A assinatura feita por aqui é gravada com `signed_via_link=True` e com o nome
+# e CPF que a pessoa digitou. Sem essa marca, um registro assinado por link
+# ficaria indistinguível de um assinado com login — e valem coisas diferentes.
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _assinatura_por_token(token):
+    """A assinatura daquele link, ou None se o link não vale mais."""
+    assinatura = (DocumentSignature.objects
+                  .select_related('document', 'user', 'document__category')
+                  .filter(public_token=token).first())
+    if assinatura is None or not assinatura.public_enabled:
+        return None
+    if not assinatura.document.is_visible:
+        return None
+    return assinatura
+
+
+@require_http_methods(['GET'])
+def public_sign_page(request, token):
+    """Página de assinatura aberta por endereço, sem login."""
+    assinatura = _assinatura_por_token(token)
+    if assinatura is None:
+        # Link inexistente, revogado e documento não liberado respondem igual:
+        # quem tem o endereço não deve conseguir distinguir os casos.
+        return render(request, 'documentos/public_sign.html',
+                      {'indisponivel': True}, status=404)
+
+    return render(request, 'documentos/public_sign.html', {
+        'assinatura': assinatura,
+        'documento': assinatura.document,
+        'ja_assinado': assinatura.is_signed,
+    })
+
+
+@xframe_options_sameorigin
+@require_http_methods(['GET'])
+def public_sign_pdf(request, token):
+    """Serve o PDF para quem abriu o link.
+
+    Mesmo motivo do `document_pdf`: sem liberar o frame na mesma origem, o
+    navegador recusa mostrar o PDF dentro do <iframe> da página de assinatura.
+    """
+    assinatura = _assinatura_por_token(token)
+    if assinatura is None:
+        raise Http404
+
+    conteudo = _read_pdf_bytes(assinatura.document.pdf_file)
+    if not conteudo:
+        raise Http404('PDF não encontrado.')
+
+    resposta = HttpResponse(conteudo, content_type='application/pdf')
+    resposta['Content-Disposition'] = f'inline; filename="documento_{assinatura.document_id}.pdf"'
+    return resposta
+
+
+@require_POST
+def api_public_sign(request, token):
+    """Recebe a assinatura feita pelo link público."""
+    assinatura = _assinatura_por_token(token)
+    if assinatura is None:
+        return JsonResponse({'error': 'Este link não está mais válido.'}, status=404)
+
+    if assinatura.is_signed:
+        return JsonResponse({'error': 'Este documento já foi assinado.'}, status=409)
+
+    try:
+        corpo = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'error': 'Dados inválidos.'}, status=400)
+
+    dados = corpo.get('signature', '')
+    if not dados.startswith('data:image/png;base64,'):
+        return JsonResponse({'error': 'Assinatura não fornecida.'}, status=400)
+
+    nome = (corpo.get('nome') or '').strip()
+    documento_pessoal = (corpo.get('cpf') or '').strip()
+    if len(nome) < 5:
+        return JsonResponse({'error': 'Escreva seu nome completo.'}, status=400)
+
+    agora = timezone.now()
+    ip = get_client_ip(request)
+    navegador = request.META.get('HTTP_USER_AGENT', '')
+
+    # O hash inclui o que a pessoa declarou e a marca de que veio por link:
+    # o que se prova depois é exatamente isto, e não uma sessão autenticada.
+    conteudo = (
+        f"{assinatura.pk}|{assinatura.document.pk}|{assinatura.user.pk}|"
+        f"{assinatura.document.title}|{agora.isoformat()}|{ip}|LINK|"
+        f"{nome}|{documento_pessoal}|{dados[:100]}"
+    )
+
+    assinatura.signed_at = agora
+    assinatura.signature_image = dados
+    assinatura.signature_ip = ip or None
+    assinatura.signature_user_agent = navegador[:500]
+    assinatura.signature_hash = hashlib.sha256(conteudo.encode('utf-8')).hexdigest()
+    assinatura.signed_via_link = True
+    assinatura.signer_declared_name = nome[:150]
+    assinatura.signer_declared_doc = documento_pessoal[:30]
+
+    bytes_assinados = _build_signed_bytes(assinatura)
+    if bytes_assinados:
+        try:
+            assinatura.signed_pdf.save(
+                f'assinado_{assinatura.pk}.pdf', ContentFile(bytes_assinados), save=False)
+        except Exception:
+            pass
+
+    assinatura.save()
+
+    return JsonResponse({
+        'success': True,
+        'message': 'Documento assinado com sucesso.',
+        'signed_at': timezone.localtime(agora).strftime('%d/%m/%Y às %H:%M'),
+        'hash': assinatura.signature_hash[:16] + '...',
+    })
+
+
+@login_required
+@require_POST
+def admin_toggle_public_link(request, pk):
+    """Liga, desliga ou troca o endereço público de um signatário."""
+    if not _require_admin(request):
+        return redirect('documentos:my_documents')
+
+    assinatura = get_object_or_404(DocumentSignature, pk=pk)
+    acao = (request.POST.get('acao') or '').strip()
+
+    if acao == 'desligar':
+        assinatura.public_enabled = False
+        assinatura.save(update_fields=['public_enabled'])
+        messages.success(request, 'Link desativado. Quem tiver o endereço não abre mais.')
+    elif acao == 'ligar':
+        assinatura.public_enabled = True
+        assinatura.save(update_fields=['public_enabled'])
+        messages.success(request, 'Link reativado.')
+    elif acao == 'novo':
+        # Trocar o token é o que realmente derruba um endereço já enviado —
+        # desativar e reativar devolveria exatamente o mesmo link.
+        assinatura.public_token = uuid.uuid4()
+        assinatura.public_enabled = True
+        assinatura.save(update_fields=['public_token', 'public_enabled'])
+        messages.success(request, 'Endereço novo gerado. O anterior parou de funcionar.')
+    else:
+        messages.error(request, 'Ação desconhecida.')
+
+    return redirect('documentos:admin_document_detail', pk=assinatura.document_id)

@@ -260,15 +260,25 @@ def meta_create(request):
                 messages.error(request, 'Escolha um gestor do seu setor.')
                 return redirect('impulso:meta_create')
 
+            # A pessoa decide se a atividade dela precisa passar pelo gestor.
+            # Sem autorização, ela entra no Kanban na hora.
+            #
+            # O gestor continua registrado mesmo quando a autorização é
+            # dispensada: é ele quem avalia a meta no fim, e sem esse vínculo a
+            # atividade não teria como ser concluída nem valer nota.
+            precisa_aprovacao = (request.POST.get('precisa_aprovacao') or 'sim') != 'nao'
+
         if not (colaborador and titulo and descricao and prazo):
             campo = 'colaborador, título, descrição e prazo' if sou_gestor else 'título, descrição e prazo'
             messages.error(request, f'Preencha {campo}.')
             return redirect('impulso:meta_create')
 
+        # Gestor criando: aprovada. Colaborador: depende do que ele escolheu.
+        ja_aprovada = sou_gestor or not precisa_aprovacao
         meta = Meta.objects.create(
             gestor=gestor, colaborador=colaborador, titulo=titulo,
             descricao=descricao, recorrencia=recorrencia, prazo=prazo,
-            aprovacao=Meta.Aprovacao.APROVADA if sou_gestor else Meta.Aprovacao.PENDENTE,
+            aprovacao=Meta.Aprovacao.APROVADA if ja_aprovada else Meta.Aprovacao.PENDENTE,
             solicitada_por=None if sou_gestor else request.user,
             created_by=request.user,
         )
@@ -291,18 +301,27 @@ def meta_create(request):
                 for n, p in enumerate(passos)
             ])
 
+        quem = request.user.get_full_name() or request.user.email
         if sou_gestor:
             _notify([colaborador], 'Nova meta atribuída',
                     f'"{meta.titulo}" foi atribuída a você.',
                     f'/impulso/metas/{meta.id}/')
             messages.success(request, 'Meta criada com sucesso.')
-        else:
+        elif precisa_aprovacao:
             _notify([gestor], 'Nova solicitação de meta',
-                    f'{request.user.get_full_name() or request.user.email} pediu a meta '
-                    f'"{meta.titulo}". Aprove ou recuse.',
+                    f'{quem} pediu a meta "{meta.titulo}". Aprove ou recuse.',
                     f'/impulso/metas/{meta.id}/')
             messages.success(
                 request, 'Solicitação enviada. Ela entra no seu Kanban assim que o gestor aprovar.')
+        else:
+            # Avisa mesmo sem pedir nada: o gestor vai avaliar esta meta no fim
+            # e não pode ser pego de surpresa por uma atividade que apareceu
+            # sozinha no acompanhamento dele.
+            _notify([gestor], 'Nova atividade criada pelo colaborador',
+                    f'{quem} criou "{meta.titulo}" sem pedir autorização. '
+                    f'A avaliação no fim continua sendo sua.',
+                    f'/impulso/metas/{meta.id}/')
+            messages.success(request, 'Atividade criada e já disponível no seu Kanban.')
         return redirect('impulso:meta_detail', meta_id=meta.id)
 
     context = {

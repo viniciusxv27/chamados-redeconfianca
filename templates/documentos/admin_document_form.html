@@ -73,8 +73,14 @@
                 <label class="block text-sm font-medium text-gray-700">Signatários <span class="text-red-500">*</span></label>
                 <span class="text-xs text-gray-500"><span id="selected-count">0</span> selecionado(s)</span>
             </div>
-            <input type="text" id="user-search" placeholder="Buscar colaborador..."
+            <input type="text" id="user-search" placeholder="Buscar colaborador (digite &quot;inativo&quot; para ver os desligados)…"
                    class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm mb-2 focus:ring-green-500 focus:border-green-500">
+            <p class="text-xs text-gray-500 mb-2">
+                <i class="fas fa-circle-info mr-1"></i>
+                Colaboradores inativos também podem ser signatários. Como eles não entram no
+                portal, a assinatura acontece pelo <strong>link sem login</strong> que aparece
+                na tela do documento depois de criado.
+            </p>
             <div class="flex items-center gap-3 mb-2 text-xs">
                 <button type="button" onclick="toggleAll(true)" class="text-green-600 hover:text-green-800">Selecionar todos (visíveis)</button>
                 <button type="button" onclick="toggleAll(false)" class="text-gray-500 hover:text-gray-700">Limpar seleção</button>
@@ -82,12 +88,17 @@
             <div id="user-list" class="border border-gray-200 rounded-md max-h-64 overflow-y-auto divide-y">
                 {% for u in users %}
                 <label class="user-row flex items-center gap-3 px-3 py-2 hover:bg-gray-50 cursor-pointer"
-                       data-name="{{ u.full_name|lower }} {{ u.email|lower }} {{ u.cpf }}">
+                       data-name="{{ u.full_name|lower }} {{ u.email|lower }} {{ u.cpf }}{% if not u.is_active %} inativo desligado{% endif %}">
                     <input type="checkbox" name="users" value="{{ u.id }}"
                            class="user-checkbox rounded text-green-600 focus:ring-green-500"
                            {% if u.id in selected_users %}checked{% endif %}>
                     <span class="flex-1 min-w-0">
-                        <span class="block text-sm text-gray-800 truncate">{{ u.full_name }}</span>
+                        <span class="block text-sm truncate {% if u.is_active %}text-gray-800{% else %}text-gray-500{% endif %}">
+                            {{ u.full_name }}
+                            {% if not u.is_active %}
+                              <span class="ml-1 text-[10px] uppercase px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 align-middle">inativo</span>
+                            {% endif %}
+                        </span>
                         <span class="block text-xs text-gray-400 truncate">{{ u.email }}</span>
                     </span>
                 </label>

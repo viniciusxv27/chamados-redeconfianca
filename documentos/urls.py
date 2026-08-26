@@ -11,6 +11,11 @@ urlpatterns = [
     path('<int:pk>/pdf-assinado/', views.document_signed_pdf, name='document_signed_pdf'),
     path('api/assinar/<int:pk>/', views.api_sign_document, name='api_sign_document'),
 
+    # Assinatura por link público (sem login) — ver o bloco em views.py
+    path('assinar/<uuid:token>/', views.public_sign_page, name='public_sign'),
+    path('assinar/<uuid:token>/pdf/', views.public_sign_pdf, name='public_sign_pdf'),
+    path('assinar/<uuid:token>/registrar/', views.api_public_sign, name='api_public_sign'),
+
     # Área administrativa (SUPERADMIN)
     path('admin/', views.admin_documents, name='admin_documents'),
     path('admin/novo/', views.admin_document_create, name='admin_document_create'),
@@ -21,6 +26,8 @@ urlpatterns = [
     path('admin/<int:pk>/adicionar-signatarios/', views.admin_add_signers, name='admin_add_signers'),
     path('admin/signatario/<int:pk>/remover/', views.admin_remove_signer, name='admin_remove_signer'),
     path('admin/signatario/<int:pk>/lembrar/', views.admin_remind_signer, name='admin_remind_signer'),
+    path('admin/signatario/<int:pk>/link/', views.admin_toggle_public_link,
+         name='admin_toggle_public_link'),
 
     # Categorias (SUPERADMIN)
     path('admin/categorias/', views.admin_categories, name='admin_categories'),

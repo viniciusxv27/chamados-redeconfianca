@@ -31,13 +31,13 @@
     <div class="imp-card p-5">
         <h2 class="text-lg font-semibold text-gray-800 mb-1">
             <i class="fas fa-bullseye text-orange-500 mr-2"></i>
-            {% if sou_gestor %}Nova meta{% else %}Solicitar uma meta{% endif %}
+            {% if sou_gestor %}Nova meta{% else %}<span id="tituloForm">Solicitar uma meta</span>{% endif %}
         </h2>
         <p class="text-sm text-gray-500 mb-4">
             {% if sou_gestor %}
             A meta entra direto no Kanban do colaborador.
             {% else %}
-            O gestor do seu setor precisa aprovar antes de a meta entrar no seu Kanban e valer pontos.
+            <span id="resumoFluxo">O gestor do seu setor precisa aprovar antes de a meta entrar no seu Kanban e valer pontos.</span>
             {% endif %}
         </p>
 
@@ -56,7 +56,35 @@
             </div>
             {% else %}
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Enviar para o gestor *</label>
+                <span class="block text-sm font-medium text-gray-700 mb-2">Esta atividade precisa da autorização do gestor?</span>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <label class="imp-aprov flex items-start gap-2.5 border border-gray-200 rounded-lg p-3 cursor-pointer hover:bg-orange-50">
+                        <input type="radio" name="precisa_aprovacao" value="sim" checked
+                               class="mt-0.5 text-orange-600 focus:ring-orange-500">
+                        <span>
+                            <span class="block text-sm font-medium text-gray-800">Sim, quero aprovação</span>
+                            <span class="block text-xs text-gray-500 mt-0.5">
+                                Vai para o gestor e entra no Kanban quando ele aprovar.
+                            </span>
+                        </span>
+                    </label>
+                    <label class="imp-aprov flex items-start gap-2.5 border border-gray-200 rounded-lg p-3 cursor-pointer hover:bg-orange-50">
+                        <input type="radio" name="precisa_aprovacao" value="nao"
+                               class="mt-0.5 text-orange-600 focus:ring-orange-500">
+                        <span>
+                            <span class="block text-sm font-medium text-gray-800">Não, é uma atividade minha</span>
+                            <span class="block text-xs text-gray-500 mt-0.5">
+                                Entra no seu Kanban agora mesmo, sem esperar ninguém.
+                            </span>
+                        </span>
+                    </label>
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">
+                    <span id="rotuloGestor">Enviar para o gestor</span> *
+                </label>
                 <select name="gestor" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                     <option value="">Selecione…</option>
                     {% for g in gestores_do_setor %}
@@ -66,7 +94,7 @@
                 <p class="text-xs text-gray-400 mt-1">
                     <i class="fas fa-circle-info mr-1"></i>
                     Só aparecem gestores do seu setor{% if setor %} ({{ setor.name }}){% endif %}.
-                    A meta será registrada em seu nome.
+                    <span id="avisoGestor">A meta será registrada em seu nome.</span>
                 </p>
             </div>
             {% endif %}
@@ -165,4 +193,46 @@
     });
 })();
 </script>
+
+<script>
+(function () {
+    const opcoes = document.querySelectorAll('input[name="precisa_aprovacao"]');
+    if (!opcoes.length) return;
+    const rotulo = document.getElementById('rotuloGestor');
+    const aviso = document.getElementById('avisoGestor');
+    const resumo = document.getElementById('resumoFluxo');
+
+    function pintar() {
+        const precisa = document.querySelector('input[name="precisa_aprovacao"]:checked').value !== 'nao';
+
+        // O select continua obrigatório nos dois casos: mesmo sem autorização,
+        // é o gestor quem avalia a meta no fim — sem ele a atividade nunca
+        // seria concluída nem valeria nota.
+        if (rotulo) rotulo.textContent = precisa ? 'Enviar para o gestor' : 'Gestor que vai avaliar';
+        if (aviso) {
+            aviso.textContent = precisa
+                ? 'A meta será registrada em seu nome.'
+                : 'Ele não precisa aprovar, mas é quem dá a nota quando você entregar.';
+        }
+        const titulo = document.getElementById('tituloForm');
+        if (titulo) titulo.textContent = precisa ? 'Solicitar uma meta' : 'Nova atividade';
+        if (resumo) {
+            resumo.textContent = precisa
+                ? 'O gestor do seu setor precisa aprovar antes de a meta entrar no seu Kanban e valer pontos.'
+                : 'A atividade entra no seu Kanban assim que você salvar.';
+        }
+
+        document.querySelectorAll('.imp-aprov').forEach(function (bloco) {
+            const marcado = bloco.querySelector('input').checked;
+            bloco.classList.toggle('border-orange-400', marcado);
+            bloco.classList.toggle('bg-orange-50', marcado);
+            bloco.classList.toggle('border-gray-200', !marcado);
+        });
+    }
+
+    opcoes.forEach(function (o) { o.addEventListener('change', pintar); });
+    pintar();
+})();
+</script>
+
 {% endblock %}

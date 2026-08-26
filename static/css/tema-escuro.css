@@ -48,6 +48,12 @@ html.dark .bg-white,
 html.dark .bg-gray-50\/50,
 html.dark .bg-white\/90 { background-color: var(--tema-superficie); }
 
+/* Variantes com opacidade (bg-white/90, bg-gray-50/80...). O Tailwind gera uma
+   classe por combinação; o seletor por atributo pega todas de uma vez. */
+html.dark [class*="bg-white/"]   { background-color: var(--tema-superficie); }
+html.dark [class*="bg-gray-50/"],
+html.dark [class*="bg-gray-100/"] { background-color: var(--tema-superficie-2); }
+
 html.dark .bg-gray-50  { background-color: var(--tema-superficie-2); }
 html.dark .bg-gray-100 { background-color: var(--tema-superficie-2); }
 html.dark .bg-gray-200 { background-color: var(--tema-superficie-3); }
@@ -251,3 +257,141 @@ html.dark img, html.dark canvas, html.dark svg image { filter: none; }
     html.dark, html.dark body { background: #fff !important; color: #000 !important; }
     html.dark .bg-white, html.dark .bg-gray-50, html.dark .bg-gray-100 { background: #fff !important; }
 }
+
+/* ==========================================================================
+   Classes próprias dos módulos.
+
+   Vários módulos definem o próprio cartão em <style> no template (.imp-card,
+   .cx-card, .vl-card, .tg-card...) com branco fixo, em vez de usar utilitário
+   do Tailwind. A camada acima não alcança nenhuma delas — por isso a tela
+   ficava escura com cartões brancos no meio.
+
+   Estas regras vêm depois na folha e usam !important porque o estilo do módulo
+   está num <style> dentro do <head> da própria página, e num empate de
+   especificidade quem aparece por último no documento vence.
+   ========================================================================== */
+
+/* Cartões e superfícies */
+html.dark .imp-card,
+html.dark .tg-card,
+html.dark .cx-card,
+html.dark .vd-card,
+html.dark .vl-card,
+html.dark .mp-card,
+html.dark .vd-secao,
+html.dark .cx-data {
+    background: var(--tema-superficie) !important;
+    border-color: var(--tema-borda) !important;
+    color: var(--tema-texto);
+}
+
+/* Cabeçalhos de seção e faixas de topo (degradês claros) */
+html.dark .imp-hero,
+html.dark .tg-hero,
+html.dark .cx-hero {
+    background: linear-gradient(180deg, #1e2534 0%, #1a202d 100%) !important;
+    border-color: var(--tema-borda) !important;
+}
+html.dark .vd-secao-cabeca {
+    background: var(--tema-superficie-2) !important;
+    border-bottom-color: var(--tema-borda) !important;
+}
+
+/* Aba ativa: no claro é um pastel; no escuro, o mesmo destaque translúcido */
+html.dark .imp-tab-active { background: rgba(234, 88, 12, .18) !important; color: #fb923c !important; }
+html.dark .cx-tab-active  { background: rgba(139, 92, 246, .18) !important; color: #c4b5fd !important; }
+html.dark .tg-tab-active  { background: rgba(6, 182, 212, .18) !important;  color: #67e8f9 !important; }
+html.dark .vd-tab-ativa   { background: rgba(234, 88, 12, .18) !important;  color: #fb923c !important; }
+
+/* Trilhos de barra de progresso */
+html.dark .imp-bar-track,
+html.dark .vd-barra { background: var(--tema-superficie-3) !important; }
+
+/* Etiquetas de estado da contagem de caixa */
+html.dark .cx-ok       { background: rgba(34, 197, 94, .18) !important;  color: #4ade80 !important; }
+html.dark .cx-pendente { background: rgba(59, 130, 246, .18) !important; color: #60a5fa !important; }
+html.dark .cx-atencao  { background: rgba(245, 158, 11, .18) !important; color: #fbbf24 !important; }
+html.dark .cx-negativo { color: #f87171 !important; }
+
+/* Campos e botões próprios dos módulos */
+html.dark .vd-campo,
+html.dark .cx-entrada {
+    background: var(--tema-superficie-3) !important;
+    border-color: var(--tema-borda) !important;
+    color: var(--tema-texto) !important;
+}
+html.dark .vd-ajuda { color: var(--tema-texto-3) !important; }
+html.dark .btn-back {
+    background: var(--tema-superficie-2) !important;
+    color: var(--tema-texto-2) !important;
+    border-color: var(--tema-borda) !important;
+}
+html.dark .btn-back:hover { background: var(--tema-superficie-3) !important; }
+
+/* Linha destacada da contestação de valores */
+html.dark .vl-diverge { background: rgba(249, 115, 22, .10) !important; }
+html.dark .vl-diverge:hover { background: rgba(249, 115, 22, .16) !important; }
+
+/* Linha clicável do mapa */
+html.dark .mp-pessoa:hover     { background: var(--tema-superficie-2) !important; }
+html.dark .mp-pessoa.selecionada { background: rgba(139, 92, 246, .18) !important; }
+
+/* --------------------------------------------------------------------------
+   A folha A4 da folha de ponto continua branca de propósito: é a
+   representação de um documento impresso, e escurecê-la só confundiria quem
+   confere antes de imprimir.
+   -------------------------------------------------------------------------- */
+html.dark .sheet { background: #fff !important; color: #111827 !important; }
+html.dark .sheet * { border-color: #d1d5db !important; }
+
+/* --------------------------------------------------------------------------
+   Agenda: painel próprio + FullCalendar.
+
+   O FullCalendar 6 desenha tudo a partir de variáveis CSS próprias; redefini-las
+   é mais confiável do que perseguir cada uma das dezenas de classes `.fc-*`, e
+   sobrevive a uma atualização da biblioteca.
+   -------------------------------------------------------------------------- */
+html.dark .agenda-panel {
+    background: var(--tema-superficie) !important;
+    border-color: var(--tema-borda) !important;
+    box-shadow: 0 0 0 1px var(--tema-borda-suave) !important;
+}
+
+html.dark .fc {
+    --fc-page-bg-color: var(--tema-superficie);
+    --fc-neutral-bg-color: var(--tema-superficie-2);
+    --fc-neutral-text-color: var(--tema-texto-2);
+    --fc-border-color: var(--tema-borda);
+    --fc-today-bg-color: rgba(234, 88, 12, .14);
+    --fc-list-event-hover-bg-color: var(--tema-superficie-2);
+    --fc-highlight-color: rgba(59, 130, 246, .18);
+    color: var(--tema-texto);
+}
+html.dark .fc .fc-daygrid-day-number,
+html.dark .fc .fc-col-header-cell-cushion,
+html.dark .fc .fc-list-day-text,
+html.dark .fc .fc-list-day-side-text,
+html.dark .fc .fc-timegrid-slot-label-cushion,
+html.dark .fc .fc-toolbar-title { color: var(--tema-texto) !important; }
+
+html.dark .fc .fc-day-other .fc-daygrid-day-number { color: var(--tema-texto-3) !important; }
+html.dark .fc-theme-standard td,
+html.dark .fc-theme-standard th,
+html.dark .fc-theme-standard .fc-scrollgrid { border-color: var(--tema-borda) !important; }
+html.dark .fc-theme-standard .fc-list { border-color: var(--tema-borda) !important; }
+html.dark .fc .fc-list-empty { background-color: var(--tema-superficie-2) !important; }
+
+/* O template da agenda pinta o dia de hoje com uma variável própria
+   (--agenda-brand-soft), um laranja bem claro. Redefinimos a variável em vez
+   de sobrescrever a regra: assim o realce continua sendo "laranja da marca",
+   só que na versão que funciona no escuro. */
+html.dark { --agenda-brand-soft: rgba(234, 88, 12, .16) !important; }
+
+/* Botões da barra do calendário */
+html.dark .fc .fc-button-primary {
+    background-color: var(--tema-superficie-3);
+    border-color: var(--tema-borda);
+    color: var(--tema-texto);
+}
+html.dark .fc .fc-button-primary:not(:disabled):hover { background-color: #3a4358; }
+html.dark .fc .fc-button-primary:disabled { background-color: var(--tema-superficie-2); color: var(--tema-texto-3); }

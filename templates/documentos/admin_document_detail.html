@@ -104,17 +104,32 @@
 
         <div class="divide-y">
             {% for sig in signatures %}
-            <div class="flex items-center gap-3 px-5 py-3">
+            <div class="px-5 py-3">
+              <div class="flex items-center gap-3">
                 <div class="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0
                             {% if sig.is_signed %}bg-emerald-100 text-emerald-700{% else %}bg-amber-100 text-amber-700{% endif %}">
                     <i class="fas {% if sig.is_signed %}fa-check{% else %}fa-clock{% endif %} text-xs"></i>
                 </div>
                 <div class="flex-1 min-w-0">
-                    <p class="text-sm font-medium text-gray-800 truncate">{{ sig.user.full_name }}</p>
+                    <p class="text-sm font-medium text-gray-800 truncate">
+                        {{ sig.user.full_name }}
+                        {% if not sig.user.is_active %}
+                          <span class="ml-1 text-[10px] uppercase px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 align-middle">inativo</span>
+                        {% endif %}
+                    </p>
                     {% if sig.is_signed %}
                     <p class="text-xs text-gray-400">
                         Assinado em {{ sig.signed_at|date:"d/m/Y H:i" }} · IP {{ sig.signature_ip|default:"—" }}
+                        {% if sig.signed_via_link %}
+                          <span class="ml-1 text-[10px] uppercase px-1.5 py-0.5 rounded bg-sky-50 text-sky-700 align-middle"
+                                title="Assinatura feita pelo link público, sem login no portal">pelo link</span>
+                        {% endif %}
                     </p>
+                    {% if sig.signed_via_link and sig.signer_declared_name %}
+                    <p class="text-xs text-gray-400">
+                        Declarou-se <strong>{{ sig.signer_declared_name }}</strong>{% if sig.signer_declared_doc %} · CPF {{ sig.signer_declared_doc }}{% endif %}
+                    </p>
+                    {% endif %}
                     {% else %}
                     <p class="text-xs text-amber-600">Pendente</p>
                     {% endif %}
@@ -144,6 +159,45 @@
                     </form>
                 </div>
                 {% endif %}
+              </div>
+
+              {% if not sig.is_signed %}
+              <div class="mt-2.5 pl-12">
+                {% if sig.public_enabled %}
+                  <p class="text-[11px] text-gray-500 mb-1">
+                    <i class="fas fa-link mr-1"></i>Link de assinatura sem login
+                    {% if not sig.user.is_active %}<span class="text-gray-400">— única via para quem está inativo</span>{% endif %}
+                  </p>
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <input type="text" readonly onclick="this.select()"
+                           value="{{ request.scheme }}://{{ request.get_host }}{% url 'documentos:public_sign' sig.public_token %}"
+                           class="flex-1 min-w-[220px] px-2 py-1.5 text-[11px] border border-gray-200 rounded-lg bg-gray-50 text-gray-600">
+                    <button type="button" class="text-xs px-2.5 py-1.5 bg-gray-900 text-white rounded-lg hover:bg-gray-700"
+                            data-copiar="{{ request.scheme }}://{{ request.get_host }}{% url 'documentos:public_sign' sig.public_token %}">
+                      <i class="fas fa-copy mr-1"></i>Copiar
+                    </button>
+                    <form method="post" action="{% url 'documentos:admin_toggle_public_link' sig.pk %}" class="inline"
+                          onsubmit="return confirm('Desativar o link? Quem já tem o endereço deixa de conseguir assinar.');">
+                      {% csrf_token %}<input type="hidden" name="acao" value="desligar">
+                      <button class="text-xs px-2.5 py-1.5 border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50">Desativar</button>
+                    </form>
+                    <form method="post" action="{% url 'documentos:admin_toggle_public_link' sig.pk %}" class="inline"
+                          onsubmit="return confirm('Gerar um endereço novo? O anterior para de funcionar na hora.');">
+                      {% csrf_token %}<input type="hidden" name="acao" value="novo">
+                      <button class="text-xs px-2.5 py-1.5 border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50">Novo endereço</button>
+                    </form>
+                  </div>
+                {% else %}
+                  <div class="flex items-center gap-2">
+                    <span class="text-[11px] text-gray-400"><i class="fas fa-link-slash mr-1"></i>Link desativado</span>
+                    <form method="post" action="{% url 'documentos:admin_toggle_public_link' sig.pk %}" class="inline">
+                      {% csrf_token %}<input type="hidden" name="acao" value="ligar">
+                      <button class="text-xs px-2.5 py-1.5 border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50">Reativar</button>
+                    </form>
+                  </div>
+                {% endif %}
+              </div>
+              {% endif %}
             </div>
             {% empty %}
             <div class="px-5 py-6 text-center text-sm text-gray-400">Nenhum signatário atribuído.</div>
@@ -163,4 +217,28 @@
     });
 })();
 </script>
+
+<script>
+document.querySelectorAll('[data-copiar]').forEach(function (b) {
+    b.addEventListener('click', function () {
+        const original = b.innerHTML;
+        const feito = function () {
+            b.innerHTML = '<i class="fas fa-check mr-1"></i>Copiado';
+            setTimeout(function () { b.innerHTML = original; }, 1800);
+        };
+        // navigator.clipboard só existe em https (ou localhost); sem ele,
+        // selecionamos o campo ao lado para a pessoa copiar à mão.
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(b.dataset.copiar).then(feito).catch(function () {
+                const campo = b.parentNode.querySelector('input[readonly]');
+                if (campo) campo.select();
+            });
+        } else {
+            const campo = b.parentNode.querySelector('input[readonly]');
+            if (campo) { campo.select(); document.execCommand('copy'); feito(); }
+        }
+    });
+});
+</script>
+
 {% endblock %}
