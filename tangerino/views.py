@@ -165,6 +165,9 @@ def meu_ponto(request):
         except TangerinoError as exc:
             contexto['erro'] = str(exc)
 
+    from .models import nao_bate_ponto
+    contexto['isento_de_ponto'] = nao_bate_ponto(request.user)
+
     return render(request, 'tangerino/meu_ponto.html', contexto)
 
 

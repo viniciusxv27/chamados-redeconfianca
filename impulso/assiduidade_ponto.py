@@ -141,6 +141,13 @@ def nota_assiduidade_ponto(user, ano, mes, agora=None):
     Devolve ``None`` quando não há ponto sincronizado — aí quem responde é a
     folha de ponto importada, como antes.
     """
+    from tangerino.models import nao_bate_ponto
+
+    # Dispensado de bater ponto não é avaliado por assiduidade: a nota mediria
+    # a ausência de algo que ninguém pediu para ele fazer.
+    if nao_bate_ponto(user):
+        return None
+
     marcacoes = _marcacoes_do_mes(user, ano, mes)
     if not marcacoes:
         return None

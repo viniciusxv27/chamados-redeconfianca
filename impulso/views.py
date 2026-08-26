@@ -1840,3 +1840,35 @@ def ciclo_encerrar(request, ciclo_id):
                 f"Você recebeu {item['valor']} C$ pelo ciclo {ciclo.nome}. Parabéns!",
                 '/impulso/acompanhamento/')
     return redirect('impulso:ciclo_detail', ciclo_id=ciclo.id)
+
+
+@require_POST
+@impulso_member_required
+def meta_solicitacao_cancelar(request, meta_id):
+    """Quem pediu a meta desiste dela, enquanto ainda está pendente."""
+    meta = get_object_or_404(Meta, id=meta_id)
+
+    if not meta.pode_cancelar_solicitacao(request.user):
+        # Mensagem diferente para cada caso: "não pode" sem dizer por quê é o
+        # tipo de resposta que faz a pessoa tentar de novo achando que é bug.
+        if meta.solicitada_por_id != request.user.id:
+            messages.error(request, 'Só quem fez a solicitação pode cancelá-la.')
+        else:
+            messages.error(request, 'Esta solicitação já foi decidida pelo gestor — '
+                                    'fale com ele para remover a meta.')
+        return redirect('impulso:meta_solicitacoes')
+
+    titulo = meta.titulo
+    gestor = meta.gestor
+    meta.delete()
+
+    if gestor:
+        # O gestor tem essa solicitação na fila dele; sumir sem aviso o deixaria
+        # procurando algo que não existe mais.
+        _notify([gestor], 'Solicitação cancelada',
+                f'{request.user.get_full_name() or request.user.email} cancelou o pedido '
+                f'da meta "{titulo}".',
+                '/impulso/metas/solicitacoes/')
+
+    messages.success(request, f'Solicitação "{titulo}" cancelada.')
+    return redirect('impulso:meta_solicitacoes')

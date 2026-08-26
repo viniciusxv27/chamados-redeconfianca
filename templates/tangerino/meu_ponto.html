@@ -6,6 +6,20 @@
 
 {% block tg_conteudo %}
 
+{% if isento_de_ponto %}
+<div class="tg-card p-4 mb-4 border-l-4 border-emerald-400">
+    <p class="text-sm text-gray-700">
+        <i class="fas fa-circle-check text-emerald-500 mr-1.5"></i>
+        <strong>Você está dispensado de bater ponto.</strong>
+        O portal não trava por marcação em aberto, e a assiduidade do Impulso não é
+        avaliada para você.
+    </p>
+    <p class="text-xs text-gray-400 mt-1">
+        Quem controla isso é o RH, pelo grupo “Não bate ponto”.
+    </p>
+</div>
+{% endif %}
+
 {% if not integracao_ativa %}
 <div class="tg-card p-6 text-center">
     <i class="fas fa-plug-circle-xmark text-3xl text-gray-300 mb-3"></i>

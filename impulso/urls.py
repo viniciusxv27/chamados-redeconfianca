@@ -12,6 +12,8 @@ urlpatterns = [
     path('metas/nova/', views.meta_create, name='meta_create'),
     path('metas/solicitacoes/', views.meta_solicitacoes, name='meta_solicitacoes'),
     path('metas/<int:meta_id>/decidir/', views.meta_decidir, name='meta_decidir'),
+    path('metas/<int:meta_id>/cancelar-solicitacao/',
+         views.meta_solicitacao_cancelar, name='meta_solicitacao_cancelar'),
     path('metas/<int:meta_id>/excluir/', views.meta_excluir, name='meta_excluir'),
     path('metas/<int:meta_id>/item/', views.meta_item_add, name='meta_item_add'),
     path('metas/item/<int:item_id>/check/', views.meta_item_toggle, name='meta_item_toggle'),

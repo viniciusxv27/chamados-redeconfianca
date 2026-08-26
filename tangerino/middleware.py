@@ -134,6 +134,12 @@ def decidir_bloqueio(user):
     from .models import ConfiguracaoTangerino
     from .regras_jornada import bloqueio
 
+    from .models import nao_bate_ponto
+
+    # Quem não bate ponto não pode ser trancado por causa de ponto.
+    if nao_bate_ponto(user):
+        return None
+
     config = ConfiguracaoTangerino.get()
     regras_ligadas = (config.bloquear_sem_entrada or config.bloquear_durante_almoco
                       or config.bloquear_saida_pendente)

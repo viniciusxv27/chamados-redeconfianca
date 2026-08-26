@@ -273,6 +273,20 @@ class Meta(models.Model):
             return False
         return self.created_by_id == user.id or self.decidida_por_id == user.id
 
+    def pode_cancelar_solicitacao(self, user):
+        """Quem pede pode desistir — enquanto a solicitação ainda está parada.
+
+        É diferente de excluir uma meta: uma solicitação pendente não está no
+        Kanban de ninguém, não vale ponto e não foi avaliada. Sumir com ela não
+        esconde nada. Depois de aprovada, a regra volta a ser a do
+        `pode_excluir` — aí já é uma tarefa em andamento.
+        """
+        if not (user and user.is_authenticated):
+            return False
+        if not self.pendente_aprovacao:
+            return False
+        return self.solicitada_por_id == user.id
+
     @property
     def impacto_da_exclusao(self):
         """O que some junto — usado no aviso de confirmação."""

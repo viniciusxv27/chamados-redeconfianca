@@ -466,3 +466,30 @@ class RegistroPontoPortal(models.Model):
 
     def __str__(self):
         return f"{self.usuario} em {self.momento:%d/%m/%Y %H:%M}"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Isenção de ponto
+# ─────────────────────────────────────────────────────────────────────────────
+# Grupo de comunicação (/users/manage/groups/) que reúne quem não bate ponto.
+# Fica pelo ID porque é ele que identifica o grupo de forma estável: renomear
+# o grupo na tela não deve desligar a isenção sem ninguém perceber.
+GRUPO_SEM_PONTO_ID = 41          # "Não bate ponto"
+
+
+def nao_bate_ponto(user):
+    """A pessoa está dispensada de bater ponto?
+
+    Quem está no grupo não é bloqueado pela jornada e não é avaliado por
+    assiduidade — cobrar marcação de quem não precisa marcar seria zerar a nota
+    de alguém por não fazer algo que ninguém pediu.
+
+    Falha para ``False``: na dúvida, a regra normal continua valendo. Uma
+    consulta que quebra não pode virar isenção silenciosa para a rede inteira.
+    """
+    if not (user and getattr(user, 'is_authenticated', False)):
+        return False
+    try:
+        return user.communication_groups.filter(pk=GRUPO_SEM_PONTO_ID).exists()
+    except Exception:
+        return False
