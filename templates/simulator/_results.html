@@ -1,6 +1,8 @@
 {% load simulator_tags %}
-{# Parcial carregado via AJAX (fragment=results). Contém tudo que depende do
-   cálculo pesado: cards do usuário + tabelas de comissionamento por papel. #}
+{% comment %}
+Parcial carregado via AJAX (fragment=results). Contém tudo que depende do
+cálculo pesado: cards do usuário + tabelas de comissionamento por papel.
+{% endcomment %}
 {% if not simulation %}
   <div class="mb-8 p-4 bg-amber-50 border border-amber-200 rounded-lg text-amber-700 flex items-start gap-3">
     <i class="fas fa-exclamation-circle mt-0.5"></i>

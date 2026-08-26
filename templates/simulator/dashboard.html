@@ -109,8 +109,10 @@
         <input type="hidden" name="view" value="{{ view_mode }}">
 
         {% if view_mode == 'simulador' %}
-          {# Repassa todos os valores já digitados (meta/real/realpdv/qty/receita) para
-             que recalcular os níveis Hunter não apague a simulação. #}
+          {% comment %}
+          Repassa todos os valores já digitados (meta/real/realpdv/qty/receita)
+          para que recalcular os níveis Hunter não apague a simulação.
+          {% endcomment %}
           {% for sim_key, sim_value in simulator_inputs.items %}
           <input type="hidden" name="sim__{{ sim_key }}" value="{{ sim_value }}">
           {% endfor %}

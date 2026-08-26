@@ -256,6 +256,7 @@ def manage_users_view(request):
         'users': users,
         'sectors': Sector.objects.all(),
         'user': request.user,
+        'can_change_photos': request.user.can_manage_user_photos(),
         'total_users_count': total_users_count,
         'active_users_count': active_users_count,
         'superadmin_count': superadmin_count,
@@ -3814,10 +3815,11 @@ def upload_profile_photo_ajax(request):
 @login_required
 @require_POST
 def admin_upload_user_photo(request, user_id):
-    """Permite que um gestor troque a foto de perfil de outro usuário."""
-    if not request.user.can_manage_users():
+    """Troca a foto de perfil de outro usuário. Só SUPERADMIN."""
+    if not request.user.can_manage_user_photos():
         return JsonResponse(
-            {'success': False, 'error': 'Você não tem permissão para alterar a foto de outros usuários.'},
+            {'success': False,
+             'error': 'Apenas o SUPERADMIN pode alterar a foto de outras pessoas.'},
             status=403,
         )
 

@@ -10,6 +10,21 @@
                 {% if c.obrigatorio %}<span class="text-[10px] uppercase px-1.5 py-0.5 rounded bg-red-100 text-red-600 flex-shrink-0">Obrigatório</span>{% endif %}
             </div>
             {% if c.descricao %}<p class="text-xs text-gray-500 mt-1 line-clamp-2">{{ c.descricao }}</p>{% endif %}
+            {% if is_gestor %}
+              {% comment %}
+              O gestor vê todo o material, inclusive o de outras pessoas; sem
+              este selo ele não distingue o que é da rede do que é dirigido.
+              {% endcomment %}
+              <p class="text-[11px] text-gray-400 mt-1.5">
+                <i class="fas fa-user-group mr-1"></i>
+                {% with alvos=c.obrigatorio_para.all %}
+                  {% if alvos %}
+                    {% for u in alvos|slice:":2" %}{{ u.first_name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                    {% if alvos|length > 2 %} +{{ alvos|length|add:"-2" }}{% endif %}
+                  {% else %}toda a equipe{% endif %}
+                {% endwith %}
+              </p>
+            {% endif %}
             <div class="mt-auto pt-3 flex items-center justify-between">
                 {% if c.minha_conclusao and c.minha_conclusao.concluido %}
                 <span class="text-xs text-emerald-600"><i class="fas fa-circle-check mr-1"></i>Concluído</span>

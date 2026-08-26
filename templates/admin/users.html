@@ -167,10 +167,15 @@
                         data-search="{{ user_item.full_name|lower }} {{ user_item.email|lower }} {{ user_item.sector.name|default:''|lower }}">
                         <td class="py-4 px-6">
                             <div class="flex items-center">
-                                <button type="button"
+                                {% comment %}
+                                Sem permissão o avatar é só um avatar: um botão que sempre
+                                responde "não pode" seria um convite frustrante.
+                                {% endcomment %}
+                                <{% if can_change_photos %}button type="button"
                                         onclick="openPhotoModal({{ user_item.id }}, '{{ user_item.full_name|escapejs }}')"
                                         title="Alterar foto de {{ user_item.full_name }}"
-                                        class="group relative w-10 h-10 rounded-full mr-3 flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-primary">
+                                        class="group relative w-10 h-10 rounded-full mr-3 flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-primary"{% else %}span
+                                        class="relative w-10 h-10 rounded-full mr-3 flex-shrink-0 inline-block"{% endif %}>
                                     {% if user_item.profile_picture %}
                                         <img src="{{ user_item.profile_picture.url }}"
                                              alt="{{ user_item.full_name }}"
@@ -182,10 +187,12 @@
                                             <i class="fas fa-user text-white"></i>
                                         </span>
                                     {% endif %}
+                                    {% if can_change_photos %}
                                     <span class="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                         <i class="fas fa-camera text-white text-xs"></i>
                                     </span>
-                                </button>
+                                    {% endif %}
+                                </{% if can_change_photos %}button{% else %}span{% endif %}>
                                 <div>
                                     <div class="font-semibold text-gray-900">{{ user_item.full_name }}</div>
                                     <div class="text-sm text-gray-500">{{ user_item.phone|default:"Sem telefone" }}</div>
@@ -275,11 +282,13 @@
                                    title="Editar">
                                     <i class="fas fa-edit"></i>
                                 </a>
+                                {% if can_change_photos %}
                                 <button onclick="openPhotoModal({{ user_item.id }}, '{{ user_item.full_name|escapejs }}')"
                                    class="bg-purple-100 text-purple-600 p-2 rounded-lg hover:bg-purple-200 transition-colors"
                                    title="Alterar Foto de Perfil">
                                     <i class="fas fa-camera"></i>
                                 </button>
+                                {% endif %}
                                 <button onclick="openChangePasswordModal({{ user_item.id }}, '{{ user_item.full_name|escapejs }}')"
                                    class="bg-yellow-100 text-yellow-600 p-2 rounded-lg hover:bg-yellow-200 transition-colors"
                                    title="Alterar Senha">
@@ -429,6 +438,7 @@
 </div>
 
 <!-- Modal de Foto de Perfil -->
+{% if can_change_photos %}
 <div id="photoModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
     <div class="bg-white rounded-lg p-6 w-full max-w-md mx-4">
         <div class="flex items-center justify-between mb-4">
@@ -474,6 +484,7 @@
         </div>
     </div>
 </div>
+{% endif %}
 
 <!-- Modal de Importação de Colaboradores -->
 <div id="importColaboradoresModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50">
@@ -544,6 +555,7 @@ function toggleImportColaboradoresModal() {
 let photoTargetUserId = null;
 
 function openPhotoModal(userId, userName) {
+    if (!document.getElementById('photoModal')) { return; }
     photoTargetUserId = userId;
     document.getElementById('photoUserNameDisplay').textContent = userName;
 
@@ -573,7 +585,11 @@ function hidePhotoError() {
     document.getElementById('photoError').classList.add('hidden');
 }
 
-document.getElementById('photoInput').addEventListener('change', function () {
+// Sem permissão o modal não é renderizado. Este listener roda no carregamento
+// da página: sem a guarda, ele estouraria e derrubaria todo o JS da tela
+// (filtros, busca, os outros modais) para quem não é SUPERADMIN.
+const photoInputEl = document.getElementById('photoInput');
+if (photoInputEl) photoInputEl.addEventListener('change', function () {
     const file = this.files[0];
     const submitBtn = document.getElementById('photoSubmitBtn');
     hidePhotoError();
@@ -609,6 +625,7 @@ document.getElementById('photoInput').addEventListener('change', function () {
 });
 
 function submitUserPhoto() {
+    if (!document.getElementById('photoInput')) { return; }
     const file = document.getElementById('photoInput').files[0];
     if (!file || !photoTargetUserId) return;
 

@@ -1157,11 +1157,50 @@ def feedback_regenerar_ia(request, fb_id):
 # ---------------------------------------------------------------------------
 # CONECTAR — Conteúdos (cursos/vídeos/POPs)
 # ---------------------------------------------------------------------------
+def conteudos_para(user, gestor=False):
+    """Conteúdos do CONECTAR que esta pessoa precisa fazer.
+
+    A regra vem do próprio cadastro do conteúdo:
+
+    * ``obrigatorio_para`` com pessoas → aparece só para elas;
+    * ``obrigatorio_para`` vazio → vale para toda a equipe, como já dizia o
+      texto de ajuda do campo (por isso o vazio continua aparecendo para todos:
+      mudar isso sumiria com todo o conteúdo já cadastrado).
+
+    Gestor vê tudo — é quem sobe e acompanha o material dos outros.
+    """
+    base = ConteudoConectar.objects.filter(ativo=True)
+    if gestor:
+        return base
+    # `criado_por` entra na conta para quem sobe um POP não perder o próprio
+    # material de vista quando ele é direcionado a outra pessoa.
+    return base.filter(
+        Q(obrigatorio_para__isnull=True)
+        | Q(obrigatorio_para=user)
+        | Q(criado_por=user)
+    ).distinct()
+
+
+def pode_ver_conteudo(user, conteudo):
+    """A pessoa foi designada para este conteúdo (ou é gestor)?"""
+    if is_impulso_manager(user):
+        return True
+    if not conteudo.ativo:
+        return False
+    if conteudo.criado_por_id == user.pk:
+        return True
+    designados = conteudo.obrigatorio_para.all()
+    if not designados:
+        return True
+    return any(u.pk == user.pk for u in designados)
+
+
 @impulso_member_required
 def conectar_list(request):
     user = request.user
     gestor = is_impulso_manager(user)
-    conteudos = ConteudoConectar.objects.filter(ativo=True).prefetch_related('conclusoes')
+    conteudos = (conteudos_para(user, gestor)
+                 .prefetch_related('conclusoes', 'obrigatorio_para'))
 
     # status de conclusão do usuário atual
     minhas = {c.conteudo_id: c for c in
@@ -1234,6 +1273,12 @@ def conteudo_create(request):
 @impulso_member_required
 def conteudo_detail(request, conteudo_id):
     conteudo = get_object_or_404(ConteudoConectar, id=conteudo_id)
+    # Sumir da lista sem fechar o detalhe seria esconder, não restringir: o
+    # endereço do conteúdo é sequencial e fácil de adivinhar.
+    if not pode_ver_conteudo(request.user, conteudo):
+        messages.error(request, 'Este conteúdo não foi direcionado para você.')
+        return redirect('impulso:conectar_list')
+
     conclusao = ConclusaoConteudo.objects.filter(
         conteudo=conteudo, user=request.user).first()
     context = {
@@ -1256,6 +1301,8 @@ def conteudo_progresso_video(request, conteudo_id):
     "assisti tudo" de uma vez e o vídeo obrigatório viraria enfeite.
     """
     conteudo = get_object_or_404(ConteudoConectar, id=conteudo_id)
+    if not pode_ver_conteudo(request.user, conteudo):
+        return JsonResponse({'ok': False, 'erro': 'Conteúdo não direcionado para você.'}, status=403)
     if not conteudo.video_reproduzivel:
         return JsonResponse({'ok': False, 'erro': 'Conteúdo não é um vídeo do portal.'}, status=400)
 
@@ -1301,6 +1348,10 @@ def conteudo_progresso_video(request, conteudo_id):
 @impulso_member_required
 def conteudo_concluir(request, conteudo_id):
     conteudo = get_object_or_404(ConteudoConectar, id=conteudo_id)
+    if not pode_ver_conteudo(request.user, conteudo):
+        messages.error(request, 'Este conteúdo não foi direcionado para você.')
+        return redirect('impulso:conectar_list')
+
     conclusao, _ = ConclusaoConteudo.objects.get_or_create(
         conteudo=conteudo, user=request.user)
 

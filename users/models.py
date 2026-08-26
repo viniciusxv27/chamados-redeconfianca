@@ -910,6 +910,16 @@ class User(AbstractUser):
         """Somente SUPERADMIN configura quais documentos são exigidos no pré-cadastro."""
         return self.hierarchy == 'SUPERADMIN'
 
+    def can_manage_user_photos(self):
+        """Somente SUPERADMIN troca a foto de perfil de outra pessoa.
+
+        Gerir usuários (ADMIN, SUPERVISOR, ADMINISTRATIVO) não dá esse direito:
+        a foto é a identidade da pessoa dentro do portal, e trocá-la é diferente
+        de editar um cadastro. O `is_superuser` entra junto para o administrador
+        do Django não ficar de fora por causa da hierarquia.
+        """
+        return bool(self.is_superuser or self.hierarchy == 'SUPERADMIN')
+
     @classmethod
     def hierarchy_rank(cls, hierarchy):
         """Índice da hierarquia (0 = mais baixo). Retorna -1 se for inválida."""
