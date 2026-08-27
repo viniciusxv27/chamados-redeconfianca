@@ -1177,3 +1177,42 @@ class EmergencyContact(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.relationship}) - {self.phone}"
+
+
+class UserChangeLog(models.Model):
+    """Uma linha por campo alterado no cadastro de um colaborador.
+
+    Uma linha por campo, e não um registro por edição, porque a pergunta que se
+    faz depois é sempre sobre um campo: "quem mudou o salário?", "quando esta
+    pessoa virou inativa?". Guardar tudo num texto só obrigaria a ler edição por
+    edição para responder isso.
+
+    O valor fica como texto legível (o rótulo, não o código): quem consulta o
+    histórico quer ler "Gerente", não "GERENTE_LOJA".
+    """
+
+    target = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name='change_logs', verbose_name='Colaborador alterado')
+    changed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='user_changes_made', verbose_name='Alterado por')
+
+    field = models.CharField(max_length=60, verbose_name='Campo')
+    field_label = models.CharField(max_length=80, verbose_name='Nome do campo')
+    old_value = models.TextField(blank=True, default='', verbose_name='Antes')
+    new_value = models.TextField(blank=True, default='', verbose_name='Depois')
+
+    ip = models.GenericIPAddressField(null=True, blank=True, verbose_name='IP')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Quando')
+
+    class Meta:
+        verbose_name = 'Alteração de cadastro'
+        verbose_name_plural = 'Alterações de cadastro'
+        ordering = ['-created_at', 'field_label']
+        indexes = [
+            models.Index(fields=['target', '-created_at']),
+        ]
+
+    def __str__(self):
+        return f'{self.target}: {self.field_label} ({self.created_at:%d/%m/%Y %H:%M})'

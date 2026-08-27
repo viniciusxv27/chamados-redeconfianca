@@ -1003,6 +1003,14 @@ def create_user_view(request):
 
 
 @login_required
+def _ip_do_pedido(request):
+    """IP de quem fez a alteração, respeitando o proxy da frente."""
+    encaminhado = request.META.get('HTTP_X_FORWARDED_FOR', '')
+    if encaminhado:
+        return encaminhado.split(',')[0].strip()
+    return request.META.get('REMOTE_ADDR') or None
+
+
 def edit_user_view(request, user_id):
     """Editar usuário existente"""
     if not request.user.can_manage_users():
@@ -1012,8 +1020,11 @@ def edit_user_view(request, user_id):
     user_to_edit = get_object_or_404(User.objects.prefetch_related('sectors'), id=user_id)
 
     if request.method == 'POST':
-        email = request.POST.get('email')
-        username = request.POST.get('username')
+        # Fotografia antes de qualquer alteração: é ela que diz o que mudou.
+        from .auditoria import fotografar, registrar
+        estado_anterior = fotografar(user_to_edit)
+        email = request.POST.get('email', '')
+        username = request.POST.get('username', '')
         full_name = request.POST.get('full_name', '').strip()
         # Separar nome completo: primeira palavra = first_name, restante = last_name
         name_parts = full_name.split()
@@ -1022,10 +1033,13 @@ def edit_user_view(request, user_id):
         sector_id = request.POST.get('sector')
         sectors_ids = request.POST.getlist('sectors')  # Múltiplos setores
         hierarchy = request.POST.get('hierarchy')
-        phone = request.POST.get('phone')
-        disc_profile = request.POST.get('disc_profile')
-        uniform_size_shirt = request.POST.get('uniform_size_shirt')
-        uniform_size_pants = request.POST.get('uniform_size_pants')
+        # `.get(campo)` devolve None quando o campo não vem no POST, e estes
+        # campos são NOT NULL no banco: sem o default '' um envio parcial
+        # estourava com erro cru de banco na cara do usuário.
+        phone = request.POST.get('phone', '')
+        disc_profile = request.POST.get('disc_profile', '')
+        uniform_size_shirt = request.POST.get('uniform_size_shirt', '')
+        uniform_size_pants = request.POST.get('uniform_size_pants', '')
         is_active = request.POST.get('is_active') == 'on'
 
         # Situação do colaborador (ativo/inativo/afastado)
@@ -1137,25 +1151,44 @@ def edit_user_view(request, user_id):
                     user_to_edit.sector = sectors.first()
                     user_to_edit.save()
                 
+                user_to_edit.refresh_from_db()
+                alteracoes = registrar(user_to_edit, estado_anterior, request.user,
+                                       ip=_ip_do_pedido(request))
+
                 log_action(
-                    request.user, 
-                    'USER_UPDATE', 
-                    f'Usuário editado: {user_to_edit.full_name} ({user_to_edit.email})',
+                    request.user,
+                    'USER_UPDATE',
+                    f'Usuário editado: {user_to_edit.full_name} ({user_to_edit.email})'
+                    + (f' — {alteracoes} campo(s) alterado(s)' if alteracoes else ' — sem alterações'),
                     request
                 )
-                
-                messages.success(request, f'Usuário {user_to_edit.full_name} atualizado com sucesso!')
+
+                if alteracoes:
+                    messages.success(
+                        request,
+                        f'Usuário {user_to_edit.full_name} atualizado — '
+                        f'{alteracoes} campo(s) alterado(s), registrados no histórico.')
+                else:
+                    messages.info(request, 'Nenhum campo foi alterado.')
                 return redirect('manage_users')
                 
         except Exception as e:
             messages.error(request, f'Erro ao atualizar usuário: {str(e)}')
     
+    from .models import UserChangeLog
+    historico = (UserChangeLog.objects
+                 .filter(target=user_to_edit)
+                 .select_related('changed_by')
+                 .order_by('-created_at', 'field_label')[:200])
+
     context = {
         'user_to_edit': user_to_edit,
         'sectors': Sector.objects.all(),
         'hierarchy_choices': request.user.assignable_hierarchy_choices(),
         'user': request.user,
         'job_title_choices': _job_title_choices(user_to_edit.job_title),
+        'historico_alteracoes': historico,
+        'total_alteracoes': UserChangeLog.objects.filter(target=user_to_edit).count(),
     }
     return render(request, 'admin/edit_user.html', context)
 

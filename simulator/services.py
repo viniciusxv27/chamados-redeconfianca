@@ -1429,7 +1429,10 @@ def compute_consultor_simulation(
         mysql_pdv = get_realized_sales_from_mysql(pdv=pdv_lookup)
         pdv_proj = {
             'movel': mysql_pdv.get('movel', 0.0),
-            'fixa': mysql_pdv.get('fixa', 0.0),
+            # Fixa é contagem de vendas, não receita — a meta ('META_FIXA')
+            # também é quantidade, e comparar reais com unidades dava um
+            # atingimento sem sentido. Mesmo critério já usado no individual.
+            'fixa': mysql_pdv.get('fixa_qty', 0.0),
             'smartphones': mysql_pdv.get('smartphones', 0.0),
             'eletronicos': mysql_pdv.get('eletronicos', 0.0),
             'essenciais': mysql_pdv.get('essenciais', 0.0),
@@ -1456,7 +1459,8 @@ def compute_consultor_simulation(
         du_passed, du_total = get_business_days_info()
         pdv_proj = {
             'movel': project_from_realized(mysql_pdv.get('movel', 0.0), du_passed, du_total),
-            'fixa': project_from_realized(mysql_pdv.get('fixa', 0.0), du_passed, du_total),
+            # Projeta a QUANTIDADE de vendas fixa, não a receita — ver acima.
+            'fixa': project_from_realized(mysql_pdv.get('fixa_qty', 0.0), du_passed, du_total),
             'smartphones': project_from_realized(mysql_pdv.get('smartphones', 0.0), du_passed, du_total),
             'eletronicos': project_from_realized(mysql_pdv.get('eletronicos', 0.0), du_passed, du_total),
             'essenciais': project_from_realized(mysql_pdv.get('essenciais', 0.0), du_passed, du_total),
@@ -1481,7 +1485,9 @@ def compute_consultor_simulation(
     if view_mode == VIEW_REALIZADO:
         coord_pdvs = get_pdvs_of_coord(realized, coord_name) or get_pdvs_of_coord(projection, coord_name)
         mysql_coord = get_realized_sales_from_mysql(pdvs=coord_pdvs) if coord_pdvs else get_realized_sales_from_mysql(coord_name=coord_name)
-        coord_proj = {k: mysql_coord.get(k, 0.0) for k in ['movel','fixa','smartphones','eletronicos','essenciais','seguros','sva']}
+        coord_proj = {k: mysql_coord.get(k, 0.0) for k in ['movel','smartphones','eletronicos','essenciais','seguros','sva']}
+        # Fixa fora do laço porque a chave é outra: quantidade, não receita.
+        coord_proj['fixa'] = mysql_coord.get('fixa_qty', 0.0)
     else:
         # VIEW_PROJECAO / VIEW_SIMULADOR: projeção dinâmica da Coordenação via MySQL D-1 projetado por DU.
         coord_pdvs = get_pdvs_of_coord(realized, coord_name) or get_pdvs_of_coord(projection, coord_name)
@@ -1489,7 +1495,8 @@ def compute_consultor_simulation(
         du_passed_c, du_total_c = get_business_days_info()
         coord_proj = {
             'movel': project_from_realized(mysql_coord.get('movel', 0.0), du_passed_c, du_total_c),
-            'fixa': project_from_realized(mysql_coord.get('fixa', 0.0), du_passed_c, du_total_c),
+            # Projeta a QUANTIDADE de vendas fixa, não a receita.
+            'fixa': project_from_realized(mysql_coord.get('fixa_qty', 0.0), du_passed_c, du_total_c),
             'smartphones': project_from_realized(mysql_coord.get('smartphones', 0.0), du_passed_c, du_total_c),
             'eletronicos': project_from_realized(mysql_coord.get('eletronicos', 0.0), du_passed_c, du_total_c),
             'essenciais': project_from_realized(mysql_coord.get('essenciais', 0.0), du_passed_c, du_total_c),
@@ -1807,7 +1814,8 @@ def compute_gerente_simulation(
         mysql_coord = get_realized_sales_from_mysql(pdvs=coord_pdvs) if coord_pdvs else get_realized_sales_from_mysql(coord_name=coord_name)
         coord_proj = {
             'movel': mysql_coord.get('movel', 0.0),
-            'fixa': mysql_coord.get('fixa', 0.0),
+            # Fixa em quantidade, igual ao PDV e ao individual.
+            'fixa': mysql_coord.get('fixa_qty', 0.0),
             'smartphones': mysql_coord.get('smartphones', 0.0),
             'eletronicos': mysql_coord.get('eletronicos', 0.0),
             'essenciais': mysql_coord.get('essenciais', 0.0),
@@ -1821,7 +1829,8 @@ def compute_gerente_simulation(
         du_passed_c, du_total_c = get_business_days_info()
         coord_proj = {
             'movel': project_from_realized(mysql_coord.get('movel', 0.0), du_passed_c, du_total_c),
-            'fixa': project_from_realized(mysql_coord.get('fixa', 0.0), du_passed_c, du_total_c),
+            # Projeta a QUANTIDADE de vendas fixa, não a receita.
+            'fixa': project_from_realized(mysql_coord.get('fixa_qty', 0.0), du_passed_c, du_total_c),
             'smartphones': project_from_realized(mysql_coord.get('smartphones', 0.0), du_passed_c, du_total_c),
             'eletronicos': project_from_realized(mysql_coord.get('eletronicos', 0.0), du_passed_c, du_total_c),
             'essenciais': project_from_realized(mysql_coord.get('essenciais', 0.0), du_passed_c, du_total_c),
