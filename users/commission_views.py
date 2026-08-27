@@ -2092,6 +2092,9 @@ def process_commission_data(data, is_gerente=False, metas_pilar=None, iq_data=No
     # Aceleradores e IQ
     processed['aceleradores'] = {
         'seis_pilares': safe_float(data.get('ACELERADOR_6 PILARES')),
+        # Coluna CAMPANHA da aba REMUNERAÇÃO CN. Aceita a variação com acento
+        # porque o cabeçalho da planilha já mudou de grafia outras vezes.
+        'campanha': safe_float(data.get('CAMPANHA') or data.get('CAMPANHAS')),
         'total_aceleradores': safe_float(data.get('REMUNERAÇÃO TOTAL + ACELERADORES')),
         'iq_acelerador_movel': safe_float(data.get('IQ_ACELADOR MÓVEL')),
         'iq_acelerador_fixa': safe_float(data.get('IQ_ACELERADOR FIXA')),

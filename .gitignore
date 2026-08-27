@@ -214,3 +214,10 @@ coverage.xml
 # Gunicorn
 gunicorn.sock
 *.sock
+
+# Snapshots de páginas usados em conferência visual durante o desenvolvimento.
+# São cópias de telas autenticadas (com nome, e-mail e token de sessão dentro) e
+# `static/` é servido sem login — não podem ir para o repositório nem para o ar.
+static/_p_*.html
+static/_t_*.html
+static/_d_*.html
