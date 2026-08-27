@@ -25,6 +25,27 @@ logger = logging.getLogger(__name__)
 DIAS_PARA_TRAS_PENDENCIA = 30
 
 
+def _sem_duplicatas(pares):
+    """Remove pares repetidos pela paginação da API (mesmo ``id``).
+
+    A API do Tangerino/Sólides devolve cada par em duas páginas (visto ao vivo:
+    400 itens para 200 pares reais). Sem isto, ``_eventos`` achataria cada
+    marcação duas vezes e a tela mostraria tudo em dobro. Mantém a 1ª ocorrência
+    de cada id; pares sem id (raros) passam sem deduplicar. Espelha o ``vistos``
+    de ``sync.sincronizar_marcacoes``, que já deixava a tabela sincronizada limpa.
+    """
+    vistos = set()
+    unicos = []
+    for par in pares or []:
+        pid = par.get('id')
+        if pid is not None:
+            if pid in vistos:
+                continue
+            vistos.add(pid)
+        unicos.append(par)
+    return unicos
+
+
 def _eventos(pares):
     """Achata os pares em uma linha do tempo de marcações individuais."""
     eventos = []
@@ -69,7 +90,7 @@ def status_do_dia(employee_id, dia=None, pares=None):
     agora = timezone.localtime()
 
     if pares is None:
-        pares = listar_marcacoes(dia, dia, employee_id=employee_id)
+        pares = _sem_duplicatas(listar_marcacoes(dia, dia, employee_id=employee_id))
     do_dia = _pares_do_dia(pares, dia)
     eventos = _eventos(do_dia)
 
@@ -130,7 +151,7 @@ def pendencias(employee_id, dias=DIAS_PARA_TRAS_PENDENCIA, pares=None):
     hoje = timezone.localdate()
     inicio = hoje - timedelta(days=dias)
     if pares is None:
-        pares = listar_marcacoes(inicio, hoje, employee_id=employee_id, ttl=300)
+        pares = _sem_duplicatas(listar_marcacoes(inicio, hoje, employee_id=employee_id, ttl=300))
 
     abertos = []
     for par in pares:
@@ -164,7 +185,7 @@ def painel_da_empresa(dia=None):
     A API aceita a busca sem ``employeeId``, o que evita 168 chamadas.
     """
     dia = dia or timezone.localdate()
-    pares = listar_marcacoes(dia, dia, ttl=120)
+    pares = _sem_duplicatas(listar_marcacoes(dia, dia, ttl=120))
     por_funcionario = {}
     for par in pares:
         por_funcionario.setdefault(par.get('employeeId'), []).append(par)
