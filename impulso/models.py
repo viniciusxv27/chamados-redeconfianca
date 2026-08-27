@@ -781,6 +781,14 @@ class Ideia(models.Model):
         max_length=150, verbose_name='Setor de impacto')
     motivo = models.TextField(verbose_name='Qual o motivo?')
 
+    # Quem mais assina a ideia. Pontua junto com o autor — ideia boa raramente
+    # nasce de uma cabeça só, e sem isso quem ajudou fica de fora da nota.
+    participantes = models.ManyToManyField(
+        settings.AUTH_USER_MODEL, blank=True,
+        related_name='impulso_ideias_participando',
+        verbose_name='Também participaram',
+        help_text='Até 3 pessoas, além do autor.')
+
     status = models.CharField(
         max_length=12, choices=Status.choices,
         default=Status.NOVA, verbose_name='Status')
@@ -788,6 +796,8 @@ class Ideia(models.Model):
 
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
+
+    MAX_PARTICIPANTES = 3
 
     class Meta:
         verbose_name = 'Ideia'

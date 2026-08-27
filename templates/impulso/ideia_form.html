@@ -36,6 +36,13 @@
                 <label class="block text-sm font-medium text-gray-700 mb-1">Qual o motivo? *</label>
                 <textarea name="motivo" required rows="3" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">{{ ideia.motivo|default:'' }}</textarea>
             </div>
+            {% if candidatos %}
+            <div id="ideiaPessoas" data-max="{{ max_participantes }}">
+                {% include 'impulso/_seletor_pessoas.html' with nome='participantes' pessoas=candidatos escolhidos=escolhidos_ids rotulo='Quem mais participou desta ideia' ajuda='Opcional. Até 3 pessoas além de você — elas ganham os pontos da ideia junto com você.' %}
+                <p id="ideiaPessoasAviso" class="hidden text-xs text-red-600 mt-1"></p>
+            </div>
+            {% endif %}
+
             <div class="flex justify-end gap-2 pt-2">
                 <a href="{% url 'impulso:inovar_list' %}" class="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 text-sm hover:bg-gray-200">Cancelar</a>
                 <button type="submit" class="px-4 py-2 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700">
@@ -46,4 +53,41 @@
     </div>
 </div>
 {% endwith %}
+
+{% if candidatos %}
+<script>
+(function () {
+    const bloco = document.getElementById('ideiaPessoas');
+    if (!bloco) return;
+    const limite = parseInt(bloco.dataset.max, 10) || 3;
+    const aviso = document.getElementById('ideiaPessoasAviso');
+    const caixas = [...bloco.querySelectorAll('input[name="participantes"]')];
+
+    function aplicar() {
+        const marcadas = caixas.filter(c => c.checked);
+        const cheio = marcadas.length >= limite;
+
+        // Trava as não marcadas ao bater o limite, em vez de deixar marcar e
+        // recusar no envio: a pessoa descobre o limite na hora, não depois de
+        // preencher o formulário inteiro.
+        caixas.forEach(function (c) {
+            c.disabled = cheio && !c.checked;
+            const linha = c.closest('label');
+            if (linha) linha.classList.toggle('opacity-40', c.disabled);
+        });
+
+        if (aviso) {
+            aviso.textContent = cheio
+                ? `Limite de ${limite} pessoas atingido. Desmarque alguém para trocar.`
+                : '';
+            aviso.classList.toggle('hidden', !cheio);
+        }
+    }
+
+    caixas.forEach(function (c) { c.addEventListener('change', aplicar); });
+    aplicar();
+})();
+</script>
+{% endif %}
+
 {% endblock %}

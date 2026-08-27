@@ -181,8 +181,12 @@ def _nota_projeto_foco(user, inicio, fim):
 # INOVAR
 # ---------------------------------------------------------------------------
 def _nota_inovar(user, inicio, fim):
+    # Conta a ideia para quem escreveu e para quem foi incluído nela: sem o
+    # `distinct`, uma pessoa que é autora E participante contaria duas vezes.
     ideias = Ideia.objects.filter(
-        autor=user, criado_em__date__gte=inicio, criado_em__date__lte=fim)
+        Q(autor=user) | Q(participantes=user),
+        criado_em__date__gte=inicio, criado_em__date__lte=fim,
+    ).distinct()
     propostas = ideias.count()
     aprovadas = ideias.filter(status=Ideia.Status.APROVADA).count()
 

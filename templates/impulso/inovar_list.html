@@ -16,6 +16,16 @@
                     <span><i class="fas fa-bullseye mr-1"></i>Impacto: {{ ideia.setor_impacto }}</span>
                     {% if ideia.mostrar_autor %}
                     <span><i class="fas fa-user mr-1"></i>Sua ideia</span>
+                    {% if ideia.equipe_visivel %}
+                    <span title="Estas pessoas também pontuam com esta ideia">
+                        <i class="fas fa-user-group mr-1"></i>Com
+                        {% for p in ideia.equipe_visivel %}{{ p.first_name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                    </span>
+                    {% endif %}
+                    {% elif ideia.sou_participante %}
+                    <span title="Você foi incluído nesta ideia e pontua com ela">
+                        <i class="fas fa-user-group mr-1"></i>Você participa desta ideia
+                    </span>
                     {% elif is_gestor %}
                     {# Avaliação é da ideia, não de quem escreveu: sem autor aqui. #}
                     <span class="text-gray-400"><i class="fas fa-user-secret mr-1"></i>Autor não identificado</span>
@@ -24,6 +34,9 @@
                 </div>
                 <p class="text-xs text-gray-600 mt-2"><span class="font-medium">Motivo:</span> {{ ideia.motivo }}</p>
 
+                {% comment %}
+                Só o autor edita — quem participa pontua, mas a ideia não é dele.
+                {% endcomment %}
                 {% if ideia.autor_id == user.id or user.is_superuser %}
                     {% if ideia.editavel %}
                     <a href="{% url 'impulso:ideia_edit' ideia.id %}"

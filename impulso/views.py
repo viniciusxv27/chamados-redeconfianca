@@ -1589,12 +1589,25 @@ def inovar_list(request):
     """
     user = request.user
     gestor = is_impulso_manager(user)
-    ideias = Ideia.objects.all() if gestor else Ideia.objects.filter(autor=user)
+    if gestor:
+        ideias = Ideia.objects.all()
+    else:
+        # Quem foi incluído na ideia também precisa vê-la: é dela que vêm os
+        # pontos dele. Sem isso, a pessoa ganharia a nota sem saber por quê.
+        ideias = Ideia.objects.filter(Q(autor=user) | Q(participantes=user)).distinct()
 
-    lista = list(ideias.select_related('autor'))
+    lista = list(ideias.select_related('autor').prefetch_related('participantes'))
+    ids_participando = set()
     for ideia in lista:
+        equipe = list(ideia.participantes.all())
         # Único caso em que o nome aparece: a ideia é de quem está vendo.
         ideia.mostrar_autor = (ideia.autor_id == user.id)
+        ideia.sou_participante = any(p.id == user.id for p in equipe)
+        # A autoria fica escondida do gestor de propósito — os nomes de quem
+        # participou seguem a mesma regra, senão a anonimidade cairia por aí.
+        ideia.equipe_visivel = equipe if ideia.mostrar_autor else []
+        if ideia.sou_participante:
+            ids_participando.add(ideia.id)
 
     context = {
         'ideias': lista,
@@ -1603,6 +1616,21 @@ def inovar_list(request):
         'active_tab': 'inovar',
     }
     return render(request, 'impulso/inovar_list.html', context)
+
+
+def _participantes_da_ideia(request, autor):
+    """Quem mais assina a ideia, dentro do limite.
+
+    Devolve (pessoas, erro). O autor sai da lista mesmo se vier marcado: ele já
+    pontua como autor, e contá-lo de novo gastaria uma das três vagas à toa.
+    """
+    escolhidos = get_colaboradores().filter(
+        id__in=request.POST.getlist('participantes')).exclude(id=autor.id)
+
+    if escolhidos.count() > Ideia.MAX_PARTICIPANTES:
+        return None, (f'Escolha no máximo {Ideia.MAX_PARTICIPANTES} pessoas além de você. '
+                      'O limite existe para a ideia ter donos claros.')
+    return list(escolhidos), ''
 
 
 @impulso_member_required
@@ -1614,12 +1642,37 @@ def ideia_create(request):
         if not (descricao and setor_impacto and motivo):
             messages.error(request, 'Preencha a ideia, o setor de impacto e o motivo.')
             return redirect('impulso:ideia_create')
+
+        # O limite é conferido no servidor, não só escondendo caixas na tela:
+        # um POST direto passaria por cima do contador do formulário.
+        participantes, erro = _participantes_da_ideia(request, request.user)
+        if erro:
+            messages.error(request, erro)
+            return redirect('impulso:ideia_create')
+
         ideia = Ideia.objects.create(
             autor=request.user, descricao=descricao,
             setor_impacto=setor_impacto, motivo=motivo)
-        messages.success(request, 'Ideia enviada. Obrigado por inovar!')
+
+        if participantes:
+            ideia.participantes.set(participantes)
+            _notify(participantes, 'Você entrou em uma ideia',
+                    f'{request.user.get_full_name() or request.user.email} incluiu você na ideia '
+                    f'sobre "{ideia.setor_impacto}". Ela conta pontos para você também.',
+                    '/impulso/inovar/')
+
+        messages.success(
+            request,
+            'Ideia enviada. Obrigado por inovar!'
+            + (f' {len(participantes)} pessoa(s) incluída(s).' if participantes else ''))
         return redirect('impulso:inovar_list')
-    return render(request, 'impulso/ideia_form.html', {'active_tab': 'inovar'})
+
+    return render(request, 'impulso/ideia_form.html', {
+        'active_tab': 'inovar',
+        'candidatos': get_colaboradores().exclude(id=request.user.id),
+        'escolhidos_ids': [],
+        'max_participantes': Ideia.MAX_PARTICIPANTES,
+    })
 
 
 @impulso_member_required
@@ -1644,15 +1697,36 @@ def ideia_edit(request, ideia_id):
             messages.error(request, 'Preencha a ideia, o setor de impacto e o motivo.')
             return redirect('impulso:ideia_edit', ideia_id=ideia.id)
 
+        participantes, erro = _participantes_da_ideia(request, ideia.autor)
+        if erro:
+            messages.error(request, erro)
+            return redirect('impulso:ideia_edit', ideia_id=ideia.id)
+
         ideia.descricao = descricao
         ideia.setor_impacto = setor_impacto
         ideia.motivo = motivo
         ideia.save(update_fields=['descricao', 'setor_impacto', 'motivo', 'atualizado_em'])
+
+        # Avisa só quem entrou agora: quem já estava não precisa de outro aviso.
+        antes = set(ideia.participantes.values_list('id', flat=True))
+        ideia.participantes.set(participantes)
+        novos = [p for p in participantes if p.id not in antes]
+        if novos:
+            _notify(novos, 'Você entrou em uma ideia',
+                    f'{ideia.autor.get_full_name() or ideia.autor.email} incluiu você na ideia '
+                    f'sobre "{ideia.setor_impacto}". Ela conta pontos para você também.',
+                    '/impulso/inovar/')
+
         messages.success(request, 'Ideia atualizada.')
         return redirect('impulso:inovar_list')
 
-    return render(request, 'impulso/ideia_form.html',
-                  {'ideia': ideia, 'active_tab': 'inovar'})
+    return render(request, 'impulso/ideia_form.html', {
+        'ideia': ideia,
+        'active_tab': 'inovar',
+        'candidatos': get_colaboradores().exclude(id=ideia.autor_id),
+        'escolhidos_ids': list(ideia.participantes.values_list('id', flat=True)),
+        'max_participantes': Ideia.MAX_PARTICIPANTES,
+    })
 
 
 @require_POST
