@@ -193,13 +193,21 @@
         <span class="text-xs text-gray-400" id="impProgresso">
             {{ meta.progresso_itens.0 }} de {{ meta.progresso_itens.1 }} feitos
         </span>
+        <span id="impOrdemAviso" class="hidden text-xs text-emerald-600 ml-2"></span>
         {% endif %}
     </div>
 
     <ul class="space-y-1.5" id="impListaItens">
         {% for item in itens %}
-        <li class="group p-2 rounded-lg hover:bg-gray-50" id="passo{{ item.id }}">
+        <li class="imp-passo group p-2 rounded-lg hover:bg-gray-50" id="passo{{ item.id }}"
+            data-item="{{ item.id }}" {% if pode_mexer_itens %}draggable="true"{% endif %}>
             <div class="flex items-start gap-2.5">
+                {% if pode_mexer_itens %}
+                <span class="imp-arrasta mt-0.5 text-gray-300 hover:text-gray-500 cursor-grab select-none flex-shrink-0"
+                      title="Arraste para mudar a ordem">
+                    <i class="fas fa-grip-vertical text-xs"></i>
+                </span>
+                {% endif %}
                 <input type="checkbox" class="imp-check mt-0.5 rounded border-gray-300 text-emerald-600"
                        data-item="{{ item.id }}" {% if item.concluido %}checked{% endif %}>
                 <span class="flex-1 min-w-0">
@@ -214,6 +222,14 @@
 
                 {% if pode_mexer_itens %}
                 <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity flex-shrink-0">
+                    {% comment %}
+                    Setas além do arrastar: no celular arrastar não é confiável,
+                    e sem elas a reordenação simplesmente não existiria lá.
+                    {% endcomment %}
+                    <button type="button" class="imp-sobe text-gray-400 hover:text-gray-700 px-1"
+                            title="Subir um passo"><i class="fas fa-chevron-up text-xs"></i></button>
+                    <button type="button" class="imp-desce text-gray-400 hover:text-gray-700 px-1"
+                            title="Descer um passo"><i class="fas fa-chevron-down text-xs"></i></button>
                     <button type="button" class="imp-passo-editar text-gray-400 hover:text-gray-700 px-1"
                             data-alvo="passoForm{{ item.id }}" title="Editar passo">
                         <i class="fas fa-pen text-xs"></i>
@@ -483,4 +499,109 @@
     });
 })();
 </script>
+
+{% if pode_mexer_itens %}
+<script>
+(function () {
+    const lista = document.getElementById('impListaItens');
+    if (!lista) return;
+    const aviso = document.getElementById('impOrdemAviso');
+
+    function csrf() {
+        const m = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+        return m ? m[1] : '';
+    }
+
+    function salvar() {
+        const ids = [...lista.querySelectorAll('.imp-passo')].map(li => li.dataset.item);
+        const dados = new URLSearchParams();
+        ids.forEach(function (id) { dados.append('ordem', id); });
+
+        if (aviso) {
+            aviso.textContent = 'salvando…';
+            aviso.className = 'text-xs text-gray-400 ml-2';
+        }
+
+        fetch('{% url "impulso:meta_itens_reordenar" meta.id %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRFToken': csrf(),
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            body: dados.toString(),
+        })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (!d.ok) { throw new Error(d.erro || 'falhou'); }
+                if (aviso) {
+                    aviso.textContent = 'ordem salva';
+                    aviso.className = 'text-xs text-emerald-600 ml-2';
+                    setTimeout(function () { aviso.classList.add('hidden'); }, 2500);
+                }
+            })
+            .catch(function () {
+                // Não salvou: recarregar devolve a ordem que está no banco, em
+                // vez de deixar a tela mostrando uma ordem que não existe.
+                if (aviso) {
+                    aviso.textContent = 'não deu para salvar — recarregando';
+                    aviso.className = 'text-xs text-red-600 ml-2';
+                }
+                setTimeout(function () { window.location.reload(); }, 1200);
+            });
+    }
+
+    // ---- setas: funcionam em qualquer aparelho ----
+    lista.addEventListener('click', function (e) {
+        const sobe = e.target.closest('.imp-sobe');
+        const desce = e.target.closest('.imp-desce');
+        if (!sobe && !desce) return;
+
+        const li = e.target.closest('.imp-passo');
+        if (!li) return;
+        const vizinho = sobe ? li.previousElementSibling : li.nextElementSibling;
+        if (!vizinho || !vizinho.classList.contains('imp-passo')) return;
+
+        if (sobe) { lista.insertBefore(li, vizinho); }
+        else { lista.insertBefore(vizinho, li); }
+        li.classList.add('bg-emerald-50');
+        setTimeout(function () { li.classList.remove('bg-emerald-50'); }, 500);
+        salvar();
+    });
+
+    // ---- arrastar: o caminho confortável no computador ----
+    let arrastando = null;
+    lista.addEventListener('dragstart', function (e) {
+        const li = e.target.closest('.imp-passo');
+        if (!li) return;
+        arrastando = li;
+        li.classList.add('opacity-50');
+        e.dataTransfer.effectAllowed = 'move';
+        // Firefox só inicia o arrasto se algo for escrito no dataTransfer.
+        e.dataTransfer.setData('text/plain', li.dataset.item);
+    });
+
+    lista.addEventListener('dragover', function (e) {
+        if (!arrastando) return;
+        e.preventDefault();
+        const alvo = e.target.closest('.imp-passo');
+        if (!alvo || alvo === arrastando) return;
+        // Compara pela metade do elemento: solta antes ou depois conforme o
+        // cursor está na parte de cima ou de baixo dele.
+        const meio = alvo.getBoundingClientRect().top + alvo.offsetHeight / 2;
+        lista.insertBefore(arrastando, e.clientY < meio ? alvo : alvo.nextSibling);
+    });
+
+    lista.addEventListener('drop', function (e) { e.preventDefault(); });
+
+    lista.addEventListener('dragend', function () {
+        if (!arrastando) return;
+        arrastando.classList.remove('opacity-50');
+        arrastando = null;
+        salvar();
+    });
+})();
+</script>
+{% endif %}
+
 {% endblock %}

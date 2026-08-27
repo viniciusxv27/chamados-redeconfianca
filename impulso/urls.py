@@ -19,6 +19,8 @@ urlpatterns = [
     path('metas/item/<int:item_id>/check/', views.meta_item_toggle, name='meta_item_toggle'),
     path('metas/item/<int:item_id>/editar/', views.meta_item_editar, name='meta_item_editar'),
     path('metas/item/<int:item_id>/excluir/', views.meta_item_excluir, name='meta_item_excluir'),
+    path('metas/<int:meta_id>/itens/reordenar/', views.meta_itens_reordenar,
+         name='meta_itens_reordenar'),
     path('metas/<int:meta_id>/', views.meta_detail, name='meta_detail'),
     path('metas/<int:meta_id>/status/', views.meta_update_status, name='meta_update_status'),
     path('metas/<int:meta_id>/entregar/', views.meta_entregar, name='meta_entregar'),

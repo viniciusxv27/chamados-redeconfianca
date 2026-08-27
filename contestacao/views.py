@@ -631,8 +631,13 @@ def _row_to_exclusion_fields(row, cols):
 
     Retorna None quando a linha não tem vendedor (linha vazia).
     """
-    vendedor_val = str(row.get(cols['vendedor'], '')).strip()
-    if not vendedor_val or vendedor_val == 'nan':
+    bruto = row.get(cols['vendedor'], '')
+    # `str(None)` vira "None" e `str(NaN)` vira "nan": sem descartar esses, uma
+    # célula vazia da planilha viraria um registro com vendedor chamado "None".
+    if bruto is None or pd.isna(bruto):
+        return None
+    vendedor_val = str(bruto).strip()
+    if not vendedor_val or vendedor_val.lower() in ('nan', 'none', 'nat'):
         return None
 
     receita_val = row.get(cols['receita'], 0)
@@ -2818,16 +2823,26 @@ def sync_valores(request):
         messages.error(request, f'Colunas obrigatórias não encontradas na planilha: {nomes}.')
         return redirect('contestacao:valores_list')
 
-    lote = ExclusionSyncBatch.objects.create(
-        created_by=request.user, record_type=TipoBase.PAGAMENTO)
-
-    registros = []
+    # Monta as linhas ANTES de criar o lote: um lote vazio viraria "o lote
+    # atual" e a tela apareceria sem venda nenhuma, mesmo com a base anterior
+    # inteira no banco. Quem estava contestando veria as vendas sumirem.
+    campos_das_linhas = []
     for _, row in df.iterrows():
         campos = _row_to_pagamento_fields(row, cols)
-        if campos is None:
-            continue
-        registros.append(ExclusionRecord(sync_batch=lote, **campos))
+        if campos is not None:
+            campos_das_linhas.append(campos)
 
+    if not campos_das_linhas:
+        anterior = _get_latest_sync_batch(TipoBase.PAGAMENTO)
+        messages.error(request, (
+            'A planilha foi lida, mas não trouxe nenhuma venda — nada foi alterado. '
+            + (f'A base de {anterior.created_at:%d/%m/%Y %H:%M} continua no ar.'
+               if anterior else 'Confira se a aba e as colunas estão como o esperado.')))
+        return redirect('contestacao:valores_list')
+
+    lote = ExclusionSyncBatch.objects.create(
+        created_by=request.user, record_type=TipoBase.PAGAMENTO)
+    registros = [ExclusionRecord(sync_batch=lote, **campos) for campos in campos_das_linhas]
     ExclusionRecord.objects.bulk_create(registros, batch_size=500)
     lote.record_count = len(registros)
     lote.save(update_fields=['record_count'])

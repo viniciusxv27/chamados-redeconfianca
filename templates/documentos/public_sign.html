@@ -119,9 +119,11 @@ só criaria confusão (e não haveria sessão nenhuma para carregar).
             </button>
           </div>
 
-          {# O POST é anônimo, mas continua protegido: sem o token o Django
-             recusa, e desligar a proteção justo num endpoint de assinatura
-             seria a última coisa a fazer. #}
+          {% comment %}
+          O POST é anônimo, mas continua protegido: sem o token o Django recusa,
+          e desligar a proteção justo num endpoint de assinatura seria a última
+          coisa a fazer.
+          {% endcomment %}
           <form id="assCsrf" class="hidden">{% csrf_token %}</form>
 
           <p id="assErro" class="text-sm text-red-600 hidden"></p>

@@ -41,7 +41,19 @@
             {% endif %}
         </p>
 
-        <form method="post" class="space-y-4">
+        <div id="impRascunhoAviso" class="hidden mb-3 flex items-center justify-between gap-3 rounded-lg bg-amber-50 border border-amber-200 px-3.5 py-2.5">
+            <p class="text-sm text-amber-900">
+                <i class="fas fa-rotate-left mr-1.5"></i>
+                <strong>Rascunho recuperado</strong> — o que você tinha digitado
+                <span id="impRascunhoQuando" class="text-amber-700"></span> voltou para o formulário.
+            </p>
+            <button type="button" id="impRascunhoDescartar"
+                    class="text-xs text-amber-800 hover:text-red-600 underline flex-shrink-0">
+                começar do zero
+            </button>
+        </div>
+
+        <form method="post" class="space-y-4" id="impMetaForm">
             {% csrf_token %}
 
             {% if sou_gestor %}
@@ -142,11 +154,14 @@
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Prazo *</label>
-                    <input type="date" name="prazo" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    <input type="date" name="prazo" required min="{{ hoje|date:'Y-m-d' }}"
+                           class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    <p class="text-xs text-gray-400 mt-1">A partir de hoje ({{ hoje|date:'d/m/Y' }}).</p>
                 </div>
             </div>
 
-            <div class="flex justify-end gap-2 pt-2">
+            <div class="flex items-center justify-end gap-2 pt-2">
+                <span id="impRascunhoStatus" class="text-xs text-gray-400 mr-auto"></span>
                 <a href="{% url 'impulso:metas_kanban' %}" class="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 text-sm hover:bg-gray-200">Cancelar</a>
                 <button type="submit" class="px-4 py-2 rounded-lg bg-orange-600 text-white text-sm hover:bg-orange-700">
                     {% if sou_gestor %}Criar meta{% else %}Enviar solicitação{% endif %}
@@ -232,6 +247,146 @@
 
     opcoes.forEach(function (o) { o.addEventListener('change', pintar); });
     pintar();
+})();
+</script>
+
+
+<script>
+(function () {
+    const form = document.getElementById('impMetaForm');
+    if (!form) return;
+
+    // Rascunho por usuário: duas contas na mesma máquina não podem herdar o
+    // texto uma da outra.
+    const CHAVE = 'impulsoMetaRascunho:{{ request.user.id }}';
+    const VALIDADE_HORAS = 48;
+
+    const status = document.getElementById('impRascunhoStatus');
+    const aviso = document.getElementById('impRascunhoAviso');
+    const quando = document.getElementById('impRascunhoQuando');
+    let enviando = false;
+
+    function campos() {
+        // Só o que a pessoa digitou. Fora: o token CSRF (muda a cada sessão e
+        // guardá-lo não ajuda em nada).
+        return [...form.elements].filter(function (el) {
+            return el.name && el.name !== 'csrfmiddlewaretoken'
+                && ['INPUT', 'SELECT', 'TEXTAREA'].includes(el.tagName);
+        });
+    }
+
+    function ler() {
+        const dados = { itens: [], campos: {} };
+        campos().forEach(function (el) {
+            if (el.name === 'itens') { dados.itens.push(el.value); return; }
+            if (el.type === 'radio') { if (el.checked) dados.campos[el.name] = el.value; return; }
+            if (el.type === 'checkbox') { dados.campos[el.name] = el.checked; return; }
+            dados.campos[el.name] = el.value;
+        });
+        return dados;
+    }
+
+    function vazio(dados) {
+        const algumCampo = Object.entries(dados.campos).some(function ([nome, v]) {
+            // O gestor e a recorrência já vêm preenchidos; sozinhos não são rascunho.
+            if (nome === 'gestor' || nome === 'recorrencia' || nome === 'precisa_aprovacao') return false;
+            return typeof v === 'string' ? v.trim() !== '' : v === true;
+        });
+        return !algumCampo && !dados.itens.some(function (t) { return t.trim() !== ''; });
+    }
+
+    function guardar() {
+        if (enviando) return;
+        const dados = ler();
+        try {
+            if (vazio(dados)) { localStorage.removeItem(CHAVE); mostrar(''); return; }
+            localStorage.setItem(CHAVE, JSON.stringify({ em: Date.now(), dados: dados }));
+            mostrar('rascunho salvo');
+        } catch (e) { /* navegador sem storage ou cota cheia: segue sem rascunho */ }
+    }
+
+    function mostrar(txt) {
+        if (!status) return;
+        status.textContent = txt;
+        if (txt) { clearTimeout(mostrar._t); mostrar._t = setTimeout(function () { status.textContent = ''; }, 2500); }
+    }
+
+    function botaoAdicionarItem() {
+        const b = document.getElementById('impAddItem');
+        if (b) b.click();
+    }
+
+    function restaurar() {
+        let bruto;
+        try { bruto = localStorage.getItem(CHAVE); } catch (e) { return; }
+        if (!bruto) return;
+
+        let guardadoObj;
+        try { guardadoObj = JSON.parse(bruto); } catch (e) { localStorage.removeItem(CHAVE); return; }
+
+        // Rascunho velho é mais atrapalho que ajuda: a pessoa não lembra dele.
+        const horas = (Date.now() - (guardadoObj.em || 0)) / 3600000;
+        if (!guardadoObj.dados || horas > VALIDADE_HORAS) { localStorage.removeItem(CHAVE); return; }
+
+        const d = guardadoObj.dados;
+        const itens = d.itens || [];
+        // Cria os campos de passo que faltarem antes de preencher.
+        while (form.querySelectorAll('[name="itens"]').length < itens.length) botaoAdicionarItem();
+
+        let n = 0;
+        campos().forEach(function (el) {
+            if (el.name === 'itens') { el.value = itens[n++] || ''; return; }
+            if (!(el.name in d.campos)) return;
+            if (el.type === 'radio') { el.checked = (el.value === d.campos[el.name]); return; }
+            if (el.type === 'checkbox') { el.checked = !!d.campos[el.name]; return; }
+            el.value = d.campos[el.name];
+        });
+
+        // Os campos mudaram por script; quem depende de 'change' precisa saber.
+        form.querySelectorAll('input[name="precisa_aprovacao"], #impRecorrencia')
+            .forEach(function (el) { el.dispatchEvent(new Event('change', { bubbles: true })); });
+
+        if (aviso) {
+            if (quando) {
+                const min = Math.round(horas * 60);
+                quando.textContent = min < 60
+                    ? `há ${Math.max(min, 1)} min`
+                    : `há ${Math.round(horas)}h`;
+            }
+            aviso.classList.remove('hidden');
+        }
+    }
+
+    const descartar = document.getElementById('impRascunhoDescartar');
+    if (descartar) {
+        descartar.addEventListener('click', function () {
+            try { localStorage.removeItem(CHAVE); } catch (e) {}
+            form.reset();
+            if (aviso) aviso.classList.add('hidden');
+            form.querySelectorAll('input[name="precisa_aprovacao"], #impRecorrencia')
+                .forEach(function (el) { el.dispatchEvent(new Event('change', { bubbles: true })); });
+        });
+    }
+
+    // Salva enquanto digita (com folga, para não gravar a cada tecla) e ao sair.
+    let relogio = null;
+    form.addEventListener('input', function () {
+        clearTimeout(relogio);
+        relogio = setTimeout(guardar, 700);
+    });
+    form.addEventListener('change', guardar);
+    window.addEventListener('pagehide', guardar);
+    document.addEventListener('visibilitychange', function () {
+        if (document.hidden) guardar();
+    });
+
+    // Enviou: o rascunho cumpriu o papel e sai de cena.
+    form.addEventListener('submit', function () {
+        enviando = true;
+        try { localStorage.removeItem(CHAVE); } catch (e) {}
+    });
+
+    restaurar();
 })();
 </script>
 

@@ -273,6 +273,14 @@ def meta_create(request):
             messages.error(request, f'Preencha {campo}.')
             return redirect('impulso:meta_create')
 
+        # O `min` do campo de data é só sugestão do navegador — um POST direto
+        # passa por cima dele. Meta que nasce vencida entraria no Kanban já na
+        # coluna de atrasadas, sem ninguém ter como cumpri-la.
+        hoje = timezone.localdate()
+        if prazo < hoje:
+            messages.error(request, 'O prazo não pode ser anterior a hoje.')
+            return redirect('impulso:meta_create')
+
         # Gestor criando: aprovada. Colaborador: depende do que ele escolheu.
         ja_aprovada = sou_gestor or not precisa_aprovacao
         meta = Meta.objects.create(
@@ -330,6 +338,7 @@ def meta_create(request):
         'gestores_do_setor': gestores_do_setor,
         'setor': getattr(request.user, 'sector', None),
         'recorrencias': Meta.Recorrencia.choices,
+        'hoje': timezone.localdate(),
         'active_tab': 'confiar',
     }
     return render(request, 'impulso/meta_form.html', context)
@@ -1872,3 +1881,52 @@ def meta_solicitacao_cancelar(request, meta_id):
 
     messages.success(request, f'Solicitação "{titulo}" cancelada.')
     return redirect('impulso:meta_solicitacoes')
+
+
+@require_POST
+@impulso_member_required
+def meta_itens_reordenar(request, meta_id):
+    """Grava a nova ordem do to-do.
+
+    Recebe a lista completa de ids na ordem desejada, em vez de "sobe um" /
+    "desce um": arrastar já produz a lista pronta, e gravar tudo de uma vez
+    evita ficar com metade da ordem aplicada se algo falhar no meio.
+
+    Ids de outra meta são descartados em silêncio — não é erro do usuário, é
+    tentativa de mexer no que não é dele.
+    """
+    meta = get_object_or_404(Meta, id=meta_id)
+
+    dono = (request.user.is_superuser
+            or meta.gestor_id == request.user.id
+            or meta.colaborador_id == request.user.id
+            or meta.participantes.filter(id=request.user.id).exists())
+    if not dono:
+        return JsonResponse({'ok': False, 'erro': 'Você não pode reordenar este to-do.'},
+                            status=403)
+
+    try:
+        pedidos = [int(x) for x in request.POST.getlist('ordem')]
+    except (TypeError, ValueError):
+        return JsonResponse({'ok': False, 'erro': 'Ordem inválida.'}, status=400)
+
+    itens = {i.id: i for i in MetaItem.objects.filter(meta=meta)}
+    if not itens:
+        return JsonResponse({'ok': True, 'itens': 0})
+
+    # A ordem final é a pedida, seguida do que não veio na lista — assim nenhum
+    # passo desaparece se a tela mandar uma lista incompleta.
+    vistos, sequencia = set(), []
+    for item_id in pedidos:
+        if item_id in itens and item_id not in vistos:
+            vistos.add(item_id)
+            sequencia.append(itens[item_id])
+    sequencia.extend(i for i in
+                     sorted(itens.values(), key=lambda x: (x.ordem, x.id))
+                     if i.id not in vistos)
+
+    for posicao, item in enumerate(sequencia):
+        item.ordem = posicao
+    MetaItem.objects.bulk_update(sequencia, ['ordem'])
+
+    return JsonResponse({'ok': True, 'itens': len(sequencia)})
