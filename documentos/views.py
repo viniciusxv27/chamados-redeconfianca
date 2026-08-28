@@ -538,6 +538,47 @@ def admin_remind_signer(request, pk):
 
 @login_required
 @require_POST
+def admin_document_edit(request, pk):
+    """Edita um documento: nome (título) e obrigatoriedade de assinatura (SUPERADMIN).
+
+    Mantém o rastro de quem mexeu na obrigatoriedade — os mesmos campos usados
+    pelo toggle — para a tela continuar mostrando "alterado por … em …".
+    """
+    if not _require_admin(request):
+        return redirect('documentos:my_documents')
+
+    documento = get_object_or_404(Document, pk=pk)
+
+    novo_titulo = (request.POST.get('title') or '').strip()
+    nova_obrigatoriedade = request.POST.get('assinatura_obrigatoria') == 'on'
+
+    if not novo_titulo:
+        messages.error(request, 'Informe o nome do documento.')
+        return redirect('documentos:admin_document_detail', pk=documento.pk)
+
+    campos = []
+    if novo_titulo != documento.title:
+        documento.title = novo_titulo
+        campos.append('title')
+
+    if nova_obrigatoriedade != documento.assinatura_obrigatoria:
+        documento.assinatura_obrigatoria = nova_obrigatoriedade
+        documento.obrigatoriedade_alterada_em = timezone.now()
+        documento.obrigatoriedade_alterada_por = request.user
+        campos += ['assinatura_obrigatoria', 'obrigatoriedade_alterada_em',
+                   'obrigatoriedade_alterada_por']
+
+    if not campos:
+        messages.info(request, 'Nada foi alterado.')
+        return redirect('documentos:admin_document_detail', pk=documento.pk)
+
+    documento.save(update_fields=campos)
+    messages.success(request, f'Documento "{documento.title}" atualizado.')
+    return redirect('documentos:admin_document_detail', pk=documento.pk)
+
+
+@login_required
+@require_POST
 def admin_toggle_obrigatoriedade(request, pk):
     """Liga/desliga a obrigatoriedade de assinatura do documento.
 

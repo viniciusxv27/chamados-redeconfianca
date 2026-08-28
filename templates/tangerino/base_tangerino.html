@@ -58,6 +58,7 @@
     </div>
 
     <nav class="flex gap-1 mt-4 tg-scroll-x -mb-px">
+        {% if not esconder_abas_ponto %}
         <a href="{% url 'tangerino:meu_ponto' %}"
            class="tg-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'ponto' %}tg-tab-active{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
             <i class="fas fa-fingerprint mr-1.5"></i>Meu ponto
@@ -69,6 +70,11 @@
         <a href="{% url 'tangerino:folhas_sincronizadas' %}"
            class="tg-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'folhas' %}tg-tab-active{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
             <i class="fas fa-file-lines mr-1.5"></i>Folha sincronizada
+        </a>
+        {% endif %}
+        <a href="{% url 'tangerino:escala' %}"
+           class="tg-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'escala' %}tg-tab-active{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
+            <i class="fas fa-calendar-week mr-1.5"></i>Escala
         </a>
         {% if e_gestor %}
         <span class="w-px bg-gray-200 mx-1 my-2"></span>

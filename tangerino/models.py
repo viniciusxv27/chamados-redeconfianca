@@ -493,3 +493,108 @@ def nao_bate_ponto(user):
         return user.communication_groups.filter(pk=GRUPO_SEM_PONTO_ID).exists()
     except Exception:
         return False
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Escala (montada no portal pelos gerentes)
+# ─────────────────────────────────────────────────────────────────────────────
+# Diferente da jornada CONTRATADA (JornadaTrabalho, que vem do Tangerino), a
+# escala é o planejamento SEMANAL que o gerente da loja monta para a equipe:
+# em cada dia, entrada e saída — ou folga. Nada disto vai para o Tangerino; é o
+# quadro de horários da loja, visível para o colaborador e para a gestão.
+
+class EscalaConfig(models.Model):
+    """Registro único (id=1): quem, além do SUPERADMIN, gere todas as escalas.
+
+    O SUPERADMIN indica aqui os "gestores globais" — pessoas que enxergam e
+    editam a escala de qualquer setor, sem serem gerentes de uma loja.
+    """
+    gestores = models.ManyToManyField(
+        settings.AUTH_USER_MODEL, blank=True, related_name='escala_gestor_de',
+        verbose_name='Gestores globais de escala',
+        help_text='Além do SUPERADMIN, enxergam e editam a escala de todos os setores.')
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Configuração de Escala'
+        verbose_name_plural = 'Configuração de Escala'
+
+    def __str__(self):
+        return 'Configuração de Escala'
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+
+class Escala(models.Model):
+    """A escala de UMA pessoa em UMA semana (segunda a domingo).
+
+    A semana é identificada pela segunda-feira (``semana_inicio``), o que evita
+    a ambiguidade de "semana do mês" (começa no dia 1? na primeira segunda?): a
+    tela mostra o rótulo amigável, mas o banco guarda a data, que é exata.
+    """
+    colaborador = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name='escalas', verbose_name='Colaborador')
+    semana_inicio = models.DateField(
+        db_index=True, verbose_name='Início da semana (segunda-feira)')
+
+    criado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='escalas_criadas', verbose_name='Criada por')
+    atualizado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='escalas_atualizadas', verbose_name='Atualizada por')
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Escala'
+        verbose_name_plural = 'Escalas'
+        ordering = ['-semana_inicio', 'colaborador__first_name']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['colaborador', 'semana_inicio'],
+                name='escala_unica_por_pessoa_semana'),
+        ]
+
+    def __str__(self):
+        return f"{self.colaborador} — semana de {self.semana_inicio:%d/%m/%Y}"
+
+
+class EscalaDia(models.Model):
+    """Um dia da escala: entrada e saída, ou folga."""
+    escala = models.ForeignKey(
+        Escala, on_delete=models.CASCADE, related_name='dias', verbose_name='Escala')
+    data = models.DateField(verbose_name='Dia')
+    entrada = models.TimeField(null=True, blank=True, verbose_name='Entrada')
+    saida = models.TimeField(null=True, blank=True, verbose_name='Saída')
+    folga = models.BooleanField(default=False, verbose_name='Folga')
+    observacao = models.CharField(
+        max_length=120, blank=True, default='', verbose_name='Observação')
+
+    class Meta:
+        verbose_name = 'Dia da escala'
+        verbose_name_plural = 'Dias da escala'
+        ordering = ['data']
+        constraints = [
+            models.UniqueConstraint(fields=['escala', 'data'], name='escala_dia_unico'),
+        ]
+
+    def __str__(self):
+        if self.folga:
+            return f"{self.data:%d/%m}: folga"
+        if self.entrada and self.saida:
+            return f"{self.data:%d/%m}: {self.entrada:%H:%M}–{self.saida:%H:%M}"
+        return f"{self.data:%d/%m}"
+
+    @property
+    def preenchido(self):
+        """Tem algo que valha a pena guardar (folga ou algum horário)."""
+        return bool(self.folga or self.entrada or self.saida or self.observacao)

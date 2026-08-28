@@ -1,8 +1,8 @@
 from django.contrib import admin
 
-from .models import (ConfiguracaoTangerino, FeriasLancamento, JornadaTrabalho,
-                     MarcacaoPonto, RegistroPontoPortal, SaldoHoras,
-                     SincronizacaoTangerino)
+from .models import (ConfiguracaoTangerino, Escala, EscalaConfig, EscalaDia,
+                     FeriasLancamento, JornadaTrabalho, MarcacaoPonto,
+                     RegistroPontoPortal, SaldoHoras, SincronizacaoTangerino)
 
 
 @admin.register(ConfiguracaoTangerino)
@@ -153,3 +153,31 @@ class JornadaTrabalhoAdmin(admin.ModelAdmin):
     @admin.display(description='Semana')
     def semana(self, obj):
         return obj.resumo_semana
+
+
+class EscalaDiaInline(admin.TabularInline):
+    model = EscalaDia
+    extra = 0
+
+
+@admin.register(Escala)
+class EscalaAdmin(admin.ModelAdmin):
+    """Escala semanal montada no portal (não vem do Tangerino)."""
+
+    list_display = ('colaborador', 'semana_inicio', 'criado_por', 'atualizado_em')
+    list_filter = ('semana_inicio',)
+    search_fields = ('colaborador__first_name', 'colaborador__last_name', 'colaborador__email')
+    date_hierarchy = 'semana_inicio'
+    raw_id_fields = ('colaborador', 'criado_por', 'atualizado_por')
+    inlines = [EscalaDiaInline]
+
+
+@admin.register(EscalaConfig)
+class EscalaConfigAdmin(admin.ModelAdmin):
+    filter_horizontal = ('gestores',)
+
+    def has_add_permission(self, request):
+        return not EscalaConfig.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False

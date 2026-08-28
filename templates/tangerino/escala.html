@@ -1,0 +1,241 @@
+{% extends 'tangerino/base_tangerino.html' %}
+
+{% block tg_titulo %}Escala{% endblock %}
+{% block tg_cabecalho %}Escala{% endblock %}
+{% block tg_subtitulo %}Quadro semanal de horários da equipe{% endblock %}
+
+{% block extra_css %}
+{{ block.super }}
+<style>
+    .esc-grid th, .esc-grid td { border: 1px solid #EDEDF0; }
+    .esc-grid thead th { background: #F9FAFB; }
+    .esc-nome { position: sticky; left: 0; background: #fff; z-index: 1; }
+    .esc-grid thead .esc-nome { background: #F9FAFB; z-index: 2; }
+    .esc-time { width: 100%; border: 1px solid #E5E7EB; border-radius: .375rem;
+                padding: .2rem .35rem; font-size: .78rem; font-variant-numeric: tabular-nums; }
+    .esc-hoje { box-shadow: inset 0 2px 0 #0891B2; }
+</style>
+{% endblock %}
+
+{% block tg_conteudo %}
+
+{# ── Seletor de semana ───────────────────────────────────────────────── #}
+<div class="tg-card p-3 sm:p-4 mb-4">
+    <form method="get" class="flex flex-wrap items-end gap-2 sm:gap-3">
+        <a href="?inicio={{ semana_anterior }}{% if setor_escolhido %}&setor={{ setor_escolhido }}{% endif %}"
+           class="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50" title="Semana anterior">
+            <i class="fas fa-chevron-left"></i>
+        </a>
+
+        <div>
+            <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Semana — {{ mes_nome }} {{ ano }}</label>
+            <select name="inicio" onchange="this.form.submit()"
+                    class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-cyan-500 focus:border-cyan-500">
+                {% for s in semanas %}
+                <option value="{{ s.inicio|date:'Y-m-d' }}" {% if s.inicio == semana_inicio %}selected{% endif %}>
+                    Semana {{ s.numero }} · {{ s.inicio|date:'d/m' }} a {{ s.fim|date:'d/m' }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <a href="?inicio={{ semana_proxima }}{% if setor_escolhido %}&setor={{ setor_escolhido }}{% endif %}"
+           class="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50" title="Próxima semana">
+            <i class="fas fa-chevron-right"></i>
+        </a>
+
+        {% if pode_gerenciar and setores and e_global or setores|length > 1 %}
+        <div>
+            <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Setor</label>
+            <select name="setor" onchange="this.form.submit()"
+                    class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-cyan-500 focus:border-cyan-500">
+                <option value="">{% if e_global %}Todos os setores{% else %}Todos os meus setores{% endif %}</option>
+                {% for s in setores %}
+                <option value="{{ s.id }}" {% if setor_escolhido == s.id|stringformat:'s' %}selected{% endif %}>{{ s.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        {% endif %}
+
+        <div class="ml-auto text-xs text-gray-500 self-center">
+            {{ semana_inicio|date:'d/m/Y' }} — {{ semana_fim|date:'d/m/Y' }}
+        </div>
+    </form>
+</div>
+
+{% if pode_gerenciar %}
+{# ── Grade editável (gestores) ───────────────────────────────────────── #}
+<form method="post" action="{% url 'tangerino:escala_salvar' %}">
+    {% csrf_token %}
+    <input type="hidden" name="inicio" value="{{ semana_inicio|date:'Y-m-d' }}">
+    <input type="hidden" name="setor" value="{{ setor_escolhido }}">
+
+    <div class="tg-card overflow-hidden">
+        <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap">
+            <h3 class="text-sm font-semibold text-gray-700">
+                <i class="fas fa-users mr-1.5 text-cyan-600"></i>
+                {{ total_colaboradores }} colaborador{{ total_colaboradores|pluralize:",es" }}
+                {% if e_global %}<span class="text-gray-400 font-normal">— visão de gestor global</span>{% endif %}
+            </h3>
+            <p class="text-xs text-gray-400">Marque <strong>Folga</strong> ou preencha entrada e saída de cada dia.</p>
+        </div>
+
+        <div class="tg-scroll-x">
+            <table class="esc-grid min-w-full border-collapse text-sm">
+                <thead>
+                    <tr>
+                        <th class="esc-nome text-left px-3 py-2 text-xs font-semibold text-gray-500 min-w-[180px]">Colaborador</th>
+                        {% for d, nome in dias %}
+                        <th class="px-2 py-2 text-center text-xs font-semibold text-gray-500 min-w-[120px] {% if d == hoje %}esc-hoje{% endif %}">
+                            {{ nome }}<span class="block text-[11px] font-normal text-gray-400">{{ d|date:'d/m' }}</span>
+                        </th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for linha in grade %}
+                    <tr>
+                        <td class="esc-nome px-3 py-2 align-top">
+                            <input type="hidden" name="colaborador" value="{{ linha.colaborador.id }}">
+                            <p class="font-medium text-gray-800 leading-tight">{{ linha.colaborador.full_name }}</p>
+                            <p class="text-[11px] text-gray-400">{{ linha.colaborador.sector.name|default:"Sem setor" }}</p>
+                        </td>
+                        {% for cel in linha.celulas %}
+                        <td class="px-2 py-2 align-top {% if cel.data == hoje %}esc-hoje{% endif %}">
+                            {% with iso=cel.data|date:'Y-m-d' cid=linha.colaborador.id %}
+                            <label class="flex items-center gap-1 text-[11px] text-gray-500 mb-1 cursor-pointer">
+                                <input type="checkbox" name="folga_{{ cid }}_{{ iso }}" {% if cel.folga %}checked{% endif %}
+                                       class="esc-folga rounded text-cyan-600 focus:ring-cyan-500" onchange="escToggleFolga(this)">
+                                Folga
+                            </label>
+                            <div class="esc-horarios space-y-1 {% if cel.folga %}hidden{% endif %}">
+                                <input type="time" name="entrada_{{ cid }}_{{ iso }}" value="{{ cel.entrada|time:'H:i' }}"
+                                       class="esc-time" aria-label="Entrada">
+                                <input type="time" name="saida_{{ cid }}_{{ iso }}" value="{{ cel.saida|time:'H:i' }}"
+                                       class="esc-time" aria-label="Saída">
+                            </div>
+                            {% endwith %}
+                        </td>
+                        {% endfor %}
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="px-4 py-10 text-center text-sm text-gray-400">
+                            <i class="fas fa-user-slash text-2xl text-gray-300 mb-2 block"></i>
+                            {% if setor_escolhido %}Nenhum colaborador padrão neste setor.
+                            {% else %}Nenhum colaborador padrão vinculado ao seu setor para escalar.{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {% if grade %}
+    <div class="mt-3 flex items-center justify-end gap-3">
+        <span class="text-xs text-gray-400">A escala fica visível para cada colaborador.</span>
+        <button type="submit" class="inline-flex items-center px-4 py-2 text-sm font-medium bg-cyan-600 text-white rounded-lg hover:bg-cyan-700">
+            <i class="fas fa-check mr-2"></i> Salvar escala
+        </button>
+    </div>
+    {% endif %}
+</form>
+
+{% else %}
+{# ── Leitura da própria escala (colaborador) ─────────────────────────── #}
+<div class="tg-card overflow-hidden">
+    <div class="px-4 py-3 border-b border-gray-100">
+        <h3 class="text-sm font-semibold text-gray-700"><i class="fas fa-calendar-week mr-1.5 text-cyan-600"></i>Minha escala da semana</h3>
+    </div>
+    {% if not tem_escala %}
+    <div class="px-4 py-8 text-center text-sm text-gray-400">
+        <i class="fas fa-calendar-xmark text-2xl text-gray-300 mb-2 block"></i>
+        A escala desta semana ainda não foi publicada pela sua gestão.
+    </div>
+    {% else %}
+    <div class="divide-y">
+        {% for item in minha_escala %}
+        <div class="flex items-center justify-between px-4 py-3 {% if item.data == hoje %}bg-cyan-50/60{% endif %}">
+            <div>
+                <span class="text-sm font-medium text-gray-800">{{ item.nome }}</span>
+                <span class="text-xs text-gray-400 ml-1">{{ item.data|date:'d/m' }}</span>
+                {% if item.data == hoje %}<span class="ml-2 text-[10px] uppercase font-semibold text-cyan-700 bg-cyan-100 px-1.5 py-0.5 rounded">hoje</span>{% endif %}
+            </div>
+            <div class="text-sm tabular">
+                {% if item.dia and item.dia.folga %}
+                    <span class="text-gray-400"><i class="fas fa-mug-hot mr-1"></i>Folga</span>
+                {% elif item.dia and item.dia.entrada %}
+                    <span class="font-medium text-gray-800">{{ item.dia.entrada|time:'H:i' }} <span class="text-gray-300">–</span> {{ item.dia.saida|time:'H:i'|default:'—' }}</span>
+                    {% if item.dia.observacao %}<span class="block text-[11px] text-gray-400 text-right">{{ item.dia.observacao }}</span>{% endif %}
+                {% else %}
+                    <span class="text-gray-300">—</span>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+{% if e_superadmin %}
+{# ── Gestores globais de escala (só SUPERADMIN) ──────────────────────── #}
+<div class="tg-card mt-4">
+    <button type="button" onclick="document.getElementById('esc-gestores').classList.toggle('hidden')"
+            class="w-full flex items-center justify-between px-4 py-3 text-left">
+        <span class="text-sm font-semibold text-gray-700">
+            <i class="fas fa-user-shield mr-1.5 text-cyan-600"></i>Gestores de escala
+            <span class="text-gray-400 font-normal">— quem enxerga e edita todos os setores</span>
+        </span>
+        <i class="fas fa-chevron-down text-gray-400"></i>
+    </button>
+    <div id="esc-gestores" class="hidden px-4 pb-4 border-t border-gray-100">
+        <p class="text-xs text-gray-500 my-3">
+            Além de você (SUPERADMIN), estas pessoas podem montar a escala de qualquer setor.
+            {% if gestores_atuais %}
+            Atuais: {% for g in gestores_atuais %}<strong>{{ g.full_name }}</strong>{% if not forloop.last %}, {% endif %}{% endfor %}.
+            {% else %}Nenhum designado ainda.{% endif %}
+        </p>
+        <form method="post" action="{% url 'tangerino:escala_gestores' %}">
+            {% csrf_token %}
+            <input type="text" id="esc-gestor-busca" placeholder="Buscar colaborador..."
+                   class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm mb-2">
+            <div class="border border-gray-200 rounded-md bg-white max-h-56 overflow-y-auto divide-y mb-3">
+                {% for u in usuarios_para_gestor %}
+                <label class="esc-gestor-row flex items-center gap-3 px-3 py-2 hover:bg-gray-50 cursor-pointer"
+                       data-name="{{ u.full_name|lower }} {{ u.email|lower }}">
+                    <input type="checkbox" name="gestores" value="{{ u.id }}" {% if u.id in gestores_ids %}checked{% endif %}
+                           class="rounded text-cyan-600 focus:ring-cyan-500">
+                    <span class="text-sm text-gray-800">{{ u.full_name }}</span>
+                    <span class="text-xs text-gray-400">{{ u.email }}</span>
+                </label>
+                {% endfor %}
+            </div>
+            <button type="submit" class="px-4 py-2 text-sm font-medium bg-cyan-600 text-white rounded-md hover:bg-cyan-700">
+                Salvar gestores
+            </button>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+<script>
+function escToggleFolga(cb) {
+    const cell = cb.closest('td');
+    const horarios = cell.querySelector('.esc-horarios');
+    if (!horarios) return;
+    horarios.classList.toggle('hidden', cb.checked);
+    if (cb.checked) horarios.querySelectorAll('input[type=time]').forEach(i => i.value = '');
+}
+(function () {
+    const busca = document.getElementById('esc-gestor-busca');
+    if (!busca) return;
+    const linhas = Array.from(document.querySelectorAll('.esc-gestor-row'));
+    busca.addEventListener('input', function () {
+        const q = this.value.trim().toLowerCase();
+        linhas.forEach(r => { r.style.display = r.dataset.name.includes(q) ? '' : 'none'; });
+    });
+})();
+</script>
+{% endblock %}

@@ -24,6 +24,10 @@
                    class="inline-flex items-center px-3 py-2 text-sm bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">
                     <i class="fas fa-file-pdf text-red-500 mr-2"></i> PDF original
                 </a>
+                <button type="button" onclick="document.getElementById('edit-doc').classList.toggle('hidden')"
+                        class="inline-flex items-center px-3 py-2 text-sm bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">
+                    <i class="fas fa-pen text-gray-500 mr-2"></i> Editar
+                </button>
                 <form method="post" action="{% url 'documentos:admin_toggle_obrigatoriedade' document.pk %}"
                       onsubmit="return confirm({% if document.assinatura_obrigatoria %}'Tirar a obrigatoriedade? Quem ainda não assinou deixa de receber o popup de pendência.'{% else %}'Voltar a exigir assinatura? Quem não assinou volta a receber o popup.'{% endif %});">
                     {% csrf_token %}
@@ -43,6 +47,36 @@
                 </form>
             </div>
         </div>
+
+        <!-- Editar: nome e obrigatoriedade -->
+        <div id="edit-doc" class="hidden px-5 py-4 bg-gray-50 border-b">
+            <form method="post" action="{% url 'documentos:admin_document_edit' document.pk %}" class="space-y-3">
+                {% csrf_token %}
+                <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Nome do documento</label>
+                    <input type="text" name="title" value="{{ document.title }}" required maxlength="200"
+                           class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-green-500 focus:border-green-500">
+                </div>
+                <label class="flex items-start gap-2 text-sm text-gray-700 cursor-pointer">
+                    <input type="checkbox" name="assinatura_obrigatoria" {% if document.assinatura_obrigatoria %}checked{% endif %}
+                           class="mt-0.5 rounded text-green-600 focus:ring-green-500">
+                    <span>
+                        Assinatura obrigatória
+                        <span class="block text-xs text-gray-400">Ligada, quem ainda não assinou recebe o popup de pendência a cada acesso.</span>
+                    </span>
+                </label>
+                <div class="flex gap-2 pt-1">
+                    <button type="submit" class="px-4 py-2 text-sm font-medium bg-green-600 text-white rounded-md hover:bg-green-700">
+                        <i class="fas fa-check mr-1.5"></i> Salvar
+                    </button>
+                    <button type="button" onclick="document.getElementById('edit-doc').classList.add('hidden')"
+                            class="px-4 py-2 text-sm bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">
+                        Cancelar
+                    </button>
+                </div>
+            </form>
+        </div>
+
         {% if document.description %}
         <div class="px-5 py-3 bg-gray-50 text-sm text-gray-600">{{ document.description|linebreaksbr }}</div>
         {% endif %}

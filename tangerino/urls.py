@@ -11,6 +11,11 @@ urlpatterns = [
     path('ponto/equipe/', views.ponto_equipe, name='ponto_equipe'),
     path('ponto/folhas/', views.folhas_sincronizadas, name='folhas_sincronizadas'),
 
+    # Escala (quadro semanal montado no portal)
+    path('ponto/escala/', views.escala, name='escala'),
+    path('ponto/escala/salvar/', views.escala_salvar, name='escala_salvar'),
+    path('ponto/escala/gestores/', views.escala_gestores, name='escala_gestores'),
+
     # Férias
     path('ferias/', views.minhas_ferias, name='minhas_ferias'),
     path('ferias/equipe/', views.ferias_equipe, name='ferias_equipe'),

@@ -9,10 +9,12 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_time
 from django.views.decorators.http import require_POST
 
+from . import escala as escala_svc
 from . import ferias as ferias_svc
 from . import jornada as jornada_svc
 from . import ponto as ponto_svc
@@ -21,9 +23,9 @@ from .middleware import limpar_decisao
 from .client import (TangerinoError, de_millis, integracao_ativa, listar_funcionarios,
                      listar_marcacoes, invalidar_cache_marcacoes, justificativas_edicao,
                      registrar_ponto, registrar_ponto_atrasado, testar_conexao)
-from .models import (ConfiguracaoTangerino, FeriasLancamento, JornadaTrabalho,
-                     MarcacaoPonto, RegistroPontoPortal, SaldoHoras,
-                     SincronizacaoTangerino)
+from .models import (ConfiguracaoTangerino, Escala, EscalaConfig, EscalaDia,
+                     FeriasLancamento, JornadaTrabalho, MarcacaoPonto,
+                     RegistroPontoPortal, SaldoHoras, SincronizacaoTangerino)
 from .sync import (funcionarios_disponiveis, sincronizar_ferias, sincronizar_jornadas,
                    sincronizar_marcacoes, sincronizar_saldos, sincronizar_vinculos)
 
@@ -528,6 +530,175 @@ def api_bater_ponto(request):
         registro.save()
         logger.warning('Falha ao bater ponto de %s: %s', request.user, exc)
         return JsonResponse({'sucesso': False, 'erro': str(exc)}, status=502)
+
+
+# ─── Escala (quadro semanal montado no portal) ───────────────────────────────
+
+MESES_PT = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+            'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
+DIAS_PT = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
+
+
+def _mapa_escala_dias(colaborador_ids, semana_inicio):
+    """{(colaborador_id, data): EscalaDia} para uma semana, numa consulta só."""
+    if not colaborador_ids:
+        return {}
+    qs = (EscalaDia.objects
+          .filter(escala__colaborador_id__in=colaborador_ids,
+                  escala__semana_inicio=semana_inicio)
+          .select_related('escala'))
+    return {(d.escala.colaborador_id, d.data): d for d in qs}
+
+
+def _montar_grade(colaboradores, dias, mapa):
+    """Uma linha por colaborador; uma célula por dia (entrada/saída/folga)."""
+    grade = []
+    for c in colaboradores:
+        celulas = []
+        for d in dias:
+            ed = mapa.get((c.id, d))
+            celulas.append({
+                'data': d,
+                'entrada': ed.entrada if ed else None,
+                'saida': ed.saida if ed else None,
+                'folga': ed.folga if ed else False,
+            })
+        grade.append({'colaborador': c, 'celulas': celulas})
+    return grade
+
+
+@login_required
+def escala(request):
+    """Aba Escala: gerente monta a da loja; gestor global vê tudo; colaborador vê a sua."""
+    hoje = timezone.localdate()
+    try:
+        base = date.fromisoformat(request.GET['inicio']) if request.GET.get('inicio') else hoje
+    except ValueError:
+        base = hoje
+    semana_inicio = escala_svc.monday_of(base)
+    dias = [semana_inicio + timedelta(days=i) for i in range(7)]
+    ano, mes = escala_svc.mes_de_referencia(semana_inicio)
+
+    pode_gerenciar = escala_svc.pode_gerenciar(request.user)
+    e_superadmin = e_gestor(request.user)
+
+    contexto = {
+        'aba': 'escala',
+        'e_gestor': e_superadmin,
+        # Esconde as abas de ponto/férias de quem não tem o módulo liberado: o
+        # colaborador comum entra aqui só para ver a própria escala.
+        'esconder_abas_ponto': not ConfiguracaoTangerino.get().libera(request.user),
+        'hoje': hoje,
+        'semana_inicio': semana_inicio,
+        'semana_fim': semana_inicio + timedelta(days=6),
+        'dias': list(zip(dias, DIAS_PT)),
+        'semana_anterior': (semana_inicio - timedelta(days=7)).isoformat(),
+        'semana_proxima': (semana_inicio + timedelta(days=7)).isoformat(),
+        'ano': ano, 'mes': mes, 'mes_nome': MESES_PT[mes],
+        'semanas': escala_svc.semanas_do_mes(ano, mes),
+        'pode_gerenciar': pode_gerenciar,
+        'e_global': escala_svc.e_gestor_global(request.user),
+        'e_superadmin': e_superadmin,
+    }
+
+    if pode_gerenciar:
+        setor_id = (request.GET.get('setor') or '').strip()
+        colaboradores = list(escala_svc.colaboradores_geridos(
+            request.user, setor_id=setor_id or None))
+        mapa = _mapa_escala_dias([c.id for c in colaboradores], semana_inicio)
+        contexto['grade'] = _montar_grade(colaboradores, dias, mapa)
+        contexto['total_colaboradores'] = len(colaboradores)
+        contexto['setores'] = escala_svc.setores_para_filtro(request.user)
+        contexto['setor_escolhido'] = setor_id
+    else:
+        obj = (Escala.objects.filter(colaborador=request.user, semana_inicio=semana_inicio)
+               .prefetch_related('dias').first())
+        por_data = {d.data: d for d in obj.dias.all()} if obj else {}
+        contexto['minha_escala'] = [{'data': d, 'nome': DIAS_PT[i], 'dia': por_data.get(d)}
+                                    for i, d in enumerate(dias)]
+        contexto['tem_escala'] = any(por_data.get(d) and por_data[d].preenchido for d in dias)
+
+    if e_superadmin:
+        cfg = EscalaConfig.get()
+        contexto['gestores_atuais'] = cfg.gestores.all()
+        contexto['gestores_ids'] = set(cfg.gestores.values_list('id', flat=True))
+        contexto['usuarios_para_gestor'] = (User.objects.filter(is_active=True)
+                                            .order_by('first_name', 'last_name'))
+
+    return render(request, 'tangerino/escala.html', contexto)
+
+
+@login_required
+@require_POST
+def escala_salvar(request):
+    """Grava a semana inteira de uma vez (grade de colaboradores × dias)."""
+    if not escala_svc.pode_gerenciar(request.user):
+        messages.error(request, 'Você não tem acesso para editar escalas.')
+        return redirect('tangerino:escala')
+
+    try:
+        semana_inicio = escala_svc.monday_of(date.fromisoformat(request.POST['inicio']))
+    except (KeyError, ValueError):
+        messages.error(request, 'Semana inválida.')
+        return redirect('tangerino:escala')
+
+    dias = [semana_inicio + timedelta(days=i) for i in range(7)]
+    # Trava de segurança: só grava quem o gestor de fato pode escalar, mesmo que
+    # o POST traga outros ids.
+    permitidos = {c.id for c in escala_svc.colaboradores_geridos(request.user)}
+    alvos = {int(v) for v in request.POST.getlist('colaborador') if v.isdigit()} & permitidos
+
+    salvos = 0
+    for uid in alvos:
+        planos = []
+        for d in dias:
+            iso = d.isoformat()
+            folga = request.POST.get(f'folga_{uid}_{iso}') == 'on'
+            entrada = parse_time(request.POST.get(f'entrada_{uid}_{iso}') or '')
+            saida = parse_time(request.POST.get(f'saida_{uid}_{iso}') or '')
+            planos.append((d, folga, entrada, saida, bool(folga or entrada or saida)))
+
+        obj = Escala.objects.filter(colaborador_id=uid, semana_inicio=semana_inicio).first()
+        algo = any(p[4] for p in planos)
+        if not obj and not algo:
+            continue
+        if not obj:
+            obj = Escala.objects.create(
+                colaborador_id=uid, semana_inicio=semana_inicio,
+                criado_por=request.user, atualizado_por=request.user)
+        else:
+            obj.atualizado_por = request.user
+            obj.save(update_fields=['atualizado_por', 'atualizado_em'])
+
+        for d, folga, entrada, saida, tem in planos:
+            if tem:
+                EscalaDia.objects.update_or_create(
+                    escala=obj, data=d,
+                    defaults={'entrada': None if folga else entrada,
+                              'saida': None if folga else saida, 'folga': folga})
+            else:
+                EscalaDia.objects.filter(escala=obj, data=d).delete()
+        salvos += 1
+
+    messages.success(request, f'Escala salva para {salvos} colaborador(es).')
+    destino = f"{reverse('tangerino:escala')}?inicio={semana_inicio.isoformat()}"
+    if request.POST.get('setor'):
+        destino += f"&setor={request.POST['setor']}"
+    return redirect(destino)
+
+
+@login_required
+@require_POST
+def escala_gestores(request):
+    """SUPERADMIN define quem, além dele, gere todas as escalas."""
+    if not e_gestor(request.user):
+        messages.error(request, 'Apenas o SUPERADMIN define os gestores de escala.')
+        return redirect('tangerino:escala')
+
+    ids = [int(v) for v in request.POST.getlist('gestores') if v.isdigit()]
+    EscalaConfig.get().gestores.set(User.objects.filter(id__in=ids))
+    messages.success(request, 'Gestores de escala atualizados.')
+    return redirect('tangerino:escala')
 
 
 # ─── Férias ──────────────────────────────────────────────────────────────────

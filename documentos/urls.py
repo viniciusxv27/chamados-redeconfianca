@@ -20,6 +20,7 @@ urlpatterns = [
     path('admin/', views.admin_documents, name='admin_documents'),
     path('admin/novo/', views.admin_document_create, name='admin_document_create'),
     path('admin/<int:pk>/', views.admin_document_detail, name='admin_document_detail'),
+    path('admin/<int:pk>/editar/', views.admin_document_edit, name='admin_document_edit'),
     path('admin/<int:pk>/obrigatoriedade/', views.admin_toggle_obrigatoriedade,
          name='admin_toggle_obrigatoriedade'),
     path('admin/<int:pk>/excluir/', views.admin_delete_document, name='admin_delete_document'),
