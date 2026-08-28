@@ -716,6 +716,18 @@ def _parse_recurrence_until(value):
         return None
 
 
+def _sala_do_evento(event, invited_users):
+    """Cria (ou atualiza) a sala de vídeo de um evento do tipo Chamada."""
+    try:
+        from reunioes.servicos import precisa_de_sala, sala_para_evento
+
+        if not precisa_de_sala(event):
+            return None
+        return sala_para_evento(event, invited_users, autor=event.owner)
+    except Exception:                                   # módulo indisponível
+        return None
+
+
 def _create_weekly_occurrences(parent_event, invited_users):
     """Cria ocorrências semanais a partir do evento pai."""
     until = parent_event.recurrence_until
@@ -754,6 +766,9 @@ def _create_weekly_occurrences(parent_event, invited_users):
                 user=user,
                 status='pending',
             )
+        # Sala própria por ocorrência: uma sala só para a série inteira faria a
+        # reunião da semana que vem cair na mesma conversa da anterior.
+        _sala_do_evento(child, invited_users)
         current_start += timedelta(weeks=1)
 
 
@@ -929,6 +944,9 @@ def api_event_create(request):
                 action_url='/agenda/',
             )
 
+    # Chamada ganha sala de vídeo do portal na hora, com o link já pronto.
+    sala = _sala_do_evento(event, invited_users)
+
     # Gerar ocorrências recorrentes (semanal)
     if event.recurrence_rule == 'weekly':
         _create_weekly_occurrences(event, invited_users)
@@ -939,6 +957,8 @@ def api_event_create(request):
         'start': event.start.isoformat(),
         'end': event.end.isoformat(),
         'color': event.color,
+        'link': event.link,
+        'sala': sala,
     }, status=201)
 
 
@@ -1016,7 +1036,9 @@ def api_event_update(request, pk):
             action_url='/agenda/',
         )
 
-    return JsonResponse({'ok': True})
+    sala = _sala_do_evento(event, list(event.participants.all()))
+
+    return JsonResponse({'ok': True, 'link': event.link, 'sala': sala})
 
 
 @login_required

@@ -346,6 +346,109 @@ try:
 
     t('chave inválida não derruba a sala', gerar_token(CfgQuebrada(), ger1, 'rc-x') is None)
 
+    print('\n== SERVIDOR CERTO PARA O TOKEN ==')
+    from reunioes.jaas import servidor_para
+
+    class ComCredPublico(CfgFake):
+        servidor_jitsi = 'meet.jit.si'      # o que estava configurado e quebrava
+
+    class ComCredVazio(CfgFake):
+        servidor_jitsi = ''
+
+    class ComCredProprio(CfgFake):
+        servidor_jitsi = 'meet.suaempresa.com.br'
+
+    t('credenciais + servidor público => vai para o 8x8',
+      servidor_para(ComCredPublico()) == '8x8.vc', servidor_para(ComCredPublico()))
+    t('credenciais + servidor em branco => vai para o 8x8',
+      servidor_para(ComCredVazio()) == '8x8.vc')
+    t('credenciais + servidor próprio => respeita o servidor da empresa',
+      servidor_para(ComCredProprio()) == 'meet.suaempresa.com.br')
+    t('sem credenciais continua no servidor escolhido',
+      servidor_para(CfgVazia()) == 'meet.jit.si')
+
+    d_pub = dados_da_sala(ComCredPublico(), ger1, 'rc-sala')
+    t('token do 8x8 nunca é mandado para o servidor público',
+      d_pub['servidor'] == '8x8.vc' and d_pub['token'],
+      d_pub['servidor'])
+    t('no 8x8 a sala vai prefixada pelo AppID',
+      d_pub['sala'] == 'vpaas-magic-cookie-TESTE/rc-sala', d_pub['sala'])
+    d_proprio = dados_da_sala(ComCredProprio(), ger1, 'rc-sala')
+    t('em servidor próprio a sala não leva prefixo',
+      d_proprio['sala'] == 'rc-sala', d_proprio['sala'])
+
+    print('\n== CHAMADA NA AGENDA VIRA SALA DO PORTAL ==')
+    from agenda.models import CalendarEvent
+    from reunioes.servicos import precisa_de_sala, sala_para_evento
+
+    marca = f'ZZ-{os.getpid()}'      # título único: rodada não pega sobra de outra
+    CalendarEvent.objects.filter(title__startswith='ZZ ').delete()
+
+    t('tipo "chamada" pede sala', precisa_de_sala(
+        CalendarEvent(event_type='call')))
+    t('outros tipos não pedem sala',
+      not precisa_de_sala(CalendarEvent(event_type='event'))
+      and not precisa_de_sala(CalendarEvent(event_type='task')))
+
+    r = c.post('/agenda/api/events/create/',
+               _json.dumps({
+                   'title': f'{marca} Chamada da agenda',
+                   'description': 'Pauta vinda da agenda.',
+                   'start': (timezone.now() + timedelta(hours=1)).isoformat(),
+                   'end': (timezone.now() + timedelta(hours=2)).isoformat(),
+                   'event_type': 'call',
+                   'participants': [ger1.id, ger2.id],
+               }), content_type='application/json')
+    t('agenda cria a chamada', r.status_code == 201, r.status_code)
+    corpo_resp = r.json()
+    t('resposta já traz o link da sala',
+      (corpo_resp.get('sala') or '').startswith('/reunioes/'), corpo_resp)
+
+    evento = CalendarEvent.objects.filter(title=f'{marca} Chamada da agenda').first()
+    criada = Reuniao.objects.filter(evento=evento).first()
+    if criada:
+        criados['reunioes'].append(criada)
+    t('reunião criada no portal', criada is not None)
+    t('link do evento aponta para a sala do portal',
+      evento and evento.link == f'/reunioes/{criada.id}/sala/', evento.link if evento else '')
+    t('pauta veio da descrição do evento', criada and criada.pauta == 'Pauta vinda da agenda.')
+    t('convidados da agenda entraram na reunião',
+      criada and {ger1.id, ger2.id} <= set(criada.participantes.values_list('user_id', flat=True)))
+    t('quem organiza não vira participante de si mesmo',
+      criada and chefe.id not in set(criada.participantes.values_list('user_id', flat=True)))
+    t('a sala abre para o convidado',
+      cg.get(f'/reunioes/{criada.id}/sala/').status_code == 200)
+
+    antes_qtd = Reuniao.objects.filter(evento=evento).count()
+    sala_para_evento(evento, [ger1], autor=chefe)
+    t('chamar de novo não cria uma segunda sala',
+      Reuniao.objects.filter(evento=evento).count() == antes_qtd)
+
+    novo_inicio = timezone.now() + timedelta(days=1)
+    c.post(f'/agenda/api/events/{evento.id}/update/',
+           _json.dumps({'title': f'{marca} Chamada da agenda (remarcada)',
+                        'start': novo_inicio.isoformat(),
+                        'end': (novo_inicio + timedelta(hours=1)).isoformat(),
+                        'event_type': 'call'}), content_type='application/json')
+    criada.refresh_from_db()
+    t('remarcar o evento remarca a reunião',
+      abs((criada.inicio - novo_inicio).total_seconds()) < 5,
+      f'{criada.inicio} vs {novo_inicio}')
+    t('título da reunião acompanha o evento',
+      criada.titulo == f'{marca} Chamada da agenda (remarcada)', criada.titulo)
+
+    r = c.post('/agenda/api/events/create/',
+               _json.dumps({
+                   'title': f'{marca} Evento comum',
+                   'start': (timezone.now() + timedelta(hours=3)).isoformat(),
+                   'end': (timezone.now() + timedelta(hours=4)).isoformat(),
+                   'event_type': 'event',
+               }), content_type='application/json')
+    ev_comum = CalendarEvent.objects.filter(title=f'{marca} Evento comum').first()
+    t('evento comum não cria sala', not Reuniao.objects.filter(evento=ev_comum).exists())
+    t('evento comum não ganha link', not (ev_comum.link or ''))
+    CalendarEvent.objects.filter(title__startswith=marca).delete()
+
     print('\n== CONFIGURAÇÃO NÃO VAZA A CHAVE ==')
     cfg_real = ConfiguracaoReunioes.get()
     guardado = {'srv': cfg_real.servidor_jitsi, 'app': cfg_real.jaas_app_id,

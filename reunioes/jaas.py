@@ -86,19 +86,47 @@ def gerar_token(cfg, user, sala, moderador=True):
         return None
 
 
+# O servidor público do Jitsi. Ele não conhece as chaves do 8x8, então mandar
+# um token JaaS para cá devolve "você não está autorizado a entrar nesta
+# chamada" — que é o mesmo erro de não ter token nenhum, e por isso confunde.
+PUBLICO = 'meet.jit.si'
+SERVIDOR_JAAS = '8x8.vc'
+
+
+def servidor_para(cfg):
+    """Onde a sala abre, considerando as credenciais.
+
+    Com credenciais do 8x8 preenchidas, o destino tem de ser o servidor do 8x8:
+    o token só vale lá. Um endereço próprio (Jitsi da empresa com JWT) é
+    respeitado; o que não pode é continuar apontando para o servidor público,
+    que rejeita o token e deixa todo mundo de fora.
+    """
+    escolhido = (cfg.servidor_jitsi or '').strip()
+    tem_credenciais = bool((cfg.jaas_app_id or '').strip()
+                           and (cfg.jaas_api_key_id or '').strip()
+                           and (cfg.jaas_chave_privada or '').strip())
+    if tem_credenciais and (not escolhido or escolhido == PUBLICO):
+        return SERVIDOR_JAAS
+    return escolhido or PUBLICO
+
+
 def dados_da_sala(cfg, user, sala):
     """O que a tela precisa para abrir a sala: servidor, nome e token."""
     token = gerar_token(cfg, user, sala)
+    servidor = servidor_para(cfg)
     if token:
         app_id = (cfg.jaas_app_id or '').strip()
+        # No 8x8 a sala é sempre "AppID/nome". Num Jitsi próprio com JWT o nome
+        # é só o nome — prefixar lá criaria uma sala com barra no meio.
+        nome = f'{app_id}/{sala}' if servidor == SERVIDOR_JAAS else sala
         return {
-            'servidor': (cfg.servidor_jitsi or '').strip() or '8x8.vc',
-            'sala': f'{app_id}/{sala}',
+            'servidor': servidor,
+            'sala': nome,
             'token': token,
             'autenticado': True,
         }
     return {
-        'servidor': (cfg.servidor_jitsi or 'meet.jit.si').strip(),
+        'servidor': servidor,
         'sala': sala,
         'token': '',
         'autenticado': False,
