@@ -2,7 +2,7 @@
 {% block title %}Reuniões — configuração{% endblock %}
 
 {% block content %}
-<div class="max-w-2xl mx-auto px-4 py-6">
+<div class="max-w-3xl mx-auto px-4 py-6">
     <a href="{% url 'reunioes:lista' %}" class="text-sm text-gray-500 hover:text-gray-700 mb-3 inline-block">
         <i class="fas fa-arrow-left mr-1.5"></i>Voltar
     </a>
@@ -20,32 +20,109 @@
         {% endfor %}
     {% endif %}
 
-    <form method="post" class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-5">
+    {% if servidor_publico and not tem_jaas %}
+    <div class="mb-4 p-4 rounded-2xl bg-amber-50 border border-amber-200">
+        <p class="text-sm font-semibold text-amber-900 mb-1">
+            <i class="fas fa-triangle-exclamation mr-1.5"></i>
+            Hoje as reuniões param em “aguardando um moderador”
+        </p>
+        <p class="text-xs text-amber-800 leading-relaxed">
+            O <strong>meet.jit.si</strong> é o servidor público do Jitsi e só começa uma reunião
+            quando entra alguém autenticado na conta deles. Nenhum ajuste do lado do portal
+            contorna isso — é regra do servidor. Escolha um dos dois caminhos abaixo e o
+            problema acaba: todo mundo entra direto, sem pedir entrada e sem tela intermediária.
+        </p>
+    </div>
+    {% endif %}
+
+    {% if tem_jaas %}
+    <div class="mb-4 p-4 rounded-2xl {% if jaas_ok %}bg-green-50 border border-green-200{% else %}bg-red-50 border border-red-200{% endif %}">
+        <p class="text-sm font-semibold {% if jaas_ok %}text-green-900{% else %}text-red-900{% endif %}">
+            <i class="fas {% if jaas_ok %}fa-circle-check{% else %}fa-circle-xmark{% endif %} mr-1.5"></i>
+            {% if jaas_ok %}
+                Entrada autenticada funcionando — ninguém precisa pedir entrada.
+            {% else %}
+                As credenciais do 8x8 não estão assinando o token. Confira o AppID, o kid e a chave privada.
+            {% endif %}
+        </p>
+    </div>
+    {% endif %}
+
+    <form method="post" class="space-y-4">
         {% csrf_token %}
 
-        <div>
-            <label class="block text-sm font-semibold text-gray-700 mb-1">Servidor de vídeo</label>
-            <input type="text" name="servidor_jitsi" value="{{ cfg.servidor_jitsi }}"
-                   placeholder="meet.jit.si"
-                   class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
-            <p class="text-[11px] text-gray-500 mt-1">
-                Só o endereço, sem <code>https://</code>. O padrão <strong>meet.jit.si</strong> é o
-                servidor público do Jitsi: funciona na hora, sem limite de tempo, mas o vídeo passa
-                por um servidor de terceiros. Para conversa sensível, suba um Jitsi de vocês e
-                troque só este campo.
-            </p>
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
+            <div>
+                <h2 class="text-sm font-semibold text-gray-700 mb-1">
+                    <i class="fas fa-server text-sky-500 mr-1.5"></i>Caminho 1 — servidor de vídeo próprio
+                </h2>
+                <p class="text-xs text-gray-500 mb-2">
+                    Um Jitsi instalado num servidor de vocês não exige moderador autenticado e
+                    mantém o vídeo dentro de casa. É a opção recomendada para conversa sensível.
+                </p>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Endereço do servidor</label>
+                <input type="text" name="servidor_jitsi" value="{{ cfg.servidor_jitsi }}"
+                       placeholder="meet.suaempresa.com.br"
+                       class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+                <p class="text-[11px] text-gray-400 mt-1">
+                    Só o endereço, sem <code>https://</code>. Deixando <strong>meet.jit.si</strong>,
+                    vale o aviso acima.
+                </p>
+            </div>
         </div>
 
-        <label class="flex items-start gap-2 text-sm text-gray-700 cursor-pointer">
-            <input type="checkbox" name="gerar_ata" {% if cfg.gerar_ata %}checked{% endif %}
-                   class="rounded text-sky-600 focus:ring-sky-500 mt-0.5">
-            <span>
-                Permitir gerar ata pela IA
-                <span class="block text-[11px] text-gray-500">
-                    Desligado, o botão de gravar some das salas e nenhuma ata é criada.
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
+            <div>
+                <h2 class="text-sm font-semibold text-gray-700 mb-1">
+                    <i class="fas fa-key text-sky-500 mr-1.5"></i>Caminho 2 — conta 8x8 (JaaS)
+                </h2>
+                <p class="text-xs text-gray-500">
+                    Sem servidor próprio: cria-se uma conta em <strong>jaas.8x8.vc</strong> (tem
+                    faixa gratuita), baixa-se a chave e cola-se aqui. O portal passa a assinar a
+                    entrada de cada pessoa — ela entra direto, já como anfitriã, e o nome vai
+                    assinado no token, então não tem como trocar nem por fora.
+                </p>
+            </div>
+
+            <div class="grid sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">AppID</label>
+                    <input type="text" name="jaas_app_id" value="{{ cfg.jaas_app_id }}"
+                           placeholder="vpaas-magic-cookie-…"
+                           class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">ID da chave (kid)</label>
+                    <input type="text" name="jaas_api_key_id" value="{{ cfg.jaas_api_key_id }}"
+                           placeholder="vpaas-magic-cookie-…/abc123"
+                           class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Chave privada (arquivo .pk)</label>
+                <textarea name="jaas_chave_privada" rows="4"
+                          placeholder="-----BEGIN PRIVATE KEY-----&#10;…&#10;-----END PRIVATE KEY-----"
+                          class="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs font-mono">{% if cfg.jaas_chave_privada %}••••••••  chave já guardada — cole uma nova só se for trocar{% endif %}</textarea>
+                <p class="text-[11px] text-gray-400 mt-1">
+                    Fica só no banco do portal e nunca é mostrada de volta. Salvar sem mexer aqui
+                    mantém a chave atual.
+                </p>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+            <label class="flex items-start gap-2 text-sm text-gray-700 cursor-pointer">
+                <input type="checkbox" name="gerar_ata" {% if cfg.gerar_ata %}checked{% endif %}
+                       class="rounded text-sky-600 focus:ring-sky-500 mt-0.5">
+                <span>
+                    Permitir gerar ata pela IA
+                    <span class="block text-[11px] text-gray-500">
+                        Desligado, o botão de gravar some das salas e nenhuma ata é criada.
+                    </span>
                 </span>
-            </span>
-        </label>
+            </label>
+        </div>
 
         <button type="submit" class="px-5 py-2 rounded-lg bg-sky-600 text-white text-sm font-medium hover:bg-sky-700">
             <i class="fas fa-check mr-1.5"></i>Salvar

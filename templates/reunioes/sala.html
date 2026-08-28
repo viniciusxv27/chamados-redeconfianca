@@ -2,54 +2,93 @@
 {% block title %}{{ reuniao.titulo }} — sala{% endblock %}
 
 {% block content %}
-<div class="max-w-7xl mx-auto px-3 py-4">
+<style>
+    /* A sala ocupa a tela: numa reunião o vídeo é o conteúdo, não um cartão
+       espremido entre margens. 100dvh porque no celular a barra do navegador
+       entra e sai — com 100vh a barra do Jitsi ficaria escondida atrás dela. */
+    .rn-palco { height: calc(100dvh - 210px); min-height: 380px; }
+    @media (min-width: 640px) { .rn-palco { height: calc(100dvh - 190px); } }
+    @media (min-width: 1024px) { .rn-palco { height: calc(100dvh - 170px); } }
+    .rn-palco:fullscreen { height: 100vh; border-radius: 0; }
+    .rn-palco iframe { border: 0; width: 100%; height: 100%; }
 
-    <div class="flex items-start justify-between gap-3 flex-wrap mb-3">
-        <div class="min-w-0">
-            <a href="{% url 'reunioes:detalhe' reuniao.id %}" class="text-xs text-gray-500 hover:text-gray-700">
-                <i class="fas fa-arrow-left mr-1"></i>Detalhes da reunião
+    .rn-pulso { animation: rn-pulso 1.6s ease-in-out infinite; }
+    @keyframes rn-pulso { 0%, 100% { opacity: 1 } 50% { opacity: .35 } }
+</style>
+
+<div class="max-w-[1600px] mx-auto px-3 sm:px-4 py-3">
+
+    <div class="flex items-center justify-between gap-3 flex-wrap mb-3">
+        <div class="min-w-0 flex-1">
+            <a href="{% url 'reunioes:detalhe' reuniao.id %}"
+               class="text-[11px] text-gray-500 hover:text-gray-700">
+                <i class="fas fa-arrow-left mr-1"></i>Detalhes
             </a>
-            <h1 class="text-lg font-bold text-gray-800 truncate">{{ reuniao.titulo }}</h1>
-            <p class="text-xs text-gray-500">
-                {{ reuniao.inicio|date:'d/m/Y H:i' }} · organizada por
+            <div class="flex items-center gap-2 flex-wrap">
+                <h1 class="text-base sm:text-lg font-bold text-gray-800 truncate">{{ reuniao.titulo }}</h1>
+                <span id="rn-aovivo" class="hidden items-center gap-1.5 px-2 py-0.5 rounded-full
+                             bg-red-100 text-red-700 text-[11px] font-semibold">
+                    <span class="w-1.5 h-1.5 rounded-full bg-red-500 rn-pulso"></span>
+                    ao vivo <span id="rn-relogio" class="tabular-nums">00:00</span>
+                </span>
+                <span id="rn-gente" class="hidden items-center gap-1 px-2 py-0.5 rounded-full
+                             bg-gray-100 text-gray-600 text-[11px] font-semibold">
+                    <i class="fas fa-user-group text-[10px]"></i><span id="rn-gente-n">1</span>
+                </span>
+            </div>
+            <p class="text-[11px] text-gray-500 truncate">
+                {{ reuniao.inicio|date:'d/m/Y H:i' }} ·
                 {{ reuniao.organizador.get_full_name|default:reuniao.organizador.email }}
                 <span class="text-gray-300">·</span> sem limite de tempo
             </p>
         </div>
 
-        <div class="flex items-center gap-2 flex-wrap">
+        <div class="flex items-center gap-2 flex-wrap shrink-0">
             {% if gerar_ata %}
             <button type="button" id="rn-gravar"
-                    class="px-4 py-2 rounded-lg bg-red-500 text-white text-sm font-medium hover:bg-red-600">
-                <i class="fas fa-circle-dot mr-1.5"></i>Gravar ata
+                    class="px-3 sm:px-4 py-2 rounded-lg bg-red-500 text-white text-sm font-medium hover:bg-red-600">
+                <i class="fas fa-circle-dot sm:mr-1.5"></i><span class="hidden sm:inline">Gravar ata</span>
             </button>
             <button type="button" id="rn-parar" style="display:none"
-                    class="px-4 py-2 rounded-lg bg-gray-800 text-white text-sm font-medium hover:bg-gray-900">
-                <i class="fas fa-stop mr-1.5"></i>Parar e gerar ata
-                <span id="rn-tempo" class="ml-1 tabular">00:00</span>
+                    class="px-3 sm:px-4 py-2 rounded-lg bg-gray-800 text-white text-sm font-medium hover:bg-gray-900">
+                <i class="fas fa-stop sm:mr-1.5"></i><span class="hidden sm:inline">Parar e gerar ata</span>
+                <span id="rn-tempo" class="ml-1 tabular-nums">00:00</span>
             </button>
             {% endif %}
+            <button type="button" id="rn-telacheia" title="Tela cheia"
+                    class="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">
+                <i class="fas fa-expand"></i>
+            </button>
             <a href="{% url 'reunioes:detalhe' reuniao.id %}"
-               class="px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">
-                Sair da sala
+               class="px-3 sm:px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">
+                Sair
             </a>
         </div>
     </div>
 
     <div id="rn-status" class="hidden mb-3 p-3 rounded-xl text-sm"></div>
 
-    <div id="rn-sala" class="rounded-2xl overflow-hidden bg-gray-900 border border-gray-200"
-         style="height: min(72vh, 720px)"></div>
+    <div id="rn-palco" class="rn-palco rounded-2xl overflow-hidden bg-gray-900 shadow-lg
+                              border border-gray-200 relative">
+        <div id="rn-carregando"
+             class="absolute inset-0 flex flex-col items-center justify-center text-gray-400 gap-3">
+            <i class="fas fa-circle-notch fa-spin text-2xl"></i>
+            <p class="text-sm">Entrando na sala…</p>
+        </div>
+    </div>
 
     <p class="text-[11px] text-gray-400 mt-2">
-        Câmera, microfone, compartilhamento de tela, chat e mão levantada estão na barra da sala.
-        A gravação da ata capta o áudio desta aba — o navegador vai pedir permissão e você
-        precisa marcar <strong>“Compartilhar áudio”</strong> na janela que aparecer.
+        Câmera, microfone, tela compartilhada, chat e mão levantada ficam na barra da sala.
+        {% if gerar_ata %}
+        A ata capta o áudio desta aba — o navegador vai pedir permissão e você precisa marcar
+        <strong>“Compartilhar áudio”</strong>.
+        {% endif %}
     </p>
 </div>
 
 <script src="https://{{ servidor }}/external_api.js"></script>
-{{ reuniao.sala|json_script:"rn-nome-sala" }}
+{{ sala_video|json_script:"rn-nome-sala" }}
+{{ token_video|json_script:"rn-token" }}
 {{ nome_exibicao|json_script:"rn-nome-usuario" }}
 {{ email_exibicao|json_script:"rn-email-usuario" }}
 {{ reuniao.titulo|json_script:"rn-titulo" }}
@@ -59,41 +98,150 @@
     const leia = id => JSON.parse(document.getElementById(id).textContent);
     const nomeSala = leia('rn-nome-sala');
     const titulo = leia('rn-titulo');
+    const nomeUsuario = leia('rn-nome-usuario');
     const servidor = '{{ servidor }}';
+    const palco = document.getElementById('rn-palco');
+    const carregando = document.getElementById('rn-carregando');
 
-    // ---- sala de vídeo -----------------------------------------------------
     if (typeof JitsiMeetExternalAPI === 'undefined') {
-        document.getElementById('rn-sala').innerHTML =
-            '<div class="h-full flex items-center justify-center text-center text-sm text-gray-300 p-6">' +
-            'Não foi possível carregar a sala de vídeo (servidor <strong>' + servidor + '</strong> ' +
-            'fora do ar ou bloqueado pela rede).<br>Verifique a configuração do módulo.</div>';
+        carregando.innerHTML =
+            '<div class="text-center text-sm text-gray-300 p-6">' +
+            'Não foi possível carregar a sala de vídeo.<br>' +
+            'O servidor <strong>' + servidor + '</strong> está fora do ar ou bloqueado pela rede.</div>';
         return;
     }
 
+    const token = leia('rn-token');
     const api = new JitsiMeetExternalAPI(servidor, {
         roomName: nomeSala,
-        parentNode: document.getElementById('rn-sala'),
-        userInfo: { displayName: leia('rn-nome-usuario'), email: leia('rn-email-usuario') },
+        parentNode: palco,
+        jwt: token || undefined,
+        userInfo: { displayName: nomeUsuario, email: leia('rn-email-usuario') },
         configOverwrite: {
+            // Entrar direto. `prejoinConfig` é o nome atual da opção; o
+            // `prejoinPageEnabled` fica para servidores mais antigos — sem ele
+            // o Jitsi para numa tela pedindo o nome e um clique para entrar,
+            // que é exatamente o "solicitar entrada" que não faz sentido para
+            // quem já entrou no portal e foi convidado.
+            prejoinConfig: { enabled: false },
             prejoinPageEnabled: false,
-            disableDeepLinking: true,
+            // O nome vem do cadastro e não se edita: numa ata, "Fulano" tem de
+            // ser o Fulano do portal.
+            readOnlyName: true,
+            disableProfile: true,
+            requireDisplayName: false,
+            // Se o servidor tiver sala de espera, bate na porta sozinho em vez
+            // de deixar a pessoa parada esperando descobrir o botão.
+            lobby: { autoKnock: true, enableChat: false },
             subject: titulo,
             startWithAudioMuted: false,
-            startWithVideoMuted: true
+            startWithVideoMuted: true,
+            disableDeepLinking: true,
+            enableWelcomePage: false,
+            enableClosePage: false,
+            // O convite é o portal. Botão de convidar aqui vazaria o link da
+            // sala, que é o único segredo que protege a reunião.
+            disableInviteFunctions: true,
+            disableThirdPartyRequests: true,
+            enableInsecureRoomNameWarning: false
         },
         interfaceConfigOverwrite: {
             SHOW_JITSI_WATERMARK: false,
+            SHOW_BRAND_WATERMARK: false,
+            SHOW_POWERED_BY: false,
             MOBILE_APP_PROMO: false,
+            SHOW_CHROME_EXTENSION_BANNER: false,
+            DEFAULT_BACKGROUND: '#111827',
+            // Sem a aba "perfil" não há onde trocar o nome.
+            SETTINGS_SECTIONS: ['devices', 'language', 'moderator'],
             TOOLBAR_BUTTONS: [
-                'microphone', 'camera', 'desktop', 'chat', 'raisehand', 'participants-pane',
-                'tileview', 'toggle-camera', 'select-background', 'settings', 'fullscreen',
-                'hangup', 'videoquality', 'filmstrip', 'shortcuts'
+                'microphone', 'camera', 'desktop', 'chat', 'raisehand',
+                'participants-pane', 'tileview', 'toggle-camera',
+                'select-background', 'settings', 'fullscreen', 'videoquality',
+                'filmstrip', 'shortcuts', 'hangup'
             ]
+        }
+    });
+
+    // ---- estado da sala ----------------------------------------------------
+    const marcaAoVivo = document.getElementById('rn-aovivo');
+    const marcaGente = document.getElementById('rn-gente');
+    const contaGente = document.getElementById('rn-gente-n');
+    const relogioSala = document.getElementById('rn-relogio');
+    let entrouEm = null;
+
+    function mostrar(el) { el.classList.remove('hidden'); el.classList.add('inline-flex'); }
+
+    function atualizaGente() {
+        try {
+            contaGente.textContent = api.getNumberOfParticipants();
+            mostrar(marcaGente);
+        } catch (e) { /* a sala ainda não respondeu */ }
+    }
+
+    api.addEventListener('videoConferenceJoined', function () {
+        carregando.style.display = 'none';
+        entrouEm = Date.now();
+        mostrar(marcaAoVivo);
+        atualizaGente();
+        setInterval(function () {
+            if (!entrouEm) return;
+            const s = Math.floor((Date.now() - entrouEm) / 1000);
+            const h = Math.floor(s / 3600);
+            const m = Math.floor((s % 3600) / 60);
+            relogioSala.textContent = (h ? String(h).padStart(2, '0') + ':' : '') +
+                String(m).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+        }, 1000);
+    });
+
+    api.addEventListener('participantJoined', atualizaGente);
+    api.addEventListener('participantLeft', atualizaGente);
+
+    // O servidor público do Jitsi só começa a reunião quando chega alguém
+    // autenticado — quem entra antes disso fica olhando um "aguarde" sem
+    // explicação. Se em 20s a sala não abriu, a tela diz o que está havendo e
+    // o que resolve, em vez de deixar a pessoa achando que travou.
+    {% if not sala_autenticada %}
+    setTimeout(function () {
+        if (entrouEm) return;
+        const caixa = document.getElementById('rn-status');
+        caixa.className = 'mb-3 p-3 rounded-xl text-sm bg-amber-50 border border-amber-100 text-amber-800';
+        caixa.innerHTML =
+            '<strong>A sala está esperando um anfitrião autenticado.</strong> ' +
+            'Isso é regra do servidor público <strong>{{ servidor }}</strong>, não do portal. ' +
+            'Para todo mundo entrar direto, o administrador precisa apontar o módulo para um ' +
+            'servidor Jitsi da empresa ou preencher as credenciais do 8x8 em ' +
+            '<a href="{% url "reunioes:configuracao" %}" class="underline font-semibold">configuração</a>.';
+        caixa.classList.remove('hidden');
+    }, 20000);
+    {% endif %}
+
+    // Nome trocado por fora (extensão, versão antiga do servidor): devolve o do
+    // cadastro. A ata precisa bater com quem a pessoa é no portal.
+    api.addEventListener('displayNameChange', function (ev) {
+        if (ev && ev.displayname && ev.displayname !== nomeUsuario) {
+            try { api.executeCommand('displayName', nomeUsuario); } catch (e) {}
         }
     });
 
     api.addEventListener('readyToClose', function () {
         window.location.href = "{% url 'reunioes:detalhe' reuniao.id %}";
+    });
+
+    // ---- tela cheia --------------------------------------------------------
+    const botaoTela = document.getElementById('rn-telacheia');
+    botaoTela.addEventListener('click', function () {
+        if (document.fullscreenElement) {
+            document.exitFullscreen();
+        } else if (palco.requestFullscreen) {
+            palco.requestFullscreen().catch(function () {
+                try { api.executeCommand('toggleFilmStrip'); } catch (e) {}
+            });
+        }
+    });
+    document.addEventListener('fullscreenchange', function () {
+        botaoTela.querySelector('i').className =
+            document.fullscreenElement ? 'fas fa-compress' : 'fas fa-expand';
     });
 
     // ---- gravação da ata ---------------------------------------------------

@@ -20,6 +20,7 @@ if 'testserver' not in settings.ALLOWED_HOSTS:
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import transaction
 from django.test import Client
 from django.utils import timezone
 
@@ -48,18 +49,18 @@ def anexo(nome='comprovante.pdf'):
     return SimpleUploadedFile(nome, b'%PDF-1.4 comprovante de teste', content_type='application/pdf')
 
 
+marcador = transaction.atomic()
+marcador.__enter__()
 try:
     cfg = ConfiguracaoCursos.get()
-    estado_config = {
-        'bloquear': cfg.bloquear_navegacao,
-        'grupos': list(cfg.grupos.values_list('id', flat=True)),
-        'setores': list(cfg.setores.values_list('id', flat=True)),
-        'gestores': list(cfg.gestores.values_list('id', flat=True)),
-    }
 
     print('== ESTADO DE FÁBRICA ==')
-    t('bloqueio nasce desligado', estado_config['bloquear'] is False,
-      f"está {estado_config['bloquear']}")
+    # O que importa é o padrão do módulo, não o valor de hoje: o administrador
+    # pode ter ligado o bloqueio de propósito, e o teste não pode reclamar disso.
+    t('bloqueio nasce desligado numa instalação nova',
+      ConfiguracaoCursos._meta.get_field('bloquear_navegacao').default is False)
+    print(f'   (no banco agora: bloqueio={cfg.bloquear_navegacao} — '
+          f'configuração do administrador, preservada)')
 
     # ---------------------------------------------------------------- cenário
     def novo(username, **kw):
@@ -347,28 +348,11 @@ try:
     t('nenhum comentário {# #} de várias linhas', not ruins, ruins)
 
 finally:
-    Comprovante.objects.filter(curso__titulo__startswith='ZZ ').delete()
-    AtribuicaoCurso.objects.filter(curso__titulo__startswith='ZZ ').delete()
-    for c in criados['cursos']:
-        Curso.objects.filter(id=c.id).delete()
-    for u in criados['users']:
-        Comprovante.objects.filter(colaborador=u).delete()
-        User.objects.filter(id=u.id).delete()
-    if criados['grupo']:
-        CommunicationGroup.objects.filter(id=criados['grupo'].id).delete()
-    if criados['setor']:
-        Sector.objects.filter(id=criados['setor'].id).delete()
-
-    if estado_config is not None:
-        cfg = ConfiguracaoCursos.get()
-        cfg.bloquear_navegacao = estado_config['bloquear']
-        cfg.save(update_fields=['bloquear_navegacao'])
-        cfg.grupos.set(CommunicationGroup.objects.filter(id__in=estado_config['grupos']))
-        cfg.setores.set(Sector.objects.filter(id__in=estado_config['setores']))
-        cfg.gestores.set(User.objects.filter(id__in=estado_config['gestores']))
-        print('\nconfiguração do módulo devolvida ao estado anterior '
-              f"(bloqueio={estado_config['bloquear']}).")
-    print('limpeza: só o que este teste criou foi removido.')
+    # Desfaz TUDO — inclusive a configuração do módulo, que o teste precisa
+    # mexer para exercitar o bloqueio. Nada do que rodou aqui chega ao banco.
+    transaction.set_rollback(True)
+    marcador.__exit__(None, None, None)
+    print('\nrollback: nada deste teste foi gravado no banco.')
 
 print(f'\n{ok} OK / {fail} falhas')
 sys.exit(1 if fail else 0)

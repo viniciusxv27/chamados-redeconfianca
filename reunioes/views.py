@@ -250,9 +250,15 @@ def sala(request, reuniao_id):
         reuniao.status = Reuniao.EM_ANDAMENTO
 
     cfg = ConfiguracaoReunioes.get()
+    from .jaas import dados_da_sala
+
+    sala_video = dados_da_sala(cfg, request.user, reuniao.sala)
     return render(request, 'reunioes/sala.html', {
         'reuniao': reuniao,
-        'servidor': cfg.servidor_jitsi,
+        'servidor': sala_video['servidor'],
+        'sala_video': sala_video['sala'],
+        'token_video': sala_video['token'],
+        'sala_autenticada': sala_video['autenticado'],
         'gerar_ata': cfg.gerar_ata and reuniao.gravar_ata,
         'e_organizador': reuniao.organizador_id == request.user.id,
         'nome_exibicao': request.user.get_full_name() or request.user.email,
@@ -368,8 +374,24 @@ def configuracao(request):
         servidor = servidor.replace('https://', '').replace('http://', '').strip('/')
         cfg.servidor_jitsi = servidor or 'meet.jit.si'
         cfg.gerar_ata = request.POST.get('gerar_ata') == 'on'
+        cfg.jaas_app_id = (request.POST.get('jaas_app_id') or '').strip()[:120]
+        cfg.jaas_api_key_id = (request.POST.get('jaas_api_key_id') or '').strip()[:120]
+        chave = (request.POST.get('jaas_chave_privada') or '').strip()
+        # Campo em branco não apaga a chave já guardada: o formulário mostra a
+        # chave mascarada, e um "salvar" sem tocar nela não pode desconfigurar
+        # o módulo inteiro.
+        if chave and not chave.startswith('•'):
+            cfg.jaas_chave_privada = chave
         cfg.save()
         messages.success(request, 'Configuração salva.')
         return redirect('reunioes:configuracao')
 
-    return render(request, 'reunioes/configuracao.html', {'cfg': cfg})
+    from .jaas import gerar_token
+
+    testando = gerar_token(cfg, request.user, 'teste') if cfg.jaas_app_id else None
+    return render(request, 'reunioes/configuracao.html', {
+        'cfg': cfg,
+        'tem_jaas': bool(cfg.jaas_app_id and cfg.jaas_api_key_id and cfg.jaas_chave_privada),
+        'jaas_ok': bool(testando),
+        'servidor_publico': (cfg.servidor_jitsi or '').strip() in ('meet.jit.si', ''),
+    })

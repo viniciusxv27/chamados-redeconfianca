@@ -25,6 +25,19 @@ class ConfiguracaoReunioes(models.Model):
     gerar_ata = models.BooleanField(
         default=True, verbose_name='Gerar ata automaticamente',
         help_text='Ao encerrar a gravação, a IA monta a ata e envia para quem estava na agenda.')
+
+    # Credenciais do 8x8 (JaaS). Com elas preenchidas, o portal assina a entrada
+    # de cada pessoa: ninguém cai na tela "aguardando um moderador" e o nome vai
+    # no token, sem passar pelo navegador.
+    jaas_app_id = models.CharField(
+        max_length=120, blank=True, verbose_name='JaaS — AppID',
+        help_text='Começa com "vpaas-magic-cookie-".')
+    jaas_api_key_id = models.CharField(
+        max_length=120, blank=True, verbose_name='JaaS — ID da chave (kid)')
+    jaas_chave_privada = models.TextField(
+        blank=True, verbose_name='JaaS — chave privada (PEM)',
+        help_text='O arquivo .pk baixado no painel do 8x8, colado inteiro.')
+
     atualizado_em = models.DateTimeField(auto_now=True)
 
     class Meta:

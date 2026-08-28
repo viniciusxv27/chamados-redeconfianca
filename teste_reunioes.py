@@ -257,6 +257,134 @@ try:
     cfg.servidor_jitsi = cfg_antes
     cfg.save()
 
+    print('\n== ENTRADA NA SALA (sem pedir entrada, nome travado) ==')
+    nova = Reuniao.objects.create(
+        titulo='ZZ Sala para conferir a tela', inicio=timezone.now(),
+        fim=timezone.now() + timedelta(hours=1), organizador=chefe)
+    criados['reunioes'].append(nova)
+    ParticipanteReuniao.objects.create(reuniao=nova, user=ger1)
+    html = cg.get(f'/reunioes/{nova.id}/sala/').content.decode()
+    t('não passa pela tela de "participar" (opção nova)',
+      "prejoinConfig" in html and "enabled: false" in html)
+    t('mantém a opção antiga para servidor mais velho', 'prejoinPageEnabled: false' in html)
+    t('nome do usuário fica travado', 'readOnlyName: true' in html)
+    t('sem aba de perfil para editar o nome',
+      'disableProfile: true' in html and "'profile'" not in html)
+    t('nome vem do cadastro', (ger1.get_full_name() or ger1.email) in html)
+    t('devolve o nome se alguém trocar por fora', 'displayNameChange' in html)
+    t('não expõe botão de convidar (o link da sala é o segredo)',
+      'disableInviteFunctions: true' in html)
+    t('bate na porta sozinho se houver sala de espera', 'autoKnock: true' in html)
+    t('explica a espera do servidor público', 'esperando um anfitrião autenticado' in html)
+
+    print('\n== TELA MAIOR E RESPONSIVA ==')
+    t('palco usa a altura da janela', 'calc(100dvh' in html)
+    t('tem altura mínima para não sumir em tela baixa', 'min-height: 380px' in html)
+    t('tem breakpoints de tela', '@media (min-width: 640px)' in html
+      and '@media (min-width: 1024px)' in html)
+    t('tem botão de tela cheia', 'rn-telacheia' in html and 'requestFullscreen' in html)
+    t('mostra contador de gente na sala', 'getNumberOfParticipants' in html)
+    t('mostra cronômetro ao vivo', 'rn-relogio' in html)
+    t('esconde rótulos dos botões no celular', 'hidden sm:inline' in html)
+
+    print('\n== TOKEN DE ENTRADA (JaaS) ==')
+    import base64
+    import json as _json
+
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import padding, rsa
+
+    from reunioes.jaas import dados_da_sala, gerar_token
+
+    chave = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    pem = chave.private_bytes(serialization.Encoding.PEM,
+                              serialization.PrivateFormat.PKCS8,
+                              serialization.NoEncryption()).decode()
+
+    class CfgFake:
+        servidor_jitsi = '8x8.vc'
+        jaas_app_id = 'vpaas-magic-cookie-TESTE'
+        jaas_api_key_id = 'vpaas-magic-cookie-TESTE/abc'
+        jaas_chave_privada = pem
+
+    class CfgVazia:
+        servidor_jitsi = 'meet.jit.si'
+        jaas_app_id = jaas_api_key_id = jaas_chave_privada = ''
+
+    tok = gerar_token(CfgFake(), ger1, 'rc-sala')
+    t('gera o token quando há credenciais', bool(tok))
+    cab, corpo_b64, assin = tok.split('.')
+
+    def _dec(x):
+        return _json.loads(base64.urlsafe_b64decode(x + '=' * (-len(x) % 4)))
+
+    t('assina em RS256 com o kid certo',
+      _dec(cab)['alg'] == 'RS256' and _dec(cab)['kid'] == CfgFake.jaas_api_key_id)
+    corpo = _dec(corpo_b64)
+    t('token traz o nome do cadastro',
+      corpo['context']['user']['name'] == (ger1.get_full_name() or ger1.email))
+    t('entra como anfitrião (não pede entrada)',
+      corpo['context']['user']['moderator'] == 'true')
+    t('token vale por horas (reunião longa não expira no meio)',
+      corpo['exp'] - corpo['nbf'] >= 5 * 3600)
+    chave.public_key().verify(
+        base64.urlsafe_b64decode(assin + '=' * (-len(assin) % 4)),
+        f'{cab}.{corpo_b64}'.encode(), padding.PKCS1v15(), hashes.SHA256())
+    t('assinatura confere', True)
+
+    d = dados_da_sala(CfgFake(), ger1, 'rc-sala')
+    t('com credenciais usa o servidor autenticado', d['autenticado'] and d['servidor'] == '8x8.vc')
+    t('sala vai prefixada pelo AppID', d['sala'] == 'vpaas-magic-cookie-TESTE/rc-sala')
+
+    d0 = dados_da_sala(CfgVazia(), ger1, 'rc-sala')
+    t('sem credenciais continua abrindo a sala',
+      d0['servidor'] == 'meet.jit.si' and d0['sala'] == 'rc-sala')
+    t('sem credenciais não inventa token', d0['token'] == '' and d0['autenticado'] is False)
+
+    class CfgQuebrada(CfgFake):
+        jaas_chave_privada = '-----BEGIN PRIVATE KEY-----\nlixo\n-----END PRIVATE KEY-----'
+
+    t('chave inválida não derruba a sala', gerar_token(CfgQuebrada(), ger1, 'rc-x') is None)
+
+    print('\n== CONFIGURAÇÃO NÃO VAZA A CHAVE ==')
+    cfg_real = ConfiguracaoReunioes.get()
+    guardado = {'srv': cfg_real.servidor_jitsi, 'app': cfg_real.jaas_app_id,
+                'kid': cfg_real.jaas_api_key_id, 'pem': cfg_real.jaas_chave_privada}
+    try:
+        c.post('/reunioes/configuracao/', {
+            'servidor_jitsi': 'meet.jit.si', 'gerar_ata': 'on',
+            'jaas_app_id': 'vpaas-magic-cookie-ZZ', 'jaas_api_key_id': 'vpaas-magic-cookie-ZZ/k',
+            'jaas_chave_privada': pem}, follow=True)
+        cfg_real = ConfiguracaoReunioes.get()
+        t('guarda a chave privada', cfg_real.jaas_chave_privada.strip() == pem.strip())
+        pagina = c.get('/reunioes/configuracao/').content.decode()
+        # O corpo da chave (o miolo base64) é o que não pode voltar para a tela;
+        # o texto de exemplo do campo pode citar "BEGIN PRIVATE KEY".
+        miolo = pem.strip().splitlines()[2][:40]
+        t('não devolve a chave para a tela', miolo not in pagina)
+        t('mostra que a chave está guardada', 'chave já guardada' in pagina)
+
+        c.post('/reunioes/configuracao/', {
+            'servidor_jitsi': 'meet.jit.si', 'gerar_ata': 'on',
+            'jaas_app_id': 'vpaas-magic-cookie-ZZ', 'jaas_api_key_id': 'vpaas-magic-cookie-ZZ/k',
+            'jaas_chave_privada': '••••••••  chave já guardada'}, follow=True)
+        t('salvar sem mexer no campo não apaga a chave',
+          ConfiguracaoReunioes.get().jaas_chave_privada.strip() == pem.strip())
+
+        c.post('/reunioes/configuracao/', {
+            'servidor_jitsi': 'meet.jit.si', 'gerar_ata': 'on'}, follow=True)
+        pagina = c.get('/reunioes/configuracao/').content.decode()
+        t('avisa que o servidor público exige moderador',
+          'aguardando um moderador' in pagina)
+    finally:
+        cfg_real = ConfiguracaoReunioes.get()
+        cfg_real.servidor_jitsi = guardado['srv']
+        cfg_real.jaas_app_id = guardado['app']
+        cfg_real.jaas_api_key_id = guardado['kid']
+        cfg_real.jaas_chave_privada = guardado['pem']
+        cfg_real.save()
+        print('   (configuração real devolvida ao estado anterior)')
+
     print('\n== HIGIENE DE TEMPLATE ==')
     import glob
     import re
