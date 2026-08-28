@@ -849,6 +849,31 @@ def meta_add_comentario(request, meta_id):
     return redirect('impulso:meta_detail', meta_id=meta.id)
 
 
+@require_POST
+@impulso_member_required
+def meta_excluir_comentario(request, comentario_id):
+    """Apaga um comentário da tarefa.
+
+    Quem apaga: o autor do comentário, o gestor da meta ou um superusuário.
+    Colega nenhum apaga o comentário do outro — num histórico de tarefa isso
+    seria reescrever o que a outra pessoa disse.
+    """
+    comentario = get_object_or_404(
+        MetaComentario.objects.select_related('meta'), id=comentario_id)
+    meta = comentario.meta
+
+    pode = (request.user.is_superuser
+            or comentario.autor_id == request.user.id
+            or meta.gestor_id == request.user.id)
+    if not pode:
+        messages.error(request, 'Você só pode excluir os seus próprios comentários.')
+        return redirect('impulso:meta_detail', meta_id=meta.id)
+
+    comentario.delete()
+    messages.success(request, 'Comentário excluído.')
+    return redirect('impulso:meta_detail', meta_id=meta.id)
+
+
 @impulso_member_required
 def minhas_atividades(request):
     """Próximas atividades e prazos do colaborador."""

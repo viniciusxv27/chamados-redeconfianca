@@ -63,20 +63,23 @@ def login_view(request):
     
     return render(request, 'users/login.html')
 
-def forgot_password_view(request):
-    if request.user.is_authenticated:
-        return redirect('home')
-    
-    if request.method == 'POST':
-        email = request.POST.get('email')
-        try:
-            user = User.objects.get(email=email)
-            # Aqui você implementaria o envio do email de recuperação de senha
-            messages.success(request, 'Instruções para recuperação de senha foram enviadas para seu email.')
-        except User.DoesNotExist:
-            messages.error(request, 'Email não encontrado.')
-    
-    return render(request, 'users/forgot_password.html')
+# Espera entre dois pedidos de recuperação para o mesmo e-mail. Sem isso,
+# qualquer um enche a caixa de entrada de um colega apertando o botão.
+INTERVALO_RECUPERACAO_SEGUNDOS = 120
+
+
+def _link_de_recuperacao(request, user):
+    from django.contrib.auth.tokens import default_token_generator
+    from django.urls import reverse
+    from django.utils.encoding import force_bytes
+    from django.utils.http import urlsafe_base64_encode
+
+    caminho = reverse('reset_password', kwargs={
+        'uidb64': urlsafe_base64_encode(force_bytes(user.pk)),
+        'token': default_token_generator.make_token(user),
+    })
+    return request.build_absolute_uri(caminho)
+
 
 @login_required
 def logout_view(request):
@@ -4040,70 +4043,77 @@ def tutorial_detail_view(request, tutorial_id):
 
 
 def forgot_password_view(request):
-    """Solicitar redefinição de senha — envia o link via WhatsApp (Z-API)."""
+    """Solicitar redefinição de senha — envia o link por e-mail (Resend)."""
     if request.user.is_authenticated:
         return redirect('dashboard')
 
     if request.method == 'POST':
+        from django.core.cache import caches
+
+        from .resend_email import configurada, enviar
+
         email = (request.POST.get('email') or '').strip()
 
+        # A mesma resposta com e sem cadastro, de propósito: dizer "e-mail não
+        # encontrado" transformaria esta tela num verificador de quem trabalha
+        # aqui, que é exatamente o primeiro passo de um golpe dirigido.
+        resposta_neutra = ('Se este e-mail estiver cadastrado, o link de recuperação '
+                           'chega em instantes. Confira também o spam.')
+
         if not email:
-            messages.error(request, 'Por favor, insira seu email.')
+            messages.error(request, 'Informe seu e-mail.')
             return render(request, 'users/forgot_password.html')
 
-        # Mensagem genérica de sucesso para não revelar se o email existe.
-        generic_success = (
-            'Se o email existir em nosso sistema, enviaremos um WhatsApp com as '
-            'instruções para o número cadastrado.'
-        )
-
-        try:
-            user = User.objects.get(email__iexact=email, is_active=True)
-        except User.DoesNotExist:
-            messages.success(request, generic_success)
-            return redirect('login')
-
-        phone = (getattr(user, 'phone', '') or '').strip()
-        if not phone:
-            messages.error(
-                request,
-                'Não há um número de WhatsApp cadastrado para este email. '
-                'Procure o administrador do sistema.',
-            )
+        if not configurada():
+            messages.error(request, 'O envio de e-mail ainda não foi configurado. '
+                                    'Fale com o administrador do portal.')
             return render(request, 'users/forgot_password.html')
 
-        # Gerar token + link de redefinição.
-        from django.contrib.auth.tokens import default_token_generator
-        from django.utils.http import urlsafe_base64_encode
-        from django.utils.encoding import force_bytes
+        cache = caches['local']
+        chave = f'recuperacao:{email.lower()}'
+        if cache.get(chave):
+            # Mensagem igual à do sucesso: se dissesse "aguarde", já revelaria
+            # que alguém pediu recuperação para este e-mail.
+            messages.success(request, resposta_neutra)
+            return render(request, 'users/forgot_password.html')
 
-        token = default_token_generator.make_token(user)
-        uid = urlsafe_base64_encode(force_bytes(user.pk))
-        reset_link = request.build_absolute_uri(f'/reset-password/{uid}/{token}/')
+        user = User.objects.filter(email__iexact=email, is_active=True).first()
+        if user:
+            link = _link_de_recuperacao(request, user)
+            nome = user.first_name or user.get_full_name() or 'Olá'
+            html = f"""
+                <div style="font-family:Arial,Helvetica,sans-serif;max-width:520px;margin:0 auto">
+                  <h2 style="color:#1f2937">Recuperação de senha</h2>
+                  <p style="color:#374151">{nome}, recebemos um pedido para redefinir a sua
+                  senha do portal da Rede Confiança.</p>
+                  <p style="margin:28px 0">
+                    <a href="{link}" style="background:#FF6B35;color:#fff;padding:12px 22px;
+                       border-radius:10px;text-decoration:none;font-weight:bold">
+                      Criar uma nova senha
+                    </a>
+                  </p>
+                  <p style="color:#6b7280;font-size:13px">
+                    O link vale por tempo limitado e só pode ser usado uma vez.
+                    Se não foi você que pediu, ignore este e-mail — sua senha continua a mesma.
+                  </p>
+                  <p style="color:#9ca3af;font-size:12px;word-break:break-all">{link}</p>
+                </div>
+            """
+            texto = (f'{nome}, para redefinir sua senha do portal da Rede Confiança, '
+                     f'acesse: {link}\n\nSe não foi você que pediu, ignore este e-mail.')
 
-        wa_message = (
-            f"Olá, {user.first_name or user.username}! 👋\n\n"
-            "Recebemos uma solicitação para redefinir a sua senha no "
-            "Sistema Rede Confiança.\n\n"
-            f"Acesse o link abaixo para criar uma nova senha (válido por algumas horas):\n{reset_link}\n\n"
-            "Se você não solicitou esta redefinição, basta ignorar esta mensagem."
-        )
+            ok, erro = enviar(user.email, 'Recuperação de senha — Rede Confiança', html, texto)
+            if ok:
+                cache.set(chave, True, INTERVALO_RECUPERACAO_SEGUNDOS)
+                log_action(user, 'PASSWORD_RESET_REQUEST',
+                           f'Link de recuperação enviado para {user.email}', request)
+            else:
+                # Falha de infraestrutura é dita: aqui o silêncio faria a pessoa
+                # esperar por um e-mail que nunca vai chegar.
+                messages.error(request, erro)
+                return render(request, 'users/forgot_password.html')
 
-        try:
-            from core.zapi import send_whatsapp_message
-            ok, detail = send_whatsapp_message(phone, wa_message)
-        except Exception:  # noqa: BLE001
-            ok, detail = False, 'falha inesperada'
-
-        if ok:
-            messages.success(request, generic_success)
-            return redirect('login')
-
-        messages.error(
-            request,
-            'Não foi possível enviar a mensagem de WhatsApp agora. Tente novamente em instantes.',
-        )
-        return render(request, 'users/forgot_password.html')
+        messages.success(request, resposta_neutra)
 
     return render(request, 'users/forgot_password.html')
 

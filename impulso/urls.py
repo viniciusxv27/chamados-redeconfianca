@@ -33,6 +33,8 @@ urlpatterns = [
     path('metas/<int:meta_id>/responsaveis/',
          views.meta_participantes_editar, name='meta_participantes_editar'),
     path('metas/<int:meta_id>/comentar/', views.meta_add_comentario, name='meta_add_comentario'),
+    path('metas/comentario/<int:comentario_id>/excluir/', views.meta_excluir_comentario,
+         name='meta_excluir_comentario'),
     path('atividades/', views.minhas_atividades, name='minhas_atividades'),
 
     path('assiduidade/', views.assiduidade, name='assiduidade'),

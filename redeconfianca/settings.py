@@ -352,6 +352,11 @@ EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
 EMAIL_USE_SSL = config('EMAIL_USE_SSL', default=False, cast=bool)
 EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
+
+# Resend — usado para o e-mail de recuperação de senha. A chave fica só no .env
+# (que não vai para o repositório): chave de envio no código é chave vazada.
+RESEND_API_KEY = config('RESEND_API_KEY', default='')
+RESEND_FROM = config('RESEND_FROM', default='Rede Confiança <onboarding@resend.dev>')
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='Sistema Rede Confiança <noreply@redeconfianca.com.br>')
 
 # Z-API (WhatsApp) — usado, por exemplo, no fluxo de "esqueci minha senha".
