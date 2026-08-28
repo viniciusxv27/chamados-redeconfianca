@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+{% block title %}Reuniões — configuração{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto px-4 py-6">
+    <a href="{% url 'reunioes:lista' %}" class="text-sm text-gray-500 hover:text-gray-700 mb-3 inline-block">
+        <i class="fas fa-arrow-left mr-1.5"></i>Voltar
+    </a>
+
+    <h1 class="text-xl font-bold text-gray-800 mb-1">
+        <i class="fas fa-gear text-sky-600 mr-2"></i>Reuniões — configuração
+    </h1>
+    <p class="text-sm text-gray-500 mb-5">Só o SUPERADMIN mexe aqui.</p>
+
+    {% if messages %}
+        {% for message in messages %}
+        <div role="alert" class="mb-4 p-3 rounded-xl text-sm
+             {% if message.tags == 'success' %}bg-green-50 border border-green-100 text-green-800
+             {% else %}bg-red-50 border border-red-100 text-red-700{% endif %}">{{ message }}</div>
+        {% endfor %}
+    {% endif %}
+
+    <form method="post" class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-5">
+        {% csrf_token %}
+
+        <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Servidor de vídeo</label>
+            <input type="text" name="servidor_jitsi" value="{{ cfg.servidor_jitsi }}"
+                   placeholder="meet.jit.si"
+                   class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+            <p class="text-[11px] text-gray-500 mt-1">
+                Só o endereço, sem <code>https://</code>. O padrão <strong>meet.jit.si</strong> é o
+                servidor público do Jitsi: funciona na hora, sem limite de tempo, mas o vídeo passa
+                por um servidor de terceiros. Para conversa sensível, suba um Jitsi de vocês e
+                troque só este campo.
+            </p>
+        </div>
+
+        <label class="flex items-start gap-2 text-sm text-gray-700 cursor-pointer">
+            <input type="checkbox" name="gerar_ata" {% if cfg.gerar_ata %}checked{% endif %}
+                   class="rounded text-sky-600 focus:ring-sky-500 mt-0.5">
+            <span>
+                Permitir gerar ata pela IA
+                <span class="block text-[11px] text-gray-500">
+                    Desligado, o botão de gravar some das salas e nenhuma ata é criada.
+                </span>
+            </span>
+        </label>
+
+        <button type="submit" class="px-5 py-2 rounded-lg bg-sky-600 text-white text-sm font-medium hover:bg-sky-700">
+            <i class="fas fa-check mr-1.5"></i>Salvar
+        </button>
+    </form>
+</div>
+{% endblock %}

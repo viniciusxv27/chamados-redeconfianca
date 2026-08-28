@@ -1,0 +1,40 @@
+{% if reunioes_agora or reunioes_proximas %}
+<div class="mb-6 space-y-2">
+    {% for r in reunioes_agora %}
+    <div class="bg-white rounded-xl border-l-4 border-red-500 shadow-sm p-4 flex items-center justify-between gap-3 flex-wrap">
+        <div class="min-w-0">
+            <p class="text-xs font-semibold text-red-600 uppercase tracking-wide">
+                <i class="fas fa-circle text-[7px] mr-1 animate-pulse"></i>Reunião acontecendo agora
+            </p>
+            <p class="text-sm font-semibold text-gray-800 truncate">{{ r.titulo }}</p>
+            <p class="text-xs text-gray-500">
+                começou {{ r.inicio|date:'H:i' }} ·
+                {{ r.organizador.get_full_name|default:r.organizador.email }}
+            </p>
+        </div>
+        <a href="{% url 'reunioes:sala' r.id %}"
+           class="px-4 py-2 rounded-lg bg-red-500 text-white text-sm font-medium hover:bg-red-600 whitespace-nowrap">
+            <i class="fas fa-video mr-1.5"></i>Entrar agora
+        </a>
+    </div>
+    {% endfor %}
+
+    {% for r in reunioes_proximas %}
+    <div class="bg-white rounded-xl border-l-4 border-sky-500 shadow-sm p-4 flex items-center justify-between gap-3 flex-wrap">
+        <div class="min-w-0">
+            <p class="text-xs font-semibold text-sky-600 uppercase tracking-wide">
+                <i class="fas fa-clock mr-1"></i>Você tem reunião às {{ r.inicio|date:'H:i' }}
+            </p>
+            <p class="text-sm font-semibold text-gray-800 truncate">{{ r.titulo }}</p>
+            <p class="text-xs text-gray-500">
+                {{ r.inicio|date:'d/m' }} · {{ r.organizador.get_full_name|default:r.organizador.email }}
+            </p>
+        </div>
+        <a href="{% url 'reunioes:detalhe' r.id %}"
+           class="px-4 py-2 rounded-lg border border-sky-200 text-sky-700 text-sm font-medium hover:bg-sky-50 whitespace-nowrap">
+            Ver pauta
+        </a>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}

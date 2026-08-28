@@ -1,0 +1,213 @@
+{% extends 'base.html' %}
+{% block title %}Cursos — quadro de gestão{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto px-4 py-6">
+
+    <div class="flex items-start justify-between gap-3 flex-wrap mb-5">
+        <div>
+            <h1 class="text-xl font-bold text-gray-800">
+                <i class="fas fa-table-columns text-purple-600 mr-2"></i>Cursos — quadro de gestão
+            </h1>
+            <p class="text-sm text-gray-500">Quem fez e quem não fez, loja por loja.</p>
+        </div>
+        <div class="flex items-center gap-2 flex-wrap">
+            <a href="{% url 'cursos:meus_cursos' %}"
+               class="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">
+                <i class="fas fa-user mr-1.5"></i>Meus cursos
+            </a>
+            {% if is_superadmin %}
+            <a href="{% url 'cursos:configuracao' %}"
+               class="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">
+                <i class="fas fa-gear mr-1.5"></i>Configuração
+            </a>
+            {% endif %}
+            <a href="{% url 'cursos:curso_novo' %}"
+               class="px-4 py-2 rounded-lg bg-purple-600 text-white text-sm font-medium hover:bg-purple-700">
+                <i class="fas fa-plus mr-1.5"></i>Publicar curso
+            </a>
+        </div>
+    </div>
+
+    {% if messages %}
+        {% for message in messages %}
+        <div role="alert" class="mb-4 p-3 rounded-xl text-sm
+             {% if message.tags == 'success' %}bg-green-50 border border-green-100 text-green-800
+             {% else %}bg-red-50 border border-red-100 text-red-700{% endif %}">{{ message }}</div>
+        {% endfor %}
+    {% endif %}
+
+    {% if not curso %}
+    <div class="bg-white rounded-2xl border border-gray-100 p-10 text-center">
+        <i class="fas fa-graduation-cap text-3xl text-gray-300 mb-3 block"></i>
+        <p class="text-sm text-gray-500 mb-4">Nenhum curso publicado ainda.</p>
+        <a href="{% url 'cursos:curso_novo' %}"
+           class="inline-block px-4 py-2 rounded-lg bg-purple-600 text-white text-sm font-medium hover:bg-purple-700">
+            Publicar o primeiro curso
+        </a>
+    </div>
+    {% else %}
+
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 mb-5">
+        <form method="get" class="flex flex-wrap items-end gap-3">
+            <div>
+                <label class="block text-xs font-semibold text-gray-500 mb-1">Curso</label>
+                <select name="curso" onchange="this.form.submit()"
+                        class="border border-gray-200 rounded-lg px-3 py-2 text-sm min-w-[280px]">
+                    {% for c in cursos %}
+                    <option value="{{ c.id }}" {% if c.id == curso.id %}selected{% endif %}>
+                        {{ c.titulo }} — prazo {{ c.prazo|date:'d/m/Y' }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <a href="{% url 'cursos:exportar' %}?curso={{ curso.id }}"
+               class="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">
+                <i class="fas fa-file-csv mr-1.5"></i>Exportar CSV
+            </a>
+            <a href="{% url 'cursos:curso_editar' curso.id %}"
+               class="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">
+                <i class="fas fa-pen mr-1.5"></i>Editar curso
+            </a>
+            {% if curso.tipo == 'CAPACITACAO' %}
+            <a href="{% url 'cursos:capacitacao' curso.id %}"
+               class="px-3 py-2 rounded-lg border border-sky-200 text-sm text-sky-700 hover:bg-sky-50">
+                <i class="fas fa-user-plus mr-1.5"></i>Quem precisa fazer
+            </a>
+            {% endif %}
+        </form>
+    </div>
+
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+        <div class="bg-white rounded-2xl border border-gray-100 p-4">
+            <p class="text-xs text-gray-400">Cobrados</p>
+            <p class="text-2xl font-bold text-gray-800">{{ totais.pessoas }}</p>
+        </div>
+        <div class="bg-white rounded-2xl border border-gray-100 p-4">
+            <p class="text-xs text-gray-400">Fizeram</p>
+            <p class="text-2xl font-bold text-emerald-600">{{ totais.entregues }}</p>
+        </div>
+        <div class="bg-white rounded-2xl border border-gray-100 p-4">
+            <p class="text-xs text-gray-400">Faltam</p>
+            <p class="text-2xl font-bold text-amber-600">{{ totais.pendentes }}</p>
+        </div>
+        <div class="bg-white rounded-2xl border border-gray-100 p-4">
+            <p class="text-xs text-gray-400">A conferir</p>
+            <p class="text-2xl font-bold text-sky-600">{{ totais.conferir }}</p>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 mb-5">
+        <div class="flex items-center justify-between text-sm mb-2">
+            <span class="font-semibold text-gray-700">Adesão geral</span>
+            <span class="font-bold {% if percentual_geral == 100 %}text-emerald-600{% else %}text-gray-700{% endif %}">
+                {{ percentual_geral }}%
+            </span>
+        </div>
+        <div class="h-2 rounded-full bg-gray-100 overflow-hidden">
+            <div class="h-full rounded-full {% if percentual_geral == 100 %}bg-emerald-500{% else %}bg-purple-500{% endif %}"
+                 style="width: {{ percentual_geral }}%"></div>
+        </div>
+    </div>
+
+    <div class="space-y-3">
+        {% for loja in lojas %}
+        <div class="crs-card bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <button type="button" onclick="document.getElementById('loja-{{ forloop.counter }}').classList.toggle('hidden')"
+                    class="w-full px-5 py-3 flex items-center justify-between gap-3 text-left hover:bg-gray-50">
+                <div class="flex items-center gap-3 min-w-0">
+                    <i class="fas fa-store text-gray-300"></i>
+                    <span class="font-semibold text-gray-800 truncate">{{ loja.nome }}</span>
+                    <span class="text-xs text-gray-400">{{ loja.feitos }}/{{ loja.total }}</span>
+                </div>
+                <div class="flex items-center gap-3">
+                    {% if loja.faltam %}
+                    <span class="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[11px] font-semibold">
+                        {{ loja.faltam }} falta{{ loja.faltam|pluralize }}
+                    </span>
+                    {% else %}
+                    <span class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-semibold">
+                        <i class="fas fa-check mr-1"></i>completo
+                    </span>
+                    {% endif %}
+                    <div class="w-24 h-2 rounded-full bg-gray-100 overflow-hidden hidden sm:block">
+                        <div class="h-full rounded-full {% if loja.percentual == 100 %}bg-emerald-500{% else %}bg-purple-500{% endif %}"
+                             style="width: {{ loja.percentual }}%"></div>
+                    </div>
+                    <i class="fas fa-chevron-down text-gray-300 text-xs"></i>
+                </div>
+            </button>
+
+            <div id="loja-{{ forloop.counter }}" class="hidden border-t border-gray-100 divide-y divide-gray-50">
+                {% for item in loja.itens %}
+                <div class="px-5 py-3 flex items-center justify-between gap-3 flex-wrap">
+                    <div class="min-w-0">
+                        <p class="text-sm font-medium text-gray-800 truncate">
+                            {{ item.pessoa.get_full_name|default:item.pessoa.username }}
+                        </p>
+                        <p class="text-[11px] text-gray-400">
+                            {% if item.envio %}
+                                enviado em {{ item.envio.enviado_em|date:'d/m/Y H:i' }}
+                            {% else %}
+                                sem comprovante
+                            {% endif %}
+                        </p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        {% if item.envio %}
+                        <a href="{{ item.envio.arquivo.url }}" target="_blank" rel="noopener noreferrer"
+                           class="px-2.5 py-1 rounded-lg border border-gray-200 text-xs text-gray-600 hover:bg-gray-50">
+                            <i class="fas fa-paperclip mr-1"></i>Ver anexo
+                        </a>
+                        {% endif %}
+
+                        {% if item.conferir %}
+                        <form method="post" action="{% url 'cursos:revisar_comprovante' item.envio.id %}" class="inline">
+                            {% csrf_token %}
+                            <input type="hidden" name="acao" value="aprovar">
+                            <input type="hidden" name="voltar" value="{{ request.get_full_path }}">
+                            <button type="submit" class="px-2.5 py-1 rounded-lg bg-emerald-500 text-white text-xs font-medium hover:bg-emerald-600">
+                                Aprovar
+                            </button>
+                        </form>
+                        <form method="post" action="{% url 'cursos:revisar_comprovante' item.envio.id %}" class="inline"
+                              onsubmit="this.observacao.value = prompt('Motivo da recusa (aparece para a pessoa):') || ''; return this.observacao.value !== null;">
+                            {% csrf_token %}
+                            <input type="hidden" name="acao" value="recusar">
+                            <input type="hidden" name="observacao" value="">
+                            <input type="hidden" name="voltar" value="{{ request.get_full_path }}">
+                            <button type="submit" class="px-2.5 py-1 rounded-lg border border-red-200 text-red-600 text-xs font-medium hover:bg-red-50">
+                                Recusar
+                            </button>
+                        </form>
+                        {% elif item.entregue %}
+                        <span class="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-semibold">
+                            <i class="fas fa-check mr-1"></i>Aprovado
+                        </span>
+                        {% else %}
+                        <span class="px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 text-[11px] font-semibold">
+                            {% if item.envio %}Recusado{% else %}Não fez{% endif %}
+                        </span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% empty %}
+        <div class="bg-white rounded-2xl border border-gray-100 p-10 text-center">
+            <i class="fas fa-user-slash text-3xl text-gray-300 mb-3 block"></i>
+            <p class="text-sm text-gray-500">
+                Ninguém é cobrado por este curso ainda.
+                {% if is_superadmin %}
+                Escolha os grupos e setores em <a href="{% url 'cursos:configuracao' %}" class="text-purple-600 hover:underline">Configuração</a>.
+                {% else %}
+                Peça ao SUPERADMIN para definir o público na configuração do módulo.
+                {% endif %}
+            </p>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

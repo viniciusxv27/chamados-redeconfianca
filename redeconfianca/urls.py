@@ -128,6 +128,8 @@ urlpatterns = [
     path('contagem-caixa/', include('contagem_caixa.urls')),  # Contagem de Caixa
     # Módulo oculto: não aparece em menu nenhum, acesso conferido na view.
     path('maps/', include('maps.urls')),
+    path('cursos/', include('cursos.urls')),  # Cursos obrigatórios da Vivo
+    path('reunioes/', include('reunioes.urls')),  # Reuniões com sala de vídeo
     path('', include('tangerino.urls')),  # Ponto e Férias (integração Tangerino)
     path('reports/', include('core.reports_urls')),  # Sistema de denúncias
     path('groups/', include('core.group_urls')),  # Sistema de gerenciamento de grupos

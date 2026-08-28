@@ -3,7 +3,8 @@
 CONFIAR (40)
     20  atividades/metas ..... 10 pela média das notas do gestor (qualidade+prazo)
                                10 pelo percentual de metas concluídas
-    10  feedback ............. nota do módulo /feedback >= 90 (escala 0-100)
+    10  feedback ............. primeiro feedback, nota que subiu, ou >= 90
+                               (nota do módulo /feedback, escala 0-100)
     10  assiduidade .......... folha de ponto: -2,5 por semana com problema
 
 CONECTAR (40)
@@ -108,34 +109,103 @@ def _nota_metas(user, inicio, fim):
             _quantize(p_conclusao), PT_METAS_CONCLUSAO, detalhes)
 
 
+def _nota_anterior(fb):
+    """Nota (0-100) do feedback anterior desta pessoa, se houver alguma com nota.
+
+    Pula os feedbacks antigos que ficaram sem nota preenchida: comparar com um
+    formulário em branco não diz nada, e tratar isso como "piorou" castigaria a
+    pessoa por uma falha de preenchimento de outro.
+    """
+    from feedback.models import Feedback
+
+    anteriores = (Feedback.objects
+                  .filter(evaluatee_id=fb.evaluatee_id, created_at__lt=fb.created_at)
+                  .order_by('-created_at')[:20])
+    for antigo in anteriores:
+        try:
+            media = antigo.average_score()
+        except Exception:
+            media = None
+        if media is not None:
+            return round(float(media) * 10, 1)
+    return None
+
+
+def avaliar_feedback(fb):
+    """Este feedback garante os 10 pontos do Impulso? E por qual caminho?
+
+    São três caminhos, e basta um:
+
+    1. **Primeiro feedback** que a pessoa recebe do gestor — ninguém começa
+       devendo ponto por não ter histórico.
+    2. **Evoluiu**: a nota subiu em relação ao feedback anterior.
+    3. **Nota alta**: 90 de 100 (ou 9 de 10) para cima.
+
+    Quem já está no topo não perde ponto por não ter como subir, e quem começou
+    embaixo ganha ponto ao melhorar — é o que a regra dos três caminhos resolve.
+    """
+    try:
+        media = fb.average_score()
+    except Exception:
+        media = None
+    if media is None:
+        return None
+
+    nota = round(float(media) * 10, 1)                 # escala 0-10 -> 0-100
+    anterior = _nota_anterior(fb)
+
+    primeiro = anterior is None
+    evoluiu = (anterior is not None) and nota > anterior
+    nota_alta = nota >= FEEDBACK_NOTA_MINIMA
+    atingiu = primeiro or evoluiu or nota_alta
+
+    if nota_alta:
+        motivo = f'nota {nota:g} — acima de {FEEDBACK_NOTA_MINIMA}'
+    elif primeiro:
+        motivo = 'primeiro feedback recebido'
+    elif evoluiu:
+        motivo = f'evoluiu de {anterior:g} para {nota:g}'
+    else:
+        motivo = f'nota {nota:g} — não subiu ({anterior:g}) nem chegou a {FEEDBACK_NOTA_MINIMA}'
+
+    return {
+        'nota': nota, 'media': media, 'anterior': anterior,
+        'primeiro': primeiro, 'evoluiu': evoluiu, 'nota_alta': nota_alta,
+        'atingiu': atingiu, 'motivo': motivo,
+        'minimo': FEEDBACK_NOTA_MINIMA,
+    }
+
+
 def _nota_feedback(user, inicio, fim):
-    """10 pontos se o feedback do mês (0-100) atingir a nota mínima."""
+    """10 pontos se algum feedback do mês fechar por um dos três caminhos."""
     try:
         from feedback.models import Feedback
     except Exception:
         return ZERO, ZERO, {'indisponivel': True}
 
-    feedbacks = Feedback.objects.filter(
-        evaluatee=user, data__gte=inicio, data__lte=fim).order_by('-data')
+    feedbacks = (Feedback.objects
+                 .filter(evaluatee=user, data__gte=inicio, data__lte=fim)
+                 .order_by('-data', '-created_at'))
 
-    melhor = None
+    escolhido = None
     for fb in feedbacks:
-        try:
-            media = fb.average_score()
-        except Exception:
-            media = None
-        if media is None:
+        dados = avaliar_feedback(fb)
+        if dados is None:
             continue
-        nota = float(media) * 10  # 0-10 -> 0-100
-        if melhor is None or nota > melhor:
-            melhor = nota
+        # Vale o que garante o ponto; entre dois que garantem, a nota maior.
+        melhor_que = (
+            escolhido is None
+            or (dados['atingiu'] and not escolhido['atingiu'])
+            or (dados['atingiu'] == escolhido['atingiu']
+                and dados['nota'] > escolhido['nota'])
+        )
+        if melhor_que:
+            escolhido = dados
 
-    if melhor is None:
+    if escolhido is None:
         return ZERO, ZERO, {'sem_feedback': True}
 
-    atingiu = melhor >= FEEDBACK_NOTA_MINIMA
-    detalhes = {'nota': round(melhor, 1), 'minimo': FEEDBACK_NOTA_MINIMA, 'atingiu': atingiu}
-    return (PT_FEEDBACK if atingiu else ZERO), PT_FEEDBACK, detalhes
+    return (PT_FEEDBACK if escolhido['atingiu'] else ZERO), PT_FEEDBACK, escolhido
 
 
 # ---------------------------------------------------------------------------
@@ -317,8 +387,7 @@ def linhas_detalhadas(dados):
          if not d['metas'].get('sem_metas') else 'Nenhuma meta com prazo no mês'},
         {'bloco': 'CONFIAR', 'item': 'Feedback do gestor',
          'pontos': dados['p_feedback'], 'max': PT_FEEDBACK,
-         'info': ('nota %s (mínimo %s)' % (
-             d['feedback'].get('nota'), d['feedback'].get('minimo')))
+         'info': (d['feedback'].get('motivo') or '—')
          if not d['feedback'].get('sem_feedback') else 'Sem feedback no mês'},
         {'bloco': 'CONFIAR',
          'item': ('Assiduidade (ponto eletrônico)'

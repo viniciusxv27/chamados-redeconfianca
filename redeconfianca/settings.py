@@ -78,6 +78,8 @@ INSTALLED_APPS = [
     'contagem_caixa',  # Contagem de Caixa (controle diário por loja)
     'vendas',  # Lançamento de vendas (Postgres) + tabela de preços
     'maps',  # Mapa de localização (módulo oculto, restrito à administração)
+    'cursos',  # Cursos obrigatórios da Vivo
+    'reunioes',  # Reuniões com sala de vídeo e ata
     # 'webpush',  # Django WebPush (temporariamente removido)
 ]
 
@@ -103,6 +105,7 @@ MIDDLEWARE = [
     'users.pre_registration_middleware.PreRegistrationAdjustmentMiddleware',
     'tangerino.middleware.BloqueioFeriasMiddleware',
     'tangerino.middleware.BloqueioJornadaMiddleware',
+    'cursos.middleware.BloqueioCursoMiddleware',
 ]
 
 ROOT_URLCONF = 'redeconfianca.urls'
@@ -128,6 +131,8 @@ TEMPLATES = [
                 'tangerino.context_processors.tangerino_gate',
                 'contagem_caixa.context_processors.caixa_menu',
                 'maps.context_processors.coleta_posicao',
+                'cursos.context_processors.cursos_menu',
+                'reunioes.context_processors.reunioes_lembrete',
             ],
         },
     },

@@ -1034,7 +1034,8 @@ def feedback_list(request):
     # /feedback/ fica o formulário FM-005, que tem as notas. É a nota de lá que
     # vira ponto de feedback no Impulso — mostrá-la aqui evita abrir outro
     # módulo só para entender de onde saiu a pontuação.
-    from .scoring import FEEDBACK_NOTA_MINIMA, PT_FEEDBACK, periodo_do_mes
+    from .scoring import (FEEDBACK_NOTA_MINIMA, PT_FEEDBACK, avaliar_feedback,
+                          periodo_do_mes)
 
     inicio_mes, fim_mes = periodo_do_mes()
 
@@ -1053,20 +1054,21 @@ def feedback_list(request):
         for fb in (do_mes
                    .select_related('evaluatee', 'evaluator')
                    .order_by('-data', '-created_at')):
-            media = fb.average_score()
-            if media is None:
+            dados = avaliar_feedback(fb)
+            if dados is None:
                 continue
-            nota = round(float(media) * 10, 1)             # escala 0-10 -> 0-100
-            anterior = formais.get(fb.evaluatee_id)
-            # Mesma regra da pontuação: vale a melhor nota do mês.
-            if anterior and anterior['nota'] >= nota:
+            escolhido = formais.get(fb.evaluatee_id)
+            # A mesma regra da pontuação, na mesma função: vale o que garante o
+            # ponto e, entre dois que garantem, a nota maior. Duas contas
+            # diferentes para o mesmo número foi erro que já aconteceu aqui.
+            if escolhido and not (
+                    (dados['atingiu'] and not escolhido['atingiu'])
+                    or (dados['atingiu'] == escolhido['atingiu']
+                        and dados['nota'] > escolhido['nota'])):
                 continue
-            formais[fb.evaluatee_id] = {
-                'colaborador': fb.evaluatee, 'feedback': fb,
-                'media': media, 'nota': nota,
-                'atingiu': nota >= FEEDBACK_NOTA_MINIMA,
-                'pontos': PT_FEEDBACK if nota >= FEEDBACK_NOTA_MINIMA else 0,
-            }
+            formais[fb.evaluatee_id] = dict(
+                dados, colaborador=fb.evaluatee, feedback=fb,
+                pontos=PT_FEEDBACK if dados['atingiu'] else 0)
     except Exception:                                       # módulo indisponível
         formais = {}
 

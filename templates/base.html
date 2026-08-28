@@ -709,6 +709,30 @@
                                     </a>
                                 </li>
                                 {% endif %}
+                                <li>
+                                    <a href="{% url 'reunioes:lista' %}" data-rota="{% url 'reunioes:lista' %}" class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Reuniões">
+                                        <i class="fas fa-video text-sky-400 flex-shrink-0 w-5 text-center"></i>
+                                        <span>Reuniões</span>
+                                        {% if reunioes_agora %}
+                                        <span class="ml-auto w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                                        {% endif %}
+                                        <div class="tooltip-collapsed">Reuniões</div>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-sky-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
+                                </li>
+                                {% if pode_ver_cursos %}
+                                <li>
+                                    <a href="{% url 'cursos:meus_cursos' %}" data-rota="{% url 'cursos:meus_cursos' %}" class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Cursos Vivo">
+                                        <i class="fas fa-graduation-cap text-purple-400 flex-shrink-0 w-5 text-center"></i>
+                                        <span>Cursos Vivo</span>
+                                        {% if cursos_pendentes %}
+                                        <span class="ml-auto px-1.5 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-bold">{{ cursos_pendentes }}</span>
+                                        {% endif %}
+                                        <div class="tooltip-collapsed">Cursos Vivo</div>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-purple-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
+                                </li>
+                                {% endif %}
                                 {% if caixa_liberado %}
                                 <li>
                                     <a href="{% url 'contagem_caixa:dashboard' %}" data-rota="{% url 'contagem_caixa:dashboard' %}" class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Contagem de Caixa">

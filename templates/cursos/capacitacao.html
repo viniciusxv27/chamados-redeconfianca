@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+{% block title %}Quem precisa fazer{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 py-6">
+
+    <a href="{% url 'cursos:gestao' %}" class="text-sm text-gray-500 hover:text-gray-700 mb-3 inline-block">
+        <i class="fas fa-arrow-left mr-1.5"></i>Voltar ao quadro
+    </a>
+
+    <h1 class="text-xl font-bold text-gray-800 mb-1">Capacitação inicial — quem precisa fazer</h1>
+    <p class="text-sm text-gray-500 mb-5">
+        {{ curso.titulo }} · prazo {{ curso.prazo|date:'d/m/Y' }}.
+        Só quem estiver marcado aqui vê o curso e é cobrado por ele.
+    </p>
+
+    {% if messages %}
+        {% for message in messages %}
+        <div role="alert" class="mb-4 p-3 rounded-xl text-sm bg-red-50 border border-red-100 text-red-700">{{ message }}</div>
+        {% endfor %}
+    {% endif %}
+
+    <form method="post" class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        {% csrf_token %}
+
+        <div class="px-5 py-3 border-b border-gray-100 flex items-center gap-3 flex-wrap">
+            <input type="search" id="crs-busca" placeholder="Buscar por nome ou loja…"
+                   class="flex-1 min-w-[200px] border border-gray-200 rounded-lg px-3 py-2 text-sm">
+            <span class="text-xs text-gray-400"><span id="crs-conta">{{ marcados|length }}</span> marcado(s)</span>
+        </div>
+
+        <div class="max-h-[520px] overflow-y-auto divide-y divide-gray-50">
+            {% for p in pessoas %}
+            <label class="crs-pessoa flex items-center gap-3 px-5 py-2.5 cursor-pointer hover:bg-gray-50"
+                   data-busca="{{ p.get_full_name|lower }} {{ p.pdv|lower }}">
+                <input type="checkbox" name="colaboradores" value="{{ p.id }}"
+                       {% if p.id in marcados %}checked{% endif %}
+                       {% if p.id in com_envio %}data-travado="1"{% endif %}
+                       onchange="crsConta()"
+                       class="rounded text-sky-600 focus:ring-sky-500">
+                <div class="min-w-0 flex-1">
+                    <p class="text-sm text-gray-800 truncate">{{ p.get_full_name|default:p.username }}</p>
+                    <p class="text-[11px] text-gray-400">{{ p.pdv|default:'—' }}</p>
+                </div>
+                {% if p.id in com_envio %}
+                <span class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-semibold">já enviou</span>
+                {% endif %}
+            </label>
+            {% endfor %}
+        </div>
+
+        <div class="px-5 py-3 border-t border-gray-100 flex items-center gap-2">
+            <button type="submit" class="px-5 py-2 rounded-lg bg-sky-600 text-white text-sm font-medium hover:bg-sky-700">
+                <i class="fas fa-check mr-1.5"></i>Salvar
+            </button>
+            <a href="{% url 'cursos:gestao' %}" class="px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">
+                Cancelar
+            </a>
+            <span class="text-[11px] text-gray-400 ml-auto">
+                Quem já enviou comprovante continua na lista mesmo se você desmarcar — o histórico não se apaga.
+            </span>
+        </div>
+    </form>
+</div>
+
+<script>
+function crsConta() {
+    const n = document.querySelectorAll('.crs-pessoa input[type=checkbox]:checked').length;
+    document.getElementById('crs-conta').textContent = n;
+}
+document.getElementById('crs-busca').addEventListener('input', function () {
+    const q = this.value.trim().toLowerCase();
+    document.querySelectorAll('.crs-pessoa').forEach(function (el) {
+        el.style.display = (!q || el.dataset.busca.includes(q)) ? '' : 'none';
+    });
+});
+</script>
+{% endblock %}

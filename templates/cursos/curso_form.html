@@ -1,0 +1,102 @@
+{% extends 'base.html' %}
+{% block title %}{% if curso %}Editar curso{% else %}Publicar curso{% endif %}{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto px-4 py-6">
+
+    <a href="{% url 'cursos:gestao' %}" class="text-sm text-gray-500 hover:text-gray-700 mb-3 inline-block">
+        <i class="fas fa-arrow-left mr-1.5"></i>Voltar ao quadro
+    </a>
+
+    <h1 class="text-xl font-bold text-gray-800 mb-1">
+        {% if curso %}Editar curso{% else %}Publicar curso{% endif %}
+    </h1>
+    <p class="text-sm text-gray-500 mb-5">
+        O link e as orientações que você escrever aqui aparecem na tela de quem precisa fazer.
+    </p>
+
+    {% if messages %}
+        {% for message in messages %}
+        <div role="alert" class="mb-4 p-3 rounded-xl text-sm bg-red-50 border border-red-100 text-red-700">{{ message }}</div>
+        {% endfor %}
+    {% endif %}
+
+    <form method="post" class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-5">
+        {% csrf_token %}
+
+        <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Tipo</label>
+            <select name="tipo" id="crs-tipo" onchange="crsTipo()"
+                    class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+                {% for valor, rotulo in tipos %}
+                <option value="{{ valor }}" {% if curso and curso.tipo == valor %}selected{% endif %}>{{ rotulo }}</option>
+                {% endfor %}
+            </select>
+            <p class="text-[11px] text-gray-400 mt-1">
+                O <strong>Curso Foco</strong> vale para todo mundo do escopo, todo mês.
+                A <strong>Capacitação Inicial</strong> vale só para quem você marcar depois de salvar.
+            </p>
+        </div>
+
+        <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Título</label>
+            <input type="text" name="titulo" required maxlength="200" value="{{ curso.titulo|default:'' }}"
+                   placeholder="Ex.: Curso Foco — Agosto/2026"
+                   class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+        </div>
+
+        <div id="crs-competencia-wrap">
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Mês de referência</label>
+            <input type="month" name="competencia"
+                   value="{% if curso.competencia %}{{ curso.competencia|date:'Y-m' }}{% endif %}"
+                   class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+        </div>
+
+        <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Link do curso</label>
+            <input type="url" name="link" maxlength="500" value="{{ curso.link|default:'' }}"
+                   placeholder="https://..."
+                   class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+        </div>
+
+        <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Orientações</label>
+            <textarea name="orientacoes" rows="6"
+                      placeholder="O que a pessoa precisa saber: onde entrar, o que fazer, o que anexar como comprovante…"
+                      class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">{{ curso.orientacoes|default:'' }}</textarea>
+        </div>
+
+        <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Prazo para anexar</label>
+            <input type="date" name="prazo" required
+                   value="{% if curso %}{{ curso.prazo|date:'Y-m-d' }}{% endif %}"
+                   class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+            <p class="text-[11px] text-gray-400 mt-1">Passado o prazo sem anexo, o portal trava — se o bloqueio estiver ligado.</p>
+        </div>
+
+        <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+            <input type="checkbox" name="publicado" {% if not curso or curso.publicado %}checked{% endif %}
+                   class="rounded text-purple-600 focus:ring-purple-500">
+            Publicar agora (aparece na tela dos colaboradores)
+        </label>
+
+        <div class="flex items-center gap-2 pt-2 border-t border-gray-100">
+            <button type="submit"
+                    class="px-5 py-2 rounded-lg bg-purple-600 text-white text-sm font-medium hover:bg-purple-700">
+                <i class="fas fa-check mr-1.5"></i>Salvar
+            </button>
+            <a href="{% url 'cursos:gestao' %}" class="px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">
+                Cancelar
+            </a>
+        </div>
+    </form>
+</div>
+
+<script>
+function crsTipo() {
+    const tipo = document.getElementById('crs-tipo').value;
+    document.getElementById('crs-competencia-wrap').style.display = (tipo === 'FOCO') ? '' : 'none';
+}
+document.addEventListener('DOMContentLoaded', crsTipo);
+</script>
+{% endblock %}

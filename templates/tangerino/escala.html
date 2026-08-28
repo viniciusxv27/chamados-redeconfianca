@@ -76,8 +76,16 @@
                 <i class="fas fa-users mr-1.5 text-cyan-600"></i>
                 {{ total_colaboradores }} colaborador{{ total_colaboradores|pluralize:",es" }}
                 {% if e_global %}<span class="text-gray-400 font-normal">— visão de gestor global</span>{% endif %}
+                {% if abaixo_da_meta %}
+                <span id="esc-resumo-abaixo" class="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full
+                             bg-amber-100 text-amber-700 text-[11px] font-semibold">
+                    <i class="fas fa-triangle-exclamation text-[10px]"></i>
+                    {{ abaixo_da_meta }} abaixo de {{ horas_meta }}h
+                </span>
+                {% endif %}
             </h3>
-            <p class="text-xs text-gray-400">Marque <strong>Folga</strong> ou preencha entrada e saída de cada dia.</p>
+            <p class="text-xs text-gray-400">Marque <strong>Folga</strong> ou preencha os quatro horários do dia:
+               entrada, saída para o almoço, volta do almoço e saída. A meta é {{ horas_meta }}h por semana.</p>
         </div>
 
         <div class="tg-scroll-x">
@@ -95,10 +103,19 @@
                 <tbody>
                     {% for linha in grade %}
                     <tr>
-                        <td class="esc-nome px-3 py-2 align-top">
+                        <td class="esc-nome px-3 py-2 align-top" data-linha="{{ linha.colaborador.id }}">
                             <input type="hidden" name="colaborador" value="{{ linha.colaborador.id }}">
                             <p class="font-medium text-gray-800 leading-tight">{{ linha.colaborador.full_name }}</p>
                             <p class="text-[11px] text-gray-400">{{ linha.colaborador.sector.name|default:"Sem setor" }}</p>
+                            <span class="esc-total inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-[11px] font-semibold
+                                         {% if linha.abaixo %}bg-amber-100 text-amber-700{% else %}bg-emerald-100 text-emerald-700{% endif %}"
+                                  data-meta="{{ horas_meta }}" title="Horas da semana somando o que está preenchido">
+                                <i class="fas {% if linha.abaixo %}fa-triangle-exclamation{% else %}fa-check{% endif %} text-[10px]"></i>
+                                <span class="esc-total-txt">{{ linha.horas|floatformat:1 }}h</span>
+                            </span>
+                            <span class="esc-aviso block text-[11px] text-amber-600 mt-0.5 {% if not linha.abaixo %}hidden{% endif %}">
+                                abaixo das {{ horas_meta }}h semanais
+                            </span>
                         </td>
                         {% for cel in linha.celulas %}
                         <td class="px-2 py-2 align-top {% if cel.data == hoje %}esc-hoje{% endif %}">
@@ -110,9 +127,13 @@
                             </label>
                             <div class="esc-horarios space-y-1 {% if cel.folga %}hidden{% endif %}">
                                 <input type="time" name="entrada_{{ cid }}_{{ iso }}" value="{{ cel.entrada|time:'H:i' }}"
-                                       class="esc-time" aria-label="Entrada">
+                                       class="esc-time esc-h" data-papel="entrada" title="Entrada" aria-label="Entrada">
+                                <input type="time" name="saida_almoco_{{ cid }}_{{ iso }}" value="{{ cel.saida_almoco|time:'H:i' }}"
+                                       class="esc-time esc-h" data-papel="saida_almoco" title="Saída para o almoço" aria-label="Saída para o almoço">
+                                <input type="time" name="volta_almoco_{{ cid }}_{{ iso }}" value="{{ cel.volta_almoco|time:'H:i' }}"
+                                       class="esc-time esc-h" data-papel="volta_almoco" title="Volta do almoço" aria-label="Volta do almoço">
                                 <input type="time" name="saida_{{ cid }}_{{ iso }}" value="{{ cel.saida|time:'H:i' }}"
-                                       class="esc-time" aria-label="Saída">
+                                       class="esc-time esc-h" data-papel="saida" title="Saída" aria-label="Saída">
                             </div>
                             {% endwith %}
                         </td>
@@ -167,6 +188,10 @@
                     <span class="text-gray-400"><i class="fas fa-mug-hot mr-1"></i>Folga</span>
                 {% elif item.dia and item.dia.entrada %}
                     <span class="font-medium text-gray-800">{{ item.dia.entrada|time:'H:i' }} <span class="text-gray-300">–</span> {{ item.dia.saida|time:'H:i'|default:'—' }}</span>
+                    {% if item.dia.saida_almoco and item.dia.volta_almoco %}
+                    <span class="block text-[11px] text-gray-400 text-right">almoço {{ item.dia.saida_almoco|time:'H:i' }} – {{ item.dia.volta_almoco|time:'H:i' }}</span>
+                    {% endif %}
+                    <span class="block text-[11px] text-gray-400 text-right">{{ item.dia.horas|floatformat:1 }}h</span>
                     {% if item.dia.observacao %}<span class="block text-[11px] text-gray-400 text-right">{{ item.dia.observacao }}</span>{% endif %}
                 {% else %}
                     <span class="text-gray-300">—</span>
@@ -174,6 +199,15 @@
             </div>
         </div>
         {% endfor %}
+        <div class="flex items-center justify-between px-4 py-3 border-t border-gray-100 bg-gray-50/60">
+            <span class="text-sm font-semibold text-gray-700">Total da semana</span>
+            <span class="text-sm font-bold {% if minhas_horas_abaixo %}text-amber-600{% else %}text-emerald-600{% endif %}">
+                {{ minhas_horas|floatformat:1 }}h
+                {% if minhas_horas_abaixo %}
+                <span class="block text-[11px] font-normal text-amber-600">abaixo das {{ horas_meta }}h semanais</span>
+                {% endif %}
+            </span>
+        </div>
     </div>
     {% endif %}
 </div>
@@ -227,7 +261,69 @@ function escToggleFolga(cb) {
     if (!horarios) return;
     horarios.classList.toggle('hidden', cb.checked);
     if (cb.checked) horarios.querySelectorAll('input[type=time]').forEach(i => i.value = '');
+    escRecalcular(cb.closest('tr'));
 }
+
+// Soma as horas da semana enquanto a pessoa digita. A mesma conta do servidor:
+// com almoço preenchido soma os dois turnos; sem almoço, entrada até saída.
+function escMinutos(valor) {
+    if (!valor) return null;
+    const [h, m] = valor.split(':').map(Number);
+    if (isNaN(h) || isNaN(m)) return null;
+    return h * 60 + m;
+}
+
+function escIntervalo(ini, fim) {
+    if (ini === null || fim === null) return 0;
+    return (fim < ini ? fim + 1440 : fim) - ini;
+}
+
+function escRecalcular(linha) {
+    if (!linha) return;
+    const marcador = linha.querySelector('.esc-total');
+    if (!marcador) return;
+
+    let minutos = 0;
+    linha.querySelectorAll('td').forEach(function (celula) {
+        const folga = celula.querySelector('.esc-folga');
+        if (!folga || folga.checked) return;
+        const val = papel => {
+            const el = celula.querySelector('.esc-h[data-papel="' + papel + '"]');
+            return el ? escMinutos(el.value) : null;
+        };
+        const entrada = val('entrada'), saidaAlmoco = val('saida_almoco');
+        const voltaAlmoco = val('volta_almoco'), saida = val('saida');
+        minutos += (saidaAlmoco !== null && voltaAlmoco !== null)
+            ? escIntervalo(entrada, saidaAlmoco) + escIntervalo(voltaAlmoco, saida)
+            : escIntervalo(entrada, saida);
+    });
+
+    const meta = parseFloat(marcador.dataset.meta || '44') * 60;
+    const abaixo = minutos < meta;
+    const horas = (minutos / 60).toFixed(1).replace('.', ',');
+    marcador.querySelector('.esc-total-txt').textContent = horas + 'h';
+    marcador.classList.toggle('bg-amber-100', abaixo);
+    marcador.classList.toggle('text-amber-700', abaixo);
+    marcador.classList.toggle('bg-emerald-100', !abaixo);
+    marcador.classList.toggle('text-emerald-700', !abaixo);
+    const icone = marcador.querySelector('i');
+    if (icone) {
+        icone.classList.toggle('fa-triangle-exclamation', abaixo);
+        icone.classList.toggle('fa-check', !abaixo);
+    }
+    const aviso = linha.querySelector('.esc-aviso');
+    if (aviso) aviso.classList.toggle('hidden', !abaixo);
+}
+
+document.addEventListener('input', function (ev) {
+    if (ev.target.classList && ev.target.classList.contains('esc-h')) {
+        escRecalcular(ev.target.closest('tr'));
+    }
+});
+
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.esc-grid tbody tr').forEach(escRecalcular);
+});
 (function () {
     const busca = document.getElementById('esc-gestor-busca');
     if (!busca) return;

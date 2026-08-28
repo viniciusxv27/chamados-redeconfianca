@@ -1,0 +1,160 @@
+{% extends 'base.html' %}
+{% block title %}{% if reuniao %}Editar reunião{% else %}Nova reunião{% endif %}{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 py-6">
+
+    <a href="{% url 'reunioes:lista' %}" class="text-sm text-gray-500 hover:text-gray-700 mb-3 inline-block">
+        <i class="fas fa-arrow-left mr-1.5"></i>Voltar
+    </a>
+
+    <h1 class="text-xl font-bold text-gray-800 mb-1">
+        {% if reuniao %}Editar reunião{% else %}Nova reunião{% endif %}
+    </h1>
+    <p class="text-sm text-gray-500 mb-5">
+        Monte a agenda por cargo, coordenação, setor ou escolhendo pessoa a pessoa.
+    </p>
+
+    {% if messages %}
+        {% for message in messages %}
+        <div role="alert" class="mb-4 p-3 rounded-xl text-sm bg-red-50 border border-red-100 text-red-700">{{ message }}</div>
+        {% endfor %}
+    {% endif %}
+
+    <form method="post" class="space-y-4">
+        {% csrf_token %}
+
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Tema da reunião</label>
+                <input type="text" name="titulo" required maxlength="200" value="{{ reuniao.titulo|default:'' }}"
+                       placeholder="Ex.: Alinhamento de metas — Setembro"
+                       class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+            </div>
+
+            <div class="grid sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Início</label>
+                    <input type="datetime-local" name="inicio" required
+                           value="{% if reuniao %}{{ reuniao.inicio|date:'Y-m-d\TH:i' }}{% endif %}"
+                           class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">
+                        Fim previsto <span class="font-normal text-gray-400">(opcional)</span>
+                    </label>
+                    <input type="datetime-local" name="fim"
+                           value="{% if reuniao.fim %}{{ reuniao.fim|date:'Y-m-d\TH:i' }}{% endif %}"
+                           class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+                    <p class="text-[11px] text-gray-400 mt-1">Só para a agenda. A sala não fecha na hora marcada.</p>
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1">Pauta</label>
+                <textarea name="pauta" rows="4" placeholder="O que será tratado…"
+                          class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">{{ reuniao.pauta|default:'' }}</textarea>
+            </div>
+
+            <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                <input type="checkbox" name="gravar_ata" {% if not reuniao or reuniao.gravar_ata %}checked{% endif %}
+                       class="rounded text-sky-600 focus:ring-sky-500">
+                Gerar ata da reunião e enviar para quem está na agenda
+            </label>
+        </div>
+
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div class="px-5 py-3 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap">
+                <h2 class="text-sm font-semibold text-gray-700">
+                    <i class="fas fa-user-group text-sky-500 mr-1.5"></i>Quem participa
+                </h2>
+                <span class="text-xs text-gray-500"><span id="rn-total">0</span> pessoa(s) convidada(s)</span>
+            </div>
+
+            <div class="flex border-b border-gray-100 text-sm overflow-x-auto">
+                <button type="button" data-aba="cargos" class="rn-aba px-4 py-2 font-medium border-b-2 border-sky-500 text-sky-600">Cargos</button>
+                <button type="button" data-aba="coordenacoes" class="rn-aba px-4 py-2 font-medium border-b-2 border-transparent text-gray-500">Coordenação</button>
+                <button type="button" data-aba="setores" class="rn-aba px-4 py-2 font-medium border-b-2 border-transparent text-gray-500">Setores</button>
+                <button type="button" data-aba="grupos" class="rn-aba px-4 py-2 font-medium border-b-2 border-transparent text-gray-500">Grupos</button>
+                <button type="button" data-aba="usuarios" class="rn-aba px-4 py-2 font-medium border-b-2 border-transparent text-gray-500">Pessoas</button>
+            </div>
+
+            {% for chave, itens in catalogo.items %}
+            <div class="rn-painel p-4 max-h-72 overflow-y-auto {% if chave != 'cargos' %}hidden{% endif %}" data-painel="{{ chave }}">
+                {% for item in itens %}
+                <label class="flex items-center gap-3 px-2 py-2 rounded-lg cursor-pointer hover:bg-gray-50">
+                    <input type="checkbox" name="{{ chave }}" value="{{ item.id }}"
+                           data-membros="{{ item.membros|join:',' }}" onchange="rnRecontar()"
+                           class="rounded text-sky-600 focus:ring-sky-500">
+                    <span class="text-sm text-gray-800 flex-1">{{ item.nome }}</span>
+                    <span class="text-[11px] text-gray-400">{{ item.membros|length }}</span>
+                </label>
+                {% empty %}
+                <p class="text-sm text-gray-400 px-2 py-4">Nada cadastrado aqui ainda.</p>
+                {% endfor %}
+            </div>
+            {% endfor %}
+
+            <div class="rn-painel p-4 hidden" data-painel="usuarios">
+                <input type="search" id="rn-busca" placeholder="Buscar pessoa…"
+                       class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm mb-2">
+                <div class="max-h-60 overflow-y-auto">
+                    {% for p in pessoas %}
+                    <label class="rn-pessoa flex items-center gap-3 px-2 py-2 rounded-lg cursor-pointer hover:bg-gray-50"
+                           data-busca="{{ p.get_full_name|lower }} {{ p.job_title|lower }} {{ p.pdv|lower }}">
+                        <input type="checkbox" name="usuarios" value="{{ p.id }}"
+                               {% if p.id in marcados %}checked{% endif %}
+                               onchange="rnRecontar()" class="rounded text-sky-600 focus:ring-sky-500">
+                        <span class="text-sm text-gray-800 flex-1">{{ p.get_full_name|default:p.username }}</span>
+                        <span class="text-[11px] text-gray-400">{{ p.job_title|default:'—' }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+            <button type="submit" class="px-5 py-2 rounded-lg bg-sky-600 text-white text-sm font-medium hover:bg-sky-700">
+                <i class="fas fa-check mr-1.5"></i>{% if reuniao %}Salvar alterações{% else %}Criar reunião{% endif %}
+            </button>
+            <a href="{% url 'reunioes:lista' %}" class="px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">
+                Cancelar
+            </a>
+        </div>
+    </form>
+</div>
+
+<script>
+function rnRecontar() {
+    const ids = new Set();
+    document.querySelectorAll('input[data-membros]:checked').forEach(function (el) {
+        (el.dataset.membros || '').split(',').filter(Boolean).forEach(i => ids.add(i));
+    });
+    document.querySelectorAll('input[name="usuarios"]:checked').forEach(el => ids.add(el.value));
+    document.getElementById('rn-total').textContent = ids.size;
+}
+
+document.querySelectorAll('.rn-aba').forEach(function (aba) {
+    aba.addEventListener('click', function () {
+        document.querySelectorAll('.rn-aba').forEach(function (b) {
+            b.classList.remove('border-sky-500', 'text-sky-600');
+            b.classList.add('border-transparent', 'text-gray-500');
+        });
+        this.classList.add('border-sky-500', 'text-sky-600');
+        this.classList.remove('border-transparent', 'text-gray-500');
+        document.querySelectorAll('.rn-painel').forEach(function (p) {
+            p.classList.toggle('hidden', p.dataset.painel !== aba.dataset.aba);
+        });
+    });
+});
+
+document.getElementById('rn-busca').addEventListener('input', function () {
+    const q = this.value.trim().toLowerCase();
+    document.querySelectorAll('.rn-pessoa').forEach(function (el) {
+        el.style.display = (!q || el.dataset.busca.includes(q)) ? '' : 'none';
+    });
+});
+
+document.addEventListener('DOMContentLoaded', rnRecontar);
+</script>
+{% endblock %}

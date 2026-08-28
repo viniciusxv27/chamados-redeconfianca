@@ -568,12 +568,45 @@ class Escala(models.Model):
         return f"{self.colaborador} — semana de {self.semana_inicio:%d/%m/%Y}"
 
 
+# Jornada semanal da CLT usada como meta na tela da escala.
+HORAS_SEMANAIS = 44
+
+
+def minutos_do_dia(entrada, saida_almoco, volta_almoco, saida, folga=False):
+    """Minutos entre os horários informados, descontando o intervalo do almoço.
+
+    Aceita a escala pela metade: quem só preencheu entrada e saída tem o dia
+    inteiro contado; quem preencheu o almoço tem os dois turnos somados. Falta
+    de par (entrada sem saída) simplesmente não conta — é escala incompleta,
+    não erro.
+    """
+    if folga:
+        return 0
+
+    def intervalo(ini, fim):
+        if not ini or not fim:
+            return 0
+        i = ini.hour * 60 + ini.minute
+        f = fim.hour * 60 + fim.minute
+        if f < i:                      # virou a meia-noite
+            f += 24 * 60
+        return f - i
+
+    if saida_almoco and volta_almoco:
+        return intervalo(entrada, saida_almoco) + intervalo(volta_almoco, saida)
+    return intervalo(entrada, saida)
+
+
 class EscalaDia(models.Model):
     """Um dia da escala: entrada e saída, ou folga."""
     escala = models.ForeignKey(
         Escala, on_delete=models.CASCADE, related_name='dias', verbose_name='Escala')
     data = models.DateField(verbose_name='Dia')
     entrada = models.TimeField(null=True, blank=True, verbose_name='Entrada')
+    saida_almoco = models.TimeField(
+        null=True, blank=True, verbose_name='Saída para o almoço')
+    volta_almoco = models.TimeField(
+        null=True, blank=True, verbose_name='Volta do almoço')
     saida = models.TimeField(null=True, blank=True, verbose_name='Saída')
     folga = models.BooleanField(default=False, verbose_name='Folga')
     observacao = models.CharField(
@@ -597,4 +630,19 @@ class EscalaDia(models.Model):
     @property
     def preenchido(self):
         """Tem algo que valha a pena guardar (folga ou algum horário)."""
-        return bool(self.folga or self.entrada or self.saida or self.observacao)
+        return bool(self.folga or self.entrada or self.saida
+                    or self.saida_almoco or self.volta_almoco or self.observacao)
+
+    @property
+    def minutos(self):
+        """Minutos trabalhados no dia, já descontado o almoço.
+
+        Turno que vira a meia-noite conta certo: a saída menor que a entrada é
+        lida como do dia seguinte, não como número negativo.
+        """
+        return minutos_do_dia(self.entrada, self.saida_almoco,
+                              self.volta_almoco, self.saida, self.folga)
+
+    @property
+    def horas(self):
+        return self.minutos / 60

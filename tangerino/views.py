@@ -23,7 +23,7 @@ from .middleware import limpar_decisao
 from .client import (TangerinoError, de_millis, integracao_ativa, listar_funcionarios,
                      listar_marcacoes, invalidar_cache_marcacoes, justificativas_edicao,
                      registrar_ponto, registrar_ponto_atrasado, testar_conexao)
-from .models import (ConfiguracaoTangerino, Escala, EscalaConfig, EscalaDia,
+from .models import (HORAS_SEMANAIS, ConfiguracaoTangerino, Escala, EscalaConfig, EscalaDia,
                      FeriasLancamento, JornadaTrabalho, MarcacaoPonto,
                      RegistroPontoPortal, SaldoHoras, SincronizacaoTangerino)
 from .sync import (funcionarios_disponiveis, sincronizar_ferias, sincronizar_jornadas,
@@ -551,19 +551,28 @@ def _mapa_escala_dias(colaborador_ids, semana_inicio):
 
 
 def _montar_grade(colaboradores, dias, mapa):
-    """Uma linha por colaborador; uma célula por dia (entrada/saída/folga)."""
+    """Uma linha por colaborador; uma célula por dia, mais o total da semana."""
     grade = []
     for c in colaboradores:
-        celulas = []
+        celulas, minutos = [], 0
         for d in dias:
             ed = mapa.get((c.id, d))
             celulas.append({
                 'data': d,
                 'entrada': ed.entrada if ed else None,
+                'saida_almoco': ed.saida_almoco if ed else None,
+                'volta_almoco': ed.volta_almoco if ed else None,
                 'saida': ed.saida if ed else None,
                 'folga': ed.folga if ed else False,
             })
-        grade.append({'colaborador': c, 'celulas': celulas})
+            minutos += ed.minutos if ed else 0
+        grade.append({
+            'colaborador': c,
+            'celulas': celulas,
+            'minutos': minutos,
+            'horas': minutos / 60,
+            'abaixo': minutos < HORAS_SEMANAIS * 60,
+        })
     return grade
 
 
@@ -599,6 +608,7 @@ def escala(request):
         'pode_gerenciar': pode_gerenciar,
         'e_global': escala_svc.e_gestor_global(request.user),
         'e_superadmin': e_superadmin,
+        'horas_meta': HORAS_SEMANAIS,
     }
 
     if pode_gerenciar:
@@ -608,6 +618,7 @@ def escala(request):
         mapa = _mapa_escala_dias([c.id for c in colaboradores], semana_inicio)
         contexto['grade'] = _montar_grade(colaboradores, dias, mapa)
         contexto['total_colaboradores'] = len(colaboradores)
+        contexto['abaixo_da_meta'] = sum(1 for l in contexto['grade'] if l['abaixo'])
         contexto['setores'] = escala_svc.setores_para_filtro(request.user)
         contexto['setor_escolhido'] = setor_id
     else:
@@ -617,6 +628,9 @@ def escala(request):
         contexto['minha_escala'] = [{'data': d, 'nome': DIAS_PT[i], 'dia': por_data.get(d)}
                                     for i, d in enumerate(dias)]
         contexto['tem_escala'] = any(por_data.get(d) and por_data[d].preenchido for d in dias)
+        minutos = sum(por_data[d].minutos for d in dias if por_data.get(d))
+        contexto['minhas_horas'] = minutos / 60
+        contexto['minhas_horas_abaixo'] = minutos < HORAS_SEMANAIS * 60
 
     if e_superadmin:
         cfg = EscalaConfig.get()
@@ -655,11 +669,14 @@ def escala_salvar(request):
             iso = d.isoformat()
             folga = request.POST.get(f'folga_{uid}_{iso}') == 'on'
             entrada = parse_time(request.POST.get(f'entrada_{uid}_{iso}') or '')
+            saida_almoco = parse_time(request.POST.get(f'saida_almoco_{uid}_{iso}') or '')
+            volta_almoco = parse_time(request.POST.get(f'volta_almoco_{uid}_{iso}') or '')
             saida = parse_time(request.POST.get(f'saida_{uid}_{iso}') or '')
-            planos.append((d, folga, entrada, saida, bool(folga or entrada or saida)))
+            horarios = (entrada, saida_almoco, volta_almoco, saida)
+            planos.append((d, folga, horarios, bool(folga or any(horarios))))
 
         obj = Escala.objects.filter(colaborador_id=uid, semana_inicio=semana_inicio).first()
-        algo = any(p[4] for p in planos)
+        algo = any(p[3] for p in planos)
         if not obj and not algo:
             continue
         if not obj:
@@ -670,11 +687,14 @@ def escala_salvar(request):
             obj.atualizado_por = request.user
             obj.save(update_fields=['atualizado_por', 'atualizado_em'])
 
-        for d, folga, entrada, saida, tem in planos:
+        for d, folga, horarios, tem in planos:
             if tem:
+                entrada, saida_almoco, volta_almoco, saida = horarios
                 EscalaDia.objects.update_or_create(
                     escala=obj, data=d,
                     defaults={'entrada': None if folga else entrada,
+                              'saida_almoco': None if folga else saida_almoco,
+                              'volta_almoco': None if folga else volta_almoco,
                               'saida': None if folga else saida, 'folga': folga})
             else:
                 EscalaDia.objects.filter(escala=obj, data=d).delete()

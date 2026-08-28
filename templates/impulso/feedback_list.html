@@ -76,7 +76,9 @@
             </h3>
             <p class="text-xs text-gray-400 mt-0.5">
                 Vem do módulo <a href="/feedback/" class="text-indigo-600 hover:underline">Feedback</a> (FM-005).
-                É esta nota que vale os {{ formal.pontos }} pontos do Impulso — mínimo {{ formal.minimo }}.
+                É esta nota que vale os {{ formal.pontos }} pontos do Impulso, garantidos de
+                <strong>três formas</strong>: primeiro feedback recebido, nota maior que a do
+                feedback anterior, ou nota {{ formal.minimo }} de 100 para cima.
             </p>
         </div>
         <div class="flex items-center gap-6 text-center">
@@ -105,10 +107,14 @@
         </p>
         <div class="flex flex-wrap gap-2">
             {% for d in formal.sem_registro %}
-            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border
+            <span title="{{ d.motivo }}"
+                  class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border
                          {% if d.atingiu %}bg-emerald-50 border-emerald-200 text-emerald-800{% else %}bg-amber-50 border-amber-200 text-amber-800{% endif %}">
                 {{ d.colaborador.get_full_name|default:d.colaborador.email }}
                 <strong class="tabular-nums">{{ d.nota }}</strong>
+                {% if d.nota_alta %}
+                {% elif d.primeiro %}<i class="fas fa-seedling text-[10px]" title="primeiro feedback"></i>
+                {% elif d.evoluiu %}<i class="fas fa-arrow-trend-up text-[10px]" title="nota subiu"></i>{% endif %}
             </span>
             {% endfor %}
         </div>
@@ -246,8 +252,8 @@
                 </span>
             </div>
             <p class="text-[11px] {% if fb.formal.atingiu %}text-emerald-700/80{% else %}text-amber-700/80{% endif %} mt-0.5">
-                {% if fb.formal.atingiu %}garante{% else %}não atinge{% endif %}
-                {{ formal.pontos }} pts · mínimo {{ formal.minimo }}
+                {% if fb.formal.atingiu %}garante{% else %}não garante{% endif %}
+                {{ formal.pontos }} pts · {{ fb.formal.motivo }}
             </p>
         </div>
         {% endif %}
