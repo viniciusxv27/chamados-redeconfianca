@@ -69,8 +69,14 @@ def _metas_do_usuario(user, so_aprovadas=True):
     if user.is_superuser:
         qs = Meta.objects.all()
     elif is_impulso_manager(user):
+        # O gestor responde por TODOS os setores atrelados a ele — principal e
+        # secundários. Antes ele só via meta em que era o gestor do registro:
+        # gente do setor secundário aparecia no seletor e sumia ao ser
+        # escolhida, porque a meta dela tinha outro gestor.
+        equipe = list(get_colaboradores_do_gestor(user).values_list('id', flat=True))
         qs = Meta.objects.filter(Q(gestor=user) | Q(colaborador=user)
-                                 | Q(participantes=user)).distinct()
+                                 | Q(participantes=user)
+                                 | Q(colaborador_id__in=equipe)).distinct()
     else:
         # Meta compartilhada aparece no Kanban de quem participa dela também.
         qs = Meta.objects.filter(Q(colaborador=user) | Q(participantes=user)).distinct()
@@ -81,6 +87,11 @@ def _pode_ver_meta(user, meta):
     return (user.is_superuser or meta.gestor_id == user.id
             or meta.colaborador_id == user.id
             or meta.solicitada_por_id == user.id
+            # Gestor abre a meta de quem está em qualquer setor dele — senão a
+            # meta aparece no Kanban e dá "sem permissão" ao clicar.
+            or (is_impulso_manager(user)
+                and get_colaboradores_do_gestor(user)
+                .filter(id=meta.colaborador_id).exists())
             # Participante também é responsável pela meta: precisa abrir,
             # comentar e marcar os itens do to-do.
             or meta.participantes.filter(id=user.id).exists())
@@ -961,7 +972,11 @@ def feedback_list(request):
     if tudo:
         feedbacks = ImpulsoFeedback.objects.all()
     elif gestor:
-        feedbacks = ImpulsoFeedback.objects.filter(gestor=user)
+        # Mesma regra do Kanban: os setores do gestor, não só os feedbacks que
+        # ele mesmo aplicou.
+        equipe = list(get_colaboradores_do_gestor(user).values_list('id', flat=True))
+        feedbacks = ImpulsoFeedback.objects.filter(
+            Q(gestor=user) | Q(colaborador_id__in=equipe)).distinct()
     else:
         feedbacks = ImpulsoFeedback.objects.filter(colaborador=user)
     feedbacks = feedbacks.select_related('colaborador', 'gestor')
@@ -1093,9 +1108,14 @@ def feedback_list(request):
 
     # Opções dos filtros saem do universo visível, não da lista já filtrada —
     # senão, ao escolher alguém, os outros sumiriam do próprio seletor.
-    universo = (ImpulsoFeedback.objects.all() if tudo
-                else ImpulsoFeedback.objects.filter(gestor=user) if gestor
-                else ImpulsoFeedback.objects.filter(colaborador=user))
+    if tudo:
+        universo = ImpulsoFeedback.objects.all()
+    elif gestor:
+        universo = ImpulsoFeedback.objects.filter(
+            Q(gestor=user) | Q(colaborador_id__in=list(
+                get_colaboradores_do_gestor(user).values_list('id', flat=True)))).distinct()
+    else:
+        universo = ImpulsoFeedback.objects.filter(colaborador=user)
     context = {
         'feedbacks': lista,
         'resumo': resumo,
