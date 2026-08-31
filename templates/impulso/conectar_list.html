@@ -9,4 +9,33 @@
 {% include 'impulso/_conteudo_secao.html' with titulo='Cursos' icone='fa-book' itens=cursos %}
 {% include 'impulso/_conteudo_secao.html' with titulo='Vídeos' icone='fa-video' itens=videos %}
 {% include 'impulso/_conteudo_secao.html' with titulo='POPs' icone='fa-file-lines' itens=pops %}
+
+<form method="post" id="impFormExcluirConteudo" class="hidden">{% csrf_token %}</form>
+<script>
+// Confirmação com o tamanho do estrago: apagar leva as conclusões junto, e
+// conclusão é ponto do mês de quem fez. Perguntar "tem certeza?" sem dizer
+// isso seria pedir uma decisão às cegas.
+document.querySelectorAll('.imp-conteudo-excluir').forEach(function (botao) {
+    botao.addEventListener('click', function () {
+        var titulo = botao.dataset.titulo || 'este conteúdo';
+        var concluidos = parseInt(botao.dataset.concluidos || '0', 10);
+        var certificados = parseInt(botao.dataset.certificados || '0', 10);
+
+        var texto = 'Excluir "' + titulo + '"?';
+        if (concluidos) {
+            texto += '\n\n' + concluidos + ' pessoa(s) já concluíram — a conclusão some e ' +
+                     'a pontuação do mês delas é recalculada.';
+        }
+        if (certificados) {
+            texto += '\n' + certificados + ' certificado(s) anexado(s) serão apagados.';
+        }
+        texto += '\n\nIsso não tem volta.';
+
+        if (!confirm(texto)) return;
+        var form = document.getElementById('impFormExcluirConteudo');
+        form.action = '/impulso/conectar/' + botao.dataset.id + '/excluir/';
+        form.submit();
+    });
+});
+</script>
 {% endblock %}

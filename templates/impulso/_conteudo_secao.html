@@ -7,7 +7,19 @@
         <div class="imp-card p-4 flex flex-col">
             <div class="flex items-start justify-between gap-2">
                 <a href="{% url 'impulso:conteudo_detail' c.id %}" class="font-medium text-gray-800 hover:text-emerald-600">{{ c.titulo }}</a>
-                {% if c.obrigatorio %}<span class="text-[10px] uppercase px-1.5 py-0.5 rounded bg-red-100 text-red-600 flex-shrink-0">Obrigatório</span>{% endif %}
+                <div class="flex items-center gap-1.5 flex-shrink-0">
+                    {% if c.obrigatorio %}<span class="text-[10px] uppercase px-1.5 py-0.5 rounded bg-red-100 text-red-600">Obrigatório</span>{% endif %}
+                    {% if c.pode_apagar %}
+                    <button type="button" title="Excluir conteúdo"
+                            class="imp-conteudo-excluir w-6 h-6 rounded-md text-gray-300 hover:text-red-600 hover:bg-red-50 flex items-center justify-center transition-colors"
+                            data-id="{{ c.id }}"
+                            data-titulo="{{ c.titulo }}"
+                            data-concluidos="{{ c.impacto.concluidos }}"
+                            data-certificados="{{ c.impacto.certificados }}">
+                        <i class="fas fa-trash-can text-xs"></i>
+                    </button>
+                    {% endif %}
+                </div>
             </div>
             {% if c.descricao %}<p class="text-xs text-gray-500 mt-1 line-clamp-2">{{ c.descricao }}</p>{% endif %}
             {% if is_gestor %}

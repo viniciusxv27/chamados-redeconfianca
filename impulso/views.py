@@ -1338,9 +1338,14 @@ def conectar_list(request):
     minhas = {c.conteudo_id: c for c in
               ConclusaoConteudo.objects.filter(user=user)}
 
+    # A permissão de excluir é resolvida aqui, uma vez por card: o template não
+    # chama método com argumento, e repetir a regra no HTML criaria uma segunda
+    # verdade sobre quem pode o quê.
     grupos = {'CURSO': [], 'VIDEO': [], 'POP': []}
     for c in conteudos:
         c.minha_conclusao = minhas.get(c.id)
+        c.pode_apagar = c.pode_excluir(user)
+        c.impacto = c.impacto_da_exclusao if c.pode_apagar else None
         grupos.get(c.tipo, grupos['POP']).append(c)
 
     context = {
@@ -1418,9 +1423,48 @@ def conteudo_detail(request, conteudo_id):
         'conclusao': conclusao,
         'is_gestor': is_impulso_manager(request.user),
         'conclusoes': conteudo.conclusoes.select_related('user') if is_impulso_manager(request.user) else None,
+        'pode_apagar': conteudo.pode_excluir(request.user),
+        'impacto': conteudo.impacto_da_exclusao,
         'active_tab': 'conectar',
     }
     return render(request, 'impulso/conteudo_detail.html', context)
+
+
+@require_POST
+@impulso_member_required
+def conteudo_excluir(request, conteudo_id):
+    """Tira um curso/vídeo/POP do ar de vez.
+
+    Some com as conclusões junto (CASCADE) — e conclusão é ponto do mês de
+    quem fez. Por isso a tela mostra o tamanho do estrago antes de perguntar,
+    e o aviso vai para quem já tinha concluído.
+    """
+    conteudo = get_object_or_404(ConteudoConectar, id=conteudo_id)
+    if not conteudo.pode_excluir(request.user):
+        messages.error(request, 'Só o SUPERADMIN ou um gestor do Impulso pode excluir conteúdo.')
+        return redirect('impulso:conteudo_detail', conteudo_id=conteudo.id)
+
+    titulo = conteudo.titulo
+    impacto = conteudo.impacto_da_exclusao
+    concluintes = list(User.objects.filter(
+        id__in=conteudo.conclusoes.filter(concluido=True).values_list('user_id', flat=True)))
+
+    conteudo.delete()
+
+    if concluintes:
+        _notify(concluintes, 'Conteúdo removido do Conectar',
+                f'"{titulo}" foi removido pelo gestor. A conclusão que você tinha '
+                f'nele deixa de contar na pontuação do mês.',
+                '/impulso/conectar/')
+
+    if impacto['concluidos']:
+        messages.warning(
+            request,
+            f'"{titulo}" excluído. {impacto["concluidos"]} pessoa(s) já tinham concluído — '
+            f'a pontuação do mês delas foi recalculada.')
+    else:
+        messages.success(request, f'"{titulo}" excluído.')
+    return redirect('impulso:conectar_list')
 
 
 @require_POST

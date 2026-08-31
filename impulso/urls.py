@@ -49,6 +49,8 @@ urlpatterns = [
     path('conectar/', views.conectar_list, name='conectar_list'),
     path('conectar/novo/', views.conteudo_create, name='conteudo_create'),
     path('conectar/<int:conteudo_id>/', views.conteudo_detail, name='conteudo_detail'),
+    path('conectar/<int:conteudo_id>/excluir/', views.conteudo_excluir,
+         name='conteudo_excluir'),
     path('conectar/<int:conteudo_id>/concluir/', views.conteudo_concluir, name='conteudo_concluir'),
     path('conectar/<int:conteudo_id>/progresso/', views.conteudo_progresso_video,
          name='conteudo_progresso_video'),

@@ -691,6 +691,35 @@ class ConteudoConectar(models.Model):
             return False
         return True
 
+    def pode_excluir(self, user):
+        """Quem apaga o conteúdo: SUPERADMIN ou gestor do Impulso.
+
+        Vale para qualquer conteúdo, não só o que a pessoa subiu — quem cuida
+        do módulo precisa poder tirar do ar material errado ou vencido, mesmo
+        que outro gestor tenha publicado.
+        """
+        if not (user and getattr(user, 'is_authenticated', False)):
+            return False
+        if user.is_superuser or getattr(user, 'hierarchy', '') == 'SUPERADMIN':
+            return True
+        from .utils import is_impulso_manager       # tardio: utils importa models
+        return is_impulso_manager(user)
+
+    @property
+    def impacto_da_exclusao(self):
+        """O que some junto. A tela avisa antes de perguntar 'tem certeza?'.
+
+        Apagar o conteúdo leva as conclusões embora, e conclusão é ponto do
+        mês de quem fez. Quem apaga precisa ver o tamanho disso antes.
+        """
+        conclusoes = self.conclusoes.all()
+        return {
+            'conclusoes': conclusoes.count(),
+            'concluidos': conclusoes.filter(concluido=True).count(),
+            'certificados': conclusoes.exclude(certificado='').count(),
+            'dirigido_a': self.obrigatorio_para.count(),
+        }
+
 
 class ConclusaoConteudo(models.Model):
     """Conclusão de um conteúdo por um usuário, com certificado anexado."""
