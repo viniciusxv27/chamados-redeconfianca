@@ -23,7 +23,7 @@ from .models import (
     FAIXAS_DA_NOTA,
     Ciclo, CicloMes, ConclusaoConteudo, ConteudoConectar, Ideia, ImpulsoFeedback,
     Meta, MetaAnexo, MetaComentario, MetaItem, MetaVisualizacao, PontuacaoMensal,
-    ProjetoFoco, TarefaProjeto,
+    ProjetoAnexo, ProjetoFoco, TarefaProjeto,
 )
 from .scoring import calcular_pontuacao, linhas_detalhadas
 from .utils import (
@@ -1662,15 +1662,81 @@ def projeto_foco_detail(request, projeto_id):
         # Membro vê apenas as tarefas destinadas a ele.
         tarefas = tarefas.filter(responsavel=request.user)
 
+    anexos = list(projeto.anexos.select_related('enviado_por'))
+    for a in anexos:
+        a.pode_apagar = a.pode_mexer(request.user)
+
     context = {
         'projeto': projeto,
         'tarefas': tarefas,
         'is_gestor': gestor,
         'membros': projeto.membros.all(),
+        'anexos': anexos,
         'status_choices': TarefaProjeto.Status.choices,
         'active_tab': 'conectar',
     }
     return render(request, 'impulso/projeto_detail.html', context)
+
+
+def _pode_ver_projeto(user, projeto):
+    """Quem abre o projeto: gestor do Impulso ou membro dele."""
+    return (is_impulso_manager(user)
+            or projeto.membros.filter(id=user.id).exists())
+
+
+@require_POST
+@impulso_member_required
+def projeto_anexo_add(request, projeto_id):
+    """Anexa arquivo ou link ao projeto foco.
+
+    Quem participa do projeto anexa: o material do projeto é de quem toca o
+    projeto, não só de quem o criou.
+    """
+    projeto = get_object_or_404(ProjetoFoco, id=projeto_id)
+    if not _pode_ver_projeto(request.user, projeto):
+        messages.error(request, 'Você não faz parte deste projeto.')
+        return redirect('impulso:projeto_foco_list')
+
+    titulo = (request.POST.get('titulo') or '').strip()[:200]
+    url = (request.POST.get('url') or '').strip()
+    arquivo = request.FILES.get('arquivo')
+
+    if arquivo:
+        ProjetoAnexo.objects.create(
+            projeto=projeto, tipo=ProjetoAnexo.Tipo.ARQUIVO, titulo=titulo,
+            arquivo=arquivo, enviado_por=request.user)
+        messages.success(request, 'Arquivo anexado ao projeto.')
+    elif url:
+        ProjetoAnexo.objects.create(
+            projeto=projeto, tipo=ProjetoAnexo.Tipo.LINK, titulo=titulo,
+            url=url[:200], enviado_por=request.user)
+        messages.success(request, 'Link anexado ao projeto.')
+    else:
+        messages.error(request, 'Envie um arquivo ou informe um link.')
+    return redirect('impulso:projeto_foco_detail', projeto_id=projeto.id)
+
+
+@require_POST
+@impulso_member_required
+def projeto_anexo_excluir(request, projeto_id, anexo_id):
+    """Remove o anexo e o arquivo correspondente do storage."""
+    projeto = get_object_or_404(ProjetoFoco, id=projeto_id)
+    anexo = get_object_or_404(ProjetoAnexo, id=anexo_id, projeto=projeto)
+
+    if not _pode_ver_projeto(request.user, projeto) or not anexo.pode_mexer(request.user):
+        messages.error(request, 'Você não pode excluir este anexo.')
+        return redirect('impulso:projeto_foco_detail', projeto_id=projeto.id)
+
+    nome = anexo.nome_exibicao
+    arquivo = anexo.arquivo if anexo.tipo == ProjetoAnexo.Tipo.ARQUIVO else None
+    anexo.delete()
+    if arquivo:
+        # Só depois de apagar a linha: se o banco falhar, o arquivo continua
+        # lá e nada fica órfão pelo contrário.
+        arquivo.delete(save=False)
+
+    messages.success(request, f'“{nome}” foi excluído.')
+    return redirect('impulso:projeto_foco_detail', projeto_id=projeto.id)
 
 
 @require_POST

@@ -15,6 +15,7 @@ from django.db import models
 from django.db.models import Count, F, Min, Q, Sum
 from django.core.paginator import Paginator
 from django.utils import timezone
+from django.urls import reverse
 from django.utils.dateparse import parse_datetime
 from django.views.decorators.http import require_POST
 
@@ -1962,7 +1963,7 @@ def release_sector_for_retry(request):
     sector = request.POST.get('setor', '').strip()
     if not sector:
         messages.warning(request, 'Selecione um setor para liberar o refazer da contestação.')
-        return redirect('contestacao:manage_contestations?status=pending')
+        return redirect(_url_gerenciar('pending'))
 
     rank = HIERARCHY_RANK.get(request.user.hierarchy, 0)
     if rank < HIERARCHY_RANK['SUPERADMIN']:
@@ -1972,7 +1973,7 @@ def release_sector_for_retry(request):
         allowed_sectors = {s.strip().upper() for s in user_sectors if s}
         if sector.upper() not in allowed_sectors:
             messages.error(request, f'Você não pode liberar o setor {sector}.')
-            return redirect('contestacao:manage_contestations?status=pending')
+            return redirect(_url_gerenciar('pending'))
 
     open_qs = Contestation.objects.filter(
         exclusion__filial__iexact=sector
@@ -2228,6 +2229,16 @@ def mark_paid(request, pk):
     return redirect('contestacao:manage_contestations')
 
 
+def _url_gerenciar(status):
+    """URL da tela de gerenciamento já com o filtro de status.
+
+    `redirect('rota?query=x')` não funciona: o Django trata a string inteira
+    como nome de rota, não encontra e devolve 500. A querystring entra depois
+    do reverse().
+    """
+    return f"{reverse('contestacao:manage_contestations')}?status={status}"
+
+
 @login_required
 def bulk_mark_paid(request):
     """Marca várias contestações confirmadas como pagas."""
@@ -2248,7 +2259,7 @@ def bulk_mark_paid(request):
 
     if not valid_ids:
         messages.warning(request, 'Selecione ao menos uma contestação para marcar como paga.')
-        return redirect('contestacao:manage_contestations?status=confirmed')
+        return redirect(_url_gerenciar('confirmed'))
 
     contestations = Contestation.objects.filter(
         pk__in=valid_ids,
@@ -2273,7 +2284,7 @@ def bulk_mark_paid(request):
     else:
         messages.success(request, f'{paid_count} contestação(ões) marcada(s) como paga(s)!')
 
-    return redirect('contestacao:manage_contestations?status=confirmed')
+    return redirect(_url_gerenciar('confirmed'))
 
 
 @login_required

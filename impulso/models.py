@@ -49,6 +49,10 @@ def upload_meta_anexo(instance, filename):
     return f"impulso/metas/{instance.meta_id or 'novos'}/{_uuid_name(filename)}"
 
 
+def upload_projeto_anexo(instance, filename):
+    return f"impulso/projetos/{instance.projeto_id or 'novos'}/{_uuid_name(filename)}"
+
+
 def upload_conteudo(instance, filename):
     return f"impulso/conectar/{instance.tipo.lower()}/{_uuid_name(filename)}"
 
@@ -823,6 +827,65 @@ class TarefaProjeto(models.Model):
 # ==========================================================================
 # INOVAR
 # ==========================================================================
+
+
+class ProjetoAnexo(models.Model):
+    """Anexo de um projeto foco: arquivo enviado OU link externo.
+
+    Mesmo desenho do anexo de meta — projeto foco também acumula planilha,
+    apresentação e link de referência, e sem isso o material ficava espalhado
+    em conversa de WhatsApp.
+    """
+
+    class Tipo(models.TextChoices):
+        ARQUIVO = 'ARQUIVO', 'Arquivo'
+        LINK = 'LINK', 'Link'
+
+    projeto = models.ForeignKey(
+        ProjetoFoco, on_delete=models.CASCADE, related_name='anexos',
+        verbose_name='Projeto')
+    tipo = models.CharField(max_length=8, choices=Tipo.choices, verbose_name='Tipo')
+    titulo = models.CharField(max_length=200, blank=True, verbose_name='Título')
+    arquivo = models.FileField(
+        upload_to=upload_projeto_anexo, storage=get_media_storage(),
+        null=True, blank=True, verbose_name='Arquivo')
+    url = models.URLField(blank=True, verbose_name='URL')
+
+    enviado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+        related_name='impulso_projeto_anexos', verbose_name='Enviado por')
+    enviado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Anexo de Projeto Foco'
+        verbose_name_plural = 'Anexos de Projetos Foco'
+        ordering = ['-enviado_em']
+
+    def __str__(self):
+        return self.titulo or (self.url or (self.arquivo.name if self.arquivo else 'Anexo'))
+
+    @property
+    def nome_exibicao(self):
+        if self.titulo:
+            return self.titulo
+        if self.tipo == self.Tipo.LINK:
+            return self.url
+        return os.path.basename(self.arquivo.name) if self.arquivo else 'Arquivo'
+
+    def pode_mexer(self, user):
+        """Quem edita ou apaga.
+
+        Quem anexou mexe no que é seu; quem criou o projeto e o superusuário
+        mexem em qualquer um, porque respondem pelo projeto. Membro não apaga
+        anexo de colega — remover arquivo não tem volta.
+        """
+        if not (user and getattr(user, 'is_authenticated', False)):
+            return False
+        return (user.is_superuser
+                or self.enviado_por_id == user.id
+                or self.projeto.criado_por_id == user.id)
+
+
 class Ideia(models.Model):
     """Ideia submetida por um colaborador (bloco INOVAR)."""
 
