@@ -8,6 +8,8 @@ from django.contrib.auth.decorators import login_required
 from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.templatetags.static import static
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.views.decorators.http import require_POST
@@ -253,7 +255,11 @@ def sala(request, reuniao_id):
     from .jaas import dados_da_sala
 
     sala_video = dados_da_sala(cfg, request.user, reuniao.sala)
+    base = request.build_absolute_uri('/').rstrip('/')
     return render(request, 'reunioes/sala.html', {
+        'url_branding': base + reverse('reunioes:branding'),
+        'url_logo': base + static('images/logo-t.png'),
+        'url_portal': base,
         'reuniao': reuniao,
         'servidor': sala_video['servidor'],
         'sala_video': sala_video['sala'],
@@ -355,6 +361,31 @@ def registrar_ata(request, reuniao_id):
         logger.error('Falha ao registrar a ata da reunião %s: %s', reuniao.id, exc)
         return JsonResponse({'ok': False, 'erro': 'Não foi possível registrar a ata.'},
                             status=500)
+
+
+def branding(request):
+    """Identidade visual da sala, no formato que o Jitsi lê.
+
+    O Jitsi roda dentro de um iframe de outro domínio: não dá para alcançar o
+    chat nem o fundo dele por CSS daqui. O caminho suportado é este arquivo —
+    o próprio Jitsi busca a URL e aplica logo e fundo por dentro.
+
+    Fica aberto de propósito: quem busca é o JavaScript do Jitsi, do domínio
+    dele, sem o cookie da sessão do portal. São duas URLs de imagem pública,
+    nada de dado de ninguém.
+    """
+    base = request.build_absolute_uri('/').rstrip('/')
+    dados = {
+        'logoImageUrl': f'{base}{static("images/logo-t.png")}',
+        'logoClickUrl': base,
+        'backgroundImageUrl': f'{base}{static("images/logo.png")}',
+        'backgroundColor': '#111827',
+        'didPageUrl': base,
+    }
+    resposta = JsonResponse(dados)
+    resposta['Access-Control-Allow-Origin'] = '*'
+    resposta['Cache-Control'] = 'public, max-age=300'
+    return resposta
 
 
 # ---------------------------------------------------------------------------

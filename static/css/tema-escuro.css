@@ -395,3 +395,84 @@ html.dark .fc .fc-button-primary {
 }
 html.dark .fc .fc-button-primary:not(:disabled):hover { background-color: #3a4358; }
 html.dark .fc .fc-button-primary:disabled { background-color: var(--tema-superficie-2); color: var(--tema-texto-3); }
+
+/* --------------------------------------------------------------------------
+   Contestação — lista de exclusões e de valores.
+
+   Aqui a tela não estava só "sem regra": o template pinta a zebra da tabela,
+   o painel do carrinho e o balão do motivo com branco fixo e `!important`
+   dentro do próprio <style>. Empate de importância se decide pela
+   especificidade, e por isso cada seletor abaixo começa com `html.dark` —
+   é o que faz a regra do tema ganhar do branco cravado no template.
+   -------------------------------------------------------------------------- */
+
+/* As variáveis que o template usa no cabeçalho, nas bordas e — depois de
+   trocarmos as cores fixas por `var()` — nos estilos inline. Trocar a variável
+   é o único caminho que alcança um `style="... !important"` no HTML: nenhuma
+   folha de estilo ganha de um inline com !important. */
+html.dark {
+    --light-gray: var(--tema-superficie-2);
+    --border-gray: var(--tema-borda);
+
+    --ct-superficie: var(--tema-superficie);
+    --ct-campo: var(--tema-superficie-3);
+    --ct-borda: var(--tema-borda);
+    --ct-borda-campo: var(--tema-borda);
+    --ct-texto: var(--tema-texto);
+    --ct-texto-2: var(--tema-texto-2);
+    --ct-texto-3: var(--tema-texto-3);
+    --ct-zebra: var(--tema-superficie-2);
+    --ct-hover: var(--tema-superficie-3);
+    /* O carrinho continua sendo o realce laranja, mas na versão que funciona
+       sobre fundo escuro — creme com texto claro seria ilegível. */
+    --ct-carrinho: var(--tema-superficie);
+    --ct-carrinho-borda: #b45309;
+    --ct-carrinho-borda-2: #92400e;
+}
+
+/* Zebra da tabela e hover da linha */
+html.dark .line-white > td      { background-color: var(--tema-superficie) !important; }
+html.dark .line-light-gray > td { background-color: var(--tema-superficie-2) !important; }
+html.dark .data-row:hover > td  { background-color: var(--tema-superficie-3) !important; }
+html.dark .data-row > td        { color: var(--tema-texto); }
+
+/* Cartões da versão em lista (celular) — o template crava a borda cinza-claro
+   num style inline, então a cor vem daqui. */
+html.dark #cardsContainer > div[id^="card-"] {
+    background-color: var(--tema-superficie) !important;
+    border-color: var(--tema-borda) !important;
+    color: var(--tema-texto);
+}
+html.dark div[id^="reason-card-"] { border-top-color: var(--tema-borda) !important; }
+
+/* Balão do motivo da exclusão */
+html.dark .reason-content {
+    background: var(--tema-superficie-2) !important;
+    border-color: var(--primary) !important;
+    color: var(--tema-texto);
+    box-shadow: 0 14px 34px rgba(0, 0, 0, .45), 0 0 0 4px rgba(255, 107, 53, .18) !important;
+}
+
+/* Carrinho de contestação em lote: no claro é um creme alaranjado; no escuro
+   mantemos o laranja como realce, mas sobre superfície escura — creme com
+   texto claro ficaria ilegível. */
+html.dark #bulkBar { background: rgba(120, 53, 15, .35) !important; }
+html.dark #bulkBar .bulk-panel {
+    background: var(--tema-superficie) !important;
+    border-color: #b45309 !important;
+    box-shadow: 0 24px 50px rgba(0, 0, 0, .55), 0 0 0 6px rgba(180, 83, 9, .25) !important;
+}
+html.dark #bulkBar .bulk-details {
+    background-color: var(--tema-superficie-2) !important;
+    border-top-color: #b45309 !important;
+}
+html.dark #bulkBar .bulk-detail-item {
+    background-color: var(--tema-superficie) !important;
+    border-color: #b45309 !important;
+    color: var(--tema-texto) !important;
+}
+
+/* Divisores das tabelas da contestação */
+html.dark .divide-gray-400 > :not([hidden]) ~ :not([hidden]) {
+    border-color: var(--tema-borda) !important;
+}

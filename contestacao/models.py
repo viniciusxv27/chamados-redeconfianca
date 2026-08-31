@@ -347,3 +347,61 @@ class ContestationCartDraft(models.Model):
 
     def __str__(self):
         return f'Rascunho #{self.pk} - {self.user_id}/{self.exclusion_id}'
+
+
+class LiberacaoContestacao(models.Model):
+    """Reabre a contestação de UM setor por um prazo definido.
+
+    A janela normal é global: três dias contados da última sincronização. Ela
+    resolve o caso comum, mas não o caso real de uma loja que perdeu o prazo —
+    até aqui a única saída era sincronizar a planilha de novo, o que reabre
+    tudo para todo mundo e mistura rodada nova com rodada velha.
+
+    Esta liberação é cirúrgica: vale para um setor, até uma data e hora, e
+    aparece na tela de quem foi liberado com o prazo real.
+    """
+
+    setor = models.ForeignKey(
+        'users.Sector', on_delete=models.CASCADE, related_name='liberacoes_contestacao',
+        verbose_name='Setor liberado')
+    prazo = models.DateTimeField(verbose_name='Liberado até')
+    motivo = models.CharField(
+        max_length=200, blank=True, default='', verbose_name='Motivo',
+        help_text='Fica registrado para quem for auditar a rodada depois.')
+    ativa = models.BooleanField(default=True, verbose_name='Ativa')
+
+    criado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='liberacoes_contestacao_criadas', verbose_name='Liberado por')
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Liberação de contestação'
+        verbose_name_plural = 'Liberações de contestação'
+        ordering = ['-prazo']
+        indexes = [models.Index(fields=['setor', 'prazo'])]
+
+    def __str__(self):
+        return f'{self.setor} até {self.prazo:%d/%m/%Y %H:%M}'
+
+    @property
+    def vigente(self):
+        return self.ativa and self.prazo > timezone.now()
+
+    @classmethod
+    def para_usuario(cls, user):
+        """A liberação vigente que alcança este usuário, ou None.
+
+        Olha todos os setores da pessoa — principal e vinculados —, porque
+        quem responde por duas lojas precisa da liberação valendo nas duas.
+        """
+        if not (user and getattr(user, 'is_authenticated', False)):
+            return None
+        ids = set(user.sectors.values_list('id', flat=True))
+        if getattr(user, 'sector_id', None):
+            ids.add(user.sector_id)
+        if not ids:
+            return None
+        return (cls.objects.filter(setor_id__in=ids, ativa=True,
+                                   prazo__gt=timezone.now())
+                .select_related('setor').order_by('-prazo').first())

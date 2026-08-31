@@ -35,7 +35,7 @@
         </h2>
         <p class="text-sm text-gray-500 mb-4">
             {% if sou_gestor %}
-            A meta entra direto no Kanban do colaborador.
+            <span id="impResumoGestor">A meta entra direto no Kanban do colaborador.</span>
             {% else %}
             <span id="resumoFluxo">O gestor do seu setor precisa aprovar antes de a meta entrar no seu Kanban e valer pontos.</span>
             {% endif %}
@@ -59,12 +59,34 @@
             {% if sou_gestor %}
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Colaborador *</label>
-                <select name="colaborador" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <select name="colaborador" id="impColaborador" required onchange="impChecarArea()"
+                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                     <option value="">Selecione…</option>
                     {% for c in colaboradores %}
                     <option value="{{ c.id }}">{{ c.get_full_name|default:c.email }}</option>
                     {% endfor %}
                 </select>
+            </div>
+
+            <div id="impForaDaArea" class="hidden p-4 rounded-xl bg-amber-50 border border-amber-200">
+                <p class="text-sm font-semibold text-amber-900 mb-1">
+                    <i class="fas fa-user-clock mr-1.5"></i>
+                    Colaborador de outra área (<span id="impNomeArea"></span>)
+                </p>
+                <p class="text-xs text-amber-800 mb-3">
+                    A demanda não entra no Kanban direto: quem responde pela área dele precisa
+                    aprovar antes. Você acompanha o pedido em Solicitações.
+                </p>
+                <div id="impEscolhaGestor">
+                    <label class="block text-xs font-medium text-amber-900 mb-1">Enviar para aprovação de</label>
+                    <select name="gestor_aprovador" id="impGestorAprovador"
+                            class="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm bg-white">
+                    </select>
+                </div>
+                <p id="impSemGestor" class="hidden text-xs text-red-700 font-medium">
+                    Essa área não tem gestor do Impulso cadastrado — não há para quem mandar a
+                    aprovação. Fale com o RH antes de criar a demanda.
+                </p>
             </div>
             {% else %}
             <div>
@@ -190,6 +212,54 @@
         ajuda.textContent = TEXTOS[sel.value] || '';
     });
 })();
+</script>
+
+{{ fora_da_area|json_script:"impForaJson" }}
+<script>
+// Colaborador de outra área: avisa na hora da escolha e pergunta para qual
+// gestor de lá vai a aprovação. Descobrir isso só depois de salvar faria a
+// pessoa achar que a meta entrou no Kanban quando ela está parada esperando.
+function impChecarArea() {
+    var dados = document.getElementById('impForaJson');
+    var sel = document.getElementById('impColaborador');
+    var caixa = document.getElementById('impForaDaArea');
+    if (!dados || !sel || !caixa) return;
+
+    var fora = JSON.parse(dados.textContent || '{}');
+    var info = fora[sel.value];
+    if (!info) {
+        caixa.classList.add('hidden');
+        var escolha = document.getElementById('impGestorAprovador');
+        if (escolha) escolha.innerHTML = '';
+        impResumo('A meta entra direto no Kanban do colaborador.');
+        return;
+    }
+
+    document.getElementById('impNomeArea').textContent = info.area;
+    var lista = document.getElementById('impGestorAprovador');
+    var bloco = document.getElementById('impEscolhaGestor');
+    var semGestor = document.getElementById('impSemGestor');
+
+    lista.innerHTML = '';
+    (info.gestores || []).forEach(function (g) {
+        var op = document.createElement('option');
+        op.value = g.id;
+        op.textContent = g.nome;
+        lista.appendChild(op);
+    });
+
+    var temGestor = (info.gestores || []).length > 0;
+    bloco.classList.toggle('hidden', !temGestor);
+    semGestor.classList.toggle('hidden', temGestor);
+    caixa.classList.remove('hidden');
+    impResumo('Como é de outra área, a meta vai para aprovação antes de entrar no Kanban.');
+}
+
+function impResumo(texto) {
+    var el = document.getElementById('impResumoGestor');
+    if (el) el.textContent = texto;
+}
+document.addEventListener('DOMContentLoaded', impChecarArea);
 </script>
 
 <script>

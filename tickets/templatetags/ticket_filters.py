@@ -111,3 +111,25 @@ def strip_html(value):
     value = value.replace('\n', '<br>')
     
     return mark_safe(value)
+
+
+@register.filter
+def pode_excluir(comentario, usuario):
+    """O usuário pode apagar este comentário?
+
+    A regra mora no modelo; aqui é só a ponte para o template — repetir a
+    condição no HTML criaria uma segunda verdade sobre quem pode o quê.
+    """
+    try:
+        return comentario.pode_excluir(usuario)
+    except Exception:                                       # noqa: BLE001
+        return False
+
+
+@register.filter
+def pode_ver_original(comentario, usuario):
+    """O usuário enxerga o texto de um comentário já apagado?"""
+    try:
+        return comentario.pode_ver_original(usuario)
+    except Exception:                                       # noqa: BLE001
+        return False

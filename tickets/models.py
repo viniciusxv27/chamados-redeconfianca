@@ -527,14 +527,80 @@ class TicketComment(models.Model):
         verbose_name="Atribuído para"
     )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Data")
-    
+
+    # Exclusão é sempre lógica: num chamado o histórico é a memória de quem
+    # combinou o quê. Apagar de verdade tiraria a prova junto com o texto.
+    excluido_em = models.DateTimeField(null=True, blank=True, verbose_name="Excluído em")
+    excluido_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='comentarios_chamado_excluidos', verbose_name="Excluído por")
+    motivo_exclusao = models.CharField(
+        max_length=200, blank=True, default='', verbose_name="Motivo da exclusão")
+
     class Meta:
         verbose_name = "Comentário"
         verbose_name_plural = "Comentários"
         ordering = ['created_at']
-    
+
     def __str__(self):
         return f"#{self.ticket.id} - {self.user.full_name} - {self.get_comment_type_display()}"
+
+    # Tipos que são registro automático do chamado (mudou status, assumiu,
+    # atribuiu). Não se apaga: é a linha do tempo do atendimento, não recado.
+    TIPOS_APAGAVEIS = ('COMMENT', 'FOLLOW_UP')
+
+    @property
+    def excluido(self):
+        return self.excluido_em is not None
+
+    # Quem chefia o setor responde pelos chamados dele. PADRÃO fica de fora de
+    # propósito: `can_view_sector_tickets()` inclui todo mundo do setor, e
+    # "enxergar o chamado do colega" está longe de "apagar o recado do colega".
+    CHEFIA_DO_SETOR = ('ADMINISTRATIVO', 'SUPERVISOR', 'ADMIN', 'SUPERADMIN')
+
+    def pode_excluir(self, user):
+        """Quem pode apagar este comentário.
+
+        O autor apaga o que escreveu. Quem responde pelo chamado — responsável,
+        auxiliares, a chefia do setor e quem administra os chamados — apaga
+        qualquer recado, que é o que se espera de quem toca o atendimento. O
+        texto continua no histórico de qualquer forma.
+
+        Estar no mesmo setor não basta: envolvido é quem abriu, quem atende ou
+        quem responde pela área — não o colega da mesa ao lado.
+        """
+        if not (user and getattr(user, 'is_authenticated', False)):
+            return False
+        if self.excluido:
+            return False
+        if self.comment_type not in self.TIPOS_APAGAVEIS:
+            return False
+        if self.user_id == user.id:
+            return True
+        if user.is_superuser or user.can_view_all_tickets():
+            return True
+        if user in self.ticket.get_all_assigned_users():
+            return True
+        return (getattr(user, 'hierarchy', '') in self.CHEFIA_DO_SETOR
+                and self.ticket.sector_id == getattr(user, 'sector_id', None))
+
+    def pode_ver_original(self, user):
+        """Quem enxerga o texto de um comentário já apagado.
+
+        O autor e quem responde pelo chamado. Para os demais fica só o registro
+        de que existiu, com autor e data — que é o que "ficar no histórico"
+        precisa garantir.
+        """
+        if not (user and getattr(user, 'is_authenticated', False)):
+            return False
+        if self.user_id == user.id or self.excluido_por_id == user.id:
+            return True
+        if user.is_superuser or user.can_view_all_tickets():
+            return True
+        if user in self.ticket.get_all_assigned_users():
+            return True
+        return (getattr(user, 'hierarchy', '') in self.CHEFIA_DO_SETOR
+                and self.ticket.sector_id == getattr(user, 'sector_id', None))
     
     def save(self, *args, **kwargs):
         is_new = self.pk is None

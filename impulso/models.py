@@ -212,10 +212,27 @@ class Meta(models.Model):
         return self.aprovacao == self.Aprovacao.APROVADA
 
     def pode_decidir(self, user):
-        """Quem aprova/recusa: o gestor escolhido na solicitação, ou superuser."""
+        """Quem aprova/recusa a solicitação.
+
+        O gestor escolhido, o superuser — e qualquer gestor do Impulso da área
+        do colaborador. A última parte é o que faz a demanda vinda de outra
+        área não ficar parada quando o gestor indicado está de férias ou saiu:
+        quem responde pela área pode decidir.
+
+        Quem pediu não decide o próprio pedido, mesmo sendo gestor da área —
+        seria aprovar a si mesmo e o "aprovado pelo gestor da área" viraria
+        carimbo.
+        """
         if not (user and user.is_authenticated) or not self.pendente_aprovacao:
             return False
-        return user.is_superuser or self.gestor_id == user.id
+        if user.is_superuser:
+            return True
+        if self.solicitada_por_id == user.id:
+            return False
+        if self.gestor_id == user.id:
+            return True
+        from .utils import get_gestores_do_setor
+        return get_gestores_do_setor(self.colaborador).filter(id=user.id).exists()
 
     @property
     def responsaveis(self):
@@ -256,22 +273,37 @@ class Meta(models.Model):
             'entregue': entregue,
         }
 
-    def pode_excluir(self, user):
-        """Quem apaga a meta: só gestor, e só o que ele criou ou aprovou.
+    def pode_excluir(self, user, equipe_ids=None):
+        """Quem apaga a meta: gestor, em qualquer card que ele enxerga.
+
+        "Enxergar" é a mesma régua do Kanban: a meta é dele, ele criou, ou o
+        colaborador está em algum setor atrelado a ele — principal ou
+        secundário. Antes valia só o que ele mesmo criou ou aprovou, e o gestor
+        ficava sem poder limpar card de gente da própria área.
 
         Colaborador nunca apaga — nem a meta dele, nem a que ele mesmo pediu:
         seria uma saída fácil para sumir com tarefa ruim antes da avaliação.
-        Uma solicitação ainda pendente também não é apagável pelo gestor que a
-        recebeu: para essa existe o "recusar", que avisa quem pediu.
+        Solicitação ainda pendente também não se apaga: para essa existe o
+        "recusar", que avisa quem pediu em vez de a coisa sumir calada.
         """
         if not (user and user.is_authenticated):
             return False
+        if self.pendente_aprovacao:
+            return False
         if user.is_superuser:
             return True
-        from .utils import is_impulso_manager     # tardio: utils importa models
+        from .utils import (get_colaboradores_do_gestor,     # tardio: utils importa models
+                            is_impulso_manager)
         if not is_impulso_manager(user):
             return False
-        return self.created_by_id == user.id or self.decidida_por_id == user.id
+        if (self.created_by_id == user.id or self.decidida_por_id == user.id
+                or self.gestor_id == user.id):
+            return True
+        # `equipe_ids` evita uma consulta por card no Kanban: quem lista muitas
+        # metas calcula a equipe uma vez e passa pronto.
+        if equipe_ids is not None:
+            return self.colaborador_id in equipe_ids
+        return get_colaboradores_do_gestor(user).filter(id=self.colaborador_id).exists()
 
     def pode_cancelar_solicitacao(self, user):
         """Quem pede pode desistir — enquanto a solicitação ainda está parada.

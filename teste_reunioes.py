@@ -18,6 +18,7 @@ if 'testserver' not in settings.ALLOWED_HOSTS:
     settings.ALLOWED_HOSTS.append('testserver')
 
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.test import Client
 from django.utils import timezone
 
@@ -49,6 +50,12 @@ def novo(username, **kw):
     return u
 
 
+# Tudo numa transação desfeita no fim. O teste precisa mexer na configuração
+# do módulo (credenciais do 8x8) para exercitar a entrada autenticada — e uma
+# rodada interrompida no meio não pode deixar valor de teste no lugar da
+# credencial de verdade.
+marcador = transaction.atomic()
+marcador.__enter__()
 try:
     print('== CENÁRIO ==')
     chefe = novo('rn.chefe.t', first_name='Chefe', last_name='Reuniao',
@@ -161,7 +168,12 @@ try:
     r = cg.get(f'/reunioes/{reuniao.id}/sala/')
     t('convidado entra na sala', r.status_code == 200, r.status_code)
     html = r.content.decode()
-    t('sala usa o servidor configurado', ConfiguracaoReunioes.get().servidor_jitsi in html)
+    # O destino não é o campo cru da configuração: com credenciais do 8x8 a
+    # sala abre no servidor deles. `servidor_para` é quem decide.
+    from reunioes.jaas import servidor_para
+    t('sala abre no servidor que a configuração determina',
+      servidor_para(ConfiguracaoReunioes.get()) in html,
+      servidor_para(ConfiguracaoReunioes.get()))
     t('sala não tem limite de tempo declarado', 'sem limite de tempo' in html)
     t('sala oferece gravar a ata', 'Gravar ata' in html)
 
@@ -249,13 +261,10 @@ try:
     print('\n== CONFIGURAÇÃO ==')
     r = cg.get('/reunioes/configuracao/', follow=True)
     t('só SUPERADMIN configura', 'Só o SUPERADMIN' in r.content.decode())
-    cfg_antes = ConfiguracaoReunioes.get().servidor_jitsi
     r = c.post('/reunioes/configuracao/', {'servidor_jitsi': 'https://meet.exemplo.local/',
                                            'gerar_ata': 'on'}, follow=True)
     cfg = ConfiguracaoReunioes.get()
     t('limpa o https:// do servidor', cfg.servidor_jitsi == 'meet.exemplo.local', cfg.servidor_jitsi)
-    cfg.servidor_jitsi = cfg_antes
-    cfg.save()
 
     print('\n== ENTRADA NA SALA (sem pedir entrada, nome travado) ==')
     nova = Reuniao.objects.create(
@@ -450,43 +459,31 @@ try:
     CalendarEvent.objects.filter(title__startswith=marca).delete()
 
     print('\n== CONFIGURAÇÃO NÃO VAZA A CHAVE ==')
+    c.post('/reunioes/configuracao/', {
+        'servidor_jitsi': 'meet.jit.si', 'gerar_ata': 'on',
+        'jaas_app_id': 'vpaas-magic-cookie-ZZ', 'jaas_api_key_id': 'vpaas-magic-cookie-ZZ/k',
+        'jaas_chave_privada': pem}, follow=True)
     cfg_real = ConfiguracaoReunioes.get()
-    guardado = {'srv': cfg_real.servidor_jitsi, 'app': cfg_real.jaas_app_id,
-                'kid': cfg_real.jaas_api_key_id, 'pem': cfg_real.jaas_chave_privada}
-    try:
-        c.post('/reunioes/configuracao/', {
-            'servidor_jitsi': 'meet.jit.si', 'gerar_ata': 'on',
-            'jaas_app_id': 'vpaas-magic-cookie-ZZ', 'jaas_api_key_id': 'vpaas-magic-cookie-ZZ/k',
-            'jaas_chave_privada': pem}, follow=True)
-        cfg_real = ConfiguracaoReunioes.get()
-        t('guarda a chave privada', cfg_real.jaas_chave_privada.strip() == pem.strip())
-        pagina = c.get('/reunioes/configuracao/').content.decode()
-        # O corpo da chave (o miolo base64) é o que não pode voltar para a tela;
-        # o texto de exemplo do campo pode citar "BEGIN PRIVATE KEY".
-        miolo = pem.strip().splitlines()[2][:40]
-        t('não devolve a chave para a tela', miolo not in pagina)
-        t('mostra que a chave está guardada', 'chave já guardada' in pagina)
+    t('guarda a chave privada', cfg_real.jaas_chave_privada.strip() == pem.strip())
+    pagina = c.get('/reunioes/configuracao/').content.decode()
+    # O corpo da chave (o miolo base64) é o que não pode voltar para a tela;
+    # o texto de exemplo do campo pode citar "BEGIN PRIVATE KEY".
+    miolo = pem.strip().splitlines()[2][:40]
+    t('não devolve a chave para a tela', miolo not in pagina)
+    t('mostra que a chave está guardada', 'chave já guardada' in pagina)
 
-        c.post('/reunioes/configuracao/', {
-            'servidor_jitsi': 'meet.jit.si', 'gerar_ata': 'on',
-            'jaas_app_id': 'vpaas-magic-cookie-ZZ', 'jaas_api_key_id': 'vpaas-magic-cookie-ZZ/k',
-            'jaas_chave_privada': '••••••••  chave já guardada'}, follow=True)
-        t('salvar sem mexer no campo não apaga a chave',
-          ConfiguracaoReunioes.get().jaas_chave_privada.strip() == pem.strip())
+    c.post('/reunioes/configuracao/', {
+        'servidor_jitsi': 'meet.jit.si', 'gerar_ata': 'on',
+        'jaas_app_id': 'vpaas-magic-cookie-ZZ', 'jaas_api_key_id': 'vpaas-magic-cookie-ZZ/k',
+        'jaas_chave_privada': '••••••••  chave já guardada'}, follow=True)
+    t('salvar sem mexer no campo não apaga a chave',
+      ConfiguracaoReunioes.get().jaas_chave_privada.strip() == pem.strip())
 
-        c.post('/reunioes/configuracao/', {
-            'servidor_jitsi': 'meet.jit.si', 'gerar_ata': 'on'}, follow=True)
-        pagina = c.get('/reunioes/configuracao/').content.decode()
-        t('avisa que o servidor público exige moderador',
-          'aguardando um moderador' in pagina)
-    finally:
-        cfg_real = ConfiguracaoReunioes.get()
-        cfg_real.servidor_jitsi = guardado['srv']
-        cfg_real.jaas_app_id = guardado['app']
-        cfg_real.jaas_api_key_id = guardado['kid']
-        cfg_real.jaas_chave_privada = guardado['pem']
-        cfg_real.save()
-        print('   (configuração real devolvida ao estado anterior)')
+    c.post('/reunioes/configuracao/', {
+        'servidor_jitsi': 'meet.jit.si', 'gerar_ata': 'on'}, follow=True)
+    pagina = c.get('/reunioes/configuracao/').content.decode()
+    t('avisa que o servidor público exige moderador',
+      'aguardando um moderador' in pagina)
 
     print('\n== HIGIENE DE TEMPLATE ==')
     import glob
@@ -505,25 +502,10 @@ try:
     MeetingTranscription.objects.filter(title__startswith='ZZ ').delete()
 
 finally:
-    from agenda.models import CalendarEvent, MeetingTranscription
-
-    MeetingTranscription.objects.filter(title__startswith='ZZ ').delete()
-    for r_ in criados['reunioes']:
-        obj = Reuniao.objects.filter(id=r_.id).first()
-        if obj and obj.evento_id:
-            CalendarEvent.objects.filter(id=obj.evento_id).delete()
-        Reuniao.objects.filter(id=r_.id).delete()
-    Reuniao.objects.filter(titulo__startswith='ZZ ').delete()
-    if criados['coord']:
-        CoordinatorStoreAccess.objects.filter(id=criados['coord'].id).delete()
-    for u in criados['users']:
-        Reuniao.objects.filter(organizador=u).delete()
-        User.objects.filter(id=u.id).delete()
-    if criados['grupo']:
-        CommunicationGroup.objects.filter(id=criados['grupo'].id).delete()
-    for s in criados['setores']:
-        Sector.objects.filter(id=s.id).delete()
-    print('\nlimpeza: só o que este teste criou foi removido.')
+    transaction.set_rollback(True)
+    marcador.__exit__(None, None, None)
+    print('\nrollback: nada deste teste foi gravado no banco '
+          '(inclusive a configuração do módulo).')
 
 print(f'\n{ok} OK / {fail} falhas')
 sys.exit(1 if fail else 0)

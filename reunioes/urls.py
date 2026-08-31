@@ -14,4 +14,7 @@ urlpatterns = [
     path('<int:reuniao_id>/cancelar/', views.cancelar, name='cancelar'),
     path('<int:reuniao_id>/ata/', views.registrar_ata, name='registrar_ata'),
     path('configuracao/', views.configuracao, name='configuracao'),
+
+    # Aberta: quem busca é o Jitsi, de outro domínio, sem sessão.
+    path('branding.json', views.branding, name='branding'),
 ]

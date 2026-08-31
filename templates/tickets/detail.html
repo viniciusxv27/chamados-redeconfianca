@@ -366,7 +366,7 @@ select[multiple] option:hover {
                                 </div>
                             {% endif %}
                             <div class="flex-1">
-                                <div class="bg-gray-50 rounded-lg p-4">
+                                <div class="rounded-lg p-4 {% if comment.excluido %}bg-gray-50/60 border border-dashed border-gray-200{% else %}bg-gray-50{% endif %}">
                                     <div class="flex items-center justify-between mb-2">
                                         <div class="flex items-center space-x-2">
                                             <div class="flex items-center space-x-2">
@@ -392,9 +392,38 @@ select[multiple] option:hover {
                                                 {{ comment.get_comment_type_display }}
                                             </span>
                                         </div>
-                                        <p class="text-sm text-gray-500">{{ comment.created_at|date:"d/m/Y H:i" }}</p>
+                                        <div class="flex items-center gap-2">
+                                            <p class="text-sm text-gray-500">{{ comment.created_at|date:"d/m/Y H:i" }}</p>
+                                            {% if comment|pode_excluir:user %}
+                                            <form method="post" action="{% url 'excluir_comentario_chamado' comment.id %}"
+                                                  onsubmit="return confirm('Excluir este comentário? Ele sai da conversa, mas o registro fica no histórico do chamado.');">
+                                                {% csrf_token %}
+                                                <button type="submit" title="Excluir comentário"
+                                                        class="text-gray-300 hover:text-red-500 transition-colors px-1">
+                                                    <i class="fas fa-trash text-xs"></i>
+                                                </button>
+                                            </form>
+                                            {% endif %}
+                                        </div>
                                     </div>
+                                    {% if comment.excluido %}
+                                        <p class="text-sm text-gray-400 italic">
+                                            <i class="fas fa-ban mr-1"></i>
+                                            Comentário excluído por
+                                            {{ comment.excluido_por.full_name|default:"—" }}
+                                            em {{ comment.excluido_em|date:"d/m/Y H:i" }}{% if comment.motivo_exclusao %} · {{ comment.motivo_exclusao }}{% endif %}
+                                        </p>
+                                        {% if comment|pode_ver_original:user %}
+                                        <details class="mt-2">
+                                            <summary class="text-xs text-gray-400 cursor-pointer hover:text-gray-600">
+                                                ver o texto original
+                                            </summary>
+                                            <p class="text-gray-500 text-sm mt-1 whitespace-pre-wrap border-l-2 border-gray-200 pl-3">{{ comment.comment }}</p>
+                                        </details>
+                                        {% endif %}
+                                    {% else %}
                                     <p class="text-gray-700">{{ comment.comment }}</p>
+                                    {% endif %}
                                     {% if comment.assigned_to %}
                                         <div class="mt-2 pt-2 border-t border-gray-200">
                                             <p class="text-sm text-purple-700">

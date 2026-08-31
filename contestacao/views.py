@@ -15,11 +15,12 @@ from django.db import models
 from django.db.models import Count, F, Min, Q, Sum
 from django.core.paginator import Paginator
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from django.views.decorators.http import require_POST
 
 from .models import (ExclusionRecord, ExclusionSyncBatch, Contestation,
                      ContestationHistory, ContestationCartDraft, TipoBase)
-from users.models import SystemConfig, User
+from users.models import Sector, SystemConfig, User
 
 
 HIERARCHY_RANK = {
@@ -57,6 +58,14 @@ def _has_global_contestation_access(user):
         return config.contestacao_global_managers.filter(pk=user.pk).exists()
     except Exception:
         return False
+
+
+def _to_int(valor):
+    """Inteiro do POST, ou None. Campo vazio não pode virar exceção na tela."""
+    try:
+        return int(valor)
+    except (TypeError, ValueError):
+        return None
 
 
 def _can_view_all_contestation_scope(user):
@@ -461,9 +470,25 @@ def _get_latest_sync_batch(record_type=TipoBase.EXCLUSAO):
             .order_by('-created_at').first())
 
 
-def _get_sync_window_state():
+def _get_sync_window_state(user=None):
+    """Se a contestação está aberta — e até quando.
+
+    A regra padrão é global: três dias da última sincronização. Passando o
+    ``user``, uma liberação avulsa do setor dele (``LiberacaoContestacao``)
+    pode reabrir o prazo mesmo com a janela geral vencida — é o caminho para
+    destravar uma loja que perdeu a data sem reabrir a rodada para todo mundo.
+    """
     now = timezone.now()
     last_sync_at = _get_last_sync_at()
+
+    liberacao = None
+    if user is not None:
+        try:
+            from .models import LiberacaoContestacao
+            liberacao = LiberacaoContestacao.para_usuario(user)
+        except Exception:                                   # noqa: BLE001
+            liberacao = None
+
     if not last_sync_at:
         return {
             'has_sync': False,
@@ -473,11 +498,29 @@ def _get_sync_window_state():
             'sync_deadline_at': None,
             'remaining_seconds': 0,
             'remaining_label': 'Expirado',
+            'liberacao': None,
         }
 
     sync_deadline_at = last_sync_at + timezone.timedelta(days=SYNC_VALIDITY_DAYS)
     remaining_seconds = int((sync_deadline_at - now).total_seconds())
     is_expired = remaining_seconds <= 0
+
+    # A liberação só entra em cena quando ela vai além do prazo normal: não faz
+    # sentido encurtar uma janela que ainda está aberta.
+    if liberacao is not None and liberacao.prazo > sync_deadline_at:
+        restante = int((liberacao.prazo - now).total_seconds())
+        return {
+            'has_sync': True,
+            'is_blocked': restante <= 0,
+            'is_expired': restante <= 0,
+            'last_sync_at': last_sync_at,
+            'sync_deadline_at': liberacao.prazo,
+            'remaining_seconds': max(restante, 0),
+            'remaining_label': (_format_remaining_duration(restante) if restante > 0
+                                else 'Expirado'),
+            'liberacao': liberacao,
+        }
+
     return {
         'has_sync': True,
         'is_blocked': is_expired,
@@ -486,6 +529,7 @@ def _get_sync_window_state():
         'sync_deadline_at': sync_deadline_at,
         'remaining_seconds': max(remaining_seconds, 0),
         'remaining_label': _format_remaining_duration(remaining_seconds) if remaining_seconds > 0 else 'Expirado',
+        'liberacao': None,
     }
 
 
@@ -941,7 +985,7 @@ def exclusion_list(request):
     pilares = qs.values_list('pilar', flat=True).distinct().order_by('pilar')
     filiais = qs.values_list('filial', flat=True).distinct().order_by('filial')
 
-    sync_state = _get_sync_window_state()
+    sync_state = _get_sync_window_state(request.user)
 
     # IDs que já têm contestação ativa no ciclo atual (após última sincronização).
     contestations_map = {}
@@ -985,6 +1029,7 @@ def exclusion_list(request):
         'sync_deadline_at': sync_state['sync_deadline_at'],
         'sync_remaining_seconds': sync_state['remaining_seconds'],
         'sync_remaining_label': sync_state['remaining_label'],
+        'liberacao_avulsa': sync_state.get('liberacao'),
         'showing_old_records': show_old,
         'old_records_count': old_records_count,
         # Quantas vendas estão esperando contestação de valor — o número no
@@ -1266,7 +1311,7 @@ def create_contestation(request, exclusion_id):
         messages.error(request, 'Sem permissão para contestar.')
         return redirect('contestacao:exclusion_list')
 
-    sync_state = _get_sync_window_state()
+    sync_state = _get_sync_window_state(request.user)
     if sync_state['is_blocked']:
         if sync_state['has_sync']:
             messages.error(request, 'Período de 3 dias após a última sincronização expirou. Sincronize a planilha para liberar novas contestações.')
@@ -1318,7 +1363,7 @@ def bulk_create_contestation(request):
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'Método não permitido.'}, status=405)
 
-    sync_state = _get_sync_window_state()
+    sync_state = _get_sync_window_state(request.user)
     if sync_state['is_blocked']:
         if sync_state['has_sync']:
             error_msg = 'Período de 3 dias após a última sincronização expirou. Sincronize a planilha para liberar novas contestações.'
@@ -3235,3 +3280,60 @@ def export_valores(request):
         ])
 
     return resposta
+
+
+@login_required
+def liberar_setor(request):
+    """Reabre a contestação de um setor por um prazo definido.
+
+    Existe porque a janela padrão é global (três dias da sincronização) e a
+    única forma de destravar uma loja atrasada era sincronizar de novo — o que
+    reabre a rodada para a rede inteira e embaralha o que já foi decidido.
+    """
+    if not _can_view_all_contestation_scope(request.user):
+        messages.error(request, 'Só quem administra as contestações libera setor.')
+        return redirect('contestacao:exclusion_list')
+
+    from .models import LiberacaoContestacao
+
+    if request.method == 'POST':
+        acao = request.POST.get('acao')
+        if acao == 'revogar':
+            lib = LiberacaoContestacao.objects.filter(
+                id=_to_int(request.POST.get('liberacao'))).first()
+            if lib:
+                lib.ativa = False
+                lib.save(update_fields=['ativa'])
+                messages.success(request, f'Liberação de {lib.setor.name} revogada.')
+            return redirect('contestacao:liberar_setor')
+
+        setor = Sector.objects.filter(id=_to_int(request.POST.get('setor'))).first()
+        prazo = parse_datetime(request.POST.get('prazo') or '')
+        if prazo and timezone.is_naive(prazo):
+            prazo = timezone.make_aware(prazo)
+
+        if not setor or not prazo:
+            messages.error(request, 'Escolha o setor e o prazo.')
+        elif prazo <= timezone.now():
+            messages.error(request, 'O prazo precisa ser no futuro.')
+        else:
+            LiberacaoContestacao.objects.create(
+                setor=setor, prazo=prazo,
+                motivo=(request.POST.get('motivo') or '').strip()[:200],
+                criado_por=request.user)
+            messages.success(
+                request,
+                f'{setor.name} liberado para contestar até '
+                f'{timezone.localtime(prazo):%d/%m/%Y às %H:%M}.')
+        return redirect('contestacao:liberar_setor')
+
+    agora = timezone.now()
+    return render(request, 'contestacao/liberar_setor.html', {
+        'setores': Sector.objects.order_by('name'),
+        'vigentes': (LiberacaoContestacao.objects
+                     .filter(ativa=True, prazo__gt=agora)
+                     .select_related('setor', 'criado_por')),
+        'encerradas': (LiberacaoContestacao.objects
+                       .filter(Q(ativa=False) | Q(prazo__lte=agora))
+                       .select_related('setor', 'criado_por')[:15]),
+    })

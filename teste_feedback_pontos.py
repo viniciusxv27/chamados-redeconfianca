@@ -22,6 +22,7 @@ if 'testserver' not in settings.ALLOWED_HOSTS:
     settings.ALLOWED_HOSTS.append('testserver')
 
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.utils import timezone
 
 from feedback.models import Feedback
@@ -61,6 +62,8 @@ def cria_feedback(gestor, pessoa, nota_0a10, data, criado_em=None):
     return fb
 
 
+marcador = transaction.atomic()
+marcador.__enter__()
 try:
     gestor = novo_usuario('fbp.gestor.t')
     hoje = timezone.localdate()
@@ -183,12 +186,9 @@ try:
           (pontos == PT_FEEDBACK) is esperado, f'{pontos} / {det}')
 
 finally:
-    Feedback.objects.filter(id__in=[f.id for f in criados['feedbacks']]).delete()
-    for u in criados['users']:
-        Feedback.objects.filter(evaluatee=u).delete()
-        Feedback.objects.filter(evaluator=u).delete()
-        User.objects.filter(id=u.id).delete()
-    print('\nlimpeza: só o que este teste criou foi removido.')
+    transaction.set_rollback(True)
+    marcador.__exit__(None, None, None)
+    print('\nrollback: nada deste teste foi gravado no banco.')
 
 print(f'\n{ok} OK / {fail} falhas')
 sys.exit(1 if fail else 0)

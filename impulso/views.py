@@ -205,8 +205,11 @@ def metas_kanban(request):
     metas = list(metas)
     vistas = {v.meta_id: v.visto_em for v in
               MetaVisualizacao.objects.filter(user=user, meta__in=metas)}
+    # A equipe do gestor sai numa consulta só, não uma por card.
+    equipe_ids = (set(get_colaboradores_do_gestor(user).values_list('id', flat=True))
+                  if gestor else set())
     for m in metas:
-        m.pode_apagar = m.pode_excluir(user)
+        m.pode_apagar = m.pode_excluir(user, equipe_ids=equipe_ids)
         m.novidades = m.novidades_para(user)
         m.tem_novidade = any(m.novidades.values())
         m.feitos, m.total_itens = m.progresso_itens
@@ -257,10 +260,32 @@ def meta_create(request):
         if recorrencia not in Meta.Recorrencia.values:
             recorrencia = Meta.Recorrencia.UNICA
 
+        fora_da_area = False
         if sou_gestor:
             colaborador = get_colaboradores().filter(
                 id=_int_or_none(request.POST.get('colaborador'))).first()
             gestor = request.user
+
+            # Demanda para gente de OUTRA área não entra na fila direto: quem
+            # responde pela área do colaborador precisa aprovar. Sem isso, um
+            # gestor encheria a agenda da equipe de outro sem ele saber.
+            if colaborador is not None:
+                da_minha_area = (get_colaboradores_do_gestor(request.user)
+                                 .filter(id=colaborador.id).exists())
+                if not da_minha_area:
+                    gestores_da_area = get_gestores_do_setor(colaborador).exclude(
+                        id=request.user.id)
+                    if not gestores_da_area.exists():
+                        messages.error(
+                            request,
+                            f'{colaborador.get_full_name() or colaborador.email} é de outra '
+                            f'área e não há gestor do Impulso cadastrado nela para aprovar '
+                            f'a demanda. Fale com o RH para ajustar o cadastro.')
+                        return redirect('impulso:meta_create')
+                    escolhido = gestores_da_area.filter(
+                        id=_int_or_none(request.POST.get('gestor_aprovador'))).first()
+                    gestor = escolhido or gestores_da_area.first()
+                    fora_da_area = True
         else:
             # O colaborador só pode pedir para um gestor do SEU setor, e a meta
             # é sempre para ele mesmo — não dá para criar tarefa para terceiros.
@@ -292,13 +317,14 @@ def meta_create(request):
             messages.error(request, 'O prazo não pode ser anterior a hoje.')
             return redirect('impulso:meta_create')
 
-        # Gestor criando: aprovada. Colaborador: depende do que ele escolheu.
-        ja_aprovada = sou_gestor or not precisa_aprovacao
+        # Gestor criando para a própria área: aprovada. Para outra área, vai
+        # para o gestor de lá. Colaborador: depende do que ele escolheu.
+        ja_aprovada = (sou_gestor and not fora_da_area) or (not sou_gestor and not precisa_aprovacao)
         meta = Meta.objects.create(
             gestor=gestor, colaborador=colaborador, titulo=titulo,
             descricao=descricao, recorrencia=recorrencia, prazo=prazo,
             aprovacao=Meta.Aprovacao.APROVADA if ja_aprovada else Meta.Aprovacao.PENDENTE,
-            solicitada_por=None if sou_gestor else request.user,
+            solicitada_por=request.user if (fora_da_area or not sou_gestor) else None,
             created_by=request.user,
         )
 
@@ -321,7 +347,20 @@ def meta_create(request):
             ])
 
         quem = request.user.get_full_name() or request.user.email
-        if sou_gestor:
+        if sou_gestor and fora_da_area:
+            # A área de destino decide; quem pediu fica sabendo que está parado.
+            _notify(list(get_gestores_do_setor(colaborador).exclude(id=request.user.id)),
+                    'Demanda de outra área para aprovar',
+                    f'{quem} pediu a meta "{meta.titulo}" para '
+                    f'{colaborador.get_full_name() or colaborador.email}, da sua área. '
+                    f'Aprove ou recuse.',
+                    f'/impulso/metas/{meta.id}/')
+            messages.success(
+                request,
+                f'{colaborador.get_full_name() or colaborador.email} é de outra área — '
+                f'a demanda foi enviada para o gestor da área dele aprovar. '
+                f'Ela entra no Kanban depois disso.')
+        elif sou_gestor:
             _notify([colaborador], 'Nova meta atribuída',
                     f'"{meta.titulo}" foi atribuída a você.',
                     f'/impulso/metas/{meta.id}/')
@@ -343,10 +382,28 @@ def meta_create(request):
             messages.success(request, 'Atividade criada e já disponível no seu Kanban.')
         return redirect('impulso:meta_detail', meta_id=meta.id)
 
+    # Para o gestor, a tela precisa saber quem é de outra área: essa demanda
+    # não entra na fila direto, vai para aprovação de lá. Mandamos o mapa
+    # pronto para o formulário avisar na hora da escolha, em vez de a pessoa
+    # descobrir depois de salvar.
+    fora_da_area = {}
+    if sou_gestor:
+        meus = set(get_colaboradores_do_gestor(request.user).values_list('id', flat=True))
+        for c in get_colaboradores().exclude(id__in=meus).select_related('sector'):
+            aprovadores = [
+                {'id': g.id, 'nome': g.get_full_name() or g.email}
+                for g in get_gestores_do_setor(c).exclude(id=request.user.id)
+            ]
+            fora_da_area[str(c.id)] = {
+                'area': c.sector.name if c.sector_id else 'sem setor',
+                'gestores': aprovadores,
+            }
+
     context = {
         'sou_gestor': sou_gestor,
         'colaboradores': get_colaboradores() if sou_gestor else None,
         'gestores_do_setor': gestores_do_setor,
+        'fora_da_area': fora_da_area,
         'setor': getattr(request.user, 'sector', None),
         'recorrencias': Meta.Recorrencia.choices,
         'hoje': timezone.localdate(),

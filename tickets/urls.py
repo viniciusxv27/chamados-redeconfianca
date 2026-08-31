@@ -13,6 +13,8 @@ urlpatterns = [
     path('<int:ticket_id>/delete/', views.ticket_delete_view, name='ticket_delete'),
     path('<int:ticket_id>/assume/', views.assume_ticket_view, name='assume_ticket'),
     path('<int:ticket_id>/comment/', views.add_comment_view, name='add_comment'),
+    path('comentario/<int:comment_id>/excluir/', views.excluir_comentario_view,
+         name='excluir_comentario_chamado'),
     path('<int:ticket_id>/attachment/<int:attachment_id>/delete/', views.delete_attachment_view, name='delete_ticket_attachment'),
     path('<int:ticket_id>/update-status/', views.update_ticket_status_view, name='update_ticket_status'),
     path('<int:ticket_id>/update-priority/', views.update_priority_view, name='ticket_update_priority'),

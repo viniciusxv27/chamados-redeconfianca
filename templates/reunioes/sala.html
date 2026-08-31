@@ -71,8 +71,9 @@
     <div id="rn-palco" class="rn-palco rounded-2xl overflow-hidden bg-gray-900 shadow-lg
                               border border-gray-200 relative">
         <div id="rn-carregando"
-             class="absolute inset-0 flex flex-col items-center justify-center text-gray-400 gap-3">
-            <i class="fas fa-circle-notch fa-spin text-2xl"></i>
+             class="absolute inset-0 flex flex-col items-center justify-center text-gray-400 gap-4">
+            <img src="{{ url_logo }}" alt="Rede Confiança" class="w-24 h-24 opacity-70">
+            <i class="fas fa-circle-notch fa-spin text-xl"></i>
             <p class="text-sm">Entrando na sala…</p>
         </div>
     </div>
@@ -125,6 +126,12 @@
             // quem já entrou no portal e foi convidado.
             prejoinConfig: { enabled: false },
             prejoinPageEnabled: false,
+            // Português do Brasil, sempre. Sem isso o Jitsi segue o idioma do
+            // navegador e a sala abre em inglês para metade da rede.
+            defaultLanguage: 'ptBR',
+            // Logo e fundo da sala vêm daqui: o Jitsi roda em outro domínio e
+            // não há CSS nosso que alcance o chat por dentro.
+            dynamicBrandingUrl: '{{ url_branding }}',
             // O nome vem do cadastro e não se edita: numa ata, "Fulano" tem de
             // ser o Fulano do portal.
             readOnlyName: true,
@@ -146,9 +153,15 @@
             enableInsecureRoomNameWarning: false
         },
         interfaceConfigOverwrite: {
-            SHOW_JITSI_WATERMARK: false,
+            // Marca d'água: a nossa, não a do Jitsi.
+            SHOW_JITSI_WATERMARK: true,
+            JITSI_WATERMARK_LINK: '{{ url_portal }}',
+            DEFAULT_LOGO_URL: '{{ url_logo }}',
+            DEFAULT_WELCOME_PAGE_LOGO_URL: '{{ url_logo }}',
             SHOW_BRAND_WATERMARK: false,
             SHOW_POWERED_BY: false,
+            // O idioma não pode ser adivinhado pelo navegador.
+            LANG_DETECTION: false,
             MOBILE_APP_PROMO: false,
             SHOW_CHROME_EXTENSION_BANNER: false,
             DEFAULT_BACKGROUND: '#111827',

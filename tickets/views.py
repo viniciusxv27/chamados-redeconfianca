@@ -1,5 +1,6 @@
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_POST
 from django.contrib import messages
 from django.http import JsonResponse, HttpResponse
 from django.utils import timezone
@@ -1143,6 +1144,36 @@ def update_priority_view(request, ticket_id):
 
 
 @login_required
+@login_required
+@require_POST
+def excluir_comentario_view(request, comment_id):
+    """Apaga um comentário do chamado — sem tirar do histórico.
+
+    O registro continua na conversa mostrando quem escreveu, quando e quem
+    apagou. Some o texto para quem não responde pelo chamado; some o comentário
+    de vez, nunca.
+    """
+    comentario = get_object_or_404(
+        TicketComment.objects.select_related('ticket', 'user'), id=comment_id)
+    ticket = comentario.ticket
+
+    if not comentario.pode_excluir(request.user):
+        messages.error(request, 'Você não pode excluir este comentário.')
+        return redirect('ticket_detail', ticket_id=ticket.id)
+
+    comentario.excluido_em = timezone.now()
+    comentario.excluido_por = request.user
+    comentario.motivo_exclusao = (request.POST.get('motivo') or '').strip()[:200]
+    comentario.save(update_fields=['excluido_em', 'excluido_por', 'motivo_exclusao'])
+
+    log_action(request.user, 'TICKET_COMMENT_DELETE',
+               f'Comentário {comentario.id} do chamado #{ticket.id} excluído '
+               f'(autor: {comentario.user.full_name})', request)
+
+    messages.success(request, 'Comentário excluído. O registro fica no histórico do chamado.')
+    return redirect('ticket_detail', ticket_id=ticket.id)
+
+
 def add_comment_view(request, ticket_id):
     """Adicionar comentário ao chamado"""
     if request.method == 'POST':
