@@ -443,6 +443,46 @@ def _find_sector_for_store(sectors, store_name):
     return None
 
 
+def _encontrar_usuario_por_nome(nome, indice):
+    """Acha o usuario do portal a partir do nome que veio na planilha.
+
+    Tres tentativas, da mais segura para a menos:
+
+    1. Nome igual, depois de normalizar.
+    2. Um nome contido no outro (sobrenome a mais ou a menos na planilha —
+       "WELLINGTON BOTELHO MOTA" x "WELLINGTON BOTELHO MOTA LOPES").
+    3. Nome muito parecido (erro de digitacao — "HEMILY" x "HEMILLY").
+
+    Em 2 e 3, so vale se houver **um unico** candidato. Duas pessoas parecidas
+    devolvem None de proposito: trocar o setor da pessoa errada e pior do que
+    nao trocar, porque mexe em acesso e em meta de loja.
+    """
+    from difflib import SequenceMatcher
+
+    chave = _normalize_text(nome)
+    if not chave:
+        return None
+
+    exato = indice.get(chave)
+    if exato is not None:
+        return exato
+
+    partes = set(chave.split())
+    if len(partes) < 2:
+        return None
+
+    contidos = [u for k, u in indice.items()
+                if partes <= set(k.split()) or set(k.split()) <= partes]
+    if len(contidos) == 1:
+        return contidos[0]
+    if contidos:
+        return None                      # ambiguo: melhor nao adivinhar
+
+    parecidos = [u for k, u in indice.items()
+                 if SequenceMatcher(None, chave, k).ratio() >= 0.90]
+    return parecidos[0] if len(parecidos) == 1 else None
+
+
 def _update_users_sectors(store_by_consultor):
     """Atualiza o setor principal e os setores dos usuarios.
 
@@ -451,34 +491,45 @@ def _update_users_sectors(store_by_consultor):
     vinculados ao usuario, apenas adicionando o setor da loja e definindo-o como
     setor principal.
 
-    Retorna a quantidade de usuarios efetivamente atualizados.
+    Devolve (atualizados, nao_casaram) — a segunda lista vai para a tela. Antes
+    quem nao casava sumia em silencio, e a loja da pessoa ficava errada sem
+    ninguem saber por que.
     """
     from users.models import Sector, User
 
     if not store_by_consultor:
-        return 0
+        return 0, []
 
     normalized_store = {}
     for consultor, store in store_by_consultor.items():
         key = _normalize_text(consultor)
         if key and store:
-            normalized_store.setdefault(key, store)
+            normalized_store.setdefault(key, (consultor, store))
 
     if not normalized_store:
-        return 0
+        return 0, []
 
     sectors = list(Sector.objects.all())
     if not sectors:
-        return 0
+        return 0, []
+
+    indice = {}
+    for u in User.objects.filter(is_active=True):
+        chave = _normalize_text(f'{u.first_name} {u.last_name}')
+        if chave:
+            indice.setdefault(chave, u)
 
     updated = 0
-    for user in User.objects.all():
-        full_name_key = _normalize_text(f'{user.first_name} {user.last_name}')
-        if not full_name_key or full_name_key not in normalized_store:
+    nao_casaram = []
+    for _chave, (nome_planilha, loja) in normalized_store.items():
+        user = _encontrar_usuario_por_nome(nome_planilha, indice)
+        if user is None:
+            nao_casaram.append(f'{nome_planilha} ({loja})')
             continue
 
-        sector = _find_sector_for_store(sectors, normalized_store[full_name_key])
+        sector = _find_sector_for_store(sectors, loja)
         if sector is None:
+            nao_casaram.append(f'{nome_planilha} — PDV "{loja}" sem setor no portal')
             continue
 
         changed = False
@@ -492,7 +543,7 @@ def _update_users_sectors(store_by_consultor):
         if changed:
             updated += 1
 
-    return updated
+    return updated, nao_casaram
 
 
 def _build_store_by_consultor(entries):
@@ -1204,14 +1255,24 @@ def upload_goals_view(request):
         ])
 
         updated_pcn = _update_users_pcn(pcn_by_consultor)
-        updated_sectors = _update_users_sectors(_build_store_by_consultor(parsed_entries))
+        updated_sectors, sem_casar = _update_users_sectors(
+            _build_store_by_consultor(parsed_entries))
 
     messages.success(
         request,
         f'Metas de {month:02d}/{year} importadas com sucesso ({len(parsed_entries)} linhas). '
         f'PCN atualizado em {updated_pcn} usuario(s). '
-        f'Setor atualizado em {updated_sectors} usuario(s).'
+        f'Setor principal ajustado pelo PDV em {updated_sectors} usuario(s).'
     )
+    if sem_casar:
+        # Nome que nao casa e cadastro para corrigir, nao erro de importacao:
+        # a planilha entra do mesmo jeito e a tela diz quem ficou de fora.
+        messages.warning(
+            request,
+            f'{len(sem_casar)} pessoa(s) da planilha nao foram encontradas no portal e '
+            f'ficaram sem ajuste de setor: ' + '; '.join(sem_casar[:12])
+            + ('…' if len(sem_casar) > 12 else '')
+        )
     return redirect('power_bi:manage_goals')
 
 

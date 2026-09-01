@@ -309,6 +309,29 @@ class Meta(models.Model):
             return self.colaborador_id in equipe_ids
         return get_colaboradores_do_gestor(user).filter(id=self.colaborador_id).exists()
 
+    def pode_editar(self, user, equipe_ids=None):
+        """Quem edita a meta.
+
+        A mesma régua do excluir — gestor, em qualquer card que ele enxerga —
+        com uma diferença: solicitação ainda pendente **pode** ser editada.
+        Corrigir o texto de um pedido antes de aprovar é reversível; apagá-lo
+        em silêncio não é.
+        """
+        if not (user and user.is_authenticated):
+            return False
+        if user.is_superuser:
+            return True
+        from .utils import (get_colaboradores_do_gestor,     # tardio: utils importa models
+                            is_impulso_manager)
+        if not is_impulso_manager(user):
+            return False
+        if (self.created_by_id == user.id or self.decidida_por_id == user.id
+                or self.gestor_id == user.id):
+            return True
+        if equipe_ids is not None:
+            return self.colaborador_id in equipe_ids
+        return get_colaboradores_do_gestor(user).filter(id=self.colaborador_id).exists()
+
     def pode_cancelar_solicitacao(self, user):
         """Quem pede pode desistir — enquanto a solicitação ainda está parada.
 

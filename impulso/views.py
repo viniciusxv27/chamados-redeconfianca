@@ -638,6 +638,7 @@ def meta_detail(request, meta_id):
         'is_gestor_da_meta': meta.gestor_id == request.user.id or request.user.is_superuser,
         'is_colaborador_da_meta': meta.colaborador_id == request.user.id,
         'pode_decidir': meta.pode_decidir(request.user),
+        'pode_editar_meta': meta.pode_editar(request.user),
         'proxima_ocorrencia': meta.ocorrencias.first(),
         'notas_range': range(0, 6),
         'active_tab': 'confiar',
@@ -770,6 +771,171 @@ def meta_add_anexo(request, meta_id):
     else:
         messages.error(request, 'Envie um arquivo ou informe um link.')
     return redirect('impulso:meta_detail', meta_id=meta.id)
+
+
+@impulso_member_required
+def meta_editar(request, meta_id):
+    """Edita título, descrição, prazo e recorrência de uma atividade do Confiar."""
+    meta = get_object_or_404(Meta, id=meta_id)
+    if not meta.pode_editar(request.user):
+        messages.error(request, 'Você não pode editar esta atividade.')
+        return redirect('impulso:meta_detail', meta_id=meta.id)
+
+    if request.method == 'POST':
+        titulo = (request.POST.get('titulo') or '').strip()
+        descricao = (request.POST.get('descricao') or '').strip()
+        prazo = parse_date(request.POST.get('prazo') or '')
+        recorrencia = request.POST.get('recorrencia') or meta.recorrencia
+
+        if not titulo or not prazo:
+            messages.error(request, 'Título e prazo são obrigatórios.')
+            return redirect('impulso:meta_editar', meta_id=meta.id)
+        if recorrencia not in Meta.Recorrencia.values:
+            recorrencia = meta.recorrencia
+
+        # O prazo pode ir para trás numa edição — a atividade já existe e às
+        # vezes o combinado mudou. O que não pode é nascer vencida, e isso a
+        # tela de criação já barra.
+        antes = {'titulo': meta.titulo, 'prazo': meta.prazo}
+        meta.titulo = titulo[:200]
+        meta.descricao = descricao
+        meta.prazo = prazo
+        meta.recorrencia = recorrencia
+        meta.save(update_fields=['titulo', 'descricao', 'prazo', 'recorrencia'])
+
+        # Mudança de meta alheia vira comentário: quem toca a atividade não pode
+        # descobrir por acaso que o prazo mudou.
+        mudou = []
+        if antes['titulo'] != meta.titulo:
+            mudou.append(f'título: "{antes["titulo"]}" → "{meta.titulo}"')
+        if antes['prazo'] != meta.prazo:
+            mudou.append(f'prazo: {antes["prazo"]:%d/%m/%Y} → {meta.prazo:%d/%m/%Y}')
+        if mudou:
+            quem = request.user.get_full_name() or request.user.email
+            MetaComentario.objects.create(
+                meta=meta, autor=request.user,
+                mensagem=f'{quem} editou a atividade — ' + '; '.join(mudou))
+            _notify([u for u in meta.responsaveis if u.id != request.user.id],
+                    'Atividade alterada',
+                    f'"{meta.titulo}" foi editada por {quem}.',
+                    f'/impulso/metas/{meta.id}/')
+
+        messages.success(request, 'Atividade atualizada.')
+        return redirect('impulso:meta_detail', meta_id=meta.id)
+
+    return render(request, 'impulso/meta_editar.html', {
+        'meta': meta,
+        'recorrencias': Meta.Recorrencia.choices,
+        'active_tab': 'confiar',
+    })
+
+
+@require_POST
+@impulso_member_required
+def meta_duplicar(request, meta_id):
+    """Cria uma cópia da atividade com os passos e a descrição.
+
+    Copia o que descreve o trabalho — título, descrição, prazo, recorrência,
+    responsáveis e o to-do inteiro. Não copia o que é histórico daquela
+    execução: status, entrega, avaliação, nota, comentários e anexos. A cópia
+    nasce "A fazer" e já aprovada, e a tela abre na edição — duplicar existe
+    justamente para mudar alguma coisa antes de valer.
+    """
+    original = get_object_or_404(Meta, id=meta_id)
+    if not original.pode_editar(request.user):
+        messages.error(request, 'Você não pode duplicar esta atividade.')
+        return redirect('impulso:meta_detail', meta_id=original.id)
+
+    titulo = f'Cópia de {original.titulo}'[:200]
+
+    # Prazo no passado viraria card nascendo atrasado; puxa para hoje.
+    hoje = timezone.localdate()
+    prazo = original.prazo if original.prazo and original.prazo >= hoje else hoje
+
+    copia = Meta.objects.create(
+        gestor=original.gestor,
+        colaborador=original.colaborador,
+        titulo=titulo,
+        descricao=original.descricao,
+        recorrencia=original.recorrencia,
+        prazo=prazo,
+        aprovacao=Meta.Aprovacao.APROVADA,
+        created_by=request.user,
+    )
+    copia.participantes.set(original.participantes.all())
+
+    passos = list(original.itens.order_by('ordem', 'id'))
+    if passos:
+        MetaItem.objects.bulk_create([
+            MetaItem(meta=copia, texto=p.texto, ordem=n, criado_por=request.user)
+            for n, p in enumerate(passos)
+        ])
+
+    messages.success(
+        request,
+        f'Atividade duplicada com {len(passos)} passo(s). Ajuste o que precisar e salve.')
+    return redirect('impulso:meta_editar', meta_id=copia.id)
+
+
+@impulso_member_required
+def conteudo_editar(request, conteudo_id):
+    """Edita um curso, vídeo ou POP do Conectar. Mesmo público do excluir."""
+    conteudo = get_object_or_404(ConteudoConectar, id=conteudo_id)
+    if not conteudo.pode_excluir(request.user):
+        messages.error(request, 'Só o SUPERADMIN ou um gestor do Impulso pode editar conteúdo.')
+        return redirect('impulso:conteudo_detail', conteudo_id=conteudo.id)
+
+    if request.method == 'POST':
+        titulo = (request.POST.get('titulo') or '').strip()
+        if not titulo:
+            messages.error(request, 'Informe o título.')
+            return redirect('impulso:conteudo_editar', conteudo_id=conteudo.id)
+
+        tipo = request.POST.get('tipo') or conteudo.tipo
+        if tipo not in ConteudoConectar.Tipo.values:
+            tipo = conteudo.tipo
+
+        conteudo.tipo = tipo
+        conteudo.titulo = titulo[:200]
+        conteudo.descricao = (request.POST.get('descricao') or '').strip()
+        conteudo.url = (request.POST.get('url') or '').strip()
+        conteudo.obrigatorio = bool(request.POST.get('obrigatorio'))
+        conteudo.inicio = parse_date(request.POST.get('inicio') or '') or None
+        conteudo.fim = parse_date(request.POST.get('fim') or '') or None
+
+        novo_arquivo = request.FILES.get('arquivo')
+        if novo_arquivo:
+            # Troca o arquivo e apaga o antigo — deixar os dois ocupa espaço e
+            # ninguém volta para o anterior.
+            antigo = conteudo.arquivo
+            conteudo.arquivo = novo_arquivo
+            conteudo.save()
+            if antigo:
+                antigo.delete(save=False)
+        else:
+            conteudo.save()
+
+        antes = set(conteudo.obrigatorio_para.values_list('id', flat=True))
+        ids = request.POST.getlist('obrigatorio_para')
+        escolhidos = get_colaboradores().filter(id__in=ids)
+        conteudo.obrigatorio_para.set(escolhidos)
+        novos = [u for u in escolhidos if u.id not in antes]
+        if novos:
+            _notify(novos, f'Novo {conteudo.get_tipo_display().lower()} obrigatório',
+                    f'"{conteudo.titulo}" foi atribuído a você.',
+                    f'/impulso/conectar/{conteudo.id}/')
+
+        messages.success(request, 'Conteúdo atualizado.')
+        return redirect('impulso:conteudo_detail', conteudo_id=conteudo.id)
+
+    return render(request, 'impulso/conteudo_form.html', {
+        'conteudo': conteudo,
+        'is_gestor': is_impulso_manager(request.user),
+        'tipos': ConteudoConectar.Tipo.choices,
+        'colaboradores': get_colaboradores(),
+        'marcados': set(conteudo.obrigatorio_para.values_list('id', flat=True)),
+        'active_tab': 'conectar',
+    })
 
 
 def _pode_mexer_no_anexo(user, anexo):

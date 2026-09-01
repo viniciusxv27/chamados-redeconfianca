@@ -358,6 +358,7 @@
                         </li>
                         <li class="submenu-content hidden" id="colaborador-menu">
                             <ul class="space-y-0.5 ml-4 pl-2.5 border-l border-gray-800">
+                        {% if pode_ver_comissionamento %}
                         <li>
                             <a href="{% url 'commission' %}" data-rota="{% url 'commission' %}"
                                class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
@@ -367,6 +368,7 @@
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-green-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </a>
                         </li>
+                        {% endif %}
                         {% if user.is_authenticated %}
                         <li>
                             <a href="{% url 'simulator:dashboard' %}" data-rota="{% url 'simulator:dashboard' %}"

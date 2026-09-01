@@ -260,6 +260,7 @@ def manage_users_view(request):
         'sectors': Sector.objects.all(),
         'user': request.user,
         'can_change_photos': request.user.can_manage_user_photos(),
+        'can_edit_users': request.user.can_edit_users(),
         'total_users_count': total_users_count,
         'active_users_count': active_users_count,
         'superadmin_count': superadmin_count,
@@ -442,8 +443,8 @@ def export_users_excel(request):
 @login_required
 def import_users_excel(request):
     """Importar usuários de Excel"""
-    if not request.user.can_manage_users():
-        messages.error(request, 'Você não tem permissão para realizar esta ação.')
+    if not request.user.can_edit_users():
+        messages.error(request, 'Somente o SUPERADMIN pode importar/alterar cadastros em massa.')
         return redirect('manage_users')
     
     if request.method == 'POST':
@@ -629,8 +630,8 @@ def import_users_excel(request):
 @login_required
 def import_colaboradores_csv(request):
     """Importar dados de colaboradores de CSV usando nome como chave"""
-    if not request.user.can_manage_users():
-        messages.error(request, 'Você não tem permissão para realizar esta ação.')
+    if not request.user.can_edit_users():
+        messages.error(request, 'Somente o SUPERADMIN pode importar/alterar cadastros em massa.')
         return redirect('manage_users')
     
     if request.method == 'POST':
@@ -1015,10 +1016,11 @@ def _ip_do_pedido(request):
 
 
 def edit_user_view(request, user_id):
-    """Editar usuário existente"""
-    if not request.user.can_manage_users():
-        messages.error(request, 'Você não tem permissão para acessar esta área.')
-        return redirect('dashboard')
+    """Editar usuário existente. Só o SUPERADMIN."""
+    if not request.user.can_edit_users():
+        messages.error(request, 'Somente o SUPERADMIN pode alterar o cadastro de um '
+                                'funcionário. Peça a alteração a quem administra o portal.')
+        return redirect('manage_users')
     
     user_to_edit = get_object_or_404(User.objects.prefetch_related('sectors'), id=user_id)
 
@@ -2259,8 +2261,8 @@ def delete_required_document_view(request, doc_id):
 @login_required
 def admin_change_user_password(request, user_id):
     """Alterar senha de usuário pelo admin"""
-    if not request.user.can_manage_users():
-        messages.error(request, 'Você não tem permissão para acessar esta área.')
+    if not request.user.can_edit_users():
+        messages.error(request, 'Somente o SUPERADMIN pode trocar a senha de um funcionário.')
         return redirect('dashboard')
     
     user_to_edit = get_object_or_404(User, id=user_id)

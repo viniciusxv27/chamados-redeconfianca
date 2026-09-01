@@ -2966,6 +2966,23 @@ def commission_aparte_view(request, target_user=None):
     return render(request, 'users/commission_aparte.html', context)
 
 
+def pode_ver_comissionamento(user):
+    """Quem abre o comissionamento.
+
+    Entre os usuários PADRÃO, só quem responde por equipe: o grupo GERENTES —
+    e os coordenadores, que estão acima do gerente na mesma cadeia. Consultor
+    e recepcionista PADRÃO não veem mais a tela.
+
+    Quem não é PADRÃO (ADMINISTRATIVO, SUPERVISOR, ADMIN, SUPERADMIN) segue
+    como antes: a restrição pedida era sobre o pessoal PADRÃO.
+    """
+    if not (user and user.is_authenticated):
+        return False
+    if getattr(user, 'hierarchy', '') != 'PADRAO':
+        return True
+    return is_user_gerente(user) or is_user_coordenador(user)
+
+
 @login_required
 def commission_view(request):
     """
@@ -2973,6 +2990,11 @@ def commission_view(request):
     Redireciona para a visão apropriada baseado no tipo de usuário
     """
     user = request.user
+
+    if not pode_ver_comissionamento(user):
+        messages.error(request, 'O comissionamento fica disponível para gerentes e '
+                                'coordenadores. Fale com o seu gestor.')
+        return redirect('home')
 
     role = get_user_role(user)
 
@@ -3704,6 +3726,10 @@ def commission_api(request):
     API para buscar dados de comissionamento via AJAX
     """
     user = request.user
+    # A mesma porta da tela: fechar só a tela deixaria a API aberta, e o
+    # endereço dela é público para quem já está logado.
+    if not pode_ver_comissionamento(user):
+        return JsonResponse({'error': 'Sem acesso ao comissionamento.'}, status=403)
     user_id = request.GET.get('user_id')
     role = get_user_role(user)
     
@@ -3767,6 +3793,8 @@ def commission_refresh(request):
     """
     Força atualização dos dados de comissionamento (limpa cache)
     """
+    if not pode_ver_comissionamento(request.user):
+        return JsonResponse({'error': 'Sem acesso ao comissionamento.'}, status=403)
     # Limpa todos os caches de comissionamento
     from django.core.cache import cache
     
@@ -3806,6 +3834,10 @@ def export_commission_excel(request):
     Exporta dados de comissionamento para Excel
     """
     user = request.user
+    if not pode_ver_comissionamento(user):
+        messages.error(request, 'O comissionamento fica disponível para gerentes e '
+                                'coordenadores.')
+        return redirect('home')
     role = get_user_role(user)
     
     wb = Workbook()
@@ -3995,6 +4027,8 @@ def api_vendas_por_pilar(request):
     - Gerente: Filtra por coluna PDV = nome da loja do usuário
     - Coordenador: Filtra por coluna COORDENACAO = primeiro nome do usuário
     """
+    if not pode_ver_comissionamento(request.user):
+        return JsonResponse({'error': 'Sem acesso ao comissionamento.'}, status=403)
     user = request.user
     pilar = request.GET.get('pilar', '').upper()
     
@@ -4348,6 +4382,10 @@ def export_vendas_pilar_excel(request):
     """
     Exporta vendas de um pilar específico para Excel.
     """
+    if not pode_ver_comissionamento(request.user):
+        messages.error(request, 'O comissionamento fica disponível para gerentes e '
+                                'coordenadores.')
+        return redirect('home')
     import json
     from datetime import datetime
     

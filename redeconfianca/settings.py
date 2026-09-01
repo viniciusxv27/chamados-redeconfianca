@@ -133,6 +133,7 @@ TEMPLATES = [
                 'maps.context_processors.coleta_posicao',
                 'cursos.context_processors.cursos_menu',
                 'reunioes.context_processors.reunioes_lembrete',
+                'users.context_processors_commission.comissionamento_menu',
             ],
         },
     },

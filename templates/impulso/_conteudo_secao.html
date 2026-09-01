@@ -10,6 +10,10 @@
                 <div class="flex items-center gap-1.5 flex-shrink-0">
                     {% if c.obrigatorio %}<span class="text-[10px] uppercase px-1.5 py-0.5 rounded bg-red-100 text-red-600">Obrigatório</span>{% endif %}
                     {% if c.pode_apagar %}
+                    <a href="{% url 'impulso:conteudo_editar' c.id %}" title="Editar conteúdo"
+                       class="w-6 h-6 rounded-md text-gray-300 hover:text-emerald-600 hover:bg-emerald-50 flex items-center justify-center transition-colors">
+                        <i class="fas fa-pen text-xs"></i>
+                    </a>
                     <button type="button" title="Excluir conteúdo"
                             class="imp-conteudo-excluir w-6 h-6 rounded-md text-gray-300 hover:text-red-600 hover:bg-red-50 flex items-center justify-center transition-colors"
                             data-id="{{ c.id }}"

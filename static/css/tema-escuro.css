@@ -476,3 +476,35 @@ html.dark #bulkBar .bulk-detail-item {
 html.dark .divide-gray-400 > :not([hidden]) ~ :not([hidden]) {
     border-color: var(--tema-borda) !important;
 }
+
+/* --------------------------------------------------------------------------
+   Escala (/ponto/escala/).
+
+   A grade define as próprias cores num <style> do template: borda clara,
+   cabeçalho branco e — o que mais atrapalha — a coluna do nome com `background:
+   #fff` fixo, porque ela é sticky e precisa tapar as células que passam por
+   baixo. No escuro isso virava uma faixa branca atravessando a tabela.
+   -------------------------------------------------------------------------- */
+html.dark .esc-grid th,
+html.dark .esc-grid td { border-color: var(--tema-borda) !important; }
+
+html.dark .esc-grid thead th { background: var(--tema-superficie-2) !important; }
+
+/* A coluna fixa do nome: mesma superfície do cartão, senão a rolagem
+   horizontal mostra o texto passando por baixo. */
+html.dark .esc-nome { background: var(--tema-superficie) !important; }
+html.dark .esc-grid thead .esc-nome { background: var(--tema-superficie-2) !important; }
+
+/* Campos de horário */
+html.dark .esc-time {
+    background-color: var(--tema-superficie-3) !important;
+    border-color: var(--tema-borda) !important;
+    color: var(--tema-texto) !important;
+}
+html.dark .esc-time::-webkit-calendar-picker-indicator { filter: invert(0.8); }
+
+/* Dia de hoje: o azul do realce continua, sobre fundo escuro */
+html.dark .esc-hoje { box-shadow: inset 0 2px 0 #22d3ee !important; }
+
+/* Linha da grade no hover */
+html.dark .esc-grid tbody tr:hover .esc-nome { background: var(--tema-superficie-2) !important; }

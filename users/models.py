@@ -814,7 +814,18 @@ class User(AbstractUser):
             self.save()
     
     def can_manage_users(self):
+        """Abre a área de gestão de usuários (listar, conferir, exportar)."""
         return self.hierarchy in ['ADMIN', 'SUPERADMIN', 'SUPERVISOR', 'ADMINISTRATIVO']
+
+    def can_edit_users(self):
+        """Altera o cadastro de um funcionário.
+
+        Só o SUPERADMIN. Ver a lista continua liberado para quem administra o
+        portal — o problema não era enxergar, era gente trocando setor, cargo e
+        acesso sem necessidade. Editar mexe em permissão e em dado de RH, e é
+        onde o estrago aparece depois.
+        """
+        return self.is_superuser or self.hierarchy == 'SUPERADMIN'
     
     @property
     def calculated_balance_cs(self):

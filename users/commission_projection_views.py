@@ -11,7 +11,8 @@ Escopo de visão espelha o de ``/users/commission/``:
 - demais (CN/recepcionista): apenas o próprio, com a média da loja como referência
 """
 from django.contrib.auth.decorators import login_required
-from django.shortcuts import render
+from django.contrib import messages
+from django.shortcuts import redirect, render
 
 from simulator.averages import (
     ROLE_LABELS,
@@ -65,6 +66,12 @@ def _scope_rows(user, viewer_role, rows):
 def commission_projection_view(request):
     """Médias de comissão projetadas, com filtros que recalculam a média."""
     user = request.user
+    # Mesma porta do comissionamento: projeção é o mesmo dado, adiantado.
+    from .commission_views import pode_ver_comissionamento
+    if not pode_ver_comissionamento(user):
+        messages.error(request, 'O comissionamento fica disponível para gerentes e '
+                                'coordenadores.')
+        return redirect('home')
     viewer_role = get_user_role(user)
     dataset = get_projection_dataset(force_refresh=request.GET.get('refresh') == '1')
 

@@ -116,6 +116,10 @@
                             <span class="esc-aviso block text-[11px] text-amber-600 mt-0.5 {% if not linha.abaixo %}hidden{% endif %}">
                                 abaixo das {{ horas_meta }}h semanais
                             </span>
+                            <button type="button" onclick="escAbrirSemana(this)"
+                                    class="esc-repetir mt-1.5 text-[11px] text-cyan-700 hover:underline">
+                                <i class="fas fa-clone mr-1"></i>Definir a semana toda
+                            </button>
                         </td>
                         {% for cel in linha.celulas %}
                         <td class="px-2 py-2 align-top {% if cel.data == hoje %}esc-hoje{% endif %}">
@@ -254,7 +258,144 @@
 </div>
 {% endif %}
 
+<div id="escModalSemana" class="fixed inset-0 bg-black/50 z-50 hidden items-center justify-center p-4">
+    <div class="tg-card w-full max-w-md p-5">
+        <h3 class="font-semibold text-gray-800 mb-1">
+            <i class="fas fa-clone text-cyan-600 mr-1.5"></i>Definir a semana toda
+        </h3>
+        <p class="text-xs text-gray-500 mb-4">
+            Os horários abaixo vão para <strong id="escModalNome"></strong> em todos os dias
+            escolhidos. Dia marcado como <strong>folga</strong> não é tocado.
+        </p>
+
+        <div class="grid grid-cols-2 gap-3 mb-4">
+            <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Entrada</label>
+                <input type="time" id="escSemEntrada" value="08:00" class="esc-time">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Saída p/ almoço</label>
+                <input type="time" id="escSemSaidaAlmoco" value="12:00" class="esc-time">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Volta do almoço</label>
+                <input type="time" id="escSemVoltaAlmoco" value="13:00" class="esc-time">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Saída</label>
+                <input type="time" id="escSemSaida" value="17:48" class="esc-time">
+            </div>
+        </div>
+
+        <p class="text-xs font-medium text-gray-600 mb-1">Aplicar em</p>
+        <div id="escSemDias" class="flex flex-wrap gap-2 mb-4"></div>
+
+        <p id="escSemPrevia" class="text-xs text-gray-500 mb-4"></p>
+
+        <div class="flex items-center justify-end gap-2">
+            <button type="button" onclick="escFecharSemana()"
+                    class="px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">
+                Cancelar
+            </button>
+            <button type="button" onclick="escAplicarSemana()"
+                    class="px-4 py-2 rounded-lg bg-cyan-600 text-white text-sm hover:bg-cyan-700">
+                Preencher
+            </button>
+        </div>
+    </div>
+</div>
+
 <script>
+// Definir a semana toda: em vez de digitar quatro horários em sete dias, a
+// pessoa digita uma vez e escolhe os dias. Folga fica de fora — quem marcou
+// folga não quer que ela seja sobrescrita por um preenchimento em massa.
+let escLinhaAlvo = null;
+
+function escAbrirSemana(botao) {
+    escLinhaAlvo = botao.closest('tr');
+    const nome = escLinhaAlvo.querySelector('.esc-nome p');
+    document.getElementById('escModalNome').textContent = nome ? nome.textContent.trim() : '';
+
+    const dias = document.getElementById('escSemDias');
+    dias.innerHTML = '';
+    escLinhaAlvo.querySelectorAll('td').forEach(function (celula, indice) {
+        const folga = celula.querySelector('.esc-folga');
+        if (!folga) return;                      // a primeira célula é o nome
+        const iso = folga.name.split('_').pop();
+        const cabecalho = document.querySelectorAll('.esc-grid thead th')[indice];
+        const rotulo = cabecalho ? cabecalho.textContent.trim().split('\n')[0] : iso;
+
+        const marca = document.createElement('label');
+        marca.className = 'flex items-center gap-1.5 text-xs text-gray-700 px-2 py-1 rounded-lg border border-gray-200 cursor-pointer';
+        marca.innerHTML = '<input type="checkbox" class="esc-sem-dia rounded text-cyan-600" ' +
+                          (folga.checked ? '' : 'checked ') + (folga.checked ? 'disabled ' : '') +
+                          'data-indice="' + indice + '">' +
+                          '<span>' + rotulo + (folga.checked ? ' (folga)' : '') + '</span>';
+        if (folga.checked) marca.classList.add('opacity-50');
+        dias.appendChild(marca);
+    });
+
+    escPrevia();
+    dias.querySelectorAll('input').forEach(i => i.addEventListener('change', escPrevia));
+    ['escSemEntrada', 'escSemSaidaAlmoco', 'escSemVoltaAlmoco', 'escSemSaida']
+        .forEach(id => document.getElementById(id).addEventListener('input', escPrevia));
+
+    const modal = document.getElementById('escModalSemana');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+function escPrevia() {
+    const dias = document.querySelectorAll('.esc-sem-dia:checked').length;
+    const minutos = escMinutosDoDiaModal() * dias;
+    document.getElementById('escSemPrevia').textContent =
+        dias + ' dia(s) × ' + (escMinutosDoDiaModal() / 60).toFixed(2).replace('.', ',') +
+        'h = ' + (minutos / 60).toFixed(1).replace('.', ',') + 'h na semana.';
+}
+
+function escMinutosDoDiaModal() {
+    const v = id => escMinutos(document.getElementById(id).value);
+    const entrada = v('escSemEntrada'), saidaAlmoco = v('escSemSaidaAlmoco');
+    const voltaAlmoco = v('escSemVoltaAlmoco'), saida = v('escSemSaida');
+    return (saidaAlmoco !== null && voltaAlmoco !== null)
+        ? escIntervalo(entrada, saidaAlmoco) + escIntervalo(voltaAlmoco, saida)
+        : escIntervalo(entrada, saida);
+}
+
+function escFecharSemana() {
+    const modal = document.getElementById('escModalSemana');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+    escLinhaAlvo = null;
+}
+
+function escAplicarSemana() {
+    if (!escLinhaAlvo) return;
+    const valores = {
+        entrada: document.getElementById('escSemEntrada').value,
+        saida_almoco: document.getElementById('escSemSaidaAlmoco').value,
+        volta_almoco: document.getElementById('escSemVoltaAlmoco').value,
+        saida: document.getElementById('escSemSaida').value
+    };
+    const celulas = escLinhaAlvo.querySelectorAll('td');
+    document.querySelectorAll('.esc-sem-dia:checked').forEach(function (marca) {
+        const celula = celulas[parseInt(marca.dataset.indice, 10)];
+        if (!celula) return;
+        const folga = celula.querySelector('.esc-folga');
+        if (!folga || folga.checked) return;         // folga não se mexe
+        Object.keys(valores).forEach(function (papel) {
+            const campo = celula.querySelector('.esc-h[data-papel="' + papel + '"]');
+            if (campo) campo.value = valores[papel];
+        });
+    });
+    escRecalcular(escLinhaAlvo);
+    escFecharSemana();
+}
+
+document.addEventListener('click', function (ev) {
+    if (ev.target.id === 'escModalSemana') escFecharSemana();
+});
+
 function escToggleFolga(cb) {
     const cell = cb.closest('td');
     const horarios = cell.querySelector('.esc-horarios');
