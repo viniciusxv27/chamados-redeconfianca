@@ -150,7 +150,8 @@ def _pessoas_do_curso(curso, cfg):
     else:
         grupos = list(cfg.grupos.values_list('id', flat=True))
         setores = list(cfg.setores.values_list('id', flat=True))
-        if not grupos and not setores:
+        escolhidos = list(cfg.usuarios.values_list('id', flat=True))
+        if not grupos and not setores and not escolhidos:
             return User.objects.none()
         filtro = None
         if grupos:
@@ -159,6 +160,9 @@ def _pessoas_do_curso(curso, cfg):
             porsetor = User.objects.filter(sector_id__in=setores) | \
                        User.objects.filter(sectors__id__in=setores)
             filtro = porsetor if filtro is None else (filtro | porsetor)
+        if escolhidos:
+            um_a_um = User.objects.filter(id__in=escolhidos)
+            filtro = um_a_um if filtro is None else (filtro | um_a_um)
         qs = filtro.filter(is_active=True)
     return qs.filter(is_active=True).distinct().order_by('pdv', 'first_name', 'last_name')
 
@@ -397,6 +401,8 @@ def configuracao(request):
         cfg.grupos.set(CommunicationGroup.objects.filter(
             id__in=request.POST.getlist('grupos')))
         cfg.setores.set(Sector.objects.filter(id__in=request.POST.getlist('setores')))
+        cfg.usuarios.set(User.objects.filter(
+            id__in=request.POST.getlist('usuarios'), is_active=True))
         cfg.gestores.set(User.objects.filter(
             id__in=request.POST.getlist('gestores'), is_active=True))
         messages.success(request, 'Configuração salva.')
@@ -409,22 +415,32 @@ def configuracao(request):
         'pessoas': User.objects.filter(is_active=True).order_by('first_name', 'last_name'),
         'grupos_marcados': set(cfg.grupos.values_list('id', flat=True)),
         'setores_marcados': set(cfg.setores.values_list('id', flat=True)),
+        'usuarios_marcados': set(cfg.usuarios.values_list('id', flat=True)),
         'gestores_marcados': set(cfg.gestores.values_list('id', flat=True)),
         'alcance': _quantas_pessoas(cfg),
     })
 
 
 def _quantas_pessoas(cfg):
-    """Quantos seriam cobrados com a configuração atual — antes de ligar o bloqueio."""
+    """Quantos seriam cobrados com a configuração atual — antes de ligar o bloqueio.
+
+    Soma os três caminhos sem contar ninguém duas vezes: quem está num grupo
+    cobrado E foi escolhido na mão continua sendo uma pessoa só.
+    """
     grupos = list(cfg.grupos.values_list('id', flat=True))
     setores = list(cfg.setores.values_list('id', flat=True))
-    if not grupos and not setores:
+    escolhidos = list(cfg.usuarios.values_list('id', flat=True))
+    if not grupos and not setores and not escolhidos:
         return 0
-    qs = User.objects.none()
+
+    qs = None
     if grupos:
         qs = User.objects.filter(communication_groups__id__in=grupos)
     if setores:
         porsetor = (User.objects.filter(sector_id__in=setores)
                     | User.objects.filter(sectors__id__in=setores))
-        qs = porsetor if not grupos else (qs | porsetor)
+        qs = porsetor if qs is None else (qs | porsetor)
+    if escolhidos:
+        um_a_um = User.objects.filter(id__in=escolhidos)
+        qs = um_a_um if qs is None else (qs | um_a_um)
     return qs.filter(is_active=True).distinct().count()

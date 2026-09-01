@@ -96,6 +96,36 @@ try:
     t('gestor é reconhecido', cfg.e_gestor(gestor))
     t('vendedor não é gestor', not cfg.e_gestor(vend1))
 
+    print('\n== ESCOLHER PESSOA A PESSOA ==')
+    # A Dora não está no grupo nem no setor cobrado: só entra na mão.
+    cfg.usuarios.set([fora])
+    cfg = ConfiguracaoCursos.get()
+    t('escolhida na mão passa a ser cobrada', cfg.no_escopo(fora))
+    t('quem já entrava pelo grupo continua', cfg.no_escopo(vend1))
+    sozinho = novo('crs.sozinho.t', first_name='Elias', last_name='Sozinho', pdv='LOJA C')
+    t('quem não está em nada segue de fora', not cfg.no_escopo(sozinho))
+
+    from cursos.views import _quantas_pessoas
+    alcance = _quantas_pessoas(cfg)
+    t('o contador soma os três caminhos sem duplicar',
+      alcance == 4, f'{alcance} (esperado 4: vend1, vend2, vend3 e a escolhida)')
+
+    cfg.grupos.set([])
+    cfg.setores.set([])
+    cfg = ConfiguracaoCursos.get()
+    t('só com a lista individual, ela vale sozinha',
+      cfg.no_escopo(fora) and not cfg.no_escopo(vend1))
+    t('e o contador acompanha', _quantas_pessoas(cfg) == 1, _quantas_pessoas(cfg))
+
+    cfg.usuarios.set([])
+    cfg = ConfiguracaoCursos.get()
+    t('sem nada marcado, ninguém é cobrado',
+      not cfg.no_escopo(fora) and not cfg.no_escopo(vend1))
+    t('e o alcance é zero', _quantas_pessoas(cfg) == 0)
+
+    cfg.grupos.set([grupo])
+    cfg = ConfiguracaoCursos.get()
+
     # ---------------------------------------------------------------- cursos
     hoje = timezone.localdate()
     foco = Curso.objects.create(
@@ -293,7 +323,32 @@ try:
     t('gestor comum não configura o módulo', 'Só o SUPERADMIN' in r.content.decode())
     r = cs.get('/cursos/configuracao/')
     t('SUPERADMIN configura', r.status_code == 200, r.status_code)
-    t('configuração mostra o alcance atual', 'pessoa' in r.content.decode())
+    pagina = r.content.decode()
+    t('configuração mostra o alcance atual', 'pessoa' in pagina)
+    t('a tela tem a lista de pessoas uma a uma',
+      'name="usuarios"' in pagina and 'Pessoas escolhidas uma a uma' in pagina)
+    t('a tela tem busca e marcar/desmarcar visíveis',
+      'cfg-busca-usuario' in pagina and 'cfgMarcarVisiveis' in pagina)
+
+    cs.post('/cursos/configuracao/', {
+        'grupos': [str(grupo.id)],
+        'usuarios': [str(fora.id), str(vend1.id)],
+        'gestores': [str(gestor.id)]}, follow=True)
+    cfg = ConfiguracaoCursos.get()
+    t('a tela grava as pessoas escolhidas',
+      set(cfg.usuarios.values_list('id', flat=True)) == {fora.id, vend1.id},
+      set(cfg.usuarios.values_list('id', flat=True)))
+    t('e a escolhida passa a ser cobrada', cfg.no_escopo(fora))
+    pagina = cs.get('/cursos/configuracao/').content.decode()
+    t('a tela volta com as pessoas marcadas',
+      f'value="{fora.id}"' in pagina and 'checked' in pagina)
+
+    cs.post('/cursos/configuracao/', {
+        'grupos': [str(grupo.id)], 'gestores': [str(gestor.id)]}, follow=True)
+    cfg = ConfiguracaoCursos.get()
+    t('desmarcar todas limpa a lista', cfg.usuarios.count() == 0)
+    t('e quem só entrava por ela sai do escopo', not cfg.no_escopo(fora))
+    cfg.gestores.set([gestor])
 
     # ------------------------------------------------------------- publicar
     print('\n== PUBLICAR CURSO ==')

@@ -33,6 +33,11 @@ class ConfiguracaoCursos(models.Model):
     setores = models.ManyToManyField(
         'users.Sector', blank=True,
         related_name='cursos_config', verbose_name='Setores cobrados')
+    usuarios = models.ManyToManyField(
+        settings.AUTH_USER_MODEL, blank=True,
+        related_name='cursos_cobrado_em', verbose_name='Pessoas cobradas',
+        help_text='Escolhidas uma a uma. Somam-se aos grupos e setores — servem '
+                  'para incluir quem não está em nenhum deles.')
     gestores = models.ManyToManyField(
         settings.AUTH_USER_MODEL, blank=True,
         related_name='cursos_gestor_de', verbose_name='Gestores do módulo',
@@ -49,20 +54,31 @@ class ConfiguracaoCursos(models.Model):
 
     @classmethod
     def get(cls):
-        obj = cls.objects.prefetch_related('grupos', 'setores', 'gestores').first()
+        obj = cls.objects.prefetch_related(
+            'grupos', 'setores', 'gestores', 'usuarios').first()
         return obj or cls.objects.create()
 
     def no_escopo(self, user):
         """A pessoa é cobrada pelos cursos?
 
-        Sem grupo nem setor escolhido, ninguém é cobrado — o módulo entra em
-        operação só depois que alguém disser quem entra nele.
+        Três caminhos que se somam: estar num grupo cobrado, num setor cobrado
+        ou ter sido escolhido na mão. O terceiro existe para o caso que os dois
+        primeiros não resolvem — alguém que precisa fazer o curso mas não está
+        em nenhum grupo ou setor da lista.
+
+        Sem nada marcado, ninguém é cobrado: o módulo entra em operação só
+        depois que alguém disser quem entra nele.
         """
         if not (user and user.is_authenticated and user.is_active):
             return False
+
+        if self.usuarios.filter(id=user.id).exists():
+            return True
+
         ids_grupos = {g.id for g in self.grupos.all()}
         if ids_grupos and set(user.communication_groups.values_list('id', flat=True)) & ids_grupos:
             return True
+
         ids_setores = {s.id for s in self.setores.all()}
         if not ids_setores:
             return False
