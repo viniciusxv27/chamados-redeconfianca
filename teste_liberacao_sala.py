@@ -187,9 +187,15 @@ try:
     t('as URLs são absolutas',
       (dados.get('logoImageUrl') or '').startswith('http')
       and (dados.get('backgroundImageUrl') or '').startswith('http'))
-    t('não vaza nada além das imagens',
+    # O arquivo é público: qualquer um na internet lê. Só pode ter marca —
+    # nome de campo fora desta lista é campo novo que ninguém revisou.
+    t('só tem campo de identidade visual, nada de dado de ninguém',
       set(dados) <= {'logoImageUrl', 'logoClickUrl', 'backgroundImageUrl',
-                     'backgroundColor', 'didPageUrl'}, set(dados))
+                     'backgroundColor', 'didPageUrl', 'premeetingBackground',
+                     'virtualBackgrounds', 'customTheme'}, set(dados))
+    bruto = r.content.decode().lower()
+    t('nem nome de sala, nem token, nem e-mail',
+      not any(x in bruto for x in ('token', 'jwt', 'jaas', '@', 'sala')), bruto[:120])
 
 finally:
     transaction.set_rollback(True)

@@ -22,6 +22,15 @@
                     </span>
                     <span class="text-sm text-gray-500 tabular-nums">{{ minha.total|floatformat:"-1" }} / {{ minha.aplicavel|floatformat:"-1" }} pts</span>
                 </div>
+                {% if minha.pontos_sem_oportunidade %}
+                <p class="text-[11px] text-gray-500 mb-2 leading-relaxed">
+                    <i class="fas fa-circle-info text-gray-400 mr-1"></i>
+                    <strong>{{ minha.pontos_sem_oportunidade|floatformat:"-1" }} ponto(s)</strong>
+                    deste mês não tiveram item publicado (curso, meta, projeto ou folha de ponto).
+                    Eles continuam na conta: o total é 100 para todo mundo — 40 Confiar, 40 Conectar,
+                    20 Inovar. Veja o detalhamento abaixo para saber quais são.
+                </p>
+                {% endif %}
                 {% blocos_de minha as blocos %}
                 {% include 'impulso/_blocos.html' %}
             </div>

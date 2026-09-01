@@ -1,0 +1,44 @@
+{% comment %}
+Casca das telas de visitante.
+
+Não estende base.html de propósito: base.html só monta o portal para quem está
+logado — para um anônimo ele cai no ramo da tela de login e o conteúdo daqui
+sumiria. Visitante não tem menu, não tem notificação e não tem sessão do
+portal: a página é só a reunião.
+{% endcomment %}
+{% load static %}
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block titulo %}Reunião — Rede Confiança{% endblock %}</title>
+    <link rel="icon" type="image/png" href="{% static 'images/logo3.png' %}">
+    <meta name="theme-color" content="#FF6B35">
+    <meta name="robots" content="noindex, nofollow">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = { theme: { extend: {
+            fontFamily: { sans: ['Montserrat', 'ui-sans-serif', 'system-ui'] },
+            colors: { primary: '#FF6B35' }
+        } } };
+    </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="{% static 'css/transicoes.css' %}">
+    <script src="{% static 'js/transicoes.js' %}" defer></script>
+    <style>
+        body { font-family: 'Montserrat', ui-sans-serif, system-ui; }
+        .rn-capa {
+            background:
+                linear-gradient(135deg, rgba(11,17,32,.90), rgba(120,53,15,.80)),
+                url('{% static "images/reuniao-fundo.jpg" %}') center/cover no-repeat;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div id="rc-conteudo">{% block corpo %}{% endblock %}</div>
+</body>
+</html>

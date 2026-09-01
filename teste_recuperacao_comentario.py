@@ -14,6 +14,7 @@ from django.conf import settings
 if 'testserver' not in settings.ALLOWED_HOSTS:
     settings.ALLOWED_HOSTS.append('testserver')
 
+from django.db import transaction
 from django.test import Client
 from django.contrib.auth import get_user_model
 from django.core.cache import caches
@@ -47,6 +48,14 @@ import users.resend_email as re_mod
 _envio_real = re_mod.enviar
 re_mod.enviar = espiao
 re_mod.configurada = lambda: True
+
+# Tudo dentro de uma transação desfeita no fim. A limpeza manual lá embaixo
+# continua, mas ela só roda se o processo chegar até o fim: uma execução morta
+# no meio (timeout, Ctrl-C) pulava o finally e deixava usuário de teste no
+# banco de verdade — foi o que aconteceu. Com a transação aberta, o Postgres
+# desfaz sozinho quando a conexão cai.
+marcador = transaction.atomic()
+marcador.__enter__()
 
 try:
     # ---------------- dados ----------------
@@ -264,12 +273,9 @@ try:
 
 finally:
     re_mod.enviar = _envio_real
-    MetaComentario.objects.filter(id__in=criados['comentarios']).delete()
-    for m in criados['metas']:
-        Meta.objects.filter(id=m.id).delete()
-    for u in criados['users']:
-        User.objects.filter(id=u.id).delete()
-    print('\nlimpeza: só o que este teste criou foi removido.')
+    transaction.set_rollback(True)
+    marcador.__exit__(None, None, None)
+    print('\nrollback: nada deste teste foi gravado no banco.')
 
 print(f'\n{ok} OK / {fail} falhas')
 sys.exit(1 if fail else 0)

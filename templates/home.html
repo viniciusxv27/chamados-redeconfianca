@@ -82,32 +82,33 @@
     {% if show_experience_window_popup %}
     <div id="experience-window-modal" class="fixed inset-0 z-50 hidden">
         <div class="absolute inset-0 bg-black bg-opacity-50" id="experience-window-backdrop"></div>
-        <div class="relative flex min-h-full items-center justify-center p-4">
-            <div class="experience-window-card w-full max-w-3xl bg-white rounded-xl shadow-xl overflow-hidden">
-                <div class="px-6 py-4 border-b border-gray-200 bg-orange-50">
-                    <div class="flex items-center justify-between">
-                        <h3 class="text-lg font-semibold text-gray-900">
+        <div class="relative flex min-h-full items-start sm:items-center justify-center p-3 sm:p-4">
+            <div class="experience-window-card w-full max-w-3xl bg-white rounded-xl shadow-xl overflow-hidden
+                        flex flex-col max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)]">
+                <div class="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200 bg-orange-50 flex-shrink-0">
+                    <div class="flex items-start justify-between gap-2 flex-wrap">
+                        <h3 class="text-base sm:text-lg font-semibold text-gray-900 min-w-0 flex-1">
                             <i class="fas fa-hourglass-half text-orange-600 mr-2"></i>
                             Alertas de Janela de Experiência
                         </h3>
-                        <div class="flex items-center gap-2">
+                        <div class="flex items-center gap-2 flex-shrink-0">
                             <button type="button" id="experience-window-export" class="inline-flex items-center px-3 py-1.5 bg-white border border-orange-200 rounded-lg text-xs font-semibold text-orange-700 hover:bg-orange-100 transition-colors">
-                                <i class="fas fa-file-export mr-1"></i>
-                                Exportar
+                                <i class="fas fa-file-export sm:mr-1"></i>
+                                <span class="hidden sm:inline">Exportar</span>
                             </button>
-                            <button type="button" id="experience-window-close" class="text-gray-500 hover:text-gray-700">
+                            <button type="button" id="experience-window-close" class="text-gray-500 hover:text-gray-700 p-1">
                                 <i class="fas fa-times"></i>
                             </button>
                         </div>
                     </div>
-                    <p class="text-sm text-gray-600 mt-1">1a (45 dias) e 2a (90 dias) janelas ativas. Alertas destacados nos últimos 10 dias.</p>
-                    <div class="mt-3 inline-flex items-center rounded-full bg-red-100 text-red-700 px-3 py-1 text-xs font-semibold">
+                    <p class="text-xs sm:text-sm text-gray-600 mt-1">1a (45 dias) e 2a (90 dias) janelas ativas. Alertas destacados nos últimos 10 dias.</p>
+                    <div class="mt-2 sm:mt-3 inline-flex items-center rounded-full bg-red-100 text-red-700 px-3 py-1 text-xs font-semibold">
                         {{ experience_window_alerts_count }} alerta{{ experience_window_alerts_count|pluralize }} nos últimos 10 dias
                     </div>
                 </div>
-                <div class="max-h-[70vh] overflow-y-auto px-6 py-4 space-y-6">
+                <div class="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-4 space-y-6">
                     <section>
-                        <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center justify-between gap-2 flex-wrap mb-3">
                             <h4 class="text-sm font-bold uppercase tracking-wide text-gray-700">2a Janela Ativa (90 dias)</h4>
                             <span class="text-xs font-medium text-gray-500">{{ experience_window_second_active|length }} colaborador{{ experience_window_second_active|length|pluralize:"es" }}</span>
                         </div>
@@ -115,12 +116,12 @@
                         <ul class="divide-y divide-gray-100 border border-gray-100 rounded-lg">
                             {% for alert in experience_window_second_active %}
                             <li class="px-4 py-3">
-                                <div class="flex items-start justify-between gap-4">
-                                    <div>
-                                        <p class="font-medium text-gray-900">{{ alert.full_name }} <span class="text-xs font-semibold text-gray-500">- {{ alert.sector_name }}</span></p>
+                                <div class="flex items-start justify-between gap-3">
+                                    <div class="min-w-0">
+                                        <p class="font-medium text-gray-900 text-sm sm:text-base">{{ alert.full_name }} <span class="text-xs font-semibold text-gray-500">- {{ alert.sector_name }}</span></p>
                                         <p class="text-xs text-gray-500">Encerramento: {{ alert.window_end_date|date:"d/m/Y" }}</p>
                                     </div>
-                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold {% if alert.is_last_10_days_alert and alert.days_remaining <= 3 %}bg-red-100 text-red-700{% elif alert.is_last_10_days_alert %}bg-yellow-100 text-yellow-700{% else %}bg-gray-100 text-gray-700{% endif %}">
+                                    <span class="inline-flex items-center flex-shrink-0 whitespace-nowrap px-3 py-1 rounded-full text-xs sm:text-sm font-semibold {% if alert.is_last_10_days_alert and alert.days_remaining <= 3 %}bg-red-100 text-red-700{% elif alert.is_last_10_days_alert %}bg-yellow-100 text-yellow-700{% else %}bg-gray-100 text-gray-700{% endif %}">
                                         {{ alert.days_remaining }} dia{{ alert.days_remaining|pluralize }}
                                     </span>
                                 </div>
@@ -133,7 +134,7 @@
                     </section>
                     
                     <section>
-                        <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center justify-between gap-2 flex-wrap mb-3">
                             <h4 class="text-sm font-bold uppercase tracking-wide text-gray-700">1a Janela Ativa (45 dias)</h4>
                             <span class="text-xs font-medium text-gray-500">{{ experience_window_first_active|length }} colaborador{{ experience_window_first_active|length|pluralize:"es" }}</span>
                         </div>
@@ -141,12 +142,12 @@
                         <ul class="divide-y divide-gray-100 border border-gray-100 rounded-lg">
                             {% for alert in experience_window_first_active %}
                             <li class="px-4 py-3">
-                                <div class="flex items-start justify-between gap-4">
-                                    <div>
-                                        <p class="font-medium text-gray-900">{{ alert.full_name }} <span class="text-xs font-semibold text-gray-500">- {{ alert.sector_name }}</span></p>
+                                <div class="flex items-start justify-between gap-3">
+                                    <div class="min-w-0">
+                                        <p class="font-medium text-gray-900 text-sm sm:text-base">{{ alert.full_name }} <span class="text-xs font-semibold text-gray-500">- {{ alert.sector_name }}</span></p>
                                         <p class="text-xs text-gray-500">Encerramento: {{ alert.window_end_date|date:"d/m/Y" }}</p>
                                     </div>
-                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold {% if alert.is_last_10_days_alert and alert.days_remaining <= 3 %}bg-red-100 text-red-700{% elif alert.is_last_10_days_alert %}bg-yellow-100 text-yellow-700{% else %}bg-gray-100 text-gray-700{% endif %}">
+                                    <span class="inline-flex items-center flex-shrink-0 whitespace-nowrap px-3 py-1 rounded-full text-xs sm:text-sm font-semibold {% if alert.is_last_10_days_alert and alert.days_remaining <= 3 %}bg-red-100 text-red-700{% elif alert.is_last_10_days_alert %}bg-yellow-100 text-yellow-700{% else %}bg-gray-100 text-gray-700{% endif %}">
                                         {{ alert.days_remaining }} dia{{ alert.days_remaining|pluralize }}
                                     </span>
                                 </div>
@@ -159,8 +160,8 @@
                     </section>
 
                 </div>
-                <div class="px-6 py-3 bg-gray-50 text-right">
-                    <button type="button" id="experience-window-ok" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-orange-600 transition-colors">
+                <div class="px-4 sm:px-6 py-3 bg-gray-50 text-right flex-shrink-0">
+                    <button type="button" id="experience-window-ok" class="w-full sm:w-auto px-4 py-2 bg-primary text-white rounded-lg hover:bg-orange-600 transition-colors">
                         Entendi
                     </button>
                 </div>
@@ -173,9 +174,10 @@
     {% if show_mandatory_trails_popup %}
     <div id="mandatory-trails-modal" class="fixed inset-0 z-50 hidden">
         <div class="absolute inset-0 bg-black bg-opacity-50" id="mandatory-trails-backdrop"></div>
-        <div class="relative flex min-h-full items-center justify-center p-4">
-            <div class="mandatory-trails-card w-full max-w-lg bg-white rounded-xl shadow-xl overflow-hidden">
-                <div class="px-6 py-4 border-b border-gray-200 bg-purple-50">
+        <div class="relative flex min-h-full items-start sm:items-center justify-center p-3 sm:p-4">
+            <div class="mandatory-trails-card w-full max-w-lg bg-white rounded-xl shadow-xl overflow-hidden
+                        flex flex-col max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)]">
+                <div class="px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-200 bg-purple-50 flex-shrink-0">
                     <h3 class="text-lg font-semibold text-gray-900">
                         <i class="fas fa-graduation-cap text-purple-600 mr-2"></i>
                         Trilhas obrigatórias pendentes
@@ -185,7 +187,7 @@
                         obrigatória{{ mandatory_trails_pending|length|pluralize }} para concluir. Conclua antes do prazo.
                     </p>
                 </div>
-                <div class="max-h-[60vh] overflow-y-auto px-6 py-4 space-y-3">
+                <div class="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-4 space-y-3">
                     {% for trail in mandatory_trails_pending %}
                     <a href="{% url 'knowledge_trails:trail_detail' trail.id %}"
                        class="flex items-center gap-3 p-4 border border-gray-100 rounded-lg hover:bg-purple-50 transition-colors">
@@ -206,7 +208,7 @@
                     </a>
                     {% endfor %}
                 </div>
-                <div class="px-6 py-3 bg-gray-50 flex items-center justify-between gap-3">
+                <div class="px-4 sm:px-6 py-3 bg-gray-50 flex items-center justify-between gap-3 flex-shrink-0">
                     <button type="button" id="mandatory-trails-later" class="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors text-sm">
                         Lembrar depois
                     </button>

@@ -1,0 +1,20 @@
+{% extends 'reunioes/_visitante_base.html' %}
+{% block titulo %}Link indisponível{% endblock %}
+
+{% block corpo %}
+{% load static %}
+<div class="rn-capa min-h-screen flex items-center justify-center p-4">
+    <div class="w-full max-w-md bg-white rounded-2xl shadow-2xl px-6 py-8 text-center">
+        <img src="{% static 'images/logo3.png' %}" alt="Rede Confiança"
+             class="w-14 h-14 mx-auto mb-4 rounded-2xl opacity-70">
+        <h1 class="text-lg font-bold text-gray-900">Este link não está mais valendo</h1>
+        <p class="text-sm text-gray-600 mt-2 leading-relaxed">
+            O convite pode ter sido desligado pelo organizador, trocado por um novo,
+            ou a reunião já foi encerrada.
+        </p>
+        <p class="text-xs text-gray-400 mt-4">
+            Peça um link novo a quem te convidou.
+        </p>
+    </div>
+</div>
+{% endblock %}

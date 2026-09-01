@@ -1,0 +1,6 @@
+{% extends 'reunioes/_visitante_base.html' %}
+{% block titulo %}{{ reuniao.titulo }} — sala{% endblock %}
+
+{% block corpo %}
+{% include 'reunioes/_palco.html' %}
+{% endblock %}

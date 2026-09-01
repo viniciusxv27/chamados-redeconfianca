@@ -18,10 +18,18 @@ INOVAR (20)
 
 Faixas: Impulso 100% · Ouro >90% · Prata >70% · Bronze 0-70%.
 
-Nota sobre "pontos aplicáveis": se um item não existe no mês (ex.: nenhum
-curso foi publicado, ou não há folha de ponto), ele sai do total possível em
-vez de zerar a nota do colaborador. O percentual — que define a faixa — é
-sempre obtidos/aplicáveis.
+O total possível é 100 para todo mundo, sempre. Um item que não existiu no mês
+(nenhum curso publicado, nenhuma meta com prazo, sem folha de ponto) vale zero
+e continua ocupando o lugar dele no total — não sai da conta. Antes ele saía, e
+o resultado era que cada pessoa era medida numa régua diferente: quem tinha
+poucos itens no mês era avaliado sobre 30 pontos e quem tinha muitos sobre 80,
+então 11 pontos e 26,7 pontos viravam o mesmo percentual. Comparar duas pessoas
+assim não significava nada.
+
+A contrapartida é que ninguém ganha ponto por item que não teve — por isso
+`pontos_sem_oportunidade` sai junto no cálculo, para as telas conseguirem
+dizer quantos pontos ficaram de fora por falta de item publicado, em vez de
+deixar parecer falha do colaborador.
 """
 from calendar import monthrange
 from datetime import date
@@ -45,6 +53,12 @@ PT_VIDEOS_POPS = Decimal('10')
 PT_PROJETO_FOCO = Decimal('20')
 PT_IDEIAS = Decimal('10')
 PT_IDEIA_APROVADA = Decimal('10')
+
+# O total de cada bloco é fixo: é a régua, e ela é a mesma para todo mundo.
+MAX_CONFIAR = PT_METAS_QUALIDADE + PT_METAS_CONCLUSAO + PT_FEEDBACK + PT_ASSIDUIDADE
+MAX_CONECTAR = PT_CURSO + PT_VIDEOS_POPS + PT_PROJETO_FOCO
+MAX_INOVAR = PT_IDEIAS + PT_IDEIA_APROVADA
+MAX_TOTAL = MAX_CONFIAR + MAX_CONECTAR + MAX_INOVAR
 
 FEEDBACK_NOTA_MINIMA = 90   # escala 0-100
 IDEIAS_MINIMAS = 3
@@ -308,9 +322,15 @@ def calcular_pontuacao(user, inicio=None, fim=None, referencia=None):
     inovar = p_ideias + p_aprov
     total = confiar + conectar + inovar
 
-    aplicavel = (ap_metas_q + ap_metas_c + ap_feedback + ap_assid
-                 + ap_curso + ap_vp + ap_proj + ap_ideias + ap_aprov)
-    percentual = (total / aplicavel * 100) if aplicavel > 0 else ZERO
+    # Os `ap_*` que cada função devolve dizem se o item existiu no mês. Não
+    # servem mais de denominador — servem para explicar de onde vem um zero que
+    # não é culpa de ninguém.
+    houve = (ap_metas_q + ap_metas_c + ap_feedback + ap_assid
+             + ap_curso + ap_vp + ap_proj + ap_ideias + ap_aprov)
+    sem_oportunidade = MAX_TOTAL - houve
+
+    aplicavel = MAX_TOTAL
+    percentual = total / MAX_TOTAL * 100
 
     return {
         'inicio': inicio, 'fim': fim,
@@ -327,14 +347,13 @@ def calcular_pontuacao(user, inicio=None, fim=None, referencia=None):
         'p_ideias': _quantize(p_ideias),
         'p_ideia_aprovada': _quantize(p_aprov),
         # Totais por bloco
-        'confiar': _quantize(confiar), 'confiar_max': _quantize(
-            ap_metas_q + ap_metas_c + ap_feedback + ap_assid),
-        'conectar': _quantize(conectar), 'conectar_max': _quantize(
-            ap_curso + ap_vp + ap_proj),
-        'inovar': _quantize(inovar), 'inovar_max': _quantize(ap_ideias + ap_aprov),
+        'confiar': _quantize(confiar), 'confiar_max': _quantize(MAX_CONFIAR),
+        'conectar': _quantize(conectar), 'conectar_max': _quantize(MAX_CONECTAR),
+        'inovar': _quantize(inovar), 'inovar_max': _quantize(MAX_INOVAR),
         # Geral
         'total': _quantize(total),
         'aplicavel': _quantize(aplicavel),
+        'pontos_sem_oportunidade': _quantize(sem_oportunidade),
         'percentual': _quantize(percentual),
         'faixa': faixa_por_score(percentual),
         'detalhes': {

@@ -17,6 +17,7 @@ puxar mais uma dependência para o deploy por causa de trinta linhas.
 import base64
 import json
 import logging
+import secrets
 import time
 
 logger = logging.getLogger(__name__)
@@ -43,6 +44,31 @@ def gerar_token(cfg, user, sala, moderador=True):
     autenticação), e derrubar a tela da reunião por causa de uma credencial
     errada seria pior do que entrar sem token.
     """
+    return _assinar_token(
+        cfg, sala,
+        identificador=str(user.id),
+        nome=user.get_full_name() or user.email,
+        email=user.email or '',
+        moderador=moderador)
+
+
+def gerar_token_visitante(cfg, nome, sala):
+    """Token de quem entrou pelo link público.
+
+    Nunca moderador e sem e-mail: o visitante entra para participar, não para
+    mandar na sala. O identificador é anônimo — a pessoa não tem cadastro e
+    inventar um id de usuário aqui misturaria visitante com colaborador nos
+    relatórios do 8x8.
+    """
+    return _assinar_token(
+        cfg, sala,
+        identificador=f'visitante-{secrets.token_hex(8)}',
+        nome=nome,
+        email='',
+        moderador=False)
+
+
+def _assinar_token(cfg, sala, identificador, nome, email, moderador):
     app_id = (cfg.jaas_app_id or '').strip()
     key_id = (cfg.jaas_api_key_id or '').strip()
     pem = (cfg.jaas_chave_privada or '').strip()
@@ -60,9 +86,9 @@ def gerar_token(cfg, user, sala, moderador=True):
         'nbf': agora - 10,
         'context': {
             'user': {
-                'id': str(user.id),
-                'name': user.get_full_name() or user.email,
-                'email': user.email or '',
+                'id': identificador,
+                'name': nome,
+                'email': email,
                 'moderator': 'true' if moderador else 'false',
             },
             'features': {
@@ -112,7 +138,15 @@ def servidor_para(cfg):
 
 def dados_da_sala(cfg, user, sala):
     """O que a tela precisa para abrir a sala: servidor, nome e token."""
-    token = gerar_token(cfg, user, sala)
+    return _montar(cfg, sala, gerar_token(cfg, user, sala))
+
+
+def dados_da_sala_visitante(cfg, nome, sala):
+    """O mesmo, para quem chegou pelo link público."""
+    return _montar(cfg, sala, gerar_token_visitante(cfg, nome, sala))
+
+
+def _montar(cfg, sala, token):
     servidor = servidor_para(cfg)
     if token:
         app_id = (cfg.jaas_app_id or '').strip()

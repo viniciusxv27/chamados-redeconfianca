@@ -142,7 +142,9 @@ try:
     p7 = novo_usuario('fbp.semfb.t')
     pontos, aplicavel, det = _nota_feedback(p7, inicio_mes, fim_mes)
     t('sem feedback não pontua', pontos == 0)
-    t('sem feedback sai do total possível (não zera a nota)', aplicavel == 0, aplicavel)
+    # O item continua valendo 10 no total de todo mundo; o zero aqui só marca
+    # "não houve feedback no mês", para a tela explicar de onde veio o zero.
+    t('sem feedback fica marcado como sem oportunidade', aplicavel == 0, aplicavel)
     t('marca sem_feedback', det.get('sem_feedback') is True)
 
     print('\n== DOIS FEEDBACKS NO MÊS ==')

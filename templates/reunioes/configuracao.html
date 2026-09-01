@@ -124,9 +124,99 @@
             </label>
         </div>
 
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
+            <h2 class="text-sm font-semibold text-gray-700">
+                <i class="fas fa-palette text-orange-500 mr-1.5"></i>Identidade visual da sala
+            </h2>
+
+            <div class="p-4 rounded-xl bg-amber-50 border border-amber-100">
+                <p class="text-xs text-amber-900 leading-relaxed">
+                    A sala de vídeo roda dentro de um iframe de outro domínio — nenhum CSS do
+                    portal alcança o que está lá. O caminho suportado é este endereço, que o
+                    servidor de vídeo busca sozinho e de onde tira logo, cores e fundo:
+                </p>
+                <div class="flex items-stretch gap-2 flex-wrap mt-2">
+                    <input type="text" id="rn-branding" readonly value="{{ url_branding }}"
+                           onclick="this.select()"
+                           class="flex-1 min-w-0 border border-amber-200 rounded-lg px-3 py-2 text-xs
+                                  bg-white text-gray-700 font-mono">
+                    <button type="button" id="rn-copiar-branding"
+                            class="px-3 py-2 rounded-lg bg-amber-500 text-white text-xs font-medium hover:bg-amber-600 shrink-0">
+                        <i class="fas fa-copy mr-1"></i>Copiar
+                    </button>
+                </div>
+                <p class="text-[11px] text-amber-800 mt-2 leading-relaxed">
+                    <strong>No 8x8 (JaaS) isso não é automático.</strong> Cole o endereço acima no
+                    console do 8x8 em <em>Branding → Advanced branding</em>. Sem esse passo o 8x8
+                    usa a marca dele. Num Jitsi próprio o portal já manda o endereço sozinho.
+                </p>
+            </div>
+
+            <div>
+                <label for="fundo_sala_url" class="block text-sm font-medium text-gray-700 mb-1">
+                    Fundo de tela da sala
+                </label>
+                <input type="url" name="fundo_sala_url" id="fundo_sala_url"
+                       value="{{ cfg.fundo_sala_url }}" placeholder="{{ url_fundo }}"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm
+                              focus:ring-2 focus:ring-sky-400 focus:border-sky-400">
+                <p class="text-[11px] text-gray-500 mt-1">
+                    Em branco usa a imagem padrão da rede. Precisa ser uma URL pública: quem
+                    baixa é o servidor de vídeo, não o navegador de quem está na reunião.
+                </p>
+                <img src="{{ url_fundo }}" alt="Fundo atual da sala"
+                     class="mt-2 w-full max-w-xs rounded-lg border border-gray-200">
+            </div>
+
+            <label class="flex items-start gap-2 text-sm text-gray-700 cursor-pointer">
+                <input type="checkbox" name="aplicar_fundo_padrao"
+                       {% if cfg.aplicar_fundo_padrao %}checked{% endif %}
+                       class="rounded text-sky-600 focus:ring-sky-500 mt-0.5">
+                <span>
+                    Aplicar o fundo automaticamente para todo mundo
+                    <span class="block text-[11px] text-gray-500">
+                        Liga o fundo virtual assim que a pessoa abre a câmera. Desligue se os
+                        celulares da rede ficarem lentos — o efeito processa vídeo quadro a quadro.
+                        A imagem continua na lista de “Selecionar fundo” de qualquer jeito.
+                    </span>
+                </span>
+            </label>
+        </div>
+
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+            <label class="flex items-start gap-2 text-sm text-gray-700 cursor-pointer">
+                <input type="checkbox" name="permitir_link_publico"
+                       {% if cfg.permitir_link_publico %}checked{% endif %}
+                       class="rounded text-sky-600 focus:ring-sky-500 mt-0.5">
+                <span>
+                    Permitir link público de visitante
+                    <span class="block text-[11px] text-gray-500">
+                        Deixa o organizador de cada reunião gerar um endereço para quem não tem
+                        conta no portal. Cada reunião nasce sem link — quem abre é o organizador.
+                        Desligando aqui, todos os links já criados param de valer na hora.
+                    </span>
+                </span>
+            </label>
+        </div>
+
         <button type="submit" class="px-5 py-2 rounded-lg bg-sky-600 text-white text-sm font-medium hover:bg-sky-700">
             <i class="fas fa-check mr-1.5"></i>Salvar
         </button>
     </form>
 </div>
+
+<script>
+(function () {
+    const botao = document.getElementById('rn-copiar-branding');
+    if (!botao) return;
+    const campo = document.getElementById('rn-branding');
+    botao.addEventListener('click', async function () {
+        try { await navigator.clipboard.writeText(campo.value); }
+        catch (e) { campo.select(); try { document.execCommand('copy'); } catch (e2) {} }
+        const antes = botao.innerHTML;
+        botao.innerHTML = '<i class="fas fa-check mr-1"></i>Copiado';
+        setTimeout(function () { botao.innerHTML = antes; }, 1800);
+    });
+})();
+</script>
 {% endblock %}

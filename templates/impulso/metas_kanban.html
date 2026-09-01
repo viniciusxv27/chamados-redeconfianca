@@ -3,13 +3,13 @@
 {% block impulso_content %}
 
 <div class="flex items-center justify-between flex-wrap gap-3 mb-4">
-    <div class="flex items-center gap-2 flex-wrap">
+    <div class="flex items-center gap-2 flex-wrap w-full sm:w-auto min-w-0">
         {% if is_gestor and colaboradores is not None %}
-        <form method="get" class="flex items-center gap-2">
-            <div class="relative">
+        <form method="get" class="flex items-center gap-2 w-full sm:w-auto min-w-0">
+            <div class="relative w-full sm:w-auto min-w-0">
                 <i class="fas fa-filter absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
                 <select name="colaborador" onchange="this.form.submit()"
-                        class="text-sm border border-gray-300 rounded-lg pl-8 pr-3 py-2 bg-white focus:ring-2 focus:ring-orange-400 focus:border-orange-400">
+                        class="w-full sm:w-auto max-w-full text-sm border border-gray-300 rounded-lg pl-8 pr-3 py-2 bg-white focus:ring-2 focus:ring-orange-400 focus:border-orange-400">
                     <option value="">Todos os colaboradores</option>
                     {% for c in colaboradores %}
                     <option value="{{ c.id }}" {% if colaborador_id == c.id %}selected{% endif %}>{{ c.get_full_name|default:c.email }}</option>

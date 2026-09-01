@@ -72,6 +72,89 @@
         </div>
     </div>
 
+    {% if pode_editar and permite_publico %}
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-4">
+        <div class="px-5 py-3 border-b border-gray-100">
+            <h2 class="text-sm font-semibold text-gray-700">
+                <i class="fas fa-link text-orange-500 mr-1.5"></i>Convidar quem não tem conta no portal
+            </h2>
+        </div>
+        <div class="px-5 py-4">
+            {% if reuniao.tem_link_publico %}
+            <p class="text-xs text-gray-500 mb-2">
+                Quem abrir este endereço escreve o próprio nome e entra como <strong>visitante</strong>:
+                participa da conversa, mas não administra a sala nem grava a ata.
+                Quem tiver o link entra — mande só para quem deve entrar.
+            </p>
+            <div class="flex items-stretch gap-2 flex-wrap">
+                <input type="text" id="rn-link" readonly value="{{ link_publico }}"
+                       onclick="this.select()"
+                       class="flex-1 min-w-0 border border-gray-200 rounded-lg px-3 py-2 text-sm
+                              bg-gray-50 text-gray-700 font-mono">
+                <button type="button" id="rn-copiar"
+                        class="px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:bg-orange-600 shrink-0">
+                    <i class="fas fa-copy mr-1.5"></i>Copiar
+                </button>
+            </div>
+            <p class="text-[11px] text-gray-400 mt-2">
+                Criado em {{ reuniao.publico_em|date:'d/m/Y H:i' }}.
+                O link deixa de valer sozinho quando a reunião é encerrada ou cancelada.
+            </p>
+            <div class="flex items-center gap-2 flex-wrap mt-3">
+                <form method="post" action="{% url 'reunioes:link_publico' reuniao.id %}" class="inline"
+                      onsubmit="return confirm('Gerar um endereço novo? Quem já recebeu o link antigo deixa de entrar.');">
+                    {% csrf_token %}
+                    <input type="hidden" name="acao" value="trocar">
+                    <button type="submit" class="px-3 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 hover:bg-gray-50">
+                        <i class="fas fa-rotate mr-1"></i>Gerar outro endereço
+                    </button>
+                </form>
+                <form method="post" action="{% url 'reunioes:link_publico' reuniao.id %}" class="inline"
+                      onsubmit="return confirm('Desligar o link? Quem estiver com ele para de entrar na hora.');">
+                    {% csrf_token %}
+                    <input type="hidden" name="acao" value="fechar">
+                    <button type="submit" class="px-3 py-1.5 rounded-lg border border-red-200 text-xs text-red-600 hover:bg-red-50">
+                        <i class="fas fa-link-slash mr-1"></i>Desligar o link
+                    </button>
+                </form>
+            </div>
+            {% else %}
+            <p class="text-xs text-gray-500 mb-3">
+                Nenhum link público. Toda reunião nasce fechada: só entra quem está na agenda.
+                Criando o link, qualquer pessoa com o endereço entra como visitante, escrevendo o nome.
+            </p>
+            <form method="post" action="{% url 'reunioes:link_publico' reuniao.id %}">
+                {% csrf_token %}
+                <input type="hidden" name="acao" value="abrir">
+                <button type="submit"
+                        class="px-4 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:bg-orange-600">
+                    <i class="fas fa-link mr-1.5"></i>Criar link público
+                </button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if visitantes %}
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-4">
+        <div class="px-5 py-3 border-b border-gray-100">
+            <h2 class="text-sm font-semibold text-gray-700">
+                <i class="fas fa-user-check text-orange-500 mr-1.5"></i>Visitantes que entraram
+                <span class="text-gray-400 font-normal">({{ visitantes|length }})</span>
+            </h2>
+        </div>
+        <ul class="divide-y divide-gray-50">
+            {% for v in visitantes %}
+            <li class="px-5 py-2.5 flex items-center justify-between gap-3">
+                <span class="text-sm text-gray-800 min-w-0 truncate">{{ v.nome }}</span>
+                <span class="text-[11px] text-gray-400 shrink-0">{{ v.entrou_em|date:'d/m H:i' }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
     <div class="grid md:grid-cols-2 gap-4">
         <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             <div class="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
@@ -140,4 +223,25 @@
         </div>
     </div>
 </div>
+
+<script>
+(function () {
+    const botao = document.getElementById('rn-copiar');
+    if (!botao) return;
+    const campo = document.getElementById('rn-link');
+    botao.addEventListener('click', async function () {
+        try {
+            await navigator.clipboard.writeText(campo.value);
+        } catch (e) {
+            // WebView sem permissão de área de transferência: seleciona para a
+            // pessoa copiar na mão, em vez de não fazer nada.
+            campo.select();
+            try { document.execCommand('copy'); } catch (e2) {}
+        }
+        const antes = botao.innerHTML;
+        botao.innerHTML = '<i class="fas fa-check mr-1.5"></i>Copiado';
+        setTimeout(function () { botao.innerHTML = antes; }, 1800);
+    });
+})();
+</script>
 {% endblock %}

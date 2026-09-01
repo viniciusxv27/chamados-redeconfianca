@@ -2,6 +2,7 @@
 import json
 import logging
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
@@ -15,7 +16,8 @@ from django.utils.dateparse import parse_datetime
 from django.views.decorators.http import require_POST
 
 from . import publico
-from .models import ConfiguracaoReunioes, ParticipanteReuniao, Reuniao
+from .models import (ConfiguracaoReunioes, ParticipanteReuniao, Reuniao,
+                     VisitanteReuniao)
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
@@ -224,13 +226,79 @@ def detalhe(request, reuniao_id):
         except Exception as exc:                                # noqa: BLE001
             logger.warning('Atas da reunião %s não carregaram: %s', reuniao.id, exc)
 
+    cfg = ConfiguracaoReunioes.get()
     return render(request, 'reunioes/detalhe.html', {
         'reuniao': reuniao,
         'participantes': reuniao.participantes.select_related('user'),
         'pode_editar': reuniao.pode_editar(request.user),
+        'permite_publico': cfg.permitir_link_publico,
+        'link_publico': (request.build_absolute_uri(
+            reverse('reunioes:sala_publica', args=[reuniao.token_publico]))
+            if reuniao.token_publico else ''),
+        'visitantes': list(reuniao.visitantes.all()),
         'atas': atas,
         'agora': timezone.now(),
     })
+
+
+FUNDO_PADRAO = 'images/reuniao-fundo.jpg'
+
+
+def _endereco(request):
+    return request.build_absolute_uri('/').rstrip('/')
+
+
+def _arquivo(caminho):
+    """Caminho de um estático, sem derrubar a página se faltar no manifesto.
+
+    Em produção o storage é o ManifestStaticFilesStorage: um arquivo que ainda
+    não passou pelo collectstatic faz a tag levantar exceção. Vale para o portal
+    inteiro, mas aqui o estrago seria grande demais — a sala de vídeo e o arquivo
+    de identidade visual sairiam do ar por causa de uma imagem. Sem o hash a
+    imagem ainda carrega; só perde o cache longo.
+    """
+    try:
+        return static(caminho)
+    except Exception:                                           # noqa: BLE001
+        logger.warning('Estático fora do manifesto: %s (rodou collectstatic?)', caminho)
+        return f'{settings.STATIC_URL}{caminho}'
+
+
+def url_do_fundo(request, cfg=None):
+    """Imagem do fundo virtual, sempre absoluta.
+
+    Quem baixa é o servidor de vídeo, de outro domínio: caminho relativo não
+    resolveria lá.
+    """
+    cfg = cfg or ConfiguracaoReunioes.get()
+    escolhido = (cfg.fundo_sala_url or '').strip()
+    if escolhido:
+        return escolhido
+    return _endereco(request) + _arquivo(FUNDO_PADRAO)
+
+
+def _contexto_da_sala(request, reuniao, sala_video, *, nome, email,
+                      gerar_ata, url_sair, e_visitante=False):
+    """Tudo o que o palco de vídeo precisa, igual para colaborador e visitante."""
+    cfg = ConfiguracaoReunioes.get()
+    base = _endereco(request)
+    return {
+        'reuniao': reuniao,
+        'url_branding': base + reverse('reunioes:branding'),
+        'url_logo': base + _arquivo('images/logo-t.png'),
+        'url_fundo': url_do_fundo(request, cfg),
+        'aplicar_fundo': cfg.aplicar_fundo_padrao,
+        'url_portal': base,
+        'url_sair': url_sair,
+        'servidor': sala_video['servidor'],
+        'sala_video': sala_video['sala'],
+        'token_video': sala_video['token'],
+        'sala_autenticada': sala_video['autenticado'],
+        'gerar_ata': gerar_ata,
+        'nome_exibicao': nome,
+        'email_exibicao': email,
+        'e_visitante': e_visitante,
+    }
 
 
 @login_required
@@ -254,22 +322,103 @@ def sala(request, reuniao_id):
     cfg = ConfiguracaoReunioes.get()
     from .jaas import dados_da_sala
 
-    sala_video = dados_da_sala(cfg, request.user, reuniao.sala)
-    base = request.build_absolute_uri('/').rstrip('/')
-    return render(request, 'reunioes/sala.html', {
-        'url_branding': base + reverse('reunioes:branding'),
-        'url_logo': base + static('images/logo-t.png'),
-        'url_portal': base,
-        'reuniao': reuniao,
-        'servidor': sala_video['servidor'],
-        'sala_video': sala_video['sala'],
-        'token_video': sala_video['token'],
-        'sala_autenticada': sala_video['autenticado'],
-        'gerar_ata': cfg.gerar_ata and reuniao.gravar_ata,
-        'e_organizador': reuniao.organizador_id == request.user.id,
-        'nome_exibicao': request.user.get_full_name() or request.user.email,
-        'email_exibicao': request.user.email,
-    })
+    ctx = _contexto_da_sala(
+        request, reuniao, dados_da_sala(cfg, request.user, reuniao.sala),
+        nome=request.user.get_full_name() or request.user.email,
+        email=request.user.email,
+        gerar_ata=cfg.gerar_ata and reuniao.gravar_ata,
+        url_sair=reverse('reunioes:detalhe', args=[reuniao.id]))
+    ctx['e_organizador'] = reuniao.organizador_id == request.user.id
+    return render(request, 'reunioes/sala.html', ctx)
+
+
+# ---------------------------------------------------------------------------
+# Link público de visitante
+# ---------------------------------------------------------------------------
+@login_required
+@require_POST
+def link_publico(request, reuniao_id):
+    """Liga, troca ou desliga o link de visitante. Só quem edita a reunião."""
+    reuniao = get_object_or_404(Reuniao, id=reuniao_id)
+    if not reuniao.pode_editar(request.user):
+        messages.error(request, 'Só o organizador mexe no link público desta reunião.')
+        return redirect('reunioes:detalhe', reuniao_id=reuniao.id)
+
+    if not ConfiguracaoReunioes.get().permitir_link_publico:
+        messages.error(request, 'O link público está desligado na configuração do módulo.')
+        return redirect('reunioes:detalhe', reuniao_id=reuniao.id)
+
+    acao = request.POST.get('acao')
+    if acao == 'fechar':
+        reuniao.fechar_link_publico()
+        messages.success(request, 'Link público desligado. Quem tinha o endereço não entra mais.')
+    elif acao == 'trocar':
+        reuniao.abrir_link_publico()
+        messages.success(request, 'Link trocado. O endereço anterior deixou de valer agora.')
+    else:
+        reuniao.abrir_link_publico()
+        messages.success(request, 'Link público criado. Quem receber entra como visitante.')
+    return redirect('reunioes:detalhe', reuniao_id=reuniao.id)
+
+
+CHAVE_VISITANTE = 'reuniao_visitante_%s'
+LIMITE_NOME = 60
+
+
+def sala_publica(request, token):
+    """A sala vista por quem chegou pelo link — sem conta no portal.
+
+    Aberta de propósito: o token no endereço é a credencial. Por isso ele é
+    longo, sorteado, some quando o organizador desliga e para de valer quando a
+    reunião encerra.
+    """
+    reuniao = Reuniao.objects.filter(token_publico=token).first() if token else None
+    if not reuniao or not reuniao.visitante_pode_entrar():
+        return render(request, 'reunioes/visitante_indisponivel.html',
+                      {'reuniao': reuniao}, status=404)
+
+    chave = CHAVE_VISITANTE % reuniao.id
+    nome = (request.session.get(chave) or '').strip()
+
+    if request.method == 'POST':
+        nome = ' '.join((request.POST.get('nome') or '').split())[:LIMITE_NOME]
+        if len(nome) < 3:
+            return render(request, 'reunioes/visitante_entrar.html', {
+                'reuniao': reuniao, 'token': token,
+                'erro': 'Escreva seu nome com pelo menos 3 letras — é assim que '
+                        'as pessoas da reunião vão te reconhecer.',
+                'nome': nome,
+            })
+        request.session[chave] = nome
+        VisitanteReuniao.objects.create(reuniao=reuniao, nome=nome)
+        return redirect('reunioes:sala_publica', token=token)
+
+    if not nome:
+        return render(request, 'reunioes/visitante_entrar.html',
+                      {'reuniao': reuniao, 'token': token})
+
+    if reuniao.status == Reuniao.AGENDADA:
+        Reuniao.objects.filter(id=reuniao.id, status=Reuniao.AGENDADA) \
+                       .update(status=Reuniao.EM_ANDAMENTO)
+        reuniao.status = Reuniao.EM_ANDAMENTO
+
+    cfg = ConfiguracaoReunioes.get()
+    from .jaas import dados_da_sala_visitante
+
+    ctx = _contexto_da_sala(
+        request, reuniao, dados_da_sala_visitante(cfg, nome, reuniao.sala),
+        nome=nome, email='',
+        # A ata grava o áudio e sobe para o portal com a sessão de quem clicou:
+        # visitante não tem sessão nem deveria disparar isso.
+        gerar_ata=False,
+        url_sair=reverse('reunioes:visitante_saiu', args=[token]),
+        e_visitante=True)
+    return render(request, 'reunioes/sala_visitante.html', ctx)
+
+
+def visitante_saiu(request, token):
+    reuniao = Reuniao.objects.filter(token_publico=token).first() if token else None
+    return render(request, 'reunioes/visitante_saiu.html', {'reuniao': reuniao})
 
 
 @require_POST
@@ -374,12 +523,38 @@ def branding(request):
     dele, sem o cookie da sessão do portal. São duas URLs de imagem pública,
     nada de dado de ninguém.
     """
-    base = request.build_absolute_uri('/').rstrip('/')
+    base = _endereco(request)
+    logo = f'{base}{_arquivo("images/logo-t.png")}'
+    # A logo pedida para o fundo do chat/conferência.
+    marca = f'{base}{_arquivo("images/logo.png")}'
+    fundo = url_do_fundo(request)
     dados = {
-        'logoImageUrl': f'{base}{static("images/logo-t.png")}',
+        'logoImageUrl': logo,
         'logoClickUrl': base,
-        'backgroundImageUrl': f'{base}{static("images/logo.png")}',
-        'backgroundColor': '#111827',
+        # Fundo da conferência: é o que aparece atrás dos vídeos e ao redor do
+        # painel de chat. O Jitsi não expõe o fundo do chat separadamente — este
+        # é o campo que a marca alcança por dentro do iframe.
+        'backgroundImageUrl': marca,
+        'backgroundColor': '#0b1120',
+        # Tela de entrada (é por ela que passa quem vem pelo link público).
+        'premeetingBackground': f"linear-gradient(135deg, rgba(11,17,32,.92), rgba(120,53,15,.85)), url('{fundo}')",
+        # Fundo virtual da rede, já pronto na lista de quem quiser trocar.
+        'virtualBackgrounds': [fundo],
+        # Cores do portal dentro da sala.
+        'customTheme': {
+            'palette': {
+                'action01': '#FF6B35',
+                'action01Hover': '#f97316',
+                'action01Active': '#ea580c',
+                'link01': '#FF6B35',
+                'link01Hover': '#f97316',
+                'link01Active': '#ea580c',
+                'focus01': '#FF6B35',
+                'ui01': '#0b1120',
+                'ui02': '#131c31',
+                'ui03': '#1c2740',
+            },
+        },
         'didPageUrl': base,
     }
     resposta = JsonResponse(dados)
@@ -405,6 +580,9 @@ def configuracao(request):
         servidor = servidor.replace('https://', '').replace('http://', '').strip('/')
         cfg.servidor_jitsi = servidor or 'meet.jit.si'
         cfg.gerar_ata = request.POST.get('gerar_ata') == 'on'
+        cfg.fundo_sala_url = (request.POST.get('fundo_sala_url') or '').strip()[:200]
+        cfg.aplicar_fundo_padrao = request.POST.get('aplicar_fundo_padrao') == 'on'
+        cfg.permitir_link_publico = request.POST.get('permitir_link_publico') == 'on'
         cfg.jaas_app_id = (request.POST.get('jaas_app_id') or '').strip()[:120]
         cfg.jaas_api_key_id = (request.POST.get('jaas_api_key_id') or '').strip()[:120]
         chave = (request.POST.get('jaas_chave_privada') or '').strip()
@@ -422,6 +600,8 @@ def configuracao(request):
     testando = gerar_token(cfg, request.user, 'teste') if cfg.jaas_app_id else None
     return render(request, 'reunioes/configuracao.html', {
         'cfg': cfg,
+        'url_branding': _endereco(request) + reverse('reunioes:branding'),
+        'url_fundo': url_do_fundo(request, cfg),
         'tem_jaas': bool(cfg.jaas_app_id and cfg.jaas_api_key_id and cfg.jaas_chave_privada),
         'jaas_ok': bool(testando),
         'servidor_publico': (cfg.servidor_jitsi or '').strip() in ('meet.jit.si', ''),

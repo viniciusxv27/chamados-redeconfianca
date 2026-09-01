@@ -1,0 +1,91 @@
+/* Transição ao trocar de tela.
+ *
+ * Dois caminhos, o mesmo resultado:
+ *
+ * 1. Navegador novo (WebView Chromium 126+, iOS 18.2+): o próprio navegador faz
+ *    a transição entre os dois documentos. O menu lateral e a barra do topo são
+ *    capturados à parte e trocam sem piscar; só o conteúdo faz o fade.
+ * 2. Navegador antigo: o transicoes.js marca <html class="rc-fallback"> e a
+ *    mesma ideia acontece com opacidade, dentro de um documento só.
+ *
+ * O conteúdo real da página nunca recebe transform: transform num ancestral
+ * quebra position:fixed, e todo modal do portal depende disso. O deslize só
+ * acontece nos pseudo-elementos da view transition, que ficam fora da árvore.
+ */
+
+@view-transition { navigation: auto; }
+
+@keyframes rc-aparece { from { opacity: 0; } to { opacity: 1; } }
+@keyframes rc-some    { from { opacity: 1; } to { opacity: 0; } }
+@keyframes rc-sobe    { from { opacity: 0; transform: translateY(8px); }
+                        to   { opacity: 1; transform: none; } }
+
+/* O "root" aqui já é só o conteúdo: menu e topo saíram para grupos próprios. */
+::view-transition-old(root) { animation: rc-some 120ms ease-in both; }
+::view-transition-new(root) { animation: rc-sobe 240ms cubic-bezier(.22, 1, .36, 1) both; }
+
+#sidebar  { view-transition-name: rc-menu; }
+#rc-topo  { view-transition-name: rc-topo; }
+
+/* Menu e topo não fazem cross-fade: o item ativo muda de uma tela para outra e
+   sobrepor os dois deixaria dois itens acesos no meio da transição. O antigo
+   sai na hora, o novo já entra pronto. */
+::view-transition-old(rc-menu),
+::view-transition-old(rc-topo) { animation: none; opacity: 0; }
+::view-transition-new(rc-menu),
+::view-transition-new(rc-topo) { animation: none; opacity: 1; }
+
+/* ---- caminho do navegador antigo ---- */
+
+/* "backwards" e não "both": com fill para a frente a animação continua mandando
+   na opacidade depois de terminar, e o esmaecimento do clique logo abaixo nunca
+   apareceria — animação ganha de declaração normal na cascata. */
+html.rc-fallback #rc-conteudo { animation: rc-aparece 240ms ease-out backwards; }
+
+/* Ao clicar num link o conteúdo esmaece um pouco, para o toque ter resposta
+   imediata mesmo antes de a próxima página responder. Não vai a zero: página
+   apagada durante uma navegação lenta parece travamento. */
+html.rc-fallback.rc-saindo #rc-conteudo {
+    opacity: .45;
+    transition: opacity 130ms ease-in;
+}
+
+/* ---- barra de progresso do topo ---- */
+
+#rc-barra {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    z-index: 9999;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 150ms ease;
+}
+#rc-barra.rc-barra-on { opacity: 1; }
+#rc-barra span {
+    display: block;
+    height: 100%;
+    width: 0;
+    border-radius: 0 3px 3px 0;
+    background: linear-gradient(90deg, #FF6B35, #f59e0b);
+    box-shadow: 0 0 8px rgba(255, 107, 53, .55);
+}
+#rc-barra.rc-barra-on span { animation: rc-barra-anda 10s cubic-bezier(.1, .7, .3, 1) forwards; }
+
+/* Nunca chega a 100%: quem fecha a barra é a página nova ao carregar. */
+@keyframes rc-barra-anda {
+    0%   { width: 0; }
+    20%  { width: 45%; }
+    55%  { width: 75%; }
+    100% { width: 94%; }
+}
+
+/* Quem pediu menos movimento no sistema não recebe nenhum. */
+@media (prefers-reduced-motion: reduce) {
+    ::view-transition-group(*),
+    ::view-transition-old(*),
+    ::view-transition-new(*) { animation: none !important; }
+    html.rc-fallback #rc-conteudo { animation: none !important; }
+    html.rc-fallback.rc-saindo #rc-conteudo { opacity: 1; }
+    #rc-barra span { animation: none !important; width: 35%; }
+}

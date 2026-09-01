@@ -18,6 +18,13 @@
                     <i class="{{ atual_faixa.icon }}"></i>{{ atual_faixa.label }}
                 </span>
                 <span class="text-sm text-gray-500 tabular-nums">{{ atual.total|floatformat:"-1" }} / {{ atual.aplicavel|floatformat:"-1" }} pts no mês</span>
+                {% if atual.pontos_sem_oportunidade %}
+                <span class="block text-[11px] text-gray-500 mt-1">
+                    <i class="fas fa-circle-info text-gray-400 mr-1"></i>
+                    {{ atual.pontos_sem_oportunidade|floatformat:"-1" }} ponto(s) sem item publicado no mês.
+                    O total é 100 para todo mundo — 40 Confiar, 40 Conectar, 20 Inovar.
+                </span>
+                {% endif %}
             </div>
         </div>
         <div class="w-full sm:w-64">
