@@ -91,6 +91,13 @@ try:
         t(f'não dispara em {porque}', trecho in js)
     t('nunca chega a 100%: quem fecha é a tela nova', '100% { width: 94%; }' in css)
 
+    print('\n== NÃO ANIMA O QUE FOI CANCELADO ==')
+    # onsubmit="return confirm(...)" é o padrão do portal: escutando na captura,
+    # a tela esmaecia enquanto o diálogo estava aberto.
+    t('escuta na subida, não na captura',
+      "comecar();\n    });" in js and "comecar();\n    }, true);" not in js)
+    t('respeita quem cancelou', 'if (e.defaultPrevented' in js)
+
     print('\n== LIGADO NO BASE.HTML ==')
     t('o CSS entra', "css/transicoes.css" in base)
     t('o JS entra sem travar o carregamento', "js/transicoes.js' %}\" defer" in base)

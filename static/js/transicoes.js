@@ -98,12 +98,18 @@
         return true;
     }
 
+    // Os dois escutam na subida, não na captura: assim os handlers da própria
+    // página já rodaram e o e.defaultPrevented diz a verdade. Metade dos botões
+    // do portal é onsubmit="return confirm(...)" — em captura a tela esmaecia
+    // enquanto o diálogo estava aberto e voltava sozinha depois, o que parecia
+    // defeito. Em troca, quem chamar stopPropagation perde a barrinha; deixar de
+    // animar é bem melhor do que animar no momento errado.
     document.addEventListener('click', function (e) {
         var a = e.target && e.target.closest ? e.target.closest('a') : null;
         if (!a) return;
         if (!navegacaoNormal(e, a)) return;
         comecar();
-    }, true);
+    });
 
     // Formulário que envia também troca de tela — menos os de busca que só
     // filtram na própria página via JS (esses chamam preventDefault).
@@ -112,7 +118,7 @@
         if (e.defaultPrevented || !f || f.hasAttribute('data-sem-transicao')) return;
         if (f.target && f.target !== '_self') return;
         comecar();
-    }, true);
+    });
 
     // Voltar pelo histórico traz a página do cache já pronta: nada de barra
     // parada nem conteúdo apagado.
