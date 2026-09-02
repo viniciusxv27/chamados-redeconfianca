@@ -1,0 +1,66 @@
+{# Linha de uma pessoa no quadro de gestão. Espera `item` no contexto.
+   Usada tanto nos cards de loja quanto na aba "Geral". #}
+<div class="px-5 py-3 flex items-center justify-between gap-3 flex-wrap">
+    <div class="min-w-0">
+        <p class="text-sm font-medium text-gray-800 truncate">
+            {{ item.pessoa.get_full_name|default:item.pessoa.username }}
+        </p>
+        <p class="text-[11px] text-gray-400">
+            {% if item.envio %}
+                enviado em {{ item.envio.enviado_em|date:'d/m/Y H:i' }}
+            {% else %}
+                sem comprovante
+            {% endif %}
+        </p>
+    </div>
+    <div class="flex items-center gap-2">
+        {% if item.envio %}
+        <a href="{{ item.envio.arquivo.url }}" target="_blank" rel="noopener noreferrer"
+           class="px-2.5 py-1 rounded-lg border border-gray-200 text-xs text-gray-600 hover:bg-gray-50">
+            <i class="fas fa-paperclip mr-1"></i>Ver anexo
+        </a>
+        {% endif %}
+
+        {% if item.conferir %}
+        <form method="post" action="{% url 'cursos:revisar_comprovante' item.envio.id %}" class="inline">
+            {% csrf_token %}
+            <input type="hidden" name="acao" value="aprovar">
+            <input type="hidden" name="voltar" value="{{ request.get_full_path }}">
+            <button type="submit" class="px-2.5 py-1 rounded-lg bg-emerald-500 text-white text-xs font-medium hover:bg-emerald-600">
+                Aprovar
+            </button>
+        </form>
+        <form method="post" action="{% url 'cursos:revisar_comprovante' item.envio.id %}" class="inline"
+              onsubmit="var m = prompt('Motivo da recusa (aparece para a pessoa):'); if (m === null) return false; this.observacao.value = m; return true;">
+            {% csrf_token %}
+            <input type="hidden" name="acao" value="recusar">
+            <input type="hidden" name="observacao" value="">
+            <input type="hidden" name="voltar" value="{{ request.get_full_path }}">
+            <button type="submit" class="px-2.5 py-1 rounded-lg border border-red-200 text-red-600 text-xs font-medium hover:bg-red-50">
+                Recusar
+            </button>
+        </form>
+        {% elif item.entregue %}
+        <span class="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-semibold">
+            <i class="fas fa-check mr-1"></i>Aprovado
+        </span>
+        {# Rejeitar um certificado já aprovado: só gestor/SUPERADMIN chega aqui.
+           Volta a valer como pendência e a pessoa é avisada do motivo. #}
+        <form method="post" action="{% url 'cursos:revisar_comprovante' item.envio.id %}" class="inline"
+              onsubmit="var m = prompt('Motivo da rejeição do certificado (aparece para a pessoa):'); if (m === null) return false; this.observacao.value = m; return true;">
+            {% csrf_token %}
+            <input type="hidden" name="acao" value="recusar">
+            <input type="hidden" name="observacao" value="">
+            <input type="hidden" name="voltar" value="{{ request.get_full_path }}">
+            <button type="submit" class="px-2.5 py-1 rounded-lg border border-red-200 text-red-600 text-xs font-medium hover:bg-red-50"
+                    title="Rejeitar este certificado já aprovado">
+                <i class="fas fa-xmark mr-1"></i>Rejeitar
+            </button>
+        </form>
+        {% else %}
+        <span class="px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 text-[11px] font-semibold">
+            {% if item.envio %}Recusado{% else %}Não fez{% endif %}
+        </span>
+        {% endif %}
+    </div>
+</div>

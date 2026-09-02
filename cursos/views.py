@@ -32,9 +32,12 @@ def _tamanho_legivel(bytes_):
     return f'{bytes_:.1f} MB'
 
 
+SEM_LOJA = 'Sem loja'
+
+
 def _loja(user):
     """Nome da loja da pessoa. O PDV é o campo que o RH mantém preenchido."""
-    return (user.pdv or '').strip() or (user.sector.name if user.sector_id else 'Sem loja')
+    return (user.pdv or '').strip() or (user.sector.name if user.sector_id else SEM_LOJA)
 
 
 def _comprovantes_por_curso(user, cursos):
@@ -183,7 +186,8 @@ def gestao(request):
     if curso is None:
         curso = cursos[0] if cursos else None
 
-    lojas, totais = [], {'pessoas': 0, 'entregues': 0, 'pendentes': 0, 'conferir': 0}
+    lojas, geral = [], None
+    totais = {'pessoas': 0, 'entregues': 0, 'pendentes': 0, 'conferir': 0}
     if curso:
         pessoas = list(_pessoas_do_curso(curso, cfg))
         envios = {}
@@ -206,14 +210,19 @@ def gestao(request):
         for nome in sorted(por_loja):
             itens = sorted(por_loja[nome], key=lambda i: (i['entregue'], i['pessoa'].first_name))
             feitos = sum(1 for i in itens if i['entregue'])
-            lojas.append({
+            bloco = {
                 'nome': nome, 'itens': itens, 'total': len(itens), 'feitos': feitos,
                 'faltam': len(itens) - feitos,
                 'percentual': round(feitos * 100 / len(itens)) if itens else 0,
-            })
+            }
+            # Consultores sem loja saem para a aba "Geral", separados das lojas.
+            if nome == SEM_LOJA:
+                geral = bloco
+            else:
+                lojas.append(bloco)
 
     return render(request, 'cursos/gestao.html', {
-        'cursos': cursos, 'curso': curso, 'lojas': lojas, 'totais': totais,
+        'cursos': cursos, 'curso': curso, 'lojas': lojas, 'geral': geral, 'totais': totais,
         'percentual_geral': (round(totais['entregues'] * 100 / totais['pessoas'])
                              if totais['pessoas'] else 0),
         'is_superadmin': e_superadmin(request.user),

@@ -110,7 +110,23 @@
         </div>
     </div>
 
-    <div class="space-y-3">
+    {# ── Abas: Por loja / Geral (consultores sem loja) ───────────────────── #}
+    <div class="flex gap-1 mb-4 border-b border-gray-100">
+        <button type="button" onclick="crsTab('loja')" id="crs-tab-loja"
+                class="crs-tab px-4 py-2 text-sm font-medium border-b-2 border-purple-600 text-purple-700">
+            <i class="fas fa-store mr-1.5"></i>Por loja
+        </button>
+        {% if geral %}
+        <button type="button" onclick="crsTab('geral')" id="crs-tab-geral"
+                class="crs-tab px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700">
+            <i class="fas fa-user-group mr-1.5"></i>Geral
+            <span class="ml-1 px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 text-[10px] font-semibold">{{ geral.total }}</span>
+        </button>
+        {% endif %}
+    </div>
+
+    {# Pane: Por loja #}
+    <div id="crs-pane-loja" class="space-y-3">
         {% for loja in lojas %}
         <div class="crs-card bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             <button type="button" onclick="document.getElementById('loja-{{ forloop.counter }}').classList.toggle('hidden')"
@@ -139,64 +155,18 @@
             </button>
 
             <div id="loja-{{ forloop.counter }}" class="hidden border-t border-gray-100 divide-y divide-gray-50">
-                {% for item in loja.itens %}
-                <div class="px-5 py-3 flex items-center justify-between gap-3 flex-wrap">
-                    <div class="min-w-0">
-                        <p class="text-sm font-medium text-gray-800 truncate">
-                            {{ item.pessoa.get_full_name|default:item.pessoa.username }}
-                        </p>
-                        <p class="text-[11px] text-gray-400">
-                            {% if item.envio %}
-                                enviado em {{ item.envio.enviado_em|date:'d/m/Y H:i' }}
-                            {% else %}
-                                sem comprovante
-                            {% endif %}
-                        </p>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        {% if item.envio %}
-                        <a href="{{ item.envio.arquivo.url }}" target="_blank" rel="noopener noreferrer"
-                           class="px-2.5 py-1 rounded-lg border border-gray-200 text-xs text-gray-600 hover:bg-gray-50">
-                            <i class="fas fa-paperclip mr-1"></i>Ver anexo
-                        </a>
-                        {% endif %}
-
-                        {% if item.conferir %}
-                        <form method="post" action="{% url 'cursos:revisar_comprovante' item.envio.id %}" class="inline">
-                            {% csrf_token %}
-                            <input type="hidden" name="acao" value="aprovar">
-                            <input type="hidden" name="voltar" value="{{ request.get_full_path }}">
-                            <button type="submit" class="px-2.5 py-1 rounded-lg bg-emerald-500 text-white text-xs font-medium hover:bg-emerald-600">
-                                Aprovar
-                            </button>
-                        </form>
-                        <form method="post" action="{% url 'cursos:revisar_comprovante' item.envio.id %}" class="inline"
-                              onsubmit="this.observacao.value = prompt('Motivo da recusa (aparece para a pessoa):') || ''; return this.observacao.value !== null;">
-                            {% csrf_token %}
-                            <input type="hidden" name="acao" value="recusar">
-                            <input type="hidden" name="observacao" value="">
-                            <input type="hidden" name="voltar" value="{{ request.get_full_path }}">
-                            <button type="submit" class="px-2.5 py-1 rounded-lg border border-red-200 text-red-600 text-xs font-medium hover:bg-red-50">
-                                Recusar
-                            </button>
-                        </form>
-                        {% elif item.entregue %}
-                        <span class="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-semibold">
-                            <i class="fas fa-check mr-1"></i>Aprovado
-                        </span>
-                        {% else %}
-                        <span class="px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 text-[11px] font-semibold">
-                            {% if item.envio %}Recusado{% else %}Não fez{% endif %}
-                        </span>
-                        {% endif %}
-                    </div>
-                </div>
-                {% endfor %}
+                {% for item in loja.itens %}{% include 'cursos/_pessoa_row.html' %}{% endfor %}
             </div>
         </div>
         {% empty %}
         <div class="bg-white rounded-2xl border border-gray-100 p-10 text-center">
             <i class="fas fa-user-slash text-3xl text-gray-300 mb-3 block"></i>
+            {% if geral %}
+            <p class="text-sm text-gray-500">
+                Todos os cobrados deste curso estão sem loja.
+                Veja a aba <button type="button" onclick="crsTab('geral')" class="text-purple-600 hover:underline font-medium">Geral</button>.
+            </p>
+            {% else %}
             <p class="text-sm text-gray-500">
                 Ninguém é cobrado por este curso ainda.
                 {% if is_superadmin %}
@@ -205,9 +175,53 @@
                 Peça ao SUPERADMIN para definir o público na configuração do módulo.
                 {% endif %}
             </p>
+            {% endif %}
         </div>
         {% endfor %}
     </div>
+
+    {# Pane: Geral (consultores sem loja) #}
+    {% if geral %}
+    <div id="crs-pane-geral" class="hidden">
+        <div class="crs-card bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div class="px-5 py-3 flex items-center justify-between gap-3 border-b border-gray-100">
+                <div class="flex items-center gap-3 min-w-0">
+                    <i class="fas fa-user-group text-gray-300"></i>
+                    <span class="font-semibold text-gray-800">Consultores sem loja</span>
+                    <span class="text-xs text-gray-400">{{ geral.feitos }}/{{ geral.total }}</span>
+                </div>
+                {% if geral.faltam %}
+                <span class="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[11px] font-semibold">
+                    {{ geral.faltam }} falta{{ geral.faltam|pluralize }}
+                </span>
+                {% else %}
+                <span class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-semibold">
+                    <i class="fas fa-check mr-1"></i>completo
+                </span>
+                {% endif %}
+            </div>
+            <div class="divide-y divide-gray-50">
+                {% for item in geral.itens %}{% include 'cursos/_pessoa_row.html' %}{% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
     {% endif %}
 </div>
+
+<script>
+function crsTab(name) {
+    ['loja', 'geral'].forEach(function (n) {
+        var pane = document.getElementById('crs-pane-' + n);
+        var tab = document.getElementById('crs-tab-' + n);
+        if (!pane || !tab) return;
+        var on = (n === name);
+        pane.classList.toggle('hidden', !on);
+        tab.classList.toggle('border-purple-600', on);
+        tab.classList.toggle('text-purple-700', on);
+        tab.classList.toggle('border-transparent', !on);
+        tab.classList.toggle('text-gray-500', !on);
+    });
+}
+</script>
 {% endblock %}

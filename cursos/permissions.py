@@ -24,9 +24,36 @@ def no_escopo(user, cfg=None):
     return (cfg or config()).no_escopo(user)
 
 
+def tem_curso_disponivel(user, cfg=None):
+    """Tem algum curso publicado que a alcança — a fazer ou já feito.
+
+    Cobre quem recebeu uma capacitação inicial (atribuição) mas não está em
+    nenhum grupo/setor cobrado: sem isto, essa pessoa não veria no menu nem
+    conseguiria abrir o curso que foi mandada fazer.
+    """
+    return bool(cursos_do_usuario(user, cfg))
+
+
 def pode_ver(user, cfg=None):
     cfg = cfg or config()
-    return e_gestor(user, cfg) or no_escopo(user, cfg)
+    return e_gestor(user, cfg) or no_escopo(user, cfg) or tem_curso_disponivel(user, cfg)
+
+
+def deve_ir_para_cursos(user, cfg=None):
+    """A home deve direcionar este colaborador para /cursos/?
+
+    Regra: colaborador PADRÃO em janela de experiência ou com curso a fazer.
+    Só direciona quem de fato enxerga o módulo (``pode_ver``), senão a tela de
+    cursos o mandaria de volta para a home e viraria pingue-pongue.
+    """
+    if not (user and getattr(user, 'is_authenticated', False)):
+        return False
+    if getattr(user, 'hierarchy', '') != 'PADRAO':
+        return False
+    cfg = cfg or config()
+    if not pode_ver(user, cfg):
+        return False
+    return bool(getattr(user, 'has_experience_window', False)) or bool(pendencias(user, cfg))
 
 
 def cursos_do_usuario(user, cfg=None):

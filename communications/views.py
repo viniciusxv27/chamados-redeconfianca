@@ -105,6 +105,16 @@ def _get_experience_window_alerts_for_dp():
 @login_required
 def home_feed(request):
     """View principal da home com feed de comunicados"""
+    # Colaborador PADRÃO em janela de experiência ou com curso a fazer começa a
+    # home dentro de /cursos/. Nunca derruba a home: erro no módulo de cursos é
+    # ignorado e o feed carrega normalmente.
+    try:
+        from cursos.permissions import deve_ir_para_cursos
+        if deve_ir_para_cursos(request.user):
+            return redirect('cursos:meus_cursos')
+    except Exception:
+        pass
+
     # Comunicados fixados
     pinned_communications = Communication.objects.filter(
         is_pinned=True
