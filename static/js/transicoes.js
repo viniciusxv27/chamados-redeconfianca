@@ -1,27 +1,19 @@
 /* Transição ao trocar de tela — ver static/css/transicoes.css.
  *
- * Este arquivo faz duas coisas:
- *   1. decide qual dos dois caminhos o navegador vai usar (marca .rc-fallback);
- *   2. mostra a barrinha de progresso entre o toque no link e a tela nova
- *      aparecer, que é o intervalo em que o WebView não dá sinal nenhum.
+ * Este arquivo faz uma coisa só: mostra a barrinha de progresso entre o toque
+ * no link e a tela nova aparecer, que é o intervalo em que o WebView não dá
+ * sinal nenhum de que alguma coisa está acontecendo.
  *
- * Regra de ouro: nada aqui pode deixar a tela apagada. Todo esmaecimento tem
- * volta por tempo, por pageshow e por visibilitychange.
+ * A transição em si é do navegador (@view-transition no CSS). Já houve aqui
+ * uma animação de entrada para navegador antigo, e foi ela que travou o app:
+ * animação parada no quadro 0 deixa o conteúdo em opacity: 0 para sempre. Ver
+ * o comentário no transicoes.css.
+ *
+ * Regra de ouro: nada aqui pode deixar a tela apagada nem presa. A barrinha é
+ * pointer-events:none e some por tempo, por pageshow e por visibilitychange.
  */
 (function () {
     'use strict';
-
-    var raiz = document.documentElement;
-    var reduzido = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-    // A transição entre documentos chegou junto com o evento pagereveal
-    // (Chrome 126, Safari 18.2). Sem ele, o CSS @view-transition é ignorado e
-    // quem anima é o .rc-fallback.
-    var nativo = ('onpagereveal' in window) &&
-                 !!(window.CSS && CSS.supports && CSS.supports('view-transition-name', 'none'));
-    if (!nativo && !reduzido) {
-        raiz.classList.add('rc-fallback');
-    }
 
     var barra = null;
     var voltarDepois = null;
@@ -50,8 +42,6 @@
             tira.style.animation = '';
             b.classList.add('rc-barra-on');
         }
-        raiz.classList.add('rc-saindo');
-
         clearTimeout(voltarDepois);
         // Se depois disso ainda estamos aqui, a navegação não aconteceu:
         // era download, um confirm() cancelado ou um link que não levou a lugar
@@ -61,7 +51,6 @@
 
     function desfazer() {
         clearTimeout(voltarDepois);
-        raiz.classList.remove('rc-saindo');
         if (barra) {
             barra.classList.remove('rc-barra-on');
         }

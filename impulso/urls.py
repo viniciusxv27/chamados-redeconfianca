@@ -40,6 +40,10 @@ urlpatterns = [
     path('atividades/', views.minhas_atividades, name='minhas_atividades'),
 
     path('assiduidade/', views.assiduidade, name='assiduidade'),
+    path('assiduidade/excecao/', views.assiduidade_excecao_add,
+         name='assiduidade_excecao_add'),
+    path('assiduidade/excecao/<int:excecao_id>/excluir/', views.assiduidade_excecao_excluir,
+         name='assiduidade_excecao_excluir'),
 
     # CONFIAR — feedback
     path('feedbacks/', views.feedback_list, name='feedback_list'),

@@ -19,6 +19,9 @@ Três coisas moldam a leitura:
   regra não cobra ainda.
 * **Ajuste é marcação editada no Tangerino** (``MarcacaoPonto.editado``), que
   é como a correção de ponto esquecido aparece de lá.
+* **Dia de exceção** (``ExcecaoAssiduidade``, criado pelo SUPERADMIN) tira o
+  ajuste daquele dia da conta — e só isso. O dia segue sendo dia útil, segue
+  precisando das 4 batidas, e falta injustificada nele continua zerando.
 """
 from datetime import timedelta
 from decimal import Decimal
@@ -83,15 +86,23 @@ def faltas_injustificadas(employee_id, ano, mes):
     return sorted(dias)
 
 
-def avaliar(marcacoes, faltas=None, agora=None):
-    """Percorre o mês e separa o que conta contra a assiduidade."""
+def avaliar(marcacoes, faltas=None, agora=None, excecoes=None):
+    """Percorre o mês e separa o que conta contra a assiduidade.
+
+    ``excecoes`` são os dias liberados pelo SUPERADMIN (ver
+    ``ExcecaoAssiduidade``). O alcance é estreito de propósito: o dia continua
+    valendo como dia útil e ainda precisa das 4 batidas — a exceção só faz o
+    ajuste daquele dia não entrar na conta dos 3 do mês.
+    """
     agora = agora or timezone.localtime()
     hoje = agora.date()
     limite_prazo = agora - timedelta(hours=PRAZO_AJUSTE_HORAS)
 
     faltas = set(faltas or [])
+    excecoes = set(excecoes or [])
     dias_uteis = 0
     incompletos, no_prazo, ajustes, dias_completos = [], [], [], []
+    ajustes_perdoados = []
 
     for m in marcacoes:
         if m.data >= hoje:
@@ -103,7 +114,10 @@ def avaliar(marcacoes, faltas=None, agora=None):
         batidas = _batidas(m)
 
         if m.editado:
-            ajustes.append({'data': m.data, 'batidas': batidas})
+            if m.data in excecoes:
+                ajustes_perdoados.append({'data': m.data, 'batidas': batidas})
+            else:
+                ajustes.append({'data': m.data, 'batidas': batidas})
 
         if batidas >= BATIDAS_ESPERADAS:
             dias_completos.append(m.data)
@@ -127,6 +141,8 @@ def avaliar(marcacoes, faltas=None, agora=None):
         'no_prazo': no_prazo,
         'ajustes': ajustes,
         'total_ajustes': len(ajustes),
+        'ajustes_perdoados': ajustes_perdoados,
+        'total_perdoados': len(ajustes_perdoados),
         'limite_ajustes': LIMITE_AJUSTES_MES,
         'faltas': sorted(faltas),
         'total_faltas': len(faltas),
@@ -143,6 +159,8 @@ def nota_assiduidade_ponto(user, ano, mes, agora=None):
     """
     from tangerino.models import nao_bate_ponto
 
+    from .models import ExcecaoAssiduidade
+
     # Dispensado de bater ponto não é avaliado por assiduidade: a nota mediria
     # a ausência de algo que ninguém pediu para ele fazer.
     if nao_bate_ponto(user):
@@ -153,7 +171,8 @@ def nota_assiduidade_ponto(user, ano, mes, agora=None):
         return None
 
     faltas = faltas_injustificadas(user.tangerino_employee_id, ano, mes)
-    resultado = avaliar(marcacoes, faltas=faltas, agora=agora)
+    excecoes = ExcecaoAssiduidade.dias_do_mes(ano, mes)
+    resultado = avaliar(marcacoes, faltas=faltas, agora=agora, excecoes=excecoes)
     resultado['fonte'] = 'ponto'
     resultado['faltas_indisponiveis'] = faltas is None
 
@@ -184,10 +203,12 @@ def nota_assiduidade_ponto(user, ano, mes, agora=None):
         return Decimal('0'), PONTOS_ASSIDUIDADE, resultado
 
     restantes = LIMITE_AJUSTES_MES - resultado['total_ajustes']
+    perdoados = resultado['total_perdoados']
     resultado['motivo'] = (
         f"{resultado['dias_completos']} de {resultado['dias_uteis']} dias úteis com as "
         f"{BATIDAS_ESPERADAS} batidas"
-        + (f", {resultado['total_ajustes']} ajuste(s) usado(s) de {LIMITE_AJUSTES_MES}."
-           if resultado['total_ajustes'] else ', sem ajustes.'))
+        + (f", {resultado['total_ajustes']} ajuste(s) usado(s) de {LIMITE_AJUSTES_MES}"
+           if resultado['total_ajustes'] else ', sem ajustes')
+        + (f" ({perdoados} em dia de exceção, fora da conta)." if perdoados else '.'))
     resultado['ajustes_restantes'] = restantes
     return PONTOS_ASSIDUIDADE, PONTOS_ASSIDUIDADE, resultado

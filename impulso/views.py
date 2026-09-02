@@ -10,6 +10,7 @@ from django.contrib.auth import get_user_model
 from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_POST
@@ -21,7 +22,8 @@ from .ai import generate_feedback_summary
 from . import ciclos as ciclos_service
 from .models import (
     FAIXAS_DA_NOTA,
-    Ciclo, CicloMes, ConclusaoConteudo, ConteudoConectar, Ideia, ImpulsoFeedback,
+    Ciclo, CicloMes, ConclusaoConteudo, ConteudoConectar, ExcecaoAssiduidade, Ideia,
+    ImpulsoFeedback,
     Meta, MetaAnexo, MetaComentario, MetaItem, MetaVisualizacao, PontuacaoMensal,
     ProjetoAnexo, ProjetoFoco, TarefaProjeto,
 )
@@ -1177,8 +1179,70 @@ def assiduidade(request):
         'limite_ajustes': LIMITE_AJUSTES_MES,
         'pontos_max': PONTOS_ASSIDUIDADE,
         'is_gestor': is_impulso_manager(request.user),
+        'pode_excecao': request.user.is_superuser,
+        'excecoes': ExcecaoAssiduidade.objects.filter(
+            data__year=ano, data__month=mes).select_related('criado_por'),
         'active_tab': 'confiar',
     })
+
+
+@impulso_member_required
+@require_POST
+def assiduidade_excecao_add(request):
+    """Libera o ajuste de um dia. Só o SUPERADMIN.
+
+    Mexe na nota de todo mundo naquele mês, então não passa de superadmin nem
+    para gestor do módulo.
+    """
+    if not request.user.is_superuser:
+        messages.error(request, 'Apenas o superadmin cria exceção de assiduidade.')
+        return redirect('impulso:assiduidade')
+
+    dia = parse_date((request.POST.get('data') or '').strip())
+    motivo = (request.POST.get('motivo') or '').strip()
+
+    if not dia:
+        messages.error(request, 'Escolha o dia da exceção.')
+        return redirect(_url_assiduidade(request))
+    if not motivo:
+        # Sem motivo, em três meses ninguém lembra por que o dia foi liberado.
+        messages.error(request, 'Escreva o motivo — ele aparece na tela para todo mundo.')
+        return redirect(_url_assiduidade(request))
+
+    _, criada = ExcecaoAssiduidade.objects.get_or_create(
+        data=dia, defaults={'motivo': motivo[:200], 'criado_por': request.user})
+    if criada:
+        messages.success(
+            request, f'{dia:%d/%m/%Y} virou exceção: o ajuste desse dia deixa de contar.')
+    else:
+        messages.info(request, f'{dia:%d/%m/%Y} já era uma exceção.')
+    return redirect(_url_assiduidade(request, dia))
+
+
+@impulso_member_required
+@require_POST
+def assiduidade_excecao_excluir(request, excecao_id):
+    """Desfaz a exceção — o ajuste daquele dia volta a contar."""
+    if not request.user.is_superuser:
+        messages.error(request, 'Apenas o superadmin mexe nas exceções de assiduidade.')
+        return redirect('impulso:assiduidade')
+
+    excecao = get_object_or_404(ExcecaoAssiduidade, id=excecao_id)
+    dia = excecao.data
+    excecao.delete()
+    messages.success(request, f'{dia:%d/%m/%Y} deixou de ser exceção — '
+                              'o ajuste desse dia volta a contar.')
+    return redirect(_url_assiduidade(request, dia))
+
+
+def _url_assiduidade(request, dia=None):
+    """Volta para o mês que a pessoa estava vendo, não para o mês corrente."""
+    mes = _int_or_none(request.POST.get('mes') or request.GET.get('mes'), 1, 12)
+    ano = _int_or_none(request.POST.get('ano') or request.GET.get('ano'), 2000, 2100)
+    if dia is not None and not (mes and ano):
+        mes, ano = dia.month, dia.year
+    base = reverse('impulso:assiduidade')
+    return f'{base}?mes={mes}&ano={ano}' if (mes and ano) else base
 
 
 @impulso_member_required

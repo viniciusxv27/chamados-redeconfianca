@@ -1,5 +1,7 @@
-{# Linha de uma pessoa no quadro de gestão. Espera `item` no contexto.
-   Usada tanto nos cards de loja quanto na aba "Geral". #}
+{% comment %}
+Linha de uma pessoa no quadro de gestão. Espera `item` no contexto.
+Usada tanto nos cards de loja quanto na aba "Geral".
+{% endcomment %}
 <div class="px-5 py-3 flex items-center justify-between gap-3 flex-wrap">
     <div class="min-w-0">
         <p class="text-sm font-medium text-gray-800 truncate">
@@ -44,8 +46,10 @@
         <span class="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-semibold">
             <i class="fas fa-check mr-1"></i>Aprovado
         </span>
-        {# Rejeitar um certificado já aprovado: só gestor/SUPERADMIN chega aqui.
-           Volta a valer como pendência e a pessoa é avisada do motivo. #}
+        {% comment %}
+        Rejeitar um certificado já aprovado: só gestor/SUPERADMIN chega aqui.
+        Volta a valer como pendência e a pessoa é avisada do motivo.
+        {% endcomment %}
         <form method="post" action="{% url 'cursos:revisar_comprovante' item.envio.id %}" class="inline"
               onsubmit="var m = prompt('Motivo da rejeição do certificado (aparece para a pessoa):'); if (m === null) return false; this.observacao.value = m; return true;">
             {% csrf_token %}

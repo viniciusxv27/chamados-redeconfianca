@@ -1,4 +1,8 @@
-const CACHE_NAME = 'rede-confianca-v2';
+// v3: o custom.css entra na lista de pré-cache abaixo e é servido
+// cache-first sem revalidar. Sem trocar este nome, o celular continuaria
+// com a folha de estilo antiga para sempre — e foi uma regra dela que
+// travou o app. Trocar o nome apaga os caches velhos no activate.
+const CACHE_NAME = 'rede-confianca-v3';
 // Não pré-cacheamos páginas HTML (ex.: '/') — elas usam network-first para
 // sempre refletir a versão mais recente do servidor. Só assets estáticos aqui.
 const urlsToCache = [

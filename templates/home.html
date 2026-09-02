@@ -26,46 +26,60 @@
 
 <!-- Mobile Optimization -->
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+{% endblock %}
 
+{# O bloco extra_head acima nao existe no base.html: fica aqui so por historico. #}
+{% block extra_css %}
 <style>
-    #experience-window-modal {
-        opacity: 0;
-        transition: opacity 220ms ease;
+    /* Os dois popups aparecem por ANIMAÇÃO DE ENTRADA, não por classe.
+     *
+     * Antes o estado de repouso era opacity:0 e a visibilidade só chegava quando
+     * o JS adicionava .is-visible dentro de um requestAnimationFrame. Só que rAF
+     * não roda enquanto o documento não está sendo pintado — WebView abrindo em
+     * segundo plano, app trocado no meio do carregamento, aba oculta. Quando
+     * isso acontecia o popup ficava invisível MAS já sem o `hidden`, ou seja:
+     * um vidro transparente em cima da tela inteira engolindo todo toque. Tela
+     * cinza, nada visível, app travado.
+     *
+     * Agora o repouso é visível e o rAF continua ali, mas com o sinal
+     * invertido: ele LIGA a animação (classe .rc-anima) em vez de ligar a
+     * visibilidade. Sem quadro não há animação, e o popup simplesmente aparece
+     * — em vez de sumir. Só tirar o fill-mode não bastaria: animação parada no
+     * quadro 0 segura o opacity: 0 igual, porque a linha do tempo não anda.
+     */
+    #experience-window-modal.rc-anima:not(.hidden),
+    #mandatory-trails-modal.rc-anima:not(.hidden) {
+        animation: rc-popup-fundo 220ms ease;
     }
 
-    #experience-window-modal.is-visible {
-        opacity: 1;
+    #experience-window-modal.rc-anima:not(.hidden) .experience-window-card,
+    #mandatory-trails-modal.rc-anima:not(.hidden) .mandatory-trails-card {
+        animation: rc-popup-card 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
     }
 
-    #experience-window-modal .experience-window-card {
-        opacity: 0;
-        transform: translateY(16px) scale(0.98);
-        transition: transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 260ms ease;
+    @keyframes rc-popup-fundo { from { opacity: 0; } }
+    @keyframes rc-popup-card {
+        from { opacity: 0; transform: translateY(16px) scale(0.98); }
     }
 
-    #experience-window-modal.is-visible .experience-window-card {
-        opacity: 1;
-        transform: translateY(0) scale(1);
+    /* Saída: o pointer-events sai JUNTO com o início da animação, então mesmo
+     * que o setTimeout que põe o `hidden` nunca rode, o popup para de bloquear
+     * a tela na mesma hora. Fechar nunca pode depender de um timer. */
+    #experience-window-modal.esta-fechando,
+    #mandatory-trails-modal.esta-fechando {
+        animation: rc-popup-sai 220ms ease forwards;
+        pointer-events: none;
     }
 
-    #mandatory-trails-modal {
-        opacity: 0;
-        transition: opacity 220ms ease;
-    }
+    @keyframes rc-popup-sai { to { opacity: 0; } }
 
-    #mandatory-trails-modal.is-visible {
-        opacity: 1;
-    }
-
-    #mandatory-trails-modal .mandatory-trails-card {
-        opacity: 0;
-        transform: translateY(16px) scale(0.98);
-        transition: transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 260ms ease;
-    }
-
-    #mandatory-trails-modal.is-visible .mandatory-trails-card {
-        opacity: 1;
-        transform: translateY(0) scale(1);
+    @media (prefers-reduced-motion: reduce) {
+        #experience-window-modal.rc-anima:not(.hidden),
+        #mandatory-trails-modal.rc-anima:not(.hidden),
+        #experience-window-modal.rc-anima:not(.hidden) .experience-window-card,
+        #mandatory-trails-modal.rc-anima:not(.hidden) .mandatory-trails-card {
+            animation: none;
+        }
     }
 </style>
 {% endblock %}
@@ -731,20 +745,25 @@ document.addEventListener('DOMContentLoaded', function() {
     function closeExperienceModal() {
         if (!experienceModal || isExperienceModalClosing) return;
         isExperienceModalClosing = true;
-        experienceModal.classList.remove('is-visible');
+        // .esta-fechando já tira o pointer-events: a tela volta a responder na
+        // hora, mesmo se o setTimeout abaixo não rodar.
+        experienceModal.classList.add('esta-fechando');
 
         setTimeout(() => {
             experienceModal.classList.add('hidden');
+            experienceModal.classList.remove('esta-fechando', 'rc-anima');
             isExperienceModalClosing = false;
-        }, 260);
+        }, 240);
     }
 
     function openExperienceModal() {
         if (!experienceModal) return;
+        // Tirar o `hidden` já mostra o popup. O rAF abaixo só acrescenta a
+        // animação de entrada: se esse quadro não vier, perde-se o enfeite, não
+        // o popup.
         experienceModal.classList.remove('hidden');
-
-        requestAnimationFrame(() => {
-            experienceModal.classList.add('is-visible');
+        requestAnimationFrame(function () {
+            experienceModal.classList.add('rc-anima');
         });
     }
 
@@ -766,15 +785,18 @@ document.addEventListener('DOMContentLoaded', function() {
         function closeMandatoryModal() {
             if (isMandatoryClosing) return;
             isMandatoryClosing = true;
-            mandatoryTrailsModal.classList.remove('is-visible');
+            mandatoryTrailsModal.classList.add('esta-fechando');
             setTimeout(() => {
                 mandatoryTrailsModal.classList.add('hidden');
+                mandatoryTrailsModal.classList.remove('esta-fechando', 'rc-anima');
                 isMandatoryClosing = false;
-            }, 260);
+            }, 240);
         }
 
         mandatoryTrailsModal.classList.remove('hidden');
-        requestAnimationFrame(() => mandatoryTrailsModal.classList.add('is-visible'));
+        requestAnimationFrame(function () {
+            mandatoryTrailsModal.classList.add('rc-anima');
+        });
 
         if (mandatoryBackdrop) mandatoryBackdrop.addEventListener('click', closeMandatoryModal);
         if (mandatoryLater) mandatoryLater.addEventListener('click', closeMandatoryModal);

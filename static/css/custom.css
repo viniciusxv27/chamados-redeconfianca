@@ -384,36 +384,51 @@ button:disabled,
 
 /* --- Sistema reutilizável de popups (entrada/saída) --- */
 /* Uso: <div class="rc-modal ..."> ... <div class="rc-modal-card"> ... </div> </div>
-   Abrir: remover 'hidden' (display), no próximo frame adicionar 'is-open'.
-   Fechar: remover 'is-open', após ~280ms adicionar 'hidden'. */
-.rc-modal {
-    opacity: 0;
-    transition: opacity 220ms ease;
+   Abrir: remover 'hidden' e, dentro de um requestAnimationFrame, adicionar
+          'rc-anima' (é a animação de entrada).
+   Fechar: adicionar 'esta-fechando' e, ~240ms depois, 'hidden'.
+
+   O estado de repouso é VISÍVEL de propósito. A versão anterior nascia em
+   opacity:0 e só aparecia quando o JS adicionava 'is-open' dentro de um
+   requestAnimationFrame — e rAF não roda enquanto o documento não está sendo
+   pintado (WebView abrindo em segundo plano, app trocado no meio do
+   carregamento, aba oculta). Nesses casos o popup ficava invisível mas já sem
+   o 'hidden': um vidro transparente cobrindo a tela e engolindo todo toque.
+   Tela cinza, nada visível, app travado.
+
+   Repare que o rAF continua ali, mas com o sinal invertido: ele agora LIGA a
+   animação em vez de ligar a visibilidade. Se o quadro não vier, não há
+   animação e o popup simplesmente aparece — em vez de sumir. (Tirar o
+   fill-mode não bastava: uma animação parada no quadro 0 mantém o opacity: 0
+   do mesmo jeito, porque a linha do tempo não anda sem quadro.)
+
+   Pela mesma razão a saída tira o pointer-events já no primeiro instante: se o
+   setTimeout que põe o 'hidden' não rodar, a tela volta a responder assim
+   mesmo. Regra da casa: ver e fechar nunca podem depender de um quadro. */
+.rc-modal.rc-anima:not(.hidden) {
+    animation: rc-modal-fundo 220ms ease;
 }
 
-.rc-modal.is-open {
-    opacity: 1;
+.rc-modal.rc-anima:not(.hidden) .rc-modal-card {
+    animation: rc-modal-card 280ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.rc-modal .rc-modal-card {
-    opacity: 0;
-    transform: translateY(18px) scale(0.97);
-    transition: transform 280ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 260ms ease;
-    will-change: transform, opacity;
+@keyframes rc-modal-fundo { from { opacity: 0; } }
+@keyframes rc-modal-card {
+    from { opacity: 0; transform: translateY(18px) scale(0.97); }
 }
 
-.rc-modal.is-open .rc-modal-card {
-    opacity: 1;
-    transform: translateY(0) scale(1);
+.rc-modal.esta-fechando {
+    animation: rc-modal-sai 220ms ease forwards;
+    pointer-events: none;
 }
+
+@keyframes rc-modal-sai { to { opacity: 0; } }
 
 @media (prefers-reduced-motion: reduce) {
-    .rc-modal,
-    .rc-modal .rc-modal-card {
-        transition: none;
-    }
-    .rc-modal .rc-modal-card {
-        transform: none;
+    .rc-modal.rc-anima:not(.hidden),
+    .rc-modal.rc-anima:not(.hidden) .rc-modal-card {
+        animation: none;
     }
 }
 

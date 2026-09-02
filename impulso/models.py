@@ -1141,3 +1141,43 @@ class PontuacaoMensal(models.Model):
     @property
     def total_inovar(self):
         return self.p_ideias + self.p_ideia_aprovada
+
+
+class ExcecaoAssiduidade(models.Model):
+    """Um dia em que o ajuste de ponto não conta contra a assiduidade.
+
+    Serve para o dia em que a culpa não foi de ninguém — relógio fora do ar,
+    sistema do Tangerino travado, loja sem energia. Todo mundo teve de ajustar
+    o ponto daquele dia, e sem isso o mês inteiro perderia os 10 pontos por
+    algo que a pessoa não causou.
+
+    O alcance é estreito de propósito: o dia continua sendo dia útil, continua
+    precisando das 4 batidas e a falta injustificada continua zerando. A
+    exceção **só** tira o ajuste daquele dia da conta dos 3 do mês.
+
+    Quem cria é o SUPERADMIN, e o motivo é obrigatório: daqui a três meses
+    ninguém lembra por que 12/03 estava liberado.
+    """
+
+    data = models.DateField(unique=True, verbose_name='Dia')
+    motivo = models.CharField(
+        max_length=200, verbose_name='Motivo',
+        help_text='Aparece na tela para todo mundo. Ex.: "relógio de ponto fora do ar".')
+    criado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='+', verbose_name='Criado por')
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Exceção de assiduidade'
+        verbose_name_plural = 'Exceções de assiduidade'
+        ordering = ['-data']
+
+    def __str__(self):
+        return f'{self.data:%d/%m/%Y} — {self.motivo}'
+
+    @classmethod
+    def dias_do_mes(cls, ano, mes):
+        """Os dias liberados naquele mês, como set de date."""
+        return set(cls.objects.filter(data__year=ano, data__month=mes)
+                   .values_list('data', flat=True))

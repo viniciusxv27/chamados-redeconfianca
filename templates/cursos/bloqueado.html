@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load static %}
 {% block title %}Curso pendente{% endblock %}
 
 {% block content %}
@@ -51,7 +52,7 @@
                 </p>
                 {% endif %}
 
-                <form method="post" enctype="multipart/form-data"
+                <form method="post" enctype="multipart/form-data" data-encolher-imagem
                       action="{% url 'cursos:enviar_comprovante' curso.id %}"
                       class="flex flex-wrap items-center gap-2">
                     {% csrf_token %}
@@ -76,4 +77,9 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+{{ block.super }}
+<script src="{% static 'js/upload-imagem.js' %}" defer></script>
 {% endblock %}

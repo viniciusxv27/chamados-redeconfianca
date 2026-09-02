@@ -107,13 +107,19 @@
 
   function open() {
     modal.classList.remove('hidden');
-    requestAnimationFrame(function () { modal.classList.add('is-open'); });
+    // O rAF liga a ANIMAÇÃO, não a visibilidade: se o quadro não vier
+    // (WebView em segundo plano), o popup aparece sem enfeite em vez de
+    // virar um bloqueio invisível por cima da tela.
+    requestAnimationFrame(function () { modal.classList.add('rc-anima'); });
     if (blocking) document.body.style.overflow = 'hidden';
   }
 
   function close() {
-    modal.classList.remove('is-open');
-    setTimeout(function () { modal.classList.add('hidden'); }, 300);
+    modal.classList.add('esta-fechando');
+    setTimeout(function () {
+        modal.classList.add('hidden');
+        modal.classList.remove('esta-fechando', 'rc-anima');
+    }, 240);
     document.body.style.overflow = '';
   }
 

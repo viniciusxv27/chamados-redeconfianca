@@ -81,6 +81,22 @@ class ConfiguracaoTangerino(models.Model):
     entrada_manha_ate = models.TimeField(
         default=time(10, 0), verbose_name='Entrada da manhã — até')
 
+    # ── Sincronização automática ────────────────────────────────────────────
+    # Produção roda só gunicorn: não há cron nem worker separado. Quem dispara
+    # é a primeira requisição depois da hora marcada, e a corrida entre os 3
+    # workers é resolvida por UPDATE condicional (ver tangerino/agendador.py).
+    sincronizar_automatico = models.BooleanField(
+        default=False, verbose_name='Sincronizar sozinho todo dia',
+        help_text='Puxa jornadas, marcações, férias e saldo do Tangerino uma vez por dia.')
+    hora_sincronizacao = models.TimeField(
+        default=time(7, 0), verbose_name='Hora da sincronização automática',
+        help_text='A primeira visita ao portal a partir deste horário dispara.')
+    dias_sincronizacao = models.PositiveSmallIntegerField(
+        default=30, verbose_name='Dias de ponto para trás',
+        help_text='Janela de marcações que a sincronização automática recarrega.')
+    ultima_sincronizacao_automatica = models.DateTimeField(
+        null=True, blank=True, verbose_name='Última sincronização automática')
+
     atualizado_em = models.DateTimeField(auto_now=True)
     atualizado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,

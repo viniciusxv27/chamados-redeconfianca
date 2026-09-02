@@ -10,6 +10,8 @@ from django.shortcuts import redirect
 from django.urls import reverse
 
 from .ferias import esta_de_ferias
+from tangerino.agendador import disparar_se_esta_na_hora
+
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +34,12 @@ class BloqueioFeriasMiddleware:
         usuario = getattr(request, 'user', None)
         if usuario is None or not usuario.is_authenticated:
             return self.get_response(request)
+
+        # Sem cron em produção, quem acorda a sincronização diária é a primeira
+        # visita depois da hora marcada. Sai daqui em microssegundos: o
+        # agendador só consulta o banco uma vez por minuto por worker, e o
+        # trabalho de verdade acontece numa thread.
+        disparar_se_esta_na_hora()
 
         caminho = request.path
         if any(caminho.startswith(p) for p in LIBERADOS):

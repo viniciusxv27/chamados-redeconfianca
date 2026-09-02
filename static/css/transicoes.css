@@ -5,8 +5,9 @@
  * 1. Navegador novo (WebView Chromium 126+, iOS 18.2+): o próprio navegador faz
  *    a transição entre os dois documentos. O menu lateral e a barra do topo são
  *    capturados à parte e trocam sem piscar; só o conteúdo faz o fade.
- * 2. Navegador antigo: o transicoes.js marca <html class="rc-fallback"> e a
- *    mesma ideia acontece com opacidade, dentro de um documento só.
+ * 2. Navegador antigo: não anima nada do conteúdo — só a barrinha de
+ *    progresso do topo, que é o que dá resposta ao toque. Ver a explicação
+ *    logo abaixo: animar o conteúdo real foi o que travou o app.
  *
  * O conteúdo real da página nunca recebe transform: transform num ancestral
  * quebra position:fixed, e todo modal do portal depende disso. O deslize só
@@ -37,18 +38,23 @@
 
 /* ---- caminho do navegador antigo ---- */
 
-/* "backwards" e não "both": com fill para a frente a animação continua mandando
-   na opacidade depois de terminar, e o esmaecimento do clique logo abaixo nunca
-   apareceria — animação ganha de declaração normal na cascata. */
-html.rc-fallback #rc-conteudo { animation: rc-aparece 240ms ease-out backwards; }
-
-/* Ao clicar num link o conteúdo esmaece um pouco, para o toque ter resposta
-   imediata mesmo antes de a próxima página responder. Não vai a zero: página
-   apagada durante uma navegação lenta parece travamento. */
-html.rc-fallback.rc-saindo #rc-conteudo {
-    opacity: .45;
-    transition: opacity 130ms ease-in;
-}
+/* Aqui NÃO existe animação de entrada, de propósito.
+ *
+ * A primeira versão tinha, e derrubou o app: `animation: rc-aparece ...` deixa
+ * o elemento no quadro 0 (opacity: 0) enquanto a linha do tempo não anda — e
+ * ela não anda quando o documento não está sendo pintado (WebView abrindo em
+ * segundo plano, app trocado no meio do carregamento, aba oculta). A tela
+ * inteira ficava invisível com os overlays ainda capturando o toque.
+ *
+ * Tirar o fill-mode não resolve: parado no quadro 0 o opacity: 0 continua
+ * valendo. Animar transform em vez de opacity é pior ainda — transform em
+ * #rc-conteudo vira bloco de contenção e desloca todo position:fixed de
+ * dentro, inclusive os popups.
+ *
+ * Então o conteúdo real não anima. Quem tem navegador novo ganha a transição
+ * de verdade (feita pelo navegador, fora da árvore do documento); quem não
+ * tem, ganha a barrinha de progresso — que é o que faltava para o toque ter
+ * resposta. Nada que o usuário precise ver depende de um quadro acontecer. */
 
 /* ---- barra de progresso do topo ---- */
 
@@ -85,7 +91,5 @@ html.rc-fallback.rc-saindo #rc-conteudo {
     ::view-transition-group(*),
     ::view-transition-old(*),
     ::view-transition-new(*) { animation: none !important; }
-    html.rc-fallback #rc-conteudo { animation: none !important; }
-    html.rc-fallback.rc-saindo #rc-conteudo { opacity: 1; }
     #rc-barra span { animation: none !important; width: 35%; }
 }

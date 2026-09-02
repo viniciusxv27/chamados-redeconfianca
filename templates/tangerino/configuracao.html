@@ -276,9 +276,77 @@
             <i class="fas fa-rotate mr-1.5"></i>Sincronizar agora
         </button>
     </form>
-    <p class="text-xs text-gray-400 mt-2">
-        Também dá para agendar: <code class="bg-gray-100 px-1.5 py-0.5 rounded">manage.py sync_tangerino --dados</code>
+</div>
+
+<!-- Sincronização automática diária -->
+<div class="tg-card p-5 mt-4">
+    <h2 class="text-sm font-semibold text-gray-700 mb-1">
+        <i class="fas fa-clock text-cyan-600 mr-1.5"></i>Sincronização automática
+    </h2>
+    <p class="text-xs text-gray-400 mb-4">
+        Uma vez por dia o portal puxa sozinho jornadas, marcações, férias e saldo — na ordem
+        certa, que é a mesma do botão acima. Quem dispara é a primeira visita ao portal a partir
+        do horário marcado; se ninguém entrar, ela acontece quando a primeira pessoa entrar.
+        Roda em segundo plano: ninguém fica esperando a página.
     </p>
+
+    <form method="post" class="space-y-4">
+        {% csrf_token %}
+        <input type="hidden" name="secao" value="agendamento">
+
+        <label class="flex items-start gap-3 cursor-pointer">
+            <input type="checkbox" name="sincronizar_automatico" class="mt-0.5 rounded"
+                   {% if config.sincronizar_automatico %}checked{% endif %}>
+            <span>
+                <span class="block text-sm text-gray-800">Sincronizar sozinho todo dia</span>
+                <span class="block text-xs text-gray-400">
+                    Desmarque para voltar a sincronizar só pelo botão.
+                </span>
+            </span>
+        </label>
+
+        <div class="flex items-end gap-3 flex-wrap">
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Horário</label>
+                <input type="time" name="hora_sincronizacao"
+                       value="{{ config.hora_sincronizacao|time:'H:i' }}"
+                       class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Dias de ponto para trás</label>
+                <input type="number" name="dias_sincronizacao" min="1" max="365"
+                       value="{{ config.dias_sincronizacao }}"
+                       class="w-28 border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            </div>
+            <button class="px-5 py-2.5 bg-gray-900 text-white rounded-lg text-sm font-semibold hover:bg-black">
+                <i class="fas fa-check mr-1.5"></i>Salvar agendamento
+            </button>
+        </div>
+    </form>
+
+    <div class="mt-4 pt-4 border-t border-gray-100 text-xs text-gray-500">
+        {% if config.sincronizar_automatico %}
+            <p>
+                <i class="fas fa-circle text-[7px] text-green-500 mr-1.5 align-middle"></i>
+                Ligada para todo dia às <strong>{{ config.hora_sincronizacao|time:'H:i' }}</strong>.
+            </p>
+        {% else %}
+            <p><i class="fas fa-circle text-[7px] text-gray-300 mr-1.5 align-middle"></i>Desligada.</p>
+        {% endif %}
+        <p class="mt-1">
+            Última automática:
+            {% if config.ultima_sincronizacao_automatica %}
+                <strong>{{ config.ultima_sincronizacao_automatica|date:"d/m/Y H:i" }}</strong>
+            {% else %}
+                ainda não rodou
+            {% endif %}
+        </p>
+        <p class="mt-2 text-gray-400">
+            Se um dia houver cron de verdade no servidor, ele pode chamar
+            <code class="bg-gray-100 px-1.5 py-0.5 rounded">manage.py sync_tangerino --dados</code>
+            — os dois convivem sem sincronizar duas vezes.
+        </p>
+    </div>
 </div>
 
 <!-- Diagnóstico das tentativas de marcação -->

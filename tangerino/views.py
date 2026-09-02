@@ -951,6 +951,28 @@ def configuracao(request):
     from communications.models import CommunicationGroup
     config = ConfiguracaoTangerino.get()
 
+    if request.method == 'POST' and request.POST.get('secao') == 'agendamento':
+        # Formulário próprio, com os campos do agendamento e mais nada. Sem este
+        # desvio ele cairia no bloco de baixo, que lê 12 checkboxes de uma vez —
+        # e todas as que não vêm neste POST virariam False em silêncio.
+        config.sincronizar_automatico = request.POST.get('sincronizar_automatico') == 'on'
+        hora = parse_time(request.POST.get('hora_sincronizacao') or '')
+        if hora:
+            config.hora_sincronizacao = hora
+        bruto = (request.POST.get('dias_sincronizacao') or '').strip()
+        if bruto.isdigit() and 1 <= int(bruto) <= 365:
+            config.dias_sincronizacao = int(bruto)
+        config.atualizado_por = request.user
+        config.save()
+        if config.sincronizar_automatico:
+            messages.success(
+                request,
+                f'Sincronização automática ligada para todo dia às '
+                f'{config.hora_sincronizacao:%H:%M}.')
+        else:
+            messages.success(request, 'Sincronização automática desligada.')
+        return redirect('tangerino:configuracao')
+
     if request.method == 'POST':
         for campo in ('ativo', 'restrito_ao_grupo', 'permitir_bater_ponto', 'exigir_foto',
                       'permitir_ponto_atrasado', 'mostrar_widget_home',

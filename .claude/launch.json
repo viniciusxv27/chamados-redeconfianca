@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "portal",
+      "runtimeExecutable": "venv/bin/python",
+      "runtimeArgs": ["manage.py", "runserver", "127.0.0.1:8009", "--noreload"],
+      "port": 8009,
+      "url": "http://127.0.0.1:8009"
+    }
+  ]
+}
