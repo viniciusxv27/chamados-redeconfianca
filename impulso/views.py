@@ -4,6 +4,7 @@ Blocos: dashboard, CONFIAR (metas/kanban/feedback), CONECTAR (conteúdos/projeto
 INOVAR (ideias) e ACOMPANHAMENTO (faixas).
 """
 from datetime import date, timedelta
+from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
@@ -192,11 +193,42 @@ def _por_prazo(metas, hoje=None):
     return grupos
 
 
+# Filtros que o Kanban entende. Ficam listados aqui porque o "Voltar" da tela
+# da meta reconstrói a URL a partir da sessão — só o que está nesta tupla é
+# guardado, então filtro novo precisa ser acrescentado junto.
+FILTROS_KANBAN = ('colaborador',)
+CHAVE_FILTROS_KANBAN = 'impulso_kanban_filtros'
+
+
+def _guardar_filtros_kanban(request):
+    """Lembra como o Kanban estava, para o Voltar da meta devolver igual."""
+    escolhidos = {c: request.GET[c] for c in FILTROS_KANBAN
+                  if (request.GET.get(c) or '').strip()}
+    request.session[CHAVE_FILTROS_KANBAN] = escolhidos
+    return escolhidos
+
+
+def _url_kanban(request):
+    """O Kanban com os filtros que a pessoa tinha escolhido.
+
+    Guardar na sessão em vez de carregar a query na URL de cada card resolve
+    também quem chegou na meta por notificação ou link direto: o Voltar leva de
+    volta para a tela de onde a pessoa saiu, não para a lista sem filtro.
+    """
+    base = reverse('impulso:metas_kanban')
+    guardados = request.session.get(CHAVE_FILTROS_KANBAN) or {}
+    limpos = {c: str(v) for c, v in guardados.items()
+              if c in FILTROS_KANBAN and str(v).strip()}
+    return f'{base}?{urlencode(limpos)}' if limpos else base
+
+
 @impulso_member_required
 def metas_kanban(request):
     user = request.user
     gestor = is_impulso_manager(user)
     metas = _metas_do_usuario(user).select_related('colaborador', 'gestor')
+
+    _guardar_filtros_kanban(request)
 
     colaborador_id = _int_or_none(request.GET.get('colaborador'))
     if colaborador_id:
@@ -212,6 +244,8 @@ def metas_kanban(request):
                   if gestor else set())
     for m in metas:
         m.pode_apagar = m.pode_excluir(user, equipe_ids=equipe_ids)
+        # Mesma régua da tela da meta: quem edita, duplica.
+        m.pode_duplicar = m.pode_editar(user, equipe_ids=equipe_ids)
         m.novidades = m.novidades_para(user)
         m.tem_novidade = any(m.novidades.values())
         m.feitos, m.total_itens = m.progresso_itens
@@ -643,6 +677,7 @@ def meta_detail(request, meta_id):
         'pode_editar_meta': meta.pode_editar(request.user),
         'proxima_ocorrencia': meta.ocorrencias.first(),
         'notas_range': range(0, 6),
+        'url_voltar': _url_kanban(request),
         'active_tab': 'confiar',
     }
     return render(request, 'impulso/meta_detail.html', context)

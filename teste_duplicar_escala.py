@@ -144,6 +144,29 @@ try:
     t('e não aparece para o colaborador',
       f'/impulso/metas/{original.id}/duplicar/' not in html)
 
+    print('\n== BOTÃO DE DUPLICAR NO CARD DO KANBAN ==')
+    kanban = cg.get('/impulso/metas/').content.decode()
+    t('o card traz o botão de duplicar', 'imp-duplicar' in kanban)
+    t('apontando para a meta certa',
+      f'class="imp-duplicar' in kanban and f'data-id="{original.id}"' in kanban)
+    t('existe um formulário único na página', 'id="impFormDuplicar"' in kanban)
+    t('clique duplo não cria duas cópias', "dataset.enviando === '1'" in kanban)
+    t('o botão não dispara o arrastar do card',
+      'e.stopPropagation();' in kanban and "setAttribute('draggable', 'false')" in kanban)
+
+    kanban_colab = cc.get('/impulso/metas/').content.decode()
+    # O seletor do script aparece para todo mundo (não acha nada); o que
+    # importa é não existir botão nenhum no HTML.
+    t('colaborador não vê o botão no card',
+      'class="imp-duplicar' not in kanban_colab)
+    t('e nem o de excluir', 'class="imp-excluir' not in kanban_colab)
+
+    antes_kanban = Meta.objects.count()
+    r = cg.post(f'/impulso/metas/{original.id}/duplicar/', follow=True)
+    t('duplicar pelo card cria a cópia', Meta.objects.count() == antes_kanban + 1)
+    t('e abre a cópia na edição',
+      r.redirect_chain and '/editar/' in r.redirect_chain[-1][0], r.redirect_chain)
+
     print('\n== ESCALA: TEMA ESCURO ==')
     css = open('static/css/tema-escuro.css', encoding='utf-8').read()
     t('a grade tem borda no escuro', 'html.dark .esc-grid th' in css)

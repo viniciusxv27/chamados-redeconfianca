@@ -277,3 +277,62 @@ class ImportacaoContagem(models.Model):
 
     def __str__(self):
         return f'Importação de {self.executada_em:%d/%m/%Y %H:%M}'
+
+
+class SaldoInicialMes(models.Model):
+    """Com quanto o caixa da loja começa o mês.
+
+    Sem nenhuma linha aqui, o comportamento é o de sempre: o mês começa com o
+    saldo final do mês anterior — o dinheiro simplesmente continua na gaveta.
+    Isso cobre o caso normal e continua sendo o padrão.
+
+    A linha existe para os dois casos em que a corrente precisa ser cortada:
+
+    * **começo de uso** — a loja entra no controle no meio do ano e o saldo
+      anterior no portal é zero, mas a gaveta não está vazia;
+    * **acerto de fechamento** — o financeiro fechou o mês num valor e o
+      acumulado do portal ficou diferente por lançamento antigo corrigido
+      depois. Sem poder fixar a abertura, o erro se arrastaria para sempre.
+
+    Quem define é gestor: mexer aqui desloca o saldo de todos os dias dali para
+    frente.
+    """
+
+    loja = models.ForeignKey(
+        Sector, on_delete=models.CASCADE, related_name='saldos_iniciais_caixa',
+        verbose_name='Loja')
+    ano = models.PositiveSmallIntegerField(verbose_name='Ano')
+    mes = models.PositiveSmallIntegerField(verbose_name='Mês')
+    valor = _dec('Saldo inicial do mês')
+
+    motivo = models.CharField(
+        max_length=200, blank=True, verbose_name='Motivo',
+        help_text='Aparece na tela. Ex.: "abertura do controle" ou "acerto do fechamento".')
+    definido_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='saldos_iniciais_caixa', verbose_name='Definido por')
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Saldo inicial do mês'
+        verbose_name_plural = 'Saldos iniciais do mês'
+        ordering = ['loja__name', '-ano', '-mes']
+        constraints = [
+            models.UniqueConstraint(fields=['loja', 'ano', 'mes'],
+                                    name='contagem_caixa_saldo_inicial_unico'),
+        ]
+
+    def __str__(self):
+        return f'{self.loja.name} — {self.mes:02d}/{self.ano}: {self.valor}'
+
+    @classmethod
+    def do_mes(cls, loja_id, ano, mes):
+        """A linha daquele mês, ou None se o mês puxa do anterior."""
+        return cls.objects.filter(loja_id=loja_id, ano=ano, mes=mes).first()
+
+    @classmethod
+    def mapa_da_loja(cls, loja_id):
+        """{(ano, mes): valor} — usado no recálculo da corrente de saldos."""
+        return {(s.ano, s.mes): s.valor
+                for s in cls.objects.filter(loja_id=loja_id)}

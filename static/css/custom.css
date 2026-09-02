@@ -624,3 +624,99 @@ button:disabled,
         margin-left: 0 !important;
     }
 }
+
+/* --- Caixa de link do editor de comunicado (static/js/editor-link.js) --- */
+/* Não é window.prompt de propósito: WebView sem onJsPrompt devolve null sem
+   abrir nada, e o botão pareceria quebrado. */
+#rc-caixa-link {
+    position: fixed;
+    inset: 0;
+    z-index: 1100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+}
+#rc-caixa-link[hidden] { display: none !important; }
+
+.rc-link-fundo {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, .45);
+}
+.rc-link-card {
+    position: relative;
+    width: 100%;
+    max-width: 26rem;
+    background: #fff;
+    border-radius: .9rem;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, .25);
+    padding: 1.25rem;
+}
+.rc-link-titulo {
+    font-weight: 700;
+    font-size: .95rem;
+    color: #111827;
+    margin: 0 0 .75rem;
+}
+.rc-link-rot {
+    display: block;
+    font-size: .7rem;
+    color: #6b7280;
+    margin-bottom: .25rem;
+}
+#rc-caixa-link input[type="text"] {
+    width: 100%;
+    border: 1px solid #d1d5db;
+    border-radius: .5rem;
+    padding: .5rem .75rem;
+    font-size: .875rem;
+    margin-bottom: .75rem;
+}
+#rc-caixa-link input[type="text"]:focus {
+    outline: none;
+    border-color: #f97316;
+    box-shadow: 0 0 0 3px rgba(249, 115, 22, .15);
+}
+.rc-link-erro {
+    font-size: .75rem;
+    color: #b91c1c;
+    margin: -.25rem 0 .75rem;
+}
+.rc-link-botoes {
+    display: flex;
+    justify-content: flex-end;
+    gap: .5rem;
+}
+.rc-link-botoes button {
+    padding: .5rem 1rem;
+    border-radius: .5rem;
+    font-size: .875rem;
+    font-weight: 600;
+    border: 0;
+    cursor: pointer;
+}
+.rc-link-cancela { background: #f3f4f6; color: #4b5563; }
+.rc-link-ok { background: #f97316; color: #fff; }
+.rc-link-ok:hover { background: #ea580c; }
+
+/* O link precisa parecer link — dentro do editor e no comunicado publicado. */
+#message-editor a,
+.prose a {
+    color: #2563eb;
+    text-decoration: underline;
+    word-break: break-word;
+}
+#message-editor a:hover,
+.prose a:hover { color: #1d4ed8; }
+
+html.dark #rc-caixa-link .rc-link-card { background: #1f2937; }
+html.dark .rc-link-titulo { color: #f3f4f6; }
+html.dark #rc-caixa-link input[type="text"] {
+    background: #111827;
+    border-color: #374151;
+    color: #f3f4f6;
+}
+html.dark .rc-link-cancela { background: #374151; color: #d1d5db; }
+html.dark #message-editor a,
+html.dark .prose a { color: #60a5fa; }

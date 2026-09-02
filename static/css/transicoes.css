@@ -16,7 +16,6 @@
 
 @view-transition { navigation: auto; }
 
-@keyframes rc-aparece { from { opacity: 0; } to { opacity: 1; } }
 @keyframes rc-some    { from { opacity: 1; } to { opacity: 0; } }
 @keyframes rc-sobe    { from { opacity: 0; transform: translateY(8px); }
                         to   { opacity: 1; transform: none; } }

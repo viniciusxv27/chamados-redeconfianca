@@ -57,25 +57,28 @@ try:
     t('menu e topo não fazem cross-fade (o item ativo muda de tela para tela)',
       '::view-transition-old(rc-menu)' in css and 'animation: none' in css)
 
-    print('\n== O NAVEGADOR ANTIGO CAI NO PLANO B ==')
-    t('o JS marca o plano B', "classList.add('rc-fallback')" in js)
-    t('o teste de suporte é o pagereveal', "'onpagereveal' in window" in js)
-    t('o conteúdo aparece ao carregar', 'html.rc-fallback #rc-conteudo' in css)
-    # animação com fill para a frente continuaria mandando na opacidade depois
-    # de terminar e o esmaecimento do clique nunca apareceria
-    t('a animação de entrada não trava a opacidade',
-      'animation: rc-aparece 240ms ease-out backwards;' in css)
-    t('o conteúdo esmaece ao clicar', 'html.rc-fallback.rc-saindo #rc-conteudo' in css)
-    m = re.search(r'html\.rc-fallback\.rc-saindo #rc-conteudo \{\s*opacity: ([\d.]+)', css)
-    t('mas não apaga de vez: página preta parece travamento',
-      m and float(m.group(1)) >= 0.3, m.group(1) if m else '')
+    print('\n== O NAVEGADOR ANTIGO NÃO ANIMA O CONTEÚDO ==')
+    # Aqui havia uma animação de entrada no #rc-conteudo, e foi ela que travou
+    # o app: animação parada no quadro 0 segura opacity: 0 para sempre, e a
+    # linha do tempo não anda enquanto o documento não é pintado (WebView
+    # abrindo em segundo plano). A tela ficava invisível com os overlays ainda
+    # capturando o toque. Estas asserções existem para isso não voltar.
+    sem_comentarios = re.sub(r'/\*.*?\*/', '', css, flags=re.S)
+    t('nenhuma regra encosta no #rc-conteudo', '#rc-conteudo' not in sem_comentarios,
+      [l for l in sem_comentarios.splitlines() if '#rc-conteudo' in l])
+    t('nenhuma animação de opacidade no conteúdo real',
+      'rc-aparece' not in sem_comentarios)
+    t('o JS não marca mais plano B nenhum', 'rc-fallback' not in js)
+    t('e não esmaece o conteúdo', 'rc-saindo' not in js and 'rc-saindo' not in css)
+    t('quem tem navegador antigo ainda ganha a barrinha', '#rc-barra' in sem_comentarios)
 
-    print('\n== NADA PODE DEIXAR A TELA APAGADA ==')
+    print('\n== NADA PODE DEIXAR A TELA APAGADA NEM PRESA ==')
     t('volta por tempo se a navegação não acontecer', 'setTimeout(desfazer, 1400)' in js)
     t('volta ao voltar pelo histórico', "addEventListener('pageshow', desfazer)" in js)
     t('volta ao reabrir o app', "visibilityState === 'visible'" in js)
+    t('a barrinha nunca captura toque', 'pointer-events: none;' in css)
     t('quem pede menos movimento não recebe nenhum',
-      'prefers-reduced-motion: reduce' in css and 'prefers-reduced-motion' in js)
+      'prefers-reduced-motion: reduce' in css)
 
     print('\n== A BARRINHA SÓ APARECE EM LINK QUE TROCA DE TELA ==')
     for trecho, porque in [

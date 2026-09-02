@@ -8,15 +8,18 @@ from django.contrib.auth.decorators import login_required
 from django.db.models import Count, F, Sum
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from users.models import Sector
 
-from .models import ConfiguracaoContagem, ContagemCaixaDia, ImportacaoContagem
+from .models import (ConfiguracaoContagem, ContagemCaixaDia, ImportacaoContagem,
+                     SaldoInicialMes)
 from .permissions import e_gestor as _e_gestor
 from .permissions import lojas_do_usuario as _lojas_do_usuario
-from .servicos import importar, notificar_atencao, previa, recalcular_saldos
+from .servicos import (importar, notificar_atencao, previa, recalcular_saldos,
+                      saldo_de_abertura)
 
 logger = logging.getLogger(__name__)
 ZERO = Decimal('0.00')
@@ -151,9 +154,14 @@ def loja_detalhe(request, loja_id):
     existentes = {d.data: d for d in
                   ContagemCaixaDia.objects.filter(loja=loja, data__gte=primeiro, data__lte=ultimo)}
 
-    anterior = (ContagemCaixaDia.objects.filter(loja=loja, data__lt=primeiro)
-                .order_by('-data').first())
-    saldo_anterior = anterior.saldo if anterior else ZERO
+    abertura = SaldoInicialMes.do_mes(loja.id, ano, mes)
+    saldo_anterior, abertura_fixada = saldo_de_abertura(loja.id, ano, mes)
+
+    # O fechamento do mês anterior é mostrado junto mesmo quando a abertura foi
+    # fixada: é a diferença entre os dois que explica por que o valor mudou.
+    ultimo_do_anterior = (ContagemCaixaDia.objects.filter(loja=loja, data__lt=primeiro)
+                          .order_by('-data').first())
+    fechamento_anterior = ultimo_do_anterior.saldo if ultimo_do_anterior else ZERO
 
     # Todo dia do mês aparece, mesmo sem lançamento — a planilha original é
     # assim e é o que deixa o buraco visível. Dia sem lançamento mantém o saldo
@@ -177,6 +185,9 @@ def loja_detalhe(request, loja_id):
         'primeiro': primeiro, 'ultimo': ultimo,
         'hoje': hoje,
         'saldo_anterior': saldo_anterior,
+        'abertura': abertura,
+        'abertura_fixada': abertura_fixada,
+        'fechamento_anterior': fechamento_anterior,
         'meses': list(enumerate(
             ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho',
              'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'], start=1)),
@@ -309,3 +320,66 @@ def importacao(request):
             messages.error(request, f'Não consegui ler a planilha: {exc}')
 
     return render(request, 'contagem_caixa/importacao.html', contexto)
+
+@login_required
+@require_POST
+def salvar_saldo_inicial(request, loja_id):
+    """Fixa (ou solta) o saldo com que o mês começa.
+
+    Só gestor: mexer aqui desloca o saldo de todos os dias dali para frente, e
+    a corrente segue para os meses seguintes.
+    """
+    loja = get_object_or_404(Sector, id=loja_id)
+    if not _e_gestor(request.user):
+        messages.error(request, 'Só a gestão define o saldo inicial do mês.')
+        return redirect(_url_loja(loja.id, request))
+    if loja not in _lojas_do_usuario(request.user):
+        messages.error(request, 'Você não tem acesso ao caixa desta loja.')
+        return redirect('contagem_caixa:dashboard')
+
+    hoje = timezone.localdate()
+    try:
+        mes = int(request.POST.get('mes') or hoje.month)
+        ano = int(request.POST.get('ano') or hoje.year)
+        if not (1 <= mes <= 12 and 2000 <= ano <= 2100):
+            raise ValueError
+    except (TypeError, ValueError):
+        messages.error(request, 'Mês ou ano inválido.')
+        return redirect(_url_loja(loja.id, request))
+
+    origem = request.POST.get('origem')
+
+    if origem == 'anterior':
+        # Voltar a puxar do mês anterior é apagar a linha: sem linha, a
+        # corrente segue normalmente.
+        apagadas, _ = SaldoInicialMes.objects.filter(loja=loja, ano=ano, mes=mes).delete()
+        recalcular_saldos(loja.id, desde=date(ano, mes, 1))
+        messages.success(
+            request,
+            f'{mes:02d}/{ano} volta a puxar o saldo do fechamento do mês anterior.'
+            if apagadas else f'{mes:02d}/{ano} já puxava do mês anterior.')
+        return redirect(_url_loja(loja.id, request, ano, mes))
+
+    bruto = (request.POST.get('valor') or '').strip()
+    try:
+        valor = _para_decimal(bruto) if bruto else ZERO
+    except ValorInvalido:
+        messages.error(request, f'“{bruto}” não é um valor válido.')
+        return redirect(_url_loja(loja.id, request, ano, mes))
+
+    SaldoInicialMes.objects.update_or_create(
+        loja=loja, ano=ano, mes=mes,
+        defaults={'valor': valor,
+                  'motivo': (request.POST.get('motivo') or '')[:200],
+                  'definido_por': request.user})
+    recalcular_saldos(loja.id, desde=date(ano, mes, 1))
+    messages.success(request, f'{mes:02d}/{ano} passa a começar com {valor}.')
+    return redirect(_url_loja(loja.id, request, ano, mes))
+
+
+def _url_loja(loja_id, request, ano=None, mes=None):
+    """Volta para a mesma loja e mês que estavam na tela."""
+    base = reverse('contagem_caixa:loja_detalhe', args=[loja_id])
+    mes = mes or request.POST.get('mes')
+    ano = ano or request.POST.get('ano')
+    return f'{base}?mes={mes}&ano={ano}' if (mes and ano) else base

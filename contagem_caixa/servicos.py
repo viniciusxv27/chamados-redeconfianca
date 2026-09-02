@@ -2,6 +2,7 @@
 import logging
 import re
 import unicodedata
+from datetime import date
 from decimal import Decimal
 
 from django.utils import timezone
@@ -228,17 +229,35 @@ def recalcular_saldos(loja_id, desde=None):
 
     O saldo é encadeado (saldo do dia = saldo anterior + valor real), então
     mexer num dia do meio obriga a refazer todos os seguintes.
+
+    Mês com saldo inicial definido (``SaldoInicialMes``) corta a corrente: a
+    abertura vale em vez do fechamento do mês anterior. Sem linha nenhuma, nada
+    muda — o mês continua começando de onde o anterior parou.
     """
+    from .models import SaldoInicialMes
+
+    aberturas = SaldoInicialMes.mapa_da_loja(loja_id)
+
     qs = ContagemCaixaDia.objects.filter(loja_id=loja_id).order_by('data')
     if desde:
         anterior = (qs.filter(data__lt=desde).order_by('-data').first())
         saldo = anterior.saldo if anterior else ZERO
+        # De qual mês vem esse saldo: se for o mesmo mês do primeiro dia a
+        # recalcular, a abertura já foi aplicada lá atrás e não pode entrar de
+        # novo no meio do mês.
+        mes_corrente = (anterior.data.year, anterior.data.month) if anterior else None
         qs = qs.filter(data__gte=desde)
     else:
         saldo = ZERO
+        mes_corrente = None
 
     alterados = []
     for dia in qs:
+        chave = (dia.data.year, dia.data.month)
+        if chave != mes_corrente:
+            mes_corrente = chave
+            if chave in aberturas:
+                saldo = aberturas[chave]
         saldo = dia.calcular_saldo(saldo)
         if dia.saldo != saldo:
             dia.saldo = saldo
@@ -246,6 +265,25 @@ def recalcular_saldos(loja_id, desde=None):
     if alterados:
         ContagemCaixaDia.objects.bulk_update(alterados, ['saldo'], batch_size=500)
     return len(alterados)
+
+
+def saldo_de_abertura(loja_id, ano, mes):
+    """(valor, definido) com que o mês começa.
+
+    ``definido`` diz se veio de uma abertura fixada ou do fechamento do mês
+    anterior — a tela mostra as duas coisas de forma diferente.
+    """
+    from .models import SaldoInicialMes
+
+    abertura = SaldoInicialMes.do_mes(loja_id, ano, mes)
+    if abertura is not None:
+        return abertura.valor, True
+
+    primeiro = date(ano, mes, 1)
+    anterior = (ContagemCaixaDia.objects
+                .filter(loja_id=loja_id, data__lt=primeiro)
+                .order_by('-data').first())
+    return (anterior.saldo if anterior else ZERO), False
 
 
 def gerentes_da_loja(setor):

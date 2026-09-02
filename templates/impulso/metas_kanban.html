@@ -151,6 +151,35 @@
 })();
 </script>
 
+{# Duplicar: um formulário só para a página inteira, com o action trocado no clique. #}
+<form method="post" id="impFormDuplicar" class="hidden">{% csrf_token %}</form>
+
+<script>
+(function () {
+    var form = document.getElementById('impFormDuplicar');
+    if (!form) return;
+
+    document.querySelectorAll('.imp-duplicar').forEach(function (b) {
+        b.addEventListener('click', function (e) {
+            e.stopPropagation();          // não dispara o arrastar do card
+            e.preventDefault();
+            if (b.dataset.enviando === '1') return;   // clique duplo criaria duas cópias
+            b.dataset.enviando = '1';
+            b.innerHTML = '<i class="fas fa-spinner fa-spin text-xs"></i>';
+            form.action = '/impulso/metas/' + b.dataset.id + '/duplicar/';
+            form.submit();
+        });
+    });
+
+    // O botão vive dentro de um card arrastável: sem isso, começar a arrastar
+    // a partir dele cancelaria o clique.
+    document.querySelectorAll('.imp-duplicar, .imp-excluir').forEach(function (b) {
+        b.addEventListener('mousedown', function (e) { e.stopPropagation(); });
+        b.setAttribute('draggable', 'false');
+    });
+})();
+</script>
+
 <!-- Confirmação de exclusão: mostra o que vai junto antes de apagar -->
 <div id="impModalExcluir" class="hidden fixed inset-0 z-[9990] bg-black/60 flex items-center justify-center p-4">
     <form method="post" id="impFormExcluir" class="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">

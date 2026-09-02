@@ -37,14 +37,106 @@
         <p class="text-2xl font-bold {% if total_atencao %}text-amber-600{% else %}text-gray-300{% endif %} tabular">{{ total_atencao }}</p>
     </div>
     <div class="cx-card p-4">
-        <p class="text-xs text-gray-500">Saldo anterior</p>
-        <p class="text-2xl font-bold text-gray-500 tabular">{{ saldo_anterior|brl_zero }}</p>
+        <p class="text-xs text-gray-500">
+            {% if abertura_fixada %}Saldo inicial do mês{% else %}Saldo anterior{% endif %}
+        </p>
+        <p class="text-2xl font-bold {% if abertura_fixada %}text-violet-600{% else %}text-gray-500{% endif %} tabular">
+            {{ saldo_anterior|brl_zero }}
+        </p>
+        <p class="text-[11px] {% if abertura_fixada %}text-violet-500{% else %}text-gray-400{% endif %} mt-0.5">
+            {% if abertura_fixada %}fixado{% else %}vindo do mês anterior{% endif %}
+        </p>
     </div>
     <div class="cx-card p-4">
         <p class="text-xs text-gray-500">Período</p>
         <p class="text-sm font-semibold text-gray-700 mt-1">{{ primeiro|date:"d/m" }} a {{ ultimo|date:"d/m/Y" }}</p>
     </div>
 </div>
+
+{% if e_gestor %}
+{# Abertura do mês: só gestor, porque mexer aqui desloca o saldo de todos os dias seguintes. #}
+<div class="cx-card p-5 mb-4">
+    <div class="flex items-start justify-between gap-3 flex-wrap mb-1">
+        <h2 class="font-semibold text-gray-800 text-sm">
+            <i class="fas fa-play text-violet-600 mr-1.5"></i>Com quanto o mês começa
+        </h2>
+        <span class="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 font-medium">
+            só gestão
+        </span>
+    </div>
+    <p class="text-xs text-gray-400 mb-4">
+        Normalmente o mês começa com o saldo que sobrou do anterior — é o padrão e não precisa
+        mexer. Fixe um valor quando a loja entra no controle no meio do caminho, ou quando o
+        financeiro fechou o mês num número diferente do acumulado aqui. Mudar isso desloca o
+        saldo de todos os dias daqui para a frente.
+    </p>
+
+    <form method="post" action="{% url 'contagem_caixa:salvar_saldo_inicial' loja.id %}"
+          class="space-y-3">
+        {% csrf_token %}
+        <input type="hidden" name="mes" value="{{ mes }}">
+        <input type="hidden" name="ano" value="{{ ano }}">
+
+        <label class="flex items-start gap-2 cursor-pointer">
+            <input type="radio" name="origem" value="anterior" class="mt-1"
+                   {% if not abertura_fixada %}checked{% endif %} onchange="cxModoAbertura()">
+            <span class="text-sm text-gray-800">
+                Puxar do fechamento do mês anterior
+                <span class="block text-xs text-gray-400">
+                    Hoje isso dá {{ fechamento_anterior|brl_zero }}.
+                </span>
+            </span>
+        </label>
+
+        <label class="flex items-start gap-2 cursor-pointer">
+            <input type="radio" name="origem" value="fixo" class="mt-1"
+                   {% if abertura_fixada %}checked{% endif %} onchange="cxModoAbertura()">
+            <span class="text-sm text-gray-800">
+                Definir o saldo inicial deste mês
+                {% if abertura and abertura.definido_por %}
+                <span class="block text-xs text-gray-400">
+                    definido por {{ abertura.definido_por.get_full_name|default:abertura.definido_por.username }}
+                    em {{ abertura.atualizado_em|date:"d/m/Y" }}
+                </span>
+                {% endif %}
+            </span>
+        </label>
+
+        <div id="cxCamposAbertura" class="flex items-end gap-2 flex-wrap pl-6">
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Valor</label>
+                <input type="text" name="valor" inputmode="decimal"
+                       value="{% if abertura %}{{ abertura.valor }}{% endif %}"
+                       placeholder="0,00"
+                       class="w-36 border border-gray-300 rounded-lg px-3 py-1.5 text-sm tabular">
+            </div>
+            <div class="flex-1 min-w-[200px]">
+                <label class="block text-xs text-gray-500 mb-1">Motivo (opcional)</label>
+                <input type="text" name="motivo" maxlength="200"
+                       value="{% if abertura %}{{ abertura.motivo }}{% endif %}"
+                       placeholder="Ex.: abertura do controle"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm">
+            </div>
+        </div>
+
+        <button class="px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700">
+            <i class="fas fa-check mr-1"></i>Salvar
+        </button>
+    </form>
+</div>
+
+<script>
+// Os campos só fazem sentido no modo "definir": deixá-los ativos no modo
+// "puxar do anterior" faria parecer que o valor digitado vale alguma coisa.
+function cxModoAbertura() {
+    var fixo = document.querySelector('input[name="origem"][value="fixo"]').checked;
+    var campos = document.getElementById('cxCamposAbertura');
+    campos.style.opacity = fixo ? '1' : '.45';
+    campos.querySelectorAll('input').forEach(function (i) { i.disabled = !fixo; });
+}
+cxModoAbertura();
+</script>
+{% endif %}
 
 <div class="cx-card overflow-hidden">
     <div class="px-5 py-3 border-b border-gray-100 flex items-center justify-between flex-wrap gap-2">

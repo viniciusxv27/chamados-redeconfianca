@@ -1,4 +1,5 @@
 import re
+from html import unescape
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -392,6 +393,37 @@ def _cor_do_titulo(request):
     return bruto if COR_HEX.match(bruto) else ''
 
 
+# Esquemas que não podem virar href: um "javascript:" num link publicado roda
+# script no navegador de quem só clicou no comunicado. A checagem do editor
+# (static/js/editor-link.js) já barra na origem; esta aqui é a que vale, porque
+# é a única que um POST forjado não consegue pular.
+HREF_PERIGOSO = re.compile(
+    r"""href\s*=\s*(?P<aspas>["'])(?P<valor>[^"']*)(?P=aspas)""", re.I)
+ESQUEMA_PERIGOSO = re.compile(r'^(javascript|vbscript|data|file)$', re.I)
+
+
+def _limpar_links(html):
+    """Tira o href de links com esquema perigoso, preservando o resto do HTML.
+
+    Não é um sanitizador completo — o corpo do comunicado é HTML de editor e
+    quem cria já precisa de permissão de gestão. O alvo aqui é só o vetor que a
+    função de link introduz.
+    """
+    if not html:
+        return html
+
+    def trocar(m):
+        valor = unescape(m.group('valor'))
+        # "java\tscript:" e "  javascript :" contam como javascript.
+        limpo = re.sub(r'[\s\x00-\x20]+', '', valor)
+        esquema = limpo.split(':', 1)[0] if ':' in limpo else ''
+        if esquema and ESQUEMA_PERIGOSO.match(esquema):
+            return 'data-href-removido="1"'
+        return m.group(0)
+
+    return HREF_PERIGOSO.sub(trocar, html)
+
+
 @login_required
 def create_communication_view(request):
     """Criar novo comunicado"""
@@ -401,7 +433,7 @@ def create_communication_view(request):
     
     if request.method == 'POST':
         title = request.POST.get('title')
-        message = request.POST.get('message')
+        message = _limpar_links(request.POST.get('message'))
         send_to_all = request.POST.get('send_to_all') == 'on'
         recipient_ids = request.POST.getlist('recipients')
         communication_group_ids = request.POST.getlist('communication_groups')  # Múltiplos grupos
@@ -553,7 +585,7 @@ def edit_communication_view(request, communication_id):
     if request.method == 'POST':
         communication.title = request.POST.get('title')
         communication.title_color = _cor_do_titulo(request)
-        communication.message = request.POST.get('message')
+        communication.message = _limpar_links(request.POST.get('message'))
         communication.send_to_all = request.POST.get('send_to_all') == 'on'
         communication.is_pinned = request.POST.get('is_pinned') == 'on'
         communication.is_popup = request.POST.get('is_popup') == 'on'

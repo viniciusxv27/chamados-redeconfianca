@@ -18,6 +18,15 @@ diferentes do cartão na primeira alteração.
             </span>
             {% endif %}
             <span class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{{ m.get_recorrencia_display }}</span>
+            {% if m.pode_duplicar %}
+            {# Posta num formulário único da página: form dentro de cada card criaria 40 formulários e ainda brigaria com o arrastar. #}
+            <button type="button" class="imp-duplicar w-6 h-6 rounded-md text-gray-300 hover:text-orange-600 hover:bg-orange-50 flex items-center justify-center transition-colors"
+                    title="Duplicar esta atividade"
+                    data-id="{{ m.id }}"
+                    data-titulo="{{ m.titulo }}">
+                <i class="fas fa-copy text-xs"></i>
+            </button>
+            {% endif %}
             {% if m.pode_apagar %}
             {% with imp=m.impacto_da_exclusao %}
             <button type="button" class="imp-excluir w-6 h-6 rounded-md text-gray-300 hover:text-red-600 hover:bg-red-50 flex items-center justify-center transition-colors"

@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load static %}
 
 {% block title %}Criar Comunicado - Rede de Confiança{% endblock %}
 
@@ -173,6 +174,7 @@
 
 {% block extra_js %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+<script src="{% static 'js/editor-link.js' %}" defer></script>
 {% endblock %}
 
 {% block content %}
@@ -317,6 +319,15 @@
                                         <i class="fas fa-align-right text-gray-600"></i>
                                     </button>
                                     <div class="w-px h-6 bg-gray-300 mx-2"></div>
+                                    {# onmousedown/preventDefault: sem isso o clique tira o foco do editor e a selecao se perde antes do onclick rodar. #}
+                                    <button type="button" onmousedown="event.preventDefault()" onclick="rcAbrirLink()"
+                                            class="p-2 hover:bg-gray-200 rounded" title="Inserir ou editar link">
+                                        <i class="fas fa-link text-gray-600"></i>
+                                    </button>
+                                    <button type="button" onmousedown="event.preventDefault()" onclick="rcTirarLink()"
+                                            class="p-2 hover:bg-gray-200 rounded" title="Tirar o link">
+                                        <i class="fas fa-link-slash text-gray-600"></i>
+                                    </button>
 
                                     <!-- Cor do texto selecionado no corpo -->
                                     <label class="flex items-center gap-1 p-2 hover:bg-gray-200 rounded cursor-pointer"
@@ -1344,6 +1355,10 @@ function handlePaste(event) {
     // Get pasted data
     const paste = (event.clipboardData || window.clipboardData).getData('text');
     
+    // URL colada sozinha já entra clicável — é assim que quase todo link
+    // chega ao comunicado. O resto continua entrando como texto puro.
+    if (typeof rcLinkDePaste === 'function' && rcLinkDePaste(paste)) return;
+
     // Insert as plain text to avoid unwanted formatting
     document.execCommand('insertText', false, paste);
     syncContent();
