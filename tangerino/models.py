@@ -136,6 +136,11 @@ class ConfiguracaoTangerino(models.Model):
         from users.module_access import user_has_module
         if user_has_module(user, 'ponto'):
             return True
+        # Mesma ideia para quem administra o módulo: sem isso, dar a gestão do
+        # ponto para a ADMINISTRAÇÃO e esquecer de pôr a pessoa no grupo
+        # liberado deixaria a permissão existindo só no papel.
+        if getattr(user, 'can_manage_rh', lambda: False)():
+            return True
         if not self.restrito_ao_grupo:
             return True
         if not self.grupo_id:

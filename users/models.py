@@ -826,7 +826,22 @@ class User(AbstractUser):
         onde o estrago aparece depois.
         """
         return self.is_superuser or self.hierarchy == 'SUPERADMIN'
-    
+
+    def can_manage_rh(self):
+        """Administra os módulos de pessoal, junto com o SUPERADMIN.
+
+        Vale para folha de ponto, documentos, contracheque, ponto da equipe,
+        férias e escala. A hierarquia ADMINISTRAÇÃO faz esse trabalho no dia a
+        dia e vinha esbarrando em tela de superadmin para tudo.
+
+        A regra mora aqui porque seis telas em quatro apps fazem exatamente
+        esta pergunta — seis cópias divergiriam na primeira mudança. O que
+        continua fora: a configuração do módulo de ponto (liga/desliga, regras
+        de bloqueio) e a edição do cadastro de funcionário, que seguem só com
+        o SUPERADMIN.
+        """
+        return bool(self.is_superuser or self.hierarchy in ('SUPERADMIN', 'ADMIN'))
+
     @property
     def calculated_balance_cs(self):
         """Calcula o saldo C$ baseado apenas em transações aprovadas"""

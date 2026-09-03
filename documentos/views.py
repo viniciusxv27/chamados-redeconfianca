@@ -25,8 +25,17 @@ HIERARCHY_RANK = {
 }
 
 
-def is_superadmin(user):
-    return HIERARCHY_RANK.get(getattr(user, 'hierarchy', 'PADRAO'), 0) >= HIERARCHY_RANK['SUPERADMIN']
+def pode_administrar(user):
+    """Quem gere este módulo: SUPERADMIN e a hierarquia ADMINISTRAÇÃO.
+
+    O nome antigo era `pode_administrar`, e passou a mentir quando a
+    ADMINISTRAÇÃO entrou: uma função com esse nome liberando quem não é
+    superadmin é armadilha para quem ler o código depois. A regra em si mora em
+    users.models.User.can_manage_rh.
+    """
+    if not getattr(user, 'is_authenticated', False):
+        return False
+    return bool(getattr(user, 'can_manage_rh', lambda: False)())
 
 
 def get_client_ip(request):
@@ -98,7 +107,7 @@ def my_documents(request):
         'status': status,
         'pending_total': pending_total,
         'signed_total': signed_total,
-        'is_admin': is_superadmin(request.user),
+        'is_admin': pode_administrar(request.user),
     })
 
 
@@ -110,11 +119,11 @@ def document_detail(request, pk):
         pk=pk,
     )
 
-    if not signature.document.is_visible and not is_superadmin(request.user):
+    if not signature.document.is_visible and not pode_administrar(request.user):
         messages.error(request, 'Este documento ainda não foi liberado para visualização.')
         return redirect('documentos:my_documents')
 
-    if signature.user != request.user and not is_superadmin(request.user):
+    if signature.user != request.user and not pode_administrar(request.user):
         messages.error(request, 'Você não tem permissão para acessar este documento.')
         return redirect('documentos:my_documents')
 
@@ -136,7 +145,7 @@ def document_pdf(request, pk):
     """
     signature = get_object_or_404(DocumentSignature.objects.select_related('document'), pk=pk)
 
-    if signature.user != request.user and not is_superadmin(request.user):
+    if signature.user != request.user and not pode_administrar(request.user):
         return HttpResponse('Sem permissão.', status=403)
 
     pdf_bytes = _read_pdf_bytes(signature.document.pdf_file)
@@ -153,7 +162,7 @@ def document_signed_pdf(request, pk):
     """Baixa o PDF assinado (original + folha de Certificado de Assinatura)."""
     signature = get_object_or_404(DocumentSignature.objects.select_related('document', 'user'), pk=pk)
 
-    if signature.user != request.user and not is_superadmin(request.user):
+    if signature.user != request.user and not pode_administrar(request.user):
         return HttpResponse('Sem permissão.', status=403)
 
     if not signature.is_signed:
@@ -286,7 +295,7 @@ def api_sign_document(request, pk):
 # ══════════════════════════════════════════════════════════════════════════════
 
 def _require_admin(request):
-    if not is_superadmin(request.user):
+    if not pode_administrar(request.user):
         messages.error(request, 'Acesso restrito.')
         return False
     return True

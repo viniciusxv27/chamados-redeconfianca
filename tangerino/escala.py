@@ -34,10 +34,14 @@ def e_gerente(user):
 
 
 def e_gestor_global(user):
-    """SUPERADMIN ou indicado em EscalaConfig: enxerga/edita todos os setores."""
+    """Enxerga/edita a escala de todos os setores.
+
+    SUPERADMIN, a hierarquia ADMINISTRAÇÃO (ver User.can_manage_rh) e quem for
+    indicado em EscalaConfig. O gerente de loja continua vendo só a dele.
+    """
     if not (user and getattr(user, 'is_authenticated', False)):
         return False
-    if user.is_superuser or getattr(user, 'hierarchy', '') == 'SUPERADMIN':
+    if getattr(user, 'can_manage_rh', lambda: False)():
         return True
     from .models import EscalaConfig
     return EscalaConfig.get().gestores.filter(pk=user.pk).exists()

@@ -34,8 +34,17 @@ User = get_user_model()
 
 
 def e_gestor(user):
-    """Quem enxerga o ponto/férias de todo mundo."""
-    return bool(user.is_superuser or getattr(user, 'hierarchy', '') == 'SUPERADMIN')
+    """Quem enxerga e gere o ponto/férias de todo mundo.
+
+    SUPERADMIN e a hierarquia ADMINISTRAÇÃO (ver User.can_manage_rh). Abre o
+    ponto da equipe, as férias da equipe, os vínculos com o Tangerino e a
+    sincronização. Não abre a configuração do módulo: aquela tela liga e
+    desliga o bloqueio de navegação e o registro de ponto, e continua só com o
+    superusuário.
+    """
+    if not getattr(user, 'is_authenticated', False):
+        return False
+    return bool(getattr(user, 'can_manage_rh', lambda: False)())
 
 
 def modulo_liberado(view_func):

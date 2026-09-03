@@ -23,8 +23,17 @@ HIERARCHY_RANK = {
 }
 
 
-def is_superadmin(user):
-    return HIERARCHY_RANK.get(user.hierarchy, 0) >= HIERARCHY_RANK['SUPERADMIN']
+def pode_administrar(user):
+    """Quem gere este módulo: SUPERADMIN e a hierarquia ADMINISTRAÇÃO.
+
+    O nome antigo era `pode_administrar`, e passou a mentir quando a
+    ADMINISTRAÇÃO entrou: uma função com esse nome liberando quem não é
+    superadmin é armadilha para quem ler o código depois. A regra em si mora em
+    users.models.User.can_manage_rh.
+    """
+    if not getattr(user, 'is_authenticated', False):
+        return False
+    return bool(getattr(user, 'can_manage_rh', lambda: False)())
 
 
 def _read_pdf_bytes(field_file):
@@ -95,7 +104,7 @@ def payslip_detail(request, pk):
     payslip = get_object_or_404(Payslip, pk=pk)
 
     # Verificar permissão: dono ou superadmin
-    if payslip.user != request.user and not is_superadmin(request.user):
+    if payslip.user != request.user and not pode_administrar(request.user):
         messages.error(request, 'Sem permissão para visualizar este contracheque.')
         return redirect('contracheque:my_payslips')
 
@@ -109,7 +118,7 @@ def payslip_pdf(request, pk):
     """Download/visualização do PDF do contracheque (somente a página do funcionário)."""
     payslip = get_object_or_404(Payslip, pk=pk)
 
-    if payslip.user != request.user and not is_superadmin(request.user):
+    if payslip.user != request.user and not pode_administrar(request.user):
         messages.error(request, 'Sem permissão.')
         return redirect('contracheque:my_payslips')
 
@@ -160,7 +169,7 @@ def payslip_signed_pdf(request, pk):
     """Download do contracheque + folha 'Certificado de Assinatura Digital'."""
     payslip = get_object_or_404(Payslip, pk=pk)
 
-    if payslip.user != request.user and not is_superadmin(request.user):
+    if payslip.user != request.user and not pode_administrar(request.user):
         messages.error(request, 'Sem permissão.')
         return redirect('contracheque:my_payslips')
 
@@ -223,7 +232,7 @@ def payslip_signed_pdf(request, pk):
 @login_required
 def admin_payslips(request):
     """Painel administrativo de contracheques (SUPERADMIN)."""
-    if not is_superadmin(request.user):
+    if not pode_administrar(request.user):
         messages.error(request, 'Acesso restrito.')
         return redirect('contracheque:my_payslips')
 
@@ -260,7 +269,7 @@ def admin_payslips(request):
 @login_required
 def admin_import(request):
     """Página de importação de PDFs de contracheque (SUPERADMIN)."""
-    if not is_superadmin(request.user):
+    if not pode_administrar(request.user):
         messages.error(request, 'Acesso restrito.')
         return redirect('contracheque:my_payslips')
 
@@ -281,7 +290,7 @@ def api_import_payslip(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'Método não permitido'}, status=405)
 
-    if not is_superadmin(request.user):
+    if not pode_administrar(request.user):
         return JsonResponse({'error': 'Acesso restrito'}, status=403)
 
     user_id = request.POST.get('user_id')
@@ -423,7 +432,7 @@ def api_bulk_import(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'Método não permitido'}, status=405)
 
-    if not is_superadmin(request.user):
+    if not pode_administrar(request.user):
         return JsonResponse({'error': 'Acesso restrito'}, status=403)
 
     month = request.POST.get('month')
@@ -558,7 +567,7 @@ def api_reimport_full_month_pdf(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'Método não permitido'}, status=405)
 
-    if not is_superadmin(request.user):
+    if not pode_administrar(request.user):
         return JsonResponse({'error': 'Acesso restrito'}, status=403)
 
     month = request.POST.get('month')
@@ -767,7 +776,7 @@ def admin_delete_payslip(request, pk):
     if request.method != 'POST':
         return JsonResponse({'error': 'Método não permitido'}, status=405)
 
-    if not is_superadmin(request.user):
+    if not pode_administrar(request.user):
         return JsonResponse({'error': 'Acesso restrito'}, status=403)
 
     payslip = get_object_or_404(Payslip, pk=pk)
@@ -785,7 +794,7 @@ def admin_reupload_payslip_pdf(request, pk):
     if request.method != 'POST':
         return JsonResponse({'error': 'Método não permitido'}, status=405)
 
-    if not is_superadmin(request.user):
+    if not pode_administrar(request.user):
         return JsonResponse({'error': 'Acesso restrito'}, status=403)
 
     payslip = get_object_or_404(Payslip, pk=pk)
@@ -839,7 +848,7 @@ def api_bulk_delete(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'Método não permitido'}, status=405)
 
-    if not is_superadmin(request.user):
+    if not pode_administrar(request.user):
         return JsonResponse({'error': 'Acesso restrito'}, status=403)
 
     month = request.POST.get('month')
@@ -878,7 +887,7 @@ def api_bulk_delete(request):
 @login_required
 def export_signature_report(request):
     """Exportar relatório CSV de assinaturas de contracheques para um mês/ano."""
-    if not is_superadmin(request.user):
+    if not pode_administrar(request.user):
         messages.error(request, 'Acesso restrito.')
         return redirect('contracheque:admin_payslips')
 
@@ -989,7 +998,7 @@ def income_report_detail(request, pk):
     """Detalhe de um informe de rendimentos."""
     report = get_object_or_404(IncomeReport, pk=pk)
 
-    if report.user != request.user and not is_superadmin(request.user):
+    if report.user != request.user and not pode_administrar(request.user):
         messages.error(request, 'Sem permissão para visualizar este informe.')
         return redirect('contracheque:my_income_reports')
 
@@ -1003,7 +1012,7 @@ def income_report_pdf(request, pk):
     """Download/visualização do PDF do informe de rendimentos."""
     report = get_object_or_404(IncomeReport, pk=pk)
 
-    if report.user != request.user and not is_superadmin(request.user):
+    if report.user != request.user and not pode_administrar(request.user):
         messages.error(request, 'Sem permissão.')
         return redirect('contracheque:my_income_reports')
 
@@ -1043,7 +1052,7 @@ def income_report_pdf(request, pk):
 @login_required
 def admin_income_reports(request):
     """Painel administrativo de informes de rendimentos."""
-    if not is_superadmin(request.user):
+    if not pode_administrar(request.user):
         messages.error(request, 'Acesso restrito.')
         return redirect('contracheque:my_income_reports')
 
@@ -1075,7 +1084,7 @@ def admin_income_reports(request):
 @login_required
 def admin_income_import(request):
     """Página de importação de informes de rendimentos."""
-    if not is_superadmin(request.user):
+    if not pode_administrar(request.user):
         messages.error(request, 'Acesso restrito.')
         return redirect('contracheque:my_income_reports')
 
@@ -1090,7 +1099,7 @@ def api_bulk_import_income(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'Método não permitido'}, status=405)
 
-    if not is_superadmin(request.user):
+    if not pode_administrar(request.user):
         return JsonResponse({'error': 'Acesso restrito'}, status=403)
 
     files = request.FILES.getlist('pdf_files')
@@ -1192,7 +1201,7 @@ def api_download_unmatched_excel(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'Método não permitido'}, status=405)
 
-    if not is_superadmin(request.user):
+    if not pode_administrar(request.user):
         return JsonResponse({'error': 'Acesso restrito'}, status=403)
 
     import json
@@ -1260,7 +1269,7 @@ def admin_delete_income_report(request, pk):
     if request.method != 'POST':
         return JsonResponse({'error': 'Método não permitido'}, status=405)
 
-    if not is_superadmin(request.user):
+    if not pode_administrar(request.user):
         return JsonResponse({'error': 'Acesso restrito'}, status=403)
 
     report = get_object_or_404(IncomeReport, pk=pk)
@@ -1281,7 +1290,7 @@ def api_bulk_delete_income(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'Método não permitido'}, status=405)
 
-    if not is_superadmin(request.user):
+    if not pode_administrar(request.user):
         return JsonResponse({'error': 'Acesso restrito'}, status=403)
 
     year = request.POST.get('year')

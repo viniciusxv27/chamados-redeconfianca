@@ -27,8 +27,17 @@ HIERARCHY_RANK = {
 }
 
 
-def is_superadmin(user):
-    return HIERARCHY_RANK.get(user.hierarchy, 0) >= HIERARCHY_RANK['SUPERADMIN']
+def pode_administrar(user):
+    """Quem gere este módulo: SUPERADMIN e a hierarquia ADMINISTRAÇÃO.
+
+    O nome antigo era `pode_administrar`, e passou a mentir quando a
+    ADMINISTRAÇÃO entrou: uma função com esse nome liberando quem não é
+    superadmin é armadilha para quem ler o código depois. A regra em si mora em
+    users.models.User.can_manage_rh.
+    """
+    if not getattr(user, 'is_authenticated', False):
+        return False
+    return bool(getattr(user, 'can_manage_rh', lambda: False)())
 
 
 def can_manage_folhaponto(user):
@@ -36,7 +45,7 @@ def can_manage_folhaponto(user):
     FolhaPontoManagerPermission (gerenciada em /folha-ponto/admin/acessos/)."""
     if not user.is_authenticated:
         return False
-    if is_superadmin(user):
+    if pode_administrar(user):
         return True
     return FolhaPontoManagerPermission.objects.filter(user=user).exists()
 
@@ -387,7 +396,7 @@ def admin_import(request):
 @login_required
 def admin_access(request):
     """Gerencia quem pode administrar a Folha de Ponto além dos superadmins."""
-    if not is_superadmin(request.user):
+    if not pode_administrar(request.user):
         messages.error(request, 'Apenas superadministradores gerenciam os acessos da Folha de Ponto.')
         return redirect('folhaponto:my_folhas')
 
@@ -399,7 +408,7 @@ def admin_access(request):
             return redirect('folhaponto:admin_access')
 
         if action == 'grant':
-            if is_superadmin(target):
+            if pode_administrar(target):
                 messages.info(request, f'{target.full_name} já é superadmin e tem acesso.')
             else:
                 FolhaPontoManagerPermission.objects.get_or_create(
