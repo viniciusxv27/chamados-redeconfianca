@@ -1230,7 +1230,11 @@ def edit_user_view(request, user_id):
 # ==========================================================================
 
 # Tipos de arquivo aceitos para documentos e limite de tamanho (público/admin)
-DOCUMENT_ALLOWED_EXTENSIONS = ['.pdf', '.jpg', '.jpeg', '.png', '.webp', '.doc', '.docx']
+# .heic/.heif entram porque é o formato padrão da câmera do iPhone: sem eles o
+# colaborador tirava a foto do documento e o portal recusava sem explicar o
+# porquê.
+DOCUMENT_ALLOWED_EXTENSIONS = ['.pdf', '.jpg', '.jpeg', '.png', '.webp',
+                               '.heic', '.heif', '.doc', '.docx']
 DOCUMENT_MAX_SIZE = 20 * 1024 * 1024  # 20MB por documento
 
 

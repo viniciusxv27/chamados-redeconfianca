@@ -88,30 +88,45 @@
         if (alvo) alvo.textContent = texto || '';
     }
 
+    /** Todos os campos de arquivo do formulário que valem encolher. */
+    function camposComImagem(form) {
+        var alvos = [];
+        form.querySelectorAll('input[type="file"]').forEach(function (input) {
+            var arquivo = input.files && input.files[0];
+            if (arquivo && podeEncolher(arquivo)) alvos.push({input: input, arquivo: arquivo});
+        });
+        return alvos;
+    }
+
     document.addEventListener('submit', function (e) {
         var form = e.target;
         if (!form || !form.hasAttribute || !form.hasAttribute('data-encolher-imagem')) return;
         if (form.dataset.encolhido === '1') return;      // segunda passada: deixa ir
 
-        var input = form.querySelector('input[type="file"]');
-        var arquivo = input && input.files && input.files[0];
-        if (!arquivo || !podeEncolher(arquivo) || !temSuporte()) return;
+        // O pré-cadastro tem um campo por documento, não só um: encolhe todos
+        // os que forem imagem grande, e deixa PDF e Word passarem intactos.
+        var alvos = camposComImagem(form);
+        if (!alvos.length || !temSuporte()) return;
 
         e.preventDefault();
         var botao = form.querySelector('button[type="submit"], button:not([type])');
         if (botao) botao.disabled = true;
-        avisar(form, 'Preparando a imagem…');
+        avisar(form, alvos.length > 1
+            ? 'Preparando as imagens…' : 'Preparando a imagem…');
 
-        encolher(arquivo).then(function (menor) {
-            try {
-                if (menor !== arquivo) {
-                    var pacote = new DataTransfer();
-                    pacote.items.add(menor);
-                    input.files = pacote.files;
+        Promise.all(alvos.map(function (alvo) {
+            return encolher(alvo.arquivo).then(function (menor) {
+                try {
+                    if (menor !== alvo.arquivo) {
+                        var pacote = new DataTransfer();
+                        pacote.items.add(menor);
+                        alvo.input.files = pacote.files;
+                    }
+                } catch (err) {
+                    /* segue com o original */
                 }
-            } catch (err) {
-                /* segue com o original */
-            }
+            });
+        })).then(function () {
             form.dataset.encolhido = '1';
             avisar(form, '');
             if (botao) botao.disabled = false;

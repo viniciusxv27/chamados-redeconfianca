@@ -5,8 +5,10 @@
 
 {% block content %}
 <div class="p-4 sm:p-6">
-    {# Navegação do dia: a tela responde "o que eu tenho hoje?" e deixa andar
-       para os outros dias sem precisar de filtro. #}
+    {% comment %}
+    Navegação do dia: a tela responde "o que eu tenho hoje?" e deixa andar para
+    os outros dias sem precisar de filtro.
+    {% endcomment %}
     <!-- Header -->
     <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
         <div>
@@ -212,8 +214,10 @@
     </div>
 
     {% if sem_prazo %}
-    {# Tarefa sem prazo não pertence a dia nenhum e sumiria de todas as telas.
-       Aparece só em hoje, para não repetir em toda data visitada. #}
+    {% comment %}
+    Tarefa sem prazo não pertence a dia nenhum e sumiria de todas as telas.
+    Aparece só em hoje, para não repetir em toda data visitada.
+    {% endcomment %}
     <div id="semprazo-section" class="mb-8">
         <div class="bg-white rounded-lg shadow-lg overflow-hidden">
             <div class="bg-gray-500 text-white px-6 py-4 flex items-center justify-between gap-3 flex-wrap">

@@ -30,7 +30,7 @@
             </div>
         {% endif %}
 
-        <form method="post" enctype="multipart/form-data" class="bg-white rounded-xl shadow-sm p-6 space-y-6">
+        <form method="post" enctype="multipart/form-data" data-encolher-imagem class="bg-white rounded-xl shadow-sm p-6 space-y-6">
             {% csrf_token %}
 
             <!-- Dados pessoais -->
@@ -198,13 +198,24 @@
                                 {% if doc.is_required %}<span class="text-red-500">*</span>{% else %}<span class="text-xs text-gray-400">(opcional)</span>{% endif %}
                             </label>
                             {% if doc.description %}<p class="text-xs text-gray-500 mb-2">{{ doc.description }}</p>{% endif %}
+                            {% comment %}
+                            O accept precisa ter tipo MIME, não só extensão. Com lista só de
+                            extensões o seletor do Android devolve um arquivo que o WebView não
+                            consegue abrir, e o Chrome mostra "Não foi possível acessar seu
+                            arquivo" — era esse o problema no celular. image/* também é o que faz
+                            aparecer Câmera e Galeria em vez de só o gerenciador de arquivos.
+                            {% endcomment %}
                             <input type="file" name="document_{{ doc.id }}" {% if doc.is_required %}required{% endif %}
-                                   accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx"
+                                   accept="image/*,application/pdf,.pdf,.jpg,.jpeg,.png,.webp,.heic,.heif,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                                    class="w-full text-sm text-gray-700 file:mr-3 file:py-2 file:px-3 file:rounded file:border-0 file:text-sm file:bg-primary file:text-white hover:file:bg-orange-600">
                         </div>
                     {% endfor %}
                 </div>
-                <p class="text-xs text-gray-500 mt-3">Formatos aceitos: PDF, imagem (JPG/PNG) ou Word. Máximo de 20MB por arquivo.</p>
+                <p class="text-xs text-gray-500 mt-3">
+                    Formatos aceitos: PDF, imagem (JPG, PNG, HEIC do iPhone) ou Word.
+                    Máximo de 20MB por arquivo — fotos são reduzidas automaticamente antes de subir.
+                </p>
+                <span data-encolher-aviso class="block text-xs text-primary mt-1"></span>
             </div>
             {% endif %}
 
@@ -217,5 +228,6 @@
 
         <p class="text-center text-xs text-gray-400 mt-6">Rede Confiança &copy; {% now "Y" %}</p>
     </div>
+<script src="{% static 'js/upload-imagem.js' %}" defer></script>
 </body>
 </html>

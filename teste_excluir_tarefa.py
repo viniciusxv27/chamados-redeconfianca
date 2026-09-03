@@ -56,7 +56,9 @@ try:
     colega = novo('tk.colega', hierarchy='PADRAO')
     chefe = novo('tk.chefe', hierarchy='SUPERADMIN', is_superuser=True, is_staff=True)
 
-    prazo = timezone.now() + timedelta(days=3)
+    # /users/tasks/ passou a mostrar só o dia: prazo daqui a 3 dias não
+    # apareceria na tela de hoje, e o teste do botão não teria o que conferir.
+    prazo = timezone.now().replace(hour=10, minute=0, second=0, microsecond=0)
 
     def tarefa(titulo, para, por):
         return TaskActivity.objects.create(

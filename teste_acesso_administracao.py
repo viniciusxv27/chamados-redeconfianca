@@ -131,9 +131,12 @@ try:
     r = ca.get('/ponto/configuracao/', follow=True)
     t('configuração do módulo de ponto segue só com superusuário',
       'Apenas superusuários' in r.content.decode())
-    t('ADMINISTRAÇÃO não edita cadastro de funcionário',
-      not administracao.can_edit_users())
-    t('e o SUPERADMIN edita', chefe.can_edit_users())
+    # A edição de cadastro foi reaberta para a ADMINISTRAÇÃO depois, com a
+    # trava de hierarquia — ver teste_agenda_tarefa.py.
+    t('ADMINISTRAÇÃO edita cadastro, menos de quem está acima',
+      administracao.can_edit_users() and not administracao.pode_editar_usuario(chefe))
+    t('e o SUPERADMIN edita qualquer um',
+      chefe.can_edit_users() and chefe.pode_editar_usuario(administracao))
 
     print('\n== O PORTÃO DO MÓDULO DE PONTO ==')
     cfg = ConfiguracaoTangerino.get()

@@ -118,12 +118,19 @@ try:
     t('e o gerente continua abrindo a projeção',
       'disponível para gerentes' not in r.content.decode())
 
-    print('\n== CADASTRO DE FUNCIONÁRIO: SÓ SUPERADMIN ==')
+    print('\n== CADASTRO DE FUNCIONÁRIO: SUPERADMIN E ADMINISTRAÇÃO ==')
     alvo = novo('pe.alvo')
+    admin = novo('pe.admin', hierarchy='ADMIN')
+    supervisor = novo('pe.sup', hierarchy='SUPERVISOR')
     t('SUPERADMIN edita', chefe.can_edit_users())
-    t('ADMINISTRATIVO não edita mais', not administrativo.can_edit_users())
-    t('SUPERVISOR não edita', not novo('pe.sup', hierarchy='SUPERVISOR').can_edit_users())
-    t('ADMIN não edita', not novo('pe.admin', hierarchy='ADMIN').can_edit_users())
+    # A ADMINISTRAÇÃO voltou a editar a pedido do Vinicius, com uma trava nova:
+    # não alcança quem está acima dela na hierarquia.
+    t('ADMINISTRAÇÃO edita', admin.can_edit_users())
+    t('mas não alcança o SUPERADMIN', not admin.pode_editar_usuario(chefe))
+    t('alcança quem está abaixo', admin.pode_editar_usuario(alvo)
+      and admin.pode_editar_usuario(supervisor))
+    t('ADMINISTRATIVO não edita', not administrativo.can_edit_users())
+    t('SUPERVISOR não edita', not supervisor.can_edit_users())
     t('mas continuam abrindo a lista', administrativo.can_manage_users())
 
     ca = Client()
