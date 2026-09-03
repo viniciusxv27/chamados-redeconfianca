@@ -5,6 +5,8 @@
 
 {% block content %}
 <div class="p-4 sm:p-6">
+    {# Navegação do dia: a tela responde "o que eu tenho hoje?" e deixa andar
+       para os outros dias sem precisar de filtro. #}
     <!-- Header -->
     <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
         <div>
@@ -12,7 +14,9 @@
                 <i class="fas fa-tasks text-primary mr-2"></i>
                 Minhas Tarefas
             </h1>
-            <p class="text-gray-600 mt-1">Gerencie suas tarefas e atividades</p>
+            <p class="text-gray-600 mt-1">
+                {% if e_hoje %}O que você tem para hoje{% else %}O que você tem em {{ dia|date:"d/m/Y" }}{% endif %}
+            </p>
         </div>
 
         <div class="flex flex-wrap gap-2">
@@ -32,6 +36,33 @@
                     class="section-btn px-4 py-2 rounded-lg font-medium transition-colors bg-gray-200 text-gray-700 hover:bg-gray-300">
                 <i class="fas fa-check mr-2"></i>Concluídas
             </button>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow p-3 mb-6 flex items-center justify-between gap-3 flex-wrap">
+        <div class="flex items-center gap-2">
+            <a href="?dia={{ dia_anterior|date:'Y-m-d' }}"
+               class="w-9 h-9 flex items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50"
+               title="Dia anterior"><i class="fas fa-chevron-left text-xs"></i></a>
+            <div class="text-center min-w-[11rem]">
+                <p class="font-semibold text-gray-900 capitalize">{{ dia|date:"l, d \d\e F" }}</p>
+                <p class="text-xs text-gray-400">
+                    {% if e_hoje %}hoje{% else %}{{ dia|date:"Y" }}{% endif %} ·
+                    {{ total_do_dia }} tarefa{{ total_do_dia|pluralize }}
+                </p>
+            </div>
+            <a href="?dia={{ dia_seguinte|date:'Y-m-d' }}"
+               class="w-9 h-9 flex items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50"
+               title="Próximo dia"><i class="fas fa-chevron-right text-xs"></i></a>
+        </div>
+        <div class="flex items-center gap-2">
+            {% if not e_hoje %}
+            <a href="?dia={{ hoje|date:'Y-m-d' }}"
+               class="px-3 py-2 rounded-lg bg-primary text-white text-sm font-medium">Hoje</a>
+            {% endif %}
+            <a href="/agenda/" class="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">
+                <i class="fas fa-calendar-plus mr-1.5"></i>Marcar na agenda
+            </a>
         </div>
     </div>
 
@@ -179,6 +210,29 @@
             </div>
         </div>
     </div>
+
+    {% if sem_prazo %}
+    {# Tarefa sem prazo não pertence a dia nenhum e sumiria de todas as telas.
+       Aparece só em hoje, para não repetir em toda data visitada. #}
+    <div id="semprazo-section" class="mb-8">
+        <div class="bg-white rounded-lg shadow-lg overflow-hidden">
+            <div class="bg-gray-500 text-white px-6 py-4 flex items-center justify-between gap-3 flex-wrap">
+                <h2 class="text-xl font-semibold">
+                    <i class="fas fa-calendar-xmark mr-2"></i>
+                    Sem prazo ({{ sem_prazo|length }})
+                </h2>
+                <span class="text-xs text-white/80">não caem em nenhum dia — marque na agenda para entrar num</span>
+            </div>
+            <div class="p-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {% for task in sem_prazo %}
+                        {% include 'tasks/task_card.html' %}
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 </div>
 
 <!-- Modal de Atualização de Status -->
@@ -230,7 +284,7 @@ function showSection(section) {
     event.target.classList.add('bg-primary', 'text-white');
     
     // Mostrar/ocultar seções
-    const sections = ['pending-section', 'doing-section', 'done-section', 'overdue-section'];
+    const sections = ['pending-section', 'doing-section', 'done-section', 'overdue-section', 'semprazo-section'];
     sections.forEach(sec => {
         const element = document.getElementById(sec);
         if (element) element.style.display = 'none';

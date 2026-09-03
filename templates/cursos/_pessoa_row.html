@@ -5,9 +5,11 @@ Usada tanto nos cards de loja quanto na aba "Geral".
 <div class="px-5 py-3 flex items-center justify-between gap-3 flex-wrap">
     <div class="flex items-center gap-3 min-w-0">
         {% if item.conferir %}
-        {# Fora de qualquer <form>: os botões da linha já são formulários, e
-           form dentro de form é HTML inválido. Quem recolhe as marcadas é o
-           JS do quadro, na hora de enviar o lote. #}
+        {% comment %}
+        Fora de qualquer <form>: os botões da linha já são formulários, e form
+        dentro de form é HTML inválido. Quem recolhe as marcadas é o JS do
+        quadro, na hora de enviar o lote.
+        {% endcomment %}
         <input type="checkbox" class="crs-marcar rounded text-emerald-600 focus:ring-emerald-500 flex-shrink-0"
                value="{{ item.envio.id }}"
                aria-label="Selecionar {{ item.pessoa.get_full_name|default:item.pessoa.username }}">

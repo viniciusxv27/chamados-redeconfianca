@@ -6,6 +6,7 @@ from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST, require_http_methods
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 from django.db.models import Sum, Max
 from django.db import transaction
 from decimal import Decimal
@@ -255,6 +256,12 @@ def manage_users_view(request):
     active_users_count = users.filter(is_active=True).count()
     superadmin_count = users.filter(hierarchy='SUPERADMIN').count()
     
+    # O template não chama método com argumento: a permissão de cada linha é
+    # resolvida aqui, para o botão de editar não aparecer em quem está acima.
+    users = list(users)
+    for u in users:
+        u.pode_editar = request.user.pode_editar_usuario(u)
+
     context = {
         'users': users,
         'sectors': Sector.objects.all(),
@@ -1016,13 +1023,21 @@ def _ip_do_pedido(request):
 
 
 def edit_user_view(request, user_id):
-    """Editar usuário existente. Só o SUPERADMIN."""
+    """Editar usuário existente. SUPERADMIN e ADMINISTRAÇÃO."""
     if not request.user.can_edit_users():
-        messages.error(request, 'Somente o SUPERADMIN pode alterar o cadastro de um '
-                                'funcionário. Peça a alteração a quem administra o portal.')
+        messages.error(request, 'Somente o SUPERADMIN e a ADMINISTRAÇÃO alteram o cadastro '
+                                'de um funcionário. Peça a alteração a quem administra o portal.')
         return redirect('manage_users')
-    
+
     user_to_edit = get_object_or_404(User.objects.prefetch_related('sectors'), id=user_id)
+
+    # Abrir a tela não é poder mexer em qualquer um: quem está acima na
+    # hierarquia fica fora do alcance. Sem isso a ADMINISTRAÇÃO poderia
+    # rebaixar um SUPERADMIN e assumir o portal.
+    if not request.user.pode_editar_usuario(user_to_edit):
+        messages.error(request, f'{user_to_edit.get_full_name() or user_to_edit.email} tem '
+                                f'hierarquia acima da sua — só o SUPERADMIN altera esse cadastro.')
+        return redirect('manage_users')
 
     if request.method == 'POST':
         # Fotografia antes de qualquer alteração: é ela que diz o que mudou.
@@ -2274,10 +2289,18 @@ def delete_required_document_view(request, doc_id):
 def admin_change_user_password(request, user_id):
     """Alterar senha de usuário pelo admin"""
     if not request.user.can_edit_users():
-        messages.error(request, 'Somente o SUPERADMIN pode trocar a senha de um funcionário.')
+        messages.error(request, 'Somente o SUPERADMIN e a ADMINISTRAÇÃO trocam a senha de um '
+                                'funcionário.')
         return redirect('dashboard')
-    
+
     user_to_edit = get_object_or_404(User, id=user_id)
+
+    # Trocar a senha é entrar na conta da pessoa. Vale a mesma trava da edição:
+    # ninguém troca a senha de quem está acima na hierarquia.
+    if not request.user.pode_editar_usuario(user_to_edit):
+        messages.error(request, f'{user_to_edit.get_full_name() or user_to_edit.email} tem '
+                                f'hierarquia acima da sua — só o SUPERADMIN troca essa senha.')
+        return redirect('manage_users')
     
     if request.method == 'POST':
         new_password = request.POST.get('new_password')
@@ -5832,28 +5855,50 @@ def pode_excluir_tarefa(user, task):
 
 @login_required
 def tasks_dashboard_view(request):
-    """Dashboard de tarefas do usuário"""
+    """As tarefas do dia — as que foram marcadas na agenda para aquela data.
+
+    A tela era a lista inteira de tarefas da pessoa, o que com o tempo virou
+    uma pilha sem ordem de leitura. Agora ela responde "o que eu tenho hoje?",
+    com navegação para os outros dias.
+
+    Duas coisas continuam fora do recorte do dia, de propósito, porque some com
+    trabalho de verdade se saírem:
+
+    * **atrasadas** — são de dias anteriores por definição; filtrar pelo dia
+      escondia 163 tarefas em aberto de uma vez;
+    * **sem prazo** — não pertencem a dia nenhum e sumiriam de todas as telas.
+      Aparecem só no dia de hoje, para não repetirem em toda data visitada.
+    """
     from core.models import TaskActivity
     from django.utils import timezone
     from datetime import date, timedelta
-    
+
     user = request.user
     today = timezone.now()
-    
+    hoje = timezone.localdate()
+
+    dia = parse_date(request.GET.get('dia') or '') or hoje
+    e_hoje = (dia == hoje)
+
     # Tarefas do usuário
     user_tasks = TaskActivity.objects.filter(assigned_to=user)
-    
-    # Separar por status
-    pending_tasks = user_tasks.filter(status='PENDING').order_by('due_date')
-    doing_tasks = user_tasks.filter(status='DOING').order_by('due_date')
-    done_tasks = user_tasks.filter(status='DONE').order_by('-completed_at')[:10]
-    
-    # Tarefas em atraso
+    do_dia = user_tasks.filter(due_date__date=dia)
+
+    # Separar por status, dentro do dia escolhido
+    pending_tasks = do_dia.filter(status='PENDING').order_by('due_date')
+    doing_tasks = do_dia.filter(status='DOING').order_by('due_date')
+    done_tasks = do_dia.filter(status='DONE').order_by('-completed_at')
+
+    # Tarefas em atraso: sempre todas, não só as do dia.
     overdue_tasks = user_tasks.filter(
         status__in=['PENDING', 'DOING'],
         due_date__lt=today
     ).order_by('due_date')
-    
+
+    sem_prazo = (user_tasks.filter(due_date__isnull=True)
+                 .exclude(status='DONE').order_by('-created_at')
+                 if e_hoje else TaskActivity.objects.none())
+
     # Estatísticas
     total_tasks = user_tasks.count()
     completed_tasks = user_tasks.filter(status='DONE').count()
@@ -5867,11 +5912,19 @@ def tasks_dashboard_view(request):
     doing_tasks = list(doing_tasks)
     done_tasks = list(done_tasks)
     overdue_tasks = list(overdue_tasks)
-    for grupo in (pending_tasks, doing_tasks, done_tasks, overdue_tasks):
+    sem_prazo = list(sem_prazo)
+    for grupo in (pending_tasks, doing_tasks, done_tasks, overdue_tasks, sem_prazo):
         for tarefa in grupo:
             tarefa.pode_apagar = pode_excluir_tarefa(user, tarefa)
 
     context = {
+        'dia': dia,
+        'e_hoje': e_hoje,
+        'dia_anterior': dia - timedelta(days=1),
+        'dia_seguinte': dia + timedelta(days=1),
+        'hoje': hoje,
+        'sem_prazo': sem_prazo,
+        'total_do_dia': len(pending_tasks) + len(doing_tasks) + len(done_tasks),
         'pending_tasks': pending_tasks,
         'doing_tasks': doing_tasks,
         'done_tasks': done_tasks,

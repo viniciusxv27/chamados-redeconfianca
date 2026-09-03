@@ -817,15 +817,50 @@ class User(AbstractUser):
         """Abre a área de gestão de usuários (listar, conferir, exportar)."""
         return self.hierarchy in ['ADMIN', 'SUPERADMIN', 'SUPERVISOR', 'ADMINISTRATIVO']
 
-    def can_edit_users(self):
-        """Altera o cadastro de um funcionário.
+    # Ordem das hierarquias, para "não posso mexer em quem está acima de mim".
+    ESCALA_HIERARQUIA = {
+        'PADRAO': 0,
+        'ADMINISTRATIVO': 1,
+        'SUPERVISOR': 2,
+        'ADMIN': 3,
+        'SUPERADMIN': 4,
+    }
 
-        Só o SUPERADMIN. Ver a lista continua liberado para quem administra o
-        portal — o problema não era enxergar, era gente trocando setor, cargo e
-        acesso sem necessidade. Editar mexe em permissão e em dado de RH, e é
-        onde o estrago aparece depois.
+    @property
+    def nivel_hierarquia(self):
+        return self.ESCALA_HIERARQUIA.get(self.hierarchy, 0)
+
+    def can_edit_users(self):
+        """Abre a edição de cadastro de funcionário.
+
+        SUPERADMIN e a hierarquia ADMINISTRAÇÃO. Continua fechada para o resto:
+        o problema nunca foi enxergar a lista, era gente trocando setor, cargo e
+        acesso sem necessidade.
+
+        Poder abrir a tela não é poder editar qualquer um — quem manda nisso é
+        `pode_editar_usuario`, que não deixa mexer em quem está acima.
         """
-        return self.is_superuser or self.hierarchy == 'SUPERADMIN'
+        return bool(self.is_superuser or self.hierarchy in ('SUPERADMIN', 'ADMIN'))
+
+    def pode_editar_usuario(self, alvo):
+        """Pode mexer no cadastro DESTA pessoa?
+
+        Ninguém edita quem está acima de si na hierarquia — sem isso, a
+        ADMINISTRAÇÃO poderia rebaixar um SUPERADMIN e assumir o portal. O
+        SUPERADMIN passa por cima porque é o topo, e a pessoa sempre pode
+        mexer no próprio cadastro.
+        """
+        if not self.can_edit_users():
+            return False
+        if alvo is None:
+            return True
+        if self.is_superuser or self.hierarchy == 'SUPERADMIN':
+            return True
+        if alvo.pk == self.pk:
+            return True
+        # Empate passa: dois da ADMINISTRAÇÃO se ajudam. O que não passa é
+        # mexer em quem está acima.
+        return alvo.nivel_hierarquia <= self.nivel_hierarquia and not alvo.is_superuser
 
     def can_manage_rh(self):
         """Administra os módulos de pessoal, junto com o SUPERADMIN.

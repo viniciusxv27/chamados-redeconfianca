@@ -142,6 +142,18 @@ class CalendarEvent(models.Model):
         verbose_name='Repetir até',
         help_text='Data limite da recorrência (opcional)',
     )
+    # Tarefa de verdade por trás do evento do tipo "Tarefa" (ver agenda/tarefas.py).
+    # SET_NULL e não CASCADE: apagar a tarefa em /users/tasks/ não pode sumir
+    # com o compromisso do calendário sem a pessoa saber.
+    tarefa = models.OneToOneField(
+        'core.TaskActivity',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='evento_agenda',
+        verbose_name='Tarefa vinculada',
+    )
+
     recurrence_parent = models.ForeignKey(
         'self',
         on_delete=models.SET_NULL,

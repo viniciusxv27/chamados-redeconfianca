@@ -203,6 +203,7 @@
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Início *</label>
                         <input type="datetime-local" id="eventStart" required
+                               onchange="atualizarRotuloRepetir()" oninput="atualizarRotuloRepetir()"
                                class="w-full min-w-0 border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-orange-500 focus:border-orange-500">
                     </div>
                     <div>
@@ -319,7 +320,8 @@
                 <div>
                     <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
                         <input type="checkbox" id="eventRecurring" class="rounded border-gray-300 text-orange-500 focus:ring-orange-500" onchange="toggleRecurrenceOptions()">
-                        <i class="fas fa-redo text-primary"></i> Repetir toda semana (mesmo dia)
+                        <i class="fas fa-redo text-primary"></i>
+                        <span id="rotuloRepetir">Repetir toda semana (mesmo dia)</span>
                     </label>
                     <div id="recurrenceOptions" class="hidden mt-2 ml-6">
                         <label class="block text-xs font-medium text-gray-500 mb-1">Repetir até (opcional)</label>
@@ -479,6 +481,7 @@ function openCreateModal(start, end, allDay) {
     document.getElementById('eventRecurring').checked = false;
     document.getElementById('eventRecurrenceUntil').value = '';
     document.getElementById('recurrenceOptions').classList.add('hidden');
+    atualizarRotuloRepetir();
     
     // Clear participants
     selectedParticipantIds = [];
@@ -574,9 +577,34 @@ function selectCustomColor(color) {
     selectedColor = color;
 }
 
+// "Repetir toda segunda" em vez de "Repetir toda semana": o rótulo genérico
+// obrigava a pessoa a conferir no calendário em que dia ela estava marcando.
+var DIAS_REPETIR = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+
+function atualizarRotuloRepetir() {
+    var rotulo = document.getElementById('rotuloRepetir');
+    var campo = document.getElementById('eventStart');
+    if (!rotulo || !campo) return;
+    var bruto = campo.value;
+    if (!bruto) {
+        rotulo.textContent = 'Repetir toda semana (mesmo dia)';
+        return;
+    }
+    var d = new Date(bruto);
+    if (isNaN(d.getTime())) {
+        rotulo.textContent = 'Repetir toda semana (mesmo dia)';
+        return;
+    }
+    var dia = DIAS_REPETIR[d.getDay()];
+    // Sábado e domingo são masculinos.
+    var artigo = (d.getDay() === 0 || d.getDay() === 6) ? 'todo' : 'toda';
+    rotulo.textContent = 'Repetir ' + artigo + ' ' + dia;
+}
+
 function toggleRecurrenceOptions() {
     const checked = document.getElementById('eventRecurring').checked;
     document.getElementById('recurrenceOptions').classList.toggle('hidden', !checked);
+    atualizarRotuloRepetir();
 }
 
 // =====================================================================

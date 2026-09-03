@@ -716,6 +716,18 @@ def _parse_recurrence_until(value):
         return None
 
 
+def _tarefa_do_evento(event, invited_users):
+    """Cria (ou atualiza) a tarefa de verdade de um evento do tipo Tarefa."""
+    try:
+        from agenda.tarefas import precisa_de_tarefa, tarefa_para_evento
+
+        if not precisa_de_tarefa(event):
+            return None
+        return tarefa_para_evento(event, invited_users, autor=event.owner)
+    except Exception:                                   # módulo indisponível
+        return None
+
+
 def _sala_do_evento(event, invited_users):
     """Cria (ou atualiza) a sala de vídeo de um evento do tipo Chamada."""
     try:
@@ -769,6 +781,9 @@ def _create_weekly_occurrences(parent_event, invited_users):
         # Sala própria por ocorrência: uma sala só para a série inteira faria a
         # reunião da semana que vem cair na mesma conversa da anterior.
         _sala_do_evento(child, invited_users)
+        # Tarefa própria por ocorrência, pela mesma razão: "toda segunda" são
+        # várias tarefas, uma para cada segunda, cada uma com seu status.
+        _tarefa_do_evento(child, invited_users)
         current_start += timedelta(weeks=1)
 
 
@@ -946,6 +961,9 @@ def api_event_create(request):
 
     # Chamada ganha sala de vídeo do portal na hora, com o link já pronto.
     sala = _sala_do_evento(event, invited_users)
+    # Tarefa vira tarefa de verdade: aparece em /users/tasks/ com status, chat,
+    # anexos e subtarefas, em vez de ser só um compromisso parecido com uma.
+    tarefa = _tarefa_do_evento(event, invited_users)
 
     # Gerar ocorrências recorrentes (semanal)
     if event.recurrence_rule == 'weekly':
@@ -959,6 +977,7 @@ def api_event_create(request):
         'color': event.color,
         'link': event.link,
         'sala': sala,
+        'tarefa_id': tarefa.id if tarefa else None,
     }, status=201)
 
 
@@ -1037,6 +1056,7 @@ def api_event_update(request, pk):
         )
 
     sala = _sala_do_evento(event, list(event.participants.all()))
+    _tarefa_do_evento(event, list(event.participants.all()))
 
     return JsonResponse({'ok': True, 'link': event.link, 'sala': sala})
 
