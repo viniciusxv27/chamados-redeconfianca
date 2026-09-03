@@ -213,6 +213,10 @@ def gestao(request):
             bloco = {
                 'nome': nome, 'itens': itens, 'total': len(itens), 'feitos': feitos,
                 'faltam': len(itens) - feitos,
+                # Quantos deste bloco esperam conferência: é o número que o
+                # "marcar todos" da loja mostra, e ele some quando não há nada
+                # para aprovar ali.
+                'conferir': sum(1 for i in itens if i['conferir']),
                 'percentual': round(feitos * 100 / len(itens)) if itens else 0,
             }
             # Consultores sem loja saem para a aba "Geral", separados das lojas.
@@ -379,7 +383,79 @@ def revisar_comprovante(request, comprovante_id):
                 f'{envio.observacao or "Envie novamente."}')
     messages.success(request, 'Comprovante ' +
                      ('aprovado.' if acao == 'aprovar' else 'recusado.'))
-    return redirect(request.POST.get('voltar') or 'cursos:gestao')
+    return redirect(_destino(request))
+
+
+def _destino(request):
+    """Para onde voltar depois de revisar.
+
+    O `voltar` vem de um campo escondido da tela, mas é o POST que manda — um
+    formulário forjado poderia jogar o gestor para fora do portal. Só caminho
+    interno passa.
+    """
+    from django.utils.http import url_has_allowed_host_and_scheme
+
+    destino = (request.POST.get('voltar') or '').strip()
+    if destino and url_has_allowed_host_and_scheme(
+            destino, allowed_hosts={request.get_host()},
+            require_https=request.is_secure()):
+        return destino
+    return 'cursos:gestao'
+
+
+@require_POST
+@login_required
+def aprovar_lote(request):
+    """Aprova de uma vez todos os comprovantes marcados no quadro.
+
+    Conferir 40 comprovantes de uma loja um a um era 40 recarregamentos de
+    página. Aqui a régua é a mesma da aprovação individual, só aplicada em
+    lote — e só sobre o que está de fato pendente: um comprovante que alguém
+    recusou no meio do caminho não é aprovado por tabela só porque a caixinha
+    ficou marcada na tela antiga.
+    """
+    cfg = ConfiguracaoCursos.get()
+    if not e_gestor(request.user, cfg):
+        messages.error(request, 'Área dos gestores do módulo.')
+        return redirect('cursos:meus_cursos')
+
+    ids = []
+    for bruto in request.POST.getlist('comprovantes'):
+        try:
+            ids.append(int(bruto))
+        except (TypeError, ValueError):
+            continue
+    if not ids:
+        messages.error(request, 'Marque pelo menos um colaborador.')
+        return redirect(_destino(request))
+
+    escolhidos = list(Comprovante.objects.filter(id__in=ids)
+                      .select_related('colaborador', 'curso'))
+    pendentes = [c for c in escolhidos if c.status == Comprovante.PENDENTE]
+
+    agora = timezone.now()
+    for envio in pendentes:
+        envio.status = Comprovante.APROVADO
+        envio.observacao = ''
+        envio.revisado_por = request.user
+        envio.revisado_em = agora
+    if pendentes:
+        Comprovante.objects.bulk_update(
+            pendentes, ['status', 'observacao', 'revisado_por', 'revisado_em'],
+            batch_size=200)
+
+    n = len(pendentes)
+    if n:
+        messages.success(request, f'{n} comprovante{"s" if n > 1 else ""} '
+                                  f'aprovado{"s" if n > 1 else ""}.')
+    # Marcado mas já revisado por outra pessoa: dizer isso evita o gestor achar
+    # que aprovou algo que na verdade continua recusado.
+    fora = len(escolhidos) - n
+    if fora:
+        messages.info(request, f'{fora} já tinha{"m" if fora > 1 else ""} sido '
+                               f'revisado{"s" if fora > 1 else ""} e não mudou'
+                               f'{"" if fora == 1 else "ram"}.')
+    return redirect(_destino(request))
 
 
 def _avisar(destinatario, titulo, texto):

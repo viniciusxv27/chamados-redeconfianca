@@ -3,7 +3,16 @@ Linha de uma pessoa no quadro de gestão. Espera `item` no contexto.
 Usada tanto nos cards de loja quanto na aba "Geral".
 {% endcomment %}
 <div class="px-5 py-3 flex items-center justify-between gap-3 flex-wrap">
-    <div class="min-w-0">
+    <div class="flex items-center gap-3 min-w-0">
+        {% if item.conferir %}
+        {# Fora de qualquer <form>: os botões da linha já são formulários, e
+           form dentro de form é HTML inválido. Quem recolhe as marcadas é o
+           JS do quadro, na hora de enviar o lote. #}
+        <input type="checkbox" class="crs-marcar rounded text-emerald-600 focus:ring-emerald-500 flex-shrink-0"
+               value="{{ item.envio.id }}"
+               aria-label="Selecionar {{ item.pessoa.get_full_name|default:item.pessoa.username }}">
+        {% endif %}
+        <div class="min-w-0">
         <p class="text-sm font-medium text-gray-800 truncate">
             {{ item.pessoa.get_full_name|default:item.pessoa.username }}
         </p>
@@ -14,13 +23,21 @@ Usada tanto nos cards de loja quanto na aba "Geral".
                 sem comprovante
             {% endif %}
         </p>
+        </div>
     </div>
     <div class="flex items-center gap-2">
-        {% if item.envio %}
+        {# `.url` levanta ValueError quando o campo está vazio, e isso derrubava #}
+        {# o quadro inteiro do gestor por causa de uma linha. #}
+        {% if item.envio.arquivo %}
         <a href="{{ item.envio.arquivo.url }}" target="_blank" rel="noopener noreferrer"
            class="px-2.5 py-1 rounded-lg border border-gray-200 text-xs text-gray-600 hover:bg-gray-50">
             <i class="fas fa-paperclip mr-1"></i>Ver anexo
         </a>
+        {% elif item.envio %}
+        <span class="px-2.5 py-1 rounded-lg border border-amber-200 text-xs text-amber-700"
+              title="O registro existe mas o arquivo não está no storage">
+            <i class="fas fa-triangle-exclamation mr-1"></i>sem arquivo
+        </span>
         {% endif %}
 
         {% if item.conferir %}

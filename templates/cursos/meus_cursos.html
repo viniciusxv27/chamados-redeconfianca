@@ -95,7 +95,8 @@
                 </div>
                 {% endif %}
 
-                {% if l.entregue %}
+                {# Mesma armadilha do quadro do gestor: `.url` com campo vazio levanta ValueError e derruba a tela. #}
+                {% if l.entregue and l.envio.arquivo %}
                 <div class="flex items-center gap-2 text-sm text-gray-500">
                     <i class="fas fa-paperclip text-gray-400"></i>
                     <a href="{{ l.envio.arquivo.url }}" target="_blank" rel="noopener noreferrer"

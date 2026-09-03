@@ -30,7 +30,7 @@ from .models import (
 )
 from .scoring import calcular_pontuacao, linhas_detalhadas
 from .utils import (
-    FAIXAS, calcular_faixa, faixa_info, get_colaboradores,
+    FAIXAS, calcular_faixa, faixa_info, get_colaboradores, get_gestores,
     get_colaboradores_do_gestor, get_gestores_do_setor,
     is_impulso_manager, impulso_manager_required, impulso_member_required,
 )
@@ -300,7 +300,17 @@ def meta_create(request):
         if sou_gestor:
             colaborador = get_colaboradores().filter(
                 id=_int_or_none(request.POST.get('colaborador'))).first()
-            gestor = request.user
+
+            # Quem responde pela meta pode ser outro gestor: é ele quem avalia
+            # no fim e quem aparece no card. Antes o criador ficava amarrado a
+            # si mesmo, e uma área com dois gestores não tinha como registrar
+            # de quem a atividade era de verdade.
+            #
+            # A lista é validada no servidor: só gestor do Impulso entra, e a
+            # falta de escolha (ou uma escolha inválida) cai em quem criou.
+            escolhido = get_gestores().filter(
+                id=_int_or_none(request.POST.get('gestor'))).first()
+            gestor = escolhido or request.user
 
             # Demanda para gente de OUTRA área não entra na fila direto: quem
             # responde pela área do colaborador precisa aprovar. Sem isso, um
@@ -318,9 +328,13 @@ def meta_create(request):
                             f'área e não há gestor do Impulso cadastrado nela para aprovar '
                             f'a demanda. Fale com o RH para ajustar o cadastro.')
                         return redirect('impulso:meta_create')
-                    escolhido = gestores_da_area.filter(
+                    # Fora da área, a escolha livre acima não vale: quem fica
+                    # com a meta é um gestor da área do colaborador, que é
+                    # quem precisa aprovar. Deixar o criador apontar alguém de
+                    # fora anularia justamente essa trava.
+                    aprovador = gestores_da_area.filter(
                         id=_int_or_none(request.POST.get('gestor_aprovador'))).first()
-                    gestor = escolhido or gestores_da_area.first()
+                    gestor = aprovador or gestores_da_area.first()
                     fora_da_area = True
         else:
             # O colaborador só pode pedir para um gestor do SEU setor, e a meta
@@ -400,7 +414,18 @@ def meta_create(request):
             _notify([colaborador], 'Nova meta atribuída',
                     f'"{meta.titulo}" foi atribuída a você.',
                     f'/impulso/metas/{meta.id}/')
-            messages.success(request, 'Meta criada com sucesso.')
+            if gestor.id != request.user.id:
+                # Ele vai avaliar esta meta no fim: não pode descobrir isso
+                # só quando ela aparecer no acompanhamento dele.
+                _notify([gestor], 'Meta criada no seu nome',
+                        f'{request.user.get_full_name() or request.user.email} criou '
+                        f'"{meta.titulo}" com você como gestor responsável. '
+                        f'A avaliação no fim é sua.',
+                        f'/impulso/metas/{meta.id}/')
+            messages.success(
+                request,
+                'Meta criada com sucesso.' if gestor.id == request.user.id else
+                f'Meta criada com {gestor.get_full_name() or gestor.email} como gestor responsável.')
         elif precisa_aprovacao:
             _notify([gestor], 'Nova solicitação de meta',
                     f'{quem} pediu a meta "{meta.titulo}". Aprove ou recuse.',
@@ -439,6 +464,7 @@ def meta_create(request):
         'sou_gestor': sou_gestor,
         'colaboradores': get_colaboradores() if sou_gestor else None,
         'gestores_do_setor': gestores_do_setor,
+        'gestores': get_gestores() if sou_gestor else None,
         'fora_da_area': fora_da_area,
         'setor': getattr(request.user, 'sector', None),
         'recorrencias': Meta.Recorrencia.choices,

@@ -5812,6 +5812,24 @@ def api_delete_checklist_item_evidence(request, evidence_id):
 
 
 # ===== ATIVIDADES/TAREFAS VIEWS =====
+def pode_excluir_tarefa(user, task):
+    """Quem apaga uma tarefa: a gestão ou quem a criou.
+
+    O responsável pela tarefa NÃO entra: apagar uma tarefa que o gestor
+    atribuiu apagaria o registro do lado de quem cobrou. Quem criou a própria
+    tarefa continua podendo apagá-la, que é o caso da grande maioria delas.
+
+    A regra fica aqui para a tela e o endpoint responderem a mesma coisa —
+    botão que aparece e depois recusa é pior do que botão que não aparece.
+    """
+    if not (user and user.is_authenticated and task):
+        return False
+    if user.is_staff or user.hierarchy in ('SUPERVISOR', 'ADMIN', 'SUPERADMIN',
+                                           'ADMINISTRATIVO'):
+        return True
+    return task.created_by_id == user.id
+
+
 @login_required
 def tasks_dashboard_view(request):
     """Dashboard de tarefas do usuário"""
@@ -5843,6 +5861,16 @@ def tasks_dashboard_view(request):
     if total_tasks > 0:
         completion_rate = round((completed_tasks / total_tasks) * 100)
     
+    # O template não chama função com argumento, então a permissão de cada
+    # tarefa é resolvida aqui, uma vez por card.
+    pending_tasks = list(pending_tasks)
+    doing_tasks = list(doing_tasks)
+    done_tasks = list(done_tasks)
+    overdue_tasks = list(overdue_tasks)
+    for grupo in (pending_tasks, doing_tasks, done_tasks, overdue_tasks):
+        for tarefa in grupo:
+            tarefa.pode_apagar = pode_excluir_tarefa(user, tarefa)
+
     context = {
         'pending_tasks': pending_tasks,
         'doing_tasks': doing_tasks,
@@ -7065,10 +7093,9 @@ def delete_task(request, task_id):
     try:
         task = get_object_or_404(TaskActivity, id=task_id)
         
-        # Verificar se o usuário tem permissão (supervisor ou criador da tarefa)
-        if not (request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN', 'ADMINISTRATIVO'] or 
-                request.user.is_staff or task.created_by == request.user):
-            return JsonResponse({'success': False, 'error': 'Permissão negada'})
+        # Mesma regra que a tela usa para decidir se mostra o botão.
+        if not pode_excluir_tarefa(request.user, task):
+            return JsonResponse({'success': False, 'error': 'Permissão negada'}, status=403)
         
         task_title = task.title
         task.delete()

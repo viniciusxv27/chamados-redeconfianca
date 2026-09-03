@@ -68,6 +68,22 @@
                 </select>
             </div>
 
+            <div id="impGestorDono">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Gestor responsável *</label>
+                <select name="gestor" id="impGestor"
+                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    {% for g in gestores %}
+                    <option value="{{ g.id }}" {% if g.id == request.user.id %}selected{% endif %}>
+                        {{ g.get_full_name|default:g.email }}{% if g.id == request.user.id %} (você){% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
+                <p class="text-xs text-gray-400 mt-1">
+                    É quem avalia a meta no fim e aparece como responsável no card.
+                    Escolhendo outra pessoa, ela é avisada.
+                </p>
+            </div>
+
             <div id="impForaDaArea" class="hidden p-4 rounded-xl bg-amber-50 border border-amber-200">
                 <p class="text-sm font-semibold text-amber-900 mb-1">
                     <i class="fas fa-user-clock mr-1.5"></i>
@@ -227,6 +243,12 @@ function impChecarArea() {
 
     var fora = JSON.parse(dados.textContent || '{}');
     var info = fora[sel.value];
+    // Fora da área quem fica com a meta é um gestor de lá, então a escolha
+    // livre de gestor some: mostrá-la prometeria algo que o servidor não vai
+    // fazer.
+    var dono = document.getElementById('impGestorDono');
+    if (dono) dono.classList.toggle('hidden', !!info);
+
     if (!info) {
         caixa.classList.add('hidden');
         var escolha = document.getElementById('impGestorAprovador');

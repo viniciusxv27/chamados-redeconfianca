@@ -285,6 +285,35 @@ function closeModal() {
     document.getElementById('updateStatusModal').classList.add('hidden');
 }
 
+// Excluir tarefa. O botão só aparece para quem o servidor já disse que pode
+// (task.pode_apagar), mas o endpoint refaz a checagem — a tela não é a trava.
+function excluirTarefa(taskId, titulo) {
+    if (!confirm('Excluir a tarefa "' + titulo + '"?\n\nIsso apaga junto as mensagens, os anexos e as subtarefas. Não dá para desfazer.')) {
+        return;
+    }
+    fetch("{% url 'delete_task' 0 %}".replace('0', taskId), {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: 'csrfmiddlewaretoken={{ csrf_token }}'
+    })
+    .then(function (r) { return r.json().catch(function () { return {success: false}; }); })
+    .then(function (data) {
+        if (data.success) {
+            showToast(data.message || 'Tarefa removida.', 'success');
+            // Some o card na hora; o recarregamento acerta os contadores.
+            var card = document.querySelector('[data-task-id="' + taskId + '"]');
+            if (card) card.remove();
+            setTimeout(function () { location.reload(); }, 600);
+        } else {
+            showToast(data.error || 'Não foi possível excluir a tarefa.', 'error');
+        }
+    })
+    .catch(function () { showToast('Erro de conexão ao excluir a tarefa.', 'error'); });
+}
+
 function updateTaskStatus(newStatus) {
     if (!currentTaskId) return;
     

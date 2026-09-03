@@ -1,6 +1,6 @@
 {% load static %}
 
-<div class="task-card bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 border-l-4 {% if task.status == 'PENDING' %}border-yellow-500 hover:border-yellow-400{% elif task.status == 'DOING' %}border-blue-500 hover:border-blue-400{% elif task.status == 'DONE' %}border-green-500 hover:border-green-400{% endif %} {% if is_overdue %}bg-gradient-to-br from-red-50 to-pink-50 border-red-500{% endif %} cursor-pointer h-full transform hover:scale-[1.02] hover:-translate-y-1 relative overflow-hidden group"
+<div data-task-id="{{ task.id }}" class="task-card bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 border-l-4 {% if task.status == 'PENDING' %}border-yellow-500 hover:border-yellow-400{% elif task.status == 'DOING' %}border-blue-500 hover:border-blue-400{% elif task.status == 'DONE' %}border-green-500 hover:border-green-400{% endif %} {% if is_overdue %}bg-gradient-to-br from-red-50 to-pink-50 border-red-500{% endif %} cursor-pointer h-full transform hover:scale-[1.02] hover:-translate-y-1 relative overflow-hidden group"
      onclick="openTaskModal({{ task.id }}, '{{ task.title|escapejs }}', '{{ task.description|default:''|escapejs }}', '{{ task.status }}')"
      style="box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);">
     
@@ -120,6 +120,15 @@
                     </svg>
                     <span class="hidden sm:inline">Chat</span>
                 </button>
+
+                {% if task.pode_apagar %}
+                {# stopPropagation: o card inteiro é clicável e abriria o modal da tarefa. #}
+                <button onclick="event.stopPropagation(); excluirTarefa({{ task.id }}, '{{ task.title|escapejs }}')"
+                        class="ml-1 flex items-center justify-center w-8 h-8 rounded-full text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors focus:ring-2 focus:ring-red-400"
+                        title="Excluir tarefa">
+                    <i class="fas fa-trash-can text-xs"></i>
+                </button>
+                {% endif %}
                 <script>
                     function openTaskChat(activityId) {
                         // Create modal for task chat

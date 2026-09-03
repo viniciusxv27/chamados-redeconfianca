@@ -155,6 +155,14 @@
             </button>
 
             <div id="loja-{{ forloop.counter }}" class="hidden border-t border-gray-100 divide-y divide-gray-50">
+                {% if loja.conferir %}
+                <div class="px-5 py-2 bg-gray-50/70">
+                    <label class="inline-flex items-center gap-2 text-[11px] text-gray-500 cursor-pointer">
+                        <input type="checkbox" class="crs-marcar-todos rounded text-emerald-600 focus:ring-emerald-500">
+                        Marcar {{ loja.conferir }} pendente{{ loja.conferir|pluralize }} desta loja
+                    </label>
+                </div>
+                {% endif %}
                 {% for item in loja.itens %}{% include 'cursos/_pessoa_row.html' %}{% endfor %}
             </div>
         </div>
@@ -201,6 +209,14 @@
                 {% endif %}
             </div>
             <div class="divide-y divide-gray-50">
+                {% if geral.conferir %}
+                <div class="px-5 py-2 bg-gray-50/70">
+                    <label class="inline-flex items-center gap-2 text-[11px] text-gray-500 cursor-pointer">
+                        <input type="checkbox" class="crs-marcar-todos rounded text-emerald-600 focus:ring-emerald-500">
+                        Marcar {{ geral.conferir }} pendente{{ geral.conferir|pluralize }}
+                    </label>
+                </div>
+                {% endif %}
                 {% for item in geral.itens %}{% include 'cursos/_pessoa_row.html' %}{% endfor %}
             </div>
         </div>
@@ -209,7 +225,96 @@
     {% endif %}
 </div>
 
+{# Barra do lote: aparece só quando há alguém marcado. #}
+<form method="post" action="{% url 'cursos:aprovar_lote' %}" id="crsFormLote">
+    {% csrf_token %}
+    <input type="hidden" name="voltar" value="{{ request.get_full_path }}">
+    <div id="crsBarraLote"
+         class="hidden fixed bottom-0 inset-x-0 z-40 border-t border-gray-200 bg-white shadow-[0_-4px_16px_rgba(0,0,0,.06)]">
+        <div class="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
+            <p class="text-sm text-gray-700">
+                <strong id="crsQtdLote">0</strong> colaborador<span id="crsPluralLote"></span> selecionado<span id="crsPluralLote2"></span>
+            </p>
+            <div class="flex items-center gap-2">
+                <button type="button" onclick="crsLimparLote()"
+                        class="px-3 py-2 text-sm text-gray-500 hover:text-gray-700">Limpar</button>
+                <button type="submit" id="crsBotaoLote"
+                        class="px-5 py-2 rounded-lg bg-emerald-500 text-white text-sm font-semibold hover:bg-emerald-600">
+                    <i class="fas fa-check mr-1.5"></i>Aprovar selecionados
+                </button>
+            </div>
+        </div>
+    </div>
+</form>
+
 <script>
+// ── Aprovar em lote ────────────────────────────────────────────────────────
+// As caixinhas vivem fora do formulário (cada linha já tem os formulários de
+// aprovar/recusar, e form dentro de form é HTML inválido). Então elas são
+// recolhidas para dentro do formulário do lote na hora de enviar.
+(function () {
+    var form = document.getElementById('crsFormLote');
+    var barra = document.getElementById('crsBarraLote');
+    if (!form || !barra) return;
+
+    function marcadas() {
+        return Array.prototype.filter.call(
+            document.querySelectorAll('.crs-marcar'), function (c) { return c.checked; });
+    }
+
+    function atualizar() {
+        var n = marcadas().length;
+        document.getElementById('crsQtdLote').textContent = n;
+        document.getElementById('crsPluralLote').textContent = n === 1 ? '' : 'es';
+        document.getElementById('crsPluralLote2').textContent = n === 1 ? '' : 's';
+        barra.classList.toggle('hidden', n === 0);
+        // Espaço para a barra não tapar a última linha da lista.
+        document.body.style.paddingBottom = n ? '5rem' : '';
+    }
+
+    document.querySelectorAll('.crs-marcar').forEach(function (c) {
+        c.addEventListener('change', atualizar);
+    });
+
+    // "Marcar todos" vale só para o bloco em que ele está — marcar a rede
+    // inteira sem querer seria pior do que não ter o atalho.
+    document.querySelectorAll('.crs-marcar-todos').forEach(function (mestre) {
+        mestre.addEventListener('change', function () {
+            var bloco = mestre.closest('.crs-card') || document;
+            bloco.querySelectorAll('.crs-marcar').forEach(function (c) {
+                c.checked = mestre.checked;
+            });
+            atualizar();
+        });
+    });
+
+    window.crsLimparLote = function () {
+        document.querySelectorAll('.crs-marcar, .crs-marcar-todos').forEach(function (c) {
+            c.checked = false;
+        });
+        atualizar();
+    };
+
+    form.addEventListener('submit', function (e) {
+        var escolhidas = marcadas();
+        if (!escolhidas.length) { e.preventDefault(); return; }
+        // Limpa os inputs de uma tentativa anterior antes de recolher de novo.
+        form.querySelectorAll('input[name="comprovantes"]').forEach(function (i) { i.remove(); });
+        escolhidas.forEach(function (c) {
+            var campo = document.createElement('input');
+            campo.type = 'hidden';
+            campo.name = 'comprovantes';
+            campo.value = c.value;
+            form.appendChild(campo);
+        });
+        var botao = document.getElementById('crsBotaoLote');
+        botao.disabled = true;                     // clique duplo não envia duas vezes
+        botao.innerHTML = '<i class="fas fa-spinner fa-spin mr-1.5"></i>Aprovando…';
+    });
+
+    atualizar();
+})();
+
 function crsTab(name) {
     ['loja', 'geral'].forEach(function (n) {
         var pane = document.getElementById('crs-pane-' + n);
