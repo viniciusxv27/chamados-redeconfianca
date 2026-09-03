@@ -761,9 +761,10 @@ class Asset(models.Model):
     )
     observacoes = models.TextField(blank=True, null=True, verbose_name='Observações')
     photo = models.ImageField(
-        upload_to='assets/', 
-        blank=True, 
-        null=True, 
+        upload_to='assets/',
+        storage=get_media_storage(),
+        blank=True,
+        null=True,
         verbose_name='Foto do Asset'
     )
     

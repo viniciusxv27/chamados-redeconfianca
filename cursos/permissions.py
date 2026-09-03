@@ -35,8 +35,10 @@ def tem_curso_disponivel(user, cfg=None):
 
 
 def pode_ver(user, cfg=None):
+    from users.module_access import user_has_module
     cfg = cfg or config()
-    return e_gestor(user, cfg) or no_escopo(user, cfg) or tem_curso_disponivel(user, cfg)
+    return (e_gestor(user, cfg) or no_escopo(user, cfg)
+            or tem_curso_disponivel(user, cfg) or user_has_module(user, 'cursos'))
 
 
 def deve_ir_para_cursos(user, cfg=None):

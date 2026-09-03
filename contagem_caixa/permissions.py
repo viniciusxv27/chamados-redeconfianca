@@ -44,4 +44,5 @@ def pode_ver_caixa(user):
     """Gestor ou alguém lotado numa loja — o resto não tem caixa para contar."""
     if not user or not user.is_authenticated:
         return False
-    return e_gestor(user) or lojas_do_usuario(user).exists()
+    from users.module_access import user_has_module
+    return e_gestor(user) or lojas_do_usuario(user).exists() or user_has_module(user, 'caixa')

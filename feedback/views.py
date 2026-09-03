@@ -248,7 +248,9 @@ def _can_manage_surveys(user) -> bool:
         return False
     if _is_superadmin(user):
         return True
-    return SurveyManagerPermission.objects.filter(user=user).exists()
+    from users.module_access import user_has_module
+    return (SurveyManagerPermission.objects.filter(user=user).exists()
+            or user_has_module(user, 'clima'))
 
 
 def _can_access_exit_interview(user) -> bool:
@@ -258,7 +260,9 @@ def _can_access_exit_interview(user) -> bool:
         return False
     if _is_superadmin(user):
         return True
-    return ExitInterviewAccessPermission.objects.filter(user=user).exists()
+    from users.module_access import user_has_module
+    return (ExitInterviewAccessPermission.objects.filter(user=user).exists()
+            or user_has_module(user, 'entrevista_desligamento'))
 
 
 def superadmin_required(view_func):

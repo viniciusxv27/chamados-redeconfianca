@@ -767,12 +767,33 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // App instalado / WebView: mesma leitura da splash (base.html) + WebView
+    // nativo Android ("; wv)") e iOS (WKWebView sem "Safari" no user-agent).
+    function rcIsApp() {
+        try {
+            var mq = window.matchMedia;
+            var standalone = (mq && mq('(display-mode: standalone)').matches)
+                || window.navigator.standalone === true;
+            var ua = navigator.userAgent || '';
+            var androidWv = /;\s*wv\)/.test(ua) || /\bwv\b/.test(ua);
+            var iosApp = /(iPhone|iPod|iPad)/.test(ua) && !/Safari/.test(ua);
+            return standalone || androidWv || iosApp;
+        } catch (e) { return false; }
+    }
+
     if (experienceModal) {
-        openExperienceModal();
-        if (experienceClose) experienceClose.addEventListener('click', closeExperienceModal);
-        if (experienceOk) experienceOk.addEventListener('click', closeExperienceModal);
-        if (experienceBackdrop) experienceBackdrop.addEventListener('click', closeExperienceModal);
-        if (experienceExport) experienceExport.addEventListener('click', exportExperienceWindowCsv);
+        // O alerta de Janela de Experiência é um painel de DP e, como modal de
+        // tela cheia, aparecia como "tela cinza" travando o app. No app/WebView
+        // ele não abre (fica oculto e sem bloquear nada); no navegador é igual.
+        if (rcIsApp()) {
+            experienceModal.classList.add('hidden');
+        } else {
+            openExperienceModal();
+            if (experienceClose) experienceClose.addEventListener('click', closeExperienceModal);
+            if (experienceOk) experienceOk.addEventListener('click', closeExperienceModal);
+            if (experienceBackdrop) experienceBackdrop.addEventListener('click', closeExperienceModal);
+            if (experienceExport) experienceExport.addEventListener('click', exportExperienceWindowCsv);
+        }
     }
 
     // Popup de trilhas obrigatórias pendentes

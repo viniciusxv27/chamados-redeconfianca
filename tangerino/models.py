@@ -131,6 +131,11 @@ class ConfiguracaoTangerino(models.Model):
             return True
         if not self.ativo:
             return False
+        # Liberação individual (SUPERADMIN na tela do usuário) fura a restrição
+        # de grupo, mas continua respeitando o módulo estar ativo.
+        from users.module_access import user_has_module
+        if user_has_module(user, 'ponto'):
+            return True
         if not self.restrito_ao_grupo:
             return True
         if not self.grupo_id:

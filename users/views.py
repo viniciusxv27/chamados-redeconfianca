@@ -1155,7 +1155,14 @@ def edit_user_view(request, user_id):
                 if not user_to_edit.sector and sectors.exists():
                     user_to_edit.sector = sectors.first()
                     user_to_edit.save()
-                
+
+                # Liberação individual de módulos (grant-only). A view já é
+                # restrita a can_edit_users (SUPERADMIN), então este controle é,
+                # por construção, só do SUPERADMIN.
+                from .module_access import set_user_modules, MODULE_KEYS
+                modulos_marcados = [k for k in request.POST.getlist('modulos') if k in MODULE_KEYS]
+                set_user_modules(user_to_edit, modulos_marcados, granted_by=request.user)
+
                 user_to_edit.refresh_from_db()
                 alteracoes = registrar(user_to_edit, estado_anterior, request.user,
                                        ip=_ip_do_pedido(request))
@@ -1186,6 +1193,8 @@ def edit_user_view(request, user_id):
                  .select_related('changed_by')
                  .order_by('-created_at', 'field_label')[:200])
 
+    from .module_access import modules_by_group
+    from .models import UserModuleAccess
     context = {
         'user_to_edit': user_to_edit,
         'sectors': Sector.objects.all(),
@@ -1194,6 +1203,9 @@ def edit_user_view(request, user_id):
         'job_title_choices': _job_title_choices(user_to_edit.job_title),
         'historico_alteracoes': historico,
         'total_alteracoes': UserChangeLog.objects.filter(target=user_to_edit).count(),
+        'modulos_por_grupo': modules_by_group(),
+        'modulos_liberados': set(UserModuleAccess.objects
+                                 .filter(user=user_to_edit).values_list('module_key', flat=True)),
     }
     return render(request, 'admin/edit_user.html', context)
 

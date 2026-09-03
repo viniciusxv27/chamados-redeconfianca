@@ -19,7 +19,9 @@ def can_access_cartoes(user) -> bool:
         return False
     if is_superadmin(user):
         return True
-    return Cartao.objects.filter(responsavel=user, ativo=True).exists()
+    from users.module_access import user_has_module
+    return (Cartao.objects.filter(responsavel=user, ativo=True).exists()
+            or user_has_module(user, 'cartoes'))
 
 
 def cartoes_do_usuario(user):

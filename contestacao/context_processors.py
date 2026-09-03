@@ -35,6 +35,9 @@ def contestacao_menu_context(request):
         can_access = True
     elif _has_contestacao_global_access(user):
         can_access = True
+    else:
+        from users.module_access import user_has_module
+        can_access = user_has_module(user, 'contestacao')
 
     return {
         'can_access_contestacao_menu': can_access,

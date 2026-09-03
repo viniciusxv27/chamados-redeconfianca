@@ -1227,3 +1227,37 @@ class UserChangeLog(models.Model):
 
     def __str__(self):
         return f'{self.target}: {self.field_label} ({self.created_at:%d/%m/%Y %H:%M})'
+
+
+class UserModuleAccess(models.Model):
+    """Liberação individual de um módulo para um usuário (concede acesso extra).
+
+    Grant-only: a presença da linha LIBERA aquele módulo para a pessoa,
+    somando-se (OR) à regra normal de cada módulo (hierarquia/grupo/config).
+    Nunca tira acesso — só concede. Quem mexe é o SUPERADMIN, pela tela de
+    edição de usuário, que já é restrita a ele.
+
+    A lista de chaves válidas e como cada uma é checada fica em
+    ``users/module_access.py`` (uma única fonte, consumida pelo menu e pelas
+    views de cada módulo).
+    """
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name='module_accesses', verbose_name='Usuário')
+    module_key = models.CharField(max_length=50, db_index=True, verbose_name='Módulo')
+    granted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='module_grants_made', verbose_name='Liberado por')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Liberado em')
+
+    class Meta:
+        verbose_name = 'Acesso a módulo (individual)'
+        verbose_name_plural = 'Acessos a módulos (individuais)'
+        ordering = ['user__first_name', 'module_key']
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'module_key'], name='uniq_user_module'),
+        ]
+
+    def __str__(self):
+        return f'{self.user} → {self.module_key}'

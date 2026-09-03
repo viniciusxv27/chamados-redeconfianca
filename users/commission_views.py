@@ -2980,7 +2980,9 @@ def pode_ver_comissionamento(user):
         return False
     if getattr(user, 'hierarchy', '') != 'PADRAO':
         return True
-    return is_user_gerente(user) or is_user_coordenador(user)
+    from users.module_access import user_has_module
+    return (is_user_gerente(user) or is_user_coordenador(user)
+            or user_has_module(user, 'comissionamento'))
 
 
 @login_required

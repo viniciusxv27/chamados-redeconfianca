@@ -498,6 +498,38 @@
                     </div>
                 </div>
 
+                <!-- Liberação individual de módulos (grant-only) — só SUPERADMIN abre esta tela -->
+                <div class="pt-6 border-t border-gray-200 mt-6">
+                    <div class="flex items-start gap-2 mb-1">
+                        <i class="fas fa-toggle-on text-primary mt-1"></i>
+                        <div>
+                            <h3 class="text-lg font-semibold text-gray-900">Acessos de módulo (liberação individual)</h3>
+                            <p class="text-sm text-gray-500">
+                                Marque para <strong>liberar</strong> um módulo só para este usuário, somando-se à regra normal
+                                (hierarquia/grupo). Desmarcar remove apenas a liberação individual — não tira o acesso que a
+                                pessoa já tenha pela regra normal.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-3">
+                        {% for grupo, itens in modulos_por_grupo %}
+                        <div class="border border-gray-200 rounded-lg p-3">
+                            <p class="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">{{ grupo }}</p>
+                            <div class="space-y-2">
+                                {% for chave, rotulo in itens %}
+                                <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                                    <input type="checkbox" name="modulos" value="{{ chave }}"
+                                           {% if chave in modulos_liberados %}checked{% endif %}
+                                           class="rounded text-primary focus:ring-primary">
+                                    {{ rotulo }}
+                                </label>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
                 <!-- Submit Button -->
                 <div class="pt-6 border-t border-gray-200 mt-6">
                     <div class="flex flex-wrap justify-end gap-3">

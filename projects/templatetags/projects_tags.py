@@ -12,7 +12,11 @@ def can_access_projects(user):
     
     if user.is_superuser:
         return True
-    
+
+    from users.module_access import user_has_module
+    if user_has_module(user, 'projetos'):
+        return True
+
     try:
         access = ProjectSectorAccess.objects.get(sector=user.sector)
         return access.can_view_projects
