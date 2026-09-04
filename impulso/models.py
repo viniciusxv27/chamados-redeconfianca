@@ -1191,8 +1191,15 @@ class PesosImpulso(models.Model):
     o ciclo — uma rede sem Projeto FOCO num mês, por exemplo, não pode carregar
     20 pontos impossíveis.
 
-    Uma linha só (id=1). Enquanto ninguém mexer, os valores são exatamente os
-    que o código usava, e a pontuação de todo mundo continua igual.
+    São dois níveis, na mesma tabela:
+
+    * **régua geral** (``usuario`` vazio) — vale para todo mundo. É a linha que
+      já existia, e enquanto ninguém mexer os valores são exatamente os que o
+      código usava.
+    * **régua de uma pessoa** (``usuario`` preenchido) — quem tem função que
+      não encosta em Projeto FOCO, por exemplo, não pode carregar 20 pontos
+      impossíveis só porque a régua geral os tem. Existe só para quem foi
+      ajustado; os demais continuam na geral, sem cópia nenhuma no banco.
     """
 
     # (campo, rótulo, pilar, valor de origem)
@@ -1209,6 +1216,11 @@ class PesosImpulso(models.Model):
     )
     PILARES = (('CONFIAR', 'Confiar'), ('CONECTAR', 'Conectar'), ('INOVAR', 'Inovar'))
     TOTAL_ESPERADO = Decimal('100')
+
+    usuario = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True,
+        related_name='pesos_impulso', verbose_name='Pessoa',
+        help_text='Vazio = régua geral, que vale para quem não tem a própria.')
 
     metas_qualidade = models.DecimalField(max_digits=5, decimal_places=2, default=10)
     metas_conclusao = models.DecimalField(max_digits=5, decimal_places=2, default=10)
@@ -1232,18 +1244,43 @@ class PesosImpulso(models.Model):
     class Meta:
         verbose_name = 'Pesos do Impulso'
         verbose_name_plural = 'Pesos do Impulso'
+        # O OneToOne já garante uma régua por pessoa. A régua geral (usuario
+        # nulo) não dá para travar por constraint — no Postgres vários NULL
+        # convivem no mesmo índice único —, então quem garante uma só é o
+        # get(), que sempre devolve a primeira.
 
     def __str__(self):
-        return f'Pesos do Impulso ({self.total} pontos)'
+        if self.usuario_id:
+            return f'Pesos do Impulso — {self.usuario} ({self.total} pontos)'
+        return f'Pesos do Impulso — geral ({self.total} pontos)'
 
-    def save(self, *args, **kwargs):
-        self.pk = 1
-        super().save(*args, **kwargs)
+    @property
+    def e_geral(self):
+        return self.usuario_id is None
 
     @classmethod
     def get(cls):
-        obj, _ = cls.objects.get_or_create(pk=1)
+        """A régua geral. Continua sendo o padrão de todo mundo."""
+        obj = cls.objects.filter(usuario__isnull=True).order_by('pk').first()
+        if obj is None:
+            obj = cls.objects.create(usuario=None)
         return obj
+
+    @classmethod
+    def para(cls, user):
+        """A régua que vale para esta pessoa: a dela, ou a geral."""
+        if user is not None and getattr(user, 'pk', None):
+            propria = cls.objects.filter(usuario_id=user.pk).first()
+            if propria is not None:
+                return propria
+        return cls.get()
+
+    @classmethod
+    def propria_de(cls, user):
+        """A régua exclusiva desta pessoa, ou None se ela usa a geral."""
+        if user is None or not getattr(user, 'pk', None):
+            return None
+        return cls.objects.filter(usuario_id=user.pk).first()
 
     def esta_ativo(self, campo):
         """Tarefa desligada explicitamente? Sem registro, está ligada."""

@@ -26,7 +26,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from feedback.models import Feedback
-from impulso.scoring import (FEEDBACK_NOTA_MINIMA, PT_FEEDBACK, _nota_feedback,
+from impulso.scoring import (FEEDBACK_NOTA_MINIMA, pt, _nota_feedback,
                              avaliar_feedback, periodo_do_mes)
 
 User = get_user_model()
@@ -78,7 +78,7 @@ try:
     t('primeiro feedback garante o ponto mesmo com nota baixa',
       d['atingiu'] is True and d['nota'] == 60.0, d)
     pontos, aplicavel, det = _nota_feedback(p1, inicio_mes, fim_mes)
-    t('pontuação dá os 10 pontos', pontos == PT_FEEDBACK, pontos)
+    t('pontuação dá os 10 pontos', pontos == pt('feedback'), pontos)
     t('explica o motivo na tela', det['motivo'] == 'primeiro feedback recebido', det['motivo'])
 
     print('\n== CAMINHO 2 — A NOTA SUBIU ==')
@@ -91,7 +91,7 @@ try:
     t('reconhece a evolução', d['evoluiu'] is True)
     t('nota que subiu garante o ponto', d['atingiu'] is True)
     pontos, _ap, det = _nota_feedback(p2, inicio_mes, fim_mes)
-    t('pontuação dá os 10 pontos', pontos == PT_FEEDBACK, pontos)
+    t('pontuação dá os 10 pontos', pontos == pt('feedback'), pontos)
     t('explica a evolução', 'evoluiu de 50 para 60' in det['motivo'], det['motivo'])
 
     print('\n== CAMINHO 3 — NOTA ALTA ==')
@@ -103,7 +103,7 @@ try:
     t('9 de 10 (90 de 100) garante o ponto', d['nota_alta'] is True and d['atingiu'] is True,
       d['nota'])
     pontos, _ap, det = _nota_feedback(p3, inicio_mes, fim_mes)
-    t('pontuação dá os 10 pontos', pontos == PT_FEEDBACK, pontos)
+    t('pontuação dá os 10 pontos', pontos == pt('feedback'), pontos)
     t('quem está no topo não perde ponto por não ter como subir',
       'acima de 90' in det['motivo'], det['motivo'])
 
@@ -116,7 +116,7 @@ try:
       d['atingiu'] is False, d)
     pontos, aplicavel, det = _nota_feedback(p4, inicio_mes, fim_mes)
     t('pontuação não dá os pontos', pontos == 0, pontos)
-    t('o item continua contando no total possível', aplicavel == PT_FEEDBACK)
+    t('o item continua contando no total possível', aplicavel == pt('feedback'))
     t('explica por que não fechou',
       'não subiu' in det['motivo'] and '90' in det['motivo'], det['motivo'])
 
@@ -153,7 +153,7 @@ try:
     cria_feedback(gestor, p8, 6, hoje, agora - timedelta(hours=3))     # 60: caiu de 90
     cria_feedback(gestor, p8, 7, hoje, agora - timedelta(hours=1))     # 70: subiu de 60
     pontos, _ap, det = _nota_feedback(p8, inicio_mes, fim_mes)
-    t('basta um feedback do mês fechar por algum caminho', pontos == PT_FEEDBACK, det)
+    t('basta um feedback do mês fechar por algum caminho', pontos == pt('feedback'), det)
     t('mostra o que garantiu o ponto', det['atingiu'] is True and det['nota'] == 70.0, det)
 
     print('\n== A TELA USA A MESMA CONTA ==')
@@ -185,7 +185,7 @@ try:
     for pessoa, esperado in ((p1, True), (p2, True), (p3, True), (p4, False)):
         pontos, _ap, det = _nota_feedback(pessoa, inicio_mes, fim_mes)
         t(f'{pessoa.username}: motor e regra combinam',
-          (pontos == PT_FEEDBACK) is esperado, f'{pontos} / {det}')
+          (pontos == pt('feedback')) is esperado, f'{pontos} / {det}')
 
 finally:
     transaction.set_rollback(True)

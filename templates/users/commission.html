@@ -202,6 +202,21 @@
 
                 <!-- Barra: atingimento da LOJA no pilar (ATING_CART_{PILAR}) -->
                 <div class="mt-auto">
+                    {% if pilar.carteira_sem_dado %}
+                    {% comment %}
+                    Célula vazia ou com texto na planilha. Mostrar 0,00% aqui
+                    seria apresentar dado que não existe como resultado real —
+                    e ninguém conseguiria distinguir de um zero verdadeiro.
+                    {% endcomment %}
+                    <div class="w-full h-2.5 rounded-full bg-gray-100 overflow-hidden"
+                         title="A planilha não traz o atingimento da loja neste pilar"></div>
+                    <p class="text-center text-xs font-semibold text-gray-400 mt-3">
+                        ATING LOJA:
+                        <span class="text-gray-400" title="Confira a coluna ATING_CART deste pilar na planilha">
+                            <i class="fas fa-triangle-exclamation text-amber-500 mr-0.5"></i>sem dado
+                        </span>
+                    </p>
+                    {% else %}
                     <div class="w-full h-2.5 rounded-full bg-gray-200 overflow-hidden"
                          title="Atingimento da loja: {{ pilar.carteira|default:0|format_br:2 }}%">
                         <div class="h-full rounded-full transition-all duration-700
@@ -214,6 +229,7 @@
                             {{ pilar.carteira|default:0|format_br:1 }}%
                         </span>
                     </p>
+                    {% endif %}
                 </div>
 
                 <!-- Hunter ID -->

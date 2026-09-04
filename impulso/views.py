@@ -1397,8 +1397,10 @@ def feedback_list(request):
     # /feedback/ fica o formulário FM-005, que tem as notas. É a nota de lá que
     # vira ponto de feedback no Impulso — mostrá-la aqui evita abrir outro
     # módulo só para entender de onde saiu a pontuação.
-    from .scoring import (FEEDBACK_NOTA_MINIMA, PT_FEEDBACK, avaliar_feedback,
-                          periodo_do_mes)
+    # O peso do feedback deixou de ser constante: agora vem da régua (geral ou
+    # da própria pessoa), editável em /impulso/acompanhamento/pesos/.
+    from .scoring import (FEEDBACK_NOTA_MINIMA, avaliar_feedback, periodo_do_mes,
+                          pt)
 
     inicio_mes, fim_mes = periodo_do_mes()
 
@@ -1431,7 +1433,7 @@ def feedback_list(request):
                 continue
             formais[fb.evaluatee_id] = dict(
                 dados, colaborador=fb.evaluatee, feedback=fb,
-                pontos=PT_FEEDBACK if dados['atingiu'] else 0)
+                pontos=pt('feedback', fb.evaluatee) if dados['atingiu'] else 0)
     except Exception:                                       # módulo indisponível
         formais = {}
 
@@ -1445,7 +1447,7 @@ def feedback_list(request):
         'media': round(sum(d['nota'] for d in com_nota) / len(com_nota), 1)
         if com_nota else None,
         'minimo': FEEDBACK_NOTA_MINIMA,
-        'pontos': PT_FEEDBACK,
+        'pontos': pt('feedback'),
         'mes': inicio_mes,
         # Tem nota no mês e ainda não tem feedback do Impulso registrado.
         'sem_registro': sorted(
@@ -2529,7 +2531,18 @@ def pesos_editar(request):
         messages.error(request, 'Apenas o SUPERADMIN altera a pontuação das tarefas.')
         return redirect('impulso:acompanhamento')
 
-    config = PesosImpulso.get()
+    # Sem `usuario` na URL, a tela edita a régua geral — a que vale para quem
+    # não tem a própria. Com `usuario`, edita só a daquela pessoa.
+    alvo = None
+    alvo_id = _int_or_none(request.GET.get('usuario') or request.POST.get('usuario'))
+    if alvo_id:
+        alvo = get_colaboradores().filter(id=alvo_id).first()
+        if alvo is None:
+            messages.error(request, 'Colaborador não encontrado no Impulso.')
+            return redirect('impulso:pesos_editar')
+
+    config = PesosImpulso.para(alvo) if alvo else PesosImpulso.get()
+    propria = PesosImpulso.propria_de(alvo) if alvo else None
 
     if request.method == 'POST':
         valores, ativos, erro = {}, {}, ''
@@ -2557,33 +2570,62 @@ def pesos_editar(request):
             messages.error(request, erro)
             # Devolve o que a pessoa digitou, para ela não redigitar tudo.
             return render(request, 'impulso/pesos.html', {
-                'config': config,
+                'config': config, 'alvo': alvo, 'propria': propria,
+                'colaboradores': get_colaboradores(),
+                'com_regua_propria': _com_regua_propria(),
                 'blocos': _blocos_digitados(valores, ativos, config),
                 'total_digitado': sum((v for c, v in valores.items()
                                        if ativos.get(c)), Decimal('0')),
                 'active_tab': 'acompanhamento',
             })
 
+        # Voltar para a régua geral é apagar a linha da pessoa: sem linha, ela
+        # volta a seguir a geral sozinha, e a geral segue evoluindo para ela.
+        if alvo and request.POST.get('usar_geral') == 'on':
+            PesosImpulso.objects.filter(usuario=alvo).delete()
+            limpar_cache_pesos(alvo)
+            messages.success(
+                request,
+                f'{alvo.get_full_name() or alvo.email} volta a seguir a régua geral.')
+            return redirect(f'{reverse("impulso:pesos_editar")}?usuario={alvo.id}')
+
+        if alvo and config.usuario_id != alvo.id:
+            # Primeira vez que esta pessoa ganha régua própria: parte da geral.
+            config = PesosImpulso(usuario=alvo)
+
         for campo, valor in valores.items():
             setattr(config, campo, valor)
         config.ativos = ativos
         config.atualizado_por = request.user
         config.save()
-        limpar_cache_pesos()
+        limpar_cache_pesos(alvo)
 
         desligadas = [r for c, r, _p, _d in PesosImpulso.ITENS if not ativos[c]]
-        recado = 'Pontuação salva.'
+        de_quem = (f' de {alvo.get_full_name() or alvo.email}' if alvo
+                   else ' geral (vale para quem não tem a própria)')
+        recado = f'Pontuação{de_quem} salva.'
         if desligadas:
-            recado += f' Fora da conta neste ciclo: {", ".join(desligadas)}.'
+            recado += f' Fora da conta: {", ".join(desligadas)}.'
         messages.success(request, recado)
-        return redirect('impulso:pesos_editar')
+        destino = reverse('impulso:pesos_editar')
+        return redirect(f'{destino}?usuario={alvo.id}' if alvo else destino)
 
     return render(request, 'impulso/pesos.html', {
-        'config': config,
+        'config': config, 'alvo': alvo, 'propria': propria,
+        'colaboradores': get_colaboradores(),
+        'com_regua_propria': _com_regua_propria(),
         'blocos': config.por_pilar(),
         'total_digitado': config.total,
         'active_tab': 'acompanhamento',
     })
+
+
+def _com_regua_propria():
+    """Quem já tem régua própria — a tela lista para não virar caixa-preta."""
+    from .models import PesosImpulso
+
+    return (PesosImpulso.objects.filter(usuario__isnull=False)
+            .select_related('usuario').order_by('usuario__first_name'))
 
 
 def _blocos_digitados(valores, ativos, config):

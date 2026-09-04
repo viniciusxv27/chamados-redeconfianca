@@ -1328,6 +1328,25 @@ def safe_float(value, default=0):
         return default
 
 
+def e_numero(value):
+    """A célula traz um número de verdade?
+
+    Existe para separar "a planilha diz zero" de "a planilha não tem esse
+    dado". O safe_float devolve 0 nos dois casos, e a tela mostrava 0,00% de
+    atingimento como se fosse resultado real — foi assim que o ATING LOJA de
+    Seguro apareceu zerado quando a célula, na verdade, continha o texto "H3".
+    """
+    if value is None:
+        return False
+    try:
+        import math
+
+        n = float(value)
+        return not math.isnan(n)
+    except (TypeError, ValueError):
+        return False
+
+
 def normalize_col_name(col_name):
     """
     Normaliza nome de coluna removendo acentos e convertendo para uppercase.
@@ -1959,6 +1978,11 @@ def process_commission_data(data, is_gerente=False, metas_pilar=None, iq_data=No
             # sempre vazia.
             'carteira': convert_percentage(
                 safe_float(data.get(f'ATING_CART_{key}') or data.get(cart_key))),
+            # Célula vazia ou com texto (Hunter "H3" caiu no ATING_CART_SEG da
+            # planilha de 07/2026) não é atingimento zero: é dado que falta. A
+            # tela precisa dizer isso em vez de desenhar uma barra vazia.
+            'carteira_sem_dado': not (
+                e_numero(data.get(f'ATING_CART_{key}')) or e_numero(data.get(cart_key))),
             'habilitado': data.get(f'H_{pilar["nome"].upper()}') or data.get(f'H_{key}'),
             # Dados de metas: Total, Pago, Exclusão
             'total': pilar_metas.get('total', 0),

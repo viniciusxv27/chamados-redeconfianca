@@ -163,6 +163,77 @@ try:
     t('a tela avisa o que ficou de fora', 'Projeto FOCO' in r.content.decode())
     t('o valor guardado não foi perdido', cfg.projeto_foco == 20, cfg.projeto_foco)
 
+    print('\n== RÉGUA POR PESSOA ==')
+    from impulso.models import PesosImpulso as PI
+
+    def salvar_de(pessoa, valores, desligar=()):
+        dados = {'usuario': pessoa.id}
+        for campo, _r, _p, padrao in PI.ITENS:
+            dados[f'peso_{campo}'] = str(valores.get(campo, padrao))
+            if campo not in desligar:
+                dados[f'ativo_{campo}'] = 'on'
+        return cs.post(f'/impulso/acompanhamento/pesos/?usuario={pessoa.id}',
+                       dados, follow=True)
+
+    t('sem régua própria, a pessoa segue a geral',
+      PI.propria_de(colab) is None)
+    t('e os pesos dela são os gerais',
+      pesos(colab)['curso'] == pesos()['curso'], (pesos(colab)['curso'], pesos()['curso']))
+
+    # O colaborador não encosta em Projeto FOCO: os 20 dele vão para as ideias.
+    # CONFIAR 40 + CONECTAR (10 curso + 10 vídeos + 0 foco) + INOVAR 40 = 100.
+    r = salvar_de(colab, {'ideias': 20, 'ideia_aprovada': 20},
+                  desligar={'projeto_foco'})
+    limpar_cache_pesos()
+    propria = PI.propria_de(colab)
+    t('a pessoa ganha régua própria', propria is not None)
+    t('com os valores dela', propria and propria.ideias == 20, propria.ideias if propria else '')
+    t('e a tarefa desligada', propria and not propria.esta_ativo('projeto_foco'))
+    t('o total dela fecha em 100', propria and propria.total == 100, propria.total if propria else '')
+
+    t('a pontuação dela usa a régua dela', pt('ideias', colab) == 20, pt('ideias', colab))
+    t('e o Projeto FOCO dela vale zero', pt('projeto_foco', colab) == 0)
+    t('mas a régua GERAL não mudou', pt('ideias') == 10, pt('ideias'))
+    t('e quem não tem régua própria segue a geral',
+      pt('ideias', gestor) == 10, pt('ideias', gestor))
+
+    t('os máximos dela mudam', maximos(colab)[2] == 40, maximos(colab)[2])
+    t('e continuam somando 100', maximos(colab)[3] == 100, maximos(colab)[3])
+    t('os de quem segue a geral não mudam', maximos(gestor)[2] == 20, maximos(gestor)[2])
+
+    print('\n-- a tela mostra de quem é a régua --')
+    html = cs.get(f'/impulso/acompanhamento/pesos/?usuario={colab.id}').content.decode()
+    t('dá para escolher a pessoa', 'name="usuario"' in html)
+    t('avisa que ela tem régua própria', 'tem régua própria' in html)
+    t('e oferece voltar para a geral', 'name="usar_geral"' in html)
+    t('lista quem já tem régua própria', 'Com régua própria hoje' in html)
+
+    html = cs.get(f'/impulso/acompanhamento/pesos/?usuario={gestor.id}').content.decode()
+    t('para quem não tem, avisa que vai criar', 'segue a régua geral' in html)
+    t('e não oferece "voltar à geral"', 'name="usar_geral"' not in html)
+
+    html = cs.get('/impulso/acompanhamento/pesos/').content.decode()
+    t('a tela geral se identifica como geral', 'Régua geral' in html)
+
+    print('\n-- voltar para a geral --')
+    dados = {'usuario': colab.id, 'usar_geral': 'on'}
+    for campo, _r, _p, padrao in PI.ITENS:
+        dados[f'peso_{campo}'] = str(padrao)
+        dados[f'ativo_{campo}'] = 'on'
+    r = cs.post(f'/impulso/acompanhamento/pesos/?usuario={colab.id}', dados, follow=True)
+    limpar_cache_pesos()
+    t('a régua própria é apagada', PI.propria_de(colab) is None)
+    t('e ela volta a seguir a geral', pt('ideias', colab) == 10, pt('ideias', colab))
+    t('a tela confirma', 'volta a seguir a régua geral' in r.content.decode())
+
+    print('\n-- régua quebrada por pessoa também é recusada --')
+    r = salvar_de(colab, {'ideias': 90})
+    t('não salva quem não fecha em 100', PI.propria_de(colab) is None)
+
+    print('\n-- colaborador inexistente --')
+    r = cs.get('/impulso/acompanhamento/pesos/?usuario=99999999', follow=True)
+    t('id inexistente volta para a geral', bool(r.redirect_chain), r.redirect_chain)
+
     print('\n== O CACHE NÃO PODE SEGURAR A RÉGUA VELHA ==')
     t('a tela limpa o cache ao salvar', pt('curso') == 30)
     t('e o padrão sobrevive a banco fora do ar',
