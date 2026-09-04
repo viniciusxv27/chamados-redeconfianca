@@ -1,0 +1,188 @@
+{% extends 'base.html' %}
+{% block title %}{{ c.nome|default:"Currículo" }}{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 py-6">
+
+    <a href="{% url 'curriculos:banco' %}" class="text-sm text-gray-500 hover:text-gray-700 mb-3 inline-block">
+        <i class="fas fa-arrow-left mr-1.5"></i>Voltar ao banco
+    </a>
+
+    {% if messages %}
+        {% for message in messages %}
+        <div role="alert" class="mb-3 p-3 rounded-xl text-sm
+             {% if message.tags == 'success' %}bg-green-50 border border-green-100 text-green-800
+             {% else %}bg-red-50 border border-red-100 text-red-700{% endif %}">{{ message }}</div>
+        {% endfor %}
+    {% endif %}
+
+    <div class="flex items-start justify-between gap-3 flex-wrap mb-4">
+        <div class="min-w-0">
+            <h1 class="text-xl font-bold text-gray-800">{{ c.nome|default:"(sem nome lido)" }}</h1>
+            <p class="text-xs text-gray-400 mt-0.5">
+                importado em {{ c.enviado_em|date:"d/m/Y H:i" }}
+                {% if c.enviado_por %} por {{ c.enviado_por.get_full_name|default:c.enviado_por.username }}{% endif %}
+            </p>
+        </div>
+        <div class="flex items-center gap-2">
+            {% if c.arquivo %}
+            <a href="{{ c.arquivo.url }}" target="_blank" rel="noopener noreferrer"
+               class="px-3 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 hover:bg-gray-50">
+                <i class="fas fa-file-pdf mr-1"></i>Abrir PDF
+            </a>
+            {% endif %}
+            <span class="px-2.5 py-1 rounded-full text-[11px] font-semibold
+                {% if c.situacao == 'CONTRATADO' %}bg-emerald-100 text-emerald-700
+                {% elif c.situacao == 'ENTREVISTA' %}bg-indigo-100 text-indigo-700
+                {% elif c.situacao == 'DESCARTADO' %}bg-gray-200 text-gray-600
+                {% else %}bg-teal-50 text-teal-700{% endif %}">
+                {{ c.get_situacao_display }}
+            </span>
+        </div>
+    </div>
+
+    {% if c.situacao == 'CONTRATADO' %}
+    <div class="mb-4 p-3 rounded-xl bg-emerald-50 border border-emerald-100 text-sm text-emerald-800">
+        <i class="fas fa-user-check mr-1.5"></i>
+        Contratado{% if c.contratado_em %} em {{ c.contratado_em|date:"d/m/Y" }}{% endif %} —
+        não aparece mais nas buscas por vaga.
+    </div>
+    {% endif %}
+
+    {% if c.entrevista_token %}
+    <div class="mb-4 p-4 rounded-2xl bg-white border border-indigo-100 shadow-sm">
+        <h2 class="text-sm font-semibold text-gray-700 mb-1">
+            <i class="fas fa-robot text-indigo-500 mr-1.5"></i>Entrevista com a IA do RH
+        </h2>
+        {% if entrevista %}
+            {% for cand in entrevista.candidatos %}
+            <div class="mt-2 text-sm text-gray-700">
+                <p class="font-medium">{{ cand.nome }}</p>
+                {% if cand.resumo %}<p class="text-xs text-gray-500 mt-0.5">{{ cand.resumo }}</p>{% endif %}
+                <div class="flex items-center gap-2 flex-wrap mt-1.5 text-[11px]">
+                    {% if cand.loja_top %}
+                    <span class="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700">
+                        melhor loja: {{ cand.loja_top }}{% if cand.score_top %} · {{ cand.score_top }}{% endif %}
+                    </span>{% endif %}
+                    {% if cand.tolerancia_pressao %}
+                    <span class="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">pressão: {{ cand.tolerancia_pressao }}</span>{% endif %}
+                    {% if cand.ritmo_aprendizado %}
+                    <span class="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">ritmo: {{ cand.ritmo_aprendizado }}</span>{% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <p class="text-xs text-gray-400">
+                O resumo da análise só aparece aqui quando o portal tem acesso de leitura ao
+                sistema de perfil. O link abaixo funciona de qualquer forma.
+            </p>
+        {% endif %}
+        {% if c.link_entrevista %}
+        <a href="{{ c.link_entrevista }}" target="_blank" rel="noopener noreferrer"
+           class="inline-block mt-3 px-4 py-2 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700">
+            <i class="fas fa-arrow-up-right-from-square mr-1.5"></i>Abrir a entrevista completa
+        </a>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <form method="post" action="{% url 'curriculos:atualizar' c.id %}"
+          class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
+        {% csrf_token %}
+
+        <p class="text-xs text-gray-400">
+            O portal leu o que conseguiu do PDF. Corrija o que estiver errado — é isto que a
+            busca por vaga usa.
+        </p>
+
+        <div class="grid sm:grid-cols-2 gap-3">
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Nome</label>
+                <input type="text" name="nome" value="{{ c.nome }}" maxlength="180"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Telefone</label>
+                <input type="text" name="telefone" value="{{ c.telefone }}" maxlength="40"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            </div>
+            <div class="sm:col-span-2">
+                <label class="block text-xs text-gray-500 mb-1">Endereço</label>
+                <input type="text" name="endereco" value="{{ c.endereco }}" maxlength="300"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Cidade</label>
+                <input type="text" name="cidade" value="{{ c.cidade }}" maxlength="120"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Bairro</label>
+                <input type="text" name="bairro" value="{{ c.bairro }}" maxlength="120"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            </div>
+            <div class="sm:col-span-2">
+                <label class="block text-xs text-gray-500 mb-1">E-mail</label>
+                <input type="email" name="email" value="{{ c.email }}" maxlength="254"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            </div>
+        </div>
+
+        <div>
+            <label class="block text-xs text-gray-500 mb-1">
+                Cargos (um por linha — é o que a busca compara primeiro)
+            </label>
+            <textarea name="cargos" rows="3"
+                      class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">{{ c.cargos }}</textarea>
+        </div>
+
+        <div>
+            <label class="block text-xs text-gray-500 mb-1">Experiência</label>
+            <textarea name="experiencia" rows="8"
+                      class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">{{ c.experiencia }}</textarea>
+        </div>
+
+        <div class="grid sm:grid-cols-2 gap-3">
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Situação</label>
+                <select name="situacao" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    {% for valor, rotulo in situacoes %}
+                    <option value="{{ valor }}" {% if c.situacao == valor %}selected{% endif %}>{{ rotulo }}</option>
+                    {% endfor %}
+                </select>
+                <p class="text-[11px] text-gray-400 mt-1">
+                    Contratado e descartado saem das buscas por vaga.
+                </p>
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">Entrevista (link ou token)</label>
+                <input type="text" name="entrevista_token" value="{{ c.entrevista_token }}"
+                       placeholder="cole o link /e/… da IA do RH"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            </div>
+        </div>
+
+        <div>
+            <label class="block text-xs text-gray-500 mb-1">Observação do RH</label>
+            <textarea name="observacao" rows="3"
+                      class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">{{ c.observacao }}</textarea>
+        </div>
+
+        <div class="flex items-center justify-between gap-3 flex-wrap pt-2 border-t border-gray-100">
+            <button class="px-5 py-2 rounded-lg bg-teal-600 text-white text-sm font-medium hover:bg-teal-700">
+                <i class="fas fa-check mr-1.5"></i>Salvar
+            </button>
+        </div>
+    </form>
+
+    {% if e_superadmin %}
+    <form method="post" action="{% url 'curriculos:excluir' c.id %}" class="mt-3 text-right"
+          onsubmit="return confirm('Excluir o currículo de {{ c.nome|default:c.nome_arquivo|escapejs }} do banco? Não dá para desfazer.');">
+        {% csrf_token %}
+        <button class="text-xs text-gray-400 hover:text-red-600">
+            <i class="fas fa-trash-can mr-1"></i>Excluir do banco
+        </button>
+    </form>
+    {% endif %}
+</div>
+{% endblock %}

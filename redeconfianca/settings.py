@@ -78,7 +78,8 @@ INSTALLED_APPS = [
     'contagem_caixa',  # Contagem de Caixa (controle diário por loja)
     'vendas',  # Lançamento de vendas (Postgres) + tabela de preços
     'maps',  # Mapa de localização (módulo oculto, restrito à administração)
-    'cursos',  # Cursos obrigatórios da Vivo
+    'cursos',
+    'curriculos',  # Banco de Talentos (currículos do RH)
     'reunioes',  # Reuniões com sala de vídeo e ata
     # 'webpush',  # Django WebPush (temporariamente removido)
 ]
@@ -132,6 +133,7 @@ TEMPLATES = [
                 'contagem_caixa.context_processors.caixa_menu',
                 'maps.context_processors.coleta_posicao',
                 'cursos.context_processors.cursos_menu',
+                'curriculos.context_processors.banco_de_talentos',
                 'reunioes.context_processors.reunioes_lembrete',
                 'users.context_processors_commission.comissionamento_menu',
             ],

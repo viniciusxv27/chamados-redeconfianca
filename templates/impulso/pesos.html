@@ -1,0 +1,153 @@
+{% extends 'impulso/base_impulso.html' %}
+{% block impulso_content %}
+
+<div class="flex items-start justify-between gap-3 mb-4 flex-wrap">
+    <div>
+        <h2 class="font-semibold text-gray-800">
+            <i class="fas fa-sliders text-orange-600 mr-2"></i>Pontuação das tarefas
+        </h2>
+        <p class="text-xs text-gray-400 mt-0.5">
+            Quanto vale cada tarefa dos 3 pilares. Só o SUPERADMIN.
+        </p>
+    </div>
+    <a href="{% url 'impulso:acompanhamento' %}" class="text-sm text-gray-500 hover:text-gray-800">
+        <i class="fas fa-arrow-left mr-1"></i>Voltar ao acompanhamento
+    </a>
+</div>
+
+{% if messages %}
+    {% for message in messages %}
+    <div role="alert" class="mb-3 p-3 rounded-xl text-sm
+         {% if message.tags == 'success' %}bg-green-50 border border-green-100 text-green-800
+         {% else %}bg-red-50 border border-red-100 text-red-700{% endif %}">{{ message }}</div>
+    {% endfor %}
+{% endif %}
+
+<div class="imp-card p-4 mb-4 bg-gray-50/60">
+    <p class="text-xs text-gray-600 leading-relaxed">
+        <i class="fas fa-circle-info text-gray-400 mr-1"></i>
+        Os <strong>100 pontos</strong> do mês são divididos entre estas tarefas. Desligar uma
+        tirar ela da conta de todo mundo — e os pontos dela precisam ir para outra, senão a
+        faixa "Impulso 100%" fica inatingível. Por isso a tela só salva quando a soma fecha
+        em 100.
+    </p>
+</div>
+
+<form method="post" id="pesosForm">
+    {% csrf_token %}
+
+    <div class="grid lg:grid-cols-3 gap-4">
+        {% for bloco in blocos %}
+        <div class="imp-card p-5">
+            <div class="flex items-center justify-between gap-2 mb-3">
+                <h3 class="text-sm font-bold text-gray-800">{{ bloco.rotulo }}</h3>
+                <span class="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 tabular-nums"
+                      data-total-pilar="{{ bloco.pilar }}">{{ bloco.total|floatformat:"-2" }} pts</span>
+            </div>
+
+            <div class="space-y-3">
+                {% for item in bloco.itens %}
+                <div class="flex items-center gap-2" data-item>
+                    <input type="checkbox" name="ativo_{{ item.campo }}"
+                           {% if item.ativo %}checked{% endif %}
+                           onchange="pesosRecalcular()"
+                           class="rounded text-orange-600 focus:ring-orange-500 flex-shrink-0"
+                           title="Desmarque para tirar esta tarefa da conta">
+                    <label class="text-sm text-gray-700 flex-1 min-w-0 truncate">{{ item.rotulo }}</label>
+                    <input type="number" name="peso_{{ item.campo }}" step="0.5" min="0" max="100"
+                           value="{{ item.valor|floatformat:"-2" }}"
+                           oninput="pesosRecalcular()"
+                           data-pilar="{{ bloco.pilar }}"
+                           class="w-20 border border-gray-300 rounded-lg px-2 py-1 text-sm text-right tabular-nums">
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="imp-card p-4 mt-4 flex items-center justify-between gap-3 flex-wrap">
+        <div>
+            <p class="text-sm text-gray-700">
+                Total: <strong id="pesosTotal" class="tabular-nums">{{ total_digitado|floatformat:"-2" }}</strong> de 100
+            </p>
+            <p id="pesosAviso" class="text-xs mt-0.5"></p>
+        </div>
+        <div class="flex items-center gap-2">
+            <button type="button" onclick="pesosDistribuir()"
+                    class="px-3 py-2 text-sm text-gray-600 hover:text-gray-800">
+                Distribuir igualmente
+            </button>
+            <button type="submit" id="pesosSalvar"
+                    class="px-5 py-2 rounded-lg bg-orange-600 text-white text-sm font-semibold hover:bg-orange-700">
+                <i class="fas fa-check mr-1.5"></i>Salvar
+            </button>
+        </div>
+    </div>
+</form>
+
+<script>
+// A conta na tela é a mesma do servidor: quem manda é o servidor, mas deixar a
+// pessoa descobrir o desequilíbrio só depois de salvar seria trabalho perdido.
+function pesosCampos() {
+    return Array.from(document.querySelectorAll('#pesosForm input[type=number]'));
+}
+function pesosLigado(campo) {
+    var linha = campo.closest('[data-item]');
+    var caixa = linha ? linha.querySelector('input[type=checkbox]') : null;
+    return !caixa || caixa.checked;
+}
+function pesosRecalcular() {
+    var total = 0;
+    var porPilar = {};
+    pesosCampos().forEach(function (campo) {
+        var ligado = pesosLigado(campo);
+        campo.disabled = !ligado;
+        campo.classList.toggle('opacity-40', !ligado);
+        var valor = ligado ? (parseFloat(campo.value) || 0) : 0;
+        total += valor;
+        var pilar = campo.dataset.pilar;
+        porPilar[pilar] = (porPilar[pilar] || 0) + valor;
+    });
+    Object.keys(porPilar).forEach(function (pilar) {
+        var alvo = document.querySelector('[data-total-pilar="' + pilar + '"]');
+        if (alvo) alvo.textContent = (Math.round(porPilar[pilar] * 100) / 100) + ' pts';
+    });
+
+    var arredondado = Math.round(total * 100) / 100;
+    document.getElementById('pesosTotal').textContent = arredondado;
+    var aviso = document.getElementById('pesosAviso');
+    var salvar = document.getElementById('pesosSalvar');
+    if (arredondado === 100) {
+        aviso.textContent = 'Fecha em 100 — pode salvar.';
+        aviso.className = 'text-xs mt-0.5 text-emerald-600';
+        salvar.disabled = false;
+        salvar.classList.remove('opacity-50', 'cursor-not-allowed');
+    } else {
+        var falta = Math.round((100 - arredondado) * 100) / 100;
+        aviso.textContent = falta > 0 ? 'Faltam ' + falta + ' pontos para fechar em 100.'
+                                      : 'Passou ' + (-falta) + ' pontos de 100.';
+        aviso.className = 'text-xs mt-0.5 text-red-600';
+        salvar.disabled = true;
+        salvar.classList.add('opacity-50', 'cursor-not-allowed');
+    }
+}
+// Campo desabilitado não é enviado pelo formulário, e o servidor precisa saber
+// o peso guardado da tarefa desligada para religar sem redigitar. Reabilita
+// tudo no instante do envio; a caixinha é que diz o que está ligado.
+document.getElementById('pesosForm').addEventListener('submit', function () {
+    pesosCampos().forEach(function (campo) { campo.disabled = false; });
+});
+function pesosDistribuir() {
+    var ligados = pesosCampos().filter(pesosLigado);
+    if (!ligados.length) return;
+    var cada = Math.floor(100 / ligados.length * 100) / 100;
+    ligados.forEach(function (campo) { campo.value = cada; });
+    // A sobra do arredondamento vai para o primeiro, para fechar exatamente 100.
+    var soma = cada * ligados.length;
+    ligados[0].value = Math.round((cada + (100 - soma)) * 100) / 100;
+    pesosRecalcular();
+}
+pesosRecalcular();
+</script>
+{% endblock %}

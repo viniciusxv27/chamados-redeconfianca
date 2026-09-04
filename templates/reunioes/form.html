@@ -21,10 +21,59 @@
         {% endfor %}
     {% endif %}
 
-    <form method="post" class="space-y-4">
+    {% comment %}
+    enctype: entrevista pode vir com o currículo em PDF anexado. Sem isso o
+    arquivo chega vazio no servidor, sem erro nenhum.
+    {% endcomment %}
+    <form method="post" enctype="multipart/form-data" class="space-y-4">
         {% csrf_token %}
 
         <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Tipo</label>
+                <div class="grid sm:grid-cols-2 gap-2">
+                    <label class="flex items-start gap-2 p-3 rounded-xl border border-gray-200 cursor-pointer hover:bg-gray-50">
+                        <input type="radio" name="tipo" value="REUNIAO" class="mt-0.5"
+                               onchange="rnTipo()" id="rnTipoReuniao"
+                               {% if not reuniao or reuniao.tipo != 'ENTREVISTA' %}checked{% endif %}>
+                        <span>
+                            <span class="block text-sm text-gray-800">Reunião</span>
+                            <span class="block text-xs text-gray-400">Sala de vídeo e ata.</span>
+                        </span>
+                    </label>
+                    <label class="flex items-start gap-2 p-3 rounded-xl border border-gray-200 cursor-pointer hover:bg-gray-50">
+                        <input type="radio" name="tipo" value="ENTREVISTA" class="mt-0.5"
+                               onchange="rnTipo()" id="rnTipoEntrevista"
+                               {% if reuniao and reuniao.tipo == 'ENTREVISTA' %}checked{% endif %}>
+                        <span>
+                            <span class="block text-sm text-gray-800">Entrevista</span>
+                            <span class="block text-xs text-gray-400">
+                                Abre a ficha no Banco de Talentos.
+                            </span>
+                        </span>
+                    </label>
+                </div>
+            </div>
+
+            <div id="rnBlocoEntrevista" class="hidden p-4 rounded-xl bg-teal-50/60 border border-teal-100">
+                <p class="text-sm font-semibold text-teal-900 mb-1">
+                    <i class="fas fa-address-book mr-1.5"></i>Candidato no Banco de Talentos
+                </p>
+                <p class="text-xs text-teal-800 mb-3">
+                    A ficha é criada junto com a entrevista. Anexando o currículo aqui, o portal
+                    já lê nome, endereço e experiência — e o candidato passa a aparecer nas
+                    buscas por vaga.
+                </p>
+                <label class="block text-xs font-medium text-teal-900 mb-1">Currículo (PDF, opcional)</label>
+                <input type="file" name="curriculo" accept="application/pdf,.pdf"
+                       class="w-full text-sm text-gray-600 file:mr-3 file:px-3 file:py-1.5 file:rounded-lg
+                              file:border-0 file:bg-white file:text-teal-700 file:text-sm">
+                <p class="text-[11px] text-teal-700 mt-2">
+                    Escreva o nome do candidato no tema ("Entrevista — Maria Silva"): ele vira o
+                    nome da ficha.
+                </p>
+            </div>
+
             <div>
                 <label class="block text-sm font-semibold text-gray-700 mb-1">Tema da reunião</label>
                 <input type="text" name="titulo" required maxlength="200" value="{{ reuniao.titulo|default:'' }}"
@@ -158,3 +207,14 @@ document.getElementById('rn-busca').addEventListener('input', function () {
 document.addEventListener('DOMContentLoaded', rnRecontar);
 </script>
 {% endblock %}
+
+<script>
+// O bloco do candidato só faz sentido em entrevista: deixá-lo visível sempre
+// faria parecer que toda reunião abre ficha no banco de talentos.
+function rnTipo() {
+    var entrevista = document.getElementById('rnTipoEntrevista');
+    var bloco = document.getElementById('rnBlocoEntrevista');
+    if (bloco && entrevista) bloco.classList.toggle('hidden', !entrevista.checked);
+}
+rnTipo();
+</script>

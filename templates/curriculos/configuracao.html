@@ -1,0 +1,68 @@
+{% extends 'base.html' %}
+{% block title %}Banco de Talentos — configuração{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto px-4 py-6">
+    <a href="{% url 'curriculos:banco' %}" class="text-sm text-gray-500 hover:text-gray-700 mb-3 inline-block">
+        <i class="fas fa-arrow-left mr-1.5"></i>Voltar ao banco
+    </a>
+
+    <h1 class="text-xl font-bold text-gray-800 mb-1">
+        <i class="fas fa-gear text-teal-600 mr-2"></i>Banco de Talentos — configuração
+    </h1>
+    <p class="text-sm text-gray-500 mb-5">Só o SUPERADMIN mexe aqui.</p>
+
+    {% if messages %}
+        {% for message in messages %}
+        <div role="alert" class="mb-4 p-3 rounded-xl text-sm bg-green-50 border border-green-100 text-green-800">{{ message }}</div>
+        {% endfor %}
+    {% endif %}
+
+    <form method="post" class="space-y-4">
+        {% csrf_token %}
+
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+            <h2 class="text-sm font-semibold text-gray-700 mb-1">
+                <i class="fas fa-users text-teal-500 mr-1.5"></i>Quem usa o banco
+            </h2>
+            <p class="text-xs text-gray-500 mb-3">
+                Currículo é dado pessoal de quem ainda nem trabalha aqui — endereço, telefone,
+                histórico. Sem nenhum grupo marcado, só o SUPERADMIN enxerga.
+            </p>
+            <div class="max-h-72 overflow-y-auto border border-gray-100 rounded-xl divide-y divide-gray-50">
+                {% for g in grupos %}
+                <label class="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-gray-50">
+                    <input type="checkbox" name="grupos" value="{{ g.id }}"
+                           {% if g.id in marcados %}checked{% endif %}
+                           class="rounded text-teal-600 focus:ring-teal-500">
+                    <span class="text-sm text-gray-700">{{ g.name }}</span>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+            <h2 class="text-sm font-semibold text-gray-700 mb-1">
+                <i class="fas fa-robot text-indigo-500 mr-1.5"></i>IA do RH (sistema de perfil)
+            </h2>
+            <p class="text-xs text-gray-500 mb-3">
+                Endereço do sistema que grava e analisa a entrevista. É com ele que o portal monta
+                o link <code class="bg-gray-100 px-1 rounded">/e/&lt;token&gt;</code> de cada candidato.
+            </p>
+            <input type="url" name="url_sistema_perfil" value="{{ cfg.url_sistema_perfil }}"
+                   placeholder="https://…"
+                   class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            <p class="text-[11px] text-gray-400 mt-2">
+                Para o portal também mostrar o resumo da análise dentro do currículo, a variável
+                <code class="bg-gray-100 px-1 rounded">SISTEMA_PERFIL_MYSQL_URL</code> precisa estar
+                no <code class="bg-gray-100 px-1 rounded">.env</code> do servidor. Credencial de outro
+                sistema não fica no código.
+            </p>
+        </div>
+
+        <button class="px-5 py-2 rounded-lg bg-teal-600 text-white text-sm font-medium hover:bg-teal-700">
+            <i class="fas fa-check mr-1.5"></i>Salvar
+        </button>
+    </form>
+</div>
+{% endblock %}

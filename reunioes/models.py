@@ -112,6 +112,18 @@ class Reuniao(models.Model):
     status = models.CharField(max_length=14, choices=STATUS, default=AGENDADA)
     gravar_ata = models.BooleanField(default=True, verbose_name='Gerar ata')
 
+    # Entrevista não é uma reunião como as outras: ela nasce ligada a um
+    # candidato do banco de talentos e ao sistema de perfil (a IA do RH). O tipo
+    # é o que dispara essa ligação — ver curriculos/entrevistas.py.
+    REUNIAO = 'REUNIAO'
+    ENTREVISTA = 'ENTREVISTA'
+    TIPOS = [
+        (REUNIAO, 'Reunião'),
+        (ENTREVISTA, 'Entrevista'),
+    ]
+    tipo = models.CharField(max_length=12, choices=TIPOS, default=REUNIAO,
+                            db_index=True, verbose_name='Tipo')
+
     evento = models.OneToOneField(
         'agenda.CalendarEvent', on_delete=models.SET_NULL, null=True, blank=True,
         related_name='reuniao', verbose_name='Evento na agenda')

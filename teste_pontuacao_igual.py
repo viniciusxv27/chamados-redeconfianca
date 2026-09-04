@@ -24,7 +24,7 @@ from django.utils import timezone
 
 from communications.models import CommunicationGroup
 from impulso.models import GRUPO_ADM, GRUPO_GESTOR, Ideia, Meta
-from impulso.scoring import (MAX_CONECTAR, MAX_CONFIAR, MAX_INOVAR, MAX_TOTAL,
+from impulso.scoring import (maximos,
                              blocos_resumo, calcular_pontuacao,
                              linhas_detalhadas, periodo_do_mes)
 from users.models import Sector
@@ -47,6 +47,7 @@ marcador = transaction.atomic()
 marcador.__enter__()
 try:
     print('== OS PESOS SÃO OS PEDIDOS ==')
+    MAX_CONFIAR, MAX_CONECTAR, MAX_INOVAR, MAX_TOTAL = maximos()
     t('CONFIAR vale 40', MAX_CONFIAR == 40, MAX_CONFIAR)
     t('CONECTAR vale 40', MAX_CONECTAR == 40, MAX_CONECTAR)
     t('INOVAR vale 20', MAX_INOVAR == 20, MAX_INOVAR)

@@ -1181,3 +1181,100 @@ class ExcecaoAssiduidade(models.Model):
         """Os dias liberados naquele mês, como set de date."""
         return set(cls.objects.filter(data__year=ano, data__month=mes)
                    .values_list('data', flat=True))
+
+
+class PesosImpulso(models.Model):
+    """Quantos pontos vale cada tarefa dos 3 pilares.
+
+    Os pesos eram constantes no código: mudar a régua exigia deploy. Aqui o
+    SUPERADMIN redistribui os 100 pontos e desliga a tarefa que não vale para
+    o ciclo — uma rede sem Projeto FOCO num mês, por exemplo, não pode carregar
+    20 pontos impossíveis.
+
+    Uma linha só (id=1). Enquanto ninguém mexer, os valores são exatamente os
+    que o código usava, e a pontuação de todo mundo continua igual.
+    """
+
+    # (campo, rótulo, pilar, valor de origem)
+    ITENS = (
+        ('metas_qualidade', 'Qualidade das metas', 'CONFIAR', 10),
+        ('metas_conclusao', 'Conclusão das metas', 'CONFIAR', 10),
+        ('feedback', 'Feedback do gestor', 'CONFIAR', 10),
+        ('assiduidade', 'Assiduidade', 'CONFIAR', 10),
+        ('curso', 'Curso', 'CONECTAR', 10),
+        ('videos_pops', 'Vídeos e POPs', 'CONECTAR', 10),
+        ('projeto_foco', 'Projeto FOCO', 'CONECTAR', 20),
+        ('ideias', 'Ideias propostas', 'INOVAR', 10),
+        ('ideia_aprovada', 'Ideia aprovada', 'INOVAR', 10),
+    )
+    PILARES = (('CONFIAR', 'Confiar'), ('CONECTAR', 'Conectar'), ('INOVAR', 'Inovar'))
+    TOTAL_ESPERADO = Decimal('100')
+
+    metas_qualidade = models.DecimalField(max_digits=5, decimal_places=2, default=10)
+    metas_conclusao = models.DecimalField(max_digits=5, decimal_places=2, default=10)
+    feedback = models.DecimalField(max_digits=5, decimal_places=2, default=10)
+    assiduidade = models.DecimalField(max_digits=5, decimal_places=2, default=10)
+    curso = models.DecimalField(max_digits=5, decimal_places=2, default=10)
+    videos_pops = models.DecimalField(max_digits=5, decimal_places=2, default=10)
+    projeto_foco = models.DecimalField(max_digits=5, decimal_places=2, default=20)
+    ideias = models.DecimalField(max_digits=5, decimal_places=2, default=10)
+    ideia_aprovada = models.DecimalField(max_digits=5, decimal_places=2, default=10)
+
+    # Tarefa desligada vale zero e some da tela de acompanhamento. Guardar o
+    # peso dela em vez de zerar permite religar sem redigitar.
+    ativos = models.JSONField(default=dict, blank=True, verbose_name='Tarefas ativas')
+
+    atualizado_em = models.DateTimeField(auto_now=True)
+    atualizado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='+')
+
+    class Meta:
+        verbose_name = 'Pesos do Impulso'
+        verbose_name_plural = 'Pesos do Impulso'
+
+    def __str__(self):
+        return f'Pesos do Impulso ({self.total} pontos)'
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    def esta_ativo(self, campo):
+        """Tarefa desligada explicitamente? Sem registro, está ligada."""
+        return bool((self.ativos or {}).get(campo, True))
+
+    def peso(self, campo):
+        """Pontos que a tarefa vale agora. Desligada vale zero."""
+        if not self.esta_ativo(campo):
+            return Decimal('0')
+        return Decimal(getattr(self, campo, 0) or 0)
+
+    @property
+    def total(self):
+        return sum((self.peso(c) for c, _, _, _ in self.ITENS), Decimal('0'))
+
+    @property
+    def fecha_em_100(self):
+        return self.total == self.TOTAL_ESPERADO
+
+    def por_pilar(self):
+        """[(pilar, rótulo, [itens], total)] — é como a tela desenha."""
+        rotulos = dict(self.PILARES)
+        saida = []
+        for pilar in rotulos:
+            itens = [
+                {'campo': c, 'rotulo': r, 'valor': Decimal(getattr(self, c) or 0),
+                 'ativo': self.esta_ativo(c), 'peso': self.peso(c)}
+                for c, r, p, _ in self.ITENS if p == pilar
+            ]
+            saida.append({
+                'pilar': pilar, 'rotulo': rotulos[pilar], 'itens': itens,
+                'total': sum((i['peso'] for i in itens), Decimal('0')),
+            })
+        return saida

@@ -84,6 +84,7 @@ urlpatterns = [
 
     # ACOMPANHAMENTO
     path('acompanhamento/', views.acompanhamento, name='acompanhamento'),
+    path('acompanhamento/pesos/', views.pesos_editar, name='pesos_editar'),
     path('acompanhamento/<int:user_id>/', views.detalhe_colaborador, name='detalhe_colaborador'),
 
     # ACOMPANHAMENTO — ciclos

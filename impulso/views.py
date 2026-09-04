@@ -2509,3 +2509,97 @@ def meta_itens_reordenar(request, meta_id):
     MetaItem.objects.bulk_update(sequencia, ['ordem'])
 
     return JsonResponse({'ok': True, 'itens': len(sequencia)})
+
+
+@impulso_member_required
+def pesos_editar(request):
+    """A régua dos 100 pontos: quanto vale cada tarefa dos 3 pilares.
+
+    Só o SUPERADMIN. Mexer aqui muda a nota de todo mundo no ciclo, então a
+    tela recusa salvar enquanto a soma não fechar em 100 — régua que não fecha
+    faria a faixa "Impulso 100%" ser inatingível ou barata demais, e ninguém
+    perceberia até o fim do mês.
+    """
+    from decimal import Decimal, InvalidOperation
+
+    from .models import PesosImpulso
+    from .scoring import limpar_cache_pesos
+
+    if not request.user.is_superuser:
+        messages.error(request, 'Apenas o SUPERADMIN altera a pontuação das tarefas.')
+        return redirect('impulso:acompanhamento')
+
+    config = PesosImpulso.get()
+
+    if request.method == 'POST':
+        valores, ativos, erro = {}, {}, ''
+        for campo, rotulo, _pilar, _padrao in PesosImpulso.ITENS:
+            ligado = request.POST.get(f'ativo_{campo}') == 'on'
+            ativos[campo] = ligado
+            bruto = (request.POST.get(f'peso_{campo}') or '').strip().replace(',', '.')
+            try:
+                valor = Decimal(bruto or '0')
+            except InvalidOperation:
+                erro = f'"{bruto}" não é um valor válido em {rotulo}.'
+                break
+            if valor < 0:
+                erro = f'{rotulo} não pode ser negativo.'
+                break
+            valores[campo] = valor
+
+        if not erro:
+            soma = sum((v for c, v in valores.items() if ativos[c]), Decimal('0'))
+            if soma != PesosImpulso.TOTAL_ESPERADO:
+                erro = (f'As tarefas ligadas somam {soma}, não {PesosImpulso.TOTAL_ESPERADO}. '
+                        f'Redistribua os pontos antes de salvar.')
+
+        if erro:
+            messages.error(request, erro)
+            # Devolve o que a pessoa digitou, para ela não redigitar tudo.
+            return render(request, 'impulso/pesos.html', {
+                'config': config,
+                'blocos': _blocos_digitados(valores, ativos, config),
+                'total_digitado': sum((v for c, v in valores.items()
+                                       if ativos.get(c)), Decimal('0')),
+                'active_tab': 'acompanhamento',
+            })
+
+        for campo, valor in valores.items():
+            setattr(config, campo, valor)
+        config.ativos = ativos
+        config.atualizado_por = request.user
+        config.save()
+        limpar_cache_pesos()
+
+        desligadas = [r for c, r, _p, _d in PesosImpulso.ITENS if not ativos[c]]
+        recado = 'Pontuação salva.'
+        if desligadas:
+            recado += f' Fora da conta neste ciclo: {", ".join(desligadas)}.'
+        messages.success(request, recado)
+        return redirect('impulso:pesos_editar')
+
+    return render(request, 'impulso/pesos.html', {
+        'config': config,
+        'blocos': config.por_pilar(),
+        'total_digitado': config.total,
+        'active_tab': 'acompanhamento',
+    })
+
+
+def _blocos_digitados(valores, ativos, config):
+    """Redesenha a tela com o que a pessoa acabou de digitar."""
+    from .models import PesosImpulso
+
+    rotulos = dict(PesosImpulso.PILARES)
+    saida = []
+    for pilar in rotulos:
+        itens = [
+            {'campo': c, 'rotulo': r,
+             'valor': valores.get(c, getattr(config, c)),
+             'ativo': ativos.get(c, True),
+             'peso': valores.get(c, getattr(config, c)) if ativos.get(c) else 0}
+            for c, r, p, _ in PesosImpulso.ITENS if p == pilar
+        ]
+        saida.append({'pilar': pilar, 'rotulo': rotulos[pilar], 'itens': itens,
+                      'total': sum(i['peso'] for i in itens)})
+    return saida

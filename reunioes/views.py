@@ -104,6 +104,17 @@ def lista(request):
 # ---------------------------------------------------------------------------
 # Criar / editar
 # ---------------------------------------------------------------------------
+def _ficha_de_entrevista(reuniao, request):
+    """Reunião do tipo Entrevista ganha ficha no banco de talentos."""
+    try:
+        from curriculos.entrevistas import ficha_da_entrevista
+
+        return ficha_da_entrevista(reuniao, autor=request.user,
+                                   arquivo=request.FILES.get('curriculo'))
+    except Exception:                                   # módulo indisponível
+        return None
+
+
 @login_required
 def nova(request, reuniao_id=None):
     reuniao = None
@@ -145,19 +156,28 @@ def nova(request, reuniao_id=None):
             convidados = list(User.objects.filter(id__in=ids, is_active=True))
             origem = publico.origens(catalogo, escolhidos)
 
+            tipo = request.POST.get('tipo')
+            if tipo not in dict(Reuniao.TIPOS):
+                tipo = Reuniao.REUNIAO
+
             if reuniao is None:
                 reuniao = Reuniao.objects.create(
                     titulo=titulo[:200], pauta=(request.POST.get('pauta') or '').strip(),
-                    inicio=inicio, fim=fim, organizador=request.user,
+                    inicio=inicio, fim=fim, organizador=request.user, tipo=tipo,
                     gravar_ata=request.POST.get('gravar_ata') == 'on')
                 novo = True
             else:
                 reuniao.titulo = titulo[:200]
                 reuniao.pauta = (request.POST.get('pauta') or '').strip()
                 reuniao.inicio, reuniao.fim = inicio, fim
+                reuniao.tipo = tipo
                 reuniao.gravar_ata = request.POST.get('gravar_ata') == 'on'
                 reuniao.save()
                 novo = False
+
+            # Entrevista já abre a ficha no banco de talentos, com o currículo
+            # anexado se veio junto. Falhar aqui não derruba a reunião.
+            _ficha_de_entrevista(reuniao, request)
 
             antes = set(reuniao.participantes.values_list('user_id', flat=True))
             agora_ids = {u.id for u in convidados}

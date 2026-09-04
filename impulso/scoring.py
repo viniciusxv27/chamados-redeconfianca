@@ -44,21 +44,94 @@ from .models import (ConclusaoConteudo, ConteudoConectar, Ideia, Meta,
 from .utils import faixa_por_score
 
 # --- Pesos de cada item -----------------------------------------------------
-PT_METAS_QUALIDADE = Decimal('10')
-PT_METAS_CONCLUSAO = Decimal('10')
-PT_FEEDBACK = Decimal('10')
-PT_ASSIDUIDADE = Decimal('10')
-PT_CURSO = Decimal('10')
-PT_VIDEOS_POPS = Decimal('10')
-PT_PROJETO_FOCO = Decimal('20')
-PT_IDEIAS = Decimal('10')
-PT_IDEIA_APROVADA = Decimal('10')
+# Os valores vivem no banco (PesosImpulso), editáveis pelo SUPERADMIN em
+# /impulso/acompanhamento/. Estes aqui são só o ponto de partida: enquanto
+# ninguém mexer, a régua é exatamente a que sempre foi.
+PADRAO = {
+    'metas_qualidade': Decimal('10'),
+    'metas_conclusao': Decimal('10'),
+    'feedback': Decimal('10'),
+    'assiduidade': Decimal('10'),
+    'curso': Decimal('10'),
+    'videos_pops': Decimal('10'),
+    'projeto_foco': Decimal('20'),
+    'ideias': Decimal('10'),
+    'ideia_aprovada': Decimal('10'),
+}
 
-# O total de cada bloco é fixo: é a régua, e ela é a mesma para todo mundo.
-MAX_CONFIAR = PT_METAS_QUALIDADE + PT_METAS_CONCLUSAO + PT_FEEDBACK + PT_ASSIDUIDADE
-MAX_CONECTAR = PT_CURSO + PT_VIDEOS_POPS + PT_PROJETO_FOCO
-MAX_INOVAR = PT_IDEIAS + PT_IDEIA_APROVADA
-MAX_TOTAL = MAX_CONFIAR + MAX_CONECTAR + MAX_INOVAR
+PILAR_DO_ITEM = {
+    'metas_qualidade': 'CONFIAR', 'metas_conclusao': 'CONFIAR',
+    'feedback': 'CONFIAR', 'assiduidade': 'CONFIAR',
+    'curso': 'CONECTAR', 'videos_pops': 'CONECTAR', 'projeto_foco': 'CONECTAR',
+    'ideias': 'INOVAR', 'ideia_aprovada': 'INOVAR',
+}
+
+
+CHAVE_CACHE = 'impulso_pesos_v1'
+
+
+def pesos():
+    """Os pesos em vigor. Banco fora do ar volta ao padrão, nunca a zero.
+
+    Zerar em caso de falha faria todo mundo tirar 0 no mês — o erro mais caro
+    possível numa régua de premiação.
+
+    Fica em cache curto porque o cálculo de uma pontuação consulta os pesos
+    dezenas de vezes; sem isso seria uma consulta ao banco por item, por
+    pessoa. A tela de edição limpa o cache ao salvar, então a régua nova vale
+    na hora.
+    """
+    from django.core.cache import caches
+
+    try:
+        cache = caches['local']
+    except Exception:                                        # noqa: BLE001
+        cache = None
+
+    if cache is not None:
+        guardado = cache.get(CHAVE_CACHE)
+        if guardado:
+            return {k: Decimal(v) for k, v in guardado.items()}
+
+    try:
+        from .models import PesosImpulso
+
+        config = PesosImpulso.get()
+        tabela = {campo: config.peso(campo) for campo in PADRAO}
+    except Exception:                                        # noqa: BLE001
+        return dict(PADRAO)
+
+    if cache is not None:
+        cache.set(CHAVE_CACHE, {k: str(v) for k, v in tabela.items()}, 60)
+    return tabela
+
+
+def limpar_cache_pesos():
+    """Chamado ao salvar a régua: a mudança precisa valer na hora."""
+    from django.core.cache import caches
+    try:
+        caches['local'].delete(CHAVE_CACHE)
+    except Exception:                                        # noqa: BLE001
+        pass
+
+
+def pt(campo, tabela=None):
+    """Pontos de um item. `tabela` evita reler o banco a cada chamada."""
+    return (tabela or pesos()).get(campo, PADRAO.get(campo, ZERO_INICIAL))
+
+
+ZERO_INICIAL = Decimal('0')
+
+
+def maximos(tabela=None):
+    """(confiar, conectar, inovar, total) com os pesos em vigor."""
+    tabela = tabela or pesos()
+    por_pilar = {'CONFIAR': Decimal('0'), 'CONECTAR': Decimal('0'),
+                 'INOVAR': Decimal('0')}
+    for campo, valor in tabela.items():
+        por_pilar[PILAR_DO_ITEM[campo]] += valor
+    total = sum(por_pilar.values(), Decimal('0'))
+    return por_pilar['CONFIAR'], por_pilar['CONECTAR'], por_pilar['INOVAR'], total
 
 FEEDBACK_NOTA_MINIMA = 90   # escala 0-100
 IDEIAS_MINIMAS = 3
@@ -96,7 +169,7 @@ def _nota_metas(user, inicio, fim):
     avaliadas = list(metas.filter(nota_qualidade__isnull=False, nota_prazo__isnull=False))
 
     # Conclusão (0-10)
-    p_conclusao = PT_METAS_CONCLUSAO * Decimal(concluidas) / Decimal(total)
+    p_conclusao = pt('metas_conclusao') * Decimal(concluidas) / Decimal(total)
 
     # Qualidade (0-10): média de (qualidade + prazo) numa escala 0-10 por meta
     if avaliadas:
@@ -105,8 +178,8 @@ def _nota_metas(user, inicio, fim):
         n = len(avaliadas)
         media_q = Decimal(soma_q) / Decimal(n)
         media_p = Decimal(soma_p) / Decimal(n)
-        p_qualidade = PT_METAS_QUALIDADE * (media_q + media_p) / Decimal('10')
-        aplicavel_qualidade = PT_METAS_QUALIDADE
+        p_qualidade = pt('metas_qualidade') * (media_q + media_p) / Decimal('10')
+        aplicavel_qualidade = pt('metas_qualidade')
     else:
         media_q = media_p = None
         p_qualidade = ZERO
@@ -120,7 +193,7 @@ def _nota_metas(user, inicio, fim):
         'media_prazo': float(round(media_p, 2)) if media_p is not None else None,
     }
     return (_quantize(p_qualidade), aplicavel_qualidade,
-            _quantize(p_conclusao), PT_METAS_CONCLUSAO, detalhes)
+            _quantize(p_conclusao), pt('metas_conclusao'), detalhes)
 
 
 def _nota_anterior(fb):
@@ -219,7 +292,7 @@ def _nota_feedback(user, inicio, fim):
     if escolhido is None:
         return ZERO, ZERO, {'sem_feedback': True}
 
-    return (PT_FEEDBACK if escolhido['atingiu'] else ZERO), PT_FEEDBACK, escolhido
+    return (pt('feedback') if escolhido['atingiu'] else ZERO), pt('feedback'), escolhido
 
 
 # ---------------------------------------------------------------------------
@@ -257,8 +330,8 @@ def _nota_projeto_foco(user, inicio, fim):
     if not total:
         return ZERO, ZERO, {'sem_tarefas': True}
     concluidas = tarefas.filter(status=TarefaProjeto.Status.CONCLUIDA).count()
-    nota = PT_PROJETO_FOCO * Decimal(concluidas) / Decimal(total)
-    return _quantize(nota), PT_PROJETO_FOCO, {'total': total, 'concluidas': concluidas}
+    nota = pt('projeto_foco') * Decimal(concluidas) / Decimal(total)
+    return _quantize(nota), pt('projeto_foco'), {'total': total, 'concluidas': concluidas}
 
 
 # ---------------------------------------------------------------------------
@@ -274,12 +347,12 @@ def _nota_inovar(user, inicio, fim):
     propostas = ideias.count()
     aprovadas = ideias.filter(status=Ideia.Status.APROVADA).count()
 
-    p_ideias = PT_IDEIAS if propostas >= IDEIAS_MINIMAS else ZERO
-    p_aprovada = PT_IDEIA_APROVADA if aprovadas >= 1 else ZERO
+    p_ideias = pt('ideias') if propostas >= IDEIAS_MINIMAS else ZERO
+    p_aprovada = pt('ideia_aprovada') if aprovadas >= 1 else ZERO
     detalhes = {
         'propostas': propostas, 'minimo': IDEIAS_MINIMAS, 'aprovadas': aprovadas,
     }
-    return p_ideias, PT_IDEIAS, p_aprovada, PT_IDEIA_APROVADA, detalhes
+    return p_ideias, pt('ideias'), p_aprovada, pt('ideia_aprovada'), detalhes
 
 
 def _info_assiduidade(detalhe):
@@ -309,10 +382,10 @@ def calcular_pontuacao(user, inicio=None, fim=None, referencia=None):
     p_assid, ap_assid, det_assid = nota_assiduidade(user, inicio.year, inicio.month)
 
     p_curso, ap_curso, det_curso = _nota_conteudos(
-        user, [ConteudoConectar.Tipo.CURSO], PT_CURSO, inicio, fim)
+        user, [ConteudoConectar.Tipo.CURSO], pt('curso'), inicio, fim)
     p_vp, ap_vp, det_vp = _nota_conteudos(
         user, [ConteudoConectar.Tipo.VIDEO, ConteudoConectar.Tipo.POP],
-        PT_VIDEOS_POPS, inicio, fim)
+        pt('videos_pops'), inicio, fim)
     p_proj, ap_proj, det_proj = _nota_projeto_foco(user, inicio, fim)
 
     (p_ideias, ap_ideias, p_aprov, ap_aprov, det_inovar) = _nota_inovar(user, inicio, fim)
@@ -327,10 +400,10 @@ def calcular_pontuacao(user, inicio=None, fim=None, referencia=None):
     # não é culpa de ninguém.
     houve = (ap_metas_q + ap_metas_c + ap_feedback + ap_assid
              + ap_curso + ap_vp + ap_proj + ap_ideias + ap_aprov)
-    sem_oportunidade = MAX_TOTAL - houve
+    sem_oportunidade = maximos()[3] - houve
 
-    aplicavel = MAX_TOTAL
-    percentual = total / MAX_TOTAL * 100
+    aplicavel = maximos()[3]
+    percentual = total / maximos()[3] * 100
 
     return {
         'inicio': inicio, 'fim': fim,
@@ -347,9 +420,9 @@ def calcular_pontuacao(user, inicio=None, fim=None, referencia=None):
         'p_ideias': _quantize(p_ideias),
         'p_ideia_aprovada': _quantize(p_aprov),
         # Totais por bloco
-        'confiar': _quantize(confiar), 'confiar_max': _quantize(MAX_CONFIAR),
-        'conectar': _quantize(conectar), 'conectar_max': _quantize(MAX_CONECTAR),
-        'inovar': _quantize(inovar), 'inovar_max': _quantize(MAX_INOVAR),
+        'confiar': _quantize(confiar), 'confiar_max': _quantize(maximos()[0]),
+        'conectar': _quantize(conectar), 'conectar_max': _quantize(maximos()[1]),
+        'inovar': _quantize(inovar), 'inovar_max': _quantize(maximos()[2]),
         # Geral
         'total': _quantize(total),
         'aplicavel': _quantize(aplicavel),
@@ -394,45 +467,45 @@ def linhas_detalhadas(dados):
     d = dados['detalhes']
     return [
         {'bloco': 'CONFIAR', 'item': 'Metas — qualidade das entregas',
-         'pontos': dados['p_metas_qualidade'], 'max': PT_METAS_QUALIDADE,
+         'pontos': dados['p_metas_qualidade'], 'max': pt('metas_qualidade'),
          'info': ('%s meta(s) avaliada(s) · qualidade %s/5 · prazo %s/5' % (
              d['metas'].get('avaliadas', 0), d['metas'].get('media_qualidade') or '—',
              d['metas'].get('media_prazo') or '—'))
          if not d['metas'].get('sem_metas') else 'Nenhuma meta com prazo no mês'},
         {'bloco': 'CONFIAR', 'item': 'Metas — conclusão',
-         'pontos': dados['p_metas_conclusao'], 'max': PT_METAS_CONCLUSAO,
+         'pontos': dados['p_metas_conclusao'], 'max': pt('metas_conclusao'),
          'info': ('%s de %s concluída(s)' % (
              d['metas'].get('concluidas', 0), d['metas'].get('total', 0)))
          if not d['metas'].get('sem_metas') else 'Nenhuma meta com prazo no mês'},
         {'bloco': 'CONFIAR', 'item': 'Feedback do gestor',
-         'pontos': dados['p_feedback'], 'max': PT_FEEDBACK,
+         'pontos': dados['p_feedback'], 'max': pt('feedback'),
          'info': (d['feedback'].get('motivo') or '—')
          if not d['feedback'].get('sem_feedback') else 'Sem feedback no mês'},
         {'bloco': 'CONFIAR',
          'item': ('Assiduidade (ponto eletrônico)'
                   if d['assiduidade'].get('fonte') == 'ponto'
                   else 'Assiduidade (folha de ponto)'),
-         'pontos': dados['p_assiduidade'], 'max': PT_ASSIDUIDADE,
+         'pontos': dados['p_assiduidade'], 'max': pt('assiduidade'),
          'info': _info_assiduidade(d['assiduidade'])},
         {'bloco': 'CONECTAR', 'item': 'Curso do mês',
-         'pontos': dados['p_curso'], 'max': PT_CURSO,
+         'pontos': dados['p_curso'], 'max': pt('curso'),
          'info': ('%s de %s concluído(s)' % (
              d['curso'].get('concluidos', 0), d['curso'].get('total', 0)))
          if not d['curso'].get('sem_conteudo') else 'Nenhum curso obrigatório no mês'},
         {'bloco': 'CONECTAR', 'item': 'Vídeos e POPs',
-         'pontos': dados['p_videos_pops'], 'max': PT_VIDEOS_POPS,
+         'pontos': dados['p_videos_pops'], 'max': pt('videos_pops'),
          'info': ('%s de %s concluído(s)' % (
              d['videos_pops'].get('concluidos', 0), d['videos_pops'].get('total', 0)))
          if not d['videos_pops'].get('sem_conteudo') else 'Nenhum vídeo/POP obrigatório'},
         {'bloco': 'CONECTAR', 'item': 'Projeto foco',
-         'pontos': dados['p_projeto_foco'], 'max': PT_PROJETO_FOCO,
+         'pontos': dados['p_projeto_foco'], 'max': pt('projeto_foco'),
          'info': ('%s de %s tarefa(s) concluída(s)' % (
              d['projeto_foco'].get('concluidas', 0), d['projeto_foco'].get('total', 0)))
          if not d['projeto_foco'].get('sem_tarefas') else 'Sem tarefas de projeto foco'},
         {'bloco': 'INOVAR', 'item': 'Propor %s ideias' % IDEIAS_MINIMAS,
-         'pontos': dados['p_ideias'], 'max': PT_IDEIAS,
+         'pontos': dados['p_ideias'], 'max': pt('ideias'),
          'info': '%s ideia(s) proposta(s)' % d['inovar'].get('propostas', 0)},
         {'bloco': 'INOVAR', 'item': 'Ideia aprovada',
-         'pontos': dados['p_ideia_aprovada'], 'max': PT_IDEIA_APROVADA,
+         'pontos': dados['p_ideia_aprovada'], 'max': pt('ideia_aprovada'),
          'info': '%s aprovada(s)' % d['inovar'].get('aprovadas', 0)},
     ]
