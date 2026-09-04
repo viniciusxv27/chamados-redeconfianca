@@ -53,6 +53,8 @@ urlpatterns = [
 
     # CONECTAR — conteúdos
     path('conectar/', views.conectar_list, name='conectar_list'),
+    path('conectar/conclusao/<int:conclusao_id>/decidir/', views.conclusao_decidir,
+         name='conclusao_decidir'),
     path('conectar/novo/', views.conteudo_create, name='conteudo_create'),
     path('conectar/<int:conteudo_id>/', views.conteudo_detail, name='conteudo_detail'),
     path('conectar/<int:conteudo_id>/editar/', views.conteudo_editar,
@@ -72,6 +74,8 @@ urlpatterns = [
     path('conectar/projetos/<int:projeto_id>/anexo/<int:anexo_id>/excluir/',
          views.projeto_anexo_excluir, name='projeto_anexo_excluir'),
     path('conectar/projetos/<int:projeto_id>/editar/', views.projeto_foco_edit, name='projeto_foco_edit'),
+    path('conectar/projetos/<int:projeto_id>/concluir/', views.projeto_foco_concluir,
+         name='projeto_foco_concluir'),
     path('conectar/projetos/<int:projeto_id>/tarefa/', views.tarefa_create, name='tarefa_create'),
     path('conectar/tarefa/<int:tarefa_id>/status/', views.tarefa_update_status, name='tarefa_update_status'),
     path('minhas-tarefas/', views.minhas_tarefas, name='minhas_tarefas'),

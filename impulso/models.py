@@ -667,7 +667,14 @@ class ConteudoConectar(models.Model):
     arquivo = models.FileField(
         upload_to=upload_conteudo, storage=get_media_storage(),
         null=True, blank=True, verbose_name='Arquivo',
-        help_text='Vídeo, PDF do POP ou material do curso (opcional).')
+        help_text='PDF do POP, material do curso ou o próprio vídeo (opcional).')
+    # POP e vídeo deixaram de ser dois cards: o POP escrito e o vídeo que
+    # ensina a mesma coisa são um conteúdo só, com dois anexos. Antes disso a
+    # pessoa concluía o PDF sem nunca ver o vídeo — e vice-versa.
+    video = models.FileField(
+        upload_to=upload_conteudo, storage=get_media_storage(),
+        null=True, blank=True, verbose_name='Vídeo',
+        help_text='Vídeo que acompanha o POP ou o material (opcional).')
     url = models.URLField(blank=True, verbose_name='Link externo',
                           help_text='Link do curso/vídeo (opcional).')
 
@@ -701,14 +708,73 @@ class ConteudoConectar(models.Model):
     # ou por link externo não dá para controlar, então não vira obrigatório.
     EXTENSOES_VIDEO = ('.mp4', '.webm', '.ogg', '.ogv', '.m4v', '.mov')
 
+    # Vídeo e POP são o mesmo grupo na tela e na pontuação; CURSO é o outro.
+    GRUPO_CURSO = 'CURSO'
+    GRUPO_POP_VIDEO = 'POP_VIDEO'
+    GRUPOS = (
+        (GRUPO_CURSO, 'Curso'),
+        (GRUPO_POP_VIDEO, 'Vídeo e POP'),
+    )
+    TIPOS_DO_GRUPO = {
+        GRUPO_CURSO: (Tipo.CURSO,),
+        GRUPO_POP_VIDEO: (Tipo.VIDEO, Tipo.POP),
+    }
+
+    @classmethod
+    def grupo_do_tipo(cls, tipo):
+        return cls.GRUPO_CURSO if tipo == cls.Tipo.CURSO else cls.GRUPO_POP_VIDEO
+
+    @property
+    def grupo(self):
+        return self.grupo_do_tipo(self.tipo)
+
+    @staticmethod
+    def _e_video(campo):
+        if not campo:
+            return False
+        return (campo.name or '').lower().endswith(
+            ConteudoConectar.EXTENSOES_VIDEO)
+
+    @property
+    def arquivo_de_video(self):
+        """O vídeo que o portal consegue acompanhar do início ao fim.
+
+        Olha o campo `video` primeiro e cai no `arquivo` depois: os vídeos
+        subidos antes do campo existir moram no `arquivo`, e continuar tocando
+        esses é o que impede a mudança de zerar o histórico de quem já assistiu.
+        """
+        if self._e_video(self.video):
+            return self.video
+        if self._e_video(self.arquivo):
+            return self.arquivo
+        return None
+
+    @property
+    def documento(self):
+        """O anexo que não é vídeo — o PDF do POP, o material do curso."""
+        if self.arquivo and not self._e_video(self.arquivo):
+            return self.arquivo
+        return None
+
     @property
     def video_reproduzivel(self):
-        """True quando o conteúdo é um vídeo hospedado que o portal consegue
-        acompanhar do início ao fim."""
-        if self.tipo != self.Tipo.VIDEO or not self.arquivo:
-            return False
-        nome = (self.arquivo.name or '').lower()
-        return nome.endswith(self.EXTENSOES_VIDEO)
+        """True quando há um vídeo hospedado que o portal consegue acompanhar."""
+        return self.arquivo_de_video is not None
+
+    @property
+    def rotulo(self):
+        """O que este conteúdo é, pelo que ele carrega — não pelo `tipo`.
+
+        Um item do grupo Vídeo e POP pode ter os dois anexos; dizer só "POP"
+        esconderia o vídeo de quem precisa assistir.
+        """
+        if self.tipo == self.Tipo.CURSO:
+            return 'Curso'
+        tem_video = self.arquivo_de_video is not None
+        tem_doc = self.documento is not None
+        if tem_video and tem_doc:
+            return 'Vídeo e POP'
+        return 'Vídeo' if tem_video else 'POP'
 
     def periodo_ativo(self):
         hoje = timezone.localdate()
@@ -763,6 +829,27 @@ class ConclusaoConteudo(models.Model):
         null=True, blank=True, verbose_name='Certificado')
     concluido_em = models.DateTimeField(null=True, blank=True, verbose_name='Concluído em')
 
+    # ── Aprovação, no mesmo desenho do Confiar ──────────────────────────────
+    # "Marquei como feito" não é a mesma coisa que "está feito": o certificado
+    # pode estar ilegível, ser de outro curso ou o POP não ter sido aplicado.
+    # Sem alguém conferir, os pontos do Conectar valiam pela palavra de quem
+    # marcou — e não havia como saber, na tela, o que já foi checado.
+    class Aprovacao(models.TextChoices):
+        PENDENTE = 'PENDENTE', 'Aguardando conferência'
+        APROVADA = 'APROVADA', 'Aprovada'
+        RECUSADA = 'RECUSADA', 'Recusada'
+
+    aprovacao = models.CharField(
+        max_length=10, choices=Aprovacao.choices, default=Aprovacao.PENDENTE,
+        db_index=True, verbose_name='Aprovação')
+    decidida_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='impulso_conclusoes_decididas', verbose_name='Conferido por')
+    decidida_em = models.DateTimeField(null=True, blank=True, verbose_name='Conferido em')
+    observacao = models.TextField(
+        blank=True, verbose_name='Observação de quem conferiu',
+        help_text='Obrigatória na recusa: é o que a pessoa lê para corrigir.')
+
     # Acompanhamento do vídeo. Guardado no servidor porque a checagem no
     # navegador sozinha não vale nada: bastaria um POST direto para "concluir"
     # sem ter assistido.
@@ -787,6 +874,40 @@ class ConclusaoConteudo(models.Model):
     def __str__(self):
         return f"{self.user} — {self.conteudo} ({'ok' if self.concluido else 'pendente'})"
 
+    @property
+    def aprovada(self):
+        return self.aprovacao == self.Aprovacao.APROVADA
+
+    @property
+    def aguardando(self):
+        """Marcada como feita e ainda não conferida."""
+        return self.concluido and self.aprovacao == self.Aprovacao.PENDENTE
+
+    @property
+    def vale_ponto(self):
+        """O que de fato conta na pontuação do Conectar.
+
+        Só o que foi conferido. Antes bastava a pessoa marcar; agora a régua é
+        a mesma do Confiar, onde a entrega passa pelo gestor.
+        """
+        return self.concluido and self.aprovacao == self.Aprovacao.APROVADA
+
+    def pode_decidir(self, user):
+        """Quem aprova ou recusa esta conclusão.
+
+        Gestor do Impulso, e nunca a própria pessoa — aprovar o próprio
+        certificado transformaria a conferência em carimbo. É a mesma regra do
+        `Meta.pode_decidir`, sem a parte de "quem pediu", que aqui não existe.
+        """
+        if not (user and user.is_authenticated) or not self.concluido:
+            return False
+        if user.is_superuser:
+            return True
+        if self.user_id == user.id:
+            return False
+        from .utils import is_impulso_manager
+        return is_impulso_manager(user)
+
 
 class ProjetoFoco(models.Model):
     """Projeto foco: o gestor adequa a equipe e as atribuições (tarefas)."""
@@ -797,6 +918,18 @@ class ProjetoFoco(models.Model):
         settings.AUTH_USER_MODEL, blank=True,
         related_name='impulso_projetos_foco', verbose_name='Equipe do projeto')
     ativo = models.BooleanField(default=True, verbose_name='Ativo')
+
+    # Metade dos 20 pontos do Projeto FOCO depende de o projeto ter saído, não
+    # só de cada um ter feito a sua parte. Por isso a conclusão é um estado do
+    # projeto, marcado por quem responde por ele — e não algo deduzido de
+    # "todas as tarefas estão concluídas": projeto sem tarefa nenhuma passaria
+    # por concluído, e a última tarefa marcada por engano encerraria o projeto.
+    concluido = models.BooleanField(default=False, verbose_name='Projeto concluído')
+    concluido_em = models.DateTimeField(null=True, blank=True,
+                                        verbose_name='Concluído em')
+    concluido_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='impulso_projetos_concluidos', verbose_name='Concluído por')
 
     criado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
@@ -810,6 +943,20 @@ class ProjetoFoco(models.Model):
 
     def __str__(self):
         return self.nome
+
+    @property
+    def progresso_tarefas(self):
+        """(concluídas, total) das tarefas do projeto."""
+        tarefas = list(self.tarefas.all())
+        feitas = sum(1 for t in tarefas
+                     if t.status == TarefaProjeto.Status.CONCLUIDA)
+        return feitas, len(tarefas)
+
+    @property
+    def tudo_entregue(self):
+        """Todas as tarefas concluídas — o momento de encerrar o projeto."""
+        feitas, total = self.progresso_tarefas
+        return bool(total) and feitas == total
 
 
 class TarefaProjeto(models.Model):
@@ -1210,7 +1357,10 @@ class PesosImpulso(models.Model):
         ('assiduidade', 'Assiduidade', 'CONFIAR', 10),
         ('curso', 'Curso', 'CONECTAR', 10),
         ('videos_pops', 'Vídeos e POPs', 'CONECTAR', 10),
-        ('projeto_foco', 'Projeto FOCO', 'CONECTAR', 20),
+        # Metade sai pela entrega da parte de cada um, metade pela conclusão
+        # do projeto. O peso configurado aqui é o total dos dois.
+        ('projeto_foco', 'Projeto FOCO (metade entrega, metade conclusão)',
+         'CONECTAR', 20),
         ('ideias', 'Ideias propostas', 'INOVAR', 10),
         ('ideia_aprovada', 'Ideia aprovada', 'INOVAR', 10),
     )

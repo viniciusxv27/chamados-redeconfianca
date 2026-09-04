@@ -119,6 +119,15 @@
     {% endif %}
     {% endwith %}
 
+    {% comment %}
+    Filtro por nome e setor logo abaixo dos botões, no mesmo lugar em toda aba.
+    Aparece só onde a view mandou `filtro_setores` — tela sem gente para
+    filtrar (formulários, detalhe de uma meta) não ganha barra à toa.
+    {% endcomment %}
+    {% if filtro_setores is not None or filtro_meses %}
+        {% include 'impulso/_filtros.html' %}
+    {% endif %}
+
     {% block impulso_content %}{% endblock %}
 </div>
 {% endblock %}

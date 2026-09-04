@@ -1,0 +1,66 @@
+{% comment %}
+Barra de filtro por nome e setor — a mesma em todas as telas do Impulso.
+
+Params (todos opcionais):
+  acao     — para onde o form envia (padrão: a própria URL)
+  rotulo   — placeholder da busca
+  compacto — sem o card em volta, para encaixar dentro de outro bloco
+
+Os demais parâmetros da URL (mês, ano, situação…) voltam como hidden: filtrar
+por nome não pode jogar a pessoa de volta para o mês corrente.
+{% endcomment %}
+<form method="get" action="{{ acao|default:'' }}"
+      class="{% if not compacto %}imp-card p-3 {% endif %}mb-4 flex flex-wrap items-center gap-2">
+    {% for chave, valor in filtro_outros.items %}
+    <input type="hidden" name="{{ chave }}" value="{{ valor }}">
+    {% endfor %}
+
+    {% comment %}
+    Nome e setor só aparecem onde a view mandou `filtro_setores`. O Inovar
+    manda só os meses de propósito: buscar por nome ali derrubaria o anonimato
+    da ideia diante do gestor.
+    {% endcomment %}
+    {% if filtro_setores is not None %}
+    <div class="relative flex-1 min-w-[12rem]">
+        <i class="fas fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-300 text-xs"></i>
+        <input type="search" name="q" value="{{ filtro_nome }}"
+               placeholder="{{ rotulo|default:'Buscar por nome…' }}"
+               class="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-lg
+                      focus:ring-2 focus:ring-orange-400 focus:border-transparent">
+    </div>
+
+    <select name="setor"
+            class="py-2 pl-3 pr-8 text-sm border border-gray-200 rounded-lg bg-white
+                   focus:ring-2 focus:ring-orange-400 focus:border-transparent">
+        <option value="">Todos os setores</option>
+        {% for s in filtro_setores %}
+        <option value="{{ s.id }}" {% if filtro_setor == s.id %}selected{% endif %}>{{ s.name }}</option>
+        {% endfor %}
+    </select>
+    {% else %}
+    <span class="flex-1"></span>
+    {% endif %}
+
+    {% if filtro_meses %}
+    <select name="mes"
+            class="py-2 pl-3 pr-8 text-sm border border-gray-200 rounded-lg bg-white
+                   focus:ring-2 focus:ring-orange-400 focus:border-transparent">
+        <option value="">Todos os meses</option>
+        {% for valor, nome in filtro_meses %}
+        <option value="{{ valor }}" {% if filtro_mes == valor %}selected{% endif %}>{{ nome }}</option>
+        {% endfor %}
+    </select>
+    {% endif %}
+
+    <button type="submit"
+            class="px-3.5 py-2 rounded-lg bg-orange-600 text-white text-sm font-medium hover:bg-orange-700">
+        Filtrar
+    </button>
+
+    {% if filtro.ativo %}
+    <a href="?{% for chave, valor in filtro_outros.items %}{{ chave }}={{ valor|urlencode }}{% if not forloop.last %}&{% endif %}{% endfor %}"
+       class="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-500 hover:bg-gray-50">
+        <i class="fas fa-xmark mr-1"></i>Limpar
+    </a>
+    {% endif %}
+</form>

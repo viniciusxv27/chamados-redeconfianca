@@ -40,7 +40,7 @@ from django.utils import timezone
 
 from .assiduidade import nota_assiduidade
 from .models import (ConclusaoConteudo, ConteudoConectar, Ideia, Meta,
-                     TarefaProjeto)
+                     ProjetoFoco, TarefaProjeto)
 from .utils import faixa_por_score
 
 # --- Pesos de cada item -----------------------------------------------------
@@ -328,23 +328,60 @@ def _nota_conteudos(user, tipos, pontos, inicio, fim):
         return ZERO, ZERO, {'sem_conteudo': True}
 
     ids = [c.id for c in conteudos]
-    concluidos = ConclusaoConteudo.objects.filter(
-        user=user, conteudo_id__in=ids, concluido=True).count()
+    feitas = ConclusaoConteudo.objects.filter(
+        user=user, conteudo_id__in=ids, concluido=True)
+    # Só pontua o que o gestor conferiu — mesma régua do Confiar, onde a
+    # entrega passa pela avaliação. "Marquei como feito" não é "está feito".
+    concluidos = feitas.filter(
+        aprovacao=ConclusaoConteudo.Aprovacao.APROVADA).count()
+    aguardando = feitas.filter(
+        aprovacao=ConclusaoConteudo.Aprovacao.PENDENTE).count()
+    recusados = feitas.filter(
+        aprovacao=ConclusaoConteudo.Aprovacao.RECUSADA).count()
     nota = pontos * Decimal(concluidos) / Decimal(total)
-    return _quantize(nota), pontos, {'total': total, 'concluidos': concluidos}
+    return _quantize(nota), pontos, {
+        'total': total, 'concluidos': concluidos,
+        # A tela precisa distinguir "ainda não fiz" de "fiz e espera
+        # conferência": o segundo não é culpa de quem fez.
+        'aguardando': aguardando, 'recusados': recusados,
+    }
 
 
 def _nota_projeto_foco(user, inicio, fim):
-    """20 pontos pelo andamento das tarefas do usuário em projetos foco."""
+    """Os pontos do Projeto FOCO, em duas metades.
+
+    Metade pela entrega da parte da pessoa; a outra metade quando o projeto é
+    concluído. A régua anterior pagava tudo por tarefa concluída — quem
+    entregava a sua parte pontuava igual em projeto que saiu e em projeto que
+    morreu no meio, e ninguém tinha motivo para empurrar o conjunto.
+
+    As duas metades são proporcionais: 3 de 4 tarefas feitas valem 3/4 da
+    primeira; estar em 2 projetos com 1 concluído vale metade da segunda.
+    """
     tarefas = TarefaProjeto.objects.filter(
         responsavel=user, projeto__ativo=True).filter(
         Q(prazo__isnull=True) | Q(prazo__gte=inicio, prazo__lte=fim))
     total = tarefas.count()
     if not total:
         return ZERO, ZERO, {'sem_tarefas': True}
+
+    maximo = pt('projeto_foco', user)
+    metade = maximo / Decimal(2)
+
     concluidas = tarefas.filter(status=TarefaProjeto.Status.CONCLUIDA).count()
-    nota = pt('projeto_foco', user) * Decimal(concluidas) / Decimal(total)
-    return _quantize(nota), pt('projeto_foco', user), {'total': total, 'concluidas': concluidas}
+    nota_entrega = metade * Decimal(concluidas) / Decimal(total)
+
+    ids = set(tarefas.values_list('projeto_id', flat=True))
+    entregues = ProjetoFoco.objects.filter(id__in=ids, concluido=True).count()
+    nota_conclusao = metade * Decimal(entregues) / Decimal(len(ids)) if ids else ZERO
+
+    return _quantize(nota_entrega + nota_conclusao), maximo, {
+        'total': total, 'concluidas': concluidas,
+        'projetos': len(ids), 'projetos_concluidos': entregues,
+        'metade': _quantize(metade),
+        'pontos_entrega': _quantize(nota_entrega),
+        'pontos_conclusao': _quantize(nota_conclusao),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -366,6 +403,18 @@ def _nota_inovar(user, inicio, fim):
         'propostas': propostas, 'minimo': IDEIAS_MINIMAS, 'aprovadas': aprovadas,
     }
     return p_ideias, pt('ideias', user), p_aprovada, pt('ideia_aprovada', user), detalhes
+
+
+def _info_projeto_foco(detalhe):
+    """Explica as duas metades, porque a nota já não sai só das tarefas."""
+    if detalhe.get('sem_tarefas'):
+        return 'Sem tarefas de projeto foco'
+    return ('%s de %s tarefa(s) concluída(s) (%s pt) · %s de %s projeto(s) '
+            'concluído(s) (%s pt)' % (
+                detalhe.get('concluidas', 0), detalhe.get('total', 0),
+                detalhe.get('pontos_entrega', 0),
+                detalhe.get('projetos_concluidos', 0), detalhe.get('projetos', 0),
+                detalhe.get('pontos_conclusao', 0)))
 
 
 def _info_assiduidade(detalhe):
@@ -521,9 +570,7 @@ def linhas_detalhadas(dados):
          if not d['videos_pops'].get('sem_conteudo') else 'Nenhum vídeo/POP obrigatório'},
         {'bloco': 'CONECTAR', 'item': 'Projeto foco',
          'pontos': dados['p_projeto_foco'], 'max': pt('projeto_foco', tabela=tabela),
-         'info': ('%s de %s tarefa(s) concluída(s)' % (
-             d['projeto_foco'].get('concluidas', 0), d['projeto_foco'].get('total', 0)))
-         if not d['projeto_foco'].get('sem_tarefas') else 'Sem tarefas de projeto foco'},
+         'info': _info_projeto_foco(d['projeto_foco'])},
         {'bloco': 'INOVAR', 'item': 'Propor %s ideias' % IDEIAS_MINIMAS,
          'pontos': dados['p_ideias'], 'max': pt('ideias', tabela=tabela),
          'info': '%s ideia(s) proposta(s)' % d['inovar'].get('propostas', 0)},

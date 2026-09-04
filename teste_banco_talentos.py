@@ -133,15 +133,19 @@ try:
       next(x['nota'] for x in r if x['curriculo'].nome == 'ZZ Maria Silva')
       > next(x['nota'] for x in r if x['curriculo'].nome == 'ZZ Ana Lima'))
 
+    # O banco de dev tem currículos de verdade importados pelo RH, então as
+    # asserções olham só para os ZZ criados aqui — o que o teste quer provar é
+    # o ranqueamento, não o tamanho do banco.
+    def meus(resultados):
+        return [x['curriculo'].nome for x in resultados
+                if x['curriculo'].nome.startswith('ZZ ')]
+
     r = procurar('estoquista', lugares_conhecidos=lugares)
-    t('busca só por função funciona',
-      [x['curriculo'].nome for x in r] == ['ZZ Ana Lima'],
-      [x['curriculo'].nome for x in r])
+    t('busca só por função funciona', meus(r) == ['ZZ Ana Lima'], meus(r))
 
     r = procurar('', lugares_conhecidos=lugares)
-    t('busca vazia devolve o banco disponível', len(r) == 3, len(r))
-    t('e sem o contratado',
-      'ZZ Pedro Rocha' not in [x['curriculo'].nome for x in r])
+    t('busca vazia devolve o banco disponível', len(meus(r)) == 3, meus(r))
+    t('e sem o contratado', 'ZZ Pedro Rocha' not in meus(r))
 
     print('\n== A TELA ==')
     c = Client(); c.force_login(chefe)

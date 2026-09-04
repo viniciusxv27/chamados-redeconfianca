@@ -6,19 +6,23 @@
         <a href="{% url 'impulso:conectar_list' %}" class="text-sm text-gray-500 hover:text-gray-800"><i class="fas fa-arrow-left mr-1"></i>Voltar</a>
     </div>
     <div class="imp-card p-5">
-        <h2 class="text-lg font-semibold text-gray-800 mb-4"><i class="fas fa-graduation-cap text-emerald-500 mr-2"></i>{% if conteudo %}Editar conteúdo{% elif is_gestor %}Novo conteúdo{% else %}Subir POP{% endif %}</h2>
+        <h2 class="text-lg font-semibold text-gray-800 mb-4"><i class="fas fa-graduation-cap text-emerald-500 mr-2"></i>{% if conteudo %}Editar conteúdo{% elif is_gestor %}Novo conteúdo{% else %}Subir POP ou vídeo{% endif %}</h2>
         <form method="post" enctype="multipart/form-data" class="space-y-4">
             {% csrf_token %}
+            {% comment %}
+            Duas opções, não três: vídeo e POP viraram um grupo só, com dois
+            anexos no mesmo conteúdo.
+            {% endcomment %}
             {% if is_gestor %}
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Tipo *</label>
-                <select name="tipo" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                    {% for value, label in tipos %}<option value="{{ value }}" {% if conteudo.tipo == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+                <select name="grupo" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    {% for value, label in grupos %}<option value="{{ value }}" {% if conteudo.grupo == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
                 </select>
             </div>
             {% else %}
-            <input type="hidden" name="tipo" value="POP">
-            <p class="text-xs text-gray-400">Como membro da equipe, você pode subir POPs.</p>
+            <input type="hidden" name="grupo" value="POP_VIDEO">
+            <p class="text-xs text-gray-400">Como membro da equipe, você pode subir POPs e vídeos.</p>
             {% endif %}
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Título *</label>
@@ -32,15 +36,34 @@
                 <label class="block text-sm font-medium text-gray-700 mb-1">Link externo (opcional)</label>
                 <input type="url" name="url" value="{{ conteudo.url|default:'' }}" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="https://…">
             </div>
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Arquivo (vídeo, PDF do POP, material)</label>
-                <input type="file" name="arquivo" class="w-full text-sm">
-                {% if conteudo.arquivo %}
-                <p class="text-xs text-gray-400 mt-1">
-                    Já tem arquivo enviado. Escolher outro <strong>substitui</strong> o atual.
-                </p>
-                {% endif %}
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Documento (PDF do POP, material)</label>
+                    <input type="file" name="arquivo" accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,image/*"
+                           class="w-full text-sm">
+                    {% if conteudo.documento %}
+                    <p class="text-xs text-gray-400 mt-1">
+                        Já tem documento. Escolher outro <strong>substitui</strong> o atual.
+                    </p>
+                    {% endif %}
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Vídeo</label>
+                    <input type="file" name="video" accept="video/*" class="w-full text-sm">
+                    {% if conteudo.arquivo_de_video %}
+                    <p class="text-xs text-gray-400 mt-1">
+                        Já tem vídeo. Escolher outro <strong>substitui</strong> o atual.
+                    </p>
+                    <label class="flex items-center gap-2 text-xs text-gray-500 mt-1">
+                        <input type="checkbox" name="remover_video" class="rounded"> Remover o vídeo atual
+                    </label>
+                    {% endif %}
+                </div>
             </div>
+            <p class="text-xs text-gray-400 -mt-2">
+                Os dois podem conviver: o POP escrito e o vídeo que ensina a mesma coisa
+                ficam no mesmo conteúdo, num card só.
+            </p>
 
             {% if is_gestor %}
             <div class="border-t border-gray-100 pt-4 space-y-4">

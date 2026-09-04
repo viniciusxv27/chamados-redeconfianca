@@ -26,6 +26,29 @@
                 </div>
             </div>
             {% if c.descricao %}<p class="text-xs text-gray-500 mt-1 line-clamp-2">{{ c.descricao }}</p>{% endif %}
+            {% comment %}
+            O que o card carrega, dito no card: um POP com vídeo junto não pode
+            parecer só um PDF — quem abre precisa saber que tem vídeo para ver.
+            {% endcomment %}
+            {% if c.arquivo_de_video or c.documento or c.url %}
+            <div class="flex flex-wrap items-center gap-1.5 mt-2">
+                {% if c.arquivo_de_video %}
+                <span class="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 font-medium">
+                    <i class="fas fa-play mr-1"></i>Vídeo
+                </span>
+                {% endif %}
+                {% if c.documento %}
+                <span class="text-[10px] px-1.5 py-0.5 rounded bg-sky-50 text-sky-700 font-medium">
+                    <i class="fas fa-file-lines mr-1"></i>POP
+                </span>
+                {% endif %}
+                {% if c.url %}
+                <span class="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 font-medium">
+                    <i class="fas fa-link mr-1"></i>Link
+                </span>
+                {% endif %}
+            </div>
+            {% endif %}
             {% if is_gestor %}
               {% comment %}
               O gestor vê todo o material, inclusive o de outras pessoas; sem
@@ -42,8 +65,23 @@
               </p>
             {% endif %}
             <div class="mt-auto pt-3 flex items-center justify-between">
-                {% if c.minha_conclusao and c.minha_conclusao.concluido %}
-                <span class="text-xs text-emerald-600"><i class="fas fa-circle-check mr-1"></i>Concluído</span>
+                {% comment %}
+                Três estados, não dois: "marquei" e "está valendo" deixaram de
+                ser a mesma coisa quando a conferência entrou. Sem separar,
+                ninguém sabe se o ponto já conta.
+                {% endcomment %}
+                {% if c.minha_conclusao.aprovacao == 'APROVADA' and c.minha_conclusao.concluido %}
+                <span class="text-xs text-emerald-600" title="Conferido pelo gestor — os pontos contam">
+                    <i class="fas fa-circle-check mr-1"></i>Concluído
+                </span>
+                {% elif c.minha_conclusao.aprovacao == 'RECUSADA' %}
+                <span class="text-xs text-red-600" title="{{ c.minha_conclusao.observacao }}">
+                    <i class="fas fa-circle-xmark mr-1"></i>Recusado
+                </span>
+                {% elif c.minha_conclusao and c.minha_conclusao.concluido %}
+                <span class="text-xs text-amber-600" title="Aguardando o gestor conferir">
+                    <i class="fas fa-hourglass-half mr-1"></i>Em conferência
+                </span>
                 {% else %}
                 <span class="text-xs text-gray-400"><i class="far fa-circle mr-1"></i>Pendente</span>
                 {% endif %}

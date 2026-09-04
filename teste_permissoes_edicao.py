@@ -259,13 +259,18 @@ try:
         descricao='antes', url='https://exemplo.local/a', obrigatorio=True,
         criado_por=gestor_imp)
 
+    # O formulário passou a mandar `grupo` (Curso ou Vídeo e POP) em vez de
+    # `tipo`: vídeo e POP viraram um grupo só, com dois anexos no mesmo card.
     r = cgi.post(f'/impulso/conectar/{conteudo.id}/editar/', {
-        'tipo': ConteudoConectar.Tipo.VIDEO, 'titulo': 'ZZ Curso editado',
+        'grupo': ConteudoConectar.GRUPO_POP_VIDEO, 'titulo': 'ZZ Curso editado',
         'descricao': 'depois', 'url': 'https://exemplo.local/b',
         'obrigatorio': 'on'}, follow=True)
     conteudo.refresh_from_db()
     t('gestor edita o conteúdo', conteudo.titulo == 'ZZ Curso editado', r.status_code)
-    t('muda o tipo', conteudo.tipo == ConteudoConectar.Tipo.VIDEO)
+    t('muda de grupo', conteudo.grupo == ConteudoConectar.GRUPO_POP_VIDEO,
+      conteudo.grupo)
+    t('e sai do balde de curso', conteudo.tipo != ConteudoConectar.Tipo.CURSO,
+      conteudo.tipo)
     t('muda o link', conteudo.url == 'https://exemplo.local/b')
 
     r = ccol.post(f'/impulso/conectar/{conteudo.id}/editar/', {

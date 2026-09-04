@@ -19,6 +19,7 @@ from django.views.decorators.http import require_POST
 from core.models import NotificationMixin
 
 from . import ai
+from . import filtros as filtros_impulso
 from .ai import generate_feedback_summary
 from . import ciclos as ciclos_service
 from .models import (
@@ -196,7 +197,9 @@ def _por_prazo(metas, hoje=None):
 # Filtros que o Kanban entende. Ficam listados aqui porque o "Voltar" da tela
 # da meta reconstrói a URL a partir da sessão — só o que está nesta tupla é
 # guardado, então filtro novo precisa ser acrescentado junto.
-FILTROS_KANBAN = ('colaborador',)
+# O Voltar da meta precisa devolver o Kanban exatamente como estava — inclusive
+# o filtro por nome e setor, senão a pessoa perde a busca a cada card aberto.
+FILTROS_KANBAN = ('colaborador', filtros_impulso.PARAM_NOME, filtros_impulso.PARAM_SETOR)
 CHAVE_FILTROS_KANBAN = 'impulso_kanban_filtros'
 
 
@@ -233,6 +236,14 @@ def metas_kanban(request):
     colaborador_id = _int_or_none(request.GET.get('colaborador'))
     if colaborador_id:
         metas = metas.filter(colaborador_id=colaborador_id)
+
+    # Nome e setor valem para o responsável ou para o gestor da meta: quem
+    # digita o nome de um gestor quer as metas que ele acompanha, não zero.
+    f = filtros_impulso.ler(request)
+    metas = filtros_impulso.por(metas, f, ['colaborador', 'gestor'])
+    # O mês corta pelo prazo: a pergunta do Kanban é "o que vence quando",
+    # não "o que foi cadastrado quando".
+    metas = filtros_impulso.por_mes(metas, f, 'prazo')
 
     # O template não passa argumentos para métodos, então a permissão de
     # exclusão é resolvida aqui, uma vez por card.
@@ -278,6 +289,7 @@ def metas_kanban(request):
         'colaborador_id': colaborador_id,
         'solicitacoes_pendentes': pendentes.count(),
         'active_tab': 'confiar',
+        **filtros_impulso.contexto(request, f),
     }
     return render(request, 'impulso/metas_kanban.html', context)
 
@@ -644,7 +656,14 @@ def meta_solicitacoes(request):
 
     decididas = Meta.objects.filter(
         aprovacao__in=[Meta.Aprovacao.RECUSADA],
-    ).filter(Q(gestor=request.user) | Q(solicitada_por=request.user))[:20]
+    ).filter(Q(gestor=request.user) | Q(solicitada_por=request.user))
+
+    f = filtros_impulso.ler(request)
+    alvos = ['colaborador', 'solicitada_por']
+    pendentes = filtros_impulso.por_mes(
+        filtros_impulso.por(pendentes, f, alvos), f, 'prazo')
+    decididas = filtros_impulso.por_mes(
+        filtros_impulso.por(decididas, f, alvos), f, 'prazo')[:20]
 
     context = {
         'titulo': titulo,
@@ -652,6 +671,7 @@ def meta_solicitacoes(request):
         'recusadas': decididas.select_related('colaborador', 'gestor', 'decidida_por'),
         'is_gestor': is_impulso_manager(request.user),
         'active_tab': 'confiar',
+        **filtros_impulso.contexto(request, f),
     }
     return render(request, 'impulso/meta_solicitacoes.html', context)
 
@@ -954,11 +974,17 @@ def conteudo_editar(request, conteudo_id):
             messages.error(request, 'Informe o título.')
             return redirect('impulso:conteudo_editar', conteudo_id=conteudo.id)
 
-        tipo = request.POST.get('tipo') or conteudo.tipo
-        if tipo not in ConteudoConectar.Tipo.values:
-            tipo = conteudo.tipo
+        grupo = request.POST.get('grupo') or conteudo.grupo
+        if grupo not in dict(ConteudoConectar.GRUPOS):
+            grupo = conteudo.grupo
 
-        conteudo.tipo = tipo
+        novo_arquivo = request.FILES.get('arquivo')
+        novo_video = request.FILES.get('video')
+        conteudo.tipo = _tipo_do_grupo(
+            grupo,
+            documento=novo_arquivo or conteudo.documento,
+            video=novo_video or conteudo.arquivo_de_video,
+            atual=conteudo.tipo)
         conteudo.titulo = titulo[:200]
         conteudo.descricao = (request.POST.get('descricao') or '').strip()
         conteudo.url = (request.POST.get('url') or '').strip()
@@ -966,17 +992,22 @@ def conteudo_editar(request, conteudo_id):
         conteudo.inicio = parse_date(request.POST.get('inicio') or '') or None
         conteudo.fim = parse_date(request.POST.get('fim') or '') or None
 
-        novo_arquivo = request.FILES.get('arquivo')
+        # Troca cada anexo e apaga o antigo — deixar os dois ocupa espaço e
+        # ninguém volta para o anterior.
+        antigos = []
         if novo_arquivo:
-            # Troca o arquivo e apaga o antigo — deixar os dois ocupa espaço e
-            # ninguém volta para o anterior.
-            antigo = conteudo.arquivo
+            antigos.append(conteudo.arquivo)
             conteudo.arquivo = novo_arquivo
-            conteudo.save()
+        if novo_video:
+            antigos.append(conteudo.video)
+            conteudo.video = novo_video
+        if request.POST.get('remover_video') and not novo_video:
+            antigos.append(conteudo.video)
+            conteudo.video = None
+        conteudo.save()
+        for antigo in antigos:
             if antigo:
                 antigo.delete(save=False)
-        else:
-            conteudo.save()
 
         antes = set(conteudo.obrigatorio_para.values_list('id', flat=True))
         ids = request.POST.getlist('obrigatorio_para')
@@ -994,7 +1025,7 @@ def conteudo_editar(request, conteudo_id):
     return render(request, 'impulso/conteudo_form.html', {
         'conteudo': conteudo,
         'is_gestor': is_impulso_manager(request.user),
-        'tipos': ConteudoConectar.Tipo.choices,
+        'grupos': ConteudoConectar.GRUPOS,
         'colaboradores': get_colaboradores(),
         'marcados': set(conteudo.obrigatorio_para.values_list('id', flat=True)),
         'active_tab': 'conectar',
@@ -1173,14 +1204,32 @@ def meta_excluir_comentario(request, comentario_id):
 
 @impulso_member_required
 def minhas_atividades(request):
-    """Próximas atividades e prazos do colaborador."""
-    metas = (Meta.objects.filter(colaborador=request.user)
-             .exclude(status=Meta.Status.CONCLUIDA)
-             .select_related('gestor').order_by('prazo'))
+    """Próximas atividades e prazos.
+
+    O colaborador vê as dele. O gestor vê as dele e as da equipe — sem isso o
+    filtro por nome não teria o que filtrar, e "o que vence essa semana" é
+    pergunta de quem acompanha, não só de quem executa.
+    """
+    gestor = is_impulso_manager(request.user)
+    metas = Meta.objects.exclude(status=Meta.Status.CONCLUIDA)
+    if gestor:
+        equipe = get_colaboradores_do_gestor(request.user).values_list('id', flat=True)
+        metas = metas.filter(Q(colaborador=request.user)
+                             | Q(colaborador_id__in=list(equipe))
+                             | Q(gestor=request.user)).distinct()
+    else:
+        metas = metas.filter(colaborador=request.user)
+
+    f = filtros_impulso.ler(request)
+    metas = filtros_impulso.por(metas, f, ['colaborador', 'gestor'])
+    metas = filtros_impulso.por_mes(metas, f, 'prazo')
+
     context = {
-        'metas': metas,
+        'metas': metas.select_related('colaborador', 'gestor').order_by('prazo'),
         'hoje': timezone.localdate(),
+        'is_gestor': gestor,
         'active_tab': 'confiar',
+        **filtros_impulso.contexto(request, f),
     }
     return render(request, 'impulso/minhas_atividades.html', context)
 
@@ -1213,13 +1262,17 @@ def assiduidade(request):
 
     minha = _linha(request.user)
 
+    f = filtros_impulso.ler(request)
+
     equipe = None
     if is_impulso_manager(request.user) or request.user.is_superuser:
         # A equipe do gestor são os colaboradores dos setores atrelados a ele —
         # todos eles, não só o setor principal. Gestor sem setor cadastrado (e o
         # superadmin) continua vendo a rede inteira, senão a tela nasceria vazia
         # para quem administra o módulo.
-        equipe = [_linha(u) for u in get_colaboradores_do_gestor(request.user)
+        pessoas = filtros_impulso.pessoas(
+            get_colaboradores_do_gestor(request.user), f)
+        equipe = [_linha(u) for u in pessoas
                   if u.id != request.user.id and u.tangerino_employee_id]
         equipe = [l for l in equipe if not l['sem_ponto']]
         # Quem perdeu ponto aparece primeiro; depois quem está no limite.
@@ -1244,6 +1297,7 @@ def assiduidade(request):
         'excecoes': ExcecaoAssiduidade.objects.filter(
             data__year=ano, data__month=mes).select_related('criado_por'),
         'active_tab': 'confiar',
+        **filtros_impulso.contexto(request, f),
     })
 
 
@@ -1360,6 +1414,15 @@ def feedback_list(request):
             | Q(colaborador__email__icontains=busca)
             | Q(pontos_fortes__icontains=busca)
             | Q(pontos_melhoria__icontains=busca))
+
+    # Aqui o `q` já procurava no nome E no texto do feedback — mantido, porque
+    # achar pelo que foi escrito é útil. O setor entra por cima.
+    # (nome `filtro_pessoa` e não `f`: `f` é a variável dos comprehensions abaixo.)
+    filtro_pessoa = filtros_impulso.ler(request)
+    if filtro_pessoa['setor']:
+        feedbacks = filtros_impulso.por(
+            feedbacks, {'nome': '', 'setor': filtro_pessoa['setor'], 'ativo': True},
+            'colaborador')
 
     lista = list(feedbacks)
 
@@ -1482,8 +1545,10 @@ def feedback_list(request):
                          for f in universo.only('referencia_mes')}, reverse=True),
         'f_colaborador': colaborador_id, 'f_gestor': gestor_id,
         'f_mes': mes, 'f_situacao': situacao, 'f_busca': busca,
-        'tem_filtro': any([colaborador_id, gestor_id, mes, situacao, busca]),
+        'tem_filtro': any([colaborador_id, gestor_id, mes, situacao, busca,
+                           filtro_pessoa['setor']]),
         'active_tab': 'confiar',
+        **filtros_impulso.contexto(request, filtro_pessoa),
     }
     return render(request, 'impulso/feedback_list.html', context)
 
@@ -1627,6 +1692,15 @@ def conectar_list(request):
     conteudos = (conteudos_para(user, gestor)
                  .prefetch_related('conclusoes', 'obrigatorio_para'))
 
+    # Nome e setor aqui procuram POR PESSOA: "o que foi dirigido à Ana", não
+    # "o conteúdo chamado Ana". Quem procura conteúdo tem o título na tela.
+    f = filtros_impulso.ler(request)
+    if f['nome'] or f['setor']:
+        conteudos = filtros_impulso.por(conteudos, f, 'obrigatorio_para')
+    # Conteúdo sem período vale sempre e continua aparecendo no mês filtrado —
+    # é a maior parte do catálogo, sumir com ele esvaziaria a tela.
+    conteudos = filtros_impulso.por_periodo(conteudos, f, 'inicio', 'fim')
+
     # status de conclusão do usuário atual
     minhas = {c.conteudo_id: c for c in
               ConclusaoConteudo.objects.filter(user=user)}
@@ -1634,33 +1708,135 @@ def conectar_list(request):
     # A permissão de excluir é resolvida aqui, uma vez por card: o template não
     # chama método com argumento, e repetir a regra no HTML criaria uma segunda
     # verdade sobre quem pode o quê.
-    grupos = {'CURSO': [], 'VIDEO': [], 'POP': []}
+    # Dois grupos, não três: POP e vídeo ensinam a mesma coisa em formatos
+    # diferentes, e separá-los fazia a pessoa concluir o PDF sem ver o vídeo.
+    grupos = {ConteudoConectar.GRUPO_CURSO: [],
+              ConteudoConectar.GRUPO_POP_VIDEO: []}
     for c in conteudos:
         c.minha_conclusao = minhas.get(c.id)
         c.pode_apagar = c.pode_excluir(user)
         c.impacto = c.impacto_da_exclusao if c.pode_apagar else None
-        grupos.get(c.tipo, grupos['POP']).append(c)
+        grupos[c.grupo].append(c)
+
+    # Fila de conferência: o que a equipe marcou como feito e ainda ninguém
+    # olhou. É o que faltava para o gestor saber o que está DE FATO concluído —
+    # antes, "marcado" e "conferido" eram a mesma coisa na tela.
+    a_conferir = []
+    if gestor:
+        pendentes = (ConclusaoConteudo.objects
+                     .filter(concluido=True,
+                             aprovacao=ConclusaoConteudo.Aprovacao.PENDENTE)
+                     .select_related('user', 'conteudo')
+                     .order_by('concluido_em'))
+        equipe = set(get_colaboradores_do_gestor(user).values_list('id', flat=True))
+        for c in pendentes:
+            if not (user.is_superuser or c.user_id in equipe):
+                continue
+            if not filtros_impulso.combina(c.user, f):
+                continue
+            if f['inicio'] and not (
+                    c.concluido_em and f['inicio'] <= timezone.localtime(
+                        c.concluido_em).date() <= f['fim']):
+                continue
+            a_conferir.append(c)
+
+    # O que o próprio usuário mandou e está esperando (ou foi recusado).
+    minhas_aguardando = [c for c in minhas.values() if c.aguardando]
+    minhas_recusadas = [c for c in minhas.values()
+                        if c.aprovacao == ConclusaoConteudo.Aprovacao.RECUSADA]
 
     context = {
-        'cursos': grupos['CURSO'],
-        'videos': grupos['VIDEO'],
-        'pops': grupos['POP'],
+        'cursos': grupos[ConteudoConectar.GRUPO_CURSO],
+        'videos_pops': grupos[ConteudoConectar.GRUPO_POP_VIDEO],
         'is_gestor': gestor,
+        'a_conferir': a_conferir,
+        'minhas_aguardando': minhas_aguardando,
+        'minhas_recusadas': minhas_recusadas,
         'active_tab': 'conectar',
+        **filtros_impulso.contexto(request, f),
     }
     return render(request, 'impulso/conectar_list.html', context)
 
 
 @impulso_member_required
+@require_POST
+def conclusao_decidir(request, conclusao_id):
+    """Gestor aprova ou recusa uma conclusão do Conectar.
+
+    Mesma mecânica do `meta_decidir` do Confiar: quem decide não é quem fez, a
+    recusa exige motivo, e a pessoa é avisada nos dois casos — descobrir a
+    recusa só no fechamento do mês seria tarde para refazer.
+    """
+    conclusao = get_object_or_404(
+        ConclusaoConteudo.objects.select_related('user', 'conteudo'), id=conclusao_id)
+
+    if not conclusao.pode_decidir(request.user):
+        messages.error(request, 'Você não confere esta conclusão.')
+        return redirect('impulso:conectar_list')
+
+    decisao = request.POST.get('decisao')
+    if decisao not in ('aprovar', 'recusar'):
+        messages.error(request, 'Decisão inválida.')
+        return redirect('impulso:conectar_list')
+
+    observacao = (request.POST.get('observacao') or '').strip()
+    if decisao == 'recusar' and not observacao:
+        messages.error(request, 'Escreva o motivo da recusa — é o que a pessoa lê '
+                                'para corrigir e reenviar.')
+        return redirect('impulso:conectar_list')
+
+    conclusao.aprovacao = (ConclusaoConteudo.Aprovacao.APROVADA if decisao == 'aprovar'
+                           else ConclusaoConteudo.Aprovacao.RECUSADA)
+    conclusao.observacao = observacao[:2000]
+    conclusao.decidida_por = request.user
+    conclusao.decidida_em = timezone.now()
+    conclusao.save(update_fields=['aprovacao', 'observacao', 'decidida_por', 'decidida_em'])
+
+    titulo = conclusao.conteudo.titulo
+    if decisao == 'aprovar':
+        _notify([conclusao.user], 'Conteúdo aprovado',
+                f'"{titulo}" foi conferido e aprovado. Os pontos valem neste mês.',
+                '/impulso/conectar/')
+        messages.success(request, f'"{titulo}" aprovado para '
+                                  f'{conclusao.user.get_full_name() or conclusao.user.email}.')
+    else:
+        _notify([conclusao.user], 'Conteúdo recusado',
+                f'"{titulo}" não foi aprovado. {observacao} '
+                f'Corrija e marque como concluído de novo.',
+                '/impulso/conectar/')
+        messages.success(request, f'"{titulo}" recusado — a pessoa foi avisada do motivo.')
+    return redirect('impulso:conectar_list')
+
+
+def _tipo_do_grupo(grupo, documento=None, video=None, atual=None):
+    """Traduz o grupo escolhido na tela para o `tipo` guardado no banco.
+
+    O grupo "Vídeo e POP" é um só para quem usa, mas a coluna `tipo` continua
+    com os dois valores — a pontuação e os conteúdos já cadastrados dependem
+    dela. Com anexo de vídeo e nenhum documento é VIDEO; caso contrário POP.
+    Como os dois caem no mesmo grupo em toda parte, a diferença é invisível.
+    """
+    if grupo == ConteudoConectar.GRUPO_CURSO:
+        return ConteudoConectar.Tipo.CURSO
+    if documento:
+        return ConteudoConectar.Tipo.POP
+    if video:
+        return ConteudoConectar.Tipo.VIDEO
+    if atual and atual != ConteudoConectar.Tipo.CURSO:
+        return atual
+    return ConteudoConectar.Tipo.POP
+
+
+@impulso_member_required
 def conteudo_create(request):
-    """Gestor cria curso/vídeo/POP; equipe pode criar apenas POP."""
+    """Gestor cria curso ou vídeo/POP; a equipe sobe vídeo/POP."""
     gestor = is_impulso_manager(request.user)
     if request.method == 'POST':
-        tipo = request.POST.get('tipo') or ConteudoConectar.Tipo.POP
-        if tipo not in ConteudoConectar.Tipo.values:
-            tipo = ConteudoConectar.Tipo.POP
-        if not gestor and tipo != ConteudoConectar.Tipo.POP:
-            messages.error(request, 'A equipe só pode subir POPs.')
+        grupo = request.POST.get('grupo') or ConteudoConectar.GRUPO_POP_VIDEO
+        if grupo not in dict(ConteudoConectar.GRUPOS):
+            grupo = ConteudoConectar.GRUPO_POP_VIDEO
+        if not gestor and grupo != ConteudoConectar.GRUPO_POP_VIDEO:
+            messages.error(request, 'A equipe só pode subir POPs e vídeos.')
             return redirect('impulso:conteudo_create')
 
         titulo = (request.POST.get('titulo') or '').strip()
@@ -1668,11 +1844,16 @@ def conteudo_create(request):
             messages.error(request, 'Informe o título.')
             return redirect('impulso:conteudo_create')
 
+        documento = request.FILES.get('arquivo')
+        video = request.FILES.get('video')
+        tipo = _tipo_do_grupo(grupo, documento, video)
+
         conteudo = ConteudoConectar.objects.create(
             tipo=tipo, titulo=titulo,
             descricao=(request.POST.get('descricao') or '').strip(),
             url=(request.POST.get('url') or '').strip(),
-            arquivo=request.FILES.get('arquivo'),
+            arquivo=documento,
+            video=video,
             obrigatorio=bool(request.POST.get('obrigatorio')) if gestor else False,
             inicio=parse_date(request.POST.get('inicio') or '') or None,
             fim=parse_date(request.POST.get('fim') or '') or None,
@@ -1693,7 +1874,7 @@ def conteudo_create(request):
 
     context = {
         'is_gestor': gestor,
-        'tipos': ConteudoConectar.Tipo.choices,
+        'grupos': ConteudoConectar.GRUPOS,
         'colaboradores': get_colaboradores() if gestor else None,
         'active_tab': 'conectar',
     }
@@ -1839,8 +2020,28 @@ def conteudo_concluir(request, conteudo_id):
     certificado = request.FILES.get('certificado')
     if certificado:
         conclusao.certificado = certificado
+
+    # Reenvio depois de recusa volta para a fila: sem isso, quem foi recusado
+    # ficaria recusado para sempre, mesmo tendo corrigido.
+    conclusao.aprovacao = ConclusaoConteudo.Aprovacao.PENDENTE
+    conclusao.decidida_por = None
+    conclusao.decidida_em = None
+    conclusao.observacao = ''
     conclusao.save()
-    messages.success(request, 'Conteúdo marcado como concluído.')
+
+    # Avisa quem confere: fila que ninguém sabe que encheu não é fila.
+    try:
+        gestores = get_gestores_do_setor(request.user)
+        if gestores.exists():
+            _notify(list(gestores), 'Conteúdo aguardando conferência',
+                    f'{request.user.get_full_name() or request.user.email} concluiu '
+                    f'"{conteudo.titulo}". Confira para os pontos valerem.',
+                    '/impulso/conectar/')
+    except Exception:                                       # aviso nunca derruba
+        pass
+
+    messages.success(request, 'Conteúdo marcado como concluído. '
+                              'Os pontos entram quando o gestor conferir.')
     return redirect('impulso:conteudo_detail', conteudo_id=conteudo.id)
 
 
@@ -1855,10 +2056,24 @@ def projeto_foco_list(request):
         projetos = ProjetoFoco.objects.all()
     else:
         projetos = ProjetoFoco.objects.filter(membros=user, ativo=True)
+
+    # Achar o projeto pelo nome de quem está nele: é assim que o gestor procura
+    # ("o projeto do Lucas"), não pelo título, que ele nem sempre lembra.
+    f = filtros_impulso.ler(request)
+    projetos = filtros_impulso.por(projetos, f, 'membros')
+    # O mês do projeto é o das tarefas dele: um projeto que corre de março a
+    # maio precisa aparecer nos três meses, não só no que foi criado.
+    if f['inicio']:
+        projetos = projetos.filter(
+            Q(tarefas__prazo__gte=f['inicio'], tarefas__prazo__lte=f['fim'])
+            | Q(criado_em__date__gte=f['inicio'], criado_em__date__lte=f['fim'])
+        ).distinct()
+
     context = {
         'projetos': projetos.prefetch_related('membros', 'tarefas').distinct(),
         'is_gestor': gestor,
         'active_tab': 'conectar',
+        **filtros_impulso.contexto(request, f),
     }
     return render(request, 'impulso/projeto_list.html', context)
 
@@ -1959,6 +2174,7 @@ def projeto_foco_detail(request, projeto_id):
     for a in anexos:
         a.pode_apagar = a.pode_mexer(request.user)
 
+    feitas, total_tarefas = projeto.progresso_tarefas
     context = {
         'projeto': projeto,
         'tarefas': tarefas,
@@ -1966,6 +2182,9 @@ def projeto_foco_detail(request, projeto_id):
         'membros': projeto.membros.all(),
         'anexos': anexos,
         'status_choices': TarefaProjeto.Status.choices,
+        'tarefas_feitas': feitas,
+        'tarefas_total': total_tarefas,
+        'tudo_entregue': projeto.tudo_entregue,
         'active_tab': 'conectar',
     }
     return render(request, 'impulso/projeto_detail.html', context)
@@ -2034,6 +2253,61 @@ def projeto_anexo_excluir(request, projeto_id, anexo_id):
 
 @require_POST
 @impulso_manager_required
+def projeto_foco_concluir(request, projeto_id):
+    """Encerra (ou reabre) um projeto foco.
+
+    É aqui que sai a segunda metade dos pontos do Projeto FOCO: entregar a
+    própria tarefa vale metade, o projeto sair vale a outra. Por isso a
+    conclusão é um ato de quem responde pelo projeto, e não uma dedução de
+    "todas as tarefas concluídas" — a última tarefa marcada por engano não
+    pode fechar o projeto e pagar todo mundo.
+    """
+    projeto = get_object_or_404(ProjetoFoco, id=projeto_id)
+    reabrir = bool(request.POST.get('reabrir'))
+
+    if reabrir:
+        if not projeto.concluido:
+            messages.info(request, 'Este projeto não está concluído.')
+            return redirect('impulso:projeto_foco_detail', projeto_id=projeto.id)
+        projeto.concluido = False
+        projeto.concluido_em = None
+        projeto.concluido_por = None
+        projeto.save(update_fields=['concluido', 'concluido_em', 'concluido_por'])
+        messages.warning(
+            request,
+            f'"{projeto.nome}" foi reaberto — a metade dos pontos pela conclusão '
+            f'sai da pontuação do mês de quem tem tarefa nele.')
+        return redirect('impulso:projeto_foco_detail', projeto_id=projeto.id)
+
+    if projeto.concluido:
+        messages.info(request, 'Este projeto já está concluído.')
+        return redirect('impulso:projeto_foco_detail', projeto_id=projeto.id)
+
+    projeto.concluido = True
+    projeto.concluido_em = timezone.now()
+    projeto.concluido_por = request.user
+    projeto.save(update_fields=['concluido', 'concluido_em', 'concluido_por'])
+
+    # Quem tem tarefa no projeto ganha a segunda metade agora; avisar é o que
+    # transforma "a nota subiu" em "a nota subiu por causa disto".
+    envolvidos = list(User.objects.filter(
+        id__in=projeto.tarefas.exclude(responsavel__isnull=True)
+                             .values_list('responsavel_id', flat=True)))
+    if envolvidos:
+        _notify(envolvidos, 'Projeto foco concluído',
+                f'"{projeto.nome}" foi concluído. A metade dos pontos do Projeto '
+                f'FOCO pela conclusão entra na sua pontuação do mês.',
+                f'/impulso/conectar/projetos/{projeto.id}/')
+
+    messages.success(
+        request,
+        f'"{projeto.nome}" concluído — {len(envolvidos)} pessoa(s) recebem a '
+        f'metade dos pontos pela conclusão.')
+    return redirect('impulso:projeto_foco_detail', projeto_id=projeto.id)
+
+
+@require_POST
+@impulso_manager_required
 def tarefa_create(request, projeto_id):
     projeto = get_object_or_404(ProjetoFoco, id=projeto_id)
     titulo = (request.POST.get('titulo') or '').strip()
@@ -2077,9 +2351,32 @@ def tarefa_update_status(request, tarefa_id):
 
 @impulso_member_required
 def minhas_tarefas(request):
-    tarefas = (TarefaProjeto.objects.filter(responsavel=request.user)
-               .select_related('projeto').order_by('status', 'prazo'))
-    context = {'tarefas': tarefas, 'active_tab': 'conectar'}
+    """Tarefas dos projetos foco.
+
+    Cada um vê as suas; o gestor vê também as da equipe, senão o filtro por
+    nome não teria o que filtrar e ninguém saberia o que está parado com quem.
+    """
+    gestor = is_impulso_manager(request.user)
+    tarefas = TarefaProjeto.objects.all()
+    if gestor:
+        equipe = list(get_colaboradores_do_gestor(request.user)
+                      .values_list('id', flat=True))
+        tarefas = tarefas.filter(Q(responsavel=request.user)
+                                 | Q(responsavel_id__in=equipe)).distinct()
+    else:
+        tarefas = tarefas.filter(responsavel=request.user)
+
+    f = filtros_impulso.ler(request)
+    tarefas = filtros_impulso.por(tarefas, f, 'responsavel')
+    tarefas = filtros_impulso.por_mes(tarefas, f, 'prazo')
+
+    context = {
+        'tarefas': tarefas.select_related('projeto', 'responsavel')
+                          .order_by('status', 'prazo'),
+        'is_gestor': gestor,
+        'active_tab': 'conectar',
+        **filtros_impulso.contexto(request, f),
+    }
     return render(request, 'impulso/minhas_tarefas.html', context)
 
 
@@ -2103,6 +2400,11 @@ def inovar_list(request):
         # pontos dele. Sem isso, a pessoa ganharia a nota sem saber por quê.
         ideias = Ideia.objects.filter(Q(autor=user) | Q(participantes=user)).distinct()
 
+    # Mês sim, nome não: filtrar as ideias por período é útil e não diz nada
+    # sobre quem escreveu. Um campo de nome aqui entregaria a autoria.
+    f = filtros_impulso.ler(request)
+    ideias = filtros_impulso.por_mes(ideias, f, 'criado_em__date')
+
     lista = list(ideias.select_related('autor').prefetch_related('participantes'))
     ids_participando = set()
     for ideia in lista:
@@ -2121,6 +2423,7 @@ def inovar_list(request):
         'is_gestor': gestor,
         'status_choices': Ideia.Status.choices,
         'active_tab': 'inovar',
+        **filtros_impulso.contexto_mes(request, f),
     }
     return render(request, 'impulso/inovar_list.html', context)
 
@@ -2258,7 +2561,8 @@ def ideia_update_status(request, ideia_id):
 @impulso_member_required
 def acompanhamento(request):
     """Pontuação do mês corrente (ao vivo) + ranking + faixas."""
-    colaboradores = get_colaboradores()
+    f = filtros_impulso.ler(request)
+    colaboradores = filtros_impulso.pessoas(get_colaboradores(), f)
     ranking = []
     for c in colaboradores:
         dados = calcular_pontuacao(c)
@@ -2275,6 +2579,7 @@ def acompanhamento(request):
         'ciclo_ativo': Ciclo.objects.filter(status=Ciclo.Status.ABERTO).first(),
         'is_gestor': is_impulso_manager(request.user),
         'active_tab': 'acompanhamento',
+        **filtros_impulso.contexto(request, f),
     }
     return render(request, 'impulso/acompanhamento.html', context)
 
@@ -2358,6 +2663,12 @@ def ciclo_detail(request, ciclo_id):
     ciclo = get_object_or_404(Ciclo.objects.prefetch_related('meses'), id=ciclo_id)
     meses = list(ciclo.meses.all())
     resumo = ciclos_service.resumo_ciclo(ciclo)
+
+    # O resumo do ciclo é montado em memória (agrega vários meses), então o
+    # filtro é aplicado sobre a lista pronta, com a mesma régua do banco.
+    f = filtros_impulso.ler(request)
+    resumo = filtros_impulso.lista(resumo, f, lambda linha: linha['user'])
+
     context = {
         'ciclo': ciclo,
         'meses': meses,
@@ -2365,6 +2676,7 @@ def ciclo_detail(request, ciclo_id):
         'tem_mes_aberto': any(not m.is_fechado for m in meses),
         'is_gestor': is_impulso_manager(request.user),
         'active_tab': 'acompanhamento',
+        **filtros_impulso.contexto(request, f),
     }
     return render(request, 'impulso/ciclo_detail.html', context)
 
@@ -2373,6 +2685,10 @@ def ciclo_detail(request, ciclo_id):
 def mes_detail(request, mes_id):
     mes = get_object_or_404(CicloMes.objects.select_related('ciclo'), id=mes_id)
     pontuacoes = (mes.pontuacoes.select_related('user', 'setor').order_by('-percentual'))
+
+    f = filtros_impulso.ler(request)
+    pontuacoes = filtros_impulso.por(pontuacoes, f, 'user')
+
     context = {
         'mes': mes,
         'ciclo': mes.ciclo,
@@ -2380,6 +2696,7 @@ def mes_detail(request, mes_id):
         'setores': ciclos_service.setores_do_mes(mes),
         'is_gestor': is_impulso_manager(request.user),
         'active_tab': 'acompanhamento',
+        **filtros_impulso.contexto(request, f),
     }
     return render(request, 'impulso/mes_detail.html', context)
 

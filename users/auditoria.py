@@ -29,6 +29,7 @@ CAMPOS_AUDITADOS = [
     ('contract_type', 'Tipo de contrato'),
     ('branch_cnpj', 'CNPJ da filial'),
     ('salary', 'Salário'),
+    ('pix_key', 'Chave PIX'),
     ('is_active', 'Login ativo'),
     ('status', 'Situação'),
     ('inactivation_reason', 'Motivo da inativação'),

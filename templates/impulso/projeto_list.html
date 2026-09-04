@@ -13,7 +13,10 @@
     <a href="{% url 'impulso:projeto_foco_detail' p.id %}" class="imp-card p-4 hover:border-emerald-300 hover:shadow-sm transition block">
         <div class="flex items-start justify-between gap-2">
             <span class="font-medium text-gray-800">{{ p.nome }}</span>
-            {% if not p.ativo %}<span class="text-[10px] uppercase px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">Inativo</span>{% endif %}
+            <span class="flex items-center gap-1 flex-shrink-0">
+                {% if p.concluido %}<span class="text-[10px] uppercase px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700">Concluído</span>{% endif %}
+                {% if not p.ativo %}<span class="text-[10px] uppercase px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">Inativo</span>{% endif %}
+            </span>
         </div>
         {% if p.descricao %}<p class="text-xs text-gray-500 mt-1 line-clamp-2">{{ p.descricao }}</p>{% endif %}
         <div class="flex items-center gap-4 mt-3 text-xs text-gray-500">

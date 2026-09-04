@@ -12,11 +12,20 @@
                 <div class="min-w-0">
                     <h2 class="text-xl font-bold text-gray-900">
                         {{ projeto.nome }}
+                        {% if projeto.concluido %}
+                        <span class="align-middle text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-normal">
+                            <i class="fas fa-flag-checkered mr-1"></i>concluído
+                        </span>
+                        {% endif %}
                         {% if not projeto.ativo %}
                         <span class="align-middle text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 font-normal">inativo</span>
                         {% endif %}
                     </h2>
                     {% if projeto.descricao %}<p class="text-sm text-gray-700 mt-2 whitespace-pre-wrap">{{ projeto.descricao }}</p>{% endif %}
+                    <p class="text-xs text-gray-400 mt-2">
+                        <i class="fas fa-list-check mr-1"></i>{{ tarefas_feitas }} de {{ tarefas_total }} tarefa(s) concluída(s)
+                        {% if projeto.concluido %} · encerrado em {{ projeto.concluido_em|date:"d/m/Y" }}{% if projeto.concluido_por %} por {{ projeto.concluido_por.get_full_name|default:projeto.concluido_por.email }}{% endif %}{% endif %}
+                    </p>
                 </div>
                 {% if is_gestor %}
                 <a href="{% url 'impulso:projeto_foco_edit' projeto.id %}"
@@ -25,6 +34,43 @@
                 </a>
                 {% endif %}
             </div>
+
+            {% comment %}
+            Metade dos pontos do Projeto FOCO só entra quando o projeto é
+            encerrado. Deixar isso implícito faria a equipe entregar tudo e
+            ficar sem a segunda metade porque ninguém apertou o botão.
+            {% endcomment %}
+            {% if is_gestor %}
+            <div class="border-t border-gray-100 mt-4 pt-4">
+                {% if projeto.concluido %}
+                <form method="post" action="{% url 'impulso:projeto_foco_concluir' projeto.id %}"
+                      onsubmit="return confirm('Reabrir “{{ projeto.nome|escapejs }}”?\n\nA metade dos pontos pela conclusão sai da pontuação do mês de quem tem tarefa no projeto.');">
+                    {% csrf_token %}
+                    <input type="hidden" name="reabrir" value="1">
+                    <button class="px-3 py-1.5 rounded-lg border border-amber-200 text-amber-700 text-sm hover:bg-amber-50">
+                        <i class="fas fa-rotate-left mr-1"></i>Reabrir projeto
+                    </button>
+                </form>
+                {% else %}
+                <div class="flex items-center justify-between gap-3 flex-wrap">
+                    <p class="text-xs {% if tudo_entregue %}text-emerald-700{% else %}text-gray-500{% endif %}">
+                        {% if tudo_entregue %}
+                        <i class="fas fa-circle-check mr-1"></i>Todas as tarefas foram entregues — dá para encerrar o projeto.
+                        {% else %}
+                        <i class="fas fa-circle-info mr-1"></i>Metade dos pontos do Projeto FOCO entra quando o projeto for concluído.
+                        {% endif %}
+                    </p>
+                    <form method="post" action="{% url 'impulso:projeto_foco_concluir' projeto.id %}"
+                          onsubmit="return confirm('Concluir “{{ projeto.nome|escapejs }}”?\n\nQuem tem tarefa neste projeto recebe a metade dos pontos pela conclusão na pontuação do mês.');">
+                        {% csrf_token %}
+                        <button class="px-3 py-1.5 rounded-lg bg-emerald-500 text-white text-sm hover:bg-emerald-600">
+                            <i class="fas fa-flag-checkered mr-1"></i>Concluir projeto
+                        </button>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
         </div>
 
         <!-- Tarefas -->

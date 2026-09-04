@@ -612,6 +612,16 @@ class User(AbstractUser):
         help_text="Salário do colaborador. Visível apenas para quem gerencia usuários.",
     )
 
+    # --- Dados bancários ---
+    # Uma chave só, na forma canônica do BC (CPF/CNPJ com dígitos, celular como
+    # +55DDD…, e-mail e chave aleatória em minúsculas). O tipo não é um campo
+    # porque os cinco formatos são disjuntos — dá para deduzir, e um campo a
+    # menos é um campo a menos para o colaborador errar no pré-cadastro.
+    pix_key = models.CharField(
+        max_length=140, blank=True, default='', verbose_name="Chave PIX",
+        help_text="CPF, CNPJ, celular, e-mail ou chave aleatória.",
+    )
+
     avatar = models.ImageField(upload_to='avatars/', storage=get_media_storage(), blank=True, null=True, verbose_name="Avatar")
     profile_picture = models.ImageField(upload_to=upload_user_profile_photo, storage=get_media_storage(), blank=True, null=True)
     is_active = models.BooleanField(default=True, verbose_name="Ativo")
@@ -688,6 +698,19 @@ class User(AbstractUser):
         if self.status != self.STATUS_FERIAS or not self.vacation_end_date:
             return None
         return (self.vacation_end_date - timezone.localdate()).days
+
+    @property
+    def pix_key_type(self):
+        """Rótulo do tipo de chave PIX ('CPF', 'Celular'…) ou '' se não houver."""
+        from .pix import ROTULOS, identificar
+        _chave, tipo = identificar(self.pix_key)
+        return ROTULOS.get(tipo, '')
+
+    @property
+    def pix_key_display(self):
+        """A chave PIX com máscara, para leitura humana."""
+        from .pix import formatar
+        return formatar(self.pix_key)
 
     # Pré-cadastro (onboarding via link enviado ao novo colaborador)
     PRE_REG_NONE = 'NONE'

@@ -902,6 +902,7 @@ def create_user_view(request):
         contract_type = request.POST.get('contract_type', '').strip()
         branch_cnpj = request.POST.get('branch_cnpj', '').strip()
         salary = _parse_salary(request.POST.get('salary'))
+        pix_key, pix_error = _parse_pix(request.POST.get('pix_key'))
 
         context = {
             'sectors': Sector.objects.all(),
@@ -909,6 +910,10 @@ def create_user_view(request):
             'user': request.user,
             'job_title_choices': _job_title_choices(),
         }
+
+        if pix_error:
+            messages.error(request, pix_error)
+            return render(request, 'admin/create_user.html', context)
 
         # CEP e RG são obrigatórios no cadastro.
         if not cep:
@@ -975,6 +980,7 @@ def create_user_view(request):
                 contract_type=contract_type,
                 branch_cnpj=branch_cnpj,
                 salary=salary,
+                pix_key=pix_key,
             )
             
             # Anexo de afastamento (somente quando a situação é "Afastado")
@@ -1159,6 +1165,15 @@ def edit_user_view(request, user_id):
                 user_to_edit.contract_type = request.POST.get('contract_type', '').strip()
                 user_to_edit.branch_cnpj = request.POST.get('branch_cnpj', '').strip()
                 user_to_edit.salary = _parse_salary(request.POST.get('salary'))
+
+                pix_key, pix_error = _parse_pix(request.POST.get('pix_key'))
+                if pix_error:
+                    # Devolve para a tela em vez de salvar em branco: apagar a
+                    # chave que já estava lá por causa de um erro de digitação
+                    # é pior do que não salvar nada.
+                    messages.error(request, pix_error)
+                    return redirect('edit_user', user_id=user_to_edit.id)
+                user_to_edit.pix_key = pix_key
 
                 user_to_edit.save()
                 
@@ -1520,6 +1535,14 @@ def _read_pre_registration_personal_data(request):
     }
 
     errors = []
+
+    # PIX é opcional: nem todo mundo tem chave cadastrada no dia da admissão, e
+    # exigir aqui travaria também o reenvio de quem já preencheu a ficha antes
+    # deste campo existir. Mas o que vier tem que ser uma chave de verdade.
+    values['pix_key'], pix_error = _parse_pix(data.get('pix_key'))
+    if pix_error:
+        errors.append(pix_error)
+
     if not values['rg']:
         errors.append('Informe o número do RG.')
     if not values['rg_issue_date']:
@@ -1584,6 +1607,20 @@ def _job_title_choices(atual=''):
         vistos.setdefault(limpo.upper(), limpo)
 
     return sorted(vistos.values(), key=lambda s: s.upper())
+
+
+def _parse_pix(valor):
+    """(chave_canonica, erro). Chave em branco é aceita — PIX é opcional."""
+    from users.pix import identificar
+
+    texto = (valor or '').strip()
+    if not texto:
+        return '', None
+    chave, _tipo = identificar(texto)
+    if not chave:
+        return '', ('Chave PIX inválida. Use CPF, CNPJ, celular com DDD, '
+                    'e-mail ou a chave aleatória do banco.')
+    return chave, None
 
 
 def _parse_salary(valor):
@@ -1700,6 +1737,7 @@ def _apply_pre_registration_personal_data(target, values):
     target.address_number = values['address_number']
     target.address_complement = values['address_complement']
     target.state = values['state']
+    target.pix_key = values['pix_key']
 
     # Contatos de emergência: substitui a lista pela informada no formulário
     # (o colaborador pode reenviar o formulário no fluxo de ajuste).

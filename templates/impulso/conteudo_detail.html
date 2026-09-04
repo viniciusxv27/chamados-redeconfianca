@@ -33,7 +33,7 @@
     <div class="imp-card p-5 mb-4">
         <div class="flex items-start justify-between gap-2">
             <h2 class="text-xl font-bold text-gray-900">{{ conteudo.titulo }}</h2>
-            <span class="text-xs uppercase px-2 py-0.5 rounded bg-gray-100 text-gray-600 flex-shrink-0">{{ conteudo.get_tipo_display }}</span>
+            <span class="text-xs uppercase px-2 py-0.5 rounded bg-gray-100 text-gray-600 flex-shrink-0">{{ conteudo.rotulo }}</span>
         </div>
         {% if conteudo.descricao %}<p class="text-sm text-gray-700 mt-2 whitespace-pre-wrap">{{ conteudo.descricao }}</p>{% endif %}
         {% if conteudo.video_reproduzivel %}
@@ -43,7 +43,7 @@
                    preload="metadata" playsinline
                    data-assistido="{{ conclusao.video_assistido_ate|default:0|floatformat:'-2' }}"
                    data-concluido="{% if conclusao.video_concluido %}1{% else %}0{% endif %}">
-                <source src="{{ conteudo.arquivo.url }}">
+                <source src="{{ conteudo.arquivo_de_video.url }}">
                 Seu navegador não consegue tocar este vídeo.
             </video>
             <div class="flex items-center justify-between gap-3 mt-2 flex-wrap">
@@ -58,9 +58,14 @@
         </div>
         {% endif %}
 
+        {% comment %}
+        O POP e o vídeo convivem na mesma tela: o player acima, o documento
+        aqui. Antes o "Baixar arquivo" sumia quando havia vídeo, porque só
+        existia um anexo por conteúdo.
+        {% endcomment %}
         <div class="flex flex-wrap gap-3 mt-4">
             {% if conteudo.url %}<a href="{{ conteudo.url }}" target="_blank" rel="noopener" class="px-3 py-2 rounded-lg bg-emerald-500 text-white text-sm hover:bg-emerald-600"><i class="fas fa-external-link mr-1"></i>Acessar link</a>{% endif %}
-            {% if conteudo.arquivo and not conteudo.video_reproduzivel %}<a href="{{ conteudo.arquivo.url }}" target="_blank" rel="noopener" class="px-3 py-2 rounded-lg bg-gray-800 text-white text-sm hover:bg-gray-900"><i class="fas fa-download mr-1"></i>Baixar arquivo</a>{% endif %}
+            {% if conteudo.documento %}<a href="{{ conteudo.documento.url }}" target="_blank" rel="noopener" class="px-3 py-2 rounded-lg bg-gray-800 text-white text-sm hover:bg-gray-900"><i class="fas fa-file-lines mr-1"></i>Abrir o POP</a>{% endif %}
         </div>
     </div>
 
