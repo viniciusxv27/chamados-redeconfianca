@@ -719,9 +719,10 @@ def escala_salvar(request):
 @login_required
 @require_POST
 def escala_gestores(request):
-    """SUPERADMIN define quem, além dele, gere todas as escalas."""
+    """Quem administra o ponto define quem mais gere todas as escalas."""
     if not e_gestor(request.user):
-        messages.error(request, 'Apenas o SUPERADMIN define os gestores de escala.')
+        messages.error(request, 'Apenas quem administra o ponto define os gestores '
+                                'de escala.')
         return redirect('tangerino:escala')
 
     ids = [int(v) for v in request.POST.getlist('gestores') if v.isdigit()]
@@ -952,9 +953,10 @@ def sincronizar(request):
 @modulo_liberado
 @login_required
 def configuracao(request):
-    """Liga/desliga do módulo — só superusuário."""
-    if not request.user.is_superuser:
-        messages.error(request, 'Apenas superusuários alteram a configuração do módulo.')
+    """Liga/desliga do módulo — quem administra o ponto (ver User.can_manage_rh)."""
+    if not e_gestor(request.user):
+        messages.error(request, 'Apenas quem administra o ponto altera a configuração '
+                                'do módulo.')
         return redirect('tangerino:meu_ponto')
 
     from communications.models import CommunicationGroup

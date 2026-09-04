@@ -127,7 +127,10 @@ class ConfiguracaoTangerino(models.Model):
         """
         if not (user and user.is_authenticated):
             return False
-        if user.is_superuser:
+        # Quem administra o módulo é checado ANTES de `ativo`, pela mesma razão
+        # do superusuário: a tela que religa o módulo vive dentro dele. Sem
+        # isso, desligar seria chave de mão única para a ADMINISTRAÇÃO.
+        if user.is_superuser or getattr(user, 'can_manage_rh', lambda: False)():
             return True
         if not self.ativo:
             return False
@@ -135,11 +138,6 @@ class ConfiguracaoTangerino(models.Model):
         # de grupo, mas continua respeitando o módulo estar ativo.
         from users.module_access import user_has_module
         if user_has_module(user, 'ponto'):
-            return True
-        # Mesma ideia para quem administra o módulo: sem isso, dar a gestão do
-        # ponto para a ADMINISTRAÇÃO e esquecer de pôr a pessoa no grupo
-        # liberado deixaria a permissão existindo só no papel.
-        if getattr(user, 'can_manage_rh', lambda: False)():
             return True
         if not self.restrito_ao_grupo:
             return True

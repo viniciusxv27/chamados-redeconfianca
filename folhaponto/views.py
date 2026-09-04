@@ -428,7 +428,9 @@ def admin_access(request):
     available_users = (
         User.objects.filter(is_active=True)
         .exclude(pk__in=permissions.values_list('user_id', flat=True))
-        .exclude(hierarchy='SUPERADMIN')
+        # Quem já administra o módulo tem acesso por hierarquia: oferecer
+        # liberação individual criaria permissão redundante e confusa.
+        .exclude(hierarchy__in=('SUPERADMIN', 'ADMIN'))
         .order_by('first_name', 'last_name')
     )
 

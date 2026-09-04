@@ -47,7 +47,8 @@ class BloqueioFeriasMiddleware:
 
         # Administradores continuam entrando: quem cuida do portal pode precisar
         # trabalhar mesmo estando de férias no sistema de ponto.
-        if usuario.is_superuser or getattr(usuario, 'hierarchy', '') == 'SUPERADMIN':
+        if (usuario.is_superuser
+                or getattr(usuario, 'can_manage_rh', lambda: False)()):
             return self.get_response(request)
 
         try:
@@ -185,7 +186,8 @@ class BloqueioJornadaMiddleware:
 
         # Quem administra o portal não pode ficar preso do lado de fora — é
         # quem desliga a regra se ela sair errada.
-        if usuario.is_superuser or getattr(usuario, 'hierarchy', '') == 'SUPERADMIN':
+        if (usuario.is_superuser
+                or getattr(usuario, 'can_manage_rh', lambda: False)()):
             return self.get_response(request)
 
         try:

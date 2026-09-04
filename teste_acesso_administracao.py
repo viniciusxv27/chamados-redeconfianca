@@ -128,9 +128,8 @@ try:
     t('e o servidor recusa o PADRÃO salvando', r.status_code in (302, 403), r.status_code)
 
     print('\n== O QUE NÃO FOI PEDIDO CONTINUA FECHADO ==')
-    r = ca.get('/ponto/configuracao/', follow=True)
-    t('configuração do módulo de ponto segue só com superusuário',
-      'Apenas superusuários' in r.content.decode())
+    # A configuração do ponto saiu desta lista: o Vinicius pediu paridade total
+    # nos dois módulos depois, e ela é testada na seção de paridade abaixo.
     # A edição de cadastro foi reaberta para a ADMINISTRAÇÃO depois, com a
     # trava de hierarquia — ver teste_agenda_tarefa.py.
     t('ADMINISTRAÇÃO edita cadastro, menos de quem está acima',
@@ -147,10 +146,55 @@ try:
       cfg.libera(administracao))
     t('e quem não administra continua barrado', not cfg.libera(padrao))
 
+    # Mudou a pedido: ADMIN passou a ter o mesmo acesso do SUPERADMIN nos dois
+    # módulos, e a tela que religa o módulo vive dentro dele. Se a ADMINISTRAÇÃO
+    # pudesse desligar mas não reabrir, seria chave de mão única.
     cfg.ativo = False
-    t('módulo desligado: só o superusuário reabre',
-      not cfg.libera(administracao) and cfg.libera(chefe))
+    t('módulo desligado: quem administra ainda reabre',
+      cfg.libera(administracao) and cfg.libera(chefe))
+    t('e quem não administra continua fora', not cfg.libera(padrao))
     cfg.ativo = True
+
+    print('\n== PARIDADE COM O SUPERADMIN NOS DOIS MÓDULOS ==')
+    # O pedido foi "os mesmos acessos" em /folha-ponto/ e /ponto/. A prova é
+    # comparar as duas hierarquias em cada tela, não conferir uma a uma.
+    TELAS_DOS_MODULOS = [
+        '/folha-ponto/', '/folha-ponto/admin/', '/folha-ponto/admin/importar/',
+        '/folha-ponto/admin/acessos/',
+        '/ponto/', '/ponto/equipe/', '/ponto/folhas/', '/ponto/escala/',
+        '/ferias/', '/ferias/equipe/', '/ponto/configuracao/', '/ponto/vinculos/',
+    ]
+    cs = Client(); cs.force_login(chefe)
+    diferentes = []
+    for url in TELAS_DOS_MODULOS:
+        do_chefe = abriu(cs, url)[0]
+        da_adm = abriu(ca, url)[0]
+        if do_chefe != da_adm:
+            diferentes.append(url)
+    t('ADMINISTRAÇÃO abre exatamente o mesmo que o SUPERADMIN',
+      not diferentes, diferentes)
+
+    t('a configuração do ponto abriu para a ADMINISTRAÇÃO', abriu(ca, '/ponto/configuracao/')[0])
+    t('e continua fechada para o PADRÃO', not abriu(cp, '/ponto/configuracao/')[0])
+
+    # Nenhuma view dos dois módulos pode ter voltado a exigir superusuário.
+    import re as _re
+    for arq in ('folhaponto/views.py', 'tangerino/views.py'):
+        with open(arq, encoding='utf-8') as fh:
+            corpo = fh.read()
+        corpo_sem_comentarios = '\n'.join(
+            l for l in corpo.split('\n') if not l.strip().startswith('#'))
+        t(f'{arq.split("/")[0]}: nenhuma trava de superusuário sobrou',
+          'is_superuser' not in corpo_sem_comentarios
+          and not _re.search(r"hierarchy'?\s*==\s*'SUPERADMIN'", corpo_sem_comentarios))
+
+    print('\n== O BLOQUEIO NÃO PODE PRENDER QUEM ADMINISTRA ==')
+    with open('tangerino/middleware.py', encoding='utf-8') as fh:
+        mid = fh.read()
+    t('férias e jornada deixam quem administra passar',
+      mid.count("can_manage_rh") == 2, mid.count('can_manage_rh'))
+    t('e não é mais só o SUPERADMIN',
+      "hierarchy', '') == 'SUPERADMIN'" not in mid)
 
     print('\n== NOME DA FUNÇÃO NÃO PODE MENTIR ==')
     for arq in ('folhaponto/views.py', 'documentos/views.py', 'contracheque/views.py'):
