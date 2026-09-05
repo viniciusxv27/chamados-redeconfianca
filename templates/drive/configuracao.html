@@ -10,6 +10,7 @@
                 <p class="font-semibold {% if conexao_ok %}text-emerald-800{% else %}text-amber-800{% endif %}">{% if conexao_ok %}Conectado ao Google Drive{% else %}Google Drive não conectado{% endif %}</p>
             </div>
             <p class="text-sm mt-1 {% if conexao_ok %}text-emerald-700{% else %}text-amber-700{% endif %}">{{ conexao_msg }}</p>
+            {% if sa_email %}<p class="text-xs mt-2 {% if conexao_ok %}text-emerald-700{% else %}text-amber-700{% endif %}">Conta de serviço: <code class="bg-white/60 px-1 rounded">{{ sa_email }}</code></p>{% endif %}
         </div>
 
         <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
@@ -19,22 +20,42 @@
                 <li>Em <strong>APIs e serviços → Biblioteca</strong>, busque <strong>Google Drive API</strong> e clique em <strong>Ativar</strong>.</li>
                 <li>Em <strong>APIs e serviços → Credenciais → Criar credenciais → Conta de serviço</strong>, crie uma conta (ex.: <code>portal-drive</code>).</li>
                 <li>Abra a conta de serviço → aba <strong>Chaves → Adicionar chave → Criar nova chave → JSON</strong>. Baixe o arquivo.</li>
-                <li>No servidor, no arquivo <code>.env</code>, defina <code>GOOGLE_DRIVE_SA_FILE=/caminho/chave.json</code> <em>ou</em> cole o conteúdo em <code>GOOGLE_DRIVE_SA_JSON={...}</code> e reinicie o portal.</li>
+                <li><strong>Envie o JSON aqui na tela</strong> (campo ao lado). Ele é guardado com acesso privado no S3 e ligado automaticamente — <em>não</em> precisa editar o <code>.env</code>.</li>
                 <li><strong>Compartilhe</strong> as pastas da empresa com o e-mail da conta de serviço{% if sa_email %} (<code class="bg-gray-100 px-1 rounded">{{ sa_email }}</code>){% endif %}: no Drive, botão direito na pasta → Compartilhar → adicione esse e-mail como <strong>Leitor</strong> (só ver) ou <strong>Editor/Gestor de conteúdo</strong> (para enviar/editar/excluir pelo portal).</li>
-                <li>Se usar um <strong>Drive Compartilhado</strong>, adicione a conta de serviço como <strong>membro</strong> e cole o ID do Drive Compartilhado no formulário ao lado.</li>
-                <li>Na aba <a href="{% url 'drive:gestao_setores' %}" class="text-blue-600 hover:underline">Setores</a>, ligue cada setor à sua pasta (o ID vem da URL do Drive, após <code>/folders/</code>). Depois defina quem vê o quê em <a href="{% url 'drive:gestao_permissoes' %}" class="text-blue-600 hover:underline">Permissões</a>.</li>
+                <li>Para o Drive enxergar <strong>TODOS os arquivos</strong> da conta (não só o compartilhado): no <strong>Admin do Workspace → Segurança → Controles de API → Delegação em todo o domínio</strong>, autorize o <em>Client ID</em> da conta de serviço com o escopo <code>https://www.googleapis.com/auth/drive</code> e preencha o campo <strong>Impersonar</strong> ao lado com um e-mail admin.</li>
+                <li>Na aba <a href="{% url 'drive:gestao_setores' %}" class="text-blue-600 hover:underline">Setores</a>, ligue cada setor à sua pasta e defina quem vê o quê em <a href="{% url 'drive:gestao_permissoes' %}" class="text-blue-600 hover:underline">Permissões</a>.</li>
             </ol>
-            <p class="text-[11px] text-gray-400 mt-3"><strong>Google Workspace (opcional):</strong> para acessar o “Meu Drive” de usuários via delegação em todo o domínio, autorize o Client ID da conta de serviço com o escopo <code>.../auth/drive</code> no Admin do Workspace e preencha <code>GOOGLE_DRIVE_IMPERSONATE</code> com um e-mail administrador.</p>
         </div>
     </div>
 
-    <!-- Limites e opções -->
+    <!-- Credencial + limites -->
     <div>
-        <form method="post" class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-4">
+        <form method="post" enctype="multipart/form-data" class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-4">
             {% csrf_token %}
+
+            <h3 class="font-semibold text-gray-700">Credencial e conexão</h3>
+            {% if cfg.sa_json %}
+            <div class="flex items-center gap-2 text-sm bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
+                <i class="fas fa-key text-emerald-600"></i>
+                <span class="text-emerald-800 flex-1 truncate">Credencial enviada e ativa{% if sa_email %} · {{ sa_email }}{% endif %}</span>
+            </div>
+            {% endif %}
+            <div>
+                <label class="block text-xs font-semibold text-gray-500 mb-1">{% if cfg.sa_json %}Trocar credencial (JSON){% else %}Enviar credencial (JSON){% endif %}</label>
+                <input type="file" name="sa_json" accept="application/json,.json"
+                       class="w-full text-sm text-gray-600 file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:bg-blue-50 file:text-blue-700 file:text-sm file:font-medium">
+                <p class="text-[11px] text-gray-400 mt-1">Guardado com acesso <strong>privado</strong> (nunca por link público) e ligado automaticamente.</p>
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-gray-500 mb-1">Impersonar — ver todos os arquivos (opcional)</label>
+                <input type="email" name="impersonate_email" value="{{ cfg.impersonate_email }}" placeholder="admin@suaempresa.com"
+                       class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+                <p class="text-[11px] text-gray-400 mt-1">Exige delegação em todo o domínio autorizada no Admin do Workspace.</p>
+            </div>
+
+            <hr class="border-gray-100">
             <h3 class="font-semibold text-gray-700">Limites e opções</h3>
             <label class="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="ativo" {% if cfg.ativo %}checked{% endif %} class="rounded text-blue-600"> Módulo ativo</label>
-
             <div>
                 <label class="block text-xs font-semibold text-gray-500 mb-1">ID do Drive Compartilhado (opcional)</label>
                 <input type="text" name="shared_drive_id" value="{{ cfg.shared_drive_id }}" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono">
@@ -64,6 +85,13 @@
             </div>
             <button type="submit" class="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"><i class="fas fa-check mr-1.5"></i>Salvar configuração</button>
         </form>
+
+        {% if cfg.sa_json %}
+        <form method="post" onsubmit="return confirm('Remover a credencial? O Drive fica desconectado até você enviar outra.');" class="mt-2 text-right">
+            {% csrf_token %}<input type="hidden" name="remover_credencial" value="1">
+            <button type="submit" class="text-xs text-red-600 hover:underline"><i class="fas fa-trash-can mr-1"></i>Remover credencial enviada</button>
+        </form>
+        {% endif %}
     </div>
 </div>
 {% endblock %}

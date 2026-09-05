@@ -17,6 +17,19 @@ HIERARQUIAS = [
 ]
 
 
+def credencial_storage():
+    """Storage PRIVADO para a chave JSON (S3 com ACL privada; local fora do S3)."""
+    from django.conf import settings
+    if getattr(settings, 'USE_S3', False):
+        from .storage import DriveCredentialStorage
+        return DriveCredentialStorage()
+    return None
+
+
+def upload_credencial(instance, filename):
+    return 'drive/credenciais/service_account.json'
+
+
 class DriveConfig(models.Model):
     """Registro único (id=1): liga-desliga, limites e apontamentos do Google."""
 
@@ -27,6 +40,19 @@ class DriveConfig(models.Model):
     shared_drive_id = models.CharField(
         max_length=100, blank=True, default='', verbose_name='ID do Drive Compartilhado',
         help_text='Se a empresa usa um Drive Compartilhado (Team Drive), cole o ID aqui. Opcional.')
+
+    # Credencial enviada pela tela (em vez do .env). Guardada em storage PRIVADO
+    # (nunca público — é uma chave). O cliente do Drive lê daqui primeiro.
+    sa_json = models.FileField(
+        upload_to=upload_credencial, storage=credencial_storage(), blank=True, null=True,
+        verbose_name='Credencial (JSON da conta de serviço)')
+    sa_client_email = models.CharField(
+        max_length=255, blank=True, default='', verbose_name='E-mail da conta de serviço',
+        help_text='Extraído da chave; é com este e-mail que se compartilham as pastas.')
+    impersonate_email = models.EmailField(
+        blank=True, default='', verbose_name='Impersonar (delegação em todo o domínio)',
+        help_text='E-mail de um usuário/admin do Workspace para o Drive enxergar TODOS os '
+                  'arquivos da conta. Exige delegação em todo o domínio autorizada no Admin.')
 
     # ── Limites de arquivo (configuráveis) ──────────────────────────────────
     max_file_mb = models.PositiveIntegerField(

@@ -32,6 +32,7 @@ FIELDS = ('id,name,mimeType,size,modifiedTime,createdTime,iconLink,thumbnailLink
 
 _lock = threading.Lock()
 _service = None
+_fingerprint = None
 
 
 class DriveError(Exception):
@@ -44,44 +45,98 @@ class DriveNaoConfigurado(DriveError):
 
 # ─── Autenticação ────────────────────────────────────────────────────────────
 
+def _config():
+    """DriveConfig (id=1), sem quebrar se a tabela ainda não existir."""
+    try:
+        from .models import DriveConfig
+        return DriveConfig.objects.filter(pk=1).first()
+    except Exception:
+        return None
+
+
 def configurado() -> bool:
-    """Há credencial apontada em settings?"""
-    return bool(getattr(settings, 'GOOGLE_DRIVE_SA_JSON', '')
-                or getattr(settings, 'GOOGLE_DRIVE_SA_FILE', ''))
+    """Há credencial — enviada pela tela (S3) ou apontada no .env?"""
+    cfg = _config()
+    if cfg and cfg.sa_json:
+        return True
+    return bool((getattr(settings, 'GOOGLE_DRIVE_SA_JSON', '') or '').strip()
+                or (getattr(settings, 'GOOGLE_DRIVE_SA_FILE', '') or '').strip())
+
+
+def _marca():
+    """Impressão digital BARATA da credencial vigente (não lê o arquivo).
+
+    Serve para refazer o cliente quando o SUPERADMIN troca a chave pela tela —
+    mesmo em outro worker do gunicorn, que só vê a mudança pelo banco.
+    """
+    cfg = _config()
+    if cfg and cfg.sa_json:
+        ts = cfg.atualizado_em.isoformat() if cfg.atualizado_em else ''
+        return f'db:{cfg.sa_json.name}:{cfg.impersonate_email}:{ts}'
+    return 'env:' + '|'.join([
+        (getattr(settings, 'GOOGLE_DRIVE_SA_JSON', '') or '')[:24],
+        getattr(settings, 'GOOGLE_DRIVE_SA_FILE', '') or '',
+        getattr(settings, 'GOOGLE_DRIVE_IMPERSONATE', '') or '',
+    ])
 
 
 def _credenciais():
+    """Credencial vigente: JSON enviado pela tela (S3 privado) tem prioridade."""
     from google.oauth2 import service_account
 
-    raw = (getattr(settings, 'GOOGLE_DRIVE_SA_JSON', '') or '').strip()
-    arquivo = (getattr(settings, 'GOOGLE_DRIVE_SA_FILE', '') or '').strip()
+    cfg = _config()
+    info, arquivo, subject = None, '', ''
+    if cfg and cfg.sa_json:
+        try:
+            cfg.sa_json.open('rb')
+            dados = cfg.sa_json.read()
+            cfg.sa_json.close()
+            info = json.loads(dados.decode('utf-8'))
+        except Exception as exc:  # noqa: BLE001
+            raise DriveNaoConfigurado(f'Credencial enviada inválida: {exc}')
+        subject = (cfg.impersonate_email or '').strip()
+    else:
+        raw = (getattr(settings, 'GOOGLE_DRIVE_SA_JSON', '') or '').strip()
+        arquivo = (getattr(settings, 'GOOGLE_DRIVE_SA_FILE', '') or '').strip()
+        subject = (getattr(settings, 'GOOGLE_DRIVE_IMPERSONATE', '') or '').strip()
+        if raw.startswith('{'):
+            info = json.loads(raw)
+        elif raw and not arquivo and os.path.exists(raw):
+            arquivo = raw
 
-    if raw.startswith('{'):
-        cred = service_account.Credentials.from_service_account_info(json.loads(raw), scopes=SCOPES)
+    if info is not None:
+        cred = service_account.Credentials.from_service_account_info(info, scopes=SCOPES)
     elif arquivo and os.path.exists(arquivo):
         cred = service_account.Credentials.from_service_account_file(arquivo, scopes=SCOPES)
-    elif raw and os.path.exists(raw):
-        cred = service_account.Credentials.from_service_account_file(raw, scopes=SCOPES)
     else:
         raise DriveNaoConfigurado('Credencial do Google Drive não configurada.')
 
-    subject = (getattr(settings, 'GOOGLE_DRIVE_IMPERSONATE', '') or '').strip()
     if subject:
         cred = cred.with_subject(subject)
     return cred
 
 
 def service():
-    """Cliente da API v3, cacheado no processo."""
-    global _service
+    """Cliente da API v3, cacheado — refeito se a credencial mudar."""
+    global _service, _fingerprint
     if not configurado():
         raise DriveNaoConfigurado('Credencial do Google Drive não configurada.')
-    if _service is None:
+    marca = _marca()
+    if _service is None or _fingerprint != marca:
         with _lock:
-            if _service is None:
+            if _service is None or _fingerprint != marca:
                 from googleapiclient.discovery import build
                 _service = build('drive', 'v3', credentials=_credenciais(), cache_discovery=False)
+                _fingerprint = marca
     return _service
+
+
+def resetar():
+    """Esquece o cliente cacheado (chamado após trocar a credencial pela tela)."""
+    global _service, _fingerprint
+    with _lock:
+        _service = None
+        _fingerprint = None
 
 
 def testar_conexao():

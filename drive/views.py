@@ -758,6 +758,38 @@ def configuracao(request):
         return redirect('drive:index')
     cfg = DriveConfig.get()
     if request.method == 'POST':
+        # Remover a credencial enviada.
+        if request.POST.get('remover_credencial') == '1':
+            if cfg.sa_json:
+                try:
+                    cfg.sa_json.delete(save=False)
+                except Exception:  # noqa: BLE001
+                    pass
+            cfg.sa_json = None
+            cfg.sa_client_email = ''
+            cfg.save()
+            gdrive.resetar()
+            messages.success(request, 'Credencial removida.')
+            return redirect('drive:configuracao')
+
+        # Upload do JSON da conta de serviço (guardado em storage PRIVADO).
+        arq = request.FILES.get('sa_json')
+        if arq:
+            import json as _json
+            from django.core.files.base import ContentFile
+            try:
+                bruto = arq.read()
+                info = _json.loads(bruto.decode('utf-8'))
+            except Exception:  # noqa: BLE001
+                messages.error(request, 'O arquivo enviado não é um JSON válido.')
+                return redirect('drive:configuracao')
+            if info.get('type') != 'service_account' or not info.get('private_key') or not info.get('client_email'):
+                messages.error(request, 'Este JSON não parece a chave de uma conta de serviço do Google.')
+                return redirect('drive:configuracao')
+            cfg.sa_json.save('service_account.json', ContentFile(bruto), save=False)
+            cfg.sa_client_email = info.get('client_email', '')
+
+        cfg.impersonate_email = (request.POST.get('impersonate_email') or '').strip()
         cfg.ativo = request.POST.get('ativo') == 'on'
         cfg.shared_drive_id = (request.POST.get('shared_drive_id') or '').strip()
         cfg.allowed_extensions = (request.POST.get('allowed_extensions') or '').strip()
@@ -769,13 +801,14 @@ def configuracao(request):
         cfg.notify_updated = request.POST.get('notify_updated') == 'on'
         cfg.atualizado_por = request.user
         cfg.save()
-        messages.success(request, 'Configuração salva.')
+        gdrive.resetar()   # a credencial/impersonação pode ter mudado
+        messages.success(request, 'Configuração salva.' + (' Credencial atualizada.' if arq else ''))
         return redirect('drive:configuracao')
 
     ok, msg = gdrive.testar_conexao()
     return render(request, 'drive/configuracao.html', {
         'cfg': cfg, 'conexao_ok': ok, 'conexao_msg': msg,
-        'sa_email': _sa_email(), 'is_superadmin': True})
+        'sa_email': cfg.sa_client_email or _sa_email(), 'is_superadmin': True})
 
 
 def _sa_email():
