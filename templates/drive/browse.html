@@ -1,0 +1,110 @@
+{% extends 'drive/base_drive.html' %}
+{% block drive_titulo %}{{ sector.name }} — Drive{% endblock %}
+{% block drive_subtitulo %}{{ sector.name }}{% endblock %}
+
+{% block drive_conteudo %}
+<div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+    <!-- Barra de caminho + ações -->
+    <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap">
+        <div class="flex items-center gap-1.5 text-sm dv-scroll-x min-w-0">
+            <a href="{% url 'drive:index' %}" class="text-gray-400 hover:text-gray-600"><i class="fas fa-hard-drive"></i></a>
+            <i class="fas fa-chevron-right text-[10px] text-gray-300"></i>
+            <a href="{% url 'drive:browse' mapping.sector_id %}" class="text-blue-600 hover:underline font-medium whitespace-nowrap">{{ sector.name }}</a>
+            {% for fid, fnome in trilha %}
+                {% if not forloop.first %}
+                <i class="fas fa-chevron-right text-[10px] text-gray-300"></i>
+                {% if forloop.last %}
+                <span class="text-gray-700 font-medium whitespace-nowrap">{{ fnome }}</span>
+                {% else %}
+                <a href="{% url 'drive:browse_folder' mapping.sector_id fid %}" class="text-blue-600 hover:underline whitespace-nowrap">{{ fnome }}</a>
+                {% endif %}
+                {% endif %}
+            {% endfor %}
+        </div>
+        <div class="flex items-center gap-2 flex-shrink-0">
+            {% if pode_editar %}
+            <button type="button" onclick="dvNovaPasta()" class="px-3 py-1.5 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">
+                <i class="fas fa-folder-plus mr-1.5"></i><span class="hidden sm:inline">Nova pasta</span>
+            </button>
+            {% endif %}
+            {% if pode_upload %}
+            <button type="button" onclick="document.getElementById('dv-file-input').click()" class="px-3 py-1.5 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700">
+                <i class="fas fa-upload mr-1.5"></i><span class="hidden sm:inline">Enviar</span>
+            </button>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Grade (dropzone) -->
+    <div id="dv-grid-wrap" class="dv-drop p-3 sm:p-4">
+        {% if pode_upload %}
+        <p class="text-[11px] text-gray-400 mb-2 hidden sm:block"><i class="fas fa-hand-pointer mr-1"></i>Arraste arquivos para esta área para enviar.</p>
+        {% endif %}
+        <div id="dv-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+            {% include 'drive/_lista.html' %}
+        </div>
+    </div>
+</div>
+
+<!-- Formulários auxiliares -->
+{% if pode_upload %}
+<form id="dv-upload-form" method="post" action="{% url 'drive:upload' mapping.sector_id %}" enctype="multipart/form-data" class="hidden">
+    {% csrf_token %}<input type="hidden" name="folder_id" value="{{ folder_id }}">
+    <input id="dv-file-input" type="file" name="arquivos" multiple onchange="document.getElementById('dv-upload-form').submit()">
+</form>
+<form id="dv-mkdir-form" method="post" action="{% url 'drive:mkdir' mapping.sector_id %}" class="hidden">
+    {% csrf_token %}<input type="hidden" name="folder_id" value="{{ folder_id }}"><input type="hidden" name="nome" id="dv-mkdir-nome">
+</form>
+{% endif %}
+<form id="dv-rename-form" method="post" class="hidden">{% csrf_token %}<input type="hidden" name="nome" id="dv-rename-nome"><input type="hidden" name="folder_id" value="{{ folder_id }}"></form>
+
+<script>
+function dvMenu(btn){
+    document.querySelectorAll('.dv-menu').forEach(m => { if (m !== btn.nextElementSibling) m.classList.add('hidden'); });
+    btn.nextElementSibling.classList.toggle('hidden');
+}
+document.addEventListener('click', e => {
+    if (!e.target.closest('.dv-menu') && !e.target.closest('[onclick^="dvMenu"]'))
+        document.querySelectorAll('.dv-menu').forEach(m => m.classList.add('hidden'));
+});
+function dvNovaPasta(){
+    const nome = prompt('Nome da nova pasta:');
+    if (!nome) return;
+    document.getElementById('dv-mkdir-nome').value = nome;
+    document.getElementById('dv-mkdir-form').submit();
+}
+function dvRenomear(id, nome){
+    const novo = prompt('Novo nome:', nome);
+    if (!novo) return;
+    const f = document.getElementById('dv-rename-form');
+    f.action = '/drive/file/' + id + '/renomear/';
+    document.getElementById('dv-rename-nome').value = novo;
+    f.submit();
+}
+function dvCarregarMais(btn){
+    const url = new URL(window.location.href);
+    url.searchParams.set('t', btn.dataset.next);
+    btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1.5"></i>Carregando...';
+    fetch(url, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
+        .then(r => r.text()).then(html => {
+            const wrap = btn.closest('.dv-more-wrap');
+            wrap.insertAdjacentHTML('beforebegin', html);
+            wrap.remove();
+        }).catch(() => { btn.disabled = false; btn.textContent = 'Carregar mais'; });
+}
+{% if pode_upload %}
+(function(){
+    const drop = document.getElementById('dv-grid-wrap');
+    if (!drop) return;
+    ['dragenter','dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('dragover'); }));
+    ['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); if (ev==='dragleave' && drop.contains(e.relatedTarget)) return; drop.classList.remove('dragover'); }));
+    drop.addEventListener('drop', e => {
+        if (e.dataTransfer && e.dataTransfer.files.length) {
+            document.getElementById('dv-file-input').files = e.dataTransfer.files;
+            document.getElementById('dv-upload-form').submit();
+        }
+    });
+})();
+{% endif %}
+</script>
+{% endblock %}

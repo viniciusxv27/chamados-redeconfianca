@@ -1,0 +1,42 @@
+{% extends 'drive/base_drive.html' %}
+{% block drive_titulo %}Usuários com acesso — Drive{% endblock %}
+{% block drive_conteudo %}
+<div class="flex items-center justify-between mb-3">
+    <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">Usuários com acesso</h2>
+    <span class="text-xs text-gray-400">{{ total }} pessoa(s)</span>
+</div>
+<div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+    <div class="dv-scroll-x">
+        <table class="min-w-full text-sm">
+            <thead class="bg-gray-50 text-gray-500 text-xs uppercase">
+                <tr>
+                    <th class="text-left px-4 py-2.5 font-semibold">Colaborador</th>
+                    <th class="text-left px-4 py-2.5 font-semibold">Setores que enxerga</th>
+                    <th class="text-left px-4 py-2.5 font-semibold">Gestor de</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-50">
+                {% for l in linhas %}
+                <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-2.5">
+                        <p class="font-medium text-gray-800">{{ l.user.full_name }}</p>
+                        <p class="text-xs text-gray-400">{{ l.user.email }}</p>
+                    </td>
+                    <td class="px-4 py-2.5">
+                        <div class="flex flex-wrap gap-1">
+                            {% for s in l.setores %}<span class="text-[11px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">{{ s }}</span>{% endfor %}
+                        </div>
+                    </td>
+                    <td class="px-4 py-2.5">
+                        {% if l.gestor_de %}<div class="flex flex-wrap gap-1">{% for s in l.gestor_de %}<span class="text-[11px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700"><i class="fas fa-user-shield mr-1"></i>{{ s }}</span>{% endfor %}</div>{% else %}<span class="text-gray-300">—</span>{% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="3" class="px-4 py-10 text-center text-gray-400">Ninguém tem acesso configurado ainda. Defina permissões em <a href="{% url 'drive:gestao_permissoes' %}" class="text-blue-600 hover:underline">Permissões</a>.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+<p class="text-[11px] text-gray-400 mt-2">SUPERADMIN enxerga todos os setores automaticamente e não aparece nesta lista, que mostra quem foi liberado por permissão/gestão.</p>
+{% endblock %}

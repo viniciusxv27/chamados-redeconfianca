@@ -1,0 +1,69 @@
+{% extends 'drive/base_drive.html' %}
+{% block drive_titulo %}Configuração — Drive{% endblock %}
+{% block drive_conteudo %}
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    <!-- Conexão + guia -->
+    <div class="space-y-4">
+        <div class="rounded-2xl border shadow-sm p-4 {% if conexao_ok %}bg-emerald-50 border-emerald-100{% else %}bg-amber-50 border-amber-100{% endif %}">
+            <div class="flex items-center gap-2">
+                <i class="fas {% if conexao_ok %}fa-circle-check text-emerald-600{% else %}fa-triangle-exclamation text-amber-600{% endif %} text-lg"></i>
+                <p class="font-semibold {% if conexao_ok %}text-emerald-800{% else %}text-amber-800{% endif %}">{% if conexao_ok %}Conectado ao Google Drive{% else %}Google Drive não conectado{% endif %}</p>
+            </div>
+            <p class="text-sm mt-1 {% if conexao_ok %}text-emerald-700{% else %}text-amber-700{% endif %}">{{ conexao_msg }}</p>
+        </div>
+
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+            <h3 class="font-semibold text-gray-700 mb-2"><i class="fab fa-google mr-1.5 text-blue-500"></i>Como conectar (Google Cloud Console)</h3>
+            <ol class="text-sm text-gray-600 space-y-2 list-decimal pl-5">
+                <li>Acesse <a href="https://console.cloud.google.com/" target="_blank" class="text-blue-600 hover:underline">console.cloud.google.com</a> com a conta Google da empresa e crie (ou escolha) um <strong>projeto</strong>.</li>
+                <li>Em <strong>APIs e serviços → Biblioteca</strong>, busque <strong>Google Drive API</strong> e clique em <strong>Ativar</strong>.</li>
+                <li>Em <strong>APIs e serviços → Credenciais → Criar credenciais → Conta de serviço</strong>, crie uma conta (ex.: <code>portal-drive</code>).</li>
+                <li>Abra a conta de serviço → aba <strong>Chaves → Adicionar chave → Criar nova chave → JSON</strong>. Baixe o arquivo.</li>
+                <li>No servidor, no arquivo <code>.env</code>, defina <code>GOOGLE_DRIVE_SA_FILE=/caminho/chave.json</code> <em>ou</em> cole o conteúdo em <code>GOOGLE_DRIVE_SA_JSON={...}</code> e reinicie o portal.</li>
+                <li><strong>Compartilhe</strong> as pastas da empresa com o e-mail da conta de serviço{% if sa_email %} (<code class="bg-gray-100 px-1 rounded">{{ sa_email }}</code>){% endif %}: no Drive, botão direito na pasta → Compartilhar → adicione esse e-mail como <strong>Leitor</strong> (só ver) ou <strong>Editor/Gestor de conteúdo</strong> (para enviar/editar/excluir pelo portal).</li>
+                <li>Se usar um <strong>Drive Compartilhado</strong>, adicione a conta de serviço como <strong>membro</strong> e cole o ID do Drive Compartilhado no formulário ao lado.</li>
+                <li>Na aba <a href="{% url 'drive:gestao_setores' %}" class="text-blue-600 hover:underline">Setores</a>, ligue cada setor à sua pasta (o ID vem da URL do Drive, após <code>/folders/</code>). Depois defina quem vê o quê em <a href="{% url 'drive:gestao_permissoes' %}" class="text-blue-600 hover:underline">Permissões</a>.</li>
+            </ol>
+            <p class="text-[11px] text-gray-400 mt-3"><strong>Google Workspace (opcional):</strong> para acessar o “Meu Drive” de usuários via delegação em todo o domínio, autorize o Client ID da conta de serviço com o escopo <code>.../auth/drive</code> no Admin do Workspace e preencha <code>GOOGLE_DRIVE_IMPERSONATE</code> com um e-mail administrador.</p>
+        </div>
+    </div>
+
+    <!-- Limites e opções -->
+    <div>
+        <form method="post" class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-4">
+            {% csrf_token %}
+            <h3 class="font-semibold text-gray-700">Limites e opções</h3>
+            <label class="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="ativo" {% if cfg.ativo %}checked{% endif %} class="rounded text-blue-600"> Módulo ativo</label>
+
+            <div>
+                <label class="block text-xs font-semibold text-gray-500 mb-1">ID do Drive Compartilhado (opcional)</label>
+                <input type="text" name="shared_drive_id" value="{{ cfg.shared_drive_id }}" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono">
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-500 mb-1">Tamanho máx. por arquivo (MB)</label>
+                    <input type="number" name="max_file_mb" value="{{ cfg.max_file_mb }}" min="1" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-500 mb-1">Capacidade máx. (GB, 0=sem limite)</label>
+                    <input type="number" name="storage_cap_gb" value="{{ cfg.storage_cap_gb }}" min="0" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+                </div>
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-gray-500 mb-1">Extensões permitidas</label>
+                <input type="text" name="allowed_extensions" value="{{ cfg.allowed_extensions }}" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+                <p class="text-[11px] text-gray-400 mt-1">Separadas por vírgula, sem ponto.</p>
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-gray-500 mb-1">Dias na lixeira antes da exclusão definitiva</label>
+                <input type="number" name="trash_retention_days" value="{{ cfg.trash_retention_days }}" min="1" class="w-40 border border-gray-200 rounded-lg px-3 py-2 text-sm">
+            </div>
+            <div class="space-y-2 pt-1">
+                <label class="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="notify_new" {% if cfg.notify_new %}checked{% endif %} class="rounded text-blue-600"> Avisar usuários sobre novo documento no setor</label>
+                <label class="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="notify_updated" {% if cfg.notify_updated %}checked{% endif %} class="rounded text-blue-600"> Avisar quando um documento for atualizado</label>
+            </div>
+            <button type="submit" class="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"><i class="fas fa-check mr-1.5"></i>Salvar configuração</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

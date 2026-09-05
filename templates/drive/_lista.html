@@ -1,0 +1,66 @@
+{% load drive_extras %}
+{% for item in itens %}
+<div class="dv-card bg-white border border-gray-100 rounded-xl p-3 relative group">
+    <a href="{% if item.is_folder %}{% url 'drive:browse_folder' mapping.sector_id item.id %}{% else %}{% url 'drive:file_preview' item.id %}{% endif %}"
+       class="block">
+        <div class="flex items-start gap-3">
+            <div class="w-10 h-10 rounded-lg bg-gray-50 flex items-center justify-center flex-shrink-0">
+                <i class="fas {{ item.mimeType|file_icon }} text-lg"></i>
+            </div>
+            <div class="min-w-0 flex-1">
+                <p class="text-sm font-medium text-gray-800 truncate" title="{{ item.name }}">{{ item.name }}</p>
+                <p class="text-[11px] text-gray-400 mt-0.5">
+                    {% if item.is_folder %}Pasta{% else %}{{ item.size_h }}{% endif %}
+                    · {{ item.modifiedTime|slice:':10' }}
+                </p>
+            </div>
+        </div>
+    </a>
+    <div class="absolute top-2 right-2 flex items-center gap-1">
+        {% if not item.is_folder %}
+        <form method="post" action="{% url 'drive:favorite_toggle' item.id %}" class="dv-fav-form">
+            {% csrf_token %}
+            <button type="submit" title="Favoritar" class="w-7 h-7 rounded-md hover:bg-gray-100 text-sm {% if item.fav %}text-amber-400{% else %}text-gray-300 group-hover:text-gray-400{% endif %}">
+                <i class="fas fa-star"></i>
+            </button>
+        </form>
+        {% endif %}
+        <div class="relative">
+            <button type="button" onclick="dvMenu(this)" class="w-7 h-7 rounded-md hover:bg-gray-100 text-gray-400 opacity-0 group-hover:opacity-100 focus:opacity-100">
+                <i class="fas fa-ellipsis-vertical"></i>
+            </button>
+            <div class="dv-menu hidden absolute right-0 top-8 z-20 w-44 bg-white border border-gray-100 rounded-lg shadow-lg py-1 text-sm">
+                <a href="{% if item.is_folder %}{% url 'drive:browse_folder' mapping.sector_id item.id %}{% else %}{% url 'drive:file_preview' item.id %}{% endif %}"
+                   class="block px-3 py-1.5 hover:bg-gray-50"><i class="fas fa-eye w-4 mr-1.5 text-gray-400"></i>Abrir</a>
+                {% if not item.is_folder and pode_download %}
+                <a href="{% url 'drive:file_content' item.id %}?dl=1" class="block px-3 py-1.5 hover:bg-gray-50"><i class="fas fa-download w-4 mr-1.5 text-gray-400"></i>Baixar</a>
+                {% endif %}
+                {% if pode_editar %}
+                <button type="button" onclick="dvRenomear('{{ item.id }}','{{ item.name|escapejs }}')" class="w-full text-left px-3 py-1.5 hover:bg-gray-50"><i class="fas fa-pen w-4 mr-1.5 text-gray-400"></i>Renomear</button>
+                {% endif %}
+                {% if pode_excluir %}
+                <form method="post" action="{% url 'drive:file_delete' item.id %}" onsubmit="return confirm('Mover para a lixeira?');">
+                    {% csrf_token %}<input type="hidden" name="folder_id" value="{{ folder_id }}">
+                    <button type="submit" class="w-full text-left px-3 py-1.5 hover:bg-red-50 text-red-600"><i class="fas fa-trash-can w-4 mr-1.5"></i>Excluir</button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% empty %}
+{% if not prox %}
+<div class="col-span-full text-center py-12 text-gray-400">
+    <i class="fas fa-folder-open text-3xl mb-2 block"></i>
+    <p class="text-sm">Esta pasta está vazia.</p>
+</div>
+{% endif %}
+{% endfor %}
+{% if prox %}
+<div class="col-span-full flex justify-center py-2 dv-more-wrap">
+    <button type="button" data-next="{{ prox }}" onclick="dvCarregarMais(this)"
+            class="px-4 py-2 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">
+        <i class="fas fa-arrow-down mr-1.5"></i>Carregar mais
+    </button>
+</div>
+{% endif %}

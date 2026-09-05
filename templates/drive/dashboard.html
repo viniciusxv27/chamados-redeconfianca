@@ -1,0 +1,52 @@
+{% extends 'drive/base_drive.html' %}
+{% block drive_titulo %}Dashboard — Drive{% endblock %}
+{% block drive_conteudo %}
+<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
+    <div class="bg-white rounded-2xl border border-gray-100 p-4"><p class="text-xs text-gray-400">Setores</p><p class="text-2xl font-bold text-gray-800">{{ total_setores }}</p></div>
+    <div class="bg-white rounded-2xl border border-gray-100 p-4"><p class="text-xs text-gray-400">Usuários com acesso</p><p class="text-2xl font-bold text-blue-600">{{ total_usuarios_acesso }}</p></div>
+    <div class="bg-white rounded-2xl border border-gray-100 p-4"><p class="text-xs text-gray-400">Downloads</p><p class="text-2xl font-bold text-emerald-600">{{ total_downloads }}</p></div>
+    <div class="bg-white rounded-2xl border border-gray-100 p-4"><p class="text-xs text-gray-400">Uploads</p><p class="text-2xl font-bold text-purple-600">{{ total_uploads }}</p></div>
+    <div class="bg-white rounded-2xl border border-gray-100 p-4"><p class="text-xs text-gray-400">Espaço usado (Google)</p><p class="text-2xl font-bold text-gray-800">{{ espaco|default:'—' }}</p></div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm">
+        <div class="px-4 py-3 border-b border-gray-100"><h3 class="font-semibold text-gray-700 text-sm"><i class="fas fa-fire text-orange-400 mr-1.5"></i>Documentos mais acessados</h3></div>
+        <div class="divide-y divide-gray-50">
+            {% for d in mais_acessados %}
+            <a href="{% url 'drive:file_preview' d.file_id %}" class="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50">
+                <span class="text-xs font-bold text-gray-400 w-5">{{ forloop.counter }}</span>
+                <span class="text-sm text-gray-700 truncate flex-1">{{ d.file_name|default:'Documento' }}</span>
+                <span class="text-xs text-gray-400">{{ d.n }} acesso(s)</span>
+            </a>
+            {% empty %}<p class="px-4 py-6 text-center text-sm text-gray-400">Sem acessos registrados ainda.</p>{% endfor %}
+        </div>
+    </div>
+
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm">
+        <div class="px-4 py-3 border-b border-gray-100"><h3 class="font-semibold text-gray-700 text-sm"><i class="fas fa-clock text-blue-400 mr-1.5"></i>Adicionados recentemente</h3></div>
+        <div class="divide-y divide-gray-50">
+            {% for r in recentes %}
+            <a href="{% url 'drive:file_preview' r.file_id %}" class="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50">
+                <span class="text-sm text-gray-700 truncate flex-1">{{ r.file_name|default:'Documento' }}</span>
+                <span class="text-xs text-gray-400">{{ r.sector.name|default:'' }}</span>
+                <span class="text-[11px] text-gray-400">{{ r.criado_em|date:'d/m H:i' }}</span>
+            </a>
+            {% empty %}<p class="px-4 py-6 text-center text-sm text-gray-400">Nenhum upload registrado ainda.</p>{% endfor %}
+        </div>
+    </div>
+
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm lg:col-span-2">
+        <div class="px-4 py-3 border-b border-gray-100"><h3 class="font-semibold text-gray-700 text-sm"><i class="fas fa-sitemap text-gray-400 mr-1.5"></i>Uploads por setor</h3></div>
+        <div class="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {% for s in por_setor %}
+            <div class="flex items-center justify-between px-3 py-2 bg-gray-50 rounded-lg text-sm">
+                <span class="text-gray-700 truncate">{{ s.sector__name|default:'(sem setor)' }}</span>
+                <span class="font-semibold text-gray-800">{{ s.n }}</span>
+            </div>
+            {% empty %}<p class="text-sm text-gray-400 col-span-full text-center py-4">Sem dados por setor ainda.</p>{% endfor %}
+        </div>
+    </div>
+</div>
+<p class="text-[11px] text-gray-400 mt-3">Contadores de download/upload/acesso são registrados pelo portal (trilha de auditoria). O espaço usado vem do próprio Google Drive.</p>
+{% endblock %}

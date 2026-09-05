@@ -1,0 +1,86 @@
+{% extends 'drive/base_drive.html' %}
+{% block drive_titulo %}Permissões — Drive{% endblock %}
+{% block drive_conteudo %}
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    <!-- Form -->
+    <div class="lg:col-span-1">
+        <form method="post" class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3 sticky top-4">
+            {% csrf_token %}
+            <h3 class="font-semibold text-gray-700">Nova permissão</h3>
+            <div>
+                <label class="block text-xs font-semibold text-gray-500 mb-1">Setor</label>
+                <select name="mapping" required class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+                    <option value="">Selecione...</option>
+                    {% for m in mappings %}<option value="{{ m.id }}">{{ m.sector.name }}</option>{% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-gray-500 mb-1">Liberar para</label>
+                <select name="alvo" id="p-alvo" onchange="dvAlvo()" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+                    <option value="USER">Um usuário</option>
+                    <option value="GROUP">Um grupo</option>
+                    <option value="SECTOR">Um setor (todos do setor)</option>
+                    <option value="HIERARCHY">Uma hierarquia</option>
+                </select>
+            </div>
+            <div id="p-user"><label class="block text-xs font-semibold text-gray-500 mb-1">Usuário</label>
+                <select name="target_user" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">{% for p in pessoas %}<option value="{{ p.id }}">{{ p.full_name }}</option>{% endfor %}</select></div>
+            <div id="p-group" class="hidden"><label class="block text-xs font-semibold text-gray-500 mb-1">Grupo</label>
+                <select name="target_group" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">{% for g in grupos %}<option value="{{ g.id }}">{{ g.name }}</option>{% endfor %}</select></div>
+            <div id="p-sector" class="hidden"><label class="block text-xs font-semibold text-gray-500 mb-1">Setor (alvo)</label>
+                <select name="target_sector" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">{% for s in setores %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select></div>
+            <div id="p-hier" class="hidden"><label class="block text-xs font-semibold text-gray-500 mb-1">Hierarquia</label>
+                <select name="target_hierarchy" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">{% for v, r in hierarquias %}<option value="{{ v }}">{{ r }}</option>{% endfor %}</select></div>
+            <div>
+                <label class="block text-xs font-semibold text-gray-500 mb-1">Nível</label>
+                <select name="nivel" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">{% for v, r in niveis %}<option value="{{ v }}">{{ r }}</option>{% endfor %}</select>
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-gray-500 mb-1">Pasta específica <span class="text-gray-400 font-normal">(opcional)</span></label>
+                <input type="text" name="folder_id" placeholder="vazio = setor inteiro" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono">
+                <p class="text-[11px] text-gray-400 mt-1">Informe o ID de uma subpasta para restringir a permissão a ela (e ao que está abaixo).</p>
+            </div>
+            <button type="submit" class="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium">Adicionar permissão</button>
+        </form>
+    </div>
+
+    <!-- Lista -->
+    <div class="lg:col-span-2">
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div class="dv-scroll-x">
+                <table class="min-w-full text-sm">
+                    <thead class="bg-gray-50 text-gray-500 text-xs uppercase">
+                        <tr><th class="text-left px-4 py-2.5 font-semibold">Setor</th><th class="text-left px-4 py-2.5 font-semibold">Liberado para</th><th class="text-left px-4 py-2.5 font-semibold">Nível</th><th class="text-left px-4 py-2.5 font-semibold">Pasta</th><th></th></tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-50">
+                        {% for p in permissoes %}
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-4 py-2.5 text-gray-700">{{ p.mapping.sector.name }}</td>
+                            <td class="px-4 py-2.5"><span class="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 mr-1">{{ p.get_alvo_display }}</span><span class="text-gray-700">{{ p.alvo_label }}</span></td>
+                            <td class="px-4 py-2.5"><span class="text-[11px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">{{ p.get_nivel_display }}</span></td>
+                            <td class="px-4 py-2.5 text-gray-400 text-xs">{{ p.folder_name|default:'setor inteiro' }}</td>
+                            <td class="px-4 py-2.5 text-right">
+                                <form method="post" action="{% url 'drive:permissao_excluir' p.id %}" onsubmit="return confirm('Remover esta permissão?');">
+                                    {% csrf_token %}<button type="submit" class="text-gray-400 hover:text-red-600"><i class="fas fa-trash-can"></i></button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="5" class="px-4 py-10 text-center text-gray-400">Nenhuma permissão cadastrada. SUPERADMIN e gestores de setor já enxergam sem regra.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+function dvAlvo(){
+    const v = document.getElementById('p-alvo').value;
+    document.getElementById('p-user').classList.toggle('hidden', v !== 'USER');
+    document.getElementById('p-group').classList.toggle('hidden', v !== 'GROUP');
+    document.getElementById('p-sector').classList.toggle('hidden', v !== 'SECTOR');
+    document.getElementById('p-hier').classList.toggle('hidden', v !== 'HIERARCHY');
+}
+</script>
+{% endblock %}

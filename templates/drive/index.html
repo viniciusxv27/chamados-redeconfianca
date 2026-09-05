@@ -1,0 +1,89 @@
+{% extends 'drive/base_drive.html' %}
+{% load drive_extras %}
+{% block drive_titulo %}Drive{% endblock %}
+
+{% block drive_conteudo %}
+{% if not drive_ok %}
+<div class="mb-4 px-4 py-3 rounded-xl bg-amber-50 border border-amber-100 text-amber-800 text-sm flex items-start gap-2">
+    <i class="fas fa-triangle-exclamation mt-0.5"></i>
+    <div>
+        A conexão com o Google Drive ainda não está configurada.
+        {% if is_superadmin %}<a href="{% url 'drive:configuracao' %}" class="font-semibold underline">Abrir o guia de configuração</a>.{% else %}Fale com o administrador do portal.{% endif %}
+    </div>
+</div>
+{% endif %}
+
+{% if is_superadmin or e_gestor_algum %}
+<div class="flex flex-wrap gap-2 mb-4">
+    {% if is_superadmin %}
+    <a href="{% url 'drive:gestao_setores' %}" class="px-3 py-2 text-sm rounded-lg bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"><i class="fas fa-sitemap mr-1.5 text-blue-500"></i>Configurar setores</a>
+    <a href="{% url 'drive:gestao_permissoes' %}" class="px-3 py-2 text-sm rounded-lg bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"><i class="fas fa-user-lock mr-1.5 text-blue-500"></i>Permissões</a>
+    <a href="{% url 'drive:dashboard' %}" class="px-3 py-2 text-sm rounded-lg bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"><i class="fas fa-chart-line mr-1.5 text-blue-500"></i>Dashboard</a>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- Setores -->
+<h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Setores</h2>
+{% if setores %}
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
+    {% for m in setores %}
+    <a href="{% url 'drive:browse' m.sector_id %}" class="dv-card bg-white border border-gray-100 rounded-2xl p-4 flex items-center gap-3">
+        <div class="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0">
+            <i class="fas fa-folder text-blue-500 text-xl"></i>
+        </div>
+        <div class="min-w-0 flex-1">
+            <p class="font-semibold text-gray-800 truncate">{{ m.sector.name }}</p>
+            <p class="text-xs text-gray-400 truncate">{{ m.folder_name|default:"Pasta do setor" }}</p>
+        </div>
+        <i class="fas fa-chevron-right text-gray-300"></i>
+    </a>
+    {% endfor %}
+</div>
+{% else %}
+<div class="bg-white rounded-2xl border border-gray-100 p-10 text-center text-gray-500 mb-6">
+    <i class="fas fa-folder-open text-3xl text-gray-300 mb-2 block"></i>
+    <p class="text-sm">Você ainda não tem acesso a nenhum setor no Drive.</p>
+</div>
+{% endif %}
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    <!-- Favoritos -->
+    <div>
+        <div class="flex items-center justify-between mb-2">
+            <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">Favoritos</h2>
+            <a href="{% url 'drive:favoritos' %}" class="text-xs text-blue-600 hover:underline">ver todos</a>
+        </div>
+        <div class="bg-white rounded-2xl border border-gray-100 divide-y divide-gray-50">
+            {% for f in favoritos %}
+            <a href="{% url 'drive:file_preview' f.file_id %}" class="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50">
+                <i class="fas {{ f.mime_type|file_icon }}"></i>
+                <span class="text-sm text-gray-700 truncate flex-1">{{ f.file_name|default:'Documento' }}</span>
+                <i class="fas fa-star text-amber-400 text-xs"></i>
+            </a>
+            {% empty %}
+            <p class="px-4 py-6 text-center text-sm text-gray-400">Nenhum favorito ainda.</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Recentes -->
+    <div>
+        <div class="flex items-center justify-between mb-2">
+            <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">Recentes</h2>
+            <a href="{% url 'drive:recentes' %}" class="text-xs text-blue-600 hover:underline">ver todos</a>
+        </div>
+        <div class="bg-white rounded-2xl border border-gray-100 divide-y divide-gray-50">
+            {% for r in recentes %}
+            <a href="{% url 'drive:file_preview' r.file_id %}" class="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50">
+                <i class="fas fa-file text-gray-300"></i>
+                <span class="text-sm text-gray-700 truncate flex-1">{{ r.file_name|default:'Documento' }}</span>
+                <span class="text-[11px] text-gray-400">{{ r.criado_em|date:'d/m H:i' }}</span>
+            </a>
+            {% empty %}
+            <p class="px-4 py-6 text-center text-sm text-gray-400">Nada acessado ainda.</p>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,21 @@
+{% extends 'drive/base_drive.html' %}
+{% block drive_titulo %}Drive indisponível{% endblock %}
+{% block drive_conteudo %}
+<div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 sm:p-10 text-center max-w-xl mx-auto">
+    <div class="w-16 h-16 rounded-2xl bg-amber-50 flex items-center justify-center mx-auto mb-4">
+        <i class="fab fa-google-drive text-amber-500 text-2xl"></i>
+    </div>
+    <h2 class="text-lg font-bold text-gray-800 mb-1">Conexão com o Google Drive indisponível</h2>
+    {% if not configurado %}
+    <p class="text-sm text-gray-500 mb-5">O portal ainda não está conectado ao Google Drive da empresa.</p>
+    {% else %}
+    <p class="text-sm text-gray-500 mb-2">Não foi possível falar com o Google Drive agora.</p>
+    {% if erro %}<p class="text-xs text-gray-400 mb-5 font-mono bg-gray-50 rounded-lg px-3 py-2 inline-block">{{ erro }}</p>{% endif %}
+    {% endif %}
+    {% if is_superadmin %}
+    <a href="{% url 'drive:configuracao' %}" class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"><i class="fas fa-gear mr-1.5"></i>Abrir o guia de configuração</a>
+    {% else %}
+    <p class="text-sm text-gray-500">Fale com o administrador do portal.</p>
+    {% endif %}
+</div>
+{% endblock %}

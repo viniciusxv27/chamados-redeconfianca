@@ -28,8 +28,13 @@ django-debug-toolbar==4.4.6
 python-dateutil==2.9.0
 
 # HTTP Requests
-requests==2.32.3
+requests==2.34.2
 PyMySQL==1.1.1
+
+# Google Drive API (módulo /drive — espelho ao vivo do Google Drive da empresa)
+google-api-python-client==2.149.0
+google-auth==2.35.0
+google-auth-httplib2==0.2.0
 
 # CORS Headers (para API)
 django-cors-headers==4.4.0

@@ -1,0 +1,104 @@
+{% extends 'drive/base_drive.html' %}
+{% load drive_extras %}
+{% block drive_titulo %}{{ meta.name }} — Drive{% endblock %}
+{% block drive_subtitulo %}{{ sector.name }}{% endblock %}
+
+{% block drive_conteudo %}
+<div class="mb-3">
+    <a href="{% url 'drive:browse' mapping.sector_id %}" class="text-sm text-gray-500 hover:text-gray-700">
+        <i class="fas fa-arrow-left mr-1.5"></i>Voltar a {{ sector.name }}
+    </a>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    <!-- Visualização -->
+    <div class="lg:col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div class="px-4 py-3 border-b border-gray-100 flex items-center gap-3">
+            <i class="fas {{ meta.mimeType|file_icon }} text-lg"></i>
+            <p class="font-semibold text-gray-800 truncate flex-1" title="{{ meta.name }}">{{ meta.name }}</p>
+            <form method="post" action="{% url 'drive:favorite_toggle' meta.id %}">
+                {% csrf_token %}
+                <button type="submit" title="Favoritar" class="w-8 h-8 rounded-lg hover:bg-gray-100 {% if fav %}text-amber-400{% else %}text-gray-300{% endif %}"><i class="fas fa-star"></i></button>
+            </form>
+        </div>
+        <div class="bg-gray-50" style="min-height: 60vh;">
+            {% if meta.previewavel %}
+                {% if 'image/' in meta.mimeType %}
+                <div class="flex items-center justify-center p-4" style="min-height:60vh;">
+                    <img src="{% url 'drive:file_content' meta.id %}" alt="{{ meta.name }}" class="max-w-full max-h-[75vh] rounded-lg shadow">
+                </div>
+                {% else %}
+                <iframe src="{% url 'drive:file_content' meta.id %}" class="w-full" style="height: 78vh; border: 0;"></iframe>
+                {% endif %}
+            {% else %}
+                <div class="flex flex-col items-center justify-center text-center p-10" style="min-height:60vh;">
+                    <i class="fas {{ meta.mimeType|file_icon }} text-5xl mb-3"></i>
+                    <p class="text-sm text-gray-500 mb-4">Pré-visualização não disponível para este tipo de arquivo.</p>
+                    {% if pode_download %}
+                    <a href="{% url 'drive:file_content' meta.id %}?dl=1" class="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700"><i class="fas fa-download mr-1.5"></i>Baixar para abrir</a>
+                    {% endif %}
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Ações + detalhes -->
+    <div class="space-y-4">
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+            <div class="grid grid-cols-2 gap-2">
+                {% if pode_download %}
+                <a href="{% url 'drive:file_content' meta.id %}?dl=1" class="col-span-2 text-center px-3 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700"><i class="fas fa-download mr-1.5"></i>Baixar</a>
+                {% endif %}
+                <a href="{% url 'drive:file_versions' meta.id %}" class="text-center px-3 py-2 rounded-lg border border-gray-200 text-gray-700 text-sm hover:bg-gray-50"><i class="fas fa-clock-rotate-left mr-1.5"></i>Versões</a>
+                {% if pode_editar %}
+                <button type="button" onclick="dvRenomear()" class="px-3 py-2 rounded-lg border border-gray-200 text-gray-700 text-sm hover:bg-gray-50"><i class="fas fa-pen mr-1.5"></i>Renomear</button>
+                <button type="button" onclick="document.getElementById('dv-replace-input').click()" class="px-3 py-2 rounded-lg border border-gray-200 text-gray-700 text-sm hover:bg-gray-50"><i class="fas fa-upload mr-1.5"></i>Nova versão</button>
+                <button type="button" onclick="dvMover()" class="px-3 py-2 rounded-lg border border-gray-200 text-gray-700 text-sm hover:bg-gray-50"><i class="fas fa-arrows-up-down-left-right mr-1.5"></i>Mover</button>
+                {% endif %}
+                {% if pode_excluir %}
+                <form method="post" action="{% url 'drive:file_delete' meta.id %}" class="{% if not pode_editar %}col-span-2{% endif %}" onsubmit="return confirm('Mover para a lixeira?');">
+                    {% csrf_token %}
+                    <button type="submit" class="w-full px-3 py-2 rounded-lg border border-red-200 text-red-600 text-sm hover:bg-red-50"><i class="fas fa-trash-can mr-1.5"></i>Excluir</button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 text-sm">
+            <h3 class="font-semibold text-gray-700 mb-3">Detalhes</h3>
+            <dl class="space-y-2">
+                <div class="flex justify-between gap-3"><dt class="text-gray-400">Tipo</dt><dd class="text-gray-700 text-right truncate">{{ meta.mimeType }}</dd></div>
+                {% if not meta.is_folder %}<div class="flex justify-between gap-3"><dt class="text-gray-400">Tamanho</dt><dd class="text-gray-700">{{ meta.size_h }}</dd></div>{% endif %}
+                <div class="flex justify-between gap-3"><dt class="text-gray-400">Setor</dt><dd class="text-gray-700">{{ sector.name }}</dd></div>
+                <div class="flex justify-between gap-3"><dt class="text-gray-400">Criado</dt><dd class="text-gray-700">{{ meta.createdTime|slice:':10' }}</dd></div>
+                <div class="flex justify-between gap-3"><dt class="text-gray-400">Atualizado</dt><dd class="text-gray-700">{{ meta.modifiedTime|slice:':16' }}</dd></div>
+                {% if meta.lastModifyingUser %}<div class="flex justify-between gap-3"><dt class="text-gray-400">Por</dt><dd class="text-gray-700 text-right truncate">{{ meta.lastModifyingUser.displayName }}</dd></div>{% endif %}
+                {% if meta.version %}<div class="flex justify-between gap-3"><dt class="text-gray-400">Versão</dt><dd class="text-gray-700">{{ meta.version }}</dd></div>{% endif %}
+            </dl>
+        </div>
+    </div>
+</div>
+
+<form id="dv-rename-form" method="post" action="{% url 'drive:file_rename' meta.id %}" class="hidden">{% csrf_token %}<input type="hidden" name="nome" id="dv-rename-nome"></form>
+<form id="dv-move-form" method="post" action="{% url 'drive:file_move' meta.id %}" class="hidden">{% csrf_token %}<input type="hidden" name="destino" id="dv-move-destino"></form>
+{% if pode_editar %}
+<form id="dv-replace-form" method="post" action="{% url 'drive:file_replace' meta.id %}" enctype="multipart/form-data" class="hidden">
+    {% csrf_token %}<input id="dv-replace-input" type="file" name="arquivo" onchange="if(this.files.length){document.getElementById('dv-replace-form').submit();}">
+</form>
+{% endif %}
+
+<script>
+function dvRenomear(){
+    const novo = prompt('Novo nome:', "{{ meta.name|escapejs }}");
+    if (!novo) return;
+    document.getElementById('dv-rename-nome').value = novo;
+    document.getElementById('dv-rename-form').submit();
+}
+function dvMover(){
+    const dest = prompt('Cole o ID da pasta de destino (mesma do setor). O ID aparece na URL do Google Drive depois de /folders/.');
+    if (!dest) return;
+    document.getElementById('dv-move-destino').value = dest.trim();
+    document.getElementById('dv-move-form').submit();
+}
+</script>
+{% endblock %}

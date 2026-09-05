@@ -1,0 +1,65 @@
+{% extends 'drive/base_drive.html' %}
+{% block drive_titulo %}Setores — Drive{% endblock %}
+{% block drive_conteudo %}
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    <!-- Form -->
+    <div class="lg:col-span-1">
+        <form method="post" class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3 sticky top-4">
+            {% csrf_token %}
+            <h3 class="font-semibold text-gray-700">Ligar setor a uma pasta</h3>
+            <div>
+                <label class="block text-xs font-semibold text-gray-500 mb-1">Setor</label>
+                <select name="sector" id="f-sector" required class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+                    <option value="">Selecione...</option>
+                    {% for m in mappings %}<option value="{{ m.sector_id }}">{{ m.sector.name }} (já configurado)</option>{% endfor %}
+                    {% for s in setores_livres %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-gray-500 mb-1">ID da pasta no Google Drive</label>
+                <input type="text" name="folder_id" id="f-folder" placeholder="ex: 1A2b3C..." class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono">
+                <p class="text-[11px] text-gray-400 mt-1">Na URL do Drive, o trecho depois de <code>/folders/</code>.</p>
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-gray-500 mb-1">Gestores do setor</label>
+                <select name="managers" id="f-managers" multiple size="6" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+                    {% for p in pessoas %}<option value="{{ p.id }}">{{ p.full_name }}</option>{% endfor %}
+                </select>
+                <p class="text-[11px] text-gray-400 mt-1">Gerenciam tudo o que os usuários do setor enxergam. Ctrl/Cmd p/ marcar vários.</p>
+            </div>
+            <label class="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="ativo" id="f-ativo" checked class="rounded text-blue-600"> Ativo</label>
+            <button type="submit" class="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium">Salvar setor</button>
+        </form>
+    </div>
+
+    <!-- Lista -->
+    <div class="lg:col-span-2">
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm divide-y divide-gray-50">
+            {% for m in mappings %}
+            <div class="px-4 py-3 flex items-center gap-3">
+                <div class="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0"><i class="fas fa-folder text-blue-500"></i></div>
+                <div class="flex-1 min-w-0">
+                    <p class="font-medium text-gray-800">{{ m.sector.name }} {% if not m.ativo %}<span class="text-[10px] uppercase bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">inativo</span>{% endif %}</p>
+                    <p class="text-[11px] text-gray-400 font-mono truncate">{{ m.folder_id|default:'sem pasta' }}</p>
+                    {% if m.managers.all %}<p class="text-[11px] text-amber-600 mt-0.5"><i class="fas fa-user-shield mr-1"></i>{% for g in m.managers.all %}{{ g.full_name }}{% if not forloop.last %}, {% endif %}{% endfor %}</p>{% endif %}
+                </div>
+                <button type="button" class="text-sm text-blue-600 hover:underline"
+                        onclick="dvEditar('{{ m.sector_id }}','{{ m.folder_id }}',{% if m.ativo %}true{% else %}false{% endif %},'{% for g in m.managers.all %}{{ g.id }}{% if not forloop.last %},{% endif %}{% endfor %}')">Editar</button>
+            </div>
+            {% empty %}
+            <p class="px-4 py-10 text-center text-sm text-gray-400">Nenhum setor ligado ao Drive ainda. Use o formulário ao lado.</p>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+<script>
+function dvEditar(sector, folder, ativo, managers){
+    document.getElementById('f-sector').value = sector;
+    document.getElementById('f-folder').value = folder;
+    document.getElementById('f-ativo').checked = ativo;
+    const ids = (managers || '').split(',');
+    Array.from(document.getElementById('f-managers').options).forEach(o => { o.selected = ids.includes(o.value); });
+    window.scrollTo({top: 0, behavior: 'smooth'});
+}
+</script>
+{% endblock %}

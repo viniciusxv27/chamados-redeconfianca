@@ -1,0 +1,53 @@
+{% extends 'drive/base_drive.html' %}
+{% block drive_titulo %}Auditoria — Drive{% endblock %}
+{% block drive_conteudo %}
+<form method="get" class="flex items-end gap-2 mb-3 flex-wrap">
+    <div>
+        <label class="block text-xs font-semibold text-gray-500 mb-1">Ação</label>
+        <select name="acao" onchange="this.form.submit()" class="border border-gray-200 rounded-lg px-3 py-2 text-sm">
+            <option value="">Todas</option>
+            {% for val, rot in acoes %}<option value="{{ val }}" {% if acao == val %}selected{% endif %}>{{ rot }}</option>{% endfor %}
+        </select>
+    </div>
+</form>
+
+<div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+    <div class="dv-scroll-x">
+        <table class="min-w-full text-sm">
+            <thead class="bg-gray-50 text-gray-500 text-xs uppercase">
+                <tr>
+                    <th class="text-left px-4 py-2.5 font-semibold">Quando</th>
+                    <th class="text-left px-4 py-2.5 font-semibold">Usuário</th>
+                    <th class="text-left px-4 py-2.5 font-semibold">Ação</th>
+                    <th class="text-left px-4 py-2.5 font-semibold">Documento</th>
+                    <th class="text-left px-4 py-2.5 font-semibold">Setor</th>
+                    <th class="text-left px-4 py-2.5 font-semibold">IP</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-50">
+                {% for l in pagina %}
+                <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-2 text-gray-500 whitespace-nowrap">{{ l.criado_em|date:'d/m/Y H:i:s' }}</td>
+                    <td class="px-4 py-2 text-gray-700 whitespace-nowrap">{{ l.user.full_name|default:'—' }}</td>
+                    <td class="px-4 py-2"><span class="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{{ l.get_acao_display }}</span></td>
+                    <td class="px-4 py-2 text-gray-700 max-w-[220px] truncate" title="{{ l.file_name }}">{{ l.file_name|default:'—' }}{% if l.detalhe %} <span class="text-gray-400">· {{ l.detalhe }}</span>{% endif %}</td>
+                    <td class="px-4 py-2 text-gray-500 whitespace-nowrap">{{ l.sector.name|default:'—' }}</td>
+                    <td class="px-4 py-2 text-gray-400 whitespace-nowrap">{{ l.ip|default:'—' }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="6" class="px-4 py-10 text-center text-gray-400">Nenhuma atividade registrada.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if pagina.has_other_pages %}
+    <div class="px-4 py-3 border-t border-gray-100 flex items-center justify-between text-sm">
+        <span class="text-gray-400">Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span>
+        <div class="flex gap-2">
+            {% if pagina.has_previous %}<a href="?page={{ pagina.previous_page_number }}{% if acao %}&acao={{ acao }}{% endif %}" class="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">Anterior</a>{% endif %}
+            {% if pagina.has_next %}<a href="?page={{ pagina.next_page_number }}{% if acao %}&acao={{ acao }}{% endif %}" class="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">Próxima</a>{% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

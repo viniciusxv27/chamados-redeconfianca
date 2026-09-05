@@ -81,6 +81,7 @@ INSTALLED_APPS = [
     'cursos',
     'curriculos',  # Banco de Talentos (currículos do RH)
     'reunioes',  # Reuniões com sala de vídeo e ata
+    'drive',  # Drive: espelho do Google Drive da empresa com permissão por setor
     # 'webpush',  # Django WebPush (temporariamente removido)
 ]
 
@@ -405,3 +406,12 @@ OPENAI_API_KEY = config('OPENAI_API_KEY', default='')
 # Vazio desliga o endpoint (retorna 401). Enviar no header Authorization: Bearer
 # <token> ou X-API-Key: <token>.
 CARTOES_API_TOKEN = config('CARTOES_API_TOKEN', default='')
+
+# ── Google Drive (módulo /drive — espelho ao vivo do Drive da empresa) ───────
+# Credencial de SERVICE ACCOUNT. Use UMA das duas: o caminho do arquivo JSON da
+# chave OU o JSON inteiro colado no .env. Vazio = o módulo mostra o guia de
+# configuração e degrada com elegância (não quebra o portal).
+GOOGLE_DRIVE_SA_FILE = config('GOOGLE_DRIVE_SA_FILE', default='')
+GOOGLE_DRIVE_SA_JSON = config('GOOGLE_DRIVE_SA_JSON', default='')
+# Opcional: e-mail para delegação em todo o domínio (Google Workspace admin).
+GOOGLE_DRIVE_IMPERSONATE = config('GOOGLE_DRIVE_IMPERSONATE', default='')

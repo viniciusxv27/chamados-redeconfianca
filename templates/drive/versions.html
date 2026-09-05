@@ -1,0 +1,35 @@
+{% extends 'drive/base_drive.html' %}
+{% load drive_extras %}
+{% block drive_titulo %}Versões — {{ meta.name }}{% endblock %}
+{% block drive_conteudo %}
+<div class="mb-3">
+    <a href="{% url 'drive:file_preview' meta.id %}" class="text-sm text-gray-500 hover:text-gray-700"><i class="fas fa-arrow-left mr-1.5"></i>Voltar ao documento</a>
+</div>
+<div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+    <div class="px-4 py-3 border-b border-gray-100 flex items-center gap-3">
+        <i class="fas {{ meta.mimeType|file_icon }}"></i>
+        <h2 class="font-semibold text-gray-800 truncate">Histórico de versões · {{ meta.name }}</h2>
+    </div>
+    <div class="divide-y divide-gray-50">
+        {% for r in revs %}
+        <div class="flex items-center gap-3 px-4 py-3">
+            <div class="w-9 h-9 rounded-full flex items-center justify-center {% if r.atual %}bg-emerald-100 text-emerald-600{% else %}bg-gray-100 text-gray-400{% endif %}">
+                <i class="fas fa-code-branch text-xs"></i>
+            </div>
+            <div class="flex-1 min-w-0">
+                <p class="text-sm font-medium text-gray-800">Versão {{ r.num }} {% if r.atual %}<span class="text-[10px] uppercase font-semibold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded ml-1">atual</span>{% endif %}</p>
+                <p class="text-[11px] text-gray-400">{{ r.modifiedTime|slice:':16' }}{% if r.lastModifyingUser %} · {{ r.lastModifyingUser.displayName }}{% endif %} · {{ r.size_h }}</p>
+            </div>
+            {% if pode_restaurar and not r.atual %}
+            <form method="post" action="{% url 'drive:version_restore' meta.id %}" onsubmit="return confirm('Restaurar esta versão como a mais recente?');">
+                {% csrf_token %}<input type="hidden" name="rev" value="{{ r.id }}">
+                <button type="submit" class="px-3 py-1.5 text-xs rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"><i class="fas fa-rotate-left mr-1"></i>Restaurar</button>
+            </form>
+            {% endif %}
+        </div>
+        {% empty %}
+        <p class="px-4 py-8 text-center text-sm text-gray-400">Este documento tem apenas uma versão.</p>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

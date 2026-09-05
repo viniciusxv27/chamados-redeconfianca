@@ -1,0 +1,69 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{% block drive_titulo %}Drive{% endblock %}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .dv-hero { background: linear-gradient(120deg,#1f2937 0%,#2563eb 55%,#0ea5e9 100%); }
+    .dv-tab { white-space: nowrap; border-radius: .6rem; transition: background-color .15s, color .15s; }
+    .dv-tab-active { background: rgba(255,255,255,.18); color: #fff; }
+    .dv-tab-idle { color: rgba(255,255,255,.75); }
+    .dv-tab-idle:hover { background: rgba(255,255,255,.10); color:#fff; }
+    .dv-card { transition: box-shadow .15s, transform .15s, border-color .15s; }
+    .dv-card:hover { box-shadow: 0 8px 24px rgba(16,24,40,.10); transform: translateY(-1px); border-color:#c7d2fe; }
+    .dv-drop.dragover { outline: 2px dashed #2563eb; outline-offset: -6px; background: #eff6ff; }
+    .dv-scroll-x { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+    .dv-scroll-x::-webkit-scrollbar { height:6px; } .dv-scroll-x::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:3px; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% with url=request.resolver_match.url_name %}
+<div class="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-4">
+
+    <div class="dv-hero rounded-2xl px-4 sm:px-6 py-4 sm:py-5 mb-4 text-white shadow-lg">
+        <div class="flex items-start justify-between gap-4 flex-wrap">
+            <div class="min-w-0">
+                <h1 class="text-xl sm:text-2xl font-bold flex items-center gap-2">
+                    <i class="fab fa-google-drive"></i> Drive
+                </h1>
+                <p class="text-white/70 text-sm mt-0.5">{% block drive_subtitulo %}Documentos da empresa, por setor{% endblock %}</p>
+            </div>
+            <form action="{% url 'drive:busca' %}" method="get" class="relative flex-1 min-w-[180px] sm:max-w-xs">
+                <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-white/60 text-sm"></i>
+                <input type="text" name="q" value="{{ termo|default:'' }}" placeholder="Buscar documentos..."
+                       class="w-full bg-white/15 focus:bg-white/25 placeholder-white/60 text-white text-sm rounded-lg pl-9 pr-3 py-2 outline-none border border-white/10">
+            </form>
+        </div>
+
+        <nav class="flex gap-1 mt-4 dv-scroll-x -mb-1 pb-1">
+            <a href="{% url 'drive:index' %}" class="dv-tab px-3 py-1.5 text-sm font-medium {% if url == 'index' or url == 'browse' or url == 'browse_folder' or url == 'file_preview' %}dv-tab-active{% else %}dv-tab-idle{% endif %}"><i class="fas fa-house mr-1.5"></i>Início</a>
+            <a href="{% url 'drive:favoritos' %}" class="dv-tab px-3 py-1.5 text-sm font-medium {% if url == 'favoritos' %}dv-tab-active{% else %}dv-tab-idle{% endif %}"><i class="fas fa-star mr-1.5"></i>Favoritos</a>
+            <a href="{% url 'drive:recentes' %}" class="dv-tab px-3 py-1.5 text-sm font-medium {% if url == 'recentes' %}dv-tab-active{% else %}dv-tab-idle{% endif %}"><i class="fas fa-clock-rotate-left mr-1.5"></i>Recentes</a>
+            <a href="{% url 'drive:lixeira' %}" class="dv-tab px-3 py-1.5 text-sm font-medium {% if url == 'lixeira' %}dv-tab-active{% else %}dv-tab-idle{% endif %}"><i class="fas fa-trash-can mr-1.5"></i>Lixeira</a>
+            {% if is_superadmin %}
+            <span class="w-px bg-white/20 mx-1 my-1"></span>
+            <a href="{% url 'drive:dashboard' %}" class="dv-tab px-3 py-1.5 text-sm font-medium {% if url == 'dashboard' %}dv-tab-active{% else %}dv-tab-idle{% endif %}"><i class="fas fa-chart-line mr-1.5"></i>Dashboard</a>
+            <a href="{% url 'drive:acessos' %}" class="dv-tab px-3 py-1.5 text-sm font-medium {% if url == 'acessos' %}dv-tab-active{% else %}dv-tab-idle{% endif %}"><i class="fas fa-users mr-1.5"></i>Acessos</a>
+            <a href="{% url 'drive:gestao_setores' %}" class="dv-tab px-3 py-1.5 text-sm font-medium {% if url == 'gestao_setores' %}dv-tab-active{% else %}dv-tab-idle{% endif %}"><i class="fas fa-sitemap mr-1.5"></i>Setores</a>
+            <a href="{% url 'drive:gestao_permissoes' %}" class="dv-tab px-3 py-1.5 text-sm font-medium {% if url == 'gestao_permissoes' %}dv-tab-active{% else %}dv-tab-idle{% endif %}"><i class="fas fa-user-lock mr-1.5"></i>Permissões</a>
+            <a href="{% url 'drive:auditoria' %}" class="dv-tab px-3 py-1.5 text-sm font-medium {% if url == 'auditoria' %}dv-tab-active{% else %}dv-tab-idle{% endif %}"><i class="fas fa-list-check mr-1.5"></i>Auditoria</a>
+            <a href="{% url 'drive:configuracao' %}" class="dv-tab px-3 py-1.5 text-sm font-medium {% if url == 'configuracao' %}dv-tab-active{% else %}dv-tab-idle{% endif %}"><i class="fas fa-gear mr-1.5"></i>Config</a>
+            {% endif %}
+        </nav>
+    </div>
+
+    {% if messages %}
+        {% for message in messages %}
+        <div class="mb-3 px-4 py-3 rounded-xl text-sm border
+                    {% if message.tags == 'success' %}bg-emerald-50 border-emerald-100 text-emerald-800
+                    {% elif message.tags == 'error' %}bg-red-50 border-red-100 text-red-700
+                    {% else %}bg-blue-50 border-blue-100 text-blue-800{% endif %}">{{ message }}</div>
+        {% endfor %}
+    {% endif %}
+
+    {% block drive_conteudo %}{% endblock %}
+</div>
+{% endwith %}
+{% endblock %}
