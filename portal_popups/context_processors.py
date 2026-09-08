@@ -51,6 +51,29 @@ def _deve_bater_ponto(user):
         return False
 
 
+def tem_popup_bloqueante_pendente(user):
+    """Há um popup BLOQUEANTE pendente para o usuário agora? (independe da rota)
+
+    Outras travas do portal chamam isto para CEDER a vez ao comunicado —
+    "primeiro o comunicado, depois o resto". Ex.: o bloqueio de curso não
+    redireciona enquanto um comunicado obrigatório não foi lido, senão as duas
+    travas se mordem (o popup cobre a tela do curso e, ao abrir o comunicado, o
+    curso jogava a pessoa de volta). Falha para ``False`` — na dúvida, não
+    inventa prioridade.
+    """
+    if not user or not getattr(user, 'is_authenticated', False):
+        return False
+    try:
+        from .models import PortalPopup
+        for popup in PortalPopup.objects.filter(is_active=True).order_by('order', 'id'):
+            if (popup.is_within_window() and popup.applies_to(user)
+                    and not popup.is_completed_by(user) and popup.is_blocking_now()):
+                return True
+        return False
+    except Exception:
+        return False
+
+
 def portal_popup_gate(request):
     empty = {'portal_popup': None, 'portal_popup_blocking': False}
 

@@ -42,6 +42,17 @@ class BloqueioCursoMiddleware:
                 return self.get_response(request)
             if cfg.e_gestor(usuario):
                 return self.get_response(request)
+
+            # Ordem de prioridade: PRIMEIRO o comunicado, DEPOIS o curso.
+            # Enquanto houver um popup bloqueante pendente (ex.: comunicado
+            # obrigatório a ler), o bloqueio de curso cede a vez — senão as duas
+            # travas se mordem: o popup do comunicado cobre a tela do curso e,
+            # ao clicar para abrir o comunicado, este middleware jogava a pessoa
+            # de volta para /cursos/bloqueado/, sem nunca deixar concluir nenhum.
+            from portal_popups.context_processors import tem_popup_bloqueante_pendente
+            if tem_popup_bloqueante_pendente(usuario):
+                return self.get_response(request)
+
             if vencidos_sem_comprovante(usuario, cfg):
                 return redirect(reverse('cursos:bloqueado'))
         except Exception as exc:                     # nunca derruba a navegação
