@@ -66,8 +66,13 @@
                 <li>Em <a href="https://console.cloud.google.com/apis/library/drive.googleapis.com" target="_blank" rel="noopener" class="text-blue-600 hover:underline">APIs e serviços → Biblioteca</a>, ative a <strong>Google Drive API</strong>.</li>
                 <li>Em <strong>APIs e serviços → Tela de permissão OAuth</strong>, escolha <strong>Externo</strong>, preencha o nome do app e o seu e-mail. Deixe em <strong>Teste</strong> e adicione a sua conta em <strong>Usuários de teste</strong> — é o bastante para uso próprio.</li>
                 <li>Em <strong>Credenciais → Criar credenciais → ID do cliente OAuth</strong>, tipo <strong>Aplicativo da Web</strong>.</li>
-                <li>Em <strong>URIs de redirecionamento autorizados</strong>, cole exatamente:
+                <li>Em <strong>URIs de redirecionamento autorizados</strong>, cole exatamente
+                    (o Google compara letra por letra — barra final inclusive):
                     <code class="block mt-1 bg-gray-100 px-2 py-1 rounded text-[11px] break-all select-all">{{ redirect_uri }}</code>
+                    <span class="block text-[11px] text-gray-400 mt-1">
+                        Se o Google responder <em>Erro 400: redirect_uri_mismatch</em>, é este endereço
+                        que está diferente do cadastrado lá.
+                    </span>
                 </li>
                 <li>Copie o <strong>ID</strong> e o <strong>segredo</strong> do cliente para os campos ao lado e salve.</li>
                 <li>Volte aqui e clique em <strong>Conectar minha conta Google</strong>.</li>

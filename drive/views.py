@@ -846,13 +846,31 @@ def configuracao(request):
 CHAVE_STATE = 'drive_oauth_state'
 
 
+# Hosts em que o Google aceita http:// — em qualquer outro ele exige https.
+HOSTS_LOCAIS = ('localhost', '127.0.0.1', '[::1]', '0.0.0.0')
+
+
+def _e_local(host):
+    nome = (host or '').split(':')[0].lower()
+    return nome in HOSTS_LOCAIS or nome.endswith('.localhost')
+
+
 def _redirect_uri(request):
     """O endereço de retorno — precisa bater EXATAMENTE com o do Google Cloud.
 
     Montado a partir do host da requisição para funcionar igual em produção e
     em homologação, sem uma segunda configuração para manter em dia.
+
+    O `https` é forçado fora de localhost porque o portal roda atrás de um
+    proxy que termina o TLS: o Django recebe a requisição em http e montaria
+    `http://…/callback/`, que o Google recusa duas vezes — ele só aceita https
+    fora de localhost, e compara o URI recebido com o cadastrado letra por
+    letra (era o `Erro 400: redirect_uri_mismatch`).
     """
-    return request.build_absolute_uri(reverse('drive:oauth_callback'))
+    uri = request.build_absolute_uri(reverse('drive:oauth_callback'))
+    if uri.startswith('http://') and not _e_local(request.get_host()):
+        uri = 'https://' + uri[len('http://'):]
+    return uri
 
 
 @login_required

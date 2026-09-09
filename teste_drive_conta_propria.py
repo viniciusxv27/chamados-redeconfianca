@@ -78,6 +78,33 @@ try:
     t('o botão nasce desabilitado sem client id/secret',
       'Salve o ID e o segredo do cliente' in html)
 
+    print('\n== O ENDEREÇO DE RETORNO ==')
+    from django.test import RequestFactory
+
+    from drive.views import _redirect_uri
+    for h in ('chamados.redeconfianca.com.br', 'testserver'):
+        if h not in settings.ALLOWED_HOSTS:
+            settings.ALLOWED_HOSTS.append(h)
+
+    def uri(host, seguro=False):
+        return _redirect_uri(RequestFactory().get(
+            '/drive/configuracao/', HTTP_HOST=host, secure=seguro))
+
+    # O portal roda atrás de um proxy que termina o TLS: o Django recebe http e
+    # montaria http://…, que o Google recusa (redirect_uri_mismatch).
+    t('atrás do proxy, força https',
+      uri('chamados.redeconfianca.com.br') ==
+      'https://chamados.redeconfianca.com.br/drive/oauth/callback/',
+      uri('chamados.redeconfianca.com.br'))
+    t('já em https, não mexe',
+      uri('chamados.redeconfianca.com.br', True) ==
+      'https://chamados.redeconfianca.com.br/drive/oauth/callback/')
+    t('em 127.0.0.1 mantém http (o Google aceita)',
+      uri('127.0.0.1:8009').startswith('http://127.0.0.1:8009/'))
+    t('em localhost também', uri('localhost:8009').startswith('http://localhost:8009/'))
+    t('o consentimento e o callback usam a MESMA função',
+      uri('chamados.redeconfianca.com.br') == uri('chamados.redeconfianca.com.br', True))
+
     print('\n== SALVAR O CLIENTE OAUTH ==')
     r = c.post('/drive/configuracao/', {
         'oauth_client_id': '123-abc.apps.googleusercontent.com',
@@ -106,6 +133,9 @@ try:
     r = c.post('/drive/oauth/conectar/')
     t('redireciona para o Google', r.status_code == 302, r.status_code)
     destino = r['Location']
+    t('o redirect_uri enviado ao Google é o mesmo da tela',
+      'drive%2Foauth%2Fcallback' in destino or 'drive/oauth/callback' in destino,
+      destino[:120])
     t('para o endpoint certo', destino.startswith(gdrive.OAUTH_AUTH_URL), destino[:60])
     t('pede acesso offline (senão o token morre em 1h)', 'access_type=offline' in destino)
     t('força o consentimento (senão não vem refresh token)',
