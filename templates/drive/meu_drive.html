@@ -1,0 +1,70 @@
+{% extends 'drive/base_drive.html' %}
+{% load drive_extras %}
+{% block drive_titulo %}Meu Drive{% endblock %}
+{% block drive_subtitulo %}Meu Drive{% endblock %}
+
+{% block drive_conteudo %}
+{% comment %}
+Navegação do Drive pessoal da conta conectada. Fora do recorte por setor de
+propósito — e por isso só o SUPERADMIN chega aqui.
+{% endcomment %}
+<div class="rounded-2xl bg-blue-50 border border-blue-100 px-4 py-3 mb-4 text-sm text-blue-800">
+    <i class="fas fa-circle-info mr-1.5"></i>
+    Estes são <strong>todos os arquivos</strong> de {% if cfg.oauth_email %}<code class="bg-white/70 px-1 rounded">{{ cfg.oauth_email }}</code>{% else %}da conta conectada{% endif %},
+    inclusive os que não estão ligados a nenhum setor. Só o SUPERADMIN enxerga esta tela.
+</div>
+
+<div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+    <div class="px-4 py-3 border-b border-gray-100 flex items-center gap-1.5 text-sm dv-scroll-x min-w-0">
+        <a href="{% url 'drive:index' %}" class="text-gray-400 hover:text-gray-600"><i class="fas fa-hard-drive"></i></a>
+        <i class="fas fa-chevron-right text-[10px] text-gray-300"></i>
+        <a href="{% url 'drive:meu_drive' %}" class="text-blue-600 hover:underline font-medium whitespace-nowrap">Meu Drive</a>
+        {% for fid, fnome in trilha %}
+        <i class="fas fa-chevron-right text-[10px] text-gray-300"></i>
+        {% if forloop.last %}
+        <span class="text-gray-700 font-medium whitespace-nowrap">{{ fnome }}</span>
+        {% else %}
+        <a href="{% url 'drive:meu_drive_folder' fid %}" class="text-blue-600 hover:underline whitespace-nowrap">{{ fnome }}</a>
+        {% endif %}
+        {% endfor %}
+    </div>
+
+    <div class="p-3 sm:p-4">
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+            {% for item in itens %}
+            <div class="group relative rounded-xl border border-gray-100 hover:border-blue-200 hover:shadow-sm transition bg-white">
+                <a href="{% if item.is_folder %}{% url 'drive:meu_drive_folder' item.id %}{% else %}{% url 'drive:meu_drive_arquivo' item.id %}{% endif %}"
+                   class="block p-3">
+                    <div class="flex items-center justify-center h-16">
+                        <i class="fas {{ item.mimeType|file_icon }} text-3xl"></i>
+                    </div>
+                    <p class="text-xs font-medium text-gray-700 mt-2 line-clamp-2 break-words" title="{{ item.name }}">{{ item.name }}</p>
+                    <p class="text-[10px] text-gray-400 mt-0.5">
+                        {% if item.is_folder %}Pasta{% else %}{{ item.size_h }}{% endif %}
+                        · {{ item.modifiedTime|slice:':10' }}
+                    </p>
+                </a>
+                {% if not item.is_folder %}
+                <a href="{% url 'drive:meu_drive_conteudo' item.id %}?dl=1"
+                   title="Baixar"
+                   class="absolute top-2 right-2 w-7 h-7 rounded-lg bg-white/90 border border-gray-100 text-gray-400
+                          hover:text-blue-600 hover:border-blue-200 flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
+                    <i class="fas fa-download text-xs"></i>
+                </a>
+                {% endif %}
+            </div>
+            {% empty %}
+            <p class="col-span-full text-sm text-gray-400 py-8 text-center">Esta pasta está vazia.</p>
+            {% endfor %}
+        </div>
+
+        {% if prox %}
+        <div class="mt-4 text-center">
+            <a href="?t={{ prox }}" class="px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">
+                Carregar mais
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

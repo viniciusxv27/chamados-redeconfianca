@@ -54,6 +54,47 @@ class DriveConfig(models.Model):
         help_text='E-mail de um usuário/admin do Workspace para o Drive enxergar TODOS os '
                   'arquivos da conta. Exige delegação em todo o domínio autorizada no Admin.')
 
+    # ── Conectar a própria conta Google (OAuth) ─────────────────────────────
+    # Conta de serviço só enxerga o que foi compartilhado com ela; para ver
+    # TODOS os arquivos de uma conta, a saída documentada do Google é delegação
+    # em todo o domínio — que exige Google Workspace. Quem tem uma conta Google
+    # comum (gmail.com) não tem Admin console, então esse caminho não existe.
+    # Aqui o dono da conta autoriza o portal uma vez pelo consentimento do
+    # Google e o portal passa a agir como ele, com acesso ao Meu Drive inteiro.
+    class Modo(models.TextChoices):
+        SA = 'SA', 'Conta de serviço (pastas compartilhadas)'
+        OAUTH = 'OAUTH', 'Minha conta Google (todos os meus arquivos)'
+
+    modo = models.CharField(
+        max_length=6, choices=Modo.choices, default=Modo.SA,
+        verbose_name='Como o portal acessa o Drive')
+
+    oauth_client_id = models.CharField(
+        max_length=255, blank=True, default='', verbose_name='ID do cliente OAuth')
+    # Segredos: ficam só no banco e NUNCA voltam para a tela (a tela mostra
+    # apenas se estão preenchidos). Mesma regra da chave da conta de serviço.
+    oauth_client_secret = models.CharField(
+        max_length=255, blank=True, default='', verbose_name='Segredo do cliente OAuth')
+    oauth_refresh_token = models.TextField(
+        blank=True, default='', verbose_name='Refresh token')
+    oauth_email = models.EmailField(
+        blank=True, default='', verbose_name='Conta conectada')
+    oauth_conectado_em = models.DateTimeField(
+        null=True, blank=True, verbose_name='Conectado em')
+    oauth_conectado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='+', verbose_name='Conectado por')
+
+    @property
+    def usa_conta_propria(self):
+        return self.modo == self.Modo.OAUTH
+
+    @property
+    def oauth_pronto(self):
+        """Tem tudo para falar com o Google pela conta do dono?"""
+        return bool(self.oauth_client_id and self.oauth_client_secret
+                    and self.oauth_refresh_token)
+
     # ── Limites de arquivo (configuráveis) ──────────────────────────────────
     max_file_mb = models.PositiveIntegerField(
         default=100, verbose_name='Tamanho máximo por arquivo (MB)')

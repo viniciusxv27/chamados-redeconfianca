@@ -19,6 +19,9 @@
     <a href="{% url 'drive:gestao_setores' %}" class="px-3 py-2 text-sm rounded-lg bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"><i class="fas fa-sitemap mr-1.5 text-blue-500"></i>Configurar setores</a>
     <a href="{% url 'drive:gestao_permissoes' %}" class="px-3 py-2 text-sm rounded-lg bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"><i class="fas fa-user-lock mr-1.5 text-blue-500"></i>Permissões</a>
     <a href="{% url 'drive:dashboard' %}" class="px-3 py-2 text-sm rounded-lg bg-white border border-gray-200 text-gray-700 hover:bg-gray-50"><i class="fas fa-chart-line mr-1.5 text-blue-500"></i>Dashboard</a>
+    {% if cfg.usa_conta_propria and cfg.oauth_refresh_token %}
+    <a href="{% url 'drive:meu_drive' %}" class="px-3 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700"><i class="fas fa-folder-open mr-1.5"></i>Meu Drive{% if cfg.oauth_email %} · {{ cfg.oauth_email }}{% endif %}</a>
+    {% endif %}
     {% endif %}
 </div>
 {% endif %}

@@ -13,8 +13,89 @@
             {% if sa_email %}<p class="text-xs mt-2 {% if conexao_ok %}text-emerald-700{% else %}text-amber-700{% endif %}">Conta de serviço: <code class="bg-white/60 px-1 rounded">{{ sa_email }}</code></p>{% endif %}
         </div>
 
+        {% comment %}
+        Conta de serviço só enxerga o que foi compartilhado com ela. Ver TODOS
+        os arquivos de uma conta, pela conta de serviço, exige delegação em
+        todo o domínio — que só existe com Google Workspace. Sem Workspace,
+        este é o caminho: o dono autoriza o portal uma vez.
+        {% endcomment %}
+        <div class="bg-white rounded-2xl border-2 {% if cfg.oauth_refresh_token %}border-emerald-200{% else %}border-blue-200{% endif %} shadow-sm p-4">
+            <h3 class="font-semibold text-gray-800 mb-1">
+                <i class="fas fa-user-lock mr-1.5 text-blue-500"></i>Conectar a minha conta Google
+            </h3>
+            <p class="text-sm text-gray-600 mb-3">
+                Sem Google Workspace não existe “delegação em todo o domínio”, então a conta de
+                serviço nunca vai enxergar o seu Drive inteiro — só as pastas que você
+                compartilhar com ela. Autorizando a sua própria conta aqui, o portal passa a
+                agir como você e vê <strong>todos os seus arquivos</strong>, sem compartilhar nada.
+            </p>
+
+            {% if cfg.oauth_refresh_token %}
+            <div class="rounded-xl bg-emerald-50 border border-emerald-100 px-3 py-2 text-sm">
+                <p class="text-emerald-800 font-medium">
+                    <i class="fas fa-circle-check mr-1"></i>Conectado
+                    {% if cfg.oauth_email %}como <code class="bg-white/70 px-1 rounded">{{ cfg.oauth_email }}</code>{% endif %}
+                </p>
+                {% if cfg.oauth_conectado_em %}
+                <p class="text-emerald-700 text-xs mt-0.5">
+                    desde {{ cfg.oauth_conectado_em|date:"d/m/Y H:i" }}{% if cfg.oauth_conectado_por %} · por {{ cfg.oauth_conectado_por.full_name|default:cfg.oauth_conectado_por.email }}{% endif %}
+                </p>
+                {% endif %}
+            </div>
+            <div class="flex flex-wrap items-center gap-2 mt-3">
+                <a href="{% url 'drive:meu_drive' %}"
+                   class="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700">
+                    <i class="fas fa-folder-open mr-1"></i>Abrir o meu Drive
+                </a>
+                <form method="post" action="{% url 'drive:oauth_conectar' %}">
+                    {% csrf_token %}
+                    <button class="px-3 py-2 rounded-lg border border-gray-200 text-gray-600 text-sm hover:bg-gray-50">
+                        <i class="fas fa-rotate mr-1"></i>Reconectar
+                    </button>
+                </form>
+                <form method="post" action="{% url 'drive:oauth_desconectar' %}"
+                      onsubmit="return confirm('Desconectar a conta {{ cfg.oauth_email|escapejs }}?\n\nO portal deixa de enxergar os seus arquivos e volta a usar a conta de serviço.');">
+                    {% csrf_token %}
+                    <button class="px-3 py-2 rounded-lg border border-red-200 text-red-600 text-sm hover:bg-red-50">
+                        <i class="fas fa-link-slash mr-1"></i>Desconectar
+                    </button>
+                </form>
+            </div>
+            {% else %}
+            <ol class="text-sm text-gray-600 space-y-2 list-decimal pl-5">
+                <li>Em <a href="https://console.cloud.google.com/apis/library/drive.googleapis.com" target="_blank" rel="noopener" class="text-blue-600 hover:underline">APIs e serviços → Biblioteca</a>, ative a <strong>Google Drive API</strong>.</li>
+                <li>Em <strong>APIs e serviços → Tela de permissão OAuth</strong>, escolha <strong>Externo</strong>, preencha o nome do app e o seu e-mail. Deixe em <strong>Teste</strong> e adicione a sua conta em <strong>Usuários de teste</strong> — é o bastante para uso próprio.</li>
+                <li>Em <strong>Credenciais → Criar credenciais → ID do cliente OAuth</strong>, tipo <strong>Aplicativo da Web</strong>.</li>
+                <li>Em <strong>URIs de redirecionamento autorizados</strong>, cole exatamente:
+                    <code class="block mt-1 bg-gray-100 px-2 py-1 rounded text-[11px] break-all select-all">{{ redirect_uri }}</code>
+                </li>
+                <li>Copie o <strong>ID</strong> e o <strong>segredo</strong> do cliente para os campos ao lado e salve.</li>
+                <li>Volte aqui e clique em <strong>Conectar minha conta Google</strong>.</li>
+            </ol>
+            <form method="post" action="{% url 'drive:oauth_conectar' %}" class="mt-3">
+                {% csrf_token %}
+                <button {% if not cfg.oauth_client_id or not tem_segredo %}disabled{% endif %}
+                        class="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700
+                               disabled:bg-gray-300 disabled:cursor-not-allowed">
+                    <i class="fab fa-google mr-1.5"></i>Conectar minha conta Google
+                </button>
+                {% if not cfg.oauth_client_id or not tem_segredo %}
+                <p class="text-[11px] text-gray-400 mt-1">Salve o ID e o segredo do cliente ao lado para liberar o botão.</p>
+                {% endif %}
+            </form>
+            {% endif %}
+
+            <p class="text-[11px] text-gray-400 mt-3">
+                O portal guarda apenas a autorização (refresh token), no banco, e nunca a mostra
+                em tela. Você pode revogar quando quiser em
+                <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener" class="text-blue-600 hover:underline">myaccount.google.com/permissions</a>.
+                Enquanto a conta estiver conectada, <strong>só o SUPERADMIN</strong> navega o Meu Drive;
+                para o resto da empresa continua valendo o acesso por setor.
+            </p>
+        </div>
+
         <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-            <h3 class="font-semibold text-gray-700 mb-2"><i class="fab fa-google mr-1.5 text-blue-500"></i>Como conectar (Google Cloud Console)</h3>
+            <h3 class="font-semibold text-gray-700 mb-2"><i class="fab fa-google mr-1.5 text-blue-500"></i>Conta de serviço (alternativa, por pastas compartilhadas)</h3>
             <ol class="text-sm text-gray-600 space-y-2 list-decimal pl-5">
                 <li>Acesse <a href="https://console.cloud.google.com/" target="_blank" class="text-blue-600 hover:underline">console.cloud.google.com</a> com a conta Google da empresa e crie (ou escolha) um <strong>projeto</strong>.</li>
                 <li>Em <strong>APIs e serviços → Biblioteca</strong>, busque <strong>Google Drive API</strong> e clique em <strong>Ativar</strong>.</li>
@@ -33,7 +114,35 @@
         <form method="post" enctype="multipart/form-data" class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-4">
             {% csrf_token %}
 
-            <h3 class="font-semibold text-gray-700">Credencial e conexão</h3>
+            <h3 class="font-semibold text-gray-700">Cliente OAuth (minha conta)</h3>
+            <div>
+                <label class="block text-xs font-semibold text-gray-500 mb-1">ID do cliente OAuth</label>
+                <input type="text" name="oauth_client_id" value="{{ cfg.oauth_client_id }}"
+                       placeholder="000000000000-xxxxxxxx.apps.googleusercontent.com" autocomplete="off"
+                       class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+            </div>
+            <div>
+                <label class="block text-xs font-semibold text-gray-500 mb-1">
+                    Segredo do cliente {% if tem_segredo %}<span class="text-emerald-600 font-normal">· já salvo</span>{% endif %}
+                </label>
+                <input type="password" name="oauth_client_secret" value="" autocomplete="new-password"
+                       placeholder="{% if tem_segredo %}deixe vazio para manter o atual{% else %}GOCSPX-…{% endif %}"
+                       class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+                <p class="text-[11px] text-gray-400 mt-1">Guardado no banco e nunca devolvido para a tela.</p>
+            </div>
+            {% if cfg.oauth_refresh_token %}
+            <div>
+                <label class="block text-xs font-semibold text-gray-500 mb-1">Modo de acesso</label>
+                <select name="modo" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+                    {% for valor, rotulo in modos %}
+                    <option value="{{ valor }}" {% if cfg.modo == valor %}selected{% endif %}>{{ rotulo }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
+
+            <hr class="border-gray-100">
+            <h3 class="font-semibold text-gray-700">Credencial e conexão (conta de serviço)</h3>
             {% if cfg.sa_json %}
             <div class="flex items-center gap-2 text-sm bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
                 <i class="fas fa-key text-emerald-600"></i>

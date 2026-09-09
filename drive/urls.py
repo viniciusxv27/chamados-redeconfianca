@@ -42,4 +42,15 @@ urlpatterns = [
     path('gestao/permissoes/', views.gestao_permissoes, name='gestao_permissoes'),
     path('gestao/permissoes/<int:pk>/excluir/', views.permissao_excluir, name='permissao_excluir'),
     path('configuracao/', views.configuracao, name='configuracao'),
+
+    # Conectar a conta Google do dono (para quem não tem Workspace)
+    path('oauth/conectar/', views.oauth_conectar, name='oauth_conectar'),
+    path('oauth/callback/', views.oauth_callback, name='oauth_callback'),
+    path('oauth/desconectar/', views.oauth_desconectar, name='oauth_desconectar'),
+
+    # Meu Drive inteiro (SUPERADMIN, só com a conta própria conectada)
+    path('meu-drive/', views.meu_drive, name='meu_drive'),
+    path('meu-drive/f/<str:folder_id>/', views.meu_drive, name='meu_drive_folder'),
+    path('meu-drive/a/<str:file_id>/', views.meu_drive_arquivo, name='meu_drive_arquivo'),
+    path('meu-drive/a/<str:file_id>/conteudo/', views.meu_drive_conteudo, name='meu_drive_conteudo'),
 ]

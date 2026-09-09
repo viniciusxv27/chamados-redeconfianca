@@ -1,0 +1,39 @@
+{% extends 'drive/base_drive.html' %}
+{% block drive_titulo %}{{ meta.name }} — Meu Drive{% endblock %}
+{% block drive_subtitulo %}Meu Drive{% endblock %}
+
+{% block drive_conteudo %}
+<div class="mb-4">
+    <a href="{% url 'drive:meu_drive' %}" class="text-sm text-gray-500 hover:text-gray-800">
+        <i class="fas fa-arrow-left mr-1"></i>Voltar ao Meu Drive
+    </a>
+</div>
+
+<div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+    <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap">
+        <div class="min-w-0">
+            <p class="font-semibold text-gray-800 truncate">{{ meta.name }}</p>
+            <p class="text-xs text-gray-400">
+                {{ meta.size_h }}
+                {% if meta.modifiedTime %} · alterado em {{ meta.modifiedTime|slice:":10" }}{% endif %}
+            </p>
+        </div>
+        <div class="flex items-center gap-2 flex-shrink-0">
+            <a href="{% url 'drive:meu_drive_conteudo' meta.id %}?dl=1"
+               class="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700">
+                <i class="fas fa-download mr-1.5"></i>Baixar
+            </a>
+            {% if meta.webViewLink %}
+            <a href="{{ meta.webViewLink }}" target="_blank" rel="noopener"
+               class="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-sm hover:bg-gray-50">
+                <i class="fab fa-google-drive mr-1.5"></i>Abrir no Drive
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    <div class="bg-gray-50">
+        <iframe src="{% url 'drive:meu_drive_conteudo' meta.id %}"
+                class="w-full" style="height: 72vh; border: 0;" title="{{ meta.name }}"></iframe>
+    </div>
+</div>
+{% endblock %}

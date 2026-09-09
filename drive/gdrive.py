@@ -1,16 +1,27 @@
-"""Cliente do Google Drive (service account).
+"""Cliente do Google Drive — dois modos de autenticação.
 
 Degrada com elegância: sem credencial configurada tudo levanta
 ``DriveNaoConfigurado`` e as telas mostram o guia de configuração em vez de
 quebrar (mesmo padrão do resto do portal com serviços externos).
 
-Autenticação por **service account** (server-to-server, sem login de usuário).
-A empresa compartilha a(s) pasta(s)/Drive Compartilhado com o e-mail da service
-account. Config em settings (lidas do .env):
+**Conta de serviço** (padrão, server-to-server): a empresa compartilha as
+pastas com o e-mail da conta de serviço. Ela só enxerga o que foi compartilhado
+com ela. Para ver TODOS os arquivos de uma conta existe a delegação em todo o
+domínio — que exige Google Workspace (Admin console). Config em settings:
 
     GOOGLE_DRIVE_SA_FILE   caminho do JSON da chave da service account, OU
     GOOGLE_DRIVE_SA_JSON   o próprio JSON (conteúdo) da chave
     GOOGLE_DRIVE_IMPERSONATE  (opcional) e-mail para delegação em todo o domínio
+
+**Conta própria (OAuth)**: para quem NÃO tem Workspace. O dono da conta
+autoriza o portal uma vez na tela de consentimento do Google e o portal guarda
+um refresh token; a partir daí age como ele e enxerga o Meu Drive inteiro, sem
+precisar compartilhar pasta nenhuma. Configurado em /drive/configuracao/.
+
+O fluxo OAuth é feito com HTTP direto (montar a URL de consentimento e trocar o
+código por token são duas chamadas simples). Assim o portal não ganha a
+dependência `google-auth-oauthlib` só para isso — `google-auth`, que já está no
+requirements, dá conta de renovar o token sozinho a partir do refresh token.
 """
 import io
 import json
@@ -24,6 +35,14 @@ logger = logging.getLogger(__name__)
 
 SCOPES = ['https://www.googleapis.com/auth/drive']
 FOLDER_MIME = 'application/vnd.google-apps.folder'
+
+# Endpoints do OAuth do Google (fluxo de código de autorização).
+OAUTH_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
+OAUTH_TOKEN_URL = 'https://oauth2.googleapis.com/token'
+OAUTH_REVOKE_URL = 'https://oauth2.googleapis.com/revoke'
+
+# A raiz do "Meu Drive" na API é o id literal 'root'.
+RAIZ_MEU_DRIVE = 'root'
 
 # Campos pedidos à API em cada arquivo/pasta.
 FIELDS = ('id,name,mimeType,size,modifiedTime,createdTime,iconLink,thumbnailLink,'
@@ -55,8 +74,10 @@ def _config():
 
 
 def configurado() -> bool:
-    """Há credencial — enviada pela tela (S3) ou apontada no .env?"""
+    """Há credencial — conta própria conectada, JSON na tela ou no .env?"""
     cfg = _config()
+    if cfg and cfg.usa_conta_propria:
+        return cfg.oauth_pronto
     if cfg and cfg.sa_json:
         return True
     return bool((getattr(settings, 'GOOGLE_DRIVE_SA_JSON', '') or '').strip()
@@ -70,6 +91,12 @@ def _marca():
     mesmo em outro worker do gunicorn, que só vê a mudança pelo banco.
     """
     cfg = _config()
+    if cfg and cfg.usa_conta_propria:
+        ts = cfg.oauth_conectado_em.isoformat() if cfg.oauth_conectado_em else ''
+        # O refresh token não entra na marca: ela vai para log/erro e nada que
+        # identifique o segredo pode passar por aí. Conta + data já mudam
+        # sempre que a conexão é refeita.
+        return f'oauth:{cfg.oauth_client_id}:{cfg.oauth_email}:{ts}'
     if cfg and cfg.sa_json:
         ts = cfg.atualizado_em.isoformat() if cfg.atualizado_em else ''
         return f'db:{cfg.sa_json.name}:{cfg.impersonate_email}:{ts}'
@@ -81,10 +108,13 @@ def _marca():
 
 
 def _credenciais():
-    """Credencial vigente: JSON enviado pela tela (S3 privado) tem prioridade."""
+    """Credencial vigente: conta própria (OAuth) ou conta de serviço."""
+    cfg = _config()
+    if cfg and cfg.usa_conta_propria:
+        return _credenciais_oauth(cfg)
+
     from google.oauth2 import service_account
 
-    cfg = _config()
     info, arquivo, subject = None, '', ''
     if cfg and cfg.sa_json:
         try:
@@ -114,6 +144,94 @@ def _credenciais():
     if subject:
         cred = cred.with_subject(subject)
     return cred
+
+
+def _credenciais_oauth(cfg):
+    """Credencial de usuário a partir do refresh token guardado.
+
+    `google-auth` renova o access token sozinho quando ele vence — só precisa
+    do refresh token, do client id e do segredo.
+    """
+    from google.oauth2.credentials import Credentials
+
+    if not cfg.oauth_pronto:
+        raise DriveNaoConfigurado(
+            'Conta Google não conectada. Vá em Drive → Configuração e clique '
+            'em "Conectar minha conta Google".')
+    return Credentials(
+        token=None,
+        refresh_token=cfg.oauth_refresh_token,
+        client_id=cfg.oauth_client_id,
+        client_secret=cfg.oauth_client_secret,
+        token_uri=OAUTH_TOKEN_URL,
+        scopes=SCOPES,
+    )
+
+
+# ─── OAuth: consentimento e troca de código ──────────────────────────────────
+
+def url_de_consentimento(client_id, redirect_uri, state):
+    """A URL para onde mandar o dono da conta autorizar o portal.
+
+    `access_type=offline` + `prompt=consent` são o que garantem o refresh
+    token: sem os dois, uma segunda autorização volta sem refresh token e a
+    conexão morre quando o access token vence (uma hora depois).
+    """
+    from urllib.parse import urlencode
+
+    return OAUTH_AUTH_URL + '?' + urlencode({
+        'client_id': client_id,
+        'redirect_uri': redirect_uri,
+        'response_type': 'code',
+        'scope': ' '.join(SCOPES),
+        'access_type': 'offline',
+        'prompt': 'consent',
+        'include_granted_scopes': 'true',
+        'state': state,
+    })
+
+
+def trocar_codigo(codigo, client_id, client_secret, redirect_uri):
+    """Troca o código do callback por tokens. Devolve o dict do Google."""
+    import requests
+
+    try:
+        resp = requests.post(OAUTH_TOKEN_URL, timeout=30, data={
+            'code': codigo,
+            'client_id': client_id,
+            'client_secret': client_secret,
+            'redirect_uri': redirect_uri,
+            'grant_type': 'authorization_code',
+        })
+    except Exception as exc:  # noqa: BLE001
+        raise DriveError(f'Falha ao falar com o Google: {exc}') from exc
+
+    dados = {}
+    try:
+        dados = resp.json()
+    except Exception:  # noqa: BLE001
+        pass
+    if resp.status_code != 200:
+        # `error_description` do Google é texto de diagnóstico, não segredo.
+        motivo = dados.get('error_description') or dados.get('error') or resp.text[:200]
+        raise DriveError(f'O Google recusou a autorização: {motivo}')
+    if not dados.get('refresh_token'):
+        raise DriveError(
+            'O Google não devolveu o refresh token. Isso acontece quando a conta '
+            'já havia autorizado o app antes: remova o acesso em '
+            'myaccount.google.com/permissions e conecte de novo.')
+    return dados
+
+
+def revogar(refresh_token):
+    """Desfaz a autorização no lado do Google. Falha em silêncio."""
+    import requests
+
+    try:
+        requests.post(OAUTH_REVOKE_URL, timeout=15,
+                      data={'token': refresh_token})
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def service():

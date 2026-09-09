@@ -15,6 +15,7 @@ from django.core.exceptions import PermissionDenied
 from django.db.models import Count, Q
 from django.http import HttpResponse, JsonResponse, Http404
 from django.shortcuts import redirect, render, get_object_or_404
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.decorators.http import require_POST
@@ -790,6 +791,27 @@ def configuracao(request):
             cfg.sa_client_email = info.get('client_email', '')
 
         cfg.impersonate_email = (request.POST.get('impersonate_email') or '').strip()
+
+        # Credenciais do cliente OAuth. O segredo nunca volta preenchido para a
+        # tela, então campo vazio significa "mantém o que está lá" — e não
+        # "apague", que desconectaria a conta a cada salvamento.
+        cid = (request.POST.get('oauth_client_id') or '').strip()
+        if cid or request.POST.get('oauth_client_id') is not None:
+            cfg.oauth_client_id = cid
+        segredo = (request.POST.get('oauth_client_secret') or '').strip()
+        if segredo:
+            cfg.oauth_client_secret = segredo
+
+        modo = (request.POST.get('modo') or '').strip()
+        if modo in DriveConfig.Modo.values:
+            # Só deixa ficar no modo conta própria se houver conta conectada:
+            # senão a tela diria "conectado pela minha conta" com o Drive fora.
+            if modo == DriveConfig.Modo.OAUTH and not cfg.oauth_refresh_token:
+                messages.warning(
+                    request, 'Conecte a sua conta Google antes de usar esse modo.')
+            else:
+                cfg.modo = modo
+
         cfg.ativo = request.POST.get('ativo') == 'on'
         cfg.shared_drive_id = (request.POST.get('shared_drive_id') or '').strip()
         cfg.allowed_extensions = (request.POST.get('allowed_extensions') or '').strip()
@@ -808,7 +830,228 @@ def configuracao(request):
     ok, msg = gdrive.testar_conexao()
     return render(request, 'drive/configuracao.html', {
         'cfg': cfg, 'conexao_ok': ok, 'conexao_msg': msg,
-        'sa_email': cfg.sa_client_email or _sa_email(), 'is_superadmin': True})
+        'sa_email': cfg.sa_client_email or _sa_email(), 'is_superadmin': True,
+        # O endereço de retorno tem que ser colado igualzinho no Google Cloud.
+        'redirect_uri': _redirect_uri(request),
+        'tem_segredo': bool(cfg.oauth_client_secret),
+        'modos': DriveConfig.Modo.choices})
+
+
+# ─── Conectar a conta Google do dono (OAuth) ─────────────────────────────────
+# Conta de serviço só vê o que foi compartilhado com ela. Para enxergar TODOS
+# os arquivos de uma conta o Google exige delegação em todo o domínio, que só
+# existe com Workspace. Sem Workspace, o caminho é este: o dono autoriza o
+# portal uma vez e o portal passa a agir como ele.
+
+CHAVE_STATE = 'drive_oauth_state'
+
+
+def _redirect_uri(request):
+    """O endereço de retorno — precisa bater EXATAMENTE com o do Google Cloud.
+
+    Montado a partir do host da requisição para funcionar igual em produção e
+    em homologação, sem uma segunda configuração para manter em dia.
+    """
+    return request.build_absolute_uri(reverse('drive:oauth_callback'))
+
+
+@login_required
+@require_POST
+def oauth_conectar(request):
+    """Manda o SUPERADMIN para a tela de consentimento do Google."""
+    if not _exige_super(request):
+        return redirect('drive:index')
+
+    cfg = DriveConfig.get()
+    if not (cfg.oauth_client_id and cfg.oauth_client_secret):
+        messages.error(request, 'Preencha o ID e o segredo do cliente OAuth antes de conectar.')
+        return redirect('drive:configuracao')
+
+    # `state` amarra o retorno a ESTA sessão: sem ele, um link forjado poderia
+    # fazer o navegador do superadmin trocar um código de outra conta.
+    import secrets
+    state = secrets.token_urlsafe(32)
+    request.session[CHAVE_STATE] = state
+    return redirect(gdrive.url_de_consentimento(
+        cfg.oauth_client_id, _redirect_uri(request), state))
+
+
+@login_required
+def oauth_callback(request):
+    """Volta do Google com o código e guarda o refresh token."""
+    if not _exige_super(request):
+        return redirect('drive:index')
+
+    esperado = request.session.pop(CHAVE_STATE, None)
+    recebido = request.GET.get('state')
+    if not esperado or not recebido or not secrets_iguais(esperado, recebido):
+        messages.error(request, 'A autorização não confere com esta sessão. Tente de novo.')
+        return redirect('drive:configuracao')
+
+    erro = request.GET.get('error')
+    if erro:
+        messages.error(request, f'Autorização cancelada no Google ({erro}).')
+        return redirect('drive:configuracao')
+
+    codigo = request.GET.get('code')
+    if not codigo:
+        messages.error(request, 'O Google não devolveu o código de autorização.')
+        return redirect('drive:configuracao')
+
+    cfg = DriveConfig.get()
+    try:
+        tokens = gdrive.trocar_codigo(
+            codigo, cfg.oauth_client_id, cfg.oauth_client_secret, _redirect_uri(request))
+    except gdrive.DriveError as exc:
+        messages.error(request, str(exc))
+        return redirect('drive:configuracao')
+
+    cfg.oauth_refresh_token = tokens['refresh_token']
+    cfg.modo = DriveConfig.Modo.OAUTH
+    cfg.oauth_conectado_em = timezone.now()
+    cfg.oauth_conectado_por = request.user
+    cfg.save()
+    gdrive.resetar()
+
+    # Qual conta ficou conectada? Vem da própria API, não do que foi digitado.
+    try:
+        sobre = gdrive.service().about().get(fields='user(emailAddress)').execute()
+        cfg.oauth_email = (sobre.get('user') or {}).get('emailAddress', '')
+        cfg.save(update_fields=['oauth_email'])
+    except Exception:  # noqa: BLE001
+        pass
+
+    audit.registrar(request.user, 'PERM', request,
+                    detalhe=f'Conta Google conectada: {cfg.oauth_email or "?"}')
+    messages.success(
+        request,
+        f'Conta {cfg.oauth_email or "Google"} conectada. O portal agora enxerga '
+        f'todos os arquivos do seu Drive.')
+    return redirect('drive:configuracao')
+
+
+def secrets_iguais(a, b):
+    """Comparação em tempo constante (o `state` é um segredo de sessão)."""
+    import hmac
+    return hmac.compare_digest(str(a), str(b))
+
+
+@login_required
+@require_POST
+def oauth_desconectar(request):
+    """Tira a autorização e volta para a conta de serviço."""
+    if not _exige_super(request):
+        return redirect('drive:index')
+
+    cfg = DriveConfig.get()
+    if cfg.oauth_refresh_token:
+        gdrive.revogar(cfg.oauth_refresh_token)
+    antiga = cfg.oauth_email
+    cfg.oauth_refresh_token = ''
+    cfg.oauth_email = ''
+    cfg.oauth_conectado_em = None
+    cfg.oauth_conectado_por = None
+    cfg.modo = DriveConfig.Modo.SA
+    cfg.save()
+    gdrive.resetar()
+    audit.registrar(request.user, 'PERM', request,
+                    detalhe=f'Conta Google desconectada: {antiga or "?"}')
+    messages.success(request, 'Conta Google desconectada.')
+    return redirect('drive:configuracao')
+
+
+@login_required
+def meu_drive(request, folder_id=None):
+    """Navega o Meu Drive inteiro da conta conectada.
+
+    Só o SUPERADMIN entra: aqui não existe o recorte por setor: é a conta
+    pessoal do dono, com tudo dentro. Para o resto da empresa continua valendo
+    a navegação por setor, com as permissões do portal.
+    """
+    if not _exige_super(request):
+        return redirect('drive:index')
+    if not _exige_meu_drive(request):
+        messages.error(request, 'Conecte a sua conta Google em Configuração para navegar o Meu Drive.')
+        return redirect('drive:configuracao')
+    cfg = DriveConfig.get()
+
+    alvo = folder_id or gdrive.RAIZ_MEU_DRIVE
+    try:
+        itens, prox = gdrive.listar(alvo, page_token=request.GET.get('t') or None, page_size=60)
+        trilha = gdrive.caminho(alvo) if folder_id else []
+    except gdrive.DriveNaoConfigurado as e:
+        return _drive_off(request, e)
+    except gdrive.DriveError as e:
+        messages.error(request, f'Google Drive: {e}')
+        return redirect('drive:index')
+
+    favset = set(DriveFavorite.objects.filter(user=request.user).values_list('file_id', flat=True))
+    itens = [_enriquecer(f) for f in itens]
+    for f in itens:
+        f['fav'] = f['id'] in favset
+
+    audit.registrar(request.user, 'VIEW', request, folder_id=alvo, detalhe='Meu Drive')
+    return render(request, 'drive/meu_drive.html', {
+        'cfg': cfg, 'itens': itens, 'prox': prox, 'trilha': trilha,
+        'folder_id': alvo, 'e_raiz': not folder_id,
+        'is_superadmin': True,
+    })
+
+
+def _exige_meu_drive(request):
+    """SUPERADMIN + conta própria conectada. Devolve o cfg ou None.
+
+    O Meu Drive tem porta própria de propósito: o motor de permissões por setor
+    protege o módulo inteiro para a empresa toda, e abrir uma exceção lá dentro
+    para o dono da conta arriscaria vazar o Drive pessoal para quem não deve.
+    Aqui a exceção fica confinada a três views que só o SUPERADMIN alcança.
+    """
+    if not perms.is_superadmin(request.user):
+        return None
+    cfg = DriveConfig.get()
+    if not (cfg.usa_conta_propria and cfg.oauth_refresh_token):
+        return None
+    return cfg
+
+
+@login_required
+def meu_drive_arquivo(request, file_id):
+    """Preview de um arquivo do Meu Drive (fora do recorte por setor)."""
+    if not _exige_meu_drive(request):
+        _deny(request, file_id=file_id, detalhe='meu drive')
+    try:
+        meta = _enriquecer(gdrive.obter(file_id))
+    except gdrive.DriveNaoConfigurado as e:
+        return _drive_off(request, e)
+    except gdrive.DriveError:
+        raise Http404('Arquivo não encontrado.')
+
+    audit.registrar(request.user, 'VIEW', request, file_id=file_id,
+                    file_name=meta.get('name', ''), detalhe='Meu Drive')
+    return render(request, 'drive/meu_drive_arquivo.html', {
+        'meta': meta, 'is_superadmin': True})
+
+
+@login_required
+@xframe_options_sameorigin
+def meu_drive_conteudo(request, file_id):
+    """Conteúdo (inline para o preview, anexo para baixar) do Meu Drive."""
+    if not _exige_meu_drive(request):
+        _deny(request, file_id=file_id, detalhe='meu drive conteúdo')
+    anexo = bool(request.GET.get('dl'))
+    try:
+        buf, nome, mime = gdrive.baixar(file_id, preview=not anexo)
+    except gdrive.DriveNaoConfigurado as e:
+        return _drive_off(request, e)
+    except gdrive.DriveError as e:
+        raise Http404(str(e))
+
+    audit.registrar(request.user, 'DOWNLOAD' if anexo else 'VIEW', request,
+                    file_id=file_id, file_name=nome, detalhe='Meu Drive')
+    resp = HttpResponse(buf.read(), content_type=mime)
+    resp['Content-Disposition'] = f"{'attachment' if anexo else 'inline'}; filename*=UTF-8''{quote(nome)}"
+    resp['X-Content-Type-Options'] = 'nosniff'
+    return resp
 
 
 def _sa_email():
