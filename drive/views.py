@@ -14,7 +14,8 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.db.models import Count, Q
-from django.http import HttpResponse, JsonResponse, Http404
+from django.http import (HttpResponse, HttpResponseNotModified, JsonResponse, Http404,
+                         StreamingHttpResponse)
 from django.shortcuts import redirect, render, get_object_or_404
 from django.urls import reverse
 from django.utils import timezone
@@ -26,6 +27,7 @@ from users.models import Sector
 
 from . import audit
 from . import gdrive
+from . import visualizacao as vis
 from . import permissions as perms
 from .models import (DriveAuditLog, DriveConfig, DriveFavorite, DrivePermission,
                      SectorDriveMapping, HIERARQUIAS)
@@ -50,9 +52,7 @@ def humano_bytes(n):
 
 
 def _previewavel(mime):
-    mime = mime or ''
-    return (mime == 'application/pdf' or mime.startswith('image/')
-            or mime.startswith('application/vnd.google-apps.'))
+    return vis.tipo(mime) is not None
 
 
 def _enriquecer(f):
@@ -60,6 +60,180 @@ def _enriquecer(f):
     f['size_h'] = '' if f['is_folder'] else humano_bytes(f.get('size'))
     f['previewavel'] = (not f['is_folder']) and _previewavel(f.get('mimeType', ''))
     return f
+
+
+CAMPOS_CONTEUDO = 'id,name,mimeType,md5Checksum,version,modifiedTime,size'
+# Vídeo e áudio saem em pedaços deste tamanho; o player pede o próximo sozinho.
+TRECHO_MIDIA = 4 * 1024 * 1024
+SEM_FORMATO = 'Formato não disponível para este arquivo.'
+CSP_SANDBOX = "sandbox; default-src 'none'; img-src data:; style-src 'unsafe-inline'"
+
+
+def _texto_simples(conteudo, status):
+    return HttpResponse(conteudo, status=status, content_type='text/plain; charset=utf-8')
+
+
+def _como_texto(dados):
+    try:
+        return dados.decode('utf-8')
+    except UnicodeDecodeError:
+        return dados.decode('latin-1')
+
+
+def _nome_pdf(nome):
+    return (nome.rsplit('.', 1)[0] if '.' in nome else nome) + '.pdf'
+
+
+def _mesma_versao(request, marca):
+    """O navegador já tem esta versão? Aceita a ETag enfraquecida por proxy (W/) e lista."""
+    pedido = request.headers.get('If-None-Match') or ''
+    return any(p.strip().removeprefix('W/') == marca for p in pedido.split(','))
+
+
+def _faixa(cabecalho, tamanho):
+    """(início, fim) do primeiro intervalo de `Range: bytes=…`, ou None se não dá para atender."""
+    if not cabecalho.startswith('bytes=') or tamanho <= 0:
+        return None
+    ini, _, fim = cabecalho[6:].split(',')[0].strip().partition('-')
+    try:
+        if not ini:                                   # bytes=-500: os últimos 500
+            ultimos = int(fim)
+            return (max(tamanho - ultimos, 0), tamanho - 1) if ultimos > 0 else None
+        inicio, final = int(ini), (int(fim) if fim else tamanho - 1)
+    except ValueError:
+        return None
+    if inicio >= tamanho or final < inicio:
+        return None
+    return inicio, min(final, tamanho - 1)
+
+
+def _cabecalhos(resp, nome, anexo, marca):
+    resp['Content-Disposition'] = f"{'attachment' if anexo else 'inline'}; filename*=UTF-8''{quote(nome)}"
+    resp['X-Content-Type-Options'] = 'nosniff'
+    resp['ETag'] = marca
+    # Privado: fica só no navegador de quem abriu, e revalida em 5 minutos.
+    resp['Cache-Control'] = 'private, max-age=300'
+    if (resp.get('Content-Type') or '').split(';')[0].strip() in vis.EXECUTAVEIS:
+        resp['Content-Security-Policy'] = CSP_SANDBOX
+    return resp
+
+
+def _servir_midia(request, file_id, meta, marca, auditoria):
+    """Vídeo e áudio em trechos (Range), como os players pedem.
+
+    Sem isso o Safari — e o app no iPhone — nem começa a tocar, e avançar o
+    vídeo exigiria trazer o arquivo inteiro para a memória do servidor.
+    """
+    tamanho = int(meta.get('size') or 0)
+    mime = meta.get('mimeType') or 'application/octet-stream'
+    nome = meta.get('name') or 'arquivo'
+    pedido = request.headers.get('Range') or ''
+    if pedido:
+        faixa = _faixa(pedido, tamanho)
+        if faixa is None:
+            resp = HttpResponse(status=416)
+            resp['Content-Range'] = f'bytes */{tamanho}'
+            return resp
+        inicio = faixa[0]
+        dados = gdrive.baixar_trecho(file_id, inicio, min(faixa[1], inicio + TRECHO_MIDIA - 1))
+        if not dados:
+            raise gdrive.DriveError('O Google devolveu um trecho vazio.')
+        resp = HttpResponse(dados, status=206, content_type=mime)
+        resp['Content-Range'] = f'bytes {inicio}-{inicio + len(dados) - 1}/{tamanho}'
+    else:
+        inicio = 0
+
+        def pedacos():
+            for de in range(0, tamanho, TRECHO_MIDIA):
+                yield gdrive.baixar_trecho(file_id, de, min(de + TRECHO_MIDIA, tamanho) - 1)
+
+        resp = StreamingHttpResponse(pedacos(), content_type=mime)
+        resp['Content-Length'] = str(tamanho)
+    if inicio == 0:
+        # O player pede dezenas de pedaços; na auditoria entra só a abertura.
+        audit.registrar(request.user, 'VIEW', request=request, file_id=file_id,
+                        file_name=nome, **auditoria)
+    resp['Accept-Ranges'] = 'bytes'
+    return _cabecalhos(resp, nome, False, marca)
+
+
+def _servir_conteudo(request, file_id, anexo, url_voltar, pode_baixar=True, **auditoria):
+    """Bytes de um arquivo para ver no portal (inline) ou baixar (anexo).
+
+    Quem chama já checou a permissão. Inline, cada tipo sai do jeito que o
+    navegador mostra: Word, Excel, PowerPoint e Docs do Google como PDF
+    (convertido pelo Google e guardado por versão); texto como texto puro;
+    vídeo e áudio em trechos; PDF e imagem como são. No download, `?formato=`
+    escolhe o formato.
+    """
+    formato = (request.GET.get('formato') or '').strip().lower()
+    try:
+        meta = gdrive.obter(file_id, fields=CAMPOS_CONTEUDO)
+    except gdrive.DriveNaoConfigurado as e:
+        return _drive_off(request, e)
+    except gdrive.DriveError:
+        raise Http404('Arquivo não encontrado.')
+
+    mime = meta.get('mimeType') or ''
+    tipo = vis.tipo(mime)
+    nome = meta.get('name') or 'arquivo'
+    marca = vis.etag(meta, f"{'dl' if anexo else 'ver'}:{formato}")
+    midia = not anexo and tipo in ('video', 'audio') and int(meta.get('size') or 0) > 0
+
+    # Já está no navegador e o arquivo não mudou: confirma sem mandar de novo.
+    if not request.headers.get('Range') and _mesma_versao(request, marca):
+        resp = HttpResponseNotModified()
+        resp['ETag'] = marca
+        resp['Cache-Control'] = 'private, max-age=300'
+        return resp
+
+    try:
+        if midia:
+            return _servir_midia(request, file_id, meta, marca, auditoria)
+        if anexo and tipo == 'google':
+            codigo = formato or vis.DOWNLOAD_PADRAO_GOOGLE.get(mime, 'pdf')
+            alvo = vis.exportacao(mime, codigo)
+            if not alvo:
+                return _texto_simples(SEM_FORMATO, 400)
+            mime_saida, ext = alvo
+            dados = vis.pdf_da_previa(meta) if codigo == 'pdf' else gdrive.exportar(file_id, mime_saida)
+            nome_saida = nome + ext
+        elif anexo and formato in ('', 'original'):
+            buf, nome_saida, mime_saida = gdrive.baixar(file_id)
+            dados = buf.read()
+        elif anexo and formato == 'pdf' and tipo == 'office':
+            dados, mime_saida, nome_saida = vis.pdf_da_previa(meta), vis.PDF, _nome_pdf(nome)
+        elif anexo:
+            return _texto_simples(SEM_FORMATO, 400)
+        elif tipo in ('office', 'google'):
+            # Doc do Google não tem extensão no nome: "Ata 10.09" vira "Ata 10.09.pdf".
+            nome_saida = _nome_pdf(nome) if tipo == 'office' else nome + '.pdf'
+            dados, mime_saida = vis.pdf_da_previa(meta), vis.PDF
+        elif tipo:
+            buf, nome_saida, mime_saida = gdrive.baixar(file_id)
+            dados = buf.read()
+            if tipo == 'texto':
+                # text/plain sempre: um .html enviado ao Drive não roda script no portal.
+                dados, mime_saida = _como_texto(dados), 'text/plain; charset=utf-8'
+        else:
+            return _texto_simples('Pré-visualização indisponível para este tipo de arquivo.', 415)
+    except gdrive.DriveNaoConfigurado as e:
+        return _drive_off(request, e)
+    except gdrive.DriveError as e:
+        logger.warning('Conteúdo do Drive não gerado (%s, formato=%s): %s', file_id, formato, e)
+        if midia:
+            return _texto_simples('Não foi possível carregar o arquivo agora.', 502)
+        if anexo:
+            messages.error(request, 'Não foi possível gerar o arquivo neste formato agora. '
+                                    'Tente de novo ou escolha outro formato.')
+            return redirect(url_voltar)
+        # Dentro do iframe: uma página curta que explica e oferece o download.
+        return render(request, 'drive/_sem_previa.html',
+                      {'url_baixar': f'{request.path}?dl=1' if pode_baixar else ''})
+
+    audit.registrar(request.user, 'DOWNLOAD' if anexo else 'VIEW', request=request,
+                    file_id=file_id, file_name=nome_saida, **auditoria)
+    return _cabecalhos(HttpResponse(dados, content_type=mime_saida), nome_saida, anexo, marca)
 
 
 def _deny(request, **kw):
@@ -206,6 +380,8 @@ def file_preview(request, file_id):
     return render(request, 'drive/preview.html', {
         'meta': meta, 'mapping': mapping, 'sector': mapping.sector, 'nivel': nivel,
         'fav': DriveFavorite.objects.filter(user=request.user, file_id=file_id).exists(),
+        'visualizacao': vis.tipo(meta.get('mimeType')),
+        'formatos': vis.formatos_de_download(meta),
         'pode_download': nivel >= ORDEM['DOWNLOAD'], 'pode_editar': nivel >= ORDEM['EDIT'],
         'pode_excluir': nivel >= ORDEM['DELETE'], 'is_superadmin': perms.is_superadmin(request.user),
     })
@@ -223,19 +399,8 @@ def file_content(request, file_id):
     mapping, nivel = perms.file_allowed(request.user, file_id)
     if not mapping or nivel < (ORDEM['DOWNLOAD'] if anexo else ORDEM['VIEW']):
         _deny(request, file_id=file_id, detalhe='download' if anexo else 'inline')
-    try:
-        buf, nome, mime = gdrive.baixar(file_id, preview=not anexo)
-    except gdrive.DriveNaoConfigurado as e:
-        return _drive_off(request, e)
-    except gdrive.DriveError as e:
-        raise Http404(str(e))
-
-    audit.registrar(request.user, 'DOWNLOAD' if anexo else 'VIEW', request=request,
-                    file_id=file_id, file_name=nome, sector=mapping.sector)
-    resp = HttpResponse(buf.read(), content_type=mime)
-    resp['Content-Disposition'] = f"{'attachment' if anexo else 'inline'}; filename*=UTF-8''{quote(nome)}"
-    resp['X-Content-Type-Options'] = 'nosniff'
-    return resp
+    return _servir_conteudo(request, file_id, anexo, reverse('drive:file_preview', args=[file_id]),
+                            pode_baixar=nivel >= ORDEM['DOWNLOAD'], sector=mapping.sector)
 
 
 @login_required
@@ -530,35 +695,66 @@ def busca(request):
 
 # ─── lixeira (RF31–33) ───────────────────────────────────────────────────────
 
+# A lixeira do Google é da CONTA inteira e pode ter milhares de itens; cada um
+# precisa descobrir a que setor pertence. Tudo de uma vez travava o botão.
+LIXEIRA_POR_PARTE = 25
+LIXEIRA_PAGINAS_DRIVE = 4
+LIXEIRA_TAMANHO_PAGINA_DRIVE = 50
+
+
 @login_required
 def lixeira(request):
+    """Lixeira em partes: a tela abre na hora e os itens chegam aos poucos.
+
+    Antes a view listava 200 itens e checava a permissão de um por um — cada
+    checagem subindo a árvore de pastas com uma chamada ao Google por nível —
+    antes de mostrar qualquer coisa. Agora a página abre sem falar com o Google
+    e busca `?parte=1` em pedaços, com "Mostrar mais".
+    """
     setores = perms.sectors_visible(request.user)
     meu = _exige_meu_drive(request)
-    if not setores and not meu:
-        return render(request, 'drive/lixeira.html', {'itens': [], 'is_superadmin': perms.is_superadmin(request.user)})
+    superadmin = perms.is_superadmin(request.user)
+    if request.GET.get('parte') != '1':
+        return render(request, 'drive/lixeira.html', {
+            'tem_acesso': bool(setores or meu),
+            'retencao': DriveConfig.get().trash_retention_days,
+            'is_superadmin': superadmin})
+
+    contexto = {'itens': [], 'prox': None, 'is_superadmin': superadmin}
+    if not (setores or meu):
+        return render(request, 'drive/_lixeira_itens.html', contexto)
+
+    token = request.GET.get('t') or None
+    pais = {}
     try:
-        achados, _ = gdrive.listar_lixeira(page_size=200)
-    except gdrive.DriveNaoConfigurado as e:
-        return _drive_off(request, e)
+        for _ in range(LIXEIRA_PAGINAS_DRIVE):
+            achados, token = gdrive.listar_lixeira(page_token=token,
+                                                   page_size=LIXEIRA_TAMANHO_PAGINA_DRIVE)
+            acessos = perms.resolver_acessos(request.user, achados, mapeamentos=setores, pais=pais)
+            for f in achados:
+                m, nivel = acessos.get(f.get('id'), (None, 0))
+                if m and nivel >= ORDEM['DELETE']:
+                    f = _enriquecer(f)
+                    f['setor_nome'] = m.sector.name
+                    contexto['itens'].append(f)
+                elif meu and not m:
+                    # Excluído pelo Meu Drive: sem isso, a exclusão só se desfazia
+                    # indo ao próprio Google Drive.
+                    f = _enriquecer(f)
+                    f['setor_nome'] = 'Meu Drive'
+                    contexto['itens'].append(f)
+            if len(contexto['itens']) >= LIXEIRA_POR_PARTE or not token:
+                break
+    except gdrive.DriveNaoConfigurado:
+        contexto['erro'] = 'O Google Drive não está conectado.'
+        return render(request, 'drive/_lixeira_itens.html', contexto, status=503)
     except gdrive.DriveError as e:
-        messages.error(request, f'Google Drive: {e}')
-        achados = []
-    itens = []
-    for f in achados:
-        m, nivel = perms.file_allowed(request.user, f['id'])
-        if m and nivel >= ORDEM['DELETE']:
-            f = _enriquecer(f)
-            f['setor_nome'] = m.sector.name
-            itens.append(f)
-        elif meu and not m:
-            # Excluído pelo Meu Drive: sem isso, a exclusão só se desfazia
-            # indo ao próprio Google Drive.
-            f = _enriquecer(f)
-            f['setor_nome'] = 'Meu Drive'
-            itens.append(f)
-    return render(request, 'drive/lixeira.html', {
-        'itens': itens, 'retencao': DriveConfig.get().trash_retention_days,
-        'is_superadmin': perms.is_superadmin(request.user)})
+        logger.warning('Lixeira do Drive não carregada: %s', e)
+        contexto['erro'] = 'Não foi possível carregar a lixeira agora.'
+        return render(request, 'drive/_lixeira_itens.html', contexto, status=502)
+
+    contexto['prox'] = token
+    return render(request, 'drive/_lixeira_itens.html', contexto)
 
 
 @login_required
@@ -1124,7 +1320,9 @@ def meu_drive_arquivo(request, file_id):
                     file_name=meta.get('name', ''), detalhe='Meu Drive')
     pai = (meta.get('parents') or [''])[0]
     return render(request, 'drive/meu_drive_arquivo.html', {
-        'meta': meta, 'pai_id': pai if _id_valido(pai) else '', 'is_superadmin': True})
+        'meta': meta, 'pai_id': pai if _id_valido(pai) else '', 'is_superadmin': True,
+        'visualizacao': vis.tipo(meta.get('mimeType')),
+        'formatos': vis.formatos_de_download(meta), 'pode_download': True})
 
 
 @login_required
@@ -1134,19 +1332,8 @@ def meu_drive_conteudo(request, file_id):
     if not _exige_meu_drive(request) or not _id_valido(file_id):
         _deny(request, file_id=file_id, detalhe='meu drive conteúdo')
     anexo = bool(request.GET.get('dl'))
-    try:
-        buf, nome, mime = gdrive.baixar(file_id, preview=not anexo)
-    except gdrive.DriveNaoConfigurado as e:
-        return _drive_off(request, e)
-    except gdrive.DriveError as e:
-        raise Http404(str(e))
-
-    audit.registrar(request.user, 'DOWNLOAD' if anexo else 'VIEW', request,
-                    file_id=file_id, file_name=nome, detalhe='Meu Drive')
-    resp = HttpResponse(buf.read(), content_type=mime)
-    resp['Content-Disposition'] = f"{'attachment' if anexo else 'inline'}; filename*=UTF-8''{quote(nome)}"
-    resp['X-Content-Type-Options'] = 'nosniff'
-    return resp
+    return _servir_conteudo(request, file_id, anexo,
+                            reverse('drive:meu_drive_arquivo', args=[file_id]), detalhe='Meu Drive')
 
 
 @login_required

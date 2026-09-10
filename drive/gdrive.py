@@ -47,7 +47,7 @@ RAIZ_MEU_DRIVE = 'root'
 # Campos pedidos à API em cada arquivo/pasta.
 FIELDS = ('id,name,mimeType,size,modifiedTime,createdTime,iconLink,thumbnailLink,'
           'webViewLink,webContentLink,parents,trashed,version,'
-          'lastModifyingUser(displayName,emailAddress),owners(displayName),'
+          'lastModifyingUser(displayName,emailAddress),owners(displayName),md5Checksum,'
           'shortcutDetails(targetId,targetMimeType)')
 
 SHORTCUT_MIME = 'application/vnd.google-apps.shortcut'
@@ -375,8 +375,6 @@ def baixar(file_id, preview=False):
     Google Docs/Sheets/Slides são exportados: para ``preview`` vira PDF (bom para
     ver no navegador); para download vira o Office equivalente (docx/xlsx/pptx).
     """
-    from googleapiclient.http import MediaIoBaseDownload
-
     meta = obter(file_id, fields='id,name,mimeType')
     mime = meta.get('mimeType', '')
     svc = service()
@@ -399,6 +397,12 @@ def baixar(file_id, preview=False):
         req = svc.files().get_media(fileId=file_id, **_params())
         nome, alvo_mime = meta['name'], mime or 'application/octet-stream'
 
+    return _baixar_para_memoria(req), nome, alvo_mime
+
+
+def _baixar_para_memoria(req):
+    from googleapiclient.http import MediaIoBaseDownload
+
     buf = io.BytesIO()
     downloader = MediaIoBaseDownload(buf, req)
     done = False
@@ -408,7 +412,64 @@ def baixar(file_id, preview=False):
         except Exception as exc:  # noqa: BLE001
             raise DriveError(f'Falha no download: {exc}') from exc
     buf.seek(0)
-    return buf, nome, alvo_mime
+    return buf
+
+
+def exportar(file_id, mime_alvo):
+    """Bytes de um arquivo nativo do Google (Doc, Planilha…) exportado para `mime_alvo`.
+
+    `export_media` não aceita `supportsAllDrives`: passar o parâmetro quebra ao
+    montar a requisição — o mesmo tipo de erro que já derrubou o Meu Drive.
+    """
+    req = service().files().export_media(fileId=file_id, mimeType=mime_alvo)
+    return _baixar_para_memoria(req).read()
+
+
+def converter_para_pdf(file_id, mime_google, nome=''):
+    """PDF de um Word/Excel/PowerPoint, convertido pelo próprio Google Drive.
+
+    Copia o arquivo como Doc/Planilha/Apresentação, exporta a cópia em PDF e
+    apaga a cópia — que sai mesmo quando a exportação falha. Com a conta
+    própria, a cópia vai para a raiz, e não para a pasta da equipe, onde
+    apareceria por alguns segundos. Conta de serviço não tem cota para guardar
+    a cópia na raiz dela: aí a cópia herda a pasta do original.
+    """
+    corpo = {'name': f'Visualização temporária do portal — {nome}'[:200], 'mimeType': mime_google}
+    cfg = _config()
+    if cfg and cfg.usa_conta_propria:
+        corpo['parents'] = [RAIZ_MEU_DRIVE]
+    copia = _executar(service().files().copy(fileId=file_id, fields='id', body=corpo, **_params()))
+    try:
+        return exportar(copia['id'], 'application/pdf')
+    finally:
+        try:
+            excluir_definitivo(copia['id'])
+        except DriveError:
+            try:
+                para_lixeira(copia['id'])
+            except DriveError as exc:
+                logger.warning('Cópia temporária de visualização não removida (%s): %s',
+                               copia['id'], exc)
+
+
+def pai_de(file_id):
+    """Primeira pasta-pai de um item: '' no topo, None quando o Google não respondeu.
+
+    A diferença importa para o cache da lixeira: o topo pode ser guardado; uma
+    falha passageira, não — esconderia os itens daquela pasta por minutos.
+    """
+    try:
+        meta = obter(file_id, fields='id,parents')
+    except DriveError:
+        return None
+    return (meta.get('parents') or [''])[0]
+
+
+def baixar_trecho(file_id, inicio, fim):
+    """Bytes de `inicio` a `fim` (inclusive): vídeo e áudio tocam sem baixar o arquivo todo."""
+    req = service().files().get_media(fileId=file_id, **_params())
+    req.headers['Range'] = f'bytes={inicio}-{fim}'
+    return _executar(req)
 
 
 _raizes = {}

@@ -1,33 +1,127 @@
 {% extends 'drive/base_drive.html' %}
-{% load drive_extras %}
 {% block drive_titulo %}Lixeira — Drive{% endblock %}
 {% block drive_conteudo %}
 <div class="flex items-center justify-between mb-3 gap-3 flex-wrap">
     <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">Lixeira</h2>
     {% if retencao %}<p class="text-xs text-gray-400"><i class="fas fa-circle-info mr-1"></i>Itens ficam aqui por {{ retencao }} dias antes da exclusão definitiva.</p>{% endif %}
 </div>
-{% if itens %}
-<div class="bg-white rounded-2xl border border-gray-100 shadow-sm divide-y divide-gray-50">
-    {% for f in itens %}
-    <div class="flex items-center gap-3 px-4 py-3">
-        <i class="fas {{ f.mimeType|file_icon }}"></i>
-        <div class="flex-1 min-w-0">
-            <p class="text-sm text-gray-700 truncate">{{ f.name }}</p>
-            <p class="text-[11px] text-gray-400">{{ f.setor_nome }}{% if not f.is_folder %} · {{ f.size_h }}{% endif %}</p>
-        </div>
-        <form method="post" action="{% url 'drive:lixeira_restaurar' f.id %}">
-            {% csrf_token %}
-            <button type="submit" class="px-3 py-1.5 text-xs rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"><i class="fas fa-rotate-left mr-1"></i>Restaurar</button>
-        </form>
-        {% if is_superadmin %}
-        <form method="post" action="{% url 'drive:lixeira_excluir' f.id %}" onsubmit="return confirm('Excluir DEFINITIVAMENTE? Não há como desfazer.');">
-            {% csrf_token %}
-            <button type="submit" class="px-3 py-1.5 text-xs rounded-lg border border-red-200 text-red-600 hover:bg-red-50"><i class="fas fa-xmark mr-1"></i>Excluir</button>
-        </form>
-        {% endif %}
+
+{% if tem_acesso %}
+{% comment %}
+A página abre sem falar com o Google; os itens chegam em partes. A lixeira é
+da conta inteira e pode ter milhares de itens — buscar tudo antes de mostrar
+qualquer coisa era o que deixava o botão lento.
+{% endcomment %}
+<div id="dv-lixeira" class="bg-white rounded-2xl border border-gray-100 shadow-sm divide-y divide-gray-50">
+    <div class="dv-lixeira-carregando flex items-center gap-3 px-4 py-6 text-sm text-gray-500">
+        <i class="fas fa-spinner fa-spin text-blue-500"></i>Carregando os itens da lixeira…
     </div>
-    {% endfor %}
 </div>
+<div id="dv-lixeira-mais" class="hidden justify-center mt-3">
+    <button type="button" class="px-4 py-2 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">
+        <i class="fas fa-arrow-down mr-1.5"></i>Mostrar mais
+    </button>
+</div>
+<div id="dv-lixeira-vazia" class="hidden bg-white rounded-2xl border border-gray-100 p-10 text-center text-gray-400">
+    <i class="fas fa-trash-can text-3xl text-gray-200 mb-2 block"></i>
+    <p class="text-sm">A lixeira está vazia.</p>
+</div>
+
+<script>
+(function () {
+    var lista = document.getElementById('dv-lixeira');
+    var mais = document.getElementById('dv-lixeira-mais');
+    var botao = mais.querySelector('button');
+    var vazia = document.getElementById('dv-lixeira-vazia');
+    var URL_PARTE = "{% url 'drive:lixeira' %}?parte=1";
+    var ROTULO_MAIS = '<i class="fas fa-arrow-down mr-1.5"></i>Mostrar mais';
+    var ROTULO_DE_NOVO = '<i class="fas fa-rotate-right mr-1.5"></i>Tentar de novo';
+    var mostrados = 0;
+    var partesVazias = 0;
+
+    function mostrarBotao(visivel, rotulo) {
+        botao.disabled = false;
+        botao.innerHTML = rotulo || ROTULO_MAIS;
+        mais.classList.toggle('hidden', !visivel);
+        mais.classList.toggle('flex', visivel);
+    }
+
+    function aviso(texto, classe) {
+        var p = document.createElement('p');
+        p.className = classe;
+        p.textContent = texto;
+        lista.appendChild(p);
+    }
+
+    function tirarCarregando() {
+        var carregando = lista.querySelector('.dv-lixeira-carregando');
+        if (carregando) carregando.remove();
+    }
+
+    function carregar(token) {
+        lista.querySelectorAll('.dv-lixeira-erro, .dv-lixeira-nota').forEach(function (el) { el.remove(); });
+        botao.disabled = true;
+        botao.innerHTML = '<i class="fas fa-spinner fa-spin mr-1.5"></i>Carregando…';
+        fetch(URL_PARTE + (token ? '&t=' + encodeURIComponent(token) : ''),
+              {headers: {'X-Requested-With': 'XMLHttpRequest'}, credentials: 'same-origin'})
+            .then(function (r) { return r.text(); })
+            .then(function (html) {
+                var caixa = document.createElement('div');
+                caixa.innerHTML = html;
+                var parte = caixa.querySelector('.dv-lixeira-parte');
+                if (!parte) { throw new Error('resposta inesperada'); }
+                // Lidos ANTES de ir para a lista: depois de movidos, somem da parte.
+                var novos = parte.querySelectorAll('.dv-lixeira-item');
+                var erros = parte.querySelectorAll('.dv-lixeira-erro');
+                var prox = parte.getAttribute('data-prox') || '';
+                novos.forEach(function (el) { lista.appendChild(el); });
+                erros.forEach(function (el) { lista.appendChild(el); });
+                mostrados += novos.length;
+
+                if (erros.length) {
+                    // O Google falhou nesta parte: dá para tentar de novo dali.
+                    tirarCarregando();
+                    partesVazias = 0;
+                    botao.dataset.token = token || '';
+                    mostrarBotao(true, ROTULO_DE_NOVO);
+                    return;
+                }
+                botao.dataset.token = prox;
+                // Parte sem nada visível, mas com continuação: segue sozinha, em
+                // vez de mostrar uma lista vazia com "Mostrar mais".
+                if (!novos.length && prox && partesVazias < 10) {
+                    partesVazias++;
+                    carregar(prox);
+                    return;
+                }
+                partesVazias = 0;
+                tirarCarregando();
+                if (!mostrados && !prox) {
+                    lista.classList.add('hidden');
+                    vazia.classList.remove('hidden');
+                    mostrarBotao(false);
+                    return;
+                }
+                if (!mostrados) {
+                    aviso('Nada que você possa restaurar apareceu até aqui, mas a lixeira continua.',
+                          'dv-lixeira-nota px-4 py-4 text-sm text-gray-500');
+                }
+                mostrarBotao(!!prox);
+            })
+            .catch(function () {
+                tirarCarregando();
+                partesVazias = 0;
+                aviso('Não foi possível carregar a lixeira. Tente de novo.',
+                      'dv-lixeira-erro px-4 py-4 text-sm text-red-600');
+                botao.dataset.token = token || '';
+                mostrarBotao(true, ROTULO_DE_NOVO);
+            });
+    }
+
+    botao.addEventListener('click', function () { carregar(botao.dataset.token || null); });
+    carregar(null);
+})();
+</script>
 {% else %}
 <div class="bg-white rounded-2xl border border-gray-100 p-10 text-center text-gray-400">
     <i class="fas fa-trash-can text-3xl text-gray-200 mb-2 block"></i>

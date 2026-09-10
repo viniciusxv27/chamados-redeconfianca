@@ -1,0 +1,31 @@
+{% comment %}
+"Abrir e baixar". Params: formatos [(código, rótulo)], url_conteudo,
+visualizacao, pode_download.
+
+O navegador não abre um programa do computador direto de uma página (isso
+exigiria um link público do arquivo). O caminho é baixar no formato que o
+programa da pessoa abre — e, para ver na hora, abrir em outra aba. Com um
+formato só, a lista repetiria o botão "Baixar" e não aparece.
+{% endcomment %}
+{% if visualizacao and visualizacao != 'audio' or pode_download and formatos|length > 1 %}
+<div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+    <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Abrir e baixar</p>
+    {% if visualizacao and visualizacao != 'audio' %}
+    <a href="{{ url_conteudo }}" target="_blank" rel="noopener"
+       class="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
+        <i class="fas fa-up-right-from-square w-4 text-gray-400"></i>Abrir em nova aba
+    </a>
+    {% endif %}
+    {% if pode_download and formatos|length > 1 %}
+    {% for codigo, rotulo in formatos %}
+    <a href="{{ url_conteudo }}?dl=1&amp;formato={{ codigo }}"
+       class="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
+        <i class="fas fa-download w-4 text-gray-400"></i>Baixar como {{ rotulo }}
+    </a>
+    {% endfor %}
+    <p class="text-[11px] text-gray-400 mt-2 px-1">
+        O arquivo baixado abre no programa do seu computador (Word, Excel, leitor de PDF…).
+    </p>
+    {% endif %}
+</div>
+{% endif %}

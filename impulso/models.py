@@ -6,7 +6,7 @@ Estrutura (conforme especificação):
   - INOVAR:         Ideia
   - ACOMPANHAMENTO: cálculo de faixas (ver impulso/utils.py)
 
-Visibilidade do módulo é restrita ao CommunicationGroup "ESCRITÓRIO (ADM)".
+Visibilidade do módulo é restrita aos CommunicationGroups "ESCRITÓRIO (ADM)" e "ADM's LOJAS".
 O papel de gestor é definido pelo CommunicationGroup "GESTORES (IMPULSO)".
 Ambos gerenciados em /users/manage/groups/.
 """
@@ -25,6 +25,10 @@ from django.utils import timezone
 # Nomes dos grupos (CommunicationGroup) que controlam acesso e papel.
 GRUPO_ADM = 'ESCRITÓRIO (ADM)'
 GRUPO_GESTOR = 'GESTORES (IMPULSO)'
+# Quem participa do Impulso como colaborador: o escritório e os ADMs das lojas.
+# `GRUPO_ADM` continua sendo o nome principal (testes e telas o usam); a regra
+# de acesso e a lista de colaboradores olham para os dois.
+GRUPOS_ADM = (GRUPO_ADM, "ADM's LOJAS")
 
 
 def get_media_storage():

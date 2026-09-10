@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Visualização indisponível</title>
+<style>
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+         background: #f9fafb; color: #374151; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .caixa { max-width: 420px; padding: 24px; text-align: center; }
+  p { font-size: 14px; line-height: 1.5; margin: 6px 0; }
+  a { display: inline-block; margin-top: 14px; padding: 9px 16px; border-radius: 10px;
+      background: #2563eb; color: #fff; text-decoration: none; font-size: 14px; }
+</style>
+</head>
+<body>
+  <div class="caixa">
+    <p><strong>Não foi possível gerar a visualização deste arquivo.</strong></p>
+    {% if url_baixar %}
+    <p>Baixe e abra no programa do seu computador.</p>
+    <a href="{{ url_baixar }}" target="_top">Baixar arquivo</a>
+    {% else %}
+    <p>Peça a quem cuida da pasta para liberar o download, ou tente de novo mais tarde.</p>
+    {% endif %}
+  </div>
+</body>
+</html>

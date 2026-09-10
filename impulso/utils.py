@@ -1,4 +1,5 @@
 """Permissões, descoberta de usuários e cálculo de faixas do módulo IMPULSO."""
+import re
 from functools import wraps
 
 from django.contrib import messages
@@ -6,7 +7,7 @@ from django.contrib.auth import get_user_model
 from django.db.models import Q
 from django.shortcuts import redirect
 
-from .models import GRUPO_ADM, GRUPO_GESTOR, Faixa
+from .models import GRUPO_GESTOR, GRUPOS_ADM, Faixa
 
 User = get_user_model()
 
@@ -14,9 +15,25 @@ User = get_user_model()
 # ---------------------------------------------------------------------------
 # Papéis / permissões
 # ---------------------------------------------------------------------------
+def _q_grupo(campo, nomes):
+    """Filtro pelo nome do grupo, aceitando vários nomes.
+
+    Ignora maiúsculas e espaços nas pontas: em /users/manage/groups/ o grupo
+    foi cadastrado como "ADM's LOJAS " (com espaço no fim), ninguém vê a
+    diferença, e um `iexact` deixaria os seis ADMs fora do módulo.
+    """
+    q = Q()
+    for nome in ((nomes,) if isinstance(nomes, str) else nomes):
+        q |= Q(**{f'{campo}__iregex': r'^\s*' + re.escape(nome.strip()) + r'\s*$'})
+    return q
+
+
 def _in_group(user, group_name):
-    """Membro de um CommunicationGroup (gerenciado em /users/manage/groups/)."""
-    return user.communication_groups.filter(name__iexact=group_name).exists()
+    """Membro de um CommunicationGroup (gerenciado em /users/manage/groups/).
+
+    `group_name` pode ser um nome ou uma tupla de nomes (basta estar em um).
+    """
+    return user.communication_groups.filter(_q_grupo('name', group_name)).exists()
 
 
 def is_impulso_manager(user):
@@ -30,26 +47,26 @@ def is_impulso_manager(user):
 
 
 def is_impulso_member(user):
-    """Pode acessar o módulo: superuser, ESCRITÓRIO (ADM) ou gestor do Impulso."""
+    """Pode acessar o módulo: superuser, ESCRITÓRIO (ADM), ADM's LOJAS ou gestor do Impulso."""
     if not (user and user.is_authenticated):
         return False
     if user.is_superuser:
         return True
     from users.module_access import user_has_module
-    return (_in_group(user, GRUPO_ADM) or _in_group(user, GRUPO_GESTOR)
+    return (_in_group(user, GRUPOS_ADM) or _in_group(user, GRUPO_GESTOR)
             or user_has_module(user, 'impulso'))
 
 
 def get_colaboradores():
-    """Usuários ativos do ESCRITÓRIO (ADM) — alvos possíveis de metas/feedbacks."""
-    return (User.objects.filter(is_active=True,
-                                communication_groups__name__iexact=GRUPO_ADM)
+    """Usuários ativos do ESCRITÓRIO (ADM) ou de ADM's LOJAS — alvos de metas/feedbacks."""
+    return (User.objects.filter(is_active=True)
+            .filter(_q_grupo('communication_groups__name', GRUPOS_ADM))
             .distinct().order_by('first_name', 'last_name'))
 
 
 def get_gestores():
-    return (User.objects.filter(is_active=True,
-                                communication_groups__name__iexact=GRUPO_GESTOR)
+    return (User.objects.filter(is_active=True)
+            .filter(_q_grupo('communication_groups__name', GRUPO_GESTOR))
             .distinct().order_by('first_name', 'last_name'))
 
 

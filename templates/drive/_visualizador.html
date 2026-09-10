@@ -1,0 +1,67 @@
+{% load drive_extras %}
+{% comment %}
+Visualizador do arquivo dentro do portal. Params: meta, visualizacao (o tipo
+de drive/visualizacao.py), url_conteudo, pode_download.
+
+O aviso de "preparando" fica ATRÁS do iframe: enquanto o conteúdo não chega o
+iframe é transparente e o aviso aparece; quando chega, o conteúdo cobre o
+aviso. Não depende de JS para sumir — se o evento de carregado não vier, o
+documento continua visível. Imagem, vídeo ou áudio que o navegador não
+consegue tocar trocam de lugar com o botão de baixar.
+{% endcomment %}
+<script>
+window.dvFalhou = window.dvFalhou || function (el) {
+    var caixa = el.closest('[data-visualizador]');
+    var midia = el.closest('[data-midia]');
+    if (midia) midia.remove();
+    var falha = caixa && caixa.querySelector('[data-falha]');
+    if (falha) falha.hidden = false;
+};
+</script>
+<div class="relative bg-gray-50" style="min-height: 60vh;" data-visualizador>
+{% if visualizacao == 'imagem' %}
+    <div class="flex items-center justify-center p-4" style="min-height:60vh;" data-midia>
+        <img src="{{ url_conteudo }}" alt="{{ meta.name }}" class="max-w-full max-h-[75vh] rounded-lg shadow"
+             onerror="dvFalhou(this)">
+    </div>
+{% elif visualizacao == 'video' %}
+    <div class="flex items-center justify-center bg-black" style="min-height:60vh;" data-midia>
+        <video src="{{ url_conteudo }}" controls preload="metadata" playsinline
+               class="max-w-full max-h-[75vh]" onerror="dvFalhou(this)"></video>
+    </div>
+{% elif visualizacao == 'audio' %}
+    <div class="flex flex-col items-center justify-center p-10 gap-4" style="min-height:40vh;" data-midia>
+        <i class="fas {{ meta.mimeType|file_icon }} text-5xl"></i>
+        <audio src="{{ url_conteudo }}" controls preload="metadata" class="w-full max-w-md"
+               onerror="dvFalhou(this)"></audio>
+    </div>
+{% elif visualizacao %}
+    <div class="dv-preparando absolute inset-0 flex flex-col items-center justify-center text-center p-6" style="z-index: 0;">
+        <i class="fas fa-spinner fa-spin text-2xl text-blue-500 mb-3"></i>
+        <p class="text-sm font-medium text-gray-600">Preparando a visualização…</p>
+        {% if visualizacao == 'office' %}
+        <p class="text-xs text-gray-400 mt-1 max-w-sm">
+            Na primeira abertura o arquivo é convertido — pode levar alguns segundos. As próximas são imediatas.
+        </p>
+        {% endif %}
+    </div>
+    <iframe src="{{ url_conteudo }}" title="{{ meta.name }}" class="relative w-full block"
+            style="height: 78vh; border: 0; background: transparent; z-index: 1;"
+            onload="var p = this.parentNode.querySelector('.dv-preparando'); if (p) p.remove();"></iframe>
+{% endif %}
+    {# O wrapper não leva classe de display: com "flex" o atributo hidden perderia para o Tailwind. #}
+    <div data-falha {% if visualizacao %}hidden{% endif %}>
+        <div class="flex flex-col items-center justify-center text-center p-10" style="min-height:60vh;">
+            <i class="fas {{ meta.mimeType|file_icon }} text-5xl mb-3"></i>
+            <p class="text-sm text-gray-600 mb-1">
+                {% if visualizacao %}Não foi possível mostrar este arquivo no navegador.{% else %}Este tipo de arquivo não abre no navegador.{% endif %}
+            </p>
+            <p class="text-xs text-gray-400 mb-4">Baixe e abra no programa do seu computador.</p>
+            {% if pode_download %}
+            <a href="{{ url_conteudo }}?dl=1" class="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700">
+                <i class="fas fa-download mr-1.5"></i>Baixar
+            </a>
+            {% endif %}
+        </div>
+    </div>
+</div>

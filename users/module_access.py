@@ -105,7 +105,7 @@ MODULOS = [
     # ── Administrativo ──────────────────────────────────────────────────
     {'chave': 'impulso', 'rotulo': 'Impulso', 'grupo': 'Administrativo',
      'acesso': True,
-     'descricao': 'Entrar no Impulso sem estar no grupo ESCRITÓRIO (ADM).',
+     'descricao': "Entrar no Impulso sem estar nos grupos ESCRITÓRIO (ADM) ou ADM's LOJAS.",
      'permissoes': [
          ('impulso.gestor', 'Gestor do Impulso', 'Aprovar e avaliar metas, conferir o Conectar, concluir projeto foco.'),
      ]},

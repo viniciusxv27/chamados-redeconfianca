@@ -12,3 +12,17 @@ class DriveCredentialStorage(S3Boto3Storage):
     default_acl = 'private'
     querystring_auth = True
     file_overwrite = True
+
+
+class DrivePreviewStorage(S3Boto3Storage):
+    """Prévias em PDF dos arquivos do Drive (Word/Excel/PowerPoint convertidos).
+
+    Privadas pelo mesmo motivo da credencial: a prévia É o conteúdo do arquivo.
+    No bucket público de mídia, qualquer um com o link leria um documento que o
+    portal só mostra depois de checar a permissão do setor. Como a ACL por
+    objeto não é garantia em todo S3 compatível, o conteúdo ainda vai cifrado
+    (drive/visualizacao.py).
+    """
+    default_acl = 'private'
+    querystring_auth = True
+    file_overwrite = True

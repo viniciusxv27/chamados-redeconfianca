@@ -1,0 +1,29 @@
+{% load drive_extras %}
+{% comment %}
+Uma parte da lixeira, pedida pela tela com ?parte=1. `data-prox` é o token do
+Google para a próxima parte; vazio quando acabou.
+{% endcomment %}
+<div class="dv-lixeira-parte" data-prox="{{ prox|default:'' }}">
+    {% if erro %}
+    <p class="dv-lixeira-erro px-4 py-4 text-sm text-red-600"><i class="fas fa-triangle-exclamation mr-1.5"></i>{{ erro }}</p>
+    {% endif %}
+    {% for f in itens %}
+    <div class="dv-lixeira-item flex items-center gap-3 px-4 py-3">
+        <i class="fas {{ f.mimeType|file_icon }}"></i>
+        <div class="flex-1 min-w-0">
+            <p class="text-sm text-gray-700 truncate">{{ f.name }}</p>
+            <p class="text-[11px] text-gray-400">{{ f.setor_nome }}{% if not f.is_folder %} · {{ f.size_h }}{% endif %}</p>
+        </div>
+        <form method="post" action="{% url 'drive:lixeira_restaurar' f.id %}">
+            {% csrf_token %}
+            <button type="submit" class="px-3 py-1.5 text-xs rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"><i class="fas fa-rotate-left mr-1"></i>Restaurar</button>
+        </form>
+        {% if is_superadmin %}
+        <form method="post" action="{% url 'drive:lixeira_excluir' f.id %}" onsubmit="return confirm('Excluir DEFINITIVAMENTE? Não há como desfazer.');">
+            {% csrf_token %}
+            <button type="submit" class="px-3 py-1.5 text-xs rounded-lg border border-red-200 text-red-600 hover:bg-red-50"><i class="fas fa-xmark mr-1"></i>Excluir</button>
+        </form>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>

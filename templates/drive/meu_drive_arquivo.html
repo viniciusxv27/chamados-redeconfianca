@@ -25,30 +25,8 @@
                 </button>
             </form>
         </div>
-        <div class="bg-gray-50" style="min-height: 60vh;">
-            {% comment %}
-            Só abre em iframe o que o navegador mostra (PDF, imagem, Docs do
-            Google exportados em PDF). O resto no iframe baixava o arquivo sozinho
-            ou mostrava bytes na tela.
-            {% endcomment %}
-            {% if meta.previewavel %}
-                {% if 'image/' in meta.mimeType %}
-                <div class="flex items-center justify-center p-4" style="min-height:60vh;">
-                    <img src="{% url 'drive:meu_drive_conteudo' meta.id %}" alt="{{ meta.name }}" class="max-w-full max-h-[75vh] rounded-lg shadow">
-                </div>
-                {% else %}
-                <iframe src="{% url 'drive:meu_drive_conteudo' meta.id %}" class="w-full" style="height: 78vh; border: 0;" title="{{ meta.name }}"></iframe>
-                {% endif %}
-            {% else %}
-            <div class="flex flex-col items-center justify-center text-center p-10" style="min-height:60vh;">
-                <i class="fas {{ meta.mimeType|file_icon }} text-5xl mb-3"></i>
-                <p class="text-sm text-gray-500 mb-4">Pré-visualização não disponível para este tipo de arquivo.</p>
-                <a href="{% url 'drive:meu_drive_conteudo' meta.id %}?dl=1" class="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700">
-                    <i class="fas fa-download mr-1.5"></i>Baixar para abrir
-                </a>
-            </div>
-            {% endif %}
-        </div>
+        {% url 'drive:meu_drive_conteudo' meta.id as url_conteudo %}
+        {% include 'drive/_visualizador.html' %}
     </div>
 
     <!-- Ações + detalhes -->
@@ -92,6 +70,8 @@
                 </form>
             </div>
         </div>
+
+        {% include 'drive/_baixar_como.html' %}
 
         <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 text-sm">
             <h3 class="font-semibold text-gray-700 mb-3">Detalhes</h3>

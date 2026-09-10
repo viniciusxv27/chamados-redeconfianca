@@ -24,6 +24,7 @@ if 'testserver' not in settings.ALLOWED_HOSTS:
 
 import httplib2
 from django.contrib.auth import get_user_model
+from django.core.cache.backends.locmem import LocMemCache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import transaction
 from django.test import Client
@@ -196,6 +197,12 @@ try:
         'revisoes': lambda: gdrive.revisoes('x'),
         'buscar': lambda: gdrive.buscar('zz'),
         'listar_lixeira': lambda: gdrive.listar_lixeira(),
+        # Abrir no portal: export_media NÃO aceita supportsAllDrives.
+        'exportar': lambda: gdrive.exportar('x', 'application/pdf'),
+        'converter_para_pdf': lambda: gdrive.converter_para_pdf(
+            'x', 'application/vnd.google-apps.document', 'a.docx'),
+        'pai_de': lambda: gdrive.pai_de('x'),
+        'baixar_trecho': lambda: gdrive.baixar_trecho('x', 0, 1),
     }
     gdrive._raizes.clear()
     with mock.patch.object(gdrive, 'service', return_value=svc):
@@ -282,7 +289,10 @@ try:
         for acao in ('Baixar', 'Renomear', 'Mover', 'Nova versão', 'Versões', 'Excluir', 'Abrir no Drive'):
             t(f'a página do arquivo tem "{acao}"', acao in html)
         html = c.get('/drive/meu-drive/a/ARQ_2/').content.decode()
-        t('planilha não entra em iframe (não é previewável)', '<iframe' not in html and 'Baixar para abrir' in html)
+        # Desde que Word/Excel/PowerPoint abrem no portal (convertidos em PDF
+        # pelo Google), a planilha também vai para o visualizador.
+        t('planilha agora abre no portal (convertida em PDF)',
+          '<iframe' in html and 'Preparando a visualização' in html)
         html = c.get('/drive/meu-drive/a/DOC_G/').content.decode()
         t('Doc do Google não oferece "Nova versão" de arquivo', 'Nova versão' not in html)
         r = c.get('/drive/meu-drive/a/PASTA_A/')
@@ -373,7 +383,10 @@ try:
         t('volta para a pasta', '/f/PASTA_A/' in r['Location'])
         r = c.post('/drive/meu-drive/a/PASTA_B/excluir/', {'folder_id': 'PASTA_B'})
         t('excluir a pasta que se está vendo volta para a de cima', '/f/PASTA_A/' in r['Location'])
-        html = c.get('/drive/lixeira/').content.decode()
+        # A lixeira carrega em partes: os itens vêm de ?parte=1, não da página.
+        # Cache em memória: os pais das pastas falsas não vão para o Redis.
+        with mock.patch('django.core.cache.cache', LocMemCache('zz-drive-pais', {})):
+            html = c.get('/drive/lixeira/?parte=1').content.decode()
         t('o que foi excluído aparece na lixeira do portal', 'ZZ planilha final.xlsx' in html)
         t('marcado como Meu Drive', 'Meu Drive' in html)
         c.post('/drive/lixeira/ARQ_2/restaurar/')

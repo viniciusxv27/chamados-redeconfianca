@@ -90,18 +90,21 @@ def can(user, mapping, action, folder_id=None):
     return level_for_folder(user, mapping, folder_id) >= ORDEM[REQUERIDO[action]]
 
 
-def file_allowed(user, file_id):
+def file_allowed(user, file_id, cadeia=None, mapeamentos=None):
     """(mapping, nivel) do arquivo, ou (None, 0). O portão contra URL direta.
 
     Resolve a cadeia de pastas do arquivo UMA vez e procura, entre os setores
     que o usuário enxerga, um cujo folder-raiz esteja nessa cadeia.
+
+    `cadeia` e `mapeamentos` deixam quem checa muitos arquivos de uma vez (a
+    lixeira) passar a subida da árvore e os setores já prontos.
     """
     if not file_id:
         return None, 0
-    cadeia = set(gdrive.ancestrais(file_id))
+    cadeia = set(gdrive.ancestrais(file_id) if cadeia is None else cadeia)
     cadeia.add(file_id)
     melhor = (None, 0)
-    for m in sectors_visible(user):
+    for m in (sectors_visible(user) if mapeamentos is None else mapeamentos):
         if m.folder_id not in cadeia:
             continue
         if is_superadmin(user) or _e_gestor(user, m):
@@ -112,6 +115,67 @@ def file_allowed(user, file_id):
         if nivel > melhor[1]:
             melhor = (m, nivel)
     return melhor
+
+
+CACHE_PAI_SEGUNDOS = 300
+PROFUNDIDADE_MAXIMA = 30
+
+
+def resolver_acessos(user, arquivos, mapeamentos=None, pais=None):
+    """{id: (mapping, nivel)} de vários arquivos, subindo a árvore uma vez só.
+
+    A lixeira checava item por item com `file_allowed`: cada arquivo subia a
+    árvore inteira, uma chamada ao Google por nível, e ainda buscava os setores
+    no banco de novo. Com 200 itens eram centenas de chamadas antes da tela
+    aparecer. Aqui a subida é compartilhada: os `parents` que já vêm na
+    listagem não custam nada, pasta já vista não é consultada de novo, e o pai
+    de cada pasta fica alguns minutos no cache para o "mostrar mais".
+
+    O cache serve SÓ para listar. Restaurar e excluir continuam checando com
+    `file_allowed` sem cache: uma pasta movida direto no Google não pode dar
+    acesso por causa de um pai guardado.
+    """
+    from django.core.cache import cache
+
+    mapeamentos = sectors_visible(user) if mapeamentos is None else mapeamentos
+    pais = {} if pais is None else pais
+    for f in arquivos:
+        if f.get('id'):
+            pais.setdefault(f['id'], (f.get('parents') or [''])[0])
+
+    def pai(item_id):
+        if item_id in pais:
+            return pais[item_id]
+        chave = f'drive:pai:{item_id}'
+        guardado = None
+        try:
+            guardado = cache.get(chave)
+        except Exception:  # noqa: BLE001 — sem Redis, só fica sem o atalho
+            pass
+        if guardado is None:
+            guardado = gdrive.pai_de(item_id)
+            if guardado is not None:
+                # Falha do Google (None) não é guardada: esconderia a pasta por minutos.
+                try:
+                    cache.set(chave, guardado, CACHE_PAI_SEGUNDOS)
+                except Exception:  # noqa: BLE001
+                    pass
+        pais[item_id] = guardado
+        return guardado
+
+    resultado = {}
+    for f in arquivos:
+        fid = f.get('id')
+        if not fid:
+            continue
+        cadeia, atual = [], fid
+        for _ in range(PROFUNDIDADE_MAXIMA):
+            if not atual or atual in cadeia:
+                break
+            cadeia.append(atual)
+            atual = pai(atual)
+        resultado[fid] = file_allowed(user, fid, cadeia=cadeia, mapeamentos=mapeamentos)
+    return resultado
 
 
 def folder_allowed(user, folder_id, mapping=None):
