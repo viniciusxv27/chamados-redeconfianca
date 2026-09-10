@@ -78,10 +78,26 @@ def meus_cursos(request):
             'dias': (c.prazo - hoje).days,
         })
 
+    # Mesma régua do quadro do gestor, para os dois lados falarem a mesma
+    # língua: "mandei e espera conferência" não é a mesma coisa que "aprovado".
+    for l in linhas:
+        l['situacao'] = _situacao(l['envio'])
+    linhas.sort(key=lambda l: (ORDEM_MEUS[l['situacao']], l['curso'].prazo))
+
+    resumo = {
+        'aprovados': sum(1 for l in linhas if l['situacao'] == APROVADO),
+        'conferir': sum(1 for l in linhas if l['situacao'] == CONFERIR),
+        'recusados': sum(1 for l in linhas if l['situacao'] == RECUSADO),
+        'nao_fez': sum(1 for l in linhas if l['situacao'] == NAO_FEZ),
+        'atrasados': sum(1 for l in linhas if l['atrasado']),
+    }
+
     return render(request, 'cursos/meus_cursos.html', {
         'linhas': linhas,
         'is_gestor': e_gestor(request.user, cfg),
         'pendentes': sum(1 for l in linhas if not l['entregue']),
+        'resumo': resumo,
+        'total_cursos': len(linhas),
         'extensoes': ', '.join(EXTENSOES),
         'tamanho_maximo': _tamanho_legivel(TAMANHO_MAXIMO),
     })
@@ -145,6 +161,31 @@ def bloqueado(request):
 # ---------------------------------------------------------------------------
 # Gestão
 # ---------------------------------------------------------------------------
+# Situação de cada pessoa no quadro. Existe porque "entregue" sozinho não
+# distinguia "mandou e espera o gestor" de "já foi aprovado" — e era isso que
+# obrigava a abrir loja por loja para achar quem depende de uma decisão.
+CONFERIR = 'CONFERIR'
+RECUSADO = 'RECUSADO'
+NAO_FEZ = 'NAO_FEZ'
+APROVADO = 'APROVADO'
+
+ORDEM_SITUACAO = {CONFERIR: 0, RECUSADO: 1, NAO_FEZ: 2, APROVADO: 3}
+# Na tela do colaborador a urgência é outra: o que ele precisa FAZER primeiro.
+ORDEM_MEUS = {RECUSADO: 0, NAO_FEZ: 1, CONFERIR: 2, APROVADO: 3}
+CONTADOR = {CONFERIR: 'conferir', RECUSADO: 'recusados',
+            NAO_FEZ: 'nao_fez', APROVADO: 'aprovados'}
+
+
+def _situacao(envio):
+    if envio is None:
+        return NAO_FEZ
+    if envio.status == Comprovante.PENDENTE:
+        return CONFERIR
+    if envio.status == Comprovante.APROVADO:
+        return APROVADO
+    return RECUSADO
+
+
 def _pessoas_do_curso(curso, cfg):
     """Quem é cobrado por este curso, já com a loja."""
     if curso.tipo == Curso.CAPACITACAO:
@@ -187,7 +228,8 @@ def gestao(request):
         curso = cursos[0] if cursos else None
 
     lojas, geral = [], None
-    totais = {'pessoas': 0, 'entregues': 0, 'pendentes': 0, 'conferir': 0}
+    totais = {'pessoas': 0, 'entregues': 0, 'pendentes': 0, 'conferir': 0,
+              'aprovados': 0, 'recusados': 0, 'nao_fez': 0}
     if curso:
         pessoas = list(_pessoas_do_curso(curso, cfg))
         envios = {}
@@ -200,24 +242,37 @@ def gestao(request):
         for p in pessoas:
             envio = envios.get(p.id)
             entregue = bool(envio and envio.vale_como_entregue)
+            situacao = _situacao(envio)
             item = {'pessoa': p, 'envio': envio, 'entregue': entregue,
-                    'conferir': bool(envio and envio.status == Comprovante.PENDENTE)}
+                    'conferir': situacao == CONFERIR, 'situacao': situacao}
             por_loja.setdefault(_loja(p), []).append(item)
             totais['pessoas'] += 1
             totais['entregues' if entregue else 'pendentes'] += 1
-            totais['conferir'] += 1 if item['conferir'] else 0
+            totais[CONTADOR[situacao]] += 1
 
         for nome in sorted(por_loja):
-            itens = sorted(por_loja[nome], key=lambda i: (i['entregue'], i['pessoa'].first_name))
+            # Primeiro o que espera decisão do gestor, depois o que ele precisa
+            # cobrar, e só no fim quem já está resolvido: a lista responde
+            # "de quem eu preciso agora?" sem ninguém ter que ler tudo.
+            itens = sorted(por_loja[nome],
+                           key=lambda i: (ORDEM_SITUACAO[i['situacao']],
+                                          (i['pessoa'].first_name or '').lower()))
             feitos = sum(1 for i in itens if i['entregue'])
+            conferir = sum(1 for i in itens if i['conferir'])
             bloco = {
                 'nome': nome, 'itens': itens, 'total': len(itens), 'feitos': feitos,
                 'faltam': len(itens) - feitos,
                 # Quantos deste bloco esperam conferência: é o número que o
                 # "marcar todos" da loja mostra, e ele some quando não há nada
                 # para aprovar ali.
-                'conferir': sum(1 for i in itens if i['conferir']),
+                'conferir': conferir,
+                'aprovados': sum(1 for i in itens if i['situacao'] == APROVADO),
+                'recusados': sum(1 for i in itens if i['situacao'] == RECUSADO),
+                'nao_fez': sum(1 for i in itens if i['situacao'] == NAO_FEZ),
                 'percentual': round(feitos * 100 / len(itens)) if itens else 0,
+                # Loja com gente na fila abre sozinha: o motivo da reclamação
+                # era justamente ter que abrir uma por uma para descobrir isso.
+                'abrir': bool(conferir),
             }
             # Consultores sem loja saem para a aba "Geral", separados das lojas.
             if nome == SEM_LOJA:
@@ -225,8 +280,15 @@ def gestao(request):
             else:
                 lojas.append(bloco)
 
+        # Lojas com fila de aprovação sobem para o topo; o resto segue em ordem
+        # alfabética, que é como se procura uma loja específica.
+        lojas.sort(key=lambda b: (0 if b['conferir'] else 1, b['nome']))
+
     return render(request, 'cursos/gestao.html', {
         'cursos': cursos, 'curso': curso, 'lojas': lojas, 'geral': geral, 'totais': totais,
+        # A aba "Por loja" mostra só o que é das lojas; o resto vive na aba
+        # "Geral". Somar tudo nas duas faria o gestor procurar onde não está.
+        'conferir_lojas': sum(b['conferir'] for b in lojas),
         'percentual_geral': (round(totais['entregues'] * 100 / totais['pessoas'])
                              if totais['pessoas'] else 0),
         'is_superadmin': e_superadmin(request.user),

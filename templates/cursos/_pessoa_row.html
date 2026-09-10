@@ -1,8 +1,19 @@
 {% comment %}
 Linha de uma pessoa no quadro de gestão. Espera `item` no contexto.
 Usada tanto nos cards de loja quanto na aba "Geral".
+
+`data-situacao` e `data-nome` são o que o filtro e a busca do quadro leem: a
+decisão de quem aparece é feita aqui, uma vez, e não espalhada pelo JS.
 {% endcomment %}
-<div class="px-5 py-3 flex items-center justify-between gap-3 flex-wrap">
+<div class="crs-linha px-4 sm:px-5 py-3 flex items-center justify-between gap-3 flex-wrap
+            border-l-[3px] transition-colors
+            {% if item.situacao == 'CONFERIR' %}border-sky-400 bg-sky-50/40 hover:bg-sky-50
+            {% elif item.situacao == 'RECUSADO' %}border-red-300 hover:bg-red-50/40
+            {% elif item.situacao == 'NAO_FEZ' %}border-amber-300 hover:bg-amber-50/40
+            {% else %}border-emerald-300 hover:bg-gray-50{% endif %}"
+     data-situacao="{{ item.situacao }}"
+     data-nome="{{ item.pessoa.get_full_name|default:item.pessoa.username|lower }}">
+
     <div class="flex items-center gap-3 min-w-0">
         {% if item.conferir %}
         {% comment %}
@@ -13,21 +24,55 @@ Usada tanto nos cards de loja quanto na aba "Geral".
         <input type="checkbox" class="crs-marcar rounded text-emerald-600 focus:ring-emerald-500 flex-shrink-0"
                value="{{ item.envio.id }}"
                aria-label="Selecionar {{ item.pessoa.get_full_name|default:item.pessoa.username }}">
+        {% else %}
+        <span class="w-4 flex-shrink-0" aria-hidden="true"></span>
         {% endif %}
+
+        {# Inicial em bolinha: dá âncora visual para varrer a lista com o olho. #}
+        <span class="w-8 h-8 rounded-full flex-shrink-0 hidden sm:flex items-center justify-center
+                     text-[11px] font-bold
+                     {% if item.situacao == 'CONFERIR' %}bg-sky-100 text-sky-700
+                     {% elif item.situacao == 'RECUSADO' %}bg-red-100 text-red-700
+                     {% elif item.situacao == 'NAO_FEZ' %}bg-amber-100 text-amber-700
+                     {% else %}bg-emerald-100 text-emerald-700{% endif %}">
+            {{ item.pessoa.first_name|default:item.pessoa.username|slice:":1"|upper }}
+        </span>
+
         <div class="min-w-0">
-        <p class="text-sm font-medium text-gray-800 truncate">
-            {{ item.pessoa.get_full_name|default:item.pessoa.username }}
-        </p>
-        <p class="text-[11px] text-gray-400">
-            {% if item.envio %}
-                enviado em {{ item.envio.enviado_em|date:'d/m/Y H:i' }}
-            {% else %}
-                sem comprovante
-            {% endif %}
-        </p>
+            <p class="text-sm font-medium text-gray-800 truncate">
+                {{ item.pessoa.get_full_name|default:item.pessoa.username }}
+            </p>
+            <p class="text-[11px] text-gray-400">
+                {% if item.envio %}
+                    enviado em {{ item.envio.enviado_em|date:'d/m/Y H:i' }}
+                {% else %}
+                    sem comprovante
+                {% endif %}
+            </p>
         </div>
     </div>
-    <div class="flex items-center gap-2">
+
+    <div class="flex items-center gap-2 flex-wrap justify-end">
+        {# O selo do estado vem antes dos botões: primeiro entender, depois agir. #}
+        {% if item.situacao == 'CONFERIR' %}
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-sky-100 text-sky-800 text-[11px] font-bold">
+            <span class="w-1.5 h-1.5 rounded-full bg-sky-500 animate-pulse"></span>Pendente de aprovação
+        </span>
+        {% elif item.situacao == 'APROVADO' %}
+        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-semibold">
+            <i class="fas fa-check"></i>Aprovado
+        </span>
+        {% elif item.situacao == 'RECUSADO' %}
+        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-100 text-red-700 text-[11px] font-semibold"
+              {% if item.envio.observacao %}title="{{ item.envio.observacao }}"{% endif %}>
+            <i class="fas fa-rotate-left"></i>Recusado
+        </span>
+        {% else %}
+        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 text-[11px] font-semibold">
+            <i class="fas fa-hourglass-half"></i>Não fez
+        </span>
+        {% endif %}
+
         {# `.url` levanta ValueError quando o campo está vazio, e isso derrubava #}
         {# o quadro inteiro do gestor por causa de uma linha. #}
         {% if item.envio.arquivo %}
@@ -47,7 +92,7 @@ Usada tanto nos cards de loja quanto na aba "Geral".
             {% csrf_token %}
             <input type="hidden" name="acao" value="aprovar">
             <input type="hidden" name="voltar" value="{{ request.get_full_path }}">
-            <button type="submit" class="px-2.5 py-1 rounded-lg bg-emerald-500 text-white text-xs font-medium hover:bg-emerald-600">
+            <button type="submit" class="px-3 py-1 rounded-lg bg-emerald-500 text-white text-xs font-semibold hover:bg-emerald-600">
                 Aprovar
             </button>
         </form>
@@ -57,14 +102,11 @@ Usada tanto nos cards de loja quanto na aba "Geral".
             <input type="hidden" name="acao" value="recusar">
             <input type="hidden" name="observacao" value="">
             <input type="hidden" name="voltar" value="{{ request.get_full_path }}">
-            <button type="submit" class="px-2.5 py-1 rounded-lg border border-red-200 text-red-600 text-xs font-medium hover:bg-red-50">
+            <button type="submit" class="px-3 py-1 rounded-lg border border-red-200 text-red-600 text-xs font-medium hover:bg-red-50">
                 Recusar
             </button>
         </form>
-        {% elif item.entregue %}
-        <span class="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-semibold">
-            <i class="fas fa-check mr-1"></i>Aprovado
-        </span>
+        {% elif item.situacao == 'APROVADO' %}
         {% comment %}
         Rejeitar um certificado já aprovado: só gestor/SUPERADMIN chega aqui.
         Volta a valer como pendência e a pessoa é avisada do motivo.
@@ -75,15 +117,11 @@ Usada tanto nos cards de loja quanto na aba "Geral".
             <input type="hidden" name="acao" value="recusar">
             <input type="hidden" name="observacao" value="">
             <input type="hidden" name="voltar" value="{{ request.get_full_path }}">
-            <button type="submit" class="px-2.5 py-1 rounded-lg border border-red-200 text-red-600 text-xs font-medium hover:bg-red-50"
+            <button type="submit" class="px-2.5 py-1 rounded-lg border border-gray-200 text-gray-500 text-xs font-medium hover:bg-red-50 hover:text-red-600 hover:border-red-200"
                     title="Rejeitar este certificado já aprovado">
-                <i class="fas fa-xmark mr-1"></i>Rejeitar
+                <i class="fas fa-xmark"></i>
             </button>
         </form>
-        {% else %}
-        <span class="px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 text-[11px] font-semibold">
-            {% if item.envio %}Recusado{% else %}Não fez{% endif %}
-        </span>
         {% endif %}
     </div>
 </div>

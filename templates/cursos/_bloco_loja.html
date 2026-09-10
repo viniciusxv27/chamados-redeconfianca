@@ -1,0 +1,77 @@
+{% comment %}
+Card de um bloco do quadro (uma loja, ou o "Geral" dos sem loja).
+Params: bloco (dict da view), indice (para o id do painel), icone, rotulo_vazio.
+
+O cabeçalho responde sozinho "de quem eu preciso aqui?" — era o que faltava e
+obrigava a abrir loja por loja.
+{% endcomment %}
+<div class="crs-card crs-bloco bg-white rounded-2xl border shadow-sm overflow-hidden transition-shadow
+            {% if bloco.conferir %}border-sky-200 ring-1 ring-sky-100{% else %}border-gray-100{% endif %}"
+     data-conferir="{{ bloco.conferir }}"
+     data-faltam="{{ bloco.faltam }}"
+     data-nome="{{ bloco.nome|lower }}">
+
+    <button type="button" data-crs-toggle="crs-bloco-{{ indice }}"
+            class="w-full px-4 sm:px-5 py-3.5 flex items-center justify-between gap-3 text-left hover:bg-gray-50/80 transition-colors">
+        <div class="flex items-center gap-3 min-w-0">
+            <span class="w-9 h-9 rounded-xl flex-shrink-0 flex items-center justify-center
+                         {% if bloco.conferir %}bg-sky-100 text-sky-600{% elif bloco.faltam %}bg-amber-50 text-amber-500{% else %}bg-emerald-50 text-emerald-600{% endif %}">
+                <i class="fas {{ icone|default:'fa-store' }}"></i>
+            </span>
+            <div class="min-w-0">
+                <p class="font-semibold text-gray-800 truncate leading-tight">{{ bloco.nome }}</p>
+                <p class="text-[11px] text-gray-400">{{ bloco.feitos }} de {{ bloco.total }} com comprovante</p>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+            {% comment %}
+            O indicador que o quadro não tinha. Fica antes de tudo e com o ponto
+            pulsando porque é a única coisa aqui que depende de uma decisão.
+            {% endcomment %}
+            {% if bloco.conferir %}
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-sky-500 text-white text-[11px] font-bold shadow-sm">
+                <span class="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
+                {{ bloco.conferir }}
+                <span class="hidden sm:inline">pendente{{ bloco.conferir|pluralize }} de aprovação {{ sufixo|default:'nesta loja' }}</span>
+                <span class="sm:hidden">p/ aprovar</span>
+            </span>
+            {% endif %}
+
+            {% if bloco.nao_fez or bloco.recusados %}
+            <span class="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[11px] font-semibold"
+                  title="{{ bloco.nao_fez }} sem comprovante · {{ bloco.recusados }} recusado{{ bloco.recusados|pluralize }}">
+                {{ bloco.faltam }} falta{{ bloco.faltam|pluralize }}
+            </span>
+            {% elif not bloco.conferir %}
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-semibold">
+                <i class="fas fa-check"></i><span class="hidden sm:inline">completo</span>
+            </span>
+            {% endif %}
+
+            <div class="w-16 sm:w-24 h-2 rounded-full bg-gray-100 overflow-hidden hidden xs:block">
+                <div class="h-full rounded-full transition-all duration-700
+                            {% if bloco.percentual == 100 %}bg-emerald-500{% else %}bg-purple-500{% endif %}"
+                     style="width: {{ bloco.percentual }}%"></div>
+            </div>
+            <span class="text-[11px] font-bold text-gray-400 tabular-nums w-9 text-right hidden sm:inline">{{ bloco.percentual }}%</span>
+            <i class="fas fa-chevron-down text-gray-300 text-xs transition-transform" data-crs-seta></i>
+        </div>
+    </button>
+
+    <div id="crs-bloco-{{ indice }}"
+         class="{% if not bloco.abrir %}hidden {% endif %}border-t border-gray-100 divide-y divide-gray-50">
+        {% if bloco.conferir %}
+        <div class="px-4 sm:px-5 py-2 bg-sky-50/60 flex items-center justify-between gap-2 flex-wrap">
+            <label class="inline-flex items-center gap-2 text-[11px] font-medium text-sky-800 cursor-pointer">
+                <input type="checkbox" class="crs-marcar-todos rounded text-emerald-600 focus:ring-emerald-500">
+                Marcar {{ bloco.conferir }} pendente{{ bloco.conferir|pluralize }} {{ sufixo|default:'desta loja' }}
+            </label>
+        </div>
+        {% endif %}
+        {% for item in bloco.itens %}{% include 'cursos/_pessoa_row.html' %}{% endfor %}
+        <p class="crs-vazio hidden px-5 py-4 text-xs text-gray-400 text-center">
+            Ninguém aqui com esse filtro.
+        </p>
+    </div>
+</div>

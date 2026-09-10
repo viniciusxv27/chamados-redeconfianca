@@ -31,11 +31,41 @@
         {% endfor %}
     {% endif %}
 
+    {% comment %}
+    Os mesmos quatro estados do quadro do gestor, nas mesmas cores: o que ele
+    chama de "pendente de aprovação" é o que aqui aparece como "em conferência".
+    Sem isso, o colaborador via "entregue" e o gestor via "pendente".
+    {% endcomment %}
+    {% if total_cursos %}
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-5">
+        <div class="bg-white rounded-2xl border-2 {% if resumo.nao_fez %}border-amber-200{% else %}border-gray-100{% endif %} p-3 sm:p-4">
+            <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">A enviar</p>
+            <p class="text-2xl font-bold text-amber-600 tabular-nums">{{ resumo.nao_fez }}</p>
+        </div>
+        <div class="bg-white rounded-2xl border-2 {% if resumo.recusados %}border-red-200{% else %}border-gray-100{% endif %} p-3 sm:p-4">
+            <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Recusados</p>
+            <p class="text-2xl font-bold text-red-600 tabular-nums">{{ resumo.recusados }}</p>
+        </div>
+        <div class="bg-white rounded-2xl border-2 {% if resumo.conferir %}border-sky-200{% else %}border-gray-100{% endif %} p-3 sm:p-4">
+            <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Em conferência</p>
+            <p class="text-2xl font-bold text-sky-600 tabular-nums flex items-center gap-2">
+                {{ resumo.conferir }}
+                {% if resumo.conferir %}<span class="w-2 h-2 rounded-full bg-sky-500 animate-pulse"></span>{% endif %}
+            </p>
+        </div>
+        <div class="bg-white rounded-2xl border-2 border-gray-100 p-3 sm:p-4">
+            <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Aprovados</p>
+            <p class="text-2xl font-bold text-emerald-600 tabular-nums">{{ resumo.aprovados }}</p>
+        </div>
+    </div>
+    {% endif %}
+
     {% if pendentes %}
     <div class="mb-5 p-4 rounded-xl bg-amber-50 border border-amber-100 flex items-start gap-3">
         <i class="fas fa-triangle-exclamation text-amber-500 mt-0.5"></i>
         <div class="text-sm text-amber-800">
-            Você tem <strong>{{ pendentes }}</strong> curso{{ pendentes|pluralize }} sem comprovante.
+            Você tem <strong>{{ pendentes }}</strong> curso{{ pendentes|pluralize }} sem comprovante{% if resumo.atrasados %},
+            {{ resumo.atrasados }} deles com o <strong>prazo vencido</strong>{% endif %}.
             Depois do prazo o portal fica travado até o anexo chegar.
         </div>
     </div>
@@ -43,7 +73,12 @@
 
     <div class="space-y-4">
         {% for l in linhas %}
-        <div class="crs-card bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div class="crs-card bg-white rounded-2xl border shadow-sm overflow-hidden border-l-4 transition-shadow hover:shadow-md
+                    {% if l.situacao == 'CONFERIR' %}border-gray-100 border-l-sky-400
+                    {% elif l.situacao == 'APROVADO' %}border-gray-100 border-l-emerald-400
+                    {% elif l.situacao == 'RECUSADO' %}border-red-100 border-l-red-400
+                    {% elif l.atrasado %}border-red-100 border-l-red-400
+                    {% else %}border-gray-100 border-l-amber-400{% endif %}">
             <div class="px-5 py-4 border-b border-gray-100 flex items-start justify-between gap-3 flex-wrap">
                 <div>
                     <span class="inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold mb-1
@@ -55,23 +90,35 @@
                     <p class="text-xs text-gray-400">Referente a {{ l.curso.competencia|date:'F/Y' }}</p>
                     {% endif %}
                 </div>
-                <div class="text-right">
-                    {% if l.entregue %}
+                <div class="text-right flex flex-col items-end gap-1">
+                    {% comment %}
+                    "Aguardando conferência" era verde igual a "Aprovado" e dava
+                    a impressão de estar resolvido. Agora é azul, a mesma cor
+                    que o gestor vê na fila dele.
+                    {% endcomment %}
+                    {% if l.situacao == 'APROVADO' %}
                         <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold">
-                            <i class="fas fa-check"></i>
-                            {% if l.envio.status == 'APROVADO' %}Aprovado{% else %}Aguardando conferência{% endif %}
+                            <i class="fas fa-circle-check"></i>Aprovado
+                        </span>
+                    {% elif l.situacao == 'CONFERIR' %}
+                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-sky-100 text-sky-800 text-xs font-bold">
+                            <span class="w-1.5 h-1.5 rounded-full bg-sky-500 animate-pulse"></span>Em conferência
+                        </span>
+                    {% elif l.situacao == 'RECUSADO' %}
+                        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-100 text-red-700 text-xs font-semibold">
+                            <i class="fas fa-rotate-left"></i>Reenviar
                         </span>
                     {% elif l.atrasado %}
                         <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-100 text-red-700 text-xs font-semibold">
                             <i class="fas fa-triangle-exclamation"></i>Prazo vencido
                         </span>
                     {% else %}
-                        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-100 text-amber-700 text-xs font-semibold">
+                        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 text-xs font-semibold">
                             <i class="fas fa-clock"></i>
                             {% if l.dias == 0 %}Vence hoje{% else %}Faltam {{ l.dias }} dia{{ l.dias|pluralize }}{% endif %}
                         </span>
                     {% endif %}
-                    <p class="text-[11px] text-gray-400 mt-1">Prazo: {{ l.curso.prazo|date:'d/m/Y' }}</p>
+                    <p class="text-[11px] text-gray-400">Prazo: {{ l.curso.prazo|date:'d/m/Y' }}</p>
                 </div>
             </div>
 
@@ -87,6 +134,13 @@
                 </a>
                 {% endif %}
 
+                {% if l.situacao == 'CONFERIR' %}
+                <div class="p-3 rounded-xl bg-sky-50 border border-sky-100 text-sm text-sky-800 flex items-start gap-2">
+                    <i class="fas fa-hourglass-half mt-0.5"></i>
+                    <span>Comprovante enviado. Está na fila do gestor — você é avisado quando ele aprovar.</span>
+                </div>
+                {% endif %}
+
                 {% if l.envio and l.envio.status == 'RECUSADO' %}
                 <div class="p-3 rounded-xl bg-red-50 border border-red-100 text-sm text-red-700">
                     <strong>Comprovante recusado.</strong>
@@ -96,7 +150,7 @@
                 {% endif %}
 
                 {# Mesma armadilha do quadro do gestor: `.url` com campo vazio levanta ValueError e derruba a tela. #}
-                {% if l.entregue and l.envio.arquivo %}
+                {% if l.envio.arquivo %}
                 <div class="flex items-center gap-2 text-sm text-gray-500">
                     <i class="fas fa-paperclip text-gray-400"></i>
                     <a href="{{ l.envio.arquivo.url }}" target="_blank" rel="noopener noreferrer"
