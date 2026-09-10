@@ -47,7 +47,10 @@ RAIZ_MEU_DRIVE = 'root'
 # Campos pedidos à API em cada arquivo/pasta.
 FIELDS = ('id,name,mimeType,size,modifiedTime,createdTime,iconLink,thumbnailLink,'
           'webViewLink,webContentLink,parents,trashed,version,'
-          'lastModifyingUser(displayName,emailAddress),owners(displayName)')
+          'lastModifyingUser(displayName,emailAddress),owners(displayName),'
+          'shortcutDetails(targetId,targetMimeType)')
+
+SHORTCUT_MIME = 'application/vnd.google-apps.shortcut'
 
 _lock = threading.Lock()
 _service = None
@@ -272,7 +275,18 @@ def testar_conexao():
 
 
 def _params():
-    """Parâmetros para enxergar Drives Compartilhados."""
+    """Parâmetro aceito por TODA chamada de arquivo (get, update, create…).
+
+    `includeItemsFromAllDrives` ficava aqui junto e só existe em `files.list`.
+    Nas outras, a biblioteca do Google recusa o parâmetro ao MONTAR a
+    requisição (TypeError), antes de `_executar` poder traduzir o erro — e
+    abrir pasta, abrir arquivo ou baixar virava erro 500.
+    """
+    return {'supportsAllDrives': True}
+
+
+def _params_lista():
+    """Parâmetros de `files.list`: aí sim cabe incluir os Drives Compartilhados."""
     return {'supportsAllDrives': True, 'includeItemsFromAllDrives': True}
 
 
@@ -298,7 +312,7 @@ def listar(folder_id, page_token=None, page_size=100, trashed=False, apenas_past
         q += f" and mimeType='{FOLDER_MIME}'"
     resp = _executar(service().files().list(
         q=q, pageSize=page_size, pageToken=page_token, orderBy=order,
-        fields=f'nextPageToken, files({FIELDS})', **_params()))
+        fields=f'nextPageToken, files({FIELDS})', **_params_lista()))
     return resp.get('files', []), resp.get('nextPageToken')
 
 
@@ -397,6 +411,25 @@ def baixar(file_id, preview=False):
     return buf, nome, alvo_mime
 
 
+_raizes = {}
+
+
+def id_da_raiz():
+    """O id real do "Meu Drive" da conta conectada.
+
+    A API aceita o apelido 'root' para listar, mas os `parents` dos arquivos
+    trazem o id verdadeiro. Sem ele a trilha de navegação mostrava "Meu Drive"
+    duas vezes. Guardado por credencial: trocar de conta troca a raiz.
+    """
+    marca = _marca()
+    if marca not in _raizes:
+        try:
+            _raizes[marca] = obter(RAIZ_MEU_DRIVE, fields='id').get('id', '')
+        except DriveError:
+            return ''
+    return _raizes[marca]
+
+
 def revisoes(file_id):
     resp = _executar(service().revisions().list(
         fileId=file_id,
@@ -415,14 +448,14 @@ def buscar(nome='', mime='', page_token=None, page_size=50):
         partes.append(f"mimeType='{mime}'")
     resp = _executar(service().files().list(
         q=' and '.join(partes), pageSize=page_size, pageToken=page_token,
-        orderBy='modifiedTime desc', fields=f'nextPageToken, files({FIELDS})', **_params()))
+        orderBy='modifiedTime desc', fields=f'nextPageToken, files({FIELDS})', **_params_lista()))
     return resp.get('files', []), resp.get('nextPageToken')
 
 
 def listar_lixeira(page_token=None, page_size=100):
     resp = _executar(service().files().list(
         q='trashed=true', pageSize=page_size, pageToken=page_token,
-        orderBy='modifiedTime desc', fields=f'nextPageToken, files({FIELDS})', **_params()))
+        orderBy='modifiedTime desc', fields=f'nextPageToken, files({FIELDS})', **_params_lista()))
     return resp.get('files', []), resp.get('nextPageToken')
 
 

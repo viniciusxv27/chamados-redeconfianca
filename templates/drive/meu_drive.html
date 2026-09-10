@@ -15,56 +15,123 @@ propósito — e por isso só o SUPERADMIN chega aqui.
 </div>
 
 <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-    <div class="px-4 py-3 border-b border-gray-100 flex items-center gap-1.5 text-sm dv-scroll-x min-w-0">
-        <a href="{% url 'drive:index' %}" class="text-gray-400 hover:text-gray-600"><i class="fas fa-hard-drive"></i></a>
-        <i class="fas fa-chevron-right text-[10px] text-gray-300"></i>
-        <a href="{% url 'drive:meu_drive' %}" class="text-blue-600 hover:underline font-medium whitespace-nowrap">Meu Drive</a>
-        {% for fid, fnome in trilha %}
-        <i class="fas fa-chevron-right text-[10px] text-gray-300"></i>
-        {% if forloop.last %}
-        <span class="text-gray-700 font-medium whitespace-nowrap">{{ fnome }}</span>
-        {% else %}
-        <a href="{% url 'drive:meu_drive_folder' fid %}" class="text-blue-600 hover:underline whitespace-nowrap">{{ fnome }}</a>
-        {% endif %}
-        {% endfor %}
-    </div>
-
-    <div class="p-3 sm:p-4">
-        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-            {% for item in itens %}
-            <div class="group relative rounded-xl border border-gray-100 hover:border-blue-200 hover:shadow-sm transition bg-white">
-                <a href="{% if item.is_folder %}{% url 'drive:meu_drive_folder' item.id %}{% else %}{% url 'drive:meu_drive_arquivo' item.id %}{% endif %}"
-                   class="block p-3">
-                    <div class="flex items-center justify-center h-16">
-                        <i class="fas {{ item.mimeType|file_icon }} text-3xl"></i>
-                    </div>
-                    <p class="text-xs font-medium text-gray-700 mt-2 line-clamp-2 break-words" title="{{ item.name }}">{{ item.name }}</p>
-                    <p class="text-[10px] text-gray-400 mt-0.5">
-                        {% if item.is_folder %}Pasta{% else %}{{ item.size_h }}{% endif %}
-                        · {{ item.modifiedTime|slice:':10' }}
-                    </p>
-                </a>
-                {% if not item.is_folder %}
-                <a href="{% url 'drive:meu_drive_conteudo' item.id %}?dl=1"
-                   title="Baixar"
-                   class="absolute top-2 right-2 w-7 h-7 rounded-lg bg-white/90 border border-gray-100 text-gray-400
-                          hover:text-blue-600 hover:border-blue-200 flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
-                    <i class="fas fa-download text-xs"></i>
-                </a>
-                {% endif %}
-            </div>
-            {% empty %}
-            <p class="col-span-full text-sm text-gray-400 py-8 text-center">Esta pasta está vazia.</p>
+    <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap">
+        <div class="flex items-center gap-1.5 text-sm dv-scroll-x min-w-0">
+            <a href="{% url 'drive:index' %}" class="text-gray-400 hover:text-gray-600" aria-label="Início do Drive"><i class="fas fa-hard-drive"></i></a>
+            <i class="fas fa-chevron-right text-[10px] text-gray-300"></i>
+            {% if e_raiz %}
+            <span class="text-gray-700 font-medium whitespace-nowrap">Meu Drive</span>
+            {% else %}
+            <a href="{% url 'drive:meu_drive' %}" class="text-blue-600 hover:underline font-medium whitespace-nowrap">Meu Drive</a>
+            {% endif %}
+            {% for fid, fnome in trilha %}
+            <i class="fas fa-chevron-right text-[10px] text-gray-300"></i>
+            {% if forloop.last %}
+            <span class="text-gray-700 font-medium whitespace-nowrap">{{ fnome }}</span>
+            {% else %}
+            <a href="{% url 'drive:meu_drive_folder' fid %}" class="text-blue-600 hover:underline whitespace-nowrap">{{ fnome }}</a>
+            {% endif %}
             {% endfor %}
         </div>
 
-        {% if prox %}
-        <div class="mt-4 text-center">
-            <a href="?t={{ prox }}" class="px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">
-                Carregar mais
+        <div class="flex items-center gap-2 flex-shrink-0">
+            {% if not e_raiz %}
+            <a href="{% if pai_id %}{% url 'drive:meu_drive_folder' pai_id %}{% else %}{% url 'drive:meu_drive' %}{% endif %}"
+               class="px-3 py-1.5 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50" title="Pasta de cima">
+                <i class="fas fa-arrow-turn-up fa-flip-horizontal"></i>
             </a>
+            {% endif %}
+            <button type="button" onclick="mdNovaPasta()"
+                    class="px-3 py-1.5 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">
+                <i class="fas fa-folder-plus sm:mr-1.5"></i><span class="hidden sm:inline">Nova pasta</span>
+            </button>
+            <button type="button" onclick="document.getElementById('md-input-upload').click()"
+                    class="px-3 py-1.5 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700">
+                <i class="fas fa-upload sm:mr-1.5"></i><span class="hidden sm:inline">Enviar</span>
+            </button>
         </div>
-        {% endif %}
+    </div>
+
+    <div id="md-area" class="dv-drop p-3 sm:p-4">
+        <p class="text-[11px] text-gray-400 mb-2 hidden sm:block">
+            <i class="fas fa-hand-pointer mr-1"></i>Arraste arquivos para esta área para enviar para esta pasta.
+        </p>
+        <div id="md-grade" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+            {% include 'drive/_lista_meu_drive.html' %}
+        </div>
     </div>
 </div>
+
+<form id="md-form-upload" method="post" action="{% url 'drive:meu_drive_upload' %}" enctype="multipart/form-data" class="hidden">
+    {% csrf_token %}<input type="hidden" name="folder_id" value="{{ folder_id }}">
+    <input id="md-input-upload" type="file" name="arquivos" multiple>
+</form>
+<form id="md-form-pasta" method="post" action="{% url 'drive:meu_drive_nova_pasta' %}" class="hidden">
+    {% csrf_token %}<input type="hidden" name="folder_id" value="{{ folder_id }}"><input type="hidden" name="nome">
+</form>
+
+{% include 'drive/_meu_drive_acoes.html' %}
+
+<script>
+(function () {
+    var formUpload = document.getElementById('md-form-upload');
+    var input = document.getElementById('md-input-upload');
+
+    function enviando() {
+        var area = document.getElementById('md-area');
+        var aviso = document.createElement('div');
+        aviso.className = 'mb-3 px-3 py-2 rounded-lg bg-blue-50 text-blue-700 text-sm';
+        aviso.innerHTML = '<i class="fas fa-spinner fa-spin mr-1.5"></i>Enviando para o Google Drive…';
+        area.prepend(aviso);
+    }
+
+    input.addEventListener('change', function () {
+        if (!input.files.length) return;
+        enviando();
+        formUpload.submit();
+    });
+
+    window.mdNovaPasta = function () {
+        var nome = prompt('Nome da nova pasta:');
+        if (!nome || !nome.trim()) return;
+        var f = document.getElementById('md-form-pasta');
+        f.nome.value = nome.trim();
+        f.submit();
+    };
+
+    window.mdCarregarMais = function (botao) {
+        var alvo = new URL(window.location.href);
+        alvo.searchParams.set('t', botao.dataset.next);
+        botao.disabled = true;
+        botao.innerHTML = '<i class="fas fa-spinner fa-spin mr-1.5"></i>Carregando…';
+        fetch(alvo, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
+            .then(function (r) { if (!r.ok) throw new Error(); return r.text(); })
+            .then(function (html) {
+                var embrulho = botao.closest('.md-mais');
+                embrulho.insertAdjacentHTML('beforebegin', html);
+                embrulho.remove();
+            })
+            .catch(function () { botao.disabled = false; botao.textContent = 'Carregar mais'; });
+    };
+
+    var area = document.getElementById('md-area');
+    ['dragenter', 'dragover'].forEach(function (ev) {
+        area.addEventListener(ev, function (e) { e.preventDefault(); area.classList.add('dragover'); });
+    });
+    ['dragleave', 'drop'].forEach(function (ev) {
+        area.addEventListener(ev, function (e) {
+            e.preventDefault();
+            if (ev === 'dragleave' && area.contains(e.relatedTarget)) return;
+            area.classList.remove('dragover');
+        });
+    });
+    area.addEventListener('drop', function (e) {
+        if (e.dataTransfer && e.dataTransfer.files.length) {
+            input.files = e.dataTransfer.files;
+            enviando();
+            formUpload.submit();
+        }
+    });
+})();
+</script>
 {% endblock %}

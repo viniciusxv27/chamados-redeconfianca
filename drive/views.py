@@ -6,6 +6,7 @@ Toda view valida a permissão NO SERVIDOR antes de qualquer leitura/escrita
 """
 import io
 import logging
+import re
 from urllib.parse import quote
 
 from django.contrib import messages
@@ -532,7 +533,8 @@ def busca(request):
 @login_required
 def lixeira(request):
     setores = perms.sectors_visible(request.user)
-    if not setores:
+    meu = _exige_meu_drive(request)
+    if not setores and not meu:
         return render(request, 'drive/lixeira.html', {'itens': [], 'is_superadmin': perms.is_superadmin(request.user)})
     try:
         achados, _ = gdrive.listar_lixeira(page_size=200)
@@ -544,11 +546,16 @@ def lixeira(request):
     itens = []
     for f in achados:
         m, nivel = perms.file_allowed(request.user, f['id'])
-        if not m or nivel < ORDEM['DELETE']:
-            continue
-        f = _enriquecer(f)
-        f['setor_nome'] = m.sector.name
-        itens.append(f)
+        if m and nivel >= ORDEM['DELETE']:
+            f = _enriquecer(f)
+            f['setor_nome'] = m.sector.name
+            itens.append(f)
+        elif meu and not m:
+            # Excluído pelo Meu Drive: sem isso, a exclusão só se desfazia
+            # indo ao próprio Google Drive.
+            f = _enriquecer(f)
+            f['setor_nome'] = 'Meu Drive'
+            itens.append(f)
     return render(request, 'drive/lixeira.html', {
         'itens': itens, 'retencao': DriveConfig.get().trash_retention_days,
         'is_superadmin': perms.is_superadmin(request.user)})
@@ -558,7 +565,8 @@ def lixeira(request):
 @require_POST
 def lixeira_restaurar(request, file_id):
     mapping, nivel = perms.file_allowed(request.user, file_id)
-    if not mapping or nivel < ORDEM['DELETE']:
+    do_meu_drive = not mapping and bool(_exige_meu_drive(request))
+    if not do_meu_drive and (not mapping or nivel < ORDEM['DELETE']):
         _deny(request, file_id=file_id, detalhe='restaurar lixeira')
     try:
         meta = gdrive.obter(file_id, fields='id,name')
@@ -567,7 +575,8 @@ def lixeira_restaurar(request, file_id):
         messages.error(request, str(e))
         return redirect('drive:lixeira')
     audit.registrar(request.user, 'RESTORE', request=request, file_id=file_id,
-                    file_name=meta.get('name', ''), sector=mapping.sector, detalhe='restaurado da lixeira')
+                    file_name=meta.get('name', ''), sector=mapping.sector if mapping else None,
+                    detalhe='restaurado da lixeira' + (' (Meu Drive)' if do_meu_drive else ''))
     messages.success(request, 'Documento restaurado.')
     return redirect('drive:lixeira')
 
@@ -978,52 +987,22 @@ def oauth_desconectar(request):
     return redirect('drive:configuracao')
 
 
-@login_required
-def meu_drive(request, folder_id=None):
-    """Navega o Meu Drive inteiro da conta conectada.
+# ─── Meu Drive: todas as funções de pastas e arquivos ────────────────────────
+# Porta própria de propósito: o motor de permissões por setor protege o módulo
+# para a empresa toda, e abrir uma exceção lá dentro para o dono da conta
+# arriscaria vazar o Drive pessoal. Aqui tudo passa por `_exige_meu_drive`.
 
-    Só o SUPERADMIN entra: aqui não existe o recorte por setor: é a conta
-    pessoal do dono, com tudo dentro. Para o resto da empresa continua valendo
-    a navegação por setor, com as permissões do portal.
-    """
-    if not _exige_super(request):
-        return redirect('drive:index')
-    if not _exige_meu_drive(request):
-        messages.error(request, 'Conecte a sua conta Google em Configuração para navegar o Meu Drive.')
-        return redirect('drive:configuracao')
-    cfg = DriveConfig.get()
+# Ids do Google são letras, números, "-" e "_". Validar antes de montar URL de
+# redirect ou mandar para a API evita que um valor forjado vá parar em algum lugar.
+ID_DRIVE = re.compile(r'^[A-Za-z0-9_-]{1,160}$')
 
-    alvo = folder_id or gdrive.RAIZ_MEU_DRIVE
-    try:
-        itens, prox = gdrive.listar(alvo, page_token=request.GET.get('t') or None, page_size=60)
-        trilha = gdrive.caminho(alvo) if folder_id else []
-    except gdrive.DriveNaoConfigurado as e:
-        return _drive_off(request, e)
-    except gdrive.DriveError as e:
-        messages.error(request, f'Google Drive: {e}')
-        return redirect('drive:index')
 
-    favset = set(DriveFavorite.objects.filter(user=request.user).values_list('file_id', flat=True))
-    itens = [_enriquecer(f) for f in itens]
-    for f in itens:
-        f['fav'] = f['id'] in favset
-
-    audit.registrar(request.user, 'VIEW', request, folder_id=alvo, detalhe='Meu Drive')
-    return render(request, 'drive/meu_drive.html', {
-        'cfg': cfg, 'itens': itens, 'prox': prox, 'trilha': trilha,
-        'folder_id': alvo, 'e_raiz': not folder_id,
-        'is_superadmin': True,
-    })
+def _id_valido(valor):
+    return bool(valor) and bool(ID_DRIVE.match(valor))
 
 
 def _exige_meu_drive(request):
-    """SUPERADMIN + conta própria conectada. Devolve o cfg ou None.
-
-    O Meu Drive tem porta própria de propósito: o motor de permissões por setor
-    protege o módulo inteiro para a empresa toda, e abrir uma exceção lá dentro
-    para o dono da conta arriscaria vazar o Drive pessoal para quem não deve.
-    Aqui a exceção fica confinada a três views que só o SUPERADMIN alcança.
-    """
+    """SUPERADMIN + conta própria conectada. Devolve o cfg ou None."""
     if not perms.is_superadmin(request.user):
         return None
     cfg = DriveConfig.get()
@@ -1032,29 +1011,127 @@ def _exige_meu_drive(request):
     return cfg
 
 
+def _enriquecer_meu(f, favset=()):
+    """`_enriquecer` entendendo atalhos (shortcut).
+
+    Atalho é muito comum no Drive pessoal (o "Adicionar ao Meu Drive" de algo
+    compartilhado cria um). Tratado como arquivo comum, abrir um atalho de
+    pasta tentava baixar o próprio atalho e dava erro.
+    """
+    f = _enriquecer(f)
+    atalho = f.get('mimeType') == gdrive.SHORTCUT_MIME
+    detalhe = (f.get('shortcutDetails') or {}) if atalho else {}
+    mime_real = detalhe.get('targetMimeType') or f.get('mimeType', '')
+    f['e_atalho'] = atalho
+    f['alvo_id'] = detalhe.get('targetId') or f['id']
+    f['icone_mime'] = mime_real
+    f['is_folder'] = mime_real == FOLDER_MIME
+    if f['is_folder']:
+        f['size_h'] = ''
+    f['previewavel'] = (not f['is_folder']) and _previewavel(mime_real)
+    # Docs/Planilhas do Google não recebem arquivo como nova versão.
+    f['aceita_versao'] = (not f['is_folder']) and not mime_real.startswith('application/vnd.google-apps.')
+    f['fav'] = f['alvo_id'] in favset
+    return f
+
+
+def _favset(request):
+    return set(DriveFavorite.objects.filter(user=request.user).values_list('file_id', flat=True))
+
+
+def _url_meu_drive(folder_id=''):
+    if folder_id and folder_id != gdrive.RAIZ_MEU_DRIVE and _id_valido(folder_id):
+        return reverse('drive:meu_drive_folder', args=[folder_id])
+    return reverse('drive:meu_drive')
+
+
+def _pasta_do_post(request):
+    fid = (request.POST.get('folder_id') or '').strip()
+    return fid if _id_valido(fid) else gdrive.RAIZ_MEU_DRIVE
+
+
+def _resp_meu(request, ok, msg, folder_id='', extra=None):
+    """JSON para AJAX; redirect de volta para a pasta num POST normal."""
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        dados = {'ok': ok, 'msg': msg}
+        dados.update(extra or {})
+        return JsonResponse(dados, status=200 if ok else 400)
+    (messages.success if ok else messages.error)(request, msg)
+    return redirect(_url_meu_drive(folder_id))
+
+
+def _trilha_meu_drive(folder_id):
+    """[(id, nome)] da raiz até a pasta, sem repetir o próprio "Meu Drive"."""
+    raiz = gdrive.id_da_raiz()
+    return [(i, n) for i, n in gdrive.caminho(folder_id) if i != raiz]
+
+
+@login_required
+def meu_drive(request, folder_id=None):
+    """Navega o Meu Drive inteiro da conta conectada (só SUPERADMIN)."""
+    if not _exige_super(request):
+        return redirect('drive:index')
+    cfg = _exige_meu_drive(request)
+    if not cfg:
+        messages.error(request, 'Conecte a sua conta Google em Configuração para navegar o Meu Drive.')
+        return redirect('drive:configuracao')
+    if folder_id and not _id_valido(folder_id):
+        raise Http404('Pasta inválida.')
+
+    alvo = folder_id or gdrive.RAIZ_MEU_DRIVE
+    ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+    try:
+        itens, prox = gdrive.listar(alvo, page_token=request.GET.get('t') or None, page_size=60)
+        trilha = _trilha_meu_drive(alvo) if (folder_id and not ajax) else []
+    except gdrive.DriveNaoConfigurado as e:
+        return _drive_off(request, e)
+    except gdrive.DriveError as e:
+        messages.error(request, f'Google Drive: {e}')
+        return redirect('drive:meu_drive' if folder_id else 'drive:index')
+
+    favset = _favset(request)
+    ctx = {
+        'cfg': cfg, 'itens': [_enriquecer_meu(f, favset) for f in itens], 'prox': prox,
+        'trilha': trilha, 'folder_id': alvo, 'e_raiz': not folder_id,
+        'pai_id': trilha[-2][0] if len(trilha) > 1 else '',
+        'is_superadmin': True,
+    }
+    if ajax:
+        return render(request, 'drive/_lista_meu_drive.html', ctx)
+    audit.registrar(request.user, 'VIEW', request, folder_id=alvo, detalhe='Meu Drive')
+    return render(request, 'drive/meu_drive.html', ctx)
+
+
 @login_required
 def meu_drive_arquivo(request, file_id):
-    """Preview de um arquivo do Meu Drive (fora do recorte por setor)."""
-    if not _exige_meu_drive(request):
+    """Preview de um arquivo do Meu Drive, com todas as ações dele."""
+    if not _exige_meu_drive(request) or not _id_valido(file_id):
         _deny(request, file_id=file_id, detalhe='meu drive')
     try:
-        meta = _enriquecer(gdrive.obter(file_id))
+        meta = _enriquecer_meu(gdrive.obter(file_id), _favset(request))
     except gdrive.DriveNaoConfigurado as e:
         return _drive_off(request, e)
     except gdrive.DriveError:
         raise Http404('Arquivo não encontrado.')
 
+    if meta['e_atalho'] and meta['alvo_id'] != file_id:
+        destino = 'drive:meu_drive_folder' if meta['is_folder'] else 'drive:meu_drive_arquivo'
+        return redirect(destino, meta['alvo_id'])
+    if meta['is_folder']:
+        return redirect('drive:meu_drive_folder', folder_id=file_id)
+
     audit.registrar(request.user, 'VIEW', request, file_id=file_id,
                     file_name=meta.get('name', ''), detalhe='Meu Drive')
+    pai = (meta.get('parents') or [''])[0]
     return render(request, 'drive/meu_drive_arquivo.html', {
-        'meta': meta, 'is_superadmin': True})
+        'meta': meta, 'pai_id': pai if _id_valido(pai) else '', 'is_superadmin': True})
 
 
 @login_required
 @xframe_options_sameorigin
 def meu_drive_conteudo(request, file_id):
     """Conteúdo (inline para o preview, anexo para baixar) do Meu Drive."""
-    if not _exige_meu_drive(request):
+    if not _exige_meu_drive(request) or not _id_valido(file_id):
         _deny(request, file_id=file_id, detalhe='meu drive conteúdo')
     anexo = bool(request.GET.get('dl'))
     try:
@@ -1071,6 +1148,239 @@ def meu_drive_conteudo(request, file_id):
     resp['X-Content-Type-Options'] = 'nosniff'
     return resp
 
+
+@login_required
+@require_POST
+def meu_drive_upload(request):
+    if not _exige_meu_drive(request):
+        _deny(request, detalhe='meu drive upload')
+    pasta = _pasta_do_post(request)
+    cfg = DriveConfig.get()
+    arquivos = request.FILES.getlist('arquivos') or request.FILES.getlist('arquivo')
+    if not arquivos:
+        return _resp_meu(request, False, 'Nenhum arquivo enviado.', pasta)
+
+    ok, erros = 0, []
+    for up in arquivos:
+        erro = _valida_arquivo(cfg, up)
+        if erro:
+            erros.append(f'{up.name}: {erro}')
+            continue
+        try:
+            f = gdrive.enviar(up.name, up.content_type, up, pasta)
+        except gdrive.DriveError as e:
+            erros.append(f'{up.name}: {e}')
+            continue
+        ok += 1
+        audit.registrar(request.user, 'UPLOAD', request, file_id=f.get('id', ''),
+                        file_name=up.name, folder_id=pasta, detalhe='Meu Drive')
+
+    msg = f'{ok} arquivo(s) enviado(s).'
+    if erros:
+        # Num POST normal a mensagem é tudo o que a pessoa vê: diz o porquê.
+        msg += f' {len(erros)} com erro: ' + '; '.join(erros[:3])
+    return _resp_meu(request, ok > 0, msg, pasta, extra={'enviados': ok, 'erros': erros})
+
+
+@login_required
+@require_POST
+def meu_drive_nova_pasta(request):
+    if not _exige_meu_drive(request):
+        _deny(request, detalhe='meu drive nova pasta')
+    pasta = _pasta_do_post(request)
+    nome = (request.POST.get('nome') or '').strip()[:255]
+    if not nome:
+        return _resp_meu(request, False, 'Informe o nome da pasta.', pasta)
+    try:
+        f = gdrive.criar_pasta(nome, pasta)
+    except gdrive.DriveError as e:
+        return _resp_meu(request, False, f'Google Drive: {e}', pasta)
+    audit.registrar(request.user, 'MKDIR', request, file_id=f.get('id', ''),
+                    file_name=nome, folder_id=pasta, detalhe='Meu Drive')
+    return _resp_meu(request, True, f'Pasta "{nome}" criada.', pasta)
+
+
+@login_required
+@require_POST
+def meu_drive_renomear(request, file_id):
+    if not _exige_meu_drive(request) or not _id_valido(file_id):
+        _deny(request, file_id=file_id, detalhe='meu drive renomear')
+    pasta = _pasta_do_post(request)
+    nome = (request.POST.get('nome') or '').strip()[:255]
+    if not nome:
+        return _resp_meu(request, False, 'Informe o novo nome.', pasta)
+    try:
+        gdrive.renomear(file_id, nome)
+    except gdrive.DriveError as e:
+        return _resp_meu(request, False, f'Google Drive: {e}', pasta)
+    audit.registrar(request.user, 'RENAME', request, file_id=file_id,
+                    file_name=nome, detalhe='Meu Drive')
+    return _resp_meu(request, True, f'Renomeado para "{nome}".', pasta)
+
+
+@login_required
+@require_POST
+def meu_drive_mover(request, file_id):
+    if not _exige_meu_drive(request) or not _id_valido(file_id):
+        _deny(request, file_id=file_id, detalhe='meu drive mover')
+    pasta = _pasta_do_post(request)
+    destino = (request.POST.get('destino') or '').strip()
+    if not _id_valido(destino):
+        return _resp_meu(request, False, 'Escolha a pasta de destino.', pasta)
+    # Pasta para dentro dela mesma (ou de uma subpasta sua) criaria um laço:
+    # o Google recusa, mas com uma mensagem que ninguém entende.
+    if destino == file_id or gdrive.dentro_de(destino, file_id):
+        return _resp_meu(request, False, 'Uma pasta não pode ir para dentro dela mesma.', pasta)
+    try:
+        gdrive.mover(file_id, destino)
+    except gdrive.DriveError as e:
+        return _resp_meu(request, False, f'Google Drive: {e}', pasta)
+    audit.registrar(request.user, 'MOVE', request, file_id=file_id,
+                    folder_id=destino, detalhe='Meu Drive')
+    return _resp_meu(request, True, 'Movido.', destino, extra={'destino': destino})
+
+
+@login_required
+def meu_drive_pastas(request):
+    """Subpastas de uma pasta, para o seletor de destino do "Mover"."""
+    if not _exige_meu_drive(request):
+        return JsonResponse({'ok': False, 'msg': 'Sem acesso.'}, status=403)
+    pai = (request.GET.get('pai') or '').strip() or gdrive.RAIZ_MEU_DRIVE
+    if not _id_valido(pai):
+        return JsonResponse({'ok': False, 'msg': 'Pasta inválida.'}, status=400)
+    try:
+        pastas, _ = gdrive.listar(pai, apenas_pastas=True, page_size=200)
+        trilha = _trilha_meu_drive(pai) if pai != gdrive.RAIZ_MEU_DRIVE else []
+    except gdrive.DriveError as e:
+        return JsonResponse({'ok': False, 'msg': str(e)}, status=400)
+    acima = ''
+    if pai != gdrive.RAIZ_MEU_DRIVE:
+        acima = trilha[-2][0] if len(trilha) > 1 else gdrive.RAIZ_MEU_DRIVE
+    return JsonResponse({
+        'ok': True, 'pai': pai, 'acima': acima,
+        'nome': trilha[-1][1] if trilha else 'Meu Drive',
+        'pastas': [{'id': p['id'], 'nome': p.get('name', '')} for p in pastas],
+    })
+
+
+@login_required
+@require_POST
+def meu_drive_nova_versao(request, file_id):
+    if not _exige_meu_drive(request) or not _id_valido(file_id):
+        _deny(request, file_id=file_id, detalhe='meu drive nova versão')
+    up = request.FILES.get('arquivo')
+    if not up:
+        messages.error(request, 'Envie o arquivo da nova versão.')
+        return redirect('drive:meu_drive_arquivo', file_id=file_id)
+    erro = _valida_arquivo(DriveConfig.get(), up)
+    if erro:
+        messages.error(request, erro)
+        return redirect('drive:meu_drive_arquivo', file_id=file_id)
+    try:
+        gdrive.nova_versao(file_id, up, mimetype=up.content_type)
+    except gdrive.DriveError as e:
+        messages.error(request, f'Google Drive: {e}')
+        return redirect('drive:meu_drive_arquivo', file_id=file_id)
+    audit.registrar(request.user, 'VERSION', request, file_id=file_id,
+                    file_name=up.name, detalhe='Meu Drive')
+    messages.success(request, 'Nova versão enviada. A anterior fica no histórico.')
+    return redirect('drive:meu_drive_arquivo', file_id=file_id)
+
+
+@login_required
+@require_POST
+def meu_drive_excluir(request, file_id):
+    """Vai para a lixeira do Google — dá para restaurar em Drive → Lixeira."""
+    if not _exige_meu_drive(request) or not _id_valido(file_id):
+        _deny(request, file_id=file_id, detalhe='meu drive excluir')
+    pasta = _pasta_do_post(request)
+    try:
+        meta = gdrive.obter(file_id, fields='id,name,parents')
+        gdrive.para_lixeira(file_id, True)
+    except gdrive.DriveError as e:
+        return _resp_meu(request, False, f'Google Drive: {e}', pasta)
+    audit.registrar(request.user, 'DELETE', request, file_id=file_id,
+                    file_name=meta.get('name', ''), detalhe='Meu Drive · para a lixeira')
+    # Excluir a pasta que se está vendo: volta para a pasta de cima dela.
+    if pasta == file_id:
+        pasta = (meta.get('parents') or [''])[0]
+    return _resp_meu(request, True, f'"{meta.get("name", "Item")}" foi para a lixeira.', pasta)
+
+
+@login_required
+@require_POST
+def meu_drive_favoritar(request, file_id):
+    if not _exige_meu_drive(request) or not _id_valido(file_id):
+        _deny(request, file_id=file_id, detalhe='meu drive favoritar')
+    fav = DriveFavorite.objects.filter(user=request.user, file_id=file_id).first()
+    if fav:
+        fav.delete()
+        estado = False
+    else:
+        try:
+            meta = gdrive.obter(file_id, fields='id,name,mimeType')
+        except gdrive.DriveError:
+            meta = {}
+        DriveFavorite.objects.create(
+            user=request.user, file_id=file_id, file_name=meta.get('name', ''),
+            mime_type=meta.get('mimeType', ''), sector=None)
+        estado = True
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return JsonResponse({'favorito': estado})
+    volta = (request.POST.get('voltar') or '').strip()
+    if volta == 'arquivo':
+        return redirect('drive:meu_drive_arquivo', file_id=file_id)
+    if volta == 'favoritos':
+        return redirect('drive:favoritos')
+    return redirect(_url_meu_drive(_pasta_do_post(request)))
+
+
+@login_required
+def meu_drive_versoes(request, file_id):
+    if not _exige_meu_drive(request) or not _id_valido(file_id):
+        _deny(request, file_id=file_id, detalhe='meu drive versões')
+    try:
+        meta = gdrive.obter(file_id, fields='id,name,mimeType')
+        revs = gdrive.revisoes(file_id)
+    except gdrive.DriveError as e:
+        messages.error(request, f'Google Drive: {e}')
+        return redirect('drive:meu_drive_arquivo', file_id=file_id)
+    n = len(revs)
+    for i, r in enumerate(revs):
+        r['num'] = i + 1
+        r['size_h'] = humano_bytes(r.get('size'))
+        r['atual'] = (i == n - 1)
+    return render(request, 'drive/meu_drive_versoes.html', {
+        'meta': meta, 'revs': list(reversed(revs)), 'is_superadmin': True})
+
+
+@login_required
+@require_POST
+def meu_drive_versao_restaurar(request, file_id):
+    if not _exige_meu_drive(request) or not _id_valido(file_id):
+        _deny(request, file_id=file_id, detalhe='meu drive restaurar versão')
+    rev_id = (request.POST.get('rev') or '').strip()
+    if not _id_valido(rev_id):
+        messages.error(request, 'Versão inválida.')
+        return redirect('drive:meu_drive_versoes', file_id=file_id)
+    try:
+        from googleapiclient.http import MediaIoBaseDownload
+        buf = io.BytesIO()
+        dl = MediaIoBaseDownload(buf, gdrive.service().revisions().get_media(
+            fileId=file_id, revisionId=rev_id))
+        done = False
+        while not done:
+            _, done = dl.next_chunk()
+        buf.seek(0)
+        meta = gdrive.obter(file_id, fields='id,name,mimeType')
+        gdrive.nova_versao(file_id, buf, mimetype=meta.get('mimeType'))
+    except Exception as e:  # noqa: BLE001
+        messages.error(request, f'Não foi possível restaurar esta versão: {e}')
+        return redirect('drive:meu_drive_versoes', file_id=file_id)
+    audit.registrar(request.user, 'RESTORE', request, file_id=file_id,
+                    file_name=meta.get('name', ''), detalhe=f'Meu Drive · revisão {rev_id}')
+    messages.success(request, 'Versão restaurada como a mais recente.')
+    return redirect('drive:meu_drive_versoes', file_id=file_id)
 
 def _sa_email():
     """E-mail da service account (para o guia de compartilhamento), se der."""

@@ -7,12 +7,17 @@
 <div class="bg-white rounded-2xl border border-gray-100 shadow-sm divide-y divide-gray-50">
     {% for f in itens %}
     <div class="flex items-center gap-3 px-4 py-3 hover:bg-gray-50">
-        <a href="{% url 'drive:file_preview' f.file_id %}" class="flex items-center gap-3 flex-1 min-w-0">
+        {% comment %}
+        Favorito sem setor é do Meu Drive: ele não passa pelo motor de
+        permissões por setor, então abre (e sai dos favoritos) pela porta
+        própria do Meu Drive.
+        {% endcomment %}
+        <a href="{% if f.sector %}{% url 'drive:file_preview' f.file_id %}{% else %}{% url 'drive:meu_drive_arquivo' f.file_id %}{% endif %}" class="flex items-center gap-3 flex-1 min-w-0">
             <i class="fas {{ f.mime_type|file_icon }}"></i>
             <span class="text-sm text-gray-800 truncate flex-1">{{ f.file_name|default:'Documento' }}</span>
-            {% if f.sector %}<span class="text-xs text-gray-400 hidden sm:inline">{{ f.sector.name }}</span>{% endif %}
+            {% if f.sector %}<span class="text-xs text-gray-400 hidden sm:inline">{{ f.sector.name }}</span>{% else %}<span class="text-xs text-blue-500 hidden sm:inline">Meu Drive</span>{% endif %}
         </a>
-        <form method="post" action="{% url 'drive:favorite_toggle' f.file_id %}">
+        <form method="post" action="{% if f.sector %}{% url 'drive:favorite_toggle' f.file_id %}{% else %}{% url 'drive:meu_drive_favoritar' f.file_id %}{% endif %}">
             {% csrf_token %}
             <button type="submit" title="Remover dos favoritos" class="w-8 h-8 rounded-lg text-amber-400 hover:bg-gray-100"><i class="fas fa-star"></i></button>
         </form>

@@ -1,0 +1,152 @@
+{% comment %}
+Ações do Meu Drive que valem na lista e na página do arquivo: menu, renomear,
+mover (com seletor de pastas) e nova versão. Params: folder_id — para onde a
+tela volta depois da ação.
+
+As URLs vêm do {% url %} com um marcador trocado no JS, em vez de caminhos
+escritos à mão: se a rota mudar, o JS não fica apontando para o lugar velho.
+{% endcomment %}
+<form id="md-form-renomear" method="post" class="hidden">
+    {% csrf_token %}<input type="hidden" name="nome"><input type="hidden" name="folder_id" value="{{ folder_id }}">
+</form>
+<form id="md-form-mover" method="post" class="hidden">
+    {% csrf_token %}<input type="hidden" name="destino"><input type="hidden" name="folder_id" value="{{ folder_id }}">
+</form>
+<form id="md-form-versao" method="post" enctype="multipart/form-data" class="hidden">
+    {% csrf_token %}<input type="file" name="arquivo" id="md-input-versao">
+</form>
+
+<!-- Seletor de destino do "Mover" -->
+<div id="md-modal-mover" class="hidden fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4"
+     role="dialog" aria-modal="true" aria-labelledby="md-mover-titulo">
+    <div class="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-xl overflow-hidden">
+        <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3">
+            <div class="min-w-0">
+                <p id="md-mover-titulo" class="font-semibold text-gray-800 truncate">Mover</p>
+                <p class="text-[11px] text-gray-400 truncate">Destino: <span id="md-mover-onde">Meu Drive</span></p>
+            </div>
+            <button type="button" onclick="mdFecharMover()" class="w-8 h-8 rounded-lg text-gray-400 hover:bg-gray-100" aria-label="Fechar">
+                <i class="fas fa-xmark"></i>
+            </button>
+        </div>
+        <div class="max-h-[50vh] overflow-y-auto">
+            <button type="button" id="md-mover-acima" onclick="mdAbrirPasta(this.dataset.id)"
+                    class="hidden w-full text-left px-4 py-2.5 text-sm text-blue-600 hover:bg-blue-50 border-b border-gray-50">
+                <i class="fas fa-arrow-turn-up fa-flip-horizontal mr-2"></i>Voltar uma pasta
+            </button>
+            <div id="md-mover-lista" class="divide-y divide-gray-50"></div>
+            <p id="md-mover-status" class="px-4 py-6 text-center text-sm text-gray-400"></p>
+        </div>
+        <div class="px-4 py-3 border-t border-gray-100 flex items-center justify-end gap-2 bg-gray-50">
+            <button type="button" onclick="mdFecharMover()" class="px-3 py-2 text-sm text-gray-500 hover:text-gray-700">Cancelar</button>
+            <button type="button" id="md-mover-confirmar" onclick="mdConfirmarMover()"
+                    class="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:bg-gray-300">
+                <i class="fas fa-folder-tree mr-1.5"></i>Mover para cá
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    var URLS = {
+        renomear: "{% url 'drive:meu_drive_renomear' '__ID__' %}",
+        mover: "{% url 'drive:meu_drive_mover' '__ID__' %}",
+        versao: "{% url 'drive:meu_drive_nova_versao' '__ID__' %}",
+        pastas: "{% url 'drive:meu_drive_pastas' %}"
+    };
+    function url(nome, id) { return URLS[nome].replace('__ID__', encodeURIComponent(id)); }
+
+    window.mdMenu = function (botao) {
+        var menu = botao.nextElementSibling;
+        document.querySelectorAll('.md-menu').forEach(function (m) { if (m !== menu) m.classList.add('hidden'); });
+        menu.classList.toggle('hidden');
+    };
+    document.addEventListener('click', function (e) {
+        if (!e.target.closest('.md-menu') && !e.target.closest('[onclick^="mdMenu"]')) {
+            document.querySelectorAll('.md-menu').forEach(function (m) { m.classList.add('hidden'); });
+        }
+    });
+
+    window.mdRenomear = function (id, nome) {
+        var novo = prompt('Novo nome:', nome);
+        if (!novo || novo.trim() === nome) return;
+        var f = document.getElementById('md-form-renomear');
+        f.action = url('renomear', id);
+        f.nome.value = novo.trim();
+        f.submit();
+    };
+
+    window.mdNovaVersao = function (id) {
+        var f = document.getElementById('md-form-versao');
+        var input = document.getElementById('md-input-versao');
+        f.action = url('versao', id);
+        input.onchange = function () { if (input.files.length) f.submit(); };
+        input.click();
+    };
+
+    // ── Mover: navega pelas pastas e move para a que estiver aberta ──────
+    var movendo = null, pastaAberta = 'root';
+
+    window.mdMover = function (id, nome) {
+        movendo = id;
+        document.getElementById('md-mover-titulo').textContent = 'Mover “' + nome + '”';
+        document.getElementById('md-modal-mover').classList.remove('hidden');
+        mdAbrirPasta('root');
+    };
+    window.mdFecharMover = function () {
+        document.getElementById('md-modal-mover').classList.add('hidden');
+        movendo = null;
+    };
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') mdFecharMover(); });
+
+    window.mdAbrirPasta = function (pai) {
+        var lista = document.getElementById('md-mover-lista');
+        var status = document.getElementById('md-mover-status');
+        var acima = document.getElementById('md-mover-acima');
+        var confirmar = document.getElementById('md-mover-confirmar');
+        lista.innerHTML = '';
+        status.textContent = 'Carregando pastas…';
+        confirmar.disabled = true;
+
+        fetch(URLS.pastas + '?pai=' + encodeURIComponent(pai), {headers: {'X-Requested-With': 'XMLHttpRequest'}})
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (!d.ok) { status.textContent = d.msg || 'Não foi possível abrir a pasta.'; return; }
+                pastaAberta = d.pai;
+                document.getElementById('md-mover-onde').textContent = d.nome;
+                acima.dataset.id = d.acima;
+                acima.classList.toggle('hidden', !d.acima);
+                // O próprio item não aparece como destino: pasta dentro de si mesma.
+                var pastas = d.pastas.filter(function (p) { return p.id !== movendo; });
+                pastas.forEach(function (p) {
+                    var b = document.createElement('button');
+                    b.type = 'button';
+                    b.className = 'w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2';
+                    var icone = document.createElement('i');
+                    icone.className = 'fas fa-folder text-amber-400';
+                    var nome = document.createElement('span');
+                    nome.className = 'truncate flex-1';
+                    nome.textContent = p.nome;                 // textContent: nome de pasta não vira HTML
+                    var seta = document.createElement('i');
+                    seta.className = 'fas fa-chevron-right text-[10px] text-gray-300';
+                    b.append(icone, nome, seta);
+                    b.addEventListener('click', function () { mdAbrirPasta(p.id); });
+                    lista.appendChild(b);
+                });
+                status.textContent = pastas.length ? '' : 'Nenhuma subpasta aqui.';
+                confirmar.disabled = (pastaAberta === movendo);
+            })
+            .catch(function () { status.textContent = 'Não foi possível carregar as pastas.'; });
+    };
+
+    window.mdConfirmarMover = function () {
+        if (!movendo) return;
+        var f = document.getElementById('md-form-mover');
+        f.action = url('mover', movendo);
+        f.destino.value = pastaAberta;
+        document.getElementById('md-mover-confirmar').disabled = true;
+        f.submit();
+    };
+})();
+</script>

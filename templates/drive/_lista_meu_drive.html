@@ -1,0 +1,91 @@
+{% load drive_extras %}
+{% comment %}
+Itens de uma pasta do Meu Drive. Vai no carregamento normal e também sozinho,
+no "Carregar mais" (AJAX), por isso não depende de nada além de `itens`,
+`prox` e `folder_id`.
+
+`item.alvo_id` é o id que abre de verdade: num atalho (shortcut) é o id do
+arquivo ou da pasta de destino — abrir o próprio atalho dava erro.
+{% endcomment %}
+{% for item in itens %}
+<div class="dv-card group relative bg-white border border-gray-100 rounded-xl">
+    <a href="{% if item.is_folder %}{% url 'drive:meu_drive_folder' item.alvo_id %}{% else %}{% url 'drive:meu_drive_arquivo' item.alvo_id %}{% endif %}"
+       class="block p-3">
+        <div class="flex items-center justify-center h-14 relative">
+            <i class="fas {{ item.icone_mime|file_icon }} text-3xl"></i>
+            {% if item.e_atalho %}
+            <span class="absolute bottom-0 right-1/2 translate-x-5 w-4 h-4 rounded-full bg-white border border-gray-200 flex items-center justify-center"
+                  title="Atalho">
+                <i class="fas fa-share text-[8px] text-gray-500"></i>
+            </span>
+            {% endif %}
+        </div>
+        <p class="text-xs font-medium text-gray-700 mt-2 line-clamp-2 break-words pr-5" title="{{ item.name }}">{{ item.name }}</p>
+        <p class="text-[10px] text-gray-400 mt-0.5">
+            {% if item.is_folder %}Pasta{% else %}{{ item.size_h }}{% endif %}{% if item.modifiedTime %} · {{ item.modifiedTime|slice:':10' }}{% endif %}
+        </p>
+    </a>
+
+    <div class="absolute top-1.5 right-1.5 flex items-center">
+        {% if item.fav %}
+        <span class="w-6 h-6 flex items-center justify-center text-amber-400 text-xs" title="Favorito"><i class="fas fa-star"></i></span>
+        {% endif %}
+        <div class="relative">
+            <button type="button" onclick="mdMenu(this)" aria-label="Ações de {{ item.name }}"
+                    class="w-7 h-7 rounded-lg bg-white/90 text-gray-400 hover:bg-gray-100 hover:text-gray-700
+                           sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 transition">
+                <i class="fas fa-ellipsis-vertical"></i>
+            </button>
+            <div class="md-menu hidden absolute right-0 top-8 z-30 w-48 bg-white border border-gray-100 rounded-xl shadow-lg py-1 text-sm">
+                <a href="{% if item.is_folder %}{% url 'drive:meu_drive_folder' item.alvo_id %}{% else %}{% url 'drive:meu_drive_arquivo' item.alvo_id %}{% endif %}"
+                   class="block px-3 py-1.5 hover:bg-gray-50"><i class="fas fa-eye w-4 mr-2 text-gray-400"></i>Abrir</a>
+                {% if not item.is_folder %}
+                <a href="{% url 'drive:meu_drive_conteudo' item.alvo_id %}?dl=1"
+                   class="block px-3 py-1.5 hover:bg-gray-50"><i class="fas fa-download w-4 mr-2 text-gray-400"></i>Baixar</a>
+                {% endif %}
+                <button type="button" onclick="mdRenomear('{{ item.id }}', '{{ item.name|escapejs }}')"
+                        class="w-full text-left px-3 py-1.5 hover:bg-gray-50"><i class="fas fa-pen w-4 mr-2 text-gray-400"></i>Renomear</button>
+                <button type="button" onclick="mdMover('{{ item.id }}', '{{ item.name|escapejs }}')"
+                        class="w-full text-left px-3 py-1.5 hover:bg-gray-50"><i class="fas fa-folder-tree w-4 mr-2 text-gray-400"></i>Mover</button>
+                {% if item.aceita_versao %}
+                <button type="button" onclick="mdNovaVersao('{{ item.alvo_id }}')"
+                        class="w-full text-left px-3 py-1.5 hover:bg-gray-50"><i class="fas fa-upload w-4 mr-2 text-gray-400"></i>Nova versão</button>
+                <a href="{% url 'drive:meu_drive_versoes' item.alvo_id %}"
+                   class="block px-3 py-1.5 hover:bg-gray-50"><i class="fas fa-clock-rotate-left w-4 mr-2 text-gray-400"></i>Versões</a>
+                {% endif %}
+                {% if not item.is_folder %}
+                <form method="post" action="{% url 'drive:meu_drive_favoritar' item.alvo_id %}">
+                    {% csrf_token %}<input type="hidden" name="folder_id" value="{{ folder_id }}">
+                    <button type="submit" class="w-full text-left px-3 py-1.5 hover:bg-gray-50">
+                        <i class="fas fa-star w-4 mr-2 {% if item.fav %}text-amber-400{% else %}text-gray-400{% endif %}"></i>{% if item.fav %}Tirar dos favoritos{% else %}Favoritar{% endif %}
+                    </button>
+                </form>
+                {% endif %}
+                <div class="my-1 border-t border-gray-100"></div>
+                <form method="post" action="{% url 'drive:meu_drive_excluir' item.id %}"
+                      onsubmit="return confirm('Mover “{{ item.name|escapejs }}” para a lixeira?{% if item.is_folder %}\n\nTudo o que está dentro da pasta vai junto.{% endif %}');">
+                    {% csrf_token %}<input type="hidden" name="folder_id" value="{{ folder_id }}">
+                    <button type="submit" class="w-full text-left px-3 py-1.5 hover:bg-red-50 text-red-600">
+                        <i class="fas fa-trash-can w-4 mr-2"></i>Excluir
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% empty %}
+{% if not prox %}
+<div class="col-span-full text-center py-12 text-gray-400">
+    <i class="fas fa-folder-open text-3xl mb-2 block"></i>
+    <p class="text-sm">Esta pasta está vazia.</p>
+</div>
+{% endif %}
+{% endfor %}
+{% if prox %}
+<div class="col-span-full flex justify-center py-2 md-mais">
+    <button type="button" data-next="{{ prox }}" onclick="mdCarregarMais(this)"
+            class="px-4 py-2 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">
+        <i class="fas fa-arrow-down mr-1.5"></i>Carregar mais
+    </button>
+</div>
+{% endif %}

@@ -27,3 +27,17 @@ def file_icon(mime):
         if chave in m:
             return f'{icon} {cor}'
     return 'fa-file text-gray-400'
+
+
+@register.simple_tag
+def meu_drive_ligado(user):
+    """A aba "Meu Drive" aparece? Só para o SUPERADMIN com a conta conectada."""
+    try:
+        from drive import permissions as perms
+        from drive.models import DriveConfig
+        if not perms.is_superadmin(user):
+            return False
+        cfg = DriveConfig.objects.filter(pk=1).first()
+        return bool(cfg and cfg.usa_conta_propria and cfg.oauth_refresh_token)
+    except Exception:  # noqa: BLE001 — a aba nunca derruba a tela
+        return False

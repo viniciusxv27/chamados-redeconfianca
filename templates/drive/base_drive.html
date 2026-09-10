@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static drive_extras %}
 
 {% block title %}{% block drive_titulo %}Drive{% endblock %}{% endblock %}
 
@@ -42,6 +42,10 @@
             <a href="{% url 'drive:favoritos' %}" class="dv-tab px-3 py-1.5 text-sm font-medium {% if url == 'favoritos' %}dv-tab-active{% else %}dv-tab-idle{% endif %}"><i class="fas fa-star mr-1.5"></i>Favoritos</a>
             <a href="{% url 'drive:recentes' %}" class="dv-tab px-3 py-1.5 text-sm font-medium {% if url == 'recentes' %}dv-tab-active{% else %}dv-tab-idle{% endif %}"><i class="fas fa-clock-rotate-left mr-1.5"></i>Recentes</a>
             <a href="{% url 'drive:lixeira' %}" class="dv-tab px-3 py-1.5 text-sm font-medium {% if url == 'lixeira' %}dv-tab-active{% else %}dv-tab-idle{% endif %}"><i class="fas fa-trash-can mr-1.5"></i>Lixeira</a>
+            {% meu_drive_ligado request.user as tem_meu_drive %}
+            {% if tem_meu_drive %}
+            <a href="{% url 'drive:meu_drive' %}" class="dv-tab px-3 py-1.5 text-sm font-medium {% if 'meu_drive' in url %}dv-tab-active{% else %}dv-tab-idle{% endif %}"><i class="fas fa-folder-open mr-1.5"></i>Meu Drive</a>
+            {% endif %}
             {% if is_superadmin %}
             <span class="w-px bg-white/20 mx-1 my-1"></span>
             <a href="{% url 'drive:dashboard' %}" class="dv-tab px-3 py-1.5 text-sm font-medium {% if url == 'dashboard' %}dv-tab-active{% else %}dv-tab-idle{% endif %}"><i class="fas fa-chart-line mr-1.5"></i>Dashboard</a>
