@@ -11,6 +11,15 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'redeconfianca.settings')
 django.setup()
 
+# Criar comunicado "para todos" dispara WhatsApp REAL (Z-API) para todo
+# colaborador ativo com telefone — e o banco de dev tem gente de verdade. O
+# envio fica desligado no processo inteiro, antes de qualquer POST.
+from unittest import mock as _mock
+
+for _alvo, _retorno in (('communications.whatsapp.enviar_whatsapp_comunicado', 0),
+                        ('core.zapi.send_whatsapp_message', (False, 'bloqueado no teste'))):
+    _mock.patch(_alvo, return_value=_retorno).start()
+
 from django.conf import settings
 
 if 'testserver' not in settings.ALLOWED_HOSTS:

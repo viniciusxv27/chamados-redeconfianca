@@ -257,6 +257,10 @@ def metas_kanban(request):
         m.pode_apagar = m.pode_excluir(user, equipe_ids=equipe_ids)
         # Mesma régua da tela da meta: quem edita, duplica.
         m.pode_duplicar = m.pode_editar(user, equipe_ids=equipe_ids)
+        # Sem a edição, quem responde pela atividade pede a cópia ao gestor. No
+        # Kanban de quem não é gestor todo card já é dele (dono ou participante),
+        # então isto não custa uma consulta por card.
+        m.duplicar_por_pedido = (not m.pode_duplicar) and (not gestor or m.colaborador_id == user.id)
         m.novidades = m.novidades_para(user)
         m.tem_novidade = any(m.novidades.values())
         m.feitos, m.total_itens = m.progresso_itens
@@ -532,6 +536,17 @@ def meta_decidir(request, meta_id):
         messages.error(request, 'Decisão inválida.')
         return redirect('impulso:meta_detail', meta_id=meta.id)
 
+    if meta.duplicada_de_id:
+        # "Sua meta foi aprovada" confundiria com a atividade original, que
+        # continua como estava: o aviso diz que o que se decidiu foi a cópia.
+        base = f'Seu pedido para duplicar "{meta.duplicada_de.titulo}"'
+        if decisao == 'aprovar':
+            aviso = ('Duplicação aprovada',
+                     f'{base} foi aprovado. A cópia "{meta.titulo}" já está no Kanban.')
+        else:
+            motivo = f' Motivo: {meta.motivo_recusa}' if meta.motivo_recusa else ''
+            aviso = ('Duplicação recusada', f'{base} foi recusado.{motivo}')
+
     meta.decidida_por = request.user
     meta.decidida_em = timezone.now()
     meta.save(update_fields=['aprovacao', 'motivo_recusa', 'decidida_por',
@@ -689,7 +704,8 @@ def meta_solicitacoes(request):
 
     context = {
         'titulo': titulo,
-        'pendentes': pendentes.select_related('colaborador', 'gestor', 'solicitada_por'),
+        'pendentes': pendentes.select_related('colaborador', 'gestor', 'solicitada_por',
+                                              'duplicada_de'),
         'recusadas': decididas.select_related('colaborador', 'gestor', 'decidida_por'),
         'is_gestor': is_impulso_manager(request.user),
         'active_tab': 'confiar',
@@ -701,7 +717,8 @@ def meta_solicitacoes(request):
 @impulso_member_required
 def meta_detail(request, meta_id):
     meta = get_object_or_404(
-        Meta.objects.select_related('colaborador', 'gestor', 'avaliado_por'), id=meta_id)
+        Meta.objects.select_related('colaborador', 'gestor', 'avaliado_por', 'duplicada_de'),
+        id=meta_id)
     if not _pode_ver_meta(request.user, meta):
         messages.error(request, 'Você não tem acesso a esta meta.')
         return redirect('impulso:metas_kanban')
@@ -743,6 +760,7 @@ def meta_detail(request, meta_id):
         'is_colaborador_da_meta': meta.colaborador_id == request.user.id,
         'pode_decidir': meta.pode_decidir(request.user),
         'pode_editar_meta': meta.pode_editar(request.user),
+        'pode_solicitar_duplicacao': meta.pode_solicitar_duplicacao(request.user),
         'proxima_ocorrencia': meta.ocorrencias.first(),
         'notas_range': range(0, 6),
         'url_voltar': _url_kanban(request),
@@ -955,6 +973,10 @@ def meta_duplicar(request, meta_id):
     """
     original = get_object_or_404(Meta, id=meta_id)
     if not original.pode_editar(request.user):
+        # Sem a edição, quem responde pela atividade ainda pode pedir a cópia:
+        # vai para a tela do pedido, que manda para o gestor aprovar.
+        if original.pode_solicitar_duplicacao(request.user):
+            return redirect('impulso:meta_duplicar_solicitar', meta_id=original.id)
         messages.error(request, 'Você não pode duplicar esta atividade.')
         return redirect('impulso:meta_detail', meta_id=original.id)
 
@@ -963,6 +985,7 @@ def meta_duplicar(request, meta_id):
     # Prazo no passado viraria card nascendo atrasado; puxa para hoje.
     hoje = timezone.localdate()
     prazo = original.prazo if original.prazo and original.prazo >= hoje else hoje
+    prazo, _aviso = _prazo_em_dia_util(prazo, original.apenas_dias_uteis)
 
     copia = Meta.objects.create(
         gestor=original.gestor,
@@ -974,6 +997,7 @@ def meta_duplicar(request, meta_id):
         prazo=prazo,
         aprovacao=Meta.Aprovacao.APROVADA,
         created_by=request.user,
+        duplicada_de=original,
     )
     copia.participantes.set(original.participantes.all())
 
@@ -988,6 +1012,90 @@ def meta_duplicar(request, meta_id):
         request,
         f'Atividade duplicada com {len(passos)} passo(s). Ajuste o que precisar e salve.')
     return redirect('impulso:meta_editar', meta_id=copia.id)
+
+
+@impulso_member_required
+def meta_duplicar_solicitar(request, meta_id):
+    """Quem não edita a atividade pede para duplicá-la; o gestor aprova.
+
+    A cópia nasce PENDENTE, para a própria pessoa, com a descrição, a
+    recorrência e os passos do original — e sem os outros participantes: o
+    colaborador não põe tarefa no Kanban de ninguém (a mesma regra de criar
+    meta). Título, prazo e gestor são escolhidos por quem pede, porque é o que
+    muda de uma execução para a outra e ele não pode editar a cópia depois.
+    """
+    original = get_object_or_404(Meta.objects.select_related('gestor'), id=meta_id)
+    if original.pode_editar(request.user):
+        # Quem edita duplica direto, sem pedido.
+        return redirect('impulso:meta_detail', meta_id=original.id)
+    if not original.pode_solicitar_duplicacao(request.user):
+        messages.error(request, 'Você não pode duplicar esta atividade.')
+        return redirect('impulso:metas_kanban')
+
+    gestores = get_gestores_do_setor(request.user)
+    ja_pedida = Meta.objects.filter(duplicada_de=original, solicitada_por=request.user,
+                                    aprovacao=Meta.Aprovacao.PENDENTE).first()
+    passos = list(original.itens.order_by('ordem', 'id'))
+    hoje = timezone.localdate()
+
+    if request.method == 'POST':
+        # Um pedido por vez da mesma atividade: segura também o clique duplo.
+        if ja_pedida:
+            messages.error(request, 'Você já pediu a duplicação desta atividade — '
+                                    'aguarde o gestor decidir.')
+            return redirect('impulso:meta_detail', meta_id=ja_pedida.id)
+
+        titulo = (request.POST.get('titulo') or '').strip()[:200]
+        prazo = parse_date(request.POST.get('prazo') or '')
+        gestor = gestores.filter(id=_int_or_none(request.POST.get('gestor'))).first()
+        if not titulo or not prazo:
+            messages.error(request, 'Informe o título e o prazo da cópia.')
+            return redirect('impulso:meta_duplicar_solicitar', meta_id=original.id)
+        if prazo < hoje:
+            messages.error(request, 'O prazo não pode ser anterior a hoje.')
+            return redirect('impulso:meta_duplicar_solicitar', meta_id=original.id)
+        if not gestor:
+            messages.error(request, 'Escolha um gestor do seu setor.')
+            return redirect('impulso:meta_duplicar_solicitar', meta_id=original.id)
+        prazo, aviso_dia_util = _prazo_em_dia_util(prazo, original.apenas_dias_uteis)
+
+        copia = Meta.objects.create(
+            gestor=gestor, colaborador=request.user, titulo=titulo,
+            descricao=original.descricao, recorrencia=original.recorrencia,
+            apenas_dias_uteis=original.apenas_dias_uteis, prazo=prazo,
+            aprovacao=Meta.Aprovacao.PENDENTE, solicitada_por=request.user,
+            created_by=request.user, duplicada_de=original,
+        )
+        if passos:
+            MetaItem.objects.bulk_create([
+                MetaItem(meta=copia, texto=p.texto, ordem=n, criado_por=request.user)
+                for n, p in enumerate(passos)
+            ])
+
+        quem = request.user.get_full_name() or request.user.email
+        _notify([gestor], 'Pedido de duplicação de meta',
+                f'{quem} pediu para duplicar "{original.titulo}" como "{copia.titulo}". '
+                f'Aprove ou recuse.',
+                f'/impulso/metas/{copia.id}/')
+        if aviso_dia_util:
+            messages.info(request, aviso_dia_util)
+        messages.success(
+            request,
+            f'Pedido de duplicação enviado para {gestor.get_full_name() or gestor.email}. '
+            f'A cópia entra no seu Kanban assim que ele aprovar.')
+        return redirect('impulso:meta_detail', meta_id=copia.id)
+
+    return render(request, 'impulso/meta_duplicar_solicitar.html', {
+        'original': original,
+        'gestores': gestores,
+        'gestor_padrao': gestores.filter(id=original.gestor_id).first() or gestores.first(),
+        'titulo_sugerido': f'Cópia de {original.titulo}'[:200],
+        'prazo_sugerido': original.prazo if original.prazo and original.prazo >= hoje else hoje,
+        'hoje': hoje,
+        'passos': passos,
+        'ja_pedida': ja_pedida,
+        'active_tab': 'confiar',
+    })
 
 
 @impulso_member_required

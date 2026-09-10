@@ -93,3 +93,18 @@ def upload_exit_interview_video(instance, filename):
     ext = os.path.splitext(filename)[1].lower()
     unique_filename = f"entrevista_{uuid.uuid4()}{ext}"
     return f"entrevistas_desligamento/{unique_filename}"
+
+
+def processo_de_teste():
+    """Este processo é um script de teste do projeto (`teste_*.py`)?
+
+    Os testes daqui rodam como scripts soltos contra o banco de dev, que tem
+    colaboradores de verdade com telefone e e-mail. Um teste que criou
+    comunicado "para todos" sem neutralizar o envio chegou a disparar WhatsApp
+    real. Os pontos de saída de WhatsApp e e-mail perguntam isto antes de
+    enviar — assim nenhum teste manda mensagem, nem o que esquecer do mock.
+    """
+    import os
+    import sys
+    nome = os.path.basename(sys.argv[0]) if sys.argv else ''
+    return nome.startswith('teste_') and nome.endswith('.py')

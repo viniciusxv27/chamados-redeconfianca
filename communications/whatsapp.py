@@ -10,16 +10,21 @@ import threading
 logger = logging.getLogger(__name__)
 
 
-def _mensagem(nome, titulo, link):
-    return (
+def _mensagem(nome, titulo, link, obrigatorio=True):
+    texto = (
         f"Olá, {nome}! 👋\n\n"
         f"Você recebeu um novo comunicado no portal: *{titulo}*.\n\n"
-        f"Acesse diretamente por aqui:\n{link}\n\n"
-        f"Após ler, registre o seu \"de acordo\" (Estou Ciente) para confirmar. ✅"
+        f"Acesse diretamente por aqui:\n{link}"
     )
+    # Só o comunicado obrigatório cobra o "de acordo": pedir confirmação de um
+    # aviso que não trava nada ensina a pessoa a ignorar o pedido quando ele
+    # importa.
+    if obrigatorio:
+        texto += "\n\nApós ler, registre o seu \"de acordo\" (Estou Ciente) para confirmar. ✅"
+    return texto
 
 
-def build_payloads(titulo, usuarios, link):
+def build_payloads(titulo, usuarios, link, obrigatorio=True):
     """Monta [(phone, mensagem), ...] para usuários com telefone. Função pura (testável)."""
     payloads = []
     for u in usuarios:
@@ -27,17 +32,17 @@ def build_payloads(titulo, usuarios, link):
         if not phone:
             continue
         nome = getattr(u, 'first_name', '') or getattr(u, 'username', '') or 'colaborador'
-        payloads.append((phone, _mensagem(nome, titulo, link)))
+        payloads.append((phone, _mensagem(nome, titulo, link, obrigatorio)))
     return payloads
 
 
-def enviar_whatsapp_comunicado(titulo, usuarios, link):
+def enviar_whatsapp_comunicado(titulo, usuarios, link, obrigatorio=True):
     """Dispara (em background) o WhatsApp com o link do comunicado. Nunca levanta.
 
     Retorna a quantidade de mensagens enfileiradas (usuários com telefone).
     """
     try:
-        payloads = build_payloads(titulo, list(usuarios), link)
+        payloads = build_payloads(titulo, list(usuarios), link, obrigatorio)
     except Exception:
         logger.exception('Erro montando payloads de WhatsApp do comunicado')
         return 0

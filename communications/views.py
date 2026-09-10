@@ -451,6 +451,7 @@ def create_communication_view(request):
         communication_group_ids = request.POST.getlist('communication_groups')  # Múltiplos grupos
         is_pinned = request.POST.get('is_pinned') == 'on'
         is_popup = request.POST.get('is_popup') == 'on'
+        obrigatorio = request.POST.get('obrigatorio') == 'on'
         sender_group = request.POST.get('sender_group', '')
         custom_group_id = request.POST.get('custom_group', '')  # Manter para compatibilidade
         active_from = request.POST.get('active_from')
@@ -465,6 +466,7 @@ def create_communication_view(request):
                 send_to_all=send_to_all,
                 is_pinned=is_pinned,
                 is_popup=is_popup,
+                obrigatorio=obrigatorio,
                 sender_group=sender_group if sender_group else None,
                 custom_group_id=custom_group_id if custom_group_id else None,
                 active_from=active_from if active_from else None,
@@ -550,7 +552,8 @@ def create_communication_view(request):
                     audiencia = User.objects.filter(is_active=True).exclude(id=request.user.id)
                 else:
                     audiencia = communication.recipients.exclude(id=request.user.id)
-                enviar_whatsapp_comunicado(communication.title, audiencia, link)
+                enviar_whatsapp_comunicado(communication.title, audiencia, link,
+                                           obrigatorio=communication.obrigatorio)
             except Exception:
                 pass
 
@@ -601,6 +604,7 @@ def edit_communication_view(request, communication_id):
         communication.send_to_all = request.POST.get('send_to_all') == 'on'
         communication.is_pinned = request.POST.get('is_pinned') == 'on'
         communication.is_popup = request.POST.get('is_popup') == 'on'
+        communication.obrigatorio = request.POST.get('obrigatorio') == 'on'
         
         active_from = request.POST.get('active_from')
         active_until = request.POST.get('active_until')

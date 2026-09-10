@@ -1,7 +1,9 @@
-"""Checker do portal_popups: obriga o "de acordo" em todos os comunicados ativos.
+"""Checker do portal_popups: obriga o "de acordo" nos comunicados OBRIGATÓRIOS.
 
-Enquanto o usuário tiver algum comunicado ativo direcionado a ele sem
-CommunicationRead.status == 'ESTOU_CIENTE', o popup bloqueante permanece.
+Enquanto o usuário tiver algum comunicado obrigatório ativo direcionado a ele
+sem CommunicationRead.status == 'ESTOU_CIENTE', o popup bloqueante permanece.
+Comunicado com a "Obrigatoriedade" desmarcada não entra: a pessoa recebe e
+pode dar o de acordo, mas não fica travada.
 Como o popup usa action_url='/communications/', toda a seção de comunicados
 fica liberada (on_action_page faz startswith), permitindo ler e dar o de acordo.
 """
@@ -20,7 +22,8 @@ REGRA_ATIVA_DESDE = date(2026, 7, 27)
 
 
 def comunicados_pendentes(user):
-    """Comunicados ativos direcionados ao usuário que ainda aguardam o "de acordo".
+    """Comunicados obrigatórios e ativos direcionados ao usuário que ainda
+    aguardam o "de acordo".
 
     Fonte única usada tanto pelo checker do popup quanto pela listagem exibida
     dentro dele.
@@ -33,6 +36,7 @@ def comunicados_pendentes(user):
     now = timezone.now()
     return (
         Communication.objects
+        .filter(obrigatorio=True)
         .filter(created_at__date__gte=REGRA_ATIVA_DESDE)
         .filter(Q(recipients=user) | Q(send_to_all=True))
         .filter(Q(active_from__isnull=True) | Q(active_from__lte=now))

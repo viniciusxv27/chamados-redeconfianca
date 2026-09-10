@@ -44,6 +44,12 @@ def send_whatsapp_message(phone: str, message: str, *, timeout: int = 10) -> Tup
     Nunca lança exceção — em caso de falha de rede registra log e devolve
     ``(False, '...mensagem de erro...')``.
     """
+    # Teste nunca manda WhatsApp: o banco de dev tem telefone de gente de verdade.
+    from core.utils import processo_de_teste
+    if processo_de_teste():
+        logger.warning('WhatsApp bloqueado: processo de teste.')
+        return False, 'Envio bloqueado: processo de teste.'
+
     instance_id = getattr(settings, 'ZAPI_INSTANCE_ID', '')
     token = getattr(settings, 'ZAPI_TOKEN', '')
     client_token = getattr(settings, 'ZAPI_CLIENT_TOKEN', '')

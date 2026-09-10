@@ -85,6 +85,13 @@ class Communication(models.Model):
     send_to_all = models.BooleanField(default=False, verbose_name="Enviar para Todos")
     is_pinned = models.BooleanField(default=False, verbose_name="Fixar na Dashboard")
     is_popup = models.BooleanField(default=False, verbose_name="Exibir como Pop-up")
+    # Só comunicado obrigatório trava o portal no popup de "de acordo". Os
+    # demais continuam aceitando o "Estou Ciente", mas não bloqueiam ninguém —
+    # antes todo comunicado recente travava, e o aviso importante se perdia no
+    # meio de dezenas de avisos triviais.
+    obrigatorio = models.BooleanField(
+        default=False, verbose_name="Obrigatoriedade",
+        help_text='Marcado, o comunicado trava o portal até a pessoa dar o "Estou Ciente".')
     
     # Reaction fields
     liked_by = models.ManyToManyField(

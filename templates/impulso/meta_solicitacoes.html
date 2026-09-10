@@ -30,6 +30,11 @@
             <div class="flex items-start justify-between gap-4 flex-wrap">
                 <div class="min-w-0 flex-1">
                     <a href="{% url 'impulso:meta_detail' m.id %}" class="text-sm font-semibold text-gray-900 hover:text-orange-600">{{ m.titulo }}</a>
+                    {% if m.duplicada_de %}
+                    <span class="ml-1.5 align-middle text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-semibold">
+                        <i class="fas fa-copy mr-0.5"></i>duplicação
+                    </span>
+                    {% endif %}
                     <p class="text-xs text-gray-500 mt-0.5">
                         {% if is_gestor %}
                         Pedida por <strong>{{ m.colaborador.get_full_name|default:m.colaborador.email }}</strong>
@@ -39,6 +44,9 @@
                         · prazo {{ m.prazo|date:"d/m/Y" }}
                         · {{ m.get_recorrencia_display }}
                     </p>
+                    {% if m.duplicada_de %}
+                    <p class="text-xs text-indigo-700 mt-1"><i class="fas fa-copy mr-1"></i>Cópia de: {{ m.duplicada_de.titulo }}</p>
+                    {% endif %}
                     <p class="text-sm text-gray-600 mt-2 line-clamp-2">{{ m.descricao|truncatechars:180 }}</p>
                 </div>
 

@@ -25,6 +25,11 @@ def enviar(para, assunto, html, texto=''):
     Nunca levanta exceção: quem chama está no meio de um fluxo de usuário e
     precisa decidir a mensagem da tela, não receber um stack trace.
     """
+    # Teste nunca manda e-mail: o banco de dev tem endereço de gente de verdade.
+    from core.utils import processo_de_teste
+    if processo_de_teste():
+        return False, 'Envio bloqueado: processo de teste.'
+
     if not configurada():
         return False, 'RESEND_API_KEY não configurada no .env.'
 

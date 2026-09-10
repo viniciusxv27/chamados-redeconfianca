@@ -159,6 +159,12 @@ class Meta(models.Model):
         related_name='impulso_metas_decididas', verbose_name='Decidida por')
     decidida_em = models.DateTimeField(null=True, blank=True, verbose_name='Decidida em')
     motivo_recusa = models.TextField(blank=True, verbose_name='Motivo da recusa')
+    # De onde veio uma cópia. Serve para o gestor saber que está aprovando uma
+    # DUPLICAÇÃO (e de quê), e para a mesma pessoa não empilhar dois pedidos
+    # iguais da mesma atividade enquanto o primeiro não foi decidido.
+    duplicada_de = models.ForeignKey(
+        'self', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='duplicacoes', verbose_name='Duplicada de')
 
     status = models.CharField(
         max_length=14, choices=Status.choices,
@@ -348,6 +354,21 @@ class Meta(models.Model):
         if equipe_ids is not None:
             return self.colaborador_id in equipe_ids
         return get_colaboradores_do_gestor(user).filter(id=self.colaborador_id).exists()
+
+    def pode_solicitar_duplicacao(self, user):
+        """Quem PEDE ao gestor para duplicar, em vez de duplicar direto.
+
+        Quem responde pela atividade — dono ou participante — sem ter a edição
+        dela. A cópia é sempre para a própria pessoa e nasce como solicitação:
+        sem isso, duplicar viraria um jeito de pôr tarefa no próprio Kanban sem
+        o gestor saber, ou no Kanban dos outros participantes.
+        """
+        if not (user and user.is_authenticated) or not self.vale_pontos:
+            return False
+        if self.pode_editar(user):
+            return False
+        return (self.colaborador_id == user.id
+                or self.participantes.filter(id=user.id).exists())
 
     def pode_cancelar_solicitacao(self, user):
         """Quem pede pode desistir — enquanto a solicitação ainda está parada.

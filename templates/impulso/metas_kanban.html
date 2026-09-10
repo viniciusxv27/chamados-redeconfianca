@@ -173,7 +173,7 @@
 
     // O botão vive dentro de um card arrastável: sem isso, começar a arrastar
     // a partir dele cancelaria o clique.
-    document.querySelectorAll('.imp-duplicar, .imp-excluir').forEach(function (b) {
+    document.querySelectorAll('.imp-duplicar, .imp-duplicar-pedido, .imp-excluir').forEach(function (b) {
         b.addEventListener('mousedown', function (e) { e.stopPropagation(); });
         b.setAttribute('draggable', 'false');
     });

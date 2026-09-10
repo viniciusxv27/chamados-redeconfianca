@@ -128,8 +128,20 @@ try:
     cc.force_login(colab)
     antes = Meta.objects.count()
     r = cc.post(f'/impulso/metas/{original.id}/duplicar/', follow=True)
-    t('colaborador não duplica', Meta.objects.count() == antes)
-    t('a tela explica', 'não pode duplicar' in r.content.decode())
+    t('colaborador não duplica direto', Meta.objects.count() == antes)
+    # Desde que o PADRÃO pode PEDIR a duplicação, o POST direto dele vai para
+    # a tela do pedido (que manda para o gestor aprovar) em vez de só negar.
+    t('e vai para a tela de pedir a duplicação',
+      bool(r.redirect_chain) and '/duplicar/solicitar/' in r.redirect_chain[-1][0],
+      r.redirect_chain)
+
+    estranho = novo('dp.estranho', [adm])
+    ce = Client()
+    ce.force_login(estranho)
+    r = ce.post(f'/impulso/metas/{original.id}/duplicar/', follow=True)
+    t('quem não responde pela atividade não duplica', Meta.objects.count() == antes)
+    t('nem é mandado para o pedido',
+      not any('/duplicar/solicitar/' in u for u, _ in r.redirect_chain), r.redirect_chain)
 
     r = cg.get(f'/impulso/metas/{original.id}/duplicar/')
     t('GET não duplica (405)', r.status_code == 405, r.status_code)
@@ -141,8 +153,10 @@ try:
     t('o botão de duplicar aparece para o gestor',
       f'/impulso/metas/{original.id}/duplicar/' in html)
     html = cc.get(f'/impulso/metas/{original.id}/').content.decode()
-    t('e não aparece para o colaborador',
-      f'/impulso/metas/{original.id}/duplicar/' not in html)
+    t('o colaborador não recebe o formulário de duplicar direto',
+      f'action="/impulso/metas/{original.id}/duplicar/"' not in html)
+    t('recebe o link de pedir a duplicação',
+      f'/impulso/metas/{original.id}/duplicar/solicitar/' in html)
 
     print('\n== BOTÃO DE DUPLICAR NO CARD DO KANBAN ==')
     kanban = cg.get('/impulso/metas/').content.decode()
@@ -157,8 +171,9 @@ try:
     kanban_colab = cc.get('/impulso/metas/').content.decode()
     # O seletor do script aparece para todo mundo (não acha nada); o que
     # importa é não existir botão nenhum no HTML.
-    t('colaborador não vê o botão no card',
-      'class="imp-duplicar' not in kanban_colab)
+    t('colaborador não vê o botão de duplicar direto no card',
+      'class="imp-duplicar ' not in kanban_colab)
+    t('vê o de pedir a duplicação', 'class="imp-duplicar-pedido' in kanban_colab)
     t('e nem o de excluir', 'class="imp-excluir' not in kanban_colab)
 
     antes_kanban = Meta.objects.count()

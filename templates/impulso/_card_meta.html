@@ -31,6 +31,13 @@ diferentes do cartão na primeira alteração.
                     data-titulo="{{ m.titulo }}">
                 <i class="fas fa-copy text-xs"></i>
             </button>
+            {% elif m.duplicar_por_pedido %}
+            {# Sem a edição, duplicar vira pedido: abre a tela que manda para o gestor aprovar. #}
+            <a href="{% url 'impulso:meta_duplicar_solicitar' m.id %}" draggable="false"
+               class="imp-duplicar-pedido w-6 h-6 rounded-md text-gray-300 hover:text-orange-600 hover:bg-orange-50 flex items-center justify-center transition-colors"
+               title="Pedir ao gestor para duplicar esta atividade">
+                <i class="fas fa-copy text-xs"></i>
+            </a>
             {% endif %}
             {% if m.pode_apagar %}
             {% with imp=m.impacto_da_exclusao %}
