@@ -18,6 +18,9 @@ def pode_usar(user, cfg=None):
         return False
     if e_superadmin(user):
         return True
+    from users.module_access import user_has_module
+    if user_has_module(user, 'talentos'):
+        return True
     try:
         from .models import ConfiguracaoCurriculos
         cfg = cfg or ConfiguracaoCurriculos.get()

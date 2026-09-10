@@ -12,7 +12,9 @@ def user_can_manage_suppliers(user):
     """Verifica se o usuário pode gerenciar fornecedores"""
     if user.is_superuser:
         return True
-    return user.groups.filter(name='Gestores de Fornecedores').exists()
+    from users.module_access import user_has_module
+    return (user.groups.filter(name='Gestores de Fornecedores').exists()
+            or user_has_module(user, 'fornecedores'))
 
 
 @login_required

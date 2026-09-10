@@ -512,36 +512,91 @@
                     </div>
                 </div>
 
-                <!-- Liberação individual de módulos (grant-only) — só SUPERADMIN abre esta tela -->
-                <div class="pt-6 border-t border-gray-200 mt-6">
-                    <div class="flex items-start gap-2 mb-1">
-                        <i class="fas fa-toggle-on text-primary mt-1"></i>
-                        <div>
-                            <h3 class="text-lg font-semibold text-gray-900">Acessos de módulo (liberação individual)</h3>
-                            <p class="text-sm text-gray-500">
-                                Marque para <strong>liberar</strong> um módulo só para este usuário, somando-se à regra normal
-                                (hierarquia/grupo). Desmarcar remove apenas a liberação individual — não tira o acesso que a
-                                pessoa já tenha pela regra normal.
-                            </p>
+                <!-- Liberação individual de acessos (grant-only): só o SUPERADMIN altera -->
+                <div class="pt-6 border-t border-gray-200 mt-6" id="acessosIndividuais">
+                    <div class="flex items-start justify-between gap-3 flex-wrap mb-3">
+                        <div class="flex items-start gap-2">
+                            <i class="fas fa-key text-primary mt-1"></i>
+                            <div>
+                                <h3 class="text-lg font-semibold text-gray-900">Acessos de módulo (liberação individual)</h3>
+                                <p class="text-sm text-gray-500">
+                                    Cada caixa <strong>libera</strong> uma visão só para esta pessoa, somando-se à regra normal
+                                    (hierarquia/grupo). Desmarcar tira apenas a liberação individual — nunca o acesso que ela
+                                    já tem pela regra normal.
+                                </p>
+                            </div>
                         </div>
+                        {% if pode_liberar_acessos %}
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs text-gray-500"><strong id="acessoContador">{{ modulos_liberados|length }}</strong> liberação(ões)</span>
+                            <div class="relative">
+                                <i class="fas fa-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-300 text-xs"></i>
+                                <input type="search" id="acessoBusca" placeholder="Filtrar módulo…"
+                                       class="pl-7 pr-2 py-1.5 text-xs border border-gray-200 rounded-lg w-44 focus:ring-2 focus:ring-primary focus:border-transparent">
+                            </div>
+                        </div>
+                        {% endif %}
                     </div>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-3">
-                        {% for grupo, itens in modulos_por_grupo %}
-                        <div class="border border-gray-200 rounded-lg p-3">
-                            <p class="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">{{ grupo }}</p>
-                            <div class="space-y-2">
-                                {% for chave, rotulo in itens %}
+
+                    {% if pode_liberar_acessos %}
+                    {% for grupo, modulos in catalogo_acessos %}
+                    <p class="acesso-grupo text-[11px] font-semibold uppercase tracking-wide text-gray-400 mt-4 mb-2">{{ grupo }}</p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                        {% for m in modulos %}
+                        <div class="acesso-modulo border border-gray-200 rounded-xl p-3 bg-white transition-colors"
+                             data-busca="{{ m.rotulo|lower }} {{ m.grupo|lower }}{% for c, r, d in m.permissoes %} {{ r|lower }}{% endfor %}">
+                            <div class="flex items-start justify-between gap-2">
+                                <div class="min-w-0">
+                                    <p class="text-sm font-semibold text-gray-800">{{ m.rotulo }}</p>
+                                    <p class="text-[11px] text-gray-500 leading-snug">{{ m.descricao }}</p>
+                                </div>
+                                <button type="button" class="acesso-tudo text-[11px] text-primary hover:underline flex-shrink-0" title="Marcar ou desmarcar tudo deste módulo">tudo</button>
+                            </div>
+                            <div class="mt-2 space-y-1.5">
+                                {% if m.acesso %}
                                 <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                                    <input type="checkbox" name="modulos" value="{{ m.chave }}"
+                                           class="acesso-principal rounded text-primary focus:ring-primary"
+                                           {% if m.chave in modulos_liberados %}checked{% endif %}>
+                                    <span class="font-medium">Acesso ao módulo</span>
+                                </label>
+                                {% endif %}
+                                {% for chave, rotulo, descricao in m.permissoes %}
+                                <label class="flex items-start gap-2 text-sm text-gray-700 cursor-pointer {% if m.acesso %}ml-5{% endif %}">
                                     <input type="checkbox" name="modulos" value="{{ chave }}"
-                                           {% if chave in modulos_liberados %}checked{% endif %}
-                                           class="rounded text-primary focus:ring-primary">
-                                    {{ rotulo }}
+                                           class="acesso-detalhe rounded text-primary focus:ring-primary mt-0.5"
+                                           {% if chave in modulos_liberados %}checked{% endif %}>
+                                    <span class="min-w-0">
+                                        {{ rotulo }}
+                                        <span class="block text-[11px] text-gray-400 leading-snug">{{ descricao }}</span>
+                                    </span>
                                 </label>
                                 {% endfor %}
                             </div>
                         </div>
                         {% endfor %}
                     </div>
+                    {% endfor %}
+                    <p class="acesso-nada hidden text-sm text-gray-400 mt-3">Nenhum módulo com esse nome.</p>
+                    {% else %}
+                    {% comment %}
+                    A ADMINISTRAÇÃO edita o cadastro mas não distribui acesso.
+                    Mostra o que existe, para ela não descobrir por acaso.
+                    {% endcomment %}
+                    <div class="rounded-lg bg-gray-50 border border-gray-200 px-4 py-3 text-sm text-gray-600">
+                        <i class="fas fa-lock text-gray-400 mr-1.5"></i>Só o SUPERADMIN dá ou tira liberação individual.
+                        {% if liberacoes_atuais %}
+                        <p class="mt-2 text-xs text-gray-500">Liberações atuais desta pessoa:</p>
+                        <ul class="mt-1 flex flex-wrap gap-1.5">
+                            {% for r in liberacoes_atuais %}
+                            <li class="px-2 py-0.5 rounded-full bg-white border border-gray-200 text-xs text-gray-700">{{ r }}</li>
+                            {% endfor %}
+                        </ul>
+                        {% else %}
+                        <p class="mt-1 text-xs text-gray-400">Esta pessoa não tem liberação individual.</p>
+                        {% endif %}
+                    </div>
+                    {% endif %}
                 </div>
 
                 <!-- Submit Button -->
@@ -828,6 +883,66 @@ document.addEventListener('DOMContentLoaded', function() {
     if (form) form.addEventListener('submit', function () {
         if (sel.value !== '__novo__') input.value = sel.value;
     });
+})();
+</script>
+
+<script>
+// Acessos individuais: detalhe puxa o acesso ao módulo; tirar o acesso limpa os
+// detalhes; "tudo" marca/desmarca o card; a busca filtra os cards por nome.
+(function () {
+    var raiz = document.getElementById('acessosIndividuais');
+    if (!raiz) return;
+    var contador = document.getElementById('acessoContador');
+
+    function contar() {
+        if (!contador) return;
+        contador.textContent = raiz.querySelectorAll('input[name="modulos"]:checked').length;
+    }
+
+    raiz.querySelectorAll('.acesso-modulo').forEach(function (card) {
+        var principal = card.querySelector('.acesso-principal');
+        var detalhes = Array.prototype.slice.call(card.querySelectorAll('.acesso-detalhe'));
+        var todos = (principal ? [principal] : []).concat(detalhes);
+
+        detalhes.forEach(function (d) {
+            d.addEventListener('change', function () {
+                if (d.checked && principal) principal.checked = true;
+                contar();
+            });
+        });
+        if (principal) principal.addEventListener('change', function () {
+            if (!principal.checked) detalhes.forEach(function (d) { d.checked = false; });
+            contar();
+        });
+        var tudo = card.querySelector('.acesso-tudo');
+        if (tudo) tudo.addEventListener('click', function () {
+            var ligar = todos.some(function (c) { return !c.checked; });
+            todos.forEach(function (c) { c.checked = ligar; });
+            contar();
+        });
+    });
+
+    var busca = document.getElementById('acessoBusca');
+    if (busca) busca.addEventListener('input', function () {
+        var termo = busca.value.trim().toLowerCase();
+        var algum = false;
+        raiz.querySelectorAll('.acesso-modulo').forEach(function (card) {
+            var mostra = !termo || (card.dataset.busca || '').indexOf(termo) !== -1;
+            card.classList.toggle('hidden', !mostra);
+            if (mostra) algum = true;
+        });
+        // Título de grupo some quando nenhum card dele sobrou.
+        raiz.querySelectorAll('.acesso-grupo').forEach(function (titulo) {
+            var grade = titulo.nextElementSibling;
+            var vivo = grade && grade.querySelector('.acesso-modulo:not(.hidden)');
+            titulo.classList.toggle('hidden', !vivo);
+            if (grade) grade.classList.toggle('hidden', !vivo);
+        });
+        var nada = raiz.querySelector('.acesso-nada');
+        if (nada) nada.classList.toggle('hidden', algum);
+    });
+
+    contar();
 })();
 </script>
 {% endblock %}

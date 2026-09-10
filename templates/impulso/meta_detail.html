@@ -98,6 +98,9 @@
                     {% if meta.recorrencia != 'UNICA' and not meta.recorrencia_ativa %}
                     <span class="ml-1 text-gray-400" title="Meta anterior à recorrência automática">(não gera nova ocorrência)</span>
                     {% endif %}
+                    {% if meta.apenas_dias_uteis %}
+                    <span class="ml-1 px-1.5 py-0.5 rounded bg-sky-50 text-sky-700" title="Fim de semana passa para a segunda-feira">somente dias úteis</span>
+                    {% endif %}
                 </span>
                 <span class="{% if meta.is_overdue %}text-red-600 font-semibold{% endif %}"><i class="fas fa-clock mr-1"></i>Prazo: {{ meta.prazo|date:"d/m/Y" }}</span>
                 <span><i class="fas fa-user-tie mr-1"></i>Gestor: {{ meta.gestor.get_full_name|default:meta.gestor.email }}</span>

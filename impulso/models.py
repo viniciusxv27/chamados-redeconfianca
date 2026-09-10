@@ -64,6 +64,17 @@ def upload_certificado(instance, filename):
 # ==========================================================================
 # CONFIAR
 # ==========================================================================
+def proximo_dia_util(dia):
+    """Sábado e domingo andam para a segunda-feira; dia útil fica como está.
+
+    Feriado não entra: a régua pedida foi fim de semana, e o portal não tem
+    calendário de feriados nacional/municipal em que se possa confiar.
+    """
+    while dia.weekday() >= 5:
+        dia += timedelta(days=1)
+    return dia
+
+
 class Meta(models.Model):
     """Meta/tarefa atribuída por um gestor a um colaborador.
 
@@ -127,6 +138,12 @@ class Meta(models.Model):
     recorrencia_de = models.ForeignKey(
         'self', on_delete=models.SET_NULL, null=True, blank=True,
         related_name='ocorrencias', verbose_name='Ocorrência anterior')
+    # Uma tarefa diária de loja não existe no domingo: com isto ligado, a
+    # ocorrência que cair em sábado ou domingo anda para a segunda-feira —
+    # tanto o prazo escolhido na criação quanto cada repetição gerada depois.
+    apenas_dias_uteis = models.BooleanField(
+        default=False, verbose_name='Somente dias úteis',
+        help_text='Prazo que cair no fim de semana passa para o próximo dia útil.')
     prazo = models.DateField(verbose_name='Prazo')
 
     # Solicitação feita pelo colaborador, que o gestor precisa aprovar.
@@ -367,17 +384,23 @@ class Meta(models.Model):
         if not self.repete or not self.prazo:
             return None
         if self.recorrencia == self.Recorrencia.DIARIA:
-            return self.prazo + timedelta(days=1)
-        if self.recorrencia == self.Recorrencia.SEMANAL:
-            return self.prazo + timedelta(days=7)
-        if self.recorrencia == self.Recorrencia.QUINZENAL:
-            return self.prazo + timedelta(days=15)
-        # Mensal: mesmo dia do mês seguinte, encolhendo quando o mês é curto
-        # (31/01 vira 28/02, não 03/03).
-        ano = self.prazo.year + (1 if self.prazo.month == 12 else 0)
-        mes = 1 if self.prazo.month == 12 else self.prazo.month + 1
-        dia = min(self.prazo.day, calendar.monthrange(ano, mes)[1])
-        return date(ano, mes, dia)
+            proximo = self.prazo + timedelta(days=1)
+        elif self.recorrencia == self.Recorrencia.SEMANAL:
+            proximo = self.prazo + timedelta(days=7)
+        elif self.recorrencia == self.Recorrencia.QUINZENAL:
+            proximo = self.prazo + timedelta(days=15)
+        else:
+            # Mensal: mesmo dia do mês seguinte, encolhendo quando o mês é curto
+            # (31/01 vira 28/02, não 03/03).
+            ano = self.prazo.year + (1 if self.prazo.month == 12 else 0)
+            mes = 1 if self.prazo.month == 12 else self.prazo.month + 1
+            dia = min(self.prazo.day, calendar.monthrange(ano, mes)[1])
+            proximo = date(ano, mes, dia)
+        return self.ajustar_dia_util(proximo)
+
+    def ajustar_dia_util(self, dia):
+        """Com "somente dias úteis", fim de semana anda para a segunda."""
+        return proximo_dia_util(dia) if (self.apenas_dias_uteis and dia) else dia
 
     def criar_proxima_ocorrencia(self):
         """Gera a próxima ocorrência de uma meta recorrente concluída.
@@ -396,6 +419,7 @@ class Meta(models.Model):
             recorrencia=self.recorrencia,
             recorrencia_ativa=True,
             recorrencia_de=self,
+            apenas_dias_uteis=self.apenas_dias_uteis,
             prazo=proximo,
             aprovacao=self.Aprovacao.APROVADA,
             created_by_id=self.created_by_id,

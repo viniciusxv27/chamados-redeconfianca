@@ -12,7 +12,9 @@ def e_gestor(user):
     """Vê todas as lojas e importa a base."""
     if not user or not user.is_authenticated:
         return False
-    return bool(user.is_superuser or getattr(user, 'hierarchy', '') in GESTORES)
+    from users.module_access import user_has_module
+    return bool(user.is_superuser or getattr(user, 'hierarchy', '') in GESTORES
+                or user_has_module(user, 'caixa.gestor'))
 
 
 def lojas():

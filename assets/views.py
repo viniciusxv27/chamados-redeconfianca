@@ -1055,6 +1055,9 @@ def can_approve_requests(user):
     """Verifica se o usuário pode aprovar/reprovar solicitações"""
     if user.hierarchy in ['SUPERADMIN', 'ADMIN']:
         return True
+    from users.module_access import user_has_module
+    if user_has_module(user, 'almoxarifado.aprovar'):
+        return True
     manager = _get_inventory_manager(user)
     if manager:
         return manager.is_active and manager.can_approve_requests

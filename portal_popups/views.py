@@ -9,6 +9,9 @@ from .models import PortalPopup
 
 
 def _can_manage_popups(user):
+    from users.module_access import user_has_module
+    if user_has_module(user, 'popups.gerenciar'):
+        return True
     return user.is_authenticated and (
         user.is_superuser or getattr(user, 'hierarchy', None) == 'SUPERADMIN'
     )

@@ -109,7 +109,7 @@ def redeem_prize(request, prize_id):
 @login_required
 def manage_prizes(request):
     """Gerenciar prêmios (admin)"""
-    if not request.user.can_manage_users():
+    if not request.user.can_manage_prizes():
         messages.error(request, 'Acesso negado.')
         return redirect('marketplace')
     
@@ -133,7 +133,7 @@ def manage_prizes(request):
 @login_required
 def create_prize(request):
     """Criar novo prêmio"""
-    if not request.user.can_manage_users():
+    if not request.user.can_manage_prizes():
         messages.error(request, 'Acesso negado.')
         return redirect('marketplace')
     
@@ -182,7 +182,7 @@ def create_prize(request):
 @login_required
 def edit_prize(request, prize_id):
     """Editar prêmio existente"""
-    if not request.user.can_manage_users():
+    if not request.user.can_manage_prizes():
         messages.error(request, 'Acesso negado.')
         return redirect('marketplace')
     
@@ -243,7 +243,7 @@ def edit_prize(request, prize_id):
 @login_required
 def manage_categories(request):
     """Gerenciar categorias de prêmios"""
-    if not request.user.can_manage_users():
+    if not request.user.can_manage_prizes():
         messages.error(request, 'Acesso negado.')
         return redirect('marketplace')
     
@@ -278,7 +278,7 @@ def redemption_history(request):
 @login_required
 def manage_redemptions(request):
     """Gerenciar resgates (admin)"""
-    if not request.user.can_manage_users():
+    if not request.user.can_manage_prizes():
         messages.error(request, 'Acesso negado.')
         return redirect('marketplace')
     
@@ -328,7 +328,7 @@ def manage_redemptions(request):
 @login_required
 def export_redemptions_excel(request):
     """Exportar resgates para Excel (respeita os filtros aplicados)"""
-    if not request.user.can_manage_users():
+    if not request.user.can_manage_prizes():
         messages.error(request, 'Acesso negado.')
         return redirect('marketplace')
 
@@ -419,7 +419,7 @@ def export_redemptions_excel(request):
 @login_required
 def update_redemption_status(request, redemption_id):
     """Atualizar status do resgate"""
-    if not request.user.can_manage_users():
+    if not request.user.can_manage_prizes():
         return JsonResponse({'success': False, 'error': 'Acesso negado'})
     
     if request.method != 'POST':
@@ -495,7 +495,7 @@ def update_redemption_status(request, redemption_id):
 @require_POST
 def notify_pickup(request, redemption_id):
     """Notifica o usuário que o prêmio está na SEDE e define a data limite de retirada."""
-    if not request.user.can_manage_users():
+    if not request.user.can_manage_prizes():
         return JsonResponse({'success': False, 'error': 'Acesso negado'})
 
     redemption = get_object_or_404(Redemption, id=redemption_id)
@@ -565,7 +565,7 @@ def cancel_redemption(request, redemption_id):
     redemption = get_object_or_404(Redemption, id=redemption_id)
     
     # Verificar permissão: admin ou próprio usuário
-    if not (request.user.can_manage_users() or redemption.user == request.user):
+    if not (request.user.can_manage_prizes() or redemption.user == request.user):
         return JsonResponse({'success': False, 'error': 'Acesso negado'})
     
     # Só pode cancelar se estiver pendente ou aprovado
@@ -622,7 +622,7 @@ def cancel_redemption(request, redemption_id):
 @login_required
 def manage_discounts(request):
     """Gerenciar descontos (admin)"""
-    if not request.user.can_manage_users():
+    if not request.user.can_manage_prizes():
         messages.error(request, 'Acesso negado.')
         return redirect('marketplace')
     
@@ -658,7 +658,7 @@ def manage_discounts(request):
 @login_required
 def create_discount(request):
     """Criar novo desconto"""
-    if not request.user.can_manage_users():
+    if not request.user.can_manage_prizes():
         messages.error(request, 'Acesso negado.')
         return redirect('marketplace')
     
@@ -699,7 +699,7 @@ def create_discount(request):
 @login_required
 def edit_discount(request, discount_id):
     """Editar desconto"""
-    if not request.user.can_manage_users():
+    if not request.user.can_manage_prizes():
         messages.error(request, 'Acesso negado.')
         return redirect('marketplace')
     
@@ -745,7 +745,7 @@ def edit_discount(request, discount_id):
 @require_POST
 def delete_discount(request, discount_id):
     """Excluir desconto"""
-    if not request.user.can_manage_users():
+    if not request.user.can_manage_prizes():
         return JsonResponse({'success': False, 'error': 'Acesso negado'})
     
     discount = get_object_or_404(PrizeDiscount, id=discount_id)

@@ -9,6 +9,20 @@ from .models import Training, TrainingView, TrainingCategory, TrainingProgress
 import os
 
 
+def pode_gerenciar_treinamentos(user):
+    """Publica, edita e desativa treinamentos.
+
+    A mesma turma de sempre (`can_manage_users`) mais quem foi liberado na
+    tela do usuário. Antes esta pergunta era feita com `can_manage_users`
+    direto, e liberar "treinamentos" a alguém abriria junto a gestão de
+    usuários — ou o contrário.
+    """
+    if not (user and getattr(user, 'is_authenticated', False)):
+        return False
+    from users.module_access import user_has_module
+    return user.can_manage_users() or user_has_module(user, 'treinamentos.gestao')
+
+
 def trainings_list_view(request):
     """Lista todos os treinamentos ativos"""
     trainings = Training.objects.filter(is_active=True).select_related('uploaded_by', 'category')
@@ -84,7 +98,7 @@ def training_detail_view(request, pk):
     
     # Lista de usuários que completaram (para admin)
     completed_users = []
-    if request.user.can_manage_users():
+    if pode_gerenciar_treinamentos(request.user):
         completed_views = TrainingView.objects.filter(
             training=training, 
             completed=True
@@ -95,7 +109,7 @@ def training_detail_view(request, pk):
         'training': training,
         'training_view': training_view,
         'training_progress': training_progress,
-        'can_manage': request.user.can_manage_users(),
+        'can_manage': pode_gerenciar_treinamentos(request.user),
         'stats': {
             'total_viewers': total_viewers,
             'completed_viewers': completed_viewers,
@@ -109,7 +123,7 @@ def training_detail_view(request, pk):
 @login_required
 def training_upload_view(request):
     """Upload de novos treinamentos - apenas para admins"""
-    if not request.user.can_manage_users():
+    if not pode_gerenciar_treinamentos(request.user):
         messages.error(request, 'Você não tem permissão para fazer upload de treinamentos.')
         return redirect('trainings_list')
     
@@ -173,7 +187,7 @@ def training_upload_view(request):
 @login_required
 def training_manage_view(request):
     """Gerenciar treinamentos - apenas para admins"""
-    if not request.user.can_manage_users():
+    if not pode_gerenciar_treinamentos(request.user):
         messages.error(request, 'Você não tem permissão para gerenciar treinamentos.')
         return redirect('trainings_list')
     
@@ -215,7 +229,7 @@ def training_manage_view(request):
 @login_required
 def training_toggle_status_view(request, pk):
     """Ativar/desativar treinamento - apenas para admins"""
-    if not request.user.can_manage_users():
+    if not pode_gerenciar_treinamentos(request.user):
         return JsonResponse({'error': 'Permissão negada'}, status=403)
     
     if request.method == 'POST':
@@ -236,7 +250,7 @@ def training_toggle_status_view(request, pk):
 @login_required
 def training_delete_view(request, pk):
     """Excluir treinamento - apenas para admins"""
-    if not request.user.can_manage_users():
+    if not pode_gerenciar_treinamentos(request.user):
         messages.error(request, 'Você não tem permissão para excluir treinamentos.')
         return redirect('trainings_list')
     
@@ -374,7 +388,7 @@ def mark_training_completed(request, pk):
 @login_required
 def manage_training_categories_view(request):
     """Gerenciar categorias de treinamento - apenas para admins"""
-    if not request.user.can_manage_users():
+    if not pode_gerenciar_treinamentos(request.user):
         messages.error(request, 'Você não tem permissão para gerenciar categorias.')
         return redirect('trainings_list')
     
@@ -413,7 +427,7 @@ def manage_training_categories_view(request):
 @login_required
 def edit_training_category_view(request, pk):
     """Editar categoria de treinamento"""
-    if not request.user.can_manage_users():
+    if not pode_gerenciar_treinamentos(request.user):
         return JsonResponse({'error': 'Permissão negada'}, status=403)
     
     category = get_object_or_404(TrainingCategory, pk=pk)

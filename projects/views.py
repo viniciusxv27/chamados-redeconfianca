@@ -36,11 +36,23 @@ def get_user_sectors(user):
     return sectors
 
 
+def user_can_manage_projects_menu(user):
+    """Item "Projetos – Gerenciar" do menu: grupo Gestores de Projetos ou liberado."""
+    if not (user and getattr(user, 'is_authenticated', False)):
+        return False
+    from users.module_access import user_has_module
+    return (user.groups.filter(name='Gestores de Projetos').exists()
+            or user_has_module(user, 'projetos.gestao'))
+
+
 def user_can_access_projects(user):
     """Verifica se o usuário pode acessar o sistema de projetos"""
     if user.is_superuser:
         return True
-    
+    from users.module_access import user_has_module
+    if user_has_module(user, 'projetos'):
+        return True
+
     try:
         access = ProjectSectorAccess.objects.get(sector=user.sector)
         return access.can_view_projects

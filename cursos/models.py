@@ -92,7 +92,8 @@ class ConfiguracaoCursos(models.Model):
             return False
         if user.is_superuser or getattr(user, 'hierarchy', '') == 'SUPERADMIN':
             return True
-        return self.gestores.filter(id=user.id).exists()
+        from users.module_access import user_has_module
+        return self.gestores.filter(id=user.id).exists() or user_has_module(user, 'cursos.gestao')
 
 
 class Curso(models.Model):

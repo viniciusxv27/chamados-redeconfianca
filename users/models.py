@@ -836,9 +836,15 @@ class User(AbstractUser):
             self.sector = self.sectors.first()
             self.save()
     
+    def _liberado(self, chave):
+        """Liberação individual feita pelo SUPERADMIN (users/module_access)."""
+        from .module_access import user_has_module
+        return user_has_module(self, chave)
+
     def can_manage_users(self):
         """Abre a área de gestão de usuários (listar, conferir, exportar)."""
-        return self.hierarchy in ['ADMIN', 'SUPERADMIN', 'SUPERVISOR', 'ADMINISTRATIVO']
+        return (self.hierarchy in ['ADMIN', 'SUPERADMIN', 'SUPERVISOR', 'ADMINISTRATIVO']
+                or self._liberado('usuarios.gerenciar'))
 
     # Ordem das hierarquias, para "não posso mexer em quem está acima de mim".
     ESCALA_HIERARQUIA = {
@@ -898,7 +904,8 @@ class User(AbstractUser):
         de bloqueio) e a edição do cadastro de funcionário, que seguem só com
         o SUPERADMIN.
         """
-        return bool(self.is_superuser or self.hierarchy in ('SUPERADMIN', 'ADMIN'))
+        return bool(self.is_superuser or self.hierarchy in ('SUPERADMIN', 'ADMIN')
+                    or self._liberado('rh.gestao'))
 
     @property
     def calculated_balance_cs(self):
@@ -926,34 +933,41 @@ class User(AbstractUser):
         return abs(credits) - abs(debits)
 
     def can_manage_prizes(self):
-        return self.hierarchy in ['ADMINISTRATIVO', 'SUPERVISOR', 'ADMIN', 'SUPERADMIN']
+        return (self.hierarchy in ['ADMINISTRATIVO', 'SUPERVISOR', 'ADMIN', 'SUPERADMIN']
+                or self._liberado('mercadinho.gerenciar'))
 
     def can_manage_cs(self):
-        return self.hierarchy in ['ADMINISTRATIVO', 'SUPERVISOR', 'ADMIN', 'SUPERADMIN']
-    
+        return (self.hierarchy in ['ADMINISTRATIVO', 'SUPERVISOR', 'ADMIN', 'SUPERADMIN']
+                or self._liberado('cs.gerenciar'))
+
     def can_view_all_tickets(self):
-        return self.hierarchy in ['ADMIN', 'SUPERADMIN']
-    
+        return self.hierarchy in ['ADMIN', 'SUPERADMIN'] or self._liberado('chamados.todos')
+
     def can_view_sector_tickets(self):
         return self.hierarchy in ['PADRAO', 'ADMINISTRATIVO', 'SUPERVISOR', 'ADMIN', 'SUPERADMIN']
-    
+
     def can_create_communications(self):
-        return self.hierarchy in ['ADMINISTRATIVO', 'SUPERVISOR', 'ADMIN', 'SUPERADMIN']
-    
+        return (self.hierarchy in ['ADMINISTRATIVO', 'SUPERVISOR', 'ADMIN', 'SUPERADMIN']
+                or self._liberado('comunicados.criar'))
+
     def can_edit_sector_categories(self):
-        return self.hierarchy in ['ADMINISTRATIVO', 'SUPERVISOR', 'ADMIN', 'SUPERADMIN']
-    
+        return (self.hierarchy in ['ADMINISTRATIVO', 'SUPERVISOR', 'ADMIN', 'SUPERADMIN']
+                or self._liberado('categorias.editar'))
+
     def can_upload_files(self):
-        return self.hierarchy in ['ADMINISTRATIVO', 'SUPERVISOR', 'ADMIN', 'SUPERADMIN']
-    
+        return (self.hierarchy in ['ADMINISTRATIVO', 'SUPERVISOR', 'ADMIN', 'SUPERADMIN']
+                or self._liberado('arquivos.enviar'))
+
     def can_access_management_panel(self):
-        return self.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN']
-    
+        return (self.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN']
+                or self._liberado('painel.gestao'))
+
     def can_access_admin_panel(self):
-        return self.hierarchy in ['ADMIN', 'SUPERADMIN']
-    
+        return self.hierarchy in ['ADMIN', 'SUPERADMIN'] or self._liberado('painel.admin')
+
     def can_view_reports(self):
-        return self.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN']
+        return (self.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN']
+                or self._liberado('relatorios.ver'))
     
     def can_manage_webhooks(self):
         return self.hierarchy in ['SUPERADMIN']

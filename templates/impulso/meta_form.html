@@ -189,6 +189,19 @@
                     <p class="text-xs text-gray-400 mt-1" id="impRecorrenciaAjuda">
                         Feita uma vez só; ao concluir, encerra.
                     </p>
+                    {% comment %}
+                    Só aparece quando a tarefa se repete: para "única vez" o
+                    prazo é o que a pessoa escolheu e pronto.
+                    {% endcomment %}
+                    <label id="impDiasUteis" class="hidden mt-2 flex items-start gap-2 text-xs text-gray-600 cursor-pointer
+                                                     rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+                        <input type="checkbox" name="apenas_dias_uteis" id="impApenasDiasUteis"
+                               class="rounded text-orange-600 focus:ring-orange-500 mt-0.5">
+                        <span>
+                            <strong class="text-gray-700">Somente dias úteis</strong><br>
+                            Se uma ocorrência cair no sábado ou domingo, o prazo passa para a segunda-feira.
+                        </span>
+                    </label>
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Prazo *</label>
@@ -223,10 +236,17 @@
     };
     var sel = document.getElementById('impRecorrencia');
     var ajuda = document.getElementById('impRecorrenciaAjuda');
+    var diasUteis = document.getElementById('impDiasUteis');
     if (!sel || !ajuda) return;
-    sel.addEventListener('change', function () {
+    function atualizar() {
         ajuda.textContent = TEXTOS[sel.value] || '';
-    });
+        // A opção de dias úteis acompanha a recorrência: sem repetição, some.
+        if (diasUteis) diasUteis.classList.toggle('hidden', sel.value === 'UNICA');
+    }
+    sel.addEventListener('change', atualizar);
+    // O rascunho pode devolver a recorrência já preenchida ao recarregar.
+    window.addEventListener('load', atualizar);
+    atualizar();
 })();
 </script>
 

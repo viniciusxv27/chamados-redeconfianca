@@ -1,47 +1,308 @@
-"""Liberação individual de módulos por usuário (grant-only).
+"""Liberação individual de acessos por usuário (grant-only).
 
-O SUPERADMIN pode ligar um módulo para uma pessoa específica na tela de edição
-de usuário (/users/manage/users/<id>/edit/). A checagem é **somada (OR)** à
-regra normal de cada módulo — então nunca tira acesso, só concede.
+O SUPERADMIN liga, para uma pessoa específica, um módulo inteiro ou uma
+permissão de detalhe dentro dele — na tela de edição de usuário
+(/users/manage/users/<id>/edit/). A checagem é **somada (OR)** à regra normal
+de cada módulo (hierarquia, grupo, configuração): nunca tira acesso, só
+concede.
 
-Como usar num gate de módulo (menu ou view):
+Como usar num gate (menu ou view):
 
     from users.module_access import user_has_module
     ...
-    return regra_normal(user) or user_has_module(user, 'cursos')
+    return regra_normal(user) or user_has_module(user, 'impulso.gestor')
 
-`MODULES` é a fonte única da lista exibida na tela. Para liberar um módulo novo,
-basta acrescentar uma linha aqui e o ``or user_has_module(...)`` no gate dele.
+Chaves têm dois níveis: ``'impulso'`` (entrar no módulo) e
+``'impulso.gestor'`` (uma visão de detalhe dentro dele). Liberar o detalhe
+libera junto a entrada no módulo, senão a pessoa teria a permissão e não
+teria a porta.
+
+``MODULOS`` é a fonte única do catálogo exibido na tela. Toda chave listada
+tem um gate de verdade em ``GATES`` — é ele que o menu consulta e é ele que o
+teste percorre para provar que nenhuma caixinha da tela é decorativa.
 """
 
-# (chave, rótulo exibido, grupo na tela). A ordem aqui é a ordem na tela.
-MODULES = [
-    ('comissionamento',        'Comissionamento',            'Gestão Comercial'),
-    ('cursos',                 'Cursos Vivo',                'Gestão Comercial'),
-    ('ponto',                  'Ponto e Férias',             'Gestão Comercial'),
-    ('projetos',               'Projetos',                   'Operação'),
-    ('clima',                  'Pesquisa de Clima',          'Operação'),
-    ('entrevista_desligamento','Entrevista de Desligamento', 'Operação'),
-    ('contestacao',            'Contestação',                'Operação'),
-    ('impulso',                'Impulso',                    'Administrativo'),
-    ('caixa',                  'Contagem de Caixa',          'Administrativo'),
-    ('cartoes',                'Cartões',                    'Financeiro'),
+# ---------------------------------------------------------------------------
+# Catálogo: o que aparece na tela, por grupo
+# ---------------------------------------------------------------------------
+# chave, rótulo, grupo, descrição, acesso (a própria chave libera a entrada no
+# módulo?), permissões de detalhe [(chave, rótulo, o que libera)].
+MODULOS = [
+    # ── Gestão Comercial ────────────────────────────────────────────────
+    {'chave': 'comissionamento', 'rotulo': 'Comissionamento', 'grupo': 'Gestão Comercial',
+     'acesso': True,
+     'descricao': 'Ver o próprio comissionamento (para quem é PADRÃO e não está nos grupos de gerente/coordenador).',
+     'permissoes': [
+         ('comissionamento.projecao', 'Médias de comissão', 'Item "Médias de Comissão" do menu (projeção).'),
+     ]},
+    {'chave': 'cursos', 'rotulo': 'Cursos Vivo', 'grupo': 'Gestão Comercial',
+     'acesso': True,
+     'descricao': 'Ver e enviar comprovantes dos cursos, mesmo fora dos grupos/setores cobrados.',
+     'permissoes': [
+         ('cursos.gestao', 'Gestor dos cursos', 'Publicar curso, definir quem faz e aprovar comprovantes (quadro de gestão).'),
+     ]},
+    {'chave': 'ponto', 'rotulo': 'Ponto e Férias', 'grupo': 'Gestão Comercial',
+     'acesso': True,
+     'descricao': 'Ver o próprio ponto, férias e escala quando o módulo está restrito a um grupo.',
+     'permissoes': []},
+
+    # ── Pessoal ─────────────────────────────────────────────────────────
+    {'chave': 'rh', 'rotulo': 'Pessoal (RH/DP)', 'grupo': 'Pessoal',
+     'acesso': False,
+     'descricao': 'As telas de administração de pessoal, hoje da hierarquia ADMINISTRAÇÃO.',
+     'permissoes': [
+         ('rh.gestao', 'Administrar pessoal',
+          'Folha de ponto, documentos, contracheque, ponto da equipe, férias e escala — como a ADMINISTRAÇÃO.'),
+     ]},
+    {'chave': 'talentos', 'rotulo': 'Banco de Talentos', 'grupo': 'Pessoal',
+     'acesso': True,
+     'descricao': 'Pesquisar e importar currículos (dado pessoal: nasce fechado).',
+     'permissoes': []},
+    {'chave': 'clima', 'rotulo': 'Pesquisa de Clima', 'grupo': 'Pessoal',
+     'acesso': True,
+     'descricao': 'Gerenciar a pesquisa de clima (o mesmo que a tela de acessos da pesquisa).',
+     'permissoes': []},
+    {'chave': 'entrevista_desligamento', 'rotulo': 'Entrevista de Desligamento', 'grupo': 'Pessoal',
+     'acesso': True,
+     'descricao': 'Ver e conduzir entrevistas de desligamento.',
+     'permissoes': []},
+
+    # ── Operação ────────────────────────────────────────────────────────
+    {'chave': 'projetos', 'rotulo': 'Projetos', 'grupo': 'Operação',
+     'acesso': True,
+     'descricao': 'Ver os projetos, mesmo sem o setor liberado.',
+     'permissoes': [
+         ('projetos.gestao', 'Gerenciar projetos', 'Item "Projetos – Gerenciar" (o mesmo que o grupo Gestores de Projetos).'),
+     ]},
+    {'chave': 'contestacao', 'rotulo': 'Contestação', 'grupo': 'Operação',
+     'acesso': True,
+     'descricao': 'Abrir o módulo de contestação.',
+     'permissoes': []},
+    {'chave': 'fornecedores', 'rotulo': 'Fornecedores', 'grupo': 'Operação',
+     'acesso': True,
+     'descricao': 'Cadastro de fornecedores (o mesmo que o grupo Gestores de Fornecedores).',
+     'permissoes': []},
+    {'chave': 'compras', 'rotulo': 'Compras', 'grupo': 'Operação',
+     'acesso': True,
+     'descricao': 'Compras e formas de pagamento (o mesmo que o grupo Gestores de Compras).',
+     'permissoes': []},
+    {'chave': 'almoxarifado', 'rotulo': 'Almoxarifado', 'grupo': 'Operação',
+     'acesso': False,
+     'descricao': 'Estoque e solicitações de itens.',
+     'permissoes': [
+         ('almoxarifado.gestao', 'Gerir o estoque', 'Menu e telas de gestão do inventário.'),
+         ('almoxarifado.aprovar', 'Aprovar solicitações', 'Aprovar ou reprovar pedidos de itens.'),
+     ]},
+    {'chave': 'chamados', 'rotulo': 'Chamados', 'grupo': 'Operação',
+     'acesso': False,
+     'descricao': 'Todo mundo abre chamado; aqui é o que vai além do próprio setor.',
+     'permissoes': [
+         ('chamados.todos', 'Ver chamados de todos os setores', 'Como a hierarquia ADMINISTRAÇÃO.'),
+         ('painel.gestao', 'Painel de gestão', 'Painel de gestão de chamados (hoje SUPERVISOR e acima).'),
+         ('painel.admin', 'Painel administrativo', 'Painel administrativo (hoje ADMINISTRAÇÃO e acima).'),
+     ]},
+
+    # ── Administrativo ──────────────────────────────────────────────────
+    {'chave': 'impulso', 'rotulo': 'Impulso', 'grupo': 'Administrativo',
+     'acesso': True,
+     'descricao': 'Entrar no Impulso sem estar no grupo ESCRITÓRIO (ADM).',
+     'permissoes': [
+         ('impulso.gestor', 'Gestor do Impulso', 'Aprovar e avaliar metas, conferir o Conectar, concluir projeto foco.'),
+     ]},
+    {'chave': 'caixa', 'rotulo': 'Contagem de Caixa', 'grupo': 'Administrativo',
+     'acesso': True,
+     'descricao': 'Contar o caixa mesmo sem estar lotado numa loja.',
+     'permissoes': [
+         ('caixa.gestor', 'Gestor do caixa', 'Ver todas as lojas e importar a base.'),
+     ]},
+    {'chave': 'treinamentos', 'rotulo': 'Treinamentos', 'grupo': 'Administrativo',
+     'acesso': False,
+     'descricao': 'Todo mundo assiste; aqui é quem publica.',
+     'permissoes': [
+         ('treinamentos.gestao', 'Publicar e gerenciar treinamentos', 'Upload, categorias, ativar/desativar.'),
+     ]},
+    {'chave': 'comunicados', 'rotulo': 'Comunicados', 'grupo': 'Administrativo',
+     'acesso': False,
+     'descricao': 'Todo mundo lê; aqui é quem escreve.',
+     'permissoes': [
+         ('comunicados.criar', 'Criar comunicados', 'Item "Novo Comunicado" e a tela de criação.'),
+     ]},
+    {'chave': 'usuarios', 'rotulo': 'Usuários', 'grupo': 'Administrativo',
+     'acesso': False,
+     'descricao': 'A área de gestão de usuários. A edição de cadastro continua só com SUPERADMIN e ADMINISTRAÇÃO.',
+     'permissoes': [
+         ('usuarios.gerenciar', 'Gerenciar usuários', 'Listar, conferir, exportar e analisar pré-cadastros.'),
+     ]},
+    {'chave': 'relatorios', 'rotulo': 'Relatórios', 'grupo': 'Administrativo',
+     'acesso': False,
+     'descricao': 'Relatórios do portal.',
+     'permissoes': [
+         ('relatorios.ver', 'Ver relatórios', 'Hoje SUPERVISOR e acima.'),
+     ]},
+    {'chave': 'categorias', 'rotulo': 'Categorias de chamado', 'grupo': 'Administrativo',
+     'acesso': False,
+     'descricao': 'Categorias dos chamados do setor.',
+     'permissoes': [
+         ('categorias.editar', 'Editar categorias do setor', 'Hoje ADMINISTRATIVO e acima.'),
+     ]},
+    {'chave': 'arquivos', 'rotulo': 'Arquivos', 'grupo': 'Administrativo',
+     'acesso': False,
+     'descricao': 'Biblioteca de arquivos do portal.',
+     'permissoes': [
+         ('arquivos.enviar', 'Enviar arquivos', 'Hoje ADMINISTRATIVO e acima.'),
+     ]},
+    {'chave': 'popups', 'rotulo': 'Popups do portal', 'grupo': 'Administrativo',
+     'acesso': False,
+     'descricao': 'Os avisos que aparecem ao entrar no portal.',
+     'permissoes': [
+         ('popups.gerenciar', 'Gerenciar popups', 'Criar, editar, ligar e desligar (hoje só SUPERADMIN).'),
+     ]},
+
+    # ── Financeiro ──────────────────────────────────────────────────────
+    {'chave': 'cartoes', 'rotulo': 'Cartões', 'grupo': 'Financeiro',
+     'acesso': True,
+     'descricao': 'Entrar no módulo de cartões sem ser responsável por um cartão.',
+     'permissoes': []},
+    {'chave': 'cs', 'rotulo': 'C$ (moeda interna)', 'grupo': 'Financeiro',
+     'acesso': False,
+     'descricao': 'Saldo e transações de C$.',
+     'permissoes': [
+         ('cs.gerenciar', 'Gerenciar C$', 'Creditar, ajustar e aprovar transações (hoje ADMINISTRATIVO e acima).'),
+     ]},
+    {'chave': 'mercadinho', 'rotulo': 'Mercadinho', 'grupo': 'Financeiro',
+     'acesso': False,
+     'descricao': 'Todo mundo resgata; aqui é quem cuida da prateleira.',
+     'permissoes': [
+         ('mercadinho.gerenciar', 'Gerenciar prêmios e resgates', 'Cadastrar prêmios e atender resgates (hoje ADMINISTRATIVO e acima).'),
+     ]},
 ]
 
-MODULE_KEYS = {m[0] for m in MODULES}
+# ---------------------------------------------------------------------------
+# Gates: para cada chave, quem decide de verdade (regra normal OU liberação)
+# ---------------------------------------------------------------------------
+# Valor: 'metodo:<nome>' chama user.<nome>(); 'pacote.modulo:funcao' chama a
+# função com o usuário. Todas já incluem `user_has_module` por dentro — este
+# mapa é só o índice, para o menu e para o teste acharem o gate certo.
+GATES = {
+    'comissionamento': 'users.commission_views:pode_ver_comissionamento',
+    'comissionamento.projecao': 'users.module_access:_gate_projecao',
+    'cursos': 'cursos.permissions:pode_ver',
+    'cursos.gestao': 'cursos.permissions:e_gestor',
+    'ponto': 'users.module_access:_gate_ponto',
+    'rh.gestao': 'metodo:can_manage_rh',
+    'talentos': 'curriculos.permissions:pode_usar',
+    'clima': 'feedback.views:_can_manage_surveys',
+    'entrevista_desligamento': 'feedback.views:_can_access_exit_interview',
+    'projetos': 'projects.views:user_can_access_projects',
+    'projetos.gestao': 'projects.views:user_can_manage_projects_menu',
+    'contestacao': 'contestacao.views:_can_access_contestation_module',
+    'fornecedores': 'suppliers.views:user_can_manage_suppliers',
+    'compras': 'purchases.views:user_can_manage_purchases',
+    'almoxarifado.gestao': 'assets.context_processors:e_gestor_de_inventario',
+    'almoxarifado.aprovar': 'assets.views:can_approve_requests',
+    'chamados.todos': 'metodo:can_view_all_tickets',
+    'painel.gestao': 'metodo:can_access_management_panel',
+    'painel.admin': 'metodo:can_access_admin_panel',
+    'impulso': 'impulso.utils:is_impulso_member',
+    'impulso.gestor': 'impulso.utils:is_impulso_manager',
+    'caixa': 'contagem_caixa.permissions:pode_ver_caixa',
+    'caixa.gestor': 'contagem_caixa.permissions:e_gestor',
+    'treinamentos.gestao': 'trainings.views:pode_gerenciar_treinamentos',
+    'comunicados.criar': 'metodo:can_create_communications',
+    'usuarios.gerenciar': 'metodo:can_manage_users',
+    'relatorios.ver': 'metodo:can_view_reports',
+    'categorias.editar': 'metodo:can_edit_sector_categories',
+    'arquivos.enviar': 'metodo:can_upload_files',
+    'popups.gerenciar': 'portal_popups.views:_can_manage_popups',
+    'cartoes': 'cartoes.permissions:can_access_cartoes',
+    'cs.gerenciar': 'metodo:can_manage_cs',
+    'mercadinho.gerenciar': 'metodo:can_manage_prizes',
+}
+
+
+def _gate_projecao(user):
+    """Menu "Médias de Comissão": SUPERADMIN, ou liberado — e, em qualquer
+    caso, só para quem já enxerga o comissionamento."""
+    if not (user and getattr(user, 'is_authenticated', False)):
+        return False
+    if user.is_superuser or getattr(user, 'hierarchy', '') == 'SUPERADMIN':
+        return True
+    if not user_has_module(user, 'comissionamento.projecao'):
+        return False
+    from users.commission_views import pode_ver_comissionamento
+    return pode_ver_comissionamento(user)
+
+
+def _gate_ponto(user):
+    """O módulo de ponto responde pela própria configuração (ativo/restrito)."""
+    try:
+        from tangerino.models import ConfiguracaoTangerino
+        return ConfiguracaoTangerino.get().libera(user)
+    except Exception:  # noqa: BLE001
+        return False
+
+
+# ---------------------------------------------------------------------------
+# Derivados do catálogo
+# ---------------------------------------------------------------------------
+def _todas_as_chaves():
+    chaves = set()
+    for m in MODULOS:
+        if m['acesso']:
+            chaves.add(m['chave'])
+        for chave, _r, _d in m['permissoes']:
+            chaves.add(chave)
+    return chaves
+
+
+MODULE_KEYS = _todas_as_chaves()
+
+# Compatibilidade com quem importava a lista antiga (chave, rótulo, grupo).
+MODULES = [(m['chave'], m['rotulo'], m['grupo']) for m in MODULOS if m['acesso']]
+
+# chave de detalhe -> chave do módulo que precisa ir junto
+_PAI = {chave: m['chave'] for m in MODULOS if m['acesso']
+        for chave, _r, _d in m['permissoes']}
+
+ROTULOS = {}
+for _m in MODULOS:
+    if _m['acesso']:
+        ROTULOS[_m['chave']] = _m['rotulo']
+    for _c, _r, _d in _m['permissoes']:
+        ROTULOS[_c] = f"{_m['rotulo']} · {_r}"
+
+
+def catalogo_por_grupo():
+    """[(grupo, [modulo, ...]), ...] na ordem de MODULOS, para a tela."""
+    grupos, ordem = {}, []
+    for m in MODULOS:
+        if m['grupo'] not in grupos:
+            grupos[m['grupo']] = []
+            ordem.append(m['grupo'])
+        grupos[m['grupo']].append(m)
+    return [(g, grupos[g]) for g in ordem]
 
 
 def modules_by_group():
-    """[(grupo, [(chave, rótulo), ...]), ...] preservando a ordem de MODULES."""
-    grupos, ordem = {}, []
+    """Forma antiga: [(grupo, [(chave, rótulo), ...])]. Só as chaves de acesso."""
+    saida, ordem, grupos = [], [], {}
     for chave, rotulo, grupo in MODULES:
         if grupo not in grupos:
             grupos[grupo] = []
             ordem.append(grupo)
         grupos[grupo].append((chave, rotulo))
-    return [(g, grupos[g]) for g in ordem]
+    for g in ordem:
+        saida.append((g, grupos[g]))
+    return saida
 
 
+def rotulos_de(chaves):
+    return [ROTULOS.get(c, c) for c in sorted(chaves)]
+
+
+# ---------------------------------------------------------------------------
+# Leitura
+# ---------------------------------------------------------------------------
 def granted_modules(user):
     """Conjunto de chaves liberadas individualmente para ``user``.
 
@@ -66,18 +327,44 @@ def granted_modules(user):
 
 
 def user_has_module(user, key):
-    """``user`` recebeu liberação individual do módulo ``key``?"""
+    """``user`` recebeu liberação individual da chave ``key``?"""
     return key in granted_modules(user)
 
 
+def tem_acesso(user, chave):
+    """Regra normal OU liberação individual — o que o menu e o teste perguntam.
+
+    Falha para False: uma chave sem gate (ou gate que explode) nunca abre
+    porta nenhuma.
+    """
+    if not (user and getattr(user, 'is_authenticated', False)):
+        return False
+    spec = GATES.get(chave)
+    if not spec:
+        return False
+    try:
+        if spec.startswith('metodo:'):
+            return bool(getattr(user, spec[len('metodo:'):])())
+        modulo, funcao = spec.split(':')
+        from importlib import import_module
+        return bool(getattr(import_module(modulo), funcao)(user))
+    except Exception:  # noqa: BLE001
+        return False
+
+
+# ---------------------------------------------------------------------------
+# Escrita
+# ---------------------------------------------------------------------------
 def set_user_modules(user, keys, granted_by=None):
     """Sincroniza as liberações de ``user`` para exatamente ``keys`` (grant-only).
 
     Cria as que faltam, remove as que saíram; ignora chaves desconhecidas.
+    Uma permissão de detalhe traz junto a entrada no módulo dela.
     Devolve (adicionadas, removidas) para a mensagem de auditoria.
     """
     from .models import UserModuleAccess
     alvo = {k for k in keys if k in MODULE_KEYS}
+    alvo |= {_PAI[k] for k in list(alvo) if k in _PAI}
     atuais = set(UserModuleAccess.objects.filter(user=user).values_list('module_key', flat=True))
 
     remover = atuais - alvo

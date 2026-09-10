@@ -294,6 +294,21 @@ def metas_kanban(request):
     return render(request, 'impulso/metas_kanban.html', context)
 
 
+def _prazo_em_dia_util(prazo, apenas_dias_uteis):
+    """(prazo ajustado, aviso ou None).
+
+    Com "somente dias úteis", um prazo escolhido no sábado ou domingo anda para
+    a segunda — a mesma regra das repetições, aplicada já na primeira. Avisar é
+    obrigatório: a pessoa digitou uma data e vai ver outra.
+    """
+    if not (prazo and apenas_dias_uteis) or prazo.weekday() < 5:
+        return prazo, None
+    from .models import proximo_dia_util
+    ajustado = proximo_dia_util(prazo)
+    return ajustado, (f'O prazo {prazo:%d/%m/%Y} caía no fim de semana e passou para '
+                      f'{ajustado:%d/%m/%Y} (somente dias úteis).')
+
+
 @impulso_member_required
 def meta_create(request):
     """Cria a meta (gestor) ou solicita uma ao gestor do próprio setor (colaborador)."""
@@ -307,6 +322,10 @@ def meta_create(request):
         prazo = parse_date(request.POST.get('prazo') or '')
         if recorrencia not in Meta.Recorrencia.values:
             recorrencia = Meta.Recorrencia.UNICA
+        # "Somente dias úteis" só faz sentido para o que se repete.
+        apenas_dias_uteis = (recorrencia != Meta.Recorrencia.UNICA
+                             and request.POST.get('apenas_dias_uteis') == 'on')
+        prazo, aviso_dia_util = _prazo_em_dia_util(prazo, apenas_dias_uteis)
 
         fora_da_area = False
         if sou_gestor:
@@ -385,10 +404,13 @@ def meta_create(request):
         meta = Meta.objects.create(
             gestor=gestor, colaborador=colaborador, titulo=titulo,
             descricao=descricao, recorrencia=recorrencia, prazo=prazo,
+            apenas_dias_uteis=apenas_dias_uteis,
             aprovacao=Meta.Aprovacao.APROVADA if ja_aprovada else Meta.Aprovacao.PENDENTE,
             solicitada_por=request.user if (fora_da_area or not sou_gestor) else None,
             created_by=request.user,
         )
+        if aviso_dia_util:
+            messages.info(request, aviso_dia_util)
 
         # Outros responsáveis pela mesma meta (só o gestor escolhe).
         if sou_gestor:
@@ -875,6 +897,9 @@ def meta_editar(request, meta_id):
             return redirect('impulso:meta_editar', meta_id=meta.id)
         if recorrencia not in Meta.Recorrencia.values:
             recorrencia = meta.recorrencia
+        apenas_dias_uteis = (recorrencia != Meta.Recorrencia.UNICA
+                             and request.POST.get('apenas_dias_uteis') == 'on')
+        prazo, aviso_dia_util = _prazo_em_dia_util(prazo, apenas_dias_uteis)
 
         # O prazo pode ir para trás numa edição — a atividade já existe e às
         # vezes o combinado mudou. O que não pode é nascer vencida, e isso a
@@ -884,7 +909,11 @@ def meta_editar(request, meta_id):
         meta.descricao = descricao
         meta.prazo = prazo
         meta.recorrencia = recorrencia
-        meta.save(update_fields=['titulo', 'descricao', 'prazo', 'recorrencia'])
+        meta.apenas_dias_uteis = apenas_dias_uteis
+        meta.save(update_fields=['titulo', 'descricao', 'prazo', 'recorrencia',
+                                 'apenas_dias_uteis'])
+        if aviso_dia_util:
+            messages.info(request, aviso_dia_util)
 
         # Mudança de meta alheia vira comentário: quem toca a atividade não pode
         # descobrir por acaso que o prazo mudou.
@@ -941,6 +970,7 @@ def meta_duplicar(request, meta_id):
         titulo=titulo,
         descricao=original.descricao,
         recorrencia=original.recorrencia,
+        apenas_dias_uteis=original.apenas_dias_uteis,
         prazo=prazo,
         aprovacao=Meta.Aprovacao.APROVADA,
         created_by=request.user,

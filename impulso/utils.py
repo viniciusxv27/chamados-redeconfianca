@@ -25,7 +25,8 @@ def is_impulso_manager(user):
         return False
     if user.is_superuser:
         return True
-    return _in_group(user, GRUPO_GESTOR)
+    from users.module_access import user_has_module
+    return _in_group(user, GRUPO_GESTOR) or user_has_module(user, 'impulso.gestor')
 
 
 def is_impulso_member(user):

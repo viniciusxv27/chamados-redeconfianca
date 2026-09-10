@@ -13,7 +13,9 @@ def user_can_manage_purchases(user):
     """Verifica se o usuário pode gerenciar compras"""
     if user.is_superuser:
         return True
-    return user.groups.filter(name='Gestores de Compras').exists()
+    from users.module_access import user_has_module
+    return (user.groups.filter(name='Gestores de Compras').exists()
+            or user_has_module(user, 'compras'))
 
 
 @login_required

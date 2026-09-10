@@ -1186,12 +1186,14 @@ def edit_user_view(request, user_id):
                     user_to_edit.sector = sectors.first()
                     user_to_edit.save()
 
-                # Liberação individual de módulos (grant-only). A view já é
-                # restrita a can_edit_users (SUPERADMIN), então este controle é,
-                # por construção, só do SUPERADMIN.
-                from .module_access import set_user_modules, MODULE_KEYS
-                modulos_marcados = [k for k in request.POST.getlist('modulos') if k in MODULE_KEYS]
-                set_user_modules(user_to_edit, modulos_marcados, granted_by=request.user)
+                # Liberação individual de acessos (grant-only): só o SUPERADMIN.
+                # A ADMINISTRAÇÃO também edita cadastro, mas não pode dar
+                # acesso — senão alguém da ADMINISTRAÇÃO liberaria para si, ou
+                # para um colega, a administração inteira do portal.
+                if _pode_liberar_acessos(request.user):
+                    from .module_access import set_user_modules, MODULE_KEYS
+                    marcados = [k for k in request.POST.getlist('modulos') if k in MODULE_KEYS]
+                    set_user_modules(user_to_edit, marcados, granted_by=request.user)
 
                 user_to_edit.refresh_from_db()
                 alteracoes = registrar(user_to_edit, estado_anterior, request.user,
@@ -1223,8 +1225,10 @@ def edit_user_view(request, user_id):
                  .select_related('changed_by')
                  .order_by('-created_at', 'field_label')[:200])
 
-    from .module_access import modules_by_group
+    from .module_access import catalogo_por_grupo, rotulos_de
     from .models import UserModuleAccess
+    liberados = set(UserModuleAccess.objects
+                    .filter(user=user_to_edit).values_list('module_key', flat=True))
     context = {
         'user_to_edit': user_to_edit,
         'sectors': Sector.objects.all(),
@@ -1233,11 +1237,17 @@ def edit_user_view(request, user_id):
         'job_title_choices': _job_title_choices(user_to_edit.job_title),
         'historico_alteracoes': historico,
         'total_alteracoes': UserChangeLog.objects.filter(target=user_to_edit).count(),
-        'modulos_por_grupo': modules_by_group(),
-        'modulos_liberados': set(UserModuleAccess.objects
-                                 .filter(user=user_to_edit).values_list('module_key', flat=True)),
+        'catalogo_acessos': catalogo_por_grupo(),
+        'modulos_liberados': liberados,
+        'liberacoes_atuais': rotulos_de(liberados),
+        'pode_liberar_acessos': _pode_liberar_acessos(request.user),
     }
     return render(request, 'admin/edit_user.html', context)
+
+
+def _pode_liberar_acessos(user):
+    """Quem dá e tira liberação individual de acesso: só o SUPERADMIN."""
+    return bool(user.is_superuser or getattr(user, 'hierarchy', '') == 'SUPERADMIN')
 
 
 # ==========================================================================

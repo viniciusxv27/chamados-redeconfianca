@@ -94,6 +94,12 @@ def _can_create_contestations(user):
 def _can_access_contestation_module(user):
     if not user or not user.is_authenticated:
         return False
+    # Liberação individual: o menu já a respeitava, a view não — a pessoa via
+    # o item e batia em "sem permissão" ao clicar. Fica antes do atalho do
+    # PADRÃO, que devolve sem olhar o resto.
+    from users.module_access import user_has_module
+    if user_has_module(user, 'contestacao'):
+        return True
     if user.hierarchy == 'PADRAO':
         return user.can_create_contestations()
     if _can_create_contestations(user):

@@ -23,6 +23,33 @@ from users.models import User, Sector
 from core.middleware import log_action
 
 
+# Setores que acompanham a janela de experiência dos novos (ids do cadastro):
+# Inteligência, RH, Diretoria, Departamento Pessoal e Comercial.
+SETORES_PAINEL_EXPERIENCIA = (2, 3, 4, 13, 36)
+
+
+def _ve_painel_de_experiencia(user):
+    """Quem recebe o painel de janela de experiência na home.
+
+    Os setores de sempre, mais quem administra os módulos de pessoal
+    (`can_manage_rh`: SUPERADMIN e a hierarquia ADMINISTRAÇÃO) — é essa turma
+    que cobra o fim da janela, esteja lotada onde estiver. Antes a lista era
+    só de ids de setor, e uma pessoa do DP lotada em outro setor ficava sem
+    ver. Falha para False: o painel nunca derruba a home.
+    """
+    if not (user and getattr(user, 'is_authenticated', False)):
+        return False
+    try:
+        if user.can_manage_rh():
+            return True
+        ids = set(user.sectors.values_list('id', flat=True))
+        if user.sector_id:
+            ids.add(user.sector_id)
+        return bool(ids & set(SETORES_PAINEL_EXPERIENCIA))
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _get_experience_window_alerts_for_dp():
     """Retorna usuários com janela de experiência ativa (1a e 2a), destacando alertas (<= 10 dias)."""
     today = timezone.localdate()
@@ -37,7 +64,6 @@ def _get_experience_window_alerts_for_dp():
         Q(demission_date__isnull=True) | Q(demission_date__gte=today)
     ).order_by('admission_date', 'first_name', 'last_name')
 
-    print(f"DEBUG: Found {users.count()} users with experience window")
 
     for user in users:
         days_since_admission = (today - user.admission_date).days - 1
@@ -66,7 +92,6 @@ def _get_experience_window_alerts_for_dp():
         if days_remaining < 0:
             continue
 
-        print(f"DEBUG: User {user.id} - {user.full_name} has {days_remaining} days remaining in {window_name}")
 
         item = {
             'user_id': user.id,
@@ -79,8 +104,6 @@ def _get_experience_window_alerts_for_dp():
             'is_last_10_days_alert': 0 <= days_remaining <= 10,
         }
 
-        if item['is_last_10_days_alert']:
-            print(f"DEBUG: Adding alert for user {user.id} - {user.full_name}, days remaining: {days_remaining}")
 
         if window_key == 'FIRST':
             first_window_active.append(item)
@@ -148,18 +171,7 @@ def home_feed(request):
     page_number = request.GET.get('page')
     communications = paginator.get_page(page_number)
 
-    show_experience_window_popup = (
-        request.user.sector_id == 13
-        or request.user.sectors.filter(id=13).exists() 
-        or request.user.sector_id == 36
-        or request.user.sectors.filter(id=36).exists()
-        or request.user.sector_id == 4
-        or request.user.sectors.filter(id=4).exists()
-        or request.user.sector_id == 3
-        or request.user.sectors.filter(id=3).exists()
-        or request.user.sector_id == 2
-        or request.user.sectors.filter(id=2).exists()
-    )
+    show_experience_window_popup = _ve_painel_de_experiencia(request.user)
     experience_window_data = _get_experience_window_alerts_for_dp() if show_experience_window_popup else {
         'first_window_active': [],
         'second_window_active': [],
@@ -427,7 +439,7 @@ def _limpar_links(html):
 @login_required
 def create_communication_view(request):
     """Criar novo comunicado"""
-    if not request.user.can_manage_users():
+    if not request.user.can_create_communications():
         messages.error(request, 'Você não tem permissão para criar comunicados.')
         return redirect('dashboard')
     

@@ -41,11 +41,20 @@
             </div>
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Recorrência</label>
-                <select name="recorrencia" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <select name="recorrencia" id="impRecorrenciaEditar" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                     {% for valor, rotulo in recorrencias %}
                     <option value="{{ valor }}" {% if meta.recorrencia == valor %}selected{% endif %}>{{ rotulo }}</option>
                     {% endfor %}
                 </select>
+                <label id="impDiasUteisEditar" class="{% if meta.recorrencia == 'UNICA' %}hidden {% endif %}mt-2 flex items-start gap-2 text-xs text-gray-600 cursor-pointer
+                                                       rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+                    <input type="checkbox" name="apenas_dias_uteis" {% if meta.apenas_dias_uteis %}checked{% endif %}
+                           class="rounded text-orange-600 focus:ring-orange-500 mt-0.5">
+                    <span>
+                        <strong class="text-gray-700">Somente dias úteis</strong><br>
+                        Se uma ocorrência cair no sábado ou domingo, o prazo passa para a segunda-feira.
+                    </span>
+                </label>
             </div>
         </div>
 
@@ -58,4 +67,14 @@
         </div>
     </form>
 </div>
+<script>
+(function () {
+    var sel = document.getElementById('impRecorrenciaEditar');
+    var caixa = document.getElementById('impDiasUteisEditar');
+    if (!sel || !caixa) return;
+    sel.addEventListener('change', function () {
+        caixa.classList.toggle('hidden', sel.value === 'UNICA');
+    });
+})();
+</script>
 {% endblock %}

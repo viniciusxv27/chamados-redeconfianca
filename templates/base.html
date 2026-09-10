@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 {% load static %}
+{% load acessos %}
 <html lang="pt-br"{% if user.is_authenticated and user.theme == 'dark' %} class="dark"{% endif %}>
 <head>
     <meta charset="UTF-8">
@@ -681,7 +682,7 @@
                         </li>
                         <li class="submenu-content hidden" id="financeiro-menu">
                             <ul class="space-y-0.5 ml-4 pl-2.5 border-l border-gray-800">
-                        {% if user.hierarchy == 'SUPERADMIN' or user.is_superuser %}
+                        {% if user|tem_acesso:'comissionamento.projecao' %}
                         <li>
                             <a href="{% url 'commission_projection' %}" data-rota="{% url 'commission_projection' %}"
                                class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
@@ -715,7 +716,7 @@
                         </li>
 
                         <!-- Menu Administrativo - Para usuários autorizados -->
-                        {% if user.can_manage_users or user.groups.all %}
+                        {% if user.can_manage_users or user.groups.all or can_access_impulso or caixa_liberado or user|tem_acesso:'fornecedores' or user|tem_acesso:'compras' or user|tem_acesso:'projetos.gestao' or user|tem_acesso:'treinamentos.gestao' %}
                         <li class="border-t border-gray-800 pt-2 mt-2">
                             <div class="flex items-center space-x-2 px-2 py-1 rounded-lg hover:bg-gray-800 transition-colors cursor-pointer" 
                                  onclick="toggleSubmenu('management-menu')">
@@ -759,7 +760,7 @@
                                     </a>
                                 </li>
                                 {% endif %}
-                                {% if user.can_manage_users %}
+                                {% if user|tem_acesso:'treinamentos.gestao' %}
                                 <li>
                                     <a href="{% url 'training_upload' %}" data-rota="{% url 'training_upload' %}" class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Novo treinamento">
                                         <i class="fas fa-plus-circle text-yellow-400 flex-shrink-0 w-5 text-center"></i>
@@ -769,7 +770,7 @@
                                     </a>
                                 </li>
                                 {% endif %}
-                                {% if user.can_manage_users %}
+                                {% if user|tem_acesso:'treinamentos.gestao' %}
                                 <li>
                                     <a href="{% url 'trainings_manage' %}" data-rota="{% url 'trainings_manage' %}" class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Gerenciar treinamentos">
                                         <i class="fas fa-graduation-cap text-yellow-400 flex-shrink-0 w-5 text-center"></i>
@@ -781,8 +782,7 @@
                                 {% endif %}
 
                                 <!-- Gestão de Fornecedores, Compras, Projetos -->
-                                {% for group in user.groups.all %}
-                                    {% if group.name == "Gestores de Fornecedores" %}
+                                                                    {% if user|tem_acesso:'fornecedores' %}
                                     <li>
                                         <a href="{% url 'suppliers:supplier_list' %}" class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Fornecedores">
                                             <i class="fas fa-store text-orange-400 flex-shrink-0 w-5 text-center"></i>
@@ -792,7 +792,7 @@
                                     </li>
                                     {% endif %}
                                     
-                                    {% if group.name == "Gestores de Compras" %}
+                                    {% if user|tem_acesso:'compras' %}
                                     <li>
                                         <a href="{% url 'purchases:purchase_list' %}" class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Compras">
                                             <i class="fas fa-shopping-cart text-green-400 flex-shrink-0 w-5 text-center"></i>
@@ -802,7 +802,7 @@
                                     </li>
                                     {% endif %}
                                     
-                                    {% if group.name == "Gestores de Projetos" %}
+                                    {% if user|tem_acesso:'projetos.gestao' %}
                                     <li>
                                         <a href="{% url 'projects:project_list' %}" class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Projetos - Gerenciar">
                                             <i class="fas fa-project-diagram text-purple-400 flex-shrink-0 w-5 text-center"></i>
@@ -811,7 +811,7 @@
                                         </a>
                                     </li>
                                     {% endif %}
-                                {% endfor %}
+
                                 
                                 <!-- Gerenciamento de Grupos - Apenas Superadmin -->
                                 {% if user.hierarchy == 'SUPERADMIN' or user.is_superuser %}
