@@ -363,7 +363,7 @@
 
 <div class="imp-card p-5">
             <h3 class="font-semibold text-gray-800 mb-3"><i class="fas fa-paperclip text-gray-500 mr-2"></i>Anexos</h3>
-            <ul class="space-y-1 mb-4">
+            <ul class="space-y-1 mb-4" id="impListaAnexos">
                 {% for a in anexos %}
                 <li class="group rounded-lg hover:bg-gray-50 -mx-2 px-2 py-1.5" id="anexo{{ a.id }}">
                     <div class="flex items-start gap-2 text-sm">
@@ -422,7 +422,17 @@
                 <li class="text-sm text-gray-400">Nenhum anexo.</li>
                 {% endfor %}
             </ul>
-            <form method="post" action="{% url 'impulso:meta_add_anexo' meta.id %}" enctype="multipart/form-data" class="space-y-2 border-t border-gray-100 pt-3">
+            {# Print de tela vira anexo: clica no campo e Ctrl+V — sobe sozinho, sem salvar o arquivo antes. #}
+            <div class="border-t border-gray-100 pt-3 mb-3">
+                <label for="impColarImagem" class="block text-xs font-medium text-gray-600 mb-1">
+                    <i class="fas fa-image text-gray-400 mr-1"></i>Cole a imagem aqui
+                </label>
+                <textarea id="impColarImagem" rows="2" data-url="{% url 'impulso:meta_add_anexo' meta.id %}"
+                          placeholder="Clique aqui e aperte Ctrl+V (no Mac, ⌘+V) para anexar a imagem copiada"
+                          class="w-full resize-none border-2 border-dashed border-gray-300 rounded-lg px-3 py-3 text-sm text-center bg-gray-50 placeholder-gray-400 focus:border-orange-400 focus:ring-2 focus:ring-orange-200 focus:bg-white"></textarea>
+                <p id="impColarStatus" class="hidden mt-1 text-xs" role="status" aria-live="polite"></p>
+            </div>
+            <form method="post" action="{% url 'impulso:meta_add_anexo' meta.id %}" enctype="multipart/form-data" class="space-y-2">
                 {% csrf_token %}
                 <input type="text" name="titulo" placeholder="Título (opcional)" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                 <input type="url" name="url" placeholder="Cole um link…" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
@@ -436,6 +446,110 @@
 
 <script>
 (function () {
+    // Colar imagem nos anexos: Ctrl+V no campo e a imagem sobe como arquivo.
+    var campo = document.getElementById('impColarImagem');
+    if (!campo) return;
+    var aviso = document.getElementById('impColarStatus');
+    var TIPOS = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp' };
+
+    function mostrar(texto, tipo) {
+        aviso.textContent = texto;
+        aviso.className = 'mt-1 text-xs ' +
+            (tipo === 'erro' ? 'text-red-600' : (tipo === 'ok' ? 'text-emerald-600' : 'text-gray-500'));
+    }
+
+    function nomeDoArquivo(tipo, numero) {
+        var d = new Date();
+        var p = function (x) { return String(x).padStart(2, '0'); };
+        var carimbo = d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' +
+            p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+        return 'imagem-colada-' + carimbo + (numero ? '-' + numero : '') + '.' + (TIPOS[tipo] || 'png');
+    }
+
+    function imagensDaColagem(dados) {
+        var imagens = [];
+        if (!dados) return imagens;
+        Array.prototype.forEach.call(dados.items || [], function (item) {
+            if (item.kind === 'file' && TIPOS[item.type]) {
+                var arquivo = item.getAsFile();
+                if (arquivo) imagens.push(arquivo);
+            }
+        });
+        if (!imagens.length) {
+            Array.prototype.forEach.call(dados.files || [], function (arquivo) {
+                if (TIPOS[arquivo.type]) imagens.push(arquivo);
+            });
+        }
+        return imagens;
+    }
+
+    // Troca só a lista de anexos: recarregar a página perderia o comentário que
+    // a pessoa estivesse escrevendo.
+    async function atualizarLista() {
+        try {
+            var resposta = await fetch(window.location.href, { credentials: 'same-origin', cache: 'no-store' });
+            var pagina = new DOMParser().parseFromString(await resposta.text(), 'text/html');
+            var nova = pagina.getElementById('impListaAnexos');
+            var atual = document.getElementById('impListaAnexos');
+            if (nova && atual) atual.replaceWith(nova);
+        } catch (e) {
+            window.location.reload();
+        }
+    }
+
+    async function enviar(arquivo, numero) {
+        var corpo = new FormData();
+        corpo.append('arquivo', arquivo, nomeDoArquivo(arquivo.type, numero));
+        corpo.append('colada', '1');
+        var resposta = await fetch(campo.dataset.url, {
+            method: 'POST', body: corpo, credentials: 'same-origin',
+            headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': '{{ csrf_token }}' }
+        });
+        var tipo = resposta.headers.get('content-type') || '';
+        var dados = tipo.indexOf('application/json') !== -1 ? await resposta.json() : {};
+        if (!resposta.ok || !dados.ok) {
+            throw new Error(dados.error || (resposta.status === 403
+                ? 'Sem permissão para anexar (ou sua sessão expirou).'
+                : 'Não foi possível anexar a imagem agora.'));
+        }
+    }
+
+    campo.addEventListener('paste', async function (e) {
+        var imagens = imagensDaColagem(e.clipboardData);
+        e.preventDefault();
+        campo.value = '';
+        if (!imagens.length) {
+            mostrar('Não veio imagem. Copie a imagem (Print Screen ou “Copiar imagem”) e cole aqui.', 'erro');
+            return;
+        }
+        campo.disabled = true;
+        mostrar(imagens.length > 1 ? 'Enviando ' + imagens.length + ' imagens…' : 'Enviando a imagem…');
+        var falha = '';
+        for (var i = 0; i < imagens.length; i++) {
+            try {
+                await enviar(imagens[i], imagens.length > 1 ? i + 1 : 0);
+            } catch (erro) {
+                falha = erro.message;
+            }
+        }
+        campo.disabled = false;
+        mostrar(falha || (imagens.length > 1 ? 'Imagens anexadas.' : 'Imagem anexada.'), falha ? 'erro' : 'ok');
+        await atualizarLista();
+        campo.focus();
+    });
+
+    // Digitar não faz sentido aqui: o campo só recebe imagem colada.
+    campo.addEventListener('input', function () {
+        if (campo.value) {
+            campo.value = '';
+            mostrar('Aqui só entra imagem colada (Ctrl+V).', 'erro');
+        }
+    });
+})();
+</script>
+
+<script>
+(function () {
     // Editar anexo abre o formulário embaixo dele, sem sair da tela.
     function alterna(alvo, mostrar) {
         var form = document.getElementById(alvo);
@@ -446,14 +560,18 @@
             if (primeiro) primeiro.focus();
         }
     }
-    document.querySelectorAll('.imp-anexo-editar').forEach(function (b) {
-        b.addEventListener('click', function () {
-            var form = document.getElementById(b.dataset.alvo);
-            alterna(b.dataset.alvo, form && form.classList.contains('hidden'));
-        });
-    });
-    document.querySelectorAll('.imp-anexo-cancelar').forEach(function (b) {
-        b.addEventListener('click', function () { alterna(b.dataset.alvo, false); });
+    // No documento, e não em cada botão: a lista de anexos é trocada sem
+    // recarregar a página quando uma imagem é colada, e os botões novos precisam
+    // funcionar igual.
+    document.addEventListener('click', function (e) {
+        var editar = e.target.closest('.imp-anexo-editar');
+        if (editar) {
+            var form = document.getElementById(editar.dataset.alvo);
+            alterna(editar.dataset.alvo, form && form.classList.contains('hidden'));
+            return;
+        }
+        var cancelar = e.target.closest('.imp-anexo-cancelar');
+        if (cancelar) alterna(cancelar.dataset.alvo, false);
     });
 
     // Editar responsáveis: abre o seletor embaixo da lista.

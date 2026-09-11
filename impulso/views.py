@@ -886,11 +886,33 @@ def meta_avaliar(request, meta_id):
     return redirect('impulso:meta_detail', meta_id=meta.id)
 
 
+# Imagem colada (Ctrl+V) no card de anexos: vem de print de tela ou "copiar
+# imagem", então só entra imagem e com limite de tamanho.
+COLAR_MAX_BYTES = 10 * 1024 * 1024
+COLAR_EXTENSOES = ('png', 'jpg', 'jpeg', 'gif', 'webp')
+
+
+def _erro_da_imagem_colada(arquivo):
+    """O que impede a imagem colada de virar anexo — ou None."""
+    if arquivo is None:
+        return 'Nenhuma imagem chegou. Copie a imagem e cole de novo.'
+    extensao = arquivo.name.rsplit('.', 1)[-1].lower() if '.' in arquivo.name else ''
+    if not (arquivo.content_type or '').startswith('image/') or extensao not in COLAR_EXTENSOES:
+        return 'Aqui só entra imagem (PNG, JPG, GIF ou WEBP).'
+    if arquivo.size > COLAR_MAX_BYTES:
+        return 'A imagem passa de 10 MB.'
+    return None
+
+
 @require_POST
 @impulso_member_required
 def meta_add_anexo(request, meta_id):
     meta = get_object_or_404(Meta, id=meta_id)
+    # A imagem colada sobe por fetch: responde JSON e a tela troca só a lista.
+    por_fetch = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
     if not _pode_ver_meta(request.user, meta):
+        if por_fetch:
+            return JsonResponse({'ok': False, 'error': 'Sem permissão.'}, status=403)
         messages.error(request, 'Sem permissão.')
         return redirect('impulso:metas_kanban')
 
@@ -898,18 +920,36 @@ def meta_add_anexo(request, meta_id):
     url = (request.POST.get('url') or '').strip()
     arquivo = request.FILES.get('arquivo')
 
+    if request.POST.get('colada'):
+        erro = _erro_da_imagem_colada(arquivo)
+        if erro:
+            if por_fetch:
+                return JsonResponse({'ok': False, 'error': erro}, status=400)
+            messages.error(request, erro)
+            return redirect('impulso:meta_detail', meta_id=meta.id)
+        # O arquivo é salvo com nome aleatório: sem título, a lista mostraria só isso.
+        titulo = titulo or f'Imagem colada em {timezone.localtime():%d/%m/%Y %H:%M}'
+        url = ''
+
     if arquivo:
-        MetaAnexo.objects.create(
+        anexo = MetaAnexo.objects.create(
             meta=meta, tipo=MetaAnexo.Tipo.ARQUIVO, titulo=titulo,
             arquivo=arquivo, enviado_por=request.user)
-        messages.success(request, 'Arquivo anexado.')
+        mensagem = 'Arquivo anexado.'
     elif url:
-        MetaAnexo.objects.create(
+        anexo = MetaAnexo.objects.create(
             meta=meta, tipo=MetaAnexo.Tipo.LINK, titulo=titulo,
             url=url, enviado_por=request.user)
-        messages.success(request, 'Link anexado.')
+        mensagem = 'Link anexado.'
     else:
+        if por_fetch:
+            return JsonResponse({'ok': False, 'error': 'Envie um arquivo ou informe um link.'}, status=400)
         messages.error(request, 'Envie um arquivo ou informe um link.')
+        return redirect('impulso:meta_detail', meta_id=meta.id)
+
+    if por_fetch:
+        return JsonResponse({'ok': True, 'id': anexo.id, 'nome': anexo.nome_exibicao, 'mensagem': mensagem})
+    messages.success(request, mensagem)
     return redirect('impulso:meta_detail', meta_id=meta.id)
 
 
