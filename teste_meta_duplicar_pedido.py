@@ -98,7 +98,7 @@ try:
     cg = Client(); cg.force_login(gestor)
 
     print('\n== O BOTÃO APARECE PARA O PADRÃO ==')
-    kanban = cc.get('/impulso/metas/').content.decode()
+    kanban = cc.get('/impulso/metas/?mes=').content.decode()
     t('no card: link de pedir a duplicação',
       f'href="/impulso/metas/{original.id}/duplicar/solicitar/"' in kanban)
     t('e não o botão de duplicar direto', 'class="imp-duplicar ' not in kanban)
@@ -106,7 +106,7 @@ try:
     html = cc.get(f'/impulso/metas/{original.id}/').content.decode()
     t('no detalhe também', f'/impulso/metas/{original.id}/duplicar/solicitar/' in html)
 
-    kanban_g = cg.get('/impulso/metas/').content.decode()
+    kanban_g = cg.get('/impulso/metas/?mes=').content.decode()
     t('o gestor continua com o botão de duplicar direto', 'class="imp-duplicar ' in kanban_g)
 
     print('\n== A TELA DO PEDIDO ==')
@@ -175,7 +175,7 @@ try:
       Notification.objects.filter(user=gestor2, title='Pedido de duplicação de meta').exists())
 
     print('\n== ENQUANTO NÃO APROVA ==')
-    kanban = cc.get('/impulso/metas/').content.decode()
+    kanban = cc.get('/impulso/metas/?mes=').content.decode()
     t('a cópia não entra no Kanban', 'ZZ Relatório de outubro' not in kanban)
     html = cc.get('/impulso/metas/solicitacoes/').content.decode()
     t('aparece nas solicitações do colaborador', 'ZZ Relatório de outubro' in html)
@@ -209,7 +209,7 @@ try:
       Notification.objects.filter(user=colab, title='Duplicação aprovada').exists())
     kanban = Client()
     kanban.force_login(colab)
-    t('agora a cópia está no Kanban', 'ZZ Relatório de outubro' in kanban.get('/impulso/metas/').content.decode())
+    t('agora a cópia está no Kanban', 'ZZ Relatório de outubro' in kanban.get('/impulso/metas/?mes=').content.decode())
 
     print('\n== RECUSA ==')
     cc.post(url, {**base, 'titulo': 'ZZ Pedido que será recusado'}, follow=True)

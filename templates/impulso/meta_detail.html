@@ -77,14 +77,13 @@
                    class="w-7 h-7 rounded-md text-gray-300 hover:text-emerald-600 hover:bg-emerald-50 flex items-center justify-center transition-colors">
                     <i class="fas fa-pen text-xs"></i>
                 </a>
-                <form method="post" action="{% url 'impulso:meta_duplicar' meta.id %}"
-                      onsubmit="return confirm('Duplicar esta atividade com os passos e a descrição? A cópia abre para você editar.');">
-                    {% csrf_token %}
-                    <button type="submit" title="Duplicar atividade"
-                            class="w-7 h-7 rounded-md text-gray-300 hover:text-indigo-600 hover:bg-indigo-50 flex items-center justify-center transition-colors">
-                        <i class="fas fa-copy text-xs"></i>
-                    </button>
-                </form>
+                {# Abre a escolha de para quem vai a cópia; o formulário fica no fim da página. #}
+                <button type="button" title="Duplicar atividade"
+                        class="imp-duplicar w-7 h-7 rounded-md text-gray-300 hover:text-indigo-600 hover:bg-indigo-50 flex items-center justify-center transition-colors"
+                        data-id="{{ meta.id }}" data-url="{% url 'impulso:meta_duplicar' meta.id %}"
+                        data-titulo="{{ meta.titulo }}" data-colaborador="{{ meta.colaborador_id }}">
+                    <i class="fas fa-copy text-xs"></i>
+                </button>
                 {% elif pode_solicitar_duplicacao %}
                 <a href="{% url 'impulso:meta_duplicar_solicitar' meta.id %}" title="Pedir ao gestor para duplicar esta atividade"
                    class="w-7 h-7 rounded-md text-gray-300 hover:text-indigo-600 hover:bg-indigo-50 flex items-center justify-center transition-colors">
@@ -643,6 +642,10 @@
     });
 })();
 </script>
+{% endif %}
+
+{% if colaboradores_duplicar is not None %}
+{% include 'impulso/_modal_duplicar.html' %}
 {% endif %}
 
 {% endblock %}

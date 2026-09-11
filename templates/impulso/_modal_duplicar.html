@@ -1,0 +1,99 @@
+{% comment %}
+Duplicar atividade escolhendo para qual colaborador vai a cópia — no Kanban e no
+detalhe da meta.
+
+Precisa de `colaboradores_duplicar` (quem pode receber a cópia) e `equipe_ids`
+(quem é da área de quem duplica: fora dela, a cópia vai para aprovação). Cada
+botão `.imp-duplicar` traz data-id, data-titulo e data-colaborador (o dono da
+original, que vem marcado).
+{% endcomment %}
+<div id="impModalDuplicar" class="hidden fixed inset-0 z-[9990] bg-black/60 flex items-center justify-center p-4">
+    <form method="post" id="impFormDuplicar" class="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
+        {% csrf_token %}
+        <div class="px-6 py-4 bg-orange-600 text-white">
+            <h3 class="font-bold"><i class="fas fa-copy mr-2"></i>Duplicar atividade</h3>
+        </div>
+        <div class="px-6 py-5 space-y-4">
+            <div>
+                <p class="text-sm text-gray-600">A cópia leva a descrição, a recorrência e os passos de:</p>
+                <p class="text-base font-semibold text-gray-900 mt-1" id="impDupTitulo"></p>
+            </div>
+            <div>
+                <label for="impDupColaborador" class="block text-sm font-medium text-gray-700 mb-1">Para qual colaborador vai a cópia?</label>
+                <select name="colaborador" id="impDupColaborador" required
+                        class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-orange-400 focus:border-orange-400">
+                    {% for c in colaboradores_duplicar %}
+                    <option value="{{ c.id }}"{% if c.id not in equipe_ids %} data-fora="1"{% endif %}>{{ c.get_full_name|default:c.email }}{% if c.id not in equipe_ids %} — outra área{% endif %}</option>
+                    {% endfor %}
+                </select>
+                <p id="impDupAviso" class="hidden mt-2 text-xs text-amber-700">
+                    <i class="fas fa-circle-info mr-1"></i>Colaborador de outra área: a cópia vai para o gestor da área dele aprovar e só entra no Kanban depois disso.
+                </p>
+            </div>
+            <p class="text-xs text-gray-400">Depois de duplicar, a cópia abre para você ajustar título, prazo e o que mais precisar.</p>
+        </div>
+        <div class="px-6 py-4 bg-gray-50 flex justify-end gap-3">
+            <button type="button" id="impDupCancelar" class="px-4 py-2 text-sm text-gray-500 hover:text-gray-700">Cancelar</button>
+            <button type="submit" id="impDupConfirmar" class="px-5 py-2.5 bg-orange-600 text-white rounded-lg hover:bg-orange-700 text-sm font-semibold">
+                <i class="fas fa-copy mr-1"></i>Duplicar
+            </button>
+        </div>
+    </form>
+</div>
+
+<script>
+(function () {
+    var modal = document.getElementById('impModalDuplicar');
+    var form = document.getElementById('impFormDuplicar');
+    var select = document.getElementById('impDupColaborador');
+    var aviso = document.getElementById('impDupAviso');
+    if (!modal || !form || !select) return;
+    var doOriginal = '';
+
+    function avisar() {
+        var opcao = select.options[select.selectedIndex];
+        // Ficar com o mesmo colaborador nunca pede aprovação: é o duplicar de sempre.
+        var fora = !!opcao && opcao.dataset.fora === '1' && select.value !== doOriginal;
+        aviso.classList.toggle('hidden', !fora);
+    }
+
+    function fechar() {
+        modal.classList.add('hidden');
+    }
+
+    document.querySelectorAll('.imp-duplicar').forEach(function (b) {
+        b.addEventListener('click', function (e) {
+            e.stopPropagation();          // não dispara o arrastar do card
+            e.preventDefault();
+            form.action = b.dataset.url || ('/impulso/metas/' + b.dataset.id + '/duplicar/');
+            document.getElementById('impDupTitulo').textContent = b.dataset.titulo || '';
+            doOriginal = b.dataset.colaborador || '';
+            // O dono da original vem marcado. Se ele saiu do Impulso e não está
+            // na lista, nada fica marcado e a pessoa escolhe.
+            select.value = doOriginal;
+            if (select.value !== doOriginal) select.selectedIndex = -1;
+            avisar();
+            modal.classList.remove('hidden');
+            select.focus();
+        });
+    });
+
+    select.addEventListener('change', avisar);
+    form.addEventListener('submit', function (e) {
+        if (!select.value) {
+            e.preventDefault();
+            select.focus();
+            return;
+        }
+        if (form.dataset.enviando === '1') {       // clique duplo criaria duas cópias
+            e.preventDefault();
+            return;
+        }
+        form.dataset.enviando = '1';
+        document.getElementById('impDupConfirmar').innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Duplicando…';
+    });
+    document.getElementById('impDupCancelar').addEventListener('click', fechar);
+    modal.addEventListener('click', function (e) { if (e.target === modal) fechar(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') fechar(); });
+})();
+</script>

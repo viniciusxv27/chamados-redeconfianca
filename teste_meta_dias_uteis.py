@@ -170,7 +170,7 @@ try:
 
     html = c.get(f'/impulso/metas/{criada.id}/').content.decode()
     t('o detalhe mostra "somente dias úteis"', 'somente dias úteis' in html)
-    html = c.get('/impulso/metas/').content.decode()
+    html = c.get('/impulso/metas/?mes=').content.decode()
     t('o card sinaliza', 'Somente dias úteis' in html)
 
 finally:

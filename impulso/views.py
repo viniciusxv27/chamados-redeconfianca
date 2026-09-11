@@ -199,7 +199,8 @@ def _por_prazo(metas, hoje=None):
 # guardado, então filtro novo precisa ser acrescentado junto.
 # O Voltar da meta precisa devolver o Kanban exatamente como estava — inclusive
 # o filtro por nome e setor, senão a pessoa perde a busca a cada card aberto.
-FILTROS_KANBAN = ('colaborador', filtros_impulso.PARAM_NOME, filtros_impulso.PARAM_SETOR)
+FILTROS_KANBAN = ('colaborador', filtros_impulso.PARAM_NOME, filtros_impulso.PARAM_SETOR,
+                  filtros_impulso.PARAM_MES)
 CHAVE_FILTROS_KANBAN = 'impulso_kanban_filtros'
 
 
@@ -207,6 +208,12 @@ def _guardar_filtros_kanban(request):
     """Lembra como o Kanban estava, para o Voltar da meta devolver igual."""
     escolhidos = {c: request.GET[c] for c in FILTROS_KANBAN
                   if (request.GET.get(c) or '').strip()}
+    # O Kanban abre no mês atual e "Todos os meses" chega como `mes=` vazio: o
+    # vazio também é escolha. Sem guardá-lo, o Voltar reabriria no mês atual.
+    mes = request.GET.get(filtros_impulso.PARAM_MES)
+    if mes is not None:
+        mes = mes.strip()
+        escolhidos[filtros_impulso.PARAM_MES] = mes if filtros_impulso.periodo_do_mes(mes) else ''
     request.session[CHAVE_FILTROS_KANBAN] = escolhidos
     return escolhidos
 
@@ -221,7 +228,7 @@ def _url_kanban(request):
     base = reverse('impulso:metas_kanban')
     guardados = request.session.get(CHAVE_FILTROS_KANBAN) or {}
     limpos = {c: str(v) for c, v in guardados.items()
-              if c in FILTROS_KANBAN and str(v).strip()}
+              if c in FILTROS_KANBAN and (str(v).strip() or c == filtros_impulso.PARAM_MES)}
     return f'{base}?{urlencode(limpos)}' if limpos else base
 
 
@@ -231,7 +238,7 @@ def metas_kanban(request):
     gestor = is_impulso_manager(user)
     metas = _metas_do_usuario(user).select_related('colaborador', 'gestor')
 
-    _guardar_filtros_kanban(request)
+    escolhidos = _guardar_filtros_kanban(request)
 
     colaborador_id = _int_or_none(request.GET.get('colaborador'))
     if colaborador_id:
@@ -239,7 +246,8 @@ def metas_kanban(request):
 
     # Nome e setor valem para o responsável ou para o gestor da meta: quem
     # digita o nome de um gestor quer as metas que ele acompanha, não zero.
-    f = filtros_impulso.ler(request)
+    # Sem mês na URL, o Kanban abre no mês atual; "Todos os meses" segue no seletor.
+    f = filtros_impulso.ler(request, mes_padrao=filtros_impulso.mes_atual())
     metas = filtros_impulso.por(metas, f, ['colaborador', 'gestor'])
     # O mês corta pelo prazo: a pergunta do Kanban é "o que vence quando",
     # não "o que foi cadastrado quando".
@@ -291,8 +299,12 @@ def metas_kanban(request):
         'is_gestor': gestor,
         'colaboradores': get_colaboradores() if gestor else None,
         'colaborador_id': colaborador_id,
+        # Para o duplicar: fora da área de quem duplica, a cópia vai para aprovação.
+        'equipe_ids': equipe_ids,
         'solicitacoes_pendentes': pendentes.count(),
         'active_tab': 'confiar',
+        # Trocar o colaborador no seletor não pode desfazer a busca nem o mês.
+        'manter_no_colaborador': {c: v for c, v in escolhidos.items() if c != 'colaborador'},
         **filtros_impulso.contexto(request, f),
     }
     return render(request, 'impulso/metas_kanban.html', context)
@@ -743,6 +755,7 @@ def meta_detail(request, meta_id):
 
     pode_editar_participantes = (meta.gestor_id == request.user.id
                                  or request.user.is_superuser)
+    pode_editar_meta = meta.pode_editar(request.user)
 
     context = {
         'meta': meta,
@@ -759,7 +772,11 @@ def meta_detail(request, meta_id):
         'is_gestor_da_meta': meta.gestor_id == request.user.id or request.user.is_superuser,
         'is_colaborador_da_meta': meta.colaborador_id == request.user.id,
         'pode_decidir': meta.pode_decidir(request.user),
-        'pode_editar_meta': meta.pode_editar(request.user),
+        'pode_editar_meta': pode_editar_meta,
+        # Duplicar escolhendo para quem vai a cópia: a lista só vai para quem edita.
+        'colaboradores_duplicar': get_colaboradores() if pode_editar_meta else None,
+        'equipe_ids': (set(get_colaboradores_do_gestor(request.user).values_list('id', flat=True))
+                       if pode_editar_meta else set()),
         'pode_solicitar_duplicacao': meta.pode_solicitar_duplicacao(request.user),
         'proxima_ocorrencia': meta.ocorrencias.first(),
         'notas_range': range(0, 6),
@@ -970,6 +987,11 @@ def meta_duplicar(request, meta_id):
     execução: status, entrega, avaliação, nota, comentários e anexos. A cópia
     nasce "A fazer" e já aprovada, e a tela abre na edição — duplicar existe
     justamente para mudar alguma coisa antes de valer.
+
+    Quem duplica escolhe para qual colaborador vai a cópia (vem marcado o da
+    original). Trocar de colaborador segue a régua de criar meta: da própria
+    área entra no Kanban na hora; de outra área vira demanda para o gestor de lá
+    aprovar.
     """
     original = get_object_or_404(Meta, id=meta_id)
     if not original.pode_editar(request.user):
@@ -980,6 +1002,34 @@ def meta_duplicar(request, meta_id):
         messages.error(request, 'Você não pode duplicar esta atividade.')
         return redirect('impulso:meta_detail', meta_id=original.id)
 
+    # Para quem vai a cópia. Sem escolha, fica com o colaborador da original — o
+    # duplicar de sempre. Uma escolha que não é colaborador do Impulso não vira
+    # "o de sempre" calada: a pessoa pediu outra coisa.
+    escolhido = _int_or_none(request.POST.get('colaborador'))
+    colaborador = original.colaborador
+    if escolhido and escolhido != original.colaborador_id:
+        colaborador = get_colaboradores().filter(id=escolhido).first()
+        if colaborador is None:
+            messages.error(request, 'Escolha um colaborador do Impulso para receber a cópia.')
+            return redirect('impulso:meta_detail', meta_id=original.id)
+    trocou = colaborador.id != original.colaborador_id
+    nome = colaborador.get_full_name() or colaborador.email
+
+    # Trocar para gente de OUTRA área segue a trava de criar meta: a cópia vira
+    # demanda para o gestor de lá aprovar, e é ele quem fica com a meta.
+    gestor = original.gestor
+    fora_da_area = False
+    if trocou and not get_colaboradores_do_gestor(request.user).filter(id=colaborador.id).exists():
+        gestores_da_area = get_gestores_do_setor(colaborador).exclude(id=request.user.id)
+        if not gestores_da_area.exists():
+            messages.error(
+                request,
+                f'{nome} é de outra área e não há gestor do Impulso cadastrado nela para aprovar '
+                f'a demanda. Fale com o RH para ajustar o cadastro.')
+            return redirect('impulso:meta_detail', meta_id=original.id)
+        gestor = gestores_da_area.first()
+        fora_da_area = True
+
     titulo = f'Cópia de {original.titulo}'[:200]
 
     # Prazo no passado viraria card nascendo atrasado; puxa para hoje.
@@ -988,18 +1038,20 @@ def meta_duplicar(request, meta_id):
     prazo, _aviso = _prazo_em_dia_util(prazo, original.apenas_dias_uteis)
 
     copia = Meta.objects.create(
-        gestor=original.gestor,
-        colaborador=original.colaborador,
+        gestor=gestor,
+        colaborador=colaborador,
         titulo=titulo,
         descricao=original.descricao,
         recorrencia=original.recorrencia,
         apenas_dias_uteis=original.apenas_dias_uteis,
         prazo=prazo,
-        aprovacao=Meta.Aprovacao.APROVADA,
+        aprovacao=Meta.Aprovacao.PENDENTE if fora_da_area else Meta.Aprovacao.APROVADA,
+        solicitada_por=request.user if fora_da_area else None,
         created_by=request.user,
         duplicada_de=original,
     )
-    copia.participantes.set(original.participantes.all())
+    # Quem recebe a cópia não fica também como "outro responsável" nela.
+    copia.participantes.set(original.participantes.exclude(id=colaborador.id))
 
     passos = list(original.itens.order_by('ordem', 'id'))
     if passos:
@@ -1008,9 +1060,32 @@ def meta_duplicar(request, meta_id):
             for n, p in enumerate(passos)
         ])
 
-    messages.success(
-        request,
-        f'Atividade duplicada com {len(passos)} passo(s). Ajuste o que precisar e salve.')
+    quem = request.user.get_full_name() or request.user.email
+    if fora_da_area:
+        _notify(list(get_gestores_do_setor(colaborador).exclude(id=request.user.id)),
+                'Demanda de outra área para aprovar',
+                f'{quem} duplicou "{original.titulo}" para {nome}, da sua área. Aprove ou recuse.',
+                f'/impulso/metas/{copia.id}/')
+        messages.success(
+            request,
+            f'{nome} é de outra área — a cópia foi enviada para o gestor da área dele aprovar e '
+            f'entra no Kanban depois disso. Ajuste o que precisar e salve.')
+    else:
+        if trocou:
+            _notify([colaborador], 'Nova meta atribuída',
+                    f'"{copia.titulo}" foi atribuída a você.',
+                    f'/impulso/metas/{copia.id}/')
+            if gestor.id != request.user.id:
+                # Ele avalia a cópia no fim: não pode descobrir isso só no acompanhamento.
+                _notify([gestor], 'Meta criada no seu nome',
+                        f'{quem} duplicou "{original.titulo}" para {nome} com você como '
+                        f'gestor responsável. A avaliação no fim é sua.',
+                        f'/impulso/metas/{copia.id}/')
+        messages.success(
+            request,
+            f'Atividade duplicada com {len(passos)} passo(s)'
+            + (f' para {nome}' if trocou else '') + '. Ajuste o que precisar e salve.')
+    # Quem duplicou criou a cópia, então pode editá-la (inclusive a pendente).
     return redirect('impulso:meta_editar', meta_id=copia.id)
 
 

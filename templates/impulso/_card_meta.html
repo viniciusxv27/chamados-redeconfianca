@@ -24,11 +24,13 @@ diferentes do cartão na primeira alteração.
             </span>
             {% endif %}
             {% if m.pode_duplicar %}
-            {# Posta num formulário único da página: form dentro de cada card criaria 40 formulários e ainda brigaria com o arrastar. #}
+            {# Abre a escolha de para quem vai a cópia, num formulário único da página: form dentro de cada card criaria 40 formulários e ainda brigaria com o arrastar. #}
             <button type="button" class="imp-duplicar w-6 h-6 rounded-md text-gray-300 hover:text-orange-600 hover:bg-orange-50 flex items-center justify-center transition-colors"
                     title="Duplicar esta atividade"
                     data-id="{{ m.id }}"
-                    data-titulo="{{ m.titulo }}">
+                    data-url="{% url 'impulso:meta_duplicar' m.id %}"
+                    data-titulo="{{ m.titulo }}"
+                    data-colaborador="{{ m.colaborador_id }}">
                 <i class="fas fa-copy text-xs"></i>
             </button>
             {% elif m.duplicar_por_pedido %}

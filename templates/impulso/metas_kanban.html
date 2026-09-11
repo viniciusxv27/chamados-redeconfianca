@@ -6,6 +6,10 @@
     <div class="flex items-center gap-2 flex-wrap w-full sm:w-auto min-w-0">
         {% if is_gestor and colaboradores is not None %}
         <form method="get" class="flex items-center gap-2 w-full sm:w-auto min-w-0">
+            {% comment %}Trocar o colaborador mantém a busca e o mês escolhidos.{% endcomment %}
+            {% for chave, valor in manter_no_colaborador.items %}
+            <input type="hidden" name="{{ chave }}" value="{{ valor }}">
+            {% endfor %}
             <div class="relative w-full sm:w-auto min-w-0">
                 <i class="fas fa-filter absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
                 <select name="colaborador" onchange="this.form.submit()"
@@ -151,28 +155,15 @@
 })();
 </script>
 
-{# Duplicar: um formulário só para a página inteira, com o action trocado no clique. #}
-<form method="post" id="impFormDuplicar" class="hidden">{% csrf_token %}</form>
+{# Duplicar: escolhe para qual colaborador vai a cópia, num formulário só para a página inteira. #}
+{% if colaboradores is not None %}
+{% include 'impulso/_modal_duplicar.html' with colaboradores_duplicar=colaboradores %}
+{% endif %}
 
 <script>
 (function () {
-    var form = document.getElementById('impFormDuplicar');
-    if (!form) return;
-
-    document.querySelectorAll('.imp-duplicar').forEach(function (b) {
-        b.addEventListener('click', function (e) {
-            e.stopPropagation();          // não dispara o arrastar do card
-            e.preventDefault();
-            if (b.dataset.enviando === '1') return;   // clique duplo criaria duas cópias
-            b.dataset.enviando = '1';
-            b.innerHTML = '<i class="fas fa-spinner fa-spin text-xs"></i>';
-            form.action = '/impulso/metas/' + b.dataset.id + '/duplicar/';
-            form.submit();
-        });
-    });
-
-    // O botão vive dentro de um card arrastável: sem isso, começar a arrastar
-    // a partir dele cancelaria o clique.
+    // Os botões vivem dentro de um card arrastável: sem isso, começar a arrastar
+    // a partir deles cancelaria o clique.
     document.querySelectorAll('.imp-duplicar, .imp-duplicar-pedido, .imp-excluir').forEach(function (b) {
         b.addEventListener('mousedown', function (e) { e.stopPropagation(); });
         b.setAttribute('draggable', 'false');

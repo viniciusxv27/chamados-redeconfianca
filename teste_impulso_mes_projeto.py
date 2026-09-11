@@ -84,6 +84,20 @@ try:
     t('começando pelo mês atual',
       filtros.meses_disponiveis()[0][0] == mes_atual)
 
+    def f_kanban(qs=''):
+        return filtros.ler(RequestFactory().get(f'/x/?{qs}'), mes_padrao=mes_atual)
+
+    t('mês atual no formato do seletor', filtros.mes_atual() == mes_atual)
+    t('com mês padrão, a URL sem mês vale o padrão',
+      f_kanban()['mes'] == mes_atual and f_kanban()['inicio'] == inicio)
+    t('e o padrão não conta como filtro ligado', f_kanban()['ativo'] is False)
+    t('"Todos os meses" (mes= vazio) vale o vazio',
+      f_kanban('mes=')['mes'] == '' and f_kanban('mes=')['inicio'] is None)
+    t('e conta como escolha', f_kanban('mes=')['ativo'] is True)
+    t('outro mês escolhido vale o escolhido',
+      f_kanban(f'mes={mes_anterior}')['mes'] == mes_anterior
+      and f_kanban(f'mes={mes_anterior}')['ativo'] is True)
+
     print('\n== CONFIAR: METAS POR MÊS ==')
     m_agora = Meta.objects.create(titulo='ZZM Meta deste mes', colaborador=dev,
                                   gestor=chefe, prazo=hoje,
@@ -93,11 +107,20 @@ try:
                                   aprovacao=Meta.Aprovacao.APROVADA)
 
     c = Client(); c.force_login(chefe)
+    # O "Limpar" da barra de filtro (o ícone vem colado no texto).
+    LIMPAR = 'fa-xmark mr-1"></i>Limpar'
     html = c.get('/impulso/metas/').content.decode()
     t('o seletor de mês aparece no Confiar',
       'name="mes"' in html and 'Todos os meses' in html)
-    t('sem filtro, as duas metas', 'ZZM Meta deste mes' in html
+    t('o Kanban abre no mês atual: só a meta deste mês', 'ZZM Meta deste mes' in html
+      and 'ZZM Meta do mes passado' not in html)
+    t('com o mês atual já selecionado', f'value="{mes_atual}" selected' in html)
+    t('no padrão, sem o Limpar', LIMPAR not in html)
+
+    html = c.get('/impulso/metas/?mes=').content.decode()
+    t('"Todos os meses": as duas metas', 'ZZM Meta deste mes' in html
       and 'ZZM Meta do mes passado' in html)
+    t('e o Limpar aparece, voltando para o mês atual', LIMPAR in html and 'href="?"' in html)
 
     html = c.get(f'/impulso/metas/?mes={mes_atual}').content.decode()
     t('mês atual: só a deste mês',
@@ -105,6 +128,21 @@ try:
     html = c.get(f'/impulso/metas/?mes={mes_anterior}').content.decode()
     t('mês passado: só a do mês passado',
       'ZZM Meta do mes passado' in html and 'ZZM Meta deste mes' not in html)
+
+    print('\n== O VOLTAR E O SELETOR DE COLABORADOR GUARDAM O MÊS ==')
+    c.get(f'/impulso/metas/?mes={mes_anterior}')
+    html = c.get(f'/impulso/metas/{m_agora.id}/').content.decode()
+    t('o Voltar da meta devolve o mês escolhido', f'href="/impulso/metas/?mes={mes_anterior}"' in html)
+    c.get('/impulso/metas/?mes=')
+    html = c.get(f'/impulso/metas/{m_agora.id}/').content.decode()
+    t('"Todos os meses" também é lembrado', 'href="/impulso/metas/?mes="' in html)
+    c.get('/impulso/metas/')
+    html = c.get(f'/impulso/metas/{m_agora.id}/').content.decode()
+    t('sem escolher, o Voltar reabre no mês atual', '/impulso/metas/?mes=' not in html)
+    html = c.get(f'/impulso/metas/?mes={mes_anterior}&q=ZZMDev').content.decode()
+    t('trocar o colaborador mantém o mês e a busca',
+      f'<input type="hidden" name="mes" value="{mes_anterior}">' in html
+      and '<input type="hidden" name="q" value="ZZMDev">' in html)
 
     html = c.get(f'/impulso/atividades/?mes={mes_atual}').content.decode()
     t('próximas atividades filtram por mês',

@@ -181,10 +181,10 @@ try:
         titulo='ZZ Card visivel', colaborador=colab_a, gestor=gestor_b,
         prazo=hoje + timedelta(days=5), aprovacao=Meta.Aprovacao.APROVADA,
         created_by=gestor_b)
-    html = ca.get('/impulso/metas/').content.decode()
+    html = ca.get('/impulso/metas/?mes=').content.decode()
     t('o card do gestor traz a lixeira',
       f'data-id="{minha_visivel.id}"' in html and 'imp-excluir' in html)
-    html_colab = cc.get('/impulso/metas/').content.decode()
+    html_colab = cc.get('/impulso/metas/?mes=').content.decode()
     # O seletor `.imp-excluir` aparece no script da página de qualquer forma;
     # o que não pode existir é o botão.
     t('o colaborador não vê lixeira nenhuma', 'class="imp-excluir' not in html_colab)

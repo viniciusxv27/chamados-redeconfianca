@@ -34,10 +34,21 @@ def periodo_do_mes(texto):
     return date(ano, mes, 1), date(ano, mes, monthrange(ano, mes)[1])
 
 
-def ler(request):
+def mes_atual(hoje=None):
+    """O mês corrente no formato do seletor ('YYYY-MM')."""
+    hoje = hoje or timezone.localdate()
+    return f'{hoje.year:04d}-{hoje.month:02d}'
+
+
+def ler(request, mes_padrao=''):
     """O que a pessoa pediu na URL.
 
     {'nome', 'setor', 'mes' ('YYYY-MM'), 'inicio', 'fim', 'ativo'}
+
+    `mes_padrao` é o mês que vale quando a URL não fala de mês — o Kanban de
+    metas abre no mês atual. "Todos os meses" chega como `mes=` vazio e aí vale
+    o vazio: foi a pessoa que pediu tudo. `ativo` diz se algo foge do padrão
+    da tela (é o que faz o "Limpar" aparecer).
     """
     nome = (request.GET.get(PARAM_NOME) or '').strip()
     setor = (request.GET.get(PARAM_SETOR) or '').strip()
@@ -46,7 +57,8 @@ def ler(request):
     except (TypeError, ValueError):
         setor_id = None
 
-    mes = (request.GET.get(PARAM_MES) or '').strip()
+    pedido = request.GET.get(PARAM_MES)
+    mes = (mes_padrao if pedido is None else pedido).strip()
     periodo = periodo_do_mes(mes) if mes else None
     if periodo is None:
         mes = ''
@@ -56,7 +68,7 @@ def ler(request):
         'mes': mes,
         'inicio': periodo[0] if periodo else None,
         'fim': periodo[1] if periodo else None,
-        'ativo': bool(nome or setor_id or mes),
+        'ativo': bool(nome or setor_id or mes != mes_padrao),
     }
 
 

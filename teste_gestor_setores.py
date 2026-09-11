@@ -119,14 +119,14 @@ try:
 
     c = Client()
     c.force_login(gestor)
-    html = c.get(f'/impulso/metas/?colaborador={do_secundario.id}').content.decode()
+    html = c.get(f'/impulso/metas/?mes=&colaborador={do_secundario.id}').content.decode()
     t('kanban filtrado pelo colaborador do setor secundário mostra a meta',
       'ZZ Meta do secundario' in html)
     r = c.get(f'/impulso/metas/{m_secundario.id}/', follow=True)
     t('detalhe da meta abre para o gestor', r.status_code == 200
       and 'ZZ Meta do secundario' in r.content.decode(), r.status_code)
 
-    html = c.get(f'/impulso/metas/?colaborador={de_fora.id}').content.decode()
+    html = c.get(f'/impulso/metas/?mes=&colaborador={de_fora.id}').content.decode()
     t('meta de fora do escopo continua invisível', 'ZZ Meta de fora' not in html)
 
     print('\n== FEEDBACKS ==')

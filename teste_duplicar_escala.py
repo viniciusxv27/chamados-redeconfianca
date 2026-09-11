@@ -158,8 +158,102 @@ try:
     t('recebe o link de pedir a duplicação',
       f'/impulso/metas/{original.id}/duplicar/solicitar/' in html)
 
+    print('\n== ESCOLHER O COLABORADOR DA CÓPIA ==')
+    from core.models import Notification
+
+    area_b = Sector.objects.create(name='ZZ Area Duplicar B')
+    area_orfa = Sector.objects.create(name='ZZ Area Duplicar Sem Gestor')
+
+    def mudar_setor(u, setor):
+        u.sector = setor
+        u.save(update_fields=['sector'])
+        return u
+
+    colab2 = novo('dp.colab2', [adm])
+    gestor_b = mudar_setor(novo('dp.gestorb', [adm, ges]), area_b)
+    colab_b = mudar_setor(novo('dp.colabb', [adm]), area_b)
+    colab_orfao = mudar_setor(novo('dp.colaborfao', [adm]), area_orfa)
+    fora_do_impulso = novo('dp.semgrupo')
+
+    def duplicar_para(quem, cliente=cg):
+        ja_havia = set(Meta.objects.filter(duplicada_de=original).values_list('id', flat=True))
+        r = cliente.post(f'/impulso/metas/{original.id}/duplicar/', {'colaborador': quem.id}, follow=True)
+        return r, Meta.objects.filter(duplicada_de=original).exclude(id__in=ja_havia).first()
+
+    r, para_colab2 = duplicar_para(colab2)
+    t('a cópia vai para o colaborador escolhido', para_colab2 and para_colab2.colaborador_id == colab2.id)
+    t('da própria área: entra no Kanban na hora',
+      para_colab2 and para_colab2.aprovacao == Meta.Aprovacao.APROVADA and para_colab2.solicitada_por_id is None)
+    t('o gestor continua o da original', para_colab2 and para_colab2.gestor_id == gestor.id)
+    t('continua levando os passos e os responsáveis', para_colab2 and para_colab2.itens.count() == 3
+      and set(para_colab2.participantes.values_list('id', flat=True)) == {participante.id})
+    t('abre direto na edição da cópia', para_colab2 and r.redirect_chain
+      and f'/impulso/metas/{para_colab2.id}/editar/' in r.redirect_chain[-1][0], r.redirect_chain)
+    t('a mensagem diz para quem foi', 'para Colab2 Teste' in r.content.decode())
+    t('quem recebe é avisado', Notification.objects.filter(user=colab2, title='Nova meta atribuída').exists())
+
+    r, para_mesmo = duplicar_para(colab)
+    t('o mesmo colaborador da original: o duplicar de sempre', para_mesmo
+      and para_mesmo.colaborador_id == colab.id and para_mesmo.aprovacao == Meta.Aprovacao.APROVADA)
+    t('sem aviso de meta nova para quem já era o dono',
+      not Notification.objects.filter(user=colab, title='Nova meta atribuída').exists())
+
+    r, para_participante = duplicar_para(participante)
+    t('um responsável da original pode receber a cópia',
+      para_participante and para_participante.colaborador_id == participante.id)
+    t('e não fica repetido como "outro responsável"',
+      para_participante and not para_participante.participantes.filter(id=participante.id).exists())
+
+    r, para_outra_area = duplicar_para(colab_b)
+    t('de outra área: a cópia é criada', para_outra_area is not None)
+    t('mas fica aguardando o gestor de lá aprovar',
+      para_outra_area and para_outra_area.aprovacao == Meta.Aprovacao.PENDENTE)
+    t('quem fica com a meta é o gestor da área do colaborador',
+      para_outra_area and para_outra_area.gestor_id == gestor_b.id)
+    t('e quem duplicou fica como quem pediu', para_outra_area and para_outra_area.solicitada_por_id == gestor.id)
+    t('o gestor da outra área é avisado',
+      Notification.objects.filter(user=gestor_b, title='Demanda de outra área para aprovar').exists())
+    t('a tela explica que foi para aprovação', 'enviada para o gestor da área' in r.content.decode())
+    t('quem duplicou ainda ajusta a cópia antes da aprovação', para_outra_area and r.redirect_chain
+      and f'/impulso/metas/{para_outra_area.id}/editar/' in r.redirect_chain[-1][0], r.redirect_chain)
+
+    antes = Meta.objects.count()
+    r, nada = duplicar_para(colab_orfao)
+    t('área sem gestor do Impulso: não cria a cópia', nada is None and Meta.objects.count() == antes)
+    t('e explica o que fazer', 'não há gestor do Impulso cadastrado' in r.content.decode())
+    r, nada = duplicar_para(fora_do_impulso)
+    t('quem não é colaborador do Impulso não recebe cópia', nada is None and Meta.objects.count() == antes)
+    t('e a tela pede outro colaborador', 'Escolha um colaborador do Impulso' in r.content.decode())
+    r, nada = duplicar_para(colab2, cliente=cc)
+    t('o PADRÃO não escolhe para quem vai: continua indo para o pedido', nada is None
+      and bool(r.redirect_chain) and '/duplicar/solicitar/' in r.redirect_chain[-1][0], r.redirect_chain)
+
+    kanban = cg.get('/impulso/metas/?mes=').content.decode()
+    t('o Kanban tem a escolha do colaborador', 'id="impModalDuplicar"' in kanban and 'id="impDupColaborador"' in kanban)
+    t('com quem é da área, sem marca', f'<option value="{colab2.id}">' in kanban)
+    t('e marcando quem é de outra área', f'<option value="{colab_b.id}" data-fora="1">' in kanban)
+    t('o card leva o dono da original, que vem marcado', f'data-colaborador="{colab.id}"' in kanban)
+    html = cg.get(f'/impulso/metas/{original.id}/').content.decode()
+    t('o detalhe também abre a escolha', 'id="impModalDuplicar"' in html and f'data-colaborador="{colab.id}"' in html)
+    t('sem o confirm antigo, que duplicava direto', "confirm('Duplicar esta atividade" not in html)
+    t('o colaborador não recebe a lista de pessoas',
+      'id="impModalDuplicar"' not in cc.get(f'/impulso/metas/{original.id}/').content.decode())
+
+    import re
+    import shutil
+    import subprocess
+    import tempfile
+    blocos = [b for b in re.findall(r'<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>', kanban, flags=re.S)
+              if 'impModalDuplicar' in b]
+    if shutil.which('node') and blocos:
+        with tempfile.NamedTemporaryFile('w', suffix='.js', delete=False, encoding='utf-8') as fh:
+            fh.write(blocos[0])
+        rr = subprocess.run([shutil.which('node'), '--check', fh.name], capture_output=True, text=True)
+        os.unlink(fh.name)
+        t('o script da escolha tem sintaxe válida (node --check)', rr.returncode == 0, rr.stderr[-400:])
+
     print('\n== BOTÃO DE DUPLICAR NO CARD DO KANBAN ==')
-    kanban = cg.get('/impulso/metas/').content.decode()
+    kanban = cg.get('/impulso/metas/?mes=').content.decode()
     t('o card traz o botão de duplicar', 'imp-duplicar' in kanban)
     t('apontando para a meta certa',
       f'class="imp-duplicar' in kanban and f'data-id="{original.id}"' in kanban)
@@ -168,7 +262,7 @@ try:
     t('o botão não dispara o arrastar do card',
       'e.stopPropagation();' in kanban and "setAttribute('draggable', 'false')" in kanban)
 
-    kanban_colab = cc.get('/impulso/metas/').content.decode()
+    kanban_colab = cc.get('/impulso/metas/?mes=').content.decode()
     # O seletor do script aparece para todo mundo (não acha nada); o que
     # importa é não existir botão nenhum no HTML.
     t('colaborador não vê o botão de duplicar direto no card',
