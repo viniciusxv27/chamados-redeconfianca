@@ -20,6 +20,7 @@ from django.utils.dateparse import parse_date
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
+from core.evolution import enviar_texto
 from tickets.models import Category, Ticket, TicketAttachment, TicketLog
 from users.models import User
 
@@ -548,6 +549,36 @@ def _download_image(url, max_bytes=10 * 1024 * 1024, timeout=15):
         return None, None
 
 
+MENSAGEM_ESCOLHA_ENVIADA = 'Mensagem enviada ao cliente'
+
+
+def texto_escolha_do_cartao(cartoes):
+    """A lista que o cliente recebe no WhatsApp para escolher o cartão."""
+    linhas = [f'[ {n:02d} ] Final {c.last4} {c.get_bandeira_display()}'
+              for n, c in enumerate(cartoes, start=1)]
+    return 'Escolha o cartão:\n\n' + '\n'.join(linhas)
+
+
+def _pedir_escolha_do_cartao(numero, cartoes):
+    """Mais de um cartão: manda a lista pelo WhatsApp em vez de adivinhar qual é."""
+    ok, detalhe = enviar_texto(numero, texto_escolha_do_cartao(cartoes))
+    if not ok:
+        logger.warning('Escolha de cartão não enviada ao cliente: %s', detalhe)
+        return JsonResponse({
+            'error': ('Usuário tem mais de um cartão e a mensagem para escolher não pôde ser enviada; '
+                      'informe cartao_opcao ou cartao_last4.'),
+            'detalhe': detalhe[:200],
+        }, status=502)
+    return JsonResponse({
+        'success': True,
+        'status': 200,
+        'mensagem': MENSAGEM_ESCOLHA_ENVIADA,
+        'aguardando_escolha': True,
+        'cartoes': [{'opcao': f'{n:02d}', 'last4': c.last4, 'bandeira': c.get_bandeira_display()}
+                    for n, c in enumerate(cartoes, start=1)],
+    })
+
+
 @csrf_exempt
 @require_POST
 def api_lancar_gasto(request):
@@ -559,6 +590,12 @@ def api_lancar_gasto(request):
       - descricao: descrição da compra (opcional; obrigatório se não houver foto)
       - valor: valor do gasto (opcional; fallback se a IA não extrair)
       - cartao_last4: desempate quando o usuário tem mais de um cartão
+      - cartao_opcao: o número escolhido na lista mandada ao cliente (ex.: "01")
+
+    Com mais de um cartão ativo e sem desempate, o gasto não é lançado: o cliente
+    recebe no WhatsApp (Evolution API) a lista para escolher e a resposta é
+    200 "Mensagem enviada ao cliente". A escolha volta nesta mesma API, com
+    ``cartao_opcao`` (ou ``cartao_last4``).
     """
     if not _check_api_token(request):
         return JsonResponse({'error': 'Não autorizado.'}, status=401)
@@ -577,6 +614,7 @@ def api_lancar_gasto(request):
     descricao = (payload.get('descricao') or '').strip()
     foto_url = (payload.get('foto_url') or payload.get('foto') or '').strip()
     cartao_last4 = (payload.get('cartao_last4') or '').strip()
+    cartao_opcao = str(payload.get('cartao_opcao') or payload.get('opcao') or '').strip()
     valor_payload = _parse_valor(payload.get('valor'))
 
     if not telefone:
@@ -596,15 +634,21 @@ def api_lancar_gasto(request):
     if not user:
         return JsonResponse({'error': 'Usuário não encontrado para este telefone.'}, status=404)
 
-    # Cartão do usuário (responsável).
-    qs = Cartao.objects.filter(responsavel=user, ativo=True)
-    if cartao_last4:
-        qs = qs.filter(last4=cartao_last4)
-    cartoes = list(qs[:3])
+    # Cartão do usuário (responsável). A ordem é a mesma da lista mandada ao
+    # cliente: o "01" que ele responde é o primeiro desta lista.
+    ativos = list(Cartao.objects.filter(responsavel=user, ativo=True).order_by('apelido', 'last4', 'id'))
+    cartoes = [c for c in ativos if c.last4 == cartao_last4] if cartao_last4 else ativos
+    if cartao_opcao and not cartao_last4 and len(ativos) > 1:
+        numero_opcao = int(_only_digits(cartao_opcao) or 0)
+        if not 1 <= numero_opcao <= len(ativos):
+            return JsonResponse(
+                {'error': f'Opção de cartão inválida: escolha de 01 a {len(ativos):02d}.'}, status=400)
+        cartoes = [ativos[numero_opcao - 1]]
     if not cartoes:
         return JsonResponse({'error': 'Nenhum cartão ativo para este usuário.'}, status=400)
     if len(cartoes) > 1:
-        return JsonResponse({'error': 'Usuário tem mais de um cartão; informe cartao_last4.'}, status=400)
+        # A lista vai sempre com todos os cartões ativos, na ordem acima.
+        return _pedir_escolha_do_cartao(telefone, ativos)
     cartao = cartoes[0]
 
     # Baixa a foto (best-effort — não trava se falhar).

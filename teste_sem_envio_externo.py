@@ -18,6 +18,7 @@ django.setup()
 
 from django.test.utils import override_settings
 
+import core.evolution as evolution
 import core.zapi as zapi
 import users.resend_email as resend
 from core.utils import processo_de_teste
@@ -43,7 +44,9 @@ rede_whatsapp = mock.Mock(side_effect=TocouARede('urlopen chamado'))
 rede_email = mock.Mock(side_effect=TocouARede('requests.post chamado'))
 
 CONFIG = dict(ZAPI_INSTANCE_ID='instancia-falsa', ZAPI_TOKEN='token-falso',
-              ZAPI_CLIENT_TOKEN='', RESEND_API_KEY='re_chave_falsa')
+              ZAPI_CLIENT_TOKEN='', RESEND_API_KEY='re_chave_falsa',
+              EVOLUTION_API_URL='https://evolution.exemplo', EVOLUTION_API_KEY='chave-falsa',
+              EVOLUTION_INSTANCE='instancia-falsa')
 
 with mock.patch.object(zapi.urlrequest, 'urlopen', rede_whatsapp), \
      mock.patch.object(resend.requests, 'post', rede_email), \
@@ -59,6 +62,11 @@ with mock.patch.object(zapi.urlrequest, 'urlopen', rede_whatsapp), \
     resultado = resend.enviar('alguem@exemplo-teste.local', 'Assunto', '<p>oi</p>')
     t('e-mail devolve bloqueado', resultado == (False, 'Envio bloqueado: processo de teste.'), resultado)
     t('sem tocar a rede', rede_email.call_count == 0, rede_email.call_count)
+
+    # A Evolution usa o mesmo urllib da Z-API: o dublê da rede vale para as duas.
+    resultado = evolution.enviar_texto('5527999990000@s.whatsapp.net', 'mensagem de teste')
+    t('WhatsApp pela Evolution devolve bloqueado', resultado == (False, 'Envio bloqueado: processo de teste.'), resultado)
+    t('sem tocar a rede', rede_whatsapp.call_count == 0, rede_whatsapp.call_count)
 
     from communications.whatsapp import enviar_whatsapp_comunicado
 
@@ -90,6 +98,12 @@ with mock.patch.object(zapi.urlrequest, 'urlopen', rede_whatsapp), \
         except TocouARede:
             pass
         t('o e-mail tentaria enviar', rede_email.call_count == 1, rede_email.call_count)
+
+        try:
+            evolution.enviar_texto('5527999990000@s.whatsapp.net', 'mensagem')
+        except TocouARede:
+            pass
+        t('a Evolution tentaria enviar', rede_whatsapp.call_count == 2, rede_whatsapp.call_count)
 
     for nome in ('gunicorn', 'teste.py', 'meu_teste_x.py', 'teste_sem_envio_externo.pyc'):
         with mock.patch.object(sys, 'argv', [f'/usr/bin/{nome}']):

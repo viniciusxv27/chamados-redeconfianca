@@ -374,6 +374,11 @@ ZAPI_TOKEN = config('ZAPI_TOKEN', default='D264A10FFCED2A1CC3EF40DF')
 ZAPI_CLIENT_TOKEN = config('ZAPI_CLIENT_TOKEN', default='F6690f6a3b4674d268fd389104abf8ab7S')
 ZAPI_BASE_URL = config('ZAPI_BASE_URL', default='https://api.z-api.io')
 
+# Evolution API (WhatsApp do bot dos cartões). A chave fica só no .env.
+EVOLUTION_API_URL = config('EVOLUTION_API_URL', default='')
+EVOLUTION_API_KEY = config('EVOLUTION_API_KEY', default='')
+EVOLUTION_INSTANCE = config('EVOLUTION_INSTANCE', default='')
+
 # VAPID Configuration for Web Push Notifications
 VAPID_PRIVATE_KEY = """-----BEGIN PRIVATE KEY-----
 MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQg/JoLTjAHWVdb35iE
