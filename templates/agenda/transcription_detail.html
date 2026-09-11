@@ -446,6 +446,22 @@
                                     <i class="fas fa-user mr-1 text-emerald-500"></i>{{ task.assigned_to.get_full_name|default:task.assigned_to.username }}
                                 </p>
                                 {% endif %}
+                                {% if impulso_disponivel %}
+                                <!-- Importar para o Impulso: vira meta de quem clica -->
+                                <div class="mt-2" id="task-impulso-{{ task.pk }}">
+                                    {% if task.meta_impulso %}
+                                    <a href="/impulso/metas/{{ task.meta_impulso.id }}/" class="inline-flex items-center gap-1.5 text-xs font-medium text-orange-700 hover:underline">
+                                        <i class="fas fa-bolt"></i>{% if task.meta_impulso.pendente_aprovacao %}No Impulso — aguardando o gestor aprovar{% else %}No Impulso — ver a meta{% endif %}
+                                    </a>
+                                    {% else %}
+                                    <button type="button" class="impulso-importar inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-orange-200 text-orange-700 text-xs font-medium hover:bg-orange-50 transition"
+                                            data-task="{{ task.pk }}" data-titulo="{{ task.title }}" data-descricao="{{ task.description }}"
+                                            data-prazo="{% if task.due_date %}{{ task.due_date|date:'Y-m-d' }}{% endif %}">
+                                        <i class="fas fa-bolt"></i>Importar para o Impulso
+                                    </button>
+                                    {% endif %}
+                                </div>
+                                {% endif %}
                             </div>
                         </div>
                     </div>
@@ -701,6 +717,81 @@
                 </div>
             </div>
         </div>
+    </div>
+</div>
+{% endif %}
+
+{% if impulso_disponivel %}
+<!-- ===== Modal: importar tarefa para o Impulso ===== -->
+<div id="impulso-modal" class="fixed inset-0 z-50 hidden" aria-modal="true" role="dialog" aria-labelledby="impulso-modal-titulo">
+    <div class="absolute inset-0 bg-gray-900/50 backdrop-blur-sm" data-fechar-impulso></div>
+    <div class="relative min-h-full flex items-center justify-center p-4 pointer-events-none">
+        <form id="impulso-form" class="pointer-events-auto bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden">
+            <div class="px-5 sm:px-6 py-4 bg-orange-600 text-white flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                    <h3 id="impulso-modal-titulo" class="font-bold text-base leading-tight"><i class="fas fa-bolt mr-2"></i>Importar para o Impulso</h3>
+                    <p class="text-xs text-orange-100 mt-0.5">A tarefa vira uma meta sua no Kanban do Impulso.</p>
+                </div>
+                <button type="button" data-fechar-impulso class="text-white/80 hover:text-white transition flex-shrink-0" aria-label="Fechar">
+                    <i class="fas fa-times text-lg"></i>
+                </button>
+            </div>
+            <div class="px-5 sm:px-6 py-4 space-y-3">
+                {% if not impulso_sou_gestor and not impulso_gestores %}
+                <p class="p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800">
+                    <i class="fas fa-user-tie mr-1"></i>Ainda não há gestor do Impulso no seu setor, então não há para quem enviar a meta. Fale com o RH para ajustar o cadastro.
+                </p>
+                {% endif %}
+                <div>
+                    <label for="impulso-titulo" class="block text-sm font-medium text-gray-700 mb-1">Título *</label>
+                    <input type="text" id="impulso-titulo" name="titulo" required maxlength="200" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                </div>
+                <div>
+                    <label for="impulso-descricao" class="block text-sm font-medium text-gray-700 mb-1">Descrição *</label>
+                    <textarea id="impulso-descricao" name="descricao" required rows="4" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></textarea>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label for="impulso-prazo" class="block text-sm font-medium text-gray-700 mb-1">Prazo *</label>
+                        <input type="date" id="impulso-prazo" name="prazo" required min="{{ impulso_hoje|date:'Y-m-d' }}" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    </div>
+                    <div>
+                        <label for="impulso-gestor" class="block text-sm font-medium text-gray-700 mb-1">Gestor *</label>
+                        <select id="impulso-gestor" name="gestor" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
+                            {% if not impulso_sou_gestor %}<option value="">Selecione…</option>{% endif %}
+                            {% for g in impulso_gestores %}
+                            <option value="{{ g.id }}"{% if impulso_sou_gestor and g.id == request.user.id %} selected{% endif %}>{{ g.get_full_name|default:g.email }}{% if g.id == request.user.id %} (você){% endif %}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                {% if impulso_sou_gestor %}
+                <p class="text-xs text-gray-500"><i class="fas fa-circle-info mr-1"></i>Como gestor do Impulso, a meta já entra no seu Kanban.</p>
+                {% else %}
+                <fieldset>
+                    <legend class="block text-sm font-medium text-gray-700 mb-1.5">Precisa da autorização do gestor?</legend>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <label class="flex items-start gap-2 border border-gray-200 rounded-lg p-2.5 cursor-pointer hover:bg-orange-50">
+                            <input type="radio" name="precisa_aprovacao" value="sim" checked class="mt-0.5 text-orange-600 focus:ring-orange-500">
+                            <span class="text-xs text-gray-600"><span class="block text-sm font-medium text-gray-800">Sim, quero aprovação</span>Entra no Kanban quando o gestor aprovar.</span>
+                        </label>
+                        <label class="flex items-start gap-2 border border-gray-200 rounded-lg p-2.5 cursor-pointer hover:bg-orange-50">
+                            <input type="radio" name="precisa_aprovacao" value="nao" class="mt-0.5 text-orange-600 focus:ring-orange-500">
+                            <span class="text-xs text-gray-600"><span class="block text-sm font-medium text-gray-800">Não, é uma atividade minha</span>Entra no seu Kanban agora.</span>
+                        </label>
+                    </div>
+                </fieldset>
+                {% endif %}
+                <p id="impulso-erro" class="hidden text-sm text-red-600" role="alert"></p>
+            </div>
+            <div class="px-5 sm:px-6 py-4 bg-gray-50 border-t flex items-center justify-end gap-2">
+                <button type="button" data-fechar-impulso class="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800 transition">Cancelar</button>
+                <button type="submit" id="impulso-enviar"{% if not impulso_sou_gestor and not impulso_gestores %} disabled{% endif %}
+                        class="inline-flex items-center px-4 py-2 bg-orange-600 text-white text-sm font-semibold rounded-lg hover:bg-orange-700 disabled:opacity-50 transition shadow-sm">
+                    <i class="fas fa-bolt mr-2"></i>Importar
+                </button>
+            </div>
+        </form>
     </div>
 </div>
 {% endif %}
@@ -1122,5 +1213,105 @@ async function saveShare(btn) {
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') closeShareModal();
 });
+
+// ---- Importar tarefa para o Impulso ----
+(function () {
+    const modal = document.getElementById('impulso-modal');
+    const form = document.getElementById('impulso-form');
+    if (!modal || !form) return;
+    const erro = document.getElementById('impulso-erro');
+    const enviar = document.getElementById('impulso-enviar');
+    let tarefa = null;
+
+    function abrir(botao) {
+        tarefa = botao.dataset.task;
+        form.elements.titulo.value = botao.dataset.titulo || '';
+        form.elements.descricao.value = botao.dataset.descricao || '';
+        const prazo = botao.dataset.prazo || '';
+        // Prazo que já passou não serve: a pessoa escolhe outro.
+        form.elements.prazo.value = prazo && prazo >= form.elements.prazo.min ? prazo : '';
+        erro.classList.add('hidden');
+        modal.classList.remove('hidden');
+        form.elements.titulo.focus();
+    }
+
+    function fechar() {
+        modal.classList.add('hidden');
+        tarefa = null;
+    }
+
+    function mostrarErro(texto) {
+        erro.textContent = texto;
+        erro.classList.remove('hidden');
+    }
+
+    // Troca o botão pelo link da meta (texto da pessoa entra como texto, não HTML).
+    function marcarImportada(id, dados) {
+        const lugar = document.getElementById(`task-impulso-${id}`);
+        if (!lugar || !dados.url) return;
+        const link = document.createElement('a');
+        link.href = dados.url;
+        link.className = 'inline-flex items-center gap-1.5 text-xs font-medium text-orange-700 hover:underline';
+        const icone = document.createElement('i');
+        icone.className = 'fas fa-bolt';
+        link.appendChild(icone);
+        link.appendChild(document.createTextNode(
+            dados.aprovada ? 'No Impulso — ver a meta' : 'No Impulso — aguardando o gestor aprovar'));
+        lugar.replaceChildren(link);
+        if (dados.message) {
+            const aviso = document.createElement('p');
+            aviso.className = 'text-xs text-green-600 mt-1';
+            aviso.textContent = dados.message;
+            lugar.appendChild(aviso);
+        }
+    }
+
+    document.querySelectorAll('.impulso-importar').forEach((b) => b.addEventListener('click', () => abrir(b)));
+    modal.querySelectorAll('[data-fechar-impulso]').forEach((b) => b.addEventListener('click', fechar));
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !modal.classList.contains('hidden')) fechar();
+    });
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (!tarefa || form.dataset.enviando === '1') return;   // clique duplo não cria duas metas
+        const id = tarefa;
+        const aprovacao = form.querySelector('input[name="precisa_aprovacao"]:checked');
+        form.dataset.enviando = '1';
+        enviar.disabled = true;
+        erro.classList.add('hidden');
+        try {
+            const resp = await fetch(`/agenda/api/transcricoes/${transcriptionId}/tasks/${id}/impulso/`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+                body: JSON.stringify({
+                    titulo: form.elements.titulo.value,
+                    descricao: form.elements.descricao.value,
+                    prazo: form.elements.prazo.value,
+                    gestor: form.elements.gestor.value,
+                    precisa_aprovacao: aprovacao ? aprovacao.value : 'sim',
+                }),
+            });
+            if (resp.status === 401) {
+                mostrarErro('Sua sessão no portal expirou. Entre de novo e tente outra vez.');
+                return;
+            }
+            const tipo = resp.headers.get('content-type') || '';
+            const dados = tipo.includes('application/json') ? await resp.json() : {};
+            if (resp.ok && dados.ok) {
+                marcarImportada(id, dados);
+                fechar();
+                return;
+            }
+            if (resp.status === 409) marcarImportada(id, dados);
+            mostrarErro(dados.error || 'Não foi possível importar agora. Tente de novo.');
+        } catch (err) {
+            mostrarErro('Sem conexão com o portal agora. Tente de novo.');
+        } finally {
+            form.dataset.enviando = '';
+            enviar.disabled = false;
+        }
+    });
+})();
 </script>
 {% endblock %}

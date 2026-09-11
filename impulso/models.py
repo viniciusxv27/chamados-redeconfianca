@@ -169,6 +169,11 @@ class Meta(models.Model):
     duplicada_de = models.ForeignKey(
         'self', on_delete=models.SET_NULL, null=True, blank=True,
         related_name='duplicacoes', verbose_name='Duplicada de')
+    # De qual tarefa da agenda (a ata de uma reunião) a meta foi importada. A
+    # mesma pessoa não importa a mesma tarefa duas vezes enquanto a primeira vale.
+    tarefa_origem = models.ForeignKey(
+        'core.TaskActivity', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='metas_impulso', verbose_name='Importada da tarefa')
 
     status = models.CharField(
         max_length=14, choices=Status.choices,

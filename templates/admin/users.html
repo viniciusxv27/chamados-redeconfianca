@@ -306,6 +306,13 @@
                                     <i class="fas fa-key"></i>
                                 </button>
                                 {% endif %}
+                                {% if user_item.pode_apagar %}
+                                <button type="button" onclick="openDeleteUserModal({{ user_item.id }})"
+                                   class="bg-red-100 text-red-600 p-2 rounded-lg hover:bg-red-200 transition-colors"
+                                   title="Apagar usuário">
+                                    <i class="fas fa-trash-alt"></i>
+                                </button>
+                                {% endif %}
                                 <a href="{% url 'add_cs' user_item.id %}"
                                    class="bg-green-100 text-green-600 p-2 rounded-lg hover:bg-green-200 transition-colors"
                                    title="Adicionar C$">
@@ -777,4 +784,143 @@ document.addEventListener('DOMContentLoaded', function() {
     statusFilter.addEventListener('change', filterUsers);
 });
 </script>
+
+{% if can_delete_users %}
+<!-- Modal: apagar usuário (mostra o que vai junto antes de confirmar) -->
+<div id="deleteUserModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50 p-4"
+     role="dialog" aria-modal="true" aria-labelledby="deleteUserTitle">
+    <form id="deleteUserForm" method="post" class="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+        {% csrf_token %}
+        <div class="px-6 py-4 bg-red-600 text-white flex items-center justify-between">
+            <h3 id="deleteUserTitle" class="font-bold"><i class="fas fa-trash-alt mr-2"></i>Apagar usuário</h3>
+            <button type="button" onclick="closeDeleteUserModal()" class="text-white/80 hover:text-white" aria-label="Fechar">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="px-6 py-5 space-y-4">
+            <p class="text-sm text-gray-700">
+                Você vai apagar <strong id="deleteUserName"></strong> do portal. <strong>Não dá para desfazer.</strong>
+            </p>
+            <p id="deleteUserLoading" class="text-sm text-gray-500"><i class="fas fa-circle-notch fa-spin mr-1"></i>Conferindo o que vai junto…</p>
+            <div id="deleteUserBlocked" class="hidden p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800">
+                <p class="font-semibold mb-1"><i class="fas fa-lock mr-1"></i>Este usuário não pode ser apagado</p>
+                <p class="mb-1">Há registros que dependem dele:</p>
+                <ul id="deleteUserBlockedList" class="list-disc ml-5 space-y-0.5"></ul>
+                <p class="mt-2">Desative o usuário na edição do cadastro: o acesso some e o histórico continua.</p>
+            </div>
+            <div id="deleteUserImpact" class="hidden">
+                <p class="text-sm text-gray-600 mb-1">Também serão apagados:</p>
+                <ul id="deleteUserImpactList" class="text-sm text-gray-700 list-disc ml-5 space-y-0.5 max-h-40 overflow-y-auto"></ul>
+            </div>
+            <div id="deleteUserConfirmBox" class="hidden">
+                <label for="deleteUserConfirm" class="block text-sm text-gray-700 mb-1">
+                    Para confirmar, digite o usuário <strong id="deleteUserUsername" class="font-mono"></strong>:
+                </label>
+                <input type="text" id="deleteUserConfirm" name="confirmacao" autocomplete="off"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono">
+            </div>
+            <p class="text-xs text-gray-500">
+                Prefere manter o histórico? <a id="deleteUserEditLink" href="#" class="underline">Desative o usuário</a> em vez de apagar.
+            </p>
+        </div>
+        <div class="px-6 py-4 bg-gray-50 flex justify-end gap-3">
+            <button type="button" onclick="closeDeleteUserModal()" class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancelar</button>
+            <button type="submit" id="deleteUserSubmit" disabled
+                    class="px-5 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed">
+                <i class="fas fa-trash-alt mr-1"></i>Apagar definitivamente
+            </button>
+        </div>
+    </form>
+</div>
+
+<script>
+(function () {
+    const modal = document.getElementById('deleteUserModal');
+    if (!modal) return;
+    const form = document.getElementById('deleteUserForm');
+    const campo = document.getElementById('deleteUserConfirm');
+    const botao = document.getElementById('deleteUserSubmit');
+    let usernameAlvo = '';
+    let bloqueado = true;
+
+    // Nomes vêm do banco: entram como texto, nunca como HTML.
+    function listar(lista, linhas) {
+        lista.replaceChildren();
+        linhas.forEach(function (linha) {
+            const item = document.createElement('li');
+            item.textContent = linha.quantidade + ' × ' + linha.tipo;
+            lista.appendChild(item);
+        });
+    }
+
+    function mostrar(id, sim) {
+        document.getElementById(id).classList.toggle('hidden', !sim);
+    }
+
+    function atualizarBotao() {
+        botao.disabled = bloqueado || !usernameAlvo || campo.value.trim() !== usernameAlvo;
+    }
+
+    window.openDeleteUserModal = async function (userId) {
+        form.action = '/users/manage/users/' + userId + '/delete/';
+        document.getElementById('deleteUserEditLink').href = '/users/manage/users/' + userId + '/edit/';
+        document.getElementById('deleteUserName').textContent = '…';
+        mostrar('deleteUserLoading', true);
+        mostrar('deleteUserBlocked', false);
+        mostrar('deleteUserImpact', false);
+        mostrar('deleteUserConfirmBox', false);
+        campo.value = '';
+        usernameAlvo = '';
+        bloqueado = true;
+        atualizarBotao();
+        modal.classList.remove('hidden');
+        try {
+            const resposta = await fetch(form.action, {
+                credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            const tipo = resposta.headers.get('content-type') || '';
+            const dados = tipo.includes('application/json') ? await resposta.json() : {};
+            if (!resposta.ok || !dados.ok) throw new Error(dados.erro || 'Não foi possível conferir este usuário agora.');
+            document.getElementById('deleteUserName').textContent = dados.nome;
+            document.getElementById('deleteUserUsername').textContent = dados.username;
+            usernameAlvo = dados.username;
+            if (dados.bloqueios.length) {
+                listar(document.getElementById('deleteUserBlockedList'), dados.bloqueios);
+                mostrar('deleteUserBlocked', true);
+            } else {
+                bloqueado = false;
+                if (dados.apagados.length) {
+                    listar(document.getElementById('deleteUserImpactList'), dados.apagados);
+                    mostrar('deleteUserImpact', true);
+                }
+                mostrar('deleteUserConfirmBox', true);
+                campo.focus();
+            }
+        } catch (erro) {
+            modal.classList.add('hidden');
+            alert(erro.message || 'Não foi possível conferir este usuário agora.');
+        } finally {
+            mostrar('deleteUserLoading', false);
+            atualizarBotao();
+        }
+    };
+
+    window.closeDeleteUserModal = function () {
+        modal.classList.add('hidden');
+    };
+
+    campo.addEventListener('input', atualizarBotao);
+    form.addEventListener('submit', function (e) {
+        if (botao.disabled) {
+            e.preventDefault();
+            return;
+        }
+        // Clique duplo não manda dois pedidos.
+        setTimeout(function () { botao.disabled = true; }, 0);
+    });
+    modal.addEventListener('click', function (e) { if (e.target === modal) modal.classList.add('hidden'); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') modal.classList.add('hidden'); });
+})();
+</script>
+{% endif %}
 {% endblock %}

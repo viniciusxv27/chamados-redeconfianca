@@ -42,6 +42,7 @@ urlpatterns = [
     path('manage/users/create/', views.create_user_view, name='create_user'),
     path('manage/users/pre-register/', views.pre_register_user_view, name='pre_register_user'),
     path('manage/users/<int:user_id>/edit/', views.edit_user_view, name='edit_user'),
+    path('manage/users/<int:user_id>/delete/', views.delete_user_view, name='delete_user'),
     path('manage/users/<int:user_id>/profile/', views.view_user_profile_view, name='view_user_profile'),
     path('manage/users/<int:user_id>/profile/print/', views.print_user_profile_view, name='print_user_profile'),
     path('manage/users/<int:user_id>/pre-register-link/', views.pre_register_link_view, name='pre_register_link'),

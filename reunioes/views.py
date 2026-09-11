@@ -386,6 +386,9 @@ def sala(request, reuniao_id):
         gerar_ata=cfg.gerar_ata and reuniao.gravar_ata,
         url_sair=reverse('reunioes:detalhe', args=[reuniao.id]))
     ctx['e_organizador'] = reuniao.organizador_id == request.user.id
+    # "Encerrar reunião" na sala: só quem edita a reunião, e só enquanto ela não acabou.
+    ctx['pode_encerrar'] = reuniao.pode_editar(request.user) and not reuniao.acabou
+    ctx['url_encerrar'] = reverse('reunioes:encerrar', args=[reuniao.id])
     return render(request, 'reunioes/sala.html', ctx)
 
 
@@ -481,13 +484,29 @@ def visitante_saiu(request, token):
 @require_POST
 @login_required
 def encerrar(request, reuniao_id):
-    reuniao = get_object_or_404(Reuniao, id=reuniao_id)
-    if not reuniao.pode_editar(request.user):
-        return JsonResponse({'ok': False, 'erro': 'Só o organizador encerra.'}, status=403)
+    """Marca a reunião como encerrada.
 
-    reuniao.status = Reuniao.ENCERRADA
-    reuniao.save(update_fields=['status', 'atualizado_em'])
-    return JsonResponse({'ok': True})
+    Serve ao botão do detalhe (formulário: volta para a tela com o aviso) e ao
+    da sala (fetch: responde JSON e a própria sala derruba a chamada).
+    """
+    reuniao = get_object_or_404(Reuniao, id=reuniao_id)
+    por_fetch = (request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+                 or 'application/json' in (request.headers.get('Accept') or ''))
+
+    def responder(ok, texto, status=200):
+        if por_fetch:
+            return JsonResponse({'ok': ok, ('mensagem' if ok else 'erro'): texto}, status=status)
+        (messages.success if ok else messages.error)(request, texto)
+        return redirect('reunioes:detalhe', reuniao_id=reuniao.id)
+
+    if not reuniao.pode_editar(request.user):
+        return responder(False, 'Só quem organizou a reunião pode encerrá-la.', 403)
+    if reuniao.status == Reuniao.CANCELADA:
+        return responder(False, 'Esta reunião foi cancelada — não há o que encerrar.', 409)
+    if reuniao.status != Reuniao.ENCERRADA:
+        reuniao.status = Reuniao.ENCERRADA
+        reuniao.save(update_fields=['status', 'atualizado_em'])
+    return responder(True, 'Reunião encerrada e marcada como finalizada.')
 
 
 @require_POST

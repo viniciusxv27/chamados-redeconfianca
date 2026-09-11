@@ -261,6 +261,7 @@ def manage_users_view(request):
     users = list(users)
     for u in users:
         u.pode_editar = request.user.pode_editar_usuario(u)
+        u.pode_apagar = request.user.pode_apagar_usuario(u)
 
     context = {
         'users': users,
@@ -268,11 +269,81 @@ def manage_users_view(request):
         'user': request.user,
         'can_change_photos': request.user.can_manage_user_photos(),
         'can_edit_users': request.user.can_edit_users(),
+        'can_delete_users': request.user.is_superuser or request.user.can_delete_users(),
         'total_users_count': total_users_count,
         'active_users_count': active_users_count,
         'superadmin_count': superadmin_count,
     }
     return render(request, 'admin/users.html', context)
+
+
+def _impacto_da_exclusao(alvo):
+    """O que vai junto ao apagar `alvo` — e o que impede apagar.
+
+    Usa o coletor do admin do Django: segue as ligações em cascata e separa o que
+    é protegido (PROTECT/RESTRICT), que impede a exclusão.
+    """
+    from django.contrib.admin.utils import NestedObjects
+    from django.db import router
+
+    coletor = NestedObjects(using=router.db_for_write(User))
+    coletor.collect([alvo])
+
+    def resumo(contagem):
+        linhas = [{'tipo': str(modelo._meta.verbose_name_plural), 'quantidade': n}
+                  for modelo, n in contagem.items() if n]
+        return sorted(linhas, key=lambda linha: (-linha['quantidade'], linha['tipo']))
+
+    apagados = {modelo: len(objetos) for modelo, objetos in coletor.model_objs.items()
+                if modelo is not User and not modelo._meta.auto_created}
+    protegidos = {}
+    for objeto in coletor.protected:
+        protegidos[type(objeto)] = protegidos.get(type(objeto), 0) + 1
+    return {'apagados': resumo(apagados), 'bloqueios': resumo(protegidos)}
+
+
+@login_required
+@require_http_methods(['GET', 'POST'])
+def delete_user_view(request, user_id):
+    """Apagar um usuário (SUPERADMIN).
+
+    GET devolve em JSON o que vai junto e o que impede — a tela mostra isso antes
+    de confirmar. POST apaga, exigindo que se digite o usuário (login) igualzinho.
+    """
+    from django.db.models import ProtectedError, RestrictedError
+
+    alvo = get_object_or_404(User, pk=user_id)
+    if not request.user.pode_apagar_usuario(alvo):
+        if request.method == 'GET':
+            return JsonResponse({'ok': False, 'erro': 'Você não pode apagar este usuário.'}, status=403)
+        messages.error(request, 'Você não pode apagar este usuário.')
+        return redirect('manage_users')
+
+    nome = alvo.get_full_name() or alvo.username
+    if request.method == 'GET':
+        return JsonResponse({'ok': True, 'nome': nome, 'username': alvo.username,
+                             **_impacto_da_exclusao(alvo)})
+
+    if (request.POST.get('confirmacao') or '').strip() != alvo.username:
+        messages.error(request, f'Para apagar {nome}, digite o usuário "{alvo.username}" exatamente como aparece.')
+        return redirect('manage_users')
+
+    email, ident = alvo.email, alvo.pk
+    try:
+        with transaction.atomic():
+            alvo.delete()
+    except (ProtectedError, RestrictedError) as exc:
+        objetos = getattr(exc, 'protected_objects', None) or getattr(exc, 'restricted_objects', None) or []
+        tipos = sorted({str(type(o)._meta.verbose_name_plural) for o in objetos})
+        messages.error(
+            request,
+            f'{nome} não pode ser apagado: há registros que dependem dele ({", ".join(tipos)}). '
+            f'Desative o usuário em vez de apagar — o acesso some e o histórico continua.')
+        return redirect('manage_users')
+
+    log_action(request.user, 'ADMIN_ACTION', f'Apagou o usuário {nome} ({email}, id {ident}).', request)
+    messages.success(request, f'Usuário {nome} apagado.')
+    return redirect('manage_users')
 
 
 @login_required

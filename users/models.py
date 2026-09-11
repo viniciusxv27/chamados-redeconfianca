@@ -891,6 +891,21 @@ class User(AbstractUser):
         # mexer em quem está acima.
         return alvo.nivel_hierarquia <= self.nivel_hierarquia and not alvo.is_superuser
 
+    def pode_apagar_usuario(self, alvo):
+        """Pode APAGAR esta pessoa do portal?
+
+        Só o SUPERADMIN (a régua de `can_delete_users`). Ninguém apaga a si mesmo —
+        sumiria o acesso de quem está mexendo, no meio da tela — e o superusuário do
+        Django só é apagado por outro superusuário.
+        """
+        if not (self.is_superuser or self.can_delete_users()):
+            return False
+        if alvo is None or alvo.pk == self.pk:
+            return False
+        if alvo.is_superuser and not self.is_superuser:
+            return False
+        return True
+
     def can_manage_rh(self):
         """Administra os módulos de pessoal, junto com o SUPERADMIN.
 

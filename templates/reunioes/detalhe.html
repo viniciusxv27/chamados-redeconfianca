@@ -58,7 +58,16 @@
                class="px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">
                 <i class="fas fa-pen mr-1.5"></i>Editar
             </a>
-            {% if reuniao.status != 'CANCELADA' %}
+            {% if not reuniao.acabou %}
+            <form method="post" action="{% url 'reunioes:encerrar' reuniao.id %}" class="inline"
+                  onsubmit="return confirm('Encerrar a reunião e marcar como finalizada?');">
+                {% csrf_token %}
+                <button type="submit"
+                        class="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700">
+                    <i class="fas fa-flag-checkered mr-1.5"></i>Encerrar reunião
+                </button>
+            </form>
+            {# Reunião que já acabou não se cancela: cancelar apaga o evento da agenda e avisa todo mundo. #}
             <form method="post" action="{% url 'reunioes:cancelar' reuniao.id %}" class="inline"
                   onsubmit="return confirm('Cancelar a reunião e avisar todos os participantes?');">
                 {% csrf_token %}

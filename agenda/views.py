@@ -2631,7 +2631,7 @@ def transcription_detail(request, pk):
         pk=pk,
     )
     is_owner = transcription.owner_id == request.user.id
-    tasks = transcription.tasks_created.select_related('assigned_to').all()
+    tasks = list(transcription.tasks_created.select_related('assigned_to').all())
     users = User.objects.filter(is_active=True).order_by('first_name', 'username')
     shared_ids = list(transcription.shared_with.values_list('id', flat=True))
 
@@ -2642,8 +2642,27 @@ def transcription_detail(request, pk):
         'is_owner': is_owner,
         'can_reprocess_transcription': _can_reprocess_transcription(request.user, transcription),
         'shared_ids': shared_ids,
+        **_contexto_impulso(request.user, tasks),
     }
     return render(request, 'agenda/transcription_detail.html', context)
+
+
+def _contexto_impulso(user, tasks):
+    """O "Importar para o Impulso" das tarefas: só para quem participa do Impulso."""
+    from impulso import importacao
+    from impulso.utils import is_impulso_manager, is_impulso_member
+
+    if not tasks or not is_impulso_member(user):
+        return {'impulso_disponivel': False}
+    vivas = importacao.importacoes_vivas(user, [task.pk for task in tasks])
+    for task in tasks:
+        task.meta_impulso = vivas.get(task.pk)
+    return {
+        'impulso_disponivel': True,
+        'impulso_sou_gestor': is_impulso_manager(user),
+        'impulso_gestores': list(importacao.gestores_para(user)),
+        'impulso_hoje': timezone.localdate(),
+    }
 
 
 @login_required
@@ -2836,6 +2855,68 @@ def api_transcription_assign_task(request, pk, task_id):
         'task_id': task.pk,
         'assigned_to': target_user.get_full_name() or target_user.username,
         'message': f'Tarefa atribuída a {target_user.get_full_name() or target_user.username}!'
+    })
+
+
+@login_required_json
+@require_POST
+def api_transcription_task_impulso(request, pk, task_id):
+    """Importa uma tarefa da transcrição como meta do Impulso para quem pede.
+
+    Vale para quem enxerga a transcrição e participa do Impulso. A meta é sempre
+    da própria pessoa, com o gestor que ela escolher — as regras de quem pode
+    ser o gestor e de quando precisa de aprovação estão em impulso/importacao.py.
+    """
+    from django.utils.dateparse import parse_date
+
+    from core.models import TaskActivity
+    from impulso import importacao
+
+    transcription = get_object_or_404(_visible_transcriptions_for_user(request.user), pk=pk)
+    task = get_object_or_404(TaskActivity, pk=task_id, source_transcription=transcription)
+
+    try:
+        data = json.loads(request.body.decode('utf-8') or '{}')
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        data = None
+    if not isinstance(data, dict):
+        return JsonResponse({'error': 'JSON inválido.'}, status=400)
+
+    try:
+        prazo = parse_date(str(data.get('prazo') or ''))
+    except ValueError:
+        prazo = None
+    try:
+        gestor_id = int(data.get('gestor') or 0) or None
+    except (TypeError, ValueError):
+        gestor_id = None
+    texto = lambda chave: data.get(chave) if isinstance(data.get(chave), str) else ''  # noqa: E731
+
+    try:
+        meta = importacao.importar_tarefa(
+            request.user, task,
+            gestor_id=gestor_id,
+            prazo=prazo,
+            titulo=texto('titulo'),
+            descricao=texto('descricao'),
+            precisa_aprovacao=str(data.get('precisa_aprovacao', 'sim')).lower() not in ('nao', 'não', 'false', '0'),
+            origem=transcription.title,
+        )
+    except importacao.ImportacaoRecusada as exc:
+        extra = dict(exc.extra)
+        if extra.get('meta_id'):
+            extra['url'] = f"/impulso/metas/{extra['meta_id']}/"
+        return JsonResponse({'error': str(exc), **extra}, status=exc.status)
+
+    aprovada = meta.aprovacao == meta.Aprovacao.APROVADA
+    nome_gestor = meta.gestor.get_full_name() or meta.gestor.email
+    return JsonResponse({
+        'ok': True,
+        'meta_id': meta.id,
+        'url': f'/impulso/metas/{meta.id}/',
+        'aprovada': aprovada,
+        'message': ('Meta criada no seu Kanban do Impulso.' if aprovada else
+                    f'Enviada para {nome_gestor} aprovar; entra no seu Kanban depois disso.'),
     })
 
 

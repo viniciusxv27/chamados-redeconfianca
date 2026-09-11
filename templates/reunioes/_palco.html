@@ -90,6 +90,12 @@ url_branding, url_fundo, aplicar_fundo, url_portal, url_sair, e_visitante.
                     class="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">
                 <i class="fas fa-expand"></i>
             </button>
+            {% if pode_encerrar %}
+            <button type="button" id="rn-encerrar" title="Encerrar a reunião para todos e marcar como finalizada"
+                    class="px-3 sm:px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700">
+                <i class="fas fa-flag-checkered sm:mr-1.5"></i><span class="hidden sm:inline">Encerrar reunião</span>
+            </button>
+            {% endif %}
             <a href="{{ url_sair }}"
                class="px-3 sm:px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">
                 Sair
@@ -332,6 +338,48 @@ url_branding, url_fundo, aplicar_fundo, url_portal, url_sair, e_visitante.
         botaoTela.querySelector('i').className =
             document.fullscreenElement ? 'fas fa-compress' : 'fas fa-expand';
     });
+
+    // ---- encerrar a reunião ------------------------------------------------
+    {% if pode_encerrar %}
+    const botaoEncerrar = document.getElementById('rn-encerrar');
+    const rotuloEncerrar = botaoEncerrar.innerHTML;
+    let encerrando = false;
+    botaoEncerrar.addEventListener('click', async function () {
+        if (encerrando) return;
+        if (!confirm('Encerrar a reunião para todos e marcar como finalizada?')) return;
+        encerrando = true;
+        botaoEncerrar.disabled = true;
+        botaoEncerrar.innerHTML = '<i class="fas fa-circle-notch fa-spin sm:mr-1.5"></i><span class="hidden sm:inline">Encerrando…</span>';
+        // A ata que estiver gravando fecha e sobe antes: encerrar não pode perder o fim da reunião.
+        if (antesDeSair) {
+            try { await antesDeSair(); } catch (e) { /* a gravação continua guardada neste computador */ }
+        }
+        let ok = false;
+        try {
+            const resposta = await fetch("{{ url_encerrar|escapejs }}", {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'X-CSRFToken': '{{ csrf_token }}', 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            const dados = await resposta.json().catch(function () { return {}; });
+            ok = resposta.ok && dados.ok;
+            if (!ok) alert(dados.erro || 'Não foi possível encerrar a reunião agora. Tente de novo.');
+        } catch (e) {
+            alert('Sem conexão com o portal: a reunião não foi encerrada.');
+        }
+        if (!ok) {
+            encerrando = false;
+            botaoEncerrar.disabled = false;
+            botaoEncerrar.innerHTML = rotuloEncerrar;
+            return;
+        }
+        // Derruba a chamada de todo mundo (vale para o moderador da sala); para os
+        // outros casos, ao menos quem encerrou sai. Os demais caem no detalhe sozinhos.
+        try { api.executeCommand('endConference'); } catch (e) {}
+        try { api.executeCommand('hangup'); } catch (e) {}
+        window.location.href = "{{ url_sair|escapejs }}";
+    });
+    {% endif %}
 
     // ---- gravação da ata ---------------------------------------------------
     // Tudo daqui para baixo só existe para quem pode gerar a ata. Um visitante
