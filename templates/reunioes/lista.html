@@ -12,7 +12,7 @@
             <p class="text-sm text-gray-500">Sala de vídeo no portal, sem limite de tempo, com ata automática.</p>
         </div>
         <div class="flex items-center gap-2">
-            {% if user.is_superuser %}
+            {% if pode_configurar %}
             <a href="{% url 'reunioes:configuracao' %}"
                class="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">
                 <i class="fas fa-gear mr-1.5"></i>Configuração
@@ -91,6 +91,59 @@
         </a>
         {% endfor %}
     </div>
+    {% endif %}
+
+    {% if e_superadmin %}
+    <section id="todas" class="mt-10">
+        <div class="flex items-end justify-between gap-3 flex-wrap mb-3">
+            <div>
+                <h2 class="text-base font-bold text-gray-800">
+                    <i class="fas fa-user-shield text-sky-600 mr-1.5"></i>Todas as reuniões
+                </h2>
+                <p class="text-xs text-gray-500">Visão do SUPERADMIN: reuniões de outras pessoas, fora das suas acima.</p>
+            </div>
+            <form method="get" action="#todas" class="flex items-center gap-2">
+                <input type="search" name="q" value="{{ busca }}" placeholder="Tema ou organizador"
+                       class="w-52 px-3 py-1.5 rounded-lg border border-gray-200 text-sm focus:ring-sky-500 focus:border-sky-500">
+                <button type="submit" class="px-3 py-1.5 rounded-lg bg-sky-600 text-white text-xs font-medium hover:bg-sky-700">
+                    <i class="fas fa-magnifying-glass mr-1"></i>Buscar
+                </button>
+                {% if busca %}
+                <a href="{% url 'reunioes:lista' %}#todas" class="text-xs text-gray-500 hover:text-gray-700">Limpar</a>
+                {% endif %}
+            </form>
+        </div>
+
+        <h3 class="text-sm font-semibold text-gray-600 mb-2">
+            Próximas e em andamento <span class="font-normal text-gray-400">({{ total_todas_proximas }})</span>
+        </h3>
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm divide-y divide-gray-50 mb-2">
+            {% for r in todas_proximas %}
+            {% include 'reunioes/_linha_todas.html' %}
+            {% empty %}
+            <p class="px-4 py-6 text-sm text-gray-400 text-center">
+                {% if busca %}Nada encontrado para “{{ busca }}”.{% else %}Nenhuma reunião de outras pessoas por vir.{% endif %}
+            </p>
+            {% endfor %}
+        </div>
+        {% if total_todas_proximas > todas_proximas|length %}
+        <p class="text-[11px] text-gray-400 mb-2">Mostrando as {{ todas_proximas|length }} primeiras — use a busca para achar as outras.</p>
+        {% endif %}
+
+        <h3 class="text-sm font-semibold text-gray-600 mt-6 mb-2">
+            Anteriores e canceladas <span class="font-normal text-gray-400">({{ total_todas_anteriores }})</span>
+        </h3>
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm divide-y divide-gray-50">
+            {% for r in todas_anteriores %}
+            {% include 'reunioes/_linha_todas.html' %}
+            {% empty %}
+            <p class="px-4 py-6 text-sm text-gray-400 text-center">Nenhuma.</p>
+            {% endfor %}
+        </div>
+        {% if total_todas_anteriores > todas_anteriores|length %}
+        <p class="text-[11px] text-gray-400 mt-2">Mostrando as {{ todas_anteriores|length }} mais recentes — use a busca para achar as outras.</p>
+        {% endif %}
+    </section>
     {% endif %}
 </div>
 {% endblock %}

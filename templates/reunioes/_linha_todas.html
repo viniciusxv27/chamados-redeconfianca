@@ -1,0 +1,40 @@
+{% comment %}
+Linha da seção "Todas as reuniões" (só SUPERADMIN). Contexto: r (Reuniao com
+n_participantes anotado).
+{% endcomment %}
+<div class="flex items-center justify-between gap-3 flex-wrap px-4 py-3">
+    <div class="min-w-0">
+        <div class="flex items-center gap-2 flex-wrap mb-0.5">
+            <span class="text-sm font-semibold text-gray-800 truncate">{{ r.titulo }}</span>
+            {% if r.tipo == 'ENTREVISTA' %}
+            <span class="px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 text-[11px] font-semibold">Entrevista</span>
+            {% endif %}
+            {% if r.status == 'EM_ANDAMENTO' %}
+            <span class="px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-[11px] font-semibold">
+                <i class="fas fa-circle text-[7px] mr-1"></i>acontecendo agora
+            </span>
+            {% elif r.status == 'CANCELADA' %}
+            <span class="px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 text-[11px] font-semibold">Cancelada</span>
+            {% elif r.status == 'ENCERRADA' %}
+            <span class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-semibold">Encerrada</span>
+            {% endif %}
+        </div>
+        <p class="text-xs text-gray-500">
+            {{ r.inicio|date:'d/m/Y' }} às {{ r.inicio|date:'H:i' }}
+            <span class="text-gray-300">·</span>
+            <i class="fas fa-user-tie text-gray-400 mr-0.5"></i>{{ r.organizador.get_full_name|default:r.organizador.email }}
+            <span class="text-gray-300">·</span>
+            {{ r.n_participantes }} participante{{ r.n_participantes|pluralize }}
+        </p>
+    </div>
+    <div class="flex items-center gap-2">
+        <a href="{% url 'reunioes:detalhe' r.id %}"
+           class="px-3 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 hover:bg-gray-50">Detalhes</a>
+        {% if r.status != 'CANCELADA' %}
+        <a href="{% url 'reunioes:sala' r.id %}"
+           class="px-4 py-1.5 rounded-lg bg-sky-600 text-white text-xs font-medium hover:bg-sky-700">
+            <i class="fas fa-video mr-1"></i>Entrar
+        </a>
+        {% endif %}
+    </div>
+</div>

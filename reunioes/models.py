@@ -14,6 +14,8 @@ from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
+from .permissoes import e_superadmin
+
 
 class ConfiguracaoReunioes(models.Model):
     """Uma linha só."""
@@ -161,13 +163,13 @@ class Reuniao(models.Model):
     def pode_ver(self, user):
         if not (user and user.is_authenticated):
             return False
-        return (user.is_superuser or self.organizador_id == user.id
+        return (e_superadmin(user) or self.organizador_id == user.id
                 or self.convidado(user))
 
     def pode_editar(self, user):
         if not (user and user.is_authenticated):
             return False
-        return user.is_superuser or self.organizador_id == user.id
+        return e_superadmin(user) or self.organizador_id == user.id
 
     # ---- link público -----------------------------------------------------
     def abrir_link_publico(self):

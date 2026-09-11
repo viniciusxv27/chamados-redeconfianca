@@ -292,3 +292,53 @@ class DriveAuditLog(models.Model):
 
     def __str__(self):
         return f'{self.user} · {self.get_acao_display()} · {self.file_name}'
+
+
+class EdicaoLocal(models.Model):
+    """Um arquivo do Drive aberto para edição no computador de alguém.
+
+    O token (aqui só o hash) vale para ESTE arquivo e ESTA pessoa, por tempo
+    limitado. Guarda a trava do Office enquanto o arquivo está aberto e o md5 da
+    versão que a pessoa abriu — para um salvamento não passar por cima da
+    alteração de outra pessoa. Ver drive/edicao_local.py.
+    """
+
+    class Modo(models.TextChoices):
+        OFFICE = 'office', 'No Office (Word, Excel, PowerPoint)'
+        ARQUIVO = 'arquivo', 'Cópia no computador'
+
+    token_hash = models.CharField(max_length=64, unique=True)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='drive_edicoes_locais')
+    file_id = models.CharField(max_length=100, db_index=True)
+    file_name = models.CharField(max_length=255)
+    mime_type = models.CharField(max_length=120, blank=True, default='')
+    sector = models.ForeignKey('users.Sector', on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    meu_drive = models.BooleanField(default=False)
+    modo = models.CharField(max_length=10, choices=Modo.choices)
+    pode_salvar = models.BooleanField(default=False)
+    md5_base = models.CharField(max_length=64, blank=True, default='')
+
+    criado_em = models.DateTimeField(auto_now_add=True)
+    expira_em = models.DateTimeField()
+    encerrado_em = models.DateTimeField(null=True, blank=True)
+    aberto_em = models.DateTimeField(null=True, blank=True)
+    permissao_conferida_em = models.DateTimeField(null=True, blank=True)
+
+    lock_token = models.CharField(max_length=80, blank=True, default='')
+    lock_expira_em = models.DateTimeField(null=True, blank=True)
+
+    salvamentos = models.PositiveIntegerField(default=0)
+    ultimo_salvamento_em = models.DateTimeField(null=True, blank=True)
+    conflito_file_id = models.CharField(max_length=100, blank=True, default='')
+    ultimo_conflito_nome = models.CharField(max_length=255, blank=True, default='')
+    ultimo_conflito_em = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'Edição no computador'
+        verbose_name_plural = 'Edições no computador'
+        ordering = ['-criado_em']
+        indexes = [models.Index(fields=['file_id', 'lock_expira_em'])]
+
+    def __str__(self):
+        return f'{self.user} · {self.file_name} · {self.get_modo_display()}'

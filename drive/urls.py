@@ -1,6 +1,6 @@
-from django.urls import path
+from django.urls import path, re_path
 
-from . import views
+from . import edicao_local, views
 
 app_name = 'drive'
 
@@ -22,6 +22,7 @@ urlpatterns = [
     path('file/<str:file_id>/substituir/', views.file_replace, name='file_replace'),
     path('file/<str:file_id>/excluir/', views.file_delete, name='file_delete'),
     path('file/<str:file_id>/favoritar/', views.favorite_toggle, name='favorite_toggle'),
+    path('file/<str:file_id>/editar-no-computador/', edicao_local.iniciar_edicao, name='edicao_local_iniciar'),
     path('file/<str:file_id>/', views.file_preview, name='file_preview'),
 
     # Áreas pessoais
@@ -64,4 +65,16 @@ urlpatterns = [
     path('meu-drive/a/<str:file_id>/versoes/', views.meu_drive_versoes, name='meu_drive_versoes'),
     path('meu-drive/a/<str:file_id>/versoes/restaurar/', views.meu_drive_versao_restaurar,
          name='meu_drive_versao_restaurar'),
+    path('meu-drive/a/<str:file_id>/editar-no-computador/', edicao_local.iniciar_edicao_meu_drive,
+         name='edicao_local_iniciar_meu_drive'),
+
+    # Editar no computador: a página acompanha a edição; o Office fala WebDAV com
+    # o token no endereço, sem sessão nem CSRF (ver drive/edicao_local.py).
+    path('edicao/<str:token>/status/', edicao_local.status_edicao, name='edicao_local_status'),
+    path('edicao/<str:token>/enviar/', edicao_local.enviar_versao, name='edicao_local_enviar'),
+    path('edicao/<str:token>/encerrar/', edicao_local.encerrar_edicao, name='edicao_local_encerrar'),
+    re_path(r'^dav/?$', edicao_local.dav_raiz, name='dav_raiz'),
+    re_path(r'^dav/(?P<token>[A-Za-z0-9_-]{20,100})/?$', edicao_local.dav_colecao, name='dav_colecao'),
+    re_path(r'^dav/(?P<token>[A-Za-z0-9_-]{20,100})/(?P<nome>[^/]+)$', edicao_local.dav_arquivo,
+            name='dav_arquivo'),
 ]

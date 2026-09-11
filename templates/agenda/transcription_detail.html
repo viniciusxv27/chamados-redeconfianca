@@ -122,10 +122,12 @@
                     {% if transcription.status == 'completed' %}bg-green-400 text-green-900
                     {% elif transcription.status == 'processing' %}bg-yellow-400 text-yellow-900
                     {% elif transcription.status == 'error' %}bg-red-400 text-red-900
+                    {% elif transcription.status == 'recording' %}bg-red-500 text-white
                     {% else %}bg-gray-300 text-gray-800{% endif %}">
                     {% if transcription.status == 'completed' %}<i class="fas fa-check-circle mr-1.5"></i>Concluída
                     {% elif transcription.status == 'processing' %}<i class="fas fa-spinner fa-spin mr-1.5"></i>Processando
                     {% elif transcription.status == 'error' %}<i class="fas fa-exclamation-triangle mr-1.5"></i>Erro
+                    {% elif transcription.status == 'recording' %}<i class="fas fa-circle mr-1.5"></i>Gravando
                     {% else %}{{ transcription.status }}{% endif %}
                 </span>
             </div>
@@ -559,21 +561,32 @@
     </div>
 
     {% elif transcription.status == 'processing' %}
-    <div class="bg-white trans-panel rounded-xl p-10 text-center" id="processing-card">
+    <div class="bg-white trans-panel rounded-xl p-8 sm:p-10 text-center" id="processing-card">
         <div id="processing-stale-banner" class="hidden mb-4 mx-auto max-w-xl text-left bg-red-50 border border-red-200 rounded-lg px-4 py-3">
             <p class="text-sm font-semibold text-red-700 flex items-center gap-2">
                 <i class="fas fa-exclamation-triangle"></i>
-                <span id="processing-stale-title">Processamento parece travado</span>
+                <span id="processing-stale-title">Processamento sem sinal</span>
             </p>
             <p class="text-xs text-red-600 mt-1" id="processing-stale-msg">
-                Recarregue a página e clique em "Reiniciar Processamento" para tentar novamente.
+                O portal retoma sozinho em instantes. Se preferir, clique em "Reiniciar Processamento".
             </p>
+        </div>
+        <div id="processing-retry-banner" class="{% if not transcription.aguardando_nova_tentativa %}hidden {% endif %}mb-4 mx-auto max-w-xl text-left bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+            <p class="text-sm font-semibold text-amber-800 flex items-center gap-2"><i class="fas fa-rotate"></i> Vai tentar de novo sozinho</p>
+            <p class="text-xs text-amber-700 mt-1" id="processing-retry-msg">{{ transcription.error_message }}</p>
         </div>
         <div class="inline-flex items-center justify-center w-16 h-16 bg-orange-100 rounded-full mb-4" id="processing-icon">
             <i class="fas fa-spinner fa-spin text-2xl text-primary"></i>
         </div>
         <p class="text-gray-700 font-medium text-lg" id="processing-title">Processando transcrição com IA em segundo plano...</p>
-        <p class="text-sm text-gray-500 mt-2">Você pode manter a aba aberta, navegar no portal ou voltar mais tarde.</p>
+        <p class="text-sm text-gray-500 mt-1" id="processing-stage">{% if transcription.etapa %}{{ transcription.get_etapa_display }}{% else %}Na fila{% endif %}{% if transcription.finalizada_automaticamente %} · gravação fechada automaticamente{% endif %}</p>
+        <div class="mx-auto max-w-md mt-4">
+            <div class="h-2 rounded-full bg-orange-100 overflow-hidden">
+                <div id="processing-bar" class="h-2 rounded-full bg-orange-500 transition-all duration-500" style="width: 3%"></div>
+            </div>
+            <p class="text-[11px] text-gray-400 mt-1" id="processing-pct"></p>
+        </div>
+        <p class="text-sm text-gray-500 mt-3">Pode fechar esta página: o processamento continua no servidor e retoma sozinho se algo cair.</p>
         <p class="text-xs text-gray-400 mt-1 mb-5">Criado em {{ transcription.created_at|date:"d/m/Y H:i" }}</p>
         {% if can_reprocess_transcription %}
         <button onclick="reprocessTranscription({{ transcription.pk }}, this)" id="btn-reprocess-processing"
@@ -582,6 +595,27 @@
         </button>
         {% endif %}
         <p class="text-xs text-gray-400 mt-3" id="processing-subtitle">A tela atualiza automaticamente quando a conclusão for detectada.</p>
+    </div>
+
+    {% elif transcription.status == 'recording' %}
+    <div class="bg-white trans-panel rounded-xl p-8 sm:p-10 text-center" id="recording-card">
+        <div class="inline-flex items-center justify-center w-16 h-16 bg-red-100 rounded-full mb-4">
+            <i class="fas fa-microphone-lines text-2xl text-red-600"></i>
+        </div>
+        <p class="text-gray-700 font-medium text-lg">Gravação em andamento</p>
+        <p class="text-sm text-gray-500 mt-2" id="recording-detail">
+            {{ transcription.partes_recebidas }} parte{{ transcription.partes_recebidas|pluralize }} no servidor{% if transcription.ultima_parte_em %} · a última chegou às {{ transcription.ultima_parte_em|date:"H:i" }}{% endif %}
+        </p>
+        <p class="text-xs text-gray-400 mt-2 max-w-lg mx-auto">
+            Quando a gravação for encerrada, o processamento começa sozinho. Se o navegador de quem grava fechar,
+            o portal encerra a gravação depois de 20 minutos sem partes novas e processa o que chegou.
+        </p>
+        {% if can_reprocess_transcription and transcription.partes_recebidas %}
+        <button onclick="reprocessTranscription({{ transcription.pk }}, this)" id="btn-close-recording"
+                class="mt-5 inline-flex items-center px-5 py-2.5 bg-gray-800 text-white text-sm font-medium rounded-lg hover:bg-black transition shadow-sm">
+            <i class="fas fa-stop mr-2"></i> Encerrar agora e processar
+        </button>
+        {% endif %}
     </div>
     {% endif %}
 </div>
@@ -715,11 +749,13 @@ function expandAllSections() {
 
 async function pollProcessingStatus() {
     try {
-        const resp = await fetch(`/agenda/api/transcricoes/${transcriptionId}/status/`);
+        const resp = await fetch(`/agenda/api/transcricoes/${transcriptionId}/status/`, { credentials: 'same-origin' });
         if (!resp.ok) return;
 
         const data = await resp.json();
-        if (data.status === 'completed' || data.status === 'error') {
+        // Mudou de estado (gravação encerrada, processamento concluído ou com
+        // erro): a página certa é outra — recarrega.
+        if (data.status !== initialStatus) {
             if (statusPollTimer) {
                 clearInterval(statusPollTimer);
                 statusPollTimer = null;
@@ -728,32 +764,50 @@ async function pollProcessingStatus() {
             return;
         }
 
-        const subtitle = document.getElementById('processing-subtitle');
-        if (subtitle && data.updated_at) {
-            const updatedTime = new Date(data.updated_at).toLocaleTimeString('pt-BR');
-            subtitle.textContent = `Última atualização detectada: ${updatedTime}`;
+        const hora = (iso) => new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+        if (data.status === 'recording') {
+            const detalhe = document.getElementById('recording-detail');
+            if (detalhe) {
+                detalhe.textContent = `${data.partes_recebidas} parte(s) no servidor` +
+                    (data.ultima_parte_em ? ` · a última chegou às ${hora(data.ultima_parte_em)}` : '');
+            }
+            return;
         }
 
-        // Banner de "travado": aparece quando o backend reporta is_stale
-        // (mais de 3 minutos sem qualquer atualização da transcrição).
+        const etapa = document.getElementById('processing-stage');
+        if (etapa) {
+            etapa.textContent = (data.etapa_rotulo || 'Na fila') +
+                (data.finalizada_automaticamente ? ' · gravação fechada automaticamente' : '') +
+                (data.tentativas ? ` · tentativa ${data.tentativas + 1}` : '');
+        }
+        const barra = document.getElementById('processing-bar');
+        if (barra) barra.style.width = Math.max(3, data.progresso_pct || 0) + '%';
+        const pct = document.getElementById('processing-pct');
+        if (pct) pct.textContent = data.progresso_pct ? `${data.progresso_pct}%` : '';
+
+        const retry = document.getElementById('processing-retry-banner');
+        const retryMsg = document.getElementById('processing-retry-msg');
+        if (retry) {
+            retry.classList.toggle('hidden', !data.aguardando_nova_tentativa);
+            if (retryMsg && data.error_message) retryMsg.textContent = data.error_message;
+        }
+
+        const subtitle = document.getElementById('processing-subtitle');
+        if (subtitle && data.updated_at) {
+            subtitle.textContent = `Última atualização detectada: ${new Date(data.updated_at).toLocaleTimeString('pt-BR')}`;
+        }
+
+        // "Sem sinal": o job não renova o batimento há mais de 3 minutos (o
+        // servidor caiu ou reiniciou). A varredura retoma sozinha.
         const banner = document.getElementById('processing-stale-banner');
         const staleMsg = document.getElementById('processing-stale-msg');
-        const staleTitle = document.getElementById('processing-stale-title');
         if (banner) {
-            if (data.is_stale) {
-                banner.classList.remove('hidden');
-                if (data.error_message) {
-                    if (staleTitle) staleTitle.textContent = 'Falha no processamento';
-                    if (staleMsg) staleMsg.textContent = data.error_message;
-                } else {
-                    const mins = Math.max(1, Math.floor((data.stale_seconds || 180) / 60));
-                    if (staleTitle) staleTitle.textContent = 'Processamento parece travado';
-                    if (staleMsg) staleMsg.textContent =
-                        `Sem atualizações há cerca de ${mins} min. Pode ter faltado token na OpenAI. ` +
-                        `Clique em "Reiniciar Processamento" para tentar de novo.`;
-                }
-            } else {
-                banner.classList.add('hidden');
+            banner.classList.toggle('hidden', !data.is_stale);
+            if (data.is_stale && staleMsg) {
+                const mins = Math.max(1, Math.floor((data.stale_seconds || 180) / 60));
+                staleMsg.textContent = `Sem sinal do processamento há cerca de ${mins} min. O portal retoma sozinho ` +
+                    `em até um minuto; se preferir, clique em "Reiniciar Processamento".`;
             }
         }
     } catch (err) {
@@ -762,9 +816,9 @@ async function pollProcessingStatus() {
 }
 
 function startStatusPollingIfNeeded() {
-    if (initialStatus !== 'processing') return;
+    if (initialStatus !== 'processing' && initialStatus !== 'recording') return;
     pollProcessingStatus();
-    statusPollTimer = setInterval(pollProcessingStatus, 7000);
+    statusPollTimer = setInterval(pollProcessingStatus, initialStatus === 'recording' ? 15000 : 7000);
 }
 
 // Auto-expand first section

@@ -26,6 +26,7 @@ from communications.models import CommunicationGroup
 from users.models import Sector
 
 from . import audit
+from . import edicao_local
 from . import gdrive
 from . import visualizacao as vis
 from . import permissions as perms
@@ -384,6 +385,9 @@ def file_preview(request, file_id):
         'formatos': vis.formatos_de_download(meta),
         'pode_download': nivel >= ORDEM['DOWNLOAD'], 'pode_editar': nivel >= ORDEM['EDIT'],
         'pode_excluir': nivel >= ORDEM['DELETE'], 'is_superadmin': perms.is_superadmin(request.user),
+        'edicao': edicao_local.contexto_da_tela(
+            meta, nivel >= ORDEM['DOWNLOAD'], nivel >= ORDEM['EDIT'],
+            reverse('drive:edicao_local_iniciar', args=[file_id])),
     })
 
 
@@ -1322,7 +1326,9 @@ def meu_drive_arquivo(request, file_id):
     return render(request, 'drive/meu_drive_arquivo.html', {
         'meta': meta, 'pai_id': pai if _id_valido(pai) else '', 'is_superadmin': True,
         'visualizacao': vis.tipo(meta.get('mimeType')),
-        'formatos': vis.formatos_de_download(meta), 'pode_download': True})
+        'formatos': vis.formatos_de_download(meta), 'pode_download': True,
+        'edicao': edicao_local.contexto_da_tela(
+            meta, True, True, reverse('drive:edicao_local_iniciar_meu_drive', args=[file_id]))})
 
 
 @login_required

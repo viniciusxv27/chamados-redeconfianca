@@ -404,6 +404,38 @@ class MeetingTranscription(models.Model):
         verbose_name='Status',
     )
     error_message = models.TextField(blank=True, verbose_name='Mensagem de Erro')
+
+    # Gravação à prova de perda. A transcrição existe desde o primeiro pedaço de
+    # áudio (status "recording"): se o navegador fechar, o portal sabe de quem
+    # é, onde estão as partes e quando chegou a última.
+    ORIGENS = [
+        ('gravador', 'Gravador da agenda'),
+        ('reuniao', 'Sala de reunião'),
+        ('arquivo', 'Arquivo enviado'),
+    ]
+    ETAPAS = [
+        ('montagem', 'Juntando o áudio'),
+        ('transcricao', 'Transcrevendo'),
+        ('analise', 'Analisando com IA'),
+        ('tarefas', 'Gravando na agenda'),
+    ]
+    upload_id = models.CharField(
+        max_length=80, blank=True, default='', db_index=True, verbose_name='Sessão de envio',
+        help_text='Pasta transcriptions/parts/<upload_id>/ no storage.')
+    origem = models.CharField(max_length=12, blank=True, default='', choices=ORIGENS, verbose_name='Origem')
+    partes_recebidas = models.PositiveIntegerField(default=0, verbose_name='Partes recebidas')
+    ultima_parte_em = models.DateTimeField(null=True, blank=True, verbose_name='Última parte recebida em')
+    etapa = models.CharField(max_length=16, blank=True, default='', choices=ETAPAS, verbose_name='Etapa')
+    progresso = models.JSONField(
+        default=dict, blank=True, verbose_name='Progresso do processamento',
+        help_text='Partes juntadas, trechos já transcritos… — o que a retomada não precisa refazer.')
+    tentativas = models.PositiveIntegerField(default=0, verbose_name='Tentativas de processamento')
+    proxima_tentativa_em = models.DateTimeField(null=True, blank=True, verbose_name='Próxima tentativa em')
+    processando_por = models.CharField(max_length=80, blank=True, default='', verbose_name='Processando em')
+    batimento_em = models.DateTimeField(null=True, blank=True, verbose_name='Último sinal do processamento')
+    finalizada_automaticamente = models.BooleanField(
+        default=False, verbose_name='Finalizada automaticamente',
+        help_text='O navegador de quem gravava sumiu e o portal fechou a gravação com o que tinha chegado.')
     calendar_event_created = models.ForeignKey(
         CalendarEvent,
         on_delete=models.SET_NULL,
@@ -424,6 +456,18 @@ class MeetingTranscription(models.Model):
         verbose_name = 'Transcrição de Reunião'
         verbose_name_plural = 'Transcrições de Reunião'
         ordering = ['-created_at']
+        constraints = [
+            # Uma sessão de gravação = uma transcrição, mesmo com o "iniciar" e a
+            # primeira parte chegando juntos.
+            models.UniqueConstraint(fields=['upload_id'], condition=~models.Q(upload_id=''),
+                                    name='transcricao_upload_id_unico'),
+        ]
 
     def __str__(self):
         return f'{self.title} ({self.created_at:%d/%m/%Y %H:%M})'
+
+    @property
+    def aguardando_nova_tentativa(self):
+        """Falhou e já tem nova tentativa marcada (não está travada)."""
+        return bool(self.status == 'processing' and self.proxima_tentativa_em
+                    and self.proxima_tentativa_em > timezone.now())

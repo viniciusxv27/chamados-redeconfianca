@@ -1,4 +1,4 @@
-{% comment %}
+{% load static %}{% comment %}
 Palco de vídeo da reunião.
 
 Existe como include porque a mesma sala é servida em duas páginas muito
@@ -115,7 +115,8 @@ url_branding, url_fundo, aplicar_fundo, url_portal, url_sair, e_visitante.
         O fundo da rede pode ser trocado em <strong>“Selecionar fundo”</strong> na barra.
         {% if gerar_ata %}
         A ata capta o áudio desta aba — o navegador vai pedir permissão e você precisa marcar
-        <strong>“Compartilhar áudio”</strong>.
+        <strong>“Compartilhar áudio”</strong>. Cada trecho fica guardado neste computador até chegar ao
+        servidor: se a aba fechar, a gravação é oferecida para envio quando você voltar à sala.
         {% endif %}
     </p>
 </div>
@@ -127,6 +128,7 @@ url_branding, url_fundo, aplicar_fundo, url_portal, url_sair, e_visitante.
 {{ email_exibicao|json_script:"rn-email-usuario" }}
 {{ reuniao.titulo|json_script:"rn-titulo" }}
 
+{% if gerar_ata %}<script src="{% static 'js/rc-gravador.js' %}"></script>{% endif %}
 <script>
 (function () {
     const leia = id => JSON.parse(document.getElementById(id).textContent);
@@ -136,6 +138,8 @@ url_branding, url_fundo, aplicar_fundo, url_portal, url_sair, e_visitante.
     const servidor = '{{ servidor }}';
     const palco = document.getElementById('rn-palco');
     const carregando = document.getElementById('rn-carregando');
+    // Com a ata gravando, encerra e envia antes de a pessoa sair da sala.
+    let antesDeSair = null;
 
     if (typeof JitsiMeetExternalAPI === 'undefined') {
         carregando.innerHTML =
@@ -305,7 +309,12 @@ url_branding, url_fundo, aplicar_fundo, url_portal, url_sair, e_visitante.
     });
 
     api.addEventListener('readyToClose', function () {
-        window.location.href = "{{ url_sair }}";
+        // Sair direto perdia os últimos minutos da ata e ela nem começava.
+        if (antesDeSair) {
+            antesDeSair().finally(function () { window.location.href = "{{ url_sair }}"; });
+        } else {
+            window.location.href = "{{ url_sair }}";
+        }
     });
 
     // ---- tela cheia --------------------------------------------------------
@@ -330,184 +339,220 @@ url_branding, url_fundo, aplicar_fundo, url_portal, url_sair, e_visitante.
     // rotas internas, e nada disso tem serventia para quem não tem sessão.
 {% if gerar_ata %}
     const botaoGravar = document.getElementById('rn-gravar');
-    if (!botaoGravar) return;
+    if (!botaoGravar || typeof RCGravador === 'undefined') return;
 
     const botaoParar = document.getElementById('rn-parar');
     const caixaStatus = document.getElementById('rn-status');
     const relogio = document.getElementById('rn-tempo');
-
-    const TAMANHO_PEDACO = 5 * 60 * 1000;   // um pedaço a cada 5 min
-    let gravador = null, streamMic = null, streamTela = null, contexto = null;
-    let uploadId = null, indice = 0, inicio = 0, cronometro = null, enviando = [];
-
-    function aviso(texto, tipo) {
-        caixaStatus.className = 'mb-3 p-3 rounded-xl text-sm ' + ({
-            erro: 'bg-red-50 border border-red-100 text-red-700',
-            ok: 'bg-green-50 border border-green-100 text-green-800'
-        }[tipo] || 'bg-sky-50 border border-sky-100 text-sky-800');
-        caixaStatus.innerHTML = texto;
-        caixaStatus.classList.remove('hidden');
-    }
+    const URLS = {
+        iniciar: '{% url "agenda:api_gravacao_iniciar" %}',
+        chunk: '{% url "agenda:api_transcription_upload_chunk" %}',
+        finalize: '{% url "agenda:api_transcription_upload_finalize" %}'
+    };
+    const URL_ATA = "{% url 'reunioes:registrar_ata' reuniao.id %}";
+    const URL_SAIR = "{{ url_sair|escapejs }}";
+    const EVENTO_ID = '{{ reuniao.evento_id|default_if_none:"" }}';
+    let gravador = null;
 
     function csrf() {
         const m = document.cookie.match(/csrftoken=([^;]+)/);
         return m ? m[1] : '';
     }
 
-    function encerrarStreams() {
-        [streamMic, streamTela].forEach(s => s && s.getTracks().forEach(t => t.stop()));
-        if (contexto) { try { contexto.close(); } catch (e) {} }
-        streamMic = streamTela = contexto = null;
-    }
-
-    async function montarAudio() {
-        const micConf = { audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } };
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-            aviso('Seu navegador não captura o áudio da aba. Use Chrome ou Edge atualizado.', 'erro');
-            return null;
-        }
-        try {
-            streamTela = await navigator.mediaDevices.getDisplayMedia({
-                video: { width: { ideal: 320 }, height: { ideal: 180 }, frameRate: { ideal: 1, max: 5 } },
-                audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
-                preferCurrentTab: true, selfBrowserSurface: 'include'
-            });
-        } catch (err) {
-            aviso('Compartilhamento cancelado — a ata precisa do áudio da aba desta reunião.', 'erro');
-            return null;
-        }
-        const faixas = streamTela.getAudioTracks();
-        if (!faixas.length) {
-            encerrarStreams();
-            aviso('Você compartilhou a aba sem o áudio. Clique de novo e marque <strong>“Compartilhar áudio”</strong>.', 'erro');
-            return null;
-        }
-        // A faixa de vídeo fica viva, mas desligada: encerrá-la derruba a captura
-        // em alguns navegadores, e vídeo aqui só gastaria banda.
-        streamTela.getVideoTracks().forEach(t => { t.enabled = false; });
-        faixas[0].addEventListener('ended', () => { if (gravador) pararGravacao(); });
-
-        try {
-            streamMic = await navigator.mediaDevices.getUserMedia(micConf);
-        } catch (err) {
-            encerrarStreams();
-            aviso('Não foi possível usar o microfone: ' + (err.message || err), 'erro');
-            return null;
-        }
-
-        const Ctx = window.AudioContext || window.webkitAudioContext;
-        contexto = new Ctx();
-        const destino = contexto.createMediaStreamDestination();
-        contexto.createMediaStreamSource(streamMic).connect(destino);
-        contexto.createMediaStreamSource(new MediaStream(faixas)).connect(destino);
-        return destino.stream;
-    }
-
-    async function enviarPedaco(blob, idx) {
-        const dados = new FormData();
-        dados.append('upload_id', uploadId);
-        dados.append('chunk_index', idx);
-        dados.append('total_chunks', 0);
-        dados.append('audio', blob, 'parte-' + idx + '.webm');
-        const r = await fetch('/agenda/api/transcricoes/upload/chunk/', {
-            method: 'POST', body: dados, headers: { 'X-CSRFToken': csrf() }
-        });
-        if (!r.ok) throw new Error('parte ' + idx + ' não subiu');
-    }
-
-    function tique() {
-        const s = Math.floor((Date.now() - inicio) / 1000);
-        relogio.textContent = String(Math.floor(s / 60)).padStart(2, '0') + ':' +
-                              String(s % 60).padStart(2, '0');
-    }
-
-    botaoGravar.addEventListener('click', async function () {
-        const stream = await montarAudio();
-        if (!stream) return;
-
-        uploadId = 'reuniao-{{ reuniao.id }}-' + Date.now();
-        indice = 0; enviando = [];
-        gravador = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-        gravador.ondataavailable = function (ev) {
-            if (ev.data && ev.data.size > 0) {
-                enviando.push(enviarPedaco(ev.data, indice++).catch(e => e));
+    // Texto da pessoa (título, erro) entra como texto; as ações viram botões.
+    function aviso(texto, tipo, acoes) {
+        caixaStatus.className = 'mb-3 p-3 rounded-xl text-sm ' + ({
+            erro: 'bg-red-50 border border-red-100 text-red-700',
+            ok: 'bg-green-50 border border-green-100 text-green-800',
+            atencao: 'bg-amber-50 border border-amber-100 text-amber-800'
+        }[tipo] || 'bg-sky-50 border border-sky-100 text-sky-800');
+        caixaStatus.innerHTML = '';
+        caixaStatus.appendChild(document.createTextNode(texto));
+        (acoes || []).forEach(function (acao) {
+            const el = document.createElement(acao.href ? 'a' : 'button');
+            el.className = 'ml-2 underline font-semibold';
+            el.textContent = acao.rotulo;
+            if (acao.href) {
+                el.href = acao.href;
+            } else {
+                el.type = 'button';
+                el.addEventListener('click', acao.fazer);
             }
-        };
-        gravador.start(TAMANHO_PEDACO);
+            caixaStatus.appendChild(el);
+        });
+        caixaStatus.classList.remove('hidden');
+    }
 
-        inicio = Date.now();
-        cronometro = setInterval(tique, 1000);
-        botaoGravar.style.display = 'none';
-        botaoParar.style.display = '';
-        aviso('Gravando a ata. Pode falar à vontade — não existe limite de tempo.', 'info');
+    function pintar(e) {
+        relogio.textContent = e.tempo;
+        const ocupado = ['gravando', 'parando', 'enviando', 'finalizando', 'pedindo-permissao'].indexOf(e.fase) !== -1;
+        botaoGravar.style.display = ocupado ? 'none' : '';
+        botaoParar.style.display = e.fase === 'gravando' ? '' : 'none';
+        if (e.fase !== 'gravando') return;
+        if (!e.online) {
+            aviso('Sem internet: a ata continua gravando e as partes ficam guardadas neste computador.', 'atencao');
+        } else if (e.pausado) {
+            aviso('Sua sessão no portal expirou. Entre de novo em outra aba — a gravação continua.', 'erro');
+        } else {
+            aviso('Gravando a ata. Pode falar à vontade — não existe limite de tempo. ' +
+                  e.partes.enviadas + ' parte(s) já no servidor.', 'info');
+        }
+    }
+
+    function aoErro(mensagem) {
+        const sobrou = gravador && !gravador.gravando() && gravador.estado().partes.geradas > 0;
+        aviso(mensagem, 'erro', sobrou ? [{ rotulo: 'Gerar a ata com o que foi gravado', fazer: function () { pararGravacao(); } }] : []);
+    }
+
+    async function comecar() {
+        if (gravador && gravador.gravando()) return;
+        gravador = new RCGravador({
+            csrf: csrf(),
+            urls: URLS,
+            fonte: 'aba-mic',
+            sessao: { titulo: titulo, eventId: EVENTO_ID, origem: 'reuniao' },
+            onEstado: pintar,
+            onErro: aoErro
+        });
+        const ok = await gravador.iniciar();
+        if (!ok) gravador = null;
+    }
+
+    async function registrarAta(transcricaoId) {
+        const vinculo = new FormData();
+        vinculo.append('transcricao', transcricaoId);
+        const r = await fetch(URL_ATA, {
+            method: 'POST', body: vinculo, credentials: 'same-origin', headers: { 'X-CSRFToken': csrf() }
+        });
+        const j = (r.headers.get('content-type') || '').indexOf('application/json') !== -1 ? await r.json() : {};
+        if (!r.ok || !j.ok) throw new Error(j.erro || ('o portal respondeu ' + r.status));
+        return j;
+    }
+
+    async function ligarAta(transcricaoId) {
+        try {
+            const j = await registrarAta(transcricaoId);
+            aviso('Ata em preparo e já compartilhada com ' + j.destinatarios + ' pessoa(s).', 'ok',
+                  [{ rotulo: 'Acompanhar', href: j.url }]);
+            return true;
+        } catch (e) {
+            aviso('A ata está sendo gerada, mas não foi ligada à reunião (' + (e.message || e) + ').', 'erro',
+                  [{ rotulo: 'Tentar de novo', fazer: function () { ligarAta(transcricaoId); } }]);
+            return false;
+        }
+    }
+
+    async function pararGravacao(opcoes) {
+        opcoes = opcoes || {};
+        if (!gravador) return true;
+        botaoParar.disabled = true;
+        aviso('Encerrando a gravação e enviando as últimas partes…', 'info');
+        let dados;
+        try {
+            let r = await gravador.finalizar({ titulo: titulo, esperarPendentesMs: opcoes.esperaMs || 5 * 60 * 1000 });
+            if (r && r.pendentes) {
+                if (r.sessaoExpirada) {
+                    aviso('Sua sessão no portal expirou. Entre de novo em outra aba — nada foi perdido.', 'erro',
+                          [{ rotulo: 'Tentar de novo', fazer: function () { pararGravacao(opcoes); } }]);
+                    return false;
+                }
+                const seguir = opcoes.semPerguntar || confirm(
+                    'Ainda há ' + r.pendentes + ' parte(s) que não subiram. Gerar a ata com o que já chegou?\n\n' +
+                    'As que faltam ficam guardadas neste computador e podem ser enviadas depois.');
+                if (!seguir) {
+                    aviso('A gravação está guardada neste computador.', 'atencao',
+                          [{ rotulo: 'Tentar de novo', fazer: function () { pararGravacao(opcoes); } }]);
+                    return false;
+                }
+                r = await gravador.finalizar({ titulo: titulo, forcar: true, esperarPendentesMs: 0 });
+            }
+            dados = r;
+        } catch (e) {
+            if (e && e.message === 'Nada foi gravado.') {
+                gravador = null;
+                aviso('Nada foi gravado.', 'erro');
+                return true;
+            }
+            aviso('A gravação está guardada, mas a ata não pôde ser iniciada: ' + (e.message || e) + '.', 'erro',
+                  [{ rotulo: 'Tentar de novo', fazer: function () { pararGravacao(opcoes); } }]);
+            return false;
+        } finally {
+            botaoParar.disabled = false;
+        }
+        gravador = null;
+        return ligarAta(dados.id);
+    }
+
+    // Gravação da ata desta reunião que ficou neste computador (aba fechada,
+    // navegador travou, internet caiu): oferece enviar ao voltar à sala.
+    async function oferecerGravacaoGuardada() {
+        let locais = [];
+        try {
+            locais = await RCGravador.pendentesLocais();
+        } catch (e) {
+            return;
+        }
+        const daqui = locais.filter(function (l) {
+            return l.origem === 'reuniao'
+                && ((EVENTO_ID && String(l.eventId) === EVENTO_ID) || l.pagina === window.location.pathname);
+        });
+        for (const l of daqui) {
+            if (gravador && l.uploadId === gravador.sessao.uploadId) continue;
+            if (await RCGravador.sessaoAtiva(l.uploadId, 1200)) {
+                aviso('A ata desta reunião está sendo gravada em outra aba.', 'info');
+                return;
+            }
+            aviso('Uma gravação da ata desta reunião não foi enviada (' + l.partesLocais + ' parte(s) neste computador' +
+                  (l.partesEnviadas ? ', ' + l.partesEnviadas + ' no servidor' : '') + ').', 'atencao', [
+                { rotulo: 'Enviar e gerar a ata', fazer: function () { enviarGuardada(l); } },
+                { rotulo: 'Descartar', fazer: function () { descartarGuardada(l); } }
+            ]);
+            return;
+        }
+    }
+
+    async function enviarGuardada(l) {
+        aviso('Enviando a gravação guardada…', 'info');
+        try {
+            await RCGravador.retomar({
+                uploadId: l.uploadId, csrf: csrf(), urls: URLS,
+                onProgresso: function (p) { aviso('Enviando a gravação guardada… ' + p.enviadas + '/' + p.total, 'info'); }
+            });
+            const dados = await RCGravador.finalizarSessao({
+                uploadId: l.uploadId, csrf: csrf(), urls: URLS, titulo: l.titulo || titulo, eventId: EVENTO_ID
+            });
+            await ligarAta(dados.id);
+        } catch (e) {
+            aviso('Não foi possível enviar agora: ' + (e.message || e) + '. Nada foi apagado deste computador.', 'erro',
+                  [{ rotulo: 'Tentar de novo', fazer: function () { enviarGuardada(l); } }]);
+        }
+    }
+
+    async function descartarGuardada(l) {
+        if (!confirm('Descartar a gravação guardada desta ata? Não dá para desfazer.')) return;
+        await RCGravador.descartarLocal(l.uploadId);
+        caixaStatus.classList.add('hidden');
+    }
+
+    antesDeSair = async function () {
+        if (gravador && gravador.gravando()) {
+            aviso('Encerrando a ata antes de sair…', 'info');
+            await pararGravacao({ semPerguntar: true, esperaMs: 60 * 1000 });
+        }
+    };
+
+    // "Sair" e "Detalhes" com a ata gravando: encerra e envia antes de ir.
+    document.querySelectorAll('a[href="' + URL_SAIR + '"]').forEach(function (link) {
+        link.addEventListener('click', function (ev) {
+            if (!gravador || !gravador.gravando()) return;
+            ev.preventDefault();
+            antesDeSair().finally(function () { window.location.href = URL_SAIR; });
+        });
     });
 
-    async function pararGravacao() {
-        if (!gravador) return;
-        const duracao = Math.floor((Date.now() - inicio) / 1000);
-        clearInterval(cronometro);
-        botaoParar.disabled = true;
-        aviso('Enviando a gravação e montando a ata…', 'info');
-
-        await new Promise(resolve => {
-            gravador.onstop = resolve;
-            gravador.stop();
-        });
-        encerrarStreams();
-        await Promise.all(enviando);
-
-        const total = indice;
-        gravador = null;
-        if (!total) {
-            aviso('Nada foi gravado.', 'erro');
-            botaoParar.style.display = 'none';
-            botaoGravar.style.display = '';
-            botaoParar.disabled = false;
-            return;
-        }
-
-        const dados = new FormData();
-        dados.append('upload_id', uploadId);
-        dados.append('total_chunks', total);
-        dados.append('title', titulo);
-        dados.append('duration_seconds', duracao);
-        dados.append('original_audio_name', 'reuniao.webm');
-
-        let resposta;
-        try {
-            const r = await fetch('/agenda/api/transcricoes/upload/finalize/', {
-                method: 'POST', body: dados, headers: { 'X-CSRFToken': csrf() }
-            });
-            resposta = await r.json();
-            if (!r.ok) throw new Error(resposta.error || 'falha ao finalizar');
-        } catch (err) {
-            aviso('A gravação subiu, mas a ata não pôde ser iniciada: ' + err.message, 'erro');
-            botaoParar.disabled = false;
-            return;
-        }
-
-        const vinculo = new FormData();
-        vinculo.append('transcricao', resposta.id);
-        try {
-            const r2 = await fetch("{% url 'reunioes:registrar_ata' reuniao.id %}", {
-                method: 'POST', body: vinculo, headers: { 'X-CSRFToken': csrf() }
-            });
-            const j = await r2.json();
-            if (j.ok) {
-                aviso('Ata em preparo e já compartilhada com ' + j.destinatarios +
-                      ' pessoa(s). <a href="' + j.url + '" class="underline font-semibold">Acompanhar</a>.', 'ok');
-            } else {
-                aviso('Ata gerada, mas não foi possível avisar os participantes: ' + (j.erro || ''), 'erro');
-            }
-        } catch (err) {
-            aviso('Ata gerada. Ela aparece em /agenda/transcricoes/.', 'ok');
-        }
-        botaoParar.style.display = 'none';
-        botaoGravar.style.display = '';
-        botaoParar.disabled = false;
-    }
-
-    botaoParar.addEventListener('click', pararGravacao);
+    botaoGravar.addEventListener('click', comecar);
+    botaoParar.addEventListener('click', function () { pararGravacao(); });
+    oferecerGravacaoGuardada();
 {% endif %}
 })();
 </script>

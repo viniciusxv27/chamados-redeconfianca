@@ -1,0 +1,283 @@
+{% load static %}<!doctype html>
+<html lang="pt-br"{% if user.is_authenticated and user.theme == 'dark' %} class="dark"{% endif %}>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Gravador — Rede Confiança</title>
+    {% comment %}
+    Janela própria do gravador. Existe para a gravação não depender da aba do
+    portal: a pessoa pode fechar a página, navegar, minimizar. Não estende o
+    base.html de propósito — sem menu, sem popups do portal, leve para ficar
+    aberta horas. O cabeçalho repete o do base (Tailwind, ícones e tema escuro).
+    {% endcomment %}
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = { theme: { extend: { colors: { primary: '#FF6B35' },
+            fontFamily: { sans: ['Montserrat', 'ui-sans-serif', 'system-ui'] } } } };
+    </script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="{% static 'css/tema-escuro.css' %}" rel="stylesheet">
+    <style>
+        .grav-pulso { animation: grav-pulso 1.6s ease-in-out infinite; }
+        @keyframes grav-pulso { 0%, 100% { opacity: 1 } 50% { opacity: .35 } }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+<main class="p-3 sm:p-4 max-w-md mx-auto">
+    <div class="grav-shell bg-white rounded-2xl border border-orange-100 shadow-sm overflow-hidden">
+        <div class="px-4 py-3 bg-gradient-to-r from-orange-500 to-orange-600 text-white flex items-center gap-2">
+            <i class="fas fa-microphone-lines"></i>
+            <span class="font-semibold text-sm">Gravador de reunião</span>
+            <span id="rede" class="ml-auto text-[11px] px-2 py-0.5 rounded-full bg-white/20 border border-white/30">
+                <i class="fas fa-wifi mr-1"></i>online
+            </span>
+        </div>
+
+        <div class="p-4 space-y-4">
+            <div>
+                <label for="titulo" class="block text-xs font-semibold text-gray-600 mb-1">Título da reunião</label>
+                <input id="titulo" type="text" value="{{ titulo }}" maxlength="255" placeholder="Ex: Reunião de resultados"
+                       class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-orange-500 focus:border-orange-500">
+                {% if event %}
+                <p class="text-[11px] text-gray-500 mt-1"><i class="fas fa-calendar-day mr-1 text-primary"></i>Ligada a: {{ event.title }}</p>
+                {% endif %}
+            </div>
+
+            <div class="text-center">
+                <div class="inline-flex items-center gap-2 text-xs font-semibold text-gray-500">
+                    <span id="bolinha" class="w-2.5 h-2.5 rounded-full bg-gray-300"></span>
+                    <span id="fase">Preparando o microfone…</span>
+                </div>
+                <div id="tempo" class="font-mono text-5xl font-bold text-gray-800 mt-1 tracking-tight">00:00</div>
+                <p id="fonte" class="text-[11px] text-gray-400 mt-1">
+                    {% if fonte == 'system' %}Áudio do computador{% elif fonte == 'both' %}Microfone + áudio do computador{% else %}Microfone{% endif %}
+                </p>
+            </div>
+
+            <div class="grid grid-cols-3 gap-2 text-center">
+                <div class="grav-card rounded-xl border border-gray-100 bg-gray-50 p-2">
+                    <div id="n-servidor" class="text-lg font-bold text-gray-800">0</div>
+                    <div class="text-[10px] leading-tight text-gray-500">partes no servidor</div>
+                </div>
+                <div class="grav-card rounded-xl border border-gray-100 bg-gray-50 p-2">
+                    <div id="n-local" class="text-lg font-bold text-gray-800">0</div>
+                    <div class="text-[10px] leading-tight text-gray-500">guardadas neste computador</div>
+                </div>
+                <div class="grav-card rounded-xl border border-gray-100 bg-gray-50 p-2">
+                    <div id="n-pendente" class="text-lg font-bold text-gray-800">0</div>
+                    <div class="text-[10px] leading-tight text-gray-500">a enviar</div>
+                </div>
+            </div>
+
+            <p id="aviso" class="hidden text-xs rounded-lg px-3 py-2 border"></p>
+
+            <div class="space-y-2">
+                <button type="button" id="btn-iniciar"
+                        class="hidden w-full inline-flex items-center justify-center px-4 py-3 bg-red-600 text-white text-sm font-semibold rounded-xl hover:bg-red-700">
+                    <i class="fas fa-circle mr-2"></i> Iniciar gravação
+                </button>
+                <button type="button" id="btn-encerrar"
+                        class="hidden w-full inline-flex items-center justify-center px-4 py-3 bg-gray-800 text-white text-sm font-semibold rounded-xl hover:bg-black disabled:opacity-60">
+                    <i class="fas fa-stop mr-2"></i> Encerrar e processar
+                </button>
+                <button type="button" id="btn-mini"
+                        class="hidden w-full inline-flex items-center justify-center px-4 py-2 border border-gray-200 text-gray-700 text-xs font-medium rounded-xl hover:bg-gray-50">
+                    <i class="fas fa-up-right-and-down-left-from-center mr-2"></i> Mini-painel flutuante (fica por cima das outras janelas)
+                </button>
+            </div>
+
+            <div id="concluido" class="hidden rounded-xl border border-green-200 bg-green-50 p-4 text-center">
+                <p class="text-sm font-semibold text-green-800"><i class="fas fa-check-circle mr-1"></i> Gravação enviada!</p>
+                <p class="text-xs text-green-700 mt-1">A transcrição está sendo processada e continua mesmo que você feche tudo.</p>
+                <div class="flex gap-2 justify-center mt-3">
+                    <a id="link-acompanhar" href="#" target="_blank" rel="opener"
+                       class="px-3 py-2 text-xs font-semibold rounded-lg bg-green-600 text-white hover:bg-green-700">Acompanhar</a>
+                    <button type="button" id="btn-fechar" class="px-3 py-2 text-xs font-medium rounded-lg border border-green-200 text-green-800 bg-white hover:bg-green-50">Fechar janela</button>
+                </div>
+            </div>
+
+            <p class="text-[11px] leading-snug text-gray-400 text-center">
+                Pode minimizar esta janela, trocar de aba e até fechar a página do portal.
+                Evite fechar esta janela antes de encerrar — se acontecer, o que foi gravado
+                fica guardado e aparece em <strong>Nova transcrição</strong> para enviar.
+            </p>
+        </div>
+    </div>
+
+    {# O mini-painel mora escondido aqui e só aparece quando vai para a janela flutuante. #}
+    <div class="hidden">
+        <div id="mini-painel" class="p-3 flex items-center gap-3 bg-white">
+            <span class="w-3 h-3 rounded-full bg-red-500 grav-pulso"></span>
+            <span id="mini-tempo" class="font-mono text-2xl font-bold text-gray-800">00:00</span>
+            <span id="mini-partes" class="text-[11px] text-gray-500"></span>
+            <button type="button" id="mini-encerrar" class="ml-auto px-3 py-2 text-xs font-semibold rounded-lg bg-gray-800 text-white">Encerrar</button>
+        </div>
+    </div>
+</main>
+
+<script src="{% static 'js/rc-gravador.js' %}"></script>
+<script>
+(function () {
+    const $ = (id) => document.getElementById(id);
+    const FONTE = '{{ fonte|escapejs }}';
+    const EVENTO_ID = '{% if event %}{{ event.pk }}{% endif %}';
+    const URLS = {
+        iniciar: '{% url "agenda:api_gravacao_iniciar" %}',
+        chunk: '{% url "agenda:api_transcription_upload_chunk" %}',
+        finalize: '{% url "agenda:api_transcription_upload_finalize" %}',
+    };
+    const FASES = {
+        'ocioso': ['Pronto para gravar', 'bg-gray-300'],
+        'pedindo-permissao': ['Aguardando a permissão do navegador…', 'bg-amber-400'],
+        'gravando': ['Gravando', 'bg-red-500 grav-pulso'],
+        'parando': ['Encerrando…', 'bg-amber-400'],
+        'enviando': ['Enviando as últimas partes…', 'bg-sky-500 grav-pulso'],
+        'finalizando': ['Iniciando o processamento…', 'bg-sky-500 grav-pulso'],
+        'concluido': ['Enviado', 'bg-green-500'],
+        'erro': ['Precisa de atenção', 'bg-red-600'],
+    };
+    const papeis = { lista: [] };
+    let encerrando = false;
+    let jaGravou = false;
+
+    function aviso(texto, tipo) {
+        const el = $('aviso');
+        if (!texto) { el.classList.add('hidden'); return; }
+        el.className = 'text-xs rounded-lg px-3 py-2 border ' + ({
+            erro: 'bg-red-50 border-red-200 text-red-700',
+            ok: 'bg-green-50 border-green-200 text-green-800',
+        }[tipo] || 'bg-amber-50 border-amber-200 text-amber-800');
+        el.textContent = texto;
+    }
+
+    function pintar(e) {
+        const [rotulo, cor] = FASES[e.fase] || [e.fase, 'bg-gray-300'];
+        $('fase').textContent = rotulo;
+        $('bolinha').className = 'w-2.5 h-2.5 rounded-full ' + cor;
+        $('tempo').textContent = e.tempo;
+        $('mini-tempo').textContent = e.tempo;
+        $('n-servidor').textContent = e.partes.enviadas;
+        $('n-local').textContent = e.semArmazenamentoLocal ? '—' : e.partes.locais;
+        $('n-pendente').textContent = e.partes.pendentes;
+        $('mini-partes').textContent = e.partes.enviadas + ' no servidor' + (e.partes.pendentes ? ' · ' + e.partes.pendentes + ' a enviar' : '');
+
+        const rede = $('rede');
+        if (!e.online) {
+            rede.innerHTML = '<i class="fas fa-plug-circle-xmark mr-1"></i>sem internet';
+        } else if (e.pausado) {
+            rede.innerHTML = '<i class="fas fa-user-lock mr-1"></i>entre no portal';
+        } else {
+            rede.innerHTML = '<i class="fas fa-wifi mr-1"></i>online';
+        }
+
+        if (e.fase === 'gravando') jaGravou = true;
+        const podeEncerrar = ['gravando', 'enviando', 'erro', 'parando'].includes(e.fase) || (jaGravou && e.fase === 'ocioso');
+        $('btn-encerrar').classList.toggle('hidden', !podeEncerrar || e.fase === 'concluido');
+        $('btn-mini').classList.toggle('hidden', !(e.fase === 'gravando' && RCGravador.suporte().miniPainel));
+
+        if (e.fase === 'gravando') {
+            document.title = '● ' + e.tempo + ' — Gravando';
+        } else if (e.fase === 'concluido') {
+            document.title = '✓ Gravação enviada';
+        } else {
+            document.title = 'Gravador — Rede Confiança';
+        }
+        if (!e.online && e.fase === 'gravando') {
+            aviso('Sem internet: a gravação continua e as partes ficam guardadas neste computador até a conexão voltar.', 'aviso');
+        } else if (e.pausado) {
+            aviso('Sua sessão no portal expirou. Entre no portal em outra aba — a gravação continua e as partes sobem sozinhas depois.', 'erro');
+        } else if (e.semArmazenamentoLocal && e.fase === 'gravando') {
+            aviso('Este navegador não deixou guardar cópia neste computador (modo anônimo?). A gravação segue, mas depende da internet.', 'aviso');
+        }
+    }
+
+    const gravador = new RCGravador({
+        csrf: '{{ csrf_token }}',
+        urls: URLS,
+        fonte: FONTE,
+        sessao: {
+            uploadId: '{{ upload_id|escapejs }}' || RCGravador.novoUploadId(),
+            titulo: $('titulo').value.trim(),
+            eventId: EVENTO_ID,
+            origem: 'gravador',
+            papeis: [],
+        },
+        onEstado: pintar,
+        onErro: (mensagem) => aviso(mensagem, 'erro'),
+        // A aba do portal manda o título e os papéis que a pessoa editar lá, e
+        // pode pedir para encerrar daqui.
+        onComando: (comando, dados) => {
+            if (comando === 'config' || comando === 'parar_e_processar') {
+                if (dados.titulo) $('titulo').value = dados.titulo;
+                if (Array.isArray(dados.papeis)) papeis.lista = dados.papeis;
+            }
+            if (comando === 'parar_e_processar') encerrar();
+            if (comando === 'focar') { try { window.focus(); } catch (e) { /* o navegador decide */ } }
+        },
+    });
+
+    async function comecar() {
+        $('btn-iniciar').classList.add('hidden');
+        aviso('');
+        const ok = await gravador.iniciar();
+        if (!ok) {
+            $('btn-iniciar').classList.remove('hidden');
+        }
+    }
+
+    async function encerrar() {
+        if (encerrando) return;
+        encerrando = true;
+        const botao = $('btn-encerrar');
+        botao.disabled = true;
+        botao.innerHTML = '<i class="fas fa-circle-notch fa-spin mr-2"></i> Encerrando…';
+        const titulo = $('titulo').value.trim() || 'Reunião sem título';
+        try {
+            let r = await gravador.finalizar({ titulo, papeis: papeis.lista, esperarPendentesMs: 5 * 60 * 1000 });
+            if (r && r.pendentes) {
+                if (r.sessaoExpirada) {
+                    aviso('Sua sessão no portal expirou. Entre no portal em outra aba e clique de novo em Encerrar — nada foi perdido.', 'erro');
+                    return;
+                }
+                const seguir = confirm(
+                    'Ainda há ' + r.pendentes + ' parte(s) que não subiram. Processar com o que já chegou?\n\n' +
+                    'As que faltam continuam guardadas neste computador e podem ser enviadas depois pela tela "Nova transcrição".');
+                if (!seguir) return;
+                r = await gravador.finalizar({ titulo, papeis: papeis.lista, forcar: true, esperarPendentesMs: 0 });
+            }
+            $('concluido').classList.remove('hidden');
+            $('btn-encerrar').classList.add('hidden');
+            $('link-acompanhar').href = r.redirect || '/agenda/transcricoes/';
+            aviso(r.missing_chunks > 0 ? (r.missing_chunks + ' parte(s) não chegaram; o processamento começou com as ' + r.parts_received + ' recebidas.') : '', 'aviso');
+        } catch (e) {
+            aviso('Não foi possível iniciar o processamento: ' + (e.message || e) + ' A gravação continua guardada — tente de novo.', 'erro');
+        } finally {
+            encerrando = false;
+            botao.disabled = false;
+            botao.innerHTML = '<i class="fas fa-stop mr-2"></i> Encerrar e processar';
+        }
+    }
+
+    $('titulo').addEventListener('input', () => { gravador.sessao.titulo = $('titulo').value.trim(); });
+    $('btn-iniciar').addEventListener('click', comecar);
+    $('btn-encerrar').addEventListener('click', encerrar);
+    $('mini-encerrar').addEventListener('click', encerrar);
+    $('btn-fechar').addEventListener('click', () => window.close());
+    $('btn-mini').addEventListener('click', async () => {
+        const abriu = await gravador.abrirMiniPainel($('mini-painel'));
+        if (!abriu) aviso('Este navegador não abre o mini-painel flutuante. A gravação segue normalmente.', 'aviso');
+    });
+
+    if (FONTE === 'mic') {
+        // Microfone não precisa de clique: a permissão aparece nesta janela.
+        comecar();
+    } else {
+        // Compartilhar tela/aba exige um clique nesta janela (regra do navegador).
+        $('fase').textContent = 'Pronto para gravar';
+        $('btn-iniciar').classList.remove('hidden');
+        aviso('Clique em "Iniciar gravação" e escolha a aba ou janela da reunião, marcando "Compartilhar áudio".', 'aviso');
+    }
+})();
+</script>
+</body>
+</html>

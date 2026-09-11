@@ -205,10 +205,17 @@
                     <p class="text-sm font-medium text-gray-800">{{ ata.title }}</p>
                     <p class="text-[11px] text-gray-400">
                         {{ ata.created_at|date:'d/m/Y H:i' }} ·
-                        {% if ata.status == 'processing' %}
+                        {% if ata.status == 'recording' %}
+                            <span class="text-red-600"><i class="fas fa-circle text-[7px] mr-0.5"></i>gravando</span>
+                        {% elif ata.status == 'processing' %}
                             <span class="text-amber-600">montando a ata…</span>
+                        {% elif ata.status == 'error' %}
+                            <span class="text-red-600">não foi gerada — abra para tentar de novo</span>
                         {% else %}
                             pronta
+                        {% endif %}
+                        {% if ata.finalizada_automaticamente %}
+                            · <span title="O navegador de quem gravava fechou antes de encerrar; o portal fechou a gravação com o que tinha chegado.">finalizada automaticamente</span>
                         {% endif %}
                     </p>
                 </a>

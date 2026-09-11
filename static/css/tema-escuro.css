@@ -94,6 +94,20 @@ html.dark .divide-gray-50  > :not([hidden]) ~ :not([hidden]) {
     border-color: var(--tema-borda);
 }
 
+/* Borda só com o lado e sem cor (border-b, border-t…): o Tailwind usa a cor do
+   preflight (#e5e7eb), e no escuro sobra uma linha branca brilhando entre o
+   cabeçalho e o corpo de painéis e modais. O `:where()` zera a especificidade
+   do `html.dark` e o `:is()` conta como um elemento (0,0,1): ganha do preflight
+   (0,0,0) e perde de qualquer cor explícita (`border-orange-500`, 0,1,0), então
+   borda de destaque continua colorida. */
+:where(html.dark) :is(div, section, article, aside, header, footer, main, nav, span, p, a, button,
+    label, ul, ol, li, dl, dt, dd, table, thead, tbody, tfoot, tr, th, td, form, fieldset,
+    hr, h1, h2, h3, h4, h5, h6, details, summary, figure, img, i) { border-color: var(--tema-borda); }
+
+/* Divisórias pastel (divide-amber-50, divide-rose-50…) viram fios quase
+   brancos entre os itens; no escuro todas usam a borda do tema. */
+html.dark [class*="divide-"] > :not([hidden]) ~ :not([hidden]) { border-color: var(--tema-borda); }
+
 /* --------------------------------------------------------------------------
    Interação
    -------------------------------------------------------------------------- */
@@ -104,6 +118,57 @@ html.dark .hover\:bg-white:hover    { background-color: var(--tema-superficie-2)
 html.dark .hover\:text-gray-900:hover,
 html.dark .hover\:text-gray-800:hover { color: var(--tema-texto); }
 html.dark .hover\:text-gray-700:hover { color: var(--tema-texto-2); }
+html.dark .hover\:text-gray-600:hover,
+html.dark .hover\:text-gray-500:hover { color: var(--tema-texto); }
+
+/* Hover pastel (hover:bg-orange-50…): no claro o fundo clareia sob texto
+   escuro; no escuro o texto já foi clareado, e o pastel o apagava. Vira o
+   mesmo translúcido das etiquetas, um pouco mais forte que o repouso. */
+html.dark .hover\:bg-red-50:hover, html.dark .hover\:bg-red-100:hover { background-color: rgba(239, 68, 68, .22); }
+html.dark .hover\:bg-red-200:hover { background-color: rgba(239, 68, 68, .30); }
+html.dark [class*="hover:bg-red-50/"]:hover { background-color: rgba(239, 68, 68, .12); }
+html.dark .hover\:bg-rose-50:hover, html.dark .hover\:bg-rose-100:hover { background-color: rgba(244, 63, 94, .22); }
+html.dark .hover\:bg-rose-200:hover { background-color: rgba(244, 63, 94, .30); }
+html.dark [class*="hover:bg-rose-50/"]:hover { background-color: rgba(244, 63, 94, .12); }
+html.dark .hover\:bg-orange-50:hover, html.dark .hover\:bg-orange-100:hover { background-color: rgba(249, 115, 22, .22); }
+html.dark .hover\:bg-orange-200:hover { background-color: rgba(249, 115, 22, .30); }
+html.dark [class*="hover:bg-orange-50/"]:hover { background-color: rgba(249, 115, 22, .12); }
+html.dark .hover\:bg-amber-50:hover, html.dark .hover\:bg-amber-100:hover { background-color: rgba(245, 158, 11, .22); }
+html.dark .hover\:bg-amber-200:hover { background-color: rgba(245, 158, 11, .30); }
+html.dark [class*="hover:bg-amber-50/"]:hover { background-color: rgba(245, 158, 11, .12); }
+html.dark .hover\:bg-yellow-50:hover, html.dark .hover\:bg-yellow-100:hover { background-color: rgba(234, 179, 8, .22); }
+html.dark .hover\:bg-yellow-200:hover { background-color: rgba(234, 179, 8, .30); }
+html.dark [class*="hover:bg-yellow-50/"]:hover { background-color: rgba(234, 179, 8, .12); }
+html.dark .hover\:bg-green-50:hover, html.dark .hover\:bg-green-100:hover { background-color: rgba(34, 197, 94, .22); }
+html.dark .hover\:bg-green-200:hover { background-color: rgba(34, 197, 94, .30); }
+html.dark [class*="hover:bg-green-50/"]:hover { background-color: rgba(34, 197, 94, .12); }
+html.dark .hover\:bg-emerald-50:hover, html.dark .hover\:bg-emerald-100:hover { background-color: rgba(16, 185, 129, .22); }
+html.dark .hover\:bg-emerald-200:hover { background-color: rgba(16, 185, 129, .30); }
+html.dark [class*="hover:bg-emerald-50/"]:hover { background-color: rgba(16, 185, 129, .12); }
+html.dark .hover\:bg-teal-50:hover, html.dark .hover\:bg-teal-100:hover { background-color: rgba(20, 184, 166, .22); }
+html.dark .hover\:bg-teal-200:hover { background-color: rgba(20, 184, 166, .30); }
+html.dark [class*="hover:bg-teal-50/"]:hover { background-color: rgba(20, 184, 166, .12); }
+html.dark .hover\:bg-cyan-50:hover, html.dark .hover\:bg-cyan-100:hover { background-color: rgba(6, 182, 212, .22); }
+html.dark .hover\:bg-cyan-200:hover { background-color: rgba(6, 182, 212, .30); }
+html.dark [class*="hover:bg-cyan-50/"]:hover { background-color: rgba(6, 182, 212, .12); }
+html.dark .hover\:bg-sky-50:hover, html.dark .hover\:bg-sky-100:hover { background-color: rgba(14, 165, 233, .22); }
+html.dark .hover\:bg-sky-200:hover { background-color: rgba(14, 165, 233, .30); }
+html.dark [class*="hover:bg-sky-50/"]:hover { background-color: rgba(14, 165, 233, .12); }
+html.dark .hover\:bg-blue-50:hover, html.dark .hover\:bg-blue-100:hover { background-color: rgba(59, 130, 246, .22); }
+html.dark .hover\:bg-blue-200:hover { background-color: rgba(59, 130, 246, .30); }
+html.dark [class*="hover:bg-blue-50/"]:hover { background-color: rgba(59, 130, 246, .12); }
+html.dark .hover\:bg-indigo-50:hover, html.dark .hover\:bg-indigo-100:hover { background-color: rgba(99, 102, 241, .22); }
+html.dark .hover\:bg-indigo-200:hover { background-color: rgba(99, 102, 241, .30); }
+html.dark [class*="hover:bg-indigo-50/"]:hover { background-color: rgba(99, 102, 241, .12); }
+html.dark .hover\:bg-violet-50:hover, html.dark .hover\:bg-violet-100:hover { background-color: rgba(139, 92, 246, .22); }
+html.dark .hover\:bg-violet-200:hover { background-color: rgba(139, 92, 246, .30); }
+html.dark [class*="hover:bg-violet-50/"]:hover { background-color: rgba(139, 92, 246, .12); }
+html.dark .hover\:bg-purple-50:hover, html.dark .hover\:bg-purple-100:hover { background-color: rgba(168, 85, 247, .22); }
+html.dark .hover\:bg-purple-200:hover { background-color: rgba(168, 85, 247, .30); }
+html.dark [class*="hover:bg-purple-50/"]:hover { background-color: rgba(168, 85, 247, .12); }
+html.dark .hover\:bg-pink-50:hover, html.dark .hover\:bg-pink-100:hover { background-color: rgba(236, 72, 153, .22); }
+html.dark .hover\:bg-pink-200:hover { background-color: rgba(236, 72, 153, .30); }
+html.dark [class*="hover:bg-pink-50/"]:hover { background-color: rgba(236, 72, 153, .12); }
 
 /* --------------------------------------------------------------------------
    Formulários — o ponto onde tema escuro costuma falhar: campo branco com
@@ -172,6 +237,8 @@ html.dark .text-purple-600,  html.dark .text-purple-700,  html.dark .text-purple
 html.dark .text-pink-600,    html.dark .text-pink-700,    html.dark .text-pink-800    { color: #f472b6; }
 html.dark .text-slate-700,   html.dark .text-slate-800,   html.dark .text-slate-900   { color: var(--tema-texto); }
 html.dark .text-slate-500,   html.dark .text-slate-600    { color: var(--tema-texto-2); }
+html.dark .text-orange-900 { color: #fdba74; }
+html.dark .text-rose-900   { color: #fda4af; }
 
 /* Bordas claras das mesmas etiquetas */
 html.dark .border-red-100,     html.dark .border-red-200     { border-color: rgba(239, 68, 68, .3); }
@@ -203,6 +270,8 @@ html.dark [class*="bg-gradient-to-"].from-blue-50,   html.dark [class*="bg-gradi
 html.dark [class*="bg-gradient-to-"].from-indigo-50, html.dark [class*="bg-gradient-to-"].from-violet-50,
 html.dark [class*="bg-gradient-to-"].from-purple-50, html.dark [class*="bg-gradient-to-"].from-purple-100,
 html.dark [class*="bg-gradient-to-"].from-pink-50,   html.dark [class*="bg-gradient-to-"].from-gray-50,
+html.dark [class*="bg-gradient-to-"].from-rose-50,   html.dark [class*="bg-gradient-to-"].from-rose-100,
+html.dark [class*="bg-gradient-to-"].from-orange-200,html.dark [class*="bg-gradient-to-"].from-amber-200,
 html.dark [class*="bg-gradient-to-"].from-slate-50 {
     background-image: none;
     background-color: var(--tema-superficie-2);
@@ -395,6 +464,92 @@ html.dark .fc .fc-button-primary {
 }
 html.dark .fc .fc-button-primary:not(:disabled):hover { background-color: #3a4358; }
 html.dark .fc .fc-button-primary:disabled { background-color: var(--tema-superficie-2); color: var(--tema-texto-3); }
+/* O botão de visão ativa (Mês, Semana…) segue laranja no escuro, de propósito. */
+html.dark .fc .fc-button-primary:not(:disabled).fc-button-active,
+html.dark .fc .fc-button-primary:not(:disabled):active { background-color: #c2410c; border-color: #c2410c; color: #fff; }
+
+/* Eventos "com bolinha" e o "+N mais": o hover do FullCalendar é preto
+   translúcido, invisível sobre superfície escura. */
+html.dark .fc .fc-daygrid-dot-event:hover,
+html.dark .fc .fc-daygrid-dot-event.fc-event-mirror,
+html.dark .fc .fc-daygrid-more-link:hover { background: rgba(255, 255, 255, .08); }
+
+/* Cor escolhida no modal de evento: o anel escuro do claro some no escuro. */
+html.dark .color-option.selected { border-color: #fff; box-shadow: 0 0 0 2px var(--tema-superficie), 0 0 0 4px #fff; }
+
+/* --------------------------------------------------------------------------
+   Agenda e transcrições (/agenda/, /agenda/transcricoes/…).
+
+   As molduras e cartões dessas telas são classes próprias com degradê quase
+   branco e borda rosa-claro no <style> do template: no escuro ficavam painéis
+   escuros flutuando num retângulo branco, com o texto já clareado por cima.
+   -------------------------------------------------------------------------- */
+html.dark .agenda-shell,
+html.dark .trans-detail-shell {
+    background: var(--tema-fundo) !important;
+    border-color: var(--tema-borda) !important;
+    box-shadow: none !important;
+}
+html.dark .trans-list-shell,
+html.dark .trans-shell,
+html.dark .grav-shell {
+    background: var(--tema-superficie) !important;
+    border-color: var(--tema-borda) !important;
+    box-shadow: 0 0 0 1px var(--tema-borda-suave) !important;
+}
+html.dark .trans-list-card,
+html.dark .trans-panel {
+    border-color: var(--tema-borda) !important;
+    box-shadow: 0 0 0 1px var(--tema-borda-suave) !important;
+}
+html.dark .trans-card,
+html.dark .grav-card {
+    background: var(--tema-superficie-2) !important;
+    border-color: var(--tema-borda) !important;
+    box-shadow: none !important;
+}
+html.dark .section-card:hover { border-color: rgba(249, 115, 22, .45) !important; }
+
+/* Método de entrada escolhido e as pílulas de papel */
+html.dark .mode-card-active {
+    background: rgba(234, 88, 12, .18) !important;
+    border-color: #fb923c !important;
+    box-shadow: none !important;
+}
+html.dark .role-pill {
+    background: rgba(249, 115, 22, .16) !important;
+    border-color: rgba(249, 115, 22, .35) !important;
+    color: #fb923c !important;
+}
+
+/* Status das transcrições na lista */
+html.dark .status-completed  { background: rgba(34, 197, 94, .18) !important;  color: #4ade80 !important; }
+html.dark .status-processing { background: rgba(249, 115, 22, .18) !important; color: #fb923c !important; }
+html.dark .status-recording,
+html.dark .status-error      { background: rgba(239, 68, 68, .18) !important;  color: #f87171 !important; }
+
+/* Chips translúcidos sobre os cabeçalhos laranja. A regra geral de
+   `bg-white/NN` os pintaria de superfície escura sólida — viravam remendos
+   pretos sobre o laranja, que continua laranja no escuro. */
+html.dark .trans-header [class*="bg-white/"],
+html.dark .trans-shell > .bg-gradient-to-r [class*="bg-white/"],
+html.dark #share-modal .bg-gradient-to-r [class*="bg-white/"] {
+    background-color: rgba(255, 255, 255, .16) !important;
+    border-color: rgba(255, 255, 255, .3) !important;
+}
+html.dark .trans-header [class*="hover:bg-white/"]:hover,
+html.dark #share-modal .bg-gradient-to-r [class*="hover:bg-white/"]:hover {
+    background-color: rgba(255, 255, 255, .26) !important;
+}
+/* O botão "Compartilhar" é o destaque branco do cabeçalho: segue branco. */
+html.dark .trans-header .bg-white { background-color: #fff !important; color: #c2410c !important; }
+html.dark .trans-header .bg-white:hover { background-color: #ffedd5 !important; }
+
+/* Etiqueta de status "gravando" no cabeçalho: cinza-claro com texto já clareado. */
+html.dark .trans-header .bg-gray-300 { background-color: var(--tema-superficie-3) !important; }
+
+html.dark .nice-scroll::-webkit-scrollbar-thumb { background: #3a4358; }
+html.dark .nice-scroll::-webkit-scrollbar-thumb:hover { background: #4a5470; }
 
 /* --------------------------------------------------------------------------
    Contestação — lista de exclusões e de valores.

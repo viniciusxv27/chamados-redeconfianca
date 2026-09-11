@@ -3,7 +3,7 @@
 {% block title %}{% if viewing_other %}Agenda de {{ target_user.full_name }}{% else %}Minha Agenda{% endif %}{% endblock %}
 
 {% block extra_css %}
-<link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css" rel="stylesheet">
+{# O FullCalendar 6 injeta o próprio CSS pelo JS; o pacote não publica .css (era um 404 a cada carga). #}
 <style>
     :root {
         --agenda-brand: #ff6b35;

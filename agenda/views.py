@@ -1,18 +1,25 @@
+import hashlib
 import json
+import logging
+import math
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 import threading
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from functools import wraps
 from datetime import datetime, timedelta, time, date as date_type
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.files import File
 from django.core.files.storage import default_storage
-from django.db import close_old_connections
-from django.db.models import Case, IntegerField, Q, Value, When
+from django.db import IntegrityError, close_old_connections, transaction
+from django.db.models import Case, F, IntegerField, Q, Value, When
+from django.db.models.functions import Greatest
 from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
@@ -33,8 +40,7 @@ except ImportError:
     send_push_notification_to_user = None
 
 
-_ACTIVE_TRANSCRIPTION_JOBS = set()
-_TRANSCRIPTION_JOB_LOCK = threading.Lock()
+logger = logging.getLogger('agenda.transcricao')
 
 
 # =========================================================================
@@ -116,6 +122,26 @@ def _can_view_full_calendar(viewer, target):
         if viewer_sectors & target_sectors:
             return True
     return False
+
+
+def login_required_json(view_func):
+    """Como @login_required, mas para as APIs que o gravador chama por fetch.
+
+    O @login_required redireciona para a tela de login; o fetch seguia o
+    redirecionamento, recebia a página de login com status 200 e contava o
+    pedaço de áudio como salvo — perda silenciosa justamente na gravação longa
+    em que a sessão expirou. Aqui a resposta é um 401 em JSON.
+    """
+    @wraps(view_func)
+    def _wrapped(request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return JsonResponse({
+                'error': ('Sua sessão no portal expirou. Entre de novo (pode ser em outra aba) — '
+                          'a gravação continua guardada neste computador.'),
+                'sessao_expirada': True,
+            }, status=401)
+        return view_func(request, *args, **kwargs)
+    return _wrapped
 
 
 def _is_superadmin(user):
@@ -1354,6 +1380,9 @@ def view_user_calendar(request, user_id):
 @login_required
 def transcription_list(request):
     """Lista transcrições visíveis para o usuário."""
+    from . import processamento
+
+    processamento.garantir_varredura()
     transcriptions = (
         _visible_transcriptions_for_user(request.user)
         .select_related('event', 'owner')
@@ -1378,29 +1407,26 @@ def transcription_list(request):
 @login_required
 def transcription_new(request):
     """Página para iniciar nova transcrição (gravar áudio ou upload)"""
-    event_id = request.GET.get('event_id')
-    event = None
-    if event_id:
-        try:
-            event = CalendarEvent.objects.get(pk=event_id, owner=request.user)
-        except CalendarEvent.DoesNotExist:
-            pass
-
     context = {
-        'event': event,
+        'event': _evento_para_transcricao(request.user, request.GET.get('event_id')),
     }
     return render(request, 'agenda/transcription_new.html', context)
 
 
-@login_required
+@login_required_json
 @require_POST
 def api_transcription_upload(request):
-    """Recebe áudio, salva com segurança e agenda processamento assíncrono."""
+    """Recebe um áudio inteiro (arquivos pequenos), guarda no storage e agenda o processamento.
+
+    O áudio vai para o storage ANTES da resposta. Antes ficava num temporário
+    do worker e só subia dentro do job: se o job morresse no caminho, o arquivo
+    ia junto e a transcrição virava erro sem volta.
+    """
     from django.conf import settings as django_settings
+    from . import processamento
 
     audio_file = request.FILES.get('audio')
     title = request.POST.get('title', '').strip() or 'Reunião sem título'
-    event_id = request.POST.get('event_id')
     participant_roles = _parse_participant_roles(request.POST.get('participant_roles'))
 
     try:
@@ -1415,34 +1441,25 @@ def api_transcription_upload(request):
     if not api_key:
         return JsonResponse({'error': 'Chave da API OpenAI não configurada. Configure OPENAI_API_KEY no .env'}, status=500)
 
-    temp_audio_path = _save_uploaded_audio_to_temp(audio_file)
-
-    event = None
-    if event_id:
-        try:
-            event = CalendarEvent.objects.get(pk=event_id, owner=request.user)
-        except CalendarEvent.DoesNotExist:
-            pass
-
-    # O arquivo é persistido no storage (S3 quando USE_S3=True) antes do processamento.
-    transcription = MeetingTranscription.objects.create(
+    transcription = MeetingTranscription(
         owner=request.user,
-        event=event,
-        title=title,
+        event=_evento_para_transcricao(request.user, request.POST.get('event_id')),
+        title=title[:255],
         duration_seconds=duration_seconds,
         participant_roles=participant_roles,
         status='processing',
+        origem='arquivo',
     )
+    nome = os.path.basename(getattr(audio_file, 'name', '') or '') or 'audio.webm'
+    try:
+        transcription.audio_file.save(nome, audio_file, save=False)
+    except Exception as exc:                                        # noqa: BLE001
+        logger.error('Áudio enviado não foi guardado no storage: %s', exc)
+        return JsonResponse({'error': 'Não foi possível guardar o áudio agora. Tente de novo em instantes.'},
+                            status=503)
+    transcription.save()
 
-    _start_transcription_background_job(
-        transcription_id=transcription.pk,
-        api_key=api_key,
-        mode='upload',
-        options={
-            'temp_audio_path': temp_audio_path,
-            'original_audio_name': getattr(audio_file, 'name', '') or 'audio.webm',
-        },
-    )
+    processamento.iniciar_job(transcription.pk, modo='upload')
 
     return JsonResponse({
         'id': transcription.pk,
@@ -1477,14 +1494,21 @@ TRANSCRIPTION_PARTS_PREFIX = 'transcriptions/parts'
 
 def _sanitize_upload_id(value):
     upload_id = (value or '').strip()
-    if not upload_id or not re.match(r'^[a-zA-Z0-9_-]{8,}$', upload_id):
+    if not upload_id or not re.match(r'^[a-zA-Z0-9_-]{8,80}$', upload_id):
         return ''
     return upload_id
 
 
 def _get_transcription_parts_storage():
-    """Storage dos pedaços — o mesmo do audio_file (MinIO quando USE_S3)."""
-    return get_media_storage() or default_storage
+    """Storage dos pedaços — o mesmo do audio_file (MinIO quando USE_S3).
+
+    Com sobrescrita ligada: a mesma parte reenviada substitui a anterior, em vez
+    de ganhar um nome com sufixo que a montagem ignoraria.
+    """
+    storage = get_media_storage() or default_storage
+    if hasattr(storage, 'file_overwrite'):
+        storage.file_overwrite = True
+    return storage
 
 
 def _transcription_parts_dir(upload_id):
@@ -1496,33 +1520,74 @@ def _transcription_part_name(upload_id, chunk_index, suffix='.webm'):
     return f'{_transcription_parts_dir(upload_id)}/part_{int(chunk_index):06d}{suffix}'
 
 
-def _list_transcription_parts(storage, upload_id):
-    """Nomes completos das partes já persistidas no storage, ordenados por índice."""
+_NOME_DE_PARTE = re.compile(r'^part_(\d{6})(\.[A-Za-z0-9]{1,8})?$')
+
+
+def _list_transcription_parts(storage, upload_id, levantar=False):
+    """Partes já persistidas no storage — UMA por índice, em ordem.
+
+    Um reenvio concorrente da mesma parte podia virar `part_000003_AbCd.webm`
+    ao lado da original, e a montagem colava o trecho duas vezes: só nomes
+    exatos contam. Com `levantar=True` (no job), falha do storage sobe como erro
+    e vira nova tentativa — antes virava "nenhuma parte" e erro definitivo.
+    """
     directory = _transcription_parts_dir(upload_id)
     try:
         _dirs, files = storage.listdir(directory)
     except (FileNotFoundError, NotADirectoryError):
         return []
     except Exception:
-        files = []
-    part_files = sorted(name for name in files if name.startswith('part_'))
-    return [f'{directory}/{name}' for name in part_files]
+        if levantar:
+            raise
+        return []
+    por_indice = {}
+    for name in files:
+        achado = _NOME_DE_PARTE.match(name)
+        if achado:
+            por_indice.setdefault(int(achado.group(1)), name)
+    return [f'{directory}/{por_indice[i]}' for i in sorted(por_indice)]
+
+
+def _apagar_partes(upload_id):
+    """Apaga do storage todas as partes de uma sessão de gravação."""
+    upload_id = _sanitize_upload_id(upload_id)
+    if not upload_id:
+        return 0
+    storage = _get_transcription_parts_storage()
+    directory = _transcription_parts_dir(upload_id)
+    try:
+        _dirs, files = storage.listdir(directory)
+    except Exception:
+        return 0
+    apagadas = 0
+    for name in files:
+        try:
+            storage.delete(f'{directory}/{name}')
+            apagadas += 1
+        except Exception:
+            pass
+    return apagadas
 
 
 def _assemble_transcription_parts_to_temp(upload_id, original_audio_name):
     """Baixa as partes do storage e concatena num arquivo temporário local.
 
-    Retorna (temp_path, parts_count) ou (None, 0) se não houver partes.
-    Feito por streaming (1MB por vez) para suportar gravações de muitas horas
-    sem carregar tudo na memória.
+    Retorna (temp_path, partes) — `partes` é o maior índice + 1, a mesma conta
+    de `partes_recebidas` — ou (None, 0) se não houver partes. Feito por
+    streaming (1MB por vez) para suportar gravações de muitas horas sem carregar
+    tudo na memória. Falha do storage sobe como erro (vira nova tentativa).
     """
     storage = _get_transcription_parts_storage()
-    parts = _list_transcription_parts(storage, upload_id)
+    parts = _list_transcription_parts(storage, upload_id, levantar=True)
     if not parts:
         return None, 0
 
-    _, ext = os.path.splitext(original_audio_name or 'audio.webm')
-    suffix = ext or '.webm'
+    # A extensão importa: o Whisper descobre o formato pelo nome do arquivo, e o
+    # gravador do Safari grava mp4, não webm.
+    _, ext = os.path.splitext(original_audio_name or '')
+    if not _SUFIXO_VALIDO.match((ext or '').lower()):
+        _, ext = os.path.splitext(parts[0])
+    suffix = ext.lower() if _SUFIXO_VALIDO.match((ext or '').lower()) else '.webm'
 
     tmp_file = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
     tmp_path = tmp_file.name
@@ -1540,16 +1605,112 @@ def _assemble_transcription_parts_to_temp(upload_id, original_audio_name):
                     source.close()
                 except Exception:
                     pass
-    finally:
+    except Exception:
         tmp_file.close()
+        os.unlink(tmp_path)
+        raise
+    tmp_file.close()
 
-    return tmp_path, len(parts)
+    maior = int(_NOME_DE_PARTE.match(parts[-1].rsplit('/', 1)[-1]).group(1))
+    return tmp_path, maior + 1
 
 
-@login_required
+ORIGENS_VALIDAS = {'gravador', 'reuniao', 'arquivo'}
+MAIOR_INDICE_DE_PARTE = 200000
+_SUFIXO_VALIDO = re.compile(r'^\.[a-z0-9]{1,8}$')
+
+
+def _evento_para_transcricao(user, event_id):
+    """Evento da agenda ao qual a transcrição pode ser ligada, ou None.
+
+    Antes só valia evento cujo dono fosse quem grava. Na sala de reunião quem
+    grava a ata raramente é o dono do evento — a ata nascia solta. Vale o dono,
+    quem foi convidado para o evento e quem está na reunião ligada a ele.
+    """
+    try:
+        event_id = int(event_id)
+    except (TypeError, ValueError):
+        return None
+    evento = CalendarEvent.objects.filter(pk=event_id).first()
+    if evento is None:
+        return None
+    if evento.owner_id == user.id or _is_superadmin(user):
+        return evento
+    if EventParticipant.objects.filter(event=evento, user=user).exists():
+        return evento
+    try:
+        from reunioes.models import Reuniao
+
+        reuniao = Reuniao.objects.filter(evento=evento).first()
+        if reuniao is not None and reuniao.pode_ver(user):
+            return evento
+    except Exception:                                               # noqa: BLE001
+        pass
+    return None
+
+
+def _sessao_de_gravacao(request, upload_id, criar=True, so_dono=True):
+    """(transcrição, resposta de erro) da sessão de gravação com esse upload_id.
+
+    A sessão nasce no primeiro contato (iniciar ou primeira parte) com o dono
+    gravado. Antes qualquer pessoa logada podia escrever partes em qualquer
+    upload_id — e finalizar a gravação de outra pessoa.
+    """
+    transcricao = MeetingTranscription.objects.filter(upload_id=upload_id).first()
+    if transcricao is not None:
+        if transcricao.owner_id != request.user.id and (so_dono or not _is_superadmin(request.user)):
+            return None, JsonResponse({'error': 'Esta gravação é de outra pessoa.'}, status=403)
+        return transcricao, None
+    if not criar:
+        return None, None
+
+    origem = (request.POST.get('origem') or '').strip()
+    try:
+        with transaction.atomic():
+            transcricao = MeetingTranscription.objects.create(
+                owner=request.user,
+                upload_id=upload_id,
+                status='recording',
+                origem=origem if origem in ORIGENS_VALIDAS else 'gravador',
+                title=(request.POST.get('title') or '').strip()[:255] or 'Gravação em andamento',
+                participant_roles=_parse_participant_roles(request.POST.get('participant_roles')),
+                event=_evento_para_transcricao(request.user, request.POST.get('event_id')),
+            )
+    except IntegrityError:
+        # O "iniciar" e a primeira parte chegaram juntos: o outro criou primeiro.
+        transcricao = MeetingTranscription.objects.filter(upload_id=upload_id).first()
+        if transcricao is None or transcricao.owner_id != request.user.id:
+            return None, JsonResponse({'error': 'Esta gravação é de outra pessoa.'}, status=403)
+    return transcricao, None
+
+
+@login_required_json
+@require_POST
+def api_gravacao_iniciar(request):
+    """Abre a sessão de gravação no servidor antes do primeiro pedaço de áudio.
+
+    Com a sessão aberta o portal sabe da gravação desde o primeiro segundo: se o
+    navegador fechar, ela aparece nas pendências e o varredor a fecha com o que
+    tiver chegado.
+    """
+    upload_id = _sanitize_upload_id(request.POST.get('upload_id'))
+    if not upload_id:
+        return JsonResponse({'error': 'upload_id inválido.'}, status=400)
+    transcricao, erro = _sessao_de_gravacao(request, upload_id, criar=True)
+    if erro:
+        return erro
+    return JsonResponse({
+        'id': transcricao.pk,
+        'upload_id': transcricao.upload_id,
+        'status': transcricao.status,
+        'partes_recebidas': transcricao.partes_recebidas,
+    })
+
+
+@login_required_json
 @require_POST
 def api_transcription_upload_chunk(request):
-    """Recebe um chunk de áudio para uploads grandes."""
+    """Recebe uma parte da gravação e a guarda no storage na hora."""
     upload_id = _sanitize_upload_id(request.POST.get('upload_id'))
     if not upload_id:
         return JsonResponse({'error': 'upload_id inválido.'}, status=400)
@@ -1560,7 +1721,7 @@ def api_transcription_upload_chunk(request):
     except (TypeError, ValueError):
         return JsonResponse({'error': 'Índices de chunk inválidos.'}, status=400)
 
-    if chunk_index < 0:
+    if chunk_index < 0 or chunk_index > MAIOR_INDICE_DE_PARTE:
         return JsonResponse({'error': 'Chunk fora do intervalo.'}, status=400)
 
     if total_chunks > 0 and chunk_index >= total_chunks:
@@ -1570,21 +1731,21 @@ def api_transcription_upload_chunk(request):
     if not audio_chunk:
         return JsonResponse({'error': 'Nenhum chunk enviado.'}, status=400)
 
-    # Sufixo a partir do nome enviado (default .webm).
-    original_name = getattr(audio_chunk, 'name', '') or 'audio.webm'
-    _, ext = os.path.splitext(original_name)
-    suffix = ext or '.webm'
+    transcricao, erro = _sessao_de_gravacao(request, upload_id, criar=True)
+    if erro:
+        return erro
+
+    _, ext = os.path.splitext(getattr(audio_chunk, 'name', '') or '')
+    suffix = ext.lower() if _SUFIXO_VALIDO.match((ext or '').lower()) else '.webm'
 
     # Persiste a parte direto no storage de mídia (MinIO quando USE_S3), para que
     # gravações longas (horas) não fiquem só em disco efêmero e não se percam se
     # o processo/servidor reiniciar no meio.
     storage = _get_transcription_parts_storage()
     name = _transcription_part_name(upload_id, chunk_index, suffix)
-
     try:
-        # Idempotente: se o mesmo índice for reenviado após falha de rede,
-        # sobrescreve a parte anterior mantendo o nome determinístico.
-        if storage.exists(name):
+        # Mesmo índice reenviado depois de uma falha de rede substitui a parte.
+        if not getattr(storage, 'file_overwrite', False) and storage.exists(name):
             storage.delete(name)
         saved_name = storage.save(name, audio_chunk)
         try:
@@ -1592,7 +1753,23 @@ def api_transcription_upload_chunk(request):
         except Exception:
             size = getattr(audio_chunk, 'size', 0)
     except Exception as exc:
-        return JsonResponse({'error': f'Falha ao salvar parte no armazenamento: {exc}'}, status=500)
+        logger.warning('Parte %s de %s não foi guardada: %s', chunk_index, upload_id, exc)
+        return JsonResponse({'error': 'Falha ao salvar a parte no armazenamento. Nova tentativa automática.'},
+                            status=503)
+
+    agora = timezone.now()
+    campos = {
+        'partes_recebidas': Greatest(F('partes_recebidas'), chunk_index + 1),
+        'ultima_parte_em': agora,
+        'updated_at': agora,
+    }
+    if transcricao.finalizada_automaticamente and transcricao.status != 'recording':
+        # O portal tinha fechado a gravação porque o navegador sumiu, e ele
+        # voltou com mais áudio: reabre. Um job em andamento percebe que perdeu
+        # a transcrição e para; o processamento recomeça com o áudio completo.
+        campos.update(status='recording', etapa='', processando_por='', batimento_em=None,
+                      proxima_tentativa_em=None, finalizada_automaticamente=False)
+    MeetingTranscription.objects.filter(pk=transcricao.pk).update(**campos)
 
     return JsonResponse({
         'upload_id': upload_id,
@@ -1600,96 +1777,194 @@ def api_transcription_upload_chunk(request):
         'received': True,
         'stored': saved_name,
         'size': size,
+        'transcription_id': transcricao.pk,
     })
 
 
-@login_required
+@login_required_json
 @require_POST
 def api_transcription_upload_finalize(request):
-    """Finaliza upload chunked: valida as partes no MinIO e inicia a transcrição.
+    """Encerra a gravação: confere as partes e coloca a transcrição para processar.
 
-    A montagem do áudio consolidado (baixar + concatenar as partes) NÃO é feita
-    aqui — ela roda no job em background. Para gravações de 24h isso evita
-    estourar o tempo da request e mantém o retorno rápido.
+    Idempotente — clique repetido ou retomada depois de o navegador fechar não
+    duplica transcrição nem processamento. Se chegaram partes depois de uma
+    transcrição concluída, processa de novo com o áudio completo. A montagem do
+    áudio NÃO é feita aqui (fica no job), para a resposta ser rápida mesmo com
+    uma gravação de 24 h.
     """
     from django.conf import settings as django_settings
+    from . import processamento
 
     upload_id = _sanitize_upload_id(request.POST.get('upload_id'))
     if not upload_id:
         return JsonResponse({'error': 'upload_id inválido.'}, status=400)
 
     try:
-        total_chunks = int(request.POST.get('total_chunks', 0))
+        total_chunks = int(request.POST.get('total_chunks', 0) or 0)
     except (TypeError, ValueError):
         total_chunks = 0
 
-    if total_chunks <= 0:
-        return JsonResponse({'error': 'total_chunks inválido.'}, status=400)
-
-    title = request.POST.get('title', '').strip() or 'Reunião sem título'
-    event_id = request.POST.get('event_id')
+    title = (request.POST.get('title') or '').strip()
     participant_roles = _parse_participant_roles(request.POST.get('participant_roles'))
-
     try:
         duration_seconds = int(request.POST.get('duration_seconds', 0) or 0)
     except (TypeError, ValueError):
         duration_seconds = 0
 
-    api_key = getattr(django_settings, 'OPENAI_API_KEY', '')
-    if not api_key:
+    if not getattr(django_settings, 'OPENAI_API_KEY', ''):
         return JsonResponse({'error': 'Chave da API OpenAI não configurada. Configure OPENAI_API_KEY no .env'}, status=500)
 
-    # As partes já foram persistidas no MinIO durante a gravação — aqui só
-    # conferimos quantas chegaram.
-    storage = _get_transcription_parts_storage()
-    parts = _list_transcription_parts(storage, upload_id)
+    transcricao, erro = _sessao_de_gravacao(request, upload_id, criar=False, so_dono=False)
+    if erro:
+        return erro
 
-    if not parts:
+    storage = _get_transcription_parts_storage()
+    try:
+        recebidas = len(_list_transcription_parts(storage, upload_id, levantar=True))
+    except Exception as exc:                                        # noqa: BLE001
+        # Storage fora do ar agora: se o banco registrou partes, segue — o job
+        # junta o áudio depois, com novas tentativas.
+        logger.warning('Partes de %s não listadas ao finalizar: %s', upload_id, exc)
+        recebidas = transcricao.partes_recebidas if transcricao else 0
+
+    if not recebidas:
         return JsonResponse({'error': 'Nenhuma parte do áudio foi encontrada no armazenamento. Tente gravar novamente.'}, status=400)
 
-    # Tolerância: se faltarem algumas partes (ex.: queda momentânea de rede),
-    # processamos o que está disponível em vez de descartar todo o áudio.
-    missing_chunks = 0
-    if total_chunks > 0 and len(parts) < total_chunks:
-        missing_chunks = total_chunks - len(parts)
+    if transcricao is None:
+        transcricao = MeetingTranscription.objects.create(
+            owner=request.user,
+            upload_id=upload_id,
+            origem='gravador',
+            status='processing',
+            etapa='montagem',
+            title=title[:255] or 'Reunião sem título',
+            duration_seconds=duration_seconds,
+            participant_roles=participant_roles,
+            event=_evento_para_transcricao(request.user, request.POST.get('event_id')),
+            partes_recebidas=recebidas,
+            ultima_parte_em=timezone.now(),
+        )
+    else:
+        processadas = int((transcricao.progresso or {}).get('partes_processadas') or 0)
+        maior = max(transcricao.partes_recebidas, recebidas)
+        if transcricao.status == 'completed' and maior <= processadas:
+            return JsonResponse({
+                'id': transcricao.pk,
+                'status': 'completed',
+                'redirect': f'/agenda/transcricoes/{transcricao.pk}/',
+                'message': 'Esta gravação já foi processada.',
+                'missing_chunks': 0,
+                'parts_received': recebidas,
+            })
 
-    original_audio_name = request.POST.get('original_audio_name', '') or 'audio.webm'
+        campos = []
+        if title:
+            transcricao.title = title[:255]
+            campos.append('title')
+        if duration_seconds > (transcricao.duration_seconds or 0):
+            transcricao.duration_seconds = duration_seconds
+            campos.append('duration_seconds')
+        if participant_roles:
+            transcricao.participant_roles = participant_roles
+            campos.append('participant_roles')
+        evento = _evento_para_transcricao(request.user, request.POST.get('event_id'))
+        if evento is not None and transcricao.event_id is None:
+            transcricao.event = evento
+            campos.append('event')
+        if maior > transcricao.partes_recebidas:
+            transcricao.partes_recebidas = maior
+            campos.append('partes_recebidas')
 
-    event = None
-    if event_id:
-        try:
-            event = CalendarEvent.objects.get(pk=event_id, owner=request.user)
-        except CalendarEvent.DoesNotExist:
-            pass
+        agora = timezone.now()
+        processando_agora = (transcricao.status == 'processing' and transcricao.batimento_em is not None
+                             and transcricao.batimento_em > agora - timedelta(seconds=processamento.PARADO_APOS_SEGUNDOS))
+        if not processando_agora:
+            transcricao.status = 'processing'
+            transcricao.etapa = 'montagem'
+            transcricao.error_message = ''
+            transcricao.tentativas = 0
+            transcricao.proxima_tentativa_em = None
+            campos += ['status', 'etapa', 'error_message', 'tentativas', 'proxima_tentativa_em']
+        if campos:
+            transcricao.save(update_fields=list(dict.fromkeys(campos + ['updated_at'])))
 
-    transcription = MeetingTranscription.objects.create(
-        owner=request.user,
-        event=event,
-        title=title,
-        duration_seconds=duration_seconds,
-        participant_roles=participant_roles,
-        status='processing',
-    )
-
-    _start_transcription_background_job(
-        transcription_id=transcription.pk,
-        api_key=api_key,
-        mode='upload',
-        options={
-            'parts_upload_id': upload_id,
-            'original_audio_name': original_audio_name,
-            'duration_hint': duration_seconds,
-        },
-    )
+    missing_chunks = max(0, total_chunks - recebidas) if total_chunks > 0 else 0
+    iniciado = processamento.iniciar_job(transcricao.pk, modo='upload')
 
     return JsonResponse({
-        'id': transcription.pk,
+        'id': transcricao.pk,
         'status': 'processing',
-        'redirect': f'/agenda/transcricoes/{transcription.pk}/',
+        'redirect': f'/agenda/transcricoes/{transcricao.pk}/',
         'message': 'Upload concluído e transcrição iniciada em segundo plano.',
         'missing_chunks': missing_chunks,
-        'parts_received': len(parts),
+        'parts_received': recebidas,
+        'iniciado': iniciado,
     }, status=202)
+
+
+@login_required_json
+def api_transcricoes_pendentes(request):
+    """Gravações e processamentos em aberto de quem está logado (o banner de pendências)."""
+    from . import processamento
+
+    processamento.garantir_varredura()
+    pendentes = []
+    abertas = (MeetingTranscription.objects
+               .filter(owner=request.user, status__in=('recording', 'processing'))
+               .order_by('-created_at')[:20])
+    for t in abertas:
+        pendentes.append({
+            'id': t.pk,
+            'upload_id': t.upload_id,
+            'title': t.title,
+            'status': t.status,
+            'origem': t.origem,
+            'event_id': t.event_id,
+            'partes_recebidas': t.partes_recebidas,
+            'ultima_parte_em': t.ultima_parte_em.isoformat() if t.ultima_parte_em else None,
+            'criado_em': t.created_at.isoformat(),
+            'etapa': t.etapa,
+            'etapa_rotulo': ETAPA_ROTULOS.get(t.etapa, ''),
+            'tentativas': t.tentativas,
+            'proxima_tentativa_em': t.proxima_tentativa_em.isoformat() if t.proxima_tentativa_em else None,
+            'finalizada_automaticamente': t.finalizada_automaticamente,
+            'progresso_pct': _progresso_pct(t),
+            'redirect': f'/agenda/transcricoes/{t.pk}/',
+        })
+    return JsonResponse({'pendentes': pendentes})
+
+
+@login_required_json
+@require_POST
+def api_transcription_discard(request, pk):
+    """Descarta uma gravação que não vai ser processada: apaga as partes e o registro."""
+    transcricao = get_object_or_404(_manageable_transcriptions_for_user(request.user), pk=pk)
+    if transcricao.status not in ('recording', 'error') or (transcricao.raw_transcription or '').strip():
+        return JsonResponse({'error': 'Só dá para descartar gravação em andamento ou que falhou antes de ter texto.'},
+                            status=409)
+    apagadas = _apagar_partes(transcricao.upload_id) if transcricao.upload_id else 0
+    if transcricao.audio_file:
+        try:
+            transcricao.audio_file.delete(save=False)
+        except Exception:                                           # noqa: BLE001
+            pass
+    transcricao.delete()
+    return JsonResponse({'ok': True, 'partes_apagadas': apagadas})
+
+
+@login_required
+def transcription_recorder(request):
+    """Janela própria do gravador: segue gravando mesmo com a aba do portal fechada."""
+    fonte = request.GET.get('fonte') or 'mic'
+    if fonte not in ('mic', 'system', 'both'):
+        fonte = 'mic'
+    return render(request, 'agenda/gravador.html', {
+        'event': _evento_para_transcricao(request.user, request.GET.get('event_id')),
+        'upload_id': _sanitize_upload_id(request.GET.get('upload_id')),
+        'titulo': (request.GET.get('titulo') or '').strip()[:255],
+        'fonte': fonte,
+        'origem': 'gravador',
+    })
 
 
 def _copy_storage_file_to_temp(field_file):
@@ -1796,28 +2071,44 @@ def _probe_audio_duration_seconds(file_path):
         return None
 
 
-def _transcribe_audio_path(client, source_path, original_filename, duration_hint=0):
-    """Converte para mp3 quando possível, divide em partes se necessário e transcreve com retry."""
+def _transcribe_audio_path(client, source_path, original_filename, duration_hint=0,
+                           transcricao=None, salvar_progresso=None, permitir_lacunas=True):
+    """Converte para mp3 quando possível, divide em partes se necessário e transcreve com retry.
+
+    Com `transcricao`/`salvar_progresso`, áudio longo é transcrito em trechos e
+    cada trecho pronto fica salvo — a retomada não refaz. Com
+    `permitir_lacunas=False`, trecho que falhar levanta erro em vez de virar um
+    marcador no texto: o job tenta de novo só os que faltaram.
+    """
+    from .processamento import PerdeuAReivindicacao
+
     whisper_max_size = 24 * 1024 * 1024  # 24MB
     long_audio_seconds = 1500  # acima de ~25min, segmentar para mais robustez
+    nao_cair_no_plano_b = (SegmentosFaltando, PerdeuAReivindicacao)
+    em_trechos = {'transcricao': transcricao, 'salvar_progresso': salvar_progresso,
+                  'permitir_lacunas': permitir_lacunas}
 
     duration_hint = int(duration_hint or 0)
 
     # A duração vinda do ffprobe é a fonte primária; o hint (cronômetro do
     # cliente) entra como fallback. Isso é essencial em gravações de 24h cujo
     # webm concatenado às vezes não expõe a duração — sem o hint, a segmentação
-    # assumiria só 1h e cortaria o restante do áudio.
-    probed_duration = _probe_audio_duration_seconds(source_path)
+    # assumiria só 1h e cortaria o restante do áudio. Numa retomada vale a
+    # duração da primeira vez, para cortar o áudio nos mesmos pontos.
+    progresso = getattr(transcricao, 'progresso', None) or {}
+    probed_duration = float(progresso.get('duracao_total') or 0) or _probe_audio_duration_seconds(source_path)
     duration_seconds = probed_duration or (duration_hint or None)
 
     if duration_seconds and duration_seconds >= long_audio_seconds:
         try:
             raw_text = _split_and_transcribe(
-                client, source_path, total_duration_hint=duration_seconds
+                client, source_path, total_duration_hint=duration_seconds, **em_trechos
             )
             return raw_text, int(duration_seconds)
+        except nao_cair_no_plano_b:
+            raise
         except Exception:
-            # Se falhar a segmentacao, tenta o fluxo tradicional
+            # Se falhar a segmentacao (ex.: sem ffmpeg), tenta o fluxo tradicional
             pass
 
     # Primeiro, tenta sem conversão se for pequeno o suficiente
@@ -1839,7 +2130,7 @@ def _transcribe_audio_path(client, source_path, original_filename, duration_hint
 
             # Se ainda for grande, divide em segmentos
             raw_text = _split_and_transcribe(
-                client, mp3_path, total_duration_hint=duration_seconds or duration_hint
+                client, mp3_path, total_duration_hint=duration_seconds or duration_hint, **em_trechos
             )
             return raw_text, duration_seconds
         finally:
@@ -1886,64 +2177,114 @@ def _try_transcribe_file(client, file_path, is_converted=False, max_retries=2, r
             raise
 
 
-def _split_and_transcribe(client, mp3_path, total_duration_hint=0):
-    """Divide áudio grande em segmentos de tempo e concatena as transcrições com retry."""
+# Trechos transcritos ao mesmo tempo: bem abaixo do limite de requisições da
+# OpenAI, e uma gravação longa sai em um terço do tempo.
+TRANSCRICAO_TRECHOS_EM_PARALELO = 3
+
+
+class SegmentosFaltando(Exception):
+    """Alguns trechos do áudio não foram transcritos (a OpenAI falhou neles)."""
+
+
+def _hhmm(segundos):
+    segundos = int(segundos or 0)
+    return f'{segundos // 3600:02d}:{(segundos % 3600) // 60:02d}'
+
+
+def _transcrever_trecho(client, audio_path, indice, inicio, duracao, pasta):
+    """Recorta um trecho com o ffmpeg e manda para o Whisper (roda numa thread)."""
+    seg_path = os.path.join(pasta, f'seg_{indice:04d}.mp3')
+    try:
+        subprocess.run(
+            [
+                'ffmpeg', '-y', '-ss', str(inicio), '-t', str(duracao), '-i', audio_path,
+                '-vn', '-acodec', 'libmp3lame', '-ab', '64k', '-ar', '16000', '-ac', '1', seg_path,
+            ],
+            capture_output=True,
+            timeout=max(300, int(duracao * 3)),
+            check=True,
+        )
+        text, _ = _try_transcribe_file(client, seg_path, is_converted=True, max_retries=3,
+                                       response_format='text')
+        return (text or '').strip()
+    finally:
+        if os.path.exists(seg_path):
+            os.unlink(seg_path)
+
+
+def _split_and_transcribe(client, mp3_path, total_duration_hint=0,
+                          transcricao=None, salvar_progresso=None, permitir_lacunas=True):
+    """Divide áudio grande em trechos de tempo, transcreve 3 por vez e junta na ordem.
+
+    Com `salvar_progresso`, cada trecho pronto é salvo na hora em
+    `transcricao.progresso`: se o processo cair no meio de uma gravação de 8 h,
+    a retomada só transcreve o que faltou. A divisão também fica salva, para a
+    retomada cortar o áudio nos mesmos pontos.
+    """
+    progresso = dict(getattr(transcricao, 'progresso', None) or {})
     # Fallback para o hint (cronômetro do cliente) quando o ffprobe não consegue
     # ler a duração — sem isso, gravações longas seriam truncadas em 1h.
-    total_duration = _probe_audio_duration_seconds(mp3_path) or int(total_duration_hint or 0) or 3600
+    total_duration = (float(progresso.get('duracao_total') or 0)
+                      or _probe_audio_duration_seconds(mp3_path) or int(total_duration_hint or 0) or 3600)
+    segment_seconds = int(progresso.get('segundos_por_segmento')
+                          or (900 if total_duration >= 6 * 3600 else 720))
+    total_segmentos = max(1, int(math.ceil(total_duration / segment_seconds)))
+    feitos = {str(chave): valor for chave, valor in (progresso.get('segmentos') or {}).items()}
 
-    if total_duration >= 6 * 3600:
-        segment_seconds = 900
-    else:
-        segment_seconds = 720
+    progresso.update(duracao_total=total_duration, segundos_por_segmento=segment_seconds,
+                     total_segmentos=total_segmentos, segmentos=feitos)
+    if salvar_progresso:
+        salvar_progresso(dict(progresso))
 
+    falhas = {}
+    pendentes = [i for i in range(total_segmentos) if str(i) not in feitos]
     tmp_dir = tempfile.mkdtemp()
-    all_text_parts = []
-
+    pool = ThreadPoolExecutor(max_workers=TRANSCRICAO_TRECHOS_EM_PARALELO)
     try:
-        start = 0.0
-        segment_index = 0
-        while start < total_duration:
-            seg_duration = min(segment_seconds, max(1, total_duration - start))
-            seg_path = os.path.join(tmp_dir, f'seg_{segment_index:04d}.mp3')
-            timeout = max(300, int(seg_duration * 3))
-
+        futuros = {}
+        for indice in pendentes:
+            inicio = indice * segment_seconds
+            duracao = min(segment_seconds, max(1, total_duration - inicio))
+            futuros[pool.submit(_transcrever_trecho, client, mp3_path, indice, inicio, duracao, tmp_dir)] = indice
+        for futuro in as_completed(futuros):
+            indice = futuros[futuro]
             try:
-                subprocess.run(
-                    [
-                        'ffmpeg', '-y', '-ss', str(start), '-t', str(seg_duration), '-i', mp3_path,
-                        '-vn', '-acodec', 'libmp3lame', '-ab', '64k', '-ar', '16000', '-ac', '1', seg_path,
-                    ],
-                    capture_output=True,
-                    timeout=timeout,
-                    check=True,
-                )
-
-                text, _ = _try_transcribe_file(
-                    client,
-                    seg_path,
-                    is_converted=True,
-                    max_retries=3,
-                    response_format='text',
-                )
-                if text:
-                    all_text_parts.append(text.strip())
+                feitos[str(indice)] = futuro.result()
             except Exception as err:
-                all_text_parts.append(f'[Segmento não transcrito: {str(err)[:80]}]')
-            finally:
-                if os.path.exists(seg_path):
-                    os.unlink(seg_path)
-
-            start += seg_duration
-            segment_index += 1
-
-        return '\n\n'.join([p for p in all_text_parts if p]).strip()
+                falhas[indice] = str(err)[:120]
+                continue
+            if salvar_progresso:
+                progresso['segmentos'] = feitos
+                progresso['segmentos_falhados'] = sorted(falhas)
+                salvar_progresso(dict(progresso))
+    except BaseException:
+        # Outro processo assumiu a transcrição (ou houve interrupção): não espera
+        # os trechos que ainda nem começaram.
+        pool.shutdown(wait=False, cancel_futures=True)
+        raise
     finally:
-        for name in os.listdir(tmp_dir):
-            file_path = os.path.join(tmp_dir, name)
-            if os.path.isfile(file_path):
-                os.unlink(file_path)
-        os.rmdir(tmp_dir)
+        pool.shutdown(wait=True)
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    if falhas and not permitir_lacunas:
+        if salvar_progresso:
+            progresso['segmentos'] = feitos
+            progresso['segmentos_falhados'] = sorted(falhas)
+            salvar_progresso(dict(progresso))
+        raise SegmentosFaltando(
+            f'{len(falhas)} de {total_segmentos} trechos do áudio ainda não foram transcritos '
+            f'({next(iter(falhas.values()))}).')
+
+    partes = []
+    for indice in range(total_segmentos):
+        texto = feitos.get(str(indice))
+        if texto is None:
+            inicio = indice * segment_seconds
+            fim = min(total_duration, inicio + segment_seconds)
+            partes.append(f'[Trecho {_hhmm(inicio)}–{_hhmm(fim)} não transcrito]')
+        elif texto:
+            partes.append(texto)
+    return '\n\n'.join(partes).strip()
 
 
 def _split_and_transcribe_raw(client, source_path):
@@ -2035,286 +2376,209 @@ def _ensure_transcription_calendar_event(transcription, user):
     transcription.save(update_fields=['calendar_event_created'])
 
 
-def _process_transcription_upload_job(
-    transcription_id,
-    client,
-    source_path=None,
-    original_audio_name=None,
-    parts_upload_id=None,
-    duration_hint=0,
-):
-    """Pipeline principal de transcrição inicial."""
-    transcription = MeetingTranscription.objects.select_related('owner').get(pk=transcription_id)
-    temp_path = source_path
+# =========================================================================
+# PIPELINE DE TRANSCRIÇÃO (retomável — quem roda é agenda/processamento.py)
+# =========================================================================
 
-    # Fluxo de gravação longa: as partes foram salvas no MinIO durante a captura.
-    # Aqui baixamos e concatenamos num único arquivo temporário para transcrever.
-    # As partes NÃO são apagadas (ficam como backup para reprocessar).
-    if not temp_path and parts_upload_id:
-        temp_path, _parts_count = _assemble_transcription_parts_to_temp(
-            parts_upload_id, original_audio_name
-        )
-        if not temp_path:
-            raise ValueError('Nenhuma parte do áudio foi encontrada no armazenamento.')
+ETAPA_ROTULOS = dict(MeetingTranscription.ETAPAS)
+# A partir desta tentativa, trecho que a OpenAI não transcreveu vira um aviso no
+# texto: melhor a ata com uma lacuna marcada do que ata nenhuma.
+TENTATIVAS_ANTES_DE_ACEITAR_LACUNAS = 4
 
-    duration_hint = int(duration_hint or 0) or int(getattr(transcription, 'duration_seconds', 0) or 0)
 
-    if temp_path:
-        # Salva o áudio consolidado no MinIO cedo. Assim, se a transcrição falhar
-        # no meio, o áudio completo já está persistido e o reprocessamento
-        # consegue retranscrever do zero sem perder a gravação.
-        original_name = original_audio_name or os.path.basename(temp_path) or 'audio.webm'
-        with open(temp_path, 'rb') as audio_stream:
-            transcription.audio_file.save(original_name, File(audio_stream), save=False)
-        transcription.save(update_fields=['audio_file'])
+def processar_transcricao(transcricao_id, client, dono='', modo='upload', opcoes=None):
+    """O pipeline inteiro, retomável — cada etapa salva o que produziu.
 
+    montagem    → junta as partes do storage num áudio só e o guarda;
+    transcrição → Whisper em trechos, cada trecho salvo ao terminar;
+    análise     → resumo, seções, decisões e ações (o texto bruto já está salvo);
+    tarefas     → evento na agenda e tarefas.
+
+    Quem chama é o job de agenda/processamento.py, que reivindica a
+    transcrição, mantém o batimento e agenda nova tentativa quando algo falha.
+    Retomar é chamar de novo: o que já está no banco não é refeito.
+    """
+    from . import processamento as proc
+
+    opcoes = opcoes or {}
+    t = MeetingTranscription.objects.select_related('owner').get(pk=transcricao_id)
+
+    def salvar(*campos):
+        proc.conferir_dono(transcricao_id, dono)
+        t.save(update_fields=list(dict.fromkeys(list(campos) + ['updated_at'])))
+
+    def salvar_progresso(progresso):
+        t.progresso = progresso
+        salvar('progresso')
+
+    raw_fornecido = opcoes.get('raw_text') if isinstance(opcoes.get('raw_text'), str) else ''
+    raw_fornecido = (raw_fornecido or '').strip()
+    if raw_fornecido:
+        t.raw_transcription = raw_fornecido
+        salvar('raw_transcription')
+    forcar_texto = bool(opcoes.get('force_raw'))
+    if forcar_texto and not ((t.raw_transcription or '').strip() or (t.formatted_transcription or '').strip()):
+        raise proc.ErroPermanente('Não há texto bruto para retranscrever.')
+
+    permitir_lacunas = (t.tentativas or 0) >= TENTATIVAS_ANTES_DE_ACEITAR_LACUNAS
+    texto = ''
+    for _volta in range(4):
+        processadas = int((t.progresso or {}).get('partes_processadas') or 0)
+        partes_novas = bool(t.upload_id) and not raw_fornecido and t.partes_recebidas > processadas
+        texto = '' if partes_novas else (t.raw_transcription or '').strip()
+        if not texto and not partes_novas and (forcar_texto or not t.audio_file):
+            # Transcrição antiga que só guardou a versão formatada.
+            texto = (t.formatted_transcription or '').strip()
+            if texto:
+                t.raw_transcription = texto
+                salvar('raw_transcription')
+        if not texto:
+            texto = _montar_e_transcrever(t, client, salvar, salvar_progresso, partes_novas, permitir_lacunas)
+        # Partes que chegaram enquanto transcrevia (o navegador voltou e mandou o
+        # que estava guardado nele): refaz com o áudio completo.
+        t.refresh_from_db(fields=['partes_recebidas'])
+        if (bool(t.upload_id) and not raw_fornecido
+                and t.partes_recebidas > int((t.progresso or {}).get('partes_processadas') or 0)):
+            continue
+        break
+
+    _analisar_e_concluir(t, client, texto, salvar)
+
+
+def _montar_e_transcrever(t, client, salvar, salvar_progresso, partes_novas, permitir_lacunas):
+    """Junta as partes (se chegaram novas) e transcreve o áudio. Devolve o texto bruto."""
+    from . import processamento as proc
+
+    temp_path = None
     try:
-        if temp_path:
-            raw_text, duration = _transcribe_audio_path(
-                client,
-                temp_path,
-                original_audio_name or os.path.basename(temp_path) or 'audio.webm',
-                duration_hint=duration_hint,
-            )
-        else:
-            if not transcription.audio_file:
-                raise ValueError('Arquivo de áudio não encontrado para processamento.')
+        if partes_novas:
+            t.etapa = 'montagem'
+            salvar('etapa')
+            temp_path, partes = _assemble_transcription_parts_to_temp(t.upload_id, '')
+            if not temp_path:
+                raise proc.ErroPermanente('Nenhuma parte do áudio foi encontrada no armazenamento.')
+            nome = ('reuniao' if t.origem == 'reuniao' else 'gravacao') + os.path.splitext(temp_path)[1]
+            anterior = t.audio_file.name if t.audio_file else ''
+            with open(temp_path, 'rb') as audio_stream:
+                t.audio_file.save(nome, File(audio_stream), save=False)
+            # Áudio novo: os trechos transcritos do áudio anterior não valem mais.
+            progresso = {chave: valor for chave, valor in (t.progresso or {}).items()
+                         if chave not in ('segmentos', 'segmentos_falhados', 'total_segmentos',
+                                          'segundos_por_segmento', 'duracao_total')}
+            progresso['partes_processadas'] = partes
+            t.progresso = progresso
+            t.raw_transcription = ''
+            salvar('audio_file', 'progresso', 'raw_transcription')
+            if anterior and anterior != t.audio_file.name:
+                try:
+                    t.audio_file.storage.delete(anterior)
+                except Exception:                                   # noqa: BLE001
+                    pass
+        elif not t.audio_file:
+            raise proc.ErroPermanente('Não há texto nem áudio para processar esta transcrição.')
 
-            raw_text, duration = _transcribe_audio_from_storage(
-                client, transcription.audio_file, duration_hint=duration_hint
-            )
-
-        if not raw_text:
-            raise ValueError('Falha ao transcrever áudio enviado.')
-
-        if duration:
-            transcription.duration_seconds = duration
-
-        transcription.raw_transcription = raw_text
-
-        analysis_context = _build_participant_roles_context(transcription.participant_roles)
-        analysis = _generate_transcription_analysis(
-            client,
-            transcription.title,
-            raw_text,
-            analysis_context=analysis_context,
-        )
-
-        transcription.formatted_transcription = analysis['formatted_transcription']
-        transcription.summary = analysis['summary']
-        transcription.sections = analysis['sections']
-        transcription.key_decisions = analysis['key_decisions']
-        transcription.action_items = analysis['action_items']
-        transcription.participants_identified = analysis['participants_identified']
-        transcription.sentiment = analysis['sentiment']
-        transcription.meeting_type_detected = analysis['meeting_type_detected']
-        transcription.tags = analysis['tags']
-        transcription.suggested_events = analysis['suggested_events']
-        transcription.risks = analysis.get('risks', [])
-        transcription.status = 'completed'
-        transcription.error_message = ''
-        transcription.save()
-
-        _ensure_transcription_calendar_event(transcription, transcription.owner)
-        transcription.tasks_created.clear()
-        _create_tasks_from_transcription(transcription, transcription.owner)
+        t.etapa = 'transcricao'
+        salvar('etapa')
+        if not temp_path:
+            temp_path = _copy_storage_file_to_temp(t.audio_file)
+        texto, duracao = _transcribe_audio_path(
+            client, temp_path, os.path.basename(t.audio_file.name or '') or 'audio.webm',
+            duration_hint=int(t.duration_seconds or 0), transcricao=t,
+            salvar_progresso=salvar_progresso, permitir_lacunas=permitir_lacunas)
+        texto = (texto or '').strip()
+        if not texto:
+            if (t.tentativas or 0) >= 2:
+                raise proc.ErroPermanente('O áudio não tem fala que a transcrição consiga reconhecer.')
+            raise RuntimeError('A transcrição do áudio voltou vazia.')
+        # O texto bruto é salvo ANTES da análise: se a análise falhar, a próxima
+        # tentativa não paga o Whisper de novo.
+        t.raw_transcription = texto
+        if duracao:
+            t.duration_seconds = int(duracao)
+        salvar('raw_transcription', 'duration_seconds')
+        return texto
     finally:
         if temp_path and os.path.exists(temp_path):
             os.unlink(temp_path)
 
 
-def _process_transcription_reprocess_job(transcription_id, client, options=None):
-    """Pipeline de reprocessamento, priorizando texto salvo e fallback para áudio."""
-    options = options or {}
-    transcription = MeetingTranscription.objects.select_related('owner').get(pk=transcription_id)
-
-    force_raw = bool(options.get('force_raw'))
-    provided_raw_text = (options.get('raw_text') or '').strip()
-
-    source_text = (transcription.raw_transcription or '').strip()
-    formatted_text = (transcription.formatted_transcription or '').strip()
-
-    if provided_raw_text:
-        source_text = provided_raw_text
-        transcription.raw_transcription = provided_raw_text
-        transcription.save(update_fields=['raw_transcription'])
-
-    if not source_text and formatted_text:
-        source_text = formatted_text
-        transcription.raw_transcription = formatted_text
-        transcription.save(update_fields=['raw_transcription'])
-
-    if force_raw and not source_text:
-        raise ValueError('Não há texto bruto para retranscrever.')
-
-    if not source_text and transcription.audio_file:
-        source_text, duration = _transcribe_audio_from_storage(
-            client,
-            transcription.audio_file,
-            duration_hint=int(getattr(transcription, 'duration_seconds', 0) or 0),
-        )
-        if duration:
-            transcription.duration_seconds = duration
-        if source_text:
-            transcription.raw_transcription = source_text
-            transcription.save(update_fields=['raw_transcription', 'duration_seconds'])
-
-    if not source_text:
-        raise ValueError('Sem transcrição bruta/completa ou áudio para processar.')
-
-    analysis_context = _build_participant_roles_context(transcription.participant_roles)
+def _analisar_e_concluir(t, client, texto, salvar):
+    t.etapa = 'analise'
+    salvar('etapa')
     analysis = _generate_transcription_analysis(
-        client,
-        transcription.title,
-        source_text,
-        analysis_context=analysis_context,
-    )
+        client, t.title, texto, analysis_context=_build_participant_roles_context(t.participant_roles))
 
-    transcription.formatted_transcription = analysis['formatted_transcription']
-    if not transcription.raw_transcription:
-        transcription.raw_transcription = source_text
-    transcription.summary = analysis['summary']
-    transcription.sections = analysis['sections']
-    transcription.key_decisions = analysis['key_decisions']
-    transcription.action_items = analysis['action_items']
-    transcription.participants_identified = analysis['participants_identified']
-    transcription.sentiment = analysis['sentiment']
-    transcription.meeting_type_detected = analysis['meeting_type_detected']
-    transcription.tags = analysis['tags']
-    transcription.suggested_events = analysis['suggested_events']
-    transcription.risks = analysis.get('risks', [])
-    transcription.status = 'completed'
-    transcription.error_message = ''
-    transcription.save()
+    t.formatted_transcription = analysis['formatted_transcription']
+    t.summary = analysis['summary']
+    t.sections = analysis['sections']
+    t.key_decisions = analysis['key_decisions']
+    t.action_items = analysis['action_items']
+    t.participants_identified = analysis['participants_identified']
+    t.sentiment = analysis['sentiment']
+    t.meeting_type_detected = analysis['meeting_type_detected']
+    t.tags = analysis['tags']
+    t.suggested_events = analysis['suggested_events']
+    t.risks = analysis.get('risks', [])
+    t.etapa = 'tarefas'
+    salvar('formatted_transcription', 'summary', 'sections', 'key_decisions', 'action_items',
+           'participants_identified', 'sentiment', 'meeting_type_detected', 'tags',
+           'suggested_events', 'risks', 'etapa')
 
-    _ensure_transcription_calendar_event(transcription, transcription.owner)
-    transcription.tasks_created.clear()
-    _create_tasks_from_transcription(transcription, transcription.owner)
+    _ensure_transcription_calendar_event(t, t.owner)
+    # Tarefas numa transação e marcadas com a lista que as gerou: uma retomada
+    # depois de cair no meio não cria a mesma tarefa duas vezes.
+    marca = hashlib.sha1(json.dumps(t.action_items or [], sort_keys=True, ensure_ascii=False,
+                                    default=str).encode()).hexdigest()
+    if (t.progresso or {}).get('tarefas_de') != marca:
+        with transaction.atomic():
+            t.tasks_created.clear()
+            _create_tasks_from_transcription(t, t.owner)
+            t.progresso = {**(t.progresso or {}), 'tarefas_de': marca}
+            salvar('progresso')
 
-
-def _run_transcription_background_job(transcription_id, api_key, mode, options=None):
-    """Worker thread para processar transcrição sem depender da conexão HTTP."""
-    import openai
-
-    close_old_connections()
-    options = options or {}
-    source_text = ''
-
-    try:
-        transcription = MeetingTranscription.objects.get(pk=transcription_id)
-    except MeetingTranscription.DoesNotExist:
-        close_old_connections()
-        return
-
-    try:
-        if mode == 'upload' and not api_key:
-            raise ValueError('OPENAI_API_KEY não configurada para transcrição.')
-
-        if mode == 'reprocess' and not api_key:
-            source_text = (transcription.raw_transcription or '').strip() or (transcription.formatted_transcription or '').strip()
-            if not source_text:
-                raise ValueError('Chave da API OpenAI não configurada.')
-
-            transcription.formatted_transcription = transcription.formatted_transcription or source_text
-            transcription.summary = (
-                transcription.summary
-                or 'Reprocessado usando a transcrição já salva. Configure OPENAI_API_KEY para análise avançada.'
-            )
-            transcription.status = 'completed'
-            transcription.error_message = ''
-            transcription.save(update_fields=['formatted_transcription', 'summary', 'status', 'error_message'])
-            return
-
-        client = openai.OpenAI(api_key=api_key)
-
-        if mode == 'upload':
-            _process_transcription_upload_job(
-                transcription_id,
-                client,
-                source_path=options.get('temp_audio_path'),
-                original_audio_name=options.get('original_audio_name'),
-                parts_upload_id=options.get('parts_upload_id'),
-                duration_hint=options.get('duration_hint', 0),
-            )
-        else:
-            _process_transcription_reprocess_job(transcription_id, client, options=options)
-
-    except Exception as err:
-        transcription = MeetingTranscription.objects.filter(pk=transcription_id).first()
-        if transcription:
-            source_text = (transcription.raw_transcription or '').strip() or (transcription.formatted_transcription or '').strip()
-            error_msg = _friendly_openai_error(err)[:500]
-
-            # Sempre marcar como erro para liberar o "Reiniciar Processamento" e
-            # exibir a mensagem amigável na tela do usuário. A transcrição bruta
-            # continua disponível para nova tentativa.
-            transcription.status = 'error'
-            transcription.error_message = error_msg
-            if source_text and not transcription.formatted_transcription:
-                transcription.formatted_transcription = source_text
-                transcription.save(update_fields=['status', 'error_message', 'formatted_transcription'])
-            else:
-                transcription.save(update_fields=['status', 'error_message'])
-    finally:
-        close_old_connections()
+    t.status = 'completed'
+    t.etapa = ''
+    t.error_message = ''
+    t.processando_por = ''
+    t.batimento_em = None
+    t.proxima_tentativa_em = None
+    salvar('status', 'etapa', 'error_message', 'processando_por', 'batimento_em', 'proxima_tentativa_em')
 
 
-def _run_tracked_transcription_background_job(transcription_id, api_key, mode, options=None):
-    try:
-        _run_transcription_background_job(transcription_id, api_key, mode, options=options)
-    finally:
-        with _TRANSCRIPTION_JOB_LOCK:
-            _ACTIVE_TRANSCRIPTION_JOBS.discard(transcription_id)
+def concluir_sem_ia(transcricao_id, dono=''):
+    """Sem chave da OpenAI: conclui com o texto que já existe (como antes)."""
+    from . import processamento as proc
+
+    t = MeetingTranscription.objects.get(pk=transcricao_id)
+    texto = (t.raw_transcription or '').strip() or (t.formatted_transcription or '').strip()
+    if not texto:
+        raise proc.ErroPermanente('Chave da API OpenAI não configurada.')
+    proc.conferir_dono(transcricao_id, dono)
+    t.formatted_transcription = t.formatted_transcription or texto
+    t.summary = (t.summary or 'Reprocessado usando a transcrição já salva. '
+                              'Configure OPENAI_API_KEY para análise avançada.')
+    t.status = 'completed'
+    t.error_message = ''
+    t.etapa = ''
+    t.processando_por = ''
+    t.batimento_em = None
+    t.proxima_tentativa_em = None
+    t.save(update_fields=['formatted_transcription', 'summary', 'status', 'error_message', 'etapa',
+                          'processando_por', 'batimento_em', 'proxima_tentativa_em', 'updated_at'])
 
 
-def _start_transcription_background_job(transcription_id, api_key, mode='upload', options=None):
-    """Dispara uma thread para processamento de transcrição em segundo plano."""
-    with _TRANSCRIPTION_JOB_LOCK:
-        if transcription_id in _ACTIVE_TRANSCRIPTION_JOBS:
-            return False
-        _ACTIVE_TRANSCRIPTION_JOBS.add(transcription_id)
+def _start_transcription_background_job(transcription_id, api_key=None, mode='upload', options=None):
+    """Mantido pelo nome (outros pontos e testes o usam): agora é o job durável."""
+    from . import processamento
 
-    worker = threading.Thread(
-        target=_run_tracked_transcription_background_job,
-        kwargs={
-            'transcription_id': transcription_id,
-            'api_key': api_key,
-            'mode': mode,
-            'options': options or {},
-        },
-        daemon=True,
-        name=f'transcription-{mode}-{transcription_id}',
-    )
-    worker.start()
-    return True
+    return processamento.iniciar_job(transcription_id, modo=mode, opcoes=options)
 
 
-def _prioritize_processing_transcriptions(api_key, exclude_id=None, limit=2):
-    """
-    Retoma primeiro transcrições em processamento que parecem paradas.
-    Evita duplicar trabalhos ativos neste processo e limita o volume por request.
-    """
-    if not api_key:
-        return 0
+def _prioritize_processing_transcriptions(api_key=None, exclude_id=None, limit=2):
+    """Retoma primeiro as transcrições paradas (mantido pelo nome)."""
+    from . import processamento
 
-    stale_before = timezone.now() - timedelta(minutes=3)
-    candidates = (
-        MeetingTranscription.objects
-        .filter(status='processing', updated_at__lte=stale_before)
-        .exclude(pk=exclude_id)
-        .order_by('updated_at', 'created_at')[:limit]
-    )
-
-    started = 0
-    for transcription in candidates:
-        if _start_transcription_background_job(
-            transcription.pk,
-            api_key,
-            mode='reprocess',
-            options={'resume_processing': True},
-        ):
-            started += 1
-    return started
+    return processamento.retomar_paradas(limite=limit, excluir=exclude_id)
 
 
 def _create_tasks_from_transcription(transcription, user):
@@ -2429,17 +2693,43 @@ def api_transcription_share(request, pk):
     })
 
 
-@login_required
+def _progresso_pct(t):
+    """Quanto do processamento já foi feito (para a barra da tela)."""
+    if t.status == 'completed':
+        return 100
+    if t.status == 'recording':
+        return 0
+    if t.etapa == 'montagem':
+        return 5
+    if t.etapa == 'transcricao':
+        progresso = t.progresso or {}
+        total = int(progresso.get('total_segmentos') or 0)
+        feitos = len(progresso.get('segmentos') or {})
+        return 10 + int(70 * feitos / total) if total else 10
+    if t.etapa == 'analise':
+        return 85
+    if t.etapa == 'tarefas':
+        return 95
+    return 3
+
+
+@login_required_json
 def api_transcription_status(request, pk):
     """Retorna status resumido da transcrição para polling da interface."""
+    from . import processamento
+
+    processamento.garantir_varredura()
     transcription = get_object_or_404(_visible_transcriptions_for_user(request.user), pk=pk)
 
-    # Detecta "Processando" travado: sem updates há mais de 3 minutos.
-    is_stale = False
+    # "Travado" é job sem sinal de vida — não a espera de uma nova tentativa já
+    # marcada. `updated_at` não serve: salvar só alguns campos não o renova.
+    agora = timezone.now()
+    aguardando = transcription.aguardando_nova_tentativa
+    referencia = transcription.batimento_em or transcription.updated_at
     stale_seconds = 0
-    if transcription.status == 'processing' and transcription.updated_at:
-        stale_seconds = int((timezone.now() - transcription.updated_at).total_seconds())
-        is_stale = stale_seconds >= 180
+    if transcription.status == 'processing' and referencia and not aguardando:
+        stale_seconds = int((agora - referencia).total_seconds())
+    is_stale = stale_seconds >= processamento.PARADO_APOS_SEGUNDOS
 
     return JsonResponse({
         'id': transcription.pk,
@@ -2449,6 +2739,16 @@ def api_transcription_status(request, pk):
         'is_stale': is_stale,
         'stale_seconds': stale_seconds,
         'redirect': f'/agenda/transcricoes/{transcription.pk}/',
+        'etapa': transcription.etapa,
+        'etapa_rotulo': ETAPA_ROTULOS.get(transcription.etapa, ''),
+        'tentativas': transcription.tentativas,
+        'aguardando_nova_tentativa': aguardando,
+        'proxima_tentativa_em': (transcription.proxima_tentativa_em.isoformat()
+                                 if transcription.proxima_tentativa_em else None),
+        'partes_recebidas': transcription.partes_recebidas,
+        'ultima_parte_em': transcription.ultima_parte_em.isoformat() if transcription.ultima_parte_em else None,
+        'finalizada_automaticamente': transcription.finalizada_automaticamente,
+        'progresso_pct': _progresso_pct(transcription),
     })
 
 
@@ -2539,10 +2839,14 @@ def api_transcription_assign_task(request, pk, task_id):
     })
 
 
-@login_required
+@login_required_json
 @require_POST
 def api_transcription_reprocess(request, pk):
-    """Reinicia processamento da transcrição em segundo plano."""
+    """Reinicia o processamento em segundo plano (e retoma outras que pararam).
+
+    Numa gravação ainda aberta (o navegador de quem gravava sumiu), serve de
+    "encerrar agora": fecha a sessão com as partes que chegaram e processa.
+    """
     from django.conf import settings as django_settings
 
     transcription = get_object_or_404(_manageable_transcriptions_for_user(request.user), pk=pk)
@@ -2551,12 +2855,26 @@ def api_transcription_reprocess(request, pk):
         payload = json.loads(request.body.decode('utf-8') or '{}') if request.body else {}
     except (json.JSONDecodeError, UnicodeDecodeError):
         payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
 
-    provided_raw_text = (payload.get('raw_text') or '').strip()
+    # Só o que o pipeline entende vai adiante (antes ia o JSON inteiro do cliente).
+    options = {}
+    if payload.get('force_raw'):
+        options['force_raw'] = True
+    provided_raw_text = payload.get('raw_text') if isinstance(payload.get('raw_text'), str) else ''
+    provided_raw_text = (provided_raw_text or '').strip()
+    if provided_raw_text:
+        options['raw_text'] = provided_raw_text
+
+    if transcription.status == 'recording' and not transcription.partes_recebidas and not provided_raw_text:
+        return JsonResponse({'error': 'Esta gravação ainda não recebeu nenhuma parte de áudio.'}, status=400)
 
     transcription.status = 'processing'
     transcription.error_message = ''
-    update_fields = ['status', 'error_message']
+    transcription.tentativas = 0
+    transcription.proxima_tentativa_em = None
+    update_fields = ['status', 'error_message', 'tentativas', 'proxima_tentativa_em', 'updated_at']
 
     if provided_raw_text:
         transcription.raw_transcription = provided_raw_text
@@ -2573,7 +2891,7 @@ def api_transcription_reprocess(request, pk):
         transcription_id=transcription.pk,
         api_key=api_key,
         mode='reprocess',
-        options=payload,
+        options=options,
     )
 
     return JsonResponse({

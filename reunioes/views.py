@@ -6,7 +6,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.templatetags.static import static
@@ -18,6 +18,7 @@ from django.views.decorators.http import require_POST
 from . import publico
 from .models import (ConfiguracaoReunioes, ParticipanteReuniao, Reuniao,
                      VisitanteReuniao)
+from .permissoes import e_superadmin
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
@@ -82,23 +83,59 @@ def _espelhar_na_agenda(reuniao, convidados):
 # ---------------------------------------------------------------------------
 # Listagem
 # ---------------------------------------------------------------------------
+LIMITE_TODAS_PROXIMAS = 100
+LIMITE_TODAS_ANTERIORES = 60
+
+
 @login_required
 def lista(request):
     agora = timezone.now()
+    corte = agora - timezone.timedelta(hours=4)
     minhas = (Reuniao.objects
               .filter(Q(organizador=request.user) | Q(participantes__user=request.user))
               .select_related('organizador').distinct())
 
-    proximas = minhas.filter(inicio__gte=agora - timezone.timedelta(hours=4)) \
-                     .exclude(status=Reuniao.CANCELADA).order_by('inicio')
-    passadas = minhas.filter(inicio__lt=agora - timezone.timedelta(hours=4)) \
-                     .order_by('-inicio')[:30]
+    proximas = minhas.filter(inicio__gte=corte).exclude(status=Reuniao.CANCELADA).order_by('inicio')
+    passadas = minhas.filter(inicio__lt=corte).order_by('-inicio')[:30]
 
-    return render(request, 'reunioes/lista.html', {
+    superadmin = e_superadmin(request.user)
+    ctx = {
         'proximas': proximas,
         'passadas': passadas,
         'agora': agora,
-    })
+        'e_superadmin': superadmin,
+        'pode_configurar': superadmin,
+    }
+    if superadmin:
+        ctx.update(_todas_as_reunioes(request, minhas, corte))
+    return render(request, 'reunioes/lista.html', ctx)
+
+
+def _todas_as_reunioes(request, minhas, corte):
+    """Visão do SUPERADMIN: as reuniões dos outros, fora das que ele já vê acima.
+
+    Ficam numa seção separada de propósito: misturar tudo numa lista só faria o
+    SUPERADMIN perder de vista a própria agenda no meio das reuniões da rede.
+    """
+    busca = (request.GET.get('q') or '').strip()[:100]
+    outras = (Reuniao.objects.exclude(id__in=minhas.values('id'))
+              .select_related('organizador')
+              .annotate(n_participantes=Count('participantes', distinct=True)))
+    if busca:
+        outras = outras.filter(
+            Q(titulo__icontains=busca) | Q(organizador__first_name__icontains=busca)
+            | Q(organizador__last_name__icontains=busca) | Q(organizador__email__icontains=busca))
+    proximas = (outras.filter(inicio__gte=corte).exclude(status=Reuniao.CANCELADA)
+                .order_by('inicio'))
+    anteriores = (outras.filter(Q(inicio__lt=corte) | Q(status=Reuniao.CANCELADA))
+                  .order_by('-inicio'))
+    return {
+        'busca': busca,
+        'todas_proximas': list(proximas[:LIMITE_TODAS_PROXIMAS]),
+        'todas_anteriores': list(anteriores[:LIMITE_TODAS_ANTERIORES]),
+        'total_todas_proximas': proximas.count(),
+        'total_todas_anteriores': anteriores.count(),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -506,7 +543,7 @@ def registrar_ata(request, reuniao_id):
         ata = MeetingTranscription.objects.filter(id=transcricao_id).first()
         if ata is None:
             return JsonResponse({'ok': False, 'erro': 'Ata não encontrada.'}, status=404)
-        if ata.owner_id != request.user.id and not request.user.is_superuser:
+        if ata.owner_id != request.user.id and not e_superadmin(request.user):
             return JsonResponse({'ok': False, 'erro': 'Ata de outra pessoa.'}, status=403)
 
         if reuniao.evento_id:
@@ -588,8 +625,7 @@ def branding(request):
 # ---------------------------------------------------------------------------
 @login_required
 def configuracao(request):
-    if not (request.user.is_superuser
-            or getattr(request.user, 'hierarchy', '') == 'SUPERADMIN'):
+    if not e_superadmin(request.user):
         messages.error(request, 'Só o SUPERADMIN configura as reuniões.')
         return redirect('reunioes:lista')
 
