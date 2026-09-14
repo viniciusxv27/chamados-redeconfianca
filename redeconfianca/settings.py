@@ -413,6 +413,12 @@ OPENAI_API_KEY = config('OPENAI_API_KEY', default='')
 # <token> ou X-API-Key: <token>.
 CARTOES_API_TOKEN = config('CARTOES_API_TOKEN', default='')
 
+# Parciais Vivo — painel de resultados comerciais (abas livres, sem auth).
+# O Assistente Claude (só SUPERADMIN) lê estas abas server-side e resume ao
+# usuário. Trocar a URL aqui redireciona a ferramenta sem tocar no código.
+PARCIAIS_URL = config('PARCIAIS_URL',
+                      default='https://rede-confianca-parciais-adm.lpl0df.easypanel.host')
+
 # ── Google Drive (módulo /drive — espelho ao vivo do Drive da empresa) ───────
 # Credencial de SERVICE ACCOUNT. Use UMA das duas: o caminho do arquivo JSON da
 # chave OU o JSON inteiro colado no .env. Vazio = o módulo mostra o guia de

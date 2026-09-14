@@ -7,6 +7,7 @@ aviso curto, sem derrubar a conversa.
 
 Adicionar uma ferramenta = uma entrada em `TOOLS` com schema + função.
 """
+import json
 import logging
 
 from django.db.models import Q
@@ -254,6 +255,121 @@ def _meu_drive(user, args):
     return '\n'.join(linhas)
 
 
+# ─── Resultados comerciais (Parciais Vivo) — SÓ SUPERADMIN ───────────────────
+# Dado global da rede (não é dado "do usuário"), então fica atrás do mesmo
+# portão do menu: apenas SUPERADMIN. As abas do painel são endpoints livres
+# (sem login); o assistente lê server-side e resume. Trocar a URL: PARCIAIS_URL.
+
+import re as _re  # usado só aqui, para limpar o HTML da aba Resultados
+
+# aba lógica → (caminho, precisa de scope?, tipo). data_ref entra em todas.
+_PARCIAIS_ABAS = {
+    'resultados':   ('/parciais/indicadores/resultados-fragment', True, 'html'),
+    'meta_dia':     ('/parciais/indicadores/meta-dia-dados', True, 'json'),
+    'banda_larga':  ('/parciais/indicadores/banda-larga-dados', True, 'json'),
+    'dias_zerados': ('/parciais/indicadores/dias-zerados-dados', True, 'json'),
+    'bsc_d0':       ('/api/dados-bsc-d0', True, 'json'),
+    'ppl':          ('/parciais/indicadores/ppl-dados', False, 'json'),
+}
+_PARCIAIS_MICRO = {
+    'coordenacao': '/api/dados-microindicadores-coordenacao',
+    'loja': '/api/dados-microindicadores-loja',
+    'cn': '/api/dados-microindicadores-cn',
+}
+_PARCIAIS_ABAS_VALIDAS = (['resumo'] + list(_PARCIAIS_ABAS) + ['microindicadores'])
+_PARCIAIS_LIMITE = 15000   # teto de caracteres por aba, para não estourar o contexto
+
+
+def _e_superadmin(user):
+    return bool(user and getattr(user, 'is_authenticated', False)
+                and (user.is_superuser or getattr(user, 'hierarchy', '') == 'SUPERADMIN'))
+
+
+def _parciais_get(path, params, espera_json=True):
+    """GET no painel Parciais. Devolve (dados|texto) ou levanta para o chamador."""
+    import requests
+    from django.conf import settings
+    base = (getattr(settings, 'PARCIAIS_URL', '') or '').rstrip('/')
+    if not base:
+        raise RuntimeError('PARCIAIS_URL não configurada.')
+    r = requests.get(base + path, params=params, timeout=20)
+    r.raise_for_status()
+    return r.json() if espera_json else r.text
+
+
+def _truncar(texto, limite=_PARCIAIS_LIMITE):
+    texto = texto or ''
+    if len(texto) <= limite:
+        return texto
+    return texto[:limite] + f'\n… [cortado em {limite} caracteres — peça uma aba específica ' \
+                            f'ou um scope de loja para ver o restante]'
+
+
+def _parciais_html_para_texto(html):
+    html = _re.sub(r'(?is)<(script|style)[^>]*>.*?</\1>', ' ', html)
+    html = _re.sub(r'(?s)<[^>]+>', ' ', html)
+    return _re.sub(r'[ \t]+', ' ', _re.sub(r'\n\s*\n\s*\n+', '\n\n', html)).strip()
+
+
+def _resumo_meta_dia(dados):
+    """Formata a aba Meta Dia como a 'Visão geral do dia' do painel."""
+    linhas = []
+    st = (dados.get('_status') or {})
+    cab = f'{dados.get("scope_label", "Rede")} · {dados.get("data", "")}'
+    if st.get('updated_at'):
+        cab += f' · atualizado {st["updated_at"]}'
+    linhas.append(cab)
+    linhas.append(f'{dados.get("atingidos", 0)}/{dados.get("total_pilares", 0)} pilares na meta')
+    for l in dados.get('linhas', []):
+        alvo = '✓' if l.get('atingido') else ' '
+        linhas.append(f'[{alvo}] {l.get("pilar")}: {l.get("realizado")} de {l.get("meta")} '
+                      f'({l.get("atingimento")}) · faltam {l.get("faltando")}')
+    return '\n'.join(linhas)
+
+
+def _resultados_comerciais(user, args):
+    if not _e_superadmin(user):
+        return 'Os resultados comerciais da rede são restritos a SUPERADMIN.'
+
+    import datetime
+    aba = (args.get('aba') or 'resumo').strip().lower().replace(' ', '_').replace('-', '_')
+    if aba not in _PARCIAIS_ABAS_VALIDAS:
+        return (f'Aba desconhecida: {aba}. Abas: ' + ', '.join(_PARCIAIS_ABAS_VALIDAS) + '.')
+    scope = (args.get('scope') or 'rede').strip() or 'rede'
+    data_ref = (args.get('data_ref') or '').strip()
+    if not _re.match(r'^\d{4}-\d{2}-\d{2}$', data_ref):
+        data_ref = datetime.date.today().isoformat()
+
+    def p_scope():
+        return {'scope': scope, 'data_ref': data_ref}
+
+    try:
+        if aba == 'resumo':
+            meta = _parciais_get('/parciais/indicadores/meta-dia-dados', p_scope())
+            return 'RESULTADOS DO DIA (Parciais Vivo)\n' + _resumo_meta_dia(meta)
+
+        if aba == 'microindicadores':
+            incluir_cn = bool(args.get('incluir_cn'))
+            partes = ['MICROINDICADORES (documentos por produto) — período do mês']
+            for chave in (['coordenacao', 'loja'] + (['cn'] if incluir_cn else [])):
+                d = _parciais_get(_PARCIAIS_MICRO[chave], p_scope())
+                partes.append(f'\n— por {chave} —\n' + json.dumps(d.get('data', d), ensure_ascii=False))
+            return _truncar('\n'.join(partes))
+
+        caminho, usa_scope, tipo = _PARCIAIS_ABAS[aba]
+        params = p_scope() if usa_scope else {'data_ref': data_ref, 'modo': 'mes'}
+        if tipo == 'html':
+            texto = _parciais_html_para_texto(_parciais_get(caminho, params, espera_json=False))
+            return _truncar(f'ABA RESULTADOS · {scope} · {data_ref}\n{texto}')
+        dados = _parciais_get(caminho, params)
+        return _truncar(f'ABA {aba.upper()} · {scope} · {data_ref}\n'
+                        + json.dumps(dados, ensure_ascii=False))
+    except Exception as exc:  # noqa: BLE001 — vira aviso curto, não derruba a conversa
+        logger.warning('Parciais (%s) falhou: %s', aba, exc)
+        return ('Não consegui consultar o painel de resultados comerciais agora. '
+                'Confirme se o painel está no ar e tente de novo.')
+
+
 # ─── Registro ────────────────────────────────────────────────────────────────
 
 TOOLS = {
@@ -319,6 +435,25 @@ TOOLS = {
                        'permissão), favoritos e a própria atividade recente.',
         'input_schema': {'type': 'object', 'properties': {
             'limite': {'type': 'integer'}}, 'required': []},
+    },
+    'resultados_comerciais': {
+        'fn': _resultados_comerciais,
+        'description': (
+            'Resultados comerciais da rede (painel Parciais Vivo) — SÓ para SUPERADMIN. '
+            'Lê ao vivo qualquer aba do painel e traz os números. Use o parâmetro "aba": '
+            '"resumo" (visão geral do dia por pilar: móvel, fixa, smartphone, eletrônicos, '
+            'essenciais, seguro, sva — realizado x meta e atingimento), "resultados" '
+            '(ranking completo por loja em cada pilar), "meta_dia", "banda_larga" '
+            '(vendas acelerando/desafio), "microindicadores" (documentos por produto, por '
+            'coordenação/loja/consultor), "bsc_d0" (ranking BSC por PDV), "ppl" e '
+            '"dias_zerados". Para uma loja específica, passe "scope" com o nome/identificador '
+            'da loja; para outro dia, "data_ref" no formato AAAA-MM-DD (padrão: hoje).'),
+        'input_schema': {'type': 'object', 'properties': {
+            'aba': {'type': 'string', 'description': 'resumo | resultados | meta_dia | banda_larga | microindicadores | bsc_d0 | ppl | dias_zerados (padrão: resumo).'},
+            'scope': {'type': 'string', 'description': 'Escopo: "rede" (padrão) ou o nome/identificador de uma loja.'},
+            'data_ref': {'type': 'string', 'description': 'Dia de referência AAAA-MM-DD (padrão: hoje).'},
+            'incluir_cn': {'type': 'boolean', 'description': 'Em microindicadores, incluir também o detalhe por consultor (CN).'}},
+            'required': []},
     },
 }
 
