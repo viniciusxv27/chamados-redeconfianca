@@ -82,6 +82,7 @@ INSTALLED_APPS = [
     'curriculos',  # Banco de Talentos (currículos do RH)
     'reunioes',  # Reuniões com sala de vídeo e ata
     'drive',  # Drive: espelho do Google Drive da empresa com permissão por setor
+    'assistente',  # Assistente Claude (chave por usuário; acesso aos dados do próprio usuário)
     # 'webpush',  # Django WebPush (temporariamente removido)
 ]
 

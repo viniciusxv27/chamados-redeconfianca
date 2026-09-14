@@ -1,0 +1,140 @@
+{% extends 'base.html' %}
+{% block title %}Assistente Claude{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto px-3 sm:px-4 py-4 flex flex-col" style="min-height: calc(100vh - 6rem);">
+    {% csrf_token %}
+    <!-- Cabeçalho -->
+    <div class="flex items-center justify-between gap-3 mb-3 flex-wrap">
+        <div>
+            <h1 class="text-xl font-bold text-gray-900 flex items-center"><i class="fas fa-robot text-primary mr-2"></i>Assistente Claude</h1>
+            <p class="text-sm text-gray-500">Pergunte sobre os seus dados no portal — só você e os seus.</p>
+        </div>
+        <div class="flex items-center gap-2">
+            {% if historico %}
+            <form method="post" action="{% url 'assistente:limpar' %}" onsubmit="return confirm('Limpar toda a conversa?');">
+                {% csrf_token %}<button class="px-3 py-2 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"><i class="fas fa-eraser mr-1.5"></i>Limpar</button>
+            </form>
+            {% endif %}
+            <a href="{% url 'settings' %}" class="px-3 py-2 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"><i class="fas fa-cog mr-1.5"></i>Configurações</a>
+        </div>
+    </div>
+
+    {% if not conexao.conectado %}
+    <div class="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 text-sm text-amber-800 mb-3">
+        <i class="fas fa-triangle-exclamation mr-1"></i>
+        Você ainda não conectou o seu Claude.
+        <a href="{% url 'settings' %}" class="font-semibold underline">Conectar agora</a> em Configurações.
+    </div>
+    {% endif %}
+
+    <!-- Mensagens -->
+    <div id="msgs" class="flex-1 overflow-y-auto space-y-3 bg-white rounded-2xl border border-gray-100 shadow-sm p-4 mb-3">
+        {% for m in historico %}
+        <div class="flex {% if m.papel == 'user' %}justify-end{% endif %}">
+            <div class="max-w-[85%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap
+                        {% if m.papel == 'user' %}bg-primary text-white{% else %}bg-gray-100 text-gray-800{% endif %}">{{ m.conteudo }}</div>
+        </div>
+        {% empty %}
+        <div id="msgs-vazio" class="text-center text-gray-400 py-10">
+            <i class="fas fa-comments text-3xl text-gray-200 mb-2 block"></i>
+            <p class="text-sm">Comece perguntando algo sobre os seus dados no portal.</p>
+            <div class="flex flex-wrap justify-center gap-2 mt-4">
+                <button type="button" class="dv-sug px-3 py-1.5 text-xs rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50">Meus chamados abertos</button>
+                <button type="button" class="dv-sug px-3 py-1.5 text-xs rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50">Tenho cursos pendentes?</button>
+                <button type="button" class="dv-sug px-3 py-1.5 text-xs rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50">Documentos que preciso assinar</button>
+                <button type="button" class="dv-sug px-3 py-1.5 text-xs rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50">Minha última folha de ponto</button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Entrada -->
+    <form id="chat-form" class="flex items-end gap-2">
+        <textarea id="chat-input" rows="1" placeholder="Escreva a sua pergunta..." {% if not conexao.conectado %}disabled{% endif %}
+                  class="flex-1 border border-gray-300 rounded-xl px-4 py-3 text-sm resize-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-gray-100"></textarea>
+        <button id="chat-enviar" type="submit" {% if not conexao.conectado %}disabled{% endif %}
+                class="bg-primary text-white rounded-xl px-4 py-3 hover:bg-orange-600 disabled:bg-gray-300 disabled:cursor-not-allowed">
+            <i class="fas fa-paper-plane"></i>
+        </button>
+    </form>
+</div>
+
+<script>
+(function () {
+    var form = document.getElementById('chat-form');
+    var input = document.getElementById('chat-input');
+    var btn = document.getElementById('chat-enviar');
+    var msgs = document.getElementById('msgs');
+    var URL_ENVIAR = "{% url 'assistente:enviar' %}";
+
+    function csrf() {
+        var el = document.querySelector('[name=csrfmiddlewaretoken]');
+        return el ? el.value : '';
+    }
+    function scrollFim() { msgs.scrollTop = msgs.scrollHeight; }
+
+    function bolha(papel, texto, classeExtra) {
+        var vazio = document.getElementById('msgs-vazio');
+        if (vazio) vazio.remove();
+        var linha = document.createElement('div');
+        linha.className = 'flex' + (papel === 'user' ? ' justify-end' : '');
+        var b = document.createElement('div');
+        b.className = 'max-w-[85%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap ' +
+            (papel === 'user' ? 'bg-primary text-white' : (classeExtra || 'bg-gray-100 text-gray-800'));
+        b.textContent = texto;
+        linha.appendChild(b);
+        msgs.appendChild(linha);
+        scrollFim();
+        return b;
+    }
+
+    input.addEventListener('input', function () {
+        input.style.height = 'auto';
+        input.style.height = Math.min(input.scrollHeight, 160) + 'px';
+    });
+    input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); }
+    });
+    document.querySelectorAll('.dv-sug').forEach(function (s) {
+        s.addEventListener('click', function () { input.value = s.textContent; input.focus(); form.requestSubmit(); });
+    });
+
+    form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var texto = input.value.trim();
+        if (!texto) return;
+        bolha('user', texto);
+        input.value = ''; input.style.height = 'auto';
+        input.disabled = true; btn.disabled = true;
+        var pensando = bolha('assistant', 'Pensando…', 'bg-gray-50 text-gray-400 italic');
+
+        fetch(URL_ENVIAR, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf(), 'X-Requested-With': 'XMLHttpRequest'},
+            credentials: 'same-origin',
+            body: JSON.stringify({mensagem: texto}),
+        })
+        .then(function (r) { return r.json().then(function (d) { return {ok: r.ok, d: d}; }); })
+        .then(function (res) {
+            pensando.parentNode.remove();
+            if (res.ok && res.d.resposta) {
+                bolha('assistant', res.d.resposta);
+            } else {
+                var msg = (res.d && res.d.erro) || 'Não foi possível responder agora.';
+                var b = bolha('assistant', msg, 'bg-red-50 text-red-700');
+                if (res.d && res.d.precisa_conectar) {
+                    var a = document.createElement('a');
+                    a.href = "{% url 'settings' %}"; a.textContent = ' Conectar';
+                    a.className = 'underline font-semibold'; b.appendChild(a);
+                }
+            }
+        })
+        .catch(function () { pensando.parentNode.remove(); bolha('assistant', 'Erro de conexão. Tente de novo.', 'bg-red-50 text-red-700'); })
+        .finally(function () { input.disabled = false; btn.disabled = false; input.focus(); });
+    });
+
+    scrollFim();
+})();
+</script>
+{% endblock %}

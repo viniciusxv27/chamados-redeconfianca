@@ -24,6 +24,65 @@
     </div>
 
         <div class="max-w-4xl mx-auto space-y-6">
+        <!-- Assistente Claude -->
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-200 flex items-start justify-between gap-3 flex-wrap">
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-900 flex items-center"><i class="fas fa-robot text-primary mr-2"></i>Assistente Claude</h3>
+                    <p class="text-sm text-gray-600 mt-1">Conecte a sua conta do Claude e converse com um assistente que enxerga os <strong>seus</strong> dados no portal (chamados, folhas, cursos, documentos, contracheques).</p>
+                </div>
+                {% if assistente_conexao.conectado %}
+                <a href="{% url 'assistente:chat' %}" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors text-sm whitespace-nowrap"><i class="fas fa-comments mr-2"></i>Abrir assistente</a>
+                {% endif %}
+            </div>
+            <div class="p-6">
+                {% if assistente_conexao.conectado %}
+                <div class="flex items-center gap-2 mb-4 text-sm bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2 text-emerald-800">
+                    <i class="fas fa-circle-check"></i>
+                    <span>Conectado · chave <code class="bg-white/70 px-1 rounded">{{ assistente_conexao.key_hint }}</code>{% if assistente_conexao.ultimo_ok_em %} · último teste {{ assistente_conexao.ultimo_ok_em|date:'d/m/Y H:i' }}{% endif %}</span>
+                </div>
+                <div class="flex flex-wrap items-end gap-2">
+                    <form method="post" action="{% url 'assistente:conectar' %}" class="flex items-end gap-2">
+                        {% csrf_token %}<input type="hidden" name="voltar" value="{% url 'settings' %}">
+                        <div>
+                            <label class="block text-xs font-medium text-gray-500 mb-1">Modelo</label>
+                            <select name="modelo" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                                {% for v, r in assistente_modelos %}<option value="{{ v }}" {% if assistente_conexao.modelo == v %}selected{% endif %}>{{ r }}</option>{% endfor %}
+                            </select>
+                        </div>
+                        <button class="bg-gray-800 text-white px-4 py-2 rounded-lg text-sm hover:bg-gray-900">Salvar modelo</button>
+                    </form>
+                    <form method="post" action="{% url 'assistente:testar' %}">{% csrf_token %}<input type="hidden" name="voltar" value="{% url 'settings' %}">
+                        <button class="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 text-sm hover:bg-gray-50"><i class="fas fa-plug mr-1.5"></i>Testar</button>
+                    </form>
+                    <form method="post" action="{% url 'assistente:desconectar' %}" onsubmit="return confirm('Desconectar e remover a chave?');">{% csrf_token %}<input type="hidden" name="voltar" value="{% url 'settings' %}">
+                        <button class="px-4 py-2 rounded-lg border border-red-200 text-red-600 text-sm hover:bg-red-50"><i class="fas fa-link-slash mr-1.5"></i>Desconectar</button>
+                    </form>
+                </div>
+                {% else %}
+                <form method="post" action="{% url 'assistente:conectar' %}" class="space-y-3">
+                    {% csrf_token %}<input type="hidden" name="voltar" value="{% url 'settings' %}">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Chave da API Anthropic</label>
+                        <input type="password" name="api_key" placeholder="sk-ant-..." required autocomplete="off"
+                               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-transparent">
+                        <p class="text-xs text-gray-500 mt-1">
+                            Pegue em <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener" class="text-primary hover:underline">console.anthropic.com/settings/keys</a>.
+                            Guardamos <strong>cifrada</strong> e nunca mostramos de volta; o uso é cobrado na sua conta Anthropic.
+                        </p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Modelo</label>
+                        <select name="modelo" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                            {% for v, r in assistente_modelos %}<option value="{{ v }}">{{ r }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <button class="bg-primary text-white px-5 py-2.5 rounded-lg hover:bg-orange-600 transition-colors text-sm font-medium"><i class="fas fa-plug mr-1.5"></i>Conectar Claude</button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+
         <!-- Security Settings -->
         <div class="bg-white rounded-xl shadow-sm overflow-hidden">
             <div class="px-6 py-4 border-b border-gray-200">

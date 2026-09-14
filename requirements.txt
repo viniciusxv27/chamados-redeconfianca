@@ -62,3 +62,6 @@ pdfplumber==0.11.4
 
 # AI / OpenAI
 openai==1.58.1
+
+# AI / Claude (assistente do portal — chave por usuário em /users/settings/)
+anthropic==1.5.0

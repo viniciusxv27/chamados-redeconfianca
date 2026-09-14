@@ -132,6 +132,7 @@ urlpatterns = [
     path('talentos/', include('curriculos.urls')),  # Banco de Talentos (RH)
     path('reunioes/', include('reunioes.urls')),  # Reuniões com sala de vídeo
     path('drive/', include('drive.urls')),  # Drive: espelho do Google Drive (fora do menu)
+    path('assistente/', include('assistente.urls')),  # Assistente Claude do usuário
     path('', include('tangerino.urls')),  # Ponto e Férias (integração Tangerino)
     path('reports/', include('core.reports_urls')),  # Sistema de denúncias
     path('groups/', include('core.group_urls')),  # Sistema de gerenciamento de grupos

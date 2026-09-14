@@ -4039,8 +4039,11 @@ def admin_upload_user_photo(request, user_id):
 @login_required
 def settings_view(request):
     """Visualizar configurações do usuário"""
+    from assistente.models import AssistenteConexao, MODELOS
     context = {
         'user': request.user,
+        'assistente_conexao': AssistenteConexao.objects.filter(user=request.user).first(),
+        'assistente_modelos': MODELOS,
     }
     return render(request, 'users/settings.html', context)
 

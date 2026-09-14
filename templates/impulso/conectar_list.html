@@ -22,39 +22,87 @@ que depende dele — o resto é catálogo.
     </div>
     <div class="divide-y divide-gray-50">
         {% for c in a_conferir %}
-        <div class="px-5 py-3 flex items-start justify-between gap-3 flex-wrap">
-            <div class="min-w-0">
-                <p class="text-sm font-medium text-gray-800">{{ c.conteudo.titulo }}</p>
-                <p class="text-[11px] text-gray-400 mt-0.5">
-                    {{ c.user.get_full_name|default:c.user.email }} ·
-                    marcou em {{ c.concluido_em|date:"d/m/Y H:i" }} ·
-                    {{ c.conteudo.rotulo }}
-                </p>
-            </div>
-            <div class="flex items-center gap-2 flex-shrink-0">
-                {% if c.certificado %}
-                <a href="{{ c.certificado.url }}" target="_blank" rel="noopener noreferrer"
-                   class="px-2.5 py-1 rounded-lg border border-gray-200 text-xs text-gray-600 hover:bg-gray-50">
-                    <i class="fas fa-paperclip mr-1"></i>Certificado
-                </a>
-                {% endif %}
-                <form method="post" action="{% url 'impulso:conclusao_decidir' c.id %}" class="inline">
-                    {% csrf_token %}
-                    <input type="hidden" name="decisao" value="aprovar">
-                    <button class="px-3 py-1 rounded-lg bg-emerald-500 text-white text-xs font-medium hover:bg-emerald-600">
-                        Aprovar
-                    </button>
-                </form>
-                <form method="post" action="{% url 'impulso:conclusao_decidir' c.id %}" class="inline"
-                      onsubmit="var m = prompt('Motivo da recusa (a pessoa lê isto para corrigir):'); if (!m) return false; this.observacao.value = m; return true;">
-                    {% csrf_token %}
-                    <input type="hidden" name="decisao" value="recusar">
-                    <input type="hidden" name="observacao" value="">
-                    <button class="px-3 py-1 rounded-lg border border-red-200 text-red-600 text-xs font-medium hover:bg-red-50">
+        <div class="px-5 py-3">
+            <div class="flex items-start justify-between gap-3 flex-wrap">
+                <div class="min-w-0">
+                    <p class="text-sm font-medium text-gray-800">{{ c.conteudo.titulo }}</p>
+                    <p class="text-[11px] text-gray-400 mt-0.5">
+                        {{ c.user.get_full_name|default:c.user.email }} ·
+                        marcou em {{ c.concluido_em|date:"d/m/Y H:i" }} ·
+                        {{ c.conteudo.rotulo }}
+                    </p>
+                    {% comment %}
+                    Links para o gestor validar antes de decidir: o vídeo e a POP
+                    do conteúdo, o link externo e o certificado que a pessoa anexou.
+                    {% endcomment %}
+                    <div class="flex items-center gap-1.5 flex-wrap mt-2">
+                        {% if c.conteudo.arquivo_de_video %}
+                        <a href="{{ c.conteudo.arquivo_de_video.url }}" target="_blank" rel="noopener noreferrer"
+                           class="px-2.5 py-1 rounded-lg border border-emerald-200 bg-emerald-50 text-xs text-emerald-700 hover:bg-emerald-100">
+                            <i class="fas fa-play mr-1"></i>Assistir vídeo
+                        </a>
+                        {% endif %}
+                        {% if c.conteudo.documento %}
+                        <a href="{{ c.conteudo.documento.url }}" target="_blank" rel="noopener noreferrer"
+                           class="px-2.5 py-1 rounded-lg border border-sky-200 bg-sky-50 text-xs text-sky-700 hover:bg-sky-100">
+                            <i class="fas fa-file-lines mr-1"></i>Abrir POP
+                        </a>
+                        {% endif %}
+                        {% if c.conteudo.url %}
+                        <a href="{{ c.conteudo.url }}" target="_blank" rel="noopener noreferrer"
+                           class="px-2.5 py-1 rounded-lg border border-gray-200 text-xs text-gray-600 hover:bg-gray-50">
+                            <i class="fas fa-arrow-up-right-from-square mr-1"></i>Link externo
+                        </a>
+                        {% endif %}
+                        {% if c.certificado %}
+                        <a href="{{ c.certificado.url }}" target="_blank" rel="noopener noreferrer"
+                           class="px-2.5 py-1 rounded-lg border border-gray-200 text-xs text-gray-600 hover:bg-gray-50">
+                            <i class="fas fa-paperclip mr-1"></i>Certificado
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 flex-shrink-0">
+                    <form method="post" action="{% url 'impulso:conclusao_decidir' c.id %}" class="inline">
+                        {% csrf_token %}
+                        <input type="hidden" name="decisao" value="aprovar">
+                        <button class="px-3 py-1 rounded-lg bg-emerald-500 text-white text-xs font-medium hover:bg-emerald-600">
+                            Aprovar
+                        </button>
+                    </form>
+                    <button type="button" data-recusa-abrir="{{ c.id }}"
+                            class="px-3 py-1 rounded-lg border border-red-200 text-red-600 text-xs font-medium hover:bg-red-50">
                         Recusar
                     </button>
-                </form>
+                </div>
             </div>
+            {% comment %}
+            Painel de recusa: comentário obrigatório. O gestor precisa dizer o
+            que corrigir — a pessoa lê isto. O backend também exige (não é só o
+            required do navegador).
+            {% endcomment %}
+            <form method="post" action="{% url 'impulso:conclusao_decidir' c.id %}"
+                  id="recusa-{{ c.id }}" hidden
+                  class="mt-3 bg-red-50/60 border border-red-100 rounded-lg p-3">
+                {% csrf_token %}
+                <input type="hidden" name="decisao" value="recusar">
+                <label for="obs-{{ c.id }}" class="block text-xs font-semibold text-red-900 mb-1">
+                    Motivo da recusa <span class="text-red-500">*</span>
+                </label>
+                <textarea id="obs-{{ c.id }}" name="observacao" required rows="2" maxlength="2000"
+                          placeholder="Explique o que a pessoa precisa corrigir — ela vai ler isto."
+                          class="w-full text-sm border border-red-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-red-300 focus:border-transparent"></textarea>
+                <div class="flex items-center justify-end gap-2 mt-2">
+                    <button type="button" data-recusa-cancelar="{{ c.id }}"
+                            class="px-3 py-1 rounded-lg border border-gray-200 text-gray-500 text-xs hover:bg-white">
+                        Cancelar
+                    </button>
+                    <button type="submit"
+                            class="px-3 py-1 rounded-lg bg-red-600 text-white text-xs font-medium hover:bg-red-700">
+                        Confirmar recusa
+                    </button>
+                </div>
+            </form>
         </div>
         {% endfor %}
     </div>
@@ -117,6 +165,23 @@ document.querySelectorAll('.imp-conteudo-excluir').forEach(function (botao) {
         var form = document.getElementById('impFormExcluirConteudo');
         form.action = '/impulso/conectar/' + botao.dataset.id + '/excluir/';
         form.submit();
+    });
+});
+
+// Recusar: abre o painel de comentário (obrigatório) em vez do antigo prompt().
+document.querySelectorAll('[data-recusa-abrir]').forEach(function (botao) {
+    botao.addEventListener('click', function () {
+        var painel = document.getElementById('recusa-' + botao.dataset.recusaAbrir);
+        if (!painel) return;
+        painel.hidden = false;
+        var campo = painel.querySelector('textarea');
+        if (campo) campo.focus();
+    });
+});
+document.querySelectorAll('[data-recusa-cancelar]').forEach(function (botao) {
+    botao.addEventListener('click', function () {
+        var painel = document.getElementById('recusa-' + botao.dataset.recusaCancelar);
+        if (painel) painel.hidden = true;
     });
 });
 </script>
