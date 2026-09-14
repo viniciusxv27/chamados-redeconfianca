@@ -15,8 +15,8 @@
 
     <div class="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 mb-4 text-sm text-blue-800">
         <i class="fas fa-info-circle mr-1"></i>
-        Superadministradores já têm acesso total à Folha de Ponto. Use esta tela para liberar
-        usuários que <strong>não são superadmin</strong> a importar, editar e excluir folhas.
+        SUPERADMIN e a hierarquia Administração já têm acesso total à Folha de Ponto. Use esta
+        tela para liberar <strong>outros usuários</strong> a importar, editar e excluir folhas.
     </div>
 
     <!-- Liberar novo gestor -->
@@ -76,7 +76,7 @@
                 {% empty %}
                 <tr>
                     <td colspan="4" class="px-4 py-8 text-center text-sm text-gray-500">
-                        Nenhum usuário liberado. Apenas superadmins têm acesso.
+                        Nenhum usuário liberado. Apenas SUPERADMIN e Administração têm acesso.
                     </td>
                 </tr>
                 {% endfor %}

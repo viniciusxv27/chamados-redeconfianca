@@ -169,6 +169,9 @@ def my_folhas(request):
         'years': years,
         'selected_year': year_filter,
         'pending_signature': sum(1 for f in folhas if f.can_sign),
+        # Botão "Administrar": aparece para quem de fato entra na área admin
+        # (SUPERADMIN, Administração e liberados) — a mesma regra da view.
+        'pode_administrar_modulo': can_manage_folhaponto(request.user),
     })
 
 
@@ -373,6 +376,9 @@ def admin_folhas(request):
         'month_choices': FolhaPonto.MONTH_CHOICES,
         'semanal_count': sum(1 for f in folhas if f.is_semanal),
         'mensal_count': sum(1 for f in folhas if not f.is_semanal),
+        # "Acessos" gere o FolhaPontoManagerPermission — só quem administra o
+        # módulo por hierarquia (SUPERADMIN/Administração), igual à view.
+        'pode_gerenciar_acessos': pode_administrar(request.user),
     })
 
 
