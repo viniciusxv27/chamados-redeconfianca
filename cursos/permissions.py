@@ -55,7 +55,7 @@ def deve_ir_para_cursos(user, cfg=None):
     cfg = cfg or config()
     if not pode_ver(user, cfg):
         return False
-    return bool(getattr(user, 'has_experience_window', False)) or bool(pendencias(user, cfg))
+    return bool(pendencias(user, cfg))
 
 
 def cursos_do_usuario(user, cfg=None):
