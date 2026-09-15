@@ -248,10 +248,13 @@ def sincronizar_marcacoes(dias=30, employee_id=None):
     # Quanto cada um devia ter trabalhado nesses dias, já sem feriado e abono.
     grades = _grades_por_funcionario()
     abonos = jornada_svc.carregar_abonos(inicio, hoje)
+    # O payload novo (payssego) não traz o nome; o cadastro de funcionários tem.
+    nomes = {f.get('id'): f.get('name') or '' for f in listar_funcionarios()}
 
     registros = []
     for (eid, dia), do_dia in por_dia.items():
         do_dia.sort(key=lambda p: p['dateIn'])
+        nome = (do_dia[0].get('employeeName') or nomes.get(eid) or '')[:200]
         campos = {}
         total = 0
         extras = []
@@ -274,7 +277,7 @@ def sincronizar_marcacoes(dias=30, employee_id=None):
 
         if extras:
             logger.warning('%s em %s teve %d pares de ponto; o excedente foi para '
-                           'marcacoes_extras.', do_dia[0].get('employeeName'), dia, len(do_dia))
+                           'marcacoes_extras.', nome or eid, dia, len(do_dia))
 
         previsto = jornada_svc.previsto_liquido(
             grades.get(eid), dia, abonos.get((eid, dia), 0))
@@ -282,7 +285,7 @@ def sincronizar_marcacoes(dias=30, employee_id=None):
         registros.append(MarcacaoPonto(
             employee_id=eid,
             usuario=usuarios.get(eid),
-            nome=(do_dia[0].get('employeeName') or '')[:200],
+            nome=nome,
             data=dia,
             total_segundos=total,
             previsto_segundos=previsto,
@@ -294,12 +297,19 @@ def sincronizar_marcacoes(dias=30, employee_id=None):
             sincronizado_em=agora,
             **campos))
 
-    resultado = _gravar_em_lote(MarcacaoPonto, registros, [
-        'employee_id', 'usuario', 'nome', 'entrada1', 'saida1', 'entrada2', 'saida2',
-        'entrada3', 'saida3', 'marcacoes_extras', 'total_segundos', 'previsto_segundos',
-        'em_aberto', 'plataforma', 'editado', 'tangerino_ids', 'sincronizado_em'],
-        chave=('employee_id', 'data'),
-        escopo=MarcacaoPonto.objects.filter(data__gte=inicio, data__lte=hoje))
+    colunas = ['employee_id', 'usuario', 'nome', 'entrada1', 'saida1', 'entrada2', 'saida2',
+               'entrada3', 'saida3', 'marcacoes_extras', 'total_segundos', 'previsto_segundos',
+               'em_aberto', 'plataforma', 'editado', 'tangerino_ids', 'sincronizado_em']
+    # O endpoint novo (payssego) não informa plataforma nem edição. Sem o dado na
+    # origem, a linha que já existe fica com o que tinha: regravar ``editado``
+    # como False apagaria da assiduidade do Impulso os ajustes já sincronizados.
+    if not any('plataform' in p for p in pares):
+        colunas.remove('plataforma')
+    if not any('edited' in p for p in pares):
+        colunas.remove('editado')
+    resultado = _gravar_em_lote(MarcacaoPonto, registros, colunas,
+                                chave=('employee_id', 'data'),
+                                escopo=MarcacaoPonto.objects.filter(data__gte=inicio, data__lte=hoje))
     resultado['lidos'] = len(pares)
     resultado['dias'] = len(registros)
     # Linhas de sincronizações anteriores ficaram fora da janela e sem previsto.

@@ -16,7 +16,7 @@ from .pdf_parser import (
     extract_all_folhas, extract_pages_pdf, normalize_name, clean_cpf,
 )
 from .periodicity import MENSAL, SEMANAL, annotate_periodicity, is_semanal
-from users.models import User
+from users.models import Sector, User
 
 HIERARCHY_RANK = {
     'PADRAO': 0,
@@ -343,6 +343,11 @@ def admin_folhas(request):
     search = request.GET.get('q', '').strip()
     year_filter = request.GET.get('year')
     month_filter = request.GET.get('month')
+    # Loja = setor principal do colaborador (o mesmo do relatório de assinaturas).
+    # Pelos setores extras não dá: quem é de escritório costuma ter todas as lojas
+    # ali e apareceria na folha de cada uma.
+    lojas = list(Sector.objects.filter(name__icontains='Loja').order_by('name'))
+    loja = next((s for s in lojas if str(s.pk) == request.GET.get('loja', '')), None)
 
     if search:
         folhas = folhas.filter(
@@ -355,6 +360,8 @@ def admin_folhas(request):
         folhas = folhas.filter(year=year_filter)
     if month_filter:
         folhas = folhas.filter(month=month_filter)
+    if loja:
+        folhas = folhas.filter(user__sector=loja)
 
     years = FolhaPonto.objects.values_list('year', flat=True).distinct().order_by('-year')
 
@@ -373,6 +380,8 @@ def admin_folhas(request):
         'selected_year': year_filter,
         'selected_month': month_filter,
         'selected_periodicity': periodicity_filter,
+        'lojas': lojas,
+        'selected_loja': str(loja.pk) if loja else '',
         'month_choices': FolhaPonto.MONTH_CHOICES,
         'semanal_count': sum(1 for f in folhas if f.is_semanal),
         'mensal_count': sum(1 for f in folhas if not f.is_semanal),

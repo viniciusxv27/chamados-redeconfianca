@@ -31,6 +31,13 @@
                 <input type="text" name="q" value="{{ search }}" placeholder="Nome, CPF..." class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-purple-500 focus:border-purple-500">
             </div>
             <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">Loja</label>
+                <select name="loja" class="border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-purple-500 focus:border-purple-500">
+                    <option value="">Todas</option>
+                    {% for s in lojas %}<option value="{{ s.pk }}" {% if selected_loja == s.pk|stringformat:"d" %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
+                </select>
+            </div>
+            <div>
                 <label class="block text-xs font-medium text-gray-500 mb-1">Ano</label>
                 <select name="year" class="border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-purple-500 focus:border-purple-500">
                     <option value="">Todos</option>

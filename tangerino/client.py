@@ -139,6 +139,10 @@ def funcionario(employee_id):
 
 # ─── Marcações de ponto ──────────────────────────────────────────────────────
 
+# O payssego só obedece ``size``, e no máximo 2000 (ver ``_marcacoes_de_um``).
+MARCACOES_POR_PEDIDO = 2000
+
+
 def _ddmmaaaa(quando):
     """date/datetime -> 'dd/MM/yyyy' (formato que o endpoint de marcações aceita)."""
     return quando.strftime('%d/%m/%Y')
@@ -158,36 +162,70 @@ def _registro_para_par(r):
         'dateIn': r.get('startDateTimestamp'),
         'dateOut': r.get('endDateTimestamp'),        # ausente = entrou e não saiu
         'employeeId': r.get('employeeId'),
-        'id': None,                                  # o novo payload não traz id de par
+        # O payload novo não traz id de par. Funcionário + instante da entrada
+        # identificam a batida e não mudam quando a saída chega: é por esse id
+        # que o ``_sem_duplicatas`` e a sincronização descartam a repetição da
+        # API. Com ``None``, a sincronização pulava todos os pares.
+        'id': f"{r.get('employeeId')}-{r['startDateTimestamp']}" if r.get('startDateTimestamp') else None,
         'editedIn': False, 'editedOut': False, 'nsrIn': None, 'nsrOut': None,
         'status': r.get('status'),
         'workedTimeInSeconds': r.get('workedTimeInSeconds'),
     }
 
 
+def _bloco_de_dias_inteiros(r):
+    """Afastamento/férias/abono que o ``payssego`` devolve no meio das batidas.
+
+    Vem com entrada e saída cravadas na meia-noite, cobrindo dias inteiros, e
+    repetido uma vez por dia do período (conferido ao vivo: 7 blocos, de 1 a 29
+    dias). Não é marcação de ponto — a tabela sincronizada pelo endpoint antigo
+    não tem nenhum — e, lido como par, virava "696 horas trabalhadas" no dia em
+    que o bloco começa.
+    """
+    entrada = de_millis(r.get('startDateTimestamp'))
+    saida = de_millis(r.get('endDateTimestamp'))
+    return bool(entrada and saida and saida - entrada >= timedelta(days=1)
+                and entrada.time() == time.min and saida.time() == time.min)
+
+
 def _marcacoes_de_um(inicio, fim, employee_id):
     """Marcações de UM funcionário, já no formato de pares entrada/saída.
 
-    Fonte: ``GET /external/api/v1/payssego/punches/{id}`` com datas em dd/MM/yyyy,
-    paginado no padrão Spring (``pageNumber``/``pageSize``).
+    Fonte: ``GET /external/api/v1/payssego/punches/{id}`` com datas em dd/MM/yyyy.
+
+    Paginação: o endpoint só obedece ``size`` (até 2000). ``pageSize``,
+    ``pageNumber`` e até ``page`` são ignorados — sem ``size`` vêm só as 20
+    batidas mais recentes, com ``last=True`` e ``totalElements`` contando só
+    essas 20 (conferido ao vivo). Por isso é um pedido só, com a página no
+    máximo: 2000 batidas são anos de ponto de uma pessoa.
+
+    ``inicio`` e ``fim`` são inclusivos, como no endpoint antigo. A ``endDate``
+    do ``payssego`` não: pedindo até hoje, as batidas de hoje não vêm (conferido
+    ao vivo). Por isso a busca vai até o dia seguinte e o recorte é feito aqui,
+    pelo dia local da entrada — o mesmo com que o resto do módulo agrupa, e que
+    nas batidas coincide com o dia trabalhado pelo qual o endpoint filtra.
     """
     caminho = f'/external/api/v1/payssego/punches/{employee_id}'
-    base = {'startDate': _ddmmaaaa(inicio), 'endDate': _ddmmaaaa(fim), 'pageSize': 500}
-    registros, pagina = [], 0
-    while pagina < 40:
-        try:
-            dados = _get(EMPLOYER_BASE, caminho, dict(base, pageNumber=pagina)) or {}
-        except TangerinoError as exc:
-            # O endpoint sinaliza "sem marcações neste período" com 404
-            # ("Cant find punches for this employee") — não é erro, é lista vazia.
-            if 'respondeu 404' in str(exc):
-                return []
-            raise
-        registros.extend(dados.get('content') or [])
-        if dados.get('last') is True or pagina + 1 >= (dados.get('totalPages') or 1):
-            break
-        pagina += 1
-    return [_registro_para_par(r) for r in registros]
+    params = {'startDate': _ddmmaaaa(inicio), 'endDate': _ddmmaaaa(fim + timedelta(days=1)),
+              'size': MARCACOES_POR_PEDIDO}
+    try:
+        dados = _get(EMPLOYER_BASE, caminho, params) or {}
+    except TangerinoError as exc:
+        # O endpoint sinaliza "sem marcações neste período" com 404
+        # ("Cant find punches for this employee") — não é erro, é lista vazia.
+        if 'respondeu 404' in str(exc):
+            return []
+        raise
+    registros = dados.get('content') or []
+    if len(registros) >= MARCACOES_POR_PEDIDO:
+        logger.warning('Marcações de %s entre %s e %s vieram com a página cheia (%d); '
+                       'as mais antigas podem ter ficado de fora.', employee_id, inicio, fim, len(registros))
+    pares = []
+    for r in registros:
+        entrada = de_millis(r.get('startDateTimestamp'))
+        if entrada and inicio <= entrada.date() <= fim and not _bloco_de_dias_inteiros(r):
+            pares.append(_registro_para_par(r))
+    return pares
 
 
 def _marcacoes_de_todos(inicio, fim):
