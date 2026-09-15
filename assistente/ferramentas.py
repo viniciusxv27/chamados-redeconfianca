@@ -43,12 +43,41 @@ def _meu_perfil(user, args):
         f'Nome: {user.full_name}',
         f'E-mail: {user.email}',
         f'Cargo: {getattr(user, "job_title", "") or "—"}',
-        f'Setor: {setor}',
+        f'Setor principal: {setor}',
         f'Hierarquia: {user.get_hierarchy_display()}',
         f'PDV: {getattr(user, "pdv", "") or "—"}',
         f'Admissão: {_fmt_data(getattr(user, "admission_date", None))}',
         f'Telefone: {getattr(user, "phone", "") or "—"}',
     ]
+    # Saldo de Confianças (C$) — o "dinheiro" interno do portal.
+    saldo = getattr(user, 'balance_cs', None)
+    if saldo is not None:
+        linhas.append(f'Saldo de Confianças: C$ {saldo}')
+    # Tempo de casa, a partir da admissão.
+    adm = getattr(user, 'admission_date', None)
+    if adm:
+        try:
+            import datetime
+            dias = (datetime.date.today() - adm).days
+            anos, resto = divmod(dias, 365)
+            meses = resto // 30
+            partes = ([f'{anos} ano(s)'] if anos else []) + ([f'{meses} mês(es)'] if meses else [])
+            linhas.append('Tempo de casa: ' + (' e '.join(partes) or f'{dias} dia(s)'))
+        except Exception:  # noqa: BLE001
+            pass
+    # Setores vinculados e grupos — dizem a que áreas a pessoa pertence.
+    try:
+        setores = list(user.sectors.values_list('name', flat=True))
+        if setores:
+            linhas.append('Setores vinculados: ' + ', '.join(setores))
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        grupos = list(user.communication_groups.values_list('name', flat=True))
+        if grupos:
+            linhas.append('Grupos: ' + ', '.join(grupos))
+    except Exception:  # noqa: BLE001
+        pass
     return '\n'.join(linhas)
 
 
@@ -255,6 +284,147 @@ def _meu_drive(user, args):
     return '\n'.join(linhas)
 
 
+def _minhas_confiancas(user, args):
+    from prizes.models import CSTransaction
+    saldo = getattr(user, 'balance_cs', None)
+    linhas = [f'Saldo de Confianças (C$): {saldo if saldo is not None else "—"}']
+    itens = list(CSTransaction.objects.filter(user=user)
+                 .order_by('-created_at')[:int(args.get('limite') or 10)])
+    if itens:
+        linhas.append(f'Últimos movimentos ({len(itens)}):')
+        for t in itens:
+            sinal = ('+' if t.transaction_type in ('CREDIT', 'REFUND')
+                     else '-' if t.transaction_type in ('DEBIT', 'REDEMPTION') else '')
+            linhas.append(f'{_fmt_data(t.created_at)} · {t.get_transaction_type_display()} · '
+                          f'{sinal}C$ {t.amount} · {t.description} · {t.get_status_display()}')
+    else:
+        linhas.append('Nenhum movimento de C$ registrado.')
+    return '\n'.join(linhas)
+
+
+def _meus_elogios(user, args):
+    from compliments.models import Compliment
+    recebidos = Compliment.objects.filter(to_user=user, is_active=True).select_related('from_user')
+    total_receb = recebidos.count()
+    total_dados = Compliment.objects.filter(from_user=user, is_active=True).count()
+    linhas = [f'Elogios recebidos: {total_receb} · elogios que você deu: {total_dados}']
+    recentes = list(recebidos.order_by('-created_at')[:int(args.get('limite') or 8)])
+    if recentes:
+        linhas.append('Recebidos recentemente:')
+        for c in recentes:
+            linhas.append(f'{_fmt_data(c.created_at)} · {c.rating}★ · de {_nome(c.from_user)} · '
+                          f'{(c.comment or "")[:140]}')
+    return '\n'.join(linhas)
+
+
+def _minhas_notificacoes(user, args):
+    from notifications.models import UserNotification
+    qs = UserNotification.objects.filter(user=user).select_related('notification')
+    nao_lidas = qs.filter(is_read=False).count()
+    recentes = list(qs.order_by('-created_at')[:int(args.get('limite') or 10)])
+    linhas = [f'Notificações não lidas: {nao_lidas}']
+    if recentes:
+        linhas.append('Recentes:')
+        for n in recentes:
+            estado = 'não lida' if not n.is_read else 'lida'
+            linhas.append(f'{_fmt_data(n.created_at)} · {getattr(n.notification, "title", "—")} · {estado}')
+    else:
+        linhas.append('Nenhuma notificação.')
+    return '\n'.join(linhas)
+
+
+def _meus_feedbacks(user, args):
+    from impulso.models import ImpulsoFeedback
+    itens = list(ImpulsoFeedback.objects.filter(colaborador=user)
+                 .select_related('gestor').order_by('-referencia_mes')[:int(args.get('limite') or 6)])
+    if not itens:
+        return 'Você ainda não recebeu feedbacks no Impulso.'
+    linhas = [f'Feedbacks recebidos ({len(itens)}):']
+    for f in itens:
+        nota = f' · nota IA {f.nota_ia}' if f.nota_ia is not None else ''
+        linhas.append(f'{_fmt_data(f.referencia_mes, "%m/%Y")} · de {_nome(f.gestor)}{nota}')
+        if f.pontos_fortes:
+            linhas.append(f'   Fortes: {f.pontos_fortes[:160]}')
+        if f.pontos_melhoria:
+            linhas.append(f'   A melhorar: {f.pontos_melhoria[:160]}')
+    return '\n'.join(linhas)
+
+
+def _minhas_trilhas(user, args):
+    from knowledge_trails.models import TrailProgress
+    itens = list(TrailProgress.objects.filter(user=user)
+                 .select_related('trail').order_by('status')[:int(args.get('limite') or 15)])
+    if not itens:
+        return 'Você não está em nenhuma trilha de conhecimento.'
+    linhas = ['Suas trilhas:']
+    for p in itens:
+        linhas.append(f'{p.trail.title} · {p.get_status_display()} · {p.total_points_earned} pts')
+    return '\n'.join(linhas)
+
+
+def _resumo_geral(user, args):
+    """Panorama do que está em aberto para o usuário, cruzando vários módulos.
+
+    Cada linha é defensiva: se um módulo falhar, some daquela linha em vez de
+    derrubar o resumo inteiro. É o atalho para 'o que eu preciso resolver?'.
+    """
+    linhas = [f'Panorama de {_nome(user)}:']
+
+    def _tenta(rotulo, fn):
+        try:
+            linhas.append(f'· {rotulo}: {fn()}')
+        except Exception as exc:  # noqa: BLE001
+            logger.debug('resumo_geral/%s falhou: %s', rotulo, exc)
+
+    def _cursos():
+        from cursos.permissions import pendencias
+        return f'{len(list(pendencias(user)))} curso(s) pendente(s)'
+
+    def _docs():
+        from documentos.models import DocumentSignature
+        return (f'{DocumentSignature.objects.filter(user=user, signed_at__isnull=True).count()} '
+                'documento(s) a assinar')
+
+    def _metas():
+        from impulso.models import Meta
+        n = (Meta.objects.filter(Q(colaborador=user) | Q(participantes=user))
+             .exclude(status=Meta.Status.CONCLUIDA).distinct().count())
+        return f'{n} meta(s) em aberto'
+
+    def _notif():
+        from notifications.models import UserNotification
+        return f'{UserNotification.objects.filter(user=user, is_read=False).count()} notificação(ões) não lida(s)'
+
+    def _cs():
+        return f'C$ {getattr(user, "balance_cs", "—")}'
+
+    def _ponto():
+        from tangerino.ponto import resumo_para_usuario
+        r = resumo_para_usuario(user)
+        if not r.get('disponivel'):
+            return 'sem vínculo de ponto' if r.get('motivo') == 'sem_vinculo' else 'indisponível agora'
+        pend = len(r.get('pendencias') or [])
+        extra = f', {pend} dia(s) com ponto em aberto' if pend else ''
+        return f'{r.get("rotulo", "—")} (trabalhado {r.get("trabalhado_hhmm", "—")}){extra}'
+
+    def _ferias():
+        from tangerino.ferias import situacao_do_usuario
+        r = situacao_do_usuario(user)
+        if not r.get('disponivel'):
+            return 'sem vínculo' if r.get('motivo') == 'sem_vinculo' else 'indisponível agora'
+        venc = f', {r["dias_vencidos"]} vencido(s)' if r.get('dias_vencidos') else ''
+        return f'{r.get("saldo_total", 0)} dia(s) de saldo{venc}'
+
+    _tenta('Cursos', _cursos)
+    _tenta('Documentos', _docs)
+    _tenta('Metas', _metas)
+    _tenta('Ponto hoje', _ponto)
+    _tenta('Férias', _ferias)
+    _tenta('Notificações', _notif)
+    _tenta('Confianças', _cs)
+    return '\n'.join(linhas)
+
+
 # ─── Resultados comerciais (Parciais Vivo) — SÓ SUPERADMIN ───────────────────
 # Dado global da rede (não é dado "do usuário"), então fica atrás do mesmo
 # portão do menu: apenas SUPERADMIN. As abas do painel são endpoints livres
@@ -433,6 +603,47 @@ TOOLS = {
         'fn': _meu_drive,
         'description': 'Drive do usuário: pastas/setores que ele pode acessar (com o nível de '
                        'permissão), favoritos e a própria atividade recente.',
+        'input_schema': {'type': 'object', 'properties': {
+            'limite': {'type': 'integer'}}, 'required': []},
+    },
+    'resumo_geral': {
+        'fn': _resumo_geral,
+        'description': 'Panorama do usuário cruzando módulos: cursos pendentes, documentos a '
+                       'assinar, metas em aberto, ponto de hoje, saldo de férias, notificações '
+                       'não lidas e saldo de Confianças. Use para "o que eu preciso resolver?".',
+        'input_schema': {'type': 'object', 'properties': {}, 'required': []},
+    },
+    'minhas_confiancas': {
+        'fn': _minhas_confiancas,
+        'description': 'Saldo de Confianças (C$) do usuário e os últimos movimentos (créditos, '
+                       'débitos, resgates) com data e status.',
+        'input_schema': {'type': 'object', 'properties': {
+            'limite': {'type': 'integer'}}, 'required': []},
+    },
+    'meus_elogios': {
+        'fn': _meus_elogios,
+        'description': 'Elogios do usuário no portal: quantos recebeu e deu, e os últimos '
+                       'recebidos (estrelas, de quem, comentário).',
+        'input_schema': {'type': 'object', 'properties': {
+            'limite': {'type': 'integer'}}, 'required': []},
+    },
+    'minhas_notificacoes': {
+        'fn': _minhas_notificacoes,
+        'description': 'Notificações do usuário: quantas não lidas e as mais recentes.',
+        'input_schema': {'type': 'object', 'properties': {
+            'limite': {'type': 'integer'}}, 'required': []},
+    },
+    'meus_feedbacks': {
+        'fn': _meus_feedbacks,
+        'description': 'Feedbacks mensais que o usuário recebeu no Impulso (pontos fortes, '
+                       'pontos a melhorar, nota da IA), do mais recente ao mais antigo.',
+        'input_schema': {'type': 'object', 'properties': {
+            'limite': {'type': 'integer'}}, 'required': []},
+    },
+    'minhas_trilhas': {
+        'fn': _minhas_trilhas,
+        'description': 'Trilhas de conhecimento do usuário e o progresso em cada uma '
+                       '(status e pontos conquistados).',
         'input_schema': {'type': 'object', 'properties': {
             'limite': {'type': 'integer'}}, 'required': []},
     },

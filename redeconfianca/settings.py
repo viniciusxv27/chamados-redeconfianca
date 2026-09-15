@@ -92,6 +92,12 @@ INSTALLED_APPS = [
 # segue funcionando normalmente, apenas sem as telas de ponto e férias.
 TANGERINO_TOKEN = config('TANGERINO_TOKEN', default='')
 TANGERINO_ENABLED = config('TANGERINO_ENABLED', default=False, cast=bool)
+# Hosts da API do Tangerino/Sólides. Vazio = usa o padrão histórico do cliente.
+# Se a Sólides mudar o endereço de um serviço (aconteceu com as MARCAÇÕES/punch),
+# aponte aqui sem mexer no código — ex.:
+#   TANGERINO_PUNCH_BASE=https://novo-host/api/punch
+TANGERINO_EMPLOYER_BASE = config('TANGERINO_EMPLOYER_BASE', default='')
+TANGERINO_PUNCH_BASE = config('TANGERINO_PUNCH_BASE', default='')
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',

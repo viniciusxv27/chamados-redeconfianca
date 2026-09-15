@@ -21,8 +21,10 @@ from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
-EMPLOYER_BASE = 'https://employer.tangerino.com.br'
-PUNCH_BASE = 'https://api.tangerino.com.br/api/punch'
+# Hosts ficam em settings para poder redirecionar sem alterar o código quando a
+# Sólides/Tangerino muda o endereço de um serviço. Vazio no .env = padrão abaixo.
+EMPLOYER_BASE = getattr(settings, 'TANGERINO_EMPLOYER_BASE', '') or 'https://employer.tangerino.com.br'
+PUNCH_BASE = getattr(settings, 'TANGERINO_PUNCH_BASE', '') or 'https://api.tangerino.com.br/api/punch'
 
 TIMEOUT = (5, 25)          # (conexão, leitura) em segundos
 MOTIVO_FERIAS_ID = 1       # "FÉRIAS" em /adjustment-reason/find-all
@@ -137,12 +139,87 @@ def funcionario(employee_id):
 
 # ─── Marcações de ponto ──────────────────────────────────────────────────────
 
-def listar_marcacoes(inicio, fim, employee_id=None, usar_cache=True, ttl=60):
-    """Marcações num intervalo de dias.
+def _ddmmaaaa(quando):
+    """date/datetime -> 'dd/MM/yyyy' (formato que o endpoint de marcações aceita)."""
+    return quando.strftime('%d/%m/%Y')
 
-    Cada item é um PAR entrada/saída (``dateIn``/``dateOut``); ``dateOut`` vazio
-    significa que a pessoa entrou e ainda não saiu. Sem ``employee_id`` traz a
-    empresa inteira, que é como as telas de gestor carregam tudo de uma vez.
+
+def _registro_para_par(r):
+    """Adapta um registro do endpoint ``payssego`` (novo) ao par antigo.
+
+    O serviço de marcações mudou: o antigo ``api.tangerino.com.br/api/punch``
+    saiu do ar (passou a responder 404) e as batidas agora vêm de
+    ``/external/api/v1/payssego/punches/{id}`` no host ``employer``. O novo
+    payload traz entrada/saída em milissegundos e o total trabalhado; o resto do
+    módulo consome ``dateIn``/``dateOut``, então a tradução mora aqui e nada mais
+    precisa mudar.
+    """
+    return {
+        'dateIn': r.get('startDateTimestamp'),
+        'dateOut': r.get('endDateTimestamp'),        # ausente = entrou e não saiu
+        'employeeId': r.get('employeeId'),
+        'id': None,                                  # o novo payload não traz id de par
+        'editedIn': False, 'editedOut': False, 'nsrIn': None, 'nsrOut': None,
+        'status': r.get('status'),
+        'workedTimeInSeconds': r.get('workedTimeInSeconds'),
+    }
+
+
+def _marcacoes_de_um(inicio, fim, employee_id):
+    """Marcações de UM funcionário, já no formato de pares entrada/saída.
+
+    Fonte: ``GET /external/api/v1/payssego/punches/{id}`` com datas em dd/MM/yyyy,
+    paginado no padrão Spring (``pageNumber``/``pageSize``).
+    """
+    caminho = f'/external/api/v1/payssego/punches/{employee_id}'
+    base = {'startDate': _ddmmaaaa(inicio), 'endDate': _ddmmaaaa(fim), 'pageSize': 500}
+    registros, pagina = [], 0
+    while pagina < 40:
+        try:
+            dados = _get(EMPLOYER_BASE, caminho, dict(base, pageNumber=pagina)) or {}
+        except TangerinoError as exc:
+            # O endpoint sinaliza "sem marcações neste período" com 404
+            # ("Cant find punches for this employee") — não é erro, é lista vazia.
+            if 'respondeu 404' in str(exc):
+                return []
+            raise
+        registros.extend(dados.get('content') or [])
+        if dados.get('last') is True or pagina + 1 >= (dados.get('totalPages') or 1):
+            break
+        pagina += 1
+    return [_registro_para_par(r) for r in registros]
+
+
+def _marcacoes_de_todos(inicio, fim):
+    """Empresa inteira. O novo endpoint é por pessoa, então busca em paralelo.
+
+    O painel do gestor consultava todo mundo numa chamada só; como isso não
+    existe mais, varremos os funcionários em paralelo (com teto de workers) e
+    juntamos. A falha de um não derruba os demais.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+    ids = [f.get('id') for f in listar_funcionarios() if f.get('id')]
+
+    def _um(eid):
+        try:
+            return _marcacoes_de_um(inicio, fim, eid)
+        except TangerinoError:
+            return []
+
+    todos = []
+    with ThreadPoolExecutor(max_workers=12) as executor:
+        for pares in executor.map(_um, ids):
+            todos.extend(pares)
+    return todos
+
+
+def listar_marcacoes(inicio, fim, employee_id=None, usar_cache=True, ttl=60):
+    """Marcações num intervalo de dias, no formato de pares entrada/saída.
+
+    Cada item é um PAR (``dateIn``/``dateOut``); ``dateOut`` vazio significa que a
+    pessoa entrou e ainda não saiu. Sem ``employee_id`` traz a empresa inteira
+    (painel do gestor). A fonte é o endpoint ``payssego`` por funcionário — a
+    tradução para pares fica em ``_marcacoes_de_um``.
     """
     chave = f"tangerino:marcacoes:{employee_id or 'todos'}:{inicio}:{fim}"
     if usar_cache:
@@ -150,10 +227,8 @@ def listar_marcacoes(inicio, fim, employee_id=None, usar_cache=True, ttl=60):
         if em_cache is not None:
             return em_cache
 
-    params = {'startDateInMillis': para_millis(inicio), 'endDateInMillis': fim_do_dia_millis(fim)}
-    if employee_id:
-        params['employeeId'] = employee_id
-    itens = _paginar(PUNCH_BASE, '/', params)
+    itens = (_marcacoes_de_um(inicio, fim, employee_id) if employee_id
+             else _marcacoes_de_todos(inicio, fim))
     cache.set(chave, itens, ttl)
     return itens
 
@@ -187,12 +262,21 @@ def listar_saldo_horas(inicio, fim, employee_id=None, tentativas=3):
 
 
 def justificativas_edicao():
-    """Motivos válidos para uma marcação retroativa."""
+    """Motivos válidos para uma marcação retroativa.
+
+    Vive no host antigo de ``punch`` (o de marcação retroativa/escrita), que
+    hoje responde 404. É leitura auxiliar — se falhar, devolve lista vazia (só
+    desabilita o seletor de justificativa) em vez de derrubar a tela de ponto.
+    """
     chave = 'tangerino:justificativas'
     em_cache = cache.get(chave)
     if em_cache is not None:
         return em_cache
-    dados = _get(PUNCH_BASE, '/manual-editing-justification-punch/', {'page': 0, 'size': 100})
+    try:
+        dados = _get(PUNCH_BASE, '/manual-editing-justification-punch/', {'page': 0, 'size': 100})
+    except TangerinoError as exc:
+        logger.warning('Justificativas de edição indisponíveis: %s', exc)
+        return []
     itens = (dados or {}).get('content') if isinstance(dados, dict) else (dados or [])
     itens = itens or []
     cache.set(chave, itens, 60 * 60)
