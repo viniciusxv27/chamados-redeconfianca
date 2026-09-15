@@ -1,0 +1,170 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{% block rn_pagina %}Vini Renova{% endblock %} · Vini Renova{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Identidade do Vini Renova: o roxo da Vivo dos impressos, com os cartões do portal. */
+    .rn { --rn-roxo: #660099; --rn-roxo-2: #7B2CBF; --rn-roxo-3: #9D4EDD; --rn-escuro: #3C096C;
+          --rn-lilas: #F6EEFF; --rn-lilas-2: #E9D8FD; --rn-borda: #ECE4F6; --rn-texto: #2A1340; }
+    .rn-hero {
+        position: relative; overflow: hidden; border-radius: 1.25rem; color: #fff;
+        padding: 1.35rem 1.5rem 1.4rem;
+        background:
+            radial-gradient(640px 260px at 100% 0%, rgba(157, 78, 221, .55), transparent 62%),
+            radial-gradient(420px 220px at 0% 100%, rgba(255, 255, 255, .08), transparent 60%),
+            linear-gradient(118deg, #2E0854 0%, #660099 46%, #7B2CBF 100%);
+        box-shadow: 0 16px 34px -18px rgba(60, 9, 108, .75);
+    }
+    .rn-hero::after {
+        content: ''; position: absolute; right: -70px; bottom: -110px; width: 280px; height: 280px;
+        border-radius: 9999px; border: 46px solid rgba(255, 255, 255, .06); pointer-events: none;
+    }
+    .rn-selo { width: 2.8rem; height: 2.8rem; border-radius: .95rem; display: grid; place-items: center;
+               background: rgba(255, 255, 255, .14); border: 1px solid rgba(255, 255, 255, .25); font-size: 1.2rem; }
+    .rn-marca { font-weight: 800; font-size: 1.3rem; line-height: 1; letter-spacing: -.01em; }
+    .rn-marca b { color: #E9D8FD; }
+    .rn-slogan { font-size: .62rem; letter-spacing: .2em; text-transform: uppercase; opacity: .85; margin-top: .25rem; }
+    .rn-titulo { font-size: clamp(1.4rem, 2.8vw, 2.1rem); font-weight: 800; line-height: 1.08;
+                 letter-spacing: -.01em; text-transform: uppercase; margin-top: 1rem; }
+    .rn-subtitulo { font-size: .68rem; letter-spacing: .24em; text-transform: uppercase; opacity: .85; margin-top: .4rem; }
+    .rn-frase { font-size: .66rem; letter-spacing: .16em; text-transform: uppercase; line-height: 1.55;
+                opacity: .92; max-width: 12.5rem; border-left: 2px solid rgba(255, 255, 255, .35); padding-left: .8rem; }
+    .rn-abas { display: flex; gap: .4rem; overflow-x: auto; margin: .9rem 0 1.25rem; padding-bottom: .2rem;
+               -webkit-overflow-scrolling: touch; }
+    .rn-aba { white-space: nowrap; display: inline-flex; align-items: center; gap: .45rem; padding: .5rem .9rem;
+              border-radius: 9999px; font-size: .8rem; font-weight: 600; color: #5B2A86; background: #fff;
+              border: 1px solid var(--rn-borda); transition: background-color .15s, color .15s, box-shadow .15s; }
+    .rn-aba:hover { background: var(--rn-lilas); }
+    .rn-aba.ativa { color: #fff; background: var(--rn-roxo); border-color: var(--rn-roxo);
+                    box-shadow: 0 8px 18px -10px rgba(102, 0, 153, .85); }
+    .rn-aba .rn-contador { min-width: 1.2rem; height: 1.2rem; padding: 0 .3rem; border-radius: 9999px; font-size: .65rem;
+                           display: inline-grid; place-items: center; background: #F97316; color: #fff; }
+    .rn-card { background: #fff; border: 1px solid var(--rn-borda); border-radius: 1rem;
+               box-shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 1px 3px rgba(16, 24, 40, .06); }
+    .rn-h2 { font-size: .95rem; font-weight: 800; color: var(--rn-escuro); text-transform: uppercase; letter-spacing: .03em; }
+    .rn-secao { border-radius: 1rem; overflow: hidden; background: #fff; border: 1px solid var(--rn-borda);
+                box-shadow: 0 1px 2px rgba(16, 24, 40, .04); }
+    .rn-secao-topo { display: flex; align-items: center; gap: .6rem; padding: .65rem 1rem; color: #fff; font-weight: 700;
+                     font-size: .8rem; letter-spacing: .05em; text-transform: uppercase;
+                     background: linear-gradient(90deg, #3C096C, #660099 58%, #7B2CBF); }
+    .rn-num { width: 1.55rem; height: 1.55rem; border-radius: .5rem; display: grid; place-items: center;
+              background: rgba(255, 255, 255, .18); font-size: .75rem; flex-shrink: 0; }
+    .rn-btn { display: inline-flex; align-items: center; justify-content: center; gap: .5rem; border-radius: .75rem;
+              padding: .6rem 1rem; font-size: .85rem; font-weight: 700; transition: filter .15s, transform .15s, box-shadow .15s; }
+    .rn-btn-primario { color: #fff; background: linear-gradient(90deg, #660099, #7B2CBF);
+                       box-shadow: 0 10px 22px -12px rgba(102, 0, 153, .9); }
+    .rn-btn-primario:hover { filter: brightness(1.08); transform: translateY(-1px); }
+    .rn-btn-claro { color: #5B2A86; background: #fff; border: 1px solid var(--rn-borda); }
+    .rn-btn-claro:hover { background: var(--rn-lilas); }
+    .rn-btn:disabled { opacity: .6; cursor: not-allowed; transform: none; }
+    .rn-etq { display: inline-flex; align-items: center; gap: .35rem; padding: .18rem .55rem; border-radius: 9999px;
+              font-size: .7rem; font-weight: 700; white-space: nowrap; }
+    .rn-etq-PENDENTE { background: #FFF7ED; color: #C2410C; }
+    .rn-etq-CHEGOU { background: #ECFDF5; color: #047857; }
+    .rn-etq-NAO_CHEGOU { background: #FEF2F2; color: #B91C1C; }
+    .rn-etq-SEM { background: #F3F4F6; color: #4B5563; }
+    .rn-etq-APROVADO { background: #ECFDF5; color: #047857; }
+    .rn-etq-APROVADO_OBS { background: var(--rn-lilas); color: #6B21A8; }
+    .rn-etq-NAO_APROVADO { background: #FEF2F2; color: #B91C1C; }
+    .rn-letra { width: 2.2rem; height: 2.2rem; border-radius: .6rem; display: grid; place-items: center; color: #fff;
+                font-weight: 800; font-size: 1.1rem; flex-shrink: 0; }
+    .rn-letra-A { background: #16A34A; } .rn-letra-B { background: #2563EB; }
+    .rn-letra-C { background: #F97316; } .rn-letra-D { background: #DC2626; }
+    .rn-letra-sm { width: 1.45rem; height: 1.45rem; border-radius: .45rem; font-size: .75rem; }
+    .rn-alternar { display: inline-flex; padding: .25rem; border-radius: 9999px; background: #fff; border: 1px solid var(--rn-borda);
+                   margin-bottom: 1rem; }
+    .rn-alternar button { padding: .4rem .9rem; border-radius: 9999px; font-size: .78rem; font-weight: 700; color: #6B5B7B; }
+    .rn-alternar button.ativo { background: var(--rn-roxo); color: #fff; }
+    .rn-rodape { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .6rem; margin-top: 1.75rem; }
+    @media (min-width: 768px) { .rn-rodape { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+    .rn-rodape div { display: flex; align-items: center; gap: .6rem; padding: .7rem .8rem; border-radius: .9rem;
+                     background: var(--rn-lilas); color: var(--rn-escuro); font-size: .66rem; font-weight: 700;
+                     text-transform: uppercase; letter-spacing: .06em; line-height: 1.3; }
+    .rn-rodape i { font-size: 1.1rem; color: var(--rn-roxo-2); }
+    .rn-vazio { text-align: center; padding: 2.5rem 1rem; color: #7C6A8E; }
+    .rn-vazio i { font-size: 2rem; color: #D8C4F0; }
+    .rn [hidden] { display: none !important; }
+    .rn-acao { display: inline-flex; align-items: center; justify-content: center; gap: .35rem; padding: .42rem .65rem;
+               border-radius: .6rem; font-size: .74rem; font-weight: 700; transition: filter .15s; }
+    .rn-acao:hover { filter: brightness(.97); }
+    .rn-acao-chegou { color: #047857; background: #ECFDF5; border: 1px solid #A7F3D0; }
+    .rn-acao-nao { color: #B91C1C; background: #FEF2F2; border: 1px solid #FECACA; }
+    .rn-acao-neutra { color: #4B3F58; background: #fff; border: 1px solid #E5E7EB; }
+</style>
+{% block rn_css %}{% endblock %}
+{% endblock %}
+
+{% block content %}
+<div class="rn max-w-6xl mx-auto px-1 sm:px-0 pb-6">
+    <section class="rn-hero">
+        <div class="relative z-10 flex flex-wrap items-start justify-between gap-5">
+            <div class="min-w-0">
+                <div class="flex items-center gap-3">
+                    <span class="rn-selo"><i class="fa-solid fa-recycle"></i></span>
+                    <div>
+                        <p class="rn-marca">Vini <b>Renova</b></p>
+                        <p class="rn-slogan">Seu usado vale mais</p>
+                    </div>
+                </div>
+                <h1 class="rn-titulo">{% block rn_titulo %}Vini Renova{% endblock %}</h1>
+                <p class="rn-subtitulo">{% block rn_subtitulo %}Avaliação de aparelhos usados{% endblock %}</p>
+            </div>
+            <div class="flex flex-col items-end gap-3">
+                <p class="rn-frase hidden sm:block">Reutilizar conecta pessoas a um futuro melhor.</p>
+                {% block rn_acoes %}{% endblock %}
+            </div>
+        </div>
+    </section>
+
+    <nav class="rn-abas" aria-label="Seções do Vini Renova">
+        <a href="{% url 'renova:inicio' %}" class="rn-aba {% if aba == 'inicio' %}ativa{% endif %}">
+            <i class="fa-solid fa-mobile-screen-button"></i>Avaliações
+            {% if rn_pode_receber and renova_aguardando %}<span class="rn-contador" title="Aguardando chegada">{{ renova_aguardando }}</span>{% endif %}
+        </a>
+        {% if rn_pode_fazer %}
+        <a href="{% url 'renova:nova' %}" class="rn-aba {% if aba == 'nova' %}ativa{% endif %}">
+            <i class="fa-solid fa-clipboard-check"></i>Nova avaliação
+        </a>
+        {% endif %}
+        <a href="{% url 'renova:tabela' %}" class="rn-aba {% if aba == 'tabela' %}ativa{% endif %}">
+            <i class="fa-solid fa-table-list"></i>Tabela de avaliação
+        </a>
+        <a href="{% url 'renova:passo_a_passo' %}" class="rn-aba {% if aba == 'passo' %}ativa{% endif %}">
+            <i class="fa-solid fa-list-check"></i>Passo a passo
+        </a>
+        {% if rn_superadmin %}
+        <a href="{% url 'renova:configuracao' %}" class="rn-aba {% if aba == 'configuracao' %}ativa{% endif %}">
+            <i class="fa-solid fa-gear"></i>Configuração
+        </a>
+        {% endif %}
+    </nav>
+
+    {% block rn_conteudo %}{% endblock %}
+
+    <footer class="rn-rodape" aria-hidden="true">
+        <div><i class="fa-solid fa-rotate"></i>Avaliação segura e transparente</div>
+        <div><i class="fa-solid fa-shield-alt"></i>Seu usado vale mais</div>
+        <div><i class="fa-solid fa-leaf"></i>Tecnologia que circula</div>
+        <div><i class="fa-solid fa-users"></i>Conectar transforma</div>
+    </footer>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+/* Alternância "No sistema | Impresso" das telas de material. */
+document.querySelectorAll('[data-alternar]').forEach(function (grupo) {
+    grupo.addEventListener('click', function (e) {
+        var botao = e.target.closest('button[data-alvo]');
+        if (!botao) return;
+        grupo.querySelectorAll('button').forEach(function (b) { b.classList.toggle('ativo', b === botao); });
+        document.querySelectorAll('[data-painel]').forEach(function (p) {
+            p.hidden = p.getAttribute('data-painel') !== botao.getAttribute('data-alvo');
+        });
+    });
+});
+</script>
+{% block rn_js %}{% endblock %}
+{% endblock %}

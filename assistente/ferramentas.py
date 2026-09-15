@@ -1,16 +1,29 @@
-"""Ferramentas do assistente — sempre escopadas ao PRÓPRIO usuário.
+"""Ferramentas do assistente.
 
-Cada função recebe (user, args) e lê apenas registros daquele usuário (filtro por
-FK), então o assistente nunca alcança dado de terceiros — a segurança é do
-servidor, não do prompt. Toda leitura é defensiva: erro/módulo ausente vira um
-aviso curto, sem derrubar a conversa.
+Nos módulos pessoais, cada função recebe (user, args) e lê apenas registros
+daquele usuário (filtro por FK), então o assistente nunca alcança dado de
+terceiros — a segurança é do servidor, não do prompt. Agenda e Reuniões moram
+em agenda_reunioes.py: lá vale o que a pessoa vê e faz na tela, pelas regras do
+próprio módulo.
+
+Ferramenta que muda dados (``acao``) nunca roda na pergunta em que o Claude a
+pede: ``executar`` guarda a ação e devolve o resumo, e ela só roda com
+``confirmar_acao`` numa pergunta seguinte. Toda leitura é defensiva: erro ou
+módulo ausente vira um aviso curto, sem derrubar a conversa.
 
 Adicionar uma ferramenta = uma entrada em `TOOLS` com schema + função.
 """
 import json
 import logging
+import uuid
 
+from django.core.cache import cache
 from django.db.models import Q
+
+from .agenda_reunioes import TOOLS as TOOLS_AGENDA_REUNIOES
+from .comum import Invalido
+from .ferramentas_impulso import TOOLS as TOOLS_IMPULSO
+from .metas_comerciais import TOOLS as TOOLS_METAS_COMERCIAIS
 
 logger = logging.getLogger(__name__)
 
@@ -669,19 +682,112 @@ TOOLS = {
 }
 
 
+# Agenda e Reuniões: acesso completo, com as regras de cada módulo (ver o módulo).
+TOOLS.update(TOOLS_AGENDA_REUNIOES)
+# Metas comerciais do Power BI e Impulso: mesmas regras das telas (ver cada módulo).
+TOOLS.update(TOOLS_METAS_COMERCIAIS)
+TOOLS.update(TOOLS_IMPULSO)
+
+
+# ─── Ações com confirmação ───────────────────────────────────────────────────
+# Ferramenta com ``acao`` nunca roda na pergunta em que o Claude a pede: aqui
+# ela só é validada e guardada, e o resumo volta para o usuário ler. Roda com
+# confirmar_acao numa pergunta SEGUINTE. A regra é do servidor — nem uma ordem
+# escondida numa pauta ou numa transcrição faz o assistente agir sozinho.
+
+ACAO_PENDENTE_TTL = 15 * 60
+
+
+def _chave_pendente(user):
+    return f'assistente:acao-pendente:{user.pk}'
+
+
+def _preparar_acao(nome, tool, user, args, turno):
+    try:
+        resumo, dados = tool['previa'](user, args)
+    except Invalido as exc:
+        return f'Não dá para fazer isso: {exc}'
+    cache.set(_chave_pendente(user),
+              {'nome': nome, 'dados': dados, 'turno': turno, 'resumo': resumo}, ACAO_PENDENTE_TTL)
+    return ('AÇÃO PREPARADA — NADA FOI FEITO AINDA.\n' + resumo + '\n\n'
+            'Mostre este resumo ao usuário e pergunte se pode fazer. Chame confirmar_acao '
+            f'(acao="{nome}") só depois que ele confirmar, numa nova mensagem.')
+
+
+def _confirmar_acao(user, args, turno):
+    pendente = cache.get(_chave_pendente(user))
+    if not pendente:
+        return ('Não há ação esperando confirmação (ela vale por 15 minutos). '
+                'Prepare de novo, se o usuário ainda quiser.')
+    nome = str(args.get('acao') or '').strip()
+    if nome != pendente['nome']:
+        return f'A ação preparada é {pendente["nome"]}, não {nome or "(vazio)"}. Resumo dela:\n{pendente["resumo"]}'
+    if turno is None or pendente.get('turno') == turno:
+        return ('Ainda não: a confirmação tem de vir do usuário, numa nova mensagem, depois de ele '
+                'ler o resumo. Pergunte e aguarde a resposta.')
+    if not cache.delete(_chave_pendente(user)):
+        return 'Essa ação já foi executada ou descartada.'
+    tool = TOOLS.get(nome)
+    if not tool or not tool.get('acao'):
+        return 'A ação preparada não existe mais.'
+    try:
+        return tool['fn'](user, pendente['dados'])
+    except Exception:  # noqa: BLE001
+        logger.exception('Ação %s do assistente falhou', nome)
+        return 'A ação falhou por um erro inesperado. Confira na tela se algo chegou a ser feito.'
+
+
+def _descartar_acao(user, args, turno):
+    pendente = cache.get(_chave_pendente(user))
+    if not pendente:
+        return 'Não havia ação esperando confirmação.'
+    cache.delete(_chave_pendente(user))
+    return f'Ação descartada ({pendente["nome"]}); nada foi feito.'
+
+
+TOOLS.update({
+    'confirmar_acao': {
+        'fn': _confirmar_acao,
+        'confirmacao': True,
+        'description': ('Executa a ação que uma ferramenta de Agenda/Reuniões preparou. Só use depois '
+                        'que o usuário leu o resumo e respondeu que sim, numa nova mensagem.'),
+        'input_schema': {'type': 'object', 'properties': {
+            'acao': {'type': 'string', 'description': 'Nome da ferramenta que preparou a ação (ex.: reunioes_criar).'}},
+            'required': ['acao']},
+    },
+    'descartar_acao': {
+        'fn': _descartar_acao,
+        'confirmacao': True,
+        'description': 'Descarta a ação preparada que o usuário recusou ou não quer mais.',
+        'input_schema': {'type': 'object', 'properties': {}, 'required': []},
+    },
+})
+
+
 def tools_schema():
     """Lista no formato que a API do Claude espera."""
     return [{'name': nome, 'description': d['description'], 'input_schema': d['input_schema']}
             for nome, d in TOOLS.items()]
 
 
-def executar(nome, args, user):
-    """Roda a ferramenta escopada ao usuário. Nunca levanta — devolve texto."""
+def executar(nome, args, user, turno=None):
+    """Roda a ferramenta com as permissões do usuário. Nunca levanta — devolve texto.
+
+    ``turno`` identifica a pergunta em andamento (claude_client.responder): ação
+    preparada num turno só pode ser confirmada em outro.
+    """
     tool = TOOLS.get(nome)
     if not tool:
         return f'Ferramenta desconhecida: {nome}.'
+    args = args if isinstance(args, dict) else {}
     try:
-        return tool['fn'](user, args or {})
+        if tool.get('acao'):
+            return _preparar_acao(nome, tool, user, args, turno or uuid.uuid4().hex)
+        if tool.get('confirmacao'):
+            return tool['fn'](user, args, turno)
+        return tool['fn'](user, args)
+    except Invalido as exc:
+        return str(exc)
     except Exception as exc:  # noqa: BLE001
         logger.warning('Ferramenta %s falhou: %s', nome, exc)
         return f'Não consegui obter estes dados agora ({nome}).'

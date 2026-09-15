@@ -1,0 +1,50 @@
+{% extends 'rotina/base_rotina.html' %}
+{% load static %}
+
+{% block rt_titulo %}Minha rotina{% endblock %}
+{% block rt_cabecalho %}Minha rotina{% endblock %}
+{% block rt_subtitulo %}{% if mostrar_calendario %}{% if semana.proxima %}Próxima semana · {% endif %}{{ semana.rotulo }}{% else %}Sua semana organizada, de segunda a sábado{% endif %}{% endblock %}
+
+{% block rt_acoes %}
+{% if e_admin %}
+<a href="{% url 'rotina:gestao' %}" class="rt-btn rt-btn-hero"><i class="fas fa-sliders"></i><span>Gerenciar rotinas</span></a>
+{% endif %}
+{% endblock %}
+
+{% block rt_conteudo %}
+{% if mostrar_calendario %}
+    {% include 'rotina/_calendario.html' %}
+{% else %}
+<section class="rt-card rt-vazio" data-rt="vazio">
+    <div class="rt-vazio-ilustracao" aria-hidden="true">
+        <i class="fas fa-calendar-week"></i>
+        <span class="rt-vazio-selo"><i class="fas {% if rotina and not rotina.ativa %}fa-pause{% else %}fa-clock{% endif %}"></i></span>
+    </div>
+    {% if rotina and not rotina.ativa %}
+    <h2>Sua rotina gerencial está pausada</h2>
+    <p>A gestão desativou a sua rotina por enquanto. Quando ela voltar, a semana aparece aqui de novo, com o aviso de cada atividade na hora certa.</p>
+    {% elif rotina %}
+    <h2>Sua rotina ainda está vazia</h2>
+    <p>A gestão ainda não colocou atividades na sua semana. Assim que colocar, você vê tudo aqui, de segunda a sábado.</p>
+    {% else %}
+    <h2>Você ainda não tem uma rotina gerencial</h2>
+    <p>A rotina gerencial organiza a semana de quem gere a loja: o horário de cada atividade e um aviso no portal quando cada uma começa. Quem define é a gestão.</p>
+    {% endif %}
+    {% if e_admin %}
+    <div class="flex flex-wrap justify-center gap-2 mt-5">
+        <a href="{% url 'rotina:gestao' %}" class="rt-btn rt-btn-primario"><i class="fas fa-users"></i> Gerenciar rotinas</a>
+        <a href="{% url 'rotina:modelos' %}" class="rt-btn rt-btn-claro"><i class="fas fa-layer-group"></i> Ver modelos</a>
+    </div>
+    {% endif %}
+</section>
+{% endif %}
+{% endblock %}
+
+{% block rt_js %}
+{% if mostrar_calendario %}
+{{ config|json_script:"rt-config" }}
+{{ dados|json_script:"rt-dados" }}
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
+<script src="{% static 'rotina/rotina-calendario.js' %}"></script>
+{% endif %}
+{% endblock %}

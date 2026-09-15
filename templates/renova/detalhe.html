@@ -1,0 +1,203 @@
+{% extends 'renova/base_renova.html' %}
+
+{% block rn_pagina %}{{ renova.codigo }}{% endblock %}
+{% block rn_titulo %}{{ renova.aparelho }}{% endblock %}
+{% block rn_subtitulo %}{{ renova.codigo }} · avaliado em {{ renova.data_avaliacao|date:"d/m/Y" }}{% endblock %}
+{% block rn_acoes %}
+<a href="{% url 'renova:etiqueta' renova.pk %}" class="rn-btn bg-white hover:bg-purple-50 text-xs shadow-lg" style="color:#3C096C">
+    <i class="fa-solid fa-tag"></i>Etiqueta
+</a>
+{% endblock %}
+
+{% block rn_css %}
+<style>
+    .rn-dado span { display: block; font-size: .6rem; font-weight: 800; text-transform: uppercase; letter-spacing: .07em; color: #8B78A0; }
+    .rn-dado b { display: block; font-size: .9rem; font-weight: 700; color: #1F0B33; margin-top: .1rem; word-break: break-word; }
+    .rn-item-ro { display: grid; grid-template-columns: 2.1rem minmax(0, 1fr) auto; gap: .7rem; align-items: center;
+                  padding: .55rem 1rem; border-top: 1px solid #F3ECFA; }
+    .rn-item-ro .rn-ic { width: 2.1rem; height: 2.1rem; border-radius: .65rem; display: grid; place-items: center; background: #F3E8FF; color: #660099; }
+    .rn-res { font-size: .7rem; font-weight: 800; padding: .22rem .6rem; border-radius: 9999px; white-space: nowrap; }
+    .rn-res-OK { background: #ECFDF5; color: #047857; }
+    .rn-res-OBS { background: #FFFBEB; color: #B45309; }
+    .rn-res-NAO { background: #FEF2F2; color: #B91C1C; }
+    .rn-res-vazio { background: #F3F4F6; color: #6B7280; }
+    .rn-tempo li { position: relative; padding: 0 0 .95rem 1.45rem; }
+    .rn-tempo li::before { content: ''; position: absolute; left: .37rem; top: .45rem; bottom: -.15rem; width: 2px; background: #EDE3F7; }
+    .rn-tempo li:last-child::before { display: none; }
+    .rn-tempo li::after { content: ''; position: absolute; left: 0; top: .2rem; width: .85rem; height: .85rem; border-radius: 9999px;
+                          background: #fff; border: 2px solid #C4A6E8; }
+    .rn-tempo li.feito::after { background: #7B2CBF; border-color: #7B2CBF; }
+    .rn-caixa-obs { width: 100%; border: 1.5px solid #E4D9F1; border-radius: .65rem; padding: .5rem .65rem; font-size: .82rem; }
+    .rn-caixa-obs:focus { outline: none; border-color: #9D4EDD; }
+</style>
+{% endblock %}
+
+{% block rn_conteudo %}
+<div class="grid lg:grid-cols-3 gap-4 items-start">
+    <div class="lg:col-span-2 grid gap-4">
+        <section class="rn-card p-4 sm:p-5">
+            <div class="flex flex-wrap items-center gap-2 mb-4">
+                <span class="rn-etq rn-etq-{{ renova.parecer }}">{{ renova.get_parecer_display }}</span>
+                {% if renova.sem_recebimento %}<span class="rn-etq rn-etq-SEM"><i class="fa-solid fa-ban"></i>Sem troca</span>{% else %}<span class="rn-etq rn-etq-{{ renova.recebimento }}">{{ renova.get_recebimento_display }}</span>{% endif %}
+                {% if renova.alertas %}
+                <span class="rn-etq" style="background:#FFFBEB;color:#B45309"><i class="fa-solid fa-triangle-exclamation"></i>{{ renova.alertas }} item(ns) com observação ou falha</span>
+                {% endif %}
+            </div>
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                <div class="rn-dado"><span>Marca</span><b>{{ renova.marca_texto }}</b></div>
+                <div class="rn-dado"><span>Modelo</span><b>{{ renova.modelo }}</b></div>
+                <div class="rn-dado"><span>Armazenamento</span><b>{{ renova.armazenamento_texto }}</b></div>
+                <div class="rn-dado"><span>Cor</span><b>{{ renova.cor|default:"—" }}</b></div>
+                <div class="rn-dado"><span>IMEI 1</span><b class="font-mono">{{ renova.imei1 }}</b></div>
+                <div class="rn-dado"><span>IMEI 2</span><b class="font-mono">{{ renova.imei2|default:"—" }}</b></div>
+                <div class="rn-dado"><span>Nº de série</span><b class="font-mono">{{ renova.numero_serie|default:"—" }}</b></div>
+                <div class="rn-dado"><span>Loja (origem)</span><b>{{ renova.loja.name|default:"—" }}</b></div>
+                <div class="rn-dado"><span>Data da avaliação</span><b>{{ renova.data_avaliacao|date:"d/m/Y" }}</b></div>
+                <div class="rn-dado"><span>Saúde da bateria</span><b>{% if renova.saude_bateria is not None %}{{ renova.saude_bateria }}%{% else %}—{% endif %}</b></div>
+            </div>
+            <div class="mt-4 flex flex-wrap items-center gap-3 rounded-xl p-3" style="background:linear-gradient(135deg,#F6EEFF,#EDE0FF)">
+                {% if renova.padrao %}<span class="rn-letra rn-letra-{{ renova.padrao }}">{{ renova.padrao }}</span>{% endif %}
+                <div>
+                    <p class="text-[11px] font-extrabold uppercase tracking-wide" style="color:#6B21A8">Valor estimado de troca</p>
+                    <p class="text-2xl font-extrabold" style="color:#2E0854">{% if renova.valor_estimado is not None %}R$ {{ renova.valor_estimado|floatformat:"2g" }}{% else %}—{% endif %}</p>
+                </div>
+                {% if renova.padrao %}
+                <p class="text-xs" style="color:#4C1D95">Padrão {{ renova.padrao }} · {{ renova.get_padrao_display }}{% if renova.preco_tabela %} · tabela: {{ renova.preco_tabela }}{% endif %}</p>
+                {% endif %}
+            </div>
+        </section>
+
+        <section class="rn-secao">
+            <div class="rn-secao-topo"><span class="rn-num">2</span>Itens obrigatórios antes da avaliação</div>
+            {% for chave, titulo, descricao, icone, feito in renova.itens_obrigatorios_lista %}
+            <div class="rn-item-ro">
+                <span class="rn-ic"><i class="{{ icone }}"></i></span>
+                <div class="min-w-0"><p class="text-sm font-bold text-gray-900">{{ titulo }}</p><p class="text-xs text-gray-500">{{ descricao }}</p></div>
+                {% if feito %}<span class="rn-res rn-res-OK"><i class="fa-solid fa-check"></i> Feito</span>{% else %}<span class="rn-res rn-res-NAO">Não conferido</span>{% endif %}
+            </div>
+            {% endfor %}
+        </section>
+
+        <div class="grid md:grid-cols-2 gap-4 items-start">
+            <section class="rn-secao">
+                <div class="rn-secao-topo"><span class="rn-num">3</span>Funcionalidades</div>
+                {% for chave, titulo, descricao, icone, valor, rotulo in renova.funcionalidades_lista %}
+                <div class="rn-item-ro">
+                    <span class="rn-ic"><i class="{{ icone }}"></i></span>
+                    <div class="min-w-0"><p class="text-sm font-bold text-gray-900">{{ titulo }}</p><p class="text-xs text-gray-500">{{ descricao }}</p></div>
+                    <span class="rn-res rn-res-{{ valor|default:'vazio' }}">{{ rotulo }}</span>
+                </div>
+                {% endfor %}
+            </section>
+            <section class="rn-secao">
+                <div class="rn-secao-topo"><span class="rn-num">4</span>Condição estética</div>
+                {% for chave, titulo, descricao, icone, valor, rotulo in renova.estetica_lista %}
+                <div class="rn-item-ro">
+                    <span class="rn-ic"><i class="{{ icone }}"></i></span>
+                    <div class="min-w-0"><p class="text-sm font-bold text-gray-900">{{ titulo }}</p><p class="text-xs text-gray-500">{{ descricao }}</p></div>
+                    <span class="rn-res rn-res-{{ valor|default:'vazio' }}">{{ rotulo }}</span>
+                </div>
+                {% endfor %}
+            </section>
+        </div>
+
+        <section class="rn-secao">
+            <div class="rn-secao-topo"><span class="rn-num">5</span>Observações gerais</div>
+            <p class="p-4 text-sm text-gray-800 whitespace-pre-line">{{ renova.observacoes|default:"Sem observações." }}</p>
+        </section>
+
+        <section class="rn-secao">
+            <div class="rn-secao-topo"><span class="rn-num">7</span>Responsável pela avaliação</div>
+            <div class="p-4 grid sm:grid-cols-2 gap-4 items-center">
+                <div class="grid gap-3">
+                    <div class="rn-dado"><span>Nome do vendedor</span><b>{{ renova.vendedor_nome }}</b></div>
+                    <div class="rn-dado"><span>Matrícula</span><b>{{ renova.matricula|default:"—" }}</b></div>
+                    <div class="rn-dado"><span>Data</span><b>{{ renova.data_responsavel|date:"d/m/Y" }}</b></div>
+                </div>
+                <div class="rounded-xl border border-dashed p-2 text-center" style="border-color:#CDB8E8;background:#FDFBFF">
+                    {% if renova.assinatura %}
+                    <img src="{{ renova.assinatura }}" alt="Assinatura de {{ renova.vendedor_nome }}" class="mx-auto max-h-28">
+                    {% else %}
+                    <p class="text-xs text-gray-400 py-6">Sem assinatura.</p>
+                    {% endif %}
+                    <p class="text-[10px] uppercase tracking-widest text-gray-400 border-t mt-1 pt-1">Assinatura</p>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <aside class="grid gap-4">
+        <section class="rn-card p-4">
+            <h2 class="rn-h2 mb-3">Chamado</h2>
+            {% if renova.chamado %}
+            <a href="/tickets/{{ renova.chamado_id }}/" class="block rounded-xl border p-3 transition hover:bg-purple-50" style="border-color:#E9D8FD">
+                <p class="text-xs font-bold" style="color:#6B21A8">#{{ renova.chamado_id }} · {{ renova.chamado.get_status_display }}</p>
+                <p class="text-sm font-semibold text-gray-900 mt-0.5">{{ renova.chamado.title }}</p>
+                <p class="text-[11px] text-gray-500 mt-1">{{ renova.chamado.category.name|default:"" }} · setor {{ renova.chamado.sector.name }}</p>
+            </a>
+            {% else %}
+            <p class="text-sm text-red-700"><i class="fa-solid fa-triangle-exclamation mr-1"></i>O chamado ainda não foi aberto.</p>
+            {% if pode_reabrir_chamado %}
+            <form method="post" action="{% url 'renova:abrir_chamado' renova.pk %}" class="mt-3">
+                {% csrf_token %}
+                <button type="submit" class="rn-btn rn-btn-primario text-xs w-full"><i class="fa-solid fa-ticket"></i>Abrir o chamado agora</button>
+            </form>
+            {% endif %}
+            {% endif %}
+        </section>
+
+        <section class="rn-card p-4" id="recebimento">
+            <h2 class="rn-h2">Recebimento</h2>
+            {% if setor %}<p class="text-xs text-gray-500 mt-1">Quem marca é o setor <b>{{ setor.name }}</b>.</p>{% endif %}
+            <div class="mt-3">
+                {% if renova.sem_recebimento %}
+                <span class="rn-etq rn-etq-SEM" style="font-size:.8rem;padding:.3rem .75rem"><i class="fa-solid fa-ban"></i>Sem troca</span>
+                <p class="text-xs text-gray-500 mt-2">Não aprovado: o cliente ficou com o aparelho, então não há o que receber.</p>
+                {% else %}
+                <span class="rn-etq rn-etq-{{ renova.recebimento }}" style="font-size:.8rem;padding:.3rem .75rem">
+                    <i class="fa-solid {% if renova.recebimento == 'CHEGOU' %}fa-box-open{% elif renova.recebimento == 'NAO_CHEGOU' %}fa-circle-xmark{% else %}fa-truck-fast{% endif %}"></i>
+                    {{ renova.get_recebimento_display }}
+                </span>
+                {% endif %}
+            </div>
+            {% if renova.recebido_em %}
+            <p class="text-xs text-gray-500 mt-2">por {{ renova.recebido_por.full_name|default:"—" }} em {{ renova.recebido_em|date:"d/m/Y H:i" }}</p>
+            {% endif %}
+            {% if renova.recebimento_obs %}
+            <p class="text-xs text-gray-700 mt-2 bg-gray-50 rounded-lg p-2 whitespace-pre-line">{{ renova.recebimento_obs }}</p>
+            {% endif %}
+            {% if pode_marcar and renova.recebe_aparelho %}
+            <form method="post" action="{% url 'renova:recebimento' renova.pk %}" class="mt-4 grid gap-2">
+                {% csrf_token %}
+                <textarea name="observacao" rows="2" maxlength="2000" placeholder="Observação (opcional)" class="rn-caixa-obs"></textarea>
+                <div class="grid grid-cols-2 gap-2">
+                    <button type="submit" name="situacao" value="CHEGOU" class="rn-acao rn-acao-chegou py-2"><i class="fa-solid fa-box-open"></i>Chegou</button>
+                    <button type="submit" name="situacao" value="NAO_CHEGOU" class="rn-acao rn-acao-nao py-2"><i class="fa-solid fa-circle-xmark"></i>Não chegou</button>
+                </div>
+                {% if renova.recebimento != 'PENDENTE' %}
+                <button type="submit" name="situacao" value="PENDENTE" class="text-[11px] text-gray-500 hover:text-purple-700 underline">Voltar para "aguardando chegada"</button>
+                {% endif %}
+            </form>
+            {% endif %}
+        </section>
+
+        <section class="rn-card p-4">
+            <h2 class="rn-h2 mb-3">Linha do tempo</h2>
+            <ol class="rn-tempo text-xs text-gray-600">
+                <li class="feito">
+                    <b class="text-gray-900">Avaliação feita</b><br>
+                    {{ renova.criado_em|date:"d/m/Y H:i" }} · {{ renova.criado_por.full_name|default:renova.vendedor_nome }}
+                </li>
+                <li class="{% if renova.chamado_id %}feito{% endif %}">
+                    <b class="text-gray-900">{% if renova.chamado_id %}Chamado #{{ renova.chamado_id }} aberto{% else %}Chamado pendente{% endif %}</b>
+                    {% if renova.chamado %}<br>{{ renova.chamado.created_at|date:"d/m/Y H:i" }}{% endif %}
+                </li>
+                <li class="{% if renova.recebimento != 'PENDENTE' %}feito{% endif %}">
+                    <b class="text-gray-900">{% if renova.sem_recebimento %}Sem recebimento (não aprovado){% elif renova.recebimento == 'PENDENTE' %}Aguardando chegada{% else %}{{ renova.get_recebimento_display }}{% endif %}</b>
+                    {% if renova.recebido_em %}<br>{{ renova.recebido_em|date:"d/m/Y H:i" }}{% endif %}
+                </li>
+            </ol>
+        </section>
+    </aside>
+</div>
+{% endblock %}

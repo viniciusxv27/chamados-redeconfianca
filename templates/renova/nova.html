@@ -1,0 +1,669 @@
+{% extends 'renova/base_renova.html' %}
+
+{% block rn_pagina %}Nova avaliação{% endblock %}
+{% block rn_titulo %}Checklist de avaliação do aparelho{% endblock %}
+{% block rn_subtitulo %}Confira todos os itens antes de concluir a oferta{% endblock %}
+{% block rn_acoes %}
+<button type="button" data-abrir="rn-modal-impresso"
+        class="rn-btn text-xs text-white bg-white/15 hover:bg-white/25 border border-white/30">
+    <i class="fa-regular fa-image"></i>Ver o impresso
+</button>
+{% endblock %}
+
+{% block rn_css %}
+<style>
+    .rn-rotulo { display: block; font-size: .72rem; font-weight: 700; color: #4B3F58; margin-bottom: .3rem; }
+    .rn-campo { width: 100%; border: 1.5px solid #E4D9F1; border-radius: .7rem; padding: .55rem .75rem; font-size: .9rem;
+                color: #1F0B33; background: #fff; transition: border-color .15s, box-shadow .15s; }
+    .rn-campo:focus { outline: none; border-color: #9D4EDD; box-shadow: 0 0 0 3px rgba(157, 78, 221, .18); }
+    .rn-campo.rn-ok { border-color: #34D399; }
+    .rn-invalido { border-color: #EF4444 !important; background-color: #FEF2F2 !important; }
+    .rn-erro { color: #B91C1C; font-size: .72rem; font-weight: 600; margin-top: .3rem; }
+    .rn-dica { font-size: .68rem; color: #7C6A8E; margin-top: .25rem; min-height: .9rem; }
+    .rn-erros { border-radius: 1rem; border: 1px solid #FECACA; background: #FEF2F2; color: #991B1B; padding: .9rem 1rem;
+                margin-bottom: 1rem; font-size: .82rem; }
+    .rn-erros ul { margin-top: .4rem; display: grid; gap: .2rem; list-style: disc; padding-left: 1.2rem; }
+    .rn-secao-erro { border-color: #FCA5A5; box-shadow: 0 0 0 3px rgba(239, 68, 68, .12); }
+    .rn-opcoes { display: flex; flex-wrap: wrap; gap: .45rem; align-items: center; }
+    .rn-caixa { position: relative; display: inline-flex; align-items: center; gap: .45rem; padding: .42rem .7rem;
+                border-radius: .65rem; border: 1.5px solid #E4D9F1; background: #fff; font-size: .84rem; font-weight: 600;
+                color: #3B2A4D; cursor: pointer; user-select: none; transition: background-color .15s, border-color .15s; }
+    .rn-caixa:hover { border-color: #C9B3E6; }
+    .rn-caixa:has(input:checked) { border-color: #9D4EDD; background: #F6EEFF; }
+    .rn-caixa input, .rn-check input, .rn-tri input, .rn-parecer input, .rn-padroes input { position: absolute; opacity: 0; pointer-events: none; }
+    .rn-quadrado { width: 1.1rem; height: 1.1rem; border-radius: .32rem; border: 1.5px solid #B9A3D3; background: #fff;
+                   display: grid; place-items: center; flex-shrink: 0; transition: background-color .15s, border-color .15s; }
+    input:checked + .rn-quadrado { background: #660099; border-color: #660099; }
+    input:checked + .rn-quadrado::after { content: '\f00c'; font-family: 'Font Awesome 6 Free'; font-weight: 900; color: #fff; font-size: .62rem; }
+    input:focus-visible + .rn-quadrado { box-shadow: 0 0 0 3px rgba(157, 78, 221, .35); }
+    .rn-campo-outro { width: 11rem; padding: .42rem .65rem; }
+
+    .rn-item { display: grid; grid-template-columns: 2.25rem minmax(0, 1fr) auto; gap: .75rem; align-items: center;
+               padding: .6rem 1rem; border-top: 1px solid #F3ECFA; transition: background-color .15s; }
+    .rn-item-check { cursor: pointer; }
+    .rn-item-check:hover { background: #FCFAFF; }
+    .rn-item-icone { width: 2.25rem; height: 2.25rem; border-radius: .7rem; display: grid; place-items: center; color: #660099;
+                     background: #F3E8FF; font-size: 1rem; }
+    .rn-item-titulo { display: block; font-size: .86rem; font-weight: 700; color: #1F0B33; line-height: 1.25; }
+    .rn-item-desc { display: block; font-size: .72rem; color: #6B5B7B; line-height: 1.3; }
+    .rn-check { position: relative; }
+    .rn-check .rn-quadrado { width: 1.35rem; height: 1.35rem; }
+    .rn-tri { display: grid; grid-template-columns: repeat(3, 3.9rem); gap: .2rem; text-align: center; }
+    .rn-tri label { position: relative; display: grid; place-items: center; height: 2.1rem; border-radius: .55rem; cursor: pointer; }
+    .rn-tri label:hover { background: #F6EEFF; }
+    .rn-tri .rn-quadrado { width: 1.3rem; height: 1.3rem; }
+    .rn-tri .rn-op-OK input:checked + .rn-quadrado { background: #16A34A; border-color: #16A34A; }
+    .rn-tri .rn-op-OBS input:checked + .rn-quadrado { background: #F59E0B; border-color: #F59E0B; }
+    .rn-tri .rn-op-NAO input:checked + .rn-quadrado { background: #DC2626; border-color: #DC2626; }
+    .rn-tri .rn-op-texto { display: none; }
+    .rn-tri-cabecalho { display: grid; grid-template-columns: 2.25rem minmax(0, 1fr) auto; gap: .75rem; padding: .5rem 1rem .35rem;
+                        background: #FBF8FF; }
+    .rn-tri-cabecalho .rn-tri span { font-size: .56rem; font-weight: 800; text-transform: uppercase; letter-spacing: .04em;
+                                     color: #6B5B7B; line-height: 1.15; align-self: end; }
+    .rn-item.rn-marcado-OBS { background: #FFFBEB; }
+    .rn-item.rn-marcado-NAO { background: #FEF2F2; }
+    @media (max-width: 640px) {
+        .rn-item-tri { grid-template-columns: 2.25rem minmax(0, 1fr); }
+        .rn-item-tri .rn-tri { grid-column: 1 / -1; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .35rem; }
+        .rn-item-tri .rn-tri label { height: auto; display: flex; gap: .35rem; justify-content: center; padding: .45rem .3rem;
+                                     border: 1.5px solid #E4D9F1; background: #fff; }
+        .rn-item-tri .rn-op-texto { display: inline; font-size: .68rem; font-weight: 700; color: #4B3F58; }
+        .rn-tri-cabecalho { display: none; }
+        .rn-campo-outro { width: 100%; }
+    }
+
+    .rn-valor-box { border-radius: .95rem; background: linear-gradient(135deg, #F6EEFF, #EDE0FF); border: 1px solid #E1CFF7;
+                    padding: .85rem 1rem; }
+    .rn-campo-valor { font-size: 1.25rem; font-weight: 800; color: #3C096C; }
+    .rn-padroes { display: flex; gap: .4rem; }
+    .rn-padroes label { position: relative; cursor: pointer; }
+    .rn-padroes .rn-letra { width: 2.35rem; height: 2.35rem; opacity: .35; transition: opacity .15s, transform .15s, box-shadow .15s; }
+    .rn-padroes label:hover .rn-letra { opacity: .7; }
+    .rn-padroes input:checked + .rn-letra { opacity: 1; transform: scale(1.06); box-shadow: 0 0 0 3px #fff, 0 0 0 5px #9D4EDD; }
+    .rn-sugestao { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin-top: .7rem; font-size: .74rem; color: #4B3F58; }
+    .rn-chip { display: inline-flex; align-items: center; gap: .4rem; padding: .28rem .6rem .28rem .3rem; border-radius: 9999px;
+               background: #fff; border: 1px solid #E1CFF7; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .rn-chip:hover { border-color: #9D4EDD; }
+
+    .rn-pautado { border: 0; resize: vertical; min-height: 7.6rem; line-height: 1.9rem; padding: 0 .2rem; font-size: .9rem; color: #1F0B33;
+                  background: repeating-linear-gradient(to bottom, transparent 0, transparent 1.83rem, #E9DDF6 1.83rem, #E9DDF6 1.9rem); }
+    .rn-pautado:focus { outline: none; }
+    .rn-parecer { display: grid; gap: .5rem; padding: 1rem; }
+    .rn-parecer label { position: relative; display: flex; align-items: center; gap: .7rem; padding: .7rem .85rem; border-radius: .8rem;
+                        border: 1.5px solid #E4D9F1; cursor: pointer; font-weight: 700; font-size: .9rem; transition: background-color .15s, border-color .15s; }
+    .rn-parecer .rn-quadrado { width: 1.35rem; height: 1.35rem; border-width: 2px; }
+    .rn-parecer-APROVADO { color: #15803D; } .rn-parecer-APROVADO .rn-quadrado { border-color: #16A34A; }
+    .rn-parecer-APROVADO input:checked + .rn-quadrado { background: #16A34A; border-color: #16A34A; }
+    .rn-parecer-APROVADO:has(input:checked) { background: #F0FDF4; border-color: #16A34A; }
+    .rn-parecer-APROVADO_OBS { color: #6B21A8; } .rn-parecer-APROVADO_OBS .rn-quadrado { border-color: #9333EA; }
+    .rn-parecer-APROVADO_OBS input:checked + .rn-quadrado { background: #9333EA; border-color: #9333EA; }
+    .rn-parecer-APROVADO_OBS:has(input:checked) { background: #FAF5FF; border-color: #9333EA; }
+    .rn-parecer-NAO_APROVADO { color: #B91C1C; } .rn-parecer-NAO_APROVADO .rn-quadrado { border-color: #DC2626; }
+    .rn-parecer-NAO_APROVADO input:checked + .rn-quadrado { background: #DC2626; border-color: #DC2626; }
+    .rn-parecer-NAO_APROVADO:has(input:checked) { background: #FEF2F2; border-color: #DC2626; }
+
+    .rn-assinatura { position: relative; height: 9.5rem; border: 1.5px dashed #CDB8E8; border-radius: .85rem; background: #FDFBFF; touch-action: none; }
+    .rn-assinatura canvas { display: block; width: 100%; height: 100%; border-radius: .85rem; cursor: crosshair; }
+    .rn-assinatura-dica { position: absolute; left: 0; right: 0; bottom: .6rem; text-align: center; font-size: .72rem; color: #A38BBE; pointer-events: none; }
+    .rn-assinatura.rn-assinado .rn-assinatura-dica { display: none; }
+    .rn-assinatura::before { content: ''; position: absolute; left: 1.2rem; right: 1.2rem; bottom: 2.1rem; border-bottom: 1px solid #E3D5F3; pointer-events: none; }
+
+    .rn-modal { position: fixed; inset: 0; z-index: 70; display: flex; align-items: center; justify-content: center; padding: 1rem; }
+    .rn-modal-fundo { position: absolute; inset: 0; background: rgba(20, 6, 36, .6); }
+    .rn-modal-caixa { position: relative; display: flex; flex-direction: column; width: 100%; max-width: 44rem; max-height: 90vh;
+                      background: #fff; border-radius: 1rem; overflow: hidden; box-shadow: 0 30px 60px -20px rgba(0, 0, 0, .5); }
+</style>
+{% endblock %}
+
+{% block rn_conteudo %}
+{% if sem_categoria %}
+<div class="rn-card p-4 mb-4 text-sm" style="background:#FFFBEB;border-color:#FDE68A;color:#92400E">
+    <i class="fa-solid fa-triangle-exclamation mr-1"></i>
+    A categoria do chamado do Renova não está configurada, então a avaliação não pode ser concluída agora.
+    {% if rn_superadmin %}<a href="{% url 'renova:configuracao' %}" class="font-bold underline">Configurar</a>{% else %}Avise o SUPERADMIN.{% endif %}
+</div>
+{% endif %}
+
+{% if erros %}
+<div id="rn-erros" class="rn-erros" role="alert">
+    <p class="font-bold"><i class="fa-solid fa-circle-exclamation mr-1"></i>Faltou pouco — confira o que está marcado:</p>
+    <ul>{% for campo, mensagem in erros.items %}<li>{{ mensagem }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+<form method="post" id="rn-form" novalidate>
+    {% csrf_token %}
+    <input type="hidden" name="preco_tabela" value="{{ valores.preco_tabela|default:'' }}">
+    <input type="hidden" name="assinatura" value="{{ valores.assinatura|default:'' }}">
+
+    <section class="rn-secao mb-4">
+        <div class="rn-secao-topo"><span class="rn-num">1</span>Dados do aparelho</div>
+        <div class="p-4 sm:p-5 grid gap-4">
+            <div>
+                <span class="rn-rotulo">Marca</span>
+                <div class="rn-opcoes">
+                    {% for valor, nome in marcas %}
+                    <label class="rn-caixa">
+                        <input type="radio" name="marca" value="{{ valor }}" {% if valores.marca == valor %}checked{% endif %}>
+                        <span class="rn-quadrado"></span>{% if valor == 'APPLE' %}<i class="fa-brands fa-apple"></i>{% endif %}{{ nome }}
+                    </label>
+                    {% endfor %}
+                    <input type="text" name="marca_outra" value="{{ valores.marca_outra|default:'' }}" maxlength="60"
+                           placeholder="Qual marca?" data-outro-de="marca" data-outro-valor="OUTROS"
+                           class="rn-campo rn-campo-outro {% if erros.marca_outra %}rn-invalido{% endif %}">
+                </div>
+                {% if erros.marca %}<p class="rn-erro">{{ erros.marca }}</p>{% endif %}
+                {% if erros.marca_outra %}<p class="rn-erro">{{ erros.marca_outra }}</p>{% endif %}
+            </div>
+
+            <div class="grid sm:grid-cols-2 gap-4">
+                <label class="block">
+                    <span class="rn-rotulo">Modelo</span>
+                    <input type="text" name="modelo" value="{{ valores.modelo|default:'' }}" list="rn-modelos" maxlength="120"
+                           autocomplete="off" placeholder="Ex.: iPhone 15 Pro"
+                           class="rn-campo {% if erros.modelo %}rn-invalido{% endif %}">
+                    {% if erros.modelo %}<p class="rn-erro">{{ erros.modelo }}</p>{% endif %}
+                </label>
+                <label class="block">
+                    <span class="rn-rotulo">Cor</span>
+                    <input type="text" name="cor" value="{{ valores.cor|default:'' }}" maxlength="60"
+                           placeholder="Ex.: Titânio natural" class="rn-campo">
+                </label>
+            </div>
+            <datalist id="rn-modelos"></datalist>
+
+            <div>
+                <span class="rn-rotulo">Armazenamento</span>
+                <div class="rn-opcoes">
+                    {% for valor, nome in armazenamentos %}
+                    <label class="rn-caixa">
+                        <input type="radio" name="armazenamento" value="{{ valor }}" {% if valores.armazenamento == valor %}checked{% endif %}>
+                        <span class="rn-quadrado"></span>{{ nome }}
+                    </label>
+                    {% endfor %}
+                    <input type="text" name="armazenamento_outro" value="{{ valores.armazenamento_outro|default:'' }}" maxlength="20"
+                           placeholder="Qual?" data-outro-de="armazenamento" data-outro-valor="OUTRO"
+                           class="rn-campo rn-campo-outro {% if erros.armazenamento_outro %}rn-invalido{% endif %}">
+                </div>
+                {% if erros.armazenamento %}<p class="rn-erro">{{ erros.armazenamento }}</p>{% endif %}
+                {% if erros.armazenamento_outro %}<p class="rn-erro">{{ erros.armazenamento_outro }}</p>{% endif %}
+            </div>
+
+            <div class="grid sm:grid-cols-3 gap-4">
+                <label class="block">
+                    <span class="rn-rotulo">IMEI 1</span>
+                    <input type="text" id="rn-imei1" name="imei1" value="{{ valores.imei1|default:'' }}" inputmode="numeric"
+                           maxlength="15" autocomplete="off" data-imei placeholder="15 números"
+                           class="rn-campo font-mono tracking-wider {% if erros.imei1 %}rn-invalido{% endif %}">
+                    <p class="rn-dica" id="rn-imei1-dica"></p>
+                    {% if erros.imei1 %}<p class="rn-erro">{{ erros.imei1 }}</p>{% endif %}
+                </label>
+                <label class="block">
+                    <span class="rn-rotulo">IMEI 2 <span class="font-normal text-gray-400">(se tiver)</span></span>
+                    <input type="text" id="rn-imei2" name="imei2" value="{{ valores.imei2|default:'' }}" inputmode="numeric"
+                           maxlength="15" autocomplete="off" data-imei placeholder="15 números"
+                           class="rn-campo font-mono tracking-wider {% if erros.imei2 %}rn-invalido{% endif %}">
+                    <p class="rn-dica" id="rn-imei2-dica"></p>
+                    {% if erros.imei2 %}<p class="rn-erro">{{ erros.imei2 }}</p>{% endif %}
+                </label>
+                <label class="block">
+                    <span class="rn-rotulo">Nº de série</span>
+                    <input type="text" name="numero_serie" value="{{ valores.numero_serie|default:'' }}" maxlength="40"
+                           autocomplete="off" class="rn-campo font-mono">
+                </label>
+            </div>
+
+            <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 items-start">
+                <label class="block">
+                    <span class="rn-rotulo">Data da avaliação</span>
+                    <input type="date" name="data_avaliacao" value="{{ valores.data_avaliacao|default:'' }}" max="{% now 'Y-m-d' %}"
+                           class="rn-campo {% if erros.data_avaliacao %}rn-invalido{% endif %}">
+                    {% if erros.data_avaliacao %}<p class="rn-erro">{{ erros.data_avaliacao }}</p>{% endif %}
+                </label>
+                <label class="block">
+                    <span class="rn-rotulo">Loja (origem)</span>
+                    <select name="loja" class="rn-campo {% if erros.loja %}rn-invalido{% endif %}">
+                        <option value="">Escolha a loja…</option>
+                        {% if lojas %}
+                        <optgroup label="Lojas">
+                            {% for s in lojas %}<option value="{{ s.pk }}" {% if valores.loja == s.pk|stringformat:"d" %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
+                        </optgroup>
+                        {% endif %}
+                        {% if outros_setores %}
+                        <optgroup label="Outros setores">
+                            {% for s in outros_setores %}<option value="{{ s.pk }}" {% if valores.loja == s.pk|stringformat:"d" %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
+                        </optgroup>
+                        {% endif %}
+                    </select>
+                    {% if erros.loja %}<p class="rn-erro">{{ erros.loja }}</p>{% endif %}
+                </label>
+                <label class="block">
+                    <span class="rn-rotulo">Saúde da bateria (%)</span>
+                    <input type="number" name="saude_bateria" value="{{ valores.saude_bateria|default:'' }}" min="0" max="100"
+                           placeholder="Ex.: 87" class="rn-campo {% if erros.saude_bateria %}rn-invalido{% endif %}">
+                    {% if erros.saude_bateria %}<p class="rn-erro">{{ erros.saude_bateria }}</p>{% endif %}
+                </label>
+            </div>
+
+            <div class="rn-valor-box">
+                <div class="flex flex-wrap items-end gap-4">
+                    <div>
+                        <span class="rn-rotulo">Padrão de avaliação</span>
+                        <div class="rn-padroes">
+                            {% for letra, nome in padroes %}
+                            <label title="{{ letra }} · {{ nome }}">
+                                <input type="radio" name="padrao" value="{{ letra }}" {% if valores.padrao == letra %}checked{% endif %}>
+                                <span class="rn-letra rn-letra-{{ letra }}">{{ letra }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <label class="block flex-1 min-w-[12rem]">
+                        <span class="rn-rotulo">Valor estimado de troca</span>
+                        <span class="relative block">
+                            <span class="absolute left-3 top-1/2 -translate-y-1/2 font-extrabold text-purple-900">R$</span>
+                            <input type="number" name="valor_estimado" value="{{ valores.valor_estimado|default:'' }}" step="0.01" min="0"
+                                   inputmode="decimal" placeholder="0,00"
+                                   class="rn-campo rn-campo-valor pl-10 {% if erros.valor_estimado %}rn-invalido{% endif %}">
+                        </span>
+                    </label>
+                </div>
+                <div id="rn-sugestao" class="rn-sugestao" hidden></div>
+                <p class="text-[11px] mt-2" style="color:#5B2A86">
+                    <i class="fa-solid fa-circle-info"></i>
+                    Com marca Apple, modelo e armazenamento da <a href="{% url 'renova:tabela' %}" target="_blank" class="underline font-semibold">tabela de avaliação</a>,
+                    o valor de cada padrão aparece pronto para escolher.
+                </p>
+                {% if erros.valor_estimado %}<p class="rn-erro">{{ erros.valor_estimado }}</p>{% endif %}
+            </div>
+        </div>
+    </section>
+
+    <div class="grid lg:grid-cols-2 gap-4 items-start">
+        <div class="grid gap-4">
+            <section class="rn-secao {% if erros.itens_obrigatorios %}rn-secao-erro{% endif %}">
+                <div class="rn-secao-topo"><span class="rn-num">2</span>Itens obrigatórios antes da avaliação</div>
+                {% for chave, titulo, descricao, icone, marcado in itens_obrigatorios %}
+                <label class="rn-item rn-item-check">
+                    <span class="rn-item-icone"><i class="{{ icone }}"></i></span>
+                    <span class="min-w-0"><span class="rn-item-titulo">{{ titulo }}</span><span class="rn-item-desc">{{ descricao }}</span></span>
+                    <span class="rn-check"><input type="checkbox" name="obrig_{{ chave }}" {% if marcado %}checked{% endif %}><span class="rn-quadrado"></span></span>
+                </label>
+                {% endfor %}
+                {% if erros.itens_obrigatorios %}<p class="rn-erro px-4 pb-3">{{ erros.itens_obrigatorios }}</p>{% endif %}
+            </section>
+
+            <section class="rn-secao {% if erros.funcionalidades %}rn-secao-erro{% endif %}">
+                <div class="rn-secao-topo"><span class="rn-num">3</span>Funcionalidades</div>
+                <div class="rn-tri-cabecalho" aria-hidden="true">
+                    <span></span><span></span>
+                    <div class="rn-tri">{% for valor, rotulo in opcoes_func %}<span>{{ rotulo }}</span>{% endfor %}</div>
+                </div>
+                {% for chave, titulo, descricao, icone, atual in funcionalidades %}
+                <div class="rn-item rn-item-tri">
+                    <span class="rn-item-icone"><i class="{{ icone }}"></i></span>
+                    <span class="min-w-0"><span class="rn-item-titulo">{{ titulo }}</span><span class="rn-item-desc">{{ descricao }}</span></span>
+                    <div class="rn-tri" role="radiogroup" aria-label="{{ titulo }}">
+                        {% for valor, rotulo in opcoes_func %}
+                        <label class="rn-op-{{ valor }}" title="{{ rotulo }}">
+                            <input type="radio" name="func_{{ chave }}" value="{{ valor }}" {% if atual == valor %}checked{% endif %}>
+                            <span class="rn-quadrado"></span><span class="rn-op-texto">{{ rotulo }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endfor %}
+                {% if erros.funcionalidades %}<p class="rn-erro px-4 pb-3">{{ erros.funcionalidades }}</p>{% endif %}
+            </section>
+        </div>
+
+        <div class="grid gap-4">
+            <section class="rn-secao {% if erros.estetica %}rn-secao-erro{% endif %}">
+                <div class="rn-secao-topo"><span class="rn-num">4</span>Condição estética</div>
+                <div class="rn-tri-cabecalho" aria-hidden="true">
+                    <span></span><span></span>
+                    <div class="rn-tri">{% for valor, rotulo in opcoes_est %}<span>{{ rotulo }}</span>{% endfor %}</div>
+                </div>
+                {% for chave, titulo, descricao, icone, atual in estetica %}
+                <div class="rn-item rn-item-tri">
+                    <span class="rn-item-icone"><i class="{{ icone }}"></i></span>
+                    <span class="min-w-0"><span class="rn-item-titulo">{{ titulo }}</span><span class="rn-item-desc">{{ descricao }}</span></span>
+                    <div class="rn-tri" role="radiogroup" aria-label="{{ titulo }}">
+                        {% for valor, rotulo in opcoes_est %}
+                        <label class="rn-op-{{ valor }}" title="{{ rotulo }}">
+                            <input type="radio" name="est_{{ chave }}" value="{{ valor }}" {% if atual == valor %}checked{% endif %}>
+                            <span class="rn-quadrado"></span><span class="rn-op-texto">{{ rotulo }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endfor %}
+                {% if erros.estetica %}<p class="rn-erro px-4 pb-3">{{ erros.estetica }}</p>{% endif %}
+            </section>
+
+            <section class="rn-secao {% if erros.observacoes %}rn-secao-erro{% endif %}">
+                <div class="rn-secao-topo"><span class="rn-num">5</span>Observações gerais</div>
+                <div class="p-4">
+                    <textarea name="observacoes" rows="4" maxlength="4000" class="rn-pautado w-full"
+                              placeholder="Conte o que ficou com observação ou não funciona…">{{ valores.observacoes|default:'' }}</textarea>
+                    {% if erros.observacoes %}<p class="rn-erro">{{ erros.observacoes }}</p>{% endif %}
+                </div>
+            </section>
+
+            <section class="rn-secao {% if erros.parecer %}rn-secao-erro{% endif %}">
+                <div class="rn-secao-topo"><span class="rn-num">6</span>Parecer final do aparelho</div>
+                <div class="rn-parecer">
+                    {% for valor, rotulo in pareceres %}
+                    <label class="rn-parecer-{{ valor }}">
+                        <input type="radio" name="parecer" value="{{ valor }}" {% if valores.parecer == valor %}checked{% endif %}>
+                        <span class="rn-quadrado"></span>{{ rotulo }}
+                    </label>
+                    {% endfor %}
+                    <p id="rn-aviso-parecer" class="text-[11px] text-amber-700" hidden>
+                        <i class="fa-solid fa-lightbulb"></i> Há item que não funciona ou não está OK — confira se o parecer combina.
+                    </p>
+                    {% if erros.parecer %}<p class="rn-erro">{{ erros.parecer }}</p>{% endif %}
+                </div>
+            </section>
+
+            <section class="rn-secao">
+                <div class="rn-secao-topo"><span class="rn-num">7</span>Responsável pela avaliação</div>
+                <div class="p-4 grid gap-3">
+                    <div class="grid sm:grid-cols-2 gap-3">
+                        <label class="block">
+                            <span class="rn-rotulo">Nome do vendedor</span>
+                            <input type="text" name="vendedor_nome" value="{{ valores.vendedor_nome|default:'' }}" maxlength="150"
+                                   class="rn-campo {% if erros.vendedor_nome %}rn-invalido{% endif %}">
+                            {% if erros.vendedor_nome %}<p class="rn-erro">{{ erros.vendedor_nome }}</p>{% endif %}
+                        </label>
+                        <label class="block">
+                            <span class="rn-rotulo">Matrícula <span class="font-normal text-gray-400">(opcional)</span></span>
+                            <input type="text" name="matricula" value="{{ valores.matricula|default:'' }}" maxlength="40" class="rn-campo">
+                        </label>
+                    </div>
+                    <div>
+                        <div class="flex items-center justify-between">
+                            <span class="rn-rotulo">Assinatura</span>
+                            <button type="button" id="rn-limpar-assinatura" class="text-[11px] font-semibold hover:underline" style="color:#6B21A8">
+                                <i class="fa-solid fa-eraser"></i> Limpar
+                            </button>
+                        </div>
+                        <div id="rn-assinatura" class="rn-assinatura {% if erros.assinatura %}rn-invalido{% endif %}">
+                            <canvas aria-label="Quadro para assinar"></canvas>
+                            <span class="rn-assinatura-dica">Assine aqui com o dedo ou o mouse</span>
+                        </div>
+                        {% if erros.assinatura %}<p class="rn-erro">{{ erros.assinatura }}</p>{% endif %}
+                    </div>
+                    <label class="block sm:w-1/2">
+                        <span class="rn-rotulo">Data</span>
+                        <input type="date" name="data_responsavel" value="{{ valores.data_responsavel|default:'' }}" class="rn-campo">
+                    </label>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <div class="rn-card mt-4 p-4 flex flex-wrap items-center justify-between gap-3">
+        <p class="text-xs text-gray-600 max-w-xl">
+            <i class="fa-solid fa-ticket mr-1" style="color:#7B2CBF"></i>
+            Ao concluir, o portal abre o chamado{% if cfg.categoria %} em <b>{{ cfg.categoria.name }}</b>{% endif %}
+            e mostra a etiqueta do aparelho para imprimir.
+        </p>
+        <button type="submit" id="rn-enviar" class="rn-btn rn-btn-primario" {% if sem_categoria %}disabled{% endif %}>
+            <i class="fa-solid fa-circle-check"></i>Concluir avaliação e abrir chamado
+        </button>
+    </div>
+</form>
+
+<div class="rn-modal" id="rn-modal-impresso" hidden>
+    <div class="rn-modal-fundo" data-fechar></div>
+    <div class="rn-modal-caixa" role="dialog" aria-label="Checklist impresso">
+        <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+            <p class="font-bold text-sm text-gray-900">Checklist impresso</p>
+            <button type="button" data-fechar class="w-8 h-8 rounded-lg hover:bg-gray-100" aria-label="Fechar"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="overflow-y-auto p-3">
+            <img src="{{ imagem_checklist }}" alt="Checklist de avaliação do aparelho (impresso)" class="w-full h-auto rounded-lg" loading="lazy">
+        </div>
+    </div>
+</div>
+{{ precos_json|json_script:"rn-precos" }}
+{% endblock %}
+
+{% block rn_js %}
+<script>
+(function () {
+    var form = document.getElementById('rn-form');
+    if (!form) return;
+
+    function marcado(nome) {
+        var el = form.querySelector('input[name="' + nome + '"]:checked');
+        return el ? el.value : '';
+    }
+
+    /* "Qual marca?" e "Qual armazenamento?" só aparecem com Outros/Outro marcado. */
+    function sincronizarOutros() {
+        form.querySelectorAll('[data-outro-de]').forEach(function (campo) {
+            campo.hidden = marcado(campo.getAttribute('data-outro-de')) !== campo.getAttribute('data-outro-valor');
+        });
+    }
+
+    /* Tabela de avaliação: com Apple + modelo + armazenamento da tabela, o valor de cada padrão fica pronto. */
+    var precos = JSON.parse(document.getElementById('rn-precos').textContent || '[]');
+    var campoModelo = form.querySelector('[name=modelo]');
+    var campoValor = form.querySelector('[name=valor_estimado]');
+    var campoPreco = form.querySelector('[name=preco_tabela]');
+    var sugestao = document.getElementById('rn-sugestao');
+    var lista = document.getElementById('rn-modelos');
+    var moeda = new Intl.NumberFormat('pt-BR', {style: 'currency', currency: 'BRL', maximumFractionDigits: 0});
+
+    function normal(texto) {
+        return (texto || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/iphone/g, '').replace(/\s+/g, '');
+    }
+    var modelosVistos = {};
+    precos.forEach(function (p) {
+        if (modelosVistos[p.modelo]) return;
+        modelosVistos[p.modelo] = true;
+        var opcao = document.createElement('option');
+        opcao.value = p.modelo;
+        lista.appendChild(opcao);
+    });
+
+    function linhaDaTabela() {
+        if (marcado('marca') !== 'APPLE') return null;
+        var modelo = normal(campoModelo.value);
+        var armazenamento = marcado('armazenamento');
+        if (!modelo || !armazenamento) return null;
+        return precos.find(function (p) {
+            return p.marca === 'APPLE' && normal(p.modelo) === modelo && p.armazenamento === armazenamento;
+        }) || null;
+    }
+
+    function aplicar(linha, letra) {
+        if (!linha || linha.valores[letra] === undefined) return;
+        campoValor.value = linha.valores[letra].toFixed(2);
+        campoValor.dataset.auto = '1';
+        campoPreco.value = linha.id;
+        campoValor.classList.remove('rn-invalido');
+    }
+
+    function atualizarSugestao() {
+        var linha = linhaDaTabela();
+        sugestao.textContent = '';
+        if (!linha) {
+            sugestao.hidden = true;
+            if (campoValor.dataset.auto === '1') campoPreco.value = '';
+            return;
+        }
+        sugestao.hidden = false;
+        var titulo = document.createElement('span');
+        titulo.textContent = 'Pela tabela · ' + linha.modelo + ' ' + linha.armazenamento + ':';
+        sugestao.appendChild(titulo);
+        ['A', 'B', 'C', 'D'].forEach(function (letra) {
+            var chip = document.createElement('button');
+            chip.type = 'button';
+            chip.className = 'rn-chip';
+            var bolinha = document.createElement('span');
+            bolinha.className = 'rn-letra rn-letra-sm rn-letra-' + letra;
+            bolinha.textContent = letra;
+            chip.appendChild(bolinha);
+            chip.appendChild(document.createTextNode(moeda.format(linha.valores[letra])));
+            chip.addEventListener('click', function () {
+                var radio = form.querySelector('input[name=padrao][value="' + letra + '"]');
+                if (radio) radio.checked = true;
+                aplicar(linha, letra);
+            });
+            sugestao.appendChild(chip);
+        });
+        var letra = marcado('padrao');
+        if (letra && (!campoValor.value || campoValor.dataset.auto === '1')) aplicar(linha, letra);
+    }
+
+    campoModelo.addEventListener('input', atualizarSugestao);
+    campoValor.addEventListener('input', function () { campoValor.dataset.auto = ''; });
+
+    /* IMEI: só números, 15 dígitos e o dígito verificador certo. */
+    function luhn(numero) {
+        var soma = 0;
+        for (var i = 0; i < numero.length; i++) {
+            var d = parseInt(numero.charAt(i), 10);
+            if (i % 2 === 1) { d *= 2; if (d > 9) d -= 9; }
+            soma += d;
+        }
+        return soma % 10 === 0;
+    }
+    form.querySelectorAll('[data-imei]').forEach(function (campo) {
+        var dica = document.getElementById(campo.id + '-dica');
+        function checar() {
+            var limpo = campo.value.replace(/\D/g, '').slice(0, 15);
+            if (limpo !== campo.value) campo.value = limpo;
+            var completo = limpo.length === 15;
+            var valido = completo && luhn(limpo);
+            campo.classList.toggle('rn-ok', valido);
+            campo.classList.toggle('rn-invalido', completo && !valido);
+            if (!dica) return;
+            dica.textContent = !limpo ? '' : !completo ? (15 - limpo.length) + ' número(s) faltando'
+                : valido ? 'IMEI válido' : 'Esse IMEI não confere — revise os números';
+            dica.style.color = valido ? '#047857' : (completo ? '#B91C1C' : '');
+        }
+        campo.addEventListener('input', checar);
+        checar();
+    });
+
+    /* Item com observação ou falha fica destacado; e o parecer ganha um lembrete. */
+    var avisoParecer = document.getElementById('rn-aviso-parecer');
+    function destacar(input) {
+        var linha = input.closest('.rn-item');
+        if (!linha) return;
+        linha.classList.remove('rn-marcado-OK', 'rn-marcado-OBS', 'rn-marcado-NAO');
+        linha.classList.add('rn-marcado-' + input.value);
+    }
+    function conferirParecer() {
+        var temFalha = !!form.querySelector('.rn-tri input[value="NAO"]:checked');
+        avisoParecer.hidden = !(temFalha && marcado('parecer') === 'APROVADO');
+    }
+    form.querySelectorAll('.rn-tri input:checked').forEach(destacar);
+
+    form.addEventListener('change', function (e) {
+        var nome = e.target.name || '';
+        if (nome === 'marca' || nome === 'armazenamento') sincronizarOutros();
+        if (nome === 'marca' || nome === 'armazenamento' || nome === 'padrao') atualizarSugestao();
+        if (e.target.closest('.rn-tri')) destacar(e.target);
+        conferirParecer();
+    });
+    sincronizarOutros();
+    atualizarSugestao();
+    conferirParecer();
+
+    /* Assinatura no quadro. */
+    var quadro = document.getElementById('rn-assinatura');
+    var canvas = quadro.querySelector('canvas');
+    var campoAssinatura = form.querySelector('[name=assinatura]');
+    var ctx = canvas.getContext('2d');
+    var desenhou = false;
+    var desenhando = false;
+    var anterior = null;
+
+    function preparar() {
+        var caixa = canvas.getBoundingClientRect();
+        var escala = window.devicePixelRatio || 1;
+        var imagem = desenhou ? canvas.toDataURL('image/png') : campoAssinatura.value;
+        canvas.width = Math.max(1, Math.round(caixa.width * escala));
+        canvas.height = Math.max(1, Math.round(caixa.height * escala));
+        ctx.setTransform(escala, 0, 0, escala, 0, 0);
+        ctx.lineWidth = 2.4;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.strokeStyle = '#1F0B33';
+        if (imagem && imagem.indexOf('data:image/png;base64,') === 0) {
+            var figura = new Image();
+            figura.onload = function () { ctx.drawImage(figura, 0, 0, caixa.width, caixa.height); };
+            figura.src = imagem;
+            desenhou = true;
+            quadro.classList.add('rn-assinado');
+        }
+    }
+    function ponto(evento) {
+        var caixa = canvas.getBoundingClientRect();
+        return {x: evento.clientX - caixa.left, y: evento.clientY - caixa.top};
+    }
+    canvas.addEventListener('pointerdown', function (evento) {
+        desenhando = true;
+        anterior = ponto(evento);
+        canvas.setPointerCapture(evento.pointerId);
+        evento.preventDefault();
+    });
+    canvas.addEventListener('pointermove', function (evento) {
+        if (!desenhando) return;
+        var atual = ponto(evento);
+        ctx.beginPath();
+        ctx.moveTo(anterior.x, anterior.y);
+        ctx.lineTo(atual.x, atual.y);
+        ctx.stroke();
+        anterior = atual;
+        if (!desenhou) { desenhou = true; quadro.classList.add('rn-assinado'); quadro.classList.remove('rn-invalido'); }
+    });
+    ['pointerup', 'pointercancel'].forEach(function (tipo) {
+        canvas.addEventListener(tipo, function () { desenhando = false; });
+    });
+    document.getElementById('rn-limpar-assinatura').addEventListener('click', function () {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        desenhou = false;
+        campoAssinatura.value = '';
+        quadro.classList.remove('rn-assinado');
+    });
+    var aguardandoTamanho = null;
+    window.addEventListener('resize', function () {
+        clearTimeout(aguardandoTamanho);
+        aguardandoTamanho = setTimeout(preparar, 150);
+    });
+    preparar();
+
+    /* Envio: guarda a assinatura e evita clique duplo. */
+    form.addEventListener('submit', function () {
+        if (desenhou) campoAssinatura.value = canvas.toDataURL('image/png');
+        var botao = document.getElementById('rn-enviar');
+        if (botao) {
+            botao.disabled = true;
+            botao.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Abrindo chamado…';
+        }
+    });
+
+    /* Impresso em janela. */
+    document.querySelectorAll('[data-abrir]').forEach(function (botao) {
+        botao.addEventListener('click', function () {
+            document.getElementById(botao.getAttribute('data-abrir')).hidden = false;
+        });
+    });
+    document.querySelectorAll('[data-fechar]').forEach(function (botao) {
+        botao.addEventListener('click', function () { botao.closest('.rn-modal').hidden = true; });
+    });
+    document.addEventListener('keydown', function (evento) {
+        if (evento.key === 'Escape') document.querySelectorAll('.rn-modal').forEach(function (m) { m.hidden = true; });
+    });
+
+    var erros = document.getElementById('rn-erros');
+    if (erros) erros.scrollIntoView({behavior: 'smooth', block: 'start'});
+})();
+</script>
+{% endblock %}

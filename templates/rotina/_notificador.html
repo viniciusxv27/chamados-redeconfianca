@@ -1,0 +1,306 @@
+{% comment %}
+Aviso de início de atividade da Rotina Gerencial.
+
+Entra no base.html só para quem tem rotina ativa ({% if rotina_liberada %}).
+Busca as atividades de hoje, acerta o relógio pelo do servidor e, quando uma
+atividade começa, mostra um cartão no canto da tela e registra o aviso — que
+põe a notificação no sino uma única vez, mesmo com várias abas abertas.
+
+Autocontido de propósito: CSS com prefixo rtn-, um único objeto global
+(window.RotinaNotificador) e nenhuma falha de rede ou de sessão atrapalha a
+página. Para ver o cartão sem esperar a hora: RotinaNotificador.testar().
+{% endcomment %}
+<style>
+    #rtn-avisos {
+        position: fixed; top: 80px; right: 16px; z-index: 65;
+        display: flex; flex-direction: column; gap: 10px;
+        width: min(360px, calc(100vw - 24px)); pointer-events: none;
+    }
+    @media (max-width: 640px) { #rtn-avisos { top: 70px; left: 12px; right: 12px; width: auto; } }
+    .rtn-cartao {
+        position: relative; display: flex; overflow: hidden; pointer-events: auto; cursor: pointer; text-align: left;
+        border-radius: 16px; background: #fff; color: #1F2937;
+        box-shadow: 0 18px 40px rgba(16, 24, 40, .22), 0 0 0 1px rgba(16, 24, 40, .06);
+        font-family: 'Montserrat', ui-sans-serif, system-ui, sans-serif;
+        animation: rtn-entra .45s cubic-bezier(.2, .8, .2, 1);
+    }
+    .rtn-cartao.rtn-saindo { animation: rtn-sai .25s ease forwards; pointer-events: none; }
+    .rtn-faixa { flex-shrink: 0; width: 6px; background: var(--rtn-cor, #FF6B35); }
+    .rtn-corpo { flex: 1; min-width: 0; padding: 12px 38px 12px 14px; }
+    .rtn-topo {
+        display: flex; align-items: center; gap: 8px;
+        font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #FF6B35;
+    }
+    .rtn-pulso { position: relative; flex-shrink: 0; width: 8px; height: 8px; border-radius: 999px; background: var(--rtn-cor, #FF6B35); }
+    .rtn-pulso::after { content: ''; position: absolute; inset: 0; border-radius: inherit; background: inherit; animation: rtn-pulso 1.6s ease-out infinite; }
+    .rtn-marca { margin-left: auto; font-weight: 600; letter-spacing: 0; text-transform: none; color: #6B7280; white-space: nowrap; }
+    .rtn-titulo { margin: 4px 0 2px; font-size: 15px; font-weight: 800; line-height: 1.25; color: #111827; word-break: break-word; }
+    .rtn-hora { margin: 0; font-size: 12.5px; color: #4B5563; font-variant-numeric: tabular-nums; }
+    .rtn-acoes { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+    .rtn-botao {
+        flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px;
+        border-radius: 10px; background: #FF6B35; color: #fff; text-decoration: none;
+        font-size: 12.5px; font-weight: 700;
+    }
+    .rtn-botao:hover { background: #E8572A; color: #fff; }
+    .rtn-proxima { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 11.5px; color: #6B7280; }
+    .rtn-fechar {
+        position: absolute; top: 6px; right: 6px; width: 28px; height: 28px;
+        border: 0; border-radius: 999px; background: transparent; color: #9CA3AF;
+        font-size: 20px; line-height: 1; cursor: pointer;
+    }
+    .rtn-fechar:hover { background: #F3F4F6; color: #111827; }
+    .rtn-cartao:focus-visible, .rtn-botao:focus-visible, .rtn-fechar:focus-visible { outline: 2px solid #FF6B35; outline-offset: 2px; }
+    html.dark .rtn-cartao { background: #1b2130; color: #e7eaf0; box-shadow: 0 18px 40px rgba(0, 0, 0, .5), 0 0 0 1px #313a4f; }
+    html.dark .rtn-titulo { color: #fff; }
+    html.dark .rtn-hora { color: #b6bdcc; }
+    html.dark .rtn-proxima, html.dark .rtn-marca { color: #8b93a5; }
+    html.dark .rtn-fechar:hover { background: #2b3346; color: #fff; }
+    @keyframes rtn-entra { from { opacity: 0; transform: translateY(-12px) scale(.97); } }
+    @keyframes rtn-sai { to { opacity: 0; transform: translateX(24px); } }
+    @keyframes rtn-pulso { from { transform: scale(1); opacity: .6; } to { transform: scale(2.8); opacity: 0; } }
+    @media (prefers-reduced-motion: reduce) { .rtn-cartao, .rtn-pulso::after { animation: none; } }
+</style>
+<div id="rtn-avisos" role="region" aria-live="polite" aria-label="Avisos da rotina gerencial"></div>
+<script>
+(function () {
+    'use strict';
+
+    if (window.RotinaNotificador) { return; }
+
+    var URL_HOJE = '{% url "rotina:api_hoje" %}';
+    var URL_AVISO = '{% url "rotina:api_aviso" 0 %}';
+    var URL_ROTINA = '{% url "rotina:minha" %}';
+    var CSRF_PAGINA = '{{ csrf_token }}';
+    var PREFIXO = 'rotina-aviso:';          // rotina-aviso:<atividade_id>:<AAAA-MM-DD>
+    var ATRASO_MAXIMO = 10 * 60 * 1000;     // ao abrir a página, avisa o que começou há até 10 min
+    var RECARGA = 10 * 60 * 1000;           // busca de novo a cada 10 min (a gestão pode ter mudado a rotina)
+    var CACHE_SESSAO = 2 * 60 * 1000;       // navegar entre páginas não refaz a busca a cada clique
+
+    var caixa = document.getElementById('rtn-avisos');
+    var estado = { offset: 0, data: '', atividades: [], timers: [], ultimaCarga: 0, carregando: false, registrando: {} };
+
+    function agora() { return Date.now() + estado.offset; }
+    function chave(a) { return PREFIXO + a.id + ':' + estado.data; }
+    function ler(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } }
+    function gravar(k, v) { try { window.localStorage.setItem(k, v); } catch (e) { /* modo privado: segue sem memória */ } }
+    function criar(tag, classe, texto) {
+        var el = document.createElement(tag);
+        if (classe) { el.className = classe; }
+        if (texto) { el.textContent = texto; }
+        return el;
+    }
+    function csrf() {
+        var achado = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+        return achado ? decodeURIComponent(achado[1]) : CSRF_PAGINA;
+    }
+
+    function limparAntigos() {
+        try {
+            var remover = [];
+            for (var i = 0; i < window.localStorage.length; i++) {
+                var k = window.localStorage.key(i);
+                if (k && k.indexOf(PREFIXO) === 0 && k.slice(-10) !== estado.data) { remover.push(k); }
+            }
+            remover.forEach(function (k) { window.localStorage.removeItem(k); });
+        } catch (e) { /* sem localStorage */ }
+    }
+
+    function aplicar(dados, offset) {
+        estado.offset = offset;
+        estado.data = dados.data;
+        estado.atividades = dados.atividades || [];
+        limparAntigos();
+        agendar();
+        conferir();
+    }
+
+    function carregar(forcar) {
+        if (estado.carregando) { return; }
+        if (!forcar) {
+            try {
+                var guardado = JSON.parse(window.sessionStorage.getItem('rotina-hoje') || 'null');
+                if (guardado && Date.now() - guardado.salvoEm < CACHE_SESSAO && guardado.dados) {
+                    estado.ultimaCarga = guardado.salvoEm;
+                    aplicar(guardado.dados, guardado.offset);
+                    return;
+                }
+            } catch (e) { /* sem sessionStorage: busca normal */ }
+        }
+        estado.carregando = true;
+        var enviadoEm = Date.now();
+        fetch(URL_HOJE, {
+            credentials: 'same-origin',
+            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+        }).then(function (resposta) {
+            return resposta.ok ? resposta.json() : null;
+        }).then(function (dados) {
+            if (!dados || !dados.ok) { return; }
+            var recebidoEm = Date.now();
+            // O relógio do aparelho pode estar errado: vale o do servidor, descontada a viagem.
+            var offset = dados.agora_ts - Math.round((enviadoEm + recebidoEm) / 2);
+            estado.ultimaCarga = recebidoEm;
+            try {
+                window.sessionStorage.setItem('rotina-hoje', JSON.stringify({ salvoEm: recebidoEm, offset: offset, dados: dados }));
+            } catch (e) { /* segue sem cache */ }
+            aplicar(dados, offset);
+        }).catch(function () {
+            /* sem rede, sessão caída ou página de login no lugar do JSON: tenta na próxima rodada */
+        }).then(function () {
+            estado.carregando = false;
+        });
+    }
+
+    function agendar() {
+        estado.timers.forEach(clearTimeout);
+        estado.timers = [];
+        var momento = agora();
+        estado.atividades.forEach(function (a) {
+            var falta = a.inicio_ts - momento;
+            if (falta > 0 && falta < 24 * 3600 * 1000) {
+                estado.timers.push(setTimeout(function () { disparar(a, true); }, falta + 300));
+            }
+        });
+    }
+
+    /* O que começou há pouco (e ainda não terminou) e ninguém avisou. */
+    function conferir() {
+        var momento = agora();
+        estado.atividades.forEach(function (a) {
+            if (a.inicio_ts <= momento + 1000 && momento < a.inicio_ts + ATRASO_MAXIMO && momento < a.fim_ts) {
+                disparar(a, false);
+            }
+        });
+    }
+
+    function disparar(a, naHora) {
+        registrar(a);                        // o sino recebe mesmo com a aba escondida
+        if (document.hidden) { return; }     // o cartão espera a pessoa voltar para a aba
+        if (ler(chave(a))) { return; }
+        // Espera curta e aleatória: duas abas visíveis na mesma hora não mostram o mesmo cartão.
+        setTimeout(function () {
+            if (document.hidden || ler(chave(a))) { return; }
+            gravar(chave(a), String(Date.now()));
+            mostrar(a);
+        }, naHora ? Math.floor(Math.random() * 400) : 0);
+    }
+
+    function registrar(a) {
+        var marca = a.id + ':' + estado.data;
+        if (a.avisada || estado.registrando[marca]) { return; }
+        estado.registrando[marca] = true;
+        fetch(URL_AVISO.replace('/0/', '/' + a.id + '/'), {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Accept': 'application/json', 'Content-Type': 'application/json',
+                'X-CSRFToken': csrf(), 'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: '{}'
+        }).then(function (resposta) {
+            return resposta.json().catch(function () { return null; }).then(function (dados) {
+                if (dados && dados.ok) {
+                    a.avisada = true;
+                    if (dados.novo && typeof window.updateUnreadCount === 'function') {
+                        try { window.updateUnreadCount(); } catch (e) { /* sino de outra versão */ }
+                    }
+                } else if (!dados || resposta.status >= 500) {
+                    estado.registrando[marca] = false;   // falha passageira: tenta na próxima conferência
+                }
+            });
+        }).catch(function () {
+            estado.registrando[marca] = false;
+        });
+    }
+
+    function seguinte(a) {
+        var achada = null;
+        estado.atividades.forEach(function (b) {
+            if (b.id !== a.id && b.inicio_ts > a.inicio_ts && (!achada || b.inicio_ts < achada.inicio_ts)) { achada = b; }
+        });
+        return achada;
+    }
+
+    function tirar(cartao) {
+        if (!cartao || cartao.classList.contains('rtn-saindo')) { return; }
+        clearTimeout(cartao._rtnTempo);
+        cartao.classList.add('rtn-saindo');
+        setTimeout(function () { if (cartao.parentNode) { cartao.parentNode.removeChild(cartao); } }, 260);
+    }
+
+    function mostrar(a) {
+        if (!caixa || caixa.querySelector('[data-rtn-id="' + a.id + '"]')) { return; }
+        var destino = a.url || URL_ROTINA;
+        var cartao = criar('div', 'rtn-cartao');
+        cartao.setAttribute('data-rtn-id', a.id);
+        cartao.setAttribute('role', 'link');
+        cartao.tabIndex = 0;
+        cartao.setAttribute('aria-label', 'Agora, das ' + a.inicio + ' às ' + a.fim + ': ' + a.titulo + '. Abrir a rotina gerencial.');
+        cartao.style.setProperty('--rtn-cor', a.cor || '#FF6B35');
+
+        var corpo = criar('div', 'rtn-corpo');
+        var topo = criar('div', 'rtn-topo');
+        topo.appendChild(criar('span', 'rtn-pulso'));
+        topo.appendChild(document.createTextNode('Rotina gerencial'));
+        if (a.categoria_nome) { topo.appendChild(criar('span', 'rtn-marca', a.categoria_nome)); }
+        corpo.appendChild(topo);
+        corpo.appendChild(criar('p', 'rtn-titulo', a.titulo));
+        corpo.appendChild(criar('p', 'rtn-hora', 'Agora · ' + a.inicio + '–' + a.fim));
+
+        var acoes = criar('div', 'rtn-acoes');
+        var abrir = criar('a', 'rtn-botao', 'Abrir rotina');
+        abrir.href = destino;
+        acoes.appendChild(abrir);
+        var depois = seguinte(a);
+        if (depois) { acoes.appendChild(criar('span', 'rtn-proxima', 'Depois: ' + depois.inicio + ' ' + depois.titulo)); }
+        corpo.appendChild(acoes);
+
+        var fechar = criar('button', 'rtn-fechar', '×');
+        fechar.type = 'button';
+        fechar.setAttribute('aria-label', 'Fechar aviso');
+        fechar.addEventListener('click', function (evento) {
+            evento.preventDefault();
+            evento.stopPropagation();
+            tirar(cartao);
+        });
+
+        cartao.appendChild(criar('div', 'rtn-faixa'));
+        cartao.appendChild(corpo);
+        cartao.appendChild(fechar);
+        cartao.addEventListener('click', function (evento) {
+            if (evento.target.closest('.rtn-fechar') || evento.target.closest('a')) { return; }
+            window.location.href = destino;
+        });
+        cartao.addEventListener('keydown', function (evento) {
+            if (evento.key === 'Enter' && evento.target === cartao) { window.location.href = destino; }
+            if (evento.key === 'Escape') { tirar(cartao); }
+        });
+
+        caixa.insertBefore(cartao, caixa.firstChild);
+        while (caixa.children.length > 3) { caixa.removeChild(caixa.lastChild); }
+        // Sai sozinho quando a atividade acaba (e fica pelo menos um minuto).
+        cartao._rtnTempo = setTimeout(function () { tirar(cartao); }, Math.max(a.fim_ts - agora(), 60 * 1000));
+    }
+
+    document.addEventListener('visibilitychange', function () {
+        if (document.hidden) { return; }
+        if (Date.now() - estado.ultimaCarga > 60 * 1000) { carregar(true); } else { conferir(); }
+    });
+    setInterval(function () { carregar(true); }, RECARGA);
+
+    window.RotinaNotificador = {
+        recarregar: function () { carregar(true); },
+        conferir: conferir,
+        estado: estado,
+        testar: function () {
+            var momento = agora();
+            mostrar({
+                id: 'teste', titulo: 'Parcial Gerentes', categoria_nome: 'Resultado', cor: '#E74C3C',
+                inicio: '12:00', fim: '12:30', inicio_ts: momento, fim_ts: momento + 30 * 60 * 1000, url: URL_ROTINA
+            });
+        }
+    };
+
+    carregar(false);
+})();
+</script>

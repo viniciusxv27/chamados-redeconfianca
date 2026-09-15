@@ -1,0 +1,92 @@
+{% extends 'renova/base_renova.html' %}
+
+{% block rn_pagina %}Passo a passo da avaliação{% endblock %}
+{% block rn_titulo %}Avaliação de aparelhos{% endblock %}
+{% block rn_subtitulo %}Guia prático para o vendedor{% endblock %}
+
+{% block rn_css %}
+<style>
+    .rn-passos { display: grid; gap: .9rem; grid-template-columns: repeat(1, minmax(0, 1fr)); }
+    @media (min-width: 640px) { .rn-passos { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (min-width: 1100px) { .rn-passos { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+    .rn-passo { display: flex; flex-direction: column; background: #fff; border: 1px solid var(--rn-borda); border-radius: 1rem;
+                overflow: hidden; box-shadow: 0 1px 2px rgba(16, 24, 40, .04); transition: box-shadow .15s, transform .15s; }
+    .rn-passo:hover { box-shadow: 0 14px 28px -18px rgba(76, 11, 122, .55); transform: translateY(-2px); }
+    .rn-passo-topo { display: flex; align-items: center; gap: .7rem; padding: .8rem .9rem;
+                     background: linear-gradient(90deg, var(--rn-lilas), #fff); border-bottom: 1px solid var(--rn-borda); }
+    .rn-passo-num { width: 2.1rem; height: 2.1rem; border-radius: .7rem; display: grid; place-items: center; flex-shrink: 0;
+                    font-weight: 800; color: #fff; background: linear-gradient(135deg, #660099, #9D4EDD); }
+    .rn-passo-topo h3 { font-size: .8rem; font-weight: 800; line-height: 1.25; text-transform: uppercase; color: var(--rn-escuro);
+                        letter-spacing: .02em; flex: 1; }
+    .rn-passo-icone { color: #9D4EDD; font-size: 1.15rem; }
+    .rn-passo-corpo { padding: .85rem .95rem 1rem; display: grid; gap: .7rem; font-size: .8rem; color: #45355A; line-height: 1.45; }
+    .rn-lista { display: grid; gap: .35rem; }
+    .rn-lista li { position: relative; padding-left: 1rem; }
+    .rn-lista li::before { content: ''; position: absolute; left: .2rem; top: .5rem; width: .35rem; height: .35rem; border-radius: 9999px; background: #9D4EDD; }
+    .rn-lista-num { display: grid; gap: .35rem; counter-reset: passo; }
+    .rn-lista-num li { position: relative; padding-left: 1.6rem; counter-increment: passo; }
+    .rn-lista-num li::before { content: counter(passo); position: absolute; left: 0; top: .05rem; width: 1.15rem; height: 1.15rem;
+                               border-radius: 9999px; background: #660099; color: #fff; font-size: .62rem; font-weight: 800;
+                               display: grid; place-items: center; }
+    .rn-faixas { display: grid; gap: .35rem; background: var(--rn-lilas); border-radius: .75rem; padding: .6rem .7rem; }
+    .rn-faixa { display: flex; align-items: center; gap: .5rem; }
+    .rn-ponto { width: .8rem; height: .8rem; border-radius: 9999px; flex-shrink: 0; }
+    .rn-ponto-verde { background: #16A34A; } .rn-ponto-amarelo { background: #EAB308; } .rn-ponto-vermelho { background: #DC2626; }
+    .rn-alerta { display: flex; align-items: flex-start; gap: .55rem; border-radius: .75rem; padding: .6rem .7rem; font-weight: 700;
+                 color: #581C87; background: #F3E8FF; border: 1px solid #E9D5FF; }
+    .rn-alerta i { color: #7E22CE; margin-top: .1rem; }
+</style>
+{% endblock %}
+
+{% block rn_conteudo %}
+<div class="flex flex-wrap items-center justify-between gap-3">
+    <div class="rn-alternar" data-alternar>
+        <button type="button" class="ativo" data-alvo="sistema"><i class="fa-solid fa-table-cells mr-1"></i>No sistema</button>
+        <button type="button" data-alvo="impresso"><i class="fa-regular fa-image mr-1"></i>Impresso</button>
+    </div>
+    <p class="text-xs text-gray-500 mb-4"><i class="fa-solid fa-circle-info text-purple-500 mr-1"></i>Avaliar bem é garantir mais valor para todos.</p>
+</div>
+
+<div data-painel="sistema">
+    <div class="rn-passos">
+        {% for passo in passos %}
+        <article class="rn-passo">
+            <header class="rn-passo-topo">
+                <span class="rn-passo-num">{{ forloop.counter }}</span>
+                <h3>{{ passo.titulo }}</h3>
+                <i class="{{ passo.icone }} rn-passo-icone" aria-hidden="true"></i>
+            </header>
+            <div class="rn-passo-corpo">
+                {% if passo.numerado %}
+                <ol class="rn-lista-num">{% for item in passo.itens %}<li>{{ item }}</li>{% endfor %}</ol>
+                {% else %}
+                <ul class="rn-lista">{% for item in passo.itens %}<li>{{ item }}</li>{% endfor %}</ul>
+                {% endif %}
+                {% if passo.faixas %}
+                <div class="rn-faixas">
+                    {% for cor, faixa, significado in passo.faixas %}
+                    <div class="rn-faixa"><span class="rn-ponto rn-ponto-{{ cor }}"></span><span><b>{{ faixa }}</b> = {{ significado }}</span></div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% if passo.alerta %}
+                <div class="rn-alerta"><i class="fa-solid fa-circle-exclamation"></i><span>{{ passo.alerta }}</span></div>
+                {% endif %}
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+</div>
+
+<div data-painel="impresso" hidden>
+    <figure class="rn-card p-3 sm:p-4">
+        <img src="{{ imagem_url }}" alt="Passo a passo da avaliação de aparelhos (impresso)" loading="lazy"
+             class="mx-auto rounded-xl w-full max-w-3xl h-auto">
+        <figcaption class="text-center mt-3">
+            <a href="{{ imagem_url }}" target="_blank" rel="noopener" class="rn-btn rn-btn-claro text-xs">
+                <i class="fa-solid fa-up-right-from-square"></i>Abrir em tamanho real
+            </a>
+        </figcaption>
+    </figure>
+</div>
+{% endblock %}

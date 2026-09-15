@@ -1,0 +1,218 @@
+{% comment %}
+Calendário da semana (segunda a sábado) + painel lateral + modais.
+
+Usado pela rotina da pessoa, pelo editor de rotina da gestão e pelo editor de
+modelo. Quem desenha é static/rotina/rotina-calendario.js, a partir dos
+json_script "rt-config" e "rt-dados" que a página inclui. Os atributos
+data-rt="…" são os ganchos que o JS procura — mudar um nome aqui exige mudar lá.
+{% endcomment %}
+<div id="rt-app" class="rt-layout" data-modo="{{ config.modo }}">
+    <section class="rt-card rt-cal-card" aria-label="Calendário da semana">
+        <div class="rt-cal-topo">
+            <div class="min-w-0">
+                <p class="rt-cal-sobre">
+                    {% if config.modo == 'pessoa' %}{% if semana.proxima %}Próxima semana{% else %}Esta semana{% endif %}{% elif config.modo == 'modelo' %}Semana-modelo{% else %}Semana da pessoa{% endif %}
+                </p>
+                <h2 class="rt-cal-titulo">{% if config.modo == 'pessoa' %}{{ semana.rotulo }}{% else %}Segunda a sábado{% endif %}</h2>
+            </div>
+            <div class="rt-cal-botoes">
+                {% if config.modo == 'pessoa' and not semana.proxima %}
+                <button type="button" class="rt-btn rt-btn-claro rt-btn-sm" data-rt="btn-agora">
+                    <i class="fas fa-crosshairs"></i> Agora
+                </button>
+                {% endif %}
+                {% if config.podeCriar %}
+                <button type="button" class="rt-btn rt-btn-primario rt-btn-sm" data-rt="btn-nova">
+                    <i class="fas fa-plus"></i> Nova atividade
+                </button>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="rt-dias" data-rt="dias" role="tablist" aria-label="Dias da semana"></div>
+        <div id="rt-calendario" class="rt-cal" data-rt="calendario"></div>
+
+        <p class="rt-cal-dica">
+            {% if config.modo == 'pessoa' %}
+            <span><i class="fas fa-lock"></i>Travadas: horário fixo definido pela gestão</span>
+            <span><i class="fas fa-up-down-left-right"></i>As outras: arraste para mudar o horário</span>
+            {% if config.podeCriar %}<span><i class="fas fa-hand-pointer"></i>Clique e arraste num horário vazio para criar</span>{% endif %}
+            {% else %}
+            <span><i class="fas fa-hand-pointer"></i>Clique e arraste num horário vazio para criar</span>
+            <span><i class="fas fa-up-down-left-right"></i>Arraste ou estique um bloco para mudar dia e horário</span>
+            <span><i class="fas fa-lock"></i>Travada: a pessoa não consegue mover</span>
+            {% endif %}
+        </p>
+    </section>
+
+    <aside class="rt-lateral" aria-label="Resumo da rotina">
+        {% if config.modo == 'pessoa' %}
+        <section class="rt-card rt-agora rt-bloco-agora" data-rt="agora" aria-live="polite">
+            <p class="rt-agora-rotulo"><span class="rt-pulso"></span> Agora</p>
+            <p class="rt-agora-vazio">Carregando a sua semana…</p>
+        </section>
+        <section class="rt-card">
+            <div class="rt-card-cabeca">
+                <h3 class="rt-card-titulo"><i class="fas fa-list-check"></i> {% if semana.proxima %}Segunda-feira{% else %}Hoje{% endif %}</h3>
+                <span class="rt-chip" data-rt="hoje-conta"></span>
+            </div>
+            <ol class="rt-hoje-lista" data-rt="hoje-lista"></ol>
+        </section>
+        {% endif %}
+
+        <section class="rt-card">
+            <div class="rt-card-cabeca">
+                <h3 class="rt-card-titulo"><i class="fas fa-palette"></i> Legenda</h3>
+                <span class="rt-total-semana" data-rt="total-semana"></span>
+            </div>
+            <div class="rt-card-corpo">
+                {% for c in categorias %}
+                <div class="rt-legenda-item" style="--rt-cor: {{ c.cor }}">
+                    <span class="rt-bolinha" aria-hidden="true"></span>
+                    <div class="min-w-0">
+                        <p class="rt-legenda-nome">{{ c.nome }}</p>
+                        <p class="rt-legenda-desc">{{ c.rotulo }}</p>
+                    </div>
+                    <span class="rt-legenda-horas" data-rt-horas="{{ c.valor }}">—</span>
+                </div>
+                {% endfor %}
+                <div class="rt-distribuicao" data-rt="distribuicao" aria-hidden="true"></div>
+                <ul class="rt-regras">
+                    <li><i class="fas fa-lock"></i>Travada: horário fixo</li>
+                    <li><i class="fas fa-up-down-left-right"></i>Livre: {% if config.modo == 'pessoa' %}você pode mover{% else %}a pessoa pode mover{% endif %}</li>
+                    {% if config.modo != 'modelo' %}<li><i class="fas fa-user-pen"></i>Criada pela própria pessoa</li>{% endif %}
+                </ul>
+            </div>
+        </section>
+    </aside>
+</div>
+
+{# ------------------------------------------------------------------ #}
+{# Detalhe da atividade                                               #}
+{# ------------------------------------------------------------------ #}
+<div id="rt-modal-detalhe" class="rc-modal rt-modal hidden" role="dialog" aria-modal="true" aria-labelledby="rt-det-titulo">
+    <div class="rt-modal-fundo" data-rt-fechar></div>
+    <div class="rc-modal-card rt-modal-card" data-rt="det-card">
+        <div class="rt-det-faixa"></div>
+        <div class="rt-det-cabeca">
+            <div class="min-w-0 flex-1">
+                <span class="rt-det-categoria" data-rt="det-categoria"></span>
+                <h3 id="rt-det-titulo" class="rt-det-titulo" data-rt="det-titulo"></h3>
+                <p class="rt-det-quando" data-rt="det-quando"></p>
+                <p class="rt-det-rotulo-longo" data-rt="det-rotulo"></p>
+            </div>
+            <button type="button" class="rt-x" data-rt-fechar aria-label="Fechar"><i class="fas fa-xmark"></i></button>
+        </div>
+        <div class="rt-modal-corpo">
+            <div class="rt-det-status" data-rt="det-status"></div>
+            <div class="rt-det-descricao" data-rt="det-descricao"></div>
+
+            <form class="rt-det-horario hidden" data-rt="det-horario" novalidate>
+                <p class="rt-rotulo"><i class="fas fa-clock"></i> Mudar dia e horário</p>
+                <div class="rt-grade-2">
+                    <label class="rt-campo" style="grid-column: 1 / -1">
+                        <span class="rt-rotulo">Dia</span>
+                        <select name="dia_semana" class="rt-input">
+                            {% for d in dias_semana %}<option value="{{ d.valor }}">{{ d.nome }}</option>{% endfor %}
+                        </select>
+                    </label>
+                    <label class="rt-campo">
+                        <span class="rt-rotulo">Início</span>
+                        <input type="time" name="inicio" class="rt-input" step="300" min="05:00" max="23:00" required>
+                    </label>
+                    <label class="rt-campo">
+                        <span class="rt-rotulo">Fim</span>
+                        <input type="time" name="fim" class="rt-input" step="300" min="05:00" max="23:00" required>
+                    </label>
+                </div>
+                <p class="rt-erro hidden" data-rt="det-erro" role="alert" style="margin-top: .6rem"></p>
+                <div style="margin-top: .7rem; text-align: right">
+                    <button type="submit" class="rt-btn rt-btn-primario rt-btn-sm"><i class="fas fa-check"></i> Salvar horário</button>
+                </div>
+            </form>
+        </div>
+        <div class="rt-modal-rodape">
+            <button type="button" class="rt-btn rt-btn-perigo rt-btn-sm hidden" data-rt="det-excluir"><i class="fas fa-trash-can"></i> Excluir</button>
+            <span class="rt-espaco"></span>
+            <button type="button" class="rt-btn rt-btn-claro rt-btn-sm" data-rt-fechar>Fechar</button>
+            <button type="button" class="rt-btn rt-btn-primario rt-btn-sm hidden" data-rt="det-editar"><i class="fas fa-pen"></i> Editar</button>
+        </div>
+    </div>
+</div>
+
+{# ------------------------------------------------------------------ #}
+{# Criar / editar atividade                                           #}
+{# ------------------------------------------------------------------ #}
+<div id="rt-modal-form" class="rc-modal rt-modal hidden" role="dialog" aria-modal="true" aria-labelledby="rt-form-titulo">
+    <div class="rt-modal-fundo" data-rt-fechar></div>
+    <form class="rc-modal-card rt-modal-card" data-rt="form" novalidate>
+        <div class="rt-modal-cabeca">
+            <h3 id="rt-form-titulo" data-rt="form-titulo">Nova atividade</h3>
+            <button type="button" class="rt-x" data-rt-fechar aria-label="Fechar"><i class="fas fa-xmark"></i></button>
+        </div>
+        <div class="rt-modal-corpo rt-pilha">
+            <label class="rt-campo">
+                <span class="rt-rotulo">Título</span>
+                <input type="text" name="titulo" class="rt-input" maxlength="150" required
+                       placeholder="Ex.: Parcial Gerentes" autocomplete="off" data-rt-foco>
+            </label>
+            <div class="rt-grade-2">
+                <label class="rt-campo">
+                    <span class="rt-rotulo">Início</span>
+                    <input type="time" name="inicio" class="rt-input" step="300" min="05:00" max="23:00" required>
+                </label>
+                <label class="rt-campo">
+                    <span class="rt-rotulo">Fim</span>
+                    <input type="time" name="fim" class="rt-input" step="300" min="05:00" max="23:00" required>
+                </label>
+            </div>
+            <label class="rt-campo" data-rt="form-dia">
+                <span class="rt-rotulo">Dia</span>
+                <select name="dia_semana" class="rt-input">
+                    {% for d in dias_semana %}<option value="{{ d.valor }}">{{ d.nome }}</option>{% endfor %}
+                </select>
+            </label>
+            <fieldset class="rt-campo" data-rt="form-repetir">
+                <legend class="rt-rotulo">Dias <small>(marque mais de um para repetir a atividade)</small></legend>
+                <div class="rt-dias-check">
+                    {% for d in dias_semana %}
+                    <label title="{{ d.nome }}"><input type="checkbox" name="repetir_em" value="{{ d.valor }}"><span>{{ d.curto }}</span></label>
+                    {% endfor %}
+                </div>
+            </fieldset>
+            <fieldset class="rt-campo">
+                <legend class="rt-rotulo">Categoria</legend>
+                <div class="rt-cats">
+                    {% for c in categorias %}
+                    <label class="rt-cat-opcao" style="--rt-cor: {{ c.cor }}">
+                        <input type="radio" name="categoria" value="{{ c.valor }}">
+                        <span class="rt-bolinha" aria-hidden="true"></span>
+                        <span><strong>{{ c.nome }}</strong><small>{{ c.rotulo }}</small></span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </fieldset>
+            {% if config.podeTravar %}
+            <label class="rt-switch-linha">
+                <span class="rt-switch"><input type="checkbox" name="bloqueada"><span class="rt-switch-trilho"></span></span>
+                <span>
+                    <strong><i class="fas fa-lock"></i> Horário travado</strong>
+                    <small>A pessoa não consegue mover a atividade nem mudar a duração.</small>
+                </span>
+            </label>
+            {% endif %}
+            <label class="rt-campo">
+                <span class="rt-rotulo">Descrição <small>(opcional — links ficam clicáveis)</small></span>
+                <textarea name="descricao" class="rt-input" rows="3" maxlength="2000"
+                          placeholder="Detalhes, passo a passo ou um link"></textarea>
+            </label>
+            <p class="rt-erro hidden" data-rt="form-erro" role="alert"></p>
+        </div>
+        <div class="rt-modal-rodape">
+            <button type="button" class="rt-btn rt-btn-perigo rt-btn-sm hidden" data-rt="form-excluir"><i class="fas fa-trash-can"></i> Excluir</button>
+            <span class="rt-espaco"></span>
+            <button type="button" class="rt-btn rt-btn-claro rt-btn-sm" data-rt-fechar>Cancelar</button>
+            <button type="submit" class="rt-btn rt-btn-primario rt-btn-sm" data-rt="form-salvar"><i class="fas fa-check"></i> Salvar</button>
+        </div>
+    </form>
+</div>

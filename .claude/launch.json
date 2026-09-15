@@ -4,9 +4,28 @@
     {
       "name": "portal",
       "runtimeExecutable": "venv/bin/python",
-      "runtimeArgs": ["manage.py", "runserver", "127.0.0.1:8009", "--noreload"],
+      "runtimeArgs": [
+        "manage.py",
+        "runserver",
+        "127.0.0.1:8009",
+        "--noreload"
+      ],
       "port": 8009,
       "url": "http://127.0.0.1:8009"
+    },
+    {
+      "name": "harness-renova",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8766",
+        "--bind",
+        "127.0.0.1",
+        "--directory",
+        "/private/tmp/claude-501/-Users-teste-Downloads-chamados-redeconfianca/1b2410b4-ddae-4410-9b31-707d4a25c9a5/scratchpad/harness-renova"
+      ],
+      "port": 8766
     }
   ]
 }

@@ -1,0 +1,53 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{% block rt_titulo %}Rotina Gerencial{% endblock %} · Rede Confiança{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'rotina/rotina.css' %}">
+{% block rt_css %}{% endblock %}
+{% endblock %}
+
+{% block content %}
+<div class="rt-pagina">
+    <header class="rt-hero">
+        <div class="rt-hero-brilho" aria-hidden="true"></div>
+        <div class="rt-hero-linha">
+            <div class="rt-hero-marca">
+                <span class="rt-hero-icone" aria-hidden="true"><i class="fas fa-calendar-check"></i></span>
+                <div class="min-w-0">
+                    <p class="rt-hero-sobre">Rotina Gerencial</p>
+                    <h1 class="rt-hero-titulo">{% block rt_cabecalho %}Rotina Gerencial{% endblock %}</h1>
+                    <p class="rt-hero-sub">{% block rt_subtitulo %}A semana organizada, de segunda a sábado{% endblock %}</p>
+                </div>
+            </div>
+            <div class="rt-hero-acoes">{% block rt_acoes %}{% endblock %}</div>
+        </div>
+
+        <nav class="rt-abas" aria-label="Seções da rotina gerencial">
+            <a href="{% url 'rotina:minha' %}" class="rt-aba{% if aba == 'minha' %} rt-aba-ativa{% endif %}"
+               {% if aba == 'minha' %}aria-current="page"{% endif %}>
+                <i class="fas fa-calendar-week"></i><span>Minha rotina</span>
+            </a>
+            {% if e_admin %}
+            <span class="rt-abas-divisor" aria-hidden="true"></span>
+            <a href="{% url 'rotina:gestao' %}" class="rt-aba{% if aba == 'gestao' %} rt-aba-ativa{% endif %}"
+               {% if aba == 'gestao' %}aria-current="page"{% endif %}>
+                <i class="fas fa-users"></i><span>Pessoas</span>
+            </a>
+            <a href="{% url 'rotina:modelos' %}" class="rt-aba{% if aba == 'modelos' %} rt-aba-ativa{% endif %}"
+               {% if aba == 'modelos' %}aria-current="page"{% endif %}>
+                <i class="fas fa-layer-group"></i><span>Modelos</span>
+            </a>
+            {% endif %}
+        </nav>
+    </header>
+
+    {% block rt_conteudo %}{% endblock %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'rotina/rotina.js' %}"></script>
+{% block rt_js %}{% endblock %}
+{% endblock %}

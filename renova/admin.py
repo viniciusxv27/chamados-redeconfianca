@@ -1,0 +1,25 @@
+from django.contrib import admin
+
+from .models import ConfiguracaoRenova, PrecoAparelho, Renova
+
+
+@admin.register(PrecoAparelho)
+class PrecoAparelhoAdmin(admin.ModelAdmin):
+    list_display = ('modelo', 'armazenamento', 'valor_excelente', 'marca', 'ativo', 'ordem')
+    list_filter = ('marca', 'ativo')
+    list_editable = ('valor_excelente', 'ativo', 'ordem')
+    search_fields = ('modelo',)
+
+
+@admin.register(Renova)
+class RenovaAdmin(admin.ModelAdmin):
+    list_display = ('__str__', 'loja', 'parecer', 'recebimento', 'criado_por', 'criado_em')
+    list_filter = ('recebimento', 'parecer', 'marca')
+    search_fields = ('imei1', 'imei2', 'modelo', 'numero_serie', 'vendedor_nome')
+    raw_id_fields = ('chamado', 'criado_por', 'recebido_por', 'preco_tabela', 'loja')
+    readonly_fields = ('criado_em', 'atualizado_em')
+
+
+@admin.register(ConfiguracaoRenova)
+class ConfiguracaoRenovaAdmin(admin.ModelAdmin):
+    filter_horizontal = ('habilitados',)

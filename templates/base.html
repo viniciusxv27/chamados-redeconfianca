@@ -548,6 +548,18 @@
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-indigo-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </a>
                         </li>
+                        {% if renova_liberado %}
+                        <li>
+                            <a href="{% url 'renova:inicio' %}" data-rota="{% url 'renova:inicio' %}"
+                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-recycle text-purple-400 flex-shrink-0 w-5 text-center"></i>
+                                <span class="text-sm flex-1">Vini Renova</span>
+                                {% if renova_aguardando %}<span class="sidebar-text min-w-[1.25rem] h-5 px-1.5 rounded-full bg-purple-600 text-white text-[10px] font-bold flex items-center justify-center" title="Aparelhos aguardando chegada">{{ renova_aguardando }}</span>{% endif %}
+                                <div class="tooltip-collapsed">Vini Renova</div>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-purple-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        {% endif %}
                         <li>
                             <a href="{% url 'feedback:dashboard' %}" data-rota="{% url 'feedback:dashboard' %}"
                                class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">

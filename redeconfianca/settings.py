@@ -83,6 +83,8 @@ INSTALLED_APPS = [
     'reunioes',  # Reuniões com sala de vídeo e ata
     'drive',  # Drive: espelho do Google Drive da empresa com permissão por setor
     'assistente',  # Assistente Claude (chave por usuário; acesso aos dados do próprio usuário)
+    'renova',  # Vini Renova: avaliação de aparelho usado (checklist, chamado e etiqueta)
+    'rotina',  # Rotina Gerencial: a semana do gerente, com horários e avisos
     # 'webpush',  # Django WebPush (temporariamente removido)
 ]
 
@@ -143,6 +145,7 @@ TEMPLATES = [
                 'cursos.context_processors.cursos_menu',
                 'curriculos.context_processors.banco_de_talentos',
                 'reunioes.context_processors.reunioes_lembrete',
+                'renova.context_processors.renova_menu',
                 'users.context_processors_commission.comissionamento_menu',
             ],
         },

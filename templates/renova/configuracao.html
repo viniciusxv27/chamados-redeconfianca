@@ -1,0 +1,203 @@
+{% extends 'renova/base_renova.html' %}
+
+{% block rn_pagina %}Configuração{% endblock %}
+{% block rn_titulo %}Configuração{% endblock %}
+{% block rn_subtitulo %}Quem faz, onde abre o chamado e a tabela de valores{% endblock %}
+
+{% block rn_css %}
+<style>
+    .rn-campo { width: 100%; border: 1.5px solid #E4D9F1; border-radius: .7rem; padding: .5rem .7rem; font-size: .86rem; color: #1F0B33; background: #fff; }
+    .rn-campo:focus { outline: none; border-color: #9D4EDD; box-shadow: 0 0 0 3px rgba(157, 78, 221, .15); }
+    .rn-campo-tabela { padding: .35rem .5rem; font-size: .82rem; }
+    .rn-ajuda { font-size: .75rem; color: #6B5B7B; margin-top: .25rem; }
+</style>
+{% endblock %}
+
+{% block rn_conteudo %}
+<div class="grid gap-5">
+    <form method="post" id="acesso" class="rn-card p-4 sm:p-5 grid gap-6">
+        {% csrf_token %}
+        <input type="hidden" name="secao" value="acesso">
+        <div class="grid md:grid-cols-2 gap-6">
+            <div>
+                <h2 class="rn-h2">Chamado</h2>
+                <p class="rn-ajuda mb-3">Cada avaliação abre um chamado nesta categoria. Quem é do setor dela marca se o aparelho chegou.</p>
+                <select name="categoria" class="rn-campo">
+                    <option value="">— sem categoria (a avaliação não pode ser concluída) —</option>
+                    {% regroup categorias by sector as por_setor %}
+                    {% for grupo in por_setor %}
+                    <optgroup label="{{ grupo.grouper.name }}">
+                        {% for c in grupo.list %}<option value="{{ c.pk }}" {% if cfg.categoria_id == c.pk %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+                    </optgroup>
+                    {% endfor %}
+                </select>
+                {% if setor %}
+                <p class="text-xs rounded-lg p-2 mt-2" style="background:#F6EEFF;color:#4C1D95">
+                    <i class="fa-solid fa-warehouse mr-1"></i>Setor que recebe: <b>{{ setor.name }}</b> · {{ membros_setor }} pessoa(s)
+                </p>
+                {% else %}
+                <p class="text-xs text-red-700 mt-2"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Sem categoria, ninguém recebe e nenhuma avaliação é concluída.</p>
+                {% endif %}
+            </div>
+            <div>
+                <h2 class="rn-h2">Descontos por padrão</h2>
+                <p class="rn-ajuda mb-3">Os valores de B, C e D saem do valor A da tabela com estes descontos.</p>
+                <div class="grid grid-cols-3 gap-3">
+                    {% for campo, letra, valor in descontos %}
+                    <label class="block">
+                        <span class="flex items-center gap-2 text-xs font-bold text-gray-700 mb-1"><span class="rn-letra rn-letra-sm rn-letra-{{ letra }}">{{ letra }}</span>desconto</span>
+                        <span class="relative block">
+                            <input type="number" name="{{ campo }}" value="{{ valor }}" min="0" max="100" class="rn-campo pr-7 text-right font-bold">
+                            <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">%</span>
+                        </span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div>
+            <div class="flex flex-wrap items-center justify-between gap-2">
+                <h2 class="rn-h2">Quem pode fazer Renova</h2>
+                <span class="text-[11px] text-gray-500"><span id="cfg-conta">{{ habilitados|length }}</span> selecionada(s)</span>
+            </div>
+            <p class="rn-ajuda mb-2">
+                Só estas pessoas (e o SUPERADMIN) preenchem o checklist. A tabela e o passo a passo ficam visíveis para
+                elas e para o setor que recebe.
+            </p>
+            <input type="search" id="cfg-busca" placeholder="Buscar por nome, e-mail ou loja…" class="rn-campo mb-2">
+            <div class="flex flex-wrap items-center gap-3 mb-2">
+                <button type="button" data-marcar="1" class="text-[11px] font-semibold hover:underline" style="color:#6B21A8">Marcar os visíveis</button>
+                <button type="button" data-marcar="0" class="text-[11px] text-gray-500 hover:underline">Desmarcar os visíveis</button>
+                <label class="ml-auto flex items-center gap-1 text-[11px] text-gray-600"><input type="checkbox" id="cfg-so-marcados" class="rounded"> só as marcadas</label>
+            </div>
+            <div class="max-h-80 overflow-y-auto border border-gray-100 rounded-xl divide-y divide-gray-50">
+                {% for p in pessoas %}
+                <label class="cfg-pessoa flex items-center gap-3 px-4 py-2 cursor-pointer hover:bg-purple-50/50"
+                       data-busca="{{ p.full_name|lower }} {{ p.email|lower }} {{ p.sector.name|lower }}">
+                    <input type="checkbox" name="habilitados" value="{{ p.pk }}" {% if p.pk in habilitados %}checked{% endif %}
+                           class="rounded text-purple-600 focus:ring-purple-500">
+                    <span class="text-sm text-gray-800 flex-1">{{ p.full_name|default:p.username }}</span>
+                    <span class="text-[11px] text-gray-400 text-right">{{ p.sector.name|default:"—" }}</span>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="flex justify-end">
+            <button type="submit" class="rn-btn rn-btn-primario"><i class="fa-solid fa-check"></i>Salvar configuração</button>
+        </div>
+    </form>
+
+    <form method="post" enctype="multipart/form-data" id="materiais" class="rn-card p-4 sm:p-5">
+        {% csrf_token %}
+        <input type="hidden" name="secao" value="materiais">
+        <h2 class="rn-h2">Materiais impressos</h2>
+        <p class="rn-ajuda">Sem imagem enviada, as telas mostram os impressos que vêm com o portal. Troque quando a tabela mudar.</p>
+        <div class="grid md:grid-cols-3 gap-4 mt-4">
+            {% for campo, rotulo, url, enviada in imagens %}
+            <div class="rounded-xl border border-gray-100 p-3">
+                <p class="text-sm font-bold text-gray-900">{{ rotulo }}</p>
+                <a href="{{ url }}" target="_blank" rel="noopener">
+                    <img src="{{ url }}" alt="{{ rotulo }}" loading="lazy" class="mt-2 h-44 w-full object-cover object-top rounded-lg border border-gray-100">
+                </a>
+                <p class="text-[11px] text-gray-500 mt-1">{% if enviada %}Imagem enviada{% else %}Impresso padrão do portal{% endif %}</p>
+                <input type="file" name="{{ campo }}" accept="image/jpeg,image/png,image/webp" class="mt-2 w-full text-xs">
+                {% if enviada %}
+                <label class="mt-1 flex items-center gap-1 text-[11px] text-gray-600"><input type="checkbox" name="remover_{{ campo }}" class="rounded"> voltar ao impresso padrão</label>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        <div class="flex justify-end mt-4">
+            <button type="submit" class="rn-btn rn-btn-primario"><i class="fa-solid fa-upload"></i>Salvar materiais</button>
+        </div>
+    </form>
+
+    <form method="post" id="tabela" class="rn-card overflow-hidden">
+        {% csrf_token %}
+        <input type="hidden" name="secao" value="tabela">
+        <div class="p-4 sm:p-5 pb-3">
+            <h2 class="rn-h2">Tabela de avaliação</h2>
+            <p class="rn-ajuda">Valor do padrão A (os outros saem dos descontos). Desmarque "ativo" para tirar da tela sem apagar. As três últimas linhas são para modelos novos.</p>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm min-w-[720px]">
+                <thead class="text-[11px] uppercase tracking-wide" style="background:#F6EEFF;color:#4C1D95">
+                    <tr>
+                        <th class="text-left px-4 py-2">Modelo</th>
+                        <th class="text-left px-2 py-2">Armazenamento</th>
+                        <th class="text-right px-2 py-2">Valor A (R$)</th>
+                        <th class="px-2 py-2">Ordem</th>
+                        <th class="px-2 py-2">Ativo</th>
+                        <th class="px-2 py-2">Excluir</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-50">
+                    {% for p in precos %}
+                    <tr class="{% if not p.ativo %}opacity-60{% endif %}">
+                        <td class="px-4 py-1.5">
+                            <input type="hidden" name="preco_id" value="{{ p.pk }}">
+                            <input name="modelo_{{ p.pk }}" value="{{ p.modelo }}" maxlength="80" class="rn-campo rn-campo-tabela">
+                        </td>
+                        <td class="px-2 py-1.5"><input name="armazenamento_{{ p.pk }}" value="{{ p.armazenamento }}" maxlength="10" class="rn-campo rn-campo-tabela w-28"></td>
+                        <td class="px-2 py-1.5"><input name="valor_{{ p.pk }}" value="{{ p.valor_excelente|stringformat:'.2f' }}" type="number" step="0.01" min="0" class="rn-campo rn-campo-tabela w-32 text-right"></td>
+                        <td class="px-2 py-1.5"><input name="ordem_{{ p.pk }}" value="{{ p.ordem }}" type="number" min="0" class="rn-campo rn-campo-tabela w-20"></td>
+                        <td class="px-2 py-1.5 text-center"><input type="checkbox" name="ativo_{{ p.pk }}" {% if p.ativo %}checked{% endif %} class="rounded"></td>
+                        <td class="px-2 py-1.5 text-center"><input type="checkbox" name="excluir_{{ p.pk }}" class="rounded text-red-600"></td>
+                    </tr>
+                    {% endfor %}
+                    {% for vazio in "123" %}
+                    <tr style="background:#F7FDF9">
+                        <td class="px-4 py-1.5">
+                            <input type="hidden" name="novo_marca" value="APPLE">
+                            <input name="novo_modelo" maxlength="80" placeholder="Novo modelo, ex.: iPhone 17 Air" class="rn-campo rn-campo-tabela">
+                        </td>
+                        <td class="px-2 py-1.5"><input name="novo_armazenamento" maxlength="10" placeholder="256GB" class="rn-campo rn-campo-tabela w-28"></td>
+                        <td class="px-2 py-1.5"><input name="novo_valor" type="number" step="0.01" min="0" class="rn-campo rn-campo-tabela w-32 text-right"></td>
+                        <td colspan="3" class="px-2 py-1.5 text-[11px] text-gray-400">linha nova</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="flex justify-end p-4 border-t border-gray-100">
+            <button type="submit" class="rn-btn rn-btn-primario"><i class="fa-solid fa-floppy-disk"></i>Salvar tabela</button>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block rn_js %}
+<script>
+(function () {
+    var busca = document.getElementById('cfg-busca');
+    var soMarcadas = document.getElementById('cfg-so-marcados');
+    var conta = document.getElementById('cfg-conta');
+    var pessoas = Array.prototype.slice.call(document.querySelectorAll('.cfg-pessoa'));
+
+    function contar() {
+        conta.textContent = pessoas.filter(function (p) { return p.querySelector('input').checked; }).length;
+    }
+    function filtrar() {
+        var termos = (busca.value || '').toLowerCase().trim().split(/\s+/).filter(Boolean);
+        pessoas.forEach(function (p) {
+            var texto = p.getAttribute('data-busca');
+            var casa = termos.every(function (t) { return texto.indexOf(t) !== -1; });
+            var marcada = p.querySelector('input').checked;
+            p.hidden = !casa || (soMarcadas.checked && !marcada);
+        });
+    }
+    busca.addEventListener('input', filtrar);
+    soMarcadas.addEventListener('change', filtrar);
+    pessoas.forEach(function (p) { p.querySelector('input').addEventListener('change', contar); });
+    // "Marcar os visíveis" respeita a busca: filtrando por uma loja, marca só aquela loja.
+    document.querySelectorAll('[data-marcar]').forEach(function (botao) {
+        botao.addEventListener('click', function () {
+            var marcar = botao.getAttribute('data-marcar') === '1';
+            pessoas.forEach(function (p) { if (!p.hidden) p.querySelector('input').checked = marcar; });
+            contar();
+        });
+    });
+})();
+</script>
+{% endblock %}

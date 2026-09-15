@@ -1,0 +1,198 @@
+{% extends 'renova/base_renova.html' %}
+
+{% block rn_pagina %}Avaliações{% endblock %}
+{% block rn_titulo %}{% if rn_pode_receber %}Avaliações e recebimento{% else %}Minhas avaliações{% endif %}{% endblock %}
+{% block rn_subtitulo %}Checklist, chamado e etiqueta de cada aparelho{% endblock %}
+{% block rn_acoes %}
+{% if rn_pode_fazer %}
+<a href="{% url 'renova:nova' %}" class="rn-btn bg-white hover:bg-purple-50 shadow-lg" style="color:#3C096C">
+    <i class="fa-solid fa-plus"></i>Nova avaliação
+</a>
+{% endif %}
+{% endblock %}
+
+{% block rn_css %}
+<style>
+    .rn-kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
+    @media (min-width: 900px) { .rn-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+    .rn-kpi { display: block; padding: .95rem 1rem; border-radius: 1rem; background: #fff; border: 1px solid var(--rn-borda);
+              transition: transform .15s, box-shadow .15s, border-color .15s; }
+    .rn-kpi:hover { transform: translateY(-2px); box-shadow: 0 14px 26px -18px rgba(76, 11, 122, .6); }
+    .rn-kpi.ativo { border-color: #9D4EDD; box-shadow: 0 0 0 3px rgba(157, 78, 221, .18); }
+    .rn-kpi-numero { font-size: 1.9rem; font-weight: 800; line-height: 1; color: var(--rn-escuro); font-variant-numeric: tabular-nums; }
+    .rn-kpi-titulo { font-size: .7rem; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: #6B5B7B; margin-top: .4rem; }
+    .rn-kpi-icone { width: 2.2rem; height: 2.2rem; border-radius: .7rem; display: grid; place-items: center; font-size: 1rem; }
+    .rn-filtro-rotulo { display: block; font-size: .68rem; font-weight: 700; color: #6B5B7B; margin-bottom: .25rem; }
+    .rn-filtro { width: 100%; border: 1.5px solid #E4D9F1; border-radius: .65rem; padding: .45rem .65rem; font-size: .84rem; background: #fff; }
+    .rn-filtro:focus { outline: none; border-color: #9D4EDD; box-shadow: 0 0 0 3px rgba(157, 78, 221, .15); }
+    .rn-linha { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: .9rem; align-items: center; padding: .85rem 1rem;
+                border-top: 1px solid #F3ECFA; transition: background-color .15s; }
+    .rn-linha:hover { background: #FCFAFF; }
+    @media (max-width: 767px) {
+        .rn-linha { grid-template-columns: auto minmax(0, 1fr); }
+        .rn-linha-acoes { grid-column: 1 / -1; justify-content: flex-start !important; }
+    }
+    .rn-mini { position: relative; width: 2.7rem; height: 2.7rem; border-radius: .85rem; display: grid; place-items: center;
+               background: var(--rn-lilas); color: #660099; font-size: 1.2rem; }
+    .rn-mini .rn-letra { position: absolute; right: -.35rem; bottom: -.35rem; width: 1.3rem; height: 1.3rem; font-size: .66rem;
+                         border-radius: .45rem; border: 2px solid #fff; }
+    .rn-codigo { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .68rem; font-weight: 700; color: #6B21A8;
+                 background: #F3E8FF; border-radius: .35rem; padding: .08rem .4rem; }
+</style>
+{% endblock %}
+
+{% block rn_conteudo %}
+<div class="rn-kpis mb-4">
+    <a href="?" class="rn-kpi {% if not filtros.recebimento %}ativo{% endif %}">
+        <div class="flex items-start justify-between gap-2">
+            <p class="rn-kpi-numero">{{ kpis.total }}</p>
+            <span class="rn-kpi-icone" style="background:#F3E8FF;color:#7B2CBF"><i class="fa-solid fa-mobile-screen-button"></i></span>
+        </div>
+        <p class="rn-kpi-titulo">Avaliações</p>
+        <p class="text-[11px] text-gray-400">{{ kpis.no_mes }} neste mês</p>
+    </a>
+    <a href="?recebimento=AGUARDANDO" class="rn-kpi {% if filtros.recebimento == 'AGUARDANDO' %}ativo{% endif %}">
+        <div class="flex items-start justify-between gap-2">
+            <p class="rn-kpi-numero">{{ kpis.aguardando }}</p>
+            <span class="rn-kpi-icone" style="background:#FFF7ED;color:#EA580C"><i class="fa-solid fa-truck-fast"></i></span>
+        </div>
+        <p class="rn-kpi-titulo">Aguardando chegada</p>
+        <p class="text-[11px] text-gray-400">aprovados ainda a caminho</p>
+    </a>
+    <a href="?recebimento=CHEGOU" class="rn-kpi {% if filtros.recebimento == 'CHEGOU' %}ativo{% endif %}">
+        <div class="flex items-start justify-between gap-2">
+            <p class="rn-kpi-numero">{{ kpis.chegaram }}</p>
+            <span class="rn-kpi-icone" style="background:#ECFDF5;color:#059669"><i class="fa-solid fa-box-open"></i></span>
+        </div>
+        <p class="rn-kpi-titulo">Chegaram</p>
+        <p class="text-[11px] text-gray-400">marcados pelo setor</p>
+    </a>
+    <a href="?recebimento=NAO_CHEGOU" class="rn-kpi {% if filtros.recebimento == 'NAO_CHEGOU' %}ativo{% endif %}">
+        <div class="flex items-start justify-between gap-2">
+            <p class="rn-kpi-numero">{{ kpis.nao_chegaram }}</p>
+            <span class="rn-kpi-icone" style="background:#FEF2F2;color:#DC2626"><i class="fa-solid fa-circle-xmark"></i></span>
+        </div>
+        <p class="rn-kpi-titulo">Não chegaram</p>
+        <p class="text-[11px] text-gray-400">precisam de atenção</p>
+    </a>
+</div>
+
+<form method="get" class="rn-card p-3 sm:p-4 mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-6 items-end">
+    <label class="lg:col-span-2">
+        <span class="rn-filtro-rotulo">Buscar</span>
+        <input type="search" name="q" value="{{ filtros.q }}" placeholder="IMEI, modelo, RN-000123, vendedor…" class="rn-filtro">
+    </label>
+    <label>
+        <span class="rn-filtro-rotulo">Recebimento</span>
+        <select name="recebimento" class="rn-filtro">
+            <option value="">Todos</option>
+            <option value="AGUARDANDO" {% if filtros.recebimento == 'AGUARDANDO' %}selected{% endif %}>Aguardando chegada</option>
+            <option value="CHEGOU" {% if filtros.recebimento == 'CHEGOU' %}selected{% endif %}>Chegou</option>
+            <option value="NAO_CHEGOU" {% if filtros.recebimento == 'NAO_CHEGOU' %}selected{% endif %}>Não chegou</option>
+        </select>
+    </label>
+    <label>
+        <span class="rn-filtro-rotulo">Parecer</span>
+        <select name="parecer" class="rn-filtro">
+            <option value="">Todos</option>
+            {% for valor, nome in pareceres %}<option value="{{ valor }}" {% if filtros.parecer == valor %}selected{% endif %}>{{ nome }}</option>{% endfor %}
+        </select>
+    </label>
+    {% if lojas_filtro %}
+    <label>
+        <span class="rn-filtro-rotulo">Loja</span>
+        <select name="loja" class="rn-filtro">
+            <option value="">Todas</option>
+            {% for s in lojas_filtro %}<option value="{{ s.pk }}" {% if filtros.loja == s.pk|stringformat:"d" %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
+        </select>
+    </label>
+    {% endif %}
+    <label>
+        <span class="rn-filtro-rotulo">Mês</span>
+        <input type="month" name="mes" value="{{ filtros.mes }}" class="rn-filtro">
+    </label>
+    <div class="flex gap-2 justify-end sm:col-span-2 lg:col-span-6">
+        {% if querystring %}<a href="?" class="rn-btn rn-btn-claro text-xs">Limpar</a>{% endif %}
+        <button type="submit" class="rn-btn rn-btn-primario text-xs"><i class="fa-solid fa-filter"></i>Filtrar</button>
+    </div>
+</form>
+
+<section class="rn-card overflow-hidden">
+    <header class="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+        <h2 class="rn-h2">{{ pagina.paginator.count }} avaliação(ões)</h2>
+        {% if rn_pode_receber and cfg.categoria %}
+        <p class="text-[11px] text-gray-500"><i class="fa-solid fa-warehouse mr-1"></i>Quem recebe: <b>{{ cfg.categoria.sector.name }}</b></p>
+        {% endif %}
+    </header>
+
+    {% for r in pagina %}
+    <article class="rn-linha">
+        <div class="rn-mini">
+            <i class="{% if r.marca == 'APPLE' %}fa-brands fa-apple{% else %}fa-solid fa-mobile-button{% endif %}"></i>
+            {% if r.padrao %}<span class="rn-letra rn-letra-{{ r.padrao }}">{{ r.padrao }}</span>{% endif %}
+        </div>
+        <div class="min-w-0">
+            <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <a href="{% url 'renova:detalhe' r.pk %}" class="font-bold text-sm text-gray-900 hover:text-purple-700">{{ r.aparelho }}</a>
+                <span class="rn-codigo">{{ r.codigo }}</span>
+                <span class="rn-etq rn-etq-{{ r.parecer }}">{{ r.get_parecer_display }}</span>
+            </div>
+            <p class="text-xs text-gray-500 mt-0.5 truncate">
+                IMEI {{ r.imei1 }} · {{ r.loja.name|default:"sem loja" }} · {{ r.vendedor_nome }} · {{ r.criado_em|date:"d/m/Y H:i" }}
+            </p>
+            <div class="flex flex-wrap items-center gap-2 mt-1.5">
+                {% if r.valor_estimado is not None %}<span class="text-xs font-extrabold" style="color:#3C096C">R$ {{ r.valor_estimado|floatformat:"2g" }}</span>{% endif %}
+                {% if r.sem_recebimento %}
+                <span class="rn-etq rn-etq-SEM" title="Não aprovado: o cliente ficou com o aparelho"><i class="fa-solid fa-ban"></i>Sem troca</span>
+                {% else %}
+                <span class="rn-etq rn-etq-{{ r.recebimento }}">
+                    <i class="fa-solid {% if r.recebimento == 'CHEGOU' %}fa-box-open{% elif r.recebimento == 'NAO_CHEGOU' %}fa-circle-xmark{% else %}fa-truck-fast{% endif %}"></i>{{ r.get_recebimento_display }}
+                </span>
+                {% endif %}
+                {% if r.chamado_id %}
+                <a href="/tickets/{{ r.chamado_id }}/" class="text-[11px] text-gray-500 hover:text-purple-700"><i class="fa-solid fa-ticket"></i> Chamado #{{ r.chamado_id }}</a>
+                {% else %}
+                <span class="text-[11px] font-semibold text-red-600"><i class="fa-solid fa-triangle-exclamation"></i> sem chamado</span>
+                {% endif %}
+            </div>
+        </div>
+        <div class="rn-linha-acoes flex flex-wrap items-center justify-end gap-2">
+            {% if rn_pode_receber and r.recebimento == 'PENDENTE' and r.parecer != 'NAO_APROVADO' %}
+            <form method="post" action="{% url 'renova:recebimento' r.pk %}">
+                {% csrf_token %}
+                <input type="hidden" name="voltar" value="{{ voltar }}">
+                <button type="submit" name="situacao" value="CHEGOU" class="rn-acao rn-acao-chegou"><i class="fa-solid fa-check"></i>Chegou</button>
+            </form>
+            <form method="post" action="{% url 'renova:recebimento' r.pk %}">
+                {% csrf_token %}
+                <input type="hidden" name="voltar" value="{{ voltar }}">
+                <button type="submit" name="situacao" value="NAO_CHEGOU" class="rn-acao rn-acao-nao"><i class="fa-solid fa-xmark"></i>Não chegou</button>
+            </form>
+            {% endif %}
+            <a href="{% url 'renova:etiqueta' r.pk %}" class="rn-acao rn-acao-neutra" title="Etiqueta"><i class="fa-solid fa-tag"></i></a>
+            <a href="{% url 'renova:detalhe' r.pk %}" class="rn-acao rn-acao-neutra">Ver</a>
+        </div>
+    </article>
+    {% empty %}
+    <div class="rn-vazio">
+        <i class="fa-solid fa-mobile-screen-button"></i>
+        <p class="mt-2 text-sm font-semibold">Nenhuma avaliação {% if querystring %}com esses filtros{% else %}por aqui ainda{% endif %}.</p>
+        {% if rn_pode_fazer and not querystring %}
+        <a href="{% url 'renova:nova' %}" class="rn-btn rn-btn-primario text-xs mt-3"><i class="fa-solid fa-plus"></i>Fazer a primeira avaliação</a>
+        {% endif %}
+    </div>
+    {% endfor %}
+
+    {% if pagina.paginator.num_pages > 1 %}
+    <nav class="flex items-center justify-between gap-2 px-4 py-3 border-t border-gray-100 text-xs">
+        {% if pagina.has_previous %}
+        <a href="?{% if querystring %}{{ querystring }}&amp;{% endif %}pagina={{ pagina.previous_page_number }}" class="rn-btn rn-btn-claro text-xs">← Anteriores</a>
+        {% else %}<span></span>{% endif %}
+        <span class="text-gray-500">Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span>
+        {% if pagina.has_next %}
+        <a href="?{% if querystring %}{{ querystring }}&amp;{% endif %}pagina={{ pagina.next_page_number }}" class="rn-btn rn-btn-claro text-xs">Próximas →</a>
+        {% else %}<span></span>{% endif %}
+    </nav>
+    {% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,141 @@
+{% extends 'renova/base_renova.html' %}
+
+{% block rn_pagina %}Tabela de avaliação{% endblock %}
+{% block rn_titulo %}Tabela de avaliação{% endblock %}
+{% block rn_subtitulo %}Consulte o valor de compra do seu usado{% endblock %}
+
+{% block rn_css %}
+<style>
+    .rn-padrao { border-radius: 1rem; border: 1px solid var(--rn-borda); padding: 1rem; background: #fff; position: relative; overflow: hidden; }
+    .rn-padrao::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; }
+    .rn-padrao-verde::before { background: #16A34A; } .rn-padrao-azul::before { background: #2563EB; }
+    .rn-padrao-laranja::before { background: #F97316; } .rn-padrao-vermelho::before { background: #DC2626; }
+    .rn-padrao-nome { font-weight: 800; text-transform: uppercase; font-size: .85rem; letter-spacing: .03em; }
+    .rn-padrao-verde .rn-padrao-nome { color: #15803D; } .rn-padrao-azul .rn-padrao-nome { color: #1D4ED8; }
+    .rn-padrao-laranja .rn-padrao-nome { color: #C2410C; } .rn-padrao-vermelho .rn-padrao-nome { color: #B91C1C; }
+    .rn-criterios { margin-top: .75rem; display: grid; gap: .3rem; }
+    .rn-criterios li { position: relative; padding-left: .95rem; font-size: .78rem; color: #4B3F58; line-height: 1.35; }
+    .rn-criterios li::before { content: ''; position: absolute; left: .15rem; top: .45rem; width: .32rem; height: .32rem;
+                               border-radius: 9999px; background: #9D4EDD; }
+    .rn-tabela-topo { background: linear-gradient(90deg, #3C096C, #660099 60%, #7B2CBF); color: #fff; }
+    .rn-tabela { border-collapse: separate; border-spacing: 0; font-size: .82rem; min-width: 640px; }
+    .rn-tabela thead th { position: sticky; top: 0; z-index: 1; padding: .6rem .75rem; font-size: .66rem; font-weight: 800;
+                          text-transform: uppercase; letter-spacing: .06em; color: #fff; background: #4C0B7A; text-align: left; }
+    .rn-tabela thead th small { display: block; font-size: .6rem; font-weight: 600; opacity: .9; letter-spacing: .03em; }
+    .rn-tabela thead th.rn-th-A { background: #15803D; text-align: right; } .rn-tabela thead th.rn-th-B { background: #1D4ED8; text-align: right; }
+    .rn-tabela thead th.rn-th-C { background: #EA580C; text-align: right; } .rn-tabela thead th.rn-th-D { background: #DC2626; text-align: right; }
+    .rn-tabela tbody td { padding: .55rem .75rem; border-bottom: 1px solid #F1EAF8; color: #2A1340; }
+    .rn-tabela tbody tr:nth-child(even) td { background: #FBF8FF; }
+    .rn-tabela tbody tr:hover td { background: var(--rn-lilas); }
+    .rn-tabela td.rn-modelo { font-weight: 700; }
+    .rn-tabela td.rn-valor { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+    .rn-tabela td.rn-valor-A { color: #15803D; font-weight: 800; }
+</style>
+{% endblock %}
+
+{% block rn_conteudo %}
+<div class="rn-alternar" data-alternar>
+    <button type="button" class="ativo" data-alvo="sistema"><i class="fa-solid fa-table-cells mr-1"></i>No sistema</button>
+    <button type="button" data-alvo="impresso"><i class="fa-regular fa-image mr-1"></i>Impresso</button>
+</div>
+
+<div data-painel="sistema">
+    <section class="rn-card p-4 sm:p-5 mb-5">
+        <h2 class="rn-h2">Entenda os padrões de avaliação</h2>
+        <div class="grid sm:grid-cols-2 xl:grid-cols-4 gap-3 mt-3">
+            {% for p in padroes %}
+            <article class="rn-padrao rn-padrao-{{ p.cor }}">
+                <div class="flex items-center gap-3">
+                    <span class="rn-letra rn-letra-{{ p.letra }}">{{ p.letra }}</span>
+                    <div>
+                        <p class="rn-padrao-nome">{{ p.nome }}</p>
+                        <p class="text-[11px] text-gray-500">{% if p.desconto %}−{{ p.desconto }}% do valor A{% else %}Valor cheio da tabela{% endif %}</p>
+                    </div>
+                </div>
+                <ul class="rn-criterios">
+                    {% for c in p.criterios %}<li>{{ c }}</li>{% endfor %}
+                </ul>
+            </article>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section class="rn-card overflow-hidden">
+        <div class="rn-tabela-topo flex flex-wrap items-center justify-between gap-3 px-4 sm:px-5 py-3">
+            <div>
+                <h2 class="font-extrabold uppercase tracking-wide text-sm">Tabela de valores — iPhone</h2>
+                <p class="text-[11px] opacity-90">Valores de compra (R$) conforme o padrão de avaliação.</p>
+            </div>
+            <label class="relative w-full sm:w-64">
+                <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-purple-300 text-xs"></i>
+                <input type="search" id="rn-busca-modelo" placeholder="Buscar modelo, ex.: 15 Pro"
+                       class="w-full rounded-lg border-0 pl-8 pr-3 py-2 text-sm text-gray-800 focus:ring-2 focus:ring-purple-300">
+            </label>
+        </div>
+        <div class="overflow-x-auto max-h-[70vh]">
+            <table class="rn-tabela w-full">
+                <thead>
+                    <tr>
+                        <th>Modelo</th>
+                        <th>Armazenamento</th>
+                        {% for p in padroes %}
+                        <th class="rn-th-{{ p.letra }}">{{ p.letra }} · {{ p.nome }}<small>{% if p.desconto %}−{{ p.desconto }}%{% else %}valor cheio{% endif %}</small></th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for linha in precos %}
+                    <tr data-busca="{{ linha.busca }}">
+                        <td class="rn-modelo">{{ linha.modelo }}</td>
+                        <td>{{ linha.armazenamento }}</td>
+                        {% for letra, nome, valor in linha.valores %}
+                        <td class="rn-valor rn-valor-{{ letra }}">{{ valor|floatformat:"0g" }}</td>
+                        {% endfor %}
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="6"><div class="rn-vazio"><i class="fa-solid fa-table-list"></i><p class="mt-2 text-sm">A tabela ainda não tem preços cadastrados.</p></div></td></tr>
+                    {% endfor %}
+                    <tr id="rn-sem-resultado" hidden><td colspan="6" class="text-center text-sm text-gray-500 py-6">Nenhum modelo encontrado.</td></tr>
+                </tbody>
+            </table>
+        </div>
+        {% if atualizado_em %}
+        <p class="px-5 py-2.5 text-[11px] text-gray-400 border-t border-gray-100">Tabela atualizada em {{ atualizado_em|date:"d/m/Y H:i" }}.</p>
+        {% endif %}
+    </section>
+</div>
+
+<div data-painel="impresso" hidden>
+    <figure class="rn-card p-3 sm:p-4">
+        <img src="{{ imagem_url }}" alt="Tabela de avaliação do Vini Renova (impresso)" loading="lazy"
+             class="mx-auto rounded-xl w-full max-w-3xl h-auto">
+        <figcaption class="text-center mt-3">
+            <a href="{{ imagem_url }}" target="_blank" rel="noopener" class="rn-btn rn-btn-claro text-xs">
+                <i class="fa-solid fa-up-right-from-square"></i>Abrir em tamanho real
+            </a>
+        </figcaption>
+    </figure>
+</div>
+{% endblock %}
+
+{% block rn_js %}
+<script>
+(function () {
+    var campo = document.getElementById('rn-busca-modelo');
+    var vazio = document.getElementById('rn-sem-resultado');
+    if (!campo) return;
+    function normal(t) { return (t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim(); }
+    campo.addEventListener('input', function () {
+        var termos = normal(campo.value).split(' ').filter(Boolean);
+        var visiveis = 0;
+        document.querySelectorAll('tr[data-busca]').forEach(function (tr) {
+            var texto = tr.getAttribute('data-busca');
+            var mostra = termos.every(function (t) { return texto.indexOf(t) !== -1; });
+            tr.hidden = !mostra;
+            if (mostra) visiveis++;
+        });
+        if (vazio) vazio.hidden = visiveis > 0;
+    });
+})();
+</script>
+{% endblock %}

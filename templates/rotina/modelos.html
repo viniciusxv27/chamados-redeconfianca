@@ -1,0 +1,106 @@
+{% extends 'rotina/base_rotina.html' %}
+
+{% block rt_titulo %}Modelos de rotina{% endblock %}
+{% block rt_cabecalho %}Modelos de rotina{% endblock %}
+{% block rt_subtitulo %}A semana-padrão pronta para aplicar em várias pessoas{% endblock %}
+
+{% block rt_acoes %}
+<button type="button" class="rt-btn rt-btn-hero-forte" data-rt-abrir="rt-modal-modelo">
+    <i class="fas fa-plus"></i><span>Novo modelo</span>
+</button>
+{% endblock %}
+
+{% block rt_conteudo %}
+{% if modelos %}
+<div class="rt-modelos">
+    {% for m in modelos %}
+    <article class="rt-card rt-modelo">
+        <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+                <h2 class="rt-pessoa-nome" style="font-size: .98rem; white-space: normal">
+                    <a href="{% url 'rotina:modelo_editor' m.id %}" style="color: inherit; text-decoration: none">{{ m.nome }}</a>
+                </h2>
+                <p class="rt-pessoa-meta" style="white-space: normal; margin-top: .15rem">{{ m.descricao|default:'Sem descrição'|truncatechars:140 }}</p>
+            </div>
+            {% if m.ativo %}<span class="rt-chip rt-chip-verde">Ativo</span>{% else %}<span class="rt-chip rt-chip-cinza">Inativo</span>{% endif %}
+        </div>
+
+        <div class="rt-mini-semana" aria-hidden="true">
+            {% for d in m.previa %}
+            <div class="rt-mini-dia">
+                {% for b in d.blocos %}<span class="rt-mini-bloco" style="top: {{ b.topo }}%; height: {{ b.altura }}%; --rt-cor: {{ b.cor }}"></span>{% endfor %}
+            </div>
+            {% endfor %}
+        </div>
+        <div class="rt-mini-rotulos" aria-hidden="true">
+            {% for d in m.previa %}<span>{{ d.curto }}</span>{% endfor %}
+        </div>
+
+        <div class="flex flex-wrap gap-2" style="margin-top: .85rem">
+            <span class="rt-chip rt-chip-laranja"><i class="fas fa-calendar-week"></i> {{ m.total }} atividade{{ m.total|pluralize }}</span>
+            <span class="rt-chip"><i class="fas fa-users"></i> {{ m.pessoas }} pessoa{{ m.pessoas|pluralize }}</span>
+        </div>
+
+        <div class="flex items-center gap-2" style="margin-top: auto; padding-top: 1rem">
+            <span class="rt-pessoa-meta" style="flex: 1">Atualizado em {{ m.atualizado_em|date:'d/m/Y' }}</span>
+            <form method="post" action="{% url 'rotina:modelo_acao' m.id %}">
+                {% csrf_token %}
+                <input type="hidden" name="acao" value="duplicar">
+                <button type="submit" class="rt-btn rt-btn-fantasma rt-btn-sm" title="Duplicar modelo" aria-label="Duplicar {{ m.nome }}">
+                    <i class="fas fa-copy"></i>
+                </button>
+            </form>
+            <a href="{% url 'rotina:modelo_editor' m.id %}" class="rt-btn rt-btn-claro rt-btn-sm"><i class="fas fa-pen"></i> Editar</a>
+        </div>
+    </article>
+    {% endfor %}
+</div>
+{% else %}
+<section class="rt-card rt-vazio">
+    <div class="rt-vazio-ilustracao" aria-hidden="true">
+        <i class="fas fa-layer-group"></i>
+        <span class="rt-vazio-selo"><i class="fas fa-plus"></i></span>
+    </div>
+    <h2>Nenhum modelo ainda</h2>
+    <p>Um modelo é a semana-padrão (a planilha) que você aplica em várias pessoas de uma vez. Depois, a semana de cada pessoa pode ser ajustada sem mexer no modelo.</p>
+    <button type="button" class="rt-btn rt-btn-primario" style="margin-top: 1.25rem" data-rt-abrir="rt-modal-modelo">
+        <i class="fas fa-plus"></i> Criar modelo
+    </button>
+</section>
+{% endif %}
+
+<div id="rt-modal-modelo" class="rc-modal rt-modal hidden" role="dialog" aria-modal="true" aria-labelledby="rt-modelo-titulo">
+    <div class="rt-modal-fundo" data-rt-fechar></div>
+    <form method="post" action="{% url 'rotina:modelo_novo' %}" class="rc-modal-card rt-modal-card">
+        {% csrf_token %}
+        <div class="rt-modal-cabeca">
+            <h3 id="rt-modelo-titulo"><i class="fas fa-layer-group" style="color: var(--rt-laranja)"></i> Novo modelo</h3>
+            <button type="button" class="rt-x" data-rt-fechar aria-label="Fechar"><i class="fas fa-xmark"></i></button>
+        </div>
+        <div class="rt-modal-corpo rt-pilha">
+            <label class="rt-campo">
+                <span class="rt-rotulo">Nome</span>
+                <input type="text" name="nome" maxlength="120" required class="rt-input" placeholder="Ex.: Rotina de loja de shopping" data-rt-foco>
+            </label>
+            <label class="rt-campo">
+                <span class="rt-rotulo">Descrição <small>(opcional)</small></span>
+                <textarea name="descricao" rows="2" class="rt-input" placeholder="Para quem é este modelo"></textarea>
+            </label>
+            <label class="rt-campo">
+                <span class="rt-rotulo">Começar a partir de</span>
+                <select name="base" class="rt-input">
+                    <option value="">Semana vazia</option>
+                    {% for m in modelos %}
+                    <option value="{{ m.id }}">Cópia de: {{ m.nome }} ({{ m.total }} atividade{{ m.total|pluralize }})</option>
+                    {% endfor %}
+                </select>
+            </label>
+        </div>
+        <div class="rt-modal-rodape">
+            <span class="rt-espaco"></span>
+            <button type="button" class="rt-btn rt-btn-claro" data-rt-fechar>Cancelar</button>
+            <button type="submit" class="rt-btn rt-btn-primario"><i class="fas fa-check"></i> Criar e editar</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

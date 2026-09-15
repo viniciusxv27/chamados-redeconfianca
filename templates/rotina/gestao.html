@@ -1,0 +1,190 @@
+{% extends 'rotina/base_rotina.html' %}
+
+{% block rt_titulo %}Pessoas com rotina{% endblock %}
+{% block rt_cabecalho %}Pessoas com rotina{% endblock %}
+{% block rt_subtitulo %}Quem segue a rotina gerencial, o que cada pessoa pode fazer e a semana de cada uma{% endblock %}
+
+{% block rt_acoes %}
+<button type="button" class="rt-btn rt-btn-hero-forte" data-rt-abrir="rt-modal-adicionar">
+    <i class="fas fa-user-plus"></i><span>Adicionar pessoas</span>
+</button>
+{% endblock %}
+
+{% block rt_conteudo %}
+<div class="rt-stats">
+    <div class="rt-card rt-stat">
+        <span class="rt-stat-icone"><i class="fas fa-users"></i></span>
+        <div><p class="rt-stat-valor">{{ resumo.total }}</p><p class="rt-stat-rotulo">Pessoas com rotina</p></div>
+    </div>
+    <div class="rt-card rt-stat">
+        <span class="rt-stat-icone"><i class="fas fa-circle-check"></i></span>
+        <div><p class="rt-stat-valor">{{ resumo.ativas }}</p><p class="rt-stat-rotulo">Rotinas ativas</p></div>
+    </div>
+    <div class="rt-card rt-stat">
+        <span class="rt-stat-icone"><i class="fas fa-user-pen"></i></span>
+        <div><p class="rt-stat-valor">{{ resumo.criam }}</p><p class="rt-stat-rotulo">Podem criar atividades</p></div>
+    </div>
+    <a href="{% url 'rotina:modelos' %}" class="rt-card rt-stat" style="text-decoration: none">
+        <span class="rt-stat-icone"><i class="fas fa-layer-group"></i></span>
+        <div><p class="rt-stat-valor">{{ modelos|length }}</p><p class="rt-stat-rotulo">Modelos ativos</p></div>
+    </a>
+</div>
+
+<section class="rt-card">
+    <form method="get" class="rt-barra" role="search">
+        <label class="rt-busca">
+            <i class="fas fa-magnifying-glass" aria-hidden="true"></i>
+            <input type="search" name="q" value="{{ q }}" class="rt-input" placeholder="Buscar por nome, setor ou cargo…"
+                   aria-label="Buscar pessoas" data-rt-filtro=".rt-pessoa" data-rt-contador="#rt-conta-pessoas">
+        </label>
+        <span class="rt-chip"><span id="rt-conta-pessoas">{{ rotinas|length }}</span>&nbsp;pessoa(s)</span>
+        {% if q %}
+        <a href="{% url 'rotina:gestao' %}" class="rt-btn rt-btn-fantasma rt-btn-sm"><i class="fas fa-xmark"></i> Limpar busca</a>
+        {% endif %}
+    </form>
+
+    {% if rotinas %}
+    <ul class="rt-pessoas">
+        {% for r in rotinas %}
+        <li class="rt-pessoa{% if not r.ativa %} rt-pessoa-inativa{% endif %}" data-rt-linha
+            data-busca="{{ r.user.full_name }} {{ r.user.email }} {{ r.user.sector.name|default:'' }} {{ r.user.job_title }}">
+            <span class="rt-avatar" aria-hidden="true">{{ r.user.first_name|slice:':1' }}{{ r.user.last_name|slice:':1' }}</span>
+            <div class="min-w-0">
+                <p class="rt-pessoa-nome">{{ r.user.full_name|default:r.user.username }}</p>
+                <p class="rt-pessoa-meta">{{ r.user.sector.name|default:'Sem setor' }}{% if r.user.job_title %} · {{ r.user.job_title }}{% endif %}</p>
+            </div>
+            <div class="rt-pessoa-extra">
+                <p class="rt-pessoa-meta"><i class="fas fa-layer-group" style="opacity: .5"></i> {{ r.modelo_origem.nome|default:'Sem modelo aplicado' }}</p>
+                <p class="rt-pessoa-meta">
+                    {% if r.atualizado_em %}Atualizada em {{ r.atualizado_em|date:'d/m/Y H:i' }}{% if r.atualizado_por %} por {{ r.atualizado_por.first_name }}{% endif %}{% endif %}
+                </p>
+            </div>
+            <div class="rt-pessoa-opcoes">
+                <span class="rt-chip {% if r.total %}rt-chip-laranja{% else %}rt-chip-cinza{% endif %}">
+                    <i class="fas fa-calendar-week"></i> {{ r.total }} atividade{{ r.total|pluralize }}
+                </span>
+                <label class="rt-opcao">
+                    <span class="rt-switch">
+                        <input type="checkbox" {% if r.ativa %}checked{% endif %} data-rt-opcao="ativa"
+                               data-url="{% url 'rotina:api_gestao_opcoes' r.user_id %}"
+                               data-msg-ligado="Rotina de {{ r.user.first_name }} ativada."
+                               data-msg-desligado="Rotina de {{ r.user.first_name }} desativada: sai do menu e os avisos param.">
+                        <span class="rt-switch-trilho"></span>
+                    </span>
+                    Ativa
+                </label>
+                <label class="rt-opcao">
+                    <span class="rt-switch">
+                        <input type="checkbox" {% if r.pode_criar %}checked{% endif %} data-rt-opcao="pode_criar"
+                               data-url="{% url 'rotina:api_gestao_opcoes' r.user_id %}"
+                               data-msg-ligado="{{ r.user.first_name }} agora pode criar atividades próprias."
+                               data-msg-desligado="{{ r.user.first_name }} não cria mais atividades próprias.">
+                        <span class="rt-switch-trilho"></span>
+                    </span>
+                    Pode criar
+                </label>
+            </div>
+            <a href="{% url 'rotina:gestao_pessoa' r.user_id %}" class="rt-btn rt-btn-claro rt-btn-sm rt-pessoa-acao"
+               title="Editar a semana de {{ r.user.first_name }}">
+                <i class="fas fa-pen"></i><span class="hidden sm:inline">Editar semana</span>
+            </a>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <div class="rt-vazio">
+        <div class="rt-vazio-ilustracao" aria-hidden="true">
+            <i class="fas fa-users"></i>
+            <span class="rt-vazio-selo"><i class="fas {% if q %}fa-magnifying-glass{% else %}fa-plus{% endif %}"></i></span>
+        </div>
+        {% if q %}
+        <h2>Ninguém encontrado</h2>
+        <p>Nenhuma pessoa com rotina bate com “{{ q }}”.</p>
+        {% else %}
+        <h2>Ninguém tem rotina gerencial ainda</h2>
+        <p>Adicione quem vai seguir a rotina. Dá para começar com o modelo padrão de loja e ajustar a semana de cada pessoa depois.</p>
+        <button type="button" class="rt-btn rt-btn-primario" style="margin-top: 1.25rem" data-rt-abrir="rt-modal-adicionar">
+            <i class="fas fa-user-plus"></i> Adicionar pessoas
+        </button>
+        {% endif %}
+    </div>
+    {% endif %}
+</section>
+
+{# ------------------------------------------------------------------ #}
+{# Adicionar pessoas (seletor da casa: busca + lista com caixas)      #}
+{# ------------------------------------------------------------------ #}
+<div id="rt-modal-adicionar" class="rc-modal rt-modal hidden" role="dialog" aria-modal="true" aria-labelledby="rt-adicionar-titulo">
+    <div class="rt-modal-fundo" data-rt-fechar></div>
+    <form method="post" action="{% url 'rotina:gestao_adicionar' %}" class="rc-modal-card rt-modal-card rt-modal-largo">
+        {% csrf_token %}
+        <div class="rt-modal-cabeca">
+            <h3 id="rt-adicionar-titulo"><i class="fas fa-user-plus" style="color: var(--rt-laranja)"></i> Adicionar pessoas à rotina</h3>
+            <button type="button" class="rt-x" data-rt-fechar aria-label="Fechar"><i class="fas fa-xmark"></i></button>
+        </div>
+        <div class="rt-modal-corpo rt-pilha">
+            <div>
+                <label class="rt-busca" style="display: block">
+                    <i class="fas fa-magnifying-glass" aria-hidden="true"></i>
+                    <input type="search" class="rt-input" placeholder="Buscar por nome, e-mail, loja ou cargo…"
+                           aria-label="Buscar colaboradores" data-rt-filtro=".rt-candidato"
+                           data-rt-contador="#rt-conta-candidatos" data-rt-foco>
+                </label>
+                <div class="flex items-center gap-2 flex-wrap" style="margin: .55rem 0">
+                    <button type="button" class="rt-btn rt-btn-fantasma rt-btn-sm" data-rt-marcar=".rt-candidato" data-valor="1">
+                        <i class="fas fa-square-check"></i> Marcar os visíveis
+                    </button>
+                    <button type="button" class="rt-btn rt-btn-fantasma rt-btn-sm" data-rt-marcar=".rt-candidato" data-valor="0">
+                        <i class="far fa-square"></i> Desmarcar os visíveis
+                    </button>
+                    <span class="rt-chip" style="margin-left: auto">
+                        <span data-rt-conta-marcados="input[name=usuarios]">0</span>&nbsp;selecionada(s) ·
+                        <span id="rt-conta-candidatos">{{ candidatos|length }}</span>&nbsp;na lista
+                    </span>
+                </div>
+                <div class="rt-picker">
+                    {% for p in candidatos %}
+                    <label class="rt-candidato" data-busca="{{ p.full_name }} {{ p.email }} {{ p.sector.name|default:'' }} {{ p.job_title }}">
+                        <input type="checkbox" name="usuarios" value="{{ p.id }}">
+                        <span class="min-w-0 flex-1">
+                            <span class="rt-pessoa-nome" style="display: block; font-size: .84rem">{{ p.full_name|default:p.username }}</span>
+                            <span class="rt-pessoa-meta" style="display: block">{{ p.sector.name|default:'Sem setor' }}{% if p.job_title %} · {{ p.job_title }}{% endif %}</span>
+                        </span>
+                        {% if p.id in com_rotina %}<span class="rt-chip rt-chip-laranja">já tem rotina</span>{% endif %}
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <label class="rt-campo">
+                <span class="rt-rotulo">Começar com o modelo</span>
+                <select name="modelo" class="rt-input">
+                    {% for m in modelos %}
+                    <option value="{{ m.id }}" {% if forloop.first %}selected{% endif %}>{{ m.nome }} ({{ m.total }} atividade{{ m.total|pluralize }})</option>
+                    {% endfor %}
+                    <option value="">Nenhum: começar com a semana vazia</option>
+                </select>
+            </label>
+            <label class="rt-switch-linha">
+                <span class="rt-switch"><input type="checkbox" name="pode_criar"><span class="rt-switch-trilho"></span></span>
+                <span>
+                    <strong>Pode criar atividades próprias</strong>
+                    <small>A pessoa acrescenta e apaga atividades dela. As da gestão continuam como a gestão definiu.</small>
+                </span>
+            </label>
+            <label class="rt-switch-linha">
+                <span class="rt-switch"><input type="checkbox" name="substituir"><span class="rt-switch-trilho"></span></span>
+                <span>
+                    <strong>Substituir a rotina de quem já tem</strong>
+                    <small>Aplica o modelo de novo em quem aparece como “já tem rotina”. O que a pessoa tinha mudado ou criado se perde.</small>
+                </span>
+            </label>
+        </div>
+        <div class="rt-modal-rodape">
+            <span class="rt-espaco"></span>
+            <button type="button" class="rt-btn rt-btn-claro" data-rt-fechar>Cancelar</button>
+            <button type="submit" class="rt-btn rt-btn-primario"><i class="fas fa-check"></i> Adicionar</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

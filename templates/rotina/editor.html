@@ -1,0 +1,192 @@
+{% extends 'rotina/base_rotina.html' %}
+{% load static %}
+
+{% block rt_titulo %}{% if modo == 'modelo' %}Modelo · {{ modelo.nome }}{% else %}Rotina de {{ pessoa.full_name|default:pessoa.username }}{% endif %}{% endblock %}
+{% block rt_cabecalho %}{% if modo == 'modelo' %}{{ modelo.nome }}{% else %}{{ pessoa.full_name|default:pessoa.username }}{% endif %}{% endblock %}
+{% block rt_subtitulo %}{% if modo == 'modelo' %}Modelo de rotina{% else %}Rotina gerencial{% endif %} · {{ dados.atividades|length }} atividade{{ dados.atividades|length|pluralize }} na semana{% endblock %}
+
+{% block rt_acoes %}
+<a href="{% if modo == 'modelo' %}{% url 'rotina:modelos' %}{% else %}{% url 'rotina:gestao' %}{% endif %}" class="rt-btn rt-btn-hero">
+    <i class="fas fa-arrow-left"></i><span>Voltar</span>
+</a>
+{% endblock %}
+
+{% block rt_conteudo %}
+{% if modo == 'gestao' %}
+<section class="rt-card" style="padding: 1rem; margin-bottom: 1rem">
+    <div class="flex items-start gap-4 flex-wrap">
+        <span class="rt-avatar rt-avatar-grande" aria-hidden="true">{{ pessoa.first_name|slice:':1' }}{{ pessoa.last_name|slice:':1' }}</span>
+        <div class="min-w-0 flex-1">
+            <p class="rt-pessoa-nome" style="font-size: 1rem">{{ pessoa.full_name|default:pessoa.username }}</p>
+            <p class="rt-pessoa-meta">{{ pessoa.sector.name|default:'Sem setor' }}{% if pessoa.job_title %} · {{ pessoa.job_title }}{% endif %} · {{ pessoa.email }}</p>
+            <p class="rt-pessoa-meta" style="margin-top: .2rem">
+                <i class="fas fa-layer-group" style="opacity: .5"></i>
+                {% if rotina.modelo_origem %}Modelo: {{ rotina.modelo_origem.nome }}{% else %}Sem modelo aplicado{% endif %}
+                {% if rotina.atualizado_em %} · Atualizada em {{ rotina.atualizado_em|date:'d/m/Y H:i' }}{% if rotina.atualizado_por %} por {{ rotina.atualizado_por.full_name|default:rotina.atualizado_por.username }}{% endif %}{% endif %}
+            </p>
+        </div>
+        <div class="flex items-center gap-4 flex-wrap">
+            <label class="rt-opcao">
+                <span class="rt-switch">
+                    <input type="checkbox" {% if rotina.ativa %}checked{% endif %} data-rt-opcao="ativa" data-url="{{ config.urlOpcoes }}"
+                           data-msg-ligado="Rotina ativada." data-msg-desligado="Rotina desativada: sai do menu da pessoa e os avisos param.">
+                    <span class="rt-switch-trilho"></span>
+                </span>
+                Ativa
+            </label>
+            <label class="rt-opcao">
+                <span class="rt-switch">
+                    <input type="checkbox" {% if rotina.pode_criar %}checked{% endif %} data-rt-opcao="pode_criar" data-url="{{ config.urlOpcoes }}"
+                           data-msg-ligado="A pessoa agora pode criar atividades próprias." data-msg-desligado="A pessoa não cria mais atividades próprias.">
+                    <span class="rt-switch-trilho"></span>
+                </span>
+                Pode criar atividades
+            </label>
+        </div>
+    </div>
+    <div class="flex flex-wrap items-center gap-2" style="margin-top: .9rem; padding-top: .9rem; border-top: 1px solid var(--rt-borda)">
+        <button type="button" class="rt-btn rt-btn-claro rt-btn-sm" data-rt-abrir="rt-modal-aplicar">
+            <i class="fas fa-wand-magic-sparkles"></i> Aplicar modelo
+        </button>
+        <button type="button" class="rt-btn rt-btn-claro rt-btn-sm" data-rt-abrir="rt-modal-copiar"
+                {% if not outras %}disabled title="Ninguém mais tem rotina com atividades"{% endif %}>
+            <i class="fas fa-copy"></i> Copiar de outra pessoa
+        </button>
+        <form method="post" action="{% url 'rotina:gestao_pessoa_acao' pessoa.id %}"
+              onsubmit="return confirm('Apagar todas as atividades da semana de {{ pessoa.first_name|escapejs }}?')">
+            {% csrf_token %}
+            <input type="hidden" name="acao" value="limpar">
+            <button type="submit" class="rt-btn rt-btn-claro rt-btn-sm" {% if not dados.atividades %}disabled{% endif %}>
+                <i class="fas fa-eraser"></i> Limpar semana
+            </button>
+        </form>
+        <span style="flex: 1"></span>
+        <form method="post" action="{% url 'rotina:gestao_pessoa_acao' pessoa.id %}"
+              onsubmit="return confirm('Tirar {{ pessoa.first_name|escapejs }} da rotina gerencial? A semana da pessoa será apagada.')">
+            {% csrf_token %}
+            <input type="hidden" name="acao" value="remover">
+            <button type="submit" class="rt-btn rt-btn-perigo rt-btn-sm"><i class="fas fa-user-minus"></i> Remover da rotina</button>
+        </form>
+    </div>
+</section>
+{% else %}
+<section class="rt-card" style="padding: 1rem; margin-bottom: 1rem">
+    <form method="post" action="{% url 'rotina:modelo_acao' modelo.id %}" class="grid gap-3 md:grid-cols-[1fr_1.4fr_auto_auto] items-end">
+        {% csrf_token %}
+        <input type="hidden" name="acao" value="salvar">
+        <label class="rt-campo">
+            <span class="rt-rotulo">Nome do modelo</span>
+            <input type="text" name="nome" value="{{ modelo.nome }}" maxlength="120" required class="rt-input">
+        </label>
+        <label class="rt-campo">
+            <span class="rt-rotulo">Descrição</span>
+            <input type="text" name="descricao" value="{{ modelo.descricao }}" class="rt-input" placeholder="Para quem é este modelo">
+        </label>
+        <label class="rt-opcao" style="padding-bottom: .55rem">
+            <span class="rt-switch"><input type="checkbox" name="ativo" {% if modelo.ativo %}checked{% endif %}><span class="rt-switch-trilho"></span></span>
+            Ativo
+        </label>
+        <button type="submit" class="rt-btn rt-btn-primario"><i class="fas fa-check"></i> Salvar</button>
+    </form>
+    <div class="flex flex-wrap items-center gap-2" style="margin-top: .9rem; padding-top: .9rem; border-top: 1px solid var(--rt-borda)">
+        <span class="rt-chip {% if pessoas_usando %}rt-chip-laranja{% else %}rt-chip-cinza{% endif %}">
+            <i class="fas fa-users"></i> {{ pessoas_usando }} pessoa{{ pessoas_usando|pluralize }} com este modelo
+        </span>
+        <span class="rt-pessoa-meta">Mudar o modelo não altera quem já recebeu.</span>
+        <span style="flex: 1"></span>
+        {% if pessoas_usando %}
+        <form method="post" action="{% url 'rotina:modelo_acao' modelo.id %}"
+              onsubmit="return confirm('Reaplicar este modelo em {{ pessoas_usando }} pessoa(s)? A semana de cada uma será substituída e o que tiverem mudado ou criado se perde.')">
+            {% csrf_token %}
+            <input type="hidden" name="acao" value="reaplicar">
+            <button type="submit" class="rt-btn rt-btn-claro rt-btn-sm"><i class="fas fa-rotate"></i> Reaplicar em quem usa</button>
+        </form>
+        {% endif %}
+        <form method="post" action="{% url 'rotina:modelo_acao' modelo.id %}">
+            {% csrf_token %}
+            <input type="hidden" name="acao" value="duplicar">
+            <button type="submit" class="rt-btn rt-btn-claro rt-btn-sm"><i class="fas fa-copy"></i> Duplicar</button>
+        </form>
+        <form method="post" action="{% url 'rotina:modelo_acao' modelo.id %}"
+              onsubmit="return confirm('Excluir o modelo “{{ modelo.nome|escapejs }}”? Quem já recebeu continua com a rotina.')">
+            {% csrf_token %}
+            <input type="hidden" name="acao" value="excluir">
+            <button type="submit" class="rt-btn rt-btn-perigo rt-btn-sm"><i class="fas fa-trash-can"></i> Excluir</button>
+        </form>
+    </div>
+</section>
+{% endif %}
+
+{% include 'rotina/_calendario.html' %}
+
+{% if modo == 'gestao' %}
+<div id="rt-modal-aplicar" class="rc-modal rt-modal hidden" role="dialog" aria-modal="true" aria-labelledby="rt-aplicar-titulo">
+    <div class="rt-modal-fundo" data-rt-fechar></div>
+    <form method="post" action="{% url 'rotina:gestao_pessoa_acao' pessoa.id %}" class="rc-modal-card rt-modal-card">
+        {% csrf_token %}
+        <input type="hidden" name="acao" value="aplicar_modelo">
+        <div class="rt-modal-cabeca">
+            <h3 id="rt-aplicar-titulo"><i class="fas fa-wand-magic-sparkles" style="color: var(--rt-laranja)"></i> Aplicar modelo</h3>
+            <button type="button" class="rt-x" data-rt-fechar aria-label="Fechar"><i class="fas fa-xmark"></i></button>
+        </div>
+        <div class="rt-modal-corpo rt-pilha">
+            <label class="rt-campo">
+                <span class="rt-rotulo">Modelo</span>
+                <select name="modelo" class="rt-input" required>
+                    {% for m in modelos %}
+                    <option value="{{ m.id }}" {% if rotina.modelo_origem_id == m.id %}selected{% endif %}>{{ m.nome }} ({{ m.total }} atividade{{ m.total|pluralize }}){% if not m.ativo %} · inativo{% endif %}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <p class="rt-alerta">
+                <i class="fas fa-triangle-exclamation"></i>
+                <span>Substitui a semana inteira de {{ pessoa.first_name }}: as {{ dados.atividades|length }} atividades de hoje saem, inclusive as que a pessoa criou ou mudou de horário.</span>
+            </p>
+        </div>
+        <div class="rt-modal-rodape">
+            <span class="rt-espaco"></span>
+            <button type="button" class="rt-btn rt-btn-claro" data-rt-fechar>Cancelar</button>
+            <button type="submit" class="rt-btn rt-btn-primario"><i class="fas fa-wand-magic-sparkles"></i> Aplicar</button>
+        </div>
+    </form>
+</div>
+
+<div id="rt-modal-copiar" class="rc-modal rt-modal hidden" role="dialog" aria-modal="true" aria-labelledby="rt-copiar-titulo">
+    <div class="rt-modal-fundo" data-rt-fechar></div>
+    <form method="post" action="{% url 'rotina:gestao_pessoa_acao' pessoa.id %}" class="rc-modal-card rt-modal-card">
+        {% csrf_token %}
+        <input type="hidden" name="acao" value="copiar">
+        <div class="rt-modal-cabeca">
+            <h3 id="rt-copiar-titulo"><i class="fas fa-copy" style="color: var(--rt-laranja)"></i> Copiar a rotina de outra pessoa</h3>
+            <button type="button" class="rt-x" data-rt-fechar aria-label="Fechar"><i class="fas fa-xmark"></i></button>
+        </div>
+        <div class="rt-modal-corpo rt-pilha">
+            <label class="rt-campo">
+                <span class="rt-rotulo">Copiar de</span>
+                <select name="origem" class="rt-input" required>
+                    {% for o in outras %}
+                    <option value="{{ o.user_id }}">{{ o.user.full_name|default:o.user.username }} · {{ o.user.sector.name|default:'sem setor' }} ({{ o.total }} atividade{{ o.total|pluralize }})</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <p class="rt-alerta">
+                <i class="fas fa-triangle-exclamation"></i>
+                <span>A semana de {{ pessoa.first_name }} passa a ser uma cópia da outra pessoa, com os mesmos horários e travas. As {{ dados.atividades|length }} atividades atuais saem.</span>
+            </p>
+        </div>
+        <div class="rt-modal-rodape">
+            <span class="rt-espaco"></span>
+            <button type="button" class="rt-btn rt-btn-claro" data-rt-fechar>Cancelar</button>
+            <button type="submit" class="rt-btn rt-btn-primario"><i class="fas fa-copy"></i> Copiar</button>
+        </div>
+    </form>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block rt_js %}
+{{ config|json_script:"rt-config" }}
+{{ dados|json_script:"rt-dados" }}
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
+<script src="{% static 'rotina/rotina-calendario.js' %}"></script>
+{% endblock %}
