@@ -221,7 +221,12 @@ def salvar_midia(conteudo, nome, *, dono, tipo, origem, apresentacao=None, templ
     midia = Midia(dono=dono, apresentacao=apresentacao, template=template, tipo=tipo, origem=origem, nome=nome[:200],
                   mime=mime, tamanho=len(conteudo), largura=largura, altura=altura, duracao=duracao,
                   prompt=prompt[:4000])
-    midia.arquivo.save(nome, ContentFile(conteudo), save=False)
+    # O nome de exibição pode vir sem extensão ("Início", da captura); o arquivo no storage não pode.
+    import mimetypes
+    import os
+    nome_arquivo = nome if os.path.splitext(nome)[1] else nome + (
+        {'image/jpeg': '.jpg', 'audio/mpeg': '.mp3'}.get(mime) or mimetypes.guess_extension(mime or '') or '')
+    midia.arquivo.save(nome_arquivo, ContentFile(conteudo), save=False)
     midia.save()
     return midia
 
@@ -663,11 +668,22 @@ def _analisar_template(tarefa):
     analisar_template(tarefa, _progresso)
 
 
+def leitor_de_midia(usuario, apresentacao):
+    """Leitor de mídia da exportação: só entra o que é da apresentação ou que a pessoa pode ver."""
+    from . import exportar_pptx
+    from .permissoes import pode_ver_midia
+
+    def permitir(midia):
+        return midia.apresentacao_id == apresentacao.pk or pode_ver_midia(usuario, midia)
+    return lambda src: exportar_pptx.ler_midia_padrao(src, permitir=permitir)
+
+
 def _canva(tarefa):
     from . import canva, exportar_pptx
     apresentacao = tarefa.apresentacao
     _progresso(tarefa, 'Gerando o arquivo PowerPoint')
-    conteudo = exportar_pptx.gerar_pptx(apresentacao.documento, apresentacao.titulo)
+    conteudo = exportar_pptx.gerar_pptx(apresentacao.documento, apresentacao.titulo,
+                                        ler_midia=leitor_de_midia(tarefa.usuario, apresentacao))
     _progresso(tarefa, 'Enviando ao Canva')
     job = canva.iniciar_importacao(tarefa.usuario, apresentacao.titulo, conteudo)
     _progresso(tarefa, 'O Canva está importando os slides')

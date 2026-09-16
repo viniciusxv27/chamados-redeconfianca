@@ -716,7 +716,8 @@ def exportar_pptx(request, pk):
         return redirect('apresentacoes:inicio')
     from . import exportar_pptx as exportador
     try:
-        conteudo = exportador.gerar_pptx(apresentacao.documento or formato.documento_vazio(), apresentacao.titulo)
+        conteudo = exportador.gerar_pptx(apresentacao.documento or formato.documento_vazio(), apresentacao.titulo,
+                                         ler_midia=tarefas.leitor_de_midia(request.user, apresentacao))
     except Exception:                                           # noqa: BLE001
         logger.exception('Exportação .pptx da apresentação %s falhou', apresentacao.pk)
         messages.error(request, 'Não foi possível gerar o PowerPoint agora.')

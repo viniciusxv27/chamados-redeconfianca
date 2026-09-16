@@ -393,15 +393,23 @@ def extrair_pptx(tarefa, progresso, conteudo):
                 pass
         elementos = []
         tem_titulo = False
+        tem_corpo = False
         for shape in slide.shapes:
             if id_figura_fundo is not None and shape.shape_id == id_figura_fundo:
                 continue
             x, y = shape.left * escala_x if shape.left is not None else 0, shape.top * escala_y if shape.top is not None else 0
             w, h = (shape.width or 0) * escala_x, (shape.height or 0) * escala_y
+            tipo = shape.placeholder_format.type if shape.is_placeholder else None
+            if tipo in (PP_PLACEHOLDER.BODY, PP_PLACEHOLDER.OBJECT) and w > LARGURA * 0.3 and h > ALTURA * 0.2:
+                # O corpo do layout é onde o conteúdo entra: vira a área de conteúdo, não um texto fixo.
+                tem_corpo = True
+                elementos.append({'id': formato.novo_id('e'), 'tipo': 'forma', 'slot': 'area_conteudo',
+                                  'forma': 'retangulo', 'x': x, 'y': y, 'w': w, 'h': h,
+                                  'borda': {'cor': 'tema:primaria', 'largura': 2, 'estilo': 'dashed'}})
+                continue
             if getattr(shape, 'has_text_frame', False) and shape.text_frame.text.strip():
                 slot = 'texto'
                 if shape.is_placeholder:
-                    tipo = shape.placeholder_format.type
                     if tipo in (PP_PLACEHOLDER.TITLE, PP_PLACEHOLDER.CENTER_TITLE):
                         slot = 'titulo'
                     elif tipo == PP_PLACEHOLDER.SUBTITLE:
@@ -460,7 +468,7 @@ def extrair_pptx(tarefa, progresso, conteudo):
             papel = 'capa'
         elif numero == len(slides_pptx) and len(slides_pptx) > 2:
             papel = 'encerramento'
-        elif tem_titulo and len([e for e in elementos if e['tipo'] == 'texto']) <= 2:
+        elif tem_titulo and not tem_corpo and len([e for e in elementos if e['tipo'] == 'texto']) <= 2:
             papel = 'secao'
         else:
             papel = 'conteudo'

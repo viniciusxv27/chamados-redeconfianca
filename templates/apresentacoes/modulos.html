@@ -21,14 +21,13 @@
         <div class="flex items-start gap-3">
             <div class="w-11 h-11 rounded-xl grid place-items-center text-white flex-shrink-0" style="background: linear-gradient(135deg,#34114D,#8B3DFF)"><i class="fas {{ m.icone }}"></i></div>
             <div class="min-w-0 flex-1">
-                <h2 class="font-bold leading-tight">{{ m.nome }}</h2>
-                <p class="text-xs mt-0.5" style="color: var(--ap-suave)">{{ m.verbose }} · {{ m.telas|length }} tela{{ m.telas|length|pluralize }} no menu</p>
+                <h2 class="font-bold leading-tight break-words">{{ m.nome }}</h2>
+                <p class="mt-1 flex flex-wrap items-center gap-1.5 text-xs" style="color: var(--ap-suave)">
+                    {% if m.apresentacao %}<span class="ap-selo ap-selo-{{ m.apresentacao.status }}">{{ m.apresentacao.get_status_display }}</span>
+                    {% else %}<span class="ap-selo ap-selo-PERGUNTAS">Sem apresentação</span>{% endif %}
+                    <span>{{ m.telas|length }} tela{{ m.telas|length|pluralize }} no menu</span>
+                </p>
             </div>
-            {% if m.apresentacao %}
-            <span class="ap-selo ap-selo-{{ m.apresentacao.status }}">{{ m.apresentacao.get_status_display }}</span>
-            {% else %}
-            <span class="ap-selo ap-selo-PERGUNTAS">Sem apresentação</span>
-            {% endif %}
         </div>
         {% if m.apresentacao %}
         <p class="text-xs" style="color: var(--ap-suave)"><i class="fas fa-clock-rotate-left mr-1"></i>{{ m.apresentacao.titulo }} · {{ m.apresentacao.atualizado_em|date:"d/m/Y" }}{% if ap_superadmin %} · {{ m.apresentacao.dono.get_full_name|default:m.apresentacao.dono.username }}{% endif %}</p>

@@ -61,7 +61,7 @@
                 <input id="cfg-imagem" name="modelo_imagem" value="{{ cfg.modelo_imagem }}" list="cfg-lista-imagem" class="ap-campo">
                 <datalist id="cfg-lista-imagem">{% for m in modelos_imagem %}<option value="{{ m }}">{% endfor %}</datalist>
             </div>
-            <div class="grid grid-cols-2 gap-2">
+            <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-3">
                 <div>
                     <label class="ap-rotulo-campo" for="cfg-video">Vídeo</label>
                     <input id="cfg-video" name="modelo_video" value="{{ cfg.modelo_video }}" list="cfg-lista-video" class="ap-campo">

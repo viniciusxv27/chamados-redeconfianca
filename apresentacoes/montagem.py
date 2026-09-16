@@ -71,6 +71,16 @@ def ajustar_tamanho(texto, largura, altura, maximo, minimo=14, peso=400, entreli
     return minimo
 
 
+def tamanho_em_uma_linha(texto, largura, maximo, minimo=14, peso=400, espacamento=0.0, maiusculas=False):
+    """Maior fonte (até `maximo`) em que o texto cabe numa linha só da largura dada."""
+    tamanho = maximo
+    while tamanho > minimo:
+        if estimar_linhas(texto, tamanho, largura, peso, espacamento * tamanho / maximo, maiusculas) <= 1:
+            return tamanho
+        tamanho -= 2 if tamanho > 40 else 1
+    return minimo
+
+
 # ---------------------------------------------------------------------------
 # Construtores
 # ---------------------------------------------------------------------------
@@ -149,11 +159,37 @@ def _cor_destaque(tema):
     return ((tema or {}).get('cores') or {}).get('destaque') or formato.TEMA_PADRAO['cores']['destaque']
 
 
+_ICONES = None
+
+
+def _icones_existentes():
+    """{estilo: {nomes}} do Font Awesome 6.0.0 que o portal carrega — a IA às vezes inventa nome."""
+    global _ICONES
+    if _ICONES is None:
+        import json
+        from pathlib import Path
+
+        from django.conf import settings
+        try:
+            dados = json.loads((Path(settings.BASE_DIR) / 'static/apresentacoes/icones.json').read_text(encoding='utf-8'))
+            _ICONES = {estilo: set(dados.get(estilo) or []) for estilo in ('solid', 'regular', 'brands')}
+        except (OSError, ValueError):
+            _ICONES = {}
+    return _ICONES
+
+
 def _icone_valido(nome, padrao='fa-solid fa-circle-check'):
-    nome = (nome or '').strip()
-    if nome.startswith('fa-') and ' ' not in nome:
-        nome = f'fa-solid {nome}'
-    return nome if formato._RE_ICONE.match(nome) else padrao
+    nome = ' '.join((nome or '').split())
+    if nome and ' ' not in nome:                       # "bolt" ou "fa-bolt": sem estilo, vale o solid
+        nome = f"fa-solid {nome if nome.startswith('fa-') else 'fa-' + nome}"
+    if not formato._RE_ICONE.match(nome):
+        return padrao
+    estilo, icone = nome.split(' ')
+    existentes = _icones_existentes()
+    if existentes and icone[3:] not in existentes.get(estilo[3:], set()):
+        # Estilo errado para um ícone que existe no solid (ex.: fa-regular fa-bolt) → solid; nome inventado → padrão.
+        return f'fa-solid {icone}' if icone[3:] in existentes.get('solid', set()) else padrao
+    return nome
 
 
 def _encaixar(largura_img, altura_img, x, y, w, h):
@@ -219,7 +255,10 @@ def _preencher_slots(layout, item, tema, tipo_ia):
                 el['html'] = f'{_e(titulo)} <span style="color: {destaque}">{_e(segunda)}</span>'
             else:
                 el['html'] = _e(titulo)
-            _ajustar_elemento(el, f'{titulo}\n{segunda}' if grande and segunda else f'{titulo} {segunda}'.strip())
+            if grande and segunda and not tem_slot_destaque:
+                _ajustar_titulo_em_duas_linhas(el, titulo, segunda)
+            else:
+                _ajustar_elemento(el, f'{titulo} {segunda}'.strip())
         elif slot == 'titulo_destaque':
             if not segunda:
                 continue
@@ -244,6 +283,24 @@ def _preencher_slots(layout, item, tema, tipo_ia):
         el['id'] = novo_id('e')
         elementos.append(el)
     layout['elementos'] = elementos
+
+
+def _ajustar_titulo_em_duas_linhas(el, primeira, segunda):
+    """Capa/seção/encerramento: cada parte do título numa linha (a quebra no meio da parte
+    destacada deixava "Nova / entrega" em três linhas colado no subtítulo)."""
+    estilo = el.get('estilo') or {}
+    maximo = estilo.get('tamanho') or 96
+    minimo = max(12, int(maximo * 0.4))
+    largura = max(10, el['w'] - 2 * (estilo.get('preenchimento') or 0))
+    tamanhos = [tamanho_em_uma_linha(parte, largura, maximo, minimo, estilo.get('peso', 400),
+                                     estilo.get('espacamento', 0), estilo.get('maiusculas', False))
+                for parte in (primeira, segunda) if parte]
+    tamanho = min(tamanhos) if tamanhos else maximo
+    # Duas linhas precisam caber na altura da caixa.
+    entrelinha = estilo.get('entrelinha', 1.2) or 1.2
+    while tamanho > minimo and 2 * tamanho * entrelinha > el['h']:
+        tamanho -= 2
+    estilo['tamanho'] = tamanho
 
 
 def _ajustar_elemento(el, conteudo):
@@ -571,6 +628,24 @@ CONSTRUTORES = {
 # ---------------------------------------------------------------------------
 # Montagem
 # ---------------------------------------------------------------------------
+def _abrir_espaco_para_imagem(layout, item, tipo, limite_x):
+    titulo = (item.get('titulo') or '').strip()
+    segunda = (item.get('titulo_destaque') or '').strip()
+    tem_slot_destaque = any(el.get('slot') == 'titulo_destaque' for el in layout.get('elementos') or [])
+    for el in layout.get('elementos') or []:
+        if el.get('slot') not in ('rotulo', 'titulo', 'titulo_destaque', 'subtitulo', 'texto', 'botao'):
+            continue
+        if el['x'] + el['w'] <= limite_x:
+            continue
+        el['w'] = max(160, limite_x - el['x'])
+        if el.get('tipo') != 'texto':
+            continue
+        if el['slot'] == 'titulo' and segunda and not tem_slot_destaque:
+            _ajustar_titulo_em_duas_linhas(el, titulo, segunda)
+        else:
+            _ajustar_elemento(el, formato.html_para_texto(el.get('html')))
+
+
 def montar_slide(item, template_doc, tema, imagem_midia=None, slide_id=None):
     tipo = item.get('layout') if item.get('layout') in CONSTRUTORES or item.get('layout') in PAPEL_DO_LAYOUT else 'topicos'
     layout = escolher_layout(template_doc, tipo)
@@ -581,8 +656,10 @@ def montar_slide(item, template_doc, tema, imagem_midia=None, slide_id=None):
     if construtor:
         construtor(item, area, tema, conteudo, imagem_midia=imagem_midia)
     elif imagem_midia is not None and tipo in ('capa', 'secao', 'encerramento') and imagem_midia.origem == 'IA_IMAGEM':
-        # Capa com ilustração pedida: vai à direita, onde o template não tem texto.
-        conteudo.append(imagem(imagem_midia, 1040, 140, 760, 700, ajuste='cover', raio=36))
+        # Ilustração pedida: vai à direita, e os textos param antes dela (senão o título passa por baixo).
+        imagem_x = 1040
+        conteudo.append(imagem(imagem_midia, imagem_x, 140, 760, 700, ajuste='cover', raio=36))
+        _abrir_espaco_para_imagem(layout, item, tipo, imagem_x - 48)
     # Conteúdo antes da paginação (que fica por cima de tudo).
     paginacao = [el for el in layout['elementos'] if el.get('slot') == 'paginacao']
     outros = [el for el in layout['elementos'] if el.get('slot') != 'paginacao']

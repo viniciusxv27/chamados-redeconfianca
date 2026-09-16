@@ -302,6 +302,21 @@ try:
     t('texto longo encolhe a fonte', montagem.ajustar_tamanho('palavra ' * 60, 400, 120, 40) < 40)
     t('texto curto mantém', montagem.ajustar_tamanho('Oi', 400, 120, 40) == 40)
     t('documento montado já passa no saneador sem mudar', formato.sanear_documento(documento) == documento)
+    capa_longa = montagem.montar_slide(slide('capa', titulo='Vini Renova', titulo_destaque='Nova entrega'),
+                                       padrao.documento, padrao.tema)
+    titulo_longo = next(e for e in capa_longa['elementos'] if e['slot'] == 'titulo')
+    est = titulo_longo['estilo']
+    t('título grande: cada parte cabe numa linha (sem "Nova / entrega")', all(
+        montagem.estimar_linhas(parte, est['tamanho'], titulo_longo['w'], est['peso'], est['espacamento'] * est['tamanho'] / 126)
+        == 1 for parte in ('Vini Renova', 'Nova entrega')) and est['tamanho'] < 126, est['tamanho'])
+    ilustracao = tarefas.salvar_midia(png(1536, 1024), 'ia.png', dono=ana, tipo=Midia.Tipo.IMAGEM,
+                                      origem=Midia.Origem.IA_IMAGEM)
+    secao_img = montagem.montar_slide(slide('secao', rotulo='Atenção!', titulo='Dicas e cuidados'), padrao.documento,
+                                      padrao.tema, ilustracao)
+    img_secao = next(e for e in secao_img['elementos'] if e['tipo'] == 'imagem')
+    textos_secao = [e for e in secao_img['elementos'] if e['tipo'] == 'texto' and e['slot'] in ('titulo', 'rotulo')]
+    t('seção com ilustração: os textos param antes da imagem', textos_secao and all(
+        e['x'] + e['w'] <= img_secao['x'] for e in textos_secao), [(e['x'], e['w']) for e in textos_secao])
 
     print('\n== NOVA APRESENTAÇÃO (PEDIDO) ==')
     r = c_ana.post('/apresentacoes/nova/', {
@@ -408,6 +423,11 @@ try:
                                               'apresentacao': ap.pk})
     midia = Midia.objects.get(pk=r.json()['midia']['id'])
     t('upload de imagem', r.status_code == 200 and midia.apresentacao_id == ap.pk and midia.largura == 320)
+    r = c_ana.post('/apresentacoes/midias/', {'arquivo': SimpleUploadedFile('tela.jpg', png(), 'image/jpeg'),
+                                              'apresentacao': ap.pk, 'origem': 'CAPTURA', 'nome': 'Início'})
+    captura_sem_ext = Midia.objects.get(pk=r.json()['midia']['id'])
+    t('captura com nome sem extensão guarda o arquivo com extensão', captura_sem_ext.nome == 'Início'
+      and captura_sem_ext.arquivo.name.endswith('.jpg'), captura_sem_ext.arquivo.name)
     r = c_ana.post('/apresentacoes/midias/', {'arquivo': SimpleUploadedFile('x.png', b'texto', 'image/png')})
     t('imagem falsa recusada', r.status_code == 400)
     r = c_ana.post('/apresentacoes/midias/', {'arquivo': SimpleUploadedFile('x.svg', b'<svg onload=1>', 'image/svg+xml')})
@@ -598,7 +618,8 @@ try:
     requisicao = c_chefe.get('/apresentacoes/modulos/?atualizar=1')
     catalogo = requisicao.context['modulos']
     labels = {m['label'] for m in catalogo}
-    t('catálogo sai do menu do SUPERADMIN', requisicao.status_code == 200 and {'renova', 'impulso'} <= labels, labels)
+    t('catálogo sai do menu do SUPERADMIN', requisicao.status_code == 200 and 'renova' in labels and len(labels) >= 10,
+      labels)
     t('o próprio módulo de apresentações fica fora', 'apresentacoes' not in labels)
     contexto = modulos.contexto_do_modulo('renova', 'Vini Renova')
     t('contexto do módulo traz modelos, rotas e frases dos testes', 'Modelos e campos' in contexto
@@ -737,6 +758,9 @@ try:
     titulo_ppt = next(e for e in ppt.layouts[0]['elementos'] if e['slot'] == 'titulo')
     t('título do PowerPoint com tamanho convertido (40 pt → 80 px no quadro)', titulo_ppt['estilo']['tamanho'] == 80
       and titulo_ppt['html'] == 'Capa do PPT', titulo_ppt['estilo'])
+    corpo_ppt = [e for e in ppt.layouts[1]['elementos'] if e['slot'] == 'area_conteudo']
+    t('o corpo do slide de conteúdo vira a área de conteúdo', len(corpo_ppt) == 1 and not any(
+        e['tipo'] == 'texto' and 'Texto de exemplo' in e['html'] for e in ppt.layouts[1]['elementos']))
 
     print('\n== CANVA E VÍDEO ==')
     r = c_ana.post(f'/apresentacoes/{ap.pk}/exportar/canva/')
