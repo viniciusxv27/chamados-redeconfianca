@@ -580,8 +580,10 @@
     E.versaoLocal = 0;
     E.versaoSalva = 0;
     E.erroSalvar = null;
+    E.conflito = false;
     E.ultimoSalvo = new Date();
-    await R.carregarFontes(E.doc, { limite: 6000 });
+    await Promise.race([R.carregarFontes(E.doc, { limite: 6000 }), esperar(12000)]);
+    ajustarDocumentoInteiro();
     iniciarHistorico();
     renderizarTudo();
     atualizarStatus();
