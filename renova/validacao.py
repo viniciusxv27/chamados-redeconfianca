@@ -15,6 +15,7 @@ from .padrao import calcular_padrao
 
 PREFIXO_ASSINATURA = 'data:image/png;base64,'
 ASSINATURA_MAX = 400_000      # caracteres do data URL da assinatura
+NUMERO_VENDA_MAX = 40         # o max_length de Renova.numero_venda
 
 
 def imei_valido(imei):
@@ -56,6 +57,22 @@ def ler_valor(texto):
     if valor < 0 or valor > Decimal('9999999'):
         raise ValueError(texto)
     return valor.quantize(Decimal('0.01'))
+
+
+def ler_numero_venda(texto):
+    """Nº da venda como a pessoa digitou, sem máscara; vazio → ''.
+
+    Cada sistema de venda numera de um jeito (só números, com ponto, com letra),
+    então não há formato a conferir: só saem os espaços sobrando e os caracteres
+    invisíveis (colados de planilha ou sistema, eles não aparecem na etiqueta e
+    atrapalham a busca). Mais longo que o campo: ValueError — cortar calado
+    guardaria um número que não é o da venda.
+    """
+    visiveis = ''.join(c for c in str(texto or '') if c.isspace() or unicodedata.category(c)[0] != 'C')
+    valor = ' '.join(visiveis.split())
+    if len(valor) > NUMERO_VENDA_MAX:
+        raise ValueError(texto)
+    return valor
 
 
 def normal_modelo(texto):
@@ -173,5 +190,12 @@ def ler_checklist(post, *, lojas, precos, hoje=None, cfg=None):
     elif len(d['assinatura']) > ASSINATURA_MAX:
         erros['assinatura'] = 'A assinatura ficou grande demais: limpe e assine de novo.'
     d['data_responsavel'] = _data(post, 'data_responsavel') or hoje
+
+    # Nº da venda: opcional aqui — quase sempre sai depois, e entra pela tela da avaliação.
+    try:
+        d['numero_venda'] = ler_numero_venda(post.get('numero_venda'))
+    except ValueError:
+        d['numero_venda'] = ''
+        erros['numero_venda'] = f'O nº da venda vai até {NUMERO_VENDA_MAX} caracteres — confira o número.'
 
     return d, erros

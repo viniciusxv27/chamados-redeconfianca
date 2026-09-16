@@ -88,7 +88,7 @@
 <form method="get" class="rn-card p-3 sm:p-4 mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-6 items-end">
     <label class="lg:col-span-2">
         <span class="rn-filtro-rotulo">Buscar</span>
-        <input type="search" name="q" value="{{ filtros.q }}" placeholder="IMEI, modelo, RN-000123, vendedor…" class="rn-filtro">
+        <input type="search" name="q" value="{{ filtros.q }}" placeholder="IMEI, modelo, RN-000123, vendedor, nº da venda…" class="rn-filtro">
     </label>
     <label>
         <span class="rn-filtro-rotulo">Recebimento</span>
@@ -162,6 +162,9 @@
                 {% elif r.aprovada %}
                 <span class="text-[11px] font-semibold text-red-600"><i class="fa-solid fa-triangle-exclamation"></i> sem chamado</span>
                 {% endif %}
+                {% if r.numero_venda %}
+                <span class="text-[11px] text-gray-500"><i class="fa-solid fa-receipt"></i> Venda <b class="font-mono">{{ r.numero_venda }}</b></span>
+                {% endif %}
             </div>
         </div>
         <div class="rn-linha-acoes flex flex-wrap items-center justify-end gap-2">
@@ -182,6 +185,10 @@
             {% endif %}
             {% if r.aprovada %}<a href="{% url 'renova:etiqueta' r.pk %}" class="rn-acao rn-acao-neutra" title="Etiqueta"><i class="fa-solid fa-tag"></i></a>{% endif %}
             <a href="{% url 'renova:detalhe' r.pk %}" class="rn-acao rn-acao-neutra">Ver</a>
+            {% if rn_pode_excluir %}
+            <a href="{% url 'renova:excluir' r.pk %}?voltar={{ voltar|urlencode }}" class="rn-acao rn-acao-nao"
+               title="Excluir {{ r.codigo }}" aria-label="Excluir {{ r.codigo }}"><i class="fa-solid fa-trash-can"></i></a>
+            {% endif %}
         </div>
     </article>
     {% empty %}

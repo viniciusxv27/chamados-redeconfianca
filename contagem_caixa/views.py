@@ -13,6 +13,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from users.models import Sector
+from users.module_access import fechado_para_padrao
 
 from .models import (ConfiguracaoContagem, ContagemCaixaDia, ImportacaoContagem,
                      SaldoInicialMes)
@@ -57,6 +58,7 @@ def _para_decimal(texto):
 
 
 @login_required
+@fechado_para_padrao('caixa')
 def dashboard(request):
     """Visão geral: números do período e situação de cada loja."""
     lojas = list(_lojas_do_usuario(request.user))
@@ -131,6 +133,7 @@ def dashboard(request):
 
 
 @login_required
+@fechado_para_padrao('caixa')
 def loja_detalhe(request, loja_id):
     """A planilha da loja: uma linha por dia, com os campos preenchíveis."""
     loja = get_object_or_404(Sector, id=loja_id)
@@ -199,6 +202,7 @@ def loja_detalhe(request, loja_id):
 
 
 @login_required
+@fechado_para_padrao('caixa')
 @require_POST
 def salvar_dia(request, loja_id):
     """Grava os campos preenchidos de um dia e recalcula o saldo em diante."""
@@ -257,6 +261,7 @@ def salvar_dia(request, loja_id):
 
 
 @login_required
+@fechado_para_padrao('caixa')
 def importacao(request):
     """Sobe a base de vendas: mostra a prévia e só grava quando confirmado."""
     if not _e_gestor(request.user):
@@ -322,6 +327,7 @@ def importacao(request):
     return render(request, 'contagem_caixa/importacao.html', contexto)
 
 @login_required
+@fechado_para_padrao('caixa')
 @require_POST
 def salvar_saldo_inicial(request, loja_id):
     """Fixa (ou solta) o saldo com que o mês começa.

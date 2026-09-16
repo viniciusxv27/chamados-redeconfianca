@@ -31,20 +31,49 @@ def lojas():
 
 
 def lojas_do_usuario(user):
-    """Lojas que a pessoa enxerga: todas para gestor, a dela para os demais."""
+    """Lojas que a pessoa enxerga: todas para gestor, a dela para os demais.
+
+    O PADRÃO fora do grupo GERENTES e sem liberação não enxerga loja nenhuma,
+    nem a própria: é essa lista que as telas da loja conferem antes de abrir ou
+    gravar, então a trava vale mesmo para quem chegar por URL direta.
+    """
     if e_gestor(user):
         return lojas()
     if not user or not user.is_authenticated:
         return lojas().none()
+    from users.module_access import padrao_restrito
+    if padrao_restrito(user, 'caixa'):
+        return lojas().none()
+    return _lojas_em_que_esta_lotado(user)
+
+
+def _lojas_em_que_esta_lotado(user):
     ids = {s.id for s in user.sectors.all()}
     if user.sector_id:
         ids.add(user.sector_id)
     return lojas().filter(id__in=ids)
 
 
-def pode_ver_caixa(user):
-    """Gestor ou alguém lotado numa loja — o resto não tem caixa para contar."""
+def lotado_em_loja(user):
+    """Está lotado em alguma loja, liberado ou não para o caixa?
+
+    Só o menu usa: o grupo ADMINISTRATIVO abria para quem está em loja por causa
+    do caixa, e lá dentro fica também Reuniões, que não tem nada com a trava.
+    """
     if not user or not user.is_authenticated:
         return False
-    from users.module_access import user_has_module
+    return _lojas_em_que_esta_lotado(user).exists()
+
+
+def pode_ver_caixa(user):
+    """Gestor ou alguém lotado numa loja — o resto não tem caixa para contar.
+
+    Estar lotado na loja não basta para o PADRÃO fora do grupo GERENTES: ele só
+    entra com a liberação individual (``caixa`` ou ``caixa.gestor``).
+    """
+    if not user or not user.is_authenticated:
+        return False
+    from users.module_access import padrao_restrito, user_has_module
+    if padrao_restrito(user, 'caixa'):
+        return False
     return e_gestor(user) or lojas_do_usuario(user).exists() or user_has_module(user, 'caixa')

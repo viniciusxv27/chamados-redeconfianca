@@ -3,20 +3,21 @@ quem pode mexer em quê, a cópia de modelos, os avisos (lembrete e início) e o
 resumo do dia que a home mostra.
 
 A tela esconde botões, mas quem decide é daqui: a API e as views passam por
-estas funções, então cada regra existe num lugar só.
+estas funções, então cada regra existe num lugar só. O WhatsApp, que sai do
+servidor e não do navegador, está em `rotina/whatsapp.py`.
 """
 import logging
 import math
 from datetime import datetime, time, timedelta
 
 from django.db import IntegrityError, transaction
-from django.db.models import Exists
+from django.db.models import Exists, F
 from django.urls import reverse
 from django.utils import timezone
 
 from .models import (
-    CORES_CATEGORIA, DIAS_SEMANA, AtividadeModelo, AtividadeRotina, AvisoRotina, Categoria,
-    ModeloRotina, TipoAviso, erros_de_horario,
+    CORES_CATEGORIA, DIAS_SEMANA, DOMINGO, SABADO, AtividadeModelo, AtividadeRotina, AvisoRotina,
+    Categoria, ModeloRotina, TipoAviso, erros_de_horario,
 )
 from .permissoes import e_superadmin
 
@@ -24,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 MESES = ('janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto',
          'setembro', 'outubro', 'novembro', 'dezembro')
-DIAS_CURTOS = ('Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb')
+DIAS_CURTOS = ('Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom')
 
 LIMITE_TITULO = 150
 LIMITE_DESCRICAO = 2000
@@ -69,33 +70,58 @@ def agora():
     return timezone.localtime()
 
 
-def segunda_da_semana(dia):
+def segunda_da_semana(dia, com_domingo=False):
     """Segunda-feira da semana exibida.
 
-    No domingo a semana de trabalho já acabou: mostra a que começa amanhã.
+    Na semana de segunda a sábado, o domingo já é depois do fim: mostra a
+    semana que começa amanhã. Com domingo, o domingo é o último dia da semana
+    corrente.
     """
-    if dia.weekday() == 6:
+    if dia.weekday() == DOMINGO and not com_domingo:
         return dia + timedelta(days=1)
     return dia - timedelta(days=dia.weekday())
 
 
-def rotulo_semana(segunda, sabado):
-    if segunda.month == sabado.month:
-        return f'{segunda.day} a {sabado.day} de {MESES[sabado.month - 1]} de {sabado.year}'
-    if segunda.year == sabado.year:
+def rotulo_semana(segunda, ultimo):
+    if segunda.month == ultimo.month:
+        return f'{segunda.day} a {ultimo.day} de {MESES[ultimo.month - 1]} de {ultimo.year}'
+    if segunda.year == ultimo.year:
         return (f'{segunda.day} de {MESES[segunda.month - 1]} a '
-                f'{sabado.day} de {MESES[sabado.month - 1]} de {sabado.year}')
+                f'{ultimo.day} de {MESES[ultimo.month - 1]} de {ultimo.year}')
     return (f'{segunda.day} de {MESES[segunda.month - 1]} de {segunda.year} a '
-            f'{sabado.day} de {MESES[sabado.month - 1]} de {sabado.year}')
+            f'{ultimo.day} de {MESES[ultimo.month - 1]} de {ultimo.year}')
 
 
-def dados_da_semana(momento=None):
+def dias_da_semana(com_domingo=False):
+    """Os dias que a semana mostra: segunda a sábado, ou segunda a domingo."""
+    return DIAS_SEMANA if com_domingo else DIAS_SEMANA[:SABADO + 1]
+
+
+def nome_da_semana(com_domingo=False):
+    return 'Segunda a domingo' if com_domingo else 'Segunda a sábado'
+
+
+def semana_com_domingo(dono, atividades=None):
+    """A semana de um modelo ou de uma rotina tem domingo?
+
+    Vale o interruptor — e, por garantia, qualquer atividade que já esteja no
+    domingo (gravada pelo admin, por exemplo): dado existente nunca some da tela.
+    """
+    if getattr(dono, 'com_domingo', False):
+        return True
+    if atividades is None:
+        return dono.atividades.filter(dia_semana=DOMINGO).exists()
+    return any(a.dia_semana == DOMINGO for a in atividades)
+
+
+def dados_da_semana(momento=None, com_domingo=False):
     momento = momento or agora()
     hoje = momento.date()
-    segunda = segunda_da_semana(hoje)
-    sabado = segunda + timedelta(days=5)
+    segunda = segunda_da_semana(hoje, com_domingo)
+    ultimo_dia = DOMINGO if com_domingo else SABADO
+    fim = segunda + timedelta(days=ultimo_dia)
     dias = []
-    for numero, nome in DIAS_SEMANA:
+    for numero, nome in dias_da_semana(com_domingo):
         data = segunda + timedelta(days=numero)
         dias.append({
             'dia_semana': numero, 'data': data.isoformat(), 'nome': nome,
@@ -103,9 +129,12 @@ def dados_da_semana(momento=None):
         })
     return {
         'inicio': segunda.isoformat(),
-        'fim': sabado.isoformat(),
-        'rotulo': rotulo_semana(segunda, sabado),
-        'proxima': hoje.weekday() == 6,
+        'fim': fim.isoformat(),
+        'rotulo': rotulo_semana(segunda, fim),
+        'proxima': hoje.weekday() == DOMINGO and not com_domingo,
+        'com_domingo': com_domingo,
+        'ultimo_dia': ultimo_dia,
+        'nome': nome_da_semana(com_domingo),
         'dias': dias,
         # Relógio do servidor para o navegador: a hora "de parede" (sem fuso),
         # que é o que o calendário desenha, e o instante exato, para contar o
@@ -208,15 +237,22 @@ def _texto(corpo, campo):
     return valor.strip()
 
 
-def _dia(valor):
+def _dia(valor, com_domingo=False):
+    """O dia pedido, se a semana tem esse dia.
+
+    Semana sem domingo recusa o domingo com a mesma frase de sempre: é a tela
+    que ficou para trás (o domingo foi desligado em outra aba) ou um pedido
+    montado à mão.
+    """
     if isinstance(valor, bool) or (isinstance(valor, float) and not valor.is_integer()):
         raise ErroValidacao('Dia da semana inválido.')
     try:
         dia = int(valor)
     except (TypeError, ValueError):
         raise ErroValidacao('Dia da semana inválido.') from None
-    if not 0 <= dia <= 5:
-        raise ErroValidacao('Escolha um dia de segunda a sábado.')
+    if not 0 <= dia <= (DOMINGO if com_domingo else SABADO):
+        raise ErroValidacao('Escolha um dia de segunda a domingo.' if com_domingo
+                            else 'Escolha um dia de segunda a sábado.')
     return dia
 
 
@@ -231,13 +267,16 @@ def _hora(valor, rotulo):
     raise ErroValidacao(f'Horário de {rotulo} inválido: use o formato HH:MM.')
 
 
-def ler_dados_atividade(corpo, atual=None):
+def ler_dados_atividade(corpo, atual=None, com_domingo=False):
     """Valida o JSON de uma atividade e devolve só os campos limpos.
 
     Criando (`atual` None), título, início e fim são obrigatórios e o dia pode
     vir como `repetir_em` (lista) — devolvido em `dias`. Editando, só o que
     foi enviado muda, mas a checagem de horário olha o resultado final: mandar
     só um início que passa do fim atual também é recusado.
+
+    `com_domingo` é a semana do modelo/rotina de destino: sem ele, o domingo é
+    recusado.
     """
     if not isinstance(corpo, dict):
         raise ErroValidacao('Dados inválidos.')
@@ -276,13 +315,13 @@ def ler_dados_atividade(corpo, atual=None):
         if repetir not in (None, '', []):
             if not isinstance(repetir, list):
                 raise ErroValidacao('Dias para repetir inválidos.')
-            limpos['dias'] = sorted({_dia(valor) for valor in repetir})
+            limpos['dias'] = sorted({_dia(valor, com_domingo) for valor in repetir})
         elif 'dia_semana' in corpo:
-            limpos['dias'] = [_dia(corpo['dia_semana'])]
+            limpos['dias'] = [_dia(corpo['dia_semana'], com_domingo)]
         else:
             raise ErroValidacao('Escolha pelo menos um dia da semana.')
     elif 'dia_semana' in corpo:
-        limpos['dia_semana'] = _dia(corpo['dia_semana'])
+        limpos['dia_semana'] = _dia(corpo['dia_semana'], com_domingo)
 
     if criando and ('inicio' not in corpo or 'fim' not in corpo):
         raise ErroValidacao('Informe o horário de início e de fim.')
@@ -324,33 +363,57 @@ def serializar_atividade(atividade, permissoes=None):
     return dados
 
 
+def tem_telefone(user):
+    """A pessoa tem um número que o WhatsApp aceita no cadastro?"""
+    from core.evolution import normalizar_numero
+
+    return bool(user is not None and normalizar_numero(getattr(user, 'phone', '') or ''))
+
+
 def dados_da_rotina(rotina):
     return {
         'id': rotina.id,
         'usuario': {'id': rotina.user_id, 'nome': nome_de(rotina.user)},
         'ativa': rotina.ativa,
         'pode_criar': rotina.pode_criar,
+        'com_domingo': rotina.com_domingo,
+        'avisar_whatsapp': rotina.avisar_whatsapp,
+        'tem_telefone': tem_telefone(rotina.user),
     }
 
 
 def payload_rotina(rotina, quem_ve, momento=None):
+    atividades = list(rotina.atividades.all())
     return {
         'ok': True,
         'rotina': dados_da_rotina(rotina),
-        'semana': dados_da_semana(momento),
+        'semana': dados_da_semana(momento, semana_com_domingo(rotina, atividades)),
         'atividades': [serializar_atividade(a, permissoes_da_atividade(quem_ve, a, rotina))
-                       for a in rotina.atividades.all()],
+                       for a in atividades],
     }
 
 
 def payload_modelo(modelo, momento=None):
+    atividades = list(modelo.atividades.all())
     return {
         'ok': True,
         'modelo': {'id': modelo.id, 'nome': modelo.nome, 'descricao': modelo.descricao,
-                   'ativo': modelo.ativo},
-        'semana': dados_da_semana(momento),
-        'atividades': [serializar_atividade(a) for a in modelo.atividades.all()],
+                   'ativo': modelo.ativo, 'com_domingo': modelo.com_domingo},
+        'semana': dados_da_semana(momento, semana_com_domingo(modelo, atividades)),
+        'atividades': [serializar_atividade(a) for a in atividades],
     }
+
+
+def conferir_pode_tirar_domingo(dono):
+    """Barra desligar o domingo de um modelo/rotina que ainda tem atividade no domingo.
+
+    Desligar em silêncio esconderia essas atividades (ou deixaria avisos de um
+    dia que não aparece na tela): quem desliga decide antes o que fazer com elas.
+    """
+    total = dono.atividades.filter(dia_semana=DOMINGO).count()
+    if total:
+        quantas = 'Há 1 atividade' if total == 1 else f'Há {total} atividades'
+        raise ErroValidacao(f'{quantas} no domingo. Mova ou exclua antes de tirar o domingo da semana.')
 
 
 # ---------------------------------------------------------------------------
@@ -391,14 +454,17 @@ def aplicar_modelo(rotina, modelo, por=None):
     """Troca todas as atividades da rotina pelas do modelo. Devolve quantas entraram.
 
     É substituição, não soma: aplicar duas vezes não duplica nada. O que a
-    pessoa tinha mudado (ou criado) some — a tela avisa antes.
+    pessoa tinha mudado (ou criado) some — a tela avisa antes. A semana passa a
+    ser a do modelo, inclusive ter ou não o domingo.
     """
+    atividades = list(modelo.atividades.all())
     rotina.atividades.all().delete()
     novas = AtividadeRotina.objects.bulk_create(
-        [AtividadeRotina(rotina=rotina, **campos) for campos in _copias(modelo.atividades.all())])
+        [AtividadeRotina(rotina=rotina, **campos) for campos in _copias(atividades)])
     rotina.modelo_origem = modelo
+    rotina.com_domingo = semana_com_domingo(modelo, atividades)
     rotina.atualizado_por = por
-    rotina.save(update_fields=['modelo_origem', 'atualizado_por', 'atualizado_em'])
+    rotina.save(update_fields=['modelo_origem', 'com_domingo', 'atualizado_por', 'atualizado_em'])
     return len(novas)
 
 
@@ -411,13 +477,15 @@ def copiar_rotina(destino, origem, por=None):
     """
     if destino.pk == origem.pk:
         raise ErroValidacao('Escolha outra pessoa para copiar a rotina.')
+    atividades = list(origem.atividades.all())
     destino.atividades.all().delete()
     novas = AtividadeRotina.objects.bulk_create(
         [AtividadeRotina(rotina=destino, **campos)
-         for campos in _copias(origem.atividades.all(), criada_pela_pessoa=False)])
+         for campos in _copias(atividades, criada_pela_pessoa=False)])
     destino.modelo_origem = origem.modelo_origem
+    destino.com_domingo = semana_com_domingo(origem, atividades)
     destino.atualizado_por = por
-    destino.save(update_fields=['modelo_origem', 'atualizado_por', 'atualizado_em'])
+    destino.save(update_fields=['modelo_origem', 'com_domingo', 'atualizado_por', 'atualizado_em'])
     return len(novas)
 
 
@@ -431,10 +499,12 @@ def limpar_rotina(rotina, por=None):
 
 @transaction.atomic
 def duplicar_modelo(modelo, por=None):
+    atividades = list(modelo.atividades.all())
     copia = ModeloRotina.objects.create(
-        nome=f'{modelo.nome} (cópia)'[:120], descricao=modelo.descricao, ativo=True, criado_por=por)
+        nome=f'{modelo.nome} (cópia)'[:120], descricao=modelo.descricao, ativo=True,
+        com_domingo=semana_com_domingo(modelo, atividades), criado_por=por)
     AtividadeModelo.objects.bulk_create(
-        [AtividadeModelo(modelo=copia, **campos) for campos in _copias(modelo.atividades.all())])
+        [AtividadeModelo(modelo=copia, **campos) for campos in _copias(atividades)])
     return copia
 
 
@@ -490,8 +560,8 @@ def atividades_de_hoje(user, momento=None):
     if rotina is None or not rotina.ativa:
         return resposta
     resposta['ativa'] = True
-    if hoje.weekday() > 5:
-        return resposta
+    # Sem filtro de dia: no domingo só há o que avisar se a semana tiver domingo
+    # (a validação não deixa gravar atividade de domingo em semana sem domingo).
 
     registrados = set(AvisoRotina.objects.filter(user=user, data=hoje).values_list('atividade_id', 'tipo'))
     for atividade in rotina.atividades.filter(dia_semana=hoje.weekday()).order_by('inicio', 'fim', 'id'):
@@ -687,23 +757,33 @@ def cartao_da_home(user, momento=None):
     """O cartão "Rotina gerencial" da home: o dia de hoje de `user` em uma consulta só.
 
     Quem chama já sabe que a pessoa tem rotina liberada (context processor).
-    Uma consulta traz as atividades do dia e, junto, se o sino está desligado
-    nas preferências. No domingo a consulta traz a segunda-feira, para o
-    cartão dizer como a semana começa.
+    Uma consulta traz as atividades do dia e, junto, o que o rodapé precisa:
+    se o sino está desligado nas preferências e se o WhatsApp vale para a
+    pessoa. No domingo a consulta traz também a segunda-feira: se a semana da
+    pessoa não tem domingo, o cartão diz como a semana começa.
     """
+    from core.evolution import normalizar_numero
     from notifications.models import NotificationPreference
 
     momento = momento or agora()
     hoje = momento.date()
-    domingo = hoje.weekday() == 6
-    dia = hoje + timedelta(days=1) if domingo else hoje
+    e_domingo = hoje.weekday() == DOMINGO
+    dias = [DOMINGO, 0] if e_domingo else [hoje.weekday()]
     sino_desligado = NotificationPreference.objects.filter(user=user, in_app_enabled=False)
-    atividades = list(AtividadeRotina.objects
-                      .filter(rotina__user=user, rotina__ativa=True, dia_semana=dia.weekday())
-                      .annotate(sino_desligado=Exists(sino_desligado))
-                      .order_by('inicio', 'fim', 'id'))
+    todas = list(AtividadeRotina.objects
+                 .filter(rotina__user=user, rotina__ativa=True, dia_semana__in=dias)
+                 .annotate(sino_desligado=Exists(sino_desligado),
+                           semana_com_domingo=F('rotina__com_domingo'),
+                           avisar_whatsapp=F('rotina__avisar_whatsapp'),
+                           telefone=F('rotina__user__phone'))
+                 .order_by('inicio', 'fim', 'id'))
+    com_domingo = any(a.semana_com_domingo or a.dia_semana == DOMINGO for a in todas)
+    domingo = e_domingo and not com_domingo
+    dia = hoje + timedelta(days=1) if domingo else hoje
+    atividades = [a for a in todas if a.dia_semana == dia.weekday()]
     itens = [item_do_dia(a, dia) for a in atividades]
     agora_ts = _ms(momento)
+    primeira = todas[0] if todas else None
 
     if domingo:
         situacao = {'estado': 'domingo', 'atual': None, 'proxima': None, 'seguintes': [], 'restantes': 0,
@@ -719,7 +799,9 @@ def cartao_da_home(user, momento=None):
         'agora_ts': agora_ts,
         'amanha': itens[0] if domingo and itens else None,
         'avisos_ligados': pendente,
-        'sino_desligado': bool(atividades and atividades[0].sino_desligado),
+        'sino_desligado': bool(primeira and primeira.sino_desligado),
+        'whatsapp_ligado': bool(primeira and primeira.avisar_whatsapp
+                                and normalizar_numero(primeira.telefone or '')),
         'lembrete_minutos': MINUTOS_LEMBRETE,
         'url_rotina': reverse('rotina:minha'),
         'url_dia': f"{reverse('rotina:minha')}?dia={dia.weekday()}",

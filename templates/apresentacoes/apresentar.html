@@ -1,0 +1,79 @@
+{% load static %}<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex">
+  <title>{{ titulo }} · Apresentação</title>
+  <link rel="icon" type="image/png" href="{% static 'images/logo3.png' %}">
+
+  <!-- Mesmas fontes e o mesmo CSS do editor: o slide aqui sai igual ao que a pessoa montou. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" crossorigin="anonymous" data-apres-fonte="Montserrat"
+        href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap">
+  <link rel="stylesheet" crossorigin="anonymous" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <link rel="stylesheet" href="{% static 'apresentacoes/editor.css' %}">
+
+  {{ apres_config|json_script:"apres-config" }}
+  <script>
+    window.APRES = JSON.parse(document.getElementById('apres-config').textContent);
+  </script>
+</head>
+<body class="ap-body">
+  {% if aviso %}
+  {# Nada para apresentar: o servidor já sabe o motivo e a página explica sem depender de JavaScript. #}
+  <main class="ap-raiz ap-mensagem">
+    <section class="ap-inicio" role="alert">
+      <i class="fa-solid {{ aviso.icone }} ap-icone-grande" aria-hidden="true"></i>
+      <h1>{{ aviso.titulo }}</h1>
+      <p>{{ aviso.texto }}</p>
+      <div class="ap-acoes">
+        <a class="ap-link ap-primario" href="{{ url_editor }}"><i class="fa-solid fa-pen-to-square" aria-hidden="true"></i>Abrir o editor</a>
+        <a class="ap-link" href="{{ url_inicio }}"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i>Voltar às apresentações</a>
+      </div>
+      <small>{{ titulo }}</small>
+    </section>
+  </main>
+  {% else %}
+  <div id="ap-app" class="ap-raiz ap-mensagem" aria-busy="true">
+    <div class="ap-inicio" role="status">
+      <span class="ed-giro" aria-hidden="true"></span>
+      <p>Abrindo a apresentação…</p>
+    </div>
+  </div>
+  <noscript>
+    <p style="position: relative; z-index: 5000; padding: 24px; font-family: sans-serif; color: #fff;">O modo apresentação precisa de JavaScript ligado.</p>
+  </noscript>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.2.4/purify.min.js" crossorigin="anonymous"></script>
+  <script src="{% static 'apresentacoes/render.js' %}"></script>
+  <script src="{% static 'apresentacoes/apresentar.js' %}"></script>
+  <script>
+    // Sem os scripts (bloqueados, fora do ar), a tela diz o que houve em vez de ficar em "Abrindo…".
+    (function () {
+      var app = document.getElementById('ap-app');
+      if (window.APRES_APRESENTAR && window.APRES_RENDER) {
+        window.APRES_APRESENTAR.iniciarPagina(app);
+        return;
+      }
+      app.removeAttribute('aria-busy');
+      app.textContent = '';
+      var caixa = document.createElement('div');
+      caixa.className = 'ap-inicio';
+      caixa.setAttribute('role', 'alert');
+      var titulo = document.createElement('h1');
+      titulo.textContent = 'Não foi possível abrir a apresentação';
+      var texto = document.createElement('p');
+      texto.textContent = 'Os arquivos do modo apresentação não carregaram. Confira a internet e recarregue a página.';
+      var botao = document.createElement('button');
+      botao.type = 'button';
+      botao.textContent = 'Recarregar';
+      botao.addEventListener('click', function () { window.location.reload(); });
+      caixa.append(titulo, texto, botao);
+      app.appendChild(caixa);
+    })();
+  </script>
+  {% endif %}
+</body>
+</html>

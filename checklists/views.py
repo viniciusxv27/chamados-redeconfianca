@@ -17,6 +17,7 @@ from .models import (
     ChecklistTaskExecution, ChecklistAssignmentApprover, ChecklistPendingAssignment
 )
 from users.models import User, Sector
+from users.module_access import fechado_para_padrao
 
 # Cache de processo (LocMemCache), não o Redis remoto — ver a nota em
 # CACHE_SETORES_SEGUNDOS.
@@ -91,6 +92,7 @@ def get_user_visible_sector_ids(user, include_adm_for_admin_plus=False):
 
 
 @login_required
+@fechado_para_padrao('checklists')
 def checklist_dashboard(request):
     """Dashboard principal dos checklists"""
     user = request.user
@@ -273,6 +275,7 @@ def checklist_dashboard(request):
 
 
 @login_required
+@fechado_para_padrao('checklists')
 def create_assignment(request):
     """Criar nova atribuição de checklist"""
     if request.method == 'POST':
@@ -509,6 +512,7 @@ def create_executions_for_assignment(assignment):
 
 
 @login_required
+@fechado_para_padrao('checklists')
 def execute_today_checklists(request):
     """Executar todos os checklists de hoje em um único formulário"""
     user = request.user
@@ -709,6 +713,7 @@ def execute_today_checklists(request):
 
 @login_required
 @login_required
+@fechado_para_padrao('checklists')
 def view_execution(request, execution_id):
     """Visualizar/executar execução específica de checklist"""
     from django.utils import timezone
@@ -946,6 +951,7 @@ def view_execution(request, execution_id):
 
 
 @login_required
+@fechado_para_padrao('checklists')
 def execute_checklist(request, assignment_id):
     """Executar/visualizar checklist individual por assignment_id e period"""
     from datetime import date
@@ -1013,6 +1019,7 @@ def execute_checklist(request, assignment_id):
 
 
 @login_required
+@fechado_para_padrao('checklists')
 def my_checklists(request):
     """Listar todos os checklists do usuário"""
     user = request.user
@@ -1080,6 +1087,7 @@ def my_checklists(request):
 
 
 @login_required
+@fechado_para_padrao('checklists')
 def api_get_template_details(request, template_id):
     """API para buscar detalhes de um template"""
     try:
@@ -1115,6 +1123,7 @@ def api_get_template_details(request, template_id):
 
 
 @login_required
+@fechado_para_padrao('checklists')
 def api_search_users(request):
     """API para buscar usuários"""
     query = request.GET.get('q', '').strip()
@@ -1144,6 +1153,7 @@ def api_search_users(request):
 
 
 @login_required
+@fechado_para_padrao('checklists')
 def api_group_members(request, group_id):
     """API para buscar membros de um grupo"""
     from communications.models import CommunicationGroup
@@ -1169,6 +1179,7 @@ def api_group_members(request, group_id):
 
 
 @login_required
+@fechado_para_padrao('checklists')
 def api_get_day_checklists(request):
     """API para buscar todos os checklists de um dia específico (supervisor ou maior)"""
     user = request.user
@@ -1255,6 +1266,7 @@ def api_get_day_checklists(request):
 
 
 @login_required
+@fechado_para_padrao('checklists')
 def api_unassign_checklist(request, assignment_id):
     """API para desatribuir um checklist"""
     if request.method != 'POST':
@@ -1289,7 +1301,10 @@ def api_unassign_checklist(request, assignment_id):
         return JsonResponse({'error': str(e)}, status=500)
 
 
-# ===== ADMIN - TEMPLATES =====@login_required
+# ===== ADMIN - TEMPLATES =====
+
+@login_required
+@fechado_para_padrao('checklists')
 def admin_templates(request):
     """Administração de templates (apenas para admins)"""
     if not has_checklist_admin_permission(request.user):
@@ -1341,6 +1356,7 @@ def admin_templates(request):
 
 
 @login_required
+@fechado_para_padrao('checklists')
 def create_template(request):
     """Criar novo template de checklist (apenas para admins)"""
     if not has_checklist_admin_permission(request.user):
@@ -1441,6 +1457,7 @@ def create_template(request):
 
 
 @login_required
+@fechado_para_padrao('checklists')
 def edit_template(request, template_id):
     """Editar template de checklist (apenas para admins)"""
     if not has_checklist_admin_permission(request.user):
@@ -1547,6 +1564,7 @@ def edit_template(request, template_id):
 
 
 @login_required
+@fechado_para_padrao('checklists')
 def delete_template(request, template_id):
     """Deletar template de checklist (apenas para admins)"""
     if not has_checklist_admin_permission(request.user):
@@ -1570,6 +1588,7 @@ def delete_template(request, template_id):
 
 
 @login_required
+@fechado_para_padrao('checklists')
 def admin_approvals(request):
     """Área de aprovação de checklists para supervisores e hierarquias superiores"""
     # Verificar se o usuário tem permissão para acessar aprovações
@@ -1681,6 +1700,7 @@ def admin_approvals(request):
 
 
 @login_required
+@fechado_para_padrao('checklists')
 def approve_checklist(request, execution_id):
     """Aprovar checklist executado"""
     execution = get_object_or_404(ChecklistExecution, id=execution_id)
@@ -1715,6 +1735,7 @@ def approve_checklist(request, execution_id):
 
 
 @login_required
+@fechado_para_padrao('checklists')
 def reject_checklist(request, execution_id):
     """Rejeitar checklist executado"""
     execution = get_object_or_404(ChecklistExecution, id=execution_id)
@@ -1765,6 +1786,7 @@ def reject_checklist(request, execution_id):
 
 
 @login_required
+@fechado_para_padrao('checklists')
 def approve_all_checklists(request):
     """Aprovar todos os checklists aguardando aprovação"""
     # Verificar permissão
@@ -1806,6 +1828,7 @@ def approve_all_checklists(request):
 
 
 @login_required
+@fechado_para_padrao('checklists')
 def reject_all_checklists(request):
     """Reprovar todos os checklists aguardando aprovação"""
     # Verificar permissão
@@ -1860,6 +1883,7 @@ def reject_all_checklists(request):
 
 
 @login_required
+@fechado_para_padrao('checklists')
 def approve_task(request, task_exec_id):
     """Aprovar tarefa individual"""
     from checklists.models import ChecklistTaskExecution
@@ -1901,6 +1925,7 @@ def approve_task(request, task_exec_id):
 
 
 @login_required
+@fechado_para_padrao('checklists')
 def reject_task(request, task_exec_id):
     """Reprovar tarefa individual"""
     from checklists.models import ChecklistTaskExecution
@@ -1947,6 +1972,7 @@ def reject_task(request, task_exec_id):
 
 
 @login_required
+@fechado_para_padrao('checklists')
 def unapprove_task(request, task_exec_id):
     """Desfazer aprovação/reprovação de tarefa"""
     from checklists.models import ChecklistTaskExecution
@@ -1988,6 +2014,7 @@ def unapprove_task(request, task_exec_id):
 
 
 @login_required
+@fechado_para_padrao('checklists')
 def checklist_reports(request):
     """Relatório de quem fez e não fez os checklists"""
     # Verificar permissão
@@ -2131,6 +2158,7 @@ def checklist_reports(request):
 
 
 @login_required
+@fechado_para_padrao('checklists')
 def export_checklists(request):
     """Exportar relatório de checklists para Excel"""
     from django.http import HttpResponse
@@ -2305,6 +2333,7 @@ def export_checklists(request):
 
 
 @login_required
+@fechado_para_padrao('checklists')
 def api_upload_evidence(request, task_exec_id):
     """API para upload de evidências (imagens, vídeos, documentos) sem submeter o checklist"""
     from django.http import JsonResponse
@@ -2376,6 +2405,7 @@ def api_upload_evidence(request, task_exec_id):
 
 
 @login_required
+@fechado_para_padrao('checklists')
 def api_delete_evidence(request, evidence_id):
     """API para deletar uma evidência"""
     from django.http import JsonResponse
@@ -2418,6 +2448,7 @@ def api_delete_evidence(request, evidence_id):
 
 
 @login_required
+@fechado_para_padrao('checklists')
 def admin_executions(request):
     """Área administrativa para controle de execuções de checklists"""
     # Verificar permissão
@@ -2555,6 +2586,7 @@ def admin_executions(request):
 
 
 @login_required
+@fechado_para_padrao('checklists')
 def admin_executions_macro(request):
     """Visão macro de execuções de checklists - por usuário, turno e atrasados"""
     # Verificar permissão
@@ -2708,6 +2740,7 @@ def admin_executions_macro(request):
 
 
 @login_required
+@fechado_para_padrao('checklists')
 def admin_assignment_approvers(request):
     """Gerenciar aprovadores de atribuição de checklists - Somente SUPERADMIN"""
     # Verificar permissão (somente SUPERADMIN)
@@ -2743,6 +2776,7 @@ def admin_assignment_approvers(request):
 
 
 @login_required
+@fechado_para_padrao('checklists')
 @require_POST
 def api_add_assignment_approver(request):
     """API para adicionar aprovador de atribuição"""
@@ -2795,6 +2829,7 @@ def api_add_assignment_approver(request):
 
 
 @login_required
+@fechado_para_padrao('checklists')
 @require_POST
 def api_remove_assignment_approver(request, approver_id):
     """API para remover aprovador de atribuição"""
@@ -2819,6 +2854,7 @@ def api_remove_assignment_approver(request, approver_id):
 
 
 @login_required
+@fechado_para_padrao('checklists')
 def admin_pending_assignments(request):
     """Listar atribuições pendentes de aprovação"""
     # Verificar permissão - aprovadores ou admins
@@ -2868,6 +2904,7 @@ def admin_pending_assignments(request):
 
 
 @login_required
+@fechado_para_padrao('checklists')
 @require_POST
 def api_approve_pending_assignment(request, pending_id):
     """API para aprovar atribuição pendente"""
@@ -2926,6 +2963,7 @@ def api_approve_pending_assignment(request, pending_id):
 
 
 @login_required
+@fechado_para_padrao('checklists')
 @require_POST
 def api_reject_pending_assignment(request, pending_id):
     """API para rejeitar atribuição pendente"""
@@ -2975,6 +3013,7 @@ def api_reject_pending_assignment(request, pending_id):
 
 
 @login_required
+@fechado_para_padrao('checklists')
 @require_POST
 def api_approve_all_pending_assignments(request):
     """API para aprovar todas as atribuições pendentes visíveis ao aprovador"""
@@ -3045,6 +3084,7 @@ def api_approve_all_pending_assignments(request):
 
 
 @login_required
+@fechado_para_padrao('checklists')
 @require_POST
 def api_reject_all_pending_assignments(request):
     """API para rejeitar todas as atribuições pendentes visíveis ao aprovador"""
@@ -3101,6 +3141,7 @@ def api_reject_all_pending_assignments(request):
 
 
 @login_required
+@fechado_para_padrao('checklists')
 @require_POST
 def api_delete_executions(request):
     """API para excluir múltiplas execuções de checklist"""
@@ -3148,6 +3189,7 @@ def api_delete_executions(request):
 
 
 @login_required
+@fechado_para_padrao('checklists')
 @require_POST
 def api_delete_duplicate_executions(request):
     """API para remover execuções duplicadas com base nos filtros da tela administrativa"""
@@ -3250,6 +3292,7 @@ def api_delete_duplicate_executions(request):
 
 
 @login_required
+@fechado_para_padrao('checklists')
 @require_POST
 def api_delete_filtered_executions(request):
     """API para excluir todas as execuções filtradas na tela administrativa"""

@@ -9,6 +9,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from users.models import Sector, User
+from users.module_access import fechado_para_padrao
 
 from .models import (
     LimpezaAnswer,
@@ -50,6 +51,7 @@ def _get_user_sectors(user):
 # ─── Dashboard ────────────────────────────────────────────────────────────────
 
 @login_required
+@fechado_para_padrao('limpeza')
 def dashboard(request):
     """Lista as limpezas já feitas e dá o atalho para registrar uma nova.
 
@@ -94,6 +96,7 @@ def dashboard(request):
 # ─── Registrar uma limpeza ────────────────────────────────────────────────────
 
 @login_required
+@fechado_para_padrao('limpeza')
 def registro_novo(request):
     """Checklist da limpeza: uma pergunta, três opções, e pronto."""
     template = (LimpezaTemplate.objects.filter(is_active=True)
@@ -249,6 +252,7 @@ def _perguntas_para_tela(perguntas, respostas, ids_faltando, dados_post):
 
 
 @login_required
+@fechado_para_padrao('limpeza')
 def registro_detalhe(request, registro_id):
     """Ver uma limpeza registrada: quem fez, quando e o checklist."""
     registro = get_object_or_404(
@@ -275,6 +279,7 @@ def registro_detalhe(request, registro_id):
 
 
 @login_required
+@fechado_para_padrao('limpeza')
 def template_list(request):
     user = request.user
     if not _is_gerente_or_superadmin(user):
@@ -292,6 +297,7 @@ def template_list(request):
 
 
 @login_required
+@fechado_para_padrao('limpeza')
 def template_create(request):
     user = request.user
     if not _is_gerente_or_superadmin(user):
@@ -351,6 +357,7 @@ def template_create(request):
 
 
 @login_required
+@fechado_para_padrao('limpeza')
 def template_edit(request, template_id):
     user = request.user
     template = get_object_or_404(LimpezaTemplate, id=template_id, is_active=True)
@@ -405,6 +412,7 @@ def template_edit(request, template_id):
 
 
 @login_required
+@fechado_para_padrao('limpeza')
 @require_POST
 def template_delete(request, template_id):
     user = request.user
@@ -421,6 +429,7 @@ def template_delete(request, template_id):
 
 
 @login_required
+@fechado_para_padrao('limpeza')
 def import_template_pdf(request):
     """Importa template a partir de PDF de checklist."""
     user = request.user
@@ -510,6 +519,7 @@ def import_template_pdf(request):
 # ─── Relatórios ──────────────────────────────────────────────────────────────
 
 @login_required
+@fechado_para_padrao('limpeza')
 def reports(request):
     user = request.user
     if not _is_gerente_or_superadmin(user):
@@ -588,6 +598,7 @@ def reports(request):
 
 
 @login_required
+@fechado_para_padrao('limpeza')
 def export_report(request):
     user = request.user
     if not _is_gerente_or_superadmin(user):
@@ -651,6 +662,7 @@ def export_report(request):
 # ─── Histórico / Arquivo ─────────────────────────────────────────────────────
 
 @login_required
+@fechado_para_padrao('limpeza')
 def archive(request):
     user = request.user
     if not _is_gerente_or_superadmin(user):

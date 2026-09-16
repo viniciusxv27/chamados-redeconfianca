@@ -68,6 +68,22 @@ def pode_aprovar(user, renova):
     return bool(renova.loja_id and getattr(user, 'sector_id', None) == renova.loja_id and e_gerente(user))
 
 
+def pode_informar_venda(user, renova):
+    """Informa ou corrige o nº da venda: quem fez a avaliação, o gerente da loja dela ou o SUPERADMIN.
+
+    Os mesmos que abrem o chamado de novo: a venda é da loja, então fica com quem
+    vendeu e com quem responde pela loja. O financeiro e quem recebe só leem.
+    """
+    if not (user and user.is_authenticated):
+        return False
+    return renova.criado_por_id == user.pk or pode_aprovar(user, renova)
+
+
+def pode_excluir(user):
+    """Exclui uma avaliação feita: só o SUPERADMIN — some o registro inteiro e não tem volta."""
+    return e_superadmin(user)
+
+
 def pode_ver_gestao(user, cfg=None):
     """Quadro de gestão: o SUPERADMIN e quem ele pôs como financeiro."""
     if not (user and user.is_authenticated):

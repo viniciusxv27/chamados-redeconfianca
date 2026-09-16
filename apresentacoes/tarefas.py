@@ -28,6 +28,10 @@ MAX_RODADAS_DE_PERGUNTAS = 2
 MAX_IMAGENS_IA = 6
 MAX_TAREFAS_ABERTAS_POR_PESSOA = 4
 PARADA_APOS = {TarefaIA.Tipo.VIDEO: timedelta(minutes=30), 'padrao': timedelta(minutes=15)}
+# A thread tira a tarefa da fila (PENDENTE → RODANDO) segundos depois do commit. Na fila por mais
+# que isto, ninguém vai pegá-la (o servidor reiniciou entre o pedido e o início): não faz sentido a
+# tela esperar os 15 minutos de uma tarefa que está de fato rodando.
+FILA_PARADA_APOS = timedelta(minutes=5)
 
 
 class TarefaRecusada(Exception):
@@ -69,7 +73,10 @@ def conferir_parada(tarefa):
     """Tarefa RODANDO sem sinal de vida (servidor reiniciou no meio) vira ERRO."""
     if tarefa.status not in (TarefaIA.Status.PENDENTE, TarefaIA.Status.RODANDO):
         return tarefa
-    limite = PARADA_APOS.get(tarefa.tipo, PARADA_APOS['padrao'])
+    if tarefa.status == TarefaIA.Status.PENDENTE:
+        limite = FILA_PARADA_APOS
+    else:
+        limite = PARADA_APOS.get(tarefa.tipo, PARADA_APOS['padrao'])
     if tarefa.atualizado_em and timezone.now() - tarefa.atualizado_em > limite:
         _falhar(tarefa, 'O pedido foi interrompido (o servidor reiniciou no meio). Tente de novo.')
     return tarefa

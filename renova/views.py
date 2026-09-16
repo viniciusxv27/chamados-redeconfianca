@@ -17,18 +17,21 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.templatetags.static import static
 from django.urls import reverse
 from django.utils import timezone
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_http_methods, require_POST
 from PIL import Image
+
+from core.middleware import log_action
 
 from . import checklist, conteudo
 from .context_processors import limpar_cache_do_menu
 from .models import PrecoAparelho, Renova
-from .permissoes import (configuracao, e_gerente, e_superadmin, pode_aprovar, pode_fazer, pode_receber,
-                         pode_ver, pode_ver_gestao, pode_ver_modulo, renovas_visiveis, setor_recebedor)
+from .permissoes import (configuracao, e_gerente, e_superadmin, pode_aprovar, pode_excluir, pode_fazer,
+                         pode_informar_venda, pode_receber, pode_ver, pode_ver_gestao, pode_ver_modulo,
+                         renovas_visiveis, setor_recebedor)
 from .padrao import regras_para_tela
-from .servicos import (DecisaoInvalida, abrir_chamado, avisar_gerentes, decidir, gerentes_da_loja,
-                       registrar_recebimento)
-from .validacao import ler_checklist, ler_valor
+from .servicos import (DecisaoInvalida, abrir_chamado, avisar_gerentes, decidir, excluir_avaliacao,
+                       gerentes_da_loja, registrar_recebimento, resumo_da_avaliacao)
+from .validacao import NUMERO_VENDA_MAX, ler_checklist, ler_numero_venda, ler_valor
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
@@ -93,6 +96,7 @@ def _contexto(request, cfg, aba, **extra):
         'rn_gerente': gerente,
         'rn_pode_ver_gestao': pode_ver_gestao(user, cfg),
         'rn_superadmin': e_superadmin(user),
+        'rn_pode_excluir': pode_excluir(user),
         'renova_aguardando': _aguardando() if receber else 0,
         'rn_a_aprovar': (Renova.objects.filter(aprovacao=Renova.AGUARDANDO_GERENTE, loja_id=user.sector_id).count()
                          if gerente and user.sector_id else 0),
@@ -156,7 +160,7 @@ def inicio(request):
     if filtros['q']:
         termo = filtros['q']
         condicao = (Q(imei1__icontains=termo) | Q(imei2__icontains=termo) | Q(modelo__icontains=termo)
-                    | Q(vendedor_nome__icontains=termo) | Q(cor__icontains=termo))
+                    | Q(vendedor_nome__icontains=termo) | Q(cor__icontains=termo) | Q(numero_venda__icontains=termo))
         codigo = re.fullmatch(r'(?i)rn-?0*(\d+)', termo.replace(' ', ''))
         if codigo:
             condicao |= Q(pk=int(codigo.group(1)))
@@ -257,10 +261,30 @@ def nova(request):
 
 
 def _renova_visivel(request, cfg, pk):
-    renova = get_object_or_404(
-        Renova.objects.select_related('loja', 'criado_por', 'chamado', 'chamado__category', 'chamado__sector',
-                                      'recebido_por', 'preco_tabela'), pk=pk)
-    return renova if pode_ver(request.user, renova, cfg) else None
+    """A avaliação, se existe e a pessoa pode vê-la; senão None (quem chama responde com _nao_abre)."""
+    renova = (Renova.objects.select_related('loja', 'criado_por', 'chamado', 'chamado__category', 'chamado__sector',
+                                            'recebido_por', 'preco_tabela')
+              .filter(pk=pk).first())
+    return renova if renova is not None and pode_ver(request.user, renova, cfg) else None
+
+
+def _nao_abre(request, cfg, pk):
+    """Avaliação que não abre para a pessoa.
+
+    A excluída pelo SUPERADMIN continua linkada nos avisos do sino e na descrição
+    do chamado: quem clica lê que ela foi excluída, em vez de cair numa página de erro.
+    """
+    if Renova.objects.filter(pk=pk).exists():
+        messages.error(request, 'Essa avaliação não está entre as que você pode ver.')
+    else:
+        messages.error(request, f'A avaliação {Renova(pk=pk).codigo} não está no portal — pode ter sido excluída '
+                                'pelo SUPERADMIN.')
+    return redirect('renova:inicio' if pode_ver_modulo(request.user, cfg) else 'dashboard')
+
+
+def _pode_editar_venda(user, renova):
+    """Reprovada não tem venda: o cliente ficou com o aparelho."""
+    return not renova.reprovada and pode_informar_venda(user, renova)
 
 
 @login_required
@@ -268,8 +292,7 @@ def detalhe(request, pk):
     cfg = configuracao()
     renova = _renova_visivel(request, cfg, pk)
     if renova is None:
-        messages.error(request, 'Essa avaliação não está entre as que você pode ver.')
-        return redirect('renova:inicio' if pode_ver_modulo(request.user, cfg) else 'dashboard')
+        return _nao_abre(request, cfg, pk)
     user = request.user
     return render(request, 'renova/detalhe.html', _contexto(
         request, cfg, 'inicio', renova=renova,
@@ -278,7 +301,8 @@ def detalhe(request, pk):
         pode_marcar=renova.aprovada and pode_receber(user, cfg),
         pode_reabrir_chamado=(renova.aprovada and renova.chamado_id is None
                               and (renova.criado_por_id == user.pk or e_superadmin(user) or pode_aprovar(user, renova))),
-        setor=setor_recebedor(cfg)))
+        pode_editar_venda=_pode_editar_venda(user, renova), numero_venda_max=NUMERO_VENDA_MAX,
+        voltar=request.get_full_path(), setor=setor_recebedor(cfg)))
 
 
 @login_required
@@ -286,14 +310,89 @@ def etiqueta(request, pk):
     cfg = configuracao()
     renova = _renova_visivel(request, cfg, pk)
     if renova is None:
-        messages.error(request, 'Essa avaliação não está entre as que você pode ver.')
-        return redirect('renova:inicio' if pode_ver_modulo(request.user, cfg) else 'dashboard')
+        return _nao_abre(request, cfg, pk)
     if not renova.aprovada:
         messages.info(request, f'A etiqueta de {renova.codigo} sai depois que o gerente da loja aprova a troca.')
         return redirect('renova:detalhe', pk=renova.pk)
     return render(request, 'renova/etiqueta.html', _contexto(
         request, cfg, 'inicio', renova=renova, novo=request.GET.get('novo') == '1',
-        logo_url=_estatico('images/logo.png')))
+        logo_url=_estatico('images/logo.png'),
+        pode_editar_venda=_pode_editar_venda(request.user, renova), numero_venda_max=NUMERO_VENDA_MAX,
+        voltar=reverse('renova:etiqueta', args=[renova.pk])))
+
+
+@login_required
+@require_POST
+def informar_venda(request, pk):
+    """Informa, corrige ou apaga o nº da venda — a venda costuma fechar depois da avaliação."""
+    cfg = configuracao()
+    renova = get_object_or_404(Renova.objects.select_related('loja'), pk=pk)
+    destino = _voltar_seguro(request.POST.get('voltar'), reverse('renova:detalhe', args=[renova.pk]))
+    if not pode_informar_venda(request.user, renova):
+        messages.error(request, 'Só quem fez a avaliação, o gerente da loja ou o SUPERADMIN informa o nº da venda.')
+        return redirect(destino if pode_ver(request.user, renova, cfg) else 'renova:inicio')
+    if renova.reprovada:
+        messages.error(request, f'{renova.codigo} foi reprovada: o cliente ficou com o aparelho, então não há venda.')
+        return redirect(destino)
+    try:
+        numero = ler_numero_venda(request.POST.get('numero_venda'))
+    except ValueError:
+        messages.error(request, f'O nº da venda vai até {NUMERO_VENDA_MAX} caracteres — ficou como estava.')
+        return redirect(destino)
+    if numero == renova.numero_venda:
+        messages.info(request, f'{renova.codigo}: o nº da venda já estava assim.')
+        return redirect(destino)
+    renova.numero_venda = numero
+    renova.save(update_fields=['numero_venda', 'atualizado_em'])
+    if numero:
+        quando_sai = 'ele já sai na etiqueta' if renova.aprovada else 'ele sai na etiqueta quando o gerente aprovar'
+        messages.success(request, f'{renova.codigo}: nº da venda {numero} salvo — {quando_sai}.')
+    else:
+        messages.success(request, f'{renova.codigo}: nº da venda apagado.')
+    return redirect(destino)
+
+
+@login_required
+@require_http_methods(['GET', 'POST'])
+def excluir(request, pk):
+    """Exclui uma avaliação feita (só o SUPERADMIN).
+
+    GET mostra o que some junto e o que fica — nunca exclui. POST exclui, com o
+    código da avaliação digitado (como na exclusão de usuário): o botão fica na
+    lista, ao lado de outras avaliações, e não tem volta.
+    """
+    cfg = configuracao()
+    user = request.user
+    if not pode_excluir(user):
+        messages.error(request, 'Só o SUPERADMIN exclui uma avaliação.')
+        return redirect('renova:inicio' if pode_ver_modulo(user, cfg) else 'dashboard')
+    renova = (Renova.objects.select_related('loja', 'criado_por', 'aprovacao_por', 'recebido_por', 'chamado')
+              .filter(pk=pk).first())
+    if renova is None:
+        return _nao_abre(request, cfg, pk)
+
+    tela_dela = reverse('renova:detalhe', args=[renova.pk])
+    voltar = _voltar_seguro(request.POST.get('voltar') or request.GET.get('voltar'), tela_dela)
+    if request.method == 'GET':
+        return render(request, 'renova/excluir.html', _contexto(request, cfg, 'inicio', renova=renova, voltar=voltar))
+
+    codigo = renova.codigo
+    if re.sub(r'\s+', '', request.POST.get('confirmacao') or '').upper() != codigo:
+        messages.error(request, f'Nada foi excluído: para confirmar, digite o código {codigo} exatamente como aparece.')
+        return redirect(f"{reverse('renova:excluir', args=[renova.pk])}?{urlencode({'voltar': voltar})}")
+
+    resumo = resumo_da_avaliacao(renova)
+    gerentes = gerentes_da_loja(renova) if renova.aguardando_aprovacao else []
+    chamado_id = excluir_avaliacao(renova, user)
+    log_action(user, 'ADMIN_ACTION', f'Excluiu o Vini Renova {codigo} ({resumo}).', request)
+    limpar_cache_do_menu([user.pk] + [g.pk for g in gerentes])
+    if chamado_id:
+        messages.success(request, f'{codigo} excluída. O chamado #{chamado_id} continua, com a exclusão anotada '
+                                  'no histórico dele.')
+    else:
+        messages.success(request, f'{codigo} excluída.')
+    # Voltar para a tela dela (ou a etiqueta) cairia no aviso de "não existe mais".
+    return redirect(voltar if not voltar.startswith(tela_dela) else 'renova:inicio')
 
 
 @login_required
@@ -410,7 +509,8 @@ def gestao(request):
             base = base.filter(**{lookup: filtros[campo]})
     if filtros['q']:
         termo = filtros['q']
-        condicao = (Q(imei1__icontains=termo) | Q(modelo__icontains=termo) | Q(vendedor_nome__icontains=termo))
+        condicao = (Q(imei1__icontains=termo) | Q(modelo__icontains=termo) | Q(vendedor_nome__icontains=termo)
+                    | Q(numero_venda__icontains=termo))
         codigo = re.fullmatch(r'(?i)rn-?0*(\d+)', termo.replace(' ', ''))
         if codigo:
             condicao |= Q(pk=int(codigo.group(1)))
@@ -444,8 +544,8 @@ def _gestao_csv(qs):
     resposta.write('\ufeff')                     # BOM: o Excel abre os acentos certos
     escrita = csv.writer(resposta, delimiter=';')
     escrita.writerow(['Código', 'Avaliado em', 'Loja', 'Vendedor', 'Aparelho', 'IMEI 1', 'Padrão', 'Valor (R$)',
-                      'Situação', 'Aprovação por', 'Aprovação em', 'Chamado', 'Recebimento por', 'Recebimento em',
-                      'Obs. do recebimento'])
+                      'Situação', 'Aprovação por', 'Aprovação em', 'Chamado', 'Nº da venda', 'Recebimento por',
+                      'Recebimento em', 'Obs. do recebimento'])
 
     def quando(valor):
         return timezone.localtime(valor).strftime('%d/%m/%Y %H:%M') if valor else ''
@@ -455,7 +555,7 @@ def _gestao_csv(qs):
             r.codigo, quando(r.criado_em), r.loja.name if r.loja else '', r.vendedor_nome, r.aparelho, r.imei1,
             r.padrao, f'{r.valor_estimado:.2f}'.replace('.', ',') if r.valor_estimado is not None else '',
             r.situacao[1], (r.aprovacao_por.full_name or r.aprovacao_por.get_username()) if r.aprovacao_por else '',
-            quando(r.aprovacao_em), f'#{r.chamado_id}' if r.chamado_id else '',
+            quando(r.aprovacao_em), f'#{r.chamado_id}' if r.chamado_id else '', r.numero_venda,
             (r.recebido_por.full_name or r.recebido_por.get_username()) if r.recebido_por else '',
             quando(r.recebido_em), r.recebimento_obs,
         ])

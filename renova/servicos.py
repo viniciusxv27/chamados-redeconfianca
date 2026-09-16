@@ -1,4 +1,4 @@
-"""O que o Renova faz fora dele: abrir o chamado e registrar a chegada do aparelho."""
+"""O que o Renova faz fora dele: abrir o chamado, registrar a chegada do aparelho e excluir a avaliação."""
 import logging
 
 from django.conf import settings
@@ -216,3 +216,53 @@ def decidir(renova, gerente, aprovar, observacao=''):
 def aprovado_para_receber(renova):
     """Não aprovado não viaja: fica fora da fila de chegada."""
     return renova.parecer != checklist.NAO_APROVADO
+
+
+def resumo_da_avaliacao(renova):
+    """Uma linha que identifica a avaliação — é o que resta dela no log depois de excluída."""
+    partes = [
+        renova.aparelho,
+        f'IMEI {renova.imei1}',
+        f'loja {renova.loja.name if renova.loja else "—"}',
+        f'vendedor {renova.vendedor_nome}',
+        f'avaliada em {renova.data_avaliacao:%d/%m/%Y}',
+        f'situação "{renova.situacao[1]}"',
+        f'valor {_moeda(renova.valor_estimado)}',
+    ]
+    if renova.numero_venda:
+        partes.append(f'venda nº {renova.numero_venda}')
+    partes.append(f'chamado #{renova.chamado_id} mantido' if renova.chamado_id else 'sem chamado')
+    return ', '.join(partes)
+
+
+def excluir_avaliacao(renova, usuario):
+    """Exclui a avaliação e devolve o id do chamado que ficou (ou None).
+
+    Some só o registro do Renova — e, com ele, tudo o que mora nele: checklist,
+    padrão e valor, assinatura (é um data URL no próprio registro), aprovação,
+    recebimento e nº da venda. A etiqueta é montada na hora a partir do registro,
+    então também deixa de existir. Nenhuma tabela aponta para o Renova e ele não
+    tem arquivo no armazenamento: não há cascata nem nada a apagar no S3 (as
+    imagens de material são da configuração do módulo, de todas as avaliações).
+
+    O chamado fica: é o histórico do setor que recebe (comentários, anexos, quem
+    atendeu). A chave estrangeira está do lado do Renova, então excluir não mexe
+    nele nem é impedido por ele. Só ganha uma linha no histórico dizendo quem
+    excluiu, porque a descrição dele aponta para a tela da avaliação, que deixa
+    de abrir. É TicketLog de propósito: comentário no chamado avisaria (sino e
+    push) quem abriu e quem atende, e ninguém precisa ser acordado por isso.
+    """
+    from tickets.models import TicketLog
+
+    with transaction.atomic():
+        # Trava a linha como a aprovação faz: não exclui no meio de uma decisão do gerente.
+        renova = (Renova.objects.select_for_update(of=('self',)).select_related('chamado')
+                  .get(pk=renova.pk))
+        chamado = renova.chamado
+        if chamado is not None:
+            TicketLog.objects.create(
+                ticket=chamado, user=usuario, old_status=chamado.status, new_status=chamado.status,
+                observation=(f'Vini Renova {renova.codigo} excluído por {_nome(usuario)}. O chamado continua '
+                             'como histórico; o link da avaliação na descrição não abre mais.'))
+        renova.delete()
+    return chamado.pk if chamado is not None else None

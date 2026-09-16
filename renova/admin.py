@@ -15,7 +15,7 @@ class PrecoAparelhoAdmin(admin.ModelAdmin):
 class RenovaAdmin(admin.ModelAdmin):
     list_display = ('__str__', 'loja', 'parecer', 'recebimento', 'criado_por', 'criado_em')
     list_filter = ('recebimento', 'parecer', 'marca')
-    search_fields = ('imei1', 'imei2', 'modelo', 'numero_serie', 'vendedor_nome')
+    search_fields = ('imei1', 'imei2', 'modelo', 'numero_serie', 'vendedor_nome', 'numero_venda')
     raw_id_fields = ('chamado', 'criado_por', 'recebido_por', 'preco_tabela', 'loja')
     readonly_fields = ('criado_em', 'atualizado_em')
 

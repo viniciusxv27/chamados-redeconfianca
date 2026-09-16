@@ -1,6 +1,7 @@
 """Telas da Rotina Gerencial.
 
-- `minha`: a semana da pessoa, no jeito do Google Agenda.
+- `minha`: a semana da pessoa, no jeito do Google Agenda (segunda a sábado, ou
+  a domingo quando a semana tem domingo).
 - `gestao*` e `modelo*`: só o SUPERADMIN — quem tem rotina, os modelos e o
   editor de cada semana (o mesmo calendário, com tudo liberado).
 
@@ -21,7 +22,7 @@ from django.urls import reverse
 from django.views.decorators.http import require_POST
 
 from . import servicos
-from .models import DIAS_SEMANA, ModeloRotina, RotinaGerencial
+from .models import ModeloRotina, RotinaGerencial
 from .permissoes import e_superadmin
 
 logger = logging.getLogger(__name__)
@@ -54,14 +55,16 @@ def _plural(total, singular, plural):
     return f'{total} {singular if total == 1 else plural}'
 
 
-def _contexto(request, aba, **extra):
+def _contexto(request, aba, com_domingo=False, **extra):
     contexto = {
         'aba': aba,
         'e_admin': e_superadmin(request.user),
         'lembrete_minutos': servicos.MINUTOS_LEMBRETE,
         'categorias': servicos.categorias(),
+        'com_domingo': com_domingo,
+        'nome_da_semana': servicos.nome_da_semana(com_domingo),
         'dias_semana': [{'valor': numero, 'nome': nome, 'curto': servicos.DIAS_CURTOS[numero]}
-                        for numero, nome in DIAS_SEMANA],
+                        for numero, nome in servicos.dias_da_semana(com_domingo)],
     }
     contexto.update(extra)
     return contexto
@@ -74,6 +77,7 @@ def _config(request, modo, urls, **extra):
         'podeCriar': False,
         'podeTravar': False,
         'mostrarDatas': modo == 'pessoa',
+        'domingo': False,
         'usuario': None,
         'csrf': get_token(request),
         'urls': urls,
@@ -115,20 +119,23 @@ def minha(request):
     # Rotina vazia só aparece se a pessoa puder criar: senão é uma grade em
     # branco sem nada para fazer com ela.
     mostrar = bool(rotina and rotina.ativa and (total or rotina.pode_criar))
-    contexto = _contexto(request, 'minha', rotina=rotina, total_atividades=total,
-                         mostrar_calendario=mostrar)
+    dados = servicos.payload_rotina(rotina, request.user) if mostrar else None
+    com_domingo = bool(dados and dados['semana']['com_domingo'])
+    contexto = _contexto(request, 'minha', com_domingo=com_domingo, rotina=rotina, total_atividades=total,
+                         mostrar_calendario=mostrar,
+                         whatsapp_ligado=bool(rotina and rotina.avisar_whatsapp and servicos.tem_telefone(request.user)))
     if mostrar:
-        dados = servicos.payload_rotina(rotina, request.user)
         destaque = _numero(request.GET.get('atividade'), minimo=1)
         if destaque and not any(a['id'] == destaque for a in dados['atividades']):
             destaque = None
+        ultimo_dia = dados['semana']['ultimo_dia']
         contexto.update({
             'dados': dados,
             'semana': dados['semana'],
             'config': _config(
                 request, 'pessoa', _urls_rotina(),
-                podeCriar=rotina.pode_criar,
-                destaque={'atividade': destaque, 'dia': _numero(request.GET.get('dia'), 0, 5)}),
+                podeCriar=rotina.pode_criar, domingo=com_domingo,
+                destaque={'atividade': destaque, 'dia': _numero(request.GET.get('dia'), 0, ultimo_dia)}),
         })
     return render(request, 'rotina/minha.html', contexto)
 
@@ -154,9 +161,14 @@ def gestao(request):
         criam=Count('id', filter=Q(pode_criar=True)))
     modelos_ativos = (ModeloRotina.objects.filter(ativo=True)
                       .annotate(total=Count('atividades')).order_by('criado_em', 'id'))
+    rotinas = list(rotinas)
+    for rotina in rotinas:
+        # O interruptor do WhatsApp fica apagado para quem não tem telefone: ligado ou
+        # não, não sairia nada — melhor a tela dizer isso do que prometer um aviso.
+        rotina.tem_telefone = servicos.tem_telefone(rotina.user)
     return render(request, 'rotina/gestao.html', _contexto(
         request, 'gestao',
-        rotinas=list(rotinas), q=q, resumo=resumo, modelos=modelos_ativos,
+        rotinas=rotinas, q=q, resumo=resumo, modelos=modelos_ativos,
         com_rotina=set(RotinaGerencial.objects.values_list('user_id', flat=True)),
         candidatos=(User.objects.filter(is_active=True).select_related('sector')
                     .order_by('first_name', 'last_name')),
@@ -180,6 +192,7 @@ def gestao_adicionar(request):
             messages.error(request, 'O modelo escolhido não existe mais.')
             return redirect('rotina:gestao')
     pode_criar = request.POST.get('pode_criar') == 'on'
+    avisar_whatsapp = request.POST.get('avisar_whatsapp') == 'on'
     substituir = request.POST.get('substituir') == 'on'
 
     novas = substituidas = mantidas = 0
@@ -187,8 +200,8 @@ def gestao_adicionar(request):
         for pessoa in pessoas:
             rotina, criada = RotinaGerencial.objects.get_or_create(
                 user=pessoa,
-                defaults={'pode_criar': pode_criar, 'criado_por': request.user,
-                          'atualizado_por': request.user})
+                defaults={'pode_criar': pode_criar, 'avisar_whatsapp': avisar_whatsapp,
+                          'criado_por': request.user, 'atualizado_por': request.user})
             if criada:
                 novas += 1
                 if modelo:
@@ -225,17 +238,18 @@ def gestao_pessoa(request, user_id):
         return redirect('rotina:gestao')
 
     dados = servicos.payload_rotina(rotina, request.user)
+    com_domingo = dados['semana']['com_domingo']
     outras = (RotinaGerencial.objects.exclude(pk=rotina.pk)
               .select_related('user', 'user__sector')
               .annotate(total=Count('atividades')).filter(total__gt=0)
               .order_by('user__first_name', 'user__last_name'))
     return render(request, 'rotina/editor.html', _contexto(
-        request, 'gestao',
+        request, 'gestao', com_domingo=com_domingo,
         modo='gestao', pessoa=pessoa, rotina=rotina, dados=dados, semana=dados['semana'],
-        outras=outras,
+        outras=outras, tem_telefone=dados['rotina']['tem_telefone'],
         modelos=ModeloRotina.objects.annotate(total=Count('atividades')).order_by('-ativo', 'nome'),
         config=_config(request, 'gestao', _urls_rotina(pessoa.id),
-                       podeCriar=True, podeTravar=True, usuario=pessoa.id,
+                       podeCriar=True, podeTravar=True, usuario=pessoa.id, domingo=com_domingo,
                        urlOpcoes=reverse('rotina:api_gestao_opcoes', args=[pessoa.id])),
     ))
 
@@ -290,13 +304,13 @@ PREVIA_INICIO = 7 * 60     # a miniatura da semana vai das 07:00…
 PREVIA_FIM = 20 * 60       # …às 20:00
 
 
-def _previa_da_semana(atividades):
+def _previa_da_semana(atividades, com_domingo=False):
     """Blocos da miniatura da semana no cartão do modelo: topo e altura em %.
 
     Os números saem como texto já formatado: passando float, o template em
     pt-br escreveria "12,5%" e o CSS ignoraria.
     """
-    dias = [[] for _ in DIAS_SEMANA]
+    dias = [[] for _ in servicos.dias_da_semana(com_domingo)]
     janela = PREVIA_FIM - PREVIA_INICIO
     for atividade in atividades:
         inicio = max(atividade.inicio.hour * 60 + atividade.inicio.minute, PREVIA_INICIO)
@@ -318,7 +332,9 @@ def modelos(request):
                  .prefetch_related('atividades')
                  .order_by('-ativo', 'nome'))
     for modelo in lista:
-        modelo.previa = _previa_da_semana(modelo.atividades.all())
+        atividades = list(modelo.atividades.all())
+        modelo.semana_com_domingo = servicos.semana_com_domingo(modelo, atividades)
+        modelo.previa = _previa_da_semana(atividades, modelo.semana_com_domingo)
     return render(request, 'rotina/modelos.html', _contexto(request, 'modelos', modelos=lista))
 
 
@@ -330,15 +346,19 @@ def modelo_novo(request):
         messages.error(request, 'Dê um nome ao modelo.')
         return redirect('rotina:modelos')
     descricao = (request.POST.get('descricao') or '').strip()
+    com_domingo = request.POST.get('com_domingo') == 'on'
     base = ModeloRotina.objects.filter(pk=_numero(request.POST.get('base'), 1) or 0).first()
     with transaction.atomic():
         if base:
             modelo = servicos.duplicar_modelo(base, request.user)
             modelo.nome = nome
             modelo.descricao = descricao or base.descricao
-            modelo.save(update_fields=['nome', 'descricao', 'atualizado_em'])
+            # A cópia herda o domingo da base; a caixa só acrescenta (tirar apagaria atividades).
+            modelo.com_domingo = modelo.com_domingo or com_domingo
+            modelo.save(update_fields=['nome', 'descricao', 'com_domingo', 'atualizado_em'])
         else:
-            modelo = ModeloRotina.objects.create(nome=nome, descricao=descricao, criado_por=request.user)
+            modelo = ModeloRotina.objects.create(nome=nome, descricao=descricao, com_domingo=com_domingo,
+                                                 criado_por=request.user)
     messages.success(request, f'Modelo "{modelo.nome}" criado.')
     return redirect('rotina:modelo_editor', modelo_id=modelo.id)
 
@@ -347,11 +367,13 @@ def modelo_novo(request):
 def modelo_editor(request, modelo_id):
     modelo = get_object_or_404(ModeloRotina, pk=modelo_id)
     dados = servicos.payload_modelo(modelo)
+    com_domingo = dados['semana']['com_domingo']
     return render(request, 'rotina/editor.html', _contexto(
-        request, 'modelos',
+        request, 'modelos', com_domingo=com_domingo,
         modo='modelo', modelo=modelo, dados=dados, semana=dados['semana'],
         pessoas_usando=modelo.rotinas.count(),
-        config=_config(request, 'modelo', _urls_modelo(modelo), podeCriar=True, podeTravar=True),
+        config=_config(request, 'modelo', _urls_modelo(modelo), podeCriar=True, podeTravar=True,
+                       domingo=com_domingo),
     ))
 
 
@@ -368,8 +390,21 @@ def modelo_acao(request, modelo_id):
             modelo.nome = nome
             modelo.descricao = (request.POST.get('descricao') or '').strip()
             modelo.ativo = request.POST.get('ativo') == 'on'
-            modelo.save(update_fields=['nome', 'descricao', 'ativo', 'atualizado_em'])
-            messages.success(request, 'Modelo salvo.')
+            com_domingo = request.POST.get('com_domingo') == 'on'
+            aviso_domingo = None
+            if modelo.com_domingo and not com_domingo:
+                try:
+                    servicos.conferir_pode_tirar_domingo(modelo)
+                except servicos.ErroValidacao as exc:
+                    # O resto do formulário salva; só o domingo fica como estava.
+                    aviso_domingo = str(exc)
+                    com_domingo = True
+            modelo.com_domingo = com_domingo
+            modelo.save(update_fields=['nome', 'descricao', 'ativo', 'com_domingo', 'atualizado_em'])
+            if aviso_domingo:
+                messages.error(request, f'Modelo salvo, mas o domingo continua na semana: {aviso_domingo}')
+            else:
+                messages.success(request, 'Modelo salvo.')
     elif acao == 'duplicar':
         copia = servicos.duplicar_modelo(modelo, request.user)
         messages.success(request, f'Cópia criada: "{copia.nome}".')

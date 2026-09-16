@@ -29,8 +29,9 @@
     .rn-tempo li::after { content: ''; position: absolute; left: 0; top: .2rem; width: .85rem; height: .85rem; border-radius: 9999px;
                           background: #fff; border: 2px solid #C4A6E8; }
     .rn-tempo li.feito::after { background: #7B2CBF; border-color: #7B2CBF; }
-    .rn-caixa-obs { width: 100%; border: 1.5px solid #E4D9F1; border-radius: .65rem; padding: .5rem .65rem; font-size: .82rem; }
-    .rn-caixa-obs:focus { outline: none; border-color: #9D4EDD; }
+    .rn-venda-numero { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1.35rem; font-weight: 800;
+                       letter-spacing: .03em; color: #2E0854; word-break: break-all; }
+    html.dark .rn-venda-numero { color: #e9d5ff; }
 </style>
 {% endblock %}
 
@@ -186,6 +187,28 @@
             {% endif %}
         </section>
 
+        <section class="rn-card p-4" id="venda">
+            <h2 class="rn-h2">Venda</h2>
+            {% if renova.numero_venda %}
+            <p class="text-[11px] font-extrabold uppercase tracking-wide mt-2" style="color:#6B21A8">Nº da venda</p>
+            <p class="rn-venda-numero">{{ renova.numero_venda }}</p>
+            {% elif renova.reprovada %}
+            <p class="text-sm text-gray-600 mt-2"><i class="fa-solid fa-ban mr-1"></i>Troca reprovada: não há venda com este aparelho.</p>
+            {% else %}
+            <p class="text-sm text-gray-600 mt-2">Nº da venda ainda não informado.{% if pode_editar_venda %} Informe quando a venda sair — ele entra na etiqueta.{% endif %}</p>
+            {% endif %}
+            {% if pode_editar_venda %}
+            <form method="post" action="{% url 'renova:venda' renova.pk %}" class="mt-3 flex gap-2">
+                {% csrf_token %}
+                <input type="hidden" name="voltar" value="{{ voltar }}#venda">
+                <input type="text" name="numero_venda" value="{{ renova.numero_venda }}" maxlength="{{ numero_venda_max }}"
+                       autocomplete="off" spellcheck="false" aria-label="Nº da venda" placeholder="Nº da venda"
+                       class="rn-caixa-obs font-mono flex-1 min-w-0">
+                <button type="submit" class="rn-btn rn-btn-primario text-xs">{% if renova.numero_venda %}Corrigir{% else %}Salvar{% endif %}</button>
+            </form>
+            {% endif %}
+        </section>
+
         <section class="rn-card p-4" id="recebimento">
             <h2 class="rn-h2">Recebimento</h2>
             {% if setor %}<p class="text-xs text-gray-500 mt-1">Quem marca é o setor <b>{{ setor.name }}</b>.</p>{% endif %}
@@ -245,6 +268,16 @@
                 </li>
             </ol>
         </section>
+
+        {% if rn_pode_excluir %}
+        <section class="rn-card p-4">
+            <h2 class="rn-h2">Excluir avaliação</h2>
+            <p class="text-xs text-gray-500 mt-1">Só o SUPERADMIN vê isto. Antes de excluir, a próxima tela mostra o que some junto e o que fica.</p>
+            <a href="{% url 'renova:excluir' renova.pk %}?voltar={{ voltar|urlencode }}" class="rn-acao rn-acao-nao w-full mt-3 py-2">
+                <i class="fa-solid fa-trash-can"></i>Excluir {{ renova.codigo }}
+            </a>
+        </section>
+        {% endif %}
     </aside>
 </div>
 {% endblock %}

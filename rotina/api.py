@@ -139,7 +139,7 @@ def rotina_criar(request):
             raise SemPermissao('Sua rotina não permite criar atividades. Fale com a gestão.')
         if corpo.get('bloqueada'):
             raise SemPermissao('Só a gestão pode travar uma atividade.')
-    limpos = servicos.ler_dados_atividade(corpo)
+    limpos = servicos.ler_dados_atividade(corpo, com_domingo=rotina.com_domingo)
     criadas = servicos.criar_atividades_rotina(rotina, limpos, request.user, criada_pela_pessoa=not admin)
     return JsonResponse({
         'ok': True,
@@ -155,7 +155,8 @@ def rotina_atualizar(request, atividade_id):
     if not admin:
         # Antes de validar: quem tenta mexer no que está travado ouve "travada".
         servicos.conferir_edicao_da_pessoa(atividade)
-    limpos = servicos.ler_dados_atividade(ler_json(request), atual=atividade)
+    limpos = servicos.ler_dados_atividade(ler_json(request), atual=atividade,
+                                          com_domingo=atividade.rotina.com_domingo)
     if not admin:
         servicos.conferir_edicao_da_pessoa(atividade, limpos)
     if limpos:
@@ -185,23 +186,29 @@ def rotina_excluir(request, atividade_id):
     return JsonResponse({'ok': True})
 
 
+OPCOES_DA_ROTINA = ('ativa', 'pode_criar', 'avisar_whatsapp', 'com_domingo')
+
+
 @api('POST')
 def gestao_opcoes(request, user_id):
-    """Liga e desliga "ativa" e "pode criar" direto da lista de pessoas."""
+    """Os interruptores da rotina de uma pessoa, salvos na hora (lista de pessoas e editor)."""
     exigir_superadmin(request)
     rotina = RotinaGerencial.objects.select_related('user').filter(user_id=user_id).first()
     if rotina is None:
         raise NaoEncontrado('Esta pessoa não tem rotina gerencial.')
     corpo = ler_json(request)
     campos = []
-    for campo in ('ativa', 'pode_criar'):
+    for campo in OPCOES_DA_ROTINA:
         if campo in corpo:
             if not isinstance(corpo[campo], bool):
                 raise ErroValidacao('Valor inválido.')
-            setattr(rotina, campo, corpo[campo])
             campos.append(campo)
     if not campos:
         raise ErroValidacao('Nada para mudar.')
+    if 'com_domingo' in campos and not corpo['com_domingo'] and rotina.com_domingo:
+        servicos.conferir_pode_tirar_domingo(rotina)
+    for campo in campos:
+        setattr(rotina, campo, corpo[campo])
     rotina.atualizado_por = request.user
     rotina.save(update_fields=campos + ['atualizado_por', 'atualizado_em'])
     return JsonResponse({'ok': True, 'rotina': servicos.dados_da_rotina(rotina)})
@@ -230,7 +237,7 @@ def modelo_atividades(request, modelo_id):
     modelo = _modelo(modelo_id)
     if request.method == 'GET':
         return JsonResponse(servicos.payload_modelo(modelo))
-    limpos = servicos.ler_dados_atividade(ler_json(request))
+    limpos = servicos.ler_dados_atividade(ler_json(request), com_domingo=modelo.com_domingo)
     criadas = servicos.criar_atividades_modelo(modelo, limpos)
     return JsonResponse({'ok': True, 'atividades': [servicos.serializar_atividade(a) for a in criadas]},
                         status=201)
@@ -240,7 +247,8 @@ def modelo_atividades(request, modelo_id):
 def modelo_atualizar(request, atividade_id):
     exigir_superadmin(request)
     atividade = _atividade_modelo(atividade_id)
-    limpos = servicos.ler_dados_atividade(ler_json(request), atual=atividade)
+    limpos = servicos.ler_dados_atividade(ler_json(request), atual=atividade,
+                                          com_domingo=atividade.modelo.com_domingo)
     if limpos:
         for campo, valor in limpos.items():
             setattr(atividade, campo, valor)
@@ -266,7 +274,16 @@ def modelo_excluir(request, atividade_id):
 # ---------------------------------------------------------------------------
 @api('GET')
 def hoje(request):
-    """Atividades de hoje de quem está logado, com o relógio do servidor."""
+    """Atividades de hoje de quem está logado, com o relógio do servidor.
+
+    O notificador chama isto a cada 10 minutos: de carona, confere se a
+    varredura do WhatsApp deste worker está viva (e religa se tiver morrido).
+    """
+    try:
+        from . import whatsapp
+        whatsapp.garantir_varredura()
+    except Exception:                                               # noqa: BLE001
+        logger.exception('Não foi possível conferir a varredura de WhatsApp da rotina')
     return JsonResponse(servicos.atividades_de_hoje(request.user))
 
 

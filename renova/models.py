@@ -181,6 +181,10 @@ class Renova(models.Model):
     chamado = models.ForeignKey(
         'tickets.Ticket', on_delete=models.SET_NULL, null=True, blank=True, related_name='renovas',
         verbose_name='Chamado')
+    # A venda costuma fechar depois da avaliação (e da aprovação): o número entra
+    # quando sair, pela tela da avaliação — ou já no checklist, se a venda veio antes.
+    # Texto livre: cada sistema de venda numera de um jeito.
+    numero_venda = models.CharField(max_length=40, blank=True, default='', verbose_name='Nº da venda')
 
     # Recebimento pelo setor da categoria do chamado
     recebimento = models.CharField(

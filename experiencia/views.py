@@ -8,6 +8,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from users.models import Sector, User
+from users.module_access import fechado_para_padrao
 
 from .models import (
     ExperienciaAnswer,
@@ -53,6 +54,7 @@ def _get_user_sectors(user):
 # ─── Dashboard ────────────────────────────────────────────────────────────────
 
 @login_required
+@fechado_para_padrao('experiencia')
 def dashboard(request):
     user = request.user
 
@@ -91,6 +93,7 @@ def dashboard(request):
 # ─── Gestão de Templates (Perguntas) ──────────────────────────────────────────
 
 @login_required
+@fechado_para_padrao('experiencia')
 def template_list(request):
     user = request.user
     if not _is_gerente_or_superadmin(user):
@@ -108,6 +111,7 @@ def template_list(request):
 
 
 @login_required
+@fechado_para_padrao('experiencia')
 def template_create(request):
     user = request.user
     if not _is_gerente_or_superadmin(user):
@@ -167,6 +171,7 @@ def template_create(request):
 
 
 @login_required
+@fechado_para_padrao('experiencia')
 def template_edit(request, template_id):
     user = request.user
     template = get_object_or_404(ExperienciaTemplate, id=template_id, is_active=True)
@@ -221,6 +226,7 @@ def template_edit(request, template_id):
 
 
 @login_required
+@fechado_para_padrao('experiencia')
 @require_POST
 def template_delete(request, template_id):
     user = request.user
@@ -237,6 +243,7 @@ def template_delete(request, template_id):
 
 
 @login_required
+@fechado_para_padrao('experiencia')
 def import_template_pdf(request):
     """Importa template a partir de PDF de checklist."""
     user = request.user
@@ -326,6 +333,7 @@ def import_template_pdf(request):
 # ─── Lançar To-Do (Gestor seleciona template + mês + setor) ──────────────────
 
 @login_required
+@fechado_para_padrao('experiencia')
 def launch_todo(request):
     user = request.user
     if not _is_gerente_or_superadmin(user):
@@ -404,6 +412,7 @@ def launch_todo(request):
 # ─── Preencher / Responder o To-Do ───────────────────────────────────────────
 
 @login_required
+@fechado_para_padrao('experiencia')
 def fill_todo(request, todo_id):
     user = request.user
     todo = get_object_or_404(
@@ -540,6 +549,7 @@ def fill_todo(request, todo_id):
 # ─── Visualizar To-Do (leitura) ──────────────────────────────────────────────
 
 @login_required
+@fechado_para_padrao('experiencia')
 def view_todo(request, todo_id):
     user = request.user
     todo = get_object_or_404(
@@ -589,6 +599,7 @@ def view_todo(request, todo_id):
 # ─── Avaliar To-Do ───────────────────────────────────────────────────────────
 
 @login_required
+@fechado_para_padrao('experiencia')
 def evaluate_todo(request, todo_id):
     user = request.user
     todo = get_object_or_404(
@@ -644,6 +655,7 @@ def evaluate_todo(request, todo_id):
 # ─── Gerenciar Avaliadores (Superadmin) ──────────────────────────────────────
 
 @login_required
+@fechado_para_padrao('experiencia')
 def manage_evaluators(request):
     user = request.user
     if not _is_superadmin(user):
@@ -707,6 +719,7 @@ def manage_evaluators(request):
 # ─── Relatórios ──────────────────────────────────────────────────────────────
 
 @login_required
+@fechado_para_padrao('experiencia')
 def reports(request):
     user = request.user
     if not _is_gerente_or_superadmin(user):
@@ -785,6 +798,7 @@ def reports(request):
 
 
 @login_required
+@fechado_para_padrao('experiencia')
 def export_report(request):
     user = request.user
     if not _is_gerente_or_superadmin(user):
@@ -848,6 +862,7 @@ def export_report(request):
 # ─── Histórico / Arquivo ─────────────────────────────────────────────────────
 
 @login_required
+@fechado_para_padrao('experiencia')
 def archive(request):
     user = request.user
     if not _is_gerente_or_superadmin(user):
@@ -875,6 +890,7 @@ def archive(request):
 # ─── API Upload de Foto (para captura de câmera via JS) ──────────────────────
 
 @login_required
+@fechado_para_padrao('experiencia')
 @require_POST
 def api_upload_photo(request, answer_id):
     user = request.user

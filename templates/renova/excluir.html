@@ -1,0 +1,92 @@
+{% extends 'renova/base_renova.html' %}
+
+{% block rn_pagina %}Excluir {{ renova.codigo }}{% endblock %}
+{% block rn_titulo %}Excluir avaliação{% endblock %}
+{% block rn_subtitulo %}{{ renova.codigo }} · {{ renova.aparelho }}{% endblock %}
+
+{% block rn_css %}
+<style>
+    .rn-dado span { display: block; font-size: .6rem; font-weight: 800; text-transform: uppercase; letter-spacing: .07em; color: #8B78A0; }
+    .rn-dado b { display: block; font-size: .88rem; font-weight: 700; color: #1F0B33; margin-top: .1rem; word-break: break-word; }
+    .rn-exc-lista { display: grid; gap: .6rem; margin-top: .8rem; }
+    .rn-exc-lista li { display: grid; grid-template-columns: 1.4rem minmax(0, 1fr); gap: .5rem; font-size: .84rem; line-height: 1.45; color: #3B2A4D; }
+    .rn-exc-lista li > i { margin-top: .2rem; text-align: center; }
+    .rn-exc-some li > i { color: #DC2626; }
+    .rn-exc-fica li > i { color: #059669; }
+    .rn-exc-codigo { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1.3rem; font-weight: 800;
+                     letter-spacing: .04em; color: #2E0854; }
+    html.dark .rn-exc-lista li { color: var(--tema-texto, #e7eaf0); }
+    html.dark .rn-exc-some li > i { color: #fca5a5; }
+    html.dark .rn-exc-fica li > i { color: #6ee7b7; }
+    html.dark .rn-exc-codigo { color: #e9d5ff; }
+</style>
+{% endblock %}
+
+{% block rn_conteudo %}
+<div class="grid lg:grid-cols-5 gap-4 items-start">
+    <div class="lg:col-span-3 grid gap-4">
+        <section class="rn-card p-4 sm:p-5">
+            <div class="flex flex-wrap items-center gap-2 mb-4">
+                <span class="rn-etq rn-etq-AP-{{ renova.aprovacao }}">{{ renova.get_aprovacao_display }}</span>
+                {% if renova.sem_recebimento %}<span class="rn-etq rn-etq-SEM"><i class="fa-solid fa-ban"></i>Sem troca</span>{% elif renova.aprovada %}<span class="rn-etq rn-etq-{{ renova.recebimento }}">{{ renova.get_recebimento_display }}</span>{% endif %}
+            </div>
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                <div class="rn-dado"><span>Aparelho</span><b>{{ renova.aparelho }}</b></div>
+                <div class="rn-dado"><span>IMEI 1</span><b class="font-mono">{{ renova.imei1 }}</b></div>
+                <div class="rn-dado"><span>Loja (origem)</span><b>{{ renova.loja.name|default:"—" }}</b></div>
+                <div class="rn-dado"><span>Vendedor</span><b>{{ renova.vendedor_nome }}</b></div>
+                <div class="rn-dado"><span>Avaliada em</span><b>{{ renova.data_avaliacao|date:"d/m/Y" }}</b></div>
+                <div class="rn-dado"><span>Valor estimado</span><b>{% if renova.valor_estimado is not None %}R$ {{ renova.valor_estimado|floatformat:"2g" }}{% else %}—{% endif %}</b></div>
+                <div class="rn-dado"><span>Nº da venda</span><b class="font-mono">{{ renova.numero_venda|default:"—" }}</b></div>
+                <div class="rn-dado"><span>Chamado</span><b>{% if renova.chamado_id %}#{{ renova.chamado_id }}{% else %}—{% endif %}</b></div>
+            </div>
+        </section>
+
+        <section class="rn-card p-4 sm:p-5">
+            <h2 class="rn-h2">O que some junto</h2>
+            <ul class="rn-exc-lista rn-exc-some">
+                <li><i class="fa-solid fa-clipboard-check"></i><span>A avaliação inteira: dados do aparelho, itens obrigatórios, funcionalidades, condição estética, observações, padrão{% if renova.padrao %} {{ renova.padrao }}{% endif %} e valor de troca.</span></li>
+                <li><i class="fa-solid fa-signature"></i><span>A assinatura de {{ renova.vendedor_nome }}, guardada no próprio registro. Esta avaliação não tem fotos nem arquivos no armazenamento.</span></li>
+                <li><i class="fa-solid fa-user-check"></i><span>{% if renova.aguardando_aprovacao %}O pedido de aprovação que está com o gerente da loja.{% else %}O registro da decisão: {{ renova.get_aprovacao_display|lower }}{% if renova.aprovacao_por %} por {{ renova.aprovacao_por.full_name|default:renova.aprovacao_por.username }}{% endif %}{% if renova.aprovacao_em %} em {{ renova.aprovacao_em|date:"d/m/Y H:i" }}{% endif %}.{% endif %}</span></li>
+                {% if renova.recebido_em %}
+                <li><i class="fa-solid fa-box-open"></i><span>A marcação de recebimento: {{ renova.get_recebimento_display|lower }}{% if renova.recebido_por %} por {{ renova.recebido_por.full_name|default:renova.recebido_por.username }}{% endif %} em {{ renova.recebido_em|date:"d/m/Y H:i" }}.</span></li>
+                {% endif %}
+                {% if renova.numero_venda %}
+                <li><i class="fa-solid fa-receipt"></i><span>O nº da venda <b class="font-mono">{{ renova.numero_venda }}</b>.</span></li>
+                {% endif %}
+                {% if renova.aprovada %}
+                <li><i class="fa-solid fa-tag"></i><span>A etiqueta: não dá mais para imprimir. Uma que já está colada no aparelho continua lá, mas o código {{ renova.codigo }} não abre mais nada no portal.</span></li>
+                {% endif %}
+                <li><i class="fa-solid fa-list"></i><span>A avaliação sai da lista, das contagens do menu e do quadro de gestão (e da planilha exportada).</span></li>
+            </ul>
+        </section>
+
+        <section class="rn-card p-4 sm:p-5">
+            <h2 class="rn-h2">O que fica</h2>
+            <ul class="rn-exc-lista rn-exc-fica">
+                {% if renova.chamado %}
+                <li><i class="fa-solid fa-ticket"></i><span>O chamado <a href="/tickets/{{ renova.chamado_id }}/" class="font-bold underline" style="color:#6B21A8">#{{ renova.chamado_id }}</a> ({{ renova.chamado.get_status_display|lower }}), com comentários e anexos: é o histórico do setor que recebe. Ele não é fechado — só ganha no histórico uma linha dizendo que você excluiu a avaliação, sem aviso para ninguém.</span></li>
+                {% else %}
+                <li><i class="fa-solid fa-ticket"></i><span>Não há chamado ligado a esta avaliação.</span></li>
+                {% endif %}
+                <li><i class="fa-regular fa-bell"></i><span>Os avisos que já foram para o sino: quem clicar lê que a avaliação foi excluída.</span></li>
+                <li><i class="fa-solid fa-scroll"></i><span>O registro da exclusão no log do sistema, com o seu nome e um resumo da avaliação (aparelho, IMEI, loja, vendedor, situação, valor{% if renova.numero_venda %}, nº da venda{% endif %}).</span></li>
+            </ul>
+        </section>
+    </div>
+
+    <aside class="lg:col-span-2">
+        <form method="post" action="{% url 'renova:excluir' renova.pk %}" class="rn-card p-4 grid gap-3">
+            {% csrf_token %}
+            <input type="hidden" name="voltar" value="{{ voltar }}">
+            <h2 class="rn-h2">Confirmar exclusão</h2>
+            <p class="text-sm text-gray-600">Não tem volta. Para confirmar, digite o código da avaliação:</p>
+            <p class="rn-exc-codigo">{{ renova.codigo }}</p>
+            <input type="text" name="confirmacao" required autocomplete="off" autocapitalize="characters" spellcheck="false"
+                   aria-label="Digite {{ renova.codigo }} para confirmar" class="rn-caixa-obs font-mono">
+            <button type="submit" class="rn-acao rn-acao-nao py-2.5"><i class="fa-solid fa-trash-can"></i>Excluir de vez</button>
+            <a href="{{ voltar }}" class="rn-btn rn-btn-claro text-xs">Cancelar</a>
+        </form>
+    </aside>
+</div>
+{% endblock %}

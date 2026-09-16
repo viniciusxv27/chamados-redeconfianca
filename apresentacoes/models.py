@@ -311,6 +311,8 @@ class TarefaIA(models.Model):
             'id': self.pk, 'tipo': self.tipo, 'status': self.status, 'progresso': self.progresso or {},
             'erro': self.erro, 'perguntas': self.perguntas or [], 'resultado': self.resultado or {},
             'apresentacao': self.apresentacao_id, 'template': self.template_id,
+            # Último sinal de vida: a tela avisa "está demorando" em vez de só girar.
+            'atualizado_em': self.atualizado_em.isoformat() if self.atualizado_em else None,
         }
 
 

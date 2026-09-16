@@ -291,6 +291,7 @@ def _config_do_editor(request, apresentacao):
             'ia': reverse('apresentacoes:ia', args=[apresentacao.pk]),
             'tarefa': reverse('apresentacoes:tarefa', args=[0]),
             'responder': reverse('apresentacoes:responder', args=[0]),
+            'iniciar': reverse('apresentacoes:iniciar', args=[apresentacao.pk]),
             'mensagens': reverse('apresentacoes:mensagens', args=[apresentacao.pk]),
             'pptx': reverse('apresentacoes:exportar_pptx', args=[apresentacao.pk]),
             'canva': reverse('apresentacoes:exportar_canva', args=[apresentacao.pk]),
@@ -300,6 +301,9 @@ def _config_do_editor(request, apresentacao):
             'voltar': reverse('apresentacoes:inicio'),
             'limpar_fundo': '',
         },
+        # A última geração, mesmo terminada: com ela o editor decide entre abrir direto, acompanhar
+        # o progresso ou mostrar o erro com "tentar de novo" — em vez de adivinhar só pelo status.
+        'geracao': tarefa.como_json() if tarefa else None,
         'csrf': get_token(request),
         'static_url': settings.STATIC_URL,
         'fontes_url': static('apresentacoes/fontes.json'),
@@ -329,14 +333,50 @@ def apresentar(request, pk):
     if apresentacao is None:
         messages.error(request, 'Essa apresentação não é sua.')
         return redirect('apresentacoes:inicio')
+    # Saneado (nunca levanta): documento antigo ou quebrado vira aviso na página, não erro 500.
+    documento = formato.sanear_documento(apresentacao.documento)
     return render(request, 'apresentacoes/apresentar.html', {
         'titulo': apresentacao.titulo,
+        'aviso': _aviso_para_apresentar(apresentacao, documento),
+        'url_editor': reverse('apresentacoes:editor', args=[apresentacao.pk]),
+        'url_inicio': reverse('apresentacoes:inicio'),
         'apres_config': {
             'id': apresentacao.pk, 'titulo': apresentacao.titulo, 'static_url': settings.STATIC_URL,
             'fontes_url': static('apresentacoes/fontes.json'),
             'urls': {'documento': reverse('apresentacoes:documento', args=[apresentacao.pk]),
-                     'voltar': reverse('apresentacoes:editor', args=[apresentacao.pk])},
+                     'voltar': reverse('apresentacoes:editor', args=[apresentacao.pk]),
+                     'inicio': reverse('apresentacoes:inicio')},
         }})
+
+
+def _aviso_para_apresentar(apresentacao, documento):
+    """Por que ainda não dá para apresentar (None quando dá).
+
+    Apresentação sem slide nenhum visível abriria uma tela preta; aqui a página
+    diz o motivo — IA ainda montando, esperando respostas, geração que falhou —
+    e manda para o editor, que é onde cada caso se resolve.
+    """
+    slides = documento['slides']
+    if any(not s['oculto'] for s in slides):
+        return None
+    if slides:
+        return {'icone': 'fa-eye-slash', 'titulo': 'Todos os slides estão ocultos',
+                'texto': 'Mostre ao menos um slide no editor para poder apresentar.'}
+    status = apresentacao.status
+    if status == Apresentacao.Status.PERGUNTAS:
+        return {'icone': 'fa-circle-question', 'titulo': 'A IA está esperando suas respostas',
+                'texto': 'Antes de montar os slides, ela fez algumas perguntas. Responda no editor para continuar.'}
+    gerando = TarefaIA.objects.filter(apresentacao=apresentacao, tipo=TarefaIA.Tipo.GERAR, status__in=[
+        TarefaIA.Status.PENDENTE, TarefaIA.Status.RODANDO]).exists()
+    if status == Apresentacao.Status.GERANDO or gerando:
+        return {'icone': 'fa-wand-magic-sparkles', 'titulo': 'A IA ainda está montando esta apresentação',
+                'texto': 'Assim que os slides ficarem prontos, dá para apresentar. Acompanhe o progresso no editor.'}
+    if status == Apresentacao.Status.ERRO:
+        return {'icone': 'fa-triangle-exclamation', 'titulo': 'A geração desta apresentação falhou',
+                'texto': (apresentacao.erro or 'A IA não conseguiu montar os slides.')
+                + ' No editor dá para tentar de novo ou criar os slides à mão.'}
+    return {'icone': 'fa-file-circle-plus', 'titulo': 'Esta apresentação ainda não tem slides',
+            'texto': 'Abra o editor para criar os slides ou pedir à IA.'}
 
 
 # ---------------------------------------------------------------------------
@@ -348,9 +388,11 @@ def documento(request, pk):
     if apresentacao is None:
         return _erro('Sem permissão para esta apresentação.', 403)
     if request.method == 'GET':
-        return JsonResponse({'ok': True, 'titulo': apresentacao.titulo, 'documento': apresentacao.documento or
-                             formato.documento_vazio(), 'revisao': apresentacao.revisao,
-                             'status': apresentacao.status, 'pode_editar': True})
+        # Saneado também na leitura: um registro gravado fora do fluxo (ou de versão antiga do formato)
+        # chega ao editor e à apresentação sempre com a estrutura completa, em vez de travar a tela.
+        return JsonResponse({'ok': True, 'titulo': apresentacao.titulo,
+                             'documento': formato.sanear_documento(apresentacao.documento),
+                             'revisao': apresentacao.revisao, 'status': apresentacao.status, 'pode_editar': True})
     if request.method != 'POST':
         return _erro('Método não permitido.', 405)
     try:
@@ -680,28 +722,52 @@ def responder(request, pk):
 @modulo_liberado
 @require_POST
 def iniciar(request, pk):
-    """Começa a geração depois que o navegador terminou de capturar as telas (módulos do portal)."""
+    """Começa a geração depois que o navegador terminou de capturar as telas (módulos do portal).
+
+    Também é o "tentar de novo" do editor quando a geração falhou ou travou: sem `midias` no
+    corpo, reaproveita os anexos da última geração (o pedido e as opções já estão na apresentação).
+    """
     apresentacao = _apresentacao_editavel(request, pk)
     if apresentacao is None:
         return _erro('Sem permissão.', 403)
-    if TarefaIA.objects.filter(apresentacao=apresentacao, tipo=TarefaIA.Tipo.GERAR,
-                               status__in=[TarefaIA.Status.PENDENTE, TarefaIA.Status.RODANDO,
-                                           TarefaIA.Status.PERGUNTAS]).exists():
-        return JsonResponse({'ok': True, 'editor': reverse('apresentacoes:editor', args=[apresentacao.pk])})
+    editor = reverse('apresentacoes:editor', args=[apresentacao.pk])
+
+    def aberta():
+        return (TarefaIA.objects.filter(apresentacao=apresentacao, tipo=TarefaIA.Tipo.GERAR, status__in=[
+            TarefaIA.Status.PENDENTE, TarefaIA.Status.RODANDO, TarefaIA.Status.PERGUNTAS]).order_by('-criado_em').first())
+
+    # Tarefa sem sinal de vida (servidor reiniciou no meio) não pode segurar o "tentar de novo" para sempre.
+    em_andamento = aberta()
+    if em_andamento:
+        tarefas.conferir_parada(em_andamento)
+        em_andamento = aberta()
+    if em_andamento:
+        return JsonResponse({'ok': True, 'editor': editor, 'tarefa': em_andamento.como_json()})
     try:
         dados = _corpo_json(request)
     except ValueError as exc:
         return _erro(str(exc))
-    ids = [int(i) for i in (dados.get('midias') or []) if str(i).isdigit()][:MAX_ANEXOS]
+    if 'midias' in dados:
+        brutos, limite = dados.get('midias') or [], MAX_ANEXOS
+    else:
+        anterior = (TarefaIA.objects.filter(apresentacao=apresentacao, tipo=TarefaIA.Tipo.GERAR)
+                    .order_by('-criado_em').first())
+        # O formulário "Nova" guarda até 20 anexos (páginas de PDF contam): a nova tentativa usa os mesmos.
+        brutos, limite = (((anterior.parametros or {}).get('anexos') or []) if anterior else []), 20
+    ids = [int(i) for i in (brutos if isinstance(brutos, list) else []) if str(i).isdigit()][:limite]
     anexos = list(Midia.objects.filter(pk__in=ids, apresentacao=apresentacao, tipo=Midia.Tipo.IMAGEM)
                   .values_list('pk', flat=True))
     ordenados = [i for i in ids if i in set(anexos)]
-    try:
-        tarefas.criar(TarefaIA.Tipo.GERAR, request.user, apresentacao=apresentacao, parametros={'anexos': ordenados})
-    except tarefas.TarefaRecusada as exc:
-        return _erro(str(exc), 429)
-    Apresentacao.objects.filter(pk=apresentacao.pk).update(status=Apresentacao.Status.GERANDO)
-    return JsonResponse({'ok': True, 'editor': reverse('apresentacoes:editor', args=[apresentacao.pk])})
+    # Numa transação só: a thread da tarefa começa no commit, depois do status GERANDO — se a IA
+    # falhasse muito rápido, o ERRO dela seria apagado por este update logo em seguida.
+    with transaction.atomic():
+        try:
+            tarefa = tarefas.criar(TarefaIA.Tipo.GERAR, request.user, apresentacao=apresentacao,
+                                   parametros={'anexos': ordenados})
+        except tarefas.TarefaRecusada as exc:
+            return _erro(str(exc), 429)
+        Apresentacao.objects.filter(pk=apresentacao.pk).update(status=Apresentacao.Status.GERANDO, erro='')
+    return JsonResponse({'ok': True, 'editor': editor, 'tarefa': tarefa.como_json()})
 
 
 # ---------------------------------------------------------------------------
@@ -1020,6 +1086,7 @@ def template_editor(request, pk):
         'fontes_url': static('apresentacoes/fontes.json'), 'icones_url': static('apresentacoes/icones.json'),
         'tema_escuro': getattr(request.user, 'theme', '') == 'dark', 'pode_ia': False, 'canva_configurado': False,
         'tarefa_em_andamento': {'id': em_andamento.pk, 'tipo': em_andamento.tipo} if em_andamento else None,
+        'geracao': tarefa.como_json() if tarefa else None,
         'upload_template': template.pk,
     }
     return render(request, 'apresentacoes/editor.html', {'apres_config': config, 'titulo': template.nome})

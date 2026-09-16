@@ -283,9 +283,19 @@ class Ticket(models.Model):
             return False
         
         # Verifica permissões do usuário
-        if user.can_view_all_tickets() or user.can_view_sector_tickets():
+        if user.can_view_all_tickets():
             return True
-        
+
+        # O PADRÃO restrito só assume o que já enxerga (auxiliar, cópia ou setor
+        # de atendimento). Sem isto, bastava assumir um chamado da loja para ele
+        # voltar a aparecer — virando o responsável.
+        from .permissions import chamados_restritos, pode_ver_chamado
+        if chamados_restritos(user):
+            return pode_ver_chamado(user, self)
+
+        if user.can_view_sector_tickets():
+            return True
+
         return False
     
     def assume_ticket(self, user, comment=None):

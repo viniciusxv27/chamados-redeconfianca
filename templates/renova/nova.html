@@ -313,10 +313,20 @@
                         </div>
                         {% if erros.assinatura %}<p class="rn-erro">{{ erros.assinatura }}</p>{% endif %}
                     </div>
-                    <label class="block sm:w-1/2">
-                        <span class="rn-rotulo">Data</span>
-                        <input type="date" name="data_responsavel" value="{{ valores.data_responsavel|default:'' }}" class="rn-campo">
-                    </label>
+                    <div class="grid sm:grid-cols-2 gap-3 items-start">
+                        <label class="block">
+                            <span class="rn-rotulo">Data</span>
+                            <input type="date" name="data_responsavel" value="{{ valores.data_responsavel|default:'' }}" class="rn-campo">
+                        </label>
+                        <label class="block">
+                            <span class="rn-rotulo">Nº da venda <span class="font-normal text-gray-400">(se já tiver)</span></span>
+                            <input type="text" name="numero_venda" value="{{ valores.numero_venda|default:'' }}" maxlength="40"
+                                   autocomplete="off" spellcheck="false"
+                                   class="rn-campo font-mono {% if erros.numero_venda %}rn-invalido{% endif %}">
+                            <p class="rn-dica">Pode deixar em branco e informar depois, na tela da avaliação.</p>
+                            {% if erros.numero_venda %}<p class="rn-erro">{{ erros.numero_venda }}</p>{% endif %}
+                        </label>
+                    </div>
                 </div>
             </section>
         </div>

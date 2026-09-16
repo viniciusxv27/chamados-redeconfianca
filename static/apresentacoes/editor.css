@@ -648,6 +648,10 @@ html.dark .ed-toast button { background: rgba(0,0,0,.08); }
   border-radius: 14px; background: rgba(18, 12, 28, .78); backdrop-filter: blur(8px); opacity: 0; transition: opacity .25s; z-index: 6;
 }
 .ap-raiz.ap-mostrar-controles .ap-controles, .ap-controles:focus-within { opacity: 1; }
+/* Invisível não recebe toque: um toque perto da base avança o slide em vez de apertar um botão escondido. */
+.ap-raiz:not(.ap-mostrar-controles) .ap-controles:not(:focus-within) { pointer-events: none; }
+.ap-controles button[disabled] { opacity: .35; cursor: default; }
+.ap-controles button[aria-pressed="true"] { background: rgba(226, 63, 207, .35); }
 .ap-controles button {
   width: 38px; height: 38px; border: 0; border-radius: 10px; background: transparent; color: #fff; cursor: pointer; font-size: 15px;
   display: inline-flex; align-items: center; justify-content: center;
@@ -680,6 +684,23 @@ html.dark .ed-toast button { background: rgba(0,0,0,.08); }
 .ap-fim button { height: 44px; padding: 0 18px; border-radius: 12px; border: 1px solid rgba(255,255,255,.25); background: rgba(255,255,255,.08); color: #fff; font: 600 15px Montserrat, sans-serif; cursor: pointer; }
 .ap-fim button:hover { background: rgba(255,255,255,.16); }
 .ap-aviso { position: absolute; left: 50%; top: 18px; transform: translateX(-50%); padding: 8px 14px; border-radius: 10px; background: rgba(18,12,28,.85); font-size: 13px; font-weight: 600; z-index: 9; }
+/* telas de mensagem (carregando, nada para apresentar, erro): texto selecionável e rolagem normal */
+.ap-raiz.ap-mensagem { touch-action: auto; user-select: text; -webkit-user-select: text; }
+.ap-inicio .ap-acoes { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+.ap-inicio .ap-icone-grande { font-size: 44px; color: #FFD15C; }
+.ap-inicio a.ap-link {
+  display: inline-flex; align-items: center; gap: 10px; height: 48px; padding: 0 22px; border-radius: 14px; text-decoration: none;
+  border: 1px solid rgba(255,255,255,.25); background: rgba(255,255,255,.08); color: #fff; font: 600 15px Montserrat, sans-serif;
+}
+.ap-inicio a.ap-link:hover { background: rgba(255,255,255,.16); }
+.ap-inicio a.ap-link.ap-primario { border: 0; background: linear-gradient(135deg, #E23FCF, #8B3DFF); font-weight: 700; }
+.ap-inicio a.ap-link:focus-visible { outline: 3px solid #FFD15C; outline-offset: 3px; }
+.ap-inicio button.ap-secundario { background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.25); box-shadow: none; font-weight: 600; }
+.ap-inicio kbd { display: inline-block; padding: 0 6px; border-radius: 5px; border: 1px solid rgba(255,255,255,.3); font: 600 12px/20px ui-monospace, monospace; color: #f1eaf8; }
+.ap-inicio .ed-giro { border-color: rgba(255,255,255,.18); border-top-color: #E23FCF; }
+.ap-preto { position: absolute; inset: 0; z-index: 6; background: #000; }
+.ap-raiz :focus { outline: none; }
+.ap-raiz button:focus-visible { outline: 2px solid #E23FCF; outline-offset: 2px; }
 
 @media (prefers-reduced-motion: reduce) {
   .ed-pop, .ed-modal, .ed-toast, .ed-modal-fundo { animation: none; }

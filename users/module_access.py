@@ -20,7 +20,13 @@ teria a porta.
 ``MODULOS`` é a fonte única do catálogo exibido na tela. Toda chave listada
 tem um gate de verdade em ``GATES`` — é ele que o menu consulta e é ele que o
 teste percorre para provar que nenhuma caixinha da tela é decorativa.
+
+A exceção que vai no sentido contrário também mora aqui: ``padrao_restrito``
+diz quando o PADRÃO fora do grupo GERENTES fica de fora de Chamados do setor,
+Checklists ADM, Limpeza, Experiência Vivo e Contagem de Caixa — e a liberação
+individual do módulo é justamente o que devolve o acesso a ele.
 """
+from functools import wraps
 
 # ---------------------------------------------------------------------------
 # Catálogo: o que aparece na tela, por grupo
@@ -95,12 +101,26 @@ MODULOS = [
      ]},
     {'chave': 'chamados', 'rotulo': 'Chamados', 'grupo': 'Operação',
      'acesso': False,
-     'descricao': 'Todo mundo abre chamado; aqui é o que vai além do próprio setor.',
+     'descricao': 'Todo mundo abre chamado e acompanha os seus; aqui é o que vai além disso.',
      'permissoes': [
+         ('chamados.setor', 'Ver os chamados do setor',
+          'Para PADRÃO fora do grupo GERENTES, que sem isto só vê os que abriu e os atribuídos a ele.'),
          ('chamados.todos', 'Ver chamados de todos os setores', 'Como a hierarquia ADMINISTRAÇÃO.'),
          ('painel.gestao', 'Painel de gestão', 'Painel de gestão de chamados (hoje SUPERVISOR e acima).'),
          ('painel.admin', 'Painel administrativo', 'Painel administrativo (hoje ADMINISTRAÇÃO e acima).'),
      ]},
+    {'chave': 'checklists', 'rotulo': 'Checklists ADM', 'grupo': 'Operação',
+     'acesso': True,
+     'descricao': 'Entrar nos Checklists ADM sendo PADRÃO fora do grupo GERENTES.',
+     'permissoes': []},
+    {'chave': 'limpeza', 'rotulo': 'Limpeza', 'grupo': 'Operação',
+     'acesso': True,
+     'descricao': 'Registrar e consultar limpezas sendo PADRÃO fora do grupo GERENTES.',
+     'permissoes': []},
+    {'chave': 'experiencia', 'rotulo': 'Experiência Vivo', 'grupo': 'Operação',
+     'acesso': True,
+     'descricao': 'Preencher e consultar a Experiência Vivo sendo PADRÃO fora do grupo GERENTES.',
+     'permissoes': []},
 
     # ── Administrativo ──────────────────────────────────────────────────
     {'chave': 'impulso', 'rotulo': 'Impulso', 'grupo': 'Administrativo',
@@ -111,7 +131,7 @@ MODULOS = [
      ]},
     {'chave': 'caixa', 'rotulo': 'Contagem de Caixa', 'grupo': 'Administrativo',
      'acesso': True,
-     'descricao': 'Contar o caixa mesmo sem estar lotado numa loja.',
+     'descricao': 'Contar o caixa mesmo sem estar lotado numa loja — e, sendo PADRÃO fora do grupo GERENTES, entrar no módulo.',
      'permissoes': [
          ('caixa.gestor', 'Gestor do caixa', 'Ver todas as lojas e importar a base.'),
      ]},
@@ -200,7 +220,11 @@ GATES = {
     'compras': 'purchases.views:user_can_manage_purchases',
     'almoxarifado.gestao': 'assets.context_processors:e_gestor_de_inventario',
     'almoxarifado.aprovar': 'assets.views:can_approve_requests',
+    'chamados.setor': 'users.module_access:_gate_chamados_setor',
     'chamados.todos': 'metodo:can_view_all_tickets',
+    'checklists': 'users.module_access:_gate_checklists',
+    'limpeza': 'users.module_access:_gate_limpeza',
+    'experiencia': 'users.module_access:_gate_experiencia',
     'painel.gestao': 'metodo:can_access_management_panel',
     'painel.admin': 'metodo:can_access_admin_panel',
     'impulso': 'impulso.utils:is_impulso_member',
@@ -240,6 +264,25 @@ def _gate_ponto(user):
         return ConfiguracaoTangerino.get().libera(user)
     except Exception:  # noqa: BLE001
         return False
+
+
+def _gate_chamados_setor(user):
+    """Vê chamado pelo setor: a regra de sempre, menos o PADRÃO restrito."""
+    return bool(user.can_view_sector_tickets()) and not padrao_restrito(user, 'chamados')
+
+
+# Os três módulos abaixo não tinham regra de entrada: todo mundo logado entrava.
+# O gate agora é só a trava do PADRÃO — quem não é PADRÃO restrito segue entrando.
+def _gate_checklists(user):
+    return not padrao_restrito(user, 'checklists')
+
+
+def _gate_limpeza(user):
+    return not padrao_restrito(user, 'limpeza')
+
+
+def _gate_experiencia(user):
+    return not padrao_restrito(user, 'experiencia')
 
 
 # ---------------------------------------------------------------------------
@@ -350,6 +393,119 @@ def tem_acesso(user, chave):
         return bool(getattr(import_module(modulo), funcao)(user))
     except Exception:  # noqa: BLE001
         return False
+
+
+# ---------------------------------------------------------------------------
+# PADRÃO fora do grupo GERENTES: módulos fechados
+# ---------------------------------------------------------------------------
+# O PADRÃO que não é gerente não entra em Checklists ADM, Limpeza, Experiência
+# Vivo e Contagem de Caixa, e em Chamados vê só o que é dele. As outras
+# hierarquias, o grupo GERENTES e o superusuário seguem como antes.
+#
+# A exceção para uma pessoa é a mesma tela de liberação individual: qualquer
+# uma das chaves listadas para o módulo devolve o acesso de antes. Assim ninguém
+# precisa entrar no GERENTES só para contar caixa — o grupo pesa em comissão,
+# contestação, escala e aprovações.
+GRUPO_GERENTES = 'GERENTES'
+
+LIBERACOES_DO_PADRAO = {
+    'chamados': ('chamados.setor', 'chamados.todos'),
+    'checklists': ('checklists',),
+    'limpeza': ('limpeza',),
+    'experiencia': ('experiencia',),
+    'caixa': ('caixa', 'caixa.gestor'),
+}
+
+
+def e_do_grupo_gerentes(user):
+    """Está no grupo de comunicação GERENTES?
+
+    Nome exato, como em ``User.can_create_contestations``: existem também
+    "GERENTES (CHECKLIST)", "Gerentes 1..4" e "Gerente / ADM", e um
+    ``icontains`` com ``.first()`` depende da ordem alfabética para acertar.
+    Cacheado na instância, como ``granted_modules``: o menu pergunta várias
+    vezes no mesmo request.
+    """
+    if not (user and getattr(user, 'is_authenticated', False)):
+        return False
+    cached = getattr(user, '_e_do_grupo_gerentes_cache', None)
+    if cached is None:
+        try:
+            cached = user.communication_groups.filter(name__iexact=GRUPO_GERENTES).exists()
+        except Exception:  # noqa: BLE001
+            cached = False
+        try:
+            user._e_do_grupo_gerentes_cache = cached
+        except Exception:  # noqa: BLE001
+            pass
+    return cached
+
+
+def padrao_restrito(user, modulo):
+    """``user`` é o PADRÃO que fica de fora de ``modulo``?
+
+    True só para quem é PADRÃO, não é superusuário, não está no grupo GERENTES
+    e não tem nenhuma das liberações individuais do módulo
+    (``LIBERACOES_DO_PADRAO``). Para qualquer outra pessoa, False — e o módulo
+    segue com a regra que já tinha.
+
+    É a pergunta única que menu, views e APIs desses módulos fazem, para o menu
+    esconder exatamente o que o servidor bloqueia. Módulo desconhecido levanta
+    KeyError: nome digitado errado não pode virar porta aberta.
+    """
+    chaves = LIBERACOES_DO_PADRAO[modulo]
+    if not (user and getattr(user, 'is_authenticated', False)):
+        return False
+    if user.is_superuser or getattr(user, 'hierarchy', '') != 'PADRAO':
+        return False
+    if e_do_grupo_gerentes(user):
+        return False
+    return not any(user_has_module(user, chave) for chave in chaves)
+
+
+def _rotulo_do_modulo(modulo):
+    return next((m['rotulo'] for m in MODULOS if m['chave'] == modulo), modulo)
+
+
+def _quer_json(request):
+    """Chamada de API/AJAX: quem pergunta espera JSON, não uma tela."""
+    return ('/api/' in request.path
+            or request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+            or 'application/json' in request.headers.get('Accept', '')
+            or (request.content_type or '').startswith('application/json'))
+
+
+def resposta_de_bloqueio(request, modulo):
+    """O que o PADRÃO restrito recebe ao bater na porta de ``modulo``."""
+    aviso = (f'O módulo {_rotulo_do_modulo(modulo)} não está liberado para o seu usuário. '
+             'Se você precisa dele, fale com o seu gestor.')
+    if _quer_json(request):
+        from django.http import JsonResponse
+        return JsonResponse({'success': False, 'error': aviso}, status=403)
+    from django.contrib import messages
+    from django.shortcuts import redirect
+    messages.error(request, aviso)
+    return redirect('home')
+
+
+def fechado_para_padrao(modulo):
+    """Trava de view: ``padrao_restrito`` não passa.
+
+    Vai logo abaixo do ``@login_required`` (e acima do ``@require_POST``), para
+    barrar também a URL digitada à mão e o POST direto — esconder o menu não
+    basta. Tela volta para o início com o aviso; API/AJAX recebe 403 em JSON,
+    porque um redirect chegaria ao ``fetch`` como HTML.
+    """
+    LIBERACOES_DO_PADRAO[modulo]  # nome errado quebra ao importar, não em produção
+
+    def decorador(view):
+        @wraps(view)
+        def _view(request, *args, **kwargs):
+            if padrao_restrito(request.user, modulo):
+                return resposta_de_bloqueio(request, modulo)
+            return view(request, *args, **kwargs)
+        return _view
+    return decorador
 
 
 # ---------------------------------------------------------------------------

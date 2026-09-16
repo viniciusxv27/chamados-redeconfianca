@@ -12,6 +12,8 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from .models import Ticket, Category, TicketLog, TicketComment, Webhook, TicketView, TicketAssignment
+from .permissions import (ForaDoPadraoRestrito, chamados_restritos, filtro_do_padrao_restrito,
+                          pode_ver_chamado, setores_pelo_setor)
 from .serializers import TicketSerializer, CategorySerializer, TicketLogSerializer, TicketCommentSerializer, WebhookSerializer
 from users.models import Sector, User
 from core.middleware import log_action
@@ -117,6 +119,11 @@ def tickets_list_view(request):
     if user.can_view_all_tickets():
         # Admin vê todos os tickets (incluindo fechados)
         tickets = Ticket.objects.all()
+    elif chamados_restritos(user):
+        # PADRÃO fora do grupo GERENTES: o que abriu, o que atende (responsável,
+        # auxiliar ou cópia) e o setor de atendimento — a fila da loja não.
+        # O filtro é aqui, na base: busca, abas, contadores e paginação saem dela.
+        tickets = Ticket.objects.filter(filtro_do_padrao_restrito(user)).distinct()
     elif user.can_view_sector_tickets():
         # Supervisores veem: seus próprios tickets + TODOS os tickets dos setores (independente de atribuição) + tickets atribuídos
         user_sectors = list(user.sectors.all())
@@ -590,6 +597,9 @@ def tickets_history_view(request):
     if user.can_view_all_tickets():
         # Admin vê todos os tickets fechados
         tickets = Ticket.objects.filter(status='FECHADO')
+    elif chamados_restritos(user):
+        # PADRÃO fora do grupo GERENTES: o mesmo recorte da lista, só os fechados.
+        tickets = Ticket.objects.filter(filtro_do_padrao_restrito(user), status='FECHADO').distinct()
     elif user.can_view_sector_tickets():
         # Supervisores veem: próprios tickets fechados + tickets fechados dos setores + atribuídos fechados
         user_sectors = list(user.sectors.all())
@@ -848,14 +858,14 @@ def ticket_detail_view(request, ticket_id):
     ticket = get_object_or_404(Ticket, id=ticket_id)
     user = request.user
     
-    # Verificar permissão para visualizar o ticket
-    user_sectors = list(user.sectors.all())
-    if user.sector:
-        user_sectors.append(user.sector)
-    
+    # Verificar permissão para visualizar o ticket. Os setores já vêm
+    # recortados para o PADRÃO restrito (sem as lojas): o chamado da loja aberto
+    # por outra pessoa não abre nem digitando a URL.
+    setores_visiveis = setores_pelo_setor(user)
+
     can_view = (
-        user.can_view_all_tickets() or 
-        (user.can_view_sector_tickets() and ticket.sector in user_sectors) or
+        user.can_view_all_tickets() or
+        (user.can_view_sector_tickets() and ticket.sector_id in setores_visiveis) or
         ticket.created_by == user or
         user in ticket.get_all_assigned_users()
     )
@@ -868,8 +878,8 @@ def ticket_detail_view(request, ticket_id):
     if request.method == 'POST' and 'upload_files' in request.POST:
         # Verificar permissão para adicionar arquivos
         can_upload = (
-            user.can_view_all_tickets() or 
-            (user.can_view_sector_tickets() and ticket.sector in user_sectors) or
+            user.can_view_all_tickets() or
+            (user.can_view_sector_tickets() and ticket.sector_id in setores_visiveis) or
             ticket.created_by == user or
             ticket.assigned_to == user or
             user in ticket.get_all_assigned_users()
@@ -945,8 +955,8 @@ def ticket_detail_view(request, ticket_id):
     
     # Verificar se pode fazer upload de arquivos
     can_upload = (
-        user.can_view_all_tickets() or 
-        (user.can_view_sector_tickets() and ticket.sector in user_sectors) or
+        user.can_view_all_tickets() or
+        (user.can_view_sector_tickets() and ticket.sector_id in setores_visiveis) or
         ticket.created_by == user or
         ticket.assigned_to == user or
         user in ticket.get_all_assigned_users()
@@ -1157,6 +1167,12 @@ def excluir_comentario_view(request, comment_id):
         TicketComment.objects.select_related('ticket', 'user'), id=comment_id)
     ticket = comentario.ticket
 
+    # O PADRÃO restrito não mexe em chamado que deixou de enxergar, nem no
+    # comentário que ele mesmo deixou lá quando ainda via a fila da loja.
+    if chamados_restritos(request.user) and not pode_ver_chamado(request.user, ticket):
+        messages.error(request, 'Você não tem permissão para visualizar este chamado.')
+        return redirect('tickets_list')
+
     if not comentario.pode_excluir(request.user):
         messages.error(request, 'Você não pode excluir este comentário.')
         return redirect('ticket_detail', ticket_id=ticket.id)
@@ -1183,10 +1199,12 @@ def add_comment_view(request, ticket_id):
         # Suporte para múltiplos usuários (select multiple)
         assigned_user_ids = request.POST.getlist('assigned_to')
         
-        # Verificar permissão para comentar
+        # Verificar permissão para comentar. "Pelo setor" exclui a loja do
+        # PADRÃO restrito (setores_pelo_setor), como na tela de detalhe.
         can_comment = (
-            request.user.can_view_all_tickets() or 
-            (request.user.can_view_sector_tickets() and ticket.sector == request.user.sector) or
+            request.user.can_view_all_tickets() or
+            (request.user.can_view_sector_tickets() and ticket.sector == request.user.sector
+             and ticket.sector_id in setores_pelo_setor(request.user)) or
             ticket.created_by == request.user or
             request.user in ticket.get_all_assigned_users()
         )
@@ -1256,10 +1274,12 @@ def update_ticket_status_view(request, ticket_id):
         observation = request.POST.get('observation', '')
         solution = request.POST.get('solution', '')
         
-        # Verificar permissão para atualizar
+        # Verificar permissão para atualizar. "Pelo setor" exclui a loja do
+        # PADRÃO restrito (setores_pelo_setor), como na tela de detalhe.
         can_update = (
-            request.user.can_view_all_tickets() or 
-            (request.user.can_view_sector_tickets() and ticket.sector == request.user.sector) or
+            request.user.can_view_all_tickets() or
+            (request.user.can_view_sector_tickets() and ticket.sector == request.user.sector
+             and ticket.sector_id in setores_pelo_setor(request.user)) or
             ticket.assigned_to == request.user or
             request.user in ticket.get_all_assigned_users() or
             ticket.created_by == request.user  # Criador pode aprovar/reprovar
@@ -1562,6 +1582,11 @@ class TicketViewSet(viewsets.ModelViewSet):
         
         if user.can_view_all_tickets():
             return Ticket.objects.all()
+        elif chamados_restritos(user):
+            # PADRÃO fora do grupo GERENTES: o mesmo recorte da lista. Como
+            # get_object() parte daqui, update_status/add_comment de chamado
+            # fora do recorte respondem 404.
+            return Ticket.objects.filter(filtro_do_padrao_restrito(user)).distinct()
         elif user.can_view_sector_tickets():
             # Ver tickets dos setores + próprios tickets + atribuídos
             user_sectors = list(user.sectors.all())
@@ -1864,7 +1889,9 @@ def delete_webhook_view(request, webhook_id):
 class WebhookViewSet(viewsets.ModelViewSet):
     queryset = Webhook.objects.all()
     serializer_class = WebhookSerializer
-    permission_classes = [IsAuthenticated]
+    # Um webhook cadastrado recebe todo chamado novo, de qualquer setor: para o
+    # PADRÃO restrito seria o caminho de volta à fila que a lista deixou de mostrar.
+    permission_classes = [IsAuthenticated, ForaDoPadraoRestrito]
     
     @action(detail=True, methods=['post'])
     def test(self, request, pk=None):
@@ -2161,6 +2188,14 @@ def user_tickets_api(request, user_id):
     URL: /api/users/{user_id}/tickets/
     Retorna quantidade e títulos dos chamados do usuário
     """
+    # O PADRÃO restrito só consulta os próprios: com o id do colega, a API
+    # devolveria os chamados que a lista deixou de mostrar para ele.
+    if chamados_restritos(request.user) and request.user.id != user_id:
+        return JsonResponse({
+            'error': 'Sem permissão para ver os chamados de outro usuário',
+            'success': False
+        }, status=403)
+
     try:
         # Buscar o usuário
         user = get_object_or_404(User, id=user_id)
@@ -2571,6 +2606,9 @@ def tickets_export_view(request):
     # Filtrar tickets baseado na hierarquia do usuário (mesma lógica)
     if user.can_view_all_tickets():
         tickets = Ticket.objects.all()
+    elif chamados_restritos(user):
+        # PADRÃO fora do grupo GERENTES: exporta só o que a lista mostra a ele.
+        tickets = Ticket.objects.filter(filtro_do_padrao_restrito(user)).distinct()
     elif user.can_view_sector_tickets():
         user_sectors = list(user.sectors.all())
         if user.sector:

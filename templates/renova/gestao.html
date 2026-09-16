@@ -23,7 +23,7 @@
     .rn-filtro-rotulo { display: block; font-size: .68rem; font-weight: 700; color: #6B5B7B; margin-bottom: .25rem; }
     .rn-filtro { width: 100%; border: 1.5px solid #E4D9F1; border-radius: .65rem; padding: .45rem .65rem; font-size: .84rem; background: #fff; }
     .rn-filtro:focus { outline: none; border-color: #9D4EDD; box-shadow: 0 0 0 3px rgba(157, 78, 221, .15); }
-    .rn-grade { width: 100%; border-collapse: separate; border-spacing: 0; font-size: .78rem; min-width: 900px; }
+    .rn-grade { width: 100%; border-collapse: separate; border-spacing: 0; font-size: .78rem; min-width: 980px; }
     .rn-grade td:first-child, .rn-grade td:nth-child(5) { white-space: nowrap; }
     .rn-grade thead th { padding: .55rem .7rem; text-align: left; font-size: .63rem; font-weight: 800; text-transform: uppercase;
                          letter-spacing: .05em; color: #fff; background: #4C0B7A; white-space: nowrap; }
@@ -57,7 +57,7 @@
 <form method="get" class="rn-card p-3 sm:p-4 mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-6 items-end">
     <label class="lg:col-span-2">
         <span class="rn-filtro-rotulo">Buscar</span>
-        <input type="search" name="q" value="{{ filtros.q }}" placeholder="IMEI, modelo, RN-000123, vendedor…" class="rn-filtro">
+        <input type="search" name="q" value="{{ filtros.q }}" placeholder="IMEI, modelo, RN-000123, vendedor, nº da venda…" class="rn-filtro">
     </label>
     <label>
         <span class="rn-filtro-rotulo">Situação</span>
@@ -98,7 +98,7 @@
             <thead>
                 <tr>
                     <th>Código</th><th>Avaliado em · loja</th><th>Aparelho</th><th>Padrão</th><th class="num">Valor</th>
-                    <th>Situação</th><th>Aprovação</th><th>Chamado</th><th>Chegada</th>
+                    <th>Situação</th><th>Aprovação</th><th>Chamado</th><th>Nº da venda</th><th>Chegada</th>
                 </tr>
             </thead>
             <tbody>
@@ -112,6 +112,7 @@
                     <td><span class="rn-sit rn-sit-{{ r.situacao.0 }}">{{ r.situacao.1 }}</span></td>
                     <td>{% if r.aprovacao_por %}{{ r.aprovacao_por.full_name|default:r.aprovacao_por.username }}<span class="fraco">{{ r.aprovacao_em|date:"d/m/Y H:i" }}</span>{% else %}—{% endif %}</td>
                     <td>{% if r.chamado_id %}<a href="/tickets/{{ r.chamado_id }}/" class="hover:underline" style="color:#6B21A8">#{{ r.chamado_id }}</a>{% else %}—{% endif %}</td>
+                    <td class="font-mono">{{ r.numero_venda|default:"—" }}</td>
                     <td>{% if r.recebido_em %}{{ r.recebido_por.full_name|default:"—" }}<span class="fraco">{{ r.recebido_em|date:"d/m/Y H:i" }}</span>{% if r.recebimento_obs %}<span class="fraco">{{ r.recebimento_obs|truncatechars:60 }}</span>{% endif %}{% else %}—{% endif %}</td>
                 </tr>
                 {% endfor %}

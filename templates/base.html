@@ -613,6 +613,7 @@
                             </a>
                         </li>
                         {% endif %}
+                        {% if user|tem_acesso:'checklists' %}
                         <li>
                             <a href="{% url 'checklists:dashboard' %}" data-rota="{% url 'checklists:dashboard' %}"
                                class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
@@ -622,6 +623,7 @@
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-emerald-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </a>
                         </li>
+                        {% endif %}
                         <li>
                             <a href="{% url 'files:files_list' %}" data-rota="{% url 'files:files_list' %}"
                                class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
@@ -643,6 +645,7 @@
                             </a>
                         </li>
                         {% endif %}
+                        {% if user|tem_acesso:'limpeza' %}
                         <li>
                             <a href="{% url 'limpeza:dashboard' %}" data-rota="{% url 'limpeza:dashboard' %}"
                                class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
@@ -652,6 +655,8 @@
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-lime-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </a>
                         </li>
+                        {% endif %}
+                        {% if user|tem_acesso:'experiencia' %}
                         <li>
                             <a href="{% url 'experiencia:dashboard' %}" data-rota="{% url 'experiencia:dashboard' %}"
                                class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
@@ -661,6 +666,7 @@
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-fuchsia-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </a>
                         </li>
+                        {% endif %}
                         {% if can_access_contestacao_menu %}
                         <li>
                             <a href="{% url 'contestacao:exclusion_list' %}" data-rota="{% url 'contestacao:exclusion_list' %}"
@@ -761,7 +767,7 @@
                         </li>
 
                         <!-- Menu Administrativo - Para usuários autorizados -->
-                        {% if user.can_manage_users or user.groups.all or can_access_impulso or caixa_liberado or user|tem_acesso:'fornecedores' or user|tem_acesso:'compras' or user|tem_acesso:'projetos.gestao' or user|tem_acesso:'treinamentos.gestao' %}
+                        {% if user.can_manage_users or user.groups.all or can_access_impulso or caixa_abre_grupo_administrativo or user|tem_acesso:'fornecedores' or user|tem_acesso:'compras' or user|tem_acesso:'projetos.gestao' or user|tem_acesso:'treinamentos.gestao' %}
                         <li class="border-t border-gray-800 pt-2 mt-2">
                             <div class="flex items-center space-x-2 px-2 py-1 rounded-lg hover:bg-gray-800 transition-colors cursor-pointer" 
                                  onclick="toggleSubmenu('management-menu')">
