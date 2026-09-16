@@ -456,7 +456,7 @@ def abrir_chamado_do_gasto(cartao, gasto, ator_user):
         f'Categoria: {gasto.categoria_gasto or "—"}\n'
         f'Descrição: {gasto.descricao or "—"}'
     )
-    title = f'Compra no cartão {cartao.get_bandeira_display()} ••••{cartao.last4} — {gasto.estabelecimento or "gasto"}'
+    title = f'COMPRA: {gasto.descricao} — R${gasto.valor}'
 
     ticket = Ticket.objects.create(
         title=title[:200],
