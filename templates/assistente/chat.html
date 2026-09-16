@@ -31,6 +31,19 @@
     .rc-md th { background: #f9fafb; color: #374151; font-weight: 600; text-align: left; white-space: nowrap; }
     .rc-md th, .rc-md td { padding: .45rem .7rem; border-bottom: 1px solid #f3f4f6; vertical-align: top; }
     .rc-md tr:last-child td { border-bottom: 0; }
+
+    /* Tema escuro: o tema-escuro.css remapeia os utilitários do Tailwind, mas
+       estas regras são próprias do chat e precisam do par escuro aqui. */
+    html.dark .rc-md h3, html.dark .rc-md h4, html.dark .rc-md h5, html.dark .rc-md h6,
+    html.dark .rc-md strong { color: var(--tema-texto, #e7eaf0); }
+    html.dark .rc-md a { color: #fdba74; }
+    html.dark .rc-md code { background: var(--tema-superficie-3, #2b3346); border-color: var(--tema-borda, #313a4f); color: var(--tema-texto, #e7eaf0); }
+    html.dark .rc-md pre { background: #0d1117; color: #e7eaf0; border: 1px solid var(--tema-borda, #313a4f); }
+    html.dark .rc-md blockquote { background: rgba(255, 107, 53, .12); color: var(--tema-texto-2, #b6bdcc); }
+    html.dark .rc-md hr { border-top-color: var(--tema-borda, #313a4f); }
+    html.dark .rc-md .rc-md-tabela { background: var(--tema-superficie, #1b2130); border-color: var(--tema-borda, #313a4f); }
+    html.dark .rc-md th { background: var(--tema-superficie-2, #232a3b); color: var(--tema-texto, #e7eaf0); }
+    html.dark .rc-md th, html.dark .rc-md td { border-bottom-color: var(--tema-borda-suave, #262e40); }
 </style>
 <div class="max-w-3xl mx-auto px-3 sm:px-4 py-4 flex flex-col" style="min-height: calc(100vh - 6rem);">
     {% csrf_token %}

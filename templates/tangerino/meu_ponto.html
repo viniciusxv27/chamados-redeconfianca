@@ -485,7 +485,17 @@
                 headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf()},
                 body: JSON.stringify(corpo)
             })
-            .then(function (r) { return r.json(); })
+            .then(function (r) {
+                // Resposta fora do padrão (sessão expirada, CSRF, página de erro
+                // do proxy) não é JSON: vira um motivo que a pessoa entende.
+                return r.json().catch(function () {
+                    if (r.status === 401 || r.status === 403 || r.redirected) {
+                        return {sucesso: false, erro: 'A sua sessão expirou. Recarregue a página, entre de novo e bata o ponto.'};
+                    }
+                    return {sucesso: false, erro: 'O servidor respondeu ' + r.status + ' e o ponto NÃO foi registrado. '
+                        + 'Tente de novo; se repetir, bata pelo aplicativo do Tangerino.'};
+                });
+            })
             .then(function (d) {
                 if (d.sucesso) {
                     fecharCamera();
@@ -506,7 +516,8 @@
             .catch(function () {
                 confirmar.disabled = false;
                 confirmar.innerHTML = '<i class="fas fa-check mr-1"></i>Registrar ponto';
-                avisar('Erro de conexão. O ponto NÃO foi registrado.', 'error');
+                avisar('Sem conexão com o portal. O ponto NÃO foi registrado: confira a internet e '
+                       + 'tente de novo, ou bata pelo aplicativo do Tangerino.', 'error');
             });
         }
 
@@ -564,7 +575,17 @@
                     observacao: document.getElementById('tgAtrasadoObs').value
                 })
             })
-            .then(function (r) { return r.json(); })
+            .then(function (r) {
+                // Resposta fora do padrão (sessão expirada, CSRF, página de erro
+                // do proxy) não é JSON: vira um motivo que a pessoa entende.
+                return r.json().catch(function () {
+                    if (r.status === 401 || r.status === 403 || r.redirected) {
+                        return {sucesso: false, erro: 'A sua sessão expirou. Recarregue a página, entre de novo e bata o ponto.'};
+                    }
+                    return {sucesso: false, erro: 'O servidor respondeu ' + r.status + ' e o ponto NÃO foi registrado. '
+                        + 'Tente de novo; se repetir, bata pelo aplicativo do Tangerino.'};
+                });
+            })
             .then(function (d) {
                 if (d.sucesso) {
                     avisar('Marcação retroativa registrada.', 'success');
@@ -576,7 +597,8 @@
             })
             .catch(function () {
                 enviarAtrasado.disabled = false; enviarAtrasado.textContent = 'Registrar';
-                avisar('Erro de conexão. Nada foi registrado.', 'error');
+                avisar('Sem conexão com o portal. Nada foi registrado: confira a internet e tente de novo, '
+                       + 'ou registre pelo aplicativo do Tangerino.', 'error');
             });
         });
     }

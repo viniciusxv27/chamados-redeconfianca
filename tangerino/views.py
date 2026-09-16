@@ -428,6 +428,30 @@ def api_ponto_status(request):
     })
 
 
+def _motivo_legivel(exc):
+    """Traduz a falha do Tangerino para quem está com o dedo no botão.
+
+    O texto cru ("Tangerino respondeu 404 em /register/web/1.1") não ajuda
+    ninguém na loja: o que a pessoa precisa saber é se o ponto entrou e o que
+    fazer agora.
+    """
+    texto = str(exc)
+    if 'respondeu 404' in texto:
+        return ('O Tangerino está recusando a batida pelo portal agora (erro 404 no serviço deles). '
+                'O seu ponto NÃO foi registrado: bata pelo aplicativo do Tangerino e avise a gestão.')
+    if 'respondeu 5' in texto or '504' in texto or '502' in texto:
+        return ('O Tangerino não respondeu a tempo. O seu ponto pode NÃO ter sido registrado: '
+                'confira na lista abaixo e, se não aparecer, bata pelo aplicativo do Tangerino.')
+    if 'Não foi possível falar com o Tangerino' in texto:
+        return ('Não conseguimos falar com o Tangerino agora. O seu ponto NÃO foi registrado: '
+                'tente de novo em instantes ou use o aplicativo do Tangerino.')
+    if 'Já existe um ponto cadastrado' in texto:
+        return 'Já existe uma marcação neste mesmo horário no Tangerino. Confira a lista abaixo.'
+    if 'não está autorizado' in texto.lower() or 'não Registra Ponto' in texto:
+        return 'O Tangerino não autoriza o seu registro de ponto pela web. Fale com o RH.'
+    return texto
+
+
 @modulo_liberado
 @login_required
 @require_POST
@@ -538,7 +562,10 @@ def api_bater_ponto(request):
         registro.retorno = str(exc)[:2000]
         registro.save()
         logger.warning('Falha ao bater ponto de %s: %s', request.user, exc)
-        return JsonResponse({'sucesso': False, 'erro': str(exc)}, status=502)
+        # 200 de propósito: o pedido chegou e foi tratado — o que falhou foi o
+        # Tangerino. Com 5xx, o proxy troca este JSON por uma página HTML e a
+        # tela cai no "erro de conexão", escondendo o motivo de quem bateu.
+        return JsonResponse({'sucesso': False, 'erro': _motivo_legivel(exc), 'detalhe': str(exc)[:300]})
 
 
 # ─── Escala (quadro semanal montado no portal) ───────────────────────────────

@@ -103,8 +103,10 @@ try:
         acoes = [n for n, d in ferramentas.TOOLS.items() if d.get('acao')]
         t('leituras de agenda e reuniões estão no assistente', all(n in esquema for n in novas),
           [n for n in novas if n not in esquema])
-        t('as 18 ações também, cada uma com prévia', len(acoes) == 18
-          and all(ferramentas.TOOLS[n].get('previa') and n in esquema for n in acoes), acoes)
+        # O registro cresceu (metas comerciais e Impulso entraram depois): conte só as daqui.
+        acoes_agenda = [n for n in acoes if n.startswith(('agenda_', 'reunioes_'))]
+        t('as 18 ações de agenda e reuniões também, cada uma com prévia', len(acoes_agenda) == 18
+          and all(ferramentas.TOOLS[n].get('previa') and n in esquema for n in acoes), acoes_agenda)
         t('as ferramentas antigas continuam', all(n in esquema for n in ('meu_perfil', 'minhas_metas', 'resultados_comerciais')))
         t('todo esquema é válido (required dentro de properties)', all(
             s['input_schema']['type'] == 'object'

@@ -666,6 +666,21 @@ try:
     t('rotina ativa sem nenhuma atividade: sem menu (nada a avisar)', bandeiras(sem_atividades)['rotina_liberada'] is False)
     t('SUPERADMIN sem rotina: só a gestão', bandeiras(superadmin) == {'rotina_liberada': False, 'rotina_admin': True})
     t('superusuário também é gestão', bandeiras(superusuario)['rotina_admin'] is True)
+
+    print('\n== MENU E NOTIFICADOR NO PORTAL ==')
+    # A fiação no base.html entrou depois deste teste: confira na página renderizada.
+    html_gerente = cliente(gerente).get('/rotina-gerencial/').content.decode()
+    t('quem tem rotina ganha o item no menu e o notificador de avisos',
+      'data-rota="/rotina-gerencial/"' in html_gerente and 'window.RotinaNotificador' in html_gerente)
+    html_admin = cliente(superadmin).get('/rotina-gerencial/').content.decode()
+    t('SUPERADMIN vê o menu mesmo sem rotina própria, e sem notificador',
+      'data-rota="/rotina-gerencial/"' in html_admin and 'window.RotinaNotificador' not in html_admin)
+    html_ninguem = cliente(ninguem).get('/rotina-gerencial/').content.decode()
+    t('quem não tem rotina não vê nem o menu nem o notificador',
+      'data-rota="/rotina-gerencial/"' not in html_ninguem and 'window.RotinaNotificador' not in html_ninguem)
+    html_pausada = cliente(pausada).get('/rotina-gerencial/').content.decode()
+    t('rotina pausada tira os dois do portal',
+      'data-rota="/rotina-gerencial/"' not in html_pausada and 'window.RotinaNotificador' not in html_pausada)
     with mock.patch('rotina.models.RotinaGerencial.objects') as quebrado:
         quebrado.filter.side_effect = RuntimeError('banco fora do ar')
         resultado = bandeiras(gerente)

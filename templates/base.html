@@ -560,6 +560,17 @@
                             </a>
                         </li>
                         {% endif %}
+                        {% if rotina_liberada or rotina_admin %}
+                        <li>
+                            <a href="{% url 'rotina:minha' %}" data-rota="{% url 'rotina:minha' %}"
+                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-calendar-week text-orange-400 flex-shrink-0 w-5 text-center"></i>
+                                <span class="text-sm flex-1">Rotina Gerencial</span>
+                                <div class="tooltip-collapsed">Rotina Gerencial</div>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-orange-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        {% endif %}
                         <li>
                             <a href="{% url 'feedback:dashboard' %}" data-rota="{% url 'feedback:dashboard' %}"
                                class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
@@ -4163,6 +4174,7 @@
     </script>
     {% include 'feedback/_reminder_popup.html' %}
     {% include 'portal_popups/_popup_gate.html' %}
+    {% if rotina_liberada %}{% include 'rotina/_notificador.html' %}{% endif %}
     {% if user.is_authenticated and request.resolver_match.url_name == 'home' %}
     {% include 'support/_transfer_popup.html' %}
     {% if tangerino_popup_ferias %}{% include 'tangerino/_popup_ferias.html' %}{% endif %}

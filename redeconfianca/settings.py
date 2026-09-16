@@ -146,6 +146,7 @@ TEMPLATES = [
                 'curriculos.context_processors.banco_de_talentos',
                 'reunioes.context_processors.reunioes_lembrete',
                 'renova.context_processors.renova_menu',
+                'rotina.context_processors.rotina_menu',
                 'users.context_processors_commission.comissionamento_menu',
             ],
         },

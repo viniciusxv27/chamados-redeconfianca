@@ -424,7 +424,10 @@
     -webkit-box-orient: vertical;
     overflow: hidden;
     font-weight: 700;
-    word-break: break-word;
+    /* quebra na palavra só quando ela não cabe, e com hífen: evita "Fechament / o semanal" */
+    overflow-wrap: break-word;
+    word-break: normal;
+    hyphens: auto;
 }
 .rt-ev-hora { font-size: .67rem; font-weight: 600; opacity: .82; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .rt-ev-icone { flex-shrink: 0; margin-top: .14rem; font-size: .58rem; opacity: .75; }
