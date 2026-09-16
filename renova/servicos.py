@@ -19,6 +19,10 @@ def _moeda(valor):
     return f'R$ {texto}'
 
 
+def _nome(user):
+    return (getattr(user, 'full_name', '') or user.get_username()) if user else '—'
+
+
 def _link(renova):
     return (getattr(settings, 'BASE_URL', '') or '').rstrip('/') + reverse('renova:detalhe', args=[renova.pk])
 
@@ -34,12 +38,16 @@ def descricao_do_chamado(renova):
         '',
         f'Aparelho: {renova.aparelho}' + (f' · cor {renova.cor}' if renova.cor else ''),
         f'IMEI 1: {renova.imei1}' + (f' · IMEI 2: {renova.imei2}' if renova.imei2 else ''),
-        f'Nº de série: {renova.numero_serie or "—"}',
         f'Loja (origem): {renova.loja.name if renova.loja else "—"}',
         f'Data da avaliação: {renova.data_avaliacao:%d/%m/%Y}',
         f'Padrão: {padrao} · valor estimado de troca: {_moeda(renova.valor_estimado)}',
+        'Por que este padrão: ' + ('; '.join(m['texto'] for m in (renova.padrao_motivos or []))
+                                   or 'nenhuma avaria sinalizada'),
         f'Saúde da bateria: {bateria}',
-        f'Parecer final: {renova.get_parecer_display()}',
+        f'Aprovação: {renova.get_aprovacao_display()}'
+        + (f' por {_nome(renova.aprovacao_por)} em {timezone.localtime(renova.aprovacao_em):%d/%m/%Y %H:%M}'
+           if renova.aprovacao_por_id and renova.aprovacao_em else '')
+        + (f' — {renova.aprovacao_obs}' if renova.aprovacao_obs else ''),
         '',
         'Itens obrigatórios: ' + ('todos conferidos.' if not faltando else 'faltou ' + '; '.join(faltando) + '.'),
         '',
@@ -128,15 +136,81 @@ def registrar_recebimento(renova, usuario, situacao, observacao=''):
     return renova
 
 
-def _avisar_no_sino(destino, titulo, mensagem, url, autor):
-    """Notificação só no sino do portal (sem push)."""
+def _avisar_no_sino(destinos, titulo, mensagem, url, autor):
+    """Notificação só no sino do portal (sem push). Aceita uma pessoa ou uma lista."""
+    destinos = [d for d in (destinos if isinstance(destinos, (list, tuple)) else [destinos]) if d]
+    if not destinos:
+        return
     try:
         from notifications.services import NotificationType, notification_service
 
-        notification_service._send_in_app([destino], titulo, mensagem, NotificationType.SYSTEM, url,
+        notification_service._send_in_app(destinos, titulo, mensagem, NotificationType.SYSTEM, url,
                                           'NORMAL', 'fas fa-mobile-screen-button', {}, autor)
     except Exception as exc:                                    # noqa: BLE001
         logger.warning('Aviso do Renova não foi para o sino: %s', exc)
+
+
+class DecisaoInvalida(Exception):
+    """A aprovação pedida não vale (já decidida, ou reprovação sem motivo)."""
+
+
+def gerentes_da_loja(renova):
+    """Quem aprova esta troca: os membros ativos do grupo GERENTES com a loja dela como setor principal."""
+    from .permissoes import grupo_gerentes
+
+    grupo = grupo_gerentes()
+    if grupo is None or not renova.loja_id:
+        return []
+    return list(grupo.members.filter(is_active=True, sector_id=renova.loja_id).order_by('first_name', 'last_name'))
+
+
+def avisar_gerentes(renova, autor):
+    """Avaliação nova: o sino dos gerentes da loja pede a aprovação. Devolve quem foi avisado."""
+    gerentes = [g for g in gerentes_da_loja(renova) if g.pk != getattr(autor, 'pk', None)]
+    _avisar_no_sino(gerentes, f'Renova {renova.codigo}: aprovar a troca',
+                    f'{renova.vendedor_nome} avaliou {renova.aparelho} — padrão {renova.padrao or "—"}, '
+                    f'{_moeda(renova.valor_estimado)}. Aprove ou reprove.',
+                    reverse('renova:detalhe', args=[renova.pk]), autor)
+    return gerentes
+
+
+def decidir(renova, gerente, aprovar, observacao=''):
+    """Aprovação do gerente. Aprovada: abre o chamado (e libera a etiqueta). Reprovada: sem troca.
+
+    Devolve (renova, chamado). O chamado é None na reprovação ou se não abrir — a
+    aprovação vale mesmo assim, e dá para abrir de novo pela tela.
+    """
+    observacao = (observacao or '').strip()[:2000]
+    if not aprovar and not observacao:
+        raise DecisaoInvalida('Diga ao vendedor por que a troca foi reprovada.')
+    with transaction.atomic():
+        renova = Renova.objects.select_for_update().get(pk=renova.pk)
+        if renova.aprovacao != Renova.AGUARDANDO_GERENTE:
+            raise DecisaoInvalida(f'{renova.codigo} já foi decidida: {renova.get_aprovacao_display().lower()}.')
+        renova.aprovacao = Renova.APROVADA if aprovar else Renova.REPROVADA
+        renova.aprovacao_por, renova.aprovacao_em, renova.aprovacao_obs = gerente, timezone.now(), observacao
+        campos = ['aprovacao', 'aprovacao_por', 'aprovacao_em', 'aprovacao_obs', 'atualizado_em']
+        if not aprovar:
+            renova.parecer = checklist.NAO_APROVADO
+            campos.append('parecer')
+        renova.save(update_fields=campos)
+
+    chamado = None
+    if aprovar:
+        try:
+            chamado = abrir_chamado(renova, renova.criado_por or gerente)
+        except Exception:                                       # noqa: BLE001 — a aprovação já valeu
+            logger.exception('Chamado do Renova %s não abriu na aprovação', renova.pk)
+
+    if renova.criado_por_id and renova.criado_por_id != gerente.pk:
+        if aprovar:
+            texto = (f'{_nome(gerente)} aprovou a troca de {renova.aparelho}. '
+                     + (f'Chamado #{chamado.pk} aberto — imprima a etiqueta.' if chamado else 'Imprima a etiqueta.'))
+        else:
+            texto = f'{_nome(gerente)} reprovou a troca de {renova.aparelho}: {observacao}'
+        _avisar_no_sino(renova.criado_por, f'Renova {renova.codigo}: {renova.get_aprovacao_display().lower()}',
+                        texto, reverse('renova:detalhe', args=[renova.pk]), gerente)
+    return renova, chamado
 
 
 def aprovado_para_receber(renova):

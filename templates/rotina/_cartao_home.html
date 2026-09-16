@@ -1,0 +1,132 @@
+{% comment %}
+Cartão "Rotina gerencial" da home. Contexto: `rh`, de rotina.servicos.cartao_da_home.
+
+Renderizado pela tag cartao_rotina_home (dentro de rotina/_home.html) e pelo
+api/hoje/cartao/. O JS de rotina/_home.html só mexe no que tem data-rth-*
+(contagens, barra, marca do agora) e pede o cartão de novo quando chega
+data-mudanca — o instante em que uma atividade começa ou termina.
+{% endcomment %}
+<section class="rth-cartao rth-estado-{{ rh.estado }}" aria-labelledby="rth-titulo"
+         data-agora-ts="{{ rh.agora_ts }}" data-mudanca="{{ rh.proxima_mudanca_ts|default_if_none:'' }}">
+    <header class="rth-cabeca">
+        <span class="rth-icone" aria-hidden="true"><i class="fas fa-calendar-check"></i></span>
+        <div class="rth-cabeca-texto">
+            <p class="rth-sobre">Rotina gerencial{% if rh.estado != 'domingo' %} · hoje{% endif %}</p>
+            <h2 id="rth-titulo" class="rth-titulo">{{ rh.dia_nome }}, {{ rh.data_curta }}</h2>
+        </div>
+        <a class="rth-link" href="{{ rh.url_rotina }}" aria-label="Abrir minha rotina gerencial">
+            <span>Minha rotina</span><i class="fas fa-arrow-right" aria-hidden="true"></i>
+        </a>
+    </header>
+
+    {% if rh.faixa and rh.estado != 'domingo' %}
+    <div class="rth-faixa" data-rth-inicio="{{ rh.faixa.inicio_ts }}" data-rth-fim="{{ rh.faixa.fim_ts }}">
+        <div class="rth-faixa-trilho" role="img"
+             aria-label="Seu dia: {{ rh.feitas }} de {{ rh.total }} atividades concluídas, das {{ rh.faixa.inicio }} às {{ rh.faixa.fim }}">
+            <div class="rth-faixa-blocos">
+                {% for b in rh.faixa.blocos %}<span class="rth-bloco rth-bloco-{{ b.estado }}" style="left: {{ b.esquerda }}%; width: {{ b.largura }}%; background: {{ b.cor }}" title="{{ b.inicio }}–{{ b.fim }} · {{ b.titulo }}"></span>{% endfor %}
+            </div>
+            <span class="rth-faixa-agora{% if rh.faixa.agora is None %} rth-oculto{% endif %}" style="left: {{ rh.faixa.agora|default:'0' }}%"></span>
+        </div>
+        <div class="rth-faixa-legenda">
+            <span>{{ rh.faixa.inicio }}</span>
+            <span><strong>{{ rh.feitas }}</strong> de {{ rh.total }} concluída{{ rh.total|pluralize }}</span>
+            <span>{{ rh.faixa.fim }}</span>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if rh.estado == 'agora' or rh.estado == 'antes' or rh.estado == 'intervalo' %}
+    <div class="rth-corpo">
+        {% if rh.atual %}{% with a=rh.atual %}
+        <a class="rth-destaque rth-cat-{{ a.categoria|lower }}" href="{{ a.url }}">
+            <p class="rth-rotulo">
+                <span class="rth-pulso" aria-hidden="true"></span><span>Agora · {{ a.categoria_nome }}</span>
+                {% if a.bloqueada %}<i class="fas fa-lock" title="Horário travado" aria-label="Horário travado"></i>{% endif %}
+            </p>
+            <p class="rth-destaque-titulo">{{ a.titulo }}</p>
+            <p class="rth-destaque-hora">{{ a.inicio }}–{{ a.fim }} · <span data-rth-ate="{{ a.fim_ts }}" data-rth-prefixo="termina em ">termina em {{ a.termina_em }}</span></p>
+            <span class="rth-progresso" aria-hidden="true"><span class="rth-progresso-barra" data-rth-de="{{ a.inicio_ts }}" data-rth-fim="{{ a.fim_ts }}" style="width: {{ a.progresso }}%"></span></span>
+        </a>
+        {% endwith %}{% else %}{% with a=rh.proxima %}
+        <a class="rth-destaque rth-destaque-proxima rth-cat-{{ a.categoria|lower }}" href="{{ a.url }}">
+            <p class="rth-rotulo">
+                <i class="fas fa-forward" aria-hidden="true"></i><span>{% if rh.estado == 'antes' %}Primeira do dia{% else %}Próxima{% endif %} · {{ a.categoria_nome }}</span>
+                {% if a.bloqueada %}<i class="fas fa-lock" title="Horário travado" aria-label="Horário travado"></i>{% endif %}
+            </p>
+            <p class="rth-destaque-titulo">{{ a.titulo }}</p>
+            <p class="rth-destaque-hora">{{ a.inicio }}–{{ a.fim }} · <span data-rth-ate="{{ a.inicio_ts }}" data-rth-prefixo="começa em ">começa em {{ a.comeca_em }}</span></p>
+        </a>
+        {% endwith %}{% endif %}
+
+        <div class="rth-seguir">
+            <p class="rth-seguir-titulo">{% if rh.atual %}A seguir{% else %}Depois{% endif %}</p>
+            {% if rh.seguintes %}
+            <ol class="rth-lista">
+                {% for i in rh.seguintes %}
+                <li>
+                    <a class="rth-item rth-cat-{{ i.categoria|lower }}" href="{{ i.url }}">
+                        <span class="rth-item-hora">{{ i.inicio }}</span>
+                        <span class="rth-item-marca" aria-hidden="true"></span>
+                        <span class="rth-item-titulo">{{ i.titulo }}</span>
+                        {% if i.bloqueada %}<i class="fas fa-lock rth-item-trava" title="Horário travado" aria-label="Horário travado"></i>{% endif %}
+                        {% if forloop.first and rh.atual %}<span class="rth-item-em" data-rth-ate="{{ i.inicio_ts }}" data-rth-prefixo="em ">em {{ rh.proxima.comeca_em }}</span>{% endif %}
+                    </a>
+                </li>
+                {% endfor %}
+            </ol>
+            {% if rh.restantes %}
+            <a class="rth-mais" href="{{ rh.url_dia }}">Mais {{ rh.restantes }} até as {{ rh.faixa.fim }} <i class="fas fa-arrow-right" aria-hidden="true"></i></a>
+            {% endif %}
+            {% else %}
+            <p class="rth-seguir-vazio">{% if rh.atual %}É a última atividade de hoje.{% else %}Depois dela, o dia termina.{% endif %}</p>
+            {% endif %}
+        </div>
+    </div>
+    {% elif rh.estado == 'concluida' %}
+    <div class="rth-mensagem">
+        <span class="rth-mensagem-icone rth-mensagem-ok" aria-hidden="true"><i class="fas fa-circle-check"></i></span>
+        <div class="min-w-0">
+            <p class="rth-mensagem-titulo">Rotina de hoje concluída</p>
+            <p class="rth-mensagem-texto">{{ rh.total }} atividade{{ rh.total|pluralize }}, das {{ rh.faixa.inicio }} às {{ rh.faixa.fim }}. Bom trabalho!</p>
+        </div>
+    </div>
+    {% elif rh.estado == 'domingo' %}
+    <div class="rth-mensagem">
+        <span class="rth-mensagem-icone" aria-hidden="true"><i class="fas fa-mug-hot"></i></span>
+        <div class="min-w-0">
+            {% if rh.amanha %}
+            <p class="rth-mensagem-titulo">Sua semana começa amanhã</p>
+            <p class="rth-mensagem-texto">Segunda-feira abre às {{ rh.amanha.inicio }} com <a href="{{ rh.amanha.url }}">{{ rh.amanha.titulo }}</a>.</p>
+            {% else %}
+            <p class="rth-mensagem-titulo">Domingo, sem rotina</p>
+            <p class="rth-mensagem-texto">A semana que começa amanhã já está na sua rotina.</p>
+            {% endif %}
+        </div>
+    </div>
+    {% else %}
+    <div class="rth-mensagem">
+        <span class="rth-mensagem-icone" aria-hidden="true"><i class="fas fa-calendar-week"></i></span>
+        <div class="min-w-0">
+            <p class="rth-mensagem-titulo">Nenhuma atividade hoje</p>
+            <p class="rth-mensagem-texto">Hoje não há nada na sua rotina gerencial. A semana completa está em <a href="{{ rh.url_rotina }}">Minha rotina</a>.</p>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if rh.avisos_ligados %}
+    <footer class="rth-rodape">
+        {% if rh.sino_desligado %}
+        <p class="rth-avisos rth-avisos-parcial">
+            <i class="fas fa-bell-slash" aria-hidden="true"></i>
+            <span><strong>Avisos só na tela:</strong> {{ rh.lembrete_minutos }} min antes e no início. O sino está desligado nas suas <a href="{% url 'notifications:settings' %}">preferências de notificação</a>.</span>
+        </p>
+        {% else %}
+        <p class="rth-avisos">
+            <i class="fas fa-bell" aria-hidden="true"></i>
+            <span><strong>Avisos ligados:</strong> {{ rh.lembrete_minutos }} min antes e no início, na tela e no sino, com o portal aberto.</span>
+        </p>
+        {% endif %}
+    </footer>
+    {% endif %}
+</section>

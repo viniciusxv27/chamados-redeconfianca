@@ -30,7 +30,7 @@
                 color: #3B2A4D; cursor: pointer; user-select: none; transition: background-color .15s, border-color .15s; }
     .rn-caixa:hover { border-color: #C9B3E6; }
     .rn-caixa:has(input:checked) { border-color: #9D4EDD; background: #F6EEFF; }
-    .rn-caixa input, .rn-check input, .rn-tri input, .rn-parecer input, .rn-padroes input { position: absolute; opacity: 0; pointer-events: none; }
+    .rn-caixa input, .rn-check input, .rn-tri input, .rn-padroes input { position: absolute; opacity: 0; pointer-events: none; }
     .rn-quadrado { width: 1.1rem; height: 1.1rem; border-radius: .32rem; border: 1.5px solid #B9A3D3; background: #fff;
                    display: grid; place-items: center; flex-shrink: 0; transition: background-color .15s, border-color .15s; }
     input:checked + .rn-quadrado { background: #660099; border-color: #660099; }
@@ -84,23 +84,16 @@
     .rn-chip { display: inline-flex; align-items: center; gap: .4rem; padding: .28rem .6rem .28rem .3rem; border-radius: 9999px;
                background: #fff; border: 1px solid #E1CFF7; font-weight: 700; font-variant-numeric: tabular-nums; }
     .rn-chip:hover { border-color: #9D4EDD; }
+    .rn-chip.ativo { border-color: #9D4EDD; box-shadow: 0 0 0 2px rgba(157, 78, 221, .28); }
+    .rn-valor-calculado { display: flex; align-items: center; gap: .45rem; min-height: 2.95rem; background: #FBF8FF; cursor: default; }
+    .rn-valor-nota { color: #5B2A86; }
+    .rn-marca-fixa { display: flex; align-items: center; gap: .45rem; font-weight: 700; background: #FBF8FF; cursor: default; }
+    .rn-letra-grande { width: 3.3rem; height: 3.3rem; font-size: 1.65rem; border-radius: .95rem; margin: .15rem auto 0; }
+    .rn-letra-vazia { background: #E4D9F1; color: #7C6A8E; }
 
     .rn-pautado { border: 0; resize: vertical; min-height: 7.6rem; line-height: 1.9rem; padding: 0 .2rem; font-size: .9rem; color: #1F0B33;
                   background: repeating-linear-gradient(to bottom, transparent 0, transparent 1.83rem, #E9DDF6 1.83rem, #E9DDF6 1.9rem); }
     .rn-pautado:focus { outline: none; }
-    .rn-parecer { display: grid; gap: .5rem; padding: 1rem; }
-    .rn-parecer label { position: relative; display: flex; align-items: center; gap: .7rem; padding: .7rem .85rem; border-radius: .8rem;
-                        border: 1.5px solid #E4D9F1; cursor: pointer; font-weight: 700; font-size: .9rem; transition: background-color .15s, border-color .15s; }
-    .rn-parecer .rn-quadrado { width: 1.35rem; height: 1.35rem; border-width: 2px; }
-    .rn-parecer-APROVADO { color: #15803D; } .rn-parecer-APROVADO .rn-quadrado { border-color: #16A34A; }
-    .rn-parecer-APROVADO input:checked + .rn-quadrado { background: #16A34A; border-color: #16A34A; }
-    .rn-parecer-APROVADO:has(input:checked) { background: #F0FDF4; border-color: #16A34A; }
-    .rn-parecer-APROVADO_OBS { color: #6B21A8; } .rn-parecer-APROVADO_OBS .rn-quadrado { border-color: #9333EA; }
-    .rn-parecer-APROVADO_OBS input:checked + .rn-quadrado { background: #9333EA; border-color: #9333EA; }
-    .rn-parecer-APROVADO_OBS:has(input:checked) { background: #FAF5FF; border-color: #9333EA; }
-    .rn-parecer-NAO_APROVADO { color: #B91C1C; } .rn-parecer-NAO_APROVADO .rn-quadrado { border-color: #DC2626; }
-    .rn-parecer-NAO_APROVADO input:checked + .rn-quadrado { background: #DC2626; border-color: #DC2626; }
-    .rn-parecer-NAO_APROVADO:has(input:checked) { background: #FEF2F2; border-color: #DC2626; }
 
     .rn-assinatura { position: relative; height: 9.5rem; border: 1.5px dashed #CDB8E8; border-radius: .85rem; background: #FDFBFF; touch-action: none; }
     .rn-assinatura canvas { display: block; width: 100%; height: 100%; border-radius: .85rem; cursor: crosshair; }
@@ -133,63 +126,40 @@
 
 <form method="post" id="rn-form" novalidate>
     {% csrf_token %}
-    <input type="hidden" name="preco_tabela" value="{{ valores.preco_tabela|default:'' }}">
     <input type="hidden" name="assinatura" value="{{ valores.assinatura|default:'' }}">
 
     <section class="rn-secao mb-4">
         <div class="rn-secao-topo"><span class="rn-num">1</span>Dados do aparelho</div>
         <div class="p-4 sm:p-5 grid gap-4">
-            <div>
-                <span class="rn-rotulo">Marca</span>
-                <div class="rn-opcoes">
-                    {% for valor, nome in marcas %}
-                    <label class="rn-caixa">
-                        <input type="radio" name="marca" value="{{ valor }}" {% if valores.marca == valor %}checked{% endif %}>
-                        <span class="rn-quadrado"></span>{% if valor == 'APPLE' %}<i class="fa-brands fa-apple"></i>{% endif %}{{ nome }}
-                    </label>
-                    {% endfor %}
-                    <input type="text" name="marca_outra" value="{{ valores.marca_outra|default:'' }}" maxlength="60"
-                           placeholder="Qual marca?" data-outro-de="marca" data-outro-valor="OUTROS"
-                           class="rn-campo rn-campo-outro {% if erros.marca_outra %}rn-invalido{% endif %}">
+            <div class="grid sm:grid-cols-3 gap-4">
+                <div>
+                    <span class="rn-rotulo">Marca</span>
+                    <p class="rn-campo rn-marca-fixa"><i class="fa-brands fa-apple"></i>Apple</p>
                 </div>
-                {% if erros.marca %}<p class="rn-erro">{{ erros.marca }}</p>{% endif %}
-                {% if erros.marca_outra %}<p class="rn-erro">{{ erros.marca_outra }}</p>{% endif %}
-            </div>
-
-            <div class="grid sm:grid-cols-2 gap-4">
                 <label class="block">
                     <span class="rn-rotulo">Modelo</span>
-                    <input type="text" name="modelo" value="{{ valores.modelo|default:'' }}" list="rn-modelos" maxlength="120"
-                           autocomplete="off" placeholder="Ex.: iPhone 15 Pro"
-                           class="rn-campo {% if erros.modelo %}rn-invalido{% endif %}">
+                    <select name="modelo" id="rn-modelo" class="rn-campo {% if erros.modelo %}rn-invalido{% endif %}">
+                        <option value="">Escolha o modelo…</option>
+                        {% for modelo in modelos %}<option value="{{ modelo }}" {% if valores.modelo == modelo %}selected{% endif %}>{{ modelo }}</option>{% endfor %}
+                    </select>
                     {% if erros.modelo %}<p class="rn-erro">{{ erros.modelo }}</p>{% endif %}
                 </label>
+                <label class="block">
+                    <span class="rn-rotulo">Armazenamento</span>
+                    <select name="armazenamento" id="rn-armazenamento" data-atual="{{ valores.armazenamento|default:'' }}"
+                            class="rn-campo {% if erros.armazenamento %}rn-invalido{% endif %}">
+                        <option value="">Escolha o modelo primeiro</option>
+                    </select>
+                    {% if erros.armazenamento %}<p class="rn-erro">{{ erros.armazenamento }}</p>{% endif %}
+                </label>
+            </div>
+
+            <div class="grid sm:grid-cols-3 gap-4">
                 <label class="block">
                     <span class="rn-rotulo">Cor</span>
                     <input type="text" name="cor" value="{{ valores.cor|default:'' }}" maxlength="60"
                            placeholder="Ex.: Titânio natural" class="rn-campo">
                 </label>
-            </div>
-            <datalist id="rn-modelos"></datalist>
-
-            <div>
-                <span class="rn-rotulo">Armazenamento</span>
-                <div class="rn-opcoes">
-                    {% for valor, nome in armazenamentos %}
-                    <label class="rn-caixa">
-                        <input type="radio" name="armazenamento" value="{{ valor }}" {% if valores.armazenamento == valor %}checked{% endif %}>
-                        <span class="rn-quadrado"></span>{{ nome }}
-                    </label>
-                    {% endfor %}
-                    <input type="text" name="armazenamento_outro" value="{{ valores.armazenamento_outro|default:'' }}" maxlength="20"
-                           placeholder="Qual?" data-outro-de="armazenamento" data-outro-valor="OUTRO"
-                           class="rn-campo rn-campo-outro {% if erros.armazenamento_outro %}rn-invalido{% endif %}">
-                </div>
-                {% if erros.armazenamento %}<p class="rn-erro">{{ erros.armazenamento }}</p>{% endif %}
-                {% if erros.armazenamento_outro %}<p class="rn-erro">{{ erros.armazenamento_outro }}</p>{% endif %}
-            </div>
-
-            <div class="grid sm:grid-cols-3 gap-4">
                 <label class="block">
                     <span class="rn-rotulo">IMEI 1</span>
                     <input type="text" id="rn-imei1" name="imei1" value="{{ valores.imei1|default:'' }}" inputmode="numeric"
@@ -205,11 +175,6 @@
                            class="rn-campo font-mono tracking-wider {% if erros.imei2 %}rn-invalido{% endif %}">
                     <p class="rn-dica" id="rn-imei2-dica"></p>
                     {% if erros.imei2 %}<p class="rn-erro">{{ erros.imei2 }}</p>{% endif %}
-                </label>
-                <label class="block">
-                    <span class="rn-rotulo">Nº de série</span>
-                    <input type="text" name="numero_serie" value="{{ valores.numero_serie|default:'' }}" maxlength="40"
-                           autocomplete="off" class="rn-campo font-mono">
                 </label>
             </div>
 
@@ -245,37 +210,6 @@
                 </label>
             </div>
 
-            <div class="rn-valor-box">
-                <div class="flex flex-wrap items-end gap-4">
-                    <div>
-                        <span class="rn-rotulo">Padrão de avaliação</span>
-                        <div class="rn-padroes">
-                            {% for letra, nome in padroes %}
-                            <label title="{{ letra }} · {{ nome }}">
-                                <input type="radio" name="padrao" value="{{ letra }}" {% if valores.padrao == letra %}checked{% endif %}>
-                                <span class="rn-letra rn-letra-{{ letra }}">{{ letra }}</span>
-                            </label>
-                            {% endfor %}
-                        </div>
-                    </div>
-                    <label class="block flex-1 min-w-[12rem]">
-                        <span class="rn-rotulo">Valor estimado de troca</span>
-                        <span class="relative block">
-                            <span class="absolute left-3 top-1/2 -translate-y-1/2 font-extrabold text-purple-900">R$</span>
-                            <input type="number" name="valor_estimado" value="{{ valores.valor_estimado|default:'' }}" step="0.01" min="0"
-                                   inputmode="decimal" placeholder="0,00"
-                                   class="rn-campo rn-campo-valor pl-10 {% if erros.valor_estimado %}rn-invalido{% endif %}">
-                        </span>
-                    </label>
-                </div>
-                <div id="rn-sugestao" class="rn-sugestao" hidden></div>
-                <p class="text-[11px] mt-2" style="color:#5B2A86">
-                    <i class="fa-solid fa-circle-info"></i>
-                    Com marca Apple, modelo e armazenamento da <a href="{% url 'renova:tabela' %}" target="_blank" class="underline font-semibold">tabela de avaliação</a>,
-                    o valor de cada padrão aparece pronto para escolher.
-                </p>
-                {% if erros.valor_estimado %}<p class="rn-erro">{{ erros.valor_estimado }}</p>{% endif %}
-            </div>
         </div>
     </section>
 
@@ -350,24 +284,9 @@
                 </div>
             </section>
 
-            <section class="rn-secao {% if erros.parecer %}rn-secao-erro{% endif %}">
-                <div class="rn-secao-topo"><span class="rn-num">6</span>Parecer final do aparelho</div>
-                <div class="rn-parecer">
-                    {% for valor, rotulo in pareceres %}
-                    <label class="rn-parecer-{{ valor }}">
-                        <input type="radio" name="parecer" value="{{ valor }}" {% if valores.parecer == valor %}checked{% endif %}>
-                        <span class="rn-quadrado"></span>{{ rotulo }}
-                    </label>
-                    {% endfor %}
-                    <p id="rn-aviso-parecer" class="text-[11px] text-amber-700" hidden>
-                        <i class="fa-solid fa-lightbulb"></i> Há item que não funciona ou não está OK — confira se o parecer combina.
-                    </p>
-                    {% if erros.parecer %}<p class="rn-erro">{{ erros.parecer }}</p>{% endif %}
-                </div>
-            </section>
 
             <section class="rn-secao">
-                <div class="rn-secao-topo"><span class="rn-num">7</span>Responsável pela avaliação</div>
+                <div class="rn-secao-topo"><span class="rn-num">6</span>Responsável pela avaliação</div>
                 <div class="p-4 grid gap-3">
                     <div class="grid sm:grid-cols-2 gap-3">
                         <label class="block">
@@ -403,14 +322,43 @@
         </div>
     </div>
 
+    <section class="rn-secao mt-4" id="rn-resultado">
+        <div class="rn-secao-topo"><span class="rn-num"><i class="fa-solid fa-calculator"></i></span>Padrão e valor de troca</div>
+        <div class="p-4">
+            <div class="rn-valor-box">
+                <div class="flex flex-wrap items-center gap-4">
+                    <div class="text-center">
+                        <span class="rn-rotulo">Padrão</span>
+                        <span id="rn-padrao-letra" class="rn-letra rn-letra-grande rn-letra-vazia">?</span>
+                    </div>
+                    <div class="flex-1 min-w-[12rem]">
+                        <span class="rn-rotulo">Valor estimado de troca</span>
+                        <div id="rn-valor" class="rn-campo rn-campo-valor rn-valor-calculado" aria-live="polite">
+                            <span>R$</span><span id="rn-valor-numero">—</span>
+                        </div>
+                        <p id="rn-valor-dica" class="rn-dica"></p>
+                    </div>
+                </div>
+                <div id="rn-motivos" class="rn-motivos" aria-live="polite"></div>
+                <div id="rn-sugestao" class="rn-sugestao" hidden></div>
+                <p class="text-[11px] mt-2 rn-valor-nota">
+                    <i class="fa-solid fa-circle-info"></i>
+                    O padrão sai das avarias marcadas e da saúde da bateria, pelos critérios da
+                    <a href="{% url 'renova:tabela' %}" target="_blank" class="underline font-semibold">tabela de avaliação</a>;
+                    o valor, da tabela com o desconto do padrão. Ninguém digita nem escolhe.
+                </p>
+            </div>
+        </div>
+    </section>
+
     <div class="rn-card mt-4 p-4 flex flex-wrap items-center justify-between gap-3">
         <p class="text-xs text-gray-600 max-w-xl">
             <i class="fa-solid fa-ticket mr-1" style="color:#7B2CBF"></i>
-            Ao concluir, o portal abre o chamado{% if cfg.categoria %} em <b>{{ cfg.categoria.name }}</b>{% endif %}
-            e mostra a etiqueta do aparelho para imprimir.
+            Ao enviar, a avaliação vai para o gerente da loja aprovar. Na aprovação, o portal abre o
+            chamado{% if cfg.categoria %} em <b>{{ cfg.categoria.name }}</b>{% endif %} e libera a etiqueta.
         </p>
         <button type="submit" id="rn-enviar" class="rn-btn rn-btn-primario" {% if sem_categoria %}disabled{% endif %}>
-            <i class="fa-solid fa-circle-check"></i>Concluir avaliação e abrir chamado
+            <i class="fa-solid fa-paper-plane"></i>Enviar para aprovação do gerente
         </button>
     </div>
 </form>
@@ -428,6 +376,7 @@
     </div>
 </div>
 {{ precos_json|json_script:"rn-precos" }}
+{{ regras_padrao|json_script:"rn-regras" }}
 {% endblock %}
 
 {% block rn_js %}
@@ -441,86 +390,136 @@
         return el ? el.value : '';
     }
 
-    /* "Qual marca?" e "Qual armazenamento?" só aparecem com Outros/Outro marcado. */
-    function sincronizarOutros() {
-        form.querySelectorAll('[data-outro-de]').forEach(function (campo) {
-            campo.hidden = marcado(campo.getAttribute('data-outro-de')) !== campo.getAttribute('data-outro-valor');
-        });
-    }
 
-    /* Tabela de avaliação: com Apple + modelo + armazenamento da tabela, o valor de cada padrão fica pronto. */
+    /* Padrão e valor: saem das avarias marcadas e da tabela — as mesmas regras do servidor (renova/padrao.py). */
     var precos = JSON.parse(document.getElementById('rn-precos').textContent || '[]');
-    var campoModelo = form.querySelector('[name=modelo]');
-    var campoValor = form.querySelector('[name=valor_estimado]');
-    var campoPreco = form.querySelector('[name=preco_tabela]');
+    var regras = JSON.parse(document.getElementById('rn-regras').textContent || '{}');
+    var campoModelo = document.getElementById('rn-modelo');
+    var campoArmazenamento = document.getElementById('rn-armazenamento');
+    var campoBateria = form.querySelector('[name=saude_bateria]');
+    var valorNumero = document.getElementById('rn-valor-numero');
+    var valorDica = document.getElementById('rn-valor-dica');
+    var letraPadrao = document.getElementById('rn-padrao-letra');
+    var listaMotivos = document.getElementById('rn-motivos');
     var sugestao = document.getElementById('rn-sugestao');
-    var lista = document.getElementById('rn-modelos');
     var moeda = new Intl.NumberFormat('pt-BR', {style: 'currency', currency: 'BRL', maximumFractionDigits: 0});
+    var numero = new Intl.NumberFormat('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    var ORDEM = 'ABCD';
 
-    function normal(texto) {
-        return (texto || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/iphone/g, '').replace(/\s+/g, '');
+    function preencherArmazenamentos() {
+        var modelo = campoModelo.value;
+        var atual = campoArmazenamento.value || campoArmazenamento.dataset.atual || '';
+        campoArmazenamento.dataset.atual = '';
+        campoArmazenamento.textContent = '';
+        var opcoes = precos.filter(function (p) { return p.modelo === modelo; });
+        var vazia = document.createElement('option');
+        vazia.value = '';
+        vazia.textContent = modelo ? 'Escolha o armazenamento…' : 'Escolha o modelo primeiro';
+        campoArmazenamento.appendChild(vazia);
+        opcoes.forEach(function (p) {
+            var opcao = document.createElement('option');
+            opcao.value = p.armazenamento;
+            opcao.textContent = p.armazenamento;
+            opcao.selected = p.armazenamento === atual;
+            campoArmazenamento.appendChild(opcao);
+        });
+        if (opcoes.length === 1) campoArmazenamento.value = opcoes[0].armazenamento;
     }
-    var modelosVistos = {};
-    precos.forEach(function (p) {
-        if (modelosVistos[p.modelo]) return;
-        modelosVistos[p.modelo] = true;
-        var opcao = document.createElement('option');
-        opcao.value = p.modelo;
-        lista.appendChild(opcao);
-    });
 
     function linhaDaTabela() {
-        if (marcado('marca') !== 'APPLE') return null;
-        var modelo = normal(campoModelo.value);
-        var armazenamento = marcado('armazenamento');
-        if (!modelo || !armazenamento) return null;
         return precos.find(function (p) {
-            return p.marca === 'APPLE' && normal(p.modelo) === modelo && p.armazenamento === armazenamento;
+            return p.modelo === campoModelo.value && p.armazenamento === campoArmazenamento.value;
         }) || null;
     }
 
-    function aplicar(linha, letra) {
-        if (!linha || linha.valores[letra] === undefined) return;
-        campoValor.value = linha.valores[letra].toFixed(2);
-        campoValor.dataset.auto = '1';
-        campoPreco.value = linha.id;
-        campoValor.classList.remove('rn-invalido');
+    function calcularPadrao() {
+        var r = regras.regras || {};
+        var bateria = parseInt((campoBateria.value || '').trim(), 10);
+        if (isNaN(bateria)) return null;
+        var letras = ['A'], motivos = [], naoOk = 0, faltou = false;
+        var faixa = (r.bateria || []).find(function (f) { return bateria >= f[0]; });
+        if (faixa) {
+            letras.push(faixa[1]);
+            if (faixa[1] !== 'A') motivos.push({letra: faixa[1], texto: 'Bateria em ' + bateria + '%'});
+        }
+        form.querySelectorAll('.rn-tri[role="radiogroup"]').forEach(function (grupo) {
+            var marcado = grupo.querySelector('input:checked');
+            if (!marcado) { faltou = true; return; }
+            var funcional = marcado.name.indexOf('func_') === 0;
+            var chave = marcado.name.replace(/^(func|est)_/, '');
+            var trincos = !funcional && chave === regras.item_trincos;
+            var tabela = funcional ? r.funcionalidades : (trincos ? r.trincos : r.estetica);
+            var letra = (tabela || {})[marcado.value];
+            if (!letra) return;
+            if (!funcional && !trincos && marcado.value === 'NAO') naoOk++;
+            letras.push(letra);
+            var estado = marcado.value === 'NAO' ? (funcional ? ' não funciona' : ' não OK') : ' com observação';
+            motivos.push({letra: letra, texto: ((regras.titulos || {})[chave] || chave) + estado});
+        });
+        if (faltou) return null;
+        if (naoOk >= r.estetica_nao_ok_para_d) {
+            letras.push('D');
+            motivos.push({letra: 'D', texto: naoOk + ' itens estéticos não OK (marcas acentuadas)'});
+        }
+        motivos.sort(function (a, b) { return ORDEM.indexOf(b.letra) - ORDEM.indexOf(a.letra); });
+        var pior = letras.reduce(function (a, b) { return ORDEM.indexOf(b) > ORDEM.indexOf(a) ? b : a; }, 'A');
+        return {letra: pior, motivos: motivos};
     }
 
-    function atualizarSugestao() {
+    function selo(letra, pequeno) {
+        var s = document.createElement('span');
+        s.className = 'rn-letra rn-letra-' + letra + (pequeno ? ' rn-letra-sm' : '');
+        s.textContent = letra;
+        return s;
+    }
+
+    function atualizarValor() {
         var linha = linhaDaTabela();
+        var resultado = calcularPadrao();
+        var letra = resultado ? resultado.letra : '';
+        letraPadrao.textContent = letra || '?';
+        letraPadrao.className = 'rn-letra rn-letra-grande ' + (letra ? 'rn-letra-' + letra : 'rn-letra-vazia');
+
+        listaMotivos.textContent = '';
+        if (resultado) {
+            var motivos = resultado.motivos.length ? resultado.motivos
+                : [{letra: 'A', texto: 'Nenhuma avaria sinalizada e bateria acima de 85%'}];
+            motivos.forEach(function (m) {
+                var item = document.createElement('span');
+                item.className = 'rn-motivo';
+                item.appendChild(selo(m.letra, true));
+                item.appendChild(document.createTextNode(m.texto));
+                listaMotivos.appendChild(item);
+            });
+        }
+
         sugestao.textContent = '';
-        if (!linha) {
-            sugestao.hidden = true;
-            if (campoValor.dataset.auto === '1') campoPreco.value = '';
+        sugestao.hidden = !linha;
+        if (linha) {
+            var titulo = document.createElement('span');
+            titulo.textContent = 'Tabela · ' + linha.modelo + ' ' + linha.armazenamento + ':';
+            sugestao.appendChild(titulo);
+            ORDEM.split('').forEach(function (l) {
+                var chip = document.createElement('span');
+                chip.className = 'rn-chip' + (l === letra ? ' ativo' : '');
+                chip.appendChild(selo(l, true));
+                chip.appendChild(document.createTextNode(moeda.format(linha.valores[l])));
+                sugestao.appendChild(chip);
+            });
+        }
+
+        if (linha && letra && linha.valores[letra] !== undefined) {
+            valorNumero.textContent = numero.format(linha.valores[letra]);
+            valorDica.textContent = 'Padrão ' + letra + ' na tabela de avaliação.';
             return;
         }
-        sugestao.hidden = false;
-        var titulo = document.createElement('span');
-        titulo.textContent = 'Pela tabela · ' + linha.modelo + ' ' + linha.armazenamento + ':';
-        sugestao.appendChild(titulo);
-        ['A', 'B', 'C', 'D'].forEach(function (letra) {
-            var chip = document.createElement('button');
-            chip.type = 'button';
-            chip.className = 'rn-chip';
-            var bolinha = document.createElement('span');
-            bolinha.className = 'rn-letra rn-letra-sm rn-letra-' + letra;
-            bolinha.textContent = letra;
-            chip.appendChild(bolinha);
-            chip.appendChild(document.createTextNode(moeda.format(linha.valores[letra])));
-            chip.addEventListener('click', function () {
-                var radio = form.querySelector('input[name=padrao][value="' + letra + '"]');
-                if (radio) radio.checked = true;
-                aplicar(linha, letra);
-            });
-            sugestao.appendChild(chip);
-        });
-        var letra = marcado('padrao');
-        if (letra && (!campoValor.value || campoValor.dataset.auto === '1')) aplicar(linha, letra);
+        valorNumero.textContent = '—';
+        if (!campoModelo.value || !campoArmazenamento.value) {
+            valorDica.textContent = 'Escolha o modelo e o armazenamento.';
+        } else if (!resultado) {
+            valorDica.textContent = 'Informe a saúde da bateria e marque todas as funcionalidades e a condição estética.';
+        }
     }
-
-    campoModelo.addEventListener('input', atualizarSugestao);
-    campoValor.addEventListener('input', function () { campoValor.dataset.auto = ''; });
 
     /* IMEI: só números, 15 dígitos e o dígito verificador certo. */
     function luhn(numero) {
@@ -550,30 +549,23 @@
         checar();
     });
 
-    /* Item com observação ou falha fica destacado; e o parecer ganha um lembrete. */
-    var avisoParecer = document.getElementById('rn-aviso-parecer');
+    /* Item com observação ou falha fica destacado. */
     function destacar(input) {
         var linha = input.closest('.rn-item');
         if (!linha) return;
         linha.classList.remove('rn-marcado-OK', 'rn-marcado-OBS', 'rn-marcado-NAO');
         linha.classList.add('rn-marcado-' + input.value);
     }
-    function conferirParecer() {
-        var temFalha = !!form.querySelector('.rn-tri input[value="NAO"]:checked');
-        avisoParecer.hidden = !(temFalha && marcado('parecer') === 'APROVADO');
-    }
     form.querySelectorAll('.rn-tri input:checked').forEach(destacar);
 
     form.addEventListener('change', function (e) {
-        var nome = e.target.name || '';
-        if (nome === 'marca' || nome === 'armazenamento') sincronizarOutros();
-        if (nome === 'marca' || nome === 'armazenamento' || nome === 'padrao') atualizarSugestao();
+        if (e.target === campoModelo) preencherArmazenamentos();
         if (e.target.closest('.rn-tri')) destacar(e.target);
-        conferirParecer();
+        atualizarValor();
     });
-    sincronizarOutros();
-    atualizarSugestao();
-    conferirParecer();
+    campoBateria.addEventListener('input', atualizarValor);
+    preencherArmazenamentos();
+    atualizarValor();
 
     /* Assinatura no quadro. */
     var quadro = document.getElementById('rn-assinatura');

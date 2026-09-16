@@ -1,14 +1,18 @@
 {% comment %}
-Aviso de início de atividade da Rotina Gerencial.
+Avisos da Rotina Gerencial: lembrete minutos antes e aviso de início.
 
 Entra no base.html só para quem tem rotina ativa ({% if rotina_liberada %}).
-Busca as atividades de hoje, acerta o relógio pelo do servidor e, quando uma
-atividade começa, mostra um cartão no canto da tela e registra o aviso — que
-põe a notificação no sino uma única vez, mesmo com várias abas abertas.
+Busca as atividades de hoje, acerta o relógio pelo do servidor e mostra um
+cartão no canto da tela em dois momentos de cada atividade: alguns minutos
+antes (lembrete, com contagem regressiva) e quando ela começa. Cada um é
+registrado no servidor, que põe a notificação no sino uma única vez, mesmo com
+várias abas ou aparelhos abertos. Nada disso é web push: sem o portal aberto,
+não há aviso.
 
 Autocontido de propósito: CSS com prefixo rtn-, um único objeto global
 (window.RotinaNotificador) e nenhuma falha de rede ou de sessão atrapalha a
-página. Para ver o cartão sem esperar a hora: RotinaNotificador.testar().
+página. Para ver os cartões sem esperar a hora: RotinaNotificador.testar() e
+RotinaNotificador.testar('lembrete').
 {% endcomment %}
 <style>
     #rtn-avisos {
@@ -26,6 +30,7 @@ página. Para ver o cartão sem esperar a hora: RotinaNotificador.testar().
     }
     .rtn-cartao.rtn-saindo { animation: rtn-sai .25s ease forwards; pointer-events: none; }
     .rtn-faixa { flex-shrink: 0; width: 6px; background: var(--rtn-cor, #FF6B35); }
+    .rtn-lembrete .rtn-faixa { background: repeating-linear-gradient(180deg, var(--rtn-cor, #FF6B35) 0 8px, transparent 8px 12px); }
     .rtn-corpo { flex: 1; min-width: 0; padding: 12px 38px 12px 14px; }
     .rtn-topo {
         display: flex; align-items: center; gap: 8px;
@@ -33,9 +38,11 @@ página. Para ver o cartão sem esperar a hora: RotinaNotificador.testar().
     }
     .rtn-pulso { position: relative; flex-shrink: 0; width: 8px; height: 8px; border-radius: 999px; background: var(--rtn-cor, #FF6B35); }
     .rtn-pulso::after { content: ''; position: absolute; inset: 0; border-radius: inherit; background: inherit; animation: rtn-pulso 1.6s ease-out infinite; }
+    .rtn-sino { flex-shrink: 0; font-size: 11px; animation: rtn-balanca 1.4s ease-in-out 2; transform-origin: 50% 0; }
     .rtn-marca { margin-left: auto; font-weight: 600; letter-spacing: 0; text-transform: none; color: #6B7280; white-space: nowrap; }
     .rtn-titulo { margin: 4px 0 2px; font-size: 15px; font-weight: 800; line-height: 1.25; color: #111827; word-break: break-word; }
     .rtn-hora { margin: 0; font-size: 12.5px; color: #4B5563; font-variant-numeric: tabular-nums; }
+    .rtn-hora strong { color: #B6461F; }
     .rtn-acoes { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
     .rtn-botao {
         flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px;
@@ -54,12 +61,14 @@ página. Para ver o cartão sem esperar a hora: RotinaNotificador.testar().
     html.dark .rtn-cartao { background: #1b2130; color: #e7eaf0; box-shadow: 0 18px 40px rgba(0, 0, 0, .5), 0 0 0 1px #313a4f; }
     html.dark .rtn-titulo { color: #fff; }
     html.dark .rtn-hora { color: #b6bdcc; }
+    html.dark .rtn-hora strong { color: #FFB38F; }
     html.dark .rtn-proxima, html.dark .rtn-marca { color: #8b93a5; }
     html.dark .rtn-fechar:hover { background: #2b3346; color: #fff; }
     @keyframes rtn-entra { from { opacity: 0; transform: translateY(-12px) scale(.97); } }
     @keyframes rtn-sai { to { opacity: 0; transform: translateX(24px); } }
     @keyframes rtn-pulso { from { transform: scale(1); opacity: .6; } to { transform: scale(2.8); opacity: 0; } }
-    @media (prefers-reduced-motion: reduce) { .rtn-cartao, .rtn-pulso::after { animation: none; } }
+    @keyframes rtn-balanca { 20% { transform: rotate(14deg); } 40% { transform: rotate(-12deg); } 60% { transform: rotate(8deg); } 80% { transform: rotate(-4deg); } }
+    @media (prefers-reduced-motion: reduce) { .rtn-cartao, .rtn-pulso::after, .rtn-sino { animation: none; } }
 </style>
 <div id="rtn-avisos" role="region" aria-live="polite" aria-label="Avisos da rotina gerencial"></div>
 <script>
@@ -70,18 +79,30 @@ página. Para ver o cartão sem esperar a hora: RotinaNotificador.testar().
 
     var URL_HOJE = '{% url "rotina:api_hoje" %}';
     var URL_AVISO = '{% url "rotina:api_aviso" 0 %}';
+    var URL_LEMBRETE = '{% url "rotina:api_lembrete" 0 %}';
     var URL_ROTINA = '{% url "rotina:minha" %}';
     var CSRF_PAGINA = '{{ csrf_token }}';
-    var PREFIXO = 'rotina-aviso:';          // rotina-aviso:<atividade_id>:<AAAA-MM-DD>
+    var PREFIXO = 'rotina-aviso:';          // rotina-aviso:<id>:<AAAA-MM-DD> (início) e rotina-aviso:lembrete:<id>:<AAAA-MM-DD>
     var ATRASO_MAXIMO = 10 * 60 * 1000;     // ao abrir a página, avisa o que começou há até 10 min
     var RECARGA = 10 * 60 * 1000;           // busca de novo a cada 10 min (a gestão pode ter mudado a rotina)
     var CACHE_SESSAO = 2 * 60 * 1000;       // navegar entre páginas não refaz a busca a cada clique
+    var UM_DIA = 24 * 3600 * 1000;
+    // Um tipo de aviso por momento da atividade: a rota que registra, o pedaço da
+    // chave no localStorage e o campo que o api/hoje/ devolve já marcado.
+    var TIPOS = {
+        lembrete: { url: URL_LEMBRETE, chave: 'lembrete:', marcado: 'lembrada' },
+        inicio: { url: URL_AVISO, chave: '', marcado: 'avisada' }
+    };
 
     var caixa = document.getElementById('rtn-avisos');
-    var estado = { offset: 0, data: '', atividades: [], timers: [], ultimaCarga: 0, carregando: false, registrando: {} };
+    var estado = {
+        offset: 0, data: '', atividades: [], lembreteMinutos: 5,
+        timers: [], ultimaCarga: 0, carregando: false, registrando: {}
+    };
 
     function agora() { return Date.now() + estado.offset; }
-    function chave(a) { return PREFIXO + a.id + ':' + estado.data; }
+    function antecedencia() { return estado.lembreteMinutos * 60 * 1000; }
+    function chave(a, tipo) { return PREFIXO + TIPOS[tipo].chave + a.id + ':' + estado.data; }
     function ler(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } }
     function gravar(k, v) { try { window.localStorage.setItem(k, v); } catch (e) { /* modo privado: segue sem memória */ } }
     function criar(tag, classe, texto) {
@@ -94,6 +115,7 @@ página. Para ver o cartão sem esperar a hora: RotinaNotificador.testar().
         var achado = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
         return achado ? decodeURIComponent(achado[1]) : CSRF_PAGINA;
     }
+    function minutosAte(ts) { return Math.max(1, Math.ceil((ts - agora()) / 60000)); }
 
     function limparAntigos() {
         try {
@@ -110,6 +132,7 @@ página. Para ver o cartão sem esperar a hora: RotinaNotificador.testar().
         estado.offset = offset;
         estado.data = dados.data;
         estado.atividades = dados.atividades || [];
+        estado.lembreteMinutos = dados.lembrete_minutos > 0 ? dados.lembrete_minutos : 5;
         limparAntigos();
         agendar();
         conferir();
@@ -156,40 +179,50 @@ página. Para ver o cartão sem esperar a hora: RotinaNotificador.testar().
         estado.timers = [];
         var momento = agora();
         estado.atividades.forEach(function (a) {
+            var paraLembrete = a.inicio_ts - antecedencia() - momento;
+            if (paraLembrete > 0 && paraLembrete < UM_DIA) {
+                estado.timers.push(setTimeout(function () { disparar(a, 'lembrete', true); }, paraLembrete + 300));
+            }
             var falta = a.inicio_ts - momento;
-            if (falta > 0 && falta < 24 * 3600 * 1000) {
-                estado.timers.push(setTimeout(function () { disparar(a, true); }, falta + 300));
+            if (falta > 0 && falta < UM_DIA) {
+                estado.timers.push(setTimeout(function () { disparar(a, 'inicio', true); }, falta + 300));
             }
         });
     }
 
-    /* O que começou há pouco (e ainda não terminou) e ninguém avisou. */
+    /* O que começou há pouco (e ainda não terminou) ou começa daqui a pouco, e ninguém avisou. */
     function conferir() {
         var momento = agora();
         estado.atividades.forEach(function (a) {
             if (a.inicio_ts <= momento + 1000 && momento < a.inicio_ts + ATRASO_MAXIMO && momento < a.fim_ts) {
-                disparar(a, false);
+                disparar(a, 'inicio', false);
+            } else if (a.inicio_ts - antecedencia() <= momento + 1000 && momento < a.inicio_ts - 1000) {
+                disparar(a, 'lembrete', false);
             }
         });
     }
 
-    function disparar(a, naHora) {
-        registrar(a);                        // o sino recebe mesmo com a aba escondida
+    function disparar(a, tipo, naHora) {
+        registrar(a, tipo);                  // o sino recebe mesmo com a aba escondida
         if (document.hidden) { return; }     // o cartão espera a pessoa voltar para a aba
-        if (ler(chave(a))) { return; }
+        if (ler(chave(a, tipo))) { return; }
         // Espera curta e aleatória: duas abas visíveis na mesma hora não mostram o mesmo cartão.
         setTimeout(function () {
-            if (document.hidden || ler(chave(a))) { return; }
-            gravar(chave(a), String(Date.now()));
-            mostrar(a);
+            if (document.hidden || ler(chave(a, tipo))) { return; }
+            if (tipo === 'lembrete' && agora() >= a.inicio_ts) { return; }   // chegou tarde: o aviso de início cuida
+            gravar(chave(a, tipo), String(Date.now()));
+            mostrar(a, tipo);
         }, naHora ? Math.floor(Math.random() * 400) : 0);
     }
 
-    function registrar(a) {
-        var marca = a.id + ':' + estado.data;
-        if (a.avisada || estado.registrando[marca]) { return; }
+    function registrar(a, tipo) {
+        var dados = TIPOS[tipo];
+        var marca = tipo + ':' + a.id + ':' + estado.data;
+        if (a[dados.marcado] || estado.registrando[marca]) { return; }
+        // Lembrete de atividade que já começou (aba adormecida, timer atrasado) não vai mais para o sino.
+        if (tipo === 'lembrete' && agora() > a.inicio_ts + 30 * 1000) { return; }
         estado.registrando[marca] = true;
-        fetch(URL_AVISO.replace('/0/', '/' + a.id + '/'), {
+        fetch(dados.url.replace('/0/', '/' + a.id + '/'), {
             method: 'POST',
             credentials: 'same-origin',
             headers: {
@@ -198,13 +231,13 @@ página. Para ver o cartão sem esperar a hora: RotinaNotificador.testar().
             },
             body: '{}'
         }).then(function (resposta) {
-            return resposta.json().catch(function () { return null; }).then(function (dados) {
-                if (dados && dados.ok) {
-                    a.avisada = true;
-                    if (dados.novo && typeof window.updateUnreadCount === 'function') {
+            return resposta.json().catch(function () { return null; }).then(function (corpo) {
+                if (corpo && corpo.ok) {
+                    a[dados.marcado] = true;
+                    if (corpo.novo && typeof window.updateUnreadCount === 'function') {
                         try { window.updateUnreadCount(); } catch (e) { /* sino de outra versão */ }
                     }
-                } else if (!dados || resposta.status >= 500) {
+                } else if (!corpo || resposta.status >= 500) {
                     estado.registrando[marca] = false;   // falha passageira: tenta na próxima conferência
                 }
             });
@@ -224,34 +257,66 @@ página. Para ver o cartão sem esperar a hora: RotinaNotificador.testar().
     function tirar(cartao) {
         if (!cartao || cartao.classList.contains('rtn-saindo')) { return; }
         clearTimeout(cartao._rtnTempo);
+        clearInterval(cartao._rtnRelogio);
         cartao.classList.add('rtn-saindo');
         setTimeout(function () { if (cartao.parentNode) { cartao.parentNode.removeChild(cartao); } }, 260);
     }
 
-    function mostrar(a) {
-        if (!caixa || caixa.querySelector('[data-rtn-id="' + a.id + '"]')) { return; }
+    function textoDoLembrete(a) {
+        return agora() >= a.inicio_ts ? 'Começando agora' : 'Em ' + minutosAte(a.inicio_ts) + ' min';
+    }
+
+    function mostrar(a, tipo) {
+        tipo = tipo === 'lembrete' ? 'lembrete' : 'inicio';
+        if (!caixa) { return; }
+        var seletor = '[data-rtn-id="' + a.id + '"]';
+        if (caixa.querySelector(seletor + '[data-rtn-tipo="' + tipo + '"]')) { return; }
+        if (tipo === 'lembrete' && caixa.querySelector(seletor + '[data-rtn-tipo="inicio"]')) { return; }
+        if (tipo === 'inicio') {   // o lembrete da mesma atividade dá lugar ao aviso de início
+            Array.prototype.forEach.call(caixa.querySelectorAll(seletor + '[data-rtn-tipo="lembrete"]'), tirar);
+        }
+        var lembrete = tipo === 'lembrete';
         var destino = a.url || URL_ROTINA;
-        var cartao = criar('div', 'rtn-cartao');
+        var cartao = criar('div', 'rtn-cartao' + (lembrete ? ' rtn-lembrete' : ''));
         cartao.setAttribute('data-rtn-id', a.id);
+        cartao.setAttribute('data-rtn-tipo', tipo);
         cartao.setAttribute('role', 'link');
         cartao.tabIndex = 0;
-        cartao.setAttribute('aria-label', 'Agora, das ' + a.inicio + ' às ' + a.fim + ': ' + a.titulo + '. Abrir a rotina gerencial.');
+        cartao.setAttribute('aria-label', (lembrete ? 'Em ' + minutosAte(a.inicio_ts) + ' minutos' : 'Agora')
+            + ', das ' + a.inicio + ' às ' + a.fim + ': ' + a.titulo + '. Abrir a rotina gerencial.');
         cartao.style.setProperty('--rtn-cor', a.cor || '#FF6B35');
 
         var corpo = criar('div', 'rtn-corpo');
         var topo = criar('div', 'rtn-topo');
-        topo.appendChild(criar('span', 'rtn-pulso'));
-        topo.appendChild(document.createTextNode('Rotina gerencial'));
+        if (lembrete) {
+            var sino = criar('i', 'fas fa-bell rtn-sino');
+            sino.setAttribute('aria-hidden', 'true');
+            topo.appendChild(sino);
+            topo.appendChild(document.createTextNode('Lembrete da rotina'));
+        } else {
+            topo.appendChild(criar('span', 'rtn-pulso'));
+            topo.appendChild(document.createTextNode('Rotina gerencial'));
+        }
         if (a.categoria_nome) { topo.appendChild(criar('span', 'rtn-marca', a.categoria_nome)); }
         corpo.appendChild(topo);
         corpo.appendChild(criar('p', 'rtn-titulo', a.titulo));
-        corpo.appendChild(criar('p', 'rtn-hora', 'Agora · ' + a.inicio + '–' + a.fim));
+
+        var hora = criar('p', 'rtn-hora');
+        if (lembrete) {
+            var falta = criar('strong', '', textoDoLembrete(a));
+            hora.appendChild(falta);
+            hora.appendChild(document.createTextNode(' · ' + a.inicio + '–' + a.fim));
+            cartao._rtnRelogio = setInterval(function () { falta.textContent = textoDoLembrete(a); }, 15000);
+        } else {
+            hora.textContent = 'Agora · ' + a.inicio + '–' + a.fim;
+        }
+        corpo.appendChild(hora);
 
         var acoes = criar('div', 'rtn-acoes');
         var abrir = criar('a', 'rtn-botao', 'Abrir rotina');
         abrir.href = destino;
         acoes.appendChild(abrir);
-        var depois = seguinte(a);
+        var depois = lembrete ? null : seguinte(a);
         if (depois) { acoes.appendChild(criar('span', 'rtn-proxima', 'Depois: ' + depois.inicio + ' ' + depois.titulo)); }
         corpo.appendChild(acoes);
 
@@ -277,9 +342,10 @@ página. Para ver o cartão sem esperar a hora: RotinaNotificador.testar().
         });
 
         caixa.insertBefore(cartao, caixa.firstChild);
-        while (caixa.children.length > 3) { caixa.removeChild(caixa.lastChild); }
-        // Sai sozinho quando a atividade acaba (e fica pelo menos um minuto).
-        cartao._rtnTempo = setTimeout(function () { tirar(cartao); }, Math.max(a.fim_ts - agora(), 60 * 1000));
+        while (caixa.children.length > 3) { tirar(caixa.lastChild); caixa.removeChild(caixa.lastChild); }
+        // Sai sozinho: o lembrete quando a atividade começa, o de início quando ela acaba (e cada um fica pelo menos um minuto).
+        var fica = (lembrete ? a.inicio_ts : a.fim_ts) - agora();
+        cartao._rtnTempo = setTimeout(function () { tirar(cartao); }, Math.max(fica, 60 * 1000));
     }
 
     document.addEventListener('visibilitychange', function () {
@@ -292,12 +358,15 @@ página. Para ver o cartão sem esperar a hora: RotinaNotificador.testar().
         recarregar: function () { carregar(true); },
         conferir: conferir,
         estado: estado,
-        testar: function () {
+        testar: function (tipo) {
             var momento = agora();
+            var lembrete = tipo === 'lembrete';
+            var inicio = lembrete ? momento + antecedencia() : momento;
             mostrar({
-                id: 'teste', titulo: 'Parcial Gerentes', categoria_nome: 'Resultado', cor: '#E74C3C',
-                inicio: '12:00', fim: '12:30', inicio_ts: momento, fim_ts: momento + 30 * 60 * 1000, url: URL_ROTINA
-            });
+                id: 'teste-' + (lembrete ? 'lembrete' : 'inicio'), titulo: 'Parcial Gerentes',
+                categoria_nome: 'Resultado', cor: '#E74C3C', inicio: '12:00', fim: '12:30',
+                inicio_ts: inicio, fim_ts: inicio + 30 * 60 * 1000, url: URL_ROTINA
+            }, lembrete ? 'lembrete' : 'inicio');
         }
     };
 

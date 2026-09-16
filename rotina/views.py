@@ -58,6 +58,7 @@ def _contexto(request, aba, **extra):
     contexto = {
         'aba': aba,
         'e_admin': e_superadmin(request.user),
+        'lembrete_minutos': servicos.MINUTOS_LEMBRETE,
         'categorias': servicos.categorias(),
         'dias_semana': [{'valor': numero, 'nome': nome, 'curto': servicos.DIAS_CURTOS[numero]}
                         for numero, nome in DIAS_SEMANA],

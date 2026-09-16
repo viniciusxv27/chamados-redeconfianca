@@ -68,6 +68,12 @@
     .rn-etq-APROVADO { background: #ECFDF5; color: #047857; }
     .rn-etq-APROVADO_OBS { background: var(--rn-lilas); color: #6B21A8; }
     .rn-etq-NAO_APROVADO { background: #FEF2F2; color: #B91C1C; }
+    .rn-etq-AP-PENDENTE { background: #FFFBEB; color: #B45309; }
+    .rn-etq-AP-APROVADA { background: #ECFDF5; color: #047857; }
+    .rn-etq-AP-REPROVADA { background: #FEF2F2; color: #B91C1C; }
+    .rn-motivos { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .75rem; }
+    .rn-motivo { display: inline-flex; align-items: center; gap: .35rem; padding: .18rem .6rem .18rem .22rem; border-radius: 9999px;
+                 background: #fff; border: 1px solid #E1CFF7; font-size: .72rem; font-weight: 600; color: #3B2A4D; }
     .rn-letra { width: 2.2rem; height: 2.2rem; border-radius: .6rem; display: grid; place-items: center; color: #fff;
                 font-weight: 800; font-size: 1.1rem; flex-shrink: 0; }
     .rn-letra-A { background: #16A34A; } .rn-letra-B { background: #2563EB; }
@@ -92,6 +98,134 @@
     .rn-acao-chegou { color: #047857; background: #ECFDF5; border: 1px solid #A7F3D0; }
     .rn-acao-nao { color: #B91C1C; background: #FEF2F2; border: 1px solid #FECACA; }
     .rn-acao-neutra { color: #4B3F58; background: #fff; border: 1px solid #E5E7EB; }
+
+    /* ── Tema escuro ─────────────────────────────────────────────────────────
+       O tema-escuro.css do portal remapeia os utilitários do Tailwind; as classes
+       rn-* são do módulo e ganham o par escuro aqui (html.dark vence pela
+       especificidade). Os estilos inline de cor dos templates vão no fim, por
+       seletor de atributo — esses exigem !important. A etiqueta e o quadro de
+       assinatura continuam claros de propósito: são "papel", e a tinta é escura. */
+    html.dark .rn { --rn-escuro: #d8b4fe; --rn-lilas: rgba(157, 78, 221, .16); --rn-lilas-2: rgba(157, 78, 221, .26);
+                    --rn-borda: var(--tema-borda, #313a4f); --rn-texto: var(--tema-texto, #e7eaf0); }
+    html.dark .rn-card, html.dark .rn-secao, html.dark .rn-kpi, html.dark .rn-padrao, html.dark .rn-passo,
+    html.dark .rn-modal-caixa { background: var(--tema-superficie, #1b2130); }
+    html.dark .rn-aba, html.dark .rn-btn-claro, html.dark .rn-alternar { background: var(--tema-superficie, #1b2130); color: #d8b4fe; }
+    html.dark .rn-aba.ativa { color: #fff; background: var(--rn-roxo); border-color: var(--rn-roxo); }
+    html.dark .rn-alternar button { color: var(--tema-texto-2, #b6bdcc); }
+    html.dark .rn-alternar button.ativo { color: #fff; }
+    html.dark .rn-rodape div { color: #e9d5ff; }
+    html.dark .rn-rodape i { color: #c084fc; }
+    html.dark .rn-vazio { color: var(--tema-texto-3, #8b93a5); }
+    html.dark .rn-vazio i { color: #6b4f8f; }
+    html.dark .rn-etq-PENDENTE { background: rgba(249, 115, 22, .16); color: #fdba74; }
+    html.dark .rn-etq-CHEGOU, html.dark .rn-etq-APROVADO, html.dark .rn-res-OK { background: rgba(16, 185, 129, .16); color: #6ee7b7; }
+    html.dark .rn-etq-NAO_CHEGOU, html.dark .rn-etq-NAO_APROVADO, html.dark .rn-res-NAO { background: rgba(239, 68, 68, .16); color: #fca5a5; }
+    html.dark .rn-etq-SEM, html.dark .rn-res-vazio { background: rgba(148, 163, 184, .16); color: #cbd5e1; }
+    html.dark .rn-etq-APROVADO_OBS { background: rgba(157, 78, 221, .22); color: #d8b4fe; }
+    html.dark .rn-res-OBS { background: rgba(245, 158, 11, .16); color: #fcd34d; }
+    html.dark .rn-acao-chegou { color: #6ee7b7; background: rgba(16, 185, 129, .14); border-color: rgba(16, 185, 129, .35); }
+    html.dark .rn-acao-nao { color: #fca5a5; background: rgba(239, 68, 68, .14); border-color: rgba(239, 68, 68, .35); }
+    html.dark .rn-acao-neutra { color: var(--tema-texto, #e7eaf0); background: var(--tema-superficie-2, #232a3b); border-color: var(--tema-borda, #313a4f); }
+
+    /* Lista de avaliações */
+    html.dark .rn-kpi-titulo, html.dark .rn-filtro-rotulo, html.dark .rn-ajuda { color: var(--tema-texto-2, #b6bdcc); }
+    html.dark .rn-filtro { background: var(--tema-superficie-3, #2b3346); border-color: var(--tema-borda, #313a4f); color: var(--tema-texto, #e7eaf0); }
+    html.dark .rn-linha { border-top-color: var(--tema-borda-suave, #262e40); }
+    html.dark .rn-linha:hover { background: var(--tema-superficie-2, #232a3b); }
+    html.dark .rn-mini { color: #d8b4fe; }
+    html.dark .rn-mini .rn-letra { border-color: var(--tema-superficie, #1b2130); }
+    html.dark .rn-codigo { background: rgba(157, 78, 221, .22); color: #e9d5ff; }
+
+    /* Formulários (nova avaliação, recebimento e configuração) */
+    html.dark .rn-rotulo { color: var(--tema-texto-2, #b6bdcc); }
+    html.dark .rn-campo, html.dark .rn-caixa-obs { background: var(--tema-superficie-3, #2b3346); border-color: var(--tema-borda, #313a4f); color: var(--tema-texto, #e7eaf0); }
+    html.dark .rn-invalido { background-color: rgba(239, 68, 68, .14) !important; }
+    html.dark .rn-erro { color: #fca5a5; }
+    html.dark .rn-dica { color: var(--tema-texto-3, #8b93a5); }
+    html.dark .rn-erros { background: rgba(239, 68, 68, .12); border-color: rgba(239, 68, 68, .4); color: #fecaca; }
+    html.dark .rn-secao-erro { border-color: rgba(239, 68, 68, .6); }
+    html.dark .rn-caixa { background: var(--tema-superficie-2, #232a3b); border-color: var(--tema-borda, #313a4f); color: var(--tema-texto, #e7eaf0); }
+    html.dark .rn-caixa:has(input:checked) { background: rgba(157, 78, 221, .22); border-color: #9D4EDD; }
+    html.dark input:not(:checked) + .rn-quadrado { background: var(--tema-superficie-3, #2b3346); border-color: #6b5a85; }
+    html.dark .rn-item, html.dark .rn-item-ro { border-top-color: var(--tema-borda-suave, #262e40); }
+    html.dark .rn-item-check:hover, html.dark .rn-tri label:hover { background: var(--tema-superficie-2, #232a3b); }
+    html.dark .rn-item-icone, html.dark .rn-item-ro .rn-ic { background: rgba(157, 78, 221, .2); color: #d8b4fe; }
+    html.dark .rn-item-titulo, html.dark .rn-dado b { color: var(--tema-texto, #e7eaf0); }
+    html.dark .rn-item-desc, html.dark .rn-dado span, html.dark .rn-tri-cabecalho .rn-tri span { color: var(--tema-texto-3, #8b93a5); }
+    html.dark .rn-tri-cabecalho { background: var(--tema-superficie-2, #232a3b); }
+    html.dark .rn-item.rn-marcado-OBS { background: rgba(245, 158, 11, .12); }
+    html.dark .rn-item.rn-marcado-NAO { background: rgba(239, 68, 68, .12); }
+    html.dark .rn-item-tri .rn-op-texto { color: var(--tema-texto-2, #b6bdcc); }
+    @media (max-width: 640px) {
+        html.dark .rn-item-tri .rn-tri label { background: var(--tema-superficie-2, #232a3b); border-color: var(--tema-borda, #313a4f); }
+    }
+    html.dark .rn-valor-box { background: linear-gradient(135deg, rgba(102, 0, 153, .35), rgba(123, 44, 191, .2)); border-color: rgba(157, 78, 221, .4); }
+    html.dark .rn-campo-valor { color: #e9d5ff; }
+    html.dark .rn-valor-calculado { background: rgba(20, 6, 36, .35); }
+    html.dark .rn-valor-nota, html.dark .rn-sugestao { color: #d8b4fe; }
+    html.dark .rn-padroes input:checked + .rn-letra { box-shadow: 0 0 0 3px var(--tema-superficie, #1b2130), 0 0 0 5px #c084fc; }
+    html.dark .rn-chip { background: var(--tema-superficie-2, #232a3b); border-color: rgba(157, 78, 221, .4); color: var(--tema-texto, #e7eaf0); }
+    html.dark .rn-pautado { color: var(--tema-texto, #e7eaf0);
+        background: repeating-linear-gradient(to bottom, transparent 0, transparent 1.83rem, #3a3150 1.83rem, #3a3150 1.9rem); }
+
+    /* Detalhe: linha do tempo */
+    html.dark .rn-tempo li::before { background: var(--tema-borda, #313a4f); }
+    html.dark .rn-tempo li::after { background: var(--tema-superficie, #1b2130); border-color: #7c5ca8; }
+    html.dark .rn-tempo li.feito::after { background: #9D4EDD; border-color: #9D4EDD; }
+
+    /* Tabela de avaliação */
+    html.dark .rn-criterios li { color: var(--tema-texto-2, #b6bdcc); }
+    html.dark .rn-padrao-verde .rn-padrao-nome { color: #4ade80; }
+    html.dark .rn-padrao-azul .rn-padrao-nome { color: #93c5fd; }
+    html.dark .rn-padrao-laranja .rn-padrao-nome { color: #fdba74; }
+    html.dark .rn-padrao-vermelho .rn-padrao-nome { color: #fca5a5; }
+    html.dark .rn-tabela tbody td { color: var(--tema-texto, #e7eaf0); border-bottom-color: var(--tema-borda-suave, #262e40); }
+    html.dark .rn-tabela tbody tr:nth-child(even) td { background: rgba(255, 255, 255, .025); }
+    html.dark .rn-tabela tbody tr:hover td { background: var(--rn-lilas); }
+    html.dark .rn-tabela td.rn-valor-A { color: #4ade80; }
+
+    /* Passo a passo */
+    html.dark .rn-passo-topo { background: linear-gradient(90deg, rgba(157, 78, 221, .2), transparent); }
+    html.dark .rn-passo-corpo { color: var(--tema-texto-2, #b6bdcc); }
+    html.dark .rn-alerta { color: #e9d5ff; background: rgba(157, 78, 221, .16); border-color: rgba(157, 78, 221, .35); }
+    html.dark .rn-alerta i { color: #c084fc; }
+
+    /* Aprovação, padrão calculado e quadro de gestão */
+    html.dark .rn-etq-AP-PENDENTE { background: rgba(245, 158, 11, .16); color: #fcd34d; }
+    html.dark .rn-etq-AP-APROVADA { background: rgba(16, 185, 129, .16); color: #6ee7b7; }
+    html.dark .rn-etq-AP-REPROVADA { background: rgba(239, 68, 68, .16); color: #fca5a5; }
+    html.dark .rn-marca-fixa { background: var(--tema-superficie-2, #232a3b); }
+    html.dark .rn-letra-vazia { background: var(--tema-superficie-3, #2b3346); color: var(--tema-texto-3, #8b93a5); }
+    html.dark .rn-motivo { background: var(--tema-superficie-2, #232a3b); border-color: rgba(157, 78, 221, .35); color: var(--tema-texto, #e7eaf0); }
+    html.dark .rn-resumo { background: var(--tema-superficie, #1b2130); }
+    html.dark .rn-resumo-rotulo { color: var(--tema-texto-2, #b6bdcc); }
+    html.dark .rn-resumo-valor { color: #e9d5ff; }
+    html.dark .rn-grade td { color: var(--tema-texto, #e7eaf0); border-bottom-color: var(--tema-borda-suave, #262e40); }
+    html.dark .rn-grade .fraco { color: var(--tema-texto-3, #8b93a5); }
+    html.dark .rn-sit-APROVACAO { background: rgba(245, 158, 11, .16); color: #fcd34d; }
+    html.dark .rn-sit-A_CAMINHO { background: rgba(249, 115, 22, .16); color: #fdba74; }
+    html.dark .rn-sit-CHEGOU { background: rgba(16, 185, 129, .16); color: #6ee7b7; }
+    html.dark .rn-sit-NAO_CHEGOU { background: rgba(239, 68, 68, .16); color: #fca5a5; }
+    html.dark .rn-sit-REPROVADA { background: rgba(148, 163, 184, .16); color: #cbd5e1; }
+
+    /* Cores inline dos templates */
+    html.dark .rn [style*="color:#3C096C"], html.dark .rn [style*="color:#2E0854"],
+    html.dark .rn [style*="color:#4C1D95"] { color: #e9d5ff !important; }
+    html.dark .rn [style*="color:#6B21A8"], html.dark .rn [style*="color:#7B2CBF"],
+    html.dark .rn [style*="color:#5B2A86"] { color: #d8b4fe !important; }
+    html.dark .rn [style*="background:#F6EEFF"], html.dark .rn [style*="background:#F3E8FF"] { background: rgba(157, 78, 221, .18) !important; }
+    html.dark .rn [style*="#EDE0FF"] { background: linear-gradient(135deg, rgba(102, 0, 153, .35), rgba(123, 44, 191, .2)) !important; }
+    html.dark .rn [style*="background:#FFF7ED"] { background: rgba(249, 115, 22, .16) !important; }
+    html.dark .rn [style*="color:#EA580C"] { color: #fdba74 !important; }
+    html.dark .rn [style*="background:#ECFDF5"] { background: rgba(16, 185, 129, .14) !important; border-color: rgba(16, 185, 129, .4) !important; }
+    html.dark .rn [style*="color:#059669"] { color: #6ee7b7 !important; }
+    html.dark .rn [style*="background:#ECFDF5"] .text-emerald-900, html.dark .rn [style*="background:#ECFDF5"] .text-emerald-800 { color: #a7f3d0 !important; }
+    html.dark .rn [style*="background:#FEF2F2"] { background: rgba(239, 68, 68, .16) !important; }
+    html.dark .rn [style*="color:#DC2626"] { color: #fca5a5 !important; }
+    html.dark .rn [style*="background:#FFFBEB"] { background: rgba(245, 158, 11, .14) !important; border-color: rgba(245, 158, 11, .4) !important; }
+    html.dark .rn [style*="color:#B45309"], html.dark .rn [style*="color:#92400E"] { color: #fcd34d !important; }
+    html.dark .rn [style*="border-color:#E9D8FD"] { border-color: rgba(157, 78, 221, .35) !important; }
+    html.dark .rn [style*="background:#F7FDF9"] { background: rgba(16, 185, 129, .07) !important; }
 </style>
 {% block rn_css %}{% endblock %}
 {% endblock %}
@@ -122,6 +256,7 @@
         <a href="{% url 'renova:inicio' %}" class="rn-aba {% if aba == 'inicio' %}ativa{% endif %}">
             <i class="fa-solid fa-mobile-screen-button"></i>Avaliações
             {% if rn_pode_receber and renova_aguardando %}<span class="rn-contador" title="Aguardando chegada">{{ renova_aguardando }}</span>{% endif %}
+            {% if rn_a_aprovar %}<span class="rn-contador" title="Trocas para aprovar" style="background:#7B2CBF">{{ rn_a_aprovar }}</span>{% endif %}
         </a>
         {% if rn_pode_fazer %}
         <a href="{% url 'renova:nova' %}" class="rn-aba {% if aba == 'nova' %}ativa{% endif %}">
@@ -134,6 +269,11 @@
         <a href="{% url 'renova:passo_a_passo' %}" class="rn-aba {% if aba == 'passo' %}ativa{% endif %}">
             <i class="fa-solid fa-list-check"></i>Passo a passo
         </a>
+        {% if rn_pode_ver_gestao %}
+        <a href="{% url 'renova:gestao' %}" class="rn-aba {% if aba == 'gestao' %}ativa{% endif %}">
+            <i class="fa-solid fa-coins"></i>Gestão
+        </a>
+        {% endif %}
         {% if rn_superadmin %}
         <a href="{% url 'renova:configuracao' %}" class="rn-aba {% if aba == 'configuracao' %}ativa{% endif %}">
             <i class="fa-solid fa-gear"></i>Configuração

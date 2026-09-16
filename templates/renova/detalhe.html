@@ -4,9 +4,11 @@
 {% block rn_titulo %}{{ renova.aparelho }}{% endblock %}
 {% block rn_subtitulo %}{{ renova.codigo }} · avaliado em {{ renova.data_avaliacao|date:"d/m/Y" }}{% endblock %}
 {% block rn_acoes %}
+{% if renova.aprovada %}
 <a href="{% url 'renova:etiqueta' renova.pk %}" class="rn-btn bg-white hover:bg-purple-50 text-xs shadow-lg" style="color:#3C096C">
     <i class="fa-solid fa-tag"></i>Etiqueta
 </a>
+{% endif %}
 {% endblock %}
 
 {% block rn_css %}
@@ -37,8 +39,8 @@
     <div class="lg:col-span-2 grid gap-4">
         <section class="rn-card p-4 sm:p-5">
             <div class="flex flex-wrap items-center gap-2 mb-4">
-                <span class="rn-etq rn-etq-{{ renova.parecer }}">{{ renova.get_parecer_display }}</span>
-                {% if renova.sem_recebimento %}<span class="rn-etq rn-etq-SEM"><i class="fa-solid fa-ban"></i>Sem troca</span>{% else %}<span class="rn-etq rn-etq-{{ renova.recebimento }}">{{ renova.get_recebimento_display }}</span>{% endif %}
+                <span class="rn-etq rn-etq-AP-{{ renova.aprovacao }}">{{ renova.get_aprovacao_display }}</span>
+                {% if renova.sem_recebimento %}<span class="rn-etq rn-etq-SEM"><i class="fa-solid fa-ban"></i>Sem troca</span>{% elif renova.aprovada %}<span class="rn-etq rn-etq-{{ renova.recebimento }}">{{ renova.get_recebimento_display }}</span>{% endif %}
                 {% if renova.alertas %}
                 <span class="rn-etq" style="background:#FFFBEB;color:#B45309"><i class="fa-solid fa-triangle-exclamation"></i>{{ renova.alertas }} item(ns) com observação ou falha</span>
                 {% endif %}
@@ -50,7 +52,7 @@
                 <div class="rn-dado"><span>Cor</span><b>{{ renova.cor|default:"—" }}</b></div>
                 <div class="rn-dado"><span>IMEI 1</span><b class="font-mono">{{ renova.imei1 }}</b></div>
                 <div class="rn-dado"><span>IMEI 2</span><b class="font-mono">{{ renova.imei2|default:"—" }}</b></div>
-                <div class="rn-dado"><span>Nº de série</span><b class="font-mono">{{ renova.numero_serie|default:"—" }}</b></div>
+                {% if renova.numero_serie %}<div class="rn-dado"><span>Nº de série</span><b class="font-mono">{{ renova.numero_serie }}</b></div>{% endif %}
                 <div class="rn-dado"><span>Loja (origem)</span><b>{{ renova.loja.name|default:"—" }}</b></div>
                 <div class="rn-dado"><span>Data da avaliação</span><b>{{ renova.data_avaliacao|date:"d/m/Y" }}</b></div>
                 <div class="rn-dado"><span>Saúde da bateria</span><b>{% if renova.saude_bateria is not None %}{{ renova.saude_bateria }}%{% else %}—{% endif %}</b></div>
@@ -65,6 +67,11 @@
                 <p class="text-xs" style="color:#4C1D95">Padrão {{ renova.padrao }} · {{ renova.get_padrao_display }}{% if renova.preco_tabela %} · tabela: {{ renova.preco_tabela }}{% endif %}</p>
                 {% endif %}
             </div>
+            {% if renova.padrao_motivos %}
+            <div class="rn-motivos">
+                {% for m in renova.padrao_motivos %}<span class="rn-motivo"><span class="rn-letra rn-letra-sm rn-letra-{{ m.letra }}">{{ m.letra }}</span>{{ m.texto }}</span>{% endfor %}
+            </div>
+            {% endif %}
         </section>
 
         <section class="rn-secao">
@@ -107,7 +114,7 @@
         </section>
 
         <section class="rn-secao">
-            <div class="rn-secao-topo"><span class="rn-num">7</span>Responsável pela avaliação</div>
+            <div class="rn-secao-topo"><span class="rn-num">6</span>Responsável pela avaliação</div>
             <div class="p-4 grid sm:grid-cols-2 gap-4 items-center">
                 <div class="grid gap-3">
                     <div class="rn-dado"><span>Nome do vendedor</span><b>{{ renova.vendedor_nome }}</b></div>
@@ -127,6 +134,33 @@
     </div>
 
     <aside class="grid gap-4">
+        <section class="rn-card p-4" id="aprovacao">
+            <h2 class="rn-h2">Aprovação do gerente</h2>
+            <p class="mt-2"><span class="rn-etq rn-etq-AP-{{ renova.aprovacao }}" style="font-size:.8rem;padding:.3rem .75rem">
+                <i class="fa-solid {% if renova.aguardando_aprovacao %}fa-hourglass-half{% elif renova.aprovada %}fa-user-check{% else %}fa-ban{% endif %}"></i>{{ renova.get_aprovacao_display }}
+            </span></p>
+            {% if renova.aguardando_aprovacao %}
+                {% if gerentes %}
+                <p class="text-xs text-gray-500 mt-2">Quem aprova: {% for g in gerentes %}<b>{{ g.full_name|default:g.username }}</b>{% if not forloop.last %}, {% endif %}{% endfor %}.</p>
+                {% else %}
+                <p class="text-xs text-red-700 mt-2"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Nenhum gerente do grupo GERENTES tem {{ renova.loja.name|default:"esta loja" }} como loja — o SUPERADMIN pode aprovar.</p>
+                {% endif %}
+                {% if pode_decidir %}
+                <form method="post" action="{% url 'renova:aprovacao' renova.pk %}" class="mt-3 grid gap-2">
+                    {% csrf_token %}
+                    <textarea name="observacao" rows="2" maxlength="2000" placeholder="Observação (obrigatória para reprovar)" class="rn-caixa-obs"></textarea>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button type="submit" name="decisao" value="aprovar" class="rn-acao rn-acao-chegou py-2"><i class="fa-solid fa-check"></i>Aprovar troca</button>
+                        <button type="submit" name="decisao" value="reprovar" class="rn-acao rn-acao-nao py-2"><i class="fa-solid fa-xmark"></i>Reprovar</button>
+                    </div>
+                </form>
+                {% endif %}
+            {% else %}
+                {% if renova.aprovacao_por %}<p class="text-xs text-gray-500 mt-2">por <b>{{ renova.aprovacao_por.full_name|default:renova.aprovacao_por.username }}</b> em {{ renova.aprovacao_em|date:"d/m/Y H:i" }}</p>{% endif %}
+                {% if renova.aprovacao_obs %}<p class="text-xs text-gray-700 mt-2 bg-gray-50 rounded-lg p-2 whitespace-pre-line">{{ renova.aprovacao_obs }}</p>{% endif %}
+            {% endif %}
+        </section>
+
         <section class="rn-card p-4">
             <h2 class="rn-h2 mb-3">Chamado</h2>
             {% if renova.chamado %}
@@ -136,7 +170,13 @@
                 <p class="text-[11px] text-gray-500 mt-1">{{ renova.chamado.category.name|default:"" }} · setor {{ renova.chamado.sector.name }}</p>
             </a>
             {% else %}
+            {% if renova.aguardando_aprovacao %}
+            <p class="text-sm text-gray-600"><i class="fa-solid fa-hourglass-half mr-1"></i>O chamado abre quando o gerente aprovar a troca.</p>
+            {% elif renova.reprovada %}
+            <p class="text-sm text-gray-600"><i class="fa-solid fa-ban mr-1"></i>Troca reprovada: não há chamado.</p>
+            {% else %}
             <p class="text-sm text-red-700"><i class="fa-solid fa-triangle-exclamation mr-1"></i>O chamado ainda não foi aberto.</p>
+            {% endif %}
             {% if pode_reabrir_chamado %}
             <form method="post" action="{% url 'renova:abrir_chamado' renova.pk %}" class="mt-3">
                 {% csrf_token %}
@@ -152,7 +192,10 @@
             <div class="mt-3">
                 {% if renova.sem_recebimento %}
                 <span class="rn-etq rn-etq-SEM" style="font-size:.8rem;padding:.3rem .75rem"><i class="fa-solid fa-ban"></i>Sem troca</span>
-                <p class="text-xs text-gray-500 mt-2">Não aprovado: o cliente ficou com o aparelho, então não há o que receber.</p>
+                <p class="text-xs text-gray-500 mt-2">Troca reprovada: o cliente ficou com o aparelho, então não há o que receber.</p>
+                {% elif renova.aguardando_aprovacao %}
+                <span class="rn-etq rn-etq-AP-PENDENTE" style="font-size:.8rem;padding:.3rem .75rem"><i class="fa-solid fa-hourglass-half"></i>Aguardando aprovação</span>
+                <p class="text-xs text-gray-500 mt-2">O aparelho só é enviado depois que o gerente aprova a troca.</p>
                 {% else %}
                 <span class="rn-etq rn-etq-{{ renova.recebimento }}" style="font-size:.8rem;padding:.3rem .75rem">
                     <i class="fa-solid {% if renova.recebimento == 'CHEGOU' %}fa-box-open{% elif renova.recebimento == 'NAO_CHEGOU' %}fa-circle-xmark{% else %}fa-truck-fast{% endif %}"></i>
@@ -188,12 +231,16 @@
                     <b class="text-gray-900">Avaliação feita</b><br>
                     {{ renova.criado_em|date:"d/m/Y H:i" }} · {{ renova.criado_por.full_name|default:renova.vendedor_nome }}
                 </li>
+                <li class="{% if not renova.aguardando_aprovacao %}feito{% endif %}">
+                    <b class="text-gray-900">{% if renova.aguardando_aprovacao %}Aguardando aprovação do gerente{% else %}{{ renova.get_aprovacao_display }}{% endif %}</b>
+                    {% if renova.aprovacao_em %}<br>{{ renova.aprovacao_em|date:"d/m/Y H:i" }}{% if renova.aprovacao_por %} · {{ renova.aprovacao_por.full_name|default:renova.aprovacao_por.username }}{% endif %}{% endif %}
+                </li>
                 <li class="{% if renova.chamado_id %}feito{% endif %}">
                     <b class="text-gray-900">{% if renova.chamado_id %}Chamado #{{ renova.chamado_id }} aberto{% else %}Chamado pendente{% endif %}</b>
                     {% if renova.chamado %}<br>{{ renova.chamado.created_at|date:"d/m/Y H:i" }}{% endif %}
                 </li>
                 <li class="{% if renova.recebimento != 'PENDENTE' %}feito{% endif %}">
-                    <b class="text-gray-900">{% if renova.sem_recebimento %}Sem recebimento (não aprovado){% elif renova.recebimento == 'PENDENTE' %}Aguardando chegada{% else %}{{ renova.get_recebimento_display }}{% endif %}</b>
+                    <b class="text-gray-900">{% if renova.sem_recebimento %}Sem recebimento (troca reprovada){% elif renova.recebimento == 'PENDENTE' %}Aguardando chegada{% else %}{{ renova.get_recebimento_display }}{% endif %}</b>
                     {% if renova.recebido_em %}<br>{{ renova.recebido_em|date:"d/m/Y H:i" }}{% endif %}
                 </li>
             </ol>

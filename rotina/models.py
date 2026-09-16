@@ -193,11 +193,17 @@ class AtividadeRotina(AtividadeBase):
         verbose_name_plural = 'Atividades da rotina'
 
 
-class AvisoRotina(models.Model):
-    """Registro de que o aviso de início de uma atividade já foi dado naquele dia.
+class TipoAviso(models.TextChoices):
+    LEMBRETE = 'LEMBRETE', 'Lembrete (minutos antes)'
+    INICIO = 'INICIO', 'Início da atividade'
 
-    É o que torna o aviso idempotente: várias abas, vários aparelhos e vários
-    workers podem pedir o registro ao mesmo tempo, e o sino recebe um só.
+
+class AvisoRotina(models.Model):
+    """Registro de que um aviso de uma atividade já foi dado naquele dia.
+
+    São dois por atividade: o lembrete, minutos antes, e o do início. É o que
+    torna os avisos idempotentes: várias abas, vários aparelhos e vários
+    workers podem pedir o registro ao mesmo tempo, e o sino recebe um de cada.
     """
 
     user = models.ForeignKey(
@@ -207,6 +213,7 @@ class AvisoRotina(models.Model):
         AtividadeRotina, on_delete=models.SET_NULL, null=True, blank=True, related_name='avisos',
         verbose_name='Atividade')
     data = models.DateField('Dia')
+    tipo = models.CharField('Tipo', max_length=10, choices=TipoAviso.choices, default=TipoAviso.INICIO)
     # Cópia do que foi avisado: a atividade pode ser apagada ou mudar depois.
     titulo = models.CharField('Título avisado', max_length=150, blank=True)
     inicio = models.TimeField('Início avisado', null=True, blank=True)
@@ -217,8 +224,9 @@ class AvisoRotina(models.Model):
         verbose_name = 'Aviso de atividade'
         verbose_name_plural = 'Avisos de atividade'
         constraints = [
-            models.UniqueConstraint(fields=['atividade', 'data'], name='rotina_aviso_um_por_atividade_e_dia'),
+            models.UniqueConstraint(fields=['atividade', 'data', 'tipo'],
+                                    name='rotina_aviso_um_por_atividade_dia_e_tipo'),
         ]
 
     def __str__(self):
-        return f'{self.titulo} · {self.data:%d/%m/%Y}'
+        return f'{self.titulo} · {self.data:%d/%m/%Y} · {self.get_tipo_display()}'

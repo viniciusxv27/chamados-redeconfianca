@@ -4,12 +4,14 @@ Função pura sobre o POST: devolve os dados prontos para o ``Renova`` e os erro
 por campo, para a tela reabrir o formulário preenchido e apontar o que falta.
 """
 import re
+import unicodedata
 from decimal import Decimal, InvalidOperation
 
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 
 from . import checklist
+from .padrao import calcular_padrao
 
 PREFIXO_ASSINATURA = 'data:image/png;base64,'
 ASSINATURA_MAX = 400_000      # caracteres do data URL da assinatura
@@ -56,7 +58,23 @@ def ler_valor(texto):
     return valor.quantize(Decimal('0.01'))
 
 
-def ler_checklist(post, *, lojas, precos, hoje=None):
+def normal_modelo(texto):
+    """"iPhone 15  Pro" e "iphone 15 pro" viram a mesma coisa: sem acento, caixa, espaço nem "iphone"."""
+    texto = unicodedata.normalize('NFD', str(texto or '').lower())
+    texto = ''.join(c for c in texto if not unicodedata.combining(c))
+    return re.sub(r'\s+', '', texto.replace('iphone', ''))
+
+
+def linha_da_tabela(marca, modelo, armazenamento, precos):
+    """A linha da tabela de avaliação do aparelho — o mesmo casamento que a tela faz."""
+    if marca != 'APPLE' or not modelo or not armazenamento:
+        return None
+    alvo = normal_modelo(modelo)
+    return next((p for p in precos.values()
+                 if p.marca == 'APPLE' and p.armazenamento == armazenamento and normal_modelo(p.modelo) == alvo), None)
+
+
+def ler_checklist(post, *, lojas, precos, hoje=None, cfg=None):
     """(dados, erros) do checklist.
 
     ``lojas`` e ``precos`` são dicionários {id em texto: objeto} com o que a
@@ -66,23 +84,19 @@ def ler_checklist(post, *, lojas, precos, hoje=None):
     erros = {}
     d = {}
 
-    # 1. Dados do aparelho
-    d['marca'] = str(post.get('marca', ''))
-    if d['marca'] not in dict(checklist.MARCAS):
-        erros['marca'] = 'Escolha a marca.'
-    d['marca_outra'] = _texto(post, 'marca_outra', 60) if d['marca'] == 'OUTROS' else ''
-    if d['marca'] == 'OUTROS' and not d['marca_outra']:
-        erros['marca_outra'] = 'Informe qual é a marca.'
+    # 1. Dados do aparelho — só Apple, com modelo e armazenamento da tabela de avaliação
+    d['marca'], d['marca_outra'], d['armazenamento_outro'], d['numero_serie'] = 'APPLE', '', '', ''
     d['modelo'] = _texto(post, 'modelo', 120)
     if not d['modelo']:
-        erros['modelo'] = 'Informe o modelo.'
+        erros['modelo'] = 'Escolha o modelo.'
     d['cor'] = _texto(post, 'cor', 60)
-    d['armazenamento'] = str(post.get('armazenamento', ''))
-    if d['armazenamento'] not in dict(checklist.ARMAZENAMENTOS):
+    d['armazenamento'] = str(post.get('armazenamento', '') or '')[:10]
+    if not d['armazenamento']:
         erros['armazenamento'] = 'Escolha o armazenamento.'
-    d['armazenamento_outro'] = _texto(post, 'armazenamento_outro', 20) if d['armazenamento'] == 'OUTRO' else ''
-    if d['armazenamento'] == 'OUTRO' and not d['armazenamento_outro']:
-        erros['armazenamento_outro'] = 'Informe o armazenamento.'
+    d['preco_tabela'] = linha_da_tabela('APPLE', d['modelo'], d['armazenamento'], precos)
+    if d['preco_tabela'] is None and not ({'modelo', 'armazenamento'} & erros.keys()):
+        erros['modelo'] = ('Esse modelo com esse armazenamento não está na tabela de avaliação — '
+                           'peça ao SUPERADMIN para incluir.')
 
     d['imei1'] = re.sub(r'\D', '', str(post.get('imei1', '')))[:15]
     if not imei_valido(d['imei1']):
@@ -92,7 +106,6 @@ def ler_checklist(post, *, lojas, precos, hoje=None):
         erros['imei2'] = 'IMEI 2 inválido: são 15 números.'
     elif d['imei2'] and d['imei2'] == d['imei1']:
         erros['imei2'] = 'O IMEI 2 está igual ao IMEI 1.'
-    d['numero_serie'] = _texto(post, 'numero_serie', 40)
 
     d['data_avaliacao'] = _data(post, 'data_avaliacao')
     if d['data_avaliacao'] is None:
@@ -104,22 +117,14 @@ def ler_checklist(post, *, lojas, precos, hoje=None):
     if d['loja'] is None:
         erros['loja'] = 'Escolha a loja de origem.'
 
-    d['padrao'] = str(post.get('padrao', ''))
-    if d['padrao'] and d['padrao'] not in dict(checklist.PADROES):
-        erros['padrao'] = 'Padrão inválido.'
-    d['preco_tabela'] = precos.get(str(post.get('preco_tabela', '')))
-    try:
-        d['valor_estimado'] = ler_valor(post.get('valor_estimado'))
-    except ValueError:
-        d['valor_estimado'] = None
-        erros['valor_estimado'] = 'Valor estimado inválido.'
     bateria = str(post.get('saude_bateria', '') or '').strip().rstrip('%')
     d['saude_bateria'] = None
-    if bateria:
-        if bateria.isdigit() and 0 <= int(bateria) <= 100:
-            d['saude_bateria'] = int(bateria)
-        else:
-            erros['saude_bateria'] = 'Saúde da bateria vai de 0 a 100%.'
+    if not bateria:
+        erros['saude_bateria'] = 'Informe a saúde da bateria (Ajustes > Bateria > Saúde da bateria).'
+    elif bateria.isdigit() and 0 <= int(bateria) <= 100:
+        d['saude_bateria'] = int(bateria)
+    else:
+        erros['saude_bateria'] = 'Saúde da bateria vai de 0 a 100%.'
 
     # 2. Itens obrigatórios antes da avaliação — todos
     d['itens_obrigatorios'] = {chave: post.get(f'obrig_{chave}') == 'on'
@@ -138,18 +143,26 @@ def ler_checklist(post, *, lojas, precos, hoje=None):
         if sem_resposta:
             erros[campo] = f'Marque {rotulo}: faltou ' + ', '.join(sem_resposta) + '.'
 
-    # 5 e 6. Observações e parecer final
-    d['observacoes'] = str(post.get('observacoes', '') or '').strip()[:4000]
-    d['parecer'] = str(post.get('parecer', ''))
-    if d['parecer'] not in dict(checklist.PARECERES):
-        erros['parecer'] = 'Escolha o parecer final do aparelho.'
-    elif d['parecer'] in (checklist.APROVADO_OBS, checklist.NAO_APROVADO) and not d['observacoes']:
-        erros['observacoes'] = 'Conte nas observações o motivo desse parecer.'
-    if (d['parecer'] in (checklist.APROVADO, checklist.APROVADO_OBS) and d['valor_estimado'] is None
-            and 'valor_estimado' not in erros):
-        erros['valor_estimado'] = 'Informe o valor estimado de troca.'
+    # Padrão e valor de troca: saem das avarias sinalizadas e da tabela — ninguém escolhe.
+    d['padrao'], d['padrao_motivos'], d['valor_estimado'] = '', [], None
+    if not ({'funcionalidades', 'estetica', 'saude_bateria'} & erros.keys()):
+        d['padrao'], d['padrao_motivos'] = calcular_padrao(d['funcionalidades'], d['estetica'], d['saude_bateria'])
+        if d['preco_tabela'] is not None:
+            if cfg is None:
+                from .models import ConfiguracaoRenova
+                cfg = ConfiguracaoRenova.get()
+            d['valor_estimado'] = cfg.valor_do_padrao(d['preco_tabela'].valor_excelente, d['padrao'])
 
-    # 7. Responsável pela avaliação
+    # 5. Observações. O parecer não é mais escolhido: sai do próprio checklist —
+    # item com observação ou que não funciona deixa "aprovado com observações".
+    d['observacoes'] = str(post.get('observacoes', '') or '').strip()[:4000]
+    sinalizados = [valor for campo in ('funcionalidades', 'estetica') for valor in d[campo].values()
+                   if valor in ('OBS', 'NAO')]
+    d['parecer'] = checklist.APROVADO_OBS if sinalizados else checklist.APROVADO
+    if sinalizados and not d['observacoes']:
+        erros['observacoes'] = 'Conte nas observações o que ficou com observação ou não funciona.'
+
+    # 6. Responsável pela avaliação
     d['vendedor_nome'] = _texto(post, 'vendedor_nome', 150)
     if not d['vendedor_nome']:
         erros['vendedor_nome'] = 'Informe o nome do vendedor.'

@@ -21,6 +21,21 @@ from portal_popups.checkers import register_popup_checker
 REGRA_ATIVA_DESDE = date(2026, 7, 27)
 
 
+def inicio_da_obrigatoriedade(user):
+    """Primeiro dia em que um comunicado obrigatório passa a travar esta pessoa.
+
+    A regra vale desde ``REGRA_ATIVA_DESDE``. Para quem foi criado depois, contam
+    só os comunicados a partir do dia em que o usuário foi criado: ninguém fica
+    travado por comunicado publicado antes de existir no portal.
+    """
+    entrada = getattr(user, 'date_joined', None)
+    if entrada is None:
+        return REGRA_ATIVA_DESDE
+    if timezone.is_aware(entrada):
+        entrada = timezone.localtime(entrada)
+    return max(REGRA_ATIVA_DESDE, entrada.date())
+
+
 def comunicados_pendentes(user):
     """Comunicados obrigatórios e ativos direcionados ao usuário que ainda
     aguardam o "de acordo".
@@ -37,7 +52,7 @@ def comunicados_pendentes(user):
     return (
         Communication.objects
         .filter(obrigatorio=True)
-        .filter(created_at__date__gte=REGRA_ATIVA_DESDE)
+        .filter(created_at__date__gte=inicio_da_obrigatoriedade(user))
         .filter(Q(recipients=user) | Q(send_to_all=True))
         .filter(Q(active_from__isnull=True) | Q(active_from__lte=now))
         .filter(Q(active_until__isnull=True) | Q(active_until__gte=now))

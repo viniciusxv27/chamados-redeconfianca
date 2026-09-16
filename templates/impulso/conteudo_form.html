@@ -13,13 +13,18 @@
             Duas opções, não três: vídeo e POP viraram um grupo só, com dois
             anexos no mesmo conteúdo.
             {% endcomment %}
-            {% if is_gestor %}
+            {% if campos_do_gestor %}
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Tipo *</label>
                 <select name="grupo" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                     {% for value, label in grupos %}<option value="{{ value }}" {% if conteudo.grupo == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
                 </select>
             </div>
+            {% elif conteudo %}
+            <p class="text-xs text-gray-500 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
+                <i class="fas fa-pen-to-square text-emerald-600 mr-1"></i>Você enviou este POP: pode trocar o arquivo
+                e corrigir título, descrição e link. Obrigatoriedade e período ficam com o gestor.
+            </p>
             {% else %}
             <input type="hidden" name="grupo" value="POP_VIDEO">
             <p class="text-xs text-gray-400">Como membro da equipe, você pode subir POPs e vídeos.</p>
@@ -65,7 +70,7 @@
                 ficam no mesmo conteúdo, num card só.
             </p>
 
-            {% if is_gestor %}
+            {% if campos_do_gestor %}
             <div class="border-t border-gray-100 pt-4 space-y-4">
                 <label class="flex items-center gap-2 text-sm text-gray-700">
                     <input type="checkbox" name="obrigatorio" {% if not conteudo or conteudo.obrigatorio %}checked{% endif %} class="rounded"> Obrigatório
@@ -91,7 +96,7 @@
             {% endif %}
 
             <div class="flex justify-end gap-2 pt-2">
-                <a href="{% url 'impulso:conectar_list' %}" class="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 text-sm hover:bg-gray-200">Cancelar</a>
+                <a href="{% if conteudo %}{% url 'impulso:conteudo_detail' conteudo.id %}{% else %}{% url 'impulso:conectar_list' %}{% endif %}" class="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 text-sm hover:bg-gray-200">Cancelar</a>
                 <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-500 text-white text-sm hover:bg-emerald-600">{% if conteudo %}Salvar alterações{% else %}Publicar{% endif %}</button>
             </div>
         </form>

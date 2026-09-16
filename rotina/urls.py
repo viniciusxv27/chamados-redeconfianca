@@ -28,7 +28,9 @@ urlpatterns = [
     path('api/modelos/atividades/<int:atividade_id>/', api.modelo_atualizar, name='api_modelo_atualizar'),
     path('api/modelos/atividades/<int:atividade_id>/excluir/', api.modelo_excluir, name='api_modelo_excluir'),
 
-    # Notificador
+    # Notificador e cartão da home
     path('api/hoje/', api.hoje, name='api_hoje'),
+    path('api/hoje/cartao/', api.cartao_home, name='api_cartao_home'),
     path('api/avisos/<int:atividade_id>/', api.aviso, name='api_aviso'),
+    path('api/lembretes/<int:atividade_id>/', api.lembrete, name='api_lembrete'),
 ]

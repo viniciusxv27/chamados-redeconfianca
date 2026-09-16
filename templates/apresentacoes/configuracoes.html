@@ -1,0 +1,155 @@
+{% extends 'apresentacoes/base_apresentacoes.html' %}
+
+{% block ap_pagina %}Configurações{% endblock %}
+{% block ap_titulo %}quem usa<br><span>e como a IA trabalha</span>{% endblock %}
+{% block ap_sub %}Só você (SUPERADMIN) vê esta tela. Escolha quem pode usar o módulo, os modelos de IA e a integração com o Canva.{% endblock %}
+{% block ap_acoes %}
+<a href="{% url 'apresentacoes:inicio' %}" class="ap-botao ap-botao-contorno"><i class="fas fa-layer-group"></i>Ver todas as apresentações</a>
+{% endblock %}
+
+{% block ap_conteudo %}
+<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+    <div class="ap-cartao p-3"><p class="text-xs font-semibold" style="color: var(--ap-suave)">Pessoas liberadas</p><p class="text-2xl font-black" id="cfg-total">{{ liberados|length }}</p></div>
+    <div class="ap-cartao p-3"><p class="text-xs font-semibold" style="color: var(--ap-suave)">Apresentações</p><p class="text-2xl font-black">{{ uso.total }}</p></div>
+    <div class="ap-cartao p-3"><p class="text-xs font-semibold" style="color: var(--ap-suave)">De módulos do portal</p><p class="text-2xl font-black">{{ uso.modulos }}</p></div>
+    <div class="ap-cartao p-3"><p class="text-xs font-semibold" style="color: var(--ap-suave)">Chave da OpenAI</p><p class="text-sm font-bold mt-1 {% if tem_chave_openai %}text-emerald-600{% else %}text-red-600{% endif %}">{% if tem_chave_openai %}<i class="fas fa-check mr-1"></i>Configurada{% else %}Ausente no .env{% endif %}</p></div>
+</div>
+
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
+    <form method="post" id="acesso" class="ap-cartao p-4 sm:p-5 xl:col-span-2">
+        {% csrf_token %}
+        <input type="hidden" name="secao" value="acesso">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+            <h2 class="font-bold"><i class="fas fa-user-check text-fuchsia-500 mr-1"></i>Quem pode usar o Assistente de Apresentações</h2>
+            <span class="text-xs" style="color: var(--ap-suave)"><span id="cfg-conta">{{ liberados|length }}</span> selecionada(s)</span>
+        </div>
+        <p class="ap-ajuda mb-3">O SUPERADMIN sempre pode e vê todas as apresentações. Cada pessoa liberada vê só as dela.</p>
+        <input type="search" id="cfg-busca" placeholder="Buscar por nome, e-mail ou setor…" class="ap-campo mb-2">
+        <div class="flex flex-wrap items-center gap-3 mb-2 text-xs">
+            <button type="button" data-marcar="1" class="font-semibold text-fuchsia-600 hover:underline">Marcar os visíveis</button>
+            <button type="button" data-marcar="0" class="hover:underline" style="color: var(--ap-suave)">Desmarcar os visíveis</button>
+            <label class="ml-auto flex items-center gap-1"><input type="checkbox" id="cfg-so-marcados"> só as marcadas</label>
+        </div>
+        <div class="max-h-96 overflow-y-auto rounded-xl border" style="border-color: var(--ap-borda)">
+            {% for p in pessoas %}
+            <label class="cfg-pessoa flex items-center gap-3 px-4 py-2 cursor-pointer border-b last:border-b-0" style="border-color: var(--ap-borda)"
+                   data-busca="{{ p.get_full_name|lower }} {{ p.email|lower }} {{ p.sector.name|lower }}">
+                <input type="checkbox" name="liberados" value="{{ p.pk }}" {% if p.pk in liberados %}checked{% endif %} class="rounded" style="accent-color: #FF48CE">
+                <span class="text-sm flex-1">{{ p.get_full_name|default:p.username }}</span>
+                <span class="text-[11px] text-right" style="color: var(--ap-suave)">{{ p.sector.name|default:"—" }}</span>
+            </label>
+            {% endfor %}
+        </div>
+        <div class="flex justify-end mt-3">
+            <button type="submit" class="ap-botao ap-botao-principal"><i class="fas fa-check"></i>Salvar quem usa</button>
+        </div>
+    </form>
+
+    <div class="space-y-4">
+        <form method="post" id="ia" class="ap-cartao p-4 sm:p-5 space-y-3">
+            {% csrf_token %}
+            <input type="hidden" name="secao" value="ia">
+            <h2 class="font-bold"><i class="fas fa-wand-magic-sparkles text-fuchsia-500 mr-1"></i>Modelos de IA (OpenAI)</h2>
+            <div>
+                <label class="ap-rotulo-campo" for="cfg-texto">Texto e leitura de imagens</label>
+                <input id="cfg-texto" name="modelo_texto" value="{{ cfg.modelo_texto }}" list="cfg-lista-texto" class="ap-campo">
+                <datalist id="cfg-lista-texto">{% for m in modelos_texto %}<option value="{{ m }}">{% endfor %}</datalist>
+                <p class="ap-ajuda">Se o modelo não existir na conta, a geração usa gpt-4o.</p>
+            </div>
+            <div>
+                <label class="ap-rotulo-campo" for="cfg-imagem">Imagens</label>
+                <input id="cfg-imagem" name="modelo_imagem" value="{{ cfg.modelo_imagem }}" list="cfg-lista-imagem" class="ap-campo">
+                <datalist id="cfg-lista-imagem">{% for m in modelos_imagem %}<option value="{{ m }}">{% endfor %}</datalist>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+                <div>
+                    <label class="ap-rotulo-campo" for="cfg-video">Vídeo</label>
+                    <input id="cfg-video" name="modelo_video" value="{{ cfg.modelo_video }}" list="cfg-lista-video" class="ap-campo">
+                    <datalist id="cfg-lista-video">{% for m in modelos_video %}<option value="{{ m }}">{% endfor %}</datalist>
+                </div>
+                <div>
+                    <label class="ap-rotulo-campo" for="cfg-voz-modelo">Voz</label>
+                    <input id="cfg-voz-modelo" name="modelo_voz" value="{{ cfg.modelo_voz }}" list="cfg-lista-voz" class="ap-campo">
+                    <datalist id="cfg-lista-voz">{% for m in modelos_voz %}<option value="{{ m }}">{% endfor %}</datalist>
+                </div>
+            </div>
+            <div>
+                <label class="ap-rotulo-campo" for="cfg-voz">Voz da narração</label>
+                <select id="cfg-voz" name="voz" class="ap-campo">{% for v in vozes %}<option value="{{ v }}" {% if cfg.voz == v %}selected{% endif %}>{{ v|capfirst }}</option>{% endfor %}</select>
+            </div>
+            <div class="flex justify-end"><button type="submit" class="ap-botao ap-botao-principal"><i class="fas fa-check"></i>Salvar modelos</button></div>
+        </form>
+
+        <form method="post" id="canva" class="ap-cartao p-4 sm:p-5 space-y-3">
+            {% csrf_token %}
+            <input type="hidden" name="secao" value="canva">
+            <h2 class="font-bold flex items-center gap-2"><i class="fas fa-palette text-fuchsia-500"></i>Canva
+                {% if cfg.canva_configurado %}<span class="ap-selo ap-selo-PRONTA"><i class="fas fa-check"></i>Configurado</span>{% else %}<span class="ap-selo ap-selo-RASCUNHO">Não configurado</span>{% endif %}
+            </h2>
+            <p class="ap-ajuda">Crie uma integração em canva.com/developers com o escopo <code>design:content:write</code> e cadastre este endereço de retorno:</p>
+            <input type="text" readonly value="{{ canva_redirect }}" class="ap-campo text-xs" onclick="this.select()">
+            <div>
+                <label class="ap-rotulo-campo" for="cfg-canva-id">Client ID</label>
+                <input id="cfg-canva-id" name="canva_client_id" value="{{ cfg.canva_client_id }}" class="ap-campo" autocomplete="off">
+            </div>
+            <div>
+                <label class="ap-rotulo-campo" for="cfg-canva-segredo">Client secret</label>
+                <input id="cfg-canva-segredo" name="canva_client_secret" type="password" class="ap-campo" autocomplete="new-password"
+                       placeholder="{% if cfg.canva_client_secret_cifrado %}•••••••• guardado — deixe em branco para manter{% else %}cole o segredo{% endif %}">
+                {% if cfg.canva_client_secret_cifrado %}<label class="flex items-center gap-2 text-xs mt-1"><input type="checkbox" name="limpar_segredo"> apagar o segredo guardado</label>{% endif %}
+            </div>
+            <p class="ap-ajuda">Sem o Canva configurado, "Abrir no Canva" baixa o PowerPoint para importar lá manualmente.</p>
+            <div class="flex justify-end"><button type="submit" class="ap-botao ap-botao-principal"><i class="fas fa-check"></i>Salvar Canva</button></div>
+        </form>
+    </div>
+</div>
+
+<section class="ap-cartao p-4 sm:p-5 mt-4">
+    <h2 class="font-bold mb-2"><i class="fas fa-clock-rotate-left text-fuchsia-500 mr-1"></i>Últimos pedidos à IA</h2>
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead><tr class="text-left text-xs" style="color: var(--ap-suave)"><th class="py-1.5 pr-3">Quando</th><th class="pr-3">Quem</th><th class="pr-3">O quê</th><th class="pr-3">Situação</th><th>Detalhe</th></tr></thead>
+            <tbody>
+            {% for t in tarefas_recentes %}
+            <tr class="border-t" style="border-color: var(--ap-borda)">
+                <td class="py-1.5 pr-3 whitespace-nowrap">{{ t.criado_em|date:"d/m H:i" }}</td>
+                <td class="pr-3 whitespace-nowrap">{{ t.usuario.get_full_name|default:t.usuario.username }}</td>
+                <td class="pr-3 whitespace-nowrap">{{ t.get_tipo_display }}</td>
+                <td class="pr-3 whitespace-nowrap">{{ t.get_status_display }}</td>
+                <td class="text-xs" style="color: var(--ap-suave)">{{ t.erro|default:t.progresso.etapa|default:""|truncatechars:90 }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5" class="py-3 text-center text-xs" style="color: var(--ap-suave)">Nenhum pedido ainda.</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    'use strict';
+    const busca = document.getElementById('cfg-busca');
+    const soMarcados = document.getElementById('cfg-so-marcados');
+    const pessoas = Array.from(document.querySelectorAll('.cfg-pessoa'));
+    const conta = document.getElementById('cfg-conta');
+    function filtrar() {
+        const termo = busca.value.trim().toLowerCase();
+        pessoas.forEach((p) => {
+            const marcada = p.querySelector('input').checked;
+            p.style.display = (!termo || p.dataset.busca.includes(termo)) && (!soMarcados.checked || marcada) ? '' : 'none';
+        });
+    }
+    function contar() { conta.textContent = pessoas.filter((p) => p.querySelector('input').checked).length; }
+    busca.addEventListener('input', filtrar);
+    soMarcados.addEventListener('change', filtrar);
+    pessoas.forEach((p) => p.querySelector('input').addEventListener('change', contar));
+    document.querySelectorAll('[data-marcar]').forEach((b) => b.addEventListener('click', () => {
+        pessoas.filter((p) => p.style.display !== 'none').forEach((p) => { p.querySelector('input').checked = b.dataset.marcar === '1'; });
+        contar();
+    }));
+})();
+</script>
+{% endblock %}

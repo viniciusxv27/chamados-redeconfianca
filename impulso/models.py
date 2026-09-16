@@ -852,6 +852,20 @@ class ConteudoConectar(models.Model):
         from .utils import is_impulso_manager       # tardio: utils importa models
         return is_impulso_manager(user)
 
+    def pode_editar(self, user):
+        """Quem edita: quem pode excluir (edição completa) ou quem enviou o POP.
+
+        Quem enviou o POP/vídeo corrige o próprio material — troca o arquivo e
+        ajusta título, descrição e link. Obrigatoriedade, público e período
+        continuam com o gestor, e excluir também: `pode_excluir` diz se a
+        edição é completa.
+        """
+        if self.pode_excluir(user):
+            return True
+        return bool(user and getattr(user, 'is_authenticated', False)
+                    and self.criado_por_id == user.pk
+                    and self.grupo == self.GRUPO_POP_VIDEO)
+
     @property
     def impacto_da_exclusao(self):
         """O que some junto. A tela avisa antes de perguntar 'tem certeza?'.
@@ -1033,6 +1047,10 @@ class TarefaProjeto(models.Model):
     status = models.CharField(
         max_length=14, choices=Status.choices,
         default=Status.A_FAZER, verbose_name='Status')
+    # A entrega pontua no mês em que aconteceu. Pelo prazo só, a tarefa criada
+    # com prazo já vencido (ou entregue atrasada) caía num mês fora do ciclo e
+    # nunca pontuava, mesmo concluída.
+    concluida_em = models.DateTimeField(null=True, blank=True, verbose_name='Concluída em')
 
     criado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
@@ -1046,6 +1064,19 @@ class TarefaProjeto(models.Model):
 
     def __str__(self):
         return self.titulo
+
+    def save(self, *args, **kwargs):
+        # A data acompanha o status em qualquer caminho (tela, admin, assistente):
+        # concluída ganha a data uma vez; reaberta perde.
+        concluida = self.status == self.Status.CONCLUIDA
+        if concluida and self.concluida_em is None:
+            self.concluida_em = timezone.now()
+        elif not concluida:
+            self.concluida_em = None
+        campos = kwargs.get('update_fields')
+        if campos is not None and 'status' in campos and 'concluida_em' not in campos:
+            kwargs['update_fields'] = list(campos) + ['concluida_em']
+        super().save(*args, **kwargs)
 
 
 # ==========================================================================

@@ -1,0 +1,47 @@
+{% load static %}<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex">
+  <title>{{ titulo }} · Editor de apresentações</title>
+  <link rel="icon" type="image/png" href="{% static 'images/logo3.png' %}">
+
+  <!-- Montserrat (cromo do editor e fonte padrão dos slides). crossorigin: a exportação lê as regras @font-face. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" crossorigin="anonymous" data-apres-fonte="Montserrat"
+        href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap">
+  <link rel="stylesheet" crossorigin="anonymous" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <link rel="stylesheet" href="{% static 'apresentacoes/editor.css' %}">
+
+  {{ apres_config|json_script:"apres-config" }}
+  <script>
+    // Configuração vem do servidor como JSON (json_script escapa tudo); o tema escuro entra
+    // antes de pintar para a tela não piscar branco.
+    (function () {
+      var cfg = JSON.parse(document.getElementById('apres-config').textContent);
+      window.APRES = cfg;
+      if (cfg.tema_escuro) document.documentElement.classList.add('dark');
+    })();
+  </script>
+</head>
+<body class="ed-body">
+  <div id="ed-app" class="ed-app" aria-busy="true">
+    <div class="ed-carregando" role="status">
+      <span class="ed-giro" aria-hidden="true"></span>
+      <span>Abrindo o editor…</span>
+    </div>
+  </div>
+  <noscript>
+    <p style="padding:24px;font-family:sans-serif">O editor de apresentações precisa de JavaScript ligado.</p>
+  </noscript>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.2.4/purify.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.6/Sortable.min.js" crossorigin="anonymous"></script>
+  <script src="{% static 'apresentacoes/render.js' %}"></script>
+  <script src="{% static 'apresentacoes/apresentar.js' %}"></script>
+  <script src="{% static 'apresentacoes/exportar.js' %}"></script>
+  <script src="{% static 'apresentacoes/editor.js' %}"></script>
+</body>
+</html>

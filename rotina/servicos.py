@@ -1,19 +1,22 @@
 """Regras da Rotina Gerencial: a semana exibida, a validação das atividades,
-quem pode mexer em quê, a cópia de modelos e o aviso de início.
+quem pode mexer em quê, a cópia de modelos, os avisos (lembrete e início) e o
+resumo do dia que a home mostra.
 
 A tela esconde botões, mas quem decide é daqui: a API e as views passam por
 estas funções, então cada regra existe num lugar só.
 """
 import logging
+import math
 from datetime import datetime, time, timedelta
 
 from django.db import IntegrityError, transaction
+from django.db.models import Exists
 from django.urls import reverse
 from django.utils import timezone
 
 from .models import (
     CORES_CATEGORIA, DIAS_SEMANA, AtividadeModelo, AtividadeRotina, AvisoRotina, Categoria,
-    ModeloRotina, erros_de_horario,
+    ModeloRotina, TipoAviso, erros_de_horario,
 )
 from .permissoes import e_superadmin
 
@@ -33,6 +36,15 @@ CAMPOS_COPIA = ('dia_semana', 'inicio', 'fim', 'titulo', 'descricao', 'categoria
 # relógio de quem pede pode estar adiantado.
 JANELA_AVISO = timedelta(minutes=10)
 ADIANTAMENTO_ACEITO = timedelta(minutes=2)
+
+# O lembrete vem alguns minutos antes do início e vale até a atividade começar
+# (com um minuto de folga para o pedido que sai no último segundo).
+MINUTOS_LEMBRETE = 5
+ANTECEDENCIA_LEMBRETE = timedelta(minutes=MINUTOS_LEMBRETE)
+TOLERANCIA_LEMBRETE = timedelta(minutes=1)
+
+# Quantas atividades a home lista depois da que está em destaque.
+SEGUINTES_NA_HOME = 3
 
 CATEGORIA_SINO = 'Rotina Gerencial'
 
@@ -111,6 +123,19 @@ def categorias():
 
 def _instante(dia, hora):
     return timezone.make_aware(datetime.combine(dia, hora), timezone.get_current_timezone())
+
+
+def _ms(instante):
+    return int(instante.timestamp() * 1000)
+
+
+def duracao_curta(minutos):
+    """Duração curta ("18 min", "1h", "2h30"): o mesmo formato do calendário e da home no navegador."""
+    minutos = max(0, int(minutos))
+    if minutos < 60:
+        return f'{minutos} min'
+    horas, resto = divmod(minutos, 60)
+    return f'{horas}h{resto:02d}' if resto else f'{horas}h'
 
 
 def url_da_atividade(atividade):
@@ -414,14 +439,38 @@ def duplicar_modelo(modelo, por=None):
 
 
 # ---------------------------------------------------------------------------
-# Avisos de início
+# Avisos: lembrete minutos antes e aviso de início
 # ---------------------------------------------------------------------------
-def atividades_de_hoje(user, momento=None):
-    """O que o notificador precisa: as atividades de hoje de `user` e o relógio do servidor.
+def item_do_dia(atividade, dia):
+    """Uma atividade de `dia` como o navegador precisa: textos, cor, link e instantes.
 
     Os instantes vão em milissegundos desde a época (`*_ts`), já calculados no
     fuso do portal: o navegador só compara números e não importa em que fuso
-    o aparelho está.
+    o aparelho está. Serve ao notificador (api/hoje/) e ao cartão da home.
+    """
+    cor = atividade.cor
+    inicio_ts = _ms(_instante(dia, atividade.inicio))
+    fim_ts = _ms(_instante(dia, atividade.fim))
+    return {
+        'id': atividade.id,
+        'titulo': atividade.titulo,
+        'categoria': atividade.categoria,
+        'categoria_nome': cor['nome'],
+        'cor': cor['cor'],
+        'bloqueada': atividade.bloqueada,
+        'inicio': f'{atividade.inicio:%H:%M}',
+        'fim': f'{atividade.fim:%H:%M}',
+        'inicio_ts': inicio_ts,
+        'fim_ts': fim_ts,
+        'url': url_da_atividade(atividade),
+    }
+
+
+def atividades_de_hoje(user, momento=None):
+    """O que o notificador precisa: as atividades de hoje de `user` e o relógio do servidor.
+
+    Cada atividade diz se o lembrete (`lembrada`) e o aviso de início
+    (`avisada`) já foram registrados hoje — por esta aba ou por outra.
     """
     from .models import RotinaGerencial
 
@@ -430,9 +479,10 @@ def atividades_de_hoje(user, momento=None):
     resposta = {
         'ok': True,
         'agora': momento.isoformat(),
-        'agora_ts': int(momento.timestamp() * 1000),
+        'agora_ts': _ms(momento),
         'data': hoje.isoformat(),
         'dia_semana': hoje.weekday(),
+        'lembrete_minutos': MINUTOS_LEMBRETE,
         'ativa': False,
         'atividades': [],
     }
@@ -443,63 +493,80 @@ def atividades_de_hoje(user, momento=None):
     if hoje.weekday() > 5:
         return resposta
 
-    avisadas = set(AvisoRotina.objects.filter(user=user, data=hoje)
-                   .values_list('atividade_id', flat=True))
+    registrados = set(AvisoRotina.objects.filter(user=user, data=hoje).values_list('atividade_id', 'tipo'))
     for atividade in rotina.atividades.filter(dia_semana=hoje.weekday()).order_by('inicio', 'fim', 'id'):
-        cor = atividade.cor
-        resposta['atividades'].append({
-            'id': atividade.id,
-            'titulo': atividade.titulo,
-            'categoria': atividade.categoria,
-            'categoria_nome': cor['nome'],
-            'cor': cor['cor'],
-            'bloqueada': atividade.bloqueada,
-            'inicio': f'{atividade.inicio:%H:%M}',
-            'fim': f'{atividade.fim:%H:%M}',
-            'inicio_ts': int(_instante(hoje, atividade.inicio).timestamp() * 1000),
-            'fim_ts': int(_instante(hoje, atividade.fim).timestamp() * 1000),
-            'url': url_da_atividade(atividade),
-            'avisada': atividade.id in avisadas,
-        })
+        item = item_do_dia(atividade, hoje)
+        item['avisada'] = (atividade.id, TipoAviso.INICIO) in registrados
+        item['lembrada'] = (atividade.id, TipoAviso.LEMBRETE) in registrados
+        resposta['atividades'].append(item)
     return resposta
 
 
-def registrar_aviso(user, atividade, momento=None):
-    """Registra o aviso de início de hoje e põe a notificação no sino — uma vez só.
-
-    Devolve `(aviso, novo)`. `novo` é False quando outra aba, outro aparelho
-    ou outro worker já tinha registrado. Levanta ErroValidacao fora da hora.
-    """
-    momento = momento or agora()
+def conferir_hora_do_aviso(atividade, momento, tipo):
+    """Barra o aviso pedido fora da janela dele (ErroValidacao com o motivo)."""
     hoje = momento.date()
     if atividade.dia_semana != hoje.weekday():
         raise ErroValidacao('Esta atividade não é de hoje.')
     inicio = _instante(hoje, atividade.inicio)
     fim = _instante(hoje, atividade.fim)
+    if tipo == TipoAviso.LEMBRETE:
+        if momento < inicio - ANTECEDENCIA_LEMBRETE - ADIANTAMENTO_ACEITO:
+            raise ErroValidacao('Ainda é cedo para o lembrete desta atividade.')
+        if momento > inicio + TOLERANCIA_LEMBRETE:
+            raise ErroValidacao('Esta atividade já começou.')
+        return
     if momento < inicio - ADIANTAMENTO_ACEITO:
         raise ErroValidacao('Ainda não chegou a hora desta atividade.')
     if momento > max(fim, inicio + JANELA_AVISO):
         raise ErroValidacao('Esta atividade já terminou.')
 
-    existente = AvisoRotina.objects.filter(atividade=atividade, data=hoje).first()
+
+def registrar_aviso(user, atividade, momento=None, tipo=TipoAviso.INICIO):
+    """Registra o aviso de hoje (lembrete ou início) e põe a notificação no sino — uma vez só.
+
+    Devolve `(aviso, novo)`. `novo` é False quando outra aba, outro aparelho
+    ou outro worker já tinha registrado o mesmo tipo. Levanta ErroValidacao
+    fora da hora.
+    """
+    if tipo not in TipoAviso.values:
+        raise ErroValidacao('Tipo de aviso inválido.')
+    momento = momento or agora()
+    hoje = momento.date()
+    conferir_hora_do_aviso(atividade, momento, tipo)
+
+    existente = AvisoRotina.objects.filter(atividade=atividade, data=hoje, tipo=tipo).first()
     if existente is not None:
         return existente, False
     try:
         with transaction.atomic():
             aviso = AvisoRotina.objects.create(
-                user=user, atividade=atividade, data=hoje,
+                user=user, atividade=atividade, data=hoje, tipo=tipo,
                 titulo=atividade.titulo, inicio=atividade.inicio)
-            notificar_no_sino(user, atividade)
+            notificar_no_sino(user, atividade, tipo=tipo, momento=momento)
     except IntegrityError:
         # Corrida: outra aba (ou outro worker) gravou entre a consulta e a inserção.
-        existente = AvisoRotina.objects.filter(atividade=atividade, data=hoje).first()
+        existente = AvisoRotina.objects.filter(atividade=atividade, data=hoje, tipo=tipo).first()
         if existente is None:
             raise
         return existente, False
     return aviso, True
 
 
-def notificar_no_sino(user, atividade):
+def textos_do_sino(atividade, tipo=TipoAviso.INICIO, momento=None):
+    """Título e texto da notificação do sino para o lembrete ou o início."""
+    categoria = atividade.cor['nome']
+    if tipo == TipoAviso.LEMBRETE:
+        momento = momento or agora()
+        inicio = _instante(momento.date(), atividade.inicio)
+        faltam = max(1, math.ceil((inicio - momento).total_seconds() / 60))
+        return (f'Em {faltam} min: {atividade.titulo}',
+                f'Começa às {atividade.inicio:%H:%M} e vai até {atividade.fim:%H:%M} · {categoria}. '
+                'Toque para abrir sua rotina gerencial.')
+    return (f'Agora: {atividade.titulo}',
+            f'{atividade.horario} · {categoria}. Toque para abrir sua rotina gerencial.')
+
+
+def notificar_no_sino(user, atividade, tipo=TipoAviso.INICIO, momento=None):
     """Notificação no sino do portal — e só nele.
 
     Não passa por `PushNotification.send_notification()` nem pelo
@@ -518,18 +585,142 @@ def notificar_no_sino(user, atividade):
     if categoria is None:
         categoria = NotificationCategory.objects.create(
             name=CATEGORIA_SINO, icon='fas fa-calendar-check', color='orange')
+    titulo, mensagem = textos_do_sino(atividade, tipo, momento)
+    lembrete = tipo == TipoAviso.LEMBRETE
     notificacao = PushNotification.objects.create(
-        title=f'Agora: {atividade.titulo}'[:200],
-        message=f'{atividade.horario} · {atividade.cor["nome"]}. Toque para abrir sua rotina gerencial.',
+        title=titulo[:200],
+        message=mensagem,
         category=categoria,
         notification_type='TASK',
         priority='NORMAL',
-        icon='fas fa-calendar-check',
+        icon='fas fa-bell' if lembrete else 'fas fa-calendar-check',
         action_url=url_da_atividade(atividade),
         action_text='Abrir rotina',
         created_by=user,
         is_sent=True,
         sent_at=timezone.now(),
-        extra_data={'origem': 'rotina_gerencial', 'atividade_id': atividade.id},
+        extra_data={'origem': 'rotina_gerencial', 'atividade_id': atividade.id,
+                    'tipo': 'lembrete' if lembrete else 'inicio'},
     )
     return UserNotification.objects.create(notification=notificacao, user=user)
+
+
+# ---------------------------------------------------------------------------
+# Resumo do dia para a home
+# ---------------------------------------------------------------------------
+def _porcento(parte, todo):
+    """Porcentagem com ponto decimal, pronta para o CSS (o template em pt-br escreveria vírgula)."""
+    if todo <= 0:
+        return '0'
+    return f'{min(100.0, max(0.0, 100 * parte / todo)):.2f}'
+
+
+def situacao_do_dia(itens, agora_ts):
+    """Em que pé está o dia: a atividade de agora, a próxima, as seguintes e o que já foi.
+
+    `itens` vem de `item_do_dia`, em ordem de horário. Função pura (só números),
+    para a regra ser a mesma no teste, na home e no recarregamento do cartão.
+    """
+    atual = next((i for i in itens if i['inicio_ts'] <= agora_ts < i['fim_ts']), None)
+    proxima = next((i for i in itens if i['inicio_ts'] > agora_ts), None)
+    feitas = sum(1 for i in itens if i['fim_ts'] <= agora_ts)
+    if not itens:
+        estado = 'vazio'
+    elif atual:
+        estado = 'agora'
+    elif proxima:
+        estado = 'intervalo' if feitas else 'antes'
+    else:
+        estado = 'concluida'
+
+    if atual:
+        duracao = atual['fim_ts'] - atual['inicio_ts']
+        atual = {**atual,
+                 'progresso': _porcento(agora_ts - atual['inicio_ts'], duracao),
+                 'termina_em': duracao_curta(math.ceil((atual['fim_ts'] - agora_ts) / 60000))}
+    if proxima:
+        proxima = {**proxima, 'comeca_em': duracao_curta(max(1, math.ceil((proxima['inicio_ts'] - agora_ts) / 60000)))}
+
+    # A lista curta começa depois da que está em destaque: a próxima, quando há
+    # uma atividade agora (ela vai na lista), ou a seguinte a ela, quando não há.
+    depois = [i for i in itens if i['inicio_ts'] > agora_ts]
+    if not atual:
+        depois = depois[1:]
+    seguintes = depois[:SEGUINTES_NA_HOME]
+
+    mudancas = [ts for i in itens for ts in (i['inicio_ts'], i['fim_ts']) if ts > agora_ts]
+    faixa = None
+    if itens:
+        comeco, termino = itens[0]['inicio_ts'], max(i['fim_ts'] for i in itens)
+        extensao = termino - comeco
+
+        def estado_do_bloco(i):
+            if i['fim_ts'] <= agora_ts:
+                return 'feita'
+            return 'agora' if i['inicio_ts'] <= agora_ts else 'depois'
+
+        faixa = {
+            'inicio': itens[0]['inicio'],
+            'fim': max(itens, key=lambda i: i['fim_ts'])['fim'],
+            'inicio_ts': comeco,
+            'fim_ts': termino,
+            'agora': _porcento(agora_ts - comeco, extensao) if comeco <= agora_ts <= termino else None,
+            'blocos': [{'id': i['id'], 'titulo': i['titulo'], 'inicio': i['inicio'], 'fim': i['fim'],
+                        'cor': i['cor'], 'estado': estado_do_bloco(i),
+                        'esquerda': _porcento(i['inicio_ts'] - comeco, extensao),
+                        'largura': _porcento(i['fim_ts'] - i['inicio_ts'], extensao)} for i in itens],
+        }
+    return {
+        'estado': estado,
+        'atual': atual,
+        'proxima': proxima,
+        'seguintes': seguintes,
+        'restantes': max(0, len(depois) - len(seguintes)),
+        'feitas': feitas,
+        'total': len(itens),
+        'faixa': faixa,
+        'proxima_mudanca_ts': min(mudancas) if mudancas else None,
+    }
+
+
+def cartao_da_home(user, momento=None):
+    """O cartão "Rotina gerencial" da home: o dia de hoje de `user` em uma consulta só.
+
+    Quem chama já sabe que a pessoa tem rotina liberada (context processor).
+    Uma consulta traz as atividades do dia e, junto, se o sino está desligado
+    nas preferências. No domingo a consulta traz a segunda-feira, para o
+    cartão dizer como a semana começa.
+    """
+    from notifications.models import NotificationPreference
+
+    momento = momento or agora()
+    hoje = momento.date()
+    domingo = hoje.weekday() == 6
+    dia = hoje + timedelta(days=1) if domingo else hoje
+    sino_desligado = NotificationPreference.objects.filter(user=user, in_app_enabled=False)
+    atividades = list(AtividadeRotina.objects
+                      .filter(rotina__user=user, rotina__ativa=True, dia_semana=dia.weekday())
+                      .annotate(sino_desligado=Exists(sino_desligado))
+                      .order_by('inicio', 'fim', 'id'))
+    itens = [item_do_dia(a, dia) for a in atividades]
+    agora_ts = _ms(momento)
+
+    if domingo:
+        situacao = {'estado': 'domingo', 'atual': None, 'proxima': None, 'seguintes': [], 'restantes': 0,
+                    'feitas': 0, 'total': len(itens), 'faixa': None, 'proxima_mudanca_ts': None}
+    else:
+        situacao = situacao_do_dia(itens, agora_ts)
+    pendente = situacao['estado'] in ('agora', 'antes', 'intervalo')
+    nome_do_dia = dict(DIAS_SEMANA).get(hoje.weekday(), 'Domingo')
+    return {
+        **situacao,
+        'dia_nome': nome_do_dia,
+        'data_curta': f'{hoje:%d/%m}',
+        'agora_ts': agora_ts,
+        'amanha': itens[0] if domingo and itens else None,
+        'avisos_ligados': pendente,
+        'sino_desligado': bool(atividades and atividades[0].sino_desligado),
+        'lembrete_minutos': MINUTOS_LEMBRETE,
+        'url_rotina': reverse('rotina:minha'),
+        'url_dia': f"{reverse('rotina:minha')}?dia={dia.weekday()}",
+    }

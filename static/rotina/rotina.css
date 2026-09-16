@@ -109,8 +109,25 @@
 .rt-hero-titulo { font-size: 1.3rem; font-weight: 800; line-height: 1.15; letter-spacing: -.01em; }
 .rt-hero-sub { margin-top: .1rem; font-size: .84rem; color: rgba(255, 255, 255, .76); }
 .rt-hero-acoes { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.rt-hero-sem-abas { padding-bottom: 1.1rem; }
+/* "Avisos ligados": o estado dos avisos, sem cara de botão. */
+.rt-hero-selo {
+    display: inline-flex;
+    align-items: center;
+    gap: .5rem;
+    padding: .4rem .75rem;
+    border: 1px solid rgba(255, 255, 255, .18);
+    border-radius: 999px;
+    font-size: .76rem;
+    line-height: 1.3;
+    color: rgba(255, 255, 255, .85);
+    background: rgba(255, 255, 255, .08);
+}
+.rt-hero-selo i { color: #7EE2A8; }
+.rt-hero-selo strong { color: #fff; }
 @media (min-width: 640px) {
     .rt-hero { padding: 1.35rem 1.6rem .65rem; }
+    .rt-hero-sem-abas { padding-bottom: 1.35rem; }
     .rt-hero-titulo { font-size: 1.6rem; }
 }
 
@@ -253,18 +270,30 @@
 /* --------------------------------------------------------------------------
    Calendário: moldura, abas de dia (celular) e painel lateral
    -------------------------------------------------------------------------- */
+/* Três arranjos:
+   - a partir de 1440px: grade da semana + coluna lateral (agora, hoje, legenda);
+   - de 768px a 1439px: tudo empilhado, com a grade na largura toda (as colunas dos
+     dias ficam largas o bastante para ler) e "Hoje" e "Legenda" lado a lado embaixo;
+   - no celular: "Agora", o dia (lista ou grade) e a legenda, um embaixo do outro. */
 .rt-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; }
 .rt-lateral { display: flex; flex-direction: column; gap: 1rem; min-width: 0; }
-@media (min-width: 1100px) {
-    .rt-layout { grid-template-columns: minmax(0, 1fr) 19.5rem; align-items: start; }
-    .rt-lateral { position: sticky; top: 1rem; }
+@media (min-width: 1440px) {
+    .rt-layout { grid-template-columns: minmax(0, 1fr) 20rem; align-items: start; }
+    .rt-lateral { position: sticky; top: calc(var(--rt-topo, 0px) + 1rem); }
 }
-/* No celular o cartão "Agora" vem antes do calendário; o resto, depois. */
-@media (max-width: 1099.98px) {
+@media (max-width: 1439.98px) {
     .rt-layout .rt-lateral { display: contents; }
     .rt-layout .rt-cal-card { order: 2; }
     .rt-layout .rt-lateral > * { order: 3; }
     .rt-layout .rt-lateral > .rt-bloco-agora { order: 1; }
+}
+@media (min-width: 768px) and (max-width: 1439.98px) {
+    .rt-layout { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+    .rt-layout > .rt-cal-card,
+    .rt-layout .rt-lateral > .rt-bloco-agora,
+    .rt-layout:not([data-modo="pessoa"]) .rt-lateral > * { grid-column: 1 / -1; }
+    .rt-layout:not([data-modo="pessoa"]) .rt-legenda-itens { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 1.5rem; }
+    .rt-layout:not([data-modo="pessoa"]) .rt-legenda-item + .rt-legenda-item { border-top: 0; }
 }
 
 .rt-cal-card { min-width: 0; padding: .85rem .75rem .6rem; }
@@ -272,28 +301,68 @@
 .rt-cal-topo { display: flex; align-items: center; justify-content: space-between; gap: .75rem; flex-wrap: wrap; margin-bottom: .75rem; }
 .rt-cal-sobre { font-size: .68rem; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--rt-laranja); }
 .rt-cal-titulo { font-size: 1.05rem; font-weight: 800; line-height: 1.25; color: var(--rt-texto); }
-.rt-cal-botoes { display: flex; gap: .5rem; flex-wrap: wrap; }
+.rt-cal-botoes { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
 .rt-cal-dica { display: flex; flex-wrap: wrap; gap: .35rem 1rem; margin-top: .6rem; font-size: .72rem; color: var(--rt-texto-3); }
 .rt-cal-dica i { margin-right: .3rem; }
+.rt-dica-lista { display: none; }
+.rt-app-dia.rt-vista-lista [data-rt="btn-agora"] { display: none; }
+.rt-app-dia.rt-vista-lista .rt-dica-lista { display: flex; }
+.rt-app-dia.rt-vista-lista .rt-dica-grade { display: none; }
 
-.rt-dias {
-    display: none;
+/* Lista | Grade: só faz sentido com um dia por vez. */
+.rt-vistas { display: none; padding: .15rem; border-radius: .7rem; background: var(--rt-superficie-2); }
+.rt-app-dia .rt-vistas { display: inline-flex; }
+.rt-vista {
+    display: inline-flex;
+    align-items: center;
     gap: .35rem;
-    margin: 0 -.25rem .65rem;
-    padding: .1rem .25rem .2rem;
+    padding: .3rem .6rem;
+    border: 0;
+    border-radius: .55rem;
+    background: transparent;
+    font-family: inherit;
+    font-size: .74rem;
+    font-weight: 700;
+    color: var(--rt-texto-2);
+    cursor: pointer;
+}
+.rt-vista[aria-pressed="true"] { background: var(--rt-superficie); color: var(--rt-texto); box-shadow: 0 1px 3px rgba(16, 24, 40, .12); }
+.rt-vista[aria-pressed="true"] i { color: var(--rt-laranja); }
+.rt-vista:focus-visible { outline: 2px solid var(--rt-laranja); outline-offset: 1px; }
+
+/* Abas dos dias: presas logo abaixo do cabeçalho do portal enquanto a lista rola. */
+.rt-dias-barra { display: none; }
+.rt-app-dia .rt-dias-barra {
+    display: block;
+    position: sticky;
+    top: var(--rt-topo, 0px);
+    z-index: 8;
+    margin: 0 -.75rem .35rem;
+    padding: .45rem .75rem .5rem;
+    background: var(--rt-superficie);
+    box-shadow: 0 1px 0 var(--rt-borda);
+}
+@media (min-width: 640px) {
+    .rt-app-dia .rt-dias-barra { margin: 0 -1.1rem .35rem; padding: .45rem 1.1rem .5rem; }
+}
+.rt-dias {
+    display: flex;
+    gap: .35rem;
+    /* folga embaixo para a sombra da aba ativa não ser cortada pelo overflow */
+    margin: 0 -.2rem -.45rem;
+    padding: .1rem .2rem .55rem;
     overflow-x: auto;
     scrollbar-width: none;
 }
 .rt-dias::-webkit-scrollbar { display: none; }
-.rt-app-dia .rt-dias { display: flex; }
 .rt-dia {
     position: relative;
-    flex: 1 0 3.1rem;
+    flex: 1 0 3rem;
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: .05rem;
-    padding: .45rem .25rem .55rem;
+    padding: .4rem .25rem .5rem;
     border: 1px solid var(--rt-borda);
     border-radius: .85rem;
     background: var(--rt-superficie);
@@ -304,14 +373,16 @@
 }
 .rt-dia-nome { font-size: .66rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
 .rt-dia-num { font-size: 1.05rem; font-weight: 800; line-height: 1.1; color: var(--rt-texto); font-variant-numeric: tabular-nums; }
+.rt-dia-vazio .rt-dia-nome, .rt-dia-vazio .rt-dia-num { opacity: .5; }
 .rt-dia-hoje .rt-dia-nome, .rt-dia-hoje .rt-dia-num { color: var(--rt-laranja); }
 .rt-dia-num:empty { display: none; }
 .rt-dia-hoje::after {
     content: '';
     position: absolute;
-    bottom: .22rem;
-    width: .3rem;
-    height: .3rem;
+    top: .3rem;
+    right: .3rem;
+    width: .38rem;
+    height: .38rem;
     border-radius: 999px;
     background: var(--rt-laranja);
 }
@@ -320,6 +391,91 @@
 .rt-dia-ativo.rt-dia-hoje { background: var(--rt-laranja); border-color: var(--rt-laranja); box-shadow: 0 6px 16px rgba(255, 107, 53, .3); }
 .rt-dia-ativo.rt-dia-hoje .rt-dia-nome, .rt-dia-ativo.rt-dia-hoje .rt-dia-num { color: #fff; }
 .rt-dia-ativo.rt-dia-hoje::after { background: #fff; }
+
+/* O dia escolhido, por extenso, com o resumo. */
+.rt-dia-cabeca { display: none; }
+.rt-app-dia .rt-dia-cabeca { display: block; padding: .35rem .1rem .6rem; }
+.rt-dia-titulo { font-size: 1rem; font-weight: 800; line-height: 1.25; color: var(--rt-texto); }
+.rt-dia-resumo { margin-top: .1rem; font-size: .74rem; color: var(--rt-texto-2); font-variant-numeric: tabular-nums; }
+.rt-app-dia.rt-vista-grade .rt-dia-cabeca { padding-bottom: .35rem; }
+
+/* --------------------------------------------------------------------------
+   Lista do dia (celular)
+   -------------------------------------------------------------------------- */
+.rt-lista-dia { display: none; margin: 0; padding: 0; list-style: none; }
+.rt-app-dia.rt-vista-lista .rt-lista-dia { display: grid; gap: .5rem; min-height: 8rem; }
+.rt-app-dia.rt-vista-lista .rt-cal { display: none; }
+.rt-lista-da-direita { animation: rt-entra-direita .28s ease-out; }
+.rt-lista-da-esquerda { animation: rt-entra-esquerda .28s ease-out; }
+@keyframes rt-entra-direita { from { opacity: .3; transform: translateX(28px); } }
+@keyframes rt-entra-esquerda { from { opacity: .3; transform: translateX(-28px); } }
+
+.rt-li-botao {
+    --rt-li-cor: var(--rt-complementar);
+    --rt-li-fundo: var(--rt-complementar-fundo);
+    --rt-li-tom: var(--rt-complementar-texto);
+    display: grid;
+    grid-template-columns: 3rem minmax(0, 1fr);
+    gap: .55rem;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+.rt-li-botao.rt-cat-resultado { --rt-li-cor: var(--rt-resultado); --rt-li-fundo: var(--rt-resultado-fundo); --rt-li-tom: var(--rt-resultado-texto); }
+.rt-li-botao.rt-cat-equipe { --rt-li-cor: var(--rt-equipe); --rt-li-fundo: var(--rt-equipe-fundo); --rt-li-tom: var(--rt-equipe-texto); }
+.rt-li-horas { display: flex; flex-direction: column; align-items: flex-end; padding-top: .6rem; font-variant-numeric: tabular-nums; }
+.rt-li-inicio { font-size: .86rem; font-weight: 800; line-height: 1.2; color: var(--rt-texto); }
+.rt-li-fim { font-size: .7rem; font-weight: 600; color: var(--rt-texto-3); }
+.rt-li-corpo {
+    display: block;
+    min-width: 0;
+    padding: .6rem .75rem .65rem .9rem;
+    border-radius: .8rem;
+    background: var(--rt-li-fundo);
+    box-shadow: inset 4px 0 0 var(--rt-li-cor);
+    transition: box-shadow .15s, filter .15s;
+}
+.rt-li-botao:hover .rt-li-corpo, .rt-li-botao:active .rt-li-corpo { filter: saturate(1.2) brightness(.985); }
+.rt-li-botao:focus-visible { outline: none; }
+.rt-li-botao:focus-visible .rt-li-corpo { outline: 2px solid var(--rt-laranja); outline-offset: 2px; }
+.rt-li-topo { display: flex; align-items: flex-start; gap: .5rem; }
+.rt-li-titulo { flex: 1; min-width: 0; font-size: .92rem; font-weight: 700; line-height: 1.3; color: var(--rt-texto); overflow-wrap: break-word; }
+.rt-li-icone { flex-shrink: 0; margin-top: .22rem; font-size: .7rem; color: var(--rt-li-tom); opacity: .75; }
+.rt-li-meta { display: flex; align-items: center; flex-wrap: wrap; gap: .3rem .6rem; margin-top: .2rem; font-size: .74rem; color: var(--rt-li-tom); }
+.rt-li-cat { display: inline-flex; align-items: center; gap: .35rem; font-weight: 700; }
+.rt-li-cat::before { content: ''; width: .45rem; height: .45rem; border-radius: 999px; background: var(--rt-li-cor); }
+.rt-li-duracao { color: var(--rt-texto-2); font-variant-numeric: tabular-nums; }
+.rt-li-selo {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    padding: .12rem .5rem;
+    border-radius: 999px;
+    font-size: .68rem;
+    font-weight: 800;
+    white-space: nowrap;
+}
+.rt-li-selo i { font-size: .58rem; }
+.rt-li-selo-agora { background: var(--rt-laranja); color: #fff; }
+.rt-li-selo-proxima { background: var(--rt-superficie); color: #B6461F; box-shadow: inset 0 0 0 1px rgba(255, 107, 53, .45); }
+.rt-li-progresso { display: block; height: .3rem; margin-top: .55rem; overflow: hidden; border-radius: 999px; background: rgba(17, 24, 39, .08); }
+.rt-li-progresso-barra { display: block; height: 100%; border-radius: inherit; background: var(--rt-li-cor); transition: width .6s ease; }
+.rt-li-agora .rt-li-corpo { box-shadow: inset 4px 0 0 var(--rt-li-cor), 0 0 0 2px var(--rt-li-cor), 0 10px 22px rgba(16, 24, 40, .12); }
+.rt-li-agora .rt-li-inicio { color: var(--rt-laranja); }
+.rt-li-feita .rt-li-corpo, .rt-li-feita .rt-li-horas { opacity: .5; }
+.rt-li-destaque .rt-li-corpo { outline: 2px solid var(--rt-laranja); outline-offset: 2px; animation: rt-destaque 1.1s ease-in-out 4; }
+.rt-li-agora-linha { display: flex; align-items: center; gap: .5rem; padding: .1rem 0 .1rem 3.55rem; font-size: .7rem; font-weight: 700; color: var(--rt-laranja); }
+.rt-li-agora-linha::after { content: ''; flex: 1; height: 2px; border-radius: 2px; background: var(--rt-laranja); opacity: .5; }
+.rt-li-vazio { display: flex; flex-direction: column; align-items: center; gap: .6rem; padding: 2rem 1rem; border: 1px dashed var(--rt-borda-forte); border-radius: .9rem; font-size: .86rem; color: var(--rt-texto-2); text-align: center; }
+.rt-li-vazio > i { font-size: 1.4rem; color: var(--rt-texto-3); }
+/* Na lista, "Hoje" repete o que já está na tela. */
+.rt-app-dia.rt-vista-lista .rt-card-hoje { display: none; }
 
 /* --------------------------------------------------------------------------
    FullCalendar com cara de agenda moderna
@@ -369,33 +525,37 @@
 .rt-cal .fc-timegrid-axis { border-color: transparent; }
 .rt-cal .fc-timegrid-col.fc-day-today { background: var(--fc-today-bg-color); }
 .rt-cal .fc-day-disabled { background: var(--rt-superficie-2); }
-.rt-cal .fc-timegrid-now-indicator-line { z-index: 5; border-width: 2px 0 0; border-color: var(--rt-laranja); }
-.rt-cal .fc-timegrid-now-indicator-line::before {
-    content: '';
-    position: absolute;
-    left: -6px;
-    top: -7px;
-    width: 12px;
-    height: 12px;
+/* A linha do "agora" passa por trás das atividades: não risca o texto de quem está
+   acontecendo (essa ganha contorno). A hora exata fica marcada na coluna de horas. */
+.rt-cal .fc-timegrid-now-indicator-container { z-index: 2; }
+.rt-cal .fc-timegrid-now-indicator-line { border-width: 2px 0 0; border-color: var(--rt-laranja); }
+.rt-cal .fc-timegrid-now-indicator-arrow {
+    left: auto;
+    right: 2px;
+    width: 10px;
+    height: 10px;
+    margin-top: -5px;
+    border: 0;
     border-radius: 999px;
     background: var(--rt-laranja);
     box-shadow: 0 0 0 3px rgba(255, 107, 53, .22);
 }
-.rt-cal .fc-timegrid-now-indicator-arrow { display: none; }
 
-/* Blocos de atividade: fundo claro da categoria + filete forte à esquerda. */
+/* Blocos de atividade: fundo claro da categoria + filete forte à esquerda. O tom vai
+   por cima da cor do cartão: no tema escuro o tom é translúcido e, sem isso, a linha do
+   "agora" (que passa por trás) apareceria riscando o texto. */
 .rt-cal .fc-v-event {
     border: 0;
     border-radius: .55rem;
-    background: var(--rt-complementar-fundo);
+    background: linear-gradient(var(--rt-complementar-fundo), var(--rt-complementar-fundo)) var(--rt-superficie);
     box-shadow: inset 3px 0 0 var(--rt-complementar), 0 0 0 1px var(--rt-superficie);
     overflow: hidden;
     transition: filter .15s, box-shadow .15s;
 }
 .rt-cal .fc-v-event .fc-event-main { padding: .14rem .35rem .14rem .55rem; color: var(--rt-complementar-texto); }
-.rt-cal .fc-v-event.rt-cat-resultado { background: var(--rt-resultado-fundo); box-shadow: inset 3px 0 0 var(--rt-resultado), 0 0 0 1px var(--rt-superficie); }
+.rt-cal .fc-v-event.rt-cat-resultado { background: linear-gradient(var(--rt-resultado-fundo), var(--rt-resultado-fundo)) var(--rt-superficie); box-shadow: inset 3px 0 0 var(--rt-resultado), 0 0 0 1px var(--rt-superficie); }
 .rt-cal .fc-v-event.rt-cat-resultado .fc-event-main { color: var(--rt-resultado-texto); }
-.rt-cal .fc-v-event.rt-cat-equipe { background: var(--rt-equipe-fundo); box-shadow: inset 3px 0 0 var(--rt-equipe), 0 0 0 1px var(--rt-superficie); }
+.rt-cal .fc-v-event.rt-cat-equipe { background: linear-gradient(var(--rt-equipe-fundo), var(--rt-equipe-fundo)) var(--rt-superficie); box-shadow: inset 3px 0 0 var(--rt-equipe), 0 0 0 1px var(--rt-superficie); }
 .rt-cal .fc-v-event.rt-cat-equipe .fc-event-main { color: var(--rt-equipe-texto); }
 .rt-cal .fc-v-event.rt-livre { cursor: grab; }
 .rt-cal .fc-v-event.rt-travada { cursor: pointer; }
@@ -412,11 +572,16 @@
     border-radius: 3px;
     background: rgba(0, 0, 0, .22);
 }
+/* A atividade que está acontecendo: contorno na cor dela e um pouco de sombra. */
+.rt-cal .fc-v-event.rt-ev-agora { z-index: 3; }
+.rt-cal .fc-v-event.rt-ev-agora.rt-cat-resultado { box-shadow: inset 3px 0 0 var(--rt-resultado), 0 0 0 2px var(--rt-resultado), 0 6px 16px rgba(16, 24, 40, .16); }
+.rt-cal .fc-v-event.rt-ev-agora.rt-cat-equipe { box-shadow: inset 3px 0 0 var(--rt-equipe), 0 0 0 2px var(--rt-equipe), 0 6px 16px rgba(16, 24, 40, .16); }
+.rt-cal .fc-v-event.rt-ev-agora.rt-cat-complementar { box-shadow: inset 3px 0 0 var(--rt-complementar), 0 0 0 2px var(--rt-complementar), 0 6px 16px rgba(16, 24, 40, .16); }
 .rt-cal .fc-v-event.rt-destaque { z-index: 6; outline: 2px solid var(--rt-laranja); outline-offset: 1px; animation: rt-destaque 1.1s ease-in-out 4; }
 @keyframes rt-destaque { 50% { outline-offset: 5px; outline-color: rgba(255, 107, 53, .35); } }
 .rt-cal .fc-highlight { border-radius: .5rem; }
 
-.rt-ev { display: flex; flex-direction: column; gap: .05rem; height: 100%; min-width: 0; overflow: hidden; font-size: .74rem; line-height: 1.2; }
+.rt-ev { display: flex; flex-direction: column; gap: .05rem; height: 100%; min-width: 0; overflow: hidden; font-size: .76rem; line-height: 1.2; }
 .rt-ev-topo { display: flex; align-items: flex-start; gap: .3rem; min-width: 0; }
 .rt-ev-titulo {
     display: -webkit-box;
@@ -424,10 +589,11 @@
     -webkit-box-orient: vertical;
     overflow: hidden;
     font-weight: 700;
-    /* quebra na palavra só quando ela não cabe, e com hífen: evita "Fechament / o semanal" */
+    /* Com as colunas largas as palavras cabem: quebra entre palavras, e no meio só a que
+       sozinha não couber — sem hifenização automática ("Conferên-cia", "Fecha-mento"). */
     overflow-wrap: break-word;
     word-break: normal;
-    hyphens: auto;
+    hyphens: manual;
 }
 .rt-ev-hora { font-size: .67rem; font-weight: 600; opacity: .82; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .rt-ev-icone { flex-shrink: 0; margin-top: .14rem; font-size: .58rem; opacity: .75; }
@@ -440,6 +606,14 @@
    -------------------------------------------------------------------------- */
 .rt-agora { position: relative; overflow: hidden; padding: 1rem; }
 .rt-agora::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 4px; background: var(--rt-agora-cor, var(--rt-laranja)); }
+.rt-agora-principal { min-width: 0; }
+.rt-agora-trava { margin-left: .15rem; font-size: .66rem; opacity: .7; }
+/* Na largura toda (tablet e desktop até 1440px), "Agora" e "Próxima" ficam lado a lado. */
+@media (min-width: 768px) and (max-width: 1439.98px) {
+    .rt-agora { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); align-items: center; column-gap: 1.5rem; padding: 1.1rem 1.35rem; }
+    .rt-agora-titulo { font-size: 1.25rem; }
+    .rt-agora .rt-proxima { align-self: stretch; align-items: center; margin-top: 0; padding: 0 0 0 1.35rem; border-top: 0; border-left: 1px dashed var(--rt-borda-forte); }
+}
 .rt-agora-rotulo {
     display: inline-flex;
     align-items: center;
@@ -467,10 +641,16 @@
     font-size: .78rem;
     color: var(--rt-texto-2);
 }
-.rt-proxima strong { color: var(--rt-texto); }
+.rt-proxima > i { margin-top: .2rem; color: var(--rt-texto-3); }
+.rt-proxima-texto { display: flex; flex-direction: column; gap: .1rem; min-width: 0; }
+.rt-proxima-rotulo { font-size: .66rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--rt-texto-3); }
+.rt-proxima-em { color: #B6461F; }
+.rt-proxima strong { color: var(--rt-texto); font-size: .86rem; overflow-wrap: break-word; }
 .rt-agora-vazio { margin-top: .35rem; font-size: .86rem; color: var(--rt-texto-2); line-height: 1.45; }
+.rt-hoje-trava { flex-shrink: 0; font-size: .6rem; opacity: .45; }
 
 .rt-hoje-lista { list-style: none; margin: 0; padding: 0 .5rem .6rem; max-height: 22rem; overflow-y: auto; }
+@media (max-width: 1439.98px) { .rt-hoje-lista { max-height: none; } }
 .rt-hoje-item {
     display: flex;
     align-items: center;
@@ -597,6 +777,7 @@ body.rt-modal-aberto { overflow: hidden; }
     color: var(--rt-texto-2);
 }
 .rt-det-status-livre { background: #EEF8F1; color: #1E6B3A; }
+.rt-modal-corpo > .rt-det-status:first-child { margin-top: 0; }
 .rt-det-descricao { margin-top: .9rem; font-size: .88rem; line-height: 1.5; white-space: pre-wrap; word-break: break-word; color: var(--rt-texto); }
 .rt-det-descricao a { font-weight: 600; color: var(--rt-laranja-escuro); text-decoration: underline; text-underline-offset: 2px; }
 .rt-det-descricao-vazia { font-style: italic; color: var(--rt-texto-3); }
@@ -772,7 +953,8 @@ textarea.rt-input { min-height: 4.5rem; resize: vertical; }
 .rt-mini-rotulos { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 3px; margin-top: -.5rem; font-size: .6rem; font-weight: 700; text-align: center; text-transform: uppercase; color: var(--rt-texto-3); }
 
 @media (prefers-reduced-motion: reduce) {
-    .rt-pulso::after, .rt-cal .fc-v-event.rt-destaque { animation: none; }
+    .rt-pulso::after, .rt-cal .fc-v-event.rt-destaque, .rt-li-destaque .rt-li-corpo,
+    .rt-lista-da-direita, .rt-lista-da-esquerda { animation: none; }
     .rt-modelo:hover { transform: none; }
 }
 
@@ -826,4 +1008,12 @@ html.dark .rt-modal-fundo { background: rgba(0, 0, 0, .6); }
 html.dark .rt-switch-trilho { background: #3a4358; }
 html.dark .rt-dia-ativo:not(.rt-dia-hoje) { background: #3a4358; border-color: #3a4358; }
 html.dark .rt-cal .fc-v-event .fc-event-resizer-end::after { background: rgba(255, 255, 255, .3); }
+html.dark .rt-vistas { background: #151a26; }
+html.dark .rt-vista[aria-pressed="true"] { background: #2b3346; box-shadow: none; }
+html.dark .rt-app-dia .rt-dias-barra { box-shadow: 0 1px 0 var(--rt-borda), 0 6px 12px -8px rgba(0, 0, 0, .6); }
+html.dark .rt-li-progresso { background: rgba(255, 255, 255, .1); }
+html.dark .rt-li-agora .rt-li-corpo { box-shadow: inset 4px 0 0 var(--rt-li-cor), 0 0 0 2px var(--rt-li-cor), 0 10px 22px rgba(0, 0, 0, .45); }
+html.dark .rt-li-selo-proxima { background: transparent; color: #FFB38F; box-shadow: inset 0 0 0 1px rgba(255, 107, 53, .5); }
+html.dark .rt-proxima-em { color: #FFB38F; }
+html.dark .rt-cal .fc-v-event.rt-ev-agora { filter: brightness(1.12); }
 html.dark .rt-alerta { background: rgba(251, 146, 60, .12); border-color: rgba(251, 146, 60, .35); color: #FDBA74; }

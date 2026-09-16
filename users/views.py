@@ -968,7 +968,9 @@ def create_user_view(request):
         pdv = request.POST.get('pdv', '')
         neighborhood = request.POST.get('neighborhood', '')
         city = request.POST.get('city', '')
-        cep = request.POST.get('cep', '').strip()
+        # CEP (normalizado), rua, número, complemento e UF.
+        endereco, endereco_error = _read_address(request.POST)
+        cep = endereco.get('cep', '')
         rg = request.POST.get('rg', '').strip()
         contract_type = request.POST.get('contract_type', '').strip()
         branch_cnpj = request.POST.get('branch_cnpj', '').strip()
@@ -980,10 +982,15 @@ def create_user_view(request):
             'hierarchy_choices': request.user.assignable_hierarchy_choices(),
             'user': request.user,
             'job_title_choices': _job_title_choices(),
+            'state_choices': User.STATE_CHOICES,
         }
 
         if pix_error:
             messages.error(request, pix_error)
+            return render(request, 'admin/create_user.html', context)
+
+        if endereco_error:
+            messages.error(request, endereco_error)
             return render(request, 'admin/create_user.html', context)
 
         # CEP e RG são obrigatórios no cadastro.
@@ -1046,12 +1053,12 @@ def create_user_view(request):
                 pdv=pdv,
                 neighborhood=neighborhood,
                 city=city,
-                cep=cep,
                 rg=rg,
                 contract_type=contract_type,
                 branch_cnpj=branch_cnpj,
                 salary=salary,
                 pix_key=pix_key,
+                **endereco,
             )
             
             # Anexo de afastamento (somente quando a situação é "Afastado")
@@ -1086,6 +1093,7 @@ def create_user_view(request):
         'hierarchy_choices': request.user.assignable_hierarchy_choices(),
         'user': request.user,
         'job_title_choices': _job_title_choices(),
+        'state_choices': User.STATE_CHOICES,
     }
     return render(request, 'admin/create_user.html', context)
 
@@ -1246,6 +1254,15 @@ def edit_user_view(request, user_id):
                     return redirect('edit_user', user_id=user_to_edit.id)
                 user_to_edit.pix_key = pix_key
 
+                # Endereço: CEP inválido volta para a tela sem salvar nada, como
+                # a chave PIX; campo que não veio no POST fica como está.
+                endereco, endereco_error = _read_address(request.POST)
+                if endereco_error:
+                    messages.error(request, endereco_error)
+                    return redirect('edit_user', user_id=user_to_edit.id)
+                for campo, valor in endereco.items():
+                    setattr(user_to_edit, campo, valor)
+
                 user_to_edit.save()
                 
                 # Atualizar setores múltiplos
@@ -1306,6 +1323,7 @@ def edit_user_view(request, user_id):
         'hierarchy_choices': request.user.assignable_hierarchy_choices(),
         'user': request.user,
         'job_title_choices': _job_title_choices(user_to_edit.job_title),
+        'state_choices': User.STATE_CHOICES,
         'historico_alteracoes': historico,
         'total_alteracoes': UserChangeLog.objects.filter(target=user_to_edit).count(),
         'catalogo_acessos': catalogo_por_grupo(),
@@ -1702,6 +1720,50 @@ def _parse_pix(valor):
         return '', ('Chave PIX inválida. Use CPF, CNPJ, celular com DDD, '
                     'e-mail ou a chave aleatória do banco.')
     return chave, None
+
+
+# Seção "Endereço" das telas de criar/editar usuário. O nome no formulário é o
+# nome do campo no modelo; Bairro e Cidade já eram lidos à parte pelas views.
+CAMPOS_ENDERECO = ('cep', 'address', 'address_number', 'address_complement', 'state')
+
+
+def _parse_cep(valor):
+    """(cep, erro). Aceita com ou sem máscara e devolve no formato 00000-000.
+
+    Em branco é aceito — quem exige o CEP (a criação) confere depois.
+    """
+    import re
+
+    texto = (valor or '').strip()
+    if not texto:
+        return '', None
+    digitos = re.sub(r'[\s.\-]', '', texto)
+    if not re.fullmatch(r'[0-9]{8}', digitos):
+        return '', f'CEP inválido: "{texto[:20]}". Informe os 8 dígitos (ex.: 29100-000).'
+    return f'{digitos[:5]}-{digitos[5:]}', None
+
+
+def _read_address(data):
+    """(valores, erro) da seção Endereço, só com os campos que vieram no POST.
+
+    Campo ausente fica de fora de propósito: um envio sem a seção (tela aberta
+    antes de ela existir, script) não apaga o endereço que o colaborador
+    informou no pré-cadastro.
+    """
+    ufs = {uf for uf, _rotulo in User.STATE_CHOICES}
+    valores = {}
+    for campo in CAMPOS_ENDERECO:
+        if campo not in data:
+            continue
+        valor = (data.get(campo) or '').strip()
+        if campo == 'cep':
+            valor, erro = _parse_cep(valor)
+            if erro:
+                return {}, erro
+        elif campo == 'state':
+            valor = valor.upper() if valor.upper() in ufs else ''
+        valores[campo] = valor[:User._meta.get_field(campo).max_length]
+    return valores, None
 
 
 def _parse_salary(valor):

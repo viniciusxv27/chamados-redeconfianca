@@ -85,6 +85,7 @@ INSTALLED_APPS = [
     'assistente',  # Assistente Claude (chave por usuário; acesso aos dados do próprio usuário)
     'renova',  # Vini Renova: avaliação de aparelho usado (checklist, chamado e etiqueta)
     'rotina',  # Rotina Gerencial: a semana do gerente, com horários e avisos
+    'apresentacoes',  # Assistente de Apresentações: slides com IA na identidade da rede
     # 'webpush',  # Django WebPush (temporariamente removido)
 ]
 
@@ -111,6 +112,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'apresentacoes.middleware.CapturaDeTelaMiddleware',  # iframe da captura de telas (só com ?captura_apresentacao=1)
     'core.middleware.LoggingMiddleware',
     'users.session_tracking.ActiveSessionMiddleware',
     'users.pre_registration_middleware.PreRegistrationAdjustmentMiddleware',
@@ -147,6 +149,7 @@ TEMPLATES = [
                 'reunioes.context_processors.reunioes_lembrete',
                 'renova.context_processors.renova_menu',
                 'rotina.context_processors.rotina_menu',
+                'apresentacoes.context_processors.apresentacoes_menu',
                 'users.context_processors_commission.comissionamento_menu',
             ],
         },

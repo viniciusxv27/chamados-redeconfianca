@@ -10,7 +10,7 @@
 
 {% block content %}
 <div class="rt-pagina">
-    <header class="rt-hero">
+    <header class="rt-hero{% if not e_admin %} rt-hero-sem-abas{% endif %}">
         <div class="rt-hero-brilho" aria-hidden="true"></div>
         <div class="rt-hero-linha">
             <div class="rt-hero-marca">
@@ -24,12 +24,13 @@
             <div class="rt-hero-acoes">{% block rt_acoes %}{% endblock %}</div>
         </div>
 
+        {# Só a gestão tem mais de uma seção; para quem só vê a própria rotina, uma aba sozinha é ruído. #}
+        {% if e_admin %}
         <nav class="rt-abas" aria-label="Seções da rotina gerencial">
             <a href="{% url 'rotina:minha' %}" class="rt-aba{% if aba == 'minha' %} rt-aba-ativa{% endif %}"
                {% if aba == 'minha' %}aria-current="page"{% endif %}>
                 <i class="fas fa-calendar-week"></i><span>Minha rotina</span>
             </a>
-            {% if e_admin %}
             <span class="rt-abas-divisor" aria-hidden="true"></span>
             <a href="{% url 'rotina:gestao' %}" class="rt-aba{% if aba == 'gestao' %} rt-aba-ativa{% endif %}"
                {% if aba == 'gestao' %}aria-current="page"{% endif %}>
@@ -39,8 +40,8 @@
                {% if aba == 'modelos' %}aria-current="page"{% endif %}>
                 <i class="fas fa-layer-group"></i><span>Modelos</span>
             </a>
-            {% endif %}
         </nav>
+        {% endif %}
     </header>
 
     {% block rt_conteudo %}{% endblock %}

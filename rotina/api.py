@@ -14,10 +14,10 @@ import logging
 from functools import wraps
 
 from django.db import transaction
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 
 from . import servicos
-from .models import AtividadeModelo, AtividadeRotina, ModeloRotina, RotinaGerencial
+from .models import AtividadeModelo, AtividadeRotina, ModeloRotina, RotinaGerencial, TipoAviso
 from .permissoes import e_superadmin
 from .servicos import ErroValidacao, NaoEncontrado, SemPermissao
 
@@ -262,7 +262,7 @@ def modelo_excluir(request, atividade_id):
 
 
 # ---------------------------------------------------------------------------
-# Notificador de início de atividade
+# Notificador (lembrete e início) e cartão da home
 # ---------------------------------------------------------------------------
 @api('GET')
 def hoje(request):
@@ -270,13 +270,38 @@ def hoje(request):
     return JsonResponse(servicos.atividades_de_hoje(request.user))
 
 
-@api('POST')
-def aviso(request, atividade_id):
-    """Registra que o aviso de início foi dado; o sino recebe na primeira vez (`novo`)."""
+def _registrar_aviso(request, atividade_id, tipo):
     atividade = (AtividadeRotina.objects.select_related('rotina')
                  .filter(pk=atividade_id, rotina__user=request.user).first())
     if atividade is None:
         raise NaoEncontrado('Atividade não encontrada.')
     servicos.conferir_rotina_ativa(atividade.rotina)
-    _, novo = servicos.registrar_aviso(request.user, atividade)
+    _, novo = servicos.registrar_aviso(request.user, atividade, tipo=tipo)
     return JsonResponse({'ok': True, 'novo': novo, 'url': servicos.url_da_atividade(atividade)})
+
+
+@api('POST')
+def aviso(request, atividade_id):
+    """Registra que o aviso de início foi dado; o sino recebe na primeira vez (`novo`)."""
+    return _registrar_aviso(request, atividade_id, TipoAviso.INICIO)
+
+
+@api('POST')
+def lembrete(request, atividade_id):
+    """Registra o lembrete de minutos antes; o sino recebe na primeira vez (`novo`)."""
+    return _registrar_aviso(request, atividade_id, TipoAviso.LEMBRETE)
+
+
+@api('GET')
+def cartao_home(request):
+    """O cartão da home já renderizado (HTML), para ele se atualizar quando o dia muda de atividade.
+
+    Responde 204 quando o cartão não vale mais para a pessoa (rotina pausada,
+    removida ou sem atividades): a home tira o cartão.
+    """
+    from .context_processors import rotina_liberada
+    from .home import html_do_cartao
+
+    if not rotina_liberada(request.user):
+        return HttpResponse(status=204)
+    return HttpResponse(html_do_cartao(request.user), content_type='text/html; charset=utf-8')

@@ -1,0 +1,152 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{% block ap_pagina %}Apresentações{% endblock %} · Assistente de Apresentações{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Identidade do módulo: o roxo escuro com neon magenta do template da Rede Confiança. */
+    .ap { --ap-fundo: #0B0612; --ap-roxo: #2A0F3F; --ap-magenta: #FF48CE; --ap-amarelo: #FEDB63;
+          --ap-lilas: #F7EEFB; --ap-borda: #ECE3F3; --ap-texto: #231331; --ap-suave: #6B5A7B; }
+    .ap-hero {
+        position: relative; overflow: hidden; border-radius: 1.25rem; color: #fff; padding: 1.4rem 1.5rem;
+        background:
+            radial-gradient(520px 260px at 92% 8%, rgba(255, 72, 206, .42), transparent 62%),
+            radial-gradient(460px 240px at 6% 110%, rgba(139, 61, 255, .35), transparent 60%),
+            linear-gradient(120deg, #0B0612 0%, #1E0A2E 55%, #34114D 100%);
+        box-shadow: 0 18px 38px -20px rgba(43, 8, 64, .85);
+    }
+    .ap-hero::after { content: ''; position: absolute; right: -40px; top: -60px; width: 240px; height: 240px;
+                      clip-path: polygon(25% 5%, 75% 5%, 100% 50%, 75% 95%, 25% 95%, 0 50%);
+                      border: 2px solid rgba(255, 72, 206, .35); background: rgba(255, 72, 206, .06); }
+    .ap-rotulo { font-size: .66rem; letter-spacing: .28em; text-transform: uppercase; color: #FECEFB; font-weight: 700; }
+    .ap-fio { width: 4.5rem; height: 3px; border-radius: 3px; background: var(--ap-magenta); margin: .45rem 0 .7rem;
+              box-shadow: 0 0 12px rgba(255, 72, 206, .8); }
+    .ap-titulo { font-size: clamp(1.45rem, 3vw, 2.2rem); font-weight: 900; line-height: 1.02; letter-spacing: -.02em; }
+    .ap-titulo span { color: var(--ap-amarelo); }
+    .ap-sub { color: #E6D5F0; font-size: .9rem; margin-top: .55rem; max-width: 40rem; }
+    .ap-botao { display: inline-flex; align-items: center; gap: .5rem; padding: .62rem 1.05rem; border-radius: 9999px;
+                font-weight: 700; font-size: .85rem; transition: transform .15s, box-shadow .15s, background-color .15s; }
+    .ap-botao:hover { transform: translateY(-1px); }
+    .ap-botao-principal { background: var(--ap-magenta); color: #fff; box-shadow: 0 8px 22px -10px rgba(255, 72, 206, .9); }
+    .ap-botao-principal:hover { background: #F23BC0; }
+    .ap-botao-contorno { border: 2px solid rgba(255, 72, 206, .8); color: #fff; }
+    .ap-botao-contorno:hover { background: rgba(255, 72, 206, .15); }
+    .ap-botao-claro { background: #fff; color: var(--ap-texto); border: 1px solid var(--ap-borda); }
+    .ap-botao-claro:hover { background: var(--ap-lilas); }
+    .ap-abas { display: flex; gap: .4rem; overflow-x: auto; margin: .9rem 0 1.2rem; padding-bottom: .2rem;
+               -webkit-overflow-scrolling: touch; }
+    .ap-aba { white-space: nowrap; display: inline-flex; align-items: center; gap: .45rem; padding: .5rem .9rem;
+              border-radius: 9999px; font-size: .8rem; font-weight: 600; color: #5E2A7E; background: #fff;
+              border: 1px solid var(--ap-borda); transition: background-color .15s, color .15s; }
+    .ap-aba:hover { background: var(--ap-lilas); }
+    .ap-aba.ativa { color: #fff; background: #1E0A2E; border-color: #1E0A2E; box-shadow: 0 6px 16px -10px rgba(30, 10, 46, .9); }
+    .ap-aba .ap-contador { min-width: 1.2rem; height: 1.2rem; padding: 0 .35rem; border-radius: 9999px; font-size: .65rem;
+                           display: inline-flex; align-items: center; justify-content: center; background: var(--ap-magenta); color: #fff; }
+    .ap-cartao { background: #fff; border: 1px solid var(--ap-borda); border-radius: 1rem; }
+    .ap-poster { position: relative; aspect-ratio: 16 / 9; border-radius: .8rem; overflow: hidden; background-size: cover;
+                 background-position: center; display: flex; align-items: flex-end; }
+    .ap-poster::before { content: ''; position: absolute; inset: 0;
+                         background: linear-gradient(180deg, rgba(11, 6, 18, 0) 35%, rgba(11, 6, 18, .78) 100%); }
+    .ap-poster-titulo { position: relative; color: #fff; font-weight: 900; line-height: 1.05; padding: .8rem .9rem;
+                        font-size: 1.05rem; letter-spacing: -.01em; text-shadow: 0 2px 12px rgba(0, 0, 0, .6);
+                        display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+    .ap-selo { display: inline-flex; align-items: center; gap: .3rem; padding: .15rem .5rem; border-radius: 9999px;
+               font-size: .66rem; font-weight: 700; }
+    .ap-selo-PRONTA { background: #E7F8EE; color: #147A43; }
+    .ap-selo-GERANDO { background: #FFF1D6; color: #9A5B00; }
+    .ap-selo-PERGUNTAS { background: #FFE7F7; color: #B0187E; }
+    .ap-selo-RASCUNHO { background: #EEF0F4; color: #4B5563; }
+    .ap-selo-ERRO { background: #FDE8E8; color: #B42318; }
+    .ap-campo { width: 100%; border: 1px solid #DCCFE6; border-radius: .7rem; padding: .6rem .8rem; font-size: .9rem;
+                background: #fff; color: var(--ap-texto); }
+    .ap-campo:focus { outline: none; border-color: var(--ap-magenta); box-shadow: 0 0 0 3px rgba(255, 72, 206, .18); }
+    .ap-rotulo-campo { display: block; font-size: .8rem; font-weight: 700; color: var(--ap-texto); margin-bottom: .35rem; }
+    .ap-ajuda { font-size: .75rem; color: var(--ap-suave); margin-top: .3rem; }
+    .ap-chip { display: inline-flex; align-items: center; gap: .35rem; padding: .4rem .75rem; border-radius: 9999px;
+               border: 1px solid #DCCFE6; font-size: .8rem; font-weight: 600; color: #5E2A7E; background: #fff; cursor: pointer;
+               user-select: none; }
+    .ap-chip:has(input:checked) { background: #1E0A2E; color: #fff; border-color: #1E0A2E; }
+    .ap-chip input { position: absolute; opacity: 0; pointer-events: none; }
+    .ap-interruptor { display: flex; gap: .75rem; align-items: flex-start; padding: .8rem .9rem; border-radius: .8rem;
+                      border: 1px solid var(--ap-borda); background: #fff; cursor: pointer; }
+    .ap-interruptor input { width: 1.1rem; height: 1.1rem; margin-top: .15rem; accent-color: var(--ap-magenta); flex-shrink: 0; }
+    .ap-fontes-lista { position: absolute; z-index: 40; left: 0; right: 0; top: calc(100% + .3rem); max-height: 18rem;
+                       overflow-y: auto; background: #fff; border: 1px solid #DCCFE6; border-radius: .8rem;
+                       box-shadow: 0 18px 40px -18px rgba(30, 10, 46, .5); }
+    .ap-fonte-opcao { display: flex; justify-content: space-between; align-items: center; gap: .5rem; width: 100%;
+                      text-align: left; padding: .55rem .8rem; font-size: 1.05rem; color: var(--ap-texto); }
+    .ap-fonte-opcao:hover, .ap-fonte-opcao[aria-selected="true"] { background: var(--ap-lilas); }
+    .ap-fonte-opcao small { font-family: Montserrat, sans-serif; font-size: .65rem; color: var(--ap-suave);
+                            text-transform: uppercase; letter-spacing: .08em; }
+    .ap-soltar { border: 2px dashed #D7C2E6; border-radius: 1rem; padding: 1.2rem; text-align: center; background: #FCF8FE;
+                 transition: border-color .15s, background-color .15s; cursor: pointer; }
+    .ap-soltar.arrastando { border-color: var(--ap-magenta); background: #FFF0FA; }
+    .ap-template { position: relative; display: block; border-radius: 1rem; border: 2px solid transparent; cursor: pointer;
+                   background: #fff; box-shadow: 0 0 0 1px var(--ap-borda); transition: box-shadow .15s, border-color .15s; }
+    .ap-template:has(input:checked) { border-color: var(--ap-magenta); box-shadow: 0 10px 26px -14px rgba(255, 72, 206, .8); }
+    .ap-template input { position: absolute; opacity: 0; }
+    .ap-mini { aspect-ratio: 16 / 9; border-radius: .45rem; background-size: cover; background-position: center; background-color: #1C1026; }
+    .ap-modal-fundo { position: fixed; inset: 0; z-index: 60; background: rgba(11, 6, 18, .65); display: none;
+                      align-items: flex-start; justify-content: center; padding: 1rem; overflow-y: auto; }
+    .ap-modal-fundo.aberto { display: flex; }
+    .ap-modal { width: 100%; max-width: 40rem; margin: 2rem 0; background: #fff; border-radius: 1.2rem; overflow: hidden;
+                box-shadow: 0 30px 60px -30px rgba(0, 0, 0, .7); }
+    .ap-progresso { height: .5rem; border-radius: 9999px; background: #F1E7F8; overflow: hidden; }
+    .ap-progresso > div { height: 100%; background: linear-gradient(90deg, #8B3DFF, #FF48CE); border-radius: 9999px;
+                          transition: width .3s; }
+
+    /* Tema escuro */
+    html.dark .ap { --ap-borda: #3A2A48; --ap-texto: #F3E9FA; --ap-suave: #B9A6C9; --ap-lilas: #2A1B38; }
+    html.dark .ap-aba { background: var(--tema-superficie, #1F1728); color: #E6D5F0; border-color: var(--ap-borda); }
+    html.dark .ap-aba:hover { background: #2A1B38; }
+    html.dark .ap-aba.ativa { background: var(--ap-magenta); border-color: var(--ap-magenta); color: #fff; }
+    html.dark .ap-cartao, html.dark .ap-interruptor, html.dark .ap-template, html.dark .ap-modal,
+    html.dark .ap-fontes-lista, html.dark .ap-chip, html.dark .ap-botao-claro { background: var(--tema-superficie, #1F1728); color: var(--ap-texto); }
+    html.dark .ap-campo { background: var(--tema-superficie-2, #261C31); color: var(--ap-texto); border-color: var(--ap-borda); }
+    html.dark .ap-soltar { background: #1A1222; border-color: #4A3659; }
+    html.dark .ap-soltar.arrastando { background: #2B1233; }
+    html.dark .ap-chip { color: #E6D5F0; border-color: var(--ap-borda); }
+    html.dark .ap-chip:has(input:checked) { background: var(--ap-magenta); border-color: var(--ap-magenta); }
+    html.dark .ap-progresso { background: #2A1B38; }
+    html.dark .ap-selo-PRONTA { background: rgba(34, 197, 94, .15); color: #6EE7A1; }
+    html.dark .ap-selo-GERANDO { background: rgba(245, 158, 11, .15); color: #FCD27A; }
+    html.dark .ap-selo-PERGUNTAS { background: rgba(255, 72, 206, .15); color: #FF9BE3; }
+    html.dark .ap-selo-RASCUNHO { background: rgba(148, 163, 184, .15); color: #CBD5E1; }
+    html.dark .ap-selo-ERRO { background: rgba(239, 68, 68, .15); color: #FCA5A5; }
+</style>
+{% block ap_css %}{% endblock %}
+{% endblock %}
+
+{% block content %}
+<div class="ap max-w-7xl mx-auto">
+    <div class="ap-hero">
+        <div class="relative z-10 flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
+            <div>
+                <div class="ap-rotulo">Assistente de Apresentações</div>
+                <div class="ap-fio"></div>
+                <h1 class="ap-titulo">{% block ap_titulo %}slides prontos<br><span>na nossa identidade</span>{% endblock %}</h1>
+                <p class="ap-sub">{% block ap_sub %}Descreva o que precisa, anexe prints do material e a IA monta os slides no padrão Rede Confiança — depois é só ajustar, apresentar e exportar.{% endblock %}</p>
+            </div>
+            <div class="flex flex-wrap gap-2">
+                {% block ap_acoes %}
+                <a href="{% url 'apresentacoes:nova' %}" class="ap-botao ap-botao-principal"><i class="fas fa-wand-magic-sparkles"></i>Nova apresentação</a>
+                <a href="{% url 'apresentacoes:modulos' %}" class="ap-botao ap-botao-contorno"><i class="fas fa-cubes"></i>Apresentar um módulo</a>
+                {% endblock %}
+            </div>
+        </div>
+    </div>
+
+    <nav class="ap-abas" aria-label="Seções do Assistente de Apresentações">
+        <a href="{% url 'apresentacoes:inicio' %}" class="ap-aba {% if ap_aba == 'inicio' %}ativa{% endif %}"><i class="fas fa-layer-group"></i>{% if ap_superadmin %}Todas as apresentações{% else %}Minhas apresentações{% endif %}</a>
+        <a href="{% url 'apresentacoes:nova' %}" class="ap-aba {% if ap_aba == 'nova' %}ativa{% endif %}"><i class="fas fa-wand-magic-sparkles"></i>Nova</a>
+        <a href="{% url 'apresentacoes:modulos' %}" class="ap-aba {% if ap_aba == 'modulos' %}ativa{% endif %}"><i class="fas fa-cubes"></i>Módulos do portal{% if sem_apresentacao %}<span class="ap-contador" title="Módulos sem apresentação">{{ sem_apresentacao }}</span>{% endif %}</a>
+        <a href="{% url 'apresentacoes:templates' %}" class="ap-aba {% if ap_aba == 'templates' %}ativa{% endif %}"><i class="fas fa-palette"></i>Templates</a>
+        {% if ap_superadmin %}
+        <a href="{% url 'apresentacoes:configuracoes' %}" class="ap-aba {% if ap_aba == 'configuracoes' %}ativa{% endif %}"><i class="fas fa-user-shield"></i>Quem usa e configurações</a>
+        {% endif %}
+    </nav>
+
+    {% block ap_conteudo %}{% endblock %}
+</div>
+{% endblock %}

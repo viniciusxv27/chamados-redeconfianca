@@ -11,6 +11,13 @@ O que se confere:
 - `api/hoje/` devolve as atividades do dia e o relógio do servidor;
 - `api/avisos/<id>/` é idempotente e põe exatamente uma notificação no sino,
   com o link certo e SEM web push;
+- `api/lembretes/<id>/` (minutos antes) segue as mesmas regras, na janela dele,
+  e convive com o aviso de início (um de cada tipo por atividade e dia);
+- o cartão da home: só para quem tem rotina, uma consulta por renderização,
+  cada estado do dia (agora, antes, intervalo, concluída, domingo, vazio),
+  avisos ligados/sino desligado, falha silenciosa com log e o `api/hoje/cartao/`;
+- a tela da pessoa traz os ganchos do layout novo (lista do dia no celular,
+  abas presas, selo de avisos) e os JS passam no `node --check`;
 - o parcial do notificador renderiza e o context processor liga os menus certos.
 
 Nada é gravado: roda dentro de uma transação desfeita no fim. O relógio da
@@ -46,15 +53,18 @@ from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from django.template.loader import render_to_string
 from django.test import Client, RequestFactory
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from notifications.models import NotificationPreference, UserNotification
 from rotina import servicos
 from rotina.context_processors import rotina_menu
-from rotina.models import AtividadeModelo, AtividadeRotina, AvisoRotina, ModeloRotina, RotinaGerencial
+from rotina.models import (
+    AtividadeModelo, AtividadeRotina, AvisoRotina, ModeloRotina, RotinaGerencial, TipoAviso,
+)
 from users.models import Sector
 
 User = get_user_model()
@@ -123,6 +133,24 @@ def contigua(atividades, inicio, fim):
 
 def url_atividade(atividade, excluir=False):
     return f'/rotina-gerencial/api/rotina/atividades/{atividade.id}/' + ('excluir/' if excluir else '')
+
+
+def quando(dia, hora, minuto, segundo=0):
+    """Instante no fuso do portal, em setembro de 2026 (14 = segunda … 20 = domingo)."""
+    return timezone.make_aware(datetime(2026, 9, dia, hora, minuto, segundo), FUSO)
+
+
+def js_valido(codigo, rotulo):
+    """`node --check` num trecho de JS; sem node, só avisa."""
+    node = shutil.which('node')
+    if not node:
+        print(f'  (node não encontrado: sintaxe de {rotulo} não conferida)')
+        return
+    with tempfile.NamedTemporaryFile('w', suffix='.js', delete=False, encoding='utf-8') as arquivo:
+        arquivo.write(codigo)
+    verificacao = subprocess.run([node, '--check', arquivo.name], capture_output=True, text=True, timeout=30)
+    os.unlink(arquivo.name)
+    t(f'o JS de {rotulo} é válido (node --check)', verificacao.returncode == 0, verificacao.stderr[-400:])
 
 
 marcador = transaction.atomic()
@@ -267,6 +295,24 @@ try:
     livre_json = next(a for a in dados['atividades'] if not a['bloqueada'])
     t('travada chega sem poder mover; livre chega podendo mover (mas não renomear)',
       travada_json['pode_mover'] is False and livre_json['pode_mover'] is True and livre_json['pode_editar'] is False)
+    t('layout do dia no celular: abas presas, cabeçalho do dia, lista e a troca lista/grade',
+      all(gancho in html for gancho in ('data-rt="dias-barra"', 'data-rt="dia-titulo"', 'data-rt="lista"',
+                                        'data-rt-vista="lista"', 'data-rt-vista="grade"')))
+    t('cartão "Agora" já vem com a área principal (a próxima fica ao lado na tela larga)',
+      'class="rt-agora-principal"' in html and 'rt-card-hoje' in html and 'rt-legenda-itens' in html)
+    t('o topo mostra que os avisos estão ligados (5 min antes e no início)',
+      'rt-hero-selo' in html and 'Avisos ligados' in html and '5 min antes e no início' in html)
+    t('quem só vê a própria rotina não ganha a barra de abas (uma aba sozinha é ruído)',
+      'class="rt-abas"' not in html and 'rt-hero-sem-abas' in html)
+    html_admin_minha = c_admin.get('/rotina-gerencial/').content.decode()
+    t('a gestão continua com as abas Minha rotina / Pessoas / Modelos',
+      'class="rt-abas"' in html_admin_minha and 'rt-hero-sem-abas' not in html_admin_minha)
+    with open(os.path.join(settings.BASE_DIR, 'static', 'rotina', 'rotina-calendario.js'), encoding='utf-8') as arquivo:
+        calendario_js = arquivo.read()
+    t('o calendário decide celular pelo matchMedia (o mesmo corte do CSS) e lembra lista/grade',
+      "window.matchMedia('(max-width: '" in calendario_js and "'rotina-vista-dia'" in calendario_js
+      and 'touchend' in calendario_js)
+    js_valido(calendario_js, 'static/rotina/rotina-calendario.js')
 
     destacada = rotina_gerente.atividades.get(dia_semana=2, inicio='12:00')
     cfg = json_script(c_gerente.get('/rotina-gerencial/', {'dia': 2, 'atividade': destacada.id}).content.decode(),
@@ -588,6 +634,83 @@ try:
     chamados = {nome: duble.call_count for nome, duble in dubles.items() if duble.call_count}
     t('nenhuma função de envio (web push/OneSignal) foi chamada', not chamados, chamados)
 
+    print('\n== LEMBRETE ANTES DO INÍCIO: SINO UMA VEZ, SEM PUSH ==')
+    # `futura` é a Parcial Gerentes de quarta, 15:00–15:30; ninguém avisou nada dela ainda.
+    url_lembrete = f'/rotina-gerencial/api/lembretes/{futura.id}/'
+    relogio.return_value = quando(16, 14, 56)
+    sino_antes = UserNotification.objects.filter(user=gerente).count()
+    ultimo_do_sino = UserNotification.objects.filter(user=gerente).order_by('-id').values_list('id', flat=True).first() or 0
+    r1 = c_gerente.post(url_lembrete)
+    r2 = c_gerente.post(url_lembrete)
+    t('4 min antes: lembrete registrado (novo)', r1.status_code == 200 and js(r1).get('novo') is True,
+      (r1.status_code, js(r1)))
+    t('de novo, e de outra aba: não é novo',
+      js(r2).get('novo') is False and js(cliente(gerente).post(url_lembrete)).get('novo') is False, js(r2))
+    t('um registro de lembrete e nenhum de início para a atividade no dia',
+      AvisoRotina.objects.filter(atividade=futura, data='2026-09-16', tipo=TipoAviso.LEMBRETE).count() == 1
+      and not AvisoRotina.objects.filter(atividade=futura, data='2026-09-16', tipo=TipoAviso.INICIO).exists())
+    novas = list(UserNotification.objects.filter(user=gerente, id__gt=ultimo_do_sino).select_related('notification'))
+    lembrete_sino = novas[0].notification if len(novas) == 1 else None
+    t('exatamente uma notificação nova no sino', len(novas) == 1, len(novas))
+    t('"Em 4 min: Parcial Gerentes", com o horário, o link da atividade e marcada como lembrete',
+      lembrete_sino is not None and lembrete_sino.title == 'Em 4 min: Parcial Gerentes'
+      and 'Começa às 15:00 e vai até 15:30' in lembrete_sino.message
+      and lembrete_sino.action_url == f'/rotina-gerencial/?dia=2&atividade={futura.id}'
+      and (lembrete_sino.extra_data or {}).get('tipo') == 'lembrete',
+      lembrete_sino and (lembrete_sino.title, lembrete_sino.message, lembrete_sino.extra_data))
+    d = js(c_gerente.get('/rotina-gerencial/api/hoje/'))
+    item = next((a for a in d.get('atividades', []) if a['id'] == futura.id), {})
+    t('api/hoje/ diz quantos minutos antes e marca lembrada, mas não avisada',
+      d.get('lembrete_minutos') == servicos.MINUTOS_LEMBRETE == 5
+      and item.get('lembrada') is True and item.get('avisada') is False, (d.get('lembrete_minutos'), item))
+    relogio.return_value = quando(16, 15, 0, 20)
+    r = c_gerente.post(f'/rotina-gerencial/api/avisos/{futura.id}/')
+    t('na hora, o aviso de início entra também (novo) — um de cada tipo',
+      js(r).get('novo') is True
+      and AvisoRotina.objects.filter(atividade=futura, data='2026-09-16').count() == 2
+      and UserNotification.objects.filter(user=gerente).count() == sino_antes + 2, (r.status_code, js(r)))
+    relogio.return_value = quando(16, 14, 50)
+    r = c_gerente.post(url_lembrete)
+    t('cedo demais (10 min antes): 400', r.status_code == 400
+      and js(r).get('erro') == 'Ainda é cedo para o lembrete desta atividade.', (r.status_code, js(r)))
+    relogio.return_value = quando(16, 15, 2)
+    r = c_gerente.post(url_lembrete)
+    t('depois de começar: 400', r.status_code == 400 and js(r).get('erro') == 'Esta atividade já começou.',
+      (r.status_code, js(r)))
+
+    def aceita_lembrete(momento):
+        try:
+            servicos.conferir_hora_do_aviso(futura, momento, TipoAviso.LEMBRETE)
+            return True
+        except servicos.ErroValidacao:
+            return False
+
+    t('janela do lembrete: de 7 min antes (5 + 2 de relógio adiantado) até 1 min depois do início',
+      [aceita_lembrete(quando(16, 14, 52, 59)), aceita_lembrete(quando(16, 14, 53)),
+       aceita_lembrete(quando(16, 15, 1)), aceita_lembrete(quando(16, 15, 1, 1))] == [False, True, True, False])
+    t('texto do sino conta os minutos que faltam de verdade (14:55:30 → 5 min)',
+      servicos.textos_do_sino(futura, TipoAviso.LEMBRETE, quando(16, 14, 55, 30))[0] == 'Em 5 min: Parcial Gerentes')
+    relogio.return_value = quando(16, 11, 57)
+    r = c_gerente.post(f'/rotina-gerencial/api/lembretes/{de_terca.id}/')
+    t('lembrete de atividade de outro dia: 400', r.status_code == 400 and js(r).get('erro') == 'Esta atividade não é de hoje.')
+    t('lembrete de atividade de outra pessoa: 404',
+      c_gerente.post(f'/rotina-gerencial/api/lembretes/{de_outra.id}/').status_code == 404)
+    t('GET no lembrete: 405; sem login: 401',
+      c_gerente.get(url_lembrete).status_code == 405 and Client().post(url_lembrete).status_code == 401)
+    de_pausada = rotina_pausada.atividades.get(dia_semana=2, inicio='12:00')
+    t('rotina desativada não recebe lembrete (403)',
+      cliente(pausada).post(f'/rotina-gerencial/api/lembretes/{de_pausada.id}/').status_code == 403)
+    try:
+        with transaction.atomic():
+            AvisoRotina.objects.create(user=gerente, atividade=futura, data='2026-09-16', tipo=TipoAviso.LEMBRETE)
+        barrou = False
+    except IntegrityError:
+        barrou = True
+    t('o banco barra dois lembretes da mesma atividade no mesmo dia (constraint)', barrou)
+    relogio.return_value = QUARTA_MEIO_DIA
+    chamados = {nome: duble.call_count for nome, duble in dubles.items() if duble.call_count}
+    t('lembrete também não chama nenhuma função de envio', not chamados, chamados)
+
     print('\n== AÇÕES DA GESTÃO ==')
     r = c_admin.post('/rotina-gerencial/gestao/adicionar/',
                      {'usuarios': [adicionada.id, vazia.id], 'modelo': modelo.id, 'pode_criar': 'on'})
@@ -635,6 +758,14 @@ try:
       'agora_ts' in parcial_html and 'visibilitychange' in parcial_html and '10 * 60 * 1000' in parcial_html)
     t('atualiza o contador do sino quando o aviso é novo', 'updateUnreadCount' in parcial_html)
     t('usa o token CSRF da página como reserva', "'token-de-teste'" in parcial_html)
+    t('também avisa minutos antes: rota do lembrete, chave própria e contagem regressiva',
+      "'/rotina-gerencial/api/lembretes/0/'" in parcial_html and "chave: 'lembrete:'" in parcial_html
+      and 'lembrete_minutos' in parcial_html and "'Em ' + minutosAte(" in parcial_html
+      and 'Lembrete da rotina' in parcial_html)
+    t('o lembrete sai quando a atividade começa (o aviso de início toma o lugar)',
+      'data-rtn-tipo="lembrete"' in parcial_html and "agora() >= a.inicio_ts" in parcial_html)
+    t('nada de web push no parcial (só o sino do portal)',
+      not re.search(r'serviceWorker|PushManager|OneSignal|pushManager', parcial_html))
     scripts = re.findall(r'<script>(.*?)</script>', parcial_html, flags=re.S)
     t('o JS fica todo dentro de uma função (nenhuma variável global solta)',
       len(scripts) == 1 and scripts[0].strip().startswith('(function () {') and scripts[0].strip().endswith('})();'))
@@ -685,6 +816,109 @@ try:
         quebrado.filter.side_effect = RuntimeError('banco fora do ar')
         resultado = bandeiras(gerente)
     t('erro no banco não derruba a página', resultado == {'rotina_liberada': False, 'rotina_admin': False}, resultado)
+
+    print('\n== CARTÃO DA HOME ==')
+    from rotina.home import html_do_cartao
+    # A home manda PADRÃO com curso pendente para /cursos/; aqui interessa só a home.
+    pilha.enter_context(mock.patch('cursos.permissions.deve_ir_para_cursos', return_value=False))
+    relogio.return_value = QUARTA_MEIO_DIA
+    parcial_quarta = rotina_gerente.atividades.get(dia_semana=2, inicio='12:00')
+    r = cliente(gerente).get('/')
+    home = r.content.decode()
+    t('a home abre (200) com o cartão, antes do cartão do perfil',
+      r.status_code == 200 and 'id="rth"' in home and 'rth-estado-agora' in home
+      and home.find('id="rth"') < home.find('User Info Card'), r.status_code)
+    t('a atividade de agora: título, horário, categoria e quanto falta',
+      'Parcial Gerentes' in home and '12:00–12:30 · <span' in home and 'termina em 25 min' in home
+      and 'Agora · Resultado' in home)
+    t('o destaque leva direto à atividade na rotina, como o aviso',
+      f'href="/rotina-gerencial/?dia=2&amp;atividade={parcial_quarta.id}"' in home)
+    t('a próxima ("em 25 min") e a lista curta de hoje, com o link para o dia inteiro',
+      'A seguir' in home and 'em 25 min' in home and 'Mais 3 até as 18:30' in home
+      and 'href="/rotina-gerencial/?dia=2"' in home)
+    t('deixa claro que os avisos estão ligados (5 min antes e no início)',
+      'Avisos ligados:' in home and '5 min antes e no início' in home)
+    t('link para a rotina e a rota que redesenha o cartão quando o dia muda',
+      'class="rth-link" href="/rotina-gerencial/"' in home and 'data-url="/rotina-gerencial/api/hoje/cartao/"' in home)
+    for pessoa, rotulo in ((ninguem, 'sem rotina'), (pausada, 'rotina pausada'), (superadmin, 'SUPERADMIN sem rotina própria')):
+        html_home = cliente(pessoa).get('/').content.decode()
+        t(f'{rotulo}: a home não mostra o cartão', 'id="rth"' not in html_home and 'rth-cartao' not in html_home)
+
+    pedido = RequestFactory().get('/')
+    pedido.user = gerente
+    with CaptureQueriesContext(connection) as consultas:
+        parcial_home = render_to_string('rotina/_home.html', {'rotina_liberada': True, 'request': pedido})
+    t('uma consulta só por renderização do cartão',
+      len(consultas.captured_queries) == 1 and 'rth-cartao' in parcial_home,
+      [c['sql'][:160] for c in consultas.captured_queries])
+    with CaptureQueriesContext(connection) as consultas:
+        sem_cartao = render_to_string('rotina/_home.html', {'rotina_liberada': False, 'request': pedido})
+    t('sem rotina liberada: nenhuma consulta e nada na página',
+      not consultas.captured_queries and not sem_cartao.strip(), len(consultas.captured_queries))
+    anonimo = RequestFactory().get('/')
+    anonimo.user = AnonymousUser()
+    t('anônimo: nada', not render_to_string('rotina/_home.html', {'rotina_liberada': True, 'request': anonimo}).strip())
+    with mock.patch('rotina.servicos.cartao_da_home', side_effect=RuntimeError('banco fora do ar')), \
+            mock.patch('rotina.home.logger') as registro:
+        falhou = render_to_string('rotina/_home.html', {'rotina_liberada': True, 'request': pedido})
+        r = cliente(gerente).get('/')
+    t('erro no cartão: some em silêncio, fica no log e a home abre normalmente',
+      not falhou.strip() and registro.exception.called and r.status_code == 200 and 'id="rth"' not in r.content.decode())
+    scripts_home = re.findall(r'<script>(.*?)</script>', parcial_home, flags=re.S)
+    t('o JS do cartão fica numa função só (window.RotinaHome) e só pede o cartão de novo em data-mudanca',
+      len(scripts_home) == 1 and scripts_home[0].strip().startswith('(function () {')
+      and scripts_home[0].strip().endswith('})();') and 'window.RotinaHome' in scripts_home[0]
+      and 'data-mudanca' in scripts_home[0])
+    if scripts_home:
+        js_valido(scripts_home[0], 'rotina/_home.html')
+
+    cartao = servicos.cartao_da_home(gerente, QUARTA_MEIO_DIA)
+    t('agora: progresso com ponto decimal (vai para o CSS), 5 de 12 concluídas, próxima mudança às 12:30',
+      cartao['estado'] == 'agora' and cartao['atual']['progresso'] == '16.67'
+      and (cartao['feitas'], cartao['total'], cartao['restantes']) == (5, 12, 3)
+      and cartao['proxima_mudanca_ts'] == int(quando(16, 12, 30).timestamp() * 1000)
+      and cartao['faixa']['blocos'][0]['esquerda'] == '0.00' and cartao['avisos_ligados'] and not cartao['sino_desligado'],
+      {k: cartao[k] for k in ('estado', 'feitas', 'total', 'restantes', 'proxima_mudanca_ts')})
+    cartao = servicos.cartao_da_home(gerente, quando(16, 7, 0))
+    t('antes de começar: a primeira do dia em destaque ("começa em 30 min") e as seguintes em "Depois"',
+      cartao['estado'] == 'antes' and cartao['proxima']['titulo'] == 'Reunião com o supervisor'
+      and cartao['proxima']['comeca_em'] == '30 min' and cartao['faixa']['agora'] is None
+      and [i['inicio'] for i in cartao['seguintes']] == ['08:00', '08:20', '08:40'], cartao['estado'])
+    cartao = servicos.cartao_da_home(criadora, quando(17, 18, 45))
+    t('intervalo livre: a próxima em destaque, e o sino desligado nas preferências aparece',
+      cartao['estado'] == 'intervalo' and cartao['proxima']['titulo'] == 'Visita à loja vizinha'
+      and cartao['proxima']['comeca_em'] == '15 min' and not cartao['seguintes'] and cartao['sino_desligado'] is True,
+      (cartao['estado'], cartao['proxima'] and cartao['proxima']['titulo'], cartao['sino_desligado']))
+    cartao = servicos.cartao_da_home(gerente, quando(16, 19, 0))
+    t('depois da última: rotina concluída, sem avisos pendentes nem próxima mudança',
+      cartao['estado'] == 'concluida' and cartao['feitas'] == 12 and not cartao['avisos_ligados']
+      and cartao['proxima_mudanca_ts'] is None)
+    cartao = servicos.cartao_da_home(gerente, DOMINGO)
+    t('domingo: conta como a semana começa (primeira atividade de segunda)',
+      cartao['estado'] == 'domingo' and cartao['amanha']['titulo'] == 'Reunião com o supervisor'
+      and cartao['amanha']['url'].startswith('/rotina-gerencial/?dia=0&') and not cartao['avisos_ligados'])
+    so_segunda = novo('sosegunda')
+    RotinaGerencial.objects.create(user=so_segunda).atividades.create(
+        dia_semana=0, inicio=time(9), fim=time(10), titulo='Só na segunda')
+    cartao = servicos.cartao_da_home(so_segunda, QUARTA_MEIO_DIA)
+    t('dia sem atividade: estado "vazio", sem avisos', cartao['estado'] == 'vazio' and not cartao['avisos_ligados'])
+    t('o HTML de cada estado diz o que está acontecendo',
+      'Primeira do dia' in html_do_cartao(gerente, quando(16, 7, 0))
+      and 'Rotina de hoje concluída' in html_do_cartao(gerente, quando(16, 19, 0))
+      and 'Sua semana começa amanhã' in html_do_cartao(gerente, DOMINGO)
+      and 'Avisos só na tela' in html_do_cartao(criadora, quando(17, 18, 45))
+      and 'Nenhuma atividade hoje' in html_do_cartao(so_segunda, QUARTA_MEIO_DIA))
+
+    r = c_gerente.get('/rotina-gerencial/api/hoje/cartao/')
+    t('api/hoje/cartao/: o cartão pronto em HTML, sem cache',
+      r.status_code == 200 and r['Content-Type'].startswith('text/html') and 'rth-cartao' in r.content.decode()
+      and r.get('Cache-Control') == 'no-store', (r.status_code, r.get('Content-Type')))
+    t('api/hoje/cartao/ para quem não tem (ou pausou) a rotina: 204, e a home tira o cartão',
+      cliente(ninguem).get('/rotina-gerencial/api/hoje/cartao/').status_code == 204
+      and cliente(pausada).get('/rotina-gerencial/api/hoje/cartao/').status_code == 204)
+    t('api/hoje/cartao/ sem login: 401', Client().get('/rotina-gerencial/api/hoje/cartao/').status_code == 401)
+    chamados = {nome: duble.call_count for nome, duble in dubles.items() if duble.call_count}
+    t('nada disso chamou função de envio', not chamados, chamados)
 
     print('\n== ADMIN DO DJANGO ==')
     t('os cinco modelos estão registrados',

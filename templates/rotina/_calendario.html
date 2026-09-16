@@ -5,6 +5,9 @@ Usado pela rotina da pessoa, pelo editor de rotina da gestão e pelo editor de
 modelo. Quem desenha é static/rotina/rotina-calendario.js, a partir dos
 json_script "rt-config" e "rt-dados" que a página inclui. Os atributos
 data-rt="…" são os ganchos que o JS procura — mudar um nome aqui exige mudar lá.
+
+Tela larga: a grade da semana. Celular (e tela estreita): um dia por vez, com
+as abas de seg a sáb presas no topo e o dia em lista (padrão) ou em grade.
 {% endcomment %}
 <div id="rt-app" class="rt-layout" data-modo="{{ config.modo }}">
     <section class="rt-card rt-cal-card" aria-label="Calendário da semana">
@@ -16,6 +19,10 @@ data-rt="…" são os ganchos que o JS procura — mudar um nome aqui exige muda
                 <h2 class="rt-cal-titulo">{% if config.modo == 'pessoa' %}{{ semana.rotulo }}{% else %}Segunda a sábado{% endif %}</h2>
             </div>
             <div class="rt-cal-botoes">
+                <div class="rt-vistas" role="group" aria-label="Como mostrar o dia" data-rt="vistas">
+                    <button type="button" class="rt-vista" data-rt-vista="lista" aria-pressed="true"><i class="fas fa-list-ul" aria-hidden="true"></i> Lista</button>
+                    <button type="button" class="rt-vista" data-rt-vista="grade" aria-pressed="false"><i class="fas fa-table-cells" aria-hidden="true"></i> Grade</button>
+                </div>
                 {% if config.modo == 'pessoa' and not semana.proxima %}
                 <button type="button" class="rt-btn rt-btn-claro rt-btn-sm" data-rt="btn-agora">
                     <i class="fas fa-crosshairs"></i> Agora
@@ -29,10 +36,17 @@ data-rt="…" são os ganchos que o JS procura — mudar um nome aqui exige muda
             </div>
         </div>
 
-        <div class="rt-dias" data-rt="dias" role="tablist" aria-label="Dias da semana"></div>
+        <div class="rt-dias-barra" data-rt="dias-barra">
+            <div class="rt-dias" data-rt="dias" role="tablist" aria-label="Dias da semana"></div>
+        </div>
+        <div class="rt-dia-cabeca" data-rt="dia-cabeca" aria-live="polite">
+            <h3 class="rt-dia-titulo" data-rt="dia-titulo"></h3>
+            <p class="rt-dia-resumo" data-rt="dia-resumo"></p>
+        </div>
+        <ol class="rt-lista-dia" data-rt="lista" aria-label="Atividades do dia"></ol>
         <div id="rt-calendario" class="rt-cal" data-rt="calendario"></div>
 
-        <p class="rt-cal-dica">
+        <p class="rt-cal-dica rt-dica-grade">
             {% if config.modo == 'pessoa' %}
             <span><i class="fas fa-lock"></i>Travadas: horário fixo definido pela gestão</span>
             <span><i class="fas fa-up-down-left-right"></i>As outras: arraste para mudar o horário</span>
@@ -43,15 +57,21 @@ data-rt="…" são os ganchos que o JS procura — mudar um nome aqui exige muda
             <span><i class="fas fa-lock"></i>Travada: a pessoa não consegue mover</span>
             {% endif %}
         </p>
+        <p class="rt-cal-dica rt-dica-lista">
+            <span><i class="fas fa-hand-pointer"></i>Toque numa atividade para ver os detalhes{% if config.modo == 'pessoa' %} e, se ela for livre, mudar o horário{% else %} e editar{% endif %}</span>
+            <span><i class="fas fa-left-right"></i>Deslize para o lado para trocar de dia</span>
+        </p>
     </section>
 
     <aside class="rt-lateral" aria-label="Resumo da rotina">
         {% if config.modo == 'pessoa' %}
         <section class="rt-card rt-agora rt-bloco-agora" data-rt="agora" aria-live="polite">
-            <p class="rt-agora-rotulo"><span class="rt-pulso"></span> Agora</p>
-            <p class="rt-agora-vazio">Carregando a sua semana…</p>
+            <div class="rt-agora-principal">
+                <p class="rt-agora-rotulo"><span class="rt-pulso"></span> Agora</p>
+                <p class="rt-agora-vazio">Carregando a sua semana…</p>
+            </div>
         </section>
-        <section class="rt-card">
+        <section class="rt-card rt-card-hoje">
             <div class="rt-card-cabeca">
                 <h3 class="rt-card-titulo"><i class="fas fa-list-check"></i> {% if semana.proxima %}Segunda-feira{% else %}Hoje{% endif %}</h3>
                 <span class="rt-chip" data-rt="hoje-conta"></span>
@@ -60,22 +80,24 @@ data-rt="…" são os ganchos que o JS procura — mudar um nome aqui exige muda
         </section>
         {% endif %}
 
-        <section class="rt-card">
+        <section class="rt-card rt-card-legenda">
             <div class="rt-card-cabeca">
                 <h3 class="rt-card-titulo"><i class="fas fa-palette"></i> Legenda</h3>
                 <span class="rt-total-semana" data-rt="total-semana"></span>
             </div>
             <div class="rt-card-corpo">
-                {% for c in categorias %}
-                <div class="rt-legenda-item" style="--rt-cor: {{ c.cor }}">
-                    <span class="rt-bolinha" aria-hidden="true"></span>
-                    <div class="min-w-0">
-                        <p class="rt-legenda-nome">{{ c.nome }}</p>
-                        <p class="rt-legenda-desc">{{ c.rotulo }}</p>
+                <div class="rt-legenda-itens">
+                    {% for c in categorias %}
+                    <div class="rt-legenda-item" style="--rt-cor: {{ c.cor }}">
+                        <span class="rt-bolinha" aria-hidden="true"></span>
+                        <div class="min-w-0">
+                            <p class="rt-legenda-nome">{{ c.nome }}</p>
+                            <p class="rt-legenda-desc">{{ c.rotulo }}</p>
+                        </div>
+                        <span class="rt-legenda-horas" data-rt-horas="{{ c.valor }}">—</span>
                     </div>
-                    <span class="rt-legenda-horas" data-rt-horas="{{ c.valor }}">—</span>
+                    {% endfor %}
                 </div>
-                {% endfor %}
                 <div class="rt-distribuicao" data-rt="distribuicao" aria-hidden="true"></div>
                 <ul class="rt-regras">
                     <li><i class="fas fa-lock"></i>Travada: horário fixo</li>

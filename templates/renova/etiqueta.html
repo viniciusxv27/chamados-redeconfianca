@@ -92,16 +92,16 @@
                     <span class="rn-etiqueta-valor mono" contenteditable="true" spellcheck="false">{{ renova.imei1 }}</span>
                 </div>
                 <div class="rn-etiqueta-campo">
-                    <span class="rn-etiqueta-rotulo">Nº de série</span>
-                    <span class="rn-etiqueta-valor mono" contenteditable="true" spellcheck="false">{{ renova.numero_serie }}</span>
+                    <span class="rn-etiqueta-rotulo">IMEI 2</span>
+                    <span class="rn-etiqueta-valor mono" contenteditable="true" spellcheck="false">{{ renova.imei2 }}</span>
                 </div>
                 <div class="rn-etiqueta-campo largo">
                     <span class="rn-etiqueta-rotulo">Loja (origem)</span>
                     <span class="rn-etiqueta-valor" contenteditable="true" spellcheck="false">{{ renova.loja.name|default:"" }}</span>
                 </div>
                 <div class="rn-etiqueta-campo">
-                    <span class="rn-etiqueta-rotulo">Parecer</span>
-                    <span class="rn-etiqueta-valor" contenteditable="true" spellcheck="false">{{ renova.get_parecer_display }}</span>
+                    <span class="rn-etiqueta-rotulo">Aprovado por</span>
+                    <span class="rn-etiqueta-valor" contenteditable="true" spellcheck="false">{{ renova.aprovacao_por.full_name|default:"" }}</span>
                 </div>
                 <div class="rn-etiqueta-campo">
                     <span class="rn-etiqueta-rotulo">Chamado</span>

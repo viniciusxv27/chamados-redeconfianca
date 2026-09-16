@@ -179,7 +179,6 @@
                 {% include 'admin/_profile_field.html' with label='Nome do pai' value=target.father_name %}
                 {% include 'admin/_profile_field.html' with label='Nome da mãe' value=target.mother_name %}
                 {% include 'admin/_profile_field.html' with label='Cor/Raça' value=target.get_skin_color_display %}
-                {% include 'admin/_profile_field.html' with label='CEP' value=target.cep %}
                 {% include 'admin/_profile_field.html' with label='Cargo' value=target.job_title %}
                 {% include 'admin/_profile_field.html' with label='Modelo de contratação' value=target.get_contract_type_display %}
                 {% include 'admin/_profile_field.html' with label='CNPJ filial' value=target.branch_cnpj %}
@@ -205,11 +204,28 @@
                 {% include 'admin/_profile_field.html' with label='Data de demissão' value=target.demission_date %}
                 {% include 'admin/_profile_field.html' with label='Login/Código' value=target.login_code %}
                 {% include 'admin/_profile_field.html' with label='PDV' value=target.pdv %}
-                {% include 'admin/_profile_field.html' with label='Bairro' value=target.neighborhood %}
-                {% include 'admin/_profile_field.html' with label='Cidade' value=target.city %}
                 {% include 'admin/_profile_field.html' with label='Perfil DISC' value=target.disc_profile %}
                 {% include 'admin/_profile_field.html' with label='Uniforme (Blusa)' value=target.uniform_size_shirt %}
                 {% include 'admin/_profile_field.html' with label='Uniforme (Calça)' value=target.uniform_size_pants %}
+            </div>
+        </div>
+
+        <!-- Endereço -->
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h3 class="text-lg font-semibold text-gray-900 flex items-center">
+                    <i class="fas fa-map-marker-alt text-gray-500 mr-2"></i>
+                    Endereço
+                </h3>
+            </div>
+            <div class="p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4 text-sm">
+                {% include 'admin/_profile_field.html' with label='CEP' value=target.cep_display %}
+                {% include 'admin/_profile_field.html' with label='Rua' value=target.address %}
+                {% include 'admin/_profile_field.html' with label='Número' value=target.address_number %}
+                {% include 'admin/_profile_field.html' with label='Complemento' value=target.address_complement %}
+                {% include 'admin/_profile_field.html' with label='Bairro' value=target.neighborhood %}
+                {% include 'admin/_profile_field.html' with label='Cidade' value=target.city %}
+                {% include 'admin/_profile_field.html' with label='Estado' value=target.state %}
             </div>
         </div>
 

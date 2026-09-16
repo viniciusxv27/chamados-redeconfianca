@@ -347,6 +347,23 @@ def _nota_conteudos(user, tipos, pontos, inicio, fim):
     }
 
 
+def filtros_de_tarefa_do_mes(inicio, fim):
+    """(entregue no mês, pendente no mês) para as tarefas de projeto foco.
+
+    Entregue: concluída com data dentro do mês. Concluída sem data (gravada por
+    fora do save) fica com a régua antiga, pelo prazo. Pendente: prazo no mês
+    ou sem prazo, e ainda aberta no fim do mês — quem entregou depois conta
+    como pendente no mês do prazo e como entrega no mês em que entregou.
+    """
+    concluida = Q(status=TarefaProjeto.Status.CONCLUIDA)
+    prazo_no_mes = Q(prazo__isnull=True) | Q(prazo__gte=inicio, prazo__lte=fim)
+    feita_no_mes = concluida & (
+        Q(concluida_em__date__gte=inicio, concluida_em__date__lte=fim)
+        | (Q(concluida_em__isnull=True) & prazo_no_mes))
+    aberta_no_fim = ~concluida | Q(concluida_em__date__gt=fim)
+    return feita_no_mes, prazo_no_mes & aberta_no_fim
+
+
 def _nota_projeto_foco(user, inicio, fim):
     """Os pontos do Projeto FOCO, em duas metades.
 
@@ -357,10 +374,15 @@ def _nota_projeto_foco(user, inicio, fim):
 
     As duas metades são proporcionais: 3 de 4 tarefas feitas valem 3/4 da
     primeira; estar em 2 projetos com 1 concluído vale metade da segunda.
+
+    A tarefa entra no mês em que foi entregue. A que não foi entregue entra no
+    mês do prazo (ou em todo mês, sem prazo), contando como pendente. Pelo
+    prazo só, a entrega atrasada — ou a tarefa criada com prazo já vencido —
+    caía num mês que já passou e não pontuava em lugar nenhum.
     """
+    feita_no_mes, devida_no_mes = filtros_de_tarefa_do_mes(inicio, fim)
     tarefas = TarefaProjeto.objects.filter(
-        responsavel=user, projeto__ativo=True).filter(
-        Q(prazo__isnull=True) | Q(prazo__gte=inicio, prazo__lte=fim))
+        responsavel=user, projeto__ativo=True).filter(feita_no_mes | devida_no_mes)
     total = tarefas.count()
     if not total:
         return ZERO, ZERO, {'sem_tarefas': True}
@@ -368,7 +390,7 @@ def _nota_projeto_foco(user, inicio, fim):
     maximo = pt('projeto_foco', user)
     metade = maximo / Decimal(2)
 
-    concluidas = tarefas.filter(status=TarefaProjeto.Status.CONCLUIDA).count()
+    concluidas = tarefas.filter(feita_no_mes).count()
     nota_entrega = metade * Decimal(concluidas) / Decimal(total)
 
     ids = set(tarefas.values_list('projeto_id', flat=True))

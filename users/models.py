@@ -712,6 +712,12 @@ class User(AbstractUser):
         from .pix import formatar
         return formatar(self.pix_key)
 
+    @property
+    def cep_display(self):
+        """O CEP como 00000-000, inclusive o de cadastro antigo gravado só com os dígitos."""
+        cep = self.cep or ''
+        return f'{cep[:5]}-{cep[5:]}' if len(cep) == 8 and cep.isascii() and cep.isdigit() else cep
+
     # Pré-cadastro (onboarding via link enviado ao novo colaborador)
     PRE_REG_NONE = 'NONE'
     PRE_REG_PENDING = 'PENDING'

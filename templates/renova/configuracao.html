@@ -21,7 +21,7 @@
         <div class="grid md:grid-cols-2 gap-6">
             <div>
                 <h2 class="rn-h2">Chamado</h2>
-                <p class="rn-ajuda mb-3">Cada avaliação abre um chamado nesta categoria. Quem é do setor dela marca se o aparelho chegou.</p>
+                <p class="rn-ajuda mb-3">Cada troca aprovada pelo gerente abre um chamado nesta categoria. Quem é do setor dela marca se o aparelho chegou.</p>
                 <select name="categoria" class="rn-campo">
                     <option value="">— sem categoria (a avaliação não pode ser concluída) —</option>
                     {% regroup categorias by sector as por_setor %}
@@ -76,6 +76,28 @@
                 <label class="cfg-pessoa flex items-center gap-3 px-4 py-2 cursor-pointer hover:bg-purple-50/50"
                        data-busca="{{ p.full_name|lower }} {{ p.email|lower }} {{ p.sector.name|lower }}">
                     <input type="checkbox" name="habilitados" value="{{ p.pk }}" {% if p.pk in habilitados %}checked{% endif %}
+                           class="rounded text-purple-600 focus:ring-purple-500">
+                    <span class="text-sm text-gray-800 flex-1">{{ p.full_name|default:p.username }}</span>
+                    <span class="text-[11px] text-gray-400 text-right">{{ p.sector.name|default:"—" }}</span>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+        <div>
+            <div class="flex flex-wrap items-center justify-between gap-2">
+                <h2 class="rn-h2">Quem acompanha o quadro de gestão (financeiro)</h2>
+                <span class="text-[11px] text-gray-500"><span id="fin-conta">{{ financeiro|length }}</span> selecionada(s)</span>
+            </div>
+            <p class="rn-ajuda mb-2">
+                Estas pessoas (e o SUPERADMIN) veem todas as trocas — aprovação, chamado e chegada de cada aparelho —,
+                com os totais e a exportação para planilha.
+            </p>
+            <input type="search" id="fin-busca" placeholder="Buscar por nome, e-mail ou setor…" class="rn-campo mb-2">
+            <div class="max-h-60 overflow-y-auto border border-gray-100 rounded-xl divide-y divide-gray-50">
+                {% for p in pessoas %}
+                <label class="fin-pessoa flex items-center gap-3 px-4 py-2 cursor-pointer hover:bg-purple-50/50"
+                       data-busca="{{ p.full_name|lower }} {{ p.email|lower }} {{ p.sector.name|lower }}">
+                    <input type="checkbox" name="financeiro" value="{{ p.pk }}" {% if p.pk in financeiro %}checked{% endif %}
                            class="rounded text-purple-600 focus:ring-purple-500">
                     <span class="text-sm text-gray-800 flex-1">{{ p.full_name|default:p.username }}</span>
                     <span class="text-[11px] text-gray-400 text-right">{{ p.sector.name|default:"—" }}</span>
@@ -198,6 +220,23 @@
             contar();
         });
     });
+})();
+(function () {
+    var busca = document.getElementById('fin-busca');
+    var conta = document.getElementById('fin-conta');
+    var pessoas = Array.prototype.slice.call(document.querySelectorAll('.fin-pessoa'));
+    if (!busca) return;
+    function contar() {
+        conta.textContent = pessoas.filter(function (p) { return p.querySelector('input').checked; }).length;
+    }
+    busca.addEventListener('input', function () {
+        var termos = (busca.value || '').toLowerCase().trim().split(/\s+/).filter(Boolean);
+        pessoas.forEach(function (p) {
+            var texto = p.getAttribute('data-busca');
+            p.hidden = !termos.every(function (t) { return texto.indexOf(t) !== -1; });
+        });
+    });
+    pessoas.forEach(function (p) { p.querySelector('input').addEventListener('change', contar); });
 })();
 </script>
 {% endblock %}

@@ -229,6 +229,8 @@ DEFAULT_META_BY_ROLE = {
         'bonus_6_7_rate': 0.1,
         'hunter2_rate': 0.05,
         'hunter3_rate': 0.15,
+        # Gerente operacional: fração da comissão do gerente de vendas da loja.
+        'operacional_rate': 0.75,
     },
     ROLE_COORDENADOR: {
         'bonus_6_7_rate': 0.1,
@@ -694,6 +696,11 @@ def get_user_role(user: User) -> str:
         if 'comercial' in sector_name:
             return ROLE_COORDENADOR
 
+    # Gerente operacional (pelo cargo, mesmo fora do grupo GERENTES) usa o cálculo
+    # de gerente: recebe 75% da comissão do gerente de vendas da mesma loja.
+    if is_gerente_operacional(user):
+        return ROLE_GERENTE
+
     if getattr(user, 'hierarchy', None) == 'PADRAO':
         gerente_group = CommunicationGroup.objects.filter(name__icontains='GERENTES').first()
         if gerente_group and gerente_group.members.filter(id=user.id).exists():
@@ -767,8 +774,13 @@ def get_all_gerentes() -> List[User]:
     if coord_group:
         coord_ids = list(coord_group.members.values_list('id', flat=True))
     excluded = get_simulator_excluded_user_ids()
+    # Gerente operacional entra pelo cargo, mesmo fora do grupo: ele precisa
+    # aparecer no seletor para ver os 75% do gerente de vendas da loja.
+    ids = set(gerente_group.members.filter(is_active=True).values_list('id', flat=True))
+    ids |= {u.id for u in User.objects.filter(is_active=True, job_title__icontains='OPERACIONAL')
+            if is_gerente_operacional(u)}
     return list(
-        gerente_group.members.filter(is_active=True)
+        User.objects.filter(id__in=ids, is_active=True)
         .exclude(id__in=coord_ids)
         .exclude(id__in=excluded)
         .order_by('first_name', 'last_name')
@@ -1482,6 +1494,7 @@ def compute_consultor_simulation(
         'seguros': sumifs(realized, 'META_SEGUROS', 'COORDENAÇÃO', coord_name),
         'sva': sumifs(realized, 'META_SVA', 'COORDENAÇÃO', coord_name),
     }
+    coord_meta['fixa'] = meta_fixa_da_coordenacao(realized, projection, coord_name)
     if view_mode == VIEW_REALIZADO:
         coord_pdvs = get_pdvs_of_coord(realized, coord_name) or get_pdvs_of_coord(projection, coord_name)
         mysql_coord = get_realized_sales_from_mysql(pdvs=coord_pdvs) if coord_pdvs else get_realized_sales_from_mysql(coord_name=coord_name)
@@ -1670,7 +1683,118 @@ def compute_consultor_simulation(
     }
 
 
+GERENTE_OPERACIONAL = 'GERENTE OPERACIONAL'
+GERENTE_DE_VENDAS = 'GERENTE DE VENDAS'
+# O que é dinheiro no resultado do gerente: é isso que leva o percentual do
+# gerente operacional. Metas, realizado e atingimentos são os da loja.
+CAMPOS_EM_REAIS_DA_LINHA = ('commission_value', 'premium_value', 'total_individual', 'pdv_premium_value',
+                            'total_with_pdv', 'hunter2_value', 'hunter3_value')
+CAMPOS_EM_REAIS_DOS_TOTAIS = ('total_with_pdv', 'hunter2', 'hunter3', 'bonus_6_7', 'ganho_total')
+
+
+def _cargo(user) -> str:
+    """Cargo em maiúsculas e com espaços simples — "Gerente  Operacional I" vira "GERENTE OPERACIONAL I"."""
+    return ' '.join(str(getattr(user, 'job_title', '') or '').upper().split())
+
+
+def is_gerente_operacional(user) -> bool:
+    """Cargo com "GERENTE OPERACIONAL", em qualquer nível (I, II, III)."""
+    return GERENTE_OPERACIONAL in _cargo(user)
+
+
+def is_gerente_de_vendas(user) -> bool:
+    """Cargo com "GERENTE DE VENDAS", em qualquer nível."""
+    return GERENTE_DE_VENDAS in _cargo(user)
+
+
+def get_gerente_de_vendas_do_setor(user) -> Optional[User]:
+    """Gerente de vendas da mesma loja (setor principal): a base do gerente operacional.
+
+    Com mais de um no setor, vale quem está no grupo GERENTES; persistindo o
+    empate, o cargo sem nível ("GERENTE DE VENDAS" antes de "GERENTE DE VENDAS
+    II") e, por fim, o cadastro mais antigo. A tela mostra quem foi usado.
+    """
+    setor_id = getattr(user, 'sector_id', None)
+    if not setor_id:
+        return None
+    # O banco só pré-filtra; quem decide é is_gerente_de_vendas (espaços e caixa normalizados).
+    candidatos = [c for c in User.objects.filter(is_active=True, sector_id=setor_id, job_title__icontains='VENDAS')
+                  .exclude(pk=user.pk) if is_gerente_de_vendas(c)]
+    if not candidatos:
+        return None
+    grupo = CommunicationGroup.objects.filter(name__icontains='GERENTES').first()
+    no_grupo = (set(grupo.members.filter(pk__in=[c.pk for c in candidatos]).values_list('pk', flat=True))
+                if grupo else set())
+    candidatos.sort(key=lambda c: (c.pk not in no_grupo, len(' '.join((c.job_title or '').split())), c.pk))
+    return candidatos[0]
+
+
+def meta_fixa_da_coordenacao(realized, projection, coord_name) -> float:
+    """Meta de FIXA da coordenação em QUANTIDADE: soma das metas oficiais das lojas dela.
+
+    A planilha traz META_FIXA em reais por consultor (a coordenação THAYANDRA
+    somava 36.850), enquanto o realizado e a projeção da coordenação são contados
+    em quantidade de vendas — o atingimento saía perto de 0% e a premiação de
+    coordenação na Fixa nunca vinha. Na loja a meta já sai do Power BI
+    (META_PDV_REAL, em quantidade); a coordenação passa a usar a mesma fonte,
+    somando as lojas. Loja sem meta oficial não soma: misturar reais com
+    quantidade era justamente o erro.
+    """
+    pdvs = get_pdvs_of_coord(realized, coord_name) or get_pdvs_of_coord(projection, coord_name)
+    total = 0.0
+    for pdv in pdvs or []:
+        meta = (get_metas_from_power_bi(store_name=pdv) or {}).get('fixa')
+        total += float(meta or 0)
+    return total
+
+
 def compute_gerente_simulation(
+    user: User,
+    factor_data: Dict[str, Any],
+    hunter_levels: Optional[Dict[str, int]] = None,
+    view_mode: str = VIEW_PROJECAO,
+    simulator_inputs: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Simulação do gerente — e do gerente operacional, que recebe um percentual
+    (75%) da comissão do gerente de vendas da mesma loja: calcula-se a do gerente
+    de vendas e o percentual vale para todo valor em reais."""
+    if not is_gerente_operacional(user):
+        return _compute_gerente_simulation_base(user, factor_data, hunter_levels, view_mode, simulator_inputs)
+
+    setor = user.sector.name if getattr(user, 'sector', None) else 'sem setor'
+    base = get_gerente_de_vendas_do_setor(user)
+    if base is None:
+        return {
+            'error': (f'{user.get_full_name() or user.email} é gerente operacional, mas não há gerente de vendas '
+                      f'ativo em {setor} para servir de base à comissão.'),
+            'is_gerente_operacional': True, 'rows': [], 'totals': {},
+        }
+    padrao = DEFAULT_META_BY_ROLE[ROLE_GERENTE]['operacional_rate']
+    taxa = float(((factor_data or {}).get('meta') or {}).get('operacional_rate', padrao))
+
+    sim = _compute_gerente_simulation_base(base, factor_data, hunter_levels, view_mode, simulator_inputs)
+    if sim.get('error'):
+        return sim
+    ganho_base = (sim.get('totals') or {}).get('ganho_total', 0.0)
+    for row in sim.get('rows') or []:
+        for campo in CAMPOS_EM_REAIS_DA_LINHA:
+            if isinstance(row.get(campo), (int, float)):
+                row[campo] = row[campo] * taxa
+    totais = sim.setdefault('totals', {})
+    for campo in CAMPOS_EM_REAIS_DOS_TOTAIS:
+        if isinstance(totais.get(campo), (int, float)):
+            totais[campo] = totais[campo] * taxa
+    sim.update({
+        'is_gerente_operacional': True,
+        'gerente_de_vendas_base': f"{base.get_full_name() or base.email} ({' '.join((base.job_title or '').split())})",
+        'percentual_operacional': taxa,
+        'percentual_operacional_pct': round(taxa * 100),
+        'ganho_total_base': ganho_base,
+    })
+    return sim
+
+
+def _compute_gerente_simulation_base(
     user: User,
     factor_data: Dict[str, Any],
     hunter_levels: Optional[Dict[str, int]] = None,
@@ -1808,6 +1932,7 @@ def compute_gerente_simulation(
         'seguros': sumifs(realized, 'META_SEGUROS', 'COORDENAÇÃO', coord_name),
         'sva': sumifs(realized, 'META_SVA', 'COORDENAÇÃO', coord_name),
     }
+    coord_meta['fixa'] = meta_fixa_da_coordenacao(realized, projection, coord_name)
     if view_mode == VIEW_REALIZADO:
         # Realizado do coordenador via MySQL (soma de todas as lojas que ele coordena).
         coord_pdvs = get_pdvs_of_coord(realized, coord_name) or get_pdvs_of_coord(projection, coord_name)

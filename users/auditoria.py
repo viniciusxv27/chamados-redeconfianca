@@ -40,8 +40,13 @@ CAMPOS_AUDITADOS = [
     ('disc_profile', 'Perfil DISC'),
     ('uniform_size_shirt', 'Camisa'),
     ('uniform_size_pants', 'Calça'),
+    ('cep', 'CEP'),
+    ('address', 'Rua'),
+    ('address_number', 'Número'),
+    ('address_complement', 'Complemento'),
     ('neighborhood', 'Bairro'),
     ('city', 'Cidade'),
+    ('state', 'Estado'),
     ('theme', 'Tema do portal'),
 ]
 

@@ -29,7 +29,7 @@ from .models import (
     Meta, MetaAnexo, MetaComentario, MetaItem, MetaVisualizacao, PontuacaoMensal,
     ProjetoAnexo, ProjetoFoco, TarefaProjeto,
 )
-from .scoring import calcular_pontuacao, linhas_detalhadas
+from .scoring import calcular_pontuacao, filtros_de_tarefa_do_mes, linhas_detalhadas
 from .utils import (
     FAIXAS, calcular_faixa, faixa_info, get_colaboradores, get_gestores,
     get_colaboradores_do_gestor, get_gestores_do_setor,
@@ -1215,11 +1215,17 @@ def meta_duplicar_solicitar(request, meta_id):
 
 @impulso_member_required
 def conteudo_editar(request, conteudo_id):
-    """Edita um curso, vídeo ou POP do Conectar. Mesmo público do excluir."""
+    """Edita um curso, vídeo ou POP do Conectar.
+
+    O SUPERADMIN e o gestor editam tudo. Quem enviou o POP/vídeo edita o que é
+    dele — arquivo, título, descrição e link —, mas não mexe em obrigatoriedade,
+    público nem período: o formulário nem mostra, e o POST ignora.
+    """
     conteudo = get_object_or_404(ConteudoConectar, id=conteudo_id)
-    if not conteudo.pode_excluir(request.user):
-        messages.error(request, 'Só o SUPERADMIN ou um gestor do Impulso pode editar conteúdo.')
+    if not conteudo.pode_editar(request.user):
+        messages.error(request, 'Só quem enviou o POP, o SUPERADMIN ou um gestor do Impulso pode editar.')
         return redirect('impulso:conteudo_detail', conteudo_id=conteudo.id)
+    completa = conteudo.pode_excluir(request.user)
 
     if request.method == 'POST':
         titulo = (request.POST.get('titulo') or '').strip()
@@ -1227,7 +1233,7 @@ def conteudo_editar(request, conteudo_id):
             messages.error(request, 'Informe o título.')
             return redirect('impulso:conteudo_editar', conteudo_id=conteudo.id)
 
-        grupo = request.POST.get('grupo') or conteudo.grupo
+        grupo = (request.POST.get('grupo') or conteudo.grupo) if completa else conteudo.grupo
         if grupo not in dict(ConteudoConectar.GRUPOS):
             grupo = conteudo.grupo
 
@@ -1241,9 +1247,10 @@ def conteudo_editar(request, conteudo_id):
         conteudo.titulo = titulo[:200]
         conteudo.descricao = (request.POST.get('descricao') or '').strip()
         conteudo.url = (request.POST.get('url') or '').strip()
-        conteudo.obrigatorio = bool(request.POST.get('obrigatorio'))
-        conteudo.inicio = parse_date(request.POST.get('inicio') or '') or None
-        conteudo.fim = parse_date(request.POST.get('fim') or '') or None
+        if completa:
+            conteudo.obrigatorio = bool(request.POST.get('obrigatorio'))
+            conteudo.inicio = parse_date(request.POST.get('inicio') or '') or None
+            conteudo.fim = parse_date(request.POST.get('fim') or '') or None
 
         # Troca cada anexo e apaga o antigo — deixar os dois ocupa espaço e
         # ninguém volta para o anterior.
@@ -1262,15 +1269,16 @@ def conteudo_editar(request, conteudo_id):
             if antigo:
                 antigo.delete(save=False)
 
-        antes = set(conteudo.obrigatorio_para.values_list('id', flat=True))
-        ids = request.POST.getlist('obrigatorio_para')
-        escolhidos = get_colaboradores().filter(id__in=ids)
-        conteudo.obrigatorio_para.set(escolhidos)
-        novos = [u for u in escolhidos if u.id not in antes]
-        if novos:
-            _notify(novos, f'Novo {conteudo.get_tipo_display().lower()} obrigatório',
-                    f'"{conteudo.titulo}" foi atribuído a você.',
-                    f'/impulso/conectar/{conteudo.id}/')
+        if completa:
+            antes = set(conteudo.obrigatorio_para.values_list('id', flat=True))
+            ids = request.POST.getlist('obrigatorio_para')
+            escolhidos = get_colaboradores().filter(id__in=ids)
+            conteudo.obrigatorio_para.set(escolhidos)
+            novos = [u for u in escolhidos if u.id not in antes]
+            if novos:
+                _notify(novos, f'Novo {conteudo.get_tipo_display().lower()} obrigatório',
+                        f'"{conteudo.titulo}" foi atribuído a você.',
+                        f'/impulso/conectar/{conteudo.id}/')
 
         messages.success(request, 'Conteúdo atualizado.')
         return redirect('impulso:conteudo_detail', conteudo_id=conteudo.id)
@@ -1278,8 +1286,9 @@ def conteudo_editar(request, conteudo_id):
     return render(request, 'impulso/conteudo_form.html', {
         'conteudo': conteudo,
         'is_gestor': is_impulso_manager(request.user),
+        'campos_do_gestor': completa,
         'grupos': ConteudoConectar.GRUPOS,
-        'colaboradores': get_colaboradores(),
+        'colaboradores': get_colaboradores() if completa else None,
         'marcados': set(conteudo.obrigatorio_para.values_list('id', flat=True)),
         'active_tab': 'conectar',
     })
@@ -1968,6 +1977,7 @@ def conectar_list(request):
     for c in conteudos:
         c.minha_conclusao = minhas.get(c.id)
         c.pode_apagar = c.pode_excluir(user)
+        c.editavel = c.pode_apagar or c.pode_editar(user)
         c.impacto = c.impacto_da_exclusao if c.pode_apagar else None
         grupos[c.grupo].append(c)
 
@@ -2127,6 +2137,7 @@ def conteudo_create(request):
 
     context = {
         'is_gestor': gestor,
+        'campos_do_gestor': gestor,
         'grupos': ConteudoConectar.GRUPOS,
         'colaboradores': get_colaboradores() if gestor else None,
         'active_tab': 'conectar',
@@ -2151,6 +2162,7 @@ def conteudo_detail(request, conteudo_id):
         'is_gestor': is_impulso_manager(request.user),
         'conclusoes': conteudo.conclusoes.select_related('user') if is_impulso_manager(request.user) else None,
         'pode_apagar': conteudo.pode_excluir(request.user),
+        'pode_editar': conteudo.pode_editar(request.user),
         'impacto': conteudo.impacto_da_exclusao,
         'active_tab': 'conectar',
     }
@@ -2315,10 +2327,13 @@ def projeto_foco_list(request):
     f = filtros_impulso.ler(request)
     projetos = filtros_impulso.por(projetos, f, 'membros')
     # O mês do projeto é o das tarefas dele: um projeto que corre de março a
-    # maio precisa aparecer nos três meses, não só no que foi criado.
+    # maio precisa aparecer nos três meses, não só no que foi criado. Tarefa
+    # entregue no mês também traz o projeto — é onde ela pontua.
     if f['inicio']:
         projetos = projetos.filter(
             Q(tarefas__prazo__gte=f['inicio'], tarefas__prazo__lte=f['fim'])
+            | Q(tarefas__concluida_em__date__gte=f['inicio'],
+                tarefas__concluida_em__date__lte=f['fim'])
             | Q(criado_em__date__gte=f['inicio'], criado_em__date__lte=f['fim'])
         ).distinct()
 
@@ -2621,7 +2636,11 @@ def minhas_tarefas(request):
 
     f = filtros_impulso.ler(request)
     tarefas = filtros_impulso.por(tarefas, f, 'responsavel')
-    tarefas = filtros_impulso.por_mes(tarefas, f, 'prazo')
+    if f['inicio']:
+        # As do mês são as que contam na pontuação dele: entregues no mês, ou
+        # pendentes com prazo no mês.
+        feita_no_mes, devida_no_mes = filtros_de_tarefa_do_mes(f['inicio'], f['fim'])
+        tarefas = tarefas.filter(feita_no_mes | devida_no_mes)
 
     context = {
         'tarefas': tarefas.select_related('projeto', 'responsavel')

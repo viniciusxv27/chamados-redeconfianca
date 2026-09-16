@@ -1,4 +1,5 @@
 """Telas do Vini Renova."""
+import csv
 import logging
 import re
 import unicodedata
@@ -10,7 +11,8 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
-from django.db.models import Count, Q
+from django.db.models import Count, Q, Sum
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.templatetags.static import static
 from django.urls import reverse
@@ -21,9 +23,11 @@ from PIL import Image
 from . import checklist, conteudo
 from .context_processors import limpar_cache_do_menu
 from .models import PrecoAparelho, Renova
-from .permissoes import (configuracao, e_superadmin, pode_fazer, pode_receber, pode_ver, pode_ver_modulo,
-                         renovas_visiveis, setor_recebedor)
-from .servicos import abrir_chamado, registrar_recebimento
+from .permissoes import (configuracao, e_gerente, e_superadmin, pode_aprovar, pode_fazer, pode_receber,
+                         pode_ver, pode_ver_gestao, pode_ver_modulo, renovas_visiveis, setor_recebedor)
+from .padrao import regras_para_tela
+from .servicos import (DecisaoInvalida, abrir_chamado, avisar_gerentes, decidir, gerentes_da_loja,
+                       registrar_recebimento)
 from .validacao import ler_checklist, ler_valor
 
 logger = logging.getLogger(__name__)
@@ -73,19 +77,25 @@ def _normal(texto):
 
 
 def _aguardando():
-    return Renova.objects.filter(recebimento=Renova.PENDENTE).exclude(parecer=checklist.NAO_APROVADO).count()
+    return (Renova.objects.filter(aprovacao=Renova.APROVADA, recebimento=Renova.PENDENTE)
+            .exclude(parecer=checklist.NAO_APROVADO).count())
 
 
 def _contexto(request, cfg, aba, **extra):
     user = request.user
     receber = pode_receber(user, cfg)
+    gerente = e_gerente(user)
     ctx = {
         'aba': aba,
         'cfg': cfg,
         'rn_pode_fazer': pode_fazer(user, cfg),
         'rn_pode_receber': receber,
+        'rn_gerente': gerente,
+        'rn_pode_ver_gestao': pode_ver_gestao(user, cfg),
         'rn_superadmin': e_superadmin(user),
         'renova_aguardando': _aguardando() if receber else 0,
+        'rn_a_aprovar': (Renova.objects.filter(aprovacao=Renova.AGUARDANDO_GERENTE, loja_id=user.sector_id).count()
+                         if gerente and user.sector_id else 0),
     }
     ctx.update(extra)
     return ctx
@@ -108,7 +118,17 @@ def _setores():
 def _precos_para_tela(cfg):
     return [{'id': p.pk, 'marca': p.marca, 'modelo': p.modelo, 'armazenamento': p.armazenamento,
              'valores': {letra: float(valor) for letra, _, valor in p.valores(cfg)}}
-            for p in PrecoAparelho.objects.filter(ativo=True).order_by('marca', 'ordem', 'id')]
+            for p in PrecoAparelho.objects.filter(ativo=True, marca='APPLE').order_by('ordem', 'id')]
+
+
+def _modelos_da_tabela():
+    """Os modelos da tabela de avaliação ativa, na ordem dela — a lista do formulário."""
+    modelos = []
+    for modelo in (PrecoAparelho.objects.filter(ativo=True, marca='APPLE').order_by('ordem', 'id')
+                   .values_list('modelo', flat=True)):
+        if modelo not in modelos:
+            modelos.append(modelo)
+    return modelos
 
 
 def _voltar_seguro(valor, padrao):
@@ -128,7 +148,7 @@ def inicio(request):
     filtros = {
         'q': (request.GET.get('q') or '').strip()[:60],
         'recebimento': request.GET.get('recebimento') or '',
-        'parecer': request.GET.get('parecer') or '',
+        'aprovacao': request.GET.get('aprovacao') or '',
         'loja': request.GET.get('loja') or '',
         'mes': request.GET.get('mes') or '',
     }
@@ -136,18 +156,17 @@ def inicio(request):
     if filtros['q']:
         termo = filtros['q']
         condicao = (Q(imei1__icontains=termo) | Q(imei2__icontains=termo) | Q(modelo__icontains=termo)
-                    | Q(numero_serie__icontains=termo) | Q(vendedor_nome__icontains=termo)
-                    | Q(cor__icontains=termo))
+                    | Q(vendedor_nome__icontains=termo) | Q(cor__icontains=termo))
         codigo = re.fullmatch(r'(?i)rn-?0*(\d+)', termo.replace(' ', ''))
         if codigo:
             condicao |= Q(pk=int(codigo.group(1)))
         qs = qs.filter(condicao)
     if filtros['recebimento'] == 'AGUARDANDO':
-        qs = qs.filter(recebimento=Renova.PENDENTE).exclude(parecer=checklist.NAO_APROVADO)
+        qs = qs.filter(aprovacao=Renova.APROVADA, recebimento=Renova.PENDENTE).exclude(parecer=checklist.NAO_APROVADO)
     elif filtros['recebimento'] in dict(Renova.RECEBIMENTOS):
         qs = qs.filter(recebimento=filtros['recebimento'])
-    if filtros['parecer'] in dict(checklist.PARECERES):
-        qs = qs.filter(parecer=filtros['parecer'])
+    if filtros['aprovacao'] in dict(Renova.APROVACOES):
+        qs = qs.filter(aprovacao=filtros['aprovacao'])
     if filtros['loja'].isdigit():
         qs = qs.filter(loja_id=int(filtros['loja']))
     ano_mes = re.fullmatch(r'(\d{4})-(\d{2})', filtros['mes'])
@@ -158,19 +177,22 @@ def inicio(request):
     kpis = base.aggregate(
         total=Count('id'),
         no_mes=Count('id', filter=Q(criado_em__year=hoje.year, criado_em__month=hoje.month)),
-        aguardando=Count('id', filter=Q(recebimento=Renova.PENDENTE) & ~Q(parecer=checklist.NAO_APROVADO)),
+        a_aprovar=Count('id', filter=Q(aprovacao=Renova.AGUARDANDO_GERENTE)),
+        aguardando=Count('id', filter=Q(aprovacao=Renova.APROVADA, recebimento=Renova.PENDENTE)
+                         & ~Q(parecer=checklist.NAO_APROVADO)),
         chegaram=Count('id', filter=Q(recebimento=Renova.CHEGOU)),
         nao_chegaram=Count('id', filter=Q(recebimento=Renova.NAO_CHEGOU)),
     )
     pagina = Paginator(qs.order_by('-criado_em'), POR_PAGINA).get_page(request.GET.get('pagina'))
     lojas_filtro = []
-    if pode_receber(user, cfg):
+    if pode_receber(user, cfg) or pode_ver_gestao(user, cfg):
         from users.models import Sector
 
         lojas_filtro = Sector.objects.filter(renovas__isnull=False).distinct().order_by('name')
     return render(request, 'renova/inicio.html', _contexto(
         request, cfg, 'inicio', pagina=pagina, kpis=kpis, filtros=filtros, lojas_filtro=lojas_filtro,
-        querystring=urlencode({k: v for k, v in filtros.items() if v}), pareceres=checklist.PARECERES,
+        querystring=urlencode({k: v for k, v in filtros.items() if v}), aprovacoes=Renova.APROVACOES,
+        pode_aprovar_ids={r.pk for r in pagina if r.aguardando_aprovacao and pode_aprovar(user, r)},
         voltar=request.get_full_path()))
 
 
@@ -201,24 +223,23 @@ def nova(request):
     if request.method == 'POST':
         dados, erros = ler_checklist(
             request.POST, lojas={str(s.pk): s for s in lojas + outros_setores},
-            precos={str(p.pk): p for p in PrecoAparelho.objects.filter(ativo=True)})
+            precos={str(p.pk): p for p in PrecoAparelho.objects.filter(ativo=True)}, cfg=cfg)
         if sem_categoria:
             erros['categoria'] = ('A categoria do chamado do Renova não está configurada. '
                                   'Peça ao SUPERADMIN para configurar antes de concluir.')
         if not erros:
             with transaction.atomic():
                 renova = Renova.objects.create(criado_por=user, **dados)
-            ticket = None
-            try:
-                ticket = abrir_chamado(renova, user)
-            except Exception:                                   # noqa: BLE001 — a avaliação já está salva
-                logger.exception('Chamado do Renova %s não abriu', renova.pk)
-            if ticket:
-                messages.success(request, f'Avaliação {renova.codigo} concluída e chamado #{ticket.pk} aberto.')
+            gerentes = avisar_gerentes(renova, user)
+            limpar_cache_do_menu([g.pk for g in gerentes])
+            if gerentes:
+                nomes = ', '.join(g.full_name or g.get_username() for g in gerentes)
+                messages.success(request, f'Avaliação {renova.codigo} enviada para o gerente da loja aprovar ({nomes}). '
+                                          'O chamado e a etiqueta saem depois da aprovação.')
             else:
-                messages.warning(request, f'Avaliação {renova.codigo} salva, mas o chamado não abriu. '
-                                          'Abra de novo pela tela da avaliação.')
-            return redirect(f"{reverse('renova:etiqueta', args=[renova.pk])}?novo=1")
+                messages.warning(request, f'Avaliação {renova.codigo} salva, mas não há gerente do grupo GERENTES na loja '
+                                          f'{renova.loja.name if renova.loja else ""} para aprovar. Avise o SUPERADMIN.')
+            return redirect('renova:detalhe', pk=renova.pk)
         valores = request.POST
     else:
         hoje = timezone.localdate().isoformat()
@@ -228,10 +249,10 @@ def nova(request):
     obrigatorios, funcionalidades, estetica = _secoes(request.POST if request.method == 'POST' else {})
     return render(request, 'renova/nova.html', _contexto(
         request, cfg, 'nova', valores=valores, erros=erros, lojas=lojas, outros_setores=outros_setores,
-        marcas=checklist.MARCAS, armazenamentos=checklist.ARMAZENAMENTOS, padroes=checklist.PADROES,
+        padroes=checklist.PADROES, regras_padrao=regras_para_tela(), modelos=_modelos_da_tabela(),
         itens_obrigatorios=obrigatorios, funcionalidades=funcionalidades, estetica=estetica,
         opcoes_func=checklist.OPCOES_FUNCIONALIDADE, opcoes_est=checklist.OPCOES_ESTETICA,
-        pareceres=checklist.PARECERES, precos_json=_precos_para_tela(cfg),
+        precos_json=_precos_para_tela(cfg),
         imagem_checklist=_imagem(cfg, 'imagem_checklist'), sem_categoria=sem_categoria))
 
 
@@ -251,8 +272,12 @@ def detalhe(request, pk):
         return redirect('renova:inicio' if pode_ver_modulo(request.user, cfg) else 'dashboard')
     user = request.user
     return render(request, 'renova/detalhe.html', _contexto(
-        request, cfg, 'inicio', renova=renova, pode_marcar=pode_receber(user, cfg),
-        pode_reabrir_chamado=renova.chamado_id is None and (renova.criado_por_id == user.pk or e_superadmin(user)),
+        request, cfg, 'inicio', renova=renova,
+        pode_decidir=renova.aguardando_aprovacao and pode_aprovar(user, renova),
+        gerentes=gerentes_da_loja(renova) if renova.aguardando_aprovacao else [],
+        pode_marcar=renova.aprovada and pode_receber(user, cfg),
+        pode_reabrir_chamado=(renova.aprovada and renova.chamado_id is None
+                              and (renova.criado_por_id == user.pk or e_superadmin(user) or pode_aprovar(user, renova))),
         setor=setor_recebedor(cfg)))
 
 
@@ -263,6 +288,9 @@ def etiqueta(request, pk):
     if renova is None:
         messages.error(request, 'Essa avaliação não está entre as que você pode ver.')
         return redirect('renova:inicio' if pode_ver_modulo(request.user, cfg) else 'dashboard')
+    if not renova.aprovada:
+        messages.info(request, f'A etiqueta de {renova.codigo} sai depois que o gerente da loja aprova a troca.')
+        return redirect('renova:detalhe', pk=renova.pk)
     return render(request, 'renova/etiqueta.html', _contexto(
         request, cfg, 'inicio', renova=renova, novo=request.GET.get('novo') == '1',
         logo_url=_estatico('images/logo.png')))
@@ -283,7 +311,10 @@ def recebimento(request, pk):
         messages.error(request, 'Diga se o aparelho chegou ou não.')
         return redirect(destino)
     if not renova.recebe_aparelho and situacao != Renova.PENDENTE:
-        messages.error(request, f'{renova.codigo} não foi aprovado: o cliente ficou com o aparelho, então não há recebimento.')
+        if renova.aguardando_aprovacao:
+            messages.error(request, f'{renova.codigo} ainda espera a aprovação do gerente: nada foi enviado.')
+        else:
+            messages.error(request, f'{renova.codigo} foi reprovada: o cliente ficou com o aparelho, então não há recebimento.')
         return redirect(destino)
     registrar_recebimento(renova, request.user, situacao, request.POST.get('observacao', ''))
     limpar_cache_do_menu([request.user.pk])
@@ -296,8 +327,10 @@ def recebimento(request, pk):
 def abrir_chamado_de_novo(request, pk):
     cfg = configuracao()
     renova = get_object_or_404(Renova, pk=pk)
-    if not (renova.criado_por_id == request.user.pk or e_superadmin(request.user)):
-        messages.error(request, 'Só quem fez a avaliação (ou o SUPERADMIN) abre o chamado dela.')
+    if not renova.aprovada:
+        messages.error(request, f'O chamado de {renova.codigo} abre na aprovação do gerente.')
+    elif not (renova.criado_por_id == request.user.pk or e_superadmin(request.user) or pode_aprovar(request.user, renova)):
+        messages.error(request, 'Só quem fez a avaliação, o gerente da loja ou o SUPERADMIN abre o chamado dela.')
     elif renova.chamado_id:
         messages.info(request, f'O chamado #{renova.chamado_id} já está aberto.')
     else:
@@ -313,6 +346,120 @@ def abrir_chamado_de_novo(request, pk):
         else:
             messages.error(request, 'O chamado não abriu. Tente de novo em instantes.')
     return redirect('renova:detalhe', pk=renova.pk)
+
+
+@login_required
+@require_POST
+def aprovacao(request, pk):
+    cfg = configuracao()
+    renova = get_object_or_404(Renova.objects.select_related('loja', 'criado_por'), pk=pk)
+    if not pode_aprovar(request.user, renova):
+        messages.error(request, 'Só o gerente da loja (grupo GERENTES) ou o SUPERADMIN aprova esta troca.')
+        return redirect('renova:detalhe' if pode_ver(request.user, renova, cfg) else 'renova:inicio',
+                        **({'pk': pk} if pode_ver(request.user, renova, cfg) else {}))
+    decisao = request.POST.get('decisao')
+    if decisao not in ('aprovar', 'reprovar'):
+        messages.error(request, 'Escolha aprovar ou reprovar.')
+        return redirect('renova:detalhe', pk=pk)
+    try:
+        renova, chamado = decidir(renova, request.user, decisao == 'aprovar', request.POST.get('observacao', ''))
+    except DecisaoInvalida as exc:
+        messages.error(request, str(exc))
+        return redirect('renova:detalhe', pk=pk)
+    limpar_cache_do_menu([request.user.pk] + [g.pk for g in gerentes_da_loja(renova)])
+    if renova.aprovada and chamado:
+        messages.success(request, f'{renova.codigo} aprovada: chamado #{chamado.pk} aberto e etiqueta liberada.')
+    elif renova.aprovada:
+        messages.warning(request, f'{renova.codigo} aprovada, mas o chamado não abriu. Abra de novo por esta tela.')
+    else:
+        messages.success(request, f'{renova.codigo} reprovada: o vendedor foi avisado e o cliente fica com o aparelho.')
+    return redirect('renova:detalhe', pk=pk)
+
+
+# ─── Quadro de gestão (financeiro) ───────────────────────────────────────────
+
+FILTROS_SITUACAO = {
+    'APROVACAO': Q(aprovacao=Renova.AGUARDANDO_GERENTE),
+    'A_CAMINHO': Q(aprovacao=Renova.APROVADA, recebimento=Renova.PENDENTE) & ~Q(parecer=checklist.NAO_APROVADO),
+    'CHEGOU': Q(aprovacao=Renova.APROVADA, recebimento=Renova.CHEGOU) & ~Q(parecer=checklist.NAO_APROVADO),
+    'NAO_CHEGOU': Q(aprovacao=Renova.APROVADA, recebimento=Renova.NAO_CHEGOU) & ~Q(parecer=checklist.NAO_APROVADO),
+    'REPROVADA': Q(aprovacao=Renova.REPROVADA) | Q(parecer=checklist.NAO_APROVADO),
+}
+
+
+@login_required
+def gestao(request):
+    cfg = configuracao()
+    user = request.user
+    if not pode_ver_gestao(user, cfg):
+        messages.error(request, 'O quadro de gestão do Renova é do financeiro — peça acesso ao SUPERADMIN.')
+        return redirect('renova:inicio' if pode_ver_modulo(user, cfg) else 'dashboard')
+
+    filtros = {
+        'q': (request.GET.get('q') or '').strip()[:60],
+        'situacao': request.GET.get('situacao') or '',
+        'loja': request.GET.get('loja') or '',
+        'de': request.GET.get('de') or '',
+        'ate': request.GET.get('ate') or '',
+    }
+    base = Renova.objects.select_related('loja', 'criado_por', 'aprovacao_por', 'recebido_por', 'chamado')
+    if filtros['loja'].isdigit():
+        base = base.filter(loja_id=int(filtros['loja']))
+    for campo, lookup in (('de', 'criado_em__date__gte'), ('ate', 'criado_em__date__lte')):
+        if re.fullmatch(r'\d{4}-\d{2}-\d{2}', filtros[campo]):
+            base = base.filter(**{lookup: filtros[campo]})
+    if filtros['q']:
+        termo = filtros['q']
+        condicao = (Q(imei1__icontains=termo) | Q(modelo__icontains=termo) | Q(vendedor_nome__icontains=termo))
+        codigo = re.fullmatch(r'(?i)rn-?0*(\d+)', termo.replace(' ', ''))
+        if codigo:
+            condicao |= Q(pk=int(codigo.group(1)))
+        base = base.filter(condicao)
+
+    # Resumo do período e da loja filtrados — independe da situação escolhida.
+    resumo = []
+    for codigo, rotulo in Renova.SITUACOES:
+        dados = base.filter(FILTROS_SITUACAO[codigo]).aggregate(n=Count('id'), valor=Sum('valor_estimado'))
+        resumo.append({'codigo': codigo, 'rotulo': rotulo, 'quantidade': dados['n'], 'valor': dados['valor'] or 0})
+
+    qs = base.filter(FILTROS_SITUACAO[filtros['situacao']]) if filtros['situacao'] in FILTROS_SITUACAO else base
+    qs = qs.order_by('-criado_em')
+
+    if request.GET.get('formato') == 'csv':
+        return _gestao_csv(qs)
+
+    from users.models import Sector
+
+    pagina = Paginator(qs, 50).get_page(request.GET.get('pagina'))
+    return render(request, 'renova/gestao.html', _contexto(
+        request, cfg, 'gestao', pagina=pagina, resumo=resumo, filtros=filtros, situacoes=Renova.SITUACOES,
+        lojas_filtro=Sector.objects.filter(renovas__isnull=False).distinct().order_by('name'),
+        querystring=urlencode({k: v for k, v in filtros.items() if v}),
+        base_qs=urlencode({k: v for k, v in filtros.items() if v and k != 'situacao'})))
+
+
+def _gestao_csv(qs):
+    resposta = HttpResponse(content_type='text/csv; charset=utf-8')
+    resposta['Content-Disposition'] = f'attachment; filename="renova-gestao-{timezone.localdate():%Y-%m-%d}.csv"'
+    resposta.write('\ufeff')                     # BOM: o Excel abre os acentos certos
+    escrita = csv.writer(resposta, delimiter=';')
+    escrita.writerow(['Código', 'Avaliado em', 'Loja', 'Vendedor', 'Aparelho', 'IMEI 1', 'Padrão', 'Valor (R$)',
+                      'Situação', 'Aprovação por', 'Aprovação em', 'Chamado', 'Recebimento por', 'Recebimento em',
+                      'Obs. do recebimento'])
+
+    def quando(valor):
+        return timezone.localtime(valor).strftime('%d/%m/%Y %H:%M') if valor else ''
+
+    for r in qs.iterator():
+        escrita.writerow([
+            r.codigo, quando(r.criado_em), r.loja.name if r.loja else '', r.vendedor_nome, r.aparelho, r.imei1,
+            r.padrao, f'{r.valor_estimado:.2f}'.replace('.', ',') if r.valor_estimado is not None else '',
+            r.situacao[1], (r.aprovacao_por.full_name or r.aprovacao_por.get_username()) if r.aprovacao_por else '',
+            quando(r.aprovacao_em), f'#{r.chamado_id}' if r.chamado_id else '',
+            (r.recebido_por.full_name or r.recebido_por.get_username()) if r.recebido_por else '',
+            quando(r.recebido_em), r.recebimento_obs,
+        ])
+    return resposta
 
 
 # ─── Materiais ───────────────────────────────────────────────────────────────
@@ -370,6 +517,7 @@ def configurar(request):
         request, cfg, 'configuracao',
         pessoas=User.objects.filter(is_active=True).select_related('sector').order_by('first_name', 'last_name'),
         habilitados=set(cfg.habilitados.values_list('pk', flat=True)),
+        financeiro=set(cfg.financeiro.values_list('pk', flat=True)),
         categorias=Category.objects.filter(is_active=True).select_related('sector').order_by('sector__name', 'name'),
         setor=setor,
         membros_setor=(User.objects.filter(Q(sector=setor) | Q(sectors=setor), is_active=True).distinct().count()
@@ -388,6 +536,10 @@ def _salvar_acesso(request, cfg):
     ids = {int(x) for x in request.POST.getlist('habilitados') if str(x).isdigit()}
     habilitados = list(User.objects.filter(pk__in=ids, is_active=True))
     cfg.habilitados.set(habilitados)
+    antes_fin = set(cfg.financeiro.values_list('pk', flat=True))
+    ids_fin = {int(x) for x in request.POST.getlist('financeiro') if str(x).isdigit()}
+    financeiro = list(User.objects.filter(pk__in=ids_fin, is_active=True))
+    cfg.financeiro.set(financeiro)
 
     categoria_id = request.POST.get('categoria') or ''
     cfg.categoria = (Category.objects.filter(pk=int(categoria_id), is_active=True).first()
@@ -400,8 +552,9 @@ def _salvar_acesso(request, cfg):
             messages.error(request, f'O desconto do padrão {letra} vai de 0 a 100% — ficou como estava.')
     cfg.atualizado_por = request.user
     cfg.save()
-    limpar_cache_do_menu(antes ^ {u.pk for u in habilitados})
-    messages.success(request, f'Configuração salva: {len(habilitados)} pessoa(s) podem fazer Renova.')
+    limpar_cache_do_menu((antes ^ {u.pk for u in habilitados}) | (antes_fin ^ {u.pk for u in financeiro}))
+    messages.success(request, f'Configuração salva: {len(habilitados)} pessoa(s) podem fazer Renova e '
+                              f'{len(financeiro)} acompanham o quadro de gestão.')
     if cfg.categoria is None:
         messages.warning(request, 'Sem categoria de chamado, ninguém consegue concluir uma avaliação.')
 

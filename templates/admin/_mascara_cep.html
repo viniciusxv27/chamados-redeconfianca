@@ -1,0 +1,14 @@
+<script>
+// CEP: só dígitos, com o hífen no lugar (00000-000). O servidor normaliza e
+// recusa o que não tiver 8 dígitos; isto aqui só poupa a volta.
+(function () {
+    var cep = document.getElementById('cep');
+    if (!cep) return;
+    function mascara(valor) {
+        var d = valor.replace(/\D/g, '').slice(0, 8);
+        return d.length > 5 ? d.slice(0, 5) + '-' + d.slice(5) : d;
+    }
+    cep.addEventListener('input', function () { cep.value = mascara(cep.value); });
+    if (cep.value) cep.value = mascara(cep.value);
+})();
+</script>

@@ -29,6 +29,9 @@ class ConfiguracaoRenova(models.Model):
     habilitados = models.ManyToManyField(
         settings.AUTH_USER_MODEL, blank=True, related_name='renova_habilitacoes',
         verbose_name='Quem pode fazer Renova')
+    financeiro = models.ManyToManyField(
+        settings.AUTH_USER_MODEL, blank=True, related_name='renova_financeiro',
+        verbose_name='Quem acompanha o quadro de gestão (financeiro)')
     desconto_b = models.PositiveSmallIntegerField(
         default=20, validators=[MaxValueValidator(100)], verbose_name='Desconto do padrão B (%)')
     desconto_c = models.PositiveSmallIntegerField(
@@ -122,6 +125,16 @@ class Renova(models.Model):
         (NAO_CHEGOU, 'Não chegou'),
     ]
 
+    # Aprovação do gerente da loja (grupo GERENTES), depois da avaliação do vendedor
+    AGUARDANDO_GERENTE = 'PENDENTE'
+    APROVADA = 'APROVADA'
+    REPROVADA = 'REPROVADA'
+    APROVACOES = [
+        (AGUARDANDO_GERENTE, 'Aguardando aprovação do gerente'),
+        (APROVADA, 'Aprovada pelo gerente'),
+        (REPROVADA, 'Reprovada pelo gerente'),
+    ]
+
     # 1. Dados do aparelho
     marca = models.CharField(max_length=12, choices=checklist.MARCAS, verbose_name='Marca')
     marca_outra = models.CharField(max_length=60, blank=True, verbose_name='Outra marca')
@@ -136,6 +149,7 @@ class Renova(models.Model):
     loja = models.ForeignKey(
         'users.Sector', on_delete=models.SET_NULL, null=True, related_name='renovas', verbose_name='Loja (origem)')
     padrao = models.CharField(max_length=1, choices=checklist.PADROES, blank=True, verbose_name='Padrão de avaliação')
+    padrao_motivos = models.JSONField(default=list, blank=True, verbose_name='Por que este padrão')
     preco_tabela = models.ForeignKey(
         PrecoAparelho, on_delete=models.SET_NULL, null=True, blank=True, related_name='renovas',
         verbose_name='Linha da tabela usada')
@@ -177,6 +191,15 @@ class Renova(models.Model):
     recebido_em = models.DateTimeField(null=True, blank=True, verbose_name='Marcado em')
     recebimento_obs = models.TextField(blank=True, verbose_name='Observação do recebimento')
 
+    aprovacao = models.CharField(
+        max_length=10, choices=APROVACOES, default=AGUARDANDO_GERENTE, db_index=True,
+        verbose_name='Aprovação do gerente')
+    aprovacao_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+',
+        verbose_name='Decidido por')
+    aprovacao_em = models.DateTimeField(null=True, blank=True, verbose_name='Decidido em')
+    aprovacao_obs = models.TextField(blank=True, verbose_name='Observação do gerente')
+
     class Meta:
         verbose_name = 'Renova'
         verbose_name_plural = 'Renovas'
@@ -210,14 +233,49 @@ class Renova(models.Model):
         return self.parecer in (checklist.APROVADO, checklist.APROVADO_OBS)
 
     @property
+    def aguardando_aprovacao(self):
+        return self.aprovacao == self.AGUARDANDO_GERENTE
+
+    @property
+    def aprovada(self):
+        return self.aprovacao == self.APROVADA
+
+    @property
+    def reprovada(self):
+        return self.aprovacao == self.REPROVADA or self.parecer == checklist.NAO_APROVADO
+
+    @property
     def recebe_aparelho(self):
-        """Só aparelho aprovado vira troca e chega ao setor que recebe."""
-        return self.parecer != checklist.NAO_APROVADO
+        """Só a troca aprovada pelo gerente viaja e chega ao setor que recebe."""
+        return self.aprovada and self.parecer != checklist.NAO_APROVADO
 
     @property
     def sem_recebimento(self):
-        """Não aprovado e nunca marcado: o cliente ficou com o aparelho."""
-        return not self.recebe_aparelho and self.recebimento == self.PENDENTE
+        """Reprovada e nunca marcada: o cliente ficou com o aparelho."""
+        return self.reprovada and self.recebimento == self.PENDENTE
+
+    SITUACOES = [
+        ('APROVACAO', 'Aguardando aprovação'),
+        ('A_CAMINHO', 'Aprovada, aguardando chegada'),
+        ('CHEGOU', 'Chegou'),
+        ('NAO_CHEGOU', 'Não chegou'),
+        ('REPROVADA', 'Reprovada — sem troca'),
+    ]
+
+    @property
+    def situacao(self):
+        """Onde a troca está, do jeito que o financeiro acompanha: (código, rótulo)."""
+        if self.aguardando_aprovacao:
+            codigo = 'APROVACAO'
+        elif self.reprovada:
+            codigo = 'REPROVADA'
+        elif self.recebimento == self.CHEGOU:
+            codigo = 'CHEGOU'
+        elif self.recebimento == self.NAO_CHEGOU:
+            codigo = 'NAO_CHEGOU'
+        else:
+            codigo = 'A_CAMINHO'
+        return codigo, dict(self.SITUACOES)[codigo]
 
     def itens_obrigatorios_lista(self):
         feitos = self.itens_obrigatorios or {}

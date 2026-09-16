@@ -1,0 +1,258 @@
+{% comment %}
+Cartão "Rotina gerencial" na home — o que a pessoa faz agora, a próxima e o
+resto do dia, com o link para a rotina e o estado dos avisos.
+
+A home inclui este arquivo só com {% if rotina_liberada %}. A tag faz uma
+consulta; se algo falhar, devolve vazio (com log) e nada daqui aparece.
+O JS só atualiza os números a cada 20 s e, quando uma atividade começa ou
+termina (data-mudanca), pede o cartão pronto de novo ao servidor.
+Prefixo rth- no CSS; um único objeto global: window.RotinaHome.
+{% endcomment %}
+{% load rotina_home %}
+{% cartao_rotina_home as cartao_rotina %}
+{% if cartao_rotina %}
+<style>
+    .rth { margin-bottom: 1.5rem; }
+    .rth-oculto { display: none !important; }
+    .rth-cartao {
+        position: relative; overflow: hidden;
+        border: 1px solid #EDEFF3; border-radius: 1rem;
+        background: #fff; color: #1F2937;
+        box-shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 6px 18px rgba(16, 24, 40, .06);
+    }
+    .rth-cartao::before { content: ''; position: absolute; inset: 0 0 auto 0; height: 3px; background: linear-gradient(90deg, #FF6B35, #FF9A6B 55%, #FFD2BD); }
+
+    /* As três cores da legenda (rotina.models.CORES_CATEGORIA), com tons próprios para fundo e texto. */
+    .rth-cat-resultado { --rth-cor: #E74C3C; --rth-fundo: #FDF0EE; --rth-tom: #9B2C1F; }
+    .rth-cat-equipe { --rth-cor: #F2B01E; --rth-fundo: #FEF7E1; --rth-tom: #7A4F00; }
+    .rth-cat-complementar { --rth-cor: #4FA3E0; --rth-fundo: #EAF5FD; --rth-tom: #1B5A8A; }
+
+    .rth-cabeca { display: flex; align-items: center; gap: .75rem; padding: 1rem 1rem .8rem; }
+    .rth-icone {
+        flex-shrink: 0; display: grid; place-items: center; width: 2.5rem; height: 2.5rem; border-radius: .8rem;
+        font-size: 1.05rem; color: #fff; background: linear-gradient(135deg, #FF8C5E, #FF6B35);
+        box-shadow: 0 6px 14px rgba(255, 107, 53, .32);
+    }
+    .rth-cabeca-texto { flex: 1; min-width: 0; }
+    .rth-sobre { margin: 0; font-size: .66rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #E8572A; }
+    .rth-titulo { margin: .05rem 0 0; font-size: 1.02rem; font-weight: 800; line-height: 1.25; color: #111827; }
+    .rth-link {
+        flex-shrink: 0; display: inline-flex; align-items: center; gap: .45rem; padding: .5rem .8rem;
+        border-radius: .7rem; font-size: .8rem; font-weight: 700; white-space: nowrap; text-decoration: none;
+        color: #2C3E50; background: #F3F4F6; transition: background-color .15s;
+    }
+    .rth-link:hover { background: #E7E9EE; color: #111827; }
+    .rth-link i { font-size: .72rem; color: #FF6B35; }
+
+    .rth-faixa { padding: 0 1rem .9rem; }
+    .rth-faixa-trilho { position: relative; height: .5rem; }
+    .rth-faixa-blocos { position: absolute; inset: 0; overflow: hidden; border-radius: 999px; background: #EEF1F5; }
+    .rth-bloco { position: absolute; top: 0; bottom: 0; box-shadow: inset -2px 0 0 #fff; }
+    .rth-bloco-feita { opacity: .28; }
+    .rth-bloco-depois { opacity: .75; }
+    .rth-faixa-agora {
+        position: absolute; top: -.3rem; bottom: -.3rem; width: 3px; margin-left: -1.5px;
+        border-radius: 3px; background: #1F2937; box-shadow: 0 0 0 2px #fff;
+    }
+    .rth-faixa-legenda {
+        display: flex; justify-content: space-between; gap: .5rem; margin-top: .45rem;
+        font-size: .7rem; color: #6B7280; font-variant-numeric: tabular-nums;
+    }
+    .rth-faixa-legenda strong { color: #1F2937; }
+
+    .rth-corpo { display: grid; gap: .9rem; padding: 0 1rem 1rem; }
+    @media (min-width: 640px) { .rth-corpo { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 1.25rem; } }
+    .rth-destaque {
+        position: relative; display: flex; flex-direction: column; padding: .85rem 1rem .95rem 1.15rem; border-radius: .85rem;
+        background: var(--rth-fundo); box-shadow: inset 4px 0 0 var(--rth-cor);
+        color: inherit; text-decoration: none; transition: filter .15s;
+    }
+    .rth-destaque:hover { filter: saturate(1.2) brightness(.985); color: inherit; }
+    .rth-rotulo {
+        display: flex; align-items: center; gap: .45rem; margin: 0;
+        font-size: .68rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--rth-tom);
+    }
+    .rth-rotulo .fa-lock { margin-left: auto; font-size: .72rem; opacity: .75; }
+    .rth-rotulo .fa-forward { font-size: .7rem; }
+    .rth-pulso { position: relative; flex-shrink: 0; width: .5rem; height: .5rem; border-radius: 999px; background: var(--rth-cor); }
+    .rth-pulso::after { content: ''; position: absolute; inset: 0; border-radius: inherit; background: inherit; animation: rth-pulso 1.8s ease-out infinite; }
+    @keyframes rth-pulso { from { transform: scale(1); opacity: .6; } to { transform: scale(2.8); opacity: 0; } }
+    .rth-destaque-titulo { margin: .35rem 0 0; font-size: 1.15rem; font-weight: 800; line-height: 1.25; color: #111827; overflow-wrap: break-word; }
+    .rth-destaque-hora { margin: .2rem 0 .75rem; font-size: .82rem; color: #4B5563; font-variant-numeric: tabular-nums; }
+    .rth-destaque-hora span { font-weight: 700; color: var(--rth-tom); }
+    .rth-progresso { display: block; flex-shrink: 0; height: .38rem; margin-top: auto; overflow: hidden; border-radius: 999px; background: rgba(17, 24, 39, .08); }
+    .rth-progresso-barra { display: block; height: 100%; border-radius: inherit; background: var(--rth-cor); transition: width .6s ease; }
+
+    .rth-seguir { min-width: 0; }
+    .rth-seguir-titulo { margin: 0 0 .25rem; font-size: .68rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #6B7280; }
+    .rth-lista { display: grid; gap: .05rem; margin: 0; padding: 0; list-style: none; }
+    .rth-item {
+        display: flex; align-items: center; gap: .6rem; margin: 0 -.55rem; padding: .5rem .55rem;
+        border-radius: .6rem; font-size: .86rem; color: #1F2937; text-decoration: none;
+    }
+    .rth-item:hover { background: #F5F6F8; color: #111827; }
+    .rth-item-hora { flex-shrink: 0; width: 2.7rem; font-size: .8rem; font-weight: 700; color: #4B5563; font-variant-numeric: tabular-nums; }
+    .rth-item-marca { flex-shrink: 0; width: .55rem; height: .55rem; border-radius: 999px; background: var(--rth-cor); box-shadow: 0 0 0 3px var(--rth-fundo); }
+    .rth-item-titulo { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .rth-item-trava { flex-shrink: 0; font-size: .62rem; color: #9CA3AF; }
+    .rth-item-em {
+        flex-shrink: 0; padding: .12rem .5rem; border-radius: 999px; white-space: nowrap;
+        font-size: .7rem; font-weight: 700; background: #FFF1EA; color: #B6461F;
+    }
+    .rth-mais { display: inline-flex; align-items: center; gap: .35rem; margin-top: .4rem; font-size: .78rem; font-weight: 700; text-decoration: none; color: #E8572A; }
+    .rth-mais i { font-size: .65rem; }
+    .rth-mais:hover { color: #C2410C; }
+    .rth-seguir-vazio { margin: .2rem 0 0; font-size: .82rem; color: #6B7280; }
+
+    .rth-mensagem { display: flex; align-items: center; gap: .85rem; padding: 0 1rem 1rem; }
+    .rth-mensagem-icone {
+        flex-shrink: 0; display: grid; place-items: center; width: 2.6rem; height: 2.6rem; border-radius: 999px;
+        font-size: 1.1rem; color: #6B7280; background: #F3F4F6;
+    }
+    .rth-mensagem-ok { color: #1E7B45; background: #E9F7EF; }
+    .rth-mensagem-titulo { margin: 0; font-size: .95rem; font-weight: 800; color: #111827; }
+    .rth-mensagem-texto { margin: .1rem 0 0; font-size: .82rem; line-height: 1.45; color: #4B5563; }
+    .rth-mensagem-texto a { font-weight: 700; color: #E8572A; text-decoration: none; }
+
+    .rth-rodape { padding: .6rem 1rem; border-top: 1px solid #F0F1F4; background: #FAFBFC; }
+    .rth-avisos { display: flex; align-items: flex-start; gap: .55rem; margin: 0; font-size: .76rem; line-height: 1.45; color: #4B5563; }
+    .rth-avisos i { flex-shrink: 0; margin-top: .18rem; color: #1E7B45; }
+    .rth-avisos strong { color: #1E7B45; }
+    .rth-avisos-parcial i, .rth-avisos-parcial strong, .rth-avisos a { color: #B45309; }
+    .rth-avisos a { font-weight: 700; }
+
+    .rth-link:focus-visible, .rth-destaque:focus-visible, .rth-item:focus-visible, .rth-mais:focus-visible,
+    .rth-cartao a:focus-visible { outline: 2px solid #FF6B35; outline-offset: 2px; }
+    @media (max-width: 479.98px) {
+        .rth-link span { display: none; }
+        .rth-link { padding: .65rem .75rem; }
+        .rth-link i { font-size: .8rem; }
+    }
+    @media (prefers-reduced-motion: reduce) { .rth-pulso::after { animation: none; } .rth-progresso-barra { transition: none; } }
+
+    html.dark .rth-cartao { border-color: #2a3244; background: #1b2130; color: #e7eaf0; box-shadow: 0 1px 2px rgba(0, 0, 0, .35); }
+    html.dark .rth-cat-resultado { --rth-fundo: rgba(231, 76, 60, .16); --rth-tom: #FFB4A9; }
+    html.dark .rth-cat-equipe { --rth-fundo: rgba(242, 176, 30, .15); --rth-tom: #FBD98A; }
+    html.dark .rth-cat-complementar { --rth-fundo: rgba(79, 163, 224, .16); --rth-tom: #A9D4F5; }
+    html.dark .rth-sobre { color: #FF9A6B; }
+    html.dark .rth-titulo, html.dark .rth-destaque-titulo, html.dark .rth-mensagem-titulo { color: #fff; }
+    html.dark .rth-link { background: #232a3b; color: #e7eaf0; }
+    html.dark .rth-link:hover { background: #2b3346; color: #fff; }
+    html.dark .rth-faixa-blocos { background: #2b3346; }
+    html.dark .rth-bloco { box-shadow: inset -2px 0 0 #1b2130; }
+    html.dark .rth-faixa-agora { background: #fff; box-shadow: 0 0 0 2px #1b2130; }
+    html.dark .rth-faixa-legenda, html.dark .rth-seguir-titulo, html.dark .rth-seguir-vazio, html.dark .rth-item-trava { color: #8b93a5; }
+    html.dark .rth-faixa-legenda strong { color: #e7eaf0; }
+    html.dark .rth-destaque-hora, html.dark .rth-item-hora, html.dark .rth-mensagem-texto, html.dark .rth-avisos { color: #b6bdcc; }
+    html.dark .rth-progresso { background: rgba(255, 255, 255, .1); }
+    html.dark .rth-item { color: #e7eaf0; }
+    html.dark .rth-item:hover { background: #232a3b; color: #fff; }
+    html.dark .rth-item-em { background: rgba(255, 107, 53, .16); color: #FFB38F; }
+    html.dark .rth-mais, html.dark .rth-mensagem-texto a { color: #FF9A6B; }
+    html.dark .rth-mensagem-icone { background: #232a3b; color: #b6bdcc; }
+    html.dark .rth-mensagem-ok { background: rgba(39, 174, 96, .16); color: #9BE3B5; }
+    html.dark .rth-rodape { border-top-color: #2a3244; background: #171c29; }
+    html.dark .rth-avisos i, html.dark .rth-avisos strong { color: #9BE3B5; }
+    html.dark .rth-avisos-parcial i, html.dark .rth-avisos-parcial strong, html.dark .rth-avisos a { color: #FDBA74; }
+</style>
+<div id="rth" class="rth" data-url="{% url 'rotina:api_cartao_home' %}">{{ cartao_rotina }}</div>
+<script>
+(function () {
+    'use strict';
+
+    var raiz = document.getElementById('rth');
+    if (!raiz || window.RotinaHome) { return; }
+
+    var URL_CARTAO = raiz.getAttribute('data-url');
+    var TIQUE = 20 * 1000;
+    var FOLGA = 1500;                        // espera o servidor passar do instante da mudança
+    var estado = { offset: 0, carregando: false, esperarAte: 0 };
+
+    function cartao() { return raiz.querySelector('.rth-cartao'); }
+    function agora() { return Date.now() + estado.offset; }
+    function duracao(minutos) {
+        if (minutos < 60) { return minutos + ' min'; }
+        var horas = Math.floor(minutos / 60), resto = minutos % 60;
+        return horas + 'h' + (resto ? (resto < 10 ? '0' : '') + resto : '');
+    }
+
+    /* O relógio que vale é o do servidor (o do aparelho pode estar errado). */
+    function sincronizar() {
+        var c = cartao();
+        var ts = c ? +c.getAttribute('data-agora-ts') : 0;
+        if (ts) { estado.offset = ts - Date.now(); }
+    }
+
+    function atualizar() {
+        var c = cartao();
+        if (!c) { return; }
+        var t = agora();
+        var mudanca = +c.getAttribute('data-mudanca') || 0;
+        if (mudanca && t >= mudanca + FOLGA && t >= estado.esperarAte) { recarregar(); return; }
+
+        Array.prototype.forEach.call(c.querySelectorAll('[data-rth-ate]'), function (el) {
+            var faltam = Math.max(1, Math.ceil((+el.getAttribute('data-rth-ate') - t) / 60000));
+            el.textContent = (el.getAttribute('data-rth-prefixo') || '') + duracao(faltam);
+        });
+        Array.prototype.forEach.call(c.querySelectorAll('[data-rth-de]'), function (barra) {
+            var de = +barra.getAttribute('data-rth-de'), ate = +barra.getAttribute('data-rth-fim');
+            if (ate > de) { barra.style.width = Math.min(100, Math.max(0, 100 * (t - de) / (ate - de))) + '%'; }
+        });
+        var faixa = c.querySelector('[data-rth-inicio]');
+        var marca = faixa && faixa.querySelector('.rth-faixa-agora');
+        if (marca) {
+            var ini = +faixa.getAttribute('data-rth-inicio'), fim = +faixa.getAttribute('data-rth-fim');
+            var dentro = fim > ini && t >= ini && t <= fim;
+            marca.classList.toggle('rth-oculto', !dentro);
+            if (dentro) { marca.style.left = (100 * (t - ini) / (fim - ini)) + '%'; }
+        }
+    }
+
+    /* Uma atividade começou ou terminou: o servidor manda o cartão já no estado novo. */
+    function recarregar() {
+        if (estado.carregando || !URL_CARTAO) { return; }
+        estado.carregando = true;
+        fetch(URL_CARTAO, {
+            credentials: 'same-origin',
+            headers: { 'Accept': 'text/html', 'X-Requested-With': 'XMLHttpRequest' }
+        }).then(function (resposta) {
+            if (resposta.status === 204) { return ''; }
+            var tipo = resposta.headers.get('Content-Type') || '';
+            return resposta.ok && tipo.indexOf('text/html') === 0 ? resposta.text() : null;
+        }).then(function (html) {
+            if (html === '') {                               // a rotina deixou de valer: o cartão sai
+                raiz.innerHTML = '';
+                raiz.classList.add('rth-oculto');
+                return;
+            }
+            if (!html || html.indexOf('rth-cartao') === -1) {  // sessão caída, erro: tenta de novo em 1 min
+                estado.esperarAte = agora() + 60 * 1000;
+                return;
+            }
+            raiz.innerHTML = html;
+            sincronizar();
+            var novo = cartao();
+            var mudanca = novo ? +novo.getAttribute('data-mudanca') || 0 : 0;
+            // Relógios desencontrados (o servidor ainda não chegou lá): não insiste a cada tique.
+            if (mudanca && agora() >= mudanca + FOLGA) { estado.esperarAte = agora() + 60 * 1000; }
+            atualizar();
+        }).catch(function () {
+            estado.esperarAte = agora() + 60 * 1000;
+        }).then(function () {
+            estado.carregando = false;
+        });
+    }
+
+    document.addEventListener('visibilitychange', function () {
+        if (!document.hidden) { atualizar(); }
+    });
+    setInterval(function () {
+        if (!document.hidden) { atualizar(); }
+    }, TIQUE);
+
+    window.RotinaHome = { atualizar: atualizar, recarregar: recarregar, estado: estado };
+    sincronizar();
+    atualizar();
+})();
+</script>
+{% endif %}

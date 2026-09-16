@@ -54,8 +54,8 @@ class AtividadeRotinaAdmin(admin.ModelAdmin):
 
 @admin.register(AvisoRotina)
 class AvisoRotinaAdmin(admin.ModelAdmin):
-    list_display = ('titulo', 'user', 'data', 'inicio', 'criado_em')
-    list_filter = ('data',)
+    list_display = ('titulo', 'user', 'data', 'tipo', 'inicio', 'criado_em')
+    list_filter = ('tipo', 'data')
     search_fields = ('titulo', 'user__first_name', 'user__last_name', 'user__email')
     raw_id_fields = ('user', 'atividade')
     date_hierarchy = 'data'

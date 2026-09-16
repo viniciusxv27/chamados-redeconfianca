@@ -1,0 +1,51 @@
+{% extends 'apresentacoes/base_apresentacoes.html' %}
+
+{% block ap_pagina %}Templates{% endblock %}
+{% block ap_titulo %}identidade visual<br><span>pronta para a IA</span>{% endblock %}
+{% block ap_sub %}Importe as telas de um template (imagens, PDF ou PowerPoint): os textos de exemplo saem do fundo e voltam como campos editáveis, e a IA passa a montar os slides nesse padrão.{% endblock %}
+{% block ap_acoes %}
+<a href="{% url 'apresentacoes:template_novo' %}" class="ap-botao ap-botao-principal"><i class="fas fa-plus"></i>Importar template</a>
+{% endblock %}
+
+{% block ap_conteudo %}
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    {% for t in templates %}
+    <article class="ap-cartao p-4">
+        <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+                <h2 class="font-bold flex items-center gap-2 flex-wrap">{{ t.nome }}
+                    {% if t.principal %}<span class="ap-selo ap-selo-PERGUNTAS"><i class="fas fa-crown"></i>Principal</span>{% endif %}
+                    {% if t.padrao_da_rede %}<span class="ap-selo ap-selo-PRONTA"><i class="fas fa-users"></i>Para todos</span>{% endif %}
+                    {% if t.status == 'ANALISANDO' %}<span class="ap-selo ap-selo-GERANDO"><i class="fas fa-circle-notch fa-spin"></i>Analisando</span>{% elif t.status == 'ERRO' %}<span class="ap-selo ap-selo-ERRO">Erro</span>{% endif %}
+                </h2>
+                <p class="text-xs mt-0.5" style="color: var(--ap-suave)">{{ t.get_origem_display }} · {{ t.layouts|length }} layout{{ t.layouts|length|pluralize }} · {{ t.fonte_titulo }}{% if t.criado_por %} · {{ t.criado_por.get_full_name|default:t.criado_por.username }}{% endif %}</p>
+            </div>
+            <span class="flex -space-x-1 flex-shrink-0">{% for cor in t.cores %}<span class="w-4 h-4 rounded-full ring-2 ring-white" style="background: {{ cor }}"></span>{% endfor %}</span>
+        </div>
+        <div class="mt-3 grid grid-cols-5 gap-1.5">
+            {% for c in t.capas %}<div class="ap-mini" style="{% if c.fundo %}background-image: url('{{ c.fundo }}'){% endif %}" title="{{ c.nome }}"></div>{% empty %}<div class="ap-mini col-span-5 grid place-items-center text-xs text-white/70">sem layouts ainda</div>{% endfor %}
+        </div>
+        {% if t.status == 'ERRO' and t.erro %}<p class="mt-2 text-xs text-red-600">{{ t.erro }}</p>{% endif %}
+        <div class="mt-3 flex flex-wrap gap-2">
+            {% if t.pode_editar %}
+            <a href="{% url 'apresentacoes:template_editor' t.pk %}" class="ap-botao ap-botao-claro !py-1.5 !px-3 !text-xs"><i class="fas fa-pen-to-square"></i>Editar layouts</a>
+            {% endif %}
+            {% if ap_superadmin %}
+            {% if not t.principal %}
+            <form method="post" action="{% url 'apresentacoes:template_opcoes' t.pk %}">{% csrf_token %}<input type="hidden" name="acao" value="principal">
+                <button class="ap-botao ap-botao-claro !py-1.5 !px-3 !text-xs"><i class="fas fa-crown"></i>Tornar principal</button></form>
+            {% endif %}
+            {% if t.origem != 'SISTEMA' %}
+            <form method="post" action="{% url 'apresentacoes:template_opcoes' t.pk %}">{% csrf_token %}<input type="hidden" name="acao" value="rede">
+                <button class="ap-botao ap-botao-claro !py-1.5 !px-3 !text-xs"><i class="fas {% if t.padrao_da_rede %}fa-eye-slash{% else %}fa-eye{% endif %}"></i>{% if t.padrao_da_rede %}Só para quem importou{% else %}Liberar para todos{% endif %}</button></form>
+            {% endif %}
+            {% endif %}
+            {% if t.pode_editar and t.origem != 'SISTEMA' %}
+            <form method="post" action="{% url 'apresentacoes:template_excluir' t.pk %}" class="ml-auto" onsubmit="return confirm('Remover o template “{{ t.nome|escapejs }}”? As apresentações que já usam continuam como estão.');">{% csrf_token %}
+                <button class="ap-botao ap-botao-claro !py-1.5 !px-3 !text-xs text-red-600"><i class="fas fa-trash-can"></i>Remover</button></form>
+            {% endif %}
+        </div>
+    </article>
+    {% endfor %}
+</div>
+{% endblock %}

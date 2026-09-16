@@ -1,8 +1,8 @@
 """Diz ao menu e ao base.html se a Rotina Gerencial vale para quem está olhando.
 
 - `rotina_liberada`: a pessoa tem rotina ativa com pelo menos uma atividade.
-  Decide o item de menu e a inclusão do notificador de avisos — sem atividade
-  não há o que avisar.
+  Decide o item de menu, a inclusão do notificador de avisos e o cartão da
+  home — sem atividade não há o que avisar nem mostrar.
 - `rotina_admin`: SUPERADMIN, que enxerga o menu mesmo sem rotina própria,
   para gerir a dos outros.
 
@@ -16,6 +16,13 @@ from .permissoes import e_superadmin
 logger = logging.getLogger(__name__)
 
 
+def rotina_liberada(user):
+    """A regra de quem tem a rotina "ligada": ativa e com pelo menos uma atividade."""
+    from .models import RotinaGerencial
+
+    return RotinaGerencial.objects.filter(user=user, ativa=True, atividades__isnull=False).exists()
+
+
 def rotina_menu(request):
     user = getattr(request, 'user', None)
     if not (user and user.is_authenticated):
@@ -26,9 +33,7 @@ def rotina_menu(request):
         return ja_calculado
 
     try:
-        from .models import RotinaGerencial
-        liberada = RotinaGerencial.objects.filter(
-            user=user, ativa=True, atividades__isnull=False).exists()
+        liberada = rotina_liberada(user)
     except Exception as exc:                                    # noqa: BLE001
         logger.warning('Menu da rotina gerencial indisponível: %s', exc)
         liberada = False

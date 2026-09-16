@@ -1,0 +1,103 @@
+{% extends 'apresentacoes/base_apresentacoes.html' %}
+
+{% block ap_pagina %}{% if ap_superadmin %}Todas as apresentações{% else %}Minhas apresentações{% endif %}{% endblock %}
+
+{% block ap_conteudo %}
+{% if gerando %}
+<div class="mb-4 flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+    <i class="fas fa-circle-notch fa-spin"></i>
+    <span><strong>{{ gerando }}</strong> apresentação(ões) sendo montada(s) pela IA — você pode continuar usando o portal; o sino avisa quando ficar pronta.</span>
+</div>
+{% endif %}
+
+<form method="get" class="ap-cartao p-3 sm:p-4 mb-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
+    <div class="lg:col-span-2">
+        <label class="ap-rotulo-campo" for="ap-q">Buscar</label>
+        <input id="ap-q" type="search" name="q" value="{{ filtros.q }}" class="ap-campo" placeholder="Título, pedido{% if ap_superadmin %} ou pessoa{% endif %}">
+    </div>
+    {% if ap_superadmin %}
+    <div>
+        <label class="ap-rotulo-campo" for="ap-pessoa">Criada por</label>
+        <select id="ap-pessoa" name="pessoa" class="ap-campo">
+            <option value="">Todas as pessoas</option>
+            {% for p in pessoas %}<option value="{{ p.pk }}" {% if filtros.pessoa == p.pk|stringformat:'s' %}selected{% endif %}>{{ p.get_full_name|default:p.username }}</option>{% endfor %}
+        </select>
+    </div>
+    {% endif %}
+    <div>
+        <label class="ap-rotulo-campo" for="ap-origem">Tipo</label>
+        <select id="ap-origem" name="origem" class="ap-campo">
+            <option value="">Todos</option>
+            {% for valor, rotulo in origens %}<option value="{{ valor }}" {% if filtros.origem == valor %}selected{% endif %}>{{ rotulo }}</option>{% endfor %}
+        </select>
+    </div>
+    <div class="flex gap-2">
+        <div class="flex-1">
+            <label class="ap-rotulo-campo" for="ap-status">Situação</label>
+            <select id="ap-status" name="status" class="ap-campo">
+                <option value="">Todas</option>
+                {% for valor, rotulo in status_opcoes %}<option value="{{ valor }}" {% if filtros.status == valor %}selected{% endif %}>{{ rotulo }}</option>{% endfor %}
+            </select>
+        </div>
+        <button type="submit" class="ap-botao ap-botao-claro self-end" title="Filtrar"><i class="fas fa-filter"></i><span class="sr-only">Filtrar</span></button>
+    </div>
+</form>
+
+{% if pagina.object_list %}
+<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+    {% for ap in pagina %}
+    <article class="ap-cartao p-3 flex flex-col">
+        <a href="{% url 'apresentacoes:editor' ap.pk %}" class="ap-poster" style="background-color: {{ ap.capa.cor }};{% if ap.capa.fundo %} background-image: url('{{ ap.capa.fundo }}');{% endif %}">
+            <span class="ap-poster-titulo">{{ ap.capa.titulo|truncatechars:90 }}</span>
+            {% if ap.status == 'GERANDO' %}<span class="absolute top-2 right-2 ap-selo ap-selo-GERANDO"><i class="fas fa-circle-notch fa-spin"></i>Gerando</span>{% endif %}
+        </a>
+        <div class="mt-3 flex items-start justify-between gap-2">
+            <div class="min-w-0">
+                <h2 class="font-bold text-sm leading-snug truncate" title="{{ ap.titulo }}">{{ ap.titulo }}</h2>
+                <p class="text-xs mt-0.5" style="color: var(--ap-suave)">
+                    {% if ap.origem == 'MODULO' %}<i class="fas fa-cubes mr-1"></i>Módulo{% else %}<i class="fas fa-wand-magic-sparkles mr-1"></i>Pedido{% endif %}
+                    · {{ ap.total_slides }} slide{{ ap.total_slides|pluralize }}
+                    · {{ ap.atualizado_em|date:"d/m H:i" }}
+                    {% if ap_superadmin and ap.dono_id != request.user.pk %}· {{ ap.dono.get_full_name|default:ap.dono.username }}{% endif %}
+                </p>
+            </div>
+            <span class="ap-selo ap-selo-{{ ap.status }} flex-shrink-0">{{ ap.get_status_display }}</span>
+        </div>
+        <div class="mt-3 flex flex-wrap items-center gap-2">
+            <a href="{% url 'apresentacoes:editor' ap.pk %}" class="ap-botao ap-botao-principal !py-1.5 !px-3 !text-xs"><i class="fas fa-pen-to-square"></i>Abrir</a>
+            {% if ap.total_slides %}<a href="{% url 'apresentacoes:apresentar' ap.pk %}" target="_blank" rel="noopener" class="ap-botao ap-botao-claro !py-1.5 !px-3 !text-xs"><i class="fas fa-play"></i>Apresentar</a>{% endif %}
+            <form method="post" action="{% url 'apresentacoes:duplicar' ap.pk %}" class="inline">{% csrf_token %}
+                <button type="submit" class="ap-botao ap-botao-claro !py-1.5 !px-3 !text-xs" title="Duplicar"><i class="fas fa-copy"></i><span class="sr-only">Duplicar</span></button>
+            </form>
+            <form method="post" action="{% url 'apresentacoes:excluir' ap.pk %}" class="inline ml-auto" onsubmit="return confirm('Excluir “{{ ap.titulo|escapejs }}”? As imagens e vídeos dela também saem. Não tem volta.');">{% csrf_token %}
+                <button type="submit" class="ap-botao ap-botao-claro !py-1.5 !px-3 !text-xs text-red-600" title="Excluir"><i class="fas fa-trash-can"></i><span class="sr-only">Excluir</span></button>
+            </form>
+        </div>
+    </article>
+    {% endfor %}
+</div>
+{% if pagina.has_other_pages %}
+<nav class="mt-5 flex items-center justify-center gap-2 text-sm" aria-label="Páginas">
+    {% if pagina.has_previous %}<a class="ap-botao ap-botao-claro !py-1.5" href="?{% for k, v in filtros.items %}{% if v %}{{ k }}={{ v|urlencode }}&{% endif %}{% endfor %}pagina={{ pagina.previous_page_number }}">Anterior</a>{% endif %}
+    <span style="color: var(--ap-suave)">Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span>
+    {% if pagina.has_next %}<a class="ap-botao ap-botao-claro !py-1.5" href="?{% for k, v in filtros.items %}{% if v %}{{ k }}={{ v|urlencode }}&{% endif %}{% endfor %}pagina={{ pagina.next_page_number }}">Próxima</a>{% endif %}
+</nav>
+{% endif %}
+{% else %}
+<div class="ap-cartao p-8 text-center">
+    <div class="mx-auto w-14 h-14 rounded-2xl grid place-items-center text-2xl text-white" style="background: linear-gradient(135deg,#8B3DFF,#FF48CE)"><i class="fas fa-chalkboard-user"></i></div>
+    {% if total %}
+    <h2 class="mt-4 font-bold">Nada com esses filtros</h2>
+    <p class="text-sm mt-1" style="color: var(--ap-suave)">Limpe a busca para ver todas.</p>
+    <a href="{% url 'apresentacoes:inicio' %}" class="ap-botao ap-botao-claro mt-4">Limpar filtros</a>
+    {% else %}
+    <h2 class="mt-4 font-bold">Sua primeira apresentação sai em minutos</h2>
+    <p class="text-sm mt-1 max-w-md mx-auto" style="color: var(--ap-suave)">Conte o assunto, anexe o print do material da Vivo e escolha a fonte. A IA pergunta o que faltar e monta os slides no nosso padrão.</p>
+    <div class="mt-4 flex flex-wrap justify-center gap-2">
+        <a href="{% url 'apresentacoes:nova' %}" class="ap-botao ap-botao-principal"><i class="fas fa-wand-magic-sparkles"></i>Criar agora</a>
+        <a href="{% url 'apresentacoes:modulos' %}" class="ap-botao ap-botao-claro"><i class="fas fa-cubes"></i>Apresentar um módulo do portal</a>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}

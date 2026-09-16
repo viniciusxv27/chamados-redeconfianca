@@ -1,20 +1,25 @@
 /* Rotina Gerencial — o calendário da semana (segunda a sábado).
 
    Lê a configuração e os dados dos json_script "rt-config" e "rt-dados" e
-   monta o FullCalendar: a semana inteira na tela larga e um dia por vez (com
-   abas de seg a sáb) no celular. Toda mudança passa pela API; se o servidor
+   monta o FullCalendar: a semana inteira na tela larga e, no celular, um dia
+   por vez — em lista (padrão, fácil de ler com o polegar) ou em grade (para
+   arrastar), com as abas de seg a sáb presas no topo e troca de dia por toque
+   ou deslizando para o lado. Toda mudança passa pela API; se o servidor
    recusar (atividade travada, horário inválido), o bloco volta para onde
    estava e a mensagem aparece.
 
    O relógio é o do servidor: a página traz a hora "de parede" do portal e o
    calendário soma o tempo que passou desde que abriu. Assim a linha do
-   "agora" e o cartão lateral batem com os avisos, mesmo com o relógio do
-   aparelho errado ou em outro fuso. */
+   "agora", o destaque da atividade atual e o cartão lateral batem com os
+   avisos, mesmo com o relógio do aparelho errado ou em outro fuso. */
 (function () {
     'use strict';
 
     var LARGURA_DIA = 768;   // abaixo disso, um dia por vez
     var MINUTO = 60000;
+    var CHAVE_VISTA = 'rotina-vista-dia';   // lista | grade, lembrado por aparelho
+    var MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto',
+        'setembro', 'outubro', 'novembro', 'dezembro'];
 
     function gancho(raiz, nome) { return raiz ? raiz.querySelector('[data-rt="' + nome + '"]') : null; }
     function doisDigitos(n) { return (n < 10 ? '0' : '') + n; }
@@ -40,6 +45,7 @@
         var horas = Math.floor(minutos / 60), resto = minutos % 60;
         return horas + 'h' + (resto ? doisDigitos(resto) : '');
     }
+    function plural(n, um, varios) { return n + ' ' + (n === 1 ? um : varios); }
     function lerJson(id) {
         var el = document.getElementById(id);
         if (!el) { return null; }
@@ -51,7 +57,11 @@
         if (texto !== undefined && texto !== null) { el.textContent = texto; }
         return el;
     }
-    function icone(nome) { return criar('i', 'fas ' + nome); }
+    function icone(nome) {
+        var i = criar('i', 'fas ' + nome);
+        i.setAttribute('aria-hidden', 'true');
+        return i;
+    }
     function mostrarErro(el, mensagem) { if (el) { el.textContent = mensagem; el.classList.remove('hidden'); } }
     function esconderErro(el) { if (el) { el.textContent = ''; el.classList.add('hidden'); } }
     function horarioValido(inicio, fim) {
@@ -60,6 +70,8 @@
         if (fim <= inicio) { return 'O fim precisa ser depois do início.'; }
         return '';
     }
+    function lerPreferencia(chave) { try { return window.localStorage.getItem(chave); } catch (e) { return null; } }
+    function gravarPreferencia(chave, valor) { try { window.localStorage.setItem(chave, valor); } catch (e) { /* sem storage */ } }
 
     function montar(cfg, dados, app, alvo) {
         var R = window.Rotina;
@@ -73,6 +85,7 @@
         var paredeInicial = new Date(+parede[0], +parede[1] - 1, +parede[2], +parede[3], +parede[4], +(parede[5] || 0));
         var abertaEm = Date.now();
         function agora() { return new Date(paredeInicial.getTime() + (Date.now() - abertaEm)); }
+        function minutoDoDia(data) { return data.getHours() * 60 + data.getMinutes() + data.getSeconds() / 60; }
 
         var hojeIdx = -1;
         semana.dias.forEach(function (d) { if (d.hoje) { hojeIdx = d.dia_semana; } });
@@ -80,11 +93,21 @@
 
         function nomeDoDia(idx) { return (semana.dias[idx] || {}).nome || ''; }
         function dataCurta(idx) { var d = (semana.dias[idx] || {}).data || ''; return d ? d.slice(8, 10) + '/' + d.slice(5, 7) : ''; }
+        function dataPorExtenso(idx) {
+            var d = (semana.dias[idx] || {}).data || '';
+            return d ? (+d.slice(8, 10)) + ' de ' + MESES[+d.slice(5, 7) - 1] : '';
+        }
         function urlDe(modelo, id) {
             var i = modelo.lastIndexOf('/0/');
             return modelo.slice(0, i) + '/' + id + '/' + modelo.slice(i + 3);
         }
-        function modoDia() { return window.innerWidth < LARGURA_DIA; }
+
+        /* O mesmo corte do CSS (matchMedia), e não window.innerWidth: em alguns WebViews o
+           innerWidth ainda vale 980 quando a página abre, e o celular ficava com a semana inteira. */
+        var consultaDia = window.matchMedia ? window.matchMedia('(max-width: ' + (LARGURA_DIA - 0.02) + 'px)') : null;
+        function modoDia() { return consultaDia ? consultaDia.matches : window.innerWidth < LARGURA_DIA; }
+        var vista = lerPreferencia(CHAVE_VISTA) === 'grade' ? 'grade' : 'lista';
+        function emLista() { return modoDia() && vista === 'lista'; }
 
         /* Os modais vão para o <body>: um ancestral com transform prenderia o position: fixed. */
         var modalDet = document.getElementById('rt-modal-detalhe');
@@ -97,11 +120,36 @@
         if (destaque.atividade && atividades[destaque.atividade]) { diaAtual = atividades[destaque.atividade].dia_semana; }
 
         /* ---------------------------------------------------------------- */
+        /* O que está acontecendo agora                                       */
+        /* ---------------------------------------------------------------- */
+        function atividadesDoDia(idx) {
+            return Object.keys(atividades).map(function (id) { return atividades[id]; })
+                .filter(function (a) { return a.dia_semana === idx; })
+                .sort(function (x, y) {
+                    return paraMinutos(x.inicio) - paraMinutos(y.inicio) || paraMinutos(x.fim) - paraMinutos(y.fim);
+                });
+        }
+
+        /* A atividade de agora e a próxima de hoje (só na rotina da pessoa, na semana corrente). */
+        function situacaoDeHoje() {
+            var resultado = { atual: null, proxima: null, minuto: minutoDoDia(agora()) };
+            if (!temHoje) { return resultado; }
+            atividadesDoDia(hojeIdx).forEach(function (a) {
+                var ini = paraMinutos(a.inicio), fim = paraMinutos(a.fim);
+                if (!resultado.atual && ini <= resultado.minuto && resultado.minuto < fim) { resultado.atual = a; }
+                if (!resultado.proxima && ini > resultado.minuto) { resultado.proxima = a; }
+            });
+            return resultado;
+        }
+
+        /* ---------------------------------------------------------------- */
         /* Eventos                                                            */
         /* ---------------------------------------------------------------- */
         function evento(a) {
             var data = somarDias(segunda, a.dia_semana);
             var classes = ['rt-cat-' + String(a.categoria).toLowerCase(), a.pode_mover ? 'rt-livre' : 'rt-travada'];
+            var atual = situacaoDeHoje().atual;
+            if (atual && atual.id === a.id) { classes.push('rt-ev-agora'); }
             return {
                 id: String(a.id),
                 title: a.titulo,
@@ -112,13 +160,19 @@
             };
         }
 
+        /* A faixa de horas da grade. Quem só consulta a própria rotina vê o dia dela, sem
+           horas vazias em volta; quem cria (gestão, modelo, pessoa com "pode criar") ganha
+           folga para arrastar uma atividade nova antes ou depois. */
         function faixaDeHorario() {
-            var minimo = 7 * 60, maximo = 20 * 60;
+            var justa = pessoa && !cfg.podeCriar;
+            var minimo = justa ? null : 7 * 60, maximo = justa ? null : 20 * 60;
             Object.keys(atividades).forEach(function (id) {
                 var a = atividades[id];
-                minimo = Math.min(minimo, Math.floor(paraMinutos(a.inicio) / 60) * 60);
-                maximo = Math.max(maximo, Math.ceil(paraMinutos(a.fim) / 60) * 60);
+                var ini = Math.floor(paraMinutos(a.inicio) / 60) * 60, fim = Math.ceil(paraMinutos(a.fim) / 60) * 60;
+                minimo = minimo === null ? ini : Math.min(minimo, ini);
+                maximo = maximo === null ? fim : Math.max(maximo, fim);
             });
+            if (minimo === null) { minimo = 8 * 60; maximo = 18 * 60; }
             return { min: deMinutos(minimo) + ':00', max: deMinutos(Math.min(maximo, 24 * 60)) + ':00' };
         }
 
@@ -128,8 +182,7 @@
             if (destaque.atividade && atividades[destaque.atividade]) {
                 alvoMin = paraMinutos(atividades[destaque.atividade].inicio) - 45;
             } else if (temHoje) {
-                var n = agora();
-                alvoMin = n.getHours() * 60 + n.getMinutes() - 60;
+                alvoMin = Math.floor(minutoDoDia(agora())) - 60;
             }
             return deMinutos(Math.max(faixa, Math.min(alvoMin, 22 * 60))) + ':00';
         }
@@ -243,14 +296,17 @@
             eventClick: function (info) {
                 info.jsEvent.preventDefault();
                 var a = atividades[info.event.id];
-                if (!a) { return; }
-                if (!pessoa && a.pode_editar) { abrirFormulario({ atividade: a }); } else { abrirDetalhe(a); }
+                if (a) { abrirAtividade(a); }
             },
 
             eventDrop: function (info) { salvarHorario(info.event, info.revert); },
             eventResize: function (info) { salvarHorario(info.event, info.revert); },
             windowResize: function () { aplicarModo(); }
         });
+
+        function abrirAtividade(a) {
+            if (!pessoa && a.pode_editar) { abrirFormulario({ atividade: a }); } else { abrirDetalhe(a); }
+        }
 
         /* ---------------------------------------------------------------- */
         /* Mudanças                                                           */
@@ -261,6 +317,7 @@
             if (calendario.getOption('slotMaxTime') !== faixa.max) { calendario.setOption('slotMaxTime', faixa.max); }
             atualizarLegenda();
             atualizarPainelHoje();
+            desenharDia();
         }
 
         function atualizarAtividade(a) {
@@ -302,33 +359,56 @@
             });
         }
 
+        /* Destaque passageiro de uma atividade (vinda do aviso, do cartão "Agora" ou da lista de hoje). */
+        var destacada = { id: null, ate: 0 };
         var temporizadorDestaque = null;
         function focarAtividade(id, abrir) {
             var a = atividades[id];
             if (!a) { return; }
-            if (modoDia()) {
-                irParaDia(a.dia_semana);
-                var cartao = app.querySelector('.rt-cal-card');
-                if (cartao && cartao.scrollIntoView) { cartao.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
-            }
-            calendario.scrollToTime(deMinutos(Math.max(paraMinutos(a.inicio) - 45, 0)) + ':00');
-            calendario.getEvents().forEach(function (ev) {
-                var classes = ev.classNames.filter(function (c) { return c !== 'rt-destaque'; });
-                if (ev.id === String(id)) { classes = classes.concat('rt-destaque'); }
-                if (classes.length !== ev.classNames.length || ev.id === String(id)) { ev.setProp('classNames', classes); }
-            });
+            destacada = { id: String(id), ate: Date.now() + 5000 };
             clearTimeout(temporizadorDestaque);
+            if (modoDia()) { irParaDia(a.dia_semana); }   // na lista, já desenha com o destaque
+            if (emLista()) {
+                var item = app.querySelector('[data-rt-item="' + id + '"]');
+                if (item && item.scrollIntoView) { item.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+            } else {
+                if (modoDia()) {
+                    var cartao = app.querySelector('.rt-cal-card');
+                    if (cartao && cartao.scrollIntoView) { cartao.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+                }
+                calendario.scrollToTime(deMinutos(Math.max(paraMinutos(a.inicio) - 45, 0)) + ':00');
+                calendario.getEvents().forEach(function (ev) {
+                    var classes = ev.classNames.filter(function (c) { return c !== 'rt-destaque'; });
+                    if (ev.id === String(id)) { classes = classes.concat('rt-destaque'); }
+                    if (classes.length !== ev.classNames.length || ev.id === String(id)) { ev.setProp('classNames', classes); }
+                });
+            }
             temporizadorDestaque = setTimeout(function () {
+                destacada = { id: null, ate: 0 };
                 var ev = calendario.getEventById(String(id));
                 if (ev) { ev.setProp('classNames', ev.classNames.filter(function (c) { return c !== 'rt-destaque'; })); }
+                var item = app.querySelector('[data-rt-item="' + id + '"]');
+                if (item) { item.classList.remove('rt-li-destaque'); }
             }, 5000);
-            if (abrir) {
-                if (!pessoa && a.pode_editar) { abrirFormulario({ atividade: a }); } else { abrirDetalhe(a); }
-            }
+            if (abrir) { abrirAtividade(a); }
+        }
+
+        /* Na grade, a atividade que está acontecendo ganha contorno (a classe muda sozinha com o relógio). */
+        function marcarAgoraNaGrade() {
+            if (!temHoje) { return; }
+            var atual = situacaoDeHoje().atual;
+            var idAtual = atual ? String(atual.id) : null;
+            calendario.getEvents().forEach(function (ev) {
+                var tem = ev.classNames.indexOf('rt-ev-agora') !== -1;
+                var deve = ev.id === idAtual;
+                if (tem === deve) { return; }
+                var classes = ev.classNames.filter(function (c) { return c !== 'rt-ev-agora'; });
+                ev.setProp('classNames', deve ? classes.concat('rt-ev-agora') : classes);
+            });
         }
 
         /* ---------------------------------------------------------------- */
-        /* Celular: um dia por vez, com abas                                  */
+        /* Celular: um dia por vez — abas, lista e troca por deslize          */
         /* ---------------------------------------------------------------- */
         function montarAbasDias() {
             var caixa = gancho(app, 'dias');
@@ -339,11 +419,21 @@
                 botao.type = 'button';
                 botao.setAttribute('role', 'tab');
                 botao.setAttribute('data-dia', d.dia_semana);
+                botao.setAttribute('aria-label', d.nome + (cfg.mostrarDatas ? ', ' + dataPorExtenso(d.dia_semana) : '')
+                    + (temHoje && d.hoje ? ' (hoje)' : ''));
                 if (temHoje && d.hoje) { botao.classList.add('rt-dia-hoje'); }
                 botao.appendChild(criar('span', 'rt-dia-nome', d.curto));
                 botao.appendChild(criar('span', 'rt-dia-num', cfg.mostrarDatas ? String(d.numero) : ''));
                 botao.addEventListener('click', function () { irParaDia(d.dia_semana); });
                 caixa.appendChild(botao);
+            });
+            contarPorDia();
+        }
+
+        /* Dia sem nenhuma atividade fica apagado na aba. */
+        function contarPorDia() {
+            app.querySelectorAll('.rt-dia').forEach(function (botao) {
+                botao.classList.toggle('rt-dia-vazio', !atividadesDoDia(+botao.getAttribute('data-dia')).length);
             });
         }
 
@@ -352,38 +442,254 @@
                 var ativa = +botao.getAttribute('data-dia') === diaAtual;
                 botao.classList.toggle('rt-dia-ativo', ativa);
                 botao.setAttribute('aria-selected', ativa ? 'true' : 'false');
+                botao.tabIndex = ativa ? 0 : -1;
             });
         }
 
-        function irParaDia(idx) {
+        function irParaDia(idx, direcao) {
+            if (idx < 0 || idx > 5) { return; }
+            var mudou = idx !== diaAtual;
             diaAtual = idx;
             if (modoDia()) { calendario.gotoDate(somarDias(segunda, idx)); }
             marcarAbaAtiva();
+            desenharDia(mudou ? direcao || 0 : 0);
         }
 
         function aplicarModo() {
             var dia = modoDia();
+            var eraLista = app.classList.contains('rt-vista-lista') && app.classList.contains('rt-app-dia');
             app.classList.toggle('rt-app-dia', dia);
-            var vista = dia ? 'timeGridDay' : 'timeGridWeek';
-            if (calendario.view.type !== vista) {
-                calendario.changeView(vista, dia ? somarDias(segunda, diaAtual) : segunda);
+            app.classList.toggle('rt-vista-lista', dia && vista === 'lista');
+            app.classList.toggle('rt-vista-grade', !dia || vista === 'grade');
+            var tipo = dia ? 'timeGridDay' : 'timeGridWeek';
+            if (calendario.view.type !== tipo) {
+                calendario.changeView(tipo, dia ? somarDias(segunda, diaAtual) : segunda);
             }
             if (calendario.getOption('dayHeaders') !== !dia) { calendario.setOption('dayHeaders', !dia); }
             calendario.setOption('height', altura());
+            app.querySelectorAll('[data-rt-vista]').forEach(function (botao) {
+                botao.setAttribute('aria-pressed', botao.getAttribute('data-rt-vista') === vista ? 'true' : 'false');
+            });
+            // A grade estava escondida: o FullCalendar precisa medir de novo.
+            if (eraLista && !emLista()) { calendario.updateSize(); }
+            medirTopo();
             marcarAbaAtiva();
+            desenharDia();
+        }
+
+        function trocarVista(nova) {
+            if (nova === vista) { return; }
+            vista = nova;
+            gravarPreferencia(CHAVE_VISTA, nova);
+            aplicarModo();
+            if (!emLista()) {
+                calendario.updateSize();
+                var n = agora();
+                if (temHoje && diaAtual === hojeIdx) {
+                    calendario.scrollToTime(deMinutos(Math.max(Math.floor(minutoDoDia(n)) - 60, 0)) + ':00');
+                }
+            }
+        }
+
+        /* A barra de dias gruda logo abaixo do cabeçalho do portal (que também é fixo). */
+        function medirTopo() {
+            var topo = document.getElementById('rc-topo');
+            var altura = topo ? Math.round(topo.getBoundingClientRect().height) : 0;
+            app.style.setProperty('--rt-topo', altura + 'px');
+        }
+
+        function desenharCabecaDoDia() {
+            var titulo = gancho(app, 'dia-titulo');
+            var resumo = gancho(app, 'dia-resumo');
+            if (!titulo || !resumo) { return; }
+            var doDia = atividadesDoDia(diaAtual);
+            var ehHoje = temHoje && diaAtual === hojeIdx;
+            titulo.textContent = (ehHoje ? 'Hoje, ' + nomeDoDia(diaAtual).toLowerCase() : nomeDoDia(diaAtual))
+                + (cfg.mostrarDatas ? ', ' + dataPorExtenso(diaAtual) : '');
+            var partes = [];
+            if (doDia.length) {
+                var minutos = doDia.reduce(function (soma, a) { return soma + paraMinutos(a.fim) - paraMinutos(a.inicio); }, 0);
+                partes.push(plural(doDia.length, 'atividade', 'atividades'));
+                partes.push(doDia[0].inicio + '–' + doDia[doDia.length - 1].fim);
+                partes.push(duracao(minutos));
+                if (ehHoje) {
+                    var minuto = minutoDoDia(agora());
+                    var feitas = doDia.filter(function (a) { return paraMinutos(a.fim) <= minuto; }).length;
+                    partes.push(plural(feitas, 'concluída', 'concluídas'));
+                }
+            }
+            resumo.textContent = partes.length ? partes.join(' · ') : 'Nenhuma atividade';
+        }
+
+        function selo(classe, iconeNome, texto) {
+            var el = criar('span', 'rt-li-selo ' + classe);
+            if (iconeNome) { el.appendChild(icone(iconeNome)); }
+            el.appendChild(document.createTextNode(texto));
+            return el;
+        }
+
+        var animacaoLista = null;
+        var chaveDaLista = '';
+        /* `soSeMudou`: o relógio (a cada 30 s) só redesenha quando algo visível mudou —
+           outro minuto, outra atividade "agora" ou "próxima". Redesenhar à toa atrapalha o toque. */
+        function desenharLista(direcao, soSeMudou) {
+            var lista = gancho(app, 'lista');
+            if (!lista || !emLista()) { return; }
+            var doDia = atividadesDoDia(diaAtual);
+            var ehHoje = temHoje && diaAtual === hojeIdx;
+            var situacao = situacaoDeHoje();
+            var minuto = situacao.minuto;
+            if (destacada.id && Date.now() > destacada.ate) { destacada = { id: null, ate: 0 }; }
+            var chave = [diaAtual, doDia.length, ehHoje ? Math.floor(minuto) : '',
+                situacao.atual ? situacao.atual.id : '', situacao.proxima ? situacao.proxima.id : '', destacada.id].join('|');
+            if (soSeMudou && chave === chaveDaLista) { return; }
+            chaveDaLista = chave;
+            var focada = document.activeElement && lista.contains(document.activeElement)
+                ? document.activeElement.getAttribute('data-rt-item') : null;
+
+            lista.innerHTML = '';
+            if (!doDia.length) {
+                var vazio = criar('li', 'rt-li-vazio');
+                vazio.appendChild(icone('fa-calendar-day'));
+                vazio.appendChild(criar('span', '', 'Nenhuma atividade neste dia.'));
+                if (cfg.podeCriar) {
+                    var nova = criar('button', 'rt-btn rt-btn-primario rt-btn-sm');
+                    nova.type = 'button';
+                    nova.appendChild(icone('fa-plus'));
+                    nova.appendChild(document.createTextNode(' Nova atividade'));
+                    nova.addEventListener('click', function () { abrirFormulario({ dia: diaAtual, inicio: '09:00', fim: '09:30' }); });
+                    vazio.appendChild(nova);
+                }
+                lista.appendChild(vazio);
+            }
+
+            var jaTemLinhaAgora = false;
+            doDia.forEach(function (a) {
+                var ini = paraMinutos(a.inicio), fim = paraMinutos(a.fim);
+                var feita = ehHoje && fim <= minuto;
+                var eAgora = ehHoje && situacao.atual === a;
+                var eProxima = ehHoje && situacao.proxima === a;
+
+                // Intervalo livre agora: uma linha mostra onde o "agora" está na lista.
+                if (eProxima && !situacao.atual && !jaTemLinhaAgora && doDia[0] !== a) {
+                    var linha = criar('li', 'rt-li-agora-linha');
+                    linha.appendChild(criar('span', '', 'Agora · ' + hhmm(agora()) + ' · livre até ' + a.inicio));
+                    lista.appendChild(linha);
+                    jaTemLinhaAgora = true;
+                }
+
+                var item = criar('li', 'rt-li');
+                var botao = criar('button', 'rt-li-botao rt-cat-' + String(a.categoria).toLowerCase()
+                    + (feita ? ' rt-li-feita' : '') + (eAgora ? ' rt-li-agora' : '') + (eProxima ? ' rt-li-proxima' : '')
+                    + (destacada.id === String(a.id) ? ' rt-li-destaque' : ''));
+                botao.type = 'button';
+                botao.setAttribute('data-rt-item', a.id);
+                botao.setAttribute('aria-label', a.titulo + ', das ' + a.inicio + ' às ' + a.fim + ', ' + a.categoria_nome
+                    + (a.bloqueada ? ', horário travado' : '') + (eAgora ? ', acontecendo agora' : '')
+                    + (eProxima ? ', é a próxima' : '') + (feita ? ', já passou' : ''));
+
+                var horas = criar('span', 'rt-li-horas');
+                horas.appendChild(criar('span', 'rt-li-inicio', a.inicio));
+                horas.appendChild(criar('span', 'rt-li-fim', a.fim));
+                botao.appendChild(horas);
+
+                var corpo = criar('span', 'rt-li-corpo');
+                var topo = criar('span', 'rt-li-topo');
+                topo.appendChild(criar('span', 'rt-li-titulo', a.titulo));
+                if (a.bloqueada) {
+                    var trava = icone('fa-lock rt-li-icone');
+                    trava.title = 'Horário travado pela gestão';
+                    topo.appendChild(trava);
+                } else if (a.criada_pela_pessoa) {
+                    var propria = icone('fa-user-pen rt-li-icone');
+                    propria.title = pessoa ? 'Criada por você' : 'Criada pela própria pessoa';
+                    topo.appendChild(propria);
+                }
+                corpo.appendChild(topo);
+
+                var meta = criar('span', 'rt-li-meta');
+                meta.appendChild(criar('span', 'rt-li-cat', a.categoria_nome));
+                meta.appendChild(criar('span', 'rt-li-duracao', duracao(fim - ini)));
+                if (eAgora) {
+                    meta.appendChild(selo('rt-li-selo-agora', '', 'Agora · termina em ' + duracao(Math.max(1, Math.ceil(fim - minuto)))));
+                } else if (eProxima) {
+                    meta.appendChild(selo('rt-li-selo-proxima', 'fa-forward', 'Próxima · em ' + duracao(Math.max(1, Math.ceil(ini - minuto)))));
+                }
+                corpo.appendChild(meta);
+                if (eAgora) {
+                    var trilho = criar('span', 'rt-li-progresso');
+                    var barra = criar('span', 'rt-li-progresso-barra');
+                    barra.style.width = Math.min(100, Math.max(0, 100 * (minuto - ini) / (fim - ini))) + '%';
+                    trilho.appendChild(barra);
+                    corpo.appendChild(trilho);
+                }
+                botao.appendChild(corpo);
+                botao.addEventListener('click', function () { abrirAtividade(a); });
+                item.appendChild(botao);
+                lista.appendChild(item);
+            });
+
+            if (direcao) {
+                lista.classList.remove('rt-lista-da-direita', 'rt-lista-da-esquerda');
+                void lista.offsetWidth;   // reinicia a animação
+                lista.classList.add(direcao > 0 ? 'rt-lista-da-direita' : 'rt-lista-da-esquerda');
+                clearTimeout(animacaoLista);
+                animacaoLista = setTimeout(function () {
+                    lista.classList.remove('rt-lista-da-direita', 'rt-lista-da-esquerda');
+                }, 400);
+            }
+            if (focada) {
+                var deVolta = lista.querySelector('[data-rt-item="' + focada + '"]');
+                if (deVolta) { try { deVolta.focus({ preventScroll: true }); } catch (e) { deVolta.focus(); } }
+            }
+        }
+
+        function desenharDia(direcao, soSeMudou) {
+            if (!modoDia()) { return; }
+            desenharCabecaDoDia();
+            desenharLista(direcao, soSeMudou);
+        }
+
+        /* Deslizar para o lado troca o dia (só na lista: na grade o toque longo arrasta atividades). */
+        function ligarDeslize() {
+            var lista = gancho(app, 'lista');
+            if (!lista) { return; }
+            var inicio = null;
+            lista.addEventListener('touchstart', function (e) {
+                if (e.touches.length !== 1) { inicio = null; return; }
+                inicio = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now() };
+            }, { passive: true });
+            lista.addEventListener('touchend', function (e) {
+                if (!inicio || !e.changedTouches.length) { return; }
+                var dx = e.changedTouches[0].clientX - inicio.x;
+                var dy = e.changedTouches[0].clientY - inicio.y;
+                var rapido = Date.now() - inicio.t < 800;
+                inicio = null;
+                if (!rapido || Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.8) { return; }
+                var destino = diaAtual + (dx < 0 ? 1 : -1);
+                if (destino >= 0 && destino <= 5) { irParaDia(destino, dx < 0 ? 1 : -1); }
+            }, { passive: true });
+        }
+
+        /* Teclado nas abas: setas trocam o dia (padrão de tablist). */
+        function ligarTecladoDasAbas() {
+            var caixa = gancho(app, 'dias');
+            if (!caixa) { return; }
+            caixa.addEventListener('keydown', function (e) {
+                var passo = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+                if (!passo) { return; }
+                var destino = diaAtual + passo;
+                if (destino < 0 || destino > 5) { return; }
+                e.preventDefault();
+                irParaDia(destino, passo);
+                var aba = caixa.querySelector('[data-dia="' + destino + '"]');
+                if (aba) { aba.focus(); }
+            });
         }
 
         /* ---------------------------------------------------------------- */
         /* Painel lateral: legenda, agora e hoje                              */
         /* ---------------------------------------------------------------- */
-        function atividadesDoDia(idx) {
-            return Object.keys(atividades).map(function (id) { return atividades[id]; })
-                .filter(function (a) { return a.dia_semana === idx; })
-                .sort(function (x, y) {
-                    return paraMinutos(x.inicio) - paraMinutos(y.inicio) || paraMinutos(x.fim) - paraMinutos(y.fim);
-                });
-        }
-
         function atualizarLegenda() {
             var minutos = {}, total = 0, quantas = 0;
             Object.keys(atividades).forEach(function (id) {
@@ -413,6 +719,7 @@
                     ? quantas + (quantas === 1 ? ' atividade · ' : ' atividades · ') + duracao(total)
                     : 'Nenhuma atividade';
             }
+            contarPorDia();
         }
 
         function atualizarPainelHoje() {
@@ -420,21 +727,12 @@
             var cartao = gancho(app, 'agora');
             var lista = gancho(app, 'hoje-lista');
             var conta = gancho(app, 'hoje-conta');
-            var momento = agora();
-            var minutoAgora = momento.getHours() * 60 + momento.getMinutes() + momento.getSeconds() / 60;
+            var situacao = situacaoDeHoje();
+            var minutoAgora = situacao.minuto;
             var idx = semana.proxima ? 0 : hojeIdx;
             var doDia = idx >= 0 ? atividadesDoDia(idx) : [];
-
-            var atual = null, proxima = null;
-            if (temHoje) {
-                doDia.forEach(function (a) {
-                    var ini = paraMinutos(a.inicio), fim = paraMinutos(a.fim);
-                    if (!atual && ini <= minutoAgora && minutoAgora < fim) { atual = a; }
-                    if (!proxima && ini > minutoAgora) { proxima = a; }
-                });
-            } else if (semana.proxima) {
-                proxima = doDia[0] || null;
-            }
+            var atual = situacao.atual, proxima = situacao.proxima;
+            if (!temHoje && semana.proxima) { proxima = doDia[0] || null; }
 
             if (lista) {
                 lista.innerHTML = '';
@@ -453,35 +751,40 @@
                     botao.appendChild(criar('span', 'rt-hoje-marca'));
                     botao.appendChild(criar('span', 'rt-hoje-hora', a.inicio));
                     botao.appendChild(criar('span', 'rt-hoje-titulo', a.titulo));
-                    if (a.bloqueada) {
-                        var trava = icone('fa-lock');
-                        trava.style.cssText = 'font-size:.6rem;opacity:.45';
-                        botao.appendChild(trava);
-                    }
+                    if (a.bloqueada) { botao.appendChild(icone('fa-lock rt-hoje-trava')); }
                     botao.addEventListener('click', function () { focarAtividade(a.id, true); });
                     item.appendChild(botao);
                     lista.appendChild(item);
                 });
             }
             if (conta) { conta.textContent = doDia.length ? String(doDia.length) : ''; }
+            marcarAgoraNaGrade();
             if (!cartao) { return; }
 
             cartao.innerHTML = '';
+            var principal = criar('div', 'rt-agora-principal');
+            cartao.appendChild(principal);
             var rotulo = criar('p', 'rt-agora-rotulo');
             rotulo.appendChild(criar('span', 'rt-pulso'));
-            cartao.appendChild(rotulo);
+            principal.appendChild(rotulo);
+            cartao.classList.toggle('rt-agora-com-atividade', !!atual);
             if (atual) {
                 var ini = paraMinutos(atual.inicio), fim = paraMinutos(atual.fim);
                 cartao.style.setProperty('--rt-agora-cor', atual.cor);
                 rotulo.appendChild(document.createTextNode(' Agora · ' + atual.categoria_nome));
-                cartao.appendChild(criar('h3', 'rt-agora-titulo', atual.titulo));
-                cartao.appendChild(criar('p', 'rt-agora-hora', atual.inicio + '–' + atual.fim
+                if (atual.bloqueada) {
+                    var trava = icone('fa-lock rt-agora-trava');
+                    trava.title = 'Horário travado pela gestão';
+                    rotulo.appendChild(trava);
+                }
+                principal.appendChild(criar('h3', 'rt-agora-titulo', atual.titulo));
+                principal.appendChild(criar('p', 'rt-agora-hora', atual.inicio + '–' + atual.fim
                     + ' · termina em ' + duracao(Math.max(1, Math.ceil(fim - minutoAgora)))));
                 var trilho = criar('div', 'rt-progresso');
                 var barra = criar('div', 'rt-progresso-barra');
                 barra.style.width = Math.min(100, Math.max(0, 100 * (minutoAgora - ini) / (fim - ini))) + '%';
                 trilho.appendChild(barra);
-                cartao.appendChild(trilho);
+                principal.appendChild(trilho);
                 cartao.style.cursor = 'pointer';
                 cartao.onclick = function (e) { if (!e.target.closest('a')) { focarAtividade(atual.id, true); } };
             } else {
@@ -494,18 +797,19 @@
                 else if (!doDia.length) { mensagem = 'Nenhuma atividade na sua rotina de hoje.'; }
                 else if (proxima) { mensagem = 'Nenhuma atividade neste momento.'; }
                 else { mensagem = 'Rotina de hoje concluída. Bom trabalho!'; }
-                cartao.appendChild(criar('p', 'rt-agora-vazio', mensagem));
+                principal.appendChild(criar('p', 'rt-agora-vazio', mensagem));
             }
             if (proxima) {
                 var linha = criar('div', 'rt-proxima');
                 linha.appendChild(icone('fa-forward'));
-                var texto = criar('span');
-                texto.appendChild(document.createTextNode(semana.proxima ? 'Amanhã · ' : 'Próxima · '));
-                texto.appendChild(criar('strong', '', proxima.inicio + ' ' + proxima.titulo));
+                var texto = criar('span', 'rt-proxima-texto');
+                var cabeca = criar('span', 'rt-proxima-rotulo', semana.proxima ? 'Amanhã' : 'Próxima');
                 if (temHoje) {
                     var falta = Math.max(1, Math.ceil(paraMinutos(proxima.inicio) - minutoAgora));
-                    texto.appendChild(document.createTextNode(' (em ' + duracao(falta) + ')'));
+                    cabeca.appendChild(criar('span', 'rt-proxima-em', ' · em ' + duracao(falta)));
                 }
+                texto.appendChild(cabeca);
+                texto.appendChild(criar('strong', '', proxima.inicio + ' ' + proxima.titulo));
                 linha.appendChild(texto);
                 cartao.appendChild(linha);
             }
@@ -545,6 +849,10 @@
             if (a.bloqueada) { texto = pessoa ? 'Horário travado pela gestão.' : 'Travada: a pessoa não consegue mover.'; }
             else if (pessoa) { texto = a.pode_mover ? 'Você pode arrastar esta atividade para outro horário.' : 'Atividade livre.'; }
             else { texto = 'Livre: a pessoa pode mover para outro horário.'; }
+            if (pessoa && a.pode_mover && emLista()) {   // na lista não há arrastar: o caminho é o formulário
+                texto = a.pode_editar ? 'Você pode editar esta atividade, inclusive o dia e o horário.'
+                    : 'Você pode mudar o dia e o horário desta atividade aqui embaixo.';
+            }
             if (a.criada_pela_pessoa) { texto += pessoa ? ' Criada por você.' : ' Criada pela própria pessoa.'; }
             det.status.className = 'rt-det-status' + (livre ? ' rt-det-status-livre' : '');
             det.status.innerHTML = '';
@@ -721,8 +1029,12 @@
         if (botaoAgora) {
             botaoAgora.addEventListener('click', function () {
                 if (hojeIdx >= 0) { irParaDia(hojeIdx); }
-                var n = agora();
-                calendario.scrollToTime(deMinutos(Math.max(n.getHours() * 60 + n.getMinutes() - 60, 0)) + ':00');
+                if (emLista()) {
+                    var alvoLista = app.querySelector('.rt-li-agora, .rt-li-proxima') || app.querySelector('.rt-li-botao');
+                    if (alvoLista && alvoLista.scrollIntoView) { alvoLista.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+                    return;
+                }
+                calendario.scrollToTime(deMinutos(Math.max(Math.floor(minutoDoDia(agora())) - 60, 0)) + ':00');
             });
         }
         var botaoNova = gancho(app, 'btn-nova');
@@ -731,13 +1043,26 @@
                 abrirFormulario({ dia: diaAtual, inicio: '09:00', fim: '09:30' });
             });
         }
+        app.querySelectorAll('[data-rt-vista]').forEach(function (botao) {
+            botao.addEventListener('click', function () { trocarVista(botao.getAttribute('data-rt-vista')); });
+        });
+        if (consultaDia) {
+            if (consultaDia.addEventListener) { consultaDia.addEventListener('change', aplicarModo); }
+            else if (consultaDia.addListener) { consultaDia.addListener(aplicarModo); }
+        }
+        window.addEventListener('load', aplicarModo);
 
         calendario.render();
         montarAbasDias();
+        ligarDeslize();
+        ligarTecladoDasAbas();
         aplicarModo();
         atualizarLegenda();
         atualizarPainelHoje();
-        setInterval(atualizarPainelHoje, 30000);
+        setInterval(function () {
+            atualizarPainelHoje();
+            if (!document.hidden) { desenharDia(0, true); }
+        }, 30000);
 
         if (destaque.atividade && atividades[destaque.atividade]) {
             setTimeout(function () {
@@ -752,6 +1077,8 @@
             calendario: calendario,
             atividades: atividades,
             focar: focarAtividade,
+            irParaDia: irParaDia,
+            vista: function (nova) { if (nova) { trocarVista(nova); } return vista; },
             recarregar: function () {
                 return R.api(cfg.urls.listar).then(function (novos) {
                     Object.keys(atividades).forEach(function (id) { delete atividades[id]; });

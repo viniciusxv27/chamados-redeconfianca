@@ -6,6 +6,12 @@
 {% block rt_subtitulo %}{% if mostrar_calendario %}{% if semana.proxima %}Próxima semana · {% endif %}{{ semana.rotulo }}{% else %}Sua semana organizada, de segunda a sábado{% endif %}{% endblock %}
 
 {% block rt_acoes %}
+{% if rotina_liberada %}
+<span class="rt-hero-selo" title="Com o portal aberto, você recebe um lembrete {{ lembrete_minutos }} minutos antes e um aviso quando cada atividade começa, na tela e no sino.">
+    <i class="fas fa-bell" aria-hidden="true"></i>
+    <span><strong>Avisos ligados</strong> · {{ lembrete_minutos }} min antes e no início</span>
+</span>
+{% endif %}
 {% if e_admin %}
 <a href="{% url 'rotina:gestao' %}" class="rt-btn rt-btn-hero"><i class="fas fa-sliders"></i><span>Gerenciar rotinas</span></a>
 {% endif %}

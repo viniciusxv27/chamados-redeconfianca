@@ -560,6 +560,17 @@
                             </a>
                         </li>
                         {% endif %}
+                        {% if apresentacoes_liberado %}
+                        <li>
+                            <a href="{% url 'apresentacoes:inicio' %}" data-rota="{% url 'apresentacoes:inicio' %}"
+                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-chalkboard-user text-fuchsia-400 flex-shrink-0 w-5 text-center"></i>
+                                <span class="text-sm flex-1">Apresentações</span>
+                                <div class="tooltip-collapsed">Apresentações</div>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-fuchsia-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        {% endif %}
                         {% if rotina_liberada or rotina_admin %}
                         <li>
                             <a href="{% url 'rotina:minha' %}" data-rota="{% url 'rotina:minha' %}"
@@ -1038,6 +1049,15 @@
                                     </button>
                                 </div>
                             </div>
+
+                            {% if apresentacoes_modulo_atual %}
+                            <!-- Assistente de Apresentações: gera o passo a passo do módulo aberto. -->
+                            <a href="{% url 'apresentacoes:modulos' %}?gerar={{ apresentacoes_modulo_atual }}"
+                               class="relative p-2 text-gray-600 hover:text-fuchsia-600 focus:outline-none transition-colors rounded-lg hover:bg-gray-100"
+                               title="Gerar apresentação deste módulo com IA" aria-label="Gerar apresentação deste módulo com IA">
+                                <i class="fas fa-chalkboard-user text-base sm:text-lg"></i>
+                            </a>
+                            {% endif %}
 
                             <!-- Multitarefa: abre outra janela do portal. O cookie de sessão
                                  é do navegador, então a nova janela já nasce logada. -->
