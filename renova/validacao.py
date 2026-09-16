@@ -143,12 +143,17 @@ def ler_checklist(post, *, lojas, precos, hoje=None, cfg=None):
     else:
         erros['saude_bateria'] = 'Saúde da bateria vai de 0 a 100%.'
 
-    # 2. Itens obrigatórios antes da avaliação — todos
+    # O cliente decide depois de ver o padrão e o valor: só segue a troca que ele aceitou.
+    if str(post.get('cliente_segue', '') or '').upper() != 'SIM':
+        erros['cliente_segue'] = ('A avaliação só é enviada quando o cliente quer seguir com a troca — '
+                                  'confirme na etapa do valor.')
+
+    # Itens obrigatórios para concluir a troca (última etapa da tela) — todos
     d['itens_obrigatorios'] = {chave: post.get(f'obrig_{chave}') == 'on'
                                for chave, _, _, _ in checklist.ITENS_OBRIGATORIOS}
     faltando = [titulo for chave, titulo, _, _ in checklist.ITENS_OBRIGATORIOS if not d['itens_obrigatorios'][chave]]
     if faltando:
-        erros['itens_obrigatorios'] = 'Confira todos os itens obrigatórios antes da avaliação: ' + '; '.join(faltando) + '.'
+        erros['itens_obrigatorios'] = 'Confira todos os itens obrigatórios antes de concluir: ' + '; '.join(faltando) + '.'
 
     # 3 e 4. Funcionalidades e condição estética — uma resposta por item
     for campo, prefixo, itens, opcoes, rotulo in (

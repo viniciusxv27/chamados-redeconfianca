@@ -17,7 +17,7 @@
                 <span class="rt-hero-icone" aria-hidden="true"><i class="fas fa-calendar-check"></i></span>
                 <div class="min-w-0">
                     <h1 class="rt-hero-titulo">{% block rt_cabecalho %}Rotina Gerencial{% endblock %}</h1>
-                    <p class="rt-hero-sub">{% block rt_subtitulo %}A semana organizada, de segunda a sábado{% endblock %}</p>
+                    <p class="rt-hero-sub">{% block rt_subtitulo %}A semana organizada, de {{ nome_da_semana|lower }}{% endblock %}</p>
                 </div>
             </div>
             <div class="rt-hero-acoes">{% block rt_acoes %}{% endblock %}</div>

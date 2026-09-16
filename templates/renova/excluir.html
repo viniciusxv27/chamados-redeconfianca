@@ -46,7 +46,10 @@
             <h2 class="rn-h2">O que some junto</h2>
             <ul class="rn-exc-lista rn-exc-some">
                 <li><i class="fa-solid fa-clipboard-check"></i><span>A avaliação inteira: dados do aparelho, itens obrigatórios, funcionalidades, condição estética, observações, padrão{% if renova.padrao %} {{ renova.padrao }}{% endif %} e valor de troca.</span></li>
-                <li><i class="fa-solid fa-signature"></i><span>A assinatura de {{ renova.vendedor_nome }}, guardada no próprio registro. Esta avaliação não tem fotos nem arquivos no armazenamento.</span></li>
+                <li><i class="fa-solid fa-signature"></i><span>A assinatura de {{ renova.vendedor_nome }}, guardada no próprio registro.</span></li>
+                {% with total_fotos=renova.fotos.count %}
+                <li><i class="fa-solid fa-camera"></i><span>{% if total_fotos %}As {{ total_fotos }} foto{{ total_fotos|pluralize }} do aparelho, apagada{{ total_fotos|pluralize }} também do armazenamento.{% else %}Esta avaliação não tem fotos no armazenamento.{% endif %}</span></li>
+                {% endwith %}
                 <li><i class="fa-solid fa-user-check"></i><span>{% if renova.aguardando_aprovacao %}O pedido de aprovação que está com o gerente da loja.{% else %}O registro da decisão: {{ renova.get_aprovacao_display|lower }}{% if renova.aprovacao_por %} por {{ renova.aprovacao_por.full_name|default:renova.aprovacao_por.username }}{% endif %}{% if renova.aprovacao_em %} em {{ renova.aprovacao_em|date:"d/m/Y H:i" }}{% endif %}.{% endif %}</span></li>
                 {% if renova.recebido_em %}
                 <li><i class="fa-solid fa-box-open"></i><span>A marcação de recebimento: {{ renova.get_recebimento_display|lower }}{% if renova.recebido_por %} por {{ renova.recebido_por.full_name|default:renova.recebido_por.username }}{% endif %} em {{ renova.recebido_em|date:"d/m/Y H:i" }}.</span></li>

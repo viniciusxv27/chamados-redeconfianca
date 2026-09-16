@@ -1,5 +1,5 @@
 {% comment %}
-Calendário da semana (segunda a sábado) + painel lateral + modais.
+Calendário da semana (segunda a sábado, ou a domingo quando a semana tem domingo) + painel lateral + modais.
 
 Usado pela rotina da pessoa, pelo editor de rotina da gestão e pelo editor de
 modelo. Quem desenha é static/rotina/rotina-calendario.js, a partir dos
@@ -7,7 +7,7 @@ json_script "rt-config" e "rt-dados" que a página inclui. Os atributos
 data-rt="…" são os ganchos que o JS procura — mudar um nome aqui exige mudar lá.
 
 Tela larga: a grade da semana. Celular (e tela estreita): um dia por vez, com
-as abas de seg a sáb presas no topo e o dia em lista (padrão) ou em grade.
+as abas dos dias presas no topo e o dia em lista (padrão) ou em grade.
 {% endcomment %}
 <div id="rt-app" class="rt-layout" data-modo="{{ config.modo }}">
     <section class="rt-card rt-cal-card" aria-label="Calendário da semana">
@@ -16,7 +16,7 @@ as abas de seg a sáb presas no topo e o dia em lista (padrão) ou em grade.
                 <p class="rt-cal-sobre">
                     {% if config.modo == 'pessoa' %}{% if semana.proxima %}Próxima semana{% else %}Esta semana{% endif %}{% elif config.modo == 'modelo' %}Semana-modelo{% else %}Semana da pessoa{% endif %}
                 </p>
-                <h2 class="rt-cal-titulo">{% if config.modo == 'pessoa' %}{{ semana.rotulo }}{% else %}Segunda a sábado{% endif %}</h2>
+                <h2 class="rt-cal-titulo">{% if config.modo == 'pessoa' %}{{ semana.rotulo }}{% else %}{{ nome_da_semana }}{% endif %}</h2>
             </div>
             <div class="rt-cal-botoes">
                 <div class="rt-vistas" role="group" aria-label="Como mostrar o dia" data-rt="vistas">
@@ -196,7 +196,7 @@ as abas de seg a sáb presas no topo e o dia em lista (padrão) ou em grade.
             </label>
             <fieldset class="rt-campo" data-rt="form-repetir">
                 <legend class="rt-rotulo">Dias <small>(marque mais de um para repetir a atividade)</small></legend>
-                <div class="rt-dias-check">
+                <div class="rt-dias-check" style="--rt-dias: {{ dias_semana|length }}">
                     {% for d in dias_semana %}
                     <label title="{{ d.nome }}"><input type="checkbox" name="repetir_em" value="{{ d.valor }}"><span>{{ d.curto }}</span></label>
                     {% endfor %}

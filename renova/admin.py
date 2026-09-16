@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import ConfiguracaoRenova, PrecoAparelho, Renova
+from .models import ConfiguracaoRenova, FotoRenova, PrecoAparelho, Renova
 
 
 @admin.register(PrecoAparelho)
@@ -11,8 +11,16 @@ class PrecoAparelhoAdmin(admin.ModelAdmin):
     search_fields = ('modelo',)
 
 
+class FotoRenovaInline(admin.TabularInline):
+    model = FotoRenova
+    extra = 0
+    fields = ('tipo', 'ordem', 'arquivo', 'enviada_em')
+    readonly_fields = ('enviada_em',)
+
+
 @admin.register(Renova)
 class RenovaAdmin(admin.ModelAdmin):
+    inlines = [FotoRenovaInline]
     list_display = ('__str__', 'loja', 'parecer', 'recebimento', 'criado_por', 'criado_em')
     list_filter = ('recebimento', 'parecer', 'marca')
     search_fields = ('imei1', 'imei2', 'modelo', 'numero_serie', 'vendedor_nome', 'numero_venda')

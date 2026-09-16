@@ -63,6 +63,7 @@
                 <span class="rt-chip {% if r.total %}rt-chip-laranja{% else %}rt-chip-cinza{% endif %}">
                     <i class="fas fa-calendar-week"></i> {{ r.total }} atividade{{ r.total|pluralize }}
                 </span>
+                {% if r.com_domingo %}<span class="rt-chip rt-chip-azul" title="Semana de segunda a domingo"><i class="fas fa-sun"></i> Com domingo</span>{% endif %}
                 <label class="rt-opcao">
                     <span class="rt-switch">
                         <input type="checkbox" {% if r.ativa %}checked{% endif %} data-rt-opcao="ativa"
@@ -82,6 +83,16 @@
                         <span class="rt-switch-trilho"></span>
                     </span>
                     Pode criar
+                </label>
+                <label class="rt-opcao" title="{% if r.tem_telefone %}Lembrete de cada atividade no WhatsApp do cadastro.{% else %}Sem telefone no cadastro: nada sai pelo WhatsApp.{% endif %}">
+                    <span class="rt-switch">
+                        <input type="checkbox" {% if r.avisar_whatsapp %}checked{% endif %} data-rt-opcao="avisar_whatsapp"
+                               data-url="{% url 'rotina:api_gestao_opcoes' r.user_id %}"
+                               data-msg-ligado="Lembretes de {{ r.user.first_name }} no WhatsApp ligados{% if not r.tem_telefone %} — falta o telefone no cadastro{% endif %}."
+                               data-msg-desligado="Lembretes de {{ r.user.first_name }} no WhatsApp desligados.">
+                        <span class="rt-switch-trilho"></span>
+                    </span>
+                    WhatsApp{% if not r.tem_telefone %} <span class="rt-chip rt-chip-cinza" style="padding: .05rem .4rem">sem tel.</span>{% endif %}
                 </label>
             </div>
             <a href="{% url 'rotina:gestao_pessoa' r.user_id %}" class="rt-btn rt-btn-claro rt-btn-sm rt-pessoa-acao"
@@ -160,7 +171,7 @@
                 <span class="rt-rotulo">Começar com o modelo</span>
                 <select name="modelo" class="rt-input">
                     {% for m in modelos %}
-                    <option value="{{ m.id }}" {% if forloop.first %}selected{% endif %}>{{ m.nome }} ({{ m.total }} atividade{{ m.total|pluralize }})</option>
+                    <option value="{{ m.id }}" {% if forloop.first %}selected{% endif %}>{{ m.nome }} ({{ m.total }} atividade{{ m.total|pluralize }}){% if m.com_domingo %} · com domingo{% endif %}</option>
                     {% endfor %}
                     <option value="">Nenhum: começar com a semana vazia</option>
                 </select>
@@ -170,6 +181,13 @@
                 <span>
                     <strong>Pode criar atividades próprias</strong>
                     <small>A pessoa acrescenta e apaga atividades dela. As da gestão continuam como a gestão definiu.</small>
+                </span>
+            </label>
+            <label class="rt-switch-linha">
+                <span class="rt-switch"><input type="checkbox" name="avisar_whatsapp" checked><span class="rt-switch-trilho"></span></span>
+                <span>
+                    <strong><i class="fab fa-whatsapp"></i> Lembretes no WhatsApp</strong>
+                    <small>Cada atividade avisa no WhatsApp do cadastro (campo Telefone) {{ lembrete_minutos }} minutos antes de começar. Sem telefone, nada sai.</small>
                 </span>
             </label>
             <label class="rt-switch-linha">

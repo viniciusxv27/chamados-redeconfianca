@@ -24,7 +24,7 @@ ARMAZENAMENTOS = [
     ('OUTRO', 'Outro'),
 ]
 
-# 2. Itens obrigatórios antes da avaliação — todos precisam estar conferidos.
+# Itens obrigatórios — todos precisam estar conferidos (última etapa da tela, antes de enviar).
 ITENS_OBRIGATORIOS = [
     ('capa', 'Retirar capa, película e acessórios', 'Avaliar o aparelho sem itens adicionais.', 'fa-solid fa-layer-group'),
     ('backup', 'Verificar se o cliente realizou backup', 'Orientar o cliente, se necessário.', 'fa-solid fa-cloud'),
@@ -59,6 +59,19 @@ ESTETICA = [
     ('marcas_uso', 'Marcas de uso geral', 'Riscos, amassados, desgaste natural.', 'fa-solid fa-pen'),
     ('trincos', 'Trincos / Quebras', 'Tela, traseira, laterais.', 'fa-solid fa-triangle-exclamation'),
 ]
+
+# Fotos do aparelho — só quando o cliente segue com a troca (antes do envio ao gerente).
+# Cada foto: (chave, título, orientação, ícone, obrigatória).
+FOTOS = [
+    ('frente', 'Frente', 'De frente, com a tela apagada, sem capa nem película.', 'fa-solid fa-mobile-screen-button', True),
+    ('traseira', 'Traseira', 'A traseira inteira, com as câmeras.', 'fa-solid fa-mobile', True),
+    ('laterais', 'Laterais', 'As duas laterais, com os botões.', 'fa-solid fa-grip-lines-vertical', True),
+    ('tela_ligada', 'Tela ligada', 'Ajustes > Geral > Sobre, mostrando o modelo e o IMEI.', 'fa-solid fa-circle-info', False),
+]
+FOTO_AVARIA = 'avaria'
+FOTO_AVARIA_TITULO = 'Avaria'
+FOTOS_AVARIA_MAX = 6
+TIPOS_DE_FOTO = [(chave, titulo) for chave, titulo, _, _, _ in FOTOS] + [(FOTO_AVARIA, FOTO_AVARIA_TITULO)]
 
 # 6. Parecer final
 APROVADO = 'APROVADO'

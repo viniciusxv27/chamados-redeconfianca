@@ -42,6 +42,22 @@
                 </span>
                 Pode criar atividades
             </label>
+            <label class="rt-opcao" title="{% if tem_telefone %}Lembrete de cada atividade no WhatsApp do cadastro, {{ lembrete_minutos }} minutos antes.{% else %}Sem telefone no cadastro: nada sai pelo WhatsApp até alguém preencher o Telefone.{% endif %}">
+                <span class="rt-switch">
+                    <input type="checkbox" {% if rotina.avisar_whatsapp %}checked{% endif %} data-rt-opcao="avisar_whatsapp" data-url="{{ config.urlOpcoes }}"
+                           data-msg-ligado="Lembretes no WhatsApp ligados{% if not tem_telefone %} — mas falta o telefone no cadastro{% endif %}." data-msg-desligado="Lembretes no WhatsApp desligados.">
+                    <span class="rt-switch-trilho"></span>
+                </span>
+                <i class="fab fa-whatsapp" aria-hidden="true"></i> WhatsApp{% if not tem_telefone %} <span class="rt-chip rt-chip-cinza">sem telefone</span>{% endif %}
+            </label>
+            <label class="rt-opcao" title="Para quem trabalha no domingo: a semana da pessoa vai de segunda a domingo, com os avisos do domingo.">
+                <span class="rt-switch">
+                    <input type="checkbox" {% if rotina.com_domingo %}checked{% endif %} data-rt-opcao="com_domingo" data-url="{{ config.urlOpcoes }}"
+                           data-msg-ligado="Domingo incluído na semana. Atualizando o calendário…" data-msg-desligado="Domingo tirado da semana. Atualizando o calendário…">
+                    <span class="rt-switch-trilho"></span>
+                </span>
+                <i class="fas fa-sun" aria-hidden="true"></i> Com domingo
+            </label>
         </div>
     </div>
     <div class="flex flex-wrap items-center gap-2" style="margin-top: .9rem; padding-top: .9rem; border-top: 1px solid var(--rt-borda)">
@@ -71,7 +87,7 @@
 </section>
 {% else %}
 <section class="rt-card" style="padding: 1rem; margin-bottom: 1rem">
-    <form method="post" action="{% url 'rotina:modelo_acao' modelo.id %}" class="grid gap-3 md:grid-cols-[1fr_1.4fr_auto_auto] items-end">
+    <form method="post" action="{% url 'rotina:modelo_acao' modelo.id %}" class="grid gap-3 md:grid-cols-[1fr_1.4fr_auto_auto_auto] items-end">
         {% csrf_token %}
         <input type="hidden" name="acao" value="salvar">
         <label class="rt-campo">
@@ -85,6 +101,10 @@
         <label class="rt-opcao" style="padding-bottom: .55rem">
             <span class="rt-switch"><input type="checkbox" name="ativo" {% if modelo.ativo %}checked{% endif %}><span class="rt-switch-trilho"></span></span>
             Ativo
+        </label>
+        <label class="rt-opcao" style="padding-bottom: .55rem" title="Para lojas que abrem no domingo: a semana vai de segunda a domingo. Para tirar, mova ou exclua antes as atividades do domingo.">
+            <span class="rt-switch"><input type="checkbox" name="com_domingo" {% if modelo.com_domingo %}checked{% endif %}><span class="rt-switch-trilho"></span></span>
+            <i class="fas fa-sun" aria-hidden="true"></i> Com domingo
         </label>
         <button type="submit" class="rt-btn rt-btn-primario"><i class="fas fa-check"></i> Salvar</button>
     </form>
@@ -189,4 +209,10 @@
 {{ dados|json_script:"rt-dados" }}
 <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
 <script src="{% static 'rotina/rotina-calendario.js' %}"></script>
+<script>
+/* Ligar ou tirar o domingo muda os dias do calendário: recarrega para desenhar a semana nova. */
+document.addEventListener('rotina:opcao', function (evento) {
+    if (evento.detail && evento.detail.campo === 'com_domingo') { setTimeout(function () { window.location.reload(); }, 700); }
+});
+</script>
 {% endblock %}

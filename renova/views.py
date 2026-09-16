@@ -29,6 +29,7 @@ from .permissoes import (configuracao, e_gerente, e_superadmin, pode_aprovar, po
                          pode_informar_venda, pode_receber, pode_ver, pode_ver_gestao, pode_ver_modulo,
                          renovas_visiveis, setor_recebedor)
 from .padrao import regras_para_tela
+from .fotos import gravar_fotos, ler_fotos
 from .servicos import (DecisaoInvalida, abrir_chamado, avisar_gerentes, decidir, excluir_avaliacao,
                        gerentes_da_loja, registrar_recebimento, resumo_da_avaliacao)
 from .validacao import NUMERO_VENDA_MAX, ler_checklist, ler_numero_venda, ler_valor
@@ -200,6 +201,23 @@ def inicio(request):
         voltar=request.get_full_path()))
 
 
+# Etapas da tela de nova avaliação (a ordem em que o vendedor preenche) e onde cada erro aparece.
+ETAPAS = [
+    (1, 'Aparelho', 'fa-solid fa-mobile-screen-button'),
+    (2, 'Funcionalidades', 'fa-solid fa-power-off'),
+    (3, 'Estética', 'fa-solid fa-wand-magic-sparkles'),
+    (4, 'Valor', 'fa-solid fa-calculator'),
+    (5, 'Fotos', 'fa-solid fa-camera'),
+    (6, 'Responsável', 'fa-solid fa-signature'),
+    (7, 'Concluir', 'fa-solid fa-list-check'),
+]
+ETAPA_DO_ERRO = {
+    'modelo': 1, 'armazenamento': 1, 'imei1': 1, 'imei2': 1, 'data_avaliacao': 1, 'loja': 1, 'saude_bateria': 1,
+    'funcionalidades': 2, 'estetica': 3, 'observacoes': 4, 'cliente_segue': 4, 'fotos': 5,
+    'vendedor_nome': 6, 'assinatura': 6, 'numero_venda': 6, 'itens_obrigatorios': 7, 'categoria': 7,
+}
+
+
 def _secoes(post):
     """Os itens do checklist com o que já veio marcado (para reabrir a tela preenchida)."""
     obrigatorios = [(chave, titulo, descricao, icone, post.get(f'obrig_{chave}') == 'on')
@@ -228,12 +246,21 @@ def nova(request):
         dados, erros = ler_checklist(
             request.POST, lojas={str(s.pk): s for s in lojas + outros_setores},
             precos={str(p.pk): p for p in PrecoAparelho.objects.filter(ativo=True)}, cfg=cfg)
+        fotos, erros_fotos = ler_fotos(request.FILES)
+        erros.update(erros_fotos)
         if sem_categoria:
             erros['categoria'] = ('A categoria do chamado do Renova não está configurada. '
                                   'Peça ao SUPERADMIN para configurar antes de concluir.')
         if not erros:
-            with transaction.atomic():
-                renova = Renova.objects.create(criado_por=user, **dados)
+            try:
+                with transaction.atomic():
+                    renova = Renova.objects.create(criado_por=user, **dados)
+                    gravar_fotos(renova, fotos)
+            except Exception:                                   # noqa: BLE001 — armazenamento fora do ar
+                logger.exception('Renova não foi salva (fotos no armazenamento ou gravação no banco)')
+                erros['fotos'] = ('A avaliação não foi salva: as fotos não subiram (o armazenamento não respondeu). '
+                                  'Nada foi gravado — tente enviar de novo em instantes.')
+        if not erros:
             gerentes = avisar_gerentes(renova, user)
             limpar_cache_do_menu([g.pk for g in gerentes])
             if gerentes:
@@ -245,6 +272,9 @@ def nova(request):
                                           f'{renova.loja.name if renova.loja else ""} para aprovar. Avise o SUPERADMIN.')
             return redirect('renova:detalhe', pk=renova.pk)
         valores = request.POST
+        if request.FILES:
+            # O navegador não devolve arquivos escolhidos: com erro, as fotos precisam ser escolhidas de novo.
+            erros.setdefault('fotos_de_novo', 'Por segurança do navegador, escolha as fotos de novo antes de enviar.')
     else:
         hoje = timezone.localdate().isoformat()
         valores = {'data_avaliacao': hoje, 'data_responsavel': hoje, 'vendedor_nome': user.full_name,
@@ -257,7 +287,9 @@ def nova(request):
         itens_obrigatorios=obrigatorios, funcionalidades=funcionalidades, estetica=estetica,
         opcoes_func=checklist.OPCOES_FUNCIONALIDADE, opcoes_est=checklist.OPCOES_ESTETICA,
         precos_json=_precos_para_tela(cfg),
-        imagem_checklist=_imagem(cfg, 'imagem_checklist'), sem_categoria=sem_categoria))
+        imagem_checklist=_imagem(cfg, 'imagem_checklist'), sem_categoria=sem_categoria,
+        etapas=ETAPAS, etapa_inicial=min((ETAPA_DO_ERRO.get(c, 7) for c in erros if c != 'fotos_de_novo'), default=1),
+        fotos=checklist.FOTOS, fotos_avaria_max=checklist.FOTOS_AVARIA_MAX))
 
 
 def _renova_visivel(request, cfg, pk):

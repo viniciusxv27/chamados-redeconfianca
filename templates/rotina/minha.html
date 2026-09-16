@@ -3,13 +3,13 @@
 
 {% block rt_titulo %}Minha rotina{% endblock %}
 {% block rt_cabecalho %}Minha rotina{% endblock %}
-{% block rt_subtitulo %}{% if mostrar_calendario %}{% if semana.proxima %}Próxima semana · {% endif %}{{ semana.rotulo }}{% else %}Sua semana organizada, de segunda a sábado{% endif %}{% endblock %}
+{% block rt_subtitulo %}{% if mostrar_calendario %}{% if semana.proxima %}Próxima semana · {% endif %}{{ semana.rotulo }}{% else %}Sua semana organizada, de {{ nome_da_semana|lower }}{% endif %}{% endblock %}
 
 {% block rt_acoes %}
 {% if rotina_liberada %}
 <span class="rt-hero-selo" title="Com o portal aberto, você recebe um lembrete {{ lembrete_minutos }} minutos antes e um aviso quando cada atividade começa, na tela e no sino.">
     <i class="fas fa-bell" aria-hidden="true"></i>
-    <span><strong>Avisos ligados</strong> · {{ lembrete_minutos }} min antes e no início</span>
+    <span><strong>Avisos ligados</strong> · {{ lembrete_minutos }} min antes e no início{% if whatsapp_ligado %} · também no WhatsApp{% endif %}</span>
 </span>
 {% endif %}
 {% if e_admin %}
@@ -31,7 +31,7 @@
     <p>A gestão desativou a sua rotina por enquanto. Quando ela voltar, a semana aparece aqui de novo, com o aviso de cada atividade na hora certa.</p>
     {% elif rotina %}
     <h2>Sua rotina ainda está vazia</h2>
-    <p>A gestão ainda não colocou atividades na sua semana. Assim que colocar, você vê tudo aqui, de segunda a sábado.</p>
+    <p>A gestão ainda não colocou atividades na sua semana. Assim que colocar, você vê tudo aqui, de {{ nome_da_semana|lower }}.</p>
     {% else %}
     <h2>Você ainda não tem uma rotina gerencial</h2>
     <p>A rotina gerencial organiza a semana de quem gere a loja: o horário de cada atividade e um aviso no portal quando cada uma começa. Quem define é a gestão.</p>

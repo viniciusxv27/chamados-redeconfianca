@@ -25,20 +25,21 @@
             {% if m.ativo %}<span class="rt-chip rt-chip-verde">Ativo</span>{% else %}<span class="rt-chip rt-chip-cinza">Inativo</span>{% endif %}
         </div>
 
-        <div class="rt-mini-semana" aria-hidden="true">
+        <div class="rt-mini-semana" aria-hidden="true" style="--rt-dias: {{ m.previa|length }}">
             {% for d in m.previa %}
             <div class="rt-mini-dia">
                 {% for b in d.blocos %}<span class="rt-mini-bloco" style="top: {{ b.topo }}%; height: {{ b.altura }}%; --rt-cor: {{ b.cor }}"></span>{% endfor %}
             </div>
             {% endfor %}
         </div>
-        <div class="rt-mini-rotulos" aria-hidden="true">
+        <div class="rt-mini-rotulos" aria-hidden="true" style="--rt-dias: {{ m.previa|length }}">
             {% for d in m.previa %}<span>{{ d.curto }}</span>{% endfor %}
         </div>
 
         <div class="flex flex-wrap gap-2" style="margin-top: .85rem">
             <span class="rt-chip rt-chip-laranja"><i class="fas fa-calendar-week"></i> {{ m.total }} atividade{{ m.total|pluralize }}</span>
             <span class="rt-chip"><i class="fas fa-users"></i> {{ m.pessoas }} pessoa{{ m.pessoas|pluralize }}</span>
+            {% if m.semana_com_domingo %}<span class="rt-chip rt-chip-azul" title="A semana deste modelo vai de segunda a domingo"><i class="fas fa-sun"></i> Com domingo</span>{% endif %}
         </div>
 
         <div class="flex items-center gap-2" style="margin-top: auto; padding-top: 1rem">
@@ -91,9 +92,16 @@
                 <select name="base" class="rt-input">
                     <option value="">Semana vazia</option>
                     {% for m in modelos %}
-                    <option value="{{ m.id }}">Cópia de: {{ m.nome }} ({{ m.total }} atividade{{ m.total|pluralize }})</option>
+                    <option value="{{ m.id }}">Cópia de: {{ m.nome }} ({{ m.total }} atividade{{ m.total|pluralize }}){% if m.semana_com_domingo %} · com domingo{% endif %}</option>
                     {% endfor %}
                 </select>
+            </label>
+            <label class="rt-switch-linha">
+                <span class="rt-switch"><input type="checkbox" name="com_domingo"><span class="rt-switch-trilho"></span></span>
+                <span>
+                    <strong><i class="fas fa-sun"></i> Semana com domingo</strong>
+                    <small>Para lojas que abrem no domingo: a semana do modelo vai de segunda a domingo, e quem recebe o modelo recebe o domingo junto. Cópia de um modelo com domingo já vem com ele.</small>
+                </span>
             </label>
         </div>
         <div class="rt-modal-rodape">

@@ -7,6 +7,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from . import checklist
+from .fotos import apagar_arquivos
 from .models import ConfiguracaoRenova, Renova
 
 logger = logging.getLogger(__name__)
@@ -25,6 +26,13 @@ def _nome(user):
 
 def _link(renova):
     return (getattr(settings, 'BASE_URL', '') or '').rstrip('/') + reverse('renova:detalhe', args=[renova.pk])
+
+
+def _texto_das_fotos(renova):
+    fotos = renova.fotos_em_ordem()
+    if not fotos:
+        return 'nenhuma'
+    return f'{len(fotos)} — ' + ', '.join(f.get_tipo_display() for f in fotos)
 
 
 def descricao_do_chamado(renova):
@@ -59,6 +67,8 @@ def descricao_do_chamado(renova):
     linhas += [
         '',
         f'Observações gerais: {renova.observacoes or "—"}',
+        '',
+        f'Fotos do aparelho: {_texto_das_fotos(renova)} (veja na avaliação)',
         '',
         f'Responsável: {renova.vendedor_nome}' + (f' (matrícula {renova.matricula})' if renova.matricula else ''),
         '',
@@ -238,12 +248,13 @@ def resumo_da_avaliacao(renova):
 def excluir_avaliacao(renova, usuario):
     """Exclui a avaliação e devolve o id do chamado que ficou (ou None).
 
-    Some só o registro do Renova — e, com ele, tudo o que mora nele: checklist,
+    Some o registro do Renova — e, com ele, tudo o que mora nele: checklist,
     padrão e valor, assinatura (é um data URL no próprio registro), aprovação,
     recebimento e nº da venda. A etiqueta é montada na hora a partir do registro,
-    então também deixa de existir. Nenhuma tabela aponta para o Renova e ele não
-    tem arquivo no armazenamento: não há cascata nem nada a apagar no S3 (as
-    imagens de material são da configuração do módulo, de todas as avaliações).
+    então também deixa de existir. As fotos do aparelho saem em cascata e os
+    arquivos delas são apagados do armazenamento depois que a exclusão vale
+    (apagar a linha não apaga o arquivo no S3). As imagens de material são da
+    configuração do módulo, de todas as avaliações, e ficam.
 
     O chamado fica: é o histórico do setor que recebe (comentários, anexos, quem
     atendeu). A chave estrangeira está do lado do Renova, então excluir não mexe
@@ -264,5 +275,7 @@ def excluir_avaliacao(renova, usuario):
                 ticket=chamado, user=usuario, old_status=chamado.status, new_status=chamado.status,
                 observation=(f'Vini Renova {renova.codigo} excluído por {_nome(usuario)}. O chamado continua '
                              'como histórico; o link da avaliação na descrição não abre mais.'))
+        fotos = list(renova.fotos.all())
         renova.delete()
+        transaction.on_commit(lambda: apagar_arquivos(fotos))
     return chamado.pk if chamado is not None else None

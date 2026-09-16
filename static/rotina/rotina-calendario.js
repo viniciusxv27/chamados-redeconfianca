@@ -77,6 +77,8 @@
         var R = window.Rotina;
         var pessoa = cfg.modo === 'pessoa';
         var semana = dados.semana;
+        // Último dia da semana desta rotina/modelo: 5 (sábado) ou 6 (domingo, quando a semana tem domingo).
+        var ultimoDia = Math.max(0, (semana.dias || []).length - 1);
         var segunda = lerData(semana.inicio);
         var atividades = {};
         (dados.atividades || []).forEach(function (a) { atividades[a.id] = a; });
@@ -196,10 +198,10 @@
         var calendario = new FullCalendar.Calendar(alvo, {
             initialView: modoDia() ? 'timeGridDay' : 'timeGridWeek',
             initialDate: modoDia() ? somarDias(segunda, diaAtual) : segunda,
-            validRange: { start: segunda, end: somarDias(segunda, 6) },
+            validRange: { start: segunda, end: somarDias(segunda, ultimoDia + 1) },
             headerToolbar: false,
             firstDay: 1,
-            hiddenDays: [0],
+            hiddenDays: ultimoDia >= 6 ? [] : [0],
             allDaySlot: false,
             dayHeaders: !modoDia(),
             slotMinTime: faixaInicial.min,
@@ -280,10 +282,10 @@
             },
 
             selectAllow: function (selecao) {
-                return mesmoDia(selecao.start, selecao.end) && diaDaSemana(selecao.start) <= 5;
+                return mesmoDia(selecao.start, selecao.end) && diaDaSemana(selecao.start) <= ultimoDia;
             },
             eventAllow: function (destino) {
-                return mesmoDia(destino.start, destino.end) && diaDaSemana(destino.start) <= 5;
+                return mesmoDia(destino.start, destino.end) && diaDaSemana(destino.start) <= ultimoDia;
             },
 
             select: function (info) {
@@ -447,7 +449,7 @@
         }
 
         function irParaDia(idx, direcao) {
-            if (idx < 0 || idx > 5) { return; }
+            if (idx < 0 || idx > ultimoDia) { return; }
             var mudou = idx !== diaAtual;
             diaAtual = idx;
             if (modoDia()) { calendario.gotoDate(somarDias(segunda, idx)); }
@@ -667,7 +669,7 @@
                 inicio = null;
                 if (!rapido || Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.8) { return; }
                 var destino = diaAtual + (dx < 0 ? 1 : -1);
-                if (destino >= 0 && destino <= 5) { irParaDia(destino, dx < 0 ? 1 : -1); }
+                if (destino >= 0 && destino <= ultimoDia) { irParaDia(destino, dx < 0 ? 1 : -1); }
             }, { passive: true });
         }
 
@@ -679,7 +681,7 @@
                 var passo = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
                 if (!passo) { return; }
                 var destino = diaAtual + passo;
-                if (destino < 0 || destino > 5) { return; }
+                if (destino < 0 || destino > ultimoDia) { return; }
                 e.preventDefault();
                 irParaDia(destino, passo);
                 var aba = caixa.querySelector('[data-dia="' + destino + '"]');

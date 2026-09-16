@@ -2,7 +2,7 @@
 
 {% block rn_pagina %}Nova avaliação{% endblock %}
 {% block rn_titulo %}Checklist de avaliação do aparelho{% endblock %}
-{% block rn_subtitulo %}Confira todos os itens antes de concluir a oferta{% endblock %}
+{% block rn_subtitulo %}Siga as etapas: avaliação, valor, fotos e conclusão{% endblock %}
 {% block rn_acoes %}
 <button type="button" data-abrir="rn-modal-impresso"
         class="rn-btn text-xs text-white bg-white/15 hover:bg-white/25 border border-white/30">
@@ -105,6 +105,93 @@
     .rn-modal-fundo { position: absolute; inset: 0; background: rgba(20, 6, 36, .6); }
     .rn-modal-caixa { position: relative; display: flex; flex-direction: column; width: 100%; max-width: 44rem; max-height: 90vh;
                       background: #fff; border-radius: 1rem; overflow: hidden; box-shadow: 0 30px 60px -20px rgba(0, 0, 0, .5); }
+    /* Etapas */
+    .rn-etapas { margin-bottom: 1rem; padding: .7rem .8rem .8rem; }
+    .rn-etapas ol { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: .3rem; }
+    .rn-etapa-botao { width: 100%; display: flex; flex-direction: column; align-items: center; gap: .3rem; padding: .25rem .1rem;
+                      border-radius: .7rem; color: #8B78A0; font-size: .66rem; font-weight: 700; text-align: center; line-height: 1.15; }
+    .rn-etapa-botao:disabled { cursor: default; }
+    .rn-etapa-botao:not(:disabled):hover { background: var(--rn-lilas); }
+    .rn-etapa-bolinha { width: 2rem; height: 2rem; border-radius: 9999px; display: grid; place-items: center; font-size: .8rem;
+                        background: #F3ECFA; color: #8B78A0; border: 2px solid transparent; transition: background-color .2s, color .2s; }
+    .rn-etapa-botao.feita .rn-etapa-bolinha { background: #7B2CBF; color: #fff; }
+    .rn-etapa-botao.atual { color: #3C096C; }
+    .rn-etapa-botao.atual .rn-etapa-bolinha { background: #fff; color: #660099; border-color: #9D4EDD; box-shadow: 0 0 0 4px rgba(157, 78, 221, .18); }
+    .rn-etapa-botao.com-erro .rn-etapa-bolinha { background: #FEF2F2; color: #DC2626; border-color: #FCA5A5; }
+    .rn-etapas-barra { height: .3rem; border-radius: 9999px; background: #F3ECFA; margin-top: .55rem; overflow: hidden; }
+    .rn-etapas-barra i { display: block; height: 100%; width: 0; border-radius: 9999px; background: linear-gradient(90deg, #660099, #9D4EDD); transition: width .3s; }
+    @media (max-width: 640px) {
+        .rn-etapa-nome { display: none; }
+        .rn-etapa-botao.atual .rn-etapa-nome { display: none; }
+        .rn-etapa-bolinha { width: 1.8rem; height: 1.8rem; font-size: .72rem; }
+    }
+    .rn-etapa-titulo-movel { display: none; font-size: .78rem; font-weight: 800; color: #3C096C; text-align: center; margin-top: .45rem; }
+    @media (max-width: 640px) { .rn-etapa-titulo-movel { display: block; } }
+    .rn-etapa { animation: rn-entra .2s ease-out; }
+    @keyframes rn-entra { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+    .rn-navegacao { position: sticky; bottom: .5rem; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: .75rem;
+                    padding: .7rem .8rem; margin-top: 1rem; }
+    .rn-navegacao .rn-passo-contador { font-size: .72rem; font-weight: 700; color: #7C6A8E; }
+    .rn-erros-etapa { margin: 0 0 1rem; }
+
+    /* O cliente quer seguir? */
+    .rn-decisao { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .6rem; }
+    .rn-decisao label { position: relative; display: flex; align-items: center; gap: .7rem; padding: .85rem 1rem; border-radius: .9rem;
+                        border: 1.5px solid #E4D9F1; background: #fff; cursor: pointer; font-weight: 700; color: #3B2A4D; }
+    .rn-decisao label:hover { border-color: #C9B3E6; }
+    .rn-decisao input { position: absolute; opacity: 0; pointer-events: none; }
+    .rn-decisao i { font-size: 1.25rem; }
+    .rn-decisao label:has(input[value="SIM"]:checked) { border-color: #16A34A; background: #F0FDF4; color: #14532D; }
+    .rn-decisao label:has(input[value="NAO"]:checked) { border-color: #DC2626; background: #FEF2F2; color: #7F1D1D; }
+    .rn-decisao label:has(input:focus-visible) { box-shadow: 0 0 0 3px rgba(157, 78, 221, .35); }
+    .rn-decisao small { display: block; font-weight: 500; font-size: .7rem; opacity: .8; }
+
+    /* Fotos */
+    .rn-fotos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
+    @media (min-width: 768px) { .rn-fotos { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+    .rn-foto { position: relative; display: flex; flex-direction: column; border-radius: .9rem; border: 1.5px dashed #CDB8E8; background: #FDFBFF;
+               overflow: hidden; cursor: pointer; transition: border-color .15s, box-shadow .15s; }
+    .rn-foto:hover { border-color: #9D4EDD; }
+    .rn-foto:focus-within { box-shadow: 0 0 0 3px rgba(157, 78, 221, .3); }
+    .rn-foto input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0; }
+    .rn-foto-area { aspect-ratio: 4 / 3; display: grid; place-items: center; color: #9D4EDD; font-size: 1.6rem; background: #F6EEFF; }
+    .rn-foto-area img { width: 100%; height: 100%; object-fit: cover; }
+    .rn-foto-texto { padding: .55rem .65rem .65rem; }
+    .rn-foto-titulo { display: flex; align-items: center; justify-content: space-between; gap: .3rem; font-size: .8rem; font-weight: 800; color: #1F0B33; }
+    .rn-foto-desc { display: block; font-size: .66rem; color: #6B5B7B; line-height: 1.3; margin-top: .15rem; }
+    .rn-foto-selo { font-size: .56rem; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; padding: .1rem .4rem; border-radius: 9999px;
+                    background: #F3E8FF; color: #6B21A8; white-space: nowrap; }
+    .rn-foto.tem-foto { border-style: solid; border-color: #34D399; }
+    .rn-foto.tem-foto .rn-foto-selo { background: #ECFDF5; color: #047857; }
+    .rn-foto.rn-invalido { border-color: #EF4444 !important; }
+    .rn-foto-remover { position: absolute; top: .4rem; right: .4rem; width: 1.9rem; height: 1.9rem; border-radius: 9999px; display: grid; place-items: center;
+                       background: rgba(20, 6, 36, .7); color: #fff; font-size: .8rem; }
+    .rn-avarias { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5rem; }
+    @media (min-width: 768px) { .rn-avarias { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+    .rn-avaria { position: relative; aspect-ratio: 1; border-radius: .7rem; overflow: hidden; background: #F6EEFF; }
+    .rn-avaria img { width: 100%; height: 100%; object-fit: cover; }
+    .rn-foto-processando { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(255, 255, 255, .75); color: #660099; }
+
+    .rn-resumo-final { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
+    @media (min-width: 768px) { .rn-resumo-final { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+    .rn-resumo-final div { border-radius: .8rem; background: #FBF8FF; border: 1px solid #EFE6F8; padding: .6rem .75rem; min-width: 0; }
+    .rn-resumo-final span { display: block; font-size: .58rem; font-weight: 800; text-transform: uppercase; letter-spacing: .07em; color: #8B78A0; }
+    .rn-resumo-final b { display: block; font-size: .88rem; color: #1F0B33; margin-top: .1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    html.dark .rn-etapa-bolinha { background: var(--tema-superficie-3, #2b3346); color: var(--tema-texto-3, #8b93a5); }
+    html.dark .rn-etapa-botao { color: var(--tema-texto-3, #8b93a5); }
+    html.dark .rn-etapa-botao.atual { color: #e9d5ff; }
+    html.dark .rn-etapa-botao.atual .rn-etapa-bolinha { background: var(--tema-superficie, #1b2130); color: #d8b4fe; }
+    html.dark .rn-etapa-botao.feita .rn-etapa-bolinha { background: #7B2CBF; color: #fff; }
+    html.dark .rn-etapas-barra { background: var(--tema-superficie-3, #2b3346); }
+    html.dark .rn-etapa-titulo-movel { color: #e9d5ff; }
+    html.dark .rn-decisao label, html.dark .rn-foto { background: var(--tema-superficie-2, #232a3b); border-color: var(--tema-borda, #313a4f); color: var(--tema-texto, #e7eaf0); }
+    html.dark .rn-decisao label:has(input[value="SIM"]:checked) { background: rgba(16, 185, 129, .14); border-color: #10b981; color: #a7f3d0; }
+    html.dark .rn-decisao label:has(input[value="NAO"]:checked) { background: rgba(239, 68, 68, .14); border-color: #ef4444; color: #fecaca; }
+    html.dark .rn-foto-area, html.dark .rn-avaria { background: rgba(157, 78, 221, .14); color: #d8b4fe; }
+    html.dark .rn-foto-titulo, html.dark .rn-resumo-final b { color: var(--tema-texto, #e7eaf0); }
+    html.dark .rn-foto-desc, html.dark .rn-resumo-final span { color: var(--tema-texto-3, #8b93a5); }
+    html.dark .rn-resumo-final div { background: var(--tema-superficie-2, #232a3b); border-color: var(--tema-borda, #313a4f); }
 </style>
 {% endblock %}
 
@@ -124,13 +211,30 @@
 </div>
 {% endif %}
 
-<form method="post" id="rn-form" novalidate>
+<nav class="rn-card rn-etapas" id="rn-etapas" aria-label="Etapas da avaliação">
+    <ol>
+        {% for numero, nome, icone in etapas %}
+        <li>
+            <button type="button" class="rn-etapa-botao" data-ir="{{ numero }}" disabled aria-label="Etapa {{ numero }}: {{ nome }}">
+                <span class="rn-etapa-bolinha">{{ numero }}</span>
+                <span class="rn-etapa-nome">{{ nome }}</span>
+            </button>
+        </li>
+        {% endfor %}
+    </ol>
+    <div class="rn-etapas-barra" aria-hidden="true"><i></i></div>
+    <p class="rn-etapa-titulo-movel" id="rn-etapa-titulo" aria-live="polite"></p>
+</nav>
+
+<form method="post" id="rn-form" enctype="multipart/form-data" novalidate data-etapa-inicial="{{ etapa_inicial }}">
     {% csrf_token %}
     <input type="hidden" name="assinatura" value="{{ valores.assinatura|default:'' }}">
 
-    <section class="rn-secao mb-4">
+    {# ── 1. Aparelho ─────────────────────────────────────────────────────────── #}
+    <section class="rn-etapa rn-secao" data-etapa="1" data-nome="Dados do aparelho">
         <div class="rn-secao-topo"><span class="rn-num">1</span>Dados do aparelho</div>
         <div class="p-4 sm:p-5 grid gap-4">
+            <div class="rn-erros rn-erros-etapa" role="alert" hidden><ul></ul></div>
             <div class="grid sm:grid-cols-3 gap-4">
                 <div>
                     <span class="rn-rotulo">Marca</span>
@@ -205,169 +309,249 @@
                 <label class="block">
                     <span class="rn-rotulo">Saúde da bateria (%)</span>
                     <input type="number" name="saude_bateria" value="{{ valores.saude_bateria|default:'' }}" min="0" max="100"
-                           placeholder="Ex.: 87" class="rn-campo {% if erros.saude_bateria %}rn-invalido{% endif %}">
+                           inputmode="numeric" placeholder="Ex.: 87" class="rn-campo {% if erros.saude_bateria %}rn-invalido{% endif %}">
+                    <p class="rn-dica">Ajustes &gt; Bateria &gt; Saúde da bateria.</p>
                     {% if erros.saude_bateria %}<p class="rn-erro">{{ erros.saude_bateria }}</p>{% endif %}
                 </label>
             </div>
-
         </div>
     </section>
 
-    <div class="grid lg:grid-cols-2 gap-4 items-start">
-        <div class="grid gap-4">
-            <section class="rn-secao {% if erros.itens_obrigatorios %}rn-secao-erro{% endif %}">
-                <div class="rn-secao-topo"><span class="rn-num">2</span>Itens obrigatórios antes da avaliação</div>
-                {% for chave, titulo, descricao, icone, marcado in itens_obrigatorios %}
-                <label class="rn-item rn-item-check">
-                    <span class="rn-item-icone"><i class="{{ icone }}"></i></span>
-                    <span class="min-w-0"><span class="rn-item-titulo">{{ titulo }}</span><span class="rn-item-desc">{{ descricao }}</span></span>
-                    <span class="rn-check"><input type="checkbox" name="obrig_{{ chave }}" {% if marcado %}checked{% endif %}><span class="rn-quadrado"></span></span>
+    {# ── 2. Funcionalidades ──────────────────────────────────────────────────── #}
+    <section class="rn-etapa rn-secao {% if erros.funcionalidades %}rn-secao-erro{% endif %}" data-etapa="2" data-nome="Funcionalidades" hidden>
+        <div class="rn-secao-topo"><span class="rn-num">2</span>Funcionalidades</div>
+        <div class="rn-erros rn-erros-etapa mx-4 mt-4" role="alert" hidden><ul></ul></div>
+        <div class="rn-tri-cabecalho" aria-hidden="true">
+            <span></span><span></span>
+            <div class="rn-tri">{% for valor, rotulo in opcoes_func %}<span>{{ rotulo }}</span>{% endfor %}</div>
+        </div>
+        {% for chave, titulo, descricao, icone, atual in funcionalidades %}
+        <div class="rn-item rn-item-tri">
+            <span class="rn-item-icone"><i class="{{ icone }}"></i></span>
+            <span class="min-w-0"><span class="rn-item-titulo">{{ titulo }}</span><span class="rn-item-desc">{{ descricao }}</span></span>
+            <div class="rn-tri" role="radiogroup" aria-label="{{ titulo }}" data-titulo="{{ titulo }}">
+                {% for valor, rotulo in opcoes_func %}
+                <label class="rn-op-{{ valor }}" title="{{ rotulo }}">
+                    <input type="radio" name="func_{{ chave }}" value="{{ valor }}" {% if atual == valor %}checked{% endif %}>
+                    <span class="rn-quadrado"></span><span class="rn-op-texto">{{ rotulo }}</span>
                 </label>
                 {% endfor %}
-                {% if erros.itens_obrigatorios %}<p class="rn-erro px-4 pb-3">{{ erros.itens_obrigatorios }}</p>{% endif %}
-            </section>
-
-            <section class="rn-secao {% if erros.funcionalidades %}rn-secao-erro{% endif %}">
-                <div class="rn-secao-topo"><span class="rn-num">3</span>Funcionalidades</div>
-                <div class="rn-tri-cabecalho" aria-hidden="true">
-                    <span></span><span></span>
-                    <div class="rn-tri">{% for valor, rotulo in opcoes_func %}<span>{{ rotulo }}</span>{% endfor %}</div>
-                </div>
-                {% for chave, titulo, descricao, icone, atual in funcionalidades %}
-                <div class="rn-item rn-item-tri">
-                    <span class="rn-item-icone"><i class="{{ icone }}"></i></span>
-                    <span class="min-w-0"><span class="rn-item-titulo">{{ titulo }}</span><span class="rn-item-desc">{{ descricao }}</span></span>
-                    <div class="rn-tri" role="radiogroup" aria-label="{{ titulo }}">
-                        {% for valor, rotulo in opcoes_func %}
-                        <label class="rn-op-{{ valor }}" title="{{ rotulo }}">
-                            <input type="radio" name="func_{{ chave }}" value="{{ valor }}" {% if atual == valor %}checked{% endif %}>
-                            <span class="rn-quadrado"></span><span class="rn-op-texto">{{ rotulo }}</span>
-                        </label>
-                        {% endfor %}
-                    </div>
-                </div>
-                {% endfor %}
-                {% if erros.funcionalidades %}<p class="rn-erro px-4 pb-3">{{ erros.funcionalidades }}</p>{% endif %}
-            </section>
+            </div>
         </div>
+        {% endfor %}
+        {% if erros.funcionalidades %}<p class="rn-erro px-4 pb-3">{{ erros.funcionalidades }}</p>{% endif %}
+    </section>
 
-        <div class="grid gap-4">
-            <section class="rn-secao {% if erros.estetica %}rn-secao-erro{% endif %}">
-                <div class="rn-secao-topo"><span class="rn-num">4</span>Condição estética</div>
-                <div class="rn-tri-cabecalho" aria-hidden="true">
-                    <span></span><span></span>
-                    <div class="rn-tri">{% for valor, rotulo in opcoes_est %}<span>{{ rotulo }}</span>{% endfor %}</div>
-                </div>
-                {% for chave, titulo, descricao, icone, atual in estetica %}
-                <div class="rn-item rn-item-tri">
-                    <span class="rn-item-icone"><i class="{{ icone }}"></i></span>
-                    <span class="min-w-0"><span class="rn-item-titulo">{{ titulo }}</span><span class="rn-item-desc">{{ descricao }}</span></span>
-                    <div class="rn-tri" role="radiogroup" aria-label="{{ titulo }}">
-                        {% for valor, rotulo in opcoes_est %}
-                        <label class="rn-op-{{ valor }}" title="{{ rotulo }}">
-                            <input type="radio" name="est_{{ chave }}" value="{{ valor }}" {% if atual == valor %}checked{% endif %}>
-                            <span class="rn-quadrado"></span><span class="rn-op-texto">{{ rotulo }}</span>
-                        </label>
-                        {% endfor %}
-                    </div>
-                </div>
-                {% endfor %}
-                {% if erros.estetica %}<p class="rn-erro px-4 pb-3">{{ erros.estetica }}</p>{% endif %}
-            </section>
-
-            <section class="rn-secao {% if erros.observacoes %}rn-secao-erro{% endif %}">
-                <div class="rn-secao-topo"><span class="rn-num">5</span>Observações gerais</div>
-                <div class="p-4">
-                    <textarea name="observacoes" rows="4" maxlength="4000" class="rn-pautado w-full"
-                              placeholder="Conte o que ficou com observação ou não funciona…">{{ valores.observacoes|default:'' }}</textarea>
-                    {% if erros.observacoes %}<p class="rn-erro">{{ erros.observacoes }}</p>{% endif %}
-                </div>
-            </section>
-
-
-            <section class="rn-secao">
-                <div class="rn-secao-topo"><span class="rn-num">6</span>Responsável pela avaliação</div>
-                <div class="p-4 grid gap-3">
-                    <div class="grid sm:grid-cols-2 gap-3">
-                        <label class="block">
-                            <span class="rn-rotulo">Nome do vendedor</span>
-                            <input type="text" name="vendedor_nome" value="{{ valores.vendedor_nome|default:'' }}" maxlength="150"
-                                   class="rn-campo {% if erros.vendedor_nome %}rn-invalido{% endif %}">
-                            {% if erros.vendedor_nome %}<p class="rn-erro">{{ erros.vendedor_nome }}</p>{% endif %}
-                        </label>
-                        <label class="block">
-                            <span class="rn-rotulo">Matrícula <span class="font-normal text-gray-400">(opcional)</span></span>
-                            <input type="text" name="matricula" value="{{ valores.matricula|default:'' }}" maxlength="40" class="rn-campo">
-                        </label>
-                    </div>
-                    <div>
-                        <div class="flex items-center justify-between">
-                            <span class="rn-rotulo">Assinatura</span>
-                            <button type="button" id="rn-limpar-assinatura" class="text-[11px] font-semibold hover:underline" style="color:#6B21A8">
-                                <i class="fa-solid fa-eraser"></i> Limpar
-                            </button>
-                        </div>
-                        <div id="rn-assinatura" class="rn-assinatura {% if erros.assinatura %}rn-invalido{% endif %}">
-                            <canvas aria-label="Quadro para assinar"></canvas>
-                            <span class="rn-assinatura-dica">Assine aqui com o dedo ou o mouse</span>
-                        </div>
-                        {% if erros.assinatura %}<p class="rn-erro">{{ erros.assinatura }}</p>{% endif %}
-                    </div>
-                    <div class="grid sm:grid-cols-2 gap-3 items-start">
-                        <label class="block">
-                            <span class="rn-rotulo">Data</span>
-                            <input type="date" name="data_responsavel" value="{{ valores.data_responsavel|default:'' }}" class="rn-campo">
-                        </label>
-                        <label class="block">
-                            <span class="rn-rotulo">Nº da venda <span class="font-normal text-gray-400">(se já tiver)</span></span>
-                            <input type="text" name="numero_venda" value="{{ valores.numero_venda|default:'' }}" maxlength="40"
-                                   autocomplete="off" spellcheck="false"
-                                   class="rn-campo font-mono {% if erros.numero_venda %}rn-invalido{% endif %}">
-                            <p class="rn-dica">Pode deixar em branco e informar depois, na tela da avaliação.</p>
-                            {% if erros.numero_venda %}<p class="rn-erro">{{ erros.numero_venda }}</p>{% endif %}
-                        </label>
-                    </div>
-                </div>
-            </section>
+    {# ── 3. Condição estética ───────────────────────────────────────────────── #}
+    <section class="rn-etapa rn-secao {% if erros.estetica %}rn-secao-erro{% endif %}" data-etapa="3" data-nome="Condição estética" hidden>
+        <div class="rn-secao-topo"><span class="rn-num">3</span>Condição estética</div>
+        <div class="rn-erros rn-erros-etapa mx-4 mt-4" role="alert" hidden><ul></ul></div>
+        <div class="rn-tri-cabecalho" aria-hidden="true">
+            <span></span><span></span>
+            <div class="rn-tri">{% for valor, rotulo in opcoes_est %}<span>{{ rotulo }}</span>{% endfor %}</div>
         </div>
+        {% for chave, titulo, descricao, icone, atual in estetica %}
+        <div class="rn-item rn-item-tri">
+            <span class="rn-item-icone"><i class="{{ icone }}"></i></span>
+            <span class="min-w-0"><span class="rn-item-titulo">{{ titulo }}</span><span class="rn-item-desc">{{ descricao }}</span></span>
+            <div class="rn-tri" role="radiogroup" aria-label="{{ titulo }}" data-titulo="{{ titulo }}">
+                {% for valor, rotulo in opcoes_est %}
+                <label class="rn-op-{{ valor }}" title="{{ rotulo }}">
+                    <input type="radio" name="est_{{ chave }}" value="{{ valor }}" {% if atual == valor %}checked{% endif %}>
+                    <span class="rn-quadrado"></span><span class="rn-op-texto">{{ rotulo }}</span>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+        {% if erros.estetica %}<p class="rn-erro px-4 pb-3">{{ erros.estetica }}</p>{% endif %}
+    </section>
+
+    {# ── 4. Valor e decisão do cliente ──────────────────────────────────────── #}
+    <div class="rn-etapa grid gap-4" data-etapa="4" data-nome="Padrão, valor e decisão do cliente" hidden>
+        <div class="rn-erros rn-erros-etapa" role="alert" hidden><ul></ul></div>
+        <section class="rn-secao {% if erros.observacoes %}rn-secao-erro{% endif %}">
+            <div class="rn-secao-topo"><span class="rn-num">4</span>Observações gerais</div>
+            <div class="p-4">
+                <textarea name="observacoes" rows="4" maxlength="4000" class="rn-pautado w-full"
+                          placeholder="Conte o que ficou com observação ou não funciona…">{{ valores.observacoes|default:'' }}</textarea>
+                <p class="rn-dica" id="rn-obs-dica"></p>
+                {% if erros.observacoes %}<p class="rn-erro">{{ erros.observacoes }}</p>{% endif %}
+            </div>
+        </section>
+
+        <section class="rn-secao" id="rn-resultado">
+            <div class="rn-secao-topo"><span class="rn-num"><i class="fa-solid fa-calculator"></i></span>Padrão e valor de troca</div>
+            <div class="p-4">
+                <div class="rn-valor-box">
+                    <div class="flex flex-wrap items-center gap-4">
+                        <div class="text-center">
+                            <span class="rn-rotulo">Padrão</span>
+                            <span id="rn-padrao-letra" class="rn-letra rn-letra-grande rn-letra-vazia">?</span>
+                        </div>
+                        <div class="flex-1 min-w-[12rem]">
+                            <span class="rn-rotulo">Valor estimado de troca</span>
+                            <div id="rn-valor" class="rn-campo rn-campo-valor rn-valor-calculado" aria-live="polite">
+                                <span>R$</span><span id="rn-valor-numero">—</span>
+                            </div>
+                            <p id="rn-valor-dica" class="rn-dica"></p>
+                        </div>
+                    </div>
+                    <div id="rn-motivos" class="rn-motivos" aria-live="polite"></div>
+                    <div id="rn-sugestao" class="rn-sugestao" hidden></div>
+                    <p class="text-[11px] mt-2 rn-valor-nota">
+                        <i class="fa-solid fa-circle-info"></i>
+                        O padrão sai das avarias marcadas e da saúde da bateria, pelos critérios da
+                        <a href="{% url 'renova:tabela' %}" target="_blank" class="underline font-semibold">tabela de avaliação</a>;
+                        o valor, da tabela com o desconto do padrão. Ninguém digita nem escolhe.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <section class="rn-secao {% if erros.cliente_segue %}rn-secao-erro{% endif %}">
+            <div class="rn-secao-topo"><span class="rn-num"><i class="fa-solid fa-handshake"></i></span>O cliente quer seguir com a troca?</div>
+            <div class="p-4 grid gap-3">
+                <p class="text-sm text-gray-600">Mostre o padrão e o valor ao cliente. Se ele aceitar, a avaliação segue para as fotos do aparelho.</p>
+                <div class="rn-decisao" role="radiogroup" aria-label="O cliente quer seguir com a troca?">
+                    <label><input type="radio" name="cliente_segue" value="SIM" {% if valores.cliente_segue == 'SIM' %}checked{% endif %}>
+                        <i class="fa-solid fa-circle-check"></i><span>Sim, quer seguir<small>Tirar as fotos e concluir</small></span></label>
+                    <label><input type="radio" name="cliente_segue" value="NAO" {% if valores.cliente_segue == 'NAO' %}checked{% endif %}>
+                        <i class="fa-solid fa-circle-xmark"></i><span>Não quer seguir<small>Encerrar sem salvar</small></span></label>
+                </div>
+                {% if erros.cliente_segue %}<p class="rn-erro">{{ erros.cliente_segue }}</p>{% endif %}
+                <div id="rn-nao-segue" class="rounded-xl p-4 text-sm" style="background:#FEF2F2;color:#7F1D1D" hidden>
+                    <p class="font-bold"><i class="fa-solid fa-circle-info mr-1"></i>Troca encerrada.</p>
+                    <p class="mt-1">O cliente fica com o aparelho e nada desta avaliação é salvo — nem chamado, nem aprovação.</p>
+                    <div class="mt-3 flex flex-wrap gap-2">
+                        <a href="{% url 'renova:nova' %}" class="rn-btn rn-btn-claro text-xs"><i class="fa-solid fa-rotate-left"></i>Começar outra avaliação</a>
+                        <a href="{% url 'renova:inicio' %}" class="rn-btn rn-btn-claro text-xs"><i class="fa-solid fa-list"></i>Voltar às avaliações</a>
+                    </div>
+                </div>
+            </div>
+        </section>
     </div>
 
-    <section class="rn-secao mt-4" id="rn-resultado">
-        <div class="rn-secao-topo"><span class="rn-num"><i class="fa-solid fa-calculator"></i></span>Padrão e valor de troca</div>
-        <div class="p-4">
-            <div class="rn-valor-box">
-                <div class="flex flex-wrap items-center gap-4">
-                    <div class="text-center">
-                        <span class="rn-rotulo">Padrão</span>
-                        <span id="rn-padrao-letra" class="rn-letra rn-letra-grande rn-letra-vazia">?</span>
+    {# ── 5. Fotos ───────────────────────────────────────────────────────────── #}
+    <section class="rn-etapa rn-secao {% if erros.fotos or erros.fotos_de_novo %}rn-secao-erro{% endif %}" data-etapa="5" data-nome="Fotos do aparelho" hidden>
+        <div class="rn-secao-topo"><span class="rn-num">5</span>Fotos do aparelho</div>
+        <div class="p-4 sm:p-5 grid gap-4">
+            <div class="rn-erros rn-erros-etapa" role="alert" hidden><ul></ul></div>
+            <p class="text-sm text-gray-600">Fotografe o aparelho sem capa e sem película, num fundo liso e com boa luz. As fotos vão junto para o gerente e para quem recebe o aparelho.</p>
+            {% if erros.fotos %}<p class="rn-erro">{{ erros.fotos }}</p>{% endif %}
+            {% if erros.fotos_de_novo %}<p class="rn-erro"><i class="fa-solid fa-camera-rotate mr-1"></i>{{ erros.fotos_de_novo }}</p>{% endif %}
+            <div class="rn-fotos">
+                {% for chave, titulo, descricao, icone, obrigatoria in fotos %}
+                <label class="rn-foto" data-foto="{{ chave }}" data-obrigatoria="{{ obrigatoria|yesno:'1,' }}" data-titulo="{{ titulo }}">
+                    <input type="file" name="foto_{{ chave }}" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,image/*">
+                    <span class="rn-foto-area"><i class="{{ icone }}"></i></span>
+                    <span class="rn-foto-texto">
+                        <span class="rn-foto-titulo">{{ titulo }}<span class="rn-foto-selo">{% if obrigatoria %}Obrigatória{% else %}Opcional{% endif %}</span></span>
+                        <span class="rn-foto-desc">{{ descricao }}</span>
+                    </span>
+                </label>
+                {% endfor %}
+            </div>
+            <div class="grid gap-2">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                        <p class="text-sm font-bold" style="color:#3C096C"><i class="fa-solid fa-magnifying-glass-plus mr-1"></i>Avarias <span class="font-normal text-gray-500">(até {{ fotos_avaria_max }})</span></p>
+                        <p class="rn-dica" id="rn-avaria-dica">Riscos, trincos e amassados de perto.</p>
                     </div>
-                    <div class="flex-1 min-w-[12rem]">
-                        <span class="rn-rotulo">Valor estimado de troca</span>
-                        <div id="rn-valor" class="rn-campo rn-campo-valor rn-valor-calculado" aria-live="polite">
-                            <span>R$</span><span id="rn-valor-numero">—</span>
-                        </div>
-                        <p id="rn-valor-dica" class="rn-dica"></p>
-                    </div>
+                    <label class="rn-btn rn-btn-claro text-xs cursor-pointer">
+                        <i class="fa-solid fa-camera"></i>Adicionar foto de avaria
+                        <input type="file" id="rn-avaria-entrada" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,image/*" multiple class="sr-only">
+                    </label>
                 </div>
-                <div id="rn-motivos" class="rn-motivos" aria-live="polite"></div>
-                <div id="rn-sugestao" class="rn-sugestao" hidden></div>
-                <p class="text-[11px] mt-2 rn-valor-nota">
-                    <i class="fa-solid fa-circle-info"></i>
-                    O padrão sai das avarias marcadas e da saúde da bateria, pelos critérios da
-                    <a href="{% url 'renova:tabela' %}" target="_blank" class="underline font-semibold">tabela de avaliação</a>;
-                    o valor, da tabela com o desconto do padrão. Ninguém digita nem escolhe.
-                </p>
+                <input type="file" name="foto_avaria" id="rn-avarias-campo" multiple hidden>
+                <div class="rn-avarias" id="rn-avarias"></div>
             </div>
         </div>
     </section>
 
-    <div class="rn-card mt-4 p-4 flex flex-wrap items-center justify-between gap-3">
-        <p class="text-xs text-gray-600 max-w-xl">
-            <i class="fa-solid fa-ticket mr-1" style="color:#7B2CBF"></i>
-            Ao enviar, a avaliação vai para o gerente da loja aprovar. Na aprovação, o portal abre o
-            chamado{% if cfg.categoria %} em <b>{{ cfg.categoria.name }}</b>{% endif %} e libera a etiqueta.
-        </p>
-        <button type="submit" id="rn-enviar" class="rn-btn rn-btn-primario" {% if sem_categoria %}disabled{% endif %}>
+    {# ── 6. Responsável ─────────────────────────────────────────────────────── #}
+    <section class="rn-etapa rn-secao" data-etapa="6" data-nome="Responsável pela avaliação" hidden>
+        <div class="rn-secao-topo"><span class="rn-num">6</span>Responsável pela avaliação</div>
+        <div class="p-4 grid gap-3">
+            <div class="rn-erros rn-erros-etapa" role="alert" hidden><ul></ul></div>
+            <div class="grid sm:grid-cols-2 gap-3">
+                <label class="block">
+                    <span class="rn-rotulo">Nome do vendedor</span>
+                    <input type="text" name="vendedor_nome" value="{{ valores.vendedor_nome|default:'' }}" maxlength="150"
+                           class="rn-campo {% if erros.vendedor_nome %}rn-invalido{% endif %}">
+                    {% if erros.vendedor_nome %}<p class="rn-erro">{{ erros.vendedor_nome }}</p>{% endif %}
+                </label>
+                <label class="block">
+                    <span class="rn-rotulo">Matrícula <span class="font-normal text-gray-400">(opcional)</span></span>
+                    <input type="text" name="matricula" value="{{ valores.matricula|default:'' }}" maxlength="40" class="rn-campo">
+                </label>
+            </div>
+            <div>
+                <div class="flex items-center justify-between">
+                    <span class="rn-rotulo">Assinatura</span>
+                    <button type="button" id="rn-limpar-assinatura" class="text-[11px] font-semibold hover:underline" style="color:#6B21A8">
+                        <i class="fa-solid fa-eraser"></i> Limpar
+                    </button>
+                </div>
+                <div id="rn-assinatura" class="rn-assinatura {% if erros.assinatura %}rn-invalido{% endif %}">
+                    <canvas aria-label="Quadro para assinar"></canvas>
+                    <span class="rn-assinatura-dica">Assine aqui com o dedo ou o mouse</span>
+                </div>
+                {% if erros.assinatura %}<p class="rn-erro">{{ erros.assinatura }}</p>{% endif %}
+            </div>
+            <div class="grid sm:grid-cols-2 gap-3 items-start">
+                <label class="block">
+                    <span class="rn-rotulo">Data</span>
+                    <input type="date" name="data_responsavel" value="{{ valores.data_responsavel|default:'' }}" class="rn-campo">
+                </label>
+                <label class="block">
+                    <span class="rn-rotulo">Nº da venda <span class="font-normal text-gray-400">(se já tiver)</span></span>
+                    <input type="text" name="numero_venda" value="{{ valores.numero_venda|default:'' }}" maxlength="40"
+                           autocomplete="off" spellcheck="false"
+                           class="rn-campo font-mono {% if erros.numero_venda %}rn-invalido{% endif %}">
+                    <p class="rn-dica">Pode deixar em branco e informar depois, na tela da avaliação.</p>
+                    {% if erros.numero_venda %}<p class="rn-erro">{{ erros.numero_venda }}</p>{% endif %}
+                </label>
+            </div>
+        </div>
+    </section>
+
+    {# ── 7. Itens obrigatórios (era a etapa 2 do impresso) e envio ──────────── #}
+    <div class="rn-etapa grid gap-4" data-etapa="7" data-nome="Itens obrigatórios e envio" hidden>
+        <section class="rn-secao {% if erros.itens_obrigatorios %}rn-secao-erro{% endif %}">
+            <div class="rn-secao-topo"><span class="rn-num">7</span>Itens obrigatórios para concluir a troca</div>
+            <div class="rn-erros rn-erros-etapa mx-4 mt-4" role="alert" hidden><ul></ul></div>
+            {% for chave, titulo, descricao, icone, marcado in itens_obrigatorios %}
+            <label class="rn-item rn-item-check">
+                <span class="rn-item-icone"><i class="{{ icone }}"></i></span>
+                <span class="min-w-0"><span class="rn-item-titulo">{{ titulo }}</span><span class="rn-item-desc">{{ descricao }}</span></span>
+                <span class="rn-check"><input type="checkbox" name="obrig_{{ chave }}" data-titulo="{{ titulo }}" {% if marcado %}checked{% endif %}><span class="rn-quadrado"></span></span>
+            </label>
+            {% endfor %}
+            {% if erros.itens_obrigatorios %}<p class="rn-erro px-4 pb-3">{{ erros.itens_obrigatorios }}</p>{% endif %}
+        </section>
+
+        <section class="rn-card p-4 grid gap-3">
+            <h2 class="rn-h2"><i class="fa-solid fa-clipboard-check mr-1"></i>Resumo</h2>
+            <div class="rn-resumo-final">
+                <div><span>Aparelho</span><b id="rn-resumo-aparelho">—</b></div>
+                <div><span>Padrão</span><b id="rn-resumo-padrao">—</b></div>
+                <div><span>Valor de troca</span><b id="rn-resumo-valor">—</b></div>
+                <div><span>Fotos</span><b id="rn-resumo-fotos">—</b></div>
+            </div>
+            <p class="text-xs text-gray-600">
+                <i class="fa-solid fa-ticket mr-1" style="color:#7B2CBF"></i>
+                Ao enviar, a avaliação vai para o gerente da loja aprovar. Na aprovação, o portal abre o
+                chamado{% if cfg.categoria %} em <b>{{ cfg.categoria.name }}</b>{% endif %} e libera a etiqueta.
+            </p>
+        </section>
+    </div>
+
+    <div class="rn-card rn-navegacao">
+        <button type="button" id="rn-voltar" class="rn-btn rn-btn-claro"><i class="fa-solid fa-arrow-left"></i><span class="hidden sm:inline">Voltar</span></button>
+        <span class="rn-passo-contador" id="rn-contador" aria-live="polite"></span>
+        <button type="button" id="rn-avancar" class="rn-btn rn-btn-primario">Continuar<i class="fa-solid fa-arrow-right"></i></button>
+        <button type="submit" id="rn-enviar" class="rn-btn rn-btn-primario" hidden {% if sem_categoria %}disabled{% endif %}>
             <i class="fa-solid fa-paper-plane"></i>Enviar para aprovação do gerente
         </button>
     </div>
@@ -394,12 +578,6 @@
 (function () {
     var form = document.getElementById('rn-form');
     if (!form) return;
-
-    function marcado(nome) {
-        var el = form.querySelector('input[name="' + nome + '"]:checked');
-        return el ? el.value : '';
-    }
-
 
     /* Padrão e valor: saem das avarias marcadas e da tabela — as mesmas regras do servidor (renova/padrao.py). */
     var precos = JSON.parse(document.getElementById('rn-precos').textContent || '[]');
@@ -483,10 +661,12 @@
         return s;
     }
 
+    var ultimoResultado = null;
     function atualizarValor() {
         var linha = linhaDaTabela();
         var resultado = calcularPadrao();
         var letra = resultado ? resultado.letra : '';
+        ultimoResultado = {linha: linha, letra: letra};
         letraPadrao.textContent = letra || '?';
         letraPadrao.className = 'rn-letra rn-letra-grande ' + (letra ? 'rn-letra-' + letra : 'rn-letra-vazia');
 
@@ -521,26 +701,29 @@
         if (linha && letra && linha.valores[letra] !== undefined) {
             valorNumero.textContent = numero.format(linha.valores[letra]);
             valorDica.textContent = 'Padrão ' + letra + ' na tabela de avaliação.';
-            return;
+        } else {
+            valorNumero.textContent = '—';
+            if (!campoModelo.value || !campoArmazenamento.value) {
+                valorDica.textContent = 'Escolha o modelo e o armazenamento.';
+            } else if (!resultado) {
+                valorDica.textContent = 'Informe a saúde da bateria e marque todas as funcionalidades e a condição estética.';
+            }
         }
-        valorNumero.textContent = '—';
-        if (!campoModelo.value || !campoArmazenamento.value) {
-            valorDica.textContent = 'Escolha o modelo e o armazenamento.';
-        } else if (!resultado) {
-            valorDica.textContent = 'Informe a saúde da bateria e marque todas as funcionalidades e a condição estética.';
-        }
+        var dicaObs = document.getElementById('rn-obs-dica');
+        if (dicaObs) dicaObs.textContent = sinalizados().length ? 'Obrigatório: ' + sinalizados().join(', ') + ' ficou com observação ou não funciona.' : '';
     }
 
     /* IMEI: só números, 15 dígitos e o dígito verificador certo. */
-    function luhn(numero) {
+    function luhn(texto) {
         var soma = 0;
-        for (var i = 0; i < numero.length; i++) {
-            var d = parseInt(numero.charAt(i), 10);
+        for (var i = 0; i < texto.length; i++) {
+            var d = parseInt(texto.charAt(i), 10);
             if (i % 2 === 1) { d *= 2; if (d > 9) d -= 9; }
             soma += d;
         }
         return soma % 10 === 0;
     }
+    function imeiValido(texto) { return /^\d{15}$/.test(texto) && luhn(texto); }
     form.querySelectorAll('[data-imei]').forEach(function (campo) {
         var dica = document.getElementById(campo.id + '-dica');
         function checar() {
@@ -568,16 +751,179 @@
     }
     form.querySelectorAll('.rn-tri input:checked').forEach(destacar);
 
-    form.addEventListener('change', function (e) {
-        if (e.target === campoModelo) preencherArmazenamentos();
-        if (e.target.closest('.rn-tri')) destacar(e.target);
-        atualizarValor();
-    });
-    campoBateria.addEventListener('input', atualizarValor);
-    preencherArmazenamentos();
-    atualizarValor();
+    function sinalizados() {
+        var lista = [];
+        form.querySelectorAll('.rn-tri[role="radiogroup"]').forEach(function (grupo) {
+            var marcado = grupo.querySelector('input:checked');
+            if (marcado && (marcado.value === 'OBS' || marcado.value === 'NAO')) lista.push(grupo.getAttribute('data-titulo'));
+        });
+        return lista;
+    }
 
-    /* Assinatura no quadro. */
+    /* ── Fotos: reduz no navegador (celular manda 4 MB por foto) e mostra a prévia. ── */
+    var LADO_MAX = 1920;
+    var AVARIAS_MAX = {{ fotos_avaria_max }};
+    var processando = 0;
+
+    function reduzir(arquivo) {
+        if (!window.createImageBitmap || !arquivo.type || !/^image\/(jpeg|png|webp)$/.test(arquivo.type)) return Promise.resolve(arquivo);
+        return createImageBitmap(arquivo, {imageOrientation: 'from-image'}).then(function (bmp) {
+            var escala = Math.min(1, LADO_MAX / Math.max(bmp.width, bmp.height));
+            if (escala === 1 && arquivo.size < 1.5 * 1024 * 1024) { if (bmp.close) bmp.close(); return arquivo; }
+            var canvas = document.createElement('canvas');
+            canvas.width = Math.round(bmp.width * escala);
+            canvas.height = Math.round(bmp.height * escala);
+            var ctx2 = canvas.getContext('2d');
+            ctx2.fillStyle = '#fff';
+            ctx2.fillRect(0, 0, canvas.width, canvas.height);
+            ctx2.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+            if (bmp.close) bmp.close();
+            return new Promise(function (resolve) {
+                canvas.toBlob(function (blob) {
+                    if (!blob) { resolve(arquivo); return; }
+                    var nome = (arquivo.name || 'foto').replace(/\.[^.]+$/, '') + '.jpg';
+                    resolve(new File([blob], nome, {type: 'image/jpeg', lastModified: Date.now()}));
+                }, 'image/jpeg', 0.85);
+            });
+        }).catch(function () { return arquivo; });
+    }
+
+    function colocarArquivos(input, arquivos) {
+        try {
+            var dt = new DataTransfer();
+            arquivos.forEach(function (a) { dt.items.add(a); });
+            input.files = dt.files;
+            return true;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function aguardando(caixa, ligado) {
+        var marca = caixa.querySelector('.rn-foto-processando');
+        if (ligado && !marca) {
+            marca = document.createElement('span');
+            marca.className = 'rn-foto-processando';
+            marca.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+            caixa.appendChild(marca);
+        } else if (!ligado && marca) {
+            marca.remove();
+        }
+    }
+
+    form.querySelectorAll('.rn-foto').forEach(function (caixa) {
+        var input = caixa.querySelector('input[type=file]');
+        var area = caixa.querySelector('.rn-foto-area');
+        var iconeOriginal = area.innerHTML;
+        var seloTexto = caixa.querySelector('.rn-foto-selo');
+        var seloOriginal = seloTexto.textContent;
+        var url = null;
+        function limpar() {
+            if (url) URL.revokeObjectURL(url);
+            url = null;
+            input.value = '';
+            area.innerHTML = iconeOriginal;
+            caixa.classList.remove('tem-foto');
+            seloTexto.textContent = seloOriginal;
+            var remover = caixa.querySelector('.rn-foto-remover');
+            if (remover) remover.remove();
+            atualizarResumo();
+        }
+        input.addEventListener('change', function () {
+            var arquivo = input.files && input.files[0];
+            if (!arquivo) { limpar(); return; }
+            if (!/^image\//.test(arquivo.type || 'image/')) {
+                alert('Escolha uma foto (JPG, PNG ou WEBP).');
+                limpar();
+                return;
+            }
+            processando++;
+            aguardando(caixa, true);
+            reduzir(arquivo).then(function (pronto) {
+                if (pronto !== arquivo) colocarArquivos(input, [pronto]);
+                if (url) URL.revokeObjectURL(url);
+                url = URL.createObjectURL(pronto);
+                area.innerHTML = '';
+                var img = document.createElement('img');
+                img.src = url;
+                img.alt = 'Foto: ' + caixa.getAttribute('data-titulo');
+                area.appendChild(img);
+                caixa.classList.add('tem-foto');
+                caixa.classList.remove('rn-invalido');
+                seloTexto.innerHTML = '<i class="fa-solid fa-check"></i> Pronta';
+                if (!caixa.querySelector('.rn-foto-remover')) {
+                    var remover = document.createElement('button');
+                    remover.type = 'button';
+                    remover.className = 'rn-foto-remover';
+                    remover.setAttribute('aria-label', 'Tirar a foto ' + caixa.getAttribute('data-titulo'));
+                    remover.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+                    remover.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); limpar(); });
+                    caixa.appendChild(remover);
+                }
+            }).finally(function () {
+                processando--;
+                aguardando(caixa, false);
+                atualizarResumo();
+            });
+        });
+    });
+
+    /* Avarias: várias fotos, somadas a cada escolha (o campo de arquivo sozinho substituiria as anteriores). */
+    var entradaAvaria = document.getElementById('rn-avaria-entrada');
+    var campoAvarias = document.getElementById('rn-avarias-campo');
+    var gradeAvarias = document.getElementById('rn-avarias');
+    var avarias = [];
+    function desenharAvarias() {
+        gradeAvarias.textContent = '';
+        avarias.forEach(function (item, i) {
+            var caixa = document.createElement('div');
+            caixa.className = 'rn-avaria';
+            var img = document.createElement('img');
+            img.src = item.url;
+            img.alt = 'Avaria ' + (i + 1);
+            var remover = document.createElement('button');
+            remover.type = 'button';
+            remover.className = 'rn-foto-remover';
+            remover.setAttribute('aria-label', 'Tirar a foto de avaria ' + (i + 1));
+            remover.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+            remover.addEventListener('click', function () {
+                URL.revokeObjectURL(item.url);
+                avarias.splice(i, 1);
+                sincronizarAvarias();
+            });
+            caixa.appendChild(img);
+            caixa.appendChild(remover);
+            gradeAvarias.appendChild(caixa);
+        });
+        var dica = document.getElementById('rn-avaria-dica');
+        dica.textContent = avarias.length ? avarias.length + ' de ' + AVARIAS_MAX + ' fotos de avaria.' : 'Riscos, trincos e amassados de perto.';
+    }
+    function sincronizarAvarias() {
+        colocarArquivos(campoAvarias, avarias.map(function (a) { return a.arquivo; }));
+        desenharAvarias();
+        atualizarResumo();
+    }
+    entradaAvaria.addEventListener('change', function () {
+        var novos = Array.prototype.slice.call(entradaAvaria.files || []).filter(function (a) { return /^image\//.test(a.type || 'image/'); });
+        entradaAvaria.value = '';
+        var vagas = AVARIAS_MAX - avarias.length;
+        if (novos.length > vagas) alert('Cabem só ' + AVARIAS_MAX + ' fotos de avaria.');
+        novos = novos.slice(0, Math.max(0, vagas));
+        if (!novos.length) return;
+        processando++;
+        Promise.all(novos.map(reduzir)).then(function (prontos) {
+            prontos.forEach(function (a) { avarias.push({arquivo: a, url: URL.createObjectURL(a)}); });
+            sincronizarAvarias();
+        }).finally(function () { processando--; });
+    });
+
+    function contarFotos() {
+        var n = 0;
+        form.querySelectorAll('.rn-foto input[type=file]').forEach(function (i) { if (i.files && i.files.length) n++; });
+        return n + avarias.length;
+    }
+
+    /* ── Assinatura no quadro ── */
     var quadro = document.getElementById('rn-assinatura');
     var canvas = quadro.querySelector('canvas');
     var campoAssinatura = form.querySelector('[name=assinatura]');
@@ -588,6 +934,7 @@
 
     function preparar() {
         var caixa = canvas.getBoundingClientRect();
+        if (!caixa.width) return;                       // etapa escondida: prepara quando aparecer
         var escala = window.devicePixelRatio || 1;
         var imagem = desenhou ? canvas.toDataURL('image/png') : campoAssinatura.value;
         canvas.width = Math.max(1, Math.round(caixa.width * escala));
@@ -626,7 +973,10 @@
         if (!desenhou) { desenhou = true; quadro.classList.add('rn-assinado'); quadro.classList.remove('rn-invalido'); }
     });
     ['pointerup', 'pointercancel'].forEach(function (tipo) {
-        canvas.addEventListener(tipo, function () { desenhando = false; });
+        canvas.addEventListener(tipo, function () {
+            desenhando = false;
+            if (desenhou) campoAssinatura.value = canvas.toDataURL('image/png');
+        });
     });
     document.getElementById('rn-limpar-assinatura').addEventListener('click', function () {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -639,16 +989,207 @@
         clearTimeout(aguardandoTamanho);
         aguardandoTamanho = setTimeout(preparar, 150);
     });
-    preparar();
 
-    /* Envio: guarda a assinatura e evita clique duplo. */
-    form.addEventListener('submit', function () {
-        if (desenhou) campoAssinatura.value = canvas.toDataURL('image/png');
-        var botao = document.getElementById('rn-enviar');
-        if (botao) {
-            botao.disabled = true;
-            botao.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Abrindo chamado…';
+    /* ── Etapas ── */
+    var etapas = Array.prototype.slice.call(form.querySelectorAll('[data-etapa]'));
+    var total = etapas.length;
+    var botoesEtapa = Array.prototype.slice.call(document.querySelectorAll('#rn-etapas [data-ir]'));
+    var botaoVoltar = document.getElementById('rn-voltar');
+    var botaoAvancar = document.getElementById('rn-avancar');
+    var botaoEnviar = document.getElementById('rn-enviar');
+    var atual = 1;
+    var alcancada = Math.max(1, parseInt(form.getAttribute('data-etapa-inicial'), 10) || 1);
+    // Voltou do servidor com erro: todas as etapas até a do erro já foram preenchidas.
+    if (document.getElementById('rn-erros')) alcancada = total;
+
+    function valor(nome) {
+        var el = form.querySelector('[name="' + nome + '"]');
+        return el ? String(el.value || '').trim() : '';
+    }
+    function marcado(nome) {
+        var el = form.querySelector('input[name="' + nome + '"]:checked');
+        return el ? el.value : '';
+    }
+    function invalidar(nome, ruim) {
+        var el = form.querySelector('[name="' + nome + '"]');
+        if (el) el.classList.toggle('rn-invalido', !!ruim);
+    }
+
+    /** Mensagens do que falta na etapa (vazio = pode seguir). Espelha renova/validacao.py. */
+    function problemasDaEtapa(n) {
+        var p = [];
+        if (n === 1) {
+            if (!valor('modelo')) { p.push('Escolha o modelo.'); invalidar('modelo', true); } else invalidar('modelo', false);
+            if (!valor('armazenamento')) { p.push('Escolha o armazenamento.'); invalidar('armazenamento', true); } else invalidar('armazenamento', false);
+            var i1 = valor('imei1'), i2 = valor('imei2');
+            if (!imeiValido(i1)) { p.push('IMEI 1 inválido: são 15 números (disque *#06#).'); invalidar('imei1', true); }
+            if (i2 && !imeiValido(i2)) { p.push('IMEI 2 inválido: são 15 números.'); invalidar('imei2', true); }
+            else if (i2 && i2 === i1) { p.push('O IMEI 2 está igual ao IMEI 1.'); invalidar('imei2', true); }
+            var data = valor('data_avaliacao');
+            var hoje = new Date(); hoje.setMinutes(hoje.getMinutes() - hoje.getTimezoneOffset());
+            if (!data) { p.push('Informe a data da avaliação.'); invalidar('data_avaliacao', true); }
+            else if (data > hoje.toISOString().slice(0, 10)) { p.push('A data da avaliação não pode ser no futuro.'); invalidar('data_avaliacao', true); }
+            else invalidar('data_avaliacao', false);
+            if (!valor('loja')) { p.push('Escolha a loja de origem.'); invalidar('loja', true); } else invalidar('loja', false);
+            var bateria = valor('saude_bateria');
+            if (!/^\d{1,3}$/.test(bateria) || parseInt(bateria, 10) > 100) { p.push('Informe a saúde da bateria (0 a 100%).'); invalidar('saude_bateria', true); }
+            else invalidar('saude_bateria', false);
         }
+        if (n === 2 || n === 3) {
+            var faltam = [];
+            etapas[n - 1].querySelectorAll('.rn-tri[role="radiogroup"]').forEach(function (grupo) {
+                var linha = grupo.closest('.rn-item');
+                var ok = !!grupo.querySelector('input:checked');
+                if (linha) linha.classList.toggle('rn-invalido', !ok);
+                if (!ok) faltam.push(grupo.getAttribute('data-titulo'));
+            });
+            if (faltam.length) p.push('Marque ' + (n === 2 ? 'todas as funcionalidades' : 'todos os itens da condição estética') + ': faltou ' + faltam.join(', ') + '.');
+        }
+        if (n === 4) {
+            var obs = sinalizados();
+            if (obs.length && !valor('observacoes')) { p.push('Conte nas observações o que ficou com observação ou não funciona (' + obs.join(', ') + ').'); invalidar('observacoes', true); }
+            else invalidar('observacoes', false);
+            var segue = marcado('cliente_segue');
+            if (!segue) p.push('Diga se o cliente quer seguir com a troca.');
+        }
+        if (n === 5) {
+            var faltando = [];
+            form.querySelectorAll('.rn-foto[data-obrigatoria="1"]').forEach(function (caixa) {
+                var input = caixa.querySelector('input[type=file]');
+                var tem = input.files && input.files.length;
+                caixa.classList.toggle('rn-invalido', !tem);
+                if (!tem) faltando.push(caixa.getAttribute('data-titulo'));
+            });
+            if (faltando.length) p.push('Tire as fotos obrigatórias: ' + faltando.join(', ') + '.');
+            if (processando) p.push('Espere as fotos terminarem de carregar.');
+        }
+        if (n === 6) {
+            if (!valor('vendedor_nome')) { p.push('Informe o nome do vendedor.'); invalidar('vendedor_nome', true); } else invalidar('vendedor_nome', false);
+            if (!desenhou && !(campoAssinatura.value || '').length) { p.push('Assine no quadro de assinatura.'); quadro.classList.add('rn-invalido'); }
+        }
+        if (n === 7) {
+            var pendentes = [];
+            form.querySelectorAll('input[name^="obrig_"]').forEach(function (c) { if (!c.checked) pendentes.push(c.getAttribute('data-titulo')); });
+            if (pendentes.length) p.push('Confira todos os itens obrigatórios antes de concluir: ' + pendentes.join('; ') + '.');
+        }
+        return p;
+    }
+
+    function mostrarProblemas(n, lista) {
+        var caixa = etapas[n - 1].querySelector('.rn-erros-etapa');
+        if (!caixa) return;
+        var ul = caixa.querySelector('ul');
+        ul.textContent = '';
+        lista.forEach(function (m) { var li = document.createElement('li'); li.textContent = m; ul.appendChild(li); });
+        caixa.hidden = !lista.length;
+    }
+
+    function naoSegue() { return marcado('cliente_segue') === 'NAO'; }
+
+    function atualizarNavegacao() {
+        botoesEtapa.forEach(function (b) {
+            var n = parseInt(b.getAttribute('data-ir'), 10);
+            b.classList.toggle('atual', n === atual);
+            b.classList.toggle('feita', n < atual || (n <= alcancada && n !== atual));
+            b.disabled = n > alcancada || (naoSegue() && n > 4);
+            if (n === atual) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current');
+        });
+        document.querySelector('.rn-etapas-barra i').style.width = ((atual - 1) / (total - 1) * 100) + '%';
+        document.getElementById('rn-etapa-titulo').textContent = 'Etapa ' + atual + ' · ' + etapas[atual - 1].getAttribute('data-nome');
+        document.getElementById('rn-contador').textContent = atual + ' de ' + total;
+        botaoVoltar.disabled = atual === 1;
+        var ultima = atual === total;
+        botaoAvancar.hidden = ultima || (atual === 4 && naoSegue());
+        botaoEnviar.hidden = !ultima;
+        document.getElementById('rn-nao-segue').hidden = !naoSegue();
+    }
+
+    function irPara(n, opcoes) {
+        n = Math.max(1, Math.min(total, n));
+        etapas.forEach(function (e, i) { e.hidden = i !== n - 1; });
+        atual = n;
+        alcancada = Math.max(alcancada, n);
+        atualizarNavegacao();
+        if (n === 4) atualizarValor();
+        if (n === 6) preparar();
+        if (n === 7) atualizarResumo();
+        if (!(opcoes && opcoes.semRolar)) document.getElementById('rn-etapas').scrollIntoView({behavior: 'smooth', block: 'start'});
+    }
+
+    function avancar() {
+        var lista = problemasDaEtapa(atual);
+        mostrarProblemas(atual, lista);
+        if (lista.length) {
+            var caixa = etapas[atual - 1].querySelector('.rn-erros-etapa');
+            if (caixa) caixa.scrollIntoView({behavior: 'smooth', block: 'center'});
+            return;
+        }
+        if (atual === 4 && naoSegue()) return;
+        irPara(atual + 1);
+    }
+
+    botaoAvancar.addEventListener('click', avancar);
+    botaoVoltar.addEventListener('click', function () { irPara(atual - 1); });
+    botoesEtapa.forEach(function (b) {
+        b.addEventListener('click', function () {
+            var n = parseInt(b.getAttribute('data-ir'), 10);
+            if (n > atual) {
+                // Pular para frente só passando pela conferência das etapas do meio.
+                for (var k = atual; k < n; k++) {
+                    var lista = problemasDaEtapa(k);
+                    if (lista.length) { irPara(k); mostrarProblemas(k, lista); return; }
+                }
+            }
+            irPara(n);
+        });
+    });
+
+    function atualizarResumo() {
+        var aparelho = [campoModelo.value, campoArmazenamento.value].filter(Boolean).join(' ');
+        document.getElementById('rn-resumo-aparelho').textContent = aparelho || '—';
+        var r = ultimoResultado || {};
+        document.getElementById('rn-resumo-padrao').textContent = r.letra || '—';
+        document.getElementById('rn-resumo-valor').textContent = r.linha && r.letra ? moeda.format(r.linha.valores[r.letra]) : '—';
+        document.getElementById('rn-resumo-fotos').textContent = contarFotos() + (contarFotos() === 1 ? ' foto' : ' fotos');
+    }
+
+    form.addEventListener('change', function (e) {
+        if (e.target === campoModelo) preencherArmazenamentos();
+        if (e.target.closest('.rn-tri')) {
+            destacar(e.target);
+            var linha = e.target.closest('.rn-item');
+            if (linha) linha.classList.remove('rn-invalido');
+        }
+        if (e.target.name === 'cliente_segue') atualizarNavegacao();
+        if (e.target.classList && e.target.classList.contains('rn-campo')) e.target.classList.remove('rn-invalido');
+        atualizarValor();
+    });
+    campoBateria.addEventListener('input', atualizarValor);
+    preencherArmazenamentos();
+    atualizarValor();
+
+    /* Envio: confere tudo de novo, guarda a assinatura e evita clique duplo. */
+    form.addEventListener('keydown', function (e) {
+        // Enter num campo não envia o formulário no meio das etapas.
+        if (e.key === 'Enter' && e.target.tagName === 'INPUT' && e.target.type !== 'submit') {
+            e.preventDefault();
+            if (atual < total) avancar();
+        }
+    });
+    form.addEventListener('submit', function (e) {
+        if (naoSegue()) { e.preventDefault(); irPara(4); return; }
+        for (var k = 1; k <= total; k++) {
+            var lista = problemasDaEtapa(k);
+            if (lista.length) {
+                e.preventDefault();
+                irPara(k);
+                mostrarProblemas(k, lista);
+                return;
+            }
+        }
+        if (desenhou) campoAssinatura.value = canvas.toDataURL('image/png');
+        botaoEnviar.disabled = true;
+        botaoEnviar.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Enviando fotos e avaliação…';
     });
 
     /* Impresso em janela. */
@@ -664,6 +1205,7 @@
         if (evento.key === 'Escape') document.querySelectorAll('.rn-modal').forEach(function (m) { m.hidden = true; });
     });
 
+    irPara(parseInt(form.getAttribute('data-etapa-inicial'), 10) || 1, {semRolar: !document.getElementById('rn-erros')});
     var erros = document.getElementById('rn-erros');
     if (erros) erros.scrollIntoView({behavior: 'smooth', block: 'start'});
 })();

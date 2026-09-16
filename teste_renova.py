@@ -7,11 +7,14 @@ Pedidos:
 - o preço é calculado pelas avarias sinalizadas (ninguém escolhe padrão nem valor);
 - depois da avaliação do vendedor, o gerente da loja (grupo GERENTES) aprova ou não;
 - só Apple, sem nº de série e sem parecer do aparelho na tela;
-- quadro de gestão para o financeiro acompanhar o que chegou ou não.
+- quadro de gestão para o financeiro acompanhar o que chegou ou não;
+- a tela vem em etapas, com os itens obrigatórios na última; se o cliente segue
+  com a troca, as fotos do aparelho são obrigatórias (gravadas no armazenamento).
 
 Nada sai daqui: avisos do chamado (sinais, push, webhooks) são dublês, os avisos
 do Renova vão só para o sino (registro no banco), a categoria e o setor que
-recebe são de teste e tudo roda numa transação desfeita no fim.
+recebe são de teste, as fotos vão para um armazenamento em memória (nada sobe
+para o MinIO) e tudo roda numa transação desfeita no fim.
 """
 import base64
 import io
@@ -46,7 +49,10 @@ from PIL import Image
 from notifications.models import UserNotification
 from renova import checklist
 from renova.context_processors import renova_menu
-from renova.models import CATEGORIA_PADRAO_ID, ConfiguracaoRenova, PrecoAparelho, Renova
+from django.core.files.storage import InMemoryStorage
+from django.core.files.uploadedfile import SimpleUploadedFile
+
+from renova.models import CATEGORIA_PADRAO_ID, ConfiguracaoRenova, FotoRenova, PrecoAparelho, Renova
 from renova.padrao import calcular_padrao
 from renova.permissoes import grupo_gerentes
 from renova.validacao import imei_valido, ler_checklist
@@ -86,6 +92,16 @@ def assinatura():
     buffer = io.BytesIO()
     Image.effect_noise((90, 30), 60).convert('L').save(buffer, format='PNG')
     return 'data:image/png;base64,' + base64.b64encode(buffer.getvalue()).decode()
+
+
+def foto(nome='foto.jpg', cor=(102, 0, 153), tamanho=(2400, 1800), formato='JPEG'):
+    buffer = io.BytesIO()
+    Image.new('RGB', tamanho, cor).save(buffer, format=formato)
+    return SimpleUploadedFile(nome, buffer.getvalue(), content_type='image/jpeg')
+
+
+def fotos_obrigatorias():
+    return {f'foto_{chave}': foto(f'{chave}.jpg') for chave, _, _, _, obrigatoria in checklist.FOTOS if obrigatoria}
 
 
 IMEI_1 = com_digito('35693803564380')
@@ -146,8 +162,9 @@ try:
             'imei1': IMEI_1, 'imei2': IMEI_2, 'data_avaliacao': HOJE, 'loja': str(loja.pk),
             'saude_bateria': '90', 'observacoes': '',
             'vendedor_nome': 'ZZ Vendedor Renova', 'matricula': 'M123', 'assinatura': ASSINATURA,
-            'data_responsavel': HOJE,
+            'data_responsavel': HOJE, 'cliente_segue': 'SIM',
         }
+        dados.update(fotos_obrigatorias())
         for chave, _, _, _ in checklist.ITENS_OBRIGATORIOS:
             dados[f'obrig_{chave}'] = 'on'
         dados.update(todos_ok())
@@ -173,7 +190,8 @@ try:
             mock.patch('notifications.services.notification_service.notify_ticket_status_changed'), \
             mock.patch('notifications.push_utils.send_push_notification_to_user') as push, \
             mock.patch.object(Ticket, 'trigger_webhooks') as webhooks, \
-            mock.patch.object(Ticket, 'trigger_webhook'):
+            mock.patch.object(Ticket, 'trigger_webhook'), \
+            mock.patch.object(FotoRenova._meta.get_field('arquivo'), 'storage', InMemoryStorage()) as fotos_memoria:
 
         print('== QUEM ENTRA ==')
         t('quem não foi habilitado nem recebe não entra', c_estranho.get('/renova/').status_code == 302)
@@ -210,8 +228,20 @@ try:
         print('\n== O CHECKLIST ==')
         html_nova = c_vendedor.get('/renova/nova/').content.decode()
         t('com as seções do impresso, sem o card de parecer', all(s in html_nova for s in (
-            'Dados do aparelho', 'Itens obrigatórios antes da avaliação', 'Funcionalidades', 'Condição estética',
+            'Dados do aparelho', 'Itens obrigatórios para concluir a troca', 'Funcionalidades', 'Condição estética',
             'Observações gerais', 'Responsável pela avaliação')) and 'Parecer final do aparelho' not in html_nova)
+        etapas = re.findall(r'data-etapa="(\d)" data-nome="([^"]+)"', html_nova)
+        t('em 7 etapas, uma por vez', [n for n, _ in etapas] == list('1234567')
+          and html_nova.count('data-ir=') == 7, etapas)
+        t('os itens obrigatórios (a etapa 2 do impresso) ficam no fim, depois do responsável',
+          dict(etapas).get('7') == 'Itens obrigatórios e envio'
+          and html_nova.index('Responsável pela avaliação') < html_nova.index('name="obrig_capa"'))
+        t('o cliente decide se segue depois de ver o valor, antes das fotos',
+          html_nova.index('id="rn-valor"') < html_nova.index('name="cliente_segue" value="SIM"')
+          < html_nova.index('name="foto_frente"'))
+        t('fotos: envio de arquivo, uma por posição e as avarias',
+          'enctype="multipart/form-data"' in html_nova
+          and all(f'name="foto_{c}"' in html_nova for c, *_ in checklist.FOTOS) and 'name="foto_avaria"' in html_nova)
         itens = [titulo for _, titulo, _, _ in checklist.ITENS_OBRIGATORIOS + checklist.FUNCIONALIDADES + checklist.ESTETICA]
         t('e todos os itens', all(titulo in html_nova for titulo in itens), [x for x in itens if x not in html_nova])
         t('só Apple: sem escolha de marca', 'fa-brands fa-apple' in html_nova and 'name="marca"' not in html_nova
@@ -238,6 +268,18 @@ try:
             print('  (node não encontrado ou script ausente: sintaxe do JS não conferida)')
 
         antes = Renova.objects.count()
+        sem_fotos = {k: v for k, v in checklist_completo().items() if not k.startswith('foto_')}
+        html = c_vendedor.post('/renova/nova/', sem_fotos).content.decode()
+        t('sem as fotos obrigatórias não grava e volta na etapa das fotos',
+          'Tire as fotos obrigatórias: Frente, Traseira, Laterais.' in html and 'data-etapa-inicial="5"' in html
+          and Renova.objects.count() == antes)
+        falsa = SimpleUploadedFile('frente.jpg', b'<html>nao sou foto</html>' * 30, content_type='image/jpeg')
+        html = c_vendedor.post('/renova/nova/', checklist_completo(foto_frente=falsa)).content.decode()
+        t('arquivo que só diz ser foto é recusado (e pede para escolher as fotos de novo)',
+          'Frente: não abriu como imagem' in html and 'escolha as fotos de novo' in html and Renova.objects.count() == antes)
+        html = c_vendedor.post('/renova/nova/', checklist_completo(cliente_segue='NAO')).content.decode()
+        t('cliente que não quer seguir: nada é gravado', 'quando o cliente quer seguir' in html
+          and 'data-etapa-inicial="4"' in html and Renova.objects.count() == antes)
         r = c_vendedor.post('/renova/nova/', checklist_completo(imei1='12345', obrig_chip='', func_bateria='', saude_bateria=''))
         html = r.content.decode()
         t('incompleto: a tela volta com os erros e não grava', r.status_code == 200 and 'Faltou pouco' in html
@@ -251,8 +293,20 @@ try:
         print('\n== ENVIO: VAI PARA O GERENTE ==')
         r = c_vendedor.post('/renova/nova/', checklist_completo(
             saude_bateria='82', est_laterais='OBS', observacoes='Risco na lateral esquerda', padrao='A',
-            valor_estimado='99999', parecer=checklist.APROVADO, marca='SAMSUNG', numero_serie='X1'))
+            valor_estimado='99999', parecer=checklist.APROVADO, marca='SAMSUNG', numero_serie='X1',
+            foto_tela_ligada=foto('sobre.png', formato='PNG', tamanho=(900, 1600)),
+            foto_avaria=[foto('risco1.jpg'), foto('risco2.jpg')]))
         renova = Renova.objects.filter(criado_por=vendedor).order_by('-pk').first()
+        fotos = renova.fotos_em_ordem() if renova else []
+        t('as fotos ficam na avaliação, na ordem do checklist (fixas e depois as avarias)',
+          [(f.tipo, f.ordem) for f in fotos] == [('frente', 0), ('traseira', 0), ('laterais', 0), ('tela_ligada', 0),
+                                                 ('avaria', 1), ('avaria', 2)], [(f.tipo, f.ordem) for f in fotos])
+        with Image.open(fotos_memoria.open(fotos[0].arquivo.name)) as gravada:
+            t('gravadas em JPEG, reduzidas a 1920 px, com nome sem dados do cliente',
+              gravada.format == 'JPEG' and max(gravada.size) == 1920 and fotos[0].arquivo.name.startswith('renova/fotos/')
+              and IMEI_1 not in fotos[0].arquivo.name, (gravada.format, gravada.size, fotos[0].arquivo.name))
+        with Image.open(fotos_memoria.open(fotos[3].arquivo.name)) as gravada:
+            t('PNG vira JPEG também', gravada.format == 'JPEG' and gravada.size == (900, 1600), gravada.size)
         t('grava a avaliação e abre o detalhe dela', renova is not None and r.status_code == 302
           and r['Location'] == f'/renova/{renova.pk}/', r.get('Location'))
         t('fica aguardando a aprovação do gerente, sem chamado', renova.aprovacao == Renova.AGUARDANDO_GERENTE
@@ -278,6 +332,7 @@ try:
         html = c_gerente.get(f'/renova/{renova.pk}/').content.decode()
         t('o gerente vê os motivos do padrão e os botões de aprovar e reprovar',
           'value="aprovar"' in html and 'value="reprovar"' in html and 'Laterais com observação' in html)
+        t('e as fotos do aparelho', html.count('data-galeria') == 6 and fotos[0].arquivo.url in html)
         html = c_gerente.get('/renova/').content.decode()
         t('e a lista dele leva direto para aprovar', f'/renova/{renova.pk}/#aprovacao' in html
           and c_gerente.get('/renova/').context['kpis']['a_aprovar'] == 1)
@@ -301,7 +356,8 @@ try:
           and chamado.category_id == categoria.pk and chamado.sector_id == setor_recebe.pk and chamado.created_by_id == vendedor.pk)
         t('com o checklist, o padrão e a aprovação', chamado is not None and renova.codigo in chamado.title
           and IMEI_1 in chamado.description and 'Por que este padrão: Bateria em 82%' in chamado.description
-          and 'Aprovada pelo gerente por ZZRenova Gerente' in chamado.description and 'Nº de série' not in chamado.description)
+          and 'Aprovada pelo gerente por ZZRenova Gerente' in chamado.description and 'Nº de série' not in chamado.description
+          and 'Fotos do aparelho: 6 — Frente, Traseira, Laterais, Tela ligada, Avaria, Avaria' in chamado.description)
         t('e o histórico e os avisos de sempre do chamado', TicketLog.objects.filter(ticket=chamado, new_status='ABERTO').exists()
           and aviso_criado.called and webhooks.called)
         t('o vendedor é avisado no sino', UserNotification.objects.filter(
@@ -499,6 +555,8 @@ try:
     t('data da avaliação no futuro é recusada', 'data_avaliacao' in erros, erros)
     _, erros = ler_checklist(checklist_completo(assinatura=''), lojas=lojas, precos=tabela)
     t('sem assinatura não conclui', 'assinatura' in erros, erros)
+    _, erros = ler_checklist(checklist_completo(cliente_segue=''), lojas=lojas, precos=tabela)
+    t('sem o cliente dizer que segue não conclui', 'cliente_segue' in erros, erros)
     _, erros = ler_checklist(checklist_completo(loja='999999999'), lojas=lojas, precos=tabela)
     t('loja fora da lista é recusada', 'loja' in erros, erros)
     t('o push do comentário do chamado foi sempre dublê (nada saiu)', isinstance(push, mock.MagicMock))

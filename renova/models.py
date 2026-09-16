@@ -4,6 +4,8 @@ O caminho: quem está habilitado preenche o checklist (o mesmo do impresso), o
 portal abre o chamado na categoria configurada e mostra a etiqueta do aparelho.
 Quem é do setor dessa categoria recebe o aparelho e marca se ele chegou.
 """
+import os
+import uuid
 from decimal import ROUND_HALF_UP, Decimal
 
 from django.conf import settings
@@ -293,8 +295,37 @@ class Renova(models.Model):
     def estetica_lista(self):
         return checklist.respostas_de_itens(checklist.ESTETICA, self.estetica, checklist.OPCOES_ESTETICA)
 
+    def fotos_em_ordem(self):
+        """As fotos na ordem do checklist: as fixas primeiro, depois as das avarias."""
+        posicao = {chave: i for i, (chave, _) in enumerate(checklist.TIPOS_DE_FOTO)}
+        return sorted(self.fotos.all(), key=lambda f: (posicao.get(f.tipo, 99), f.ordem, f.pk))
+
     @property
     def alertas(self):
         """Quantos itens de funcionalidade e estética ficaram com observação ou falha."""
         valores = list((self.funcionalidades or {}).values()) + list((self.estetica or {}).values())
         return sum(1 for v in valores if v in ('OBS', 'NAO'))
+
+
+def _caminho_da_foto(instancia, nome):
+    """Nome aleatório no armazenamento: o IMEI e o nome do cliente não vão parar na URL do arquivo."""
+    extensao = os.path.splitext(nome or '')[1].lower() or '.jpg'
+    return f'renova/fotos/{timezone.localdate():%Y/%m}/{uuid.uuid4().hex}{extensao}'
+
+
+class FotoRenova(models.Model):
+    """Foto do aparelho tirada na avaliação (vai para o armazenamento de mídia, o MinIO)."""
+
+    renova = models.ForeignKey(Renova, on_delete=models.CASCADE, related_name='fotos', verbose_name='Renova')
+    tipo = models.CharField(max_length=20, choices=checklist.TIPOS_DE_FOTO, verbose_name='Foto')
+    arquivo = models.ImageField(upload_to=_caminho_da_foto, storage=get_media_storage(), verbose_name='Arquivo')
+    ordem = models.PositiveSmallIntegerField(default=0)
+    enviada_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Foto do Renova'
+        verbose_name_plural = 'Fotos do Renova'
+        ordering = ['renova', 'ordem', 'id']
+
+    def __str__(self):
+        return f'{self.renova.codigo} · {self.get_tipo_display()}'

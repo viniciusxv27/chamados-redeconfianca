@@ -3936,5 +3936,1302 @@
     }
   }
 
-  // (fechamento provisório: faltam partes)
+  // =================================================================== D. área de transferência (copiar, recortar, colar)
+
+  const CHAVE_COPIA = 'apres-editor-copia';
+
+  /** Elementos copiados: na memória e no localStorage (colar em outra aba ou outra apresentação). */
+  function lerCopiaGuardada() {
+    if (E.areaTransferencia) return E.areaTransferencia;
+    try {
+      const bruto = window.localStorage.getItem(CHAVE_COPIA);
+      const dados = bruto ? JSON.parse(bruto) : null;
+      if (dados && Array.isArray(dados.elementos) && dados.elementos.length) return dados;
+    } catch (e) { /* armazenamento bloqueado */ }
+    return null;
+  }
+
+  function temAreaTransferencia() {
+    return !!lerCopiaGuardada();
+  }
+
+  function pacoteDaSelecao() {
+    const s = slideAtual();
+    if (!s) return null;
+    const ids = new Set(E.selecao);
+    // Na ordem das camadas do slide, não na ordem em que foram clicados.
+    const elementos = s.elementos.filter((el) => ids.has(el.id)).map(clonar);
+    if (!elementos.length) return null;
+    return { marca: novoId('c'), slideId: s.id, elementos };
+  }
+
+  function guardarCopia(pacote) {
+    E.areaTransferencia = pacote;
+    E.colagens = 0;
+    try { window.localStorage.setItem(CHAVE_COPIA, JSON.stringify(pacote)); } catch (e) { /* cheio ou bloqueado: fica só na memória */ }
+  }
+
+  function textoDoPacote(pacote) {
+    return pacote.elementos.map((el) => {
+      if (el.tipo === 'texto') return R.textoPlano(el.html);
+      if (el.tipo === 'tabela') return el.linhas.map((l) => l.join('\t')).join('\n');
+      return '';
+    }).filter(Boolean).join('\n\n');
+  }
+
+  function recortarPacote(pacote) {
+    const s = slideAtual();
+    const apagar = new Set(pacote.elementos.filter((el) => !el.bloqueado).map((el) => el.id));
+    if (!s || !apagar.size) { avisarBloqueado(); return; }
+    s.elementos = s.elementos.filter((el) => !apagar.has(el.id));
+    E.selecao = [];
+    commit('Recortar');
+    renderizarQuadro();
+    selecaoMudou();
+    agendarMiniaturas();
+  }
+
+  /** Copiar/recortar pelo menu ou pelos botões: dispara o evento de cópia do navegador (texto vai junto). */
+  function copiarSelecao(recortar) {
+    finalizarEdicoes();
+    const pacote = pacoteDaSelecao();
+    if (!pacote) return;
+    guardarCopia(pacote);
+    E.copiaPendente = pacote;
+    let foi = false;
+    try { foi = document.execCommand('copy'); } catch (e) { foi = false; }
+    E.copiaPendente = null;
+    if (recortar) recortarPacote(pacote);
+    avisar((recortar ? 'Recortado' : 'Copiado') + (pacote.elementos.length > 1 ? ' (' + pacote.elementos.length + ' elementos).' : '.'), { duracao: 1400 });
+    return foi;
+  }
+
+  function aoCopiar(ev, recortar) {
+    if (E.movel || E.apresentando || modaisAbertos.length) return;
+    if (ehEditavel(ev.target) || E.editandoTexto || E.editandoCelula) return;
+    const pacote = E.copiaPendente || pacoteDaSelecao();
+    if (!pacote || !ev.clipboardData) return;
+    ev.preventDefault();
+    guardarCopia(pacote);
+    const texto = textoDoPacote(pacote);
+    ev.clipboardData.setData('text/plain', texto || ' ');
+    // O pacote vai no HTML: colar em outra janela do navegador também traz os elementos.
+    try {
+      const codificado = btoa(unescape(encodeURIComponent(JSON.stringify(pacote))));
+      ev.clipboardData.setData('text/html', '<div data-apres-copia="' + codificado + '">' + R.escaparHtml(texto) + '</div>');
+    } catch (e) { /* pacote grande demais: fica o localStorage */ }
+    if (recortar && !E.copiaPendente) recortarPacote(pacote);
+  }
+
+  function pacoteDoHtml(html) {
+    const m = /data-apres-copia="([^"]+)"/.exec(html || '');
+    if (!m) return null;
+    try {
+      const dados = JSON.parse(decodeURIComponent(escape(atob(m[1]))));
+      return dados && Array.isArray(dados.elementos) ? dados : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function colarElementos(ponto, pacoteRecebido) {
+    const pacote = pacoteRecebido || lerCopiaGuardada();
+    if (!pacote || !pacote.elementos || !pacote.elementos.length) return;
+    finalizarEdicoes();
+    if (!slideAtual()) novoSlide(null);
+    const s = slideAtual();
+    const copias = pacote.elementos.map((bruto) => {
+      const el = normalizarElemento(clonar(bruto));
+      el.id = novoId('e');
+      el.bloqueado = false;
+      // Template → apresentação: área de conteúdo e "apagar" só existem no template.
+      if (!MODO_TEMPLATE && (el.tipo === 'apagar' || el.slot === 'area_conteudo')) return null;
+      return el;
+    }).filter(Boolean);
+    if (!copias.length) { avisar('Esses elementos só existem no editor de templates.'); return; }
+    if (pacote.marca !== E.ultimaMarcaColada) { E.ultimaMarcaColada = pacote.marca; E.colagens = 0; }
+    const g = caixaDoGrupo(copias);
+    let dx = 0;
+    let dy = 0;
+    if (ponto) {
+      dx = ponto.x - (g.x + g.w / 2);
+      dy = ponto.y - (g.y + g.h / 2);
+    } else if (pacote.slideId === s.id || E.colagens > 0) {
+      // No mesmo slide, cada colagem desce um pouco: não fica escondida em cima do original.
+      E.colagens += 1;
+      dx = 30 * E.colagens;
+      dy = 30 * E.colagens;
+    } else {
+      E.colagens += 1;
+    }
+    copias.forEach((el) => {
+      el.x += dx;
+      el.y += dy;
+      if (el.tipo === 'texto') E.tamanhoBase[el.id] = el.estilo.tamanho;
+    });
+    s.elementos.push.apply(s.elementos, copias);
+    E.selecao = copias.map((el) => el.id);
+    commit(copias.length > 1 ? 'Colar elementos' : 'Colar');
+    renderizarQuadro();
+    selecaoMudou();
+    agendarMiniaturas();
+  }
+
+  function aoColar(ev) {
+    if (E.movel || E.apresentando || modaisAbertos.length) return;
+    if (ehEditavel(ev.target) || E.editandoTexto || E.editandoCelula) return;
+    const dados = ev.clipboardData;
+    if (!dados) return;
+    const pacote = pacoteDoHtml(dados.getData('text/html'));
+    if (pacote) { ev.preventDefault(); colarElementos(null, pacote); return; }
+    const arquivos = Array.prototype.slice.call(dados.files || []).filter((f) => tipoDoArquivo(f));
+    if (arquivos.length) {
+      ev.preventDefault();
+      arquivos.forEach((f, i) => inserirArquivo(f, { centro: { x: LARG / 2 + i * 40, y: ALT / 2 + i * 40 } }));
+      return;
+    }
+    const texto = (dados.getData('text/plain') || '').trim();
+    const guardado = lerCopiaGuardada();
+    if (guardado && (!texto || texto === textoDoPacote(guardado).trim())) { ev.preventDefault(); colarElementos(null, guardado); return; }
+    if (!texto) return;
+    ev.preventDefault();
+    const html = texto.split(/\r?\n/).map((l) => R.escaparHtml(l) || '<br>').map((l) => '<div>' + l + '</div>').join('');
+    const linhas = texto.split(/\r?\n/).length;
+    inserirElemento(novoElemento('texto', {
+      html, w: 1100, h: Math.min(900, 70 + linhas * 52), autoajuste: true,
+      estilo: Object.assign(padraoEstiloTexto(), { tamanho: 36, entrelinha: 1.3 }),
+    }), 'Colar texto');
+  }
+
+  // =================================================================== D. atalhos de teclado
+
+  const ATALHOS = [
+    ['Geral', [
+      ['Ctrl Z', 'Desfazer'], ['Ctrl ⇧ Z  ·  Ctrl Y', 'Refazer'], ['Ctrl S', 'Salvar agora'],
+      ['Ctrl Enter', 'Apresentar a partir do slide atual'], ['Ctrl +  ·  Ctrl −', 'Zoom'], ['Ctrl 0', 'Ajustar zoom à tela'], ['?', 'Esta lista'],
+    ]],
+    ['Slides', [
+      ['Page Up  ·  Page Down', 'Slide anterior / próximo'], ['Ctrl M', 'Novo slide'], ['Ctrl D (sem seleção)', 'Duplicar slide'],
+      ['Alt ↑  ·  Alt ↓ (na lista)', 'Mover slide'],
+    ]],
+    ['Elementos', [
+      ['Ctrl C  ·  Ctrl X  ·  Ctrl V', 'Copiar, recortar e colar'], ['Ctrl D', 'Duplicar'], ['Del', 'Excluir'],
+      ['Setas  ·  ⇧ Setas', 'Mover 1 px / 10 px'], ['Ctrl A', 'Selecionar tudo'], ['Enter', 'Editar o texto selecionado'],
+      ['Esc', 'Sair da edição / tirar a seleção'], ['Ctrl ]  ·  Ctrl [', 'Frente / trás'], ['Ctrl ⇧ ]  ·  Ctrl ⇧ [', 'Topo / fundo'],
+      ['Ctrl L', 'Bloquear / desbloquear'], ['Alt + clique', 'Selecionar o elemento de baixo'], ['⇧ + arrastar', 'Mover só na horizontal ou vertical'],
+    ]],
+  ];
+
+  function mostrarAtalhos() {
+    const grupos = ATALHOS.map((g) => h('div', { style: { display: 'flex', flexDirection: 'column', gap: '6px' } },
+      h('div', { class: 'ed-rotulo', text: g[0], style: { textTransform: 'uppercase', letterSpacing: '.05em' } }),
+      g[1].map((a) => h('div', { style: { display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center' } },
+        h('span', { text: a[1] }),
+        h('span', { style: { display: 'flex', gap: '4px', flexWrap: 'wrap', justifyContent: 'flex-end' } },
+          a[0].split('  ·  ').map((k) => h('kbd', { text: k })))))));
+    modal({
+      titulo: 'Atalhos de teclado', icone: 'fa-regular fa-keyboard', largura: 560,
+      corpo: h('div', { class: 'ed-atalhos', style: { display: 'flex', flexDirection: 'column', gap: '16px' } }, grupos),
+    });
+  }
+
+  function aoTeclar(ev) {
+    if (E.movel || E.apresentando || !E.doc) return;
+    if (modaisAbertos.length) return;
+    const ctrl = ev.ctrlKey || ev.metaKey;
+    const tecla = ev.key;
+    const minuscula = tecla.length === 1 ? tecla.toLowerCase() : tecla;
+
+    // Valem até digitando num campo.
+    if (ctrl && minuscula === 's') { ev.preventDefault(); finalizarEdicoes(); salvar({ forcar: true }); return; }
+    if (E.editandoTexto || E.editandoCelula) return;
+    if (ehEditavel(ev.target)) return;
+    if (popAtual && popAtual.pop.contains(ev.target)) return;
+
+    const sel = selecionados();
+    const naLista = UI.listaSlides && UI.listaSlides.contains(ev.target);
+    // Del, Enter, setas e Esc só mexem nos elementos com o foco no slide (não num botão do painel).
+    const noPalco = ev.target === document.body || ev.target === document.documentElement || (UI.palco && UI.palco.contains(ev.target));
+
+    if (ctrl && minuscula === 'z') { ev.preventDefault(); if (ev.shiftKey) refazer(); else desfazer(); return; }
+    if (ctrl && minuscula === 'y') { ev.preventDefault(); refazer(); return; }
+    if (ctrl && tecla === 'Enter') { ev.preventDefault(); apresentar(MODO_TEMPLATE ? { template: true } : undefined); return; }
+    if (ctrl && (tecla === '=' || tecla === '+')) { ev.preventDefault(); mudarZoom(1); return; }
+    if (ctrl && tecla === '-') { ev.preventDefault(); mudarZoom(-1); return; }
+    if (ctrl && tecla === '0') { ev.preventDefault(); E.zoom = null; aplicarZoom(); return; }
+    if (ctrl && minuscula === 'm') { ev.preventDefault(); novoSlide(E.slideId); return; }
+    if (ctrl && minuscula === 'd') { ev.preventDefault(); if (sel.length) duplicarSelecao(); else duplicarSlide(E.slideId); return; }
+    if (ctrl && minuscula === 'a') { ev.preventDefault(); selecionarTudo(); return; }
+    if (ctrl && minuscula === 'l') { ev.preventDefault(); alternarBloqueio(); return; }
+    if (ctrl && (tecla === ']' || tecla === '}')) { ev.preventDefault(); ordenar(ev.shiftKey ? 'topo' : 'frente'); return; }
+    if (ctrl && (tecla === '[' || tecla === '{')) { ev.preventDefault(); ordenar(ev.shiftKey ? 'fundo' : 'tras'); return; }
+    if (tecla === '?' && !ctrl) { ev.preventDefault(); mostrarAtalhos(); return; }
+    if (tecla === 'PageDown' || tecla === 'PageUp') {
+      ev.preventDefault();
+      const i = indiceDoSlide(E.slideId);
+      const alvo = E.doc.slides[i + (tecla === 'PageDown' ? 1 : -1)];
+      if (alvo) selecionarSlide(alvo.id);
+      return;
+    }
+    if (naLista || !noPalco) return;
+    if (tecla === 'Escape') {
+      if (E.selecao.length) { ev.preventDefault(); E.selecao = []; selecaoMudou(); }
+      return;
+    }
+    if (!sel.length) return;
+    if (tecla === 'Delete' || tecla === 'Backspace') { ev.preventDefault(); excluirSelecao(); return; }
+    if (tecla === 'Enter' && sel.length === 1) {
+      if (sel[0].tipo === 'texto') { ev.preventDefault(); editarTexto(sel[0].id, { noFim: true }); }
+      else if (sel[0].tipo === 'tabela') { ev.preventDefault(); editarCelula(sel[0].id, 0, 0); }
+      return;
+    }
+    const setas = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+    if (setas[tecla] && !ctrl) {
+      ev.preventDefault();
+      const passo = ev.shiftKey ? 10 : 1;
+      moverComTeclado(setas[tecla][0] * passo, setas[tecla][1] * passo);
+    }
+  }
+
+  // =================================================================== D. versões
+
+  function abrirVersoes() {
+    if (!URLS.versoes) return;
+    finalizarEdicoes();
+    const lista = h('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } }, h('span', { class: 'ed-giro', style: { margin: '16px auto' } }));
+    const controle = modal({
+      titulo: 'Versões anteriores', icone: 'fa-solid fa-clock-rotate-left', largura: 520,
+      corpo: [h('p', { text: 'O portal guarda uma cópia antes de cada mudança grande (IA gerou ou alterou, versão restaurada). Restaurar também guarda a versão atual antes.' }), lista],
+    });
+    api(URLS.versoes).then((r) => {
+      if (controle.fechado) return;
+      lista.textContent = '';
+      const versoes = r.versoes || [];
+      if (!versoes.length) {
+        lista.appendChild(h('p', { class: 'ed-dica', text: 'Ainda não há versões guardadas desta apresentação.' }));
+        return;
+      }
+      versoes.forEach((v) => {
+        lista.appendChild(h('div', {
+          style: { display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', border: '1px solid var(--ed-borda)', borderRadius: '10px' },
+        },
+        h('div', { style: { flex: '1', minWidth: '0', display: 'flex', flexDirection: 'column', gap: '2px' } },
+          h('b', { text: v.motivo || 'Versão', style: { fontSize: '13px' } }),
+          h('span', { class: 'ed-dica', text: v.criado_em + ' · ' + v.slides + (v.slides === 1 ? ' slide' : ' slides') + (v.titulo ? ' · ' + v.titulo : '') })),
+        botao('Restaurar', 'fa-solid fa-rotate-left', () => restaurarVersao(v, controle), 'ed-btn-p')));
+      });
+    }).catch((erro) => {
+      if (controle.fechado) return;
+      lista.textContent = '';
+      lista.appendChild(h('p', { class: 'ed-ia-erro', text: erro.message }));
+    });
+  }
+
+  async function restaurarVersao(versao, controleLista) {
+    const ok = await confirmar('Restaurar esta versão?', 'A apresentação volta a ficar como estava em ' + versao.criado_em
+      + '. A versão atual é guardada antes, então dá para voltar depois.', 'Restaurar');
+    if (!ok) return;
+    await salvar();
+    try {
+      const r = await api(versao.restaurar, { json: {} });
+      if (controleLista && !controleLista.fechado) controleLista.fechar();
+      E.doc = normalizarDocumento(r.documento);
+      E.revisao = r.revisao;
+      E.versaoLocal = 0;
+      E.versaoSalva = 0;
+      E.erroSalvar = null;
+      E.ultimoSalvo = new Date();
+      E.selecao = [];
+      E.slideId = (E.doc.slides[0] || {}).id || null;
+      ajustarDocumentoInteiro();
+      iniciarHistorico();
+      renderizarTudo();
+      avisar('Versão restaurada.', { tipo: 'ok' });
+    } catch (erro) {
+      avisar(erro.message, { tipo: 'erro' });
+    }
+  }
+
+  // =================================================================== D. apresentar
+
+  function apresentar(opcoes) {
+    const o = opcoes || {};
+    if (!E.doc || E.apresentando) return;
+    const P = window.APRES_APRESENTAR;
+    if (!P || typeof P.abrir !== 'function') {
+      if (URLS.apresentar) window.open(URLS.apresentar, '_blank', 'noopener');
+      else avisar('O modo apresentação não carregou. Recarregue a página.', { tipo: 'erro' });
+      return;
+    }
+    finalizarEdicoes();
+    fecharPopover();
+    const lista = o.template ? E.doc.slides : R.slidesVisiveis(E.doc);
+    if (!lista.length) {
+      avisar(E.doc.slides.length ? 'Todos os slides estão ocultos.' : 'Crie um slide antes de apresentar.', { tipo: 'erro' });
+      return;
+    }
+    salvar();
+    const atual = slideAtual();
+    const inicio = o.inicioId || (atual && (o.template || !atual.oculto) ? atual.id : null);
+    E.apresentando = true;
+    try {
+      P.abrir(clonar(E.doc), {
+        titulo: E.titulo, inicioId: inicio, template: !!o.template, narracao: !!o.narracao,
+        rotuloSair: 'Voltar ao editor',
+        aoFechar: (id) => {
+          E.apresentando = false;
+          if (E.movel) return;
+          if (id && id !== E.slideId && E.doc.slides.some((s) => s.id === id)) selecionarSlide(id);
+          if (UI.palco) UI.palco.focus({ preventScroll: true });
+        },
+      });
+    } catch (erro) {
+      E.apresentando = false;
+      avisar('Não foi possível abrir a apresentação: ' + (erro.message || erro), { tipo: 'erro' });
+    }
+  }
+
+  // =================================================================== D. exportação
+
+  function abrirMenuExportar(ancora) {
+    finalizarEdicoes();
+    const X = window.APRES_EXPORTAR;
+    const video = X && X.formatoDeVideo && X.formatoDeVideo();
+    const temNarracao = E.doc && E.doc.slides.some((s) => !s.oculto && s.narracao);
+    abrirMenu(ancora, [
+      { titulo: 'Baixar' },
+      { icone: 'fa-regular fa-file-pdf', texto: 'PDF', sub: 'Um slide por página, igual ao que você vê', desativado: !X, acao: exportarPdf },
+      URLS.pptx ? { icone: 'fa-regular fa-file-powerpoint', texto: 'PowerPoint (.pptx)', sub: 'Para editar no PowerPoint ou no Google Slides', acao: exportarPptx } : null,
+      { icone: 'fa-regular fa-file-image', texto: 'Imagem deste slide (JPG)', desativado: !X || !slideAtual(), acao: exportarImagem },
+      URLS.video ? {
+        icone: 'fa-solid fa-film', texto: 'Vídeo narrado', desativado: !X || !video,
+        sub: !video ? 'Precisa do Chrome ou do Edge no computador' : temNarracao ? 'Com a narração de cada slide' : 'Sem narração: cada slide fica alguns segundos',
+        acao: exportarVideo,
+      } : null,
+      URLS.canva ? '-' : null,
+      URLS.canva ? { titulo: 'Canva' } : null,
+      URLS.canva ? { icone: 'fa-solid fa-palette', texto: 'Enviar para o Canva', sub: APRES.canva_configurado ? 'Cria um design na sua conta do Canva' : 'Baixa o PowerPoint para importar no Canva', acao: exportarCanva } : null,
+      URLS.canva && APRES.canva_url ? { icone: 'fa-solid fa-arrow-up-right-from-square', texto: 'Abrir o último envio no Canva', href: APRES.canva_url, novaAba: true } : null,
+      URLS.apresentar ? '-' : null,
+      URLS.apresentar ? { icone: 'fa-solid fa-display', texto: 'Apresentar em outra aba', sub: 'Útil para projetar numa segunda tela', href: URLS.apresentar, novaAba: true } : null,
+    ].filter(Boolean), { alinhar: 'fim' });
+  }
+
+  /** Janela de progresso com cancelar. Devolve {atualizar(fracao, texto), cancelado(), fechar()}. */
+  function modalProgresso(titulo, icone_) {
+    let cancelado = false;
+    const barra = h('div', { class: 'ed-barra-progresso indeterminada' }, h('i'));
+    const texto = h('p', { text: 'Preparando…' });
+    const controle = modal({
+      titulo, icone: icone_, fechavel: false, corpo: [texto, barra],
+      acoes: [{ texto: 'Cancelar', acao: () => { cancelado = true; texto.textContent = 'Cancelando…'; return false; } }],
+    });
+    return {
+      atualizar(fracao, t) {
+        if (t) texto.textContent = t;
+        if (fracao == null) { barra.classList.add('indeterminada'); return; }
+        barra.classList.remove('indeterminada');
+        barra.firstChild.style.width = Math.round(limitar(fracao, 0, 1) * 100) + '%';
+      },
+      cancelado: () => cancelado,
+      fechar: () => controle.fechar(),
+      controle,
+    };
+  }
+
+  async function exportarPdf() {
+    const X = window.APRES_EXPORTAR;
+    if (!R.slidesVisiveis(E.doc).length) { avisar('Não há slides visíveis para exportar.', { tipo: 'erro' }); return; }
+    const p = modalProgresso('Gerando o PDF', 'fa-regular fa-file-pdf');
+    try {
+      const blob = await X.gerarPdf(clonar(E.doc), {
+        titulo: E.titulo, cancelado: p.cancelado,
+        aoProgresso: (feito, total, etapa) => p.atualizar(total ? feito / total : null, etapa),
+      });
+      X.baixar(blob, X.nomeDoArquivo(E.titulo, 'pdf'));
+      avisar('PDF pronto.', { tipo: 'ok' });
+    } catch (erro) {
+      if (!erro.cancelado) avisar(erro.message || 'Não foi possível gerar o PDF.', { tipo: 'erro' });
+    } finally {
+      p.fechar();
+    }
+  }
+
+  async function exportarImagem() {
+    const X = window.APRES_EXPORTAR;
+    const s = slideAtual();
+    if (!s) return;
+    const aviso = avisar('Gerando a imagem do slide…', { duracao: 60000 });
+    try {
+      const blob = await X.imagemDoSlide(clonar(s), clonar(E.doc));
+      X.baixar(blob, X.nomeDoArquivo(E.titulo + ' slide ' + (indiceDoSlide(s.id) + 1), 'jpg'));
+    } catch (erro) {
+      avisar(erro.message || 'Não foi possível gerar a imagem.', { tipo: 'erro' });
+    } finally {
+      aviso.remove();
+    }
+  }
+
+  async function exportarPptx() {
+    const salvo = await salvar();
+    if (!salvo && (E.conflito || E.erroSalvar)) {
+      avisar('Salve a apresentação antes de baixar (há alterações que não foram salvas).', { tipo: 'erro' });
+      return;
+    }
+    avisar('Montando o PowerPoint… o download começa em instantes.', { duracao: 5000 });
+    window.location.href = URLS.pptx;
+  }
+
+  async function exportarVideo() {
+    const X = window.APRES_EXPORTAR;
+    const visiveis = R.slidesVisiveis(E.doc);
+    if (!visiveis.length) { avisar('Não há slides visíveis para gravar.', { tipo: 'erro' }); return; }
+    const segundos = Math.round(visiveis.reduce((t, s) => t + (s.narracao ? num(s.narracao.duracao, 5) + 0.7 : 5), 0));
+    const ok = await confirmar('Gravar o vídeo narrado?',
+      'A gravação acontece em tempo real: leva cerca de ' + Math.max(1, Math.round(segundos / 60)) + ' minuto(s). '
+      + 'Deixe esta aba aberta até terminar. Depois o vídeo é enviado ao portal e convertido para MP4.', 'Gravar');
+    if (!ok) return;
+    const p = modalProgresso('Gravando o vídeo', 'fa-solid fa-film');
+    try {
+      const r = await X.gravarVideo(clonar(E.doc), { cancelado: p.cancelado, aoProgresso: (f, etapa) => p.atualizar(f * 0.9, etapa) });
+      if (p.cancelado()) throw new X.Cancelado();
+      p.atualizar(0.9, 'Enviando o vídeo ao portal…');
+      const form = new FormData();
+      form.append('arquivo', r.blob, X.nomeDoArquivo(E.titulo, 'webm'));
+      const enviado = await enviarFormulario(URLS.video, form, (f) => p.atualizar(0.9 + f * 0.1, 'Enviando o vídeo ao portal… ' + Math.round(f * 100) + '%'));
+      p.fechar();
+      modal({
+        titulo: 'Vídeo pronto', icone: 'fa-solid fa-circle-check',
+        corpo: [h('p', { text: 'O vídeo (' + segundos + ' s) ficou salvo nas mídias desta apresentação.' }),
+          r.avisos && r.avisos.length ? h('p', { class: 'ed-dica', text: r.avisos.join(' ') }) : null],
+        acoes: [{ texto: 'Fechar' }, { texto: 'Baixar o vídeo', icone: 'fa-solid fa-download', primario: true, href: enviado.midia.download || enviado.midia.url }],
+      });
+      E.bibliotecaCache = null;
+    } catch (erro) {
+      p.fechar();
+      if (!erro.cancelado) avisar(erro.message || 'Não foi possível gravar o vídeo.', { tipo: 'erro' });
+    }
+  }
+
+  async function exportarCanva() {
+    await salvar();
+    let r;
+    try {
+      r = await api(URLS.canva, { json: {} });
+    } catch (erro) {
+      const dados = erro.dados || {};
+      if (dados.conectar) {
+        const ok = await confirmar('Conectar ao Canva', 'Para enviar, conecte sua conta do Canva (uma vez só). Você volta para cá depois.', 'Conectar');
+        if (ok) window.location.href = dados.conectar;
+        return;
+      }
+      if (dados.pptx) {
+        modal({
+          titulo: 'Canva', icone: 'fa-solid fa-palette', corpo: erro.message,
+          acoes: [{ texto: 'Fechar' }, { texto: 'Baixar o PowerPoint', icone: 'fa-solid fa-download', primario: true, href: dados.pptx }],
+        });
+        return;
+      }
+      avisar(erro.message, { tipo: 'erro' });
+      return;
+    }
+    const p = modalProgresso('Enviando para o Canva', 'fa-solid fa-palette');
+    try {
+      const final = await acompanharTarefa(r.tarefa, {
+        cancelado: p.cancelado,
+        aoMudar: (t) => p.atualizar(fracaoDoProgresso(t), (t.progresso && t.progresso.etapa) || 'Enviando…'),
+      });
+      p.fechar();
+      if (!final) return;
+      if (final.status === 'ERRO') { avisar(final.erro || 'O Canva recusou o envio.', { tipo: 'erro' }); return; }
+      const url = final.resultado && final.resultado.edit_url;
+      if (url) APRES.canva_url = url;
+      modal({
+        titulo: 'Pronto no Canva', icone: 'fa-solid fa-circle-check', corpo: 'O design foi criado na sua conta do Canva.',
+        acoes: [{ texto: 'Fechar' }, url ? { texto: 'Abrir no Canva', icone: 'fa-solid fa-arrow-up-right-from-square', primario: true, href: url, novaAba: true } : null].filter(Boolean),
+      });
+    } catch (erro) {
+      p.fechar();
+      avisar(erro.message, { tipo: 'erro' });
+    }
+  }
+
+  // =================================================================== D. tarefas da IA (acompanhamento)
+
+  const EM_ANDAMENTO = ['PENDENTE', 'RODANDO', 'PERGUNTAS'];
+  const SEM_SINAL_MS = 4 * 60 * 1000;
+
+  function fracaoDoProgresso(t) {
+    const p = (t && t.progresso) || {};
+    return p.total ? limitar(num(p.feito, 0) / num(p.total, 1), 0, 1) : null;
+  }
+
+  function semSinalDeVida(t) {
+    if (!t || !t.atualizado_em || t.status === 'PERGUNTAS') return false;
+    const quando = Date.parse(t.atualizado_em);
+    return Number.isFinite(quando) && Date.now() - quando > SEM_SINAL_MS;
+  }
+
+  /**
+   * Pergunta o andamento até a tarefa terminar. aoMudar(tarefa) a cada resposta; perguntas não
+   * encerram (a tela mostra e segue esperando). Devolve a tarefa final, ou null se cancelou.
+   */
+  async function acompanharTarefa(tarefa, opcoes) {
+    const o = opcoes || {};
+    let atual = tarefa;
+    let falhas = 0;
+    let espera = 1200;
+    while (true) {
+      if (o.cancelado && o.cancelado()) return null;
+      if (o.aoMudar) o.aoMudar(atual);
+      if (EM_ANDAMENTO.indexOf(atual.status) < 0) return atual;
+      await esperar(atual.status === 'PERGUNTAS' ? 3000 : espera);
+      if (o.cancelado && o.cancelado()) return null;
+      try {
+        atual = (await api(trocarId(URLS.tarefa, atual.id))).tarefa;
+        falhas = 0;
+        espera = Math.min(3000, espera + 150);
+      } catch (erro) {
+        falhas += 1;
+        if (erro.status === 404 || erro.status === 403 || falhas >= 8) throw erro;
+        await esperar(2000 * falhas);
+      }
+    }
+  }
+
+  /** Formulário das perguntas da IA. aoResponder(respostas) → Promise. */
+  function formularioPerguntas(perguntas, aoResponder, opcoes) {
+    const o = opcoes || {};
+    const respostas = {};
+    const blocos = (perguntas || []).map((p) => {
+      const id = p.id || novoId('p');
+      const opcoesP = Array.isArray(p.opcoes) ? p.opcoes.filter(Boolean) : [];
+      const escolhidas = new Set();
+      const livre = h(opcoesP.length ? 'input' : 'textarea', {
+        class: opcoesP.length ? 'ed-entrada' : 'ed-area', placeholder: opcoesP.length ? 'Outra resposta (opcional)' : 'Sua resposta',
+        rows: 2, attrs: { 'aria-label': p.pergunta || 'Resposta' },
+      });
+      const juntar = () => {
+        const extra = livre.value.trim();
+        if (p.multipla) respostas[id] = Array.from(escolhidas).concat(extra ? [extra] : []);
+        else respostas[id] = extra || Array.from(escolhidas)[0] || '';
+      };
+      livre.addEventListener('input', juntar);
+      const chips = opcoesP.length ? h('div', { class: 'ed-ia-chips', attrs: { role: p.multipla ? 'group' : 'radiogroup', 'aria-label': p.pergunta || '' } },
+        opcoesP.map((texto) => {
+          const chip = h('button', { class: 'ed-chip', type: 'button', text: texto, attrs: { 'aria-pressed': 'false' } });
+          chip.addEventListener('click', () => {
+            const marcar = chip.getAttribute('aria-pressed') !== 'true';
+            if (!p.multipla) { escolhidas.clear(); $$('.ed-chip', chip.parentNode).forEach((c) => c.setAttribute('aria-pressed', 'false')); }
+            if (marcar) escolhidas.add(texto); else escolhidas.delete(texto);
+            chip.setAttribute('aria-pressed', marcar ? 'true' : 'false');
+            juntar();
+          });
+          return chip;
+        })) : null;
+      juntar();
+      return h('div', { class: 'ed-pergunta' }, h('b', { text: p.pergunta || 'Pergunta' }), p.multipla ? h('span', { class: 'ed-dica', text: 'Pode marcar mais de uma.' }) : null, chips, livre);
+    });
+    const erro = h('p', { class: 'ed-ia-erro', hidden: true });
+    const enviar = async (vazias, b) => {
+      b.disabled = true;
+      erro.hidden = true;
+      try {
+        await aoResponder(vazias ? {} : respostas);
+      } catch (e) {
+        erro.textContent = e.message;
+        erro.hidden = false;
+        b.disabled = false;
+      }
+    };
+    const bResponder = botao('Responder e continuar', 'fa-solid fa-paper-plane', () => enviar(false, bResponder), 'ed-btn-primario');
+    const bPular = botao(o.rotuloPular || 'Pular — a IA decide', 'fa-solid fa-forward', () => enviar(true, bPular), 'ed-btn-fantasma');
+    return h('form', { class: 'ed-perguntas', on: { submit: (ev) => { ev.preventDefault(); enviar(false, bResponder); } } },
+      blocos, erro, h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' } }, bPular, bResponder));
+  }
+
+  function responderTarefa(tarefa, respostas) {
+    return api(trocarId(URLS.responder, tarefa.id), { json: { respostas } }).then((r) => r.tarefa);
+  }
+
+  // =================================================================== D. geração inicial (tela cheia)
+
+  const ETAPAS_GERAR = [
+    ['Lendo o pedido', 'Lendo o pedido e os anexos'],
+    ['Escrevendo o roteiro', 'Escrevendo o roteiro'],
+    ['Gerando imagens', 'Gerando imagens com IA'],
+    ['Montando os slides', 'Montando os slides no template'],
+  ];
+
+  function precisaDaTelaDeGeracao() {
+    const g = APRES.geracao;
+    if (!g) return false;
+    if (EM_ANDAMENTO.indexOf(g.status) >= 0) return true;
+    // Falhou e não sobrou nada para editar: a tela explica e oferece tentar de novo.
+    return g.status === 'ERRO' && (APRES.status === 'ERRO' || APRES.status === 'ANALISANDO' || !(E.doc && E.doc.slides.length));
+  }
+
+  function mostrarGeracao(tarefa) {
+    fecharGeracao();
+    let cancelado = false;
+    const raiz = h('div', { class: 'ed-geracao', attrs: { role: 'dialog', 'aria-modal': 'true', 'aria-label': MODO_TEMPLATE ? 'Análise do template' : 'Geração da apresentação' } });
+    const cartao = h('div', { class: 'ed-geracao-cartao', attrs: { 'aria-live': 'polite' } });
+    raiz.appendChild(cartao);
+    document.body.appendChild(raiz);
+    const estado = { raiz, cancelar: () => { cancelado = true; }, rodada: null };
+    E.geracao = estado;
+
+    function desenhar(t) {
+      cartao.textContent = '';
+      const etapa = (t.progresso && t.progresso.etapa) || 'Na fila';
+      const titulo = h('h1', {}, MODO_TEMPLATE ? 'Lendo o template ' : 'Montando ', h('span', { text: '“' + (E.titulo || 'sua apresentação') + '”' }));
+      if (t.status === 'ERRO') {
+        cartao.append(
+          h('div', { class: 'ed-geracao-orbe', style: { animation: 'none', background: '#b91c1c' } }, icone('fa-solid fa-triangle-exclamation')),
+          h('h1', { text: MODO_TEMPLATE ? 'A análise do template não deu certo' : 'A geração não deu certo' }),
+          h('p', { text: t.erro || 'A IA não conseguiu terminar.' }),
+          h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
+            URLS.iniciar && !MODO_TEMPLATE ? botao('Tentar de novo', 'fa-solid fa-rotate-right', (ev) => tentarDeNovo(ev.currentTarget), 'ed-btn-primario ed-btn-g') : null,
+            botao(E.doc && E.doc.slides.length ? 'Abrir o editor' : 'Começar em branco', 'fa-solid fa-pen-to-square', () => fecharGeracao(), 'ed-btn-g'),
+            h('a', { class: 'ed-btn ed-btn-g', href: URLS.voltar || '/' }, icone('fa-solid fa-arrow-left'), h('span', { text: 'Voltar' }))));
+        return;
+      }
+      cartao.append(h('div', { class: 'ed-geracao-orbe' }, icone(MODO_TEMPLATE ? 'fa-solid fa-swatchbook' : 'fa-solid fa-wand-magic-sparkles')), titulo);
+      if (t.status === 'PERGUNTAS') {
+        cartao.append(
+          h('p', { text: 'Antes de continuar, a IA quer confirmar alguns pontos:' }),
+          formularioPerguntas(t.perguntas, async (respostas) => {
+            const nova = await responderTarefa(t, respostas);
+            acompanhar(nova);
+          }));
+        return;
+      }
+      if (MODO_TEMPLATE) {
+        cartao.append(h('p', { text: etapa }));
+      } else {
+        let atual = ETAPAS_GERAR.findIndex((e) => etapa.indexOf(e[1]) === 0 || etapa.indexOf(e[0]) === 0);
+        // Vídeo de abertura e narração vêm depois de montar: as quatro etapas já estão feitas.
+        if (atual < 0 && /vídeo|narração/i.test(etapa)) atual = ETAPAS_GERAR.length;
+        cartao.append(h('ol', { class: 'ed-etapas' }, ETAPAS_GERAR.map((e, i) => {
+          const classe = atual < 0 ? '' : i < atual ? 'feita' : i === atual ? 'atual' : '';
+          return h('li', { class: classe }, icone(classe === 'feita' ? 'fa-solid fa-check' : classe === 'atual' ? 'fa-solid fa-ellipsis' : 'fa-regular fa-circle'), h('span', { text: e[0] }));
+        })));
+        if (atual < 0 || atual >= ETAPAS_GERAR.length) cartao.append(h('p', { text: etapa }));
+      }
+      const fracao = fracaoDoProgresso(t);
+      const barra = h('div', { class: 'ed-barra-progresso' + (fracao == null ? ' indeterminada' : '') }, h('i', { style: fracao == null ? {} : { width: Math.round(fracao * 100) + '%' } }));
+      cartao.append(barra, h('p', { class: 'ed-dica', style: { color: '#d9c9e8' }, text: 'Pode levar alguns minutos. Você pode fechar esta aba: o portal avisa no sino quando ficar pronta.' }));
+      if (semSinalDeVida(t)) {
+        cartao.append(h('p', { text: 'Está demorando mais que o normal.' }),
+          h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } },
+            URLS.iniciar && !MODO_TEMPLATE ? botao('Tentar de novo', 'fa-solid fa-rotate-right', (ev) => tentarDeNovo(ev.currentTarget), 'ed-btn-primario') : null,
+            h('a', { class: 'ed-btn', href: URLS.voltar || '/' }, icone('fa-solid fa-arrow-left'), h('span', { text: 'Voltar' }))));
+      }
+    }
+
+    async function tentarDeNovo(b) {
+      if (b) b.disabled = true;
+      try {
+        const r = await api(URLS.iniciar, { json: {} });
+        acompanhar(r.tarefa);
+      } catch (erro) {
+        if (b) b.disabled = false;
+        avisar(erro.message, { tipo: 'erro' });
+      }
+    }
+
+    async function acompanhar(t) {
+      const minha = {};
+      estado.rodada = minha;
+      try {
+        const final = await acompanharTarefa(t, { cancelado: () => cancelado || estado.rodada !== minha, aoMudar: desenhar });
+        if (!final || cancelado || estado.rodada !== minha) return;
+        if (final.status === 'CONCLUIDA') {
+          cartao.textContent = '';
+          cartao.append(h('div', { class: 'ed-geracao-orbe' }, icone('fa-solid fa-check')), h('h1', { text: 'Pronto! Abrindo o editor…' }));
+          await recarregarDocumento();
+          if (E.doc.slides.length) E.slideId = E.doc.slides[0].id;
+          renderizarTudo();
+          fecharGeracao();
+          const avisos = (final.resultado && final.resultado.avisos) || [];
+          avisar(MODO_TEMPLATE ? 'Template lido. Revise os layouts e salve.' : 'Apresentação pronta: ' + E.doc.slides.length + ' slides.', { tipo: 'ok', duracao: 5000 });
+          if (avisos.length) setTimeout(() => avisar(avisos.join(' '), { duracao: 9000 }), 600);
+        }
+      } catch (erro) {
+        if (!cancelado) desenhar({ status: 'ERRO', erro: erro.message });
+      }
+    }
+
+    acompanhar(tarefa);
+  }
+
+  function fecharGeracao() {
+    if (!E.geracao) return;
+    E.geracao.cancelar();
+    E.geracao.raiz.remove();
+    E.geracao = null;
+    if (UI.palco) UI.palco.focus({ preventScroll: true });
+  }
+
+  // =================================================================== D. assistente de IA (painel)
+
+  function alternarPainelIA() {
+    if (E.painelIA) fecharPainelIA(); else abrirPainelIA();
+  }
+
+  function abrirPainelIA(opcoes) {
+    if (!iaDisponivel()) return;
+    finalizarEdicoes();
+    E.painelIA = true;
+    E.focoIA = (opcoes && opcoes.foco) || null;
+    if (UI.botaoIA) { UI.botaoIA.classList.add('ativo'); UI.botaoIA.setAttribute('aria-pressed', 'true'); }
+    carregarMensagensIA();
+    renderizarPainel();
+  }
+
+  function fecharPainelIA() {
+    E.painelIA = false;
+    E.focoIA = null;
+    if (UI.botaoIA) { UI.botaoIA.classList.remove('ativo'); UI.botaoIA.setAttribute('aria-pressed', 'false'); }
+    renderizarPainel();
+  }
+
+  function carregarMensagensIA(forcar) {
+    if (!URLS.mensagens || (E.mensagensIA && !forcar)) return;
+    api(URLS.mensagens).then((r) => {
+      E.mensagensIA = r.mensagens || [];
+      if (E.painelIA && !(E.tarefaIA && E.tarefaIA.digitando)) atualizarHistoricoIA();
+    }).catch(() => { E.mensagensIA = E.mensagensIA || []; });
+  }
+
+  const ROTULO_ACAO_IA = {
+    editar: 'Alterando a apresentação', refazer_slide: 'Refazendo o slide', novo_slide: 'Criando slide',
+    texto: 'Reescrevendo o texto', imagem: 'Gerando a imagem', video: 'Gerando o vídeo', narracao: 'Gerando a narração',
+  };
+
+  function blocoIA(iconeClasse, titulo, conteudo, chave) {
+    return h('section', { class: 'ed-ia-bloco', dataset: { bloco: chave || '' } }, h('h3', {}, icone(iconeClasse), h('span', { text: titulo })), conteudo);
+  }
+
+  function areaIA(placeholder, chave, linhas) {
+    E.rascunhosIA = E.rascunhosIA || {};
+    const area = h('textarea', { class: 'ed-area', rows: linhas || 3, placeholder, attrs: { 'aria-label': placeholder } });
+    area.value = E.rascunhosIA[chave] || '';
+    area.addEventListener('input', () => { E.rascunhosIA[chave] = area.value; });
+    area.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey)) {
+        ev.preventDefault();
+        const b = area.parentNode && $('.ed-btn-primario', area.parentNode);
+        if (b && !b.disabled) b.click();
+      }
+    });
+    return area;
+  }
+
+  function chipsIA(sugestoes, area, chave) {
+    return h('div', { class: 'ed-ia-chips' }, sugestoes.map((s) => h('button', {
+      class: 'ed-chip', type: 'button', text: s,
+      on: { click: () => { area.value = s; E.rascunhosIA[chave] = s; area.focus(); } },
+    })));
+  }
+
+  function atualizarHistoricoIA() {
+    const caixa = UI.props && $('.ed-ia-historico', UI.props);
+    if (!caixa) return;
+    caixa.textContent = '';
+    const msgs = (E.mensagensIA || []).filter((m) => m.texto).slice(-8);
+    if (!msgs.length) { caixa.appendChild(h('p', { class: 'ed-dica', text: 'Nada conversado com a IA ainda.' })); return; }
+    msgs.forEach((m) => {
+      const ia = m.papel === 'IA';
+      caixa.appendChild(h('div', {
+        style: {
+          alignSelf: ia ? 'flex-start' : 'flex-end', maxWidth: '92%', padding: '8px 10px', borderRadius: '10px', fontSize: '12px', lineHeight: '1.45',
+          whiteSpace: 'pre-wrap', background: ia ? 'var(--ed-painel-2)' : 'var(--ed-acento-suave)', color: 'var(--ed-texto)',
+        },
+      }, h('b', { text: (ia ? 'IA' : 'Você') + ' · ' + m.criado_em, style: { display: 'block', fontSize: '10px', color: 'var(--ed-texto-3)', marginBottom: '2px' } }),
+      m.texto.length > 600 ? m.texto.slice(0, 600) + '…' : m.texto));
+    });
+    caixa.scrollTop = caixa.scrollHeight;
+  }
+
+  function renderizarPainelIA() {
+    const rolagemAntiga = $('.ed-props-corpo', UI.props);
+    const rolagem = rolagemAntiga && E.painelAlvo === 'ia' ? rolagemAntiga.scrollTop : 0;
+    E.painelAlvo = 'ia';
+    UI.props.textContent = '';
+    UI.camposGeo = null;
+    E.mostrarOrdemAnim = false;
+    UI.props.appendChild(cabecalhoPainel('fa-solid fa-wand-magic-sparkles', 'Assistente IA',
+      botaoIcone('fa-solid fa-xmark', 'Fechar o assistente', fecharPainelIA)));
+    const s = slideAtual();
+    const sel = selecionados();
+    const um = sel.length === 1 ? sel[0] : null;
+    const ocupado = !!(E.tarefaIA && EM_ANDAMENTO.indexOf(E.tarefaIA.tarefa.status) >= 0);
+    const corpo = h('div', { class: 'ed-ia-corpo' });
+
+    if (E.tarefaIA) corpo.appendChild(blocoTarefaIA(E.tarefaIA));
+
+    // Pedido livre sobre a apresentação inteira
+    const areaEditar = areaIA('Ex.: deixe os títulos mais curtos e acrescente um slide com os próximos passos', 'editar', 3);
+    corpo.appendChild(blocoIA('fa-solid fa-comments', 'Pedir uma alteração', [
+      areaEditar,
+      chipsIA(['Deixe os textos mais curtos', 'Corrija a ortografia de todos os slides', 'Acrescente um slide de conclusão', 'Deixe o tom mais motivador'], areaEditar, 'editar'),
+      botao('Enviar para a IA', 'fa-solid fa-paper-plane', () => {
+        const instrucao = areaEditar.value.trim();
+        if (!instrucao) { avisar('Escreva o que a IA deve fazer.'); areaEditar.focus(); return; }
+        iniciarTarefaIA('editar', { instrucao, documento: clonar(E.doc) }, () => { E.rascunhosIA.editar = ''; });
+      }, 'ed-btn-primario', { disabled: ocupado }),
+      h('p', { class: 'ed-dica', text: 'A IA lê a apresentação como está agora (inclusive o que ainda não salvou). Dá para desfazer com Ctrl+Z.' }),
+    ], 'editar'));
+
+    // Slide atual
+    if (s) {
+      const areaSlide = areaIA('O que mudar neste slide ou o que o novo slide deve ter', 'slide', 2);
+      corpo.appendChild(blocoIA('fa-regular fa-file', 'Slide ' + (indiceDoSlide(s.id) + 1), [
+        areaSlide,
+        h('div', { class: 'ed-grade' },
+          botao('Refazer este slide', 'fa-solid fa-rotate', () => iniciarTarefaIA('refazer_slide', { instrucao: areaSlide.value.trim(), slide_id: s.id, documento: clonar(E.doc) }, () => { E.rascunhosIA.slide = ''; }), 'ed-btn-p', { disabled: ocupado }),
+          botao('Novo slide depois', 'fa-solid fa-plus', () => {
+            const instrucao = areaSlide.value.trim();
+            if (!instrucao) { avisar('Diga o que o novo slide deve ter.'); areaSlide.focus(); return; }
+            iniciarTarefaIA('novo_slide', { instrucao, slide_id: s.id, documento: clonar(E.doc) }, () => { E.rascunhosIA.slide = ''; });
+          }, 'ed-btn-p ed-btn-primario', { disabled: ocupado })),
+      ], 'slide'));
+    }
+
+    // Texto selecionado
+    if (um && um.tipo === 'texto') {
+      const areaTexto = areaIA('Como reescrever (ex.: mais curto, mais formal)', 'texto', 2);
+      corpo.appendChild(blocoIA('fa-solid fa-font', 'Texto selecionado', [
+        h('p', { class: 'ed-dica', text: '“' + (R.textoPlano(um.html).slice(0, 140) || '(vazio)') + '”' }),
+        areaTexto,
+        chipsIA(['Mais curto', 'Mais formal', 'Mais direto e animado', 'Corrigir a ortografia', 'Transformar em tópicos'], areaTexto, 'texto'),
+        botao('Reescrever', 'fa-solid fa-pen-nib', () => iniciarTarefaIA('texto', { instrucao: areaTexto.value.trim(), html: um.html, slide_id: s.id, elemento_id: um.id }, () => { E.rascunhosIA.texto = ''; }), 'ed-btn-primario', { disabled: ocupado }),
+      ], 'texto'));
+    }
+
+    // Imagem
+    const trocar = um && um.tipo === 'imagem';
+    const areaImagem = areaIA('Descreva a imagem (ex.: loja moderna com clientes sorrindo, luz natural)', 'imagem', 3);
+    E.formatoImagemIA = E.formatoImagemIA || 'paisagem';
+    corpo.appendChild(blocoIA('fa-regular fa-image', trocar ? 'Trocar a imagem selecionada' : 'Gerar imagem', [
+      areaImagem,
+      campoSegmentado({ rotulo: 'Formato', valor: E.formatoImagemIA, opcoes: [['paisagem', 'Paisagem'], ['quadrado', 'Quadrado'], ['retrato', 'Retrato']], aoMudar: (v) => { E.formatoImagemIA = v; } }),
+      botao(trocar ? 'Gerar e trocar' : 'Gerar e inserir', 'fa-solid fa-wand-magic-sparkles', () => {
+        const instrucao = areaImagem.value.trim();
+        if (!instrucao) { avisar('Descreva a imagem.'); areaImagem.focus(); return; }
+        iniciarTarefaIA('imagem', { instrucao, slide_id: s ? s.id : '', elemento_id: trocar ? um.id : '', opcoes: { formato: E.formatoImagemIA } }, () => { E.rascunhosIA.imagem = ''; });
+      }, 'ed-btn-primario', { disabled: ocupado }),
+    ], 'imagem'));
+
+    // Vídeo
+    const areaVideo = areaIA('Descreva a cena do vídeo (sem textos na tela)', 'video', 2);
+    E.segundosVideoIA = E.segundosVideoIA || '8';
+    corpo.appendChild(blocoIA('fa-solid fa-film', 'Gerar vídeo curto', [
+      areaVideo,
+      campoSegmentado({ rotulo: 'Duração', valor: E.segundosVideoIA, opcoes: [['4', '4 s'], ['8', '8 s'], ['12', '12 s']], aoMudar: (v) => { E.segundosVideoIA = v; } }),
+      botao('Gerar e inserir', 'fa-solid fa-wand-magic-sparkles', () => {
+        const instrucao = areaVideo.value.trim();
+        if (!instrucao) { avisar('Descreva o vídeo.'); areaVideo.focus(); return; }
+        iniciarTarefaIA('video', { instrucao, slide_id: s ? s.id : '', opcoes: { segundos: E.segundosVideoIA } }, () => { E.rascunhosIA.video = ''; });
+      }, 'ed-btn-primario', { disabled: ocupado }),
+      h('p', { class: 'ed-dica', text: 'O vídeo leva alguns minutos para ficar pronto.' }),
+    ], 'video'));
+
+    // Narração
+    const visiveis = R.slidesVisiveis(E.doc);
+    corpo.appendChild(blocoIA('fa-solid fa-microphone', 'Narração', [
+      h('p', { class: 'ed-dica', text: 'A IA grava a fala de cada slide a partir das notas do apresentador (e escreve as notas que faltarem). Serve para "apresentar com narração" e para o vídeo narrado.' }),
+      h('div', { class: 'ed-grade' },
+        botao('Todos os slides', 'fa-solid fa-layer-group', () => iniciarTarefaIA('narracao', { documento: clonar(E.doc), slides: visiveis.map((x) => x.id) }), 'ed-btn-p ed-btn-primario', { disabled: ocupado || !visiveis.length }),
+        botao('Só este slide', 'fa-regular fa-file', () => iniciarTarefaIA('narracao', { documento: clonar(E.doc), slides: s ? [s.id] : [] }), 'ed-btn-p', { disabled: ocupado || !s || s.oculto })),
+      visiveis.some((x) => x.narracao) ? botao('Apresentar com narração', 'fa-solid fa-play', () => apresentar({ narracao: true }), 'ed-btn-p') : null,
+    ], 'narracao'));
+
+    // Conversa
+    corpo.appendChild(blocoIA('fa-regular fa-message', 'Conversa com a IA',
+      h('div', { class: 'ed-ia-historico', style: { display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '260px', overflowY: 'auto' } }), 'historico'));
+
+    const envoltorio = h('div', { class: 'ed-props-corpo' }, corpo);
+    UI.props.appendChild(envoltorio);
+    atualizarHistoricoIA();
+    if (E.focoIA) {
+      const alvo = $('[data-bloco="' + E.focoIA + '"]', corpo);
+      E.focoIA = null;
+      if (alvo) {
+        setTimeout(() => {
+          alvo.scrollIntoView({ block: 'start' });
+          const area = $('textarea', alvo);
+          if (area) area.focus({ preventScroll: true });
+        }, 30);
+      }
+    } else if (rolagem) {
+      envoltorio.scrollTop = rolagem;
+    }
+    desenharSobreposicao();
+  }
+
+  function blocoTarefaIA(item) {
+    const t = item.tarefa;
+    const rotulo = ROTULO_ACAO_IA[item.acao] || 'Trabalhando';
+    const caixa = h('section', { class: 'ed-ia-tarefa', attrs: { 'aria-live': 'polite' } });
+    if (t.status === 'ERRO') {
+      caixa.append(h('div', { class: 'ed-etapa ed-ia-erro' }, icone('fa-solid fa-circle-exclamation'), h('span', { text: rotulo + ': não deu certo' })),
+        h('p', { class: 'ed-dica', text: t.erro || 'A IA não conseguiu terminar.' }),
+        botao('Fechar', 'fa-solid fa-xmark', () => { E.tarefaIA = null; renderizarPainel(); }, 'ed-btn-p'));
+      return caixa;
+    }
+    if (t.status === 'PERGUNTAS') {
+      caixa.append(h('div', { class: 'ed-etapa' }, icone('fa-solid fa-circle-question'), h('span', { text: 'A IA precisa de uma resposta' })),
+        formularioPerguntas(t.perguntas, async (respostas) => {
+          const nova = await responderTarefa(t, respostas);
+          item.tarefa = nova;
+          renderizarPainel();
+        }, { rotuloPular: 'Pular' }));
+      return caixa;
+    }
+    const etapa = (t.progresso && t.progresso.etapa) || 'Na fila';
+    const fracao = fracaoDoProgresso(t);
+    caixa.append(
+      h('div', { class: 'ed-etapa' }, h('span', { class: 'ed-giro ed-giro-p', attrs: { 'aria-hidden': 'true' } }), h('span', { text: rotulo })),
+      h('span', { class: 'ed-dica', text: etapa + (semSinalDeVida(t) ? ' · está demorando mais que o normal' : '') }),
+      h('div', { class: 'ed-barra-progresso' + (fracao == null ? ' indeterminada' : '') }, h('i', { style: fracao == null ? {} : { width: Math.round(fracao * 100) + '%' } })));
+    return caixa;
+  }
+
+  async function iniciarTarefaIA(acao, dados, aoAceitar) {
+    if (E.tarefaIA && EM_ANDAMENTO.indexOf(E.tarefaIA.tarefa.status) >= 0) { avisar('Espere a IA terminar o pedido anterior.'); return; }
+    finalizarEdicoes();
+    let r;
+    try {
+      r = await api(URLS.ia, { json: Object.assign({ acao }, dados) });
+    } catch (erro) {
+      avisar(erro.message, { tipo: 'erro' });
+      return;
+    }
+    if (aoAceitar) aoAceitar();
+    const item = { acao, tarefa: r.tarefa, hIndice: E.hIndice, versao: E.versaoLocal, token: {} };
+    E.tarefaIA = item;
+    if (!E.painelIA) abrirPainelIA(); else renderizarPainel();
+    if (acao === 'editar' || acao === 'refazer_slide' || acao === 'novo_slide') carregarMensagensIA(true);
+    let final;
+    try {
+      final = await acompanharTarefa(r.tarefa, {
+        cancelado: () => E.tarefaIA !== item,
+        aoMudar: (t) => {
+          const mudouStatus = item.tarefa.status !== t.status || JSON.stringify(item.tarefa.progresso) !== JSON.stringify(t.progresso);
+          item.tarefa = t;
+          if (mudouStatus && E.painelIA && E.tarefaIA === item) atualizarBlocoTarefa(item);
+        },
+      });
+    } catch (erro) {
+      item.tarefa = Object.assign({}, item.tarefa, { status: 'ERRO', erro: erro.message });
+      if (E.painelIA) renderizarPainel();
+      return;
+    }
+    if (!final || E.tarefaIA !== item) return;
+    if (final.status === 'CONCLUIDA') {
+      E.tarefaIA = null;
+      await aplicarResultadoIA(item, final);
+      carregarMensagensIA(true);
+    }
+    if (E.painelIA) renderizarPainel();
+  }
+
+  /** Troca só o bloco de andamento: redesenhar o painel todo apagaria o que a pessoa está digitando. */
+  function atualizarBlocoTarefa(item) {
+    const antigo = UI.props && $('.ed-ia-tarefa', UI.props);
+    if (!antigo) { renderizarPainel(); return; }
+    if (antigo.contains(document.activeElement)) return;
+    antigo.replaceWith(blocoTarefaIA(item));
+  }
+
+  async function aplicarResultadoIA(item, tarefa) {
+    const res = tarefa.resultado || {};
+    const acao = item.acao;
+    finalizarEdicoes();
+    if (acao === 'editar') {
+      if (!res.documento) { avisar(res.resumo || 'A IA não mudou nada.'); return; }
+      if (E.versaoLocal !== item.versao) {
+        const ok = await confirmar('Aplicar as alterações da IA?', 'Você mexeu na apresentação enquanto a IA trabalhava. Aplicar agora substitui essas mudanças pelas da IA (dá para desfazer com Ctrl+Z).', 'Aplicar');
+        if (!ok) return;
+      }
+      const slideAntes = E.slideId;
+      E.doc = normalizarDocumento(res.documento);
+      E.slideId = E.doc.slides.some((x) => x.id === slideAntes) ? slideAntes : ((E.doc.slides[0] || {}).id || null);
+      E.selecao = [];
+      ajustarDocumentoInteiro();
+      commit('Alterações da IA');
+      renderizarTudo();
+      avisar(res.resumo || 'Alterações aplicadas.', { tipo: 'ok', duracao: 7000, acao: { texto: 'Desfazer', fn: desfazer } });
+      return;
+    }
+    if (acao === 'refazer_slide') {
+      const i = indiceDoSlide(res.slide_id);
+      if (i < 0 || !res.slide) { avisar('O slide não existe mais.', { tipo: 'erro' }); return; }
+      E.doc.slides[i] = normalizarSlide(Object.assign(res.slide, { id: res.slide_id }));
+      E.slideId = res.slide_id;
+      E.selecao = [];
+      ajustarDocumentoInteiro();
+      commit('Refazer slide com IA');
+      renderizarTudo();
+      avisar('Slide refeito.', { tipo: 'ok', acao: { texto: 'Desfazer', fn: desfazer } });
+      return;
+    }
+    if (acao === 'novo_slide') {
+      const novos = (res.slides || []).map((x) => normalizarSlide(x));
+      if (!novos.length) { avisar('A IA não criou nenhum slide.'); return; }
+      const usados = new Set(E.doc.slides.map((x) => x.id));
+      novos.forEach((x) => { if (usados.has(x.id)) trocarIds(x); usados.add(x.id); });
+      let i = res.depois_de ? indiceDoSlide(res.depois_de) : -1;
+      if (i < 0) i = E.doc.slides.length - 1;
+      E.doc.slides.splice.apply(E.doc.slides, [i + 1, 0].concat(novos));
+      E.slideId = novos[0].id;
+      E.selecao = [];
+      ajustarDocumentoInteiro();
+      commit(novos.length > 1 ? 'Novos slides com IA' : 'Novo slide com IA');
+      renderizarTudo();
+      rolarMiniaturaAtiva();
+      avisar(novos.length > 1 ? novos.length + ' slides criados.' : 'Slide criado.', { tipo: 'ok', acao: { texto: 'Desfazer', fn: desfazer } });
+      return;
+    }
+    if (acao === 'texto') {
+      const slide = E.doc.slides.find((x) => x.id === res.slide_id);
+      const el = slide && (slide.elementos || []).find((x) => x.id === res.elemento_id);
+      if (!el || el.tipo !== 'texto') { avisar('O texto não existe mais.', { tipo: 'erro' }); return; }
+      if (slide.id !== E.slideId) selecionarSlide(slide.id);
+      E.selecao = [el.id];
+      mudarElemento(el, (x) => { x.html = res.html || x.html; }, 'Reescrever texto com IA', { painel: false });
+      selecaoMudou();
+      avisar('Texto reescrito.', { tipo: 'ok', acao: { texto: 'Desfazer', fn: desfazer } });
+      return;
+    }
+    if (acao === 'imagem' || acao === 'video') {
+      const midia = res.midia;
+      if (!midia) return;
+      E.bibliotecaCache = null;
+      if (res.slide_id && E.doc.slides.some((x) => x.id === res.slide_id) && res.slide_id !== E.slideId) selecionarSlide(res.slide_id);
+      const alvo = acao === 'imagem' && res.elemento_id ? elementoPorId(res.elemento_id) : null;
+      if (alvo && alvo.tipo === 'imagem') {
+        mudarElemento(alvo, (x) => { x.src = midia.url; x.midia = midia.id; }, 'Trocar imagem pela da IA');
+        E.selecao = [alvo.id];
+        selecaoMudou();
+      } else {
+        await inserirMidiaEscolhida(midia);
+      }
+      avisar(acao === 'imagem' ? 'Imagem pronta.' : 'Vídeo pronto.', { tipo: 'ok', acao: { texto: 'Desfazer', fn: desfazer } });
+      return;
+    }
+    if (acao === 'narracao') {
+      const narracoes = res.narracoes || {};
+      const notas = res.notas || {};
+      let n = 0;
+      E.doc.slides.forEach((x) => {
+        if (narracoes[x.id]) { x.narracao = narracoes[x.id]; n += 1; }
+        if (notas[x.id] && !(x.notas || '').trim()) x.notas = notas[x.id];
+      });
+      commit('Narração com IA');
+      renderizarTudo();
+      const avisos = (res.avisos || []).join(' ');
+      avisar(n ? 'Narração gravada em ' + n + (n === 1 ? ' slide.' : ' slides.') + (avisos ? ' ' + avisos : '') : (avisos || 'Nenhuma narração gravada.'), { tipo: n ? 'ok' : 'erro', duracao: 7000 });
+    }
+  }
+
+  // =================================================================== D. template: limpar fundo
+
+  async function limparFundo() {
+    const s = slideAtual();
+    if (!MODO_TEMPLATE || !URLS.limpar_fundo || !s) return;
+    finalizarEdicoes();
+    const areas = s.elementos.filter((el) => el.tipo === 'apagar');
+    if (!s.fundo.imagem) { avisar('Este layout não tem imagem de fundo.', { tipo: 'erro' }); return; }
+    if (!areas.length) { avisar('Marque antes as áreas com "Apagar do fundo".'); return; }
+    await salvar();
+    const aviso = avisar('Limpando o fundo…', { duracao: 120000 });
+    try {
+      const r = await api(URLS.limpar_fundo, {
+        json: { imagem: s.fundo.imagem, areas: areas.map((el) => ({ x: Math.round(el.x), y: Math.round(el.y), w: Math.round(el.w), h: Math.round(el.h) })) },
+      });
+      const ids = new Set(areas.map((el) => el.id));
+      const atual = E.doc.slides.find((x) => x.id === s.id);
+      if (!atual) return;
+      atual.fundo.imagem = r.midia.url;
+      atual.elementos = atual.elementos.filter((el) => !ids.has(el.id));
+      E.selecao = E.selecao.filter((id) => !ids.has(id));
+      E.bibliotecaCache = null;
+      commit('Limpar fundo');
+      renderizarTudo();
+      avisar('Fundo limpo.', { tipo: 'ok', acao: { texto: 'Desfazer', fn: desfazer } });
+    } catch (erro) {
+      avisar(erro.message, { tipo: 'erro' });
+    } finally {
+      aviso.remove();
+    }
+  }
+
+  // =================================================================== D. celular
+
+  const CONSULTA_MOVEL = '(max-width: 760px)';
+  const CHAVE_EDITOR_COMPLETO = 'apres-editor-completo';
+
+  function querEditorCompleto() {
+    try { return window.sessionStorage.getItem(CHAVE_EDITOR_COMPLETO) === '1'; } catch (e) { return false; }
+  }
+
+  function deveSerMovel() {
+    return !!(window.matchMedia && window.matchMedia(CONSULTA_MOVEL).matches) && !querEditorCompleto();
+  }
+
+  function renderizarMovel() {
+    const app = $('#ed-app');
+    app.textContent = '';
+    app.removeAttribute('aria-busy');
+    app.className = 'ed-app ed-movel';
+    document.body.classList.add('ed-body-movel');
+    fecharPopover();
+    UI.status = h('button', { class: 'ed-status', type: 'button' });
+    const X = window.APRES_EXPORTAR;
+    const visiveis = R.slidesVisiveis(E.doc);
+    const topo = h('header', { class: 'ed-movel-topo' },
+      h('a', { class: 'ed-btn-icone', href: URLS.voltar || '/', dica: 'Voltar' }, icone('fa-solid fa-arrow-left')),
+      h('h1', { text: E.titulo || 'Sem título' }), UI.status);
+    const acoes = h('div', { class: 'ed-movel-acoes' },
+      botao(MODO_TEMPLATE ? 'Visualizar' : 'Apresentar', 'fa-solid fa-play', () => apresentar(MODO_TEMPLATE ? { template: true } : undefined), 'ed-btn-primario ed-btn-g', { disabled: !(MODO_TEMPLATE ? E.doc.slides.length : visiveis.length) }),
+      !MODO_TEMPLATE && X ? botao('PDF', 'fa-regular fa-file-pdf', exportarPdf, 'ed-btn-g', { disabled: !visiveis.length }) : null,
+      !MODO_TEMPLATE && URLS.pptx ? botao('PowerPoint', 'fa-regular fa-file-powerpoint', exportarPptx, 'ed-btn-g') : null);
+    const lista = h('ol', { class: 'ed-movel-lista', attrs: { 'aria-label': MODO_TEMPLATE ? 'Layouts' : 'Slides' } });
+    E.doc.slides.forEach((s, i) => {
+      const numero = R.numeracao(E.doc, s.id);
+      const escala = h('div', { class: 'ed-mini-escala' }, R.criarSlide(s, E.doc, { modo: 'miniatura', template: MODO_TEMPLATE, indice: numero.n, total: numero.total }));
+      const quadro = h('button', {
+        class: 'ed-mini-quadro', type: 'button', style: { padding: '0', border: '0', display: 'block', cursor: 'pointer' },
+        attrs: { 'aria-label': (MODO_TEMPLATE ? 'Visualizar a partir do layout ' : 'Apresentar a partir do slide ') + (i + 1) },
+        on: { click: () => apresentar({ inicioId: MODO_TEMPLATE || !s.oculto ? s.id : null, template: MODO_TEMPLATE }) },
+      }, escala);
+      lista.appendChild(h('li', { class: 'ed-movel-slide' + (s.oculto ? ' oculto' : '') }, quadro,
+        h('div', { class: 'ed-movel-slide-info' },
+          h('span', { text: (MODO_TEMPLATE ? 'Layout ' : 'Slide ') + (i + 1) + (MODO_TEMPLATE ? ' · ' + nomeDoPapel(s.layout) : '') }),
+          s.oculto ? h('span', { class: 'ed-chip', text: 'Oculto' }) : null,
+          s.narracao ? icone('fa-solid fa-microphone') : null)));
+    });
+    const corpo = h('div', { class: 'ed-movel-corpo' },
+      acoes,
+      h('div', { class: 'ed-aviso-caixa' }, icone('fa-solid fa-display'),
+        h('span', { text: 'No celular dá para ver, apresentar e baixar. Para editar os slides, use um computador ou tablet.' })),
+      E.doc.slides.length ? lista : h('p', { class: 'ed-dica', text: 'Ainda não há slides.' }),
+      botao('Abrir o editor completo mesmo assim', 'fa-solid fa-up-right-and-down-left-from-center', () => {
+        try { window.sessionStorage.setItem(CHAVE_EDITOR_COMPLETO, '1'); } catch (e) { /* segue só nesta tela */ }
+        trocarModo(false);
+      }, 'ed-btn-fantasma'));
+    app.append(topo, corpo);
+    const ajustar = () => {
+      $$('.ed-movel-slide', lista).forEach((li) => {
+        const q = $('.ed-mini-quadro', li);
+        if (q.clientWidth) $('.ed-mini-escala', li).style.transform = 'scale(' + q.clientWidth / LARG + ')';
+      });
+    };
+    if (E.observadorMovel) E.observadorMovel.disconnect();
+    E.observadorMovel = new ResizeObserver(ajustar);
+    E.observadorMovel.observe(lista);
+    ajustar();
+    atualizarStatus();
+  }
+
+  function trocarModo(movel) {
+    if (E.movel === movel || !E.doc) return;
+    finalizarEdicoes();
+    fecharPopover();
+    E.movel = movel;
+    if (movel) {
+      renderizarMovel();
+      return;
+    }
+    if (E.observadorMovel) { E.observadorMovel.disconnect(); E.observadorMovel = null; }
+    montarInterface();
+    renderizarTudo();
+    rolarMiniaturaAtiva();
+  }
+
+  // =================================================================== D. início
+
+  function mostrarFalha(titulo, texto) {
+    const app = $('#ed-app');
+    if (!app) return;
+    app.textContent = '';
+    app.removeAttribute('aria-busy');
+    app.appendChild(h('div', { class: 'ed-carregando', attrs: { role: 'alert' }, style: { flexDirection: 'column', gap: '12px', textAlign: 'center', padding: '24px' } },
+      icone('fa-solid fa-triangle-exclamation'),
+      h('b', { text: titulo, style: { fontSize: '16px' } }),
+      h('span', { text: texto }),
+      h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' } },
+        botao('Recarregar', 'fa-solid fa-rotate-right', () => window.location.reload(), 'ed-btn-primario'),
+        h('a', { class: 'ed-btn', href: URLS.voltar || '/' }, icone('fa-solid fa-arrow-left'), h('span', { text: 'Voltar' })))));
+  }
+
+  function ligarEventosGlobais() {
+    document.addEventListener('keydown', aoTeclar);
+    document.addEventListener('copy', (ev) => aoCopiar(ev, false));
+    document.addEventListener('cut', (ev) => aoCopiar(ev, true));
+    document.addEventListener('paste', aoColar);
+    window.addEventListener('beforeunload', (ev) => {
+      if (!haAlteracoesNaoSalvas()) return;
+      finalizarEdicoes();
+      salvar();
+      ev.preventDefault();
+      ev.returnValue = '';
+    });
+    // Saiu da aba (ou fechou o notebook): salva já, sem esperar o intervalo.
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && E.doc && !E.movel) salvar(); });
+    window.addEventListener('storage', (ev) => { if (ev.key === CHAVE_COPIA) E.areaTransferencia = null; });
+    if (window.matchMedia) {
+      const consulta = window.matchMedia(CONSULTA_MOVEL);
+      const aoMudar = () => { if (!querEditorCompleto()) trocarModo(consulta.matches); };
+      if (consulta.addEventListener) consulta.addEventListener('change', aoMudar);
+      else if (consulta.addListener) consulta.addListener(aoMudar);
+    }
+  }
+
+  async function iniciar() {
+    if (!R) {
+      mostrarFalha('Não foi possível abrir o editor', 'Os arquivos do editor não carregaram. Confira a internet e recarregue a página.');
+      return;
+    }
+    if (!URLS.documento) {
+      mostrarFalha('Não foi possível abrir o editor', 'Configuração do editor incompleta.');
+      return;
+    }
+    let r;
+    try {
+      r = await api(URLS.documento);
+    } catch (erro) {
+      mostrarFalha('Não foi possível carregar a apresentação', erro.message);
+      return;
+    }
+    try {
+      E.doc = normalizarDocumento(r.documento);
+      E.revisao = num(r.revisao, 0);
+      if (typeof r.titulo === 'string' && r.titulo) E.titulo = r.titulo;
+      E.slideId = (E.doc.slides[0] || {}).id || null;
+      E.ultimoSalvo = null;
+      // Fonte que não carrega (CDN fora do ar) não pode segurar o editor para sempre.
+      await Promise.race([R.carregarFontes(E.doc, { limite: 6000 }), esperar(12000)]).catch(() => {});
+      ajustarDocumentoInteiro();
+      E.movel = deveSerMovel();
+      if (!E.movel) montarInterface();
+      iniciarHistorico();
+      renderizarTudo();
+      ligarEventosGlobais();
+      if (precisaDaTelaDeGeracao()) mostrarGeracao(APRES.geracao);
+      else if (!E.movel && UI.palco) UI.palco.focus({ preventScroll: true });
+    } catch (erro) {
+      // Erro de programação ou documento que o desenho não entende: melhor dizer do que girar para sempre.
+      if (window.console) console.error(erro);
+      mostrarFalha('O editor encontrou um problema', (erro && erro.message) || String(erro));
+    }
+  }
+
+  window.APRES_EDITOR = { estado: E, salvar, apresentar, recarregarDocumento };
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar);
+  else iniciar();
 })();

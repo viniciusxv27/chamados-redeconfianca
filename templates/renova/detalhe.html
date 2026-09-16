@@ -32,6 +32,20 @@
     .rn-venda-numero { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1.35rem; font-weight: 800;
                        letter-spacing: .03em; color: #2E0854; word-break: break-all; }
     html.dark .rn-venda-numero { color: #e9d5ff; }
+    .rn-galeria { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .6rem; }
+    @media (min-width: 640px) { .rn-galeria { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+    .rn-galeria-item { position: relative; display: block; aspect-ratio: 4 / 3; border-radius: .75rem; overflow: hidden; background: #F6EEFF;
+                       border: 1px solid #ECE4F6; }
+    .rn-galeria-item img { width: 100%; height: 100%; object-fit: cover; transition: transform .2s; }
+    .rn-galeria-item:hover img { transform: scale(1.04); }
+    .rn-galeria-item span { position: absolute; left: .4rem; bottom: .4rem; padding: .12rem .5rem; border-radius: 9999px; font-size: .66rem;
+                            font-weight: 700; color: #fff; background: rgba(20, 6, 36, .72); }
+    .rn-foto-grande { position: fixed; inset: 0; z-index: 80; display: flex; align-items: center; justify-content: center; padding: 1rem;
+                      background: rgba(10, 4, 20, .88); }
+    .rn-foto-grande img { max-width: 100%; max-height: calc(100vh - 6rem); border-radius: .75rem; }
+    .rn-foto-grande p { position: absolute; left: 0; right: 0; bottom: 1rem; text-align: center; color: #fff; font-weight: 700; font-size: .85rem; }
+    .rn-foto-grande button { position: absolute; width: 2.6rem; height: 2.6rem; border-radius: 9999px; color: #fff; background: rgba(255, 255, 255, .14); }
+    html.dark .rn-galeria-item { background: rgba(157, 78, 221, .14); border-color: var(--tema-borda, #313a4f); }
 </style>
 {% endblock %}
 
@@ -75,20 +89,9 @@
             {% endif %}
         </section>
 
-        <section class="rn-secao">
-            <div class="rn-secao-topo"><span class="rn-num">2</span>Itens obrigatórios antes da avaliação</div>
-            {% for chave, titulo, descricao, icone, feito in renova.itens_obrigatorios_lista %}
-            <div class="rn-item-ro">
-                <span class="rn-ic"><i class="{{ icone }}"></i></span>
-                <div class="min-w-0"><p class="text-sm font-bold text-gray-900">{{ titulo }}</p><p class="text-xs text-gray-500">{{ descricao }}</p></div>
-                {% if feito %}<span class="rn-res rn-res-OK"><i class="fa-solid fa-check"></i> Feito</span>{% else %}<span class="rn-res rn-res-NAO">Não conferido</span>{% endif %}
-            </div>
-            {% endfor %}
-        </section>
-
         <div class="grid md:grid-cols-2 gap-4 items-start">
             <section class="rn-secao">
-                <div class="rn-secao-topo"><span class="rn-num">3</span>Funcionalidades</div>
+                <div class="rn-secao-topo"><span class="rn-num">2</span>Funcionalidades</div>
                 {% for chave, titulo, descricao, icone, valor, rotulo in renova.funcionalidades_lista %}
                 <div class="rn-item-ro">
                     <span class="rn-ic"><i class="{{ icone }}"></i></span>
@@ -98,7 +101,7 @@
                 {% endfor %}
             </section>
             <section class="rn-secao">
-                <div class="rn-secao-topo"><span class="rn-num">4</span>Condição estética</div>
+                <div class="rn-secao-topo"><span class="rn-num">3</span>Condição estética</div>
                 {% for chave, titulo, descricao, icone, valor, rotulo in renova.estetica_lista %}
                 <div class="rn-item-ro">
                     <span class="rn-ic"><i class="{{ icone }}"></i></span>
@@ -110,8 +113,27 @@
         </div>
 
         <section class="rn-secao">
-            <div class="rn-secao-topo"><span class="rn-num">5</span>Observações gerais</div>
+            <div class="rn-secao-topo"><span class="rn-num">4</span>Observações gerais</div>
             <p class="p-4 text-sm text-gray-800 whitespace-pre-line">{{ renova.observacoes|default:"Sem observações." }}</p>
+        </section>
+
+        <section class="rn-secao" id="fotos">
+            <div class="rn-secao-topo"><span class="rn-num">5</span>Fotos do aparelho</div>
+            {% with fotos=renova.fotos_em_ordem %}
+            {% if fotos %}
+            <div class="p-4 rn-galeria">
+                {% for foto in fotos %}
+                <a href="{{ foto.arquivo.url }}" target="_blank" rel="noopener" class="rn-galeria-item" data-galeria
+                   title="{{ foto.get_tipo_display }}{% if foto.tipo == 'avaria' %} {{ foto.ordem }}{% endif %}">
+                    <img src="{{ foto.arquivo.url }}" alt="{{ foto.get_tipo_display }} — {{ renova.aparelho }}" loading="lazy">
+                    <span>{{ foto.get_tipo_display }}{% if foto.tipo == 'avaria' %} {{ foto.ordem }}{% endif %}</span>
+                </a>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="p-4 text-sm text-gray-500">Sem fotos — avaliação feita antes das fotos passarem a ser pedidas.</p>
+            {% endif %}
+            {% endwith %}
         </section>
 
         <section class="rn-secao">
@@ -131,6 +153,17 @@
                     <p class="text-[10px] uppercase tracking-widest text-gray-400 border-t mt-1 pt-1">Assinatura</p>
                 </div>
             </div>
+        </section>
+
+        <section class="rn-secao">
+            <div class="rn-secao-topo"><span class="rn-num">7</span>Itens obrigatórios para concluir a troca</div>
+            {% for chave, titulo, descricao, icone, feito in renova.itens_obrigatorios_lista %}
+            <div class="rn-item-ro">
+                <span class="rn-ic"><i class="{{ icone }}"></i></span>
+                <div class="min-w-0"><p class="text-sm font-bold text-gray-900">{{ titulo }}</p><p class="text-xs text-gray-500">{{ descricao }}</p></div>
+                {% if feito %}<span class="rn-res rn-res-OK"><i class="fa-solid fa-check"></i> Feito</span>{% else %}<span class="rn-res rn-res-NAO">Não conferido</span>{% endif %}
+            </div>
+            {% endfor %}
         </section>
     </div>
 
@@ -280,4 +313,66 @@
         {% endif %}
     </aside>
 </div>
+{% endblock %}
+
+{% block rn_js %}
+<script>
+/* Fotos do aparelho em tela cheia, com setas entre elas. */
+(function () {
+    var itens = Array.prototype.slice.call(document.querySelectorAll('[data-galeria]'));
+    if (!itens.length) return;
+    var caixa = null, indice = 0;
+    function botao(icone, rotulo, estilo, acao) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.setAttribute('aria-label', rotulo);
+        b.innerHTML = '<i class="fa-solid ' + icone + '"></i>';
+        Object.keys(estilo).forEach(function (k) { b.style[k] = estilo[k]; });
+        b.addEventListener('click', function (e) { e.stopPropagation(); acao(); });
+        return b;
+    }
+    function mostrar(i) {
+        indice = (i + itens.length) % itens.length;
+        var item = itens[indice];
+        caixa.querySelector('img').src = item.getAttribute('href');
+        caixa.querySelector('img').alt = item.querySelector('img').alt;
+        caixa.querySelector('p').textContent = item.getAttribute('title') + ' · ' + (indice + 1) + ' de ' + itens.length;
+    }
+    function fechar() {
+        if (!caixa) return;
+        caixa.remove();
+        caixa = null;
+        document.removeEventListener('keydown', teclas);
+        itens[indice].focus();
+    }
+    function teclas(e) {
+        if (e.key === 'Escape') fechar();
+        else if (e.key === 'ArrowRight') mostrar(indice + 1);
+        else if (e.key === 'ArrowLeft') mostrar(indice - 1);
+    }
+    itens.forEach(function (item, i) {
+        item.addEventListener('click', function (e) {
+            if (e.ctrlKey || e.metaKey || e.shiftKey) return;
+            e.preventDefault();
+            caixa = document.createElement('div');
+            caixa.className = 'rn-foto-grande';
+            caixa.setAttribute('role', 'dialog');
+            caixa.setAttribute('aria-modal', 'true');
+            caixa.setAttribute('aria-label', 'Fotos do aparelho');
+            caixa.appendChild(document.createElement('img'));
+            caixa.appendChild(document.createElement('p'));
+            caixa.appendChild(botao('fa-xmark', 'Fechar', {top: '1rem', right: '1rem'}, fechar));
+            if (itens.length > 1) {
+                caixa.appendChild(botao('fa-chevron-left', 'Foto anterior', {left: '1rem', top: '50%'}, function () { mostrar(indice - 1); }));
+                caixa.appendChild(botao('fa-chevron-right', 'Próxima foto', {right: '1rem', top: '50%'}, function () { mostrar(indice + 1); }));
+            }
+            caixa.addEventListener('click', function (ev) { if (ev.target === caixa) fechar(); });
+            document.body.appendChild(caixa);
+            document.addEventListener('keydown', teclas);
+            mostrar(i);
+            caixa.querySelector('button').focus();
+        });
+    });
+})();
+</script>
 {% endblock %}
