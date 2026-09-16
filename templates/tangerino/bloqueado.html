@@ -49,6 +49,22 @@
         {% elif motivo.motivo == 'SAIDA_PENDENTE' %}Regularizar o ponto em aberto
         {% else %}Registrar minha entrada{% endif %}
       </a>
+      {% elif registro_indisponivel %}
+      {# A trava manda para cá; se o portal não consegue registrar, a saída tem que
+         ser o relógio da Sólides — senão a pessoa fica presa na tela. #}
+      <div class="rounded-xl bg-amber-50 border border-amber-200 p-4 space-y-3">
+        <p class="text-sm text-amber-800">
+          <i class="fas fa-triangle-exclamation mr-1.5"></i>
+          O registro de ponto pelo portal está fora do ar (a Sólides desativou o serviço).
+          Bata pelo app <strong>Sólides Ponto</strong> ou pelo relógio web e depois use
+          <strong>“Já bati — verificar de novo”</strong>.
+        </p>
+        <a href="{{ url_relogio_web }}" target="_blank" rel="noopener noreferrer"
+           class="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl
+                  bg-amber-600 hover:bg-amber-700 text-white font-semibold">
+          <i class="fas fa-arrow-up-right-from-square"></i> Abrir relógio da Sólides
+        </a>
+      </div>
       {% else %}
       <div class="rounded-xl bg-gray-50 border border-gray-200 p-4">
         <p class="text-sm text-gray-600">

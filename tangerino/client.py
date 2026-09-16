@@ -16,7 +16,7 @@ from datetime import timezone as dt_timezone
 
 import requests
 from django.conf import settings
-from django.core.cache import cache
+from django.core.cache import cache, caches
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
@@ -382,6 +382,57 @@ def enviar_foto(foto_base64):
     if not url.startswith('http'):
         raise TangerinoError('O Tangerino não devolveu a URL da foto.')
     return url
+
+
+# ─── Disponibilidade do registro pelo portal ─────────────────────────────────
+# Relógio web oficial da Sólides: para onde a pessoa vai quando o portal não
+# consegue registrar. Lá o registro é direto com a Sólides (código do
+# empregador + PIN), sem passar pelo portal.
+URL_RELOGIO_WEB = 'https://app.tangerino.com.br/Tangerino/pages/baterPonto/'
+_CHAVE_REGISTRO_WEB = 'tangerino:registro-web-disponivel'
+_REGISTRO_WEB_TTL = 60 * 10
+
+
+def url_relogio_web():
+    return getattr(settings, 'TANGERINO_RELOGIO_WEB_URL', '') or URL_RELOGIO_WEB
+
+
+def registro_web_disponivel(usar_cache=True):
+    """O serviço que recebe a batida pelo portal está no ar?
+
+    Em 14/09/2026 a Sólides desligou o host ``api.tangerino.com.br`` inteiro —
+    todo caminho responde 404, inclusive o de registro — e não publicou um
+    substituto que aceite o token de integração: o relógio web deles passou a
+    exigir o PIN do colaborador e reCAPTCHA. Sem esta checagem a pessoa abria a
+    câmera, tirava a foto e só então descobria que não dava; e a trava de
+    jornada mandava todo mundo justamente para essa tela.
+
+    Sonda com GET, que não registra nada (o endpoint só aceita POST): 404 ou
+    falha de conexão = fora do ar; qualquer outra resposta (405, 400, 401…) =
+    o endpoint existe. O resultado fica 10 minutos no cache local do processo,
+    então o botão volta sozinho quando ``TANGERINO_PUNCH_BASE`` apontar para um
+    serviço que responda.
+    """
+    if not integracao_ativa():
+        return False
+    local = caches['local']
+    if usar_cache:
+        guardado = local.get(_CHAVE_REGISTRO_WEB)
+        if guardado is not None:
+            return guardado
+    try:
+        resp = requests.get(f'{PUNCH_BASE}/register/web/1.1', headers=_headers(),
+                            timeout=(3, 6), allow_redirects=False)
+        disponivel = resp.status_code != 404
+    except (requests.RequestException, TangerinoError):
+        disponivel = False
+    local.set(_CHAVE_REGISTRO_WEB, disponivel, _REGISTRO_WEB_TTL)
+    return disponivel
+
+
+def marcar_registro_web_indisponivel():
+    """Uma batida de verdade voltou 404: as próximas telas já nascem sabendo."""
+    caches['local'].set(_CHAVE_REGISTRO_WEB, False, _REGISTRO_WEB_TTL)
 
 
 def registrar_ponto(employee_id, quando=None, latitude=None, longitude=None,

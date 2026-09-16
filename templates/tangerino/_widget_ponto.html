@@ -106,8 +106,12 @@
     // O botão leva para /ponto/, onde fica a câmera — a marcação exige foto.
     // Com o registro pelo portal desligado, o cartão é só informativo.
     var botao = document.getElementById('tgwBater');
+    var cores = ['hidden', 'bg-emerald-600', 'hover:bg-emerald-700', 'bg-red-600', 'hover:bg-red-700',
+                 'bg-amber-600', 'hover:bg-amber-700'];
     if (d.pode_bater) {
-      botao.classList.remove('hidden', 'bg-emerald-600', 'hover:bg-emerald-700', 'bg-red-600', 'hover:bg-red-700');
+      botao.classList.remove.apply(botao.classList, cores);
+      botao.href = '/ponto/';
+      botao.removeAttribute('target');
       if (d.proxima_acao === 'ENTRADA') {
         botao.classList.add('bg-emerald-600', 'hover:bg-emerald-700');
         document.getElementById('tgwBaterTexto').textContent = 'Bater entrada';
@@ -115,6 +119,14 @@
         botao.classList.add('bg-red-600', 'hover:bg-red-700');
         document.getElementById('tgwBaterTexto').textContent = 'Bater saída';
       }
+    } else if (d.registro_indisponivel && d.url_relogio_web) {
+      // Serviço de batida da Sólides fora do ar: o botão leva ao relógio deles.
+      botao.classList.remove.apply(botao.classList, cores);
+      botao.classList.add('bg-amber-600', 'hover:bg-amber-700');
+      botao.href = d.url_relogio_web;
+      botao.target = '_blank';
+      botao.rel = 'noopener noreferrer';
+      document.getElementById('tgwBaterTexto').textContent = 'Bater no relógio da Sólides';
     } else {
       botao.classList.add('hidden');
     }

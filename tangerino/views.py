@@ -22,7 +22,9 @@ from . import regras_jornada as regras
 from .middleware import limpar_decisao
 from .client import (TangerinoError, de_millis, integracao_ativa, listar_funcionarios,
                      listar_marcacoes, invalidar_cache_marcacoes, justificativas_edicao,
-                     registrar_ponto, registrar_ponto_atrasado, testar_conexao)
+                     marcar_registro_web_indisponivel, registrar_ponto,
+                     registrar_ponto_atrasado, registro_web_disponivel, testar_conexao,
+                     url_relogio_web)
 from .models import (HORAS_SEMANAIS, ConfiguracaoTangerino, Escala, EscalaConfig, EscalaDia,
                      FeriasLancamento, JornadaTrabalho, MarcacaoPonto,
                      RegistroPontoPortal, SaldoHoras, SincronizacaoTangerino)
@@ -129,6 +131,24 @@ def _nome_do_setor(opcoes, escolhido):
 
 # ─── Ponto ───────────────────────────────────────────────────────────────────
 
+def _registro_pelo_portal(config):
+    """O que a tela pode oferecer: bater ponto e marcação retroativa pelo portal.
+
+    A configuração diz se o RH liga o registro pelo portal; a checagem diz se o
+    serviço da Sólides que recebe a batida está no ar. O botão só aparece
+    quando os dois concordam — senão a pessoa é mandada direto para o relógio
+    da Sólides, em vez de tirar a foto para descobrir no fim que não entrou.
+    """
+    quer = config.permitir_bater_ponto or config.permitir_ponto_atrasado
+    no_ar = registro_web_disponivel() if quer else False
+    return {
+        'pode_bater_ponto': config.permitir_bater_ponto and no_ar,
+        'pode_ponto_atrasado': config.permitir_ponto_atrasado and no_ar,
+        'registro_indisponivel': quer and not no_ar,
+        'url_relogio_web': url_relogio_web(),
+    }
+
+
 @modulo_liberado
 @login_required
 def meu_ponto(request):
@@ -139,7 +159,7 @@ def meu_ponto(request):
     contexto = {
         'aba': 'ponto',
         'config': config,
-        'pode_bater_ponto': config.permitir_bater_ponto,
+        **_registro_pelo_portal(config),
         'integracao_ativa': integracao_ativa(),
         'vinculado': bool(request.user.tangerino_employee_id),
         'e_gestor': e_gestor(request.user),
@@ -321,7 +341,7 @@ def bloqueado(request):
     return render(request, 'tangerino/bloqueado.html', {
         'motivo': motivo,
         'config': config,
-        'pode_bater_ponto': config.permitir_bater_ponto,
+        **_registro_pelo_portal(config),
         'exige_foto': config.exigir_foto,
     })
 
@@ -401,9 +421,12 @@ def api_ponto_status(request):
         return JsonResponse({'disponivel': False, 'motivo': resumo.get('motivo')})
 
     config = ConfiguracaoTangerino.get()
+    portal = _registro_pelo_portal(config)
     return JsonResponse({
         'disponivel': True,
-        'pode_bater': config.permitir_bater_ponto,
+        'pode_bater': portal['pode_bater_ponto'],
+        'registro_indisponivel': portal['registro_indisponivel'],
+        'url_relogio_web': portal['url_relogio_web'],
         'situacao': resumo['situacao'],
         'rotulo': resumo['rotulo'],
         'bateu_entrada': resumo['bateu_entrada'],
@@ -437,8 +460,9 @@ def _motivo_legivel(exc):
     """
     texto = str(exc)
     if 'respondeu 404' in texto:
-        return ('O Tangerino está recusando a batida pelo portal agora (erro 404 no serviço deles). '
-                'O seu ponto NÃO foi registrado: bata pelo aplicativo do Tangerino e avise a gestão.')
+        return ('O registro de ponto pelo portal está fora do ar: a Sólides (Tangerino) desativou o '
+                'serviço que recebia a batida. O seu ponto NÃO foi registrado — bata agora pelo '
+                'aplicativo Sólides Ponto (Tangerino) ou pelo relógio web da Sólides.')
     if 'respondeu 5' in texto or '504' in texto or '502' in texto:
         return ('O Tangerino não respondeu a tempo. O seu ponto pode NÃO ter sido registrado: '
                 'confira na lista abaixo e, se não aparecer, bata pelo aplicativo do Tangerino.')
@@ -565,7 +589,13 @@ def api_bater_ponto(request):
         # 200 de propósito: o pedido chegou e foi tratado — o que falhou foi o
         # Tangerino. Com 5xx, o proxy troca este JSON por uma página HTML e a
         # tela cai no "erro de conexão", escondendo o motivo de quem bateu.
-        return JsonResponse({'sucesso': False, 'erro': _motivo_legivel(exc), 'detalhe': str(exc)[:300]})
+        falha = {'sucesso': False, 'erro': _motivo_legivel(exc), 'detalhe': str(exc)[:300]}
+        if 'respondeu 404' in str(exc):
+            # Serviço fora do ar: as próximas telas já escondem a câmera e
+            # mostram o relógio da Sólides; esta recebe o link para ir agora.
+            marcar_registro_web_indisponivel()
+            falha['url_relogio_web'] = url_relogio_web()
+        return JsonResponse(falha)
 
 
 # ─── Escala (quadro semanal montado no portal) ───────────────────────────────
