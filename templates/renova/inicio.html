@@ -163,7 +163,7 @@
                 <span class="text-[11px] font-semibold text-red-600"><i class="fa-solid fa-triangle-exclamation"></i> sem chamado</span>
                 {% endif %}
                 {% if r.numero_venda %}
-                <span class="text-[11px] text-gray-500"><i class="fa-solid fa-receipt"></i> Venda <b class="font-mono">{{ r.numero_venda }}</b></span>
+                <span class="text-[11px] text-gray-500"><i class="fa-solid fa-receipt"></i> Venda Vivo Go <b class="font-mono">{{ r.numero_venda }}</b></span>
                 {% endif %}
             </div>
         </div>
@@ -183,7 +183,8 @@
             {% if r.pk in pode_aprovar_ids %}
             <a href="{% url 'renova:detalhe' r.pk %}#aprovacao" class="rn-acao rn-acao-chegou"><i class="fa-solid fa-user-check"></i>Aprovar</a>
             {% endif %}
-            {% if r.aprovada %}<a href="{% url 'renova:etiqueta' r.pk %}" class="rn-acao rn-acao-neutra" title="Etiqueta"><i class="fa-solid fa-tag"></i></a>{% endif %}
+            {% if r.pode_imprimir_etiqueta %}<a href="{% url 'renova:etiqueta' r.pk %}" class="rn-acao rn-acao-neutra" title="Etiqueta" aria-label="Etiqueta de {{ r.codigo }}"><i class="fa-solid fa-tag"></i></a>{% endif %}
+            {% if r.tem_contrato %}<a href="{% url 'renova:contrato' r.pk %}" class="rn-acao rn-acao-neutra" title="Contrato" aria-label="Contrato de {{ r.codigo }}"><i class="fa-solid fa-file-signature"></i></a>{% endif %}
             <a href="{% url 'renova:detalhe' r.pk %}" class="rn-acao rn-acao-neutra">Ver</a>
             {% if rn_pode_excluir %}
             <a href="{% url 'renova:excluir' r.pk %}?voltar={{ voltar|urlencode }}" class="rn-acao rn-acao-nao"

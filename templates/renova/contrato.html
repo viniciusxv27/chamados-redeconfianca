@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contrato {{ renova.codigo }} · Vini Renova</title>
+    <link rel="icon" type="image/png" href="{% static 'images/logo3.png' %}">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    {% include 'renova/_contrato_estilo.html' %}
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background: #E9E4EF; font-family: Montserrat, Arial, Helvetica, sans-serif; color: #2A1340; }
+        .cp-barra { position: sticky; top: 0; z-index: 10; display: flex; flex-wrap: wrap; align-items: center; gap: .6rem 1rem;
+                    padding: .65rem 1rem; color: #fff; background: linear-gradient(90deg, #2E0854, #660099 60%, #7B2CBF);
+                    box-shadow: 0 6px 18px -10px rgba(46, 8, 84, .8); }
+        .cp-voltar { display: inline-flex; align-items: center; gap: .45rem; padding: .45rem .7rem; border-radius: .6rem; color: #fff;
+                     font-size: .8rem; font-weight: 700; text-decoration: none; background: rgba(255, 255, 255, .14); }
+        .cp-voltar:hover { background: rgba(255, 255, 255, .24); }
+        .cp-titulo { flex: 1; min-width: 10rem; font-size: .78rem; line-height: 1.25; }
+        .cp-titulo b { display: block; font-size: .95rem; }
+        .cp-acoes { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+        .cp-acoes select { border: 0; border-radius: .6rem; padding: .5rem .6rem; font: 600 .8rem Montserrat, Arial, sans-serif; color: #3C096C; }
+        .cp-imprimir { display: inline-flex; align-items: center; gap: .45rem; border: 0; border-radius: .6rem; padding: .55rem .9rem; cursor: pointer;
+                       font: 800 .82rem Montserrat, Arial, sans-serif; color: #3C096C; background: #fff; }
+        .cp-imprimir:hover { background: #F6EEFF; }
+        .cp-aviso { max-width: 794px; margin: 1rem auto 0; padding: .75rem 1rem; border-radius: .75rem; font-size: .85rem; }
+        .cp-aviso-erro { color: #7F1D1D; background: #FEF2F2; border: 1px solid #FECACA; }
+        .cp-aviso-espera { color: #78350F; background: #FFFBEB; border: 1px solid #FDE68A; }
+        .cp-folhas { display: grid; gap: 1.25rem; padding: 1.25rem .75rem 2.5rem; }
+        .cp-folhas .ct-folha { border-radius: .35rem; box-shadow: 0 18px 40px -24px rgba(46, 8, 84, .55); }
+        body[data-vias="cliente"] .ct-folha[data-via="loja"], body[data-vias="loja"] .ct-folha[data-via="cliente"] { display: none; }
+        @media print {
+            @page { size: A4; margin: 0; }
+            body { background: #fff; }
+            .cp-barra, .cp-aviso { display: none !important; }
+            .cp-folhas { display: block; padding: 0; }
+        }
+    </style>
+</head>
+<body data-vias="duas">
+    <header class="cp-barra">
+        <a href="{% url 'renova:detalhe' renova.pk %}" class="cp-voltar"><i class="fa-solid fa-arrow-left"></i>Avaliação</a>
+        <p class="cp-titulo"><b>Termo de transferência · {{ renova.codigo }}</b>{{ renova.aparelho }} · {{ contrato.cliente_nome }}</p>
+        <div class="cp-acoes">
+            <select id="cp-vias" aria-label="Vias para imprimir">
+                <option value="duas">Duas vias (cliente e loja)</option>
+                <option value="cliente">Só a via do cliente</option>
+                <option value="loja">Só a via da loja</option>
+            </select>
+            <button type="button" class="cp-imprimir" id="cp-imprimir"><i class="fa-solid fa-print"></i>Imprimir</button>
+        </div>
+    </header>
+
+    {% if renova.reprovada %}
+    <p class="cp-aviso cp-aviso-erro" role="alert"><b>Troca reprovada pelo gerente:</b> o cliente ficou com o aparelho e este termo não vale — a folha sai marcada como sem valor.</p>
+    {% elif renova.aguardando_aprovacao %}
+    <p class="cp-aviso cp-aviso-espera"><b>Aguardando a aprovação do gerente.</b> O termo já pode ser impresso e entregue; se a troca for reprovada, ele perde o valor.</p>
+    {% endif %}
+
+    <main class="cp-folhas">
+        {% for via in vias %}
+        {% include 'renova/_contrato_folha.html' with c=contrato logo=logo_contrato sem_valor=renova.reprovada %}
+        {% endfor %}
+    </main>
+
+    <script>
+    (function () {
+        // Cada folha sabe de qual via é; a última que sai não quebra página (sem folha em branco no fim).
+        var nomes = ['cliente', 'loja'];
+        var folhas = Array.prototype.slice.call(document.querySelectorAll('.ct-folha'));
+        folhas.forEach(function (folha, i) { folha.setAttribute('data-via', nomes[i] || ''); });
+        var vias = document.getElementById('cp-vias');
+        function aplicar() {
+            document.body.setAttribute('data-vias', vias.value);
+            var visiveis = folhas.filter(function (f) { return vias.value === 'duas' || f.getAttribute('data-via') === vias.value; });
+            folhas.forEach(function (f) { f.classList.toggle('ct-ultima', f === visiveis[visiveis.length - 1]); });
+        }
+        vias.addEventListener('change', aplicar);
+        aplicar();
+        document.getElementById('cp-imprimir').addEventListener('click', function () { window.print(); });
+    })();
+    </script>
+</body>
+</html>

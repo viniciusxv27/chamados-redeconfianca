@@ -1,4 +1,4 @@
-"""Vini Renova: checklist só Apple, padrão pelas avarias, aprovação do gerente, chamado, etiqueta e gestão.
+"""Vini Renova: checklist só Apple, padrão pelas avarias, contrato, aprovação do gerente, chamado, etiqueta e gestão.
 
 Pedidos:
 - módulo em que o SUPERADMIN vê tudo e define quem faz; checklist do impresso; a
@@ -8,13 +8,18 @@ Pedidos:
 - depois da avaliação do vendedor, o gerente da loja (grupo GERENTES) aprova ou não;
 - só Apple, sem nº de série e sem parecer do aparelho na tela;
 - quadro de gestão para o financeiro acompanhar o que chegou ou não;
-- a tela vem em etapas, com os itens obrigatórios na última; se o cliente segue
-  com a troca, as fotos do aparelho são obrigatórias (gravadas no armazenamento).
+- a tela vem em etapas; se o cliente segue com a troca, as fotos do aparelho são
+  obrigatórias (gravadas no armazenamento);
+- o contrato (termo de transferência) é a última etapa, com o nº da venda do Vivo Go
+  obrigatório e a assinatura do cliente; sem matrícula; o passo a passo abre ao
+  passar o mouse no item; "com observação" abre o campo para descrever; botão para
+  a consulta oficial do IMEI; a etiqueta sai antes da aprovação; a aprovação avisa
+  o financeiro e os gerentes.
 
-Nada sai daqui: avisos do chamado (sinais, push, webhooks) são dublês, os avisos
-do Renova vão só para o sino (registro no banco), a categoria e o setor que
-recebe são de teste, as fotos vão para um armazenamento em memória (nada sobe
-para o MinIO) e tudo roda numa transação desfeita no fim.
+Nada sai daqui: avisos do chamado (sinais, push, webhooks) e os avisos do Renova
+(sino e push) são dublês, a categoria e o setor que recebe são de teste, as fotos
+vão para um armazenamento em memória (nada sobe para o MinIO) e tudo roda numa
+transação desfeita no fim.
 """
 import base64
 import io
@@ -46,8 +51,7 @@ from django.test.utils import setup_test_environment
 from django.utils import timezone
 from PIL import Image
 
-from notifications.models import UserNotification
-from renova import checklist
+from renova import checklist, conteudo
 from renova.context_processors import renova_menu
 from django.core.files.storage import InMemoryStorage
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -55,7 +59,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from renova.models import CATEGORIA_PADRAO_ID, ConfiguracaoRenova, FotoRenova, PrecoAparelho, Renova
 from renova.padrao import calcular_padrao
 from renova.permissoes import grupo_gerentes
-from renova.validacao import imei_valido, ler_checklist
+from renova.validacao import cnpj_valido, cpf_valido, imei_valido, ler_checklist
 from tickets.models import Category, Ticket, TicketComment, TicketLog
 from users.models import Sector
 
@@ -104,10 +108,21 @@ def fotos_obrigatorias():
     return {f'foto_{chave}': foto(f'{chave}.jpg') for chave, _, _, _, obrigatoria in checklist.FOTOS if obrigatoria}
 
 
+def cpf_de(nove):
+    """CPF de 11 números a partir de 9, com os dígitos verificadores certos."""
+    d = [int(c) for c in nove]
+    for tamanho in (9, 10):
+        d.append(sum(d[i] * (tamanho + 1 - i) for i in range(tamanho)) * 10 % 11 % 10)
+    return ''.join(map(str, d))
+
+
+CPF_VENDEDOR = cpf_de('529982247')
+CPF_CLIENTE = cpf_de('123456789')
 IMEI_1 = com_digito('35693803564380')
 IMEI_2 = com_digito('01234567890123')
 HOJE = timezone.localdate().isoformat()
 ASSINATURA = assinatura()
+ASSINATURA_CLIENTE = assinatura()
 
 
 def todos_ok(**nada):
@@ -142,7 +157,7 @@ try:
             first_name='ZZRenova', last_name=apelido.title(), **extra)
 
     admin = novo('admin', hierarchy='SUPERADMIN', sector=loja)
-    vendedor = novo('vendedor', sector=loja)
+    vendedor = novo('vendedor', sector=loja, cpf=CPF_VENDEDOR)
     gerente = novo('gerente', sector=loja)
     gerente_outra = novo('gerenteoutra', sector=outra_loja)
     financeiro = novo('financeiro')
@@ -161,8 +176,11 @@ try:
             'modelo': 'iPhone 15 Pro', 'cor': 'Titânio natural', 'armazenamento': '256GB',
             'imei1': IMEI_1, 'imei2': IMEI_2, 'data_avaliacao': HOJE, 'loja': str(loja.pk),
             'saude_bateria': '90', 'observacoes': '',
-            'vendedor_nome': 'ZZ Vendedor Renova', 'matricula': 'M123', 'assinatura': ASSINATURA,
+            'vendedor_nome': 'ZZ Vendedor Renova', 'vendedor_cpf': CPF_VENDEDOR[:3] + '.' + CPF_VENDEDOR[3:6] + '.'
+            + CPF_VENDEDOR[6:9] + '-' + CPF_VENDEDOR[9:], 'assinatura': ASSINATURA,
             'data_responsavel': HOJE, 'cliente_segue': 'SIM',
+            'aparelho_novo': 'iPhone 16 128GB', 'numero_venda': 'VG-2026-000123', 'cliente_nome': 'ZZ Cliente Renova',
+            'cliente_cpf': CPF_CLIENTE, 'contrato_cidade': 'Vila Velha', 'assinatura_cliente': ASSINATURA_CLIENTE,
         }
         dados.update(fotos_obrigatorias())
         for chave, _, _, _ in checklist.ITENS_OBRIGATORIOS:
@@ -189,6 +207,7 @@ try:
             mock.patch('notifications.services.notification_service.notify_ticket_comment') as aviso_comentario, \
             mock.patch('notifications.services.notification_service.notify_ticket_status_changed'), \
             mock.patch('notifications.push_utils.send_push_notification_to_user') as push, \
+            mock.patch('notifications.services.notification_service.send_notification') as notificar, \
             mock.patch.object(Ticket, 'trigger_webhooks') as webhooks, \
             mock.patch.object(Ticket, 'trigger_webhook'), \
             mock.patch.object(FotoRenova._meta.get_field('arquivo'), 'storage', InMemoryStorage()) as fotos_memoria:
@@ -231,11 +250,31 @@ try:
             'Dados do aparelho', 'Itens obrigatórios para concluir a troca', 'Funcionalidades', 'Condição estética',
             'Observações gerais', 'Responsável pela avaliação')) and 'Parecer final do aparelho' not in html_nova)
         etapas = re.findall(r'data-etapa="(\d)" data-nome="([^"]+)"', html_nova)
-        t('em 7 etapas, uma por vez', [n for n, _ in etapas] == list('1234567')
-          and html_nova.count('data-ir=') == 7, etapas)
-        t('os itens obrigatórios (a etapa 2 do impresso) ficam no fim, depois do responsável',
-          dict(etapas).get('7') == 'Itens obrigatórios e envio'
-          and html_nova.index('Responsável pela avaliação') < html_nova.index('name="obrig_capa"'))
+        t('em 8 etapas, uma por vez', [n for n, _ in etapas] == list('12345678')
+          and html_nova.count('data-ir=') == 8, etapas)
+        t('os itens obrigatórios vêm depois do responsável, e o contrato é o último passo',
+          dict(etapas).get('7') == 'Itens obrigatórios' and dict(etapas).get('8') == 'Contrato com o cliente'
+          and html_nova.index('Responsável pela avaliação') < html_nova.index('name="obrig_capa"')
+          < html_nova.index('name="cliente_cpf"') < html_nova.index('id="rn-enviar"'))
+        t('o contrato pede aparelho novo, nº da venda do Vivo Go, cliente com CPF, cidade e assinatura do cliente',
+          all(f'name="{c}"' in html_nova for c in ('aparelho_novo', 'numero_venda', 'cliente_nome', 'cliente_cpf',
+                                                   'contrato_cidade', 'assinatura_cliente'))
+          and 'rn-selo-vivo">Vivo Go' in html_nova and 'TERMO DE TRANSFERÊNCIA DE PROPRIEDADE DE APARELHO' in html_nova
+          and 'id="rn-assinatura-cliente"' in html_nova)
+        t('o nº da venda saiu do responsável: fica só no contrato', html_nova.count('name="numero_venda"') == 1
+          and html_nova.index('name="numero_venda"') > html_nova.index('data-etapa="8"'))
+        t('sem matrícula; com o CPF do vendedor, que vem do cadastro', 'name="matricula"' not in html_nova
+          and 'Matrícula' not in html_nova
+          and f'value="{CPF_VENDEDOR[:3]}.{CPF_VENDEDOR[3:6]}.{CPF_VENDEDOR[6:9]}-{CPF_VENDEDOR[9:]}"' in html_nova)
+        t('o passo a passo de cada item abre ao passar o mouse (os 12 passos vão prontos na tela)',
+          html_nova.count('<template id="rn-passo-') == 12 and 'id="rn-passo-pop"' in html_nova
+          and 'data-passos="bateria pecas"' in html_nova and 'data-passos="acessorios"' in html_nova
+          and 'data-passos="cameras faceid"' in html_nova and 'Nunca aceite o aparelho com iCloud ativo!' in html_nova)
+        t('cada funcionalidade e item estético tem o campo para descrever a observação',
+          all(f'name="obs_func_{c}"' in html_nova for c, *_ in checklist.FUNCIONALIDADES)
+          and all(f'name="obs_est_{c}"' in html_nova for c, *_ in checklist.ESTETICA))
+        t('botão que leva à consulta oficial do IMEI', 'id="rn-consultar-imei"' in html_nova
+          and f'href="{conteudo.CONSULTA_IMEI_URL}"' in html_nova)
         t('o cliente decide se segue depois de ver o valor, antes das fotos',
           html_nova.index('id="rn-valor"') < html_nova.index('name="cliente_segue" value="SIM"')
           < html_nova.index('name="foto_frente"'))
@@ -291,8 +330,20 @@ try:
         t('modelo fora da tabela é recusado', 'não está na tabela de avaliação' in html and Renova.objects.count() == antes)
 
         print('\n== ENVIO: VAI PARA O GERENTE ==')
+        sem_nota = checklist_completo(saude_bateria='82', est_laterais='OBS')
+        html = c_vendedor.post('/renova/nova/', sem_nota).content.decode()
+        t('"com observação" sem descrever não grava e volta na etapa da estética',
+          'Descreva a observação (condição estética): Laterais.' in html and 'data-etapa-inicial="3"' in html
+          and Renova.objects.count() == antes)
+        html = c_vendedor.post('/renova/nova/', checklist_completo(numero_venda='', assinatura_cliente='',
+                                                                   cliente_cpf='123.456.789-00')).content.decode()
+        t('sem nº da venda do Vivo Go, sem assinatura do cliente ou com CPF errado não grava (volta no contrato)',
+          'Informe o nº da venda no Vivo Go.' in html and 'O cliente precisa assinar o contrato no quadro.' in html
+          and 'CPF do cliente inválido' in html and 'data-etapa-inicial="8"' in html and Renova.objects.count() == antes)
+        notificar.reset_mock()
         r = c_vendedor.post('/renova/nova/', checklist_completo(
-            saude_bateria='82', est_laterais='OBS', observacoes='Risco na lateral esquerda', padrao='A',
+            saude_bateria='82', est_laterais='OBS', obs_est_laterais='Risco na lateral esquerda',
+            obs_est_tela='não vale: a tela está OK', observacoes='', padrao='A', matricula='M123', contrato_empresa='X',
             valor_estimado='99999', parecer=checklist.APROVADO, marca='SAMSUNG', numero_serie='X1',
             foto_tela_ligada=foto('sobre.png', formato='PNG', tamanho=(900, 1600)),
             foto_avaria=[foto('risco1.jpg'), foto('risco2.jpg')]))
@@ -307,8 +358,18 @@ try:
               and IMEI_1 not in fotos[0].arquivo.name, (gravada.format, gravada.size, fotos[0].arquivo.name))
         with Image.open(fotos_memoria.open(fotos[3].arquivo.name)) as gravada:
             t('PNG vira JPEG também', gravada.format == 'JPEG' and gravada.size == (900, 1600), gravada.size)
-        t('grava a avaliação e abre o detalhe dela', renova is not None and r.status_code == 302
-          and r['Location'] == f'/renova/{renova.pk}/', r.get('Location'))
+        t('grava a avaliação e já abre a etiqueta (antes da aprovação)', renova is not None and r.status_code == 302
+          and r['Location'] == f'/renova/{renova.pk}/etiqueta/?novo=1', r.get('Location'))
+        t('a observação fica no item (a do item OK é ignorada) e a matrícula não é mais gravada',
+          renova.observacoes_itens == {'estetica': {'laterais': 'Risco na lateral esquerda'}} and renova.matricula == '',
+          (renova.observacoes_itens, renova.matricula))
+        t('o contrato fica gravado: cliente, CPFs só com números, venda do Vivo Go, cidade, empresa e assinatura',
+          (renova.cliente_nome, renova.cliente_cpf, renova.vendedor_cpf, renova.numero_venda, renova.aparelho_novo,
+           renova.contrato_cidade, renova.contrato_empresa) == ('ZZ Cliente Renova', CPF_CLIENTE, CPF_VENDEDOR,
+                                                                 'VG-2026-000123', 'iPhone 16 128GB', 'Vila Velha',
+                                                                 cfg.contrato_empresa)
+          and renova.assinatura_cliente == ASSINATURA_CLIENTE and renova.tem_contrato,
+          (renova.cliente_cpf, renova.vendedor_cpf, renova.contrato_empresa))
         t('fica aguardando a aprovação do gerente, sem chamado', renova.aprovacao == Renova.AGUARDANDO_GERENTE
           and renova.chamado_id is None and not aviso_criado.called)
         t('o padrão sai das avarias: bateria 82% e lateral com observação = B',
@@ -317,12 +378,32 @@ try:
         t('o valor sai da tabela no padrão B (A − 20%), e o que veio da tela é ignorado',
           renova.valor_estimado == 2080 and renova.preco_tabela_id == preco.pk and renova.marca == 'APPLE'
           and renova.numero_serie == '', (renova.valor_estimado, renova.marca))
-        t('o gerente da loja é avisado no sino; o da outra loja não',
-          UserNotification.objects.filter(user=gerente, notification__title__contains=renova.codigo).exists()
-          and not UserNotification.objects.filter(user=gerente_outra, notification__title__contains=renova.codigo).exists())
+        envio = notificar.call_args_list[-1] if notificar.call_args_list else None
+        destinos = set(u.pk for u in envio.args[0]) if envio else set()
+        t('o envio avisa (sino e push) o gerente da loja e o financeiro — num envio só; o da outra loja e o vendedor não',
+          notificar.call_count == 1 and destinos == {gerente.pk, financeiro.pk}
+          and set(envio.kwargs['channels']) >= {'in_app', 'push'} and 'email' not in envio.kwargs['channels']
+          and renova.codigo in envio.args[1] and envio.kwargs['action_url'] == f'/renova/{renova.pk}/',
+          (notificar.call_count, destinos, envio.kwargs if envio else None))
         t('menu do gerente mostra a troca a aprovar', menu(gerente)['renova_aguardando'] == 1, menu(gerente))
 
-        t('antes da aprovação não há etiqueta', c_vendedor.get(f'/renova/{renova.pk}/etiqueta/').status_code == 302)
+        r = c_vendedor.get(f'/renova/{renova.pk}/etiqueta/?novo=1')
+        html = r.content.decode()
+        t('a etiqueta já sai antes da aprovação, com o nº da venda e "Aprovado por" em branco', r.status_code == 200
+          and 'Aguardando a aprovação do gerente' in html and 'VG-2026-000123' in html and 'Nº venda Vivo Go' in html
+          and re.search(r'Aprovado por</span>\s*<span[^>]*></span>', html) is not None
+          and f'/renova/{renova.pk}/contrato/' in html and 'Risco na lateral esquerda' in html)
+        r = c_vendedor.get(f'/renova/{renova.pk}/contrato/')
+        html = r.content.decode()
+        cpf_cliente_formatado = f'{CPF_CLIENTE[:3]}.{CPF_CLIENTE[3:6]}.{CPF_CLIENTE[6:9]}-{CPF_CLIENTE[9:]}'
+        t('o contrato abre para imprimir, nas duas vias, com os dados e as duas assinaturas', r.status_code == 200
+          and html.count('TERMO DE TRANSFERÊNCIA DE PROPRIEDADE DE APARELHO') == 2
+          and 'Via do cliente' in html and 'Via da loja' in html and cpf_cliente_formatado in html
+          and 'ZZ Cliente Renova' in html and 'VG-2026-000123' in html and 'iPhone 16 128GB' in html
+          and '>Vila Velha</span>, ' in html and IMEI_1 in html and '82%' in html and html.count(ASSINATURA_CLIENTE) == 2
+          and html.count(ASSINATURA) >= 2 and 'REDE CONFIANÇA TELECOM LTDA.' in html
+          and 'renova/contrato-logo.png' in html)
+        t('o gerente de outra loja não abre o contrato', c_gerente_outra.get(f'/renova/{renova.pk}/contrato/').status_code == 302)
         c_recebe.post(f'/renova/{renova.pk}/recebimento/', {'situacao': Renova.CHEGOU})
         renova.refresh_from_db()
         t('nem marcação de chegada', renova.recebimento == Renova.PENDENTE)
@@ -332,7 +413,11 @@ try:
         html = c_gerente.get(f'/renova/{renova.pk}/').content.decode()
         t('o gerente vê os motivos do padrão e os botões de aprovar e reprovar',
           'value="aprovar"' in html and 'value="reprovar"' in html and 'Laterais com observação' in html)
-        t('e as fotos do aparelho', html.count('data-galeria') == 6 and fotos[0].arquivo.url in html)
+        t('e a observação do item, o contrato (CPF do cliente mascarado) e a consulta do IMEI; sem matrícula',
+          'Risco na lateral esquerda' in html and f'***.{CPF_CLIENTE[3:6]}.{CPF_CLIENTE[6:9]}-**' in html
+          and cpf_cliente_formatado not in html and CPF_CLIENTE not in html and f'/renova/{renova.pk}/contrato/' in html
+          and conteudo.CONSULTA_IMEI_URL in html and 'Matrícula' not in html and f'/renova/{renova.pk}/etiqueta/' in html)
+        t('e as fotos do aparelho', html.count('class="rn-galeria-item" data-galeria') == 6 and fotos[0].arquivo.url in html)
         html = c_gerente.get('/renova/').content.decode()
         t('e a lista dele leva direto para aprovar', f'/renova/{renova.pk}/#aprovacao' in html
           and c_gerente.get('/renova/').context['kpis']['a_aprovar'] == 1)
@@ -347,6 +432,7 @@ try:
         t('reprovar sem dizer o motivo não vale', renova.aprovacao == Renova.AGUARDANDO_GERENTE)
 
         print('\n== APROVAÇÃO: ABRE O CHAMADO ==')
+        notificar.reset_mock()
         r = c_gerente.post(f'/renova/{renova.pk}/aprovacao/', {'decisao': 'aprovar', 'observacao': 'Pode trocar'}, follow=True)
         renova.refresh_from_db()
         chamado = renova.chamado
@@ -358,10 +444,19 @@ try:
           and IMEI_1 in chamado.description and 'Por que este padrão: Bateria em 82%' in chamado.description
           and 'Aprovada pelo gerente por ZZRenova Gerente' in chamado.description and 'Nº de série' not in chamado.description
           and 'Fotos do aparelho: 6 — Frente, Traseira, Laterais, Tela ligada, Avaria, Avaria' in chamado.description)
+        t('o chamado leva a observação do item e a venda do Vivo Go, sem matrícula nem os dados do cliente',
+          chamado is not None and '• Laterais: Com observação — Risco na lateral esquerda' in chamado.description
+          and 'Nº da venda (Vivo Go): VG-2026-000123' in chamado.description and 'matrícula' not in chamado.description
+          and CPF_CLIENTE not in chamado.description and cpf_cliente_formatado not in chamado.description
+          and 'assinado pelo cliente' in chamado.description)
         t('e o histórico e os avisos de sempre do chamado', TicketLog.objects.filter(ticket=chamado, new_status='ABERTO').exists()
           and aviso_criado.called and webhooks.called)
-        t('o vendedor é avisado no sino', UserNotification.objects.filter(
-            user=vendedor, notification__title__contains=renova.codigo).exists())
+        decisao = notificar.call_args_list[-1] if notificar.call_args_list else None
+        destinos = set(u.pk for u in decisao.args[0]) if decisao else set()
+        t('a aprovação avisa o vendedor e o financeiro (sino e push); quem aprovou não recebe o próprio aviso',
+          notificar.call_count == 1 and destinos == {vendedor.pk, financeiro.pk}
+          and 'push' in decisao.kwargs['channels'] and 'aprovada' in decisao.args[1]
+          and 'Chamado #' in decisao.args[2], (notificar.call_count, destinos))
         c_gerente.post(f'/renova/{renova.pk}/aprovacao/', {'decisao': 'reprovar', 'observacao': 'mudei de ideia'})
         renova.refresh_from_db()
         t('decisão tomada não muda mais', renova.aprovacao == Renova.APROVADA)
@@ -392,18 +487,26 @@ try:
         reprovada = Renova.objects.filter(criado_por=vendedor).order_by('-pk').first()
         t('bateria 65% e câmera que não funciona = D',
           reprovada.padrao == 'D' and reprovada.valor_estimado == 1040, (reprovada.padrao, reprovada.valor_estimado))
-        c_gerente.post(f'/renova/{reprovada.pk}/aprovacao/', {'decisao': 'reprovar', 'observacao': 'Cliente não aceitou o valor'})
+        t('item que não funciona: descrever é opcional', reprovada.funcionalidades.get('cameras') == 'NAO'
+          and reprovada.observacoes_itens == {})
+        notificar.reset_mock()
+        c_admin.post(f'/renova/{reprovada.pk}/aprovacao/', {'decisao': 'reprovar', 'observacao': 'Cliente não aceitou o valor'})
         reprovada.refresh_from_db()
         t('reprovada: sem chamado e marcada como não aprovada', reprovada.aprovacao == Renova.REPROVADA
           and reprovada.parecer == checklist.NAO_APROVADO and reprovada.chamado_id is None)
-        t('o vendedor fica sabendo o motivo', UserNotification.objects.filter(
-            user=vendedor, notification__message__contains='Cliente não aceitou o valor').exists())
+        decisao = notificar.call_args_list[-1] if notificar.call_args_list else None
+        destinos = set(u.pk for u in decisao.args[0]) if decisao else set()
+        t('a reprovação avisa o vendedor, o financeiro e o gerente da loja, com o motivo',
+          destinos == {vendedor.pk, financeiro.pk, gerente.pk} and 'Cliente não aceitou o valor' in decisao.args[2],
+          destinos)
         html = c_recebe.get(f'/renova/{reprovada.pk}/').content.decode()
         t('aparece como "Sem troca", sem os botões de chegada', 'Sem troca' in html and 'value="CHEGOU"' not in html)
         c_recebe.post(f'/renova/{reprovada.pk}/recebimento/', {'situacao': Renova.CHEGOU})
         reprovada.refresh_from_db()
         t('ninguém marca chegada nem imprime etiqueta', reprovada.recebimento == Renova.PENDENTE
           and c_vendedor.get(f'/renova/{reprovada.pk}/etiqueta/').status_code == 302)
+        html = c_vendedor.get(f'/renova/{reprovada.pk}/contrato/').content.decode()
+        t('o contrato da reprovada sai marcado como sem valor', 'ct-sem-valor' in html and 'Troca reprovada pelo gerente' in html)
 
         print('\n== SEM CATEGORIA / CHAMADO QUE NÃO ABRIU ==')
         cfg.categoria = None
@@ -433,6 +536,9 @@ try:
         outro = Renova.objects.create(criado_por=admin, marca='APPLE', modelo='iPhone 13', armazenamento='128GB',
                                       imei1=com_digito('35693803564383'), loja=outra_loja, parecer=checklist.APROVADO,
                                       vendedor_nome='ZZ Admin')
+        r = c_admin.get(f'/renova/{outro.pk}/contrato/')
+        t('avaliação de antes do contrato: a tela do contrato volta para a avaliação', r.status_code == 302
+          and r['Location'] == f'/renova/{outro.pk}/' and 'antes do contrato' in c_admin.get(f'/renova/{outro.pk}/').content.decode())
         t('quem faz vê só as próprias', outro.codigo not in c_vendedor.get('/renova/').content.decode()
           and c_vendedor.get(f'/renova/{outro.pk}/').status_code == 302)
         t('o gerente vê as da loja dele, não as de outra', renova.codigo in c_gerente.get('/renova/').content.decode()
@@ -441,6 +547,15 @@ try:
         t('SUPERADMIN, financeiro e quem recebe veem todas',
           all(outro.codigo in c.get('/renova/').content.decode() for c in (c_admin, c_fin, c_recebe)))
         t('busca por código RN-', outro.codigo in c_admin.get(f'/renova/?q={outro.codigo}').content.decode())
+
+        print('\n== Nº DA VENDA (VIVO GO) ==')
+        r = c_vendedor.post(f'/renova/{renova.pk}/venda/', {'numero_venda': '   ', 'voltar': f'/renova/{renova.pk}/'}, follow=True)
+        renova.refresh_from_db()
+        t('não dá para apagar o nº da venda', renova.numero_venda == 'VG-2026-000123'
+          and 'obrigatório' in r.content.decode())
+        c_vendedor.post(f'/renova/{renova.pk}/venda/', {'numero_venda': 'VG-2026-000999'})
+        renova.refresh_from_db()
+        t('mas dá para corrigir', renova.numero_venda == 'VG-2026-000999')
 
         print('\n== QUADRO DE GESTÃO ==')
         t('só o financeiro e o SUPERADMIN abrem', c_fin.get('/renova/gestao/').status_code == 200
@@ -489,6 +604,25 @@ try:
         cfg.refresh_from_db()
         t('quem não é SUPERADMIN não muda nada', r.status_code == 302 and cfg.habilitados.count() == 2
           and cfg.financeiro.count() == 2 and cfg.categoria_id == categoria.pk)
+
+        cnpj_loja = '11222333000181'
+        c_admin.post('/renova/configuracao/', {
+            'secao': 'contrato', 'contrato_empresa': 'REDE CONFIANÇA TELECOM LTDA.', 'contrato_cnpj': '11.222.333/0001-82',
+            'loja_id': [str(loja.pk), str(outra_loja.pk)], f'cidade_{loja.pk}': ' Vila  Velha ',
+            f'cnpj_{loja.pk}': cnpj_loja, f'cidade_{outra_loja.pk}': '', f'cnpj_{outra_loja.pk}': '123'})
+        cfg.refresh_from_db()
+        t('contrato: CNPJ inválido não entra; cidade e CNPJ válidos da loja entram (formatados)',
+          cfg.contrato_cnpj == '' and cfg.dados_da_loja(loja.pk) == ('Vila Velha', '11.222.333/0001-81')
+          and str(outra_loja.pk) not in cfg.contrato_lojas, (cfg.contrato_cnpj, cfg.contrato_lojas))
+        html = c_vendedor.get('/renova/nova/').content.decode()
+        t('e a tela nova já traz a cidade da loja no contrato', 'name="contrato_cidade" value="Vila Velha"' in html
+          and '11.222.333/0001-81' in html)
+        caches['local'].clear()
+        c_vendedor.post('/renova/nova/', checklist_completo(imei1=com_digito('35693803564385')))
+        com_cnpj = Renova.objects.filter(criado_por=vendedor).order_by('-pk').first()
+        t('o contrato novo guarda o CNPJ da loja', com_cnpj.contrato_cnpj == '11.222.333/0001-81'
+          and '(CNPJ <span data-c="cnpj">11.222.333/0001-81</span>)' in c_vendedor.get(f'/renova/{com_cnpj.pk}/contrato/').content.decode(),
+          com_cnpj.contrato_cnpj)
 
         print('\n== MATERIAIS IMPRESSOS ==')
         from django.core.files.storage import InMemoryStorage
@@ -548,7 +682,27 @@ try:
     _, erros = ler_checklist(checklist_completo(saude_bateria=''), lojas=lojas, precos=tabela)
     t('sem saúde da bateria não conclui', 'saude_bateria' in erros, erros)
     _, erros = ler_checklist(checklist_completo(func_bateria='OBS', observacoes=''), lojas=lojas, precos=tabela)
-    t('item com observação pede a observação', 'observacoes' in erros, erros)
+    t('item com observação pede a descrição dele (não as observações gerais)',
+      'obs_funcionalidades' in erros and 'observacoes' not in erros, erros)
+    dados, erros = ler_checklist(checklist_completo(func_bateria='OBS', obs_func_bateria='  Bateria   em manutenção ',
+                                                    func_audio='NAO'), lojas=lojas, precos=tabela)
+    t('descrita, vale; e o item que não funciona não exige descrição', not erros
+      and dados['observacoes_itens'] == {'funcionalidades': {'bateria': 'Bateria em manutenção'}}, (erros, dados.get('observacoes_itens')))
+    for campo, valor, rotulo in (('numero_venda', '', 'sem nº da venda do Vivo Go'),
+                                 ('numero_venda', 'x' * 41, 'nº da venda comprido demais'),
+                                 ('aparelho_novo', '', 'sem o aparelho novo'),
+                                 ('cliente_nome', ' ', 'sem o nome do cliente'),
+                                 ('cliente_cpf', '123.456.789-00', 'CPF do cliente com dígito errado'),
+                                 ('cliente_cpf', '111.111.111-11', 'CPF do cliente repetido'),
+                                 ('vendedor_cpf', '', 'sem CPF do vendedor'),
+                                 ('contrato_cidade', '', 'sem cidade'),
+                                 ('assinatura_cliente', 'data:image/png;base64,xx', 'sem assinatura do cliente')):
+        _, erros = ler_checklist(checklist_completo(**{campo: valor}), lojas=lojas, precos=tabela)
+        t(f'contrato: {rotulo} não conclui', campo in erros, erros)
+    dados, _ = ler_checklist(checklist_completo(matricula='M1'), lojas=lojas, precos=tabela)
+    t('matrícula não é mais lida', 'matricula' not in dados)
+    t('CPF e CNPJ: dígitos verificadores', cpf_valido(CPF_CLIENTE) and not cpf_valido('12345678900')
+      and cnpj_valido('11.222.333/0001-81') and not cnpj_valido('11.222.333/0001-82') and not cnpj_valido('00000000000000'))
     dados, erros = ler_checklist(checklist_completo(parecer=checklist.NAO_APROVADO), lojas=lojas, precos=tabela)
     t('parecer enviado pela tela é ignorado', not erros and dados['parecer'] == checklist.APROVADO, erros)
     _, erros = ler_checklist(checklist_completo(data_avaliacao='2999-01-01'), lojas=lojas, precos=tabela)
@@ -559,7 +713,8 @@ try:
     t('sem o cliente dizer que segue não conclui', 'cliente_segue' in erros, erros)
     _, erros = ler_checklist(checklist_completo(loja='999999999'), lojas=lojas, precos=tabela)
     t('loja fora da lista é recusada', 'loja' in erros, erros)
-    t('o push do comentário do chamado foi sempre dublê (nada saiu)', isinstance(push, mock.MagicMock))
+    t('o push do comentário do chamado e os avisos do Renova foram sempre dublês (nada saiu)',
+      isinstance(push, mock.MagicMock) and isinstance(notificar, mock.MagicMock))
 finally:
     transaction.set_rollback(True)
     marcador.__exit__(None, None, None)

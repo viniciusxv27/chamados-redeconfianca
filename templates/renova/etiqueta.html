@@ -46,14 +46,17 @@
 {% if novo %}
 <div class="rn-card p-4 mb-4 flex flex-wrap items-center gap-3" style="background:#ECFDF5;border-color:#A7F3D0">
     <span class="w-10 h-10 rounded-xl grid place-items-center text-white" style="background:#059669"><i class="fa-solid fa-check"></i></span>
-    <div class="flex-1 min-w-0">
-        <p class="font-bold text-emerald-900">Avaliação {{ renova.codigo }} concluída</p>
+    <div class="flex-1 min-w-0" style="flex-basis:14rem">
+        <p class="font-bold text-emerald-900">Avaliação {{ renova.codigo }} enviada para o gerente aprovar</p>
         <p class="text-xs text-emerald-800">
             {% if renova.chamado_id %}Chamado <a href="/tickets/{{ renova.chamado_id }}/" class="font-bold underline">#{{ renova.chamado_id }}</a> aberto para o setor que recebe.
-            {% else %}O chamado não abriu — tente de novo pela <a href="{% url 'renova:detalhe' renova.pk %}" class="font-bold underline">tela da avaliação</a>.{% endif %}
-            Agora imprima a etiqueta e cole no aparelho.
+            {% elif renova.aguardando_aprovacao %}O chamado abre quando o gerente aprovar.{% endif %}
+            Agora imprima a etiqueta e cole no aparelho{% if renova.tem_contrato %}, e imprima o contrato (uma via fica com o cliente){% endif %}.
         </p>
     </div>
+    {% if renova.tem_contrato %}
+    <a href="{% url 'renova:contrato' renova.pk %}" class="rn-btn rn-btn-primario text-xs"><i class="fa-solid fa-file-signature"></i>Imprimir contrato</a>
+    {% endif %}
 </div>
 {% endif %}
 
@@ -101,7 +104,7 @@
                 </div>
                 {# Os dois números que ligam o aparelho ao resto: a venda e o chamado. #}
                 <div class="rn-etiqueta-campo">
-                    <span class="rn-etiqueta-rotulo">Nº da venda</span>
+                    <span class="rn-etiqueta-rotulo">Nº venda Vivo Go</span>
                     <span class="rn-etiqueta-valor mono" contenteditable="true" spellcheck="false">{{ renova.numero_venda }}</span>
                 </div>
                 <div class="rn-etiqueta-campo">
@@ -118,11 +121,11 @@
                 </div>
                 <div class="rn-etiqueta-campo largo">
                     <span class="rn-etiqueta-rotulo">Aprovado por</span>
-                    <span class="rn-etiqueta-valor" contenteditable="true" spellcheck="false">{{ renova.aprovacao_por.full_name|default:"" }}</span>
+                    <span class="rn-etiqueta-valor" contenteditable="true" spellcheck="false">{% if renova.aprovada %}{{ renova.aprovacao_por.full_name|default:"" }}{% endif %}</span>
                 </div>
                 <div class="rn-etiqueta-campo largo">
                     <span class="rn-etiqueta-rotulo">Observação</span>
-                    <span class="rn-etiqueta-valor" contenteditable="true" spellcheck="false">{{ renova.observacoes|truncatechars:180 }}</span>
+                    <span class="rn-etiqueta-valor" contenteditable="true" spellcheck="false">{{ renova.observacoes_resumo|truncatechars:180 }}</span>
                 </div>
             </div>
 
@@ -140,20 +143,33 @@
                 Toque em qualquer campo da etiqueta para completar ou corrigir. O que você mudar vale só para esta
                 impressão — a avaliação continua como foi salva.
             </p>
+            {% if renova.aguardando_aprovacao %}
+            <p class="text-xs mt-3 rounded-lg p-2.5" style="background:#FFFBEB;color:#92400E">
+                <i class="fa-solid fa-hourglass-half mr-1"></i><b>Aguardando a aprovação do gerente</b>{% if gerentes %} ({% for g in gerentes %}{{ g.full_name|default:g.username }}{% if not forloop.last %}, {% endif %}{% endfor %}){% endif %}.
+                "Aprovado por" sai em branco: o gerente assina à mão, ou reimprima depois da aprovação.
+            </p>
+            {% endif %}
             <button type="button" id="rn-imprimir" class="rn-btn rn-btn-primario w-full mt-4"><i class="fa-solid fa-print"></i>Imprimir etiqueta</button>
         </section>
+        {% if renova.tem_contrato %}
+        <section class="rn-card p-4">
+            <h2 class="rn-h2">Contrato</h2>
+            <p class="text-sm text-gray-600 mt-2">O termo de transferência assinado por {{ renova.cliente_nome }}: imprima as duas vias, uma fica com o cliente.</p>
+            <a href="{% url 'renova:contrato' renova.pk %}" class="rn-btn rn-btn-claro w-full mt-3 text-xs"><i class="fa-solid fa-file-signature"></i>Abrir o contrato</a>
+        </section>
+        {% endif %}
         {% if pode_editar_venda %}
         <section class="rn-card p-4" id="venda">
-            <h2 class="rn-h2">Nº da venda</h2>
+            <h2 class="rn-h2">Nº da venda no Vivo Go</h2>
             <p class="text-sm text-gray-600 mt-2">
                 {% if renova.numero_venda %}Já está na etiqueta. Se mudou, corrija aqui para ficar salvo na avaliação.
-                {% else %}A venda já saiu? Informe aqui: fica salvo na avaliação e entra na etiqueta — digitado só na etiqueta, vale só para esta impressão.{% endif %}
+                {% else %}Informe aqui: fica salvo na avaliação e entra na etiqueta — digitado só na etiqueta, vale só para esta impressão.{% endif %}
             </p>
             <form method="post" action="{% url 'renova:venda' renova.pk %}" class="mt-3 flex gap-2">
                 {% csrf_token %}
                 <input type="hidden" name="voltar" value="{{ voltar }}">
                 <input type="text" name="numero_venda" value="{{ renova.numero_venda }}" maxlength="{{ numero_venda_max }}"
-                       autocomplete="off" spellcheck="false" aria-label="Nº da venda" placeholder="Nº da venda"
+                       autocomplete="off" spellcheck="false" required aria-label="Nº da venda no Vivo Go" placeholder="Nº da venda no Vivo Go"
                        class="rn-caixa-obs font-mono flex-1 min-w-0">
                 <button type="submit" class="rn-btn rn-btn-primario text-xs">{% if renova.numero_venda %}Corrigir{% else %}Salvar{% endif %}</button>
             </form>

@@ -87,6 +87,16 @@ def _config(request, modo, urls, **extra):
     return config
 
 
+def _pessoas_para_editar():
+    """Todas as pessoas ativas, para o SUPERADMIN abrir a rotina de qualquer uma (quem já tem rotina primeiro)."""
+    totais = dict(RotinaGerencial.objects.annotate(total=Count('atividades')).values_list('user_id', 'total'))
+    pessoas = list(User.objects.filter(is_active=True).select_related('sector').order_by('first_name', 'last_name'))
+    for pessoa in pessoas:
+        pessoa.rotina_total = totais.get(pessoa.id)
+    pessoas.sort(key=lambda pessoa: pessoa.rotina_total is None)
+    return pessoas
+
+
 def _urls_rotina(usuario_id=None):
     listar = reverse('rotina:api_rotina')
     if usuario_id:
@@ -123,7 +133,8 @@ def minha(request):
     com_domingo = bool(dados and dados['semana']['com_domingo'])
     contexto = _contexto(request, 'minha', com_domingo=com_domingo, rotina=rotina, total_atividades=total,
                          mostrar_calendario=mostrar,
-                         whatsapp_ligado=bool(rotina and rotina.avisar_whatsapp and servicos.tem_telefone(request.user)))
+                         whatsapp_ligado=bool(rotina and rotina.avisar_whatsapp and servicos.tem_telefone(request.user)),
+                         pessoas_para_editar=_pessoas_para_editar() if e_superadmin(request.user) else [])
     if mostrar:
         destaque = _numero(request.GET.get('atividade'), minimo=1)
         if destaque and not any(a['id'] == destaque for a in dados['atividades']):
@@ -172,6 +183,7 @@ def gestao(request):
         com_rotina=set(RotinaGerencial.objects.values_list('user_id', flat=True)),
         candidatos=(User.objects.filter(is_active=True).select_related('sector')
                     .order_by('first_name', 'last_name')),
+        pessoas_para_editar=_pessoas_para_editar(),
     ))
 
 
@@ -233,9 +245,14 @@ def gestao_pessoa(request, user_id):
     rotina = (RotinaGerencial.objects.select_related('user', 'modelo_origem', 'atualizado_por')
               .filter(user=pessoa).first())
     if rotina is None:
-        messages.info(request, f'{servicos.nome_de(pessoa)} ainda não tem rotina gerencial. '
-                               'Adicione a pessoa primeiro.')
-        return redirect('rotina:gestao')
+        if not pessoa.is_active:
+            messages.info(request, f'{servicos.nome_de(pessoa)} está inativa no portal e não tem rotina gerencial.')
+            return redirect('rotina:gestao')
+        # Quem ainda não tem rotina: a tela oferece criar ali mesmo (com um modelo ou vazia) e já abre a semana.
+        return render(request, 'rotina/pessoa_sem_rotina.html', _contexto(
+            request, 'gestao', pessoa=pessoa, pessoas_para_editar=_pessoas_para_editar(),
+            modelos=(ModeloRotina.objects.filter(ativo=True).annotate(total=Count('atividades'))
+                     .order_by('criado_em', 'id'))))
 
     dados = servicos.payload_rotina(rotina, request.user)
     com_domingo = dados['semana']['com_domingo']
@@ -246,7 +263,7 @@ def gestao_pessoa(request, user_id):
     return render(request, 'rotina/editor.html', _contexto(
         request, 'gestao', com_domingo=com_domingo,
         modo='gestao', pessoa=pessoa, rotina=rotina, dados=dados, semana=dados['semana'],
-        outras=outras, tem_telefone=dados['rotina']['tem_telefone'],
+        outras=outras, tem_telefone=dados['rotina']['tem_telefone'], pessoas_para_editar=_pessoas_para_editar(),
         modelos=ModeloRotina.objects.annotate(total=Count('atividades')).order_by('-ativo', 'nome'),
         config=_config(request, 'gestao', _urls_rotina(pessoa.id),
                        podeCriar=True, podeTravar=True, usuario=pessoa.id, domingo=com_domingo,

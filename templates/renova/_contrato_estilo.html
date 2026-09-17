@@ -1,0 +1,54 @@
+{% comment %}
+Folha do termo de transferência — a mesma na prévia da última etapa e na página de impressão.
+É "papel": fica clara também no tema escuro. Na tela acompanha a largura (o texto nunca fica
+ilegível no celular); na impressão vira A4, como o .docx do contrato.
+{% endcomment %}
+<style>
+    .ct-folha { position: relative; width: 100%; max-width: 794px; margin: 0 auto; background: #fff; color: #111;
+                font-family: Arial, Helvetica, sans-serif; container-type: inline-size; overflow: hidden;
+                -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .ct-topo { position: relative; width: 100%; aspect-ratio: 210 / 34; }
+    .ct-faixa-rosa { position: absolute; left: 11.1%; right: 0; top: 0; height: 37.4%; background: #EB3C70;
+                     border-bottom-left-radius: 2.2% 31%; }
+    .ct-faixa-roxa { position: absolute; left: 22.2%; right: 0; top: 20.6%; height: 62%; background: #660099;
+                     border-radius: 1.9% 0 0 1.9% / 14% 0 0 14%; }
+    .ct-faixa-roxa img { position: absolute; left: 6%; top: 50%; height: 56%; width: auto; transform: translateY(-50%); }
+    .ct-corpo { padding: 2.5% 6% 5%; font-size: max(12.5px, 2.02cqw); line-height: 1.3; }
+    .ct-titulo { text-align: center; font-weight: 700; font-size: 1em; letter-spacing: .01em; margin: 1.4em 0 1.6em; }
+    .ct-local-data { text-align: right; margin-bottom: .4em; }
+    .ct-subtitulo { font-size: 1.17em; font-weight: 700; margin: .2em 0 1em; }
+    .ct-dados { display: grid; gap: .85em; margin-bottom: 2em; }
+    .ct-dados div { display: flex; flex-wrap: wrap; column-gap: .35em; }
+    .ct-dados dt { font-weight: 700; }
+    .ct-texto { text-align: justify; hyphens: auto; margin-bottom: 1.2em; }
+    .ct-vazio { display: inline-block; min-width: 9em; color: transparent; border-bottom: 1px solid #555; line-height: 1; }
+    .ct-cnpj[hidden] { display: none !important; }
+    .ct-assinaturas { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3em 8%; margin-top: 3.2em; }
+    .ct-assinatura { text-align: center; min-width: 0; }
+    .ct-assinatura-img { height: 5.2em; display: flex; align-items: flex-end; justify-content: center; }
+    .ct-assinatura-img img { max-height: 100%; max-width: 100%; object-fit: contain; }
+    .ct-assinatura-img img[hidden] { display: none !important; }
+    .ct-assinatura-linha { border-top: 1px solid #111; margin: 0 4%; padding-top: .45em; font-size: .75em; letter-spacing: .02em; }
+    .ct-assinatura-nome { font-size: .8em; margin-top: .25em; color: #333; overflow-wrap: anywhere; }
+    .ct-rodape { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .3em 1em; padding: 0 6% 3.5%;
+                 font-size: max(10px, 1.45cqw); color: #777; }
+    .ct-rodape b { color: #444; }
+    .ct-sem-valor::after { content: 'SEM VALOR — TROCA REPROVADA'; position: absolute; left: 50%; top: 46%; white-space: nowrap;
+                           transform: translate(-50%, -50%) rotate(-28deg); font: 800 max(20px, 5.4cqw) Arial, sans-serif;
+                           color: rgba(220, 38, 38, .28); border: .12em solid rgba(220, 38, 38, .28); padding: .1em .4em;
+                           pointer-events: none; }
+    @media (max-width: 480px) {
+        .ct-assinaturas { grid-template-columns: minmax(0, 1fr); gap: 1.8em; }
+        .ct-texto { text-align: left; }
+    }
+    @media print {
+        .ct-folha { width: 210mm; max-width: none; height: 297mm; margin: 0; box-shadow: none !important; border: 0 !important;
+                    border-radius: 0 !important; page-break-after: always; break-after: page; }
+        .ct-folha:last-child, .ct-folha.ct-ultima { page-break-after: auto; break-after: auto; }
+        .ct-topo { height: 34mm; aspect-ratio: auto; }
+        .ct-corpo { padding: 9mm 14mm 0; font-size: 12pt; }
+        .ct-assinaturas { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 12mm; }
+        .ct-rodape { position: absolute; left: 0; right: 0; bottom: 0; padding: 0 14mm 9mm; font-size: 8pt; }
+        .ct-sem-valor::after { font-size: 34pt; }
+    }
+</style>

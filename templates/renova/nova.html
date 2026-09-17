@@ -107,7 +107,7 @@
                       background: #fff; border-radius: 1rem; overflow: hidden; box-shadow: 0 30px 60px -20px rgba(0, 0, 0, .5); }
     /* Etapas */
     .rn-etapas { margin-bottom: 1rem; padding: .7rem .8rem .8rem; }
-    .rn-etapas ol { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: .3rem; }
+    .rn-etapas ol { display: grid; grid-template-columns: repeat({{ etapas|length }}, minmax(0, 1fr)); gap: .3rem; }
     .rn-etapa-botao { width: 100%; display: flex; flex-direction: column; align-items: center; gap: .3rem; padding: .25rem .1rem;
                       border-radius: .7rem; color: #8B78A0; font-size: .66rem; font-weight: 700; text-align: center; line-height: 1.15; }
     .rn-etapa-botao:disabled { cursor: default; }
@@ -192,7 +192,77 @@
     html.dark .rn-foto-titulo, html.dark .rn-resumo-final b { color: var(--tema-texto, #e7eaf0); }
     html.dark .rn-foto-desc, html.dark .rn-resumo-final span { color: var(--tema-texto-3, #8b93a5); }
     html.dark .rn-resumo-final div { background: var(--tema-superficie-2, #232a3b); border-color: var(--tema-borda, #313a4f); }
+
+    /* Observação do item marcado: abre na hora, logo abaixo dele */
+    .rn-item-obs { grid-column: 2 / -1; display: grid; gap: .25rem; }
+    .rn-item-obs-rotulo { font-size: .7rem; font-weight: 700; color: #92400E; }
+    .rn-item.rn-marcado-NAO .rn-item-obs-rotulo { color: #991B1B; }
+    .rn-campo-obs { font-size: .85rem; padding: .45rem .65rem; resize: vertical; min-height: 2.6rem; }
+    @media (max-width: 640px) { .rn-item-obs { grid-column: 1 / -1; } }
+    html.dark .rn-item-obs-rotulo { color: #fcd34d; }
+    html.dark .rn-item.rn-marcado-NAO .rn-item-obs-rotulo { color: #fca5a5; }
+
+    /* Passo a passo ao passar o mouse (ou tocar no "?") */
+    [data-passos] { cursor: help; }
+    .rn-passo-ajuda { display: inline-grid; place-items: center; width: 1.3rem; height: 1.3rem; margin-left: .3rem; border-radius: 9999px;
+                      color: #9D4EDD; font-size: .82rem; vertical-align: -.12rem; cursor: pointer; transition: background-color .15s, color .15s; }
+    .rn-passo-ajuda:hover, .rn-passo-ajuda[aria-expanded="true"] { color: #fff; background: #9D4EDD; }
+    .rn-passo-ajuda:focus-visible { outline: 2px solid #9D4EDD; outline-offset: 2px; }
+    .rn-passo-pop { position: fixed; z-index: 75; width: min(23rem, calc(100vw - 1.5rem)); max-height: min(72vh, 32rem); display: flex;
+                    flex-direction: column; background: #fff; border: 1px solid #E1CFF7; border-radius: .95rem; overflow: hidden;
+                    box-shadow: 0 26px 50px -20px rgba(46, 8, 84, .5); animation: rn-entra .15s ease-out; }
+    .rn-passo-pop-topo { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .4rem .45rem .4rem .85rem;
+                         color: #fff; font-size: .66rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase;
+                         background: linear-gradient(90deg, #3C096C, #660099 60%, #7B2CBF); }
+    .rn-passo-pop-fechar { width: 1.9rem; height: 1.9rem; border-radius: .55rem; color: #fff; }
+    .rn-passo-pop-fechar:hover { background: rgba(255, 255, 255, .16); }
+    .rn-passo-pop-corpo { overflow-y: auto; overscroll-behavior: contain; padding: .8rem .95rem; display: grid; gap: 1rem;
+                          font-size: .8rem; line-height: 1.45; color: #45355A; }
+    .rn-passo-pop-corpo h3 { display: flex; align-items: center; gap: .45rem; margin-bottom: .45rem; font-size: .78rem; font-weight: 800;
+                             line-height: 1.25; text-transform: uppercase; letter-spacing: .02em; color: #3C096C; }
+    .rn-passo-pop-corpo h3 i { color: #9D4EDD; }
+    .rn-pop-lista, .rn-pop-lista-num { display: grid; gap: .3rem; }
+    .rn-pop-lista li { position: relative; padding-left: 1rem; }
+    .rn-pop-lista li::before { content: ''; position: absolute; left: .2rem; top: .5rem; width: .35rem; height: .35rem; border-radius: 9999px; background: #9D4EDD; }
+    .rn-pop-lista-num { counter-reset: passo; }
+    .rn-pop-lista-num li { position: relative; padding-left: 1.55rem; counter-increment: passo; }
+    .rn-pop-lista-num li::before { content: counter(passo); position: absolute; left: 0; top: .08rem; width: 1.1rem; height: 1.1rem; border-radius: 9999px;
+                                   display: grid; place-items: center; font-size: .6rem; font-weight: 800; color: #fff; background: #660099; }
+    .rn-pop-faixas { display: grid; gap: .3rem; margin-top: .55rem; padding: .55rem .65rem; border-radius: .7rem; background: #F6EEFF; }
+    .rn-pop-faixas div { display: flex; align-items: center; gap: .45rem; }
+    .rn-pop-ponto { width: .75rem; height: .75rem; border-radius: 9999px; flex-shrink: 0; }
+    .rn-pop-ponto-verde { background: #16A34A; } .rn-pop-ponto-amarelo { background: #EAB308; } .rn-pop-ponto-vermelho { background: #DC2626; }
+    .rn-pop-alerta { display: flex; align-items: flex-start; gap: .5rem; margin-top: .55rem; padding: .5rem .65rem; border-radius: .7rem;
+                     font-weight: 700; color: #581C87; background: #F3E8FF; border: 1px solid #E9D5FF; }
+    .rn-passo-pop-link { display: flex; align-items: center; justify-content: center; gap: .4rem; padding: .55rem; font-size: .72rem;
+                         font-weight: 700; color: #6B21A8; border-top: 1px solid #F0E7FA; }
+    .rn-passo-pop-link:hover { background: #FBF8FF; }
+    html.dark .rn-passo-pop { background: var(--tema-superficie, #1b2130); border-color: rgba(157, 78, 221, .4); }
+    html.dark .rn-passo-pop-corpo { color: var(--tema-texto-2, #b6bdcc); }
+    html.dark .rn-passo-pop-corpo h3 { color: #e9d5ff; }
+    html.dark .rn-pop-faixas { background: rgba(157, 78, 221, .16); }
+    html.dark .rn-pop-alerta { color: #e9d5ff; background: rgba(157, 78, 221, .16); border-color: rgba(157, 78, 221, .35); }
+    html.dark .rn-passo-pop-link { color: #d8b4fe; border-top-color: var(--tema-borda, #313a4f); }
+    html.dark .rn-passo-pop-link:hover { background: var(--tema-superficie-2, #232a3b); }
+
+    /* Consulta do IMEI (fora do portal) */
+    .rn-imei-consulta { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem .8rem; padding: .7rem .85rem; border-radius: .9rem;
+                        background: #FBF8FF; border: 1px dashed #D8C4F0; }
+    .rn-imei-consulta-icone { width: 2.2rem; height: 2.2rem; flex-shrink: 0; display: grid; place-items: center; border-radius: .7rem;
+                              color: #660099; background: #F3E8FF; }
+    .rn-imei-consulta p b { color: #3C096C; }
+    html.dark .rn-imei-consulta { background: var(--tema-superficie-2, #232a3b); border-color: rgba(157, 78, 221, .4); }
+    html.dark .rn-imei-consulta-icone { background: rgba(157, 78, 221, .2); color: #d8b4fe; }
+    html.dark .rn-imei-consulta p b { color: #e9d5ff; }
+
+    /* Contrato (etapa 8) */
+    .rn-selo-vivo { display: inline-flex; align-items: center; margin-left: .3rem; padding: .05rem .45rem; border-radius: 9999px; font-size: .6rem;
+                    font-weight: 800; letter-spacing: .03em; color: #fff; background: #660099; vertical-align: .06rem; }
+    .rn-contrato-previa { max-height: 34rem; overflow-y: auto; overscroll-behavior: contain; padding: .75rem; background: #E9E4EF; }
+    .rn-contrato-previa .ct-folha { border-radius: .35rem; box-shadow: 0 14px 30px -22px rgba(46, 8, 84, .6); }
+    html.dark .rn-contrato-previa { background: #0f131c; }
 </style>
+{% include 'renova/_contrato_estilo.html' %}
 {% endblock %}
 
 {% block rn_conteudo %}
@@ -229,6 +299,7 @@
 <form method="post" id="rn-form" enctype="multipart/form-data" novalidate data-etapa-inicial="{{ etapa_inicial }}">
     {% csrf_token %}
     <input type="hidden" name="assinatura" value="{{ valores.assinatura|default:'' }}">
+    <input type="hidden" name="assinatura_cliente" value="{{ valores.assinatura_cliente|default:'' }}">
 
     {# ── 1. Aparelho ─────────────────────────────────────────────────────────── #}
     <section class="rn-etapa rn-secao" data-etapa="1" data-nome="Dados do aparelho">
@@ -282,6 +353,17 @@
                 </label>
             </div>
 
+            <div class="rn-imei-consulta">
+                <span class="rn-imei-consulta-icone"><i class="fa-solid fa-user-shield"></i></span>
+                <div class="min-w-0 flex-1" style="min-width:14rem">
+                    <p class="text-sm"><b>O IMEI tem restrição?</b> Confira antes de seguir (roubo, furto ou extravio).</p>
+                    <p class="rn-dica" id="rn-imei-copiado" aria-live="polite">A consulta oficial (Anatel / ABR Telecom) não se liga ao portal: o botão copia o IMEI 1 e abre o site — cole lá e responda o captcha.</p>
+                </div>
+                <a href="{{ consulta_imei_url }}" target="_blank" rel="noopener" id="rn-consultar-imei" class="rn-btn rn-btn-claro text-xs">
+                    <i class="fa-solid fa-magnifying-glass-location"></i>Consultar IMEI<i class="fa-solid fa-up-right-from-square" style="font-size:.6rem"></i>
+                </a>
+            </div>
+
             <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 items-start">
                 <label class="block">
                     <span class="rn-rotulo">Data da avaliação</span>
@@ -307,7 +389,7 @@
                     {% if erros.loja %}<p class="rn-erro">{{ erros.loja }}</p>{% endif %}
                 </label>
                 <label class="block">
-                    <span class="rn-rotulo">Saúde da bateria (%)</span>
+                    <span class="rn-rotulo" data-passos="bateria">Saúde da bateria (%)<span class="rn-passo-ajuda" role="button" tabindex="0" aria-label="Como ver a saúde da bateria" aria-expanded="false"><i class="fa-solid fa-circle-question"></i></span></span>
                     <input type="number" name="saude_bateria" value="{{ valores.saude_bateria|default:'' }}" min="0" max="100"
                            inputmode="numeric" placeholder="Ex.: 87" class="rn-campo {% if erros.saude_bateria %}rn-invalido{% endif %}">
                     <p class="rn-dica">Ajustes &gt; Bateria &gt; Saúde da bateria.</p>
@@ -318,65 +400,84 @@
     </section>
 
     {# ── 2. Funcionalidades ──────────────────────────────────────────────────── #}
-    <section class="rn-etapa rn-secao {% if erros.funcionalidades %}rn-secao-erro{% endif %}" data-etapa="2" data-nome="Funcionalidades" hidden>
+    <section class="rn-etapa rn-secao {% if erros.funcionalidades or erros.obs_funcionalidades %}rn-secao-erro{% endif %}" data-etapa="2" data-nome="Funcionalidades" hidden>
         <div class="rn-secao-topo"><span class="rn-num">2</span>Funcionalidades</div>
         <div class="rn-erros rn-erros-etapa mx-4 mt-4" role="alert" hidden><ul></ul></div>
         <div class="rn-tri-cabecalho" aria-hidden="true">
             <span></span><span></span>
             <div class="rn-tri">{% for valor, rotulo in opcoes_func %}<span>{{ rotulo }}</span>{% endfor %}</div>
         </div>
-        {% for chave, titulo, descricao, icone, atual in funcionalidades %}
+        {% for item in funcionalidades %}
         <div class="rn-item rn-item-tri">
-            <span class="rn-item-icone"><i class="{{ icone }}"></i></span>
-            <span class="min-w-0"><span class="rn-item-titulo">{{ titulo }}</span><span class="rn-item-desc">{{ descricao }}</span></span>
-            <div class="rn-tri" role="radiogroup" aria-label="{{ titulo }}" data-titulo="{{ titulo }}">
+            <span class="rn-item-icone"><i class="{{ item.icone }}"></i></span>
+            <span class="min-w-0"{% if item.passos %} data-passos="{{ item.passos }}"{% endif %}>
+                <span class="rn-item-titulo">{{ item.titulo }}{% if item.passos %}<span class="rn-passo-ajuda" role="button" tabindex="0" aria-label="Passo a passo: {{ item.titulo }}" aria-expanded="false"><i class="fa-solid fa-circle-question"></i></span>{% endif %}</span>
+                <span class="rn-item-desc">{{ item.descricao }}</span>
+            </span>
+            <div class="rn-tri" role="radiogroup" aria-label="{{ item.titulo }}" data-titulo="{{ item.titulo }}">
                 {% for valor, rotulo in opcoes_func %}
                 <label class="rn-op-{{ valor }}" title="{{ rotulo }}">
-                    <input type="radio" name="func_{{ chave }}" value="{{ valor }}" {% if atual == valor %}checked{% endif %}>
+                    <input type="radio" name="func_{{ item.chave }}" value="{{ valor }}" {% if item.valor == valor %}checked{% endif %}>
                     <span class="rn-quadrado"></span><span class="rn-op-texto">{{ rotulo }}</span>
                 </label>
                 {% endfor %}
             </div>
+            <div class="rn-item-obs" {% if item.valor != 'OBS' and item.valor != 'NAO' %}hidden{% endif %}>
+                <label for="rn-obs-func-{{ item.chave }}" class="rn-item-obs-rotulo">{% if item.valor == 'NAO' %}Descreva o problema (opcional){% else %}Descreva a observação{% endif %}</label>
+                <textarea id="rn-obs-func-{{ item.chave }}" name="obs_func_{{ item.chave }}" rows="2" maxlength="{{ observacao_item_max }}"
+                          placeholder="O que você viu em {{ item.titulo|lower }}?"
+                          class="rn-campo rn-campo-obs {% if erros.obs_funcionalidades and item.valor == 'OBS' and not item.nota %}rn-invalido{% endif %}">{{ item.nota }}</textarea>
+            </div>
         </div>
         {% endfor %}
         {% if erros.funcionalidades %}<p class="rn-erro px-4 pb-3">{{ erros.funcionalidades }}</p>{% endif %}
+        {% if erros.obs_funcionalidades %}<p class="rn-erro px-4 pb-3">{{ erros.obs_funcionalidades }}</p>{% endif %}
     </section>
 
     {# ── 3. Condição estética ───────────────────────────────────────────────── #}
-    <section class="rn-etapa rn-secao {% if erros.estetica %}rn-secao-erro{% endif %}" data-etapa="3" data-nome="Condição estética" hidden>
+    <section class="rn-etapa rn-secao {% if erros.estetica or erros.obs_estetica %}rn-secao-erro{% endif %}" data-etapa="3" data-nome="Condição estética" hidden>
         <div class="rn-secao-topo"><span class="rn-num">3</span>Condição estética</div>
         <div class="rn-erros rn-erros-etapa mx-4 mt-4" role="alert" hidden><ul></ul></div>
         <div class="rn-tri-cabecalho" aria-hidden="true">
             <span></span><span></span>
             <div class="rn-tri">{% for valor, rotulo in opcoes_est %}<span>{{ rotulo }}</span>{% endfor %}</div>
         </div>
-        {% for chave, titulo, descricao, icone, atual in estetica %}
+        {% for item in estetica %}
         <div class="rn-item rn-item-tri">
-            <span class="rn-item-icone"><i class="{{ icone }}"></i></span>
-            <span class="min-w-0"><span class="rn-item-titulo">{{ titulo }}</span><span class="rn-item-desc">{{ descricao }}</span></span>
-            <div class="rn-tri" role="radiogroup" aria-label="{{ titulo }}" data-titulo="{{ titulo }}">
+            <span class="rn-item-icone"><i class="{{ item.icone }}"></i></span>
+            <span class="min-w-0"{% if item.passos %} data-passos="{{ item.passos }}"{% endif %}>
+                <span class="rn-item-titulo">{{ item.titulo }}{% if item.passos %}<span class="rn-passo-ajuda" role="button" tabindex="0" aria-label="Passo a passo: {{ item.titulo }}" aria-expanded="false"><i class="fa-solid fa-circle-question"></i></span>{% endif %}</span>
+                <span class="rn-item-desc">{{ item.descricao }}</span>
+            </span>
+            <div class="rn-tri" role="radiogroup" aria-label="{{ item.titulo }}" data-titulo="{{ item.titulo }}">
                 {% for valor, rotulo in opcoes_est %}
                 <label class="rn-op-{{ valor }}" title="{{ rotulo }}">
-                    <input type="radio" name="est_{{ chave }}" value="{{ valor }}" {% if atual == valor %}checked{% endif %}>
+                    <input type="radio" name="est_{{ item.chave }}" value="{{ valor }}" {% if item.valor == valor %}checked{% endif %}>
                     <span class="rn-quadrado"></span><span class="rn-op-texto">{{ rotulo }}</span>
                 </label>
                 {% endfor %}
             </div>
+            <div class="rn-item-obs" {% if item.valor != 'OBS' and item.valor != 'NAO' %}hidden{% endif %}>
+                <label for="rn-obs-est-{{ item.chave }}" class="rn-item-obs-rotulo">{% if item.valor == 'NAO' %}Descreva o problema (opcional){% else %}Descreva a observação{% endif %}</label>
+                <textarea id="rn-obs-est-{{ item.chave }}" name="obs_est_{{ item.chave }}" rows="2" maxlength="{{ observacao_item_max }}"
+                          placeholder="O que você viu em {{ item.titulo|lower }}?"
+                          class="rn-campo rn-campo-obs {% if erros.obs_estetica and item.valor == 'OBS' and not item.nota %}rn-invalido{% endif %}">{{ item.nota }}</textarea>
+            </div>
         </div>
         {% endfor %}
         {% if erros.estetica %}<p class="rn-erro px-4 pb-3">{{ erros.estetica }}</p>{% endif %}
+        {% if erros.obs_estetica %}<p class="rn-erro px-4 pb-3">{{ erros.obs_estetica }}</p>{% endif %}
     </section>
 
     {# ── 4. Valor e decisão do cliente ──────────────────────────────────────── #}
     <div class="rn-etapa grid gap-4" data-etapa="4" data-nome="Padrão, valor e decisão do cliente" hidden>
         <div class="rn-erros rn-erros-etapa" role="alert" hidden><ul></ul></div>
-        <section class="rn-secao {% if erros.observacoes %}rn-secao-erro{% endif %}">
-            <div class="rn-secao-topo"><span class="rn-num">4</span>Observações gerais</div>
+        <section class="rn-secao">
+            <div class="rn-secao-topo"><span class="rn-num">4</span>Observações gerais <span class="normal-case font-medium tracking-normal opacity-80">(opcional)</span></div>
             <div class="p-4">
                 <textarea name="observacoes" rows="4" maxlength="4000" class="rn-pautado w-full"
-                          placeholder="Conte o que ficou com observação ou não funciona…">{{ valores.observacoes|default:'' }}</textarea>
-                <p class="rn-dica" id="rn-obs-dica"></p>
-                {% if erros.observacoes %}<p class="rn-erro">{{ erros.observacoes }}</p>{% endif %}
+                          placeholder="Algo mais sobre o aparelho que o gerente e quem recebe precisam saber…">{{ valores.observacoes|default:'' }}</textarea>
+                <p class="rn-dica">O que é de cada item já fica escrito no próprio item, nas etapas 2 e 3.</p>
             </div>
         </section>
 
@@ -482,8 +583,12 @@
                     {% if erros.vendedor_nome %}<p class="rn-erro">{{ erros.vendedor_nome }}</p>{% endif %}
                 </label>
                 <label class="block">
-                    <span class="rn-rotulo">Matrícula <span class="font-normal text-gray-400">(opcional)</span></span>
-                    <input type="text" name="matricula" value="{{ valores.matricula|default:'' }}" maxlength="40" class="rn-campo">
+                    <span class="rn-rotulo">CPF do vendedor</span>
+                    <input type="text" id="rn-vendedor-cpf" name="vendedor_cpf" value="{{ valores.vendedor_cpf|default:'' }}" inputmode="numeric"
+                           maxlength="14" autocomplete="off" data-cpf placeholder="000.000.000-00"
+                           class="rn-campo font-mono {% if erros.vendedor_cpf %}rn-invalido{% endif %}">
+                    <p class="rn-dica" id="rn-vendedor-cpf-dica">Vai no contrato, ao lado da sua assinatura.</p>
+                    {% if erros.vendedor_cpf %}<p class="rn-erro">{{ erros.vendedor_cpf }}</p>{% endif %}
                 </label>
             </div>
             <div>
@@ -504,31 +609,100 @@
                     <span class="rn-rotulo">Data</span>
                     <input type="date" name="data_responsavel" value="{{ valores.data_responsavel|default:'' }}" class="rn-campo">
                 </label>
-                <label class="block">
-                    <span class="rn-rotulo">Nº da venda <span class="font-normal text-gray-400">(se já tiver)</span></span>
-                    <input type="text" name="numero_venda" value="{{ valores.numero_venda|default:'' }}" maxlength="40"
-                           autocomplete="off" spellcheck="false"
-                           class="rn-campo font-mono {% if erros.numero_venda %}rn-invalido{% endif %}">
-                    <p class="rn-dica">Pode deixar em branco e informar depois, na tela da avaliação.</p>
-                    {% if erros.numero_venda %}<p class="rn-erro">{{ erros.numero_venda }}</p>{% endif %}
-                </label>
             </div>
         </div>
     </section>
 
-    {# ── 7. Itens obrigatórios (era a etapa 2 do impresso) e envio ──────────── #}
-    <div class="rn-etapa grid gap-4" data-etapa="7" data-nome="Itens obrigatórios e envio" hidden>
-        <section class="rn-secao {% if erros.itens_obrigatorios %}rn-secao-erro{% endif %}">
-            <div class="rn-secao-topo"><span class="rn-num">7</span>Itens obrigatórios para concluir a troca</div>
-            <div class="rn-erros rn-erros-etapa mx-4 mt-4" role="alert" hidden><ul></ul></div>
-            {% for chave, titulo, descricao, icone, marcado in itens_obrigatorios %}
-            <label class="rn-item rn-item-check">
-                <span class="rn-item-icone"><i class="{{ icone }}"></i></span>
-                <span class="min-w-0"><span class="rn-item-titulo">{{ titulo }}</span><span class="rn-item-desc">{{ descricao }}</span></span>
-                <span class="rn-check"><input type="checkbox" name="obrig_{{ chave }}" data-titulo="{{ titulo }}" {% if marcado %}checked{% endif %}><span class="rn-quadrado"></span></span>
-            </label>
-            {% endfor %}
-            {% if erros.itens_obrigatorios %}<p class="rn-erro px-4 pb-3">{{ erros.itens_obrigatorios }}</p>{% endif %}
+    {# ── 7. Itens obrigatórios (era a etapa 2 do impresso) ─────────────────── #}
+    <section class="rn-etapa rn-secao {% if erros.itens_obrigatorios %}rn-secao-erro{% endif %}" data-etapa="7" data-nome="Itens obrigatórios" hidden>
+        <div class="rn-secao-topo"><span class="rn-num">7</span>Itens obrigatórios para concluir a troca</div>
+        <div class="rn-erros rn-erros-etapa mx-4 mt-4" role="alert" hidden><ul></ul></div>
+        {% for item in itens_obrigatorios %}
+        <label class="rn-item rn-item-check">
+            <span class="rn-item-icone"><i class="{{ item.icone }}"></i></span>
+            <span class="min-w-0"{% if item.passos %} data-passos="{{ item.passos }}"{% endif %}>
+                <span class="rn-item-titulo">{{ item.titulo }}{% if item.passos %}<span class="rn-passo-ajuda" role="button" tabindex="0" aria-label="Passo a passo: {{ item.titulo }}" aria-expanded="false"><i class="fa-solid fa-circle-question"></i></span>{% endif %}</span>
+                <span class="rn-item-desc">{{ item.descricao }}</span>
+            </span>
+            <span class="rn-check"><input type="checkbox" name="obrig_{{ item.chave }}" data-titulo="{{ item.titulo }}" {% if item.marcado %}checked{% endif %}><span class="rn-quadrado"></span></span>
+        </label>
+        {% endfor %}
+        {% if erros.itens_obrigatorios %}<p class="rn-erro px-4 pb-3">{{ erros.itens_obrigatorios }}</p>{% endif %}
+    </section>
+
+    {# ── 8. Contrato: o termo de transferência que o cliente assina, e o envio ── #}
+    <div class="rn-etapa grid gap-4" data-etapa="8" data-nome="Contrato com o cliente" hidden>
+        <div class="rn-erros rn-erros-etapa" role="alert" hidden><ul></ul></div>
+        <section class="rn-secao">
+            <div class="rn-secao-topo"><span class="rn-num">8</span>Contrato com o cliente</div>
+            <div class="p-4 sm:p-5 grid gap-4">
+                <p class="text-sm text-gray-600">
+                    É o <b>termo de transferência de propriedade do aparelho</b>. Preencha com o cliente, leiam juntos e
+                    peça para ele assinar. Depois do envio, o contrato sai para imprimir em duas vias (cliente e loja).
+                </p>
+                <div class="grid sm:grid-cols-2 gap-3 items-start">
+                    <label class="block">
+                        <span class="rn-rotulo">Aparelho novo</span>
+                        <input type="text" name="aparelho_novo" value="{{ valores.aparelho_novo|default:'' }}" maxlength="150"
+                               placeholder="Ex.: iPhone 16 128GB preto" class="rn-campo {% if erros.aparelho_novo %}rn-invalido{% endif %}">
+                        {% if erros.aparelho_novo %}<p class="rn-erro">{{ erros.aparelho_novo }}</p>{% endif %}
+                    </label>
+                    <label class="block">
+                        <span class="rn-rotulo">Nº da venda<span class="rn-selo-vivo">Vivo Go</span></span>
+                        <input type="text" name="numero_venda" value="{{ valores.numero_venda|default:'' }}" maxlength="{{ numero_venda_max }}"
+                               autocomplete="off" spellcheck="false" placeholder="Número da venda no Vivo Go"
+                               class="rn-campo font-mono {% if erros.numero_venda %}rn-invalido{% endif %}">
+                        <p class="rn-dica">Obrigatório: é o número que o <b>Vivo Go</b> dá para a venda do aparelho novo.</p>
+                        {% if erros.numero_venda %}<p class="rn-erro">{{ erros.numero_venda }}</p>{% endif %}
+                    </label>
+                    <label class="block">
+                        <span class="rn-rotulo">Nome completo do cliente</span>
+                        <input type="text" name="cliente_nome" value="{{ valores.cliente_nome|default:'' }}" maxlength="150"
+                               autocomplete="off" class="rn-campo {% if erros.cliente_nome %}rn-invalido{% endif %}">
+                        {% if erros.cliente_nome %}<p class="rn-erro">{{ erros.cliente_nome }}</p>{% endif %}
+                    </label>
+                    <label class="block">
+                        <span class="rn-rotulo">CPF do cliente</span>
+                        <input type="text" id="rn-cliente-cpf" name="cliente_cpf" value="{{ valores.cliente_cpf|default:'' }}" inputmode="numeric"
+                               maxlength="14" autocomplete="off" data-cpf placeholder="000.000.000-00"
+                               class="rn-campo font-mono {% if erros.cliente_cpf %}rn-invalido{% endif %}">
+                        <p class="rn-dica" id="rn-cliente-cpf-dica"></p>
+                        {% if erros.cliente_cpf %}<p class="rn-erro">{{ erros.cliente_cpf }}</p>{% endif %}
+                    </label>
+                    <label class="block">
+                        <span class="rn-rotulo">Cidade</span>
+                        <input type="text" name="contrato_cidade" value="{{ valores.contrato_cidade|default:'' }}" maxlength="100"
+                               placeholder="Cidade da loja" class="rn-campo {% if erros.contrato_cidade %}rn-invalido{% endif %}">
+                        <p class="rn-dica">Vai no alto do contrato, com a data de hoje.</p>
+                        {% if erros.contrato_cidade %}<p class="rn-erro">{{ erros.contrato_cidade }}</p>{% endif %}
+                    </label>
+                </div>
+            </div>
+        </section>
+
+        <section class="rn-secao">
+            <div class="rn-secao-topo"><span class="rn-num"><i class="fa-solid fa-file-contract"></i></span>Leia o contrato com o cliente</div>
+            <div class="rn-contrato-previa" id="rn-contrato-previa">
+                {% include 'renova/_contrato_folha.html' with c=contrato_previa logo=logo_contrato via='Prévia' rodape='O contrato para imprimir sai depois do envio' sem_valor=False %}
+            </div>
+        </section>
+
+        <section class="rn-secao {% if erros.assinatura_cliente %}rn-secao-erro{% endif %}">
+            <div class="rn-secao-topo"><span class="rn-num"><i class="fa-solid fa-signature"></i></span>Assinatura do cliente</div>
+            <div class="p-4 grid gap-2">
+                <div class="flex items-center justify-between">
+                    <span class="rn-rotulo">O cliente assina aqui</span>
+                    <button type="button" id="rn-limpar-assinatura-cliente" class="text-[11px] font-semibold hover:underline" style="color:#6B21A8">
+                        <i class="fa-solid fa-eraser"></i> Limpar
+                    </button>
+                </div>
+                <div id="rn-assinatura-cliente" class="rn-assinatura {% if erros.assinatura_cliente %}rn-invalido{% endif %}">
+                    <canvas aria-label="Quadro para o cliente assinar"></canvas>
+                    <span class="rn-assinatura-dica">Assinatura do cliente, com o dedo ou o mouse</span>
+                </div>
+                <p class="rn-dica">Ao assinar, o cliente concorda com o termo acima. Sua assinatura (etapa 6) entra como a do vendedor.</p>
+                {% if erros.assinatura_cliente %}<p class="rn-erro">{{ erros.assinatura_cliente }}</p>{% endif %}
+            </div>
         </section>
 
         <section class="rn-card p-4 grid gap-3">
@@ -540,9 +714,10 @@
                 <div><span>Fotos</span><b id="rn-resumo-fotos">—</b></div>
             </div>
             <p class="text-xs text-gray-600">
-                <i class="fa-solid fa-ticket mr-1" style="color:#7B2CBF"></i>
-                Ao enviar, a avaliação vai para o gerente da loja aprovar. Na aprovação, o portal abre o
-                chamado{% if cfg.categoria %} em <b>{{ cfg.categoria.name }}</b>{% endif %} e libera a etiqueta.
+                <i class="fa-solid fa-paper-plane mr-1" style="color:#7B2CBF"></i>
+                Ao enviar, a avaliação vai para o gerente da loja aprovar (o financeiro também é avisado) e a etiqueta e o
+                contrato já ficam prontos para imprimir. Na aprovação, o portal abre o chamado{% if cfg.categoria %} em
+                <b>{{ cfg.categoria.name }}</b>{% endif %}.
             </p>
         </section>
     </div>
@@ -569,8 +744,37 @@
         </div>
     </div>
 </div>
+<div class="rn-passo-pop" id="rn-passo-pop" role="dialog" aria-label="Passo a passo da avaliação" hidden>
+    <div class="rn-passo-pop-topo">
+        <span><i class="fa-solid fa-list-check mr-1"></i>Passo a passo</span>
+        <button type="button" class="rn-passo-pop-fechar" aria-label="Fechar o passo a passo"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="rn-passo-pop-corpo" id="rn-passo-pop-corpo"></div>
+    <a href="{% url 'renova:passo_a_passo' %}" target="_blank" rel="noopener" class="rn-passo-pop-link">
+        Ver o passo a passo completo<i class="fa-solid fa-up-right-from-square" style="font-size:.6rem"></i>
+    </a>
+</div>
+{% for passo in passos %}
+<template id="rn-passo-{{ passo.chave }}">
+    <section>
+        <h3><i class="{{ passo.icone }}" aria-hidden="true"></i>{{ passo.titulo }}</h3>
+        {% if passo.numerado %}
+        <ol class="rn-pop-lista-num">{% for item in passo.itens %}<li>{{ item }}</li>{% endfor %}</ol>
+        {% else %}
+        <ul class="rn-pop-lista">{% for item in passo.itens %}<li>{{ item }}</li>{% endfor %}</ul>
+        {% endif %}
+        {% if passo.faixas %}
+        <div class="rn-pop-faixas">{% for cor, faixa, significado in passo.faixas %}<div><span class="rn-pop-ponto rn-pop-ponto-{{ cor }}"></span><span><b>{{ faixa }}</b> = {{ significado }}</span></div>{% endfor %}</div>
+        {% endif %}
+        {% if passo.alerta %}
+        <p class="rn-pop-alerta"><i class="fa-solid fa-circle-exclamation" style="margin-top:.15rem"></i><span>{{ passo.alerta }}</span></p>
+        {% endif %}
+    </section>
+</template>
+{% endfor %}
 {{ precos_json|json_script:"rn-precos" }}
 {{ regras_padrao|json_script:"rn-regras" }}
+{{ lojas_contrato|json_script:"rn-lojas-contrato" }}
 {% endblock %}
 
 {% block rn_js %}
@@ -709,8 +913,6 @@
                 valorDica.textContent = 'Informe a saúde da bateria e marque todas as funcionalidades e a condição estética.';
             }
         }
-        var dicaObs = document.getElementById('rn-obs-dica');
-        if (dicaObs) dicaObs.textContent = sinalizados().length ? 'Obrigatório: ' + sinalizados().join(', ') + ' ficou com observação ou não funciona.' : '';
     }
 
     /* IMEI: só números, 15 dígitos e o dígito verificador certo. */
@@ -742,23 +944,71 @@
         checar();
     });
 
-    /* Item com observação ou falha fica destacado. */
+    /* Não há API para conferir o IMEI: o botão copia o IMEI 1 e abre a consulta oficial (o link segue normalmente). */
+    document.getElementById('rn-consultar-imei').addEventListener('click', function () {
+        var imei = valor('imei1');
+        var aviso = document.getElementById('rn-imei-copiado');
+        function avisar(copiou) {
+            aviso.textContent = copiou ? 'IMEI ' + imei + ' copiado: cole no site da consulta.' : 'Copie o IMEI ' + imei + ' e cole no site da consulta.';
+            aviso.style.color = '#047857';
+        }
+        if (!imeiValido(imei)) {
+            aviso.textContent = 'Digite o IMEI 1 completo para ele ir copiado para a consulta.';
+            aviso.style.color = '#B45309';
+            return;
+        }
+        try {
+            navigator.clipboard.writeText(imei).then(function () { avisar(true); }, function () { avisar(false); });
+        } catch (e) {
+            avisar(false);
+        }
+    });
+
+    /* CPF: máscara 000.000.000-00 e os dígitos verificadores (as mesmas regras do servidor). */
+    function cpfValido(texto) {
+        var d = String(texto || '').replace(/\D/g, '');
+        if (d.length !== 11 || /^(\d)\1{10}$/.test(d)) return false;
+        for (var t = 9; t <= 10; t++) {
+            var soma = 0;
+            for (var i = 0; i < t; i++) soma += parseInt(d.charAt(i), 10) * (t + 1 - i);
+            if ((soma * 10) % 11 % 10 !== parseInt(d.charAt(t), 10)) return false;
+        }
+        return true;
+    }
+    form.querySelectorAll('[data-cpf]').forEach(function (campo) {
+        var dica = document.getElementById(campo.id + '-dica');
+        var dicaOriginal = dica ? dica.textContent : '';
+        function checar() {
+            var d = campo.value.replace(/\D/g, '').slice(0, 11);
+            var formatado = [d.slice(0, 3), d.slice(3, 6), d.slice(6, 9)].filter(Boolean).join('.') + (d.length > 9 ? '-' + d.slice(9) : '');
+            if (formatado !== campo.value) campo.value = formatado;
+            var completo = d.length === 11;
+            var valido = completo && cpfValido(d);
+            campo.classList.toggle('rn-ok', valido);
+            if (completo) campo.classList.toggle('rn-invalido', !valido);
+            if (!dica) return;
+            dica.textContent = !d ? dicaOriginal : !completo ? (11 - d.length) + ' número(s) faltando'
+                : valido ? 'CPF válido' : 'Esse CPF não confere — revise os números';
+            dica.style.color = valido ? '#047857' : (completo ? '#B91C1C' : '');
+        }
+        campo.addEventListener('input', checar);
+        checar();
+    });
+
+    /* Item com observação ou falha fica destacado e abre o campo para descrever. */
     function destacar(input) {
         var linha = input.closest('.rn-item');
-        if (!linha) return;
+        if (!linha) return false;
         linha.classList.remove('rn-marcado-OK', 'rn-marcado-OBS', 'rn-marcado-NAO');
         linha.classList.add('rn-marcado-' + input.value);
+        var caixa = linha.querySelector('.rn-item-obs');
+        if (!caixa) return false;
+        var sinalizado = input.value === 'OBS' || input.value === 'NAO';
+        caixa.hidden = !sinalizado;
+        caixa.querySelector('.rn-item-obs-rotulo').textContent = input.value === 'NAO' ? 'Descreva o problema (opcional)' : 'Descreva a observação';
+        return sinalizado;
     }
     form.querySelectorAll('.rn-tri input:checked').forEach(destacar);
-
-    function sinalizados() {
-        var lista = [];
-        form.querySelectorAll('.rn-tri[role="radiogroup"]').forEach(function (grupo) {
-            var marcado = grupo.querySelector('input:checked');
-            if (marcado && (marcado.value === 'OBS' || marcado.value === 'NAO')) lista.push(grupo.getAttribute('data-titulo'));
-        });
-        return lista;
-    }
 
     /* ── Fotos: reduz no navegador (celular manda 4 MB por foto) e mostra a prévia. ── */
     var LADO_MAX = 1920;
@@ -923,72 +1173,134 @@
         return n + avarias.length;
     }
 
-    /* ── Assinatura no quadro ── */
-    var quadro = document.getElementById('rn-assinatura');
-    var canvas = quadro.querySelector('canvas');
-    var campoAssinatura = form.querySelector('[name=assinatura]');
-    var ctx = canvas.getContext('2d');
-    var desenhou = false;
-    var desenhando = false;
-    var anterior = null;
+    /* ── Assinatura no quadro: a do vendedor (etapa 6) e a do cliente (contrato) ── */
+    function quadroDeAssinatura(idQuadro, nomeCampo, idLimpar) {
+        var quadro = document.getElementById(idQuadro);
+        var canvas = quadro.querySelector('canvas');
+        var campo = form.querySelector('[name="' + nomeCampo + '"]');
+        var ctx = canvas.getContext('2d');
+        var desenhou = false;
+        var desenhando = false;
+        var anterior = null;
 
-    function preparar() {
-        var caixa = canvas.getBoundingClientRect();
-        if (!caixa.width) return;                       // etapa escondida: prepara quando aparecer
-        var escala = window.devicePixelRatio || 1;
-        var imagem = desenhou ? canvas.toDataURL('image/png') : campoAssinatura.value;
-        canvas.width = Math.max(1, Math.round(caixa.width * escala));
-        canvas.height = Math.max(1, Math.round(caixa.height * escala));
-        ctx.setTransform(escala, 0, 0, escala, 0, 0);
-        ctx.lineWidth = 2.4;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        ctx.strokeStyle = '#1F0B33';
-        if (imagem && imagem.indexOf('data:image/png;base64,') === 0) {
-            var figura = new Image();
-            figura.onload = function () { ctx.drawImage(figura, 0, 0, caixa.width, caixa.height); };
-            figura.src = imagem;
-            desenhou = true;
-            quadro.classList.add('rn-assinado');
+        function preparar() {
+            var caixa = canvas.getBoundingClientRect();
+            if (!caixa.width) return;                       // etapa escondida: prepara quando aparecer
+            var escala = window.devicePixelRatio || 1;
+            var imagem = desenhou ? canvas.toDataURL('image/png') : campo.value;
+            canvas.width = Math.max(1, Math.round(caixa.width * escala));
+            canvas.height = Math.max(1, Math.round(caixa.height * escala));
+            ctx.setTransform(escala, 0, 0, escala, 0, 0);
+            ctx.lineWidth = 2.4;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.strokeStyle = '#1F0B33';
+            if (imagem && imagem.indexOf('data:image/png;base64,') === 0) {
+                var figura = new Image();
+                figura.onload = function () { ctx.drawImage(figura, 0, 0, caixa.width, caixa.height); };
+                figura.src = imagem;
+                desenhou = true;
+                quadro.classList.add('rn-assinado');
+            }
         }
-    }
-    function ponto(evento) {
-        var caixa = canvas.getBoundingClientRect();
-        return {x: evento.clientX - caixa.left, y: evento.clientY - caixa.top};
-    }
-    canvas.addEventListener('pointerdown', function (evento) {
-        desenhando = true;
-        anterior = ponto(evento);
-        canvas.setPointerCapture(evento.pointerId);
-        evento.preventDefault();
-    });
-    canvas.addEventListener('pointermove', function (evento) {
-        if (!desenhando) return;
-        var atual = ponto(evento);
-        ctx.beginPath();
-        ctx.moveTo(anterior.x, anterior.y);
-        ctx.lineTo(atual.x, atual.y);
-        ctx.stroke();
-        anterior = atual;
-        if (!desenhou) { desenhou = true; quadro.classList.add('rn-assinado'); quadro.classList.remove('rn-invalido'); }
-    });
-    ['pointerup', 'pointercancel'].forEach(function (tipo) {
-        canvas.addEventListener(tipo, function () {
-            desenhando = false;
-            if (desenhou) campoAssinatura.value = canvas.toDataURL('image/png');
+        function ponto(evento) {
+            var caixa = canvas.getBoundingClientRect();
+            return {x: evento.clientX - caixa.left, y: evento.clientY - caixa.top};
+        }
+        canvas.addEventListener('pointerdown', function (evento) {
+            desenhando = true;
+            anterior = ponto(evento);
+            canvas.setPointerCapture(evento.pointerId);
+            evento.preventDefault();
         });
-    });
-    document.getElementById('rn-limpar-assinatura').addEventListener('click', function () {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        desenhou = false;
-        campoAssinatura.value = '';
-        quadro.classList.remove('rn-assinado');
-    });
+        canvas.addEventListener('pointermove', function (evento) {
+            if (!desenhando) return;
+            var agora = ponto(evento);
+            ctx.beginPath();
+            ctx.moveTo(anterior.x, anterior.y);
+            ctx.lineTo(agora.x, agora.y);
+            ctx.stroke();
+            anterior = agora;
+            if (!desenhou) { desenhou = true; quadro.classList.add('rn-assinado'); quadro.classList.remove('rn-invalido'); }
+        });
+        ['pointerup', 'pointercancel'].forEach(function (tipo) {
+            canvas.addEventListener(tipo, function () {
+                if (!desenhando) return;
+                desenhando = false;
+                if (desenhou) campo.value = canvas.toDataURL('image/png');
+                atualizarContrato();
+            });
+        });
+        document.getElementById(idLimpar).addEventListener('click', function () {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            desenhou = false;
+            campo.value = '';
+            quadro.classList.remove('rn-assinado');
+            atualizarContrato();
+        });
+        return {
+            preparar: preparar,
+            assinado: function () { return desenhou || !!campo.value; },
+            guardar: function () { if (desenhou) campo.value = canvas.toDataURL('image/png'); },
+            valor: function () { return campo.value; },
+            marcarErro: function () { quadro.classList.add('rn-invalido'); }
+        };
+    }
+    var assinaturaVendedor = quadroDeAssinatura('rn-assinatura', 'assinatura', 'rn-limpar-assinatura');
+    var assinaturaCliente = quadroDeAssinatura('rn-assinatura-cliente', 'assinatura_cliente', 'rn-limpar-assinatura-cliente');
     var aguardandoTamanho = null;
     window.addEventListener('resize', function () {
         clearTimeout(aguardandoTamanho);
-        aguardandoTamanho = setTimeout(preparar, 150);
+        aguardandoTamanho = setTimeout(function () { assinaturaVendedor.preparar(); assinaturaCliente.preparar(); }, 150);
     });
+
+    /* ── Contrato: a prévia acompanha o que foi preenchido em todas as etapas ── */
+    var previa = document.getElementById('rn-contrato-previa');
+    var lojasContrato = JSON.parse(document.getElementById('rn-lojas-contrato').textContent || '{}');
+    var campoCidade = form.querySelector('[name=contrato_cidade]');
+    campoCidade.setAttribute('data-auto', (lojasContrato[form.querySelector('[name=loja]').value] || {}).cidade || '');
+
+    function cidadeDaLoja() {
+        // A cidade acompanha a loja enquanto ninguém a digitou.
+        var cidade = (lojasContrato[valor('loja')] || {}).cidade || '';
+        if (!campoCidade.value.trim() || campoCidade.value === campoCidade.getAttribute('data-auto')) {
+            campoCidade.value = cidade;
+            campoCidade.setAttribute('data-auto', cidade);
+        }
+    }
+    function atualizarContrato() {
+        if (!previa) return;
+        var loja = lojasContrato[valor('loja')] || {};
+        var modelo = campoModelo.value;
+        var data = valor('data_avaliacao').split('-');
+        var dados = {
+            cidade: valor('contrato_cidade'),
+            aparelho: modelo ? ['Apple', modelo, campoArmazenamento.value].filter(Boolean).join(' ') + (valor('cor') ? ' · ' + valor('cor') : '') : '',
+            imei: valor('imei1') ? valor('imei1') + (valor('imei2') ? ' / ' + valor('imei2') : '') : '',
+            numero_venda: valor('numero_venda'),
+            data_operacao: data.length === 3 ? data[2] + '/' + data[1] + '/' + data[0] : '',
+            aparelho_novo: valor('aparelho_novo'),
+            bateria: valor('saude_bateria') ? valor('saude_bateria') + '%' : '',
+            vendedor_nome: valor('vendedor_nome'),
+            vendedor_cpf: valor('vendedor_cpf'),
+            cliente_nome: valor('cliente_nome'),
+            cliente_cpf: valor('cliente_cpf'),
+            cnpj: loja.cnpj || ''
+        };
+        Object.keys(dados).forEach(function (campo) {
+            previa.querySelectorAll('[data-c="' + campo + '"]').forEach(function (el) {
+                el.textContent = dados[campo] || '—';
+                if (!el.closest('.ct-assinatura-nome')) el.classList.toggle('ct-vazio', !dados[campo]);
+            });
+        });
+        previa.querySelector('[data-c-cnpj]').hidden = !dados.cnpj;
+        [['vendedor_assinatura', assinaturaVendedor], ['cliente_assinatura', assinaturaCliente]].forEach(function (par) {
+            var img = previa.querySelector('[data-c-img="' + par[0] + '"]');
+            var imagem = par[1] ? par[1].valor() : '';
+            if (imagem) img.src = imagem; else img.removeAttribute('src');
+            img.hidden = !imagem;
+        });
+    }
 
     /* ── Etapas ── */
     var etapas = Array.prototype.slice.call(form.querySelectorAll('[data-etapa]'));
@@ -1044,11 +1356,17 @@
                 if (!ok) faltam.push(grupo.getAttribute('data-titulo'));
             });
             if (faltam.length) p.push('Marque ' + (n === 2 ? 'todas as funcionalidades' : 'todos os itens da condição estética') + ': faltou ' + faltam.join(', ') + '.');
+            var semNota = [];
+            etapas[n - 1].querySelectorAll('.rn-item-tri').forEach(function (linha) {
+                var escolhido = linha.querySelector('.rn-tri input:checked');
+                var nota = linha.querySelector('.rn-item-obs textarea');
+                var falta = !!(escolhido && nota) && escolhido.value === 'OBS' && !nota.value.trim();
+                if (nota) nota.classList.toggle('rn-invalido', falta);
+                if (falta) semNota.push(linha.querySelector('.rn-tri').getAttribute('data-titulo'));
+            });
+            if (semNota.length) p.push('Descreva a observação de: ' + semNota.join(', ') + '.');
         }
         if (n === 4) {
-            var obs = sinalizados();
-            if (obs.length && !valor('observacoes')) { p.push('Conte nas observações o que ficou com observação ou não funciona (' + obs.join(', ') + ').'); invalidar('observacoes', true); }
-            else invalidar('observacoes', false);
             var segue = marcado('cliente_segue');
             if (!segue) p.push('Diga se o cliente quer seguir com a troca.');
         }
@@ -1065,12 +1383,25 @@
         }
         if (n === 6) {
             if (!valor('vendedor_nome')) { p.push('Informe o nome do vendedor.'); invalidar('vendedor_nome', true); } else invalidar('vendedor_nome', false);
-            if (!desenhou && !(campoAssinatura.value || '').length) { p.push('Assine no quadro de assinatura.'); quadro.classList.add('rn-invalido'); }
+            if (!cpfValido(valor('vendedor_cpf'))) { p.push('Informe o CPF do vendedor (ele vai no contrato).'); invalidar('vendedor_cpf', true); }
+            else invalidar('vendedor_cpf', false);
+            if (!assinaturaVendedor.assinado()) { p.push('Assine no quadro de assinatura.'); assinaturaVendedor.marcarErro(); }
         }
         if (n === 7) {
             var pendentes = [];
             form.querySelectorAll('input[name^="obrig_"]').forEach(function (c) { if (!c.checked) pendentes.push(c.getAttribute('data-titulo')); });
             if (pendentes.length) p.push('Confira todos os itens obrigatórios antes de concluir: ' + pendentes.join('; ') + '.');
+        }
+        if (n === 8) {
+            [['aparelho_novo', 'Informe o aparelho novo que o cliente está levando.'],
+             ['numero_venda', 'Informe o nº da venda no Vivo Go.'],
+             ['cliente_nome', 'Informe o nome completo do cliente.'],
+             ['contrato_cidade', 'Informe a cidade do contrato.']].forEach(function (par) {
+                if (!valor(par[0])) { p.push(par[1]); invalidar(par[0], true); } else invalidar(par[0], false);
+            });
+            if (!cpfValido(valor('cliente_cpf'))) { p.push('CPF do cliente inválido: confira os 11 números.'); invalidar('cliente_cpf', true); }
+            else invalidar('cliente_cpf', false);
+            if (!assinaturaCliente.assinado()) { p.push('O cliente precisa assinar o contrato no quadro.'); assinaturaCliente.marcarErro(); }
         }
         return p;
     }
@@ -1111,8 +1442,8 @@
         alcancada = Math.max(alcancada, n);
         atualizarNavegacao();
         if (n === 4) atualizarValor();
-        if (n === 6) preparar();
-        if (n === 7) atualizarResumo();
+        if (n === 6) assinaturaVendedor.preparar();
+        if (n === 8) { assinaturaCliente.preparar(); atualizarResumo(); atualizarContrato(); }
         if (!(opcoes && opcoes.semRolar)) document.getElementById('rn-etapas').scrollIntoView({behavior: 'smooth', block: 'start'});
     }
 
@@ -1156,13 +1487,21 @@
     form.addEventListener('change', function (e) {
         if (e.target === campoModelo) preencherArmazenamentos();
         if (e.target.closest('.rn-tri')) {
-            destacar(e.target);
+            var abriu = destacar(e.target);
             var linha = e.target.closest('.rn-item');
             if (linha) linha.classList.remove('rn-invalido');
+            // "Com observação" já abre o campo com o cursor nele, para descrever na hora.
+            if (abriu && e.target.value === 'OBS') linha.querySelector('.rn-item-obs textarea').focus();
         }
+        if (e.target.name === 'loja') cidadeDaLoja();
         if (e.target.name === 'cliente_segue') atualizarNavegacao();
-        if (e.target.classList && e.target.classList.contains('rn-campo')) e.target.classList.remove('rn-invalido');
+        if (e.target.classList && e.target.classList.contains('rn-campo') && !e.target.hasAttribute('data-cpf')) e.target.classList.remove('rn-invalido');
         atualizarValor();
+        atualizarContrato();
+    });
+    form.addEventListener('input', function (e) {
+        if (e.target.classList.contains('rn-campo-obs') && e.target.value.trim()) e.target.classList.remove('rn-invalido');
+        if (atual === total) atualizarContrato();
     });
     campoBateria.addEventListener('input', atualizarValor);
     preencherArmazenamentos();
@@ -1187,7 +1526,8 @@
                 return;
             }
         }
-        if (desenhou) campoAssinatura.value = canvas.toDataURL('image/png');
+        assinaturaVendedor.guardar();
+        assinaturaCliente.guardar();
         botaoEnviar.disabled = true;
         botaoEnviar.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Enviando fotos e avaliação…';
     });
@@ -1208,6 +1548,108 @@
     irPara(parseInt(form.getAttribute('data-etapa-inicial'), 10) || 1, {semRolar: !document.getElementById('rn-erros')});
     var erros = document.getElementById('rn-erros');
     if (erros) erros.scrollIntoView({behavior: 'smooth', block: 'start'});
+})();
+
+/* Passo a passo do item: abre ao passar o mouse no item (ou tocando no "?", que também fixa a janela). */
+(function () {
+    var pop = document.getElementById('rn-passo-pop');
+    if (!pop) return;
+    var corpo = document.getElementById('rn-passo-pop-corpo');
+    var comMouse = window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+    var alvo = null, fixo = false, abrirDepois = null, fecharDepois = null;
+
+    function marcar(el, aberto) {
+        var botao = el && el.querySelector('.rn-passo-ajuda');
+        if (botao) botao.setAttribute('aria-expanded', aberto ? 'true' : 'false');
+    }
+    function posicionar() {
+        if (!alvo || pop.hidden) return;
+        var r = alvo.getBoundingClientRect();
+        var margem = 12;
+        pop.style.maxHeight = '';
+        var largura = pop.offsetWidth, altura = pop.offsetHeight;
+        pop.style.left = Math.max(margem, Math.min(r.left, window.innerWidth - largura - margem)) + 'px';
+        // Embaixo do item; sem espaço, em cima; sem espaço nos dois, no lado maior, mais baixa — sem cobrir o item.
+        var embaixo = window.innerHeight - r.bottom - 8 - margem;
+        var emCima = r.top - 8 - margem;
+        var topo;
+        if (altura <= embaixo) {
+            topo = r.bottom + 8;
+        } else if (altura <= emCima) {
+            topo = r.top - 8 - altura;
+        } else if (Math.max(embaixo, emCima) >= 180) {
+            pop.style.maxHeight = Math.max(embaixo, emCima) + 'px';
+            topo = embaixo >= emCima ? r.bottom + 8 : margem;
+        } else {
+            topo = Math.max(margem, window.innerHeight - altura - margem);
+        }
+        pop.style.top = topo + 'px';
+    }
+    function abrir(el, fixar) {
+        clearTimeout(abrirDepois);
+        clearTimeout(fecharDepois);
+        if (alvo !== el) {
+            marcar(alvo, false);
+            corpo.textContent = '';
+            el.getAttribute('data-passos').split(/\s+/).forEach(function (chave) {
+                var modelo = document.getElementById('rn-passo-' + chave);
+                if (modelo) corpo.appendChild(modelo.content.cloneNode(true));
+            });
+            corpo.scrollTop = 0;
+            fixo = false;
+        }
+        alvo = el;
+        fixo = fixo || !!fixar;
+        pop.hidden = false;
+        marcar(el, true);
+        posicionar();
+    }
+    function fechar() {
+        clearTimeout(abrirDepois);
+        clearTimeout(fecharDepois);
+        marcar(alvo, false);
+        pop.hidden = true;
+        alvo = null;
+        fixo = false;
+    }
+
+    document.querySelectorAll('[data-passos]').forEach(function (el) {
+        if (comMouse) {
+            el.addEventListener('mouseenter', function () {
+                clearTimeout(fecharDepois);
+                if (fixo && alvo !== el) return;
+                clearTimeout(abrirDepois);
+                abrirDepois = setTimeout(function () { abrir(el, false); }, 300);
+            });
+            el.addEventListener('mouseleave', function () {
+                clearTimeout(abrirDepois);
+                if (!fixo) fecharDepois = setTimeout(fechar, 250);
+            });
+        }
+        var botao = el.querySelector('.rn-passo-ajuda');
+        if (!botao) return;
+        function alternar(e) {
+            // Dentro do item obrigatório (um label), o toque no "?" não marca o item.
+            e.preventDefault();
+            e.stopPropagation();
+            if (alvo === el && fixo) fechar(); else abrir(el, true);
+        }
+        botao.addEventListener('click', alternar);
+        botao.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') alternar(e); });
+    });
+    pop.addEventListener('mouseenter', function () { clearTimeout(fecharDepois); clearTimeout(abrirDepois); });
+    pop.addEventListener('mouseleave', function () { if (!fixo) fecharDepois = setTimeout(fechar, 250); });
+    pop.querySelector('.rn-passo-pop-fechar').addEventListener('click', function () {
+        var botao = alvo && alvo.querySelector('.rn-passo-ajuda');
+        fechar();
+        if (botao) botao.focus();
+    });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !pop.hidden) fechar(); });
+    document.addEventListener('click', function (e) {
+        if (!pop.hidden && !pop.contains(e.target) && !(alvo && alvo.contains(e.target))) fechar();
+    });
+    window.addEventListener('scroll', posicionar, {passive: true});
+    window.addEventListener('resize', posicionar);
 })();
 </script>
 {% endblock %}

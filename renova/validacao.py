@@ -16,6 +16,36 @@ from .padrao import calcular_padrao
 PREFIXO_ASSINATURA = 'data:image/png;base64,'
 ASSINATURA_MAX = 400_000      # caracteres do data URL da assinatura
 NUMERO_VENDA_MAX = 40         # o max_length de Renova.numero_venda
+OBSERVACAO_ITEM_MAX = 500     # caracteres da observação de um item do checklist
+
+
+def so_digitos(texto):
+    return re.sub(r'\D', '', str(texto or ''))
+
+
+def cpf_valido(cpf):
+    """11 números com os dois dígitos verificadores certos (e não todos iguais)."""
+    d = so_digitos(cpf)
+    if len(d) != 11 or d == d[0] * 11:
+        return False
+    for tamanho in (9, 10):
+        soma = sum(int(d[i]) * (tamanho + 1 - i) for i in range(tamanho))
+        if (soma * 10) % 11 % 10 != int(d[tamanho]):
+            return False
+    return True
+
+
+def cnpj_valido(cnpj):
+    d = so_digitos(cnpj)
+    if len(d) != 14 or d == d[0] * 14:
+        return False
+    for tamanho in (12, 13):
+        pesos = list(range(tamanho - 7, 1, -1)) + list(range(9, 1, -1))
+        soma = sum(int(d[i]) * pesos[i] for i in range(tamanho))
+        resto = soma % 11
+        if (0 if resto < 2 else 11 - resto) != int(d[tamanho]):
+            return False
+    return True
 
 
 def imei_valido(imei):
@@ -175,32 +205,80 @@ def ler_checklist(post, *, lojas, precos, hoje=None, cfg=None):
                 cfg = ConfiguracaoRenova.get()
             d['valor_estimado'] = cfg.valor_do_padrao(d['preco_tabela'].valor_excelente, d['padrao'])
 
-    # 5. Observações. O parecer não é mais escolhido: sai do próprio checklist —
-    # item com observação ou que não funciona deixa "aprovado com observações".
+    # O item marcado já abre o campo para descrever: obrigatório no "com observação",
+    # opcional no que não funciona (a marcação já diz o que houve).
+    d['observacoes_itens'] = {}
+    for campo, prefixo, itens, rotulo in (('funcionalidades', 'func', checklist.FUNCIONALIDADES, 'funcionalidades'),
+                                          ('estetica', 'est', checklist.ESTETICA, 'condição estética')):
+        notas, sem_nota = {}, []
+        for chave, titulo, _, _ in itens:
+            if d[campo][chave] not in ('OBS', 'NAO'):
+                continue
+            nota = _texto(post, f'obs_{prefixo}_{chave}', OBSERVACAO_ITEM_MAX)
+            if nota:
+                notas[chave] = nota
+            elif d[campo][chave] == 'OBS':
+                sem_nota.append(titulo)
+        if notas:
+            d['observacoes_itens'][campo] = notas
+        if sem_nota:
+            erros[f'obs_{campo}'] = f'Descreva a observação ({rotulo}): ' + ', '.join(sem_nota) + '.'
+
+    # 5. Observações gerais (opcionais: o que é de cada item fica no item). O parecer
+    # não é escolhido: item com observação ou que não funciona deixa "aprovado com observações".
     d['observacoes'] = str(post.get('observacoes', '') or '').strip()[:4000]
     sinalizados = [valor for campo in ('funcionalidades', 'estetica') for valor in d[campo].values()
                    if valor in ('OBS', 'NAO')]
     d['parecer'] = checklist.APROVADO_OBS if sinalizados else checklist.APROVADO
-    if sinalizados and not d['observacoes']:
-        erros['observacoes'] = 'Conte nas observações o que ficou com observação ou não funciona.'
 
     # 6. Responsável pela avaliação
     d['vendedor_nome'] = _texto(post, 'vendedor_nome', 150)
     if not d['vendedor_nome']:
         erros['vendedor_nome'] = 'Informe o nome do vendedor.'
-    d['matricula'] = _texto(post, 'matricula', 40)
-    d['assinatura'] = str(post.get('assinatura', '') or '')
-    if not d['assinatura'].startswith(PREFIXO_ASSINATURA) or len(d['assinatura']) < 200:
-        erros['assinatura'] = 'Assine no quadro de assinatura.'
-    elif len(d['assinatura']) > ASSINATURA_MAX:
-        erros['assinatura'] = 'A assinatura ficou grande demais: limpe e assine de novo.'
+    d['vendedor_cpf'] = so_digitos(post.get('vendedor_cpf'))
+    if not cpf_valido(d['vendedor_cpf']):
+        erros['vendedor_cpf'] = 'CPF do vendedor inválido: confira os 11 números (ele vai no contrato).'
+    d['assinatura'], erro = _assinatura(post, 'assinatura')
+    if erro:
+        erros['assinatura'] = erro
     d['data_responsavel'] = _data(post, 'data_responsavel') or hoje
 
-    # Nº da venda: opcional aqui — quase sempre sai depois, e entra pela tela da avaliação.
+    # 8. Contrato: o termo de transferência de propriedade que o cliente assina.
+    # Empresa e CNPJ não vêm da tela: saem da configuração, na hora de gravar.
+    d['aparelho_novo'] = _texto(post, 'aparelho_novo', 150)
+    if not d['aparelho_novo']:
+        erros['aparelho_novo'] = 'Informe o aparelho novo que o cliente está levando.'
     try:
         d['numero_venda'] = ler_numero_venda(post.get('numero_venda'))
     except ValueError:
         d['numero_venda'] = ''
-        erros['numero_venda'] = f'O nº da venda vai até {NUMERO_VENDA_MAX} caracteres — confira o número.'
+        erros['numero_venda'] = f'O nº da venda no Vivo Go vai até {NUMERO_VENDA_MAX} caracteres — confira o número.'
+    else:
+        if not d['numero_venda']:
+            erros['numero_venda'] = 'Informe o nº da venda no Vivo Go.'
+    d['cliente_nome'] = _texto(post, 'cliente_nome', 150)
+    if not d['cliente_nome']:
+        erros['cliente_nome'] = 'Informe o nome completo do cliente.'
+    d['cliente_cpf'] = so_digitos(post.get('cliente_cpf'))
+    if not cpf_valido(d['cliente_cpf']):
+        erros['cliente_cpf'] = 'CPF do cliente inválido: confira os 11 números.'
+    d['contrato_cidade'] = _texto(post, 'contrato_cidade', 100)
+    if not d['contrato_cidade']:
+        erros['contrato_cidade'] = 'Informe a cidade em que o contrato é assinado.'
+    d['assinatura_cliente'], erro = _assinatura(post, 'assinatura_cliente')
+    if erro:
+        erros['assinatura_cliente'] = ('O cliente precisa assinar o contrato no quadro.' if not d['assinatura_cliente']
+                                       else 'A assinatura do cliente ficou grande demais: limpe e peça para assinar de novo.')
+        d['assinatura_cliente'] = ''
 
     return d, erros
+
+
+def _assinatura(post, campo):
+    """(data URL, erro) do quadro de assinatura; o erro é None quando a assinatura vale."""
+    valor = str(post.get(campo, '') or '')
+    if not valor.startswith(PREFIXO_ASSINATURA) or len(valor) < 200:
+        return '', 'Assine no quadro de assinatura.'
+    if len(valor) > ASSINATURA_MAX:
+        return valor, 'A assinatura ficou grande demais: limpe e assine de novo.'
+    return valor, None

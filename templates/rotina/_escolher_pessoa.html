@@ -1,0 +1,43 @@
+{% comment %}
+Escolher de quem editar a rotina (só o SUPERADMIN): busca + lista de todas as pessoas ativas.
+Quem já tem rotina abre direto no editor da semana; quem não tem abre a tela de criar a rotina.
+Abre com data-rt-abrir="rt-modal-pessoa". Recebe: pessoas_para_editar (com rotina_total).
+{% endcomment %}
+<div id="rt-modal-pessoa" class="rc-modal rt-modal hidden" role="dialog" aria-modal="true" aria-labelledby="rt-pessoa-titulo">
+    <div class="rt-modal-fundo" data-rt-fechar></div>
+    <div class="rc-modal-card rt-modal-card rt-modal-largo">
+        <div class="rt-modal-cabeca">
+            <h3 id="rt-pessoa-titulo"><i class="fas fa-user-pen" style="color: var(--rt-laranja)"></i> Editar a rotina de uma pessoa</h3>
+            <button type="button" class="rt-x" data-rt-fechar aria-label="Fechar"><i class="fas fa-xmark"></i></button>
+        </div>
+        <div class="rt-modal-corpo rt-pilha">
+            <label class="rt-busca" style="display: block">
+                <i class="fas fa-magnifying-glass" aria-hidden="true"></i>
+                <input type="search" class="rt-input" placeholder="Buscar por nome, e-mail, loja ou cargo…"
+                       aria-label="Buscar a pessoa" data-rt-filtro=".rt-escolha" data-rt-contador="#rt-conta-escolhas" data-rt-foco>
+            </label>
+            <p class="rt-pessoa-meta" style="white-space: normal">
+                <span id="rt-conta-escolhas">{{ pessoas_para_editar|length }}</span> pessoa(s). Quem já tem rotina abre direto na
+                semana; quem ainda não tem começa por um modelo (ou pela semana vazia).
+            </p>
+            <div class="rt-picker">
+                {% for p in pessoas_para_editar %}
+                <a href="{% url 'rotina:gestao_pessoa' p.id %}" class="rt-escolha"
+                   data-busca="{{ p.full_name }} {{ p.email }} {{ p.sector.name|default:'' }} {{ p.job_title }}">
+                    <span class="rt-avatar" aria-hidden="true">{{ p.first_name|slice:':1' }}{{ p.last_name|slice:':1' }}</span>
+                    <span class="min-w-0 flex-1">
+                        <span class="rt-pessoa-nome" style="display: block; font-size: .84rem">{{ p.full_name|default:p.username }}</span>
+                        <span class="rt-pessoa-meta" style="display: block">{{ p.sector.name|default:'Sem setor' }}{% if p.job_title %} · {{ p.job_title }}{% endif %}</span>
+                    </span>
+                    {% if p.rotina_total is None %}
+                    <span class="rt-chip rt-chip-cinza">sem rotina</span>
+                    {% else %}
+                    <span class="rt-chip rt-chip-laranja">{{ p.rotina_total }} atividade{{ p.rotina_total|pluralize }}</span>
+                    {% endif %}
+                    <i class="fas fa-chevron-right rt-escolha-seta" aria-hidden="true"></i>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>

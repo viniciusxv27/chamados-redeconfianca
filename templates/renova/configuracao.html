@@ -110,6 +110,60 @@
         </div>
     </form>
 
+    <form method="post" id="contrato" class="rn-card p-4 sm:p-5">
+        {% csrf_token %}
+        <input type="hidden" name="secao" value="contrato">
+        <h2 class="rn-h2">Contrato</h2>
+        <p class="rn-ajuda">
+            O termo de transferência que o cliente assina na última etapa. A empresa e o CNPJ entram no texto; a cidade da loja
+            abre preenchida (o vendedor pode corrigir). Mudanças valem para os contratos assinados daqui para a frente.
+        </p>
+        <div class="grid sm:grid-cols-2 gap-4 mt-4">
+            <label class="block">
+                <span class="text-xs font-bold text-gray-700">Razão social</span>
+                <input type="text" name="contrato_empresa" value="{{ cfg.contrato_empresa }}" maxlength="150" required class="rn-campo mt-1">
+            </label>
+            <label class="block">
+                <span class="text-xs font-bold text-gray-700">CNPJ geral</span>
+                <input type="text" name="contrato_cnpj" value="{{ cfg.contrato_cnpj }}" maxlength="18" inputmode="numeric"
+                       placeholder="00.000.000/0000-00" class="rn-campo mt-1 font-mono">
+                <span class="rn-ajuda block">Vale para a loja que não tiver CNPJ próprio na lista abaixo.</span>
+            </label>
+        </div>
+        <details class="mt-4 rounded-xl border border-gray-100" {% if not cfg.contrato_cnpj %}open{% endif %}>
+            <summary class="cursor-pointer px-3 py-2 text-sm font-bold text-gray-800">Cidade e CNPJ de cada loja</summary>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-left text-[11px] uppercase tracking-wide text-gray-500">
+                            <th class="px-3 py-2">Loja</th><th class="px-3 py-2">Cidade</th><th class="px-3 py-2">CNPJ da loja</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in lojas_contrato %}
+                        <tr class="border-t border-gray-100">
+                            <td class="px-3 py-1.5 font-semibold text-gray-800 whitespace-nowrap">
+                                {{ item.loja.name }}<input type="hidden" name="loja_id" value="{{ item.loja.pk }}">
+                            </td>
+                            <td class="px-3 py-1.5" style="min-width:11rem">
+                                <input type="text" name="cidade_{{ item.loja.pk }}" value="{{ item.cidade|default:'' }}" maxlength="100"
+                                       aria-label="Cidade de {{ item.loja.name }}" class="rn-campo rn-campo-tabela">
+                            </td>
+                            <td class="px-3 py-1.5" style="min-width:12rem">
+                                <input type="text" name="cnpj_{{ item.loja.pk }}" value="{{ item.cnpj|default:'' }}" maxlength="18" inputmode="numeric"
+                                       placeholder="usa o geral" aria-label="CNPJ de {{ item.loja.name }}" class="rn-campo rn-campo-tabela font-mono">
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </details>
+        <div class="flex justify-end mt-4">
+            <button type="submit" class="rn-btn rn-btn-primario"><i class="fa-solid fa-file-signature"></i>Salvar contrato</button>
+        </div>
+    </form>
+
     <form method="post" enctype="multipart/form-data" id="materiais" class="rn-card p-4 sm:p-5">
         {% csrf_token %}
         <input type="hidden" name="secao" value="materiais">

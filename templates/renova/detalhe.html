@@ -4,11 +4,18 @@
 {% block rn_titulo %}{{ renova.aparelho }}{% endblock %}
 {% block rn_subtitulo %}{{ renova.codigo }} · avaliado em {{ renova.data_avaliacao|date:"d/m/Y" }}{% endblock %}
 {% block rn_acoes %}
-{% if renova.aprovada %}
-<a href="{% url 'renova:etiqueta' renova.pk %}" class="rn-btn bg-white hover:bg-purple-50 text-xs shadow-lg" style="color:#3C096C">
-    <i class="fa-solid fa-tag"></i>Etiqueta
-</a>
-{% endif %}
+<div class="flex flex-wrap justify-end gap-2">
+    {% if renova.tem_contrato %}
+    <a href="{% url 'renova:contrato' renova.pk %}" class="rn-btn bg-white hover:bg-purple-50 text-xs shadow-lg" style="color:#3C096C">
+        <i class="fa-solid fa-file-signature"></i>Contrato
+    </a>
+    {% endif %}
+    {% if renova.pode_imprimir_etiqueta %}
+    <a href="{% url 'renova:etiqueta' renova.pk %}" class="rn-btn bg-white hover:bg-purple-50 text-xs shadow-lg" style="color:#3C096C">
+        <i class="fa-solid fa-tag"></i>Etiqueta
+    </a>
+    {% endif %}
+</div>
 {% endblock %}
 
 {% block rn_css %}
@@ -23,6 +30,11 @@
     .rn-res-OBS { background: #FFFBEB; color: #B45309; }
     .rn-res-NAO { background: #FEF2F2; color: #B91C1C; }
     .rn-res-vazio { background: #F3F4F6; color: #6B7280; }
+    .rn-item-nota { grid-column: 2 / -1; margin-top: -.2rem; padding: .35rem .6rem; border-radius: .55rem; font-size: .75rem;
+                    color: #78350F; background: #FFFBEB; white-space: pre-line; word-break: break-word; }
+    .rn-item-nota.rn-nota-NAO { color: #7F1D1D; background: #FEF2F2; }
+    html.dark .rn-item-nota { color: #fcd34d; background: rgba(245, 158, 11, .12); }
+    html.dark .rn-item-nota.rn-nota-NAO { color: #fca5a5; background: rgba(239, 68, 68, .12); }
     .rn-tempo li { position: relative; padding: 0 0 .95rem 1.45rem; }
     .rn-tempo li::before { content: ''; position: absolute; left: .37rem; top: .45rem; bottom: -.15rem; width: 2px; background: #EDE3F7; }
     .rn-tempo li:last-child::before { display: none; }
@@ -65,7 +77,10 @@
                 <div class="rn-dado"><span>Modelo</span><b>{{ renova.modelo }}</b></div>
                 <div class="rn-dado"><span>Armazenamento</span><b>{{ renova.armazenamento_texto }}</b></div>
                 <div class="rn-dado"><span>Cor</span><b>{{ renova.cor|default:"—" }}</b></div>
-                <div class="rn-dado"><span>IMEI 1</span><b class="font-mono">{{ renova.imei1 }}</b></div>
+                <div class="rn-dado"><span>IMEI 1</span><b class="font-mono">{{ renova.imei1 }}</b>
+                    <a href="{{ consulta_imei_url }}" target="_blank" rel="noopener" class="text-[11px] font-semibold hover:underline" style="color:#6B21A8"
+                       title="Consulta oficial de aparelho com restrição (Anatel / ABR Telecom)">Consultar restrição <i class="fa-solid fa-up-right-from-square" style="font-size:.55rem"></i></a>
+                </div>
                 <div class="rn-dado"><span>IMEI 2</span><b class="font-mono">{{ renova.imei2|default:"—" }}</b></div>
                 {% if renova.numero_serie %}<div class="rn-dado"><span>Nº de série</span><b class="font-mono">{{ renova.numero_serie }}</b></div>{% endif %}
                 <div class="rn-dado"><span>Loja (origem)</span><b>{{ renova.loja.name|default:"—" }}</b></div>
@@ -92,21 +107,23 @@
         <div class="grid md:grid-cols-2 gap-4 items-start">
             <section class="rn-secao">
                 <div class="rn-secao-topo"><span class="rn-num">2</span>Funcionalidades</div>
-                {% for chave, titulo, descricao, icone, valor, rotulo in renova.funcionalidades_lista %}
+                {% for chave, titulo, descricao, icone, valor, rotulo, nota in renova.funcionalidades_lista %}
                 <div class="rn-item-ro">
                     <span class="rn-ic"><i class="{{ icone }}"></i></span>
                     <div class="min-w-0"><p class="text-sm font-bold text-gray-900">{{ titulo }}</p><p class="text-xs text-gray-500">{{ descricao }}</p></div>
                     <span class="rn-res rn-res-{{ valor|default:'vazio' }}">{{ rotulo }}</span>
+                    {% if nota and valor != 'OK' %}<p class="rn-item-nota rn-nota-{{ valor }}">{{ nota }}</p>{% endif %}
                 </div>
                 {% endfor %}
             </section>
             <section class="rn-secao">
                 <div class="rn-secao-topo"><span class="rn-num">3</span>Condição estética</div>
-                {% for chave, titulo, descricao, icone, valor, rotulo in renova.estetica_lista %}
+                {% for chave, titulo, descricao, icone, valor, rotulo, nota in renova.estetica_lista %}
                 <div class="rn-item-ro">
                     <span class="rn-ic"><i class="{{ icone }}"></i></span>
                     <div class="min-w-0"><p class="text-sm font-bold text-gray-900">{{ titulo }}</p><p class="text-xs text-gray-500">{{ descricao }}</p></div>
                     <span class="rn-res rn-res-{{ valor|default:'vazio' }}">{{ rotulo }}</span>
+                    {% if nota and valor != 'OK' %}<p class="rn-item-nota rn-nota-{{ valor }}">{{ nota }}</p>{% endif %}
                 </div>
                 {% endfor %}
             </section>
@@ -141,7 +158,6 @@
             <div class="p-4 grid sm:grid-cols-2 gap-4 items-center">
                 <div class="grid gap-3">
                     <div class="rn-dado"><span>Nome do vendedor</span><b>{{ renova.vendedor_nome }}</b></div>
-                    <div class="rn-dado"><span>Matrícula</span><b>{{ renova.matricula|default:"—" }}</b></div>
                     <div class="rn-dado"><span>Data</span><b>{{ renova.data_responsavel|date:"d/m/Y" }}</b></div>
                 </div>
                 <div class="rounded-xl border border-dashed p-2 text-center" style="border-color:#CDB8E8;background:#FDFBFF">
@@ -195,6 +211,23 @@
             {% endif %}
         </section>
 
+        <section class="rn-card p-4" id="contrato">
+            <h2 class="rn-h2">Contrato</h2>
+            {% if renova.tem_contrato %}
+            <div class="grid grid-cols-2 gap-3 mt-3">
+                <div class="rn-dado col-span-2"><span>Cliente</span><b>{{ renova.cliente_nome }}</b></div>
+                <div class="rn-dado"><span>CPF</span><b class="font-mono">{{ renova.cliente_cpf_mascarado }}</b></div>
+                <div class="rn-dado"><span>Cidade</span><b>{{ renova.contrato_cidade|default:"—" }}</b></div>
+                <div class="rn-dado col-span-2"><span>Aparelho novo</span><b>{{ renova.aparelho_novo|default:"—" }}</b></div>
+            </div>
+            <a href="{% url 'renova:contrato' renova.pk %}" class="rn-btn rn-btn-primario text-xs w-full mt-3">
+                <i class="fa-solid fa-file-signature"></i>Ver e imprimir o contrato
+            </a>
+            {% else %}
+            <p class="text-sm text-gray-600 mt-2">Avaliação feita antes do contrato no portal: não há termo assinado pelo cliente aqui.</p>
+            {% endif %}
+        </section>
+
         <section class="rn-card p-4">
             <h2 class="rn-h2 mb-3">Chamado</h2>
             {% if renova.chamado %}
@@ -223,19 +256,19 @@
         <section class="rn-card p-4" id="venda">
             <h2 class="rn-h2">Venda</h2>
             {% if renova.numero_venda %}
-            <p class="text-[11px] font-extrabold uppercase tracking-wide mt-2" style="color:#6B21A8">Nº da venda</p>
+            <p class="text-[11px] font-extrabold uppercase tracking-wide mt-2" style="color:#6B21A8">Nº da venda no Vivo Go</p>
             <p class="rn-venda-numero">{{ renova.numero_venda }}</p>
             {% elif renova.reprovada %}
             <p class="text-sm text-gray-600 mt-2"><i class="fa-solid fa-ban mr-1"></i>Troca reprovada: não há venda com este aparelho.</p>
             {% else %}
-            <p class="text-sm text-gray-600 mt-2">Nº da venda ainda não informado.{% if pode_editar_venda %} Informe quando a venda sair — ele entra na etiqueta.{% endif %}</p>
+            <p class="text-sm text-gray-600 mt-2">Nº da venda no Vivo Go não informado (avaliação de antes de ele ser obrigatório).{% if pode_editar_venda %} Informe aqui — ele entra na etiqueta.{% endif %}</p>
             {% endif %}
             {% if pode_editar_venda %}
             <form method="post" action="{% url 'renova:venda' renova.pk %}" class="mt-3 flex gap-2">
                 {% csrf_token %}
                 <input type="hidden" name="voltar" value="{{ voltar }}#venda">
                 <input type="text" name="numero_venda" value="{{ renova.numero_venda }}" maxlength="{{ numero_venda_max }}"
-                       autocomplete="off" spellcheck="false" aria-label="Nº da venda" placeholder="Nº da venda"
+                       autocomplete="off" spellcheck="false" required aria-label="Nº da venda no Vivo Go" placeholder="Nº da venda no Vivo Go"
                        class="rn-caixa-obs font-mono flex-1 min-w-0">
                 <button type="submit" class="rn-btn rn-btn-primario text-xs">{% if renova.numero_venda %}Corrigir{% else %}Salvar{% endif %}</button>
             </form>

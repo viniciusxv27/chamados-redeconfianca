@@ -5,6 +5,9 @@
 {% block rt_subtitulo %}Quem segue a rotina gerencial, o que cada pessoa pode fazer e a semana de cada uma{% endblock %}
 
 {% block rt_acoes %}
+<button type="button" class="rt-btn rt-btn-hero" data-rt-abrir="rt-modal-pessoa">
+    <i class="fas fa-user-pen"></i><span>Editar rotina de uma pessoa</span>
+</button>
 <button type="button" class="rt-btn rt-btn-hero-forte" data-rt-abrir="rt-modal-adicionar">
     <i class="fas fa-user-plus"></i><span>Adicionar pessoas</span>
 </button>
@@ -50,7 +53,8 @@
             data-busca="{{ r.user.full_name }} {{ r.user.email }} {{ r.user.sector.name|default:'' }} {{ r.user.job_title }}">
             <span class="rt-avatar" aria-hidden="true">{{ r.user.first_name|slice:':1' }}{{ r.user.last_name|slice:':1' }}</span>
             <div class="min-w-0">
-                <p class="rt-pessoa-nome">{{ r.user.full_name|default:r.user.username }}</p>
+                <a href="{% url 'rotina:gestao_pessoa' r.user_id %}" class="rt-pessoa-nome rt-pessoa-link"
+                   title="Editar a rotina de {{ r.user.full_name|default:r.user.username }}">{{ r.user.full_name|default:r.user.username }}</a>
                 <p class="rt-pessoa-meta">{{ r.user.sector.name|default:'Sem setor' }}{% if r.user.job_title %} · {{ r.user.job_title }}{% endif %}</p>
             </div>
             <div class="rt-pessoa-extra">
@@ -95,9 +99,9 @@
                     WhatsApp{% if not r.tem_telefone %} <span class="rt-chip rt-chip-cinza" style="padding: .05rem .4rem">sem tel.</span>{% endif %}
                 </label>
             </div>
-            <a href="{% url 'rotina:gestao_pessoa' r.user_id %}" class="rt-btn rt-btn-claro rt-btn-sm rt-pessoa-acao"
-               title="Editar a semana de {{ r.user.first_name }}">
-                <i class="fas fa-pen"></i><span class="hidden sm:inline">Editar semana</span>
+            <a href="{% url 'rotina:gestao_pessoa' r.user_id %}" class="rt-btn rt-btn-primario rt-btn-sm rt-pessoa-acao"
+               aria-label="Editar a rotina de {{ r.user.full_name|default:r.user.username }}">
+                <i class="fas fa-pen-to-square"></i><span>Editar rotina</span>
             </a>
         </li>
         {% endfor %}
@@ -121,6 +125,8 @@
     </div>
     {% endif %}
 </section>
+
+{% include 'rotina/_escolher_pessoa.html' %}
 
 {# ------------------------------------------------------------------ #}
 {# Adicionar pessoas (seletor da casa: busca + lista com caixas)      #}

@@ -61,16 +61,22 @@ def descricao_do_chamado(renova):
         '',
         'FUNCIONALIDADES',
     ]
-    linhas += [f'• {titulo}: {rotulo}' for _, titulo, _, _, _, rotulo in renova.funcionalidades_lista()]
+    linhas += [f'• {titulo}: {rotulo}' + (f' — {nota}' if nota else '')
+               for _, titulo, _, _, _, rotulo, nota in renova.funcionalidades_lista()]
     linhas += ['', 'CONDIÇÃO ESTÉTICA']
-    linhas += [f'• {titulo}: {rotulo}' for _, titulo, _, _, _, rotulo in renova.estetica_lista()]
+    linhas += [f'• {titulo}: {rotulo}' + (f' — {nota}' if nota else '')
+               for _, titulo, _, _, _, rotulo, nota in renova.estetica_lista()]
     linhas += [
         '',
         f'Observações gerais: {renova.observacoes or "—"}',
         '',
         f'Fotos do aparelho: {_texto_das_fotos(renova)} (veja na avaliação)',
         '',
-        f'Responsável: {renova.vendedor_nome}' + (f' (matrícula {renova.matricula})' if renova.matricula else ''),
+        f'Responsável: {renova.vendedor_nome}',
+        f'Nº da venda (Vivo Go): {renova.numero_venda or "—"}'
+        + (f' · aparelho novo: {renova.aparelho_novo}' if renova.aparelho_novo else ''),
+        'Contrato (termo de transferência): ' + ('assinado pelo cliente — veja na avaliação.' if renova.tem_contrato
+                                                 else 'não foi feito no portal.'),
         '',
         f'Marcar a chegada do aparelho: {_link(renova)}',
     ]
@@ -174,18 +180,56 @@ def gerentes_da_loja(renova):
     return list(grupo.members.filter(is_active=True, sector_id=renova.loja_id).order_by('first_name', 'last_name'))
 
 
+def _notificar(renova, destinos, titulo, mensagem, autor):
+    """Sino e push do portal (celular e navegador de quem ativou), pelo serviço de notificações.
+
+    Quem fez a ação não é avisado dela. O serviço também manda para os SUPERADMIN,
+    como em todo o portal — por isso é um envio só por acontecimento.
+    Devolve quem foi avisado.
+    """
+    unicos = {}
+    for pessoa in destinos:
+        if pessoa and pessoa.is_active and pessoa.pk != getattr(autor, 'pk', None):
+            unicos.setdefault(pessoa.pk, pessoa)
+    if not unicos:
+        return []
+    try:
+        from notifications.services import NotificationChannel, NotificationType, notification_service
+
+        canais = [NotificationChannel.IN_APP, NotificationChannel.PUSH]
+        if notification_service.onesignal_enabled:
+            canais.append(NotificationChannel.ONESIGNAL)
+        notification_service.send_notification(
+            list(unicos.values()), titulo, mensagem, notification_type=NotificationType.SYSTEM, channels=canais,
+            action_url=reverse('renova:detalhe', args=[renova.pk]), icon='fas fa-mobile-screen-button',
+            extra_data={'renova_id': renova.pk}, created_by=autor)
+    except Exception as exc:                                    # noqa: BLE001 — a avaliação já valeu
+        logger.warning('Aviso do Renova %s não foi enviado: %s', renova.pk, exc)
+    return list(unicos.values())
+
+
+def pessoas_do_financeiro(cfg=None):
+    return list((cfg or ConfiguracaoRenova.get()).financeiro.filter(is_active=True))
+
+
 def avisar_gerentes(renova, autor):
-    """Avaliação nova: o sino dos gerentes da loja pede a aprovação. Devolve quem foi avisado."""
+    """Avaliação enviada: os gerentes da loja (que aprovam) e o financeiro ficam sabendo.
+
+    Devolve os gerentes avisados.
+    """
     gerentes = [g for g in gerentes_da_loja(renova) if g.pk != getattr(autor, 'pk', None)]
-    _avisar_no_sino(gerentes, f'Renova {renova.codigo}: aprovar a troca',
-                    f'{renova.vendedor_nome} avaliou {renova.aparelho} — padrão {renova.padrao or "—"}, '
-                    f'{_moeda(renova.valor_estimado)}. Aprove ou reprove.',
-                    reverse('renova:detalhe', args=[renova.pk]), autor)
+    loja = f' ({renova.loja.name})' if renova.loja else ''
+    _notificar(renova, gerentes + pessoas_do_financeiro(), f'Renova {renova.codigo}: troca aguardando aprovação',
+               f'{renova.vendedor_nome} avaliou {renova.aparelho}{loja} — padrão {renova.padrao or "—"}, '
+               f'{_moeda(renova.valor_estimado)}. O gerente da loja aprova ou reprova.', autor)
     return gerentes
 
 
 def decidir(renova, gerente, aprovar, observacao=''):
-    """Aprovação do gerente. Aprovada: abre o chamado (e libera a etiqueta). Reprovada: sem troca.
+    """Aprovação do gerente. Aprovada: abre o chamado. Reprovada: sem troca.
+
+    A decisão avisa quem fez a avaliação, o financeiro e os gerentes da loja
+    (menos quem decidiu).
 
     Devolve (renova, chamado). O chamado é None na reprovação ou se não abrir — a
     aprovação vale mesmo assim, e dá para abrir de novo pela tela.
@@ -212,14 +256,14 @@ def decidir(renova, gerente, aprovar, observacao=''):
         except Exception:                                       # noqa: BLE001 — a aprovação já valeu
             logger.exception('Chamado do Renova %s não abriu na aprovação', renova.pk)
 
-    if renova.criado_por_id and renova.criado_por_id != gerente.pk:
-        if aprovar:
-            texto = (f'{_nome(gerente)} aprovou a troca de {renova.aparelho}. '
-                     + (f'Chamado #{chamado.pk} aberto — imprima a etiqueta.' if chamado else 'Imprima a etiqueta.'))
-        else:
-            texto = f'{_nome(gerente)} reprovou a troca de {renova.aparelho}: {observacao}'
-        _avisar_no_sino(renova.criado_por, f'Renova {renova.codigo}: {renova.get_aprovacao_display().lower()}',
-                        texto, reverse('renova:detalhe', args=[renova.pk]), gerente)
+    loja = f' ({renova.loja.name})' if renova.loja else ''
+    if aprovar:
+        texto = (f'{_nome(gerente)} aprovou a troca de {renova.aparelho}{loja} — {_moeda(renova.valor_estimado)}. '
+                 + (f'Chamado #{chamado.pk} aberto.' if chamado else 'O chamado ainda não abriu.'))
+    else:
+        texto = f'{_nome(gerente)} reprovou a troca de {renova.aparelho}{loja}: {observacao}'
+    _notificar(renova, [renova.criado_por] + pessoas_do_financeiro() + gerentes_da_loja(renova),
+               f'Renova {renova.codigo}: {renova.get_aprovacao_display().lower()}', texto, gerente)
     return renova, chamado
 
 
@@ -249,9 +293,9 @@ def excluir_avaliacao(renova, usuario):
     """Exclui a avaliação e devolve o id do chamado que ficou (ou None).
 
     Some o registro do Renova — e, com ele, tudo o que mora nele: checklist,
-    padrão e valor, assinatura (é um data URL no próprio registro), aprovação,
-    recebimento e nº da venda. A etiqueta é montada na hora a partir do registro,
-    então também deixa de existir. As fotos do aparelho saem em cascata e os
+    padrão e valor, assinaturas (data URLs no próprio registro), o contrato com
+    os dados do cliente, aprovação, recebimento e nº da venda. A etiqueta e o
+    contrato são montados na hora a partir do registro, então também deixam de existir. As fotos do aparelho saem em cascata e os
     arquivos delas são apagados do armazenamento depois que a exclusão vale
     (apagar a linha não apaga o arquivo no S3). As imagens de material são da
     configuração do módulo, de todas as avaliações, e ficam.

@@ -13,6 +13,9 @@
 </span>
 {% endif %}
 {% if e_admin %}
+<button type="button" class="rt-btn rt-btn-hero-forte" data-rt-abrir="rt-modal-pessoa">
+    <i class="fas fa-user-pen"></i><span>Editar rotina de uma pessoa</span>
+</button>
 <a href="{% url 'rotina:gestao' %}" class="rt-btn rt-btn-hero"><i class="fas fa-sliders"></i><span>Gerenciar rotinas</span></a>
 {% endif %}
 {% endblock %}
@@ -44,6 +47,7 @@
     {% endif %}
 </section>
 {% endif %}
+{% if e_admin %}{% include 'rotina/_escolher_pessoa.html' %}{% endif %}
 {% endblock %}
 
 {% block rt_js %}

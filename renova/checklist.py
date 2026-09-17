@@ -96,8 +96,9 @@ def rotulo(opcoes, valor, padrao='—'):
     return dict(opcoes).get(valor, padrao)
 
 
-def respostas_de_itens(itens, respostas, opcoes):
-    """[(chave, título, descrição, ícone, valor, rótulo)] na ordem do impresso."""
-    respostas = respostas or {}
-    return [(chave, titulo, descricao, icone, respostas.get(chave), rotulo(opcoes, respostas.get(chave)))
+def respostas_de_itens(itens, respostas, opcoes, notas=None):
+    """[(chave, título, descrição, ícone, valor, rótulo, observação do item)] na ordem do impresso."""
+    respostas, notas = respostas or {}, notas or {}
+    return [(chave, titulo, descricao, icone, respostas.get(chave), rotulo(opcoes, respostas.get(chave)),
+             notas.get(chave, ''))
             for chave, titulo, descricao, icone in itens]

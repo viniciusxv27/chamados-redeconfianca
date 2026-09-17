@@ -24,7 +24,7 @@ from core.middleware import log_action
 
 from . import checklist, conteudo
 from .context_processors import limpar_cache_do_menu
-from .models import PrecoAparelho, Renova
+from .models import PrecoAparelho, Renova, formatar_cnpj, formatar_cpf
 from .permissoes import (configuracao, e_gerente, e_superadmin, pode_aprovar, pode_excluir, pode_fazer,
                          pode_informar_venda, pode_receber, pode_ver, pode_ver_gestao, pode_ver_modulo,
                          renovas_visiveis, setor_recebedor)
@@ -32,7 +32,8 @@ from .padrao import regras_para_tela
 from .fotos import gravar_fotos, ler_fotos
 from .servicos import (DecisaoInvalida, abrir_chamado, avisar_gerentes, decidir, excluir_avaliacao,
                        gerentes_da_loja, registrar_recebimento, resumo_da_avaliacao)
-from .validacao import NUMERO_VENDA_MAX, ler_checklist, ler_numero_venda, ler_valor
+from .validacao import (NUMERO_VENDA_MAX, OBSERVACAO_ITEM_MAX, cnpj_valido, ler_checklist, ler_numero_venda,
+                        ler_valor, so_digitos)
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
@@ -209,24 +210,50 @@ ETAPAS = [
     (4, 'Valor', 'fa-solid fa-calculator'),
     (5, 'Fotos', 'fa-solid fa-camera'),
     (6, 'Responsável', 'fa-solid fa-signature'),
-    (7, 'Concluir', 'fa-solid fa-list-check'),
+    (7, 'Itens obrigatórios', 'fa-solid fa-list-check'),
+    (8, 'Contrato', 'fa-solid fa-file-signature'),
 ]
 ETAPA_DO_ERRO = {
     'modelo': 1, 'armazenamento': 1, 'imei1': 1, 'imei2': 1, 'data_avaliacao': 1, 'loja': 1, 'saude_bateria': 1,
-    'funcionalidades': 2, 'estetica': 3, 'observacoes': 4, 'cliente_segue': 4, 'fotos': 5,
-    'vendedor_nome': 6, 'assinatura': 6, 'numero_venda': 6, 'itens_obrigatorios': 7, 'categoria': 7,
+    'funcionalidades': 2, 'obs_funcionalidades': 2, 'estetica': 3, 'obs_estetica': 3, 'cliente_segue': 4, 'fotos': 5,
+    'vendedor_nome': 6, 'vendedor_cpf': 6, 'assinatura': 6, 'itens_obrigatorios': 7,
+    'aparelho_novo': 8, 'numero_venda': 8, 'cliente_nome': 8, 'cliente_cpf': 8, 'contrato_cidade': 8,
+    'assinatura_cliente': 8, 'categoria': 8,
 }
 
 
 def _secoes(post):
-    """Os itens do checklist com o que já veio marcado (para reabrir a tela preenchida)."""
-    obrigatorios = [(chave, titulo, descricao, icone, post.get(f'obrig_{chave}') == 'on')
-                    for chave, titulo, descricao, icone in checklist.ITENS_OBRIGATORIOS]
-    funcionalidades = [(chave, titulo, descricao, icone, post.get(f'func_{chave}', ''))
-                       for chave, titulo, descricao, icone in checklist.FUNCIONALIDADES]
-    estetica = [(chave, titulo, descricao, icone, post.get(f'est_{chave}', ''))
-                for chave, titulo, descricao, icone in checklist.ESTETICA]
+    """Os itens do checklist com o que já veio marcado (para reabrir a tela preenchida).
+
+    Cada item leva os passos do passo a passo que o explicam (a ajuda que abre ao
+    passar o mouse) e, em funcionalidades e estética, a observação escrita nele.
+    """
+    def item(chave, titulo, descricao, icone, **extra):
+        return dict(chave=chave, titulo=titulo, descricao=descricao, icone=icone,
+                    passos=' '.join(conteudo.PASSOS_DO_ITEM.get(chave, [])), **extra)
+
+    obrigatorios = [item(*i, marcado=post.get(f'obrig_{i[0]}') == 'on') for i in checklist.ITENS_OBRIGATORIOS]
+    funcionalidades = [item(*i, valor=post.get(f'func_{i[0]}', ''), nota=post.get(f'obs_func_{i[0]}', ''))
+                       for i in checklist.FUNCIONALIDADES]
+    estetica = [item(*i, valor=post.get(f'est_{i[0]}', ''), nota=post.get(f'obs_est_{i[0]}', ''))
+                for i in checklist.ESTETICA]
     return obrigatorios, funcionalidades, estetica
+
+
+def _lojas_no_contrato(cfg, lojas):
+    """{id da loja: {'cidade', 'cnpj'}} para o contrato abrir preenchido quando a loja muda na tela.
+
+    A cidade é a da configuração; sem ela, a do último contrato feito na loja.
+    """
+    ultimas = {}
+    for loja_id, cidade in (Renova.objects.exclude(contrato_cidade='').exclude(loja_id=None)
+                            .order_by('-criado_em').values_list('loja_id', 'contrato_cidade')[:500]):
+        ultimas.setdefault(loja_id, cidade)
+    dados = {}
+    for loja in lojas:
+        cidade, cnpj = cfg.dados_da_loja(loja.pk)
+        dados[str(loja.pk)] = {'cidade': cidade or ultimas.get(loja.pk, ''), 'cnpj': cnpj}
+    return dados
 
 
 @login_required
@@ -252,6 +279,9 @@ def nova(request):
             erros['categoria'] = ('A categoria do chamado do Renova não está configurada. '
                                   'Peça ao SUPERADMIN para configurar antes de concluir.')
         if not erros:
+            # O contrato guarda a empresa e o CNPJ de agora: reimpresso, continua o que o cliente assinou.
+            dados['contrato_empresa'] = cfg.contrato_empresa
+            dados['contrato_cnpj'] = cfg.dados_da_loja(dados['loja'].pk)[1]
             try:
                 with transaction.atomic():
                     renova = Renova.objects.create(criado_por=user, **dados)
@@ -266,11 +296,11 @@ def nova(request):
             if gerentes:
                 nomes = ', '.join(g.full_name or g.get_username() for g in gerentes)
                 messages.success(request, f'Avaliação {renova.codigo} enviada para o gerente da loja aprovar ({nomes}). '
-                                          'O chamado e a etiqueta saem depois da aprovação.')
+                                          'A etiqueta e o contrato já podem ser impressos; o chamado abre na aprovação.')
             else:
                 messages.warning(request, f'Avaliação {renova.codigo} salva, mas não há gerente do grupo GERENTES na loja '
                                           f'{renova.loja.name if renova.loja else ""} para aprovar. Avise o SUPERADMIN.')
-            return redirect('renova:detalhe', pk=renova.pk)
+            return redirect(f"{reverse('renova:etiqueta', args=[renova.pk])}?novo=1")
         valores = request.POST
         if request.FILES:
             # O navegador não devolve arquivos escolhidos: com erro, as fotos precisam ser escolhidas de novo.
@@ -278,8 +308,11 @@ def nova(request):
     else:
         hoje = timezone.localdate().isoformat()
         valores = {'data_avaliacao': hoje, 'data_responsavel': hoje, 'vendedor_nome': user.full_name,
-                   'loja': str(user.sector_id or '')}
+                   'vendedor_cpf': formatar_cpf(so_digitos(getattr(user, 'cpf', ''))), 'loja': str(user.sector_id or '')}
 
+    lojas_contrato = _lojas_no_contrato(cfg, lojas + outros_setores)
+    if request.method != 'POST':
+        valores['contrato_cidade'] = lojas_contrato.get(valores['loja'], {}).get('cidade', '')
     obrigatorios, funcionalidades, estetica = _secoes(request.POST if request.method == 'POST' else {})
     return render(request, 'renova/nova.html', _contexto(
         request, cfg, 'nova', valores=valores, erros=erros, lojas=lojas, outros_setores=outros_setores,
@@ -288,8 +321,12 @@ def nova(request):
         opcoes_func=checklist.OPCOES_FUNCIONALIDADE, opcoes_est=checklist.OPCOES_ESTETICA,
         precos_json=_precos_para_tela(cfg),
         imagem_checklist=_imagem(cfg, 'imagem_checklist'), sem_categoria=sem_categoria,
-        etapas=ETAPAS, etapa_inicial=min((ETAPA_DO_ERRO.get(c, 7) for c in erros if c != 'fotos_de_novo'), default=1),
-        fotos=checklist.FOTOS, fotos_avaria_max=checklist.FOTOS_AVARIA_MAX))
+        etapas=ETAPAS, etapa_inicial=min((ETAPA_DO_ERRO.get(c, 8) for c in erros if c != 'fotos_de_novo'), default=1),
+        fotos=checklist.FOTOS, fotos_avaria_max=checklist.FOTOS_AVARIA_MAX,
+        passos=conteudo.PASSO_A_PASSO, consulta_imei_url=conteudo.CONSULTA_IMEI_URL,
+        observacao_item_max=OBSERVACAO_ITEM_MAX, numero_venda_max=NUMERO_VENDA_MAX,
+        lojas_contrato=lojas_contrato, logo_contrato=_estatico('renova/contrato-logo.png'),
+        contrato_previa={'empresa': cfg.contrato_empresa, 'data': timezone.localdate()}))
 
 
 def _renova_visivel(request, cfg, pk):
@@ -334,29 +371,73 @@ def detalhe(request, pk):
         pode_reabrir_chamado=(renova.aprovada and renova.chamado_id is None
                               and (renova.criado_por_id == user.pk or e_superadmin(user) or pode_aprovar(user, renova))),
         pode_editar_venda=_pode_editar_venda(user, renova), numero_venda_max=NUMERO_VENDA_MAX,
-        voltar=request.get_full_path(), setor=setor_recebedor(cfg)))
+        voltar=request.get_full_path(), setor=setor_recebedor(cfg), consulta_imei_url=conteudo.CONSULTA_IMEI_URL))
 
 
 @login_required
 def etiqueta(request, pk):
+    """A etiqueta sai assim que a avaliação é enviada (com as fotos), antes da aprovação do gerente."""
     cfg = configuracao()
     renova = _renova_visivel(request, cfg, pk)
     if renova is None:
         return _nao_abre(request, cfg, pk)
-    if not renova.aprovada:
-        messages.info(request, f'A etiqueta de {renova.codigo} sai depois que o gerente da loja aprova a troca.')
+    if not renova.pode_imprimir_etiqueta:
+        messages.info(request, f'{renova.codigo} foi reprovada: o cliente ficou com o aparelho, então não há etiqueta.')
         return redirect('renova:detalhe', pk=renova.pk)
     return render(request, 'renova/etiqueta.html', _contexto(
         request, cfg, 'inicio', renova=renova, novo=request.GET.get('novo') == '1',
         logo_url=_estatico('images/logo.png'),
+        gerentes=gerentes_da_loja(renova) if renova.aguardando_aprovacao else [],
         pode_editar_venda=_pode_editar_venda(request.user, renova), numero_venda_max=NUMERO_VENDA_MAX,
         voltar=reverse('renova:etiqueta', args=[renova.pk])))
+
+
+def dados_do_contrato(renova, cfg):
+    """O que vai no termo de transferência: o que ficou gravado na assinatura, com a configuração de
+    agora só para o que a avaliação não guardou (as feitas antes de a loja ter CNPJ configurado)."""
+    cidade_da_loja, cnpj_da_loja = cfg.dados_da_loja(renova.loja_id)
+    return {
+        'empresa': renova.contrato_empresa or cfg.contrato_empresa,
+        'cnpj': formatar_cnpj(renova.contrato_cnpj) or cnpj_da_loja,
+        'cidade': renova.contrato_cidade or cidade_da_loja,
+        'data': timezone.localtime(renova.criado_em).date() if renova.criado_em else timezone.localdate(),
+        'aparelho': renova.aparelho + (f' · {renova.cor}' if renova.cor else ''),
+        'imei': renova.imei1 + (f' / {renova.imei2}' if renova.imei2 else ''),
+        'numero_venda': renova.numero_venda,
+        'data_operacao': renova.data_avaliacao,
+        'aparelho_novo': renova.aparelho_novo,
+        'bateria': f'{renova.saude_bateria}%' if renova.saude_bateria is not None else '',
+        'vendedor_nome': renova.vendedor_nome,
+        'vendedor_cpf': renova.vendedor_cpf_formatado,
+        'vendedor_assinatura': renova.assinatura,
+        'cliente_nome': renova.cliente_nome,
+        'cliente_cpf': renova.cliente_cpf_formatado,
+        'cliente_assinatura': renova.assinatura_cliente,
+    }
+
+
+@login_required
+def contrato(request, pk):
+    """O termo de transferência de propriedade assinado pelo cliente, pronto para imprimir (via do cliente e da loja)."""
+    cfg = configuracao()
+    renova = _renova_visivel(request, cfg, pk)
+    if renova is None:
+        return _nao_abre(request, cfg, pk)
+    if not renova.tem_contrato:
+        messages.info(request, f'{renova.codigo} foi feita antes do contrato no portal: não há termo assinado pelo cliente.')
+        return redirect('renova:detalhe', pk=renova.pk)
+    return render(request, 'renova/contrato.html', {
+        'renova': renova, 'contrato': dados_do_contrato(renova, cfg),
+        'logo_contrato': _estatico('renova/contrato-logo.png'),
+        'vias': ['Via do cliente', 'Via da loja'],
+        'rodape': f'{renova.codigo} · assinado no portal em {timezone.localtime(renova.criado_em):%d/%m/%Y às %H:%M}',
+    })
 
 
 @login_required
 @require_POST
 def informar_venda(request, pk):
-    """Informa, corrige ou apaga o nº da venda — a venda costuma fechar depois da avaliação."""
+    """Informa ou corrige o nº da venda no Vivo Go (as avaliações de antes do contrato podem estar sem ele)."""
     cfg = configuracao()
     renova = get_object_or_404(Renova.objects.select_related('loja'), pk=pk)
     destino = _voltar_seguro(request.POST.get('voltar'), reverse('renova:detalhe', args=[renova.pk]))
@@ -371,16 +452,16 @@ def informar_venda(request, pk):
     except ValueError:
         messages.error(request, f'O nº da venda vai até {NUMERO_VENDA_MAX} caracteres — ficou como estava.')
         return redirect(destino)
+    if not numero:
+        messages.error(request, 'O nº da venda no Vivo Go é obrigatório — ficou como estava.')
+        return redirect(destino)
     if numero == renova.numero_venda:
         messages.info(request, f'{renova.codigo}: o nº da venda já estava assim.')
         return redirect(destino)
     renova.numero_venda = numero
     renova.save(update_fields=['numero_venda', 'atualizado_em'])
-    if numero:
-        quando_sai = 'ele já sai na etiqueta' if renova.aprovada else 'ele sai na etiqueta quando o gerente aprovar'
-        messages.success(request, f'{renova.codigo}: nº da venda {numero} salvo — {quando_sai}.')
-    else:
-        messages.success(request, f'{renova.codigo}: nº da venda apagado.')
+    messages.success(request, f'{renova.codigo}: nº da venda {numero} (Vivo Go) salvo — ele sai na etiqueta'
+                              f'{" e no contrato" if renova.tem_contrato else ""}.')
     return redirect(destino)
 
 
@@ -499,11 +580,13 @@ def aprovacao(request, pk):
         return redirect('renova:detalhe', pk=pk)
     limpar_cache_do_menu([request.user.pk] + [g.pk for g in gerentes_da_loja(renova)])
     if renova.aprovada and chamado:
-        messages.success(request, f'{renova.codigo} aprovada: chamado #{chamado.pk} aberto e etiqueta liberada.')
+        messages.success(request, f'{renova.codigo} aprovada: chamado #{chamado.pk} aberto. O vendedor e o financeiro '
+                                  'foram avisados.')
     elif renova.aprovada:
         messages.warning(request, f'{renova.codigo} aprovada, mas o chamado não abriu. Abra de novo por esta tela.')
     else:
-        messages.success(request, f'{renova.codigo} reprovada: o vendedor foi avisado e o cliente fica com o aparelho.')
+        messages.success(request, f'{renova.codigo} reprovada: o vendedor e o financeiro foram avisados e o cliente '
+                                  'fica com o aparelho.')
     return redirect('renova:detalhe', pk=pk)
 
 
@@ -576,8 +659,8 @@ def _gestao_csv(qs):
     resposta.write('\ufeff')                     # BOM: o Excel abre os acentos certos
     escrita = csv.writer(resposta, delimiter=';')
     escrita.writerow(['Código', 'Avaliado em', 'Loja', 'Vendedor', 'Aparelho', 'IMEI 1', 'Padrão', 'Valor (R$)',
-                      'Situação', 'Aprovação por', 'Aprovação em', 'Chamado', 'Nº da venda', 'Recebimento por',
-                      'Recebimento em', 'Obs. do recebimento'])
+                      'Situação', 'Aprovação por', 'Aprovação em', 'Chamado', 'Nº da venda (Vivo Go)',
+                      'Recebimento por', 'Recebimento em', 'Obs. do recebimento'])
 
     def quando(valor):
         return timezone.localtime(valor).strftime('%d/%m/%Y %H:%M') if valor else ''
@@ -640,6 +723,8 @@ def configurar(request):
             _salvar_materiais(request, cfg)
         elif secao == 'tabela':
             _salvar_tabela(request)
+        elif secao == 'contrato':
+            _salvar_contrato(request, cfg)
         return redirect(f"{reverse('renova:configuracao')}#{secao or 'acesso'}")
 
     from tickets.models import Category
@@ -658,7 +743,54 @@ def configurar(request):
                    ('desconto_d', 'D', cfg.desconto_d)],
         imagens=[(campo, rotulo, _imagem(cfg, campo), bool(getattr(cfg, campo)))
                  for campo, rotulo in ROTULOS_DAS_IMAGENS],
-        precos=PrecoAparelho.objects.order_by('marca', 'ordem', 'id')))
+        precos=PrecoAparelho.objects.order_by('marca', 'ordem', 'id'),
+        lojas_contrato=[{'loja': loja, **((cfg.contrato_lojas or {}).get(str(loja.pk)) or {})}
+                        for loja in _lojas_do_contrato()]))
+
+
+def _lojas_do_contrato():
+    """As lojas (e os setores que já têm avaliação) — as que podem precisar de cidade e CNPJ no contrato."""
+    from users.models import Sector
+
+    lojas, _ = _setores()
+    com_avaliacao = list(Sector.objects.filter(renovas__isnull=False).exclude(pk__in=[s.pk for s in lojas])
+                         .distinct().order_by('name'))
+    return lojas + com_avaliacao
+
+
+def _salvar_contrato(request, cfg):
+    post = request.POST
+    empresa = ' '.join(str(post.get('contrato_empresa') or '').split())[:150]
+    if empresa:
+        cfg.contrato_empresa = empresa
+    else:
+        messages.error(request, 'A razão social do contrato não fica em branco — ficou como estava.')
+    invalidos = []
+    cnpj = so_digitos(post.get('contrato_cnpj'))
+    if not cnpj or cnpj_valido(cnpj):
+        cfg.contrato_cnpj = formatar_cnpj(cnpj)
+    else:
+        invalidos.append('o geral')
+    lojas = dict(cfg.contrato_lojas or {})
+    nomes = {str(s.pk): s.name for s in _lojas_do_contrato()}
+    for loja_id in post.getlist('loja_id'):
+        if loja_id not in nomes:
+            continue
+        cidade = ' '.join(str(post.get(f'cidade_{loja_id}') or '').split())[:100]
+        cnpj_loja = so_digitos(post.get(f'cnpj_{loja_id}'))
+        if cnpj_loja and not cnpj_valido(cnpj_loja):
+            invalidos.append(nomes[loja_id])
+            cnpj_loja = so_digitos((lojas.get(loja_id) or {}).get('cnpj'))
+        if cidade or cnpj_loja:
+            lojas[loja_id] = {'cidade': cidade, 'cnpj': formatar_cnpj(cnpj_loja)}
+        else:
+            lojas.pop(loja_id, None)
+    cfg.contrato_lojas = lojas
+    cfg.atualizado_por = request.user
+    cfg.save()
+    if invalidos:
+        messages.error(request, 'CNPJ inválido (ficou como estava): ' + ', '.join(invalidos) + '.')
+    messages.success(request, 'Dados do contrato salvos. Valem para os contratos assinados daqui para a frente.')
 
 
 def _salvar_acesso(request, cfg):

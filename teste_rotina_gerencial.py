@@ -4,7 +4,9 @@ O que se confere:
 - o modelo padrão (migração de dados) com a semana da planilha;
 - aplicar o modelo copia as atividades para a pessoa;
 - a tela da pessoa (com rotina, sem rotina, pausada) e o destaque vindo do aviso;
-- as telas de gestão só abrem para SUPERADMIN;
+- as telas de gestão só abrem para SUPERADMIN, que edita a rotina de cada pessoa: botão
+  "Editar rotina" em cada linha, o seletor de pessoa (em Minha rotina, Pessoas e no
+  editor) e, para quem ainda não tem rotina, a tela de criar e já editar;
 - a API respeita as travas: a pessoa não move atividade travada, move a livre
   e não cria sem permissão; a gestão cria, trava e apaga; horário inválido é
   recusado;
@@ -202,6 +204,16 @@ try:
 
     print('== MODELO PADRÃO (MIGRAÇÃO DE DADOS) ==')
     modelo = ModeloRotina.objects.filter(nome=NOME_PADRAO).first()
+    if modelo is None:
+        # No banco de verdade o modelo da migração pode ter sido renomeado e editado pela gestão
+        # (em 17/09/2026 virou "Rotina lojas de rua", com outras atividades). O teste confere a
+        # migração: recria o modelo original com a própria função dela, dentro da transação desfeita.
+        from importlib import import_module
+
+        from django.apps import apps as registro_de_apps
+        import_module('rotina.migrations.0002_modelo_padrao_loja').criar_modelo_padrao(registro_de_apps, None)
+        modelo = ModeloRotina.objects.filter(nome=NOME_PADRAO).first()
+        print('  (o modelo padrão foi renomeado no banco: recriado da migração só para este teste)')
     t('o modelo padrão existe', modelo is not None)
     do_modelo = list(modelo.atividades.all()) if modelo else []
     por_dia = {d: [a for a in do_modelo if a.dia_semana == d] for d in range(6)}
@@ -338,6 +350,16 @@ try:
     t('SUPERADMIN sem rotina: aviso e link para gerenciar',
       r.status_code == 200 and 'Você ainda não tem uma rotina gerencial' in html
       and 'href="/rotina-gerencial/gestao/"' in html)
+    t('e, em Minha rotina, o botão para editar a rotina de qualquer pessoa (seletor com busca)',
+      'data-rt-abrir="rt-modal-pessoa"' in html and 'id="rt-modal-pessoa"' in html
+      and 'data-rt-filtro=".rt-escolha"' in html
+      and f'href="/rotina-gerencial/gestao/{gerente.id}/"' in html and f'href="/rotina-gerencial/gestao/{ninguem.id}/"' in html)
+    escolhas = re.findall(r'<a href="/rotina-gerencial/gestao/(\d+)/" class="rt-escolha"', html)
+    t('no seletor vêm todas as pessoas ativas, quem já tem rotina primeiro',
+      len(escolhas) == User.objects.filter(is_active=True).count()
+      and escolhas.index(str(gerente.id)) < escolhas.index(str(ninguem.id))
+      and 'sem rotina' in html and '64 atividades' in html, (len(escolhas),))
+    t('pessoa comum não ganha o seletor', 'rt-modal-pessoa' not in c_gerente.get('/rotina-gerencial/').content.decode())
     r = Client().get('/rotina-gerencial/')
     t('sem login: vai para o login', r.status_code == 302 and '/login' in r.get('Location', ''),
       (r.status_code, r.get('Location')))
@@ -355,22 +377,56 @@ try:
     r = cliente(superusuario).get('/rotina-gerencial/gestao/')
     t('superusuário do Django também abre a gestão', r.status_code == 200, r.status_code)
     html = c_admin.get('/rotina-gerencial/gestao/').content.decode()
+
+    def lista_de_pessoas(pagina):
+        achado = re.search(r'<ul class="rt-pessoas">(.*?)</ul>', pagina, re.S)
+        return achado.group(1) if achado else ''
+
+    lista = lista_de_pessoas(html)
     t('a lista traz quem tem rotina, com a contagem de atividades',
-      f'href="/rotina-gerencial/gestao/{gerente.id}/"' in html and '64 atividades' in html)
+      f'href="/rotina-gerencial/gestao/{gerente.id}/"' in lista and '64 atividades' in lista)
+    t('cada pessoa tem o botão "Editar rotina" (com texto) e o nome também abre a semana dela',
+      lista.count('<span>Editar rotina</span>') == RotinaGerencial.objects.count()
+      and f'<a href="/rotina-gerencial/gestao/{gerente.id}/" class="rt-pessoa-nome rt-pessoa-link"' in lista)
+    t('a tela Pessoas também tem o seletor para editar a rotina de qualquer pessoa',
+      'data-rt-abrir="rt-modal-pessoa"' in html and f'href="/rotina-gerencial/gestao/{ninguem.id}/" class="rt-escolha"' in html)
     t('e o seletor da casa para adicionar pessoas (busca + caixas)',
       'data-rt-filtro=".rt-candidato"' in html and f'name="usuarios" value="{ninguem.id}"' in html)
-    html = c_admin.get('/rotina-gerencial/gestao/', {'q': 'zzrotina criadora'}).content.decode()
+    lista = lista_de_pessoas(c_admin.get('/rotina-gerencial/gestao/', {'q': 'zzrotina criadora'}).content.decode())
     t('a busca filtra a lista de pessoas',
-      f'href="/rotina-gerencial/gestao/{criadora.id}/"' in html and f'href="/rotina-gerencial/gestao/{gerente.id}/"' not in html)
-    html = c_admin.get('/rotina-gerencial/gestao/', {'q': 'ZZ Loja Teste Rotina'}).content.decode()
-    t('a busca por setor também', f'href="/rotina-gerencial/gestao/{gerente.id}/"' in html)
-    cfg = json_script(c_admin.get(f'/rotina-gerencial/gestao/{gerente.id}/').content.decode(), 'rt-config') or {}
+      f'href="/rotina-gerencial/gestao/{criadora.id}/"' in lista and f'href="/rotina-gerencial/gestao/{gerente.id}/"' not in lista)
+    lista = lista_de_pessoas(c_admin.get('/rotina-gerencial/gestao/', {'q': 'ZZ Loja Teste Rotina'}).content.decode())
+    t('a busca por setor também', f'href="/rotina-gerencial/gestao/{gerente.id}/"' in lista)
+    html = c_admin.get(f'/rotina-gerencial/gestao/{gerente.id}/').content.decode()
+    cfg = json_script(html, 'rt-config') or {}
     t('editor da pessoa: calendário que cria e trava, apontando para a pessoa certa',
       cfg.get('modo') == 'gestao' and cfg.get('podeCriar') is True and cfg.get('podeTravar') is True
       and cfg.get('usuario') == gerente.id, cfg)
+    t('no editor dá para trocar de pessoa sem voltar para a lista',
+      'Trocar de pessoa' in html and 'id="rt-modal-pessoa"' in html and f'href="/rotina-gerencial/gestao/{criadora.id}/" class="rt-escolha"' in html)
+    t('o editor de modelo não traz o seletor de pessoa', 'rt-modal-pessoa' not in c_admin.get(f'/rotina-gerencial/modelos/{modelo.id}/').content.decode())
     r = c_admin.get(f'/rotina-gerencial/gestao/{ninguem.id}/')
-    t('editor de quem não tem rotina volta para a lista',
-      r.status_code == 302 and r.get('Location') == '/rotina-gerencial/gestao/', (r.status_code, r.get('Location')))
+    html = r.content.decode()
+    t('quem não tem rotina: a tela oferece criar ali mesmo (com modelo ou vazia), sem calendário',
+      r.status_code == 200 and 'ainda não tem rotina gerencial' in html and 'action="/rotina-gerencial/gestao/adicionar/"' in html
+      and f'name="usuarios" value="{ninguem.id}"' in html and f'<option value="{modelo.id}"' in html
+      and 'Criar a rotina e editar a semana' in html and 'id="rt-calendario"' not in html, r.status_code)
+    with transaction.atomic():
+        r = c_admin.post('/rotina-gerencial/gestao/adicionar/', {'usuarios': [ninguem.id], 'modelo': modelo.id,
+                                                                  'avisar_whatsapp': 'on'})
+        criada = RotinaGerencial.objects.filter(user=ninguem).first()
+        t('criar por ela já abre a semana da pessoa, com as atividades do modelo',
+          r.status_code == 302 and r.get('Location') == f'/rotina-gerencial/gestao/{ninguem.id}/'
+          and criada is not None and criada.atividades.count() == modelo.atividades.count() > 0,
+          (r.status_code, r.get('Location')))
+        transaction.set_rollback(True)
+    t('(desfeito: a pessoa "ninguém" continua sem rotina para o resto do teste)',
+      not RotinaGerencial.objects.filter(user=ninguem).exists())
+    inativo = novo('inativo', is_active=False)
+    r = c_admin.get(f'/rotina-gerencial/gestao/{inativo.id}/')
+    t('pessoa inativa sem rotina volta para a lista', r.status_code == 302 and r.get('Location') == '/rotina-gerencial/gestao/',
+      (r.status_code, r.get('Location')))
+    inativo.delete()
     html = c_admin.get('/rotina-gerencial/modelos/').content.decode()
     t('lista de modelos com a miniatura da semana (números com ponto no CSS)',
       NOME_PADRAO in html and 'rt-mini-bloco' in html and not re.search(r'top: \d+,\d+%', html))

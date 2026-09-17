@@ -6,6 +6,11 @@
 {% block rt_subtitulo %}{% if modo == 'modelo' %}Modelo de rotina{% else %}Rotina gerencial{% endif %} · {{ dados.atividades|length }} atividade{{ dados.atividades|length|pluralize }} na semana{% endblock %}
 
 {% block rt_acoes %}
+{% if modo == 'gestao' %}
+<button type="button" class="rt-btn rt-btn-hero" data-rt-abrir="rt-modal-pessoa">
+    <i class="fas fa-users-gear"></i><span>Trocar de pessoa</span>
+</button>
+{% endif %}
 <a href="{% if modo == 'modelo' %}{% url 'rotina:modelos' %}{% else %}{% url 'rotina:gestao' %}{% endif %}" class="rt-btn rt-btn-hero">
     <i class="fas fa-arrow-left"></i><span>Voltar</span>
 </a>
@@ -140,6 +145,8 @@
 {% include 'rotina/_calendario.html' %}
 
 {% if modo == 'gestao' %}
+{% include 'rotina/_escolher_pessoa.html' %}
+
 <div id="rt-modal-aplicar" class="rc-modal rt-modal hidden" role="dialog" aria-modal="true" aria-labelledby="rt-aplicar-titulo">
     <div class="rt-modal-fundo" data-rt-fechar></div>
     <form method="post" action="{% url 'rotina:gestao_pessoa_acao' pessoa.id %}" class="rc-modal-card rt-modal-card">

@@ -19,6 +19,17 @@ from . import checklist
 
 # "RENOVA VINI (CONFIANÇA)", setor RENOVA: o chamado de cada Renova nasce nela.
 CATEGORIA_PADRAO_ID = 89
+EMPRESA_DO_CONTRATO = 'REDE CONFIANÇA TELECOM LTDA.'
+
+
+def formatar_cpf(digitos):
+    d = str(digitos or '')
+    return f'{d[:3]}.{d[3:6]}.{d[6:9]}-{d[9:]}' if len(d) == 11 else d
+
+
+def formatar_cnpj(digitos):
+    d = str(digitos or '')
+    return f'{d[:2]}.{d[2:5]}.{d[5:8]}/{d[8:12]}-{d[12:]}' if len(d) == 14 else d
 
 
 class ConfiguracaoRenova(models.Model):
@@ -50,6 +61,14 @@ class ConfiguracaoRenova(models.Model):
     imagem_passo_a_passo = models.ImageField(
         upload_to='renova/materiais/', storage=get_media_storage(), blank=True,
         verbose_name='Imagem do passo a passo')
+    # Termo de transferência de propriedade (o contrato que o cliente assina na última etapa)
+    contrato_empresa = models.CharField(
+        max_length=150, default=EMPRESA_DO_CONTRATO, verbose_name='Razão social no contrato')
+    contrato_cnpj = models.CharField(
+        max_length=18, blank=True, verbose_name='CNPJ no contrato',
+        help_text='Vale para as lojas que não têm CNPJ próprio abaixo.')
+    # {id da loja: {'cidade': ..., 'cnpj': ...}} — a cidade abre preenchida no contrato
+    contrato_lojas = models.JSONField(default=dict, blank=True, verbose_name='Cidade e CNPJ de cada loja')
     atualizado_em = models.DateTimeField(auto_now=True)
     atualizado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
@@ -78,6 +97,11 @@ class ConfiguracaoRenova(models.Model):
 
     def descontos(self):
         return {'A': 0, 'B': self.desconto_b, 'C': self.desconto_c, 'D': self.desconto_d}
+
+    def dados_da_loja(self, loja_id):
+        """(cidade, CNPJ formatado) da loja no contrato; o CNPJ geral quando a loja não tem o dela."""
+        dados = (self.contrato_lojas or {}).get(str(loja_id or ''), {}) or {}
+        return dados.get('cidade', ''), formatar_cnpj(dados.get('cnpj') or self.contrato_cnpj)
 
     def valor_do_padrao(self, valor_a, padrao):
         """Valor de compra no padrão: A é o valor cheio; B, C e D levam o desconto configurado."""
@@ -164,6 +188,9 @@ class Renova(models.Model):
     itens_obrigatorios = models.JSONField(default=dict, blank=True, verbose_name='Itens obrigatórios conferidos')
     funcionalidades = models.JSONField(default=dict, blank=True, verbose_name='Funcionalidades')
     estetica = models.JSONField(default=dict, blank=True, verbose_name='Condição estética')
+    # O que o vendedor descreveu no item marcado com observação ou falha:
+    # {'funcionalidades': {chave: texto}, 'estetica': {chave: texto}}
+    observacoes_itens = models.JSONField(default=dict, blank=True, verbose_name='Observação de cada item')
 
     # 5 e 6
     observacoes = models.TextField(blank=True, verbose_name='Observações gerais')
@@ -171,9 +198,21 @@ class Renova(models.Model):
 
     # 7. Responsável pela avaliação
     vendedor_nome = models.CharField(max_length=150, verbose_name='Nome do vendedor')
+    vendedor_cpf = models.CharField(max_length=11, blank=True, verbose_name='CPF do vendedor')
+    # Não é mais pedida na tela; fica para as avaliações antigas.
     matricula = models.CharField(max_length=40, blank=True, verbose_name='Matrícula')
     assinatura = models.TextField(blank=True, verbose_name='Assinatura (imagem)')
     data_responsavel = models.DateField(default=timezone.localdate, verbose_name='Data')
+
+    # 8. Termo de transferência de propriedade, assinado pelo cliente na última etapa.
+    # Empresa, CNPJ e cidade ficam como estavam na assinatura: o termo reimpresso é o mesmo.
+    cliente_nome = models.CharField(max_length=150, blank=True, verbose_name='Nome do cliente')
+    cliente_cpf = models.CharField(max_length=11, blank=True, verbose_name='CPF do cliente')
+    aparelho_novo = models.CharField(max_length=150, blank=True, verbose_name='Aparelho novo')
+    contrato_cidade = models.CharField(max_length=100, blank=True, verbose_name='Cidade do contrato')
+    contrato_empresa = models.CharField(max_length=150, blank=True, verbose_name='Empresa no contrato')
+    contrato_cnpj = models.CharField(max_length=18, blank=True, verbose_name='CNPJ no contrato')
+    assinatura_cliente = models.TextField(blank=True, verbose_name='Assinatura do cliente (imagem)')
 
     criado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='renovas_feitos',
@@ -183,10 +222,9 @@ class Renova(models.Model):
     chamado = models.ForeignKey(
         'tickets.Ticket', on_delete=models.SET_NULL, null=True, blank=True, related_name='renovas',
         verbose_name='Chamado')
-    # A venda costuma fechar depois da avaliação (e da aprovação): o número entra
-    # quando sair, pela tela da avaliação — ou já no checklist, se a venda veio antes.
-    # Texto livre: cada sistema de venda numera de um jeito.
-    numero_venda = models.CharField(max_length=40, blank=True, default='', verbose_name='Nº da venda')
+    # O nº da venda do aparelho novo no Vivo Go — obrigatório no contrato, a última etapa.
+    # Em branco só nas avaliações de antes disso (dá para informar pela tela da avaliação).
+    numero_venda = models.CharField(max_length=40, blank=True, default='', verbose_name='Nº da venda (Vivo Go)')
 
     # Recebimento pelo setor da categoria do chamado
     recebimento = models.CharField(
@@ -290,15 +328,49 @@ class Renova(models.Model):
 
     def funcionalidades_lista(self):
         return checklist.respostas_de_itens(
-            checklist.FUNCIONALIDADES, self.funcionalidades, checklist.OPCOES_FUNCIONALIDADE)
+            checklist.FUNCIONALIDADES, self.funcionalidades, checklist.OPCOES_FUNCIONALIDADE,
+            (self.observacoes_itens or {}).get('funcionalidades'))
 
     def estetica_lista(self):
-        return checklist.respostas_de_itens(checklist.ESTETICA, self.estetica, checklist.OPCOES_ESTETICA)
+        return checklist.respostas_de_itens(checklist.ESTETICA, self.estetica, checklist.OPCOES_ESTETICA,
+                                            (self.observacoes_itens or {}).get('estetica'))
+
+    def observacoes_resumo(self):
+        """As observações dos itens e as gerais num texto só (etiqueta)."""
+        partes = [f'{titulo}: {nota}' for lista in (self.funcionalidades_lista(), self.estetica_lista())
+                  for _, titulo, _, _, valor, _, nota in lista if nota and valor in ('OBS', 'NAO')]
+        if self.observacoes:
+            partes.append(self.observacoes)
+        return '; '.join(parte.strip().rstrip('.;') for parte in partes)
+
+    @property
+    def tem_contrato(self):
+        """Avaliações de antes do contrato no portal não têm o termo assinado pelo cliente."""
+        return bool(self.assinatura_cliente)
+
+    @property
+    def cliente_cpf_formatado(self):
+        return formatar_cpf(self.cliente_cpf)
+
+    @property
+    def cliente_cpf_mascarado(self):
+        """CPF do cliente nas telas que não são o contrato: só os números do meio."""
+        d = self.cliente_cpf or ''
+        return f'***.{d[3:6]}.{d[6:9]}-**' if len(d) == 11 else ''
+
+    @property
+    def vendedor_cpf_formatado(self):
+        return formatar_cpf(self.vendedor_cpf)
 
     def fotos_em_ordem(self):
         """As fotos na ordem do checklist: as fixas primeiro, depois as das avarias."""
         posicao = {chave: i for i, (chave, _) in enumerate(checklist.TIPOS_DE_FOTO)}
         return sorted(self.fotos.all(), key=lambda f: (posicao.get(f.tipo, 99), f.ordem, f.pk))
+
+    @property
+    def pode_imprimir_etiqueta(self):
+        """A etiqueta sai logo no envio (antes da aprovação); só a troca reprovada fica sem."""
+        return not self.reprovada
 
     @property
     def alertas(self):

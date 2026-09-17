@@ -1,0 +1,41 @@
+{% comment %}
+Termo de transferência de propriedade (o contrato do Renova), como no .docx da loja.
+Recebe: c (dados_do_contrato), logo, via, rodape e sem_valor. Os data-c são o que a
+prévia da última etapa preenche enquanto o vendedor digita.
+{% endcomment %}
+<article class="ct-folha{% if sem_valor %} ct-sem-valor{% endif %}" aria-label="Termo de transferência de propriedade — {{ via }}">
+    <div class="ct-topo" aria-hidden="true">
+        <span class="ct-faixa-rosa"></span>
+        <span class="ct-faixa-roxa"><img src="{{ logo }}" alt=""></span>
+    </div>
+    <div class="ct-corpo">
+        <h1 class="ct-titulo">TERMO DE TRANSFERÊNCIA DE PROPRIEDADE DE APARELHO</h1>
+        <p class="ct-local-data"><span data-c="cidade" class="{% if not c.cidade %}ct-vazio{% endif %}">{{ c.cidade|default:"—" }}</span>, {{ c.data|date:"j \d\e F \d\e Y"|lower }}.</p>
+        <h2 class="ct-subtitulo">Dados da Operação</h2>
+        <dl class="ct-dados">
+            <div><dt>Aparelho usado:</dt><dd data-c="aparelho" class="{% if not c.aparelho %}ct-vazio{% endif %}">{{ c.aparelho|default:"—" }}</dd></div>
+            <div><dt>Imei:</dt><dd data-c="imei" class="{% if not c.imei %}ct-vazio{% endif %}">{{ c.imei|default:"—" }}</dd></div>
+            <div><dt>Nº da venda (Vivo Go):</dt><dd data-c="numero_venda" class="{% if not c.numero_venda %}ct-vazio{% endif %}">{{ c.numero_venda|default:"—" }}</dd></div>
+            <div><dt>Data:</dt><dd data-c="data_operacao" class="{% if not c.data_operacao %}ct-vazio{% endif %}">{{ c.data_operacao|date:"d/m/Y"|default:"—" }}</dd></div>
+            <div><dt>Aparelho novo:</dt><dd data-c="aparelho_novo" class="{% if not c.aparelho_novo %}ct-vazio{% endif %}">{{ c.aparelho_novo|default:"—" }}</dd></div>
+            <div><dt>Saúde da bateria:</dt><dd data-c="bateria" class="{% if not c.bateria %}ct-vazio{% endif %}">{{ c.bateria|default:"—" }}</dd></div>
+        </dl>
+        <p class="ct-texto">Por meio do presente Termo, declaro que sou legítimo proprietário de aparelho objeto desta transação, o qual é totalmente regular perante a ANATEL, livre e desembaraçado de qualquer ônus, e me responsabilizo, inclusive, pela sua boa procedência.</p>
+        <p class="ct-texto">Neste ato, transfiro a propriedade do referido Aparelho à <b><span data-c="empresa">{{ c.empresa }}</span><span class="ct-cnpj" data-c-cnpj {% if not c.cnpj %}hidden{% endif %}> (CNPJ <span data-c="cnpj">{{ c.cnpj }}</span>)</span></b>, e declaro estar ciente de que devo entregá-lo com as configurações de fábrica, sem que contenha informações, arquivos e/ou dados pessoais ou de terceiros, reconhecendo e autorizando a Rede Confiança a ter posse do aparelho.</p>
+        <p class="ct-texto">A transferência de que trata este Termo, gerará um desconto, cujo valor de abatimento deverá ser utilizado, exclusivamente, neste dia e nesta mesma loja, para aquisição de um novo aparelho.</p>
+
+        <div class="ct-assinaturas">
+            <div class="ct-assinatura">
+                <div class="ct-assinatura-img"><img data-c-img="vendedor_assinatura" alt="Assinatura do vendedor" {% if c.vendedor_assinatura %}src="{{ c.vendedor_assinatura }}"{% else %}hidden{% endif %}></div>
+                <p class="ct-assinatura-linha">NOME DO VENDEDOR – CPF</p>
+                <p class="ct-assinatura-nome"><span data-c="vendedor_nome">{{ c.vendedor_nome|default:"—" }}</span> – <span data-c="vendedor_cpf">{{ c.vendedor_cpf|default:"—" }}</span></p>
+            </div>
+            <div class="ct-assinatura">
+                <div class="ct-assinatura-img"><img data-c-img="cliente_assinatura" alt="Assinatura do cliente" {% if c.cliente_assinatura %}src="{{ c.cliente_assinatura }}"{% else %}hidden{% endif %}></div>
+                <p class="ct-assinatura-linha">NOME DO CLIENTE – CPF</p>
+                <p class="ct-assinatura-nome"><span data-c="cliente_nome">{{ c.cliente_nome|default:"—" }}</span> – <span data-c="cliente_cpf">{{ c.cliente_cpf|default:"—" }}</span></p>
+            </div>
+        </div>
+    </div>
+    <footer class="ct-rodape"><b>{{ via }}</b><span>{{ rodape }}</span></footer>
+</article>

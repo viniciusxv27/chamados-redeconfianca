@@ -1,0 +1,56 @@
+{% extends 'rotina/base_rotina.html' %}
+
+{% block rt_titulo %}Rotina de {{ pessoa.full_name|default:pessoa.username }}{% endblock %}
+{% block rt_cabecalho %}{{ pessoa.full_name|default:pessoa.username }}{% endblock %}
+{% block rt_subtitulo %}Ainda sem rotina gerencial{% endblock %}
+
+{% block rt_acoes %}
+<button type="button" class="rt-btn rt-btn-hero" data-rt-abrir="rt-modal-pessoa">
+    <i class="fas fa-users-gear"></i><span>Trocar de pessoa</span>
+</button>
+<a href="{% url 'rotina:gestao' %}" class="rt-btn rt-btn-hero"><i class="fas fa-arrow-left"></i><span>Voltar</span></a>
+{% endblock %}
+
+{% block rt_conteudo %}
+<section class="rt-card rt-vazio">
+    <div class="rt-vazio-ilustracao" aria-hidden="true">
+        <i class="fas fa-calendar-week"></i>
+        <span class="rt-vazio-selo"><i class="fas fa-plus"></i></span>
+    </div>
+    <h2>{{ pessoa.first_name|default:pessoa.username }} ainda não tem rotina gerencial</h2>
+    <p>
+        {{ pessoa.sector.name|default:'Sem setor' }}{% if pessoa.job_title %} · {{ pessoa.job_title }}{% endif %}.
+        Crie a rotina para editar a semana: comece por um modelo e ajuste depois, ou comece com a semana vazia.
+    </p>
+    <form method="post" action="{% url 'rotina:gestao_adicionar' %}" class="rt-pilha rt-criar-rotina">
+        {% csrf_token %}
+        <input type="hidden" name="usuarios" value="{{ pessoa.id }}">
+        <label class="rt-campo">
+            <span class="rt-rotulo">Começar com o modelo</span>
+            <select name="modelo" class="rt-input">
+                {% for m in modelos %}
+                <option value="{{ m.id }}" {% if forloop.first %}selected{% endif %}>{{ m.nome }} ({{ m.total }} atividade{{ m.total|pluralize }}){% if m.com_domingo %} · com domingo{% endif %}</option>
+                {% endfor %}
+                <option value="">Nenhum: começar com a semana vazia</option>
+            </select>
+        </label>
+        <label class="rt-switch-linha">
+            <span class="rt-switch"><input type="checkbox" name="pode_criar"><span class="rt-switch-trilho"></span></span>
+            <span>
+                <strong>Pode criar atividades próprias</strong>
+                <small>A pessoa acrescenta e apaga atividades dela. As da gestão continuam como a gestão definiu.</small>
+            </span>
+        </label>
+        <label class="rt-switch-linha">
+            <span class="rt-switch"><input type="checkbox" name="avisar_whatsapp" checked><span class="rt-switch-trilho"></span></span>
+            <span>
+                <strong><i class="fab fa-whatsapp"></i> Lembretes no WhatsApp</strong>
+                <small>Cada atividade avisa no WhatsApp do cadastro {{ lembrete_minutos }} minutos antes de começar. Sem telefone, nada sai.</small>
+            </span>
+        </label>
+        <button type="submit" class="rt-btn rt-btn-primario"><i class="fas fa-calendar-plus"></i> Criar a rotina e editar a semana</button>
+    </form>
+</section>
+
+{% include 'rotina/_escolher_pessoa.html' %}
+{% endblock %}

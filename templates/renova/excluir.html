@@ -37,7 +37,7 @@
                 <div class="rn-dado"><span>Vendedor</span><b>{{ renova.vendedor_nome }}</b></div>
                 <div class="rn-dado"><span>Avaliada em</span><b>{{ renova.data_avaliacao|date:"d/m/Y" }}</b></div>
                 <div class="rn-dado"><span>Valor estimado</span><b>{% if renova.valor_estimado is not None %}R$ {{ renova.valor_estimado|floatformat:"2g" }}{% else %}—{% endif %}</b></div>
-                <div class="rn-dado"><span>Nº da venda</span><b class="font-mono">{{ renova.numero_venda|default:"—" }}</b></div>
+                <div class="rn-dado"><span>Nº da venda (Vivo Go)</span><b class="font-mono">{{ renova.numero_venda|default:"—" }}</b></div>
                 <div class="rn-dado"><span>Chamado</span><b>{% if renova.chamado_id %}#{{ renova.chamado_id }}{% else %}—{% endif %}</b></div>
             </div>
         </section>
@@ -57,7 +57,10 @@
                 {% if renova.numero_venda %}
                 <li><i class="fa-solid fa-receipt"></i><span>O nº da venda <b class="font-mono">{{ renova.numero_venda }}</b>.</span></li>
                 {% endif %}
-                {% if renova.aprovada %}
+                {% if renova.tem_contrato %}
+                <li><i class="fa-solid fa-file-signature"></i><span>O contrato assinado por {{ renova.cliente_nome }} (nome, CPF e assinatura do cliente): não dá mais para reimprimir. As vias já impressas continuam valendo como papel.</span></li>
+                {% endif %}
+                {% if renova.pode_imprimir_etiqueta %}
                 <li><i class="fa-solid fa-tag"></i><span>A etiqueta: não dá mais para imprimir. Uma que já está colada no aparelho continua lá, mas o código {{ renova.codigo }} não abre mais nada no portal.</span></li>
                 {% endif %}
                 <li><i class="fa-solid fa-list"></i><span>A avaliação sai da lista, das contagens do menu e do quadro de gestão (e da planilha exportada).</span></li>
