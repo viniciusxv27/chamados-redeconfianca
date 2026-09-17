@@ -71,7 +71,15 @@ FOTOS = [
 FOTO_AVARIA = 'avaria'
 FOTO_AVARIA_TITULO = 'Avaria'
 FOTOS_AVARIA_MAX = 6
-TIPOS_DE_FOTO = [(chave, titulo) for chave, titulo, _, _, _ in FOTOS] + [(FOTO_AVARIA, FOTO_AVARIA_TITULO)]
+
+# Print da consulta oficial do IMEI, obrigatório: é a prova de que o aparelho não tem
+# restrição. Fica na etapa 1, ao lado do botão que abre a consulta (não é foto do aparelho).
+FOTO_CONSULTA = ('consulta_imei', 'Print da consulta do IMEI',
+                 'A tela da consulta oficial mostrando o IMEI SEM restrição (nada de roubo, furto ou extravio).',
+                 'fa-solid fa-user-shield', True)
+
+TIPOS_DE_FOTO = ([(chave, titulo) for chave, titulo, _, _, _ in FOTOS]
+                 + [(FOTO_CONSULTA[0], FOTO_CONSULTA[1]), (FOTO_AVARIA, FOTO_AVARIA_TITULO)])
 
 # 6. Parecer final
 APROVADO = 'APROVADO'

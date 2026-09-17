@@ -131,6 +131,13 @@ def ler_checklist(post, *, lojas, precos, hoje=None, cfg=None):
     erros = {}
     d = {}
 
+    # Antes de tudo: aparelho que não liga não entra na troca — a tela encerra o fluxo ali.
+    # Não vira campo do Renova: só a avaliação de aparelho que liga chega a ser gravada.
+    liga = str(post.get('aparelho_liga', '') or '').upper()
+    if liga != 'SIM':
+        erros['aparelho_liga'] = ('O portal não aceita aparelho que não liga.' if liga == 'NAO'
+                                  else 'Diga se o aparelho liga (aparelho que não liga não entra na troca).')
+
     # 1. Dados do aparelho — só Apple, com modelo e armazenamento da tabela de avaliação
     d['marca'], d['marca_outra'], d['armazenamento_outro'], d['numero_serie'] = 'APPLE', '', '', ''
     d['modelo'] = _texto(post, 'modelo', 120)
@@ -194,6 +201,11 @@ def ler_checklist(post, *, lojas, precos, hoje=None, cfg=None):
         sem_resposta = [titulo for chave, titulo, _, _ in itens if d[campo][chave] not in validas]
         if sem_resposta:
             erros[campo] = f'Marque {rotulo}: faltou ' + ', '.join(sem_resposta) + '.'
+
+    # A mesma regra do começo, agora pelo checklist: "Liga e desliga: não funciona" encerra a troca.
+    if d['funcionalidades'].get('liga_desliga') == 'NAO':
+        erros['liga_desliga'] = ('Você marcou "Liga e desliga: não funciona" — o portal não aceita aparelho que '
+                                 'não liga. Se ele liga, corrija a marcação.')
 
     # Padrão e valor de troca: saem das avarias sinalizadas e da tabela — ninguém escolhe.
     d['padrao'], d['padrao_motivos'], d['valor_estimado'] = '', [], None

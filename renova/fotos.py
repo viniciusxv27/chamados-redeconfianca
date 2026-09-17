@@ -59,7 +59,8 @@ def ler_fotos(arquivos):
 
     ``arquivos`` é o request.FILES. ``fotos`` é uma lista [(tipo, ordem, bytes)]
     na ordem do checklist; ``erros`` tem a chave 'fotos' com o que faltou ou foi
-    recusado (a tela mostra tudo junto, na etapa das fotos).
+    recusado nas fotos do aparelho (a tela mostra tudo junto, na etapa das fotos) e
+    a chave 'foto_consulta' com o print da consulta do IMEI, que fica na etapa 1.
     """
     fotos, problemas, faltando = [], [], []
     for chave, titulo, _, _, obrigatoria in checklist.FOTOS:
@@ -82,6 +83,17 @@ def ler_fotos(arquivos):
         except FotoInvalida as exc:
             problemas.append(f'{checklist.FOTO_AVARIA_TITULO} {ordem}: {exc}')
     erros = {}
+    chave, titulo, _, _, _ = checklist.FOTO_CONSULTA
+    print_da_consulta = arquivos.get(f'foto_{chave}')
+    if not print_da_consulta:
+        erros['foto_consulta'] = ('Anexe o print da consulta do IMEI mostrando que o aparelho não tem restrição — '
+                                  'sem ele a avaliação não segue.')
+    else:
+        try:
+            fotos.append((chave, 0, normalizar(print_da_consulta)))
+        except FotoInvalida as exc:
+            erros['foto_consulta'] = f'{titulo}: {exc}. Anexe o print de novo.'
+
     mensagens = []
     if faltando:
         mensagens.append('Tire as fotos obrigatórias: ' + ', '.join(faltando) + '.')

@@ -214,8 +214,10 @@ ETAPAS = [
     (8, 'Contrato', 'fa-solid fa-file-signature'),
 ]
 ETAPA_DO_ERRO = {
-    'modelo': 1, 'armazenamento': 1, 'imei1': 1, 'imei2': 1, 'data_avaliacao': 1, 'loja': 1, 'saude_bateria': 1,
-    'funcionalidades': 2, 'obs_funcionalidades': 2, 'estetica': 3, 'obs_estetica': 3, 'cliente_segue': 4, 'fotos': 5,
+    'aparelho_liga': 1, 'modelo': 1, 'armazenamento': 1, 'imei1': 1, 'imei2': 1, 'data_avaliacao': 1, 'loja': 1,
+    'saude_bateria': 1, 'foto_consulta': 1,
+    'funcionalidades': 2, 'obs_funcionalidades': 2, 'liga_desliga': 2, 'estetica': 3, 'obs_estetica': 3,
+    'cliente_segue': 4, 'fotos': 5,
     'vendedor_nome': 6, 'vendedor_cpf': 6, 'assinatura': 6, 'itens_obrigatorios': 7,
     'aparelho_novo': 8, 'numero_venda': 8, 'cliente_nome': 8, 'cliente_cpf': 8, 'contrato_cidade': 8,
     'assinatura_cliente': 8, 'categoria': 8,
@@ -323,6 +325,7 @@ def nova(request):
         imagem_checklist=_imagem(cfg, 'imagem_checklist'), sem_categoria=sem_categoria,
         etapas=ETAPAS, etapa_inicial=min((ETAPA_DO_ERRO.get(c, 8) for c in erros if c != 'fotos_de_novo'), default=1),
         fotos=checklist.FOTOS, fotos_avaria_max=checklist.FOTOS_AVARIA_MAX,
+        foto_consulta=dict(zip(('chave', 'titulo', 'descricao', 'icone'), checklist.FOTO_CONSULTA)),
         passos=conteudo.PASSO_A_PASSO, consulta_imei_url=conteudo.CONSULTA_IMEI_URL,
         observacao_item_max=OBSERVACAO_ITEM_MAX, numero_venda_max=NUMERO_VENDA_MAX,
         lojas_contrato=lojas_contrato, logo_contrato=_estatico('renova/contrato-logo.png'),

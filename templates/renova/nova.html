@@ -150,7 +150,7 @@
     .rn-fotos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
     @media (min-width: 768px) { .rn-fotos { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
     .rn-foto { position: relative; display: flex; flex-direction: column; border-radius: .9rem; border: 1.5px dashed #CDB8E8; background: #FDFBFF;
-               overflow: hidden; cursor: pointer; transition: border-color .15s, box-shadow .15s; }
+               overflow: hidden; transition: border-color .15s, box-shadow .15s; }
     .rn-foto:hover { border-color: #9D4EDD; }
     .rn-foto:focus-within { box-shadow: 0 0 0 3px rgba(157, 78, 221, .3); }
     .rn-foto input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0; }
@@ -255,6 +255,31 @@
     html.dark .rn-imei-consulta-icone { background: rgba(157, 78, 221, .2); color: #d8b4fe; }
     html.dark .rn-imei-consulta p b { color: #e9d5ff; }
 
+    /* Prova da consulta do IMEI e botões de cada foto */
+    .rn-foto-larga { flex-direction: row; align-items: stretch; width: 100%; }
+    .rn-foto-larga .rn-foto-area { width: 7.5rem; flex-shrink: 0; aspect-ratio: auto; }
+    .rn-foto-larga .rn-foto-texto { flex: 1; min-width: 0; }
+    .rn-foto-larga .rn-foto-titulo { padding-right: 2.3rem; flex-wrap: wrap; row-gap: .15rem; }
+    .rn-foto-botoes { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .45rem; }
+    .rn-foto-botao { display: inline-flex; align-items: center; gap: .3rem; padding: .3rem .55rem; border-radius: .55rem; font-size: .68rem;
+                     font-weight: 700; color: #5B2A86; background: #fff; border: 1px solid #E4D9F1; }
+    .rn-foto-botao:hover { background: #F6EEFF; border-color: #C9B3E6; }
+    .rn-foto-botao:focus-visible { outline: 2px solid #9D4EDD; outline-offset: 1px; }
+    html.dark .rn-foto-botao { background: var(--tema-superficie-3, #2b3346); border-color: var(--tema-borda, #313a4f); color: #d8b4fe; }
+    html.dark .rn-foto-botao:hover { background: rgba(157, 78, 221, .2); }
+
+    .rn-camera-caixa { position: relative; display: flex; flex-direction: column; width: 100%; max-width: 40rem; max-height: 92vh;
+                       background: #140624; border-radius: 1rem; overflow: hidden; box-shadow: 0 30px 60px -20px rgba(0, 0, 0, .6); }
+    .rn-camera-topo { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .6rem .7rem .6rem 1rem;
+                      color: #fff; font-size: .82rem; font-weight: 700; }
+    .rn-camera-topo button { width: 2rem; height: 2rem; border-radius: .55rem; color: #fff; }
+    .rn-camera-topo button:hover { background: rgba(255, 255, 255, .15); }
+    .rn-camera-video { position: relative; background: #000; aspect-ratio: 4 / 3; display: grid; place-items: center; }
+    .rn-camera-video video { width: 100%; height: 100%; object-fit: contain; }
+    .rn-camera-erro { position: absolute; inset: 0; display: grid; place-items: center; padding: 1.5rem; text-align: center;
+                      font-size: .85rem; font-weight: 600; color: #fecaca; background: rgba(20, 6, 36, .9); }
+    .rn-camera-acoes { display: flex; align-items: center; justify-content: space-between; gap: .6rem; padding: .7rem .9rem 1rem; }
+
     /* Contrato (etapa 8) */
     .rn-selo-vivo { display: inline-flex; align-items: center; margin-left: .3rem; padding: .05rem .45rem; border-radius: 9999px; font-size: .6rem;
                     font-weight: 800; letter-spacing: .03em; color: #fff; background: #660099; vertical-align: .06rem; }
@@ -302,10 +327,32 @@
     <input type="hidden" name="assinatura_cliente" value="{{ valores.assinatura_cliente|default:'' }}">
 
     {# ── 1. Aparelho ─────────────────────────────────────────────────────────── #}
-    <section class="rn-etapa rn-secao" data-etapa="1" data-nome="Dados do aparelho">
+    <section class="rn-etapa rn-secao {% if erros.aparelho_liga or erros.foto_consulta %}rn-secao-erro{% endif %}" data-etapa="1" data-nome="Dados do aparelho">
         <div class="rn-secao-topo"><span class="rn-num">1</span>Dados do aparelho</div>
         <div class="p-4 sm:p-5 grid gap-4">
             <div class="rn-erros rn-erros-etapa" role="alert" hidden><ul></ul></div>
+
+            {# A primeira pergunta: aparelho que não liga não entra na troca, e a avaliação para aqui. #}
+            <div class="grid gap-3">
+                <span class="rn-rotulo" style="font-size:.8rem">O aparelho liga?</span>
+                <div class="rn-decisao" role="radiogroup" aria-label="O aparelho liga?">
+                    <label><input type="radio" name="aparelho_liga" value="SIM" {% if valores.aparelho_liga == 'SIM' %}checked{% endif %}>
+                        <i class="fa-solid fa-circle-check"></i><span>Sim, liga<small>Seguir com a avaliação</small></span></label>
+                    <label><input type="radio" name="aparelho_liga" value="NAO" {% if valores.aparelho_liga == 'NAO' %}checked{% endif %}>
+                        <i class="fa-solid fa-circle-xmark"></i><span>Não liga<small>Encerrar a avaliação</small></span></label>
+                </div>
+                {% if erros.aparelho_liga %}<p class="rn-erro">{{ erros.aparelho_liga }}</p>{% endif %}
+                <div id="rn-nao-liga" class="rounded-xl p-4 text-sm" style="background:#FEF2F2;color:#7F1D1D" hidden>
+                    <p class="font-bold"><i class="fa-solid fa-ban mr-1"></i>Não podemos pegar aparelho que não liga.</p>
+                    <p class="mt-1">A avaliação encerra aqui: o Renova só aceita aparelho que liga. Explique ao cliente — nada desta avaliação é salvo.</p>
+                    <div class="mt-3 flex flex-wrap gap-2">
+                        <a href="{% url 'renova:nova' %}" class="rn-btn rn-btn-claro text-xs"><i class="fa-solid fa-rotate-left"></i>Começar outra avaliação</a>
+                        <a href="{% url 'renova:inicio' %}" class="rn-btn rn-btn-claro text-xs"><i class="fa-solid fa-list"></i>Voltar às avaliações</a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid gap-4" id="rn-aparelho-dados">
             <div class="grid sm:grid-cols-3 gap-4">
                 <div>
                     <span class="rn-rotulo">Marca</span>
@@ -353,16 +400,35 @@
                 </label>
             </div>
 
-            <div class="rn-imei-consulta">
+            <div class="rn-imei-consulta {% if erros.foto_consulta %}rn-invalido{% endif %}">
                 <span class="rn-imei-consulta-icone"><i class="fa-solid fa-user-shield"></i></span>
                 <div class="min-w-0 flex-1" style="min-width:14rem">
-                    <p class="text-sm"><b>O IMEI tem restrição?</b> Confira antes de seguir (roubo, furto ou extravio).</p>
+                    <p class="text-sm"><b>O IMEI tem restrição?</b> Consulte (roubo, furto ou extravio) e <b>anexe o print da consulta</b> mostrando que não há bloqueio.</p>
                     <p class="rn-dica" id="rn-imei-copiado" aria-live="polite">A consulta oficial (Anatel / ABR Telecom) não se liga ao portal: o botão copia o IMEI 1 e abre o site — cole lá e responda o captcha.</p>
                 </div>
                 <a href="{{ consulta_imei_url }}" target="_blank" rel="noopener" id="rn-consultar-imei" class="rn-btn rn-btn-claro text-xs">
                     <i class="fa-solid fa-magnifying-glass-location"></i>Consultar IMEI<i class="fa-solid fa-up-right-from-square" style="font-size:.6rem"></i>
                 </a>
+                <div class="rn-foto rn-foto-larga" data-foto="{{ foto_consulta.chave }}" data-obrigatoria="1"
+                     data-titulo="{{ foto_consulta.titulo }}" data-selo-pronto="Pronto">
+                    <input type="file" name="foto_{{ foto_consulta.chave }}" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,image/*">
+                    <input type="file" accept="image/*" capture="environment" data-camera-nativa tabindex="-1" aria-hidden="true">
+                    <span class="rn-foto-area"><i class="{{ foto_consulta.icone }}"></i></span>
+                    <span class="rn-foto-texto">
+                        <span class="rn-foto-titulo">{{ foto_consulta.titulo }}<span class="rn-foto-selo">Obrigatório</span></span>
+                        <span class="rn-foto-desc">{{ foto_consulta.descricao }}</span>
+                        <span class="rn-foto-botoes">
+                            <button type="button" class="rn-foto-botao" data-acao="arquivo" aria-label="Enviar o arquivo do print da consulta">
+                                <i class="fa-solid fa-folder-open"></i>Enviar arquivo
+                            </button>
+                            <button type="button" class="rn-foto-botao" data-acao="camera" aria-label="Tirar foto da tela da consulta">
+                                <i class="fa-solid fa-camera"></i>Tirar foto
+                            </button>
+                        </span>
+                    </span>
+                </div>
             </div>
+            {% if erros.foto_consulta %}<p class="rn-erro">{{ erros.foto_consulta }}</p>{% endif %}
 
             <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 items-start">
                 <label class="block">
@@ -396,11 +462,12 @@
                     {% if erros.saude_bateria %}<p class="rn-erro">{{ erros.saude_bateria }}</p>{% endif %}
                 </label>
             </div>
+            </div>
         </div>
     </section>
 
     {# ── 2. Funcionalidades ──────────────────────────────────────────────────── #}
-    <section class="rn-etapa rn-secao {% if erros.funcionalidades or erros.obs_funcionalidades %}rn-secao-erro{% endif %}" data-etapa="2" data-nome="Funcionalidades" hidden>
+    <section class="rn-etapa rn-secao {% if erros.funcionalidades or erros.obs_funcionalidades or erros.liga_desliga %}rn-secao-erro{% endif %}" data-etapa="2" data-nome="Funcionalidades" hidden>
         <div class="rn-secao-topo"><span class="rn-num">2</span>Funcionalidades</div>
         <div class="rn-erros rn-erros-etapa mx-4 mt-4" role="alert" hidden><ul></ul></div>
         <div class="rn-tri-cabecalho" aria-hidden="true">
@@ -431,6 +498,7 @@
         </div>
         {% endfor %}
         {% if erros.funcionalidades %}<p class="rn-erro px-4 pb-3">{{ erros.funcionalidades }}</p>{% endif %}
+        {% if erros.liga_desliga %}<p class="rn-erro px-4 pb-3">{{ erros.liga_desliga }}</p>{% endif %}
         {% if erros.obs_funcionalidades %}<p class="rn-erro px-4 pb-3">{{ erros.obs_funcionalidades }}</p>{% endif %}
     </section>
 
@@ -543,14 +611,23 @@
             {% if erros.fotos_de_novo %}<p class="rn-erro"><i class="fa-solid fa-camera-rotate mr-1"></i>{{ erros.fotos_de_novo }}</p>{% endif %}
             <div class="rn-fotos">
                 {% for chave, titulo, descricao, icone, obrigatoria in fotos %}
-                <label class="rn-foto" data-foto="{{ chave }}" data-obrigatoria="{{ obrigatoria|yesno:'1,' }}" data-titulo="{{ titulo }}">
+                <div class="rn-foto" data-foto="{{ chave }}" data-obrigatoria="{{ obrigatoria|yesno:'1,' }}" data-titulo="{{ titulo }}">
                     <input type="file" name="foto_{{ chave }}" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,image/*">
+                    <input type="file" accept="image/*" capture="environment" data-camera-nativa tabindex="-1" aria-hidden="true">
                     <span class="rn-foto-area"><i class="{{ icone }}"></i></span>
                     <span class="rn-foto-texto">
                         <span class="rn-foto-titulo">{{ titulo }}<span class="rn-foto-selo">{% if obrigatoria %}Obrigatória{% else %}Opcional{% endif %}</span></span>
                         <span class="rn-foto-desc">{{ descricao }}</span>
+                        <span class="rn-foto-botoes">
+                            <button type="button" class="rn-foto-botao" data-acao="camera" aria-label="Tirar a foto: {{ titulo }}">
+                                <i class="fa-solid fa-camera"></i>Tirar foto
+                            </button>
+                            <button type="button" class="rn-foto-botao" data-acao="arquivo" aria-label="Enviar arquivo da foto: {{ titulo }}">
+                                <i class="fa-solid fa-folder-open"></i>Enviar arquivo
+                            </button>
+                        </span>
                     </span>
-                </label>
+                </div>
                 {% endfor %}
             </div>
             <div class="grid gap-2">
@@ -559,10 +636,16 @@
                         <p class="text-sm font-bold" style="color:#3C096C"><i class="fa-solid fa-magnifying-glass-plus mr-1"></i>Avarias <span class="font-normal text-gray-500">(até {{ fotos_avaria_max }})</span></p>
                         <p class="rn-dica" id="rn-avaria-dica">Riscos, trincos e amassados de perto.</p>
                     </div>
-                    <label class="rn-btn rn-btn-claro text-xs cursor-pointer">
-                        <i class="fa-solid fa-camera"></i>Adicionar foto de avaria
-                        <input type="file" id="rn-avaria-entrada" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,image/*" multiple class="sr-only">
-                    </label>
+                    <div class="flex flex-wrap gap-2">
+                        <button type="button" class="rn-btn rn-btn-claro text-xs" id="rn-avaria-camera">
+                            <i class="fa-solid fa-camera"></i>Tirar foto da avaria
+                        </button>
+                        <label class="rn-btn rn-btn-claro text-xs cursor-pointer">
+                            <i class="fa-solid fa-folder-open"></i>Enviar arquivo
+                            <input type="file" id="rn-avaria-entrada" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,image/*" multiple class="sr-only">
+                        </label>
+                        <input type="file" id="rn-avaria-camera-nativa" accept="image/*" capture="environment" class="sr-only" tabindex="-1" aria-hidden="true">
+                    </div>
                 </div>
                 <input type="file" name="foto_avaria" id="rn-avarias-campo" multiple hidden>
                 <div class="rn-avarias" id="rn-avarias"></div>
@@ -731,6 +814,24 @@
         </button>
     </div>
 </form>
+
+<div class="rn-modal" id="rn-camera" hidden>
+    <div class="rn-modal-fundo" data-fechar-camera></div>
+    <div class="rn-camera-caixa" role="dialog" aria-modal="true" aria-labelledby="rn-camera-titulo">
+        <div class="rn-camera-topo">
+            <p id="rn-camera-titulo">Tirar foto</p>
+            <button type="button" data-fechar-camera aria-label="Fechar a câmera"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="rn-camera-video">
+            <video id="rn-camera-video" playsinline muted></video>
+            <p class="rn-camera-erro" id="rn-camera-erro" hidden></p>
+        </div>
+        <div class="rn-camera-acoes">
+            <button type="button" class="rn-btn rn-btn-claro text-xs" id="rn-camera-trocar"><i class="fa-solid fa-camera-rotate"></i>Trocar câmera</button>
+            <button type="button" class="rn-btn rn-btn-primario" id="rn-camera-tirar"><i class="fa-solid fa-circle-dot"></i>Tirar a foto</button>
+        </div>
+    </div>
+</div>
 
 <div class="rn-modal" id="rn-modal-impresso" hidden>
     <div class="rn-modal-fundo" data-fechar></div>
@@ -1061,8 +1162,82 @@
         }
     }
 
+    /* Tirar foto: no celular abre a câmera do aparelho (melhor foco e flash); no computador,
+       a câmera abre aqui mesmo (getUserMedia só funciona em https ou localhost). Sempre há o
+       caminho "Enviar arquivo" ao lado. */
+    var camera = document.getElementById('rn-camera');
+    var cameraVideo = document.getElementById('rn-camera-video');
+    var cameraErro = document.getElementById('rn-camera-erro');
+    var cameraFluxo = null, cameraDestino = null, cameraFrontal = false;
+
+    function pararCamera() {
+        if (cameraFluxo) {
+            cameraFluxo.getTracks().forEach(function (faixa) { faixa.stop(); });
+            cameraFluxo = null;
+        }
+        cameraVideo.srcObject = null;
+    }
+    function ligarCamera() {
+        pararCamera();
+        cameraErro.hidden = true;
+        return navigator.mediaDevices.getUserMedia({
+            video: {facingMode: cameraFrontal ? 'user' : 'environment', width: {ideal: 1920}}, audio: false
+        }).then(function (fluxo) {
+            cameraFluxo = fluxo;
+            cameraVideo.srcObject = fluxo;
+            var tocando = cameraVideo.play();
+            if (tocando && tocando.catch) tocando.catch(function () { /* o vídeo já está tocando */ });
+        }).catch(function (erro) {
+            cameraErro.hidden = false;
+            cameraErro.textContent = erro && erro.name === 'NotAllowedError'
+                ? 'O navegador não liberou a câmera. Libere o acesso a ela ou use "Enviar arquivo".'
+                : 'Não deu para abrir a câmera neste navegador. Use "Enviar arquivo".';
+        });
+    }
+    function fecharCamera() {
+        camera.hidden = true;
+        cameraDestino = null;
+        pararCamera();
+    }
+    function abrirCamera(titulo, aoTirar) {
+        cameraDestino = aoTirar;
+        document.getElementById('rn-camera-titulo').textContent = 'Tirar foto · ' + titulo;
+        camera.hidden = false;
+        ligarCamera();
+    }
+    function tirarFoto(titulo, aoTirar, entradaNativa) {
+        var toque = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+        if (toque && entradaNativa) { entradaNativa.click(); return; }
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) { abrirCamera(titulo, aoTirar); return; }
+        if (entradaNativa) { entradaNativa.click(); return; }
+        alert('Este navegador não abre a câmera por aqui: use "Enviar arquivo".');
+    }
+    document.getElementById('rn-camera-tirar').addEventListener('click', function () {
+        var destino = cameraDestino;
+        if (!cameraFluxo || !cameraVideo.videoWidth || !destino) return;
+        var quadro = document.createElement('canvas');
+        quadro.width = cameraVideo.videoWidth;
+        quadro.height = cameraVideo.videoHeight;
+        quadro.getContext('2d').drawImage(cameraVideo, 0, 0);
+        quadro.toBlob(function (blob) {
+            if (blob) destino(new File([blob], 'foto.jpg', {type: 'image/jpeg', lastModified: Date.now()}));
+        }, 'image/jpeg', 0.92);
+        fecharCamera();
+    });
+    document.getElementById('rn-camera-trocar').addEventListener('click', function () {
+        cameraFrontal = !cameraFrontal;
+        ligarCamera();
+    });
+    camera.querySelectorAll('[data-fechar-camera]').forEach(function (botao) {
+        botao.addEventListener('click', fecharCamera);
+    });
+    document.addEventListener('keydown', function (evento) {
+        if (evento.key === 'Escape' && !camera.hidden) fecharCamera();
+    });
+
     form.querySelectorAll('.rn-foto').forEach(function (caixa) {
-        var input = caixa.querySelector('input[type=file]');
+        var input = caixa.querySelector('input[type=file][name]');
+        var entradaNativa = caixa.querySelector('[data-camera-nativa]');
         var area = caixa.querySelector('.rn-foto-area');
         var iconeOriginal = area.innerHTML;
         var seloTexto = caixa.querySelector('.rn-foto-selo');
@@ -1100,7 +1275,7 @@
                 area.appendChild(img);
                 caixa.classList.add('tem-foto');
                 caixa.classList.remove('rn-invalido');
-                seloTexto.innerHTML = '<i class="fa-solid fa-check"></i> Pronta';
+                seloTexto.innerHTML = '<i class="fa-solid fa-check"></i> ' + (caixa.getAttribute('data-selo-pronto') || 'Pronta');
                 if (!caixa.querySelector('.rn-foto-remover')) {
                     var remover = document.createElement('button');
                     remover.type = 'button';
@@ -1116,6 +1291,25 @@
                 atualizarResumo();
             });
         });
+        function receber(arquivo) {
+            if (colocarArquivos(input, [arquivo])) input.dispatchEvent(new Event('change'));
+            else alert('Não deu para usar a foto tirada aqui neste navegador: use "Enviar arquivo".');
+        }
+        if (entradaNativa) {
+            entradaNativa.addEventListener('change', function () {
+                var arquivo = entradaNativa.files && entradaNativa.files[0];
+                entradaNativa.value = '';
+                if (arquivo) receber(arquivo);
+            });
+        }
+        var botaoArquivo = caixa.querySelector('[data-acao=arquivo]');
+        var botaoCamera = caixa.querySelector('[data-acao=camera]');
+        if (botaoArquivo) botaoArquivo.addEventListener('click', function () { input.click(); });
+        if (botaoCamera) {
+            botaoCamera.addEventListener('click', function () {
+                tirarFoto(caixa.getAttribute('data-titulo'), receber, entradaNativa);
+            });
+        }
     });
 
     /* Avarias: várias fotos, somadas a cada escolha (o campo de arquivo sozinho substituiria as anteriores). */
@@ -1153,9 +1347,8 @@
         desenharAvarias();
         atualizarResumo();
     }
-    entradaAvaria.addEventListener('change', function () {
-        var novos = Array.prototype.slice.call(entradaAvaria.files || []).filter(function (a) { return /^image\//.test(a.type || 'image/'); });
-        entradaAvaria.value = '';
+    function receberAvarias(escolhidos) {
+        var novos = escolhidos.filter(function (a) { return /^image\//.test(a.type || 'image/'); });
         var vagas = AVARIAS_MAX - avarias.length;
         if (novos.length > vagas) alert('Cabem só ' + AVARIAS_MAX + ' fotos de avaria.');
         novos = novos.slice(0, Math.max(0, vagas));
@@ -1165,11 +1358,27 @@
             prontos.forEach(function (a) { avarias.push({arquivo: a, url: URL.createObjectURL(a)}); });
             sincronizarAvarias();
         }).finally(function () { processando--; });
+    }
+    entradaAvaria.addEventListener('change', function () {
+        var escolhidos = Array.prototype.slice.call(entradaAvaria.files || []);
+        entradaAvaria.value = '';
+        receberAvarias(escolhidos);
+    });
+    var avariaNativa = document.getElementById('rn-avaria-camera-nativa');
+    avariaNativa.addEventListener('change', function () {
+        var arquivo = avariaNativa.files && avariaNativa.files[0];
+        avariaNativa.value = '';
+        if (arquivo) receberAvarias([arquivo]);
+    });
+    document.getElementById('rn-avaria-camera').addEventListener('click', function () {
+        tirarFoto('Avaria', function (arquivo) { receberAvarias([arquivo]); }, avariaNativa);
     });
 
     function contarFotos() {
         var n = 0;
-        form.querySelectorAll('.rn-foto input[type=file]').forEach(function (i) { if (i.files && i.files.length) n++; });
+        form.querySelectorAll('[data-etapa="5"] .rn-foto input[type=file][name]').forEach(function (i) {
+            if (i.files && i.files.length) n++;
+        });
         return n + avarias.length;
     }
 
@@ -1331,6 +1540,14 @@
     function problemasDaEtapa(n) {
         var p = [];
         if (n === 1) {
+            var liga = marcado('aparelho_liga');
+            if (!liga) p.push('Diga se o aparelho liga.');
+            else if (liga === 'NAO') p.push('O portal não aceita aparelho que não liga: a avaliação encerra aqui.');
+            var prova = form.querySelector('[data-foto="consulta_imei"]');
+            var arquivoProva = prova.querySelector('input[type=file][name]');
+            var temProva = !!(arquivoProva.files && arquivoProva.files.length);
+            prova.classList.toggle('rn-invalido', !temProva);
+            if (!temProva) p.push('Anexe o print da consulta do IMEI, mostrando que o aparelho não tem restrição.');
             if (!valor('modelo')) { p.push('Escolha o modelo.'); invalidar('modelo', true); } else invalidar('modelo', false);
             if (!valor('armazenamento')) { p.push('Escolha o armazenamento.'); invalidar('armazenamento', true); } else invalidar('armazenamento', false);
             var i1 = valor('imei1'), i2 = valor('imei2');
@@ -1356,6 +1573,9 @@
                 if (!ok) faltam.push(grupo.getAttribute('data-titulo'));
             });
             if (faltam.length) p.push('Marque ' + (n === 2 ? 'todas as funcionalidades' : 'todos os itens da condição estética') + ': faltou ' + faltam.join(', ') + '.');
+            if (n === 2 && marcado('func_liga_desliga') === 'NAO') {
+                p.push('Você marcou "Liga e desliga: não funciona": o portal não aceita aparelho que não liga. Se ele liga, corrija a marcação.');
+            }
             var semNota = [];
             etapas[n - 1].querySelectorAll('.rn-item-tri').forEach(function (linha) {
                 var escolhido = linha.querySelector('.rn-tri input:checked');
@@ -1372,8 +1592,8 @@
         }
         if (n === 5) {
             var faltando = [];
-            form.querySelectorAll('.rn-foto[data-obrigatoria="1"]').forEach(function (caixa) {
-                var input = caixa.querySelector('input[type=file]');
+            form.querySelectorAll('[data-etapa="5"] .rn-foto[data-obrigatoria="1"]').forEach(function (caixa) {
+                var input = caixa.querySelector('input[type=file][name]');
                 var tem = input.files && input.files.length;
                 caixa.classList.toggle('rn-invalido', !tem);
                 if (!tem) faltando.push(caixa.getAttribute('data-titulo'));
@@ -1416,13 +1636,14 @@
     }
 
     function naoSegue() { return marcado('cliente_segue') === 'NAO'; }
+    function naoLiga() { return marcado('aparelho_liga') === 'NAO'; }
 
     function atualizarNavegacao() {
         botoesEtapa.forEach(function (b) {
             var n = parseInt(b.getAttribute('data-ir'), 10);
             b.classList.toggle('atual', n === atual);
             b.classList.toggle('feita', n < atual || (n <= alcancada && n !== atual));
-            b.disabled = n > alcancada || (naoSegue() && n > 4);
+            b.disabled = n > alcancada || (naoSegue() && n > 4) || (naoLiga() && n > 1);
             if (n === atual) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current');
         });
         document.querySelector('.rn-etapas-barra i').style.width = ((atual - 1) / (total - 1) * 100) + '%';
@@ -1430,9 +1651,11 @@
         document.getElementById('rn-contador').textContent = atual + ' de ' + total;
         botaoVoltar.disabled = atual === 1;
         var ultima = atual === total;
-        botaoAvancar.hidden = ultima || (atual === 4 && naoSegue());
-        botaoEnviar.hidden = !ultima;
+        botaoAvancar.hidden = ultima || (atual === 4 && naoSegue()) || naoLiga();
+        botaoEnviar.hidden = !ultima || naoLiga();
         document.getElementById('rn-nao-segue').hidden = !naoSegue();
+        document.getElementById('rn-nao-liga').hidden = !naoLiga();
+        document.getElementById('rn-aparelho-dados').hidden = naoLiga();
     }
 
     function irPara(n, opcoes) {
@@ -1494,7 +1717,7 @@
             if (abriu && e.target.value === 'OBS') linha.querySelector('.rn-item-obs textarea').focus();
         }
         if (e.target.name === 'loja') cidadeDaLoja();
-        if (e.target.name === 'cliente_segue') atualizarNavegacao();
+        if (e.target.name === 'cliente_segue' || e.target.name === 'aparelho_liga') atualizarNavegacao();
         if (e.target.classList && e.target.classList.contains('rn-campo') && !e.target.hasAttribute('data-cpf')) e.target.classList.remove('rn-invalido');
         atualizarValor();
         atualizarContrato();
@@ -1516,6 +1739,7 @@
         }
     });
     form.addEventListener('submit', function (e) {
+        if (naoLiga()) { e.preventDefault(); irPara(1); return; }
         if (naoSegue()) { e.preventDefault(); irPara(4); return; }
         for (var k = 1; k <= total; k++) {
             var lista = problemasDaEtapa(k);

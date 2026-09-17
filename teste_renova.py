@@ -14,7 +14,11 @@ Pedidos:
   obrigatório e a assinatura do cliente; sem matrícula; o passo a passo abre ao
   passar o mouse no item; "com observação" abre o campo para descrever; botão para
   a consulta oficial do IMEI; a etiqueta sai antes da aprovação; a aprovação avisa
-  o financeiro e os gerentes.
+  o financeiro e os gerentes;
+- aparelho que não liga encerra o fluxo na etapa 1 (e o checklist não pode dizer o
+  contrário); o print da consulta do IMEI é obrigatório; cada foto pode ser tirada
+  na hora ou enviada como arquivo (câmera do aparelho no celular, câmera na página
+  no computador).
 
 Nada sai daqui: avisos do chamado (sinais, push, webhooks) e os avisos do Renova
 (sino e push) são dublês, a categoria e o setor que recebe são de teste, as fotos
@@ -105,7 +109,10 @@ def foto(nome='foto.jpg', cor=(102, 0, 153), tamanho=(2400, 1800), formato='JPEG
 
 
 def fotos_obrigatorias():
-    return {f'foto_{chave}': foto(f'{chave}.jpg') for chave, _, _, _, obrigatoria in checklist.FOTOS if obrigatoria}
+    """As fotos que o envio exige: as do aparelho e o print da consulta do IMEI."""
+    fotos = {f'foto_{chave}': foto(f'{chave}.jpg') for chave, _, _, _, obrigatoria in checklist.FOTOS if obrigatoria}
+    fotos[f'foto_{checklist.FOTO_CONSULTA[0]}'] = foto('consulta.jpg')
+    return fotos
 
 
 def cpf_de(nove):
@@ -175,7 +182,7 @@ try:
         dados = {
             'modelo': 'iPhone 15 Pro', 'cor': 'Titânio natural', 'armazenamento': '256GB',
             'imei1': IMEI_1, 'imei2': IMEI_2, 'data_avaliacao': HOJE, 'loja': str(loja.pk),
-            'saude_bateria': '90', 'observacoes': '',
+            'aparelho_liga': 'SIM', 'saude_bateria': '90', 'observacoes': '',
             'vendedor_nome': 'ZZ Vendedor Renova', 'vendedor_cpf': CPF_VENDEDOR[:3] + '.' + CPF_VENDEDOR[3:6] + '.'
             + CPF_VENDEDOR[6:9] + '-' + CPF_VENDEDOR[9:], 'assinatura': ASSINATURA,
             'data_responsavel': HOJE, 'cliente_segue': 'SIM',
@@ -281,6 +288,18 @@ try:
         t('fotos: envio de arquivo, uma por posição e as avarias',
           'enctype="multipart/form-data"' in html_nova
           and all(f'name="foto_{c}"' in html_nova for c, *_ in checklist.FOTOS) and 'name="foto_avaria"' in html_nova)
+        t('cada foto dá para tirar na hora ou enviar arquivo (câmera do aparelho e câmera na página)',
+          html_nova.count('data-acao="camera"') == 5 and html_nova.count('data-acao="arquivo"') == 5
+          and html_nova.count('data-camera-nativa') == 6 and 'id="rn-camera"' in html_nova
+          and 'id="rn-avaria-camera"' in html_nova and html_nova.count('capture="environment"') == 6,
+          (html_nova.count('data-acao="camera"'), html_nova.count('data-camera-nativa')))
+        t('a primeira pergunta é se o aparelho liga, com o encerramento pronto na tela',
+          'name="aparelho_liga" value="SIM"' in html_nova and 'name="aparelho_liga" value="NAO"' in html_nova
+          and 'id="rn-nao-liga"' in html_nova and 'Não podemos pegar aparelho que não liga' in html_nova
+          and html_nova.index('name="aparelho_liga"') < html_nova.index('name="modelo"'))
+        t('e o print da consulta do IMEI é pedido na etapa do aparelho, como obrigatório',
+          f'name="foto_{checklist.FOTO_CONSULTA[0]}"' in html_nova and 'Print da consulta do IMEI' in html_nova
+          and html_nova.index('name="foto_consulta_imei"') < html_nova.index('data-etapa="2"'))
         itens = [titulo for _, titulo, _, _ in checklist.ITENS_OBRIGATORIOS + checklist.FUNCIONALIDADES + checklist.ESTETICA]
         t('e todos os itens', all(titulo in html_nova for titulo in itens), [x for x in itens if x not in html_nova])
         t('só Apple: sem escolha de marca', 'fa-brands fa-apple' in html_nova and 'name="marca"' not in html_nova
@@ -307,7 +326,24 @@ try:
             print('  (node não encontrado ou script ausente: sintaxe do JS não conferida)')
 
         antes = Renova.objects.count()
-        sem_fotos = {k: v for k, v in checklist_completo().items() if not k.startswith('foto_')}
+        html = c_vendedor.post('/renova/nova/', checklist_completo(aparelho_liga='')).content.decode()
+        t('sem dizer se o aparelho liga não grava e volta na etapa 1',
+          'Diga se o aparelho liga' in html and 'data-etapa-inicial="1"' in html and Renova.objects.count() == antes)
+        html = c_vendedor.post('/renova/nova/', checklist_completo(aparelho_liga='NAO')).content.decode()
+        t('aparelho que não liga encerra o fluxo: nada é gravado',
+          'não aceita aparelho que não liga' in html and 'data-etapa-inicial="1"' in html
+          and Renova.objects.count() == antes)
+        html = c_vendedor.post('/renova/nova/', checklist_completo(func_liga_desliga='NAO')).content.decode()
+        t('e marcar "Liga e desliga: não funciona" no checklist também barra',
+          'não aceita aparelho que não liga' in html and 'data-etapa-inicial="2"' in html
+          and Renova.objects.count() == antes)
+        sem_print = {k: v for k, v in checklist_completo().items() if k != 'foto_consulta_imei'}
+        html = c_vendedor.post('/renova/nova/', sem_print).content.decode()
+        t('sem o print da consulta do IMEI não grava e volta na etapa 1',
+          'Anexe o print da consulta do IMEI' in html and 'data-etapa-inicial="1"' in html
+          and Renova.objects.count() == antes)
+        sem_fotos = {k: v for k, v in checklist_completo().items()
+                     if not k.startswith('foto_') or k == 'foto_consulta_imei'}
         html = c_vendedor.post('/renova/nova/', sem_fotos).content.decode()
         t('sem as fotos obrigatórias não grava e volta na etapa das fotos',
           'Tire as fotos obrigatórias: Frente, Traseira, Laterais.' in html and 'data-etapa-inicial="5"' in html
@@ -349,9 +385,10 @@ try:
             foto_avaria=[foto('risco1.jpg'), foto('risco2.jpg')]))
         renova = Renova.objects.filter(criado_por=vendedor).order_by('-pk').first()
         fotos = renova.fotos_em_ordem() if renova else []
-        t('as fotos ficam na avaliação, na ordem do checklist (fixas e depois as avarias)',
+        t('as fotos ficam na avaliação, na ordem do checklist (fixas, o print da consulta e as avarias)',
           [(f.tipo, f.ordem) for f in fotos] == [('frente', 0), ('traseira', 0), ('laterais', 0), ('tela_ligada', 0),
-                                                 ('avaria', 1), ('avaria', 2)], [(f.tipo, f.ordem) for f in fotos])
+                                                 ('consulta_imei', 0), ('avaria', 1), ('avaria', 2)],
+          [(f.tipo, f.ordem) for f in fotos])
         with Image.open(fotos_memoria.open(fotos[0].arquivo.name)) as gravada:
             t('gravadas em JPEG, reduzidas a 1920 px, com nome sem dados do cliente',
               gravada.format == 'JPEG' and max(gravada.size) == 1920 and fotos[0].arquivo.name.startswith('renova/fotos/')
@@ -417,7 +454,9 @@ try:
           'Risco na lateral esquerda' in html and f'***.{CPF_CLIENTE[3:6]}.{CPF_CLIENTE[6:9]}-**' in html
           and cpf_cliente_formatado not in html and CPF_CLIENTE not in html and f'/renova/{renova.pk}/contrato/' in html
           and conteudo.CONSULTA_IMEI_URL in html and 'Matrícula' not in html and f'/renova/{renova.pk}/etiqueta/' in html)
-        t('e as fotos do aparelho', html.count('class="rn-galeria-item" data-galeria') == 6 and fotos[0].arquivo.url in html)
+        t('e as fotos do aparelho, com o print da consulta do IMEI entre elas',
+          html.count('class="rn-galeria-item" data-galeria') == 7 and fotos[0].arquivo.url in html
+          and 'Print da consulta do IMEI' in html)
         html = c_gerente.get('/renova/').content.decode()
         t('e a lista dele leva direto para aprovar', f'/renova/{renova.pk}/#aprovacao' in html
           and c_gerente.get('/renova/').context['kpis']['a_aprovar'] == 1)
@@ -443,7 +482,8 @@ try:
         t('com o checklist, o padrão e a aprovação', chamado is not None and renova.codigo in chamado.title
           and IMEI_1 in chamado.description and 'Por que este padrão: Bateria em 82%' in chamado.description
           and 'Aprovada pelo gerente por ZZRenova Gerente' in chamado.description and 'Nº de série' not in chamado.description
-          and 'Fotos do aparelho: 6 — Frente, Traseira, Laterais, Tela ligada, Avaria, Avaria' in chamado.description)
+          and 'Fotos do aparelho: 7 — Frente, Traseira, Laterais, Tela ligada, Print da consulta do IMEI, Avaria, Avaria'
+          in chamado.description)
         t('o chamado leva a observação do item e a venda do Vivo Go, sem matrícula nem os dados do cliente',
           chamado is not None and '• Laterais: Com observação — Risco na lateral esquerda' in chamado.description
           and 'Nº da venda (Vivo Go): VG-2026-000123' in chamado.description and 'matrícula' not in chamado.description
@@ -711,6 +751,11 @@ try:
     t('sem assinatura não conclui', 'assinatura' in erros, erros)
     _, erros = ler_checklist(checklist_completo(cliente_segue=''), lojas=lojas, precos=tabela)
     t('sem o cliente dizer que segue não conclui', 'cliente_segue' in erros, erros)
+    for valor, rotulo in (('', 'sem responder'), ('NAO', 'com "não liga"')):
+        _, erros = ler_checklist(checklist_completo(aparelho_liga=valor), lojas=lojas, precos=tabela)
+        t(f'o aparelho que liga é a primeira condição: {rotulo} não conclui', 'aparelho_liga' in erros, erros)
+    _, erros = ler_checklist(checklist_completo(func_liga_desliga='NAO'), lojas=lojas, precos=tabela)
+    t('checklist dizendo que não liga também não conclui', 'liga_desliga' in erros, erros)
     _, erros = ler_checklist(checklist_completo(loja='999999999'), lojas=lojas, precos=tabela)
     t('loja fora da lista é recusada', 'loja' in erros, erros)
     t('o push do comentário do chamado e os avisos do Renova foram sempre dublês (nada saiu)',
