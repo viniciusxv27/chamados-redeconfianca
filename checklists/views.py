@@ -27,7 +27,7 @@ cache_local = caches['local']
 def _is_admins_group_user(user):
     """Verifica se o usuário pertence ao grupo ADMINS."""
     try:
-        admins_group = Group.objects.filter(name__iexact='ADMINS').first()
+        admins_group = Group.objects.filter(name__iexact="ADM's LOJAS").first()
         if admins_group:
             return admins_group.members.filter(id=user.id).exists()
         return False
