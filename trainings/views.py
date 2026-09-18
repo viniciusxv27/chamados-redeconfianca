@@ -5,8 +5,12 @@ from django.http import JsonResponse, Http404
 from django.core.paginator import Paginator
 from django.db import transaction, models
 from django.utils import timezone
+from django.urls import reverse
 from .models import Training, TrainingView, TrainingCategory, TrainingProgress
+import logging
 import os
+
+logger = logging.getLogger(__name__)
 
 
 def pode_gerenciar_treinamentos(user):
@@ -122,66 +126,122 @@ def training_detail_view(request, pk):
 
 @login_required
 def training_upload_view(request):
-    """Upload de novos treinamentos - apenas para admins"""
+    """Upload de novos treinamentos - apenas para admins
+
+    A tela envia por XMLHttpRequest (com o progresso de verdade) e recebe JSON:
+    {'ok': True, 'redirect': ...} ou {'ok': False, 'erro': ...}. Sem JavaScript,
+    o formulário comum continua funcionando, com as mensagens de sempre.
+    """
     if not pode_gerenciar_treinamentos(request.user):
         messages.error(request, 'Você não tem permissão para fazer upload de treinamentos.')
         return redirect('trainings_list')
-    
+
+    por_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest'
     if request.method == 'POST':
         title = request.POST.get('title', '').strip()
         description = request.POST.get('description', '').strip()
         category_id = request.POST.get('category')
         video_file = request.FILES.get('video_file')
         thumbnail = request.FILES.get('thumbnail')
-        duration_seconds = request.POST.get('duration_seconds')
-        
-        # Validações
-        if not title:
-            messages.error(request, 'Título é obrigatório.')
-        elif not description:
-            messages.error(request, 'Descrição é obrigatória.')
-        elif not video_file:
-            messages.error(request, 'Arquivo de vídeo é obrigatório.')
+        duracao = (request.POST.get('duration_seconds') or '').strip()
+
+        erro = _erro_do_envio(title, description, video_file, thumbnail)
+        category = None
+        if not erro and category_id:
+            category = TrainingCategory.objects.filter(id=category_id, is_active=True).first() if category_id.isdigit() else None
+            if category is None:
+                erro = 'Categoria inválida.'
+        if erro:
+            if por_ajax:
+                return JsonResponse({'ok': False, 'erro': erro}, status=400)
+            messages.error(request, erro)
         else:
+            training = None
             try:
                 with transaction.atomic():
-                    # Buscar categoria se especificada
-                    category = None
-                    if category_id:
-                        try:
-                            category = TrainingCategory.objects.get(id=category_id, is_active=True)
-                        except TrainingCategory.DoesNotExist:
-                            messages.error(request, 'Categoria inválida.')
-                            return render(request, 'trainings/upload.html', {
-                                'categories': TrainingCategory.objects.filter(is_active=True),
-                                'max_file_size': 500 * 1024 * 1024,
-                                'accepted_formats': ['mp4', 'avi', 'mov', 'wmv', 'flv', 'webm', 'mkv'],
-                            })
-                    
-                    # Criar o treinamento
+                    # Primeiro o registro, depois os arquivos: assim o vídeo sobe uma vez
+                    # só, direto na pasta do id (ver training_video_path).
                     training = Training.objects.create(
                         title=title,
                         description=description,
                         category=category,
-                        video_file=video_file,
-                        thumbnail=thumbnail,
-                        duration_seconds=int(duration_seconds) if duration_seconds else None,
+                        duration_seconds=int(duracao) if duracao.isdigit() else None,
                         file_size=video_file.size,
                         uploaded_by=request.user
                     )
-                    
-                    messages.success(request, f'Treinamento "{title}" enviado com sucesso!')
-                    return redirect('training_detail', pk=training.pk)
-                    
-            except Exception as e:
-                messages.error(request, f'Erro ao enviar treinamento: {str(e)}')
-    
+                    training.video_file = video_file
+                    training.thumbnail = thumbnail
+                    training.save(update_fields=['video_file', 'thumbnail', 'updated_at'])
+            except Exception:
+                logger.exception('Treinamento "%s" não foi salvo (vídeo no armazenamento ou banco)', title)
+                _apagar_arquivos_enviados(training)
+                erro = ('O vídeo chegou, mas não foi guardado: o armazenamento não respondeu. '
+                        'Nada foi gravado — tente de novo em instantes.')
+                if por_ajax:
+                    return JsonResponse({'ok': False, 'erro': erro}, status=500)
+                messages.error(request, erro)
+            else:
+                messages.success(request, f'Treinamento "{title}" enviado com sucesso!')
+                destino = reverse('training_detail', args=[training.pk])
+                if por_ajax:
+                    return JsonResponse({'ok': True, 'redirect': destino})
+                return redirect(destino)
+
     context = {
         'categories': TrainingCategory.objects.filter(is_active=True),
-        'max_file_size': 500 * 1024 * 1024,  # 500MB em bytes
-        'accepted_formats': ['mp4', 'avi', 'mov', 'wmv', 'flv', 'webm', 'mkv'],
+        'max_file_size': VIDEO_MAX_BYTES,
+        'accepted_formats': VIDEO_FORMATOS,
     }
     return render(request, 'trainings/upload.html', context)
+
+
+VIDEO_MAX_BYTES = 500 * 1024 * 1024          # 500 MB por vídeo
+VIDEO_FORMATOS = ['mp4', 'avi', 'mov', 'wmv', 'flv', 'webm', 'mkv']
+MINIATURA_FORMATOS = {'JPEG': 'jpg', 'PNG': 'png', 'WEBP': 'webp', 'GIF': 'gif'}
+
+
+def _erro_do_envio(titulo, descricao, video, miniatura):
+    """Mensagem do que impede o envio, ou '' quando dá para guardar."""
+    if not titulo:
+        return 'Título é obrigatório.'
+    if not descricao:
+        return 'Descrição é obrigatória.'
+    if not video:
+        return 'Arquivo de vídeo é obrigatório.'
+    extensao = os.path.splitext(video.name or '')[1].lower().lstrip('.')
+    if extensao not in VIDEO_FORMATOS:
+        return f'Formato {extensao.upper() or "desconhecido"} não aceito. Envie {", ".join(VIDEO_FORMATOS).upper()}.'
+    if not video.size:
+        return 'O arquivo de vídeo chegou vazio.'
+    if video.size > VIDEO_MAX_BYTES:
+        return f'O vídeo tem {video.size / (1024 * 1024):.0f} MB e o limite é 500 MB.'
+    if miniatura:
+        # O tipo que o navegador declara é só uma declaração: a miniatura precisa abrir como imagem.
+        from PIL import Image
+        try:
+            miniatura.seek(0)
+            with Image.open(miniatura) as imagem:
+                formato = imagem.format
+                imagem.verify()
+        except Exception:
+            formato = None
+        finally:
+            miniatura.seek(0)
+        if formato not in MINIATURA_FORMATOS:
+            return 'A miniatura precisa ser uma imagem JPG, PNG, WEBP ou GIF.'
+    return ''
+
+
+def _apagar_arquivos_enviados(training):
+    """Se o envio falhou no meio, tira do armazenamento o que chegou a subir (o registro já foi desfeito)."""
+    if training is None:
+        return
+    for campo in (training.video_file, training.thumbnail):
+        try:
+            if campo and campo.name and getattr(campo, '_committed', False):
+                campo.storage.delete(campo.name)
+        except Exception as exc:                     # noqa: BLE001 — o erro original é o que importa
+            logger.warning('Arquivo do treinamento que falhou não saiu do armazenamento: %s', exc)
 
 
 @login_required

@@ -126,7 +126,7 @@
                            name="thumbnail" 
                            accept="image/*"
                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
-                    <p class="text-xs text-gray-500 mt-1">Imagem de capa para o vídeo (JPG, PNG). Se não fornecida, será gerada automaticamente.</p>
+                    <p class="text-xs text-gray-500 mt-1">Imagem de capa para o vídeo (JPG, PNG, WEBP). Sem imagem, o treinamento usa a miniatura padrão da Rede Confiança.</p>
                 </div>
 
                 <!-- Duração -->
@@ -153,19 +153,25 @@
                 </div>
             </div>
 
+            <!-- Erro do envio -->
+            <div id="uploadErro" class="hidden mx-6 mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">
+                <i class="fas fa-circle-exclamation mr-1"></i><span id="uploadErroTexto"></span>
+            </div>
+
             <!-- Upload Progress -->
             <div id="uploadProgress" class="hidden px-6 py-4 bg-blue-50">
                 <div class="flex items-center">
-                    <div class="flex-1">
-                        <div class="flex items-center justify-between text-sm mb-1">
-                            <span class="font-medium text-blue-900">Enviando treinamento...</span>
-                            <span id="progressPercent" class="text-blue-600">0%</span>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center justify-between gap-3 text-sm mb-1">
+                            <span class="font-medium text-blue-900" id="progressTexto" aria-live="polite">Enviando o vídeo...</span>
+                            <span id="progressPercent" class="text-blue-600 tabular-nums">0%</span>
                         </div>
-                        <div class="w-full bg-blue-200 rounded-full h-2">
+                        <div class="w-full bg-blue-200 rounded-full h-2 overflow-hidden">
                             <div id="progressBar" class="bg-blue-600 h-2 rounded-full transition-all" style="width: 0%"></div>
                         </div>
+                        <p class="text-xs text-blue-800 mt-1" id="progressDetalhe"></p>
                     </div>
-                    <i class="fas fa-spinner fa-spin text-blue-600 ml-4"></i>
+                    <button type="button" id="cancelUpload" class="ml-4 text-sm font-medium text-blue-700 hover:text-blue-900 underline">Cancelar</button>
                 </div>
             </div>
 
@@ -229,13 +235,14 @@ function handleFile() {
         fileSize.textContent = formatFileSize(file.size);
         fileInfo.classList.remove('hidden');
         
-        // Validate file size
-        const maxSize = {{ max_file_size }};
-        if (file.size > maxSize) {
-            alert('Arquivo muito grande! Tamanho máximo: ' + formatFileSize(maxSize));
+        // Formato e tamanho já na escolha do arquivo
+        const problema = problemaDoVideo(file);
+        if (problema) {
+            mostrarErro(problema);
             clearFile();
             return;
         }
+        document.getElementById('uploadErro').classList.add('hidden');
     }
 }
 
@@ -263,56 +270,104 @@ function calculateDuration() {
     document.getElementById('duration_seconds').value = totalSeconds > 0 ? totalSeconds : '';
 }
 
-// Form submission with progress
-document.getElementById('uploadForm').addEventListener('submit', function(e) {
+// Envio com o progresso de verdade (XMLHttpRequest) e a mensagem do servidor quando der errado.
+const uploadForm = document.getElementById('uploadForm');
+const progressDiv = document.getElementById('uploadProgress');
+const progressBar = document.getElementById('progressBar');
+const progressPercent = document.getElementById('progressPercent');
+const progressTexto = document.getElementById('progressTexto');
+const progressDetalhe = document.getElementById('progressDetalhe');
+const erroBox = document.getElementById('uploadErro');
+const formatosAceitos = [{% for formato in accepted_formats %}'{{ formato }}'{% if not forloop.last %}, {% endif %}{% endfor %}];
+let envio = null;
+
+function mostrarErro(mensagem) {
+    document.getElementById('uploadErroTexto').textContent = mensagem;
+    erroBox.classList.remove('hidden');
+    erroBox.scrollIntoView({behavior: 'smooth', block: 'center'});
+}
+
+function problemaDoVideo(file) {
+    const extensao = (file.name.split('.').pop() || '').toLowerCase();
+    if (formatosAceitos.indexOf(extensao) === -1) return 'Formato .' + extensao + ' não aceito. Envie ' + formatosAceitos.join(', ').toUpperCase() + '.';
+    if (!file.size) return 'O arquivo de vídeo está vazio.';
+    if (file.size > {{ max_file_size }}) return 'O vídeo tem ' + formatFileSize(file.size) + ' e o limite é ' + formatFileSize({{ max_file_size }}) + '.';
+    return '';
+}
+
+function terminarEnvio(mensagem) {
+    envio = null;
+    progressDiv.classList.add('hidden');
+    progressBar.classList.remove('animate-pulse');
+    submitBtn.disabled = false;
+    if (mensagem) mostrarErro(mensagem);
+}
+
+uploadForm.addEventListener('submit', function (e) {
     e.preventDefault();
-    
-    const formData = new FormData(this);
-    const progressDiv = document.getElementById('uploadProgress');
-    const progressBar = document.getElementById('progressBar');
-    const progressPercent = document.getElementById('progressPercent');
-    
-    // Show progress
+    if (envio) return;
+    erroBox.classList.add('hidden');
+    const file = videoInput.files[0];
+    if (!file) { mostrarErro('Escolha o arquivo de vídeo.'); return; }
+    const problema = problemaDoVideo(file);
+    if (problema) { mostrarErro(problema); return; }
+
+    const xhr = new XMLHttpRequest();
+    envio = xhr;
+    xhr.open('POST', uploadForm.getAttribute('action') || window.location.href);
+    xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+    xhr.setRequestHeader('X-CSRFToken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+    xhr.upload.onprogress = function (ev) {
+        if (!ev.lengthComputable) return;
+        const pct = Math.min(100, Math.round(ev.loaded / ev.total * 100));
+        progressBar.style.width = pct + '%';
+        progressPercent.textContent = pct + '%';
+        progressDetalhe.textContent = formatFileSize(ev.loaded) + ' de ' + formatFileSize(ev.total);
+    };
+    xhr.upload.onload = function () {
+        // O navegador terminou de mandar; o servidor ainda guarda o vídeo no armazenamento.
+        progressBar.style.width = '100%';
+        progressBar.classList.add('animate-pulse');
+        progressPercent.textContent = '100%';
+        progressTexto.textContent = 'Vídeo enviado. Guardando no servidor...';
+        progressDetalhe.textContent = 'Em vídeos grandes isso leva alguns minutos — não feche esta página.';
+    };
+    xhr.onload = function () {
+        let resposta = null;
+        try { resposta = JSON.parse(xhr.responseText); } catch (erro) { resposta = null; }
+        if (xhr.status >= 200 && xhr.status < 300 && resposta && resposta.ok) {
+            envio = null;
+            window.location.href = resposta.redirect;
+            return;
+        }
+        let mensagem = resposta && resposta.erro;
+        if (!mensagem) {
+            if (xhr.status === 413) mensagem = 'O servidor recusou o arquivo por ser grande demais. Avise o suporte: o limite do portal é 500 MB.';
+            else if (xhr.status === 502 || xhr.status === 503 || xhr.status === 504) mensagem = 'O servidor não respondeu a tempo (erro ' + xhr.status + '). Confira na lista se o treinamento entrou antes de enviar de novo.';
+            else if (xhr.status === 403) mensagem = 'Sua sessão expirou ou você não tem permissão. Recarregue a página e tente de novo.';
+            else mensagem = 'O envio falhou (erro ' + xhr.status + '). Tente de novo.';
+        }
+        terminarEnvio(mensagem);
+    };
+    xhr.onerror = function () { terminarEnvio('A conexão caiu durante o envio. Confira a internet e tente de novo.'); };
+    xhr.onabort = function () { terminarEnvio('Envio cancelado.'); };
+
+    progressBar.style.width = '0%';
+    progressPercent.textContent = '0%';
+    progressTexto.textContent = 'Enviando o vídeo...';
+    progressDetalhe.textContent = '0 Bytes de ' + formatFileSize(file.size);
     progressDiv.classList.remove('hidden');
     submitBtn.disabled = true;
-    
-    // Simulate upload progress (in real implementation, use XMLHttpRequest with progress events)
-    let progress = 0;
-    const interval = setInterval(() => {
-        progress += Math.random() * 15;
-        if (progress > 95) progress = 95;
-        
-        progressBar.style.width = progress + '%';
-        progressPercent.textContent = Math.round(progress) + '%';
-    }, 200);
-    
-    // Submit form
-    fetch(this.action, {
-        method: 'POST',
-        body: formData,
-        headers: {
-            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-        }
-    }).then(response => {
-        clearInterval(interval);
-        progressBar.style.width = '100%';
-        progressPercent.textContent = '100%';
-        
-        setTimeout(() => {
-            if (response.ok) {
-                window.location.href = response.url || '{% url "trainings_list" %}';
-            } else {
-                alert('Erro no upload. Tente novamente.');
-                progressDiv.classList.add('hidden');
-                submitBtn.disabled = false;
-            }
-        }, 500);
-    }).catch(error => {
-        clearInterval(interval);
-        alert('Erro no upload: ' + error.message);
-        progressDiv.classList.add('hidden');
-        submitBtn.disabled = false;
-    });
+    xhr.send(new FormData(uploadForm));
+});
+
+document.getElementById('cancelUpload').addEventListener('click', function () {
+    if (envio) envio.abort();
+});
+
+// Sair da página no meio do envio perde o vídeo: o navegador pergunta antes.
+window.addEventListener('beforeunload', function (e) {
+    if (envio) { e.preventDefault(); e.returnValue = ''; }
 });
 </script>
 {% endblock %}

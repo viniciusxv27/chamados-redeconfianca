@@ -19,6 +19,26 @@
     .estado-regular { background-color: #fef3c7; color: #92400e; }
     .estado-ruim { background-color: #fed7aa; color: #ea580c; }
     .estado-pessimo { background-color: #fecaca; color: #dc2626; }
+    /* Seleção de vários ativos */
+    .bulk-barra { position: sticky; top: 0; z-index: 20; display: flex; flex-wrap: wrap; align-items: center; gap: .5rem .9rem;
+                  padding: .65rem 1rem; border-bottom: 1px solid #e5e7eb; background: #f9fafb; }
+    .bulk-barra.com-selecao { background: #eef2ff; border-bottom-color: #c7d2fe; }
+    .bulk-acoes { display: flex; flex-wrap: wrap; gap: .4rem; margin-left: auto; }
+    .bulk-botao { display: inline-flex; align-items: center; gap: .4rem; padding: .4rem .75rem; border-radius: .375rem; font-size: .8rem;
+                  font-weight: 600; border: 1px solid #d1d5db; background: #fff; color: #374151; }
+    .bulk-botao:hover:not(:disabled) { background: #f3f4f6; }
+    .bulk-botao:disabled { opacity: .45; cursor: not-allowed; }
+    .bulk-botao-perigo { color: #b91c1c; border-color: #fecaca; }
+    .bulk-botao-perigo:hover:not(:disabled) { background: #fef2f2; }
+    .ativo-marcado { background: #eef2ff; }
+    .ativo-check { display: flex; align-items: center; padding-left: 1rem; padding-right: .25rem; cursor: pointer; }
+    @media (min-width: 640px) { .ativo-check { padding-left: 1.5rem; } }
+    html.dark .bulk-barra { background: var(--tema-superficie-2, #232a3b); border-bottom-color: var(--tema-borda, #313a4f); }
+    html.dark .bulk-barra.com-selecao { background: #272c4f; border-bottom-color: rgba(99, 102, 241, .45); }   /* opaca: a barra fica presa no topo */
+    html.dark .bulk-botao { background: var(--tema-superficie, #1b2130); border-color: var(--tema-borda, #313a4f); color: var(--tema-texto, #e7eaf0); }
+    html.dark .bulk-botao:hover:not(:disabled) { background: var(--tema-superficie-3, #2b3346); }
+    html.dark .bulk-botao-perigo { color: #fca5a5; border-color: rgba(239, 68, 68, .4); }
+    html.dark .ativo-marcado { background: rgba(99, 102, 241, .22); }
 </style>
 {% endblock %}
 
@@ -105,12 +125,46 @@
     </div>
 
     <!-- Lista de Ativos -->
-    <div class="bg-white shadow overflow-hidden sm:rounded-md">
+    <div class="bg-white shadow sm:rounded-md">
         {% if page_obj %}
+        <form method="post" action="{% url 'assets:bulk' %}" id="bulk-form" data-total="{{ total_assets }}">
+            {% csrf_token %}
+            <input type="hidden" name="acao" value="">
+            <input type="hidden" name="confirmar" value="">
+            <input type="hidden" name="todos" value="0">
+            <input type="hidden" name="voltar" value="{{ voltar }}">
+            <input type="hidden" name="filtro_q" value="{{ query }}">
+            <input type="hidden" name="filtro_estado" value="{{ estado_filter }}">
+            <input type="hidden" name="filtro_setor" value="{{ setor_filter }}">
+
+            <div class="bulk-barra sm:rounded-t-md" id="bulk-barra">
+                <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
+                    <input type="checkbox" id="bulk-pagina" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                    Selecionar todos desta página
+                </label>
+                <span class="text-sm text-gray-600" id="bulk-contagem" aria-live="polite">Nenhum ativo selecionado</span>
+                <button type="button" id="bulk-todos-filtro" class="text-sm font-semibold text-indigo-700 hover:underline" hidden>
+                    Selecionar os {{ total_assets }} ativos {% if query or estado_filter or setor_filter %}do filtro{% else %}da lista{% endif %}
+                </button>
+                <button type="button" id="bulk-desfazer" class="text-sm font-semibold text-indigo-700 hover:underline" hidden>
+                    Limpar seleção
+                </button>
+                <div class="bulk-acoes">
+                    <button type="button" class="bulk-botao" id="bulk-editar" disabled><i class="fas fa-pen-to-square"></i>Editar</button>
+                    <button type="button" class="bulk-botao" id="bulk-exportar" disabled><i class="fas fa-file-excel text-green-600"></i>Exportar</button>
+                    <button type="button" class="bulk-botao bulk-botao-perigo" id="bulk-excluir" disabled><i class="fas fa-trash-can"></i>Excluir</button>
+                </div>
+            </div>
+
             <ul class="divide-y divide-gray-200">
                 {% for asset in page_obj %}
-                    <li class="hover:bg-gray-50">
-                        <a href="{% url 'assets:detail' asset.pk %}" class="block px-4 py-4 sm:px-6">
+                    <li class="hover:bg-gray-50 flex items-stretch" data-ativo="{{ asset.patrimonio_numero }}">
+                        <label class="ativo-check" title="Selecionar #{{ asset.patrimonio_numero }}">
+                            <input type="checkbox" name="ids" value="{{ asset.pk }}"
+                                   class="ativo-caixa h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                   aria-label="Selecionar o ativo #{{ asset.patrimonio_numero }} — {{ asset.nome }}">
+                        </label>
+                        <a href="{% url 'assets:detail' asset.pk %}" class="block flex-1 min-w-0 px-4 py-4 sm:px-6">
                             <div class="flex items-center justify-between">
                                 <div class="flex items-center">
                                     <div class="flex-shrink-0">
@@ -162,6 +216,69 @@
                     </li>
                 {% endfor %}
             </ul>
+
+            <!-- Editar os selecionados -->
+            <div id="bulk-modal-editar" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50" role="dialog" aria-modal="true" aria-labelledby="bulk-editar-titulo">
+                <div class="bg-white rounded-lg p-6 w-full max-w-lg mx-4 max-h-[92vh] overflow-y-auto">
+                    <div class="flex items-center justify-between mb-1">
+                        <h3 class="text-lg font-semibold text-gray-900" id="bulk-editar-titulo">Editar os ativos selecionados</h3>
+                        <button type="button" data-fechar-modal class="text-gray-400 hover:text-gray-600" aria-label="Fechar"><i class="fas fa-times"></i></button>
+                    </div>
+                    <p class="text-sm text-gray-600 mb-4"><span data-contagem-modal></span> Só muda o que você preencher; o resto de cada ativo fica como está.</p>
+                    <div class="grid gap-4 sm:grid-cols-2">
+                        <label class="block">
+                            <span class="block text-sm font-medium text-gray-700">Setor</span>
+                            <select name="setor" id="bulk-setor" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                                <option value="">Não mudar</option>
+                                {% for valor, rotulo in setores_novos %}<option value="{{ valor }}">{{ rotulo }}</option>{% endfor %}
+                            </select>
+                        </label>
+                        <label class="block">
+                            <span class="block text-sm font-medium text-gray-700">PDV</span>
+                            <select name="pdv" id="bulk-pdv" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"></select>
+                        </label>
+                        <p class="sm:col-span-2 -mt-2 text-xs text-gray-500">Setor e PDV mudam juntos: na loja, o PDV é uma das lojas; no escritório, qualquer setor.</p>
+                        <label class="block">
+                            <span class="block text-sm font-medium text-gray-700">Estado físico</span>
+                            <select name="estado_fisico" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                                <option value="">Não mudar</option>
+                                {% for valor, nome in estados %}<option value="{{ valor }}">{{ nome }}</option>{% endfor %}
+                            </select>
+                        </label>
+                        <label class="block">
+                            <span class="block text-sm font-medium text-gray-700">Localizado</span>
+                            <input type="text" name="localizado" maxlength="200" placeholder="Não mudar"
+                                   class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                        </label>
+                    </div>
+                    <p class="mt-3 text-sm text-red-600" id="bulk-editar-erro" hidden></p>
+                    <div class="flex items-center justify-end gap-3 mt-6">
+                        <button type="button" data-fechar-modal class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">Cancelar</button>
+                        <button type="button" id="bulk-editar-aplicar" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700">
+                            <i class="fas fa-check mr-2"></i>Aplicar nos selecionados
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Excluir os selecionados -->
+            <div id="bulk-modal-excluir" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50" role="dialog" aria-modal="true" aria-labelledby="bulk-excluir-titulo">
+                <div class="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+                    <div class="flex items-center justify-between mb-2">
+                        <h3 class="text-lg font-semibold text-gray-900" id="bulk-excluir-titulo">Excluir os ativos selecionados?</h3>
+                        <button type="button" data-fechar-modal class="text-gray-400 hover:text-gray-600" aria-label="Fechar"><i class="fas fa-times"></i></button>
+                    </div>
+                    <p class="text-sm text-gray-700"><b data-contagem-modal></b> A exclusão não tem volta.</p>
+                    <p class="mt-2 text-xs text-gray-500 break-words" id="bulk-excluir-lista"></p>
+                    <div class="flex items-center justify-end gap-3 mt-6">
+                        <button type="button" data-fechar-modal class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">Cancelar</button>
+                        <button type="button" id="bulk-excluir-confirmar" class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700">
+                            <i class="fas fa-trash-can mr-2"></i>Excluir de vez
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </form>
             
             <!-- Paginação -->
             {% if page_obj.has_other_pages %}
@@ -309,5 +426,114 @@ function toggleImportModal() {
     modal.classList.toggle('hidden');
 }
 </script>
+
+{% if page_obj %}
+{{ pdvs|json_script:"asset-pdvs" }}
+{% include 'assets/_setor_pdv_js.html' %}
+<script>
+/* Vários ativos de uma vez: marcar na lista (ou todos do filtro) e editar, exportar ou excluir. */
+(function () {
+    var form = document.getElementById('bulk-form');
+    if (!form) return;
+    var caixas = Array.prototype.slice.call(form.querySelectorAll('.ativo-caixa'));
+    var pagina = document.getElementById('bulk-pagina');
+    var barra = document.getElementById('bulk-barra');
+    var contagem = document.getElementById('bulk-contagem');
+    var todosFiltro = document.getElementById('bulk-todos-filtro');
+    var desfazer = document.getElementById('bulk-desfazer');
+    var campoTodos = form.querySelector('[name=todos]');
+    var total = parseInt(form.getAttribute('data-total'), 10) || 0;
+    var botoes = ['bulk-editar', 'bulk-exportar', 'bulk-excluir'].map(function (id) { return document.getElementById(id); });
+
+    // A barra fica presa logo abaixo do topo do portal (a altura dele muda com a largura da tela).
+    function prenderBarra() {
+        var topo = document.getElementById('rc-topo');
+        barra.style.top = (topo ? topo.offsetHeight : 0) + 'px';
+    }
+    prenderBarra();
+    window.addEventListener('resize', prenderBarra);
+
+    function marcadas() { return caixas.filter(function (c) { return c.checked; }); }
+    function quantos() { return campoTodos.value === '1' ? total : marcadas().length; }
+    function texto(n) { return n === 1 ? '1 ativo selecionado' : n + ' ativos selecionados'; }
+
+    function atualizar() {
+        var n = quantos();
+        var naPagina = marcadas().length;
+        pagina.checked = caixas.length > 0 && naPagina === caixas.length;
+        pagina.indeterminate = naPagina > 0 && naPagina < caixas.length;
+        contagem.textContent = !n ? 'Nenhum ativo selecionado'
+            : texto(n) + (campoTodos.value === '1' && total > caixas.length ? ' (todas as páginas)' : '');
+        botoes.forEach(function (b) { b.disabled = !n; });
+        barra.classList.toggle('com-selecao', n > 0);
+        todosFiltro.hidden = !(pagina.checked && total > caixas.length && campoTodos.value !== '1');
+        desfazer.hidden = !n;
+        caixas.forEach(function (c) { c.closest('li').classList.toggle('ativo-marcado', c.checked); });
+    }
+    caixas.forEach(function (c) {
+        c.addEventListener('change', function () { campoTodos.value = '0'; atualizar(); });
+    });
+    pagina.addEventListener('change', function () {
+        caixas.forEach(function (c) { c.checked = pagina.checked; });
+        campoTodos.value = '0';
+        atualizar();
+    });
+    todosFiltro.addEventListener('click', function () { campoTodos.value = '1'; atualizar(); });
+    desfazer.addEventListener('click', function () {
+        caixas.forEach(function (c) { c.checked = false; });
+        campoTodos.value = '0';
+        atualizar();
+    });
+
+    function enviar(acao) {
+        form.querySelector('[name=acao]').value = acao;
+        form.querySelector('[name=confirmar]').value = acao === 'excluir' ? 'sim' : '';
+        form.submit();
+    }
+    function abrir(id) {
+        var modal = document.getElementById(id);
+        modal.querySelectorAll('[data-contagem-modal]').forEach(function (el) { el.textContent = texto(quantos()) + '.'; });
+        modal.classList.remove('hidden');
+    }
+    function fechar(modal) { modal.classList.add('hidden'); }
+    form.querySelectorAll('[data-fechar-modal]').forEach(function (b) {
+        b.addEventListener('click', function () { fechar(b.closest('[role=dialog]')); });
+    });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') form.querySelectorAll('[role=dialog]').forEach(fechar);
+    });
+
+    document.getElementById('bulk-exportar').addEventListener('click', function () { enviar('exportar'); });
+
+    var setor = document.getElementById('bulk-setor');
+    var pdv = document.getElementById('bulk-pdv');
+    ligarSetorPdv(setor, pdv, JSON.parse(document.getElementById('asset-pdvs').textContent));
+    document.getElementById('bulk-editar').addEventListener('click', function () {
+        document.getElementById('bulk-editar-erro').hidden = true;
+        abrir('bulk-modal-editar');
+    });
+    document.getElementById('bulk-editar-aplicar').addEventListener('click', function () {
+        var modal = document.getElementById('bulk-modal-editar');
+        var erro = document.getElementById('bulk-editar-erro');
+        var algum = setor.value || modal.querySelector('[name=estado_fisico]').value || modal.querySelector('[name=localizado]').value.trim();
+        erro.hidden = true;
+        if (!algum) { erro.textContent = 'Preencha pelo menos um campo para mudar.'; erro.hidden = false; return; }
+        if (setor.value && !pdv.value) { erro.textContent = 'Escolha o PDV do setor escolhido.'; erro.hidden = false; return; }
+        enviar('editar');
+    });
+
+    document.getElementById('bulk-excluir').addEventListener('click', function () {
+        var numeros = marcadas().map(function (c) { return '#' + c.closest('li').getAttribute('data-ativo'); });
+        document.getElementById('bulk-excluir-lista').textContent = campoTodos.value === '1'
+            ? 'Todos os ativos ' + ({% if query or estado_filter or setor_filter %}true{% else %}false{% endif %} ? 'do filtro atual' : 'da lista') + ', em todas as páginas.'
+            : numeros.slice(0, 12).join(', ') + (numeros.length > 12 ? ' e mais ' + (numeros.length - 12) : '');
+        abrir('bulk-modal-excluir');
+    });
+    document.getElementById('bulk-excluir-confirmar').addEventListener('click', function () { enviar('excluir'); });
+
+    atualizar();
+})();
+</script>
+{% endif %}
 
 {% endblock %}

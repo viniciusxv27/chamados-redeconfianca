@@ -752,7 +752,7 @@ class Asset(models.Model):
     imei_serial = models.CharField(max_length=100, blank=True, null=True, verbose_name='IMEI/Serial')
     localizado = models.CharField(max_length=200, verbose_name='Localizado')
     setor = models.CharField(max_length=100, verbose_name='Setor')
-    pdv = models.CharField(max_length=50, verbose_name='PDV')
+    pdv = models.CharField(max_length=100, verbose_name='PDV')     # nome do setor do portal (users.Sector)
     estado_fisico = models.CharField(
         max_length=20, 
         choices=ESTADO_FISICO_CHOICES, 

@@ -114,6 +114,15 @@
                 </h3>
                 
                 <div class="mt-6 grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-3">
+                    {% if form.antes %}
+                    <div class="sm:col-span-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                        <i class="fas fa-circle-info mr-1"></i>
+                        Este ativo veio do cadastro antigo: estava com Setor <b>“{{ form.antes.setor|default:'—' }}”</b> e
+                        PDV <b>“{{ form.antes.pdv|default:'—' }}”</b>. Setor e PDV abaixo já vêm no formato novo
+                        {% if form.setor.value and form.pdv.value %}(reconhecidos pelo PDV antigo){% else %}— escolha o que faltar{% endif %}.
+                        Confira antes de salvar.
+                    </div>
+                    {% endif %}
                     <!-- Localizado -->
                     <div>
                         <label for="{{ form.localizado.id_for_label }}" class="block text-sm font-medium text-gray-700">
@@ -135,6 +144,7 @@
                             <span class="text-red-500">*</span>
                         </label>
                         {{ form.setor }}
+                        <p class="mt-1 text-xs text-gray-500">Loja ou Escritório.</p>
                         {% if form.setor.errors %}
                             <div class="mt-1 text-sm text-red-600">
                                 {{ form.setor.errors.0 }}
@@ -149,6 +159,7 @@
                             <span class="text-red-500">*</span>
                         </label>
                         {{ form.pdv }}
+                        <p class="mt-1 text-xs text-gray-500">Na loja, as lojas; no escritório, todos os setores.</p>
                         {% if form.pdv.errors %}
                             <div class="mt-1 text-sm text-red-600">
                                 {{ form.pdv.errors.0 }}
@@ -280,7 +291,13 @@
 {% endblock %}
 
 {% block extra_js %}
+{{ form.pdvs|json_script:"asset-pdvs" }}
+{% include 'assets/_setor_pdv_js.html' %}
 <script>
+    // Setor (Loja/Escritório) manda na lista de PDVs
+    ligarSetorPdv(document.getElementById('{{ form.setor.id_for_label }}'), document.getElementById('{{ form.pdv.id_for_label }}'),
+                  JSON.parse(document.getElementById('asset-pdvs').textContent));
+
     // Validação em tempo real e preview de imagem
     document.addEventListener('DOMContentLoaded', function() {
         const form = document.querySelector('form');

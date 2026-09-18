@@ -133,13 +133,7 @@
                 <div class="bg-white rounded-xl shadow-sm overflow-hidden hover:shadow-md transition-shadow">
                     <!-- Thumbnail -->
                     <div class="aspect-video bg-gray-100 relative">
-                        {% if training.thumbnail %}
-                            <img src="{{ training.thumbnail.url }}" alt="{{ training.title }}" class="w-full h-full object-cover">
-                        {% else %}
-                            <div class="w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-                                <i class="fas fa-play text-4xl text-gray-400"></i>
-                            </div>
-                        {% endif %}
+                        <img src="{{ training.get_miniatura_url }}" alt="{{ training.title }}" class="w-full h-full object-cover" loading="lazy">
                         
                         <!-- Duration Badge -->
                         {% if training.duration_seconds %}

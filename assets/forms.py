@@ -6,6 +6,8 @@ from .models import (
 )
 from users.models import User, Sector
 
+from .setor_pdv import ESCRITORIO, SETORES, conferir, pdvs_por_setor, sugerir
+
 
 # CSS Classes para Tailwind
 INPUT_CLASSES = 'mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm'
@@ -596,6 +598,13 @@ class ItemRequestDeliveryForm(forms.Form):
 # FORMULÁRIO LEGADO - MANTIDO PARA COMPATIBILIDADE
 # ============================================================================
 class AssetForm(forms.ModelForm):
+    # Setor: Loja ou Escritório. PDV: um setor do portal — na loja, só os que têm "Loja" no
+    # nome; no escritório, qualquer um (a tela troca a lista quando o Setor muda).
+    setor = forms.ChoiceField(
+        label='Setor', choices=[('', 'Selecione…')] + SETORES,
+        widget=forms.Select(attrs={'class': SELECT_CLASSES}))
+    pdv = forms.ChoiceField(label='PDV', choices=(), widget=forms.Select(attrs={'class': SELECT_CLASSES}))
+
     class Meta:
         model = Asset
         fields = [
@@ -626,14 +635,6 @@ class AssetForm(forms.ModelForm):
                 'class': INPUT_CLASSES,
                 'placeholder': 'Local onde o ativo está localizado'
             }),
-            'setor': forms.TextInput(attrs={
-                'class': INPUT_CLASSES,
-                'placeholder': 'Setor responsável'
-            }),
-            'pdv': forms.TextInput(attrs={
-                'class': INPUT_CLASSES,
-                'placeholder': 'PDV'
-            }),
             'estado_fisico': forms.Select(attrs={
                 'class': SELECT_CLASSES
             }),
@@ -647,6 +648,27 @@ class AssetForm(forms.ModelForm):
                 'accept': 'image/*'
             }),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.pdvs = pdvs_por_setor()
+        self.fields['pdv'].choices = [('', 'Selecione…')] + [(nome, nome) for nome in self.pdvs[ESCRITORIO]]
+        # Ativo do jeito antigo (Setor "Salão", PDV "Glória"...): a tela já abre no formato
+        # novo, com o que der para reconhecer, e mostra o que estava escrito antes.
+        self.antes = None
+        if self.instance.pk and not self.is_bound:
+            setor, pdv = sugerir(self.instance.setor, self.instance.pdv, self.pdvs)
+            if (setor, pdv) != (self.instance.setor, self.instance.pdv):
+                self.antes = {'setor': self.instance.setor, 'pdv': self.instance.pdv}
+            self.initial['setor'], self.initial['pdv'] = setor, pdv
+
+    def clean(self):
+        dados = super().clean()
+        if 'setor' in dados and 'pdv' in dados:
+            erro = conferir(dados['setor'], dados['pdv'], self.pdvs)
+            if erro:
+                self.add_error('pdv', erro)
+        return dados
 
     def clean_patrimonio_numero(self):
         patrimonio_numero = self.cleaned_data['patrimonio_numero']

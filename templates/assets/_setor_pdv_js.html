@@ -1,0 +1,29 @@
+{% comment %}
+PDV depende do Setor: na Loja, só os setores com "Loja" no nome; no Escritório, todos.
+ligarSetorPdv(selectDoSetor, selectDoPdv, {Loja: [...], Escritório: [...]}) — a lista vem do
+json_script da tela; o PDV escolhido continua marcado quando ainda vale para o Setor novo.
+{% endcomment %}
+<script>
+window.ligarSetorPdv = function (setor, pdv, pdvs) {
+    if (!setor || !pdv) return;
+    function preencher() {
+        var atual = pdv.value;
+        var nomes = pdvs[setor.value] || [];
+        pdv.textContent = '';
+        var vazio = document.createElement('option');
+        vazio.value = '';
+        vazio.textContent = setor.value ? 'Selecione o PDV…' : 'Escolha o setor primeiro';
+        pdv.appendChild(vazio);
+        nomes.forEach(function (nome) {
+            var opcao = document.createElement('option');
+            opcao.value = nome;
+            opcao.textContent = nome;
+            opcao.selected = nome === atual;
+            pdv.appendChild(opcao);
+        });
+        pdv.disabled = !setor.value;
+    }
+    setor.addEventListener('change', preencher);
+    preencher();
+};
+</script>

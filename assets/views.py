@@ -25,6 +25,9 @@ from .forms import (
 )
 from users.models import User, Sector
 from core.middleware import log_action
+from django.urls import reverse
+
+from .setor_pdv import SETORES, conferir, pdvs_por_setor
 
 
 # ============================================================================
@@ -1537,16 +1540,13 @@ def item_request_reject_counterproposal(request, pk):
 # VIEWS LEGADAS - MANTIDAS PARA COMPATIBILIDADE
 # ============================================================================
 
-@login_required
-def asset_list(request):
-    """Lista todos os ativos com funcionalidade de busca e paginação"""
-    query = request.GET.get('q', '')
-    estado_filter = request.GET.get('estado', '')
-    setor_filter = request.GET.get('setor', '')
-    
+def _ativos_filtrados(params):
+    """Os ativos do filtro da lista (busca, estado e setor) — a lista e as ações em massa usam o mesmo."""
+    query = params.get('q', '')
+    estado_filter = params.get('estado', '')
+    setor_filter = params.get('setor', '')
+
     assets = Asset.objects.all()
-    
-    # Filtros
     if query:
         assets = assets.filter(
             Q(patrimonio_numero__icontains=query) |
@@ -1556,13 +1556,22 @@ def asset_list(request):
             Q(setor__icontains=query) |
             Q(pdv__icontains=query)
         )
-    
     if estado_filter:
         assets = assets.filter(estado_fisico=estado_filter)
-    
     if setor_filter:
         assets = assets.filter(setor__icontains=setor_filter)
-    
+    return assets
+
+
+@login_required
+def asset_list(request):
+    """Lista todos os ativos com funcionalidade de busca e paginação"""
+    query = request.GET.get('q', '')
+    estado_filter = request.GET.get('estado', '')
+    setor_filter = request.GET.get('setor', '')
+
+    assets = _ativos_filtrados(request.GET)
+
     # Paginação
     paginator = Paginator(assets, 20)
     page_number = request.GET.get('page')
@@ -1580,9 +1589,91 @@ def asset_list(request):
         'estados': estados,
         'setores': setores,
         'total_assets': assets.count(),
+        # Ações em massa: o formulário de edição usa o mesmo Setor/PDV da tela do ativo
+        'setores_novos': SETORES,
+        'pdvs': pdvs_por_setor(),
+        'voltar': request.get_full_path(),
     }
     
     return render(request, 'assets/list.html', context)
+
+
+ACOES_EM_MASSA = ('editar', 'exportar', 'excluir')
+
+
+@login_required
+@require_POST
+def asset_bulk(request):
+    """Ações nos ativos marcados na lista: editar em conjunto, exportar para Excel ou excluir.
+
+    Vale para os ids marcados ou, com ``todos=1``, para todos os ativos do filtro da
+    lista (as outras páginas também). Editar muda só os campos preenchidos.
+    """
+    voltar = request.POST.get('voltar') or ''
+    if not voltar.startswith('/assets/legado/'):
+        voltar = reverse('assets:list')
+    acao = request.POST.get('acao')
+    if acao not in ACOES_EM_MASSA:
+        messages.error(request, 'Escolha o que fazer com os ativos selecionados.')
+        return redirect(voltar)
+    if request.POST.get('todos') == '1':
+        ativos = _ativos_filtrados({campo: request.POST.get(f'filtro_{campo}', '') for campo in ('q', 'estado', 'setor')})
+    else:
+        ids = {int(valor) for valor in request.POST.getlist('ids') if str(valor).isdigit()}
+        ativos = Asset.objects.filter(pk__in=ids)
+    total = ativos.count()
+    if not total:
+        messages.error(request, 'Nenhum ativo selecionado.')
+        return redirect(voltar)
+
+    if acao == 'exportar':
+        log_action(request.user, 'ASSET_EXPORT', f'Exportação de {total} ativo(s) selecionado(s)', request)
+        return _planilha_de_ativos(ativos, f'ativos_selecionados_{timezone.now():%Y%m%d_%H%M%S}.xlsx')
+
+    if acao == 'excluir':
+        if request.POST.get('confirmar') != 'sim':
+            messages.error(request, 'Confirme a exclusão dos ativos selecionados.')
+            return redirect(voltar)
+        numeros = list(ativos.order_by('patrimonio_numero').values_list('patrimonio_numero', flat=True)[:30])
+        ativos.delete()
+        log_action(request.user, 'ADMIN_ACTION',
+                   f'Excluiu {total} ativo(s) legado(s) de uma vez: {", ".join(numeros)}{"…" if total > 30 else ""}',
+                   request)
+        messages.success(request, f'{total} ativo{"s" if total != 1 else ""} excluído{"s" if total != 1 else ""}.')
+        return redirect(voltar)
+
+    # Editar: só o que foi preenchido; Setor e PDV andam juntos.
+    mudancas, resumo = {}, []
+    setor, pdv = request.POST.get('setor') or '', request.POST.get('pdv') or ''
+    if setor or pdv:
+        erro = conferir(setor, pdv)
+        if erro:
+            messages.error(request, f'Nada foi alterado: {erro}')
+            return redirect(voltar)
+        mudancas.update(setor=setor, pdv=pdv)
+        resumo.append(f'Setor {setor} · PDV {pdv}')
+    estado = request.POST.get('estado_fisico') or ''
+    if estado:
+        estados = dict(Asset.ESTADO_FISICO_CHOICES)
+        if estado not in estados:
+            messages.error(request, 'Nada foi alterado: estado físico inválido.')
+            return redirect(voltar)
+        mudancas['estado_fisico'] = estado
+        resumo.append(f'estado {estados[estado].lower()}')
+    localizado = ' '.join((request.POST.get('localizado') or '').split())[:200]
+    if localizado:
+        mudancas['localizado'] = localizado
+        resumo.append(f'localizado "{localizado}"')
+    if not mudancas:
+        messages.error(request, 'Nada foi alterado: preencha pelo menos um campo para mudar nos selecionados.')
+        return redirect(voltar)
+    mudancas['updated_at'] = timezone.now()       # o update() em lote não passa pelo auto_now
+    atualizados = ativos.update(**mudancas)
+    log_action(request.user, 'ADMIN_ACTION',
+               f'Editou {atualizados} ativo(s) legado(s) de uma vez: {"; ".join(resumo)}', request)
+    messages.success(request, f'{atualizados} ativo{"s" if atualizados != 1 else ""} atualizado{"s" if atualizados != 1 else ""}: '
+                              + '; '.join(resumo) + '.')
+    return redirect(voltar)
 
 
 @login_required
@@ -1663,6 +1754,21 @@ def asset_delete(request, pk):
 @login_required
 def export_assets_excel(request):
     """Exportar dados de ativos em Excel (exceto fotos)"""
+    response = _planilha_de_ativos(Asset.objects.all(), f'ativos_{timezone.now().strftime("%Y%m%d_%H%M%S")}.xlsx')
+
+    # Log da ação
+    log_action(
+        request.user,
+        'ASSET_EXPORT',
+        f'Exportação de dados de ativos realizada',
+        request
+    )
+    
+    return response
+
+
+def _planilha_de_ativos(ativos, nome_do_arquivo):
+    """Excel com os ativos (sem as fotos) — a exportação inteira e a dos selecionados."""
     # Criar workbook
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -1686,7 +1792,7 @@ def export_assets_excel(request):
         cell.alignment = header_alignment
     
     # Buscar dados dos ativos
-    assets = Asset.objects.all().select_related('created_by').order_by('patrimonio_numero')
+    assets = ativos.select_related('created_by').order_by('patrimonio_numero')
     
     # Preencher dados
     for row, asset in enumerate(assets, 2):
@@ -1719,19 +1825,10 @@ def export_assets_excel(request):
     response = HttpResponse(
         content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     )
-    response['Content-Disposition'] = f'attachment; filename="ativos_{timezone.now().strftime("%Y%m%d_%H%M%S")}.xlsx"'
+    response['Content-Disposition'] = f'attachment; filename="{nome_do_arquivo}"'
     
     # Salvar workbook na response
     wb.save(response)
-    
-    # Log da ação
-    log_action(
-        request.user,
-        'ASSET_EXPORT',
-        f'Exportação de dados de ativos realizada',
-        request
-    )
-    
     return response
 
 

@@ -58,7 +58,7 @@
                 <div class="bg-white rounded-xl shadow-sm overflow-hidden">
                     <!-- Video -->
                     <div class="aspect-video bg-black relative">
-                        {% with video_url=training.get_video_url thumbnail_url=training.get_thumbnail_url %}
+                        {% with video_url=training.get_video_url thumbnail_url=training.get_miniatura_url %}
                         {% if video_url %}
                         <video id="videoPlayer" 
                                class="w-full h-full" 

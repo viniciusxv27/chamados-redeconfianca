@@ -100,6 +100,7 @@ urlpatterns = [
     path('legado/<int:pk>/', views.asset_detail, name='detail'),
     path('legado/<int:pk>/edit/', views.asset_edit, name='edit'),
     path('legado/<int:pk>/delete/', views.asset_delete, name='delete'),
+    path('legado/em-massa/', views.asset_bulk, name='bulk'),
     path('legado/export-excel/', views.export_assets_excel, name='export_excel'),
     path('legado/import-excel/', views.import_assets_excel, name='import_excel'),
 ]
