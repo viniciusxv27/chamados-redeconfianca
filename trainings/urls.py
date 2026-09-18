@@ -9,6 +9,9 @@ urlpatterns = [
     
     # Gestão administrativa (apenas para admins)
     path('upload/', views.training_upload_view, name='training_upload'),
+    path('upload/video/iniciar/', views.training_video_iniciar, name='training_video_iniciar'),
+    path('upload/video/concluir/', views.training_video_concluir, name='training_video_concluir'),
+    path('upload/video/cancelar/', views.training_video_cancelar, name='training_video_cancelar'),
     path('manage/', views.training_manage_view, name='trainings_manage'),
     path('<int:pk>/toggle-status/', views.training_toggle_status_view, name='training_toggle_status'),
     path('<int:pk>/delete/', views.training_delete_view, name='training_delete'),

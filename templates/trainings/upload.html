@@ -37,6 +37,7 @@
                         <div class="mt-2 text-sm text-blue-700">
                             <ul class="list-disc list-inside space-y-1">
                                 <li>Tamanho máximo: 500MB por arquivo</li>
+                                {% if envio_direto %}<li>Sem tempo limite: o vídeo sobe em partes direto para o armazenamento e, se a internet cair, continua de onde parou</li>{% endif %}
                                 <li>Formatos aceitos: {{ accepted_formats|join:", "|upper }}</li>
                                 <li>Recomendado: Resolução mínima de 720p para melhor qualidade</li>
                                 <li>Duração ideal: Entre 5-30 minutos para melhor engajamento</li>
@@ -169,7 +170,8 @@
                         <div class="w-full bg-blue-200 rounded-full h-2 overflow-hidden">
                             <div id="progressBar" class="bg-blue-600 h-2 rounded-full transition-all" style="width: 0%"></div>
                         </div>
-                        <p class="text-xs text-blue-800 mt-1" id="progressDetalhe"></p>
+                        <p class="text-xs text-blue-800 mt-1 tabular-nums" id="progressDetalhe"></p>
+                        <p class="text-xs text-blue-700 mt-1" id="progressDica">{% if envio_direto %}Sem tempo limite: se a internet cair, o envio continua quando ela voltar. Mantenha esta página aberta.{% else %}Não feche esta página até o envio terminar.{% endif %}</p>
                     </div>
                     <button type="button" id="cancelUpload" class="ml-4 text-sm font-medium text-blue-700 hover:text-blue-900 underline">Cancelar</button>
                 </div>
@@ -230,6 +232,8 @@ dropZone.addEventListener('drop', (e) => {
 
 function handleFile() {
     const file = videoInput.files[0];
+    // Trocou o arquivo depois de um envio que não terminou de gravar: o vídeo anterior sai do armazenamento.
+    if (videoPronto && videoPronto.arquivo !== file) descartarVideoPronto();
     if (file) {
         fileName.textContent = file.name;
         fileSize.textContent = formatFileSize(file.size);
@@ -249,6 +253,7 @@ function handleFile() {
 function clearFile() {
     videoInput.value = '';
     fileInfo.classList.add('hidden');
+    descartarVideoPronto();
 }
 
 function formatFileSize(bytes) {
@@ -270,16 +275,31 @@ function calculateDuration() {
     document.getElementById('duration_seconds').value = totalSeconds > 0 ? totalSeconds : '';
 }
 
-// Envio com o progresso de verdade (XMLHttpRequest) e a mensagem do servidor quando der errado.
+// Envio. Com o armazenamento de vídeos (MinIO), o vídeo sobe do navegador direto para lá, em
+// partes de 8 MB: cada parte é uma requisição curta, então não há tempo limite, e a parte que a
+// internet derrubar é reenviada quando ela voltar. O portal só abre o envio, fecha no fim e grava
+// o treinamento. Sem o MinIO, o vídeo vai no próprio formulário (XMLHttpRequest, com progresso).
 const uploadForm = document.getElementById('uploadForm');
 const progressDiv = document.getElementById('uploadProgress');
 const progressBar = document.getElementById('progressBar');
 const progressPercent = document.getElementById('progressPercent');
 const progressTexto = document.getElementById('progressTexto');
 const progressDetalhe = document.getElementById('progressDetalhe');
+const cancelBtn = document.getElementById('cancelUpload');
 const erroBox = document.getElementById('uploadErro');
 const formatosAceitos = [{% for formato in accepted_formats %}'{{ formato }}'{% if not forloop.last %}, {% endif %}{% endfor %}];
-let envio = null;
+const envioDireto = {{ envio_direto|yesno:"true,false" }};
+const urlsDoEnvio = {
+    iniciar: '{% url "training_video_iniciar" %}',
+    concluir: '{% url "training_video_concluir" %}',
+    cancelar: '{% url "training_video_cancelar" %}'
+};
+const PARTES_AO_MESMO_TEMPO = 3;
+const SILENCIO_MAXIMO = 90 * 1000;       // parte sem nenhum sinal por 90 s: a conexão travou, reenviar
+let envio = null;                        // o envio em andamento
+// Vídeo com todas as partes já no armazenamento e o treinamento ainda por gravar: {arquivo, aberto, partes,
+// token}. Se algo falhar daí em diante, "Enviar" de novo continua daqui, sem subir o vídeo outra vez.
+let videoPronto = null;
 
 function mostrarErro(mensagem) {
     document.getElementById('uploadErroTexto').textContent = mensagem;
@@ -295,28 +315,339 @@ function problemaDoVideo(file) {
     return '';
 }
 
+function mensagemDoStatus(status) {
+    if (status === 413) return 'O servidor recusou o arquivo por ser grande demais. Avise o suporte: o limite do portal é 500 MB.';
+    if (status === 502 || status === 503 || status === 504) return 'O servidor não respondeu a tempo (erro ' + status + '). Confira na lista se o treinamento entrou antes de enviar de novo.';
+    if (status === 403) return 'Sua sessão expirou ou você não tem permissão. Recarregue a página e tente de novo.';
+    return 'O envio falhou (erro ' + status + '). Tente de novo.';
+}
+
+function csrf() {
+    return document.querySelector('[name=csrfmiddlewaretoken]').value;
+}
+
+function formulario(campos) {
+    const dados = new FormData();
+    dados.append('csrfmiddlewaretoken', csrf());
+    Object.keys(campos).forEach(function (nome) { dados.append(nome, campos[nome]); });
+    return dados;
+}
+
+// Os campos do formulário sem o vídeo (título, descrição, categoria, duração e miniatura).
+function dadosDoFormulario() {
+    const dados = new FormData(uploadForm);
+    dados.delete('video_file');
+    return dados;
+}
+
+function falha(mensagem, status, tentarDeNovo) {
+    const erro = new Error(mensagem);
+    erro.status = status || 0;
+    erro.tentarDeNovo = Boolean(tentarDeNovo);
+    return erro;
+}
+
+function dormir(ms) {
+    return new Promise(function (resolve) { setTimeout(resolve, ms); });
+}
+
+function novoEnvio() {
+    envio = {parado: false, cancelado: false, xhrs: new Set(), controle: new AbortController(), token: null};
+    return envio;
+}
+
+function pararTransferencias(estado) {
+    estado.parado = true;
+    estado.xhrs.forEach(function (xhr) { xhr.abort(); });
+    estado.xhrs.clear();
+    estado.controle.abort();
+}
+
+function fase(texto) {
+    if (envio) envio.fase = texto;
+    progressTexto.classList.remove('text-amber-700');
+    progressTexto.textContent = texto;
+}
+
+function comecarProgresso(arquivo, texto) {
+    progressBar.style.width = '0%';
+    progressBar.classList.remove('animate-pulse');
+    progressPercent.textContent = '0%';
+    fase(texto);
+    progressDetalhe.textContent = '0 Bytes de ' + formatFileSize(arquivo.size);
+    cancelBtn.classList.remove('hidden');
+    progressDiv.classList.remove('hidden');
+    submitBtn.disabled = true;
+}
+
 function terminarEnvio(mensagem) {
     envio = null;
     progressDiv.classList.add('hidden');
     progressBar.classList.remove('animate-pulse');
+    progressTexto.classList.remove('text-amber-700');
+    cancelBtn.classList.remove('hidden');
     submitBtn.disabled = false;
     if (mensagem) mostrarErro(mensagem);
 }
 
-uploadForm.addEventListener('submit', function (e) {
-    e.preventDefault();
-    if (envio) return;
-    erroBox.classList.add('hidden');
-    const file = videoInput.files[0];
-    if (!file) { mostrarErro('Escolha o arquivo de vídeo.'); return; }
-    const problema = problemaDoVideo(file);
-    if (problema) { mostrarErro(problema); return; }
+function avisar(texto) {
+    progressTexto.textContent = texto;
+    progressTexto.classList.add('text-amber-700');
+    // Parado, velocidade e tempo restante não valem: fica só o quanto já subiu, e a medição recomeça na volta.
+    progressDetalhe.textContent = progressDetalhe.textContent.split(' · ')[0];
+    if (envio) envio.amostras = [];
+}
 
+function voltouAAndar() {
+    if (!progressTexto.classList.contains('text-amber-700') || navigator.onLine === false) return;
+    progressTexto.classList.remove('text-amber-700');
+    progressTexto.textContent = (envio && envio.fase) || 'Enviando o vídeo...';
+    if (envio) envio.amostras = [];                // a velocidade é medida de novo a partir da volta
+}
+
+function tempoRestante(segundos) {
+    if (segundos < 60) return 'menos de 1 min restante';
+    const minutos = Math.round(segundos / 60);
+    if (minutos < 60) return 'cerca de ' + minutos + ' min restantes';
+    const horas = Math.floor(minutos / 60), resto = minutos % 60;
+    return 'cerca de ' + horas + ' h' + (resto ? ' ' + resto + ' min' : '') + ' restantes';
+}
+
+// Velocidade dos últimos 15 s (não a média desde o início: depois de uma queda, a estimativa não fica presa nela).
+function mostrarAndamento(enviados, total, amostras) {
+    const agora = Date.now();
+    if (!amostras.length || agora - amostras[amostras.length - 1][0] >= 250) amostras.push([agora, enviados]);
+    while (amostras.length > 2 && agora - amostras[0][0] > 15000) amostras.shift();
+    const pct = Math.min(100, Math.floor(enviados / total * 100));
+    progressBar.style.width = pct + '%';
+    progressPercent.textContent = pct + '%';
+    let detalhe = formatFileSize(enviados) + ' de ' + formatFileSize(total);
+    const segundos = (agora - amostras[0][0]) / 1000;
+    const parado = progressTexto.classList.contains('text-amber-700');      // com aviso na tela, só o quanto já subiu
+    const taxa = segundos >= 3 && !parado ? (enviados - amostras[0][1]) / segundos : 0;
+    if (taxa >= 1) {
+        detalhe += ' · ' + formatFileSize(taxa) + '/s';
+        if (enviados < total) detalhe += ' · ' + tempoRestante((total - enviados) / taxa);
+    }
+    progressDetalhe.textContent = detalhe;
+}
+
+// POST para o portal com resposta em JSON; o que não vier {ok: true} vira erro com a mensagem do servidor.
+async function postar(url, dados, estado) {
+    let resposta;
+    try {
+        resposta = await fetch(url, {
+            method: 'POST', body: dados, credentials: 'same-origin', signal: estado.controle.signal,
+            headers: {'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': csrf()}
+        });
+    } catch (erro) {
+        throw falha('A conexão com o portal caiu. Confira a internet e tente de novo.', 0);
+    }
+    let corpo = null;
+    try { corpo = await resposta.json(); } catch (erro) { corpo = null; }
+    if (resposta.ok && corpo && corpo.ok) return corpo;
+    if (!corpo && resposta.ok) throw falha('Sua sessão expirou. Recarregue a página, entre de novo e reenvie.', 403);
+    const erro = falha((corpo && corpo.erro) || mensagemDoStatus(resposta.status), resposta.status);
+    erro.refazerVideo = Boolean(corpo && corpo.refazer_video);
+    throw erro;
+}
+
+async function esperarInternet(estado) {
+    while (navigator.onLine === false && !estado.parado) {
+        avisar('Sem internet — o envio continua sozinho quando a conexão voltar.');
+        await dormir(1000);
+    }
+}
+
+// Para o que é seguro repetir (fechar o envio, gravar o treinamento): sem internet, espera ela voltar;
+// com o portal fora do ar (deploy, erro 5xx), tenta de novo por uns 2 minutos.
+async function comTentativas(fazer, estado) {
+    for (let tentativa = 1; ; tentativa++) {
+        await esperarInternet(estado);
+        voltouAAndar();
+        try {
+            return await fazer();
+        } catch (erro) {
+            if (estado.parado || tentativa >= 8 || !(erro.status === 0 || erro.status >= 500)) throw erro;
+            const espera = Math.min(30, Math.pow(2, tentativa));
+            avisar((erro.status ? 'O portal não respondeu (erro ' + erro.status + ')' : 'A conexão com o portal caiu')
+                   + ' — tentando de novo em ' + espera + ' s...');
+            await dormir(espera * 1000);
+        }
+    }
+}
+
+// Uma parte: PUT direto no armazenamento, pela URL que o portal assinou. Devolve o ETag.
+function enviarParte(parte, pedaco, estado, aoAndar) {
+    return new Promise(function (resolve, reject) {
+        const xhr = new XMLHttpRequest();
+        let ultimoSinal = Date.now(), travou = false;
+        const vigia = setInterval(function () {
+            if (Date.now() - ultimoSinal > SILENCIO_MAXIMO) { travou = true; xhr.abort(); }
+        }, 5000);
+        function fim() { clearInterval(vigia); estado.xhrs.delete(xhr); }
+        xhr.open('PUT', parte.url);
+        xhr.upload.onprogress = function (ev) {
+            ultimoSinal = Date.now();
+            parte.carregado = ev.loaded;
+            voltouAAndar();
+            aoAndar();
+        };
+        xhr.upload.onload = function () { ultimoSinal = Date.now(); };
+        xhr.onload = function () {
+            fim();
+            const etag = xhr.getResponseHeader('ETag');
+            if (xhr.status >= 200 && xhr.status < 300 && etag) { resolve(etag); return; }
+            if (xhr.status >= 200 && xhr.status < 300) {
+                reject(falha('O armazenamento não confirmou a parte ' + parte.numero + ' (sem ETag). Avise o suporte.', xhr.status));
+                return;
+            }
+            reject(falha('O armazenamento recusou a parte ' + parte.numero + ' do vídeo (erro ' + xhr.status + '). Envie de novo.',
+                         xhr.status, xhr.status >= 500 || xhr.status === 408 || xhr.status === 429));
+        };
+        xhr.onerror = function () { fim(); reject(falha('A conexão caiu.', 0, true)); };
+        xhr.onabort = function () {
+            fim();
+            reject(travou ? falha('A conexão parou de responder.', 0, true) : falha('Envio interrompido.', 0));
+        };
+        estado.xhrs.add(xhr);
+        xhr.send(pedaco);
+    });
+}
+
+// Reenvia a parte quando a conexão oscila. Sem internet, espera ela voltar (sem contar tentativa);
+// com o envio já andando, insiste enquanto for preciso.
+async function enviarParteComTentativas(arquivo, parte, estado, aoAndar) {
+    for (let tentativa = 1; ; tentativa++) {
+        await esperarInternet(estado);
+        if (estado.parado) throw falha('Envio interrompido.');
+        try {
+            return await enviarParte(parte, arquivo.slice(parte.inicio, parte.fim), estado, aoAndar);
+        } catch (erro) {
+            parte.carregado = 0;
+            aoAndar();
+            if (estado.parado || !erro.tentarDeNovo) throw erro;
+            if (erro.status && tentativa >= 8) throw erro;
+            if (!erro.status && !estado.confirmadas && tentativa >= 6) {
+                // Nenhuma parte passou ainda: não é oscilação, o armazenamento está fora de alcance.
+                throw falha('Não foi possível falar com o armazenamento de vídeos. Confira a internet e tente de novo; se continuar, avise o suporte.');
+            }
+            const espera = Math.min(30, Math.pow(2, tentativa - 1));
+            avisar('A conexão oscilou — reenviando a parte ' + parte.numero + ' em ' + espera + ' s (o envio continua de onde parou).');
+            await dormir(espera * 1000);
+        }
+    }
+}
+
+// Todas as partes, algumas ao mesmo tempo. Devolve [{numero, etag}] para fechar o envio.
+async function enviarPartes(arquivo, aberto, estado) {
+    const total = arquivo.size, tamanho = aberto.tamanho_parte;
+    const partes = aberto.urls.map(function (url, i) {
+        return {numero: i + 1, url: url, inicio: i * tamanho, fim: Math.min(total, (i + 1) * tamanho), carregado: 0, etag: null};
+    });
+    estado.amostras = [];
+    estado.confirmadas = 0;
+    function aoAndar() {
+        let enviados = 0;
+        partes.forEach(function (p) { enviados += p.etag ? p.fim - p.inicio : p.carregado; });
+        mostrarAndamento(enviados, total, estado.amostras);
+    }
+    let proxima = 0;
+    async function trabalhar() {
+        while (proxima < partes.length && !estado.parado) {
+            const parte = partes[proxima++];
+            parte.etag = await enviarParteComTentativas(arquivo, parte, estado, aoAndar);
+            estado.confirmadas++;
+            aoAndar();
+        }
+    }
+    const trabalhos = [];
+    for (let i = 0; i < Math.min(PARTES_AO_MESMO_TEMPO, partes.length); i++) trabalhos.push(trabalhar());
+    try {
+        await Promise.all(trabalhos);
+    } catch (erro) {
+        pararTransferencias(estado);             // uma parte desistiu: as outras param junto
+        throw erro;
+    }
+    if (estado.parado) throw falha('Envio interrompido.');
+    return partes.map(function (p) { return {numero: p.numero, etag: p.etag}; });
+}
+
+function cancelarNoServidor(token) {
+    fetch(urlsDoEnvio.cancelar, {
+        method: 'POST', body: formulario({envio: token}), credentials: 'same-origin', keepalive: true,
+        headers: {'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': csrf()}
+    }).catch(function () {});
+}
+
+function descartarVideoPronto() {
+    if (!videoPronto) return;
+    cancelarNoServidor(videoPronto.token || videoPronto.aberto);
+    videoPronto = null;
+}
+
+async function enviarDireto(arquivo) {
+    const estado = novoEnvio();
+    comecarProgresso(arquivo, 'Conferindo os dados do treinamento...');
+    try {
+        if (!videoPronto || videoPronto.arquivo !== arquivo) {
+            descartarVideoPronto();
+            const dados = dadosDoFormulario();
+            dados.append('video_nome', arquivo.name);
+            dados.append('video_tamanho', String(arquivo.size));
+            dados.append('video_tipo', arquivo.type || '');
+            const aberto = await postar(urlsDoEnvio.iniciar, dados, estado);
+            estado.token = aberto.envio;
+            fase('Enviando o vídeo...');
+            const partes = await enviarPartes(arquivo, aberto, estado);
+            // Todas as partes no armazenamento: daqui em diante, nada obriga o vídeo a subir de novo.
+            videoPronto = {arquivo: arquivo, aberto: aberto.envio, partes: partes, token: null};
+            estado.token = null;
+        }
+        progressBar.style.width = '100%';
+        progressBar.classList.add('animate-pulse');
+        progressPercent.textContent = '100%';
+        progressDetalhe.textContent = formatFileSize(arquivo.size) + ' no armazenamento.';
+        if (!videoPronto.token) {
+            fase('Conferindo o vídeo no armazenamento...');
+            try {
+                videoPronto.token = (await comTentativas(function () {
+                    return postar(urlsDoEnvio.concluir, formulario({envio: videoPronto.aberto, partes: JSON.stringify(videoPronto.partes)}), estado);
+                }, estado)).envio;
+            } catch (erro) {
+                if (erro.status === 400) descartarVideoPronto();   // as partes não fecham (faltou, expirou): recomeça
+                throw erro;
+            }
+        }
+        // Falta só gravar o treinamento (é rápido e seguro repetir: sem Cancelar aqui).
+        cancelBtn.classList.add('hidden');
+        fase('Vídeo enviado. Gravando o treinamento...');
+        const gravado = await comTentativas(function () {
+            const dados = dadosDoFormulario();
+            dados.append('video_envio', videoPronto.token);
+            return postar(uploadForm.getAttribute('action') || window.location.href, dados, estado);
+        }, estado);
+        videoPronto = null;
+        envio = null;
+        window.location.href = gravado.redirect;
+    } catch (erro) {
+        if (estado.cancelado) return;                        // o Cancelar já desfez tudo
+        pararTransferencias(estado);
+        if (estado.token) cancelarNoServidor(estado.token);   // o armazenamento descarta as partes que subiram
+        if (erro.refazerVideo) videoPronto = null;
+        let mensagem = erro.message || 'O envio falhou. Tente de novo.';
+        if (videoPronto && videoPronto.arquivo === arquivo) mensagem += ' O vídeo já está no armazenamento: ao enviar de novo, ele não sobe outra vez.';
+        terminarEnvio(mensagem);
+    }
+}
+
+function enviarPeloFormulario(arquivo) {
+    const estado = novoEnvio();
     const xhr = new XMLHttpRequest();
-    envio = xhr;
+    estado.xhrs.add(xhr);
     xhr.open('POST', uploadForm.getAttribute('action') || window.location.href);
     xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
-    xhr.setRequestHeader('X-CSRFToken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+    xhr.setRequestHeader('X-CSRFToken', csrf());
     xhr.upload.onprogress = function (ev) {
         if (!ev.lengthComputable) return;
         const pct = Math.min(100, Math.round(ev.loaded / ev.total * 100));
@@ -340,34 +671,54 @@ uploadForm.addEventListener('submit', function (e) {
             window.location.href = resposta.redirect;
             return;
         }
-        let mensagem = resposta && resposta.erro;
-        if (!mensagem) {
-            if (xhr.status === 413) mensagem = 'O servidor recusou o arquivo por ser grande demais. Avise o suporte: o limite do portal é 500 MB.';
-            else if (xhr.status === 502 || xhr.status === 503 || xhr.status === 504) mensagem = 'O servidor não respondeu a tempo (erro ' + xhr.status + '). Confira na lista se o treinamento entrou antes de enviar de novo.';
-            else if (xhr.status === 403) mensagem = 'Sua sessão expirou ou você não tem permissão. Recarregue a página e tente de novo.';
-            else mensagem = 'O envio falhou (erro ' + xhr.status + '). Tente de novo.';
-        }
-        terminarEnvio(mensagem);
+        terminarEnvio((resposta && resposta.erro) || mensagemDoStatus(xhr.status));
     };
     xhr.onerror = function () { terminarEnvio('A conexão caiu durante o envio. Confira a internet e tente de novo.'); };
-    xhr.onabort = function () { terminarEnvio('Envio cancelado.'); };
-
-    progressBar.style.width = '0%';
-    progressPercent.textContent = '0%';
-    progressTexto.textContent = 'Enviando o vídeo...';
-    progressDetalhe.textContent = '0 Bytes de ' + formatFileSize(file.size);
-    progressDiv.classList.remove('hidden');
-    submitBtn.disabled = true;
+    xhr.onabort = function () { if (!estado.cancelado) terminarEnvio('Envio cancelado.'); };
+    comecarProgresso(arquivo, 'Enviando o vídeo...');
     xhr.send(new FormData(uploadForm));
+}
+
+uploadForm.addEventListener('submit', function (e) {
+    e.preventDefault();
+    if (envio) return;
+    erroBox.classList.add('hidden');
+    const file = videoInput.files[0];
+    if (!file) { mostrarErro('Escolha o arquivo de vídeo.'); return; }
+    const problema = problemaDoVideo(file);
+    if (problema) { mostrarErro(problema); return; }
+    if (envioDireto) enviarDireto(file);
+    else enviarPeloFormulario(file);
 });
 
-document.getElementById('cancelUpload').addEventListener('click', function () {
-    if (envio) envio.abort();
+cancelBtn.addEventListener('click', function () {
+    if (!envio) return;
+    const estado = envio;
+    estado.cancelado = true;
+    pararTransferencias(estado);
+    if (estado.token) cancelarNoServidor(estado.token);
+    descartarVideoPronto();
+    terminarEnvio('Envio cancelado.');
+});
+
+// Sem internet, a parte em andamento pode ficar parada sem dar erro: a tela avisa na hora (pelo aviso do
+// navegador) e volta ao normal com a conexão.
+window.addEventListener('offline', function () {
+    if (envio && (envio.token || videoPronto)) avisar('Sem internet — o envio continua sozinho quando a conexão voltar.');
+});
+window.addEventListener('online', function () {
+    if (envio) voltouAAndar();
 });
 
 // Sair da página no meio do envio perde o vídeo: o navegador pergunta antes.
 window.addEventListener('beforeunload', function (e) {
-    if (envio) { e.preventDefault(); e.returnValue = ''; }
+    if (envio || videoPronto) { e.preventDefault(); e.returnValue = ''; }
+});
+
+// Saiu mesmo assim: o armazenamento descarta o que já tinha subido.
+window.addEventListener('pagehide', function () {
+    const token = (envio && envio.token) || (videoPronto && (videoPronto.token || videoPronto.aberto));
+    if (token && navigator.sendBeacon) navigator.sendBeacon(urlsDoEnvio.cancelar, formulario({envio: token}));
 });
 </script>
 {% endblock %}
