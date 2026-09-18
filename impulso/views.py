@@ -31,7 +31,7 @@ from .models import (
 )
 from .scoring import calcular_pontuacao, filtros_de_tarefa_do_mes, linhas_detalhadas
 from .utils import (
-    FAIXAS, calcular_faixa, faixa_info, get_colaboradores, get_gestores,
+    FAIXAS, calcular_faixa, faixa_info, get_adms_lojas, get_colaboradores, get_gestores,
     get_colaboradores_do_gestor, get_gestores_do_setor,
     is_impulso_manager, impulso_manager_required, impulso_member_required,
 )
@@ -327,9 +327,20 @@ def _prazo_em_dia_util(prazo, apenas_dias_uteis):
 
 @impulso_member_required
 def meta_create(request):
-    """Cria a meta (gestor) ou solicita uma ao gestor do próprio setor (colaborador)."""
+    """Cria a meta (gestor) ou solicita uma ao gestor do próprio setor (colaborador).
+
+    Para quem está em ADM's LOJAS vale outra régua: qualquer pessoa do Impulso
+    cria a atividade para eles e escolhe, entre todos os gestores, quem aprova e
+    avalia. As lojas não têm gestor do Impulso próprio e a demanda vem do
+    escritório inteiro. Se quem cria não é o gestor escolhido (nem responde pela
+    área), a atividade espera a aprovação dele antes de entrar no Kanban.
+    """
     sou_gestor = is_impulso_manager(request.user)
-    gestores_do_setor = get_gestores_do_setor(request.user)
+    adms_lojas = get_adms_lojas()
+    sou_adm_loja = adms_lojas.filter(id=request.user.id).exists()
+    # ADM de loja pedindo para si também escolhe qualquer gestor — a mesma régua
+    # de quem cria para ele. Os demais pedem ao gestor do próprio setor.
+    gestores_do_setor = get_gestores() if sou_adm_loja else get_gestores_do_setor(request.user)
 
     if request.method == 'POST':
         titulo = (request.POST.get('titulo') or '').strip()
@@ -344,6 +355,7 @@ def meta_create(request):
         prazo, aviso_dia_util = _prazo_em_dia_util(prazo, apenas_dias_uteis)
 
         fora_da_area = False
+        pedido_adm = False       # atividade para ADM de loja esperando o gestor escolhido aprovar
         if sou_gestor:
             colaborador = get_colaboradores().filter(
                 id=_int_or_none(request.POST.get('colaborador'))).first()
@@ -365,7 +377,12 @@ def meta_create(request):
             if colaborador is not None:
                 da_minha_area = (get_colaboradores_do_gestor(request.user)
                                  .filter(id=colaborador.id).exists())
-                if not da_minha_area:
+                if not da_minha_area and adms_lojas.filter(id=colaborador.id).exists():
+                    # ADM de loja de fora da área: a escolha livre de gestor
+                    # vale — é ele quem aprova e avalia. Escolhendo a si mesmo,
+                    # quem cria já é a aprovação.
+                    fora_da_area = pedido_adm = gestor.id != request.user.id
+                elif not da_minha_area:
                     gestores_da_area = get_gestores_do_setor(colaborador).exclude(
                         id=request.user.id)
                     if not gestores_da_area.exists():
@@ -384,22 +401,41 @@ def meta_create(request):
                     gestor = aprovador or gestores_da_area.first()
                     fora_da_area = True
         else:
-            # O colaborador só pode pedir para um gestor do SEU setor, e a meta
-            # é sempre para ele mesmo — não dá para criar tarefa para terceiros.
-            colaborador = request.user
-            gestor = gestores_do_setor.filter(
-                id=_int_or_none(request.POST.get('gestor'))).first()
-            if not gestor:
-                messages.error(request, 'Escolha um gestor do seu setor.')
-                return redirect('impulso:meta_create')
+            alvo_id = _int_or_none(request.POST.get('colaborador'))
+            if alvo_id and alvo_id != request.user.id:
+                # Para outra pessoa, só quem está em ADM's LOJAS — e sempre com
+                # a aprovação do gestor escolhido (qualquer um do Impulso), que
+                # também avalia a entrega no fim.
+                colaborador = adms_lojas.filter(id=alvo_id).first()
+                if colaborador is None:
+                    messages.error(request, "Para outra pessoa, a atividade só pode ser criada "
+                                            "para quem está em ADM's LOJAS.")
+                    return redirect('impulso:meta_create')
+                gestor = get_gestores().filter(
+                    id=_int_or_none(request.POST.get('gestor_aprovador'))).first()
+                if not gestor:
+                    messages.error(request, 'Escolha o gestor que vai aprovar e avaliar a atividade.')
+                    return redirect('impulso:meta_create')
+                pedido_adm = precisa_aprovacao = True
+            else:
+                # Para si mesmo: pede ao gestor do SEU setor (ADM de loja, a
+                # qualquer gestor). Não dá para criar tarefa para terceiros fora
+                # de ADM's LOJAS.
+                colaborador = request.user
+                gestor = gestores_do_setor.filter(
+                    id=_int_or_none(request.POST.get('gestor'))).first()
+                if not gestor:
+                    messages.error(request, 'Escolha o gestor.' if sou_adm_loja
+                                   else 'Escolha um gestor do seu setor.')
+                    return redirect('impulso:meta_create')
 
-            # A pessoa decide se a atividade dela precisa passar pelo gestor.
-            # Sem autorização, ela entra no Kanban na hora.
-            #
-            # O gestor continua registrado mesmo quando a autorização é
-            # dispensada: é ele quem avalia a meta no fim, e sem esse vínculo a
-            # atividade não teria como ser concluída nem valer nota.
-            precisa_aprovacao = (request.POST.get('precisa_aprovacao') or 'sim') != 'nao'
+                # A pessoa decide se a atividade dela precisa passar pelo gestor.
+                # Sem autorização, ela entra no Kanban na hora.
+                #
+                # O gestor continua registrado mesmo quando a autorização é
+                # dispensada: é ele quem avalia a meta no fim, e sem esse vínculo a
+                # atividade não teria como ser concluída nem valer nota.
+                precisa_aprovacao = (request.POST.get('precisa_aprovacao') or 'sim') != 'nao'
 
         if not (colaborador and titulo and descricao and prazo):
             campo = 'colaborador, título, descrição e prazo' if sou_gestor else 'título, descrição e prazo'
@@ -447,7 +483,19 @@ def meta_create(request):
             ])
 
         quem = request.user.get_full_name() or request.user.email
-        if sou_gestor and fora_da_area:
+        if pedido_adm:
+            # Só o gestor escolhido é avisado: é ele quem aprova e avalia. O ADM
+            # fica sabendo quando a atividade entrar no Kanban dele.
+            nome = colaborador.get_full_name() or colaborador.email
+            _notify([gestor], 'Nova atividade para aprovar',
+                    f'{quem} criou "{meta.titulo}" para {nome}, com você para aprovar '
+                    f'e avaliar. Aprove ou recuse.',
+                    f'/impulso/metas/{meta.id}/')
+            messages.success(
+                request,
+                f'Atividade enviada para {gestor.get_full_name() or gestor.email} aprovar. '
+                f'Ela entra no Kanban de {nome} depois disso — acompanhe em Solicitações.')
+        elif sou_gestor and fora_da_area:
             # A área de destino decide; quem pediu fica sabendo que está parado.
             _notify(list(get_gestores_do_setor(colaborador).exclude(id=request.user.id)),
                     'Demanda de outra área para aprovar',
@@ -500,7 +548,14 @@ def meta_create(request):
     fora_da_area = {}
     if sou_gestor:
         meus = set(get_colaboradores_do_gestor(request.user).values_list('id', flat=True))
+        adms = set(adms_lojas.values_list('id', flat=True))
         for c in get_colaboradores().exclude(id__in=meus).select_related('sector'):
+            if c.id in adms:
+                # ADM de loja não vai para o gestor da área: quem aprova é o
+                # "Gestor responsável" escolhido no próprio formulário.
+                fora_da_area[str(c.id)] = {'area': c.sector.name if c.sector_id else 'sem setor',
+                                           'adm_loja': True}
+                continue
             aprovadores = [
                 {'id': g.id, 'nome': g.get_full_name() or g.email}
                 for g in get_gestores_do_setor(c).exclude(id=request.user.id)
@@ -512,9 +567,14 @@ def meta_create(request):
 
     context = {
         'sou_gestor': sou_gestor,
+        'sou_adm_loja': sou_adm_loja,
         'colaboradores': get_colaboradores() if sou_gestor else None,
         'gestores_do_setor': gestores_do_setor,
-        'gestores': get_gestores() if sou_gestor else None,
+        'gestores': get_gestores(),
+        # Quem não é gestor escolhe para quem é a atividade: ele mesmo ou alguém
+        # de ADM's LOJAS.
+        'adms_lojas': (None if sou_gestor
+                       else adms_lojas.exclude(id=request.user.id).select_related('sector')),
         'fora_da_area': fora_da_area,
         'setor': getattr(request.user, 'sector', None),
         'recorrencias': Meta.Recorrencia.choices,
@@ -534,15 +594,25 @@ def meta_decidir(request, meta_id):
         return redirect('impulso:meta_detail', meta_id=meta.id)
 
     decisao = request.POST.get('decisao')
+    # Pedido feito por outra pessoa (ex.: atividade para um ADM de loja): o
+    # colaborador não pediu nada, então "sua meta" não serve — e quem pediu
+    # também precisa da resposta (avisado depois de salvar).
+    pediu = meta.solicitada_por if meta.solicitada_por_id not in (None, meta.colaborador_id) else None
+    de_quem = pediu and (pediu.get_full_name() or pediu.email)
     if decisao == 'aprovar':
         meta.aprovacao = Meta.Aprovacao.APROVADA
         aviso = ('Solicitação aprovada', f'Sua meta "{meta.titulo}" foi aprovada e já está no Kanban.')
+        if pediu:
+            aviso = ('Solicitação aprovada', f'"{meta.titulo}", pedida por {de_quem} para você, '
+                                             f'foi aprovada e já está no seu Kanban.')
         retorno = 'Solicitação aprovada. A meta entrou no Kanban do colaborador.'
     elif decisao == 'recusar':
         meta.aprovacao = Meta.Aprovacao.RECUSADA
         meta.motivo_recusa = (request.POST.get('motivo_recusa') or '').strip()
         motivo = f' Motivo: {meta.motivo_recusa}' if meta.motivo_recusa else ''
         aviso = ('Solicitação recusada', f'Sua meta "{meta.titulo}" foi recusada.{motivo}')
+        if pediu:
+            aviso = ('Solicitação recusada', f'"{meta.titulo}", que {de_quem} pediu para você, foi recusada.{motivo}')
         retorno = 'Solicitação recusada.'
     else:
         messages.error(request, 'Decisão inválida.')
@@ -563,7 +633,19 @@ def meta_decidir(request, meta_id):
     meta.decidida_em = timezone.now()
     meta.save(update_fields=['aprovacao', 'motivo_recusa', 'decidida_por',
                              'decidida_em', 'updated_at'])
-    _notify([meta.colaborador], aviso[0], aviso[1], f'/impulso/metas/{meta.id}/')
+    url = f'/impulso/metas/{meta.id}/'
+    _notify([meta.colaborador], aviso[0], aviso[1], url)
+    if pediu:
+        nome = meta.colaborador.get_full_name() or meta.colaborador.email
+        decidiu = request.user.get_full_name() or request.user.email
+        if decisao == 'aprovar':
+            _notify([pediu], 'Pedido aprovado',
+                    f'"{meta.titulo}", que você pediu para {nome}, foi aprovada por {decidiu} '
+                    f'e já está no Kanban.', url)
+        else:
+            motivo = f' Motivo: {meta.motivo_recusa}' if meta.motivo_recusa else ''
+            _notify([pediu], 'Pedido recusado',
+                    f'"{meta.titulo}", que você pediu para {nome}, foi recusada por {decidiu}.{motivo}', url)
     messages.success(request, retorno)
     return redirect('impulso:meta_detail', meta_id=meta.id)
 
@@ -692,11 +774,16 @@ def meta_excluir(request, meta_id):
 
 @impulso_member_required
 def meta_solicitacoes(request):
-    """Fila de solicitações aguardando decisão."""
+    """Fila de solicitações aguardando decisão.
+
+    O gestor vê o que espera a decisão dele e também o que ele mesmo pediu para
+    outra pessoa (ex.: atividade para um ADM de loja, com outro gestor aprovando)
+    — cada linha diz se ali ele decide ou só acompanha.
+    """
     if is_impulso_manager(request.user):
         pendentes = Meta.objects.filter(aprovacao=Meta.Aprovacao.PENDENTE)
         if not request.user.is_superuser:
-            pendentes = pendentes.filter(gestor=request.user)
+            pendentes = pendentes.filter(Q(gestor=request.user) | Q(solicitada_por=request.user))
         titulo = 'Solicitações para aprovar'
     else:
         pendentes = Meta.objects.filter(solicitada_por=request.user,
@@ -714,10 +801,14 @@ def meta_solicitacoes(request):
     decididas = filtros_impulso.por_mes(
         filtros_impulso.por(decididas, f, alvos), f, 'prazo')[:20]
 
+    pendentes = list(pendentes.select_related('colaborador', 'gestor', 'solicitada_por',
+                                              'duplicada_de'))
+    for m in pendentes:
+        m.decide_aqui = m.pode_decidir(request.user)
+
     context = {
         'titulo': titulo,
-        'pendentes': pendentes.select_related('colaborador', 'gestor', 'solicitada_por',
-                                              'duplicada_de'),
+        'pendentes': pendentes,
         'recusadas': decididas.select_related('colaborador', 'gestor', 'decidida_por'),
         'is_gestor': is_impulso_manager(request.user),
         'active_tab': 'confiar',

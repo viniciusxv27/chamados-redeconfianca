@@ -6,7 +6,7 @@
         <h2 class="text-lg font-semibold text-gray-800">{{ titulo }}</h2>
         <p class="text-sm text-gray-500">
             {% if is_gestor %}
-            Metas pedidas por colaboradores do seu setor. Só entram no Kanban depois da aprovação.
+            O que chegou para você decidir e o que você pediu para outras pessoas. Só entra no Kanban depois da aprovação.
             {% else %}
             Enquanto o gestor não decide, a meta não aparece no Kanban nem conta pontos.
             {% endif %}
@@ -36,10 +36,15 @@
                     </span>
                     {% endif %}
                     <p class="text-xs text-gray-500 mt-0.5">
-                        {% if is_gestor %}
-                        Pedida por <strong>{{ m.colaborador.get_full_name|default:m.colaborador.email }}</strong>
-                        {% else %}
+                        {% if m.solicitada_por_id == user.id %}
+                        {% if m.colaborador_id != user.id %}Para <strong>{{ m.colaborador.get_full_name|default:m.colaborador.email }}</strong> ·{% endif %}
                         Enviada para <strong>{{ m.gestor.get_full_name|default:m.gestor.email }}</strong>
+                        {% elif m.solicitada_por_id and m.solicitada_por_id != m.colaborador_id %}
+                        Pedida por <strong>{{ m.solicitada_por.get_full_name|default:m.solicitada_por.email }}</strong>
+                        para <strong>{{ m.colaborador.get_full_name|default:m.colaborador.email }}</strong>
+                        {% if not m.decide_aqui %}· aprovação de <strong>{{ m.gestor.get_full_name|default:m.gestor.email }}</strong>{% endif %}
+                        {% else %}
+                        Pedida por <strong>{{ m.colaborador.get_full_name|default:m.colaborador.email }}</strong>
                         {% endif %}
                         · prazo {{ m.prazo|date:"d/m/Y" }}
                         · {{ m.get_recorrencia_display }}
@@ -50,7 +55,7 @@
                     <p class="text-sm text-gray-600 mt-2 line-clamp-2">{{ m.descricao|truncatechars:180 }}</p>
                 </div>
 
-                {% if is_gestor %}
+                {% if m.decide_aqui %}
                 <div class="flex items-center gap-2 flex-shrink-0">
                     <form method="post" action="{% url 'impulso:meta_decidir' m.id %}">
                         {% csrf_token %}
@@ -130,7 +135,7 @@
         </div>
         <div class="px-6 py-5">
             <p class="text-sm text-gray-600 mb-3">Recusando: <strong id="impRecusaTitulo"></strong></p>
-            <label class="block text-sm text-gray-600 mb-1">Motivo (opcional, vai para o colaborador)</label>
+            <label class="block text-sm text-gray-600 mb-1">Motivo (opcional, vai no aviso da recusa)</label>
             <textarea name="motivo_recusa" rows="3" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
                       placeholder="Ex.: já existe uma meta parecida neste mês"></textarea>
         </div>

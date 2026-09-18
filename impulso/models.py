@@ -28,7 +28,8 @@ GRUPO_GESTOR = 'GESTORES (IMPULSO)'
 # Quem participa do Impulso como colaborador: o escritório e os ADMs das lojas.
 # `GRUPO_ADM` continua sendo o nome principal (testes e telas o usam); a regra
 # de acesso e a lista de colaboradores olham para os dois.
-GRUPOS_ADM = (GRUPO_ADM, "ADM's LOJAS")
+GRUPO_ADM_LOJAS = "ADM's LOJAS"
+GRUPOS_ADM = (GRUPO_ADM, GRUPO_ADM_LOJAS)
 
 
 def get_media_storage():

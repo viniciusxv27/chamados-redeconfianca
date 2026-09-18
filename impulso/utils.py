@@ -7,7 +7,7 @@ from django.contrib.auth import get_user_model
 from django.db.models import Q
 from django.shortcuts import redirect
 
-from .models import GRUPO_GESTOR, GRUPOS_ADM, Faixa
+from .models import GRUPO_ADM_LOJAS, GRUPO_GESTOR, GRUPOS_ADM, Faixa
 
 User = get_user_model()
 
@@ -67,6 +67,18 @@ def get_colaboradores():
 def get_gestores():
     return (User.objects.filter(is_active=True)
             .filter(_q_grupo('communication_groups__name', GRUPO_GESTOR))
+            .distinct().order_by('first_name', 'last_name'))
+
+
+def get_adms_lojas():
+    """Usuários ativos de ADM's LOJAS.
+
+    Para eles, qualquer pessoa do Impulso cria atividade e escolhe, entre todos
+    os gestores, quem aprova e avalia — as lojas não têm gestor do Impulso
+    próprio, e a demanda vem do escritório inteiro.
+    """
+    return (User.objects.filter(is_active=True)
+            .filter(_q_grupo('communication_groups__name', GRUPO_ADM_LOJAS))
             .distinct().order_by('first_name', 'last_name'))
 
 

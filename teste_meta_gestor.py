@@ -80,7 +80,7 @@ try:
     t('o colega aparece na lista', colega.get_full_name() in html)
     t('explica o que o gestor faz', 'avalia a meta no fim' in html)
     t('some quando o colaborador é de outra área',
-      "dono.classList.toggle('hidden', !!info)" in html)
+      "dono.classList.toggle('hidden', !!info && !adm)" in html)
 
     def criar(**extra):
         dados = {'colaborador': colab.id, 'titulo': f'ZZ {extra.get("titulo", "meta")}',

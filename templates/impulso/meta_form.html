@@ -6,7 +6,7 @@
         <a href="{% url 'impulso:metas_kanban' %}" class="text-sm text-gray-500 hover:text-gray-800"><i class="fas fa-arrow-left mr-1"></i>Voltar ao Kanban</a>
     </div>
 
-    {% if not sou_gestor and not gestores_do_setor %}
+    {% if not sou_gestor and not gestores_do_setor and not adms_lojas %}
     {# Sem gestor no setor não há para quem pedir. Explica em vez de mostrar   #}
     {# um select vazio ou oferecer gestor de outro setor.                      #}
     <div class="imp-card p-6 text-center">
@@ -69,8 +69,8 @@
             </div>
 
             <div id="impGestorDono">
-                <label class="block text-sm font-medium text-gray-700 mb-1">Gestor responsável *</label>
-                <select name="gestor" id="impGestor"
+                <label class="block text-sm font-medium text-gray-700 mb-1"><span id="impRotuloGestorDono" data-padrao="Gestor responsável">Gestor responsável</span> *</label>
+                <select name="gestor" id="impGestor" data-eu="{{ request.user.id }}" onchange="impChecarArea()"
                         class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                     {% for g in gestores %}
                     <option value="{{ g.id }}" {% if g.id == request.user.id %}selected{% endif %}>
@@ -78,9 +78,13 @@
                     </option>
                     {% endfor %}
                 </select>
-                <p class="text-xs text-gray-400 mt-1">
+                <p class="text-xs text-gray-400 mt-1" id="impAjudaGestorDono">
                     É quem avalia a meta no fim e aparece como responsável no card.
                     Escolhendo outra pessoa, ela é avisada.
+                </p>
+                <p class="hidden text-xs text-amber-700 mt-1" id="impAjudaGestorAdm">
+                    <i class="fas fa-store mr-1"></i>ADM de loja de outra área: pode ser qualquer gestor do Impulso.
+                    Sendo você, a meta entra direto no Kanban; sendo outra pessoa, ela aprova antes e avalia no fim.
                 </p>
             </div>
 
@@ -105,6 +109,24 @@
                 </p>
             </div>
             {% else %}
+            {% if adms_lojas %}
+            <div>
+                <label for="impParaQuem" class="block text-sm font-medium text-gray-700 mb-1">Para quem é a atividade? *</label>
+                <select name="colaborador" id="impParaQuem" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    {% if gestores_do_setor %}<option value="">Para mim</option>{% endif %}
+                    <optgroup label="ADM's LOJAS">
+                        {% for c in adms_lojas %}
+                        <option value="{{ c.id }}" data-nome="{{ c.get_full_name|default:c.email }}">{{ c.get_full_name|default:c.email }}{% if c.sector_id %} — {{ c.sector.name }}{% endif %}</option>
+                        {% endfor %}
+                    </optgroup>
+                </select>
+                <p class="text-xs text-gray-400 mt-1">
+                    Para alguém de ADM's LOJAS, você escolhe o gestor que aprova e avalia — qualquer gestor do Impulso.
+                </p>
+            </div>
+            {% endif %}
+
+            <div id="impBlocoParaMim" class="space-y-4{% if not gestores_do_setor %} hidden{% endif %}">
             <div>
                 <span class="block text-sm font-medium text-gray-700 mb-2">Esta atividade precisa da autorização do gestor?</span>
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -135,7 +157,7 @@
                 <label class="block text-sm font-medium text-gray-700 mb-1">
                     <span id="rotuloGestor">Enviar para o gestor</span> *
                 </label>
-                <select name="gestor" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <select name="gestor" required {% if not gestores_do_setor %}disabled{% endif %} class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                     <option value="">Selecione…</option>
                     {% for g in gestores_do_setor %}
                     <option value="{{ g.id }}">{{ g.get_full_name|default:g.email }}</option>
@@ -143,10 +165,33 @@
                 </select>
                 <p class="text-xs text-gray-400 mt-1">
                     <i class="fas fa-circle-info mr-1"></i>
-                    Só aparecem gestores do seu setor{% if setor %} ({{ setor.name }}){% endif %}.
+                    {% if sou_adm_loja %}Pode ser qualquer gestor do Impulso.{% else %}Só aparecem gestores do seu setor{% if setor %} ({{ setor.name }}){% endif %}.{% endif %}
                     <span id="avisoGestor">A meta será registrada em seu nome.</span>
                 </p>
             </div>
+            </div>
+
+            {% if adms_lojas %}
+            {% comment %}
+            Para outra pessoa sempre há aprovação: quem cria não é o gestor dela.
+            Só o bloco em uso vai no formulário — o outro fica desabilitado.
+            {% endcomment %}
+            <div id="impBlocoAdm"{% if gestores_do_setor %} class="hidden"{% endif %}>
+                <label for="impGestorAprovadorAdm" class="block text-sm font-medium text-gray-700 mb-1">Gestor que vai aprovar e avaliar *</label>
+                <select name="gestor_aprovador" id="impGestorAprovadorAdm" required {% if gestores_do_setor %}disabled{% endif %}
+                        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    <option value="">Selecione…</option>
+                    {% for g in gestores %}
+                    <option value="{{ g.id }}">{{ g.get_full_name|default:g.email }}</option>
+                    {% endfor %}
+                </select>
+                <p class="text-xs text-gray-400 mt-1">
+                    <i class="fas fa-circle-info mr-1"></i>
+                    Qualquer gestor do Impulso. A atividade só entra no Kanban de
+                    <strong class="imp-nome-alvo">quem vai fazer</strong> depois que ele aprovar, e é ele quem dá a nota na entrega.
+                </p>
+            </div>
+            {% endif %}
             {% endif %}
 
             <div>
@@ -214,7 +259,7 @@
             <div class="flex items-center justify-end gap-2 pt-2">
                 <span id="impRascunhoStatus" class="text-xs text-gray-400 mr-auto"></span>
                 <a href="{% url 'impulso:metas_kanban' %}" class="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 text-sm hover:bg-gray-200">Cancelar</a>
-                <button type="submit" class="px-4 py-2 rounded-lg bg-orange-600 text-white text-sm hover:bg-orange-700">
+                <button type="submit" id="impBotaoEnviar" class="px-4 py-2 rounded-lg bg-orange-600 text-white text-sm hover:bg-orange-700">
                     {% if sou_gestor %}Criar meta{% else %}Enviar solicitação{% endif %}
                 </button>
             </div>
@@ -263,17 +308,21 @@ function impChecarArea() {
 
     var fora = JSON.parse(dados.textContent || '{}');
     var info = fora[sel.value];
+    // ADM de loja de outra área é a exceção: quem aprova e avalia é o gestor
+    // escolhido aqui mesmo, qualquer um do Impulso.
+    var adm = !!(info && info.adm_loja);
     // Fora da área quem fica com a meta é um gestor de lá, então a escolha
     // livre de gestor some: mostrá-la prometeria algo que o servidor não vai
     // fazer.
     var dono = document.getElementById('impGestorDono');
-    if (dono) dono.classList.toggle('hidden', !!info);
+    if (dono) dono.classList.toggle('hidden', !!info && !adm);
+    impGestorDaLoja(adm);
 
-    if (!info) {
+    if (!info || adm) {
         caixa.classList.add('hidden');
         var escolha = document.getElementById('impGestorAprovador');
         if (escolha) escolha.innerHTML = '';
-        impResumo('A meta entra direto no Kanban do colaborador.');
+        if (!adm) impResumo('A meta entra direto no Kanban do colaborador.');
         return;
     }
 
@@ -295,6 +344,25 @@ function impChecarArea() {
     semGestor.classList.toggle('hidden', temGestor);
     caixa.classList.remove('hidden');
     impResumo('Como é de outra área, a meta vai para aprovação antes de entrar no Kanban.');
+}
+
+// ADM de loja de outra área: o gestor escolhido aprova e avalia. Sendo quem
+// cria, a meta entra direto; sendo outra pessoa, espera a aprovação dela.
+function impGestorDaLoja(adm) {
+    var rotulo = document.getElementById('impRotuloGestorDono');
+    var ajuda = document.getElementById('impAjudaGestorDono');
+    var ajudaAdm = document.getElementById('impAjudaGestorAdm');
+    if (rotulo) rotulo.textContent = adm ? 'Gestor que aprova e avalia' : rotulo.dataset.padrao;
+    if (ajuda) ajuda.classList.toggle('hidden', adm);
+    if (ajudaAdm) ajudaAdm.classList.toggle('hidden', !adm);
+    if (!adm) return;
+    var g = document.getElementById('impGestor');
+    if (!g || g.value === g.dataset.eu) {
+        impResumo('A meta entra direto no Kanban do colaborador.');
+        return;
+    }
+    impResumo('É ADM de loja de outra área: a meta vai para aprovação de '
+              + g.options[g.selectedIndex].textContent.trim() + ' antes de entrar no Kanban.');
 }
 
 function impResumo(texto) {
@@ -328,9 +396,38 @@ document.addEventListener('DOMContentLoaded', impChecarArea);
     const rotulo = document.getElementById('rotuloGestor');
     const aviso = document.getElementById('avisoGestor');
     const resumo = document.getElementById('resumoFluxo');
+    const alvo = document.getElementById('impParaQuem');
+    const blocoMim = document.getElementById('impBlocoParaMim');
+    const blocoAdm = document.getElementById('impBlocoAdm');
+    const botao = document.getElementById('impBotaoEnviar');
 
     function pintar() {
-        const precisa = document.querySelector('input[name="precisa_aprovacao"]:checked').value !== 'nao';
+        // Para alguém de ADM's LOJAS o que vale é o bloco do gestor aprovador;
+        // só o bloco em uso vai no formulário (e só ele é obrigatório).
+        const outra = !!(alvo && alvo.value);
+        if (blocoMim) {
+            blocoMim.classList.toggle('hidden', outra);
+            blocoMim.querySelectorAll('select, input').forEach(function (el) { el.disabled = outra; });
+        }
+        if (blocoAdm) {
+            blocoAdm.classList.toggle('hidden', !outra);
+            blocoAdm.querySelectorAll('select').forEach(function (el) { el.disabled = !outra; });
+        }
+        if (outra) {
+            const nome = alvo.options[alvo.selectedIndex].dataset.nome || 'a pessoa';
+            document.querySelectorAll('.imp-nome-alvo').forEach(function (el) { el.textContent = nome; });
+            const tituloAlvo = document.getElementById('tituloForm');
+            if (tituloAlvo) tituloAlvo.textContent = 'Nova atividade para ' + nome;
+            if (resumo) {
+                resumo.textContent = 'O gestor escolhido aprova antes de a atividade entrar no Kanban de '
+                    + nome + ' e avalia a entrega no fim.';
+            }
+            if (botao) botao.textContent = 'Enviar para aprovação';
+            return;
+        }
+        if (botao) botao.textContent = 'Enviar solicitação';
+
+        const precisa = (document.querySelector('input[name="precisa_aprovacao"]:checked') || {}).value !== 'nao';
 
         // O select continua obrigatório nos dois casos: mesmo sem autorização,
         // é o gestor quem avalia a meta no fim — sem ele a atividade nunca
@@ -358,6 +455,7 @@ document.addEventListener('DOMContentLoaded', impChecarArea);
     }
 
     opcoes.forEach(function (o) { o.addEventListener('change', pintar); });
+    if (alvo) alvo.addEventListener('change', pintar);
     pintar();
 })();
 </script>
@@ -402,6 +500,7 @@ document.addEventListener('DOMContentLoaded', impChecarArea);
         const algumCampo = Object.entries(dados.campos).some(function ([nome, v]) {
             // O gestor e a recorrência já vêm preenchidos; sozinhos não são rascunho.
             if (nome === 'gestor' || nome === 'recorrencia' || nome === 'precisa_aprovacao') return false;
+            // "Para mim" é o padrão (valor vazio); escolher um ADM já é rascunho.
             return typeof v === 'string' ? v.trim() !== '' : v === true;
         });
         return !algumCampo && !dados.itens.some(function (t) { return t.trim() !== ''; });
@@ -455,7 +554,7 @@ document.addEventListener('DOMContentLoaded', impChecarArea);
         });
 
         // Os campos mudaram por script; quem depende de 'change' precisa saber.
-        form.querySelectorAll('input[name="precisa_aprovacao"], #impRecorrencia')
+        form.querySelectorAll('#impParaQuem, input[name="precisa_aprovacao"], #impRecorrencia, #impGestor')
             .forEach(function (el) { el.dispatchEvent(new Event('change', { bubbles: true })); });
 
         if (aviso) {
@@ -475,7 +574,7 @@ document.addEventListener('DOMContentLoaded', impChecarArea);
             try { localStorage.removeItem(CHAVE); } catch (e) {}
             form.reset();
             if (aviso) aviso.classList.add('hidden');
-            form.querySelectorAll('input[name="precisa_aprovacao"], #impRecorrencia')
+            form.querySelectorAll('#impParaQuem, input[name="precisa_aprovacao"], #impRecorrencia, #impGestor')
                 .forEach(function (el) { el.dispatchEvent(new Event('change', { bubbles: true })); });
         });
     }

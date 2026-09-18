@@ -14,8 +14,14 @@
                 <i class="fas fa-hourglass-half mr-1.5"></i>Solicitação aguardando aprovação
             </h3>
             <p class="text-sm text-amber-800/90 mt-1">
+                {% if meta.solicitada_por and meta.solicitada_por_id != meta.colaborador_id %}
+                Pedida por {{ meta.solicitada_por.get_full_name|default:meta.solicitada_por.email }}
+                para {{ meta.colaborador.get_full_name|default:meta.colaborador.email }} — aguardando a aprovação de
+                {{ meta.gestor.get_full_name|default:meta.gestor.email }}.
+                {% else %}
                 {% if meta.solicitada_por %}Pedida por {{ meta.solicitada_por.get_full_name|default:meta.solicitada_por.email }}{% endif %}
                 para {{ meta.gestor.get_full_name|default:meta.gestor.email }}.
+                {% endif %}
                 {% if meta.duplicada_de %}
                 É um pedido de <strong>duplicação</strong> de
                 <a href="{% url 'impulso:meta_detail' meta.duplicada_de_id %}" class="underline hover:text-amber-950">{{ meta.duplicada_de.titulo }}</a>.
