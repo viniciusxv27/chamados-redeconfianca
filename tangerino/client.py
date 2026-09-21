@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 # Hosts ficam em settings para poder redirecionar sem alterar o código quando a
 # Sólides/Tangerino muda o endereço de um serviço. Vazio no .env = padrão abaixo.
 EMPLOYER_BASE = getattr(settings, 'TANGERINO_EMPLOYER_BASE', '') or 'https://employer.tangerino.com.br'
-PUNCH_BASE = getattr(settings, 'TANGERINO_PUNCH_BASE', '') or 'https://apis.tangerino.com.br/api/punch'
+PUNCH_BASE = getattr(settings, 'TANGERINO_PUNCH_BASE', '') or 'https://apis.tangerino.com.br/punch'
 
 TIMEOUT = (5, 25)          # (conexão, leitura) em segundos
 MOTIVO_FERIAS_ID = 1       # "FÉRIAS" em /adjustment-reason/find-all
