@@ -320,7 +320,8 @@ cálculo pesado: cards do usuário + tabelas de comissionamento por papel.
 
     <!-- Summary for Consultor/Gerente -->
     <div class="bg-gray-50 px-6 py-6 border-t border-gray-200">
-      <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+      {# Com o acelerador são 6 cartões: duas linhas de 3 em vez de 5 + 1 sobrando. #}
+      <div class="grid grid-cols-1 md:grid-cols-3 {% if not simulation.acelerador_microindicadores %}lg:grid-cols-5 {% endif %}gap-4">
         <div class="bg-white rounded-lg p-4 border border-gray-200">
           <p class="text-xs text-gray-600 uppercase font-semibold mb-1">{% if target_role == 'gerente' %}Total com Coord.{% else %}Total com PDV{% endif %}</p>
           <p class="text-xl font-bold text-gray-900">{{ simulation.totals.total_with_pdv|brl }}</p>
@@ -337,10 +338,17 @@ cálculo pesado: cards do usuário + tabelas de comissionamento por papel.
           <p class="text-xs text-gray-600 uppercase font-semibold mb-1">Bônus 6/7</p>
           <p class="text-xl font-bold text-success">{{ simulation.totals.bonus_6_7|brl }}</p>
         </div>
+        {% if simulation.acelerador_microindicadores %}
+        <div class="bg-white rounded-lg p-4 border border-gray-200">
+          <p class="text-xs text-gray-600 uppercase font-semibold mb-1">Acelerador de Microindicadores (+{{ simulation.acelerador_microindicadores_pct }}%)</p>
+          <p class="text-xl font-bold text-success">{{ simulation.totals.acelerador_microindicadores|brl }}</p>
+        </div>
+        {% endif %}
         <div class="bg-gradient-to-br from-primary to-orange-600 rounded-lg p-4 text-white">
           <p class="text-xs uppercase font-semibold mb-1 opacity-90">Ganho Total</p>
           <p class="text-2xl font-bold">{{ simulation.totals.ganho_total|brl }}</p>
           {% if simulation.is_gerente_operacional %}<p class="text-xs opacity-90 mt-1">{{ simulation.percentual_operacional_pct }}% de {{ simulation.gerente_de_vendas_base }}</p>{% endif %}
+          {% if simulation.acelerador_microindicadores %}<p class="text-xs opacity-90 mt-1">Sem o acelerador: {{ simulation.totals.ganho_total_sem_acelerador|brl }}</p>{% endif %}
         </div>
       </div>
     </div>

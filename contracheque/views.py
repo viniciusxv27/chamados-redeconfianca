@@ -95,6 +95,8 @@ def my_payslips(request):
         'payslips': payslips,
         'years': years,
         'selected_year': year_filter,
+        # A mesma régua das telas de administração: ADMINISTRAÇÃO entra como o SUPERADMIN.
+        'pode_administrar': pode_administrar(request.user),
     })
 
 
@@ -227,11 +229,11 @@ def payslip_signed_pdf(request, pk):
     return response
 
 
-# ─── Área Administrativa (SUPERADMIN) ────────────────────────────────────────
+# ─── Área Administrativa (SUPERADMIN e ADMINISTRAÇÃO) ────────────────────────────────────────
 
 @login_required
 def admin_payslips(request):
-    """Painel administrativo de contracheques (SUPERADMIN)."""
+    """Painel administrativo de contracheques (SUPERADMIN e ADMINISTRAÇÃO)."""
     if not pode_administrar(request.user):
         messages.error(request, 'Acesso restrito.')
         return redirect('contracheque:my_payslips')
@@ -268,7 +270,7 @@ def admin_payslips(request):
 
 @login_required
 def admin_import(request):
-    """Página de importação de PDFs de contracheque (SUPERADMIN)."""
+    """Página de importação de PDFs de contracheque (SUPERADMIN e ADMINISTRAÇÃO)."""
     if not pode_administrar(request.user):
         messages.error(request, 'Acesso restrito.')
         return redirect('contracheque:my_payslips')
@@ -772,7 +774,7 @@ def api_sign_payslip(request, pk):
 
 @login_required
 def admin_delete_payslip(request, pk):
-    """Excluir um contracheque (SUPERADMIN)."""
+    """Excluir um contracheque (SUPERADMIN e ADMINISTRAÇÃO)."""
     if request.method != 'POST':
         return JsonResponse({'error': 'Método não permitido'}, status=405)
 
@@ -790,7 +792,7 @@ def admin_delete_payslip(request, pk):
 
 @login_required
 def admin_reupload_payslip_pdf(request, pk):
-    """Reenviar PDF de um contracheque específico (SUPERADMIN)."""
+    """Reenviar PDF de um contracheque específico (SUPERADMIN e ADMINISTRAÇÃO)."""
     if request.method != 'POST':
         return JsonResponse({'error': 'Método não permitido'}, status=405)
 
@@ -990,6 +992,7 @@ def my_income_reports(request):
     reports = IncomeReport.objects.filter(user=request.user)
     return render(request, 'contracheque/my_income_reports.html', {
         'reports': reports,
+        'pode_administrar': pode_administrar(request.user),
     })
 
 

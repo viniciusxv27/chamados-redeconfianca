@@ -1,0 +1,43 @@
+{% extends 'quiz/base_quiz.html' %}
+
+{% block quiz_titulo %}Quizzes{% endblock %}
+{% block quiz_h1 %}Quizzes{% endblock %}
+{% block quiz_sub %}Monte as perguntas, publique e use em quantas salas quiser.{% endblock %}
+{% block quiz_acoes %}<a href="{% url 'quiz:quiz_novo' %}" class="qz-btn qz-btn-laranja"><i class="fas fa-plus"></i>Novo quiz</a>{% endblock %}
+
+{% block quiz_conteudo %}
+<section class="qz-card p-4">
+    <form method="get" class="flex flex-wrap gap-2 items-center">
+        <input type="search" name="q" value="{{ q }}" placeholder="Buscar por nome, tema ou descrição…" class="qz-input flex-1 min-w-[12rem]">
+        <select name="situacao" class="qz-input w-auto">
+            <option value="">Todas as situações</option>
+            <option value="RASCUNHO" {% if situacao == 'RASCUNHO' %}selected{% endif %}>Rascunho</option>
+            <option value="PUBLICADO" {% if situacao == 'PUBLICADO' %}selected{% endif %}>Publicado</option>
+        </select>
+        <button type="submit" class="qz-btn qz-btn-roxo">Filtrar</button>
+    </form>
+</section>
+
+<section class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+    {% for quiz in quizzes %}
+    <a href="{% url 'quiz:quiz' quiz.pk %}" class="qz-card p-5 block hover:shadow-md transition-shadow">
+        <div class="flex items-start justify-between gap-2">
+            <h2 class="font-bold text-gray-800">{{ quiz.titulo }}</h2>
+            {% if quiz.publicado %}<span class="qz-chip qz-chip-verde">Publicado</span>{% else %}<span class="qz-chip qz-chip-cinza">Rascunho</span>{% endif %}
+        </div>
+        {% if quiz.categoria %}<p class="text-xs font-semibold text-violet-700 mt-1">{{ quiz.categoria }}</p>{% endif %}
+        {% if quiz.descricao %}<p class="text-sm text-gray-500 mt-2 line-clamp-2">{{ quiz.descricao }}</p>{% endif %}
+        <p class="text-xs text-gray-500 mt-3">
+            <i class="fas fa-circle-question mr-1"></i>{{ quiz.total_perguntas }} pergunta{{ quiz.total_perguntas|pluralize }}
+            · <i class="fas fa-door-open mx-1"></i>{{ quiz.total_salas }} sala{{ quiz.total_salas|pluralize }}
+            · atualizado {{ quiz.atualizado_em|date:"d/m/Y" }}
+        </p>
+    </a>
+    {% empty %}
+    <div class="qz-card p-8 text-center md:col-span-2 xl:col-span-3">
+        <p class="text-gray-600">Nenhum quiz ainda.</p>
+        <a href="{% url 'quiz:quiz_novo' %}" class="qz-btn qz-btn-laranja mt-3"><i class="fas fa-plus"></i>Criar o primeiro quiz</a>
+    </div>
+    {% endfor %}
+</section>
+{% endblock %}

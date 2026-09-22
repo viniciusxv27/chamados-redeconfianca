@@ -1,0 +1,110 @@
+{% extends 'quiz/base_quiz.html' %}
+
+{% block quiz_titulo %}{{ quiz.titulo }}{% endblock %}
+{% block quiz_h1 %}{{ quiz.titulo }}{% endblock %}
+{% block quiz_sub %}{% if quiz.categoria %}{{ quiz.categoria }} · {% endif %}{{ perguntas|length }} pergunta{{ perguntas|length|pluralize }}{% if quiz.publicado %} · publicado em {{ quiz.publicado_em|date:"d/m/Y" }}{% else %} · rascunho{% endif %}{% endblock %}
+{% block quiz_acoes %}
+{% if quiz.publicado %}<a href="{% url 'quiz:sala_nova' %}?quiz={{ quiz.pk }}" class="qz-btn qz-btn-laranja"><i class="fas fa-door-open"></i>Criar sala</a>{% endif %}
+<a href="{% url 'quiz:quiz_editar' quiz.pk %}" class="qz-btn qz-btn-claro"><i class="fas fa-pen"></i>Dados do quiz</a>
+{% endblock %}
+
+{% block quiz_conteudo %}
+{% if quiz.descricao %}<section class="qz-card p-5"><p class="text-sm text-gray-600 whitespace-pre-line">{{ quiz.descricao }}</p></section>{% endif %}
+
+<section class="qz-card p-5">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+            {% if quiz.publicado %}
+            <p class="text-sm font-semibold text-emerald-700"><i class="fas fa-circle-check mr-1"></i>Publicado: as perguntas estão travadas.</p>
+            <p class="text-xs text-gray-500 mt-0.5">{% if ja_jogado %}Já foi jogado — para mudar, duplique o quiz.{% else %}Ainda não foi jogado: dá para voltar a rascunho e mudar.{% endif %}</p>
+            {% else %}
+            <p class="text-sm font-semibold text-gray-700"><i class="fas fa-pen-ruler mr-1"></i>Rascunho: edite à vontade e publique quando estiver pronto.</p>
+            {% if problemas %}<ul class="text-xs text-amber-700 mt-1 list-disc pl-5">{% for p in problemas %}<li>{{ p }}</li>{% endfor %}</ul>{% endif %}
+            {% endif %}
+        </div>
+        <div class="flex flex-wrap gap-2">
+            {% if quiz.editavel %}
+            <form method="post" action="{% url 'quiz:quiz_publicar' quiz.pk %}">{% csrf_token %}
+                <button type="submit" class="qz-btn qz-btn-laranja" {% if problemas %}disabled title="Resolva os pontos acima"{% endif %}><i class="fas fa-rocket"></i>Publicar</button>
+            </form>
+            {% elif not ja_jogado %}
+            <form method="post" action="{% url 'quiz:quiz_rascunho' quiz.pk %}">{% csrf_token %}
+                <button type="submit" class="qz-btn qz-btn-claro"><i class="fas fa-rotate-left"></i>Voltar para rascunho</button>
+            </form>
+            {% endif %}
+            <form method="post" action="{% url 'quiz:quiz_duplicar' quiz.pk %}">{% csrf_token %}
+                <button type="submit" class="qz-btn qz-btn-claro"><i class="fas fa-copy"></i>Duplicar quiz</button>
+            </form>
+            {% if not salas %}
+            <form method="post" action="{% url 'quiz:quiz_excluir' quiz.pk %}" onsubmit="return confirm('Excluir o quiz e todas as perguntas?');">{% csrf_token %}
+                <button type="submit" class="qz-btn qz-btn-perigo"><i class="fas fa-trash"></i>Excluir</button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+</section>
+
+<section class="space-y-3">
+    <div class="flex flex-wrap items-center justify-between gap-2">
+        <h2 class="text-base font-bold text-gray-800">Perguntas</h2>
+        {% if quiz.editavel %}
+        <div class="flex flex-wrap gap-2">
+            <a href="{% url 'quiz:banco' quiz.pk %}" class="qz-btn qz-btn-claro"><i class="fas fa-box-archive"></i>Do banco de perguntas</a>
+            <a href="{% url 'quiz:pergunta_nova' quiz.pk %}" class="qz-btn qz-btn-roxo"><i class="fas fa-plus"></i>Nova pergunta</a>
+        </div>
+        {% endif %}
+    </div>
+    {% for p in perguntas %}
+    <article id="pergunta-{{ p.pk }}" class="qz-card p-4 sm:p-5">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+            <div class="min-w-0 flex-1">
+                <p class="text-xs font-semibold text-violet-700">Pergunta {{ forloop.counter }} · <i class="fas fa-stopwatch"></i> {{ p.tempo_limite }} s{% if p.origem_id %} · <span class="text-gray-400">do banco</span>{% endif %}</p>
+                <p class="font-semibold text-gray-800 mt-1 whitespace-pre-line">{{ p.enunciado }}</p>
+            </div>
+            {% if quiz.editavel %}
+            <div class="flex items-center gap-1">
+                <form method="post" action="{% url 'quiz:pergunta_mover' p.pk %}">{% csrf_token %}<input type="hidden" name="direcao" value="cima">
+                    <button class="qz-btn qz-btn-claro !px-2.5" title="Subir" aria-label="Subir a pergunta {{ forloop.counter }}" {% if forloop.first %}disabled{% endif %}><i class="fas fa-arrow-up"></i></button></form>
+                <form method="post" action="{% url 'quiz:pergunta_mover' p.pk %}">{% csrf_token %}<input type="hidden" name="direcao" value="baixo">
+                    <button class="qz-btn qz-btn-claro !px-2.5" title="Descer" aria-label="Descer a pergunta {{ forloop.counter }}" {% if forloop.last %}disabled{% endif %}><i class="fas fa-arrow-down"></i></button></form>
+                <a href="{% url 'quiz:pergunta_editar' p.pk %}" class="qz-btn qz-btn-claro !px-2.5" title="Editar" aria-label="Editar a pergunta {{ forloop.counter }}"><i class="fas fa-pen"></i></a>
+                <form method="post" action="{% url 'quiz:pergunta_duplicar' p.pk %}">{% csrf_token %}
+                    <button class="qz-btn qz-btn-claro !px-2.5" title="Duplicar" aria-label="Duplicar a pergunta {{ forloop.counter }}"><i class="fas fa-copy"></i></button></form>
+                <form method="post" action="{% url 'quiz:pergunta_excluir' p.pk %}" onsubmit="return confirm('Excluir esta pergunta?');">{% csrf_token %}
+                    <button class="qz-btn qz-btn-perigo !px-2.5" title="Excluir" aria-label="Excluir a pergunta {{ forloop.counter }}"><i class="fas fa-trash"></i></button></form>
+            </div>
+            {% endif %}
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3">
+            {% for a in p.alternativas.all %}
+            <div class="qz-alt qz-{% cycle 'vermelho' 'azul' 'amarelo' 'verde' %} !min-h-0 !py-2 text-sm {% if not a.correta %}opacity-60{% endif %}">
+                <span class="qz-forma text-base">{% cycle '▲' '◆' '●' '■' %}</span>
+                <span class="flex-1">{{ a.texto }}</span>
+                {% if a.correta %}<span class="qz-chip bg-white text-emerald-700"><i class="fas fa-check"></i>certa</span>{% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% if p.explicacao %}<p class="text-xs text-gray-500 mt-2"><i class="fas fa-lightbulb text-amber-500 mr-1"></i>{{ p.explicacao }}</p>{% endif %}
+    </article>
+    {% empty %}
+    <div class="qz-card p-8 text-center">
+        <p class="text-gray-600">Nenhuma pergunta ainda.</p>
+        {% if quiz.editavel %}<a href="{% url 'quiz:pergunta_nova' quiz.pk %}" class="qz-btn qz-btn-roxo mt-3"><i class="fas fa-plus"></i>Cadastrar a primeira</a>{% endif %}
+    </div>
+    {% endfor %}
+</section>
+
+{% if salas %}
+<section class="qz-card p-5">
+    <h2 class="text-base font-bold text-gray-800">Salas com este quiz</h2>
+    <ul class="mt-2 divide-y divide-gray-100">
+        {% for s in salas %}
+        <li class="py-2.5 flex flex-wrap items-center justify-between gap-2 text-sm">
+            <span><span class="font-semibold text-gray-800">{{ s.titulo }}</span> · {{ s.agendada_para|date:"d/m/Y H:i" }} · <span class="qz-codigo">{{ s.codigo }}</span> · {{ s.get_fase_display }}</span>
+            <a href="{% if s.encerrada %}{% url 'quiz:resultados' s.codigo %}{% else %}{% url 'quiz:painel' s.codigo %}{% endif %}" class="text-violet-700 font-semibold hover:underline">{% if s.encerrada %}Resultados{% else %}Painel{% endif %}</a>
+        </li>
+        {% endfor %}
+    </ul>
+</section>
+{% endif %}
+{% endblock %}

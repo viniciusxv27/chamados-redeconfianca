@@ -868,6 +868,18 @@ def get_hunter_levels_from_request(request) -> Dict[str, int]:
     return levels
 
 
+# Acelerador de Microindicadores (visão de consultor): marcado no simulador, soma
+# esta fração ao ganho total. É uma opção da tela, como os níveis Hunter — viaja
+# na URL (?acelerador=1), não fica gravada e não entra nas médias da rede.
+ACELERADOR_MICROINDICADORES_RATE = 0.10
+
+
+def get_acelerador_from_request(request) -> bool:
+    """Checkbox "Acelerador de Microindicadores": marcado, chega como ``acelerador=1``."""
+    value = request.GET.get('acelerador', request.POST.get('acelerador', ''))
+    return str(value).strip().lower() in ('1', 'on', 'true')
+
+
 def all_pillars_ok(att_map: Dict[str, float], coordinator_name: str, threshold: float) -> bool:
     is_ariel = normalize_text(coordinator_name) == 'ARIEL'
     if is_ariel:
@@ -1282,6 +1294,7 @@ def compute_consultor_simulation(
     hunter_levels: Optional[Dict[str, int]] = None,
     view_mode: str = VIEW_PROJECAO,
     simulator_inputs: Optional[Dict[str, Any]] = None,
+    acelerador_microindicadores: bool = False,
 ) -> Dict[str, Any]:
     realized = load_dataframe(ROLE_CONSULTOR, 'REALIZADO')
     projection = load_dataframe(ROLE_CONSULTOR, 'PROJEÇÃO')
@@ -1664,6 +1677,10 @@ def compute_consultor_simulation(
 
     bonus_rate = meta_config.get('bonus_6_7_rate', 0.0)
     bonus_value = (total_p + total_h2 + total_h3) * bonus_rate if bonus_6_7_ok(att_map, coord_name) else 0.0
+    ganho_total = total_p + total_h2 + total_h3 + bonus_value
+    # Acelerador de Microindicadores: +10% sobre o ganho total, já com Hunter e
+    # bônus 6/7. Desmarcado é zero e o ganho sai exatamente como antes.
+    acelerador_value = ganho_total * ACELERADOR_MICROINDICADORES_RATE if acelerador_microindicadores else 0.0
 
     rows = _merge_grouped_rows(rows)
     return {
@@ -1678,8 +1695,12 @@ def compute_consultor_simulation(
             'hunter2': total_h2,
             'hunter3': total_h3,
             'bonus_6_7': bonus_value,
-            'ganho_total': total_p + total_h2 + total_h3 + bonus_value,
+            'ganho_total_sem_acelerador': ganho_total,
+            'acelerador_microindicadores': acelerador_value,
+            'ganho_total': ganho_total + acelerador_value,
         },
+        'acelerador_microindicadores': bool(acelerador_microindicadores),
+        'acelerador_microindicadores_pct': round(ACELERADOR_MICROINDICADORES_RATE * 100),
     }
 
 
@@ -2158,6 +2179,11 @@ def compute_coordenador_simulation(
     for k, v in (coord_pb or {}).items():
         if v:
             meta_map[k] = v
+    # Fixa é QUANTIDADE: a soma das metas das lojas da coordenação — a mesma conta
+    # do consultor e do gerente. A coluna META_FIXA da planilha é em reais por
+    # consultor: somada, dava 34.210 onde a meta das lojas era 314, e o
+    # atingimento de Fixa do coordenador ficava perto de 0%.
+    meta_map['fixa'] = meta_fixa_da_coordenacao(realized, projection, coord_name)
     proj_map = {
         'movel': sumifs(projection, 'PROJ_MOVEL', 'COORDENAÇÃO', coord_name),
         'fixa': sumifs(projection, 'PROJ_FIXA', 'COORDENAÇÃO', coord_name),

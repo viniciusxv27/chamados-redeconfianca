@@ -227,7 +227,8 @@ def contexto_do_modulo(label, nome_no_menu=''):
     config = apps.get_app_config(label)
     pasta = Path(config.path)
     partes = [f'Módulo: {nome_no_menu or config.verbose_name} (app "{label}", {config.verbose_name}).']
-    for arquivo in ('__init__.py', 'models.py', 'views.py', 'permissoes.py', 'servicos.py', 'services.py'):
+    for arquivo in ('__init__.py', 'models.py', 'views.py', 'permissoes.py', 'permissions.py',
+                    'servicos.py', 'services.py'):
         doc = _doc_do_arquivo(pasta / arquivo)
         if doc:
             partes.append(f'[{arquivo}] {doc}')

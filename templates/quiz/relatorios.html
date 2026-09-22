@@ -1,0 +1,178 @@
+{% extends 'quiz/base_quiz.html' %}
+
+{% block quiz_titulo %}Relatórios{% endblock %}
+{% block quiz_h1 %}Relatórios{% endblock %}
+{% block quiz_sub %}Participação, desempenho, média de acertos e as perguntas que mais derrubam — das salas encerradas.{% endblock %}
+{% block quiz_acoes %}<a href="{% url 'quiz:relatorios_excel' %}?{{ request.GET.urlencode }}" class="qz-btn qz-btn-laranja"><i class="fas fa-file-excel"></i>Exportar Excel</a>{% endblock %}
+
+{% block quiz_conteudo %}
+<section class="qz-card p-4">
+    <form method="get" class="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+        <div>
+            <label for="qz-de" class="qz-rotulo">De</label>
+            <input id="qz-de" type="date" name="de" value="{{ filtros.de }}" class="qz-input">
+        </div>
+        <div>
+            <label for="qz-ate" class="qz-rotulo">Até</label>
+            <input id="qz-ate" type="date" name="ate" value="{{ filtros.ate }}" class="qz-input">
+        </div>
+        <div>
+            <label for="qz-filtro-quiz" class="qz-rotulo">Quiz</label>
+            <select id="qz-filtro-quiz" name="quiz" class="qz-input">
+                <option value="">Todos</option>
+                {% for q in quizzes %}<option value="{{ q.pk }}" {% if q.pk == filtros.quiz %}selected{% endif %}>{{ q.titulo }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="flex gap-2">
+            <button type="submit" class="qz-btn qz-btn-roxo flex-1"><i class="fas fa-filter"></i>Filtrar</button>
+            {% if request.GET %}<a href="{% url 'quiz:relatorios' %}" class="qz-btn qz-btn-claro">Limpar</a>{% endif %}
+        </div>
+    </form>
+</section>
+
+<section class="grid grid-cols-2 md:grid-cols-4 gap-3">
+    <div class="qz-card p-4">
+        <p class="text-xs font-semibold text-gray-500 uppercase">Salas encerradas</p>
+        <p class="text-3xl font-extrabold text-gray-800 mt-1">{{ r.resumo.salas }}</p>
+    </div>
+    <div class="qz-card p-4">
+        <p class="text-xs font-semibold text-gray-500 uppercase">Participação</p>
+        <p class="text-3xl font-extrabold text-gray-800 mt-1">{% widthratio r.resumo.participacao 1 100 %}%</p>
+        <p class="text-xs text-gray-500">{{ r.resumo.presentes }} de {{ r.resumo.convidados }} convites</p>
+    </div>
+    <div class="qz-card p-4">
+        <p class="text-xs font-semibold text-gray-500 uppercase">Média de acertos</p>
+        <p class="text-3xl font-extrabold text-emerald-700 mt-1">{{ r.resumo.media_acertos|floatformat:1 }}</p>
+        <p class="text-xs text-gray-500">por participante, por sala</p>
+    </div>
+    <div class="qz-card p-4">
+        <p class="text-xs font-semibold text-gray-500 uppercase">Aproveitamento</p>
+        <p class="text-3xl font-extrabold text-violet-700 mt-1">{% widthratio r.resumo.aproveitamento 1 100 %}%</p>
+        <p class="text-xs text-gray-500">acertos sobre as perguntas jogadas</p>
+    </div>
+</section>
+
+<section class="qz-card overflow-hidden">
+    <h2 class="px-5 pt-4 pb-2 text-base font-bold text-gray-800">Salas</h2>
+    {% if r.salas %}
+    <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+            <thead class="text-xs uppercase text-gray-500 border-b border-gray-100">
+                <tr>
+                    <th class="px-4 py-2 text-left">Data</th>
+                    <th class="px-4 py-2 text-left">Sala</th>
+                    <th class="px-4 py-2 text-left hidden lg:table-cell">Responsável</th>
+                    <th class="px-3 py-2 text-right">Participaram</th>
+                    <th class="px-3 py-2 text-right hidden sm:table-cell">Média de acertos</th>
+                    <th class="px-3 py-2 text-right">Aproveit.</th>
+                    <th class="px-4 py-2"></th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+                {% for l in r.salas %}
+                <tr>
+                    <td class="px-4 py-2 text-gray-600 whitespace-nowrap">{{ l.sala.agendada_para|date:"d/m/Y H:i" }}</td>
+                    <td class="px-4 py-2"><span class="font-semibold text-gray-800">{{ l.sala.titulo }}</span>{% if l.sala.nome %}<span class="block text-xs text-gray-500">{{ l.sala.quiz.titulo }}</span>{% endif %}</td>
+                    <td class="px-4 py-2 text-gray-600 hidden lg:table-cell">{{ l.sala.responsavel.get_full_name|default:'—' }}</td>
+                    <td class="px-3 py-2 text-right text-gray-800">{{ l.presentes }}/{{ l.convidados }} <span class="text-xs text-gray-500">({% widthratio l.participacao 1 100 %}%)</span></td>
+                    <td class="px-3 py-2 text-right text-gray-700 hidden sm:table-cell">{{ l.media_acertos|floatformat:1 }} de {{ l.total_perguntas }}</td>
+                    <td class="px-3 py-2 text-right font-semibold text-violet-700">{% widthratio l.aproveitamento 1 100 %}%</td>
+                    <td class="px-4 py-2 text-right"><a href="{% url 'quiz:resultados' l.sala.codigo %}" class="text-violet-700 font-semibold hover:underline whitespace-nowrap">Ver sala</a></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="px-5 pb-5 text-sm text-gray-500">Nenhuma sala encerrada no período.</p>
+    {% endif %}
+</section>
+
+<section class="qz-card overflow-hidden">
+    <h2 class="px-5 pt-4 pb-2 text-base font-bold text-gray-800">Perguntas com maior índice de erro</h2>
+    {% if r.mais_erradas %}
+    <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+            <thead class="text-xs uppercase text-gray-500 border-b border-gray-100">
+                <tr>
+                    <th class="px-4 py-2 text-left">Pergunta</th>
+                    <th class="px-3 py-2 text-right">Acertos</th>
+                    <th class="px-3 py-2 text-right">Erros</th>
+                    <th class="px-3 py-2 text-right">Sem resp.</th>
+                    <th class="px-4 py-2 text-right">Índice de erro</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+                {% for i in r.mais_erradas %}
+                <tr>
+                    <td class="px-4 py-2 min-w-[16rem]"><span class="text-gray-800">{{ i.pergunta.enunciado }}</span><span class="block text-xs text-gray-500">{{ i.quiz.titulo }}</span></td>
+                    <td class="px-3 py-2 text-right text-emerald-700 font-semibold">{{ i.acertos }}</td>
+                    <td class="px-3 py-2 text-right text-red-600">{{ i.erros }}</td>
+                    <td class="px-3 py-2 text-right text-gray-500">{{ i.sem_resposta }}</td>
+                    <td class="px-4 py-2 text-right"><span class="qz-chip qz-chip-vermelho">{% widthratio i.taxa_erro 1 100 %}%</span></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="px-5 pb-5 text-sm text-gray-500">Sem erros no período.</p>
+    {% endif %}
+</section>
+
+<section class="qz-card overflow-hidden">
+    <div class="px-5 pt-4 pb-2 flex flex-wrap items-center justify-between gap-2">
+        <h2 class="text-base font-bold text-gray-800">Desempenho por colaborador</h2>
+        {% if r.colaboradores|length > 8 %}<input type="search" id="qz-busca-colab" class="qz-input sm:w-64" placeholder="Buscar colaborador…" aria-label="Buscar colaborador">{% endif %}
+    </div>
+    {% if r.colaboradores %}
+    <div class="overflow-x-auto max-h-[32rem] overflow-y-auto">
+        <table class="min-w-full text-sm">
+            <thead class="text-xs uppercase text-gray-500 border-b border-gray-100">
+                <tr>
+                    <th class="px-4 py-2 text-left">Nome</th>
+                    <th class="px-4 py-2 text-left hidden md:table-cell">Cargo · setor</th>
+                    <th class="px-3 py-2 text-right">Participou</th>
+                    <th class="px-3 py-2 text-right">Acertos</th>
+                    <th class="px-3 py-2 text-right hidden sm:table-cell">Erros</th>
+                    <th class="px-3 py-2 text-right hidden sm:table-cell">Sem resp.</th>
+                    <th class="px-3 py-2 text-right">Aproveit.</th>
+                    <th class="px-4 py-2 text-right">Pontos</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+                {% for c in r.colaboradores %}
+                <tr data-busca="{{ c.user.get_full_name|lower }} {{ c.user.job_title|lower }} {{ c.user.sector.name|lower }}">
+                    <td class="px-4 py-2 font-semibold text-gray-800">{{ c.user.get_full_name|default:c.user.username }}</td>
+                    <td class="px-4 py-2 text-gray-500 hidden md:table-cell">{{ c.user.job_title|default:'—' }}{% if c.user.sector %} · {{ c.user.sector.name }}{% endif %}</td>
+                    <td class="px-3 py-2 text-right text-gray-700">{{ c.salas }}/{{ c.convites }}</td>
+                    <td class="px-3 py-2 text-right text-emerald-700 font-semibold">{{ c.acertos }}</td>
+                    <td class="px-3 py-2 text-right text-red-600 hidden sm:table-cell">{{ c.erros }}</td>
+                    <td class="px-3 py-2 text-right text-gray-500 hidden sm:table-cell">{{ c.sem_resposta }}</td>
+                    <td class="px-3 py-2 text-right text-violet-700 font-semibold">{% if c.salas %}{% widthratio c.aproveitamento 1 100 %}%{% else %}—{% endif %}</td>
+                    <td class="px-4 py-2 text-right font-bold text-gray-800">{{ c.pontos }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="px-5 pb-5 text-sm text-gray-500">Ninguém foi chamado para salas no período.</p>
+    {% endif %}
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    var busca = document.getElementById('qz-busca-colab');
+    if (!busca) return;
+    busca.addEventListener('input', function () {
+        var q = busca.value.trim().toLowerCase();
+        document.querySelectorAll('tr[data-busca]').forEach(function (tr) {
+            tr.style.display = (!q || tr.dataset.busca.indexOf(q) !== -1) ? '' : 'none';
+        });
+    });
+})();
+</script>
+{% endblock %}

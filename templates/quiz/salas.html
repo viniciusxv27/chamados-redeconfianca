@@ -1,0 +1,54 @@
+{% extends 'quiz/base_quiz.html' %}
+
+{% block quiz_titulo %}Salas{% endblock %}
+{% block quiz_h1 %}Salas{% endblock %}
+{% block quiz_sub %}Cada sala é uma rodada de um quiz: data, horário, código e quem joga.{% endblock %}
+{% block quiz_acoes %}<a href="{% url 'quiz:sala_nova' %}" class="qz-btn qz-btn-laranja"><i class="fas fa-plus"></i>Nova sala</a>{% endblock %}
+
+{% block quiz_conteudo %}
+<nav class="flex flex-wrap gap-2" aria-label="Situação das salas">
+    <a href="?situacao=abertas" class="qz-btn {% if situacao == 'abertas' %}qz-btn-roxo{% else %}qz-btn-claro{% endif %}">Marcadas e ao vivo</a>
+    <a href="?situacao=encerradas" class="qz-btn {% if situacao == 'encerradas' %}qz-btn-roxo{% else %}qz-btn-claro{% endif %}">Encerradas</a>
+    <a href="?situacao=canceladas" class="qz-btn {% if situacao == 'canceladas' %}qz-btn-roxo{% else %}qz-btn-claro{% endif %}">Canceladas</a>
+</nav>
+
+<section class="qz-card overflow-hidden">
+    {% if salas %}
+    <ul class="divide-y divide-gray-100">
+        {% for s in salas %}
+        <li class="p-4 flex flex-wrap items-center justify-between gap-3">
+            <div class="min-w-0">
+                <p class="font-semibold text-gray-800">
+                    {{ s.titulo }}
+                    {% if s.ao_vivo %}<span class="qz-chip qz-chip-vermelho ml-1"><i class="fas fa-circle text-[8px] animate-pulse"></i>Ao vivo</span>
+                    {% elif s.fase == 'AGENDADA' %}<span class="qz-chip qz-chip-roxo ml-1">Marcada</span>
+                    {% elif s.encerrada %}<span class="qz-chip qz-chip-verde ml-1">Encerrada</span>
+                    {% else %}<span class="qz-chip qz-chip-cinza ml-1">Cancelada</span>{% endif %}
+                </p>
+                <p class="text-xs text-gray-500 mt-1">
+                    {{ s.agendada_para|date:"d/m/Y" }} às {{ s.agendada_para|time:"H:i" }}
+                    · código <span class="qz-codigo">{{ s.codigo }}</span>
+                    {% if s.nome %}· quiz "{{ s.quiz.titulo }}"{% endif %}
+                    · {{ s.presentes }} de {{ s.convidados }} entraram
+                    {% if s.responsavel %}· responsável: {{ s.responsavel.get_full_name|default:s.responsavel.username }}{% endif %}
+                </p>
+            </div>
+            <div class="flex flex-wrap gap-2">
+                {% if s.encerrada %}
+                <a href="{% url 'quiz:resultados' s.codigo %}" class="qz-btn qz-btn-roxo"><i class="fas fa-chart-column"></i>Resultados</a>
+                {% elif s.aberta %}
+                {% if s.fase == 'AGENDADA' %}<a href="{% url 'quiz:sala_editar' s.codigo %}" class="qz-btn qz-btn-claro"><i class="fas fa-pen"></i>Editar</a>{% endif %}
+                <a href="{% url 'quiz:painel' s.codigo %}" class="qz-btn qz-btn-laranja"><i class="fas fa-tv"></i>Painel</a>
+                {% endif %}
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <div class="p-8 text-center">
+        <p class="text-gray-600">{% if situacao == 'abertas' %}Nenhuma sala marcada.{% elif situacao == 'encerradas' %}Nenhuma sala encerrada ainda.{% else %}Nenhuma sala cancelada.{% endif %}</p>
+        {% if situacao == 'abertas' %}<a href="{% url 'quiz:sala_nova' %}" class="qz-btn qz-btn-laranja mt-3"><i class="fas fa-plus"></i>Marcar uma sala</a>{% endif %}
+    </div>
+    {% endif %}
+</section>
+{% endblock %}

@@ -79,6 +79,7 @@ INSTALLED_APPS = [
     'vendas',  # Lançamento de vendas (Postgres) + tabela de preços
     'maps',  # Mapa de localização (módulo oculto, restrito à administração)
     'cursos',
+    'quiz',
     'curriculos',  # Banco de Talentos (currículos do RH)
     'reunioes',  # Reuniões com sala de vídeo e ata
     'drive',  # Drive: espelho do Google Drive da empresa com permissão por setor
@@ -148,6 +149,8 @@ TEMPLATES = [
                 'curriculos.context_processors.banco_de_talentos',
                 'reunioes.context_processors.reunioes_lembrete',
                 'renova.context_processors.renova_menu',
+                'drive.context_processors.drive_menu',
+                'quiz.context_processors.quiz_menu',
                 'rotina.context_processors.rotina_menu',
                 'apresentacoes.context_processors.apresentacoes_menu',
                 'users.context_processors_commission.comissionamento_menu',

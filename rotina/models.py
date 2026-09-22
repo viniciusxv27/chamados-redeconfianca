@@ -259,8 +259,13 @@ class AvisoWhatsApp(models.Model):
     criada ou movida em cima da hora, servidor reiniciando), vai o do início;
     nunca os dois. A linha é gravada ANTES do envio e a trava única do banco é a
     reivindicação: com vários workers varrendo ao mesmo tempo, só quem consegue
-    gravar manda a mensagem. Falha de envio fica aqui e não é repetida — melhor
-    perder um lembrete do que mandar dois.
+    gravar manda a mensagem.
+
+    Falha de envio (rede, instância reconectando, worker reiniciado no meio) é
+    tentada de novo — até ``rotina.whatsapp.MAX_TENTATIVAS`` vezes, com uma
+    espera entre elas e ainda dentro da janela do aviso. A nova tentativa também
+    é reivindicada (UPDATE condicional em ``tentado_em``), então continua uma
+    mensagem só. Número que o WhatsApp recusa não é repetido.
     """
 
     user = models.ForeignKey(
@@ -276,6 +281,11 @@ class AvisoWhatsApp(models.Model):
     inicio = models.TimeField('Início avisado', null=True, blank=True)
     enviado = models.BooleanField('Enviado', default=False)
     detalhe = models.CharField('Retorno do envio', max_length=255, blank=True)
+    # db_default: o servidor que ainda roda o código anterior (que não conhece esta
+    # coluna) grava o aviso no mesmo banco sem ela — sem o default no banco, o INSERT
+    # dele falhava, virava "outro worker já pegou" e o lembrete não saía.
+    tentativas = models.PositiveSmallIntegerField('Tentativas', default=1, db_default=1)
+    tentado_em = models.DateTimeField('Última tentativa', null=True, blank=True)
     criado_em = models.DateTimeField('Registrado em', auto_now_add=True)
     enviado_em = models.DateTimeField('Enviado em', null=True, blank=True)
 

@@ -177,7 +177,7 @@
                             <p><strong>Hash:</strong> <code class="bg-emerald-100 px-1 rounded text-xs">{{ folha.signature_hash|truncatechars:24 }}</code></p>
                         </div>
                         {% if folha.signature_image %}
-                        <div class="mt-3 bg-white rounded border border-emerald-200 p-2 inline-block">
+                        <div class="assinatura-previa mt-3 bg-white rounded border border-emerald-200 p-2 inline-block">
                             <p class="text-xs text-gray-400 mb-1">Assinatura:</p>
                             <img src="{{ folha.signature_image }}" alt="Assinatura" class="max-h-16" />
                         </div>
@@ -216,7 +216,7 @@
                     <p class="text-sm text-blue-800 mb-1"><i class="fas fa-info-circle mr-1"></i> Ao assinar, você confirma a exatidão e ciência da frequência registrada nesta folha de ponto.</p>
                     <p class="text-xs text-blue-600">Sua assinatura será registrada com data/hora, endereço IP e hash de verificação para garantir validade jurídica.</p>
                 </div>
-                <div class="border-2 border-dashed border-gray-300 rounded-lg bg-white relative" id="signature-wrapper">
+                <div class="assinatura-quadro border-2 border-dashed border-gray-300 rounded-lg bg-white relative" id="signature-wrapper">
                     <canvas id="signature-canvas" class="w-full rounded-lg cursor-crosshair" height="180"></canvas>
                     <div id="signature-placeholder" class="absolute inset-0 flex items-center justify-center pointer-events-none">
                         <p class="text-gray-400 text-sm"><i class="fas fa-pen-fancy mr-2"></i>Desenhe sua assinatura aqui</p>

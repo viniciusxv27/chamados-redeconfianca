@@ -261,6 +261,21 @@
 .rt-chip-verde { background: #E9F7EF; color: #1E7B45; }
 .rt-chip-cinza { background: #F1F3F6; color: #6B7280; }
 .rt-chip-azul { background: #EFF6FF; color: #1D4ED8; }
+.rt-chip-vermelho { background: var(--rt-resultado-fundo); color: var(--rt-resultado-texto); }
+
+/* WhatsApp dos lembretes: o diagnóstico da gestão */
+.rt-whats { padding: 1rem 1.1rem; margin-bottom: 1rem; }
+.rt-whats-cabeca { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .6rem; }
+.rt-whats-titulo { font-size: .95rem; font-weight: 700; color: var(--rt-texto); display: flex; align-items: center; gap: .45rem; }
+.rt-whats-titulo i { color: #25D366; font-size: 1.1rem; }
+.rt-whats-chips { display: flex; flex-wrap: wrap; gap: .4rem; }
+.rt-whats-alerta { margin-top: .6rem; font-size: .82rem; color: var(--rt-resultado-texto); background: var(--rt-resultado-fundo);
+                   border-radius: .6rem; padding: .5rem .75rem; }
+.rt-whats-lista { margin-top: .6rem; font-size: .82rem; color: var(--rt-texto-2); }
+.rt-whats-lista summary { cursor: pointer; font-weight: 600; color: var(--rt-texto); }
+.rt-whats-lista ul { margin-top: .4rem; display: grid; gap: .3rem; padding-left: 1.1rem; list-style: disc; }
+.rt-whats-lista a { color: var(--rt-laranja-escuro); text-decoration: underline; }
+.rt-whats-motivo { color: var(--rt-resultado-texto); }
 
 /* --------------------------------------------------------------------------
    Calendário: moldura, abas de dia (celular) e painel lateral
@@ -1009,6 +1024,10 @@ html.dark .rt-chip-verde { background: rgba(39, 174, 96, .16); color: #9BE3B5; }
 html.dark .rt-chip-cinza { background: #2b3346; color: #b6bdcc; }
 html.dark .rt-chip-laranja { color: #FFB38F; }
 html.dark .rt-chip-azul { background: rgba(59, 130, 246, .16); color: #93C5FD; }
+html.dark .rt-chip-vermelho { background: rgba(231, 76, 60, .16); color: #F5A99F; }
+html.dark .rt-whats-alerta { background: rgba(231, 76, 60, .14); color: #F5A99F; }
+html.dark .rt-whats-motivo { color: #F5A99F; }
+html.dark .rt-whats-titulo, html.dark .rt-whats-lista summary { color: #E5E7EB; }
 html.dark .rt-hero {
     border-color: var(--rt-borda);
     background:

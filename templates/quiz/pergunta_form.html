@@ -1,0 +1,52 @@
+{% extends 'quiz/base_quiz.html' %}
+
+{% block quiz_titulo %}{% if pergunta %}Editar pergunta{% else %}Nova pergunta{% endif %}{% endblock %}
+{% block quiz_h1 %}{% if pergunta %}Editar pergunta{% else %}Nova pergunta{% endif %}{% endblock %}
+{% block quiz_sub %}{{ quiz.titulo }}{% endblock %}
+
+{% block quiz_conteudo %}
+<form method="post" class="qz-card p-5 sm:p-6 max-w-3xl space-y-4" id="qz-form-pergunta">
+    {% csrf_token %}
+    {% if erro %}<p class="rounded-lg bg-red-50 text-red-800 text-sm px-3 py-2" role="alert"><i class="fas fa-circle-exclamation mr-1"></i>{{ erro }}</p>{% endif %}
+    <div>
+        <label for="qz-enunciado" class="qz-rotulo">Pergunta *</label>
+        <textarea id="qz-enunciado" name="enunciado" rows="3" maxlength="500" required class="qz-input"
+                  placeholder="Ex.: Qual é a franquia de internet do plano Vivo Controle 25GB?">{{ valores.enunciado }}</textarea>
+    </div>
+    <fieldset>
+        <legend class="qz-rotulo">Alternativas (de 2 a 4) — marque a correta *</legend>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {% for texto, certa in alternativas %}
+            <label class="qz-alt qz-{% cycle 'vermelho' 'azul' 'amarelo' 'verde' %} cursor-text !py-2">
+                <span class="qz-forma">{% cycle '▲' '◆' '●' '■' %}</span>
+                <input type="text" name="alternativas" value="{{ texto }}" maxlength="200"
+                       placeholder="{% if forloop.counter > 2 %}Opcional{% else %}Alternativa {{ forloop.counter }}{% endif %}"
+                       class="qz-alt-campo flex-1 min-w-0 rounded-lg px-2 py-1.5"
+                       aria-label="Alternativa {{ forloop.counter }}{% if forloop.counter > 2 %} (opcional){% endif %}">
+                <span class="flex items-center gap-1 text-xs font-bold bg-white/20 rounded-lg px-2 py-1 cursor-pointer">
+                    <input type="radio" name="correta" value="{{ forloop.counter0 }}" {% if certa %}checked{% endif %} required
+                           aria-label="A alternativa {{ forloop.counter }} é a correta">certa
+                </span>
+            </label>
+            {% endfor %}
+        </div>
+    </fieldset>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div>
+            <label for="qz-tempo" class="qz-rotulo">Tempo para responder (s)</label>
+            <input id="qz-tempo" name="tempo_limite" type="number" min="{{ tempo_min }}" max="{{ tempo_max }}"
+                   value="{{ valores.tempo_limite }}" class="qz-input">
+        </div>
+        <div class="sm:col-span-2">
+            <label for="qz-explicacao" class="qz-rotulo">Explicação (opcional)</label>
+            <input id="qz-explicacao" name="explicacao" maxlength="500" value="{{ valores.explicacao }}" class="qz-input"
+                   placeholder="Aparece no resultado de cada participante, junto da resposta certa.">
+        </div>
+    </div>
+    <div class="flex flex-wrap gap-2 pt-2">
+        <button type="submit" class="qz-btn qz-btn-laranja"><i class="fas fa-check"></i>Salvar</button>
+        {% if not pergunta %}<button type="submit" name="mais" value="1" class="qz-btn qz-btn-roxo"><i class="fas fa-plus"></i>Salvar e cadastrar outra</button>{% endif %}
+        <a href="{% url 'quiz:quiz' quiz.pk %}" class="qz-btn qz-btn-claro">Cancelar</a>
+    </div>
+</form>
+{% endblock %}

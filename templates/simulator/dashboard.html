@@ -134,6 +134,21 @@
           {% endfor %}
         </div>
 
+        {% if target_role == 'consultor' %}
+        {% comment %}
+        Acelerador de Microindicadores (só na visão de consultor): vai na mesma
+        query string dos níveis Hunter, e o fragmento de resultados lê dela.
+        {% endcomment %}
+        <label for="acelerador" class="flex items-start gap-3 p-3 rounded-lg border border-gray-200 bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors">
+          <input type="checkbox" name="acelerador" id="acelerador" value="1" {% if acelerador_microindicadores %}checked{% endif %}
+                 class="mt-0.5 h-4 w-4 flex-shrink-0 accent-primary cursor-pointer">
+          <span>
+            <span class="block text-xs sm:text-sm font-semibold text-gray-700">Acelerador de Microindicadores</span>
+            <span class="block text-xs text-gray-500">Soma {{ acelerador_microindicadores_pct }}% ao ganho total.</span>
+          </span>
+        </label>
+        {% endif %}
+
         <div class="pt-4 border-t border-gray-200">
           <button type="submit" class="px-6 py-2 bg-primary hover:bg-orange-600 text-white font-semibold rounded-lg transition-colors duration-200 flex items-center gap-2">
             <i class="fas fa-sync-alt"></i>
@@ -158,6 +173,7 @@
         {% if target_user %}<input type="hidden" name="user_id" value="{{ target_user.id }}">{% endif %}
         <input type="hidden" name="view" value="simulador">
         {% for k, v in hunter_levels.items %}<input type="hidden" name="hunter_{{ k }}" value="{{ v }}">{% endfor %}
+        {% if target_role == 'consultor' and acelerador_microindicadores %}<input type="hidden" name="acelerador" value="1">{% endif %}
 
         <div class="overflow-x-auto">
           <table class="min-w-full text-sm">

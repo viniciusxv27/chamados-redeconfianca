@@ -1,0 +1,165 @@
+{% extends 'quiz/base_quiz.html' %}
+
+{% block quiz_titulo %}{% if sala %}Editar sala{% else %}Nova sala{% endif %}{% endblock %}
+{% block quiz_h1 %}{% if sala %}Editar sala {{ sala.codigo }}{% else %}Nova sala{% endif %}{% endblock %}
+{% block quiz_sub %}Escolha o quiz, a data e quem joga. Cada participante recebe um aviso no sino do portal com o botão para a sala.{% endblock %}
+
+{% block quiz_css %}
+<style>
+    .qz-aba { padding: .55rem .9rem; font-size: .85rem; font-weight: 600; color: #6B7280; border-bottom: 2px solid transparent;
+              white-space: nowrap; }
+    .qz-aba-ativa { color: #6D28D9; border-bottom-color: #7C3AED; }
+    .qz-aba .qz-aba-n { display: inline-block; min-width: 1.2rem; margin-left: .25rem; padding: 0 .35rem; border-radius: 9999px;
+                        background: #F3EEFF; color: #5B21B6; font-size: .7rem; }
+    .qz-aba .qz-aba-n.hidden { display: none; }
+    .qz-opcao:hover { background: #F7F5FC; }
+    html.dark .qz-aba { color: #9CA3AF; }
+    html.dark .qz-aba-ativa { color: #C4B5FD; border-bottom-color: #8B5CF6; }
+    html.dark .qz-aba .qz-aba-n { background: rgba(124, 58, 237, .25); color: #DDD6FE; }
+    html.dark .qz-opcao:hover { background: rgba(124, 58, 237, .12); }
+</style>
+{% endblock %}
+
+{% block quiz_conteudo %}
+<form method="post" class="space-y-4" id="qz-form-sala">
+    {% csrf_token %}
+    {% if erro %}<p class="rounded-xl bg-red-50 text-red-800 text-sm px-4 py-3" role="alert"><i class="fas fa-circle-exclamation mr-1"></i>{{ erro }}</p>{% endif %}
+
+    <section class="qz-card p-5 sm:p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="md:col-span-2">
+            <label for="qz-quiz" class="qz-rotulo">Quiz *</label>
+            {% if quizzes %}
+            <select id="qz-quiz" name="quiz" required class="qz-input">
+                <option value="">Escolha um quiz publicado…</option>
+                {% for q in quizzes %}
+                <option value="{{ q.pk }}" {% if q.pk|stringformat:"s" == valores.quiz|stringformat:"s" %}selected{% endif %}>
+                    {{ q.titulo }}{% if q.categoria %} · {{ q.categoria }}{% endif %} ({{ q.total }} pergunta{{ q.total|pluralize }})
+                </option>
+                {% endfor %}
+            </select>
+            {% else %}
+            <p class="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2">Nenhum quiz publicado ainda.
+                <a href="{% url 'quiz:quizzes' %}" class="font-semibold underline">Publique um quiz</a> para marcar a sala.</p>
+            {% endif %}
+        </div>
+        <div>
+            <label for="qz-nome" class="qz-rotulo">Nome da sala (opcional)</label>
+            <input id="qz-nome" name="nome" maxlength="150" value="{{ valores.nome }}" class="qz-input"
+                   placeholder="Sem nome, a sala usa o nome do quiz">
+        </div>
+        <div>
+            <label for="qz-quando" class="qz-rotulo">Data e horário *</label>
+            <input id="qz-quando" name="agendada_para" type="datetime-local" required value="{{ valores.agendada_para }}" class="qz-input">
+        </div>
+        {% if sala %}
+        <p class="md:col-span-2 text-xs text-gray-500"><i class="fas fa-circle-info mr-1"></i>O código continua <span class="qz-codigo">{{ sala.codigo }}</span>. Quem sair da seleção deixa de ver a sala — menos quem já entrou nela. Só quem for acrescentado agora recebe aviso.</p>
+        {% endif %}
+    </section>
+
+    <section class="qz-card overflow-hidden">
+        <div class="px-5 py-3 border-b border-gray-100 flex flex-wrap items-center justify-between gap-2">
+            <h2 class="text-sm font-bold text-gray-800"><i class="fas fa-user-group text-violet-600 mr-1.5"></i>Quem participa *</h2>
+            <span class="text-sm text-gray-600"><strong id="qz-total" class="text-violet-700">0</strong> pessoa(s) selecionada(s)</span>
+        </div>
+        <div class="flex border-b border-gray-100 overflow-x-auto" role="tablist">
+            {% for chave, rotulo, itens in abas %}
+            <button type="button" role="tab" data-aba="{{ chave }}" class="qz-aba {% if forloop.first %}qz-aba-ativa{% endif %}"
+                    aria-selected="{% if forloop.first %}true{% else %}false{% endif %}">{{ rotulo }}<span class="qz-aba-n hidden" data-contador="{{ chave }}">0</span></button>
+            {% endfor %}
+            <button type="button" role="tab" data-aba="usuarios" class="qz-aba" aria-selected="false">Pessoas<span class="qz-aba-n hidden" data-contador="usuarios">0</span></button>
+        </div>
+
+        {% for chave, rotulo, itens in abas %}
+        <div class="qz-painel p-4 {% if not forloop.first %}hidden{% endif %}" data-painel="{{ chave }}" role="tabpanel">
+            {% if itens|length > 8 %}
+            <input type="search" class="qz-input mb-2 qz-filtro" placeholder="Filtrar {{ rotulo|lower }}…" aria-label="Filtrar {{ rotulo|lower }}">
+            {% endif %}
+            <div class="max-h-72 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-x-3">
+                {% for item in itens %}
+                <label class="qz-opcao flex items-center gap-3 px-2 py-2 rounded-lg cursor-pointer" data-busca="{{ item.nome|lower }}">
+                    <input type="checkbox" name="{{ chave }}" value="{{ item.id }}" data-membros="{{ item.membros|join:',' }}"
+                           {% if item.marcado %}checked{% endif %} class="rounded text-violet-600 focus:ring-violet-500">
+                    <span class="text-sm text-gray-800 flex-1">{{ item.nome }}</span>
+                    <span class="text-[11px] text-gray-400">{{ item.membros|length }} pessoa{{ item.membros|length|pluralize }}</span>
+                </label>
+                {% empty %}
+                <p class="text-sm text-gray-400 px-2 py-4">Nada cadastrado aqui.</p>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+
+        <div class="qz-painel p-4 hidden" data-painel="usuarios" role="tabpanel">
+            <input type="search" class="qz-input mb-2 qz-filtro" placeholder="Buscar pessoa por nome, cargo ou setor…" aria-label="Buscar pessoa">
+            <div class="max-h-80 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-x-3">
+                {% for p in pessoas %}
+                <label class="qz-opcao flex items-center gap-3 px-2 py-2 rounded-lg cursor-pointer"
+                       data-busca="{{ p.get_full_name|lower }} {{ p.username|lower }} {{ p.job_title|lower }} {{ p.sector.name|lower }}">
+                    <input type="checkbox" name="usuarios" value="{{ p.id }}" {% if p.id in marcados_pessoas %}checked{% endif %}
+                           class="rounded text-violet-600 focus:ring-violet-500">
+                    <span class="min-w-0 flex-1">
+                        <span class="block text-sm text-gray-800 truncate">{{ p.get_full_name|default:p.username }}</span>
+                        <span class="block text-[11px] text-gray-400 truncate">{{ p.job_title|default:'—' }}{% if p.sector %} · {{ p.sector.name }}{% endif %}</span>
+                    </span>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+    </section>
+
+    <div class="flex flex-wrap gap-2">
+        <button type="submit" class="qz-btn qz-btn-laranja" {% if not quizzes %}disabled{% endif %}>
+            <i class="fas fa-check"></i>{% if sala %}Salvar a sala{% else %}Criar a sala e avisar{% endif %}
+        </button>
+        <a href="{% if sala %}{% url 'quiz:painel' sala.codigo %}{% else %}{% url 'quiz:salas' %}{% endif %}" class="qz-btn qz-btn-claro">Cancelar</a>
+    </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    var form = document.getElementById('qz-form-sala');
+
+    function recontar() {
+        var ids = new Set();
+        form.querySelectorAll('input[data-membros]:checked').forEach(function (el) {
+            (el.dataset.membros || '').split(',').filter(Boolean).forEach(function (i) { ids.add(i); });
+        });
+        form.querySelectorAll('input[name="usuarios"]:checked').forEach(function (el) { ids.add(el.value); });
+        document.getElementById('qz-total').textContent = ids.size;
+        form.querySelectorAll('[data-contador]').forEach(function (el) {
+            var n = form.querySelectorAll('input[name="' + el.dataset.contador + '"]:checked').length;
+            el.textContent = n;
+            el.classList.toggle('hidden', !n);
+        });
+    }
+    form.addEventListener('change', function (e) { if (e.target.type === 'checkbox') recontar(); });
+
+    form.querySelectorAll('.qz-aba').forEach(function (aba) {
+        aba.addEventListener('click', function () {
+            form.querySelectorAll('.qz-aba').forEach(function (b) {
+                b.classList.toggle('qz-aba-ativa', b === aba);
+                b.setAttribute('aria-selected', b === aba ? 'true' : 'false');
+            });
+            form.querySelectorAll('.qz-painel').forEach(function (p) {
+                p.classList.toggle('hidden', p.dataset.painel !== aba.dataset.aba);
+            });
+        });
+    });
+
+    form.querySelectorAll('.qz-filtro').forEach(function (campo) {
+        campo.addEventListener('input', function () {
+            var q = campo.value.trim().toLowerCase();
+            campo.closest('.qz-painel').querySelectorAll('[data-busca]').forEach(function (el) {
+                el.style.display = (!q || el.dataset.busca.indexOf(q) !== -1) ? '' : 'none';
+            });
+        });
+        // Enter no filtro não envia o formulário.
+        campo.addEventListener('keydown', function (e) { if (e.key === 'Enter') e.preventDefault(); });
+    });
+
+    recontar();
+})();
+</script>
+{% endblock %}

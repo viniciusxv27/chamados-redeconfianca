@@ -33,6 +33,56 @@
     </a>
 </div>
 
+{% with d=whatsapp %}
+<section class="rt-card rt-whats" aria-labelledby="rt-whats-titulo">
+    <div class="rt-whats-cabeca">
+        <h2 id="rt-whats-titulo" class="rt-whats-titulo"><i class="fab fa-whatsapp"></i> WhatsApp dos lembretes</h2>
+        <div class="rt-whats-chips">
+            {% if d.configurado %}<span class="rt-chip rt-chip-verde">Canal configurado</span>
+            {% else %}<span class="rt-chip rt-chip-vermelho">Canal não configurado</span>{% endif %}
+            {% if d.ultima_varredura.em %}<span class="rt-chip rt-chip-verde" title="Processo {{ d.ultima_varredura.pid }}">Varredura há {{ d.ultima_varredura.em|timesince }}</span>
+            {% else %}<span class="rt-chip rt-chip-vermelho">Varredura sem sinal</span>{% endif %}
+            <span class="rt-chip rt-chip-azul">Hoje: {{ d.enviados_hoje }} enviado{{ d.enviados_hoje|pluralize }}</span>
+            {% if d.falhas_hoje %}<span class="rt-chip rt-chip-vermelho">{{ d.falhas_hoje }} com falha</span>{% endif %}
+        </div>
+    </div>
+    {% if not d.configurado %}
+    <p class="rt-whats-alerta">Faltam no servidor as configurações {{ d.faltando|join:", " }}. Sem elas nenhum WhatsApp da rotina sai.</p>
+    {% endif %}
+    {% if d.processo_sem_canal.em %}
+    <p class="rt-whats-alerta">O servidor <strong>{{ d.processo_sem_canal.host }}</strong> está com a varredura ligada, mas sem {{ d.processo_sem_canal.faltando|join:", " }} (visto há {{ d.processo_sem_canal.em|timesince }}). Ele não pega mais lembretes — antes pegava, falhava e o lembrete se perdia. Configure a Evolution nele ou desligue a varredura lá (RC_VARREDURA_ROTINA=0).</p>
+    {% endif %}
+    {% if not d.ultima_varredura.em %}
+    <p class="rt-whats-alerta">O servidor não registrou nenhuma varredura nas últimas 6 horas. Em produção ela roda sozinha nos workers do gunicorn, a cada minuto; sem ela, nenhum lembrete sai.</p>
+    {% elif d.ultima_varredura.erro %}
+    <p class="rt-whats-alerta">A última varredura falhou: {{ d.ultima_varredura.erro }}</p>
+    {% endif %}
+    {% if d.falhas %}
+    <details class="rt-whats-lista">
+        <summary>Falhas de hoje (cada uma é tentada até {{ d.max_tentativas }} vezes)</summary>
+        <ul>
+            {% for a in d.falhas %}
+            <li><strong>{{ a.user.full_name|default:a.user.username }}</strong> · {{ a.titulo }}{% if a.inicio %} às {{ a.inicio|time:"H:i" }}{% endif %}
+                · {{ a.tentativas }} tentativa{{ a.tentativas|pluralize }} — <span class="rt-whats-motivo">{{ a.detalhe }}</span></li>
+            {% endfor %}
+        </ul>
+    </details>
+    {% endif %}
+    {% if d.telefones_ruins %}
+    <details class="rt-whats-lista" open>
+        <summary>{{ d.telefones_ruins|length }} pessoa{{ d.telefones_ruins|length|pluralize }} com o WhatsApp ligado e um telefone que não dá para usar</summary>
+        <ul>
+            {% for p in d.telefones_ruins %}
+            <li><strong>{{ p.user.full_name|default:p.user.username }}</strong>{% if p.telefone %} · "{{ p.telefone }}"{% endif %}
+                — <span class="rt-whats-motivo">{{ p.motivo }}</span>
+                · <a href="{% url 'edit_user' p.user.id %}">corrigir o cadastro</a></li>
+            {% endfor %}
+        </ul>
+    </details>
+    {% endif %}
+</section>
+{% endwith %}
+
 <section class="rt-card">
     <form method="get" class="rt-barra" role="search">
         <label class="rt-busca">
@@ -88,7 +138,7 @@
                     </span>
                     Pode criar
                 </label>
-                <label class="rt-opcao" title="{% if r.tem_telefone %}Lembrete de cada atividade no WhatsApp do cadastro.{% else %}Sem telefone no cadastro: nada sai pelo WhatsApp.{% endif %}">
+                <label class="rt-opcao" title="{% if r.tem_telefone %}Lembrete de cada atividade no WhatsApp do cadastro.{% else %}Telefone do cadastro: {{ r.problema_telefone }}. Nada sai pelo WhatsApp até corrigir.{% endif %}">
                     <span class="rt-switch">
                         <input type="checkbox" {% if r.avisar_whatsapp %}checked{% endif %} data-rt-opcao="avisar_whatsapp"
                                data-url="{% url 'rotina:api_gestao_opcoes' r.user_id %}"
@@ -96,7 +146,7 @@
                                data-msg-desligado="Lembretes de {{ r.user.first_name }} no WhatsApp desligados.">
                         <span class="rt-switch-trilho"></span>
                     </span>
-                    WhatsApp{% if not r.tem_telefone %} <span class="rt-chip rt-chip-cinza" style="padding: .05rem .4rem">sem tel.</span>{% endif %}
+                    WhatsApp{% if not r.tem_telefone %} <span class="rt-chip rt-chip-cinza" style="padding: .05rem .4rem">{% if r.user.phone %}tel. inválido{% else %}sem tel.{% endif %}</span>{% endif %}
                 </label>
             </div>
             <a href="{% url 'rotina:gestao_pessoa' r.user_id %}" class="rt-btn rt-btn-primario rt-btn-sm rt-pessoa-acao"

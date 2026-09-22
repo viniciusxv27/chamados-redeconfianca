@@ -29,17 +29,16 @@ def normalizar_numero(numero: str) -> str:
     """Destino no formato que a Evolution aceita.
 
     O JID que chega do webhook (``5527999998888@s.whatsapp.net``) vai como está.
-    Telefone vira só dígitos, com o DDI 55 quando falta.
+    Telefone do cadastro passa por ``core.telefone.normalizar``: DDI 55 + DDD +
+    número, com o nono dígito — ou '' quando o cadastro não tem um número
+    confiável (sem DDD, DDD inexistente, dígitos demais...). Antes os dígitos
+    iam crus e a mensagem saía para um número que não existe.
     """
     texto = str(numero or '').strip()
     if '@' in texto:
         return texto
-    digitos = re.sub(r'\D', '', texto)
-    if not digitos:
-        return ''
-    if not digitos.startswith('55'):
-        digitos = '55' + digitos
-    return digitos
+    from core.telefone import normalizar
+    return normalizar(texto)
 
 
 def enviar_texto(numero: str, texto: str, *, timeout: int = 10) -> Tuple[bool, str]:

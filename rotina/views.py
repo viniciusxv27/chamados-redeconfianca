@@ -21,7 +21,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
-from . import servicos
+from . import servicos, whatsapp
 from .models import ModeloRotina, RotinaGerencial
 from .permissoes import e_superadmin
 
@@ -172,14 +172,19 @@ def gestao(request):
         criam=Count('id', filter=Q(pode_criar=True)))
     modelos_ativos = (ModeloRotina.objects.filter(ativo=True)
                       .annotate(total=Count('atividades')).order_by('criado_em', 'id'))
+    from core.telefone import problema
+
     rotinas = list(rotinas)
     for rotina in rotinas:
         # O interruptor do WhatsApp fica apagado para quem não tem telefone: ligado ou
         # não, não sairia nada — melhor a tela dizer isso do que prometer um aviso.
         rotina.tem_telefone = servicos.tem_telefone(rotina.user)
+        rotina.problema_telefone = problema(rotina.user.phone)
     return render(request, 'rotina/gestao.html', _contexto(
         request, 'gestao',
         rotinas=rotinas, q=q, resumo=resumo, modelos=modelos_ativos,
+        # Por que o WhatsApp não chega: canal, varredura, falhas de hoje e telefones ruins.
+        whatsapp=whatsapp.diagnostico(),
         com_rotina=set(RotinaGerencial.objects.values_list('user_id', flat=True)),
         candidatos=(User.objects.filter(is_active=True).select_related('sector')
                     .order_by('first_name', 'last_name')),

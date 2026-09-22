@@ -1,0 +1,14 @@
+<div class="qz-podio max-w-xl mx-auto">
+    {% for lugar, p in degraus %}
+    {% if p %}
+    <div class="text-center min-w-0">
+        <p class="text-sm font-bold text-gray-800 truncate">{{ p.nome }}</p>
+        <p class="text-xs text-gray-500 mb-1">{{ p.pontos }} pts{% if eu and p.pk == eu.pk %} · <strong class="text-orange-600">você</strong>{% endif %}</p>
+        <div class="qz-degrau qz-degrau-{{ lugar }}">
+            <div class="qz-medalha">{% if lugar == 1 %}🥇{% elif lugar == 2 %}🥈{% else %}🥉{% endif %}</div>
+            <div class="text-xl font-extrabold mt-1">{{ lugar }}º</div>
+        </div>
+    </div>
+    {% else %}<div></div>{% endif %}
+    {% endfor %}
+</div>

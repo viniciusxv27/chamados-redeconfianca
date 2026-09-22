@@ -1,0 +1,59 @@
+{% extends 'quiz/base_quiz.html' %}
+
+{% block quiz_titulo %}Banco de perguntas{% endblock %}
+{% block quiz_h1 %}Banco de perguntas{% endblock %}
+{% block quiz_sub %}Reaproveite perguntas de outros quizzes em "{{ quiz.titulo }}". Elas entram como cópia: mudar aqui não muda lá.{% endblock %}
+
+{% block quiz_conteudo %}
+<section class="qz-card p-4">
+    <form method="get" class="flex flex-wrap gap-2 items-center">
+        <input type="search" name="q" value="{{ q }}" placeholder="Buscar pelo texto da pergunta ou pelo quiz…" class="qz-input flex-1 min-w-[12rem]">
+        <select name="categoria" class="qz-input w-auto">
+            <option value="">Todos os temas</option>
+            {% for c in categorias %}<option value="{{ c }}" {% if c == categoria %}selected{% endif %}>{{ c }}</option>{% endfor %}
+        </select>
+        <button type="submit" class="qz-btn qz-btn-roxo">Buscar</button>
+    </form>
+</section>
+
+<form method="post" class="space-y-3">
+    {% csrf_token %}
+    <div class="qz-card p-3 flex flex-wrap items-center justify-between gap-2 sticky top-20 z-10">
+        <span class="text-sm text-gray-600"><span id="qz-marcadas">0</span> pergunta(s) escolhida(s)</span>
+        <div class="flex gap-2">
+            <a href="{% url 'quiz:quiz' quiz.pk %}" class="qz-btn qz-btn-claro">Voltar</a>
+            <button type="submit" class="qz-btn qz-btn-laranja"><i class="fas fa-plus"></i>Adicionar ao quiz</button>
+        </div>
+    </div>
+    {% for p in perguntas %}
+    {% with repetida=p.enunciado|lower %}
+    <label class="qz-card p-4 flex gap-3 cursor-pointer hover:shadow-md transition-shadow">
+        <input type="checkbox" name="perguntas" value="{{ p.pk }}" class="mt-1 rounded text-violet-600 qz-escolha">
+        <span class="min-w-0 flex-1">
+            <span class="block text-xs font-semibold text-violet-700">{{ p.quiz.titulo }}{% if p.quiz.categoria %} · {{ p.quiz.categoria }}{% endif %} · {{ p.tempo_limite }} s
+                {% if repetida in ja_no_quiz %}<span class="qz-chip qz-chip-laranja ml-1">já está neste quiz</span>{% endif %}</span>
+            <span class="block font-semibold text-gray-800 mt-0.5">{{ p.enunciado }}</span>
+            <span class="flex flex-wrap gap-1.5 mt-2">
+                {% for a in p.alternativas.all %}
+                <span class="qz-chip {% if a.correta %}qz-chip-verde{% else %}qz-chip-cinza{% endif %}">{% if a.correta %}<i class="fas fa-check"></i>{% endif %}{{ a.texto }}</span>
+                {% endfor %}
+            </span>
+        </span>
+    </label>
+    {% endwith %}
+    {% empty %}
+    <div class="qz-card p-8 text-center text-gray-600">Nenhuma pergunta encontrada nos outros quizzes.</div>
+    {% endfor %}
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    var contador = document.getElementById('qz-marcadas');
+    function contar() { contador.textContent = document.querySelectorAll('.qz-escolha:checked').length; }
+    document.querySelectorAll('.qz-escolha').forEach(function (c) { c.addEventListener('change', contar); });
+    contar();
+})();
+</script>
+{% endblock %}

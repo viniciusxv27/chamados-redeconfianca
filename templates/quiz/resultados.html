@@ -1,0 +1,146 @@
+{% extends 'quiz/base_quiz.html' %}
+
+{% block quiz_titulo %}Resultados · {{ sala.titulo }}{% endblock %}
+{% block quiz_h1 %}{{ sala.titulo }}{% endblock %}
+{% block quiz_sub %}Resultado da sala {{ sala.codigo }} · {{ sala.agendada_para|date:"d/m/Y" }} às {{ sala.agendada_para|time:"H:i" }}{% if sala.nome %} · quiz "{{ sala.quiz.titulo }}"{% endif %}{% if not sala.encerrada %} · {{ sala.get_fase_display|lower }}{% endif %}{% endblock %}
+{% block quiz_acoes %}
+<a href="{% url 'quiz:resultados_excel' sala.codigo %}" class="qz-btn qz-btn-laranja"><i class="fas fa-file-excel"></i>Exportar Excel</a>
+{% if sala.aberta %}<a href="{% url 'quiz:painel' sala.codigo %}" class="qz-btn bg-white/15 text-white hover:bg-white/25"><i class="fas fa-tv"></i>Painel</a>{% endif %}
+{% endblock %}
+
+{% block quiz_conteudo %}
+<section class="grid grid-cols-2 md:grid-cols-4 gap-3">
+    <div class="qz-card p-4">
+        <p class="text-xs font-semibold text-gray-500 uppercase">Participação</p>
+        <p class="text-3xl font-extrabold text-gray-800 mt-1">{% widthratio r.participacao 1 100 %}%</p>
+        <p class="text-xs text-gray-500">{{ r.placar|length }} de {{ r.convidados }} chamados</p>
+    </div>
+    <div class="qz-card p-4">
+        <p class="text-xs font-semibold text-gray-500 uppercase">Média de acertos</p>
+        <p class="text-3xl font-extrabold text-emerald-700 mt-1">{{ r.media_acertos|floatformat:1 }}</p>
+        <p class="text-xs text-gray-500">de {{ r.total_perguntas }} pergunta{{ r.total_perguntas|pluralize }}</p>
+    </div>
+    <div class="qz-card p-4">
+        <p class="text-xs font-semibold text-gray-500 uppercase">Aproveitamento médio</p>
+        <p class="text-3xl font-extrabold text-violet-700 mt-1">{% widthratio r.aproveitamento_medio 1 100 %}%</p>
+        <p class="text-xs text-gray-500">acertos sobre o total de perguntas</p>
+    </div>
+    <div class="qz-card p-4">
+        <p class="text-xs font-semibold text-gray-500 uppercase">Não participaram</p>
+        <p class="text-3xl font-extrabold text-red-600 mt-1">{{ r.ausentes|length }}</p>
+        <p class="text-xs text-gray-500">chamados que não entraram</p>
+    </div>
+</section>
+
+{% if r.placar %}
+<section class="qz-card p-5">
+    <h2 class="text-base font-bold text-gray-800 text-center mb-4">🏆 Pódio</h2>
+    {% include 'quiz/_podio.html' with degraus=r.degraus %}
+</section>
+{% endif %}
+
+<section class="qz-card overflow-hidden">
+    <h2 class="px-5 pt-4 pb-2 text-base font-bold text-gray-800">Ranking</h2>
+    {% if r.placar %}
+    <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+            <thead class="text-xs uppercase text-gray-500 border-b border-gray-100">
+                <tr>
+                    <th class="px-4 py-2 text-left">Pos.</th>
+                    <th class="px-4 py-2 text-left">Nome</th>
+                    <th class="px-4 py-2 text-left hidden md:table-cell">Cargo · setor</th>
+                    <th class="px-3 py-2 text-right">Acertos</th>
+                    <th class="px-3 py-2 text-right">Erros</th>
+                    <th class="px-3 py-2 text-right hidden sm:table-cell">Sem resp.</th>
+                    <th class="px-3 py-2 text-right hidden sm:table-cell">% acerto</th>
+                    <th class="px-4 py-2 text-right">Pontos</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+                {% for p in r.placar %}
+                <tr>
+                    <td class="px-4 py-2 font-extrabold text-violet-700">{{ p.posicao }}º</td>
+                    <td class="px-4 py-2 font-semibold text-gray-800">{{ p.nome }}</td>
+                    <td class="px-4 py-2 text-gray-500 hidden md:table-cell">{{ p.user.job_title|default:'—' }}{% if p.user.sector %} · {{ p.user.sector.name }}{% endif %}</td>
+                    <td class="px-3 py-2 text-right text-emerald-700 font-semibold">{{ p.acertos }}</td>
+                    <td class="px-3 py-2 text-right text-red-600">{{ p.erros }}</td>
+                    <td class="px-3 py-2 text-right text-gray-500 hidden sm:table-cell">{{ p.sem_resposta }}</td>
+                    <td class="px-3 py-2 text-right text-gray-600 hidden sm:table-cell">{% widthratio p.aproveitamento 1 100 %}%</td>
+                    <td class="px-4 py-2 text-right font-bold text-gray-800">{{ p.pontos }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="px-5 pb-5 text-sm text-gray-500">Ninguém entrou nesta sala.</p>
+    {% endif %}
+</section>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    <section class="qz-card p-5">
+        <h2 class="text-base font-bold text-gray-800"><i class="fas fa-triangle-exclamation text-orange-500 mr-1.5"></i>Perguntas com mais erros</h2>
+        {% if r.mais_erradas %}
+        <ol class="mt-3 space-y-3">
+            {% for l in r.mais_erradas %}
+            <li>
+                <div class="flex items-start justify-between gap-3">
+                    <p class="text-sm text-gray-800"><span class="font-bold text-violet-700">{{ l.n }}.</span> {{ l.pergunta.enunciado }}</p>
+                    <span class="qz-chip qz-chip-vermelho flex-shrink-0">{% widthratio l.taxa_erro 1 100 %}% de erro</span>
+                </div>
+                <p class="text-xs text-gray-500 mt-0.5">{{ l.acertos }} acerto{{ l.acertos|pluralize }} · {{ l.erros }} erro{{ l.erros|pluralize }} · {{ l.sem_resposta }} sem resposta</p>
+            </li>
+            {% endfor %}
+        </ol>
+        {% else %}
+        <p class="text-sm text-gray-500 mt-2">Nenhuma pergunta com erro. 🎯</p>
+        {% endif %}
+    </section>
+
+    <section class="qz-card p-5">
+        <h2 class="text-base font-bold text-gray-800"><i class="fas fa-user-slash text-gray-400 mr-1.5"></i>Não participaram ({{ r.ausentes|length }})</h2>
+        {% if r.ausentes %}
+        <ul class="mt-2 max-h-72 overflow-y-auto divide-y divide-gray-100">
+            {% for p in r.ausentes %}
+            <li class="py-2 text-sm flex items-center justify-between gap-2">
+                <span class="text-gray-800">{{ p.nome }}</span>
+                <span class="text-xs text-gray-400 text-right">{{ p.user.job_title|default:'' }}{% if p.user.sector %} · {{ p.user.sector.name }}{% endif %}</span>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="text-sm text-gray-500 mt-2">Todo mundo que foi chamado entrou. 👏</p>
+        {% endif %}
+    </section>
+</div>
+
+<section class="qz-card overflow-hidden">
+    <h2 class="px-5 pt-4 pb-2 text-base font-bold text-gray-800">Acertos por pergunta</h2>
+    <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+            <thead class="text-xs uppercase text-gray-500 border-b border-gray-100">
+                <tr>
+                    <th class="px-4 py-2 text-left">Nº</th>
+                    <th class="px-4 py-2 text-left">Pergunta</th>
+                    <th class="px-3 py-2 text-right">Acertos</th>
+                    <th class="px-3 py-2 text-right">Erros</th>
+                    <th class="px-3 py-2 text-right">Sem resp.</th>
+                    <th class="px-4 py-2 text-right">Índice de erro</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+                {% for l in r.perguntas %}
+                <tr>
+                    <td class="px-4 py-2 font-bold text-violet-700">{{ l.n }}</td>
+                    <td class="px-4 py-2 text-gray-800 min-w-[16rem]">{{ l.pergunta.enunciado }}</td>
+                    <td class="px-3 py-2 text-right text-emerald-700 font-semibold">{{ l.acertos }}</td>
+                    <td class="px-3 py-2 text-right text-red-600">{{ l.erros }}</td>
+                    <td class="px-3 py-2 text-right text-gray-500">{{ l.sem_resposta }}</td>
+                    <td class="px-4 py-2 text-right text-gray-700">{% widthratio l.taxa_erro 1 100 %}%</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

@@ -1,0 +1,314 @@
+{% extends 'quiz/base_quiz.html' %}
+
+{% block quiz_titulo %}{{ sala.titulo }}{% endblock %}
+
+{% block quiz_css %}
+<style>
+    .qz-relogio { width: 3.6rem; height: 3.6rem; border-radius: 9999px; display: flex; align-items: center; justify-content: center;
+                  background: #6D28D9; color: #fff; font-size: 1.5rem; font-weight: 800; flex-shrink: 0; }
+    .qz-relogio-fim { background: #DC2626; }
+    .qz-faixa { border-radius: 1rem; color: #fff; text-align: center; padding: 1.1rem 1rem; }
+    .qz-faixa-certa { background: linear-gradient(135deg, #15803D, #22C55E); }
+    .qz-faixa-errada { background: linear-gradient(135deg, #B91C1C, #EF4444); }
+    .qz-faixa-vazia { background: linear-gradient(135deg, #475569, #64748B); }
+    .qz-confirmar { position: sticky; bottom: .75rem; z-index: 5; }
+    /* Tela de jogo sem distração: o balão de suporte (fixo no canto) cobria o botão de confirmar no celular. */
+    #supportChatWidget { display: none; }
+    .qz-nao-escolhida { opacity: .6; }
+    @keyframes qz-pulo { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+    .qz-pulando span { display: inline-block; animation: qz-pulo 1.1s infinite; }
+    .qz-pulando span:nth-child(2) { animation-delay: .15s; }
+    .qz-pulando span:nth-child(3) { animation-delay: .3s; }
+    @media (prefers-reduced-motion: reduce) { .qz-pulando span { animation: none; } }
+</style>
+{% endblock %}
+
+{% block quiz_cabecalho %}
+<section class="qz-hero px-4 py-3 sm:px-5 sm:py-4">
+    <div class="flex items-center justify-between gap-3">
+        <div class="min-w-0">
+            <p class="text-[11px] font-semibold uppercase tracking-wider qz-hero-sub"><i class="fas fa-circle-question mr-1"></i>Quiz · {{ participante.nome }}</p>
+            <h1 class="text-lg sm:text-2xl font-extrabold truncate">{{ sala.titulo }}</h1>
+        </div>
+        <div class="text-right flex-shrink-0">
+            <p class="text-[11px] qz-hero-sub">Código</p>
+            <p class="qz-codigo text-base sm:text-lg">{{ sala.codigo }}</p>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block quiz_conteudo %}
+{% csrf_token %}
+<p id="qz-aviso" class="hidden rounded-xl bg-amber-50 text-amber-800 text-sm px-4 py-2" role="status" aria-live="polite"></p>
+<div id="qz-conteudo" class="max-w-3xl mx-auto" aria-live="polite">
+    <div class="qz-card p-10 text-center text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i>Entrando na sala…</div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    var URL_ESTADO = "{% url 'quiz:estado' sala.codigo %}";
+    var URL_RESPONDER = "{% url 'quiz:responder' sala.codigo %}";
+    var URL_INICIO = "{% url 'quiz:inicio' %}";
+    var CABECALHOS = {'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest'};
+    var CORES = ['vermelho', 'azul', 'amarelo', 'verde'];
+    var FORMAS = ['▲', '◆', '●', '■'];
+
+    var conteudo = document.getElementById('qz-conteudo');
+    var aviso = document.getElementById('qz-aviso');
+    var estado = null, chave = '', escolhida = null, enviando = false, prazo = 0, limite = 1, espera = null, falhas = 0;
+
+    function esc(t) {
+        return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) {
+            return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c];
+        });
+    }
+    function avisar(texto) { aviso.textContent = texto || ''; aviso.classList.toggle('hidden', !texto); }
+    function csrf() { return document.querySelector('[name=csrfmiddlewaretoken]').value; }
+
+    function pedir(url, opcoes) {
+        return fetch(url, Object.assign({credentials: 'same-origin', headers: CABECALHOS}, opcoes || {}))
+            .then(function (r) {
+                var tipo = r.headers.get('Content-Type') || '';
+                if (tipo.indexOf('application/json') === -1) {
+                    var erro = new Error('Sua sessão no portal expirou. Recarregue a página e entre de novo.');
+                    erro.sessao = true;
+                    throw erro;
+                }
+                return r.json();
+            });
+    }
+
+    function restante() { return Math.max(0, prazo - performance.now()); }
+
+    // ---------------------------------------------------------------- telas
+    function placarHtml(lista, euPosicao) {
+        if (!lista || !lista.length) return '';
+        return '<ol class="space-y-1.5">' + lista.map(function (p) {
+            return '<li class="' + (p.posicao === euPosicao ? 'qz-linha-eu' : 'qz-linha') + ' flex items-center gap-3 rounded-xl px-3 py-2">'
+                + '<span class="w-7 text-center font-extrabold text-violet-700">' + p.posicao + 'º</span>'
+                + '<span class="flex-1 font-semibold text-gray-800 truncate">' + esc(p.nome) + '</span>'
+                + '<span class="font-bold text-gray-800">' + p.pontos + '</span></li>';
+        }).join('') + '</ol>';
+    }
+
+    function podioHtml(podio) {
+        var lugares = [podio[1], podio[0], podio[2]];
+        var medalhas = {1: '🥇', 2: '🥈', 3: '🥉'};
+        return '<div class="qz-podio">' + lugares.map(function (p, i) {
+            var degrau = [2, 1, 3][i];
+            if (!p) return '<div></div>';
+            return '<div class="text-center min-w-0"><p class="text-sm font-bold text-gray-800 truncate">' + esc(p.nome) + '</p>'
+                + '<p class="text-xs text-gray-500 mb-1">' + p.pontos + ' pts</p>'
+                + '<div class="qz-degrau qz-degrau-' + degrau + '"><div class="qz-medalha">' + medalhas[degrau] + '</div>'
+                + '<div class="text-xl font-extrabold mt-1">' + degrau + 'º</div></div></div>';
+        }).join('') + '</div>';
+    }
+
+    function telaEspera(e) {
+        return '<section class="qz-card p-6 sm:p-10 text-center">'
+            + '<p class="text-5xl">🎮</p>'
+            + '<h2 class="text-2xl font-extrabold text-gray-800 mt-3">Você está na sala!</h2>'
+            + '<p class="text-gray-600 mt-2">Assim que o responsável começar, a primeira pergunta aparece aqui — não precisa recarregar.</p>'
+            + '<p class="qz-pulando text-4xl text-violet-600 mt-4" aria-hidden="true"><span>•</span><span>•</span><span>•</span></p>'
+            + '<p class="text-sm text-gray-500 mt-4">Marcada para ' + esc(e.agendada_para) + ' · ' + e.total_perguntas + ' pergunta' + (e.total_perguntas === 1 ? '' : 's')
+            + ' · <strong>' + e.presentes + '</strong> pessoa' + (e.presentes === 1 ? '' : 's') + ' na sala</p>'
+            + '<p class="text-xs text-gray-400 mt-4">Acertar vale pontos — e acertar rápido vale mais. Errar vale zero.</p>'
+            + '</section>';
+    }
+
+    function telaPergunta(e) {
+        var fechada = e.respondida || restante() <= 0;
+        var botoes = e.alternativas.map(function (a) {
+            var classe = 'qz-alt qz-' + CORES[a.n % 4] + ' w-full text-base sm:text-lg';
+            var marcada = e.respondida ? a.id === e.escolhida : a.id === escolhida;
+            if (marcada) classe += ' qz-escolhida';
+            else if (e.respondida) classe += ' qz-apagada';
+            else if (escolhida !== null) classe += ' qz-nao-escolhida';     // ainda dá para trocar: segue legível
+            return '<button type="button" data-alternativa="' + a.id + '" class="' + classe + '"' + (fechada ? ' disabled' : '')
+                + ' aria-pressed="' + (marcada ? 'true' : 'false') + '"><span class="qz-forma">' + FORMAS[a.n % 4] + '</span>'
+                + '<span class="flex-1">' + esc(a.texto) + '</span>' + (marcada ? '<i class="fas fa-circle-check text-xl"></i>' : '') + '</button>';
+        }).join('');
+        var rodape;
+        if (e.respondida) {
+            rodape = '<div class="qz-card p-4 text-center"><p class="font-bold text-gray-800"><i class="fas fa-paper-plane text-violet-600 mr-1"></i>Resposta enviada!</p>'
+                + '<p class="text-sm text-gray-500 mt-1">Ela não muda mais. Aguarde o resultado desta pergunta…</p></div>';
+        } else if (restante() <= 0) {
+            rodape = '<div class="qz-card p-4 text-center"><p class="font-bold text-gray-800"><i class="fas fa-hourglass-end text-red-600 mr-1"></i>O tempo acabou</p>'
+                + '<p class="text-sm text-gray-500 mt-1">Esta pergunta conta como não respondida.</p></div>';
+        } else {
+            rodape = '<div class="qz-confirmar"><button type="button" id="qz-confirmar" class="qz-btn qz-btn-laranja w-full text-lg py-4 shadow-lg"'
+                + (escolhida === null || enviando ? ' disabled' : '') + '>'
+                + (enviando ? '<i class="fas fa-spinner fa-spin"></i>Enviando…' : '<i class="fas fa-check"></i>' + (escolhida === null ? 'Escolha uma alternativa' : 'Confirmar resposta'))
+                + '</button><p class="text-center text-xs text-gray-500 mt-1.5">Depois de confirmar, não dá para trocar.</p></div>';
+        }
+        return '<section class="space-y-4">'
+            + '<div class="qz-card p-4 sm:p-6 space-y-4">'
+            + '<div class="flex items-center justify-between gap-3"><p class="font-bold text-violet-700">Pergunta ' + (e.indice + 1) + ' de ' + e.total_perguntas + '</p>'
+            + '<div id="qz-relogio" class="qz-relogio" aria-label="Segundos restantes">' + Math.ceil(restante() / 1000) + '</div></div>'
+            + '<div class="qz-barra-tempo"><div id="qz-barra" style="width:' + Math.min(100, restante() / limite * 100) + '%"></div></div>'
+            + '<h2 class="text-xl sm:text-3xl font-extrabold text-gray-800 leading-snug">' + esc(e.enunciado) + '</h2>'
+            + '</div>'
+            + '<div class="grid grid-cols-1 sm:grid-cols-2 gap-3" id="qz-alternativas">' + botoes + '</div>'
+            + rodape
+            + '</section>';
+    }
+
+    function telaResultado(e) {
+        var m = e.minha || {};
+        var faixa;
+        if (m.respondida && m.correta) {
+            faixa = '<div class="qz-faixa qz-faixa-certa"><p class="text-3xl">🎉</p><p class="text-2xl font-extrabold">Acertou!</p><p class="text-lg font-semibold">+' + m.pontos + ' pontos</p></div>';
+        } else if (m.respondida) {
+            faixa = '<div class="qz-faixa qz-faixa-errada"><p class="text-3xl">😬</p><p class="text-2xl font-extrabold">Errou</p><p class="text-sm">Resposta errada não pontua. Na próxima!</p></div>';
+        } else {
+            faixa = '<div class="qz-faixa qz-faixa-vazia"><p class="text-3xl">⏰</p><p class="text-2xl font-extrabold">Não respondeu a tempo</p><p class="text-sm">Conta como não respondida.</p></div>';
+        }
+        var alternativas = e.alternativas.map(function (a) {
+            var classe = 'qz-alt qz-' + CORES[a.n % 4] + ' !min-h-0 text-sm sm:text-base';
+            if (a.correta) classe += ' qz-certa';
+            else if (a.id === m.alternativa) classe += ' qz-errada';          // a dele, errada: marcada, não apagada
+            else classe += ' qz-apagada';
+            var minha = a.id === m.alternativa ? '<span class="text-[11px] font-bold rounded-full bg-white/25 px-2 py-0.5">sua</span>' : '';
+            return '<div class="' + classe + '"><span class="qz-forma">' + FORMAS[a.n % 4] + '</span><span class="flex-1">' + esc(a.texto) + '</span>'
+                + minha + (a.correta ? '<i class="fas fa-check" aria-label="correta"></i>' : '')
+                + '<span class="rounded-lg bg-black/20 px-2 py-0.5 text-sm" title="Quantos marcaram">' + a.total + '</span></div>';
+        }).join('');
+        return '<section class="space-y-4">' + faixa
+            + '<div class="qz-card p-4 sm:p-5 space-y-3"><p class="text-xs font-bold text-violet-700">Pergunta ' + (e.indice + 1) + ' de ' + e.total_perguntas + '</p>'
+            + '<p class="font-bold text-gray-800">' + esc(e.enunciado) + '</p>'
+            + '<div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">' + alternativas + '</div></div>'
+            + '<div class="qz-card p-4 sm:p-5">'
+            + (e.posicao ? '<p class="text-center text-gray-700">Você está em <strong class="text-2xl text-violet-700">' + e.posicao + 'º</strong> de ' + e.presentes + ' com <strong>' + e.pontos_total + '</strong> pontos</p>' : '')
+            + '<div class="mt-3">' + placarHtml(e.top, e.posicao) + '</div>'
+            + '<p class="text-center text-sm text-gray-500 mt-3 qz-pulando">' + (e.ultima ? 'Aguardando o pódio' : 'Aguardando a próxima pergunta') + ' <span>.</span><span>.</span><span>.</span></p>'
+            + '</div></section>';
+    }
+
+    function telaFim(e) {
+        return '<section class="space-y-4">'
+            + '<div class="qz-card p-5 sm:p-8 text-center space-y-5">'
+            + '<h2 class="text-2xl sm:text-3xl font-extrabold text-gray-800">🏆 Fim de jogo!</h2>'
+            + (e.podio && e.podio.length ? podioHtml(e.podio) : '')
+            + (e.posicao
+                ? '<p class="text-gray-700">Você ficou em <strong class="text-2xl text-violet-700">' + e.posicao + 'º</strong> de ' + e.presentes
+                  + ' com <strong>' + e.pontos_total + '</strong> pontos · ' + e.acertos + ' acerto' + (e.acertos === 1 ? '' : 's') + ' e ' + e.erros + ' erro' + (e.erros === 1 ? '' : 's') + '</p>'
+                : '<p class="text-gray-600">Você não participou desta partida.</p>')
+            + (e.url_resultado ? '<a href="' + esc(e.url_resultado) + '" class="qz-btn qz-btn-laranja text-base px-5 py-3"><i class="fas fa-list-check"></i>Ver meu resultado, pergunta por pergunta</a>' : '')
+            + '</div></section>';
+    }
+
+    function telaCancelada() {
+        return '<section class="qz-card p-10 text-center"><p class="text-lg font-bold text-gray-800">Esta sala foi cancelada.</p>'
+            + '<a href="' + URL_INICIO + '" class="qz-btn qz-btn-claro mt-4"><i class="fas fa-arrow-left"></i>Voltar</a></section>';
+    }
+
+    function desenhar(e, forcar) {
+        var anterior = estado;
+        estado = e;
+        if (e.fase === 'PERGUNTA') {
+            var novoPrazo = performance.now() + e.restante_ms;
+            if (!anterior || anterior.indice !== e.indice || anterior.fase !== 'PERGUNTA' || Math.abs(novoPrazo - prazo) > 400) prazo = novoPrazo;
+            limite = e.tempo_limite * 1000;
+        }
+        var nova = [e.fase, e.versao, e.indice, e.respondida ? 1 : 0, e.fase === 'AGENDADA' ? e.presentes : ''].join(':');
+        if (nova === chave && !forcar) return;
+        if (!anterior || anterior.fase !== e.fase || anterior.indice !== e.indice) escolhida = null;
+        chave = nova;
+        var telas = {AGENDADA: telaEspera, PERGUNTA: telaPergunta, RESULTADO: telaResultado, ENCERRADA: telaFim, CANCELADA: telaCancelada};
+        conteudo.innerHTML = (telas[e.fase] || telaCancelada)(e);
+    }
+
+    var esgotou = false;
+    function tique() {
+        if (estado && estado.fase === 'PERGUNTA') {
+            var resta = restante();
+            var relogio = document.getElementById('qz-relogio');
+            var barra = document.getElementById('qz-barra');
+            if (relogio) {
+                relogio.textContent = Math.ceil(resta / 1000);
+                relogio.classList.toggle('qz-relogio-fim', resta <= 5000);
+            }
+            if (barra) barra.style.width = Math.min(100, resta / limite * 100) + '%';
+            // Zerou na tela: trava os botões e pergunta ao servidor (que é quem manda) na hora.
+            if (resta <= 0 && !esgotou && !estado.respondida && !enviando) {
+                esgotou = true;
+                desenhar(estado, true);
+                consultar();
+            }
+            if (resta > 0) esgotou = false;
+        }
+        requestAnimationFrame(tique);
+    }
+
+    // ---------------------------------------------------------------- servidor
+    function consultar() {
+        clearTimeout(espera);
+        pedir(URL_ESTADO).then(function (e) {
+            if (!e.ok) {
+                avisar(e.erro || 'Não foi possível ler a sala.');
+                return;
+            }
+            falhas = 0;
+            avisar('');
+            desenhar(e);
+            if (e.fase !== 'ENCERRADA' && e.fase !== 'CANCELADA') {
+                // O relógio da pergunta anda aqui na tela; consultar a cada ~2 s basta para
+                // ver a próxima fase. O sorteio espalha as consultas de quem entrou junto.
+                var base = e.fase === 'AGENDADA' ? 2500 : (e.fase === 'PERGUNTA' && !e.respondida ? 1800 : 2200);
+                espera = setTimeout(consultar, base + Math.floor(Math.random() * 600));
+            }
+        }).catch(function (erro) {
+            if (erro.sessao) { avisar(erro.message); return; }
+            falhas += 1;
+            avisar('Sem conexão com o portal — tentando de novo…');
+            espera = setTimeout(consultar, Math.min(1000 * (falhas + 1), 5000));
+        });
+    }
+
+    function confirmar() {
+        if (!estado || estado.fase !== 'PERGUNTA' || escolhida === null || enviando || estado.respondida) return;
+        enviando = true;
+        desenhar(estado, true);
+        pedir(URL_RESPONDER, {
+            method: 'POST',
+            headers: Object.assign({'Content-Type': 'application/json', 'X-CSRFToken': csrf()}, CABECALHOS),
+            body: JSON.stringify({indice: estado.indice, alternativa: escolhida})
+        }).then(function (r) {
+            enviando = false;
+            if (r.ok) {
+                estado.respondida = true;
+                estado.escolhida = escolhida;
+                if (navigator.vibrate) navigator.vibrate(30);
+                avisar('');
+            } else {
+                avisar(r.erro || 'A resposta não foi aceita.');
+            }
+            desenhar(estado, true);
+            consultar();
+        }).catch(function (erro) {
+            enviando = false;
+            avisar(erro.sessao ? erro.message : 'A resposta não chegou ao portal. Confira a conexão e confirme de novo.');
+            desenhar(estado, true);
+        });
+    }
+
+    conteudo.addEventListener('click', function (ev) {
+        if (!estado || estado.fase !== 'PERGUNTA' || estado.respondida || enviando || restante() <= 0) return;
+        var opcao = ev.target.closest('[data-alternativa]');
+        if (opcao) {
+            escolhida = parseInt(opcao.dataset.alternativa, 10);
+            desenhar(estado, true);
+            return;
+        }
+        if (ev.target.closest('#qz-confirmar')) confirmar();
+    });
+
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) consultar(); });
+    consultar();
+    requestAnimationFrame(tique);
+})();
+</script>
+{% endblock %}

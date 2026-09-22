@@ -5,6 +5,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from users.models import Sector, User
 from .models import CoordinatorStoreAccess, SniperAssignment
 from .services import (
+    ACELERADOR_MICROINDICADORES_RATE,
     FACTOR_RANGE_SPECS,
     DEFAULT_META_BY_ROLE,
     HUNTER_PILLARS,
@@ -24,6 +25,7 @@ from .services import (
     get_all_snipers,
     get_all_aparte_users,
     get_coordinator_sectors,
+    get_acelerador_from_request,
     get_factor_set,
     get_hunter_levels_from_request,
     get_simulator_excluded_user_ids,
@@ -72,6 +74,8 @@ def simulator_dashboard(request):
     current_user = request.user
     role = get_user_role(current_user)
     hunter_levels = get_hunter_levels_from_request(request)
+    # Checkbox da visão de consultor; só o cálculo de consultor recebe.
+    acelerador = get_acelerador_from_request(request)
 
     # Modo de visualização (Realizado / Projeção / Simulador)
     view_mode = request.GET.get('view') or VIEW_PROJECAO
@@ -238,6 +242,8 @@ def simulator_dashboard(request):
             'show_summary_only': show_summary_only,
             'is_superadmin': is_superadmin(current_user),
             'hunter_levels': hunter_levels,
+            'acelerador_microindicadores': acelerador,
+            'acelerador_microindicadores_pct': round(ACELERADOR_MICROINDICADORES_RATE * 100),
             'pillars': HUNTER_PILLARS,
             'view_mode': view_mode,
             'view_choices': VIEW_CHOICES,
@@ -271,7 +277,7 @@ def simulator_dashboard(request):
             else:
                 factor_set = get_factor_set(target_role)
                 if target_role == ROLE_CONSULTOR:
-                    simulation = compute_consultor_simulation(target_user, factor_set.data, hunter_levels, view_mode=compute_view, simulator_inputs=simulator_inputs)
+                    simulation = compute_consultor_simulation(target_user, factor_set.data, hunter_levels, view_mode=compute_view, simulator_inputs=simulator_inputs, acelerador_microindicadores=acelerador)
                 elif target_role == ROLE_GERENTE:
                     simulation = compute_gerente_simulation(target_user, factor_set.data, hunter_levels, view_mode=compute_view, simulator_inputs=simulator_inputs)
                 elif target_role == ROLE_COORDENADOR:

@@ -1,0 +1,309 @@
+{% extends 'quiz/base_quiz.html' %}
+
+{% block quiz_titulo %}Painel · {{ sala.titulo }}{% endblock %}
+
+{% block quiz_css %}
+<style>
+    .qz-palco:fullscreen { background: #F4F2FA; padding: 1.5rem; overflow-y: auto; }
+    html.dark .qz-palco:fullscreen { background: #121622; }
+    .qz-palco:fullscreen .qz-so-fora { display: none; }
+    .qz-relogio { width: 4.5rem; height: 4.5rem; border-radius: 9999px; display: flex; align-items: center; justify-content: center;
+                  background: #6D28D9; color: #fff; font-size: 1.9rem; font-weight: 800; flex-shrink: 0; }
+    .qz-relogio-fim { background: #DC2626; }
+    .qz-bolinha { width: .6rem; height: .6rem; border-radius: 9999px; flex-shrink: 0; }
+</style>
+{% endblock %}
+
+{% block quiz_cabecalho %}{% endblock %}
+
+{% block quiz_conteudo %}
+{% csrf_token %}
+<div id="qz-palco" class="qz-palco space-y-4">
+    <section class="qz-hero p-4 sm:p-5">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="min-w-0">
+                <p class="text-xs font-semibold uppercase tracking-wider qz-hero-sub"><i class="fas fa-tv mr-1"></i>Painel do quiz</p>
+                <h1 class="text-xl sm:text-2xl font-extrabold mt-0.5 truncate">{{ sala.titulo }}</h1>
+                <p class="text-sm qz-hero-sub">{% if sala.nome %}{{ sala.quiz.titulo }} · {% endif %}{{ sala.agendada_para|date:"d/m/Y" }} às {{ sala.agendada_para|time:"H:i" }}</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+                <span class="rounded-xl bg-white/15 px-3 py-1.5 text-sm">Código <span class="qz-codigo text-lg">{{ sala.codigo }}</span></span>
+                <button type="button" id="qz-tela-cheia" class="qz-btn bg-white/15 text-white hover:bg-white/25"><i class="fas fa-expand"></i><span>Tela cheia</span></button>
+                <a href="{% url 'quiz:salas' %}" class="qz-btn bg-white/15 text-white hover:bg-white/25 qz-so-fora"><i class="fas fa-arrow-left"></i>Salas</a>
+            </div>
+        </div>
+    </section>
+
+    {% if not pode_conduzir %}
+    <p class="qz-card px-4 py-3 text-sm text-gray-600"><i class="fas fa-eye mr-1 text-violet-600"></i>Você está acompanhando. Quem conduz a partida é {{ sala.responsavel.get_full_name|default:sala.responsavel.username|default:'o responsável' }} (ou o SUPERADMIN).</p>
+    {% endif %}
+
+    <p id="qz-aviso" class="hidden rounded-xl bg-amber-50 text-amber-800 text-sm px-4 py-2" role="status" aria-live="polite"></p>
+    <div id="qz-conteudo" aria-live="polite">
+        <div class="qz-card p-10 text-center text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i>Carregando a sala…</div>
+    </div>
+    <div id="qz-acoes" class="flex flex-wrap justify-center gap-2"></div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    var URL_ESTADO = "{% url 'quiz:painel_estado' sala.codigo %}";
+    var URL_ACAO = "{% url 'quiz:painel_acao' sala.codigo %}";
+    var URL_EDITAR = "{% url 'quiz:sala_editar' sala.codigo %}";
+    var URL_RESULTADOS = "{% url 'quiz:resultados' sala.codigo %}";
+    var URL_EXCEL = "{% url 'quiz:resultados_excel' sala.codigo %}";
+    var URL_SALAS = "{% url 'quiz:salas' %}";
+    var URL_JOGAR = "{{ url_jogar|escapejs }}";
+    var CONDUZ = {{ pode_conduzir|yesno:"true,false" }};
+    var CABECALHOS = {'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest'};
+    var CORES = ['vermelho', 'azul', 'amarelo', 'verde'];
+    var FORMAS = ['▲', '◆', '●', '■'];
+
+    var conteudo = document.getElementById('qz-conteudo');
+    var acoes = document.getElementById('qz-acoes');
+    var aviso = document.getElementById('qz-aviso');
+    var estado = null, chave = '', detalhe = '', prazo = 0, limite = 1, espera = null, ocupado = false, falhas = 0;
+
+    function esc(t) {
+        return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) {
+            return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c];
+        });
+    }
+    function avisar(texto) { aviso.textContent = texto || ''; aviso.classList.toggle('hidden', !texto); }
+    function csrf() { return document.querySelector('[name=csrfmiddlewaretoken]').value; }
+
+    function pedir(url, opcoes) {
+        return fetch(url, Object.assign({credentials: 'same-origin', headers: CABECALHOS}, opcoes || {}))
+            .then(function (r) {
+                var tipo = r.headers.get('Content-Type') || '';
+                if (tipo.indexOf('application/json') === -1) {
+                    var erro = new Error('Sua sessão no portal expirou. Recarregue a página e entre de novo.');
+                    erro.sessao = true;
+                    throw erro;
+                }
+                return r.json().then(function (dados) { dados._status = r.status; return dados; });
+            });
+    }
+
+    // ---------------------------------------------------------------- telas
+    function alternativasHtml(e, comResultado) {
+        return '<div class="grid grid-cols-1 md:grid-cols-2 gap-3">' + e.alternativas.map(function (a) {
+            var classe = 'qz-alt qz-' + CORES[a.n % 4];
+            if (comResultado && !a.correta) classe += ' qz-apagada';
+            var fim = '';
+            if (comResultado) {
+                fim = '<span class="ml-auto flex items-center gap-2 text-lg">' + (a.correta ? '<i class="fas fa-check" aria-label="correta"></i>' : '')
+                    + '<span class="rounded-lg bg-black/20 px-2 py-0.5">' + a.total + '</span></span>';
+            }
+            return '<div class="' + classe + ' text-lg sm:text-xl"><span class="qz-forma">' + FORMAS[a.n % 4] + '</span><span>' + esc(a.texto) + '</span>' + fim + '</div>';
+        }).join('') + '</div>';
+    }
+
+    function placarHtml(lista, titulo) {
+        if (!lista || !lista.length) return '<p class="text-sm text-gray-500">Ninguém pontuou ainda.</p>';
+        return (titulo ? '<h3 class="text-sm font-bold text-gray-800 mb-2">' + titulo + '</h3>' : '') + '<ol class="space-y-1.5">' + lista.map(function (p) {
+            return '<li class="qz-linha flex items-center gap-3 rounded-xl px-3 py-2">'
+                + '<span class="w-7 text-center font-extrabold text-violet-700">' + p.posicao + 'º</span>'
+                + '<span class="flex-1 font-semibold text-gray-800 truncate">' + esc(p.nome) + '</span>'
+                + '<span class="font-bold text-gray-800">' + p.pontos + ' pts</span></li>';
+        }).join('') + '</ol>';
+    }
+
+    function podioHtml(podio) {
+        var lugares = [podio[1], podio[0], podio[2]];
+        var medalhas = {1: '🥇', 2: '🥈', 3: '🥉'};
+        return '<div class="qz-podio max-w-2xl mx-auto">' + lugares.map(function (p, i) {
+            var degrau = [2, 1, 3][i];
+            if (!p) return '<div></div>';
+            return '<div class="text-center"><p class="font-bold text-gray-800 truncate">' + esc(p.nome) + '</p>'
+                + '<p class="text-sm text-gray-500 mb-1">' + p.pontos + ' pts</p>'
+                + '<div class="qz-degrau qz-degrau-' + degrau + '"><div class="qz-medalha">' + medalhas[degrau] + '</div>'
+                + '<div class="text-2xl font-extrabold mt-1">' + degrau + 'º</div></div></div>';
+        }).join('') + '</div>';
+    }
+
+    function telaAgendada(e) {
+        var gente = (e.pessoas || []).map(function (p) {
+            var cor = p.online ? 'bg-emerald-500' : (p.entrou ? 'bg-violet-400' : 'bg-gray-300');
+            var rotulo = p.online ? 'na sala' : (p.entrou ? 'entrou' : 'ainda não entrou');
+            return '<li class="flex items-center gap-2 py-1.5"><span class="qz-bolinha ' + cor + '"></span>'
+                + '<span class="flex-1 text-sm text-gray-800 truncate">' + esc(p.nome) + '</span>'
+                + '<span class="text-[11px] text-gray-400">' + rotulo + '</span></li>';
+        }).join('');
+        return '<div class="grid grid-cols-1 lg:grid-cols-5 gap-4">'
+            + '<section class="qz-card p-6 sm:p-10 text-center lg:col-span-3">'
+            + '<p class="text-gray-600">No portal, entre em <strong class="text-gray-800">Quiz</strong> (' + esc(URL_JOGAR) + ') e digite o código</p>'
+            + '<p class="qz-codigo text-5xl sm:text-7xl text-violet-700 my-4">' + esc(e.codigo) + '</p>'
+            + '<p class="text-sm text-gray-500">Marcada para ' + esc(e.agendada_para) + ' · ' + e.total_perguntas + ' pergunta' + (e.total_perguntas === 1 ? '' : 's') + '</p>'
+            + '<p class="mt-6 text-4xl font-extrabold text-gray-800">' + e.presentes + '<span class="text-lg font-semibold text-gray-500"> de ' + e.convidados + ' já entraram</span></p>'
+            + '</section>'
+            + '<section class="qz-card p-4 lg:col-span-2"><h2 class="text-sm font-bold text-gray-800 mb-1"><i class="fas fa-users text-violet-600 mr-1"></i>Participantes</h2>'
+            + '<ul class="max-h-80 overflow-y-auto divide-y divide-gray-100">' + (gente || '<li class="text-sm text-gray-500 py-2">Ninguém selecionado.</li>') + '</ul></section>'
+            + '</div>';
+    }
+
+    function telaPergunta(e) {
+        return '<section class="qz-card p-5 sm:p-8 space-y-5">'
+            + '<div class="flex items-center justify-between gap-3"><p class="font-bold text-violet-700">Pergunta ' + (e.indice + 1) + ' de ' + e.total_perguntas + '</p>'
+            + '<div id="qz-relogio" class="qz-relogio" aria-label="Tempo restante">' + Math.ceil(e.restante_ms / 1000) + '</div></div>'
+            + '<div class="qz-barra-tempo"><div id="qz-barra" style="width:100%"></div></div>'
+            + '<p id="qz-esgotou" class="hidden text-center text-sm font-semibold text-red-600">Tempo esgotado — recebendo as últimas respostas…</p>'
+            + '<h2 class="text-2xl sm:text-4xl font-extrabold text-gray-800 text-center leading-tight py-2">' + esc(e.enunciado) + '</h2>'
+            + alternativasHtml(e, false)
+            + '<p class="text-center text-lg text-gray-600"><strong id="qz-respondidas" class="text-3xl text-gray-800">' + e.respondidas + '</strong> de <span id="qz-presentes">' + e.presentes + '</span> responderam</p>'
+            + '</section>';
+    }
+
+    function telaResultado(e) {
+        return '<div class="grid grid-cols-1 lg:grid-cols-5 gap-4">'
+            + '<section class="qz-card p-5 sm:p-6 space-y-4 lg:col-span-3">'
+            + '<p class="font-bold text-violet-700">Pergunta ' + (e.indice + 1) + ' de ' + e.total_perguntas + ' · resultado</p>'
+            + '<h2 class="text-xl sm:text-2xl font-extrabold text-gray-800">' + esc(e.enunciado) + '</h2>'
+            + alternativasHtml(e, true)
+            + '<p class="text-sm text-gray-500">' + e.respondidas + ' de ' + e.presentes + ' responderam</p>'
+            + '</section>'
+            + '<section class="qz-card p-5 lg:col-span-2">' + placarHtml(e.top, '<i class="fas fa-medal text-orange-500 mr-1"></i>Ranking') + '</section>'
+            + '</div>';
+    }
+
+    function telaEncerrada(e) {
+        return '<section class="qz-card p-5 sm:p-8 space-y-6">'
+            + '<h2 class="text-center text-2xl sm:text-3xl font-extrabold text-gray-800">🏆 Pódio</h2>'
+            + (e.podio && e.podio.length ? podioHtml(e.podio) : '<p class="text-center text-gray-500">Ninguém participou desta sala.</p>')
+            + (e.ranking && e.ranking.length > 3 ? '<div class="max-w-2xl mx-auto">' + placarHtml(e.ranking.slice(3), 'Demais colocados') + '</div>' : '')
+            + '</section>';
+    }
+
+    function telaCancelada() {
+        return '<section class="qz-card p-10 text-center"><p class="text-lg font-bold text-gray-800">Esta sala foi cancelada.</p>'
+            + '<a href="' + URL_SALAS + '" class="qz-btn qz-btn-claro mt-4"><i class="fas fa-arrow-left"></i>Voltar para as salas</a></section>';
+    }
+
+    function botao(acao, rotulo, icone, classe) {
+        return '<button type="button" data-acao="' + acao + '" class="qz-btn ' + classe + ' text-base px-5 py-3"><i class="fas ' + icone + '"></i>' + rotulo + '</button>';
+    }
+
+    function botoes(e) {
+        var html = '';
+        if (e.fase === 'ENCERRADA') {
+            return '<a href="' + URL_RESULTADOS + '" class="qz-btn qz-btn-roxo text-base px-5 py-3"><i class="fas fa-chart-column"></i>Resultados completos</a>'
+                + '<a href="' + URL_EXCEL + '" class="qz-btn qz-btn-claro text-base px-5 py-3"><i class="fas fa-file-excel"></i>Baixar Excel</a>';
+        }
+        if (!CONDUZ) return '';
+        if (e.fase === 'AGENDADA') {
+            html = botao('iniciar', 'Começar o quiz', 'fa-play', 'qz-btn-laranja')
+                + '<a href="' + URL_EDITAR + '" class="qz-btn qz-btn-claro text-base px-5 py-3 qz-so-fora"><i class="fas fa-pen"></i>Editar sala</a>'
+                + botao('cancelar', 'Cancelar sala', 'fa-ban', 'qz-btn-perigo');
+        } else if (e.fase === 'PERGUNTA') {
+            html = botao('revelar', 'Encerrar o tempo e mostrar o resultado', 'fa-forward', 'qz-btn-roxo')
+                + botao('encerrar', 'Encerrar a partida', 'fa-flag-checkered', 'qz-btn-perigo');
+        } else if (e.fase === 'RESULTADO') {
+            html = (e.ultima ? botao('proxima', 'Ver o pódio', 'fa-trophy', 'qz-btn-laranja')
+                             : botao('proxima', 'Próxima pergunta', 'fa-arrow-right', 'qz-btn-laranja'))
+                + botao('encerrar', 'Encerrar a partida', 'fa-flag-checkered', 'qz-btn-perigo');
+        }
+        return html;
+    }
+
+    function desenhar(e) {
+        estado = e;
+        var nova = e.fase + ':' + e.versao;
+        // Na sala de espera a lista muda sem mudar a versão (gente entrando): redesenha quando ela muda.
+        var mudou = e.fase === 'AGENDADA' ? JSON.stringify([e.pessoas, e.presentes]) : '';
+        if (nova !== chave || mudou !== detalhe) {
+            chave = nova;
+            detalhe = mudou;
+            var telas = {AGENDADA: telaAgendada, PERGUNTA: telaPergunta, RESULTADO: telaResultado,
+                         ENCERRADA: telaEncerrada, CANCELADA: telaCancelada};
+            conteudo.innerHTML = (telas[e.fase] || telaCancelada)(e);
+            acoes.innerHTML = botoes(e);
+        } else if (e.fase === 'PERGUNTA') {
+            var r = document.getElementById('qz-respondidas');
+            var p = document.getElementById('qz-presentes');
+            if (r) r.textContent = e.respondidas;
+            if (p) p.textContent = e.presentes;
+        }
+        if (e.fase === 'PERGUNTA') {
+            var novoPrazo = performance.now() + e.restante_ms;
+            if (Math.abs(novoPrazo - prazo) > 400) prazo = novoPrazo;
+            limite = e.tempo_limite * 1000;
+        }
+    }
+
+    function tique() {
+        if (estado && estado.fase === 'PERGUNTA') {
+            var resta = Math.max(0, prazo - performance.now());
+            var relogio = document.getElementById('qz-relogio');
+            var barra = document.getElementById('qz-barra');
+            if (relogio) {
+                relogio.textContent = Math.ceil(resta / 1000);
+                relogio.classList.toggle('qz-relogio-fim', resta <= 5000);
+            }
+            if (barra) barra.style.width = Math.min(100, resta / limite * 100) + '%';
+            var esgotou = document.getElementById('qz-esgotou');
+            if (esgotou) esgotou.classList.toggle('hidden', resta > 0);
+        }
+        requestAnimationFrame(tique);
+    }
+
+    // ---------------------------------------------------------------- servidor
+    function consultar() {
+        clearTimeout(espera);
+        pedir(URL_ESTADO).then(function (e) {
+            if (!e.ok) throw new Error(e.erro || 'Não foi possível ler a sala.');
+            falhas = 0;
+            avisar('');
+            desenhar(e);
+            if (e.fase !== 'ENCERRADA' && e.fase !== 'CANCELADA') {
+                espera = setTimeout(consultar, e.fase === 'PERGUNTA' ? 1000 : 2000);
+            }
+        }).catch(function (erro) {
+            if (erro.sessao) { avisar(erro.message); return; }
+            falhas += 1;
+            avisar('Sem conexão com o portal — tentando de novo…');
+            espera = setTimeout(consultar, Math.min(1000 * (falhas + 1), 5000));
+        });
+    }
+
+    acoes.addEventListener('click', function (ev) {
+        var alvo = ev.target.closest('[data-acao]');
+        if (!alvo || ocupado) return;
+        var acao = alvo.dataset.acao;
+        var perguntas = {
+            iniciar: estado && estado.presentes === 0 ? 'Ninguém entrou na sala ainda. Começar mesmo assim?' : null,
+            cancelar: 'Cancelar esta sala? Os participantes deixam de vê-la.',
+            encerrar: 'Encerrar a partida agora? O que já foi respondido vale e o pódio aparece.'
+        };
+        if (perguntas[acao] && !window.confirm(perguntas[acao])) return;
+        ocupado = true;
+        acoes.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
+        var dados = new FormData();
+        dados.append('acao', acao);
+        pedir(URL_ACAO, {method: 'POST', body: dados, headers: Object.assign({'X-CSRFToken': csrf()}, CABECALHOS)})
+            .then(function (e) {
+                if (!e.ok) { avisar(e.erro || 'Não deu certo. Tente de novo.'); chave = ''; consultar(); return; }
+                avisar('');
+                desenhar(e);
+                consultar();
+            })
+            .catch(function (erro) { avisar(erro.message || 'Sem conexão com o portal. Tente de novo.'); chave = ''; })
+            .finally(function () {
+                ocupado = false;
+                acoes.querySelectorAll('button').forEach(function (b) { b.disabled = false; });
+            });
+    });
+
+    var palco = document.getElementById('qz-palco');
+    document.getElementById('qz-tela-cheia').addEventListener('click', function () {
+        if (document.fullscreenElement) { document.exitFullscreen(); }
+        else if (palco.requestFullscreen) { palco.requestFullscreen(); }
+    });
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) consultar(); });
+
+    consultar();
+    requestAnimationFrame(tique);
+})();
+</script>
+{% endblock %}

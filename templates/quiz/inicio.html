@@ -1,0 +1,99 @@
+{% extends 'quiz/base_quiz.html' %}
+
+{% block quiz_h1 %}Quiz{% endblock %}
+{% block quiz_acoes %}
+{% if pode_gerenciar %}
+<a href="{% url 'quiz:quiz_novo' %}" class="qz-btn qz-btn-claro"><i class="fas fa-plus"></i>Novo quiz</a>
+<a href="{% url 'quiz:sala_nova' %}" class="qz-btn qz-btn-laranja"><i class="fas fa-door-open"></i>Nova sala</a>
+{% endif %}
+{% endblock %}
+
+{% block quiz_conteudo %}
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    <section class="qz-card p-5 lg:col-span-1">
+        <h2 class="text-base font-bold text-gray-800"><i class="fas fa-key text-violet-600 mr-1.5"></i>Entrar com código</h2>
+        <p class="text-sm text-gray-500 mt-1">O responsável mostra o código da sala na tela.</p>
+        <form method="post" action="{% url 'quiz:entrar' %}" class="mt-3 flex gap-2">
+            {% csrf_token %}
+            <label for="qz-codigo" class="sr-only">Código da sala</label>
+            <input id="qz-codigo" name="codigo" maxlength="8" required autocomplete="off" autocapitalize="characters"
+                   placeholder="EX.: K7Q9PX" class="qz-input qz-codigo uppercase text-center text-lg">
+            <button type="submit" class="qz-btn qz-btn-roxo">Entrar</button>
+        </form>
+    </section>
+
+    <section class="qz-card p-5 lg:col-span-2">
+        <h2 class="text-base font-bold text-gray-800"><i class="fas fa-gamepad text-violet-600 mr-1.5"></i>Suas salas</h2>
+        {% if abertas %}
+        <ul class="mt-3 divide-y divide-gray-100">
+            {% for p in abertas %}
+            <li class="py-3 flex flex-wrap items-center justify-between gap-3">
+                <div class="min-w-0">
+                    <p class="font-semibold text-gray-800">{{ p.sala.titulo }}</p>
+                    <p class="text-xs text-gray-500 mt-0.5">
+                        {{ p.sala.agendada_para|date:"d/m/Y" }} às {{ p.sala.agendada_para|time:"H:i" }}
+                        · código <span class="qz-codigo">{{ p.sala.codigo }}</span>
+                        {% if p.rotulo_origem %}· você foi chamado por: {{ p.rotulo_origem }}{% endif %}
+                    </p>
+                </div>
+                <div class="flex items-center gap-2">
+                    {% if p.sala.ao_vivo %}<span class="qz-chip qz-chip-vermelho"><i class="fas fa-circle text-[8px] animate-pulse"></i>Ao vivo</span>
+                    {% else %}<span class="qz-chip qz-chip-roxo">Marcada</span>{% endif %}
+                    <a href="{% url 'quiz:jogar' p.sala.codigo %}" class="qz-btn {% if p.sala.ao_vivo %}qz-btn-laranja{% else %}qz-btn-roxo{% endif %}">
+                        <i class="fas fa-right-to-bracket"></i>Entrar na sala
+                    </a>
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="text-sm text-gray-500 mt-3">Nenhum quiz marcado para você agora. Quando chamarem, chega um aviso no sino do portal.</p>
+        {% endif %}
+    </section>
+</div>
+
+{% if pode_gerenciar %}
+<section class="qz-card p-5">
+    <div class="flex flex-wrap items-center justify-between gap-2">
+        <h2 class="text-base font-bold text-gray-800"><i class="fas fa-tv text-orange-600 mr-1.5"></i>Salas que você conduz</h2>
+        <a href="{% url 'quiz:salas' %}" class="text-sm font-semibold text-violet-700 hover:underline">Todas as salas</a>
+    </div>
+    {% if minhas_salas %}
+    <ul class="mt-3 divide-y divide-gray-100">
+        {% for s in minhas_salas %}
+        <li class="py-3 flex flex-wrap items-center justify-between gap-3">
+            <div class="min-w-0">
+                <p class="font-semibold text-gray-800">{{ s.titulo }}</p>
+                <p class="text-xs text-gray-500 mt-0.5">{{ s.agendada_para|date:"d/m/Y" }} às {{ s.agendada_para|time:"H:i" }}
+                    · <span class="qz-codigo">{{ s.codigo }}</span> · {{ s.convidados }} participante{{ s.convidados|pluralize }}</p>
+            </div>
+            <a href="{% url 'quiz:painel' s.codigo %}" class="qz-btn qz-btn-laranja"><i class="fas fa-play"></i>Abrir painel</a>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-sm text-gray-500 mt-3">Nenhuma sala aberta. Crie um quiz, publique e monte uma sala.</p>
+    {% endif %}
+</section>
+{% endif %}
+
+<section class="qz-card p-5">
+    <h2 class="text-base font-bold text-gray-800"><i class="fas fa-clock-rotate-left text-violet-600 mr-1.5"></i>Histórico</h2>
+    {% if historico %}
+    <ul class="mt-3 divide-y divide-gray-100">
+        {% for p in historico %}
+        <li class="py-3 flex flex-wrap items-center justify-between gap-3">
+            <div class="min-w-0">
+                <p class="font-semibold text-gray-800">{{ p.sala.titulo }}</p>
+                <p class="text-xs text-gray-500 mt-0.5">{{ p.sala.agendada_para|date:"d/m/Y" }}
+                    {% if p.entrou_em %}· {{ p.acertos }} acerto{{ p.acertos|pluralize }} · {{ p.pontos }} pontos{% else %}· você não participou{% endif %}</p>
+            </div>
+            {% if p.entrou_em %}<a href="{% url 'quiz:meu_resultado' p.sala.codigo %}" class="qz-btn qz-btn-claro"><i class="fas fa-trophy"></i>Meu resultado</a>{% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-sm text-gray-500 mt-3">Os quizzes de que você participar ficam guardados aqui, com o seu resultado.</p>
+    {% endif %}
+</section>
+{% endblock %}

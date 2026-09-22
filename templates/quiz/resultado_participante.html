@@ -1,0 +1,65 @@
+{% extends 'quiz/base_quiz.html' %}
+
+{% block quiz_titulo %}Meu resultado · {{ sala.titulo }}{% endblock %}
+{% block quiz_h1 %}Meu resultado{% endblock %}
+{% block quiz_sub %}{{ sala.titulo }} · {{ sala.agendada_para|date:"d/m/Y" }} às {{ sala.agendada_para|time:"H:i" }}{% endblock %}
+{% block quiz_acoes %}<a href="{% url 'quiz:inicio' %}" class="qz-btn bg-white/15 text-white hover:bg-white/25"><i class="fas fa-arrow-left"></i>Voltar</a>{% endblock %}
+
+{% block quiz_conteudo %}
+<section class="grid grid-cols-2 md:grid-cols-5 gap-3">
+    <div class="qz-card p-4 text-center col-span-2 md:col-span-1">
+        <p class="text-xs font-semibold text-gray-500 uppercase">Posição</p>
+        <p class="text-3xl font-extrabold text-violet-700 mt-1">{% if r.posicao %}{{ r.posicao }}º{% else %}—{% endif %}</p>
+        <p class="text-xs text-gray-500">de {{ r.presentes }}</p>
+    </div>
+    <div class="qz-card p-4 text-center">
+        <p class="text-xs font-semibold text-gray-500 uppercase">Pontos</p>
+        <p class="text-3xl font-extrabold text-gray-800 mt-1">{{ r.pontos }}</p>
+    </div>
+    <div class="qz-card p-4 text-center">
+        <p class="text-xs font-semibold text-gray-500 uppercase">Acertos</p>
+        <p class="text-3xl font-extrabold text-emerald-700 mt-1">{{ r.acertos }}</p>
+    </div>
+    <div class="qz-card p-4 text-center">
+        <p class="text-xs font-semibold text-gray-500 uppercase">Erros</p>
+        <p class="text-3xl font-extrabold text-red-600 mt-1">{{ r.erros }}</p>
+    </div>
+    <div class="qz-card p-4 text-center">
+        <p class="text-xs font-semibold text-gray-500 uppercase">Sem resposta</p>
+        <p class="text-3xl font-extrabold text-gray-500 mt-1">{{ r.sem_resposta }}</p>
+    </div>
+</section>
+
+{% if r.podio %}
+<section class="qz-card p-5">
+    <h2 class="text-base font-bold text-gray-800 text-center mb-4">🏆 Pódio</h2>
+    {% include 'quiz/_podio.html' with degraus=r.degraus eu=participante %}
+</section>
+{% endif %}
+
+<section class="space-y-3">
+    <h2 class="text-base font-bold text-gray-800">Pergunta por pergunta</h2>
+    {% for l in r.linhas %}
+    <article class="qz-card p-4 sm:p-5">
+        <div class="flex flex-wrap items-start justify-between gap-2">
+            <p class="text-xs font-semibold text-violet-700">Pergunta {{ l.n }}</p>
+            {% if l.correta %}<span class="qz-chip qz-chip-verde"><i class="fas fa-check"></i>Acertou · +{{ l.pontos }} pts</span>
+            {% elif l.respondida %}<span class="qz-chip qz-chip-vermelho"><i class="fas fa-xmark"></i>Errou</span>
+            {% else %}<span class="qz-chip qz-chip-cinza"><i class="fas fa-hourglass-end"></i>Não respondeu a tempo</span>{% endif %}
+        </div>
+        <p class="font-semibold text-gray-800 mt-1">{{ l.pergunta.enunciado }}</p>
+        <dl class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+            <div class="rounded-lg px-3 py-2 {% if l.correta %}bg-emerald-50{% elif l.respondida %}bg-red-50{% else %}bg-gray-50{% endif %}">
+                <dt class="text-xs text-gray-500">Sua resposta{% if l.tempo_s is not None %} · em {{ l.tempo_s|floatformat:1 }} s{% endif %}</dt>
+                <dd class="font-semibold text-gray-800">{% if l.escolhida %}{{ l.escolhida.texto }}{% else %}—{% endif %}</dd>
+            </div>
+            <div class="rounded-lg px-3 py-2 bg-emerald-50">
+                <dt class="text-xs text-gray-500">Resposta certa</dt>
+                <dd class="font-semibold text-emerald-800">{{ l.certa.texto|default:'—' }}</dd>
+            </div>
+        </dl>
+        {% if l.pergunta.explicacao %}<p class="text-xs text-gray-500 mt-2"><i class="fas fa-lightbulb text-amber-500 mr-1"></i>{{ l.pergunta.explicacao }}</p>{% endif %}
+    </article>
+    {% endfor %}
+</section>
+{% endblock %}

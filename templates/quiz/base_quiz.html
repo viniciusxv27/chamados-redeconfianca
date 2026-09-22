@@ -1,0 +1,124 @@
+{% extends 'base.html' %}
+
+{% block title %}{% block quiz_titulo %}Quiz{% endblock %} · Rede Confiança{% endblock %}
+
+{% block extra_css %}
+<style>
+    .qz-card { background: #fff; border: 1px solid #ECEEF2; border-radius: 1rem;
+               box-shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 1px 3px rgba(16, 24, 40, .06); }
+    .qz-hero { background: radial-gradient(900px 260px at 100% 0%, rgba(234, 88, 12, .55), transparent 60%),
+                           linear-gradient(135deg, #3B0F7A 0%, #5B21B6 55%, #7C3AED 100%);
+               color: #fff; border-radius: 1.25rem; }
+    .qz-hero-sub { color: rgba(255, 255, 255, .82); }
+    .qz-tab { color: rgba(255, 255, 255, .85); border-radius: .75rem; padding: .45rem .9rem; font-size: .85rem;
+              font-weight: 600; white-space: nowrap; transition: background .15s; }
+    .qz-tab:hover { background: rgba(255, 255, 255, .14); color: #fff; }
+    .qz-tab-ativa { background: #fff; color: #5B21B6; }
+    .qz-tab-ativa:hover { background: #fff; color: #5B21B6; }
+    .qz-btn { display: inline-flex; align-items: center; justify-content: center; gap: .45rem; border-radius: .75rem;
+              padding: .55rem 1rem; font-size: .88rem; font-weight: 600; transition: filter .15s, background .15s; }
+    .qz-btn-roxo { background: #6D28D9; color: #fff; }
+    .qz-btn-roxo:hover { filter: brightness(1.08); }
+    .qz-btn-laranja { background: #EA580C; color: #fff; }
+    .qz-btn-laranja:hover { filter: brightness(1.06); }
+    .qz-btn-claro { background: #F4F2FA; color: #4C1D95; }
+    .qz-btn-claro:hover { background: #ECE7FA; }
+    .qz-btn-perigo { background: #FEF2F2; color: #B91C1C; }
+    .qz-btn-perigo:hover { background: #FEE2E2; }
+    .qz-btn[disabled] { opacity: .5; cursor: not-allowed; }
+    .qz-chip { display: inline-flex; align-items: center; gap: .3rem; border-radius: 9999px; padding: .15rem .6rem;
+               font-size: .72rem; font-weight: 700; }
+    .qz-chip-roxo { background: #F3EEFF; color: #5B21B6; }
+    .qz-chip-verde { background: #E9F7EF; color: #1E7B45; }
+    .qz-chip-cinza { background: #F1F3F6; color: #4B5563; }
+    .qz-chip-laranja { background: #FFF1EA; color: #B6461F; }
+    .qz-chip-vermelho { background: #FDECEA; color: #B42318; }
+    .qz-input { width: 100%; border: 1px solid #E0E4EA; border-radius: .7rem; padding: .55rem .8rem; font-size: .9rem;
+                background: #fff; color: #1F2937; }
+    .qz-input:focus { outline: 2px solid #C4B5FD; border-color: #8B5CF6; }
+    .qz-rotulo { display: block; font-size: .8rem; font-weight: 600; color: #374151; margin-bottom: .3rem; }
+
+    /* As alternativas, como no Kahoot: cor e forma para ninguém depender só da cor. */
+    .qz-alt { color: #fff; border-radius: .9rem; font-weight: 700; display: flex; align-items: center; gap: .75rem;
+              padding: .9rem 1rem; min-height: 4.25rem; text-align: left; line-height: 1.25;
+              box-shadow: 0 4px 0 rgba(0, 0, 0, .22); transition: transform .08s, filter .15s, opacity .2s, box-shadow .15s; }
+    button.qz-alt:hover { filter: brightness(1.07); }
+    button.qz-alt:active { transform: translateY(2px); box-shadow: 0 2px 0 rgba(0, 0, 0, .22); }
+    .qz-vermelho { background: #E21B3C; }
+    .qz-azul { background: #1368CE; }
+    .qz-amarelo { background: #C98A00; }
+    .qz-verde { background: #26890C; }
+    .qz-forma { font-size: 1.35rem; width: 1.9rem; flex-shrink: 0; text-align: center; }
+    /* Campo de texto dentro da alternativa colorida (cadastro de pergunta): translúcido nos dois temas. */
+    .qz-alt .qz-alt-campo { background: rgba(255, 255, 255, .16); color: #fff; border: 1px solid rgba(255, 255, 255, .35); }
+    .qz-alt .qz-alt-campo::placeholder { color: rgba(255, 255, 255, .72); }
+    .qz-alt .qz-alt-campo:focus { outline: none; background: rgba(255, 255, 255, .26); }
+    .qz-apagada { opacity: .45; filter: grayscale(.3); }
+    .qz-escolhida { box-shadow: 0 0 0 4px #fff, 0 0 0 8px #6D28D9; }
+    .qz-certa { box-shadow: 0 0 0 4px #fff, 0 0 0 8px #16A34A; }
+    .qz-errada { opacity: .85; box-shadow: 0 0 0 4px #fff, 0 0 0 8px #DC2626; }
+    .qz-barra-tempo { height: .55rem; background: #EDE9FE; border-radius: 9999px; overflow: hidden; }
+    .qz-barra-tempo > div { height: 100%; background: linear-gradient(90deg, #7C3AED, #EA580C); border-radius: 9999px;
+                            transition: width .25s linear; }
+    .qz-codigo { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .18em; font-weight: 800; }
+
+    /* Pódio */
+    .qz-podio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; gap: .6rem; }
+    .qz-degrau { border-radius: .9rem .9rem .35rem .35rem; color: #fff; text-align: center; padding: .75rem .4rem; }
+    .qz-degrau-1 { background: linear-gradient(180deg, #F59E0B, #D97706); min-height: 9.5rem; }
+    .qz-degrau-2 { background: linear-gradient(180deg, #94A3B8, #64748B); min-height: 7.5rem; }
+    .qz-degrau-3 { background: linear-gradient(180deg, #D97706, #92400E); min-height: 6rem; }
+    .qz-medalha { font-size: 1.8rem; line-height: 1; }
+    .qz-linha { background: #F7F5FC; }
+    .qz-linha-eu { background: #FFF1EA; box-shadow: inset 0 0 0 2px #FDBA8C; }
+
+    html.dark .qz-card { background: #1f2433; border-color: #2b3346; }
+    html.dark .qz-input { background: #151a26; border-color: #2b3346; color: #E5E7EB; }
+    html.dark .qz-rotulo { color: #CBD5E1; }
+    html.dark .qz-btn-claro { background: #2a2350; color: #DDD6FE; }
+    html.dark .qz-btn-perigo { background: rgba(185, 28, 28, .18); color: #FCA5A5; }
+    html.dark .qz-chip-roxo { background: rgba(124, 58, 237, .2); color: #DDD6FE; }
+    html.dark .qz-chip-verde { background: rgba(39, 174, 96, .16); color: #9BE3B5; }
+    html.dark .qz-chip-cinza { background: #2b3346; color: #B6BDCC; }
+    html.dark .qz-chip-laranja { background: rgba(234, 88, 12, .18); color: #FFB38F; }
+    html.dark .qz-chip-vermelho { background: rgba(231, 76, 60, .18); color: #F5A99F; }
+    html.dark .qz-barra-tempo { background: #2a2350; }
+    html.dark .qz-alt .qz-alt-campo { background: rgba(255, 255, 255, .16); color: #fff; border-color: rgba(255, 255, 255, .35); }
+    html.dark .qz-alt .qz-alt-campo::placeholder { color: rgba(255, 255, 255, .72); }
+    html.dark .qz-linha { background: rgba(139, 92, 246, .12); }
+    html.dark .qz-linha-eu { background: rgba(234, 88, 12, .18); box-shadow: inset 0 0 0 2px rgba(234, 88, 12, .55); }
+    html.dark .qz-escolhida { box-shadow: 0 0 0 4px #1f2433, 0 0 0 8px #A78BFA; }
+    html.dark .qz-certa { box-shadow: 0 0 0 4px #1f2433, 0 0 0 8px #4ADE80; }
+    html.dark .qz-errada { box-shadow: 0 0 0 4px #1f2433, 0 0 0 8px #F87171; }
+</style>
+{% block quiz_css %}{% endblock %}
+{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-6 space-y-4">
+    {% block quiz_cabecalho %}
+    <section class="qz-hero p-5 sm:p-6">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+            <div class="min-w-0">
+                <p class="text-xs font-semibold uppercase tracking-wider qz-hero-sub">
+                    <i class="fas fa-circle-question mr-1"></i>Quiz
+                </p>
+                <h1 class="text-2xl sm:text-3xl font-extrabold mt-1">{% block quiz_h1 %}Quiz{% endblock %}</h1>
+                <p class="text-sm mt-1 qz-hero-sub">{% block quiz_sub %}Perguntas e respostas ao vivo: acerte rápido e suba no ranking.{% endblock %}</p>
+            </div>
+            <div class="flex flex-wrap gap-2">{% block quiz_acoes %}{% endblock %}</div>
+        </div>
+        {% if pode_gerenciar %}
+        <nav class="flex gap-1 mt-4 overflow-x-auto" aria-label="Seções do quiz">
+            <a href="{% url 'quiz:inicio' %}" class="qz-tab {% if aba == 'inicio' %}qz-tab-ativa{% endif %}"><i class="fas fa-gamepad mr-1"></i>Minhas salas</a>
+            <a href="{% url 'quiz:quizzes' %}" class="qz-tab {% if aba == 'quizzes' %}qz-tab-ativa{% endif %}"><i class="fas fa-list-check mr-1"></i>Quizzes</a>
+            <a href="{% url 'quiz:salas' %}" class="qz-tab {% if aba == 'salas' %}qz-tab-ativa{% endif %}"><i class="fas fa-door-open mr-1"></i>Salas</a>
+            <a href="{% url 'quiz:relatorios' %}" class="qz-tab {% if aba == 'relatorios' %}qz-tab-ativa{% endif %}"><i class="fas fa-chart-column mr-1"></i>Relatórios</a>
+        </nav>
+        {% endif %}
+    </section>
+    {% endblock %}
+
+    {% block quiz_conteudo %}{% endblock %}
+</div>
+{% endblock %}

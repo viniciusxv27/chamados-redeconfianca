@@ -1,0 +1,39 @@
+{% extends 'quiz/base_quiz.html' %}
+
+{% block quiz_titulo %}{% if quiz %}Editar quiz{% else %}Novo quiz{% endif %}{% endblock %}
+{% block quiz_h1 %}{% if quiz %}Editar quiz{% else %}Novo quiz{% endif %}{% endblock %}
+{% block quiz_sub %}Nome, descrição e tema. As perguntas vêm no passo seguinte.{% endblock %}
+
+{% block quiz_conteudo %}
+<form method="post" class="qz-card p-5 sm:p-6 max-w-3xl space-y-4">
+    {% csrf_token %}
+    <div>
+        <label for="qz-titulo" class="qz-rotulo">Nome do quiz *</label>
+        <input id="qz-titulo" name="titulo" maxlength="150" required value="{{ quiz.titulo|default:'' }}"
+               class="qz-input" placeholder="Ex.: Planos Vivo — setembro">
+    </div>
+    <div>
+        <label for="qz-descricao" class="qz-rotulo">Descrição</label>
+        <textarea id="qz-descricao" name="descricao" rows="3" class="qz-input"
+                  placeholder="Para que serve e para quem é.">{{ quiz.descricao|default:'' }}</textarea>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+            <label for="qz-categoria" class="qz-rotulo">Categoria ou tema (opcional)</label>
+            <input id="qz-categoria" name="categoria" maxlength="80" list="qz-categorias" value="{{ quiz.categoria|default:'' }}"
+                   class="qz-input" placeholder="Ex.: Produtos, Atendimento, Segurança">
+            <datalist id="qz-categorias">{% for c in categorias %}<option value="{{ c }}">{% endfor %}</datalist>
+        </div>
+        <div>
+            <label for="qz-tempo" class="qz-rotulo">Tempo padrão por pergunta (segundos)</label>
+            <input id="qz-tempo" name="tempo_padrao" type="number" min="{{ tempo_min }}" max="{{ tempo_max }}"
+                   value="{{ quiz.tempo_padrao|default:20 }}" class="qz-input">
+            <p class="text-xs text-gray-400 mt-1">Cada pergunta pode ter o seu tempo; este é só o valor sugerido.</p>
+        </div>
+    </div>
+    <div class="flex flex-wrap gap-2 pt-2">
+        <button type="submit" class="qz-btn qz-btn-laranja"><i class="fas fa-check"></i>{% if quiz %}Salvar{% else %}Criar e cadastrar perguntas{% endif %}</button>
+        <a href="{% if quiz %}{% url 'quiz:quiz' quiz.pk %}{% else %}{% url 'quiz:quizzes' %}{% endif %}" class="qz-btn qz-btn-claro">Cancelar</a>
+    </div>
+</form>
+{% endblock %}

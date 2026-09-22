@@ -141,6 +141,13 @@ MODULOS = [
      'permissoes': [
          ('treinamentos.gestao', 'Publicar e gerenciar treinamentos', 'Upload, categorias, ativar/desativar.'),
      ]},
+    {'chave': 'quiz', 'rotulo': 'Quiz', 'grupo': 'Administrativo',
+     'acesso': False,
+     'descricao': 'Todo mundo joga nas salas para que foi chamado; aqui é quem cria.',
+     'permissoes': [
+         ('quiz.gestao', 'Criar e administrar quizzes',
+          'Criar quizzes e perguntas, montar salas, conduzir a partida e ver resultados e relatórios.'),
+     ]},
     {'chave': 'comunicados', 'rotulo': 'Comunicados', 'grupo': 'Administrativo',
      'acesso': False,
      'descricao': 'Todo mundo lê; aqui é quem escreve.',
@@ -232,6 +239,7 @@ GATES = {
     'caixa': 'contagem_caixa.permissions:pode_ver_caixa',
     'caixa.gestor': 'contagem_caixa.permissions:e_gestor',
     'treinamentos.gestao': 'trainings.views:pode_gerenciar_treinamentos',
+    'quiz.gestao': 'quiz.permissoes:pode_gerenciar',
     'comunicados.criar': 'metodo:can_create_communications',
     'usuarios.gerenciar': 'metodo:can_manage_users',
     'relatorios.ver': 'metodo:can_view_reports',

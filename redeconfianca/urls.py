@@ -129,6 +129,7 @@ urlpatterns = [
     # Módulo oculto: não aparece em menu nenhum, acesso conferido na view.
     path('maps/', include('maps.urls')),
     path('cursos/', include('cursos.urls')),
+    path('quiz/', include('quiz.urls')),
     path('talentos/', include('curriculos.urls')),  # Banco de Talentos (RH)
     path('reunioes/', include('reunioes.urls')),  # Reuniões com sala de vídeo
     path('drive/', include('drive.urls')),  # Drive: espelho do Google Drive (fora do menu)

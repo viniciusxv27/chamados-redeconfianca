@@ -663,3 +663,37 @@ html.dark .esc-hoje { box-shadow: inset 0 2px 0 #22d3ee !important; }
 
 /* Linha da grade no hover */
 html.dark .esc-grid tbody tr:hover .esc-nome { background: var(--tema-superficie-2) !important; }
+
+/* --------------------------------------------------------------------------
+   Assinatura digital — contracheque (/contracheque/) e folha de ponto
+   (/folha-ponto/).
+
+   O quadro é um <canvas> transparente com tinta escura, e é essa imagem, do
+   jeito que sai do canvas, que vai para o PDF assinado — em papel branco. No
+   escuro o `bg-white` do quadro virava superfície escura e a tinta sumia;
+   clarear a tinta resolveria a tela e estragaria o documento. Então o quadro
+   continua sendo uma folha clara, com a moldura tracejada de sempre: o mesmo
+   raciocínio da folha A4 (.sheet) acima. A prévia da assinatura já registrada
+   é o mesmo PNG transparente, e também fica sobre o papel.
+   -------------------------------------------------------------------------- */
+html.dark .assinatura-quadro,
+html.dark .assinatura-previa {
+    background-color: #f6f7f9 !important;
+    color: #1f2937;
+}
+html.dark .assinatura-quadro {
+    border-color: #9aa3b5 !important;
+    /* Um halo discreto separa a folha do cartão escuro sem parecer bloco solto. */
+    box-shadow: 0 0 0 4px rgba(255, 255, 255, .06);
+}
+/* "Desenhe sua assinatura aqui" e o "Assinatura:" da prévia: cinza de papel,
+   não o cinza clareado do tema (que sumiria no fundo claro). */
+html.dark .assinatura-quadro p,
+html.dark .assinatura-previa p { color: #6b7280; }
+
+/* Contracheque ainda sem assinatura, na lista: no claro é um contorno rosa
+   (ring-1 ring-red-200). No escuro a sombra do tema (.shadow) sobrescrevia o
+   box-shadow e o anel sumia — o aviso de pendência ficava só no cabeçalho. */
+html.dark .assinatura-pendente {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .5), 0 0 0 1px rgba(239, 68, 68, .45);
+}
