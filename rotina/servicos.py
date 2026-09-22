@@ -16,8 +16,8 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .models import (
-    CORES_CATEGORIA, DIAS_SEMANA, DOMINGO, SABADO, AtividadeModelo, AtividadeRotina, AvisoRotina,
-    Categoria, ModeloRotina, TipoAviso, erros_de_horario,
+    CORES_CATEGORIA, DIAS_SEMANA, DOMINGO, MINUTOS_WHATSAPP_MAXIMO, MINUTOS_WHATSAPP_PADRAO, SABADO,
+    AtividadeModelo, AtividadeRotina, AvisoRotina, Categoria, ModeloRotina, TipoAviso, erros_de_horario,
 )
 from .permissoes import e_superadmin
 
@@ -30,7 +30,11 @@ DIAS_CURTOS = ('Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom')
 LIMITE_TITULO = 150
 LIMITE_DESCRICAO = 2000
 CAMPOS_TEXTO = ('titulo', 'descricao', 'categoria')
-CAMPOS_COPIA = ('dia_semana', 'inicio', 'fim', 'titulo', 'descricao', 'categoria', 'bloqueada')
+# O que a dona da rotina só muda nas atividades que ela mesma criou: o texto e o
+# lembrete no WhatsApp. Nas da gestão, ela só mexe no dia e no horário.
+CAMPOS_DE_QUEM_CRIOU = CAMPOS_TEXTO + ('minutos_whatsapp',)
+CAMPOS_COPIA = ('dia_semana', 'inicio', 'fim', 'titulo', 'descricao', 'categoria', 'bloqueada',
+                'minutos_whatsapp')
 
 # O aviso de início vale do começo da atividade até ela terminar (nas bem
 # curtas, até 10 minutos depois de começar). Um pouco antes também passa: o
@@ -220,7 +224,7 @@ def conferir_edicao_da_pessoa(atividade, limpos=None):
     if 'bloqueada' in limpos and limpos['bloqueada'] != atividade.bloqueada:
         raise SemPermissao('Só a gestão pode travar ou destravar uma atividade.')
     mudou_texto = any(campo in limpos and limpos[campo] != getattr(atividade, campo)
-                      for campo in CAMPOS_TEXTO)
+                      for campo in CAMPOS_DE_QUEM_CRIOU)
     if mudou_texto and not (atividade.criada_pela_pessoa and rotina.pode_criar):
         raise SemPermissao('Nesta atividade você só pode mudar o dia e o horário.')
 
@@ -267,6 +271,20 @@ def _hora(valor, rotulo):
     raise ErroValidacao(f'Horário de {rotulo} inválido: use o formato HH:MM.')
 
 
+def _minutos_whatsapp(valor):
+    """Quantos minutos antes do início sai o lembrete no WhatsApp: inteiro de 0 a MINUTOS_WHATSAPP_MAXIMO."""
+    fora = f'O lembrete no WhatsApp vai de 0 (na hora em que começa) a {MINUTOS_WHATSAPP_MAXIMO} minutos antes.'
+    if isinstance(valor, bool) or (isinstance(valor, float) and not valor.is_integer()):
+        raise ErroValidacao(fora)
+    try:
+        minutos = int(valor.strip() if isinstance(valor, str) else valor)
+    except (TypeError, ValueError):
+        raise ErroValidacao(fora) from None
+    if not 0 <= minutos <= MINUTOS_WHATSAPP_MAXIMO:
+        raise ErroValidacao(fora)
+    return minutos
+
+
 def ler_dados_atividade(corpo, atual=None, com_domingo=False):
     """Valida o JSON de uma atividade e devolve só os campos limpos.
 
@@ -309,6 +327,11 @@ def ler_dados_atividade(corpo, atual=None, com_domingo=False):
         limpos['bloqueada'] = corpo['bloqueada']
     elif criando:
         limpos['bloqueada'] = False
+
+    if 'minutos_whatsapp' in corpo:
+        limpos['minutos_whatsapp'] = _minutos_whatsapp(corpo['minutos_whatsapp'])
+    elif criando:
+        limpos['minutos_whatsapp'] = MINUTOS_WHATSAPP_PADRAO
 
     if criando:
         repetir = corpo.get('repetir_em')
@@ -357,6 +380,7 @@ def serializar_atividade(atividade, permissoes=None):
         'inicio': f'{atividade.inicio:%H:%M}',
         'fim': f'{atividade.fim:%H:%M}',
         'bloqueada': atividade.bloqueada,
+        'minutos_whatsapp': atividade.minutos_whatsapp,
         'criada_pela_pessoa': getattr(atividade, 'criada_pela_pessoa', False),
     }
     dados.update(permissoes or {'pode_mover': True, 'pode_editar': True, 'pode_excluir': True})

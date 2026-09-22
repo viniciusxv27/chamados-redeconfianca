@@ -14,6 +14,7 @@ from datetime import time
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator
 from django.db import models
 from django.db.models import F, Q
 
@@ -47,6 +48,12 @@ DOMINGO = 6
 
 HORA_MINIMA = time(5, 0)
 HORA_MAXIMA = time(23, 0)
+
+# Lembrete no WhatsApp: quantos minutos antes do início, atividade por atividade
+# (0 = na hora em que começa). Até 2 horas: com as atividades entre 05:00 e
+# 23:00, o lembrete nunca cai no dia anterior.
+MINUTOS_WHATSAPP_PADRAO = 5
+MINUTOS_WHATSAPP_MAXIMO = 120
 
 
 def erros_de_horario(dia_semana, inicio, fim):
@@ -85,6 +92,12 @@ class AtividadeBase(models.Model):
     bloqueada = models.BooleanField(
         'Horário travado', default=False,
         help_text='Travada, a pessoa não consegue mover a atividade nem mudar a duração.')
+    # db_default: servidor que ainda roda o código anterior (sem esta coluna) grava
+    # atividade no mesmo banco — sem o default no banco, o INSERT dele falharia.
+    minutos_whatsapp = models.PositiveSmallIntegerField(
+        'Lembrete no WhatsApp (minutos antes)', default=MINUTOS_WHATSAPP_PADRAO,
+        db_default=MINUTOS_WHATSAPP_PADRAO, validators=[MaxValueValidator(MINUTOS_WHATSAPP_MAXIMO)],
+        help_text='Quanto tempo antes do início sai o lembrete no WhatsApp. 0 = na hora em que começa.')
     criada_em = models.DateTimeField('Criada em', auto_now_add=True)
     atualizada_em = models.DateTimeField('Atualizada em', auto_now=True)
 
@@ -104,6 +117,9 @@ class AtividadeBase(models.Model):
             models.CheckConstraint(
                 condition=Q(inicio__gte=HORA_MINIMA, fim__lte=HORA_MAXIMA),
                 name='%(app_label)s_%(class)s_entre_5h_e_23h'),
+            models.CheckConstraint(
+                condition=Q(minutos_whatsapp__lte=MINUTOS_WHATSAPP_MAXIMO),
+                name='%(app_label)s_%(class)s_whatsapp_ate_2h_antes'),
         ]
 
     def clean(self):

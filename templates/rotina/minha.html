@@ -7,9 +7,9 @@
 
 {% block rt_acoes %}
 {% if rotina_liberada %}
-<span class="rt-hero-selo" title="Com o portal aberto, você recebe um lembrete {{ lembrete_minutos }} minutos antes e um aviso quando cada atividade começa, na tela e no sino.">
+<span class="rt-hero-selo" title="Com o portal aberto, você recebe um lembrete {{ lembrete_minutos }} minutos antes e um aviso quando cada atividade começa, na tela e no sino.{% if whatsapp_ligado %} No WhatsApp, o lembrete vem no tempo escolhido em cada atividade (aparece no detalhe dela).{% endif %}">
     <i class="fas fa-bell" aria-hidden="true"></i>
-    <span><strong>Avisos ligados</strong> · {{ lembrete_minutos }} min antes e no início{% if whatsapp_ligado %} · também no WhatsApp{% endif %}</span>
+    <span><strong>Avisos ligados</strong> · {{ lembrete_minutos }} min antes e no início{% if whatsapp_ligado %} · no WhatsApp, no tempo de cada atividade{% endif %}</span>
 </span>
 {% endif %}
 {% if e_admin %}

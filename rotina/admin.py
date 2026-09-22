@@ -4,7 +4,7 @@ from .models import (
     AtividadeModelo, AtividadeRotina, AvisoRotina, AvisoWhatsApp, ModeloRotina, RotinaGerencial,
 )
 
-CAMPOS_ATIVIDADE = ('dia_semana', 'inicio', 'fim', 'titulo', 'categoria', 'bloqueada', 'descricao')
+CAMPOS_ATIVIDADE = ('dia_semana', 'inicio', 'fim', 'titulo', 'categoria', 'bloqueada', 'minutos_whatsapp', 'descricao')
 
 
 class AtividadeModeloInline(admin.TabularInline):

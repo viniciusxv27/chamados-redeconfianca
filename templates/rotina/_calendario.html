@@ -127,6 +127,7 @@ as abas dos dias presas no topo e o dia em lista (padrão) ou em grade.
         </div>
         <div class="rt-modal-corpo">
             <div class="rt-det-status" data-rt="det-status"></div>
+            <p class="rt-det-whatsapp hidden" data-rt="det-whatsapp"><i class="fab fa-whatsapp" aria-hidden="true"></i> <span></span></p>
             <div class="rt-det-descricao" data-rt="det-descricao"></div>
 
             <form class="rt-det-horario hidden" data-rt="det-horario" novalidate>
@@ -214,6 +215,15 @@ as abas dos dias presas no topo e o dia em lista (padrão) ou em grade.
                     {% endfor %}
                 </div>
             </fieldset>
+            <label class="rt-campo rt-campo-whatsapp">
+                <span class="rt-rotulo"><i class="fab fa-whatsapp" aria-hidden="true"></i> Lembrete no WhatsApp <small>(minutos antes do início)</small></span>
+                <span class="rt-whatsapp-linha">
+                    <input type="number" name="minutos_whatsapp" class="rt-input" min="0" max="{{ config.whatsappMaximo }}" step="1"
+                           inputmode="numeric" required aria-describedby="rt-whatsapp-ajuda">
+                    <span>min antes</span>
+                </span>
+                <small id="rt-whatsapp-ajuda" class="rt-ajuda">Padrão: {{ config.whatsappPadrao }} min. Use 0 para avisar na hora em que começa (até {{ config.whatsappMaximo }} min).</small>
+            </label>
             {% if config.podeTravar %}
             <label class="rt-switch-linha">
                 <span class="rt-switch"><input type="checkbox" name="bloqueada"><span class="rt-switch-trilho"></span></span>

@@ -47,7 +47,7 @@
                 </span>
                 Pode criar atividades
             </label>
-            <label class="rt-opcao" title="{% if tem_telefone %}Lembrete de cada atividade no WhatsApp do cadastro, {{ lembrete_minutos }} minutos antes.{% else %}Sem telefone no cadastro: nada sai pelo WhatsApp até alguém preencher o Telefone.{% endif %}">
+            <label class="rt-opcao" title="{% if tem_telefone %}Lembrete de cada atividade no WhatsApp do cadastro, no tempo escolhido em cada uma (padrão: {{ whatsapp_minutos_padrao }} minutos antes).{% else %}Sem telefone no cadastro: nada sai pelo WhatsApp até alguém preencher o Telefone.{% endif %}">
                 <span class="rt-switch">
                     <input type="checkbox" {% if rotina.avisar_whatsapp %}checked{% endif %} data-rt-opcao="avisar_whatsapp" data-url="{{ config.urlOpcoes }}"
                            data-msg-ligado="Lembretes no WhatsApp ligados{% if not tem_telefone %} — mas falta o telefone no cadastro{% endif %}." data-msg-desligado="Lembretes no WhatsApp desligados.">

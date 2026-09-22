@@ -792,6 +792,8 @@ body.rt-modal-aberto { overflow: hidden; }
 .rt-det-descricao a { font-weight: 600; color: var(--rt-laranja-escuro); text-decoration: underline; text-underline-offset: 2px; }
 .rt-det-descricao-vazia { font-style: italic; color: var(--rt-texto-3); }
 .rt-det-horario { margin-top: 1rem; padding: .85rem; border: 1px dashed var(--rt-borda-forte); border-radius: .8rem; }
+.rt-det-whatsapp { display: flex; align-items: center; gap: .45rem; margin-top: .6rem; font-size: .8rem; color: var(--rt-texto-2); }
+.rt-det-whatsapp.hidden { display: none; }
 
 /* --------------------------------------------------------------------------
    Formulários
@@ -799,6 +801,12 @@ body.rt-modal-aberto { overflow: hidden; }
 .rt-campo { display: block; }
 .rt-rotulo { display: block; margin-bottom: .3rem; font-size: .74rem; font-weight: 700; color: var(--rt-texto-2); }
 .rt-rotulo small { font-weight: 500; color: var(--rt-texto-3); }
+.rt-ajuda { display: block; margin-top: .3rem; font-size: .72rem; color: var(--rt-texto-3); }
+/* Lembrete no WhatsApp de cada atividade: o número curto, com a unidade ao lado. */
+.rt-whatsapp-linha { display: flex; align-items: center; gap: .5rem; }
+.rt-whatsapp-linha .rt-input { width: 6.5rem; }
+.rt-whatsapp-linha > span { font-size: .85rem; color: var(--rt-texto-2); }
+.rt-campo-whatsapp .fa-whatsapp, .rt-det-whatsapp .fa-whatsapp { color: #25D366; }
 .rt-input {
     width: 100%;
     padding: .55rem .7rem;

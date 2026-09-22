@@ -22,7 +22,7 @@ from django.urls import reverse
 from django.views.decorators.http import require_POST
 
 from . import servicos, whatsapp
-from .models import ModeloRotina, RotinaGerencial
+from .models import MINUTOS_WHATSAPP_MAXIMO, MINUTOS_WHATSAPP_PADRAO, ModeloRotina, RotinaGerencial
 from .permissoes import e_superadmin
 
 logger = logging.getLogger(__name__)
@@ -60,6 +60,7 @@ def _contexto(request, aba, com_domingo=False, **extra):
         'aba': aba,
         'e_admin': e_superadmin(request.user),
         'lembrete_minutos': servicos.MINUTOS_LEMBRETE,
+        'whatsapp_minutos_padrao': MINUTOS_WHATSAPP_PADRAO,
         'categorias': servicos.categorias(),
         'com_domingo': com_domingo,
         'nome_da_semana': servicos.nome_da_semana(com_domingo),
@@ -82,6 +83,9 @@ def _config(request, modo, urls, **extra):
         'csrf': get_token(request),
         'urls': urls,
         'destaque': {'atividade': None, 'dia': None},
+        # Lembrete no WhatsApp de cada atividade: o valor de uma atividade nova e o teto.
+        'whatsappPadrao': MINUTOS_WHATSAPP_PADRAO,
+        'whatsappMaximo': MINUTOS_WHATSAPP_MAXIMO,
     }
     config.update(extra)
     return config

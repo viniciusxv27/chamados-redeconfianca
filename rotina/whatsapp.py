@@ -8,10 +8,12 @@ transcrições da agenda (agenda/processamento.py). Produção roda só gunicorn
 não há cron, celery nem processo separado.
 
 Regras:
-- Os mesmos momentos dos avisos da tela, mas uma mensagem só por atividade e
-  dia: o lembrete, MINUTOS_LEMBRETE antes do início. Se ele não saiu (atividade
-  criada ou movida em cima da hora, servidor reiniciando), vai o de início, até
-  JANELA_AVISO depois de começar. Nunca os dois.
+- Uma mensagem só por atividade e dia: o lembrete, no tempo escolhido em cada
+  atividade (``minutos_whatsapp``: padrão de 5 minutos antes; 0 = na hora em
+  que começa). Se ele não saiu (atividade criada ou movida em cima da hora,
+  servidor reiniciando), vai o de início, até JANELA_AVISO depois de começar.
+  Nunca os dois. O aviso na tela e no sino continua no seu próprio tempo
+  (``servicos.MINUTOS_LEMBRETE``).
 - Só para rotina ativa com "Avisar por WhatsApp" ligado, pessoa ativa e com
   telefone no cadastro.
 - Reivindicação atômica: a linha de AvisoWhatsApp (única por atividade e dia) é
@@ -53,7 +55,7 @@ from django.db.models import Exists, F, OuterRef, Q
 from django.utils import timezone
 
 from . import servicos
-from .models import AtividadeRotina, AvisoWhatsApp, TipoAviso
+from .models import MINUTOS_WHATSAPP_MAXIMO, AtividadeRotina, AvisoWhatsApp, TipoAviso
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +88,7 @@ def texto_da_mensagem(atividade, tipo, momento):
     if tipo == TipoAviso.LEMBRETE:
         inicio = servicos._instante(momento.date(), atividade.inicio)
         faltam = max(1, math.ceil((inicio - momento).total_seconds() / 60))
-        cabeca = f'⏰ Em {faltam} min: *{atividade.titulo}*'
+        cabeca = f'⏰ Em {servicos.duracao_curta(faltam)}: *{atividade.titulo}*'
     else:
         cabeca = f'🔔 Agora: *{atividade.titulo}*'
     return (f'{cabeca}\n'
@@ -98,29 +100,33 @@ def texto_da_mensagem(atividade, tipo, momento):
 # Quem recebe agora
 # ---------------------------------------------------------------------------
 def pendentes(momento):
-    """As atividades que pedem WhatsApp neste instante e ainda não tiveram — numa consulta.
+    """As atividades que pedem WhatsApp neste instante e ainda não tiveram.
 
-    Na janela: do lembrete (começa em até MINUTOS_LEMBRETE) até JANELA_AVISO
-    depois do início, sem ter terminado. As atividades vão de 05:00 a 23:00,
-    então a janela nunca atravessa a meia-noite.
+    Na janela de cada uma: do lembrete (``minutos_whatsapp`` antes do início)
+    até JANELA_AVISO depois do início, sem ter terminado. O banco traz as que
+    começam em até MINUTOS_WHATSAPP_MAXIMO (poucas por vez); o tempo de cada
+    atividade é conferido aqui. As atividades vão de 05:00 a 23:00 e o lembrete
+    é de no máximo 2 horas: a janela nunca atravessa a meia-noite.
     """
     hoje = momento.date()
     desde = max(momento - servicos.JANELA_AVISO, servicos._instante(hoje, hora.min))
-    ate = momento + servicos.ANTECEDENCIA_LEMBRETE
+    ate = momento + timedelta(minutes=MINUTOS_WHATSAPP_MAXIMO)
     if ate.date() != hoje:
         ate = servicos._instante(hoje, hora.max)
     # Sai da lista o que já foi resolvido hoje: enviado, sem mais tentativas, ou
     # tentado há pouco (pode estar saindo agora mesmo por outro worker).
     ja_teve = AvisoWhatsApp.objects.filter(atividade=OuterRef('pk'), data=hoje).filter(
         Q(enviado=True) | Q(tentativas__gte=MAX_TENTATIVAS) | _tentado_depois_de(momento - ESPERA_ENTRE_TENTATIVAS))
-    return (AtividadeRotina.objects
-            .filter(dia_semana=hoje.weekday(),
-                    inicio__gt=desde.time(), inicio__lte=ate.time(), fim__gt=momento.time(),
-                    rotina__ativa=True, rotina__avisar_whatsapp=True, rotina__user__is_active=True)
-            .exclude(rotina__user__phone='')
-            .exclude(Exists(ja_teve))
-            .select_related('rotina__user')
-            .order_by('inicio', 'id'))
+    candidatas = (AtividadeRotina.objects
+                  .filter(dia_semana=hoje.weekday(),
+                          inicio__gt=desde.time(), inicio__lte=ate.time(), fim__gt=momento.time(),
+                          rotina__ativa=True, rotina__avisar_whatsapp=True, rotina__user__is_active=True)
+                  .exclude(rotina__user__phone='')
+                  .exclude(Exists(ja_teve))
+                  .select_related('rotina__user')
+                  .order_by('inicio', 'id'))
+    return [a for a in candidatas
+            if momento >= servicos._instante(hoje, a.inicio) - timedelta(minutes=a.minutos_whatsapp)]
 
 
 def _tentado_depois_de(limite):

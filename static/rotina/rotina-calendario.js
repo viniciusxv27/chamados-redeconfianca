@@ -76,6 +76,14 @@
     function montar(cfg, dados, app, alvo) {
         var R = window.Rotina;
         var pessoa = cfg.modo === 'pessoa';
+        // Lembrete no WhatsApp de cada atividade: no modelo vale sempre; na rotina de alguém,
+        // só com o WhatsApp ligado — e o interruptor da gestão muda isso sem recarregar.
+        var whatsappPadrao = typeof cfg.whatsappPadrao === 'number' ? cfg.whatsappPadrao : 5;
+        var whatsappMaximo = cfg.whatsappMaximo || 120;
+        var whatsappLigado = !dados.rotina || !!dados.rotina.avisar_whatsapp;
+        document.addEventListener('rotina:opcao', function (e) {
+            if (e.detail && e.detail.campo === 'avisar_whatsapp') { whatsappLigado = !!e.detail.valor; }
+        });
         var semana = dados.semana;
         // Último dia da semana desta rotina/modelo: 5 (sábado) ou 6 (domingo, quando a semana tem domingo).
         var ultimoDia = Math.max(0, (semana.dias || []).length - 1);
@@ -828,6 +836,7 @@
             rotulo: gancho(modalDet, 'det-rotulo'),
             status: gancho(modalDet, 'det-status'),
             descricao: gancho(modalDet, 'det-descricao'),
+            whatsapp: gancho(modalDet, 'det-whatsapp'),
             horario: gancho(modalDet, 'det-horario'),
             erro: gancho(modalDet, 'det-erro'),
             editar: gancho(modalDet, 'det-editar'),
@@ -860,6 +869,14 @@
             det.status.innerHTML = '';
             det.status.appendChild(icone(livre ? 'fa-up-down-left-right' : 'fa-lock'));
             det.status.appendChild(document.createTextNode(' ' + texto));
+
+            if (det.whatsapp) {
+                var minutosZap = typeof a.minutos_whatsapp === 'number' ? a.minutos_whatsapp : whatsappPadrao;
+                det.whatsapp.classList.toggle('hidden', !whatsappLigado);
+                det.whatsapp.querySelector('span').textContent = minutosZap
+                    ? 'Lembrete no WhatsApp ' + duracao(minutosZap) + ' antes'
+                    : 'Aviso no WhatsApp na hora em que começa';
+            }
 
             if (a.descricao) {
                 det.descricao.className = 'rt-det-descricao';
@@ -952,6 +969,10 @@
             form.querySelectorAll('input[name=categoria]').forEach(function (r) { r.checked = r.value === categoria; });
             marcarCategoria();
             if (campos.bloqueada) { campos.bloqueada.checked = a ? !!a.bloqueada : false; }
+            if (campos.minutos_whatsapp) {
+                campos.minutos_whatsapp.value = (a && typeof a.minutos_whatsapp === 'number')
+                    ? a.minutos_whatsapp : whatsappPadrao;
+            }
             formDia.classList.toggle('hidden', !a);
             formRepetir.classList.toggle('hidden', !!a);
             if (a) {
@@ -984,6 +1005,16 @@
                 var problema = horarioValido(corpo.inicio, corpo.fim);
                 if (problema) { mostrarErro(formErro, problema); return; }
                 if (campos.bloqueada) { corpo.bloqueada = campos.bloqueada.checked; }
+                if (campos.minutos_whatsapp) {
+                    var minutos = String(campos.minutos_whatsapp.value).trim();
+                    if (!/^\d+$/.test(minutos) || +minutos > whatsappMaximo) {
+                        mostrarErro(formErro, 'O lembrete no WhatsApp vai de 0 (na hora em que começa) a '
+                            + whatsappMaximo + ' minutos antes.');
+                        campos.minutos_whatsapp.focus();
+                        return;
+                    }
+                    corpo.minutos_whatsapp = +minutos;
+                }
 
                 var url;
                 if (editando) {
