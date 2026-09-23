@@ -25,9 +25,6 @@ import pandas as pd
 from io import BytesIO
 import unicodedata
 from users.models import User, Sector, SystemConfig, CommissionSpreadsheetVersion
-from users.commission_visoes import (VISAO_APARTE, VISAO_CONSULTOR, VISAO_COORDENADOR,
-                                     VISAO_GERENTE, VISAO_PROJECAO, VISAO_RECEPCIONISTA,
-                                     pode_ver_visao)
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
@@ -110,19 +107,26 @@ def get_excel_urls(selected_year=None, selected_month=None, selected_phase=None)
 
 
 def resolve_commission_reference_from_request(request):
-    """Resolve mês/ano de referência com base no histórico disponível e GET."""
+    """Resolve mês/ano/fase de referência com base no que a pessoa pode ver.
+
+    As opções não são o histórico inteiro: cada versão (mês/ano + fase) tem um
+    público liberado, escolhido pelo SUPERADMIN em /users/manage/system-config/.
+    Quem não está no público nem recebe a opção na tela — e, se pedir pela URL,
+    cai na referência liberada mais recente em vez de ver o número restrito.
+    """
+    from .commission_liberacao import versoes_liberadas
+
     config = SystemConfig.get_config()
     default_year, default_month = config.get_display_reference_month_year(base_date=timezone.now())
 
-    version_refs = list(
-        CommissionSpreadsheetVersion.objects.filter(
-            status=CommissionSpreadsheetVersion.STATUS_RELEASED
-        ).values('year', 'month').order_by('-year', '-month')
-    )
+    versoes = versoes_liberadas(getattr(request, 'user', None))
 
     by_year = {}
-    for item in version_refs:
-        by_year.setdefault(item['year'], set()).add(item['month'])
+    fases_por_referencia = {}
+    for versao in versoes:
+        by_year.setdefault(versao.year, set()).add(versao.month)
+        fases_por_referencia.setdefault((versao.year, versao.month), set()).add(
+            versao.contestacao_phase or 'pos')
 
     year_options = sorted(by_year.keys(), reverse=True)
     selected_year_raw = request.GET.get('year')
@@ -174,17 +178,22 @@ def resolve_commission_reference_from_request(request):
         for month in months_for_year
     ]
 
-    # Phase options (fixed)
-    phase_options = [
-        {'value': 'antes', 'label': 'Antes da Contestação'},
-        {'value': 'pos', 'label': 'Pós Contestação'},
-    ]
+    # Fases da referência escolhida, já filtradas pelo público liberado. Sem
+    # versão cadastrada, mantém as duas para a tela não ficar vazia.
+    rotulos_fase = {'antes': 'Antes da Contestação', 'pos': 'Pós Contestação'}
+    fases_liberadas = fases_por_referencia.get((selected_year, selected_month), set())
+    if not fases_liberadas:
+        fases_liberadas = {'antes', 'pos'}
+    phase_options = [{'value': fase, 'label': rotulos_fase[fase]}
+                     for fase in ('antes', 'pos') if fase in fases_liberadas]
 
-    # Validate selected phase
-    if selected_phase_raw in ('antes', 'pos'):
+    # Pediu uma fase que não está liberada para ela: volta para a que está.
+    if selected_phase_raw in fases_liberadas:
         selected_phase = selected_phase_raw
     else:
-        selected_phase = 'pos'
+        if selected_phase_raw in ('antes', 'pos'):
+            invalid_selection = True
+        selected_phase = 'pos' if 'pos' in fases_liberadas else sorted(fases_liberadas)[0]
 
     # Sem versões cadastradas: mantém fallback visual coerente.
     if not month_options:
@@ -3012,20 +3021,6 @@ def pode_ver_comissionamento(user):
             or user_has_module(user, 'comissionamento'))
 
 
-def bloqueio_da_visao(request, codigo):
-    """Resposta de bloqueio quando a visão não está liberada para a pessoa.
-
-    Devolve ``None`` quando pode passar — assim a view fica
-    ``return bloqueio_da_visao(...) or a_visao(request)``. Quem libera cada
-    visão é o SUPERADMIN em /users/manage/system-config/ (padrão: todos).
-    """
-    if pode_ver_visao(request.user, codigo):
-        return None
-    messages.error(request, 'Esta visão do comissionamento não está liberada para o seu '
-                            'perfil. Fale com o administrador do portal.')
-    return redirect('home')
-
-
 @login_required
 def commission_view(request):
     """
@@ -3039,6 +3034,14 @@ def commission_view(request):
                                 'coordenadores. Fale com o seu gestor.')
         return redirect('home')
 
+    # Nenhuma versão liberada para o perfil: sem isto, a tela cairia na
+    # planilha padrão e mostraria justamente o número que está restrito.
+    from .commission_liberacao import sem_versao_liberada
+    if sem_versao_liberada(user):
+        messages.info(request, 'Ainda não há versão do comissionamento liberada para o '
+                               'seu perfil. Assim que for liberada, ela aparece aqui.')
+        return redirect('home')
+
     role = get_user_role(user)
 
     # Superadmin vê todos
@@ -3047,22 +3050,22 @@ def commission_view(request):
 
     # Comissionamento "A parte": usuário vê o próprio comissionamento à parte
     if is_user_aparte(user):
-        return bloqueio_da_visao(request, VISAO_APARTE) or commission_aparte_view(request)
+        return commission_aparte_view(request)
 
     # Coordenador tem visão especial
     if role == 'coordenador':
-        return bloqueio_da_visao(request, VISAO_COORDENADOR) or commission_coordenador_view(request)
+        return commission_coordenador_view(request)
 
     # Gerente pode ver equipe ou seu próprio
     if role == 'gerente':
-        return bloqueio_da_visao(request, VISAO_GERENTE) or commission_gerente_view(request)
+        return commission_gerente_view(request)
 
     # Recepcionista
     if role == 'recepcionista':
-        return bloqueio_da_visao(request, VISAO_RECEPCIONISTA) or commission_recepcionista_view(request)
+        return commission_recepcionista_view(request)
 
     # CN padrão
-    return bloqueio_da_visao(request, VISAO_CONSULTOR) or commission_cn_view(request)
+    return commission_cn_view(request)
 
 
 @login_required
@@ -3838,6 +3841,10 @@ def commission_refresh(request):
     """
     if not pode_ver_comissionamento(request.user):
         return JsonResponse({'error': 'Sem acesso ao comissionamento.'}, status=403)
+    # Mesma trava da tela: sem versão liberada para o perfil, não devolve dado.
+    from .commission_liberacao import sem_versao_liberada
+    if sem_versao_liberada(request.user):
+        return JsonResponse({'error': 'Nenhuma versão liberada para o seu perfil.'}, status=403)
     # Limpa todos os caches de comissionamento
     from django.core.cache import cache
     
@@ -3881,8 +3888,13 @@ def export_commission_excel(request):
         messages.error(request, 'O comissionamento fica disponível para gerentes e '
                                 'coordenadores.')
         return redirect('home')
+    # Exportar não pode ser a porta dos fundos da versão restrita.
+    from .commission_liberacao import sem_versao_liberada
+    if sem_versao_liberada(user):
+        messages.info(request, 'Ainda não há versão do comissionamento liberada para o seu perfil.')
+        return redirect('home')
     role = get_user_role(user)
-    
+
     wb = Workbook()
     ws = wb.active
     ws.title = 'Comissionamento'
@@ -4072,6 +4084,10 @@ def api_vendas_por_pilar(request):
     """
     if not pode_ver_comissionamento(request.user):
         return JsonResponse({'error': 'Sem acesso ao comissionamento.'}, status=403)
+    # Mesma trava da tela: sem versão liberada para o perfil, não devolve dado.
+    from .commission_liberacao import sem_versao_liberada
+    if sem_versao_liberada(request.user):
+        return JsonResponse({'error': 'Nenhuma versão liberada para o seu perfil.'}, status=403)
     user = request.user
     pilar = request.GET.get('pilar', '').upper()
     

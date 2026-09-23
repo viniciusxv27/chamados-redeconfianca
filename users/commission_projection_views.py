@@ -67,16 +67,11 @@ def commission_projection_view(request):
     """Médias de comissão projetadas, com filtros que recalculam a média."""
     user = request.user
     # Mesma porta do comissionamento: projeção é o mesmo dado, adiantado.
-    from .commission_views import bloqueio_da_visao, pode_ver_comissionamento
-    from .commission_visoes import VISAO_PROJECAO
+    from .commission_views import pode_ver_comissionamento
     if not pode_ver_comissionamento(user):
         messages.error(request, 'O comissionamento fica disponível para gerentes e '
                                 'coordenadores.')
         return redirect('home')
-    # Além da porta do módulo, a projeção tem liberação própria por perfil.
-    bloqueio = bloqueio_da_visao(request, VISAO_PROJECAO)
-    if bloqueio:
-        return bloqueio
     viewer_role = get_user_role(user)
     dataset = get_projection_dataset(force_refresh=request.GET.get('refresh') == '1')
 

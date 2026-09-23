@@ -68,15 +68,6 @@ class SystemConfig(models.Model):
         verbose_name='Gestores Globais de Contestação',
         help_text='Usuários liberados para gerenciar tudo em /contestacao'
     )
-    # Liberação por visão do comissionamento: {codigo_da_visao: publico}.
-    # Visão sem entrada aqui vale como "Todos", que é o comportamento de antes
-    # de a configuração existir. Ver users/commission_visoes.py.
-    commission_view_access = models.JSONField(
-        default=dict,
-        blank=True,
-        verbose_name="Liberação das visões do comissionamento",
-        help_text="Quem pode abrir cada visão de /users/commission/ (Todos, Gerentes, Coordenadores)"
-    )
     display_reference_month = models.PositiveSmallIntegerField(
         null=True,
         blank=True,
@@ -166,6 +157,28 @@ class CommissionSpreadsheetVersion(models.Model):
         default='pos',
         verbose_name='Fase de Contestação',
         help_text='Indica se a versão é antes ou pós contestação',
+    )
+
+    # Quem enxerga esta versão (mês/ano + fase) no comissionamento. A prévia
+    # (antes da contestação) costuma valer só para quem responde por equipe,
+    # enquanto a versão fechada vai para todo mundo — por isso a liberação é
+    # por versão, e não por tela. Ver users/commission_liberacao.py.
+    LIBERADO_TODOS = 'TODOS'
+    LIBERADO_GERENTES = 'GERENTES'
+    LIBERADO_COORDENADORES = 'COORDENADORES'
+    LIBERADO_GERENTES_COORDENADORES = 'GERENTES_COORDENADORES'
+    LIBERADO_PARA_CHOICES = [
+        (LIBERADO_TODOS, 'Todos'),
+        (LIBERADO_GERENTES, 'Somente Gerentes'),
+        (LIBERADO_COORDENADORES, 'Somente Coordenadores'),
+        (LIBERADO_GERENTES_COORDENADORES, 'Gerentes e Coordenadores'),
+    ]
+    liberado_para = models.CharField(
+        max_length=24,
+        choices=LIBERADO_PARA_CHOICES,
+        default=LIBERADO_TODOS,
+        verbose_name='Liberado para',
+        help_text='Quem enxerga esta versão no comissionamento',
     )
 
     STATUS_DRAFT = 'draft'

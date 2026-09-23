@@ -388,7 +388,7 @@
             </div>
         </div>
 
-        <!-- Visões do Comissionamento: quem pode abrir cada tela -->
+        <!-- Visões do Comissionamento: quem enxerga cada versão (mês/ano + fase) -->
         <div class="mt-8 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <div class="px-6 py-4 border-b border-gray-200">
                 <h2 class="text-lg font-semibold text-gray-900">
@@ -396,8 +396,9 @@
                     Visões do Comissionamento
                 </h2>
                 <p class="text-sm text-gray-500 mt-1">
-                    O comissionamento abre uma visão diferente conforme o perfil de quem entra.
-                    Escolha aqui para quem cada visão fica liberada.
+                    Escolha quem enxerga cada versão. Serve, por exemplo, para soltar a prévia
+                    (antes da contestação) só para gerentes e coordenadores e deixar a versão
+                    fechada para todo mundo.
                 </p>
             </div>
 
@@ -407,32 +408,50 @@
                     <table class="min-w-full divide-y divide-gray-200">
                         <thead class="bg-gray-50">
                             <tr>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Visão</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">O que mostra</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Onde abre</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Referência</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fase</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Situação</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Liberar para</th>
                             </tr>
                         </thead>
                         <tbody class="bg-white divide-y divide-gray-200">
-                            {% for visao in commission_visoes %}
+                            {% for v in commission_versoes_liberacao %}
                             <tr>
-                                <td class="px-6 py-4 text-sm font-medium text-gray-900">{{ visao.nome }}</td>
-                                <td class="px-6 py-4 text-sm text-gray-600">{{ visao.descricao }}</td>
-                                <td class="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">{{ visao.onde }}</td>
-                                <td class="px-6 py-4 text-sm">
-                                    {% if visao.fixa %}
-                                    {# A visão do SuperAdmin não se libera para ninguém: é dela que sai esta configuração. #}
-                                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gray-100 text-gray-600 text-xs font-medium">
-                                        <i class="fas fa-lock text-[10px]"></i> Somente SuperAdmin
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                    {{ v.month|stringformat:"02d" }}/{{ v.year }}
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm">
+                                    {% if v.contestacao_phase == 'antes' %}
+                                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 text-xs font-semibold">
+                                        <i class="fas fa-triangle-exclamation text-[10px]"></i> Antes da Contestação
                                     </span>
                                     {% else %}
-                                    <select name="publico_{{ visao.codigo }}"
+                                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-semibold">
+                                        <i class="fas fa-check text-[10px]"></i> Pós Contestação
+                                    </span>
+                                    {% endif %}
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm">
+                                    {% if v.status == 'released' %}
+                                    <span class="text-green-700 text-xs font-medium"><i class="fas fa-circle-check mr-1"></i>Liberada</span>
+                                    {% else %}
+                                    {# Rascunho não aparece para ninguém além do superadmin, mas já dá para deixar o público pronto. #}
+                                    <span class="text-gray-400 text-xs font-medium"><i class="fas fa-pen mr-1"></i>Rascunho</span>
+                                    {% endif %}
+                                </td>
+                                <td class="px-6 py-4 text-sm">
+                                    <select name="liberado_{{ v.id }}"
                                             class="w-full max-w-[16rem] border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent">
                                         {% for codigo, rotulo in commission_publicos %}
-                                        <option value="{{ codigo }}" {% if codigo == visao.publico %}selected{% endif %}>{{ rotulo }}</option>
+                                        <option value="{{ codigo }}" {% if codigo == v.liberado_para %}selected{% endif %}>{{ rotulo }}</option>
                                         {% endfor %}
                                     </select>
-                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="4" class="px-6 py-4 text-sm text-gray-500">
+                                    Nenhuma versão cadastrada ainda.
                                 </td>
                             </tr>
                             {% endfor %}
@@ -440,18 +459,20 @@
                     </table>
                 </div>
 
+                {% if commission_versoes_liberacao %}
                 <div class="px-6 py-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between gap-4 flex-wrap">
                     <p class="text-xs text-gray-500 max-w-2xl">
                         <i class="fas fa-circle-info mr-1"></i>
-                        <strong>Todos</strong> mantém como está hoje: vale para quem já tem acesso ao
-                        comissionamento. As outras opções usam os grupos <strong>GERENTES</strong> e
-                        <strong>COORDENADORES</strong>. O SuperAdmin enxerga todas as visões sempre.
+                        <strong>Todos</strong> mantém como está hoje. As outras opções usam os grupos
+                        <strong>GERENTES</strong> e <strong>COORDENADORES</strong>: quem fica de fora não vê
+                        essa referência nem no filtro de mês/fase. O SuperAdmin enxerga todas.
                     </p>
                     <button type="submit"
                             class="px-5 py-2.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm font-semibold">
                         <i class="fas fa-save mr-1.5"></i>Salvar liberações
                     </button>
                 </div>
+                {% endif %}
             </form>
         </div>
 
