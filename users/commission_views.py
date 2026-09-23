@@ -25,6 +25,9 @@ import pandas as pd
 from io import BytesIO
 import unicodedata
 from users.models import User, Sector, SystemConfig, CommissionSpreadsheetVersion
+from users.commission_visoes import (VISAO_APARTE, VISAO_CONSULTOR, VISAO_COORDENADOR,
+                                     VISAO_GERENTE, VISAO_PROJECAO, VISAO_RECEPCIONISTA,
+                                     pode_ver_visao)
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
@@ -3009,6 +3012,20 @@ def pode_ver_comissionamento(user):
             or user_has_module(user, 'comissionamento'))
 
 
+def bloqueio_da_visao(request, codigo):
+    """Resposta de bloqueio quando a visão não está liberada para a pessoa.
+
+    Devolve ``None`` quando pode passar — assim a view fica
+    ``return bloqueio_da_visao(...) or a_visao(request)``. Quem libera cada
+    visão é o SUPERADMIN em /users/manage/system-config/ (padrão: todos).
+    """
+    if pode_ver_visao(request.user, codigo):
+        return None
+    messages.error(request, 'Esta visão do comissionamento não está liberada para o seu '
+                            'perfil. Fale com o administrador do portal.')
+    return redirect('home')
+
+
 @login_required
 def commission_view(request):
     """
@@ -3030,22 +3047,22 @@ def commission_view(request):
 
     # Comissionamento "A parte": usuário vê o próprio comissionamento à parte
     if is_user_aparte(user):
-        return commission_aparte_view(request)
+        return bloqueio_da_visao(request, VISAO_APARTE) or commission_aparte_view(request)
 
     # Coordenador tem visão especial
     if role == 'coordenador':
-        return commission_coordenador_view(request)
-    
+        return bloqueio_da_visao(request, VISAO_COORDENADOR) or commission_coordenador_view(request)
+
     # Gerente pode ver equipe ou seu próprio
     if role == 'gerente':
-        return commission_gerente_view(request)
+        return bloqueio_da_visao(request, VISAO_GERENTE) or commission_gerente_view(request)
 
     # Recepcionista
     if role == 'recepcionista':
-        return commission_recepcionista_view(request)
-    
+        return bloqueio_da_visao(request, VISAO_RECEPCIONISTA) or commission_recepcionista_view(request)
+
     # CN padrão
-    return commission_cn_view(request)
+    return bloqueio_da_visao(request, VISAO_CONSULTOR) or commission_cn_view(request)
 
 
 @login_required

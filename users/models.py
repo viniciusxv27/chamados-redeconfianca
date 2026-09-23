@@ -68,6 +68,15 @@ class SystemConfig(models.Model):
         verbose_name='Gestores Globais de Contestação',
         help_text='Usuários liberados para gerenciar tudo em /contestacao'
     )
+    # Liberação por visão do comissionamento: {codigo_da_visao: publico}.
+    # Visão sem entrada aqui vale como "Todos", que é o comportamento de antes
+    # de a configuração existir. Ver users/commission_visoes.py.
+    commission_view_access = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name="Liberação das visões do comissionamento",
+        help_text="Quem pode abrir cada visão de /users/commission/ (Todos, Gerentes, Coordenadores)"
+    )
     display_reference_month = models.PositiveSmallIntegerField(
         null=True,
         blank=True,

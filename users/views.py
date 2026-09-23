@@ -3416,6 +3416,7 @@ def _snapshot_commission_users_for_reference(version_obj, updated_by):
 def system_config_view(request):
     """Gerenciar configurações do sistema (links das planilhas Excel)"""
     from users.models import SystemConfig, CommissionSpreadsheetVersion
+    from users.commission_visoes import PUBLICOS, visoes_para_tela
     
     # Apenas superadmin pode acessar
     if request.user.hierarchy != 'SUPERADMIN':
@@ -3629,8 +3630,32 @@ def system_config_view(request):
         'display_year_choices': available_year_choices,
         'user': request.user,
         'draft_versions': commission_versions.filter(status=CommissionSpreadsheetVersion.STATUS_DRAFT),
+        # Liberação por visão do comissionamento (card "Visões do Comissionamento").
+        'commission_visoes': visoes_para_tela(config),
+        'commission_publicos': PUBLICOS,
     }
     return render(request, 'admin/system_config.html', context)
+
+
+@login_required
+@require_POST
+def commission_visoes_config_view(request):
+    """Salva quem pode abrir cada visão do comissionamento.
+
+    Rota separada (como a liberação e a sincronização) para não misturar com o
+    formulário das planilhas: salvar um card não pode mexer no outro.
+    """
+    from users.commission_visoes import salvar_publicos
+
+    if request.user.hierarchy != 'SUPERADMIN':
+        messages.error(request, 'Apenas Superadmin pode liberar as visões do comissionamento.')
+        return redirect('dashboard')
+
+    config = salvar_publicos(request.POST)
+    config.updated_by = request.user
+    config.save(update_fields=['commission_view_access', 'updated_by', 'updated_at'])
+    messages.success(request, 'Liberação das visões do comissionamento atualizada.')
+    return redirect('system_config')
 
 
 @login_required

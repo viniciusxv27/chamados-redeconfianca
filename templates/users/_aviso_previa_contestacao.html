@@ -1,0 +1,36 @@
+{% comment %}
+Aviso de PRÉVIA nas telas do comissionamento.
+
+A fase "Antes da Contestação" mostra número que ainda vai mudar: é a prévia do
+mês, antes de a contestação corrigir exclusões e valores. Sem um aviso na cara,
+a pessoa lê aquele valor como se fosse o pagamento fechado — e cobra a diferença
+depois. Quem escolhe a fase é o seletor do cabeçalho, então o aviso acompanha
+``selected_reference_phase`` e some sozinho na visão pós-contestação.
+{% endcomment %}
+{% if selected_reference_phase == 'antes' %}
+<div role="alert"
+     class="mb-6 rounded-xl border-2 border-amber-300 bg-amber-50 p-4 flex items-start gap-3">
+    <span class="flex-shrink-0 w-10 h-10 rounded-full bg-amber-400 text-white flex items-center justify-center">
+        <i class="fas fa-triangle-exclamation"></i>
+    </span>
+    <div class="min-w-0">
+        <div class="flex items-center gap-2 flex-wrap">
+            <span class="px-2.5 py-1 rounded-full bg-amber-500 text-white text-xs font-bold uppercase tracking-wider">
+                Prévia
+            </span>
+            <span class="text-sm font-bold text-amber-900">
+                Valores antes da contestação — ainda podem mudar
+            </span>
+        </div>
+        <p class="text-xs text-amber-800 mt-1.5 leading-relaxed">
+            Estes números são uma prévia: a contestação ainda pode corrigir exclusões e valores.
+            Não use como valor final de pagamento.
+            {% if tem_filtro_fase %}
+            Para ver o fechado, troque a fase para <strong>Pós Contestação</strong> no filtro acima.
+            {% else %}
+            O valor fechado aparece na fase <strong>Pós Contestação</strong>.
+            {% endif %}
+        </p>
+    </div>
+</div>
+{% endif %}

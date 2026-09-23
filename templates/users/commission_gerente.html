@@ -63,7 +63,9 @@
             </a>
         </div>
     </div>
-    
+
+    {% include 'users/_aviso_previa_contestacao.html' with tem_filtro_fase=1 %}
+
     {% if viewing_other %}
     <div class="mb-6 p-4 bg-primary/5 border border-primary/20 rounded-xl flex items-center gap-3">
         <div class="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">

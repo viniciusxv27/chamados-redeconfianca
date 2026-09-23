@@ -61,7 +61,9 @@
             </a>
         </div>
     </div>
-    
+
+    {% include 'users/_aviso_previa_contestacao.html' with tem_filtro_fase=1 %}
+
     {% if viewing_other %}
     <!-- Visualizando usuário específico -->
     <div class="mb-6 p-4 bg-primary/5 border border-primary/20 rounded-xl flex items-center gap-3">
