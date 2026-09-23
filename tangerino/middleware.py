@@ -10,7 +10,7 @@ from django.shortcuts import redirect
 from django.urls import reverse
 
 from .ferias import esta_de_ferias
-from tangerino.agendador import disparar_se_esta_na_hora
+from tangerino.agendador import disparar_analise_se_esta_na_hora, disparar_se_esta_na_hora
 
 
 logger = logging.getLogger(__name__)
@@ -40,6 +40,9 @@ class BloqueioFeriasMiddleware:
         # agendador só consulta o banco uma vez por minuto por worker, e o
         # trabalho de verdade acontece numa thread.
         disparar_se_esta_na_hora()
+        # A análise de ponto no WhatsApp tem horário próprio (depois da sincronização)
+        # e o mesmo cuidado: throttle por processo e o trabalho numa thread.
+        disparar_analise_se_esta_na_hora()
 
         caminho = request.path
         if any(caminho.startswith(p) for p in LIBERADOS):

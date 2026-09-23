@@ -7,7 +7,7 @@ from datetime import date, timedelta
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -17,8 +17,10 @@ from django.views.decorators.http import require_POST
 from . import escala as escala_svc
 from . import ferias as ferias_svc
 from . import jornada as jornada_svc
+from . import pendencias as pendencias_svc
 from . import ponto as ponto_svc
 from . import regras_jornada as regras
+from . import relatorio as relatorio_svc
 from .middleware import limpar_decisao
 from .client import (TangerinoError, de_millis, integracao_ativa, listar_funcionarios,
                      listar_marcacoes, invalidar_cache_marcacoes, justificativas_edicao,
@@ -33,6 +35,9 @@ from .sync import (funcionarios_disponiveis, sincronizar_ferias, sincronizar_jor
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
+
+# O relatório de ponto mostra as primeiras linhas na tela; o resto sai no Excel.
+LINHAS_NA_TELA = 500
 
 
 def e_gestor(user):
@@ -948,6 +953,79 @@ def folhas_sincronizadas(request):
     return render(request, 'tangerino/folhas_sincronizadas.html', contexto)
 
 
+def pode_ver_relatorio(user):
+    """Quem abre e exporta o relatório de ponto.
+
+    Quem administra o ponto (``e_gestor``) e quem gere a Folha de Ponto — são as
+    mesmas pessoas que hoje conferem o cartão de cada um, só que aqui o período
+    inteiro sai numa planilha.
+    """
+    if e_gestor(user):
+        return True
+    try:
+        from folhaponto.views import can_manage_folhaponto
+        return can_manage_folhaponto(user)
+    except Exception:                                               # noqa: BLE001 — nunca derruba a tela
+        return False
+
+
+def _recusa_relatorio(request):
+    messages.error(request, 'Apenas quem administra o ponto ou a folha de ponto abre o relatório.')
+    return redirect('tangerino:meu_ponto')
+
+
+def _rotulos_do_filtro(filtros):
+    """Os nomes por trás dos ids escolhidos, para a tela e o cabeçalho da planilha."""
+    from users.models import Sector
+
+    setor = Sector.objects.filter(pk=filtros['setor']).first() if filtros['setor'] else None
+    pessoa = User.objects.filter(pk=filtros['usuario']).first() if filtros['usuario'] else None
+    return {'setor': setor.name if setor else '', 'usuario': pessoa.full_name if pessoa else ''}
+
+
+@modulo_liberado
+@login_required
+def relatorio(request):
+    """Relatório de batidas do período, com filtro de loja e pessoa — e o Excel."""
+    if not pode_ver_relatorio(request.user):
+        return _recusa_relatorio(request)
+
+    filtros = relatorio_svc.ler_filtros(request.GET)
+    linhas = relatorio_svc.linhas(filtros)
+    pessoas = pendencias_svc.pessoas_do_ponto(setor_id=filtros['setor'])
+    setores = sorted({(p.sector_id, p.sector.name) for p in pendencias_svc.pessoas_do_ponto()
+                      if p.sector_id}, key=lambda s: s[1].upper())
+    return render(request, 'tangerino/relatorio.html', {
+        'aba': 'relatorio',
+        'e_gestor': e_gestor(request.user),
+        'filtros': filtros,
+        'rotulos': _rotulos_do_filtro(filtros),
+        'linhas': linhas[:LINHAS_NA_TELA],
+        'total_linhas': len(linhas),
+        'limitado': len(linhas) > LINHAS_NA_TELA,
+        'resumo': pendencias_svc.resumo(linhas),
+        'setores': [{'id': i, 'nome': nome} for i, nome in setores],
+        'pessoas': pessoas,
+        'consulta': request.GET.urlencode(),
+        'maximo_de_dias': relatorio_svc.MAXIMO_DE_DIAS,
+    })
+
+
+@modulo_liberado
+@login_required
+def relatorio_excel(request):
+    """O mesmo relatório da tela, em .xlsx."""
+    if not pode_ver_relatorio(request.user):
+        return _recusa_relatorio(request)
+
+    filtros = relatorio_svc.ler_filtros(request.GET)
+    conteudo = relatorio_svc.planilha(relatorio_svc.linhas(filtros), filtros, _rotulos_do_filtro(filtros))
+    resposta = HttpResponse(
+        conteudo, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    resposta['Content-Disposition'] = f'attachment; filename="{relatorio_svc.nome_do_arquivo(filtros)}"'
+    return resposta
+
+
 # ─── Administração do vínculo ────────────────────────────────────────────────
 
 @modulo_liberado
@@ -1019,6 +1097,9 @@ def configuracao(request):
     from communications.models import CommunicationGroup
     config = ConfiguracaoTangerino.get()
 
+    if request.method == 'POST' and request.POST.get('secao') == 'analise':
+        return _salvar_analise(request)
+
     if request.method == 'POST' and request.POST.get('secao') == 'agendamento':
         # Formulário próprio, com os campos do agendamento e mais nada. Sem este
         # desvio ele cairia no bloco de baixo, que lê 12 checkboxes de uma vez —
@@ -1085,7 +1166,72 @@ def configuracao(request):
             tipo=SincronizacaoTangerino.Tipo.FERIAS).first(),
         'tentativas_ponto': RegistroPontoPortal.objects.all()[:10],
     }
+    contexto.update(_contexto_da_analise(request))
     return render(request, 'tangerino/configuracao.html', contexto)
+
+
+def pode_configurar_analise(user):
+    """Quem escolhe os destinatários da análise: o SUPERADMIN, como ele pediu."""
+    return bool(getattr(user, 'is_superuser', False) or getattr(user, 'hierarchy', '') == 'SUPERADMIN')
+
+
+def _contexto_da_analise(request):
+    """A seção de análise de ponto no WhatsApp dentro da configuração do módulo."""
+    from core.evolution import normalizar_numero
+
+    from .models import AnalisePontoConfig, EnvioAnalisePonto
+
+    analise = AnalisePontoConfig.get()
+    escolhidos = set(analise.destinatarios.values_list('id', flat=True))
+    pessoas = list(User.objects.filter(is_active=True).select_related('sector')
+                   .order_by('first_name', 'last_name'))
+    for pessoa in pessoas:
+        pessoa.tem_telefone = bool(normalizar_numero(getattr(pessoa, 'phone', '') or ''))
+
+    contexto = {
+        'analise': analise,
+        'pode_configurar_analise': pode_configurar_analise(request.user),
+        'pessoas_analise': pessoas,
+        'destinatarios_escolhidos': escolhidos,
+        'envios_analise': EnvioAnalisePonto.objects.select_related('user')[:10],
+    }
+    pedida = (request.GET.get('previa') or '').upper()
+    if pedida in EnvioAnalisePonto.Tipo.values and contexto['pode_configurar_analise']:
+        from . import analise as analise_svc
+        contexto['previa'] = analise_svc.previa(pedida)
+    return contexto
+
+
+@require_POST
+def _salvar_analise(request):
+    """Grava a seção da análise — só o SUPERADMIN mexe em quem recebe mensagem."""
+    from .models import AnalisePontoConfig
+
+    if not pode_configurar_analise(request.user):
+        messages.error(request, 'Só o SUPERADMIN configura a análise de ponto no WhatsApp.')
+        return redirect('tangerino:configuracao')
+
+    analise = AnalisePontoConfig.get()
+    for campo in ('ativo', 'diario', 'semanal', 'mensal', 'somente_com_pendencia'):
+        setattr(analise, campo, request.POST.get(campo) == 'on')
+    hora = parse_time(request.POST.get('hora_envio') or '')
+    if hora:
+        analise.hora_envio = hora
+    analise.atualizado_por = request.user
+    analise.save()
+    ids = [int(i) for i in request.POST.getlist('destinatarios') if str(i).isdigit()]
+    analise.destinatarios.set(User.objects.filter(pk__in=ids, is_active=True))
+
+    quantos = len(ids)
+    if analise.ativo:
+        messages.success(
+            request,
+            f'Análise de ponto ligada para {quantos} pessoa(s), às '
+            f'{analise.hora_envio:%H:%M}.' if quantos else
+            'Análise ligada, mas ninguém foi escolhido para receber.')
+    else:
+        messages.success(request, 'Análise de ponto no WhatsApp desligada.')
+    return redirect('tangerino:configuracao')
 
 
 @modulo_liberado

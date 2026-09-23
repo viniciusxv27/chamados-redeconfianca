@@ -1,0 +1,141 @@
+{% extends 'tangerino/base_tangerino.html' %}
+
+{% block tg_titulo %}Relatório de ponto{% endblock %}
+{% block tg_cabecalho %}Relatório de ponto{% endblock %}
+{% block tg_subtitulo %}Batidas, horas e pendências de {{ filtros.de|date:"d/m/Y" }} a {{ filtros.ate|date:"d/m/Y" }}{% endblock %}
+
+{% block tg_acoes %}
+<a href="{% url 'tangerino:relatorio_excel' %}{% if consulta %}?{{ consulta }}{% endif %}"
+   class="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">
+    <i class="fas fa-file-excel mr-1.5"></i>Exportar Excel
+</a>
+{% endblock %}
+
+{% block tg_conteudo %}
+<form method="get" class="tg-card p-4 mb-4 grid grid-cols-2 md:grid-cols-6 gap-3 items-end">
+    <div>
+        <label for="rel-de" class="block text-xs text-gray-500 mb-1">Data inicial</label>
+        <input id="rel-de" type="date" name="de" value="{{ filtros.de|date:'Y-m-d' }}"
+               class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm">
+    </div>
+    <div>
+        <label for="rel-ate" class="block text-xs text-gray-500 mb-1">Data final</label>
+        <input id="rel-ate" type="date" name="ate" value="{{ filtros.ate|date:'Y-m-d' }}"
+               class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm">
+    </div>
+    <div>
+        <label for="rel-setor" class="block text-xs text-gray-500 mb-1">Loja / setor</label>
+        <select id="rel-setor" name="setor" class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm">
+            <option value="">Todas</option>
+            {% for s in setores %}
+            <option value="{{ s.id }}" {% if filtros.setor == s.id %}selected{% endif %}>{{ s.nome }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div>
+        <label for="rel-usuario" class="block text-xs text-gray-500 mb-1">Pessoa</label>
+        <select id="rel-usuario" name="usuario" class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm">
+            <option value="">Todas</option>
+            {% for p in pessoas %}
+            <option value="{{ p.id }}" {% if filtros.usuario == p.id %}selected{% endif %}>{{ p.full_name|default:p.username }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <label class="flex items-center gap-2 text-sm text-gray-700 pb-1.5">
+        <input type="checkbox" name="pendencias" value="1" {% if filtros.pendencias %}checked{% endif %}
+               class="rounded border-gray-300 text-cyan-600">
+        Só com pendência
+    </label>
+    <div class="flex gap-2">
+        <button class="flex-1 px-4 py-1.5 bg-cyan-600 text-white rounded-lg text-sm hover:bg-cyan-700">Ver</button>
+        <a href="{% url 'tangerino:relatorio' %}" class="px-3 py-1.5 text-sm text-gray-500 hover:text-gray-800">Limpar</a>
+    </div>
+</form>
+
+<div class="grid grid-cols-2 lg:grid-cols-6 gap-3 mb-4">
+    <div class="tg-card p-4">
+        <p class="text-xs text-gray-500">Dias no relatório</p>
+        <p class="text-2xl font-bold text-gray-800 tabular">{{ resumo.dias }}</p>
+        <p class="text-[11px] text-gray-400">{{ resumo.pessoas }} pessoa{{ resumo.pessoas|pluralize }}</p>
+    </div>
+    <div class="tg-card p-4">
+        <p class="text-xs text-gray-500">Com pendência</p>
+        <p class="text-2xl font-bold text-amber-600 tabular">{{ resumo.com_pendencia }}</p>
+    </div>
+    <div class="tg-card p-4">
+        <p class="text-xs text-gray-500">Sem batida nenhuma</p>
+        <p class="text-2xl font-bold text-red-600 tabular">{{ resumo.sem_batida }}</p>
+    </div>
+    <div class="tg-card p-4">
+        <p class="text-xs text-gray-500">Horas previstas</p>
+        <p class="text-2xl font-bold text-gray-800 tabular">{{ resumo.previsto }}</p>
+    </div>
+    <div class="tg-card p-4">
+        <p class="text-xs text-gray-500">Horas trabalhadas</p>
+        <p class="text-2xl font-bold text-cyan-700 tabular">{{ resumo.trabalhado }}</p>
+    </div>
+    <div class="tg-card p-4">
+        <p class="text-xs text-gray-500">Horas extras</p>
+        <p class="text-2xl font-bold text-emerald-600 tabular">{{ resumo.horas_extras }}</p>
+    </div>
+</div>
+
+<div class="tg-card overflow-hidden">
+    <div class="px-4 py-3 border-b border-gray-100 flex flex-wrap items-center justify-between gap-2">
+        <h2 class="text-sm font-semibold text-gray-700"><i class="fas fa-table-list mr-1.5 text-cyan-600"></i>Dias do período</h2>
+        <p class="text-xs text-gray-500">
+            {% if limitado %}Mostrando as {{ linhas|length }} primeiras de {{ total_linhas }} linhas — o Excel traz todas.
+            {% else %}{{ total_linhas }} linha{{ total_linhas|pluralize }}.{% endif %}
+        </p>
+    </div>
+    {% if linhas %}
+    <div class="tg-scroll-x">
+        <table class="w-full text-sm table-auto">
+            <thead class="text-[11px] uppercase tracking-tight text-gray-500 border-b border-gray-100">
+                <tr>
+                    <th class="px-3 py-2 text-left">Nome</th>
+                    <th class="px-3 py-2 text-left">Loja</th>
+                    <th class="px-3 py-2 text-left">Data</th>
+                    <th class="px-2 py-2 text-center">1ª</th>
+                    <th class="px-2 py-2 text-center">2ª</th>
+                    <th class="px-2 py-2 text-center">3ª</th>
+                    <th class="px-2 py-2 text-center">4ª</th>
+                    <th class="px-2 py-2 text-right" title="Horas previstas">Prev.</th>
+                    <th class="px-2 py-2 text-right" title="Horas trabalhadas">Trab.</th>
+                    <th class="px-2 py-2 text-right" title="Intervalo (almoço)">Interv.</th>
+                    <th class="px-2 py-2 text-right" title="Horas extras">Extras</th>
+                    <th class="px-3 py-2 text-left">Pendência</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+                {% for l in linhas %}
+                <tr class="{% if l.tem_pendencia %}tg-linha-pendente{% endif %}">
+                    <td class="px-3 py-2 font-medium text-gray-800 whitespace-nowrap">{{ l.nome }}</td>
+                    <td class="px-3 py-2 text-gray-600 whitespace-nowrap">{{ l.loja }}</td>
+                    <td class="px-3 py-2 text-gray-600 whitespace-nowrap tabular">{{ l.data|date:"d/m/Y" }}</td>
+                    {% for batida in l.batidas %}
+                    <td class="px-2 py-2 text-center tabular {% if batida %}text-gray-800{% else %}text-gray-300{% endif %}">{{ batida|default:"—" }}</td>
+                    {% endfor %}
+                    <td class="px-2 py-2 text-right tabular text-gray-600">{{ l.previsto }}</td>
+                    <td class="px-2 py-2 text-right tabular text-gray-800 font-medium">{{ l.trabalhado }}</td>
+                    <td class="px-2 py-2 text-right tabular text-gray-600">{{ l.intervalo|default:"—" }}</td>
+                    <td class="px-2 py-2 text-right tabular {% if l.extras_segundos %}text-emerald-700{% else %}text-gray-400{% endif %}">{{ l.horas_extras }}</td>
+                    <td class="px-3 py-2 tg-pendencia whitespace-normal">{{ l.pendencia }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="px-4 py-8 text-center text-sm text-gray-500">
+        Nenhum dia no período com esses filtros.
+        {% if filtros.pendencias %}Sem pendência nenhuma por aqui. 👏{% endif %}
+    </p>
+    {% endif %}
+</div>
+
+<p class="text-xs text-gray-400 mt-3">
+    As batidas vêm da sincronização com o Tangerino. Dia sem nenhuma batida aparece pelo previsto da jornada
+    contratada ou da escala do portal; quando não há previsão conhecida, o dia não entra no relatório.
+</p>
+{% endblock %}

@@ -670,3 +670,95 @@ class EscalaDia(models.Model):
     @property
     def horas(self):
         return self.minutos / 60
+
+
+class AnalisePontoConfig(models.Model):
+    """Quem recebe a análise das divergências do ponto pelo WhatsApp, e quando.
+
+    Registro único (id=1). **Nasce desligada**: mensagem automática para o
+    WhatsApp de gente de verdade só começa a sair quando alguém liga aqui.
+
+    Três cadências, cada uma com o seu recorte:
+
+    - diária, todo dia, sobre o dia anterior;
+    - semanal, toda segunda-feira, sobre a semana passada (segunda a domingo);
+    - mensal, no último dia útil do mês, sobre o mês corrente.
+
+    O envio é de quem o SUPERADMIN escolher em ``destinatarios`` — cada um
+    recebe no telefone do próprio cadastro.
+    """
+
+    ativo = models.BooleanField(
+        'Análise ligada', default=False,
+        help_text='Desligada, nada é enviado. Ligue só quando os destinatários estiverem certos.')
+    diario = models.BooleanField('Todo dia (dia anterior)', default=True)
+    semanal = models.BooleanField('Toda segunda (semana anterior)', default=True)
+    mensal = models.BooleanField('No último dia útil (mês corrente)', default=True)
+    hora_envio = models.TimeField(
+        'Horário do envio', default=time(8, 0),
+        help_text='Depois da sincronização diária: a análise lê o que já foi sincronizado.')
+    somente_com_pendencia = models.BooleanField(
+        'Só enviar quando houver divergência', default=True,
+        help_text='Desligado, manda mesmo em dia sem nenhuma pendência (o "tudo certo").')
+    destinatarios = models.ManyToManyField(
+        settings.AUTH_USER_MODEL, blank=True, related_name='analises_de_ponto',
+        verbose_name='Quem recebe',
+        help_text='Recebem no WhatsApp do cadastro (campo Telefone). Sem telefone, não sai.')
+    ultimo_envio = models.DateTimeField(null=True, blank=True, verbose_name='Última rodada automática')
+    atualizado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='+', verbose_name='Atualizada por')
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Análise de ponto no WhatsApp'
+        verbose_name_plural = 'Análise de ponto no WhatsApp'
+
+    def __str__(self):
+        return 'Análise de ponto no WhatsApp'
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+
+class EnvioAnalisePonto(models.Model):
+    """Uma análise mandada (ou tentada) para uma pessoa — no máximo uma por tipo e período.
+
+    A linha é gravada ANTES do envio, e a trava única do banco é o que garante
+    que três workers do gunicorn não mandem a mesma análise três vezes.
+    """
+
+    class Tipo(models.TextChoices):
+        DIARIO = 'DIARIO', 'Diária (dia anterior)'
+        SEMANAL = 'SEMANAL', 'Semanal (semana anterior)'
+        MENSAL = 'MENSAL', 'Mensal (mês corrente)'
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='envios_analise_ponto',
+        verbose_name='Destinatário')
+    tipo = models.CharField(max_length=10, choices=Tipo.choices, verbose_name='Cadência')
+    periodo_inicio = models.DateField(verbose_name='Início do período')
+    periodo_fim = models.DateField(verbose_name='Fim do período')
+    enviado = models.BooleanField(default=False, verbose_name='Enviado')
+    detalhe = models.CharField(max_length=255, blank=True, verbose_name='Retorno do envio')
+    pessoas = models.PositiveIntegerField(default=0, verbose_name='Pessoas com divergência')
+    dias = models.PositiveIntegerField(default=0, verbose_name='Dias com divergência')
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Envio da análise de ponto'
+        verbose_name_plural = 'Envios da análise de ponto'
+        ordering = ['-criado_em']
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'tipo', 'periodo_fim'],
+                                    name='tangerino_analise_uma_por_periodo'),
+        ]
+
+    def __str__(self):
+        return f'{self.get_tipo_display()} · {self.user} · {self.periodo_fim:%d/%m/%Y}'

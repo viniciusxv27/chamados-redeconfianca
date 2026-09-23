@@ -1,4 +1,4 @@
-"""Sincronização diária do Tangerino sem cron.
+"""Sincronização diária do Tangerino — e a análise de ponto no WhatsApp — sem cron.
 
 Produção roda só gunicorn (3 workers sync): não existe cron, celery nem
 processo separado. Então quem dispara a sincronização é a primeira requisição
@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 # Um por processo: evita ir ao banco a cada requisição.
 _ultima_checagem = None
+_ultima_checagem_analise = None
 _intervalo_checagem = 60          # segundos
 _trava_local = threading.Lock()
 
@@ -141,3 +142,83 @@ def models_Q_antes_de(alvo):
     from django.db.models import Q
     return Q(ultima_sincronizacao_automatica__lt=alvo) | Q(
         ultima_sincronizacao_automatica__isnull=True)
+
+
+# ---------------------------------------------------------------------------
+# Análise de ponto no WhatsApp (diária, semanal e mensal)
+# ---------------------------------------------------------------------------
+def _hoje_na_hora_da_analise(config, agora):
+    return timezone.make_aware(
+        timezone.datetime.combine(timezone.localdate(agora), config.hora_envio),
+        timezone.get_current_timezone())
+
+
+def esta_na_hora_da_analise(config, agora=None):
+    """Já passou do horário de hoje e a análise ainda não rodou hoje?"""
+    if not config.ativo:
+        return False
+    agora = agora or timezone.now()
+    alvo = _hoje_na_hora_da_analise(config, agora)
+    if agora < alvo:
+        return False
+    anterior = config.ultimo_envio
+    return anterior is None or anterior < alvo
+
+
+def _analise_em_segundo_plano():
+    try:
+        from tangerino.analise import enviar
+        resumo = enviar()
+        logger.info('Análise de ponto no WhatsApp: %s', resumo)
+    except Exception as exc:                          # nunca derruba a thread
+        logger.exception('Análise de ponto no WhatsApp quebrou: %s', exc)
+    finally:
+        close_old_connections()
+
+
+def disparar_analise_se_esta_na_hora():
+    """Chamado pelo middleware. Devolve True se ESTA chamada disparou a análise.
+
+    Mesmo arranjo da sincronização: throttle por processo, corrida resolvida no
+    banco por UPDATE condicional e o trabalho numa thread.
+    """
+    global _ultima_checagem_analise
+
+    agora = timezone.now()
+    with _trava_local:
+        if (_ultima_checagem_analise is not None
+                and (agora - _ultima_checagem_analise).total_seconds() < _intervalo_checagem):
+            return False
+        _ultima_checagem_analise = agora
+
+    try:
+        from django.db.models import Q
+
+        from tangerino.models import AnalisePontoConfig
+
+        config = AnalisePontoConfig.get()
+        if not esta_na_hora_da_analise(config, agora):
+            return False
+
+        # Espera a sincronização do dia: sem ela, a marcação de ontem ainda não
+        # está no banco e a análise sairia pela metade. Como nada é marcado aqui,
+        # a próxima visita depois da sincronização dispara.
+        from tangerino.analise import sincronizacao_de_hoje
+        if not sincronizacao_de_hoje():
+            return False
+
+        alvo = _hoje_na_hora_da_analise(config, agora)
+        ganhou = (AnalisePontoConfig.objects
+                  .filter(pk=config.pk)
+                  .filter(Q(ultimo_envio__lt=alvo) | Q(ultimo_envio__isnull=True))
+                  .update(ultimo_envio=agora))
+        if not ganhou:
+            return False
+
+        threading.Thread(target=_analise_em_segundo_plano,
+                         name='tangerino-analise-ponto', daemon=True).start()
+        logger.info('Análise de ponto no WhatsApp das %s disparada.', config.hora_envio)
+        return True
+    except Exception as exc:                          # jamais quebra a página
+        logger.warning('Agendador da análise de ponto ignorado por erro: %s', exc)
+        return False

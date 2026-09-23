@@ -355,6 +355,7 @@ def browse(request, sector_id, folder_id=None):
         'pode_download': nivel >= ORDEM['DOWNLOAD'],
         'pode_upload': nivel >= ORDEM['UPLOAD'], 'pode_editar': nivel >= ORDEM['EDIT'],
         'pode_excluir': nivel >= ORDEM['DELETE'], 'is_superadmin': perms.is_superadmin(request.user),
+        'pode_gerir_acesso': nivel >= ORDEM['ADMIN'],
         'e_raiz': not folder_id or folder_id == mapping.folder_id,
     }
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
@@ -601,6 +602,108 @@ def _resp(request, ok, msg, sector_id=None, folder_id='', erros=None, extra=None
     if sector_id:
         return redirect(reverse_browse(sector_id, folder_id))
     return redirect('drive:index')
+
+
+# ─── acesso a um item só (botão direito na pasta/arquivo) ────────────────────
+# A tela de Permissões libera o SETOR inteiro (ou uma pasta digitada pelo id).
+# Aqui a liberação sai de dentro da própria listagem, no item em que se clicou:
+# vira uma DrivePermission com `folder_id` = o id daquele item. O motor já lê
+# isso — a cadeia de pastas de quem for abrir inclui o próprio id (permissions.py),
+# então a regra vale para a pasta e tudo abaixo dela, ou só para aquele arquivo.
+
+
+def _pk(valor):
+    valor = (valor or '').strip()
+    return int(valor) if valor.isdigit() else 0
+
+
+def _item_gerenciavel(request, file_id):
+    """(mapping, meta) do item — só para quem pode ADMINISTRAR ali.
+
+    Mesmo portão das outras ações: o nível ADMINISTRAR naquele item, que é o
+    SUPERADMIN, o gestor do setor ou quem recebeu ADMINISTRAR na cadeia. A
+    resolução pela cadeia de pastas continua valendo (RNF05): um id de fora do
+    setor não passa nem adivinhando.
+    """
+    mapping, nivel = perms.file_allowed(request.user, file_id)
+    if not mapping or nivel < ORDEM['ADMIN']:
+        _deny(request, file_id=file_id, sector=mapping.sector if mapping else None,
+              detalhe='liberar acesso ao item')
+    try:
+        meta = gdrive.obter(file_id, fields='id,name,mimeType')
+    except gdrive.DriveError:
+        meta = {'id': file_id, 'name': '', 'mimeType': ''}
+    meta.setdefault('id', file_id)
+    return mapping, meta
+
+
+def _acessos_do_item(mapping, file_id):
+    """Quem já foi liberado NAQUELE item (as do setor inteiro não entram)."""
+    liberacoes = (DrivePermission.objects
+                  .filter(mapping=mapping, folder_id=file_id, alvo=DrivePermission.Alvo.USER)
+                  .select_related('target_user', 'criado_por').order_by('-criado_em'))
+    return [{
+        'id': p.id,
+        'nome': p.target_user.full_name if p.target_user else '—',
+        'nivel': p.get_nivel_display(),
+        'por': (p.criado_por.full_name if p.criado_por else ''),
+        'em': timezone.localtime(p.criado_em).strftime('%d/%m/%Y'),
+    } for p in liberacoes]
+
+
+@login_required
+def item_acesso(request, file_id):
+    """GET: quem já tem acesso ao item e a quem dá para liberar. POST: libera."""
+    mapping, meta = _item_gerenciavel(request, file_id)
+    nome = meta.get('name') or file_id
+
+    if request.method == 'POST':
+        pessoa = User.objects.filter(pk=_pk(request.POST.get('usuario')), is_active=True).first()
+        if not pessoa:
+            return _resp(request, False, 'Escolha uma pessoa ativa para liberar o acesso.')
+        nivel = (request.POST.get('nivel') or DrivePermission.Nivel.VIEW).strip()
+        if nivel not in DrivePermission.Nivel.values:
+            return _resp(request, False, 'Nível de acesso inválido.')
+        p, _nova = DrivePermission.objects.update_or_create(
+            mapping=mapping, folder_id=file_id, alvo=DrivePermission.Alvo.USER, target_user=pessoa,
+            defaults={'nivel': nivel, 'folder_name': nome[:255], 'criado_por': request.user})
+        audit.registrar(request.user, DriveAuditLog.Acao.PERM, request=request, file_id=file_id,
+                        file_name=nome, sector=mapping.sector, folder_id=file_id,
+                        detalhe=f'{pessoa.full_name} · {p.get_nivel_display()}')
+        return _resp(request, True, f'{pessoa.full_name} agora acessa “{nome}” ({p.get_nivel_display()}).',
+                     mapping.sector_id, extra={'acessos': _acessos_do_item(mapping, file_id)})
+
+    return JsonResponse({
+        'ok': True,
+        'nome': nome,
+        'pasta': meta.get('mimeType') == FOLDER_MIME,
+        'setor': mapping.sector.name,
+        'niveis': [{'valor': v, 'rotulo': r} for v, r in DrivePermission.Nivel.choices],
+        'pessoas': [{'id': u.id, 'nome': u.full_name or u.username}
+                    for u in User.objects.filter(is_active=True).order_by('first_name', 'last_name')],
+        'acessos': _acessos_do_item(mapping, file_id),
+    })
+
+
+@login_required
+@require_POST
+def item_acesso_remover(request, file_id):
+    """Tira uma liberação feita naquele item (as do setor inteiro ficam onde estão)."""
+    mapping, meta = _item_gerenciavel(request, file_id)
+    p = (DrivePermission.objects
+         .filter(pk=_pk(request.POST.get('permissao')), mapping=mapping, folder_id=file_id,
+                 alvo=DrivePermission.Alvo.USER)
+         .select_related('target_user').first())
+    if not p:
+        return _resp(request, False, 'Esta liberação não existe mais.')
+    quem = p.target_user.full_name if p.target_user else '—'
+    detalhe = f'{quem} · {p.get_nivel_display()} retirado'
+    p.delete()
+    audit.registrar(request.user, DriveAuditLog.Acao.PERM, request=request, file_id=file_id,
+                    file_name=meta.get('name', ''), sector=mapping.sector, folder_id=file_id,
+                    detalhe=detalhe)
+    return _resp(request, True, f'{quem} não acessa mais este item.', mapping.sector_id,
+                 extra={'acessos': _acessos_do_item(mapping, file_id)})
 
 
 # ─── favoritos / recentes ────────────────────────────────────────────────────

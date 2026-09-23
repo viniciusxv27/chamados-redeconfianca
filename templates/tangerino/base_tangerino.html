@@ -44,6 +44,11 @@
     .tg-marco-saida::before { background: #DC2626; box-shadow: 0 0 0 1px #DC2626; }
     .tg-marco-pendente::before { background: #F59E0B; box-shadow: 0 0 0 1px #F59E0B; }
     .tabular { font-variant-numeric: tabular-nums; }
+    /* Relatório de ponto: a linha com pendência e o texto do motivo, nos dois temas. */
+    .tg-linha-pendente { background: #FFFBEB; }
+    .tg-pendencia { color: #92400E; }
+    html.dark .tg-linha-pendente { background: rgba(245, 158, 11, .12); }
+    html.dark .tg-pendencia { color: #FBBF24; }
 </style>
 {% endblock %}
 
@@ -81,6 +86,10 @@
         <a href="{% url 'tangerino:ponto_equipe' %}"
            class="tg-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'ponto_equipe' %}tg-tab-active{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
             <i class="fas fa-users mr-1.5"></i>Ponto da equipe
+        </a>
+        <a href="{% url 'tangerino:relatorio' %}"
+           class="tg-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'relatorio' %}tg-tab-active{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
+            <i class="fas fa-file-excel mr-1.5"></i>Relatório
         </a>
         <a href="{% url 'tangerino:ferias_equipe' %}"
            class="tg-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'ferias_equipe' %}tg-tab-active{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">

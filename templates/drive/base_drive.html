@@ -13,6 +13,8 @@
     .dv-card { transition: box-shadow .15s, transform .15s, border-color .15s; }
     .dv-card:hover { box-shadow: 0 8px 24px rgba(16,24,40,.10); transform: translateY(-1px); border-color:#c7d2fe; }
     .dv-drop.dragover { outline: 2px dashed #2563eb; outline-offset: -6px; background: #eff6ff; }
+    /* Toque longo abre o menu do item; sem isso o iOS abre a bandeja dele por cima. */
+    .dv-item { -webkit-touch-callout: none; }
     .dv-scroll-x { overflow-x:auto; -webkit-overflow-scrolling:touch; }
     .dv-scroll-x::-webkit-scrollbar { height:6px; } .dv-scroll-x::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:3px; }
 </style>

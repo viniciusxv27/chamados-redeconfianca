@@ -1,6 +1,7 @@
 {% extends 'tangerino/base_tangerino.html' %}
 
 {% block tg_titulo %}Configuração{% endblock %}
+
 {% block tg_cabecalho %}Configuração do módulo{% endblock %}
 {% block tg_subtitulo %}Liga e desliga cada função sem precisar de deploy{% endblock %}
 
@@ -349,6 +350,115 @@
     </div>
 </div>
 
+<!-- Análise de ponto no WhatsApp -->
+<div class="tg-card p-5 mt-4">
+    <h2 class="text-sm font-semibold text-gray-700 mb-1">
+        <i class="fab fa-whatsapp text-emerald-600 mr-1.5"></i>Análise de ponto no WhatsApp
+    </h2>
+    <p class="text-xs text-gray-400 mb-4">
+        Manda as divergências do ponto para quem você escolher: todo dia (do dia anterior), toda
+        segunda (da semana passada) e no último dia útil do mês (do mês corrente). A mensagem vem
+        agrupada por loja, com o nome do colaborador e o que faltou em cada dia. Sai no horário
+        marcado, depois da sincronização — e nasce desligada.
+    </p>
+
+    {% if not pode_configurar_analise %}
+    <p class="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2">Só o SUPERADMIN escolhe quem recebe a análise.</p>
+    {% else %}
+    <form method="post" class="space-y-4">
+        {% csrf_token %}
+        <input type="hidden" name="secao" value="analise">
+
+        <label class="flex items-start gap-3 cursor-pointer">
+            <input type="checkbox" name="ativo" class="mt-0.5 rounded" {% if analise.ativo %}checked{% endif %}>
+            <span>
+                <span class="block text-sm text-gray-800">Enviar a análise automaticamente</span>
+                <span class="block text-xs text-gray-400">Desligada, nada sai — nem a diária, nem a semanal, nem a mensal.</span>
+            </span>
+        </label>
+
+        <div class="grid sm:grid-cols-3 gap-2">
+            <label class="flex items-center gap-2 text-sm text-gray-700">
+                <input type="checkbox" name="diario" class="rounded" {% if analise.diario %}checked{% endif %}> Diária (dia anterior)
+            </label>
+            <label class="flex items-center gap-2 text-sm text-gray-700">
+                <input type="checkbox" name="semanal" class="rounded" {% if analise.semanal %}checked{% endif %}> Semanal (segunda-feira)
+            </label>
+            <label class="flex items-center gap-2 text-sm text-gray-700">
+                <input type="checkbox" name="mensal" class="rounded" {% if analise.mensal %}checked{% endif %}> Mensal (último dia útil)
+            </label>
+        </div>
+
+        <div class="flex items-end gap-3 flex-wrap">
+            <div>
+                <label for="an-hora" class="block text-xs text-gray-500 mb-1">Horário do envio</label>
+                <input id="an-hora" type="time" name="hora_envio" value="{{ analise.hora_envio|time:'H:i' }}"
+                       class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            </div>
+            <label class="flex items-center gap-2 text-sm text-gray-700 pb-2">
+                <input type="checkbox" name="somente_com_pendencia" class="rounded"
+                       {% if analise.somente_com_pendencia %}checked{% endif %}>
+                Só mandar quando houver divergência
+            </label>
+        </div>
+
+        <div>
+            <p class="text-xs text-gray-500 mb-1">Quem recebe ({{ destinatarios_escolhidos|length }} selecionado{{ destinatarios_escolhidos|length|pluralize }})</p>
+            <input type="search" id="an-busca" placeholder="Buscar pessoa…"
+                   class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mb-2">
+            <div class="max-h-60 overflow-y-auto border border-gray-100 rounded-lg divide-y divide-gray-50">
+                {% for p in pessoas_analise %}
+                <label class="an-pessoa flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-gray-50"
+                       data-busca="{{ p.full_name|lower }} {{ p.sector.name|default:''|lower }}">
+                    <input type="checkbox" name="destinatarios" value="{{ p.id }}" class="rounded"
+                           {% if p.id in destinatarios_escolhidos %}checked{% endif %}>
+                    <span class="min-w-0 flex-1">
+                        <span class="block text-sm text-gray-800 truncate">{{ p.full_name|default:p.username }}</span>
+                        <span class="block text-[11px] text-gray-400 truncate">{{ p.sector.name|default:'sem loja' }}{% if not p.tem_telefone %} · sem telefone no cadastro{% endif %}</span>
+                    </span>
+                </label>
+                {% endfor %}
+            </div>
+            <p class="text-[11px] text-gray-400 mt-1">Quem está sem telefone no cadastro fica sem receber, mesmo marcado.</p>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+            <button class="px-5 py-2.5 bg-gray-900 text-white rounded-lg text-sm font-semibold hover:bg-black">
+                <i class="fas fa-check mr-1.5"></i>Salvar a análise
+            </button>
+            <a href="?previa=DIARIO" class="px-3 py-2 text-sm text-cyan-700 hover:underline">Ver prévia da diária</a>
+            <a href="?previa=SEMANAL" class="px-3 py-2 text-sm text-cyan-700 hover:underline">da semanal</a>
+            <a href="?previa=MENSAL" class="px-3 py-2 text-sm text-cyan-700 hover:underline">da mensal</a>
+        </div>
+    </form>
+
+    {% if previa %}
+    <div class="mt-4 pt-4 border-t border-gray-100">
+        <p class="text-xs text-gray-500 mb-1">Prévia — {{ previa.inicio|date:"d/m/Y" }} a {{ previa.fim|date:"d/m/Y" }} (nada foi enviado)</p>
+        <pre class="bg-gray-50 border border-gray-100 rounded-lg p-3 text-xs text-gray-700 whitespace-pre-wrap">{{ previa.texto }}</pre>
+    </div>
+    {% endif %}
+
+    {% if envios_analise %}
+    <div class="mt-4 pt-4 border-t border-gray-100">
+        <p class="text-xs text-gray-500 mb-2">Últimos envios</p>
+        <div class="space-y-1">
+            {% for e in envios_analise %}
+            <p class="text-xs text-gray-600">
+                <span class="{% if e.enviado %}text-emerald-600{% else %}text-red-600{% endif %}">
+                    <i class="fas fa-circle text-[7px] align-middle mr-1"></i></span>
+                {{ e.get_tipo_display }} · {{ e.user.full_name|default:e.user.username }} ·
+                {{ e.periodo_inicio|date:"d/m" }}–{{ e.periodo_fim|date:"d/m" }} ·
+                {{ e.dias }} dia{{ e.dias|pluralize }} de {{ e.pessoas }} pessoa{{ e.pessoas|pluralize }}
+                {% if not e.enviado %}<span class="text-red-600">— {{ e.detalhe|truncatechars:80 }}</span>{% endif %}
+            </p>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+    {% endif %}
+</div>
+
 <!-- Diagnóstico das tentativas de marcação -->
 {% if tentativas_ponto %}
 <div class="tg-card overflow-hidden mt-4">
@@ -378,4 +488,20 @@
 </div>
 {% endif %}
 
+{% endblock %}
+
+{% block extra_js %}
+<script>
+/* Busca simples na lista de quem recebe a análise de ponto. */
+(function () {
+    var busca = document.getElementById('an-busca');
+    if (!busca) { return; }
+    busca.addEventListener('input', function () {
+        var termo = busca.value.trim().toLowerCase();
+        document.querySelectorAll('.an-pessoa').forEach(function (linha) {
+            linha.style.display = (!termo || linha.dataset.busca.indexOf(termo) !== -1) ? '' : 'none';
+        });
+    });
+})();
+</script>
 {% endblock %}

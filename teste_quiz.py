@@ -448,8 +448,8 @@ try:
     t('o responsável inicia: primeira pergunta no ar', st == 200 and d['fase'] == 'PERGUNTA' and d['indice'] == 0
       and d['restante_ms'] == 20000, d)
     t('quem ainda não entrou recebe o aviso "O quiz começou!" (no portal)',
-      set(Notification.objects.filter(title='O quiz começou!').values_list('user__username', flat=True))
-      == {'zzquiz.ana', 'zzquiz.ausente', 'zzquiz.novato'})
+      set(Notification.objects.filter(title='O quiz começou!', user__username__startswith='zzquiz.')
+          .values_list('user__username', flat=True)) == {'zzquiz.ana', 'zzquiz.ausente', 'zzquiz.novato'})
     st, _ = acao(cg, 'iniciar')
     t('iniciar de novo não vale', st == 409)
     t('o painel ao vivo não mostra qual é a certa', all('correta' not in a for a in d['alternativas']))

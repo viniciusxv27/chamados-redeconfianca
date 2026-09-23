@@ -10,6 +10,8 @@ urlpatterns = [
     path('ponto/bloqueado/', views.bloqueado, name='bloqueado'),
     path('ponto/equipe/', views.ponto_equipe, name='ponto_equipe'),
     path('ponto/folhas/', views.folhas_sincronizadas, name='folhas_sincronizadas'),
+    path('ponto/relatorio/', views.relatorio, name='relatorio'),
+    path('ponto/relatorio.xlsx', views.relatorio_excel, name='relatorio_excel'),
 
     # Escala (quadro semanal montado no portal)
     path('ponto/escala/', views.escala, name='escala'),

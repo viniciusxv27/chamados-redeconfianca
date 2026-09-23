@@ -23,6 +23,9 @@ urlpatterns = [
     path('file/<str:file_id>/excluir/', views.file_delete, name='file_delete'),
     path('file/<str:file_id>/favoritar/', views.favorite_toggle, name='favorite_toggle'),
     path('file/<str:file_id>/editar-no-computador/', edicao_local.iniciar_edicao, name='edicao_local_iniciar'),
+    # Liberar aquele arquivo/pasta para uma pessoa, pelo menu da própria listagem.
+    path('file/<str:file_id>/acesso/', views.item_acesso, name='item_acesso'),
+    path('file/<str:file_id>/acesso/remover/', views.item_acesso_remover, name='item_acesso_remover'),
     path('file/<str:file_id>/', views.file_preview, name='file_preview'),
 
     # Áreas pessoais

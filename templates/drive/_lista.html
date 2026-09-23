@@ -1,6 +1,8 @@
 {% load drive_extras %}
 {% for item in itens %}
-<div class="dv-card bg-white border border-gray-100 rounded-xl p-3 relative group">
+{# data-* para o botão direito e o toque longo — ver browse.html. #}
+<div class="dv-card dv-item bg-white border border-gray-100 rounded-xl p-3 relative group"
+     data-id="{{ item.id }}" data-nome="{{ item.name }}">
     <a href="{% if item.is_folder %}{% url 'drive:browse_folder' mapping.sector_id item.id %}{% else %}{% url 'drive:file_preview' item.id %}{% endif %}"
        class="block">
         <div class="flex items-start gap-3">
@@ -26,10 +28,12 @@
         </form>
         {% endif %}
         <div class="relative">
-            <button type="button" onclick="dvMenu(this)" class="w-7 h-7 rounded-md hover:bg-gray-100 text-gray-400 opacity-0 group-hover:opacity-100 focus:opacity-100">
+            {# No toque não existe passar o mouse: o "⋯" fica sempre à mostra no celular. #}
+            <button type="button" onclick="dvMenu(this)" title="Mais ações" aria-label="Mais ações de {{ item.name }}"
+                    aria-haspopup="menu" class="dv-kebab w-7 h-7 rounded-md hover:bg-gray-100 text-gray-400 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100">
                 <i class="fas fa-ellipsis-vertical"></i>
             </button>
-            <div class="dv-menu hidden absolute right-0 top-8 z-20 w-44 bg-white border border-gray-100 rounded-lg shadow-lg py-1 text-sm">
+            <div class="dv-menu hidden absolute right-0 top-8 z-20 w-60 bg-white border border-gray-100 rounded-lg shadow-lg py-1 text-sm" role="menu">
                 <a href="{% if item.is_folder %}{% url 'drive:browse_folder' mapping.sector_id item.id %}{% else %}{% url 'drive:file_preview' item.id %}{% endif %}"
                    class="block px-3 py-1.5 hover:bg-gray-50"><i class="fas fa-eye w-4 mr-1.5 text-gray-400"></i>Abrir</a>
                 {% if not item.is_folder and pode_download %}
@@ -37,6 +41,9 @@
                 {% endif %}
                 {% if pode_editar %}
                 <button type="button" onclick="dvRenomear('{{ item.id }}','{{ item.name|escapejs }}')" class="w-full text-left px-3 py-1.5 hover:bg-gray-50"><i class="fas fa-pen w-4 mr-1.5 text-gray-400"></i>Renomear</button>
+                {% endif %}
+                {% if pode_gerir_acesso %}
+                <button type="button" onclick="dvAcesso('{{ item.id }}','{{ item.name|escapejs }}')" class="w-full text-left px-3 py-1.5 hover:bg-gray-50"><i class="fas fa-user-plus w-4 mr-1.5 text-gray-400"></i>Dar acesso a uma pessoa</button>
                 {% endif %}
                 {% if pode_excluir %}
                 <form method="post" action="{% url 'drive:file_delete' item.id %}" onsubmit="return confirm('Mover para a lixeira?');">

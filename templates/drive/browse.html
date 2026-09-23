@@ -58,15 +58,85 @@
 {% endif %}
 <form id="dv-rename-form" method="post" class="hidden">{% csrf_token %}<input type="hidden" name="nome" id="dv-rename-nome"><input type="hidden" name="folder_id" value="{{ folder_id }}"></form>
 
+{% if pode_gerir_acesso %}{% include 'drive/_acesso_item.html' %}{% endif %}
+
 <script>
-function dvMenu(btn){
-    document.querySelectorAll('.dv-menu').forEach(m => { if (m !== btn.nextElementSibling) m.classList.add('hidden'); });
-    btn.nextElementSibling.classList.toggle('hidden');
+// ── O menu do item: pelo "⋯", pelo botão direito ou por um toque longo ──────
+// Enquanto está aberto o menu flutua no <body>, preso à janela. Dentro do
+// cartão não daria: o `transform` do hover faz do cartão a origem do
+// `position: fixed`, e o menu pularia de lugar ao ganhar ou perder o hover.
+let dvAberto = null;                         // {menu, casa} do menu em cartaz
+
+function dvFecharMenus(){
+    if (!dvAberto) return;
+    dvAberto.menu.classList.add('hidden');
+    dvAberto.menu.removeAttribute('style');
+    dvAberto.casa.appendChild(dvAberto.menu);   // volta para dentro do cartão
+    dvAberto = null;
+}
+
+function dvAbrirMenu(card, x, y, pelaDireita){
+    const menu = card.dvMenuEl || card.querySelector('.dv-menu');
+    if (!menu) return;
+    card.dvMenuEl = menu;                    // o menu sai do cartão; guarda o caminho de volta
+    const eraEste = dvAberto && dvAberto.menu === menu;
+    dvFecharMenus();
+    if (eraEste) return;                     // segundo clique no mesmo botão fecha
+    const casa = menu.parentElement;
+    document.body.appendChild(menu);
+    menu.classList.remove('hidden');
+    menu.style.position = 'fixed';
+    menu.style.right = 'auto';
+    const esquerda = pelaDireita ? x - menu.offsetWidth : x;
+    menu.style.left = Math.max(8, Math.min(esquerda, window.innerWidth - menu.offsetWidth - 8)) + 'px';
+    menu.style.top = Math.max(8, Math.min(y, window.innerHeight - menu.offsetHeight - 8)) + 'px';
+    dvAberto = {menu: menu, casa: casa};
+}
+
+function dvMenu(btn){                        // o "⋯": abre logo abaixo do botão
+    const r = btn.getBoundingClientRect();
+    dvAbrirMenu(btn.closest('.dv-item'), r.right, r.bottom + 4, true);
+    // Aberto pelo teclado, o foco entra no menu (que agora mora no fim da página).
+    const primeiro = dvAberto && dvAberto.menu.querySelector('a, button');
+    if (primeiro) primeiro.focus();
 }
 document.addEventListener('click', e => {
     if (!e.target.closest('.dv-menu') && !e.target.closest('[onclick^="dvMenu"]'))
-        document.querySelectorAll('.dv-menu').forEach(m => m.classList.add('hidden'));
+        dvFecharMenus();
 });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') dvFecharMenus(); });
+
+// Delegação no contêiner: vale também para o que o "Carregar mais" trouxer.
+(function(){
+    const grade = document.getElementById('dv-grid-wrap');
+    if (!grade) return;
+    grade.addEventListener('contextmenu', e => {
+        const card = e.target.closest('.dv-item');
+        if (!card) return;
+        e.preventDefault();
+        dvAbrirMenu(card, e.clientX, e.clientY);
+    });
+    // Toque longo (~500 ms): rolar ou soltar antes cancela.
+    let toque = null, engolirClique = false;
+    grade.addEventListener('touchstart', e => {
+        const card = e.target.closest('.dv-item');
+        if (!card || e.touches.length !== 1) return;
+        const t = e.touches[0];
+        toque = setTimeout(() => {
+            toque = null;
+            engolirClique = true;            // soltar o dedo não pode abrir o arquivo
+            dvAbrirMenu(card, t.clientX, t.clientY);
+        }, 500);
+    }, {passive: true});
+    ['touchend','touchmove','touchcancel'].forEach(ev =>
+        grade.addEventListener(ev, () => { clearTimeout(toque); toque = null; }, {passive: true}));
+    grade.addEventListener('click', e => {
+        if (!engolirClique) return;
+        engolirClique = false;
+        e.preventDefault();
+        e.stopPropagation();
+    }, true);
+})();
 function dvNovaPasta(){
     const nome = prompt('Nome da nova pasta:');
     if (!nome) return;
@@ -82,6 +152,7 @@ function dvRenomear(id, nome){
     f.submit();
 }
 function dvCarregarMais(btn){
+    dvFecharMenus();                         // nenhum menu solto no <body> ao trocar a grade
     const url = new URL(window.location.href);
     url.searchParams.set('t', btn.dataset.next);
     btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1.5"></i>Carregando...';
