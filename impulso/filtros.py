@@ -159,7 +159,7 @@ def meses_disponiveis(hoje=None):
     hoje = hoje or timezone.localdate()
     ano, mes = hoje.year, hoje.month
     saida = []
-    for _ in range(MESES_PARA_TRAS + 1):
+    for _ in range(MESES_PARA_TRAS + 2):
         saida.append((f'{ano:04d}-{mes:02d}', f'{NOMES[mes - 1].capitalize()} de {ano}'))
         mes -= 1
         if mes == 0:
