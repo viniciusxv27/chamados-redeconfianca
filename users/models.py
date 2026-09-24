@@ -609,6 +609,13 @@ class User(AbstractUser):
     education_level = models.CharField(max_length=22, choices=EDUCATION_LEVEL_CHOICES,
                                        blank=True, default='',
                                        verbose_name="Grau de Instrução")
+    # Pergunta fechada, respondida no pré-cadastro. Guardar o "não" é o ponto:
+    # lista de dependentes vazia também é o cadastro que ninguém preencheu, e
+    # o RH precisa saber a diferença (salário-família, IR, plano).
+    # db_default porque os outros servidores rodam o código já commitado
+    # contra este mesmo banco: sem ele, um INSERT sem a coluna estoura.
+    has_dependents = models.BooleanField(default=False, db_default=False,
+                                         verbose_name="Possui dependentes")
     address = models.CharField(max_length=200, blank=True, default='',
                                verbose_name="Endereço")
     address_number = models.CharField(max_length=20, blank=True, default='',
@@ -1318,6 +1325,38 @@ class EmergencyContact(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.relationship}) - {self.phone}"
+
+
+class Dependent(models.Model):
+    """Dependente do colaborador: nome e documento, no mesmo desenho do contato
+    de emergência (linhas repetidas, preenchidas pela própria pessoa).
+
+    Tabela à parte porque a quantidade é da pessoa, não do formulário — ele
+    pediu "quantos tiver". A resposta fechada fica em ``User.has_dependents``.
+    """
+
+    MAX_POR_USUARIO = 10
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='dependents',
+        verbose_name="Colaborador",
+    )
+    name = models.CharField(max_length=150, verbose_name="Nome")
+    document = models.CharField(
+        max_length=30, verbose_name="Documento",
+        help_text="CPF ou número da certidão de nascimento.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Dependente"
+        verbose_name_plural = "Dependentes"
+        ordering = ['id']
+
+    def __str__(self):
+        return f"{self.name} ({self.document})"
 
 
 class UserChangeLog(models.Model):

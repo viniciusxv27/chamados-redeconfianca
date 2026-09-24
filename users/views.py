@@ -17,7 +17,8 @@ from rest_framework.permissions import IsAuthenticated
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill
 from openpyxl.utils import get_column_letter
-from .models import User, Sector, UserSession, normalize_cpf, RequiredDocument, UserDocument, EmergencyContact
+from .models import (User, Sector, UserSession, normalize_cpf, RequiredDocument, UserDocument,
+                     EmergencyContact, Dependent)
 from .serializers import UserSerializer, SectorSerializer
 from core.middleware import log_action
 import json
@@ -1631,6 +1632,9 @@ def _read_pre_registration_personal_data(request):
         'state': data.get('state', '').strip(),
         # Contatos de emergência (até 3)
         'emergency_contacts': _read_emergency_contacts(data),
+        # Dependentes: a resposta fechada e, se for "sim", a lista
+        'has_dependents': (data.get('has_dependents') or '').strip() == 'sim',
+        'dependents': _read_dependentes(data),
     }
 
     errors = []
@@ -1678,6 +1682,16 @@ def _read_pre_registration_personal_data(request):
         errors.append('Informe o número do endereço.')
     if not values['emergency_contacts']:
         errors.append('Informe ao menos um contato de emergência (nome, telefone e grau).')
+
+    # Dependentes: a pergunta é obrigatória, a lista só quando a resposta é sim.
+    # Linha pela metade (só nome ou só documento) é erro, e não silêncio: seria
+    # a pessoa achando que cadastrou o filho e o RH sem o documento dele.
+    if (data.get('has_dependents') or '').strip() not in ('sim', 'nao'):
+        errors.append('Informe se você possui dependentes.')
+    elif values['has_dependents'] and not values['dependents']:
+        errors.append('Informe o nome e o documento de cada dependente.')
+    if values['has_dependents'] and _dependentes_pela_metade(data):
+        errors.append('Cada dependente precisa de nome E documento.')
 
     return values, errors
 
@@ -1828,6 +1842,54 @@ def _emergency_rows(request, target):
     return linhas
 
 
+def _dependent_rows(request, target):
+    """As linhas de dependente do formulário, no mesmo desenho das de emergência.
+
+    Prioriza o que veio no POST (para não perder o que foi digitado quando a
+    validação falha) e, no GET, usa o que já está salvo.
+    """
+    existentes = []
+    if target and target.pk:
+        existentes = list(target.dependents.all()[:Dependent.MAX_POR_USUARIO])
+
+    linhas = []
+    for i in range(1, Dependent.MAX_POR_USUARIO + 1):
+        if request.method == 'POST':
+            nome = (request.POST.get(f'dependent_name_{i}') or '').strip()
+            documento = (request.POST.get(f'dependent_document_{i}') or '').strip()
+        else:
+            atual = existentes[i - 1] if len(existentes) >= i else None
+            nome = atual.name if atual else ''
+            documento = atual.document if atual else ''
+        linhas.append({
+            'idx': i, 'name': nome, 'document': documento,
+            'primeira': i == 1,
+            'preenchido': bool(nome or documento),
+        })
+    return linhas
+
+
+def _read_dependentes(data):
+    """Lê os dependentes do formulário. Só entra quem tem nome E documento."""
+    dependentes = []
+    for i in range(1, Dependent.MAX_POR_USUARIO + 1):
+        nome = (data.get(f'dependent_name_{i}') or '').strip()
+        documento = (data.get(f'dependent_document_{i}') or '').strip()
+        if nome and documento:
+            dependentes.append({'name': nome[:150], 'document': documento[:30]})
+    return dependentes
+
+
+def _dependentes_pela_metade(data):
+    """Alguma linha de dependente ficou com só um dos dois campos?"""
+    for i in range(1, Dependent.MAX_POR_USUARIO + 1):
+        nome = (data.get(f'dependent_name_{i}') or '').strip()
+        documento = (data.get(f'dependent_document_{i}') or '').strip()
+        if bool(nome) != bool(documento):
+            return True
+    return False
+
+
 def _read_emergency_contacts(data):
     """Lê os contatos de emergência do formulário (até 3).
 
@@ -1892,6 +1954,17 @@ def _apply_pre_registration_personal_data(target, values):
             for c in contatos[:EmergencyContact.MAX_POR_USUARIO]
         ])
 
+    # Dependentes: a lista do formulário substitui a anterior — inclusive
+    # quando a resposta vira "não", senão o dependente removido continuaria
+    # no cadastro contrariando a própria resposta.
+    target.has_dependents = bool(values.get('has_dependents'))
+    target.dependents.all().delete()
+    if target.has_dependents:
+        Dependent.objects.bulk_create([
+            Dependent(user=target, **d)
+            for d in (values.get('dependents') or [])[:Dependent.MAX_POR_USUARIO]
+        ])
+
 
 def complete_pre_registration_view(request, token):
     """Página PÚBLICA onde o colaborador conclui o cadastro e anexa os documentos."""
@@ -1940,6 +2013,7 @@ def complete_pre_registration_view(request, token):
                 'education_level_choices': User.EDUCATION_LEVEL_CHOICES,
                 'state_choices': User.STATE_CHOICES,
                 'emergency_rows': _emergency_rows(request, target),
+                'dependent_rows': _dependent_rows(request, target),
                 'form_data': request.POST,
             }
             return render(request, 'users/pre_register_complete.html', context)
@@ -1976,6 +2050,7 @@ def complete_pre_registration_view(request, token):
                 'education_level_choices': User.EDUCATION_LEVEL_CHOICES,
                 'state_choices': User.STATE_CHOICES,
                 'emergency_rows': _emergency_rows(request, target),
+                'dependent_rows': _dependent_rows(request, target),
         'form_data': None,
     }
     return render(request, 'users/pre_register_complete.html', context)
@@ -2155,6 +2230,7 @@ def adjust_pre_registration_view(request):
                 'education_level_choices': User.EDUCATION_LEVEL_CHOICES,
                 'state_choices': User.STATE_CHOICES,
                 'emergency_rows': _emergency_rows(request, target),
+                'dependent_rows': _dependent_rows(request, target),
                 'form_data': request.POST,
             }
             return render(request, 'users/pre_register_adjust.html', context)
@@ -2193,6 +2269,7 @@ def adjust_pre_registration_view(request):
                 'education_level_choices': User.EDUCATION_LEVEL_CHOICES,
                 'state_choices': User.STATE_CHOICES,
                 'emergency_rows': _emergency_rows(request, target),
+                'dependent_rows': _dependent_rows(request, target),
         'form_data': None,
     }
     return render(request, 'users/pre_register_adjust.html', context)

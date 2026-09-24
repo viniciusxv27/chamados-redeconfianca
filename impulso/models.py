@@ -1000,6 +1000,30 @@ class ProjetoFoco(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='impulso_projetos_concluidos', verbose_name='Concluído por')
 
+    # ── Aprovação da conclusão, pelo SUPERADMIN ─────────────────────────────
+    # Concluir deixou de ser o fim: é um pedido. Quem responde pelo projeto
+    # marca que entregou, e um SUPERADMIN confere — a segunda metade dos
+    # pontos cai no mês de todo mundo com tarefa no projeto, e esse peso não
+    # pode depender só de quem tem interesse nele. Reprovada, a conclusão
+    # volta a ser projeto em andamento, com o motivo à vista.
+    class Aprovacao(models.TextChoices):
+        PENDENTE = 'PENDENTE', 'Aguardando aprovação'
+        APROVADA = 'APROVADA', 'Aprovada'
+        RECUSADA = 'RECUSADA', 'Reprovada'
+
+    aprovacao = models.CharField(
+        max_length=10, choices=Aprovacao.choices, default=Aprovacao.PENDENTE,
+        # db_default porque os outros servidores rodam o código já commitado
+        # contra este mesmo banco: sem ele, um INSERT sem a coluna estoura.
+        db_default='PENDENTE', db_index=True, verbose_name='Aprovação da conclusão')
+    decidida_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='impulso_projetos_decididos', verbose_name='Decidido por')
+    decidida_em = models.DateTimeField(null=True, blank=True, verbose_name='Decidido em')
+    observacao = models.TextField(
+        blank=True, db_default='', verbose_name='Observação de quem decidiu',
+        help_text='Obrigatória na reprovação: é o que o gestor lê para corrigir.')
+
     criado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
         related_name='impulso_projetos_criados', verbose_name='Criado por')
@@ -1026,6 +1050,34 @@ class ProjetoFoco(models.Model):
         """Todas as tarefas concluídas — o momento de encerrar o projeto."""
         feitas, total = self.progresso_tarefas
         return bool(total) and feitas == total
+
+    @property
+    def entregue(self):
+        """Conclusão aprovada — é só isto que paga a segunda metade dos pontos."""
+        return self.concluido and self.aprovacao == self.Aprovacao.APROVADA
+
+    @property
+    def aguardando_aprovacao(self):
+        """Concluído pelo gestor e ainda na mesa do SUPERADMIN."""
+        return self.concluido and self.aprovacao == self.Aprovacao.PENDENTE
+
+    @property
+    def conclusao_reprovada(self):
+        """A última conclusão foi recusada: o projeto voltou a andar."""
+        return not self.concluido and self.aprovacao == self.Aprovacao.RECUSADA
+
+    def pode_decidir(self, user):
+        """Quem aprova ou reprova a conclusão: o SUPERADMIN, como ele pediu.
+
+        São dez pessoas com essa hierarquia, e o gestor do projeto não está
+        entre elas por padrão — o superuser passa (é a régua do portal inteiro)
+        mesmo tendo sido ele a concluir, senão um projeto concluído pelo único
+        SUPERADMIN de plantão ficaria parado esperando ele mesmo.
+        """
+        if not self.aguardando_aprovacao:
+            return False
+        from .utils import e_superadmin
+        return e_superadmin(user)
 
 
 class TarefaProjeto(models.Model):

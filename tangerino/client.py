@@ -80,16 +80,40 @@ def _post(base, caminho, corpo):
     return _request('POST', base, caminho, json=corpo)
 
 
-def _paginar(base, caminho, params=None, tamanho=200, limite_paginas=40):
-    """Percorre um endpoint paginado (padrão Spring: content/totalPages)."""
+def _paginar(base, caminho, params=None, tamanho=1000, limite_paginas=40):
+    """Percorre um endpoint paginado (padrão Spring: content/totalPages).
+
+    A paginação do Tangerino não é confiável e já custou dado de verdade:
+    pedindo 200 por página nos lançamentos de FERIADO, a página 1 repetia
+    exatamente a página 0 e o ``totalPages`` vinha 2 — mas existia uma página 2
+    com os 64 últimos lançamentos. O portal ficava sem eles, e feriado sem
+    lançamento vira "não houve nenhuma batida no dia" no relatório de ponto.
+
+    Por isso: página grande (uma chamada costuma bastar — 264 lançamentos vêm
+    inteiros), parada pela página curta em vez do ``totalPages``, repetição
+    descartada pelo id e um freio quando duas páginas seguidas não trazem nada
+    novo.
+    """
     params = dict(params or {})
-    itens, pagina = [], 0
+    itens, vistos, pagina, repetidas = [], set(), 0, 0
     while pagina < limite_paginas:
         params.update({'page': pagina, 'size': tamanho})
         dados = _get(base, caminho, params) or {}
-        itens.extend(dados.get('content') or [])
-        if dados.get('last') is True or pagina + 1 >= (dados.get('totalPages') or 1):
-            break
+        conteudo = dados.get('content') or []
+        novos = 0
+        for item in conteudo:
+            chave = item.get('id') if isinstance(item, dict) else None
+            if chave is not None:
+                if chave in vistos:
+                    continue
+                vistos.add(chave)
+            itens.append(item)
+            novos += 1
+        if len(conteudo) < tamanho:
+            break                                   # página curta: acabou
+        repetidas = repetidas + 1 if not novos else 0
+        if repetidas >= 2:
+            break                                   # a API está repetindo a mesma página
         pagina += 1
     return itens
 
@@ -228,15 +252,22 @@ def _marcacoes_de_um(inicio, fim, employee_id):
     return pares
 
 
-def _marcacoes_de_todos(inicio, fim):
-    """Empresa inteira. O novo endpoint é por pessoa, então busca em paralelo.
+def _marcacoes_de_todos(inicio, fim, ids=None):
+    """Empresa inteira — ou só as pessoas pedidas. O endpoint é por pessoa.
 
     O painel do gestor consultava todo mundo numa chamada só; como isso não
     existe mais, varremos os funcionários em paralelo (com teto de workers) e
     juntamos. A falha de um não derruba os demais.
+
+    Com ``ids``, varre só esse grupo: é o caso do relatório de ponto, que
+    precisa do período inteiro de uma pessoa (ou de uma loja) e não da empresa.
     """
     from concurrent.futures import ThreadPoolExecutor
-    ids = [f.get('id') for f in listar_funcionarios() if f.get('id')]
+    if ids is None:
+        ids = [f.get('id') for f in listar_funcionarios() if f.get('id')]
+    ids = [i for i in ids if i]
+    if not ids:
+        return []
 
     def _um(eid):
         try:
@@ -251,22 +282,29 @@ def _marcacoes_de_todos(inicio, fim):
     return todos
 
 
-def listar_marcacoes(inicio, fim, employee_id=None, usar_cache=True, ttl=60):
+def listar_marcacoes(inicio, fim, employee_id=None, employee_ids=None, usar_cache=True, ttl=60):
     """Marcações num intervalo de dias, no formato de pares entrada/saída.
 
     Cada item é um PAR (``dateIn``/``dateOut``); ``dateOut`` vazio significa que a
-    pessoa entrou e ainda não saiu. Sem ``employee_id`` traz a empresa inteira
-    (painel do gestor). A fonte é o endpoint ``payssego`` por funcionário — a
-    tradução para pares fica em ``_marcacoes_de_um``.
+    pessoa entrou e ainda não saiu. Sem ``employee_id``/``employee_ids`` traz a
+    empresa inteira (painel do gestor); com ``employee_ids``, só esse grupo. A
+    fonte é o endpoint ``payssego`` por funcionário — a tradução para pares fica
+    em ``_marcacoes_de_um``.
     """
-    chave = f"tangerino:marcacoes:{employee_id or 'todos'}:{inicio}:{fim}"
+    if employee_ids is not None and not employee_ids:
+        return []
+    quem = (employee_id or (f'g{len(employee_ids)}:{min(employee_ids)}-{max(employee_ids)}'
+                            if employee_ids else 'todos'))
+    chave = f"tangerino:marcacoes:{quem}:{inicio}:{fim}"
     if usar_cache:
         em_cache = cache.get(chave)
         if em_cache is not None:
             return em_cache
 
-    itens = (_marcacoes_de_um(inicio, fim, employee_id) if employee_id
-             else _marcacoes_de_todos(inicio, fim))
+    if employee_id:
+        itens = _marcacoes_de_um(inicio, fim, employee_id)
+    else:
+        itens = _marcacoes_de_todos(inicio, fim, ids=employee_ids)
     cache.set(chave, itens, ttl)
     return itens
 

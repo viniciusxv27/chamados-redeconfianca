@@ -368,9 +368,10 @@ def _nota_projeto_foco(user, inicio, fim):
     """Os pontos do Projeto FOCO, em duas metades.
 
     Metade pela entrega da parte da pessoa; a outra metade quando o projeto é
-    concluído. A régua anterior pagava tudo por tarefa concluída — quem
-    entregava a sua parte pontuava igual em projeto que saiu e em projeto que
-    morreu no meio, e ninguém tinha motivo para empurrar o conjunto.
+    concluído E a conclusão é aprovada por um SUPERADMIN. A régua anterior
+    pagava tudo por tarefa concluída — quem entregava a sua parte pontuava
+    igual em projeto que saiu e em projeto que morreu no meio, e ninguém tinha
+    motivo para empurrar o conjunto.
 
     As duas metades são proporcionais: 3 de 4 tarefas feitas valem 3/4 da
     primeira; estar em 2 projetos com 1 concluído vale metade da segunda.
@@ -394,7 +395,11 @@ def _nota_projeto_foco(user, inicio, fim):
     nota_entrega = metade * Decimal(concluidas) / Decimal(total)
 
     ids = set(tarefas.values_list('projeto_id', flat=True))
-    entregues = ProjetoFoco.objects.filter(id__in=ids, concluido=True).count()
+    # Só conclusão aprovada paga: marcar "concluído" é o pedido, e quem confere
+    # é o SUPERADMIN (ProjetoFoco.Aprovacao).
+    entregues = ProjetoFoco.objects.filter(
+        id__in=ids, concluido=True,
+        aprovacao=ProjetoFoco.Aprovacao.APROVADA).count()
     nota_conclusao = metade * Decimal(entregues) / Decimal(len(ids)) if ids else ZERO
 
     return _quantize(nota_entrega + nota_conclusao), maximo, {
@@ -432,7 +437,7 @@ def _info_projeto_foco(detalhe):
     if detalhe.get('sem_tarefas'):
         return 'Sem tarefas de projeto foco'
     return ('%s de %s tarefa(s) concluída(s) (%s pt) · %s de %s projeto(s) '
-            'concluído(s) (%s pt)' % (
+            'concluído(s) e aprovado(s) (%s pt)' % (
                 detalhe.get('concluidas', 0), detalhe.get('total', 0),
                 detalhe.get('pontos_entrega', 0),
                 detalhe.get('projetos_concluidos', 0), detalhe.get('projetos', 0),

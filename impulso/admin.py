@@ -61,12 +61,12 @@ class TarefaProjetoInline(admin.TabularInline):
 
 @admin.register(ProjetoFoco)
 class ProjetoFocoAdmin(admin.ModelAdmin):
-    list_display = ('nome', 'ativo', 'criado_por', 'criado_em')
-    list_filter = ('ativo',)
+    list_display = ('nome', 'ativo', 'concluido', 'aprovacao', 'criado_por', 'criado_em')
+    list_filter = ('ativo', 'concluido', 'aprovacao')
     search_fields = ('nome', 'descricao')
     filter_horizontal = ('membros',)
     inlines = [TarefaProjetoInline]
-    raw_id_fields = ('criado_por',)
+    raw_id_fields = ('criado_por', 'concluido_por', 'decidida_por')
 
 
 @admin.register(Ideia)

@@ -78,6 +78,8 @@ urlpatterns = [
     path('conectar/projetos/<int:projeto_id>/editar/', views.projeto_foco_edit, name='projeto_foco_edit'),
     path('conectar/projetos/<int:projeto_id>/concluir/', views.projeto_foco_concluir,
          name='projeto_foco_concluir'),
+    path('conectar/projetos/<int:projeto_id>/decidir/', views.projeto_foco_decidir,
+         name='projeto_foco_decidir'),
     path('conectar/projetos/<int:projeto_id>/tarefa/', views.tarefa_create, name='tarefa_create'),
     path('conectar/tarefa/<int:tarefa_id>/status/', views.tarefa_update_status, name='tarefa_update_status'),
     path('minhas-tarefas/', views.minhas_tarefas, name='minhas_tarefas'),

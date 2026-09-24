@@ -54,11 +54,17 @@ def ler_filtros(pedido, hoje=None):
     }
 
 
-def linhas(filtros):
+def linhas(filtros, aviso=None):
+    """As linhas do período pedido.
+
+    ``aviso`` é preenchido com o que aconteceu ao completar o período no
+    Tangerino (quantas pessoas foram buscadas, ou o erro) — a tela conta isso
+    para ninguém ler um relatório curto achando que é a realidade.
+    """
     return svc.linhas_do_periodo(
         filtros['de'], filtros['ate'], setor_id=filtros['setor'],
         usuarios=[filtros['usuario']] if filtros['usuario'] else None,
-        apenas_com_pendencia=filtros['pendencias'])
+        apenas_com_pendencia=filtros['pendencias'], aviso=aviso)
 
 
 def nome_do_arquivo(filtros):

@@ -176,6 +176,7 @@ try:
             'emergency_name_1': 'Contato Teste',
             'emergency_phone_1': '(27) 98888-0000',
             'emergency_relationship_1': 'Irmão',
+            'has_dependents': 'nao',
             'password': 'S3nha!teste', 'password_confirm': 'S3nha!teste',
             'pix_key': pix,
         }

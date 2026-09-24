@@ -991,7 +991,10 @@ def relatorio(request):
         return _recusa_relatorio(request)
 
     filtros = relatorio_svc.ler_filtros(request.GET)
-    linhas = relatorio_svc.linhas(filtros)
+    # O que faltar do período é buscado no Tangerino aqui (ver
+    # pendencias.garantir_cobertura); `aviso` volta com o que aconteceu.
+    aviso = {}
+    linhas = relatorio_svc.linhas(filtros, aviso=aviso)
     pessoas = pendencias_svc.pessoas_do_ponto(setor_id=filtros['setor'])
     setores = sorted({(p.sector_id, p.sector.name) for p in pendencias_svc.pessoas_do_ponto()
                       if p.sector_id}, key=lambda s: s[1].upper())
@@ -1008,6 +1011,12 @@ def relatorio(request):
         'pessoas': pessoas,
         'consulta': request.GET.urlencode(),
         'maximo_de_dias': relatorio_svc.MAXIMO_DE_DIAS,
+        'aviso': aviso,
+        # Filtrando uma pessoa (ou uma loja), repetir o nome dela em cada linha
+        # só rouba largura da coluna de pendência, que é a que se lê. No Excel
+        # as colunas continuam todas.
+        'mostra_nome': len({l['nome'] for l in linhas[:LINHAS_NA_TELA]}) > 1,
+        'mostra_loja': len({l['loja'] for l in linhas[:LINHAS_NA_TELA]}) > 1,
     })
 
 

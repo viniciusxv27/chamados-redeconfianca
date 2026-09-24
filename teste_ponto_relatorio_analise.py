@@ -54,13 +54,17 @@ from django.utils import timezone
 from openpyxl import load_workbook
 
 import core.evolution as evolution
+from tangerino import client
+from tangerino import feriados
 from folhaponto.models import FolhaPontoManagerPermission
 from tangerino import analise as analise_svc
 from tangerino import pendencias as svc
 from tangerino import relatorio as relatorio_svc
+from tangerino import sync as sync_svc
 from tangerino.agendador import esta_na_hora_da_analise
-from tangerino.models import (AnalisePontoConfig, ConfiguracaoTangerino, EnvioAnalisePonto, Escala,
-                              EscalaDia, MarcacaoPonto, SincronizacaoTangerino)
+from tangerino.models import (AnalisePontoConfig, CoberturaPonto, ConfiguracaoTangerino,
+                              EnvioAnalisePonto, Escala, EscalaDia, MarcacaoPonto,
+                              SincronizacaoTangerino)
 from users.models import Sector
 
 User = get_user_model()
@@ -94,6 +98,7 @@ def rede_proibida(*args, **kwargs):
 
 SEGUNDA = date(2026, 3, 2)                 # semana antiga: sem dado real por perto
 TERCA, QUARTA = SEGUNDA + timedelta(days=1), SEGUNDA + timedelta(days=2)
+QUINTA = SEGUNDA + timedelta(days=3)
 DOMINGO = SEGUNDA + timedelta(days=6)
 FUSO = timezone.get_current_timezone()
 XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
@@ -130,6 +135,13 @@ try:
         comum = pessoa('comum', 990106, loja_a)
         sem_fone = pessoa('semfone', 990107, loja_b)
         FolhaPontoManagerPermission.objects.create(user=gestor_folha)
+
+        # A cobertura é o que diz "este período já foi buscado no Tangerino".
+        # Sem ela, o relatório não acusa falta (e nem vai na API, que aqui não
+        # pode ser chamada): é a diferença entre "não bateu" e "ninguém olhou".
+        TODOS = [ana, bruno, carla, chefe, gestor_folha, comum, sem_fone]
+        CoberturaPonto.registrar([p.tangerino_employee_id for p in TODOS],
+                                 SEGUNDA - timedelta(days=60), DOMINGO + timedelta(days=60))
 
         def marcar(usuario, dia, pares, previsto=8 * 3600, aberto=False):
             campos = {}
@@ -213,6 +225,115 @@ try:
           com_jornada[(carla.full_name, QUARTA)]['pendencias'] == ['Não houve nenhuma batida no dia'],
           com_jornada.get((carla.full_name, QUARTA)))
 
+        print('\n== O QUE AINDA NÃO FOI BUSCADO NO TANGERINO ==')
+        # A sincronização diária só volta 30 dias. Pedir um período mais antigo
+        # dava "não houve nenhuma batida" em dia trabalhado — 102 dos 135 dias
+        # no relatório que mostrou o problema.
+        VELHO = SEGUNDA - timedelta(days=120)
+        t('o dia fora da cobertura não vira linha (não sei ≠ faltou)',
+          svc.linhas_do_periodo(VELHO, VELHO, setor_id=loja_a.id) == [])
+
+        chamadas = []
+
+        def sincronizacao_falsa(inicio, fim, employee_ids=None):
+            chamadas.append((inicio, fim, sorted(employee_ids or [])))
+            CoberturaPonto.registrar(employee_ids or [], inicio, fim)
+            marcar(bruno, VELHO, [((8, 0), (14, 0))])
+            return {'dias': 1}
+
+        with mock.patch('core.utils.processo_de_teste', lambda: False), \
+                mock.patch.object(sync_svc, 'sincronizar_periodo', sincronizacao_falsa):
+            aviso = {}
+            linhas_velhas = svc.linhas_do_periodo(VELHO, VELHO, setor_id=loja_a.id, aviso=aviso)
+        t('o relatório busca no Tangerino o que falta do período',
+          len(chamadas) == 1 and chamadas[0][0] <= VELHO and chamadas[0][2]
+          == sorted([ana.tangerino_employee_id, bruno.tangerino_employee_id,
+                     comum.tangerino_employee_id]), chamadas)
+        t('a busca vira aviso na tela', aviso.get('buscou') == 3 and not aviso.get('erro'), aviso)
+        t('e o que veio da API entra no relatório',
+          [(l['nome'], l['batidas'][0]) for l in linhas_velhas] == [(bruno.full_name, '08:00')],
+          linhas_velhas)
+
+        with mock.patch('core.utils.processo_de_teste', lambda: False), \
+                mock.patch.object(sync_svc, 'sincronizar_periodo',
+                                  mock.Mock(side_effect=RuntimeError('API fora do ar'))):
+            aviso = {}
+            svc.linhas_do_periodo(SEGUNDA - timedelta(days=200), SEGUNDA - timedelta(days=200),
+                                  setor_id=loja_a.id, aviso=aviso)
+        t('API fora do ar não derruba a tela, só avisa',
+          'API fora do ar' in (aviso.get('erro') or ''), aviso)
+
+        t('a cobertura não busca de novo o que já foi buscado',
+          CoberturaPonto.falta_buscar([ana.tangerino_employee_id], SEGUNDA, DOMINGO) == {})
+        t('e sabe dizer o que falta de um período mais largo',
+          list(CoberturaPonto.falta_buscar([ana.tangerino_employee_id],
+                                           SEGUNDA - timedelta(days=400), DOMINGO)) ==
+          [ana.tangerino_employee_id])
+
+        print('\n== FERIADO, ABONO E A PAGINAÇÃO DA API ==')
+        # 03/04 (Sexta-feira Santa), 21/04, 01/05 e 04/06 apareciam como falta
+        # no relatório de seis meses: o Tangerino não lança feriado nacional.
+        t('a Páscoa sai certa (o resto dos móveis vem dela)',
+          feriados.pascoa(2026) == date(2026, 4, 5) and feriados.pascoa(2027) == date(2027, 3, 28))
+        t('Sexta-feira Santa, Tiradentes, Trabalho e Corpus Christi são feriado',
+          all(feriados.e_feriado(d) for d in (date(2026, 4, 3), date(2026, 4, 21),
+                                              date(2026, 5, 1), date(2026, 6, 4))))
+        t('e um dia útil qualquer não é', not feriados.e_feriado(SEGUNDA))
+
+        FERIADO = date(2026, 5, 1)
+        CoberturaPonto.registrar([ana.tangerino_employee_id], FERIADO, FERIADO)
+        with mock.patch.object(svc, 'grades_do_tangerino',
+                               lambda: {ana.tangerino_employee_id: {d: 8 * 3600 for d in range(1, 8)}}):
+            no_feriado = svc.linhas_do_periodo(FERIADO, FERIADO, usuarios=[ana.id])
+            t('feriado nacional sem batida não vira falta', no_feriado == [], no_feriado)
+
+            util = FERIADO + timedelta(days=3)       # segunda seguinte
+            CoberturaPonto.registrar([ana.tangerino_employee_id], util, util)
+            t('mas o dia útil seguinte, sim',
+              [l['pendencia'] for l in svc.linhas_do_periodo(util, util, usuarios=[ana.id])]
+              == ['Não houve nenhuma batida no dia'])
+
+            with mock.patch.object(svc, 'abonos_do_periodo',
+                                   lambda i, f: {(ana.tangerino_employee_id, util): None}):
+                t('dia abonado (férias, atestado, feriado da loja) também não vira falta',
+                  svc.linhas_do_periodo(util, util, usuarios=[ana.id]) == [])
+
+        # A API repete a página e mente no totalPages: pedindo 200 por página,
+        # a página 1 vinha igual à 0 e os 64 últimos lançamentos sumiam.
+        paginas = {0: list(range(200)), 1: list(range(200)), 2: list(range(200, 264)), 3: []}
+
+        def get_falso(base, caminho, params=None):
+            tamanho = (params or {}).get('size') or 20
+            pagina = (params or {}).get('page') or 0
+            if tamanho >= 1000:                      # página grande: vem tudo de uma vez
+                return {'content': [{'id': i} for i in range(264)], 'totalPages': 2, 'last': True}
+            itens = paginas.get(pagina, [])
+            return {'content': [{'id': i} for i in itens], 'totalPages': 2,
+                    'last': not itens}
+
+        with mock.patch.object(client, '_get', get_falso):
+            t('a paginação não perde a última página quando a API repete',
+              len(client._paginar('x', '/y', tamanho=200)) == 264)
+            t('sem repetição: os ids são únicos',
+              len({i['id'] for i in client._paginar('x', '/y', tamanho=200)}) == 264)
+            t('e uma página grande resolve numa chamada só',
+              len(client._paginar('x', '/y')) == 264)
+
+        print('\n== BATIDAS SOBREPOSTAS ==')
+        # Visto no banco de verdade: dois pares aprovados no mesmo turno
+        # (08:00–14:00 e 08:27–14:39). Somando par a par, o dia virava 12h12.
+        um, dois = as_(QUINTA, 8, 0), as_(QUINTA, 14, 0)
+        tres, quatro = as_(QUINTA, 8, 27), as_(QUINTA, 14, 39)
+        t('a união dos pares não conta duas vezes o que se sobrepõe',
+          sync_svc._segundos_uteis([(um, dois), (tres, quatro)]) == 6 * 3600 + 39 * 60,
+          sync_svc._segundos_uteis([(um, dois), (tres, quatro)]))
+        t('e o dia normal continua somando', sync_svc._segundos_uteis(
+            [(as_(QUINTA, 8), as_(QUINTA, 12)), (as_(QUINTA, 13), as_(QUINTA, 17))]) == 8 * 3600)
+        sobreposto = marcar(carla, QUINTA, [((8, 0), (14, 0)), ((8, 27), (14, 39))])
+        motivos = svc.pendencias_do_dia(sobreposto, 8 * 3600)
+        t('e o relatório diz que as batidas se sobrepõem',
+          any('sobrepostas' in m for m in motivos), motivos)
+
         print('\n== A TELA DO RELATÓRIO ==')
         c_chefe, c_folha, c_comum = Client(), Client(), Client()
         c_chefe.force_login(chefe)
@@ -238,6 +359,10 @@ try:
         r = c_chefe.get(f'/ponto/relatorio/?de={SEGUNDA:%Y-%m-%d}&ate={DOMINGO:%Y-%m-%d}&usuario={bruno.id}')
         t('o filtro por pessoa traz só ela',
           {l['nome'] for l in r.context['linhas']} == {bruno.full_name}, r.context['total_linhas'])
+        t('e a tela larga a coluna do nome e da loja, que viraram repetição',
+          not r.context['mostra_nome'] and not r.context['mostra_loja'])
+        t('com mais de uma pessoa, o nome volta',
+          c_chefe.get(url).context['mostra_nome'])
         r = c_folha.get(url)
         t('quem gere a folha de ponto também abre', r.status_code == 200)
         r = c_comum.get(url)
@@ -325,9 +450,18 @@ try:
             t('e a mensagem é a da análise', 'Ponto de ontem' in envio.chamadas[0][1]
               and bruno.full_name in envio.chamadas[0][1])
             registro = EnvioAnalisePonto.objects.get(user=chefe, tipo=tipos.DIARIO)
+            # O tamanho é conferido contra a mesma fonte que a análise lê, e não
+            # contra um número fixo: a análise não tem filtro de loja, então
+            # gente de verdade com divergência no dia entraria na conta e
+            # quebraria um "== 2" sem nada de errado no código.
+            do_dia = svc.linhas_do_periodo(SEGUNDA, SEGUNDA, apenas_com_pendencia=True)
             t('fica registrado o que foi enviado, com o tamanho da divergência',
-              registro.enviado and registro.periodo_fim == SEGUNDA and registro.dias == 2
-              and registro.pessoas == 2, (registro.dias, registro.pessoas))
+              registro.enviado and registro.periodo_fim == SEGUNDA
+              and registro.dias == len(do_dia)
+              and registro.pessoas == len({l['usuario'].id for l in do_dia}),
+              (registro.dias, registro.pessoas, len(do_dia)))
+            t('e os dois casos do teste estão lá',
+              {bruno.id, carla.id} <= {l['usuario'].id for l in do_dia})
             envio.chamadas.clear()
             resumo = analise_svc.enviar(tipos=[tipos.DIARIO], hoje=TERCA, config=config)
             t('rodar de novo no mesmo dia não manda outra vez (quem já recebeu não recebe de novo)',

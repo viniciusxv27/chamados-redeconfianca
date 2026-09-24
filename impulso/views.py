@@ -31,9 +31,11 @@ from .models import (
 )
 from .scoring import calcular_pontuacao, filtros_de_tarefa_do_mes, linhas_detalhadas
 from .utils import (
-    FAIXAS, calcular_faixa, faixa_info, get_adms_lojas, get_colaboradores, get_gestores,
+    FAIXAS, calcular_faixa, e_superadmin, faixa_info, get_adms_lojas, get_colaboradores,
+    get_gestores, get_superadmins,
     get_colaboradores_do_gestor, get_gestores_do_setor,
     is_impulso_manager, impulso_manager_required, impulso_member_required,
+    impulso_member_or_superadmin_required,
 )
 
 User = get_user_model()
@@ -2404,7 +2406,7 @@ def conteudo_concluir(request, conteudo_id):
 # ---------------------------------------------------------------------------
 # CONECTAR — Projeto Foco
 # ---------------------------------------------------------------------------
-@impulso_member_required
+@impulso_member_or_superadmin_required
 def projeto_foco_list(request):
     user = request.user
     gestor = is_impulso_manager(user)
@@ -2428,9 +2430,21 @@ def projeto_foco_list(request):
             | Q(criado_em__date__gte=f['inicio'], criado_em__date__lte=f['fim'])
         ).distinct()
 
+    # A fila de aprovação não entra no filtro de mês: conclusão esperando
+    # decisão é tarefa de quem abre a tela, e escondê-la porque o filtro está
+    # em outro mês é o jeito mais fácil de deixar um projeto parado.
+    a_aprovar = []
+    if e_superadmin(user):
+        a_aprovar = list(ProjetoFoco.objects
+                         .filter(concluido=True,
+                                 aprovacao=ProjetoFoco.Aprovacao.PENDENTE)
+                         .select_related('concluido_por')
+                         .order_by('concluido_em'))
+
     context = {
         'projetos': projetos.prefetch_related('membros', 'tarefas').distinct(),
         'is_gestor': gestor,
+        'a_aprovar': a_aprovar,
         'active_tab': 'conectar',
         **filtros_impulso.contexto(request, f),
     }
@@ -2516,16 +2530,23 @@ def projeto_foco_edit(request, projeto_id):
     })
 
 
-@impulso_member_required
+@impulso_member_or_superadmin_required
 def projeto_foco_detail(request, projeto_id):
     projeto = get_object_or_404(ProjetoFoco, id=projeto_id)
     gestor = is_impulso_manager(request.user)
-    if not (gestor or projeto.membros.filter(id=request.user.id).exists()):
+    # O SUPERADMIN abre qualquer projeto: é dele a decisão sobre a conclusão, e
+    # é para cá que aponta o aviso que ele recebe.
+    if not (gestor or e_superadmin(request.user)
+            or projeto.membros.filter(id=request.user.id).exists()):
         messages.error(request, 'Você não faz parte deste projeto.')
         return redirect('impulso:projeto_foco_list')
 
+    # Quem decide a conclusão precisa ver o que foi entregue — por isso o
+    # SUPERADMIN enxerga a lista inteira, mesmo sem ser gestor. Mexer no status
+    # continua sendo do gestor e do responsável (tarefa_update_status).
+    ve_todas_tarefas = gestor or e_superadmin(request.user)
     tarefas = projeto.tarefas.select_related('responsavel')
-    if not gestor:
+    if not ve_todas_tarefas:
         # Membro vê apenas as tarefas destinadas a ele.
         tarefas = tarefas.filter(responsavel=request.user)
 
@@ -2544,6 +2565,8 @@ def projeto_foco_detail(request, projeto_id):
         'tarefas_feitas': feitas,
         'tarefas_total': total_tarefas,
         'tudo_entregue': projeto.tudo_entregue,
+        'pode_decidir': projeto.pode_decidir(request.user),
+        've_todas_tarefas': ve_todas_tarefas,
         'active_tab': 'conectar',
     }
     return render(request, 'impulso/projeto_detail.html', context)
@@ -2628,14 +2651,24 @@ def projeto_foco_concluir(request, projeto_id):
         if not projeto.concluido:
             messages.info(request, 'Este projeto não está concluído.')
             return redirect('impulso:projeto_foco_detail', projeto_id=projeto.id)
+        aprovada = projeto.entregue
         projeto.concluido = False
         projeto.concluido_em = None
         projeto.concluido_por = None
-        projeto.save(update_fields=['concluido', 'concluido_em', 'concluido_por'])
+        # Reabrir zera a conferência: quando for concluído de novo, é uma
+        # entrega nova, e ela volta para a mesa do SUPERADMIN.
+        projeto.aprovacao = ProjetoFoco.Aprovacao.PENDENTE
+        projeto.decidida_por = None
+        projeto.decidida_em = None
+        projeto.observacao = ''
+        projeto.save(update_fields=['concluido', 'concluido_em', 'concluido_por',
+                                    'aprovacao', 'decidida_por', 'decidida_em', 'observacao'])
         messages.warning(
             request,
-            f'"{projeto.nome}" foi reaberto — a metade dos pontos pela conclusão '
-            f'sai da pontuação do mês de quem tem tarefa nele.')
+            f'"{projeto.nome}" foi reaberto' + (
+                ' — a metade dos pontos pela conclusão sai da pontuação do mês '
+                'de quem tem tarefa nele.' if aprovada
+                else ' — a conclusão que estava esperando aprovação foi cancelada.'))
         return redirect('impulso:projeto_foco_detail', projeto_id=projeto.id)
 
     if projeto.concluido:
@@ -2645,23 +2678,100 @@ def projeto_foco_concluir(request, projeto_id):
     projeto.concluido = True
     projeto.concluido_em = timezone.now()
     projeto.concluido_por = request.user
-    projeto.save(update_fields=['concluido', 'concluido_em', 'concluido_por'])
+    # Conclusão reenviada depois de uma reprovação recomeça limpa: o motivo
+    # antigo ficaria na tela falando de uma entrega que já foi corrigida.
+    projeto.aprovacao = ProjetoFoco.Aprovacao.PENDENTE
+    projeto.decidida_por = None
+    projeto.decidida_em = None
+    projeto.observacao = ''
+    projeto.save(update_fields=['concluido', 'concluido_em', 'concluido_por',
+                                'aprovacao', 'decidida_por', 'decidida_em', 'observacao'])
 
-    # Quem tem tarefa no projeto ganha a segunda metade agora; avisar é o que
-    # transforma "a nota subiu" em "a nota subiu por causa disto".
-    envolvidos = list(User.objects.filter(
-        id__in=projeto.tarefas.exclude(responsavel__isnull=True)
-                             .values_list('responsavel_id', flat=True)))
-    if envolvidos:
-        _notify(envolvidos, 'Projeto foco concluído',
-                f'"{projeto.nome}" foi concluído. A metade dos pontos do Projeto '
-                f'FOCO pela conclusão entra na sua pontuação do mês.',
+    # Ninguém da equipe é avisado agora: os pontos só entram quando o
+    # SUPERADMIN aprovar, e avisar antes faria a nota "subir" duas vezes na
+    # cabeça de quem lê. Quem recebe o aviso é quem tem a decisão na mão.
+    decisores = list(get_superadmins())
+    if decisores:
+        _notify(decisores, 'Conclusão de projeto para aprovar',
+                f'"{projeto.nome}" foi concluído por '
+                f'{request.user.get_full_name() or request.user.email} e espera '
+                f'sua aprovação.',
                 f'/impulso/conectar/projetos/{projeto.id}/')
 
     messages.success(
         request,
-        f'"{projeto.nome}" concluído — {len(envolvidos)} pessoa(s) recebem a '
-        f'metade dos pontos pela conclusão.')
+        f'"{projeto.nome}" foi enviado para aprovação — a metade dos pontos pela '
+        f'conclusão entra quando um SUPERADMIN aprovar.')
+    return redirect('impulso:projeto_foco_detail', projeto_id=projeto.id)
+
+
+@require_POST
+@impulso_member_or_superadmin_required
+def projeto_foco_decidir(request, projeto_id):
+    """SUPERADMIN aprova ou reprova a conclusão de um projeto foco.
+
+    Mesma mecânica do `conclusao_decidir` do Conectar: quem decide não é quem
+    entregou, a reprovação exige motivo e quem precisa saber é avisado. A
+    diferença é o alcance — aqui a decisão mexe na pontuação do mês de todo
+    mundo que tem tarefa no projeto, por isso ela é do SUPERADMIN.
+    """
+    projeto = get_object_or_404(
+        ProjetoFoco.objects.select_related('concluido_por', 'criado_por'), id=projeto_id)
+
+    if not projeto.pode_decidir(request.user):
+        messages.error(request, 'Você não aprova a conclusão deste projeto.')
+        return redirect('impulso:projeto_foco_detail', projeto_id=projeto.id)
+
+    decisao = request.POST.get('decisao')
+    if decisao not in ('aprovar', 'reprovar'):
+        messages.error(request, 'Decisão inválida.')
+        return redirect('impulso:projeto_foco_detail', projeto_id=projeto.id)
+
+    observacao = (request.POST.get('observacao') or '').strip()
+    if decisao == 'reprovar' and not observacao:
+        messages.error(request, 'Escreva o motivo da reprovação — é o que o gestor '
+                                'lê para corrigir e concluir de novo.')
+        return redirect('impulso:projeto_foco_detail', projeto_id=projeto.id)
+
+    envolvidos = list(User.objects.filter(
+        id__in=projeto.tarefas.exclude(responsavel__isnull=True)
+                             .values_list('responsavel_id', flat=True)))
+    projeto.observacao = observacao[:2000]
+    projeto.decidida_por = request.user
+    projeto.decidida_em = timezone.now()
+    campos = ['aprovacao', 'observacao', 'decidida_por', 'decidida_em']
+
+    if decisao == 'aprovar':
+        projeto.aprovacao = ProjetoFoco.Aprovacao.APROVADA
+        projeto.save(update_fields=campos)
+        # Só agora os pontos existem — é este o aviso que explica a nota.
+        if envolvidos:
+            _notify(envolvidos, 'Projeto foco concluído',
+                    f'"{projeto.nome}" foi concluído e aprovado. A metade dos pontos '
+                    f'do Projeto FOCO pela conclusão entra na sua pontuação do mês.',
+                    f'/impulso/conectar/projetos/{projeto.id}/')
+        messages.success(
+            request,
+            f'"{projeto.nome}" aprovado — {len(envolvidos)} pessoa(s) recebem a '
+            f'metade dos pontos pela conclusão.')
+    else:
+        # Reprovar devolve o projeto para "em andamento": dizer "concluído" na
+        # tela de quem tem tarefa nele, sem os pontos, seria a pior das duas
+        # informações. O que foi entregue continua entregue; o projeto é que
+        # ainda não fechou.
+        projeto.aprovacao = ProjetoFoco.Aprovacao.RECUSADA
+        projeto.concluido = False
+        projeto.save(update_fields=campos + ['concluido'])
+        avisar = [u for u in ({projeto.concluido_por} | {projeto.criado_por})
+                  if u and u.id != request.user.id]
+        if avisar:
+            _notify(avisar, 'Conclusão de projeto reprovada',
+                    f'A conclusão de "{projeto.nome}" não foi aprovada. {observacao} '
+                    f'Corrija e conclua de novo.',
+                    f'/impulso/conectar/projetos/{projeto.id}/')
+        messages.success(request, f'Conclusão de "{projeto.nome}" reprovada — o projeto '
+                                  'voltou a ficar em andamento'
+                                  + (' e o gestor foi avisado.' if avisar else '.'))
     return redirect('impulso:projeto_foco_detail', projeto_id=projeto.id)
 
 

@@ -896,7 +896,7 @@ def _ler_projetos(user, args):
               f'{len(lista)} projeto(s):']
     for p in lista[:limite]:
         feitas, total = p.progresso_tarefas
-        estado = f'concluído em {_dh(p.concluido_em)}' if p.concluido else 'em andamento'
+        estado = _estado_projeto(p)
         pronto = ' · todas as tarefas entregues: pronto para concluir' if p.tudo_entregue and not p.concluido else ''
         linhas.append(f'  projeto #{p.pk} · {p.nome} · {"ativo" if p.ativo else "INATIVO"} · {estado} · '
                       f'{len(p.membros.all())} membro(s) · tarefas {feitas}/{total} concluídas{pronto}')
@@ -922,6 +922,25 @@ def _ler_projetos(user, args):
     return '\n'.join(linhas)
 
 
+def _estado_projeto(projeto, com_quem=False):
+    """Em que pé está o projeto, já contando a aprovação do SUPERADMIN.
+
+    "Concluído" sozinho passou a ser meia verdade: a segunda metade dos pontos
+    só entra quando a conclusão é aprovada, e quem pergunta ao assistente
+    precisa ouvir a mesma coisa que lê na tela.
+    """
+    quem = f' por {_nome(projeto.concluido_por)}' if com_quem and projeto.concluido_por else ''
+    if projeto.entregue:
+        return f'concluído em {_dh(projeto.concluido_em)}{quem}, aprovado por {_nome(projeto.decidida_por)}'
+    if projeto.aguardando_aprovacao:
+        return (f'concluído em {_dh(projeto.concluido_em)}{quem}, aguardando aprovação de um SUPERADMIN '
+                '(os pontos da conclusão ainda não entraram)')
+    if projeto.conclusao_reprovada:
+        motivo = _cortar(projeto.observacao, 200)
+        return 'em andamento — a última conclusão foi reprovada' + (f': {motivo}' if motivo else '')
+    return 'em andamento'
+
+
 def _projeto_visivel(user, args):
     from impulso import views as iv
     from impulso.models import ProjetoFoco
@@ -941,8 +960,7 @@ def _ler_projeto(user, args):
     hoje = timezone.localdate()
     membros = list(projeto.membros.all())
     feitas, total = projeto.progresso_tarefas
-    estado = (f'concluído em {_dh(projeto.concluido_em)} por {_nome(projeto.concluido_por)}' if projeto.concluido
-              else 'em andamento')
+    estado = _estado_projeto(projeto, com_quem=True)
     linhas = [f'Projeto foco #{projeto.pk}: {projeto.nome}',
               f'{"Ativo" if projeto.ativo else "INATIVO (as tarefas não pontuam)"} · {estado} · criado por '
               f'{_nome(projeto.criado_por)} em {_dh(projeto.criado_em)}',
@@ -2526,9 +2544,12 @@ def _previa_projeto_concluir(user, args, reabrir):
     if reabrir:
         if not projeto.concluido:
             raise Invalido('Este projeto não está concluído.')
-        linhas = [f'Reabrir o projeto foco #{projeto.pk} "{projeto.nome}" (concluído em {_dh(projeto.concluido_em)}).',
-                  'A metade dos pontos do Projeto FOCO pela conclusão sai da pontuação do mês de quem tem tarefa nele'
-                  + (f' ({_nomes(envolvidos)})' if envolvidos else '') + '. Ninguém é avisado.']
+        linhas = [f'Reabrir o projeto foco #{projeto.pk} "{projeto.nome}" (concluído em {_dh(projeto.concluido_em)}).']
+        if projeto.aguardando_aprovacao:
+            linhas.append('A conclusão que está esperando aprovação do SUPERADMIN é cancelada. Ninguém é avisado.')
+        else:
+            linhas.append('A metade dos pontos do Projeto FOCO pela conclusão sai da pontuação do mês de quem tem tarefa nele'
+                          + (f' ({_nomes(envolvidos)})' if envolvidos else '') + '. Ninguém é avisado.')
     else:
         if projeto.concluido:
             raise Invalido('Este projeto já está concluído.')
@@ -2538,8 +2559,9 @@ def _previa_projeto_concluir(user, args, reabrir):
             linhas.append('Atenção: o projeto não tem nenhuma tarefa.')
         elif feitas < total:
             linhas.append(f'Atenção: só {feitas} de {total} tarefa(s) estão concluídas.')
-        linhas.append(f'{len(envolvidos)} pessoa(s) com tarefa no projeto ({_nomes(envolvidos)}) recebem aviso e ganham a '
-                      'metade dos pontos do Projeto FOCO pela conclusão.' if envolvidos
+        linhas.append('A conclusão vai para aprovação de um SUPERADMIN — ele é avisado agora.')
+        linhas.append(f'Aprovada, {len(envolvidos)} pessoa(s) com tarefa no projeto ({_nomes(envolvidos)}) recebem aviso e '
+                      'ganham a metade dos pontos do Projeto FOCO pela conclusão.' if envolvidos
                       else 'Ninguém tem tarefa no projeto, então ninguém ganha os pontos da conclusão.')
         if not projeto.ativo:
             linhas.append('Atenção: o projeto está inativo — as tarefas dele não pontuam enquanto estiver assim.')

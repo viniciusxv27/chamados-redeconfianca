@@ -24,7 +24,8 @@ from django.utils import timezone
 from . import jornada as jornada_svc
 from .client import (MOTIVO_FERIAS_ID, de_millis, listar_ferias, listar_funcionarios,
                      listar_marcacoes, listar_saldo_horas)
-from .models import FeriasLancamento, JornadaTrabalho, MarcacaoPonto, SaldoHoras
+from .models import (CoberturaPonto, FeriasLancamento, JornadaTrabalho, MarcacaoPonto,
+                     SaldoHoras)
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
@@ -214,6 +215,27 @@ def _grades_por_funcionario():
     return grades
 
 
+def _segundos_uteis(intervalos):
+    """Quanto o dia realmente durou, sem contar duas vezes o que se sobrepõe.
+
+    O Tangerino às vezes devolve pares sobrepostos no mesmo dia (visto em 4 dos
+    5.563 dias espelhados: 08:00–14:00 e 08:27–14:39 na mesma data, os dois
+    aprovados). Somando par a par, esse dia virava 12h12 de trabalho — mais do
+    que o relógio do dia. Somando a união, dá as 6h39 que a pessoa ficou.
+    """
+    total = 0
+    fim_anterior = None
+    for comeco, fim in sorted(intervalos):
+        if fim_anterior is not None and comeco < fim_anterior:
+            comeco = fim_anterior
+        if fim > comeco:
+            total += int((fim - comeco).total_seconds())
+            fim_anterior = fim
+        elif fim_anterior is None or fim > fim_anterior:
+            fim_anterior = fim
+    return total
+
+
 def sincronizar_marcacoes(dias=30, employee_id=None):
     """Traz as marcações dos últimos N dias para a tabela MarcacaoPonto.
 
@@ -222,8 +244,26 @@ def sincronizar_marcacoes(dias=30, employee_id=None):
     Tangerino, reprocessar o mesmo período só atualiza — nunca duplica.
     """
     hoje = timezone.localdate()
-    inicio = hoje - timedelta(days=dias)
-    pares = listar_marcacoes(inicio, hoje, employee_id=employee_id, usar_cache=False)
+    return sincronizar_periodo(hoje - timedelta(days=dias), hoje,
+                               employee_ids=[employee_id] if employee_id else None)
+
+
+def sincronizar_periodo(inicio, fim, employee_ids=None):
+    """Espelha as marcações de um período qualquer — a base de ``sincronizar_marcacoes``.
+
+    Existe separado porque o relatório precisa de período antigo: a rodada
+    diária cobre 30 dias, e quem pede seis meses atrás não tem o que ler na
+    tabela. Aqui a janela é livre e dá para buscar só as pessoas pedidas — um
+    pedido por pessoa na API, feitos em paralelo.
+
+    Ao final, a faixa buscada fica registrada em ``CoberturaPonto``: é o que
+    permite diferenciar "não bateu ponto" de "nunca foi buscado".
+    """
+    if employee_ids is not None:
+        employee_ids = [e for e in dict.fromkeys(employee_ids) if e]
+        if not employee_ids:
+            return {'criados': 0, 'atualizados': 0, 'lidos': 0, 'dias': 0}
+    pares = listar_marcacoes(inicio, fim, employee_ids=employee_ids, usar_cache=False)
     usuarios = _mapa_usuarios()
 
     agora = timezone.now()
@@ -247,7 +287,7 @@ def sincronizar_marcacoes(dias=30, employee_id=None):
 
     # Quanto cada um devia ter trabalhado nesses dias, já sem feriado e abono.
     grades = _grades_por_funcionario()
-    abonos = jornada_svc.carregar_abonos(inicio, hoje)
+    abonos = jornada_svc.carregar_abonos(inicio, fim)
     # O payload novo (payssego) não traz o nome; o cadastro de funcionários tem.
     nomes = {f.get('id'): f.get('name') or '' for f in listar_funcionarios()}
 
@@ -256,14 +296,14 @@ def sincronizar_marcacoes(dias=30, employee_id=None):
         do_dia.sort(key=lambda p: p['dateIn'])
         nome = (do_dia[0].get('employeeName') or nomes.get(eid) or '')[:200]
         campos = {}
-        total = 0
         extras = []
+        intervalos = []
         aberto = False
 
         for i, par in enumerate(do_dia, start=1):
             entrada, saida = de_millis(par.get('dateIn')), de_millis(par.get('dateOut'))
             if saida and entrada:
-                total += max(0, int((saida - entrada).total_seconds()))
+                intervalos.append((entrada, saida))
             if not saida:
                 aberto = True
             if i <= 3:
@@ -274,6 +314,8 @@ def sincronizar_marcacoes(dias=30, employee_id=None):
                 extras.append(entrada.strftime('%H:%M'))
                 if saida:
                     extras.append(saida.strftime('%H:%M'))
+
+        total = _segundos_uteis(intervalos)
 
         if extras:
             logger.warning('%s em %s teve %d pares de ponto; o excedente foi para '
@@ -307,11 +349,22 @@ def sincronizar_marcacoes(dias=30, employee_id=None):
         colunas.remove('plataforma')
     if not any('edited' in p for p in pares):
         colunas.remove('editado')
+    escopo = MarcacaoPonto.objects.filter(data__gte=inicio, data__lte=fim)
+    if employee_ids is not None:
+        escopo = escopo.filter(employee_id__in=employee_ids)
     resultado = _gravar_em_lote(MarcacaoPonto, registros, colunas,
-                                chave=('employee_id', 'data'),
-                                escopo=MarcacaoPonto.objects.filter(data__gte=inicio, data__lte=hoje))
+                                chave=('employee_id', 'data'), escopo=escopo)
     resultado['lidos'] = len(pares)
     resultado['dias'] = len(registros)
+    resultado['periodo'] = (inicio, fim)
+
+    # A faixa buscada vale para todo mundo que foi consultado, inclusive quem
+    # não tem nenhuma batida no período — é justamente esse caso que o
+    # relatório precisa distinguir de "nunca foi buscado".
+    buscados = employee_ids if employee_ids is not None else [
+        f.get('id') for f in listar_funcionarios() if f.get('id')]
+    resultado['cobertura'] = CoberturaPonto.registrar(buscados, inicio, fim)
+
     # Linhas de sincronizações anteriores ficaram fora da janela e sem previsto.
     # O cálculo é local e barato, então elas são acertadas junto.
     resultado['previsto_recalculado'] = recalcular_previsto(

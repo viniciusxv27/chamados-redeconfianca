@@ -450,6 +450,32 @@
     </div>
 
     <div class="section">
+        <h2>Dependentes</h2>
+        <div class="grid">
+            <div class="field span-2">
+                <span class="label">Possui dependentes</span>
+                <span class="value">{% if target.has_dependents %}Sim{% else %}Não{% endif %}</span>
+            </div>
+            {% for dependente in target.dependents.all %}
+            <div class="field">
+                <span class="label">Nome</span>
+                <span class="value">{{ dependente.name }}</span>
+            </div>
+            <div class="field">
+                <span class="label">Documento</span>
+                <span class="value">{{ dependente.document }}</span>
+            </div>
+            {% empty %}
+            {% if target.has_dependents %}
+            <div class="field span-2">
+                <span class="value empty">Nenhum dependente informado</span>
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="section">
         <h2>Documentos e Filiação</h2>
         <div class="grid">
             <div class="field">

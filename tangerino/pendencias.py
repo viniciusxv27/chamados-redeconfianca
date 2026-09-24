@@ -35,7 +35,8 @@ from datetime import timedelta
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
-from .models import EscalaDia, MarcacaoPonto, minutos_do_dia
+from . import feriados
+from .models import CoberturaPonto, EscalaDia, MarcacaoPonto, minutos_do_dia
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
@@ -138,6 +139,25 @@ def intervalo_segundos(marcacao):
     return max(0, int((marcacao.entrada2 - marcacao.saida1).total_seconds()))
 
 
+def _sobreposicao(marcacao):
+    """Dois períodos do mesmo dia que se cruzam, em texto. '' quando está tudo certo.
+
+    Acontece quando o Tangerino guarda dois pares aprovados para o mesmo turno
+    (correção lançada sem apagar a batida original). É raro — 4 dos 5.563 dias
+    espelhados — mas o dia fica com hora a mais, e quem vê o cartão precisa
+    saber por quê.
+    """
+    pares = [(marcacao.entrada1, marcacao.saida1), (marcacao.entrada2, marcacao.saida2),
+             (marcacao.entrada3, marcacao.saida3)]
+    pares = sorted((a, b) for a, b in pares if a and b)
+    cruza = any(pares[i - 1][1] > a for i, (a, _) in enumerate(pares) if i)
+    if not cruza:
+        return ''
+    # Mostra o dia inteiro, e não só o par que cruza: é a comparação entre os
+    # dois horários que explica o problema para quem vai corrigir.
+    return ' e '.join(f'{_hora(a)}–{_hora(b)}' for a, b in pares)
+
+
 def pendencias_do_dia(marcacao, previsto):
     """Os motivos, em texto, do que está torto no dia. Lista vazia = dia certo."""
     motivos = []
@@ -168,6 +188,10 @@ def pendencias_do_dia(marcacao, previsto):
             motivos.append('Sem intervalo registrado (faltaram a 3ª e a 4ª batidas)')
     elif intervalo < INTERVALO_MINIMO and exige_intervalo:
         motivos.append(f'Almoço inferior a uma hora ({intervalo // 60} min)')
+
+    sobrepostas = _sobreposicao(marcacao)
+    if sobrepostas:
+        motivos.append(f'Batidas sobrepostas no dia ({sobrepostas})')
 
     extras = _batidas_extras(marcacao)
     if extras:
@@ -215,16 +239,69 @@ def pessoas_do_ponto(setor_id=None, usuarios=None):
                                           (p.full_name or p.get_username()).upper()))
 
 
-def linhas_do_periodo(inicio, fim, setor_id=None, usuarios=None, apenas_com_pendencia=False):
+def garantir_cobertura(employee_ids, inicio, fim):
+    """Busca no Tangerino o que o espelho local ainda não tem para o período.
+
+    A sincronização diária volta 30 dias. Um relatório de seis meses atrás não
+    tinha o que ler na tabela e saía acusando falta em dia trabalhado — 102 dos
+    135 dias, no pedido que mostrou o problema. Então o relatório busca o que
+    falta, uma chamada por pessoa (em paralelo), e guarda a faixa buscada.
+
+    Falha da API não derruba a tela: devolve o erro para quem chamou avisar, e
+    o período não coberto fica de fora da conta em vez de virar cobrança.
+    """
+    from core.utils import processo_de_teste
+
+    from .client import integracao_ativa
+
+    faltando = CoberturaPonto.falta_buscar(employee_ids, inicio, fim)
+    if not faltando:
+        return {'buscou': 0, 'erro': ''}
+    if not integracao_ativa():
+        return {'buscou': 0, 'erro': 'A integração com o Tangerino está desligada.'}
+    # Um teste que pedisse um período antigo varreria a empresa inteira na API
+    # de verdade (um pedido por pessoa). Quem quiser exercitar a busca troca
+    # `sync.sincronizar_periodo` por um dublê, como nos testes deste módulo.
+    if processo_de_teste():
+        return {'buscou': 0, 'erro': ''}
+
+    # Uma faixa só para todo mundo: a API cobra por pessoa, não por dia.
+    de = min(f[0] for f in faltando.values())
+    ate = max(f[1] for f in faltando.values())
+    try:
+        from . import sync
+        resultado = sync.sincronizar_periodo(de, ate, employee_ids=list(faltando))
+    except Exception as exc:                            # noqa: BLE001 — tela não cai por causa da API
+        logger.warning('Não foi possível completar o ponto de %s a %s: %s', de, ate, exc)
+        return {'buscou': 0, 'erro': f'Não foi possível buscar no Tangerino: {exc}'}
+    logger.info('Relatório de ponto completou %s pessoa(s) de %s a %s: %s dia(s).',
+                len(faltando), de, ate, resultado.get('dias'))
+    return {'buscou': len(faltando), 'de': de, 'ate': ate,
+            'dias': resultado.get('dias', 0), 'erro': ''}
+
+
+def linhas_do_periodo(inicio, fim, setor_id=None, usuarios=None, apenas_com_pendencia=False,
+                      buscar=True, aviso=None):
     """Uma linha por pessoa e dia do período, já com a pendência em texto.
 
     Dia de folga sem batida nenhuma não vira linha: o relatório fala dos dias em
     que a pessoa deveria estar lá ou em que houve alguma marcação.
+
+    Antes de montar as linhas, completa no Tangerino o que falta do período
+    (``buscar=False`` desliga isso). Dia fora do que já foi buscado não entra:
+    não dá para dizer que faltou batida num dia que ninguém foi conferir. Quem
+    passa ``aviso`` (um dicionário) recebe de volta o que aconteceu na busca,
+    para a tela contar.
     """
     pessoas = pessoas_do_ponto(setor_id, usuarios)
     if not pessoas:
         return []
     ids = [p.tangerino_employee_id for p in pessoas]
+
+    resultado_busca = garantir_cobertura(ids, inicio, fim) if buscar else {'buscou': 0, 'erro': ''}
+    if aviso is not None:
+        aviso.update(resultado_busca)
+    cobertura = CoberturaPonto.mapa(ids)
 
     marcacoes = list(MarcacaoPonto.objects.filter(employee_id__in=ids, data__gte=inicio, data__lte=fim))
     por_dia = {(m.employee_id, m.data): m for m in marcacoes}
@@ -235,15 +312,19 @@ def linhas_do_periodo(inicio, fim, setor_id=None, usuarios=None, apenas_com_pend
     costume = _costume(historico)
     grades = grades_do_tangerino()
     escalas = _escalas_do_portal(pessoas, inicio, fim)
+    abonos = abonos_do_periodo(inicio, fim)
 
     linhas = []
     for pessoa in pessoas:
         eid = pessoa.tangerino_employee_id
         for dia in dias_do_periodo(inicio, fim):
             marcacao = por_dia.get((eid, dia))
-            previsto = _previsto_do_dia(eid, pessoa, dia, marcacao, grades, escalas, costume)
+            previsto = _previsto_do_dia(eid, pessoa, dia, marcacao, grades, escalas,
+                                        costume, abonos)
             if marcacao is None and not previsto:
                 continue                               # folga sem batida: não é assunto do relatório
+            if marcacao is None and not _coberto(cobertura, eid, dia):
+                continue                               # dia que ninguém buscou: não é falta, é desconhecido
             linha = _linha(pessoa, dia, marcacao, previsto)
             if apenas_com_pendencia and not linha['tem_pendencia']:
                 continue
@@ -251,18 +332,57 @@ def linhas_do_periodo(inicio, fim, setor_id=None, usuarios=None, apenas_com_pend
     return linhas
 
 
-def _previsto_do_dia(eid, pessoa, dia, marcacao, grades, escalas, costume):
-    """O previsto do dia, na ordem: marcação sincronizada, jornada, escala do portal, costume."""
+def _coberto(cobertura, eid, dia):
+    """O dia está dentro do que já foi buscado no Tangerino para essa pessoa?"""
+    faixa = cobertura.get(eid)
+    return bool(faixa and faixa[0] <= dia <= faixa[1])
+
+
+def abonos_do_periodo(inicio, fim):
+    """Feriado, férias, atestado e folga do período: {(employee_id, dia): segundos}.
+
+    É a mesma fonte que a sincronização usa para o previsto de um dia COM
+    batida. Sem ela, o dia sem batida caía no previsto cheio da jornada e o
+    feriado virava falta — foi o que sobrou no relatório de seis meses: as
+    quatro "faltas" eram 03/04, 21/04, 01/05 e 04/06.
+
+    Falha da API não derruba a tela: sem abono nenhum o relatório continua de
+    pé, só mais rigoroso.
+    """
+    from .jornada import carregar_abonos
+
+    try:
+        return carregar_abonos(inicio, fim)
+    except Exception as exc:                            # noqa: BLE001 — leitura auxiliar
+        logger.warning('Abonos do período %s a %s indisponíveis: %s', inicio, fim, exc)
+        return {}
+
+
+def _previsto_do_dia(eid, pessoa, dia, marcacao, grades, escalas, costume, abonos=None):
+    """O previsto do dia, na ordem: marcação sincronizada, jornada, escala do portal, costume.
+
+    O dia abonado (feriado, férias, atestado) não tem previsto: a pessoa não
+    devia estar lá, e cobrar batida dela é a falta que não existe.
+    """
     if marcacao is not None:
         return int(marcacao.previsto_segundos or 0)
+
+    abonado = (abonos or {}).get((eid, dia), 0)
+    if abonado is None:
+        return 0                                   # dia inteiro abonado
+    if feriados.e_feriado(dia):
+        return 0                                   # feriado nacional: não se cobra batida
+
     from .jornada import previsto_no_dia
 
     grade = (grades or {}).get(eid)
     if grade:
-        return int(previsto_no_dia(grade, dia) or 0)
-    if (pessoa.id, dia) in escalas:
-        return int(escalas[(pessoa.id, dia)] or 0)
-    return int(costume.get((eid, dia.weekday()), 0) or 0)
+        bruto = int(previsto_no_dia(grade, dia) or 0)
+    elif (pessoa.id, dia) in escalas:
+        bruto = int(escalas[(pessoa.id, dia)] or 0)
+    else:
+        bruto = int(costume.get((eid, dia.weekday()), 0) or 0)
+    return max(0, bruto - int(abonado or 0))
 
 
 def por_loja(linhas):

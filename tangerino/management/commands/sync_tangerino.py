@@ -4,6 +4,8 @@ Uso:
     python manage.py sync_tangerino            # só quem ainda não tem vínculo
     python manage.py sync_tangerino --revincular   # refaz todos
     python manage.py sync_tangerino --simular      # mostra sem gravar
+    python manage.py sync_tangerino --dados --dias 30        # ponto dos últimos 30 dias
+    python manage.py sync_tangerino --dados --desde 2026-01-01   # traz o histórico de uma vez
 """
 from django.core.management.base import BaseCommand
 
@@ -24,6 +26,10 @@ class Command(BaseCommand):
                             help='Sincroniza marcações e férias para as tabelas locais.')
         parser.add_argument('--dias', type=int, default=30,
                             help='Janela de dias de ponto para trás (padrão: 30).')
+        parser.add_argument('--desde', default='',
+                            help='Data inicial (AAAA-MM-DD) do ponto, no lugar de --dias. '
+                                 'Serve para trazer o histórico de uma vez — o relatório '
+                                 'também busca sozinho o que falta do período pedido.')
 
     def handle(self, *args, **opcoes):
         if not integracao_ativa():
@@ -32,7 +38,14 @@ class Command(BaseCommand):
             return
 
         if opcoes['dados']:
-            self._sincronizar_dados(opcoes['dias'])
+            desde = None
+            if opcoes['desde']:
+                from django.utils.dateparse import parse_date
+                desde = parse_date(opcoes['desde'])
+                if desde is None:
+                    self.stderr.write(self.style.ERROR('--desde precisa ser AAAA-MM-DD.'))
+                    return
+            self._sincronizar_dados(opcoes['dias'], desde)
             return
 
         try:
@@ -60,14 +73,17 @@ class Command(BaseCommand):
         for pendente in resultado['pendentes']:
             self.stdout.write(f"  - {pendente['nome']} ({pendente['cpf'] or 'sem CPF'})")
 
-    def _sincronizar_dados(self, dias):
+    def _sincronizar_dados(self, dias, desde=None):
         """Espelha marcações e férias nas tabelas locais (bom para cron)."""
-        from tangerino.sync import (sincronizar_ferias, sincronizar_marcacoes,
-                                    sincronizar_saldos)
+        from django.utils import timezone
 
+        from tangerino.sync import (sincronizar_ferias, sincronizar_marcacoes,
+                                    sincronizar_periodo, sincronizar_saldos)
+
+        ponto = (lambda: sincronizar_periodo(desde, timezone.localdate())) if desde else (
+            lambda: sincronizar_marcacoes(dias=dias))
         for tipo, rotulo, funcao in (
-                (SincronizacaoTangerino.Tipo.PONTO, 'Marcações',
-                 lambda: sincronizar_marcacoes(dias=dias)),
+                (SincronizacaoTangerino.Tipo.PONTO, 'Marcações', ponto),
                 (SincronizacaoTangerino.Tipo.FERIAS, 'Férias', sincronizar_ferias),
                 (SincronizacaoTangerino.Tipo.SALDO, 'Saldo de horas', sincronizar_saldos)):
             registro = SincronizacaoTangerino(tipo=tipo)

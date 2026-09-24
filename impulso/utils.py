@@ -57,6 +57,24 @@ def is_impulso_member(user):
             or user_has_module(user, 'impulso'))
 
 
+def e_superadmin(user):
+    """Topo do portal: superuser ou hierarquia SUPERADMIN.
+
+    É quem aprova a conclusão de projeto foco. Fica aqui, e não solto na view,
+    porque o modelo (`ProjetoFoco.pode_decidir`) responde a mesma pergunta — e
+    duas verdades sobre quem decide é como aparece o botão que dá erro.
+    """
+    return bool(user and user.is_authenticated
+                and (user.is_superuser or getattr(user, 'hierarchy', '') == 'SUPERADMIN'))
+
+
+def get_superadmins():
+    """Os SUPERADMIN ativos, para avisar quem tem uma conclusão esperando."""
+    return (User.objects.filter(is_active=True)
+            .filter(Q(is_superuser=True) | Q(hierarchy='SUPERADMIN'))
+            .distinct().order_by('first_name', 'last_name'))
+
+
 def get_colaboradores():
     """Usuários ativos do ESCRITÓRIO (ADM) ou de ADM's LOJAS — alvos de metas/feedbacks."""
     return (User.objects.filter(is_active=True)
@@ -144,6 +162,26 @@ def impulso_member_required(view_func):
         if not request.user.is_authenticated:
             return redirect('login')
         if not is_impulso_member(request.user):
+            messages.error(request, 'Você não tem acesso ao módulo Impulso.')
+            return redirect('home')
+        return view_func(request, *args, **kwargs)
+    return _wrapped
+
+
+def impulso_member_or_superadmin_required(view_func):
+    """Quem é do módulo — e o SUPERADMIN, mesmo sem acesso ao Impulso.
+
+    A conclusão de projeto foco é decidida por ele, e o aviso que ele recebe
+    aponta para a tela do projeto: dos dez SUPERADMIN, só três são superuser e
+    entrariam no módulo. Sem isto, sete deles receberiam "aprove isto" e
+    bateriam num "você não tem acesso". Não muda o menu de ninguém — o módulo
+    continua aparecendo só para quem é do Impulso.
+    """
+    @wraps(view_func)
+    def _wrapped(request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return redirect('login')
+        if not (is_impulso_member(request.user) or e_superadmin(request.user)):
             messages.error(request, 'Você não tem acesso ao módulo Impulso.')
             return redirect('home')
         return view_func(request, *args, **kwargs)

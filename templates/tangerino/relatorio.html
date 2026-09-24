@@ -52,6 +52,23 @@
     </div>
 </form>
 
+{% comment %}
+O relatório completa o período no Tangerino antes de montar as linhas. Quando
+isso falha, o que aparece na tela é só o que já estava espelhado — e isso
+precisa estar escrito, senão um relatório curto passa por realidade.
+{% endcomment %}
+{% if aviso.erro %}
+<div class="tg-card p-3 mb-4 border-amber-200 bg-amber-50 text-amber-900 text-sm">
+    <i class="fas fa-triangle-exclamation mr-1"></i>{{ aviso.erro }}
+    Os dias que ainda não foram buscados ficam de fora do relatório — não são falta.
+</div>
+{% elif aviso.buscou %}
+<div class="tg-card p-3 mb-4 border-cyan-200 bg-cyan-50 text-cyan-900 text-sm">
+    <i class="fas fa-cloud-arrow-down mr-1"></i>Buscamos no Tangerino o que faltava deste período
+    ({{ aviso.buscou }} pessoa{{ aviso.buscou|pluralize }}, de {{ aviso.de|date:"d/m/Y" }} a {{ aviso.ate|date:"d/m/Y" }}).
+</div>
+{% endif %}
+
 <div class="grid grid-cols-2 lg:grid-cols-6 gap-3 mb-4">
     <div class="tg-card p-4">
         <p class="text-xs text-gray-500">Dias no relatório</p>
@@ -93,8 +110,8 @@
         <table class="w-full text-sm table-auto">
             <thead class="text-[11px] uppercase tracking-tight text-gray-500 border-b border-gray-100">
                 <tr>
-                    <th class="px-3 py-2 text-left">Nome</th>
-                    <th class="px-3 py-2 text-left">Loja</th>
+                    {% if mostra_nome %}<th class="px-3 py-2 text-left">Nome</th>{% endif %}
+                    {% if mostra_loja %}<th class="px-3 py-2 text-left">Loja</th>{% endif %}
                     <th class="px-3 py-2 text-left">Data</th>
                     <th class="px-2 py-2 text-center">1ª</th>
                     <th class="px-2 py-2 text-center">2ª</th>
@@ -104,14 +121,14 @@
                     <th class="px-2 py-2 text-right" title="Horas trabalhadas">Trab.</th>
                     <th class="px-2 py-2 text-right" title="Intervalo (almoço)">Interv.</th>
                     <th class="px-2 py-2 text-right" title="Horas extras">Extras</th>
-                    <th class="px-3 py-2 text-left">Pendência</th>
+                    <th class="px-3 py-2 text-left min-w-[12rem]">Pendência</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-gray-100">
                 {% for l in linhas %}
                 <tr class="{% if l.tem_pendencia %}tg-linha-pendente{% endif %}">
-                    <td class="px-3 py-2 font-medium text-gray-800 whitespace-nowrap">{{ l.nome }}</td>
-                    <td class="px-3 py-2 text-gray-600 whitespace-nowrap">{{ l.loja }}</td>
+                    {% if mostra_nome %}<td class="px-3 py-2 font-medium text-gray-800 whitespace-nowrap">{{ l.nome }}</td>{% endif %}
+                    {% if mostra_loja %}<td class="px-3 py-2 text-gray-600">{{ l.loja }}</td>{% endif %}
                     <td class="px-3 py-2 text-gray-600 whitespace-nowrap tabular">{{ l.data|date:"d/m/Y" }}</td>
                     {% for batida in l.batidas %}
                     <td class="px-2 py-2 text-center tabular {% if batida %}text-gray-800{% else %}text-gray-300{% endif %}">{{ batida|default:"—" }}</td>
@@ -120,7 +137,9 @@
                     <td class="px-2 py-2 text-right tabular text-gray-800 font-medium">{{ l.trabalhado }}</td>
                     <td class="px-2 py-2 text-right tabular text-gray-600">{{ l.intervalo|default:"—" }}</td>
                     <td class="px-2 py-2 text-right tabular {% if l.extras_segundos %}text-emerald-700{% else %}text-gray-400{% endif %}">{{ l.horas_extras }}</td>
-                    <td class="px-3 py-2 tg-pendencia whitespace-normal">{{ l.pendencia }}</td>
+                    <td class="px-3 py-2 tg-pendencia align-top">
+                        <div class="whitespace-normal min-w-[11rem] max-w-[20rem]">{{ l.pendencia }}</div>
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -135,7 +154,10 @@
 </div>
 
 <p class="text-xs text-gray-400 mt-3">
-    As batidas vêm da sincronização com o Tangerino. Dia sem nenhuma batida aparece pelo previsto da jornada
-    contratada ou da escala do portal; quando não há previsão conhecida, o dia não entra no relatório.
+    As batidas vêm do Tangerino: o período pedido é completado na API na hora de montar o relatório, e não só
+    com o que a sincronização diária trouxe. Dia sem nenhuma batida aparece pelo previsto da jornada contratada
+    ou da escala do portal; feriado nacional (inclusive Carnaval e Corpus Christi), férias, atestado e folga
+    abonada não entram como falta — quem trabalhou no feriado continua aparecendo, com as batidas do dia — e dia
+    sem previsão conhecida não entra no relatório.
 </p>
 {% endblock %}

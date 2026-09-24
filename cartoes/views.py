@@ -455,6 +455,7 @@ def abrir_chamado_do_gasto(cartao, gasto, ator_user):
         f'Data: {gasto.data_gasto.strftime("%d/%m/%Y")}\n'
         f'Categoria: {gasto.categoria_gasto or "—"}\n'
         f'Descrição: {gasto.descricao or "—"}'
+        f'- Aberto por Robo de Cartões'
     )
     title = f'COMPRA: {gasto.descricao} — R${gasto.valor}'
 

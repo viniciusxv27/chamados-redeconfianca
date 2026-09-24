@@ -12,9 +12,17 @@
                 <div class="min-w-0">
                     <h2 class="text-xl font-bold text-gray-900">
                         {{ projeto.nome }}
-                        {% if projeto.concluido %}
+                        {% if projeto.entregue %}
                         <span class="align-middle text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-normal">
                             <i class="fas fa-flag-checkered mr-1"></i>concluído
+                        </span>
+                        {% elif projeto.aguardando_aprovacao %}
+                        <span class="align-middle text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-normal">
+                            <i class="fas fa-hourglass-half mr-1"></i>aguardando aprovação
+                        </span>
+                        {% elif projeto.conclusao_reprovada %}
+                        <span class="align-middle text-xs px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200 font-normal">
+                            <i class="fas fa-circle-xmark mr-1"></i>conclusão reprovada
                         </span>
                         {% endif %}
                         {% if not projeto.ativo %}
@@ -25,6 +33,7 @@
                     <p class="text-xs text-gray-400 mt-2">
                         <i class="fas fa-list-check mr-1"></i>{{ tarefas_feitas }} de {{ tarefas_total }} tarefa(s) concluída(s)
                         {% if projeto.concluido %} · encerrado em {{ projeto.concluido_em|date:"d/m/Y" }}{% if projeto.concluido_por %} por {{ projeto.concluido_por.get_full_name|default:projeto.concluido_por.email }}{% endif %}{% endif %}
+                        {% if projeto.entregue and projeto.decidida_em %} · aprovado em {{ projeto.decidida_em|date:"d/m/Y" }}{% if projeto.decidida_por %} por {{ projeto.decidida_por.get_full_name|default:projeto.decidida_por.email }}{% endif %}{% endif %}
                     </p>
                 </div>
                 {% if is_gestor %}
@@ -36,15 +45,57 @@
             </div>
 
             {% comment %}
+            A conclusão passa por um SUPERADMIN: o gestor manda, ele decide.
+            Enquanto não decidir, nenhuma metade de ponto entra — e quem abre a
+            tela precisa ver em que pé está, senão fica esperando sem saber.
+            {% endcomment %}
+            {% if projeto.aguardando_aprovacao %}
+            <div class="border-t border-gray-100 mt-4 pt-4">
+                <div class="rounded-lg p-3 text-sm bg-amber-50 border border-amber-200 text-amber-900">
+                    <p class="font-medium"><i class="fas fa-hourglass-half mr-1"></i>Conclusão esperando aprovação de um SUPERADMIN.</p>
+                    <p class="text-xs mt-1">A metade dos pontos pela conclusão entra na pontuação do mês quando for aprovada.</p>
+                </div>
+
+                {% if pode_decidir %}
+                <form method="post" action="{% url 'impulso:projeto_foco_decidir' projeto.id %}" class="mt-3 space-y-2">
+                    {% csrf_token %}
+                    <textarea name="observacao" rows="2" maxlength="2000"
+                              placeholder="Motivo (obrigatório para reprovar)"
+                              class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2"></textarea>
+                    <div class="flex items-center gap-2">
+                        <button name="decisao" value="aprovar"
+                                class="px-3 py-1.5 rounded-lg bg-emerald-500 text-white text-sm hover:bg-emerald-600">
+                            <i class="fas fa-check mr-1"></i>Aprovar conclusão
+                        </button>
+                        <button name="decisao" value="reprovar"
+                                class="px-3 py-1.5 rounded-lg border border-red-200 text-red-700 text-sm hover:bg-red-50">
+                            <i class="fas fa-xmark mr-1"></i>Reprovar
+                        </button>
+                    </div>
+                </form>
+                {% endif %}
+            </div>
+            {% elif projeto.conclusao_reprovada %}
+            <div class="border-t border-gray-100 mt-4 pt-4">
+                <div class="rounded-lg p-3 text-sm bg-red-50 border border-red-200 text-red-700">
+                    <p class="font-medium"><i class="fas fa-circle-xmark mr-1"></i>Conclusão reprovada{% if projeto.decidida_por %} por {{ projeto.decidida_por.get_full_name|default:projeto.decidida_por.email }}{% endif %}{% if projeto.decidida_em %} em {{ projeto.decidida_em|date:"d/m/Y" }}{% endif %}.</p>
+                    {% if projeto.observacao %}<p class="text-xs mt-1 whitespace-pre-wrap">{{ projeto.observacao }}</p>{% endif %}
+                    <p class="text-xs mt-1">Corrija o que falta e conclua de novo — a aprovação é refeita.</p>
+                </div>
+            </div>
+            {% endif %}
+
+            {% comment %}
             Metade dos pontos do Projeto FOCO só entra quando o projeto é
-            encerrado. Deixar isso implícito faria a equipe entregar tudo e
-            ficar sem a segunda metade porque ninguém apertou o botão.
+            encerrado (e aprovado). Deixar isso implícito faria a equipe
+            entregar tudo e ficar sem a segunda metade porque ninguém apertou o
+            botão.
             {% endcomment %}
             {% if is_gestor %}
             <div class="border-t border-gray-100 mt-4 pt-4">
                 {% if projeto.concluido %}
                 <form method="post" action="{% url 'impulso:projeto_foco_concluir' projeto.id %}"
-                      onsubmit="return confirm('Reabrir “{{ projeto.nome|escapejs }}”?\n\nA metade dos pontos pela conclusão sai da pontuação do mês de quem tem tarefa no projeto.');">
+                      onsubmit="return confirm('Reabrir “{{ projeto.nome|escapejs }}”?\n\n{% if projeto.entregue %}A metade dos pontos pela conclusão sai da pontuação do mês de quem tem tarefa no projeto.{% else %}A conclusão que está esperando aprovação será cancelada.{% endif %}');">
                     {% csrf_token %}
                     <input type="hidden" name="reabrir" value="1">
                     <button class="px-3 py-1.5 rounded-lg border border-amber-200 text-amber-700 text-sm hover:bg-amber-50">
@@ -55,13 +106,13 @@
                 <div class="flex items-center justify-between gap-3 flex-wrap">
                     <p class="text-xs {% if tudo_entregue %}text-emerald-700{% else %}text-gray-500{% endif %}">
                         {% if tudo_entregue %}
-                        <i class="fas fa-circle-check mr-1"></i>Todas as tarefas foram entregues — dá para encerrar o projeto.
+                        <i class="fas fa-circle-check mr-1"></i>Todas as tarefas foram entregues — dá para mandar o projeto para aprovação.
                         {% else %}
-                        <i class="fas fa-circle-info mr-1"></i>Metade dos pontos do Projeto FOCO entra quando o projeto for concluído.
+                        <i class="fas fa-circle-info mr-1"></i>Metade dos pontos do Projeto FOCO entra quando a conclusão for aprovada por um SUPERADMIN.
                         {% endif %}
                     </p>
                     <form method="post" action="{% url 'impulso:projeto_foco_concluir' projeto.id %}"
-                          onsubmit="return confirm('Concluir “{{ projeto.nome|escapejs }}”?\n\nQuem tem tarefa neste projeto recebe a metade dos pontos pela conclusão na pontuação do mês.');">
+                          onsubmit="return confirm('Concluir “{{ projeto.nome|escapejs }}”?\n\nA conclusão vai para aprovação de um SUPERADMIN. Aprovada, quem tem tarefa neste projeto recebe a metade dos pontos na pontuação do mês.');">
                         {% csrf_token %}
                         <button class="px-3 py-1.5 rounded-lg bg-emerald-500 text-white text-sm hover:bg-emerald-600">
                             <i class="fas fa-flag-checkered mr-1"></i>Concluir projeto
@@ -75,7 +126,7 @@
 
         <!-- Tarefas -->
         <div class="imp-card p-5">
-            <h3 class="font-semibold text-gray-800 mb-3"><i class="fas fa-list-check text-emerald-500 mr-2"></i>{% if is_gestor %}Tarefas{% else %}Minhas tarefas neste projeto{% endif %}</h3>
+            <h3 class="font-semibold text-gray-800 mb-3"><i class="fas fa-list-check text-emerald-500 mr-2"></i>{% if ve_todas_tarefas %}Tarefas{% else %}Minhas tarefas neste projeto{% endif %}</h3>
             <div class="space-y-2">
                 {% for t in tarefas %}
                 <div class="border border-gray-100 rounded-lg p-3">
@@ -89,12 +140,22 @@
                                 {% if t.concluida_em %} · <span class="text-emerald-600" title="A entrega pontua no mês em que foi concluída"><i class="fas fa-circle-check mr-1"></i>concluída em {{ t.concluida_em|date:"d/m/Y" }}</span>{% endif %}
                             </p>
                         </div>
+                        {% comment %}
+                        Só o gestor e o responsável mexem no status (a view cobra
+                        isso). Para o SUPERADMIN que está conferindo a conclusão,
+                        a tarefa é leitura — um seletor que dá erro ao usar é pior
+                        do que nenhum seletor.
+                        {% endcomment %}
+                        {% if is_gestor or t.responsavel == user %}
                         <form method="post" action="{% url 'impulso:tarefa_update_status' t.id %}" class="flex items-center gap-1">
                             {% csrf_token %}
                             <select name="status" onchange="this.form.submit()" class="text-xs border border-gray-300 rounded px-2 py-1">
                                 {% for value, label in status_choices %}<option value="{{ value }}" {% if t.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
                             </select>
                         </form>
+                        {% else %}
+                        <span class="text-xs text-gray-500 flex-shrink-0">{{ t.get_status_display }}</span>
+                        {% endif %}
                     </div>
                 </div>
                 {% empty %}

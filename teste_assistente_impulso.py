@@ -519,8 +519,14 @@ try:
           and projeto.descricao == 'ZZ vitrine nova' and avisado(bia, 'Removido de projeto foco'))
         previa, feito = prepara_e_confirma('impulso_projeto', {'acao': 'concluir', 'projeto_id': pk(projeto)}, gil)
         projeto.refresh_from_db()
-        t('conclui o projeto e avisa quem tem tarefa', projeto.concluido and avisado(ana, 'Projeto foco concluído')
+        t('conclui o projeto, que vai para a aprovação do SUPERADMIN',
+          projeto.aguardando_aprovacao and 'aprovação de um SUPERADMIN' in previa
           and 'metade dos pontos' in previa, feito)
+        t('quem tem tarefa ainda não é avisado (os pontos não entraram)',
+          not avisado(ana, 'Projeto foco concluído'))
+        t('e quem decide é', avisado(admin, 'Conclusão de projeto para aprovar'))
+        t('a consulta conta em que pé está',
+          'aguardando aprovação' in roda('impulso_consultar', {'o_que': 'projeto', 'projeto_id': pk(projeto)}, gil))
         prepara_e_confirma('impulso_projeto', {'acao': 'reabrir', 'projeto_id': pk(projeto)}, gil)
         projeto.refresh_from_db()
         t('e reabre', not projeto.concluido)

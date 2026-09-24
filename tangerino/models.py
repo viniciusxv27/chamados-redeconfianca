@@ -262,6 +262,82 @@ class MarcacaoPonto(models.Model):
         return [d.strftime('%H:%M') for d in campos if d]
 
 
+class CoberturaPonto(models.Model):
+    """Até onde o espelho local já foi buscado no Tangerino, por funcionário.
+
+    A tabela de marcações não consegue responder "este dia não teve batida" ou
+    "este dia nunca foi buscado": nos dois casos não existe linha. Sem saber a
+    diferença, o relatório de um período antigo acusava falta em dia trabalhado
+    — foi o que aconteceu no pedido de 26/02 a 31/08: a sincronização diária só
+    volta 30 dias, e 102 dos 135 dias saíram como "não houve nenhuma batida".
+
+    Com esta faixa por pessoa, o relatório sabe o que precisa buscar na API
+    (e busca), e o que está fora do que se conhece fica fora da conta em vez de
+    virar cobrança.
+    """
+
+    employee_id = models.BigIntegerField(unique=True, verbose_name='ID no Tangerino')
+    desde = models.DateField(verbose_name='Buscado desde')
+    ate = models.DateField(verbose_name='Buscado até')
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Cobertura do ponto'
+        verbose_name_plural = 'Cobertura do ponto'
+        ordering = ['employee_id']
+
+    def __str__(self):
+        return f'{self.employee_id}: {self.desde:%d/%m/%Y} a {self.ate:%d/%m/%Y}'
+
+    @classmethod
+    def mapa(cls, employee_ids=None):
+        """{employee_id: (desde, ate)} do que já foi buscado."""
+        qs = cls.objects.all()
+        if employee_ids is not None:
+            qs = qs.filter(employee_id__in=list(employee_ids))
+        return {c.employee_id: (c.desde, c.ate) for c in qs}
+
+    @classmethod
+    def falta_buscar(cls, employee_ids, inicio, fim):
+        """Quem ainda não tem o período inteiro coberto, e de quando até quando.
+
+        Devolve {employee_id: (inicio, fim)} — já unindo o que falta antes e o
+        que falta depois num intervalo só, porque a API cobra o mesmo por um
+        dia ou por seis meses (é um pedido por pessoa).
+        """
+        coberto = cls.mapa(employee_ids)
+        pendente = {}
+        for eid in employee_ids:
+            faixa = coberto.get(eid)
+            if faixa is None:
+                pendente[eid] = (inicio, fim)
+                continue
+            desde, ate = faixa
+            if inicio < desde or fim > ate:
+                pendente[eid] = (min(inicio, desde), max(fim, ate))
+        return pendente
+
+    @classmethod
+    def registrar(cls, employee_ids, inicio, fim):
+        """Amplia a faixa conhecida de cada pessoa buscada."""
+        atuais = {c.employee_id: c for c in cls.objects.filter(employee_id__in=list(employee_ids))}
+        novos, alterados = [], []
+        for eid in employee_ids:
+            atual = atuais.get(eid)
+            if atual is None:
+                novos.append(cls(employee_id=eid, desde=inicio, ate=fim))
+                continue
+            if inicio < atual.desde or fim > atual.ate:
+                atual.desde = min(atual.desde, inicio)
+                atual.ate = max(atual.ate, fim)
+                alterados.append(atual)
+        if novos:
+            cls.objects.bulk_create(novos, batch_size=500, ignore_conflicts=True)
+        if alterados:
+            cls.objects.bulk_update(alterados, ['desde', 'ate'], batch_size=500)
+        return {'novos': len(novos), 'ampliados': len(alterados)}
+
+
 class JornadaTrabalho(models.Model):
     """Espelho de uma escala contratada do Tangerino (``/work-schedule/{id}``).
 

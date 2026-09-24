@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from .models import User, Sector, CommissionMonthlyTotal, AParteCommissionConfig, UserSession, EmergencyContact
+from .models import (User, Sector, CommissionMonthlyTotal, AParteCommissionConfig, UserSession,
+                     EmergencyContact, Dependent)
 
 
 @admin.register(UserSession)
@@ -67,4 +68,11 @@ class CustomUserAdmin(UserAdmin):
 class EmergencyContactAdmin(admin.ModelAdmin):
     list_display = ('user', 'name', 'phone', 'relationship', 'created_at')
     search_fields = ('user__email', 'user__first_name', 'user__last_name', 'name', 'phone')
+    raw_id_fields = ('user',)
+
+
+@admin.register(Dependent)
+class DependentAdmin(admin.ModelAdmin):
+    list_display = ('user', 'name', 'document', 'created_at')
+    search_fields = ('user__email', 'user__first_name', 'user__last_name', 'name', 'document')
     raw_id_fields = ('user',)

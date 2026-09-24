@@ -213,9 +213,10 @@ try:
     t('o projeto sabe que está tudo entregue', proj.tudo_entregue)
 
     proj.concluido = True
+    proj.aprovacao = ProjetoFoco.Aprovacao.APROVADA
     proj.save()
     nota, maximo, det = _nota_projeto_foco(dev, inicio, fim)
-    t('projeto concluído fecha os 20', nota == Decimal('20.00'), nota)
+    t('projeto concluído e aprovado fecha os 20', nota == Decimal('20.00'), nota)
     t('a segunda metade veio da conclusão',
       det['pontos_conclusao'] == Decimal('10.00'), det)
 
@@ -227,6 +228,7 @@ try:
                                       responsavel=dev, prazo=hoje,
                                       status=TarefaProjeto.Status.CONCLUIDA)
     proj2.concluido = True
+    proj2.aprovacao = ProjetoFoco.Aprovacao.APROVADA
     proj2.save()
     nota, maximo, det = _nota_projeto_foco(dev, inicio, fim)
     t('em 2 projetos com 1 concluído, a conclusão paga metade da metade',
@@ -246,6 +248,14 @@ try:
     t('o gestor conclui', proj.concluido)
     t('registra quem', proj.concluido_por_id == chefe.id)
     t('e quando', proj.concluido_em is not None)
+    t('a conclusão fica esperando o SUPERADMIN', proj.aguardando_aprovacao)
+    t('e a equipe ainda não é avisada (os pontos não entraram)',
+      not Notification.objects.filter(user=dev, title='Projeto foco concluído').exists())
+
+    r = c.post(f'/impulso/conectar/projetos/{proj.id}/decidir/',
+               {'decisao': 'aprovar'}, follow=True)
+    proj.refresh_from_db()
+    t('o SUPERADMIN aprova a conclusão', proj.entregue)
     t('avisa quem tem tarefa no projeto',
       Notification.objects.filter(user=dev, title='Projeto foco concluído').exists())
 
@@ -265,10 +275,11 @@ try:
     t('o gestor vê o botão de concluir', 'Concluir projeto' in html)
     t('e o progresso das tarefas', 'de 2 tarefa(s) concluída(s)' in html)
     t('com o aviso da metade', 'Metade dos pontos' in html
-      or 'dá para encerrar o projeto' in html)
+      or 'mandar o projeto para aprovação' in html)
 
     proj.concluido = True
     proj.concluido_em = timezone.now()
+    proj.aprovacao = ProjetoFoco.Aprovacao.APROVADA
     proj.save()
     html = c.get(f'/impulso/conectar/projetos/{proj.id}/').content.decode()
     t('concluído mostra o selo', 'concluído' in html)
