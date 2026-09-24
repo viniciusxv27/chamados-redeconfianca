@@ -1,0 +1,107 @@
+{% extends 'base.html' %}
+
+{% block title %}{% block sap_titulo %}Visão SAP{% endblock %}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .sap-card { background:#fff; border:1px solid #E9EDF2; border-radius:1rem;
+                box-shadow:0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.06); }
+    .sap-hero { background:
+        radial-gradient(1100px 200px at 0% 0%, rgba(2,132,199,.10), transparent 60%),
+        radial-gradient(900px 200px at 100% 0%, rgba(99,102,241,.09), transparent 60%),
+        linear-gradient(180deg,#FFFFFF 0%, #FAFBFC 100%); }
+    .sap-tab { position:relative; white-space:nowrap; }
+    .sap-tab-active { color:#0369A1; background:#F0F9FF; }
+    .sap-tab-active::after { content:''; position:absolute; left:.75rem; right:.75rem; bottom:-1px;
+        height:2px; background:#0284C7; border-radius:2px; }
+    .tabular { font-variant-numeric: tabular-nums; }
+
+    /* Uma linha da auditoria: cartão no celular, linha de tabela no computador. */
+    .sap-linha { transition: background .15s ease, box-shadow .15s ease; }
+    .sap-linha:hover { background:#F8FAFC; }
+    .sap-linha.aberta { background:#F8FAFC; }
+    .sap-rotulo { font-size:10px; text-transform:uppercase; letter-spacing:.04em; color:#94A3B8; }
+    .sap-chip { display:inline-flex; align-items:center; gap:.3rem; padding:.1rem .5rem;
+                border-radius:999px; font-size:11px; font-weight:600; line-height:1.35;
+                max-width:100%; text-align:left; }
+    .sap-situacao { white-space:nowrap; }
+    .sap-aberta { background:#FEF3C7; color:#92400E; }
+    .sap-resolvida { background:#DCFCE7; color:#166534; }
+    .sap-saiu { background:#F1F5F9; color:#64748B; }
+    .sap-erro-1 { background:#FEE2E2; color:#991B1B; }   /* SEM NF */
+    .sap-erro-2 { background:#EDE9FE; color:#5B21B6; }   /* VENDA NÃO ENCONTRADA */
+    .sap-erro-3 { background:#E0F2FE; color:#075985; }   /* SERIAL */
+    .sap-barra { height:.45rem; border-radius:999px; background:#E2E8F0; overflow:hidden; }
+    .sap-barra > span { display:block; height:100%; border-radius:999px; background:#0284C7; }
+    .sap-salvo { animation: sapflash 1.2s ease; }
+    @keyframes sapflash { 0% { background:#DCFCE7; } 100% { background:transparent; } }
+    .sap-ficha dt { font-size:10px; text-transform:uppercase; letter-spacing:.04em; color:#94A3B8; }
+    .sap-ficha dd { font-size:12px; color:#0F172A; word-break:break-word; }
+    @media (max-width: 767px) {
+        .sap-linha { border:1px solid #EEF2F6; border-radius:.9rem; margin-bottom:.6rem; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="sap-hero -mx-2 sm:-mx-4 lg:-mx-6 -mt-2 sm:-mt-4 lg:-mt-6 px-2 sm:px-4 lg:px-6 pt-5 pb-0 mb-5 border-b border-gray-100">
+    <div class="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">{% block sap_cabecalho %}Visão SAP{% endblock %}</h1>
+            <p class="text-sm text-gray-500 mt-0.5">{% block sap_subtitulo %}Auditoria SAP × Vivo go{% endblock %}</p>
+        </div>
+
+        <div class="flex items-end gap-3 flex-wrap">
+            <div class="text-right">
+                <p class="text-[11px] text-gray-400">Dados de</p>
+                <p class="text-xs font-medium text-gray-600">
+                    {% if ultima %}
+                        {{ ultima.quando|date:"d/m/Y H:i" }}
+                        {% if ultima.erro %}<span class="text-red-600">· falhou</span>{% endif %}
+                    {% else %}
+                        <span class="text-amber-600">nunca atualizado</span>
+                    {% endif %}
+                </p>
+            </div>
+            {% if e_gestor %}
+            <form method="post" action="{% url 'auditoria_sap:atualizar' %}" id="sapAtualizar">
+                {% csrf_token %}
+                <input type="hidden" name="voltar" value="{{ request.get_full_path }}">
+                <button type="submit" id="sapBotaoAtualizar"
+                        class="px-4 py-2 bg-sky-600 text-white rounded-lg text-sm font-medium hover:bg-sky-700
+                               disabled:opacity-60 disabled:cursor-wait transition-colors">
+                    <i class="fas fa-rotate mr-1.5"></i>Atualizar do SAP
+                </button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+
+    <nav class="flex items-center gap-1 mt-4 overflow-x-auto -mb-px">
+        <a href="{% url 'auditoria_sap:lista' %}{% if query %}?{{ query }}{% endif %}"
+           class="sap-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'lista' %}sap-tab-active{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
+            <i class="fas fa-list-check mr-1.5"></i>Auditoria
+        </a>
+        <a href="{% url 'auditoria_sap:painel' %}{% if query %}?{{ query }}{% endif %}"
+           class="sap-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'painel' %}sap-tab-active{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
+            <i class="fas fa-chart-pie mr-1.5"></i>Painel
+        </a>
+    </nav>
+</div>
+
+{% block sap_conteudo %}{% endblock %}
+
+<script>
+// O botão de atualizar lê a view inteira do SAP (~30 s): trava e avisa, para
+// ninguém achar que a tela travou e clicar de novo.
+(function () {
+    var form = document.getElementById('sapAtualizar');
+    if (!form) return;
+    form.addEventListener('submit', function () {
+        var b = document.getElementById('sapBotaoAtualizar');
+        b.disabled = true;
+        b.innerHTML = '<i class="fas fa-circle-notch fa-spin mr-1.5"></i>Lendo o SAP…';
+    });
+})();
+</script>
+{% endblock %}

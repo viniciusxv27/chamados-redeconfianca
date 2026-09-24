@@ -76,6 +76,7 @@ INSTALLED_APPS = [
     'cartoes',  # Cartões de crédito corporativos
     'tangerino',  # Integração com o Tangerino / Sólides Ponto
     'contagem_caixa',  # Contagem de Caixa (controle diário por loja)
+    'auditoria_sap',  # Visão SAP: auditoria SAP x Vivo go (espelho do MySQL)
     'vendas',  # Lançamento de vendas (Postgres) + tabela de preços
     'maps',  # Mapa de localização (módulo oculto, restrito à administração)
     'cursos',

@@ -832,6 +832,16 @@
                                     </a>
                                 </li>
                                 {% endif %}
+                                {% if user|tem_acesso:'sap' %}
+                                <li>
+                                    <a href="{% url 'auditoria_sap:lista' %}" data-rota="{% url 'auditoria_sap:lista' %}" class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Visão SAP">
+                                        <i class="fas fa-magnifying-glass-dollar text-sky-400 flex-shrink-0 w-5 text-center"></i>
+                                        <span>Visão SAP</span>
+                                        <div class="tooltip-collapsed">Visão SAP</div>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-sky-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
+                                </li>
+                                {% endif %}
                                 {% if user|tem_acesso:'treinamentos.gestao' %}
                                 <li>
                                     <a href="{% url 'training_upload' %}" data-rota="{% url 'training_upload' %}" class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Novo treinamento">

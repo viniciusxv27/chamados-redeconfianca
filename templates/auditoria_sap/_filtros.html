@@ -1,0 +1,106 @@
+{% comment %}
+Barra de filtros da Visão SAP — a mesma na auditoria e no painel, para o que
+está na tela e o que está no gráfico serem sempre o mesmo recorte.
+{% endcomment %}
+<form method="get" class="sap-card p-3 sm:p-4 mb-4" id="sapFiltros">
+    <div class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-2.5">
+        <div class="col-span-2 xl:col-span-2">
+            <label class="sap-rotulo block mb-1">Buscar</label>
+            <div class="relative">
+                <i class="fas fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-300 text-xs"></i>
+                <input type="search" name="q" value="{{ filtros.q }}"
+                       placeholder="venda, cliente, CPF, serial, nota, produto…"
+                       class="w-full border border-gray-200 rounded-lg pl-8 pr-3 py-1.5 text-sm
+                              focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100">
+            </div>
+        </div>
+
+        <div>
+            <label class="sap-rotulo block mb-1">Tipo do erro</label>
+            <select name="tipo" class="sap-auto w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white">
+                <option value="">Todos</option>
+                {% for t in tipos %}
+                <option value="{{ t }}" {% if filtros.tipo == t %}selected{% endif %}>{{ t|title }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div>
+            <label class="sap-rotulo block mb-1">Loja</label>
+            <select name="loja" class="sap-auto w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white">
+                <option value="">Todas</option>
+                {% for l in lojas %}
+                <option value="{{ l }}" {% if filtros.loja == l %}selected{% endif %}>{{ l|title }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div>
+            <label class="sap-rotulo block mb-1">Situação</label>
+            <select name="situacao" class="sap-auto w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white">
+                {% for chave, rotulo in situacoes %}
+                <option value="{{ chave }}" {% if filtros.situacao == chave %}selected{% endif %}>{{ rotulo }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div>
+            <label class="sap-rotulo block mb-1">Divergência em</label>
+            <select name="comparacao" class="sap-auto w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white">
+                <option value="">Qualquer uma</option>
+                {% for chave, campo in comparacoes %}
+                <option value="{{ chave }}" {% if filtros.comparacao == chave %}selected{% endif %}>{{ chave|title }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div>
+            <label class="sap-rotulo block mb-1">De</label>
+            <input type="date" name="de" value="{{ filtros.de|date:'Y-m-d' }}"
+                   class="sap-auto w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm">
+        </div>
+        <div>
+            <label class="sap-rotulo block mb-1">Até</label>
+            <input type="date" name="ate" value="{{ filtros.ate|date:'Y-m-d' }}"
+                   class="sap-auto w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm">
+        </div>
+
+        <div>
+            <label class="sap-rotulo block mb-1">No SAP</label>
+            <select name="presenca" class="sap-auto w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white">
+                {% for chave, rotulo in presencas %}
+                <option value="{{ chave }}" {% if filtros.presenca == chave %}selected{% endif %}>{{ rotulo }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        {% if aba == 'lista' %}
+        <div>
+            <label class="sap-rotulo block mb-1">Ordenar por</label>
+            <select name="ordem" class="sap-auto w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white">
+                {% for chave, rotulo in ordens %}
+                <option value="{{ chave }}" {% if filtros.ordem == chave %}selected{% endif %}>{{ rotulo }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        {% else %}
+        <input type="hidden" name="ordem" value="{{ filtros.ordem }}">
+        {% endif %}
+
+        <div class="col-span-2 md:col-span-1 flex items-end gap-2">
+            <button class="flex-1 px-3 py-1.5 bg-sky-600 text-white rounded-lg text-sm font-medium hover:bg-sky-700">
+                Filtrar
+            </button>
+            <a href="{{ request.path }}"
+               class="px-3 py-1.5 border border-gray-200 text-gray-500 rounded-lg text-sm hover:bg-gray-50"
+               title="Limpar os filtros">Limpar</a>
+        </div>
+    </div>
+</form>
+
+<script>
+// Mexeu num filtro, a tela já recarrega: é o que se espera de um painel.
+document.querySelectorAll('#sapFiltros .sap-auto').forEach(function (campo) {
+    campo.addEventListener('change', function () { campo.form.submit(); });
+});
+</script>

@@ -1,0 +1,271 @@
+{% extends 'auditoria_sap/base_sap.html' %}
+{% load caixa_tags %}
+
+{% block sap_titulo %}Visão SAP — auditoria{% endblock %}
+{% block sap_subtitulo %}
+    {{ resumo.total }} linha{{ resumo.total|pluralize }} no filtro · fonte: vw_auditoria_visao_geral
+{% endblock %}
+
+{% block sap_conteudo %}
+
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+    <div class="sap-card p-4">
+        <p class="text-xs text-gray-500">Linhas</p>
+        <p class="text-3xl font-bold text-gray-900 tabular">{{ resumo.total }}</p>
+        <p class="text-[11px] text-gray-400 mt-0.5">no filtro atual</p>
+    </div>
+    <div class="sap-card p-4">
+        <p class="text-xs text-gray-500">Abertas</p>
+        <p class="text-3xl font-bold {% if resumo.abertas %}text-amber-600{% else %}text-emerald-600{% endif %} tabular">{{ resumo.abertas }}</p>
+        <p class="text-[11px] text-gray-400 mt-0.5">ainda sem tratativa</p>
+    </div>
+    <div class="sap-card p-4">
+        <p class="text-xs text-gray-500">Resolvidas</p>
+        <p class="text-3xl font-bold text-emerald-600 tabular">{{ resumo.resolvidas }}</p>
+        <div class="sap-barra mt-2"><span style="width: {{ resumo.percentual }}%"></span></div>
+        <p class="text-[11px] text-gray-400 mt-1">{{ resumo.percentual }}% do filtro</p>
+    </div>
+    <div class="sap-card p-4">
+        <p class="text-xs text-gray-500">Diferença de valor</p>
+        <p class="text-2xl font-bold text-sky-700 tabular">{{ resumo.em_risco|brl_zero }}</p>
+        <p class="text-[11px] text-gray-400 mt-0.5">somando as linhas do filtro</p>
+    </div>
+</div>
+
+{% include 'auditoria_sap/_filtros.html' %}
+
+{% if not tem_espelho %}
+<div class="sap-card p-8 text-center">
+    <i class="fas fa-database text-3xl text-gray-200"></i>
+    <p class="mt-3 text-gray-700 font-medium">A auditoria ainda não foi trazida do SAP</p>
+    <p class="text-sm text-gray-500 mt-1">
+        {% if e_gestor %}Clique em <strong>Atualizar do SAP</strong> aqui em cima — a leitura da view leva cerca de 30 segundos.
+        {% else %}Peça para a administração atualizar a auditoria.{% endif %}
+    </p>
+</div>
+{% else %}
+
+<div class="sap-card overflow-hidden">
+    <div class="hidden lg:grid lg:grid-cols-12 gap-3 px-4 py-2.5 bg-gray-50/70 border-b border-gray-100
+                text-[11px] uppercase tracking-wide text-gray-500 font-medium">
+        <div class="col-span-2">Data · Loja</div>
+        <div class="col-span-2">Tipo do erro</div>
+        <div class="col-span-3">Venda</div>
+        <div class="col-span-3">O que está diferente</div>
+        <div class="col-span-1 text-right">Diferença</div>
+        <div class="col-span-1 text-right">Situação</div>
+    </div>
+
+    <div class="p-2 lg:p-0">
+    {% for linha in pagina %}
+    <div class="sap-linha px-3 lg:px-4 py-3 lg:border-b lg:border-gray-50" id="sap-linha-{{ linha.id }}"
+         data-id="{{ linha.id }}">
+        <div class="lg:grid lg:grid-cols-12 lg:gap-3 lg:items-start">
+
+            <div class="col-span-2 flex items-center justify-between lg:block">
+                <div>
+                    <p class="text-sm font-semibold text-gray-800 tabular">{{ linha.data_venda|date:"d/m/Y"|default:"—" }}</p>
+                    <p class="text-xs text-gray-500">{{ linha.pdv|title|default:"—" }}</p>
+                </div>
+                <span class="sap-chip sap-situacao lg:hidden {% if linha.resolvida %}sap-resolvida{% else %}sap-aberta{% endif %}">
+                    {% if linha.resolvida %}Resolvida{% else %}Aberta{% endif %}
+                </span>
+            </div>
+
+            <div class="col-span-2 mt-2 lg:mt-0">
+                <span class="sap-chip {% if 'SEM NF' in linha.tipo_erro %}sap-erro-1{% elif 'NÃO ENCONTRADA' in linha.tipo_erro %}sap-erro-2{% else %}sap-erro-3{% endif %}">
+                    {{ linha.tipo_erro }}
+                </span>
+                {% if linha.status_nf %}
+                <p class="text-[11px] text-gray-400 mt-1">NF {{ linha.status_nf|title }}</p>
+                {% endif %}
+            </div>
+
+            <div class="col-span-3 mt-2 lg:mt-0">
+                <p class="text-sm text-gray-800">
+                    {% if linha.id_venda %}<span class="font-medium">#{{ linha.id_venda }}</span>{% else %}<span class="text-gray-400">sem venda no Vivo go</span>{% endif %}
+                    {% if linha.num_fat_sap %}<span class="text-gray-400"> · NF {{ linha.num_fat_sap }}</span>{% endif %}
+                </p>
+                <p class="text-xs text-gray-500 truncate" title="{{ linha.nome_cliente }}">{{ linha.nome_cliente|default:"—" }}</p>
+                <p class="text-[11px] text-gray-400 truncate" title="{{ linha.produto_vivogo|default:linha.produto_sap }}">
+                    {{ linha.produto_vivogo|default:linha.produto_sap|default:"—" }}
+                </p>
+            </div>
+
+            <div class="col-span-3 mt-2 lg:mt-0">
+                <p class="sap-rotulo lg:hidden">O que está diferente</p>
+                <p class="text-xs text-gray-600 leading-snug">{{ linha.diferenca_explicita|default:linha.situacao_valor|default:"—" }}</p>
+            </div>
+
+            <div class="col-span-1 mt-2 lg:mt-0 lg:text-right">
+                <p class="sap-rotulo lg:hidden">Diferença</p>
+                <p class="text-sm font-semibold tabular {% if linha.diferenca_valor %}text-red-600{% else %}text-gray-300{% endif %}">
+                    {{ linha.diferenca_em_reais|brl }}
+                </p>
+                <p class="text-[11px] text-gray-400 tabular">SAP {{ linha.valor_sap|brl }}</p>
+            </div>
+
+            <div class="col-span-1 mt-3 lg:mt-0 lg:text-right">
+                <span class="sap-chip hidden lg:inline-flex sap-situacao
+                             {% if linha.resolvida %}sap-resolvida{% else %}sap-aberta{% endif %}">
+                    {% if linha.resolvida %}Resolvida{% else %}Aberta{% endif %}
+                </span>
+                {% if not linha.ativa %}
+                <span class="sap-chip sap-saiu mt-1" title="Não veio na última leitura do SAP: foi corrigida na origem">
+                    Saiu do SAP
+                </span>
+                {% endif %}
+                <p class="text-[10px] text-gray-400 mt-1 sap-quem">
+                    {% if linha.resolvida_por %}
+                        {% if linha.resolvida %}por{% else %}reaberta por{% endif %}
+                        {{ linha.resolvida_por.full_name }}<br>{{ linha.resolvida_em|date:"d/m H:i" }}
+                    {% endif %}
+                </p>
+                <div class="flex lg:justify-end gap-2 mt-2">
+                    <button type="button" onclick="sapMarcar({{ linha.id }}, {% if linha.resolvida %}false{% else %}true{% endif %})"
+                            class="sap-botao px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors
+                                   {% if linha.resolvida %}border-gray-200 text-gray-500 hover:bg-gray-50{% else %}border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100{% endif %}">
+                        {% if linha.resolvida %}Reabrir{% else %}Resolver{% endif %}
+                    </button>
+                    <button type="button" onclick="sapFicha({{ linha.id }})"
+                            class="px-2 py-1 rounded-lg text-xs border border-gray-200 text-gray-500 hover:bg-gray-50"
+                            title="Ver a linha inteira e o histórico">
+                        <i class="fas fa-chevron-down"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="sap-ficha hidden mt-3 pt-3 border-t border-dashed border-gray-200" id="sap-ficha-{{ linha.id }}">
+            <p class="text-xs text-gray-400"><i class="fas fa-circle-notch fa-spin mr-1"></i>Carregando…</p>
+        </div>
+    </div>
+    {% empty %}
+    <div class="p-10 text-center">
+        <i class="fas fa-check-double text-3xl text-emerald-200"></i>
+        <p class="mt-3 text-gray-700 font-medium">Nenhuma linha com esse filtro</p>
+        <p class="text-sm text-gray-500 mt-1">Troque o filtro ou veja também as já resolvidas.</p>
+    </div>
+    {% endfor %}
+    </div>
+</div>
+
+{% if pagina.paginator.num_pages > 1 %}
+<div class="flex items-center justify-between gap-3 mt-4 flex-wrap">
+    <p class="text-xs text-gray-500">
+        Página {{ pagina.number }} de {{ pagina.paginator.num_pages }} ·
+        {{ pagina.paginator.count }} linha{{ pagina.paginator.count|pluralize }}
+    </p>
+    <div class="flex items-center gap-1">
+        {% if pagina.has_previous %}
+        <a href="?{{ query }}&pagina=1" class="px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">«</a>
+        <a href="?{{ query }}&pagina={{ pagina.previous_page_number }}" class="px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">Anterior</a>
+        {% endif %}
+        {% if pagina.has_next %}
+        <a href="?{{ query }}&pagina={{ pagina.next_page_number }}" class="px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">Próxima</a>
+        <a href="?{{ query }}&pagina={{ pagina.paginator.num_pages }}" class="px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50">»</a>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+{% endif %}
+
+<script>
+(function () {
+    var URL_MARCAR = '{% url "auditoria_sap:marcar" 0 %}';
+    var URL_FICHA = '{% url "auditoria_sap:detalhe" 0 %}';
+
+    function csrf() {
+        var m = document.cookie.match(/csrftoken=([^;]+)/);
+        return m ? m[1] : '';
+    }
+    function endereco(base, id) { return base.replace('/0/', '/' + id + '/'); }
+
+    window.sapMarcar = function (id, resolvida, observacao) {
+        var linha = document.getElementById('sap-linha-' + id);
+        var corpo = new FormData();
+        corpo.append('resolvida', resolvida ? '1' : '0');
+        corpo.append('csrfmiddlewaretoken', csrf());
+        if (observacao) corpo.append('observacao', observacao);
+
+        fetch(endereco(URL_MARCAR, id), {
+            method: 'POST', headers: {'X-CSRFToken': csrf(), 'X-Requested-With': 'XMLHttpRequest'},
+            body: corpo
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            if (!d.ok) { alert(d.erro || 'Não deu para marcar.'); return; }
+
+            linha.querySelectorAll('.sap-situacao').forEach(function (chip) {
+                chip.textContent = d.resolvida ? 'Resolvida' : 'Aberta';
+                chip.classList.toggle('sap-resolvida', d.resolvida);
+                chip.classList.toggle('sap-aberta', !d.resolvida);
+            });
+
+            var quem = linha.querySelector('.sap-quem');
+            if (quem) quem.innerHTML = (d.resolvida ? 'por ' : 'reaberta por ') + d.quem + '<br>' + d.quando;
+
+            var botao = linha.querySelector('.sap-botao');
+            botao.textContent = d.resolvida ? 'Reabrir' : 'Resolver';
+            botao.setAttribute('onclick', 'sapMarcar(' + id + ', ' + (d.resolvida ? 'false' : 'true') + ')');
+            botao.className = 'sap-botao px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors '
+                + (d.resolvida ? 'border-gray-200 text-gray-500 hover:bg-gray-50'
+                               : 'border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100');
+
+            linha.classList.remove('sap-salvo');
+            void linha.offsetWidth;
+            linha.classList.add('sap-salvo');
+
+            var ficha = document.getElementById('sap-ficha-' + id);
+            if (ficha && !ficha.classList.contains('hidden')) { ficha.dataset.pronta = ''; sapFicha(id, true); }
+        })
+        .catch(function () { alert('Erro de conexão ao marcar a linha.'); });
+    };
+
+    window.sapFicha = function (id, recarregar) {
+        var ficha = document.getElementById('sap-ficha-' + id);
+        var linha = document.getElementById('sap-linha-' + id);
+        if (!recarregar) {
+            ficha.classList.toggle('hidden');
+            linha.classList.toggle('aberta', !ficha.classList.contains('hidden'));
+            if (ficha.classList.contains('hidden') || ficha.dataset.pronta === '1') return;
+        }
+
+        fetch(endereco(URL_FICHA, id), {headers: {'X-Requested-With': 'XMLHttpRequest'}})
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            if (!d.ok) { ficha.innerHTML = '<p class="text-xs text-red-600">Não deu para abrir a linha.</p>'; return; }
+            var campos = d.campos.map(function (c) {
+                return '<div><dt>' + c.coluna.replace(/_/g, ' ') + '</dt><dd>' + (c.valor || '—') + '</dd></div>';
+            }).join('');
+            var historico = d.historico.length
+                ? d.historico.map(function (h) {
+                    return '<li class="flex items-start gap-2 py-1">'
+                         + '<i class="fas ' + (h.resolvida ? 'fa-check text-emerald-500' : 'fa-rotate-left text-amber-500')
+                         + ' mt-0.5 text-[11px]"></i><span class="text-xs text-gray-600"><strong>' + h.quem + '</strong> '
+                         + (h.resolvida ? 'marcou como resolvida' : 'reabriu') + ' em ' + h.quando
+                         + (h.observacao ? ' — <em>' + h.observacao + '</em>' : '') + '</span></li>';
+                  }).join('')
+                : '<li class="text-xs text-gray-400 py-1">Ninguém marcou esta linha ainda.</li>';
+
+            ficha.innerHTML =
+                '<div class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-x-4 gap-y-2 sap-ficha">' + campos + '</div>'
+                + '<div class="mt-4 grid md:grid-cols-2 gap-4">'
+                +   '<div><p class="sap-rotulo mb-1">Quem marcou</p><ul>' + historico + '</ul></div>'
+                +   '<div><p class="sap-rotulo mb-1">Observação</p>'
+                +     '<div class="flex gap-2">'
+                +       '<input type="text" id="sap-obs-' + id + '" value="' + (d.observacao || '').replace(/"/g, '&quot;') + '"'
+                +       ' placeholder="o que foi feito nesta linha" class="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-sm">'
+                +       '<button type="button" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-sky-600 text-white hover:bg-sky-700"'
+                +       ' onclick="sapMarcar(' + id + ', true'
+                +       ', document.getElementById(\'sap-obs-' + id + '\').value)">'
+                +       (d.resolvida ? 'Salvar observação' : 'Salvar e resolver') + '</button>'
+                +     '</div></div>'
+                + '</div>';
+            ficha.dataset.pronta = '1';
+        })
+        .catch(function () { ficha.innerHTML = '<p class="text-xs text-red-600">Erro de conexão.</p>'; });
+    };
+})();
+</script>
+{% endblock %}

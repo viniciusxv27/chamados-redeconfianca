@@ -135,6 +135,12 @@ MODULOS = [
      'permissoes': [
          ('caixa.gestor', 'Gestor do caixa', 'Ver todas as lojas e importar a base.'),
      ]},
+    {'chave': 'sap', 'rotulo': 'Visão SAP (auditoria)', 'grupo': 'Administrativo',
+     'acesso': True,
+     'descricao': 'Ver a auditoria SAP x Vivo go e marcar linha como resolvida (nasce só para a administração).',
+     'permissoes': [
+         ('sap.gestor', 'Gestor da auditoria SAP', 'Atualizar o espelho lendo o MySQL do SAP.'),
+     ]},
     {'chave': 'treinamentos', 'rotulo': 'Treinamentos', 'grupo': 'Administrativo',
      'acesso': False,
      'descricao': 'Todo mundo assiste; aqui é quem publica.',
@@ -238,6 +244,8 @@ GATES = {
     'impulso.gestor': 'impulso.utils:is_impulso_manager',
     'caixa': 'contagem_caixa.permissions:pode_ver_caixa',
     'caixa.gestor': 'contagem_caixa.permissions:e_gestor',
+    'sap': 'auditoria_sap.permissions:pode_ver',
+    'sap.gestor': 'auditoria_sap.permissions:e_gestor',
     'treinamentos.gestao': 'trainings.views:pode_gerenciar_treinamentos',
     'quiz.gestao': 'quiz.permissoes:pode_gerenciar',
     'comunicados.criar': 'metodo:can_create_communications',
