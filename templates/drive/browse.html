@@ -1,4 +1,5 @@
 {% extends 'drive/base_drive.html' %}
+{% load static %}
 {% block drive_titulo %}{{ sector.name }} — Drive{% endblock %}
 {% block drive_subtitulo %}{{ sector.name }}{% endblock %}
 
@@ -22,6 +23,29 @@
             {% endfor %}
         </div>
         <div class="flex items-center gap-2 flex-shrink-0">
+            {% comment %}
+            Visão, ordem e "nome inteiro": a escolha fica guardada na sessão, então
+            trocar de pasta não devolve ninguém para o começo.
+            {% endcomment %}
+            <div class="flex items-center rounded-lg border border-gray-200 overflow-hidden">
+                <a href="?v=cartoes&o={{ ordem }}" title="Ver em cartões" aria-label="Ver em cartões"
+                   class="px-2.5 py-1.5 text-sm {% if visao == 'cartoes' %}bg-blue-50 text-blue-600{% else %}text-gray-400 hover:bg-gray-50{% endif %}">
+                    <i class="fas fa-border-all"></i>
+                </a>
+                <a href="?v=lista&o={{ ordem }}" title="Ver em lista" aria-label="Ver em lista"
+                   class="px-2.5 py-1.5 text-sm border-l border-gray-200 {% if visao == 'lista' %}bg-blue-50 text-blue-600{% else %}text-gray-400 hover:bg-gray-50{% endif %}">
+                    <i class="fas fa-list"></i>
+                </a>
+            </div>
+            <select onchange="location.href='?v={{ visao }}&o=' + this.value" aria-label="Ordenar por"
+                    class="px-2 py-1.5 text-sm rounded-lg border border-gray-200 text-gray-600 bg-white">
+                {% for o in ordens %}<option value="{{ o.chave }}" {% if ordem == o.chave %}selected{% endif %}>{{ o.rotulo }}</option>{% endfor %}
+            </select>
+            <button type="button" id="dv-btn-nomes" onclick="dvNomesInteiros()" title="Mostrar o nome inteiro"
+                    aria-label="Mostrar o nome inteiro"
+                    class="px-2.5 py-1.5 text-sm rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-50">
+                <i class="fas fa-text-width"></i>
+            </button>
             {% if pode_editar %}
             <button type="button" onclick="dvNovaPasta()" class="px-3 py-1.5 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">
                 <i class="fas fa-folder-plus mr-1.5"></i><span class="hidden sm:inline">Nova pasta</span>
@@ -40,7 +64,7 @@
         {% if pode_upload %}
         <p class="text-[11px] text-gray-400 mb-2 hidden sm:block"><i class="fas fa-hand-pointer mr-1"></i>Arraste arquivos para esta área para enviar.</p>
         {% endif %}
-        <div id="dv-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+        <div id="dv-grid" class="{% if visao == 'lista' %}dv-visao-lista{% else %}grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3{% endif %}">
             {% include 'drive/_lista.html' %}
         </div>
     </div>
@@ -50,7 +74,7 @@
 {% if pode_upload %}
 <form id="dv-upload-form" method="post" action="{% url 'drive:upload' mapping.sector_id %}" enctype="multipart/form-data" class="hidden">
     {% csrf_token %}<input type="hidden" name="folder_id" value="{{ folder_id }}">
-    <input id="dv-file-input" type="file" name="arquivos" multiple onchange="document.getElementById('dv-upload-form').submit()">
+    <input id="dv-file-input" type="file" name="arquivos" multiple onchange="dvEnviarArquivos(this.files)">
 </form>
 <form id="dv-mkdir-form" method="post" action="{% url 'drive:mkdir' mapping.sector_id %}" class="hidden">
     {% csrf_token %}<input type="hidden" name="folder_id" value="{{ folder_id }}"><input type="hidden" name="nome" id="dv-mkdir-nome">
@@ -58,7 +82,32 @@
 {% endif %}
 <form id="dv-rename-form" method="post" class="hidden">{% csrf_token %}<input type="hidden" name="nome" id="dv-rename-nome"><input type="hidden" name="folder_id" value="{{ folder_id }}"></form>
 
+{% if pode_upload %}
+{% comment %}
+Painel do envio: um arquivo por vez, com barra e o resultado de cada um. Antes
+era um POST do formulário inteiro — a página ficava parada, sem dizer nada, e
+um arquivo recusado derrubava a leva toda.
+{% endcomment %}
+<div id="dv-envio" class="hidden fixed bottom-4 right-4 z-50 w-80 max-w-[92vw] bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden">
+    <div class="px-3 py-2 border-b border-gray-100 flex items-center justify-between gap-2">
+        <p class="text-sm font-semibold text-gray-700"><i class="fas fa-upload text-blue-500 mr-1.5"></i><span id="dv-envio-titulo">Enviando…</span></p>
+        <button type="button" onclick="document.getElementById('dv-envio').classList.add('hidden')"
+                class="w-7 h-7 rounded-lg text-gray-400 hover:bg-gray-100" aria-label="Fechar">
+            <i class="fas fa-xmark"></i>
+        </button>
+    </div>
+    <div class="h-1 bg-gray-100"><div id="dv-envio-barra" class="h-1 bg-blue-500 transition-all" style="width:0%"></div></div>
+    <div id="dv-envio-lista" class="max-h-56 overflow-y-auto text-xs divide-y divide-gray-50"></div>
+    <p class="px-3 py-2 text-[11px] text-gray-400 border-t border-gray-100">
+        Até {{ max_file_mb }} MB por arquivo{% if extensoes %} · aceita: {{ extensoes|join:", " }}{% endif %}.
+    </p>
+</div>
+{% endif %}
+
 {% if pode_gerir_acesso %}{% include 'drive/_acesso_item.html' %}{% endif %}
+
+{# "Usar localmente"/"Finalizar uso" do menu do item — ver drive/uso_local.py. #}
+<script src="{% static 'js/rc-uso-local.js' %}" defer></script>
 
 <script>
 // ── O menu do item: pelo "⋯", pelo botão direito ou por um toque longo ──────
@@ -151,6 +200,113 @@ function dvRenomear(id, nome){
     document.getElementById('dv-rename-nome').value = novo;
     f.submit();
 }
+// ── Nome inteiro: a escolha fica no navegador de quem clicou ───────────────
+function dvNomesInteiros(){
+    const grade = document.getElementById('dv-grid');
+    const botao = document.getElementById('dv-btn-nomes');
+    const ligado = grade.classList.toggle('dv-nomes-inteiros');
+    botao.classList.toggle('bg-blue-50', ligado);
+    botao.classList.toggle('text-blue-600', ligado);
+    botao.classList.toggle('text-gray-400', !ligado);
+    try { localStorage.setItem('dv-nomes-inteiros', ligado ? '1' : '0'); } catch (e) { /* sem storage, segue */ }
+}
+(function(){
+    try { if (localStorage.getItem('dv-nomes-inteiros') === '1') dvNomesInteiros(); } catch (e) { /* idem */ }
+})();
+
+{% if pode_upload %}
+// ── Envio: um arquivo por vez, com barra e resultado de cada um ────────────
+// O formulário inteiro num POST só deixava a página parada e fazia um arquivo
+// recusado derrubar a leva; aqui cada um tem a sua sorte e o seu recado.
+const DV_EXT = {{ extensoes|safe|default:"[]" }};
+const DV_MAX = {{ max_file_mb }} * 1024 * 1024;
+
+function dvLinhaEnvio(nome){
+    const lista = document.getElementById('dv-envio-lista');
+    const linha = document.createElement('div');
+    linha.className = 'px-3 py-1.5 flex items-center gap-2';
+    linha.innerHTML = '<i class="fas fa-circle-notch fa-spin text-gray-300"></i>'
+        + '<span class="flex-1 truncate text-gray-700"></span>'
+        + '<span class="text-[11px] text-gray-400 flex-shrink-0"></span>';
+    linha.querySelector('span').textContent = nome;
+    lista.appendChild(linha);
+    return {
+        ok(texto){
+            linha.querySelector('i').className = 'fas fa-circle-check text-green-500';
+            linha.lastElementChild.textContent = texto || 'enviado';
+            linha.lastElementChild.className = 'text-[11px] text-green-600 flex-shrink-0';
+        },
+        erro(texto){
+            linha.querySelector('i').className = 'fas fa-circle-exclamation text-red-500';
+            linha.lastElementChild.textContent = texto;
+            linha.lastElementChild.className = 'text-[11px] text-red-600 flex-shrink-0 max-w-[55%] text-right';
+            linha.lastElementChild.title = texto;
+        },
+    };
+}
+
+function dvMandarUm(arquivo, aoAndar){
+    return new Promise(resolve => {
+        const corpo = new FormData();
+        corpo.append('folder_id', '{{ folder_id }}');
+        corpo.append('arquivos', arquivo, arquivo.name);
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', "{% url 'drive:upload' mapping.sector_id %}");
+        xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+        xhr.setRequestHeader('X-CSRFToken', document.querySelector('#dv-upload-form [name=csrfmiddlewaretoken]').value);
+        xhr.upload.onprogress = e => { if (e.lengthComputable) aoAndar(e.loaded / e.total); };
+        xhr.onload = () => {
+            let dados = {};
+            try { dados = JSON.parse(xhr.responseText); } catch (e) { dados = {}; }
+            if (xhr.status === 200 && (dados.enviados || 0) > 0) return resolve({ok: true});
+            const erro = (dados.erros && dados.erros[0]) || dados.msg
+                || (xhr.status === 403 ? 'sem permissão para enviar aqui' : 'o portal respondeu ' + xhr.status);
+            resolve({ok: false, erro: String(erro).replace(arquivo.name + ': ', '')});
+        };
+        xhr.onerror = () => resolve({ok: false, erro: 'conexão interrompida'});
+        xhr.send(corpo);
+    });
+}
+
+async function dvEnviarArquivos(lista){
+    const arquivos = Array.from(lista || []);
+    if (!arquivos.length) return;
+    const painel = document.getElementById('dv-envio');
+    const barra = document.getElementById('dv-envio-barra');
+    document.getElementById('dv-envio-lista').innerHTML = '';
+    document.getElementById('dv-envio-titulo').textContent = 'Enviando ' + arquivos.length + ' arquivo(s)…';
+    painel.classList.remove('hidden');
+
+    let enviados = 0, falhas = 0;
+    for (let i = 0; i < arquivos.length; i++) {
+        const arquivo = arquivos[i];
+        const linha = dvLinhaEnvio(arquivo.name);
+        const ext = (arquivo.name.split('.').pop() || '').toLowerCase();
+        // Recusa na hora o que o portal recusaria: vira recado em vez de espera.
+        if (DV_EXT.length && DV_EXT.indexOf(ext) === -1) {
+            linha.erro('tipo .' + ext + ' não aceito aqui');
+            falhas++;
+        } else if (arquivo.size > DV_MAX) {
+            linha.erro('passa de {{ max_file_mb }} MB');
+            falhas++;
+        } else {
+            const r = await dvMandarUm(arquivo, fracao => {
+                barra.style.width = Math.round(((i + fracao) / arquivos.length) * 100) + '%';
+            });
+            if (r.ok) { linha.ok(); enviados++; } else { linha.erro(r.erro); falhas++; }
+        }
+        barra.style.width = Math.round(((i + 1) / arquivos.length) * 100) + '%';
+    }
+
+    document.getElementById('dv-file-input').value = '';
+    document.getElementById('dv-envio-titulo').textContent =
+        enviados + ' enviado(s)' + (falhas ? ' · ' + falhas + ' com erro' : '');
+    barra.className = 'h-1 transition-all ' + (falhas ? 'bg-amber-500' : 'bg-green-500');
+    // Só recarrega quando algo entrou: com tudo recusado, o recado tem que ficar na tela.
+    if (enviados) setTimeout(() => location.reload(), falhas ? 2500 : 900);
+}
+{% endif %}
+
 function dvCarregarMais(btn){
     dvFecharMenus();                         // nenhum menu solto no <body> ao trocar a grade
     const url = new URL(window.location.href);
@@ -161,6 +317,8 @@ function dvCarregarMais(btn){
             const wrap = btn.closest('.dv-more-wrap');
             wrap.insertAdjacentHTML('beforebegin', html);
             wrap.remove();
+            // Os cartões novos também precisam saber o que já está em uso local.
+            if (window.RCUsoLocal) window.RCUsoLocal.marcarMenus();
         }).catch(() => { btn.disabled = false; btn.textContent = 'Carregar mais'; });
 }
 {% if pode_upload %}
@@ -171,8 +329,7 @@ function dvCarregarMais(btn){
     ['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); if (ev==='dragleave' && drop.contains(e.relatedTarget)) return; drop.classList.remove('dragover'); }));
     drop.addEventListener('drop', e => {
         if (e.dataTransfer && e.dataTransfer.files.length) {
-            document.getElementById('dv-file-input').files = e.dataTransfer.files;
-            document.getElementById('dv-upload-form').submit();
+            dvEnviarArquivos(e.dataTransfer.files);
         }
     });
 })();

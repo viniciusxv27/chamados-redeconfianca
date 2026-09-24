@@ -99,9 +99,11 @@ class DriveConfig(models.Model):
     max_file_mb = models.PositiveIntegerField(
         default=100, verbose_name='Tamanho máximo por arquivo (MB)')
     allowed_extensions = models.TextField(
-        default='pdf,doc,docx,xls,xlsx,ppt,pptx,jpg,jpeg,png,csv,txt,zip',
+        # heic/heif/webp entram porque é o que o celular tira hoje: sem eles, a
+        # foto batida no iPhone volta com "extensão não permitida".
+        default='pdf,doc,docx,xls,xlsx,ppt,pptx,jpg,jpeg,png,webp,heic,heif,gif,csv,txt,zip',
         verbose_name='Extensões permitidas',
-        help_text='Separadas por vírgula, sem ponto. Ex.: pdf,docx,xlsx')
+        help_text='Separadas por vírgula, sem ponto. Ex.: pdf,docx,xlsx. Vazio aceita qualquer uma.')
     storage_cap_gb = models.PositiveIntegerField(
         default=0, verbose_name='Capacidade máxima (GB)',
         help_text='0 = sem limite pelo portal (vale o limite do próprio Google).')
@@ -267,6 +269,7 @@ class DriveAuditLog(models.Model):
         VERSION = 'VERSION', 'Nova versão'
         PERM = 'PERM', 'Permissão alterada'
         DENY = 'DENY', 'Acesso negado'
+        USO_LOCAL = 'USO_LOCAL', 'Uso local'
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='drive_logs')

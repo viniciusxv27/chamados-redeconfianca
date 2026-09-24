@@ -2,7 +2,7 @@
 {% for item in itens %}
 {# data-* para o botão direito e o toque longo — ver browse.html. #}
 <div class="dv-card dv-item bg-white border border-gray-100 rounded-xl p-3 relative group"
-     data-id="{{ item.id }}" data-nome="{{ item.name }}">
+     data-id="{{ item.id }}" data-nome="{{ item.name }}" data-tipo="{% if item.is_folder %}pasta{% else %}arquivo{% endif %}">
     <a href="{% if item.is_folder %}{% url 'drive:browse_folder' mapping.sector_id item.id %}{% else %}{% url 'drive:file_preview' item.id %}{% endif %}"
        class="block">
         <div class="flex items-start gap-3">
@@ -10,8 +10,8 @@
                 <i class="fas {{ item.mimeType|file_icon }} text-lg"></i>
             </div>
             <div class="min-w-0 flex-1">
-                <p class="text-sm font-medium text-gray-800 truncate" title="{{ item.name }}">{{ item.name }}</p>
-                <p class="text-[11px] text-gray-400 mt-0.5">
+                <p class="dv-nome text-sm font-medium text-gray-800 truncate" title="{{ item.name }}">{{ item.name }}</p>
+                <p class="dv-meta text-[11px] text-gray-400 mt-0.5">
                     {% if item.is_folder %}Pasta{% else %}{{ item.size_h }}{% endif %}
                     · {{ item.modifiedTime|slice:':10' }}
                 </p>
@@ -41,6 +41,18 @@
                 {% endif %}
                 {% if pode_editar %}
                 <button type="button" onclick="dvRenomear('{{ item.id }}','{{ item.name|escapejs }}')" class="w-full text-left px-3 py-1.5 hover:bg-gray-50"><i class="fas fa-pen w-4 mr-1.5 text-gray-400"></i>Renomear</button>
+                {% endif %}
+                {% if pode_download %}
+                {% comment %}
+                Usar localmente: um dos dois aparece, conforme já exista cópia
+                neste computador (rc-uso-local.js decide, pelo IndexedDB).
+                {% endcomment %}
+                <button type="button" data-uso-local="{{ item.id }}" data-uso-papel="usar"
+                        onclick="RCUsoLocal.usar('{{ item.id }}','{{ item.name|escapejs }}')"
+                        class="hidden w-full text-left px-3 py-1.5 hover:bg-gray-50"><i class="fas fa-laptop w-4 mr-1.5 text-gray-400"></i>Usar localmente</button>
+                <button type="button" data-uso-local="{{ item.id }}" data-uso-papel="finalizar"
+                        onclick="RCUsoLocal.finalizar('{{ item.id }}','{{ item.name|escapejs }}')"
+                        class="hidden w-full text-left px-3 py-1.5 hover:bg-emerald-50 text-emerald-700"><i class="fas fa-check-double w-4 mr-1.5"></i>Finalizar uso</button>
                 {% endif %}
                 {% if pode_gerir_acesso %}
                 <button type="button" onclick="dvAcesso('{{ item.id }}','{{ item.name|escapejs }}')" class="w-full text-left px-3 py-1.5 hover:bg-gray-50"><i class="fas fa-user-plus w-4 mr-1.5 text-gray-400"></i>Dar acesso a uma pessoa</button>

@@ -1,6 +1,6 @@
 from django.urls import path, re_path
 
-from . import edicao_local, views
+from . import edicao_local, uso_local, views
 
 app_name = 'drive'
 
@@ -23,6 +23,9 @@ urlpatterns = [
     path('file/<str:file_id>/excluir/', views.file_delete, name='file_delete'),
     path('file/<str:file_id>/favoritar/', views.favorite_toggle, name='favorite_toggle'),
     path('file/<str:file_id>/editar-no-computador/', edicao_local.iniciar_edicao, name='edicao_local_iniciar'),
+    # Usar localmente: a cópia de trabalho da pasta (ou do arquivo) no computador.
+    path('file/<str:file_id>/uso-local/', uso_local.manifesto, name='uso_local_manifesto'),
+    path('file/<str:file_id>/uso-local/finalizar/', uso_local.finalizar, name='uso_local_finalizar'),
     # Liberar aquele arquivo/pasta para uma pessoa, pelo menu da própria listagem.
     path('file/<str:file_id>/acesso/', views.item_acesso, name='item_acesso'),
     path('file/<str:file_id>/acesso/remover/', views.item_acesso_remover, name='item_acesso_remover'),
@@ -43,6 +46,7 @@ urlpatterns = [
     path('auditoria/', views.auditoria, name='auditoria'),
     path('acessos/', views.acessos, name='acessos'),
     path('gestao/', views.gestao_setores, name='gestao_setores'),
+    path('gestao/pastas/', views.gestao_pastas, name='gestao_pastas'),
     path('gestao/permissoes/', views.gestao_permissoes, name='gestao_permissoes'),
     path('gestao/permissoes/<int:pk>/excluir/', views.permissao_excluir, name='permissao_excluir'),
     path('configuracao/', views.configuracao, name='configuracao'),

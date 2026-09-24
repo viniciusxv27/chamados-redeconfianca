@@ -20,7 +20,7 @@ from django.shortcuts import redirect, render, get_object_or_404
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.clickjacking import xframe_options_sameorigin
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 
 from communications.models import CommunicationGroup
 from users.models import Sector
@@ -319,6 +319,33 @@ def index(request):
 
 # ─── navegação ───────────────────────────────────────────────────────────────
 
+# Como a listagem aparece e em que ordem. A escolha fica na sessão: trocar de
+# pasta (ou voltar amanhã) não devolve a pessoa para a visão de cartões.
+VISOES = ('cartoes', 'lista')
+ORDENS = {
+    'nome': ('folder,name', 'Nome (A–Z)'),
+    'nome_desc': ('folder,name desc', 'Nome (Z–A)'),
+    'recente': ('folder,modifiedTime desc', 'Mais recentes'),
+    'antigo': ('folder,modifiedTime', 'Mais antigos'),
+    'maior': ('folder,quotaBytesUsed desc', 'Maiores'),
+    'menor': ('folder,quotaBytesUsed', 'Menores'),
+}
+
+
+def _visao_e_ordem(request):
+    """(visão, chave da ordem, order do Google) — do pedido ou do que ficou guardado."""
+    visao = request.GET.get('v') or request.session.get('drive_visao') or 'cartoes'
+    if visao not in VISOES:
+        visao = 'cartoes'
+    ordem = request.GET.get('o') or request.session.get('drive_ordem') or 'nome'
+    if ordem not in ORDENS:
+        ordem = 'nome'
+    if request.session.get('drive_visao') != visao or request.session.get('drive_ordem') != ordem:
+        request.session['drive_visao'] = visao
+        request.session['drive_ordem'] = ordem
+    return visao, ordem, ORDENS[ordem][0]
+
+
 @login_required
 def browse(request, sector_id, folder_id=None):
     mapping = perms.mapping_por_setor(sector_id)
@@ -335,8 +362,10 @@ def browse(request, sector_id, folder_id=None):
     if folder_id and folder_id != mapping.folder_id and not gdrive.dentro_de(folder_id, mapping.folder_id):
         _deny(request, sector=mapping.sector, folder_id=folder_id, detalhe='pasta fora do setor')
 
+    visao, ordem, order = _visao_e_ordem(request)
     try:
-        itens, prox = gdrive.listar(alvo, page_token=request.GET.get('t') or None, page_size=60)
+        itens, prox = gdrive.listar(alvo, page_token=request.GET.get('t') or None, page_size=60,
+                                    order=order)
         trilha = gdrive.caminho(alvo, ate_root=mapping.folder_id)
     except gdrive.DriveNaoConfigurado as e:
         return _drive_off(request, e)
@@ -357,6 +386,10 @@ def browse(request, sector_id, folder_id=None):
         'pode_excluir': nivel >= ORDEM['DELETE'], 'is_superadmin': perms.is_superadmin(request.user),
         'pode_gerir_acesso': nivel >= ORDEM['ADMIN'],
         'e_raiz': not folder_id or folder_id == mapping.folder_id,
+        'visao': visao, 'ordem': ordem,
+        'ordens': [{'chave': k, 'rotulo': r} for k, (_, r) in ORDENS.items()],
+        'extensoes': sorted(DriveConfig.get().extensoes()),
+        'max_file_mb': DriveConfig.get().max_file_mb,
     }
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return render(request, 'drive/_lista.html', ctx)
@@ -490,7 +523,7 @@ def upload(request, sector_id):
     if ok:
         _notificar(mapping, cfg, novo=True, quantos=ok, ator=request.user, folder_id=folder_id)
     msg = f'{ok} arquivo(s) enviado(s).' + (f' {len(erros)} com erro.' if erros else '')
-    return _resp(request, ok > 0, msg, sector_id, folder_id, erros=erros, extra={'ok': ok})
+    return _resp(request, ok > 0, msg, sector_id, folder_id, erros=erros, extra={'enviados': ok})
 
 
 @login_required
@@ -511,7 +544,10 @@ def mkdir(request, sector_id):
         return _resp(request, False, f'Google Drive: {e}', sector_id, folder_id)
     audit.registrar(request.user, 'MKDIR', request=request, file_id=f.get('id', ''),
                     file_name=nome, sector=mapping.sector, folder_id=folder_id)
-    return _resp(request, True, f'Pasta "{nome}" criada.', sector_id, folder_id)
+    # O id vai na resposta porque quem cria pasta por JS (o "usar localmente")
+    # precisa dele na hora para mandar os arquivos para dentro dela.
+    return _resp(request, True, f'Pasta "{nome}" criada.', sector_id, folder_id,
+                 extra={'file_id': f.get('id', '')})
 
 
 @login_required
@@ -986,7 +1022,7 @@ def gestao_setores(request):
         return redirect('drive:index')
     if request.method == 'POST':
         sector_id = request.POST.get('sector')
-        folder_id = (request.POST.get('folder_id') or '').strip()
+        folder_id = id_de_pasta(request.POST.get('folder_id'))
         sector = get_object_or_404(Sector, pk=sector_id)
         mapping, _ = SectorDriveMapping.objects.get_or_create(sector=sector)
         mapping.folder_id = folder_id
@@ -1011,6 +1047,52 @@ def gestao_setores(request):
         'setores_livres': Sector.objects.exclude(id__in=ja).order_by('name'),
         'pessoas': User.objects.filter(is_active=True).order_by('first_name', 'last_name'),
         'is_superadmin': True,
+    })
+
+
+ID_EM_URL = re.compile(r'/folders/([A-Za-z0-9_-]{10,})|[?&]id=([A-Za-z0-9_-]{10,})')
+
+
+def id_de_pasta(valor):
+    """O id, venha ele colado da URL do Drive ou digitado sozinho.
+
+    Ninguém precisa mais caçar "o trecho depois de /folders/": cola o endereço
+    inteiro e o portal tira o id.
+    """
+    valor = (valor or '').strip()
+    achado = ID_EM_URL.search(valor)
+    if achado:
+        return achado.group(1) or achado.group(2)
+    return valor.split('?')[0].rstrip('/').split('/')[-1]
+
+
+@login_required
+@require_GET
+def gestao_pastas(request):
+    """Subpastas de uma pasta, para escolher a do setor sem copiar id nenhum."""
+    if not perms.is_superadmin(request.user):
+        return JsonResponse({'ok': False, 'msg': 'Área exclusiva do SUPERADMIN.'}, status=403)
+    pai = id_de_pasta(request.GET.get('pai')) or 'root'
+    if pai != 'root' and not _id_valido(pai):
+        return JsonResponse({'ok': False, 'msg': 'Pasta inválida.'}, status=400)
+    try:
+        pastas, _ = gdrive.listar(pai, apenas_pastas=True, page_size=200)
+        trilha = [] if pai == 'root' else gdrive.caminho(pai)
+    except gdrive.DriveNaoConfigurado as e:
+        return JsonResponse({'ok': False, 'msg': str(e)}, status=400)
+    except gdrive.DriveError as e:
+        return JsonResponse({'ok': False, 'msg': f'Google Drive: {e}'}, status=400)
+
+    raiz = gdrive.id_da_raiz()
+    trilha = [(i, n) for i, n in trilha if i != raiz]
+    acima = ''
+    if pai != 'root':
+        acima = trilha[-2][0] if len(trilha) > 1 else 'root'
+    return JsonResponse({
+        'ok': True, 'pai': pai, 'acima': acima,
+        'nome': trilha[-1][1] if trilha else 'Meu Drive',
+        'trilha': [{'id': i, 'nome': n} for i, n in trilha],
+        'pastas': [{'id': p['id'], 'nome': p.get('name', '')} for p in pastas],
     })
 
 
