@@ -263,7 +263,8 @@ def sincronizar_periodo(inicio, fim, employee_ids=None):
         employee_ids = [e for e in dict.fromkeys(employee_ids) if e]
         if not employee_ids:
             return {'criados': 0, 'atualizados': 0, 'lidos': 0, 'dias': 0}
-    pares = listar_marcacoes(inicio, fim, employee_ids=employee_ids, usar_cache=False)
+    pares, falhas = listar_marcacoes(inicio, fim, employee_ids=employee_ids, usar_cache=False,
+                                     com_falhas=True)
     usuarios = _mapa_usuarios()
 
     agora = timezone.now()
@@ -361,8 +362,13 @@ def sincronizar_periodo(inicio, fim, employee_ids=None):
     # A faixa buscada vale para todo mundo que foi consultado, inclusive quem
     # não tem nenhuma batida no período — é justamente esse caso que o
     # relatório precisa distinguir de "nunca foi buscado".
+    #
+    # Quem falhou fica DE FORA: marcar como buscado sem ter os dados é o que
+    # transforma um erro da API em "não houve nenhuma batida no dia".
     buscados = employee_ids if employee_ids is not None else [
         f.get('id') for f in listar_funcionarios() if f.get('id')]
+    buscados = [e for e in buscados if e not in falhas]
+    resultado['falhas'] = falhas
     resultado['cobertura'] = CoberturaPonto.registrar(buscados, inicio, fim)
 
     # Linhas de sincronizações anteriores ficaram fora da janela e sem previsto.

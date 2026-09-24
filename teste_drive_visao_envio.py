@@ -226,6 +226,25 @@ try:
         t('quem não pode enviar leva 403 e nada entra',
           r.status_code in (403, 302) and len(falso.enviados) == antes, r.status_code)
 
+        print('\n== FAVORITAR PASTA ==')
+        from drive.models import DriveFavorite
+        html = c.get(BROWSE).content.decode()
+        estrelas = html.count('Favoritar')
+        t('a estrela aparece em pasta e em arquivo (eram só os arquivos)',
+          estrelas >= 2, estrelas)
+        r = c.post('/drive/file/SUB/favoritar/', **AJAX)
+        fav = DriveFavorite.objects.filter(user=chefe, file_id='SUB').first()
+        t('favoritar uma pasta funciona', r.status_code == 200 and r.json()['favorito'] is True
+          and fav is not None, r.content[:80])
+        t('e o favorito sabe que é pasta', fav.e_pasta is True and fav.file_name == 'ZZ Subpasta',
+          (fav.mime_type, fav.file_name))
+        html = c.get('/drive/favoritos/').content.decode()
+        t('nos favoritos ela abre a listagem da pasta',
+          f'/drive/s/{setor.id}/f/SUB/' in html, )
+        r = c.post('/drive/file/SUB/favoritar/', **AJAX)
+        t('e clicar de novo desfavorita',
+          r.json()['favorito'] is False and not DriveFavorite.objects.filter(file_id='SUB').exists())
+
         print('\n== A GESTÃO: ESCOLHER A PASTA SEM COPIAR ID ==')
         t('o id sai da URL do Drive',
           dviews.id_de_pasta('https://drive.google.com/drive/folders/1A2b3C4d5E6f?usp=sharing') == '1A2b3C4d5E6f')

@@ -120,8 +120,10 @@ try:
 
     # dois meses de movimento: junho fecha em 300, julho começa daí
     def dia(d, real, dep=D('0')):
-        return ContagemCaixaDia.objects.create(loja=loja, data=d, valor_real=real,
-                                               deposito=dep)
+        # SAP igual ao contado: dia sem diferença, que soma no saldo o que foi
+        # contado (o saldo é Valor real + Diferença − Depósito).
+        return ContagemCaixaDia.objects.create(loja=loja, data=d, valor_sap=real,
+                                               valor_real=real, deposito=dep)
 
     dia(date(2026, 6, 10), D('200.00'))
     dia(date(2026, 6, 20), D('100.00'))

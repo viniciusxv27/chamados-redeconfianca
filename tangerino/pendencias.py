@@ -274,10 +274,16 @@ def garantir_cobertura(employee_ids, inicio, fim):
     except Exception as exc:                            # noqa: BLE001 — tela não cai por causa da API
         logger.warning('Não foi possível completar o ponto de %s a %s: %s', de, ate, exc)
         return {'buscou': 0, 'erro': f'Não foi possível buscar no Tangerino: {exc}'}
-    logger.info('Relatório de ponto completou %s pessoa(s) de %s a %s: %s dia(s).',
-                len(faltando), de, ate, resultado.get('dias'))
-    return {'buscou': len(faltando), 'de': de, 'ate': ate,
-            'dias': resultado.get('dias', 0), 'erro': ''}
+    falhas = resultado.get('falhas') or {}
+    logger.info('Relatório de ponto completou %s pessoa(s) de %s a %s: %s dia(s), %s falha(s).',
+                len(faltando), de, ate, resultado.get('dias'), len(falhas))
+    return {'buscou': len(faltando) - len(falhas), 'de': de, 'ate': ate,
+            'dias': resultado.get('dias', 0), 'falhas': len(falhas),
+            # Quem falhou não entra na conta do relatório (fica "não sei"), e a
+            # tela precisa dizer isso — senão passa por "ninguém faltou".
+            'erro': (f'{len(falhas)} pessoa(s) não puderam ser buscadas no Tangerino agora; '
+                     'os dias delas ficaram de fora. Tente de novo em alguns minutos.'
+                     if falhas else '')}
 
 
 def linhas_do_periodo(inicio, fim, setor_id=None, usuarios=None, apenas_com_pendencia=False,
@@ -302,6 +308,8 @@ def linhas_do_periodo(inicio, fim, setor_id=None, usuarios=None, apenas_com_pend
     if aviso is not None:
         aviso.update(resultado_busca)
     cobertura = CoberturaPonto.mapa(ids)
+    perfil = perfis(pessoas)
+    hoje = timezone.localdate()
 
     marcacoes = list(MarcacaoPonto.objects.filter(employee_id__in=ids, data__gte=inicio, data__lte=fim))
     por_dia = {(m.employee_id, m.data): m for m in marcacoes}
@@ -319,6 +327,13 @@ def linhas_do_periodo(inicio, fim, setor_id=None, usuarios=None, apenas_com_pend
         eid = pessoa.tangerino_employee_id
         for dia in dias_do_periodo(inicio, fim):
             marcacao = por_dia.get((eid, dia))
+            if marcacao is None and dia >= hoje:
+                # O dia de hoje ainda não acabou: quem não bateu até agora pode
+                # bater à tarde. Falta de hoje é assunto do "Ponto da equipe",
+                # que olha o dia ao vivo.
+                continue
+            if marcacao is None and not _cobra_batida(perfil, eid, dia):
+                continue                # fora do tempo de casa, ou não é de bater ponto
             previsto = _previsto_do_dia(eid, pessoa, dia, marcacao, grades, escalas,
                                         costume, abonos)
             if marcacao is None and not previsto:
@@ -330,6 +345,61 @@ def linhas_do_periodo(inicio, fim, setor_id=None, usuarios=None, apenas_com_pend
                 continue
             linhas.append(linha)
     return linhas
+
+
+def perfis(pessoas):
+    """{employee_id: {entrada, saida, registra_ponto}} — de quem se cobra batida, e quando.
+
+    Duas coisas que o previsto da jornada não sabe, e que produziam a maior
+    parte das "pendências" de meses atrás:
+
+    - **desde quando a pessoa é da casa**: com 85 admissões em 2026 (37 delas
+      de julho para cá), quem entrou em agosto aparecia faltando em março. A
+      data de admissão do Tangerino manda, porque é a do relógio de ponto; o
+      cadastro do portal entra quando o Tangerino não tem a pessoa. A saída vem
+      do portal, que é onde a demissão é registrada;
+    - **se a pessoa bate ponto**: 39 dos 161 funcionários têm ``recordsPunch``
+      falso no Tangerino. Deles não se cobra batida — mas, se houver batida no
+      dia, ela é conferida como a de qualquer um (a marca diz o que se espera,
+      não o que aconteceu).
+    """
+    do_tangerino = {}
+    try:
+        from .client import de_millis, listar_funcionarios
+        for f in listar_funcionarios():
+            if not f.get('id'):
+                continue
+            quando = de_millis(f.get('admissionDate'))
+            do_tangerino[f['id']] = {
+                'entrada': quando.date() if quando else None,
+                'registra_ponto': f.get('recordsPunch') is not False,
+                'demitido': bool(f.get('fired')),
+            }
+    except Exception as exc:                            # noqa: BLE001 — leitura auxiliar
+        logger.warning('Cadastro de funcionários do Tangerino indisponível: %s', exc)
+
+    saida = {}
+    for pessoa in pessoas:
+        eid = pessoa.tangerino_employee_id
+        do_ponto = do_tangerino.get(eid) or {}
+        saida[eid] = {
+            'entrada': do_ponto.get('entrada') or getattr(pessoa, 'admission_date', None),
+            'saida': getattr(pessoa, 'demission_date', None),
+            'registra_ponto': do_ponto.get('registra_ponto', True),
+        }
+    return saida
+
+
+def _cobra_batida(perfil, eid, dia):
+    """Dá para cobrar batida desta pessoa neste dia?"""
+    dados = perfil.get(eid) or {}
+    if not dados.get('registra_ponto', True):
+        return False
+    if dados.get('entrada') and dia < dados['entrada']:
+        return False
+    if dados.get('saida') and dia > dados['saida']:
+        return False
+    return True
 
 
 def _coberto(cobertura, eid, dia):

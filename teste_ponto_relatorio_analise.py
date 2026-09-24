@@ -319,6 +319,105 @@ try:
             t('e uma página grande resolve numa chamada só',
               len(client._paginar('x', '/y')) == 264)
 
+        print('\n== DE QUEM SE COBRA BATIDA ==')
+        # Três motivos de "pendência" que não eram pendência nenhuma e enchiam
+        # o relatório de meses atrás: gente admitida depois, gente que não bate
+        # ponto e o dia de hoje, que ainda não acabou.
+        ANTES = SEGUNDA - timedelta(days=30)
+        CoberturaPonto.registrar([p.tangerino_employee_id for p in TODOS], ANTES, DOMINGO)
+        GRADE_CHEIA = {p.tangerino_employee_id: {d: 8 * 3600 for d in range(1, 8)} for p in TODOS}
+
+        def cadastro(**por_id):
+            """Dublê do cadastro de funcionários do Tangerino."""
+            padrao = {'admissionDate': None, 'recordsPunch': True}
+            return [dict(padrao, id=p.tangerino_employee_id,
+                         name=p.full_name, **por_id.get(p.username.split('.')[-1], {}))
+                    for p in TODOS]
+
+        from tangerino import client as cliente_tangerino
+
+        def com_cadastro(**por_id):
+            return mock.patch.object(cliente_tangerino, 'listar_funcionarios',
+                                     lambda usar_cache=True: cadastro(**por_id))
+
+        millis = int(datetime.combine(SEGUNDA, time(0, 0)).timestamp() * 1000)
+        with mock.patch.object(svc, 'grades_do_tangerino', lambda: GRADE_CHEIA), \
+                com_cadastro(ana={'admissionDate': millis}):
+            perfil = svc.perfis([ana])
+            t('a admissão vem do Tangerino', perfil[ana.tangerino_employee_id]['entrada'] == SEGUNDA,
+              perfil)
+            linhas_antes = svc.linhas_do_periodo(ANTES, ANTES, usuarios=[ana.id])
+            t('dia anterior à admissão não vira falta', linhas_antes == [], linhas_antes)
+            linhas_depois = svc.linhas_do_periodo(QUINTA, QUINTA, usuarios=[ana.id])
+            t('e o dia depois dela, sim',
+              [l['pendencia'] for l in linhas_depois] == ['Não houve nenhuma batida no dia'],
+              linhas_depois)
+
+        with mock.patch.object(svc, 'grades_do_tangerino', lambda: GRADE_CHEIA), \
+                com_cadastro(ana={'recordsPunch': False}):
+            t('de quem não bate ponto não se cobra batida',
+              svc.linhas_do_periodo(QUINTA, QUINTA, usuarios=[ana.id]) == [])
+            # Mas o dia em que ELA bateu continua sendo conferido.
+            com_batida = svc.linhas_do_periodo(SEGUNDA, SEGUNDA, usuarios=[ana.id])
+            t('e o dia com batida dela continua na conta',
+              [l['batidas'][0] for l in com_batida] == ['08:00'], com_batida)
+
+        with mock.patch.object(svc, 'grades_do_tangerino', lambda: GRADE_CHEIA), \
+                mock.patch.object(svc.timezone, 'localdate', lambda: QUINTA):
+            t('o dia de hoje não vira falta (ainda dá tempo de bater)',
+              svc.linhas_do_periodo(QUINTA, QUINTA, usuarios=[bruno.id]) == [])
+            t('mas ontem, sim',
+              len(svc.linhas_do_periodo(QUARTA, QUARTA, usuarios=[bruno.id])) == 1)
+
+        print('\n== A BUSCA NA API, EM PEDAÇOS ==')
+        # Um pedido só para meio ano voltava truncado em silêncio — e o portal
+        # marcava o período como buscado, o que virava falta em todo dia.
+        pedidos = []
+
+        def get_falso(base, caminho, params=None):
+            pedidos.append((caminho, params.get('startDate'), params.get('endDate')))
+            return {'content': []}
+
+        with mock.patch.object(cliente_tangerino, '_get', get_falso):
+            cliente_tangerino._marcacoes_de_um(date(2026, 1, 1), date(2026, 9, 24), 990101)
+        t('meio ano vira vários pedidos curtos', len(pedidos) >= 4, len(pedidos))
+        t('nenhum pedaço passa do limite de dias',
+          all((cliente_tangerino._ddmmaaaa if False else True) for _ in pedidos)
+          and len(pedidos) == 5, len(pedidos))
+
+        tentativas = []
+
+        def get_instavel(base, caminho, params=None):
+            tentativas.append(caminho)
+            if len(tentativas) < 3:
+                raise cliente_tangerino.TangerinoError('Tangerino respondeu 500')
+            return {'content': []}
+
+        with mock.patch.object(cliente_tangerino, '_get', get_instavel), \
+                mock.patch.object(cliente_tangerino, 'ESPERA_ENTRE_TENTATIVAS', 0):
+            cliente_tangerino._marcacoes_de_um(SEGUNDA, SEGUNDA, 990101)
+        t('um pedaço que falha é tentado de novo antes de desistir', len(tentativas) == 3, tentativas)
+
+        def get_morto(base, caminho, params=None):
+            raise cliente_tangerino.TangerinoError('Tangerino respondeu 500')
+
+        with mock.patch.object(cliente_tangerino, '_get', get_morto), \
+                mock.patch.object(cliente_tangerino, 'ESPERA_ENTRE_TENTATIVAS', 0):
+            itens, falhas = cliente_tangerino._marcacoes_de_todos(
+                SEGUNDA, SEGUNDA, ids=[990101, 990102], com_falhas=True)
+        t('quem não respondeu volta na lista de falhas',
+          itens == [] and sorted(falhas) == [990101, 990102], (itens, falhas))
+
+        with mock.patch.object(cliente_tangerino, '_get', get_morto), \
+                mock.patch.object(cliente_tangerino, 'ESPERA_ENTRE_TENTATIVAS', 0), \
+                mock.patch.object(sync_svc, 'listar_funcionarios', lambda usar_cache=True: []), \
+                mock.patch.object(sync_svc.jornada_svc, 'carregar_abonos', lambda i, f: {}):
+            antes = CoberturaPonto.objects.filter(employee_id=990199).count()
+            resultado = sync_svc.sincronizar_periodo(SEGUNDA, SEGUNDA, employee_ids=[990199])
+        t('e não fica marcado como buscado (senão viraria falta)',
+          CoberturaPonto.objects.filter(employee_id=990199).count() == antes
+          and len(resultado['falhas']) == 1, resultado.get('falhas'))
+
         print('\n== BATIDAS SOBREPOSTAS ==')
         # Visto no banco de verdade: dois pares aprovados no mesmo turno
         # (08:00–14:00 e 08:27–14:39). Somando par a par, o dia virava 12h12.
@@ -388,8 +487,13 @@ try:
         filtros = relatorio_svc.ler_filtros({'de': f'{DOMINGO:%Y-%m-%d}', 'ate': f'{SEGUNDA:%Y-%m-%d}'})
         t('período invertido é corrigido', (filtros['de'], filtros['ate']) == (SEGUNDA, DOMINGO))
         filtros = relatorio_svc.ler_filtros({'de': '2020-01-01', 'ate': f'{DOMINGO:%Y-%m-%d}'})
-        t('período gigante é limitado a seis meses',
-          (filtros['ate'] - filtros['de']).days == relatorio_svc.MAXIMO_DE_DIAS)
+        t('período gigante é limitado a um ano',
+          (filtros['ate'] - filtros['de']).days == relatorio_svc.MAXIMO_DE_DIAS
+          and relatorio_svc.MAXIMO_DE_DIAS == 366)
+        t('e a tela fica sabendo que encurtou, para contar a quem pediu',
+          filtros['encurtado'] is True
+          and relatorio_svc.ler_filtros({'de': f'{SEGUNDA:%Y-%m-%d}',
+                                         'ate': f'{DOMINGO:%Y-%m-%d}'})['encurtado'] is False)
 
         print('\n== OS PERÍODOS DA ANÁLISE ==')
         tipos = EnvioAnalisePonto.Tipo
@@ -404,9 +508,14 @@ try:
         t('mês que acaba no fim de semana: vale a sexta (29/05/2026)',
           analise_svc.e_ultimo_dia_util_do_mes(date(2026, 5, 29))
           and not analise_svc.e_ultimo_dia_util_do_mes(date(2026, 5, 31)))
-        config = AnalisePontoConfig.get()
         t('a análise nasce desligada, mas com as três cadências marcadas',
-          not config.ativo and config.diario and config.semanal and config.mensal)
+          not AnalisePontoConfig().ativo and AnalisePontoConfig().diario
+          and AnalisePontoConfig().semanal and AnalisePontoConfig().mensal)
+        config = AnalisePontoConfig.get()
+        config.ativo = False            # o registro do banco pode estar ligado de verdade
+        config.diario = config.semanal = config.mensal = True
+        config.somente_com_pendencia = True
+        config.save()
         t('numa segunda vencem a diária e a semanal',
           analise_svc.cadencias_do_dia(config, SEGUNDA + timedelta(days=7)) == [tipos.DIARIO, tipos.SEMANAL])
         t('numa terça comum, só a diária',
@@ -468,12 +577,13 @@ try:
               not envio.chamadas and resumo['ja_enviados'] == 1, resumo)
 
             envio.chamadas.clear()
-            resumo = analise_svc.enviar(tipos=[tipos.DIARIO], hoje=date(2026, 2, 20), config=config)
+            SEM_DADO = date(2025, 6, 11)
+            resumo = analise_svc.enviar(tipos=[tipos.DIARIO], hoje=SEM_DADO, config=config)
             t('período sem divergência nenhuma não vira mensagem',
               resumo['sem_divergencia'] == 1 and not envio.chamadas, resumo)
             config.somente_com_pendencia = False
             config.save()
-            resumo = analise_svc.enviar(tipos=[tipos.DIARIO], hoje=date(2026, 2, 20), config=config)
+            resumo = analise_svc.enviar(tipos=[tipos.DIARIO], hoje=SEM_DADO, config=config)
             t('a não ser que a configuração peça o "tudo certo"',
               resumo['enviados'] == 1 and 'Nenhuma divergência' in envio.chamadas[-1][1], resumo)
 

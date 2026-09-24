@@ -18,7 +18,10 @@ COLUNAS = [
     ('Horas previstas', 15), ('Horas trabalhadas', 17), ('Intervalo', 11),
     ('Horas extras', 13), ('Pendência', 70),
 ]
-MAXIMO_DE_DIAS = 186            # seis meses: o período pedido tem limite para a tela não travar
+# Um ano. O limite existe para a tela não travar — e agora o peso está no
+# espelho local (a busca no Tangerino é feita uma vez, em pedaços), então dá
+# para pedir o ano inteiro. A tela mostra as primeiras 500 linhas; o Excel, todas.
+MAXIMO_DE_DIAS = 366
 
 
 def periodo_padrao(hoje=None):
@@ -41,13 +44,17 @@ def ler_filtros(pedido, hoje=None):
     fim = ler_data(pedido.get('ate'), fim_padrao)
     if fim < inicio:
         inicio, fim = fim, inicio
-    if (fim - inicio).days > MAXIMO_DE_DIAS:
+    encurtado = (fim - inicio).days > MAXIMO_DE_DIAS
+    if encurtado:
         inicio = fim - timedelta(days=MAXIMO_DE_DIAS)
     setor = (pedido.get('setor') or '').strip()
     usuario = (pedido.get('usuario') or '').strip()
     return {
         'de': inicio,
         'ate': fim,
+        # A tela conta quando encurtou: período que muda sozinho, sem dizer, é
+        # relatório que parece estar escondendo dias.
+        'encurtado': encurtado,
         'setor': int(setor) if setor.isdigit() else None,
         'usuario': int(usuario) if usuario.isdigit() else None,
         'pendencias': pedido.get('pendencias') == '1',

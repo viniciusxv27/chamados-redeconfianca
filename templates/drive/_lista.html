@@ -19,14 +19,12 @@
         </div>
     </a>
     <div class="absolute top-2 right-2 flex items-center gap-1">
-        {% if not item.is_folder %}
         <form method="post" action="{% url 'drive:favorite_toggle' item.id %}" class="dv-fav-form">
             {% csrf_token %}
             <button type="submit" title="Favoritar" class="w-7 h-7 rounded-md hover:bg-gray-100 text-sm {% if item.fav %}text-amber-400{% else %}text-gray-300 group-hover:text-gray-400{% endif %}">
                 <i class="fas fa-star"></i>
             </button>
         </form>
-        {% endif %}
         <div class="relative">
             {# No toque não existe passar o mouse: o "⋯" fica sempre à mostra no celular. #}
             <button type="button" onclick="dvMenu(this)" title="Mais ações" aria-label="Mais ações de {{ item.name }}"

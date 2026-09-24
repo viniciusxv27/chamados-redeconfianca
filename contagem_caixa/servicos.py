@@ -227,8 +227,9 @@ def importar(arquivo, usuario=None, config=None):
 def recalcular_saldos(loja_id, desde=None):
     """Refaz o saldo acumulado da loja a partir de uma data.
 
-    O saldo é encadeado (saldo do dia = saldo anterior + valor real), então
-    mexer num dia do meio obriga a refazer todos os seguintes.
+    O saldo é encadeado (saldo do dia = saldo anterior + valor real +
+    diferença − depósito), então mexer num dia do meio obriga a refazer todos
+    os seguintes.
 
     Mês com saldo inicial definido (``SaldoInicialMes``) corta a corrente: a
     abertura vale em vez do fechamento do mês anterior. Sem linha nenhuma, nada

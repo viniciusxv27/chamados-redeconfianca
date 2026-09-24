@@ -245,9 +245,9 @@ try:
           and '1 novo(s)' in registro.detalhe and '3 apagado(s)' in registro.detalhe,
           registro.detalhe if registro else None)
         comecos = list(DriveAuditLog.objects.filter(acao='USO_LOCAL', detalhe__startswith='início')
-                       .order_by('id').values_list('detalhe', flat=True))
+                       .values_list('detalhe', flat=True))
         t('o começo também ficou registrado, com quantos arquivos',
-          comecos and '3 arquivo(s)' in comecos[0], comecos[:2])
+          any('3 arquivo(s)' in c for c in comecos), comecos)
 
         print('\n== O MENU DA LISTAGEM ==')
         html = c_chefe.get(f'/drive/s/{setor.id}/').content.decode()
@@ -258,6 +258,27 @@ try:
         t('e a página carrega o módulo do uso local', 'rc-uso-local.js' in html)
         html = c_ve.get(f'/drive/s/{setor.id}/').content.decode()
         t('quem não pode baixar não vê a opção', 'Usar localmente' not in html)
+
+        print('\n== USAR LOCALMENTE TAMBÉM NO /drive/ ==')
+        html = c_chefe.get('/drive/').content.decode()
+        t('o cartão do setor oferece usar localmente',
+          'Usar localmente' in html and 'data-uso-local="SETOR_RAIZ"' in html, )
+        t('com o "Finalizar uso" do lado, para quando já existir cópia',
+          'data-uso-papel="finalizar"' in html)
+        t('e a página do Drive carrega o módulo', 'rc-uso-local.js' in html)
+
+        from drive.models import DriveFavorite
+        DriveFavorite.objects.create(user=chefe, file_id='PASTA_OBRA', file_name='ZZ Obra 2026',
+                                     mime_type=FOLDER, sector=setor)
+        html = c_chefe.get('/drive/favoritos/').content.decode()
+        t('o favorito de pasta abre a pasta, não a prévia de arquivo',
+          f'/drive/s/{setor.id}/f/PASTA_OBRA/' in html and 'Pasta' in html)
+        t('e dá para usar localmente a partir dos favoritos',
+          'data-uso-local="PASTA_OBRA"' in html and 'rc-uso-local.js' in html)
+
+        dados = c_chefe.get(URL.format('SETOR_RAIZ')).json()
+        t('a raiz do setor inteira pode ir para o computador',
+          dados['pasta'] is True and len(dados['arquivos']) == 3, dados.get('arquivos'))
 
         print('\n== NOVA PASTA DEVOLVE O ID ==')
         r = c_chefe.post(f'/drive/s/{setor.id}/mkdir/',

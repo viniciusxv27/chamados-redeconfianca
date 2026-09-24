@@ -170,13 +170,20 @@ class ContagemCaixaDia(models.Model):
         return (self.entrada or ZERO) - (self.valor_real or ZERO)
 
     def calcular_saldo(self, saldo_anterior):
-        """Saldo do dia = saldo anterior + valor real − depósito.
+        """Saldo do dia = saldo anterior + Valor real + Diferença − Depósito.
+
+        Valor real + Diferença é a Entrada — tudo o que entrou na gaveta no
+        dia. Somando só o Valor real, o saldo ficava parado enquanto a loja não
+        contasse o dia (e hoje quase nenhuma conta), e a diferença, que é
+        dinheiro que a loja continua devendo, nunca chegava no saldo. Assim o
+        saldo é sempre o que tem de haver na gaveta, contado ou não.
 
         O que foi depositado saiu da gaveta e foi para o banco; continuar
         somando no saldo faria o caixa parecer ter dinheiro que não tem.
         """
         return ((saldo_anterior or ZERO)
                 + (self.valor_real or ZERO)
+                + (self.diferenca or ZERO)
                 - (self.deposito or ZERO))
 
 

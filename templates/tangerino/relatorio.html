@@ -57,6 +57,12 @@ O relatório completa o período no Tangerino antes de montar as linhas. Quando
 isso falha, o que aparece na tela é só o que já estava espelhado — e isso
 precisa estar escrito, senão um relatório curto passa por realidade.
 {% endcomment %}
+{% if filtros.encurtado %}
+<div class="tg-card p-3 mb-4 border-amber-200 bg-amber-50 text-amber-900 text-sm">
+    <i class="fas fa-calendar-day mr-1"></i>O período pedido passa de {{ maximo_de_dias }} dias;
+    o relatório mostra de {{ filtros.de|date:"d/m/Y" }} a {{ filtros.ate|date:"d/m/Y" }}.
+</div>
+{% endif %}
 {% if aviso.erro %}
 <div class="tg-card p-3 mb-4 border-amber-200 bg-amber-50 text-amber-900 text-sm">
     <i class="fas fa-triangle-exclamation mr-1"></i>{{ aviso.erro }}

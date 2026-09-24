@@ -243,6 +243,11 @@ class DriveFavorite(models.Model):
     sector = models.ForeignKey('users.Sector', on_delete=models.SET_NULL, null=True, blank=True)
     criado_em = models.DateTimeField(auto_now_add=True)
 
+    @property
+    def e_pasta(self):
+        """Favorito de pasta abre a listagem dela, não a prévia de arquivo."""
+        return self.mime_type == 'application/vnd.google-apps.folder'
+
     class Meta:
         verbose_name = 'Favorito do Drive'
         verbose_name_plural = 'Favoritos do Drive'

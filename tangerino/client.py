@@ -11,6 +11,7 @@ registra no log. Só as ações de escrita (bater ponto) propagam o erro, porque
 aí o usuário precisa saber que não foi registrado.
 """
 import logging
+import time as relogio
 from datetime import datetime, time, timedelta
 from datetime import timezone as dt_timezone
 
@@ -163,8 +164,14 @@ def funcionario(employee_id):
 
 # ─── Marcações de ponto ──────────────────────────────────────────────────────
 
-# O payssego só obedece ``size``, e no máximo 2000 (ver ``_marcacoes_de_um``).
+# O payssego só obedece ``size``, e no máximo 2000 (ver ``_pedaco_de_marcacoes``).
 MARCACOES_POR_PEDIDO = 2000
+# O período é quebrado em pedaços curtos: página cheia corta as batidas mais
+# antigas sem avisar, e é disso que nasce "não houve nenhuma batida no dia".
+DIAS_POR_PEDIDO = 62
+TENTATIVAS_POR_PEDIDO = 3
+ESPERA_ENTRE_TENTATIVAS = 1.5
+MAX_EM_PARALELO = 8
 
 
 def _ddmmaaaa(quando):
@@ -212,7 +219,7 @@ def _bloco_de_dias_inteiros(r):
                 and entrada.time() == time.min and saida.time() == time.min)
 
 
-def _marcacoes_de_um(inicio, fim, employee_id):
+def _pedaco_de_marcacoes(inicio, fim, employee_id):
     """Marcações de UM funcionário, já no formato de pares entrada/saída.
 
     Fonte: ``GET /external/api/v1/payssego/punches/{id}`` com datas em dd/MM/yyyy.
@@ -252,7 +259,37 @@ def _marcacoes_de_um(inicio, fim, employee_id):
     return pares
 
 
-def _marcacoes_de_todos(inicio, fim, ids=None):
+def _marcacoes_de_um(inicio, fim, employee_id):
+    """Marcações de UM funcionário no período, em pedaços de dois meses.
+
+    Um pedido só para meio ano cabia no ``size`` — mas cabia por sorte: com a
+    página cheia o endpoint corta as mais antigas **em silêncio**, e o
+    relatório passa a jurar que a pessoa não bateu ponto naqueles dias. Em
+    pedaços curtos isso não acontece, e um pedaço que falha é retentado antes
+    de desistir (a falha sobe, porque marcar o período como "buscado" sem os
+    dados é o que vira falta que não existe).
+    """
+    pares, dia = [], inicio
+    while dia <= fim:
+        ate = min(dia + timedelta(days=DIAS_POR_PEDIDO - 1), fim)
+        ultimo_erro = None
+        for tentativa in range(TENTATIVAS_POR_PEDIDO):
+            try:
+                pares.extend(_pedaco_de_marcacoes(dia, ate, employee_id))
+                ultimo_erro = None
+                break
+            except TangerinoError as exc:
+                ultimo_erro = exc
+                logger.warning('Marcações de %s entre %s e %s falharam (tentativa %d/%d): %s',
+                               employee_id, dia, ate, tentativa + 1, TENTATIVAS_POR_PEDIDO, exc)
+                relogio.sleep(ESPERA_ENTRE_TENTATIVAS * (tentativa + 1))
+        if ultimo_erro is not None:
+            raise ultimo_erro
+        dia = ate + timedelta(days=1)
+    return pares
+
+
+def _marcacoes_de_todos(inicio, fim, ids=None, com_falhas=False):
     """Empresa inteira — ou só as pessoas pedidas. O endpoint é por pessoa.
 
     O painel do gestor consultava todo mundo numa chamada só; como isso não
@@ -271,18 +308,25 @@ def _marcacoes_de_todos(inicio, fim, ids=None):
 
     def _um(eid):
         try:
-            return _marcacoes_de_um(inicio, fim, eid)
-        except TangerinoError:
-            return []
+            return eid, _marcacoes_de_um(inicio, fim, eid), None
+        except TangerinoError as exc:
+            return eid, [], exc
 
-    todos = []
-    with ThreadPoolExecutor(max_workers=12) as executor:
-        for pares in executor.map(_um, ids):
+    todos, falhas = [], {}
+    with ThreadPoolExecutor(max_workers=MAX_EM_PARALELO) as executor:
+        for eid, pares, erro in executor.map(_um, ids):
+            if erro is not None:
+                falhas[eid] = str(erro)[:200]
+                continue
             todos.extend(pares)
-    return todos
+    if falhas:
+        logger.warning('Marcações não vieram de %d funcionário(s): %s',
+                       len(falhas), list(falhas)[:5])
+    return (todos, falhas) if com_falhas else todos
 
 
-def listar_marcacoes(inicio, fim, employee_id=None, employee_ids=None, usar_cache=True, ttl=60):
+def listar_marcacoes(inicio, fim, employee_id=None, employee_ids=None, usar_cache=True, ttl=60,
+                     com_falhas=False):
     """Marcações num intervalo de dias, no formato de pares entrada/saída.
 
     Cada item é um PAR (``dateIn``/``dateOut``); ``dateOut`` vazio significa que a
@@ -292,21 +336,25 @@ def listar_marcacoes(inicio, fim, employee_id=None, employee_ids=None, usar_cach
     em ``_marcacoes_de_um``.
     """
     if employee_ids is not None and not employee_ids:
-        return []
+        return ([], {}) if com_falhas else []
     quem = (employee_id or (f'g{len(employee_ids)}:{min(employee_ids)}-{max(employee_ids)}'
                             if employee_ids else 'todos'))
     chave = f"tangerino:marcacoes:{quem}:{inicio}:{fim}"
     if usar_cache:
         em_cache = cache.get(chave)
         if em_cache is not None:
-            return em_cache
+            return (em_cache, {}) if com_falhas else em_cache
 
+    falhas = {}
     if employee_id:
         itens = _marcacoes_de_um(inicio, fim, employee_id)
     else:
-        itens = _marcacoes_de_todos(inicio, fim, ids=employee_ids)
-    cache.set(chave, itens, ttl)
-    return itens
+        itens, falhas = _marcacoes_de_todos(inicio, fim, ids=employee_ids, com_falhas=True)
+    # Resultado com falha não vai para o cache: senão o buraco de uma consulta
+    # ruim ficaria de pé até o cache vencer.
+    if not falhas:
+        cache.set(chave, itens, ttl)
+    return (itens, falhas) if com_falhas else itens
 
 
 def listar_saldo_horas(inicio, fim, employee_id=None, tentativas=3):

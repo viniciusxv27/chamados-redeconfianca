@@ -1,7 +1,8 @@
 {% extends 'drive/base_drive.html' %}
-{% load drive_extras %}
+{% load drive_extras static %}
 {% block drive_titulo %}Favoritos — Drive{% endblock %}
 {% block drive_conteudo %}
+<script src="{% static 'js/rc-uso-local.js' %}" defer></script>
 <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Meus favoritos</h2>
 {% if itens %}
 <div class="bg-white rounded-2xl border border-gray-100 shadow-sm divide-y divide-gray-50">
@@ -12,11 +13,24 @@
         permissões por setor, então abre (e sai dos favoritos) pela porta
         própria do Meu Drive.
         {% endcomment %}
-        <a href="{% if f.sector %}{% url 'drive:file_preview' f.file_id %}{% else %}{% url 'drive:meu_drive_arquivo' f.file_id %}{% endif %}" class="flex items-center gap-3 flex-1 min-w-0">
+        <a href="{% if f.sector and f.e_pasta %}{% url 'drive:browse_folder' f.sector_id f.file_id %}{% elif f.sector %}{% url 'drive:file_preview' f.file_id %}{% else %}{% url 'drive:meu_drive_arquivo' f.file_id %}{% endif %}" class="flex items-center gap-3 flex-1 min-w-0">
             <i class="fas {{ f.mime_type|file_icon }}"></i>
             <span class="text-sm text-gray-800 truncate flex-1">{{ f.file_name|default:'Documento' }}</span>
+            {% if f.e_pasta %}<span class="text-[10px] uppercase px-1.5 py-0.5 rounded bg-blue-50 text-blue-600">Pasta</span>{% endif %}
             {% if f.sector %}<span class="text-xs text-gray-400 hidden sm:inline">{{ f.sector.name }}</span>{% else %}<span class="text-xs text-blue-500 hidden sm:inline">Meu Drive</span>{% endif %}
         </a>
+        {% if f.sector %}
+        <button type="button" data-uso-local="{{ f.file_id }}" data-uso-papel="usar"
+                onclick="RCUsoLocal.usar('{{ f.file_id }}','{{ f.file_name|escapejs }}')"
+                title="Usar localmente" class="hidden w-8 h-8 rounded-lg text-gray-400 hover:bg-gray-100">
+            <i class="fas fa-laptop"></i>
+        </button>
+        <button type="button" data-uso-local="{{ f.file_id }}" data-uso-papel="finalizar"
+                onclick="RCUsoLocal.finalizar('{{ f.file_id }}','{{ f.file_name|escapejs }}')"
+                title="Finalizar uso" class="hidden w-8 h-8 rounded-lg text-emerald-600 hover:bg-emerald-50">
+            <i class="fas fa-check-double"></i>
+        </button>
+        {% endif %}
         <form method="post" action="{% if f.sector %}{% url 'drive:favorite_toggle' f.file_id %}{% else %}{% url 'drive:meu_drive_favoritar' f.file_id %}{% endif %}">
             {% csrf_token %}
             <button type="submit" title="Remover dos favoritos" class="w-8 h-8 rounded-lg text-amber-400 hover:bg-gray-100"><i class="fas fa-star"></i></button>
