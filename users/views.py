@@ -1652,8 +1652,7 @@ def _read_pre_registration_personal_data(request):
         errors.append('Informe a data de emissão do RG.')
     if not values['rg_issuer']:
         errors.append('Informe o órgão emissor do RG.')
-    if not values['cep']:
-        errors.append('Informe o CEP.')
+    _endereco_pelo_cep(values, errors)
     if not values['father_name']:
         errors.append('Informe o nome completo do pai.')
     if not values['mother_name']:
@@ -1671,7 +1670,7 @@ def _read_pre_registration_personal_data(request):
     if values['education_level'] not in {c[0] for c in User.EDUCATION_LEVEL_CHOICES}:
         errors.append('Selecione o grau de instrução.')
     if values['state'] not in {c[0] for c in User.STATE_CHOICES}:
-        errors.append('Selecione o estado (UF).')
+        errors.append('Informe um CEP válido para preencher o estado (UF).')
     if not values['birthplace']:
         errors.append('Informe a naturalidade.')
     if not values['nationality']:
@@ -1842,6 +1841,49 @@ def _emergency_rows(request, target):
     return linhas
 
 
+def _endereco_pelo_cep(values, errors):
+    """Preenche rua, bairro, cidade e UF a partir do CEP — e cobra o CEP certo.
+
+    No formulário o colaborador digita só o CEP e o número: o resto chega da
+    consulta. Aqui o servidor refaz a consulta e **sobrescreve** o que veio nos
+    campos travados, porque campo travado no HTML é travado só no navegador.
+
+    Três caminhos:
+
+    - CEP não existe (ou nem tem cara de CEP) → erro, e a pessoa digita de novo;
+    - consulta indisponível → segue com o que foi preenchido. Um fora do ar do
+      ViaCEP não pode parar a admissão de alguém;
+    - CEP sem logradouro (os "CEP gerais" de cidade pequena) → cidade e UF vêm
+      da consulta e a rua continua sendo a digitada, que é a única fonte.
+    """
+    from . import cep as cep_svc
+
+    digitos = cep_svc.so_digitos(values['cep'])
+    if not digitos:
+        errors.append('Informe o CEP.')
+        return
+    if not cep_svc.valido(digitos):
+        errors.append('CEP inválido. Confira e digite de novo.')
+        return
+    # Gravado com máscara, como o cadastro do portal já faz (`_parse_cep`).
+    values['cep'] = cep_svc.formatar(digitos)
+
+    try:
+        achado = cep_svc.buscar(digitos)
+    except cep_svc.CepIndisponivel:
+        return                                  # segue com o que está na tela
+    if achado is None:
+        errors.append('CEP não encontrado. Confira e digite de novo.')
+        return
+
+    values['city'] = achado['cidade'] or values['city']
+    values['state'] = achado['uf'] or values['state']
+    if achado['bairro']:
+        values['neighborhood'] = achado['bairro']
+    if achado['logradouro']:
+        values['address'] = achado['logradouro']
+
+
 def _dependent_rows(request, target):
     """As linhas de dependente do formulário, no mesmo desenho das de emergência.
 
@@ -1964,6 +2006,34 @@ def _apply_pre_registration_personal_data(target, values):
             Dependent(user=target, **d)
             for d in (values.get('dependents') or [])[:Dependent.MAX_POR_USUARIO]
         ])
+
+
+def consultar_cep_view(request, cep):
+    """Endereço de um CEP, para a tela do pré-cadastro preencher sozinha.
+
+    Pública como a tela que a usa (o colaborador ainda não tem login). Não
+    chama a internet para qualquer coisa: só CEP com oito dígitos passa, e a
+    resposta de cada um fica em cache por semanas.
+
+    Três respostas, porque a tela trata as três de jeitos diferentes:
+    ``ok`` (preenche), ``invalido`` (manda digitar de novo) e ``indisponivel``
+    (deixa seguir, já que não é culpa de quem digitou).
+    """
+    from . import cep as cep_svc
+
+    if not cep_svc.valido(cep):
+        return JsonResponse({'situacao': 'invalido',
+                             'mensagem': 'CEP inválido. Confira e digite de novo.'}, status=400)
+    try:
+        achado = cep_svc.buscar(cep)
+    except cep_svc.CepIndisponivel:
+        return JsonResponse({'situacao': 'indisponivel',
+                             'mensagem': 'Não conseguimos consultar o CEP agora. '
+                                         'Tente de novo em alguns instantes.'}, status=503)
+    if achado is None:
+        return JsonResponse({'situacao': 'invalido',
+                             'mensagem': 'CEP não encontrado. Confira e digite de novo.'}, status=404)
+    return JsonResponse({'situacao': 'ok', 'endereco': achado})
 
 
 def complete_pre_registration_view(request, token):

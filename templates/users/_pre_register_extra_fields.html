@@ -1,4 +1,5 @@
-{# Campos pessoais complementares + contatos de emergência do pré-cadastro.   #}
+{# Campos pessoais complementares do pré-cadastro (o endereço fica no        #}
+{# _pre_register_endereco.html, que é preenchido pelo CEP).                  #}
 {# Usado por pre_register_complete.html e pre_register_adjust.html.           #}
 {# Params: target (usuário), form_data (POST em caso de erro) e as listas de  #}
 {# opções (sex_choices, gender_choices, marital_status_choices,              #}
@@ -59,39 +60,6 @@
     <label class="block text-sm font-medium text-gray-700 mb-1">Nacionalidade *</label>
     <input type="text" name="nationality" required maxlength="60" placeholder="Ex.: Brasileira"
            value="{% if form_data %}{{ form_data.nationality }}{% elif target.nationality %}{{ target.nationality }}{% else %}Brasileira{% endif %}"
-           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
-</div>
-
-<div>
-    <label class="block text-sm font-medium text-gray-700 mb-1">Endereço *</label>
-    <input type="text" name="address" required maxlength="200" placeholder="Rua/Avenida"
-           value="{% if form_data %}{{ form_data.address }}{% else %}{{ target.address }}{% endif %}"
-           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
-</div>
-
-<div class="grid grid-cols-2 gap-4">
-    <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Nº *</label>
-        <input type="text" name="address_number" required maxlength="20" placeholder="123 ou S/N"
-               value="{% if form_data %}{{ form_data.address_number }}{% else %}{{ target.address_number }}{% endif %}"
-               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
-    </div>
-    <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1">Estado *</label>
-        <select name="state" required
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
-            <option value="">UF</option>
-            {% for val, label in state_choices %}
-            <option value="{{ val }}" {% if form_data and form_data.state == val %}selected{% elif not form_data and target.state == val %}selected{% endif %}>{{ label }}</option>
-            {% endfor %}
-        </select>
-    </div>
-</div>
-
-<div>
-    <label class="block text-sm font-medium text-gray-700 mb-1">Complemento <span class="text-xs text-gray-400">(opcional)</span></label>
-    <input type="text" name="address_complement" maxlength="100" placeholder="Apto, bloco, referência…"
-           value="{% if form_data %}{{ form_data.address_complement }}{% else %}{{ target.address_complement }}{% endif %}"
            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
 </div>
 

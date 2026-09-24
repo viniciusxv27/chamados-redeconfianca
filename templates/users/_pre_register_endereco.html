@@ -1,0 +1,185 @@
+{# Endereço do pré-cadastro: digita-se o CEP e o número; o resto vem da       #}
+{# consulta (users/cep.py, pela URL users:consultar_cep).                     #}
+{# Params: target (usuário) e form_data (POST em caso de erro).               #}
+{#                                                                           #}
+{# Os campos preenchidos pela consulta ficam readonly — e não disabled, que   #}
+{# não seria enviado no POST. O servidor refaz a consulta e sobrescreve o que #}
+{# vier neles: trava de HTML só vale no navegador.                            #}
+<div class="md:col-span-2">
+    <div class="grid grid-cols-1 md:grid-cols-6 gap-4">
+        <div class="md:col-span-2">
+            <label class="block text-sm font-medium text-gray-700 mb-1">CEP *</label>
+            <input type="text" id="cepCampo" name="cep" required placeholder="00000-000"
+                   inputmode="numeric" maxlength="9" autocomplete="postal-code"
+                   value="{% if form_data %}{{ form_data.cep }}{% else %}{{ target.cep_display }}{% endif %}"
+                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+            <p id="cepAviso" class="text-xs mt-1 text-gray-500">O endereço é preenchido pelo CEP.</p>
+        </div>
+
+        <div class="md:col-span-4">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Endereço *</label>
+            <input type="text" name="address" required maxlength="200" readonly data-cep-preenche="logradouro"
+                   value="{% if form_data %}{{ form_data.address }}{% else %}{{ target.address }}{% endif %}"
+                   class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600
+                          read-only:cursor-not-allowed focus:ring-2 focus:ring-primary focus:border-transparent">
+        </div>
+
+        <div class="md:col-span-2">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Nº *</label>
+            <input type="text" name="address_number" required maxlength="20" placeholder="123 ou S/N"
+                   value="{% if form_data %}{{ form_data.address_number }}{% else %}{{ target.address_number }}{% endif %}"
+                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+        </div>
+
+        <div class="md:col-span-4">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Complemento <span class="text-xs text-gray-400">(opcional)</span></label>
+            <input type="text" name="address_complement" maxlength="100" placeholder="Apto, bloco, referência…"
+                   value="{% if form_data %}{{ form_data.address_complement }}{% else %}{{ target.address_complement }}{% endif %}"
+                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+        </div>
+
+        <div class="md:col-span-3">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Bairro</label>
+            <input type="text" name="neighborhood" readonly data-cep-preenche="bairro"
+                   value="{% if form_data %}{{ form_data.neighborhood }}{% else %}{{ target.neighborhood }}{% endif %}"
+                   class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600
+                          read-only:cursor-not-allowed focus:ring-2 focus:ring-primary focus:border-transparent">
+        </div>
+
+        <div class="md:col-span-2">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Cidade *</label>
+            <input type="text" name="city" required readonly data-cep-preenche="cidade"
+                   value="{% if form_data %}{{ form_data.city }}{% else %}{{ target.city }}{% endif %}"
+                   class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600
+                          read-only:cursor-not-allowed focus:ring-2 focus:ring-primary focus:border-transparent">
+        </div>
+
+        <div class="md:col-span-1">
+            <label class="block text-sm font-medium text-gray-700 mb-1">UF *</label>
+            <input type="text" name="state" required readonly maxlength="2" data-cep-preenche="uf"
+                   value="{% if form_data %}{{ form_data.state }}{% else %}{{ target.state }}{% endif %}"
+                   class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600 uppercase
+                          read-only:cursor-not-allowed focus:ring-2 focus:ring-primary focus:border-transparent">
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    var campo = document.getElementById('cepCampo');
+    var aviso = document.getElementById('cepAviso');
+    if (!campo || !aviso) return;
+    var preenchidos = {};
+    document.querySelectorAll('[data-cep-preenche]').forEach(function (el) {
+        preenchidos[el.dataset.cepPreenche] = el;
+    });
+
+    function digitos(valor) {
+        return (valor || '').replace(/\D/g, '').slice(0, 8);
+    }
+
+    function mascara(valor) {
+        var d = digitos(valor);
+        return d.length > 5 ? d.slice(0, 5) + '-' + d.slice(5) : d;
+    }
+
+    function dizer(texto, cor) {
+        aviso.textContent = texto;
+        aviso.className = 'text-xs mt-1 ' + (cor || 'text-gray-500');
+    }
+
+    function travar(travado) {
+        Object.keys(preenchidos).forEach(function (chave) {
+            var el = preenchidos[chave];
+            el.readOnly = travado;
+            el.classList.toggle('bg-gray-50', travado);
+            el.classList.toggle('text-gray-600', travado);
+        });
+    }
+
+    function limpar() {
+        Object.keys(preenchidos).forEach(function (chave) { preenchidos[chave].value = ''; });
+    }
+
+    // O bloqueio é o do próprio navegador: um listener de submit seria pulado
+    // pelo envio programático de quem encolhe as imagens antes de mandar.
+    function impedir(motivo) {
+        campo.setCustomValidity(motivo || '');
+    }
+
+    var ultimo = '';
+    var pedido = 0;
+
+    function consultar() {
+        var d = digitos(campo.value);
+        if (d.length < 8) {
+            impedir(d ? 'O CEP tem 8 dígitos.' : '');
+            if (d) { dizer('O CEP tem 8 dígitos.', 'text-amber-600'); }
+            ultimo = '';
+            return;
+        }
+        if (d === ultimo) return;
+        ultimo = d;
+        var meu = ++pedido;
+        dizer('Consultando o CEP…', 'text-gray-500');
+        fetch('/users/cep/' + d + '/', {headers: {'Accept': 'application/json'}})
+            .then(function (r) { return r.json().then(function (dados) { return {ok: r.ok, dados: dados}; }); })
+            .then(function (resposta) {
+                if (meu !== pedido) return;                  // resposta velha, já tem outra a caminho
+                var dados = resposta.dados || {};
+                if (dados.situacao === 'ok') {
+                    var e = dados.endereco || {};
+                    if (preenchidos.logradouro) preenchidos.logradouro.value = e.logradouro || '';
+                    if (preenchidos.bairro) preenchidos.bairro.value = e.bairro || '';
+                    if (preenchidos.cidade) preenchidos.cidade.value = e.cidade || '';
+                    if (preenchidos.uf) preenchidos.uf.value = e.uf || '';
+                    travar(true);
+                    impedir('');
+                    if (!e.logradouro && preenchidos.logradouro) {
+                        // "CEP geral" de cidade pequena: não tem rua na base.
+                        preenchidos.logradouro.readOnly = false;
+                        preenchidos.logradouro.classList.remove('bg-gray-50', 'text-gray-600');
+                        dizer('Este CEP não tem rua cadastrada — escreva o endereço.', 'text-amber-600');
+                        preenchidos.logradouro.focus();
+                    } else {
+                        dizer(e.cidade + ' - ' + e.uf + '. Falta só o número.', 'text-emerald-600');
+                    }
+                    return;
+                }
+                if (dados.situacao === 'indisponivel') {
+                    travar(false);
+                    impedir('');
+                    dizer(dados.mensagem || 'Não conseguimos consultar o CEP agora. '
+                          + 'Confira o endereço abaixo.', 'text-amber-600');
+                    return;
+                }
+                limpar();
+                travar(true);
+                impedir(dados.mensagem || 'CEP inválido. Confira e digite de novo.');
+                dizer(dados.mensagem || 'CEP inválido. Confira e digite de novo.', 'text-red-600');
+            })
+            .catch(function () {
+                if (meu !== pedido) return;
+                travar(false);
+                impedir('');
+                dizer('Não conseguimos consultar o CEP agora. Confira o endereço abaixo.', 'text-amber-600');
+            });
+    }
+
+    campo.addEventListener('input', function () {
+        campo.value = mascara(campo.value);
+        impedir('');
+        if (digitos(campo.value).length === 8) consultar();
+    });
+    campo.addEventListener('blur', consultar);
+
+    // Quem reabre o formulário (ajuste) já tem endereço: fica travado até
+    // mexer no CEP, que é o que manda no endereço agora.
+    if (digitos(campo.value).length === 8) {
+        ultimo = digitos(campo.value);
+        if (preenchidos.cidade && preenchidos.cidade.value) {
+            dizer('Endereço preenchido pelo CEP. Para trocar, digite outro CEP.', 'text-gray-500');
+        }
+    }
+})();
+</script>

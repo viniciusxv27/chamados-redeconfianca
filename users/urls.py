@@ -10,6 +10,9 @@ urlpatterns = [
     path('reset-password/<uidb64>/<token>/', views.reset_password_view, name='reset_password'),
     path('logout/', views.logout_view, name='logout'),
 
+    # Consulta de CEP do pré-cadastro (público, como a própria tela)
+    path('cep/<str:cep>/', views.consultar_cep_view, name='consultar_cep'),
+
     # Pré-cadastro público (link enviado ao novo colaborador, sem login)
     path('pre-cadastro/concluido/', views.pre_registration_success_view, name='pre_registration_success'),
     path('pre-cadastro/ajustar/', views.adjust_pre_registration_view, name='adjust_pre_registration'),
