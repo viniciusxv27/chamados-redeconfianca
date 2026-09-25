@@ -9,7 +9,7 @@ from urllib.parse import urlencode
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.db.models import Q
-from django.http import JsonResponse
+from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -24,6 +24,7 @@ from .ai import generate_feedback_summary
 from . import ciclos as ciclos_service
 from .models import (
     FAIXAS_DA_NOTA,
+    AcessoAutoriaIdeia,
     Ciclo, CicloMes, ConclusaoConteudo, ConteudoConectar, ExcecaoAssiduidade, Ideia,
     ImpulsoFeedback,
     Meta, MetaAnexo, MetaComentario, MetaItem, MetaVisualizacao, PontuacaoMensal,
@@ -2866,7 +2867,9 @@ def inovar_list(request):
     """
     user = request.user
     gestor = is_impulso_manager(user)
-    if gestor:
+    # Liberado em /impulso/inovar/adm/: além de ver as ideias, vê de quem são.
+    ve_autoria = AcessoAutoriaIdeia.pode_ver(user)
+    if gestor or ve_autoria:
         ideias = Ideia.objects.all()
     else:
         # Quem foi incluído na ideia também precisa vê-la: é dela que vêm os
@@ -2882,23 +2885,88 @@ def inovar_list(request):
     ids_participando = set()
     for ideia in lista:
         equipe = list(ideia.participantes.all())
-        # Único caso em que o nome aparece: a ideia é de quem está vendo.
+        # O nome aparece quando a ideia é de quem está vendo — ou quando a
+        # pessoa foi liberada para ver a autoria.
         ideia.mostrar_autor = (ideia.autor_id == user.id)
+        ideia.autor_visivel = ideia.autor if (ve_autoria and not ideia.mostrar_autor) else None
         ideia.sou_participante = any(p.id == user.id for p in equipe)
         # A autoria fica escondida do gestor de propósito — os nomes de quem
         # participou seguem a mesma regra, senão a anonimidade cairia por aí.
-        ideia.equipe_visivel = equipe if ideia.mostrar_autor else []
+        ideia.equipe_visivel = equipe if (ideia.mostrar_autor or ve_autoria) else []
         if ideia.sou_participante:
             ids_participando.add(ideia.id)
 
     context = {
         'ideias': lista,
         'is_gestor': gestor,
+        've_autoria': ve_autoria,
         'status_choices': Ideia.Status.choices,
         'active_tab': 'inovar',
         **filtros_impulso.contexto_mes(request, f),
     }
     return render(request, 'impulso/inovar_list.html', context)
+
+
+@impulso_member_or_superadmin_required
+def inovar_adm(request):
+    """Tela escondida: quem pode ver de quem é cada ideia.
+
+    Não sai em menu nenhum e não tem link em lugar nenhum — quem não é
+    SUPERADMIN recebe 404, e não "sem permissão": uma tela escondida que diz
+    "você não pode" deixa de estar escondida.
+
+    A ideia é avaliada sem autor; aqui o SUPERADMIN abre a autoria para uma
+    pessoa de cada vez, dizendo por quê, e a lista mostra quem liberou e
+    quando — tirar o acesso é um clique.
+    """
+    if not e_superadmin(request.user):
+        raise Http404
+
+    def _numero(campo):
+        """Id vindo do formulário — vazio ou torto não pode virar erro 500."""
+        valor = (request.POST.get(campo) or '').strip()
+        return int(valor) if valor.isdigit() else 0
+
+    if request.method == 'POST':
+        if request.POST.get('acao') == 'remover':
+            acesso = (AcessoAutoriaIdeia.objects.filter(pk=_numero('acesso'))
+                      .select_related('user').first())
+            if acesso:
+                nome = acesso.user.full_name or acesso.user.get_username()
+                acesso.delete()
+                messages.success(request, f'{nome} não vê mais de quem são as ideias.')
+            else:
+                messages.error(request, 'Esse acesso já não existe.')
+            return redirect('impulso:inovar_adm')
+
+        pessoa = User.objects.filter(pk=_numero('pessoa'), is_active=True).first()
+        if not pessoa:
+            messages.error(request, 'Escolha uma pessoa ativa.')
+            return redirect('impulso:inovar_adm')
+        if e_superadmin(pessoa):
+            messages.info(request, f'{pessoa.full_name} já vê a autoria por ser SUPERADMIN.')
+            return redirect('impulso:inovar_adm')
+        acesso, criado = AcessoAutoriaIdeia.objects.update_or_create(
+            user=pessoa,
+            defaults={'motivo': (request.POST.get('motivo') or '').strip()[:200],
+                      'liberado_por': request.user})
+        messages.success(request, (
+            f'{pessoa.full_name} passa a ver de quem é cada ideia.' if criado
+            else f'Acesso de {pessoa.full_name} atualizado.'))
+        return redirect('impulso:inovar_adm')
+
+    acessos = (AcessoAutoriaIdeia.objects
+               .select_related('user', 'user__sector', 'liberado_por')
+               .order_by('user__first_name', 'user__last_name'))
+    liberados = {a.user_id for a in acessos}
+    return render(request, 'impulso/inovar_adm.html', {
+        'acessos': acessos,
+        'pessoas': (User.objects.filter(is_active=True).select_related('sector')
+                    .exclude(id__in=liberados).order_by('first_name', 'last_name')),
+        'total_ideias': Ideia.objects.count(),
+        'autores': Ideia.objects.values('autor_id').distinct().count(),
+        'active_tab': 'inovar',
+    })
 
 
 def _participantes_da_ideia(request, autor):

@@ -129,6 +129,39 @@ def rotina_semana(request):
 
 
 @api('POST')
+def rotina_concluir(request, atividade_id):
+    """Conclui a atividade daquele dia. Com comprovante, quando a atividade exige.
+
+    Vem como multipart (o arquivo), não JSON: `data` (AAAA-MM-DD), `observacao`
+    e `comprovante`. Só a dona da rotina conclui — o SUPERADMIN acompanha e
+    pode desfazer, mas não conclui no lugar dela.
+    """
+    atividade = atividade_da_rotina(request, atividade_id)
+    if atividade.rotina.user_id != request.user.id:
+        raise SemPermissao('Só a pessoa da rotina conclui a atividade dela.')
+    servicos.conferir_rotina_ativa(atividade.rotina)
+    conclusao = servicos.concluir_atividade(
+        atividade, request.user,
+        request.POST.get('data'),
+        arquivo=request.FILES.get('comprovante'),
+        observacao=request.POST.get('observacao', ''))
+    return JsonResponse({'ok': True, 'conclusao': servicos.serializar_conclusao(conclusao)})
+
+
+@api('POST')
+def rotina_desfazer(request, atividade_id):
+    """Tira a conclusão daquele dia — a pessoa, para refazer; o SUPERADMIN, para corrigir."""
+    atividade = atividade_da_rotina(request, atividade_id)
+    dona = atividade.rotina.user_id == request.user.id
+    if not dona and not e_superadmin(request.user):
+        raise SemPermissao('Só a pessoa da rotina ou o SUPERADMIN desfaz.')
+    if dona:
+        servicos.conferir_rotina_ativa(atividade.rotina)
+    servicos.desfazer_conclusao(atividade, request.POST.get('data'))
+    return JsonResponse({'ok': True, 'conclusao': None})
+
+
+@api('POST')
 def rotina_criar(request):
     corpo = ler_json(request)
     rotina = rotina_do_alvo(request, corpo.get('usuario'))

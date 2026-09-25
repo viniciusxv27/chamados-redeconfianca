@@ -130,6 +130,46 @@ as abas dos dias presas no topo e o dia em lista (padrão) ou em grade.
             <p class="rt-det-whatsapp hidden" data-rt="det-whatsapp"><i class="fab fa-whatsapp" aria-hidden="true"></i> <span></span></p>
             <div class="rt-det-descricao" data-rt="det-descricao"></div>
 
+            {% comment %}
+            Concluir a atividade do dia. Quando a atividade pede comprovante, o
+            arquivo é obrigatório — e quem cobra isso de verdade é o servidor.
+            {% endcomment %}
+            <div class="rt-det-conclusao hidden" data-rt="det-conclusao">
+                <p class="rt-det-conclusao-feita hidden" data-rt="det-conclusao-feita"></p>
+                <a class="rt-det-comprovante hidden" data-rt="det-comprovante" target="_blank" rel="noopener">
+                    <i class="fas fa-paperclip" aria-hidden="true"></i> <span>Ver comprovante</span>
+                </a>
+                <form data-rt="det-concluir" novalidate>
+                    <p class="rt-rotulo" data-rt="det-concluir-titulo"><i class="fas fa-circle-check"></i> Concluir esta atividade</p>
+                    <label class="rt-campo hidden" data-rt="det-arquivo-campo">
+                        <span class="rt-rotulo">Comprovante <small>(foto, print ou PDF)</small></span>
+                        <input type="file" name="comprovante" class="rt-input"
+                               accept="image/*,application/pdf" capture="environment">
+                    </label>
+                    <label class="rt-campo">
+                        <span class="rt-rotulo">Observação <small>(opcional)</small></span>
+                        <textarea name="observacao" class="rt-input" rows="2" maxlength="2000"
+                                  placeholder="O que foi feito, se quiser registrar"></textarea>
+                    </label>
+                    <p class="rt-erro hidden" data-rt="det-conclusao-erro" role="alert"></p>
+                    <div class="rt-det-conclusao-acoes">
+                        <button type="submit" class="rt-btn rt-btn-primario rt-btn-sm" data-rt="det-concluir-botao">
+                            <i class="fas fa-check"></i> <span>Concluir</span>
+                        </button>
+                    </div>
+                </form>
+                {% comment %}
+                Fora do formulário de propósito: quando a atividade já está
+                concluída o formulário some, e o desfazer precisa continuar ali
+                (é como se troca um comprovante errado).
+                {% endcomment %}
+                <div class="rt-det-conclusao-acoes">
+                    <button type="button" class="rt-btn rt-btn-claro rt-btn-sm hidden" data-rt="det-desfazer">
+                        <i class="fas fa-rotate-left"></i> Desfazer
+                    </button>
+                </div>
+            </div>
+
             <form class="rt-det-horario hidden" data-rt="det-horario" novalidate>
                 <p class="rt-rotulo"><i class="fas fa-clock"></i> Mudar dia e horário</p>
                 <div class="rt-grade-2">
@@ -230,6 +270,13 @@ as abas dos dias presas no topo e o dia em lista (padrão) ou em grade.
                 <span>
                     <strong><i class="fas fa-lock"></i> Horário travado</strong>
                     <small>A pessoa não consegue mover a atividade nem mudar a duração.</small>
+                </span>
+            </label>
+            <label class="rt-switch-linha">
+                <span class="rt-switch"><input type="checkbox" name="exige_comprovante"><span class="rt-switch-trilho"></span></span>
+                <span>
+                    <strong><i class="fas fa-paperclip"></i> Necessita comprovante</strong>
+                    <small>Para concluir, a pessoa precisa enviar uma foto, print ou PDF do que foi feito.</small>
                 </span>
             </label>
             {% endif %}

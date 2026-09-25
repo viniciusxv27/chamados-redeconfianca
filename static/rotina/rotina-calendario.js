@@ -265,7 +265,9 @@
                 var curto = minutos < 30;
                 var raiz = criar('div', 'rt-ev' + (curto ? ' rt-ev-curto' : ''));
                 var marca = null;
-                if (a.bloqueada) { marca = icone('fa-lock rt-ev-icone'); }
+                if (a.conclusao) { marca = icone('fa-circle-check rt-ev-icone rt-ev-feita'); }
+                else if (a.exige_comprovante) { marca = icone('fa-paperclip rt-ev-icone'); }
+                else if (a.bloqueada) { marca = icone('fa-lock rt-ev-icone'); }
                 else if (a.criada_pela_pessoa) { marca = icone('fa-user-pen rt-ev-icone'); }
                 var titulo = criar('span', 'rt-ev-titulo', arg.event.title);
                 if (curto) {
@@ -286,7 +288,8 @@
                 var a = atividades[info.event.id];
                 if (!a) { return; }
                 info.el.setAttribute('aria-label', a.titulo + ', ' + nomeDoDia(a.dia_semana) + ', das '
-                    + a.inicio + ' às ' + a.fim + (a.bloqueada ? ', horário travado' : ''));
+                    + a.inicio + ' às ' + a.fim + (a.bloqueada ? ', horário travado' : '')
+                    + (a.conclusao ? ', concluída' : (a.exige_comprovante ? ', precisa de comprovante' : '')));
             },
 
             selectAllow: function (selecao) {
@@ -840,7 +843,16 @@
             horario: gancho(modalDet, 'det-horario'),
             erro: gancho(modalDet, 'det-erro'),
             editar: gancho(modalDet, 'det-editar'),
-            excluir: gancho(modalDet, 'det-excluir')
+            excluir: gancho(modalDet, 'det-excluir'),
+            conclusao: gancho(modalDet, 'det-conclusao'),
+            feita: gancho(modalDet, 'det-conclusao-feita'),
+            comprovante: gancho(modalDet, 'det-comprovante'),
+            concluir: gancho(modalDet, 'det-concluir'),
+            concluirTitulo: gancho(modalDet, 'det-concluir-titulo'),
+            arquivoCampo: gancho(modalDet, 'det-arquivo-campo'),
+            conclusaoErro: gancho(modalDet, 'det-conclusao-erro'),
+            desfazer: gancho(modalDet, 'det-desfazer'),
+            concluirBotao: gancho(modalDet, 'det-concluir-botao')
         };
         var aberta = null;
 
@@ -896,10 +908,125 @@
             }
             det.editar.classList.toggle('hidden', !a.pode_editar);
             det.excluir.classList.toggle('hidden', !a.pode_excluir);
+            desenharConclusao(a);
             R.abrirModal(modalDet);
         }
 
+        /* Concluir a atividade do dia — e o comprovante, quando ela exige.
+           A data vem da semana que está na tela (cada dia tem a sua), e o
+           servidor confere tudo de novo: dia certo, nada de futuro, arquivo
+           obrigatório quando a atividade pede. */
+        function hojeISO() { return String(semana.agora || '').slice(0, 10); }
+
+        function desenharConclusao(a) {
+            if (!det.conclusao) { return; }
+            var data = a.data || '';
+            var futuro = !data || data > hojeISO();
+            var feita = a.conclusao || null;
+            var podeConcluir = pessoa && !futuro;
+            // Sem data não há o que concluir (é o caso do modelo, que é só a
+            // planilha da semana).
+            var mostrar = !!feita || podeConcluir || (!!data && a.exige_comprovante);
+            det.conclusao.classList.toggle('hidden', !mostrar);
+            if (!mostrar) { return; }
+
+            esconderErro(det.conclusaoErro);
+            det.concluir.reset();
+
+            det.feita.classList.toggle('hidden', !(feita || !podeConcluir));
+            det.feita.classList.toggle('rt-det-conclusao-pendente', !feita);
+            if (feita) {
+                det.feita.innerHTML = '';
+                det.feita.appendChild(icone('fa-circle-check'));
+                det.feita.appendChild(document.createTextNode(
+                    ' Concluída por ' + feita.quem + ' em ' + feita.quando + '.'));
+                if (feita.observacao) {
+                    det.feita.appendChild(document.createTextNode(' ' + feita.observacao));
+                }
+            } else if (!podeConcluir) {
+                det.feita.innerHTML = '';
+                det.feita.appendChild(icone('fa-hourglass-half'));
+                det.feita.appendChild(document.createTextNode(
+                    pessoa ? ' Você conclui esta atividade no dia dela.'
+                        : (a.exige_comprovante ? ' Ainda não concluída — precisa de comprovante.'
+                            : ' Ainda não concluída.')));
+            }
+
+            var temArquivo = !!(feita && feita.comprovante);
+            det.comprovante.classList.toggle('hidden', !temArquivo);
+            if (temArquivo) {
+                det.comprovante.href = feita.comprovante;
+                det.comprovante.querySelector('span').textContent =
+                    feita.comprovante_nome || 'Ver comprovante';
+            }
+
+            // Concluída: some o formulário e fica o desfazer (para refazer ou
+            // trocar o comprovante). A gestão desfaz para corrigir.
+            det.concluir.classList.toggle('hidden', !!feita || !podeConcluir);
+            // Desfazer aparece para a dona e para a gestão: é assim que se
+            // troca um comprovante errado.
+            det.desfazer.classList.toggle('hidden', !feita);
+            if (!feita) {
+                det.arquivoCampo.classList.toggle('hidden', !a.exige_comprovante);
+                det.concluirTitulo.innerHTML = '';
+                det.concluirTitulo.appendChild(icone(a.exige_comprovante ? 'fa-paperclip' : 'fa-circle-check'));
+                det.concluirTitulo.appendChild(document.createTextNode(
+                    a.exige_comprovante ? ' Concluir e enviar o comprovante' : ' Concluir esta atividade'));
+                if (a.exige_comprovante) {
+                    det.concluir.elements.comprovante.setAttribute('required', 'required');
+                } else {
+                    det.concluir.elements.comprovante.removeAttribute('required');
+                }
+            }
+        }
+
+        function guardarConclusao(a, conclusao) {
+            a.conclusao = conclusao;
+            if (atividades[a.id]) { atividades[a.id].conclusao = conclusao; }
+            var existente = calendario.getEventById(String(a.id));
+            if (existente) { existente.remove(); calendario.addEvent(evento(atividades[a.id] || a)); }
+            desenharConclusao(a);
+        }
+
         if (modalDet) {
+            det.concluir.addEventListener('submit', function (e) {
+                e.preventDefault();
+                var a = aberta;
+                if (!a) { return; }
+                var campos = det.concluir.elements;
+                var arquivo = campos.comprovante && campos.comprovante.files[0];
+                if (a.exige_comprovante && !arquivo) {
+                    mostrarErro(det.conclusaoErro, 'Esta atividade precisa de comprovante. Escolha a foto ou o PDF.');
+                    return;
+                }
+                var corpo = new FormData();
+                corpo.append('data', a.data || '');
+                corpo.append('observacao', campos.observacao ? campos.observacao.value : '');
+                if (arquivo) { corpo.append('comprovante', arquivo); }
+                det.concluirBotao.disabled = true;
+                R.api(urlDe(cfg.urls.concluir, a.id), { corpo: corpo, csrf: cfg.csrf })
+                    .then(function (resposta) {
+                        guardarConclusao(a, resposta.conclusao);
+                        R.avisar(a.exige_comprovante ? 'Atividade concluída e comprovante enviado.'
+                            : 'Atividade concluída.', 'success');
+                    })
+                    .catch(function (erro) { mostrarErro(det.conclusaoErro, erro.message); })
+                    .then(function () { det.concluirBotao.disabled = false; });
+            });
+
+            det.desfazer.addEventListener('click', function () {
+                var a = aberta;
+                if (!a) { return; }
+                det.desfazer.disabled = true;
+                R.api(urlDe(cfg.urls.desfazer, a.id), { corpo: { data: a.data || '' }, csrf: cfg.csrf })
+                    .then(function () {
+                        guardarConclusao(a, null);
+                        R.avisar('Conclusão desfeita.', 'success');
+                    })
+                    .catch(function (erro) { mostrarErro(det.conclusaoErro, erro.message); })
+                    .then(function () { det.desfazer.disabled = false; });
+            });
+
             det.editar.addEventListener('click', function () {
                 var a = aberta;
                 R.fecharModal(modalDet);
@@ -969,6 +1096,9 @@
             form.querySelectorAll('input[name=categoria]').forEach(function (r) { r.checked = r.value === categoria; });
             marcarCategoria();
             if (campos.bloqueada) { campos.bloqueada.checked = a ? !!a.bloqueada : false; }
+            if (campos.exige_comprovante) {
+                campos.exige_comprovante.checked = a ? !!a.exige_comprovante : false;
+            }
             if (campos.minutos_whatsapp) {
                 campos.minutos_whatsapp.value = (a && typeof a.minutos_whatsapp === 'number')
                     ? a.minutos_whatsapp : whatsappPadrao;
@@ -1005,6 +1135,7 @@
                 var problema = horarioValido(corpo.inicio, corpo.fim);
                 if (problema) { mostrarErro(formErro, problema); return; }
                 if (campos.bloqueada) { corpo.bloqueada = campos.bloqueada.checked; }
+                if (campos.exige_comprovante) { corpo.exige_comprovante = campos.exige_comprovante.checked; }
                 if (campos.minutos_whatsapp) {
                     var minutos = String(campos.minutos_whatsapp.value).trim();
                     if (!/^\d+$/.test(minutos) || +minutos > whatsappMaximo) {

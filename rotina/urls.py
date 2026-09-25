@@ -21,6 +21,11 @@ urlpatterns = [
     path('api/rotina/atividades/', api.rotina_criar, name='api_rotina_criar'),
     path('api/rotina/atividades/<int:atividade_id>/', api.rotina_atualizar, name='api_rotina_atualizar'),
     path('api/rotina/atividades/<int:atividade_id>/excluir/', api.rotina_excluir, name='api_rotina_excluir'),
+    # Concluir a atividade do dia (com o comprovante, quando ela exige).
+    path('api/rotina/atividades/<int:atividade_id>/concluir/', api.rotina_concluir,
+         name='api_rotina_concluir'),
+    path('api/rotina/atividades/<int:atividade_id>/desfazer/', api.rotina_desfazer,
+         name='api_rotina_desfazer'),
     path('api/gestao/<int:user_id>/opcoes/', api.gestao_opcoes, name='api_gestao_opcoes'),
 
     # API dos modelos

@@ -18,6 +18,8 @@ from django.core.validators import MaxValueValidator
 from django.db import models
 from django.db.models import F, Q
 
+from core.storage import get_media_storage
+
 
 class Categoria(models.TextChoices):
     RESULTADO = 'RESULTADO', 'Tem influência sobre o resultado a curto e médio prazo'
@@ -92,6 +94,10 @@ class AtividadeBase(models.Model):
     bloqueada = models.BooleanField(
         'Horário travado', default=False,
         help_text='Travada, a pessoa não consegue mover a atividade nem mudar a duração.')
+    exige_comprovante = models.BooleanField(
+        'Necessita comprovante', default=False, db_default=False,
+        help_text='Para dar a atividade por concluída, a pessoa precisa enviar um comprovante '
+                  '(foto, print ou PDF).')
     # db_default: servidor que ainda roda o código anterior (sem esta coluna) grava
     # atividade no mesmo banco — sem o default no banco, o INSERT dele falharia.
     minutos_whatsapp = models.PositiveSmallIntegerField(
@@ -227,6 +233,66 @@ class AtividadeRotina(AtividadeBase):
     class Meta(AtividadeBase.Meta):
         verbose_name = 'Atividade da rotina'
         verbose_name_plural = 'Atividades da rotina'
+
+
+def upload_comprovante(instancia, nome_do_arquivo):
+    """rotina/comprovantes/2026/09/<atividade>-<aleatório>.<ext>"""
+    import os
+    from uuid import uuid4
+
+    extensao = os.path.splitext(nome_do_arquivo or '')[1].lower()[:10]
+    return (f'rotina/comprovantes/{instancia.data:%Y/%m}/'
+            f'{instancia.atividade_id}-{uuid4().hex[:8]}{extensao}')
+
+
+class ConclusaoAtividade(models.Model):
+    """A pessoa deu por encerrada a atividade daquele dia.
+
+    A rotina é semanal, mas concluir é do DIA: a mesma atividade volta na
+    semana seguinte e precisa ser concluída de novo. Por isso a chave é
+    (atividade, data).
+
+    Quando a atividade está marcada como "necessita comprovante", o arquivo é
+    obrigatório — é o serviço que cobra isso, não a tela.
+    """
+
+    atividade = models.ForeignKey(
+        'rotina.AtividadeRotina', on_delete=models.CASCADE, related_name='conclusoes',
+        verbose_name='Atividade')
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='rotina_conclusoes',
+        verbose_name='Concluída por')
+    data = models.DateField('Dia')
+    comprovante = models.FileField(
+        'Comprovante', upload_to=upload_comprovante, storage=get_media_storage(),
+        blank=True, null=True)
+    comprovante_nome = models.CharField('Nome do arquivo', max_length=255, blank=True)
+    observacao = models.TextField('Observação', blank=True)
+    criado_em = models.DateTimeField('Concluída em', auto_now_add=True)
+    atualizado_em = models.DateTimeField('Atualizada em', auto_now=True)
+
+    class Meta:
+        ordering = ['-data', '-criado_em']
+        verbose_name = 'Conclusão de atividade'
+        verbose_name_plural = 'Conclusões de atividades'
+        constraints = [
+            models.UniqueConstraint(fields=['atividade', 'data'],
+                                    name='rotina_conclusao_uma_por_atividade_e_dia'),
+        ]
+
+    def __str__(self):
+        return f'{self.atividade_id} · {self.data:%d/%m/%Y}'
+
+    @property
+    def tem_comprovante(self):
+        return bool(self.comprovante)
+
+    @property
+    def url_comprovante(self):
+        try:
+            return self.comprovante.url if self.comprovante else ''
+        except Exception:                                        # noqa: BLE001
+            return ''
 
 
 class TipoAviso(models.TextChoices):

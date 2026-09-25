@@ -87,6 +87,8 @@ urlpatterns = [
     # INOVAR
     path('inovar/', views.inovar_list, name='inovar_list'),
     path('inovar/nova/', views.ideia_create, name='ideia_create'),
+    # Escondida: quem pode ver de quem é cada ideia (só SUPERADMIN; 404 para os outros).
+    path('inovar/adm/', views.inovar_adm, name='inovar_adm'),
     path('inovar/<int:ideia_id>/editar/', views.ideia_edit, name='ideia_edit'),
     path('inovar/<int:ideia_id>/status/', views.ideia_update_status, name='ideia_update_status'),
 

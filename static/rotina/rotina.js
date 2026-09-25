@@ -34,16 +34,20 @@
     function api(url, opcoes) {
         opcoes = opcoes || {};
         var metodo = opcoes.metodo || (opcoes.corpo ? 'POST' : 'GET');
+        // Arquivo vai como FormData: aí o Content-Type é do navegador (ele
+        // precisa escrever o limite entre as partes), não nosso.
+        var comArquivo = typeof FormData !== 'undefined' && opcoes.corpo instanceof FormData;
         var cabecalhos = { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' };
         if (metodo !== 'GET') {
-            cabecalhos['Content-Type'] = 'application/json';
+            if (!comArquivo) { cabecalhos['Content-Type'] = 'application/json'; }
             cabecalhos['X-CSRFToken'] = opcoes.csrf || csrf();
         }
         return fetch(url, {
             method: metodo,
             credentials: 'same-origin',
             headers: cabecalhos,
-            body: metodo === 'GET' ? undefined : JSON.stringify(opcoes.corpo || {})
+            body: metodo === 'GET' ? undefined
+                : (comArquivo ? opcoes.corpo : JSON.stringify(opcoes.corpo || {}))
         }).then(function (resposta) {
             return resposta.json().catch(function () { return null; }).then(function (dados) {
                 if (!resposta.ok || !dados || dados.ok === false) {

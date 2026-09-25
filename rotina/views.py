@@ -110,6 +110,8 @@ def _urls_rotina(usuario_id=None):
         'criar': reverse('rotina:api_rotina_criar'),
         'atualizar': reverse('rotina:api_rotina_atualizar', args=[0]),
         'excluir': reverse('rotina:api_rotina_excluir', args=[0]),
+        'concluir': reverse('rotina:api_rotina_concluir', args=[0]),
+        'desfazer': reverse('rotina:api_rotina_desfazer', args=[0]),
     }
 
 

@@ -8,7 +8,7 @@ servidor e não do navegador, está em `rotina/whatsapp.py`.
 """
 import logging
 import math
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 
 from django.db import IntegrityError, transaction
 from django.db.models import Exists, F
@@ -17,7 +17,8 @@ from django.utils import timezone
 
 from .models import (
     CORES_CATEGORIA, DIAS_SEMANA, DOMINGO, MINUTOS_WHATSAPP_MAXIMO, MINUTOS_WHATSAPP_PADRAO, SABADO,
-    AtividadeModelo, AtividadeRotina, AvisoRotina, Categoria, ModeloRotina, TipoAviso, erros_de_horario,
+    AtividadeModelo, AtividadeRotina, AvisoRotina, Categoria, ConclusaoAtividade, ModeloRotina,
+    TipoAviso, erros_de_horario,
 )
 from .permissoes import e_superadmin
 
@@ -34,7 +35,7 @@ CAMPOS_TEXTO = ('titulo', 'descricao', 'categoria')
 # lembrete no WhatsApp. Nas da gestão, ela só mexe no dia e no horário.
 CAMPOS_DE_QUEM_CRIOU = CAMPOS_TEXTO + ('minutos_whatsapp',)
 CAMPOS_COPIA = ('dia_semana', 'inicio', 'fim', 'titulo', 'descricao', 'categoria', 'bloqueada',
-                'minutos_whatsapp')
+                'minutos_whatsapp', 'exige_comprovante')
 
 # O aviso de início vale do começo da atividade até ela terminar (nas bem
 # curtas, até 10 minutos depois de começar). Um pouco antes também passa: o
@@ -328,6 +329,13 @@ def ler_dados_atividade(corpo, atual=None, com_domingo=False):
     elif criando:
         limpos['bloqueada'] = False
 
+    if 'exige_comprovante' in corpo:
+        if not isinstance(corpo['exige_comprovante'], bool):
+            raise ErroValidacao('Valor inválido para "necessita comprovante".')
+        limpos['exige_comprovante'] = corpo['exige_comprovante']
+    elif criando:
+        limpos['exige_comprovante'] = False
+
     if 'minutos_whatsapp' in corpo:
         limpos['minutos_whatsapp'] = _minutos_whatsapp(corpo['minutos_whatsapp'])
     elif criando:
@@ -366,7 +374,7 @@ def ler_dados_atividade(corpo, atual=None, com_domingo=False):
 # ---------------------------------------------------------------------------
 # Serialização
 # ---------------------------------------------------------------------------
-def serializar_atividade(atividade, permissoes=None):
+def serializar_atividade(atividade, permissoes=None, conclusao=None, data=None):
     cor = atividade.cor
     dados = {
         'id': atividade.id,
@@ -380,11 +388,28 @@ def serializar_atividade(atividade, permissoes=None):
         'inicio': f'{atividade.inicio:%H:%M}',
         'fim': f'{atividade.fim:%H:%M}',
         'bloqueada': atividade.bloqueada,
+        'exige_comprovante': atividade.exige_comprovante,
         'minutos_whatsapp': atividade.minutos_whatsapp,
         'criada_pela_pessoa': getattr(atividade, 'criada_pela_pessoa', False),
+        # O dia desta atividade na semana que está na tela, e o que já foi
+        # concluído nele: concluir é do dia, não da atividade.
+        'data': data.isoformat() if data else None,
+        'conclusao': serializar_conclusao(conclusao),
     }
     dados.update(permissoes or {'pode_mover': True, 'pode_editar': True, 'pode_excluir': True})
     return dados
+
+
+def serializar_conclusao(conclusao):
+    if conclusao is None:
+        return None
+    return {
+        'quando': timezone.localtime(conclusao.criado_em).strftime('%d/%m/%Y %H:%M'),
+        'quem': nome_de(conclusao.user),
+        'observacao': conclusao.observacao,
+        'comprovante': conclusao.url_comprovante,
+        'comprovante_nome': conclusao.comprovante_nome,
+    }
 
 
 def tem_telefone(user):
@@ -408,13 +433,28 @@ def dados_da_rotina(rotina):
 
 def payload_rotina(rotina, quem_ve, momento=None):
     atividades = list(rotina.atividades.all())
+    semana = dados_da_semana(momento, semana_com_domingo(rotina, atividades))
+    datas = {d['dia_semana']: date.fromisoformat(d['data']) for d in semana['dias']}
+    concluidas = conclusoes_da_semana(rotina, semana['inicio'], semana['fim'])
     return {
         'ok': True,
         'rotina': dados_da_rotina(rotina),
-        'semana': dados_da_semana(momento, semana_com_domingo(rotina, atividades)),
-        'atividades': [serializar_atividade(a, permissoes_da_atividade(quem_ve, a, rotina))
-                       for a in atividades],
+        'semana': semana,
+        'atividades': [
+            serializar_atividade(
+                a, permissoes_da_atividade(quem_ve, a, rotina),
+                conclusao=concluidas.get((a.id, datas.get(a.dia_semana))),
+                data=datas.get(a.dia_semana))
+            for a in atividades],
     }
+
+
+def conclusoes_da_semana(rotina, inicio, fim):
+    """{(atividade_id, data): conclusão} do período — uma consulta para a semana toda."""
+    conclusoes = (ConclusaoAtividade.objects
+                  .filter(atividade__rotina=rotina, data__gte=inicio, data__lte=fim)
+                  .select_related('user'))
+    return {(c.atividade_id, c.data): c for c in conclusoes}
 
 
 def payload_modelo(modelo, momento=None):
@@ -697,6 +737,100 @@ def notificar_no_sino(user, atividade, tipo=TipoAviso.INICIO, momento=None):
                     'tipo': 'lembrete' if lembrete else 'inicio'},
     )
     return UserNotification.objects.create(notification=notificacao, user=user)
+
+
+# ---------------------------------------------------------------------------
+# Concluir a atividade do dia (com comprovante, quando é exigido)
+# ---------------------------------------------------------------------------
+COMPROVANTE_MAXIMO_MB = 15
+COMPROVANTE_EXTENSOES = ('jpg', 'jpeg', 'png', 'webp', 'heic', 'heif', 'gif', 'pdf')
+# Concluir vale para o dia de hoje e para os dias já passados desta semana: a
+# pessoa conclui na hora ou no fim do dia, mas não "adianta" a semana inteira.
+DIAS_PARA_CONCLUIR_ATRAS = 14
+
+
+def erro_do_comprovante(arquivo):
+    """Mensagem do que está errado no arquivo enviado, ou '' se estiver bom."""
+    if arquivo is None:
+        return 'Envie o comprovante desta atividade.'
+    nome = (getattr(arquivo, 'name', '') or '').lower()
+    extensao = nome.rsplit('.', 1)[-1] if '.' in nome else ''
+    if extensao not in COMPROVANTE_EXTENSOES:
+        return ('Formato não aceito. Envie foto (JPG, PNG, HEIC, WEBP, GIF) ou PDF.')
+    tamanho = getattr(arquivo, 'size', 0) or 0
+    if tamanho <= 0:
+        return 'O arquivo chegou vazio. Tente enviar de novo.'
+    if tamanho > COMPROVANTE_MAXIMO_MB * 1024 * 1024:
+        return f'O arquivo passa de {COMPROVANTE_MAXIMO_MB} MB. Envie uma versão menor.'
+    return ''
+
+
+def _dia_para_concluir(atividade, valor, hoje=None):
+    """A data que está sendo concluída, conferida contra o dia da atividade."""
+    hoje = hoje or agora().date()
+    if isinstance(valor, date):
+        dia = valor
+    else:
+        try:
+            dia = date.fromisoformat(str(valor or '')[:10])
+        except ValueError:
+            raise ErroValidacao('Dia inválido.')
+    if dia.weekday() != atividade.dia_semana:
+        raise ErroValidacao('Esse dia não é o da atividade.')
+    if dia > hoje:
+        raise ErroValidacao('Esta atividade ainda não chegou. Conclua no dia dela.')
+    if (hoje - dia).days > DIAS_PARA_CONCLUIR_ATRAS:
+        raise ErroValidacao('Esse dia já passou faz tempo. Fale com a gestão.')
+    return dia
+
+
+def concluir_atividade(atividade, quem, data, arquivo=None, observacao='', hoje=None):
+    """Dá a atividade daquele dia por concluída. Devolve a conclusão.
+
+    O comprovante é cobrado aqui, no servidor: a tela esconde o botão, mas quem
+    manda é esta regra. Reenviar o arquivo no mesmo dia troca o comprovante em
+    vez de criar outra conclusão.
+    """
+    dia = _dia_para_concluir(atividade, data, hoje=hoje)
+    anterior = ConclusaoAtividade.objects.filter(atividade=atividade, data=dia).first()
+
+    if arquivo is not None:
+        problema = erro_do_comprovante(arquivo)
+        if problema:
+            raise ErroValidacao(problema)
+    elif atividade.exige_comprovante and not (anterior and anterior.comprovante):
+        raise ErroValidacao('Esta atividade precisa de comprovante para ser concluída.')
+
+    observacao = (observacao or '').strip()[:LIMITE_DESCRICAO]
+    conclusao = anterior or ConclusaoAtividade(atividade=atividade, data=dia)
+    conclusao.user = quem
+    conclusao.observacao = observacao
+    if arquivo is not None:
+        if anterior is not None and anterior.comprovante:
+            # Trocar o comprovante não deixa o antigo sobrando no armazenamento.
+            try:
+                anterior.comprovante.delete(save=False)
+            except Exception:                                    # noqa: BLE001
+                logger.warning('Comprovante antigo não pôde ser apagado (atividade %s).', atividade.id)
+        conclusao.comprovante = arquivo
+        conclusao.comprovante_nome = (getattr(arquivo, 'name', '') or '')[:255]
+    conclusao.save()
+    return conclusao
+
+
+def desfazer_conclusao(atividade, data, hoje=None):
+    """Tira a conclusão daquele dia (e o comprovante junto). True se havia algo."""
+    dia = _dia_para_concluir(atividade, data, hoje=hoje)
+    conclusao = ConclusaoAtividade.objects.filter(atividade=atividade, data=dia).first()
+    if conclusao is None:
+        return False
+    if conclusao.comprovante:
+        try:
+            conclusao.comprovante.delete(save=False)
+        except Exception:                                        # noqa: BLE001
+            logger.warning('Comprovante não pôde ser apagado (atividade %s).', atividade.id)
+    conclusao.delete()
+    return True
 
 
 # ---------------------------------------------------------------------------

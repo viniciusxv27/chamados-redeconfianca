@@ -8,6 +8,8 @@ tem o setor na cadeia não passa, mesmo adivinhando o id.
 Níveis, em escada (cada um inclui os de baixo):
     VISUALIZAR < DOWNLOAD < UPLOAD < EDITAR < EXCLUIR < ADMINISTRAR
 """
+from django.db import DatabaseError
+
 from . import gdrive
 from .models import PastaLiberada, SectorDriveMapping
 
@@ -88,10 +90,16 @@ def pastas_liberadas(user):
         return []
     base = (PastaLiberada.objects.filter(ativo=True)
             .select_related('target_user', 'target_group', 'target_sector'))
+    try:
+        liberadas = list(base)
+    except DatabaseError:
+        # Servidor que ainda não rodou o migrate: sem a tabela, não há pasta
+        # liberada — o Drive segue funcionando pelo mapa de setores.
+        return []
     if is_superadmin(user):
-        return list(base)
+        return liberadas
     de_quem = _de_quem(user)
-    return [p for p in base if alvo_aplica(p, user, de_quem)]
+    return [p for p in liberadas if alvo_aplica(p, user, de_quem)]
 
 
 def pasta_liberada_por_id(pasta_id):

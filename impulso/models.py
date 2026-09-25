@@ -18,7 +18,7 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.core.validators import MaxValueValidator, MinValueValidator
-from django.db import models
+from django.db import DatabaseError, models
 from django.utils import timezone
 
 
@@ -1254,6 +1254,58 @@ class Ideia(models.Model):
         if not self.editavel:
             return False
         return self.autor_id == user.id or user.is_superuser
+
+
+class AcessoAutoriaIdeia(models.Model):
+    """Quem pode ver de quem é cada ideia do INOVAR.
+
+    A ideia é avaliada sem autor de propósito: o gestor lê o que foi escrito,
+    não quem escreveu. Só que às vezes é preciso saber — para premiar, para
+    chamar a pessoa que teve a ideia, para apurar. Em vez de abrir a autoria
+    para todo gestor, o SUPERADMIN libera nome por nome, numa tela que não
+    aparece em menu nenhum (/impulso/inovar/adm/), e fica registrado quem
+    liberou, quando e por quê.
+
+    Quem está aqui também passa a enxergar todas as ideias — ver o autor sem
+    ver a ideia não serviria para nada.
+    """
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name='impulso_acesso_autoria', verbose_name='Pessoa')
+    motivo = models.CharField(
+        max_length=200, blank=True, verbose_name='Por quê',
+        help_text='Por que esta pessoa precisa ver a autoria das ideias.')
+    liberado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='impulso_autorias_liberadas', verbose_name='Liberado por')
+    criado_em = models.DateTimeField(auto_now_add=True, verbose_name='Liberado em')
+
+    class Meta:
+        verbose_name = 'Acesso à autoria das ideias'
+        verbose_name_plural = 'Acessos à autoria das ideias'
+        ordering = ['user__first_name', 'user__last_name']
+
+    def __str__(self):
+        return f'{self.user} vê a autoria das ideias'
+
+    @staticmethod
+    def pode_ver(user):
+        """``user`` enxerga de quem é cada ideia?
+
+        O SUPERADMIN vê sempre — é ele quem administra a lista, e não faria
+        sentido ele liberar os outros e ficar de fora.
+        """
+        if not (user and getattr(user, 'is_authenticated', False)):
+            return False
+        if user.is_superuser or getattr(user, 'hierarchy', '') == 'SUPERADMIN':
+            return True
+        try:
+            return AcessoAutoriaIdeia.objects.filter(user=user).exists()
+        except DatabaseError:
+            # Servidor que ainda não rodou o migrate: sem a tabela, ninguém foi
+            # liberado — e a tela das ideias continua de pé, anônima.
+            return False
 
 
 # ==========================================================================

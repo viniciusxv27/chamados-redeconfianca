@@ -795,6 +795,19 @@ body.rt-modal-aberto { overflow: hidden; }
 .rt-det-whatsapp { display: flex; align-items: center; gap: .45rem; margin-top: .6rem; font-size: .8rem; color: var(--rt-texto-2); }
 .rt-det-whatsapp.hidden { display: none; }
 
+/* Concluir a atividade do dia (e o comprovante, quando ela exige) */
+.rt-det-conclusao { margin-top: 1rem; padding: .85rem; border: 1px solid var(--rt-borda-forte); border-radius: .8rem; background: var(--rt-superficie-2); }
+.rt-det-conclusao.hidden { display: none; }
+.rt-det-conclusao-feita { display: flex; align-items: center; gap: .45rem; font-size: .82rem; font-weight: 600; color: #1E6B3A; }
+.rt-det-conclusao-feita.hidden { display: none; }
+.rt-det-conclusao-pendente { color: var(--rt-texto-2); font-weight: 500; }
+.rt-det-comprovante { display: inline-flex; align-items: center; gap: .4rem; margin-top: .5rem; font-size: .8rem; font-weight: 600; color: var(--rt-laranja-escuro); text-decoration: underline; text-underline-offset: 2px; }
+.rt-det-comprovante.hidden { display: none; }
+.rt-det-conclusao form { margin-top: .6rem; }
+.rt-det-conclusao .rt-campo + .rt-campo { margin-top: .6rem; }
+.rt-det-conclusao-acoes { display: flex; align-items: center; justify-content: flex-end; gap: .5rem; margin-top: .7rem; }
+.rt-det-conclusao input[type=file] { padding: .45rem; font-size: .8rem; }
+
 /* --------------------------------------------------------------------------
    Formulários
    -------------------------------------------------------------------------- */
