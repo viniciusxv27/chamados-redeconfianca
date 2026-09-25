@@ -31,7 +31,7 @@ from . import gdrive
 from . import visualizacao as vis
 from . import permissions as perms
 from .models import (DriveAuditLog, DriveConfig, DriveFavorite, DrivePermission,
-                     SectorDriveMapping, HIERARQUIAS)
+                     PastaLiberada, SectorDriveMapping, HIERARQUIAS)
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
@@ -265,8 +265,15 @@ def _usuarios_do_setor(sector):
 
 
 def _notificar(mapping, cfg, novo=True, quantos=1, ator=None, folder_id=''):
-    """RF37/38: avisa os usuários do setor sobre novo/atualizado documento."""
+    """RF37/38: avisa os usuários do setor sobre novo/atualizado documento.
+
+    Pasta liberada não tem setor: quem recebeu a pasta é uma pessoa (ou um
+    grupo) escolhida a dedo, e avisar não faz sentido — quem mandou o arquivo
+    para lá costuma ser ela mesma.
+    """
     if (novo and not cfg.notify_new) or (not novo and not cfg.notify_updated):
+        return
+    if getattr(mapping, 'sector', None) is None:
         return
     try:
         from core.models import NotificationMixin
@@ -311,6 +318,7 @@ def index(request):
 
     return render(request, 'drive/index.html', {
         'cfg': cfg, 'setores': setores, 'favoritos': favoritos, 'recentes': recentes,
+        'pastas': perms.pastas_liberadas(request.user),
         'is_superadmin': perms.is_superadmin(request.user),
         'e_gestor_algum': any(perms._e_gestor(request.user, m) for m in setores),
         'drive_ok': gdrive.configurado(),
@@ -348,25 +356,44 @@ def _visao_e_ordem(request):
 
 @login_required
 def browse(request, sector_id, folder_id=None):
+    """A pasta de um setor."""
     mapping = perms.mapping_por_setor(sector_id)
     if not mapping:
         messages.error(request, 'Este setor ainda não tem pasta no Drive configurada.')
         return redirect('drive:index')
+    nivel = perms.level_for_folder(request.user, mapping, folder_id or None)
+    return _listar_raiz(request, mapping, folder_id, nivel)
 
-    alvo = folder_id or mapping.folder_id
-    nivel = perms.level_for_folder(request.user, mapping, alvo if folder_id else None)
+
+@login_required
+def browse_pasta(request, pasta_id, folder_id=None):
+    """Uma pasta liberada direto para a pessoa — raiz sem setor.
+
+    Mesma tela do setor: o que muda é de onde vem o direito de estar ali.
+    """
+    pasta = perms.pasta_liberada_por_id(pasta_id)
+    if not pasta:
+        messages.error(request, 'Esta pasta não está mais liberada.')
+        return redirect('drive:index')
+    return _listar_raiz(request, pasta, folder_id, perms.nivel_na_pasta(request.user, pasta))
+
+
+def _listar_raiz(request, raiz, folder_id, nivel):
+    """A listagem de uma raiz (setor mapeado ou pasta liberada) e das suas subpastas."""
+    alvo = folder_id or raiz.folder_id
     if nivel < ORDEM['VIEW']:
-        _deny(request, sector=mapping.sector, folder_id=alvo, detalhe='browse')
+        _deny(request, sector=raiz.sector, folder_id=alvo, detalhe='browse')
 
-    # RNF05: uma subpasta pedida precisa mesmo estar dentro do setor.
-    if folder_id and folder_id != mapping.folder_id and not gdrive.dentro_de(folder_id, mapping.folder_id):
-        _deny(request, sector=mapping.sector, folder_id=folder_id, detalhe='pasta fora do setor')
+    # RNF05: uma subpasta pedida precisa mesmo estar dentro da raiz.
+    if folder_id and folder_id != raiz.folder_id and not gdrive.dentro_de(folder_id, raiz.folder_id):
+        _deny(request, sector=raiz.sector, folder_id=folder_id, detalhe='pasta fora da raiz')
 
+    mapping = raiz
     visao, ordem, order = _visao_e_ordem(request)
     try:
         itens, prox = gdrive.listar(alvo, page_token=request.GET.get('t') or None, page_size=60,
                                     order=order)
-        trilha = gdrive.caminho(alvo, ate_root=mapping.folder_id)
+        trilha = gdrive.caminho(alvo, ate_root=raiz.folder_id)
     except gdrive.DriveNaoConfigurado as e:
         return _drive_off(request, e)
     except gdrive.DriveError as e:
@@ -379,13 +406,18 @@ def browse(request, sector_id, folder_id=None):
         f['fav'] = f['id'] in favset
 
     ctx = {
-        'mapping': mapping, 'sector': mapping.sector, 'folder_id': alvo,
+        'mapping': raiz, 'raiz': raiz, 'sector': raiz.sector, 'folder_id': alvo,
+        'rotulo': raiz.rotulo, 'url_raiz': raiz.url_lista(),
+        'url_upload': raiz.url_envio(), 'url_mkdir': raiz.url_nova_pasta(),
+        'pasta_liberada': raiz.e_pasta_liberada,
         'itens': itens, 'prox': prox, 'trilha': trilha, 'nivel': nivel,
         'pode_download': nivel >= ORDEM['DOWNLOAD'],
         'pode_upload': nivel >= ORDEM['UPLOAD'], 'pode_editar': nivel >= ORDEM['EDIT'],
         'pode_excluir': nivel >= ORDEM['DELETE'], 'is_superadmin': perms.is_superadmin(request.user),
-        'pode_gerir_acesso': nivel >= ORDEM['ADMIN'],
-        'e_raiz': not folder_id or folder_id == mapping.folder_id,
+        # Liberar item por item é coisa do mapa de setores; numa pasta liberada
+        # quem dá acesso é a tela de permissões, com a pasta inteira.
+        'pode_gerir_acesso': nivel >= ORDEM['ADMIN'] and not raiz.e_pasta_liberada,
+        'e_raiz': not folder_id or folder_id == raiz.folder_id,
         'visao': visao, 'ordem': ordem,
         'ordens': [{'chave': k, 'rotulo': r} for k, (_, r) in ORDENS.items()],
         'extensoes': sorted(DriveConfig.get().extensoes()),
@@ -414,6 +446,8 @@ def file_preview(request, file_id):
                     file_name=meta.get('name', ''), sector=mapping.sector)
     return render(request, 'drive/preview.html', {
         'meta': meta, 'mapping': mapping, 'sector': mapping.sector, 'nivel': nivel,
+        'rotulo': mapping.rotulo, 'url_raiz': mapping.url_lista(),
+        'pasta_liberada': mapping.e_pasta_liberada,
         'fav': DriveFavorite.objects.filter(user=request.user, file_id=file_id).exists(),
         'visualizacao': vis.tipo(meta.get('mimeType')),
         'formatos': vis.formatos_de_download(meta),
@@ -459,6 +493,7 @@ def file_versions(request, file_id):
         r['atual'] = (i == n - 1)
     return render(request, 'drive/versions.html', {
         'meta': meta, 'revs': list(reversed(revs)), 'mapping': mapping, 'sector': mapping.sector,
+        'rotulo': mapping.rotulo, 'url_raiz': mapping.url_lista(),
         'pode_restaurar': nivel >= ORDEM['DELETE'], 'is_superadmin': perms.is_superadmin(request.user),
     })
 
@@ -492,20 +527,48 @@ def version_restore(request, file_id):
 
 # ─── escrita ─────────────────────────────────────────────────────────────────
 
+def _raiz_e_pasta(request, mapping=None, pasta=None, acao='upload'):
+    """(raiz, nível, pasta de destino) conferidos — ou nega ali mesmo.
+
+    Vale para as duas raízes: a pasta do setor e a pasta liberada. O destino
+    precisa estar dentro da raiz (RNF05), venha ele do formulário ou não.
+    """
+    raiz = mapping or pasta
+    folder_id = (request.POST.get('folder_id') or '').strip() or (raiz.folder_id if raiz else '')
+    if raiz is None:
+        _deny(request, folder_id=folder_id, detalhe=acao)
+    nivel = (perms.nivel_na_pasta(request.user, raiz) if raiz.e_pasta_liberada
+             else perms.level_for_folder(request.user, raiz, folder_id))
+    if nivel < ORDEM[perms.REQUERIDO[acao]]:
+        _deny(request, sector=raiz.sector, folder_id=folder_id, detalhe=acao)
+    if folder_id != raiz.folder_id and not gdrive.dentro_de(folder_id, raiz.folder_id):
+        _deny(request, sector=raiz.sector, folder_id=folder_id, detalhe=f'{acao} fora da raiz')
+    return raiz, nivel, folder_id
+
+
+@login_required
+@require_POST
+def upload_pasta(request, pasta_id):
+    """Envio dentro de uma pasta liberada."""
+    raiz, _nivel, folder_id = _raiz_e_pasta(
+        request, pasta=perms.pasta_liberada_por_id(pasta_id), acao='upload')
+    return _enviar(request, raiz, folder_id)
+
+
 @login_required
 @require_POST
 def upload(request, sector_id):
-    mapping = perms.mapping_por_setor(sector_id)
-    folder_id = (request.POST.get('folder_id') or '').strip() or (mapping.folder_id if mapping else '')
-    if not mapping or not perms.can(request.user, mapping, 'upload', folder_id):
-        _deny(request, sector=mapping.sector if mapping else None, folder_id=folder_id, detalhe='upload')
-    if folder_id != mapping.folder_id and not gdrive.dentro_de(folder_id, mapping.folder_id):
-        _deny(request, sector=mapping.sector, folder_id=folder_id, detalhe='upload fora do setor')
+    raiz, _nivel, folder_id = _raiz_e_pasta(
+        request, mapping=perms.mapping_por_setor(sector_id), acao='upload')
+    return _enviar(request, raiz, folder_id)
 
+
+def _enviar(request, raiz, folder_id):
+    mapping = raiz
     cfg = DriveConfig.get()
     arquivos = request.FILES.getlist('arquivos') or request.FILES.getlist('arquivo')
     if not arquivos:
-        return _resp(request, False, 'Nenhum arquivo enviado.', sector_id, folder_id)
+        return _resp(request, False, 'Nenhum arquivo enviado.', raiz, folder_id)
 
     ok, erros = 0, []
     for up in arquivos:
@@ -523,30 +586,39 @@ def upload(request, sector_id):
     if ok:
         _notificar(mapping, cfg, novo=True, quantos=ok, ator=request.user, folder_id=folder_id)
     msg = f'{ok} arquivo(s) enviado(s).' + (f' {len(erros)} com erro.' if erros else '')
-    return _resp(request, ok > 0, msg, sector_id, folder_id, erros=erros, extra={'enviados': ok})
+    return _resp(request, ok > 0, msg, raiz, folder_id, erros=erros, extra={'enviados': ok})
+
+
+@login_required
+@require_POST
+def mkdir_pasta(request, pasta_id):
+    """Nova pasta dentro de uma pasta liberada."""
+    raiz, _nivel, folder_id = _raiz_e_pasta(
+        request, pasta=perms.pasta_liberada_por_id(pasta_id), acao='mkdir')
+    return _criar_pasta(request, raiz, folder_id)
 
 
 @login_required
 @require_POST
 def mkdir(request, sector_id):
-    mapping = perms.mapping_por_setor(sector_id)
-    folder_id = (request.POST.get('folder_id') or '').strip() or (mapping.folder_id if mapping else '')
+    raiz, _nivel, folder_id = _raiz_e_pasta(
+        request, mapping=perms.mapping_por_setor(sector_id), acao='mkdir')
+    return _criar_pasta(request, raiz, folder_id)
+
+
+def _criar_pasta(request, raiz, folder_id):
     nome = (request.POST.get('nome') or '').strip()
-    if not mapping or not perms.can(request.user, mapping, 'mkdir', folder_id):
-        _deny(request, sector=mapping.sector if mapping else None, folder_id=folder_id, detalhe='mkdir')
-    if folder_id != mapping.folder_id and not gdrive.dentro_de(folder_id, mapping.folder_id):
-        _deny(request, sector=mapping.sector, folder_id=folder_id, detalhe='mkdir fora do setor')
     if not nome:
-        return _resp(request, False, 'Informe o nome da pasta.', sector_id, folder_id)
+        return _resp(request, False, 'Informe o nome da pasta.', raiz, folder_id)
     try:
         f = gdrive.criar_pasta(nome, folder_id)
     except gdrive.DriveError as e:
-        return _resp(request, False, f'Google Drive: {e}', sector_id, folder_id)
+        return _resp(request, False, f'Google Drive: {e}', raiz, folder_id)
     audit.registrar(request.user, 'MKDIR', request=request, file_id=f.get('id', ''),
-                    file_name=nome, sector=mapping.sector, folder_id=folder_id)
+                    file_name=nome, sector=raiz.sector, folder_id=folder_id)
     # O id vai na resposta porque quem cria pasta por JS (o "usar localmente")
     # precisa dele na hora para mandar os arquivos para dentro dela.
-    return _resp(request, True, f'Pasta "{nome}" criada.', sector_id, folder_id,
+    return _resp(request, True, f'Pasta "{nome}" criada.', raiz, folder_id,
                  extra={'file_id': f.get('id', '')})
 
 
@@ -558,14 +630,14 @@ def file_rename(request, file_id):
         _deny(request, file_id=file_id, detalhe='rename')
     nome = (request.POST.get('nome') or '').strip()
     if not nome:
-        return _resp(request, False, 'Informe o novo nome.', mapping.sector_id)
+        return _resp(request, False, 'Informe o novo nome.', mapping)
     try:
         gdrive.renomear(file_id, nome)
     except gdrive.DriveError as e:
-        return _resp(request, False, str(e), mapping.sector_id)
+        return _resp(request, False, str(e), mapping)
     audit.registrar(request.user, 'RENAME', request=request, file_id=file_id,
                     file_name=nome, sector=mapping.sector, detalhe='renomeado')
-    return _resp(request, True, 'Renomeado.', mapping.sector_id, request.POST.get('folder_id', ''))
+    return _resp(request, True, 'Renomeado.', mapping, request.POST.get('folder_id', ''))
 
 
 @login_required
@@ -577,14 +649,14 @@ def file_move(request, file_id):
     destino = (request.POST.get('destino') or '').strip()
     # RF11: mover só DENTRO do mesmo setor.
     if not destino or not gdrive.dentro_de(destino, mapping.folder_id):
-        return _resp(request, False, 'Escolha uma pasta de destino dentro do mesmo setor.', mapping.sector_id)
+        return _resp(request, False, 'Escolha uma pasta de destino dentro do mesmo setor.', mapping)
     try:
         gdrive.mover(file_id, destino)
     except gdrive.DriveError as e:
-        return _resp(request, False, str(e), mapping.sector_id)
+        return _resp(request, False, str(e), mapping)
     audit.registrar(request.user, 'MOVE', request=request, file_id=file_id, sector=mapping.sector,
                     folder_id=destino, detalhe='movido')
-    return _resp(request, True, 'Movido.', mapping.sector_id, destino)
+    return _resp(request, True, 'Movido.', mapping, destino)
 
 
 @login_required
@@ -596,18 +668,18 @@ def file_replace(request, file_id):
         _deny(request, file_id=file_id, detalhe='replace')
     up = request.FILES.get('arquivo')
     if not up:
-        return _resp(request, False, 'Envie o arquivo da nova versão.', mapping.sector_id)
+        return _resp(request, False, 'Envie o arquivo da nova versão.', mapping)
     erro = _valida_arquivo(DriveConfig.get(), up)
     if erro:
-        return _resp(request, False, erro, mapping.sector_id)
+        return _resp(request, False, erro, mapping)
     try:
         gdrive.nova_versao(file_id, up, mimetype=up.content_type)
     except gdrive.DriveError as e:
-        return _resp(request, False, str(e), mapping.sector_id)
+        return _resp(request, False, str(e), mapping)
     audit.registrar(request.user, 'VERSION', request=request, file_id=file_id,
                     file_name=up.name, sector=mapping.sector, detalhe='nova versão')
     _notificar(mapping, DriveConfig.get(), novo=False, ator=request.user)
-    return _resp(request, True, 'Nova versão enviada.', mapping.sector_id)
+    return _resp(request, True, 'Nova versão enviada.', mapping)
 
 
 @login_required
@@ -621,22 +693,29 @@ def file_delete(request, file_id):
         meta = gdrive.obter(file_id, fields='id,name')
         gdrive.para_lixeira(file_id, True)
     except gdrive.DriveError as e:
-        return _resp(request, False, str(e), mapping.sector_id)
+        return _resp(request, False, str(e), mapping)
     audit.registrar(request.user, 'DELETE', request=request, file_id=file_id,
                     file_name=meta.get('name', ''), sector=mapping.sector, detalhe='para a lixeira')
-    return _resp(request, True, 'Movido para a lixeira.', mapping.sector_id, request.POST.get('folder_id', ''))
+    return _resp(request, True, 'Movido para a lixeira.', mapping, request.POST.get('folder_id', ''))
 
 
-def _resp(request, ok, msg, sector_id=None, folder_id='', erros=None, extra=None):
-    """Resposta padrão: JSON para AJAX, redirect+mensagem para POST normal."""
+def _resp(request, ok, msg, raiz=None, folder_id='', erros=None, extra=None):
+    """Resposta padrão: JSON para AJAX, redirect+mensagem para POST normal.
+
+    ``raiz`` é de onde o arquivo veio — o setor mapeado ou uma pasta liberada.
+    Cada um sabe dizer a própria URL de listagem, então o POST normal volta
+    para a pasta em que a pessoa estava nos dois casos.
+    """
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         payload = {'ok': ok, 'msg': msg, 'erros': erros or []}
         if extra:
             payload.update(extra)
         return JsonResponse(payload, status=200 if ok else 400)
     (messages.success if ok else messages.error)(request, msg)
-    if sector_id:
-        return redirect(reverse_browse(sector_id, folder_id))
+    if raiz is not None and hasattr(raiz, 'url_lista'):
+        return redirect(raiz.url_lista(folder_id))
+    if raiz:                                   # ainda chega id de setor de algum lugar
+        return redirect(reverse_browse(raiz, folder_id))
     return redirect('drive:index')
 
 
@@ -662,7 +741,9 @@ def _item_gerenciavel(request, file_id):
     setor não passa nem adivinhando.
     """
     mapping, nivel = perms.file_allowed(request.user, file_id)
-    if not mapping or nivel < ORDEM['ADMIN']:
+    if not mapping or nivel < ORDEM['ADMIN'] or mapping.e_pasta_liberada:
+        # Dentro de uma pasta liberada não há setor onde pendurar a permissão:
+        # quem libera é a tela de Permissões, com a pasta inteira.
         _deny(request, file_id=file_id, sector=mapping.sector if mapping else None,
               detalhe='liberar acesso ao item')
     try:
@@ -707,13 +788,13 @@ def item_acesso(request, file_id):
                         file_name=nome, sector=mapping.sector, folder_id=file_id,
                         detalhe=f'{pessoa.full_name} · {p.get_nivel_display()}')
         return _resp(request, True, f'{pessoa.full_name} agora acessa “{nome}” ({p.get_nivel_display()}).',
-                     mapping.sector_id, extra={'acessos': _acessos_do_item(mapping, file_id)})
+                     mapping, extra={'acessos': _acessos_do_item(mapping, file_id)})
 
     return JsonResponse({
         'ok': True,
         'nome': nome,
         'pasta': meta.get('mimeType') == FOLDER_MIME,
-        'setor': mapping.sector.name,
+        'setor': mapping.rotulo,
         'niveis': [{'valor': v, 'rotulo': r} for v, r in DrivePermission.Nivel.choices],
         'pessoas': [{'id': u.id, 'nome': u.full_name or u.username}
                     for u in User.objects.filter(is_active=True).order_by('first_name', 'last_name')],
@@ -738,7 +819,7 @@ def item_acesso_remover(request, file_id):
     audit.registrar(request.user, DriveAuditLog.Acao.PERM, request=request, file_id=file_id,
                     file_name=meta.get('name', ''), sector=mapping.sector, folder_id=file_id,
                     detalhe=detalhe)
-    return _resp(request, True, f'{quem} não acessa mais este item.', mapping.sector_id,
+    return _resp(request, True, f'{quem} não acessa mais este item.', mapping,
                  extra={'acessos': _acessos_do_item(mapping, file_id)})
 
 
@@ -761,7 +842,8 @@ def favorite_toggle(request, file_id):
             meta = {'name': '', 'mimeType': ''}
         DriveFavorite.objects.create(
             user=request.user, file_id=file_id, file_name=meta.get('name', ''),
-            mime_type=meta.get('mimeType', ''), sector=mapping.sector)
+            mime_type=meta.get('mimeType', ''), sector=mapping.sector,
+            pasta=mapping if mapping.e_pasta_liberada else None)
         estado = True
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return JsonResponse({'favorito': estado})
@@ -770,7 +852,7 @@ def favorite_toggle(request, file_id):
 
 @login_required
 def favoritos(request):
-    itens = list(DriveFavorite.objects.filter(user=request.user).select_related('sector'))
+    itens = list(DriveFavorite.objects.filter(user=request.user).select_related('sector', 'pasta'))
     return render(request, 'drive/favoritos.html', {
         'itens': itens, 'is_superadmin': perms.is_superadmin(request.user)})
 
@@ -817,16 +899,24 @@ def busca(request):
         except gdrive.DriveError as e:
             messages.error(request, f'Google Drive: {e}')
             achados = []
-        # RNF05: só devolve o que está sob um setor que o usuário pode ver.
+        # RNF05: só devolve o que está sob uma raiz que o usuário pode ver.
+        # A permissão dos 80 resultados é resolvida de uma vez: a subida da
+        # árvore é compartilhada e vai em lote (era uma chamada ao Google por
+        # arquivo por nível, e a busca levava minutos).
         favset = set(DriveFavorite.objects.filter(user=request.user).values_list('file_id', flat=True))
+        mapeamentos = list(roots.values())
+        liberadas = perms.pastas_liberadas(request.user)
+        acessos = perms.resolver_acessos(request.user, achados, mapeamentos=mapeamentos,
+                                         liberadas=liberadas)
         for f in achados:
-            m, nivel = perms.file_allowed(request.user, f['id'])
+            m, nivel = acessos.get(f['id'], (None, 0))
             if not m or nivel < ORDEM['VIEW']:
                 continue
             if tipo in ('img', 'planilha', 'doc') and mime not in (f.get('mimeType') or ''):
                 continue
             f = _enriquecer(f)
-            f['setor_nome'] = m.sector.name
+            f['setor_nome'] = m.rotulo
+            f['url_raiz'] = m.url_lista()
             f['fav'] = f['id'] in favset
             resultados.append(f)
             if len(resultados) >= 60:
@@ -1010,7 +1100,8 @@ def acessos(request):
         return redirect('drive:index')
     dados = perms.usuarios_com_acesso()
     linhas = sorted(
-        ({'user': u, 'setores': sorted(v['setores']), 'gestor_de': sorted(v['gestor_de'])}
+        ({'user': u, 'setores': sorted(v['setores']), 'gestor_de': sorted(v['gestor_de']),
+          'pastas': sorted(v.get('pastas', ()))}
          for u, v in dados.items()),
         key=lambda x: x['user'].full_name.lower())
     return render(request, 'drive/acessos.html', {'linhas': linhas, 'total': len(linhas), 'is_superadmin': True})
@@ -1129,11 +1220,106 @@ def gestao_permissoes(request):
         'mappings': SectorDriveMapping.objects.filter(ativo=True).select_related('sector').order_by('sector__name'),
         'permissoes': (DrivePermission.objects.select_related(
             'mapping__sector', 'target_user', 'target_group', 'target_sector').order_by('-criado_em')),
+        'liberadas': (PastaLiberada.objects.select_related(
+            'target_user', 'target_group', 'target_sector', 'criado_por').order_by('-criado_em')),
         'grupos': CommunicationGroup.objects.all().order_by('name'),
         'setores': Sector.objects.all().order_by('name'),
         'pessoas': User.objects.filter(is_active=True).order_by('first_name', 'last_name'),
         'hierarquias': HIERARQUIAS, 'niveis': DrivePermission.Nivel.choices, 'is_superadmin': True,
     })
+
+
+# ─── pasta liberada direto (qualquer pasta do Drive, para quem for) ─────────
+# A permissão comum precisa de um setor mapeado e só alcança o que está dentro
+# da pasta daquele setor. Aqui a pasta é escolhida de qualquer lugar e vira uma
+# raiz: quem recebeu vê o cartão dela em /drive e navega normalmente.
+
+@login_required
+@require_POST
+def pasta_liberar(request):
+    if not _exige_super(request):
+        return redirect('drive:index')
+
+    folder_id = id_de_pasta(request.POST.get('folder_id'))
+    if not folder_id or not _id_valido(folder_id):
+        messages.error(request, 'Escolha a pasta que será liberada.')
+        return redirect('drive:gestao_permissoes')
+
+    try:
+        meta = gdrive.obter(folder_id, fields='id,name,mimeType')
+    except gdrive.DriveNaoConfigurado as e:
+        return _drive_off(request, e)
+    except gdrive.DriveError as e:
+        messages.error(request, f'Google Drive: {e}')
+        return redirect('drive:gestao_permissoes')
+    if meta.get('mimeType') != FOLDER_MIME:
+        messages.error(request, 'O que foi escolhido não é uma pasta.')
+        return redirect('drive:gestao_permissoes')
+
+    alvo = request.POST.get('alvo') or PastaLiberada.Alvo.USER
+    if alvo not in PastaLiberada.Alvo.values:
+        messages.error(request, 'Escolha para quem a pasta será liberada.')
+        return redirect('drive:gestao_permissoes')
+    nivel = request.POST.get('nivel') or DrivePermission.Nivel.VIEW
+    if nivel not in DrivePermission.Nivel.values:
+        nivel = DrivePermission.Nivel.VIEW
+
+    chave = {'folder_id': folder_id, 'alvo': alvo, 'target_user': None, 'target_group': None,
+             'target_sector': None, 'target_hierarchy': ''}
+    if alvo == PastaLiberada.Alvo.USER:
+        chave['target_user'] = User.objects.filter(pk=_pk(request.POST.get('target_user')),
+                                                   is_active=True).first()
+    elif alvo == PastaLiberada.Alvo.GROUP:
+        chave['target_group'] = CommunicationGroup.objects.filter(pk=_pk(request.POST.get('target_group'))).first()
+    elif alvo == PastaLiberada.Alvo.SECTOR:
+        chave['target_sector'] = Sector.objects.filter(pk=_pk(request.POST.get('target_sector'))).first()
+    else:
+        chave['target_hierarchy'] = request.POST.get('target_hierarchy') or ''
+
+    if not any([chave['target_user'], chave['target_group'], chave['target_sector'],
+                chave['target_hierarchy']]):
+        messages.error(request, 'Escolha quem vai receber o acesso à pasta.')
+        return redirect('drive:gestao_permissoes')
+
+    liberada, criada = PastaLiberada.objects.update_or_create(
+        defaults={'nivel': nivel, 'ativo': True, 'criado_por': request.user,
+                  'folder_name': (meta.get('name') or '')[:255],
+                  'caminho': _caminho_legivel(folder_id)},
+        **chave)
+    audit.registrar(request.user, DriveAuditLog.Acao.PERM, request=request, file_id=folder_id,
+                    file_name=liberada.folder_name, folder_id=folder_id,
+                    detalhe=f'pasta liberada · {liberada.alvo_label} · {liberada.get_nivel_display()}')
+    messages.success(request, (
+        f'“{liberada.folder_name}” liberada para {liberada.alvo_label} '
+        f'({liberada.get_nivel_display()}).' if criada else
+        f'“{liberada.folder_name}” atualizada para {liberada.alvo_label} '
+        f'({liberada.get_nivel_display()}).'))
+    return redirect('drive:gestao_permissoes')
+
+
+@login_required
+@require_POST
+def pasta_liberada_excluir(request, pk):
+    if not _exige_super(request):
+        return redirect('drive:index')
+    liberada = get_object_or_404(PastaLiberada, pk=pk)
+    quem, nome = liberada.alvo_label, liberada.folder_name
+    audit.registrar(request.user, DriveAuditLog.Acao.PERM, request=request,
+                    file_id=liberada.folder_id, file_name=nome, folder_id=liberada.folder_id,
+                    detalhe=f'pasta liberada retirada · {quem}')
+    liberada.delete()
+    messages.success(request, f'{quem} não acessa mais “{nome}”.')
+    return redirect('drive:gestao_permissoes')
+
+
+def _caminho_legivel(folder_id):
+    """'Comercial / Contratos / 2026' — para a tela dizer de onde a pasta veio."""
+    try:
+        raiz = gdrive.id_da_raiz()
+        partes = [n for i, n in gdrive.caminho(folder_id) if i != raiz]
+    except gdrive.DriveError:
+        return ''
+    return ' / '.join(partes)[:500]
 
 
 @login_required

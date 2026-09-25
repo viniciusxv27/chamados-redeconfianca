@@ -188,8 +188,13 @@ class Feedback(models.Model):
         ('AVALIADOR', 'Somente o avaliador'),
         ('AVALIADO', 'Somente o avaliado'),
     ]
+    # O áudio vai para o MinIO como todo anexo do portal (a gravação do
+    # desligamento aqui do lado já ia). Sem dizer o storage, ele caía no
+    # disco do container e sumia no deploy, deixando no banco um caminho que
+    # não existia em lugar nenhum.
     audio_file = models.FileField(
         upload_to='feedback/audio/%Y/%m/',
+        storage=get_media_storage(),
         null=True,
         blank=True,
         verbose_name='Áudio do feedback',

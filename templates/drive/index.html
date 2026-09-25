@@ -29,7 +29,13 @@
 {% endif %}
 
 <!-- Setores -->
+{% comment %}
+Sem setor nenhum e com pasta liberada, o título "Setores" ficava sozinho em
+cima de nada — quem só recebeu uma pasta não tem setor no Drive.
+{% endcomment %}
+{% if setores or not pastas %}
 <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">Setores</h2>
+{% endif %}
 {% if setores %}
 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
     {% for m in setores %}
@@ -67,10 +73,57 @@
     </div>
     {% endfor %}
 </div>
-{% else %}
+{% elif not pastas %}
 <div class="bg-white rounded-2xl border border-gray-100 p-10 text-center text-gray-500 mb-6">
     <i class="fas fa-folder-open text-3xl text-gray-300 mb-2 block"></i>
     <p class="text-sm">Você ainda não tem acesso a nenhum setor no Drive.</p>
+</div>
+{% endif %}
+
+{% comment %}
+Pastas liberadas: pastas soltas do Drive que alguém liberou direto para esta
+pessoa (ou para o grupo/setor dela). Não pertencem a setor nenhum — cada uma é
+uma raiz, e abre igual à pasta de um setor.
+{% endcomment %}
+{% if pastas %}
+<h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">
+    Pastas liberadas
+    {% if is_superadmin %}<span class="normal-case font-normal text-gray-400">· todas as que você liberou</span>{% endif %}
+</h2>
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
+    {% for pasta in pastas %}
+    <div class="dv-card bg-white border border-gray-100 rounded-2xl relative">
+        <a href="{{ pasta.url_lista }}" class="p-4 pb-9 flex items-center gap-3">
+            <div class="w-12 h-12 rounded-xl bg-amber-50 flex items-center justify-center flex-shrink-0">
+                <i class="fas fa-folder-open text-amber-500 text-xl"></i>
+            </div>
+            <div class="min-w-0 flex-1">
+                <p class="font-semibold text-gray-800 truncate">{{ pasta.rotulo }}</p>
+                <p class="text-xs text-gray-400 truncate">
+                    {% if pasta.caminho %}{{ pasta.caminho }}{% else %}Pasta liberada{% endif %}
+                </p>
+                {% if is_superadmin %}
+                <p class="text-[11px] text-amber-600 truncate">{{ pasta.alvo_label }} · {{ pasta.get_nivel_display }}</p>
+                {% endif %}
+            </div>
+            <i class="fas fa-chevron-right text-gray-300"></i>
+        </a>
+        <div class="absolute bottom-2 right-2 flex items-center gap-1">
+            <button type="button" data-uso-local="{{ pasta.folder_id }}" data-uso-papel="usar"
+                    onclick="RCUsoLocal.usar('{{ pasta.folder_id }}','{{ pasta.rotulo|escapejs }}')"
+                    title="Usar localmente" aria-label="Usar {{ pasta.rotulo }} localmente"
+                    class="hidden px-2 py-1 rounded-lg text-[11px] text-gray-500 bg-gray-50 hover:bg-gray-100">
+                <i class="fas fa-laptop mr-1"></i>Usar localmente
+            </button>
+            <button type="button" data-uso-local="{{ pasta.folder_id }}" data-uso-papel="finalizar"
+                    onclick="RCUsoLocal.finalizar('{{ pasta.folder_id }}','{{ pasta.rotulo|escapejs }}')"
+                    title="Finalizar uso" aria-label="Finalizar o uso de {{ pasta.rotulo }}"
+                    class="hidden px-2 py-1 rounded-lg text-[11px] text-emerald-700 bg-emerald-50 hover:bg-emerald-100">
+                <i class="fas fa-check-double mr-1"></i>Finalizar uso
+            </button>
+        </div>
+    </div>
+    {% endfor %}
 </div>
 {% endif %}
 
@@ -84,12 +137,12 @@
         <div class="bg-white rounded-2xl border border-gray-100 divide-y divide-gray-50">
             {% for f in favoritos %}
             <div class="flex items-center gap-2 px-4 py-2.5 hover:bg-gray-50">
-                <a href="{% if f.sector and f.e_pasta %}{% url 'drive:browse_folder' f.sector_id f.file_id %}{% else %}{% url 'drive:file_preview' f.file_id %}{% endif %}"
+                <a href="{% if f.pasta and f.e_pasta %}{% url 'drive:browse_pasta_folder' f.pasta_id f.file_id %}{% elif f.sector and f.e_pasta %}{% url 'drive:browse_folder' f.sector_id f.file_id %}{% else %}{% url 'drive:file_preview' f.file_id %}{% endif %}"
                    class="flex items-center gap-3 flex-1 min-w-0">
                     <i class="fas {{ f.mime_type|file_icon }}"></i>
                     <span class="text-sm text-gray-700 truncate flex-1">{{ f.file_name|default:'Documento' }}</span>
                 </a>
-                {% if f.sector %}
+                {% if f.sector or f.pasta %}
                 <button type="button" data-uso-local="{{ f.file_id }}" data-uso-papel="usar"
                         onclick="RCUsoLocal.usar('{{ f.file_id }}','{{ f.file_name|escapejs }}')"
                         title="Usar localmente" class="hidden w-7 h-7 rounded-lg text-gray-400 hover:bg-gray-100">

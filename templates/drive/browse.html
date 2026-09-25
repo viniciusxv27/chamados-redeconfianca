@@ -1,7 +1,7 @@
 {% extends 'drive/base_drive.html' %}
 {% load static %}
-{% block drive_titulo %}{{ sector.name }} — Drive{% endblock %}
-{% block drive_subtitulo %}{{ sector.name }}{% endblock %}
+{% block drive_titulo %}{{ rotulo }} — Drive{% endblock %}
+{% block drive_subtitulo %}{{ rotulo }}{% if pasta_liberada %} · pasta liberada para você{% endif %}{% endblock %}
 
 {% block drive_conteudo %}
 <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -10,14 +10,14 @@
         <div class="flex items-center gap-1.5 text-sm dv-scroll-x min-w-0">
             <a href="{% url 'drive:index' %}" class="text-gray-400 hover:text-gray-600"><i class="fas fa-hard-drive"></i></a>
             <i class="fas fa-chevron-right text-[10px] text-gray-300"></i>
-            <a href="{% url 'drive:browse' mapping.sector_id %}" class="text-blue-600 hover:underline font-medium whitespace-nowrap">{{ sector.name }}</a>
+            <a href="{{ url_raiz }}" class="text-blue-600 hover:underline font-medium whitespace-nowrap">{{ rotulo }}</a>
             {% for fid, fnome in trilha %}
                 {% if not forloop.first %}
                 <i class="fas fa-chevron-right text-[10px] text-gray-300"></i>
                 {% if forloop.last %}
                 <span class="text-gray-700 font-medium whitespace-nowrap">{{ fnome }}</span>
                 {% else %}
-                <a href="{% url 'drive:browse_folder' mapping.sector_id fid %}" class="text-blue-600 hover:underline whitespace-nowrap">{{ fnome }}</a>
+                <a href="{{ url_raiz }}f/{{ fid }}/" class="text-blue-600 hover:underline whitespace-nowrap">{{ fnome }}</a>
                 {% endif %}
                 {% endif %}
             {% endfor %}
@@ -72,11 +72,11 @@
 
 <!-- Formulários auxiliares -->
 {% if pode_upload %}
-<form id="dv-upload-form" method="post" action="{% url 'drive:upload' mapping.sector_id %}" enctype="multipart/form-data" class="hidden">
+<form id="dv-upload-form" method="post" action="{{ url_upload }}" enctype="multipart/form-data" class="hidden">
     {% csrf_token %}<input type="hidden" name="folder_id" value="{{ folder_id }}">
     <input id="dv-file-input" type="file" name="arquivos" multiple onchange="dvEnviarArquivos(this.files)">
 </form>
-<form id="dv-mkdir-form" method="post" action="{% url 'drive:mkdir' mapping.sector_id %}" class="hidden">
+<form id="dv-mkdir-form" method="post" action="{{ url_mkdir }}" class="hidden">
     {% csrf_token %}<input type="hidden" name="folder_id" value="{{ folder_id }}"><input type="hidden" name="nome" id="dv-mkdir-nome">
 </form>
 {% endif %}
@@ -251,7 +251,7 @@ function dvMandarUm(arquivo, aoAndar){
         corpo.append('folder_id', '{{ folder_id }}');
         corpo.append('arquivos', arquivo, arquivo.name);
         const xhr = new XMLHttpRequest();
-        xhr.open('POST', "{% url 'drive:upload' mapping.sector_id %}");
+        xhr.open('POST', "{{ url_upload }}");
         xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
         xhr.setRequestHeader('X-CSRFToken', document.querySelector('#dv-upload-form [name=csrfmiddlewaretoken]').value);
         xhr.upload.onprogress = e => { if (e.lengthComputable) aoAndar(e.loaded / e.total); };

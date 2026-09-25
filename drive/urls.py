@@ -13,6 +13,13 @@ urlpatterns = [
     path('s/<int:sector_id>/upload/', views.upload, name='upload'),
     path('s/<int:sector_id>/mkdir/', views.mkdir, name='mkdir'),
 
+    # Pasta liberada direto para alguém: é uma raiz como a do setor, só que
+    # sem setor — mesma tela, mesmas ações, endereço próprio.
+    path('p/<int:pasta_id>/', views.browse_pasta, name='browse_pasta'),
+    path('p/<int:pasta_id>/f/<str:folder_id>/', views.browse_pasta, name='browse_pasta_folder'),
+    path('p/<int:pasta_id>/upload/', views.upload_pasta, name='upload_pasta'),
+    path('p/<int:pasta_id>/mkdir/', views.mkdir_pasta, name='mkdir_pasta'),
+
     # Arquivo
     path('file/<str:file_id>/content/', views.file_content, name='file_content'),
     path('file/<str:file_id>/versoes/', views.file_versions, name='file_versions'),
@@ -49,6 +56,9 @@ urlpatterns = [
     path('gestao/pastas/', views.gestao_pastas, name='gestao_pastas'),
     path('gestao/permissoes/', views.gestao_permissoes, name='gestao_permissoes'),
     path('gestao/permissoes/<int:pk>/excluir/', views.permissao_excluir, name='permissao_excluir'),
+    path('gestao/permissoes/pasta/', views.pasta_liberar, name='pasta_liberar'),
+    path('gestao/permissoes/pasta/<int:pk>/excluir/', views.pasta_liberada_excluir,
+         name='pasta_liberada_excluir'),
     path('configuracao/', views.configuracao, name='configuracao'),
 
     # Conectar a conta Google do dono (para quem não tem Workspace)

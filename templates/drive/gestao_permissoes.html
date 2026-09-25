@@ -2,11 +2,12 @@
 {% block drive_titulo %}Permissões — Drive{% endblock %}
 {% block drive_conteudo %}
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-    <!-- Form -->
-    <div class="lg:col-span-1">
-        <form method="post" class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3 sticky top-4">
+    <!-- Formulários -->
+    <div class="lg:col-span-1 space-y-4">
+        <form method="post" class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
             {% csrf_token %}
-            <h3 class="font-semibold text-gray-700">Nova permissão</h3>
+            <h3 class="font-semibold text-gray-700">Permissão por setor</h3>
+            <p class="text-[11px] text-gray-400 -mt-2">Vale dentro da pasta do setor mapeado.</p>
             <div>
                 <label class="block text-xs font-semibold text-gray-500 mb-1">Setor</label>
                 <select name="mapping" required class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
@@ -38,15 +39,90 @@
             <div>
                 <label class="block text-xs font-semibold text-gray-500 mb-1">Pasta específica <span class="text-gray-400 font-normal">(opcional)</span></label>
                 <input type="text" name="folder_id" placeholder="vazio = setor inteiro" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono">
-                <p class="text-[11px] text-gray-400 mt-1">Informe o ID de uma subpasta para restringir a permissão a ela (e ao que está abaixo).</p>
+                <p class="text-[11px] text-gray-400 mt-1">ID de uma subpasta do setor, para restringir a permissão a ela (e ao que está abaixo).</p>
             </div>
             <button type="submit" class="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium">Adicionar permissão</button>
         </form>
+
+        {% comment %}
+        Liberar uma pasta solta: a permissão de cima precisa de um setor mapeado
+        e só alcança o que está dentro dele. Aqui a pasta é escolhida em qualquer
+        lugar do Drive e vira uma raiz por si só para quem recebeu.
+        {% endcomment %}
+        <form method="post" action="{% url 'drive:pasta_liberar' %}"
+              class="bg-white rounded-2xl border border-amber-100 shadow-sm p-4 space-y-3">
+            {% csrf_token %}
+            <h3 class="font-semibold text-gray-700">
+                <i class="fas fa-folder-open text-amber-500 mr-1.5"></i>Liberar uma pasta
+            </h3>
+            <p class="text-[11px] text-gray-400 -mt-2">
+                Qualquer pasta do Drive, para uma pessoa — sem precisar de setor. Ela aparece
+                em /drive para quem recebeu, com a pasta e tudo que está abaixo dela.
+            </p>
+
+            <div>
+                <label class="block text-xs font-semibold text-gray-500 mb-1">Pasta</label>
+                <input type="hidden" name="folder_id" id="l-folder">
+                <div class="flex items-center gap-2">
+                    <button type="button" onclick="dvEscolherPasta()"
+                            class="flex-1 text-left border border-gray-200 rounded-lg px-3 py-2 text-sm hover:bg-gray-50">
+                        <i class="fas fa-folder-open text-amber-500 mr-1.5"></i><span id="l-folder-nome" class="text-gray-500">Escolher pasta…</span>
+                    </button>
+                    <button type="button" onclick="dvLimparPasta()" title="Tirar a pasta"
+                            class="w-9 h-9 rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-50">
+                        <i class="fas fa-xmark"></i>
+                    </button>
+                </div>
+                <input type="text" id="l-folder-texto" placeholder="ou cole o endereço da pasta do Drive"
+                       oninput="dvColarPasta(this.value)"
+                       class="w-full mt-2 border border-gray-200 rounded-lg px-3 py-2 text-xs">
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-gray-500 mb-1">Liberar para</label>
+                <select name="alvo" id="l-alvo" onchange="dvAlvoPasta()" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+                    <option value="USER">Uma pessoa</option>
+                    <option value="GROUP">Um grupo</option>
+                    <option value="SECTOR">Um setor (todos do setor)</option>
+                    <option value="HIERARCHY">Uma hierarquia</option>
+                </select>
+            </div>
+
+            <div id="l-user">
+                <label class="block text-xs font-semibold text-gray-500 mb-1">Pessoa</label>
+                <input type="text" id="l-busca" placeholder="Buscar pessoa…" autocomplete="off"
+                       oninput="dvFiltrarPessoas()"
+                       class="w-full border border-gray-200 rounded-t-lg px-3 py-2 text-sm">
+                <select name="target_user" id="l-pessoas" size="6"
+                        class="w-full border border-gray-200 border-t-0 rounded-b-lg px-1 py-1 text-sm">
+                    {% for p in pessoas %}
+                    <option value="{{ p.id }}" data-busca="{{ p.full_name|lower }} {{ p.email|lower }}">{{ p.full_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div id="l-group" class="hidden"><label class="block text-xs font-semibold text-gray-500 mb-1">Grupo</label>
+                <select name="target_group" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">{% for g in grupos %}<option value="{{ g.id }}">{{ g.name }}</option>{% endfor %}</select></div>
+            <div id="l-sector" class="hidden"><label class="block text-xs font-semibold text-gray-500 mb-1">Setor</label>
+                <select name="target_sector" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">{% for s in setores %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select></div>
+            <div id="l-hier" class="hidden"><label class="block text-xs font-semibold text-gray-500 mb-1">Hierarquia</label>
+                <select name="target_hierarchy" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">{% for v, r in hierarquias %}<option value="{{ v }}">{{ r }}</option>{% endfor %}</select></div>
+
+            <div>
+                <label class="block text-xs font-semibold text-gray-500 mb-1">Nível</label>
+                <select name="nivel" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">{% for v, r in niveis %}<option value="{{ v }}">{{ r }}</option>{% endfor %}</select>
+            </div>
+            <button type="submit" class="w-full px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 text-sm font-medium">
+                Liberar pasta
+            </button>
+        </form>
     </div>
 
-    <!-- Lista -->
-    <div class="lg:col-span-2">
+    <!-- Listas -->
+    <div class="lg:col-span-2 space-y-4">
         <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div class="px-4 py-3 border-b border-gray-100">
+                <h3 class="font-semibold text-gray-700 text-sm">Permissões por setor</h3>
+            </div>
             <div class="dv-scroll-x">
                 <table class="min-w-full text-sm">
                     <thead class="bg-gray-50 text-gray-500 text-xs uppercase">
@@ -72,8 +148,82 @@
                 </table>
             </div>
         </div>
+
+        <div class="bg-white rounded-2xl border border-amber-100 shadow-sm overflow-hidden">
+            <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-2 flex-wrap">
+                <h3 class="font-semibold text-gray-700 text-sm">
+                    <i class="fas fa-folder-open text-amber-500 mr-1.5"></i>Pastas liberadas
+                </h3>
+                <span class="text-[11px] text-gray-400">pastas soltas, fora do mapa de setores</span>
+            </div>
+            <div class="dv-scroll-x">
+                <table class="min-w-full text-sm">
+                    <thead class="bg-gray-50 text-gray-500 text-xs uppercase">
+                        <tr><th class="text-left px-4 py-2.5 font-semibold">Pasta</th><th class="text-left px-4 py-2.5 font-semibold">Liberada para</th><th class="text-left px-4 py-2.5 font-semibold">Nível</th><th class="text-left px-4 py-2.5 font-semibold">Quando</th><th></th></tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-50">
+                        {% for l in liberadas %}
+                        <tr class="hover:bg-amber-50/40">
+                            <td class="px-4 py-2.5">
+                                <a href="{{ l.url_lista }}" class="text-gray-700 hover:text-blue-600 font-medium">{{ l.rotulo }}</a>
+                                {% if l.caminho %}<p class="text-[11px] text-gray-400 truncate max-w-xs">{{ l.caminho }}</p>{% endif %}
+                            </td>
+                            <td class="px-4 py-2.5"><span class="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 mr-1">{{ l.get_alvo_display }}</span><span class="text-gray-700">{{ l.alvo_label }}</span></td>
+                            <td class="px-4 py-2.5"><span class="text-[11px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">{{ l.get_nivel_display }}</span></td>
+                            <td class="px-4 py-2.5 text-gray-400 text-xs">
+                                {{ l.criado_em|date:"d/m/Y" }}{% if l.criado_por %}<br>por {{ l.criado_por.full_name }}{% endif %}
+                            </td>
+                            <td class="px-4 py-2.5 text-right">
+                                <form method="post" action="{% url 'drive:pasta_liberada_excluir' l.id %}"
+                                      onsubmit="return confirm('Tirar o acesso desta pasta?');">
+                                    {% csrf_token %}<button type="submit" class="text-gray-400 hover:text-red-600"><i class="fas fa-trash-can"></i></button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="5" class="px-4 py-10 text-center text-gray-400">
+                            Nenhuma pasta liberada ainda. Escolha uma pasta ao lado para dar acesso a alguém
+                            sem passar por setor nenhum.
+                        </td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
 </div>
+
+{% comment %}Escolher a pasta navegando o Drive, em vez de caçar o id.{% endcomment %}
+<div id="dv-modal-pasta" class="hidden fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4"
+     role="dialog" aria-modal="true" aria-labelledby="dv-pasta-titulo">
+    <div class="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-xl overflow-hidden">
+        <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3">
+            <div class="min-w-0">
+                <p id="dv-pasta-titulo" class="font-semibold text-gray-800">Escolher a pasta</p>
+                <p class="text-[11px] text-gray-400 truncate">Em: <span id="dv-pasta-onde">Meu Drive</span></p>
+            </div>
+            <button type="button" onclick="dvFecharPasta()" class="w-8 h-8 rounded-lg text-gray-400 hover:bg-gray-100" aria-label="Fechar">
+                <i class="fas fa-xmark"></i>
+            </button>
+        </div>
+        <div class="max-h-[50vh] overflow-y-auto">
+            <button type="button" id="dv-pasta-acima" onclick="dvAbrirPasta(this.dataset.id)"
+                    class="hidden w-full text-left px-4 py-2.5 text-sm text-blue-600 hover:bg-blue-50 border-b border-gray-50">
+                <i class="fas fa-arrow-turn-up fa-flip-horizontal mr-2"></i>Voltar uma pasta
+            </button>
+            <div id="dv-pasta-lista" class="divide-y divide-gray-50"></div>
+            <p id="dv-pasta-status" class="px-4 py-6 text-center text-sm text-gray-400"></p>
+        </div>
+        <div class="px-4 py-3 border-t border-gray-100 flex items-center justify-end gap-2 bg-gray-50">
+            <button type="button" onclick="dvFecharPasta()" class="px-3 py-2 text-sm text-gray-500 hover:text-gray-700">Cancelar</button>
+            <button type="button" id="dv-pasta-confirmar" onclick="dvUsarPasta()" disabled
+                    class="px-4 py-2 rounded-lg bg-amber-500 text-white text-sm font-medium hover:bg-amber-600 disabled:bg-gray-300">
+                <i class="fas fa-check mr-1.5"></i>Usar esta pasta
+            </button>
+        </div>
+    </div>
+</div>
+
 <script>
 function dvAlvo(){
     const v = document.getElementById('p-alvo').value;
@@ -82,5 +232,87 @@ function dvAlvo(){
     document.getElementById('p-sector').classList.toggle('hidden', v !== 'SECTOR');
     document.getElementById('p-hier').classList.toggle('hidden', v !== 'HIERARCHY');
 }
+function dvAlvoPasta(){
+    const v = document.getElementById('l-alvo').value;
+    document.getElementById('l-user').classList.toggle('hidden', v !== 'USER');
+    document.getElementById('l-group').classList.toggle('hidden', v !== 'GROUP');
+    document.getElementById('l-sector').classList.toggle('hidden', v !== 'SECTOR');
+    document.getElementById('l-hier').classList.toggle('hidden', v !== 'HIERARCHY');
+}
+// Achar a pessoa escrevendo o nome: são centenas no portal.
+function dvFiltrarPessoas(){
+    const termo = document.getElementById('l-busca').value.trim().toLowerCase();
+    Array.prototype.forEach.call(document.getElementById('l-pessoas').options, function (o) {
+        o.hidden = !!termo && (o.dataset.busca || '').indexOf(termo) < 0;
+    });
+}
+
+(function () {
+    var URL_PASTAS = "{% url 'drive:gestao_pastas' %}";
+    var escolhida = null;
+
+    function situacao(texto) {
+        document.getElementById('dv-pasta-status').textContent = texto || '';
+    }
+
+    window.dvAbrirPasta = function (pai) {
+        situacao('Carregando…');
+        document.getElementById('dv-pasta-lista').innerHTML = '';
+        fetch(URL_PASTAS + '?pai=' + encodeURIComponent(pai || 'root'),
+              {headers: {'X-Requested-With': 'XMLHttpRequest'}, credentials: 'same-origin'})
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (!d.ok) { situacao(d.msg || 'Não deu para listar as pastas.'); return; }
+                escolhida = {id: d.pai, nome: d.nome};
+                document.getElementById('dv-pasta-onde').textContent = d.nome;
+                document.getElementById('dv-pasta-confirmar').disabled = d.pai === 'root';
+                var acima = document.getElementById('dv-pasta-acima');
+                acima.classList.toggle('hidden', !d.acima);
+                acima.dataset.id = d.acima || 'root';
+                var alvo = document.getElementById('dv-pasta-lista');
+                alvo.innerHTML = '';
+                d.pastas.forEach(function (p) {
+                    var linha = document.createElement('button');
+                    linha.type = 'button';
+                    linha.className = 'w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-amber-50 flex items-center gap-2';
+                    linha.innerHTML = '<i class="fas fa-folder text-amber-400"></i><span class="truncate">' + p.nome + '</span>'
+                        + '<i class="fas fa-chevron-right text-[10px] text-gray-300 ml-auto"></i>';
+                    linha.onclick = function () { dvAbrirPasta(p.id); };
+                    alvo.appendChild(linha);
+                });
+                situacao(d.pastas.length ? '' : 'Nenhuma subpasta aqui — dá para liberar esta mesma.');
+            })
+            .catch(function () { situacao('Não deu para falar com o portal agora.'); });
+    };
+
+    window.dvEscolherPasta = function () {
+        document.getElementById('dv-modal-pasta').classList.remove('hidden');
+        dvAbrirPasta(document.getElementById('l-folder').value || 'root');
+    };
+    window.dvFecharPasta = function () {
+        document.getElementById('dv-modal-pasta').classList.add('hidden');
+    };
+    window.dvUsarPasta = function () {
+        if (!escolhida || escolhida.id === 'root') return;
+        dvMarcarPasta(escolhida.id, escolhida.nome);
+        dvFecharPasta();
+    };
+    window.dvMarcarPasta = function (id, nome) {
+        document.getElementById('l-folder').value = id || '';
+        var rotulo = document.getElementById('l-folder-nome');
+        rotulo.textContent = id ? (nome || id) : 'Escolher pasta…';
+        rotulo.className = id ? 'text-gray-800 font-medium' : 'text-gray-500';
+    };
+    window.dvLimparPasta = function () {
+        dvMarcarPasta('', '');
+        document.getElementById('l-folder-texto').value = '';
+    };
+    window.dvColarPasta = function (valor) {
+        // Aceita o endereço inteiro do Drive: o id é o que vem depois de /folders/.
+        var achado = String(valor || '').match(/\/folders\/([A-Za-z0-9_-]{10,})|[?&]id=([A-Za-z0-9_-]{10,})/);
+        var id = achado ? (achado[1] || achado[2]) : String(valor || '').trim();
+        dvMarcarPasta(id, id ? 'Pasta colada (' + id.slice(0, 10) + '…)' : '');
+    };
+})();
 </script>
 {% endblock %}

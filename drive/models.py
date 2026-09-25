@@ -169,6 +169,29 @@ class SectorDriveMapping(models.Model):
     def __str__(self):
         return f'{self.sector.name} → {self.folder_id}'
 
+    @property
+    def e_pasta_liberada(self):
+        return False
+
+    @property
+    def rotulo(self):
+        return self.sector.name if self.sector_id else (self.folder_name or 'Setor')
+
+    def url_lista(self, folder_id=''):
+        """A listagem desta raiz (a pasta do setor ou uma subpasta dela)."""
+        from django.urls import reverse
+        if folder_id and folder_id != self.folder_id:
+            return reverse('drive:browse_folder', args=[self.sector_id, folder_id])
+        return reverse('drive:browse', args=[self.sector_id])
+
+    def url_envio(self):
+        from django.urls import reverse
+        return reverse('drive:upload', args=[self.sector_id])
+
+    def url_nova_pasta(self):
+        from django.urls import reverse
+        return reverse('drive:mkdir', args=[self.sector_id])
+
 
 class DrivePermission(models.Model):
     """Quem enxerga o quê: alvo (usuário/grupo/setor/hierarquia) × pasta × nível.
@@ -235,12 +258,119 @@ class DrivePermission(models.Model):
         return '—'
 
 
+class PastaLiberada(models.Model):
+    """Uma pasta do Drive liberada direto para alguém, fora do mapa de setores.
+
+    A permissão normal (``DrivePermission``) pendura tudo num setor: a pasta
+    precisa estar dentro da pasta-raiz daquele setor. Aqui a pasta é escolhida
+    de qualquer lugar do Drive e passa a ser uma **raiz por si só** — aparece em
+    /drive para quem recebeu, com o mesmo nível cumulativo das outras
+    permissões, e navega como qualquer outra pasta (ela e tudo abaixo dela).
+
+    Serve para o caso de sempre: "esta pasta aqui, só para esta pessoa", sem
+    precisar inventar um setor no portal para ela.
+    """
+
+    class Alvo(models.TextChoices):
+        USER = 'USER', 'Usuário'
+        GROUP = 'GROUP', 'Grupo'
+        SECTOR = 'SECTOR', 'Setor'
+        HIERARCHY = 'HIERARCHY', 'Hierarquia'
+
+    folder_id = models.CharField(max_length=100, verbose_name='Pasta no Google Drive')
+    folder_name = models.CharField(max_length=255, blank=True, default='', verbose_name='Nome da pasta')
+    caminho = models.CharField(
+        max_length=500, blank=True, default='', verbose_name='Onde fica',
+        help_text='Caminho da pasta no Drive, guardado para a tela mostrar de onde ela veio.')
+
+    alvo = models.CharField(max_length=10, choices=Alvo.choices, default=Alvo.USER)
+    target_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True,
+        related_name='drive_pastas_liberadas', verbose_name='Pessoa')
+    target_group = models.ForeignKey(
+        'communications.CommunicationGroup', on_delete=models.CASCADE, null=True, blank=True,
+        related_name='drive_pastas_liberadas', verbose_name='Grupo')
+    target_sector = models.ForeignKey(
+        'users.Sector', on_delete=models.CASCADE, null=True, blank=True,
+        related_name='drive_pastas_liberadas', verbose_name='Setor')
+    target_hierarchy = models.CharField(max_length=20, blank=True, default='', choices=HIERARQUIAS)
+
+    nivel = models.CharField(max_length=10, choices=DrivePermission.Nivel.choices,
+                             default=DrivePermission.Nivel.VIEW, verbose_name='Nível')
+    ativo = models.BooleanField(default=True, verbose_name='Ativo')
+
+    criado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='drive_pastas_liberadas_criadas')
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Pasta liberada do Drive'
+        verbose_name_plural = 'Pastas liberadas do Drive'
+        ordering = ['folder_name', '-criado_em']
+        indexes = [models.Index(fields=['ativo', 'alvo'])]
+
+    def __str__(self):
+        return f'{self.folder_name or self.folder_id} → {self.alvo_label}'
+
+    # ── Faz as vezes de um mapeamento de setor ──────────────────────────────
+    # O motor de arquivos do Drive (prévia, download, versões, renomear…)
+    # trabalha com "a raiz de onde o arquivo veio". Uma pasta liberada é uma
+    # raiz sem setor: responde às mesmas perguntas, com setor vazio.
+    @property
+    def sector(self):
+        return None
+
+    @property
+    def sector_id(self):
+        return None
+
+    @property
+    def e_pasta_liberada(self):
+        return True
+
+    @property
+    def rotulo(self):
+        return self.folder_name or 'Pasta liberada'
+
+    def url_lista(self, folder_id=''):
+        from django.urls import reverse
+        if folder_id and folder_id != self.folder_id:
+            return reverse('drive:browse_pasta_folder', args=[self.id, folder_id])
+        return reverse('drive:browse_pasta', args=[self.id])
+
+    def url_envio(self):
+        from django.urls import reverse
+        return reverse('drive:upload_pasta', args=[self.id])
+
+    def url_nova_pasta(self):
+        from django.urls import reverse
+        return reverse('drive:mkdir_pasta', args=[self.id])
+
+    @property
+    def alvo_label(self):
+        if self.alvo == self.Alvo.USER:
+            return self.target_user.full_name if self.target_user else '—'
+        if self.alvo == self.Alvo.GROUP:
+            return self.target_group.name if self.target_group else '—'
+        if self.alvo == self.Alvo.SECTOR:
+            return self.target_sector.name if self.target_sector else '—'
+        if self.alvo == self.Alvo.HIERARCHY:
+            return dict(HIERARQUIAS).get(self.target_hierarchy, self.target_hierarchy)
+        return '—'
+
+
 class DriveFavorite(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='drive_favoritos')
     file_id = models.CharField(max_length=100)
     file_name = models.CharField(max_length=255, blank=True, default='')
     mime_type = models.CharField(max_length=120, blank=True, default='')
     sector = models.ForeignKey('users.Sector', on_delete=models.SET_NULL, null=True, blank=True)
+    # Favorito de dentro de uma pasta liberada: guarda a raiz para o link da
+    # tela de favoritos voltar para lá (sem setor, ele iria parar no Meu Drive).
+    pasta = models.ForeignKey('drive.PastaLiberada', on_delete=models.SET_NULL, null=True, blank=True,
+                              related_name='favoritos', verbose_name='Pasta liberada')
     criado_em = models.DateTimeField(auto_now_add=True)
 
     @property

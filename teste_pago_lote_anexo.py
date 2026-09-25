@@ -88,6 +88,31 @@ try:
     t('registra a data do pagamento', contestacao.paid_at is not None)
     t('avisa quantas foram', '1 contestação(ões) marcada(s) como paga(s)' in r.content.decode())
 
+    print('\n== O CARD DA VENDA EM /contestacao/gerenciar/ ==')
+    # Pedido: a data da venda e o nome do cliente no card — é por eles que o
+    # gestor acha a venda na planilha da Vivo antes de julgar.
+    sem_dados = ExclusionRecord.objects.create(
+        sync_batch=lote, filial='ZZ FILIAL', vendedor='ZZ Vendedor Sem Dados', receita=50,
+        pilar='ZZ', numero_venda='ZZ2', data_venda='', nome_cliente='',
+        record_type=TipoBase.EXCLUSAO)
+    Contestation.objects.create(exclusion=sem_dados, requester=chefe, reason='ZZ motivo 2',
+                                status='pending')
+
+    # A tela só lista depois de escolher o setor (antes disso mostra os cards
+    # de setor), e a contestação de cima terminou como "paga/confirmada".
+    html = cc.get('/contestacao/gerenciar/?status=confirmed&setor=ZZ FILIAL').content.decode()
+    t('a data da venda aparece no card', '01/07/2026' in html)
+    t('e o nome do cliente também', 'ZZ Cliente' in html)
+    t('com os ícones de data e de pessoa', 'fa-calendar-day' in html and 'fa-user text-gray-300' in html)
+    t('o resto do card continua lá', 'ZZ Vendedor' in html and 'ZZ FILIAL' in html)
+
+    html = cc.get('/contestacao/gerenciar/?status=pending&setor=ZZ FILIAL').content.decode()
+    t('venda sem data e sem cliente aparece igual',
+      'ZZ Vendedor Sem Dados' in html, html.count('ZZ Vendedor Sem Dados'))
+    t('e sem sobrar linha vazia nem "None" no card',
+      'None' not in html.split('ZZ Vendedor Sem Dados')[1][:600]
+      and 'fa-calendar-day' not in html.split('ZZ Vendedor Sem Dados')[1][:600])
+
     from contestacao.models import ContestationHistory
     t('fica no histórico',
       ContestationHistory.objects.filter(contestation=contestacao, action='paid').exists())

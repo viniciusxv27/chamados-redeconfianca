@@ -256,10 +256,23 @@ STATIC_URL = '/static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-# Whitenoise configuration for static files
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+# ─── Onde os arquivos ficam ──────────────────────────────────────────────────
+# Django 5.1 removeu DEFAULT_FILE_STORAGE e STATICFILES_STORAGE: quem manda
+# agora é STORAGES. Enquanto essas duas linhas antigas ficaram aqui, o Django
+# as ignorava em silêncio e o storage padrão voltava a ser o disco do
+# container — que some no deploy. Foi assim que o áudio do /feedback se perdeu:
+# o banco guardava o caminho, o arquivo não estava no MinIO e o link quebrava.
+#
+# Estático continua exatamente como está rodando hoje (o whitenoise serve pelo
+# middleware). Ligar o CompressedManifest é decisão à parte: exige collectstatic
+# e conferir toda referência de {% static %}, e não pode ser efeito colateral.
+STORAGES_ESTATICO = {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'}
 
-# Media files configuration
+# O disco local é o caminho de fallback (e o padrão fora do S3): precisa apontar
+# para algum lugar de verdade, senão o arquivo é gravado na pasta de onde o
+# gunicorn subiu.
+MEDIA_ROOT = BASE_DIR / 'media'
+
 USE_S3 = config('USE_S3', default=False, cast=bool)
 
 if USE_S3:
@@ -279,17 +292,24 @@ if USE_S3:
     AWS_S3_FILE_OVERWRITE = False
     AWS_QUERYSTRING_AUTH = False
     
-    # Use S3 for media files
-    DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
-    
+    # Todo arquivo enviado vai para o MinIO, na mesma pasta 'media/' que os
+    # outros módulos já usam (core.storage.MediaStorage).
+    STORAGES = {
+        'default': {'BACKEND': 'core.storage.MediaStorage'},
+        'staticfiles': STORAGES_ESTATICO,
+    }
+
     if AWS_S3_CUSTOM_DOMAIN:
         MEDIA_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/'
     else:
         MEDIA_URL = f'{AWS_S3_ENDPOINT_URL}/{AWS_STORAGE_BUCKET_NAME}/'
 else:
-    # Local storage (default)
+    # Sem S3: disco local mesmo.
     MEDIA_URL = '/media/'
-    MEDIA_ROOT = BASE_DIR / 'media'
+    STORAGES = {
+        'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+        'staticfiles': STORAGES_ESTATICO,
+    }
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field

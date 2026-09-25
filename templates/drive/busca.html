@@ -35,7 +35,9 @@
 <p class="text-sm text-gray-500 mb-2">{{ resultados|length }} resultado(s) para "<strong>{{ termo }}</strong>".</p>
 <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
     {% for f in resultados %}
-    <a href="{% url 'drive:file_preview' f.id %}" class="dv-card bg-white border border-gray-100 rounded-xl p-3 block">
+    {% comment %}Pasta abre a listagem dela; arquivo abre a prévia.{% endcomment %}
+    <a href="{% if f.is_folder %}{{ f.url_raiz }}f/{{ f.id }}/{% else %}{% url 'drive:file_preview' f.id %}{% endif %}"
+       class="dv-card bg-white border border-gray-100 rounded-xl p-3 block">
         <div class="flex items-start gap-3">
             <div class="w-10 h-10 rounded-lg bg-gray-50 flex items-center justify-center flex-shrink-0"><i class="fas {{ f.mimeType|file_icon }}"></i></div>
             <div class="min-w-0">

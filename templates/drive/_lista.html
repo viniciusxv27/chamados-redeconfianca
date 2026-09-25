@@ -3,7 +3,7 @@
 {# data-* para o botão direito e o toque longo — ver browse.html. #}
 <div class="dv-card dv-item bg-white border border-gray-100 rounded-xl p-3 relative group"
      data-id="{{ item.id }}" data-nome="{{ item.name }}" data-tipo="{% if item.is_folder %}pasta{% else %}arquivo{% endif %}">
-    <a href="{% if item.is_folder %}{% url 'drive:browse_folder' mapping.sector_id item.id %}{% else %}{% url 'drive:file_preview' item.id %}{% endif %}"
+    <a href="{% if item.is_folder %}{{ url_raiz }}f/{{ item.id }}/{% else %}{% url 'drive:file_preview' item.id %}{% endif %}"
        class="block">
         <div class="flex items-start gap-3">
             <div class="w-10 h-10 rounded-lg bg-gray-50 flex items-center justify-center flex-shrink-0">
@@ -32,7 +32,7 @@
                 <i class="fas fa-ellipsis-vertical"></i>
             </button>
             <div class="dv-menu hidden absolute right-0 top-8 z-20 w-60 bg-white border border-gray-100 rounded-lg shadow-lg py-1 text-sm" role="menu">
-                <a href="{% if item.is_folder %}{% url 'drive:browse_folder' mapping.sector_id item.id %}{% else %}{% url 'drive:file_preview' item.id %}{% endif %}"
+                <a href="{% if item.is_folder %}{{ url_raiz }}f/{{ item.id }}/{% else %}{% url 'drive:file_preview' item.id %}{% endif %}"
                    class="block px-3 py-1.5 hover:bg-gray-50"><i class="fas fa-eye w-4 mr-1.5 text-gray-400"></i>Abrir</a>
                 {% if not item.is_folder and pode_download %}
                 <a href="{% url 'drive:file_content' item.id %}?dl=1" class="block px-3 py-1.5 hover:bg-gray-50"><i class="fas fa-download w-4 mr-1.5 text-gray-400"></i>Baixar</a>

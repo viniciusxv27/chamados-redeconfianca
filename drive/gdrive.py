@@ -68,7 +68,14 @@ class DriveNaoConfigurado(DriveError):
 # ─── Autenticação ────────────────────────────────────────────────────────────
 
 def _config():
-    """DriveConfig (id=1), sem quebrar se a tabela ainda não existir."""
+    """DriveConfig (id=1), sem quebrar se a tabela ainda não existir.
+
+    É lida duas vezes por chamada ao Google (credencial configurada? mudou?).
+    Isso só pesava porque a subida da árvore fazia uma chamada por arquivo;
+    com os pais vindo em lote (`pais_de`), sobram poucas chamadas por tela e
+    a leitura pode continuar direta — assim a troca de credencial pela tela
+    vale na hora, sem janela de configuração velha.
+    """
     try:
         from .models import DriveConfig
         return DriveConfig.objects.filter(pk=1).first()
@@ -463,6 +470,47 @@ def pai_de(file_id):
     except DriveError:
         return None
     return (meta.get('parents') or [''])[0]
+
+
+# O `batch` do Google aceita até 100 sub-pedidos por chamada.
+LOTE_MAXIMO = 100
+
+
+def pais_de(ids):
+    """{id: pasta-pai} de vários itens de uma vez, pelo `batch` do Google.
+
+    Mesma resposta de `pai_de` para cada item ('' no topo), só que sem pagar um
+    ida-e-volta por arquivo: 60 itens levavam ~21 s um a um e levam ~1,2 s num
+    lote só. O id que o Google não responder fica de fora do dicionário — quem
+    chama decide (o cache da subida, por exemplo, não guarda falha).
+    """
+    ids = [i for i in dict.fromkeys(ids) if i]
+    if not ids:
+        return {}
+    achados = {}
+
+    def guardar(request_id, resposta, excecao):
+        if excecao is None and resposta is not None:
+            achados[request_id] = (resposta.get('parents') or [''])[0]
+
+    for inicio in range(0, len(ids), LOTE_MAXIMO):
+        pedaco = ids[inicio:inicio + LOTE_MAXIMO]
+        try:
+            servico = service()
+            lote = servico.new_batch_http_request(callback=guardar)
+            for file_id in pedaco:
+                lote.add(servico.files().get(fileId=file_id, fields='id,parents', **_params()),
+                         request_id=file_id)
+            lote.execute()
+        except Exception as exc:  # noqa: BLE001
+            # Sem lote (proxy, versão da API, dublê de teste): vai um a um, que
+            # é lento mas continua funcionando.
+            logger.debug('Lote de pais indisponível (%s); indo um a um.', exc)
+            for file_id in pedaco:
+                pai = pai_de(file_id)
+                if pai is not None:
+                    achados[file_id] = pai
+    return achados
 
 
 def baixar_trecho(file_id, inicio, fim):

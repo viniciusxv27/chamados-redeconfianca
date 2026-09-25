@@ -12,6 +12,7 @@
                 <tr>
                     <th class="text-left px-4 py-2.5 font-semibold">Colaborador</th>
                     <th class="text-left px-4 py-2.5 font-semibold">Setores que enxerga</th>
+                    <th class="text-left px-4 py-2.5 font-semibold">Pastas liberadas</th>
                     <th class="text-left px-4 py-2.5 font-semibold">Gestor de</th>
                 </tr>
             </thead>
@@ -28,15 +29,22 @@
                         </div>
                     </td>
                     <td class="px-4 py-2.5">
+                        {% if l.pastas %}
+                        <div class="flex flex-wrap gap-1">
+                            {% for nome in l.pastas %}<span class="text-[11px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700"><i class="fas fa-folder-open mr-1"></i>{{ nome }}</span>{% endfor %}
+                        </div>
+                        {% else %}<span class="text-gray-300">—</span>{% endif %}
+                    </td>
+                    <td class="px-4 py-2.5">
                         {% if l.gestor_de %}<div class="flex flex-wrap gap-1">{% for s in l.gestor_de %}<span class="text-[11px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700"><i class="fas fa-user-shield mr-1"></i>{{ s }}</span>{% endfor %}</div>{% else %}<span class="text-gray-300">—</span>{% endif %}
                     </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="3" class="px-4 py-10 text-center text-gray-400">Ninguém tem acesso configurado ainda. Defina permissões em <a href="{% url 'drive:gestao_permissoes' %}" class="text-blue-600 hover:underline">Permissões</a>.</td></tr>
+                <tr><td colspan="4" class="px-4 py-10 text-center text-gray-400">Ninguém tem acesso configurado ainda. Defina permissões em <a href="{% url 'drive:gestao_permissoes' %}" class="text-blue-600 hover:underline">Permissões</a>.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
 </div>
-<p class="text-[11px] text-gray-400 mt-2">SUPERADMIN enxerga todos os setores automaticamente e não aparece nesta lista, que mostra quem foi liberado por permissão/gestão.</p>
+<p class="text-[11px] text-gray-400 mt-2">SUPERADMIN enxerga todos os setores automaticamente e não aparece nesta lista, que mostra quem foi liberado por permissão, gestão ou pasta liberada.</p>
 {% endblock %}

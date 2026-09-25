@@ -1,12 +1,12 @@
 {% extends 'drive/base_drive.html' %}
 {% load drive_extras %}
 {% block drive_titulo %}{{ meta.name }} — Drive{% endblock %}
-{% block drive_subtitulo %}{{ sector.name }}{% endblock %}
+{% block drive_subtitulo %}{{ rotulo }}{% endblock %}
 
 {% block drive_conteudo %}
 <div class="mb-3">
-    <a href="{% url 'drive:browse' mapping.sector_id %}" class="text-sm text-gray-500 hover:text-gray-700">
-        <i class="fas fa-arrow-left mr-1.5"></i>Voltar a {{ sector.name }}
+    <a href="{{ url_raiz }}" class="text-sm text-gray-500 hover:text-gray-700">
+        <i class="fas fa-arrow-left mr-1.5"></i>Voltar a {{ rotulo }}
     </a>
 </div>
 
@@ -56,7 +56,10 @@
             <dl class="space-y-2">
                 <div class="flex justify-between gap-3"><dt class="text-gray-400">Tipo</dt><dd class="text-gray-700 text-right truncate">{{ meta.mimeType }}</dd></div>
                 {% if not meta.is_folder %}<div class="flex justify-between gap-3"><dt class="text-gray-400">Tamanho</dt><dd class="text-gray-700">{{ meta.size_h }}</dd></div>{% endif %}
-                <div class="flex justify-between gap-3"><dt class="text-gray-400">Setor</dt><dd class="text-gray-700">{{ sector.name }}</dd></div>
+                <div class="flex justify-between gap-3">
+                    <dt class="text-gray-400">{% if pasta_liberada %}Pasta{% else %}Setor{% endif %}</dt>
+                    <dd class="text-gray-700">{{ rotulo }}</dd>
+                </div>
                 <div class="flex justify-between gap-3"><dt class="text-gray-400">Criado</dt><dd class="text-gray-700">{{ meta.createdTime|slice:':10' }}</dd></div>
                 <div class="flex justify-between gap-3"><dt class="text-gray-400">Atualizado</dt><dd class="text-gray-700">{{ meta.modifiedTime|slice:':16' }}</dd></div>
                 {% if meta.lastModifyingUser %}<div class="flex justify-between gap-3"><dt class="text-gray-400">Por</dt><dd class="text-gray-700 text-right truncate">{{ meta.lastModifyingUser.displayName }}</dd></div>{% endif %}

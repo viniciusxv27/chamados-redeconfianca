@@ -585,7 +585,8 @@ try:
         t('itens do setor com o nome do setor', 'ZZ Setor Visualização' in html)
         t('restaurar e excluir definitivo (superadmin)',
           'Restaurar' in html and 'Excluir DEFINITIVAMENTE' in html and 'csrfmiddlewaretoken' in html)
-        t('sobe a árvore uma vez por pasta, não por item (4 consultas para 50 itens)', falso.pais == 4, falso.pais)
+        t('sobe a árvore em lote, um degrau por vez e parando na raiz '
+          '(3 consultas para 50 itens)', falso.pais == 3, falso.pais)
 
         falso.pais = 0
         r = c.get('/drive/lixeira/?parte=1&t=50')
