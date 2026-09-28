@@ -574,6 +574,45 @@
         </div>
     </div>
 </div>
+
+{% comment %}
+Dupla conferência: antes de enviar, o portal confere item a item com o servidor
+e mostra aqui o que está pronto e o que não vai passar (e por quê). Também é
+esta janela que mostra o resultado do envio, item a item — o carrinho só perde
+o que virou contestação de verdade.
+{% endcomment %}
+<div id="cartCheckModal" class="hidden fixed inset-0 z-50 items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4"
+     role="dialog" aria-modal="true" aria-labelledby="cartCheckTitulo">
+    <div class="bg-white w-full sm:max-w-2xl rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden">
+        <div class="px-5 py-4 border-b border-gray-100 flex items-start justify-between gap-3">
+            <div class="min-w-0">
+                <h3 id="cartCheckTitulo" class="font-semibold text-gray-900">Conferência do pedido</h3>
+                <p id="cartCheckResumo" class="text-sm text-gray-500 mt-0.5"></p>
+            </div>
+            <button type="button" onclick="fecharConferencia()" class="w-8 h-8 rounded-lg text-gray-400 hover:bg-gray-100" aria-label="Fechar">
+                <i class="fas fa-xmark"></i>
+            </button>
+        </div>
+        <div class="px-5 py-4 max-h-[55vh] overflow-y-auto">
+            <div id="cartCheckProgresso" class="hidden mb-4">
+                <div class="h-2 rounded-full bg-gray-100 overflow-hidden">
+                    <div id="cartCheckBarra" class="h-full bg-orange-500 transition-all" style="width: 0%"></div>
+                </div>
+                <p id="cartCheckProgressoTexto" class="text-xs text-gray-500 mt-2"></p>
+            </div>
+            <div id="cartCheckLista" class="space-y-2"></div>
+        </div>
+        <div class="px-5 py-3 border-t border-gray-100 flex items-center justify-end gap-2 bg-gray-50">
+            <button type="button" id="cartCheckCancelar" onclick="fecharConferencia()"
+                    class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Voltar ao carrinho</button>
+            <button type="button" id="cartCheckEnviar" onclick="confirmarEnvioConferido()"
+                    class="px-5 py-2 rounded-lg text-white text-sm font-semibold hover:opacity-90"
+                    style="background-color: #9a3412">
+                <i class="fas fa-paper-plane mr-2"></i><span>Enviar</span>
+            </button>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -1671,6 +1710,153 @@ window.repairCartNow = async function() {
     }
 };
 
+/* ------------------------------------------------------------------ *
+ * Envio do carrinho: conferir, subir as evidências uma a uma e enviar
+ * em pedaços pequenos.
+ *
+ * Como era: um POST único com TODAS as fotos. Em pedido grande isso
+ * estourava o tempo/limite do proxy ("Erro de conexão") e, quando passava,
+ * o servidor criava só o que dava e a tela limpava o carrinho inteiro
+ * assim mesmo — daí "chegaram menos vendas do que eu mandei".
+ * ------------------------------------------------------------------ */
+window.MOTIVOS_CONFERENCIA = {
+    pronta: 'Pronta para enviar',
+    sem_motivo: 'Falta escrever o motivo',
+    sem_evidencia: 'Falta anexar a evidência',
+    ja_contestada: 'Já contestada neste ciclo',
+    fora_do_escopo: 'Fora da sua loja/base',
+    nao_encontrada: 'Não está mais na base sincronizada',
+    falhou: 'Não deu para enviar agora (tente de novo)'
+};
+
+window.esperar = function(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+};
+
+/* Rede de loja cai: em vez de desistir na primeira falha, tenta de novo. */
+window.comTentativas = async function(tarefa, tentativas) {
+    tentativas = tentativas || 3;
+    let ultimo;
+    for (let i = 0; i < tentativas; i++) {
+        try {
+            return await tarefa();
+        } catch (erro) {
+            ultimo = erro;
+            if (i < tentativas - 1) {
+                await window.esperar(700 * (i + 1));
+            }
+        }
+    }
+    throw ultimo;
+};
+
+window.mostrarProgresso = function(feitos, total, texto) {
+    const caixa = document.getElementById('cartCheckProgresso');
+    const barra = document.getElementById('cartCheckBarra');
+    const legenda = document.getElementById('cartCheckProgressoTexto');
+    if (!caixa) return;
+    caixa.classList.remove('hidden');
+    const pct = total > 0 ? Math.round((feitos / total) * 100) : 0;
+    barra.style.width = pct + '%';
+    legenda.textContent = texto || (feitos + ' de ' + total);
+};
+
+window.abrirConferencia = function() {
+    const modal = document.getElementById('cartCheckModal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+    }
+};
+
+window.fecharConferencia = function() {
+    const modal = document.getElementById('cartCheckModal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+    const caixa = document.getElementById('cartCheckProgresso');
+    if (caixa) caixa.classList.add('hidden');
+};
+
+window.desenharConferencia = function(itens, resumo, rotuloBotao) {
+    const lista = document.getElementById('cartCheckLista');
+    const legenda = document.getElementById('cartCheckResumo');
+    const botao = document.getElementById('cartCheckEnviar');
+    if (!lista) return;
+
+    legenda.textContent = resumo || '';
+    lista.innerHTML = '';
+
+    const ordem = { sem_motivo: 0, sem_evidencia: 1, ja_contestada: 2, fora_do_escopo: 3,
+                    nao_encontrada: 4, falhou: 5, pronta: 9 };
+    itens.slice().sort((a, b) => (ordem[a.situacao] ?? 8) - (ordem[b.situacao] ?? 8)).forEach((item) => {
+        const pronta = item.situacao === 'pronta';
+        const linha = document.createElement('div');
+        linha.className = 'flex items-start gap-3 p-3 rounded-lg border '
+            + (pronta ? 'border-emerald-100 bg-emerald-50/50' : 'border-amber-200 bg-amber-50');
+        const resumoItem = (window.pendingSummaries[String(item.id)] || {});
+        const vendedor = item.vendedor || resumoItem.vendedor || ('Venda ' + item.id);
+        const filial = item.filial || resumoItem.filial || '';
+        const valor = item.valor || resumoItem.valor || '';
+        linha.innerHTML =
+            '<i class="fas ' + (pronta ? 'fa-circle-check text-emerald-500' : 'fa-triangle-exclamation text-amber-500')
+            + ' mt-0.5"></i>'
+            + '<div class="min-w-0 flex-1">'
+            + '<p class="text-sm font-medium text-gray-800 truncate">' + vendedor + '</p>'
+            + '<p class="text-xs text-gray-500">' + [filial, valor].filter(Boolean).join(' · ') + '</p>'
+            + '</div>'
+            + '<span class="text-xs font-semibold ' + (pronta ? 'text-emerald-700' : 'text-amber-700') + '">'
+            + (window.MOTIVOS_CONFERENCIA[item.situacao] || item.situacao) + '</span>';
+        lista.appendChild(linha);
+    });
+
+    if (botao) {
+        botao.querySelector('span').textContent = rotuloBotao || 'Enviar';
+        botao.classList.toggle('hidden', !rotuloBotao);
+    }
+    document.getElementById('cartCheckCancelar').textContent = rotuloBotao ? 'Voltar ao carrinho' : 'Fechar';
+};
+
+/* Sobe para o servidor, uma a uma, a evidência que só existe no navegador.
+   São pedidos pequenos: é isso que tira o POST gigante do caminho. */
+window.garantirEvidenciasNoServidor = async function(ids) {
+    const faltando = ids.filter((id) => !window.pendingServerAttachments[id] && window.pendingFiles[id]);
+    if (faltando.length === 0) return { enviadas: 0, falhas: [] };
+
+    const falhas = [];
+    let feitas = 0;
+    for (const id of faltando) {
+        const motivo = (window.pendingReasons[id] || window.reasonDrafts[id] || '').trim();
+        try {
+            await window.comTentativas(() => window.saveDraftItemOnServer(id, motivo, window.pendingFiles[id]));
+        } catch (_) {
+            falhas.push(id);
+        }
+        feitas += 1;
+        window.mostrarProgresso(feitas, faltando.length, 'Guardando evidências no servidor: ' + feitas + ' de ' + faltando.length);
+    }
+    return { enviadas: faltando.length - falhas.length, falhas: falhas };
+};
+
+window.conferirCarrinhoNoServidor = async function(ids) {
+    const resp = await fetch('{% url "contestacao:cart_check" %}', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': window.csrfToken, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            ids: ids.map((id) => parseInt(id, 10)),
+            com_arquivo_local: ids.filter((id) => !!window.pendingFiles[id]).map((id) => parseInt(id, 10))
+        })
+    });
+    const dados = await resp.json().catch(() => null);
+    if (!resp.ok || !dados || !dados.success) {
+        throw new Error((dados && dados.error) || 'Não deu para conferir o carrinho agora.');
+    }
+    return dados;
+};
+
+window.conferenciaAtual = null;
+
 window.submitAllContestations = async function() {
     if (window.contestationBlocked) {
         alert('Contestações bloqueadas. Sincronize a planilha novamente para liberar novos envios.');
@@ -1680,63 +1866,132 @@ window.submitAllContestations = async function() {
     const ids = Object.keys(window.pendingReasons);
     if (ids.length === 0) return;
 
-    await window.ensurePendingFilesBeforeSubmit(ids);
-
-    const missingFiles = ids.filter((id) => !window.pendingFiles[id]);
-    const missingWithServerFallback = missingFiles.filter((id) => !window.pendingServerAttachments[id]);
-    if (missingWithServerFallback.length > 0) {
-        alert('Alguns itens do pedido estão sem anexo disponível no navegador. Reabra esses itens e anexe novamente antes de enviar.');
-        return;
-    }
-
     const btn = document.getElementById('btnSubmitAll');
-    
-    // Confirmação antes de enviar
-    const confirmMsg = `Você está prestes a enviar ${ids.length} contestação${ids.length > 1 ? 'ões' : ''}. Deseja continuar?`;
-    if (!confirm(confirmMsg)) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Conferindo...';
+
+    try {
+        await window.ensurePendingFilesBeforeSubmit(ids);
+        window.abrirConferencia();
+        window.desenharConferencia([], 'Conferindo item a item…', '');
+        window.mostrarProgresso(0, ids.length, 'Conferindo o carrinho…');
+
+        const subida = await window.garantirEvidenciasNoServidor(ids);
+        const conferencia = await window.comTentativas(() => window.conferirCarrinhoNoServidor(ids), 2);
+
+        const prontas = conferencia.prontas.map(String);
+        window.conferenciaAtual = {
+            ids: prontas,
+            lote: conferencia.lote || 5,
+            // O que já sabemos que não vai: continua no carrinho e volta a
+            // aparecer no resultado, para o envio terminar sem surpresa.
+            naoProntas: (conferencia.itens || []).filter((i) => i.situacao !== 'pronta')
+        };
+
+        const faltam = conferencia.total - prontas.length;
+        let resumo = prontas.length + ' de ' + conferencia.total + ' prontas para enviar.';
+        if (faltam > 0) {
+            resumo += ' ' + faltam + (faltam > 1 ? ' ficam no carrinho' : ' fica no carrinho') + ' até você resolver.';
+        }
+        if (subida.falhas.length > 0) {
+            resumo += ' (' + subida.falhas.length + ' evidência(s) não subiram; tente de novo)';
+        }
+        document.getElementById('cartCheckProgresso').classList.add('hidden');
+        window.desenharConferencia(conferencia.itens, resumo,
+            prontas.length > 0 ? ('Enviar ' + prontas.length) : '');
+    } catch (erro) {
+        window.fecharConferencia();
+        alert((erro && erro.message) || 'Não deu para conferir o carrinho. Tente de novo.');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-paper-plane mr-2"></i> Enviar';
+    }
+};
+
+window.confirmarEnvioConferido = async function() {
+    const dados = window.conferenciaAtual;
+    if (!dados || dados.ids.length === 0) return;
+
+    const botao = document.getElementById('cartCheckEnviar');
+    const cancelar = document.getElementById('cartCheckCancelar');
+    botao.disabled = true;
+    cancelar.disabled = true;
+    botao.querySelector('span').textContent = 'Enviando…';
+
+    const lote = Math.max(1, dados.lote);
+    const criadas = [];
+    const problemas = [];
+    let enviados = 0;
+
+    for (let i = 0; i < dados.ids.length; i += lote) {
+        const pedaco = dados.ids.slice(i, i + lote);
+        try {
+            const resposta = await window.comTentativas(async () => {
+                const resp = await fetch('{% url "contestacao:bulk_create_contestation" %}', {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': window.csrfToken, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ids: pedaco.map((id) => parseInt(id, 10)) })
+                });
+                const corpo = await resp.json().catch(() => null);
+                if (!resp.ok || !corpo || !corpo.success) {
+                    throw new Error((corpo && corpo.error) || 'Falha no envio deste pedaço.');
+                }
+                return corpo;
+            });
+            (resposta.criadas || []).forEach((id) => criadas.push(String(id)));
+            (resposta.ignoradas || []).forEach((item) => problemas.push({ id: item.id, situacao: item.motivo }));
+        } catch (_) {
+            pedaco.forEach((id) => problemas.push({ id: id, situacao: 'falhou' }));
+        }
+        enviados += pedaco.length;
+        window.mostrarProgresso(enviados, dados.ids.length,
+            'Enviando: ' + Math.min(enviados, dados.ids.length) + ' de ' + dados.ids.length);
+    }
+
+    /* "Deu erro de conexão mas a venda chegou": quando o pedaço falhou sem
+       resposta, o servidor pode ter criado assim mesmo. Em vez de deixar a
+       pessoa mandar de novo, o portal pergunta como ficou e trata o que já
+       está contestado como enviado. */
+    const falhados = problemas.filter((p) => p.situacao === 'falhou').map((p) => String(p.id));
+    if (falhados.length > 0) {
+        try {
+            const recheque = await window.conferirCarrinhoNoServidor(falhados);
+            (recheque.itens || []).forEach((item) => {
+                const alvo = problemas.find((p) => String(p.id) === String(item.id));
+                if (alvo) { alvo.situacao = item.situacao; }
+                if (item.situacao === 'ja_contestada') { criadas.push(String(item.id)); }
+            });
+        } catch (_) {
+            // Sem recheque: os itens continuam no carrinho, que é o lado seguro.
+        }
+    }
+
+    // Só sai do carrinho o que virou contestação de verdade.
+    criadas.forEach((id) => window.removeItemFromCart(id));
+    await window.persistPendingDraft().catch(() => {});
+    window.renderBar();
+
+    // O que sobra no carrinho: o que falhou agora + o que a conferência já
+    // tinha apontado como não pronto, tirando o que acabou virando contestação.
+    const restantes = problemas.concat(dados.naoProntas || [])
+        .filter((p) => !criadas.includes(String(p.id)));
+
+    botao.disabled = false;
+    cancelar.disabled = false;
+
+    const plural = (n, um, varios) => n + ' ' + (n === 1 ? um : varios);
+
+    if (restantes.length === 0) {
+        window.showToast(plural(criadas.length, 'contestação enviada', 'contestações enviadas') + '.', 'success');
+        window.location.href = '{% url "contestacao:my_contestations" %}';
         return;
     }
-    
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Enviando contestações...';
 
-    const formData = new FormData();
-    ids.forEach((id, i) => {
-        formData.append('exclusion_id_' + i, id);
-        formData.append('reason_' + i, window.pendingReasons[id]);
-        if (window.pendingFiles[id]) {
-            formData.append('file_' + i, window.pendingFiles[id]);
-        } else if (window.pendingServerAttachments[id]) {
-            formData.append('use_server_file_' + i, '1');
-        }
-    });
-    formData.append('count', ids.length);
-
-    fetch('{% url "contestacao:bulk_create_contestation" %}', {
-        method: 'POST',
-        headers: {
-            'X-CSRFToken': '{{ csrf_token }}',
-        },
-        body: formData,
-    })
-    .then(resp => resp.json())
-    .then(data => {
-        if (data.success) {
-            localStorage.removeItem(window.contestationStorageKey);
-            window.clearAllDraftFiles().catch(() => {});
-            window.clearServerDraft().catch(() => {});
-            window.location.href = '{% url "contestacao:my_contestations" %}';
-        } else {
-            alert(data.error || 'Erro ao enviar contestações.');
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-paper-plane mr-2"></i> Enviar todas as contestações';
-        }
-    })
-    .catch(() => {
-        alert('Erro de conexão. Tente novamente.');
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-paper-plane mr-2"></i> Enviar todas as contestações';
-    });
+    window.desenharConferencia(restantes,
+        plural(criadas.length, 'enviada', 'enviadas') + '. '
+        + plural(restantes.length, 'continua no carrinho:', 'continuam no carrinho:'), '');
+    window.showToast(plural(criadas.length, 'enviada', 'enviadas') + '; '
+        + plural(restantes.length, 'ficou no carrinho', 'ficaram no carrinho') + '.', 'warning');
 };
 
 document.addEventListener('DOMContentLoaded', function() {

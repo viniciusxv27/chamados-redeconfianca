@@ -24,6 +24,8 @@ urlpatterns = [
     path('carrinho/rascunho/limpar/', views.cart_draft_clear, name='cart_draft_clear'),
     path('carrinho/rascunho/compactar/', views.cart_draft_compact, name='cart_draft_compact'),
     path('carrinho/resumo-itens/', views.contestation_cart_items_summary, name='contestation_cart_items_summary'),
+    # Dupla conferência do carrinho antes de enviar.
+    path('carrinho/conferir/', views.cart_check, name='cart_check'),
     path('minhas/', views.my_contestations, name='my_contestations'),
     path('gerenciar/', views.manage_contestations, name='manage_contestations'),
     path('liberar-setor/', views.liberar_setor, name='liberar_setor'),

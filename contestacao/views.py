@@ -1361,9 +1361,121 @@ def create_contestation(request, exclusion_id):
     return render(request, 'contestacao/create_contestation.html', {'exclusion': exclusion})
 
 
+# Itens por pedido no envio do carrinho. Não é limite de negócio: é para o
+# envio ir em pedaços pequenos, que não estouram o tempo do proxy nem o tamanho
+# do corpo — era um POST único com todas as fotos que dava "erro de conexão".
+LOTE_CARRINHO = 5
+
+
+def _conferir_itens_do_carrinho(user, ids, com_arquivo_local=(), sync_state=None):
+    """Como está cada item do carrinho, antes de enviar.
+
+    Devolve (linhas, prontas). Cada linha diz a situação daquele item:
+    pronta, sem_motivo, sem_evidencia, ja_contestada, fora_do_escopo ou
+    nao_encontrada — para a tela poder dizer exatamente o que não vai passar,
+    em vez de o item sumir no meio do envio.
+    """
+    sync_state = sync_state or _get_sync_window_state(user)
+    ids = [i for i in dict.fromkeys(ids) if i]
+    com_arquivo_local = {int(i) for i in com_arquivo_local if str(i).isdigit()}
+
+    no_escopo = {
+        e.pk: e for e in _apply_exclusion_scope_for_user(_exclusoes().filter(pk__in=ids), user)
+    }
+    rascunhos = {
+        d.exclusion_id: d
+        for d in ContestationCartDraft.objects.filter(user=user, exclusion_id__in=ids)
+    }
+    ja_contestadas = set(
+        Contestation.objects.filter(exclusion_id__in=ids)
+        .filter(_open_contestation_filter(sync_state['last_sync_at']))
+        .values_list('exclusion_id', flat=True)
+    )
+
+    linhas, prontas = [], []
+    for eid in ids:
+        rascunho = rascunhos.get(eid)
+        venda = no_escopo.get(eid)
+        if venda is None:
+            situacao = 'fora_do_escopo' if ExclusionRecord.objects.filter(pk=eid).exists() else 'nao_encontrada'
+        elif eid in ja_contestadas:
+            situacao = 'ja_contestada'
+        elif not (rascunho and rascunho.reason.strip()):
+            situacao = 'sem_motivo'
+        elif not ((rascunho and rascunho.attachment) or eid in com_arquivo_local):
+            situacao = 'sem_evidencia'
+        else:
+            situacao = 'pronta'
+            prontas.append(eid)
+        linhas.append({
+            'id': eid,
+            'situacao': situacao,
+            'vendedor': venda.vendedor if venda else '',
+            'filial': venda.filial if venda else '',
+            'valor': f'R$ {venda.receita:.2f}' if venda else '',
+        })
+    return linhas, prontas
+
+
+@login_required
+@require_POST
+def cart_check(request):
+    """Dupla conferência: o que do carrinho está pronto para virar contestação.
+
+    A tela chama isto ANTES de enviar. Assim o usuário vê "38 de 40 prontas" e
+    o que falta em cada uma das outras duas, em vez de mandar 40 e descobrir
+    depois — ou nunca — que chegaram 38.
+    """
+    if not _can_create_contestations(request.user):
+        return JsonResponse({'success': False, 'error': 'Sem permissão para contestar.'}, status=403)
+
+    try:
+        payload = json.loads(request.body.decode('utf-8') or '{}')
+    except Exception:
+        payload = {}
+
+    ids = []
+    for raw in (payload.get('ids') or []):
+        try:
+            ids.append(int(raw))
+        except (TypeError, ValueError):
+            continue
+
+    sync_state = _get_sync_window_state(request.user)
+    if sync_state['is_blocked']:
+        return JsonResponse({
+            'success': False,
+            'error': ('Período de 3 dias após a última sincronização expirou. Sincronize a planilha '
+                      'para liberar novas contestações.' if sync_state['has_sync']
+                      else 'É necessário sincronizar a planilha antes de criar novas contestações.'),
+        }, status=400)
+
+    linhas, prontas = _conferir_itens_do_carrinho(
+        request.user, ids, payload.get('com_arquivo_local') or [], sync_state)
+    return JsonResponse({
+        'success': True,
+        'total': len(linhas),
+        'prontas': prontas,
+        'itens': linhas,
+        'lote': LOTE_CARRINHO,
+    })
+
+
 @login_required
 def bulk_create_contestation(request):
-    """Cria contestações em lote — cada item com motivo e evidência individual (via FormData)."""
+    """Cria contestações em lote — do rascunho salvo no servidor ou do FormData.
+
+    Duas formas de chamar:
+
+    - JSON ``{"ids": [...]}`` — o caminho novo: motivo e evidência já estão no
+      rascunho do servidor, então o pedido é pequeno e vai em pedaços;
+    - FormData ``count``/``exclusion_id_i``/``reason_i``/``file_i`` — o caminho
+      antigo, que ainda funciona.
+
+    Em ambos, a resposta diz **item a item** o que entrou e o que ficou de
+    fora, com o motivo. Antes ela só dizia quantas foram criadas: item sem
+    evidência sumia calado, e o carrinho era apagado como se tudo tivesse ido.
+    """
     if not _can_create_contestations(request.user):
         return JsonResponse({'success': False, 'error': 'Sem permissão para contestar.'}, status=403)
 
@@ -1378,70 +1490,88 @@ def bulk_create_contestation(request):
             error_msg = 'É necessário sincronizar a planilha antes de criar novas contestações.'
         return JsonResponse({'success': False, 'error': error_msg}, status=400)
 
-    try:
-        count = int(request.POST.get('count', 0))
-    except (ValueError, TypeError):
-        return JsonResponse({'success': False, 'error': 'Dados inválidos.'}, status=400)
+    enviados = []            # [(id, motivo_do_formulario, arquivo_do_formulario)]
+    if (request.content_type or '').startswith('application/json'):
+        try:
+            payload = json.loads(request.body.decode('utf-8') or '{}')
+        except Exception:
+            return JsonResponse({'success': False, 'error': 'Dados inválidos.'}, status=400)
+        for raw in (payload.get('ids') or []):
+            try:
+                enviados.append((int(raw), '', None))
+            except (TypeError, ValueError):
+                continue
+    else:
+        try:
+            count = int(request.POST.get('count', 0))
+        except (ValueError, TypeError):
+            return JsonResponse({'success': False, 'error': 'Dados inválidos.'}, status=400)
+        if count <= 0:
+            return JsonResponse({'success': False, 'error': 'Nenhum item enviado.'}, status=400)
+        for i in range(count):
+            eid = request.POST.get(f'exclusion_id_{i}')
+            if not eid:
+                continue
+            try:
+                eid_int = int(eid)
+            except (TypeError, ValueError):
+                continue
+            enviados.append((eid_int,
+                             request.POST.get(f'reason_{i}', '').strip(),
+                             request.FILES.get(f'file_{i}')))
 
-    if count <= 0:
+    # Sem repetir id: o mesmo item mandado duas vezes vira uma contestação só.
+    vistos, itens = set(), []
+    for eid, motivo, arquivo in enviados:
+        if eid in vistos:
+            continue
+        vistos.add(eid)
+        itens.append({'exclusion_id': eid, 'reason': motivo, 'attachment': arquivo})
+
+    if not itens:
         return JsonResponse({'success': False, 'error': 'Nenhum item enviado.'}, status=400)
 
-    # Parse items from FormData
-    items = []
-    requested_ids = set()
-    for i in range(count):
-        eid = request.POST.get(f'exclusion_id_{i}')
-        use_server_file = (request.POST.get(f'use_server_file_{i}') or '').strip() in ['1', 'true', 'True', 'yes', 'on']
-        reason = request.POST.get(f'reason_{i}', '').strip()
-        attachment = request.FILES.get(f'file_{i}')
-        if not eid:
-            continue
-        try:
-            eid_int = int(eid)
-        except (TypeError, ValueError):
-            continue
-
-        requested_ids.add(eid_int)
-        if not reason:
-            continue
-
-        items.append({
-            'exclusion_id': eid_int,
-            'reason': reason,
-            'attachment': attachment,
-            'use_server_file': use_server_file,
-        })
-
-    if not items:
-        return JsonResponse({'success': False, 'error': 'Nenhum item válido. Motivo e evidência são obrigatórios.'}, status=400)
-
-    exclusion_ids = [item['exclusion_id'] for item in items]
-    exclusions_by_id = {e.pk: e for e in _exclusoes().filter(pk__in=exclusion_ids)}
+    exclusion_ids = [item['exclusion_id'] for item in itens]
+    exclusions_by_id = {
+        e.pk: e for e in _apply_exclusion_scope_for_user(
+            _exclusoes().filter(pk__in=exclusion_ids), request.user)
+    }
     draft_map = {
         d.exclusion_id: d for d in ContestationCartDraft.objects.filter(user=request.user, exclusion_id__in=exclusion_ids)
     }
 
-    # Filter out already contested in current cycle only
+    # Já contestadas no ciclo corrente (a partir da última sincronização).
     already_contested = set(
         Contestation.objects.filter(exclusion_id__in=exclusion_ids)
         .filter(_open_contestation_filter(sync_state['last_sync_at']))
         .values_list('exclusion_id', flat=True)
     )
 
-    created_count = 0
     created_ids = []
-    for item in items:
+    ignoradas = []
+    for item in itens:
         eid = item['exclusion_id']
-        reason = item['reason']
-        attachment = item['attachment']
-        if item.get('use_server_file') and not attachment:
-            draft_item = draft_map.get(eid)
-            if draft_item and draft_item.attachment:
-                attachment = draft_item.attachment
-        if eid not in exclusions_by_id or eid in already_contested:
+        rascunho = draft_map.get(eid)
+        # O rascunho do servidor é a fonte de verdade: o formulário só
+        # sobrescreve quando traz coisa nova. Era aqui que o item se perdia —
+        # sem o sinalizador `use_server_file`, o anexo já salvo era ignorado e
+        # a venda sumia do envio sem ninguém saber.
+        reason = item['reason'] or (rascunho.reason.strip() if rascunho else '')
+        attachment = item['attachment'] or (rascunho.attachment if (rascunho and rascunho.attachment) else None)
+
+        if eid not in exclusions_by_id:
+            ignoradas.append({'id': eid, 'motivo': 'fora_do_escopo'})
+            continue
+        if eid in already_contested:
+            ignoradas.append({'id': eid, 'motivo': 'ja_contestada'})
+            continue
+        if not reason:
+            ignoradas.append({'id': eid, 'motivo': 'sem_motivo'})
             continue
         if not attachment:
+            ignoradas.append({'id': eid, 'motivo': 'sem_evidencia'})
             continue
+
         exclusion = exclusions_by_id[eid]
         c = Contestation.objects.create(
             exclusion=exclusion,
@@ -1456,16 +1586,21 @@ def bulk_create_contestation(request):
             notes=reason,
             extra_data={'exclusion_id': exclusion.pk, 'vendedor': exclusion.vendedor, 'bulk': True},
         )
-        created_count += 1
         created_ids.append(eid)
         already_contested.add(eid)
 
-    if created_count == 0:
-        return JsonResponse({'success': False, 'error': 'Nenhuma contestacao pode ser criada. Verifique se os itens possuem motivo e evidencia salvos.'})
+    # Só sai do carrinho o que virou contestação de verdade. O que ficou de
+    # fora continua lá, com motivo e anexo, para a pessoa resolver e reenviar.
+    if created_ids:
+        ContestationCartDraft.objects.filter(user=request.user, exclusion_id__in=created_ids).delete()
 
-    ContestationCartDraft.objects.filter(user=request.user, exclusion_id__in=created_ids).delete()
-
-    return JsonResponse({'success': True, 'created': created_count})
+    return JsonResponse({
+        'success': True,
+        'created': len(created_ids),
+        'criadas': created_ids,
+        'ignoradas': ignoradas,
+        'enviadas': len(itens),
+    })
 
 
 @login_required
