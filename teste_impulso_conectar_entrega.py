@@ -90,6 +90,7 @@ call_command('migrate', run_syncdb=True, verbosity=0)
 from django.contrib.auth import get_user_model
 
 from communications.models import CommunicationGroup
+from core.models import Notification
 from impulso import views
 from impulso.models import ConclusaoConteudo, ConteudoConectar, EntregaConteudo
 from users.models import Sector
@@ -270,6 +271,65 @@ t('e desmarcar a cobrança vale', novo.exige_entrega is False)
 
 t('o aviso de exclusão conta o que foi entregue',
   curso.impacto_da_exclusao['certificados'] >= 3, curso.impacto_da_exclusao)
+
+print('\n== O COLABORADOR SOBE PARA ELE MESMO ==')
+Notification.objects.all().delete()
+r = c_ana.post('/impulso/conectar/novo/', {
+    'titulo': 'ZZ POP que a Ana fez',
+    'descricao': 'ZZ passo a passo da vitrine',
+    'url': 'https://exemplo.local/pasta-da-ana',
+    'arquivos': [arquivo('pop-da-ana.pdf'), arquivo('vitrine.mp4', tipo='video/mp4'),
+                 arquivo('foto-antes.jpg', tipo='image/jpeg')],
+}, follow=True)
+subido = ConteudoConectar.objects.filter(titulo='ZZ POP que a Ana fez').first()
+t('o envio do colaborador cria o conteúdo', subido is not None, r.status_code)
+t('marcado como enviado pela equipe', subido.criado_por_equipe and subido.criado_por_id == ana.id)
+t('já atrelado a ela mesma',
+  list(subido.obrigatorio_para.values_list('id', flat=True)) == [ana.id],
+  list(subido.obrigatorio_para.values_list('id', flat=True)))
+t('o documento e o vídeo viram o material do conteúdo',
+  subido.documento is not None and subido.arquivo_de_video is not None,
+  (bool(subido.documento), bool(subido.arquivo_de_video)))
+
+entrega_ana = ConclusaoConteudo.objects.filter(conteudo=subido, user=ana).first()
+t('e a entrega já nasce feita', entrega_ana is not None and entrega_ana.concluido)
+t('esperando o gestor conferir',
+  entrega_ana.aprovacao == ConclusaoConteudo.Aprovacao.PENDENTE)
+t('o arquivo que sobrou dos dois campos vira item da entrega',
+  entrega_ana.entregas.count() == 1
+  and entrega_ana.entregas.first().titulo == 'foto-antes.jpg',
+  [e.titulo for e in entrega_ana.entregas.all()])
+
+itens = entrega_ana.itens_entregues()
+nomes = [i.nome for i in itens]
+t('o que ela subiu aparece como a entrega dela',
+  'Documento enviado' in nomes and 'Vídeo enviado' in nomes
+  and 'Link informado' in nomes, nomes)
+t('junto do item extra', 'foto-antes.jpg' in nomes, nomes)
+t('e conta como entrega para o "exige entrega"', entrega_ana.tem_entrega)
+
+avisos = list(Notification.objects.values_list('user_id', 'title'))
+t('o gestor do setor é avisado',
+  any(u == chefia.id and 'conferência' in (titulo or '').lower() for u, titulo in avisos),
+  avisos)
+
+painel = c_gestor.get('/impulso/conectar/conferir/').content.decode()
+t('a entrega aparece no painel de conferência', 'ZZ POP que a Ana fez' in painel)
+t('com o que ela subiu à mão', 'Documento enviado' in painel)
+status, dado = fetch(c_gestor, f'/impulso/conectar/conclusao/{entrega_ana.id}/decidir/',
+                     {'decisao': 'aprovar'})
+entrega_ana.refresh_from_db()
+t('e o gestor só precisa aprovar', status == 200 and entrega_ana.aprovada)
+
+# O gestor publicando material da rede continua sem virar entrega dele.
+c_gestor.post('/impulso/conectar/novo/', {
+    'grupo': ConteudoConectar.GRUPO_CURSO, 'titulo': 'ZZ Curso publicado pelo gestor',
+    'obrigatorio': 'on',
+}, follow=True)
+publicado = ConteudoConectar.objects.filter(titulo='ZZ Curso publicado pelo gestor').first()
+t('o que o gestor publica não vira entrega dele',
+  publicado is not None
+  and not ConclusaoConteudo.objects.filter(conteudo=publicado, user=gestor).exists())
 
 print('\n== QUEM AVALIA ==')
 r = c_ana.get('/impulso/conectar/conferir/')

@@ -934,11 +934,13 @@ def entregas_disponiveis():
     return bool(resposta)
 
 
-class CertificadoAntigo:
-    """O `certificado` do campo antigo com a cara de uma ``EntregaConteudo``.
+class ItemDeArquivo:
+    """Um ``FileField`` com a cara de uma ``EntregaConteudo``.
 
     Existe para a tela ter uma lista só: sem isto, todo template do Conectar
-    teria um ramo para o campo antigo e outro para as entregas novas.
+    teria um ramo para o campo antigo, outro para o material que a própria
+    pessoa subiu e outro para as entregas novas. O arquivo é guardado com nome
+    de uuid, então quem dá nome ao item é o rótulo.
     """
 
     id = None
@@ -946,14 +948,13 @@ class CertificadoAntigo:
     titulo = ''
     legado = True
 
-    def __init__(self, campo):
+    def __init__(self, campo, rotulo):
         self.campo = campo
+        self.rotulo = rotulo
 
     @property
     def nome(self):
-        # O arquivo foi guardado com nome de uuid; mostrar o uuid não ajuda
-        # ninguém — a extensão, essa sim, vai no rótulo do tipo.
-        return 'Certificado'
+        return self.rotulo
 
     @property
     def extensao(self):
@@ -974,6 +975,34 @@ class CertificadoAntigo:
             return self.campo.url
         except Exception:
             return ''
+
+    def pode_remover(self, user):
+        return False
+
+
+class CertificadoAntigo(ItemDeArquivo):
+    """O `certificado` do campo antigo, como item da entrega."""
+
+    def __init__(self, campo):
+        super().__init__(campo, 'Certificado')
+
+
+class LinkDoConteudo:
+    """O link externo do conteúdo, como item da entrega."""
+
+    id = None
+    e_link = True
+    titulo = ''
+    legado = True
+    especie = 'link'
+
+    def __init__(self, url, rotulo):
+        self.link = url
+        self.rotulo = rotulo
+
+    @property
+    def nome(self):
+        return self.rotulo
 
     def pode_remover(self, user):
         return False
@@ -1072,11 +1101,29 @@ class ConclusaoConteudo(models.Model):
             itens = []
         if self.certificado:
             itens.insert(0, CertificadoAntigo(self.certificado))
+        # Quem sobe um POP para si mesmo entrega o próprio material: ele é o
+        # que o gestor abre para conferir, e não é copiado para outro arquivo.
+        itens = self._material_proprio() + itens
+        return itens
+
+    def _material_proprio(self):
+        conteudo = self.conteudo
+        if not (conteudo.criado_por_equipe and conteudo.criado_por_id == self.user_id):
+            return []
+        itens = []
+        # Rótulo neutro: a mesma lista é lida por quem entregou e por quem
+        # confere — "que você subiu" só faria sentido para um dos dois.
+        if conteudo.documento:
+            itens.append(ItemDeArquivo(conteudo.documento, 'Documento enviado'))
+        if conteudo.arquivo_de_video:
+            itens.append(ItemDeArquivo(conteudo.arquivo_de_video, 'Vídeo enviado'))
+        if conteudo.url:
+            itens.append(LinkDoConteudo(conteudo.url, 'Link informado'))
         return itens
 
     @property
     def tem_entrega(self):
-        if self.certificado:
+        if self.certificado or self._material_proprio():
             return True
         try:
             return self.entregas.exists()
@@ -1438,10 +1485,22 @@ class Ideia(models.Model):
         default=Status.NOVA, verbose_name='Status')
     resposta_gestor = models.TextField(blank=True, verbose_name='Retorno do gestor')
 
+    # Aprovar sem dizer quem faz e até quando é aplaudir e arquivar: a decisão
+    # passa a nomear o executor e o prazo, e vira atividade no Confiar.
+    executor = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='impulso_ideias_para_executar', verbose_name='Executor')
+    prazo = models.DateField(null=True, blank=True, verbose_name='Prazo de execução')
+    meta_gerada = models.ForeignKey(
+        'Meta', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='ideias_originadas', verbose_name='Atividade criada')
+
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
 
     MAX_PARTICIPANTES = 3
+    # O que a atividade do executor leva no título (o resto vai na descrição).
+    TITULO_MAX = 200
 
     class Meta:
         verbose_name = 'Ideia'
@@ -1466,6 +1525,28 @@ class Ideia(models.Model):
         if not self.editavel:
             return False
         return self.autor_id == user.id or user.is_superuser
+
+    def titulo_da_atividade(self):
+        """Como a ideia aparece no Kanban de quem vai executar."""
+        base = ' '.join((self.descricao or '').split())
+        if len(base) > 120:
+            base = base[:117].rstrip() + '…'
+        titulo = f'Ideia aprovada — {base}' if base else f'Ideia aprovada — {self.setor_impacto}'
+        return titulo[:self.TITULO_MAX]
+
+    def descricao_da_atividade(self):
+        """O que o executor precisa ler para tocar a ideia.
+
+        Sem o nome de quem teve a ideia: a autoria continua sendo assunto de
+        `/impulso/inovar/adm/` e não vaza por uma atividade do Kanban.
+        """
+        partes = [f'Ideia aprovada no INOVAR (impacto: {self.setor_impacto}).', '',
+                  self.descricao or '']
+        if self.motivo:
+            partes += ['', f'Motivo apontado por quem enviou: {self.motivo}']
+        if self.resposta_gestor:
+            partes += ['', f'Retorno de quem aprovou: {self.resposta_gestor}']
+        return '\n'.join(partes).strip()
 
 
 class AcessoAutoriaIdeia(models.Model):

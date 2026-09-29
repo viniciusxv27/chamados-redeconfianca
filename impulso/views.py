@@ -2185,6 +2185,58 @@ def conclusao_decidir(request, conclusao_id):
     return redirect('impulso:conectar_list')
 
 
+def _separar_anexos(enviados, documento_unico=None, video_unico=None):
+    """Divide o que foi enviado em (documento, vídeo, resto).
+
+    O modelo guarda um documento e um vídeo; o resto vira item de entrega.
+    ``documento_unico``/``video_unico`` são os campos antigos de um arquivo só,
+    que continuam funcionando (formulário do gestor e POST sem JavaScript).
+    """
+    documento, video, extras = documento_unico, video_unico, []
+    for anexo in enviados or []:
+        nome = (anexo.name or '').lower()
+        e_video = nome.endswith(EntregaConteudo.EXTENSOES_VIDEO)
+        if e_video and video is None:
+            video = anexo
+        elif not e_video and documento is None:
+            documento = anexo
+        else:
+            extras.append(anexo)
+    return documento, video, extras
+
+
+def _entregar_o_que_subiu(request, conteudo, extras):
+    """Marca como entregue o que a pessoa acabou de subir para si mesma.
+
+    O material do conteúdo é a própria entrega — não é copiado para outro
+    arquivo. O que sobrou dos dois campos do modelo entra como item.
+    """
+    conclusao, _ = ConclusaoConteudo.objects.get_or_create(
+        conteudo=conteudo, user=request.user)
+    for anexo in extras:
+        EntregaConteudo.objects.create(
+            conclusao=conclusao, arquivo=anexo, titulo=(anexo.name or '')[:200])
+
+    conclusao.concluido = True
+    conclusao.concluido_em = timezone.now()
+    conclusao.aprovacao = ConclusaoConteudo.Aprovacao.PENDENTE
+    conclusao.decidida_por = None
+    conclusao.decidida_em = None
+    conclusao.observacao = ''
+    conclusao.save()
+
+    try:
+        gestores = get_gestores_do_setor(request.user)
+        if gestores.exists():
+            _notify(list(gestores), 'Entrega aguardando conferência',
+                    f'{request.user.get_full_name() or request.user.email} subiu '
+                    f'"{conteudo.titulo}" e está esperando a sua conferência.',
+                    '/impulso/conectar/conferir/')
+    except Exception:                                       # aviso nunca derruba
+        pass
+    return conclusao
+
+
 def _colaboradores_para_atribuir():
     """Quem pode receber um conteúdo, agrupado por loja na tela.
 
@@ -2231,8 +2283,17 @@ def conteudo_create(request):
             messages.error(request, 'Informe o título.')
             return redirect('impulso:conteudo_create')
 
-        documento = request.FILES.get('arquivo')
-        video = request.FILES.get('video')
+        # Quem sobe pode mandar quantos arquivos quiser: o primeiro documento e
+        # o primeiro vídeo são o material do conteúdo; o resto vira item da
+        # entrega (nada se perde por só haver dois campos no modelo).
+        documento, video, extras = _separar_anexos(
+            request.FILES.getlist('arquivos'),
+            request.FILES.get('arquivo'), request.FILES.get('video'))
+        for anexo in [documento, video] + extras:
+            problema = _erro_da_entrega(anexo) if anexo else None
+            if problema:
+                messages.error(request, problema)
+                return redirect('impulso:conteudo_create')
         tipo = _tipo_do_grupo(grupo, documento, video)
 
         conteudo = ConteudoConectar.objects.create(
@@ -2259,7 +2320,15 @@ def conteudo_create(request):
                         + (' Anexe a entrega (arquivo ou link) para concluir.'
                            if conteudo.exige_entrega else ''),
                         f'/impulso/conectar/{conteudo.id}/')
-        messages.success(request, 'Conteúdo publicado.')
+            messages.success(request, 'Conteúdo publicado.')
+        else:
+            # O colaborador sobe para ele mesmo: o conteúdo já sai atrelado a
+            # ele e a entrega entra na fila de conferência na mesma hora. Antes
+            # ele subia e ainda precisava abrir o conteúdo para "marcar como
+            # concluído" — duas etapas para a mesma coisa.
+            conteudo.obrigatorio_para.set([request.user])
+            _entregar_o_que_subiu(request, conteudo, extras)
+            messages.success(request, 'Enviado! Sua entrega está aguardando a conferência do gestor.')
         return redirect('impulso:conteudo_detail', conteudo_id=conteudo.id)
 
     context = {
@@ -3183,6 +3252,9 @@ def inovar_list(request):
         'is_gestor': gestor,
         've_autoria': ve_autoria,
         'status_choices': Ideia.Status.choices,
+        # Aprovar exige escolher quem executa e até quando.
+        'colaboradores': get_colaboradores() if gestor else None,
+        'hoje': timezone.localdate(),
         'active_tab': 'inovar',
         **filtros_impulso.contexto_mes(request, f),
     }
@@ -3365,16 +3437,74 @@ def ideia_edit(request, ideia_id):
 @require_POST
 @impulso_manager_required
 def ideia_update_status(request, ideia_id):
+    """Decide a ideia e, quando aprovada, abre a atividade de quem vai executar.
+
+    Aprovar era só trocar um rótulo: a ideia virava "Aprovada" e morria ali.
+    Agora a aprovação nomeia **executor e prazo**, e a ideia entra no Kanban do
+    Confiar como atividade dele — já aprovada, porque quem decidiu foi o gestor.
+    """
     ideia = get_object_or_404(Ideia, id=ideia_id)
     novo = request.POST.get('status') or ''
     if novo in Ideia.Status.values:
         ideia.status = novo
     ideia.resposta_gestor = (request.POST.get('resposta_gestor') or '').strip()
-    ideia.save(update_fields=['status', 'resposta_gestor', 'atualizado_em'])
+
+    aprovando = ideia.status == Ideia.Status.APROVADA
+    executor = get_colaboradores().filter(
+        id=_int_or_none(request.POST.get('executor'))).first()
+    prazo = parse_date(request.POST.get('prazo') or '') or None
+
+    if aprovando:
+        # As duas coisas juntas: executor sem prazo é intenção, prazo sem
+        # executor é lembrete. A tela pede as duas, o servidor confere.
+        if not executor or not prazo:
+            messages.error(request, 'Para aprovar, escolha quem vai executar e até quando.')
+            return redirect('impulso:inovar_list')
+        if prazo < timezone.localdate():
+            messages.error(request, 'O prazo já passou — escolha uma data de hoje em diante.')
+            return redirect('impulso:inovar_list')
+        ideia.executor = executor
+        ideia.prazo = prazo
+
+    ideia.save(update_fields=['status', 'resposta_gestor', 'executor', 'prazo', 'atualizado_em'])
+
+    if aprovando:
+        meta = ideia.meta_gerada
+        if meta is None:
+            meta = Meta.objects.create(
+                gestor=request.user, colaborador=executor,
+                titulo=ideia.titulo_da_atividade(),
+                descricao=ideia.descricao_da_atividade(),
+                prazo=prazo,
+                # Quem decidiu é o gestor: a atividade já nasce valendo, sem
+                # passar por uma segunda aprovação.
+                aprovacao=Meta.Aprovacao.APROVADA,
+                created_by=request.user,
+            )
+            ideia.meta_gerada = meta
+            ideia.save(update_fields=['meta_gerada', 'atualizado_em'])
+            aviso = 'Ideia aprovada e atividade criada para '
+        else:
+            # Decidir de novo (trocou o executor ou o prazo) move a atividade
+            # que já existe, em vez de abrir uma segunda para a mesma ideia.
+            meta.colaborador = executor
+            meta.prazo = prazo
+            meta.descricao = ideia.descricao_da_atividade()
+            meta.save(update_fields=['colaborador', 'prazo', 'descricao', 'updated_at'])
+            aviso = 'Ideia atualizada e atividade remanejada para '
+
+        _notify([executor], 'Nova atividade: ideia aprovada',
+                f'"{meta.titulo}" entrou nas suas atividades, com prazo em '
+                f'{prazo.strftime("%d/%m/%Y")}.',
+                reverse('impulso:meta_detail', args=[meta.id]))
+        messages.success(request, aviso + (executor.get_full_name() or executor.email)
+                         + f', com prazo em {prazo.strftime("%d/%m/%Y")}.')
+    else:
+        messages.success(request, 'Ideia atualizada.')
+
     _notify([ideia.autor], 'Atualização na sua ideia',
             f'Sua ideia sobre "{ideia.setor_impacto}" agora está: {ideia.get_status_display()}.',
             '/impulso/inovar/')
-    messages.success(request, 'Ideia atualizada.')
     return redirect('impulso:inovar_list')
 
 

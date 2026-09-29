@@ -72,14 +72,55 @@
         <div class="mt-3 text-xs bg-gray-50 rounded-lg p-2 text-gray-600"><i class="fas fa-reply mr-1"></i>{{ ideia.resposta_gestor }}</div>
         {% endif %}
 
+        {% comment %}
+        Aprovar deixou de ser só um rótulo: a decisão nomeia quem executa e até
+        quando, e a ideia vira atividade dessa pessoa no Confiar.
+        {% endcomment %}
+        {% if ideia.meta_gerada %}
+        <div class="mt-3 text-xs bg-emerald-50 border border-emerald-100 rounded-lg p-2 text-emerald-800">
+            <i class="fas fa-list-check mr-1"></i>
+            Virou atividade
+            {% if is_gestor or ve_autoria or ideia.executor_id == user.id or ideia.autor_id == user.id %}
+            de <strong>{{ ideia.executor.get_full_name|default:ideia.executor.email }}</strong>
+            {% endif %}
+            {% if ideia.prazo %}· prazo {{ ideia.prazo|date:"d/m/Y" }}{% endif %}
+            {% if is_gestor or ideia.executor_id == user.id %}
+            · <a href="{% url 'impulso:meta_detail' ideia.meta_gerada_id %}" class="underline hover:no-underline">abrir</a>
+            {% endif %}
+        </div>
+        {% endif %}
+
         {% if is_gestor %}
-        <form method="post" action="{% url 'impulso:ideia_update_status' ideia.id %}" class="mt-3 flex flex-col sm:flex-row gap-2 border-t border-gray-100 pt-3">
+        <form method="post" action="{% url 'impulso:ideia_update_status' ideia.id %}"
+              class="mt-3 border-t border-gray-100 pt-3 space-y-2" data-decidir-ideia>
             {% csrf_token %}
-            <select name="status" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                {% for value, label in status_choices %}<option value="{{ value }}" {% if ideia.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
-            </select>
-            <input type="text" name="resposta_gestor" value="{{ ideia.resposta_gestor }}" placeholder="Retorno ao autor (opcional)" class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm">
-            <button type="submit" class="px-4 py-2 rounded-lg bg-gray-800 text-white text-sm hover:bg-gray-900">Atualizar</button>
+            <div class="flex flex-col sm:flex-row gap-2">
+                <select name="status" data-status class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    {% for value, label in status_choices %}<option value="{{ value }}" {% if ideia.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+                </select>
+                <input type="text" name="resposta_gestor" value="{{ ideia.resposta_gestor }}" placeholder="Retorno ao autor (opcional)" class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <button type="submit" class="px-4 py-2 rounded-lg bg-gray-800 text-white text-sm hover:bg-gray-900">Atualizar</button>
+            </div>
+            <div data-execucao class="grid sm:grid-cols-2 gap-2 {% if ideia.status != 'APROVADA' %}hidden{% endif %}">
+                <div>
+                    <label class="block text-[11px] font-medium text-gray-500 mb-1">Quem vai executar</label>
+                    <select name="executor" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                        <option value="">Escolha a pessoa…</option>
+                        {% for c in colaboradores %}
+                        <option value="{{ c.id }}" {% if ideia.executor_id == c.id %}selected{% endif %}>{{ c.get_full_name|default:c.email }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-[11px] font-medium text-gray-500 mb-1">Prazo</label>
+                    <input type="date" name="prazo" min="{{ hoje|date:'Y-m-d' }}"
+                           value="{% if ideia.prazo %}{{ ideia.prazo|date:'Y-m-d' }}{% endif %}"
+                           class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                </div>
+                <p class="sm:col-span-2 text-[11px] text-gray-400">
+                    Ao aprovar, a ideia entra como atividade dessa pessoa no Confiar, com este prazo.
+                </p>
+            </div>
         </form>
         {% endif %}
     </div>
@@ -87,4 +128,22 @@
     <p class="text-sm text-gray-400">{% if is_gestor %}Nenhuma ideia enviada ainda.{% else %}Você ainda não enviou ideias. Que tal começar?{% endif %}</p>
     {% endfor %}
 </div>
+
+{% if is_gestor %}
+<script>
+(function () {
+    'use strict';
+    // Executor e prazo só fazem sentido na aprovação — aparecem quando ela é escolhida.
+    document.querySelectorAll('[data-decidir-ideia]').forEach(function (form) {
+        const status = form.querySelector('[data-status]');
+        const bloco = form.querySelector('[data-execucao]');
+        function aplicar() {
+            bloco.classList.toggle('hidden', status.value !== 'APROVADA');
+        }
+        status.addEventListener('change', aplicar);
+        aplicar();
+    });
+})();
+</script>
+{% endif %}
 {% endblock %}
