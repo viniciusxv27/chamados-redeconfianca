@@ -75,12 +75,65 @@
                 <label class="flex items-center gap-2 text-sm text-gray-700">
                     <input type="checkbox" name="obrigatorio" {% if not conteudo or conteudo.obrigatorio %}checked{% endif %} class="rounded"> Obrigatório
                 </label>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Obrigatório para (vazio = toda a equipe)</label>
-                    <select name="obrigatorio_para" multiple size="5" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                        {% for c in colaboradores %}<option value="{{ c.id }}" {% if c.id in marcados %}selected{% endif %}>{{ c.get_full_name|default:c.email }}</option>{% endfor %}
-                    </select>
-                    <p class="text-xs text-gray-400 mt-1">Segure Ctrl/Cmd para selecionar vários.</p>
+                <label class="flex items-center gap-2 text-sm text-gray-700">
+                    <input type="checkbox" name="exige_entrega" {% if conteudo.exige_entrega %}checked{% endif %} class="rounded">
+                    Exige entrega
+                    <span class="text-xs text-gray-400">— só conclui depois de anexar arquivo(s) ou link</span>
+                </label>
+
+                {% comment %}
+                Atribuir era um <select multiple> com "segure Ctrl": ninguém
+                acertava e trocar uma pessoa desfazia a seleção inteira. Agora é
+                marcar quem entrega, com busca e loja por loja.
+                {% endcomment %}
+                <div data-atribuir>
+                    <div class="flex items-center justify-between gap-2 flex-wrap mb-1">
+                        <label class="block text-sm font-medium text-gray-700">Quem deve entregar</label>
+                        <span class="text-xs text-gray-500" data-atr-contador>Toda a equipe</span>
+                    </div>
+                    <div class="border border-gray-300 rounded-lg overflow-hidden">
+                        <div class="flex items-center gap-2 p-2 border-b border-gray-100 bg-gray-50">
+                            <div class="relative flex-1 min-w-0">
+                                <i class="fas fa-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+                                <input type="text" data-atr-busca placeholder="Buscar pessoa ou loja…"
+                                       class="w-full pl-7 pr-2 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-emerald-100">
+                            </div>
+                            <button type="button" data-atr-todos
+                                    class="px-2.5 py-1.5 text-xs rounded-md border border-gray-200 bg-white hover:bg-gray-50 whitespace-nowrap">
+                                Marcar todos
+                            </button>
+                            <button type="button" data-atr-limpar
+                                    class="px-2.5 py-1.5 text-xs rounded-md border border-gray-200 bg-white hover:bg-gray-50 whitespace-nowrap">
+                                Limpar
+                            </button>
+                        </div>
+                        <div class="max-h-64 overflow-y-auto divide-y divide-gray-50">
+                            {% regroup colaboradores by sector.name as por_loja %}
+                            {% for loja in por_loja %}
+                            <div data-atr-grupo>
+                                <div class="flex items-center justify-between gap-2 px-3 py-1.5 bg-gray-50/70 sticky top-0">
+                                    <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                                        {{ loja.grouper|default:"Sem loja" }}
+                                    </span>
+                                    <button type="button" data-atr-grupo-todos
+                                            class="text-[11px] text-emerald-600 hover:underline">marcar a loja</button>
+                                </div>
+                                {% for c in loja.list %}
+                                <label data-atr-item
+                                       data-busca="{{ c.get_full_name|default:c.email|lower }} {{ loja.grouper|default:''|lower }}"
+                                       class="flex items-center gap-2.5 px-3 py-2 hover:bg-emerald-50/40 cursor-pointer">
+                                    <input type="checkbox" name="obrigatorio_para" value="{{ c.id }}"
+                                           {% if c.id in marcados %}checked{% endif %} class="rounded text-emerald-500">
+                                    <span class="text-sm text-gray-700 truncate">{{ c.get_full_name|default:c.email }}</span>
+                                </label>
+                                {% endfor %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <p class="text-xs text-gray-400 mt-1">
+                        Sem ninguém marcado, o conteúdo vale para toda a equipe.
+                    </p>
                 </div>
                 <div class="grid grid-cols-2 gap-4">
                     <div>
@@ -102,4 +155,63 @@
         </form>
     </div>
 </div>
+
+<script>
+(function () {
+    'use strict';
+    const caixa = document.querySelector('[data-atribuir]');
+    if (!caixa) return;
+
+    const busca = caixa.querySelector('[data-atr-busca]');
+    const contador = caixa.querySelector('[data-atr-contador]');
+    const itens = Array.from(caixa.querySelectorAll('[data-atr-item]'));
+    const marcas = () => itens.map((i) => i.querySelector('input'));
+
+    function atualizar() {
+        const n = marcas().filter((c) => c.checked).length;
+        contador.textContent = n
+            ? n + ' pessoa(s) devem entregar'
+            : 'Toda a equipe';
+        contador.className = 'text-xs font-medium '
+            + (n ? 'text-emerald-600' : 'text-gray-500');
+    }
+
+    function filtrar() {
+        const termo = (busca.value || '').trim().toLowerCase();
+        itens.forEach(function (item) {
+            item.classList.toggle('hidden', !!termo && !(item.dataset.busca || '').includes(termo));
+        });
+        // Loja sem ninguém visível some junto com o cabeçalho dela.
+        caixa.querySelectorAll('[data-atr-grupo]').forEach(function (grupo) {
+            const visiveis = grupo.querySelectorAll('[data-atr-item]:not(.hidden)').length;
+            grupo.classList.toggle('hidden', visiveis === 0);
+        });
+    }
+
+    busca.addEventListener('input', filtrar);
+    caixa.addEventListener('change', atualizar);
+
+    // "Marcar todos" respeita a busca: marca o que está à vista.
+    caixa.querySelector('[data-atr-todos]').addEventListener('click', function () {
+        itens.filter((i) => !i.classList.contains('hidden'))
+             .forEach((i) => { i.querySelector('input').checked = true; });
+        atualizar();
+    });
+    caixa.querySelector('[data-atr-limpar]').addEventListener('click', function () {
+        marcas().forEach((c) => { c.checked = false; });
+        atualizar();
+    });
+    caixa.querySelectorAll('[data-atr-grupo-todos]').forEach(function (botao) {
+        botao.addEventListener('click', function () {
+            const grupo = botao.closest('[data-atr-grupo]');
+            const caixas = Array.from(grupo.querySelectorAll('[data-atr-item]:not(.hidden) input'));
+            const marcar = caixas.some((c) => !c.checked);
+            caixas.forEach((c) => { c.checked = marcar; });
+            atualizar();
+        });
+    });
+
+    atualizar();
+})();
+</script>
 {% endblock %}

@@ -1,0 +1,619 @@
+{% extends 'base.html' %}
+{% load simulator_tags %}
+
+{% block title %}Tabela da Rede - Simulador{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-3 sm:px-4 py-6 max-w-[100rem]">
+
+    <!-- ══ Cabeçalho ══ -->
+    <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 mb-5">
+        <div class="min-w-0">
+            <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 flex items-center gap-2">
+                <i class="fas fa-table-list text-primary"></i>
+                Tabela da Rede
+            </h1>
+            <p class="text-gray-500 text-sm mt-1">
+                Realizado até agora, projeção do fim do mês, a diferença entre os dois e o motivo dela.
+            </p>
+            {% if generated_at %}
+            <div class="mt-2 flex flex-wrap items-center gap-2">
+                <span class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 border border-primary/20 rounded-lg text-xs font-medium text-gray-700">
+                    <i class="fas fa-calendar-day text-primary text-[11px]"></i>
+                    {{ reference_label }}
+                </span>
+                <span class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 border border-gray-200 rounded-lg text-xs text-gray-500"
+                      title="O realizado do MySQL tem corte D-1, então os números não mudam ao longo do dia.">
+                    <i class="fas fa-clock text-[11px]"></i>
+                    Atualizado em {{ generated_at|date:"d/m/Y H:i" }} · 1x por dia
+                </span>
+                {% if is_stale %}
+                <span class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg text-xs font-medium text-blue-700">
+                    <i class="fas fa-arrows-rotate fa-spin text-[11px]"></i>
+                    Atualizando em segundo plano
+                </span>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+            <a href="{% url 'simulator:dashboard' %}"
+               class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                <i class="fas fa-calculator"></i> Simulador
+            </a>
+            <button type="button" id="btn-csv"
+                    class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                <i class="fas fa-file-csv"></i> Baixar CSV
+            </button>
+            <a href="?refresh=1"
+               class="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-primary rounded-lg hover:bg-orange-600 transition-colors">
+                <i class="fas fa-rotate"></i> Recalcular
+            </a>
+        </div>
+    </div>
+
+    {% if status == 'building' %}
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-12 text-center">
+        <div class="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+            <i class="fas fa-arrows-rotate fa-spin text-2xl text-primary"></i>
+        </div>
+        <h3 class="text-lg font-semibold text-gray-800">Montando a tabela da rede…</h3>
+        <p class="text-sm text-gray-500 mt-1 max-w-md mx-auto">
+            O primeiro cálculo roda o simulador duas vezes para cada colaborador (realizado e projeção)
+            e leva alguns minutos. Esta página se atualiza sozinha assim que terminar.
+        </p>
+        <p class="text-xs text-gray-400 mt-4"><span id="countdown">20</span>s para a próxima verificação</p>
+    </div>
+    <script>
+    (function () {
+        let left = 20;
+        const el = document.getElementById('countdown');
+        setInterval(function () {
+            left -= 1;
+            if (left <= 0) { window.location.href = window.location.pathname; return; }
+            if (el) el.textContent = String(left);
+        }, 1000);
+    })();
+    </script>
+    {% elif not rows %}
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-12 text-center">
+        <i class="fas fa-users-slash text-4xl text-gray-200 mb-3"></i>
+        <h3 class="text-lg font-semibold text-gray-800">Nenhum colaborador no seu escopo</h3>
+        <p class="text-sm text-gray-500 mt-1">Verifique os grupos de comissionamento e as lojas vinculadas.</p>
+    </div>
+    {% else %}
+
+    <!-- ══ Totais do recorte ══ -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+        <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+            <p class="text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Realizado</p>
+            <p class="text-xl sm:text-2xl font-bold text-gray-900 mt-1" id="kpi-realizado">—</p>
+            <p class="text-[11px] text-gray-400 mt-0.5">soma do que já entrou</p>
+        </div>
+        <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+            <p class="text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Projeção</p>
+            <p class="text-xl sm:text-2xl font-bold text-primary mt-1" id="kpi-projecao">—</p>
+            <p class="text-[11px] text-gray-400 mt-0.5">soma projetada para o fim do mês</p>
+        </div>
+        <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+            <p class="text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Diferença</p>
+            <p class="text-xl sm:text-2xl font-bold mt-1" id="kpi-diferenca">—</p>
+            <p class="text-[11px] text-gray-400 mt-0.5">o que falta acontecer</p>
+        </div>
+        <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+            <p class="text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Colaboradores</p>
+            <p class="text-xl sm:text-2xl font-bold text-gray-900 mt-1" id="kpi-pessoas">—</p>
+            <p class="text-[11px] text-gray-400 mt-0.5">
+                {% if sem_dados %}{{ sem_dados }} sem dados no mês{% else %}todos com dados no mês{% endif %}
+            </p>
+        </div>
+    </div>
+
+    <!-- ══ Tabela ══ -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div class="p-4 sm:p-5 border-b border-gray-100">
+            <div class="flex flex-col lg:flex-row lg:items-center gap-3">
+                <div class="relative flex-1 min-w-0">
+                    <i class="fas fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+                    <input type="text" id="search" placeholder="Buscar por nome, loja, coordenador ou motivo…"
+                           class="w-full pl-10 pr-9 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary">
+                    <button type="button" id="search-clear"
+                            class="hidden absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                        <i class="fas fa-xmark text-sm"></i>
+                    </button>
+                </div>
+                <div class="flex flex-wrap items-center gap-2 flex-shrink-0">
+                    <select id="coordinator-filter"
+                            class="text-sm border border-gray-200 rounded-lg px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary">
+                        <option value="">Todos os coordenadores</option>
+                        {% for name in coordinator_options %}
+                        <option value="{{ name }}">{{ name }}</option>
+                        {% endfor %}
+                    </select>
+                    <select id="sector-filter"
+                            class="text-sm border border-gray-200 rounded-lg px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary">
+                        <option value="">Todas as lojas</option>
+                        {% for name in sector_options %}
+                        <option value="{{ name }}">{{ name }}</option>
+                        {% endfor %}
+                    </select>
+                    <select id="diff-filter"
+                            class="text-sm border border-gray-200 rounded-lg px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary">
+                        <option value="">Qualquer diferença</option>
+                        <option value="sobe">Só quem sobe</option>
+                        <option value="cai">Só quem cai</option>
+                        <option value="igual">Sem diferença</option>
+                        <option value="sem">Sem dados no mês</option>
+                    </select>
+                    <button type="button" id="reset-filters"
+                            class="px-3 py-2.5 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors whitespace-nowrap">
+                        <i class="fas fa-rotate-left mr-1"></i>Limpar
+                    </button>
+                </div>
+            </div>
+
+            {% if role_filters|length > 1 %}
+            <div class="flex flex-wrap items-center gap-2 mt-3">
+                <button type="button" data-role="" class="role-chip is-active">
+                    Todos <span class="chip-count">{{ rows|length }}</span>
+                </button>
+                {% for rf in role_filters %}
+                <button type="button" data-role="{{ rf.key }}" class="role-chip">
+                    {{ rf.label }} <span class="chip-count">{{ rf.count }}</span>
+                </button>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="px-4 sm:px-6 py-2 bg-gray-50/70 border-b border-gray-100 flex items-center justify-between gap-3">
+            <p class="text-xs text-gray-500" id="result-count"></p>
+            <p class="text-[11px] text-gray-400 hidden sm:block">
+                <i class="fas fa-hand-pointer mr-1"></i>clique na linha para abrir a conta pilar por pilar
+            </p>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="min-w-full text-sm tabela-rede">
+                <thead>
+                    <tr class="bg-slate-800 text-white text-[11px] uppercase tracking-wide">
+                        <th class="py-3 px-3 sm:px-6 text-left font-semibold sort-col cursor-pointer w-[60%] sm:w-auto" data-sort="name">
+                            Nome <i class="fas fa-sort ml-1 opacity-50"></i>
+                        </th>
+                        <th class="py-3 px-4 text-left font-semibold hidden md:table-cell">Loja</th>
+                        <th class="py-3 px-4 text-left font-semibold hidden xl:table-cell">Coordenador</th>
+                        <th class="py-3 px-4 text-right font-semibold sort-col cursor-pointer whitespace-nowrap hidden sm:table-cell" data-sort="realizado">
+                            Realizado <i class="fas fa-sort ml-1 opacity-50"></i>
+                        </th>
+                        <th class="py-3 px-4 text-right font-semibold sort-col cursor-pointer whitespace-nowrap" data-sort="projecao">
+                            Projeção <i class="fas fa-sort ml-1 opacity-50"></i>
+                        </th>
+                        <th class="py-3 px-4 text-right font-semibold sort-col cursor-pointer whitespace-nowrap hidden sm:table-cell" data-sort="diferenca">
+                            Diferença <i class="fas fa-sort ml-1 opacity-50"></i>
+                        </th>
+                        <th class="py-3 px-4 sm:px-6 text-left font-semibold hidden lg:table-cell">Motivo</th>
+                    </tr>
+                </thead>
+                <tbody id="rows-body">
+                    {% for row in rows %}
+                    <tr class="person-row border-b border-gray-50 hover:bg-orange-50/40 transition-colors cursor-pointer"
+                        data-id="{{ row.id }}"
+                        data-role="{{ row.role_key }}"
+                        data-sector="{{ row.sector }}"
+                        data-coordinator="{{ row.coordinator }}"
+                        data-name="{{ row.name }}"
+                        data-realizado="{{ row.realizado|stringformat:'f' }}"
+                        data-projecao="{{ row.projecao|stringformat:'f' }}"
+                        data-diferenca="{{ row.diferenca|stringformat:'f' }}"
+                        data-motivo="{{ row.motivo }}"
+                        data-dados="{% if row.has_data %}1{% else %}0{% endif %}"
+                        data-search="{{ row.name|lower }} {{ row.sector|lower }} {{ row.coordinator|lower }} {{ row.role_label|lower }} {{ row.motivo|lower }}">
+
+                        <td class="py-3 px-3 sm:px-6 w-[60%] sm:w-auto">
+                            <div class="flex items-center gap-3">
+                                <div class="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-white text-[11px] font-bold
+                                            {% if row.role_key == 'coordenador' %}bg-violet-500
+                                            {% elif row.role_key == 'gerente' %}bg-blue-500
+                                            {% elif row.role_key == 'aparte' %}bg-indigo-500
+                                            {% else %}bg-primary{% endif %}">
+                                    {{ row.initials }}
+                                </div>
+                                <div class="min-w-0 max-w-[9.5rem] sm:max-w-none">
+                                    <!-- No celular o nome quebra em vez de empurrar a coluna do dinheiro para fora. -->
+                                    <span class="text-sm font-semibold text-gray-800 block sm:truncate">{{ row.name }}</span>
+                                    <div class="flex items-center gap-1.5 mt-0.5">
+                                        <span class="px-1.5 py-0.5 rounded text-[10px] font-medium
+                                                     {% if row.role_key == 'coordenador' %}bg-violet-50 text-violet-600
+                                                     {% elif row.role_key == 'gerente' %}bg-blue-50 text-blue-600
+                                                     {% elif row.role_key == 'aparte' %}bg-indigo-50 text-indigo-600
+                                                     {% else %}bg-orange-50 text-orange-600{% endif %}">{{ row.role_label }}</span>
+                                        <span class="text-[11px] text-gray-400 md:hidden truncate">{{ row.sector }}</span>
+                                        {% if not row.has_data %}
+                                        <span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-600">sem dados</span>
+                                        {% endif %}
+                                    </div>
+                                    <p class="lg:hidden text-[11px] text-gray-500 leading-snug mt-1 motivo-mini">
+                                        <span class="sm:hidden text-gray-400">Realizado
+                                            <span class="js-money" data-value="{{ row.realizado|stringformat:'f' }}">—</span> ·
+                                            <span class="font-semibold {% if row.diferenca > 0 %}text-green-600{% elif row.diferenca < 0 %}text-red-600{% else %}text-gray-400{% endif %} js-delta"
+                                                  data-value="{{ row.diferenca|stringformat:'f' }}">—</span> ·
+                                        </span>{{ row.motivo }}
+                                    </p>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="py-3 px-4 text-gray-600 hidden md:table-cell">{{ row.sector|default:"—" }}</td>
+                        <td class="py-3 px-4 text-gray-600 hidden xl:table-cell">{{ row.coordinator|default:"—" }}</td>
+                        <td class="py-3 px-4 text-right whitespace-nowrap text-gray-700 hidden sm:table-cell js-money" data-value="{{ row.realizado|stringformat:'f' }}">—</td>
+                        <td class="py-3 px-3 sm:px-4 text-right whitespace-nowrap font-semibold text-gray-900 js-money" data-value="{{ row.projecao|stringformat:'f' }}">—</td>
+                        <td class="py-3 px-4 text-right whitespace-nowrap font-semibold hidden sm:table-cell
+                                   {% if row.diferenca > 0 %}text-green-600{% elif row.diferenca < 0 %}text-red-600{% else %}text-gray-400{% endif %} js-delta"
+                            data-value="{{ row.diferenca|stringformat:'f' }}">—</td>
+                        <td class="py-3 px-4 sm:px-6 text-gray-600 max-w-[22rem] hidden lg:table-cell">
+                            <span class="text-[13px] leading-snug block">{{ row.motivo }}</span>
+                            {% if row.erro %}
+                            <span class="text-[11px] text-red-500 block mt-0.5" title="{{ row.erro }}">
+                                <i class="fas fa-triangle-exclamation mr-1"></i>{{ row.erro|truncatechars:60 }}
+                            </span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr class="detail-row hidden bg-gray-50/80 border-b border-gray-100">
+                        <td colspan="7" class="px-4 sm:px-6 py-4">
+                            {% if row.fatores %}
+                            <p class="text-[11px] uppercase tracking-wide text-gray-400 font-semibold mb-2">
+                                De onde vem a diferença de {{ row.name }}
+                            </p>
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full text-[13px]">
+                                    <thead>
+                                        <tr class="text-left text-gray-400 border-b border-gray-200">
+                                            <th class="py-1.5 pr-4 font-medium">Origem</th>
+                                            <th class="py-1.5 px-3 font-medium text-right">Realizado</th>
+                                            <th class="py-1.5 px-3 font-medium text-right">Projeção</th>
+                                            <th class="py-1.5 px-3 font-medium text-right">Diferença</th>
+                                            <th class="py-1.5 pl-3 font-medium text-right">Atingimento proj.</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for fator in row.fatores %}
+                                        <tr class="border-b border-gray-100 last:border-0">
+                                            <td class="py-1.5 pr-4 text-gray-700">
+                                                {{ fator.label }}
+                                                {% if fator.tipo == 'extra' %}
+                                                <span class="ml-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-violet-50 text-violet-600">acelerador</span>
+                                                {% endif %}
+                                            </td>
+                                            <td class="py-1.5 px-3 text-right text-gray-600 js-money" data-value="{{ fator.realizado|stringformat:'f' }}">—</td>
+                                            <td class="py-1.5 px-3 text-right text-gray-800 js-money" data-value="{{ fator.projecao|stringformat:'f' }}">—</td>
+                                            <td class="py-1.5 px-3 text-right font-semibold
+                                                       {% if fator.delta > 0 %}text-green-600{% else %}text-red-600{% endif %} js-delta"
+                                                data-value="{{ fator.delta|stringformat:'f' }}">—</td>
+                                            <td class="py-1.5 pl-3 text-right text-gray-500">
+                                                {% if fator.tipo == 'pilar' %}{{ fator.atingimento|pct_br:1 }}{% else %}—{% endif %}
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {% else %}
+                            <p class="text-[13px] text-gray-500">
+                                <i class="fas fa-circle-info mr-1 text-gray-400"></i>
+                                {{ row.motivo }} — não há pilar nem acelerador com diferença acima de R$ 1.
+                            </p>
+                            {% endif %}
+                            <div class="mt-3 flex flex-wrap gap-2">
+                                <a href="{% url 'simulator:dashboard' %}?user_id={{ row.id }}&view=realizado"
+                                   class="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50">
+                                    <i class="fas fa-sack-dollar"></i> Abrir realizado
+                                </a>
+                                <a href="{% url 'simulator:dashboard' %}?user_id={{ row.id }}&view=projecao"
+                                   class="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium text-white bg-primary rounded-lg hover:bg-orange-600">
+                                    <i class="fas fa-chart-line"></i> Abrir projeção
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr class="bg-slate-50 border-t-2 border-slate-200 font-semibold text-gray-800">
+                        <td class="py-3 px-3 sm:px-6" id="foot-label">Total</td>
+                        <td class="py-3 px-4 hidden md:table-cell"></td>
+                        <td class="py-3 px-4 hidden xl:table-cell"></td>
+                        <td class="py-3 px-4 text-right whitespace-nowrap hidden sm:table-cell" id="foot-realizado">—</td>
+                        <td class="py-3 px-4 text-right whitespace-nowrap text-primary" id="foot-projecao">—</td>
+                        <td class="py-3 px-4 text-right whitespace-nowrap hidden sm:table-cell" id="foot-diferenca">—</td>
+                        <td class="py-3 px-4 sm:px-6 text-[12px] font-normal text-gray-500 hidden lg:table-cell" id="foot-media">—</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+
+        <div id="no-results" class="hidden text-center py-14">
+            <i class="fas fa-magnifying-glass-chart text-4xl text-gray-200 mb-3"></i>
+            <h3 class="text-base font-semibold text-gray-800">Nenhum colaborador encontrado</h3>
+            <p class="text-sm text-gray-500 mt-1">Ajuste a busca ou limpe os filtros.</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+    .role-chip {
+        display: inline-flex; align-items: center; gap: .375rem;
+        padding: .375rem .75rem; border-radius: 9999px;
+        border: 1px solid #e5e7eb; background: #fff; color: #4b5563;
+        font-size: .8125rem; font-weight: 500; transition: all .15s ease; white-space: nowrap;
+    }
+    .role-chip:hover { background: #f9fafb; border-color: #d1d5db; }
+    .role-chip.is-active { background: #FF6B35; border-color: #FF6B35; color: #fff; }
+    .role-chip .chip-count {
+        padding: 0 .375rem; border-radius: 9999px; background: #f3f4f6;
+        color: #6b7280; font-size: .6875rem; font-weight: 600;
+    }
+    .role-chip.is-active .chip-count { background: rgba(255,255,255,.25); color: #fff; }
+    .tabela-rede tbody .person-row:nth-of-type(odd) { background-color: #fcfcfd; }
+    .tabela-rede tbody .person-row.is-open { background-color: #fff7ed; }
+    .sort-col.is-sorted i { opacity: 1; }
+    /* Motivo embaixo do nome nas telas estreitas: duas linhas, sem esticar a
+       linha da tabela. Dentro da media query porque esta folha vem depois do
+       Tailwind — sem isso o `display` venceria o `lg:hidden` e o motivo
+       apareceria duas vezes no desktop. */
+    @media (max-width: 1023.98px) {
+        .motivo-mini {
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+    }
+</style>
+
+<script>
+(function () {
+    'use strict';
+
+    const body = document.getElementById('rows-body');
+    if (!body) return;
+
+    const search = document.getElementById('search');
+    const searchClear = document.getElementById('search-clear');
+    const coordinatorFilter = document.getElementById('coordinator-filter');
+    const sectorFilter = document.getElementById('sector-filter');
+    const diffFilter = document.getElementById('diff-filter');
+    const resetBtn = document.getElementById('reset-filters');
+    const noResults = document.getElementById('no-results');
+    const resultCount = document.getElementById('result-count');
+    const chips = Array.from(document.querySelectorAll('.role-chip'));
+    const sortCols = Array.from(document.querySelectorAll('.sort-col'));
+
+    const rows = Array.from(body.querySelectorAll('.person-row'));
+    let activeRole = '';
+    let ordem = { campo: 'projecao', desc: true };
+
+    const money = new Intl.NumberFormat('pt-BR', {
+        style: 'currency', currency: 'BRL', minimumFractionDigits: 2,
+    });
+
+    function num(row, campo) { return parseFloat(row.dataset[campo]) || 0; }
+    function setText(id, value) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = value;
+    }
+    function comSinal(valor) {
+        if (Math.abs(valor) < 0.005) return money.format(0);
+        return (valor > 0 ? '+' : '−') + money.format(Math.abs(valor));
+    }
+
+    // A linha de detalhe anda junto com a linha da pessoa.
+    function detalheDe(row) {
+        const next = row.nextElementSibling;
+        return (next && next.classList.contains('detail-row')) ? next : null;
+    }
+
+    function apply() {
+        const term = (search.value || '').trim().toLowerCase();
+        const coordinator = coordinatorFilter.value;
+        const sector = sectorFilter.value;
+        const diff = diffFilter.value;
+
+        const visible = [];
+        rows.forEach(function (row) {
+            const delta = num(row, 'diferenca');
+            const temDados = row.dataset.dados === '1';
+            const passaDiff = !diff
+                || (diff === 'sobe' && delta > 0.005)
+                || (diff === 'cai' && delta < -0.005)
+                || (diff === 'igual' && temDados && Math.abs(delta) <= 0.005)
+                || (diff === 'sem' && !temDados);
+
+            const show = (!term || (row.dataset.search || '').includes(term))
+                && (!activeRole || row.dataset.role === activeRole)
+                && (!coordinator || row.dataset.coordinator === coordinator)
+                && (!sector || row.dataset.sector === sector)
+                && passaDiff;
+
+            row.classList.toggle('hidden', !show);
+            const detalhe = detalheDe(row);
+            if (detalhe && !show) {
+                detalhe.classList.add('hidden');
+                row.classList.remove('is-open');
+            }
+            if (show) visible.push(row);
+        });
+
+        const realizado = visible.reduce((s, r) => s + num(r, 'realizado'), 0);
+        const projecao = visible.reduce((s, r) => s + num(r, 'projecao'), 0);
+        const comDados = visible.filter((r) => r.dataset.dados === '1').length;
+        const count = visible.length;
+
+        setText('kpi-realizado', money.format(realizado));
+        setText('kpi-projecao', money.format(projecao));
+        setText('kpi-pessoas', String(count));
+        const diferenca = projecao - realizado;
+        const kpiDiff = document.getElementById('kpi-diferenca');
+        if (kpiDiff) {
+            kpiDiff.textContent = comSinal(diferenca);
+            kpiDiff.className = 'text-xl sm:text-2xl font-bold mt-1 '
+                + (diferenca > 0.005 ? 'text-green-600' : (diferenca < -0.005 ? 'text-red-600' : 'text-gray-400'));
+        }
+
+        setText('foot-realizado', money.format(realizado));
+        setText('foot-projecao', money.format(projecao));
+        const footDiff = document.getElementById('foot-diferenca');
+        if (footDiff) {
+            footDiff.textContent = comSinal(diferenca);
+            footDiff.className = 'py-3 px-4 text-right whitespace-nowrap hidden sm:table-cell '
+                + (diferenca > 0.005 ? 'text-green-600' : (diferenca < -0.005 ? 'text-red-600' : 'text-gray-400'));
+        }
+        setText('foot-label', 'Total · ' + count + ' colaborador(es)');
+        setText('foot-media', comDados
+            ? 'Média projetada ' + money.format(projecao / comDados) + ' · ' + comDados + ' com dados'
+            : 'Nenhum colaborador com dados no mês');
+
+        const filtrando = term || activeRole || coordinator || sector || diff;
+        resultCount.textContent = filtrando
+            ? 'Mostrando ' + count + ' de ' + rows.length + ' colaborador(es)'
+            : rows.length + ' colaborador(es) no seu escopo';
+
+        body.parentElement.classList.toggle('hidden', count === 0);
+        noResults.classList.toggle('hidden', count !== 0);
+        searchClear.classList.toggle('hidden', !term);
+    }
+
+    function ordenar() {
+        const pares = rows.map(function (row) {
+            return { row: row, detalhe: detalheDe(row) };
+        });
+        pares.sort(function (a, b) {
+            let cmp;
+            if (ordem.campo === 'name') {
+                cmp = (a.row.dataset.name || '').localeCompare(b.row.dataset.name || '', 'pt-BR');
+            } else {
+                cmp = num(a.row, ordem.campo) - num(b.row, ordem.campo);
+            }
+            return ordem.desc ? -cmp : cmp;
+        });
+        pares.forEach(function (par) {
+            body.appendChild(par.row);
+            if (par.detalhe) body.appendChild(par.detalhe);
+        });
+        sortCols.forEach(function (col) {
+            const ativa = col.dataset.sort === ordem.campo;
+            col.classList.toggle('is-sorted', ativa);
+            const icone = col.querySelector('i');
+            if (icone) {
+                icone.className = 'fas ml-1 ' + (ativa
+                    ? (ordem.desc ? 'fa-sort-down' : 'fa-sort-up')
+                    : 'fa-sort opacity-50');
+            }
+        });
+    }
+
+    let debounce;
+    search.addEventListener('input', function () {
+        clearTimeout(debounce);
+        debounce = setTimeout(apply, 120);
+    });
+    searchClear.addEventListener('click', function () {
+        search.value = '';
+        search.focus();
+        apply();
+    });
+    coordinatorFilter.addEventListener('change', apply);
+    sectorFilter.addEventListener('change', apply);
+    diffFilter.addEventListener('change', apply);
+
+    chips.forEach(function (chip) {
+        chip.addEventListener('click', function () {
+            activeRole = chip.dataset.role || '';
+            chips.forEach((c) => c.classList.toggle('is-active', c === chip));
+            apply();
+        });
+    });
+
+    resetBtn.addEventListener('click', function () {
+        search.value = '';
+        coordinatorFilter.value = '';
+        sectorFilter.value = '';
+        diffFilter.value = '';
+        activeRole = '';
+        chips.forEach((c) => c.classList.toggle('is-active', !c.dataset.role));
+        apply();
+    });
+
+    sortCols.forEach(function (col) {
+        col.addEventListener('click', function () {
+            const campo = col.dataset.sort;
+            if (ordem.campo === campo) {
+                ordem.desc = !ordem.desc;
+            } else {
+                ordem.campo = campo;
+                ordem.desc = campo !== 'name';
+            }
+            ordenar();
+        });
+    });
+
+    rows.forEach(function (row) {
+        row.addEventListener('click', function (event) {
+            if (event.target.closest('a, button')) return;
+            const detalhe = detalheDe(row);
+            if (!detalhe) return;
+            const abrindo = detalhe.classList.contains('hidden');
+            detalhe.classList.toggle('hidden', !abrindo);
+            row.classList.toggle('is-open', abrindo);
+        });
+    });
+
+    document.getElementById('btn-csv').addEventListener('click', function () {
+        const visiveis = rows.filter((r) => !r.classList.contains('hidden'));
+        const linhas = [['Nome', 'Loja', 'Coordenador', 'Papel', 'Realizado', 'Projecao', 'Diferenca', 'Motivo']];
+        visiveis.forEach(function (row) {
+            linhas.push([
+                row.dataset.name || '',
+                row.dataset.sector || '',
+                row.dataset.coordinator || '',
+                row.dataset.role || '',
+                num(row, 'realizado').toFixed(2).replace('.', ','),
+                num(row, 'projecao').toFixed(2).replace('.', ','),
+                num(row, 'diferenca').toFixed(2).replace('.', ','),
+                row.dataset.motivo || '',
+            ]);
+        });
+        const csv = linhas.map(function (linha) {
+            return linha.map((c) => '"' + String(c).replace(/"/g, '""') + '"').join(';');
+        }).join('\r\n');
+        // BOM para o Excel abrir os acentos certos.
+        const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = 'tabela-rede.csv';
+        link.click();
+        URL.revokeObjectURL(link.href);
+    });
+
+    document.addEventListener('keydown', function (e) {
+        if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
+        const tag = (document.activeElement.tagName || '').toLowerCase();
+        if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+        e.preventDefault();
+        search.focus();
+    });
+
+    // Dinheiro vem do servidor como número cru; a tela formata em pt-BR.
+    document.querySelectorAll('.js-money').forEach(function (el) {
+        el.textContent = money.format(parseFloat(el.dataset.value) || 0);
+    });
+    document.querySelectorAll('.js-delta').forEach(function (el) {
+        el.textContent = comSinal(parseFloat(el.dataset.value) || 0);
+    });
+
+    ordenar();
+    apply();
+})();
+</script>
+{% endblock %}

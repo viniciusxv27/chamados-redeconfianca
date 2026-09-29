@@ -66,6 +66,10 @@ def upload_certificado(instance, filename):
     return f"impulso/certificados/{instance.user_id}/{_uuid_name(filename)}"
 
 
+def upload_entrega(instance, filename):
+    return f"impulso/entregas/{instance.conclusao.user_id}/{_uuid_name(filename)}"
+
+
 # ==========================================================================
 # CONFIAR
 # ==========================================================================
@@ -734,6 +738,11 @@ class ConteudoConectar(models.Model):
                           help_text='Link do curso/vídeo (opcional).')
 
     obrigatorio = models.BooleanField(default=True, verbose_name='Obrigatório')
+    # Atribuir sem cobrar entrega deixava o "feito" na palavra de quem marcou:
+    # com isto ligado, concluir exige pelo menos um arquivo ou link.
+    exige_entrega = models.BooleanField(
+        default=False, db_default=False, verbose_name='Exige entrega',
+        help_text='Quem recebe só conclui depois de anexar arquivo(s) ou link.')
     obrigatorio_para = models.ManyToManyField(
         settings.AUTH_USER_MODEL, blank=True,
         related_name='impulso_conteudos_obrigatorios',
@@ -875,12 +884,99 @@ class ConteudoConectar(models.Model):
         mês de quem fez. Quem apaga precisa ver o tamanho disso antes.
         """
         conclusoes = self.conclusoes.all()
+        # O que a equipe anexou: o campo antigo mais as entregas novas. Sem
+        # somar as duas, o aviso diria "0 certificados" para um conteúdo com
+        # dezenas de arquivos entregues.
+        entregues = 0
+        if entregas_disponiveis():
+            try:
+                entregues = EntregaConteudo.objects.filter(conclusao__conteudo=self).count()
+            except DatabaseError:
+                entregues = 0
         return {
             'conclusoes': conclusoes.count(),
             'concluidos': conclusoes.filter(concluido=True).count(),
-            'certificados': conclusoes.exclude(certificado='').count(),
+            'certificados': conclusoes.exclude(certificado='').count() + entregues,
             'dirigido_a': self.obrigatorio_para.count(),
         }
+
+
+_TEM_TABELA_DE_ENTREGAS = None
+
+
+def entregas_disponiveis():
+    """A tabela das entregas já existe neste banco?
+
+    Os outros servidores rodam o código commitado no mesmo banco, e o migrate
+    é dele: até rodar, `conteudo_detail` e o painel não podem tentar um
+    prefetch de `entregas` — a consulta falharia e derrubaria a tela. Olha o
+    catálogo (não executa SELECT na tabela, que abortaria uma transação em
+    curso) e guarda a resposta.
+    """
+    global _TEM_TABELA_DE_ENTREGAS
+    if _TEM_TABELA_DE_ENTREGAS:
+        return True                      # existe e não deixa de existir
+
+    from django.core.cache import cache
+    resposta = cache.get('impulso_tem_tabela_de_entregas')
+    if resposta is None:
+        from django.db import connection
+        try:
+            resposta = (EntregaConteudo._meta.db_table
+                        in connection.introspection.table_names())
+        except DatabaseError:
+            resposta = False
+        # O "ainda não" vale pouco tempo: assim a tela volta ao normal logo
+        # depois do migrate, sem esperar o processo reiniciar.
+        cache.set('impulso_tem_tabela_de_entregas', resposta, 86400 if resposta else 120)
+    if resposta:
+        _TEM_TABELA_DE_ENTREGAS = True
+    return bool(resposta)
+
+
+class CertificadoAntigo:
+    """O `certificado` do campo antigo com a cara de uma ``EntregaConteudo``.
+
+    Existe para a tela ter uma lista só: sem isto, todo template do Conectar
+    teria um ramo para o campo antigo e outro para as entregas novas.
+    """
+
+    id = None
+    e_link = False
+    titulo = ''
+    legado = True
+
+    def __init__(self, campo):
+        self.campo = campo
+
+    @property
+    def nome(self):
+        # O arquivo foi guardado com nome de uuid; mostrar o uuid não ajuda
+        # ninguém — a extensão, essa sim, vai no rótulo do tipo.
+        return 'Certificado'
+
+    @property
+    def extensao(self):
+        nome = self.campo.name or ''
+        return ('.' + nome.rsplit('.', 1)[-1].lower()) if '.' in nome else ''
+
+    @property
+    def especie(self):
+        if self.extensao in EntregaConteudo.EXTENSOES_VIDEO:
+            return 'video'
+        if self.extensao in EntregaConteudo.EXTENSOES_IMAGEM:
+            return 'imagem'
+        return 'documento'
+
+    @property
+    def link(self):
+        try:
+            return self.campo.url
+        except Exception:
+            return ''
+
+    def pode_remover(self, user):
+        return False
 
 
 class ConclusaoConteudo(models.Model):
@@ -961,6 +1057,32 @@ class ConclusaoConteudo(models.Model):
         """
         return self.concluido and self.aprovacao == self.Aprovacao.APROVADA
 
+    def itens_entregues(self):
+        """Tudo o que a pessoa anexou, na ordem de envio.
+
+        Junta as entregas novas com o certificado do campo antigo: 30
+        conclusões já tinham certificado quando as entregas múltiplas
+        nasceram, e nenhuma delas pode sumir da tela de quem confere. O campo
+        antigo continua sendo gravado pelo código que ainda não foi atualizado
+        nos outros servidores, então isto não é só histórico.
+        """
+        try:
+            itens = list(self.entregas.all())
+        except DatabaseError:                    # antes do migrate desta tabela
+            itens = []
+        if self.certificado:
+            itens.insert(0, CertificadoAntigo(self.certificado))
+        return itens
+
+    @property
+    def tem_entrega(self):
+        if self.certificado:
+            return True
+        try:
+            return self.entregas.exists()
+        except DatabaseError:
+            return False
+
     def pode_decidir(self, user):
         """Quem aprova ou recusa esta conclusão.
 
@@ -976,6 +1098,96 @@ class ConclusaoConteudo(models.Model):
             return False
         from .utils import is_impulso_manager
         return is_impulso_manager(user)
+
+
+class EntregaConteudo(models.Model):
+    """O que a pessoa entregou num conteúdo do Conectar: arquivo ou link.
+
+    Antes existia um campo só (`ConclusaoConteudo.certificado`) e cabia **um**
+    arquivo. Na prática a entrega raramente é uma coisa só: o certificado em
+    PDF, a foto do quadro, o vídeo do atendimento e o link da planilha contam a
+    mesma história — e quem confere precisa ver tudo junto.
+
+    Cada entrega é um item: ou um arquivo, ou um link. Vários por conclusão, de
+    formatos diferentes, na ordem em que foram enviados.
+    """
+
+    conclusao = models.ForeignKey(
+        'ConclusaoConteudo', on_delete=models.CASCADE,
+        related_name='entregas', verbose_name='Conclusão')
+    arquivo = models.FileField(
+        upload_to=upload_entrega, storage=get_media_storage(),
+        null=True, blank=True, verbose_name='Arquivo')
+    url = models.URLField(blank=True, verbose_name='Link')
+    titulo = models.CharField(
+        max_length=200, blank=True, verbose_name='Descrição',
+        help_text='O que é este item (opcional).')
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Entrega do CONECTAR'
+        verbose_name_plural = 'Entregas do CONECTAR'
+        ordering = ['criado_em', 'id']
+
+    def __str__(self):
+        return f"{self.conclusao_id} — {self.nome}"
+
+    # Pelo que o navegador abre sozinho. O resto é "documento" e vai para
+    # download — não vale prometer prévia do que não dá para mostrar.
+    EXTENSOES_VIDEO = ('.mp4', '.webm', '.ogg', '.ogv', '.m4v', '.mov')
+    EXTENSOES_IMAGEM = ('.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif')
+
+    @property
+    def e_link(self):
+        return bool(self.url) and not self.arquivo
+
+    @property
+    def extensao(self):
+        nome = (self.arquivo.name if self.arquivo else '') or ''
+        return ('.' + nome.rsplit('.', 1)[-1].lower()) if '.' in nome else ''
+
+    @property
+    def especie(self):
+        """'link', 'video', 'imagem' ou 'documento' — é o que a tela desenha."""
+        if self.e_link:
+            return 'link'
+        if self.extensao in self.EXTENSOES_VIDEO:
+            return 'video'
+        if self.extensao in self.EXTENSOES_IMAGEM:
+            return 'imagem'
+        return 'documento'
+
+    @property
+    def nome(self):
+        if self.titulo:
+            return self.titulo
+        if self.arquivo:
+            return (self.arquivo.name or '').rsplit('/', 1)[-1]
+        # Link sem descrição: o domínio já diz mais que a URL inteira cortada.
+        endereco = (self.url or '').split('//')[-1]
+        return endereco.split('/')[0] or self.url
+
+    @property
+    def link(self):
+        """Para onde o botão da tela aponta."""
+        if self.arquivo:
+            try:
+                return self.arquivo.url
+            except Exception:                               # arquivo sumido do storage
+                return ''
+        return self.url
+
+    def pode_remover(self, user):
+        """Quem tira um item da entrega.
+
+        Só quem entregou, e só enquanto ninguém aprovou: depois de aprovada, a
+        entrega é a prova do ponto que já valeu. Gestor que discorda recusa —
+        apagar o material de outra pessoa não é conferir.
+        """
+        if not (user and getattr(user, 'is_authenticated', False)):
+            return False
+        return (self.conclusao.user_id == user.pk
+                and self.conclusao.aprovacao != ConclusaoConteudo.Aprovacao.APROVADA)
 
 
 class ProjetoFoco(models.Model):

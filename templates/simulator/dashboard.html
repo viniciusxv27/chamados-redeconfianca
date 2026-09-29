@@ -17,8 +17,15 @@
         </h1>
         <p class="text-gray-600 mt-2">Visualize Realizado, Projeção e simule cenários por pilar</p>
       </div>
-      {% if is_superadmin %}
       <div class="flex gap-1 sm:gap-2 md:gap-3 flex-wrap">
+        {% if is_superadmin or role == "coordenador" or role == "gerente" %}
+        <a href="{% url 'simulator:tabela' %}" class="px-3 sm:px-4 py-2 text-sm sm:text-base bg-primary hover:bg-orange-600 text-white rounded-lg transition-colors duration-200 flex items-center gap-1 sm:gap-2">
+          <i class="fas fa-table-list"></i>
+          <span class="hidden sm:inline">Tabela da rede</span>
+          <span class="sm:hidden text-xs">Tabela</span>
+        </a>
+        {% endif %}
+        {% if is_superadmin %}
         <a href="{% url 'simulator:admin_factors' %}" class="px-3 sm:px-4 py-2 text-sm sm:text-base bg-warning hover:bg-yellow-600 text-white rounded-lg transition-colors duration-200 flex items-center gap-1 sm:gap-2">
           <i class="fas fa-sliders-h"></i>
           <span class="hidden sm:inline">Fatores</span>
@@ -34,8 +41,8 @@
           <span class="hidden sm:inline">Snipers</span>
           <span class="sm:hidden text-xs">Snip.</span>
         </a>
+        {% endif %}
       </div>
-      {% endif %}
     </div>
   </div>
 

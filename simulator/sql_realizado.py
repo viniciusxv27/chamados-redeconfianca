@@ -487,6 +487,15 @@ def get_network_realized_sales_from_mysql(
     today = timezone.localdate()
     yesterday = today - timedelta(days=1)
 
+    # São três agregações sobre a rede inteira (~10 s). O número é o mesmo para
+    # todo mundo e, com o corte D-1, não muda ao longo do dia — mesmo cache do
+    # `get_realized_maps`. Sem isso, cada usuário "A parte" refaz as três
+    # consultas (e a tabela da rede as refaria duas vezes por pessoa).
+    cache_key = f'simulator_network_realized_{year}_{month:02d}_{yesterday:%Y%m%d}'
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return dict(cached)
+
     try:
         conn = pymysql.connect(**_mysql_config())
     except Exception:
@@ -552,4 +561,7 @@ def get_network_realized_sales_from_mysql(
         except Exception:
             pass
 
+    # Só o resultado completo é guardado: consulta que estourou no meio nem
+    # chega aqui, e a próxima tentativa vai ao banco de novo.
+    cache.set(cache_key, dict(result), 900)
     return result

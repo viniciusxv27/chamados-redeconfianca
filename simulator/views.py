@@ -416,3 +416,56 @@ def simulator_admin_snipers(request):
         'coordinators': coordinators,
     }
     return render(request, 'simulator/admin_snipers.html', context)
+
+
+@login_required
+def simulator_tabela(request):
+    """Tabela da rede: realizado, projeção, diferença e o motivo, por colaborador.
+
+    Mesma porta e mesmo recorte de visão do comissionamento — é o mesmo dado,
+    só disposto em tabela e com as duas visões lado a lado.
+    """
+    # Importes locais: `users` já importa `simulator`, então subir esses módulos
+    # no topo fecharia um ciclo.
+    from users.commission_views import (
+        MONTH_NAMES_PT, pode_ver_comissionamento,
+        get_user_role as get_commission_role,
+    )
+    from users.commission_projection_views import _scope_rows
+    from .tabela import get_tabela_dataset, resumir
+
+    user = request.user
+    if not pode_ver_comissionamento(user):
+        messages.error(request, 'O comissionamento fica disponível para gerentes e '
+                                'coordenadores.')
+        return redirect('home')
+
+    viewer_role = get_commission_role(user)
+    dataset = get_tabela_dataset(force_refresh=request.GET.get('refresh') == '1')
+    rows, _referencia = _scope_rows(user, viewer_role, dataset['rows'])
+
+    generated_at = dataset['generated_at']
+    role_counts: dict = {}
+    for row in rows:
+        role_counts[row['role_key']] = role_counts.get(row['role_key'], 0) + 1
+
+    from .averages import ROLE_LABELS as LABELS, ROLE_ORDER
+    context = {
+        'rows': rows,
+        'summary': resumir(rows),
+        'coordinator_options': sorted({r['coordinator'] for r in rows if r['coordinator']}),
+        'sector_options': sorted({r['sector'] for r in rows if r['sector']}),
+        'role_filters': [
+            {'key': key, 'label': LABELS[key], 'count': role_counts[key]}
+            for key in ROLE_ORDER if role_counts.get(key)
+        ],
+        'status': dataset['status'],
+        'is_stale': dataset['is_stale'],
+        'generated_at': generated_at,
+        'reference_label': (
+            f"{MONTH_NAMES_PT.get(generated_at.month, generated_at.month)} {generated_at.year}"
+            if generated_at else ''
+        ),
+        'sem_dados': sum(1 for r in rows if not r['has_data']),
+    }
+    return render(request, 'simulator/tabela.html', context)

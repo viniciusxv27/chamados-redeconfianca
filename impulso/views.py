@@ -25,7 +25,8 @@ from . import ciclos as ciclos_service
 from .models import (
     FAIXAS_DA_NOTA,
     AcessoAutoriaIdeia,
-    Ciclo, CicloMes, ConclusaoConteudo, ConteudoConectar, ExcecaoAssiduidade, Ideia,
+    Ciclo, CicloMes, ConclusaoConteudo, ConteudoConectar, EntregaConteudo,
+    ExcecaoAssiduidade, Ideia, entregas_disponiveis,
     ImpulsoFeedback,
     Meta, MetaAnexo, MetaComentario, MetaItem, MetaVisualizacao, PontuacaoMensal,
     ProjetoAnexo, ProjetoFoco, TarefaProjeto,
@@ -1343,6 +1344,7 @@ def conteudo_editar(request, conteudo_id):
         conteudo.url = (request.POST.get('url') or '').strip()
         if completa:
             conteudo.obrigatorio = bool(request.POST.get('obrigatorio'))
+            conteudo.exige_entrega = bool(request.POST.get('exige_entrega'))
             conteudo.inicio = parse_date(request.POST.get('inicio') or '') or None
             conteudo.fim = parse_date(request.POST.get('fim') or '') or None
 
@@ -1371,7 +1373,9 @@ def conteudo_editar(request, conteudo_id):
             novos = [u for u in escolhidos if u.id not in antes]
             if novos:
                 _notify(novos, f'Novo {conteudo.get_tipo_display().lower()} obrigatório',
-                        f'"{conteudo.titulo}" foi atribuído a você.',
+                        f'"{conteudo.titulo}" foi atribuído a você.'
+                        + (' Anexe a entrega (arquivo ou link) para concluir.'
+                           if conteudo.exige_entrega else ''),
                         f'/impulso/conectar/{conteudo.id}/')
 
         messages.success(request, 'Conteúdo atualizado.')
@@ -1382,7 +1386,7 @@ def conteudo_editar(request, conteudo_id):
         'is_gestor': is_impulso_manager(request.user),
         'campos_do_gestor': completa,
         'grupos': ConteudoConectar.GRUPOS,
-        'colaboradores': get_colaboradores() if completa else None,
+        'colaboradores': _colaboradores_para_atribuir() if completa else None,
         'marcados': set(conteudo.obrigatorio_para.values_list('id', flat=True)),
         'active_tab': 'conectar',
     })
@@ -2126,21 +2130,26 @@ def conclusao_decidir(request, conclusao_id):
     """
     conclusao = get_object_or_404(
         ConclusaoConteudo.objects.select_related('user', 'conteudo'), id=conclusao_id)
+    # O painel de conferência decide sem recarregar a página.
+    por_fetch = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+
+    def erro(mensagem, status=400):
+        if por_fetch:
+            return JsonResponse({'ok': False, 'error': mensagem}, status=status)
+        messages.error(request, mensagem)
+        return redirect('impulso:conectar_list')
 
     if not conclusao.pode_decidir(request.user):
-        messages.error(request, 'Você não confere esta conclusão.')
-        return redirect('impulso:conectar_list')
+        return erro('Você não confere esta conclusão.', 403)
 
     decisao = request.POST.get('decisao')
     if decisao not in ('aprovar', 'recusar'):
-        messages.error(request, 'Decisão inválida.')
-        return redirect('impulso:conectar_list')
+        return erro('Decisão inválida.')
 
     observacao = (request.POST.get('observacao') or '').strip()
     if decisao == 'recusar' and not observacao:
-        messages.error(request, 'Escreva o motivo da recusa — é o que a pessoa lê '
-                                'para corrigir e reenviar.')
-        return redirect('impulso:conectar_list')
+        return erro('Escreva o motivo da recusa — é o que a pessoa lê '
+                    'para corrigir e reenviar.')
 
     conclusao.aprovacao = (ConclusaoConteudo.Aprovacao.APROVADA if decisao == 'aprovar'
                            else ConclusaoConteudo.Aprovacao.RECUSADA)
@@ -2162,7 +2171,28 @@ def conclusao_decidir(request, conclusao_id):
                 f'Corrija e marque como concluído de novo.',
                 '/impulso/conectar/')
         messages.success(request, f'"{titulo}" recusado — a pessoa foi avisada do motivo.')
+
+    if por_fetch:
+        return JsonResponse({
+            'ok': True,
+            'id': conclusao.id,
+            'aprovacao': conclusao.aprovacao,
+            'rotulo': conclusao.get_aprovacao_display(),
+            'decidida_por': (request.user.get_full_name() or request.user.email),
+            'decidida_em': timezone.localtime(conclusao.decidida_em).strftime('%d/%m/%Y %H:%M'),
+            'observacao': conclusao.observacao,
+        })
     return redirect('impulso:conectar_list')
+
+
+def _colaboradores_para_atribuir():
+    """Quem pode receber um conteúdo, agrupado por loja na tela.
+
+    Ordenado por setor e nome porque o formulário usa ``{% regroup %}``: sem a
+    ordem, a mesma loja apareceria em vários blocos.
+    """
+    return (get_colaboradores().select_related('sector')
+            .order_by('sector__name', 'first_name', 'last_name'))
 
 
 def _tipo_do_grupo(grupo, documento=None, video=None, atual=None):
@@ -2212,6 +2242,7 @@ def conteudo_create(request):
             arquivo=documento,
             video=video,
             obrigatorio=bool(request.POST.get('obrigatorio')) if gestor else False,
+            exige_entrega=bool(request.POST.get('exige_entrega')) if gestor else False,
             inicio=parse_date(request.POST.get('inicio') or '') or None,
             fim=parse_date(request.POST.get('fim') or '') or None,
             criado_por=request.user,
@@ -2224,7 +2255,9 @@ def conteudo_create(request):
                     get_colaboradores().filter(id__in=ids))
                 _notify(conteudo.obrigatorio_para.all(),
                         f'Novo {conteudo.get_tipo_display().lower()} obrigatório',
-                        f'"{conteudo.titulo}" foi atribuído a você.',
+                        f'"{conteudo.titulo}" foi atribuído a você.'
+                        + (' Anexe a entrega (arquivo ou link) para concluir.'
+                           if conteudo.exige_entrega else ''),
                         f'/impulso/conectar/{conteudo.id}/')
         messages.success(request, 'Conteúdo publicado.')
         return redirect('impulso:conteudo_detail', conteudo_id=conteudo.id)
@@ -2233,7 +2266,7 @@ def conteudo_create(request):
         'is_gestor': gestor,
         'campos_do_gestor': gestor,
         'grupos': ConteudoConectar.GRUPOS,
-        'colaboradores': get_colaboradores() if gestor else None,
+        'colaboradores': _colaboradores_para_atribuir() if gestor else None,
         'active_tab': 'conectar',
     }
     return render(request, 'impulso/conteudo_form.html', context)
@@ -2250,11 +2283,20 @@ def conteudo_detail(request, conteudo_id):
 
     conclusao = ConclusaoConteudo.objects.filter(
         conteudo=conteudo, user=request.user).first()
+    gestor = is_impulso_manager(request.user)
     context = {
         'conteudo': conteudo,
         'conclusao': conclusao,
-        'is_gestor': is_impulso_manager(request.user),
-        'conclusoes': conteudo.conclusoes.select_related('user') if is_impulso_manager(request.user) else None,
+        'meus_itens': conclusao.itens_entregues() if conclusao else [],
+        # Item entregue só sai antes de alguém aprovar: depois disso ele é a
+        # prova do ponto que já valeu.
+        'pode_mexer_na_entrega': bool(conclusao and not conclusao.aprovada),
+        'is_gestor': gestor,
+        # O prefetch só entra quando a tabela já existe: no servidor que ainda
+        # não rodou o migrate, a consulta derrubaria a tela.
+        'conclusoes': (conteudo.conclusoes.select_related('user')
+                       .prefetch_related(*(['entregas'] if entregas_disponiveis() else []))
+                       if gestor else None),
         'pode_apagar': conteudo.pode_excluir(request.user),
         'pode_editar': conteudo.pode_editar(request.user),
         'impacto': conteudo.impacto_da_exclusao,
@@ -2374,6 +2416,27 @@ def conteudo_concluir(request, conteudo_id):
             + (f' Faltam cerca de {int(falta // 60)}min{int(falta % 60):02d}s.' if falta else ''))
         return redirect('impulso:conteudo_detail', conteudo_id=conteudo.id)
 
+    # Anexos mandados no mesmo envio do "concluir" (quem não usa o botão de
+    # anexar item a item, ou quem está sem JavaScript).
+    novos = request.FILES.getlist('arquivos')
+    link = (request.POST.get('url') or '').strip()
+    for arquivo in novos[:ENTREGA_MAX_POR_ENVIO]:
+        problema = _erro_da_entrega(arquivo)
+        if problema:
+            messages.error(request, problema)
+            return redirect('impulso:conteudo_detail', conteudo_id=conteudo.id)
+        EntregaConteudo.objects.create(
+            conclusao=conclusao, arquivo=arquivo, titulo=(arquivo.name or '')[:200])
+    if link:
+        EntregaConteudo.objects.create(conclusao=conclusao, url=link)
+
+    # Conteúdo que cobra entrega não fecha na palavra: sem nenhum item anexado,
+    # não há o que conferir.
+    if conteudo.exige_entrega and not conclusao.tem_entrega:
+        messages.error(request, 'Este conteúdo pede entrega: anexe pelo menos um '
+                                'arquivo ou link antes de concluir.')
+        return redirect('impulso:conteudo_detail', conteudo_id=conteudo.id)
+
     conclusao.concluido = True
     conclusao.concluido_em = timezone.now()
     certificado = request.FILES.get('certificado')
@@ -2402,6 +2465,225 @@ def conteudo_concluir(request, conteudo_id):
     messages.success(request, 'Conteúdo marcado como concluído. '
                               'Os pontos entram quando o gestor conferir.')
     return redirect('impulso:conteudo_detail', conteudo_id=conteudo.id)
+
+
+@impulso_member_required
+def conectar_conferir(request):
+    """Painel de quem confere: quem fez, como fez — e quem ainda não fez.
+
+    A fila antiga vivia espremida no topo do catálogo e cada decisão
+    recarregava a página inteira. Aqui a conferência é a tela: as entregas
+    aparecem com prévia (imagem e vídeo abrem na hora), a decisão vai por
+    fetch, e uma segunda aba mostra a cobertura por conteúdo — quem recebeu,
+    quem entregou e quem está devendo.
+    """
+    user = request.user
+    if not is_impulso_manager(user):
+        messages.error(request, 'A conferência é dos gestores do Impulso.')
+        return redirect('impulso:conectar_list')
+
+    equipe = get_colaboradores_do_gestor(user)
+    equipe_ids = set(equipe.values_list('id', flat=True))
+
+    conclusoes = (ConclusaoConteudo.objects
+                  .filter(concluido=True)
+                  .select_related('user', 'user__sector', 'conteudo', 'decidida_por')
+                  .prefetch_related(*(['entregas'] if entregas_disponiveis() else []))
+                  .order_by('-concluido_em'))
+    if not user.is_superuser:
+        conclusoes = conclusoes.filter(user_id__in=equipe_ids)
+
+    linhas = []
+    for c in conclusoes:
+        pessoa = c.user
+        itens = c.itens_entregues()
+        linhas.append({
+            'id': c.id,
+            'pessoa': pessoa.get_full_name() or pessoa.email,
+            'iniciais': (f"{(pessoa.first_name or '')[:1]}{(pessoa.last_name or '')[:1]}"
+                         .strip().upper() or (pessoa.email or '?')[:1].upper()),
+            'loja': getattr(pessoa.sector, 'name', '') or '',
+            'conteudo': c.conteudo.titulo,
+            'conteudo_id': c.conteudo_id,
+            'rotulo': c.conteudo.rotulo,
+            'quando': c.concluido_em,
+            'status': c.aprovacao,
+            'observacao': c.observacao,
+            'decidida_por': (c.decidida_por.get_full_name() or c.decidida_por.email)
+                            if c.decidida_por else '',
+            'decidida_em': c.decidida_em,
+            'itens': itens,
+            'pode_decidir': c.pode_decidir(user),
+            'video_ok': c.video_concluido,
+        })
+
+    # ── Cobertura por conteúdo: o outro lado da mesma pergunta ──────────────
+    # "Quem fez" só faz sentido ao lado de "quem não fez": sem isto o gestor vê
+    # a fila esvaziar e não percebe quem nunca entregou.
+    conteudos = (ConteudoConectar.objects.filter(ativo=True)
+                 .prefetch_related('obrigatorio_para', 'conclusoes__user')
+                 .order_by('titulo'))
+    cobertura = []
+    for conteudo in conteudos:
+        dirigido = [u for u in conteudo.obrigatorio_para.all()
+                    if user.is_superuser or u.id in equipe_ids]
+        para_todos = not conteudo.obrigatorio_para.all()
+        alvo = list(equipe) if para_todos else dirigido
+        if not alvo:
+            continue
+        feitas = {c.user_id: c for c in conteudo.conclusoes.all() if c.concluido}
+        entregaram = [u for u in alvo if u.id in feitas]
+        faltam = [u for u in alvo if u.id not in feitas]
+        aprovadas = sum(1 for u in entregaram
+                        if feitas[u.id].aprovacao == ConclusaoConteudo.Aprovacao.APROVADA)
+        cobertura.append({
+            'id': conteudo.id,
+            'titulo': conteudo.titulo,
+            'rotulo': conteudo.rotulo,
+            'exige_entrega': conteudo.exige_entrega,
+            'para_todos': para_todos,
+            'alvo': len(alvo),
+            'entregaram': len(entregaram),
+            'aprovadas': aprovadas,
+            'aguardando': sum(1 for u in entregaram
+                              if feitas[u.id].aprovacao == ConclusaoConteudo.Aprovacao.PENDENTE),
+            'faltam': faltam,
+            'percentual': round(100 * len(entregaram) / len(alvo)) if alvo else 0,
+        })
+    cobertura.sort(key=lambda c: (c['percentual'], -len(c['faltam'])))
+
+    aguardando = [l for l in linhas if l['status'] == ConclusaoConteudo.Aprovacao.PENDENTE]
+    context = {
+        'linhas': linhas,
+        'cobertura': cobertura,
+        'total_aguardando': len(aguardando),
+        'total_aprovadas': sum(1 for l in linhas
+                               if l['status'] == ConclusaoConteudo.Aprovacao.APROVADA),
+        'total_recusadas': sum(1 for l in linhas
+                               if l['status'] == ConclusaoConteudo.Aprovacao.RECUSADA),
+        'total_devendo': sum(len(c['faltam']) for c in cobertura),
+        'conteudo_options': sorted({l['conteudo'] for l in linhas}),
+        'loja_options': sorted({l['loja'] for l in linhas if l['loja']}),
+        'active_tab': 'conectar',
+    }
+    return render(request, 'impulso/conectar_conferir.html', context)
+
+
+# ── Entregas do Conectar ───────────────────────────────────────────────────
+# A entrega é o que a pessoa mostra de que fez: certificado, foto, vídeo,
+# planilha, link. Cabe mais de um, de formatos diferentes.
+ENTREGA_MAX_BYTES = 100 * 1024 * 1024        # vídeo curto de celular cabe
+ENTREGA_MAX_POR_ENVIO = 20
+
+
+def _erro_da_entrega(arquivo):
+    """O que impede este arquivo de virar entrega — ou None."""
+    if not arquivo.name:
+        return 'Arquivo sem nome.'
+    if arquivo.size <= 0:
+        return f'"{arquivo.name}" chegou vazio.'
+    if arquivo.size > ENTREGA_MAX_BYTES:
+        return (f'"{arquivo.name}" tem {arquivo.size / 1024 / 1024:.0f} MB — o limite '
+                f'por arquivo é {ENTREGA_MAX_BYTES // 1024 // 1024} MB.')
+    return None
+
+
+def _entrega_json(entrega):
+    return {'id': entrega.id, 'nome': entrega.nome, 'especie': entrega.especie,
+            'link': entrega.link}
+
+
+@require_POST
+@impulso_member_required
+def entrega_add(request, conteudo_id):
+    """Anexa à própria entrega: vários arquivos de uma vez e/ou um link.
+
+    Sobe por fetch (a tela troca só a lista) e também funciona sem JavaScript,
+    caindo no redirect com mensagem.
+    """
+    por_fetch = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+    conteudo = get_object_or_404(ConteudoConectar, id=conteudo_id)
+
+    def erro(mensagem, status=400):
+        if por_fetch:
+            return JsonResponse({'ok': False, 'error': mensagem}, status=status)
+        messages.error(request, mensagem)
+        return redirect('impulso:conteudo_detail', conteudo_id=conteudo.id)
+
+    if not pode_ver_conteudo(request.user, conteudo):
+        return erro('Este conteúdo não foi direcionado para você.', 403)
+
+    conclusao, _ = ConclusaoConteudo.objects.get_or_create(
+        conteudo=conteudo, user=request.user)
+    # Depois de aprovada, a entrega é a prova do ponto que já valeu: mexer nela
+    # mudaria o que o gestor conferiu.
+    if conclusao.aprovada:
+        return erro('Esta entrega já foi aprovada. Fale com quem conferiu para reabrir.')
+
+    arquivos = request.FILES.getlist('arquivos') or request.FILES.getlist('arquivo')
+    url = (request.POST.get('url') or '').strip()
+    descricao = (request.POST.get('titulo') or '').strip()[:200]
+
+    if not arquivos and not url:
+        return erro('Escolha um arquivo ou informe um link.')
+    if len(arquivos) > ENTREGA_MAX_POR_ENVIO:
+        return erro(f'Envie até {ENTREGA_MAX_POR_ENVIO} arquivos por vez.')
+    for arquivo in arquivos:
+        problema = _erro_da_entrega(arquivo)
+        if problema:
+            return erro(problema)
+
+    criadas = []
+    for arquivo in arquivos:
+        criadas.append(EntregaConteudo.objects.create(
+            conclusao=conclusao, arquivo=arquivo,
+            # O arquivo é guardado com nome de uuid; sem isto a lista mostraria
+            # o uuid para quem entregou e para quem confere.
+            titulo=descricao or (arquivo.name or '')[:200]))
+    if url:
+        criadas.append(EntregaConteudo.objects.create(
+            conclusao=conclusao, url=url, titulo=descricao))
+
+    # Reenvio depois de recusa volta para a fila — quem corrigiu precisa ser
+    # conferido de novo, senão a recusa vira definitiva.
+    if conclusao.concluido and conclusao.aprovacao == ConclusaoConteudo.Aprovacao.RECUSADA:
+        conclusao.aprovacao = ConclusaoConteudo.Aprovacao.PENDENTE
+        conclusao.decidida_por = None
+        conclusao.decidida_em = None
+        conclusao.save(update_fields=['aprovacao', 'decidida_por', 'decidida_em'])
+
+    if por_fetch:
+        return JsonResponse({'ok': True, 'itens': [_entrega_json(e) for e in criadas],
+                             'total': len(conclusao.itens_entregues()),
+                             'concluido': conclusao.concluido})
+    messages.success(request, f'{len(criadas)} item(ns) anexado(s) à sua entrega.')
+    return redirect('impulso:conteudo_detail', conteudo_id=conteudo.id)
+
+
+@require_POST
+@impulso_member_required
+def entrega_remover(request, entrega_id):
+    """Tira um item da própria entrega, enquanto ela não foi aprovada."""
+    por_fetch = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+    entrega = get_object_or_404(
+        EntregaConteudo.objects.select_related('conclusao'), id=entrega_id)
+    conteudo_id = entrega.conclusao.conteudo_id
+
+    if not entrega.pode_remover(request.user):
+        if por_fetch:
+            return JsonResponse({'ok': False, 'error': 'Você não pode remover este item.'},
+                                status=403)
+        messages.error(request, 'Você não pode remover este item.')
+        return redirect('impulso:conteudo_detail', conteudo_id=conteudo_id)
+
+    if entrega.arquivo:
+        entrega.arquivo.delete(save=False)       # tira do storage, não só do banco
+    entrega.delete()
+
+    if por_fetch:
+        return JsonResponse({'ok': True})
+    messages.success(request, 'Item removido da entrega.')
+    return redirect('impulso:conteudo_detail', conteudo_id=conteudo_id)
 
 
 # ---------------------------------------------------------------------------

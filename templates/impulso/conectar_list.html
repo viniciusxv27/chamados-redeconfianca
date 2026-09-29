@@ -3,7 +3,18 @@
 {% block impulso_content %}
 <div class="flex items-center justify-between mb-4">
     <h2 class="font-semibold text-gray-800"><i class="fas fa-graduation-cap text-emerald-500 mr-2"></i>Cursos, vídeos e POPs</h2>
-    <a href="{% url 'impulso:conteudo_create' %}" class="px-3 py-2 rounded-lg bg-emerald-500 text-white text-sm hover:bg-emerald-600"><i class="fas fa-plus mr-1"></i>{% if is_gestor %}Adicionar conteúdo{% else %}Subir POP ou vídeo{% endif %}</a>
+    <div class="flex items-center gap-2 flex-wrap">
+        {% if is_gestor %}
+        <a href="{% url 'impulso:conectar_conferir' %}"
+           class="px-3 py-2 rounded-lg bg-white border border-gray-200 text-gray-700 text-sm hover:bg-gray-50">
+            <i class="fas fa-clipboard-check mr-1"></i>Conferir entregas
+            {% if a_conferir %}
+            <span class="ml-1 px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[11px] font-semibold">{{ a_conferir|length }}</span>
+            {% endif %}
+        </a>
+        {% endif %}
+        <a href="{% url 'impulso:conteudo_create' %}" class="px-3 py-2 rounded-lg bg-emerald-500 text-white text-sm hover:bg-emerald-600"><i class="fas fa-plus mr-1"></i>{% if is_gestor %}Adicionar conteúdo{% else %}Subir POP ou vídeo{% endif %}</a>
+    </div>
 </div>
 
 {% if a_conferir %}
@@ -16,8 +27,14 @@ que depende dele — o resto é catálogo.
         <h3 class="text-sm font-bold text-amber-900">
             <i class="fas fa-clipboard-check mr-1.5"></i>Aguardando sua conferência
         </h3>
-        <span class="text-[11px] px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 font-semibold">
-            {{ a_conferir|length }}
+        <span class="flex items-center gap-2">
+            <a href="{% url 'impulso:conectar_conferir' %}"
+               class="text-[11px] font-semibold text-amber-900 underline hover:no-underline">
+                abrir o painel
+            </a>
+            <span class="text-[11px] px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 font-semibold">
+                {{ a_conferir|length }}
+            </span>
         </span>
     </div>
     <div class="divide-y divide-gray-50">
@@ -54,12 +71,12 @@ que depende dele — o resto é catálogo.
                             <i class="fas fa-arrow-up-right-from-square mr-1"></i>Link externo
                         </a>
                         {% endif %}
-                        {% if c.certificado %}
-                        <a href="{{ c.certificado.url }}" target="_blank" rel="noopener noreferrer"
-                           class="px-2.5 py-1 rounded-lg border border-gray-200 text-xs text-gray-600 hover:bg-gray-50">
-                            <i class="fas fa-paperclip mr-1"></i>Certificado
+                        {% for item in c.itens_entregues %}
+                        <a href="{{ item.link }}" target="_blank" rel="noopener noreferrer"
+                           class="px-2.5 py-1 rounded-lg border border-gray-200 text-xs text-gray-600 hover:bg-gray-50 max-w-[14rem] truncate inline-block align-middle">
+                            <i class="fas {% if item.especie == 'video' %}fa-play{% elif item.especie == 'imagem' %}fa-image{% elif item.especie == 'link' %}fa-link{% else %}fa-paperclip{% endif %} mr-1"></i>{{ item.nome }}
                         </a>
-                        {% endif %}
+                        {% endfor %}
                     </div>
                 </div>
                 <div class="flex items-center gap-2 flex-shrink-0">
@@ -157,7 +174,7 @@ document.querySelectorAll('.imp-conteudo-excluir').forEach(function (botao) {
                      'a pontuação do mês delas é recalculada.';
         }
         if (certificados) {
-            texto += '\n' + certificados + ' certificado(s) anexado(s) serão apagados.';
+            texto += '\n' + certificados + ' arquivo(s) entregue(s) serão apagados.';
         }
         texto += '\n\nIsso não tem volta.';
 

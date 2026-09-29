@@ -55,6 +55,10 @@ urlpatterns = [
 
     # CONECTAR — conteúdos
     path('conectar/', views.conectar_list, name='conectar_list'),
+    path('conectar/conferir/', views.conectar_conferir, name='conectar_conferir'),
+    path('conectar/<int:conteudo_id>/entrega/', views.entrega_add, name='entrega_add'),
+    path('conectar/entrega/<int:entrega_id>/remover/', views.entrega_remover,
+         name='entrega_remover'),
     path('conectar/conclusao/<int:conclusao_id>/decidir/', views.conclusao_decidir,
          name='conclusao_decidir'),
     path('conectar/novo/', views.conteudo_create, name='conteudo_create'),

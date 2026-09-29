@@ -1,0 +1,482 @@
+{% extends 'base.html' %}
+
+{% block title %}Conferência do CONECTAR{% endblock %}
+
+{% block content %}
+{% comment %}
+Painel de quem confere. A fila antiga era uma lista espremida no topo do
+catálogo e cada decisão recarregava a página inteira. Aqui a conferência é a
+tela: quem fez, o que anexou (com prévia) e a decisão na hora.
+{% endcomment %}
+<div class="container mx-auto px-3 sm:px-4 py-6 max-w-7xl">
+    {# O painel decide por fetch: o token fica aqui, antes do script que o lê. #}
+    {% csrf_token %}
+
+    <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 mb-5">
+        <div class="min-w-0">
+            <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 flex items-center gap-2">
+                <i class="fas fa-clipboard-check text-emerald-500"></i>
+                Conferência do CONECTAR
+            </h1>
+            <p class="text-gray-500 text-sm mt-1">
+                Quem entregou, o que anexou e quem ainda está devendo.
+            </p>
+        </div>
+        <a href="{% url 'impulso:conectar_list' %}"
+           class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 self-start">
+            <i class="fas fa-arrow-left"></i> Voltar ao catálogo
+        </a>
+    </div>
+
+    <!-- ══ Números do que importa ══ -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+        <div class="bg-white rounded-xl border border-amber-200 shadow-sm p-4">
+            <p class="text-[11px] uppercase tracking-wide text-amber-600 font-semibold">Aguardando você</p>
+            <p class="text-2xl font-bold text-amber-700 mt-1" id="kpi-aguardando">{{ total_aguardando }}</p>
+            <p class="text-[11px] text-gray-400 mt-0.5">entregas para conferir</p>
+        </div>
+        <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+            <p class="text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Aprovadas</p>
+            <p class="text-2xl font-bold text-emerald-600 mt-1" id="kpi-aprovadas">{{ total_aprovadas }}</p>
+            <p class="text-[11px] text-gray-400 mt-0.5">valem ponto no mês</p>
+        </div>
+        <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+            <p class="text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Recusadas</p>
+            <p class="text-2xl font-bold text-red-500 mt-1" id="kpi-recusadas">{{ total_recusadas }}</p>
+            <p class="text-[11px] text-gray-400 mt-0.5">voltaram para correção</p>
+        </div>
+        <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+            <p class="text-[11px] uppercase tracking-wide text-gray-400 font-semibold">Devendo entrega</p>
+            <p class="text-2xl font-bold text-gray-900 mt-1">{{ total_devendo }}</p>
+            <p class="text-[11px] text-gray-400 mt-0.5">pessoa(s) × conteúdo</p>
+        </div>
+    </div>
+
+    <!-- ══ Abas ══ -->
+    <div class="flex items-center gap-2 mb-4 flex-wrap">
+        <button type="button" data-aba="fila" class="cfr-aba is-active">
+            <i class="fas fa-hourglass-half mr-1.5"></i>Aguardando
+            <span class="cfr-conta" id="aba-conta">{{ total_aguardando }}</span>
+        </button>
+        <button type="button" data-aba="conferidas" class="cfr-aba">
+            <i class="fas fa-clock-rotate-left mr-1.5"></i>Já conferidas
+        </button>
+        <button type="button" data-aba="cobertura" class="cfr-aba">
+            <i class="fas fa-users-viewfinder mr-1.5"></i>Por conteúdo
+        </button>
+    </div>
+
+    <!-- ══ Filtros (valem para as duas primeiras abas) ══ -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-4" data-para="fila conferidas">
+        <div class="flex flex-col lg:flex-row lg:items-center gap-3">
+            <div class="relative flex-1 min-w-0">
+                <i class="fas fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+                <input type="text" id="cfr-busca" placeholder="Buscar por pessoa, loja ou conteúdo…"
+                       class="w-full pl-10 pr-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-400">
+            </div>
+            <select id="cfr-conteudo"
+                    class="text-sm border border-gray-200 rounded-lg px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-100">
+                <option value="">Todos os conteúdos</option>
+                {% for nome in conteudo_options %}<option value="{{ nome }}">{{ nome }}</option>{% endfor %}
+            </select>
+            <select id="cfr-loja"
+                    class="text-sm border border-gray-200 rounded-lg px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-100">
+                <option value="">Todas as lojas</option>
+                {% for nome in loja_options %}<option value="{{ nome }}">{{ nome }}</option>{% endfor %}
+            </select>
+            <button type="button" id="cfr-limpar"
+                    class="px-3 py-2.5 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 whitespace-nowrap">
+                <i class="fas fa-rotate-left mr-1"></i>Limpar
+            </button>
+        </div>
+        <p class="text-xs text-gray-400 mt-2" id="cfr-contagem"></p>
+    </div>
+
+    <!-- ══ Entregas ══ -->
+    <div class="space-y-3" id="cfr-lista">
+        {% for l in linhas %}
+        <div class="cfr-card bg-white rounded-2xl shadow-sm border border-gray-100 p-4"
+             data-id="{{ l.id }}"
+             data-status="{{ l.status }}"
+             data-conteudo="{{ l.conteudo }}"
+             data-loja="{{ l.loja }}"
+             data-busca="{{ l.pessoa|lower }} {{ l.loja|lower }} {{ l.conteudo|lower }}">
+
+            {# No celular a decisão desce para baixo do card: ao lado, ela espremia o nome. #}
+            <div class="flex flex-col sm:flex-row sm:items-start gap-3">
+                <div class="flex items-start gap-3 min-w-0 flex-1">
+                <div class="w-10 h-10 rounded-full bg-emerald-500 text-white text-xs font-bold flex items-center justify-center flex-shrink-0">
+                    {{ l.iniciais }}
+                </div>
+                <div class="min-w-0 flex-1">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <p class="font-semibold text-gray-800 text-sm">{{ l.pessoa }}</p>
+                        {% if l.loja %}<span class="text-[11px] text-gray-400">{{ l.loja }}</span>{% endif %}
+                        <span class="cfr-selo px-2 py-0.5 rounded-full text-[11px] font-semibold
+                                     {% if l.status == 'APROVADA' %}bg-emerald-50 text-emerald-700
+                                     {% elif l.status == 'RECUSADA' %}bg-red-50 text-red-700
+                                     {% else %}bg-amber-50 text-amber-700{% endif %}">
+                            {% if l.status == 'APROVADA' %}aprovada{% elif l.status == 'RECUSADA' %}recusada{% else %}aguardando{% endif %}
+                        </span>
+                    </div>
+                    <p class="text-sm text-gray-600 mt-0.5">
+                        <a href="{% url 'impulso:conteudo_detail' l.conteudo_id %}"
+                           class="hover:text-emerald-600">{{ l.conteudo }}</a>
+                        <span class="text-[11px] text-gray-400">· {{ l.rotulo }}</span>
+                    </p>
+                    <p class="text-[11px] text-gray-400 mt-0.5">
+                        {% if l.quando %}entregou em {{ l.quando|date:"d/m/Y H:i" }}{% else %}sem data de entrega{% endif %}
+                        {% if l.video_ok %} · assistiu o vídeo inteiro{% endif %}
+                        <span class="cfr-decisao">
+                        {% if l.decidida_em %} · conferida por {{ l.decidida_por }} em {{ l.decidida_em|date:"d/m/Y" }}{% endif %}
+                        </span>
+                    </p>
+
+                    <!-- Como fez: tudo o que anexou -->
+                    <div class="flex flex-wrap items-center gap-1.5 mt-2">
+                        {% for item in l.itens %}
+                        <button type="button" class="cfr-item inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs max-w-[16rem]
+                                     {% if item.especie == 'video' %}border-purple-200 bg-purple-50 text-purple-700
+                                     {% elif item.especie == 'imagem' %}border-sky-200 bg-sky-50 text-sky-700
+                                     {% elif item.especie == 'link' %}border-gray-200 text-gray-600
+                                     {% else %}border-emerald-200 bg-emerald-50 text-emerald-700{% endif %} hover:opacity-80"
+                                data-especie="{{ item.especie }}" data-link="{{ item.link }}" data-nome="{{ item.nome }}">
+                            <i class="fas {% if item.especie == 'video' %}fa-play
+                                          {% elif item.especie == 'imagem' %}fa-image
+                                          {% elif item.especie == 'link' %}fa-link
+                                          {% else %}fa-file-lines{% endif %}"></i>
+                            <span class="truncate">{{ item.nome }}</span>
+                        </button>
+                        {% empty %}
+                        <span class="text-[11px] text-gray-400 italic">
+                            <i class="fas fa-circle-info mr-1"></i>marcou como feito sem anexar nada
+                        </span>
+                        {% endfor %}
+                    </div>
+
+                    {% if l.observacao %}
+                    <p class="cfr-obs text-[12px] text-red-600 mt-2">
+                        <i class="fas fa-comment-dots mr-1"></i>{{ l.observacao }}
+                    </p>
+                    {% else %}
+                    <p class="cfr-obs text-[12px] text-red-600 mt-2 hidden"></p>
+                    {% endif %}
+                </div>
+                </div>
+
+                {% if l.pode_decidir %}
+                <div class="cfr-acoes flex items-center gap-2 flex-shrink-0 sm:justify-end {% if l.status != 'PENDENTE' %}hidden{% endif %}">
+                    <button type="button" data-decidir="aprovar"
+                            class="px-3 py-1.5 rounded-lg bg-emerald-500 text-white text-xs font-medium hover:bg-emerald-600">
+                        <i class="fas fa-check mr-1"></i>Aprovar
+                    </button>
+                    <button type="button" data-abrir-recusa
+                            class="px-3 py-1.5 rounded-lg border border-red-200 text-red-600 text-xs font-medium hover:bg-red-50">
+                        <i class="fas fa-xmark mr-1"></i>Recusar
+                    </button>
+                </div>
+                {% endif %}
+            </div>
+
+            {% if l.pode_decidir %}
+            <div class="cfr-recusa hidden mt-3 pt-3 border-t border-gray-100">
+                <label class="block text-xs font-medium text-gray-600 mb-1">
+                    Motivo da recusa — é o que a pessoa lê para corrigir
+                </label>
+                <div class="flex items-start gap-2 flex-wrap">
+                    <textarea rows="2" maxlength="2000" data-motivo
+                              class="flex-1 min-w-[14rem] border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-100"></textarea>
+                    <button type="button" data-decidir="recusar"
+                            class="px-3 py-2 rounded-lg bg-red-500 text-white text-xs font-medium hover:bg-red-600">
+                        Confirmar recusa
+                    </button>
+                    <button type="button" data-cancelar-recusa
+                            class="px-3 py-2 rounded-lg border border-gray-200 text-gray-600 text-xs hover:bg-gray-50">
+                        Cancelar
+                    </button>
+                </div>
+            </div>
+            {% endif %}
+            <p class="cfr-erro hidden text-xs text-red-500 mt-2"></p>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div id="cfr-vazio" class="hidden text-center py-14 bg-white rounded-2xl border border-gray-100">
+        <i class="fas fa-mug-hot text-4xl text-gray-200 mb-3"></i>
+        <h3 class="text-base font-semibold text-gray-800">Nada por aqui</h3>
+        <p class="text-sm text-gray-500 mt-1">Ajuste a busca ou troque de aba.</p>
+    </div>
+
+    <!-- ══ Por conteúdo: quem recebeu, quem entregou, quem falta ══ -->
+    <div class="hidden space-y-3" data-painel="cobertura">
+        {% for c in cobertura %}
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+            <div class="flex items-start justify-between gap-3 flex-wrap">
+                <div class="min-w-0">
+                    <a href="{% url 'impulso:conteudo_detail' c.id %}"
+                       class="font-semibold text-gray-800 text-sm hover:text-emerald-600">{{ c.titulo }}</a>
+                    <p class="text-[11px] text-gray-400 mt-0.5">
+                        {{ c.rotulo }} ·
+                        {% if c.para_todos %}toda a equipe{% else %}{{ c.alvo }} pessoa(s){% endif %}
+                        {% if c.exige_entrega %} · <span class="text-emerald-600">exige entrega</span>{% endif %}
+                    </p>
+                </div>
+                <div class="text-right flex-shrink-0">
+                    <p class="text-sm font-bold {% if c.percentual == 100 %}text-emerald-600{% elif c.percentual >= 50 %}text-amber-600{% else %}text-red-500{% endif %}">
+                        {{ c.percentual }}%
+                    </p>
+                    <p class="text-[11px] text-gray-400">{{ c.entregaram }} de {{ c.alvo }}</p>
+                </div>
+            </div>
+            <div class="h-1.5 rounded-full bg-gray-100 mt-2 overflow-hidden">
+                <div class="h-full rounded-full {% if c.percentual == 100 %}bg-emerald-500{% elif c.percentual >= 50 %}bg-amber-400{% else %}bg-red-400{% endif %}"
+                     style="width: {{ c.percentual }}%"></div>
+            </div>
+            <div class="flex items-center gap-3 mt-2 text-[11px] text-gray-500 flex-wrap">
+                <span><i class="fas fa-circle-check text-emerald-500 mr-1"></i>{{ c.aprovadas }} aprovada(s)</span>
+                <span><i class="fas fa-hourglass-half text-amber-500 mr-1"></i>{{ c.aguardando }} aguardando</span>
+            </div>
+            {% if c.faltam %}
+            <div class="mt-2 pt-2 border-t border-gray-50">
+                <p class="text-[11px] text-gray-400 mb-1">Ainda não entregaram:</p>
+                <div class="flex flex-wrap gap-1.5">
+                    {% for u in c.faltam %}
+                    <span class="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[11px]">
+                        {{ u.get_full_name|default:u.email }}
+                    </span>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        {% empty %}
+        <div class="text-center py-14 bg-white rounded-2xl border border-gray-100">
+            <i class="fas fa-inbox text-4xl text-gray-200 mb-3"></i>
+            <p class="text-sm text-gray-500">Nenhum conteúdo dirigido à sua equipe.</p>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Prévia: imagem e vídeo abrem aqui mesmo; documento e link vão para outra aba -->
+<div id="cfr-modal" class="hidden fixed inset-0 z-50 bg-black/70 items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-auto">
+        <div class="flex items-center justify-between gap-3 px-4 py-3 border-b border-gray-100">
+            <p class="text-sm font-semibold text-gray-800 truncate" id="cfr-modal-nome"></p>
+            <div class="flex items-center gap-2 flex-shrink-0">
+                <a href="#" target="_blank" rel="noopener noreferrer" id="cfr-modal-abrir"
+                   class="px-3 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 hover:bg-gray-50">
+                    <i class="fas fa-arrow-up-right-from-square mr-1"></i>Abrir
+                </a>
+                <button type="button" id="cfr-modal-fechar" class="text-gray-400 hover:text-gray-700">
+                    <i class="fas fa-xmark text-lg"></i>
+                </button>
+            </div>
+        </div>
+        <div class="p-4 bg-gray-50 flex items-center justify-center min-h-[12rem]" id="cfr-modal-corpo"></div>
+    </div>
+</div>
+
+<style>
+    .cfr-aba {
+        display: inline-flex; align-items: center;
+        padding: .5rem .875rem; border-radius: 9999px;
+        border: 1px solid #e5e7eb; background: #fff; color: #4b5563;
+        font-size: .8125rem; font-weight: 500; transition: all .15s ease;
+    }
+    .cfr-aba:hover { background: #f9fafb; }
+    .cfr-aba.is-active { background: #10b981; border-color: #10b981; color: #fff; }
+    .cfr-conta {
+        margin-left: .375rem; padding: 0 .375rem; border-radius: 9999px;
+        background: #f3f4f6; color: #6b7280; font-size: .6875rem; font-weight: 600;
+    }
+    .cfr-aba.is-active .cfr-conta { background: rgba(255,255,255,.25); color: #fff; }
+    #cfr-modal.is-open { display: flex; }
+</style>
+
+<script>
+(function () {
+    'use strict';
+    const lista = document.getElementById('cfr-lista');
+    if (!lista) return;
+
+    const cards = Array.from(lista.querySelectorAll('.cfr-card'));
+    const busca = document.getElementById('cfr-busca');
+    const filtroConteudo = document.getElementById('cfr-conteudo');
+    const filtroLoja = document.getElementById('cfr-loja');
+    const contagem = document.getElementById('cfr-contagem');
+    const vazio = document.getElementById('cfr-vazio');
+    const abas = Array.from(document.querySelectorAll('.cfr-aba'));
+    const painelCobertura = document.querySelector('[data-painel="cobertura"]');
+    const barraFiltros = document.querySelector('[data-para="fila conferidas"]');
+    const csrf = document.querySelector('[name=csrfmiddlewaretoken]');
+    let aba = 'fila';
+
+    function aplicar() {
+        if (aba === 'cobertura') {
+            lista.classList.add('hidden');
+            vazio.classList.add('hidden');
+            barraFiltros.classList.add('hidden');
+            painelCobertura.classList.remove('hidden');
+            return;
+        }
+        lista.classList.remove('hidden');
+        barraFiltros.classList.remove('hidden');
+        painelCobertura.classList.add('hidden');
+
+        const termo = (busca.value || '').trim().toLowerCase();
+        const conteudo = filtroConteudo.value;
+        const loja = filtroLoja.value;
+        let visiveis = 0;
+
+        cards.forEach(function (card) {
+            const pendente = card.dataset.status === 'PENDENTE';
+            const daAba = aba === 'fila' ? pendente : !pendente;
+            const mostra = daAba
+                && (!termo || (card.dataset.busca || '').includes(termo))
+                && (!conteudo || card.dataset.conteudo === conteudo)
+                && (!loja || card.dataset.loja === loja);
+            card.classList.toggle('hidden', !mostra);
+            if (mostra) visiveis += 1;
+        });
+
+        vazio.classList.toggle('hidden', visiveis !== 0);
+        contagem.textContent = visiveis + ' entrega(s) em tela';
+    }
+
+    function recontar() {
+        const pendentes = cards.filter((c) => c.dataset.status === 'PENDENTE').length;
+        const aprovadas = cards.filter((c) => c.dataset.status === 'APROVADA').length;
+        const recusadas = cards.filter((c) => c.dataset.status === 'RECUSADA').length;
+        document.getElementById('kpi-aguardando').textContent = pendentes;
+        document.getElementById('kpi-aprovadas').textContent = aprovadas;
+        document.getElementById('kpi-recusadas').textContent = recusadas;
+        document.getElementById('aba-conta').textContent = pendentes;
+    }
+
+    busca.addEventListener('input', aplicar);
+    filtroConteudo.addEventListener('change', aplicar);
+    filtroLoja.addEventListener('change', aplicar);
+    document.getElementById('cfr-limpar').addEventListener('click', function () {
+        busca.value = ''; filtroConteudo.value = ''; filtroLoja.value = '';
+        aplicar();
+    });
+    abas.forEach(function (botao) {
+        botao.addEventListener('click', function () {
+            aba = botao.dataset.aba;
+            abas.forEach((b) => b.classList.toggle('is-active', b === botao));
+            aplicar();
+        });
+    });
+
+    // ── Decisão sem sair da tela ────────────────────────────────────────────
+    lista.addEventListener('click', async function (e) {
+        const card = e.target.closest('.cfr-card');
+        if (!card) return;
+
+        if (e.target.closest('[data-abrir-recusa]')) {
+            card.querySelector('.cfr-recusa').classList.remove('hidden');
+            card.querySelector('[data-motivo]').focus();
+            return;
+        }
+        if (e.target.closest('[data-cancelar-recusa]')) {
+            card.querySelector('.cfr-recusa').classList.add('hidden');
+            return;
+        }
+
+        const botao = e.target.closest('[data-decidir]');
+        if (!botao) return;
+
+        const decisao = botao.dataset.decidir;
+        const campo = card.querySelector('[data-motivo]');
+        const motivo = campo ? campo.value.trim() : '';
+        const erro = card.querySelector('.cfr-erro');
+        if (decisao === 'recusar' && !motivo) {
+            erro.textContent = 'Escreva o motivo da recusa.';
+            erro.classList.remove('hidden');
+            return;
+        }
+
+        const dados = new FormData();
+        dados.append('csrfmiddlewaretoken', csrf.value);
+        dados.append('decisao', decisao);
+        dados.append('observacao', motivo);
+        botao.disabled = true;
+        try {
+            const r = await fetch('/impulso/conectar/conclusao/' + card.dataset.id + '/decidir/', {
+                method: 'POST', body: dados,
+                headers: {'X-Requested-With': 'XMLHttpRequest'},
+            });
+            const dado = await r.json();
+            if (!dado.ok) {
+                erro.textContent = dado.error || 'Não deu para registrar a decisão.';
+                erro.classList.remove('hidden');
+                botao.disabled = false;
+                return;
+            }
+            erro.classList.add('hidden');
+            card.dataset.status = dado.aprovacao;
+            const selo = card.querySelector('.cfr-selo');
+            selo.textContent = dado.aprovacao === 'APROVADA' ? 'aprovada' : 'recusada';
+            selo.className = 'cfr-selo px-2 py-0.5 rounded-full text-[11px] font-semibold '
+                + (dado.aprovacao === 'APROVADA'
+                    ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700');
+            card.querySelector('.cfr-decisao').textContent =
+                ' · conferida por ' + dado.decidida_por + ' em ' + dado.decidida_em;
+            const obs = card.querySelector('.cfr-obs');
+            if (dado.observacao) {
+                obs.textContent = dado.observacao;
+                obs.classList.remove('hidden');
+            }
+            card.querySelector('.cfr-acoes').classList.add('hidden');
+            card.querySelector('.cfr-recusa').classList.add('hidden');
+            recontar();
+            aplicar();
+        } catch (err) {
+            erro.textContent = 'Falha de conexão. Tente de novo.';
+            erro.classList.remove('hidden');
+            botao.disabled = false;
+        }
+    });
+
+    // ── Prévia da entrega ───────────────────────────────────────────────────
+    const modal = document.getElementById('cfr-modal');
+    const corpo = document.getElementById('cfr-modal-corpo');
+    const nome = document.getElementById('cfr-modal-nome');
+    const abrir = document.getElementById('cfr-modal-abrir');
+
+    function fechar() {
+        modal.classList.remove('is-open');
+        corpo.innerHTML = '';                  // para o vídeo, que continuaria tocando
+    }
+
+    lista.addEventListener('click', function (e) {
+        const item = e.target.closest('.cfr-item');
+        if (!item) return;
+        const especie = item.dataset.especie;
+        const link = item.dataset.link;
+        if (!link) return;
+        if (especie !== 'imagem' && especie !== 'video') {
+            window.open(link, '_blank', 'noopener');
+            return;
+        }
+        nome.textContent = item.dataset.nome || '';
+        abrir.href = link;
+        corpo.innerHTML = '';
+        const midia = document.createElement(especie === 'imagem' ? 'img' : 'video');
+        midia.src = link;
+        if (especie === 'video') { midia.controls = true; midia.className = 'max-h-[70vh] w-full'; }
+        else { midia.className = 'max-h-[70vh] object-contain'; midia.alt = item.dataset.nome || ''; }
+        corpo.appendChild(midia);
+        modal.classList.add('is-open');
+    });
+
+    document.getElementById('cfr-modal-fechar').addEventListener('click', fechar);
+    modal.addEventListener('click', function (e) { if (e.target === modal) fechar(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') fechar(); });
+
+    aplicar();
+})();
+</script>
+{% endblock %}

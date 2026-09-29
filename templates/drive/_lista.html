@@ -37,6 +37,17 @@
                 {% if not item.is_folder and pode_download %}
                 <a href="{% url 'drive:file_content' item.id %}?dl=1" class="block px-3 py-1.5 hover:bg-gray-50"><i class="fas fa-download w-4 mr-1.5 text-gray-400"></i>Baixar</a>
                 {% endif %}
+                {% if pode_download %}
+                {% comment %}
+                Cópia zipada: na pasta vem tudo o que está dentro dela, com as
+                subpastas; no arquivo, ele sozinho. O servidor é quem monta, então
+                o clique avisa que pode demorar.
+                {% endcomment %}
+                <a href="{% url 'drive:baixar_zip' item.id %}" onclick="dvAvisarZip()"
+                   class="block px-3 py-1.5 hover:bg-gray-50">
+                    <i class="fas fa-file-zipper w-4 mr-1.5 text-gray-400"></i>Baixar em ZIP
+                </a>
+                {% endif %}
                 {% if pode_editar %}
                 <button type="button" onclick="dvRenomear('{{ item.id }}','{{ item.name|escapejs }}')" class="w-full text-left px-3 py-1.5 hover:bg-gray-50"><i class="fas fa-pen w-4 mr-1.5 text-gray-400"></i>Renomear</button>
                 {% endif %}

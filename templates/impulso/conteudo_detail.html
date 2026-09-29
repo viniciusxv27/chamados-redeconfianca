@@ -71,21 +71,112 @@
         </div>
     </div>
 
-    <!-- Conclusão do usuário -->
-    <div class="imp-card p-5 mb-4">
-        <h3 class="font-semibold text-gray-800 mb-3"><i class="fas fa-circle-check text-emerald-500 mr-2"></i>Minha conclusão</h3>
+    <!-- Minha entrega -->
+    {% comment %}
+    A entrega deixou de ser "um certificado": cabe quanto item for preciso, de
+    formatos diferentes (PDF, foto, vídeo, planilha, link). Quem confere vê
+    todos juntos.
+    {% endcomment %}
+    <div class="imp-card p-5 mb-4" id="minhaEntrega"
+         data-url-add="{% url 'impulso:entrega_add' conteudo.id %}">
+        <div class="flex items-center justify-between gap-2 flex-wrap mb-3">
+            <h3 class="font-semibold text-gray-800">
+                <i class="fas fa-paper-plane text-emerald-500 mr-2"></i>Minha entrega
+            </h3>
+            {% if conclusao and conclusao.concluido %}
+                {% if conclusao.aprovacao == 'APROVADA' %}
+                <span class="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold">
+                    <i class="fas fa-circle-check mr-1"></i>Aprovada
+                </span>
+                {% elif conclusao.aprovacao == 'RECUSADA' %}
+                <span class="px-2.5 py-1 rounded-full bg-red-50 text-red-700 text-xs font-semibold">
+                    <i class="fas fa-circle-xmark mr-1"></i>Recusada
+                </span>
+                {% else %}
+                <span class="px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 text-xs font-semibold">
+                    <i class="fas fa-hourglass-half mr-1"></i>Aguardando conferência
+                </span>
+                {% endif %}
+            {% endif %}
+        </div>
+
         {% if conclusao and conclusao.concluido %}
-        <p class="text-sm text-emerald-600 mb-2"><i class="fas fa-check mr-1"></i>Concluído em {{ conclusao.concluido_em|date:"d/m/Y" }}</p>
-        {% if conclusao.certificado %}<a href="{{ conclusao.certificado.url }}" target="_blank" rel="noopener" class="text-sm text-emerald-600 hover:underline"><i class="fas fa-certificate mr-1"></i>Ver certificado</a>{% endif %}
+        <p class="text-xs text-gray-400 mb-3">
+            Marcada como concluída em {{ conclusao.concluido_em|date:"d/m/Y H:i" }}
+            {% if conclusao.decidida_em %}
+            · conferida por {{ conclusao.decidida_por.get_full_name|default:conclusao.decidida_por.email }}
+            em {{ conclusao.decidida_em|date:"d/m/Y" }}
+            {% endif %}
+        </p>
         {% endif %}
-        <form method="post" action="{% url 'impulso:conteudo_concluir' conteudo.id %}" enctype="multipart/form-data" class="space-y-2 mt-2">
+        {% if conclusao.observacao %}
+        <div class="mb-3 p-3 rounded-lg bg-red-50 border border-red-100 text-sm text-red-700">
+            <strong>O que voltou:</strong> {{ conclusao.observacao }}
+        </div>
+        {% endif %}
+
+        <!-- O que já foi entregue -->
+        <div id="entLista" class="grid sm:grid-cols-2 gap-2 mb-3 {% if not meus_itens %}hidden{% endif %}">
+            {% for item in meus_itens %}
+            <div class="ent-item flex items-center gap-2.5 p-2.5 rounded-lg border border-gray-200 bg-white"
+                 data-id="{{ item.id }}">
+                <span class="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0
+                             {% if item.especie == 'video' %}bg-purple-50 text-purple-600
+                             {% elif item.especie == 'imagem' %}bg-sky-50 text-sky-600
+                             {% elif item.especie == 'link' %}bg-gray-100 text-gray-600
+                             {% else %}bg-emerald-50 text-emerald-600{% endif %}">
+                    <i class="fas {% if item.especie == 'video' %}fa-play
+                                  {% elif item.especie == 'imagem' %}fa-image
+                                  {% elif item.especie == 'link' %}fa-link
+                                  {% else %}fa-file-lines{% endif %}"></i>
+                </span>
+                <a href="{{ item.link }}" target="_blank" rel="noopener noreferrer"
+                   class="text-sm text-gray-700 hover:text-emerald-600 truncate flex-1 min-w-0">{{ item.nome }}</a>
+                {% if pode_mexer_na_entrega and not item.legado %}
+                <button type="button" data-remover="{% url 'impulso:entrega_remover' item.id %}"
+                        class="text-gray-300 hover:text-red-500 flex-shrink-0" title="Remover item">
+                    <i class="fas fa-xmark"></i>
+                </button>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        <p id="entVazio" class="text-sm text-gray-400 mb-3 {% if meus_itens %}hidden{% endif %}">
+            Nada anexado ainda.
+            {% if conteudo.exige_entrega %}Este conteúdo pede entrega para concluir.{% endif %}
+        </p>
+
+        {% if pode_mexer_na_entrega or not conclusao %}
+        <!-- Anexar: arquivos (vários, de qualquer formato) e/ou link -->
+        <div class="rounded-lg border border-dashed border-gray-300 p-3 space-y-2" id="entSolta">
+            <div class="flex items-center gap-2 flex-wrap">
+                <label class="px-3 py-1.5 rounded-lg bg-white border border-gray-200 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer">
+                    <i class="fas fa-paperclip mr-1"></i>Escolher arquivos
+                    <input type="file" id="entArquivos" multiple class="hidden">
+                </label>
+                <span class="text-xs text-gray-400">ou arraste aqui · documento, foto, vídeo, planilha…</span>
+            </div>
+            <div class="flex items-center gap-2 flex-wrap">
+                <input type="url" id="entUrl" placeholder="https://… (link de vídeo, pasta ou curso)"
+                       class="flex-1 min-w-[12rem] border border-gray-200 rounded-lg px-3 py-1.5 text-sm">
+                <input type="text" id="entTitulo" placeholder="Descrição (opcional)"
+                       class="flex-1 min-w-[10rem] border border-gray-200 rounded-lg px-3 py-1.5 text-sm">
+                <button type="button" id="entEnviar"
+                        class="px-3 py-1.5 rounded-lg bg-gray-800 text-white text-sm hover:bg-gray-900">
+                    <i class="fas fa-plus mr-1"></i>Anexar
+                </button>
+            </div>
+            <p id="entAviso" class="text-xs text-gray-400"></p>
+        </div>
+        {% endif %}
+
+        <form method="post" action="{% url 'impulso:conteudo_concluir' conteudo.id %}"
+              enctype="multipart/form-data" class="mt-3 flex items-center gap-3 flex-wrap">
             {% csrf_token %}
-            <label class="block text-sm font-medium text-gray-700">Anexar certificado (opcional)</label>
-            <input type="file" name="certificado" class="w-full text-sm">
             <button type="submit" id="impBtnConcluir"
                     {% if conteudo.video_reproduzivel and not conclusao.video_concluido %}disabled{% endif %}
                     class="px-4 py-2 rounded-lg bg-emerald-500 text-white text-sm hover:bg-emerald-600
-                           disabled:bg-gray-300 disabled:cursor-not-allowed">{% if conclusao and conclusao.concluido %}Atualizar{% else %}Marcar como concluído{% endif %}</button>
+                           disabled:bg-gray-300 disabled:cursor-not-allowed">{% if conclusao and conclusao.concluido %}Reenviar para conferência{% else %}Marcar como concluído{% endif %}</button>
             {% if conteudo.video_reproduzivel and not conclusao.video_concluido %}
             <p id="impBtnAviso" class="text-xs text-gray-400">Disponível assim que o vídeo terminar.</p>
             {% endif %}
@@ -98,17 +189,57 @@
         <h3 class="font-semibold text-gray-800 mb-3"><i class="fas fa-users mr-2"></i>Conclusões da equipe</h3>
         <ul class="divide-y divide-gray-100">
             {% for cc in conclusoes %}
-            <li class="py-2 flex items-center justify-between text-sm">
-                <span class="text-gray-700">{{ cc.user.get_full_name|default:cc.user.email }}</span>
-                <span class="flex items-center gap-3">
-                    {% if cc.concluido %}<span class="text-emerald-600 text-xs"><i class="fas fa-check mr-1"></i>{{ cc.concluido_em|date:"d/m/Y" }}</span>{% else %}<span class="text-gray-400 text-xs">pendente</span>{% endif %}
-                    {% if cc.certificado %}<a href="{{ cc.certificado.url }}" target="_blank" rel="noopener" class="text-emerald-600 text-xs hover:underline"><i class="fas fa-certificate"></i></a>{% endif %}
-                </span>
+            <li class="py-2.5 text-sm">
+                <div class="flex items-center justify-between gap-3 flex-wrap">
+                    <span class="text-gray-700 font-medium">{{ cc.user.get_full_name|default:cc.user.email }}</span>
+                    <span class="flex items-center gap-2">
+                        {% if cc.concluido %}
+                        <span class="text-gray-400 text-xs">{{ cc.concluido_em|date:"d/m/Y" }}</span>
+                            {% if cc.aprovacao == 'APROVADA' %}
+                            <span class="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-semibold">aprovada</span>
+                            {% elif cc.aprovacao == 'RECUSADA' %}
+                            <span class="px-2 py-0.5 rounded-full bg-red-50 text-red-700 text-[11px] font-semibold">recusada</span>
+                            {% else %}
+                            <span class="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[11px] font-semibold">aguardando</span>
+                            {% endif %}
+                        {% else %}
+                        <span class="text-gray-400 text-xs">não entregou</span>
+                        {% endif %}
+                    </span>
+                </div>
+                {% comment %}
+                O que a pessoa entregou fica à vista aqui: antes só aparecia um
+                ícone de certificado, e quem conferia tinha de adivinhar o resto.
+                {% endcomment %}
+                {% with itens=cc.itens_entregues %}
+                {% if itens %}
+                <div class="flex flex-wrap items-center gap-1.5 mt-1.5">
+                    {% for item in itens %}
+                    <a href="{{ item.link }}" target="_blank" rel="noopener noreferrer"
+                       class="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg border text-[11px] max-w-[14rem]
+                              {% if item.especie == 'video' %}border-purple-200 bg-purple-50 text-purple-700
+                              {% elif item.especie == 'imagem' %}border-sky-200 bg-sky-50 text-sky-700
+                              {% elif item.especie == 'link' %}border-gray-200 text-gray-600
+                              {% else %}border-emerald-200 bg-emerald-50 text-emerald-700{% endif %} hover:opacity-80">
+                        <i class="fas {% if item.especie == 'video' %}fa-play
+                                      {% elif item.especie == 'imagem' %}fa-image
+                                      {% elif item.especie == 'link' %}fa-link
+                                      {% else %}fa-file-lines{% endif %}"></i>
+                        <span class="truncate">{{ item.nome }}</span>
+                    </a>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% endwith %}
             </li>
             {% empty %}
             <li class="py-2 text-sm text-gray-400">Nenhuma conclusão registrada.</li>
             {% endfor %}
         </ul>
+        <a href="{% url 'impulso:conectar_conferir' %}"
+           class="inline-flex items-center gap-1.5 mt-3 text-xs font-medium text-emerald-600 hover:underline">
+            <i class="fas fa-clipboard-check"></i>Abrir o painel de conferência
+        </a>
     </div>
     {% endif %}
 </div>
@@ -220,10 +351,148 @@ function impConfirmarExclusao() {
              'a pontuação do mês delas é recalculada.';
     {% endif %}
     {% if impacto.certificados %}
-    texto += '\n{{ impacto.certificados }} certificado(s) anexado(s) serão apagados.';
+    texto += '\n{{ impacto.certificados }} arquivo(s) entregue(s) serão apagados.';
     {% endif %}
     texto += '\n\nIsso não tem volta.';
     return confirm(texto);
 }
+</script>
+
+<script>
+// Anexar a entrega sem recarregar a página: escolher arquivos (vários),
+// arrastar para a área, ou colar um link.
+(function () {
+    'use strict';
+    const caixa = document.getElementById('minhaEntrega');
+    if (!caixa) return;
+    const enviarBtn = document.getElementById('entEnviar');
+    if (!enviarBtn) return;                     // entrega já aprovada: só leitura
+
+    const url = caixa.dataset.urlAdd;
+    const lista = document.getElementById('entLista');
+    const vazio = document.getElementById('entVazio');
+    const aviso = document.getElementById('entAviso');
+    const campoArquivos = document.getElementById('entArquivos');
+    const campoUrl = document.getElementById('entUrl');
+    const campoTitulo = document.getElementById('entTitulo');
+    const solta = document.getElementById('entSolta');
+    const csrf = (document.querySelector('[name=csrfmiddlewaretoken]') || {}).value;
+
+    const ICONES = {video: 'fa-play', imagem: 'fa-image', link: 'fa-link', documento: 'fa-file-lines'};
+    const CORES = {
+        video: 'bg-purple-50 text-purple-600',
+        imagem: 'bg-sky-50 text-sky-600',
+        link: 'bg-gray-100 text-gray-600',
+        documento: 'bg-emerald-50 text-emerald-600',
+    };
+
+    function dizer(texto, erro) {
+        aviso.textContent = texto || '';
+        aviso.className = 'text-xs ' + (erro ? 'text-red-500' : 'text-gray-400');
+    }
+
+    function desenhar(item) {
+        const div = document.createElement('div');
+        div.className = 'ent-item flex items-center gap-2.5 p-2.5 rounded-lg border border-gray-200 bg-white';
+        div.dataset.id = item.id;
+        div.innerHTML =
+            '<span class="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 '
+            + (CORES[item.especie] || CORES.documento) + '">'
+            + '<i class="fas ' + (ICONES[item.especie] || ICONES.documento) + '"></i></span>'
+            + '<a target="_blank" rel="noopener noreferrer" class="text-sm text-gray-700 '
+            + 'hover:text-emerald-600 truncate flex-1 min-w-0"></a>'
+            + '<button type="button" class="text-gray-300 hover:text-red-500 flex-shrink-0" '
+            + 'title="Remover item"><i class="fas fa-xmark"></i></button>';
+        const link = div.querySelector('a');
+        link.href = item.link;
+        link.textContent = item.nome;          // nome vem do servidor: nunca como HTML
+        div.querySelector('button').dataset.remover =
+            '/impulso/conectar/entrega/' + item.id + '/remover/';
+        lista.appendChild(div);
+        lista.classList.remove('hidden');
+        vazio.classList.add('hidden');
+    }
+
+    async function enviar(arquivos) {
+        const dados = new FormData();
+        dados.append('csrfmiddlewaretoken', csrf);
+        (arquivos || []).forEach((a) => dados.append('arquivos', a));
+        if (campoUrl.value.trim()) dados.append('url', campoUrl.value.trim());
+        if (campoTitulo.value.trim()) dados.append('titulo', campoTitulo.value.trim());
+        if (!(arquivos || []).length && !campoUrl.value.trim()) {
+            dizer('Escolha um arquivo ou informe um link.', true);
+            return;
+        }
+
+        enviarBtn.disabled = true;
+        dizer('Enviando…');
+        try {
+            const r = await fetch(url, {
+                method: 'POST', body: dados,
+                headers: {'X-Requested-With': 'XMLHttpRequest'},
+            });
+            const dado = await r.json();
+            if (!dado.ok) { dizer(dado.error || 'Não deu para anexar.', true); return; }
+            dado.itens.forEach(desenhar);
+            campoUrl.value = '';
+            campoTitulo.value = '';
+            campoArquivos.value = '';
+            dizer(dado.itens.length + ' item(ns) anexado(s).');
+        } catch (e) {
+            dizer('Falha de conexão. Tente de novo.', true);
+        } finally {
+            enviarBtn.disabled = false;
+        }
+    }
+
+    enviarBtn.addEventListener('click', function () {
+        enviar(Array.from(campoArquivos.files || []));
+    });
+    campoArquivos.addEventListener('change', function () {
+        const nomes = Array.from(campoArquivos.files || []).map((f) => f.name);
+        dizer(nomes.length ? nomes.join(', ') + ' — clique em Anexar.' : '');
+    });
+
+    ['dragenter', 'dragover'].forEach(function (evento) {
+        solta.addEventListener(evento, function (e) {
+            e.preventDefault();
+            solta.classList.add('border-emerald-400', 'bg-emerald-50/40');
+        });
+    });
+    ['dragleave', 'drop'].forEach(function (evento) {
+        solta.addEventListener(evento, function (e) {
+            e.preventDefault();
+            solta.classList.remove('border-emerald-400', 'bg-emerald-50/40');
+        });
+    });
+    solta.addEventListener('drop', function (e) {
+        const arquivos = Array.from((e.dataTransfer || {}).files || []);
+        if (arquivos.length) enviar(arquivos);
+    });
+
+    // Remover item (inclusive os desenhados agora).
+    caixa.addEventListener('click', async function (e) {
+        const botao = e.target.closest('[data-remover]');
+        if (!botao) return;
+        const item = botao.closest('.ent-item');
+        botao.disabled = true;
+        try {
+            const r = await fetch(botao.dataset.remover, {
+                method: 'POST',
+                headers: {'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': csrf},
+            });
+            const dado = await r.json();
+            if (!dado.ok) { dizer(dado.error || 'Não deu para remover.', true); botao.disabled = false; return; }
+            item.remove();
+            if (!lista.querySelector('.ent-item')) {
+                lista.classList.add('hidden');
+                vazio.classList.remove('hidden');
+            }
+        } catch (err) {
+            dizer('Falha de conexão. Tente de novo.', true);
+            botao.disabled = false;
+        }
+    });
+})();
 </script>
 {% endblock %}
