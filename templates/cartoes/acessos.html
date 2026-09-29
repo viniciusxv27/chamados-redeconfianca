@@ -1,0 +1,148 @@
+{% extends 'base.html' %}
+
+{% block title %}Quem cuida dos cartões{% endblock %}
+
+{% block content %}
+{% comment %}
+A lista que o SUPERADMIN mantém: quem está aqui gere os cartões como ele — vê
+todos, cria, lança gasto e concilia fatura. Quem foi liberado não mexe nesta
+tela, só no módulo.
+{% endcomment %}
+<div class="container mx-auto px-3 sm:px-4 py-6 max-w-4xl">
+
+  <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-5">
+    <div>
+      <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 flex items-center gap-3">
+        <i class="fas fa-user-shield text-purple-600"></i>
+        Quem cuida dos cartões
+      </h1>
+      <p class="text-gray-600 mt-1">
+        Quem estiver aqui vê todos os cartões, cria, lança gastos e concilia faturas.
+      </p>
+    </div>
+    <a href="{% url 'cartoes:dashboard' %}"
+       class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 self-start">
+      <i class="fas fa-arrow-left"></i> Voltar aos cartões
+    </a>
+  </div>
+
+  {% if messages %}
+    {% for message in messages %}
+    <div class="mb-4 p-3 rounded-xl text-sm border
+                {% if message.tags == 'error' %}bg-red-50 border-red-100 text-red-700
+                {% elif message.tags == 'success' %}bg-emerald-50 border-emerald-100 text-emerald-700
+                {% else %}bg-blue-50 border-blue-100 text-blue-700{% endif %}">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+
+  {% if sem_tabela %}
+  <div class="mb-5 p-4 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-900">
+    <i class="fas fa-triangle-exclamation mr-1.5"></i>
+    A tabela desta lista ainda não existe neste banco. Rode
+    <code class="px-1 rounded bg-amber-100">manage.py migrate cartoes</code> e volte aqui.
+  </div>
+  {% endif %}
+
+  <!-- Quem já cuida -->
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm mb-5 overflow-hidden">
+    <div class="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+      <h2 class="font-semibold text-gray-800">
+        <i class="fas fa-users text-gray-400 mr-1.5"></i>Liberados
+      </h2>
+      <span class="text-xs text-gray-500">{{ liberados|length }} pessoa(s)</span>
+    </div>
+    <ul class="divide-y divide-gray-100">
+      {% for acesso in liberados %}
+      <li class="px-5 py-3 flex items-center justify-between gap-3 flex-wrap">
+        <div class="min-w-0">
+          <p class="text-sm font-medium text-gray-800">
+            {{ acesso.user.get_full_name|default:acesso.user.email }}
+          </p>
+          <p class="text-[11px] text-gray-400 mt-0.5">
+            {% if acesso.user.sector %}{{ acesso.user.sector.name }} · {% endif %}
+            liberado{% if acesso.liberado_por %} por {{ acesso.liberado_por.get_full_name|default:acesso.liberado_por.email }}{% endif %}
+            em {{ acesso.criado_em|date:"d/m/Y" }}
+            {% if acesso.observacao %} · {{ acesso.observacao }}{% endif %}
+          </p>
+        </div>
+        <form method="post" action="{% url 'cartoes:acesso_remover' acesso.pk %}"
+              onsubmit="return confirm('Tirar {{ acesso.user.get_full_name|default:acesso.user.email|escapejs }} da gestão dos cartões?');">
+          {% csrf_token %}
+          <button class="px-3 py-1.5 rounded-lg border border-red-200 text-red-600 text-xs font-medium hover:bg-red-50">
+            <i class="fas fa-user-minus mr-1"></i>Tirar
+          </button>
+        </form>
+      </li>
+      {% empty %}
+      <li class="px-5 py-6 text-center text-sm text-gray-400">
+        Ninguém liberado ainda — só o SUPERADMIN cuida dos cartões.
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <!-- Adicionar alguém -->
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+    <div class="px-5 py-3 border-b border-gray-100">
+      <h2 class="font-semibold text-gray-800">
+        <i class="fas fa-user-plus text-gray-400 mr-1.5"></i>Adicionar alguém
+      </h2>
+    </div>
+    <form method="post" class="p-5 space-y-3">
+      {% csrf_token %}
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Pessoa</label>
+        <div class="relative mb-2">
+          <i class="fas fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+          <input type="text" id="ct-busca" placeholder="Buscar por nome ou loja…"
+                 class="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-100 focus:border-purple-400">
+        </div>
+        <div class="border border-gray-200 rounded-lg max-h-64 overflow-y-auto divide-y divide-gray-50">
+          {% for pessoa in candidatos %}
+          <label data-ct-item data-busca="{{ pessoa.get_full_name|default:pessoa.email|lower }} {{ pessoa.sector.name|default:''|lower }}"
+                 class="flex items-center gap-2.5 px-3 py-2 hover:bg-purple-50/40 cursor-pointer">
+            <input type="radio" name="user" value="{{ pessoa.id }}" class="text-purple-600">
+            <span class="text-sm text-gray-700 truncate">{{ pessoa.get_full_name|default:pessoa.email }}</span>
+            {% if pessoa.sector %}<span class="text-[11px] text-gray-400 truncate">{{ pessoa.sector.name }}</span>{% endif %}
+          </label>
+          {% empty %}
+          <p class="px-3 py-4 text-sm text-gray-400">Todo mundo já está na lista.</p>
+          {% endfor %}
+        </div>
+        <p id="ct-vazio" class="hidden text-xs text-gray-400 mt-2">Ninguém com esse nome.</p>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Motivo (opcional)</label>
+        <input type="text" name="observacao" maxlength="200" placeholder="Ex.: cuida do financeiro da rede"
+               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+      </div>
+      <div class="flex justify-end">
+        <button type="submit"
+                class="px-5 py-2.5 rounded-lg bg-purple-600 text-white text-sm font-semibold hover:bg-purple-700">
+          <i class="fas fa-check mr-1.5"></i>Liberar acesso
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var busca = document.getElementById('ct-busca');
+  if (!busca) return;
+  var itens = Array.prototype.slice.call(document.querySelectorAll('[data-ct-item]'));
+  var vazio = document.getElementById('ct-vazio');
+  busca.addEventListener('input', function () {
+    var termo = (busca.value || '').trim().toLowerCase();
+    var visiveis = 0;
+    itens.forEach(function (item) {
+      var mostra = !termo || (item.dataset.busca || '').indexOf(termo) >= 0;
+      item.classList.toggle('hidden', !mostra);
+      if (mostra) visiveis += 1;
+    });
+    vazio.classList.toggle('hidden', visiveis !== 0);
+  });
+})();
+</script>
+{% endblock %}

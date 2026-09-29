@@ -7,6 +7,9 @@ app_name = 'cartoes'
 urlpatterns = [
     path('', views.dashboard, name='dashboard'),
     path('novo/', views.cartao_create, name='cartao_create'),
+    # Quem cuida dos cartões (lista mantida pelo SUPERADMIN).
+    path('acessos/', views.acessos, name='acessos'),
+    path('acessos/<int:pk>/remover/', views.acesso_remover, name='acesso_remover'),
     # Endpoint programático (token no header) — antes de <int:pk>/ para não colidir.
     path('api/gasto/', views.api_lancar_gasto, name='api_lancar_gasto'),
     path('<int:pk>/', views.cartao_extrato, name='extrato'),

@@ -12,6 +12,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.files.base import ContentFile
+from django.db import DatabaseError
 from django.db.models import Count, Q, Sum
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -27,10 +28,12 @@ from users.models import User
 from .ai import analyze_expense, e_pdf, paginas_do_pdf
 from .exportacao import conciliacao_excel, extrato_excel
 from .fatura import TOLERANCIA_DIAS, conciliar, ler_fatura
-from .models import Cartao, Gasto
+from .models import AcessoCartoes, Cartao, Gasto
 from .permissions import (
     can_access_cartoes,
     can_manage_cartao,
+    pode_administrar_acessos,
+    pode_gerir_cartoes,
     cartoes_do_usuario,
     is_superadmin,
 )
@@ -120,6 +123,9 @@ def dashboard(request):
 
     context = {
         'cartoes': cartoes,
+        # `pode_gerir` abre os botões de gestão; `is_superadmin` fica só para o
+        # que é dele mesmo — dizer quem mais cuida dos cartões.
+        'pode_gerir': pode_gerir_cartoes(request.user),
         'is_superadmin': is_superadmin(request.user),
         'total_geral': total,
         'quantidade_gastos': quantidade,
@@ -139,9 +145,100 @@ def dashboard(request):
 
 
 @login_required
+def acessos(request):
+    """Quem cuida dos cartões — a lista que o SUPERADMIN mantém.
+
+    Adicionar alguém aqui é dar a mesma mão que o SUPERADMIN tem no módulo:
+    ver todos os cartões, criar, lançar gasto e conciliar fatura. Por isso a
+    própria lista continua sendo só dele.
+    """
+    if not pode_administrar_acessos(request.user):
+        messages.error(request, 'Só o SUPERADMIN define quem cuida dos cartões.')
+        return redirect('cartoes:dashboard')
+
+    if request.method == 'POST':
+        escolhido = User.objects.filter(
+            id=(request.POST.get('user') or '0') if (request.POST.get('user') or '').isdigit() else 0,
+            is_active=True).first()
+        if not escolhido:
+            messages.error(request, 'Escolha a pessoa que vai cuidar dos cartões.')
+            return redirect('cartoes:acessos')
+        if is_superadmin(escolhido):
+            messages.info(request, f'{escolhido.get_full_name() or escolhido.email} já é '
+                                   f'SUPERADMIN e cuida dos cartões.')
+            return redirect('cartoes:acessos')
+        acesso, criado = AcessoCartoes.objects.get_or_create(
+            user=escolhido,
+            defaults={'liberado_por': request.user,
+                      'observacao': (request.POST.get('observacao') or '').strip()[:200]})
+        if criado:
+            _notify_acesso(escolhido, request.user)
+            messages.success(request, f'{escolhido.get_full_name() or escolhido.email} agora '
+                                      f'cuida dos cartões.')
+        else:
+            messages.info(request, 'Esta pessoa já estava na lista.')
+        return redirect('cartoes:acessos')
+
+    # A tabela é nova: no servidor que ainda não rodou o migrate, a tela avisa
+    # em vez de estourar 500.
+    try:
+        liberados = list(AcessoCartoes.objects.select_related('user', 'user__sector', 'liberado_por')
+                         .order_by('user__first_name', 'user__last_name'))
+        sem_tabela = False
+    except DatabaseError:
+        liberados, sem_tabela = [], True
+    ja_liberados = {a.user_id for a in liberados}
+    candidatos = (User.objects.filter(is_active=True)
+                  .exclude(id__in=ja_liberados)
+                  .select_related('sector')
+                  .order_by('sector__name', 'first_name', 'last_name'))
+    return render(request, 'cartoes/acessos.html', {
+        'liberados': liberados,
+        'sem_tabela': sem_tabela,
+        'candidatos': [] if sem_tabela else candidatos,
+        'is_superadmin': True,
+        'pode_gerir': True,
+    })
+
+
+@login_required
+@require_POST
+def acesso_remover(request, pk):
+    """Tira alguém da lista de quem cuida dos cartões."""
+    if not pode_administrar_acessos(request.user):
+        messages.error(request, 'Só o SUPERADMIN define quem cuida dos cartões.')
+        return redirect('cartoes:dashboard')
+    acesso = get_object_or_404(AcessoCartoes.objects.select_related('user'), pk=pk)
+    nome = acesso.user.get_full_name() or acesso.user.email
+    acesso.delete()
+    messages.success(request, f'{nome} não cuida mais dos cartões.')
+    return redirect('cartoes:acessos')
+
+
+def _notify_acesso(pessoa, quem_liberou):
+    """Avisa quem ganhou a chave do módulo — sem derrubar a tela se falhar.
+
+    Mesmo caminho do resto do portal (`NotificationMixin`), para o aviso cair
+    no sino junto com os outros.
+    """
+    try:
+        from core.models import NotificationMixin
+        NotificationMixin.create_notifications_for_users(
+            users=[pessoa],
+            title='Você agora cuida dos cartões',
+            message=(f'{quem_liberou.get_full_name() or quem_liberou.email} liberou seu acesso '
+                     f'aos cartões corporativos: você pode criar cartões, lançar gastos e '
+                     f'conciliar faturas.'),
+            notification_type='SYSTEM', related_url='/cartoes/',
+        )
+    except Exception:                                       # noqa: BLE001
+        logger.warning('Não deu para avisar %s sobre o acesso aos cartões', pessoa, exc_info=True)
+
+
+@login_required
 def cartao_create(request):
-    if not is_superadmin(request.user):
-        messages.error(request, 'Apenas SUPERADMIN pode criar cartões.')
+    if not pode_gerir_cartoes(request.user):
+        messages.error(request, 'Só quem cuida dos cartões pode criar um.')
         return redirect('cartoes:dashboard')
 
     if request.method == 'POST':
@@ -206,6 +303,7 @@ def cartao_extrato(request, pk):
         'cartao': cartao,
         'gastos': gastos,
         'total': total,
+        'pode_gerir': pode_gerir_cartoes(request.user),
         'is_superadmin': is_superadmin(request.user),
     }
     return render(request, 'cartoes/extrato.html', context)
@@ -282,7 +380,8 @@ def fatura_conciliar(request, pk):
         messages.error(request, 'Você não tem acesso a este cartão.')
         return redirect('cartoes:dashboard')
 
-    contexto = {'cartao': cartao, 'is_superadmin': is_superadmin(request.user),
+    contexto = {'cartao': cartao, 'pode_gerir': pode_gerir_cartoes(request.user),
+                'is_superadmin': is_superadmin(request.user),
                 'hoje': timezone.localdate()}
 
     if request.method == 'POST':

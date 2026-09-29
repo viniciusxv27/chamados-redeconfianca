@@ -110,3 +110,51 @@ class Gasto(models.Model):
 
     def __str__(self):
         return f"{self.estabelecimento or 'Gasto'} — R$ {self.valor}"
+
+
+class AcessoCartoes(models.Model):
+    """Quem o SUPERADMIN liberou para cuidar dos cartões.
+
+    Até aqui, gerir cartão era coisa de SUPERADMIN e ponto: quem não fosse via
+    apenas os cartões em que era responsável, e criar cartão nem aparecia. Quem
+    toca o financeiro no dia a dia não é (nem deve ser) SUPERADMIN do portal,
+    então passava tudo pela mesma pessoa.
+
+    Estar nesta tabela vale como gestão do módulo: vê todos os cartões, cria,
+    lança gasto e concilia fatura — mas **não** administra esta lista, que
+    continua sendo do SUPERADMIN.
+    """
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name='acesso_cartoes', verbose_name='Usuário')
+    observacao = models.CharField(
+        max_length=200, blank=True, verbose_name='Motivo',
+        help_text='Por que esta pessoa cuida dos cartões (opcional).')
+    liberado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='acessos_cartoes_liberados', verbose_name='Liberado por')
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Acesso aos cartões'
+        verbose_name_plural = 'Acessos aos cartões'
+        ordering = ['user__first_name', 'user__last_name']
+
+    def __str__(self):
+        return f'{self.user} — cartões'
+
+    @classmethod
+    def tem_acesso(cls, user) -> bool:
+        """A pessoa está na lista? Engole a tabela que ainda não existe.
+
+        Tabela nova lida por telas que já existiam: antes do `migrate` rodar no
+        servidor, a pergunta responde "não" em vez de derrubar o módulo.
+        """
+        from django.db import DatabaseError
+        if not (user and getattr(user, 'is_authenticated', False)):
+            return False
+        try:
+            return cls.objects.filter(user=user).exists()
+        except DatabaseError:
+            return False

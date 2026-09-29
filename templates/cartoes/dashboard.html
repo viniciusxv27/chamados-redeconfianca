@@ -14,15 +14,24 @@
         Cartões de Crédito
       </h1>
       <p class="text-gray-600 mt-1">
-        {% if is_superadmin %}Gestão de todos os cartões corporativos.{% else %}Seus cartões e gastos.{% endif %}
+        {% if pode_gerir %}Gestão de todos os cartões corporativos.{% else %}Seus cartões e gastos.{% endif %}
       </p>
     </div>
-    {% if is_superadmin %}
-    <a href="{% url 'cartoes:cartao_create' %}"
-       class="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg transition-colors">
-      <i class="fas fa-plus"></i> Novo cartão
-    </a>
-    {% endif %}
+    <div class="flex items-center gap-2 flex-wrap">
+      {% if is_superadmin %}
+      {# Quem entrega a chave do módulo é o SUPERADMIN. #}
+      <a href="{% url 'cartoes:acessos' %}"
+         class="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors">
+        <i class="fas fa-user-shield"></i> Quem cuida
+      </a>
+      {% endif %}
+      {% if pode_gerir %}
+      <a href="{% url 'cartoes:cartao_create' %}"
+         class="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg transition-colors">
+        <i class="fas fa-plus"></i> Novo cartão
+      </a>
+      {% endif %}
+    </div>
   </div>
 
   <!-- Filtros -->
@@ -38,7 +47,7 @@
         <input type="date" name="ate" value="{{ fim|date:'Y-m-d' }}"
                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
       </div>
-      {% if is_superadmin %}
+      {% if pode_gerir %}
       <div>
         <label class="block text-xs font-semibold text-gray-500 mb-1">Responsável</label>
         <select name="responsavel" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
@@ -162,8 +171,8 @@
   {% else %}
   <div class="bg-white border border-dashed border-gray-300 rounded-xl p-10 text-center text-gray-500">
     <i class="fas fa-credit-card text-4xl text-gray-300 mb-3"></i>
-    <p class="font-medium">Nenhum cartão {% if not is_superadmin %}vinculado a você{% else %}cadastrado{% endif %}.</p>
-    {% if is_superadmin %}
+    <p class="font-medium">Nenhum cartão {% if not pode_gerir %}vinculado a você{% else %}cadastrado{% endif %}.</p>
+    {% if pode_gerir %}
     <a href="{% url 'cartoes:cartao_create' %}" class="mt-3 inline-flex items-center gap-2 text-purple-600 hover:text-purple-800 font-semibold">
       <i class="fas fa-plus"></i> Criar o primeiro cartão
     </a>
