@@ -314,12 +314,14 @@
                                        placeholder="00000-000"
                                        required
                                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                                <p id="cepAviso" class="text-xs mt-1 text-gray-500">Digite o CEP e o endereço vem preenchido.</p>
                             </div>
 
                             <div class="md:col-span-2">
                                 <label for="address" class="block text-sm font-medium text-gray-700 mb-2">Rua</label>
                                 <input type="text"
                                        id="address"
+                                       data-cep-preenche="logradouro"
                                        name="address"
                                        maxlength="200"
                                        placeholder="Rua, avenida, travessa..."
@@ -354,6 +356,7 @@
                                 <label for="neighborhood" class="block text-sm font-medium text-gray-700 mb-2">Bairro *</label>
                                 <input type="text"
                                        id="neighborhood"
+                                       data-cep-preenche="bairro"
                                        name="neighborhood"
                                        maxlength="100"
                                        required
@@ -364,6 +367,7 @@
                                 <label for="city" class="block text-sm font-medium text-gray-700 mb-2">Cidade *</label>
                                 <input type="text"
                                        id="city"
+                                       data-cep-preenche="cidade"
                                        name="city"
                                        maxlength="100"
                                        required
@@ -374,6 +378,7 @@
                                 <label for="state" class="block text-sm font-medium text-gray-700 mb-2">Estado</label>
                                 <select id="state"
                                         name="state"
+                                        data-cep-preenche="uf"
                                         class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
                                     <option value="">Selecione...</option>
                                     {% for uf, rotulo in state_choices %}
@@ -763,5 +768,6 @@ document.addEventListener('DOMContentLoaded', function() {
 })();
 </script>
 
-{% include 'admin/_mascara_cep.html' %}
+{# Digitou o CEP, o endereço chega pronto — a mesma busca do pré-cadastro. #}
+{% include 'users/_cep_autocompletar.html' %}
 {% endblock %}

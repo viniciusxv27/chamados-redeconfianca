@@ -1,0 +1,158 @@
+{% comment %}
+Busca do CEP: digitou os 8 dígitos, o endereço chega pronto (users/cep.py, pela
+URL users:consultar_cep). É o mesmo comportamento do pré-cadastro — este arquivo
+existe para não haver duas versões dele.
+
+Como usar:
+
+    {% include 'users/_cep_autocompletar.html' %}
+    {% include 'users/_cep_autocompletar.html' with campo_id='cepCampo' aviso_id='cepAviso' travar=True exigir=True %}
+
+- `campo_id`  id do input do CEP (padrão: `cep`);
+- `aviso_id`  id do parágrafo onde o retorno é escrito (opcional);
+- `travar`    deixa rua/bairro/cidade/UF somente leitura quando a consulta
+              acerta (pré-cadastro: quem preenche é o próprio colaborador);
+- `exigir`    CEP inexistente bloqueia o envio do formulário.
+
+Os campos preenchidos se marcam com `data-cep-preenche="logradouro|bairro|cidade|uf"`,
+e valem tanto `<input>` quanto `<select>` (a tela da gestão usa select na UF).
+{% endcomment %}
+<script>
+(function () {
+    var campo = document.getElementById('{{ campo_id|default:"cep" }}');
+    if (!campo) return;
+    var aviso = document.getElementById('{{ aviso_id|default:"cepAviso" }}');
+    var TRAVAR = {% if travar %}true{% else %}false{% endif %};
+    var EXIGIR = {% if exigir %}true{% else %}false{% endif %};
+
+    var preenchidos = {};
+    document.querySelectorAll('[data-cep-preenche]').forEach(function (el) {
+        preenchidos[el.dataset.cepPreenche] = el;
+    });
+
+    function digitos(valor) {
+        return (valor || '').replace(/\D/g, '').slice(0, 8);
+    }
+
+    function mascara(valor) {
+        var d = digitos(valor);
+        return d.length > 5 ? d.slice(0, 5) + '-' + d.slice(5) : d;
+    }
+
+    function dizer(texto, cor) {
+        if (!aviso) return;
+        aviso.textContent = texto;
+        aviso.className = 'text-xs mt-1 ' + (cor || 'text-gray-500');
+    }
+
+    function escrever(el, valor) {
+        if (!el) return;
+        if (el.tagName === 'SELECT') {
+            // UF como select: só muda se a opção existir na lista.
+            var achou = Array.prototype.some.call(el.options, function (o) {
+                return o.value === valor;
+            });
+            if (achou) el.value = valor;
+            return;
+        }
+        el.value = valor || '';
+    }
+
+    function travar(travado) {
+        if (!TRAVAR) return;
+        Object.keys(preenchidos).forEach(function (chave) {
+            var el = preenchidos[chave];
+            if (el.tagName === 'SELECT') return;
+            el.readOnly = travado;
+            el.classList.toggle('bg-gray-50', travado);
+            el.classList.toggle('text-gray-600', travado);
+        });
+    }
+
+    function limpar() {
+        Object.keys(preenchidos).forEach(function (chave) { escrever(preenchidos[chave], ''); });
+    }
+
+    // O bloqueio é o do próprio navegador: um listener de submit seria pulado
+    // pelo envio programático de quem encolhe as imagens antes de mandar.
+    function impedir(motivo) {
+        if (EXIGIR) campo.setCustomValidity(motivo || '');
+    }
+
+    var ultimo = '';
+    var pedido = 0;
+
+    function consultar() {
+        var d = digitos(campo.value);
+        if (d.length < 8) {
+            impedir(d ? 'O CEP tem 8 dígitos.' : '');
+            if (d) { dizer('O CEP tem 8 dígitos.', 'text-amber-600'); }
+            ultimo = '';
+            return;
+        }
+        if (d === ultimo) return;
+        ultimo = d;
+        var meu = ++pedido;
+        dizer('Consultando o CEP…', 'text-gray-500');
+        fetch('/users/cep/' + d + '/', {headers: {'Accept': 'application/json'}})
+            .then(function (r) { return r.json().then(function (dados) { return {ok: r.ok, dados: dados}; }); })
+            .then(function (resposta) {
+                if (meu !== pedido) return;                  // resposta velha, já tem outra a caminho
+                var dados = resposta.dados || {};
+                if (dados.situacao === 'ok') {
+                    var e = dados.endereco || {};
+                    escrever(preenchidos.logradouro, e.logradouro);
+                    escrever(preenchidos.bairro, e.bairro);
+                    escrever(preenchidos.cidade, e.cidade);
+                    escrever(preenchidos.uf, e.uf);
+                    travar(true);
+                    impedir('');
+                    if (!e.logradouro && preenchidos.logradouro) {
+                        // "CEP geral" de cidade pequena: não tem rua na base.
+                        preenchidos.logradouro.readOnly = false;
+                        preenchidos.logradouro.classList.remove('bg-gray-50', 'text-gray-600');
+                        dizer('Este CEP não tem rua cadastrada — escreva o endereço.', 'text-amber-600');
+                        preenchidos.logradouro.focus();
+                    } else {
+                        dizer(e.cidade + ' - ' + e.uf + '. Falta só o número.', 'text-emerald-600');
+                    }
+                    return;
+                }
+                if (dados.situacao === 'indisponivel') {
+                    travar(false);
+                    impedir('');
+                    dizer(dados.mensagem || 'Não conseguimos consultar o CEP agora. '
+                          + 'Confira o endereço abaixo.', 'text-amber-600');
+                    return;
+                }
+                if (TRAVAR) limpar();
+                travar(true);
+                impedir(dados.mensagem || 'CEP inválido. Confira e digite de novo.');
+                dizer(dados.mensagem || 'CEP inválido. Confira e digite de novo.', 'text-red-600');
+            })
+            .catch(function () {
+                if (meu !== pedido) return;
+                travar(false);
+                impedir('');
+                dizer('Não conseguimos consultar o CEP agora. Confira o endereço abaixo.', 'text-amber-600');
+            });
+    }
+
+    campo.addEventListener('input', function () {
+        campo.value = mascara(campo.value);
+        impedir('');
+        if (digitos(campo.value).length === 8) consultar();
+    });
+    campo.addEventListener('blur', consultar);
+
+    // Quem reabre o formulário já tem endereço: fica como está até mexer no
+    // CEP, que é o que manda no endereço agora.
+    if (digitos(campo.value).length === 8) {
+        campo.value = mascara(campo.value);
+        ultimo = digitos(campo.value);
+        if (preenchidos.cidade && preenchidos.cidade.value) {
+            dizer('Endereço preenchido pelo CEP. Para trocar, digite outro CEP.', 'text-gray-500');
+        }
+    }
+})();
+</script>
