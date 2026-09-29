@@ -255,8 +255,8 @@ class Meta(models.Model):
     def pode_decidir(self, user):
         """Quem aprova/recusa a solicitação.
 
-        O gestor escolhido, o superuser — e qualquer gestor do Impulso da área
-        do colaborador. A última parte é o que faz a demanda vinda de outra
+        O gestor escolhido, qualquer SUPERADMIN do portal — e qualquer gestor
+        do Impulso da área do colaborador. A última parte é o que faz a demanda vinda de outra
         área não ficar parada quando o gestor indicado está de férias ou saiu:
         quem responde pela área pode decidir.
 
@@ -266,7 +266,8 @@ class Meta(models.Model):
         """
         if not (user and user.is_authenticated) or not self.pendente_aprovacao:
             return False
-        if user.is_superuser:
+        from .utils import e_superadmin              # tardio: utils importa models
+        if e_superadmin(user):
             return True
         if self.solicitada_por_id == user.id:
             return False

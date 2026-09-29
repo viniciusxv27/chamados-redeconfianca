@@ -46,17 +46,6 @@ def is_impulso_manager(user):
     return _in_group(user, GRUPO_GESTOR) or user_has_module(user, 'impulso.gestor')
 
 
-def is_impulso_member(user):
-    """Pode acessar o módulo: superuser, ESCRITÓRIO (ADM), ADM's LOJAS ou gestor do Impulso."""
-    if not (user and user.is_authenticated):
-        return False
-    if user.is_superuser:
-        return True
-    from users.module_access import user_has_module
-    return (_in_group(user, GRUPOS_ADM) or _in_group(user, GRUPO_GESTOR)
-            or user_has_module(user, 'impulso'))
-
-
 def e_superadmin(user):
     """Topo do portal: superuser ou hierarquia SUPERADMIN.
 
@@ -66,6 +55,22 @@ def e_superadmin(user):
     """
     return bool(user and user.is_authenticated
                 and (user.is_superuser or getattr(user, 'hierarchy', '') == 'SUPERADMIN'))
+
+
+def is_impulso_member(user):
+    """Pode acessar o módulo: SUPERADMIN, ESCRITÓRIO (ADM), ADM's LOJAS ou gestor do Impulso.
+
+    SUPERADMIN aqui é o do portal — `is_superuser` **ou** a hierarquia. Só o
+    flag do Django deixava de fora quem administra o portal sem ser superuser,
+    e era isso que impedia o SUPERADMIN de avaliar a atividade de alguém.
+    """
+    if not (user and user.is_authenticated):
+        return False
+    if e_superadmin(user):
+        return True
+    from users.module_access import user_has_module
+    return (_in_group(user, GRUPOS_ADM) or _in_group(user, GRUPO_GESTOR)
+            or user_has_module(user, 'impulso'))
 
 
 def get_superadmins():

@@ -92,7 +92,9 @@ def _metas_do_usuario(user, so_aprovadas=True):
 
 
 def _pode_ver_meta(user, meta):
-    return (user.is_superuser or meta.gestor_id == user.id
+    # SUPERADMIN do portal (por hierarquia, nem sempre `is_superuser`) enxerga
+    # qualquer meta: é ele quem avalia e aprova no lugar do gestor ausente.
+    return (e_superadmin(user) or meta.gestor_id == user.id
             or meta.colaborador_id == user.id
             or meta.solicitada_por_id == user.id
             # Gestor abre a meta de quem está em qualquer setor dele — senão a
@@ -868,7 +870,8 @@ def meta_detail(request, meta_id):
         'participantes_ids': list(meta.participantes.values_list('id', flat=True)),
         'anexos': anexos,
         'comentarios': meta.comentarios.select_related('autor'),
-        'is_gestor_da_meta': meta.gestor_id == request.user.id or request.user.is_superuser,
+        # Quem faz a "Avaliação do gestor": o gestor da meta e qualquer SUPERADMIN.
+        'is_gestor_da_meta': meta.gestor_id == request.user.id or e_superadmin(request.user),
         'is_colaborador_da_meta': meta.colaborador_id == request.user.id,
         'pode_decidir': meta.pode_decidir(request.user),
         'pode_editar_meta': pode_editar_meta,
@@ -945,11 +948,13 @@ def meta_entregar(request, meta_id):
 
 
 @require_POST
-@impulso_manager_required
+@impulso_member_required          # quem pode avaliar é decidido logo abaixo
 def meta_avaliar(request, meta_id):
     meta = get_object_or_404(Meta, id=meta_id)
-    if not (meta.gestor_id == request.user.id or request.user.is_superuser):
-        messages.error(request, 'Apenas o gestor da meta pode avaliá-la.')
+    # O gestor da meta avalia; o SUPERADMIN também, em qualquer meta — sem isso
+    # a avaliação fica parada quando o gestor sai, muda de área ou está fora.
+    if not (meta.gestor_id == request.user.id or e_superadmin(request.user)):
+        messages.error(request, 'Apenas o gestor da meta (ou um SUPERADMIN) pode avaliá-la.')
         return redirect('impulso:meta_detail', meta_id=meta.id)
     if not meta.vale_pontos:
         messages.error(request, 'Aprove a solicitação antes de avaliar a meta.')
