@@ -89,6 +89,10 @@ class DriveFalso:
         return self.itens[id_]
 
     def obter(self, file_id, fields=None):
+        # Pedir só os campos leves é subir a árvore de um item — conta igual a
+        # um `pai_de`, que é o caminho antigo da mesma coisa.
+        if fields == gdrive.CAMPOS_LEVES:
+            self.chamadas_pai += 1
         if file_id not in self.itens:
             raise gdrive.DriveError('404')
         return dict(self.itens[file_id])
@@ -207,8 +211,13 @@ try:
 
     quebrado = ServicoFalso(falso.itens, quebrar=True)
     falso.chamadas_pai = 0
+    # O caso anterior deixou esses ids no cache de metadados: limpar é o que
+    # faz este medir de novo o caminho sem lote.
+    cache.clear()
+    # Sem lote, cada id vai pelo caminho comum (`gdrive.obter`), que é o que os
+    # dublês substituem — por isso o mock é o `obter`, não o `pai_de`.
     with mock.patch.object(gdrive, 'service', return_value=quebrado), \
-         mock.patch.object(gdrive, 'pai_de', falso.pai_de):
+         mock.patch.object(gdrive, 'obter', falso.obter):
         pais = gdrive.pais_de(['ARQ00', 'ARQ01', 'ARQ02'])
     t('servidor sem lote: cai para um a um e continua funcionando',
       pais == {'ARQ00': 'N4', 'ARQ01': 'N4', 'ARQ02': 'N4'} and falso.chamadas_pai == 3,

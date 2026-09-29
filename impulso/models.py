@@ -346,8 +346,30 @@ class Meta(models.Model):
             return self.colaborador_id in equipe_ids
         return get_colaboradores_do_gestor(user).filter(id=self.colaborador_id).exists()
 
-    def pode_editar(self, user, equipe_ids=None):
-        """Quem edita a meta.
+    def e_ponto_focal(self, user, metas_de_ideia=None):
+        """O dono de uma atividade que nasceu de uma ideia aprovada.
+
+        Quem o gestor escolheu como executor no INOVAR é o ponto focal: é ele
+        que monta o plano — ajusta o texto da atividade e quebra em passos. O
+        prazo continua sendo o combinado na aprovação, e por isso a tela de
+        edição não o oferece a ele.
+
+        ``metas_de_ideia`` é o conjunto de ids já resolvido pela tela que lista
+        muitos cards (o Kanban), para não custar uma consulta por card.
+        """
+        if not (user and getattr(user, 'is_authenticated', False)):
+            return False
+        if self.colaborador_id != user.id:
+            return False
+        if metas_de_ideia is not None:
+            return self.id in metas_de_ideia
+        try:
+            return self.ideias_originadas.exists()
+        except DatabaseError:            # antes do migrate que criou a ligação
+            return False
+
+    def pode_gerenciar(self, user, equipe_ids=None):
+        """Quem responde pela meta como gestor — edita, duplica, decide.
 
         A mesma régua do excluir — gestor, em qualquer card que ele enxerga —
         com uma diferença: solicitação ainda pendente **pode** ser editada.
@@ -369,6 +391,11 @@ class Meta(models.Model):
             return self.colaborador_id in equipe_ids
         return get_colaboradores_do_gestor(user).filter(id=self.colaborador_id).exists()
 
+    def pode_editar(self, user, equipe_ids=None, metas_de_ideia=None):
+        """Quem edita o texto da atividade: quem a gerencia — ou o ponto focal."""
+        return (self.pode_gerenciar(user, equipe_ids)
+                or self.e_ponto_focal(user, metas_de_ideia))
+
     def pode_solicitar_duplicacao(self, user):
         """Quem PEDE ao gestor para duplicar, em vez de duplicar direto.
 
@@ -379,7 +406,7 @@ class Meta(models.Model):
         """
         if not (user and user.is_authenticated) or not self.vale_pontos:
             return False
-        if self.pode_editar(user):
+        if self.pode_gerenciar(user):
             return False
         return (self.colaborador_id == user.id
                 or self.participantes.filter(id=user.id).exists())

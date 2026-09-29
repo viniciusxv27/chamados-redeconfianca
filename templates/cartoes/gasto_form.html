@@ -29,10 +29,11 @@
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1"><i class="fas fa-camera text-gray-400 mr-1"></i> Foto do comprovante</label>
-          <input type="file" name="foto" id="foto" accept="image/*" capture="environment"
+          <label class="block text-sm font-medium text-gray-700 mb-1"><i class="fas fa-camera text-gray-400 mr-1"></i> Comprovante (foto ou PDF)</label>
+          <input type="file" name="foto" id="foto" accept="image/*,application/pdf" capture="environment"
                  class="w-full text-sm border border-gray-300 rounded-lg file:mr-3 file:py-2 file:px-4 file:border-0 file:bg-purple-50 file:text-purple-700 file:font-semibold hover:file:bg-purple-100 cursor-pointer">
           <img id="foto-preview" class="hidden mt-3 max-h-56 rounded-lg border border-gray-200" alt="Prévia do comprovante">
+          <p id="foto-nome" class="hidden mt-2 text-xs text-gray-500"><i class="fas fa-file-pdf text-red-500 mr-1"></i></p>
         </div>
 
         <div>
@@ -116,10 +117,20 @@
 
   fotoInput.addEventListener('change', function () {
     var f = fotoInput.files[0];
-    if (f) {
+    // PDF não tem prévia em <img>: mostra o nome do arquivo no lugar.
+    var nome = document.getElementById('foto-nome');
+    if (f && (f.type === 'application/pdf' || /\.pdf$/i.test(f.name))) {
+      preview.classList.add('hidden');
+      if (nome) {
+        nome.textContent = 'PDF escolhido: ' + f.name;
+        nome.classList.remove('hidden');
+      }
+    } else if (f) {
+      if (nome) nome.classList.add('hidden');
       preview.src = URL.createObjectURL(f);
       preview.classList.remove('hidden');
     } else {
+      if (nome) nome.classList.add('hidden');
       preview.classList.add('hidden');
     }
   });

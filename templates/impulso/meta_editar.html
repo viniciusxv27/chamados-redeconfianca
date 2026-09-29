@@ -12,6 +12,20 @@
         Mudança de título ou prazo vira comentário na atividade e avisa quem responde por ela.
     </p>
 
+    {% if sou_ponto_focal %}
+    {% comment %}
+    O executor de uma ideia aprovada é o ponto focal: ele ajusta o texto e monta
+    o to-do. O prazo foi o combinado na aprovação e continua com o gestor.
+    {% endcomment %}
+    <div class="mb-4 p-3 rounded-xl text-sm bg-amber-50 border border-amber-100 text-amber-900">
+        <i class="fas fa-lightbulb mr-1"></i>
+        Você é o <strong>ponto focal</strong> desta atividade
+        {% if ideia_de_origem %}— ela veio de uma ideia aprovada no INOVAR{% endif %}.
+        Ajuste o texto e monte o passo a passo na tela da atividade.
+        O prazo ({{ meta.prazo|date:"d/m/Y" }}) foi o combinado na aprovação e é alterado pelo gestor.
+    </div>
+    {% endif %}
+
     {% if messages %}
         {% for message in messages %}
         <div role="alert" class="mb-4 p-3 rounded-xl text-sm bg-red-50 border border-red-100 text-red-700">{{ message }}</div>
@@ -33,6 +47,7 @@
                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">{{ meta.descricao }}</textarea>
         </div>
 
+        {% if manda_no_prazo %}
         <div class="grid sm:grid-cols-2 gap-4">
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Prazo *</label>
@@ -57,6 +72,12 @@
                 </label>
             </div>
         </div>
+        {% else %}
+        <p class="text-xs text-gray-500 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
+            <i class="fas fa-calendar-check mr-1 text-gray-400"></i>
+            Prazo: <strong>{{ meta.prazo|date:"d/m/Y" }}</strong> — combinado com o gestor.
+        </p>
+        {% endif %}
 
         <div class="flex items-center gap-2 pt-2 border-t border-gray-100">
             <button type="submit" class="px-5 py-2 rounded-lg bg-emerald-500 text-white text-sm hover:bg-emerald-600">

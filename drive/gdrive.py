@@ -312,19 +312,184 @@ def _executar(req):
 
 # ─── Leitura ─────────────────────────────────────────────────────────────────
 
-def listar(folder_id, page_token=None, page_size=100, trashed=False, apenas_pastas=False, order='folder,name'):
-    """Filhos diretos de uma pasta (pastas primeiro por padrão). Paginado."""
+# ── Cache: cada ida ao Google custa ~1 s ───────────────────────────────────
+# Abrir uma subpasta pedia o mesmo id três vezes (validar que está dentro da
+# raiz, resolver a permissão e montar a trilha) e o "voltar" pagava tudo de
+# novo. Nome e pai de uma pasta quase não mudam, então ficam guardados; as
+# ações que os mudam (renomear, mover, lixeira) esquecem o id na hora.
+TTL_META = 900
+TTL_LISTA = 60          # a listagem muda o tempo todo: cache curto, e só a 1ª página
+CAMPOS_LEVES = 'id,name,parents,mimeType'
+# Abaixo disso o lote não compensa (montá-lo custa mais que os pedidos soltos).
+MINIMO_PARA_LOTE = 4
+
+
+def _cache():
+    from django.core.cache import cache
+    return cache
+
+
+def _chave_meta(file_id):
+    return f'drive:meta:{file_id}'
+
+
+def _versao_da_lista(folder_id):
+    """Número que entra na chave da listagem. Mudar de número aposenta as
+    chaves antigas de uma vez — mais simples (e portátil) que sair apagando
+    chave por combinação de ordem/tamanho/página."""
+    return _cache().get(f'drive:lista:v:{folder_id}') or 0
+
+
+def _chave_lista(folder_id, order, page_size, trashed, apenas_pastas):
+    return (f'drive:lista:{folder_id}:{_versao_da_lista(folder_id)}:'
+            f'{order}:{page_size}:{int(trashed)}:{int(apenas_pastas)}')
+
+
+def esquecer(*ids):
+    """Tira do cache o que acabou de mudar (nome, pai, conteúdo da pasta)."""
+    cache = _cache()
+    for file_id in ids:
+        if not file_id:
+            continue
+        cache.delete(_chave_meta(file_id))
+        chave = f'drive:lista:v:{file_id}'
+        try:
+            cache.incr(chave)
+        except ValueError:                      # ainda não existia
+            cache.set(chave, 1, TTL_META)
+
+
+def meta_leve(file_id, usar_cache=True):
+    """``{id, name, parents, mimeType}`` de um item — do cache quando possível."""
+    if not file_id:
+        return None
+    cache, chave = _cache(), _chave_meta(file_id)
+    if usar_cache:
+        guardado = cache.get(chave)
+        if guardado is not None:
+            return guardado
+    try:
+        # Passa por `obter` de propósito: é a porta que os testes substituem
+        # pelo Drive falso — um `service()` direto aqui furaria o dublê.
+        meta = obter(file_id, fields=CAMPOS_LEVES)
+    except DriveError:
+        return None
+    leve = {'id': meta.get('id') or file_id, 'name': meta.get('name', ''),
+            'parents': meta.get('parents') or [], 'mimeType': meta.get('mimeType', '')}
+    cache.set(chave, leve, TTL_META)
+    return leve
+
+
+def metas_leves(ids):
+    """``{id: meta leve}`` de vários itens: o que está no cache sai de graça, o
+    resto vai num `batch` só."""
+    cache = _cache()
+    achados, faltando = {}, []
+    for file_id in dict.fromkeys(i for i in ids if i):
+        guardado = cache.get(_chave_meta(file_id))
+        if guardado is not None:
+            achados[file_id] = guardado
+        else:
+            faltando.append(file_id)
+    if not faltando:
+        return achados
+
+    def guardar(request_id, resposta, excecao):
+        if excecao is None and resposta is not None:
+            leve = {'id': resposta.get('id') or request_id, 'name': resposta.get('name', ''),
+                    'parents': resposta.get('parents') or [],
+                    'mimeType': resposta.get('mimeType', '')}
+            achados[request_id] = leve
+            cache.set(_chave_meta(request_id), leve, TTL_META)
+
+    for inicio in range(0, len(faltando), LOTE_MAXIMO):
+        pedaco = faltando[inicio:inicio + LOTE_MAXIMO]
+        if len(pedaco) < MINIMO_PARA_LOTE:
+            # Um ida-e-volta por item é mais barato que montar o lote — e é o
+            # caminho que passa por `obter`, que os testes substituem.
+            for file_id in pedaco:
+                leve = meta_leve(file_id)
+                if leve is not None:
+                    achados[file_id] = leve
+            continue
+        try:
+            servico = service()
+            lote = servico.new_batch_http_request(callback=guardar)
+            for file_id in pedaco:
+                lote.add(servico.files().get(fileId=file_id, fields=CAMPOS_LEVES, **_params()),
+                         request_id=file_id)
+            lote.execute()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug('Lote de metadados indisponível (%s); indo um a um.', exc)
+        # O lote pode voltar vazio (ids que o Google não conhece, dublê sem
+        # `batch`): o que não veio ainda tem a chance do caminho um a um.
+        for file_id in pedaco:
+            if file_id in achados:
+                continue
+            leve = meta_leve(file_id)
+            if leve is not None:
+                achados[file_id] = leve
+    return achados
+
+
+def listar(folder_id, page_token=None, page_size=100, trashed=False, apenas_pastas=False,
+           order='folder,name'):
+    """Filhos diretos de uma pasta (pastas primeiro por padrão). Paginado.
+
+    A primeira página fica guardada por ``TTL_LISTA``: é o que faz o "voltar"
+    responder na hora. As páginas seguintes não entram no cache (têm token) e
+    quem escreve na pasta chama ``esquecer(folder_id)``.
+    """
+    cache = _cache()
+    chave = _chave_lista(folder_id, order, page_size, trashed, apenas_pastas)
+    if not page_token:
+        guardado = cache.get(chave)
+        if guardado is not None:
+            return guardado[0], guardado[1]
+
     q = f"'{folder_id}' in parents and trashed={str(trashed).lower()}"
     if apenas_pastas:
         q += f" and mimeType='{FOLDER_MIME}'"
     resp = _executar(service().files().list(
         q=q, pageSize=page_size, pageToken=page_token, orderBy=order,
         fields=f'nextPageToken, files({FIELDS})', **_params_lista()))
-    return resp.get('files', []), resp.get('nextPageToken')
+    itens, prox = resp.get('files', []), resp.get('nextPageToken')
+    if not page_token:
+        cache.set(chave, (itens, prox), TTL_LISTA)
+        # De quebra, cada filho listado já entra no cache de metadados: descer
+        # uma pasta depois disso não custa nada.
+        for item in itens:
+            cache.set(_chave_meta(item['id']),
+                      {'id': item['id'], 'name': item.get('name', ''),
+                       'parents': item.get('parents') or [folder_id],
+                       'mimeType': item.get('mimeType', '')}, TTL_META)
+    return itens, prox
 
 
 def obter(file_id, fields=FIELDS):
     return _executar(service().files().get(fileId=file_id, fields=fields, **_params()))
+
+
+def cadeia(file_id, ate_root=None, limite=30):
+    """Sobe pelos pais uma vez só e devolve ``[meta leve, ...]`` do item ao topo.
+
+    É a subida única que `ancestrais`, `dentro_de` e `caminho` compartilham —
+    com o cache, uma pasta já visitada não custa chamada nenhuma.
+    """
+    cadeia_, atual, visto = [], file_id, set()
+    for _ in range(limite):
+        if not atual or atual in visto:
+            break
+        visto.add(atual)
+        meta = meta_leve(atual)
+        if meta is None:
+            break
+        cadeia_.append(meta)
+        if ate_root and meta['id'] == ate_root:
+            break
+        pais = meta.get('parents') or []
+        atual = pais[0] if pais else None
+    return cadeia_
 
 
 def ancestrais(file_id, limite=30):
@@ -333,19 +498,7 @@ def ancestrais(file_id, limite=30):
     Base do controle contra URL direta (RNF05): valida a que setor um arquivo
     pertence. Limitado em profundidade para nunca virar loop.
     """
-    ids, atual, visto = [], file_id, set()
-    for _ in range(limite):
-        if not atual or atual in visto:
-            break
-        visto.add(atual)
-        ids.append(atual)
-        try:
-            meta = _executar(service().files().get(fileId=atual, fields='id,parents', **_params()))
-        except DriveError:
-            break
-        pais = meta.get('parents') or []
-        atual = pais[0] if pais else None
-    return ids
+    return [meta['id'] for meta in cadeia(file_id, limite=limite)]
 
 
 def dentro_de(file_id, root_id):
@@ -354,25 +507,13 @@ def dentro_de(file_id, root_id):
         return False
     if file_id == root_id:
         return True
-    return root_id in ancestrais(file_id)
+    # Para de subir assim que encontra a raiz: pasta funda não paga a árvore toda.
+    return any(meta['id'] == root_id for meta in cadeia(file_id, ate_root=root_id))
 
 
 def caminho(file_id, ate_root=None, limite=30):
     """Lista [(id, nome), ...] do root (ou topo) até o item — para breadcrumbs."""
-    trilha, atual, visto = [], file_id, set()
-    for _ in range(limite):
-        if not atual or atual in visto:
-            break
-        visto.add(atual)
-        try:
-            meta = _executar(service().files().get(fileId=atual, fields='id,name,parents', **_params()))
-        except DriveError:
-            break
-        trilha.append((meta['id'], meta.get('name', '')))
-        if ate_root and meta['id'] == ate_root:
-            break
-        pais = meta.get('parents') or []
-        atual = pais[0] if pais else None
+    trilha = [(meta['id'], meta['name']) for meta in cadeia(file_id, ate_root, limite)]
     return list(reversed(trilha))
 
 
@@ -465,9 +606,8 @@ def pai_de(file_id):
     A diferença importa para o cache da lixeira: o topo pode ser guardado; uma
     falha passageira, não — esconderia os itens daquela pasta por minutos.
     """
-    try:
-        meta = obter(file_id, fields='id,parents')
-    except DriveError:
+    meta = meta_leve(file_id)
+    if meta is None:
         return None
     return (meta.get('parents') or [''])[0]
 
@@ -484,33 +624,8 @@ def pais_de(ids):
     lote só. O id que o Google não responder fica de fora do dicionário — quem
     chama decide (o cache da subida, por exemplo, não guarda falha).
     """
-    ids = [i for i in dict.fromkeys(ids) if i]
-    if not ids:
-        return {}
-    achados = {}
-
-    def guardar(request_id, resposta, excecao):
-        if excecao is None and resposta is not None:
-            achados[request_id] = (resposta.get('parents') or [''])[0]
-
-    for inicio in range(0, len(ids), LOTE_MAXIMO):
-        pedaco = ids[inicio:inicio + LOTE_MAXIMO]
-        try:
-            servico = service()
-            lote = servico.new_batch_http_request(callback=guardar)
-            for file_id in pedaco:
-                lote.add(servico.files().get(fileId=file_id, fields='id,parents', **_params()),
-                         request_id=file_id)
-            lote.execute()
-        except Exception as exc:  # noqa: BLE001
-            # Sem lote (proxy, versão da API, dublê de teste): vai um a um, que
-            # é lento mas continua funcionando.
-            logger.debug('Lote de pais indisponível (%s); indo um a um.', exc)
-            for file_id in pedaco:
-                pai = pai_de(file_id)
-                if pai is not None:
-                    achados[file_id] = pai
-    return achados
+    metas = metas_leves(ids)
+    return {file_id: (meta.get('parents') or [''])[0] for file_id, meta in metas.items()}
 
 
 def baixar_trecho(file_id, inicio, fim):
@@ -572,14 +687,18 @@ def listar_lixeira(page_token=None, page_size=100):
 
 def criar_pasta(nome, parent_id):
     body = {'name': nome, 'mimeType': FOLDER_MIME, 'parents': [parent_id]}
-    return _executar(service().files().create(body=body, fields=FIELDS, **_params()))
+    novo = _executar(service().files().create(body=body, fields=FIELDS, **_params()))
+    esquecer(parent_id)                      # a pasta nova precisa aparecer já
+    return novo
 
 
 def enviar(nome, mimetype, stream, parent_id):
     from googleapiclient.http import MediaIoBaseUpload
     media = MediaIoBaseUpload(stream, mimetype=mimetype or 'application/octet-stream', resumable=True)
     body = {'name': nome, 'parents': [parent_id]}
-    return _executar(service().files().create(body=body, media_body=media, fields=FIELDS, **_params()))
+    novo = _executar(service().files().create(body=body, media_body=media, fields=FIELDS, **_params()))
+    esquecer(parent_id)                      # quem acabou de enviar tem que ver
+    return novo
 
 
 def nova_versao(file_id, stream, mimetype=None):
@@ -590,23 +709,33 @@ def nova_versao(file_id, stream, mimetype=None):
 
 
 def renomear(file_id, novo_nome):
-    return _executar(service().files().update(
+    resposta = _executar(service().files().update(
         fileId=file_id, body={'name': novo_nome}, fields=FIELDS, **_params()))
+    esquecer(file_id, pai_de(file_id))
+    return resposta
 
 
 def mover(file_id, novo_parent, parent_atual=None):
     if not parent_atual:
         meta = obter(file_id, fields='parents')
         parent_atual = ','.join(meta.get('parents') or [])
-    return _executar(service().files().update(
+    resposta = _executar(service().files().update(
         fileId=file_id, addParents=novo_parent, removeParents=parent_atual,
         fields=FIELDS, **_params()))
+    esquecer(file_id, novo_parent, *(parent_atual or '').split(','))
+    return resposta
 
 
 def para_lixeira(file_id, trashed=True):
-    return _executar(service().files().update(
+    pai = pai_de(file_id)
+    resposta = _executar(service().files().update(
         fileId=file_id, body={'trashed': trashed}, fields=FIELDS, **_params()))
+    esquecer(file_id, pai)
+    return resposta
 
 
 def excluir_definitivo(file_id):
-    return _executar(service().files().delete(fileId=file_id, **_params()))
+    pai = pai_de(file_id)
+    resposta = _executar(service().files().delete(fileId=file_id, **_params()))
+    esquecer(file_id, pai)
+    return resposta

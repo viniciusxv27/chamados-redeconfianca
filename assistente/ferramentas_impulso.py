@@ -317,8 +317,11 @@ def _pode_na_meta(user, meta):
         pode.append('entregar')
     if meta.vale_pontos and is_impulso_manager(user) and (meta.gestor_id == user.pk or user.is_superuser):
         pode.append('reavaliar (as notas são substituídas)' if meta.is_avaliada else 'avaliar com as notas')
-    if meta.pode_editar(user):
+    if meta.pode_gerenciar(user):
         pode.append('editar e duplicar')
+    elif meta.pode_editar(user):
+        # Ponto focal de uma ideia aprovada: ajusta o texto, não duplica.
+        pode.append('editar o texto da atividade')
     elif meta.pode_solicitar_duplicacao(user):
         pode.append('pedir ao gestor a duplicação')
     if meta.gestor_id == user.pk or user.is_superuser:
@@ -1357,7 +1360,13 @@ def _previa_alterar_meta(user, args):
     if campos:
         if not meta.pode_editar(user):
             raise Invalido('Você não pode editar esta atividade: edita o gestor do Impulso que responde por ela (criou, '
-                           'aprovou, é o gestor dela ou a pessoa é da equipe dele) e o superadmin.')
+                           'aprovou, é o gestor dela ou a pessoa é da equipe dele), o superadmin e o ponto focal de uma '
+                           'ideia aprovada.')
+        # O prazo e a recorrência são o combinado com o gestor: o ponto focal
+        # mexe no texto da atividade, não na data.
+        if not meta.pode_gerenciar(user) and ({'prazo', 'recorrencia'} & set(campos)):
+            raise Invalido('Como ponto focal você ajusta título e descrição; prazo e recorrência são alterados pelo '
+                           'gestor que aprovou a ideia.')
         # A tela salva o formulário inteiro: o que não muda vai com o valor atual.
         titulo = _titulo(args)[:200] if 'titulo' in campos else meta.titulo
         descricao = str(args['descricao']).strip() if 'descricao' in campos else meta.descricao

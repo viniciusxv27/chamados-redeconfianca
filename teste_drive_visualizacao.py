@@ -84,7 +84,10 @@ class DriveFalso:
         return self.itens[id_]
 
     def obter(self, file_id, fields=None):
-        if fields == 'id,parents':
+        # Subir a árvore pede só o pai ('id,parents') ou os campos leves do
+        # cache de metadados ('id,name,parents,mimeType'): as duas formas são
+        # uma ida ao Google e contam igual.
+        if fields in ('id,parents', gdrive.CAMPOS_LEVES):
             self.pais += 1
         if file_id not in self.itens:
             raise gdrive.DriveError('Google Drive respondeu 404: File not found')
@@ -585,8 +588,11 @@ try:
         t('itens do setor com o nome do setor', 'ZZ Setor Visualização' in html)
         t('restaurar e excluir definitivo (superadmin)',
           'Restaurar' in html and 'Excluir DEFINITIVAMENTE' in html and 'csrfmiddlewaretoken' in html)
-        t('sobe a árvore em lote, um degrau por vez e parando na raiz '
-          '(3 consultas para 50 itens)', falso.pais == 3, falso.pais)
+        # O que não pode acontecer é o custo andar junto com a quantidade de
+        # itens: são 50 na página e a subida vai em lote, um degrau por vez,
+        # parando na raiz. Com o cache de metadados quente, chega a zero.
+        t('a subida não cresce com a quantidade de itens (50 itens, no máximo '
+          'um punhado de consultas)', falso.pais <= 3, falso.pais)
 
         falso.pais = 0
         r = c.get('/drive/lixeira/?parte=1&t=50')

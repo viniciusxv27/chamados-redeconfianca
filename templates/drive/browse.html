@@ -7,20 +7,8 @@
 <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
     <!-- Barra de caminho + ações -->
     <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap">
-        <div class="flex items-center gap-1.5 text-sm dv-scroll-x min-w-0">
-            <a href="{% url 'drive:index' %}" class="text-gray-400 hover:text-gray-600"><i class="fas fa-hard-drive"></i></a>
-            <i class="fas fa-chevron-right text-[10px] text-gray-300"></i>
-            <a href="{{ url_raiz }}" class="text-blue-600 hover:underline font-medium whitespace-nowrap">{{ rotulo }}</a>
-            {% for fid, fnome in trilha %}
-                {% if not forloop.first %}
-                <i class="fas fa-chevron-right text-[10px] text-gray-300"></i>
-                {% if forloop.last %}
-                <span class="text-gray-700 font-medium whitespace-nowrap">{{ fnome }}</span>
-                {% else %}
-                <a href="{{ url_raiz }}f/{{ fid }}/" class="text-blue-600 hover:underline whitespace-nowrap">{{ fnome }}</a>
-                {% endif %}
-                {% endif %}
-            {% endfor %}
+        <div id="dv-trilha" class="flex items-center gap-1.5 text-sm dv-scroll-x min-w-0">
+            {% include 'drive/_trilha.html' %}
         </div>
         <div class="flex items-center gap-2 flex-shrink-0">
             {% comment %}
@@ -48,7 +36,7 @@
             </button>
             {% if pode_download %}
             {% comment %}Cópia zipada desta pasta, com tudo o que está dentro dela.{% endcomment %}
-            <a href="{% url 'drive:baixar_zip' folder_id %}" onclick="dvAvisarZip()"
+            <a id="dv-btn-zip" href="{% url 'drive:baixar_zip' folder_id %}" onclick="dvAvisarZip()"
                title="Baixar esta pasta em ZIP" aria-label="Baixar esta pasta em ZIP"
                class="px-3 py-1.5 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">
                 <i class="fas fa-file-zipper mr-1.5"></i><span class="hidden sm:inline">Baixar em ZIP</span>
@@ -206,19 +194,72 @@ function dvAvisarZip(){
     setTimeout(function(){ aviso.remove(); }, 9000);
 }
 
-function dvNovaPasta(){
+/* Criar pasta e renomear iam por submit e recarregavam a tela inteira. Vão por
+   fetch: a grade se atualiza sozinha e a pessoa continua onde estava. Se o
+   fetch falhar, o formulário de sempre entra no lugar. */
+function dvPastaAberta(){
+    // A pasta aberta muda sem recarregar a página: quem precisa dela (enviar,
+    // criar pasta, renomear) lê daqui, não de um valor fixo do template.
+    const campo = document.querySelector('#dv-upload-form [name=folder_id], #dv-mkdir-form [name=folder_id]');
+    return (campo && campo.value) || window.DV_FOLDER || '{{ folder_id }}';
+}
+
+function dvCsrf(){
+    const campo = document.querySelector('#dv-upload-form [name=csrfmiddlewaretoken]')
+        || document.querySelector('[name=csrfmiddlewaretoken]');
+    return campo ? campo.value : '';
+}
+
+async function dvPost(url, dados){
+    const corpo = new FormData();
+    Object.keys(dados || {}).forEach(k => corpo.append(k, dados[k]));
+    const r = await fetch(url, {
+        method: 'POST', body: corpo,
+        headers: {'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': dvCsrf()},
+    });
+    return r.json();
+}
+
+function dvAvisoRapido(texto, erro){
+    const painel = document.getElementById('dv-envio');
+    const titulo = document.getElementById('dv-envio-titulo');
+    if (!painel || !titulo) { if (erro) alert(texto); return; }
+    document.getElementById('dv-envio-lista').innerHTML = '';
+    titulo.textContent = texto;
+    painel.classList.remove('hidden');
+    setTimeout(() => painel.classList.add('hidden'), erro ? 4000 : 1800);
+}
+
+async function dvNovaPasta(){
     const nome = prompt('Nome da nova pasta:');
     if (!nome) return;
-    document.getElementById('dv-mkdir-nome').value = nome;
-    document.getElementById('dv-mkdir-form').submit();
+    const form = document.getElementById('dv-mkdir-form');
+    try {
+        const dados = await dvPost(form.action, {folder_id: dvPastaAberta(), nome: nome});
+        if (!dados.ok) { dvAvisoRapido(dados.msg || 'Não deu para criar a pasta.', true); return; }
+        await dvRecarregarPasta();
+        dvAvisoRapido('Pasta criada.');
+    } catch (e) {
+        document.getElementById('dv-mkdir-nome').value = nome;
+        form.submit();
+    }
 }
-function dvRenomear(id, nome){
+
+async function dvRenomear(id, nome){
     const novo = prompt('Novo nome:', nome);
-    if (!novo) return;
-    const f = document.getElementById('dv-rename-form');
-    f.action = '/drive/file/' + id + '/renomear/';
-    document.getElementById('dv-rename-nome').value = novo;
-    f.submit();
+    if (!novo || novo === nome) return;
+    const url = '/drive/file/' + id + '/renomear/';
+    try {
+        const dados = await dvPost(url, {nome: novo, folder_id: dvPastaAberta()});
+        if (!dados.ok) { dvAvisoRapido(dados.msg || 'Não deu para renomear.', true); return; }
+        await dvRecarregarPasta();
+        dvAvisoRapido('Renomeado.');
+    } catch (e) {
+        const f = document.getElementById('dv-rename-form');
+        f.action = url;
+        document.getElementById('dv-rename-nome').value = novo;
+        f.submit();
+    }
 }
 // ── Nome inteiro: a escolha fica no navegador de quem clicou ───────────────
 function dvNomesInteiros(){
@@ -268,7 +309,7 @@ function dvLinhaEnvio(nome){
 function dvMandarUm(arquivo, aoAndar){
     return new Promise(resolve => {
         const corpo = new FormData();
-        corpo.append('folder_id', '{{ folder_id }}');
+        corpo.append('folder_id', dvPastaAberta());
         corpo.append('arquivos', arquivo, arquivo.name);
         const xhr = new XMLHttpRequest();
         xhr.open('POST', "{{ url_upload }}");
@@ -298,34 +339,154 @@ async function dvEnviarArquivos(lista){
     painel.classList.remove('hidden');
 
     let enviados = 0, falhas = 0;
-    for (let i = 0; i < arquivos.length; i++) {
-        const arquivo = arquivos[i];
-        const linha = dvLinhaEnvio(arquivo.name);
-        const ext = (arquivo.name.split('.').pop() || '').toLowerCase();
-        // Recusa na hora o que o portal recusaria: vira recado em vez de espera.
-        if (DV_EXT.length && DV_EXT.indexOf(ext) === -1) {
-            linha.erro('tipo .' + ext + ' não aceito aqui');
-            falhas++;
-        } else if (arquivo.size > DV_MAX) {
-            linha.erro('passa de {{ max_file_mb }} MB');
-            falhas++;
-        } else {
-            const r = await dvMandarUm(arquivo, fracao => {
-                barra.style.width = Math.round(((i + fracao) / arquivos.length) * 100) + '%';
-            });
+    const andamento = new Array(arquivos.length).fill(0);
+    const pintarBarra = () => {
+        const feito = andamento.reduce((s, v) => s + v, 0);
+        barra.style.width = Math.round((feito / arquivos.length) * 100) + '%';
+    };
+
+    // Um arquivo por vez fazia 10 arquivos pequenos levarem 10 idas e voltas em
+    // fila. Vão POR_VEZ juntos: o navegador aguenta e o envio termina em fração
+    // do tempo, sem tirar a ordem da lista na tela.
+    const POR_VEZ = 3;
+    const fila = arquivos.map((arquivo, i) => ({arquivo, i, linha: dvLinhaEnvio(arquivo.name)}));
+
+    async function trabalhar(){
+        while (fila.length) {
+            const tarefa = fila.shift();
+            const {arquivo, i, linha} = tarefa;
+            const ext = (arquivo.name.split('.').pop() || '').toLowerCase();
+            // Recusa na hora o que o portal recusaria: vira recado em vez de espera.
+            if (DV_EXT.length && DV_EXT.indexOf(ext) === -1) {
+                linha.erro('tipo .' + ext + ' não aceito aqui');
+                falhas++; andamento[i] = 1; pintarBarra();
+                continue;
+            }
+            if (arquivo.size > DV_MAX) {
+                linha.erro('passa de {{ max_file_mb }} MB');
+                falhas++; andamento[i] = 1; pintarBarra();
+                continue;
+            }
+            const r = await dvMandarUm(arquivo, fracao => { andamento[i] = fracao; pintarBarra(); });
             if (r.ok) { linha.ok(); enviados++; } else { linha.erro(r.erro); falhas++; }
+            andamento[i] = 1; pintarBarra();
         }
-        barra.style.width = Math.round(((i + 1) / arquivos.length) * 100) + '%';
     }
+
+    await Promise.all(Array.from({length: Math.min(POR_VEZ, arquivos.length)}, trabalhar));
 
     document.getElementById('dv-file-input').value = '';
     document.getElementById('dv-envio-titulo').textContent =
         enviados + ' enviado(s)' + (falhas ? ' · ' + falhas + ' com erro' : '');
     barra.className = 'h-1 transition-all ' + (falhas ? 'bg-amber-500' : 'bg-green-500');
-    // Só recarrega quando algo entrou: com tudo recusado, o recado tem que ficar na tela.
-    if (enviados) setTimeout(() => location.reload(), falhas ? 2500 : 900);
+    // Antes a página recarregava inteira só para mostrar o que entrou. Agora a
+    // grade se atualiza sozinha e o painel do envio continua na tela.
+    if (enviados) {
+        await dvRecarregarPasta();
+        if (!falhas) setTimeout(() => painel.classList.add('hidden'), 1500);
+    }
 }
 {% endif %}
+
+/* ── Trocar de pasta sem recarregar a página ─────────────────────────────
+   Abrir uma pasta recarregava tudo: menu, cabeçalho, scripts — e o "voltar"
+   pagava a mesma conta de novo. Agora só a trilha e a grade mudam, o histórico
+   do navegador continua funcionando e a pasta já visitada volta do cache da
+   própria página (instantâneo). */
+const DV_CACHE = new Map();          // url → fragmento já recebido
+const DV_TETO = 20;
+
+function dvMarcarCarregando(ligado){
+    const grade = document.getElementById('dv-grid-wrap');
+    if (grade) grade.style.opacity = ligado ? '0.45' : '';
+}
+
+function dvAplicarFragmento(dados){
+    document.getElementById('dv-grid').innerHTML = dados.lista;
+    const trilha = document.getElementById('dv-trilha');
+    if (trilha) trilha.innerHTML = dados.trilha;
+    // Enviar e criar pasta acontecem NA pasta aberta: os formulários seguem junto.
+    document.querySelectorAll('#dv-upload-form [name=folder_id], #dv-mkdir-form [name=folder_id],\n                              #dv-rename-form [name=folder_id]')
+        .forEach(campo => { campo.value = dados.folder_id; });
+    const zip = document.getElementById('dv-btn-zip');
+    if (zip) zip.href = dados.url_zip;
+    window.DV_FOLDER = dados.folder_id;
+    if (window.RCUsoLocal) window.RCUsoLocal.marcarMenus();
+    dvFecharMenus();
+}
+
+async function dvIrPara(url, opcoes){
+    const cfg = opcoes || {};
+    const guardado = DV_CACHE.get(url);
+    if (guardado && !cfg.recarregar) {
+        dvAplicarFragmento(guardado);
+        if (!cfg.semHistorico) history.pushState({dv: url}, '', url);
+        return true;
+    }
+    dvMarcarCarregando(true);
+    try {
+        const alvo = new URL(url, window.location.origin);
+        alvo.searchParams.set('frag', 'pasta');
+        // `no-store`: quem guarda o que já foi visto é o DV_CACHE aqui em cima.
+        // Sem isso o navegador serviria a versão antiga do fragmento e o
+        // arquivo recém-enviado não apareceria.
+        const r = await fetch(alvo, {
+            headers: {'X-Requested-With': 'XMLHttpRequest'}, cache: 'no-store',
+        });
+        if (!r.ok) throw new Error('resposta ' + r.status);
+        const dados = await r.json();
+        if (!dados.ok) throw new Error('fragmento inválido');
+        if (DV_CACHE.size >= DV_TETO) DV_CACHE.delete(DV_CACHE.keys().next().value);
+        DV_CACHE.set(url, dados);
+        dvAplicarFragmento(dados);
+        if (!cfg.semHistorico) history.pushState({dv: url}, '', url);
+        return true;
+    } catch (e) {
+        // Qualquer tropeço volta para o caminho de sempre: a página inteira.
+        if (!cfg.semHistorico) window.location.href = url;
+        return false;
+    } finally {
+        dvMarcarCarregando(false);
+    }
+}
+
+document.addEventListener('click', e => {
+    const link = e.target.closest('a[data-dv-ir]');
+    if (!link || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+    e.preventDefault();
+    dvIrPara(link.getAttribute('href'));
+});
+
+window.addEventListener('popstate', e => {
+    // Voltar/avançar: o fragmento já está na memória da página.
+    const url = (e.state && e.state.dv) || window.location.pathname + window.location.search;
+    dvIrPara(url, {semHistorico: true});
+});
+
+// A pasta com que a página abriu entra no cache a partir do que já está na
+// tela: assim o primeiro "voltar" também é instantâneo, sem ir ao servidor.
+(function () {
+    const url = window.location.pathname + window.location.search;
+    history.replaceState({dv: url}, '');
+    const grade = document.getElementById('dv-grid');
+    const trilha = document.getElementById('dv-trilha');
+    const zip = document.getElementById('dv-btn-zip');
+    if (!grade) return;
+    window.DV_FOLDER = '{{ folder_id }}';
+    DV_CACHE.set(url, {
+        ok: true,
+        lista: grade.innerHTML,
+        trilha: trilha ? trilha.innerHTML : '',
+        folder_id: '{{ folder_id }}',
+        url_zip: zip ? zip.getAttribute('href') : '',
+    });
+})();
+
+function dvRecarregarPasta(){
+    const url = window.location.pathname + window.location.search;
+    DV_CACHE.delete(url);
+    return dvIrPara(url, {semHistorico: true, recarregar: true});
+}
 
 function dvCarregarMais(btn){
     dvFecharMenus();                         // nenhum menu solto no <body> ao trocar a grade

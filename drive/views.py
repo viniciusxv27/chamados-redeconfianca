@@ -424,6 +424,20 @@ def _listar_raiz(request, raiz, folder_id, nivel):
         'max_file_mb': DriveConfig.get().max_file_mb,
     }
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        # `frag=pasta`: a tela trocou de pasta sem recarregar — precisa da
+        # grade E da trilha, mais o que muda de pasta para pasta.
+        if request.GET.get('frag') == 'pasta':
+            from django.template.loader import render_to_string
+            return JsonResponse({
+                'ok': True,
+                'lista': render_to_string('drive/_lista.html', ctx, request=request),
+                'trilha': render_to_string('drive/_trilha.html', ctx, request=request),
+                'folder_id': alvo,
+                'url_zip': reverse('drive:baixar_zip', args=[alvo]),
+                'pode_upload': ctx['pode_upload'], 'pode_editar': ctx['pode_editar'],
+                'pode_download': ctx['pode_download'],
+                'visao': visao,
+            })
         return render(request, 'drive/_lista.html', ctx)
     return render(request, 'drive/browse.html', ctx)
 

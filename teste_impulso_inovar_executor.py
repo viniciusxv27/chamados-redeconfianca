@@ -194,16 +194,61 @@ t('na coluna A Fazer', 'A Fazer' in html)
 r = c_exec.get(f'/impulso/metas/{meta.id}/')
 t('e o detalhe abre para ele', r.status_code == 200, r.status_code)
 
+print('\n== O EXECUTOR É O PONTO FOCAL DA ATIVIDADE ==')
+t('o modelo reconhece o ponto focal', meta.e_ponto_focal(executor))
+t('e só ele — nem o gestor entra nessa conta', not meta.e_ponto_focal(gestor))
+t('ele pode editar a atividade', meta.pode_editar(executor))
+t('sem virar gestor dela', not meta.pode_gerenciar(executor))
+
+r = c_exec.get(f'/impulso/metas/{meta.id}/editar/')
+t('a tela de edição abre para ele', r.status_code == 200, r.status_code)
+form = r.content.decode()
+t('avisando que ele é o ponto focal', 'ponto focal' in form)
+t('e sem oferecer o prazo', 'name="prazo"' not in form)
+
+c_exec.post(f'/impulso/metas/{meta.id}/editar/', {
+    'titulo': 'ZZ Senha eletrônica — piloto na Centro',
+    'descricao': 'ZZ plano: medir a fila por 2 semanas',
+    'prazo': (hoje + timedelta(days=90)).isoformat(),      # tenta esticar o prazo
+}, follow=True)
+meta.refresh_from_db()
+t('o texto que ele escreveu vale', meta.titulo == 'ZZ Senha eletrônica — piloto na Centro')
+t('a descrição também', 'medir a fila' in meta.descricao)
+t('mas o prazo continua o combinado', meta.prazo == prazo, meta.prazo)
+
+c_exec.post(f'/impulso/metas/{meta.id}/item/', {'texto': 'ZZ Contar a fila na sexta'}, follow=True)
+c_exec.post(f'/impulso/metas/{meta.id}/item/', {'texto': 'ZZ Cotar o painel de senha'}, follow=True)
+t('o ponto focal monta o to-do', meta.itens.count() == 2, meta.itens.count())
+item = meta.itens.first()
+c_exec.post(f'/impulso/metas/item/{item.id}/check/', {}, follow=True)
+item.refresh_from_db()
+t('e marca o que já fez', item.concluido)
+
+detalhe = c_exec.get(f'/impulso/metas/{meta.id}/').content.decode()
+t('a tela diz de onde a atividade veio', 'ideia aprovada no INOVAR' in detalhe)
+t('e que ele é o ponto focal', 'ponto focal' in detalhe)
+t('com o lápis de editar à mão', f'/impulso/metas/{meta.id}/editar/' in detalhe)
+t('mas sem o botão de duplicar', 'imp-duplicar' not in detalhe)
+
+comum = Meta.objects.create(gestor=gestor, colaborador=executor, titulo='ZZ Atividade comum',
+                            descricao='ZZ', prazo=prazo, created_by=gestor)
+t('dono de atividade comum continua sem editar', not comum.pode_editar(executor))
+r = c_exec.get(f'/impulso/metas/{comum.id}/editar/', follow=True)
+t('e a tela o manda de volta', 'não pode editar' in r.content.decode())
+
 print('\n== DECIDIR DE NOVO NÃO DUPLICA ==')
 novo_prazo = hoje + timedelta(days=20)
 c_gestor.post(url, {'status': 'APROVADA', 'executor': str(outro.id),
                     'prazo': novo_prazo.isoformat()}, follow=True)
 ideia.refresh_from_db()
 meta.refresh_from_db()
-t('continua sendo uma atividade só', Meta.objects.count() == 1, Meta.objects.count())
+vindas_de_ideia = Meta.objects.filter(ideias_originadas__isnull=False).distinct()
+t('continua sendo uma atividade só', vindas_de_ideia.count() == 1, vindas_de_ideia.count())
 t('que mudou de dono', meta.colaborador_id == outro.id)
 t('e de prazo', meta.prazo == novo_prazo)
 t('a ideia acompanha', ideia.executor_id == outro.id and ideia.meta_gerada_id == meta.id)
+t('e o ponto focal passa a ser quem recebeu',
+  meta.e_ponto_focal(outro) and not meta.e_ponto_focal(executor))
 
 print('\n== ARQUIVAR NÃO CRIA ATIVIDADE ==')
 outra = Ideia.objects.create(autor=autora, descricao='ZZ Ideia que não vai para frente',
@@ -212,7 +257,9 @@ c_gestor.post(f'/impulso/inovar/{outra.id}/status/',
               {'status': 'ARQUIVADA', 'resposta_gestor': 'ZZ não é o momento'}, follow=True)
 outra.refresh_from_db()
 t('a ideia é arquivada', outra.status == Ideia.Status.ARQUIVADA)
-t('sem criar atividade', Meta.objects.count() == 1 and outra.meta_gerada_id is None)
+t('sem criar atividade',
+  Meta.objects.filter(ideias_originadas__isnull=False).distinct().count() == 1
+  and outra.meta_gerada_id is None)
 t('e sem executor pendurado', outra.executor_id is None and outra.prazo is None)
 
 print('\n== QUEM DECIDE ==')

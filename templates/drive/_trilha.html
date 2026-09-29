@@ -1,0 +1,17 @@
+{% comment %}
+A trilha da pasta. Fica em fragmento porque a navegação por fetch troca só ela
+e a grade — sem recarregar a página inteira a cada pasta aberta.
+{% endcomment %}
+<a href="{% url 'drive:index' %}" class="text-gray-400 hover:text-gray-600"><i class="fas fa-hard-drive"></i></a>
+<i class="fas fa-chevron-right text-[10px] text-gray-300"></i>
+<a href="{{ url_raiz }}" data-dv-ir class="text-blue-600 hover:underline font-medium whitespace-nowrap">{{ rotulo }}</a>
+{% for fid, fnome in trilha %}
+    {% if not forloop.first %}
+    <i class="fas fa-chevron-right text-[10px] text-gray-300"></i>
+    {% if forloop.last %}
+    <span class="text-gray-700 font-medium whitespace-nowrap">{{ fnome }}</span>
+    {% else %}
+    <a href="{{ url_raiz }}f/{{ fid }}/" data-dv-ir class="text-blue-600 hover:underline whitespace-nowrap">{{ fnome }}</a>
+    {% endif %}
+    {% endif %}
+{% endfor %}

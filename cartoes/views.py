@@ -24,7 +24,7 @@ from core.evolution import enviar_texto
 from tickets.models import Category, Ticket, TicketAttachment, TicketLog
 from users.models import User
 
-from .ai import analyze_expense
+from .ai import analyze_expense, e_pdf, paginas_do_pdf
 from .exportacao import conciliacao_excel, extrato_excel
 from .fatura import TOLERANCIA_DIAS, conciliar, ler_fatura
 from .models import Cartao, Gasto
@@ -362,6 +362,10 @@ def gasto_analyze(request, pk):
     if f:
         image_bytes = f.read()
         mime = f.content_type or 'image/jpeg'
+        # O navegador manda `application/pdf`, mas alguns clientes mandam
+        # genérico: o conteúdo é quem decide (a IA lê PDF de outro jeito).
+        if e_pdf(image_bytes, mime):
+            mime = 'application/pdf'
 
     data = analyze_expense(image_bytes=image_bytes, manual_text=manual_text, mime=mime)
     return JsonResponse(data)
@@ -410,11 +414,15 @@ def gasto_create(request, pk):
         except (json.JSONDecodeError, TypeError):
             ia_dados = {}
 
+        # Comprovante em PDF entra como a primeira página renderizada: o campo
+        # é ImageField e é essa imagem que a tela do gasto mostra.
+        comprovante = _comprovante_para_o_campo(foto)
+
         gasto = Gasto.objects.create(
             cartao=cartao, criado_por=request.user, valor=valor_dec,
             estabelecimento=estabelecimento, data_gasto=data_gasto,
             categoria_gasto=categoria_gasto, descricao=descricao,
-            foto=foto, origem=('FOTO' if foto else 'MANUAL'), ia_dados=ia_dados,
+            foto=comprovante, origem=('FOTO' if comprovante else 'MANUAL'), ia_dados=ia_dados,
         )
 
         ticket = abrir_chamado_do_gasto(cartao, gasto, request.user)
@@ -530,8 +538,37 @@ def _check_api_token(request):
     return bool(provided) and hmac.compare_digest(provided, expected)
 
 
-def _download_image(url, max_bytes=10 * 1024 * 1024, timeout=15):
-    """Baixa uma imagem de uma URL http/https (best-effort). (bytes, mime) ou (None, None)."""
+def _comprovante_para_o_campo(arquivo):
+    """O arquivo enviado, pronto para o ``ImageField`` do gasto.
+
+    Imagem vai como está; PDF vira a primeira página em PNG (o campo não
+    guarda PDF, e é essa imagem que aparece no extrato).
+    """
+    if not arquivo:
+        return None
+    nome = (getattr(arquivo, 'name', '') or '').lower()
+    tipo = (getattr(arquivo, 'content_type', '') or '')
+    if not (nome.endswith('.pdf') or tipo == 'application/pdf'):
+        return arquivo
+    try:
+        arquivo.seek(0)
+    except Exception:                                           # noqa: BLE001
+        pass
+    conteudo = arquivo.read()
+    paginas = paginas_do_pdf(conteudo, limite=1)
+    if not paginas:
+        return None
+    return ContentFile(paginas[0], name='comprovante.png')
+
+
+def _baixar_comprovante(url, max_bytes=10 * 1024 * 1024, timeout=15):
+    """Baixa o comprovante de uma URL http/https. (bytes, mime) ou (None, None).
+
+    Imagem **ou PDF**: o cliente manda os dois pelo WhatsApp, e o PDF era
+    recusado aqui — chegava à IA como se fosse JPEG e nada era identificado.
+    O tipo é confirmado pelo conteúdo, porque o `Content-Type` que vem do
+    WhatsApp costuma ser genérico (`application/octet-stream`).
+    """
     if not url or not isinstance(url, str):
         return None, None
     if not (url.startswith('http://') or url.startswith('https://')):
@@ -540,11 +577,17 @@ def _download_image(url, max_bytes=10 * 1024 * 1024, timeout=15):
         req = Request(url, headers={'User-Agent': 'redeconfianca-cartoes/1.0'})
         with urlopen(req, timeout=timeout) as resp:
             ctype = (resp.headers.get('Content-Type') or '').split(';')[0].strip().lower()
-            if ctype and not ctype.startswith('image/'):
-                return None, None
             data = resp.read(max_bytes + 1)
             if len(data) > max_bytes:
                 return None, None
+            if data[:5] == b'%PDF-':
+                return data, 'application/pdf'
+            if ctype and not (ctype.startswith('image/') or ctype == 'application/pdf'):
+                # Tipo genérico continua valendo: quem decide é o conteúdo, e a
+                # IA descarta o que não for imagem legível.
+                if ctype not in ('application/octet-stream', 'binary/octet-stream'):
+                    return None, None
+                ctype = ''
             return data, (ctype or 'image/jpeg')
     except (URLError, ValueError, OSError):
         return None, None
@@ -652,14 +695,15 @@ def api_lancar_gasto(request):
         return _pedir_escolha_do_cartao(telefone, ativos)
     cartao = cartoes[0]
 
-    # Baixa a foto (best-effort — não trava se falhar).
+    # Baixa o comprovante (best-effort — não trava se falhar). Pode ser PDF.
     image_bytes, mime = None, 'image/jpeg'
     if foto_url:
-        image_bytes, dl_mime = _download_image(foto_url)
+        image_bytes, dl_mime = _baixar_comprovante(foto_url)
         if dl_mime:
             mime = dl_mime
 
-    # IA (degrada graciosamente; a chave pode estar indisponível).
+    # IA (degrada graciosamente; a chave pode estar indisponível). Ela insiste
+    # sozinha enquanto faltar valor, categoria ou descrição.
     ia = analyze_expense(image_bytes=image_bytes, manual_text=descricao, mime=mime)
     ia_ok = not ia.get('error')
 
@@ -685,8 +729,16 @@ def api_lancar_gasto(request):
 
     foto_file = None
     if image_bytes:
-        ext = '.png' if mime == 'image/png' else ('.webp' if mime == 'image/webp' else '.jpg')
-        foto_file = ContentFile(image_bytes, name=f'comprovante{ext}')
+        if e_pdf(image_bytes, mime):
+            # `Gasto.foto` é ImageField: o PDF entra como a primeira página
+            # renderizada, que é o que a tela do gasto mostra. O arquivo
+            # original continua na origem (a URL que o cliente mandou).
+            paginas = paginas_do_pdf(image_bytes, limite=1)
+            if paginas:
+                foto_file = ContentFile(paginas[0], name='comprovante.png')
+        else:
+            ext = '.png' if mime == 'image/png' else ('.webp' if mime == 'image/webp' else '.jpg')
+            foto_file = ContentFile(image_bytes, name=f'comprovante{ext}')
 
     gasto = Gasto.objects.create(
         cartao=cartao, criado_por=user, valor=valor,
@@ -706,5 +758,9 @@ def api_lancar_gasto(request):
         'usuario': user.get_full_name() or user.username,
         'cartao': f'••••{cartao.last4}',
         'ia_ok': ia_ok,
+        'ia_tentativas': ia.get('tentativas'),
+        'ia_faltou': ia.get('faltou') or [],
+        'comprovante': ia.get('anexo') or ('imagem' if image_bytes else ''),
+        'categoria': categoria_gasto,
         'aviso': aviso,
     })

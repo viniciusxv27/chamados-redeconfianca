@@ -267,8 +267,9 @@ def metas_kanban(request):
                   if gestor else set())
     for m in metas:
         m.pode_apagar = m.pode_excluir(user, equipe_ids=equipe_ids)
-        # Mesma régua da tela da meta: quem edita, duplica.
-        m.pode_duplicar = m.pode_editar(user, equipe_ids=equipe_ids)
+        # Mesma régua da tela da meta: quem GERENCIA, duplica. O ponto focal
+        # edita o texto da própria atividade, mas não põe cópia no Kanban dos outros.
+        m.pode_duplicar = m.pode_gerenciar(user, equipe_ids=equipe_ids)
         # Sem a edição, quem responde pela atividade pede a cópia ao gestor. No
         # Kanban de quem não é gestor todo card já é dele (dono ou participante),
         # então isto não custa uma consulta por card.
@@ -851,6 +852,9 @@ def meta_detail(request, meta_id):
     pode_editar_participantes = (meta.gestor_id == request.user.id
                                  or request.user.is_superuser)
     pode_editar_meta = meta.pode_editar(request.user)
+    pode_duplicar_meta = meta.pode_gerenciar(request.user)
+    # Atividade que nasceu de uma ideia aprovada: o dono é o ponto focal dela.
+    sou_ponto_focal = meta.e_ponto_focal(request.user)
 
     context = {
         'meta': meta,
@@ -868,8 +872,11 @@ def meta_detail(request, meta_id):
         'is_colaborador_da_meta': meta.colaborador_id == request.user.id,
         'pode_decidir': meta.pode_decidir(request.user),
         'pode_editar_meta': pode_editar_meta,
+        'pode_duplicar_meta': pode_duplicar_meta,
+        'sou_ponto_focal': sou_ponto_focal,
+        'ideia_de_origem': meta.ideias_originadas.first(),
         # Duplicar escolhendo para quem vai a cópia: a lista só vai para quem edita.
-        'colaboradores_duplicar': get_colaboradores() if pode_editar_meta else None,
+        'colaboradores_duplicar': get_colaboradores() if pode_duplicar_meta else None,
         'equipe_ids': (set(get_colaboradores_do_gestor(request.user).values_list('id', flat=True))
                        if pode_editar_meta else set()),
         'pode_solicitar_duplicacao': meta.pode_solicitar_duplicacao(request.user),
@@ -1056,19 +1063,25 @@ def meta_editar(request, meta_id):
         messages.error(request, 'Você não pode editar esta atividade.')
         return redirect('impulso:meta_detail', meta_id=meta.id)
 
+    # O prazo foi o combinado na aprovação da ideia: quem o muda é quem
+    # gerencia a atividade, não quem a executa.
+    manda_no_prazo = meta.pode_gerenciar(request.user)
+
     if request.method == 'POST':
         titulo = (request.POST.get('titulo') or '').strip()
         descricao = (request.POST.get('descricao') or '').strip()
-        prazo = parse_date(request.POST.get('prazo') or '')
-        recorrencia = request.POST.get('recorrencia') or meta.recorrencia
+        prazo = parse_date(request.POST.get('prazo') or '') if manda_no_prazo else meta.prazo
+        recorrencia = ((request.POST.get('recorrencia') or meta.recorrencia)
+                       if manda_no_prazo else meta.recorrencia)
 
         if not titulo or not prazo:
             messages.error(request, 'Título e prazo são obrigatórios.')
             return redirect('impulso:meta_editar', meta_id=meta.id)
         if recorrencia not in Meta.Recorrencia.values:
             recorrencia = meta.recorrencia
-        apenas_dias_uteis = (recorrencia != Meta.Recorrencia.UNICA
-                             and request.POST.get('apenas_dias_uteis') == 'on')
+        apenas_dias_uteis = ((recorrencia != Meta.Recorrencia.UNICA
+                              and request.POST.get('apenas_dias_uteis') == 'on')
+                             if manda_no_prazo else meta.apenas_dias_uteis)
         prazo, aviso_dia_util = _prazo_em_dia_util(prazo, apenas_dias_uteis)
 
         # O prazo pode ir para trás numa edição — a atividade já existe e às
@@ -1108,6 +1121,9 @@ def meta_editar(request, meta_id):
     return render(request, 'impulso/meta_editar.html', {
         'meta': meta,
         'recorrencias': Meta.Recorrencia.choices,
+        'manda_no_prazo': manda_no_prazo,
+        'sou_ponto_focal': meta.e_ponto_focal(request.user),
+        'ideia_de_origem': meta.ideias_originadas.first(),
         'active_tab': 'confiar',
     })
 
@@ -1129,7 +1145,7 @@ def meta_duplicar(request, meta_id):
     aprovar.
     """
     original = get_object_or_404(Meta, id=meta_id)
-    if not original.pode_editar(request.user):
+    if not original.pode_gerenciar(request.user):
         # Sem a edição, quem responde pela atividade ainda pode pedir a cópia:
         # vai para a tela do pedido, que manda para o gestor aprovar.
         if original.pode_solicitar_duplicacao(request.user):
@@ -1235,7 +1251,7 @@ def meta_duplicar_solicitar(request, meta_id):
     muda de uma execução para a outra e ele não pode editar a cópia depois.
     """
     original = get_object_or_404(Meta.objects.select_related('gestor'), id=meta_id)
-    if original.pode_editar(request.user):
+    if original.pode_gerenciar(request.user):
         # Quem edita duplica direto, sem pedido.
         return redirect('impulso:meta_detail', meta_id=original.id)
     if not original.pode_solicitar_duplicacao(request.user):

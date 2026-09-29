@@ -74,7 +74,7 @@ try:
     with override_settings(**CONFIG), \
             mock.patch.object(cartoes_views, 'enviar_texto', side_effect=envio_falso), \
             mock.patch.object(cartoes_views, 'analyze_expense', return_value=IA), \
-            mock.patch.object(cartoes_views, '_download_image', return_value=(None, None)), \
+            mock.patch.object(cartoes_views, '_baixar_comprovante', return_value=(None, None)), \
             mock.patch.object(cartoes_views, 'abrir_chamado_do_gasto', return_value=None):
 
         dono = User.objects.create_user(username='zzcart.dono', email='zzcart.dono@exemplo-teste.local',
