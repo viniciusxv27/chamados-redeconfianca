@@ -1,0 +1,7 @@
+{% comment %}
+Ponte entre a home e o cartão do quiz: a home inclui este arquivo só quando o
+context processor já disse que a pessoa tem sala aberta (`quiz_salas_abertas`).
+{% endcomment %}
+{% load quiz_home %}
+{% cartao_quiz_home as cartao_quiz %}
+{% if cartao_quiz %}{{ cartao_quiz }}{% endif %}

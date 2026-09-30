@@ -196,6 +196,9 @@ class Participante(models.Model):
         CARGO = 'CARGO', 'Pelo cargo'
         GRUPO = 'GRUPO', 'Pelo grupo'
         COORDENACAO = 'COORDENACAO', 'Pela coordenação'
+        # Quem digitou o código entra jogando: a sala não tem lista fechada
+        # nem teto de gente — quem tem o código, joga.
+        CODIGO = 'CODIGO', 'Entrou pelo código'
 
     sala = models.ForeignKey(Sala, on_delete=models.CASCADE, related_name='participantes')
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,

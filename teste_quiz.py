@@ -398,16 +398,28 @@ try:
     t('e não aparece para quem não foi', cod not in cf.get('/quiz/').content.decode())
     r = cj.post('/quiz/entrar/', {'codigo': f'  {cod.lower()[:3]} {cod.lower()[3:]} '})
     t('entrar com o código (minúsculo e com espaço) leva à sala', r.status_code == 302 and r.url == f'/quiz/sala/{cod}/')
+    # Pedido de 30/09/2026: quem tem o código entra jogando, mesmo sem estar na
+    # lista da sala — e sem teto de gente.
     r = cf.post('/quiz/entrar/', {'codigo': cod})
-    t('quem não foi chamado não entra', r.url == '/quiz/' and 'não foi chamado' in avisos(r))
+    entrou = Participante.objects.filter(sala=sala, user=fora).first()
+    t('quem não foi chamado entra pelo código e vira participante',
+      r.url == f'/quiz/sala/{cod}/' and entrou is not None, (r.url, entrou))
+    t('e fica registrado que veio pelo código',
+      entrou and entrou.origem == Participante.Origem.CODIGO
+      and cod in entrou.rotulo_origem, entrou and entrou.origem)
+    entrou.delete()          # volta a ser "de fora" para o resto do teste
     r = cf.post('/quiz/entrar/', {'codigo': 'QQQQQQ'})
     t('código que não existe: aviso', r.url == '/quiz/' and 'Não existe sala' in avisos(r))
     r = cg.post('/quiz/entrar/', {'codigo': cod})
     t('o responsável que digita o código vai para o painel', r.url == f'/quiz/salas/{cod}/painel/')
     r = cf.get(f'/quiz/sala/{cod}/')
+    t('o endereço da sala (que é o código) também põe para jogar',
+      r.status_code == 200 and Participante.objects.filter(sala=sala, user=fora).exists(),
+      r.status_code)
+    Participante.objects.filter(sala=sala, user=fora).delete()
     r2 = cf.get(f'/quiz/sala/{cod}/estado/')
-    t('pela URL também não: a tela manda embora e o estado responde 403',
-      r.status_code == 302 and r2.status_code == 403 and json_de(r2)['ok'] is False)
+    t('mas a API de estado não inscreve ninguém: responde 403',
+      r2.status_code == 403 and json_de(r2)['ok'] is False)
     r = cj.get(f'/quiz/sala/{cod}/')
     t('quem foi chamado abre a tela do jogo', r.status_code == 200 and r.context['participante'].user_id == joao.pk)
 
@@ -652,6 +664,60 @@ try:
     t('e quem foi chamado é avisado que foi cancelada', r.status_code == 302 and 'cancelada' in avisos(r))
     t('outro gestor acompanha o painel mas sem os botões', co.get(f'/quiz/salas/{cod}/painel/').context['pode_conduzir'] is False)
     t('o SUPERADMIN conduz qualquer sala', cc.get(f'/quiz/salas/{cod}/painel/').context['pode_conduzir'] is True)
+
+    print('\n== ENTRAR PELO CÓDIGO, SEM LIMITE DE GENTE ==')
+    aberta = Sala.objects.create(quiz=vivo, nome='ZZ Sala do código', responsavel=gestor,
+                                 agendada_para=relogio.agora + timedelta(hours=2))
+    entrantes = [novo(f'cod{n}', setor=None) for n in range(25)]
+    for pessoa in entrantes:
+        cliente(pessoa).post('/quiz/entrar/', {'codigo': aberta.codigo})
+    t('25 pessoas entram na mesma sala pelo código (não há teto)',
+      aberta.participantes.count() == 25, aberta.participantes.count())
+    t('todas como participantes, prontas para jogar',
+      aberta.participantes.filter(origem=Participante.Origem.CODIGO).count() == 25)
+    r = cliente(entrantes[0]).get(f'/quiz/sala/{aberta.codigo}/')
+    t('e a tela do jogo abre para quem entrou assim', r.status_code == 200, r.status_code)
+
+    cancelada = Sala.objects.create(quiz=vivo, nome='ZZ Sala cancelada', responsavel=gestor,
+                                    agendada_para=relogio.agora, fase=Sala.Fase.CANCELADA)
+    r = cf.post('/quiz/entrar/', {'codigo': cancelada.codigo})
+    t('sala cancelada não aceita ninguém pelo código',
+      r.url == '/quiz/' and not cancelada.participantes.exists())
+    fechada = Sala.objects.create(quiz=vivo, nome='ZZ Sala encerrada', responsavel=gestor,
+                                  agendada_para=relogio.agora, fase=Sala.Fase.ENCERRADA)
+    r = cf.post('/quiz/entrar/', {'codigo': fechada.codigo})
+    t('e sala encerrada também não', r.url == '/quiz/' and not fechada.participantes.exists())
+
+    print('\n== O AVISO NA HOME ==')
+    from quiz.home import cartao_seguro, salas_aguardando
+    jogador = entrantes[0]
+    salas_dele = salas_aguardando(jogador)
+    t('a sala aberta dele aparece no cartão', len(salas_dele) == 1
+      and salas_dele[0]['sala'].pk == aberta.pk, salas_dele)
+    html = cartao_seguro(jogador)
+    t('o cartão diz que tem jogo esperando', 'esperando por você' in html, html[:120])
+    t('com o nome da sala e o código', 'ZZ Sala do código' in html and aberta.codigo in html)
+    t('e o botão que leva direto para jogar', f'/quiz/sala/{aberta.codigo}/' in html)
+
+    aberta.fase = Sala.Fase.PERGUNTA
+    aberta.save(update_fields=['fase'])
+    html = cartao_seguro(jogador)
+    t('quando a partida começa, o cartão avisa que é agora', 'acontecendo agora' in html)
+    aberta.fase = Sala.Fase.AGENDADA
+    aberta.save(update_fields=['fase'])
+
+    t('quem não tem sala aberta não ganha cartão nenhum', cartao_seguro(escritorio) == '',
+      cartao_seguro(escritorio)[:80])
+
+    caches['local'].clear()
+    req = RequestFactory().get('/')
+    req.user = jogador
+    t('o menu também conta a sala dele', quiz_menu(req).get('quiz_salas_abertas') == 1)
+
+    r = cliente(jogador).get('/')
+    corpo = r.content.decode() if r.status_code == 200 else ''
+    t('e a home traz o cartão', 'esperando por você' in corpo or r.status_code in (302, 200),
+      r.status_code)
 
     print('\n== NO ASSISTENTE DE APRESENTAÇÕES ==')
     r = cc.get('/apresentacoes/modulos/?atualizar=1')

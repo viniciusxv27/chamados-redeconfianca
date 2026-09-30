@@ -1,0 +1,85 @@
+{% comment %}
+Cartão do quiz na home: "tem jogo esperando por você".
+
+Recebe `qz_salas` (quiz/home.py). Mostra as próximas salas abertas da pessoa —
+com destaque para a que já está ao vivo — e leva direto para jogar.
+{% endcomment %}
+<div class="qzh mb-6">
+  <div class="qzh-cartao">
+    <div class="qzh-topo">
+      <span class="qzh-icone"><i class="fas fa-gamepad"></i></span>
+      <div class="min-w-0">
+        <p class="qzh-titulo">
+          {% if qz_salas|length == 1 %}Tem um quiz esperando por você{% else %}Você tem {{ qz_salas|length }} quizzes esperando{% endif %}
+        </p>
+        <p class="qzh-sub">Entre pelo portal — dá para jogar do celular.</p>
+      </div>
+    </div>
+
+    <ul class="qzh-lista">
+      {% for item in qz_salas %}
+      <li class="qzh-item">
+        <div class="min-w-0">
+          <p class="qzh-nome">{{ item.sala.titulo }}</p>
+          <p class="qzh-quando">
+            {% if item.ao_vivo %}
+            <span class="qzh-vivo"><span class="qzh-ponto"></span>acontecendo agora</span>
+            {% elif item.hoje %}
+            hoje às {{ item.quando|date:"H:i" }}
+            {% else %}
+            {{ item.quando|date:"d/m" }} às {{ item.quando|date:"H:i" }}
+            {% endif %}
+            · código <strong>{{ item.sala.codigo }}</strong>
+          </p>
+        </div>
+        <a href="{% url 'quiz:jogar' item.sala.codigo %}" class="qzh-botao {% if item.ao_vivo %}qzh-botao-vivo{% endif %}">
+          {% if item.ao_vivo %}Entrar agora{% elif item.ja_entrou %}Voltar{% else %}Entrar{% endif %}
+          <i class="fas fa-arrow-right ml-1.5 text-xs"></i>
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>
+
+<style>
+  .qzh-cartao {
+    border: 1px solid #EDEFF3; border-radius: 1rem; background: #fff;
+    overflow: hidden; box-shadow: 0 1px 2px rgba(16, 24, 40, .04);
+  }
+  .qzh-topo {
+    display: flex; align-items: center; gap: .75rem;
+    padding: 1rem 1.25rem;
+    background: linear-gradient(135deg, #7C3AED 0%, #A855F7 100%);
+    color: #fff;
+  }
+  .qzh-icone {
+    width: 2.5rem; height: 2.5rem; border-radius: .75rem; flex-shrink: 0;
+    background: rgba(255, 255, 255, .18);
+    display: flex; align-items: center; justify-content: center; font-size: 1.1rem;
+  }
+  .qzh-titulo { font-weight: 700; font-size: .95rem; line-height: 1.2; }
+  .qzh-sub { font-size: .75rem; opacity: .85; margin-top: .125rem; }
+  .qzh-lista { list-style: none; margin: 0; padding: 0; }
+  .qzh-item {
+    display: flex; align-items: center; justify-content: space-between; gap: .75rem;
+    padding: .75rem 1.25rem; border-top: 1px solid #F3F4F6; flex-wrap: wrap;
+  }
+  .qzh-nome { font-size: .875rem; font-weight: 600; color: #1F2937; }
+  .qzh-quando { font-size: .75rem; color: #6B7280; margin-top: .125rem; }
+  .qzh-vivo { color: #DC2626; font-weight: 600; display: inline-flex; align-items: center; gap: .3rem; }
+  .qzh-ponto {
+    width: .45rem; height: .45rem; border-radius: 9999px; background: #DC2626;
+    display: inline-block; animation: qzh-pisca 1.2s ease-in-out infinite;
+  }
+  @keyframes qzh-pisca { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+  .qzh-botao {
+    flex-shrink: 0; display: inline-flex; align-items: center;
+    padding: .45rem .9rem; border-radius: .6rem;
+    background: #F5F3FF; color: #6D28D9; font-size: .8125rem; font-weight: 600;
+    transition: background .15s ease;
+  }
+  .qzh-botao:hover { background: #EDE9FE; }
+  .qzh-botao-vivo { background: #7C3AED; color: #fff; }
+  .qzh-botao-vivo:hover { background: #6D28D9; }
+</style>

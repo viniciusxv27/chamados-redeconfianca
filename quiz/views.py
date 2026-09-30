@@ -108,9 +108,34 @@ def inicio(request):
     return render(request, 'quiz/inicio.html', ctx)
 
 
+def _limpar_menu(*usuarios):
+    """Zera o cache do menu/cartão da home dessas pessoas.
+
+    O context processor guarda por 30 s quantas salas a pessoa tem abertas.
+    Quem acabou de entrar numa sala (ou de ser chamado para uma) não pode
+    esperar o cache vencer para ver o aviso.
+    """
+    try:
+        from django.core.cache import caches
+        local = caches['local']
+        for user in usuarios:
+            pk = getattr(user, 'pk', user)
+            if pk:
+                local.delete(f'quiz:menu:{pk}')
+    except Exception:                                           # noqa: BLE001
+        pass
+
+
 @login_required
 @require_POST
 def entrar(request):
+    """Entrar pelo código: quem tem o código entra jogando.
+
+    O código é o convite. Antes ele só abria a sala para quem já estava na
+    lista — quem recebia o código de outro jeito (no grupo, na reunião, no
+    telão) batia em "você não foi chamado". Agora a pessoa vira participante
+    na hora, e **não há teto de gente**: a sala aceita quantos entrarem.
+    """
     codigo = ''.join((request.POST.get('codigo') or '').split()).upper()
     sala = Sala.objects.filter(codigo=codigo).first() if codigo else None
     if sala is None:
@@ -120,8 +145,21 @@ def entrar(request):
         return redirect('quiz:jogar', codigo=sala.codigo)
     if pode_conduzir(request.user, sala):
         return redirect('quiz:painel', codigo=sala.codigo)
-    messages.error(request, 'Você não foi chamado para esta sala.')
-    return redirect('quiz:inicio')
+
+    if sala.fase == Sala.Fase.CANCELADA:
+        messages.info(request, f'A sala "{sala.titulo}" foi cancelada.')
+        return redirect('quiz:inicio')
+    if sala.encerrada:
+        messages.info(request, f'A partida "{sala.titulo}" já terminou.')
+        return redirect('quiz:inicio')
+
+    # Quem conduz a sala não vira participante dela pelo código.
+    Participante.objects.get_or_create(
+        sala=sala, user=request.user,
+        defaults={'origem': Participante.Origem.CODIGO, 'rotulo_origem': f'Código {sala.codigo}'})
+    _limpar_menu(request.user)
+    messages.success(request, f'Você entrou em "{sala.titulo}". Boa sorte!')
+    return redirect('quiz:jogar', codigo=sala.codigo)
 
 
 @login_required
@@ -131,8 +169,16 @@ def jogar(request, codigo):
     if participante is None:
         if pode_conduzir(request.user, sala):
             return redirect('quiz:painel', codigo=sala.codigo)
-        messages.error(request, 'Você não foi chamado para esta sala.')
-        return redirect('quiz:inicio')
+        # O endereço da sala **é** o código: quem chega aqui com a sala aberta
+        # entra jogando, como quem digita o código na tela inicial.
+        if sala.aberta:
+            participante = Participante.objects.create(
+                sala=sala, user=request.user, origem=Participante.Origem.CODIGO,
+                rotulo_origem=f'Código {sala.codigo}')
+            _limpar_menu(request.user)
+        else:
+            messages.info(request, f'A partida "{sala.titulo}" não está aberta.')
+            return redirect('quiz:inicio')
     if sala.fase == Sala.Fase.CANCELADA:
         messages.info(request, f'A sala "{sala.titulo}" foi cancelada.')
         return redirect('quiz:inicio')
@@ -624,6 +670,7 @@ def _salvar_sala(request, sala=None):
         Participante.objects.bulk_create([
             Participante(sala=sala, user=u, origem=origem.get(u.pk, (Participante.Origem.MANUAL, ''))[0],
                          rotulo_origem=origem.get(u.pk, ('', ''))[1][:120]) for u in chegando])
+    _limpar_menu(*chegando)
     _notificar(chegando, 'Você foi chamado para um quiz',
                f'"{sala.titulo}" — {_quando(sala)}. Código da sala: {sala.codigo}. Entre pelo menu Quiz.',
                _url_da_sala(sala))

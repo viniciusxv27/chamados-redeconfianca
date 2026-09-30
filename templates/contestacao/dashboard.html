@@ -27,14 +27,18 @@
     </div>
 
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-3 mb-6">
-        <div class="flex flex-wrap gap-2">
-            <a href="{% url 'contestacao:export_contested_sales' %}" class="inline-flex items-center px-3 py-2 text-sm font-medium bg-emerald-600 text-white rounded-md hover:bg-emerald-700">
+        <div class="flex flex-wrap items-center gap-2">
+            <span class="text-xs text-gray-500 mr-1">
+                <i class="fas fa-download mr-1"></i>
+                {% if selected_month %}Os arquivos saem só com {{ selected_month_label|default:selected_month }}{% else %}Os arquivos saem com todos os meses{% endif %}
+            </span>
+            <a href="{% url 'contestacao:export_contested_sales' %}{% if selected_month %}?month={{ selected_month }}{% endif %}" class="inline-flex items-center px-3 py-2 text-sm font-medium bg-emerald-600 text-white rounded-md hover:bg-emerald-700">
                 <i class="fas fa-file-csv mr-2"></i> Exportar Vendas Contestadas
             </a>
-            <a href="{% url 'contestacao:export_all_sales' %}" class="inline-flex items-center px-3 py-2 text-sm font-medium bg-teal-600 text-white rounded-md hover:bg-teal-700">
+            <a href="{% url 'contestacao:export_all_sales' %}{% if selected_month %}?month={{ selected_month }}{% endif %}" class="inline-flex items-center px-3 py-2 text-sm font-medium bg-teal-600 text-white rounded-md hover:bg-teal-700">
                 <i class="fas fa-file-export mr-2"></i> Exportar Todas as Vendas
             </a>
-            <a href="{% url 'contestacao:export_contestation_report' %}" class="inline-flex items-center px-3 py-2 text-sm font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700">
+            <a href="{% url 'contestacao:export_contestation_report' %}{% if selected_month %}?month={{ selected_month }}{% endif %}" class="inline-flex items-center px-3 py-2 text-sm font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700">
                 <i class="fas fa-chart-line mr-2"></i> Exportar Relatório
             </a>
             <a href="{% url 'contestacao:exclusion_list' %}" class="inline-flex items-center px-3 py-2 text-sm font-medium bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50">

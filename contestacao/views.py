@@ -15,6 +15,7 @@ from django.db import models
 from django.db.models import Count, F, Min, Q, Sum
 from django.core.paginator import Paginator
 from django.utils import timezone
+from django.utils.formats import date_format
 from django.urls import reverse
 from django.utils.dateparse import parse_datetime
 from django.views.decorators.http import require_POST
@@ -343,6 +344,60 @@ def _payment_status_label(status):
         'paid': 'Pago',
     }
     return mapping.get(status, status or '-')
+
+
+# Os motivos de um item ficar parado, no texto que a pessoa lê. A tela tem a
+# mesma lista em JS (window.MOTIVOS_CONFERENCIA) para a conferência do envio.
+ROTULO_SITUACAO = {
+    'pronta': 'Pronta para enviar',
+    'sem_motivo': 'Falta escrever o motivo',
+    'sem_evidencia': 'Falta anexar a evidência',
+    'ja_contestada': 'Já contestada neste ciclo',
+    'fora_do_escopo': 'Fora da sua loja/base',
+    'nao_encontrada': 'Não está mais na base sincronizada',
+}
+
+
+def _balanco_do_ciclo(user, sync_state):
+    """O que a pessoa já contestou neste ciclo e o que ainda está no carrinho.
+
+    Responde, na própria tela, a pergunta que gerou a dúvida da loja: "mandei
+    20, chegaram 13 — cadê o resto?". As que ficaram continuam no carrinho, e
+    aqui elas aparecem contadas pelo motivo de terem ficado.
+    """
+    desde = sync_state.get('last_sync_at') if sync_state else None
+    enviadas = Contestation.objects.filter(requester=user)
+    if desde:
+        enviadas = enviadas.filter(created_at__gte=desde)
+    # Só a conta e a soma: a lista em si a pessoa vê em /contestacao/minhas/.
+    enviadas = enviadas.aggregate(quantas=Count('id'), valor=Sum('exclusion__receita'))
+
+    no_carrinho = list(ContestationCartDraft.objects.select_related('exclusion').filter(user=user))
+    situacoes, por_item = {}, []
+    if no_carrinho:
+        linhas, _prontas = _conferir_itens_do_carrinho(
+            user, [d.exclusion_id for d in no_carrinho], sync_state=sync_state)
+        for linha in linhas:
+            situacoes[linha['situacao']] = situacoes.get(linha['situacao'], 0) + 1
+            por_item.append(f"{linha['id']}:{linha['situacao']}")
+
+    paradas = [{'rotulo': ROTULO_SITUACAO.get(chave, chave), 'quantas': n}
+               for chave, n in situacoes.items() if chave != 'pronta']
+    paradas.sort(key=lambda linha: -linha['quantas'])
+
+    return {
+        'enviadas': enviadas['quantas'] or 0,
+        'valor_enviado': enviadas['valor'] or Decimal('0'),
+        'no_carrinho': len(no_carrinho),
+        'prontas': situacoes.get('pronta', 0),
+        'paradas': sum(linha['quantas'] for linha in paradas),
+        'paradas_detalhe': paradas,
+        'desde': desde,
+        # A tela guarda esta assinatura e só pede o painel de novo quando o
+        # carrinho realmente muda — sem isto, abrir a página já gastava uma
+        # requisição para redesenhar o que o servidor acabou de mandar.
+        'assinatura': '|'.join(sorted(por_item)),
+    }
 
 
 def _serialize_cart_draft_item(draft):
@@ -1042,6 +1097,9 @@ def exclusion_list(request):
         # Quantas vendas estão esperando contestação de valor — o número no
         # botão é o que faz alguém lembrar de olhar a outra aba.
         'valores_divergentes': _contagem_valores_divergentes(request.user),
+        # O balanço do ciclo: o que você já contestou e o que ficou no carrinho.
+        # Sem isto, quem enviou 20 e viu chegar 13 não tinha onde conferir.
+        'balanco': _balanco_do_ciclo(request.user, sync_state),
     }
     return render(request, 'contestacao/exclusion_list.html', context)
 
@@ -1090,6 +1148,18 @@ def contestation_cart_items_summary(request):
 
 
 @login_required
+def balanco_fragmento(request):
+    """Redesenha o painel "o que foi contestado x o que ficou".
+
+    A tela chama isto depois de enviar ou de mexer no carrinho, para os
+    números não ficarem parados no que estava quando a página abriu.
+    """
+    sync_state = _get_sync_window_state(request.user)
+    return render(request, 'contestacao/_balanco.html',
+                  {'balanco': _balanco_do_ciclo(request.user, sync_state)})
+
+
+@login_required
 def cart_draft_list(request):
     """Lista os itens de carrinho salvos no servidor para o usuario atual."""
     if request.method != 'GET':
@@ -1133,11 +1203,19 @@ def cart_draft_list(request):
     )
     allowed_ids = set(scoped_exclusions.values_list('pk', flat=True))
 
+    # A situação de cada item, a mesma que a conferência mostra antes de enviar:
+    # quem abre o carrinho precisa saber o que vai e o que fica parado, e por quê.
+    situacoes = {}
+    if ids:
+        linhas, _prontas = _conferir_itens_do_carrinho(request.user, ids, sync_state=sync_state)
+        situacoes = {linha['id']: linha['situacao'] for linha in linhas}
+
     items = []
     for draft in drafts:
         if draft.exclusion_id not in allowed_ids:
             continue
         item = _serialize_cart_draft_item(draft)
+        item['situacao'] = situacoes.get(draft.exclusion_id, 'pronta')
         anterior = ja_enviadas.get(draft.exclusion_id)
         if anterior:
             item['ja_enviada'] = {
@@ -1146,7 +1224,15 @@ def cart_draft_list(request):
             }
         items.append(item)
 
-    return JsonResponse({'success': True, 'items': items, 'removidos_por_ja_contestada': removidos})
+    resumo = {'total': len(items), 'prontas': 0, 'paradas': {}}
+    for item in items:
+        if item['situacao'] == 'pronta':
+            resumo['prontas'] += 1
+        else:
+            resumo['paradas'][item['situacao']] = resumo['paradas'].get(item['situacao'], 0) + 1
+
+    return JsonResponse({'success': True, 'items': items, 'resumo': resumo,
+                         'removidos_por_ja_contestada': removidos})
 
 
 @login_required
@@ -2530,6 +2616,31 @@ def contestation_history(request):
     return render(request, 'contestacao/contestation_history.html', context)
 
 
+def _mes_do_filtro(request):
+    """O ?month=AAAA-MM da tela, já conferido.
+
+    O dashboard e os três botões de exportar usam esta mesma leitura: era o
+    que faltava para o CSV sair com o mesmo recorte que está na tela.
+    Devolve ('', None, None) quando não veio mês ou veio bobagem.
+    """
+    texto = (request.GET.get('month') or '').strip()
+    if not texto:
+        return '', None, None
+    try:
+        ano_str, mes_str = texto.split('-')
+        ano, mes = int(ano_str), int(mes_str)
+        if not (1 <= mes <= 12):
+            raise ValueError
+    except (ValueError, TypeError):
+        return '', None, None
+    return texto, ano, mes
+
+
+def _sufixo_do_mes(selected_month):
+    """'_2026-09' para entrar no nome do arquivo, ou '' sem filtro."""
+    return f'_{selected_month}' if selected_month else ''
+
+
 @login_required
 def dashboard(request):
     """Dashboard de contestações com métricas e totais."""
@@ -2539,17 +2650,7 @@ def dashboard(request):
         return redirect('home')
 
     # Filtro por mês (?month=YYYY-MM)
-    selected_month = (request.GET.get('month') or '').strip()
-    sel_year = sel_month = None
-    if selected_month:
-        try:
-            year_str, month_str = selected_month.split('-')
-            sel_year, sel_month = int(year_str), int(month_str)
-            if not (1 <= sel_month <= 12):
-                raise ValueError
-        except (ValueError, TypeError):
-            selected_month = ''
-            sel_year = sel_month = None
+    selected_month, sel_year, sel_month = _mes_do_filtro(request)
 
     qs = Contestation.objects.select_related('exclusion')
     if sel_year:
@@ -2696,6 +2797,11 @@ def dashboard(request):
         'avg_awaiting_manager_time': avg_awaiting_manager_time,
         'avg_payment_time': avg_payment_time,
         'selected_month': selected_month,
+        # O mês por extenso, para o aviso ao lado dos botões de exportar:
+        # "setembro de 2026" se lê melhor do que "2026-09" no meio da frase.
+        # Em português o mês é minúsculo no meio da frase.
+        'selected_month_label': (date_format(datetime.date(sel_year, sel_month, 1),
+                                             r'F \d\e Y').lower() if sel_year else ''),
     }
     return render(request, 'contestacao/dashboard.html', context)
 
@@ -2707,11 +2813,18 @@ def export_contested_sales(request):
         messages.error(request, 'Sem permissão para exportar.')
         return redirect('contestacao:dashboard')
 
+    selected_month, sel_year, sel_month = _mes_do_filtro(request)
+
     qs = Contestation.objects.select_related('exclusion', 'requester', 'reviewed_by').order_by('-created_at')
+    # O mesmo recorte do dashboard: sem isto o botão baixava o histórico
+    # inteiro mesmo com um mês escolhido na tela.
+    if sel_year:
+        qs = qs.filter(created_at__year=sel_year, created_at__month=sel_month)
     qs = _apply_sector_visibility_filter(qs, request.user)
 
     response = HttpResponse(content_type='text/csv; charset=utf-8')
-    response['Content-Disposition'] = 'attachment; filename="vendas_contestadas.csv"'
+    response['Content-Disposition'] = (
+        f'attachment; filename="vendas_contestadas{_sufixo_do_mes(selected_month)}.csv"')
 
     response.write('\ufeff')
     writer = csv.writer(response, delimiter=';')
@@ -2811,7 +2924,11 @@ def export_contestation_report(request):
         messages.error(request, 'Sem permissão para exportar.')
         return redirect('contestacao:dashboard')
 
+    selected_month, sel_year, sel_month = _mes_do_filtro(request)
+
     qs = Contestation.objects.select_related('exclusion').order_by('-created_at')
+    if sel_year:
+        qs = qs.filter(created_at__year=sel_year, created_at__month=sel_month)
     qs = _apply_sector_visibility_filter(qs, request.user)
 
     grouped = (
@@ -2821,7 +2938,8 @@ def export_contestation_report(request):
     )
 
     response = HttpResponse(content_type='text/csv; charset=utf-8')
-    response['Content-Disposition'] = 'attachment; filename="relatorio_contestacoes.csv"'
+    response['Content-Disposition'] = (
+        f'attachment; filename="relatorio_contestacoes{_sufixo_do_mes(selected_month)}.csv"')
 
     response.write('\ufeff')
     writer = csv.writer(response, delimiter=';')
@@ -2859,15 +2977,22 @@ def export_all_sales(request):
         'requester', 'reviewed_by', 'confirmed_by'
     ).order_by('-created_at')
 
+    selected_month, sel_year, sel_month = _mes_do_filtro(request)
+
     records = (
         _exclusoes()
         .prefetch_related(models.Prefetch('contestations', queryset=contestations_qs))
         .order_by('filial', 'vendedor', '-imported_at')
     )
+    # A base é recortada pela data de importação, como no "Total na Base" do
+    # dashboard — é o número que a pessoa está vendo quando clica no botão.
+    if sel_year:
+        records = records.filter(imported_at__year=sel_year, imported_at__month=sel_month)
     records = _apply_exclusion_scope_for_user(records, request.user)
 
     response = HttpResponse(content_type='text/csv; charset=utf-8')
-    response['Content-Disposition'] = 'attachment; filename="todas_vendas.csv"'
+    response['Content-Disposition'] = (
+        f'attachment; filename="todas_vendas{_sufixo_do_mes(selected_month)}.csv"')
 
     response.write('\ufeff')
     writer = csv.writer(response, delimiter=';')

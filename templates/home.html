@@ -241,6 +241,9 @@
 
     {% include 'reunioes/_lembrete.html' %}
 
+    {# Quiz esperando: só para quem tem sala aberta (context processor quiz_menu). #}
+    {% if quiz_salas_abertas %}{% include 'quiz/_home.html' %}{% endif %}
+
     {# Rotina gerencial de hoje: só para quem tem rotina liberada (context processor rotina_menu). #}
     {% if rotina_liberada %}{% include 'rotina/_home.html' %}{% endif %}
 

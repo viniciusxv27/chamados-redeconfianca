@@ -197,6 +197,13 @@
         </div>
     </div>
 
+    {% comment %}
+    O balanço do ciclo: o que virou contestação e o que ficou no carrinho.
+    É a resposta na própria tela para "mandei 20 e chegaram 13" — as que
+    ficaram aparecem contadas pelo motivo de não terem passado.
+    {% endcomment %}
+    <div id="balancoDoCiclo">{% include 'contestacao/_balanco.html' %}</div>
+
     <div class="mb-4 rounded-lg border p-3 {% if contestation_blocked %}border-red-200 bg-red-50{% else %}border-emerald-200 bg-emerald-50{% endif %}">
         <div class="flex flex-wrap items-center justify-between gap-2">
             <div class="text-sm {% if contestation_blocked %}text-red-700{% else %}text-emerald-700{% endif %}">
@@ -550,6 +557,7 @@
                     <span class="inline-flex items-center justify-center w-9 h-9 rounded-full text-white text-sm font-bold" style="background-color: #c2410c" id="bulkCount">0</span>
                     <div class="text-sm text-white">
                         <span class="font-semibold">pedido de contestação pronto para envio</span>
+                        <div id="bulkResumo" class="text-xs text-white/90 mt-0.5"></div>
                     </div>
                 </div>
                 <div class="flex items-center gap-2 flex-wrap justify-end">
@@ -632,6 +640,21 @@ window.reasonDrafts = {};
 window.pendingSummaries = {};
 // Vendas do carrinho que já foram contestadas antes (marca visível no item).
 window.pendingJaEnviadas = {};
+// A situação de cada item no carrinho (pronta, sem_evidencia, ...) — é o que
+// diz, sem precisar clicar em Enviar, o que vai e o que fica.
+window.pendingSituacoes = {};
+// O motivo de um item ficar parado, no texto que a pessoa lê. Usado na barra
+// do carrinho e na janela de conferência do envio (o servidor tem a mesma
+// lista em contestacao/views.py::ROTULO_SITUACAO).
+window.MOTIVOS_CONFERENCIA = {
+    pronta: 'Pronta para enviar',
+    sem_motivo: 'Falta escrever o motivo',
+    sem_evidencia: 'Falta anexar a evidência',
+    ja_contestada: 'Já contestada neste ciclo',
+    fora_do_escopo: 'Fora da sua loja/base',
+    nao_encontrada: 'Não está mais na base sincronizada',
+    falhou: 'Não deu para enviar agora (tente de novo)'
+};
 window.contestationDraftDbName = 'contestacaoDraftsDb';
 window.contestationDraftStore = 'draftFiles';
 window.contestationDraftDbVersion = 1;
@@ -935,6 +958,12 @@ window.loadServerDraft = async function() {
             if (reason) {
                 window.pendingReasons[id] = reason;
                 delete window.reasonDrafts[id];
+            } else if (window.pendingReasons[id] === undefined) {
+                // Rascunho que existe no servidor mas ainda sem motivo: entra
+                // no carrinho da tela assim mesmo, com o campo em branco. Sem
+                // isto a conta não fechava — o painel dizia "4 no carrinho" e
+                // a lista mostrava 3, sem ninguém achar o que faltava.
+                window.pendingReasons[id] = window.reasonDrafts[id] || '';
             }
 
             if (item.summary) {
@@ -957,6 +986,12 @@ window.loadServerDraft = async function() {
                 window.pendingJaEnviadas[id] = item.ja_enviada;
             } else {
                 delete window.pendingJaEnviadas[id];
+            }
+
+            if (item.situacao && item.situacao !== 'pronta') {
+                window.pendingSituacoes[id] = item.situacao;
+            } else {
+                delete window.pendingSituacoes[id];
             }
 
             document.querySelectorAll('.reason-input[data-id="' + id + '"]').forEach((ta) => {
@@ -982,6 +1017,7 @@ window.loadServerDraft = async function() {
                     delete window.pendingServerAttachments[id];
                     delete window.pendingSummaries[id];
                     delete window.pendingJaEnviadas[id];
+                    delete window.pendingSituacoes[id];
                 }
             });
             window.showToast(data.removidos_por_ja_contestada
@@ -1465,6 +1501,8 @@ window.removeItemFromCart = function(id) {
     delete window.pendingSummaries[id];
     delete window.reasonDrafts[id];
     delete window.pendingServerAttachments[id];
+    delete window.pendingSituacoes[id];
+    delete window.pendingJaEnviadas[id];
 
     window.resetButton(id);
 
@@ -1601,7 +1639,50 @@ window.bindBulkReasonInputs = function(container) {
     });
 };
 
+/* O que falta neste item para ele poder ser enviado. Motivo e evidência dão
+ * para conferir aqui mesmo (muda na hora em que a pessoa digita ou anexa); o
+ * resto — venda fora da base, já contestada — só o servidor sabe, e vem de
+ * window.pendingSituacoes. */
+window.situacaoDoItem = function(id) {
+    if ((window.pendingReasons[id] || '').trim() === '') return 'sem_motivo';
+    if (!window.pendingFiles[id] && !window.pendingServerAttachments[id]) return 'sem_evidencia';
+    const doServidor = window.pendingSituacoes[id];
+    if (doServidor && doServidor !== 'sem_motivo' && doServidor !== 'sem_evidencia') {
+        return doServidor;
+    }
+    return 'pronta';
+};
+
+/* Redesenha o painel de cima (o que foi contestado x o que ficou) pelo
+ * servidor. Chamado depois de enviar e depois de mexer no carrinho, com uma
+ * folga curta para não pedir a cada tecla digitada. */
+window.balancoTimer = null;
+window.assinaturaDoCarrinho = function() {
+    return Object.keys(window.pendingReasons)
+        .sort((a, b) => Number(a) - Number(b))
+        .map((id) => id + ':' + window.situacaoDoItem(id))
+        .join('|');
+};
+window.atualizarBalanco = function(atraso) {
+    clearTimeout(window.balancoTimer);
+    window.balancoTimer = setTimeout(async () => {
+        const alvo = document.getElementById('balancoDoCiclo');
+        if (!alvo) return;
+        const marca = document.getElementById('balancoAssinatura');
+        if (marca && marca.dataset.v === window.assinaturaDoCarrinho()) {
+            return;  // o painel na tela já é o do carrinho de agora
+        }
+        try {
+            const resp = await fetch('{% url "contestacao:balanco_fragmento" %}', {cache: 'no-store'});
+            if (resp.ok) alvo.innerHTML = await resp.text();
+        } catch (_) {
+            // O painel continua mostrando o que já estava; sem alarme na tela.
+        }
+    }, atraso === undefined ? 1200 : atraso);
+};
+
 window.renderBar = function() {
+    window.atualizarBalanco();
     const ids = Object.keys(window.pendingReasons);
     window.fetchMissingSummaries(ids).then((updated) => {
         // Re-render rápido para preencher itens antigos que estavam com '-'.
@@ -1615,6 +1696,17 @@ window.renderBar = function() {
     const toggleBtn = document.getElementById('btnToggleBulkDetails');
     const count = ids.length;
     document.getElementById('bulkCount').textContent = count;
+
+    // Quantas vão e quantas ficam, à vista, sem abrir os detalhes.
+    const resumo = document.getElementById('bulkResumo');
+    if (resumo) {
+        const prontas = ids.filter((id) => window.situacaoDoItem(id) === 'pronta').length;
+        const paradas = count - prontas;
+        resumo.innerHTML = paradas
+            ? `<i class="fas fa-circle-check mr-1"></i>${prontas} ${prontas === 1 ? 'vai ser enviada' : 'vão ser enviadas'}`
+              + ` &middot; <i class="fas fa-circle-exclamation mr-1"></i>${paradas} ${paradas === 1 ? 'fica' : 'ficam'} no carrinho`
+            : `<i class="fas fa-circle-check mr-1"></i>${prontas} ${prontas === 1 ? 'pronta — vai ser enviada' : 'prontas — todas vão ser enviadas'}`;
+    }
 
     if (detailsList) {
         detailsList.innerHTML = '';
@@ -1636,6 +1728,16 @@ window.renderBar = function() {
                    </div>`
                 : '';
             const fileStatusClass = (hasFile || hasServerFile) ? 'text-gray-600' : 'text-red-600 font-semibold';
+            const situacao = window.situacaoDoItem(id);
+            const situacaoSelo = situacao === 'pronta'
+                ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50
+                       border border-emerald-200 text-emerald-800 text-[11px] font-semibold">
+                       <i class="fas fa-circle-check"></i>Vai ser enviada
+                   </span>`
+                : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-50
+                       border border-red-200 text-red-800 text-[11px] font-semibold">
+                       <i class="fas fa-circle-exclamation"></i>Fica no carrinho: ${window.MOTIVOS_CONFERENCIA[situacao] || situacao}
+                   </span>`;
 
             const item = document.createElement('div');
             item.className = 'bulk-detail-item text-xs';
@@ -1643,6 +1745,7 @@ window.renderBar = function() {
                 <div class="flex items-start justify-between gap-2">
                     <div class="min-w-0 flex-1">
                         <div class="font-semibold text-sm text-gray-900">${summary.vendedor} <span class="text-gray-600">(${summary.filial})</span></div>
+                        <div class="mt-1 flex flex-wrap items-center gap-1">${situacaoSelo}</div>
                         ${jaEnviadaSelo}
                         <div class="mt-1 text-gray-700">Valor: <strong>${summary.valor}</strong> | Produto: ${summary.produto || '-'}</div>
                         <div class="mt-1 text-gray-700">Motivo atual: ${shortReason || '-'}</div>
@@ -1756,16 +1859,6 @@ window.repairCartNow = async function() {
  * o servidor criava só o que dava e a tela limpava o carrinho inteiro
  * assim mesmo — daí "chegaram menos vendas do que eu mandei".
  * ------------------------------------------------------------------ */
-window.MOTIVOS_CONFERENCIA = {
-    pronta: 'Pronta para enviar',
-    sem_motivo: 'Falta escrever o motivo',
-    sem_evidencia: 'Falta anexar a evidência',
-    ja_contestada: 'Já contestada neste ciclo',
-    fora_do_escopo: 'Fora da sua loja/base',
-    nao_encontrada: 'Não está mais na base sincronizada',
-    falhou: 'Não deu para enviar agora (tente de novo)'
-};
-
 window.esperar = function(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 };
