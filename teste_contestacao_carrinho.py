@@ -207,6 +207,42 @@ try:
     t('a conferência depois do reenvio também diz isso (a tela tira do carrinho)',
       r.json()['itens'][0]['situacao'] == 'ja_contestada')
 
+    print('\n== O CARRINHO NÃO GUARDA O QUE JÁ FOI ENVIADO ==')
+    # O caso da Norte Sul (30/09/2026): 13 vendas viraram contestação em
+    # 24/09 e continuaram no carrinho; em 28/09 a pessoa mandou o mesmo
+    # carrinho e criou 13 contestações repetidas da mesma venda.
+    aberta = venda(20)
+    ContestationCartDraft.objects.create(user=gerente, exclusion=aberta, reason='ZZ já enviada')
+    Contestation.objects.create(exclusion=aberta, requester=gerente, reason='ZZ já enviada',
+                                status='pending')
+    decidida = venda(21)
+    ContestationCartDraft.objects.create(user=gerente, exclusion=decidida, reason='ZZ negada antes')
+    antiga_decidida = Contestation.objects.create(
+        exclusion=decidida, requester=gerente, reason='ZZ negada antes', status='denied')
+
+    r = c.get('/contestacao/carrinho/rascunho/', HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+    dados = r.json()
+    ids_no_carrinho = {i['exclusion_id'] for i in dados['items']}
+    t('a venda com contestação aberta sai do carrinho', aberta.pk not in ids_no_carrinho)
+    t('e o rascunho dela some do banco',
+      not ContestationCartDraft.objects.filter(user=gerente, exclusion=aberta).exists())
+    t('a tela é avisada de quantas saíram', dados.get('removidos_por_ja_contestada') == 1,
+      dados.get('removidos_por_ja_contestada'))
+
+    t('a venda já decidida continua no carrinho', decidida.pk in ids_no_carrinho)
+    marcada = next(i for i in dados['items'] if i['exclusion_id'] == decidida.pk)
+    t('mas vem marcada como já contestada', bool(marcada.get('ja_enviada')), marcada)
+    t('com a data e a decisão à vista',
+      marcada['ja_enviada']['em'] == timezone.localtime(antiga_decidida.created_at).strftime('%d/%m/%Y')
+      and 'egad' in marcada['ja_enviada']['status'].lower(), marcada.get('ja_enviada'))
+
+    nunca = venda(22)
+    ContestationCartDraft.objects.create(user=gerente, exclusion=nunca, reason='ZZ nova')
+    r = c.get('/contestacao/carrinho/rascunho/', HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+    item_novo = next(i for i in r.json()['items'] if i['exclusion_id'] == nunca.pk)
+    t('e a venda que nunca foi contestada não ganha marca nenhuma',
+      'ja_enviada' not in item_novo, item_novo)
+
     print('\n== O CAMINHO ANTIGO CONTINUA ==')
     antiga = venda(7)
     r = c.post(ENVIAR, {'count': 1, 'exclusion_id_0': antiga.pk,

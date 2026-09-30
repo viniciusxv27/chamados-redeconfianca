@@ -1098,20 +1098,55 @@ def cart_draft_list(request):
     if not _can_access_contestation_module(request.user):
         return JsonResponse({'success': False, 'error': 'Sem permissao.'}, status=403)
 
-    drafts = ContestationCartDraft.objects.select_related('exclusion').filter(user=request.user).order_by('-updated_at')
+    drafts = list(ContestationCartDraft.objects.select_related('exclusion')
+                  .filter(user=request.user).order_by('-updated_at'))
+    ids = [d.exclusion_id for d in drafts]
+
+    # Item que já virou contestação e ainda está em aberto não tem o que fazer
+    # no carrinho: o envio o recusaria ("já contestada") e ele só ficava lá
+    # convidando a mandar de novo. Sai daqui, sem perder nada — a contestação
+    # dele existe e está andando.
+    sync_state = _get_sync_window_state(request.user)
+    abertas = set(
+        Contestation.objects.filter(exclusion_id__in=ids)
+        .filter(_open_contestation_filter(sync_state['last_sync_at']))
+        .values_list('exclusion_id', flat=True)
+    )
+    removidos = 0
+    if abertas:
+        removidos = (ContestationCartDraft.objects
+                     .filter(user=request.user, exclusion_id__in=abertas).delete()[0])
+        drafts = [d for d in drafts if d.exclusion_id not in abertas]
+        ids = [d.exclusion_id for d in drafts]
+
+    # O que já foi enviado alguma vez (mesmo já decidido) continua no carrinho,
+    # mas marcado: quem olha precisa saber que aquela venda já foi contestada
+    # antes de mandar de novo.
+    ja_enviadas = {}
+    for c in (Contestation.objects.filter(exclusion_id__in=ids)
+              .order_by('exclusion_id', '-created_at')):
+        ja_enviadas.setdefault(c.exclusion_id, c)
 
     scoped_exclusions = _apply_exclusion_scope_for_user(
-        _exclusoes().filter(pk__in=drafts.values_list('exclusion_id', flat=True)),
+        _exclusoes().filter(pk__in=ids),
         request.user,
     )
     allowed_ids = set(scoped_exclusions.values_list('pk', flat=True))
 
     items = []
     for draft in drafts:
-        if draft.exclusion_id in allowed_ids:
-            items.append(_serialize_cart_draft_item(draft))
+        if draft.exclusion_id not in allowed_ids:
+            continue
+        item = _serialize_cart_draft_item(draft)
+        anterior = ja_enviadas.get(draft.exclusion_id)
+        if anterior:
+            item['ja_enviada'] = {
+                'em': timezone.localtime(anterior.created_at).strftime('%d/%m/%Y'),
+                'status': anterior.get_status_display(),
+            }
+        items.append(item)
 
-    return JsonResponse({'success': True, 'items': items})
+    return JsonResponse({'success': True, 'items': items, 'removidos_por_ja_contestada': removidos})
 
 
 @login_required
