@@ -521,6 +521,17 @@ def calcular_pontuacao(user, inicio=None, fim=None, referencia=None):
         'pontos_sem_oportunidade': _quantize(sem_oportunidade),
         'percentual': _quantize(percentual),
         'faixa': faixa_por_score(percentual),
+        # Os números que desempatam o ranking, na ordem pedida: assiduidade
+        # (menos ajustes de ponto), metas do CONFIAR concluídas e ideias
+        # aprovadas. `ajustes` é None para quem não tem ponto sincronizado
+        # (ou é dispensado de bater): não há ajuste nenhum para contar, e na
+        # ordenação isso vale zero — o desempate cai para o critério seguinte.
+        'desempate': {
+            'ajustes': (det_assid.get('total_ajustes')
+                        if det_assid.get('fonte') == 'ponto' else None),
+            'metas_concluidas': det_metas.get('concluidas', 0),
+            'ideias_aprovadas': det_inovar.get('aprovadas', 0),
+        },
         # Vai junto para o linhas_detalhadas desenhar o "de quanto" certo:
         # ele não recebe a pessoa, e reler o banco lá daria a régua errada.
         'pesos': pesos(user),
@@ -530,6 +541,43 @@ def calcular_pontuacao(user, inicio=None, fim=None, referencia=None):
             'inovar': det_inovar,
         },
     }
+
+
+def chave_do_ranking(dados, nome=''):
+    """A ordem da tabela: pontuação e, no empate, os três critérios pedidos.
+
+    1. **assiduidade** — quem fez menos ajustes de ponto no mês;
+    2. **mais metas do CONFIAR concluídas**;
+    3. **mais ideias aprovadas** no Inovar.
+
+    O nome fecha a conta para a ordem não dançar de um carregamento para o
+    outro quando tudo empata.
+    """
+    d = dados.get('desempate') or {}
+    return (
+        -float(dados['percentual']),
+        d.get('ajustes') or 0,
+        -(d.get('metas_concluidas') or 0),
+        -(d.get('ideias_aprovadas') or 0),
+        (nome or '').strip().lower(),
+    )
+
+
+def ordenar_ranking(linhas, dados=lambda linha: linha['dados'],
+                    nome=lambda linha: linha['user'].get_full_name()):
+    """Ordena a tabela do acompanhamento e marca quem empatou em pontuação.
+
+    Quem empata ganha `empatou=True`, para a tela poder mostrar por que uma
+    linha ficou na frente da outra.
+    """
+    ordenadas = sorted(linhas, key=lambda linha: chave_do_ranking(dados(linha), nome(linha)))
+    por_percentual = {}
+    for linha in ordenadas:
+        chave = str(dados(linha)['percentual'])
+        por_percentual[chave] = por_percentual.get(chave, 0) + 1
+    for linha in ordenadas:
+        linha['empatou'] = por_percentual[str(dados(linha)['percentual'])] > 1
+    return ordenadas
 
 
 # Cores dos blocos — paleta validada para daltonismo (ΔE 15.0):

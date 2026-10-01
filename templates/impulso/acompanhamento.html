@@ -86,6 +86,7 @@
                     <th class="text-right px-3 py-2.5 font-medium">Conectar</th>
                     <th class="text-right px-3 py-2.5 font-medium">Inovar</th>
                     <th class="text-right px-5 py-2.5 font-medium">Total</th>
+                    <th class="text-left px-3 py-2.5 font-medium whitespace-nowrap" title="Ordem do desempate: menos ajustes de ponto, depois mais metas concluídas, depois mais ideias aprovadas">Desempate</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-gray-50">
@@ -115,9 +116,17 @@
                     <td class="px-3 py-2.5 text-right tabular-nums text-gray-600">{{ r.dados.conectar|floatformat:"-1" }}</td>
                     <td class="px-3 py-2.5 text-right tabular-nums text-gray-600">{{ r.dados.inovar|floatformat:"-1" }}</td>
                     <td class="px-5 py-2.5 text-right font-bold tabular-nums text-gray-900">{{ r.dados.total|floatformat:"-1" }}</td>
+                    <td class="px-3 py-2.5 text-xs whitespace-nowrap {% if r.empatou %}text-gray-600{% else %}text-gray-400{% endif %}">
+                        {% if r.empatou %}<i class="fas fa-code-compare text-orange-500 mr-1" title="Empatou na pontuação — a ordem saiu do desempate"></i>{% endif %}
+                        <span title="Ajustes de ponto no mês (menos é melhor)">{% if r.dados.desempate.ajustes is None %}—{% else %}{{ r.dados.desempate.ajustes }}{% endif %} aj.</span>
+                        <span class="text-gray-300 mx-0.5">·</span>
+                        <span title="Metas do Confiar concluídas no mês">{{ r.dados.desempate.metas_concluidas }} meta{{ r.dados.desempate.metas_concluidas|pluralize }}</span>
+                        <span class="text-gray-300 mx-0.5">·</span>
+                        <span title="Ideias aprovadas no Inovar">{{ r.dados.desempate.ideias_aprovadas }} ideia{{ r.dados.desempate.ideias_aprovadas|pluralize }}</span>
+                    </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="8" class="px-5 py-10 text-center text-gray-400">Nenhum colaborador no Escritório (ADM) ainda.</td></tr>
+                <tr><td colspan="9" class="px-5 py-10 text-center text-gray-400">Nenhum colaborador no Escritório (ADM) ainda.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -128,6 +137,11 @@
     <i class="fas fa-circle-info mr-1"></i>
     Total de 100 pontos: Confiar 40 (metas 20 · feedback 10 · assiduidade 10) · Conectar 40 (curso 10 · vídeos e POPs 10 · projeto foco 20) · Inovar 20 (3 ideias 10 · ideia aprovada 10).
     Itens sem nada configurado no mês saem do total possível.
+    <br>
+    <i class="fas fa-code-compare mr-1"></i>
+    Quem empata na pontuação é ordenado por: <strong>1º</strong> assiduidade — menos ajustes de ponto no mês;
+    <strong>2º</strong> mais metas do Confiar concluídas; <strong>3º</strong> mais ideias aprovadas no Inovar.
+    Quem não tem ponto sincronizado aparece com “—” ajustes e segue para o critério seguinte.
 </p>
 
 {% endblock %}

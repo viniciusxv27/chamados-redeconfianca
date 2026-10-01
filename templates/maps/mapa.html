@@ -3,11 +3,22 @@
 {% block title %}Mapa de localização{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+{% comment %}
+A biblioteca do mapa vem de CDN. Em rede que bloqueia um CDN, a tela ficava
+sem mapa nenhum e sem explicação — por isso cada arquivo tem um segundo
+endereço, em outro domínio, e a tela avisa se nem assim carregar.
+{% endcomment %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      onerror="this.onerror=null; this.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css';">
 <style>
     .mp-card { background:#fff; border:1px solid #ECECF1; border-radius:1rem;
                box-shadow:0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.06); }
-    #mpMapa { height: 68vh; min-height: 26rem; border-radius: 1rem; z-index: 0; }
+    #mpMapa { height: 68vh; min-height: 26rem; border-radius: 1rem; z-index: 0;
+              background:#EEF2F7; }
+    .mp-fonte { margin:0 0 6px; padding:7px 11px; border-radius:.75rem; font-size:12px;
+                line-height:1.35; }
+    .mp-fonte-aviso { background:#EFF6FF; color:#1D4ED8; border:1px solid #BFDBFE; }
+    .mp-fonte-alerta { background:#FEF3C7; color:#92400E; border:1px solid #FDE68A; }
     @media (max-width: 768px) { #mpMapa { height: 55vh; } }
 
     .mp-pessoa { cursor:pointer; }
@@ -150,6 +161,12 @@
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div class="lg:col-span-2">
             <div class="mp-card p-1.5">
+                {% comment %}
+                Quando o mapa base não carrega (rede que bloqueia o provedor de
+                imagens), esta faixa diz o que houve. Antes ficava só um quadro
+                cinza e parecia que o módulo estava quebrado.
+                {% endcomment %}
+                <div id="mpFonte" class="mp-fonte" style="display:none"></div>
                 <div id="mpMapa"></div>
             </div>
             <p class="text-[11px] text-gray-400 mt-2">
@@ -211,9 +228,28 @@
 </div>
 
 {{ posicoes_json|json_script:"mpDados" }}
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-(function () {
+// Se o primeiro CDN estiver bloqueado, busca a biblioteca no segundo antes de
+// desistir; `mpIniciar` só roda quando o L existe de verdade.
+function mpReserva() {
+    var tag = document.createElement('script');
+    tag.src = 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js';
+    tag.onload = function () { mpIniciar(); };
+    tag.onerror = function () { mpSemBiblioteca(); };
+    document.head.appendChild(tag);
+}
+function mpSemBiblioteca() {
+    var aviso = document.getElementById('mpFonte');
+    if (!aviso) { return; }
+    aviso.className = 'mp-fonte mp-fonte-alerta';
+    aviso.innerHTML = '<i class="fas fa-triangle-exclamation mr-1"></i>A biblioteca do mapa '
+        + 'está bloqueada nesta rede — a lista de pessoas ao lado continua completa.';
+    aviso.style.display = 'block';
+}
+</script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" onerror="mpReserva()"></script>
+<script>
+function mpIniciar() {
     // O servidor já mandou as posições nesta página. Desenhar a partir daí faz
     // o mapa aparecer preenchido no primeiro quadro — e, se a consulta de
     // atualização falhar, ele continua mostrando algo em vez de ficar cinza.
@@ -221,10 +257,85 @@
     try { dadosIniciais = JSON.parse(document.getElementById('mpDados').textContent) || []; }
     catch (e) { dadosIniciais = []; }
     var mapa = L.map('mpMapa', { zoomControl: true });
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '&copy; OpenStreetMap'
-    }).addTo(mapa);
+
+    /* O mapa base tem plano B.
+     *
+     * Em rede que bloqueia o servidor de imagens do OpenStreetMap o quadro
+     * ficava cinza, sem explicação nenhuma — os pontos estavam carregados, só
+     * não havia rua embaixo. Agora a tela tenta um provedor, percebe que
+     * nenhuma imagem chegou e passa para o próximo; a última opção é o próprio
+     * portal, que o navegador já acessa de qualquer forma. */
+    var FONTES = [
+        { nome: 'OpenStreetMap',
+          url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+          attribuicao: '&copy; OpenStreetMap' },
+        { nome: 'Carto',
+          url: 'https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
+          attribuicao: '&copy; OpenStreetMap &middot; &copy; CARTO' },
+        { nome: 'portal',
+          url: '{{ url_tiles }}',
+          attribuicao: '&copy; OpenStreetMap (pelo portal)' }
+    ];
+    var fonteAtual = -1;
+    var camadaBase = null;
+    var carregou = false;
+    var vigia = null;
+
+    function avisarFonte(texto, cor) {
+        var aviso = document.getElementById('mpFonte');
+        if (!aviso) { return; }
+        aviso.innerHTML = texto;
+        aviso.style.display = texto ? 'block' : 'none';
+        aviso.className = 'mp-fonte ' + (cor || '');
+    }
+
+    // Estado da troca de fonte, para conferir a tela de fora (teste/suporte).
+    window.mpDiag = function () {
+        return { fonte: fonteAtual, nome: (FONTES[fonteAtual] || {}).nome || '', carregou: carregou };
+    };
+
+    function usarFonte(indice) {
+        console.log('[mapa] fonte ->', indice, (FONTES[indice] || {}).nome || 'acabaram');
+        if (indice >= FONTES.length) {
+            avisarFonte('<i class="fas fa-triangle-exclamation mr-1"></i>O mapa base não '
+                      + 'carregou nesta rede — os pontos continuam marcados e a lista ao '
+                      + 'lado está completa.', 'mp-fonte-alerta');
+            return;
+        }
+        fonteAtual = indice;
+        carregou = false;
+        var fonte = FONTES[indice];
+        if (camadaBase) { mapa.removeLayer(camadaBase); }
+        camadaBase = L.tileLayer(fonte.url, { maxZoom: 19, attribution: fonte.attribuicao });
+        // `tileload` (uma imagem que chegou de verdade), não `load`: o Leaflet
+        // dispara `load` quando a leva termina — inclusive quando TODOS os
+        // quadradinhos falharam, que é justamente o caso que queremos pegar.
+        camadaBase.on('tileload', function () {
+            if (carregou) { return; }
+            carregou = true;
+            avisarFonte(indice === 0 ? '' :
+                '<i class="fas fa-circle-info mr-1"></i>Mapa base pelo <strong>'
+                + fonte.nome + '</strong> — o provedor padrão não respondeu nesta rede.',
+                'mp-fonte-aviso');
+        });
+        camadaBase.on('tileerror', function () {
+            if (!carregou) { trocarEmBreve(); }
+        });
+        camadaBase.addTo(mapa);
+        trocarEmBreve();
+    }
+
+    function trocarEmBreve() {
+        // Dá um tempo para a primeira leva de imagens chegar antes de desistir:
+        // internet lenta não é bloqueio, e trocar cedo demais ficaria piscando.
+        if (vigia) { return; }
+        vigia = setTimeout(function () {
+            vigia = null;
+            if (!carregou) { usarFonte(fonteAtual + 1); }
+        }, 5000);
+    }
+
+    usarFonte(0);
 
     var camada = L.layerGroup().addTo(mapa);
     var marcadores = {};
@@ -383,6 +494,12 @@
     var chave = document.getElementById('mpAuto');
     chave.addEventListener('change', function () { chave.checked ? ligar() : desligar(); });
     ligar();
-})();
+}
+
+// O onerror da tag acima cobre o CDN fora do ar; este `if` cobre o caso em que
+// ele responde algo que não é a biblioteca (portal cativo, proxy que devolve
+// uma página de bloqueio).
+if (typeof L !== 'undefined') { mpIniciar(); }
+else if (!document.querySelector('script[src*="jsdelivr"]')) { mpReserva(); }
 </script>
 {% endblock %}

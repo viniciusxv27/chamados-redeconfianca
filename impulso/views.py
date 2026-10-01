@@ -31,7 +31,8 @@ from .models import (
     Meta, MetaAnexo, MetaComentario, MetaItem, MetaVisualizacao, PontuacaoMensal,
     ProjetoAnexo, ProjetoFoco, TarefaProjeto,
 )
-from .scoring import calcular_pontuacao, filtros_de_tarefa_do_mes, linhas_detalhadas
+from .scoring import (calcular_pontuacao, filtros_de_tarefa_do_mes, linhas_detalhadas,
+                      ordenar_ranking)
 from .utils import (
     FAIXAS, calcular_faixa, e_superadmin, faixa_info, get_adms_lojas, get_colaboradores,
     get_gestores, get_superadmins,
@@ -3541,7 +3542,9 @@ def acompanhamento(request):
     for c in colaboradores:
         dados = calcular_pontuacao(c)
         ranking.append({'user': c, 'dados': dados, 'faixa': faixa_info(dados['faixa'])})
-    ranking.sort(key=lambda r: float(r['dados']['percentual']), reverse=True)
+    # A ordem e o desempate (assiduidade → metas concluídas → ideias
+    # aprovadas) moram no scoring, junto do cálculo que os alimenta.
+    ranking = ordenar_ranking(ranking)
 
     minha = calcular_pontuacao(request.user)
     context = {

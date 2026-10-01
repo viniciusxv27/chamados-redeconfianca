@@ -6,13 +6,15 @@ de acesso.
 """
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.views.decorators.http import require_POST
 from django.utils import timezone
 
 from users.models import Sector, User
 
+from . import tiles
 from .models import ConfiguracaoMapa, PosicaoRegistrada
 from .permissions import pode_ver_mapa
 from .servicos import DIAS_PADRAO, FRESCO_MINUTOS, posicoes
@@ -84,7 +86,34 @@ def mapa(request):
         'fresco_minutos': FRESCO_MINUTOS,
         'coleta_ativa': ConfiguracaoMapa.carregar().coleta_ativa,
         'agora': timezone.localtime(),
+        # O caminho do mapa base servido pelo próprio portal — a tela cai para
+        # ele quando os provedores públicos não respondem na rede de quem abriu.
+        'url_tiles': reverse('maps:tile', args=[0, 0, 0]).replace(
+            '/0/0/0.png', '/{z}/{x}/{y}.png'),
     })
+
+
+@login_required
+def tile(request, z, x, y):
+    """Um quadradinho do mapa base, buscado e guardado pelo portal.
+
+    Existe para a rede que bloqueia o servidor de imagens do OpenStreetMap: a
+    tela tenta os provedores públicos primeiro e só pede aqui quando o mapa
+    ficaria cinza. Restrito a quem pode ver o mapa — isto não é um proxy aberto.
+    """
+    if not pode_ver_mapa(request.user):
+        return HttpResponse(status=403)
+    if not tiles.coordenada_valida(z, x, y):
+        return HttpResponse(status=404)
+
+    imagem = tiles.buscar(z, x, y)
+    if imagem is None:
+        # 502: a tela entende como "esta fonte também não vai" e para de pedir.
+        return HttpResponse(status=502)
+
+    resposta = HttpResponse(imagem, content_type='image/png')
+    resposta['Cache-Control'] = 'private, max-age=604800'
+    return resposta
 
 
 @login_required
