@@ -258,23 +258,26 @@ function mpIniciar() {
     catch (e) { dadosIniciais = []; }
     var mapa = L.map('mpMapa', { zoomControl: true });
 
-    /* O mapa base tem plano B.
+    /* O mapa base e o seu plano B.
      *
-     * Em rede que bloqueia o servidor de imagens do OpenStreetMap o quadro
-     * ficava cinza, sem explicação nenhuma — os pontos estavam carregados, só
-     * não havia rua embaixo. Agora a tela tenta um provedor, percebe que
-     * nenhuma imagem chegou e passa para o próximo; a última opção é o próprio
-     * portal, que o navegador já acessa de qualquer forma. */
+     * Duas fontes foram descartadas por recusarem uso de aplicação — e as duas
+     * recusam do pior jeito, respondendo HTTP 200 com uma imagem escrita, que
+     * o navegador aceita como se fosse mapa: o OpenStreetMap ("Access blocked
+     * — not following the tile usage policy") e o Carto ("API KEY REQUIRED"
+     * carimbado por cima). Ficou o Esri, que serve estes mapas sem chave.
+     *
+     * A reserva é o próprio portal: quando a rede bloqueia o endereço do
+     * provedor, o navegador continua falando com o portal, que busca a imagem
+     * do lado de fora e entrega. A tela percebe que nenhuma imagem chegou e
+     * troca sozinha. */
     var FONTES = [
-        { nome: 'OpenStreetMap',
-          url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-          attribuicao: '&copy; OpenStreetMap' },
-        { nome: 'Carto',
-          url: 'https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
-          attribuicao: '&copy; OpenStreetMap &middot; &copy; CARTO' },
+        { nome: 'Esri',
+          url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map'
+               + '/MapServer/tile/{z}/{y}/{x}',
+          attribuicao: 'Tiles &copy; Esri &middot; HERE, Garmin, OpenStreetMap contributors' },
         { nome: 'portal',
           url: '{{ url_tiles }}',
-          attribuicao: '&copy; OpenStreetMap (pelo portal)' }
+          attribuicao: 'Tiles &copy; Esri (pelo portal)' }
     ];
     var fonteAtual = -1;
     var camadaBase = null;
@@ -306,7 +309,11 @@ function mpIniciar() {
         carregou = false;
         var fonte = FONTES[indice];
         if (camadaBase) { mapa.removeLayer(camadaBase); }
-        camadaBase = L.tileLayer(fonte.url, { maxZoom: 19, attribution: fonte.attribuicao });
+        camadaBase = L.tileLayer(fonte.url, {
+            maxZoom: 19,
+            attribution: fonte.attribuicao,
+            subdomains: fonte.subdominios || 'abc',
+        });
         // `tileload` (uma imagem que chegou de verdade), não `load`: o Leaflet
         // dispara `load` quando a leva termina — inclusive quando TODOS os
         // quadradinhos falharam, que é justamente o caso que queremos pegar.

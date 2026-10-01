@@ -106,12 +106,12 @@ def tile(request, z, x, y):
     if not tiles.coordenada_valida(z, x, y):
         return HttpResponse(status=404)
 
-    imagem = tiles.buscar(z, x, y)
+    imagem, tipo = tiles.buscar(z, x, y)
     if imagem is None:
         # 502: a tela entende como "esta fonte também não vai" e para de pedir.
         return HttpResponse(status=502)
 
-    resposta = HttpResponse(imagem, content_type='image/png')
+    resposta = HttpResponse(imagem, content_type=tipo or 'image/png')
     resposta['Cache-Control'] = 'private, max-age=604800'
     return resposta
 

@@ -22,12 +22,33 @@ SEGUNDOS_NO_CACHE = 7 * 24 * 3600
 TEMPO_LIMITE = 6
 AGENTE = 'PortalRedeConfianca/1.0 (mapa interno de gestão; contato pelo portal)'
 
-# Na ordem em que são tentados. Dois domínios diferentes: se um estiver fora
-# (ou bloqueado), o outro ainda responde.
+# Na ordem em que são tentados, em domínios diferentes: se um estiver fora (ou
+# bloqueado), o outro ainda responde.
+#
+# Duas recusas, pelo mesmo truque, levaram a estas escolhas:
+#
+# - **tile.openstreetmap.org** recusa uso de aplicação ("Access blocked — not
+#   following the tile usage policy");
+# - **basemaps.cartocdn.com** exige chave e carimba "API KEY REQUIRED" no mapa.
+#
+# Os dois respondem **HTTP 200 com uma imagem escrita**, então o navegador acha
+# que carregou e nada avisa que o mapa está errado — foi exatamente o que se viu
+# na tela. O Esri (ArcGIS Online) serve estes mapas base sem chave, e é ele que
+# ficou; a atribuição obrigatória vai na própria tela.
 FONTES = (
-    'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-    'https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
+    ('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map'
+     '/MapServer/tile/{z}/{y}/{x}', 'image/jpeg'),
+    ('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map'
+     '/MapServer/tile/{z}/{y}/{x}', 'image/jpeg'),
 )
+
+# Tamanho abaixo do qual a imagem não é mapa coisa nenhuma (quadrado vazio ou
+# aviso minúsculo). Serve de rede: se uma fonte começar a devolver lixo com
+# HTTP 200, a próxima é tentada em vez de pintar a tela de cinza. Não pega
+# carimbo grande ("API KEY REQUIRED" tem 2 KB) — para isso existe o comando
+# `manage.py conferir_mapa`, que pede dois quadradinhos de lugares distantes:
+# se vierem iguais, é aviso, não mapa.
+MINIMO_DE_IMAGEM = 300
 
 
 def coordenada_valida(z, x, y):
@@ -43,7 +64,7 @@ def chave(z, x, y):
 
 
 def buscar(z, x, y):
-    """Os bytes do tile (PNG), ou None se nenhuma fonte respondeu.
+    """(bytes, tipo) do tile, ou (None, None) se nenhuma fonte respondeu.
 
     Nunca levanta: o mapa perder um quadradinho é melhor do que a tela cair.
     """
@@ -54,16 +75,19 @@ def buscar(z, x, y):
     if guardado is not None:
         return guardado
 
-    for modelo in FONTES:
+    for modelo, tipo_padrao in FONTES:
         url = modelo.format(z=z, x=x, y=y)
         try:
             resposta = requests.get(url, timeout=TEMPO_LIMITE,
                                     headers={'User-Agent': AGENTE})
-            if resposta.status_code == 200 and resposta.content:
-                cache.set(chave(z, x, y), resposta.content, SEGUNDOS_NO_CACHE)
-                return resposta.content
-            logger.info('Tile %s/%s/%s recusado por %s: HTTP %s',
-                        z, x, y, url, resposta.status_code)
+            tipo = (resposta.headers.get('Content-Type') or tipo_padrao).split(';')[0].strip()
+            if (resposta.status_code == 200 and tipo.startswith('image/')
+                    and len(resposta.content or b'') >= MINIMO_DE_IMAGEM):
+                cache.set(chave(z, x, y), (resposta.content, tipo), SEGUNDOS_NO_CACHE)
+                return resposta.content, tipo
+            logger.info('Tile %s/%s/%s recusado por %s: HTTP %s, %s, %s bytes',
+                        z, x, y, url, resposta.status_code, tipo,
+                        len(resposta.content or b''))
         except Exception as exc:                          # noqa: BLE001
             logger.info('Tile %s/%s/%s falhou em %s: %s', z, x, y, url, exc)
-    return None
+    return None, None

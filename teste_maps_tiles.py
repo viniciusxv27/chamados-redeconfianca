@@ -50,7 +50,9 @@ from users.models import Sector
 
 User = get_user_model()
 ok = fail = 0
-PNG = b'\x89PNG\r\n\x1a\n' + b'zz-tile-de-teste'
+# Imagem de mentira, mas do tamanho de um tile de verdade: o portal descarta
+# resposta pequena demais (é assim que um aviso de bloqueio se disfarça).
+PNG = b'\x89PNG\r\n\x1a\n' + b'zz-tile-de-teste' * 40
 
 
 def t(nome, cond, extra=''):
@@ -64,9 +66,10 @@ def t(nome, cond, extra=''):
 
 
 class RespostaFalsa:
-    def __init__(self, status=200, conteudo=PNG):
+    def __init__(self, status=200, conteudo=PNG, tipo='image/png'):
         self.status_code = status
         self.content = conteudo
+        self.headers = {'Content-Type': tipo}
 
 
 marcador = transaction.atomic()
@@ -106,10 +109,10 @@ try:
     t('o tile responde', r.status_code == 200 and r['Content-Type'] == 'image/png',
       (r.status_code, r.get('Content-Type')))
     t('com a imagem que veio da fonte', r.content == PNG)
-    t('e pediu ao OpenStreetMap primeiro',
-      len(pedidos) == 1 and 'tile.openstreetmap.org/12/1234/2345.png' in pedidos[0][0],
-      pedidos)
-    t('identificando o portal no User-Agent (a política do OSM pede)',
+    t('e pediu ao Esri', len(pedidos) == 1 and 'arcgisonline.com' in pedidos[0][0], pedidos)
+    t('não usa quem recusa aplicação (OSM) nem quem exige chave (Carto)',
+      not any('tile.openstreetmap.org' in u or 'cartocdn' in u for u, _ in pedidos), pedidos)
+    t('identificando o portal no User-Agent',
       'PortalRedeConfianca' in pedidos[0][1], pedidos[0][1])
 
     pedidos.clear()
@@ -122,16 +125,15 @@ try:
 
     print('\n== QUANDO A PRIMEIRA FONTE NÃO RESPONDE ==')
     caches['default'].clear(); pedidos.clear()
-    get_falso.regras = {'tile.openstreetmap.org': RespostaFalsa(status=403, conteudo=b'')}
+    get_falso.regras = {'World_Street_Map': RespostaFalsa(status=403, conteudo=b'')}
     r = c.get('/maps/tiles/10/500/500.png')
     t('cai para a segunda fonte sozinho', r.status_code == 200 and r.content == PNG)
     t('tendo tentado as duas, nessa ordem',
-      len(pedidos) == 2 and 'openstreetmap' in pedidos[0][0] and 'cartocdn' in pedidos[1][0],
-      [p[0] for p in pedidos])
+      len(pedidos) == 2 and 'World_Street_Map' in pedidos[0][0]
+      and 'World_Topo_Map' in pedidos[1][0], [p[0] for p in pedidos])
 
     caches['default'].clear(); pedidos.clear()
-    get_falso.regras = {'tile.openstreetmap.org': RuntimeError('rede fora'),
-                        'cartocdn': RuntimeError('rede fora')}
+    get_falso.regras = {'arcgisonline': RuntimeError('rede fora')}
     r = c.get('/maps/tiles/10/500/500.png')
     t('nenhuma fonte respondendo vira 502 (a tela para de insistir)', r.status_code == 502,
       r.status_code)
@@ -149,16 +151,55 @@ try:
             break
     else:
         t('coordenada fora do mundo é recusada (4 casos)', True)
+    print('\n== IMAGEM QUE NÃO É MAPA ==')
+    caches['default'].clear(); pedidos.clear()
+    # O caso real: a fonte responde 200 com um avisozinho escrito em vez do
+    # mapa ("Access blocked"). Pequeno demais para ser tile — passa adiante.
+    get_falso.regras = {'World_Street_Map': RespostaFalsa(conteudo=b'\x89PNG bloqueado')}
+    r = c.get('/maps/tiles/11/700/700.png')
+    t('fonte que devolve um aviso no lugar do mapa é descartada',
+      r.status_code == 200 and r.content == PNG and len(pedidos) == 2, (r.status_code, pedidos))
+    caches['default'].clear(); pedidos.clear()
+    get_falso.regras = {'World_Street_Map': RespostaFalsa(conteudo=b'<html>bloqueado</html>' * 30,
+                                                          tipo='text/html')}
+    r = c.get('/maps/tiles/11/701/701.png')
+    t('página de bloqueio (HTML) também não vira mapa',
+      r.status_code == 200 and r.content == PNG, r.status_code)
+    get_falso.regras = {}
+
+    print('\n== NÃO É UM PROXY ABERTO (continuação) ==')
     t('a conta do zoom confere',
       tiles.coordenada_valida(0, 0, 0) and tiles.coordenada_valida(19, 524287, 524287)
       and not tiles.coordenada_valida(19, 524288, 0))
 
+    print('\n== A CONFERÊNCIA DAS FONTES ==')
+    from io import StringIO
+    from django.core.management import call_command
+    # Mapa de verdade: imagens diferentes para lugares diferentes.
+    chamadas = {'n': 0}
+
+    def get_variado(url, **kwargs):
+        chamadas['n'] += 1
+        return RespostaFalsa(conteudo=PNG + bytes([chamadas['n'] % 251]) * 400)
+    requests.get = get_variado
+    saida = StringIO(); call_command('conferir_mapa', stdout=saida)
+    t('o comando diz quando a fonte está servindo mapa',
+      saida.getvalue().count('servindo mapa') == len(tiles.FONTES), saida.getvalue()[-200:])
+
+    # Aviso carimbado: a mesma imagem para qualquer lugar do mundo.
+    requests.get = lambda url, **kwargs: RespostaFalsa(conteudo=PNG)
+    saida = StringIO(); call_command('conferir_mapa', stdout=saida)
+    t('e acusa quem devolve a mesma imagem para lugares diferentes',
+      'isto é um aviso, não um mapa' in saida.getvalue(), saida.getvalue()[-200:])
+    requests.get = get_falso
+
     print('\n== A TELA ==')
     html = c.get('/maps/').content.decode()
     t('a tela abre com o mapa', 'mpMapa' in html)
-    t('e conhece as três fontes, nessa ordem',
-      html.index('tile.openstreetmap.org') < html.index('cartocdn')
-      < html.index('/maps/tiles/{z}/{x}/{y}.png'), '')
+    t('e conhece as duas fontes, nessa ordem',
+      html.index('arcgisonline') < html.index('/maps/tiles/{z}/{x}/{y}.png'), '')
+    t('sem pedir nada a quem recusou: OSM (bloqueia aplicação) e Carto (exige chave)',
+      'tile.openstreetmap.org' not in html and 'cartocdn' not in html)
     t('a última fonte é o próprio portal', '/maps/tiles/{z}/{x}/{y}.png' in html)
     t('troca de fonte quando nenhuma imagem chega',
       'tileerror' in html and 'usarFonte(fonteAtual + 1)' in html)
