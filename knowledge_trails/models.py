@@ -148,6 +148,21 @@ class KnowledgeTrail(models.Model):
         verbose_name='Usuários Obrigatórios',
         help_text='Usuários que devem concluir esta trilha'
     )
+    # Travar o portal é a medida mais dura que existe aqui: a pessoa não usa
+    # mais nada até concluir. Por isso nasce desligada e só o gestor (ADMIN ou
+    # SUPERADMIN) liga — supervisor cria trilha obrigatória, mas não tranca o
+    # portal de ninguém. `db_default` porque o banco é compartilhado: a coluna
+    # precisa valer para as linhas que já existem assim que a migration roda.
+    blocks_portal = models.BooleanField(
+        default=False, db_default=False,
+        verbose_name='Travar o portal até concluir',
+        help_text='Só gestores (ADMIN/SUPERADMIN) podem ligar. Vale no período obrigatório.'
+    )
+    require_signature = models.BooleanField(
+        default=False, db_default=False,
+        verbose_name='Pedir assinatura ao concluir',
+        help_text='Ao terminar, a pessoa declara que assistiu e assina com o próprio nome.'
+    )
     mandatory_start_date = models.DateField(
         null=True,
         blank=True,
@@ -831,3 +846,37 @@ class Certificate(models.Model):
         if not self.certificate_code:
             self.generate_code()
         super().save(*args, **kwargs)
+
+
+class TrailSignature(models.Model):
+    """A assinatura de quem concluiu a trilha.
+
+    "Assisti e entendi" dito por escrito, com data, hora e o nome digitado pela
+    própria pessoa — é o que transforma a conclusão em algo que se mostra
+    depois (auditoria, treinamento obrigatório, integração). Guardamos também
+    o IP e o navegador: não identificam ninguém sozinhos, mas sustentam a
+    assinatura se ela for questionada.
+    """
+
+    trail = models.ForeignKey(
+        KnowledgeTrail, on_delete=models.CASCADE, related_name='signatures',
+        verbose_name='Trilha')
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='trail_signatures',
+        verbose_name='Pessoa')
+    typed_name = models.CharField(max_length=160, verbose_name='Nome digitado')
+    declaration = models.TextField(verbose_name='Declaração assinada')
+    signed_at = models.DateTimeField(auto_now_add=True, verbose_name='Assinada em')
+    ip = models.GenericIPAddressField(null=True, blank=True, verbose_name='IP')
+    user_agent = models.CharField(max_length=300, blank=True, verbose_name='Navegador')
+
+    class Meta:
+        verbose_name = 'Assinatura de trilha'
+        verbose_name_plural = 'Assinaturas de trilha'
+        ordering = ['-signed_at']
+        constraints = [
+            models.UniqueConstraint(fields=['trail', 'user'], name='uniq_assinatura_trilha'),
+        ]
+
+    def __str__(self):
+        return f'{self.user} assinou {self.trail}'

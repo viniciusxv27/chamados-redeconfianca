@@ -212,6 +212,83 @@
             {% endif %}
         </div>
 
+        {% comment %}
+        Parceria: quem toca a meta chama um colega do setor para fazer junto.
+        É convite — quem foi chamado responde aqui, e aceitar é o que coloca a
+        pessoa na meta (vê, acompanha e marca os itens do to-do).
+        {% endcomment %}
+        {% if meu_convite %}
+        <div class="imp-card p-5 border-2 border-amber-300 bg-amber-50">
+            <h3 class="font-semibold text-amber-900">
+                <i class="fas fa-handshake-angle mr-2"></i>Chamaram você para esta meta
+            </h3>
+            <p class="text-sm text-amber-800 mt-1">
+                {{ meu_convite.convidado_por.get_full_name|default:"Alguém" }} convidou você para
+                tocar <strong>{{ meta.titulo }}</strong> em conjunto.
+                {% if meu_convite.mensagem %}&ldquo;{{ meu_convite.mensagem }}&rdquo;{% endif %}
+            </p>
+            <form method="post" action="{% url 'impulso:meta_responder_parceria' meu_convite.id %}"
+                  class="flex gap-2 mt-3">
+                {% csrf_token %}
+                <button type="submit" name="resposta" value="aceitar"
+                        class="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700">
+                    <i class="fas fa-check mr-1"></i>Aceitar e entrar na meta
+                </button>
+                <button type="submit" name="resposta" value="recusar"
+                        class="px-4 py-2 rounded-lg bg-white border border-gray-300 text-gray-700 text-sm hover:bg-gray-50">
+                    Agora não
+                </button>
+            </form>
+        </div>
+        {% endif %}
+
+        {% if parcerias or pode_chamar_parceiro %}
+        <div class="imp-card p-5">
+            <h3 class="font-semibold text-gray-800 mb-1">
+                <i class="fas fa-handshake text-emerald-600 mr-2"></i>Tocando em conjunto
+            </h3>
+            <p class="text-xs text-gray-400 mb-3">
+                Quem aceita passa a ver a meta e marcar os itens do to-do junto com o responsável.
+            </p>
+
+            {% if parcerias %}
+            <div class="space-y-2 mb-3">
+                {% for p in parcerias %}
+                <div class="flex items-center gap-2 text-sm">
+                    <span class="w-7 h-7 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center text-xs font-semibold">
+                        {{ p.convidado.get_full_name|default:p.convidado.email|slice:":1"|upper }}
+                    </span>
+                    <span class="text-gray-800 flex-1 truncate">{{ p.convidado.get_full_name|default:p.convidado.email }}</span>
+                    <span class="px-2 py-0.5 rounded-full text-xs font-semibold
+                        {% if p.status == 'ACEITA' %}bg-emerald-100 text-emerald-700
+                        {% elif p.status == 'RECUSADA' %}bg-gray-100 text-gray-500
+                        {% else %}bg-amber-100 text-amber-700{% endif %}">
+                        {{ p.get_status_display }}
+                    </span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            {% if pode_chamar_parceiro and colegas_parceria %}
+            <form method="post" action="{% url 'impulso:meta_convidar_parceiro' meta.id %}"
+                  class="flex flex-col sm:flex-row gap-2">
+                {% csrf_token %}
+                <select name="parceiros" multiple size="3"
+                        class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    {% for c in colegas_parceria %}
+                    <option value="{{ c.id }}">{{ c.get_full_name|default:c.email }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm hover:bg-emerald-700 whitespace-nowrap self-start">
+                    <i class="fas fa-user-plus mr-1"></i>Chamar
+                </button>
+            </form>
+            <p class="text-[11px] text-gray-400 mt-1">Colegas do seu setor. Segure Ctrl (ou Cmd) para escolher mais de um.</p>
+            {% endif %}
+        </div>
+        {% endif %}
+
         <!-- Comentários / chat -->
         <div class="imp-card p-5">
             <h3 class="font-semibold text-gray-800 mb-3"><i class="fas fa-comments text-indigo-500 mr-2"></i>Comentários</h3>
@@ -238,11 +315,38 @@
                 <p class="text-sm text-gray-400">Nenhum comentário ainda.</p>
                 {% endfor %}
             </div>
-            <form method="post" action="{% url 'impulso:meta_add_comentario' meta.id %}" class="flex gap-2">
+            {% comment %}
+            Campo de várias linhas: era um <input>, em que Enter mandava o
+            comentário e não havia como escrever um parágrafo. Agora Enter
+            quebra a linha, o campo cresce com o texto e o envio é pelo botão
+            (ou Ctrl/Cmd+Enter, para quem está acostumado a mandar pelo teclado).
+            {% endcomment %}
+            <form method="post" action="{% url 'impulso:meta_add_comentario' meta.id %}"
+                  class="flex gap-2 items-end" id="formComentario">
                 {% csrf_token %}
-                <input type="text" name="mensagem" required placeholder="Escreva um comentário…" class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                <button type="submit" class="px-4 py-2 rounded-lg bg-indigo-500 text-white text-sm hover:bg-indigo-600">Enviar</button>
+                <textarea name="mensagem" required rows="2" id="campoComentario"
+                          placeholder="Escreva um comentário…  (Enter quebra a linha · Ctrl+Enter envia)"
+                          class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none
+                                 focus:ring-indigo-500 focus:border-indigo-500"
+                          style="max-height:220px"></textarea>
+                <button type="submit" class="px-4 py-2 rounded-lg bg-indigo-500 text-white text-sm hover:bg-indigo-600 whitespace-nowrap">Enviar</button>
             </form>
+            <script>
+            (function () {
+                var campo = document.getElementById('campoComentario');
+                var form = document.getElementById('formComentario');
+                if (!campo || !form) { return; }
+                function ajustar() {
+                    campo.style.height = 'auto';
+                    campo.style.height = Math.min(campo.scrollHeight, 220) + 'px';
+                }
+                campo.addEventListener('input', ajustar);
+                campo.addEventListener('keydown', function (e) {
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { form.requestSubmit(); }
+                });
+                ajustar();
+            })();
+            </script>
         </div>
     </div>
 

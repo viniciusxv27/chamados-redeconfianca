@@ -35,6 +35,7 @@ from .scoring import (calcular_pontuacao, filtros_de_tarefa_do_mes, linhas_detal
                       ordenar_ranking)
 from .utils import (
     FAIXAS, calcular_faixa, e_superadmin, faixa_info, get_adms_lojas, get_colaboradores,
+    impulso_ciclos_required, pode_gerir_ciclos,
     get_gestores, get_superadmins,
     get_colaboradores_do_gestor, get_gestores_do_setor,
     is_impulso_manager, impulso_manager_required, impulso_member_required,
@@ -105,7 +106,10 @@ def _pode_ver_meta(user, meta):
                 .filter(id=meta.colaborador_id).exists())
             # Participante também é responsável pela meta: precisa abrir,
             # comentar e marcar os itens do to-do.
-            or meta.participantes.filter(id=user.id).exists())
+            or meta.participantes.filter(id=user.id).exists()
+            # Quem foi chamado para tocar junto abre a meta para decidir: sem
+            # isto o convite levava a uma tela que a pessoa não podia ver.
+            or meta.parcerias.filter(convidado_id=user.id, status='PENDENTE').exists())
 
 
 # ---------------------------------------------------------------------------
@@ -482,6 +486,10 @@ def meta_create(request):
                         f'"{meta.titulo}" também é sua responsabilidade.',
                         f'/impulso/metas/{meta.id}/')
 
+        # Parceria: quem toca a meta pode chamar um colega do setor para fazer
+        # junto. É convite — quem foi chamado aceita ou não.
+        _convidar_parceiros(meta, request.POST.getlist('parceiros'), request.user)
+
         # To-do da meta: uma linha por passo, na ordem em que foram digitados.
         passos = [t.strip() for t in request.POST.getlist('itens') if t.strip()]
         if passos:
@@ -577,6 +585,9 @@ def meta_create(request):
         'sou_gestor': sou_gestor,
         'sou_adm_loja': sou_adm_loja,
         'colaboradores': get_colaboradores() if sou_gestor else None,
+        # Chamar colega do setor para fazer junto — vale para todo mundo, não
+        # só para o gestor: quem toca a tarefa é quem sabe com quem vai tocar.
+        'colegas_parceria': _colegas_para_parceria(request.user),
         'gestores_do_setor': gestores_do_setor,
         'gestores': get_gestores(),
         # Quem não é gestor escolhe para quem é a atividade: ele mesmo ou alguém
@@ -825,6 +836,94 @@ def meta_solicitacoes(request):
     return render(request, 'impulso/meta_solicitacoes.html', context)
 
 
+def _colegas_para_parceria(user):
+    """Quem pode ser chamado para tocar a meta junto: o setor da pessoa.
+
+    Parceria é combinada entre quem trabalha lado a lado — abrir isto para a
+    rede inteira transformaria o convite em lista telefônica.
+    """
+    colegas = get_colaboradores().exclude(id=user.id)
+    if getattr(user, 'sector_id', None):
+        colegas = colegas.filter(sector_id=user.sector_id)
+    return colegas
+
+
+def _convidar_parceiros(meta, ids, quem):
+    """Cria os convites de parceria e avisa quem foi chamado."""
+    from .models import ParceriaMeta
+
+    escolhidos = _colegas_para_parceria(quem).filter(
+        id__in=[i for i in ids if str(i).isdigit()]).exclude(id=meta.colaborador_id)
+    convidados = []
+    for colega in escolhidos:
+        _convite, criado = ParceriaMeta.objects.get_or_create(
+            meta=meta, convidado=colega,
+            defaults={'convidado_por': quem})
+        if criado:
+            convidados.append(colega)
+    if convidados:
+        _notify(convidados, 'Convite de parceria em uma meta',
+                f'{quem.get_full_name() or quem.email} chamou você para fazer '
+                f'"{meta.titulo}" em conjunto.',
+                f'/impulso/metas/{meta.id}/')
+    return len(convidados)
+
+
+@require_POST
+@impulso_member_required
+def meta_convidar_parceiro(request, meta_id):
+    """Chama um colega do setor para tocar a meta junto."""
+    meta = get_object_or_404(Meta, id=meta_id)
+    if not (meta.colaborador_id == request.user.id or meta.gestor_id == request.user.id
+            or is_impulso_manager(request.user)):
+        messages.error(request, 'Só quem toca a meta (ou o gestor) chama parceiro.')
+        return redirect('impulso:meta_detail', meta_id=meta.id)
+
+    quantos = _convidar_parceiros(meta, request.POST.getlist('parceiros'), request.user)
+    messages.success(request, f'{quantos} convite(s) enviado(s).' if quantos
+                     else 'Nenhum convite novo — essas pessoas já foram chamadas.')
+    return redirect('impulso:meta_detail', meta_id=meta.id)
+
+
+@require_POST
+@impulso_member_required
+def meta_responder_parceria(request, parceria_id):
+    """O convidado aceita ou recusa a parceria.
+
+    Aceitar coloca a pessoa em `participantes`: daí ela vê a meta e marca os
+    itens do to-do, que é o que significa tocar junto.
+    """
+    from .models import ParceriaMeta
+
+    convite = get_object_or_404(ParceriaMeta.objects.select_related('meta'), id=parceria_id)
+    if convite.convidado_id != request.user.id:
+        messages.error(request, 'Este convite não é seu.')
+        return redirect('impulso:metas_kanban')
+    if not convite.esta_pendente:
+        messages.info(request, 'Este convite já foi respondido.')
+        return redirect('impulso:meta_detail', meta_id=convite.meta_id)
+
+    aceitou = (request.POST.get('resposta') or '') == 'aceitar'
+    convite.status = (ParceriaMeta.Status.ACEITA if aceitou
+                      else ParceriaMeta.Status.RECUSADA)
+    convite.respondido_em = timezone.now()
+    convite.save(update_fields=['status', 'respondido_em'])
+
+    if aceitou:
+        convite.meta.participantes.add(request.user)
+    else:
+        convite.meta.participantes.remove(request.user)
+
+    quem = request.user.get_full_name() or request.user.email
+    avisar = [u for u in (convite.convidado_por, convite.meta.colaborador) if u]
+    _notify(avisar, 'Resposta ao convite de parceria',
+            f'{quem} {"aceitou" if aceitou else "recusou"} tocar '
+            f'"{convite.meta.titulo}" em conjunto.',
+            f'/impulso/metas/{convite.meta_id}/')
+    messages.success(request, 'Você entrou na meta.' if aceitou else 'Convite recusado.')
+    return redirect('impulso:meta_detail', meta_id=convite.meta_id)
+
+
 @impulso_member_required
 def meta_detail(request, meta_id):
     meta = get_object_or_404(
@@ -852,6 +951,16 @@ def meta_detail(request, meta_id):
                         or meta.colaborador_id == request.user.id
                         or meta.participantes.filter(id=request.user.id).exists())
 
+    from .models import ParceriaMeta
+    parcerias = list(ParceriaMeta.objects.filter(meta=meta)
+                     .select_related('convidado', 'convidado_por'))
+    meu_convite = next((p for p in parcerias
+                        if p.convidado_id == request.user.id and p.esta_pendente), None)
+    ja_convidados = {p.convidado_id for p in parcerias}
+    pode_chamar_parceiro = (meta.colaborador_id == request.user.id
+                            or meta.gestor_id == request.user.id
+                            or is_impulso_manager(request.user))
+
     pode_editar_participantes = (meta.gestor_id == request.user.id
                                  or request.user.is_superuser)
     pode_editar_meta = meta.pode_editar(request.user)
@@ -861,6 +970,14 @@ def meta_detail(request, meta_id):
 
     context = {
         'meta': meta,
+        # Parceria: quem já está junto, quem foi chamado e quem dá para chamar.
+        'parcerias': parcerias,
+        'meu_convite': meu_convite,
+        'pode_chamar_parceiro': pode_chamar_parceiro,
+        'colegas_parceria': (_colegas_para_parceria(request.user)
+                             .exclude(id__in=ja_convidados)
+                             .exclude(id=meta.colaborador_id)
+                             if pode_chamar_parceiro else []),
         'itens': itens,
         'pode_mexer_itens': pode_mexer_itens,
         'participantes': meta.participantes.all(),
@@ -3254,6 +3371,17 @@ def inovar_list(request):
     f = filtros_impulso.ler(request)
     ideias = filtros_impulso.por_mes(ideias, f, 'criado_em__date')
 
+    # Filtros da própria tela. Status e impacto não dizem nada sobre quem
+    # escreveu — por isso podem existir aqui, enquanto busca por nome não pode.
+    status_filtro = (request.GET.get('status') or '').strip().upper()
+    if status_filtro in Ideia.Status.values:
+        ideias = ideias.filter(status=status_filtro)
+    impacto = (request.GET.get('impacto') or '').strip()
+    if impacto:
+        ideias = ideias.filter(setor_impacto__icontains=impacto)
+    pendentes_primeiro = (request.GET.get('ordem') or '') == 'antigas'
+    ideias = ideias.order_by('criado_em' if pendentes_primeiro else '-criado_em')
+
     lista = list(ideias.select_related('autor').prefetch_related('participantes'))
     ids_participando = set()
     for ideia in lista:
@@ -3278,6 +3406,15 @@ def inovar_list(request):
         'colaboradores': get_colaboradores() if gestor else None,
         'hoje': timezone.localdate(),
         'active_tab': 'inovar',
+        'status_filtro': status_filtro,
+        'impacto_filtro': impacto,
+        'ordem_filtro': 'antigas' if pendentes_primeiro else '',
+        'filtro_ativo': bool(status_filtro or impacto or pendentes_primeiro),
+        # Os setores de impacto que já foram usados, para escolher em vez de
+        # digitar — o campo é livre e cada um escreve de um jeito.
+        'impactos': sorted({(i.setor_impacto or '').strip()
+                            for i in lista if (i.setor_impacto or '').strip()}),
+        'nao_decididas': sum(1 for i in lista if i.status == Ideia.Status.NOVA),
         **filtros_impulso.contexto_mes(request, f),
     }
     return render(request, 'impulso/inovar_list.html', context)
@@ -3489,36 +3626,8 @@ def ideia_update_status(request, ideia_id):
         ideia.prazo = prazo
 
     ideia.save(update_fields=['status', 'resposta_gestor', 'executor', 'prazo', 'atualizado_em'])
-
+    aviso = _aplicar_decisao_da_ideia(ideia, aprovando, executor, prazo, request.user)
     if aprovando:
-        meta = ideia.meta_gerada
-        if meta is None:
-            meta = Meta.objects.create(
-                gestor=request.user, colaborador=executor,
-                titulo=ideia.titulo_da_atividade(),
-                descricao=ideia.descricao_da_atividade(),
-                prazo=prazo,
-                # Quem decidiu é o gestor: a atividade já nasce valendo, sem
-                # passar por uma segunda aprovação.
-                aprovacao=Meta.Aprovacao.APROVADA,
-                created_by=request.user,
-            )
-            ideia.meta_gerada = meta
-            ideia.save(update_fields=['meta_gerada', 'atualizado_em'])
-            aviso = 'Ideia aprovada e atividade criada para '
-        else:
-            # Decidir de novo (trocou o executor ou o prazo) move a atividade
-            # que já existe, em vez de abrir uma segunda para a mesma ideia.
-            meta.colaborador = executor
-            meta.prazo = prazo
-            meta.descricao = ideia.descricao_da_atividade()
-            meta.save(update_fields=['colaborador', 'prazo', 'descricao', 'updated_at'])
-            aviso = 'Ideia atualizada e atividade remanejada para '
-
-        _notify([executor], 'Nova atividade: ideia aprovada',
-                f'"{meta.titulo}" entrou nas suas atividades, com prazo em '
-                f'{prazo.strftime("%d/%m/%Y")}.',
-                reverse('impulso:meta_detail', args=[meta.id]))
         messages.success(request, aviso + (executor.get_full_name() or executor.email)
                          + f', com prazo em {prazo.strftime("%d/%m/%Y")}.')
     else:
@@ -3528,6 +3637,126 @@ def ideia_update_status(request, ideia_id):
             f'Sua ideia sobre "{ideia.setor_impacto}" agora está: {ideia.get_status_display()}.',
             '/impulso/inovar/')
     return redirect('impulso:inovar_list')
+
+
+@require_POST
+@impulso_manager_required
+def inovar_decidir_lote(request):
+    """Decide várias ideias de uma vez.
+
+    Era uma por uma: abrir, escolher executor e prazo, salvar, voltar, repetir.
+    Com dez ideias na fila ninguém fazia. Aqui cada linha diz se a ideia
+    **segue** (e com quem e até quando) ou **não segue**; o que ficar em branco
+    não é decidido — sair sem opinião sobre uma ideia é uma resposta legítima.
+
+    O que não passa na conferência não derruba o resto: as outras decisões
+    valem e a tela diz, por ideia, o que faltou.
+    """
+    marcadas = [i for i in request.POST.getlist('ideia') if str(i).isdigit()]
+    if not marcadas:
+        messages.info(request, 'Nenhuma ideia marcada para decidir.')
+        return redirect('impulso:inovar_list')
+
+    ideias = {i.id: i for i in Ideia.objects.filter(id__in=marcadas)}
+    colaboradores = get_colaboradores()
+    hoje = timezone.localdate()
+    aprovadas = recusadas = 0
+    problemas = []
+
+    for ideia_id in marcadas:
+        ideia = ideias.get(int(ideia_id))
+        if ideia is None:
+            continue
+        decisao = (request.POST.get(f'decisao_{ideia_id}') or '').strip()
+        if decisao not in ('segue', 'nao'):
+            continue
+
+        resposta = (request.POST.get(f'resposta_{ideia_id}') or '').strip()
+        if decisao == 'nao':
+            ideia.status = Ideia.Status.ARQUIVADA
+            ideia.resposta_gestor = resposta
+            ideia.save(update_fields=['status', 'resposta_gestor', 'atualizado_em'])
+            _notify([ideia.autor], 'Atualização na sua ideia',
+                    f'Sua ideia sobre "{ideia.setor_impacto}" agora está: '
+                    f'{ideia.get_status_display()}.', '/impulso/inovar/')
+            recusadas += 1
+            continue
+
+        executor = colaboradores.filter(
+            id=_int_or_none(request.POST.get(f'executor_{ideia_id}'))).first()
+        prazo = parse_date(request.POST.get(f'prazo_{ideia_id}') or '') or None
+        if not executor or not prazo:
+            problemas.append(f'“{ideia.titulo_da_atividade()}”: falta quem executa ou o prazo')
+            continue
+        if prazo < hoje:
+            problemas.append(f'“{ideia.titulo_da_atividade()}”: o prazo já passou')
+            continue
+
+        ideia.status = Ideia.Status.APROVADA
+        ideia.resposta_gestor = resposta
+        ideia.executor = executor
+        ideia.prazo = prazo
+        ideia.save(update_fields=['status', 'resposta_gestor', 'executor', 'prazo',
+                                  'atualizado_em'])
+        _aplicar_decisao_da_ideia(ideia, True, executor, prazo, request.user)
+        _notify([ideia.autor], 'Atualização na sua ideia',
+                f'Sua ideia sobre "{ideia.setor_impacto}" agora está: '
+                f'{ideia.get_status_display()}.', '/impulso/inovar/')
+        aprovadas += 1
+
+    if aprovadas or recusadas:
+        partes = []
+        if aprovadas:
+            partes.append(f'{aprovadas} aprovada(s), com a atividade já aberta')
+        if recusadas:
+            partes.append(f'{recusadas} recusada(s)')
+        messages.success(request, 'Decisões aplicadas: ' + ' · '.join(partes) + '.')
+    if problemas:
+        messages.warning(request, 'Ficaram sem decidir — ' + '; '.join(problemas[:5])
+                         + ('…' if len(problemas) > 5 else ''))
+    if not (aprovadas or recusadas or problemas):
+        messages.info(request, 'Nenhuma decisão foi preenchida.')
+    return redirect('impulso:inovar_list')
+
+
+def _aplicar_decisao_da_ideia(ideia, aprovando, executor, prazo, quem):
+    """Abre (ou remaneja) a atividade do executor quando a ideia é aprovada.
+
+    Mora fora da view porque a decisão acontece em dois lugares: uma ideia por
+    vez e o lote — e as duas precisam fazer exatamente a mesma coisa.
+    """
+    if not aprovando:
+        return ''
+
+    meta = ideia.meta_gerada
+    if meta is None:
+        meta = Meta.objects.create(
+            gestor=quem, colaborador=executor,
+            titulo=ideia.titulo_da_atividade(),
+            descricao=ideia.descricao_da_atividade(),
+            prazo=prazo,
+            # Quem decidiu é o gestor: a atividade já nasce valendo, sem
+            # passar por uma segunda aprovação.
+            aprovacao=Meta.Aprovacao.APROVADA,
+            created_by=quem,
+        )
+        ideia.meta_gerada = meta
+        ideia.save(update_fields=['meta_gerada', 'atualizado_em'])
+        aviso = 'Ideia aprovada e atividade criada para '
+    else:
+        # Decidir de novo (trocou o executor ou o prazo) move a atividade que
+        # já existe, em vez de abrir uma segunda para a mesma ideia.
+        meta.colaborador = executor
+        meta.prazo = prazo
+        meta.descricao = ideia.descricao_da_atividade()
+        meta.save(update_fields=['colaborador', 'prazo', 'descricao', 'updated_at'])
+        aviso = 'Ideia atualizada e atividade remanejada para '
+
+    _notify([executor], 'Nova atividade: ideia aprovada',
+            f'"{meta.titulo}" entrou nas suas atividades, com prazo em '
+            f'{prazo.strftime("%d/%m/%Y")}.',
+            reverse('impulso:meta_detail', args=[meta.id]))
+    return aviso
 
 
 # ---------------------------------------------------------------------------
@@ -3601,13 +3830,13 @@ def detalhe_colaborador(request, user_id):
 def ciclo_list(request):
     context = {
         'ciclos': Ciclo.objects.prefetch_related('meses'),
-        'is_gestor': is_impulso_manager(request.user),
+        'is_gestor': pode_gerir_ciclos(request.user),
         'active_tab': 'acompanhamento',
     }
     return render(request, 'impulso/ciclo_list.html', context)
 
 
-@impulso_manager_required
+@impulso_ciclos_required
 def ciclo_create(request):
     if request.method == 'POST':
         nome = (request.POST.get('nome') or '').strip()
@@ -3651,7 +3880,7 @@ def ciclo_detail(request, ciclo_id):
         'meses': meses,
         'resumo': [{**linha, 'faixa_info': faixa_info(linha['faixa'])} for linha in resumo],
         'tem_mes_aberto': any(not m.is_fechado for m in meses),
-        'is_gestor': is_impulso_manager(request.user),
+        'is_gestor': pode_gerir_ciclos(request.user),
         'active_tab': 'acompanhamento',
         **filtros_impulso.contexto(request, f),
     }
@@ -3671,15 +3900,81 @@ def mes_detail(request, mes_id):
         'ciclo': mes.ciclo,
         'pontuacoes': [{'p': p, 'faixa': faixa_info(p.faixa)} for p in pontuacoes],
         'setores': ciclos_service.setores_do_mes(mes),
-        'is_gestor': is_impulso_manager(request.user),
+        'is_gestor': pode_gerir_ciclos(request.user),
         'active_tab': 'acompanhamento',
         **filtros_impulso.contexto(request, f),
     }
     return render(request, 'impulso/mes_detail.html', context)
 
 
+@impulso_member_required
+def mes_ranking(request, mes_id):
+    """O ranking do mês fechado, em tela cheia, para mostrar e compartilhar.
+
+    É a tela que se abre depois de finalizar o mês: pódio, medalhas e a lista
+    completa. Fica separada do detalhamento porque o uso é outro — esta é para
+    projetar na reunião e mandar no grupo.
+    """
+    mes = get_object_or_404(CicloMes.objects.select_related('ciclo'), id=mes_id)
+    pontuacoes = list(mes.pontuacoes.select_related('user', 'setor').order_by('-percentual'))
+
+    # O mesmo desempate do ranking ao vivo, para a ordem não mudar de uma tela
+    # para a outra: menos ajustes de ponto, mais metas, mais ideias aprovadas.
+    # No mês fechado os três números vêm do snapshot (`detalhes`).
+    def desempate(p):
+        d = p.detalhes or {}
+        assiduidade = d.get('assiduidade') or {}
+        metas = d.get('metas') or {}
+        inovar = d.get('inovar') or {}
+        return {
+            'ajustes': (assiduidade.get('total_ajustes')
+                        if assiduidade.get('fonte') == 'ponto' else None),
+            'metas_concluidas': metas.get('concluidas', 0),
+            'ideias_aprovadas': inovar.get('aprovadas', 0),
+        }
+
+    linhas = [{'p': p, 'user': p.user, 'faixa': faixa_info(p.faixa),
+               'dados': {'percentual': p.percentual, 'desempate': desempate(p)}}
+              for p in pontuacoes]
+    linhas = ordenar_ranking(linhas)
+
+    f = filtros_impulso.ler(request)
+    linhas = filtros_impulso.lista(linhas, f, lambda linha: linha['user'])
+
+    # Posição e atraso da animação saem daqui prontos: no template eles seriam
+    # conta dentro do laço, e o Django não faz conta.
+    for i, linha in enumerate(linhas):
+        linha['posicao'] = i + 1
+        linha['atraso'] = min(i, 24) * 40
+
+    def iniciais(nome):
+        partes = (nome or '?').split()
+        return ''.join(p[0] for p in partes[:2]).upper()
+
+    context = {
+        'mes': mes,
+        'ciclo': mes.ciclo,
+        'linhas': linhas,
+        'podio': linhas[:3],
+        'demais': linhas[3:],
+        'setores': ciclos_service.setores_do_mes(mes),
+        'premiados': [l for l in linhas if l['p'].confiancas_previstas],
+        # O que a imagem compartilhável desenha — só o pódio, sem dado sensível.
+        'dados_json': [{
+            'nome': l['user'].get_full_name() or l['user'].email,
+            'iniciais': iniciais(l['user'].get_full_name() or l['user'].email),
+            'pct': int(l['p'].percentual or 0),
+            'faixa': l['faixa']['label'],
+        } for l in linhas[:3]],
+        'is_gestor': pode_gerir_ciclos(request.user),
+        'active_tab': 'acompanhamento',
+        **filtros_impulso.contexto(request, f),
+    }
+    return render(request, 'impulso/mes_ranking.html', context)
+
+
 @require_POST
-@impulso_manager_required
+@impulso_ciclos_required
 def mes_fechar(request, mes_id):
     mes = get_object_or_404(CicloMes.objects.select_related('ciclo'), id=mes_id)
     if mes.is_fechado:
@@ -3688,11 +3983,13 @@ def mes_fechar(request, mes_id):
         qtd = ciclos_service.fechar_mes(mes, request.user)
         messages.success(
             request, f'Mês {mes.referencia:%m/%Y} fechado — {qtd} colaborador(es) pontuado(s).')
+        # Fechou: o que se quer ver em seguida é o resultado, não o formulário.
+        return redirect('impulso:mes_ranking', mes_id=mes.id)
     return redirect('impulso:mes_detail', mes_id=mes.id)
 
 
 @require_POST
-@impulso_manager_required
+@impulso_ciclos_required
 def mes_reabrir(request, mes_id):
     mes = get_object_or_404(CicloMes, id=mes_id)
     if mes.ciclo.status == Ciclo.Status.ENCERRADO:
@@ -3704,7 +4001,7 @@ def mes_reabrir(request, mes_id):
 
 
 @require_POST
-@impulso_manager_required
+@impulso_ciclos_required
 def ciclo_encerrar(request, ciclo_id):
     ciclo = get_object_or_404(Ciclo, id=ciclo_id)
     if not ciclo.is_aberto:

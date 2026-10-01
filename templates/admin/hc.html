@@ -1,0 +1,167 @@
+{% extends 'base.html' %}
+
+{% block title %}Quadro do mês (HC){% endblock %}
+
+{% comment %}
+A árvore do quadro: loja → pessoas. É de propósito que a loja venha primeiro —
+a pergunta do começo do mês é sobre a loja ("este quadro está certo?"), e a
+lista de usuários, que já existe, responde outra coisa.
+
+Cada pessoa aparece com a situação que o próprio portal já sabe: desligada
+(data de demissão), nova no mês (data de admissão) ou ativa. Ninguém precisa
+marcar nada para o desligado aparecer sinalizado.
+{% endcomment %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto pt-4 sm:pt-6 pb-16 px-4 sm:px-6 lg:px-8">
+
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+        <div>
+            <h1 class="text-xl sm:text-2xl font-bold text-gray-900">
+                <i class="fas fa-sitemap mr-2 text-indigo-600"></i>Quadro do mês (HC)
+            </h1>
+            <p class="text-sm text-gray-500 mt-1">
+                Confira o quadro de cada loja e acompanhe as movimentações do período.
+            </p>
+        </div>
+        <form method="get" class="flex items-end gap-2">
+            <div>
+                <label for="mes" class="block text-xs font-medium text-gray-500 mb-1">Mês</label>
+                <input type="month" id="mes" name="mes" value="{{ mes_escolhido }}"
+                       class="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
+            </div>
+            <button type="submit" class="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700">
+                Ver
+            </button>
+        </form>
+    </div>
+
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+        <div class="bg-white border border-gray-200 rounded-xl p-4">
+            <p class="text-xs text-gray-500">Quadro total</p>
+            <p class="text-2xl font-bold text-gray-900">{{ quadro_total }}</p>
+        </div>
+        <div class="bg-white border border-gray-200 rounded-xl p-4">
+            <p class="text-xs text-gray-500">Lojas conferidas</p>
+            <p class="text-2xl font-bold {% if validadas == total_lojas %}text-emerald-700{% else %}text-amber-700{% endif %}">
+                {{ validadas }}<span class="text-base text-gray-400">/{{ total_lojas }}</span>
+            </p>
+        </div>
+        <div class="bg-white border border-gray-200 rounded-xl p-4">
+            <p class="text-xs text-gray-500">Entraram no mês</p>
+            <p class="text-2xl font-bold text-blue-700">{{ novos_total }}</p>
+        </div>
+        <div class="bg-white border border-gray-200 rounded-xl p-4">
+            <p class="text-xs text-gray-500">Desligados</p>
+            <p class="text-2xl font-bold text-red-700">{{ desligados_total }}</p>
+        </div>
+    </div>
+
+    <div class="space-y-3">
+        {% for no in nos %}
+        <details class="bg-white border rounded-xl overflow-hidden group
+                        {% if no.validacao %}border-emerald-200{% else %}border-gray-200{% endif %}"
+                 {% if no.desligados or no.novos %}open{% endif %}>
+            <summary class="px-5 py-3.5 cursor-pointer flex items-center gap-3 hover:bg-gray-50">
+                <i class="fas fa-chevron-right text-gray-400 text-xs transition-transform group-open:rotate-90"></i>
+                <span class="font-semibold text-gray-900 flex-1 min-w-0 truncate">{{ no.loja.name }}</span>
+
+                <span class="text-sm text-gray-500 whitespace-nowrap">
+                    {{ no.quadro }} pessoa{{ no.quadro|pluralize }}
+                </span>
+                {% if no.novos %}
+                <span class="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold whitespace-nowrap">
+                    +{{ no.novos }}
+                </span>
+                {% endif %}
+                {% if no.desligados %}
+                <span class="px-2 py-0.5 rounded-full bg-red-50 text-red-700 text-xs font-semibold whitespace-nowrap">
+                    −{{ no.desligados }}
+                </span>
+                {% endif %}
+
+                {% if no.validacao %}
+                <span class="px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap
+                             {% if no.mudou %}bg-amber-100 text-amber-800{% else %}bg-emerald-100 text-emerald-700{% endif %}"
+                      title="Conferido em {{ no.validacao.validado_em|date:'d/m/Y H:i' }}{% if no.validacao.validado_por %} por {{ no.validacao.validado_por.get_full_name }}{% endif %}">
+                    <i class="fas {% if no.mudou %}fa-triangle-exclamation{% else %}fa-circle-check{% endif %} mr-1"></i>
+                    {% if no.mudou %}mudou depois de conferir{% else %}conferido{% endif %}
+                </span>
+                {% else %}
+                <span class="px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 text-xs font-semibold whitespace-nowrap">
+                    a conferir
+                </span>
+                {% endif %}
+            </summary>
+
+            <div class="border-t border-gray-100 divide-y divide-gray-50">
+                {% for linha in no.pessoas %}
+                <div class="flex items-center gap-3 px-5 py-2.5 {% if linha.situacao == 'desligado' or linha.situacao == 'inativo' %}bg-red-50/40{% endif %}">
+                    <span class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold flex-shrink-0
+                                 {% if linha.situacao == 'desligado' or linha.situacao == 'inativo' %}bg-red-100 text-red-700
+                                 {% elif linha.situacao == 'novo' %}bg-blue-100 text-blue-700
+                                 {% else %}bg-gray-100 text-gray-600{% endif %}">
+                        {{ linha.pessoa.get_full_name|default:linha.pessoa.email|slice:":1"|upper }}
+                    </span>
+                    <div class="min-w-0 flex-1">
+                        <div class="text-sm text-gray-900 truncate">
+                            {{ linha.pessoa.get_full_name|default:linha.pessoa.email }}
+                        </div>
+                        <div class="text-xs text-gray-500 truncate">
+                            {{ linha.pessoa.job_title|default:"Sem cargo" }}
+                            {% if linha.pessoa.admission_date %} &middot; desde {{ linha.pessoa.admission_date|date:"d/m/Y" }}{% endif %}
+                        </div>
+                    </div>
+                    {% if linha.situacao == 'desligado' %}
+                    <span class="px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-xs font-semibold whitespace-nowrap">
+                        <i class="fas fa-user-slash mr-1"></i>desligado em {{ linha.pessoa.demission_date|date:"d/m" }}
+                    </span>
+                    {% elif linha.situacao == 'inativo' %}
+                    <span class="px-2 py-0.5 rounded-full bg-gray-200 text-gray-700 text-xs font-semibold whitespace-nowrap">
+                        <i class="fas fa-user-slash mr-1"></i>cadastro inativo
+                    </span>
+                    {% elif linha.situacao == 'novo' %}
+                    <span class="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-semibold whitespace-nowrap">
+                        <i class="fas fa-user-plus mr-1"></i>entrou no mês
+                    </span>
+                    {% endif %}
+                    <a href="{% url 'edit_user' linha.pessoa.id %}"
+                       class="text-xs text-indigo-600 hover:text-indigo-800 whitespace-nowrap">abrir</a>
+                </div>
+                {% empty %}
+                <p class="px-5 py-6 text-sm text-gray-400 text-center">Nenhuma pessoa nesta loja.</p>
+                {% endfor %}
+
+                <div class="px-5 py-3 bg-gray-50 flex flex-col sm:flex-row sm:items-center gap-2">
+                    {% if no.validacao %}
+                    <span class="text-xs text-gray-500 flex-1">
+                        Conferido em {{ no.validacao.validado_em|date:"d/m/Y H:i" }}
+                        {% if no.validacao.validado_por %}por {{ no.validacao.validado_por.get_full_name }}{% endif %}
+                        &middot; quadro de {{ no.validacao.quantidade }}
+                        {% if no.mudou %}<strong class="text-amber-700">(hoje são {{ no.quadro }})</strong>{% endif %}
+                        {% if no.validacao.observacao %}<br>“{{ no.validacao.observacao }}”{% endif %}
+                    </span>
+                    {% else %}
+                    <span class="text-xs text-gray-500 flex-1">Ainda não conferido neste mês.</span>
+                    {% endif %}
+                    <form method="post" action="{% url 'hc_validar' no.loja.id %}" class="flex gap-2">
+                        {% csrf_token %}
+                        <input type="hidden" name="mes" value="{{ mes_escolhido }}">
+                        <input type="text" name="observacao" maxlength="300" placeholder="Observação (opcional)"
+                               class="px-3 py-1.5 text-xs border border-gray-300 rounded-lg w-full sm:w-64">
+                        <button type="submit"
+                                class="px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap
+                                       {% if no.validacao %}bg-white border border-gray-300 text-gray-700 hover:bg-gray-50
+                                       {% else %}bg-emerald-600 text-white hover:bg-emerald-700{% endif %}">
+                            <i class="fas fa-check mr-1"></i>{% if no.validacao %}Conferir de novo{% else %}Conferir quadro{% endif %}
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </details>
+        {% empty %}
+        <p class="text-sm text-gray-400 text-center py-10">Nenhuma loja atrelada a você.</p>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

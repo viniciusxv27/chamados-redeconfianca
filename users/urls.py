@@ -80,8 +80,13 @@ urlpatterns = [
     path('manage/categories/<int:category_id>/delete/', views.delete_category_view, name='delete_category'),
     path('manage/webhooks/', views.manage_webhooks_view, name='manage_webhooks'),
     path('manage/webhooks/create/', views.create_webhook_view, name='create_webhook'),
+    # Conferência mensal do quadro (HC), em árvore por loja.
+    path('manage/hc/', views.hc_view, name='hc'),
+    path('manage/hc/<int:sector_id>/validar/', views.hc_validar_view, name='hc_validar'),
     path('manage/system-config/', views.system_config_view, name='system_config'),
     path('manage/system-config/liberar-comissionamento/', views.release_commission_view, name='release_commission'),
+    path('manage/system-config/informativo-comissao/', views.informativo_comissao_view,
+         name='informativo_comissao'),
     path('manage/system-config/visoes-comissionamento/', views.commission_visoes_config_view, name='commission_visoes_config'),
     path('manage/system-config/sync-table/', views.sync_commission_table_view, name='sync_commission_table'),
     path('manage/comissionamento-a-parte/', views.aparte_config_view, name='aparte_config'),

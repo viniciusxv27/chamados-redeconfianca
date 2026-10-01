@@ -6,6 +6,11 @@
 <a href="{% url 'quiz:quiz_novo' %}" class="qz-btn qz-btn-claro"><i class="fas fa-plus"></i>Novo quiz</a>
 <a href="{% url 'quiz:sala_nova' %}" class="qz-btn qz-btn-laranja"><i class="fas fa-door-open"></i>Nova sala</a>
 {% endif %}
+{% if e_superadmin_quiz %}
+<a href="{% url 'quiz:acessos' %}" class="qz-btn qz-btn-claro" title="Liberar pessoas para criar quiz">
+    <i class="fas fa-key"></i>Quem cria quiz
+</a>
+{% endif %}
 {% endblock %}
 
 {% block quiz_conteudo %}

@@ -121,6 +121,7 @@ MIDDLEWARE = [
     'tangerino.middleware.BloqueioFeriasMiddleware',
     'tangerino.middleware.BloqueioJornadaMiddleware',
     'cursos.middleware.BloqueioCursoMiddleware',
+    'knowledge_trails.bloqueio.BloqueioTrilhaMiddleware',
 ]
 
 ROOT_URLCONF = 'redeconfianca.urls'

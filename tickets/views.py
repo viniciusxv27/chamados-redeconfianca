@@ -11,7 +11,8 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from .models import Ticket, Category, TicketLog, TicketComment, Webhook, TicketView, TicketAssignment
+from .models import (Ticket, Category, TicketLog, TicketComment, Webhook, TicketView,
+                     TicketAssignment, TicketTag)
 from .permissions import (ForaDoPadraoRestrito, chamados_restritos, filtro_do_padrao_restrito,
                           pode_ver_chamado, setores_pelo_setor)
 from .serializers import TicketSerializer, CategorySerializer, TicketLogSerializer, TicketCommentSerializer, WebhookSerializer
@@ -72,6 +73,9 @@ def tickets_list_view(request):
     status_filter = request.GET.getlist('status')  # Mudado para getlist para múltiplos valores
     origem_filter = request.GET.get('origem', '')
     categoria_filter = request.GET.get('categoria', '')
+    # Etiquetas: várias de uma vez, e o chamado precisa ter TODAS as marcadas —
+    # quem procura "nota fiscal + reembolso" quer os dois, não a soma.
+    tag_filter = [v for v in request.GET.getlist('tag') if str(v).isdigit()]
     setor_filter = request.GET.get('setor', '')
     prioridade_filter = request.GET.get('prioridade', '')
     carteira_filter = request.GET.get('carteira', '')
@@ -191,6 +195,11 @@ def tickets_list_view(request):
             # Outros usuários só podem filtrar pelas categorias que têm acesso
             tickets = tickets.filter(category_id=categoria_filter)
     
+    if tag_filter:
+        for tag_id in tag_filter:
+            tickets = tickets.filter(tags__id=tag_id)
+        tickets = tickets.distinct()
+
     # Filtro por setor - SUPERVISOR e acima podem filtrar por qualquer setor
     if setor_filter:
         if user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN'] or user.can_view_all_tickets():
@@ -343,8 +352,10 @@ def tickets_list_view(request):
             tickets = tickets.filter(title__in=list(duplicate_titles))
     
     # Aplicar ordenação por data de atualização (mais recente primeiro)
-    tickets = tickets.order_by('-updated_at')
-    
+    # As etiquetas aparecem em cada linha da lista: sem o prefetch seriam
+    # tantas consultas quanto chamados na página.
+    tickets = tickets.prefetch_related('tags').order_by('-updated_at')
+
     # Configurar paginação - permite escolher quantidade por página
     per_page = request.GET.get('per_page', '25')
     try:
@@ -535,6 +546,9 @@ def tickets_list_view(request):
         'status': status_filter,
         'origem': origem_filter,
         'categoria': categoria_filter,
+        'tag': tag_filter,
+        'tags_marcadas': [int(v) for v in tag_filter],
+        'tags_disponiveis': TicketTag.objects.filter(ativa=True),
         'setor': setor_filter,
         'prioridade': prioridade_filter,
         'carteira': carteira_filter,
@@ -977,6 +991,12 @@ def ticket_detail_view(request, ticket_id):
         'ticket': ticket,
         'logs': ticket.logs.all(),
         'comments': ticket.comments.all(),
+        # Etiquetar é tarefa de quem atende: quem mexe no chamado etiqueta.
+        'pode_etiquetar': (user.can_view_all_tickets()
+                           or ticket.created_by_id == user.id
+                           or ticket.assigned_to_id == user.id
+                           or user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN']),
+        'tags_disponiveis': TicketTag.objects.filter(ativa=True),
         'user': user,
         'can_assume': can_assume,
         'can_assign': can_assign,
@@ -2768,3 +2788,33 @@ def tickets_export_view(request):
         return export_tickets_csv(tickets)
     else:
         return export_tickets_xlsx(tickets)
+
+
+@login_required
+@require_POST
+def ticket_tags_view(request, ticket_id):
+    """Põe e tira etiquetas de um chamado, e cria etiqueta nova na hora.
+
+    Etiquetar é organização do dia a dia de quem atende, não configuração: por
+    isso dá para criar a etiqueta no próprio chamado, em vez de abrir uma tela
+    à parte e voltar. Quem pode mexer no chamado pode etiquetá-lo.
+    """
+    ticket = get_object_or_404(Ticket, id=ticket_id)
+    if not (request.user.can_view_all_tickets()
+            or ticket.created_by_id == request.user.id
+            or ticket.assigned_to_id == request.user.id
+            or request.user.hierarchy in ['SUPERVISOR', 'ADMIN', 'SUPERADMIN']):
+        messages.error(request, 'Sem permissão para etiquetar este chamado.')
+        return redirect('ticket_detail', ticket_id=ticket.id)
+
+    escolhidas = [int(v) for v in request.POST.getlist('tags') if str(v).isdigit()]
+    nova = (request.POST.get('nova_tag') or '').strip()[:40]
+    if nova:
+        tag, _criada = TicketTag.objects.get_or_create(
+            nome__iexact=nova,
+            defaults={'nome': nova, 'criada_por': request.user})
+        escolhidas.append(tag.id)
+
+    ticket.tags.set(TicketTag.objects.filter(id__in=escolhidas, ativa=True))
+    messages.success(request, 'Etiquetas atualizadas.')
+    return redirect('ticket_detail', ticket_id=ticket.id)

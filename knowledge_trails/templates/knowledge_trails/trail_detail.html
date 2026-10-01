@@ -101,6 +101,55 @@
             </div>
         </div>
 
+        {% comment %}
+        A assinatura do fim: quem concluiu declara que assistiu, digitando o
+        próprio nome. Fica guardada com data, hora e IP — é o que se mostra
+        depois, quando perguntarem se a pessoa viu o conteúdo.
+        {% endcomment %}
+        {% if pode_assinar %}
+        <div class="bg-white rounded-3xl shadow-2xl p-6 sm:p-8 mb-8 border-2 border-emerald-300">
+            <h2 class="text-xl font-bold text-gray-800 mb-1">
+                <i class="fas fa-file-signature text-emerald-600 mr-2"></i>Falta só assinar
+            </h2>
+            <p class="text-sm text-gray-600 mb-4">
+                Você concluiu a trilha. Para fechar, declare que assistiu ao conteúdo.
+            </p>
+            <form method="post" action="{% url 'knowledge_trails:trail_sign' trail.id %}" class="space-y-3">
+                {% csrf_token %}
+                <label class="flex items-start gap-2 cursor-pointer">
+                    <input type="checkbox" name="aceite" required class="mt-1">
+                    <span class="text-sm text-gray-700">
+                        Declaro que <strong>assisti e compreendi</strong> o conteúdo da trilha
+                        “{{ trail.title }}” por completo.
+                    </span>
+                </label>
+                <div>
+                    <label for="typed_name" class="block text-sm font-medium text-gray-700 mb-1">
+                        Assine digitando seu nome completo
+                    </label>
+                    <input type="text" id="typed_name" name="typed_name" required
+                           placeholder="{{ nome_para_assinar }}"
+                           class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
+                           style="font-family: 'Brush Script MT', cursive; font-size: 1.3rem">
+                    <p class="text-xs text-gray-400 mt-1">Exatamente como no seu cadastro: {{ nome_para_assinar }}</p>
+                </div>
+                <button type="submit"
+                        class="px-5 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700">
+                    <i class="fas fa-check mr-2"></i>Assinar e concluir
+                </button>
+            </form>
+        </div>
+        {% elif assinatura %}
+        <div class="bg-emerald-50 border-2 border-emerald-200 rounded-3xl p-5 mb-8">
+            <p class="text-sm text-emerald-900">
+                <i class="fas fa-file-signature mr-2"></i>
+                Assinada por <strong style="font-family: 'Brush Script MT', cursive; font-size: 1.15rem">{{ assinatura.typed_name }}</strong>
+                em {{ assinatura.signed_at|date:"d/m/Y \à\s H:i" }}.
+            </p>
+            <p class="text-xs text-emerald-700 mt-1">{{ assinatura.declaration }}</p>
+        </div>
+        {% endif %}
+
         <!-- Minimapa -->
         <div class="bg-white rounded-3xl shadow-2xl p-4 sm:p-6 lg:p-8 mb-8">
             <h2 class="text-2xl font-bold text-gray-800 mb-6 flex items-center">

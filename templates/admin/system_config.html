@@ -269,6 +269,88 @@
             </div>
         </form>
 
+        {% comment %}
+        O material que explica o comissionamento. Fica aqui porque é o lugar em
+        que já se mexe no comissionamento, e aparece como botão em todas as
+        visões de /commission.
+        {% endcomment %}
+        <div class="mt-8 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between flex-wrap gap-2">
+                <h2 class="text-lg font-semibold text-gray-900">
+                    <i class="fas fa-circle-question text-indigo-600 mr-2"></i>
+                    Informativo &mdash; Como funciona o Comissionamento
+                </h2>
+                {% if informativo %}
+                <a href="{{ informativo.destino }}" target="_blank" rel="noopener"
+                   class="text-xs px-3 py-1.5 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100">
+                    <i class="fas fa-arrow-up-right-from-square mr-1"></i>Ver o que está no ar
+                </a>
+                {% endif %}
+            </div>
+            <div class="p-6">
+                <p class="text-sm text-gray-600 mb-4">
+                    <i class="fas fa-info-circle text-indigo-500 mr-1"></i>
+                    Suba um PDF, uma imagem ou um vídeo — ou informe um link (YouTube, Drive).
+                    Ele vira o botão <strong>&ldquo;{{ informativo.titulo|default:"Como funciona o Comissionamento?" }}&rdquo;</strong>
+                    em todas as visões do comissionamento, e abre em outra guia.
+                </p>
+
+                {% if informativo %}
+                <div class="mb-4 p-3 rounded-lg bg-gray-50 border border-gray-200 text-sm text-gray-700 flex items-center justify-between flex-wrap gap-2">
+                    <span>
+                        <i class="fas fa-circle-check text-emerald-600 mr-1"></i>
+                        No ar: <strong>{{ informativo.get_tipo_display }}</strong>
+                        &middot; atualizado em {{ informativo.atualizado_em|date:"d/m/Y H:i" }}
+                        {% if informativo.atualizado_por %} por {{ informativo.atualizado_por.get_full_name|default:informativo.atualizado_por.email }}{% endif %}
+                    </span>
+                    <form method="post" action="{% url 'informativo_comissao' %}"
+                          onsubmit="return confirm('Tirar o informativo do ar? O botão some das telas de comissionamento.');">
+                        {% csrf_token %}
+                        <input type="hidden" name="acao" value="remover">
+                        <button type="submit" class="text-xs px-3 py-1.5 rounded-lg border border-red-200 bg-red-50 text-red-700 hover:bg-red-100">
+                            <i class="fas fa-xmark mr-1"></i>Tirar do ar
+                        </button>
+                    </form>
+                </div>
+                {% endif %}
+
+                <form method="post" action="{% url 'informativo_comissao' %}" enctype="multipart/form-data"
+                      class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {% csrf_token %}
+                    <div class="md:col-span-2">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Texto do botão</label>
+                        <input type="text" name="titulo" maxlength="120"
+                               value="{{ informativo.titulo|default:'Como funciona o Comissionamento?' }}"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Descrição (opcional)</label>
+                        <input type="text" name="descricao" maxlength="240" value="{{ informativo.descricao|default:'' }}"
+                               placeholder="Ex.: vídeo de 6 minutos explicando as metas e os pilares"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Arquivo (PDF, imagem ou vídeo)</label>
+                        <input type="file" name="arquivo" accept=".pdf,image/*,video/*"
+                               class="w-full text-sm text-gray-600 file:mr-3 file:px-3 file:py-2 file:rounded-lg
+                                      file:border-0 file:bg-indigo-50 file:text-indigo-700 file:text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Ou um link</label>
+                        <input type="url" name="link" value="{{ informativo.link|default:'' }}"
+                               placeholder="https://..."
+                               class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                    <div class="md:col-span-2">
+                        <button type="submit" class="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700">
+                            <i class="fas fa-upload mr-2"></i>Publicar informativo
+                        </button>
+                        <span class="text-xs text-gray-400 ml-2">Mandando os dois, o arquivo manda.</span>
+                    </div>
+                </form>
+            </div>
+        </div>
+
         <!-- Sincronizar Tabela de Totais + Comissionamento A parte -->
         <div class="mt-8 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">

@@ -12,6 +12,10 @@ urlpatterns = [
     path('metas/nova/', views.meta_create, name='meta_create'),
     path('metas/solicitacoes/', views.meta_solicitacoes, name='meta_solicitacoes'),
     path('metas/<int:meta_id>/decidir/', views.meta_decidir, name='meta_decidir'),
+    path('metas/<int:meta_id>/parceiro/', views.meta_convidar_parceiro,
+         name='meta_convidar_parceiro'),
+    path('metas/parceria/<int:parceria_id>/responder/', views.meta_responder_parceria,
+         name='meta_responder_parceria'),
     path('metas/<int:meta_id>/cancelar-solicitacao/',
          views.meta_solicitacao_cancelar, name='meta_solicitacao_cancelar'),
     path('metas/<int:meta_id>/editar/', views.meta_editar, name='meta_editar'),
@@ -95,6 +99,7 @@ urlpatterns = [
     path('inovar/adm/', views.inovar_adm, name='inovar_adm'),
     path('inovar/<int:ideia_id>/editar/', views.ideia_edit, name='ideia_edit'),
     path('inovar/<int:ideia_id>/status/', views.ideia_update_status, name='ideia_update_status'),
+    path('inovar/decidir-lote/', views.inovar_decidir_lote, name='inovar_decidir_lote'),
 
     # ACOMPANHAMENTO
     path('acompanhamento/', views.acompanhamento, name='acompanhamento'),
@@ -107,6 +112,7 @@ urlpatterns = [
     path('ciclos/<int:ciclo_id>/', views.ciclo_detail, name='ciclo_detail'),
     path('ciclos/<int:ciclo_id>/encerrar/', views.ciclo_encerrar, name='ciclo_encerrar'),
     path('ciclos/mes/<int:mes_id>/', views.mes_detail, name='mes_detail'),
+    path('ciclos/mes/<int:mes_id>/ranking/', views.mes_ranking, name='mes_ranking'),
     path('ciclos/mes/<int:mes_id>/fechar/', views.mes_fechar, name='mes_fechar'),
     path('ciclos/mes/<int:mes_id>/reabrir/', views.mes_reabrir, name='mes_reabrir'),
 ]

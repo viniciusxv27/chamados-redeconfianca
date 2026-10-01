@@ -193,6 +193,29 @@ def impulso_member_or_superadmin_required(view_func):
     return _wrapped
 
 
+def pode_gerir_ciclos(user):
+    """Quem abre, fecha e reabre ciclo e mês do Impulso.
+
+    O gestor do Impulso **ou** o SUPERADMIN do portal. Sem a segunda metade,
+    quem administra o portal mas não está no grupo GESTORES (IMPULSO) não
+    conseguia encerrar o mês — o botão nem aparecia na tela do ciclo, e o POST
+    direto era recusado. É a mesma régua já usada para avaliar a meta.
+    """
+    return is_impulso_manager(user) or e_superadmin(user)
+
+
+def impulso_ciclos_required(view_func):
+    @wraps(view_func)
+    def _wrapped(request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return redirect('login')
+        if not pode_gerir_ciclos(request.user):
+            messages.error(request, 'Ação disponível para gestores do Impulso e SUPERADMIN.')
+            return redirect('impulso:dashboard')
+        return view_func(request, *args, **kwargs)
+    return _wrapped
+
+
 def impulso_manager_required(view_func):
     @wraps(view_func)
     def _wrapped(request, *args, **kwargs):

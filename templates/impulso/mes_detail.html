@@ -22,6 +22,15 @@
             {% endif %}
         </div>
 
+        <div class="flex gap-2 flex-wrap">
+            {% if mes.is_fechado %}
+            <a href="{% url 'impulso:mes_ranking' mes.id %}"
+               class="px-4 py-2 rounded-lg bg-orange-600 text-white text-sm font-medium hover:bg-orange-700 shadow-sm">
+                <i class="fas fa-trophy mr-1"></i>Ver ranking
+            </a>
+            {% endif %}
+        </div>
+
         {% if is_gestor %}
         <div class="flex gap-2">
             {% if not mes.is_fechado %}

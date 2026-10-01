@@ -7,6 +7,8 @@ urlpatterns = [
     # Visualização pública
     path('', views.trails_dashboard, name='dashboard'),
     path('trail/<int:trail_id>/', views.trail_detail, name='trail_detail'),
+    path('trail/<int:trail_id>/bloqueada/', views.trail_blocked, name='trail_blocked'),
+    path('trail/<int:trail_id>/assinar/', views.trail_sign, name='trail_sign'),
     path('lesson/<int:lesson_id>/', views.lesson_view, name='lesson_view'),
     path('trail/<int:trail_id>/leaderboard/', views.leaderboard, name='leaderboard'),
     path('certificate/<int:certificate_id>/', views.certificate_view, name='certificate_view'),

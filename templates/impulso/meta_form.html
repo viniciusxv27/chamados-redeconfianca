@@ -206,8 +206,33 @@
                 {% if sou_gestor %}
             <div>
                 {% include 'impulso/_seletor_pessoas.html' with nome='participantes' pessoas=colaboradores escolhidos=vazio rotulo='Outros responsáveis' ajuda='Opcional. A meta continua no nome do colaborador principal — estes acompanham e podem marcar os itens do to-do.' %}
+
             </div>
             {% endif %}
+
+                {% comment %}
+                Parceria é diferente de "outros responsáveis": aqui a pessoa é
+                **convidada** e precisa aceitar. Quem cria a meta para si mesmo
+                também chama — é o caso do pedido ("posso solicitar a
+                participação em conjunto do colega de setor").
+                {% endcomment %}
+                {% if colegas_parceria %}
+                <div class="sm:col-span-2">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">
+                        Chamar colega para fazer junto
+                        <span class="text-xs text-gray-400 font-normal">— ele recebe o convite e aceita</span>
+                    </label>
+                    <select name="parceiros" multiple size="4"
+                            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                        {% for c in colegas_parceria %}
+                        <option value="{{ c.id }}">{{ c.get_full_name|default:c.email }}</option>
+                        {% endfor %}
+                    </select>
+                    <p class="text-[11px] text-gray-400 mt-1">
+                        Colegas do seu setor. Segure Ctrl (ou Cmd) para escolher mais de um.
+                    </p>
+                </div>
+                {% endif %}
 
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">To-do da meta</label>

@@ -5,6 +5,9 @@ from . import views
 app_name = 'quiz'
 
 urlpatterns = [
+    # Quem pode criar quiz — a lista que o SUPERADMIN mantém.
+    path('acessos/', views.acessos, name='acessos'),
+    path('acessos/<int:user_id>/remover/', views.acesso_remover, name='acesso_remover'),
     # Participante
     path('', views.inicio, name='inicio'),
     path('entrar/', views.entrar, name='entrar'),

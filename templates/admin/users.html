@@ -49,6 +49,13 @@
                         Documentos
                     </a>
                     {% endif %}
+                    {% if pode_ver_hc %}
+                    <a href="{% url 'hc' %}" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors flex items-center"
+                       title="Conferir o quadro de cada loja no mês">
+                        <i class="fas fa-sitemap mr-2"></i>
+                        Quadro do mês (HC)
+                    </a>
+                    {% endif %}
                     <a href="{% url 'pre_register_user' %}" class="bg-amber-500 text-white px-4 py-2 rounded-lg hover:bg-amber-600 transition-colors flex items-center">
                         <i class="fas fa-user-clock mr-2"></i>
                         Pré-cadastro

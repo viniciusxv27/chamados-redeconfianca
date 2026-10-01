@@ -167,6 +167,38 @@
                                 </div>
                             </div>
 
+                            {% comment %}
+                            Duas travas diferentes: a assinatura fecha a
+                            conclusão (quem assistiu declara que assistiu), e o
+                            bloqueio do portal é a medida dura — por isso só
+                            gestor vê a opção.
+                            {% endcomment %}
+                            <div class="mb-4 space-y-2 border-t border-gray-100 pt-4">
+                                <label class="flex items-start gap-2 cursor-pointer">
+                                    <input type="checkbox" name="require_signature" class="mt-1"
+                                           {% if trail.require_signature %}checked{% endif %}>
+                                    <span class="text-sm text-gray-700">
+                                        <strong>Pedir assinatura ao concluir</strong>
+                                        <span class="block text-xs text-gray-500">
+                                            Ao terminar, a pessoa declara que assistiu e assina com o próprio nome.
+                                        </span>
+                                    </span>
+                                </label>
+                                {% if pode_travar_portal %}
+                                <label class="flex items-start gap-2 cursor-pointer">
+                                    <input type="checkbox" name="blocks_portal" class="mt-1"
+                                           {% if trail.blocks_portal %}checked{% endif %}>
+                                    <span class="text-sm text-gray-700">
+                                        <strong>Travar o portal até concluir</strong>
+                                        <span class="block text-xs text-gray-500">
+                                            Passado o prazo, quem não concluiu só consegue abrir a trilha.
+                                            Use com parcimônia.
+                                        </span>
+                                    </span>
+                                </label>
+                                {% endif %}
+                            </div>
+
                             <div class="mb-2">
                                 <label class="block text-sm font-semibold text-gray-700 mb-2">Usuários Obrigatórios</label>
                                 <input type="text" id="mandatory_users_search"

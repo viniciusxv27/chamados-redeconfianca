@@ -53,6 +53,31 @@ def criar_meses(ciclo):
     return criados
 
 
+def _para_json(valor):
+    """Deixa o detalhamento gravável num JSONField.
+
+    O cálculo ao vivo trabalha com os tipos do Python — `date` nos dias de
+    falta, `Decimal` nas notas — e a tela lida bem com isso. O snapshot vai
+    para uma coluna JSON, e aí `date` levanta `TypeError: Object of type date
+    is not JSON serializable` **no meio da transação**: o mês não fechava, e a
+    tela só mostrava erro. Converte aqui, uma vez, na fronteira do banco.
+    """
+    from datetime import date as _date, datetime as _datetime
+    from decimal import Decimal as _Decimal
+
+    if isinstance(valor, dict):
+        return {str(k): _para_json(v) for k, v in valor.items()}
+    if isinstance(valor, (list, tuple, set)):
+        return [_para_json(v) for v in valor]
+    if isinstance(valor, _datetime):
+        return valor.strftime('%d/%m/%Y %H:%M')
+    if isinstance(valor, _date):
+        return valor.strftime('%d/%m/%Y')
+    if isinstance(valor, _Decimal):
+        return float(valor)
+    return valor
+
+
 @transaction.atomic
 def fechar_mes(mes, usuario):
     """Congela a pontuação de todos os colaboradores no mês."""
@@ -82,7 +107,7 @@ def fechar_mes(mes, usuario):
                 'percentual': dados['percentual'],
                 'faixa': faixa,
                 'confiancas_previstas': premio,
-                'detalhes': dados['detalhes'],
+                'detalhes': _para_json(dados['detalhes']),
             },
         )
         total_pessoas += 1

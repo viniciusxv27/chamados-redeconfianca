@@ -1,0 +1,35 @@
+{% load l10n %}
+{% comment %}
+Uma coluna do pódio. O 1º lugar é maior, tem a borda girando e é onde o confete
+cai — a diferença precisa ser vista de longe, no projetor da reunião.
+{% endcomment %}
+<div class="flex flex-col items-center" style="width: {% if lugar == 1 %}38%{% else %}31%{% endif %}; max-width:220px">
+    <div class="rk-sobe relative {% if lugar == 1 %}mb-3{% else %}mb-2{% endif %}"
+         style="animation-delay: {{ atraso }}" {% if lugar == 1 %}id="rkPrimeiro"{% endif %}>
+        <div class="{% if lugar == 1 %}rk-brilho{% endif %}">
+            <div class="rk-medalha" style="{% if lugar == 1 %}width:92px;height:92px;font-size:28px{% endif %}">
+                {{ l.user.get_full_name|default:l.user.email|slice:":1"|upper }}
+            </div>
+        </div>
+        <span class="absolute -bottom-2 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full text-[11px] font-black"
+              style="background: {{ cor }}; color:#0B1020">{{ lugar }}º</span>
+    </div>
+
+    <div class="text-center rk-sobe w-full" style="animation-delay: {{ atraso }}">
+        <div class="font-bold text-sm sm:text-base px-1 leading-tight" style="overflow-wrap:anywhere">{{ l.user.get_full_name|default:l.user.email }}</div>
+        <div class="text-[11px] text-white/50 truncate mt-0.5">{{ l.p.setor.name|default:"Sem setor" }}</div>
+        <div class="font-black {% if lugar == 1 %}text-3xl{% else %}text-2xl{% endif %} mt-1"
+             data-valor="{{ l.p.percentual|unlocalize }}">0%</div>
+        <div class="text-[11px] mt-0.5" style="color: {{ cor }}">
+            <i class="{{ l.faixa.icon }} mr-1"></i>{{ l.faixa.label }}
+            {% if l.p.confiancas_previstas %}&middot; C$ {{ l.p.confiancas_previstas }}{% endif %}
+        </div>
+        <div class="rk-barra mt-2 mx-auto" style="max-width:150px">
+            <i data-pct="{{ l.p.percentual|unlocalize }}" style="background: {{ cor }}"></i>
+        </div>
+    </div>
+
+    <div class="rk-coluna w-full mt-3" style="height: {{ altura }}; animation-delay: {{ atraso }};
+                background: linear-gradient(180deg, {{ cor }}33, rgba(255,255,255,.04));
+                border-top: 3px solid {{ cor }}"></div>
+</div>

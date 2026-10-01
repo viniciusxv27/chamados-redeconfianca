@@ -1976,3 +1976,50 @@ class PesosImpulso(models.Model):
                 'total': sum((i['peso'] for i in itens), Decimal('0')),
             })
         return saida
+
+
+class ParceriaMeta(models.Model):
+    """Convite para tocar uma meta em conjunto.
+
+    O campo `Meta.participantes` já existia, mas só o gestor mexia nele e a
+    pessoa era **colocada** na meta, sem ser perguntada. Aqui quem toca a meta
+    chama um colega do setor e o colega aceita (ou não): participar de uma
+    tarefa de outro é compromisso, não designação automática.
+
+    Aceitar é o que coloca a pessoa em `participantes` — daí para a frente ela
+    vê a meta, marca os itens do to-do e aparece como responsável junto.
+    """
+
+    class Status(models.TextChoices):
+        PENDENTE = 'PENDENTE', 'Aguardando resposta'
+        ACEITA = 'ACEITA', 'Aceita'
+        RECUSADA = 'RECUSADA', 'Recusada'
+
+    meta = models.ForeignKey(
+        'Meta', on_delete=models.CASCADE, related_name='parcerias', verbose_name='Meta')
+    convidado = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name='convites_de_parceria', verbose_name='Convidado')
+    convidado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='parcerias_pedidas', verbose_name='Quem convidou')
+    mensagem = models.CharField(max_length=200, blank=True, verbose_name='Recado do convite')
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDENTE,
+                              verbose_name='Situação')
+    criado_em = models.DateTimeField(auto_now_add=True)
+    respondido_em = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'Parceria em meta'
+        verbose_name_plural = 'Parcerias em metas'
+        ordering = ['-criado_em']
+        constraints = [
+            models.UniqueConstraint(fields=['meta', 'convidado'], name='uniq_parceria_meta'),
+        ]
+
+    def __str__(self):
+        return f'{self.convidado} em {self.meta} ({self.get_status_display()})'
+
+    @property
+    def esta_pendente(self):
+        return self.status == self.Status.PENDENTE

@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+
+{% block title %}Trilha obrigatória pendente{% endblock %}
+
+{% comment %}
+A tela do bloqueio. Diz o que falta e leva direto para lá — travar sem dizer
+como sair seria só um muro.
+{% endcomment %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto py-10 px-4">
+    <div class="bg-white border-2 border-amber-300 rounded-2xl shadow-sm overflow-hidden">
+        <div class="bg-amber-50 px-6 py-5 border-b border-amber-200">
+            <h1 class="text-xl font-bold text-amber-900">
+                <i class="fas fa-graduation-cap mr-2"></i>Você tem uma trilha obrigatória pendente
+            </h1>
+            <p class="text-sm text-amber-800 mt-1">
+                O portal fica travado até você concluir
+                {% if trail.require_signature %}e assinar{% endif %} esta trilha.
+            </p>
+        </div>
+        <div class="p-6">
+            <h2 class="font-semibold text-gray-900">{{ trail.title }}</h2>
+            <p class="text-sm text-gray-600 mt-1">{{ trail.description }}</p>
+
+            <div class="mt-4 space-y-2 text-sm">
+                <div class="flex items-center gap-2">
+                    <i class="fas {% if concluiu %}fa-circle-check text-emerald-600{% else %}fa-circle text-gray-300{% endif %}"></i>
+                    <span class="{% if concluiu %}text-gray-500 line-through{% else %}text-gray-800{% endif %}">
+                        Assistir a trilha inteira
+                    </span>
+                </div>
+                {% if trail.require_signature %}
+                <div class="flex items-center gap-2">
+                    <i class="fas {% if assinou %}fa-circle-check text-emerald-600{% else %}fa-circle text-gray-300{% endif %}"></i>
+                    <span class="{% if assinou %}text-gray-500 line-through{% else %}text-gray-800{% endif %}">
+                        Assinar a declaração de que assistiu
+                    </span>
+                </div>
+                {% endif %}
+            </div>
+
+            {% if trail.mandatory_end_date %}
+            <p class="text-xs text-gray-400 mt-4">
+                O prazo era {{ trail.mandatory_end_date|date:"d/m/Y" }}.
+            </p>
+            {% endif %}
+
+            <a href="{% url 'knowledge_trails:trail_detail' trail.id %}"
+               class="mt-5 inline-flex items-center px-5 py-2.5 rounded-lg bg-amber-600 text-white text-sm font-medium hover:bg-amber-700">
+                <i class="fas fa-play mr-2"></i>Ir para a trilha
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

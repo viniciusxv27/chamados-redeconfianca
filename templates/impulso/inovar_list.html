@@ -6,6 +6,58 @@
     <a href="{% url 'impulso:ideia_create' %}" class="px-3 py-2 rounded-lg bg-yellow-500 text-white text-sm hover:bg-yellow-600"><i class="fas fa-plus mr-1"></i>Nova ideia</a>
 </div>
 
+{% comment %}
+Filtro da própria tela: status, setor de impacto e ordem. Busca por nome
+continua de fora — a avaliação é sem autoria, e um campo de nome aqui
+devolveria justamente o que a tela esconde.
+{% endcomment %}
+<form method="get" class="imp-card p-3 mb-4 flex flex-col sm:flex-row sm:items-end gap-2">
+    {% if filtro.mes %}<input type="hidden" name="mes" value="{{ filtro.mes }}">{% endif %}
+    <div class="flex-1 min-w-[150px]">
+        <label class="block text-[11px] font-medium text-gray-500 mb-1">Situação</label>
+        <select name="status" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            <option value="">Todas</option>
+            {% for value, label in status_choices %}
+            <option value="{{ value }}" {% if status_filtro == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="flex-1 min-w-[150px]">
+        <label class="block text-[11px] font-medium text-gray-500 mb-1">Setor de impacto</label>
+        <input type="text" name="impacto" value="{{ impacto_filtro }}" list="impactosUsados"
+               placeholder="Todos" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        <datalist id="impactosUsados">
+            {% for i in impactos %}<option value="{{ i }}">{% endfor %}
+        </datalist>
+    </div>
+    <div class="flex-1 min-w-[140px]">
+        <label class="block text-[11px] font-medium text-gray-500 mb-1">Ordem</label>
+        <select name="ordem" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            <option value="">Mais recentes primeiro</option>
+            <option value="antigas" {% if ordem_filtro == 'antigas' %}selected{% endif %}>Mais antigas primeiro</option>
+        </select>
+    </div>
+    <div class="flex gap-2">
+        <button type="submit" class="px-4 py-2 rounded-lg bg-gray-800 text-white text-sm hover:bg-gray-900">
+            <i class="fas fa-filter mr-1"></i>Filtrar
+        </button>
+        {% if filtro_ativo %}
+        <a href="{% url 'impulso:inovar_list' %}" class="px-4 py-2 rounded-lg bg-white border border-gray-300 text-gray-700 text-sm hover:bg-gray-50">
+            Limpar
+        </a>
+        {% endif %}
+    </div>
+</form>
+
+{% if is_gestor %}
+{% comment %}
+Decidir em lote: a lista inteira é um formulário só. Cada ideia diz se segue
+(e com quem e até quando) ou não segue; o que fica em branco não é decidido.
+{% endcomment %}
+<form method="post" action="{% url 'impulso:inovar_decidir_lote' %}" id="formLote">
+{% csrf_token %}
+{% endif %}
+
 <div class="space-y-3">
     {% for ideia in ideias %}
     <div class="imp-card p-4">
@@ -91,20 +143,23 @@
         {% endif %}
 
         {% if is_gestor %}
-        <form method="post" action="{% url 'impulso:ideia_update_status' ideia.id %}"
-              class="mt-3 border-t border-gray-100 pt-3 space-y-2" data-decidir-ideia>
-            {% csrf_token %}
+        <div class="mt-3 border-t border-gray-100 pt-3 space-y-2" data-decidir-ideia>
+            <input type="checkbox" name="ideia" value="{{ ideia.id }}" class="hidden" data-marca>
             <div class="flex flex-col sm:flex-row gap-2">
-                <select name="status" data-status class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                    {% for value, label in status_choices %}<option value="{{ value }}" {% if ideia.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+                <select name="decisao_{{ ideia.id }}" data-decisao
+                        class="border border-gray-300 rounded-lg px-3 py-2 text-sm sm:w-56">
+                    <option value="">Decidir depois</option>
+                    <option value="segue">Vai seguir — aprovar</option>
+                    <option value="nao">Não vai seguir — arquivar</option>
                 </select>
-                <input type="text" name="resposta_gestor" value="{{ ideia.resposta_gestor }}" placeholder="Retorno ao autor (opcional)" class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                <button type="submit" class="px-4 py-2 rounded-lg bg-gray-800 text-white text-sm hover:bg-gray-900">Atualizar</button>
+                <input type="text" name="resposta_{{ ideia.id }}" value="{{ ideia.resposta_gestor }}"
+                       placeholder="Retorno ao autor (opcional)"
+                       class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm">
             </div>
-            <div data-execucao class="grid sm:grid-cols-2 gap-2 {% if ideia.status != 'APROVADA' %}hidden{% endif %}">
+            <div data-execucao class="grid sm:grid-cols-2 gap-2 hidden">
                 <div>
-                    <label class="block text-[11px] font-medium text-gray-500 mb-1">Quem vai executar</label>
-                    <select name="executor" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    <label class="block text-[11px] font-medium text-gray-500 mb-1">Ponto focal (quem vai executar)</label>
+                    <select name="executor_{{ ideia.id }}" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                         <option value="">Escolha a pessoa…</option>
                         {% for c in colaboradores %}
                         <option value="{{ c.id }}" {% if ideia.executor_id == c.id %}selected{% endif %}>{{ c.get_full_name|default:c.email }}</option>
@@ -113,7 +168,7 @@
                 </div>
                 <div>
                     <label class="block text-[11px] font-medium text-gray-500 mb-1">Prazo</label>
-                    <input type="date" name="prazo" min="{{ hoje|date:'Y-m-d' }}"
+                    <input type="date" name="prazo_{{ ideia.id }}" min="{{ hoje|date:'Y-m-d' }}"
                            value="{% if ideia.prazo %}{{ ideia.prazo|date:'Y-m-d' }}{% endif %}"
                            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                 </div>
@@ -121,26 +176,60 @@
                     Ao aprovar, a ideia entra como atividade dessa pessoa no Confiar, com este prazo.
                 </p>
             </div>
-        </form>
+        </div>
         {% endif %}
     </div>
     {% empty %}
-    <p class="text-sm text-gray-400">{% if is_gestor %}Nenhuma ideia enviada ainda.{% else %}Você ainda não enviou ideias. Que tal começar?{% endif %}</p>
+    <p class="text-sm text-gray-400">{% if is_gestor %}Nenhuma ideia encontrada com esse filtro.{% else %}Você ainda não enviou ideias. Que tal começar?{% endif %}</p>
     {% endfor %}
 </div>
+
+{% if is_gestor %}
+<div id="barraLote" class="hidden sticky bottom-3 mt-4 z-30">
+    <div class="imp-card p-3 flex items-center justify-between gap-3 shadow-lg border-yellow-300">
+        <span class="text-sm text-gray-700">
+            <i class="fas fa-list-check text-yellow-600 mr-1"></i>
+            <strong id="loteQuantas">0</strong> ideia(s) com decisão preenchida
+        </span>
+        <button type="submit" class="px-4 py-2 rounded-lg bg-yellow-500 text-white text-sm font-medium hover:bg-yellow-600">
+            Aplicar decisões
+        </button>
+    </div>
+</div>
+</form>
+{% endif %}
 
 {% if is_gestor %}
 <script>
 (function () {
     'use strict';
     // Executor e prazo só fazem sentido na aprovação — aparecem quando ela é escolhida.
-    document.querySelectorAll('[data-decidir-ideia]').forEach(function (form) {
-        const status = form.querySelector('[data-status]');
-        const bloco = form.querySelector('[data-execucao]');
+    // Decidir é escolher no seletor: quem segue abre os campos de ponto focal e
+    // prazo, e a ideia entra sozinha no lote. A barra de baixo só aparece
+    // quando há algo para aplicar — sem decisão nenhuma ela seria um botão
+    // que não faz nada.
+    const barra = document.getElementById('barraLote');
+    const quantas = document.getElementById('loteQuantas');
+
+    function recontar() {
+        if (!barra) { return; }
+        const n = document.querySelectorAll('[data-marca]:checked').length;
+        quantas.textContent = n;
+        barra.classList.toggle('hidden', n === 0);
+    }
+
+    document.querySelectorAll('[data-decidir-ideia]').forEach(function (linha) {
+        const decisao = linha.querySelector('[data-decisao]');
+        const marca = linha.querySelector('[data-marca]');
+        const bloco = linha.querySelector('[data-execucao]');
         function aplicar() {
-            bloco.classList.toggle('hidden', status.value !== 'APROVADA');
+            bloco.classList.toggle('hidden', decisao.value !== 'segue');
+            marca.checked = decisao.value !== '';
+            linha.parentElement.classList.toggle('ring-2', marca.checked);
+            linha.parentElement.classList.toggle('ring-yellow-300', marca.checked);
+            recontar();
         }
-        status.addEventListener('change', aplicar);
+        decisao.addEventListener('change', aplicar);
         aplicar();
     });
 })();

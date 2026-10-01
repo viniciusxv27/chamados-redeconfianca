@@ -26,6 +26,35 @@ class Category(models.Model):
         return f"{self.sector.name} - {self.name}"
 
 
+class TicketTag(models.Model):
+    """Etiqueta para agrupar chamados — "nota fiscal", "DANFE", "reembolso".
+
+    A categoria responde "de que tipo é este chamado?" e é escolhida uma só;
+    a etiqueta responde "o que este chamado tem dentro?" e pode ser várias. É
+    o que permite achar depois todos os chamados com nota fiscal, sem depender
+    de alguém ter escrito a palavra no título.
+    """
+
+    nome = models.CharField(max_length=40, unique=True, verbose_name='Etiqueta')
+    cor = models.CharField(
+        max_length=7, default='#6366F1', verbose_name='Cor',
+        help_text='Em hexadecimal (#RRGGBB). A etiqueta aparece com esta cor na lista.')
+    descricao = models.CharField(max_length=160, blank=True, verbose_name='Para que serve')
+    ativa = models.BooleanField(default=True, verbose_name='Disponível para uso')
+    criada_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='tags_criadas', verbose_name='Criada por')
+    criada_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Etiqueta de chamado'
+        verbose_name_plural = 'Etiquetas de chamado'
+        ordering = ['nome']
+
+    def __str__(self):
+        return self.nome
+
+
 class Ticket(models.Model):
     PRIORITY_CHOICES = [
         ('BAIXA', 'Baixa'),
@@ -79,6 +108,10 @@ class Ticket(models.Model):
         related_name='tickets_encerrados_sem_solucao',
         verbose_name="Encerrado sem solução por")
     priority = models.CharField(max_length=15, choices=PRIORITY_CHOICES, default='MEDIA', verbose_name="Prioridade")
+    # Várias por chamado, ao contrário da categoria: um chamado pode ter nota
+    # fiscal **e** DANFE, e é isso que permite agrupá-los depois.
+    tags = models.ManyToManyField(
+        TicketTag, blank=True, related_name='tickets', verbose_name='Etiquetas')
     solution = models.TextField(blank=True, verbose_name="Solução")
     solution_time_hours = models.IntegerField(default=24, verbose_name="Tempo para Solução (horas)")
     due_date = models.DateTimeField(null=True, blank=True, verbose_name="Data Limite")

@@ -83,12 +83,99 @@ def _quando(sala):
 
 
 def _contexto(request, aba, **extra):
-    return {'aba': aba, 'pode_gerenciar': pode_gerenciar(request.user), **extra}
+    return {'aba': aba, 'pode_gerenciar': pode_gerenciar(request.user),
+            # Só o SUPERADMIN mexe em quem pode criar quiz.
+            'e_superadmin_quiz': e_superadmin(request.user), **extra}
 
 
 # ===========================================================================
 # Participante
 # ===========================================================================
+@login_required
+def acessos(request):
+    """Quem pode criar quiz — a lista que o SUPERADMIN mantém.
+
+    A liberação individual já existia, mas escondida na tela de edição de cada
+    usuário: para liberar três pessoas era preciso abrir três cadastros e achar
+    a caixinha certa. Aqui a lista é a própria tela, com quem está liberado à
+    vista. Por baixo é a mesma chave `quiz.gestao` do catálogo de acessos — as
+    duas telas falam da mesma coisa, não de duas listas parecidas.
+    """
+    if not e_superadmin(request.user):
+        messages.error(request, 'Só o SUPERADMIN define quem cria quiz.')
+        return redirect('quiz:inicio')
+
+    from users.models import UserModuleAccess
+
+    if request.method == 'POST':
+        escolhido_id = (request.POST.get('user') or '').strip()
+        escolhido = (User.objects.filter(id=int(escolhido_id), is_active=True).first()
+                     if escolhido_id.isdigit() else None)
+        if not escolhido:
+            messages.error(request, 'Escolha a pessoa que vai criar quiz.')
+        elif e_superadmin(escolhido):
+            messages.info(request, f'{escolhido.get_full_name() or escolhido.email} já é '
+                                   f'SUPERADMIN e cria quiz.')
+        else:
+            _acesso, criado = UserModuleAccess.objects.get_or_create(
+                user=escolhido, module_key='quiz.gestao',
+                defaults={'granted_by': request.user})
+            if criado:
+                _avisar_liberado(escolhido, request.user)
+                messages.success(request, f'{escolhido.get_full_name() or escolhido.email} '
+                                          f'agora pode criar quiz.')
+            else:
+                messages.info(request, 'Essa pessoa já estava liberada.')
+        return redirect('quiz:acessos')
+
+    liberados = (UserModuleAccess.objects
+                 .filter(module_key='quiz.gestao', user__is_active=True)
+                 .select_related('user', 'user__sector', 'granted_by')
+                 .order_by('user__first_name', 'user__last_name'))
+    ja_tem = {a.user_id for a in liberados}
+
+    return render(request, 'quiz/acessos.html', {
+        'liberados': liberados,
+        'pessoas': (User.objects.filter(is_active=True)
+                    .exclude(id__in=ja_tem)
+                    .order_by('first_name', 'last_name')),
+        'superadmins': (User.objects.filter(is_active=True)
+                        .filter(Q(is_superuser=True) | Q(hierarchy='SUPERADMIN'))
+                        .order_by('first_name', 'last_name')),
+    })
+
+
+@require_POST
+@login_required
+def acesso_remover(request, user_id):
+    """Tira a liberação de criar quiz. O que a pessoa já criou continua lá."""
+    if not e_superadmin(request.user):
+        messages.error(request, 'Só o SUPERADMIN define quem cria quiz.')
+        return redirect('quiz:inicio')
+
+    from users.models import UserModuleAccess
+    apagados, _ = UserModuleAccess.objects.filter(
+        user_id=user_id, module_key='quiz.gestao').delete()
+    messages.success(request, 'Liberação retirada.' if apagados
+                     else 'Essa pessoa já não estava na lista.')
+    return redirect('quiz:acessos')
+
+
+def _avisar_liberado(pessoa, quem_liberou):
+    """Avisa no sino quem ganhou a chave — sem derrubar a tela se falhar."""
+    try:
+        from core.models import NotificationMixin
+        NotificationMixin.create_notifications_for_users(
+            users=[pessoa],
+            title='Você já pode criar quiz',
+            message=(f'{quem_liberou.get_full_name() or quem_liberou.email} liberou seu acesso: '
+                     f'você pode criar quizzes, montar salas e ver os resultados.'),
+            notification_type='SYSTEM', related_url='/quiz/',
+        )
+    except Exception:                                   # noqa: BLE001
+        pass
+
+
 @login_required
 def inicio(request):
     minhas = list(Participante.objects.filter(user=request.user)

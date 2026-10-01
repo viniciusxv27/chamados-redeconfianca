@@ -1,4 +1,7 @@
+import datetime
+
 from django.shortcuts import render, redirect, get_object_or_404
+from django.urls import reverse
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib import messages
@@ -275,6 +278,11 @@ def manage_users_view(request):
         'active_users_count': active_users_count,
         'superadmin_count': superadmin_count,
     }
+    # O quadro do mês fica ao lado da lista de usuários: é de lá que se chega
+    # à árvore por loja.
+    from users.hc import pode_validar as _pode_validar_hc
+    context['pode_ver_hc'] = _pode_validar_hc(request.user)
+
     return render(request, 'admin/users.html', context)
 
 
@@ -3781,7 +3789,69 @@ def system_config_view(request):
         'commission_versoes_liberacao': versoes_para_tela(),
         'commission_publicos': PUBLICOS,
     }
+    # O material "como funciona o comissionamento", que vira botão nas telas
+    # do módulo. Nunca derruba esta tela: enquanto a migration não roda nos
+    # outros servidores, `vigente()` devolve None.
+    from users.models import InformativoComissao
+    context['informativo'] = InformativoComissao.vigente()
+
     return render(request, 'admin/system_config.html', context)
+
+
+@login_required
+def informativo_comissao_view(request):
+    """Publica (ou tira do ar) o informativo do comissionamento.
+
+    Aceita arquivo — PDF, imagem ou vídeo — ou um link, porque a explicação
+    muitas vezes já existe num vídeo gravado. Mandando os dois, o arquivo
+    manda: foi o que a pessoa acabou de subir.
+    """
+    from users.models import InformativoComissao
+    from users.templatetags.comissao_tags import limpar_cache
+
+    if request.user.hierarchy != 'SUPERADMIN' and not request.user.is_superuser:
+        messages.error(request, 'Apenas Superadmin pode mexer no informativo.')
+        return redirect('dashboard')
+    if request.method != 'POST':
+        return redirect('system_config')
+
+    if (request.POST.get('acao') or '') == 'remover':
+        InformativoComissao.objects.filter(ativo=True).update(ativo=False)
+        limpar_cache()
+        messages.success(request, 'Informativo tirado do ar.')
+        return redirect('system_config')
+
+    arquivo = request.FILES.get('arquivo')
+    link = (request.POST.get('link') or '').strip()
+    if not arquivo and not link:
+        messages.error(request, 'Suba um arquivo ou informe um link.')
+        return redirect('system_config')
+
+    if arquivo:
+        nome = (arquivo.name or '').lower()
+        if nome.endswith('.pdf'):
+            tipo = InformativoComissao.Tipo.PDF
+        elif nome.rsplit('.', 1)[-1] in ('png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'):
+            tipo = InformativoComissao.Tipo.IMAGEM
+        else:
+            tipo = InformativoComissao.Tipo.VIDEO
+    else:
+        tipo = InformativoComissao.Tipo.LINK
+
+    # Um informativo no ar por vez: o anterior fica guardado, desligado.
+    InformativoComissao.objects.filter(ativo=True).update(ativo=False)
+    novo = InformativoComissao(
+        titulo=(request.POST.get('titulo') or '').strip()[:120] or 'Como funciona o Comissionamento?',
+        descricao=(request.POST.get('descricao') or '').strip()[:240],
+        link='' if arquivo else link,
+        tipo=tipo, ativo=True, atualizado_por=request.user,
+    )
+    if arquivo:
+        novo.arquivo = arquivo
+    novo.save()
+    limpar_cache()
+    messages.success(request, 'Informativo publicado — já aparece no comissionamento.')
+    return redirect('system_config')
 
 
 @login_required
@@ -7882,3 +7952,65 @@ def user_cs_statement_view(request, user_id):
     statement_user = get_object_or_404(User, id=user_id)
     context = _build_cs_statement_context(request, statement_user, is_admin_view=True)
     return render(request, 'users/my_cs_statement.html', context)
+
+
+@login_required
+def hc_view(request):
+    """Árvore do HC do mês: lojas, pessoas e o que mudou.
+
+    Serve para a conferência do começo do mês e para o acompanhamento depois:
+    a mesma tela mostra quem entrou, quem saiu e se a loja já foi conferida.
+    """
+    from users import hc as hc_mod
+
+    if not hc_mod.pode_validar(request.user):
+        messages.error(request, 'Sem permissão para conferir o quadro.')
+        return redirect('dashboard')
+
+    referencia = None
+    pedido = (request.GET.get('mes') or '').strip()
+    if pedido:
+        try:
+            ano, mes = pedido.split('-')
+            referencia = datetime.date(int(ano), int(mes), 1)
+        except (ValueError, TypeError):
+            referencia = None
+
+    dados = hc_mod.arvore(request.user, referencia)
+    dados['mes_escolhido'] = dados['referencia'].strftime('%Y-%m')
+    dados['e_mes_atual'] = dados['referencia'] == hc_mod.mes_de()
+    return render(request, 'admin/hc.html', dados)
+
+
+@login_required
+@require_POST
+def hc_validar_view(request, sector_id):
+    """Registra que esta loja foi conferida neste mês."""
+    from users import hc as hc_mod
+    from users.models import ValidacaoHC
+
+    if not hc_mod.pode_validar(request.user):
+        messages.error(request, 'Sem permissão para conferir o quadro.')
+        return redirect('dashboard')
+
+    loja = get_object_or_404(hc_mod.lojas_de(request.user), id=sector_id)
+    referencia = None
+    pedido = (request.POST.get('mes') or '').strip()
+    if pedido:
+        try:
+            ano, mes = pedido.split('-')
+            referencia = datetime.date(int(ano), int(mes), 1)
+        except (ValueError, TypeError):
+            referencia = None
+
+    dados = hc_mod.arvore(request.user, referencia)
+    no = next((n for n in dados['nos'] if n['loja'].id == loja.id), None)
+    quadro = no['quadro'] if no else 0
+
+    ValidacaoHC.objects.update_or_create(
+        setor=loja, referencia=dados['referencia'],
+        defaults={'validado_por': request.user, 'quantidade': quadro,
+                  'observacao': (request.POST.get('observacao') or '').strip()[:300]})
+    messages.success(request, f'Quadro da {loja.name} conferido: {quadro} pessoa(s).')
+    volta = f"?mes={dados['referencia']:%Y-%m}" if pedido else ''
+    return redirect(reverse('hc') + volta)

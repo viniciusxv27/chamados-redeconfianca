@@ -58,6 +58,11 @@
             {% endif %}
             <div class="flex gap-2 mt-3">
                 <a href="{% url 'impulso:mes_detail' m.id %}" class="text-xs px-3 py-1.5 rounded-lg bg-white border border-gray-200 text-gray-700 hover:bg-gray-50">Ver mês</a>
+                {% if m.is_fechado %}
+                <a href="{% url 'impulso:mes_ranking' m.id %}" class="text-xs px-3 py-1.5 rounded-lg bg-orange-600 text-white hover:bg-orange-700">
+                    <i class="fas fa-trophy mr-1"></i>Ver ranking
+                </a>
+                {% endif %}
                 {% if is_gestor and not m.is_fechado and ciclo.is_aberto %}
                 <form method="post" action="{% url 'impulso:mes_fechar' m.id %}"
                       onsubmit="return confirm('Finalizar {{ m.referencia|date:"m/Y" }}? A pontuação de todos será congelada.');">

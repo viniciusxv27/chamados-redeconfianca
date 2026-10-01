@@ -1430,3 +1430,112 @@ class UserModuleAccess(models.Model):
 
     def __str__(self):
         return f'{self.user} → {self.module_key}'
+
+
+class InformativoComissao(models.Model):
+    """O material que explica como funciona o comissionamento.
+
+    Uma pessoa pergunta "como é calculada a minha comissão?" e a resposta vive
+    num PDF que alguém manda no WhatsApp. Aqui ela fica no portal, ao lado dos
+    números, em qualquer visão do comissionamento.
+
+    Pode ser um arquivo (PDF, imagem ou vídeo) **ou** um link — é comum a
+    explicação já existir num vídeo gravado. Guardamos os dois campos e usamos
+    o que estiver preenchido; `ativo` permite trocar o material sem perder o
+    anterior.
+    """
+
+    class Tipo(models.TextChoices):
+        PDF = 'PDF', 'PDF'
+        IMAGEM = 'IMAGEM', 'Imagem'
+        VIDEO = 'VIDEO', 'Vídeo'
+        LINK = 'LINK', 'Link'
+
+    titulo = models.CharField(
+        max_length=120, default='Como funciona o Comissionamento?',
+        verbose_name='Texto do botão',
+        help_text='O que a pessoa lê no botão, em qualquer visão do comissionamento.')
+    descricao = models.CharField(
+        max_length=240, blank=True, verbose_name='Descrição (opcional)',
+        help_text='Uma linha explicando o que é o material.')
+    arquivo = models.FileField(
+        upload_to='comissionamento/informativo/%Y/%m/', storage=get_media_storage(),
+        blank=True, null=True, verbose_name='Arquivo (PDF, imagem ou vídeo)')
+    link = models.URLField(blank=True, verbose_name='Ou um link',
+                           help_text='Vídeo no YouTube/Drive, apresentação, página.')
+    tipo = models.CharField(max_length=8, choices=Tipo.choices, default=Tipo.PDF,
+                            verbose_name='Tipo')
+    ativo = models.BooleanField(default=True, verbose_name='Mostrar no comissionamento')
+    atualizado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='informativos_comissao', verbose_name='Atualizado por')
+    atualizado_em = models.DateTimeField(auto_now=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Informativo do comissionamento'
+        verbose_name_plural = 'Informativos do comissionamento'
+        ordering = ['-atualizado_em']
+
+    def __str__(self):
+        return self.titulo
+
+    @property
+    def destino(self):
+        """Para onde o botão leva: o arquivo guardado ou o link informado."""
+        if self.arquivo:
+            try:
+                return self.arquivo.url
+            except Exception:                            # noqa: BLE001
+                return ''
+        return self.link or ''
+
+    @classmethod
+    def vigente(cls):
+        """O informativo que está no ar, ou None.
+
+        Engole erro de banco de propósito: enquanto a migration não roda nos
+        outros servidores, a tela de comissionamento não pode cair por causa
+        de um botão.
+        """
+        try:
+            return cls.objects.filter(ativo=True).first()
+        except Exception:                                # noqa: BLE001
+            return None
+
+
+class ValidacaoHC(models.Model):
+    """A conferência mensal do quadro de uma loja.
+
+    Todo começo de mês o coordenador confere o HC das lojas dele: quem entrou,
+    quem saiu, quem continua. Antes isso era planilha e conversa; aqui fica
+    registrado quem conferiu, quando e com que quadro — e, no mês seguinte, dá
+    para comparar.
+
+    Uma validação por loja e por mês (`referencia` é sempre o dia 1º).
+    """
+
+    setor = models.ForeignKey(
+        Sector, on_delete=models.CASCADE, related_name='validacoes_hc',
+        verbose_name='Loja')
+    referencia = models.DateField(verbose_name='Mês de referência',
+                                  help_text='Sempre o dia 1º do mês conferido.')
+    validado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='validacoes_hc', verbose_name='Quem validou')
+    validado_em = models.DateTimeField(auto_now_add=True, verbose_name='Validado em')
+    quantidade = models.PositiveSmallIntegerField(
+        default=0, verbose_name='Quadro no momento da validação',
+        help_text='Quantos colaboradores ativos a loja tinha quando foi conferida.')
+    observacao = models.CharField(max_length=300, blank=True, verbose_name='Observação')
+
+    class Meta:
+        verbose_name = 'Validação de HC'
+        verbose_name_plural = 'Validações de HC'
+        ordering = ['-referencia', 'setor__name']
+        constraints = [
+            models.UniqueConstraint(fields=['setor', 'referencia'], name='uniq_hc_setor_mes'),
+        ]
+
+    def __str__(self):
+        return f'{self.setor} — {self.referencia:%m/%Y}'

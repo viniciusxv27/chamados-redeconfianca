@@ -1,0 +1,17 @@
+{% load comissao_tags %}
+{% informativo_comissao as informativo %}
+{% if informativo %}
+{% comment %}
+O botão que responde "como é calculada a minha comissão?" sem ninguém precisar
+perguntar. Abre em outra guia de propósito: a pessoa está olhando os números e
+não quer perder a tela para ler o material.
+{% endcomment %}
+<a href="{{ informativo.destino }}" target="_blank" rel="noopener"
+   class="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg border border-indigo-200
+          bg-indigo-50 text-indigo-700 text-sm font-medium hover:bg-indigo-100 transition"
+   title="{{ informativo.descricao|default:informativo.titulo }}">
+    <i class="fas {% if informativo.tipo == 'VIDEO' %}fa-circle-play{% elif informativo.tipo == 'PDF' %}fa-file-pdf{% elif informativo.tipo == 'IMAGEM' %}fa-image{% else %}fa-up-right-from-square{% endif %}"></i>
+    {{ informativo.titulo }}
+    <i class="fas fa-arrow-up-right-from-square text-[10px] opacity-60"></i>
+</a>
+{% endif %}

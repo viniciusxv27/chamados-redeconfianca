@@ -194,12 +194,19 @@ def trail_detail(request, trail_id):
             'completion_percentage': round((completed_lessons / total_lessons * 100)) if total_lessons > 0 else 0
         })
     
+    # Assinatura: só aparece quando a trilha pede e a pessoa concluiu — é o
+    # fecho da conclusão, não um campo a mais no meio do caminho.
+    assinatura = trail.signatures.filter(user=request.user).first()
     context = {
         'trail': trail,
         'progress': progress,
         'completion': completion,
         'modules_data': modules_data,
         'can_manage': can_manage,
+        'assinatura': assinatura,
+        'pode_assinar': (trail.require_signature and not assinatura
+                         and bool(progress and progress.status == 'completed')),
+        'nome_para_assinar': request.user.get_full_name(),
     }
     
     return render(request, 'knowledge_trails/trail_detail.html', context)
@@ -670,6 +677,12 @@ def create_trail(request):
         mandatory_user_ids = request.POST.getlist('mandatory_users')
         mandatory_start_date = request.POST.get('mandatory_start_date') or None
         mandatory_end_date = request.POST.get('mandatory_end_date') or None
+        # Travar o portal é só de gestor: supervisor cria trilha obrigatória,
+        # mas não tranca ninguém. A conferência é aqui, não só na tela.
+        from .bloqueio import pode_travar_portal
+        blocks_portal = (request.POST.get('blocks_portal') == 'on'
+                         and pode_travar_portal(request.user))
+        require_signature = request.POST.get('require_signature') == 'on'
 
         # Validar campos obrigatórios
         if not title or not sector_id:
@@ -695,6 +708,8 @@ def create_trail(request):
                 enable_certificate=enable_certificate,
                 mandatory_start_date=mandatory_start_date,
                 mandatory_end_date=mandatory_end_date,
+                blocks_portal=blocks_portal,
+                require_signature=require_signature,
                 created_by=user
             )
             if mandatory_user_ids:
@@ -708,6 +723,10 @@ def create_trail(request):
         'difficulty_choices': KnowledgeTrail.DIFFICULTY_CHOICES,
         'available_users': User.objects.filter(is_active=True).order_by('first_name', 'last_name'),
     }
+
+    # Só gestor vê a opção de travar o portal (e a view confere de novo).
+    from .bloqueio import pode_travar_portal
+    context['pode_travar_portal'] = pode_travar_portal(request.user)
 
     return render(request, 'knowledge_trails/create_trail.html', context)
 
@@ -759,6 +778,10 @@ def edit_trail(request, trail_id):
         trail.estimated_hours = request.POST.get('estimated_hours', trail.estimated_hours)
         trail.enable_certificate = request.POST.get('enable_certificate') == 'on'
         trail.is_active = request.POST.get('is_active') == 'on'
+        from .bloqueio import pode_travar_portal
+        if pode_travar_portal(request.user):
+            trail.blocks_portal = request.POST.get('blocks_portal') == 'on'
+        trail.require_signature = request.POST.get('require_signature') == 'on'
         trail.mandatory_start_date = request.POST.get('mandatory_start_date') or None
         trail.mandatory_end_date = request.POST.get('mandatory_end_date') or None
 
@@ -777,6 +800,10 @@ def edit_trail(request, trail_id):
         'available_users': User.objects.filter(is_active=True).order_by('first_name', 'last_name'),
         'selected_user_ids': list(trail.mandatory_users.values_list('id', flat=True)),
     }
+
+    # Só gestor vê a opção de travar o portal (e a view confere de novo).
+    from .bloqueio import pode_travar_portal
+    context['pode_travar_portal'] = pode_travar_portal(request.user)
 
     return render(request, 'knowledge_trails/edit_trail.html', context)
 
@@ -1515,3 +1542,64 @@ def user_quiz_detail(request, lesson_id, user_id):
     }
 
     return render(request, 'knowledge_trails/user_quiz_detail.html', context)
+
+
+@login_required
+def trail_blocked(request, trail_id):
+    """A tela que a pessoa vê enquanto a trilha obrigatória não foi concluída.
+
+    É a saída do bloqueio, não um muro: mostra o que falta e o botão que leva
+    direto para a trilha.
+    """
+    trilha = get_object_or_404(KnowledgeTrail, id=trail_id)
+    progresso = TrailProgress.objects.filter(user=request.user, trail=trilha).first()
+    assinou = trilha.signatures.filter(user=request.user).exists()
+    return render(request, 'knowledge_trails/blocked.html', {
+        'trail': trilha,
+        'progress': progresso,
+        'assinou': assinou,
+        'concluiu': bool(progresso and progresso.status == 'completed'),
+    })
+
+
+@login_required
+@require_POST
+def trail_sign(request, trail_id):
+    """A assinatura de quem terminou: "assisti, entendi" com nome e data.
+
+    Só assina quem concluiu — assinatura antes do fim não diria nada. O nome
+    digitado tem que bater com o nome do cadastro: é assinatura, não um campo
+    de texto qualquer.
+    """
+    from .bloqueio import limpar_cache
+    from .models import TrailSignature
+
+    trilha = get_object_or_404(KnowledgeTrail, id=trail_id)
+    progresso = TrailProgress.objects.filter(user=request.user, trail=trilha).first()
+    if not (progresso and progresso.status == 'completed'):
+        messages.error(request, 'Conclua a trilha antes de assinar.')
+        return redirect('knowledge_trails:trail_detail', trail_id=trilha.id)
+
+    digitado = (request.POST.get('typed_name') or '').strip()
+    completo = (request.user.get_full_name() or '').strip()
+    if not digitado or digitado.casefold() != completo.casefold():
+        messages.error(request, f'Digite seu nome completo exatamente como no cadastro: {completo}.')
+        return redirect('knowledge_trails:trail_detail', trail_id=trilha.id)
+    if (request.POST.get('aceite') or '') != 'on':
+        messages.error(request, 'Marque a declaração para assinar.')
+        return redirect('knowledge_trails:trail_detail', trail_id=trilha.id)
+
+    declaracao = (f'Declaro que assisti e compreendi o conteúdo da trilha '
+                  f'"{trilha.title}" por completo.')
+    TrailSignature.objects.get_or_create(
+        trail=trilha, user=request.user,
+        defaults={
+            'typed_name': digitado[:160],
+            'declaration': declaracao,
+            'ip': (request.META.get('HTTP_X_FORWARDED_FOR', '').split(',')[0].strip()
+                   or request.META.get('REMOTE_ADDR') or None),
+            'user_agent': (request.META.get('HTTP_USER_AGENT') or '')[:300],
+        })
+    limpar_cache(request.user.id)
+    messages.success(request, 'Assinatura registrada. Obrigado!')
+    return redirect('knowledge_trails:trail_detail', trail_id=trilha.id)

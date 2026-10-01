@@ -18,6 +18,7 @@ urlpatterns = [
     path('<int:ticket_id>/attachment/<int:attachment_id>/delete/', views.delete_attachment_view, name='delete_ticket_attachment'),
     path('<int:ticket_id>/update-status/', views.update_ticket_status_view, name='update_ticket_status'),
     path('<int:ticket_id>/update-priority/', views.update_priority_view, name='ticket_update_priority'),
+    path('<int:ticket_id>/etiquetas/', views.ticket_tags_view, name='ticket_tags'),
     path('api/categories-by-sector/', views.get_categories_by_sector, name='categories_by_sector'),
     path('api/users-by-sector/', views.get_users_by_sector, name='users_by_sector'),
     
