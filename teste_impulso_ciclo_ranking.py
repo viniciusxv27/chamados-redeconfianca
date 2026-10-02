@@ -158,6 +158,51 @@ try:
     t('e a do ciclo também',
       f'/impulso/ciclos/mes/{mes.id}/ranking/' in c.get(f'/impulso/ciclos/{ciclo.id}/').content.decode())
 
+    print('\n== SETOR DESTAQUE ==')
+    from impulso.ciclos import setores_do_mes
+    from impulso.models import PontuacaoMensal
+    from decimal import Decimal
+
+    # Dois setores: um grande e mediano, outro pequeno e excelente. Pela soma,
+    # o grande ganhava; pela média — que é o critério — ganha o pequeno.
+    grande = Sector.objects.create(name='ZZ Setor Grande')
+    pequeno = Sector.objects.create(name='ZZ Setor Pequeno')
+    PontuacaoMensal.objects.filter(mes=mes).delete()
+    for i in range(4):
+        u = User.objects.create_user(
+            username=f'zzsd.g{i}', email=f'zzsd.g{i}@exemplo-teste.local',
+            password='S3nha!teste', first_name=f'Grande{i}', last_name='ZZ', sector=grande)
+        PontuacaoMensal.objects.create(mes=mes, user=u, setor=grande, total=Decimal('50'),
+                                       pontos_aplicaveis=Decimal('100'),
+                                       percentual=Decimal('50'), faixa='BRONZE')
+    for i in range(2):
+        u = User.objects.create_user(
+            username=f'zzsd.p{i}', email=f'zzsd.p{i}@exemplo-teste.local',
+            password='S3nha!teste', first_name=f'Pequeno{i}', last_name='ZZ', sector=pequeno)
+        PontuacaoMensal.objects.create(mes=mes, user=u, setor=pequeno, total=Decimal('95'),
+                                       pontos_aplicaveis=Decimal('100'),
+                                       percentual=Decimal('95'), faixa='OURO')
+
+    setores = setores_do_mes(mes)
+    t('o destaque é do setor de maior média, não do que soma mais',
+      setores[0]['setor'] == 'ZZ Setor Pequeno' and setores[1]['setor'] == 'ZZ Setor Grande',
+      [(s['setor'], float(s['media']), float(s['soma'])) for s in setores])
+    t('e a soma do grande era maior mesmo (era ela que mandava antes)',
+      setores[1]['soma'] > setores[0]['soma'],
+      (float(setores[0]['soma']), float(setores[1]['soma'])))
+    t('a ordem é decrescente pela média',
+      [float(s['media']) for s in setores] == sorted(
+          (float(s['media']) for s in setores), reverse=True))
+
+    html_rk = c.get(f'/impulso/ciclos/mes/{mes.id}/ranking/').content.decode()
+    t('a tela do ranking diz que o critério é a média',
+      'Pela <strong>média</strong> das notas do setor' in html_rk)
+    t('e mostra a média em destaque', '95,0%' in html_rk or '95.0%' in html_rk, '')
+    html_md = c.get(f'/impulso/ciclos/mes/{mes.id}/').content.decode()
+    t('a tela do mês usa a mesma ordem e o mesmo texto',
+      html_md.index('ZZ Setor Pequeno') < html_md.index('ZZ Setor Grande')
+      and 'Pela <strong>média</strong>' in html_md)
+
     limpo = re.sub(r'\{%.*?%\}', 'tag', html, flags=re.S)
     limpo = re.sub(r'\{\{.*?\}\}', 'var', limpo, flags=re.S)
     blocos = re.findall(r'<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>', limpo, flags=re.S)

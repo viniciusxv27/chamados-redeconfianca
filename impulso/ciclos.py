@@ -127,11 +127,19 @@ def reabrir_mes(mes):
 
 
 def setores_do_mes(mes):
-    """Setor Destaque: soma das notas dos colaboradores por setor principal."""
+    """Setor Destaque: a média das notas por setor principal, da maior para a menor.
+
+    É a **média**, não a soma: somando, o setor com mais gente ganhava sempre —
+    dez pessoas medianas passavam à frente de três excelentes, e o destaque
+    deixava de dizer qualquer coisa sobre desempenho.
+
+    No empate decide a soma (mais gente no mesmo nível pesa mais) e, por fim, o
+    nome, para a ordem não dançar de um carregamento para o outro.
+    """
     linhas = (PontuacaoMensal.objects.filter(mes=mes)
               .values('setor__id', 'setor__name')
               .annotate(soma=Sum('total'), media=Avg('percentual'), pessoas=Count('id'))
-              .order_by('-soma'))
+              .order_by('-media', '-soma', 'setor__name'))
     return [{
         'setor_id': l['setor__id'],
         'setor': l['setor__name'] or 'Sem setor',

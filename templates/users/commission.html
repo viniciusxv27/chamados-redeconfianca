@@ -227,7 +227,7 @@
                              style="width: {{ pilar.carteira_barra|unlocalize }}%"></div>
                     </div>
                     <p class="text-center text-xs font-semibold text-gray-500 mt-3">
-                        ATING LOJA:
+                        ATING CARTEIRA:
                         <span class="{% if pilar.carteira >= 100 %}text-green-600{% elif pilar.carteira >= 80 %}text-yellow-600{% else %}text-red-600{% endif %}">
                             {{ pilar.carteira|default:0|format_br:1 }}%
                         </span>
