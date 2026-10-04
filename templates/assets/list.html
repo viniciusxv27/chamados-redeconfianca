@@ -182,8 +182,12 @@
                                         <p class="text-sm text-gray-900 font-semibold">{{ asset.nome }}</p>
                                         <div class="mt-1 flex items-center flex-wrap gap-x-4 gap-y-1 text-sm text-gray-500">
                                             <span>
+                                                <i class="fas fa-tag mr-1"></i>
+                                                {{ asset.get_categoria_display }}
+                                            </span>
+                                            <span>
                                                 <i class="fas fa-map-marker-alt mr-1"></i>
-                                                {{ asset.localizado }}
+                                                Localizado: {{ asset.localizado|default:'—' }}
                                             </span>
                                             <span>
                                                 <i class="fas fa-building mr-1"></i>
@@ -247,8 +251,17 @@
                         </label>
                         <label class="block">
                             <span class="block text-sm font-medium text-gray-700">Localizado</span>
-                            <input type="text" name="localizado" maxlength="200" placeholder="Não mudar"
-                                   class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                            <select name="localizado" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                                <option value="">Não mudar</option>
+                                {% for valor, nome in localizados %}<option value="{{ valor }}">{{ nome }}</option>{% endfor %}
+                            </select>
+                        </label>
+                        <label class="block">
+                            <span class="block text-sm font-medium text-gray-700">Categoria</span>
+                            <select name="categoria" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                                <option value="">Não mudar</option>
+                                {% for valor, nome in categorias %}<option value="{{ valor }}">{{ nome }}</option>{% endfor %}
+                            </select>
                         </label>
                     </div>
                     <p class="mt-3 text-sm text-red-600" id="bulk-editar-erro" hidden></p>
@@ -515,7 +528,7 @@ function toggleImportModal() {
     document.getElementById('bulk-editar-aplicar').addEventListener('click', function () {
         var modal = document.getElementById('bulk-modal-editar');
         var erro = document.getElementById('bulk-editar-erro');
-        var algum = setor.value || modal.querySelector('[name=estado_fisico]').value || modal.querySelector('[name=localizado]').value.trim();
+        var algum = setor.value || modal.querySelector('[name=estado_fisico]').value || modal.querySelector('[name=localizado]').value || modal.querySelector('[name=categoria]').value;
         erro.hidden = true;
         if (!algum) { erro.textContent = 'Preencha pelo menos um campo para mudar.'; erro.hidden = false; return; }
         if (setor.value && !pdv.value) { erro.textContent = 'Escolha o PDV do setor escolhido.'; erro.hidden = false; return; }

@@ -746,11 +746,25 @@ class Asset(models.Model):
         ('ruim', 'Ruim'),
         ('pessimo', 'Péssimo'),
     ]
+    # Categoria do produto. "Não localizado" fica para os que já existiam antes do campo
+    # (e os que vierem de planilha sem uma das três); no cadastro escolhe-se uma das três.
+    CATEGORIA_CHOICES = [
+        ('eletronico', 'Eletrônico'),
+        ('movel', 'Móvel'),
+        ('utilitarios', 'Utilitários'),
+        ('nao_localizado', 'Não Localizado'),
+    ]
+    LOCALIZADO_CHOICES = [
+        ('SIM', 'SIM'),
+        ('NÃO', 'NÃO'),
+    ]
 
     patrimonio_numero = models.CharField(max_length=20, unique=True, verbose_name='N° Patrimônio')
     nome = models.CharField(max_length=200, verbose_name='Nome')
     imei_serial = models.CharField(max_length=100, blank=True, null=True, verbose_name='IMEI/Serial')
-    localizado = models.CharField(max_length=200, verbose_name='Localizado')
+    categoria = models.CharField(
+        max_length=20, choices=CATEGORIA_CHOICES, default='nao_localizado', verbose_name='Categoria')
+    localizado = models.CharField(max_length=200, choices=LOCALIZADO_CHOICES, verbose_name='Localizado')
     setor = models.CharField(max_length=100, verbose_name='Setor')
     pdv = models.CharField(max_length=100, verbose_name='PDV')     # nome do setor do portal (users.Sector)
     estado_fisico = models.CharField(
@@ -785,6 +799,26 @@ class Asset(models.Model):
 
     def __str__(self):
         return f"{self.patrimonio_numero} - {self.nome}"
+
+    @staticmethod
+    def normalizar_localizado(valor):
+        """'sim', 'Nao', 'NÃO '... -> 'SIM'/'NÃO'; o que não for nem um nem outro volta ''."""
+        import unicodedata
+        texto = unicodedata.normalize('NFKD', str(valor or '')).encode('ascii', 'ignore').decode().strip().upper()
+        return {'SIM': 'SIM', 'S': 'SIM', 'NAO': 'NÃO', 'N': 'NÃO'}.get(texto, '')
+
+    @classmethod
+    def normalizar_categoria(cls, valor):
+        """Valor ou nome da categoria (com ou sem acento) -> chave; desconhecido -> 'nao_localizado'."""
+        import unicodedata
+
+        def chave(texto):
+            return unicodedata.normalize('NFKD', str(texto or '')).encode('ascii', 'ignore').decode().strip().lower()
+        alvo = chave(valor)
+        for valor_categoria, nome in cls.CATEGORIA_CHOICES:
+            if alvo in (valor_categoria, chave(nome)):
+                return valor_categoria
+        return 'nao_localizado'
 
 
 def upload_order_product_image(instance, filename):

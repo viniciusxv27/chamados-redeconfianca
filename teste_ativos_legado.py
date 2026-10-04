@@ -128,8 +128,16 @@ try:
       and 'ligarSetorPdv(' in html)
     js_valido(html, 'ligarSetorPdv(document', 'da edição')
 
+    t('ativo antigo abre pedindo a categoria (estava Não Localizado)', 'estava sem categoria' in html
+      and '<option value="nao_localizado"' not in html)
+    t('Localizado é só SIM ou NÃO', '<select name="localizado"' in html and '<option value="NÃO"' in html)
+
     base = {'patrimonio_numero': 'ZZTESTE-001', 'nome': 'Ativo editado', 'imei_serial': '', 'localizado': 'SIM',
-            'estado_fisico': 'regular', 'observacoes': ''}
+            'categoria': 'eletronico', 'estado_fisico': 'regular', 'observacoes': ''}
+    r = c.post(f'/assets/legado/{a1.pk}/edit/', {**base, 'localizado': 'Sala 2', 'setor': ESCRITORIO, 'pdv': almox.name})
+    t('Localizado fora de SIM/NÃO é recusado', r.status_code == 200 and Asset.objects.get(pk=a1.pk).localizado == 'SIM')
+    r = c.post(f'/assets/legado/{a1.pk}/edit/', {**base, 'categoria': '', 'setor': ESCRITORIO, 'pdv': almox.name})
+    t('categoria é obrigatória na edição', r.status_code == 200 and Asset.objects.get(pk=a1.pk).categoria == 'nao_localizado')
     r = c.post(f'/assets/legado/{a1.pk}/edit/', {**base, 'setor': LOJA, 'pdv': almox.name})
     a1.refresh_from_db()
     t('loja com PDV de escritório é recusada', r.status_code == 200 and 'Na loja, o PDV é uma das lojas.' in r.content.decode()
@@ -146,6 +154,9 @@ try:
     r = c.post('/assets/legado/create/', {**base, 'patrimonio_numero': 'ZZTESTE-NOVO', 'setor': LOJA, 'pdv': loja.name})
     novo = Asset.objects.filter(patrimonio_numero='ZZTESTE-NOVO').first()
     t('o cadastro novo usa o mesmo Setor/PDV', r.status_code == 302 and novo and (novo.setor, novo.pdv) == (LOJA, loja.name))
+    a1.refresh_from_db()
+    t('categoria e Localizado salvam', (a1.categoria, a1.localizado) == ('eletronico', 'SIM')
+      and novo and novo.categoria == 'eletronico')
     comprido = Sector.objects.create(name='Loja ' + 'Z' * 60)
     r = c.post(f'/assets/legado/{a2.pk}/edit/', {**base, 'patrimonio_numero': 'ZZTESTE-002', 'setor': LOJA, 'pdv': comprido.name})
     t('o PDV guarda nome de setor comprido (até 100)', r.status_code == 302 and Asset.objects.get(pk=a2.pk).pdv == comprido.name)
@@ -180,6 +191,12 @@ try:
     r = acao(acao='editar', ids=[a2.pk], estado_fisico='excelente')
     a2.refresh_from_db()
     t('o que não foi preenchido fica como estava', a2.estado_fisico == 'excelente' and a2.pdv == loja.name and a2.localizado == 'NÃO')
+    r = acao(acao='editar', ids=[a2.pk], categoria='movel')
+    a2.refresh_from_db()
+    t('categoria muda em massa', a2.categoria == 'movel' and a2.localizado == 'NÃO')
+    r = acao(acao='editar', ids=[a2.pk], localizado='talvez')
+    a2.refresh_from_db()
+    t('Localizado em massa fora de SIM/NÃO: nada muda', a2.localizado == 'NÃO' and 'Nada foi alterado' in r.content.decode())
     r = acao(acao='editar', ids=[a2.pk], setor=LOJA, pdv=almox.name)
     a2.refresh_from_db()
     t('Setor/PDV que não combinam: nada muda', a2.pdv == loja.name and 'Nada foi alterado' in r.content.decode())

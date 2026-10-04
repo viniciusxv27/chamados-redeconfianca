@@ -244,7 +244,10 @@ def gestao_adicionar(request):
     if mantidas:
         partes.append(_plural(mantidas, 'pessoa já tinha rotina e ficou como estava',
                               'pessoas já tinham rotina e ficaram como estavam'))
-    messages.success(request, '; '.join(partes) + '.')
+    texto = '; '.join(partes) + '.'
+    if novas:
+        texto += ' A Rotina Gerencial já aparece no menu de quem foi adicionado.'
+    messages.success(request, texto)
     if len(pessoas) == 1:
         return redirect('rotina:gestao_pessoa', user_id=pessoas[0].id)
     return redirect('rotina:gestao')

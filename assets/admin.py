@@ -184,6 +184,7 @@ class AssetAdmin(admin.ModelAdmin):
     list_display = [
         'patrimonio_numero', 
         'nome', 
+        'categoria',
         'localizado', 
         'setor', 
         'pdv', 
@@ -194,6 +195,8 @@ class AssetAdmin(admin.ModelAdmin):
     ]
     list_filter = [
         'estado_fisico', 
+        'categoria',
+        'localizado',
         'setor', 
         'created_at',
         'updated_at'
@@ -218,7 +221,7 @@ class AssetAdmin(admin.ModelAdmin):
             'fields': ()
         }),
         ('Informações Básicas', {
-            'fields': ('patrimonio_numero', 'nome', 'photo')
+            'fields': ('patrimonio_numero', 'nome', 'categoria', 'photo')
         }),
         ('Localização', {
             'fields': ('localizado', 'setor', 'pdv')

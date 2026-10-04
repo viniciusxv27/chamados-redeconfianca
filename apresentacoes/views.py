@@ -26,7 +26,7 @@ from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_GET, require_POST
 
-from . import formato, importacao, tarefas
+from . import formato, importacao, roteiro, tarefas
 from .context_processors import limpar_cache_do_menu
 from .models import (Apresentacao, ConexaoCanva, ConfiguracaoApresentacoes, MensagemIA, Midia, TarefaIA,
                      TemplateApresentacao, VersaoApresentacao)
@@ -184,17 +184,25 @@ def nova(request):
     garantir_template_padrao()
     modelos = _com_capas(list(templates_visiveis(user).filter(status=TemplateApresentacao.Status.PRONTO)))
     if request.method == 'POST':
-        pedido = (request.POST.get('pedido') or '').strip()
+        # O pedido livre + as respostas do tipo escolhido (briefing) viram um pedido só.
+        tipo = request.POST.get('tipo') if request.POST.get('tipo') in roteiro.TIPOS_POR_CHAVE else 'livre'
+        respostas = {chave: request.POST.get(f'b_{chave}') or '' for chave, *_ in
+                     roteiro.TIPOS_POR_CHAVE[tipo]['campos'] + roteiro.CAMPOS_COMUNS}
+        pedido = '\n\n'.join(p for p in ((request.POST.get('pedido') or '').strip(),
+                                         roteiro.briefing(tipo, respostas)) if p)
         if len(pedido) < 10:
             messages.error(request, 'Conte com um pouco mais de detalhe o que a apresentação precisa ter.')
             return redirect('apresentacoes:nova')
+        titulo_sugerido = next((' '.join(respostas[c].split()) for c in ('nome', 'produto', 'tema')
+                                if (respostas.get(c) or '').strip()), '')
         template = next((t for t in modelos if str(t.pk) == request.POST.get('template')), None) or (
             modelos[0] if modelos else None)
         arquivos = request.FILES.getlist('anexos')[:MAX_ANEXOS]
-        opcoes = _opcoes_do_pedido(request.POST, template)
+        opcoes = {**_opcoes_do_pedido(request.POST, template), 'tipo': tipo}
         with transaction.atomic():
             apresentacao = Apresentacao.objects.create(
-                titulo=formato.texto(request.POST.get('titulo'), 200).strip() or 'Nova apresentação',
+                titulo=(formato.texto(request.POST.get('titulo'), 200).strip()
+                        or formato.texto(titulo_sugerido, 200) or 'Nova apresentação'),
                 pedido=formato.texto(pedido, 8000), dono=user, template=template, status=Apresentacao.Status.GERANDO,
                 opcoes=opcoes, documento=formato.documento_vazio(template.tema if template else None))
             anexos, texto_material, avisos = _salvar_anexos(arquivos, user, apresentacao)
@@ -215,6 +223,7 @@ def nova(request):
         return redirect('apresentacoes:editor', pk=apresentacao.pk)
     return render(request, 'apresentacoes/nova.html', _contexto(
         request, 'nova', modelos=modelos, publicos=OPCOES_PUBLICO, tons=OPCOES_TOM,
+        tipos=roteiro.TIPOS, campos_comuns=roteiro.CAMPOS_COMUNS,
         principal=next((t for t in modelos if t.principal), modelos[0] if modelos else None)))
 
 

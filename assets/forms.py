@@ -604,6 +604,14 @@ class AssetForm(forms.ModelForm):
         label='Setor', choices=[('', 'Selecione…')] + SETORES,
         widget=forms.Select(attrs={'class': SELECT_CLASSES}))
     pdv = forms.ChoiceField(label='PDV', choices=(), widget=forms.Select(attrs={'class': SELECT_CLASSES}))
+    # Categoria: só as três; "Não Localizado" é dos que já existiam antes do campo.
+    categoria = forms.ChoiceField(
+        label='Categoria',
+        choices=[('', 'Selecione…')] + [c for c in Asset.CATEGORIA_CHOICES if c[0] != 'nao_localizado'],
+        widget=forms.Select(attrs={'class': SELECT_CLASSES}))
+    localizado = forms.ChoiceField(
+        label='Localizado', choices=[('', 'Selecione…')] + Asset.LOCALIZADO_CHOICES,
+        widget=forms.Select(attrs={'class': SELECT_CLASSES}))
 
     class Meta:
         model = Asset
@@ -611,6 +619,7 @@ class AssetForm(forms.ModelForm):
             'patrimonio_numero', 
             'nome', 
             'imei_serial',
+            'categoria',
             'localizado', 
             'setor', 
             'pdv', 
@@ -630,10 +639,6 @@ class AssetForm(forms.ModelForm):
             'imei_serial': forms.TextInput(attrs={
                 'class': INPUT_CLASSES,
                 'placeholder': 'IMEI ou Número de Série'
-            }),
-            'localizado': forms.TextInput(attrs={
-                'class': INPUT_CLASSES,
-                'placeholder': 'Local onde o ativo está localizado'
             }),
             'estado_fisico': forms.Select(attrs={
                 'class': SELECT_CLASSES
@@ -661,6 +666,10 @@ class AssetForm(forms.ModelForm):
             if (setor, pdv) != (self.instance.setor, self.instance.pdv):
                 self.antes = {'setor': self.instance.setor, 'pdv': self.instance.pdv}
             self.initial['setor'], self.initial['pdv'] = setor, pdv
+            # 'sim'/'Nao' de antes já abrem como SIM/NÃO; outra coisa pede para escolher
+            self.initial['localizado'] = Asset.normalizar_localizado(self.instance.localizado)
+            if self.instance.categoria == 'nao_localizado':
+                self.initial['categoria'] = ''
 
     def clean(self):
         dados = super().clean()

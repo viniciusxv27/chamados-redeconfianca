@@ -581,7 +581,7 @@
                             </a>
                         </li>
                         {% endif %}
-                        {% if rotina_liberada or rotina_admin %}
+                        {% if rotina_no_menu or rotina_admin %}
                         <li>
                             <a href="{% url 'rotina:minha' %}" data-rota="{% url 'rotina:minha' %}"
                                class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">

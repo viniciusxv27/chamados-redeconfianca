@@ -1592,6 +1592,8 @@ def asset_list(request):
         # Ações em massa: o formulário de edição usa o mesmo Setor/PDV da tela do ativo
         'setores_novos': SETORES,
         'pdvs': pdvs_por_setor(),
+        'localizados': Asset.LOCALIZADO_CHOICES,
+        'categorias': [c for c in Asset.CATEGORIA_CHOICES if c[0] != 'nao_localizado'],
         'voltar': request.get_full_path(),
     }
     
@@ -1660,10 +1662,22 @@ def asset_bulk(request):
             return redirect(voltar)
         mudancas['estado_fisico'] = estado
         resumo.append(f'estado {estados[estado].lower()}')
-    localizado = ' '.join((request.POST.get('localizado') or '').split())[:200]
+    localizado = (request.POST.get('localizado') or '').strip()
     if localizado:
+        localizado = Asset.normalizar_localizado(localizado)
+        if not localizado:
+            messages.error(request, 'Nada foi alterado: Localizado é SIM ou NÃO.')
+            return redirect(voltar)
         mudancas['localizado'] = localizado
-        resumo.append(f'localizado "{localizado}"')
+        resumo.append(f'localizado {localizado}')
+    categoria = request.POST.get('categoria') or ''
+    if categoria:
+        categorias = dict(Asset.CATEGORIA_CHOICES)
+        if categoria not in categorias or categoria == 'nao_localizado':
+            messages.error(request, 'Nada foi alterado: categoria inválida.')
+            return redirect(voltar)
+        mudancas['categoria'] = categoria
+        resumo.append(f'categoria {categorias[categoria]}')
     if not mudancas:
         messages.error(request, 'Nada foi alterado: preencha pelo menos um campo para mudar nos selecionados.')
         return redirect(voltar)
@@ -1777,7 +1791,7 @@ def _planilha_de_ativos(ativos, nome_do_arquivo):
     # Definir cabeçalhos
     headers = [
         'Nº Patrimônio', 'Nome', 'IMEI/Serial', 'Localizado', 'Setor', 'PDV', 
-        'Estado Físico', 'Observações', 'Criado por', 'Data Criação', 'Última Atualização'
+        'Estado Físico', 'Observações', 'Criado por', 'Data Criação', 'Última Atualização', 'Categoria'
     ]
     
     # Estilizar cabeçalhos
@@ -1807,6 +1821,7 @@ def _planilha_de_ativos(ativos, nome_do_arquivo):
         ws.cell(row=row, column=9, value=asset.created_by.get_full_name() if asset.created_by else "")
         ws.cell(row=row, column=10, value=asset.created_at.strftime("%Y-%m-%d %H:%M:%S"))
         ws.cell(row=row, column=11, value=asset.updated_at.strftime("%Y-%m-%d %H:%M:%S"))
+        ws.cell(row=row, column=12, value=asset.get_categoria_display())
     
     # Ajustar largura das colunas
     for col in range(1, len(headers) + 1):
@@ -1857,6 +1872,8 @@ def import_assets_excel(request):
                 try:
                     # Suportar planilhas com ou sem coluna IMEI/Serial
                     row = list(row)
+                    # Categoria vem na 12ª coluna (a planilha exportada daqui); sem ela, "Não Localizado"
+                    categoria = Asset.normalizar_categoria(row[11]) if len(row) >= 12 else None
                     if len(row) >= 11:
                         patrimonio_numero, nome, imei_serial, localizado, setor, pdv, estado_fisico, observacoes, created_by, date_created, last_updated = row[:11]
                     elif len(row) >= 10:
@@ -1886,13 +1903,17 @@ def import_assets_excel(request):
                                 estado_fisico_value = value
                                 break
                     
+                    # Localizado só SIM/NÃO; outro valor fica vazio
+                    localizado = Asset.normalizar_localizado(localizado)
+
                     # Verificar se ativo já existe pelo número de patrimônio
                     asset, created = Asset.objects.get_or_create(
                         patrimonio_numero=patrimonio_numero,
                         defaults={
                             'nome': nome or '',
                             'imei_serial': imei_serial or '',
-                            'localizado': localizado or '',
+                            'localizado': localizado,
+                            'categoria': categoria or 'nao_localizado',
                             'setor': setor or '',
                             'pdv': pdv or '',
                             'estado_fisico': estado_fisico_value or 'bom',
@@ -1911,6 +1932,8 @@ def import_assets_excel(request):
                             asset.imei_serial = imei_serial or ''
                         if localizado:
                             asset.localizado = localizado
+                        if categoria and categoria != 'nao_localizado':
+                            asset.categoria = categoria
                         if setor:
                             asset.setor = setor
                         if pdv:

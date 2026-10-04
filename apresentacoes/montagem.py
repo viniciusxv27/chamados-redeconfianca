@@ -22,6 +22,8 @@ PAPEL_DO_LAYOUT = {
     'capa': ('capa',), 'secao': ('secao', 'capa'), 'encerramento': ('encerramento', 'capa'),
     'numero_destaque': ('quadro', 'conteudo'), 'citacao': ('quadro', 'conteudo'),
 }
+# Layouts que já sabem onde pôr a imagem; nos outros, a imagem pedida vai numa coluna à direita.
+COM_IMAGEM_PROPRIA = ('passo_a_passo', 'imagem_texto', 'tela_anotada')
 TRANSICAO_DO_LAYOUT = {'capa': 'zoom', 'secao': 'empurrar-esquerda', 'encerramento': 'fade'}
 
 
@@ -333,6 +335,9 @@ def _topicos(item, area, tema, elementos, **_):
     if not itens:
         return
     n = len(itens)
+    if 2 <= n <= 3 and area['w'] >= 1100 and area['h'] >= 300:
+        _topicos_lado_a_lado(itens, area, tema, elementos)
+        return
     colunas = 1 if n <= 3 else 2
     linhas = math.ceil(n / colunas)
     vao = 28
@@ -363,6 +368,119 @@ def _topicos(item, area, tema, elementos, **_):
             elementos.append(texto(tx, cy + 26 + titulo_h + 6, tw, altura, formato.texto_para_html(corpo),
                                    tamanho=tam, peso=500, cor='tema:texto_suave', entrelinha=1.3,
                                    animacao=_anim('fade', 450, 0, 'junto')))
+
+
+def _topicos_lado_a_lado(itens, area, tema, elementos):
+    n = len(itens)
+    vao = 36
+    cw = (area['w'] - vao * (n - 1)) / n
+    ch = min(area['h'], 520)
+    for i, it in enumerate(itens):
+        cx = area['x'] + i * (cw + vao)
+        cy = area['y']
+        elementos.append(_cartao(tema, cx, cy, cw, ch, animacao=_anim('subir', 550, 0, 'auto')))
+        bola = 96
+        bx, by = cx + 40, cy + 40
+        elementos.append(forma('circulo', bx, by, bola, bola, preenchimento='tema:primaria', sombra='brilho',
+                               animacao=_anim('zoom', 450, 0, 'junto')))
+        elementos.append(icone(_icone_valido(it.get('icone')), bx + bola * 0.25, by + bola * 0.25, bola * 0.5,
+                               bola * 0.5, animacao=_anim('zoom', 450, 0, 'junto')))
+        tw = cw - 80
+        ty = by + bola + 30
+        t_tam = ajustar_tamanho(it['titulo'], tw, 96, 38, 22, peso=800, entrelinha=1.15)
+        elementos.append(texto(cx + 40, ty, tw, 96, _e(it['titulo']), tamanho=t_tam, peso=800, papel='titulo',
+                               entrelinha=1.15, animacao=_anim('fade', 450, 0, 'junto')))
+        corpo = (it.get('texto') or '').strip()
+        if corpo:
+            altura = cy + ch - (ty + 110) - 30
+            if altura > 40:
+                tam = ajustar_tamanho(corpo, tw, altura, 28, 16, peso=500, entrelinha=1.35)
+                elementos.append(texto(cx + 40, ty + 110, tw, altura, formato.texto_para_html(corpo), tamanho=tam,
+                                       peso=500, cor='tema:texto_suave', entrelinha=1.35,
+                                       animacao=_anim('fade', 450, 0, 'junto')))
+
+
+def _indicadores(item, area, tema, elementos, **_):
+    """De 2 a 4 números lado a lado, cada um num cartão com ícone, valor grande e legenda."""
+    dados = [d for d in (item.get('indicadores') or []) if isinstance(d, dict) and (d.get('valor') or '').strip()][:4]
+    if not dados:
+        numero = item.get('numero') or {}
+        if (numero.get('valor') or '').strip():
+            _numero(item, area, tema, elementos)
+        else:
+            _topicos(item, area, tema, elementos)
+        return
+    area = _intro(elementos, item, area, tema)
+    n = len(dados)
+    vao = 32
+    cw = (area['w'] - vao * (n - 1)) / n
+    ch = min(area['h'], 480)
+    cy = area['y']
+    for i, dado in enumerate(dados):
+        cx = area['x'] + i * (cw + vao)
+        elementos.append(_cartao(tema, cx, cy, cw, ch, animacao=_anim('subir', 550, 0, 'auto')))
+        bola = 76
+        elementos.append(forma('circulo', cx + (cw - bola) / 2, cy + 36, bola, bola, preenchimento='tema:primaria',
+                               sombra='brilho', animacao=_anim('zoom', 450, 0, 'junto')))
+        elementos.append(icone(_icone_valido(dado.get('icone'), 'fa-solid fa-chart-line'),
+                               cx + (cw - bola) / 2 + bola * 0.25, cy + 36 + bola * 0.25, bola * 0.5, bola * 0.5,
+                               animacao=_anim('zoom', 450, 0, 'junto')))
+        valor = dado['valor'].strip()
+        vy = cy + 36 + bola + 20
+        vh = min(150, ch * 0.36)
+        # Folga de 20%: algarismos e "%" no peso 900 são mais largos que a média da estimativa.
+        tam = tamanho_em_uma_linha(valor, (cw - 48) * 0.8, 120, 36, peso=900)
+        tam = min(tam, int(vh * 0.9))
+        elementos.append(texto(cx + 24, vy, cw - 48, vh, _e(valor), tamanho=tam, peso=900, papel='titulo',
+                               cor='tema:destaque', alinhamento='center', vertical='middle', entrelinha=1.0,
+                               animacao=_anim('zoom', 600, 0, 'junto')))
+        legenda = (dado.get('legenda') or '').strip()
+        if legenda:
+            ly = vy + vh + 10
+            altura = cy + ch - ly - 28
+            if altura > 30:
+                l_tam = ajustar_tamanho(legenda, cw - 56, altura, 30, 16, peso=600, entrelinha=1.25)
+                elementos.append(texto(cx + 28, ly, cw - 56, altura, _e(legenda), tamanho=l_tam, peso=600,
+                                       cor='tema:texto_suave', alinhamento='center', entrelinha=1.25,
+                                       animacao=_anim('fade', 450, 0, 'junto')))
+
+
+def _linha_do_tempo(item, area, tema, elementos, **_):
+    """Marcos em ordem sobre uma linha: bolinha, data/fase e o que acontece nela."""
+    marcos = [i for i in (item.get('itens') or []) if (i or {}).get('titulo')][:6]
+    if len(marcos) < 2:
+        _topicos(item, area, tema, elementos)
+        return
+    area = _intro(elementos, item, area, tema)
+    n = len(marcos)
+    vao = 24
+    cw = (area['w'] - vao * (n - 1)) / n
+    bola = 44
+    cartao = 210 if any((m.get('texto') or '').strip() for m in marcos) else 0
+    # Datas + linha + cartões, centralizados na altura da área.
+    linha_y = area['y'] + 150 + max(0, (area['h'] - 150 - bola / 2 - 30 - cartao) / 2)
+    elementos.append(forma('retangulo-arredondado', area['x'], linha_y - 4, area['w'], 8, preenchimento='tema:primaria',
+                           raio=4, animacao=_anim('revelar', 700, 0, 'auto')))
+    for i, marco in enumerate(marcos):
+        cx = area['x'] + i * (cw + vao)
+        centro = cx + cw / 2
+        elementos.append(forma('circulo', centro - bola / 2, linha_y - bola / 2, bola, bola,
+                               preenchimento='tema:destaque', borda_cor='tema:fundo', borda_largura=6,
+                               sombra='brilho', animacao=_anim('zoom', 400, 0, 'auto')))
+        t_tam = ajustar_tamanho(marco['titulo'], cw, 100, 36, 18, peso=900, entrelinha=1.1)
+        elementos.append(texto(cx, linha_y - 140, cw, 100, _e(marco['titulo']), tamanho=t_tam, peso=900,
+                               papel='titulo', cor='tema:destaque', alinhamento='center', vertical='bottom',
+                               entrelinha=1.1, animacao=_anim('fade', 400, 0, 'junto')))
+        corpo = (marco.get('texto') or '').strip()
+        if corpo:
+            ty = linha_y + bola / 2 + 30
+            altura = min(area['y'] + area['h'] - ty, cartao)
+            if altura > 30:
+                elementos.append(_cartao(tema, cx, ty - 10, cw, altura + 10, animacao=_anim('subir', 400, 0, 'junto')))
+                tam = ajustar_tamanho(corpo, cw - 36, altura - 30, 26, 15, peso=500, entrelinha=1.3)
+                elementos.append(texto(cx + 18, ty + 8, cw - 36, altura - 30, formato.texto_para_html(corpo),
+                                       tamanho=tam, peso=500, alinhamento='center', entrelinha=1.3,
+                                       animacao=_anim('fade', 400, 0, 'junto')))
 
 
 def _passos(item, area, tema, elementos, imagem_midia=None, **_):
@@ -622,7 +740,21 @@ def _citacao(item, area, tema, elementos, **_):
 CONSTRUTORES = {
     'topicos': _topicos, 'passo_a_passo': _passos, 'imagem_texto': _imagem_texto, 'tela_anotada': _tela_anotada,
     'duas_colunas': _duas_colunas, 'numero_destaque': _numero, 'tabela': _tabela, 'citacao': _citacao,
+    'indicadores': _indicadores, 'linha_do_tempo': _linha_do_tempo,
 }
+
+
+def _imagem_ao_lado(imagem_midia, area, item, elementos):
+    """Coluna da imagem à direita da área; devolve a área que sobra para o conteúdo."""
+    largura = area['w'] * 0.36
+    x0 = area['x'] + area['w'] - largura
+    if imagem_midia.origem in ('CAPTURA', 'PRINT'):
+        ix, iy, iw, ih = _encaixar(imagem_midia.largura, imagem_midia.altura, x0, area['y'], largura, area['h'])
+        elementos.append(imagem(imagem_midia, ix, iy, iw, ih, ajuste='contain', raio=16,
+                                borda_cor='rgba(255,255,255,0.18)'))
+    else:
+        elementos.append(imagem(imagem_midia, x0, area['y'], largura, area['h'], ajuste='cover', raio=28))
+    return {'x': area['x'], 'y': area['y'], 'w': area['w'] - largura - 48, 'h': area['h']}
 
 
 # ---------------------------------------------------------------------------
@@ -646,14 +778,34 @@ def _abrir_espaco_para_imagem(layout, item, tipo, limite_x):
             _ajustar_elemento(el, formato.html_para_texto(el.get('html')))
 
 
+def _subtitulo_no_conteudo(layout, item, area, tipo, conteudo):
+    """Layout de conteúdo sem lugar para subtítulo: a frase central entra no topo da área."""
+    subtitulo = (item.get('subtitulo') or '').strip()
+    if not subtitulo or tipo in ('capa', 'secao', 'encerramento', 'citacao') or area['h'] < 360:
+        return area
+    if any(el.get('slot') == 'subtitulo' for el in layout.get('elementos') or []):
+        return area
+    altura = 50
+    tamanho = ajustar_tamanho(subtitulo, area['w'], altura, 32, 20, peso=600, entrelinha=1.2)
+    conteudo.append(texto(area['x'], area['y'] - 12, area['w'], altura, _e(subtitulo), tamanho=tamanho, peso=600,
+                          cor='tema:destaque', entrelinha=1.2, slot='subtitulo', animacao=_anim('fade', 500)))
+    return {'x': area['x'], 'y': area['y'] - 12 + altura + 24, 'w': area['w'], 'h': area['h'] + 12 - altura - 24}
+
+
 def montar_slide(item, template_doc, tema, imagem_midia=None, slide_id=None):
     tipo = item.get('layout') if item.get('layout') in CONSTRUTORES or item.get('layout') in PAPEL_DO_LAYOUT else 'topicos'
     layout = escolher_layout(template_doc, tipo)
     area = area_do_layout(layout)
     _preencher_slots(layout, item, tema, tipo)
     conteudo = []
+    if CONSTRUTORES.get(tipo):
+        area = _subtitulo_no_conteudo(layout, item, area, tipo, conteudo)
     construtor = CONSTRUTORES.get(tipo)
-    if construtor:
+    if construtor and imagem_midia is not None and tipo not in COM_IMAGEM_PROPRIA:
+        # A imagem foi pedida (e paga): não some só porque o layout não tem lugar para ela.
+        area = _imagem_ao_lado(imagem_midia, area, item, conteudo)
+        construtor(item, area, tema, conteudo)
+    elif construtor:
         construtor(item, area, tema, conteudo, imagem_midia=imagem_midia)
     elif imagem_midia is not None and tipo in ('capa', 'secao', 'encerramento') and imagem_midia.origem == 'IA_IMAGEM':
         # Ilustração pedida: vai à direita, e os textos param antes dela (senão o título passa por baixo).

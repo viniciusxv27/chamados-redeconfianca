@@ -87,8 +87,25 @@
                         {% endif %}
                     </div>
 
+                    <!-- Categoria -->
+                    <div>
+                        <label for="{{ form.categoria.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                            {{ form.categoria.label }}
+                            <span class="text-red-500">*</span>
+                        </label>
+                        {{ form.categoria }}
+                        {% if form.instance.pk and form.instance.categoria == 'nao_localizado' and not form.is_bound %}
+                            <p class="mt-1 text-xs text-amber-700"><i class="fas fa-circle-info mr-1"></i>Este ativo estava sem categoria (Não Localizado) — escolha uma.</p>
+                        {% endif %}
+                        {% if form.categoria.errors %}
+                            <div class="mt-1 text-sm text-red-600">
+                                {{ form.categoria.errors.0 }}
+                            </div>
+                        {% endif %}
+                    </div>
+
                     <!-- IMEI/Serial -->
-                    <div class="sm:col-span-2">
+                    <div>
                         <label for="{{ form.imei_serial.id_for_label }}" class="block text-sm font-medium text-gray-700">
                             {{ form.imei_serial.label }}
                         </label>

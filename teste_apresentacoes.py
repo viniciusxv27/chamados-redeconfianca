@@ -318,6 +318,55 @@ try:
     t('seção com ilustração: os textos param antes da imagem', textos_secao and all(
         e['x'] + e['w'] <= img_secao['x'] for e in textos_secao), [(e['x'], e['w']) for e in textos_secao])
 
+    print('\n== LAYOUTS NOVOS: INDICADORES, LINHA DO TEMPO, IMAGEM AO LADO ==')
+    painel = montagem.montar_slide(slide('indicadores', titulo='Setembro', subtitulo='A rede passou da meta', indicadores=[
+        {'valor': '112%', 'legenda': 'da meta', 'icone': 'fa-solid fa-chart-line'},
+        {'valor': '1.240', 'legenda': 'vendas', 'icone': 'inventado'}]), padrao.documento, padrao.tema)
+    textos_painel = [formato.html_para_texto(e['html']) for e in painel['elementos'] if e['tipo'] == 'texto']
+    t('indicadores: um cartão por número, com valor e legenda', '112%' in textos_painel and 'vendas' in textos_painel
+      and sum(1 for e in painel['elementos'] if e['tipo'] == 'icone') == 2, textos_painel)
+    t('subtítulo do slide de conteúdo aparece (o layout não tem lugar para ele)',
+      'A rede passou da meta' in textos_painel)
+    tempo = montagem.montar_slide(slide('linha_do_tempo', titulo='Fases', itens=[
+        {'titulo': f'0{i}/09', 'texto': f'Fase {i}', 'icone': None} for i in range(1, 5)]), padrao.documento, padrao.tema)
+    textos_tempo = [formato.html_para_texto(e['html']) for e in tempo['elementos'] if e['tipo'] == 'texto']
+    t('linha do tempo: cada marco com data e texto', all(f'0{i}/09' in textos_tempo and f'Fase {i}' in textos_tempo
+                                                          for i in range(1, 5)), textos_tempo)
+    sem_numeros = montagem.montar_slide(slide('indicadores', titulo='Vazio', itens=[{'titulo': 'Item', 'texto': None,
+                                                                                    'icone': None}]),
+                                        padrao.documento, padrao.tema)
+    t('indicadores sem números viram tópicos', any('Item' in e.get('html', '') for e in sem_numeros['elementos']))
+    topico_img = montagem.montar_slide(slide('topicos', titulo='Com imagem', itens=[
+        {'titulo': 'A', 'texto': 'a', 'icone': None}, {'titulo': 'B', 'texto': 'b', 'icone': None}]),
+        padrao.documento, padrao.tema, ilustracao)
+    img_topico = [e for e in topico_img['elementos'] if e['tipo'] == 'imagem']
+    cartoes = [e for e in topico_img['elementos'] if e['tipo'] == 'forma' and e['forma'] == 'retangulo-arredondado']
+    t('imagem pedida num layout sem lugar para ela vai à direita, sem cobrir o conteúdo',
+      len(img_topico) == 1 and cartoes and all(c['x'] + c['w'] <= img_topico[0]['x'] for c in cartoes))
+    todos_novos = [painel, tempo, topico_img]
+    t('layouts novos ficam dentro da tela', all(0 <= e['x'] and e['x'] + e['w'] <= 1920 and 0 <= e['y']
+                                                and e['y'] + e['h'] <= 1080 for s in todos_novos for e in s['elementos']))
+
+    print('\n== PEDIDO GUIADO (TIPO + BRIEFING) ==')
+    sistema_campanha = roteiro.sistema(padrao, {'tipo': 'campanha'}, 6)
+    t('o tipo traz a estrutura sugerida e as regras de imagem para o prompt',
+      'Estrutura sugerida' in sistema_campanha and 'objeções' in sistema_campanha and 'de 3 a 6' in sistema_campanha)
+    t('sem imagens com IA, nada de regra de imagem', 'Imagens com IA estão ligadas' not in roteiro.sistema(padrao, {}, 0))
+    r = c_ana.post('/apresentacoes/nova/', {
+        'tipo': 'campanha', 'pedido': '', 'b_nome': 'Vivo Total Família', 'b_periodo': 'setembro',
+        'b_condicoes': '4 linhas por R$ 199', 'b_objetivo': 'vender o combo', 'b_obrigatorio': 'meta\nprazo',
+        'b_destaques': 'campo de outro tipo', 'template': padrao.pk, 'publico': 'Lojas', 'tom': 'Comercial e persuasivo'})
+    guiada = Apresentacao.objects.filter(dono=ana).order_by('-pk').first()
+    t('só o briefing já basta para pedir', r.status_code == 302 and guiada and guiada.opcoes.get('tipo') == 'campanha')
+    t('o briefing vira o pedido (com o tipo), e campo de outro tipo fica de fora',
+      'Briefing (Campanha ou oferta)' in guiada.pedido and 'R$ 199' in guiada.pedido and 'meta; prazo' in guiada.pedido
+      and 'outro tipo' not in guiada.pedido, guiada.pedido)
+    t('sem título, a apresentação leva o nome da campanha', guiada.titulo == 'Vivo Total Família', guiada.titulo)
+    antes = Apresentacao.objects.count()
+    r = c_ana.post('/apresentacoes/nova/', {'tipo': 'campanha', 'pedido': '', 'template': padrao.pk})
+    t('nada escrito: não cria', Apresentacao.objects.count() == antes and r.status_code == 302)
+    guiada.delete()      # não conta nas tarefas abertas da Ana daqui para a frente
+
     print('\n== NOVA APRESENTAÇÃO (PEDIDO) ==')
     r = c_ana.post('/apresentacoes/nova/', {
         'pedido': 'Explique a campanha do print para as lojas.', 'template': padrao.pk, 'publico': 'Lojas',

@@ -3,31 +3,82 @@
 
 {% block ap_pagina %}Nova apresentação{% endblock %}
 {% block ap_titulo %}conte o assunto,<br><span>a IA monta os slides</span>{% endblock %}
-{% block ap_sub %}Quanto mais claro o pedido, melhor. Anexe o print ou o PDF do material da Vivo: a IA lê o conteúdo, pergunta o que faltar e entrega os slides prontos para editar.{% endblock %}
+{% block ap_sub %}Escolha o tipo, responda o que souber e anexe o print ou o PDF do material da Vivo: a IA lê tudo, pergunta só o que faltar e entrega os slides prontos para editar.{% endblock %}
 {% block ap_acoes %}{% endblock %}
 
 {% block ap_conteudo %}
+<style>
+    .ap-tipo { position: relative; display: flex; flex-direction: column; gap: .2rem; padding: .75rem; border-radius: 1rem;
+               background: #fff; box-shadow: 0 0 0 1px var(--ap-borda); border: 2px solid transparent; cursor: pointer;
+               transition: box-shadow .15s, border-color .15s, transform .15s; }
+    .ap-tipo:hover { transform: translateY(-1px); }
+    .ap-tipo:has(input:checked) { border-color: var(--ap-magenta); box-shadow: 0 10px 26px -14px rgba(255, 72, 206, .8); }
+    .ap-tipo:has(input:focus-visible) { outline: 2px solid var(--ap-magenta); outline-offset: 2px; }
+    .ap-tipo input { position: absolute; opacity: 0; }
+    .ap-tipo-icone { display: grid; place-items: center; width: 2.2rem; height: 2.2rem; border-radius: .7rem; margin-bottom: .25rem;
+                     background: linear-gradient(135deg, #8B3DFF, #FF48CE); color: #fff; font-size: .95rem; }
+    html.dark .ap-tipo { background: var(--tema-superficie, #1F1728); color: var(--ap-texto); }
+</style>
 <form method="post" enctype="multipart/form-data" id="ap-form-nova" class="grid grid-cols-1 lg:grid-cols-3 gap-4">
     {% csrf_token %}
     <div class="lg:col-span-2 space-y-4">
         <section class="ap-cartao p-4 sm:p-5">
-            <h2 class="font-bold mb-3"><span class="text-fuchsia-500 mr-1">1.</span>O que a apresentação precisa ter?</h2>
-            <label class="ap-rotulo-campo" for="ap-pedido">Pedido para a IA</label>
-            <textarea id="ap-pedido" name="pedido" rows="6" required minlength="10" class="ap-campo"
-                      placeholder="Ex.: Monte uma apresentação para os gerentes explicando a campanha Vivo Total de setembro: o que muda na oferta, preços, argumentos de venda e metas por loja. Use o print anexado como base."></textarea>
-            <div class="flex flex-wrap gap-1.5 mt-2" aria-label="Exemplos de pedido">
-                <button type="button" class="ap-chip" data-exemplo="Explique a campanha do print anexado para os vendedores das lojas: oferta, preço, público e 3 argumentos de venda. Feche com a meta do mês.">Campanha da Vivo</button>
-                <button type="button" class="ap-chip" data-exemplo="Resultado do mês para a diretoria: destaques, números principais do print anexado, o que funcionou, o que não funcionou e próximos passos.">Resultado do mês</button>
-                <button type="button" class="ap-chip" data-exemplo="Treinamento passo a passo para novos colaboradores sobre o atendimento na loja: recepção, diagnóstico da necessidade, oferta e fechamento.">Treinamento</button>
-            </div>
-            <div class="mt-4">
-                <label class="ap-rotulo-campo" for="ap-titulo-campo">Título <span class="font-normal" style="color: var(--ap-suave)">(opcional — a IA sugere)</span></label>
-                <input id="ap-titulo-campo" type="text" name="titulo" maxlength="200" class="ap-campo" placeholder="Ex.: Campanha Vivo Total — setembro">
+            <h2 class="font-bold mb-1"><span class="text-fuchsia-500 mr-1">1.</span>Que tipo de apresentação?</h2>
+            <p class="text-sm mb-3" style="color: var(--ap-suave)">Cada tipo faz as perguntas certas e já monta a estrutura ideal.</p>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2" role="radiogroup" aria-label="Tipo de apresentação">
+                {% for tipo in tipos %}
+                <label class="ap-tipo">
+                    <input type="radio" name="tipo" value="{{ tipo.chave }}" data-publico="{{ tipo.publico }}" data-tom="{{ tipo.tom }}"
+                           data-exemplo="{{ tipo.exemplo }}"{% if tipo.chave == 'livre' %} checked{% endif %}>
+                    <span class="ap-tipo-icone"><i class="fas {{ tipo.icone }}" aria-hidden="true"></i></span>
+                    <span class="font-bold text-sm leading-tight">{{ tipo.nome }}</span>
+                    <span class="ap-ajuda !mt-0.5 leading-snug">{{ tipo.descricao }}</span>
+                </label>
+                {% endfor %}
             </div>
         </section>
 
         <section class="ap-cartao p-4 sm:p-5">
-            <h2 class="font-bold mb-1"><span class="text-fuchsia-500 mr-1">2.</span>Material base</h2>
+            <h2 class="font-bold mb-1"><span class="text-fuchsia-500 mr-1">2.</span>Conte os detalhes</h2>
+            <p class="text-sm mb-3" style="color: var(--ap-suave)">Tudo é opcional, mas cada resposta deixa os slides mais específicos — e a IA não inventa o que você não contar.</p>
+            {% for tipo in tipos %}{% if tipo.campos %}
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3" data-campos-tipo="{{ tipo.chave }}" hidden>
+                {% for chave, rotulo, exemplo, longo in tipo.campos %}
+                <div{% if longo %} class="sm:col-span-2"{% endif %}>
+                    <label class="ap-rotulo-campo" for="ap-b-{{ tipo.chave }}-{{ chave }}">{{ rotulo }}</label>
+                    {% if longo %}
+                    <textarea id="ap-b-{{ tipo.chave }}-{{ chave }}" name="b_{{ chave }}" rows="2" maxlength="1500" class="ap-campo" placeholder="{{ exemplo }}" disabled></textarea>
+                    {% else %}
+                    <input id="ap-b-{{ tipo.chave }}-{{ chave }}" type="text" name="b_{{ chave }}" maxlength="300" class="ap-campo" placeholder="{{ exemplo }}" disabled>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}{% endfor %}
+            <label class="ap-rotulo-campo" for="ap-pedido">Pedido para a IA <span class="font-normal" style="color: var(--ap-suave)">(o contexto, com as suas palavras)</span></label>
+            <textarea id="ap-pedido" name="pedido" rows="4" class="ap-campo"
+                      placeholder="Ex.: Monte uma apresentação sobre … para … com …"></textarea>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                {% for chave, rotulo, exemplo, longo in campos_comuns %}
+                <div>
+                    <label class="ap-rotulo-campo" for="ap-b-{{ chave }}">{{ rotulo }}</label>
+                    {% if longo %}
+                    <textarea id="ap-b-{{ chave }}" name="b_{{ chave }}" rows="2" maxlength="1500" class="ap-campo" placeholder="{{ exemplo }}"></textarea>
+                    {% else %}
+                    <input id="ap-b-{{ chave }}" type="text" name="b_{{ chave }}" maxlength="300" class="ap-campo" placeholder="{{ exemplo }}">
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            <div class="mt-3">
+                <label class="ap-rotulo-campo" for="ap-titulo-campo">Título <span class="font-normal" style="color: var(--ap-suave)">(opcional — a IA sugere)</span></label>
+                <input id="ap-titulo-campo" type="text" name="titulo" maxlength="200" class="ap-campo" placeholder="Ex.: Campanha Vivo Total — setembro">
+            </div>
+            <p class="mt-2 text-sm text-red-600" id="ap-pedido-erro" hidden>Conte um pouco do que a apresentação precisa ter (no pedido ou nas perguntas acima).</p>
+        </section>
+
+        <section class="ap-cartao p-4 sm:p-5">
+            <h2 class="font-bold mb-1"><span class="text-fuchsia-500 mr-1">3.</span>Material base</h2>
             <p class="text-sm mb-3" style="color: var(--ap-suave)">Prints, fotos de slides, PDF ou PowerPoint (ex.: o material da Vivo). Até 12 arquivos.</p>
             <label class="ap-soltar block" id="ap-soltar">
                 <input type="file" name="anexos" id="ap-anexos" multiple accept="image/png,image/jpeg,image/webp,image/gif,application/pdf,.pptx" class="sr-only">
@@ -40,7 +91,7 @@
 
         <section class="ap-cartao p-4 sm:p-5">
             <div class="flex items-center justify-between gap-2 mb-3">
-                <h2 class="font-bold"><span class="text-fuchsia-500 mr-1">3.</span>Template</h2>
+                <h2 class="font-bold"><span class="text-fuchsia-500 mr-1">4.</span>Template</h2>
                 <a href="{% url 'apresentacoes:template_novo' %}" class="text-xs font-semibold text-fuchsia-600 hover:underline"><i class="fas fa-plus mr-1"></i>Importar template</a>
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -65,7 +116,7 @@
 
     <aside class="space-y-4">
         <section class="ap-cartao p-4 sm:p-5">
-            <h2 class="font-bold mb-3"><span class="text-fuchsia-500 mr-1">4.</span>Fontes</h2>
+            <h2 class="font-bold mb-3"><span class="text-fuchsia-500 mr-1">5.</span>Fontes</h2>
             <label class="ap-rotulo-campo">Títulos</label>
             <div data-seletor-fonte data-url="{% static 'apresentacoes/fontes.json' %}" id="ap-fonte-titulo">
                 <input type="hidden" name="fonte_titulo" value="{{ principal.fonte_titulo|default:'Montserrat' }}">
@@ -79,7 +130,7 @@
         </section>
 
         <section class="ap-cartao p-4 sm:p-5 space-y-3">
-            <h2 class="font-bold"><span class="text-fuchsia-500 mr-1">5.</span>Público e tom</h2>
+            <h2 class="font-bold"><span class="text-fuchsia-500 mr-1">6.</span>Público e tom</h2>
             <div>
                 <label class="ap-rotulo-campo" for="ap-publico">Para quem</label>
                 <select id="ap-publico" name="publico" class="ap-campo">
@@ -106,7 +157,7 @@
         </section>
 
         <section class="ap-cartao p-4 sm:p-5 space-y-2">
-            <h2 class="font-bold mb-1"><span class="text-fuchsia-500 mr-1">6.</span>O que a IA também cria</h2>
+            <h2 class="font-bold mb-1"><span class="text-fuchsia-500 mr-1">7.</span>O que a IA também cria</h2>
             <label class="ap-interruptor"><input type="checkbox" name="imagens_ia" checked>
                 <span><strong class="text-sm">Imagens com IA</strong><span class="ap-ajuda block">Ilustrações no estilo do template, sem texto na imagem.</span></span></label>
             <label class="ap-interruptor"><input type="checkbox" name="narracao">
@@ -191,17 +242,35 @@
         }
     });
 
-    document.querySelectorAll('[data-exemplo]').forEach((botao) => botao.addEventListener('click', () => {
-        const pedido = document.getElementById('ap-pedido');
-        pedido.value = botao.dataset.exemplo;
-        pedido.focus();
-    }));
-
     const publico = document.getElementById('ap-publico');
     const outro = document.getElementById('ap-publico-outro');
+    const tom = document.getElementById('ap-tom');
+    let publicoEscolhido = false;
+    let tomEscolhido = false;
     publico.addEventListener('change', () => {
+        publicoEscolhido = true;
         outro.classList.toggle('hidden', publico.value !== '');
         if (publico.value === '') outro.focus();
+    });
+    tom.addEventListener('change', () => { tomEscolhido = true; });
+
+    function sugerir(select, valor) {
+        if (valor && Array.from(select.options).some((o) => o.value === valor || o.text === valor)) select.value = valor;
+    }
+    function aplicarTipo(radio) {
+        document.querySelectorAll('[data-campos-tipo]').forEach((grupo) => {
+            const ativo = grupo.dataset.camposTipo === radio.value;
+            grupo.hidden = !ativo;
+            // Campo de outro tipo não vai no envio (os tipos repetem nomes, como b_periodo).
+            grupo.querySelectorAll('input, textarea').forEach((campo) => { campo.disabled = !ativo; });
+        });
+        document.getElementById('ap-pedido').placeholder = radio.dataset.exemplo || '';
+        if (!publicoEscolhido) sugerir(publico, radio.dataset.publico);
+        if (!tomEscolhido) sugerir(tom, radio.dataset.tom);
+    }
+    document.querySelectorAll('input[name=tipo]').forEach((radio) => {
+        radio.addEventListener('change', () => aplicarTipo(radio));
+        if (radio.checked) aplicarTipo(radio);
     });
 
     // Trocar o template traz as fontes dele (quem já escolheu outra pode mudar de novo).
@@ -212,7 +281,16 @@
         if (texto._definir) texto._definir(radio.dataset.fonteTexto);
     }));
 
-    document.getElementById('ap-form-nova').addEventListener('submit', () => {
+    document.getElementById('ap-form-nova').addEventListener('submit', (e) => {
+        const escrito = Array.from(document.querySelectorAll('#ap-pedido, [name^=b_]'))
+            .filter((campo) => !campo.disabled).map((campo) => campo.value.trim()).join(' ');
+        const erro = document.getElementById('ap-pedido-erro');
+        erro.hidden = escrito.length >= 10;
+        if (escrito.length < 10) {
+            e.preventDefault();
+            document.getElementById('ap-pedido').focus();
+            return;
+        }
         document.getElementById('ap-enviando').classList.add('aberto');
         document.getElementById('ap-enviar').disabled = true;
     });

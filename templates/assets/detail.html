@@ -104,10 +104,19 @@
                 <div class="bg-gray-50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
                     <dt class="text-sm font-medium text-gray-500">
                         <i class="fas fa-map-marker-alt mr-2"></i>
-                        Localização
+                        Localizado
                     </dt>
                     <dd class="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
-                        {{ asset.localizado }}
+                        {{ asset.localizado|default:'—' }}
+                    </dd>
+                </div>
+                <div class="bg-white px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+                    <dt class="text-sm font-medium text-gray-500">
+                        <i class="fas fa-tag mr-2"></i>
+                        Categoria
+                    </dt>
+                    <dd class="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
+                        {{ asset.get_categoria_display }}
                     </dd>
                 </div>
                 <div class="bg-white px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">

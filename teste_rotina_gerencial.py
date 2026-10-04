@@ -845,13 +845,14 @@ try:
 
     sem_atividades = novo('sematividades')
     RotinaGerencial.objects.create(user=sem_atividades)
-    t('anônimo: tudo desligado', bandeiras(AnonymousUser()) == {'rotina_liberada': False, 'rotina_admin': False})
+    t('anônimo: tudo desligado', bandeiras(AnonymousUser()) == {'rotina_liberada': False, 'rotina_no_menu': False, 'rotina_admin': False})
     t('rotina ativa com atividades: menu liberado, sem gestão',
-      bandeiras(gerente) == {'rotina_liberada': True, 'rotina_admin': False}, bandeiras(gerente))
-    t('sem rotina: nada', bandeiras(ninguem) == {'rotina_liberada': False, 'rotina_admin': False})
-    t('rotina desativada: o menu some', bandeiras(pausada)['rotina_liberada'] is False)
-    t('rotina ativa sem nenhuma atividade: sem menu (nada a avisar)', bandeiras(sem_atividades)['rotina_liberada'] is False)
-    t('SUPERADMIN sem rotina: só a gestão', bandeiras(superadmin) == {'rotina_liberada': False, 'rotina_admin': True})
+      bandeiras(gerente) == {'rotina_liberada': True, 'rotina_no_menu': True, 'rotina_admin': False}, bandeiras(gerente))
+    t('sem rotina: nada', bandeiras(ninguem) == {'rotina_liberada': False, 'rotina_no_menu': False, 'rotina_admin': False})
+    t('rotina desativada: o menu some', bandeiras(pausada)['rotina_liberada'] is False and bandeiras(pausada)['rotina_no_menu'] is False)
+    t('rotina ativa sem nenhuma atividade: módulo no menu, sem notificador (nada a avisar)',
+      bandeiras(sem_atividades)['rotina_no_menu'] is True and bandeiras(sem_atividades)['rotina_liberada'] is False)
+    t('SUPERADMIN sem rotina: só a gestão', bandeiras(superadmin) == {'rotina_liberada': False, 'rotina_no_menu': False, 'rotina_admin': True})
     t('superusuário também é gestão', bandeiras(superusuario)['rotina_admin'] is True)
 
     print('\n== MENU E NOTIFICADOR NO PORTAL ==')
@@ -865,13 +866,16 @@ try:
     html_ninguem = cliente(ninguem).get('/rotina-gerencial/').content.decode()
     t('quem não tem rotina não vê nem o menu nem o notificador',
       'data-rota="/rotina-gerencial/"' not in html_ninguem and 'window.RotinaNotificador' not in html_ninguem)
+    html_vazia = cliente(sem_atividades).get('/rotina-gerencial/').content.decode()
+    t('adicionado na gestão (rotina ainda vazia): o módulo já aparece no menu, sem notificador',
+      'data-rota="/rotina-gerencial/"' in html_vazia and 'window.RotinaNotificador' not in html_vazia)
     html_pausada = cliente(pausada).get('/rotina-gerencial/').content.decode()
     t('rotina pausada tira os dois do portal',
       'data-rota="/rotina-gerencial/"' not in html_pausada and 'window.RotinaNotificador' not in html_pausada)
     with mock.patch('rotina.models.RotinaGerencial.objects') as quebrado:
         quebrado.filter.side_effect = RuntimeError('banco fora do ar')
         resultado = bandeiras(gerente)
-    t('erro no banco não derruba a página', resultado == {'rotina_liberada': False, 'rotina_admin': False}, resultado)
+    t('erro no banco não derruba a página', resultado == {'rotina_liberada': False, 'rotina_no_menu': False, 'rotina_admin': False}, resultado)
 
     print('\n== CARTÃO DA HOME ==')
     from rotina.home import html_do_cartao
