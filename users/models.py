@@ -80,7 +80,14 @@ class SystemConfig(models.Model):
         verbose_name="Ano de Exibição do Comissionamento",
         help_text="Ano de referência padrão exibido no /users/commission/ quando não houver seleção manual"
     )
-    
+    # Mês/ano sozinhos não bastam: o mesmo mês pode ter a prévia (antes da
+    # contestação) e a versão fechada. Vazio = a regra de antes (Pós, se houver).
+    display_reference_phase = models.CharField(
+        max_length=10, blank=True, default='', db_default='',
+        verbose_name="Fase de Exibição do Comissionamento",
+        help_text="Fase padrão (antes/pos) exibida no /users/commission/ quando não houver seleção manual"
+    )
+
     # Metadados
     updated_at = models.DateTimeField(auto_now=True, verbose_name="Última atualização")
     updated_by = models.ForeignKey(
@@ -119,6 +126,11 @@ class SystemConfig(models.Model):
             return year, month
 
         return CommissionSpreadsheetVersion.get_reference_month_year(base_date=base_date)
+
+    def get_display_reference_phase(self):
+        """'antes', 'pos' ou '' (sem escolha: vale a regra de sempre)."""
+        fase = (self.display_reference_phase or '').strip()
+        return fase if fase in ('antes', 'pos') else ''
 
 
 class CommissionSpreadsheetVersion(models.Model):

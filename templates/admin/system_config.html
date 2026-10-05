@@ -4,25 +4,48 @@
 {% block title %}Configurações do Sistema{% endblock %}
 
 {% block content %}
+<style>
+    /* Pequenos acabamentos que o Tailwind do portal não traz prontos. */
+    .sc-fase input:checked + span { background: #7c3aed; color: #fff; border-color: #7c3aed; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+    .sc-ref input:checked + div { border-color: #7c3aed; box-shadow: 0 0 0 2px rgba(124,58,237,.25); }
+    .sc-ref input:checked + div .sc-ref-marca { background: #7c3aed; border-color: #7c3aed; }
+    .sc-ref input:checked + div .sc-ref-marca::after { content: ''; position: absolute; inset: 3px; border-radius: 9999px; background: #fff; }
+    .sc-pulso { animation: sc-pulso .6s ease-out; }
+    @keyframes sc-pulso { from { box-shadow: 0 0 0 3px rgba(124,58,237,.35); } to { box-shadow: 0 0 0 0 rgba(124,58,237,0); } }
+    .sc-tabela td, .sc-tabela th { white-space: nowrap; max-width: 14rem; overflow: hidden; text-overflow: ellipsis; }
+</style>
+
 <div class="min-h-screen bg-gray-50">
-    <div class="max-w-4xl mx-auto px-4 py-8">
+    <div class="max-w-6xl mx-auto px-4 py-8">
         <!-- Header -->
-        <div class="mb-8">
-            <div class="flex items-center gap-3 mb-2">
-                <a href="{% url 'admin_panel' %}" class="text-gray-500 hover:text-gray-700">
-                    <i class="fas fa-arrow-left"></i>
-                </a>
-                <h1 class="text-2xl font-bold text-gray-900">
-                    <i class="fas fa-cog text-purple-600 mr-2"></i>
-                    Configurações do Sistema
-                </h1>
+        <div class="mb-6 flex items-start justify-between gap-4 flex-wrap">
+            <div>
+                <div class="flex items-center gap-3 mb-1">
+                    <a href="{% url 'admin_panel' %}" class="text-gray-500 hover:text-gray-700" title="Voltar">
+                        <i class="fas fa-arrow-left"></i>
+                    </a>
+                    <h1 class="text-2xl font-bold text-gray-900">
+                        <i class="fas fa-cog text-purple-600 mr-2"></i>Configurações do Sistema
+                    </h1>
+                </div>
+                <p class="text-gray-600 text-sm">Versões do comissionamento (mês/ano + fase), o que os usuários veem por padrão e os links de contestação.</p>
             </div>
-            <p class="text-gray-600">Comissionamento por versão (mês/ano de referência) e link exclusivo de contestação</p>
+            <div class="flex items-center gap-2 flex-wrap">
+                <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-gray-200 text-xs text-gray-700 shadow-sm">
+                    <span class="w-2 h-2 rounded-full {% if active_version.status == 'released' %}bg-green-500{% else %}bg-yellow-400{% endif %}"></span>
+                    Em exibição: <strong id="sc-chip-exibicao">{{ reference_month|stringformat:"02d" }}/{{ reference_year }}{% if active_version %} · {{ active_version.get_contestacao_phase_display }}{% endif %}</strong>
+                </span>
+                {% if draft_versions %}
+                <a href="#sc-liberar" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-yellow-100 text-yellow-800 text-xs font-medium hover:bg-yellow-200">
+                    <i class="fas fa-pen text-[10px]"></i>{{ draft_versions|length }} rascunho{{ draft_versions|length|pluralize }} para liberar
+                </a>
+                {% endif %}
+            </div>
         </div>
 
         <!-- Alertas -->
         {% if messages %}
-        <div class="mb-6">
+        <div class="mb-6 space-y-2">
             {% for message in messages %}
             <div class="{% if message.tags == 'success' %}bg-green-50 border-green-500 text-green-800{% elif message.tags == 'error' %}bg-red-50 border-red-500 text-red-800{% else %}bg-blue-50 border-blue-500 text-blue-800{% endif %} border-l-4 p-4 rounded-r-lg shadow-sm flex items-center gap-3">
                 <i class="fas {% if message.tags == 'success' %}fa-check-circle{% elif message.tags == 'error' %}fa-exclamation-circle{% else %}fa-info-circle{% endif %}"></i>
@@ -32,242 +55,166 @@
         </div>
         {% endif %}
 
-        <!-- Info Box -->
-        <div class="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg mb-6">
-            <div class="flex items-start gap-3">
-                <i class="fas fa-info-circle text-blue-500 mt-0.5"></i>
-                <div>
-                    <h3 class="font-semibold text-blue-800">Como obter o link de compartilhamento</h3>
-                    <ol class="text-sm text-blue-700 mt-2 space-y-1 list-decimal list-inside">
-                        <li>Abra a planilha no OneDrive/SharePoint</li>
-                        <li>Clique em <strong>Compartilhar</strong></li>
-                        <li>Selecione <strong>"Qualquer pessoa com o link"</strong></li>
-                        <li>Copie o link gerado</li>
-                    </ol>
-                    <p class="text-xs text-blue-700 mt-2">
-                        Referência atual de exibição no /users/commission:
-                        <strong>{{ reference_month|stringformat:"02d" }}/{{ reference_year }}</strong>.
-                    </p>
-                </div>
-            </div>
-        </div>
-
-        <!-- Form -->
-        <form method="post" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        {% comment %}
+        O formulário reage sem recarregar: trocar mês/ano/fase carrega os links
+        daquela versão (ou abre uma nova), o "Padrão de exibição" ganha na hora a
+        versão que está sendo lançada, e o painel ao lado mostra o que vai
+        acontecer ao salvar. Os dados de todas as versões vêm em `versoes_json`.
+        {% endcomment %}
+        <form method="post" id="sc-form" class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
             {% csrf_token %}
-            
-            <div class="p-6 space-y-6">
-                <div class="rounded-lg border border-indigo-100 bg-indigo-50 p-4">
-                    <h3 class="text-sm font-semibold text-indigo-800 mb-3">
-                        <i class="fas fa-calendar-alt mr-2"></i>
-                        Versão de Comissionamento
-                    </h3>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label for="version_month" class="block text-sm font-semibold text-gray-700 mb-2">Mês de Referência</label>
-                            <select id="version_month" name="version_month" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm" required>
-                                {% for month_value, month_label in month_choices %}
-                                <option value="{{ month_value }}" {% if month_value == commission_form.version_month %}selected{% endif %}>
-                                    {{ month_value|stringformat:"02d" }} - {{ month_label }}
-                                </option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div>
-                            <label for="version_year" class="block text-sm font-semibold text-gray-700 mb-2">Ano de Referência</label>
-                            <select id="version_year" name="version_year" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm" required>
-                                {% for year_value in year_choices %}
-                                <option value="{{ year_value }}" {% if year_value == commission_form.version_year %}selected{% endif %}>{{ year_value }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div>
-                            <label for="contestacao_phase" class="block text-sm font-semibold text-gray-700 mb-2">Fase de Contestação</label>
-                            <select id="contestacao_phase" name="contestacao_phase" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm">
-                                <option value="pos" {% if commission_form.version_phase == 'pos' %}selected{% endif %}>Pós Contestação</option>
-                                <option value="antes" {% if commission_form.version_phase == 'antes' %}selected{% endif %}>Antes da Contestação</option>
-                            </select>
+            <input type="hidden" name="display_ref" id="sc-display-ref" value="">
+
+            <div class="lg:col-span-2 space-y-6">
+
+                <!-- 1. Versão -->
+                <section class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap">
+                        <h2 class="text-base font-semibold text-gray-900 flex items-center gap-2">
+                            <span class="w-6 h-6 rounded-full bg-purple-100 text-purple-700 text-xs font-bold flex items-center justify-center">1</span>
+                            Versão do comissionamento
+                        </h2>
+                        <div class="flex items-center gap-2">
+                            <button type="button" id="sc-btn-proximo"
+                                    class="text-xs px-3 py-1.5 rounded-lg border border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100">
+                                <i class="fas fa-forward mr-1"></i>Lançar o próximo mês
+                            </button>
+                            <button type="button" id="sc-btn-exibicao"
+                                    class="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">
+                                <i class="fas fa-eye mr-1"></i>Abrir a em exibição
+                            </button>
                         </div>
                     </div>
-                    <p class="text-xs text-indigo-700 mt-2">
-                        Salvar em mês/ano já existente sobrescreve apenas aquela versão.
-                    </p>
-                </div>
-
-                <div class="rounded-lg border border-amber-100 bg-amber-50 p-4">
-                    <h3 class="text-sm font-semibold text-amber-800 mb-3">
-                        <i class="fas fa-eye mr-2"></i>
-                        Padrão de Exibição para Usuários
-                    </h3>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label for="display_reference_month" class="block text-sm font-semibold text-gray-700 mb-2">Mês de referência de exibição</label>
-                            <select id="display_reference_month" name="display_reference_month" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm" required>
-                                {% for month_value, month_label in display_month_choices %}
-                                <option value="{{ month_value }}" {% if month_value == commission_form.display_reference_month %}selected{% endif %}>
-                                    {{ month_value|stringformat:"02d" }} - {{ month_label }}
-                                </option>
-                                {% endfor %}
-                            </select>
+                    <div class="p-6 space-y-4">
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div>
+                                <label for="version_month" class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Mês</label>
+                                <select id="version_month" name="version_month" required
+                                        class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm">
+                                    {% for month_value, month_label in month_choices %}
+                                    <option value="{{ month_value }}" {% if month_value == commission_form.version_month %}selected{% endif %}>{{ month_value|stringformat:"02d" }} - {{ month_label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div>
+                                <label for="version_year" class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Ano</label>
+                                <select id="version_year" name="version_year" required
+                                        class="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm">
+                                    {% for year_value in year_choices %}
+                                    <option value="{{ year_value }}" {% if year_value == commission_form.version_year %}selected{% endif %}>{{ year_value }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div>
+                                <span class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Fase de contestação</span>
+                                <div class="grid grid-cols-2 gap-1 p-1 rounded-lg bg-gray-100">
+                                    <label class="sc-fase cursor-pointer">
+                                        <input type="radio" name="contestacao_phase" value="antes" class="sr-only"
+                                               {% if commission_form.version_phase == 'antes' %}checked{% endif %}>
+                                        <span class="block text-center text-xs font-medium px-2 py-2 rounded-md border border-transparent text-gray-600">Antes</span>
+                                    </label>
+                                    <label class="sc-fase cursor-pointer">
+                                        <input type="radio" name="contestacao_phase" value="pos" class="sr-only"
+                                               {% if commission_form.version_phase != 'antes' %}checked{% endif %}>
+                                        <span class="block text-center text-xs font-medium px-2 py-2 rounded-md border border-transparent text-gray-600">Pós</span>
+                                    </label>
+                                </div>
+                            </div>
                         </div>
-                        <div>
-                            <label for="display_reference_year" class="block text-sm font-semibold text-gray-700 mb-2">Ano de exibição</label>
-                            <select id="display_reference_year" name="display_reference_year" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm" required>
-                                {% for year_value in display_year_choices %}
-                                <option value="{{ year_value }}" {% if year_value == commission_form.display_reference_year %}selected{% endif %}>{{ year_value }}</option>
-                                {% endfor %}
-                            </select>
+
+                        <div id="sc-estado-versao" class="rounded-xl border px-4 py-3 text-sm flex items-start gap-3"></div>
+                    </div>
+                </section>
+
+                <!-- 2. Links -->
+                <section class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap">
+                        <h2 class="text-base font-semibold text-gray-900 flex items-center gap-2">
+                            <span class="w-6 h-6 rounded-full bg-purple-100 text-purple-700 text-xs font-bold flex items-center justify-center">2</span>
+                            Links das planilhas
+                        </h2>
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <button type="button" id="sc-btn-copiar" class="hidden text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"></button>
+                            <button type="button" id="sc-btn-previa-todas"
+                                    class="text-xs px-3 py-1.5 rounded-lg border border-green-200 bg-green-50 text-green-700 hover:bg-green-100">
+                                <i class="fas fa-table-cells mr-1"></i>Pré-visualizar todas
+                            </button>
                         </div>
                     </div>
-                    <p class="text-xs text-amber-700 mt-2">
-                        Esses campos definem qual referência aparece para o usuário ao entrar no /users/commission sem selecionar outra.
-                        São exibidos apenas meses e anos que já existem no histórico de versões.
-                    </p>
-                </div>
+                    <div class="p-6 space-y-5">
+                        <details class="text-xs text-gray-500 -mt-1">
+                            <summary class="cursor-pointer hover:text-gray-700"><i class="fas fa-circle-question mr-1"></i>Como obter o link de compartilhamento</summary>
+                            <ol class="mt-2 ml-4 space-y-0.5 list-decimal">
+                                <li>Abra a planilha no OneDrive/SharePoint e clique em <strong>Compartilhar</strong>.</li>
+                                <li>Selecione <strong>"Qualquer pessoa com o link"</strong> e copie o link gerado.</li>
+                                <li>Cole aqui e use <strong>Pré-visualizar</strong> para conferir as abas antes de salvar.</li>
+                            </ol>
+                        </details>
 
-                <!-- Planilha de Comissionamento -->
-                <div>
-                    <label for="excel_comissao_url" class="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                        <i class="fas fa-file-excel text-green-600"></i>
-                        Planilha de Comissionamento
-                    </label>
-                    <input type="url" 
-                           name="excel_comissao_url" 
-                           id="excel_comissao_url"
-                           value="{{ commission_form.excel_comissao_url }}"
-                           class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm"
-                           placeholder="https://1drv.ms/x/..."
-                           required>
-                    <p class="text-xs text-gray-500 mt-1">
-                        Contém as sheets: REMUNERAÇÃO CN, REMUNERAÇÃO GERENTE, REMUNERAÇÃO COO e SNP, ÍNDICE DE QUALIDADE
-                    </p>
-                </div>
+                        <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Desta versão</p>
+                        {% include 'admin/_system_config_link.html' with campo='excel_comissao_url' rotulo='Planilha de Comissionamento' icone='fa-file-excel' valor=commission_form.excel_comissao_url ajuda='Abas REMUNERAÇÃO CN, GERENTE, COO e SNP e ÍNDICE DE QUALIDADE' obrigatorio=True da_versao=True %}
+                        {% include 'admin/_system_config_link.html' with campo='excel_vendas_url' rotulo='Planilha de Vendas e Metas' icone='fa-file-excel' valor=commission_form.excel_vendas_url ajuda='Vendas dos colaboradores (aba VENDAS)' obrigatorio=True da_versao=True %}
+                        {% include 'admin/_system_config_link.html' with campo='excel_base_pagamento_url' rotulo='BASE_PAGAMENTO' icone='fa-file-excel' valor=commission_form.excel_base_pagamento_url ajuda='Pagamento por pilar (Filial, Vendedor, Receita, PILAR)' obrigatorio=True da_versao=True %}
+                        {% include 'admin/_system_config_link.html' with campo='excel_base_exclusao_url' rotulo='BASE_EXCLUSAO (Comissionamento)' icone='fa-file-excel' valor=commission_form.excel_base_exclusao_url ajuda='Exclusões usadas no /users/commission' obrigatorio=True da_versao=True %}
 
-                <!-- Planilha de Vendas e Metas -->
-                <div>
-                    <label for="excel_vendas_url" class="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                        <i class="fas fa-file-excel text-green-600"></i>
-                        Planilha de Vendas e Metas
-                    </label>
-                    <input type="url" 
-                           name="excel_vendas_url" 
-                           id="excel_vendas_url"
-                           value="{{ commission_form.excel_vendas_url }}"
-                           class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm"
-                           placeholder="https://1drv.ms/x/..."
-                           required>
-                    <p class="text-xs text-gray-500 mt-1">
-                        Contém os dados de vendas dos colaboradores
-                    </p>
-                </div>
+                        <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider pt-2 border-t border-gray-100">Contestação (valem para todas as versões)</p>
+                        {% include 'admin/_system_config_link.html' with campo='excel_contestacao_base_exclusao_url' rotulo='BASE_EXCLUSAO (Contestação)' icone='fa-file-excel' valor=config.excel_contestacao_base_exclusao_url ajuda='Exclusões usadas no /contestacao' obrigatorio=True %}
+                        {% include 'admin/_system_config_link.html' with campo='excel_contestacao_base_pagamento_url' rotulo='BASE_PAGAMENTO (Contestação)' icone='fa-file-invoice-dollar' valor=config.excel_contestacao_base_pagamento_url ajuda='Contestação de valores: precisa das colunas RECEITA e RECEBIDO. Em branco, a tela avisa que não está configurada.' %}
+                    </div>
+                </section>
 
-                <!-- Planilha BASE_PAGAMENTO -->
-                <div>
-                    <label for="excel_base_pagamento_url" class="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                        <i class="fas fa-file-excel text-green-600"></i>
-                        Planilha BASE_PAGAMENTO
-                    </label>
-                    <input type="url" 
-                           name="excel_base_pagamento_url" 
-                           id="excel_base_pagamento_url"
-                           value="{{ commission_form.excel_base_pagamento_url }}"
-                           class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm"
-                           placeholder="https://1drv.ms/x/..."
-                           required>
-                    <p class="text-xs text-gray-500 mt-1">
-                        Dados de pagamento por pilar (Filial, Vendedor, Receita, PILAR)
-                    </p>
-                </div>
+                <!-- 3. Padrão de exibição -->
+                <section class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div class="px-6 py-4 border-b border-gray-100">
+                        <h2 class="text-base font-semibold text-gray-900 flex items-center gap-2">
+                            <span class="w-6 h-6 rounded-full bg-purple-100 text-purple-700 text-xs font-bold flex items-center justify-center">3</span>
+                            Padrão de exibição para usuários
+                        </h2>
+                        <p class="text-xs text-gray-500 mt-1">
+                            O que abre no /users/commission quando a pessoa não escolhe outra referência —
+                            mês, ano <strong>e fase de contestação</strong>. A versão que você está lançando já aparece aqui.
+                        </p>
+                    </div>
+                    <div class="p-6">
+                        <div id="sc-refs" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+                        <button type="button" id="sc-refs-mais" class="hidden mt-3 text-xs text-purple-600 hover:underline"></button>
+                    </div>
+                </section>
 
-                <!-- Planilha BASE_EXCLUSAO - COMISSIONAMENTO -->
-                <div>
-                    <label for="excel_base_exclusao_url" class="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                        <i class="fas fa-file-excel text-green-600"></i>
-                        Planilha BASE_EXCLUSAO (Comissionamento)
-                    </label>
-                    <input type="url" 
-                           name="excel_base_exclusao_url" 
-                           id="excel_base_exclusao_url"
-                           value="{{ commission_form.excel_base_exclusao_url }}"
-                           class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm"
-                           placeholder="https://1drv.ms/x/..."
-                           required>
-                    <p class="text-xs text-gray-500 mt-1">
-                        Dados de exclusão usados no módulo /users/commission
-                    </p>
-                </div>
-
-                <!-- Planilha BASE_EXCLUSAO - CONTESTAÇÃO -->
-                <div>
-                    <label for="excel_contestacao_base_exclusao_url" class="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                        <i class="fas fa-file-excel text-green-600"></i>
-                        Planilha BASE_EXCLUSAO (Contestação)
-                    </label>
-                    <input type="url" 
-                           name="excel_contestacao_base_exclusao_url" 
-                           id="excel_contestacao_base_exclusao_url"
-                           value="{{ config.excel_contestacao_base_exclusao_url }}"
-                           class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm"
-                           placeholder="https://1drv.ms/x/..."
-                           required>
-                    <p class="text-xs text-gray-500 mt-1">
-                        Dados de exclusão usados no módulo /contestacao
-                    </p>
-                </div>
-
-                <!-- Planilha BASE_PAGAMENTO - CONTESTAÇÃO -->
-                <div>
-                    <label for="excel_contestacao_base_pagamento_url" class="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
-                        <i class="fas fa-file-invoice-dollar text-green-600"></i>
-                        Planilha BASE_PAGAMENTO (Contestação)
-                    </label>
-                    <input type="url"
-                           name="excel_contestacao_base_pagamento_url"
-                           id="excel_contestacao_base_pagamento_url"
-                           value="{{ config.excel_contestacao_base_pagamento_url }}"
-                           class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm"
-                           placeholder="https://1drv.ms/x/...">
-                    <p class="text-xs text-gray-500 mt-1">
-                        Contestação de valores em /contestacao/valores. Precisa ter a coluna
-                        <strong>RECEBIDO</strong> além de RECEITA — a diferença entre as duas é o que
-                        abre a contestação. Em branco, a tela avisa que não está configurada.
-                    </p>
-                </div>
-            </div>
-
-            <!-- Metadados -->
-            {% if config.updated_at %}
-            <div class="px-6 py-3 bg-gray-50 border-t border-gray-200">
-                <p class="text-xs text-gray-500">
-                    <i class="fas fa-clock mr-1"></i>
-                    Última atualização: {{ config.updated_at|date:"d/m/Y H:i" }}
-                    {% if config.updated_by %}
-                    por <strong>{{ config.updated_by.get_full_name }}</strong>
-                    {% endif %}
+                {% if config.updated_at %}
+                <p class="text-xs text-gray-400 px-1">
+                    <i class="fas fa-clock mr-1"></i>Última atualização: {{ config.updated_at|date:"d/m/Y H:i" }}{% if config.updated_by %} por <strong>{{ config.updated_by.get_full_name }}</strong>{% endif %}
                 </p>
+                {% endif %}
             </div>
-            {% endif %}
 
-            <!-- Botões -->
-            <div class="px-6 py-4 bg-gray-50 border-t border-gray-200 flex flex-wrap items-center justify-between gap-3">
-                <a href="{% url 'admin_panel' %}" class="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors">
-                    <i class="fas fa-arrow-left mr-2"></i>
-                    Voltar
-                </a>
-                <div class="flex flex-wrap items-center gap-3">
-                    <a href="{% url 'commission_refresh' %}" 
-                       class="px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors">
-                        <i class="fas fa-sync-alt mr-2"></i>
-                        Limpar Cache
-                    </a>
-                    <button type="submit" 
-                            class="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
-                        <i class="fas fa-save mr-2"></i>
-                        Salvar Configurações
-                    </button>
+            <!-- Pré-visualização -->
+            <aside class="lg:sticky lg:top-24 space-y-4">
+                <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div class="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
+                        <i class="fas fa-wand-magic-sparkles text-purple-600"></i>
+                        <h2 class="text-sm font-semibold text-gray-900">Ao salvar</h2>
+                    </div>
+                    <div class="p-5 space-y-4 text-sm" id="sc-resumo"></div>
+                    <div class="px-5 py-4 bg-gray-50 border-t border-gray-100">
+                        <button type="submit" id="sc-salvar"
+                                class="w-full px-4 py-2.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed">
+                            <i class="fas fa-save mr-2"></i><span>Salvar versão</span>
+                        </button>
+                        <p class="text-[11px] text-gray-400 mt-2 text-center">Salva como rascunho e já limpa o cache das planilhas.</p>
+                    </div>
                 </div>
-            </div>
+
+                <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div class="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
+                        <i class="fas fa-display text-purple-600"></i>
+                        <h2 class="text-sm font-semibold text-gray-900">Como o usuário vai ver</h2>
+                    </div>
+                    <div class="p-5" id="sc-mock"></div>
+                </div>
+            </aside>
         </form>
+
 
         {% comment %}
         O material que explica o comissionamento. Fica aqui porque é o lugar em
@@ -421,7 +368,7 @@
         </div>
 
         <!-- Liberação de Comissionamento (rascunhos visíveis só para superadmin) -->
-        <div class="mt-8 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div id="sc-liberar" class="mt-8 scroll-mt-24 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
                 <h2 class="text-lg font-semibold text-gray-900">
                     <i class="fas fa-unlock-alt text-purple-600 mr-2"></i>
@@ -680,5 +627,387 @@
         </div>
     </div>
 </div>
+
+{{ versoes_json|json_script:"sc-versoes" }}
+{{ exibicao_atual|json_script:"sc-exibicao" }}
+<script>
+(function () {
+    var VERSOES = JSON.parse(document.getElementById('sc-versoes').textContent || '[]');
+    var EXIB = JSON.parse(document.getElementById('sc-exibicao').textContent || '{}');
+    var URL_PREVIA = '{% url "system_config_previa" %}';
+    var MESES = ['', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho',
+                 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+    var FASES = {antes: 'Antes da Contestação', pos: 'Pós Contestação'};
+    var CAMPOS_VERSAO = ['excel_comissao_url', 'excel_vendas_url', 'excel_base_pagamento_url', 'excel_base_exclusao_url'];
+
+    var form = document.getElementById('sc-form');
+    var selMes = document.getElementById('version_month');
+    var selAno = document.getElementById('version_year');
+    var links = [].slice.call(document.querySelectorAll('.sc-link'));
+    var previas = {};          // campo -> {url, resposta}
+    var editado = false;       // a pessoa mexeu nos links desde a última carga
+    var carregada = null;      // chave da versão cujos links estão nos campos
+    var exibicao = chave(EXIB);
+    var mostrarTodas = false;
+
+    function pad(n) { return (n < 10 ? '0' : '') + n; }
+    function chave(o) { return o.year + '-' + o.month + '-' + o.phase; }
+    function rotulo(o) { return pad(o.month) + '/' + o.year + ' · ' + (FASES[o.phase] || o.phase); }
+    function esc(t) {
+        return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) {
+            return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c];
+        });
+    }
+    function fase() { var r = form.querySelector('input[name=contestacao_phase]:checked'); return r ? r.value : 'pos'; }
+    function atual() { return {year: +selAno.value, month: +selMes.value, phase: fase()}; }
+    function acha(o) {
+        for (var i = 0; i < VERSOES.length; i++) {
+            var v = VERSOES[i];
+            if (v.year === o.year && v.month === o.month && v.phase === o.phase) return v;
+        }
+        return null;
+    }
+    function campo(nome) { return document.getElementById(nome); }
+    function pulsar(el) { el.classList.remove('sc-pulso'); void el.offsetWidth; el.classList.add('sc-pulso'); }
+    function garantirAno(ano) {
+        if (![].some.call(selAno.options, function (o) { return +o.value === ano; })) {
+            var op = new Option(ano, ano); selAno.add(op);
+        }
+    }
+
+    // ---------------------------------------------------------------- versão
+    function carregarVersao(perguntar) {
+        var a = atual(), v = acha(a), k = chave(a);
+        if (k === carregada) { render(); return; }
+        if (v) {
+            if (editado && perguntar && !confirm('Trocar para ' + rotulo(a) + ' carrega os links dessa versão e descarta o que você digitou. Continuar?')) {
+                render(); return;
+            }
+            CAMPOS_VERSAO.forEach(function (c) { campo(c).value = v[c] || ''; pulsar(campo(c)); });
+            editado = false;
+        } else if (!editado) {
+            // Versão nova: os campos começam vazios — o link do mês passado
+            // esquecido aqui é justamente o erro que se quer evitar.
+            CAMPOS_VERSAO.forEach(function (c) { campo(c).value = ''; });
+        }
+        carregada = k;
+        CAMPOS_VERSAO.forEach(function (c) { delete previas[c]; limparPrevia(c); });
+        render();
+    }
+
+    function ultimaAnterior(a) {
+        var ordenadas = VERSOES.slice().sort(function (x, y) {
+            return (y.year * 100 + y.month) - (x.year * 100 + x.month) || (x.phase === a.phase ? -1 : 1);
+        });
+        for (var i = 0; i < ordenadas.length; i++) {
+            var v = ordenadas[i];
+            if (v.year * 100 + v.month <= a.year * 100 + a.month && chave(v) !== chave(a)) return v;
+        }
+        return ordenadas[0] || null;
+    }
+
+    function renderEstado() {
+        var a = atual(), v = acha(a), caixa = document.getElementById('sc-estado-versao');
+        var copiar = document.getElementById('sc-btn-copiar');
+        if (v) {
+            var liberada = v.status === 'released';
+            caixa.className = 'rounded-xl border px-4 py-3 text-sm flex items-start gap-3 ' +
+                (liberada ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-gray-200 bg-gray-50 text-gray-700');
+            caixa.innerHTML = '<i class="fas ' + (liberada ? 'fa-triangle-exclamation text-amber-500' : 'fa-pen text-gray-400') + ' mt-0.5"></i><div>' +
+                '<strong>Editando ' + esc(rotulo(v)) + '</strong> — ' + (liberada ? 'liberada' + (v.liberado_para ? ' para ' + esc(v.liberado_para) : '') : 'rascunho') +
+                (v.updated_at ? '<span class="text-xs opacity-75"> · atualizada em ' + esc(v.updated_at) + (v.updated_by ? ' por ' + esc(v.updated_by) : '') + '</span>' : '') +
+                (liberada ? '<p class="text-xs mt-1">Salvar volta esta versão para <strong>rascunho</strong>: ela sai do ar até ser liberada de novo.</p>' : '') +
+                '</div>';
+            copiar.classList.add('hidden');
+        } else {
+            caixa.className = 'rounded-xl border px-4 py-3 text-sm flex items-start gap-3 border-purple-200 bg-purple-50 text-purple-900';
+            caixa.innerHTML = '<i class="fas fa-wand-magic-sparkles text-purple-500 mt-0.5"></i><div><strong>Nova versão: ' + esc(rotulo(a)) + '</strong>' +
+                '<p class="text-xs mt-0.5">Ainda não existe. Cole os links abaixo e salve — ela nasce como rascunho e já pode virar o padrão de exibição.</p></div>';
+            var base = ultimaAnterior(a);
+            if (base) {
+                copiar.classList.remove('hidden');
+                copiar.innerHTML = '<i class="fas fa-copy mr-1"></i>Copiar links de ' + esc(pad(base.month) + '/' + base.year + ' · ' + (base.phase === 'antes' ? 'Antes' : 'Pós'));
+                copiar.onclick = function () {
+                    CAMPOS_VERSAO.forEach(function (c) { campo(c).value = base[c] || ''; pulsar(campo(c)); delete previas[c]; limparPrevia(c); });
+                    editado = true; render();
+                };
+            } else {
+                copiar.classList.add('hidden');
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------- links
+    function situacao(el) {
+        var nome = el.dataset.campo, input = campo(nome), valor = input.value.trim();
+        if (!valor) return input.required ? {tom: 'red', texto: 'vazio', icone: 'fa-circle-xmark', bloqueia: true} : {tom: 'gray', texto: 'não configurado', icone: 'fa-minus'};
+        if (!/^https?:\/\//i.test(valor)) return {tom: 'red', texto: 'link inválido', icone: 'fa-circle-xmark', bloqueia: true};
+        var p = previas[nome];
+        if (p && p.url === valor) {
+            if (p.carregando) return {tom: 'gray', texto: 'conferindo…', icone: 'fa-spinner fa-spin'};
+            if (p.resposta.erro) return {tom: 'red', texto: 'não abriu', icone: 'fa-circle-xmark'};
+            if (!p.resposta.ok) return {tom: 'amber', texto: 'faltam abas/colunas', icone: 'fa-triangle-exclamation'};
+            return {tom: 'green', texto: 'conferida · ' + p.resposta.abas.length + ' aba(s)', icone: 'fa-circle-check'};
+        }
+        // Repetido em outro campo desta tela.
+        // Só dentro do mesmo grupo: a BASE_EXCLUSAO da contestação costuma ser o
+        // mesmo arquivo da do comissionamento, de propósito.
+        var repetido = links.filter(function (o) {
+            return o !== el && !!o.dataset.versao === !!el.dataset.versao && campo(o.dataset.campo).value.trim() === valor;
+        })[0];
+        if (repetido) return {tom: 'amber', texto: 'igual a ' + repetido.dataset.rotulo, icone: 'fa-clone'};
+        // Mesmo link de outro mês: o clássico "esqueci de trocar o do mês passado".
+        // A outra fase do mesmo mês pode usar o mesmo arquivo — não conta.
+        if (el.dataset.versao) {
+            var a = atual();
+            var outra = VERSOES.filter(function (v) {
+                return (v.year !== a.year || v.month !== a.month) && v[nome] === valor;
+            })[0];
+            if (outra) return {tom: 'amber', texto: 'mesmo link de ' + pad(outra.month) + '/' + outra.year, icone: 'fa-clock-rotate-left'};
+        }
+        return {tom: 'blue', texto: 'não conferida', icone: 'fa-link'};
+    }
+
+    var TONS = {
+        red: 'bg-red-100 text-red-700', amber: 'bg-amber-100 text-amber-800', green: 'bg-green-100 text-green-700',
+        blue: 'bg-blue-50 text-blue-700', gray: 'bg-gray-100 text-gray-500'
+    };
+
+    function renderLinks() {
+        links.forEach(function (el) {
+            var s = situacao(el), badge = el.querySelector('.sc-link-status');
+            badge.className = 'sc-link-status text-[11px] px-2 py-0.5 rounded-full ' + TONS[s.tom];
+            badge.innerHTML = '<i class="fas ' + s.icone + ' mr-1"></i>' + esc(s.texto);
+            el._situacao = s;
+            var valor = campo(el.dataset.campo).value.trim(), abrir = el.querySelector('.sc-link-abrir');
+            abrir.href = valor || '#';
+            abrir.classList.toggle('pointer-events-none', !valor);
+            abrir.classList.toggle('opacity-40', !valor);
+            el.querySelector('.sc-link-previa').disabled = !valor;
+        });
+    }
+
+    function limparPrevia(nome) {
+        var el = document.querySelector('.sc-link[data-campo="' + nome + '"]');
+        if (!el) return;
+        var r = el.querySelector('.sc-link-resultado');
+        r.classList.add('hidden'); r.innerHTML = '';
+    }
+
+    function desenharPrevia(el, resp) {
+        var r = el.querySelector('.sc-link-resultado');
+        r.classList.remove('hidden');
+        if (resp.erro) {
+            r.innerHTML = '<div class="rounded-lg border border-red-200 bg-red-50 text-red-700 text-xs px-3 py-2"><i class="fas fa-circle-exclamation mr-1"></i>' + esc(resp.erro) + '</div>';
+            return;
+        }
+        var html = '<div class="rounded-xl border border-gray-200 overflow-hidden">';
+        html += '<div class="px-3 py-2 bg-gray-50 border-b border-gray-100 flex flex-wrap items-center gap-1.5">';
+        resp.abas.forEach(function (a) {
+            var cls = a.principal ? 'bg-purple-600 text-white' : (a.esperada ? 'bg-green-100 text-green-700' : 'bg-white border border-gray-200 text-gray-500');
+            html += '<span class="text-[11px] px-2 py-0.5 rounded-md ' + cls + '">' + esc(a.nome) + '</span>';
+        });
+        resp.faltando.forEach(function (n) {
+            html += '<span class="text-[11px] px-2 py-0.5 rounded-md bg-red-100 text-red-700 line-through" title="Aba esperada que não está no arquivo">' + esc(n) + '</span>';
+        });
+        html += '</div>';
+        var msgs = [];
+        if (resp.faltando.length) msgs.push('<span class="text-red-600"><i class="fas fa-circle-xmark mr-1"></i>Faltam as abas: ' + esc(resp.faltando.join(', ')) + '</span>');
+        if (resp.colunas_faltando.length) msgs.push('<span class="text-red-600"><i class="fas fa-circle-xmark mr-1"></i>Faltam as colunas: ' + esc(resp.colunas_faltando.join(', ')) + '</span>');
+        (resp.avisos || []).forEach(function (a) { msgs.push('<span class="text-amber-700"><i class="fas fa-triangle-exclamation mr-1"></i>' + esc(a) + '</span>'); });
+        var principal = resp.abas.filter(function (a) { return a.principal; })[0];
+        if (principal && principal.cabecalho) {
+            msgs.unshift('<span class="text-gray-600"><i class="fas fa-table mr-1"></i>Aba <strong>' + esc(principal.nome) + '</strong>: ' +
+                principal.linhas.toLocaleString('pt-BR') + ' linha(s) · ' + principal.colunas + ' coluna(s)</span>');
+            html += '<div class="overflow-x-auto"><table class="sc-tabela min-w-full text-[11px]"><thead><tr class="bg-gray-50 text-gray-500">';
+            principal.cabecalho.forEach(function (c) { html += '<th class="px-2 py-1.5 text-left font-semibold">' + esc(c) + '</th>'; });
+            html += '</tr></thead><tbody class="divide-y divide-gray-100">';
+            principal.amostra.forEach(function (linha) {
+                html += '<tr>';
+                principal.cabecalho.forEach(function (_, i) { html += '<td class="px-2 py-1 text-gray-700">' + esc(linha[i] || '') + '</td>'; });
+                html += '</tr>';
+            });
+            if (!principal.amostra.length) html += '<tr><td class="px-2 py-2 text-gray-400" colspan="' + principal.cabecalho.length + '">sem linhas de dados</td></tr>';
+            html += '</tbody></table></div>';
+        }
+        if (msgs.length) html += '<div class="px-3 py-2 border-t border-gray-100 text-xs flex flex-col gap-1">' + msgs.join('') + '</div>';
+        html += '</div>';
+        r.innerHTML = html;
+    }
+
+    function previa(el) {
+        var nome = el.dataset.campo, valor = campo(nome).value.trim();
+        if (!valor) return Promise.resolve();
+        previas[nome] = {url: valor, carregando: true, resposta: {}};
+        var r = el.querySelector('.sc-link-resultado');
+        r.classList.remove('hidden');
+        r.innerHTML = '<div class="text-xs text-gray-500 px-1"><i class="fas fa-spinner fa-spin mr-1"></i>Baixando a planilha do OneDrive…</div>';
+        render();
+        var dados = new FormData();
+        dados.append('url', valor); dados.append('tipo', nome);
+        dados.append('csrfmiddlewaretoken', form.querySelector('[name=csrfmiddlewaretoken]').value);
+        return fetch(URL_PREVIA, {method: 'POST', body: dados, credentials: 'same-origin'})
+            .then(function (resp) { return resp.json(); })
+            .catch(function () { return {erro: 'Não deu para falar com o servidor agora.', abas: [], faltando: [], colunas_faltando: []}; })
+            .then(function (resp) {
+                if (campo(nome).value.trim() !== valor) return;   // mudou enquanto baixava
+                previas[nome] = {url: valor, resposta: resp};
+                desenharPrevia(el, resp);
+                render();
+            });
+    }
+
+    // ---------------------------------------------------------- exibição
+    function referencias() {
+        var lista = VERSOES.map(function (v) { return {year: v.year, month: v.month, phase: v.phase, status: v.status, nova: false}; });
+        var a = atual();
+        if (!acha(a)) lista.push({year: a.year, month: a.month, phase: a.phase, status: 'draft', nova: true});
+        lista.sort(function (x, y) { return (y.year * 100 + y.month) - (x.year * 100 + x.month) || (x.phase === 'pos' ? -1 : 1); });
+        return lista;
+    }
+
+    function renderRefs() {
+        var lista = referencias(), caixa = document.getElementById('sc-refs');
+        if (!lista.some(function (r) { return chave(r) === exibicao; })) exibicao = chave(EXIB);
+        var limite = 6, mais = document.getElementById('sc-refs-mais');
+        var visiveis = mostrarTodas ? lista : lista.filter(function (r, i) {
+            return i < limite || r.nova || chave(r) === exibicao;
+        });
+        caixa.innerHTML = visiveis.map(function (r) {
+            var k = chave(r), status;
+            if (r.nova) status = '<span class="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 font-semibold">NOVA · ao salvar</span>';
+            else if (r.status === 'released') status = '<span class="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700 font-semibold">LIBERADA</span>';
+            else status = '<span class="text-[10px] px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-800 font-semibold">RASCUNHO</span>';
+            var faseCls = r.phase === 'antes' ? 'text-amber-700' : 'text-emerald-700';
+            return '<label class="sc-ref cursor-pointer block">' +
+                '<input type="radio" name="sc_ref" value="' + k + '" class="sr-only"' + (k === exibicao ? ' checked' : '') + '>' +
+                '<div class="h-full rounded-xl border ' + (r.nova ? 'border-dashed border-purple-300' : 'border-gray-200') + ' px-4 py-3 flex items-center gap-3 hover:bg-gray-50 transition-shadow">' +
+                '<span class="sc-ref-marca relative w-4 h-4 rounded-full border-2 border-gray-300 flex-shrink-0"></span>' +
+                '<span class="flex-1 min-w-0"><span class="block text-sm font-semibold text-gray-800">' + MESES[r.month] + ' ' + r.year +
+                (k === chave(EXIB) ? ' <span class="text-[10px] font-normal text-gray-400">(em exibição)</span>' : '') + '</span>' +
+                '<span class="block text-xs ' + faseCls + '">' + FASES[r.phase] + '</span></span>' + status + '</div></label>';
+        }).join('');
+        var escondidas = lista.length - visiveis.length;
+        mais.classList.toggle('hidden', !escondidas && !mostrarTodas);
+        mais.textContent = mostrarTodas ? 'Mostrar menos' : 'Mostrar todas (' + lista.length + ')';
+        document.getElementById('sc-display-ref').value = exibicao;
+    }
+
+    // ---------------------------------------------------- painel e mock
+    function renderResumo() {
+        var a = atual(), v = acha(a), partes = exibicao.split('-');
+        var ex = {year: +partes[0], month: +partes[1], phase: partes[2]};
+        var exV = acha(ex), mudou = exibicao !== chave(EXIB);
+        var faltando = 0, alertas = 0, itens = '';
+        links.forEach(function (el) {
+            var s = el._situacao || situacao(el);
+            // Só vazio ou link inválido trava o salvar; planilha que não abriu na
+            // prévia é aviso (o OneDrive às vezes falha e volta).
+            if (s.bloqueia) faltando++;
+            else if (s.tom === 'amber' || s.tom === 'red') alertas++;
+            var cor = {red: 'text-red-500', amber: 'text-amber-500', green: 'text-green-600', blue: 'text-blue-500', gray: 'text-gray-300'}[s.tom];
+            itens += '<li class="flex items-center gap-2 text-xs"><i class="fas ' + s.icone + ' ' + cor + ' w-3.5"></i>' +
+                '<span class="text-gray-700 truncate flex-1">' + esc(el.dataset.rotulo) + '</span><span class="text-gray-400 whitespace-nowrap">' + esc(s.texto) + '</span></li>';
+        });
+
+        var html = '';
+        html += '<div><p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Versão</p>' +
+            '<p class="font-semibold text-gray-900">' + esc(rotulo(a)) + '</p>' +
+            '<p class="text-xs ' + (v ? (v.status === 'released' ? 'text-amber-700' : 'text-gray-500') : 'text-purple-700') + '">' +
+            (v ? (v.status === 'released' ? 'Sobrescreve a versão liberada e volta para rascunho' : 'Sobrescreve o rascunho existente') : 'Será criada como rascunho') + '</p></div>';
+
+        html += '<div><p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Usuários veem ao abrir</p>' +
+            '<p class="font-semibold text-gray-900">' + esc(rotulo(ex)) + (mudou ? ' <span class="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 align-middle">muda</span>' : '') + '</p>';
+        if (mudou) html += '<p class="text-xs text-gray-500">Hoje: ' + esc(rotulo(EXIB)) + '</p>';
+        if (!exV || exV.status !== 'released') {
+            html += '<p class="text-xs text-amber-700 mt-1"><i class="fas fa-triangle-exclamation mr-1"></i>Ainda não está liberada: até liberar em ' +
+                '<a href="#sc-liberar" class="underline">Liberar Comissionamento</a>, os usuários seguem na versão liberada mais recente.</p>';
+        }
+        html += '</div>';
+
+        html += '<div><p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Links</p><ul class="space-y-1.5">' + itens + '</ul>';
+        if (faltando) html += '<p class="text-xs text-red-600 mt-2"><i class="fas fa-circle-xmark mr-1"></i>' + faltando + ' link(s) obrigatório(s) vazio(s) ou inválido(s).</p>';
+        else if (alertas) html += '<p class="text-xs text-amber-700 mt-2"><i class="fas fa-triangle-exclamation mr-1"></i>Confira os avisos antes de salvar.</p>';
+        html += '</div>';
+        document.getElementById('sc-resumo').innerHTML = html;
+
+        var botao = document.getElementById('sc-salvar');
+        botao.disabled = faltando > 0;
+        botao.querySelector('span').textContent = (v ? 'Salvar versão ' : 'Criar versão ') + pad(a.month) + '/' + a.year;
+
+        // Uma miniatura do filtro do /users/commission com o padrão escolhido.
+        var mock = '<div class="rounded-xl border border-gray-200 bg-gray-50 p-3">' +
+            '<p class="text-xs font-bold text-gray-800 mb-2"><i class="fas fa-sack-dollar text-purple-600 mr-1"></i>Comissionamento</p>' +
+            '<div class="flex flex-wrap gap-1.5 mb-2">' +
+            '<span class="text-[11px] px-2 py-1 rounded-md bg-white border border-gray-200 text-gray-700">' + MESES[ex.month] + ' <i class="fas fa-chevron-down text-[8px] text-gray-400 ml-1"></i></span>' +
+            '<span class="text-[11px] px-2 py-1 rounded-md bg-white border border-gray-200 text-gray-700">' + ex.year + ' <i class="fas fa-chevron-down text-[8px] text-gray-400 ml-1"></i></span></div>' +
+            '<div class="grid grid-cols-2 gap-1 p-0.5 rounded-md bg-white border border-gray-200">' +
+            ['antes', 'pos'].map(function (f) {
+                return '<span class="text-center text-[10px] py-1 rounded ' + (f === ex.phase ? 'bg-purple-600 text-white font-semibold' : 'text-gray-500') + '">' + FASES[f] + '</span>';
+            }).join('') + '</div>' +
+            (ex.phase === 'antes' ? '<p class="text-[10px] text-amber-700 mt-2"><i class="fas fa-circle-info mr-1"></i>Abre na prévia, antes da contestação.</p>' : '') +
+            '</div>';
+        document.getElementById('sc-mock').innerHTML = mock;
+        document.getElementById('sc-chip-exibicao').textContent = rotulo(EXIB);
+    }
+
+    function render() { renderEstado(); renderLinks(); renderRefs(); renderResumo(); }
+
+    // ------------------------------------------------------------ eventos
+    selMes.addEventListener('change', function () { carregarVersao(true); });
+    selAno.addEventListener('change', function () { carregarVersao(true); });
+    form.querySelectorAll('input[name=contestacao_phase]').forEach(function (r) {
+        r.addEventListener('change', function () { carregarVersao(true); });
+    });
+    links.forEach(function (el) {
+        var input = campo(el.dataset.campo);
+        input.addEventListener('input', function () {
+            if (el.dataset.versao) editado = true;
+            limparPrevia(el.dataset.campo);
+            render();
+        });
+        // Colou um link: já confere.
+        input.addEventListener('paste', function () { setTimeout(function () { if (input.value.trim()) previa(el); }, 0); });
+        el.querySelector('.sc-link-previa').addEventListener('click', function () { previa(el); });
+    });
+    document.getElementById('sc-refs').addEventListener('change', function (e) {
+        if (e.target.name === 'sc_ref') { exibicao = e.target.value; renderRefs(); renderResumo(); }
+    });
+    document.getElementById('sc-refs-mais').addEventListener('click', function () { mostrarTodas = !mostrarTodas; renderRefs(); });
+    document.getElementById('sc-btn-previa-todas').addEventListener('click', function () {
+        links.filter(function (el) { return campo(el.dataset.campo).value.trim(); })
+            .reduce(function (fila, el) { return fila.then(function () { return previa(el); }); }, Promise.resolve());
+    });
+    document.getElementById('sc-btn-proximo').addEventListener('click', function () {
+        // O mês seguinte ao mais recente cadastrado (ou ao em exibição).
+        var base = VERSOES.reduce(function (m, v) { return Math.max(m, v.year * 12 + v.month - 1); }, EXIB.year * 12 + EXIB.month - 1) + 1;
+        var ano = Math.floor(base / 12), mes = base % 12 + 1;
+        garantirAno(ano);
+        selAno.value = ano; selMes.value = mes;
+        form.querySelector('input[name=contestacao_phase][value=antes]').checked = true;
+        carregarVersao(true);
+        pulsar(selMes); pulsar(selAno);
+    });
+    document.getElementById('sc-btn-exibicao').addEventListener('click', function () {
+        garantirAno(EXIB.year);
+        selAno.value = EXIB.year; selMes.value = EXIB.month;
+        form.querySelector('input[name=contestacao_phase][value="' + EXIB.phase + '"]').checked = true;
+        carregarVersao(true);
+    });
+    form.addEventListener('submit', function (e) {
+        var v = acha(atual());
+        document.getElementById('sc-display-ref').value = exibicao;
+        if (v && v.status === 'released' &&
+            !confirm('A versão ' + rotulo(v) + ' está liberada. Salvar volta para rascunho e ela sai do ar até ser liberada de novo. Continuar?')) {
+            e.preventDefault(); return;
+        }
+        var b = document.getElementById('sc-salvar');
+        setTimeout(function () { b.disabled = true; b.querySelector('span').textContent = 'Salvando…'; }, 0);
+    });
+
+    carregada = chave(atual());
+    render();
+})();
+</script>
 
 {% endblock %}

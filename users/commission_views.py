@@ -187,13 +187,22 @@ def resolve_commission_reference_from_request(request):
     phase_options = [{'value': fase, 'label': rotulos_fase[fase]}
                      for fase in ('antes', 'pos') if fase in fases_liberadas]
 
+    # Fase padrão: a escolhida no "Padrão de Exibição" de /users/manage/system-config/
+    # quando a referência é a padrão e essa fase está liberada para a pessoa;
+    # senão a Pós (versão fechada), como sempre foi.
+    fase_padrao = 'pos' if 'pos' in fases_liberadas else sorted(fases_liberadas)[0]
+    fase_configurada = config.get_display_reference_phase()
+    if (fase_configurada in fases_liberadas
+            and (selected_year, selected_month) == (default_year, default_month)):
+        fase_padrao = fase_configurada
+
     # Pediu uma fase que não está liberada para ela: volta para a que está.
     if selected_phase_raw in fases_liberadas:
         selected_phase = selected_phase_raw
     else:
         if selected_phase_raw in ('antes', 'pos'):
             invalid_selection = True
-        selected_phase = 'pos' if 'pos' in fases_liberadas else sorted(fases_liberadas)[0]
+        selected_phase = fase_padrao
 
     # Sem versões cadastradas: mantém fallback visual coerente.
     if not month_options:

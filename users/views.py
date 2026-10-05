@@ -3581,11 +3581,18 @@ def system_config_view(request):
     config = SystemConfig.get_config()
     display_ref_year, display_ref_month = config.get_display_reference_month_year(base_date=timezone.now())
 
-    active_version = CommissionSpreadsheetVersion.objects.filter(
-        year=display_ref_year,
-        month=display_ref_month,
-    ).first()
-    commission_versions = CommissionSpreadsheetVersion.objects.select_related('updated_by').all()
+    display_ref_phase = config.get_display_reference_phase()
+    # A versão que os usuários veem por padrão: mês/ano + fase. Sem fase
+    # escolhida, a Pós (versão fechada) ganha — a mesma regra do /users/commission.
+    versoes_do_mes = list(CommissionSpreadsheetVersion.objects.filter(
+        year=display_ref_year, month=display_ref_month))
+    active_version = (
+        next((v for v in versoes_do_mes if v.contestacao_phase == display_ref_phase), None)
+        or next((v for v in versoes_do_mes if v.contestacao_phase == 'pos'), None)
+        or (versoes_do_mes[0] if versoes_do_mes else None)
+    )
+    commission_versions = CommissionSpreadsheetVersion.objects.select_related(
+        'updated_by', 'released_by').all()
 
     available_references = list(
         CommissionSpreadsheetVersion.objects.values('year', 'month').order_by('-year', '-month')
@@ -3598,6 +3605,15 @@ def system_config_view(request):
         selected_year = request.POST.get('version_year', '').strip()
         display_month = request.POST.get('display_reference_month', '').strip()
         display_year = request.POST.get('display_reference_year', '').strip()
+        display_phase = request.POST.get('display_reference_phase', '').strip()
+        # A tela nova manda o padrão de exibição num campo só: "AAAA-MM-fase".
+        display_ref = request.POST.get('display_ref', '').strip()
+        if display_ref:
+            partes = display_ref.split('-')
+            if len(partes) == 3:
+                display_year, display_month, display_phase = partes
+        if display_phase not in ('antes', 'pos'):
+            display_phase = ''
 
         try:
             selected_month_int = int(selected_month)
@@ -3629,13 +3645,20 @@ def system_config_view(request):
             messages.error(request, 'Mês de exibição inválido. Use um valor entre 1 e 12.')
             return redirect('system_config')
 
+        selected_phase_post = request.POST.get('contestacao_phase', 'pos').strip()
+        if selected_phase_post not in ('antes', 'pos'):
+            selected_phase_post = 'pos'
         display_matches_selected_version = (
             display_year_int == selected_year_int and display_month_int == selected_month_int
+            and display_phase in ('', selected_phase_post)
         )
-        display_version_exists = CommissionSpreadsheetVersion.objects.filter(
+        display_versions = CommissionSpreadsheetVersion.objects.filter(
             year=display_year_int,
             month=display_month_int,
-        ).exists()
+        )
+        if display_phase:
+            display_versions = display_versions.filter(contestacao_phase=display_phase)
+        display_version_exists = display_versions.exists()
         if not (display_matches_selected_version or display_version_exists):
             messages.error(request, 'Selecione mês e ano de exibição já disponíveis no histórico de versões.')
             return redirect('system_config')
@@ -3682,6 +3705,7 @@ def system_config_view(request):
                 config.excel_contestacao_base_pagamento_url = request.POST.get('excel_contestacao_base_pagamento_url', '').strip()
                 config.display_reference_month = display_month_int
                 config.display_reference_year = display_year_int
+                config.display_reference_phase = display_phase
                 config.updated_by = request.user
                 config.save()
 
@@ -3690,40 +3714,45 @@ def system_config_view(request):
             messages.error(request, f'Erro ao salvar histórico completo dos usuários: {exc}')
             return redirect('system_config')
         
-        # Limpar cache das planilhas para forçar reload
-        from django.core.cache import cache
-        cache.delete_many([
-            'comissao_REMUNERAÇÃO CN_file_content',
-            'comissao_REMUNERAÇÃO GERENTE_file_content', 
-            'base_pagamento_file_content',
-            'base_exclusao_file_content',
-            'contestacao_base_exclusao_content',
-            'vendas_file_content',
-        ])
-        
+        # Limpa o cache das planilhas e dos dados já lidos: é o que o antigo
+        # botão "Limpar Cache" fazia, e por isso ele saiu da tela.
+        from users.commission_config import limpar_cache_comissionamento
+        limpar_cache_comissionamento()
+
         operation = 'atualizada' if not created else 'criada'
+        fases = dict(CommissionSpreadsheetVersion.CONTESTACAO_PHASE_CHOICES)
+        fase_exibicao = f' · {fases[display_phase]}' if display_phase else ''
         messages.success(
             request,
             (
-                f'Versão {selected_month_int:02d}/{selected_year_int} {operation} como RASCUNHO. '
-                f'Padrão de exibição definido para {display_month_int:02d}/{display_year_int}. '
+                f'Versão {selected_month_int:02d}/{selected_year_int} ({fases[selected_phase]}) {operation} como RASCUNHO. '
+                f'Padrão de exibição definido para {display_month_int:02d}/{display_year_int}{fase_exibicao}. '
                 f'Histórico salvo para {snapshot_count} usuários. O cache foi limpo. '
                 f'A versão só ficará visível para os usuários após clicar em "Liberar Comissionamento".'
             )
         )
-        return redirect('system_config')
+        return redirect(f"{reverse('system_config')}?versao={version_obj.pk}")
 
-    if active_version:
+    # A versão aberta no formulário: a que acabou de ser salva (?versao=) ou a
+    # que está em exibição. Trocar mês/ano/fase na tela carrega as outras sem
+    # recarregar (os dados de todas vão para o JavaScript em `versoes_json`).
+    editing_version = None
+    versao_pedida = request.GET.get('versao', '')
+    if versao_pedida.isdigit():
+        editing_version = commission_versions.filter(pk=int(versao_pedida)).first()
+    editing_version = editing_version or active_version
+
+    if editing_version:
         commission_form = {
-            'excel_comissao_url': active_version.excel_comissao_url,
-            'excel_vendas_url': active_version.excel_vendas_url,
-            'excel_base_pagamento_url': active_version.excel_base_pagamento_url,
-            'excel_base_exclusao_url': active_version.excel_base_exclusao_url,
-            'version_month': active_version.month,
-            'version_year': active_version.year,
-            'version_phase': getattr(active_version, 'contestacao_phase', 'pos'),
-            'display_reference_month': config.display_reference_month or active_version.month,
-            'display_reference_year': config.display_reference_year or active_version.year,
+            'excel_comissao_url': editing_version.excel_comissao_url,
+            'excel_vendas_url': editing_version.excel_vendas_url,
+            'excel_base_pagamento_url': editing_version.excel_base_pagamento_url,
+            'excel_base_exclusao_url': editing_version.excel_base_exclusao_url,
+            'version_month': editing_version.month,
+            'version_year': editing_version.year,
+            'version_phase': getattr(editing_version, 'contestacao_phase', 'pos'),
+            'display_reference_month': config.display_reference_month or editing_version.month,
+            'display_reference_year': config.display_reference_year or editing_version.year,
         }
     else:
         commission_form = {
@@ -3765,9 +3794,31 @@ def system_config_view(request):
         year=display_ref_year, month=display_ref_month
     ).order_by('-synced_at').first()
 
+    # Tudo que a tela precisa para reagir sem recarregar: as versões (com os
+    # links) e o padrão de exibição atual.
+    publicos = dict(PUBLICOS)
+    versoes_json = [{
+        'id': v.id, 'year': v.year, 'month': v.month, 'phase': v.contestacao_phase or 'pos',
+        'status': v.status,
+        'liberado_para': publicos.get(getattr(v, 'liberado_para', ''), ''),
+        'excel_comissao_url': v.excel_comissao_url, 'excel_vendas_url': v.excel_vendas_url,
+        'excel_base_pagamento_url': v.excel_base_pagamento_url,
+        'excel_base_exclusao_url': v.excel_base_exclusao_url,
+        'updated_at': timezone.localtime(v.updated_at).strftime('%d/%m/%Y %H:%M') if v.updated_at else '',
+        'updated_by': (v.updated_by.get_full_name() if v.updated_by else ''),
+    } for v in commission_versions]
+    exibicao_atual = {
+        'year': display_ref_year, 'month': display_ref_month,
+        'phase': display_ref_phase or (active_version.contestacao_phase if active_version else 'pos'),
+    }
+
     context = {
         'config': config,
         'commission_form': commission_form,
+        'editing_version': editing_version,
+        'versoes_json': versoes_json,
+        'exibicao_atual': exibicao_atual,
+        'display_ref_phase': display_ref_phase,
         'commission_versions': commission_versions,
         'active_version': active_version,
         'reference_month': display_ref_month,
@@ -3796,6 +3847,17 @@ def system_config_view(request):
     context['informativo'] = InformativoComissao.vigente()
 
     return render(request, 'admin/system_config.html', context)
+
+
+@login_required
+@require_POST
+def previa_planilha_view(request):
+    """Pré-visualização de um link de planilha: abas, cabeçalho e primeiras linhas."""
+    from users.commission_config import previa_planilha
+
+    if request.user.hierarchy != 'SUPERADMIN' and not request.user.is_superuser:
+        return JsonResponse({'ok': False, 'erro': 'Apenas Superadmin.'}, status=403)
+    return JsonResponse(previa_planilha(request.POST.get('url', ''), request.POST.get('tipo', '')))
 
 
 @login_required

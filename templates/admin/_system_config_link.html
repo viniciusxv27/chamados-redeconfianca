@@ -1,0 +1,32 @@
+{% comment %}
+Um link de planilha em /users/manage/system-config/: campo, situação (vazio,
+mesmo link de outra versão, conferido…), abrir e pré-visualizar. O JavaScript
+da página preenche a situação e a prévia.
+
+Parâmetros: campo, rotulo, icone, valor, ajuda, obrigatorio, da_versao.
+{% endcomment %}
+<div class="sc-link" data-campo="{{ campo }}" data-rotulo="{{ rotulo }}"{% if da_versao %} data-versao="1"{% endif %}>
+    <div class="flex items-center justify-between gap-2 mb-1.5 flex-wrap">
+        <label for="{{ campo }}" class="flex items-center gap-2 text-sm font-semibold text-gray-700">
+            <i class="fas {{ icone }} text-green-600"></i>{{ rotulo }}
+            {% if not obrigatorio %}<span class="text-[10px] font-normal text-gray-400">opcional</span>{% endif %}
+        </label>
+        <span class="sc-link-status text-[11px] px-2 py-0.5 rounded-full"></span>
+    </div>
+    <div class="flex items-stretch gap-2">
+        <input type="url" name="{{ campo }}" id="{{ campo }}" value="{{ valor|default:'' }}"
+               {% if obrigatorio %}required{% endif %} autocomplete="off" spellcheck="false"
+               placeholder="https://1drv.ms/x/..."
+               class="sc-link-input flex-1 min-w-0 px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm font-mono">
+        <a href="#" target="_blank" rel="noopener" title="Abrir no OneDrive"
+           class="sc-link-abrir flex items-center px-3 rounded-lg border border-gray-200 text-gray-500 hover:text-purple-700 hover:bg-purple-50">
+            <i class="fas fa-arrow-up-right-from-square text-xs"></i>
+        </a>
+        <button type="button" title="Pré-visualizar a planilha"
+                class="sc-link-previa flex items-center gap-1.5 px-3 rounded-lg border border-green-200 bg-green-50 text-green-700 hover:bg-green-100 text-xs font-medium whitespace-nowrap">
+            <i class="fas fa-table-cells"></i><span class="hidden sm:inline">Pré-visualizar</span>
+        </button>
+    </div>
+    <p class="text-xs text-gray-500 mt-1">{{ ajuda }}</p>
+    <div class="sc-link-resultado hidden mt-3"></div>
+</div>

@@ -89,6 +89,7 @@ urlpatterns = [
          name='informativo_comissao'),
     path('manage/system-config/visoes-comissionamento/', views.commission_visoes_config_view, name='commission_visoes_config'),
     path('manage/system-config/sync-table/', views.sync_commission_table_view, name='sync_commission_table'),
+    path('manage/system-config/previa-planilha/', views.previa_planilha_view, name='system_config_previa'),
     path('manage/comissionamento-a-parte/', views.aparte_config_view, name='aparte_config'),
     path('manage/tutorials/', views.manage_tutorials_view, name='manage_tutorials'),
     path('manage/tutorials/create/', views.create_tutorial_view, name='create_tutorial'),
