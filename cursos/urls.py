@@ -17,6 +17,7 @@ urlpatterns = [
     path('gestao/comprovante/<int:comprovante_id>/revisar/', views.revisar_comprovante,
          name='revisar_comprovante'),
     path('gestao/aprovar-lote/', views.aprovar_lote, name='aprovar_lote'),
+    path('gestao/cobrar/', views.cobrar_whatsapp, name='cobrar_whatsapp'),
 
     path('configuracao/', views.configuracao, name='configuracao'),
 ]

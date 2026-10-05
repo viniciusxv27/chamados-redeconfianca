@@ -218,19 +218,7 @@
                 {% endcomment %}
                 {% if colegas_parceria %}
                 <div class="sm:col-span-2">
-                    <label class="block text-sm font-medium text-gray-700 mb-1">
-                        Chamar colega para fazer junto
-                        <span class="text-xs text-gray-400 font-normal">— ele recebe o convite e aceita</span>
-                    </label>
-                    <select name="parceiros" multiple size="4"
-                            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                        {% for c in colegas_parceria %}
-                        <option value="{{ c.id }}">{{ c.get_full_name|default:c.email }}</option>
-                        {% endfor %}
-                    </select>
-                    <p class="text-[11px] text-gray-400 mt-1">
-                        Colegas do seu setor. Segure Ctrl (ou Cmd) para escolher mais de um.
-                    </p>
+                    {% include 'impulso/_seletor_pessoas.html' with nome='parceiros' pessoas=colegas_parceria escolhidos=vazio rotulo='Chamar colega para fazer junto' ajuda='Opcional. Colegas do seu setor — cada um recebe o convite e precisa aceitar.' %}
                 </div>
                 {% endif %}
 

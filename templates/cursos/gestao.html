@@ -65,6 +65,10 @@
                class="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">
                 <i class="fas fa-file-csv mr-1.5"></i>Exportar CSV
             </a>
+            <a href="{% url 'cursos:cobrar_whatsapp' %}?curso={{ curso.id }}"
+               class="px-3 py-2 rounded-lg border border-green-200 text-sm text-green-700 hover:bg-green-50">
+                <i class="fab fa-whatsapp mr-1.5"></i>Cobrar no WhatsApp
+            </a>
             <a href="{% url 'cursos:curso_editar' curso.id %}"
                class="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">
                 <i class="fas fa-pen mr-1.5"></i>Editar curso

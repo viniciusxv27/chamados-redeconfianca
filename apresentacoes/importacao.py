@@ -106,6 +106,152 @@ def texto_do_pptx(conteudo, limite=30000):
 
 
 # ---------------------------------------------------------------------------
+# Planilhas (material base): cada aba vira uma tabela em texto, "a | b | c"
+# ---------------------------------------------------------------------------
+EXTENSOES_PLANILHA = {'.xlsx', '.xlsm', '.csv', '.ods'}
+MAX_ABAS = 20
+MAX_LINHAS_ABA = 500                    # linhas com conteúdo, contando o cabeçalho
+MAX_COLUNAS = 40
+
+
+def _valor_da_celula(valor):
+    """Célula → texto curto numa linha só (data no formato daqui, número sem ".0" sobrando)."""
+    from datetime import date, datetime, time
+    if valor is None:
+        return ''
+    if isinstance(valor, bool):
+        return 'sim' if valor else 'não'
+    if isinstance(valor, datetime):
+        return valor.strftime('%d/%m/%Y %H:%M' if (valor.hour, valor.minute) != (0, 0) else '%d/%m/%Y')
+    if isinstance(valor, date):
+        return valor.strftime('%d/%m/%Y')
+    if isinstance(valor, time):
+        return valor.strftime('%H:%M')
+    if isinstance(valor, float):
+        return str(int(valor)) if valor.is_integer() else format(valor, '.10g')
+    # "|" separa as colunas no texto; quebra de linha dentro da célula vira espaço.
+    return ' '.join(str(valor).replace('|', '/').split())[:300]
+
+
+def _tabela_em_texto(nome, linhas):
+    """Linhas (listas de valores) → bloco da aba: nome, cabeçalho e linhas, cortando no limite."""
+    partes, total, colunas_cortadas = [], 0, False
+    for linha in linhas:
+        # Formatação "até a coluna XFD" faz a linha vir com milhares de None: olha só o começo.
+        celulas = [_valor_da_celula(v) for v in linha[:MAX_COLUNAS * 5]]
+        while celulas and not celulas[-1]:
+            celulas.pop()
+        if not celulas:                                         # linha vazia não gasta o limite
+            continue
+        total += 1
+        if total > MAX_LINHAS_ABA:
+            continue                                            # só conta o que ficou de fora
+        if len(celulas) > MAX_COLUNAS:
+            celulas, colunas_cortadas = celulas[:MAX_COLUNAS], True
+        prefixo = 'Cabeçalho: ' if total == 1 else f'Linha {total}: '
+        partes.append(prefixo + ' | '.join(celulas))
+    if not partes:
+        return f'Aba "{nome}": (vazia)'
+    titulo = f'Aba "{nome}" ({total} linhas com conteúdo)'
+    if total > MAX_LINHAS_ABA:
+        partes.append(f'[aba cortada: só as primeiras {MAX_LINHAS_ABA} de {total} linhas foram enviadas]')
+    if colunas_cortadas:
+        partes.append(f'[colunas cortadas: só as primeiras {MAX_COLUNAS} foram enviadas]')
+    return titulo + ':\n' + '\n'.join(partes)
+
+
+def _abas_do_xlsx(conteudo):
+    from openpyxl import load_workbook
+    # data_only: fórmula entra pelo último valor calculado (o que o Excel salvou), não pelo "=SOMA(...)".
+    livro = load_workbook(io.BytesIO(conteudo), read_only=True, data_only=True)
+    try:
+        for aba in livro.worksheets[:MAX_ABAS + 1]:
+            if hasattr(aba, 'reset_dimensions'):
+                aba.reset_dimensions()                          # dimensão gravada errada (ex.: "A1") esconde linhas
+            yield aba.title, aba.iter_rows(values_only=True)
+    finally:
+        livro.close()
+
+
+def _abas_do_csv(conteudo):
+    import csv
+    try:
+        texto = conteudo.decode('utf-8-sig')
+    except UnicodeDecodeError:
+        texto = conteudo.decode('latin-1')                     # o "CSV do Excel" daqui costuma vir assim
+    amostra = texto[:20000]
+    try:
+        dialeto = csv.Sniffer().sniff(amostra, delimiters=';,\t')
+    except csv.Error:                                           # uma coluna só, ou amostra ambígua
+        class dialeto(csv.excel):
+            delimiter = ';' if amostra.count(';') >= amostra.count(',') else ','
+    yield 'CSV', csv.reader(io.StringIO(texto), dialeto)
+
+
+def _abas_do_ods(conteudo):
+    """ODS lido direto do content.xml (sem odfpy); repetição de linha/coluna vazia é limitada."""
+    from lxml import etree
+    ns = {'table': 'urn:oasis:names:tc:opendocument:xmlns:table:1.0',
+          'office': 'urn:oasis:names:tc:opendocument:xmlns:office:1.0',
+          'text': 'urn:oasis:names:tc:opendocument:xmlns:text:1.0'}
+
+    def atributo(el, prefixo, nome):
+        return el.get(f'{{{ns[prefixo]}}}{nome}')
+
+    def celula(el):
+        tipo = atributo(el, 'office', 'value-type')
+        if tipo in ('float', 'percentage', 'currency'):
+            try:
+                return float(atributo(el, 'office', 'value'))
+            except (TypeError, ValueError):
+                pass
+        return '\n'.join(''.join(p.itertext()) for p in el.findall('text:p', ns))
+
+    def linhas(tabela):
+        for linha in tabela.iter(f'{{{ns["table"]}}}table-row'):
+            valores = []
+            for el in linha:
+                if el.tag not in (f'{{{ns["table"]}}}table-cell', f'{{{ns["table"]}}}covered-table-cell'):
+                    continue
+                repete = min(int(atributo(el, 'table', 'number-columns-repeated') or 1), MAX_COLUNAS + 1)
+                valores.extend([celula(el)] * repete)
+                if len(valores) > MAX_COLUNAS:
+                    break
+            repete = min(int(atributo(linha, 'table', 'number-rows-repeated') or 1), MAX_LINHAS_ABA + 1)
+            for _ in range(repete if any(valores) else 1):
+                yield valores
+
+    with zipfile.ZipFile(io.BytesIO(conteudo)) as pacote:
+        raiz = etree.fromstring(pacote.read('content.xml'), etree.XMLParser(resolve_entities=False, huge_tree=True))
+    for tabela in raiz.findall('.//table:table', ns)[:MAX_ABAS + 1]:
+        yield atributo(tabela, 'table', 'name') or 'Planilha', linhas(tabela)
+
+
+def texto_de_planilha(conteudo, extensao, limite=30000):
+    """Planilha (xlsx, csv, ods) → texto tabular para a IA: aba por aba, cabeçalho e linhas.
+
+    Corta em MAX_ABAS abas, MAX_LINHAS_ABA linhas por aba, MAX_COLUNAS colunas e `limite`
+    caracteres no total, sempre avisando no próprio texto o que ficou de fora. Levanta
+    exceção se o arquivo não abrir (o chamador avisa a pessoa)."""
+    leitor = {'.xlsx': _abas_do_xlsx, '.xlsm': _abas_do_xlsx, '.csv': _abas_do_csv, '.ods': _abas_do_ods}[extensao]
+    blocos, abas = [], 0
+    for nome, linhas in leitor(conteudo):
+        abas += 1
+        if abas > MAX_ABAS:
+            blocos.append(f'[planilha cortada: só as primeiras {MAX_ABAS} abas foram enviadas]')
+            break
+        blocos.append(_tabela_em_texto(nome, linhas))
+        if sum(len(b) for b in blocos) > limite:
+            break
+    texto = 'Planilha (colunas separadas por " | "; a primeira linha com conteúdo é o cabeçalho)\n\n' + \
+        '\n\n'.join(blocos)
+    if len(texto) > limite:
+        aviso = f'\n[planilha cortada: passou de {limite:,} caracteres; o restante não foi enviado]'.replace(',', '.')
+        texto = texto[:limite - len(aviso)].rsplit('\n', 1)[0] + aviso
+    return texto
+
+
+# ---------------------------------------------------------------------------
 # Refino das caixas pela imagem
 # ---------------------------------------------------------------------------
 def refinar_caixa(pixels, x, y, w, h):

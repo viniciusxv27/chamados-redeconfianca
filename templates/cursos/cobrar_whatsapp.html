@@ -1,0 +1,172 @@
+{% extends 'base.html' %}
+{% block title %}Cursos — cobrar no WhatsApp{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 py-6">
+
+    <a href="{% url 'cursos:gestao' %}{% if curso %}?curso={{ curso.id }}{% endif %}"
+       class="text-sm text-gray-500 hover:text-gray-700 mb-3 inline-block">
+        <i class="fas fa-arrow-left mr-1.5"></i>Voltar ao quadro
+    </a>
+
+    <h1 class="text-xl font-bold text-gray-800 mb-1">
+        <i class="fab fa-whatsapp text-green-600 mr-2"></i>Cobrar no WhatsApp
+    </h1>
+    <p class="text-sm text-gray-500 mb-5">
+        Uma mensagem por loja, no grupo de gestão dela, com quem ainda não mandou o comprovante.
+        Confira o texto antes de enviar.
+    </p>
+
+    {% if messages %}
+        {% for message in messages %}
+        <div role="alert" class="mb-4 p-3 rounded-xl text-sm
+             {% if message.tags == 'success' %}bg-green-50 border border-green-100 text-green-800
+             {% elif message.tags == 'info' %}bg-sky-50 border border-sky-100 text-sky-800
+             {% else %}bg-red-50 border border-red-100 text-red-700{% endif %}">{{ message }}</div>
+        {% endfor %}
+    {% endif %}
+
+    {% if sem_canal %}
+    <div class="mb-4 p-3 rounded-xl text-sm bg-red-50 border border-red-100 text-red-700">
+        O WhatsApp não está configurado neste servidor (falta {{ sem_canal|join:', ' }}): dá para ver a
+        prévia, mas nada sai daqui.
+    </div>
+    {% endif %}
+
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 mb-4">
+        <form method="get" class="flex flex-wrap items-end gap-3">
+            <div class="flex-1 min-w-0">
+                <label class="block text-xs font-semibold text-gray-500 mb-1">Cobrar</label>
+                <select name="curso" onchange="this.form.submit()"
+                        class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm">
+                    <option value="" {% if not curso %}selected{% endif %}>Todos os cursos em aberto</option>
+                    {% for c in todos_cursos %}
+                    <option value="{{ c.id }}" {% if curso and c.id == curso.id %}selected{% endif %}>
+                        {{ c.titulo }} — prazo {{ c.prazo|date:'d/m/Y' }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+        </form>
+        <p class="text-[11px] text-gray-500 mt-2">
+            {% if cfg.cobranca_automatica %}
+            <i class="fas fa-clock mr-1 text-green-600"></i>A cobrança automática está <strong>ligada</strong>
+            ({{ cfg.cobranca_hora|time:'H:i' }}).
+            {% else %}
+            <i class="fas fa-clock mr-1"></i>A cobrança automática está desligada.
+            {% endif %}
+            {% if is_superadmin %}<a href="{% url 'cursos:configuracao' %}" class="text-purple-600 hover:underline ml-1">Grupos e agenda</a>{% endif %}
+        </p>
+    </div>
+
+    {% if not dados.lojas %}
+    <div class="bg-white rounded-2xl border border-gray-100 p-10 text-center mb-6">
+        <i class="fas fa-circle-check text-3xl text-green-400 mb-3 block"></i>
+        <p class="text-sm text-gray-500">
+            {% if cursos %}Ninguém para cobrar: todo mundo já mandou o comprovante.{% else %}Nenhum curso em aberto.{% endif %}
+        </p>
+    </div>
+    {% else %}
+    <form method="post" id="crs-cobrar">
+        {% csrf_token %}
+        {% if curso %}<input type="hidden" name="curso" value="{{ curso.id }}">{% endif %}
+
+        <div class="flex items-center justify-between gap-3 flex-wrap mb-2">
+            <p class="text-sm text-gray-600">
+                <strong>{{ dados.lojas|length }}</strong> loja{{ dados.lojas|length|pluralize }} com pendência ·
+                <strong>{{ dados.com_grupo }}</strong> com grupo
+            </p>
+            <div class="flex items-center gap-3">
+                <button type="button" onclick="crsMarcar(true)" class="text-[11px] text-purple-600 hover:underline">Marcar todas</button>
+                <button type="button" onclick="crsMarcar(false)" class="text-[11px] text-gray-500 hover:underline">Desmarcar todas</button>
+            </div>
+        </div>
+
+        <div class="space-y-2 mb-4">
+            {% for loja in dados.lojas %}
+            <details class="bg-white rounded-xl border {% if loja.grupo %}border-gray-100{% else %}border-dashed border-gray-200 opacity-70{% endif %} shadow-sm">
+                <summary class="flex items-center gap-3 px-4 py-3 cursor-pointer list-none">
+                    <input type="checkbox" name="setores" value="{{ loja.setor.id }}"
+                           {% if loja.grupo %}checked{% else %}disabled{% endif %}
+                           onclick="event.stopPropagation()"
+                           class="crs-loja rounded text-green-600 focus:ring-green-500">
+                    <span class="flex-1 min-w-0">
+                        <span class="block text-sm font-medium text-gray-800 truncate">{{ loja.setor.name }}</span>
+                        <span class="block text-[11px] text-gray-500">
+                            {% if loja.grupo %}grupo {{ loja.grupo.grupo }}{% else %}sem grupo de WhatsApp — não recebe{% endif %}
+                        </span>
+                    </span>
+                    <span class="text-xs font-semibold px-2 py-1 rounded-lg bg-red-50 text-red-700 flex-shrink-0">
+                        {{ loja.pessoas }} pendente{{ loja.pessoas|pluralize }}
+                    </span>
+                    <i class="fas fa-chevron-down text-gray-300 text-xs flex-shrink-0"></i>
+                </summary>
+                <pre class="mx-4 mb-4 p-3 rounded-lg bg-green-50 text-[13px] text-gray-800 whitespace-pre-wrap break-words font-sans">{{ loja.texto }}</pre>
+            </details>
+            {% endfor %}
+        </div>
+
+        {% if dados.sem_loja %}
+        <p class="text-xs text-gray-500 mb-4">
+            <i class="fas fa-circle-info mr-1"></i>{{ dados.sem_loja }} pessoa{{ dados.sem_loja|pluralize }} pendente{{ dados.sem_loja|pluralize }}
+            sem setor principal no cadastro — não entra{{ dados.sem_loja|pluralize:"m" }} em grupo nenhum.
+        </p>
+        {% endif %}
+
+        <button type="submit" {% if sem_canal or not dados.com_grupo %}disabled{% endif %}
+                class="px-5 py-2.5 rounded-lg bg-green-600 text-white text-sm font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed">
+            <i class="fab fa-whatsapp mr-1.5"></i>Enviar para os grupos marcados
+        </button>
+    </form>
+    {% endif %}
+
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mt-6">
+        <h2 class="text-sm font-semibold text-gray-700 mb-3">
+            <i class="fas fa-clock-rotate-left text-gray-400 mr-1.5"></i>Últimas cobranças
+        </h2>
+        {% if historico %}
+        <div class="divide-y divide-gray-50">
+            {% for c in historico %}
+            <div class="py-2 flex items-start gap-3 text-sm">
+                <span class="flex-shrink-0 mt-0.5">
+                    {% if c.enviado is None %}<i class="fas fa-spinner fa-spin text-gray-400" title="Enviando"></i>
+                    {% elif c.enviado %}<i class="fas fa-check text-green-600" title="Enviada"></i>
+                    {% else %}<i class="fas fa-triangle-exclamation text-red-500" title="Falhou"></i>{% endif %}
+                </span>
+                <span class="flex-1 min-w-0">
+                    <span class="text-gray-800">{{ c.setor.name|default:'Loja apagada' }}</span>
+                    <span class="text-gray-400">· {{ c.pessoas }} pendente{{ c.pessoas|pluralize }}</span>
+                    <span class="block text-[11px] text-gray-500">
+                        {{ c.criado_em|date:'d/m/Y H:i' }} ·
+                        {% if c.origem == 'AUTOMATICA' %}automática{% else %}{{ c.disparado_por.get_full_name|default:'pelo quadro' }}{% endif %}
+                        · {% for k in c.cursos.all %}{{ k.titulo }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                    </span>
+                    {% if c.enviado is False %}<span class="block text-[11px] text-red-600 break-words">{{ c.detalhe }}</span>{% endif %}
+                </span>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-sm text-gray-400">Nenhuma cobrança ainda.</p>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+function crsMarcar(valor) {
+    document.querySelectorAll('.crs-loja:not(:disabled)').forEach(function (el) { el.checked = valor; });
+}
+(function () {
+    var form = document.getElementById('crs-cobrar');
+    if (!form) return;
+    form.addEventListener('submit', function (ev) {
+        var n = form.querySelectorAll('.crs-loja:checked').length;
+        if (!n) { ev.preventDefault(); alert('Marque ao menos uma loja.'); return; }
+        if (!confirm('Enviar a cobrança para ' + n + ' grupo' + (n > 1 ? 's' : '') + ' no WhatsApp?')) {
+            ev.preventDefault(); return;
+        }
+        form.querySelector('button[type=submit]').disabled = true;
+    });
+})();
+</script>
+{% endblock %}

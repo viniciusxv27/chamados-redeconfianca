@@ -880,8 +880,9 @@ def get_acelerador_from_request(request) -> bool:
     return str(value).strip().lower() in ('1', 'on', 'true')
 
 
-def all_pillars_ok(att_map: Dict[str, float], coordinator_name: str, threshold: float) -> bool:
-    is_ariel = normalize_text(coordinator_name) == 'ARIEL'
+def all_pillars_ok(att_map: Dict[str, float], coordinator_name: str, threshold: float,
+                   exige_fixa: Optional[bool] = None) -> bool:
+    is_ariel = normalize_text(coordinator_name) == 'ARIEL' if exige_fixa is None else not exige_fixa
     if is_ariel:
         required = ['movel', 'smartphones', 'eletronicos', 'essenciais', 'seguros', 'sva']
     else:
@@ -889,8 +890,15 @@ def all_pillars_ok(att_map: Dict[str, float], coordinator_name: str, threshold: 
     return all(att_map.get(key, 0.0) >= threshold for key in required)
 
 
-def bonus_6_7_ok(att_map: Dict[str, float], coordinator_name: str) -> bool:
-    is_ariel = normalize_text(coordinator_name) == 'ARIEL'
+def bonus_6_7_ok(att_map: Dict[str, float], coordinator_name: str,
+                 exige_fixa: Optional[bool] = None) -> bool:
+    """Todos os pilares a 100%.
+
+    A coordenação do interior não tem meta de Fixa, então Fixa não conta para
+    ela. Antes isso era reconhecido pelo nome ("ARIEL"); quem passa
+    ``exige_fixa`` decide pelas lojas — carteira sem meta de Fixa não exige Fixa.
+    """
+    is_ariel = normalize_text(coordinator_name) == 'ARIEL' if exige_fixa is None else not exige_fixa
     if is_ariel:
         required = ['movel', 'smartphones', 'eletronicos', 'essenciais', 'seguros', 'sva']
     else:
@@ -1052,6 +1060,11 @@ def get_store_name_from_user(user) -> str:
     planilhas Power BI / Simulador.
     """
     sector = getattr(user, 'sector', None) or getattr(user, 'primary_sector', None)
+    return nome_da_loja(sector)
+
+
+def nome_da_loja(sector) -> str:
+    """"Loja Glória" → "GLÓRIA": o nome da loja como as planilhas e o MySQL escrevem."""
     if not sector:
         return ''
     raw = (sector.name or '').strip()
@@ -1130,6 +1143,59 @@ def get_metas_from_power_bi(user_name: str = '', store_name: str = '') -> Dict[s
     if store_name:
         return dict(maps['pdv'].get(normalize_text(store_name), {}))
     return {}
+
+
+def pdvs_da_carteira(user) -> List[str]:
+    """Lojas que o coordenador tem em /simulator/admin/stores/ (CoordinatorStoreAccess).
+
+    É a fonte do cálculo do coordenador. A coluna COORDENAÇÃO da planilha
+    guarda o nome de quem coordenava em maio: coordenador novo (Pedro, João)
+    não aparecia lá e saía zerado, e quem trocou de lojas (Luiz) continuava
+    calculado com as antigas. Sem carteira cadastrada devolve lista vazia — aí
+    o cálculo volta para a planilha, como antes. Diferente de
+    ``get_coordinator_sectors``, que sem carteira libera todas as lojas para a
+    tela: aqui isso somaria a rede inteira na comissão.
+    """
+    access = CoordinatorStoreAccess.objects.filter(coordinator=user).first()
+    if not access:
+        return []
+    nomes = []
+    for sector in access.sectors.order_by('name'):
+        nome = nome_da_loja(sector)
+        if nome and nome not in nomes:
+            nomes.append(nome)
+    return nomes
+
+
+# Pilar do simulador → coluna de meta da planilha (reserva quando a loja não
+# tem meta no Power BI). Fixa fica de fora de propósito: ver meta_fixa_da_coordenacao.
+COLUNAS_META_PLANILHA = {
+    'movel': 'META_MOVEL',
+    'smartphones': 'META_SMARTPHONE',
+    'eletronicos': 'META_ACESSORIO',
+    'essenciais': 'META_ESSENCIAIS',
+    'seguros': 'META_SEGUROS',
+    'sva': 'META_SVA',
+}
+
+
+def metas_das_lojas(pdvs: List[str], realized: pd.DataFrame) -> Dict[str, float]:
+    """Meta da coordenação = soma das metas das lojas dela.
+
+    Cada pilar soma META_PDV_REAL do Power BI (a carga mais recente). Pilar que
+    o Power BI não trouxe para nenhuma das lojas cai na planilha, somando as
+    linhas dessas lojas — a mesma reserva que existia antes. Fixa é quantidade
+    e só vem do Power BI.
+    """
+    meta = {chave: 0.0 for chave in list(COLUNAS_META_PLANILHA) + ['fixa']}
+    for pdv in pdvs:
+        oficial = get_metas_from_power_bi(store_name=pdv) or {}
+        for chave in meta:
+            meta[chave] += float(oficial.get(chave) or 0)
+    for chave, coluna in COLUNAS_META_PLANILHA.items():
+        if not meta[chave]:
+            meta[chave] = sum(sumifs(realized, coluna, 'PDV', pdv) for pdv in pdvs)
+    return meta
 
 
 def get_pdv_metas_for_coordinator(coord_name: str) -> Dict[str, float]:
@@ -2147,6 +2213,12 @@ def _compute_gerente_simulation_base(
     }
 
 
+def _realizado_da_coordenacao(coord_pdvs: List[str], coord_name: str) -> Dict[str, float]:
+    if coord_pdvs:
+        return get_realized_sales_from_mysql(pdvs=coord_pdvs)
+    return get_realized_sales_from_mysql(coord_name=coord_name)
+
+
 def compute_coordenador_simulation(
     user: User,
     factor_data: Dict[str, Any],
@@ -2165,45 +2237,60 @@ def compute_coordenador_simulation(
 
     coord_name = commission_source.first_name or commission_source.get_full_name() or commission_source.email
 
-    meta_map = {
-        'movel': sumifs(realized, 'META_MOVEL', 'COORDENAÇÃO', coord_name),
-        'fixa': sumifs(realized, 'META_FIXA', 'COORDENAÇÃO', coord_name),
-        'smartphones': sumifs(realized, 'META_SMARTPHONE', 'COORDENAÇÃO', coord_name),
-        'eletronicos': sumifs(realized, 'META_ACESSORIO', 'COORDENAÇÃO', coord_name),
-        'essenciais': sumifs(realized, 'META_ESSENCIAIS', 'COORDENAÇÃO', coord_name),
-        'seguros': sumifs(realized, 'META_SEGUROS', 'COORDENAÇÃO', coord_name),
-        'sva': sumifs(realized, 'META_SVA', 'COORDENAÇÃO', coord_name),
-    }
-    # Sobrescreve com soma das metas de PDV cadastradas em /power-bi/metas/
-    coord_pb = get_pdv_metas_for_coordinator(coord_name)
-    for k, v in (coord_pb or {}).items():
-        if v:
-            meta_map[k] = v
-    # Fixa é QUANTIDADE: a soma das metas das lojas da coordenação — a mesma conta
-    # do consultor e do gerente. A coluna META_FIXA da planilha é em reais por
-    # consultor: somada, dava 34.210 onde a meta das lojas era 314, e o
-    # atingimento de Fixa do coordenador ficava perto de 0%.
-    meta_map['fixa'] = meta_fixa_da_coordenacao(realized, projection, coord_name)
+    # As lojas da coordenação saem da carteira cadastrada em /simulator/admin/stores/.
+    # Só quem não tem carteira continua resolvido pelo nome na coluna COORDENAÇÃO
+    # da planilha (o caminho antigo).
+    carteira = pdvs_da_carteira(commission_source)
+    if carteira:
+        coord_pdvs = carteira
+        meta_map = metas_das_lojas(coord_pdvs, realized)
+
+        def _proj(col: str) -> float:
+            return sum(sumifs(projection, col, 'PDV', pdv) for pdv in coord_pdvs)
+    else:
+        coord_pdvs = get_pdvs_of_coord(realized, coord_name) or get_pdvs_of_coord(projection, coord_name)
+        meta_map = {
+            'movel': sumifs(realized, 'META_MOVEL', 'COORDENAÇÃO', coord_name),
+            'fixa': sumifs(realized, 'META_FIXA', 'COORDENAÇÃO', coord_name),
+            'smartphones': sumifs(realized, 'META_SMARTPHONE', 'COORDENAÇÃO', coord_name),
+            'eletronicos': sumifs(realized, 'META_ACESSORIO', 'COORDENAÇÃO', coord_name),
+            'essenciais': sumifs(realized, 'META_ESSENCIAIS', 'COORDENAÇÃO', coord_name),
+            'seguros': sumifs(realized, 'META_SEGUROS', 'COORDENAÇÃO', coord_name),
+            'sva': sumifs(realized, 'META_SVA', 'COORDENAÇÃO', coord_name),
+        }
+        # Sobrescreve com soma das metas de PDV cadastradas em /power-bi/metas/
+        coord_pb = get_pdv_metas_for_coordinator(coord_name)
+        for k, v in (coord_pb or {}).items():
+            if v:
+                meta_map[k] = v
+        # Fixa é QUANTIDADE: a soma das metas das lojas da coordenação — a mesma conta
+        # do consultor e do gerente. A coluna META_FIXA da planilha é em reais por
+        # consultor: somada, dava 34.210 onde a meta das lojas era 314, e o
+        # atingimento de Fixa do coordenador ficava perto de 0%.
+        meta_map['fixa'] = meta_fixa_da_coordenacao(realized, projection, coord_name)
+
+        def _proj(col: str) -> float:
+            return sumifs(projection, col, 'COORDENAÇÃO', coord_name)
+
     proj_map = {
-        'movel': sumifs(projection, 'PROJ_MOVEL', 'COORDENAÇÃO', coord_name),
-        'fixa': sumifs(projection, 'PROJ_FIXA', 'COORDENAÇÃO', coord_name),
-        'smartphones': sumifs(projection, 'PROJ_APARELHO', 'COORDENAÇÃO', coord_name),
-        'eletronicos': sumifs(projection, 'PROJ_ELETRO_A', 'COORDENAÇÃO', coord_name) + sumifs(projection, 'PROJ_ELETRO_B', 'COORDENAÇÃO', coord_name),
-        'essenciais': sumifs(projection, 'PROJ_ESSEN_A', 'COORDENAÇÃO', coord_name) + sumifs(projection, 'PROJ_ESSEN_B', 'COORDENAÇÃO', coord_name),
-        'seguros': sumifs(projection, 'PROJ_SEGURO', 'COORDENAÇÃO', coord_name),
-        'sva': sumifs(projection, 'PROJ_SVA', 'COORDENAÇÃO', coord_name),
+        'movel': _proj('PROJ_MOVEL'),
+        'fixa': _proj('PROJ_FIXA'),
+        'smartphones': _proj('PROJ_APARELHO'),
+        'eletronicos': _proj('PROJ_ELETRO_A') + _proj('PROJ_ELETRO_B'),
+        'essenciais': _proj('PROJ_ESSEN_A') + _proj('PROJ_ESSEN_B'),
+        'seguros': _proj('PROJ_SEGURO'),
+        'sva': _proj('PROJ_SVA'),
     }
-    eletro_a = sumifs(projection, 'PROJ_ELETRO_A', 'COORDENAÇÃO', coord_name)
-    eletro_b = sumifs(projection, 'PROJ_ELETRO_B', 'COORDENAÇÃO', coord_name)
-    ess_a = sumifs(projection, 'PROJ_ESSEN_A', 'COORDENAÇÃO', coord_name)
-    ess_b = sumifs(projection, 'PROJ_ESSEN_B', 'COORDENAÇÃO', coord_name)
-    fixa_quantity = sumifs(projection, 'PROJ_BL', 'COORDENAÇÃO', coord_name) if 'PROJ_BL' in projection.columns else 0.0
+    eletro_a = _proj('PROJ_ELETRO_A')
+    eletro_b = _proj('PROJ_ELETRO_B')
+    ess_a = _proj('PROJ_ESSEN_A')
+    ess_b = _proj('PROJ_ESSEN_B')
+    fixa_quantity = _proj('PROJ_BL') if 'PROJ_BL' in projection.columns else 0.0
     fixa_revenue = proj_map['fixa']
 
     if view_mode == VIEW_REALIZADO:
         # Coordenador: realizado de todas as lojas coordenadas via MySQL.
-        coord_pdvs = get_pdvs_of_coord(realized, coord_name) or get_pdvs_of_coord(projection, coord_name)
-        mysql_coord = get_realized_sales_from_mysql(pdvs=coord_pdvs) if coord_pdvs else get_realized_sales_from_mysql(coord_name=coord_name)
+        mysql_coord = _realizado_da_coordenacao(coord_pdvs, coord_name)
         proj_map = {
             'movel': mysql_coord.get('movel', 0.0),
             'fixa': mysql_coord.get('fixa', 0.0),
@@ -2240,8 +2327,7 @@ def compute_coordenador_simulation(
         ess_b = ess_b_in
         fixa_quantity = _get_sim_input(simulator_inputs, 'fixa', 'qty')
         # Receita estimada de Fixa = qtd simulada × ticket médio do realizado da coordenação.
-        coord_pdvs = get_pdvs_of_coord(realized, coord_name) or get_pdvs_of_coord(projection, coord_name)
-        _real_coord = get_realized_sales_from_mysql(pdvs=coord_pdvs) if coord_pdvs else get_realized_sales_from_mysql(coord_name=coord_name)
+        _real_coord = _realizado_da_coordenacao(coord_pdvs, coord_name)
         _real_fixa_qty = _real_coord.get('fixa_qty', 0.0) or 0.0
         _real_fixa_rev = _real_coord.get('fixa', 0.0) or 0.0
         _ticket_medio_fixa = (_real_fixa_rev / _real_fixa_qty) if _real_fixa_qty > 0 else 0.0
@@ -2258,8 +2344,7 @@ def compute_coordenador_simulation(
                 meta_map[key] = override
     else:
         # VIEW_PROJECAO: projeção dinâmica = realizado MySQL / DU_passados * DU_totais.
-        coord_pdvs = get_pdvs_of_coord(realized, coord_name) or get_pdvs_of_coord(projection, coord_name)
-        mysql_coord = get_realized_sales_from_mysql(pdvs=coord_pdvs) if coord_pdvs else get_realized_sales_from_mysql(coord_name=coord_name)
+        mysql_coord = _realizado_da_coordenacao(coord_pdvs, coord_name)
         du_passed, du_total = get_business_days_info()
         proj_map = {
             'movel': project_from_realized(mysql_coord.get('movel', 0.0), du_passed, du_total),
@@ -2373,7 +2458,10 @@ def compute_coordenador_simulation(
         })
 
     bonus_rate = meta_config.get('bonus_6_7_rate', 0.0)
-    bonus_value = total_commission * bonus_rate if bonus_6_7_ok(att_map, coord_name) else 0.0
+    # Com carteira, quem diz se Fixa conta é a meta das lojas (o interior não tem);
+    # sem carteira vale a regra antiga, pelo nome.
+    exige_fixa = bool(meta_map['fixa']) if carteira else None
+    bonus_value = total_commission * bonus_rate if bonus_6_7_ok(att_map, coord_name, exige_fixa) else 0.0
     total_coordinator = total_commission + total_h2 + total_h3 + bonus_value
     sniper_rate = meta_config.get('sniper_rate', 0.75)
 
@@ -2395,6 +2483,8 @@ def compute_coordenador_simulation(
         'user_name': user.get_full_name() or user.first_name or user.email,
         'first_name': user.first_name or (user.get_full_name() or user.email).split(' ')[0],
         'coordinator': coord_name,
+        'coord_pdvs': coord_pdvs,
+        'carteira': bool(carteira),
         'view_mode': view_mode,
         'rows': rows,
         'is_sniper': is_sniper,

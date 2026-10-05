@@ -3,6 +3,8 @@
 O curso acontece na plataforma da Vivo. Aqui a gente publica o link e as
 orientações, recebe o comprovante e mostra num quadro quem fez e quem não fez.
 """
+from datetime import time
+
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
@@ -42,6 +44,19 @@ class ConfiguracaoCursos(models.Model):
         settings.AUTH_USER_MODEL, blank=True,
         related_name='cursos_gestor_de', verbose_name='Gestores do módulo',
         help_text='Publicam o curso do mês, escrevem as orientações e conferem os comprovantes.')
+
+    # Cobrança no grupo de gestão de cada loja (GrupoWhatsappLoja). Nasce
+    # desligada: manda mensagem para grupo de gente de verdade.
+    cobranca_automatica = models.BooleanField(
+        default=False, db_default=False,
+        verbose_name='Cobrar sozinho no WhatsApp das lojas')
+    cobranca_dias = models.CharField(
+        max_length=20, default='0,2,4', db_default='0,2,4', blank=True,
+        verbose_name='Dias da cobrança',
+        help_text='Dias da semana separados por vírgula: 0 = segunda … 6 = domingo.')
+    cobranca_hora = models.TimeField(
+        default=time(9, 0), db_default=time(9, 0), verbose_name='Hora da cobrança')
+    ultima_cobranca_automatica = models.DateTimeField(null=True, blank=True)
 
     atualizado_em = models.DateTimeField(auto_now=True)
 
@@ -94,6 +109,15 @@ class ConfiguracaoCursos(models.Model):
             return True
         from users.module_access import user_has_module
         return self.gestores.filter(id=user.id).exists() or user_has_module(user, 'cursos.gestao')
+
+    @property
+    def dias_da_cobranca(self):
+        dias = set()
+        for pedaco in (self.cobranca_dias or '').split(','):
+            pedaco = pedaco.strip()
+            if pedaco.isdigit() and int(pedaco) <= 6:
+                dias.add(int(pedaco))
+        return dias
 
 
 class Curso(models.Model):
@@ -211,3 +235,78 @@ class Comprovante(models.Model):
     def vale_como_entregue(self):
         """Recusado volta a contar como pendência; o resto vale."""
         return self.status in (self.PENDENTE, self.APROVADO)
+
+
+class GrupoWhatsappLoja(models.Model):
+    """O grupo de gestão da loja no WhatsApp, para onde vai a cobrança dos cursos.
+
+    A loja é o setor principal da pessoa (``user.sector``). O identificador é o
+    que o WhatsApp dá ao grupo: ``120363…`` nos grupos novos e
+    ``5527…-1612…`` nos antigos — sem o ``@g.us``, que o envio acrescenta.
+    """
+
+    setor = models.OneToOneField(
+        'users.Sector', on_delete=models.CASCADE,
+        related_name='grupo_whatsapp_cursos', verbose_name='Loja')
+    grupo = models.CharField(max_length=80, verbose_name='ID do grupo no WhatsApp')
+    ativo = models.BooleanField(default=True, db_default=True, verbose_name='Cobrar neste grupo')
+
+    class Meta:
+        verbose_name = 'Grupo de WhatsApp da loja'
+        verbose_name_plural = 'Grupos de WhatsApp das lojas'
+        ordering = ['setor__name']
+
+    def __str__(self):
+        return f'{self.setor} → {self.grupo}'
+
+    @property
+    def destino(self):
+        """O JID que a Evolution entende. Aceita o ID colado no formato da Z-API também."""
+        return jid_do_grupo(self.grupo)
+
+
+def jid_do_grupo(grupo):
+    texto = (grupo or '').strip()
+    if not texto:
+        return ''
+    if '@' in texto:
+        return texto
+    if texto.endswith('-group'):
+        texto = texto[:-len('-group')]
+    return f'{texto}@g.us'
+
+
+class CobrancaWhatsapp(models.Model):
+    """Uma mensagem de cobrança mandada (ou tentada) para o grupo de uma loja.
+
+    A linha é gravada ANTES do envio: é ela que impede o clique duplo e os
+    workers do gunicorn de mandarem a mesma cobrança duas vezes.
+    """
+
+    MANUAL = 'MANUAL'
+    AUTOMATICA = 'AUTOMATICA'
+    ORIGENS = [(MANUAL, 'Pelo quadro'), (AUTOMATICA, 'Automática')]
+
+    setor = models.ForeignKey(
+        'users.Sector', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='cobrancas_cursos')
+    grupo = models.CharField(max_length=80)
+    cursos = models.ManyToManyField(Curso, blank=True, related_name='cobrancas_whatsapp')
+    pessoas = models.PositiveIntegerField(default=0)
+    texto = models.TextField(blank=True)
+    origem = models.CharField(max_length=10, choices=ORIGENS, default=MANUAL)
+    disparado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='cobrancas_cursos_disparadas')
+    enviado = models.BooleanField(null=True, verbose_name='Saiu?',
+                                  help_text='Vazio enquanto está sendo enviada.')
+    detalhe = models.CharField(max_length=255, blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Cobrança de curso no WhatsApp'
+        verbose_name_plural = 'Cobranças de curso no WhatsApp'
+        ordering = ['-criado_em']
+
+    def __str__(self):
+        return f'{self.setor} · {self.criado_em:%d/%m/%Y %H:%M}'

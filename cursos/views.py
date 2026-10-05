@@ -6,13 +6,16 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from communications.models import CommunicationGroup
 from users.models import Sector
 
-from .models import AtribuicaoCurso, Comprovante, ConfiguracaoCursos, Curso
+from .models import (
+    AtribuicaoCurso, CobrancaWhatsapp, Comprovante, ConfiguracaoCursos, Curso, GrupoWhatsappLoja,
+)
 from .permissions import (
     cursos_do_usuario, e_gestor, e_superadmin, no_escopo, pendencias, pode_ver,
 )
@@ -532,6 +535,56 @@ def _avisar(destinatario, titulo, texto):
 
 
 # ---------------------------------------------------------------------------
+# Cobrança no WhatsApp das lojas
+# ---------------------------------------------------------------------------
+@login_required
+def cobrar_whatsapp(request):
+    """Prévia da cobrança de um curso, loja por loja, e o envio para os grupos."""
+    from . import cobranca
+
+    cfg = ConfiguracaoCursos.get()
+    if not e_gestor(request.user, cfg):
+        messages.error(request, 'Área dos gestores do módulo.')
+        return redirect('cursos:meus_cursos')
+
+    curso_id = request.POST.get('curso') or request.GET.get('curso')
+    curso = get_object_or_404(Curso, id=curso_id, publicado=True) if curso_id else None
+    cursos = [curso] if curso else cobranca.cursos_em_aberto()
+
+    if request.method == 'POST':
+        setores = {int(s) for s in request.POST.getlist('setores') if s.isdigit()}
+        if not setores:
+            messages.error(request, 'Marque ao menos uma loja para cobrar.')
+            return redirect(request.get_full_path())
+        resultado = cobranca.cobrar(cursos, CobrancaWhatsapp.MANUAL, user=request.user,
+                                    setores=setores, cfg=cfg)
+        if resultado['sem_canal']:
+            messages.error(request, 'O WhatsApp não está configurado neste servidor '
+                                    f'(falta {", ".join(cobranca.faltando_no_canal())}). Nada foi enviado.')
+        else:
+            n = len(resultado['gravadas'])
+            if n:
+                messages.success(request, f'Cobrança enviada para {n} grupo{"s" if n > 1 else ""}. '
+                                          'O resultado de cada um aparece no histórico abaixo.')
+            if resultado['recentes']:
+                nomes = ', '.join(s.name for s in resultado['recentes'])
+                messages.info(request, f'Não reenviado (cobrado há menos de 30 minutos): {nomes}.')
+        destino = reverse('cursos:cobrar_whatsapp')
+        return redirect(f'{destino}?curso={curso.id}' if curso else destino)
+
+    dados = cobranca.previa(cursos, cfg)
+    return render(request, 'cursos/cobrar_whatsapp.html', {
+        'curso': curso, 'cursos': cursos, 'dados': dados,
+        'todos_cursos': Curso.objects.filter(publicado=True).order_by('-prazo', '-id')[:60],
+        'historico': (CobrancaWhatsapp.objects.select_related('setor', 'disparado_por')
+                      .prefetch_related('cursos')[:30]),
+        'sem_canal': cobranca.faltando_no_canal(),
+        'cfg': cfg,
+        'is_superadmin': e_superadmin(request.user),
+    })
+
+
+# ---------------------------------------------------------------------------
 # Configuração (SUPERADMIN)
 # ---------------------------------------------------------------------------
 @login_required
@@ -552,6 +605,7 @@ def configuracao(request):
             id__in=request.POST.getlist('usuarios'), is_active=True))
         cfg.gestores.set(User.objects.filter(
             id__in=request.POST.getlist('gestores'), is_active=True))
+        _salvar_cobranca(request, cfg)
         messages.success(request, 'Configuração salva.')
         return redirect('cursos:configuracao')
 
@@ -565,7 +619,51 @@ def configuracao(request):
         'usuarios_marcados': set(cfg.usuarios.values_list('id', flat=True)),
         'gestores_marcados': set(cfg.gestores.values_list('id', flat=True)),
         'alcance': _quantas_pessoas(cfg),
+        'lojas_whatsapp': _lojas_whatsapp(),
+        'dias_semana': list(enumerate(DIAS_SEMANA)),
     })
+
+
+DIAS_SEMANA = ('Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom')
+
+
+def _lojas_whatsapp():
+    """Toda loja (setor "Loja …") e todo setor que já tem grupo, com o grupo ao lado."""
+    grupos = {g.setor_id: g for g in GrupoWhatsappLoja.objects.all()}
+    setores = (Sector.objects.filter(name__istartswith='Loja')
+               | Sector.objects.filter(id__in=list(grupos)))
+    return [{'setor': s, 'grupo': grupos.get(s.id)} for s in setores.distinct().order_by('name')]
+
+
+def _salvar_cobranca(request, cfg):
+    """Agenda da cobrança automática e o grupo de WhatsApp de cada loja."""
+    from datetime import datetime
+
+    cfg.cobranca_automatica = request.POST.get('cobranca_automatica') == 'on'
+    cfg.cobranca_dias = ','.join(sorted(
+        d for d in request.POST.getlist('cobranca_dias') if d.isdigit() and int(d) <= 6))
+    try:
+        cfg.cobranca_hora = datetime.strptime(request.POST.get('cobranca_hora', ''), '%H:%M').time()
+    except ValueError:
+        pass
+    cfg.save(update_fields=['cobranca_automatica', 'cobranca_dias', 'cobranca_hora'])
+
+    for item in _lojas_whatsapp():
+        setor, grupo = item['setor'], item['grupo']
+        chave = f'grupo_{setor.id}'
+        if chave not in request.POST:
+            continue
+        valor = request.POST.get(chave, '').strip()
+        ativo = request.POST.get(f'grupo_ativo_{setor.id}') == 'on'
+        if not valor:
+            if grupo:
+                grupo.delete()
+            continue
+        if grupo is None:
+            GrupoWhatsappLoja.objects.create(setor=setor, grupo=valor, ativo=ativo)
+        elif (grupo.grupo, grupo.ativo) != (valor, ativo):
+            grupo.grupo, grupo.ativo = valor, ativo
+            grupo.save(update_fields=['grupo', 'ativo'])
 
 
 def _quantas_pessoas(cfg):

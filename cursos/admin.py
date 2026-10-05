@@ -1,6 +1,8 @@
 from django.contrib import admin
 
-from .models import AtribuicaoCurso, Comprovante, ConfiguracaoCursos, Curso
+from .models import (
+    AtribuicaoCurso, CobrancaWhatsapp, Comprovante, ConfiguracaoCursos, Curso, GrupoWhatsappLoja,
+)
 
 
 @admin.register(Curso)
@@ -19,3 +21,15 @@ class ComprovanteAdmin(admin.ModelAdmin):
 
 admin.site.register(ConfiguracaoCursos)
 admin.site.register(AtribuicaoCurso)
+
+
+@admin.register(GrupoWhatsappLoja)
+class GrupoWhatsappLojaAdmin(admin.ModelAdmin):
+    list_display = ('setor', 'grupo', 'ativo')
+    list_editable = ('grupo', 'ativo')
+
+
+@admin.register(CobrancaWhatsapp)
+class CobrancaWhatsappAdmin(admin.ModelAdmin):
+    list_display = ('setor', 'origem', 'pessoas', 'enviado', 'criado_em')
+    list_filter = ('origem', 'enviado')

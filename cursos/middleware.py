@@ -27,6 +27,12 @@ class BloqueioCursoMiddleware:
         if usuario is None or not usuario.is_authenticated:
             return self.get_response(request)
 
+        # Sem cron em produção: a cobrança automática no WhatsApp das lojas é
+        # acordada pela primeira visita depois da hora. Vai ao banco no máximo
+        # uma vez por minuto por worker; o envio acontece numa thread.
+        from .cobranca import disparar_se_esta_na_hora
+        disparar_se_esta_na_hora()
+
         if any(request.path.startswith(p) for p in LIBERADOS):
             return self.get_response(request)
 

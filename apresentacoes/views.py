@@ -206,6 +206,9 @@ def nova(request):
                 pedido=formato.texto(pedido, 8000), dono=user, template=template, status=Apresentacao.Status.GERANDO,
                 opcoes=opcoes, documento=formato.documento_vazio(template.tema if template else None))
             anexos, texto_material, avisos = _salvar_anexos(arquivos, user, apresentacao)
+            if len(texto_material) > 30000:                   # vários anexos somados: a IA fica sabendo do corte
+                aviso = '\n[material cortado: os anexos somados passaram de 30.000 caracteres]'
+                texto_material = texto_material[:30000 - len(aviso)] + aviso
             if texto_material:
                 apresentacao.opcoes = {**opcoes, 'texto_material': texto_material[:30000]}
                 apresentacao.save(update_fields=['opcoes'])
@@ -243,7 +246,7 @@ def _opcoes_do_pedido(post, template):
 
 
 def _salvar_anexos(arquivos, user, apresentacao):
-    """Imagens viram prints; PDF vira páginas (imagens) + texto; PowerPoint vira texto."""
+    """Imagens viram prints; PDF vira páginas (imagens) + texto; PowerPoint e planilha viram texto."""
     anexos, textos, avisos = [], [], []
     for arquivo in arquivos:
         nome = os.path.basename(arquivo.name or 'anexo')[:180]
@@ -261,13 +264,17 @@ def _salvar_anexos(arquivos, user, apresentacao):
                 textos.append(f'[{nome}]\n' + importacao.texto_do_pdf(conteudo))
             elif extensao == '.pptx':
                 textos.append(f'[{nome}]\n' + importacao.texto_do_pptx(conteudo))
+            elif extensao in importacao.EXTENSOES_PLANILHA:
+                textos.append(f'[{nome}]\n' + importacao.texto_de_planilha(conteudo, extensao))
+            elif extensao == '.xls':
+                avisos.append(f'"{nome}": planilha .xls antiga não é lida; salve como .xlsx (ou .csv) e envie de novo.')
             elif extensao in LIMITES_UPLOAD[Midia.Tipo.IMAGEM][0]:
                 _validar_imagem(conteudo)
                 anexos.append(tarefas.salvar_midia(conteudo, nome, dono=user, tipo=Midia.Tipo.IMAGEM,
                                                    origem=Midia.Origem.PRINT, apresentacao=apresentacao,
                                                    mime=mimetypes.guess_type(nome)[0] or 'image/png'))
             else:
-                avisos.append(f'"{nome}": envie imagem, PDF ou PowerPoint.')
+                avisos.append(f'"{nome}": envie imagem, PDF, PowerPoint ou planilha.')
         except Exception as exc:                                # noqa: BLE001 — um anexo ruim não perde o pedido
             logger.warning('Anexo %s recusado: %s', nome, exc)
             avisos.append(f'"{nome}" não pôde ser lido e ficou de fora.')
