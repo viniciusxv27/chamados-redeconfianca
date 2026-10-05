@@ -3023,6 +3023,8 @@ def pode_ver_comissionamento(user):
     """
     if not (user and user.is_authenticated):
         return False
+    if getattr(user, 'hierarchy', '') == 'SUPERADMIN':
+        return True
     from users.module_access import user_has_module
     return (is_user_gerente(user) or is_user_coordenador(user)
             or user_has_module(user, 'comissionamento'))
