@@ -164,6 +164,12 @@
                         <input type="date" name="fim" value="{% if conteudo.fim %}{{ conteudo.fim|date:'Y-m-d' }}{% endif %}" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                     </div>
                 </div>
+                {% comment %}
+                Vídeo e POP só pontuam no mês que contém o período inteiro deles
+                (impulso/scoring.py). O aviso mostra, enquanto se preenche, em que
+                mês ele vai contar — ou que não vai contar em nenhum.
+                {% endcomment %}
+                <p data-periodo-aviso class="hidden text-xs rounded-lg px-3 py-2 -mt-1"></p>
             </div>
             {% endif %}
 
@@ -230,6 +236,50 @@
         });
     });
 
+    atualizar();
+})();
+
+(function () {
+    'use strict';
+    const aviso = document.querySelector('[data-periodo-aviso]');
+    const grupo = document.querySelector('select[name="grupo"]');
+    const inicio = document.querySelector('input[name="inicio"]');
+    const fim = document.querySelector('input[name="fim"]');
+    if (!aviso || !inicio || !fim) return;
+    const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho',
+                   'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+    const TONS = {
+        ok: 'bg-emerald-50 border border-emerald-100 text-emerald-800',
+        alerta: 'bg-amber-50 border border-amber-200 text-amber-800',
+        erro: 'bg-red-50 border border-red-200 text-red-700',
+    };
+
+    function mostrar(tom, icone, texto) {
+        aviso.className = 'text-xs rounded-lg px-3 py-2 -mt-1 ' + TONS[tom];
+        aviso.innerHTML = '<i class="fas ' + icone + ' mr-1"></i>' + texto;
+    }
+
+    function atualizar() {
+        // Curso segue a regra dele; o aviso é só de Vídeo e POP.
+        if (grupo && grupo.value !== 'POP_VIDEO') { aviso.classList.add('hidden'); return; }
+        const a = inicio.value, b = fim.value;
+        if (!a || !b) {
+            mostrar('alerta', 'fa-triangle-exclamation',
+                    'Sem <strong>início e fim</strong>, este vídeo/POP não entra na pontuação de nenhum mês.');
+        } else if (b < a) {
+            mostrar('erro', 'fa-circle-xmark', 'O fim do período está antes do início.');
+        } else if (a.slice(0, 7) !== b.slice(0, 7)) {
+            mostrar('alerta', 'fa-triangle-exclamation',
+                    'O período atravessa meses: para pontuar em Vídeos e POPs, início e fim precisam estar <strong>no mesmo mês</strong>.');
+        } else {
+            mostrar('ok', 'fa-circle-check',
+                    'Pontua em Vídeos e POPs de <strong>' + MESES[+a.slice(5, 7) - 1] + ' de ' + a.slice(0, 4) + '</strong>.');
+        }
+    }
+
+    [grupo, inicio, fim].forEach(function (el) {
+        if (el) { el.addEventListener('change', atualizar); el.addEventListener('input', atualizar); }
+    });
     atualizar();
 })();
 </script>

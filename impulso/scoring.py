@@ -311,18 +311,28 @@ def _nota_feedback(user, inicio, fim):
 # ---------------------------------------------------------------------------
 # CONECTAR
 # ---------------------------------------------------------------------------
-def _conteudos_do_usuario(user, tipos, inicio, fim):
-    """Conteúdos obrigatórios aplicáveis ao usuário no período."""
-    return (ConteudoConectar.objects
-            .filter(ativo=True, obrigatorio=True, tipo__in=tipos)
-            .filter(criado_em__date__lte=fim)
-            .filter(Q(fim__isnull=True) | Q(fim__gte=inicio))
-            .filter(Q(obrigatorio_para__isnull=True) | Q(obrigatorio_para=user))
-            .distinct())
+def _conteudos_do_usuario(user, tipos, inicio, fim, periodo_dentro_do_mes=False):
+    """Conteúdos obrigatórios aplicáveis ao usuário no período.
+
+    Com ``periodo_dentro_do_mes`` (Vídeos e POPs), só entra o conteúdo cujo
+    início **e** fim do período caem dentro do mês da pontuação: sem período,
+    só com uma das datas ou atravessando meses, ele não pontua em mês nenhum.
+    Antes valia a regra do curso — criado até o fim do mês e ainda não
+    encerrado —, e o POP sem período era cobrado todo mês para sempre.
+    """
+    qs = (ConteudoConectar.objects
+          .filter(ativo=True, obrigatorio=True, tipo__in=tipos)
+          .filter(Q(obrigatorio_para__isnull=True) | Q(obrigatorio_para=user)))
+    if periodo_dentro_do_mes:
+        qs = qs.filter(inicio__gte=inicio, inicio__lte=fim, fim__gte=inicio, fim__lte=fim)
+    else:
+        qs = (qs.filter(criado_em__date__lte=fim)
+              .filter(Q(fim__isnull=True) | Q(fim__gte=inicio)))
+    return qs.distinct()
 
 
-def _nota_conteudos(user, tipos, pontos, inicio, fim):
-    conteudos = list(_conteudos_do_usuario(user, tipos, inicio, fim))
+def _nota_conteudos(user, tipos, pontos, inicio, fim, periodo_dentro_do_mes=False):
+    conteudos = list(_conteudos_do_usuario(user, tipos, inicio, fim, periodo_dentro_do_mes))
     total = len(conteudos)
     if not total:
         return ZERO, ZERO, {'sem_conteudo': True}
@@ -472,9 +482,10 @@ def calcular_pontuacao(user, inicio=None, fim=None, referencia=None):
 
     p_curso, ap_curso, det_curso = _nota_conteudos(
         user, [ConteudoConectar.Tipo.CURSO], pt('curso', user), inicio, fim)
+    # Vídeos e POPs só contam no mês que contém o período inteiro deles.
     p_vp, ap_vp, det_vp = _nota_conteudos(
         user, [ConteudoConectar.Tipo.VIDEO, ConteudoConectar.Tipo.POP],
-        pt('videos_pops', user), inicio, fim)
+        pt('videos_pops', user), inicio, fim, periodo_dentro_do_mes=True)
     p_proj, ap_proj, det_proj = _nota_projeto_foco(user, inicio, fim)
 
     (p_ideias, ap_ideias, p_aprov, ap_aprov, det_inovar) = _nota_inovar(user, inicio, fim)
@@ -642,7 +653,8 @@ def linhas_detalhadas(dados):
          'pontos': dados['p_videos_pops'], 'max': pt('videos_pops', tabela=tabela),
          'info': ('%s de %s concluído(s)' % (
              d['videos_pops'].get('concluidos', 0), d['videos_pops'].get('total', 0)))
-         if not d['videos_pops'].get('sem_conteudo') else 'Nenhum vídeo/POP obrigatório'},
+         if not d['videos_pops'].get('sem_conteudo')
+         else 'Nenhum vídeo/POP obrigatório com período dentro do mês'},
         {'bloco': 'CONECTAR', 'item': 'Projeto foco',
          'pontos': dados['p_projeto_foco'], 'max': pt('projeto_foco', tabela=tabela),
          'info': _info_projeto_foco(d['projeto_foco'])},
