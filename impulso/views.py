@@ -3790,11 +3790,11 @@ def acompanhamento(request):
     return render(request, 'impulso/acompanhamento.html', context)
 
 
-@impulso_member_required
+@impulso_member_or_superadmin_required
 def detalhe_colaborador(request, user_id):
     """Detalhamento da pontuação de um colaborador (por medalha/mês)."""
     alvo = get_object_or_404(get_colaboradores(), id=user_id)
-    if not (is_impulso_manager(request.user) or alvo.id == request.user.id):
+    if not (is_impulso_manager(request.user) or e_superadmin(request.user) or alvo.id == request.user.id):
         messages.error(request, 'Você só pode ver o seu próprio detalhamento.')
         return redirect('impulso:acompanhamento')
 
@@ -3816,11 +3816,42 @@ def detalhe_colaborador(request, user_id):
         'historico': historico,
         'snapshot': snapshot,
         'snapshot_faixa': faixa_info(snapshot.faixa) if snapshot else None,
+        'snapshot_itens': ciclos_service.itens_da_pontuacao(snapshot) if snapshot else [],
+        'ajuste': ((snapshot.detalhes or {}).get('ajuste_manual') if snapshot else None),
+        'pode_ajustar': bool(snapshot and e_superadmin(request.user) and snapshot.mes.is_fechado
+                             and not snapshot.mes.ciclo.confiancas_creditadas
+                             and snapshot.mes.ciclo.status != snapshot.mes.ciclo.Status.ENCERRADO),
         'medalhas': [{'p': p, 'faixa': faixa_info(p.faixa)} for p in historico],
         'is_gestor': is_impulso_manager(request.user),
         'active_tab': 'acompanhamento',
     }
     return render(request, 'impulso/detalhe_colaborador.html', context)
+
+
+@impulso_member_or_superadmin_required
+@require_POST
+def ajustar_pontuacao(request, user_id, mes_id):
+    """SUPERADMIN muda, item a item, os pontos de um mês fechado (quem ficou por pouco)."""
+    destino = f"{reverse('impulso:detalhe_colaborador', args=[user_id])}?mes={mes_id}"
+    if not e_superadmin(request.user):
+        messages.error(request, 'Só o SUPERADMIN ajusta a pontuação manualmente.')
+        return redirect(destino)
+    pontuacao = get_object_or_404(PontuacaoMensal.objects.select_related('mes__ciclo', 'user'),
+                                  user_id=user_id, mes_id=mes_id)
+    try:
+        if request.POST.get('acao') == 'desfazer':
+            pontuacao = ciclos_service.desfazer_ajuste(pontuacao, request.user)
+            messages.success(request, f'Ajuste desfeito: voltou aos {pontuacao.total:g} pontos calculados '
+                                      f'({pontuacao.get_faixa_display()}).')
+        else:
+            valores = {campo: request.POST.get(campo) for campo, _, _ in ciclos_service.CAMPOS_PONTOS}
+            pontuacao = ciclos_service.ajustar_pontuacao(pontuacao, valores, request.POST.get('motivo'),
+                                                         request.user)
+            messages.success(request, f'Pontuação ajustada: {pontuacao.total:g} pontos, '
+                                      f'{pontuacao.percentual:g}% — {pontuacao.get_faixa_display()}.')
+    except ciclos_service.AjusteRecusado as exc:
+        messages.error(request, str(exc))
+    return redirect(destino)
 
 
 # ---------------------------------------------------------------------------

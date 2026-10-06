@@ -105,6 +105,8 @@ urlpatterns = [
     path('acompanhamento/', views.acompanhamento, name='acompanhamento'),
     path('acompanhamento/pesos/', views.pesos_editar, name='pesos_editar'),
     path('acompanhamento/<int:user_id>/', views.detalhe_colaborador, name='detalhe_colaborador'),
+    path('acompanhamento/<int:user_id>/mes/<int:mes_id>/ajustar/', views.ajustar_pontuacao,
+         name='ajustar_pontuacao'),
 
     # ACOMPANHAMENTO — ciclos
     path('ciclos/', views.ciclo_list, name='ciclo_list'),

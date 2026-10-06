@@ -114,6 +114,14 @@
                 <span class="sap-chip sap-saiu mt-1" title="Não veio na última leitura do SAP: foi corrigida na origem">
                     Saiu do SAP
                 </span>
+                {% elif linha.estado == 'pendente' %}
+                <span class="sap-chip mt-1 bg-red-50 text-red-700 border border-red-200" title="Foi marcada como resolvida, o SAP foi lido de novo e ela continua aqui">
+                    Ainda pendente no SAP
+                </span>
+                {% elif linha.estado == 'aguardando' %}
+                <span class="sap-chip mt-1 bg-sky-50 text-sky-700 border border-sky-200" title="Marcada depois da última leitura: a próxima leitura do SAP confirma se saiu">
+                    Aguardando leitura
+                </span>
                 {% endif %}
                 <p class="text-[10px] text-gray-400 mt-1 sap-quem">
                     {% if linha.resolvida_por %}

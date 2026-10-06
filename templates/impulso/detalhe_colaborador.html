@@ -94,17 +94,77 @@
                 </span>
                 <span class="text-sm text-gray-500 tabular-nums">{{ snapshot.total|floatformat:"-1" }} / {{ snapshot.pontos_aplicaveis|floatformat:"-1" }} pts · {{ snapshot.percentual|floatformat:1 }}%</span>
             </div>
+            {% if ajuste %}
+            <div class="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" data-ajuste-manual>
+                <p class="font-semibold"><i class="fas fa-user-pen mr-1"></i>Pontuação ajustada manualmente</p>
+                <p class="text-xs mt-0.5">Por {{ ajuste.por }} em {{ ajuste.em }} — calculado: {{ ajuste.calculado_resumo.total|floatformat:"-1" }} pts ({{ ajuste.calculado_resumo.percentual|floatformat:1 }}%).</p>
+                <p class="text-xs mt-1 italic">“{{ ajuste.motivo }}”</p>
+            </div>
+            {% endif %}
             <dl class="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                <dt class="text-gray-500">Metas — qualidade</dt><dd class="text-right tabular-nums text-gray-900">{{ snapshot.p_metas_qualidade|floatformat:"-1" }}/10</dd>
-                <dt class="text-gray-500">Metas — conclusão</dt><dd class="text-right tabular-nums text-gray-900">{{ snapshot.p_metas_conclusao|floatformat:"-1" }}/10</dd>
-                <dt class="text-gray-500">Feedback</dt><dd class="text-right tabular-nums text-gray-900">{{ snapshot.p_feedback|floatformat:"-1" }}/10</dd>
-                <dt class="text-gray-500">Assiduidade</dt><dd class="text-right tabular-nums text-gray-900">{{ snapshot.p_assiduidade|floatformat:"-1" }}/10</dd>
-                <dt class="text-gray-500">Curso do mês</dt><dd class="text-right tabular-nums text-gray-900">{{ snapshot.p_curso|floatformat:"-1" }}/10</dd>
-                <dt class="text-gray-500">Vídeos e POPs</dt><dd class="text-right tabular-nums text-gray-900">{{ snapshot.p_videos_pops|floatformat:"-1" }}/10</dd>
-                <dt class="text-gray-500">Projeto foco</dt><dd class="text-right tabular-nums text-gray-900">{{ snapshot.p_projeto_foco|floatformat:"-1" }}/20</dd>
-                <dt class="text-gray-500">Ideias propostas</dt><dd class="text-right tabular-nums text-gray-900">{{ snapshot.p_ideias|floatformat:"-1" }}/10</dd>
-                <dt class="text-gray-500">Ideia aprovada</dt><dd class="text-right tabular-nums text-gray-900">{{ snapshot.p_ideia_aprovada|floatformat:"-1" }}/10</dd>
+                {% for item in snapshot_itens %}
+                <dt class="text-gray-500">{{ item.rotulo }}</dt>
+                <dd class="text-right tabular-nums text-gray-900">
+                    {% if item.mudou %}<span class="text-xs text-gray-400 line-through mr-1" title="Calculado no fechamento">{{ item.calculado|floatformat:"-1" }}</span>{% endif %}{{ item.valor|floatformat:"-1" }}/{{ item.max|floatformat:"-1" }}
+                </dd>
+                {% endfor %}
             </dl>
+            {% if pode_ajustar %}
+            <details class="mt-4 rounded-lg border border-gray-200" id="imp-ajuste" {% if request.GET.ajustar %}open{% endif %}>
+                <summary class="cursor-pointer select-none px-3 py-2 text-sm font-semibold text-orange-700">
+                    <i class="fas fa-sliders mr-1"></i>Ajustar pontos manualmente
+                </summary>
+                <form method="post" action="{% url 'impulso:ajustar_pontuacao' alvo.id snapshot.mes_id %}" class="px-3 pb-3 pt-1 space-y-3">
+                    {% csrf_token %}
+                    <p class="text-xs text-gray-500">Para quem ficou por pouco ou teve um item contado errado. O total, o percentual, a faixa e as C$ do mês são recalculados.</p>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {% for item in snapshot_itens %}
+                        <label class="flex items-center justify-between gap-2 text-sm">
+                            <span class="text-gray-600">{{ item.rotulo }}</span>
+                            <span class="flex items-center gap-1">
+                                <input type="number" name="{{ item.campo }}" value="{{ item.valor|unlocalize }}" min="0" max="{{ item.max|unlocalize }}" step="0.01" required
+                                       class="imp-ajuste-campo w-20 rounded-md border border-gray-300 px-2 py-1 text-right tabular-nums text-sm focus:border-orange-400 focus:ring-orange-300">
+                                <span class="text-xs text-gray-400 w-8">/{{ item.max|floatformat:"-1" }}</span>
+                            </span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                    <p class="text-sm text-gray-700">Novo total: <strong class="tabular-nums" id="imp-ajuste-total">{{ snapshot.total|floatformat:"-1" }}</strong> / {{ snapshot.pontos_aplicaveis|floatformat:"-1" }} pts · <strong class="tabular-nums" id="imp-ajuste-pct">{{ snapshot.percentual|floatformat:1 }}%</strong> · <span id="imp-ajuste-faixa">{{ snapshot_faixa.label }}</span></p>
+                    <label class="block text-sm">
+                        <span class="text-gray-600">Motivo do ajuste <span class="text-red-500">*</span></span>
+                        <textarea name="motivo" rows="2" required maxlength="500" placeholder="Ex.: ficou a 0,5 ponto do Ouro; o curso foi concluído no dia seguinte por queda do sistema."
+                                  class="mt-1 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-orange-400 focus:ring-orange-300"></textarea>
+                    </label>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button type="submit" class="px-3 py-1.5 rounded-lg bg-orange-600 text-white text-sm font-semibold hover:bg-orange-700"><i class="fas fa-check mr-1"></i>Salvar ajuste</button>
+                    </div>
+                </form>
+                {% if ajuste %}
+                <form method="post" action="{% url 'impulso:ajustar_pontuacao' alvo.id snapshot.mes_id %}" class="px-3 pb-3"
+                      onsubmit="return confirm('Voltar aos pontos calculados no fechamento?');">
+                    {% csrf_token %}
+                    <input type="hidden" name="acao" value="desfazer">
+                    <button type="submit" class="text-xs text-gray-500 hover:text-red-600"><i class="fas fa-rotate-left mr-1"></i>Desfazer ajuste (voltar ao calculado)</button>
+                </form>
+                {% endif %}
+            </details>
+            <script>
+            (function () {
+                var campos = document.querySelectorAll('.imp-ajuste-campo');
+                var aplicavel = {{ snapshot.pontos_aplicaveis|unlocalize }};
+                function faixa(p) { return p >= 100 ? 'Impulso' : p > 90 ? 'Ouro' : p > 70 ? 'Prata' : 'Bronze'; }
+                function atualizar() {
+                    var total = 0;
+                    campos.forEach(function (c) { total += parseFloat(c.value) || 0; });
+                    var pct = aplicavel ? total / aplicavel * 100 : 0;
+                    document.getElementById('imp-ajuste-total').textContent = total.toLocaleString('pt-BR', {maximumFractionDigits: 2});
+                    document.getElementById('imp-ajuste-pct').textContent = pct.toLocaleString('pt-BR', {minimumFractionDigits: 1, maximumFractionDigits: 1}) + '%';
+                    document.getElementById('imp-ajuste-faixa').textContent = faixa(Math.round(pct * 100) / 100);
+                }
+                campos.forEach(function (c) { c.addEventListener('input', atualizar); });
+            })();
+            </script>
+            {% endif %}
             {% if snapshot.confiancas_previstas %}
             <p class="mt-4 text-sm text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2">
                 <i class="fas fa-coins mr-1"></i>{{ snapshot.confiancas_previstas }} C$ reservados neste mês (creditados ao encerrar o ciclo).

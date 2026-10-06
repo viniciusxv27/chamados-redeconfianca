@@ -114,6 +114,18 @@ class LinhaAuditoria(models.Model):
         """Foi marcada como resolvida mas continua aparecendo na auditoria."""
         return bool(self.resolvida and self.ativa)
 
+    def estado_da_resolucao(self, corte):
+        """'pendente' (marcada e o SAP leu depois e ela continua lá), 'aguardando'
+        (marcada depois da última leitura) ou '' (aberta, ou já saiu do SAP).
+
+        `corte`: início da última leitura do SAP que deu certo (``inicio_da_ultima_leitura``).
+        """
+        if not (self.resolvida and self.ativa):
+            return ''
+        if corte and self.resolvida_em and self.resolvida_em < corte:
+            return 'pendente'
+        return 'aguardando'
+
     def marcar(self, usuario, resolvida, observacao=''):
         """Marca (ou desmarca) como resolvida, guardando quem foi.
 
@@ -153,6 +165,36 @@ class MarcacaoAuditoria(models.Model):
     def __str__(self):
         quem = self.usuario.full_name if self.usuario else 'alguém'
         return f'{quem} {"resolveu" if self.resolvida else "reabriu"} em {self.quando:%d/%m/%Y %H:%M}'
+
+
+def inicio_da_ultima_leitura():
+    """Quando começou a última leitura do SAP que deu certo (ou None).
+
+    É a régua do "resolvido mas ainda pendente": quem marcou antes desse instante
+    já passou por uma leitura — se a linha continua ativa, o problema não saiu do
+    SAP. Conta do início (quando − duração): marcação feita durante a leitura não
+    foi vista por ela.
+    """
+    from datetime import timedelta
+    leitura = SincronizacaoAuditoria.objects.filter(erro='').only('quando', 'segundos').first()
+    if leitura is None:
+        return None
+    return leitura.quando - timedelta(seconds=leitura.segundos or 0)
+
+
+def filtro_resolvidas_pendentes(corte):
+    """Marcadas como resolvidas, lidas de novo pelo SAP depois disso, e ainda lá."""
+    if corte is None:
+        return models.Q(pk__in=[])
+    return models.Q(resolvida=True, ativa=True, resolvida_em__lt=corte)
+
+
+def filtro_aguardando_leitura(corte):
+    """Marcadas como resolvidas depois da última leitura: a próxima é que vai dizer."""
+    base = models.Q(resolvida=True, ativa=True)
+    if corte is None:
+        return base
+    return base & (models.Q(resolvida_em__gte=corte) | models.Q(resolvida_em__isnull=True))
 
 
 class SincronizacaoAuditoria(models.Model):

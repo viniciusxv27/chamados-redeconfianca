@@ -57,7 +57,7 @@ from django.test import Client
 from auditoria_sap import mysql
 from auditoria_sap.espelho import sincronizar
 from auditoria_sap.models import (LinhaAuditoria, MarcacaoAuditoria,
-                                  SincronizacaoAuditoria, chave_de)
+                                  SincronizacaoAuditoria, chave_de, inicio_da_ultima_leitura)
 from auditoria_sap.permissions import e_gestor, pode_ver
 from users.models import Sector
 
@@ -327,26 +327,52 @@ try:
     t('quem não tem acesso não marca',
       cf.post(f'/sap/linha/{alvo.id}/marcar/', {'resolvida': '1'}).status_code in (302, 403))
 
-    print('\n== O PAINEL ==')
-    r = c.get('/sap/painel/?situacao=todas')
+    print('\n== O PAINEL: PENDÊNCIAS POR LOJA E RESOLVIDAS QUE NÃO SAÍRAM ==')
+    # `uma` foi marcada como resolvida lá atrás e o SAP já foi lido várias vezes desde
+    # então, com ela ainda dentro: é o "resolveu, rodou a automação e não resolveu".
+    t('há uma leitura que deu certo para servir de régua', inicio_da_ultima_leitura() is not None)
+    r = c.get('/sap/painel/')
     t('o painel abre', r.status_code == 200, r.status_code)
-    html = r.content.decode()
     contexto = r.context
-    t('conta as linhas do filtro (as que ainda estão no SAP)',
-      contexto['resumo']['total'] == LinhaAuditoria.objects.filter(ativa=True).count(),
-      contexto['resumo']['total'])
-    todas = c.get('/sap/painel/?situacao=todas&presenca=todas')
-    t('e, pedindo tudo, conta também as que saíram',
-      todas.context['resumo']['total'] == LinhaAuditoria.objects.count(),
-      todas.context['resumo']['total'])
-    t('separa por tipo de erro', len(contexto['por_tipo']) >= 2, contexto['por_tipo'])
-    t('e por loja', len(contexto['por_loja']) >= 2)
-    t('tem o dia a dia', len(contexto['por_dia']) >= 1)
-    t('mostra quem resolveu', any(q['usuario'] == chefe.id for q in contexto['quem']), contexto['quem'])
-    t('e as últimas marcações', len(contexto['ultimas']) >= 2)
-    t('lista as maiores diferenças', len(contexto['maiores']) >= 1)
-    t('diz quantas resolvidas continuam aparecendo', 'Resolvidas que voltaram' in html)
-    t('e quantas saíram do SAP', 'Saíram do SAP' in html)
+    html = r.content.decode()
+    pendentes = [l.pk for l in contexto['resolvidas_pendentes']]
+    t('marcada como resolvida e ainda no SAP depois da leitura: resolvida, mas pendente',
+      uma.pk in pendentes and contexto['numeros']['pendentes'] >= 1, pendentes)
+    t('o quadro aparece com quem marcou', 'Resolvidas, mas ainda pendentes' in html and chefe.full_name in html)
+    loja_uma = next((l for l in contexto['por_loja'] if l['pdv'] == uma.pdv), None)
+    t('pendências por loja contam a resolvida-pendente na loja dela',
+      loja_uma and loja_uma['pendentes'] >= 1, contexto['por_loja'])
+    t('as abertas também entram por loja', contexto['numeros']['abertas'] >= 1
+      and sum(l['abertas'] for l in contexto['por_loja']) == contexto['numeros']['abertas'])
+    t('cada loja leva para a lista dela', f"loja={uma.pdv}" in html.replace('%20', ' ').replace('+', ' '))
+
+    outra = LinhaAuditoria.objects.get(chave=chave_de(linhas[1]))
+    outra.marcar(chefe, True, 'corrigi no SAP')
+    contexto = c.get('/sap/painel/').context
+    t('marcada depois da última leitura: aguardando a próxima, não pendente',
+      outra.pk not in [l.pk for l in contexto['resolvidas_pendentes']] and contexto['numeros']['aguardando'] >= 1)
+    lista_aguardando = c.get('/sap/?situacao=aguardando')
+    t('a lista filtra as que aguardam e mostra o selo',
+      outra.pk in [l.pk for l in lista_aguardando.context['pagina']]
+      and 'Aguardando leitura' in lista_aguardando.content.decode())
+
+    # A próxima "automação": a `outra` saiu do SAP, a `uma` continua.
+    with mock.patch.object(mysql, 'ler_visao_geral', return_value=[linhas[0], mudada]):
+        sincronizar()
+    contexto = c.get('/sap/painel/').context
+    t('resolvida que saiu na leitura seguinte some do painel',
+      outra.pk not in [l.pk for l in contexto['resolvidas_pendentes']] and contexto['numeros']['aguardando'] == 0,
+      contexto['numeros'])
+    t('e conta como corrigida', contexto['corrigidas'] >= 1)
+    t('a que continua no SAP segue no quadro', uma.pk in [l.pk for l in contexto['resolvidas_pendentes']])
+    lista_pendentes = c.get('/sap/?situacao=pendentes')
+    t('a lista filtra as resolvidas-pendentes e mostra o selo',
+      [l.pk for l in lista_pendentes.context['pagina']] == [uma.pk]
+      and 'Ainda pendente no SAP' in lista_pendentes.content.decode())
+    uma.marcar(chefe, False, 'reaberta para tratar de novo')
+    contexto = c.get('/sap/painel/').context
+    t('reabrir tira do quadro e devolve às abertas',
+      uma.pk not in [l.pk for l in contexto['resolvidas_pendentes']] and contexto['numeros']['pendentes'] == 0)
     t('o painel tem os mesmos filtros da lista',
       'name="tipo"' in html and 'name="loja"' in html and 'name="q"' in html)
     t('e diz de quando é a última leitura', 'Última leitura do SAP' in html)

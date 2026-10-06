@@ -50,3 +50,35 @@ def pct_de(valor, maximo):
         return round(float(valor) / maximo * 100, 1)
     except (TypeError, ValueError):
         return 0
+
+
+@register.filter
+def partes_da_ideia(texto):
+    """Descrição da ideia em (título, corpo) para o cartão.
+
+    Muita ideia chega com a primeira linha como título ("Matinal mensal") e o
+    resto embaixo; outras são um parágrafo só. Primeira linha curta vira o título
+    do cartão; texto corrido fica inteiro no corpo.
+    """
+    linhas = texto_limpo(texto).split('\n')
+    while linhas and not linhas[0].strip():
+        linhas.pop(0)
+    if not linhas:
+        return {'titulo': '', 'corpo': ''}
+    primeira = linhas[0].strip()
+    resto = '\n'.join(linhas[1:]).strip('\n')
+    if len(primeira) <= 120 and (resto or len(primeira) <= 90):
+        return {'titulo': primeira, 'corpo': resto}
+    return {'titulo': '', 'corpo': '\n'.join(linhas).strip()}
+
+
+@register.filter
+def texto_limpo(texto):
+    """Quebras de linha arrumadas para mostrar com ``whitespace-pre-line``.
+
+    Texto colado do Word/WhatsApp chega com ``\r\n``, espaços sobrando e várias
+    linhas em branco seguidas — na tela isso virava buracos no meio do cartão.
+    """
+    import re
+    linhas = [linha.strip() for linha in str(texto or '').replace('\r\n', '\n').replace('\r', '\n').split('\n')]
+    return re.sub(r'\n{3,}', '\n\n', '\n'.join(linhas)).strip()

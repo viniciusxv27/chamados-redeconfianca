@@ -14,7 +14,8 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
 from .espelho import sincronizar, ultima_sincronizacao
-from .models import LinhaAuditoria, MarcacaoAuditoria
+from .models import (LinhaAuditoria, filtro_aguardando_leitura, filtro_resolvidas_pendentes,
+                     inicio_da_ultima_leitura)
 from .mysql import SapIndisponivel
 from .permissions import e_gestor as _e_gestor
 from .permissions import pode_ver as _pode_ver
@@ -23,7 +24,9 @@ logger = logging.getLogger(__name__)
 ZERO = Decimal('0.00')
 POR_PAGINA = 50
 
-SITUACOES = (('abertas', 'Só as abertas'), ('resolvidas', 'Só as resolvidas'), ('todas', 'Todas'))
+SITUACOES = (('abertas', 'Só as abertas'), ('pendentes', 'Resolvidas, mas ainda pendentes'),
+             ('aguardando', 'Resolvidas, aguardando a próxima leitura'), ('resolvidas', 'Só as resolvidas'),
+             ('todas', 'Todas'))
 PRESENCAS = (('na', 'Ainda na auditoria'), ('sairam', 'Já saíram do SAP'), ('todas', 'Todas'))
 ORDENS = (
     ('recente', 'Venda mais recente'),
@@ -88,7 +91,7 @@ def ler_filtros(request):
     }
 
 
-def filtrar(filtros):
+def filtrar(filtros, corte=None):
     """A consulta do espelho já com os filtros da tela."""
     qs = LinhaAuditoria.objects.all()
     if filtros['presenca'] == 'na':
@@ -99,6 +102,10 @@ def filtrar(filtros):
         qs = qs.filter(resolvida=False)
     elif filtros['situacao'] == 'resolvidas':
         qs = qs.filter(resolvida=True)
+    elif filtros['situacao'] == 'pendentes':
+        qs = qs.filter(filtro_resolvidas_pendentes(corte if corte is not None else inicio_da_ultima_leitura()))
+    elif filtros['situacao'] == 'aguardando':
+        qs = qs.filter(filtro_aguardando_leitura(corte if corte is not None else inicio_da_ultima_leitura()))
     if filtros['tipo']:
         qs = qs.filter(tipo_erro=filtros['tipo'])
     if filtros['loja']:
@@ -173,6 +180,9 @@ def lista(request):
     resumo = _resumo(qs)
 
     pagina = Paginator(qs.select_related('resolvida_por'), POR_PAGINA).get_page(request.GET.get('pagina'))
+    corte = inicio_da_ultima_leitura()
+    for linha in pagina:
+        linha.estado = linha.estado_da_resolucao(corte)
 
     # A paginação precisa manter os filtros e trocar só a página.
     parametros = request.GET.copy()
@@ -191,52 +201,52 @@ def lista(request):
 @login_required
 @so_auditoria
 def painel(request):
-    """O painel administrativo: onde está o problema e quem já tratou."""
+    """O painel: pendências por loja e o que foi dado como resolvido sem sair do SAP.
+
+    O ciclo é: o gerente marca "resolvido"; na leitura seguinte do SAP, se a linha
+    sumiu, ela sai daqui (corrigida); se continua lá, ela entra no quadro
+    "Resolvidas, mas ainda pendentes" — alguém disse que resolveu e não resolveu.
+    """
     filtros = ler_filtros(request)
-    qs = filtrar(filtros)
-    resumo = _resumo(qs)
+    corte = inicio_da_ultima_leitura()
+    # O painel conta todas as situações; o filtro de situação vale só para a lista.
+    base = filtrar({**filtros, 'situacao': 'todas', 'presenca': 'na'}, corte)
 
-    em_risco = Coalesce(Sum(Abs(Coalesce('diferenca_valor', Value(ZERO)))), Value(ZERO),
-                        output_field=DecimalField(max_digits=16, decimal_places=2))
+    q_abertas = Q(resolvida=False)
+    q_pendentes = filtro_resolvidas_pendentes(corte)
+    q_aguardando = filtro_aguardando_leitura(corte)
+    numeros = base.aggregate(abertas=Count('id', filter=q_abertas),
+                             pendentes=Count('id', filter=q_pendentes),
+                             aguardando=Count('id', filter=q_aguardando))
+    corrigidas = filtrar({**filtros, 'situacao': 'todas', 'presenca': 'sairam'}, corte).count()
 
-    por_tipo = list(qs.values('tipo_erro')
-                    .annotate(n=Count('id'), resolvidas=Count('id', filter=Q(resolvida=True)),
-                              valor=em_risco)
-                    .order_by('-n'))
-    por_loja = list(qs.values('pdv')
-                    .annotate(n=Count('id'), resolvidas=Count('id', filter=Q(resolvida=True)),
-                              valor=em_risco)
-                    .order_by('-n')[:15])
-    por_dia = list(qs.exclude(data_venda=None).values('data_venda')
-                   .annotate(n=Count('id'), resolvidas=Count('id', filter=Q(resolvida=True)))
-                   .order_by('data_venda'))
+    por_loja = list(base.values('pdv')
+                    .annotate(abertas=Count('id', filter=q_abertas), pendentes=Count('id', filter=q_pendentes),
+                              aguardando=Count('id', filter=q_aguardando))
+                    .filter(Q(abertas__gt=0) | Q(pendentes__gt=0) | Q(aguardando__gt=0))
+                    .order_by('-pendentes', '-abertas', 'pdv'))
+    for loja in por_loja:
+        loja['total'] = loja['abertas'] + loja['pendentes']
+    maior = max((l['total'] for l in por_loja), default=0)
 
-    # Quem tratou: conta pela marcação, que é o registro de quem mexeu.
-    quem = list(MarcacaoAuditoria.objects.filter(resolvida=True, linha__in=qs)
-                .values('usuario', 'usuario__first_name', 'usuario__last_name')
-                .annotate(n=Count('id')).order_by('-n')[:10])
+    resolvidas_pendentes = list(base.filter(q_pendentes).select_related('resolvida_por')
+                                .order_by('pdv', '-resolvida_em')[:100])
 
-    ultimas = (MarcacaoAuditoria.objects.select_related('usuario', 'linha')
-               .order_by('-quando')[:12])
-
-    maiores = list(ordenar(qs, 'diferenca').select_related('resolvida_por')[:10])
+    parametros = request.GET.copy()
+    for chave in ('situacao', 'presenca', 'loja', 'pagina'):
+        parametros.pop(chave, None)
 
     contexto = _contexto_comum(request, filtros)
     contexto.update({
-        'resumo': resumo,
-        'por_tipo': por_tipo,
+        'numeros': numeros,
+        'corrigidas': corrigidas,
         'por_loja': por_loja,
-        'por_dia': por_dia,
-        'maior_dia': max((d['n'] for d in por_dia), default=0),
-        'maior_tipo': max((d['n'] for d in por_tipo), default=0),
-        'maior_loja': max((d['n'] for d in por_loja), default=0),
-        'quem': quem,
-        'ultimas': ultimas,
-        'maiores': maiores,
-        'voltaram': qs.filter(resolvida=True, ativa=True).count(),
-        'sairam': LinhaAuditoria.objects.filter(ativa=False).count(),
+        'maior_loja': maior,
+        'resolvidas_pendentes': resolvidas_pendentes,
+        'corte': corte,
         'aba': 'painel',
-        'query': request.GET.urlencode(),
+        # Para os links de detalhe: os filtros do painel, sem situação/loja (cada link põe a sua).
+        'query': parametros.urlencode(),
     })
     return render(request, 'auditoria_sap/painel.html', contexto)
 

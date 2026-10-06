@@ -1,4 +1,5 @@
 {% extends 'impulso/base_impulso.html' %}
+{% load impulso_tags %}
 
 {% block impulso_content %}
 <div class="flex items-center justify-between mb-4">
@@ -60,42 +61,67 @@ Decidir em lote: a lista inteira é um formulário só. Cada ideia diz se segue
 
 <div class="space-y-3">
     {% for ideia in ideias %}
-    <div class="imp-card p-4">
-        <div class="flex items-start justify-between gap-2">
-            <div>
-                <p class="text-sm text-gray-800 whitespace-pre-wrap">{{ ideia.descricao }}</p>
-                <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500 mt-2">
-                    <span><i class="fas fa-bullseye mr-1"></i>Impacto: {{ ideia.setor_impacto }}</span>
-                    {% if ideia.mostrar_autor %}
-                    <span><i class="fas fa-user mr-1"></i>Sua ideia</span>
-                    {% if ideia.equipe_visivel %}
-                    <span title="Estas pessoas também pontuam com esta ideia">
-                        <i class="fas fa-user-group mr-1"></i>Com
-                        {% for p in ideia.equipe_visivel %}{{ p.first_name }}{% if not forloop.last %}, {% endif %}{% endfor %}
-                    </span>
-                    {% endif %}
-                    {% elif ideia.autor_visivel %}
-                    {% comment %}Autoria liberada em /impulso/inovar/adm/.{% endcomment %}
-                    <span title="Você foi liberado para ver quem enviou cada ideia">
-                        <i class="fas fa-user mr-1"></i>{{ ideia.autor_visivel.full_name }}
-                    </span>
-                    {% if ideia.equipe_visivel %}
-                    <span title="Estas pessoas também pontuam com esta ideia">
-                        <i class="fas fa-user-group mr-1"></i>Com
-                        {% for p in ideia.equipe_visivel %}{{ p.first_name }}{% if not forloop.last %}, {% endif %}{% endfor %}
-                    </span>
-                    {% endif %}
-                    {% elif ideia.sou_participante %}
-                    <span title="Você foi incluído nesta ideia e pontua com ela">
-                        <i class="fas fa-user-group mr-1"></i>Você participa desta ideia
-                    </span>
-                    {% elif is_gestor %}
-                    {# Avaliação é da ideia, não de quem escreveu: sem autor aqui. #}
-                    <span class="text-gray-400"><i class="fas fa-user-secret mr-1"></i>Autor não identificado</span>
-                    {% endif %}
-                    <span><i class="fas fa-calendar mr-1"></i>{{ ideia.criado_em|date:"d/m/Y" }}</span>
+    {% with partes=ideia.descricao|partes_da_ideia %}
+    <article class="imp-card imp-ideia imp-ideia-{{ ideia.status|lower }} overflow-hidden">
+        <div class="p-4 sm:p-5">
+            <header class="flex flex-wrap items-center gap-2 mb-3">
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold
+                    {% if ideia.status == 'NOVA' %}bg-blue-100 text-blue-700
+                    {% elif ideia.status == 'EM_ANALISE' %}bg-amber-100 text-amber-700
+                    {% elif ideia.status == 'APROVADA' %}bg-emerald-100 text-emerald-700
+                    {% else %}bg-gray-100 text-gray-500{% endif %}">{{ ideia.get_status_display }}</span>
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-violet-50 text-violet-700">
+                    <i class="fas fa-bullseye mr-1"></i>{{ ideia.setor_impacto }}
+                </span>
+                <span class="text-xs text-gray-400 ml-auto"><i class="far fa-calendar mr-1"></i>{{ ideia.criado_em|date:"d/m/Y" }}</span>
+            </header>
+
+            {% if partes.titulo %}
+            <h3 class="text-base sm:text-lg font-bold text-gray-900 leading-snug break-words">{{ partes.titulo }}</h3>
+            {% endif %}
+            {% if partes.corpo %}
+            <div class="imp-ideia-texto mt-1.5" data-recolher>
+                <p class="text-sm sm:text-[15px] text-gray-700 leading-relaxed whitespace-pre-line break-words">{{ partes.corpo }}</p>
+            </div>
+            {% endif %}
+
+            {% if ideia.motivo %}
+            <section class="mt-4 rounded-lg bg-amber-50/70 border-l-4 border-amber-300 px-3.5 py-2.5">
+                <p class="text-[11px] font-semibold uppercase tracking-wide text-amber-700 mb-1"><i class="fas fa-circle-question mr-1"></i>Por que esta ideia</p>
+                <div class="imp-ideia-texto" data-recolher>
+                    <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-line break-words">{{ ideia.motivo|texto_limpo }}</p>
                 </div>
-                <p class="text-xs text-gray-600 mt-2"><span class="font-medium">Motivo:</span> {{ ideia.motivo }}</p>
+            </section>
+            {% endif %}
+
+            <footer class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500 mt-4">
+                {% if ideia.mostrar_autor %}
+                <span><i class="fas fa-user mr-1"></i>Sua ideia</span>
+                {% if ideia.equipe_visivel %}
+                <span title="Estas pessoas também pontuam com esta ideia">
+                    <i class="fas fa-user-group mr-1"></i>Com
+                    {% for p in ideia.equipe_visivel %}{{ p.first_name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                </span>
+                {% endif %}
+                {% elif ideia.autor_visivel %}
+                {% comment %}Autoria liberada em /impulso/inovar/adm/.{% endcomment %}
+                <span title="Você foi liberado para ver quem enviou cada ideia">
+                    <i class="fas fa-user mr-1"></i>{{ ideia.autor_visivel.full_name }}
+                </span>
+                {% if ideia.equipe_visivel %}
+                <span title="Estas pessoas também pontuam com esta ideia">
+                    <i class="fas fa-user-group mr-1"></i>Com
+                    {% for p in ideia.equipe_visivel %}{{ p.first_name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                </span>
+                {% endif %}
+                {% elif ideia.sou_participante %}
+                <span title="Você foi incluído nesta ideia e pontua com ela">
+                    <i class="fas fa-user-group mr-1"></i>Você participa desta ideia
+                </span>
+                {% elif is_gestor %}
+                {# Avaliação é da ideia, não de quem escreveu: sem autor aqui. #}
+                <span class="text-gray-400"><i class="fas fa-user-secret mr-1"></i>Autor não identificado</span>
+                {% endif %}
 
                 {% comment %}
                 Só o autor edita — quem participa pontua, mas a ideia não é dele.
@@ -103,25 +129,19 @@ Decidir em lote: a lista inteira é um formulário só. Cada ideia diz se segue
                 {% if ideia.autor_id == user.id or user.is_superuser %}
                     {% if ideia.editavel %}
                     <a href="{% url 'impulso:ideia_edit' ideia.id %}"
-                       class="inline-flex items-center gap-1 mt-3 text-xs font-medium text-violet-600 hover:text-violet-800 hover:underline">
+                       class="ml-auto inline-flex items-center gap-1 font-medium text-violet-600 hover:text-violet-800 hover:underline">
                         <i class="fas fa-pen"></i>Editar ideia
                     </a>
                     {% else %}
-                    <p class="mt-3 text-xs text-gray-400">
+                    <span class="ml-auto text-gray-400">
                         <i class="fas fa-lock mr-1"></i>Ideia já {{ ideia.get_status_display|lower }} — não pode mais ser editada.
-                    </p>
+                    </span>
                     {% endif %}
                 {% endif %}
-            </div>
-            <span class="px-2 py-0.5 rounded-full text-xs font-semibold flex-shrink-0
-                {% if ideia.status == 'NOVA' %}bg-blue-100 text-blue-700
-                {% elif ideia.status == 'EM_ANALISE' %}bg-amber-100 text-amber-700
-                {% elif ideia.status == 'APROVADA' %}bg-emerald-100 text-emerald-700
-                {% else %}bg-gray-100 text-gray-500{% endif %}">{{ ideia.get_status_display }}</span>
-        </div>
+            </footer>
 
         {% if ideia.resposta_gestor %}
-        <div class="mt-3 text-xs bg-gray-50 rounded-lg p-2 text-gray-600"><i class="fas fa-reply mr-1"></i>{{ ideia.resposta_gestor }}</div>
+        <div class="mt-3 text-sm bg-gray-50 rounded-lg px-3 py-2 text-gray-700 whitespace-pre-line"><span class="text-xs font-semibold text-gray-500"><i class="fas fa-reply mr-1"></i>Retorno do gestor:</span> {{ ideia.resposta_gestor }}</div>
         {% endif %}
 
         {% comment %}
@@ -178,7 +198,9 @@ Decidir em lote: a lista inteira é um formulário só. Cada ideia diz se segue
             </div>
         </div>
         {% endif %}
-    </div>
+        </div>
+    </article>
+    {% endwith %}
     {% empty %}
     <p class="text-sm text-gray-400">{% if is_gestor %}Nenhuma ideia encontrada com esse filtro.{% else %}Você ainda não enviou ideias. Que tal começar?{% endif %}</p>
     {% endfor %}
@@ -198,6 +220,43 @@ Decidir em lote: a lista inteira é um formulário só. Cada ideia diz se segue
 </div>
 </form>
 {% endif %}
+
+<style>
+    .imp-ideia { border-left: 4px solid #CBD5E1; }
+    .imp-ideia-nova { border-left-color: #3B82F6; }
+    .imp-ideia-em_analise { border-left-color: #F59E0B; }
+    .imp-ideia-aprovada { border-left-color: #10B981; }
+    .imp-ideia-texto.recolhido { max-height: 9.5rem; overflow: hidden; position: relative; }
+    .imp-ideia-texto.recolhido::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 2.5rem;
+        background: linear-gradient(to bottom, rgba(255,255,255,0), var(--imp-fade, #fff)); }
+    section .imp-ideia-texto { --imp-fade: #FFFBEB; }
+    html.dark .imp-ideia-texto { --imp-fade: var(--tema-superficie, #1F1728); }
+</style>
+<script>
+(function () {
+    'use strict';
+    // Texto longo (há propostas de página inteira) começa recolhido, com "Ler mais".
+    // Decide pelo tamanho do texto, não pela altura medida: numa aba em segundo plano
+    // (ou antes do CSS carregar) a medida sai errada e todo cartão viraria "Ler mais".
+    function recolher() { document.querySelectorAll('[data-recolher]').forEach(function (caixa) {
+        var texto = caixa.textContent.trim();
+        if (texto.length <= 450 && texto.split(/\n/).length <= 7) { return; }
+        caixa.classList.add('recolhido');
+        var botao = document.createElement('button');
+        botao.type = 'button';
+        botao.className = 'mt-1 text-xs font-semibold text-violet-600 hover:text-violet-800';
+        botao.textContent = 'Ler mais';
+        botao.setAttribute('aria-expanded', 'false');
+        botao.addEventListener('click', function () {
+            var aberto = caixa.classList.toggle('recolhido') === false;
+            botao.textContent = aberto ? 'Mostrar menos' : 'Ler mais';
+            botao.setAttribute('aria-expanded', String(aberto));
+        });
+        caixa.after(botao);
+    }); }
+    recolher();
+})();
+</script>
 
 {% if is_gestor %}
 <script>
@@ -225,8 +284,8 @@ Decidir em lote: a lista inteira é um formulário só. Cada ideia diz se segue
         function aplicar() {
             bloco.classList.toggle('hidden', decisao.value !== 'segue');
             marca.checked = decisao.value !== '';
-            linha.parentElement.classList.toggle('ring-2', marca.checked);
-            linha.parentElement.classList.toggle('ring-yellow-300', marca.checked);
+            linha.closest('article').classList.toggle('ring-2', marca.checked);
+            linha.closest('article').classList.toggle('ring-yellow-300', marca.checked);
             recontar();
         }
         decisao.addEventListener('change', aplicar);

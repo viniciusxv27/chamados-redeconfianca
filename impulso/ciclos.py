@@ -78,18 +78,171 @@ def _para_json(valor):
     return valor
 
 
+# ---------------------------------------------------------------------------
+# Ajuste manual (SUPERADMIN) de um mês fechado
+# ---------------------------------------------------------------------------
+# Quem ficou "por pouco" (89,5% e a Prata no lugar do Ouro, um curso feito no dia
+# seguinte ao prazo…) é corrigido aqui, item a item, com o motivo registrado. O
+# total, o percentual, a faixa e as C$ do mês saem de novo da mesma conta do
+# fechamento, e o ajuste sobrevive a reabrir e fechar o mês de novo.
+CAMPOS_PONTOS = (
+    ('p_metas_qualidade', 'metas_qualidade', 'Metas — qualidade'),
+    ('p_metas_conclusao', 'metas_conclusao', 'Metas — conclusão'),
+    ('p_feedback', 'feedback', 'Feedback'),
+    ('p_assiduidade', 'assiduidade', 'Assiduidade'),
+    ('p_curso', 'curso', 'Curso do mês'),
+    ('p_videos_pops', 'videos_pops', 'Vídeos e POPs'),
+    ('p_projeto_foco', 'projeto_foco', 'Projeto foco'),
+    ('p_ideias', 'ideias', 'Ideias propostas'),
+    ('p_ideia_aprovada', 'ideia_aprovada', 'Ideia aprovada'),
+)
+
+
+class AjusteRecusado(Exception):
+    """Ajuste que não pode ser feito (ciclo já pago, valor inválido, sem motivo)."""
+
+
+def maximos_do_item(user):
+    from .scoring import pesos
+    tabela = pesos(user)
+    return {campo: tabela.get(peso, Decimal('0')) for campo, peso, _ in CAMPOS_PONTOS}
+
+
+def itens_da_pontuacao(pontuacao):
+    """As linhas do mês fechado para a tela: rótulo, pontos, máximo e o valor calculado."""
+    maximos = maximos_do_item(pontuacao.user)
+    calculado = ((pontuacao.detalhes or {}).get('ajuste_manual') or {}).get('calculado') or {}
+    linhas = []
+    for campo, _, rotulo in CAMPOS_PONTOS:
+        valor = getattr(pontuacao, campo)
+        original = calculado.get(campo)
+        linhas.append({
+            'campo': campo, 'rotulo': rotulo, 'valor': valor, 'max': maximos[campo],
+            'calculado': original,
+            'mudou': original is not None and Decimal(str(original)) != Decimal(valor),
+        })
+    return linhas
+
+
+def _recalcular(pontuacao):
+    """Total, percentual, faixa e C$ a partir dos itens — a mesma conta do fechamento."""
+    total = sum((Decimal(getattr(pontuacao, campo)) for campo, _, _ in CAMPOS_PONTOS), Decimal('0'))
+    aplicavel = Decimal(pontuacao.pontos_aplicaveis or 0)
+    percentual = total / aplicavel * 100 if aplicavel else Decimal('0')
+    pontuacao.total = total.quantize(Decimal('0.01'))
+    pontuacao.percentual = percentual.quantize(Decimal('0.01'))
+    pontuacao.faixa = faixa_por_score(pontuacao.percentual)
+    pontuacao.confiancas_previstas = CONFIANCAS_POR_MES if pontuacao.faixa in FAIXAS_PREMIADAS else 0
+
+
+def _resumo(pontuacao):
+    return {'total': float(pontuacao.total), 'percentual': float(pontuacao.percentual),
+            'faixa': pontuacao.faixa}
+
+
+def _conferir_ciclo(pontuacao):
+    ciclo = pontuacao.mes.ciclo
+    if ciclo.confiancas_creditadas or ciclo.status == ciclo.Status.ENCERRADO:
+        raise AjusteRecusado('O ciclo já foi encerrado e as C$ já foram creditadas: '
+                             'a pontuação dele não muda mais.')
+    if not pontuacao.mes.is_fechado:
+        raise AjusteRecusado('O mês ainda está aberto: o ajuste é feito depois de finalizar o mês.')
+
+
+@transaction.atomic
+def ajustar_pontuacao(pontuacao, valores, motivo, usuario):
+    """Grava os pontos digitados pelo SUPERADMIN. `valores`: {campo: texto/número}.
+
+    Cada item fica entre 0 e o peso dele para a pessoa. Devolve a pontuação salva.
+    """
+    pontuacao = PontuacaoMensal.objects.select_for_update().select_related('mes__ciclo', 'user').get(
+        pk=pontuacao.pk)
+    _conferir_ciclo(pontuacao)
+    motivo = ' '.join((motivo or '').split())
+    if not motivo:
+        raise AjusteRecusado('Escreva o motivo do ajuste.')
+
+    maximos = maximos_do_item(pontuacao.user)
+    novos = {}
+    for campo, _, rotulo in CAMPOS_PONTOS:
+        bruto = valores.get(campo)
+        if bruto in (None, ''):
+            novos[campo] = Decimal(getattr(pontuacao, campo))
+            continue
+        try:
+            valor = Decimal(str(bruto).strip().replace(',', '.'))
+        except Exception:                                       # noqa: BLE001
+            raise AjusteRecusado(f'{rotulo}: valor inválido.')
+        if not valor.is_finite() or valor < 0 or valor > maximos[campo]:
+            raise AjusteRecusado(f'{rotulo}: os pontos vão de 0 a {maximos[campo]:g}.')
+        novos[campo] = valor.quantize(Decimal('0.01'))
+
+    detalhes = dict(pontuacao.detalhes or {})
+    ajuste = dict(detalhes.get('ajuste_manual') or {})
+    antes = _resumo(pontuacao)
+    if 'calculado' not in ajuste:
+        # O que o fechamento calculou: é para onde "desfazer" volta.
+        ajuste['calculado'] = {campo: float(getattr(pontuacao, campo)) for campo, _, _ in CAMPOS_PONTOS}
+        ajuste['calculado_resumo'] = antes
+    if all(novos[c] == Decimal(getattr(pontuacao, c)) for c, _, _ in CAMPOS_PONTOS):
+        raise AjusteRecusado('Nenhum ponto foi alterado.')
+
+    for campo, valor in novos.items():
+        setattr(pontuacao, campo, valor)
+    _recalcular(pontuacao)
+    agora = timezone.localtime()
+    registro = {'por': usuario.get_full_name() or usuario.get_username(), 'por_id': usuario.pk,
+                'em': agora.strftime('%d/%m/%Y %H:%M'), 'motivo': motivo[:500],
+                'antes': antes, 'depois': _resumo(pontuacao)}
+    ajuste.update({'valores': {c: float(v) for c, v in novos.items()}, **registro})
+    ajuste['historico'] = (ajuste.get('historico') or [])[-19:] + [registro]
+    detalhes['ajuste_manual'] = ajuste
+    pontuacao.detalhes = detalhes
+    pontuacao.save()
+    return pontuacao
+
+
+@transaction.atomic
+def desfazer_ajuste(pontuacao, usuario):
+    """Volta para os pontos que o fechamento calculou."""
+    pontuacao = PontuacaoMensal.objects.select_for_update().select_related('mes__ciclo', 'user').get(
+        pk=pontuacao.pk)
+    _conferir_ciclo(pontuacao)
+    detalhes = dict(pontuacao.detalhes or {})
+    ajuste = detalhes.get('ajuste_manual') or {}
+    calculado = ajuste.get('calculado')
+    if not calculado:
+        raise AjusteRecusado('Esta pontuação não tem ajuste manual.')
+    for campo, _, _ in CAMPOS_PONTOS:
+        setattr(pontuacao, campo, Decimal(str(calculado.get(campo, 0))))
+    _recalcular(pontuacao)
+    historico = (detalhes.get('ajustes_desfeitos') or [])[-19:]
+    historico.append({**{k: ajuste.get(k) for k in ('por', 'em', 'motivo', 'antes', 'depois')},
+                      'desfeito_por': usuario.get_full_name() or usuario.get_username(),
+                      'desfeito_em': timezone.localtime().strftime('%d/%m/%Y %H:%M')})
+    detalhes['ajustes_desfeitos'] = historico
+    detalhes.pop('ajuste_manual', None)
+    pontuacao.detalhes = detalhes
+    pontuacao.save()
+    return pontuacao
+
+
 @transaction.atomic
 def fechar_mes(mes, usuario):
     """Congela a pontuação de todos os colaboradores no mês."""
     inicio, fim = periodo_do_mes_obj(mes)
     total_pessoas = 0
+    # Ajuste manual feito antes de reabrir o mês: o fechamento de novo não pode apagá-lo.
+    ajustes = {p.user_id: p.detalhes['ajuste_manual']
+               for p in PontuacaoMensal.objects.filter(mes=mes).only('user_id', 'detalhes')
+               if (p.detalhes or {}).get('ajuste_manual')}
 
     for colaborador in get_colaboradores():
         dados = calcular_pontuacao(colaborador, inicio=inicio, fim=fim)
         faixa = dados['faixa']
         premio = CONFIANCAS_POR_MES if faixa in FAIXAS_PREMIADAS else 0
 
-        PontuacaoMensal.objects.update_or_create(
+        pontuacao, _ = PontuacaoMensal.objects.update_or_create(
             mes=mes, user=colaborador,
             defaults={
                 'setor': getattr(colaborador, 'sector', None),
@@ -110,6 +263,17 @@ def fechar_mes(mes, usuario):
                 'detalhes': _para_json(dados['detalhes']),
             },
         )
+        ajuste = ajustes.get(colaborador.pk)
+        if ajuste and ajuste.get('valores'):
+            # O calculado passa a ser o do fechamento novo; os pontos digitados continuam.
+            ajuste = {**ajuste, 'calculado': {c: float(getattr(pontuacao, c)) for c, _, _ in CAMPOS_PONTOS},
+                      'calculado_resumo': _resumo(pontuacao)}
+            for campo, _, _ in CAMPOS_PONTOS:
+                if campo in ajuste['valores']:
+                    setattr(pontuacao, campo, Decimal(str(ajuste['valores'][campo])))
+            _recalcular(pontuacao)
+            pontuacao.detalhes = {**(pontuacao.detalhes or {}), 'ajuste_manual': ajuste}
+            pontuacao.save()
         total_pessoas += 1
 
     mes.status = CicloMes.Status.FECHADO

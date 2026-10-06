@@ -3,42 +3,37 @@
 
 {% block sap_titulo %}Visão SAP — painel{% endblock %}
 {% block sap_cabecalho %}Visão SAP{% endblock %}
-{% block sap_subtitulo %}Painel da auditoria SAP × Vivo go{% endblock %}
+{% block sap_subtitulo %}Pendências por loja e o que foi dado como resolvido sem sair do SAP{% endblock %}
 
 {% block sap_conteudo %}
 
-<div class="grid grid-cols-2 lg:grid-cols-6 gap-3 mb-4">
-    <div class="sap-card p-4">
-        <p class="text-xs text-gray-500">Linhas</p>
-        <p class="text-3xl font-bold text-gray-900 tabular">{{ resumo.total }}</p>
-        <p class="text-[11px] text-gray-400 mt-0.5">no filtro atual</p>
-    </div>
-    <div class="sap-card p-4">
-        <p class="text-xs text-gray-500">Abertas</p>
-        <p class="text-3xl font-bold {% if resumo.abertas %}text-amber-600{% else %}text-emerald-600{% endif %} tabular">{{ resumo.abertas }}</p>
-        <p class="text-[11px] text-gray-400 mt-0.5">sem tratativa</p>
-    </div>
-    <div class="sap-card p-4">
-        <p class="text-xs text-gray-500">Resolvidas</p>
-        <p class="text-3xl font-bold text-emerald-600 tabular">{{ resumo.resolvidas }}</p>
-        <div class="sap-barra mt-2"><span style="width: {{ resumo.percentual }}%"></span></div>
-        <p class="text-[11px] text-gray-400 mt-1">{{ resumo.percentual }}% tratado</p>
-    </div>
-    <div class="sap-card p-4">
-        <p class="text-xs text-gray-500">Diferença de valor</p>
-        <p class="text-xl font-bold text-sky-700 tabular">{{ resumo.em_risco|brl_zero }}</p>
-        <p class="text-[11px] text-gray-400 mt-0.5">somando o filtro</p>
-    </div>
-    <div class="sap-card p-4">
-        <p class="text-xs text-gray-500">Resolvidas que voltaram</p>
-        <p class="text-3xl font-bold {% if voltaram %}text-amber-600{% else %}text-gray-300{% endif %} tabular">{{ voltaram }}</p>
-        <p class="text-[11px] text-gray-400 mt-0.5">marcadas e ainda no SAP</p>
-    </div>
-    <div class="sap-card p-4">
-        <p class="text-xs text-gray-500">Saíram do SAP</p>
-        <p class="text-3xl font-bold text-gray-700 tabular">{{ sairam }}</p>
-        <p class="text-[11px] text-gray-400 mt-0.5">corrigidas na origem</p>
-    </div>
+{% comment %}
+O ciclo: o gerente marca "resolvido". Na leitura seguinte do SAP, se a linha
+sumiu, ela sai do painel (corrigida). Se continua lá, entra em "Resolvidas, mas
+ainda pendentes" — alguém sinalizou que resolveu, a automação rodou e o problema
+continua.
+{% endcomment %}
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+    <a href="{% url 'auditoria_sap:lista' %}?{{ query }}&situacao=abertas" class="sap-card p-4 block hover:ring-2 hover:ring-sky-100">
+        <p class="text-xs text-gray-500">Pendências abertas</p>
+        <p class="text-3xl font-bold {% if numeros.abertas %}text-amber-600{% else %}text-emerald-600{% endif %} tabular">{{ numeros.abertas }}</p>
+        <p class="text-[11px] text-gray-400 mt-0.5">ninguém marcou ainda</p>
+    </a>
+    <a href="{% url 'auditoria_sap:lista' %}?{{ query }}&situacao=pendentes" class="sap-card p-4 block hover:ring-2 hover:ring-red-100 {% if numeros.pendentes %}ring-2 ring-red-200{% endif %}" data-card="resolvidas-pendentes">
+        <p class="text-xs text-gray-500">Resolvidas, mas ainda pendentes</p>
+        <p class="text-3xl font-bold {% if numeros.pendentes %}text-red-600{% else %}text-gray-300{% endif %} tabular">{{ numeros.pendentes }}</p>
+        <p class="text-[11px] text-gray-400 mt-0.5">marcadas e o SAP leu de novo com o problema</p>
+    </a>
+    <a href="{% url 'auditoria_sap:lista' %}?{{ query }}&situacao=aguardando" class="sap-card p-4 block hover:ring-2 hover:ring-sky-100">
+        <p class="text-xs text-gray-500">Aguardando a próxima leitura</p>
+        <p class="text-3xl font-bold text-sky-700 tabular">{{ numeros.aguardando }}</p>
+        <p class="text-[11px] text-gray-400 mt-0.5">marcadas depois da última leitura</p>
+    </a>
+    <a href="{% url 'auditoria_sap:lista' %}?{{ query }}&situacao=todas&presenca=sairam" class="sap-card p-4 block hover:ring-2 hover:ring-emerald-100">
+        <p class="text-xs text-gray-500">Corrigidas</p>
+        <p class="text-3xl font-bold text-emerald-600 tabular">{{ corrigidas }}</p>
+        <p class="text-[11px] text-gray-400 mt-0.5">saíram do SAP</p>
+    </a>
 </div>
 
 {% include 'auditoria_sap/_filtros.html' %}
@@ -54,139 +49,76 @@
 </div>
 {% else %}
 
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-    <div class="sap-card overflow-hidden self-start">
-        <div class="px-5 py-3.5 border-b border-gray-100">
-            <h2 class="font-semibold text-gray-800 text-sm"><i class="fas fa-triangle-exclamation text-sky-600 mr-1.5"></i>Por tipo de erro</h2>
-        </div>
-        <div class="p-4 space-y-3">
-            {% for t in por_tipo %}
-            <a href="{% url 'auditoria_sap:lista' %}?{{ query }}&tipo={{ t.tipo_erro|urlencode }}" class="block group">
-                <div class="flex items-baseline justify-between gap-3">
-                    <p class="text-sm text-gray-700 group-hover:text-sky-700">{{ t.tipo_erro|default:"—" }}</p>
-                    <p class="text-sm font-semibold text-gray-800 tabular">{{ t.n }}</p>
-                </div>
-                <div class="sap-barra mt-1"><span style="width: {% widthratio t.n maior_tipo 100 %}%"></span></div>
-                <p class="text-[11px] text-gray-400 mt-1">
-                    {{ t.resolvidas }} resolvida{{ t.resolvidas|pluralize }} · {{ t.valor|brl_zero }} de diferença
-                </p>
-            </a>
-            {% empty %}
-            <p class="text-sm text-gray-400">Nada no filtro.</p>
-            {% endfor %}
-        </div>
-    </div>
-
-    <div class="sap-card overflow-hidden self-start">
-        <div class="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
-            <h2 class="font-semibold text-gray-800 text-sm"><i class="fas fa-store text-sky-600 mr-1.5"></i>Por loja</h2>
-            <span class="text-xs text-gray-400">as 15 com mais linhas</span>
-        </div>
-        <div class="p-4 space-y-3 max-h-96 overflow-y-auto">
-            {% for l in por_loja %}
-            <a href="{% url 'auditoria_sap:lista' %}?{{ query }}&loja={{ l.pdv|urlencode }}" class="block group">
-                <div class="flex items-baseline justify-between gap-3">
-                    <p class="text-sm text-gray-700 group-hover:text-sky-700">{{ l.pdv|title|default:"—" }}</p>
-                    <p class="text-sm font-semibold text-gray-800 tabular">{{ l.n }}</p>
-                </div>
-                <div class="sap-barra mt-1"><span style="width: {% widthratio l.n maior_loja 100 %}%"></span></div>
-                <p class="text-[11px] text-gray-400 mt-1">
-                    {{ l.resolvidas }} resolvida{{ l.resolvidas|pluralize }} · {{ l.valor|brl_zero }} de diferença
-                </p>
-            </a>
-            {% empty %}
-            <p class="text-sm text-gray-400">Nada no filtro.</p>
-            {% endfor %}
-        </div>
-    </div>
-</div>
-
-<div class="sap-card mt-4 overflow-hidden">
-    <div class="px-5 py-3.5 border-b border-gray-100">
-        <h2 class="font-semibold text-gray-800 text-sm"><i class="fas fa-calendar-day text-sky-600 mr-1.5"></i>Por dia da venda</h2>
-    </div>
-    <div class="p-4 overflow-x-auto">
-        <div class="flex items-end gap-1.5 h-40 min-w-max">
-            {% for d in por_dia %}
-            <div class="flex flex-col items-center justify-end h-full group" style="width: 26px"
-                 title="{{ d.data_venda|date:'d/m/Y' }}: {{ d.n }} linha{{ d.n|pluralize }}, {{ d.resolvidas }} resolvida{{ d.resolvidas|pluralize }}">
-                <span class="text-[10px] text-gray-400 mb-1 opacity-0 group-hover:opacity-100 transition-opacity">{{ d.n }}</span>
-                <div class="w-full bg-sky-100 rounded-t flex flex-col justify-end"
-                     style="height: {% widthratio d.n maior_dia 100 %}%">
-                    <div class="w-full bg-emerald-400 rounded-t"
-                         style="height: {% widthratio d.resolvidas d.n 100 %}%"></div>
-                </div>
-                <span class="text-[9px] text-gray-400 mt-1">{{ d.data_venda|date:"d/m" }}</span>
-            </div>
-            {% empty %}
-            <p class="text-sm text-gray-400">Nada no filtro.</p>
-            {% endfor %}
-        </div>
-        <p class="text-[11px] text-gray-400 mt-2">
-            <span class="inline-block w-2.5 h-2.5 rounded-sm bg-sky-100 align-middle"></span> linhas ·
-            <span class="inline-block w-2.5 h-2.5 rounded-sm bg-emerald-400 align-middle"></span> já resolvidas
-        </p>
-    </div>
-</div>
-
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
-    <div class="sap-card overflow-hidden self-start">
-        <div class="px-5 py-3.5 border-b border-gray-100">
-            <h2 class="font-semibold text-gray-800 text-sm"><i class="fas fa-user-check text-emerald-600 mr-1.5"></i>Quem resolveu</h2>
-        </div>
-        <div class="divide-y divide-gray-50">
-            {% for q in quem %}
-            <div class="px-5 py-2.5 flex items-center justify-between gap-3">
-                <p class="text-sm text-gray-700">{{ q.usuario__first_name }} {{ q.usuario__last_name }}</p>
-                <p class="text-sm font-semibold text-gray-800 tabular">{{ q.n }}</p>
-            </div>
-            {% empty %}
-            <p class="px-5 py-4 text-sm text-gray-400">Ninguém marcou linha nenhuma ainda.</p>
-            {% endfor %}
-        </div>
-    </div>
-
-    <div class="sap-card overflow-hidden self-start lg:col-span-2">
-        <div class="px-5 py-3.5 border-b border-gray-100">
-            <h2 class="font-semibold text-gray-800 text-sm"><i class="fas fa-clock-rotate-left text-sky-600 mr-1.5"></i>Últimas marcações</h2>
-        </div>
-        <div class="divide-y divide-gray-50 max-h-96 overflow-y-auto">
-            {% for m in ultimas %}
-            <div class="px-5 py-2.5 flex items-start gap-3">
-                <i class="fas {% if m.resolvida %}fa-check text-emerald-500{% else %}fa-rotate-left text-amber-500{% endif %} mt-1 text-xs"></i>
-                <div class="min-w-0">
-                    <p class="text-sm text-gray-700">
-                        <strong>{% if m.usuario %}{{ m.usuario.full_name }}{% else %}Usuário removido{% endif %}</strong>
-                        {% if m.resolvida %}resolveu{% else %}reabriu{% endif %}
-                        <span class="text-gray-400">· {{ m.linha.tipo_erro }} · venda {{ m.linha.id_venda|default:"—" }}</span>
-                    </p>
-                    <p class="text-[11px] text-gray-400">
-                        {{ m.quando|date:"d/m/Y H:i" }}{% if m.observacao %} — {{ m.observacao }}{% endif %}
-                    </p>
-                </div>
-            </div>
-            {% empty %}
-            <p class="px-5 py-4 text-sm text-gray-400">Nenhuma marcação ainda.</p>
-            {% endfor %}
-        </div>
-    </div>
-</div>
-
-<div class="sap-card mt-4 overflow-hidden">
+<div class="sap-card overflow-hidden" data-quadro="por-loja">
     <div class="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between flex-wrap gap-2">
-        <h2 class="font-semibold text-gray-800 text-sm"><i class="fas fa-money-bill-trend-up text-red-500 mr-1.5"></i>Maiores diferenças de valor</h2>
-        <a href="{% url 'auditoria_sap:lista' %}?{{ query }}&ordem=diferenca" class="text-xs text-sky-700 hover:underline">ver na auditoria →</a>
+        <h2 class="font-semibold text-gray-800 text-sm"><i class="fas fa-store text-sky-600 mr-1.5"></i>Pendências por loja</h2>
+        <span class="text-xs text-gray-400">clique na loja para detalhar</span>
+    </div>
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="text-[11px] uppercase tracking-wide text-gray-400 border-b border-gray-100">
+                    <th class="text-left font-medium px-5 py-2">Loja</th>
+                    <th class="text-right font-medium px-3 py-2">Abertas</th>
+                    <th class="text-right font-medium px-3 py-2">Resolvidas, mas pendentes</th>
+                    <th class="text-right font-medium px-3 py-2 hidden sm:table-cell">Aguardando leitura</th>
+                    <th class="text-left font-medium px-5 py-2 hidden md:table-cell w-1/4">Pendências</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-50">
+                {% for l in por_loja %}
+                <tr class="hover:bg-gray-50">
+                    <td class="px-5 py-2.5">
+                        <a href="{% url 'auditoria_sap:lista' %}?{{ query }}&loja={{ l.pdv|urlencode }}" class="text-gray-800 hover:text-sky-700 font-medium">{{ l.pdv|title|default:"—" }}</a>
+                    </td>
+                    <td class="px-3 py-2.5 text-right tabular">
+                        {% if l.abertas %}<a href="{% url 'auditoria_sap:lista' %}?{{ query }}&loja={{ l.pdv|urlencode }}&situacao=abertas" class="font-semibold text-amber-600 hover:underline">{{ l.abertas }}</a>{% else %}<span class="text-gray-300">0</span>{% endif %}
+                    </td>
+                    <td class="px-3 py-2.5 text-right tabular">
+                        {% if l.pendentes %}<a href="{% url 'auditoria_sap:lista' %}?{{ query }}&loja={{ l.pdv|urlencode }}&situacao=pendentes" class="font-semibold text-red-600 hover:underline">{{ l.pendentes }}</a>{% else %}<span class="text-gray-300">0</span>{% endif %}
+                    </td>
+                    <td class="px-3 py-2.5 text-right tabular hidden sm:table-cell">
+                        {% if l.aguardando %}<a href="{% url 'auditoria_sap:lista' %}?{{ query }}&loja={{ l.pdv|urlencode }}&situacao=aguardando" class="text-sky-700 hover:underline">{{ l.aguardando }}</a>{% else %}<span class="text-gray-300">0</span>{% endif %}
+                    </td>
+                    <td class="px-5 py-2.5 hidden md:table-cell">
+                        <div class="sap-barra"><span style="width: {% widthratio l.total maior_loja 100 %}%"></span></div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5" class="px-5 py-6 text-center text-sm text-emerald-600"><i class="fas fa-circle-check mr-1"></i>Nenhuma pendência no filtro.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="sap-card mt-4 overflow-hidden" data-quadro="resolvidas-pendentes">
+    <div class="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between flex-wrap gap-2">
+        <div>
+            <h2 class="font-semibold text-gray-800 text-sm"><i class="fas fa-triangle-exclamation text-red-500 mr-1.5"></i>Resolvidas, mas ainda pendentes</h2>
+            <p class="text-[11px] text-gray-400 mt-0.5">Alguém sinalizou que resolveu, o SAP foi lido de novo{% if corte %} ({{ corte|date:"d/m H:i" }}){% endif %} e o problema continua lá.</p>
+        </div>
+        {% if resolvidas_pendentes %}
+        <a href="{% url 'auditoria_sap:lista' %}?{{ query }}&situacao=pendentes" class="text-xs text-sky-700 hover:underline">ver na auditoria →</a>
+        {% endif %}
     </div>
     <div class="divide-y divide-gray-50">
-        {% for linha in maiores %}
-        <div class="px-5 py-2.5 grid grid-cols-2 md:grid-cols-5 gap-2 items-center">
-            <p class="text-sm text-gray-700 truncate">{{ linha.pdv|title }}</p>
+        {% for linha in resolvidas_pendentes %}
+        <div class="px-5 py-2.5 grid grid-cols-2 md:grid-cols-6 gap-x-3 gap-y-1 items-center">
+            <p class="text-sm text-gray-800 font-medium truncate">{{ linha.pdv|title|default:"—" }}</p>
             <p class="text-xs text-gray-500">{{ linha.data_venda|date:"d/m/Y" }} · #{{ linha.id_venda|default:"—" }}</p>
-            <p class="text-xs text-gray-500 truncate md:col-span-2" title="{{ linha.situacao_valor }}">{{ linha.situacao_valor|default:linha.tipo_erro }}</p>
-            <p class="text-sm font-semibold text-red-600 tabular text-right">{{ linha.diferenca_em_reais|brl }}</p>
+            <p class="text-xs text-gray-600 truncate md:col-span-2" title="{{ linha.tipo_erro }}">{{ linha.tipo_erro|default:"—" }}</p>
+            <p class="text-xs text-gray-500 md:col-span-2">
+                <i class="fas fa-user-check text-gray-400 mr-1"></i>{% if linha.resolvida_por %}{{ linha.resolvida_por.full_name }}{% else %}—{% endif %}
+                em {{ linha.resolvida_em|date:"d/m H:i" }}
+                {% if linha.observacao %}<span class="block text-[11px] text-gray-400 truncate" title="{{ linha.observacao }}">“{{ linha.observacao }}”</span>{% endif %}
+            </p>
         </div>
         {% empty %}
-        <p class="px-5 py-4 text-sm text-gray-400">Nada no filtro.</p>
+        <p class="px-5 py-6 text-center text-sm text-gray-400">
+            {% if corte %}Nenhuma: tudo o que foi marcado como resolvido saiu do SAP na leitura seguinte.
+            {% else %}O SAP ainda não foi lido com sucesso — sem leitura, não dá para conferir.{% endif %}
+        </p>
         {% endfor %}
     </div>
 </div>
