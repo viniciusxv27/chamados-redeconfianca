@@ -51,15 +51,26 @@ def esta_na_hora(config, agora=None):
     return anterior is None or anterior < alvo
 
 
-def _executar(dias):
+def _vinculos():
+    """Casa quem ainda não tem vínculo (CPF, depois nome). Vínculo feito à mão não é tocado."""
+    from tangerino.sync import sincronizar_vinculos
+    resultado = sincronizar_vinculos(revincular=False, aplicar=True)
+    return {'criados': resultado['casados_cpf'] + resultado['casados_nome'],
+            'atualizados': 0, 'vinculo': resultado}
+
+
+def _executar(dias, detalhe='Sincronização automática diária.'):
     """O trabalho em si. Roda fora da requisição, numa thread."""
     from tangerino.client import TangerinoError
     from tangerino.models import SincronizacaoTangerino
     from tangerino.sync import (sincronizar_ferias, sincronizar_jornadas,
                                 sincronizar_marcacoes, sincronizar_saldos)
 
-    # A jornada vem primeiro: o previsto de cada dia depende dela.
+    # O vínculo vem antes de tudo: quem acabou de entrar na Sólides (ou ganhou CPF no
+    # portal) já sai com o ponto desta mesma rodada. A jornada vem em seguida: o
+    # previsto de cada dia depende dela.
     tarefas = (
+        (SincronizacaoTangerino.Tipo.VINCULO, 'Vínculos', _vinculos),
         (SincronizacaoTangerino.Tipo.JORNADA, 'Jornadas', sincronizar_jornadas),
         (SincronizacaoTangerino.Tipo.PONTO, 'Marcações', lambda: sincronizar_marcacoes(dias=dias)),
         (SincronizacaoTangerino.Tipo.FERIAS, 'Férias', sincronizar_ferias),
@@ -72,13 +83,19 @@ def _executar(dias):
             registro.criados = resultado.get('criados', 0)
             registro.atualizados = resultado.get('atualizados', 0)
             registro.sucesso = True
-            registro.detalhe = 'Sincronização automática diária.'
+            registro.detalhe = detalhe
+            vinculo = resultado.get('vinculo')
+            if vinculo:
+                registro.casados_cpf = vinculo['casados_cpf']
+                registro.casados_nome = vinculo['casados_nome']
+                registro.ja_vinculados = vinculo['ja_vinculados']
+                registro.sem_correspondencia = vinculo['sem_correspondencia']
             registro.save()
             logger.info('Tangerino automático — %s: %s novos, %s atualizados.',
                         rotulo, registro.criados, registro.atualizados)
         except TangerinoError as exc:
             registro.sucesso = False
-            registro.detalhe = f'Sincronização automática: {exc}'[:2000]
+            registro.detalhe = f'{detalhe} {exc}'[:2000]
             registro.save()
             logger.warning('Tangerino automático — %s falhou: %s', rotulo, exc)
         except Exception as exc:                     # nunca derruba a thread
