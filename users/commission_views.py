@@ -23,6 +23,7 @@ import json
 import hashlib
 import pandas as pd
 from io import BytesIO
+import re
 import unicodedata
 from users.models import User, Sector, SystemConfig, CommissionSpreadsheetVersion
 from openpyxl import Workbook
@@ -504,6 +505,40 @@ def download_excel_file(excel_url, cache_key_prefix="excel"):
     return BytesIO(response.content), None
 
 
+# Grafias erradas que já vieram no cabeçalho da planilha do mês. Em ago/2026 a coluna de
+# Smartphone chegou como "COM_SABRTPHONE" (e BONUTS_/ALTO_DESEM_/HUNTER_SABRTPHONE): o
+# código procura "COM_SMARTPHONE" e o pilar aparecia zerado na visão do consultor.
+COLUNAS_COM_ERRO = {'SABRTPHONE': 'SMARTPHONE'}
+
+
+def corrigir_colunas(data):
+    """Acrescenta à linha a coluna com o nome certo quando ela veio com a grafia errada.
+
+    Não apaga a original nem sobrescreve uma coluna certa que já exista.
+    """
+    if not isinstance(data, dict):
+        return data
+    for chave in list(data):
+        texto = str(chave)
+        for errado, certo in COLUNAS_COM_ERRO.items():
+            if errado in texto.upper():
+                correta = re.sub(errado, certo, texto, flags=re.IGNORECASE)
+                if correta not in data:
+                    data[correta] = data[chave]
+    return data
+
+
+def _corrigir_resultado(result):
+    """``corrigir_colunas`` no que sai das buscas (inclusive do cache, gravado antes da correção)."""
+    if isinstance(result, dict):
+        if isinstance(result.get('data'), dict):
+            corrigir_colunas(result['data'])
+        for item in result.get('users') or []:
+            if isinstance(item, dict):
+                corrigir_colunas(item.get('data'))
+    return result
+
+
 def fetch_excel_data(sheet_name, user_name, excel_url=None, cache_suffix=None):
     """
     Busca dados da planilha Excel do OneDrive
@@ -517,7 +552,7 @@ def fetch_excel_data(sheet_name, user_name, excel_url=None, cache_suffix=None):
     cached_data = cache.get(cache_key)
     
     if cached_data:
-        return cached_data
+        return _corrigir_resultado(cached_data)
     
     try:
         excel_file, error = download_excel_file(excel_url, f"comissao_{sheet_name}")
@@ -570,7 +605,7 @@ def fetch_excel_data(sheet_name, user_name, excel_url=None, cache_suffix=None):
         
         result = {
             'success': True,
-            'data': data,
+            'data': corrigir_colunas(data),
             'sheet': sheet_name
         }
         
@@ -597,7 +632,7 @@ def fetch_all_users_from_sheet(sheet_name, excel_url=None, cache_suffix=None):
     cached_data = cache.get(cache_key)
     
     if cached_data:
-        return cached_data
+        return _corrigir_resultado(cached_data)
     
     try:
         excel_file, error = download_excel_file(excel_url, f"comissao_{sheet_name}")
@@ -636,7 +671,7 @@ def fetch_all_users_from_sheet(sheet_name, excel_url=None, cache_suffix=None):
             
             users_data.append({
                 'nome': str(nome).strip(),
-                'data': data
+                'data': corrigir_colunas(data)
             })
         
         result = {
