@@ -59,8 +59,13 @@ try:
             u.communication_groups.add(g)
         return u
 
-    print('== COMISSIONAMENTO: SÓ GERENTE ENTRE OS PADRÃO ==')
+    print('== COMISSIONAMENTO: SÓ GERENTE ENTRE OS PADRÃO (VERSÕES SÓ PARA GERENTES) ==')
     from users.commission_views import pode_ver_comissionamento
+    from users.models import CommissionSpreadsheetVersion as Versao
+
+    # Nenhuma versão liberada para "Todos": o consultor fica de fora. (Rollback no fim.)
+    publicos_antes = dict(Versao.objects.values_list('id', 'liberado_para'))
+    Versao.objects.update(liberado_para=Versao.LIBERADO_GERENTES)
 
     consultor = novo('pe.consultor')
     gerente = novo('pe.gerente', [gerentes])
@@ -117,6 +122,29 @@ try:
     r = cg.get('/users/commission/projecao/', follow=True)
     t('e o gerente continua abrindo a projeção',
       'disponível para gerentes' not in r.content.decode())
+
+    print('\n== COMISSIONAMENTO LIBERADO PARA TODOS: O CONSULTOR TAMBÉM VÊ ==')
+    liberada = Versao.objects.filter(status=Versao.STATUS_RELEASED).order_by('-year', '-month').first()
+    if liberada:
+        restrita = Versao.objects.filter(status=Versao.STATUS_RELEASED).exclude(pk=liberada.pk).first()
+        Versao.objects.filter(pk=liberada.pk).update(liberado_para=Versao.LIBERADO_TODOS)
+        consultor_de_novo = User.objects.get(pk=consultor.pk)
+        t('com versão liberada para todos, o consultor PADRÃO vê', pode_ver_comissionamento(consultor_de_novo))
+        r = cc.get('/commission/', follow=True)
+        corpo = r.content.decode()
+        t('a tela abre para o consultor', r.status_code == 200 and 'disponível para gerentes' not in corpo)
+        t('e o link aparece no menu dele', link_menu in cc.get('/').content.decode())
+        from users.commission_liberacao import versoes_liberadas
+        vistas = versoes_liberadas(consultor_de_novo)
+        t('ele só enxerga as versões liberadas para todos', [v.pk for v in vistas] == [liberada.pk]
+          and (restrita is None or restrita not in vistas))
+        Versao.objects.filter(pk=liberada.pk).update(liberado_para=Versao.LIBERADO_GERENTES_COORDENADORES)
+        t('voltou a ser só de gerentes e coordenadores: some de novo',
+          not pode_ver_comissionamento(User.objects.get(pk=consultor.pk)))
+    else:
+        print('  (nenhuma versão liberada no banco: liberação para todos não conferida)')
+    for pk, publico in publicos_antes.items():
+        Versao.objects.filter(pk=pk).update(liberado_para=publico)
 
     print('\n== CADASTRO DE FUNCIONÁRIO: SUPERADMIN E ADMINISTRAÇÃO ==')
     alvo = novo('pe.alvo')

@@ -75,6 +75,30 @@ def versoes_liberadas(user):
     return [v for v in base if publico_permitido(user, v.liberado_para)]
 
 
+def liberado_para_todos(user=None):
+    """Há versão liberada com o público "Todos"?
+
+    É o que abre o comissionamento para o consultor (PADRÃO fora dos grupos de
+    gerentes e coordenadores): com a versão aberta a todos, ele também entra — e
+    vê só o próprio número (a visão de CN) e só as versões liberadas para todos.
+    Público desconhecido conta como TODOS, como em ``publico_permitido``.
+
+    Guardado na instância do usuário: o menu e a view perguntam no mesmo request.
+    """
+    cache = getattr(user, '_comissao_liberada_todos', None) if user is not None else None
+    if cache is not None:
+        return cache
+    restritos = PUBLICOS_VALIDOS - {PUBLICO_TODOS}
+    resultado = (_Versao.objects.filter(status=_Versao.STATUS_RELEASED)
+                 .exclude(liberado_para__in=restritos).exists())
+    if user is not None:
+        try:
+            user._comissao_liberada_todos = resultado
+        except Exception:                                       # noqa: BLE001
+            pass
+    return resultado
+
+
 def sem_versao_liberada(user):
     """Há versão liberada no sistema, mas nenhuma para esta pessoa?
 

@@ -49,6 +49,10 @@ def fresco(user):
 marcador = transaction.atomic()
 marcador.__enter__()
 try:
+    # Versão do comissionamento liberada para "Todos" abre a tela a qualquer PADRÃO; aqui o
+    # comissionamento precisa estar fechado para a liberação individual fazer diferença.
+    from users.models import CommissionSpreadsheetVersion
+    CommissionSpreadsheetVersion.objects.update(liberado_para=CommissionSpreadsheetVersion.LIBERADO_GERENTES)
     area = Sector.objects.create(name='ZZ Setor Acessos')
 
     def novo(u, hierarquia='PADRAO', **kw):

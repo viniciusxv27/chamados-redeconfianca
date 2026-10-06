@@ -3014,20 +3014,25 @@ def commission_aparte_view(request, target_user=None):
 def pode_ver_comissionamento(user):
     """Quem abre o comissionamento.
 
-    Entre os usuários PADRÃO, só quem responde por equipe: o grupo GERENTES —
-    e os coordenadores, que estão acima do gerente na mesma cadeia. Consultor
-    e recepcionista PADRÃO não veem mais a tela.
+    Sempre: SUPERADMIN, quem responde por equipe — o grupo GERENTES e os
+    coordenadores, que estão acima do gerente na mesma cadeia — e quem tem a
+    liberação individual do módulo.
 
-    Quem não é PADRÃO (ADMINISTRATIVO, SUPERVISOR, ADMIN, SUPERADMIN) segue
-    como antes: a restrição pedida era sobre o pessoal PADRÃO.
+    Os demais (o consultor e o recepcionista PADRÃO) entram quando há versão
+    liberada para "Todos" em /users/manage/system-config/. Cada visão já recorta
+    o dado pelo papel: o consultor vê só o próprio comissionamento, e só nas
+    versões liberadas para todos (``versoes_liberadas``).
     """
     if not (user and user.is_authenticated):
         return False
     if getattr(user, 'hierarchy', '') == 'SUPERADMIN':
         return True
     from users.module_access import user_has_module
-    return (is_user_gerente(user) or is_user_coordenador(user)
-            or user_has_module(user, 'comissionamento'))
+    if (is_user_gerente(user) or is_user_coordenador(user)
+            or user_has_module(user, 'comissionamento')):
+        return True
+    from .commission_liberacao import liberado_para_todos
+    return liberado_para_todos(user)
 
 
 @login_required
