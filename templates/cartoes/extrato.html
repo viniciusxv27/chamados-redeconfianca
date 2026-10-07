@@ -1,117 +1,249 @@
 {% extends "base.html" %}
+{% load caixa_tags l10n %}
 
 {% block title %}Extrato — {{ cartao.titulo }}{% endblock %}
 
 {% block content %}
 {% include "cartoes/_card_css.html" %}
-<div class="max-w-5xl mx-auto p-4 sm:p-6 lg:p-8">
+<div class="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
   <nav class="mb-4 text-sm">
     <a href="{% url 'cartoes:dashboard' %}" class="text-gray-500 hover:text-purple-600">
       <i class="fas fa-arrow-left mr-1"></i> Cartões
     </a>
   </nav>
 
-  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-    <!-- Cartão -->
-    <div class="lg:col-span-1">
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
+    <!-- Cartão + ações -->
+    <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
       {% include "cartoes/_card.html" %}
+      <div class="mt-4">
+        <p class="text-base font-bold text-gray-900 truncate">{{ cartao.titulo }}</p>
+        <p class="text-xs text-gray-500">
+          <i class="fas fa-user mr-1"></i>{{ cartao.responsavel.get_full_name|default:cartao.responsavel.email }}
+          · validade {{ cartao.validade_display }}
+          {% if not cartao.ativo %}· <span class="text-gray-600 font-semibold">inativo</span>{% endif %}
+        </p>
+      </div>
+      <a href="{% url 'cartoes:gasto_create' cartao.pk %}"
+         class="mt-4 w-full inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-lg transition-colors">
+        <i class="fas fa-plus"></i> Lançar gasto
+      </a>
+      <div class="mt-2 grid grid-cols-2 gap-2">
+        <a href="{% url 'cartoes:extrato_exportar' cartao.pk %}?de={{ inicio|date:'Y-m-d' }}&ate={{ fim|date:'Y-m-d' }}"
+           class="inline-flex items-center justify-center gap-2 px-3 py-2 border border-gray-200 text-gray-700 text-xs font-semibold rounded-lg hover:bg-gray-50"
+           title="Exporta o período filtrado (sem período: último ano)">
+          <i class="fas fa-file-excel text-emerald-600"></i> Exportar
+        </a>
+        <a href="{% url 'cartoes:fatura_conciliar' cartao.pk %}{% if ultima_conciliacao %}?ultima=1{% endif %}"
+           class="inline-flex items-center justify-center gap-2 px-3 py-2 border border-gray-200 text-gray-700 text-xs font-semibold rounded-lg hover:bg-gray-50">
+          <i class="fas fa-scale-balanced text-purple-600"></i> Conciliar fatura
+        </a>
+      </div>
     </div>
 
-    <!-- Resumo + ação -->
-    <div class="lg:col-span-2 flex flex-col justify-between gap-4">
-      <div class="grid grid-cols-2 gap-4">
-        <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-          <p class="text-xs text-gray-500 uppercase font-semibold">Total lançado</p>
-          <p class="text-2xl font-bold text-gray-900">R$ {{ total|floatformat:2 }}</p>
+    <!-- Números + gráficos -->
+    <div class="lg:col-span-2 flex flex-col gap-4">
+      <div class="grid grid-cols-2 xl:grid-cols-4 gap-3">
+        <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+          <p class="text-[11px] text-gray-500 uppercase font-semibold tracking-wide">Total</p>
+          <p class="text-xl xl:text-2xl font-bold text-gray-900 mt-1 tabular-nums whitespace-nowrap">{{ total|brl_zero }}</p>
+          <p class="text-[11px] text-gray-400 mt-0.5">{% if inicio or fim %}{{ inicio|date:"d/m/Y"|default:"início" }} a {{ fim|date:"d/m/Y"|default:"hoje" }}{% else %}todo o histórico{% endif %}</p>
         </div>
-        <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-          <p class="text-xs text-gray-500 uppercase font-semibold">Responsável</p>
-          <p class="text-base font-bold text-gray-900 truncate">{{ cartao.responsavel.get_full_name|default:cartao.responsavel.email }}</p>
-          <p class="text-xs text-gray-500">Validade {{ cartao.validade_display }}</p>
+        <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+          <p class="text-[11px] text-gray-500 uppercase font-semibold tracking-wide">Lançamentos</p>
+          <p class="text-2xl font-bold text-gray-900 mt-1 tabular-nums">{{ quantidade }}</p>
+          <p class="text-[11px] text-gray-400 mt-0.5">ticket médio {{ ticket_medio|brl_zero }}</p>
+        </div>
+        <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+          <p class="text-[11px] text-gray-500 uppercase font-semibold tracking-wide">Sem comprovante</p>
+          <p class="text-2xl font-bold mt-1 tabular-nums {% if sem_comprovante %}text-amber-600{% else %}text-emerald-600{% endif %}">{{ sem_comprovante }}</p>
+          <p class="text-[11px] text-gray-400 mt-0.5">sem foto anexada</p>
+        </div>
+        <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+          <p class="text-[11px] text-gray-500 uppercase font-semibold tracking-wide">Sem chamado</p>
+          <p class="text-2xl font-bold mt-1 tabular-nums {% if sem_chamado %}text-amber-600{% else %}text-emerald-600{% endif %}">{{ sem_chamado }}</p>
+          <p class="text-[11px] text-gray-400 mt-0.5">gasto sem chamado aberto</p>
         </div>
       </div>
-      <div class="flex flex-col gap-2">
-        <a href="{% url 'cartoes:gasto_create' cartao.pk %}"
-           class="inline-flex items-center justify-center gap-2 px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg transition-colors">
-          <i class="fas fa-plus"></i> Lançar gasto
-        </a>
-        <div class="flex gap-2">
-          <button type="button" onclick="document.getElementById('cxExportar').classList.toggle('hidden')"
-                  class="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-300 text-gray-700 text-sm font-semibold rounded-lg hover:bg-gray-50">
-            <i class="fas fa-file-excel text-emerald-600"></i> Exportar extrato
-          </button>
-          <a href="{% url 'cartoes:fatura_conciliar' cartao.pk %}"
-             class="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 border border-gray-300 text-gray-700 text-sm font-semibold rounded-lg hover:bg-gray-50">
-            <i class="fas fa-scale-balanced text-purple-600"></i> Conciliar fatura
-          </a>
-        </div>
-        <form method="get" action="{% url 'cartoes:extrato_exportar' cartao.pk %}"
-              id="cxExportar" class="hidden bg-white border border-gray-200 rounded-lg p-3 shadow-sm">
-          <p class="text-xs font-semibold text-gray-500 mb-2">Período do extrato</p>
-          <div class="flex items-end gap-2">
-            <div class="flex-1">
-              <label class="block text-[11px] text-gray-400">De</label>
-              <input type="date" name="de" class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm">
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1">
+        <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+          <h2 class="text-sm font-bold text-gray-800 mb-3"><i class="fas fa-chart-column text-purple-600 mr-1.5"></i>Gasto por mês</h2>
+          {% if por_mes %}
+          <div class="flex items-end gap-2 h-32">
+            {% for m in por_mes %}
+            <div class="flex-1 flex flex-col items-center justify-end h-full min-w-0" title="{{ m.mes|date:'m/Y' }}: {{ m.total|brl_zero }}">
+              <span class="text-[10px] text-gray-500 tabular-nums mb-1 whitespace-nowrap">{{ m.total|floatformat:0 }}</span>
+              <div class="w-full rounded-t-md bg-purple-500" style="height: {{ m.altura }}%; min-height: 3px"></div>
+              <span class="text-[10px] text-gray-500 mt-1 whitespace-nowrap">{{ m.mes|date:"M"|lower }}/{{ m.mes|date:"y" }}</span>
             </div>
-            <div class="flex-1">
-              <label class="block text-[11px] text-gray-400">Até</label>
-              <input type="date" name="ate" class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm">
-            </div>
-            <button class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm whitespace-nowrap">
-              <i class="fas fa-download"></i>
-            </button>
+            {% endfor %}
           </div>
-          <p class="text-[11px] text-gray-400 mt-2">Em branco = último ano.</p>
-        </form>
+          {% else %}<p class="text-xs text-gray-400">Nenhum gasto no período.</p>{% endif %}
+        </div>
+        <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+          <h2 class="text-sm font-bold text-gray-800 mb-3"><i class="fas fa-chart-bar text-purple-600 mr-1.5"></i>Por categoria</h2>
+          {% if por_categoria %}
+          <ul class="space-y-2">
+            {% for c in por_categoria|slice:":6" %}
+            <li>
+              <div class="flex items-center justify-between text-xs gap-2">
+                <span class="text-gray-700 truncate">{{ c.categoria }}</span>
+                <span class="text-gray-900 font-semibold tabular-nums whitespace-nowrap">{{ c.total|brl_zero }} <span class="text-gray-400 font-normal">{{ c.fatia }}%</span></span>
+              </div>
+              <div class="h-1.5 rounded-full bg-gray-100 mt-1 overflow-hidden"><div class="h-full bg-purple-500 rounded-full" style="width: {{ c.fatia }}%"></div></div>
+            </li>
+            {% endfor %}
+          </ul>
+          {% else %}<p class="text-xs text-gray-400">Nenhum gasto no período.</p>{% endif %}
+        </div>
       </div>
     </div>
   </div>
 
+  <!-- Período -->
+  <form method="get" class="bg-white border border-gray-200 rounded-2xl p-4 mb-5 shadow-sm flex flex-col lg:flex-row lg:items-end gap-3">
+    <div class="flex flex-wrap items-center gap-1.5">
+      <span class="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mr-1">Período</span>
+      <a href="{% url 'cartoes:extrato' cartao.pk %}"
+         class="px-3 py-1 rounded-full text-xs font-medium border {% if not inicio and not fim %}bg-purple-600 border-purple-600 text-white{% else %}border-gray-200 text-gray-600 hover:bg-gray-50{% endif %}">Tudo</a>
+      {% for rotulo, de, ate in atalhos %}
+      <a href="?de={{ de|date:'Y-m-d' }}&ate={{ ate|date:'Y-m-d' }}"
+         class="px-3 py-1 rounded-full text-xs font-medium border {% if inicio == de and fim == ate %}bg-purple-600 border-purple-600 text-white{% else %}border-gray-200 text-gray-600 hover:bg-gray-50{% endif %}">{{ rotulo }}</a>
+      {% endfor %}
+    </div>
+    <div class="flex flex-wrap items-end gap-2 lg:ml-auto">
+      <label class="block flex-1 min-w-[8rem]">
+        <span class="block text-[11px] font-semibold text-gray-500 mb-1">De</span>
+        <input type="date" name="de" value="{{ inicio|date:'Y-m-d' }}" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+      </label>
+      <label class="block flex-1 min-w-[8rem]">
+        <span class="block text-[11px] font-semibold text-gray-500 mb-1">Até</span>
+        <input type="date" name="ate" value="{{ fim|date:'Y-m-d' }}" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+      </label>
+      <button class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-semibold" title="Aplicar período">
+        <i class="fas fa-filter"></i>
+      </button>
+    </div>
+  </form>
+
   <!-- Extrato -->
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-    <div class="px-5 py-3 border-b bg-gray-50">
-      <h2 class="font-bold text-gray-900"><i class="fas fa-receipt text-gray-400 mr-2"></i>Extrato de gastos</h2>
+  <div class="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden" id="extTabela">
+    <div class="px-4 sm:px-5 py-3 border-b border-gray-100 flex flex-col lg:flex-row lg:items-center gap-3 justify-between">
+      <h2 class="font-bold text-gray-900 text-sm"><i class="fas fa-receipt text-purple-600 mr-2"></i>Extrato de gastos <span class="text-gray-400 font-normal">· {{ quantidade }}</span></h2>
+      {% if gastos %}
+      <div class="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
+        <select id="extCategoria" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+          <option value="">Todas as categorias</option>
+          {% for c in categorias %}<option value="{{ c|lower }}">{{ c }}</option>{% endfor %}
+        </select>
+        <label class="inline-flex items-center gap-2 text-xs text-gray-600 px-2 cursor-pointer whitespace-nowrap">
+          <input type="checkbox" id="extSemFoto" class="rounded text-purple-600"> só sem comprovante
+        </label>
+        <div class="relative sm:w-64">
+          <i class="fas fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+          <input type="search" id="extBusca" placeholder="Buscar estabelecimento, valor…"
+                 class="w-full border border-gray-300 rounded-lg pl-8 pr-3 py-2 text-sm">
+        </div>
+      </div>
+      {% endif %}
     </div>
     {% if gastos %}
-    <div class="overflow-x-auto">
-      <table class="w-full text-sm">
-        <thead class="bg-gray-100 text-gray-600">
+    <div class="overflow-x-auto max-h-[40rem]">
+      <table class="min-w-full text-sm">
+        <thead class="bg-gray-50 text-gray-500 text-[11px] uppercase tracking-wide sticky top-0 z-10">
           <tr>
-            <th class="px-4 py-2 text-left font-semibold">Data</th>
-            <th class="px-4 py-2 text-left font-semibold">Estabelecimento</th>
-            <th class="px-4 py-2 text-left font-semibold">Categoria</th>
-            <th class="px-4 py-2 text-right font-semibold">Valor</th>
-            <th class="px-4 py-2 text-center font-semibold">Chamado</th>
+            <th class="px-4 py-2.5 text-left font-semibold">Data</th>
+            <th class="px-4 py-2.5 text-left font-semibold">Estabelecimento</th>
+            <th class="px-4 py-2.5 text-left font-semibold">Categoria</th>
+            <th class="px-4 py-2.5 text-left font-semibold">Lançado por</th>
+            <th class="px-4 py-2.5 text-center font-semibold">Comprovante · chamado</th>
+            <th class="px-4 py-2.5 text-right font-semibold">Valor</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-gray-100">
           {% for g in gastos %}
-          <tr class="hover:bg-gray-50">
-            <td class="px-4 py-2 whitespace-nowrap text-gray-700">{{ g.data_gasto|date:"d/m/Y" }}</td>
-            <td class="px-4 py-2 text-gray-900">
-              {{ g.estabelecimento|default:"—" }}
-              {% if g.descricao %}<div class="text-xs text-gray-500 truncate max-w-xs" title="{{ g.descricao }}">{{ g.descricao }}</div>{% endif %}
+          <tr class="ext-linha hover:bg-gray-50"
+              data-categoria="{{ g.categoria_gasto|default:'Sem categoria'|lower }}" data-foto="{% if g.foto %}1{% else %}0{% endif %}"
+              data-valor="{{ g.valor|unlocalize }}"
+              data-busca="{{ g.estabelecimento|lower }} {{ g.descricao|lower }} {{ g.valor|unlocalize }} {{ g.data_gasto|date:'d/m/Y' }}">
+            <td class="px-4 py-2.5 whitespace-nowrap text-gray-600 tabular-nums">{{ g.data_gasto|date:"d/m/Y" }}</td>
+            <td class="px-4 py-2.5 min-w-[14rem]">
+              <p class="text-gray-900 font-medium">{{ g.estabelecimento|default:"—" }}</p>
+              {% if g.descricao %}<p class="text-[11px] text-gray-500 truncate max-w-sm" title="{{ g.descricao }}">{{ g.descricao }}</p>{% endif %}
             </td>
-            <td class="px-4 py-2 text-gray-600">{{ g.categoria_gasto|default:"—" }}</td>
-            <td class="px-4 py-2 text-right font-semibold text-gray-900 whitespace-nowrap">R$ {{ g.valor|floatformat:2 }}</td>
-            <td class="px-4 py-2 text-center">
+            <td class="px-4 py-2.5">
+              {% if g.categoria_gasto %}<span class="px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 text-[11px] font-medium">{{ g.categoria_gasto }}</span>{% else %}<span class="text-gray-300">—</span>{% endif %}
+            </td>
+            <td class="px-4 py-2.5 text-xs text-gray-600 max-w-[9rem]">
+              {{ g.criado_por.full_name|default:"—" }}
+              {% if g.origem == 'FOTO' %}<span class="block text-[10px] text-gray-400"><i class="fas fa-camera mr-0.5"></i>pela foto</span>{% endif %}
+            </td>
+            <td class="px-4 py-2.5 text-center whitespace-nowrap">
+              {% if g.foto %}
+              <a href="{{ g.foto.url }}" target="_blank" rel="noopener" class="inline-flex items-center gap-1 text-emerald-600 hover:text-emerald-800 text-xs" title="Abrir comprovante">
+                <i class="fas fa-image"></i> ver
+              </a>
+              {% else %}<span class="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 text-[11px]">falta</span>{% endif %}
+              <span class="text-gray-300 mx-1">·</span>
               {% if g.ticket_id %}
-              <a href="{% url 'ticket_detail' g.ticket_id %}" class="text-purple-600 hover:text-purple-800" title="Ver chamado">
-                <i class="fas fa-external-link-alt"></i> #{{ g.ticket_id }}
+              <a href="{% url 'ticket_detail' g.ticket_id %}" class="text-purple-600 hover:text-purple-800 text-xs" title="Ver chamado">
+                #{{ g.ticket_id }} <i class="fas fa-arrow-up-right-from-square text-[10px]"></i>
               </a>
               {% else %}<span class="text-gray-300">—</span>{% endif %}
             </td>
+            <td class="px-4 py-2.5 text-right font-semibold text-gray-900 whitespace-nowrap tabular-nums">{{ g.valor|brl_zero }}</td>
           </tr>
           {% endfor %}
+          <tr id="extVazio" class="hidden"><td colspan="6" class="px-4 py-8 text-center text-sm text-gray-400">Nada com esse filtro.</td></tr>
         </tbody>
+        <tfoot class="bg-gray-50 border-t border-gray-200">
+          <tr>
+            <td colspan="5" class="px-4 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase">Total visível</td>
+            <td class="px-4 py-2.5 text-right font-bold text-gray-900 tabular-nums whitespace-nowrap" id="extTotal">{{ total|brl_zero }}</td>
+          </tr>
+        </tfoot>
       </table>
     </div>
     {% else %}
-    <div class="p-8 text-center text-gray-500">
+    <div class="p-10 text-center text-gray-500">
       <i class="fas fa-receipt text-3xl text-gray-300 mb-2"></i>
-      <p>Nenhum gasto lançado ainda.</p>
+      <p>{% if inicio or fim %}Nenhum gasto nesse período.{% else %}Nenhum gasto lançado ainda.{% endif %}</p>
     </div>
     {% endif %}
   </div>
 </div>
+
+<script>
+(function () {
+  const caixa = document.getElementById('extTabela');
+  const busca = document.getElementById('extBusca');
+  if (!caixa || !busca) return;
+  const categoria = document.getElementById('extCategoria');
+  const semFoto = document.getElementById('extSemFoto');
+  const linhas = [...caixa.querySelectorAll('.ext-linha')];
+  const total = document.getElementById('extTotal');
+  const vazio = document.getElementById('extVazio');
+  const brl = new Intl.NumberFormat('pt-BR', {style: 'currency', currency: 'BRL'});
+
+  function aplicar() {
+    // "1.258,60" e "1258.60" acham o mesmo valor.
+    const termo = (busca.value || '').trim().toLowerCase().replace(/\.(?=\d{3})/g, '').replace(',', '.');
+    let soma = 0, visiveis = 0;
+    linhas.forEach(function (tr) {
+      const ok = (!termo || tr.dataset.busca.includes(termo))
+        && (!categoria.value || tr.dataset.categoria === categoria.value)
+        && (!semFoto.checked || tr.dataset.foto === '0');
+      tr.classList.toggle('hidden', !ok);
+      if (ok) {
+        visiveis++;
+        soma += parseFloat(tr.dataset.valor || '0');
+      }
+    });
+    total.textContent = brl.format(soma);
+    vazio.classList.toggle('hidden', visiveis > 0);
+  }
+  [busca, categoria, semFoto].forEach(function (el) { el.addEventListener('input', aplicar); el.addEventListener('change', aplicar); });
+})();
+</script>
 {% endblock %}

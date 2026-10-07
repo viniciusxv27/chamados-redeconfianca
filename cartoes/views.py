@@ -121,8 +121,25 @@ def dashboard(request):
     for linha in por_categoria:
         linha['fatia'] = round(linha['total'] / maior * 100) if maior else 0
 
+    # Por cartão: a fatia do total e o que falta comprovar, numa consulta só.
+    sem_foto = dict(gastos.filter(Q(foto='') | Q(foto__isnull=True)).values('cartao_id')
+                    .annotate(n=Count('id')).values_list('cartao_id', 'n'))
+    for cartao in cartoes:
+        cartao.fatia = round((cartao.total_gasto or 0) * 100 / total) if total else 0
+        cartao.sem_comprovante = sem_foto.get(cartao.id, 0)
+
+    hoje = timezone.localdate()
     context = {
         'cartoes': cartoes,
+        'cartoes_ativos': sum(1 for c in cartoes if c.ativo),
+        'atalhos': [
+            ('Este mês', hoje.replace(day=1), hoje),
+            ('Mês passado', (hoje.replace(day=1) - timedelta(days=1)).replace(day=1),
+             hoje.replace(day=1) - timedelta(days=1)),
+            ('90 dias', hoje - timedelta(days=90), hoje),
+            ('Este ano', hoje.replace(month=1, day=1), hoje),
+        ],
+        'tem_fatura_lida': bool(request.session.get('cartoes_fatura_geral')),
         # `pode_gerir` abre os botões de gestão; `is_superadmin` fica só para o
         # que é dele mesmo — dizer quem mais cuida dos cartões.
         'pode_gerir': pode_gerir_cartoes(request.user),
@@ -130,7 +147,7 @@ def dashboard(request):
         'total_geral': total,
         'quantidade_gastos': quantidade,
         'ticket_medio': (total / quantidade) if quantidade else Decimal('0'),
-        'sem_comprovante': gastos.filter(foto='').count(),
+        'sem_comprovante': gastos.filter(Q(foto='') | Q(foto__isnull=True)).count(),
         'por_categoria': por_categoria,
         'ultimos': list(gastos.select_related('cartao', 'criado_por')
                         .order_by('-data_gasto', '-created_at')[:8]),
@@ -297,12 +314,55 @@ def cartao_extrato(request, pk):
         messages.error(request, 'Você não tem acesso a este cartão.')
         return redirect('cartoes:dashboard')
 
-    gastos = list(cartao.gastos.select_related('ticket', 'criado_por').all())
+    # Sem período na URL o extrato mostra tudo, como sempre mostrou; os atalhos
+    # e o filtro recortam.
+    todos = cartao.gastos.select_related('ticket', 'criado_por')
+    inicio = parse_date(request.GET.get('de') or '')
+    fim = parse_date(request.GET.get('ate') or '')
+    if inicio and fim and inicio > fim:
+        inicio, fim = fim, inicio
+    qs = todos
+    if inicio:
+        qs = qs.filter(data_gasto__gte=inicio)
+    if fim:
+        qs = qs.filter(data_gasto__lte=fim)
+    gastos = list(qs.order_by('-data_gasto', '-created_at'))
     total = sum((g.valor for g in gastos), Decimal('0'))
+
+    categorias = {}
+    meses = {}
+    for g in gastos:
+        chave = g.categoria_gasto or 'Sem categoria'
+        categorias[chave] = categorias.get(chave, Decimal('0')) + g.valor
+        mes = g.data_gasto.replace(day=1)
+        meses[mes] = meses.get(mes, Decimal('0')) + g.valor
+    por_categoria = [{'categoria': c, 'total': v, 'fatia': round(v * 100 / total) if total else 0}
+                     for c, v in sorted(categorias.items(), key=lambda kv: -kv[1])]
+    maior_mes = max(meses.values(), default=Decimal('0'))
+    por_mes = [{'mes': m, 'total': v, 'altura': round(v * 100 / maior_mes) if maior_mes else 0}
+               for m, v in sorted(meses.items())][-8:]
+
+    hoje = timezone.localdate()
     context = {
         'cartao': cartao,
         'gastos': gastos,
         'total': total,
+        'quantidade': len(gastos),
+        'ticket_medio': (total / len(gastos)) if gastos else Decimal('0'),
+        'sem_comprovante': sum(1 for g in gastos if not g.foto),
+        'sem_chamado': sum(1 for g in gastos if not g.ticket_id),
+        'por_categoria': por_categoria,
+        'por_mes': por_mes,
+        'categorias': sorted(categorias),
+        'inicio': inicio, 'fim': fim,
+        'atalhos': [
+            ('Este mês', hoje.replace(day=1), hoje),
+            ('Mês passado', (hoje.replace(day=1) - timedelta(days=1)).replace(day=1),
+             hoje.replace(day=1) - timedelta(days=1)),
+            ('90 dias', hoje - timedelta(days=90), hoje),
+            ('Este ano', hoje.replace(month=1, day=1), hoje),
+        ],
+        'ultima_conciliacao': bool(_fatura_da_sessao(request, cartao)),
         'pode_gerir': pode_gerir_cartoes(request.user),
         'is_superadmin': is_superadmin(request.user),
     }

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load static %}
+{% load static caixa_tags %}
 
 {% block title %}Cartões de Crédito{% endblock %}
 
@@ -7,32 +7,33 @@
 {% include "cartoes/_card_css.html" %}
 <div class="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
   <!-- Cabeçalho -->
-  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+  <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-5">
     <div>
       <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 flex items-center gap-3">
         <i class="fas fa-credit-card text-purple-600"></i>
         Cartões de Crédito
       </h1>
-      <p class="text-gray-600 mt-1">
-        {% if pode_gerir %}Gestão de todos os cartões corporativos.{% else %}Seus cartões e gastos.{% endif %}
+      <p class="text-gray-600 mt-1 text-sm">
+        {% if pode_gerir %}Gestão de todos os cartões corporativos{% else %}Seus cartões e gastos{% endif %}
+        · {{ cartoes_ativos }} ativo{{ cartoes_ativos|pluralize }} de {{ cartoes|length }}
       </p>
     </div>
     <div class="flex items-center gap-2 flex-wrap">
       {% if is_superadmin %}
       {# Quem entrega a chave do módulo é o SUPERADMIN. #}
       <a href="{% url 'cartoes:acessos' %}"
-         class="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors">
+         class="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors">
         <i class="fas fa-user-shield"></i> Quem cuida
       </a>
       {% endif %}
       {% if pode_gerir %}
       {# Uma fatura costuma trazer vários cartões: concilia todos de uma vez. #}
       <a href="{% url 'cartoes:fatura_geral' %}"
-         class="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-purple-200 text-purple-700 font-medium rounded-lg hover:bg-purple-50 transition-colors">
+         class="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-purple-200 text-purple-700 text-sm font-medium rounded-lg hover:bg-purple-50 transition-colors">
         <i class="fas fa-layer-group"></i> Conciliar fatura
       </a>
       <a href="{% url 'cartoes:cartao_create' %}"
-         class="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg transition-colors">
+         class="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-lg transition-colors">
         <i class="fas fa-plus"></i> Novo cartão
       </a>
       {% endif %}
@@ -40,21 +41,29 @@
   </div>
 
   <!-- Filtros -->
-  <form method="get" class="bg-white border border-gray-200 rounded-xl p-4 mb-5 shadow-sm">
+  <form method="get" class="bg-white border border-gray-200 rounded-2xl p-4 mb-5 shadow-sm">
+    <div class="flex flex-wrap items-center gap-1.5 mb-3">
+      <span class="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mr-1">Período</span>
+      {% for rotulo, de, ate in atalhos %}
+      <a href="?de={{ de|date:'Y-m-d' }}&ate={{ ate|date:'Y-m-d' }}{% if filtro.responsavel %}&responsavel={{ filtro.responsavel }}{% endif %}{% if filtro.bandeira %}&bandeira={{ filtro.bandeira }}{% endif %}{% if filtro.situacao %}&situacao={{ filtro.situacao }}{% endif %}{% if filtro.q %}&q={{ filtro.q|urlencode }}{% endif %}"
+         class="px-3 py-1 rounded-full text-xs font-medium border
+                {% if inicio == de and fim == ate %}bg-purple-600 border-purple-600 text-white{% else %}border-gray-200 text-gray-600 hover:bg-gray-50{% endif %}">{{ rotulo }}</a>
+      {% endfor %}
+    </div>
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 items-end">
       <div>
-        <label class="block text-xs font-semibold text-gray-500 mb-1">De</label>
+        <label class="block text-[11px] font-semibold text-gray-500 mb-1">De</label>
         <input type="date" name="de" value="{{ inicio|date:'Y-m-d' }}"
                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
       </div>
       <div>
-        <label class="block text-xs font-semibold text-gray-500 mb-1">Até</label>
+        <label class="block text-[11px] font-semibold text-gray-500 mb-1">Até</label>
         <input type="date" name="ate" value="{{ fim|date:'Y-m-d' }}"
                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
       </div>
       {% if pode_gerir %}
       <div>
-        <label class="block text-xs font-semibold text-gray-500 mb-1">Responsável</label>
+        <label class="block text-[11px] font-semibold text-gray-500 mb-1">Responsável</label>
         <select name="responsavel" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
           <option value="">Todos</option>
           {% for r in responsaveis %}
@@ -64,7 +73,7 @@
       </div>
       {% endif %}
       <div>
-        <label class="block text-xs font-semibold text-gray-500 mb-1">Bandeira</label>
+        <label class="block text-[11px] font-semibold text-gray-500 mb-1">Bandeira</label>
         <select name="bandeira" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
           <option value="">Todas</option>
           {% for valor, rotulo in bandeiras %}
@@ -73,7 +82,7 @@
         </select>
       </div>
       <div>
-        <label class="block text-xs font-semibold text-gray-500 mb-1">Situação</label>
+        <label class="block text-[11px] font-semibold text-gray-500 mb-1">Situação</label>
         <select name="situacao" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
           <option value="">Todas</option>
           <option value="ativos" {% if filtro.situacao == 'ativos' %}selected{% endif %}>Ativos</option>
@@ -81,9 +90,12 @@
         </select>
       </div>
       <div class="flex gap-2">
-        <input type="text" name="q" value="{{ filtro.q }}" placeholder="Apelido, final, pessoa…"
-               class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm">
-        <button class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-semibold whitespace-nowrap">
+        <div class="relative flex-1">
+          <i class="fas fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+          <input type="text" name="q" value="{{ filtro.q }}" placeholder="Apelido, final, pessoa…"
+                 class="w-full border border-gray-300 rounded-lg pl-8 pr-3 py-2 text-sm">
+        </div>
+        <button class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-semibold whitespace-nowrap" title="Filtrar">
           <i class="fas fa-filter"></i>
         </button>
       </div>
@@ -95,40 +107,110 @@
     {% endif %}
   </form>
 
-  <!-- Mini dashboard do período -->
+  <!-- Números do período -->
   <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-    <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-      <p class="text-xs text-gray-500 uppercase font-semibold">Gasto no período</p>
-      <p class="text-2xl font-bold text-gray-900 mt-1">R$ {{ total_geral|floatformat:2 }}</p>
+    <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+      <div class="flex items-center justify-between">
+        <p class="text-[11px] text-gray-500 uppercase font-semibold tracking-wide">Gasto no período</p>
+        <span class="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center"><i class="fas fa-wallet text-sm"></i></span>
+      </div>
+      <p class="text-2xl font-bold text-gray-900 mt-1 tabular-nums">{{ total_geral|brl_zero }}</p>
       <p class="text-[11px] text-gray-400 mt-0.5">{{ inicio|date:"d/m/Y" }} a {{ fim|date:"d/m/Y" }}</p>
     </div>
-    <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-      <p class="text-xs text-gray-500 uppercase font-semibold">Lançamentos</p>
-      <p class="text-2xl font-bold text-gray-900 mt-1">{{ quantidade_gastos }}</p>
-      <p class="text-[11px] text-gray-400 mt-0.5">em {{ cartoes|length }} cartão(ões)</p>
+    <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+      <div class="flex items-center justify-between">
+        <p class="text-[11px] text-gray-500 uppercase font-semibold tracking-wide">Lançamentos</p>
+        <span class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center"><i class="fas fa-receipt text-sm"></i></span>
+      </div>
+      <p class="text-2xl font-bold text-gray-900 mt-1 tabular-nums">{{ quantidade_gastos }}</p>
+      <p class="text-[11px] text-gray-400 mt-0.5">em {{ cartoes|length }} cart{{ cartoes|length|pluralize:"ão,ões" }}</p>
     </div>
-    <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-      <p class="text-xs text-gray-500 uppercase font-semibold">Ticket médio</p>
-      <p class="text-2xl font-bold text-gray-900 mt-1">R$ {{ ticket_medio|floatformat:2 }}</p>
+    <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+      <div class="flex items-center justify-between">
+        <p class="text-[11px] text-gray-500 uppercase font-semibold tracking-wide">Ticket médio</p>
+        <span class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center"><i class="fas fa-chart-line text-sm"></i></span>
+      </div>
+      <p class="text-2xl font-bold text-gray-900 mt-1 tabular-nums">{{ ticket_medio|brl_zero }}</p>
+      <p class="text-[11px] text-gray-400 mt-0.5">por lançamento</p>
     </div>
-    <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-      <p class="text-xs text-gray-500 uppercase font-semibold">Sem comprovante</p>
-      <p class="text-2xl font-bold {% if sem_comprovante %}text-amber-600{% else %}text-emerald-600{% endif %} mt-1">{{ sem_comprovante }}</p>
-      <p class="text-[11px] text-gray-400 mt-0.5">gastos sem foto anexada</p>
+    <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+      <div class="flex items-center justify-between">
+        <p class="text-[11px] text-gray-500 uppercase font-semibold tracking-wide">Sem comprovante</p>
+        <span class="w-8 h-8 rounded-lg {% if sem_comprovante %}bg-amber-50 text-amber-600{% else %}bg-emerald-50 text-emerald-600{% endif %} flex items-center justify-center"><i class="fas fa-camera text-sm"></i></span>
+      </div>
+      <p class="text-2xl font-bold {% if sem_comprovante %}text-amber-600{% else %}text-emerald-600{% endif %} mt-1 tabular-nums">{{ sem_comprovante }}</p>
+      <p class="text-[11px] text-gray-400 mt-0.5">{% if sem_comprovante %}gastos sem foto anexada{% else %}todos com comprovante{% endif %}</p>
     </div>
   </div>
 
+  <!-- Cartões -->
+  {% if cartoes %}
+  <div class="flex items-center justify-between mb-3">
+    <h2 class="text-sm font-bold text-gray-800"><i class="fas fa-credit-card text-purple-600 mr-1.5"></i>Cartões</h2>
+    <span class="text-xs text-gray-400">clique no cartão para ver o extrato</span>
+  </div>
+  <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5 mb-6">
+    {% for cartao in cartoes %}
+    <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm flex flex-col {% if not cartao.ativo %}opacity-75{% endif %}">
+      <a href="{% url 'cartoes:extrato' cartao.pk %}" style="display:block; text-decoration:none;" title="Ver extrato de {{ cartao.titulo }}">
+        {% include "cartoes/_card.html" %}
+      </a>
+      <div class="mt-4 flex items-end justify-between gap-3">
+        <div class="min-w-0">
+          <p class="text-sm font-semibold text-gray-900 truncate">{{ cartao.titulo }}</p>
+          <p class="text-[11px] text-gray-500 truncate">{{ cartao.responsavel.full_name|default:cartao.responsavel.email }}</p>
+        </div>
+        <div class="text-right">
+          <p class="text-lg font-bold text-gray-900 tabular-nums whitespace-nowrap">{{ cartao.total_gasto|brl_zero }}</p>
+          <p class="text-[11px] text-gray-500 whitespace-nowrap">{{ cartao.num_gastos }} gasto{{ cartao.num_gastos|pluralize }} no período</p>
+        </div>
+      </div>
+      <div class="mt-2 flex items-center gap-2">
+        <div class="flex-1 h-1.5 rounded-full bg-gray-100 overflow-hidden"><div class="h-full bg-purple-500 rounded-full" style="width: {{ cartao.fatia }}%"></div></div>
+        <span class="text-[11px] text-gray-500 tabular-nums whitespace-nowrap">{{ cartao.fatia }}% do total</span>
+      </div>
+      <div class="mt-2 flex flex-wrap gap-1 text-[11px]">
+        {% if not cartao.ativo %}<span class="px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">inativo</span>{% endif %}
+        {% if cartao.sem_comprovante %}<span class="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700"><i class="fas fa-camera mr-0.5"></i>{{ cartao.sem_comprovante }} sem comprovante</span>{% endif %}
+        {% if not cartao.num_gastos %}<span class="px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">sem gastos no período</span>{% endif %}
+      </div>
+      <div class="mt-auto pt-3 grid grid-cols-3 gap-1.5">
+        <a href="{% url 'cartoes:extrato' cartao.pk %}" class="text-center px-2 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-700 hover:bg-gray-50">
+          <i class="fas fa-list mr-1"></i>Extrato
+        </a>
+        <a href="{% url 'cartoes:gasto_create' cartao.pk %}" class="text-center px-2 py-1.5 rounded-lg bg-purple-600 text-xs text-white font-semibold hover:bg-purple-700">
+          <i class="fas fa-plus mr-1"></i>Gasto
+        </a>
+        <a href="{% url 'cartoes:fatura_conciliar' cartao.pk %}{% if tem_fatura_lida %}?geral=1{% endif %}" class="text-center px-2 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-700 hover:bg-gray-50" title="Conciliar a fatura deste cartão">
+          <i class="fas fa-scale-balanced mr-1"></i>Fatura
+        </a>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="bg-white border border-dashed border-gray-300 rounded-2xl p-10 text-center text-gray-500 mb-6">
+    <i class="fas fa-credit-card text-4xl text-gray-300 mb-3"></i>
+    <p class="font-medium">Nenhum cartão {% if not pode_gerir %}vinculado a você{% else %}com esse filtro{% endif %}.</p>
+    {% if pode_gerir %}
+    <a href="{% url 'cartoes:cartao_create' %}" class="mt-3 inline-flex items-center gap-2 text-purple-600 hover:text-purple-800 font-semibold">
+      <i class="fas fa-plus"></i> Cadastrar cartão
+    </a>
+    {% endif %}
+  </div>
+  {% endif %}
+
   {% if por_categoria or ultimos %}
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
     {% if por_categoria %}
-    <div class="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-      <h2 class="text-sm font-bold text-gray-800 mb-3"><i class="fas fa-chart-simple text-purple-600 mr-1.5"></i>Onde foi o dinheiro</h2>
+    <div class="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
+      <h2 class="text-sm font-bold text-gray-800 mb-3"><i class="fas fa-chart-bar text-purple-600 mr-1.5"></i>Onde foi o dinheiro</h2>
       <div class="space-y-2.5">
         {% for c in por_categoria %}
         <div>
-          <div class="flex items-center justify-between text-xs mb-1">
-            <span class="text-gray-700 truncate">{{ c.categoria_gasto }}</span>
-            <span class="text-gray-900 font-semibold whitespace-nowrap ml-2">R$ {{ c.total|floatformat:2 }}</span>
+          <div class="flex items-center justify-between text-xs mb-1 gap-2">
+            <span class="text-gray-700 truncate">{{ c.categoria_gasto }} <span class="text-gray-400">· {{ c.n }}</span></span>
+            <span class="text-gray-900 font-semibold whitespace-nowrap tabular-nums">{{ c.total|brl_zero }}</span>
           </div>
           <div class="h-1.5 bg-gray-100 rounded-full overflow-hidden">
             <div class="h-full bg-purple-500 rounded-full" style="width: {{ c.fatia }}%"></div>
@@ -139,48 +221,23 @@
     </div>
     {% endif %}
     {% if ultimos %}
-    <div class="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+    <div class="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
       <h2 class="text-sm font-bold text-gray-800 mb-3"><i class="fas fa-clock-rotate-left text-purple-600 mr-1.5"></i>Últimos lançamentos</h2>
-      <div class="divide-y divide-gray-50">
+      <div class="divide-y divide-gray-100">
         {% for g in ultimos %}
-        <a href="{% url 'cartoes:extrato' g.cartao_id %}" class="flex items-center justify-between gap-3 py-2 hover:bg-gray-50 -mx-2 px-2 rounded">
-          <span class="min-w-0">
-            <span class="block text-sm text-gray-800 truncate">{{ g.estabelecimento|default:"Sem estabelecimento" }}</span>
-            <span class="block text-[11px] text-gray-400">{{ g.data_gasto|date:"d/m/Y" }} · ••••{{ g.cartao.last4 }}{% if g.criado_por %} · {{ g.criado_por.full_name }}{% endif %}</span>
+        <a href="{% url 'cartoes:extrato' g.cartao_id %}" class="flex items-center justify-between gap-3 py-2 hover:bg-gray-50 -mx-2 px-2 rounded-lg">
+          <span class="flex items-center gap-3 min-w-0">
+            <span class="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center flex-shrink-0 text-xs font-bold">{{ g.cartao.last4|slice:"2:" }}</span>
+            <span class="min-w-0">
+              <span class="block text-sm text-gray-800 truncate">{{ g.estabelecimento|default:"Sem estabelecimento" }}</span>
+              <span class="block text-[11px] text-gray-400">{{ g.data_gasto|date:"d/m/Y" }} · ••••{{ g.cartao.last4 }}{% if g.criado_por %} · {{ g.criado_por.full_name }}{% endif %}</span>
+            </span>
           </span>
-          <span class="text-sm font-semibold text-gray-900 whitespace-nowrap">R$ {{ g.valor|floatformat:2 }}</span>
+          <span class="text-sm font-semibold text-gray-900 whitespace-nowrap tabular-nums">{{ g.valor|brl_zero }}</span>
         </a>
         {% endfor %}
       </div>
     </div>
-    {% endif %}
-  </div>
-  {% endif %}
-
-  {% if cartoes %}
-  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
-    {% for cartao in cartoes %}
-    <div>
-      <a href="{% url 'cartoes:extrato' cartao.pk %}" style="display:block; text-decoration:none;" title="Ver extrato de {{ cartao.titulo }}">
-        {% include "cartoes/_card.html" %}
-      </a>
-      <div class="mt-3 flex items-center justify-between text-sm px-1">
-        <span class="text-gray-700 font-medium truncate" title="{{ cartao.titulo }}">
-          <i class="fas fa-receipt text-gray-400 mr-1"></i>{{ cartao.num_gastos }} gasto{{ cartao.num_gastos|pluralize }}
-        </span>
-        <span class="font-bold text-gray-900">R$ {{ cartao.total_gasto|default:0|floatformat:2 }}</span>
-      </div>
-    </div>
-    {% endfor %}
-  </div>
-  {% else %}
-  <div class="bg-white border border-dashed border-gray-300 rounded-xl p-10 text-center text-gray-500">
-    <i class="fas fa-credit-card text-4xl text-gray-300 mb-3"></i>
-    <p class="font-medium">Nenhum cartão {% if not pode_gerir %}vinculado a você{% else %}cadastrado{% endif %}.</p>
-    {% if pode_gerir %}
-    <a href="{% url 'cartoes:cartao_create' %}" class="mt-3 inline-flex items-center gap-2 text-purple-600 hover:text-purple-800 font-semibold">
-      <i class="fas fa-plus"></i> Criar o primeiro cartão
-    </a>
     {% endif %}
   </div>
   {% endif %}

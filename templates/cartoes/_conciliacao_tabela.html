@@ -1,4 +1,4 @@
-{% load caixa_tags %}
+{% load caixa_tags l10n %}
 {% comment %}
 Tabela única da conciliação: cada linha da fatura (ou do portal sem cobrança)
 com a situação. Os botões de situação e a busca filtram na própria tela.
@@ -46,7 +46,7 @@ Recebe `relatorio` e `contagem`.
       <tbody class="divide-y divide-gray-100">
         {% for l in relatorio.linhas %}
         <tr class="conc-linha hover:bg-gray-50" data-situacao="{{ l.situacao }}"
-            data-busca="{{ l.fatura.estabelecimento|default:''|lower }} {{ l.fatura.categoria|default:''|lower }} {{ l.fatura.cidade|default:''|lower }} {{ l.gasto.estabelecimento|default:''|lower }} {{ l.fatura.valor|default:'' }} {{ l.gasto.valor|default:'' }}">
+            data-busca="{{ l.fatura.estabelecimento|default:''|lower }} {{ l.fatura.categoria|default:''|lower }} {{ l.fatura.cidade|default:''|lower }} {{ l.gasto.estabelecimento|default:''|lower }} {{ l.fatura.valor|default:''|unlocalize }} {{ l.gasto.valor|default:''|unlocalize }}">
           <td class="px-4 py-2.5 whitespace-nowrap">
             {% if l.situacao == 'conferido' %}<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-700"><i class="fas fa-check"></i>Conferido</span>
             {% elif l.situacao == 'divergente' %}<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-100 text-red-700"><i class="fas fa-not-equal"></i>Divergente</span>
@@ -109,7 +109,7 @@ Recebe `relatorio` e `contagem`.
   let filtro = '';
 
   function aplicar() {
-    const termo = (busca.value || '').trim().toLowerCase().replace(',', '.');
+    const termo = (busca.value || '').trim().toLowerCase().replace(/\.(?=\d{3})/g, '').replace(',', '.');
     let visiveis = 0;
     linhas.forEach(function (tr) {
       const ok = (!filtro || tr.dataset.situacao === filtro)
