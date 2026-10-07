@@ -12,6 +12,9 @@ urlpatterns = [
     path('acessos/<int:pk>/remover/', views.acesso_remover, name='acesso_remover'),
     # Endpoint programático (token no header) — antes de <int:pk>/ para não colidir.
     path('api/gasto/', views.api_lancar_gasto, name='api_lancar_gasto'),
+    # Uma fatura com vários cartões: cada final é conciliado no cartão dele.
+    path('fatura/', views.fatura_geral, name='fatura_geral'),
+    path('fatura/exportar/', views.fatura_geral_exportar, name='fatura_geral_exportar'),
     path('<int:pk>/', views.cartao_extrato, name='extrato'),
     path('<int:pk>/exportar/', views.extrato_exportar, name='extrato_exportar'),
     path('<int:pk>/fatura/', views.fatura_conciliar, name='fatura_conciliar'),

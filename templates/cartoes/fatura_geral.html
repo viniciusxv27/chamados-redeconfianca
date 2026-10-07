@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+{% load caixa_tags %}
+{% block title %}Conciliação geral da fatura{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+  <div class="flex items-start justify-between gap-3 mb-5 flex-wrap">
+    <div>
+      <a href="{% url 'cartoes:dashboard' %}" class="text-sm text-gray-500 hover:text-purple-700">
+        <i class="fas fa-arrow-left mr-1"></i> Voltar aos cartões
+      </a>
+      <h1 class="text-2xl font-bold text-gray-900 mt-1">
+        <i class="fas fa-layer-group text-purple-600 mr-2"></i>Conciliação geral da fatura
+      </h1>
+      <p class="text-gray-600 text-sm">Uma fatura com vários cartões: cada final é conciliado com o cartão cadastrado que tem o mesmo final.</p>
+    </div>
+    {% if geral %}
+    <a href="{% url 'cartoes:fatura_geral_exportar' %}"
+       class="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-lg">
+      <i class="fas fa-file-excel"></i> Exportar Excel
+    </a>
+    {% endif %}
+  </div>
+
+  <form method="post" enctype="multipart/form-data"
+        class="bg-white border border-gray-200 rounded-2xl p-4 sm:p-5 shadow-sm mb-5">
+    {% csrf_token %}
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-3 items-stretch">
+      <label class="md:col-span-3 flex items-center gap-4 border-2 border-dashed border-gray-300 rounded-xl px-4 py-4 cursor-pointer hover:border-purple-400 hover:bg-purple-50 transition-colors" id="zonaFatura">
+        <span class="w-11 h-11 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center flex-shrink-0">
+          <i class="fas fa-file-pdf text-lg"></i>
+        </span>
+        <span class="min-w-0">
+          <span class="block text-sm font-semibold text-gray-800" id="nomeFatura">{% if geral %}{{ geral.arquivo }} — enviar outra{% else %}Escolha ou arraste o PDF da fatura{% endif %}</span>
+          <span class="block text-xs text-gray-500">Titular e adicionais, compras nacionais e internacionais (com IOF). As parcelas das próximas faturas ficam de fora.</span>
+        </span>
+        <input type="file" name="fatura" accept=".pdf" required class="sr-only" id="arquivoFatura">
+      </label>
+      <div class="flex flex-col gap-2">
+        <label class="block">
+          <span class="block text-[11px] font-semibold text-gray-500 mb-1">Mês da fatura (opcional)</span>
+          <input type="month" id="refMes" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+          <input type="hidden" name="referencia" id="refData" value="">
+        </label>
+        <button class="w-full px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-lg whitespace-nowrap">
+          <i class="fas fa-scale-balanced mr-1"></i> Ler e conciliar
+        </button>
+      </div>
+    </div>
+  </form>
+
+  {% if geral %}
+  <div class="rounded-2xl p-4 mb-5 border flex flex-col md:flex-row md:items-center gap-3 justify-between
+              {% if geral.total_declarado is not None and geral.total_declarado == geral.total_lido %}bg-emerald-50 border-emerald-200{% else %}bg-amber-50 border-amber-200{% endif %}">
+    <p class="text-sm {% if geral.total_declarado == geral.total_lido %}text-emerald-800{% else %}text-amber-800{% endif %}">
+      {% if geral.total_declarado is not None and geral.total_declarado == geral.total_lido %}
+      <i class="fas fa-circle-check mr-1.5"></i><strong>Fatura inteira conferida:</strong>
+      os lançamentos lidos somam exatamente o total da fatura, {{ geral.total_lido|brl_zero }}.
+      {% else %}
+      <i class="fas fa-triangle-exclamation mr-1.5"></i><strong>Confira:</strong> a leitura somou {{ geral.total_lido|brl_zero }}
+      {% if geral.total_declarado is not None %}e a fatura declara {{ geral.total_declarado|brl_zero }}{% endif %}.
+      Os cartões marcados abaixo não fecharam.
+      {% endif %}
+    </p>
+    <div class="flex flex-wrap gap-2 text-xs">
+      <span class="px-2 py-1 rounded-lg bg-white border border-gray-200 text-gray-600">Fatura {{ geral.referencia|date:"m/Y" }}</span>
+      {% if geral.vencimento %}<span class="px-2 py-1 rounded-lg bg-white border border-gray-200 text-gray-600">Vence {{ geral.vencimento|date:"d/m/Y" }}</span>{% endif %}
+      <span class="px-2 py-1 rounded-lg bg-white border border-gray-200 text-gray-600">{{ linhas_geral|length }} cart{{ linhas_geral|length|pluralize:"ão,ões" }}</span>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+    <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+      <p class="text-[11px] text-gray-500 uppercase font-semibold tracking-wide">Total da fatura</p>
+      <p class="text-2xl font-bold text-gray-900 mt-1 tabular-nums">{{ geral.total_lido|brl_zero }}</p>
+      <p class="text-[11px] text-gray-400 mt-0.5">{{ geral.lancamentos|length }} lançamentos</p>
+    </div>
+    <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+      <p class="text-[11px] text-gray-500 uppercase font-semibold tracking-wide">Lançado no portal</p>
+      <p class="text-2xl font-bold text-gray-900 mt-1 tabular-nums">{{ total_portal|brl_zero }}</p>
+      <p class="text-[11px] text-gray-400 mt-0.5">nos {{ cadastrados|length }} cartões cadastrados</p>
+    </div>
+    <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+      <p class="text-[11px] text-gray-500 uppercase font-semibold tracking-wide">Conciliado</p>
+      <p class="text-2xl font-bold text-emerald-600 mt-1 tabular-nums">{{ percentual_conciliado }}%</p>
+      <div class="h-2 rounded-full bg-gray-100 mt-1.5 overflow-hidden"><div class="h-full bg-emerald-500 rounded-full" style="width: {{ percentual_conciliado }}%"></div></div>
+      <p class="text-[11px] text-gray-400 mt-1">{{ total_conferido|brl_zero }} da fatura toda</p>
+    </div>
+    <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+      <p class="text-[11px] text-gray-500 uppercase font-semibold tracking-wide">Cartões fora do portal</p>
+      <p class="text-2xl font-bold {% if nao_cadastrados %}text-amber-600{% else %}text-gray-300{% endif %} mt-1 tabular-nums">{{ nao_cadastrados|length }}</p>
+      <p class="text-[11px] text-gray-400 mt-0.5">{{ total_nao_cadastrados|brl_zero }} sem cartão cadastrado</p>
+    </div>
+  </div>
+
+  <div class="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden mb-5">
+    <div class="px-5 py-3 border-b border-gray-100 flex items-center justify-between gap-2 flex-wrap">
+      <h2 class="text-sm font-bold text-gray-800"><i class="fas fa-credit-card text-purple-600 mr-1.5"></i>Cartões da fatura</h2>
+      <span class="text-xs text-gray-400">clique em "Detalhar" para ver linha a linha</span>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead class="bg-gray-50 text-gray-500 text-[11px] uppercase tracking-wide">
+          <tr>
+            <th class="text-left px-4 py-2.5 font-semibold">Cartão</th>
+            <th class="text-right px-4 py-2.5 font-semibold">Na fatura</th>
+            <th class="text-right px-4 py-2.5 font-semibold">No portal</th>
+            <th class="text-left px-4 py-2.5 font-semibold min-w-[15rem]">Conciliação</th>
+            <th class="text-right px-4 py-2.5 font-semibold"></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          {% for l in linhas_geral %}
+          <tr class="hover:bg-gray-50 align-top">
+            <td class="px-4 py-3">
+              <p class="font-semibold text-gray-900">final {{ l.final }}
+                {% if not l.leitura.confere %}<span class="ml-1 px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[10px] font-bold" title="A soma lida não bateu com o total da fatura">NÃO FECHOU</span>{% endif %}
+              </p>
+              <p class="text-[11px] text-gray-500">{{ l.leitura.nome|default:"—" }}</p>
+              {% if l.cartao %}
+              <p class="text-xs text-purple-700 mt-0.5"><i class="fas fa-link mr-1"></i>{{ l.cartao.titulo }} · {{ l.cartao.responsavel.full_name|default:l.cartao.responsavel.email }}</p>
+              {% if l.ambiguo %}<p class="text-[11px] text-amber-700"><i class="fas fa-triangle-exclamation mr-1"></i>{{ l.candidatos|length }} cartões com este final — usado o ativo</p>{% endif %}
+              {% else %}
+              <p class="text-xs text-amber-700 mt-0.5"><i class="fas fa-circle-exclamation mr-1"></i>Não cadastrado no portal</p>
+              {% endif %}
+            </td>
+            <td class="px-4 py-3 text-right whitespace-nowrap">
+              <p class="font-bold text-gray-900 tabular-nums">{{ l.leitura.lido|brl_zero }}</p>
+              <p class="text-[11px] text-gray-500">{{ l.leitura.lancamentos }} lanç.{% if l.leitura.internacionais %} · <i class="fas fa-globe"></i> {{ l.leitura.lido_internacional|brl_zero }}{% endif %}</p>
+            </td>
+            <td class="px-4 py-3 text-right whitespace-nowrap">
+              {% if l.relatorio %}
+              <p class="font-semibold text-gray-800 tabular-nums">{{ l.relatorio.total_extrato|brl_zero }}</p>
+              <p class="text-[11px] {% if l.relatorio.diferenca_total %}text-red-600{% else %}text-emerald-600{% endif %}">dif. {{ l.relatorio.diferenca_total|brl_zero }}</p>
+              {% else %}<span class="text-gray-300">—</span>{% endif %}
+            </td>
+            <td class="px-4 py-3">
+              {% if l.relatorio %}
+              <div class="flex items-center gap-2">
+                <div class="flex-1 h-2 rounded-full bg-gray-100 overflow-hidden"><div class="h-full bg-emerald-500" style="width: {{ l.relatorio.percentual_conciliado }}%"></div></div>
+                <span class="text-xs font-semibold text-gray-700 tabular-nums w-12 text-right">{{ l.relatorio.percentual_conciliado }}%</span>
+              </div>
+              <div class="flex flex-wrap gap-1 mt-1.5 text-[11px]">
+                <span class="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700">{{ l.relatorio.conferidos|length }} conferidos</span>
+                {% if l.relatorio.divergentes %}<span class="px-1.5 py-0.5 rounded bg-red-50 text-red-700">{{ l.relatorio.divergentes|length }} divergentes</span>{% endif %}
+                {% if l.relatorio.so_na_fatura %}<span class="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700">{{ l.relatorio.so_na_fatura|length }} não lançados</span>{% endif %}
+                {% if l.relatorio.so_no_extrato %}<span class="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700">{{ l.relatorio.so_no_extrato|length }} sem cobrança</span>{% endif %}
+              </div>
+              {% else %}
+              <span class="text-xs text-gray-400">Cadastre um cartão com o final {{ l.final }} para conciliar.</span>
+              {% endif %}
+            </td>
+            <td class="px-4 py-3 text-right whitespace-nowrap">
+              {% if l.cartao %}
+              <a href="{% url 'cartoes:fatura_conciliar' l.cartao.pk %}?geral=1"
+                 class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-600 text-white text-xs font-semibold hover:bg-purple-700">
+                Detalhar <i class="fas fa-arrow-right text-[10px]"></i>
+              </a>
+              {% else %}
+              <button type="button" onclick="document.getElementById('nc-{{ l.final }}').classList.toggle('hidden')"
+                      class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-xs hover:bg-gray-50">
+                Ver lançamentos
+              </button>
+              {% endif %}
+            </td>
+          </tr>
+          {% if not l.cartao %}
+          <tr id="nc-{{ l.final }}" class="hidden">
+            <td colspan="5" class="px-4 pb-4">
+              <div class="rounded-xl border border-amber-200 bg-amber-50 overflow-hidden">
+                <table class="min-w-full text-xs">
+                  {% for f in l.lancamentos %}
+                  <tr class="border-b border-amber-100 last:border-0">
+                    <td class="px-3 py-1.5 text-gray-600 whitespace-nowrap">{{ f.data|date:"d/m/Y" }}</td>
+                    <td class="px-3 py-1.5 text-gray-800">{{ f.estabelecimento }}{% if f.parcela %} <span class="text-gray-500">· parcela {{ f.parcela }}</span>{% endif %}{% if f.internacional %} <span class="text-purple-700">· internacional</span>{% endif %}</td>
+                    <td class="px-3 py-1.5 text-gray-500">{{ f.categoria }}</td>
+                    <td class="px-3 py-1.5 text-right font-semibold text-gray-900 whitespace-nowrap">{{ f.valor|brl_zero }}</td>
+                  </tr>
+                  {% endfor %}
+                </table>
+              </div>
+            </td>
+          </tr>
+          {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% if fora_da_fatura %}
+  <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+    <h2 class="text-sm font-bold text-gray-800 mb-1"><i class="fas fa-circle-question text-gray-400 mr-1.5"></i>Cartões ativos do portal que não estão nesta fatura</h2>
+    <p class="text-[11px] text-gray-500 mb-3">Podem ser de outro banco ou de outra conta — confira se a fatura deles também foi enviada.</p>
+    <div class="flex flex-wrap gap-2">
+      {% for c in fora_da_fatura %}
+      <a href="{% url 'cartoes:extrato' c.pk %}" class="px-3 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-700 hover:bg-gray-50">
+        {{ c.titulo }} · final {{ c.last4 }}
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+  {% endif %}
+</div>
+
+<script>
+(function () {
+  const zona = document.getElementById('zonaFatura');
+  const campo = document.getElementById('arquivoFatura');
+  const nome = document.getElementById('nomeFatura');
+  campo.addEventListener('change', function () { if (campo.files[0]) nome.textContent = campo.files[0].name; });
+  ['dragover', 'dragenter'].forEach(function (ev) { zona.addEventListener(ev, function (e) { e.preventDefault(); zona.classList.add('border-purple-500'); }); });
+  ['dragleave', 'drop'].forEach(function (ev) { zona.addEventListener(ev, function () { zona.classList.remove('border-purple-500'); }); });
+  zona.addEventListener('drop', function (e) {
+    e.preventDefault();
+    if (e.dataTransfer.files.length) { campo.files = e.dataTransfer.files; nome.textContent = campo.files[0].name; }
+  });
+  const mes = document.getElementById('refMes'), data = document.getElementById('refData');
+  mes.addEventListener('change', function () { data.value = mes.value ? mes.value + '-01' : ''; });
+})();
+</script>
+{% endblock %}

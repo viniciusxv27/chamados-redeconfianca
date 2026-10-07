@@ -26,8 +26,8 @@ from tickets.models import Category, Ticket, TicketAttachment, TicketLog
 from users.models import User
 
 from .ai import analyze_expense, e_pdf, paginas_do_pdf
-from .exportacao import conciliacao_excel, extrato_excel
-from .fatura import TOLERANCIA_DIAS, conciliar, ler_fatura
+from .exportacao import conciliacao_excel, conciliacao_geral_excel, extrato_excel
+from .fatura import TOLERANCIA_DIAS, compra_antiga, conciliar, janela_do_portal, ler_fatura
 from .models import AcessoCartoes, Cartao, Gasto
 from .permissions import (
     can_access_cartoes,
@@ -324,6 +324,37 @@ def extrato_exportar(request, pk):
     return extrato_excel(cartao, list(gastos), inicio, fim)
 
 
+CAMPOS_DO_LANCAMENTO = ('last4', 'estabelecimento', 'parcela', 'categoria', 'cidade', 'detalhe')
+
+
+def _serializar(lancamentos):
+    return [dict({c: i.get(c, '') for c in CAMPOS_DO_LANCAMENTO},
+                 data=i['data'].isoformat(), valor=str(i['valor']),
+                 internacional=bool(i.get('internacional')), iof=bool(i.get('iof')))
+            for i in lancamentos]
+
+
+def _desserializar(itens):
+    return [dict({c: i.get(c, '') for c in CAMPOS_DO_LANCAMENTO},
+                 data=date.fromisoformat(i['data']), valor=Decimal(i['valor']),
+                 internacional=bool(i.get('internacional')), iof=bool(i.get('iof')))
+            for i in itens]
+
+
+def _resumo_serializavel(cartoes):
+    """O resumo da leitura por final, com Decimal virando texto (vai para a sessão)."""
+    return {final: {k: (str(v) if isinstance(v, Decimal) else v) for k, v in dados.items()}
+            for final, dados in cartoes.items()}
+
+
+def _resumo_lido(cartoes):
+    def dec(v):
+        return Decimal(v) if isinstance(v, str) else v
+    return {final: {k: dec(v) if k.startswith(('declarado', 'lido', 'diferenca')) else v
+                    for k, v in dados.items()}
+            for final, dados in cartoes.items()}
+
+
 def _fatura_da_sessao(request, cartao):
     """Relatório guardado na sessão pela última conciliação deste cartão.
 
@@ -335,46 +366,118 @@ def _fatura_da_sessao(request, cartao):
         return None
     try:
         referencia = date.fromisoformat(guardado['referencia'])
-        lancamentos = [{
-            'last4': i['last4'],
-            'data': date.fromisoformat(i['data']),
-            'estabelecimento': i['estabelecimento'],
-            'valor': Decimal(i['valor']),
-            'parcela': i.get('parcela', ''),
-        } for i in guardado['lancamentos']]
+        lancamentos = _desserializar(guardado['lancamentos'])
+        leitura = _resumo_lido(guardado.get('leitura') or {}).get(cartao.last4)
     except (KeyError, ValueError, TypeError, InvalidOperation):
         return None
-    return referencia, lancamentos
+    return referencia, lancamentos, leitura, guardado.get('arquivo', '')
 
 
-def _guardar_fatura(request, cartao, referencia, lancamentos):
+def _guardar_fatura(request, cartao, referencia, lancamentos, leitura=None, arquivo=''):
     guardadas = request.session.get('cartoes_conciliacao') or {}
     guardadas[str(cartao.pk)] = {
         'referencia': referencia.isoformat(),
-        'lancamentos': [{
-            'last4': i['last4'], 'data': i['data'].isoformat(),
-            'estabelecimento': i['estabelecimento'], 'valor': str(i['valor']),
-            'parcela': i['parcela'],
-        } for i in lancamentos],
+        'lancamentos': _serializar(lancamentos),
+        'leitura': _resumo_serializavel({cartao.last4: leitura}) if leitura else {},
+        'arquivo': arquivo,
     }
     request.session['cartoes_conciliacao'] = guardadas
 
 
+def _fatura_geral_da_sessao(request):
+    """A última fatura inteira lida na conciliação geral (todos os cartões)."""
+    guardado = request.session.get('cartoes_fatura_geral')
+    if not guardado:
+        return None
+    try:
+        return {
+            'referencia': date.fromisoformat(guardado['referencia']),
+            'vencimento': date.fromisoformat(guardado['vencimento']) if guardado.get('vencimento') else None,
+            'arquivo': guardado.get('arquivo', ''),
+            'lancamentos': _desserializar(guardado['lancamentos']),
+            'cartoes': _resumo_lido(guardado['cartoes']),
+            'total_declarado': Decimal(guardado['total_declarado']) if guardado.get('total_declarado') else None,
+            'total_lido': Decimal(guardado['total_lido']),
+        }
+    except (KeyError, ValueError, TypeError, InvalidOperation):
+        return None
+
+
+def _guardar_fatura_geral(request, leitura, arquivo):
+    request.session['cartoes_fatura_geral'] = {
+        'referencia': leitura['referencia'].isoformat(),
+        'vencimento': leitura['vencimento'].isoformat() if leitura.get('vencimento') else '',
+        'arquivo': arquivo,
+        'lancamentos': _serializar(leitura['lancamentos']),
+        'cartoes': _resumo_serializavel(leitura['cartoes']),
+        'total_declarado': str(leitura['total_declarado']) if leitura.get('total_declarado') is not None else '',
+        'total_lido': str(leitura['total_lido']),
+    }
+
+
 def _gastos_do_periodo(cartao, lancamentos):
-    """Gastos do portal na janela coberta pela fatura, com folga da tolerância."""
-    if not lancamentos:
+    """Gastos do portal para conciliar estes lançamentos.
+
+    Os do período da fatura e, para cada parcela de compra antiga (02/xx em
+    diante), os lançados perto da data da compra original — a fatura repete
+    essa data, e a compra foi lançada no portal naquele mês.
+    """
+    inicio, fim = janela_do_portal(lancamentos)
+    if inicio is None:
         return []
-    datas = [i['data'] for i in lancamentos]
+    filtro = Q(data_gasto__gte=inicio, data_gasto__lte=fim)
     folga = timedelta(days=TOLERANCIA_DIAS)
-    return list(cartao.gastos.select_related('criado_por')
-                .filter(data_gasto__gte=min(datas) - folga,
-                        data_gasto__lte=max(datas) + folga)
-                .order_by('data_gasto', 'id'))
+    for dia in sorted({i['data'] for i in lancamentos if compra_antiga(i)}):
+        filtro |= Q(data_gasto__gte=dia - folga, data_gasto__lte=dia + folga)
+    return list(cartao.gastos.select_related('criado_por', 'ticket')
+                .filter(filtro).order_by('data_gasto', 'id'))
+
+
+def _conciliar_cartao(cartao, lancamentos):
+    return conciliar(lancamentos, _gastos_do_periodo(cartao, lancamentos), janela_do_portal(lancamentos))
+
+
+def _ler_pdf_enviado(request, destino_erro):
+    """Lê o PDF do formulário. Devolve (leitura, None) ou (None, redirect)."""
+    arquivo = request.FILES.get('fatura')
+    if not arquivo:
+        messages.error(request, 'Escolha o PDF da fatura.')
+        return None, redirect(*destino_erro)
+    # Sem mês informado, vale o vencimento impresso na própria fatura.
+    referencia = parse_date(request.POST.get('referencia') or '')
+    try:
+        leitura = ler_fatura(arquivo, referencia=referencia.replace(day=1) if referencia else None)
+    except Exception as exc:
+        logger.warning('Falha lendo a fatura: %s', exc)
+        messages.error(request, f'Não consegui ler esta fatura: {exc}')
+        return None, redirect(*destino_erro)
+    if not leitura['lancamentos']:
+        messages.error(request, 'Não encontrei lançamentos neste PDF. É a fatura do cartão (Itaú)?')
+        return None, redirect(*destino_erro)
+    leitura['arquivo'] = arquivo.name
+    return leitura, None
+
+
+def _cartoes_por_final(user, finais):
+    """{final: [cartões visíveis com esse final]} — ativos primeiro."""
+    mapa = {}
+    for cartao in (cartoes_do_usuario(user).filter(last4__in=finais)
+                   .order_by('-ativo', 'apelido')):
+        mapa.setdefault(cartao.last4, []).append(cartao)
+    return mapa
+
+
+def _outros_cartoes_da_fatura(user, leitura_cartoes, final_atual):
+    """Os outros finais da mesma fatura, com o cartão do portal quando houver."""
+    mapa = _cartoes_por_final(user, list(leitura_cartoes))
+    return [{'final': final, 'nome': dados.get('nome', ''), 'total': dados.get('lido'),
+             'cartao': (mapa.get(final) or [None])[0]}
+            for final, dados in sorted(leitura_cartoes.items()) if final != final_atual]
 
 
 @login_required
 def fatura_conciliar(request, pk):
-    """Sobe a fatura em PDF e mostra o que bate, o que diverge e o que falta."""
+    """Concilia um cartão — mesmo que a fatura traga vários: vale o final dele."""
     cartao = get_object_or_404(Cartao, pk=pk)
     if not can_manage_cartao(request.user, cartao):
         messages.error(request, 'Você não tem acesso a este cartão.')
@@ -384,39 +487,52 @@ def fatura_conciliar(request, pk):
                 'is_superadmin': is_superadmin(request.user),
                 'hoje': timezone.localdate()}
 
+    leitura_cartoes, referencia, arquivo, do_cartao = None, None, '', None
     if request.method == 'POST':
-        arquivo = request.FILES.get('fatura')
-        if not arquivo:
-            messages.error(request, 'Escolha o PDF da fatura.')
-            return redirect('cartoes:fatura_conciliar', pk=cartao.pk)
-
-        referencia = parse_date(request.POST.get('referencia') or '') or \
-            timezone.localdate().replace(day=1)
-
-        try:
-            leitura = ler_fatura(arquivo, referencia=referencia)
-        except Exception as exc:
-            logger.warning('Falha lendo a fatura do cartão %s: %s', cartao.pk, exc)
-            messages.error(request, f'Não consegui ler esta fatura: {exc}')
-            return redirect('cartoes:fatura_conciliar', pk=cartao.pk)
-
+        leitura, erro = _ler_pdf_enviado(request, ('cartoes:fatura_conciliar', cartao.pk))
+        if erro:
+            return erro
+        leitura_cartoes, referencia, arquivo = leitura['cartoes'], leitura['referencia'], leitura['arquivo']
         do_cartao = [i for i in leitura['lancamentos'] if i['last4'] == cartao.last4]
-        conferencia = leitura['cartoes'].get(cartao.last4)
+        # A fatura inteira também fica guardada: dá para abrir os outros cartões
+        # dela sem subir o PDF de novo.
+        if pode_gerir_cartoes(request.user):
+            _guardar_fatura_geral(request, leitura, arquivo)
+    elif request.GET.get('geral'):
+        # Vindo da conciliação geral: a fatura já foi lida.
+        geral = _fatura_geral_da_sessao(request)
+        if geral:
+            leitura_cartoes, referencia, arquivo = geral['cartoes'], geral['referencia'], geral['arquivo']
+            do_cartao = [i for i in geral['lancamentos'] if i['last4'] == cartao.last4]
+    else:
+        guardado = _fatura_da_sessao(request, cartao)
+        if guardado and request.GET.get('ultima'):
+            referencia, do_cartao, leitura_um, arquivo = guardado
+            leitura_cartoes = {cartao.last4: leitura_um} if leitura_um else {}
 
+    if do_cartao is not None:
         if not do_cartao:
             messages.warning(
                 request,
                 f'A fatura não tem lançamentos do final {cartao.last4}. '
-                f'Cartões encontrados no arquivo: '
-                f"{', '.join(sorted(leitura['cartoes'])) or 'nenhum'}.")
+                f"Cartões encontrados no arquivo: {', '.join(sorted(leitura_cartoes or {})) or 'nenhum'}.")
             return redirect('cartoes:fatura_conciliar', pk=cartao.pk)
 
-        _guardar_fatura(request, cartao, referencia, do_cartao)
+        conferencia = (leitura_cartoes or {}).get(cartao.last4)
+        _guardar_fatura(request, cartao, referencia, do_cartao, conferencia, arquivo)
+        relatorio = _conciliar_cartao(cartao, do_cartao)
+        inicio, fim = janela_do_portal(do_cartao)
         contexto.update({
-            'relatorio': conciliar(do_cartao, _gastos_do_periodo(cartao, do_cartao)),
+            'relatorio': relatorio,
             'referencia': referencia,
             'conferencia': conferencia,
-            'arquivo': arquivo.name,
+            'arquivo': arquivo,
+            'janela': (inicio, fim),
+            'internacionais': sum(1 for i in do_cartao if i.get('internacional')),
+            'outros_cartoes': (_outros_cartoes_da_fatura(request.user, leitura_cartoes, cartao.last4)
+                               if leitura_cartoes and len(leitura_cartoes) > 1 else []),
+            'contagem': {s: sum(1 for l in relatorio['linhas'] if l['situacao'] == s)
+                         for s in ('conferido', 'divergente', 'nao_lancado', 'sem_cobranca')},
         })
         if conferencia and not conferencia['confere']:
             messages.warning(
@@ -426,6 +542,81 @@ def fatura_conciliar(request, pk):
                 f"R$ {conferencia['diferenca']}). Confira o relatório antes de usá-lo.")
 
     return render(request, 'cartoes/fatura_conciliar.html', contexto)
+
+
+@login_required
+def fatura_geral(request):
+    """Conciliação geral: uma fatura com vários cartões, cada final no seu cartão."""
+    if not pode_gerir_cartoes(request.user):
+        messages.error(request, 'A conciliação geral é de quem gere os cartões.')
+        return redirect('cartoes:dashboard')
+
+    if request.method == 'POST':
+        leitura, erro = _ler_pdf_enviado(request, ('cartoes:fatura_geral',))
+        if erro:
+            return erro
+        _guardar_fatura_geral(request, leitura, leitura['arquivo'])
+        if not leitura['confere_total'] and leitura.get('total_declarado') is not None:
+            messages.warning(
+                request,
+                f"A leitura somou R$ {leitura['total_lido']}, mas a fatura declara "
+                f"R$ {leitura['total_declarado']}. Confira os cartões marcados antes de usar o relatório.")
+        return redirect('cartoes:fatura_geral')
+
+    contexto = {'pode_gerir': True, 'is_superadmin': is_superadmin(request.user),
+                'hoje': timezone.localdate()}
+    geral = _fatura_geral_da_sessao(request)
+    if geral:
+        contexto.update(_conciliacao_geral(request.user, geral))
+    return render(request, 'cartoes/fatura_geral.html', contexto)
+
+
+def _conciliacao_geral(user, geral):
+    """Concilia cada final da fatura com o cartão do portal que tem esse final."""
+    finais = sorted(geral['cartoes'])
+    mapa = _cartoes_por_final(user, finais)
+    linhas, total_portal, total_conferido = [], Decimal('0'), Decimal('0')
+    for final in finais:
+        leitura = geral['cartoes'][final]
+        lancamentos = [i for i in geral['lancamentos'] if i['last4'] == final]
+        candidatos = mapa.get(final, [])
+        cartao = candidatos[0] if candidatos else None
+        relatorio = _conciliar_cartao(cartao, lancamentos) if cartao else None
+        if relatorio:
+            total_portal += relatorio['total_extrato']
+            total_conferido += relatorio['total_conferido']
+        linhas.append({
+            'final': final, 'leitura': leitura, 'cartao': cartao,
+            'ambiguo': len(candidatos) > 1, 'candidatos': candidatos,
+            'relatorio': relatorio, 'lancamentos': lancamentos,
+        })
+    # Cartões do portal ativos que não aparecem nesta fatura (outro banco, outra conta).
+    fora = list(cartoes_do_usuario(user).filter(ativo=True).exclude(last4__in=finais)
+                .order_by('apelido', 'last4'))
+    total = geral['total_lido']
+    return {
+        'geral': geral,
+        'linhas_geral': linhas,
+        'cadastrados': [l for l in linhas if l['cartao']],
+        'nao_cadastrados': [l for l in linhas if not l['cartao']],
+        'fora_da_fatura': fora,
+        'total_portal': total_portal,
+        'total_conferido': total_conferido,
+        'percentual_conciliado': round(float(total_conferido * 100 / total), 1) if total else 0,
+        'total_nao_cadastrados': sum((l['leitura']['lido'] for l in linhas if not l['cartao']), Decimal('0')),
+    }
+
+
+@login_required
+def fatura_geral_exportar(request):
+    if not pode_gerir_cartoes(request.user):
+        messages.error(request, 'A conciliação geral é de quem gere os cartões.')
+        return redirect('cartoes:dashboard')
+    geral = _fatura_geral_da_sessao(request)
+    if not geral:
+        messages.error(request, 'Envie a fatura primeiro para gerar o relatório.')
+        return redirect('cartoes:fatura_geral')
+    return conciliacao_geral_excel(_conciliacao_geral(request.user, geral))
 
 
 @login_required
@@ -441,9 +632,10 @@ def fatura_exportar(request, pk):
         messages.error(request, 'Envie a fatura primeiro para gerar o relatório.')
         return redirect('cartoes:fatura_conciliar', pk=cartao.pk)
 
-    referencia, lancamentos = guardado
-    relatorio = conciliar(lancamentos, _gastos_do_periodo(cartao, lancamentos))
-    return conciliacao_excel(cartao, relatorio, referencia)
+    referencia, lancamentos, leitura, arquivo = guardado
+    relatorio = _conciliar_cartao(cartao, lancamentos)
+    return conciliacao_excel(cartao, relatorio, referencia, leitura=leitura, arquivo=arquivo,
+                             janela=janela_do_portal(lancamentos))
 
 
 @login_required

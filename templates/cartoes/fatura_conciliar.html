@@ -1,9 +1,10 @@
 {% extends "base.html" %}
+{% load caixa_tags %}
 {% block title %}Conciliar fatura — {{ cartao.titulo }}{% endblock %}
 
 {% block content %}
-<div class="max-w-6xl mx-auto p-4 sm:p-6 lg:p-8">
-  <div class="flex items-center justify-between gap-3 mb-5 flex-wrap">
+<div class="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+  <div class="flex items-start justify-between gap-3 mb-5 flex-wrap">
     <div>
       <a href="{% url 'cartoes:extrato' cartao.pk %}" class="text-sm text-gray-500 hover:text-purple-700">
         <i class="fas fa-arrow-left mr-1"></i> Voltar ao extrato
@@ -11,197 +12,193 @@
       <h1 class="text-2xl font-bold text-gray-900 mt-1">
         <i class="fas fa-file-invoice-dollar text-purple-600 mr-2"></i>Conciliar fatura
       </h1>
-      <p class="text-gray-600 text-sm">{{ cartao.titulo }} · final {{ cartao.last4 }}</p>
+      <div class="flex flex-wrap items-center gap-2 mt-1.5">
+        <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-50 border border-purple-100 text-sm text-purple-800 font-medium">
+          <i class="fas fa-credit-card"></i>{{ cartao.titulo }} · final {{ cartao.last4 }}
+        </span>
+        <span class="text-sm text-gray-500"><i class="fas fa-user mr-1"></i>{{ cartao.responsavel.full_name|default:cartao.responsavel.email }}</span>
+      </div>
     </div>
-    {% if relatorio %}
-    <a href="{% url 'cartoes:fatura_exportar' cartao.pk %}"
-       class="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-lg">
-      <i class="fas fa-file-excel"></i> Exportar relatório
-    </a>
-    {% endif %}
+    <div class="flex items-center gap-2 flex-wrap">
+      {% if pode_gerir %}
+      <a href="{% url 'cartoes:fatura_geral' %}"
+         class="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50">
+        <i class="fas fa-layer-group text-purple-600"></i> Conciliação geral
+      </a>
+      {% endif %}
+      {% if relatorio %}
+      <a href="{% url 'cartoes:fatura_exportar' cartao.pk %}"
+         class="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-lg">
+        <i class="fas fa-file-excel"></i> Exportar Excel
+      </a>
+      {% endif %}
+    </div>
   </div>
 
-  <form method="post" enctype="multipart/form-data"
-        class="bg-white border border-gray-200 rounded-xl p-5 shadow-sm mb-5">
+  <form method="post" enctype="multipart/form-data" id="formFatura"
+        class="bg-white border border-gray-200 rounded-2xl p-4 sm:p-5 shadow-sm mb-5">
     {% csrf_token %}
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
-      <div class="sm:col-span-2">
-        <label class="block text-xs font-semibold text-gray-500 mb-1">PDF da fatura</label>
-        <input type="file" name="fatura" accept=".pdf" required
-               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-      </div>
-      <div>
-        <label class="block text-xs font-semibold text-gray-500 mb-1">Mês da fatura</label>
-        <input type="date" name="referencia" value="{{ referencia|date:'Y-m-d'|default:hoje|date:'Y-m-01' }}"
-               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-3 items-stretch">
+      <label class="md:col-span-3 flex items-center gap-4 border-2 border-dashed border-gray-300 rounded-xl px-4 py-4 cursor-pointer hover:border-purple-400 hover:bg-purple-50 transition-colors" id="zonaFatura">
+        <span class="w-11 h-11 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center flex-shrink-0">
+          <i class="fas fa-file-pdf text-lg"></i>
+        </span>
+        <span class="min-w-0">
+          <span class="block text-sm font-semibold text-gray-800" id="nomeFatura">{% if arquivo %}{{ arquivo }} — trocar arquivo{% else %}Escolha ou arraste o PDF da fatura{% endif %}</span>
+          <span class="block text-xs text-gray-500">Fatura com vários cartões? Tudo bem: entram só os lançamentos do final <strong>{{ cartao.last4 }}</strong>.</span>
+        </span>
+        <input type="file" name="fatura" accept=".pdf" required class="sr-only" id="arquivoFatura">
+      </label>
+      <div class="flex flex-col gap-2">
+        <label class="block">
+          <span class="block text-[11px] font-semibold text-gray-500 mb-1">Mês da fatura (opcional)</span>
+          <input type="month" name="referencia_mes" id="refMes" value=""
+                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+          <input type="hidden" name="referencia" id="refData" value="">
+        </label>
+        <button class="w-full px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-lg whitespace-nowrap">
+          <i class="fas fa-scale-balanced mr-1"></i> Conciliar
+        </button>
       </div>
     </div>
-    <div class="flex items-center justify-between gap-3 mt-3 flex-wrap">
-      <p class="text-xs text-gray-400">
-        <i class="fas fa-circle-info mr-1"></i>
-        A conciliação é só conferência — nada é gravado nem alterado no extrato.
-        Só os lançamentos do final <strong>{{ cartao.last4 }}</strong> são considerados.
-      </p>
-      <button class="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-lg whitespace-nowrap">
-        <i class="fas fa-scale-balanced mr-1"></i> Conciliar
-      </button>
-    </div>
+    <p class="text-[11px] text-gray-400 mt-2">
+      <i class="fas fa-circle-info mr-1"></i>
+      Em branco, o mês sai do vencimento impresso na fatura. A conciliação é só conferência — nada é gravado no extrato.
+    </p>
   </form>
 
   {% if relatorio %}
   {% if conferencia %}
-  <div class="rounded-xl p-4 mb-5 border {% if conferencia.confere %}bg-emerald-50 border-emerald-200{% else %}bg-amber-50 border-amber-200{% endif %}">
+  <div class="rounded-2xl p-4 mb-5 border flex flex-col md:flex-row md:items-center gap-3 justify-between
+              {% if conferencia.confere %}bg-emerald-50 border-emerald-200{% else %}bg-amber-50 border-amber-200{% endif %}">
     <p class="text-sm {% if conferencia.confere %}text-emerald-800{% else %}text-amber-800{% endif %}">
       <i class="fas {% if conferencia.confere %}fa-circle-check{% else %}fa-triangle-exclamation{% endif %} mr-1.5"></i>
       {% if conferencia.confere %}
-        Leitura conferida: os {{ conferencia.lancamentos }} lançamentos lidos somam exatamente
-        os R$ {{ conferencia.declarado|floatformat:2 }} que a fatura declara para este cartão.
+        <strong>Leitura conferida:</strong> os {{ conferencia.lancamentos }} lançamentos lidos somam exatamente o que a fatura declara para o final {{ cartao.last4 }}.
       {% else %}
-        A leitura somou R$ {{ conferencia.lido|floatformat:2 }}, mas a fatura declara
-        R$ {{ conferencia.declarado|floatformat:2 }} para este cartão
-        (diferença de R$ {{ conferencia.diferenca|floatformat:2 }}). Confira antes de usar o relatório.
+        <strong>Confira antes de usar:</strong> a leitura somou {{ conferencia.lido|brl_zero }}, mas a fatura declara
+        {{ conferencia.declarado|brl_zero }} (diferença de {{ conferencia.diferenca|brl_zero }}).
       {% endif %}
     </p>
+    <div class="flex flex-wrap gap-2 text-xs">
+      {% if conferencia.nome %}<span class="px-2 py-1 rounded-lg bg-white border border-gray-200 text-gray-600">Na fatura: <strong>{{ conferencia.nome }}</strong></span>{% endif %}
+      {% if referencia %}<span class="px-2 py-1 rounded-lg bg-white border border-gray-200 text-gray-600">Fatura {{ referencia|date:"m/Y" }}</span>{% endif %}
+      <span class="px-2 py-1 rounded-lg bg-white border border-gray-200 text-gray-600">Nacional {{ conferencia.declarado_nacional|brl_zero }}</span>
+      {% if conferencia.declarado_internacional %}<span class="px-2 py-1 rounded-lg bg-white border border-gray-200 text-gray-600"><i class="fas fa-globe mr-1"></i>Internacional {{ conferencia.declarado_internacional|brl_zero }}</span>{% endif %}
+    </div>
   </div>
   {% endif %}
 
   <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-    <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-      <p class="text-xs text-gray-500 uppercase font-semibold">Conferidos</p>
-      <p class="text-2xl font-bold text-emerald-600 mt-1">{{ relatorio.conferidos|length }}</p>
+    <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+      <p class="text-[11px] text-gray-500 uppercase font-semibold tracking-wide">Total na fatura</p>
+      <p class="text-2xl font-bold text-gray-900 mt-1 tabular-nums">{{ relatorio.total_fatura|brl_zero }}</p>
+      <p class="text-[11px] text-gray-400 mt-0.5">{{ relatorio.linhas|length }} linha{{ relatorio.linhas|length|pluralize }}{% if internacionais %} · {{ internacionais }} internacional{{ internacionais|pluralize:"is" }}{% endif %}</p>
     </div>
-    <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-      <p class="text-xs text-gray-500 uppercase font-semibold">Divergências</p>
-      <p class="text-2xl font-bold {% if relatorio.divergentes %}text-red-600{% else %}text-gray-300{% endif %} mt-1">{{ relatorio.divergentes|length }}</p>
-      <p class="text-[11px] text-gray-400 mt-0.5">R$ {{ relatorio.total_divergencia|floatformat:2 }}</p>
+    <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+      <p class="text-[11px] text-gray-500 uppercase font-semibold tracking-wide">Lançado no portal</p>
+      <p class="text-2xl font-bold text-gray-900 mt-1 tabular-nums">{{ relatorio.total_extrato|brl_zero }}</p>
+      <p class="text-[11px] text-gray-400 mt-0.5">{% if janela.0 %}de {{ janela.0|date:"d/m" }} a {{ janela.1|date:"d/m/Y" }}{% endif %}</p>
     </div>
-    <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-      <p class="text-xs text-gray-500 uppercase font-semibold">Não lançados</p>
-      <p class="text-2xl font-bold {% if relatorio.so_na_fatura %}text-amber-600{% else %}text-gray-300{% endif %} mt-1">{{ relatorio.so_na_fatura|length }}</p>
-      <p class="text-[11px] text-gray-400 mt-0.5">R$ {{ relatorio.total_so_na_fatura|floatformat:2 }}</p>
+    <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+      <p class="text-[11px] text-gray-500 uppercase font-semibold tracking-wide">Diferença</p>
+      <p class="text-2xl font-bold mt-1 tabular-nums {% if relatorio.diferenca_total %}text-red-600{% else %}text-emerald-600{% endif %}">{{ relatorio.diferenca_total|brl_zero }}</p>
+      <p class="text-[11px] text-gray-400 mt-0.5">fatura − portal</p>
     </div>
-    <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-      <p class="text-xs text-gray-500 uppercase font-semibold">Sem cobrança</p>
-      <p class="text-2xl font-bold {% if relatorio.so_no_extrato %}text-blue-600{% else %}text-gray-300{% endif %} mt-1">{{ relatorio.so_no_extrato|length }}</p>
-      <p class="text-[11px] text-gray-400 mt-0.5">R$ {{ relatorio.total_so_no_extrato|floatformat:2 }}</p>
+    <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+      <p class="text-[11px] text-gray-500 uppercase font-semibold tracking-wide">Conciliado</p>
+      <p class="text-2xl font-bold text-emerald-600 mt-1 tabular-nums">{{ relatorio.percentual_conciliado }}%</p>
+      <div class="h-2 rounded-full bg-gray-100 mt-1.5 overflow-hidden"><div class="h-full bg-emerald-500 rounded-full" style="width: {{ relatorio.percentual_conciliado }}%"></div></div>
+      <p class="text-[11px] text-gray-400 mt-1">{{ relatorio.total_conferido|brl_zero }} conferidos</p>
     </div>
   </div>
 
-  <div class="bg-white border border-gray-200 rounded-xl p-4 mb-5 shadow-sm flex flex-wrap gap-x-8 gap-y-2 text-sm">
-    <span class="text-gray-600">Total da fatura: <strong class="text-gray-900">R$ {{ relatorio.total_fatura|floatformat:2 }}</strong></span>
-    <span class="text-gray-600">Lançado no portal: <strong class="text-gray-900">R$ {{ relatorio.total_extrato|floatformat:2 }}</strong></span>
-    <span class="text-gray-600">Diferença: <strong class="{% if relatorio.diferenca_total %}text-red-600{% else %}text-emerald-600{% endif %}">R$ {{ relatorio.diferenca_total|floatformat:2 }}</strong></span>
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+    <button type="button" data-ir-filtro="divergente" class="text-left rounded-xl p-3 border border-red-200 bg-red-50 hover:bg-red-100">
+      <p class="text-xs font-semibold text-red-700"><i class="fas fa-not-equal mr-1"></i>Divergências de valor</p>
+      <p class="text-lg font-bold text-red-700 tabular-nums">{{ contagem.divergente }} <span class="text-xs font-medium">· {{ relatorio.total_divergencia|brl_zero }}</span></p>
+    </button>
+    <button type="button" data-ir-filtro="nao_lancado" class="text-left rounded-xl p-3 border border-amber-200 bg-amber-50 hover:bg-amber-100">
+      <p class="text-xs font-semibold text-amber-700"><i class="fas fa-magnifying-glass-minus mr-1"></i>Na fatura, não lançados</p>
+      <p class="text-lg font-bold text-amber-700 tabular-nums">{{ contagem.nao_lancado }} <span class="text-xs font-medium">· {{ relatorio.total_so_na_fatura|brl_zero }}</span></p>
+    </button>
+    <button type="button" data-ir-filtro="sem_cobranca" class="text-left rounded-xl p-3 border border-blue-200 bg-blue-50 hover:bg-blue-100">
+      <p class="text-xs font-semibold text-blue-700"><i class="fas fa-receipt mr-1"></i>Lançados, sem cobrança</p>
+      <p class="text-lg font-bold text-blue-700 tabular-nums">{{ contagem.sem_cobranca }} <span class="text-xs font-medium">· {{ relatorio.total_so_no_extrato|brl_zero }}</span></p>
+    </button>
+    <button type="button" data-ir-filtro="conferido" class="text-left rounded-xl p-3 border border-emerald-200 bg-emerald-50 hover:bg-emerald-100">
+      <p class="text-xs font-semibold text-emerald-700"><i class="fas fa-circle-check mr-1"></i>Conferidos</p>
+      <p class="text-lg font-bold text-emerald-700 tabular-nums">{{ contagem.conferido }} <span class="text-xs font-medium">· {{ relatorio.total_conferido|brl_zero }}</span></p>
+    </button>
   </div>
 
-  {% if relatorio.divergentes %}
-  <div class="bg-white border border-red-200 rounded-xl overflow-hidden mb-4 shadow-sm">
-    <div class="px-5 py-3 bg-red-50 border-b border-red-100">
-      <h2 class="text-sm font-bold text-red-800"><i class="fas fa-not-equal mr-1.5"></i>Divergências de valor</h2>
-      <p class="text-xs text-red-700/80">Mesmo estabelecimento e data próxima, valor diferente.</p>
+  <div class="grid grid-cols-1 xl:grid-cols-4 gap-5">
+    <div class="xl:col-span-3">
+      {% include "cartoes/_conciliacao_tabela.html" %}
     </div>
-    <div class="overflow-x-auto">
-      <table class="min-w-full text-sm">
-        <thead class="bg-gray-50 text-gray-500 text-xs uppercase">
-          <tr>
-            <th class="text-left px-4 py-2">Data</th><th class="text-left px-4 py-2">Estabelecimento</th>
-            <th class="text-right px-4 py-2">Na fatura</th><th class="text-right px-4 py-2">No portal</th>
-            <th class="text-right px-4 py-2">Diferença</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-gray-100">
-          {% for d in relatorio.divergentes %}
-          <tr class="hover:bg-red-50/40">
-            <td class="px-4 py-2 text-gray-600 whitespace-nowrap">{{ d.fatura.data|date:"d/m/Y" }}</td>
-            <td class="px-4 py-2 text-gray-800">
-              {{ d.fatura.estabelecimento }}
-              <span class="block text-[11px] text-gray-400">portal: {{ d.gasto.estabelecimento|default:"—" }} · {{ d.gasto.data_gasto|date:"d/m" }}</span>
-            </td>
-            <td class="px-4 py-2 text-right font-semibold text-gray-900 whitespace-nowrap">R$ {{ d.fatura.valor|floatformat:2 }}</td>
-            <td class="px-4 py-2 text-right text-gray-700 whitespace-nowrap">R$ {{ d.gasto.valor|floatformat:2 }}</td>
-            <td class="px-4 py-2 text-right font-bold text-red-600 whitespace-nowrap">R$ {{ d.diferenca|floatformat:2 }}</td>
-          </tr>
+    <aside class="space-y-5">
+      <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+        <h2 class="text-sm font-bold text-gray-800 mb-3"><i class="fas fa-chart-bar text-purple-600 mr-1.5"></i>Fatura por categoria</h2>
+        <ul class="space-y-2.5">
+          {% for c in relatorio.por_categoria %}
+          <li>
+            <div class="flex items-center justify-between text-xs gap-2">
+              <span class="text-gray-700 truncate">{{ c.categoria }}</span>
+              <span class="text-gray-900 font-semibold tabular-nums whitespace-nowrap">{{ c.valor|brl_zero }}</span>
+            </div>
+            <div class="h-1.5 rounded-full bg-gray-100 mt-1 overflow-hidden"><div class="h-full bg-purple-500 rounded-full" style="width: {{ c.percentual }}%"></div></div>
+          </li>
           {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
-  {% endif %}
+        </ul>
+      </div>
 
-  {% if relatorio.so_na_fatura %}
-  <div class="bg-white border border-amber-200 rounded-xl overflow-hidden mb-4 shadow-sm">
-    <div class="px-5 py-3 bg-amber-50 border-b border-amber-100">
-      <h2 class="text-sm font-bold text-amber-800"><i class="fas fa-magnifying-glass-minus mr-1.5"></i>Cobrados na fatura e não lançados no portal</h2>
-    </div>
-    <div class="overflow-x-auto max-h-[28rem]">
-      <table class="min-w-full text-sm">
-        <thead class="bg-gray-50 text-gray-500 text-xs uppercase sticky top-0">
-          <tr><th class="text-left px-4 py-2">Data</th><th class="text-left px-4 py-2">Estabelecimento</th>
-              <th class="text-left px-4 py-2">Parcela</th><th class="text-right px-4 py-2">Valor</th></tr>
-        </thead>
-        <tbody class="divide-y divide-gray-100">
-          {% for i in relatorio.so_na_fatura %}
-          <tr class="hover:bg-amber-50/40">
-            <td class="px-4 py-2 text-gray-600 whitespace-nowrap">{{ i.data|date:"d/m/Y" }}</td>
-            <td class="px-4 py-2 text-gray-800">{{ i.estabelecimento }}</td>
-            <td class="px-4 py-2 text-gray-500 text-xs">{{ i.parcela|default:"—" }}</td>
-            <td class="px-4 py-2 text-right font-semibold text-gray-900 whitespace-nowrap">R$ {{ i.valor|floatformat:2 }}</td>
-          </tr>
+      {% if outros_cartoes %}
+      <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+        <h2 class="text-sm font-bold text-gray-800 mb-1"><i class="fas fa-layer-group text-purple-600 mr-1.5"></i>Outros cartões nesta fatura</h2>
+        <p class="text-[11px] text-gray-500 mb-3">A fatura traz {{ outros_cartoes|length|add:1 }} finais. Só o {{ cartao.last4 }} entrou aqui.</p>
+        <ul class="divide-y divide-gray-100">
+          {% for o in outros_cartoes %}
+          <li class="py-2 flex items-center justify-between gap-2 text-xs">
+            <span class="min-w-0">
+              <span class="font-semibold text-gray-800">final {{ o.final }}</span>
+              <span class="block text-gray-500 truncate">{{ o.nome|default:"—" }}</span>
+            </span>
+            <span class="text-right">
+              <span class="block font-semibold text-gray-900 tabular-nums">{{ o.total|brl_zero }}</span>
+              {% if o.cartao %}<a href="{% url 'cartoes:fatura_conciliar' o.cartao.pk %}?geral=1" class="text-purple-600 hover:underline">conciliar</a>
+              {% else %}<span class="text-gray-400">não cadastrado</span>{% endif %}
+            </span>
+          </li>
           {% endfor %}
-        </tbody>
-      </table>
-    </div>
+        </ul>
+      </div>
+      {% endif %}
+    </aside>
   </div>
-  {% endif %}
-
-  {% if relatorio.so_no_extrato %}
-  <div class="bg-white border border-blue-200 rounded-xl overflow-hidden mb-4 shadow-sm">
-    <div class="px-5 py-3 bg-blue-50 border-b border-blue-100">
-      <h2 class="text-sm font-bold text-blue-800"><i class="fas fa-receipt mr-1.5"></i>Lançados no portal e ausentes desta fatura</h2>
-      <p class="text-xs text-blue-700/80">Podem cair na próxima fatura, ou estar no cartão errado.</p>
-    </div>
-    <div class="overflow-x-auto max-h-[28rem]">
-      <table class="min-w-full text-sm">
-        <thead class="bg-gray-50 text-gray-500 text-xs uppercase sticky top-0">
-          <tr><th class="text-left px-4 py-2">Data</th><th class="text-left px-4 py-2">Estabelecimento</th>
-              <th class="text-left px-4 py-2">Lançado por</th><th class="text-right px-4 py-2">Valor</th></tr>
-        </thead>
-        <tbody class="divide-y divide-gray-100">
-          {% for g in relatorio.so_no_extrato %}
-          <tr class="hover:bg-blue-50/40">
-            <td class="px-4 py-2 text-gray-600 whitespace-nowrap">{{ g.data_gasto|date:"d/m/Y" }}</td>
-            <td class="px-4 py-2 text-gray-800">{{ g.estabelecimento|default:"—" }}</td>
-            <td class="px-4 py-2 text-gray-500 text-xs">{{ g.criado_por.full_name|default:"—" }}</td>
-            <td class="px-4 py-2 text-right font-semibold text-gray-900 whitespace-nowrap">R$ {{ g.valor|floatformat:2 }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
-  {% endif %}
-
-  {% if relatorio.conferidos %}
-  <details class="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
-    <summary class="px-5 py-3 bg-emerald-50 border-b border-emerald-100 cursor-pointer text-sm font-bold text-emerald-800">
-      <i class="fas fa-circle-check mr-1.5"></i>{{ relatorio.conferidos|length }} lançamentos conferidos
-    </summary>
-    <div class="overflow-x-auto max-h-[28rem]">
-      <table class="min-w-full text-sm">
-        <thead class="bg-gray-50 text-gray-500 text-xs uppercase sticky top-0">
-          <tr><th class="text-left px-4 py-2">Data</th><th class="text-left px-4 py-2">Estabelecimento</th>
-              <th class="text-right px-4 py-2">Valor</th></tr>
-        </thead>
-        <tbody class="divide-y divide-gray-100">
-          {% for c in relatorio.conferidos %}
-          <tr><td class="px-4 py-2 text-gray-600 whitespace-nowrap">{{ c.fatura.data|date:"d/m/Y" }}</td>
-              <td class="px-4 py-2 text-gray-800">{{ c.fatura.estabelecimento }}</td>
-              <td class="px-4 py-2 text-right text-gray-900 whitespace-nowrap">R$ {{ c.fatura.valor|floatformat:2 }}</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </details>
-  {% endif %}
   {% endif %}
 </div>
+
+<script>
+(function () {
+  // Arrastar o PDF para a zona e mostrar o nome escolhido.
+  const zona = document.getElementById('zonaFatura');
+  const campo = document.getElementById('arquivoFatura');
+  const nome = document.getElementById('nomeFatura');
+  if (zona && campo) {
+    campo.addEventListener('change', function () { if (campo.files[0]) nome.textContent = campo.files[0].name; });
+    ['dragover', 'dragenter'].forEach(function (ev) { zona.addEventListener(ev, function (e) { e.preventDefault(); zona.classList.add('border-purple-500'); }); });
+    ['dragleave', 'drop'].forEach(function (ev) { zona.addEventListener(ev, function () { zona.classList.remove('border-purple-500'); }); });
+    zona.addEventListener('drop', function (e) {
+      e.preventDefault();
+      if (e.dataTransfer.files.length) { campo.files = e.dataTransfer.files; nome.textContent = campo.files[0].name; }
+    });
+  }
+  // O mês escolhido vira o dia 1 (o servidor lê uma data).
+  const mes = document.getElementById('refMes'), data = document.getElementById('refData');
+  if (mes && data) {
+    const sync = function () { data.value = mes.value ? mes.value + '-01' : ''; };
+    mes.addEventListener('change', sync); sync();
+  }
+})();
+</script>
 {% endblock %}

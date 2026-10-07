@@ -1,0 +1,140 @@
+{% load caixa_tags %}
+{% comment %}
+Tabela única da conciliação: cada linha da fatura (ou do portal sem cobrança)
+com a situação. Os botões de situação e a busca filtram na própria tela.
+Recebe `relatorio` e `contagem`.
+{% endcomment %}
+<div class="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden" id="concTabela">
+  <div class="px-4 sm:px-5 py-3 border-b border-gray-100 flex flex-col lg:flex-row lg:items-center gap-3 justify-between">
+    <div class="flex flex-wrap gap-1.5" role="tablist">
+      <button type="button" data-filtro="" class="conc-filtro px-3 py-1.5 rounded-full text-xs font-semibold border border-purple-600 bg-purple-600 text-white">
+        Tudo <span class="opacity-75">{{ relatorio.linhas|length }}</span>
+      </button>
+      <button type="button" data-filtro="divergente" class="conc-filtro px-3 py-1.5 rounded-full text-xs font-semibold border border-red-200 bg-red-50 text-red-700">
+        <i class="fas fa-not-equal mr-1"></i>Divergências <span class="opacity-75">{{ contagem.divergente }}</span>
+      </button>
+      <button type="button" data-filtro="nao_lancado" class="conc-filtro px-3 py-1.5 rounded-full text-xs font-semibold border border-amber-200 bg-amber-50 text-amber-700">
+        <i class="fas fa-magnifying-glass-minus mr-1"></i>Não lançados <span class="opacity-75">{{ contagem.nao_lancado }}</span>
+      </button>
+      <button type="button" data-filtro="sem_cobranca" class="conc-filtro px-3 py-1.5 rounded-full text-xs font-semibold border border-blue-200 bg-blue-50 text-blue-700">
+        <i class="fas fa-receipt mr-1"></i>Sem cobrança <span class="opacity-75">{{ contagem.sem_cobranca }}</span>
+      </button>
+      <button type="button" data-filtro="conferido" class="conc-filtro px-3 py-1.5 rounded-full text-xs font-semibold border border-emerald-200 bg-emerald-50 text-emerald-700">
+        <i class="fas fa-circle-check mr-1"></i>Conferidos <span class="opacity-75">{{ contagem.conferido }}</span>
+      </button>
+    </div>
+    <div class="relative w-full lg:w-72">
+      <i class="fas fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+      <input type="search" id="concBusca" placeholder="Buscar estabelecimento, categoria, valor…"
+             class="w-full border border-gray-300 rounded-lg pl-8 pr-3 py-2 text-sm">
+    </div>
+  </div>
+
+  <div class="overflow-x-auto max-h-[38rem]">
+    <table class="min-w-full text-sm">
+      <thead class="bg-gray-50 text-gray-500 text-[11px] uppercase tracking-wide sticky top-0 z-10">
+        <tr>
+          <th class="text-left px-4 py-2.5 font-semibold">Situação</th>
+          <th class="text-left px-4 py-2.5 font-semibold">Data</th>
+          <th class="text-left px-4 py-2.5 font-semibold">Na fatura</th>
+          <th class="text-right px-4 py-2.5 font-semibold">Valor fatura</th>
+          <th class="text-left px-4 py-2.5 font-semibold">No portal</th>
+          <th class="text-right px-4 py-2.5 font-semibold">Valor portal</th>
+          <th class="text-right px-4 py-2.5 font-semibold">Diferença</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        {% for l in relatorio.linhas %}
+        <tr class="conc-linha hover:bg-gray-50" data-situacao="{{ l.situacao }}"
+            data-busca="{{ l.fatura.estabelecimento|default:''|lower }} {{ l.fatura.categoria|default:''|lower }} {{ l.fatura.cidade|default:''|lower }} {{ l.gasto.estabelecimento|default:''|lower }} {{ l.fatura.valor|default:'' }} {{ l.gasto.valor|default:'' }}">
+          <td class="px-4 py-2.5 whitespace-nowrap">
+            {% if l.situacao == 'conferido' %}<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-700"><i class="fas fa-check"></i>Conferido</span>
+            {% elif l.situacao == 'divergente' %}<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-red-100 text-red-700"><i class="fas fa-not-equal"></i>Divergente</span>
+            {% elif l.situacao == 'nao_lancado' %}<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-700"><i class="fas fa-magnifying-glass-minus"></i>Não lançado</span>
+            {% else %}<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-blue-100 text-blue-700"><i class="fas fa-receipt"></i>Sem cobrança</span>{% endif %}
+          </td>
+          <td class="px-4 py-2.5 text-gray-600 whitespace-nowrap tabular-nums">
+            {% if l.fatura %}{{ l.fatura.data|date:"d/m/Y" }}{% else %}{{ l.gasto.data_gasto|date:"d/m/Y" }}{% endif %}
+          </td>
+          <td class="px-4 py-2.5 min-w-[14rem]">
+            {% if l.fatura %}
+            <p class="text-gray-900 font-medium break-words">{{ l.fatura.estabelecimento }}</p>
+            <p class="text-[11px] text-gray-500 flex flex-wrap gap-x-2">
+              {% if l.fatura.iof %}<span class="text-purple-700 font-semibold">IOF</span>
+              {% elif l.fatura.internacional %}<span class="text-purple-700 font-semibold"><i class="fas fa-globe mr-0.5"></i>Internacional</span>{% endif %}
+              {% if l.fatura.categoria and not l.fatura.iof %}<span>{{ l.fatura.categoria }}</span>{% endif %}
+              {% if l.fatura.cidade %}<span>{{ l.fatura.cidade }}</span>{% endif %}
+              {% if l.fatura.parcela %}<span class="text-gray-700 font-semibold">parcela {{ l.fatura.parcela }}</span>{% endif %}
+              {% if l.total_parcelado %}<span class="text-red-600" title="A parcela vezes o número de parcelas, comparado com a compra lançada no portal">compra toda {{ l.total_parcelado|brl_zero }}</span>{% endif %}
+              {% if l.fatura.detalhe %}<span>{{ l.fatura.detalhe }}</span>{% endif %}
+            </p>
+            {% else %}<span class="text-gray-400 text-xs">— não está nesta fatura</span>{% endif %}
+          </td>
+          <td class="px-4 py-2.5 text-right font-semibold text-gray-900 whitespace-nowrap tabular-nums">
+            {% if l.fatura %}{{ l.fatura.valor|brl_zero }}{% else %}<span class="text-gray-300">—</span>{% endif %}
+          </td>
+          <td class="px-4 py-2.5 min-w-[12rem]">
+            {% if l.gasto %}
+            <p class="text-gray-800 break-words">{{ l.gasto.estabelecimento|default:l.gasto.descricao|default:"—"|truncatechars:60 }}</p>
+            <p class="text-[11px] text-gray-500">
+              {{ l.gasto.data_gasto|date:"d/m" }}{% if l.gasto.criado_por %} · {{ l.gasto.criado_por.full_name }}{% endif %}
+              {% if l.gasto.ticket_id %} · <a href="{% url 'ticket_detail' l.gasto.ticket_id %}" class="text-purple-600 hover:underline">chamado #{{ l.gasto.ticket_id }}</a>{% endif %}
+            </p>
+            {% if l.parcelado %}<p class="text-[11px] text-emerald-700 font-medium"><i class="fas fa-layer-group mr-0.5"></i>compra inteira lançada; a fatura cobra a parcela</p>{% endif %}
+            {% else %}<span class="text-gray-400 text-xs">— não lançado no portal</span>{% endif %}
+          </td>
+          <td class="px-4 py-2.5 text-right text-gray-700 whitespace-nowrap tabular-nums">
+            {% if l.gasto %}{{ l.gasto.valor|brl_zero }}{% else %}<span class="text-gray-300">—</span>{% endif %}
+          </td>
+          <td class="px-4 py-2.5 text-right whitespace-nowrap tabular-nums font-semibold
+                     {% if l.situacao == 'conferido' %}text-gray-300{% elif l.situacao == 'sem_cobranca' %}text-blue-600{% else %}text-red-600{% endif %}">
+            {% if l.situacao == 'conferido' %}—{% else %}{{ l.diferenca|brl_zero }}{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+        <tr id="concVazio" class="hidden"><td colspan="7" class="px-4 py-8 text-center text-sm text-gray-400">Nada com esse filtro.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+(function () {
+  const caixa = document.getElementById('concTabela');
+  if (!caixa) return;
+  const linhas = [...caixa.querySelectorAll('.conc-linha')];
+  const botoes = [...caixa.querySelectorAll('.conc-filtro')];
+  const busca = document.getElementById('concBusca');
+  const vazio = document.getElementById('concVazio');
+  let filtro = '';
+
+  function aplicar() {
+    const termo = (busca.value || '').trim().toLowerCase().replace(',', '.');
+    let visiveis = 0;
+    linhas.forEach(function (tr) {
+      const ok = (!filtro || tr.dataset.situacao === filtro)
+        && (!termo || (tr.dataset.busca || '').includes(termo));
+      tr.classList.toggle('hidden', !ok);
+      if (ok) visiveis++;
+    });
+    vazio.classList.toggle('hidden', visiveis > 0);
+    botoes.forEach(function (b) {
+      const ativo = b.dataset.filtro === filtro;
+      b.classList.toggle('ring-2', ativo);
+      b.classList.toggle('ring-purple-400', ativo);
+    });
+  }
+  botoes.forEach(function (b) {
+    b.addEventListener('click', function () { filtro = b.dataset.filtro; aplicar(); });
+  });
+  busca.addEventListener('input', aplicar);
+  // Os cartões de resumo também filtram (data-ir-filtro).
+  document.querySelectorAll('[data-ir-filtro]').forEach(function (el) {
+    el.addEventListener('click', function () {
+      filtro = el.dataset.irFiltro; aplicar();
+      caixa.scrollIntoView({behavior: 'smooth', block: 'start'});
+    });
+  });
+  aplicar();
+})();
+</script>
