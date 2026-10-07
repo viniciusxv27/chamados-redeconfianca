@@ -1,0 +1,76 @@
+{% extends 'base.html' %}
+
+{% block title %}Movimentações - Arquivos - Rede Confiança{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="mb-4">
+        <h1 class="text-2xl sm:text-3xl font-bold text-gray-900"><i class="fas fa-clock-rotate-left text-gray-500 mr-2"></i>Movimentações</h1>
+        <p class="text-gray-600 mt-1 text-sm">Tudo o que aconteceu em /files/: envios, downloads, pastas e categorias criadas, arquivos movidos, exclusões, recuperações, acessos liberados e tentativas sem permissão.</p>
+    </div>
+    {% include 'files/_nav_superadmin.html' with ativa='movimentacoes' %}
+
+    <form method="get" class="bg-white rounded-lg shadow-sm p-4 mb-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 items-end">
+        <div class="lg:col-span-2">
+            <label class="block text-xs text-gray-500 mb-1">Buscar (item ou detalhe)</label>
+            <input type="text" name="q" value="{{ busca }}" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" placeholder="Nome do arquivo, pasta…">
+        </div>
+        <div>
+            <label class="block text-xs text-gray-500 mb-1">Ação</label>
+            <select name="acao" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                <option value="">Todas</option>
+                {% for valor, rotulo in acoes %}<option value="{{ valor }}" {% if acao == valor %}selected{% endif %}>{{ rotulo }}</option>{% endfor %}
+            </select>
+        </div>
+        <div>
+            <label class="block text-xs text-gray-500 mb-1">Pessoa</label>
+            <select name="usuario" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                <option value="">Todas</option>
+                {% for u in usuarios %}<option value="{{ u.id }}" {% if usuario_id == u.id|stringformat:"s" %}selected{% endif %}>{{ u.full_name }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+            <div><label class="block text-xs text-gray-500 mb-1">De</label><input type="date" name="de" value="{{ de }}" class="w-full px-2 py-2 border border-gray-300 rounded-md text-sm"></div>
+            <div><label class="block text-xs text-gray-500 mb-1">Até</label><input type="date" name="ate" value="{{ ate }}" class="w-full px-2 py-2 border border-gray-300 rounded-md text-sm"></div>
+        </div>
+        <div class="flex gap-2">
+            <button type="submit" class="flex-1 bg-gray-900 text-white px-3 py-2 rounded-md text-sm hover:bg-gray-800"><i class="fas fa-filter mr-1"></i>Filtrar</button>
+            <a href="{% url 'files:movimentacoes' %}" class="px-3 py-2 rounded-md text-sm border border-gray-300 text-gray-600 hover:bg-gray-50">Limpar</a>
+        </div>
+    </form>
+
+    <div class="bg-white rounded-lg shadow-sm overflow-hidden">
+        <p class="px-4 py-2 text-xs text-gray-500 border-b border-gray-100">{{ pagina.paginator.count }} movimentaç{{ pagina.paginator.count|pluralize:"ão,ões" }}</p>
+        <div class="divide-y divide-gray-100">
+            {% for m in pagina %}
+            <div class="px-4 py-3 grid grid-cols-1 md:grid-cols-12 gap-1 md:gap-3 items-start text-sm" data-movimentacao>
+                <div class="md:col-span-2 text-xs text-gray-500 tabular-nums">{{ m.quando|date:"d/m/Y H:i" }}</div>
+                <div class="md:col-span-2">
+                    <span class="inline-block px-2 py-0.5 rounded-full text-xs font-medium
+                        {% if m.acao == 'EXCLUIR' %}bg-red-50 text-red-700{% elif m.acao == 'RESTAURAR' %}bg-emerald-50 text-emerald-700{% elif m.acao == 'NEGADO' %}bg-amber-50 text-amber-700{% elif m.acao == 'LIBERAR' or m.acao == 'RETIRAR' %}bg-violet-50 text-violet-700{% elif m.acao == 'DOWNLOAD' %}bg-gray-100 text-gray-600{% else %}bg-blue-50 text-blue-700{% endif %}">{{ m.get_acao_display }}</span>
+                </div>
+                <div class="md:col-span-4 min-w-0">
+                    <p class="text-gray-900 truncate" title="{{ m.item_nome }}"><span class="text-xs text-gray-400">{{ m.get_tipo_display }}:</span> {{ m.item_nome }}</p>
+                    {% if m.detalhe %}<p class="text-xs text-gray-500">{{ m.detalhe }}</p>{% endif %}
+                </div>
+                <div class="md:col-span-3 text-gray-700">
+                    {% if m.usuario %}{{ m.usuario.full_name }}{% else %}<span class="text-gray-400">—</span>{% endif %}
+                    {% if m.pessoa %}<span class="text-xs text-gray-400"> → {{ m.pessoa.full_name }}</span>{% endif %}
+                </div>
+                <div class="md:col-span-1 text-xs text-gray-400 md:text-right">{{ m.ip|default:"" }}</div>
+            </div>
+            {% empty %}
+            <p class="px-4 py-10 text-center text-gray-400">Nenhuma movimentação com esse filtro.</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    {% if pagina.has_other_pages %}
+    <div class="flex items-center justify-between mt-4 text-sm">
+        {% if pagina.has_previous %}<a href="?{{ query }}&pagina={{ pagina.previous_page_number }}" class="px-3 py-1.5 border border-gray-300 rounded-md bg-white hover:bg-gray-50">← Anteriores</a>{% else %}<span></span>{% endif %}
+        <span class="text-gray-500">Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span>
+        {% if pagina.has_next %}<a href="?{{ query }}&pagina={{ pagina.next_page_number }}" class="px-3 py-1.5 border border-gray-300 rounded-md bg-white hover:bg-gray-50">Mais antigas →</a>{% else %}<span></span>{% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

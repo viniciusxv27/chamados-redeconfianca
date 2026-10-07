@@ -1,0 +1,157 @@
+{% extends 'base.html' %}
+
+{% block title %}Arquivos por usuário - Rede Confiança{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="mb-4">
+        <h1 class="text-2xl sm:text-3xl font-bold text-gray-900"><i class="fas fa-user-gear text-gray-500 mr-2"></i>Arquivos por usuário</h1>
+        <p class="text-gray-600 mt-1 text-sm">Escolha uma pessoa para ver o /files/ dela — o que ela enxerga, o que enviou e o que foi liberado só para ela — e liberar ou retirar acesso.</p>
+    </div>
+    {% include 'files/_nav_superadmin.html' with ativa='usuario' %}
+
+    <form method="get" class="bg-white rounded-lg shadow-sm p-4 mb-4 flex flex-col sm:flex-row gap-3 sm:items-end">
+        <div class="flex-1">
+            <label class="block text-xs text-gray-500 mb-1" for="fu-usuario">Pessoa</label>
+            <select name="usuario" id="fu-usuario" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" onchange="this.form.submit()">
+                <option value="">Escolha…</option>
+                {% for u in usuarios %}<option value="{{ u.id }}" {% if pessoa and pessoa.id == u.id %}selected{% endif %}>{{ u.full_name }}{% if u.sector %} — {{ u.sector.name }}{% endif %}</option>{% endfor %}
+            </select>
+        </div>
+        <button type="submit" class="bg-gray-900 text-white px-4 py-2 rounded-md text-sm hover:bg-gray-800">Abrir</button>
+    </form>
+
+    {% if pessoa %}
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+        <div class="bg-white rounded-lg shadow-sm p-4"><p class="text-xs text-gray-500">Arquivos que vê</p><p class="text-2xl font-bold text-gray-900">{{ ve|length }}</p></div>
+        <div class="bg-white rounded-lg shadow-sm p-4"><p class="text-xs text-gray-500">Liberados só para ela</p><p class="text-2xl font-bold text-violet-700">{{ liberados_ids|length }}</p></div>
+        <div class="bg-white rounded-lg shadow-sm p-4"><p class="text-xs text-gray-500">Pastas liberadas</p><p class="text-2xl font-bold text-yellow-600">{{ pastas_liberadas|length }}</p></div>
+        <div class="bg-white rounded-lg shadow-sm p-4"><p class="text-xs text-gray-500">Enviados por ela</p><p class="text-2xl font-bold text-gray-900">{{ enviados|length }}</p></div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <!-- O que ela vê -->
+        <form method="post" class="bg-white rounded-lg shadow-sm overflow-hidden" data-bloco="ve">
+            {% csrf_token %}
+            <input type="hidden" name="usuario" value="{{ pessoa.id }}">
+            <input type="hidden" name="tipo" value="arquivo">
+            <input type="hidden" name="acao" value="retirar">
+            <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-2">
+                <span class="font-semibold text-gray-800 text-sm"><i class="fas fa-eye text-gray-400 mr-1"></i>O que {{ pessoa.first_name }} vê</span>
+                <button type="submit" class="text-xs text-red-600 hover:underline">Retirar o acesso por pessoa dos marcados</button>
+            </div>
+            <div class="divide-y divide-gray-50 max-h-[28rem] overflow-y-auto">
+                {% for a in ve %}
+                <div class="px-4 py-2 flex items-center gap-2 text-sm">
+                    {% if a.id in liberados_ids %}
+                    <input type="checkbox" name="item" value="{{ a.id }}" class="rounded border-gray-300" title="Liberado por pessoa">
+                    {% else %}
+                    <span class="w-4"></span>
+                    {% endif %}
+                    <a href="{% url 'files:file_detail' a.id %}" class="flex-1 min-w-0 truncate text-gray-800 hover:text-blue-700" title="{{ a.title }}">{{ a.title }}</a>
+                    <span class="text-xs text-gray-400 truncate max-w-[10rem]">{{ a.category.folder.name|default:"Raiz" }} / {{ a.category.name }}</span>
+                    {% if a.id in liberados_ids %}<span class="text-[10px] px-1.5 py-0.5 rounded bg-violet-50 text-violet-700">por pessoa</span>
+                    {% else %}<span class="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{{ a.get_visibility_display }}</span>{% endif %}
+                    <a href="{% url 'files:acesso_item' 'arquivo' a.id %}" class="text-gray-400 hover:text-gray-700" title="Acesso por pessoa"><i class="fas fa-user-lock"></i></a>
+                </div>
+                {% empty %}
+                <p class="px-4 py-6 text-center text-sm text-gray-400">Nenhum arquivo visível para esta pessoa.</p>
+                {% endfor %}
+            </div>
+        </form>
+
+        <!-- O que ela não vê: liberar -->
+        <form method="post" class="bg-white rounded-lg shadow-sm overflow-hidden" data-bloco="nao-ve">
+            {% csrf_token %}
+            <input type="hidden" name="usuario" value="{{ pessoa.id }}">
+            <input type="hidden" name="tipo" value="arquivo">
+            <input type="hidden" name="acao" value="liberar">
+            <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-2">
+                <span class="font-semibold text-gray-800 text-sm"><i class="fas fa-eye-slash text-gray-400 mr-1"></i>O que {{ pessoa.first_name }} não vê</span>
+                <button type="submit" class="text-xs bg-gray-900 text-white px-2.5 py-1 rounded hover:bg-gray-800">Liberar os marcados</button>
+            </div>
+            <div class="divide-y divide-gray-50 max-h-[28rem] overflow-y-auto">
+                {% for a in nao_ve %}
+                <label class="px-4 py-2 flex items-center gap-2 text-sm cursor-pointer hover:bg-gray-50">
+                    <input type="checkbox" name="item" value="{{ a.id }}" class="rounded border-gray-300">
+                    <span class="flex-1 min-w-0 truncate text-gray-700" title="{{ a.title }}">{{ a.title }}</span>
+                    <span class="text-xs text-gray-400 truncate max-w-[10rem]">{{ a.category.folder.name|default:"Raiz" }} / {{ a.category.name }}</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{{ a.get_visibility_display }}{% if a.target_sector %}: {{ a.target_sector.name }}{% endif %}</span>
+                </label>
+                {% empty %}
+                <p class="px-4 py-6 text-center text-sm text-gray-400">Esta pessoa já vê todos os arquivos.</p>
+                {% endfor %}
+            </div>
+        </form>
+
+        <!-- Pastas -->
+        <div class="bg-white rounded-lg shadow-sm overflow-hidden" data-bloco="pastas">
+            <div class="px-4 py-3 border-b border-gray-100 font-semibold text-gray-800 text-sm"><i class="fas fa-folder text-yellow-500 mr-1"></i>Pastas liberadas por pessoa</div>
+            <div class="divide-y divide-gray-50">
+                {% for p in pastas_liberadas %}
+                <form method="post" class="px-4 py-2 flex items-center justify-between gap-2 text-sm">
+                    {% csrf_token %}
+                    <input type="hidden" name="usuario" value="{{ pessoa.id }}">
+                    <input type="hidden" name="tipo" value="pasta">
+                    <input type="hidden" name="acao" value="retirar">
+                    <input type="hidden" name="item" value="{{ p.id }}">
+                    <span class="text-gray-800">{{ p.get_full_path }}</span>
+                    <button type="submit" class="text-xs text-red-600 hover:underline">Retirar</button>
+                </form>
+                {% empty %}
+                <p class="px-4 py-4 text-center text-sm text-gray-400">Nenhuma pasta liberada só para esta pessoa.</p>
+                {% endfor %}
+            </div>
+            {% if pastas_para_liberar %}
+            <form method="post" class="px-4 py-3 border-t border-gray-100 flex flex-col sm:flex-row gap-2">
+                {% csrf_token %}
+                <input type="hidden" name="usuario" value="{{ pessoa.id }}">
+                <input type="hidden" name="tipo" value="pasta">
+                <input type="hidden" name="acao" value="liberar">
+                <select name="item" class="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm" required>
+                    <option value="">Escolha uma pasta…</option>
+                    {% for p in pastas_para_liberar %}<option value="{{ p.id }}">{{ p.get_full_path }}</option>{% endfor %}
+                </select>
+                <button type="submit" class="bg-gray-900 text-white px-3 py-2 rounded-md text-sm hover:bg-gray-800">Liberar pasta</button>
+            </form>
+            {% endif %}
+        </div>
+
+        <!-- Enviados e movimentações -->
+        <div class="space-y-4">
+            <div class="bg-white rounded-lg shadow-sm overflow-hidden" data-bloco="enviados">
+                <div class="px-4 py-3 border-b border-gray-100 font-semibold text-gray-800 text-sm"><i class="fas fa-upload text-gray-400 mr-1"></i>Enviados por {{ pessoa.first_name }}</div>
+                <div class="divide-y divide-gray-50 max-h-60 overflow-y-auto">
+                    {% for a in enviados %}
+                    <div class="px-4 py-2 flex items-center gap-2 text-sm">
+                        <a href="{% url 'files:file_detail' a.id %}" class="flex-1 min-w-0 truncate text-gray-800 hover:text-blue-700">{{ a.title }}</a>
+                        <span class="text-xs text-gray-400">{{ a.created_at|date:"d/m/Y" }}</span>
+                        <a href="{% url 'files:delete_file' a.id %}" class="text-gray-400 hover:text-red-600" title="Mandar para a lixeira"><i class="fas fa-trash"></i></a>
+                    </div>
+                    {% empty %}
+                    <p class="px-4 py-4 text-center text-sm text-gray-400">Nenhum arquivo enviado.</p>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="bg-white rounded-lg shadow-sm overflow-hidden">
+                <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                    <span class="font-semibold text-gray-800 text-sm"><i class="fas fa-clock-rotate-left text-gray-400 mr-1"></i>Movimentações</span>
+                    <a href="{% url 'files:movimentacoes' %}?usuario={{ pessoa.id }}" class="text-xs text-blue-600 hover:underline">ver tudo →</a>
+                </div>
+                <div class="divide-y divide-gray-50 text-sm">
+                    {% for m in movimentacoes %}
+                    <div class="px-4 py-2">
+                        <span class="text-xs text-gray-400 tabular-nums">{{ m.quando|date:"d/m H:i" }}</span>
+                        <span class="font-medium text-gray-700 ml-1">{{ m.get_acao_display }}</span>
+                        <span class="text-gray-600">— {{ m.item_nome }}</span>
+                    </div>
+                    {% empty %}
+                    <p class="px-4 py-4 text-center text-sm text-gray-400">Nada registrado ainda.</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -182,7 +182,8 @@ MODULOS = [
      'acesso': False,
      'descricao': 'Biblioteca de arquivos do portal.',
      'permissoes': [
-         ('arquivos.enviar', 'Enviar arquivos', 'Hoje ADMINISTRATIVO e acima.'),
+         ('arquivos.enviar', 'Enviar e organizar arquivos',
+          'Enviar, criar pasta/categoria, mover e mandar para a lixeira. Hoje ADMINISTRATIVO e acima.'),
      ]},
     {'chave': 'popups', 'rotulo': 'Popups do portal', 'grupo': 'Administrativo',
      'acesso': False,

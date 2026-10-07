@@ -37,10 +37,17 @@
                 {% endif %}
             </div>
             
-            {% if user.can_upload_files %}
+            {% if e_superadmin %}
+            <div class="flex flex-wrap gap-2 sm:order-last w-full sm:w-auto" data-ferramentas-superadmin>
+                <a href="{% url 'files:por_usuario' %}" class="bg-white border border-gray-300 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-50 inline-flex items-center text-sm"><i class="fas fa-user-gear mr-2"></i>Por usuário</a>
+                <a href="{% url 'files:movimentacoes' %}" class="bg-white border border-gray-300 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-50 inline-flex items-center text-sm"><i class="fas fa-clock-rotate-left mr-2"></i>Movimentações</a>
+                <a href="{% url 'files:lixeira' %}" class="bg-white border border-gray-300 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-50 inline-flex items-center text-sm"><i class="fas fa-trash-arrow-up mr-2"></i>Lixeira</a>
+            </div>
+            {% endif %}
+            {% if user.can_upload_files or pode_gerir %}
             <div class="flex flex-wrap gap-3">
                 <!-- Admin actions for folders/categories -->
-                {% if user.can_view_sector_tickets %}
+                {% if pode_gerir %}
                 <div class="flex flex-wrap gap-2">
                     <a href="{% url 'files:create_folder' %}{% if current_folder %}?parent={{ current_folder.id }}{% endif %}" 
                        class="bg-yellow-500 text-white px-4 py-2 rounded-lg hover:bg-yellow-600 transition-colors inline-flex items-center">
@@ -110,9 +117,16 @@
             {% for folder in folders %}
             <div class="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md hover:border-primary transition-all p-4 text-center group relative">
                 <!-- Admin actions -->
-                {% if user.can_view_sector_tickets %}
-                <div class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                {% if pode_gerir %}
+                <div class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                     <div class="flex space-x-1">
+                        {% if e_superadmin %}
+                        <a href="{% url 'files:acesso_item' 'pasta' folder.id %}"
+                           class="bg-gray-700 text-white p-1 rounded text-xs hover:bg-gray-800 transition-colors"
+                           title="Acesso por pessoa">
+                            <i class="fas fa-user-lock text-xs"></i>
+                        </a>
+                        {% endif %}
                         <a href="{% url 'files:delete_folder' folder.id %}" 
                            class="bg-red-500 text-white p-1 rounded text-xs hover:bg-red-600 transition-colors"
                            title="Deletar pasta">
@@ -147,8 +161,8 @@
             {% for category in categories %}
             <div class="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md hover:border-primary transition-all p-4 text-center group relative">
                 <!-- Admin actions -->
-                {% if user.can_view_sector_tickets %}
-                <div class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                {% if pode_gerir %}
+                <div class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                     <div class="flex space-x-1">
                         <a href="{% url 'files:delete_category' category.id %}" 
                            class="bg-red-500 text-white p-1 rounded text-xs hover:bg-red-600 transition-colors"
@@ -239,7 +253,14 @@
                             <i class="fas fa-eye"></i>
                         </a>
                         
-                        {% if user.can_view_sector_tickets %}
+                        {% if e_superadmin %}
+                        <a href="{% url 'files:acesso_item' 'arquivo' file.id %}"
+                           class="bg-gray-700 text-white text-sm px-2 py-2 rounded hover:bg-gray-800 transition-colors"
+                           title="Acesso por pessoa">
+                            <i class="fas fa-user-lock"></i>
+                        </a>
+                        {% endif %}
+                        {% if pode_gerir %}
                         <button onclick="openMoveModal('{{ file.id }}', '{{ file.title|escapejs }}')"
                                 class="bg-blue-500 text-white text-sm px-2 py-2 rounded hover:bg-blue-600 transition-colors"
                                 title="Mover arquivo">
@@ -247,7 +268,7 @@
                         </button>
                         {% endif %}
                         
-                        {% if user.can_view_sector_tickets or file.uploaded_by == user %}
+                        {% if pode_gerir or file.uploaded_by == user %}
                         <a href="{% url 'files:delete_file' file.id %}" 
                            class="bg-red-500 text-white text-sm px-2 py-2 rounded hover:bg-red-600 transition-colors"
                            title="Deletar arquivo">

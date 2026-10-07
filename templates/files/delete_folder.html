@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}Deletar Pasta - Arquivos - Rede Confiança{% endblock %}
+{% block title %}Excluir Pasta - Arquivos - Rede Confiança{% endblock %}
 
 {% block content %}
 <div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -12,8 +12,8 @@
                 <i class="fas fa-arrow-left text-lg"></i>
             </a>
             <div>
-                <h1 class="text-2xl sm:text-3xl font-bold text-red-600">Deletar Pasta</h1>
-                <p class="text-gray-600 mt-2">Esta ação não pode ser desfeita</p>
+                <h1 class="text-2xl sm:text-3xl font-bold text-red-600">Excluir Pasta</h1>
+                <p class="text-gray-600 mt-2">Vai tudo para a lixeira — o SUPERADMIN consegue recuperar</p>
             </div>
         </div>
     </div>
@@ -27,28 +27,28 @@
             <div class="ml-4 flex-1">
                 <h3 class="text-lg font-semibold text-red-800 mb-2">Atenção!</h3>
                 <p class="text-red-700 mb-4">
-                    Você está prestes a deletar a pasta <strong>"{{ folder.name }}"</strong> e todo o seu conteúdo:
+                    Você está prestes a mandar para a lixeira a pasta <strong>"{{ folder.name }}"</strong> e todo o seu conteúdo:
                 </p>
                 
                 <div class="space-y-2 text-sm">
                     {% if total_files > 0 %}
                     <div class="flex items-center text-red-600">
                         <i class="fas fa-file mr-2"></i>
-                        <span><strong>{{ total_files }}</strong> arquivo{{ total_files|pluralize:",s" }} será{{ total_files|pluralize:"ão" }} deletado{{ total_files|pluralize:",s" }}</span>
+                        <span><strong>{{ total_files }}</strong> arquivo{{ total_files|pluralize:",s" }} vai{{ total_files|pluralize:",ão" }} junto</span>
                     </div>
                     {% endif %}
                     
                     {% if total_categories > 0 %}
                     <div class="flex items-center text-red-600">
                         <i class="fas fa-tag mr-2"></i>
-                        <span><strong>{{ total_categories }}</strong> categoria{{ total_categories|pluralize:",s" }} será{{ total_categories|pluralize:"ão" }} deletada{{ total_categories|pluralize:",s" }}</span>
+                        <span><strong>{{ total_categories }}</strong> categoria{{ total_categories|pluralize:",s" }} vai{{ total_categories|pluralize:",ão" }} junto</span>
                     </div>
                     {% endif %}
                     
                     {% if total_subfolders > 0 %}
                     <div class="flex items-center text-red-600">
                         <i class="fas fa-folder mr-2"></i>
-                        <span><strong>{{ total_subfolders }}</strong> subpasta{{ total_subfolders|pluralize:",s" }} será{{ total_subfolders|pluralize:"ão" }} deletada{{ total_subfolders|pluralize:",s" }}</span>
+                        <span><strong>{{ total_subfolders }}</strong> subpasta{{ total_subfolders|pluralize:",s" }} vai{{ total_subfolders|pluralize:",ão" }} junto</span>
                     </div>
                     {% endif %}
                     
@@ -103,7 +103,7 @@
             <label class="flex items-center">
                 <input type="checkbox" id="confirm-delete" class="mr-3 h-4 w-4 text-red-600 border-gray-300 rounded focus:ring-red-500">
                 <span class="text-sm text-gray-700">
-                    Eu entendo que esta ação irá deletar permanentemente a pasta "{{ folder.name }}" e todo o seu conteúdo
+                    Eu entendo que vão para a lixeira a pasta "{{ folder.name }}" e todo o seu conteúdo
                 </span>
             </label>
         </div>
@@ -116,7 +116,7 @@
             
             <button type="submit" id="delete-button" disabled
                     class="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed">
-                <i class="fas fa-trash mr-2"></i>Deletar Pasta
+                <i class="fas fa-trash mr-2"></i>Mandar para a lixeira
             </button>
         </div>
     </form>

@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+
+{% block title %}Lixeira - Arquivos - Rede Confiança{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="mb-4">
+        <h1 class="text-2xl sm:text-3xl font-bold text-gray-900"><i class="fas fa-trash-arrow-up text-gray-500 mr-2"></i>Lixeira</h1>
+        <p class="text-gray-600 mt-1 text-sm">Nada em /files/ é apagado de vez: o que foi excluído fica aqui, com quem e quando. Recuperar devolve tudo o que saiu junto para o lugar de onde saiu.</p>
+    </div>
+    {% include 'files/_nav_superadmin.html' with ativa='lixeira' %}
+
+    <div class="space-y-3">
+        {% for lote in lotes %}
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-4 flex flex-col sm:flex-row sm:items-center gap-3" data-lote>
+            <div class="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0
+                {% if lote.tipo == 'pasta' %}bg-yellow-50 text-yellow-600{% elif lote.tipo == 'categoria' %}bg-blue-50 text-blue-600{% else %}bg-gray-100 text-gray-600{% endif %}">
+                <i class="fas {% if lote.tipo == 'pasta' %}fa-folder{% elif lote.tipo == 'categoria' %}fa-tag{% else %}fa-file{% endif %}"></i>
+            </div>
+            <div class="flex-1 min-w-0">
+                <p class="font-semibold text-gray-900 truncate">
+                    {% if lote.tipo == 'pasta' %}{{ lote.principal.get_full_path }}{% elif lote.tipo == 'categoria' %}Categoria "{{ lote.principal.name }}"{% else %}{{ lote.principal.title }}{% endif %}
+                </p>
+                <p class="text-xs text-gray-500 mt-0.5">
+                    {% if lote.tipo == 'arquivo' %}em "{{ lote.principal.category.name }}" · enviado por {{ lote.principal.uploaded_by.full_name }} · {% endif %}
+                    excluído {% if lote.por %}por <strong>{{ lote.por.full_name }}</strong>{% endif %} em {{ lote.quando|date:"d/m/Y H:i" }}
+                </p>
+                {% if lote.tipo != 'arquivo' %}
+                <p class="text-xs text-gray-400 mt-0.5">
+                    Saiu junto:
+                    {% if lote.pastas|length > 1 %}{{ lote.pastas|length|add:"-1" }} subpasta(s) · {% endif %}
+                    {% if lote.tipo == 'pasta' %}{{ lote.categorias|length }} categoria(s) · {% endif %}
+                    {{ lote.arquivos|length }} arquivo(s)
+                </p>
+                {% if lote.arquivos %}
+                <details class="mt-1">
+                    <summary class="text-xs text-gray-500 cursor-pointer">ver arquivos</summary>
+                    <ul class="mt-1 text-xs text-gray-600 list-disc list-inside">
+                        {% for a in lote.arquivos %}<li>{{ a.title }} <span class="text-gray-400">({{ a.category.name }})</span></li>{% endfor %}
+                    </ul>
+                </details>
+                {% endif %}
+                {% endif %}
+            </div>
+            <form method="post" action="{% url 'files:restaurar' lote.tipo lote.principal.id %}">
+                {% csrf_token %}
+                <button type="submit" class="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-emerald-700 whitespace-nowrap">
+                    <i class="fas fa-rotate-left mr-1"></i>Recuperar
+                </button>
+            </form>
+        </div>
+        {% empty %}
+        <div class="text-center py-12 text-gray-500">
+            <i class="fas fa-trash text-5xl text-gray-200 mb-3"></i>
+            <p>A lixeira está vazia.</p>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

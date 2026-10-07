@@ -15,4 +15,10 @@ urlpatterns = [
     path('delete-folder/<int:folder_id>/', views.delete_folder, name='delete_folder'),
     path('delete-category/<int:category_id>/', views.delete_category, name='delete_category'),
     path('delete-file/<int:file_id>/', views.file_delete_view, name='delete_file'),
+    # SUPERADMIN: lixeira, log, acesso por pessoa e visão por usuário
+    path('lixeira/', views.lixeira, name='lixeira'),
+    path('lixeira/<str:tipo>/<int:item_id>/recuperar/', views.restaurar, name='restaurar'),
+    path('movimentacoes/', views.movimentacoes, name='movimentacoes'),
+    path('acesso/<str:tipo>/<int:item_id>/', views.acesso_item, name='acesso_item'),
+    path('por-usuario/', views.por_usuario, name='por_usuario'),
 ]
