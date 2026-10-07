@@ -15,3 +15,13 @@ register = template.Library()
 @register.filter
 def tem_acesso(user, chave):
     return _tem_acesso(user, chave)
+
+
+@register.filter
+def sap_na_gestao(user):
+    """O gerente de loja acha a Visão SAP em "Gestão Administrativa" (a da loja dele)."""
+    try:
+        from auditoria_sap.permissions import no_menu_da_gestao
+        return no_menu_da_gestao(user)
+    except Exception:  # noqa: BLE001 — menu nunca derruba a página
+        return False

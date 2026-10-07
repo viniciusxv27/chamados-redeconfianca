@@ -27,12 +27,18 @@ está na tela e o que está no gráfico serem sempre o mesmo recorte.
 
         <div>
             <label class="sap-rotulo block mb-1">Loja</label>
+            {% if so_da_loja %}
+            {% comment %}O gerente vê só a loja dele: um seletor de uma opção não serviria de nada.{% endcomment %}
+            <p class="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-gray-700 bg-gray-50 truncate"
+               title="A Visão SAP mostra só a loja do seu cadastro">{{ loja_do_usuario }}</p>
+            {% else %}
             <select name="loja" class="sap-auto w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white">
                 <option value="">Todas</option>
                 {% for l in lojas %}
                 <option value="{{ l }}" {% if filtros.loja == l %}selected{% endif %}>{{ l|title }}</option>
                 {% endfor %}
             </select>
+            {% endif %}
         </div>
 
         <div>

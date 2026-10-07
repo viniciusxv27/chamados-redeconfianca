@@ -40,6 +40,49 @@
     @media (max-width: 767px) {
         .sap-linha { border:1px solid #EEF2F6; border-radius:.9rem; margin-bottom:.6rem; }
     }
+
+    /* ----------------------------------------------------------------------
+       Tema escuro. A camada do portal (static/css/tema-escuro.css) converte
+       os utilitários do Tailwind; o que é desenho próprio da Visão SAP — cor
+       fixa clara no cartão, no topo, nas abas, nas etiquetas e nas barras —
+       fica aqui, com as mesmas variáveis do tema.
+       ---------------------------------------------------------------------- */
+    html.dark .sap-card { background:var(--tema-superficie); border-color:var(--tema-borda);
+                          box-shadow:0 0 0 1px var(--tema-borda-suave); }
+    html.dark .sap-hero { background:
+        radial-gradient(1100px 200px at 0% 0%, rgba(56,189,248,.10), transparent 60%),
+        radial-gradient(900px 200px at 100% 0%, rgba(129,140,248,.10), transparent 60%),
+        linear-gradient(180deg, var(--tema-superficie) 0%, var(--tema-fundo) 100%); }
+    html.dark .sap-tab-active { color:#7dd3fc; background:rgba(14,165,233,.14); }
+    html.dark .sap-tab-active::after { background:#38bdf8; }
+    html.dark .sap-linha:hover,
+    html.dark .sap-linha.aberta { background:var(--tema-superficie-2); }
+    html.dark .sap-rotulo,
+    html.dark .sap-ficha dt { color:var(--tema-texto-3); }
+    html.dark .sap-ficha dd { color:var(--tema-texto); }
+    html.dark .sap-aberta    { background:rgba(245,158,11,.16); color:#fbbf24; }
+    html.dark .sap-resolvida { background:rgba(34,197,94,.16);  color:#4ade80; }
+    html.dark .sap-saiu      { background:var(--tema-superficie-3); color:var(--tema-texto-3); }
+    html.dark .sap-erro-1    { background:rgba(239,68,68,.16);  color:#f87171; }
+    html.dark .sap-erro-2    { background:rgba(139,92,246,.18); color:#c4b5fd; }
+    html.dark .sap-erro-3    { background:rgba(14,165,233,.16); color:#7dd3fc; }
+    html.dark .sap-barra { background:var(--tema-superficie-3); }
+    html.dark .sap-barra > span { background:#38bdf8; }
+    @keyframes sapflash-escuro { 0% { background:rgba(34,197,94,.28); } 100% { background:transparent; } }
+    html.dark .sap-salvo { animation: sapflash-escuro 1.2s ease; }
+    @media (max-width: 767px) {
+        html.dark .sap-linha { border-color:var(--tema-borda); }
+    }
+    /* Anéis dos cartões do painel: o rosa e o azul-bebê do claro viram faixas
+       brilhando no escuro. O contorno do cartão escuro também é box-shadow, então
+       o anel vem junto na mesma regra (senão um apagaria o outro). */
+    html.dark a.sap-card:hover { box-shadow:0 0 0 2px rgba(56,189,248,.35); }
+    html.dark .sap-card.ring-red-200 { box-shadow:0 0 0 2px rgba(239,68,68,.55); }
+    html.dark .sap-card.ring-red-200:hover { box-shadow:0 0 0 2px rgba(239,68,68,.75); }
+    /* Link que fica azul-escuro no hover some no fundo escuro. */
+    html.dark .hover\:text-sky-700:hover { color:#7dd3fc; }
+    html.dark #sapFiltros input:focus { --tw-ring-color: rgba(14,165,233,.35); border-color:#0ea5e9; }
+    html.dark .sap-vazio-ok { color:rgba(52,211,153,.45); }
 </style>
 {% endblock %}
 
@@ -49,6 +92,12 @@
         <div>
             <h1 class="text-2xl font-bold text-gray-900">{% block sap_cabecalho %}Visão SAP{% endblock %}</h1>
             <p class="text-sm text-gray-500 mt-0.5">{% block sap_subtitulo %}Auditoria SAP × Vivo go{% endblock %}</p>
+            {% if so_da_loja %}
+            {% comment %}Gerente de loja: a tela inteira é recortada pela loja dele (auditoria_sap/permissions.py).{% endcomment %}
+            <p class="inline-flex items-center gap-1.5 mt-2 px-2.5 py-1 rounded-full bg-sky-50 border border-sky-100 text-xs font-medium text-sky-700">
+                <i class="fas fa-store"></i>Só a sua loja: {{ loja_do_usuario }}
+            </p>
+            {% endif %}
         </div>
 
         <div class="flex items-end gap-3 flex-wrap">

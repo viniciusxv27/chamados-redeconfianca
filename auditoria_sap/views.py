@@ -18,6 +18,7 @@ from .models import (LinhaAuditoria, filtro_aguardando_leitura, filtro_resolvida
                      inicio_da_ultima_leitura)
 from .mysql import SapIndisponivel
 from .permissions import e_gestor as _e_gestor
+from .permissions import lojas_visiveis, normalizar_loja
 from .permissions import pode_ver as _pode_ver
 
 logger = logging.getLogger(__name__)
@@ -53,6 +54,21 @@ def so_auditoria(view):
             return redirect('home')
         return view(request, *args, **kwargs)
     return _view
+
+
+def pdvs_visiveis(user):
+    """None quando a pessoa vê a rede; senão os PDVs do espelho que são dela.
+
+    O SAP escreve a loja do seu jeito ("GLÓRIA", "ITACIBA") e o cadastro do
+    portal do dele ("Loja Glória", "Loja Itacibá"): a comparação é sem "Loja",
+    sem acento e em maiúsculas. Loja sem nenhuma linha no espelho dá lista
+    vazia — e a tela fica vazia, não aberta.
+    """
+    lojas = lojas_visiveis(user)
+    if lojas is None:
+        return None
+    todos = LinhaAuditoria.objects.exclude(pdv='').values_list('pdv', flat=True).distinct()
+    return sorted(p for p in todos if normalizar_loja(p) in lojas)
 
 
 def _data(texto):
@@ -91,9 +107,11 @@ def ler_filtros(request):
     }
 
 
-def filtrar(filtros, corte=None):
-    """A consulta do espelho já com os filtros da tela."""
+def filtrar(filtros, corte=None, pdvs=None):
+    """A consulta do espelho já com os filtros da tela (e só as lojas de quem vê)."""
     qs = LinhaAuditoria.objects.all()
+    if pdvs is not None:
+        qs = qs.filter(pdv__in=pdvs)
     if filtros['presenca'] == 'na':
         qs = qs.filter(ativa=True)
     elif filtros['presenca'] == 'sairam':
@@ -152,15 +170,21 @@ def _resumo(qs):
     return dados
 
 
-def _contexto_comum(request, filtros):
+def _contexto_comum(request, filtros, pdvs=None):
     """O que lista e painel mostram igual: filtros, listas de escolha, espelho."""
+    visiveis = LinhaAuditoria.objects.filter(ativa=True)
+    if pdvs is not None:
+        visiveis = visiveis.filter(pdv__in=pdvs)
     return {
         'filtros': filtros,
-        'tipos': (LinhaAuditoria.objects.filter(ativa=True)
-                  .exclude(tipo_erro='').values_list('tipo_erro', flat=True)
+        'tipos': (visiveis.exclude(tipo_erro='').values_list('tipo_erro', flat=True)
                   .distinct().order_by('tipo_erro')),
-        'lojas': (LinhaAuditoria.objects.filter(ativa=True)
-                  .exclude(pdv='').values_list('pdv', flat=True).distinct().order_by('pdv')),
+        'lojas': (visiveis.exclude(pdv='').values_list('pdv', flat=True).distinct().order_by('pdv')),
+        # O gerente vê só a loja dele: a tela diz isso em vez de oferecer um
+        # filtro de loja com uma opção só.
+        'so_da_loja': pdvs is not None,
+        'loja_do_usuario': (request.user.sector.name if pdvs is not None and request.user.sector_id
+                            else ''),
         'situacoes': SITUACOES,
         'presencas': PRESENCAS,
         'ordens': ORDENS,
@@ -176,7 +200,8 @@ def _contexto_comum(request, filtros):
 def lista(request):
     """A auditoria linha a linha, com filtro, ordem e o botão de resolver."""
     filtros = ler_filtros(request)
-    qs = ordenar(filtrar(filtros), filtros['ordem'])
+    pdvs = pdvs_visiveis(request.user)
+    qs = ordenar(filtrar(filtros, pdvs=pdvs), filtros['ordem'])
     resumo = _resumo(qs)
 
     pagina = Paginator(qs.select_related('resolvida_por'), POR_PAGINA).get_page(request.GET.get('pagina'))
@@ -188,7 +213,7 @@ def lista(request):
     parametros = request.GET.copy()
     parametros.pop('pagina', None)
 
-    contexto = _contexto_comum(request, filtros)
+    contexto = _contexto_comum(request, filtros, pdvs)
     contexto.update({
         'pagina': pagina,
         'resumo': resumo,
@@ -208,9 +233,10 @@ def painel(request):
     "Resolvidas, mas ainda pendentes" — alguém disse que resolveu e não resolveu.
     """
     filtros = ler_filtros(request)
+    pdvs = pdvs_visiveis(request.user)
     corte = inicio_da_ultima_leitura()
     # O painel conta todas as situações; o filtro de situação vale só para a lista.
-    base = filtrar({**filtros, 'situacao': 'todas', 'presenca': 'na'}, corte)
+    base = filtrar({**filtros, 'situacao': 'todas', 'presenca': 'na'}, corte, pdvs)
 
     q_abertas = Q(resolvida=False)
     q_pendentes = filtro_resolvidas_pendentes(corte)
@@ -218,7 +244,7 @@ def painel(request):
     numeros = base.aggregate(abertas=Count('id', filter=q_abertas),
                              pendentes=Count('id', filter=q_pendentes),
                              aguardando=Count('id', filter=q_aguardando))
-    corrigidas = filtrar({**filtros, 'situacao': 'todas', 'presenca': 'sairam'}, corte).count()
+    corrigidas = filtrar({**filtros, 'situacao': 'todas', 'presenca': 'sairam'}, corte, pdvs).count()
 
     por_loja = list(base.values('pdv')
                     .annotate(abertas=Count('id', filter=q_abertas), pendentes=Count('id', filter=q_pendentes),
@@ -236,7 +262,7 @@ def painel(request):
     for chave in ('situacao', 'presenca', 'loja', 'pagina'):
         parametros.pop(chave, None)
 
-    contexto = _contexto_comum(request, filtros)
+    contexto = _contexto_comum(request, filtros, pdvs)
     contexto.update({
         'numeros': numeros,
         'corrigidas': corrigidas,
@@ -251,11 +277,18 @@ def painel(request):
     return render(request, 'auditoria_sap/painel.html', contexto)
 
 
+def _linha_visivel(user, linha_id):
+    """A linha, se ela for de uma loja que a pessoa vê — senão 404, nem pela URL."""
+    pdvs = pdvs_visiveis(user)
+    qs = LinhaAuditoria.objects.all() if pdvs is None else LinhaAuditoria.objects.filter(pdv__in=pdvs)
+    return get_object_or_404(qs, id=linha_id)
+
+
 @login_required
 @so_auditoria
 def detalhe(request, linha_id):
     """A linha inteira, como veio do SAP, mais o histórico de quem marcou."""
-    linha = get_object_or_404(LinhaAuditoria, id=linha_id)
+    linha = _linha_visivel(request.user, linha_id)
     historico = [{
         'quem': m.usuario.full_name if m.usuario else 'Usuário removido',
         'resolvida': m.resolvida,
@@ -278,7 +311,7 @@ def marcar(request, linha_id):
     """Marca (ou desmarca) a linha como resolvida, guardando quem foi."""
     if request.method != 'POST':
         return JsonResponse({'ok': False, 'erro': 'Use POST.'}, status=405)
-    linha = get_object_or_404(LinhaAuditoria, id=linha_id)
+    linha = _linha_visivel(request.user, linha_id)
     resolvida = (request.POST.get('resolvida') or '').lower() in ('1', 'true', 'sim', 'on')
     marcacao = linha.marcar(request.user, resolvida, request.POST.get('observacao') or '')
     return JsonResponse({
