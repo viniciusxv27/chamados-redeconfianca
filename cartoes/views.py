@@ -668,6 +668,33 @@ def _conciliacao_geral(user, geral):
 
 
 @login_required
+@require_POST
+def fatura_limpar(request):
+    """Limpa a conciliação guardada: a fatura inteira ou, com ``cartao``, só a de um cartão.
+
+    A leitura vive na sessão (a conciliação não grava nada no banco); limpar
+    tira da tela o resultado de uma fatura que não vale mais — e da
+    exportação, que sai dele.
+    """
+    if not is_superadmin(request.user):
+        messages.error(request, 'Só o SUPERADMIN limpa a conciliação.')
+        return redirect('cartoes:dashboard')
+
+    cartao_id = (request.POST.get('cartao') or '').strip()
+    guardadas = request.session.get('cartoes_conciliacao') or {}
+    if cartao_id.isdigit():
+        guardadas.pop(cartao_id, None)
+        request.session['cartoes_conciliacao'] = guardadas
+        messages.success(request, 'Conciliação deste cartão limpa.')
+        return redirect('cartoes:fatura_conciliar', pk=int(cartao_id))
+
+    request.session.pop('cartoes_fatura_geral', None)
+    request.session.pop('cartoes_conciliacao', None)
+    messages.success(request, 'Conciliação da fatura limpa. Envie outra fatura para conciliar de novo.')
+    return redirect('cartoes:fatura_geral')
+
+
+@login_required
 def fatura_geral_exportar(request):
     if not pode_gerir_cartoes(request.user):
         messages.error(request, 'A conciliação geral é de quem gere os cartões.')

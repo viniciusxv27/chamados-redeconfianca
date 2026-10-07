@@ -15,6 +15,7 @@ urlpatterns = [
     # Uma fatura com vários cartões: cada final é conciliado no cartão dele.
     path('fatura/', views.fatura_geral, name='fatura_geral'),
     path('fatura/exportar/', views.fatura_geral_exportar, name='fatura_geral_exportar'),
+    path('fatura/limpar/', views.fatura_limpar, name='fatura_limpar'),
     path('<int:pk>/', views.cartao_extrato, name='extrato'),
     path('<int:pk>/exportar/', views.extrato_exportar, name='extrato_exportar'),
     path('<int:pk>/fatura/', views.fatura_conciliar, name='fatura_conciliar'),

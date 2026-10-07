@@ -15,10 +15,21 @@
       <p class="text-gray-600 text-sm">Uma fatura com vários cartões: cada final é conciliado com o cartão cadastrado que tem o mesmo final.</p>
     </div>
     {% if geral %}
-    <a href="{% url 'cartoes:fatura_geral_exportar' %}"
-       class="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-lg">
-      <i class="fas fa-file-excel"></i> Exportar Excel
-    </a>
+    <div class="flex items-center gap-2 flex-wrap">
+      {% if is_superadmin %}
+      <form method="post" action="{% url 'cartoes:fatura_limpar' %}"
+            onsubmit="return confirm('Limpar a conciliação desta fatura? O resultado some da tela e da exportação (nada do extrato é apagado).');">
+        {% csrf_token %}
+        <button class="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-red-200 text-red-700 text-sm font-medium rounded-lg hover:bg-red-50">
+          <i class="fas fa-eraser"></i> Limpar conciliação
+        </button>
+      </form>
+      {% endif %}
+      <a href="{% url 'cartoes:fatura_geral_exportar' %}"
+         class="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-lg">
+        <i class="fas fa-file-excel"></i> Exportar Excel
+      </a>
+    </div>
     {% endif %}
   </div>
 

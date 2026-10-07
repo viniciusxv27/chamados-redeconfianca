@@ -236,6 +236,29 @@ try:
     t('o responsável concilia o cartão dele', r.status_code == 200 and r.context['relatorio'] is not None)
     t('sem ver o link para os outros cartões que não são dele',
       all(o['cartao'] is None for o in r.context['outros_cartoes']))
+
+    print('\n== LIMPAR A CONCILIAÇÃO (SUPERADMIN) ==')
+    r = cd.post('/cartoes/fatura/limpar/')
+    t('quem não é SUPERADMIN não limpa', r.status_code == 302 and 'cartoes_conciliacao' in cd.session)
+    with mock.patch.object(cv, 'ler_fatura', return_value=leitura):
+        c.post('/cartoes/fatura/', {'fatura': pdf()})
+        c.post(f'/cartoes/{cartao.pk}/fatura/', {'fatura': pdf()})
+    html = c.get(f'/cartoes/{cartao.pk}/fatura/?geral=1').content.decode()
+    t('o SUPERADMIN vê o botão de limpar', 'Limpar conciliação' in html)
+    r = c.post('/cartoes/fatura/limpar/', {'cartao': cartao.pk})
+    t('limpar um cartão tira só a conciliação dele',
+      r['Location'] == f'/cartoes/{cartao.pk}/fatura/'
+      and str(cartao.pk) not in (c.session.get('cartoes_conciliacao') or {})
+      and 'cartoes_fatura_geral' in c.session)
+    r = c.get(f'/cartoes/{cartao.pk}/fatura/exportar/')
+    t('e a exportação dele deixa de existir', r.status_code == 302)
+    r = c.post('/cartoes/fatura/limpar/')
+    t('limpar a fatura tira a conciliação geral', r['Location'] == '/cartoes/fatura/'
+      and 'cartoes_fatura_geral' not in c.session)
+    html = c.get('/cartoes/fatura/').content.decode()
+    t('a tela volta vazia, pronta para outra fatura', 'Cartões da fatura' not in html and 'Limpar conciliação' not in html)
+    t('limpar não apaga nada do extrato', Gasto.objects.filter(cartao=cartao).count() == 2)
+    t('limpar só por POST', c.get('/cartoes/fatura/limpar/').status_code == 405)
 finally:
     transaction.set_rollback(True)
     marcador.__exit__(None, None, None)
