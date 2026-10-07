@@ -13,8 +13,8 @@ CONECTAR (40)
     20  projeto foco
 
 INOVAR (20)
-    10  propor no mínimo 3 ideias
-    10  ter 1 ideia aprovada
+    10  propor no mínimo 3 ideias (melhoria contínua ou projeto, tanto faz)
+    10  ter 1 ideia de projeto aprovada (melhoria contínua aprovada não vale)
 
 Faixas: Impulso 100% · Ouro >90% · Prata >70% · Bronze 0-70%.
 
@@ -432,14 +432,45 @@ def _nota_inovar(user, inicio, fim):
         criado_em__date__gte=inicio, criado_em__date__lte=fim,
     ).distinct()
     propostas = ideias.count()
-    aprovadas = ideias.filter(status=Ideia.Status.APROVADA).count()
+    projetos = ideias.filter(tipo=Ideia.Tipo.PROJETO).count()
+    aprovadas = ideias.filter(status=Ideia.Status.APROVADA)
+    # Para as 3 ideias vale qualquer tipo; para os pontos de aprovação, só
+    # projeto. `aprovadas` (de qualquer tipo) segue sendo o desempate do ranking.
+    projetos_aprovados = aprovadas.filter(tipo=Ideia.Tipo.PROJETO).count()
+    aprovadas = aprovadas.count()
 
     p_ideias = pt('ideias', user) if propostas >= IDEIAS_MINIMAS else ZERO
-    p_aprovada = pt('ideia_aprovada', user) if aprovadas >= 1 else ZERO
+    p_aprovada = pt('ideia_aprovada', user) if projetos_aprovados >= 1 else ZERO
     detalhes = {
         'propostas': propostas, 'minimo': IDEIAS_MINIMAS, 'aprovadas': aprovadas,
+        'projetos': projetos, 'melhorias': propostas - projetos,
+        'projetos_aprovados': projetos_aprovados,
     }
     return p_ideias, pt('ideias', user), p_aprovada, pt('ideia_aprovada', user), detalhes
+
+
+def _info_ideias(detalhe):
+    """Quantas ideias, separando melhoria contínua de projeto."""
+    propostas = detalhe.get('propostas', 0)
+    if not propostas:
+        return 'Nenhuma ideia proposta'
+    # Mês fechado antes de existir o tipo não traz a separação.
+    if 'projetos' not in detalhe:
+        return '%s ideia(s) proposta(s)' % propostas
+    return '%s ideia(s) proposta(s) · %s melhoria(s) contínua(s) · %s projeto(s)' % (
+        propostas, detalhe.get('melhorias', 0), detalhe.get('projetos', 0))
+
+
+def _info_projeto_aprovado(detalhe):
+    """Só projeto aprovado pontua; a melhoria aprovada aparece para não sumir da conta."""
+    if 'projetos_aprovados' not in detalhe:
+        return '%s aprovada(s)' % detalhe.get('aprovadas', 0)
+    projetos = detalhe.get('projetos_aprovados', 0)
+    melhorias = detalhe.get('aprovadas', 0) - projetos
+    texto = '%s projeto(s) aprovado(s)' % projetos
+    if melhorias:
+        texto += ' · %s melhoria(s) aprovada(s) não conta(m) aqui' % melhorias
+    return texto
 
 
 def _info_projeto_foco(detalhe):
@@ -660,8 +691,8 @@ def linhas_detalhadas(dados):
          'info': _info_projeto_foco(d['projeto_foco'])},
         {'bloco': 'INOVAR', 'item': 'Propor %s ideias' % IDEIAS_MINIMAS,
          'pontos': dados['p_ideias'], 'max': pt('ideias', tabela=tabela),
-         'info': '%s ideia(s) proposta(s)' % d['inovar'].get('propostas', 0)},
-        {'bloco': 'INOVAR', 'item': 'Ideia aprovada',
+         'info': _info_ideias(d['inovar'])},
+        {'bloco': 'INOVAR', 'item': 'Projeto aprovado',
          'pontos': dados['p_ideia_aprovada'], 'max': pt('ideia_aprovada', tabela=tabela),
-         'info': '%s aprovada(s)' % d['inovar'].get('aprovadas', 0)},
+         'info': _info_projeto_aprovado(d['inovar'])},
     ]

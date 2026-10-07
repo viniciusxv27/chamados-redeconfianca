@@ -802,6 +802,8 @@ STATUS_TAREFA_EXTRA = {'fazer': 'A_FAZER', 'andamento': 'EM_ANDAMENTO', 'conclui
                        'feita': 'CONCLUIDA', 'feito': 'CONCLUIDA'}
 STATUS_IDEIA_EXTRA = {'analise': 'EM_ANALISE', 'aprovar': 'APROVADA', 'aprovado': 'APROVADA',
                       'arquivar': 'ARQUIVADA', 'arquivado': 'ARQUIVADA'}
+TIPO_IDEIA_EXTRA = {'melhoria_continua': 'MELHORIA', 'mc': 'MELHORIA', 'm.c.': 'MELHORIA',
+                    'm.c': 'MELHORIA', 'projetos': 'PROJETO'}
 
 
 def _periodo_txt(inicio, fim):
@@ -1015,9 +1017,13 @@ def _ler_ideias(user, args):
               + f' — {len(lista)}:']
     for ideia in lista[:limite]:
         equipe = list(ideia.participantes.all())
-        partes = [f'ideia #{ideia.pk}', ideia.get_status_display(), f'impacto: {ideia.setor_impacto}',
-                  f'criada em {_dh(ideia.criado_em)}', f'ideia: {_cortar(ideia.descricao, 300)}',
+        partes = [f'ideia #{ideia.pk}', ideia.get_tipo_display(), ideia.get_status_display(),
+                  f'impacto: {ideia.setor_impacto}', f'criada em {_dh(ideia.criado_em)}',
+                  f'{"resumo do projeto" if ideia.e_projeto else "ideia"}: {_cortar(ideia.descricao, 300)}',
                   f'motivo: {_cortar(ideia.motivo, 200)}']
+        if ideia.e_projeto:
+            partes += [f'como funciona hoje: {_cortar(ideia.como_funciona_hoje, 200)}',
+                       f'como deveria ser: {_cortar(ideia.como_deveria_ser, 200)}']
         if ideia.resposta_gestor:
             partes.append(f'retorno do gestor: {_cortar(ideia.resposta_gestor, 200)}')
         # O único caso em que nomes aparecem: a ideia é de quem está vendo.
@@ -2744,9 +2750,14 @@ def _ideia_por_id(args):
 
 
 def _textos_da_ideia(args, ideia=None):
+    from impulso.models import Ideia
+
     campos = {}
-    for campo, rotulo in (('descricao', 'a ideia (descricao)'), ('setor_impacto', 'o setor_impacto'),
-                          ('motivo', 'o motivo')):
+    tipo = _escolha(args.get('tipo'), Ideia.Tipo.values, 'tipo', TIPO_IDEIA_EXTRA) if args.get('tipo') else ''
+    campos['tipo'] = tipo or (ideia.tipo if ideia is not None else Ideia.Tipo.MELHORIA)
+    projeto = campos['tipo'] == Ideia.Tipo.PROJETO
+    for campo, rotulo in (('descricao', 'o resumo do projeto (descricao)' if projeto else 'a ideia (descricao)'),
+                          ('setor_impacto', 'o setor_impacto'), ('motivo', 'o motivo')):
         if args.get(campo) is None and ideia is not None:
             campos[campo] = getattr(ideia, campo)
             continue
@@ -2758,6 +2769,18 @@ def _textos_da_ideia(args, ideia=None):
         campos[campo] = valor
     if len(campos['setor_impacto']) > 150:
         raise Invalido('setor_impacto passa de 150 caracteres: resuma (ex.: "Financeiro", "Lojas da região X").')
+    # Projeto pede o antes e o depois — a tela recusa sem os dois.
+    for campo, rotulo in (('como_funciona_hoje', 'como funciona hoje'), ('como_deveria_ser', 'como deveria ser')):
+        if not projeto:
+            campos[campo] = ''
+            continue
+        if args.get(campo) is None and ideia is not None and getattr(ideia, campo):
+            campos[campo] = getattr(ideia, campo)
+            continue
+        valor = str(args.get(campo) or '').strip()
+        if not valor:
+            raise Invalido(f'Projeto precisa dizer {rotulo} ({campo}): pergunte à pessoa e preencha.')
+        campos[campo] = valor
     return campos
 
 
@@ -2770,11 +2793,18 @@ def _previa_ideia_criar(user, args):
     if len(participantes) > Ideia.MAX_PARTICIPANTES:
         raise Invalido(f'Escolha no máximo {Ideia.MAX_PARTICIPANTES} pessoas além de você. O limite existe para a ideia '
                        'ter donos claros.')
-    linhas = [f'Enviar a ideia para "{campos["setor_impacto"]}": "{_cortar(campos["descricao"], 500)}"',
-              'Motivo: ' + _cortar(campos['motivo'], 300),
-              f'Também assinam: {_nomes(participantes)} — recebem aviso e pontuam junto.' if participantes
-              else 'Só você assina.',
-              'O gestor avalia sem ver quem escreveu. Propor 3 ideias no mês vale os pontos do Inovar.']
+    projeto = campos['tipo'] == Ideia.Tipo.PROJETO
+    linhas = [f'Enviar {"o projeto" if projeto else "a ideia de melhoria contínua"} para "{campos["setor_impacto"]}": '
+              f'"{_cortar(campos["descricao"], 500)}"',
+              'Motivo: ' + _cortar(campos['motivo'], 300)]
+    if projeto:
+        linhas += ['Como funciona hoje: ' + _cortar(campos['como_funciona_hoje'], 300),
+                   'Como deveria ser: ' + _cortar(campos['como_deveria_ser'], 300)]
+    linhas += [f'Também assinam: {_nomes(participantes)} — recebem aviso e pontuam junto.' if participantes
+               else 'Só você assina.',
+               'O gestor avalia sem ver quem escreveu. Propor 3 ideias no mês (de qualquer tipo) vale os pontos do Inovar'
+               + ('; projeto aprovado vale também os de "projeto aprovado".' if projeto
+                  else '; só projeto aprovado vale os de "projeto aprovado".')]
     return '\n'.join(linhas), dict(campos, participantes=[str(u.pk) for u in participantes])
 
 
@@ -2812,8 +2842,11 @@ def _previa_ideia_editar(user, args):
     if len(final) > Ideia.MAX_PARTICIPANTES:
         raise Invalido(f'A ideia ficaria com {len(final)} participantes: o máximo é {Ideia.MAX_PARTICIPANTES} além do autor.')
     mudancas = []
-    for campo, rotulo in (('descricao', 'ideia'), ('setor_impacto', 'setor de impacto'), ('motivo', 'motivo')):
-        if campos[campo] != getattr(ideia, campo):
+    if campos['tipo'] != ideia.tipo:
+        mudancas.append(f'tipo: {dict(Ideia.Tipo.choices)[campos["tipo"]]}')
+    for campo, rotulo in (('descricao', 'ideia'), ('setor_impacto', 'setor de impacto'), ('motivo', 'motivo'),
+                          ('como_funciona_hoje', 'como funciona hoje'), ('como_deveria_ser', 'como deveria ser')):
+        if campos[campo] != getattr(ideia, campo) and (campos[campo] or campos['tipo'] == Ideia.Tipo.PROJETO):
             mudancas.append(f'{rotulo}: "{_cortar(campos[campo], 300)}"')
     if novos:
         mudancas.append(f'incluir {_nomes(novos)} (recebem aviso e pontuam junto)')
@@ -2824,8 +2857,8 @@ def _previa_ideia_editar(user, args):
     if perdidos:
         mudancas.append(f'{len(perdidos)} participante(s) que não está(ão) mais no Impulso sai(em) junto')
     if not mudancas:
-        raise Invalido('Nada muda: informe descricao, setor_impacto, motivo, adicionar_participantes ou '
-                       'remover_participantes.')
+        raise Invalido('Nada muda: informe tipo, descricao, setor_impacto, motivo, como_funciona_hoje, '
+                       'como_deveria_ser, adicionar_participantes ou remover_participantes.')
     return (f'Alterar a ideia #{ideia.pk}:\n' + '\n'.join(f'• {m}' for m in mudancas),
             {'ideia_id': ideia.pk, 'post': dict(campos, participantes=[str(i) for i in sorted(final)])})
 
@@ -2858,10 +2891,15 @@ def _previa_ideia_decidir(user, args):
     linhas.append('O autor recebe aviso' + ('' if ideia.autor_id == user.pk else ' (a autoria continua oculta para você)')
                   + '.')
     if novo == Ideia.Status.APROVADA and ideia.status != Ideia.Status.APROVADA:
-        linhas.append(f'Ideia aprovada vale os pontos de "ideia aprovada" no Inovar de '
-                      f'{_mm(timezone.localtime(ideia.criado_em))} (o mês em que foi criada), para o autor e quem participa.')
-    elif ideia.status == Ideia.Status.APROVADA and novo != Ideia.Status.APROVADA:
-        linhas.append('Ela deixa de contar como ideia aprovada na pontuação.')
+        if ideia.e_projeto:
+            linhas.append(f'Projeto aprovado vale os pontos de "projeto aprovado" no Inovar de '
+                          f'{_mm(timezone.localtime(ideia.criado_em))} (o mês em que foi criado), para o autor e quem '
+                          'participa.')
+        else:
+            linhas.append('É melhoria contínua: aprovar não vale os pontos de "projeto aprovado" (ela já contou entre '
+                          'as ideias propostas do mês).')
+    elif ideia.status == Ideia.Status.APROVADA and novo != Ideia.Status.APROVADA and ideia.e_projeto:
+        linhas.append('Ele deixa de contar como projeto aprovado na pontuação.')
     if novo in (Ideia.Status.APROVADA, Ideia.Status.ARQUIVADA):
         linhas.append('Depois disso o autor não edita mais o texto.')
     return '\n'.join(linhas), {'ideia_id': ideia.pk, 'status': novo, 'resposta_gestor': resposta}
@@ -3201,12 +3239,19 @@ TOOLS.update({
         *_com_acao({'criar': (_previa_ideia_criar, _exec_ideia_criar),
                     'editar': (_previa_ideia_editar, _exec_ideia_editar),
                     'decidir': (_previa_ideia_decidir, _exec_ideia_decidir)}),
-        'Impulso Inovar. acao=criar (descricao, setor_impacto, motivo, participantes — até 3), editar (ideia_id; autor ou '
+        'Impulso Inovar. acao=criar (tipo MELHORIA | PROJETO, descricao, setor_impacto, motivo, participantes — até 3; '
+        'PROJETO exige também como_funciona_hoje e como_deveria_ser), editar (ideia_id; autor ou '
         'superadmin, enquanto NOVA ou EM_ANALISE; adicionar_participantes, remover_participantes) ou decidir (ideia_id, '
         'status, resposta ao autor; só gestor, que não vê a autoria).',
         _obj(['acao'], acao=_txt('criar | editar | decidir.'), ideia_id=_int('Id da ideia (de o_que=ideias).'),
-             descricao=_txt('A ideia.'), setor_impacto=_txt('Setor de impacto (até 150 caracteres).'),
-             motivo=_txt('Por que fazer.'), participantes=_lista_ids('criar: quem assina junto (até 3).'),
+             tipo=_txt('MELHORIA (melhoria contínua) | PROJETO. Os dois contam para as 3 ideias do mês; só projeto '
+                       'aprovado vale os pontos de "projeto aprovado". Pergunte à pessoa se não estiver claro.'),
+             descricao=_txt('A ideia (no projeto, o resumo do projeto).'),
+             setor_impacto=_txt('Setor de impacto (até 150 caracteres).'),
+             motivo=_txt('Por que fazer (no projeto, por que ele está sendo proposto).'),
+             como_funciona_hoje=_txt('PROJETO: como o processo funciona hoje.'),
+             como_deveria_ser=_txt('PROJETO: como deveria funcionar depois.'),
+             participantes=_lista_ids('criar: quem assina junto (até 3).'),
              adicionar_participantes=_lista_ids('editar: entram.'), remover_participantes=_lista_ids('editar: saem.'),
              status=_txt('decidir: NOVA | EM_ANALISE | APROVADA | ARQUIVADA.'),
              resposta=_txt('decidir: retorno ao autor.'))),

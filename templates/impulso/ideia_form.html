@@ -10,7 +10,7 @@
         <h2 class="text-lg font-semibold text-gray-800 mb-1">
             <i class="fas fa-lightbulb text-violet-500 mr-2"></i>{% if edicao %}Editar ideia{% else %}Nova ideia{% endif %}
         </h2>
-        <p class="text-sm text-gray-500 mb-4">Informe de forma concreta a sua ideia, o setor de impacto e o motivo.</p>
+        <p class="text-sm text-gray-500 mb-4">Escolha o tipo e conte de forma concreta a sua ideia, o setor de impacto e o motivo.</p>
 
         {% if edicao %}
         <p class="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 mb-4">
@@ -19,11 +19,51 @@
         </p>
         {% endif %}
 
-        <form method="post" class="space-y-4">
+        {% comment %}
+        Melhoria contínua ou projeto. Os dois contam para as 3 ideias do mês; só
+        projeto aprovado vale os pontos de "projeto aprovado". Por isso o projeto
+        pede mais: o resumo, por que propor, como é hoje e como deveria ser. O
+        mesmo campo de texto serve de "ideia" e de "resumo do projeto" — muda o
+        rótulo, não o lugar onde ele é guardado.
+        {% endcomment %}
+        <form method="post" class="space-y-4" id="ideiaForm">
             {% csrf_token %}
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Qual é a sua ideia? *</label>
-                <textarea name="descricao" required rows="4" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">{{ ideia.descricao|default:'' }}</textarea>
+                <label for="ideiaTipo" class="block text-sm font-medium text-gray-700 mb-1">Que tipo de ideia é esta? *</label>
+                <select name="tipo" id="ideiaTipo" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    {% if not ideia.tipo %}<option value="" selected disabled>Escolha: melhoria contínua ou projeto</option>{% endif %}
+                    {% for valor, rotulo in tipos %}
+                    <option value="{{ valor }}" {% if ideia.tipo == valor %}selected{% endif %}>{{ rotulo }}</option>
+                    {% endfor %}
+                </select>
+                <p class="text-xs text-gray-500 mt-1{% if ideia.tipo != 'MELHORIA' %} hidden{% endif %}" data-so-tipo="MELHORIA">
+                    <i class="fas fa-rotate mr-1 text-violet-500"></i>Um ajuste no que já existe: um passo a menos, um controle,
+                    um jeito mais rápido. Conta para as 3 ideias do mês.
+                </p>
+                <p class="text-xs text-gray-500 mt-1{% if ideia.tipo != 'PROJETO' %} hidden{% endif %}" data-so-tipo="PROJETO">
+                    <i class="fas fa-diagram-project mr-1 text-violet-500"></i>Algo novo ou uma mudança maior, que precisa de
+                    planejamento. Conta para as 3 ideias do mês e, se for aprovado, vale os pontos de <strong>projeto aprovado</strong>.
+                </p>
+            </div>
+
+            <div data-so-tipo="PROJETO" class="rounded-lg border border-violet-200 bg-violet-50 px-3 py-2.5 text-xs text-violet-900{% if ideia.tipo != 'PROJETO' %} hidden{% endif %}">
+                <p class="font-semibold mb-1"><i class="fas fa-list-check mr-1"></i>Um bom projeto responde a quatro perguntas</p>
+                <ol class="list-decimal list-inside space-y-0.5">
+                    <li>O que é o projeto, em poucas linhas?</li>
+                    <li>Por que ele está sendo proposto agora?</li>
+                    <li>Como isso funciona hoje?</li>
+                    <li>Como deveria funcionar depois?</li>
+                </ol>
+                <p class="mt-1 text-violet-700">Quanto mais claro, mais fácil para o gestor aprovar e para quem for executar.</p>
+            </div>
+
+            <div>
+                <label for="ideiaDescricao" class="block text-sm font-medium text-gray-700 mb-1"
+                       data-rotulo-melhoria="Qual é a sua ideia? *" data-rotulo-projeto="Resumo do projeto *">Qual é a sua ideia? *</label>
+                <textarea name="descricao" id="ideiaDescricao" required rows="4" data-contador
+                          data-dica-melhoria="Ex.: Enviar o relatório de vendas por e-mail automático, em vez de montar à mão toda segunda."
+                          data-dica-projeto="Ex.: Painel único de pedidos das lojas, com a situação de cada um, para acabar com as planilhas paralelas."
+                          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">{{ ideia.descricao|default:'' }}</textarea>
             </div>
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Setor de impacto *</label>
@@ -33,8 +73,27 @@
                        placeholder="Ex.: Atendimento, Financeiro, TI…">
             </div>
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Qual o motivo? *</label>
-                <textarea name="motivo" required rows="3" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">{{ ideia.motivo|default:'' }}</textarea>
+                <label for="ideiaMotivo" class="block text-sm font-medium text-gray-700 mb-1"
+                       data-rotulo-melhoria="Qual o motivo? *" data-rotulo-projeto="Por que este projeto está sendo proposto? *">Qual o motivo? *</label>
+                <textarea name="motivo" id="ideiaMotivo" required rows="3" data-contador
+                          data-dica-melhoria="O que isso resolve ou melhora?"
+                          data-dica-projeto="Que problema ele resolve, quem sofre com isso hoje, o que se ganha (tempo, dinheiro, erro a menos)?"
+                          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">{{ ideia.motivo|default:'' }}</textarea>
+            </div>
+
+            <div data-so-tipo="PROJETO" class="space-y-4{% if ideia.tipo != 'PROJETO' %} hidden{% endif %}">
+                <div>
+                    <label for="ideiaHoje" class="block text-sm font-medium text-gray-700 mb-1">Como funciona hoje? *</label>
+                    <textarea name="como_funciona_hoje" id="ideiaHoje" rows="4" data-contador data-obrigatorio-no-projeto
+                              placeholder="Descreva o processo atual: quem faz, como faz, quanto tempo leva, onde trava e o que costuma dar errado."
+                              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">{{ ideia.como_funciona_hoje|default:'' }}</textarea>
+                </div>
+                <div>
+                    <label for="ideiaDeveria" class="block text-sm font-medium text-gray-700 mb-1">Como deveria ser? *</label>
+                    <textarea name="como_deveria_ser" id="ideiaDeveria" rows="4" data-contador data-obrigatorio-no-projeto
+                              placeholder="Descreva como fica depois do projeto: o que muda no dia a dia, quem ganha com isso e que resultado você espera."
+                              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">{{ ideia.como_deveria_ser|default:'' }}</textarea>
+                </div>
             </div>
             {% if candidatos %}
             <div id="ideiaPessoas" data-max="{{ max_participantes }}">
@@ -89,5 +148,65 @@
 })();
 </script>
 {% endif %}
+
+<script>
+(function () {
+    const form = document.getElementById('ideiaForm');
+    const tipo = document.getElementById('ideiaTipo');
+    if (!form || !tipo) return;
+
+    // Um projeto bem explicado passa de umas poucas palavras: o contador mostra
+    // o caminho até lá sem travar o envio (a trava de verdade é o campo vazio).
+    const SUGERIDO = 120;
+
+    form.querySelectorAll('[data-contador]').forEach(function (campo) {
+        const aviso = document.createElement('p');
+        aviso.className = 'text-[11px] mt-1 text-gray-400';
+        campo.insertAdjacentElement('afterend', aviso);
+        campo._contador = aviso;
+        campo.addEventListener('input', function () { contar(campo); });
+    });
+
+    function contar(campo) {
+        const aviso = campo._contador;
+        if (!aviso) return;
+        const projeto = tipo.value === 'PROJETO';
+        const n = campo.value.trim().length;
+        if (!projeto) { aviso.textContent = ''; return; }
+        if (n >= SUGERIDO) {
+            aviso.className = 'text-[11px] mt-1 text-emerald-600';
+            aviso.innerHTML = '<i class="fas fa-circle-check mr-1"></i>' + n + ' caracteres — bem detalhado.';
+        } else {
+            aviso.className = 'text-[11px] mt-1 text-amber-600';
+            aviso.textContent = n + ' caracteres — detalhe um pouco mais (sugestão: pelo menos ' + SUGERIDO + ').';
+        }
+    }
+
+    function aplicar() {
+        const valor = tipo.value;
+        const projeto = valor === 'PROJETO';
+        // Blocos e explicações de cada tipo; sem escolha ainda, nenhum aparece.
+        form.querySelectorAll('[data-so-tipo]').forEach(function (el) {
+            el.classList.toggle('hidden', el.dataset.soTipo !== valor);
+        });
+        // O mesmo campo vira "resumo do projeto" e o motivo vira "por que propor".
+        form.querySelectorAll('[data-rotulo-projeto]').forEach(function (rotulo) {
+            rotulo.textContent = projeto ? rotulo.dataset.rotuloProjeto : rotulo.dataset.rotuloMelhoria;
+        });
+        form.querySelectorAll('[data-dica-projeto]').forEach(function (campo) {
+            campo.placeholder = projeto ? campo.dataset.dicaProjeto : campo.dataset.dicaMelhoria;
+        });
+        // Obrigatório só no projeto: escondido e obrigatório, o navegador
+        // recusaria o envio da melhoria sem dizer onde.
+        form.querySelectorAll('[data-obrigatorio-no-projeto]').forEach(function (campo) {
+            campo.required = projeto;
+        });
+        form.querySelectorAll('[data-contador]').forEach(contar);
+    }
+
+    tipo.addEventListener('change', aplicar);
+    aplicar();
+})();
+</script>
 
 {% endblock %}

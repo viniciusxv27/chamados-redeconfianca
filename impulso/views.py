@@ -14,6 +14,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_date
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from core.models import NotificationMixin
@@ -272,7 +273,14 @@ def metas_kanban(request):
     # A equipe do gestor sai numa consulta só, não uma por card.
     equipe_ids = (set(get_colaboradores_do_gestor(user).values_list('id', flat=True))
                   if gestor else set())
+    # Metas de outra pessoa em que esta participa (aceitou o convite ou foi
+    # incluída): o card diz de quem é — no Kanban de quem não é gestor o nome do
+    # dono nem aparecia, e a tarefa do colega parecia dela.
+    em_parceria = set(Meta.participantes.through.objects
+                      .filter(user_id=user.id, meta_id__in=[m.id for m in metas])
+                      .values_list('meta_id', flat=True))
     for m in metas:
+        m.em_parceria = m.id in em_parceria and m.colaborador_id != user.id
         m.pode_apagar = m.pode_excluir(user, equipe_ids=equipe_ids)
         # Mesma régua da tela da meta: quem GERENCIA, duplica. O ponto focal
         # edita o texto da própria atividade, mas não põe cópia no Kanban dos outros.
@@ -308,6 +316,7 @@ def metas_kanban(request):
 
     context = {
         'colunas': colunas,
+        'convites': _convites_pendentes(user),
         'is_gestor': gestor,
         'colaboradores': get_colaboradores() if gestor else None,
         'colaborador_id': colaborador_id,
@@ -320,6 +329,23 @@ def metas_kanban(request):
         **filtros_impulso.contexto(request, f),
     }
     return render(request, 'impulso/metas_kanban.html', context)
+
+
+def _convites_pendentes(user):
+    """Convites de parceria esperando a resposta desta pessoa.
+
+    Ficam fora do filtro de mês e de nome do Kanban: são pedidos para ela
+    responder, não tarefas do mês. Antes só chegavam pelo sino — e quem não
+    clicou na notificação nunca soube que tinha sido chamado. Solicitação que
+    o gestor recusou não vira tarefa de ninguém, então o convite dela some.
+    """
+    from .models import ParceriaMeta
+
+    return list(ParceriaMeta.objects
+                .filter(convidado=user, status=ParceriaMeta.Status.PENDENTE)
+                .exclude(meta__aprovacao=Meta.Aprovacao.RECUSADA)
+                .select_related('meta', 'meta__colaborador', 'convidado_por')
+                .order_by('meta__prazo', '-criado_em'))
 
 
 def _prazo_em_dia_util(prazo, apenas_dias_uteis):
@@ -920,7 +946,14 @@ def meta_responder_parceria(request, parceria_id):
             f'{quem} {"aceitou" if aceitou else "recusou"} tocar '
             f'"{convite.meta.titulo}" em conjunto.',
             f'/impulso/metas/{convite.meta_id}/')
-    messages.success(request, 'Você entrou na meta.' if aceitou else 'Convite recusado.')
+    messages.success(request, f'Você entrou em "{convite.meta.titulo}".' if aceitou
+                     else f'Convite para "{convite.meta.titulo}" recusado.')
+    # Respondido do painel de convites do Kanban, volta para o Kanban; o resto
+    # segue para a meta. Só caminho interno: o `next` vem do formulário.
+    destino = request.POST.get('next') or ''
+    if destino.startswith('/impulso/metas/') and url_has_allowed_host_and_scheme(
+            destino, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
+        return redirect(destino)
     return redirect('impulso:meta_detail', meta_id=convite.meta_id)
 
 
@@ -3379,6 +3412,11 @@ def inovar_list(request):
     impacto = (request.GET.get('impacto') or '').strip()
     if impacto:
         ideias = ideias.filter(setor_impacto__icontains=impacto)
+    tipo_filtro = (request.GET.get('tipo') or '').strip().upper()
+    if tipo_filtro in Ideia.Tipo.values:
+        ideias = ideias.filter(tipo=tipo_filtro)
+    else:
+        tipo_filtro = ''
     pendentes_primeiro = (request.GET.get('ordem') or '') == 'antigas'
     ideias = ideias.order_by('criado_em' if pendentes_primeiro else '-criado_em')
 
@@ -3408,8 +3446,10 @@ def inovar_list(request):
         'active_tab': 'inovar',
         'status_filtro': status_filtro,
         'impacto_filtro': impacto,
+        'tipo_filtro': tipo_filtro,
+        'tipos': Ideia.Tipo.choices,
         'ordem_filtro': 'antigas' if pendentes_primeiro else '',
-        'filtro_ativo': bool(status_filtro or impacto or pendentes_primeiro),
+        'filtro_ativo': bool(status_filtro or impacto or tipo_filtro or pendentes_primeiro),
         # Os setores de impacto que já foram usados, para escolher em vez de
         # digitar — o campo é livre e cada um escreve de um jeito.
         'impactos': sorted({(i.setor_impacto or '').strip()
@@ -3497,26 +3537,84 @@ def _participantes_da_ideia(request, autor):
     return list(escolhidos), ''
 
 
+def _campos_da_ideia(request, atual=None):
+    """Lê o formulário da ideia. Devolve (campos, erro).
+
+    Sem `tipo` no POST, a edição mantém o tipo atual: o assistente edita só o
+    texto, e um projeto não pode virar melhoria contínua por omissão.
+    """
+    tipo = (request.POST.get('tipo') or '').strip().upper()
+    if tipo not in Ideia.Tipo.values:
+        tipo = atual.tipo if atual is not None else Ideia.Tipo.MELHORIA
+    campos = {
+        'tipo': tipo,
+        'descricao': (request.POST.get('descricao') or '').strip(),
+        'setor_impacto': (request.POST.get('setor_impacto') or '').strip(),
+        'motivo': (request.POST.get('motivo') or '').strip(),
+        'como_funciona_hoje': '',
+        'como_deveria_ser': '',
+    }
+    projeto = tipo == Ideia.Tipo.PROJETO
+    if projeto:
+        for campo in ('como_funciona_hoje', 'como_deveria_ser'):
+            valor = request.POST.get(campo)
+            if valor is None and atual is not None:
+                valor = getattr(atual, campo)
+            campos[campo] = (valor or '').strip()
+
+    if not (campos['descricao'] and campos['setor_impacto'] and campos['motivo']):
+        return None, ('Preencha o resumo do projeto, o setor de impacto e o motivo.' if projeto
+                      else 'Preencha a ideia, o setor de impacto e o motivo.')
+    if projeto and not (campos['como_funciona_hoje'] and campos['como_deveria_ser']):
+        return None, 'Projeto precisa dizer como funciona hoje e como deveria ser.'
+    return campos, ''
+
+
+def _form_da_ideia(request, ideia, autor, escolhidos_ids):
+    """O formulário da ideia — novo, edição ou de volta com o que foi digitado.
+
+    Quando a validação recusa, a tela volta preenchida em vez de redirecionar:
+    o projeto pede quatro textos, e perder tudo por um campo vazio desanima
+    justamente quem se deu ao trabalho de detalhar.
+    """
+    return render(request, 'impulso/ideia_form.html', {
+        'ideia': ideia,
+        'active_tab': 'inovar',
+        'candidatos': get_colaboradores().exclude(id=autor.id),
+        'escolhidos_ids': escolhidos_ids,
+        'max_participantes': Ideia.MAX_PARTICIPANTES,
+        'tipos': Ideia.Tipo.choices,
+    })
+
+
+def _ideia_com_o_digitado(campos_post, ideia=None):
+    """Uma Ideia (não salva) com o que veio no POST, para devolver o formulário."""
+    rascunho = ideia or Ideia()
+    for campo in ('descricao', 'setor_impacto', 'motivo', 'como_funciona_hoje', 'como_deveria_ser'):
+        setattr(rascunho, campo, (campos_post.get(campo) or '').strip())
+    tipo = (campos_post.get('tipo') or '').strip().upper()
+    if tipo in Ideia.Tipo.values:
+        rascunho.tipo = tipo
+    return rascunho
+
+
+def _escolhidos_no_post(request):
+    return [int(i) for i in request.POST.getlist('participantes') if str(i).isdigit()]
+
+
 @impulso_member_required
 def ideia_create(request):
     if request.method == 'POST':
-        descricao = (request.POST.get('descricao') or '').strip()
-        setor_impacto = (request.POST.get('setor_impacto') or '').strip()
-        motivo = (request.POST.get('motivo') or '').strip()
-        if not (descricao and setor_impacto and motivo):
-            messages.error(request, 'Preencha a ideia, o setor de impacto e o motivo.')
-            return redirect('impulso:ideia_create')
-
+        campos, erro = _campos_da_ideia(request)
         # O limite é conferido no servidor, não só escondendo caixas na tela:
         # um POST direto passaria por cima do contador do formulário.
-        participantes, erro = _participantes_da_ideia(request, request.user)
-        if erro:
-            messages.error(request, erro)
-            return redirect('impulso:ideia_create')
+        participantes, erro_pessoas = (None, '') if erro else _participantes_da_ideia(request, request.user)
+        if erro or erro_pessoas:
+            messages.error(request, erro or erro_pessoas)
+            return _form_da_ideia(request, _ideia_com_o_digitado(request.POST), request.user,
+                                  _escolhidos_no_post(request))
 
-        ideia = Ideia.objects.create(
-            autor=request.user, descricao=descricao,
-            setor_impacto=setor_impacto, motivo=motivo)
+        ideia = Ideia.objects.create(autor=request.user, **campos)
 
         if participantes:
             ideia.participantes.set(participantes)
@@ -3527,16 +3625,11 @@ def ideia_create(request):
 
         messages.success(
             request,
-            'Ideia enviada. Obrigado por inovar!'
+            ('Projeto enviado. Obrigado por inovar!' if ideia.e_projeto else 'Ideia enviada. Obrigado por inovar!')
             + (f' {len(participantes)} pessoa(s) incluída(s).' if participantes else ''))
         return redirect('impulso:inovar_list')
 
-    return render(request, 'impulso/ideia_form.html', {
-        'active_tab': 'inovar',
-        'candidatos': get_colaboradores().exclude(id=request.user.id),
-        'escolhidos_ids': [],
-        'max_participantes': Ideia.MAX_PARTICIPANTES,
-    })
+    return _form_da_ideia(request, None, request.user, [])
 
 
 @impulso_member_required
@@ -3554,22 +3647,17 @@ def ideia_edit(request, ideia_id):
         return redirect('impulso:inovar_list')
 
     if request.method == 'POST':
-        descricao = (request.POST.get('descricao') or '').strip()
-        setor_impacto = (request.POST.get('setor_impacto') or '').strip()
-        motivo = (request.POST.get('motivo') or '').strip()
-        if not (descricao and setor_impacto and motivo):
-            messages.error(request, 'Preencha a ideia, o setor de impacto e o motivo.')
-            return redirect('impulso:ideia_edit', ideia_id=ideia.id)
+        campos, erro = _campos_da_ideia(request, atual=ideia)
+        participantes, erro_pessoas = (None, '') if erro else _participantes_da_ideia(request, ideia.autor)
+        if erro or erro_pessoas:
+            messages.error(request, erro or erro_pessoas)
+            # Sem salvar: a instância só carrega o digitado de volta para a tela.
+            return _form_da_ideia(request, _ideia_com_o_digitado(request.POST, ideia), ideia.autor,
+                                  _escolhidos_no_post(request))
 
-        participantes, erro = _participantes_da_ideia(request, ideia.autor)
-        if erro:
-            messages.error(request, erro)
-            return redirect('impulso:ideia_edit', ideia_id=ideia.id)
-
-        ideia.descricao = descricao
-        ideia.setor_impacto = setor_impacto
-        ideia.motivo = motivo
-        ideia.save(update_fields=['descricao', 'setor_impacto', 'motivo', 'atualizado_em'])
+        for campo, valor in campos.items():
+            setattr(ideia, campo, valor)
+        ideia.save(update_fields=list(campos) + ['atualizado_em'])
 
         # Avisa só quem entrou agora: quem já estava não precisa de outro aviso.
         antes = set(ideia.participantes.values_list('id', flat=True))
@@ -3584,13 +3672,8 @@ def ideia_edit(request, ideia_id):
         messages.success(request, 'Ideia atualizada.')
         return redirect('impulso:inovar_list')
 
-    return render(request, 'impulso/ideia_form.html', {
-        'ideia': ideia,
-        'active_tab': 'inovar',
-        'candidatos': get_colaboradores().exclude(id=ideia.autor_id),
-        'escolhidos_ids': list(ideia.participantes.values_list('id', flat=True)),
-        'max_participantes': Ideia.MAX_PARTICIPANTES,
-    })
+    return _form_da_ideia(request, ideia, ideia.autor,
+                          list(ideia.participantes.values_list('id', flat=True)))
 
 
 @require_POST

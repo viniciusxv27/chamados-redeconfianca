@@ -1490,15 +1490,30 @@ class Ideia(models.Model):
         APROVADA = 'APROVADA', 'Aprovada'
         ARQUIVADA = 'ARQUIVADA', 'Arquivada'
 
+    # As duas contam para as 3 ideias do mês; só PROJETO aprovado vale os
+    # pontos de "projeto aprovado" (impulso/scoring.py).
+    class Tipo(models.TextChoices):
+        MELHORIA = 'MELHORIA', 'Melhoria contínua'
+        PROJETO = 'PROJETO', 'Projeto'
+
     autor = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
         related_name='impulso_ideias', verbose_name='Autor')
+    tipo = models.CharField(
+        max_length=10, choices=Tipo.choices, default=Tipo.MELHORIA, db_default='MELHORIA',
+        verbose_name='Tipo')
     descricao = models.TextField(
         verbose_name='Qual é a sua ideia?',
-        help_text='Informe de forma concreta a sua ideia.')
+        help_text='Informe de forma concreta a sua ideia. No projeto, é o resumo dele.')
     setor_impacto = models.CharField(
         max_length=150, verbose_name='Setor de impacto')
     motivo = models.TextField(verbose_name='Qual o motivo?')
+    # Projeto pede o retrato de antes e depois: sem isso o gestor aprova um
+    # título, e quem executa não sabe o que mudar.
+    como_funciona_hoje = models.TextField(
+        blank=True, default='', db_default='', verbose_name='Como funciona hoje')
+    como_deveria_ser = models.TextField(
+        blank=True, default='', db_default='', verbose_name='Como deveria ser')
 
     # Quem mais assina a ideia. Pontua junto com o autor — ideia boa raramente
     # nasce de uma cabeça só, e sem isso quem ajudou fica de fora da nota.
@@ -1554,6 +1569,10 @@ class Ideia(models.Model):
             return False
         return self.autor_id == user.id or user.is_superuser
 
+    @property
+    def e_projeto(self):
+        return self.tipo == self.Tipo.PROJETO
+
     def titulo_da_atividade(self):
         """Como a ideia aparece no Kanban de quem vai executar."""
         base = ' '.join((self.descricao or '').split())
@@ -1568,10 +1587,14 @@ class Ideia(models.Model):
         Sem o nome de quem teve a ideia: a autoria continua sendo assunto de
         `/impulso/inovar/adm/` e não vaza por uma atividade do Kanban.
         """
-        partes = [f'Ideia aprovada no INOVAR (impacto: {self.setor_impacto}).', '',
-                  self.descricao or '']
+        partes = [f'Ideia aprovada no INOVAR ({self.get_tipo_display().lower()} · '
+                  f'impacto: {self.setor_impacto}).', '', self.descricao or '']
         if self.motivo:
             partes += ['', f'Motivo apontado por quem enviou: {self.motivo}']
+        if self.e_projeto and self.como_funciona_hoje:
+            partes += ['', f'Como funciona hoje: {self.como_funciona_hoje}']
+        if self.e_projeto and self.como_deveria_ser:
+            partes += ['', f'Como deveria ser: {self.como_deveria_ser}']
         if self.resposta_gestor:
             partes += ['', f'Retorno de quem aprovou: {self.resposta_gestor}']
         return '\n'.join(partes).strip()
@@ -1725,7 +1748,7 @@ class PontuacaoMensal(models.Model):
 
     CONFIAR 40 = metas 20 (10 qualidade + 10 conclusão) + feedback 10 + assiduidade 10
     CONECTAR 40 = curso 10 + vídeos/POPs 10 + projeto foco 20
-    INOVAR 20 = 3 ideias 10 + 1 ideia aprovada 10
+    INOVAR 20 = 3 ideias 10 + 1 projeto aprovado 10
     """
 
     mes = models.ForeignKey(
@@ -1873,7 +1896,7 @@ class PesosImpulso(models.Model):
         ('projeto_foco', 'Projeto FOCO (metade entrega, metade conclusão)',
          'CONECTAR', 20),
         ('ideias', 'Ideias propostas', 'INOVAR', 10),
-        ('ideia_aprovada', 'Ideia aprovada', 'INOVAR', 10),
+        ('ideia_aprovada', 'Projeto aprovado', 'INOVAR', 10),
     )
     PILARES = (('CONFIAR', 'Confiar'), ('CONECTAR', 'Conectar'), ('INOVAR', 'Inovar'))
     TOTAL_ESPERADO = Decimal('100')

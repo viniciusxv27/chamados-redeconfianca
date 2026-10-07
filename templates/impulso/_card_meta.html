@@ -66,6 +66,15 @@ diferentes do cartão na primeira alteração.
     </div>
     {% endif %}
 
+    {% if m.em_parceria %}
+    {# Tarefa de um colega que esta pessoa toca junto: o card diz de quem é. #}
+    <div class="mt-2">
+        <span class="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-medium max-w-full">
+            <i class="fas fa-handshake"></i><span class="truncate">Em parceria com {{ m.colaborador.first_name|default:m.colaborador.email }}</span>
+        </span>
+    </div>
+    {% endif %}
+
     {% if m.tem_novidade %}
     <div class="flex flex-wrap gap-1 mt-2">
         {% if m.novidades.entregue %}

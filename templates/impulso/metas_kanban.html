@@ -37,6 +37,53 @@
     </div>
 </div>
 
+{% comment %}
+Convites para fazer junto: tarefas de colegas para as quais esta pessoa foi
+chamada. Antes chegavam só pelo sino; aqui ela responde sem sair do Kanban.
+Ficam fora do filtro de mês — são pedidos esperando resposta, não tarefas do mês.
+{% endcomment %}
+{% if convites %}
+<section class="imp-card mb-4 overflow-hidden border border-indigo-200" id="convites">
+    <div class="px-4 py-3 bg-indigo-50 border-b border-indigo-100 flex items-center justify-between gap-2 flex-wrap">
+        <h3 class="text-sm font-semibold text-indigo-900 flex items-center gap-2">
+            <i class="fas fa-handshake"></i>Convites para fazer junto
+            <span class="min-w-[1.25rem] h-5 px-1.5 rounded-full bg-indigo-600 text-white text-[11px] font-bold inline-flex items-center justify-center">{{ convites|length }}</span>
+        </h3>
+        <p class="text-xs text-indigo-700">Colegas chamaram você para tocar estas tarefas. Aceitando, ela entra no seu Kanban.</p>
+    </div>
+    <ul class="divide-y divide-gray-100">
+        {% for c in convites %}
+        <li class="px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-3">
+            <div class="flex-1 min-w-0">
+                <a href="{% url 'impulso:meta_detail' c.meta_id %}" class="text-sm font-semibold text-gray-800 hover:text-orange-600 break-words">{{ c.meta.titulo }}</a>
+                <p class="text-xs text-gray-500 mt-0.5">
+                    <i class="fas fa-user-plus mr-1"></i>{{ c.convidado_por.get_full_name|default:c.convidado_por.email|default:"Um colega" }} chamou você
+                    {% if c.meta.colaborador_id != c.convidado_por_id %}· tarefa de {{ c.meta.colaborador.get_full_name|default:c.meta.colaborador.email }}{% endif %}
+                    {% if c.meta.prazo %}· prazo {{ c.meta.prazo|date:"d/m/Y" }}{% endif %}
+                    · {{ c.meta.get_status_display|lower }}
+                    {% if c.meta.aprovacao == 'PENDENTE' %}· aguardando o gestor aprovar a tarefa{% endif %}
+                    · convite de {{ c.criado_em|date:"d/m" }}
+                </p>
+                {% if c.mensagem %}<p class="text-xs text-gray-600 italic mt-1">"{{ c.mensagem }}"</p>{% endif %}
+            </div>
+            <form method="post" action="{% url 'impulso:meta_responder_parceria' c.id %}" class="flex items-center gap-2 flex-shrink-0">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <button type="submit" name="resposta" value="aceitar"
+                        class="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700">
+                    <i class="fas fa-check mr-1"></i>Aceitar
+                </button>
+                <button type="submit" name="resposta" value="recusar"
+                        class="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-600 text-xs hover:bg-gray-50">
+                    Recusar
+                </button>
+            </form>
+        </li>
+        {% endfor %}
+    </ul>
+</section>
+{% endif %}
+
 <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
     {% for col in colunas %}
     <div class="rounded-2xl bg-gray-50/80 border border-gray-100 flex flex-col min-h-[180px]">
