@@ -377,6 +377,66 @@ try:
       'name="tipo"' in html and 'name="loja"' in html and 'name="q"' in html)
     t('e diz de quando é a última leitura', 'Última leitura do SAP' in html)
 
+    print('\n== DIVERGÊNCIA DE VALOR ABAIXO DE R$ 1 É DESCONSIDERADA ==')
+    def linha_valor(chave, diferenca, tipo='VALOR'):
+        return LinhaAuditoria.objects.create(
+            chave=chave, tipo_erro=tipo, pdv='ICONHA', id_venda=chave[-6:], data_venda=HOJE,
+            diferenca_valor=diferenca, status_valor='DIVERGENTE', ativa=True)
+    centavos = linha_valor('zz-valor-centavos-000001', D('-0.99'))
+    real = linha_valor('zz-valor-um-real-0000002', D('1.00'))
+    grande = linha_valor('zz-valor-grande-00000003', D('25.40'))
+    produto = linha_valor('zz-produto-centavos-0004', D('0.21'), tipo='PRODUTO')
+    ids = {l.pk for l in c.get('/sap/?situacao=todas&tipo=VALOR').context['pagina']}
+    t('VALOR com menos de R$ 1 some da lista', centavos.pk not in ids, ids)
+    t('R$ 1,00 ou mais continua', real.pk in ids and grande.pk in ids)
+    ids = {l.pk for l in c.get('/sap/?situacao=todas').context['pagina'].paginator.object_list}
+    t('outro tipo de erro com centavos continua (o problema dele é outro)', produto.pk in ids)
+    ids = {l.pk for l in c.get('/sap/?situacao=todas&comparacao=valor').context['pagina'].paginator.object_list}
+    t('no filtro "divergência em valor", centavos de qualquer tipo ficam de fora',
+      produto.pk not in ids and centavos.pk not in ids and grande.pk in ids)
+    painel = c.get('/sap/painel/?tipo=VALOR').context
+    t('o painel também não conta', painel['numeros']['abertas'] == 2, painel['numeros'])
+    t('a tela avisa', 'são desconsideradas' in c.get('/sap/').content.decode())
+    t('a linha não é apagada do espelho (se crescer, volta)', LinhaAuditoria.objects.filter(pk=centavos.pk).exists())
+
+    print('\n== GESTORES ESCOLHIDOS PELO SUPERADMIN E AVISO DE RESOLVIDA ==')
+    from auditoria_sap.permissions import gestores_escolhidos
+    luiz = User.objects.create_user(username='zz.sap.luiz', email='zz.sap.luiz@exemplo-teste.local',
+                                    password='S3nha!teste', first_name='Luiz', last_name='Teste', hierarchy='PADRAO')
+    gabriel = User.objects.create_user(username='zz.sap.gabriel', email='zz.sap.gabriel@exemplo-teste.local',
+                                       password='S3nha!teste', first_name='Gabriel', last_name='Teste',
+                                       hierarchy='ADMIN')
+    t('PADRÃO sem nada não gere nem vê', not pode_ver(luiz) and not e_gestor(luiz))
+    cg = Client(); cg.force_login(gabriel)
+    t('só o SUPERADMIN abre a escolha de gestores', cg.get('/sap/gestores/').status_code == 302)
+    r = c.get('/sap/gestores/')
+    t('SUPERADMIN abre e vê a aba', r.status_code == 200 and 'Gestores da Visão SAP' in r.content.decode())
+    c.post('/sap/gestores/', {'gestores': [luiz.pk, gabriel.pk]})
+    luiz = User.objects.get(pk=luiz.pk)
+    t('escolhidos viram gestores (PADRÃO incluído: vê a rede e atualiza)',
+      {luiz.pk, gabriel.pk} <= set(gestores_escolhidos().values_list('pk', flat=True))
+      and pode_ver(luiz) and e_gestor(luiz))
+    enviados = []
+    with mock.patch('notifications.services.notification_service.send_notification',
+                    side_effect=lambda destinos, titulo, msg, **kw: enviados.append((destinos, titulo, msg, kw))):
+        r = cg.post(f'/sap/linha/{grande.pk}/marcar/', {'resolvida': '1', 'observacao': 'estornado'})
+    t('marcar como resolvida avisa os gestores escolhidos', r.json()['ok'] and len(enviados) == 1, enviados)
+    destinos, titulo, msg, kw = enviados[0]
+    t('menos quem marcou', [u.pk for u in destinos] == [luiz.pk], [u.pk for u in destinos])
+    t('o aviso diz quem, qual venda e a observação', 'Gabriel' in msg and grande.id_venda in msg and 'estornado' in msg)
+    t('e leva direto à linha, mesmo resolvida', 'situacao=todas' in kw['action_url']
+      and f'q={grande.id_venda}' in kw['action_url'])
+    lista_do_luiz = Client(); lista_do_luiz.force_login(luiz)
+    ids = {l.pk for l in lista_do_luiz.get(kw['action_url']).context['pagina']}
+    t('pelo link, o gestor encontra a linha resolvida', grande.pk in ids, ids)
+    with mock.patch('notifications.services.notification_service.send_notification',
+                    side_effect=lambda *a, **kw: enviados.append(a)):
+        cg.post(f'/sap/linha/{grande.pk}/marcar/', {'resolvida': '0'})
+    t('reabrir não manda aviso', len(enviados) == 1)
+    c.post('/sap/gestores/', {'gestores': [gabriel.pk]})
+    t('desmarcado, deixa de ser gestor', luiz.pk not in set(gestores_escolhidos().values_list('pk', flat=True))
+      and not e_gestor(User.objects.get(pk=luiz.pk)))
+
     print('\n== A TELA É DE VERDADE ==')
     for nome, pedaco in (('a tabela vira cartão no celular', 'lg:grid-cols-12'),
                          ('o filtro recarrega sozinho', 'sap-auto'),

@@ -11,6 +11,7 @@ dois valores). Medido em 24/09/2026: 4.022 linhas, 4.022 chaves distintas. É
 essa chave que segura o "resolvida", que é do portal e não do SAP.
 """
 import hashlib
+from decimal import Decimal
 
 from django.conf import settings
 from django.db import models
@@ -165,6 +166,17 @@ class MarcacaoAuditoria(models.Model):
     def __str__(self):
         quem = self.usuario.full_name if self.usuario else 'alguém'
         return f'{quem} {"resolveu" if self.resolvida else "reabriu"} em {self.quando:%d/%m/%Y %H:%M}'
+
+
+# Divergência de valor abaixo de R$ 1,00 não é problema para tratar: arredondamento,
+# centavo de imposto. A linha do tipo VALOR com diferença menor que isso sai da lista,
+# do painel e dos filtros (continua no espelho — se a diferença crescer, ela volta).
+LIMITE_VALOR_DESPREZIVEL = Decimal('1.00')
+
+
+def q_valor_desprezivel():
+    limite = LIMITE_VALOR_DESPREZIVEL
+    return models.Q(tipo_erro__iexact='VALOR', diferenca_valor__gt=-limite, diferenca_valor__lt=limite)
 
 
 def inicio_da_ultima_leitura():

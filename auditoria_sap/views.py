@@ -14,11 +14,12 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
 from .espelho import sincronizar, ultima_sincronizacao
-from .models import (LinhaAuditoria, filtro_aguardando_leitura, filtro_resolvidas_pendentes,
-                     inicio_da_ultima_leitura)
+from .models import (LIMITE_VALOR_DESPREZIVEL, LinhaAuditoria, filtro_aguardando_leitura,
+                     filtro_resolvidas_pendentes, inicio_da_ultima_leitura, q_valor_desprezivel)
 from .mysql import SapIndisponivel
 from .permissions import e_gestor as _e_gestor
-from .permissions import lojas_visiveis, normalizar_loja
+from .permissions import (CHAVE_GESTOR, gestores_escolhidos, lojas_visiveis, normalizar_loja,
+                          pode_escolher_gestores)
 from .permissions import pode_ver as _pode_ver
 
 logger = logging.getLogger(__name__)
@@ -108,8 +109,11 @@ def ler_filtros(request):
 
 
 def filtrar(filtros, corte=None, pdvs=None):
-    """A consulta do espelho já com os filtros da tela (e só as lojas de quem vê)."""
-    qs = LinhaAuditoria.objects.all()
+    """A consulta do espelho já com os filtros da tela (e só as lojas de quem vê).
+
+    Divergência de valor abaixo de R$ 1 fica de fora de tudo (``q_valor_desprezivel``).
+    """
+    qs = LinhaAuditoria.objects.exclude(q_valor_desprezivel())
     if pdvs is not None:
         qs = qs.filter(pdv__in=pdvs)
     if filtros['presenca'] == 'na':
@@ -136,6 +140,10 @@ def filtrar(filtros, corte=None, pdvs=None):
         campo = dict(COMPARACOES)[filtros['comparacao']]
         # "Divergente" é o que interessa; OK e "não comparado" ficam de fora.
         qs = qs.filter(**{f'{campo}__icontains': 'DIVERG'})
+        if filtros['comparacao'] == 'valor':
+            # "Valor divergente" por centavos, em qualquer tipo de erro, não é o que se procura aqui.
+            limite = LIMITE_VALOR_DESPREZIVEL
+            qs = qs.exclude(diferenca_valor__gt=-limite, diferenca_valor__lt=limite)
     if filtros['q']:
         procura = Q()
         for coluna in COLUNAS_DE_BUSCA:
@@ -172,7 +180,7 @@ def _resumo(qs):
 
 def _contexto_comum(request, filtros, pdvs=None):
     """O que lista e painel mostram igual: filtros, listas de escolha, espelho."""
-    visiveis = LinhaAuditoria.objects.filter(ativa=True)
+    visiveis = LinhaAuditoria.objects.filter(ativa=True).exclude(q_valor_desprezivel())
     if pdvs is not None:
         visiveis = visiveis.filter(pdv__in=pdvs)
     return {
@@ -191,6 +199,8 @@ def _contexto_comum(request, filtros, pdvs=None):
         'comparacoes': COMPARACOES,
         'ultima': ultima_sincronizacao(),
         'e_gestor': _e_gestor(request.user),
+        'pode_escolher_gestores': pode_escolher_gestores(request.user),
+        'limite_desprezivel': LIMITE_VALOR_DESPREZIVEL,
         'tem_espelho': LinhaAuditoria.objects.exists(),
     }
 
@@ -314,6 +324,9 @@ def marcar(request, linha_id):
     linha = _linha_visivel(request.user, linha_id)
     resolvida = (request.POST.get('resolvida') or '').lower() in ('1', 'true', 'sim', 'on')
     marcacao = linha.marcar(request.user, resolvida, request.POST.get('observacao') or '')
+    if resolvida:
+        from .avisos import avisar_resolvida
+        avisar_resolvida(linha, request.user)
     return JsonResponse({
         'ok': True,
         'resolvida': linha.resolvida,
@@ -342,3 +355,41 @@ def atualizar(request):
         f"{resumo['atualizadas']} alteradas e {resumo['sumiram']} que saíram "
         f"({resumo['segundos']:.0f} s)."))
     return redirect(request.POST.get('voltar') or 'auditoria_sap:lista')
+
+
+@login_required
+def gestores(request):
+    """O SUPERADMIN escolhe quem gere a Visão SAP (e recebe aviso a cada linha resolvida)."""
+    if not pode_escolher_gestores(request.user):
+        messages.error(request, 'Só o SUPERADMIN escolhe quem gere a Visão SAP.')
+        return redirect('auditoria_sap:lista')
+    from django.contrib.auth import get_user_model
+
+    from users.models import UserModuleAccess
+    User = get_user_model()
+    atuais = set(gestores_escolhidos().values_list('pk', flat=True))
+    if request.method == 'POST':
+        escolhidos = {int(i) for i in request.POST.getlist('gestores') if str(i).isdigit()}
+        escolhidos = set(User.objects.filter(pk__in=escolhidos, is_active=True).values_list('pk', flat=True))
+        saem = atuais - escolhidos
+        entram = escolhidos - atuais
+        UserModuleAccess.objects.filter(user_id__in=saem, module_key=CHAVE_GESTOR).delete()
+        for pk in entram:
+            UserModuleAccess.objects.get_or_create(user_id=pk, module_key=CHAVE_GESTOR,
+                                                   defaults={'granted_by': request.user})
+        try:
+            from core.models import SystemLog
+            nomes = lambda ids: ', '.join(u.full_name for u in User.objects.filter(pk__in=ids)) or '—'
+            SystemLog.objects.create(user=request.user, action_type='ADMIN_ACTION',
+                                     description=(f'Gestores da Visão SAP — entraram: {nomes(entram)}; '
+                                                  f'saíram: {nomes(saem)}')[:1000])
+        except Exception:                                       # noqa: BLE001 — o log não segura a escolha
+            logger.warning('Log da escolha de gestores do SAP não foi gravado', exc_info=True)
+        messages.success(request, f'Gestores da Visão SAP salvos: {len(escolhidos)} pessoa(s).')
+        return redirect('auditoria_sap:gestores')
+    pessoas = list(User.objects.filter(is_active=True).select_related('sector').order_by('first_name', 'last_name'))
+    pessoas.sort(key=lambda u: (u.pk not in atuais, (u.first_name or '').upper()))
+    return render(request, 'auditoria_sap/gestores.html', {
+        'pessoas': pessoas, 'atuais': atuais, 'aba': 'gestores',
+        'pode_escolher_gestores': True, 'e_gestor': True, 'ultima': ultima_sincronizacao(),
+    })

@@ -10,4 +10,5 @@ urlpatterns = [
     path('atualizar/', views.atualizar, name='atualizar'),
     path('linha/<int:linha_id>/', views.detalhe, name='detalhe'),
     path('linha/<int:linha_id>/marcar/', views.marcar, name='marcar'),
+    path('gestores/', views.gestores, name='gestores'),
 ]

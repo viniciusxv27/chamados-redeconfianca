@@ -135,6 +135,12 @@
            class="sap-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'painel' %}sap-tab-active{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
             <i class="fas fa-chart-pie mr-1.5"></i>Painel
         </a>
+        {% if pode_escolher_gestores %}
+        <a href="{% url 'auditoria_sap:gestores' %}"
+           class="sap-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'gestores' %}sap-tab-active{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
+            <i class="fas fa-user-shield mr-1.5"></i>Gestores
+        </a>
+        {% endif %}
     </nav>
 </div>
 

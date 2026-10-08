@@ -102,6 +102,9 @@ está na tela e o que está no gráfico serem sempre o mesmo recorte.
                title="Limpar os filtros">Limpar</a>
         </div>
     </div>
+    <p class="text-[11px] text-gray-400 mt-2" data-sap-desprezivel>
+        <i class="fas fa-circle-info mr-1"></i>Divergências de valor abaixo de R$ {{ limite_desprezivel|floatformat:2 }} são desconsideradas.
+    </p>
 </form>
 
 <script>

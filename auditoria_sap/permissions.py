@@ -68,6 +68,26 @@ def e_gestor(user):
                 or user_has_module(user, 'sap.gestor'))
 
 
+CHAVE_GESTOR = 'sap.gestor'
+
+
+def pode_escolher_gestores(user):
+    """Só o SUPERADMIN escolhe quem gere a Visão SAP."""
+    return bool(user and getattr(user, 'is_authenticated', False)
+                and (user.is_superuser or getattr(user, 'hierarchy', '') == 'SUPERADMIN'))
+
+
+def gestores_escolhidos():
+    """Quem o SUPERADMIN marcou como gestor do módulo (a liberação ``sap.gestor``).
+
+    É a mesma liberação da tela de edição de usuário — uma lista só. Essas pessoas
+    veem a rede inteira, atualizam do SAP e recebem aviso a cada linha resolvida.
+    """
+    from django.contrib.auth import get_user_model
+    return (get_user_model().objects.filter(is_active=True, module_accesses__module_key=CHAVE_GESTOR)
+            .distinct().order_by('first_name', 'last_name'))
+
+
 def normalizar_loja(nome):
     """"Loja Glória" e "GLÓRIA" viram a mesma chave: sem "Loja", sem acento, maiúsculas."""
     texto = ' '.join(str(nome or '').split())
