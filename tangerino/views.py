@@ -11,7 +11,7 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.dateparse import parse_time
+from django.utils.dateparse import parse_date, parse_time
 from django.views.decorators.http import require_POST
 
 from . import escala as escala_svc
@@ -1109,6 +1109,9 @@ def configuracao(request):
     if request.method == 'POST' and request.POST.get('secao') == 'analise':
         return _salvar_analise(request)
 
+    if request.method == 'POST' and request.POST.get('secao') == 'analise_manual':
+        return _disparar_analise(request)
+
     if request.method == 'POST' and request.POST.get('secao') == 'agendamento':
         # Formulário próprio, com os campos do agendamento e mais nada. Sem este
         # desvio ele cairia no bloco de baixo, que lê 12 checkboxes de uma vez —
@@ -1204,11 +1207,68 @@ def _contexto_da_analise(request):
         'destinatarios_escolhidos': escolhidos,
         'envios_analise': EnvioAnalisePonto.objects.select_related('user')[:10],
     }
+    ontem = timezone.localdate() - timedelta(days=1)
+    dia = parse_date(request.GET.get('dia') or '')
+    contexto['manual_dia'] = dia or ontem
+    contexto['manual_tipos'] = EnvioAnalisePonto.Tipo.choices
+    contexto['manual_tipo'] = (request.GET.get('previa') or 'DIARIO').upper()
+    contexto['hoje'] = timezone.localdate()
     pedida = (request.GET.get('previa') or '').upper()
     if pedida in EnvioAnalisePonto.Tipo.values and contexto['pode_configurar_analise']:
         from . import analise as analise_svc
-        contexto['previa'] = analise_svc.previa(pedida)
+        contexto['previa'] = analise_svc.previa(pedida, dia=dia if dia and dia <= timezone.localdate() else None)
+        contexto['previa_do_dia'] = bool(dia)
     return contexto
+
+
+@require_POST
+def _disparar_analise(request):
+    """O SUPERADMIN manda a análise de um dia escolhido agora, sem esperar o horário."""
+    from core.evolution import normalizar_numero
+
+    from . import analise as analise_svc
+    from .models import EnvioAnalisePonto
+
+    if not pode_configurar_analise(request.user):
+        messages.error(request, 'Só o SUPERADMIN dispara a análise de ponto no WhatsApp.')
+        return redirect('tangerino:configuracao')
+    tipo = (request.POST.get('tipo') or '').upper()
+    dia = parse_date(request.POST.get('dia') or '')
+    hoje = timezone.localdate()
+    if tipo not in EnvioAnalisePonto.Tipo.values or not dia:
+        messages.error(request, 'Escolha a cadência e o dia da análise.')
+        return redirect('tangerino:configuracao')
+    if dia > hoje:
+        messages.error(request, 'O dia da análise não pode ser no futuro.')
+        return redirect('tangerino:configuracao')
+
+    pessoas = None
+    if request.POST.get('para') == 'eu':
+        numero = normalizar_numero(getattr(request.user, 'phone', '') or '')
+        if not numero:
+            messages.error(request, 'Seu cadastro está sem telefone: não dá para mandar o teste para você.')
+            return redirect('tangerino:configuracao')
+        pessoas = [(request.user, numero)]
+    resumo = analise_svc.enviar_manual(tipo, dia, pessoas=pessoas,
+                                       reenviar=request.POST.get('reenviar') == 'on')
+    periodo = (f"{resumo['inicio']:%d/%m/%Y}" if resumo.get('inicio') == resumo.get('fim')
+               else f"{resumo.get('inicio'):%d/%m} a {resumo.get('fim'):%d/%m/%Y}") if resumo.get('inicio') else ''
+    if resumo.get('sem_canal'):
+        messages.error(request, 'O WhatsApp (Evolution) não está configurado neste servidor: nada foi enviado.')
+    elif not (resumo['enviados'] or resumo['falhas'] or resumo['ja_enviados']):
+        messages.warning(request, 'Ninguém para receber: marque quem recebe (com telefone no cadastro) e salve.')
+    else:
+        partes = [f"{resumo['enviados']} enviada(s)"]
+        if resumo['falhas']:
+            partes.append(f"{resumo['falhas']} falha(s)")
+        if resumo['ja_enviados']:
+            partes.append(f"{resumo['ja_enviados']} já tinha(m) recebido este período (marque \"reenviar\" para mandar de novo)")
+        if resumo['sem_telefone']:
+            partes.append(f"{resumo['sem_telefone']} sem telefone")
+        nivel = messages.success if resumo['enviados'] and not resumo['falhas'] else messages.warning
+        nivel(request, f"Análise {dict(EnvioAnalisePonto.Tipo.choices)[tipo].split(' (')[0].lower()} de {periodo}: "
+                       + '; '.join(partes) + '.')
+    return redirect('tangerino:configuracao')
 
 
 @require_POST

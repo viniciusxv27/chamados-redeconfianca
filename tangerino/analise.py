@@ -255,10 +255,76 @@ def enviar(tipos=None, hoje=None, config=None):
     return resumo
 
 
-def previa(tipo, hoje=None):
-    """O que sairia agora nessa cadência — para a tela de configuração conferir antes de ligar."""
+def periodo_do_dia(tipo, dia, hoje=None):
+    """(início, fim) da análise de um dia escolhido à mão.
+
+    Diária: o próprio dia. Semanal: a semana (segunda a domingo) que contém o dia.
+    Mensal: o mês do dia — até hoje, se for o mês corrente.
+    """
     hoje = hoje or timezone.localdate()
-    inicio, fim = periodo(tipo, hoje)
+    if tipo == EnvioAnalisePonto.Tipo.DIARIO:
+        return dia, dia
+    if tipo == EnvioAnalisePonto.Tipo.SEMANAL:
+        segunda = dia - timedelta(days=dia.weekday())
+        return segunda, segunda + timedelta(days=6)
+    ultimo = date(dia.year, dia.month, calendar.monthrange(dia.year, dia.month)[1])
+    return dia.replace(day=1), min(ultimo, max(hoje, dia))
+
+
+def enviar_manual(tipo, dia, pessoas=None, reenviar=False, config=None, hoje=None):
+    """Disparo pedido pelo SUPERADMIN: a análise de um dia escolhido, agora.
+
+    Vale com o envio automático desligado. `pessoas`: lista de (user, número); sem ela,
+    vão os destinatários marcados. Quem já recebeu a análise desse período só recebe
+    de novo com `reenviar` (a mesma linha de envio é reaproveitada — a trava única
+    continua valendo para o automático).
+    """
+    from core import evolution
+
+    config = config or AnalisePontoConfig.get()
+    resumo = {'enviados': 0, 'falhas': 0, 'ja_enviados': 0, 'sem_telefone': 0}
+    if faltando_no_canal():
+        resumo['sem_canal'] = True
+        return resumo
+    if pessoas is None:
+        pessoas = destinatarios(config)
+        resumo['sem_telefone'] = config.destinatarios.filter(is_active=True).count() - len(pessoas)
+    inicio, fim = periodo_do_dia(tipo, dia, hoje)
+    resumo['inicio'], resumo['fim'] = inicio, fim
+    if not pessoas:
+        return resumo
+    linhas = pendencias_svc.linhas_do_periodo(inicio, fim, apenas_com_pendencia=True)
+    texto = texto_da_analise(tipo, inicio, fim, linhas)
+    dias = len(linhas)
+    gente = len({l['usuario'].id for l in linhas})
+    for user, numero in pessoas:
+        envio = reivindicar(user, tipo, inicio, fim)
+        if envio is None:
+            if not reenviar:
+                resumo['ja_enviados'] += 1
+                continue
+            envio = EnvioAnalisePonto.objects.filter(user=user, tipo=tipo, periodo_fim=fim).first()
+            if envio is None:                                       # sumiu entre uma consulta e outra
+                continue
+        try:
+            ok, detalhe = evolution.enviar_texto(numero, texto)
+        except Exception as exc:                                    # noqa: BLE001 — o contrato é não levantar
+            ok, detalhe = False, f'Erro inesperado: {exc}'
+        EnvioAnalisePonto.objects.filter(pk=envio.pk).update(
+            enviado=bool(ok), detalhe=('Manual · ' + str(detalhe or ''))[:255], pessoas=gente, dias=dias,
+            periodo_inicio=inicio)
+        if ok:
+            resumo['enviados'] += 1
+        else:
+            resumo['falhas'] += 1
+            logger.warning('Análise manual de ponto (%s) não saiu para %s: %s', tipo, user, str(detalhe)[:200])
+    return resumo
+
+
+def previa(tipo, hoje=None, dia=None):
+    """O que sairia nessa cadência — agora, ou para um dia escolhido (disparo manual)."""
+    hoje = hoje or timezone.localdate()
+    inicio, fim = periodo_do_dia(tipo, dia, hoje) if dia else periodo(tipo, hoje)
     linhas = pendencias_svc.linhas_do_periodo(inicio, fim, apenas_com_pendencia=True)
     return {'tipo': tipo, 'inicio': inicio, 'fim': fim, 'linhas': linhas,
             'texto': texto_da_analise(tipo, inicio, fim, linhas)}

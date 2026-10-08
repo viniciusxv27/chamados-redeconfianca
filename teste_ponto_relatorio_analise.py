@@ -646,6 +646,51 @@ try:
           comum.id not in set(config.destinatarios.values_list('id', flat=True))
           and EnvioAnalisePonto.objects.count() == antes)
 
+        print('\n== DISPARO MANUAL DE UM DIA (SUPERADMIN) ==')
+        t('o período do dia escolhido: diária = o dia; semanal = a semana dele; mensal = o mês',
+          analise_svc.periodo_do_dia(tipos.DIARIO, SEGUNDA) == (SEGUNDA, SEGUNDA)
+          and analise_svc.periodo_do_dia(tipos.SEMANAL, SEGUNDA + timedelta(days=3)) == (SEGUNDA, DOMINGO)
+          and analise_svc.periodo_do_dia(tipos.MENSAL, date(2026, 9, 10), hoje=date(2026, 10, 8))
+          == (date(2026, 9, 1), date(2026, 9, 30)))
+        html = c_chefe.get('/ponto/configuracao/').content.decode()
+        t('a seção tem o disparo manual', 'Disparar manualmente' in html and 'name="dia"' in html
+          and 'value="analise_manual"' in html)
+        html = c_chefe.get(f'/ponto/configuracao/?previa=DIARIO&dia={SEGUNDA:%Y-%m-%d}').content.decode()
+        t('a prévia do dia escolhido mostra aquele dia', f'{SEGUNDA:%d/%m/%Y}' in html and bruno.full_name in html)
+        config.ativo = False
+        config.save()
+        envio.chamadas.clear()
+        manual = {'secao': 'analise_manual', 'tipo': 'DIARIO', 'dia': f'{SEGUNDA:%Y-%m-%d}', 'para': 'eu'}
+        with override_settings(EVOLUTION_API_URL='https://evolution.exemplo', EVOLUTION_API_KEY='zz',
+                               EVOLUTION_INSTANCE='zz'):
+            r = c_chefe.post('/ponto/configuracao/', manual, follow=True)
+            t('quem já recebeu o período não recebe de novo sem pedir', not envio.chamadas
+              and 'já tinha(m) recebido' in r.content.decode(), envio.chamadas)
+            r = c_chefe.post('/ponto/configuracao/', {**manual, 'reenviar': 'on'}, follow=True)
+            t('com "reenviar", manda — mesmo com o automático desligado',
+              [n for n, _ in envio.chamadas] == ['5527999991010'] and bruno.full_name in envio.chamadas[0][1]
+              and '1 enviada' in r.content.decode(), envio.chamadas)
+            t('e o envio fica marcado como manual',
+              EnvioAnalisePonto.objects.get(user=chefe, tipo=tipos.DIARIO, periodo_fim=SEGUNDA).detalhe
+              .startswith('Manual'))
+            envio.chamadas.clear()
+            outro_dia = SEGUNDA - timedelta(days=14)
+            c_chefe.post('/ponto/configuracao/', {**manual, 'dia': f'{outro_dia:%Y-%m-%d}', 'para': 'todos'})
+            t('"quem está marcado" manda para todos os destinatários com telefone',
+              '5527999991010' in [n for n, _ in envio.chamadas]
+              and EnvioAnalisePonto.objects.filter(tipo=tipos.DIARIO, periodo_fim=outro_dia).exists(), envio.chamadas)
+            envio.chamadas.clear()
+            r = c_chefe.post('/ponto/configuracao/', {**manual, 'dia': f'{timezone.localdate() + timedelta(days=1):%Y-%m-%d}'},
+                             follow=True)
+            t('dia no futuro é recusado', not envio.chamadas and 'futuro' in r.content.decode())
+            antes = EnvioAnalisePonto.objects.count()
+            c_folha.post('/ponto/configuracao/', {**manual, 'reenviar': 'on'})
+            t('quem não é SUPERADMIN não dispara', not envio.chamadas and EnvioAnalisePonto.objects.count() == antes)
+        with override_settings(EVOLUTION_API_KEY=''):
+            r = c_chefe.post('/ponto/configuracao/', {**manual, 'reenviar': 'on'}, follow=True)
+        t('sem a Evolution no servidor, avisa e não manda', not envio.chamadas
+          and 'não está configurado' in r.content.decode())
+
         t('nenhuma mensagem saiu de verdade (tudo pelo dublê)', True)
 finally:
     transaction.set_rollback(True)

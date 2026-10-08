@@ -432,6 +432,50 @@
         </div>
     </form>
 
+    <form method="post" class="mt-4 pt-4 border-t border-gray-100" id="an-manual"
+          onsubmit="return confirm('Mandar agora a análise para ' + (this.para.value === 'eu' ? 'você (teste)' : 'quem está marcado') + '?');">
+        {% csrf_token %}
+        <input type="hidden" name="secao" value="analise_manual">
+        <p class="text-sm font-semibold text-gray-700"><i class="fas fa-paper-plane text-emerald-600 mr-1.5"></i>Disparar manualmente</p>
+        <p class="text-xs text-gray-400 mb-3">Manda agora a análise de um dia escolhido, mesmo com o envio automático desligado.
+            Diária: o próprio dia. Semanal: a semana (seg a dom) do dia. Mensal: o mês do dia.</p>
+        <div class="flex flex-wrap items-end gap-3">
+            <div>
+                <label for="an-man-tipo" class="block text-xs text-gray-500 mb-1">Cadência</label>
+                <select id="an-man-tipo" name="tipo" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    {% for valor, rotulo in manual_tipos %}<option value="{{ valor }}" {% if manual_tipo == valor %}selected{% endif %}>{{ rotulo|cut:" (dia anterior)"|cut:" (semana anterior)"|cut:" (mês corrente)" }}</option>{% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="an-man-dia" class="block text-xs text-gray-500 mb-1">Dia analisado</label>
+                <input id="an-man-dia" type="date" name="dia" value="{{ manual_dia|date:'Y-m-d' }}" max="{{ hoje|date:'Y-m-d' }}" required
+                       class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            </div>
+            <div>
+                <label for="an-man-para" class="block text-xs text-gray-500 mb-1">Para</label>
+                <select id="an-man-para" name="para" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    <option value="todos">Quem está marcado ({{ destinatarios_escolhidos|length }})</option>
+                    <option value="eu">Só para mim (teste)</option>
+                </select>
+            </div>
+            <label class="flex items-center gap-2 text-sm text-gray-700 pb-2">
+                <input type="checkbox" name="reenviar" class="rounded"> Reenviar a quem já recebeu este período
+            </label>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 mt-3">
+            <button class="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700">
+                <i class="fab fa-whatsapp mr-1.5"></i>Enviar agora
+            </button>
+            <button type="button" class="px-3 py-2 text-sm text-cyan-700 hover:underline" id="an-man-previa">Ver prévia deste dia</button>
+        </div>
+    </form>
+    <script>
+    document.getElementById('an-man-previa').addEventListener('click', function () {
+        var f = document.getElementById('an-manual');
+        window.location.search = '?previa=' + encodeURIComponent(f.tipo.value) + '&dia=' + encodeURIComponent(f.dia.value) + '#an-manual';
+    });
+    </script>
+
     {% if previa %}
     <div class="mt-4 pt-4 border-t border-gray-100">
         <p class="text-xs text-gray-500 mb-1">Prévia — {{ previa.inicio|date:"d/m/Y" }} a {{ previa.fim|date:"d/m/Y" }} (nada foi enviado)</p>
