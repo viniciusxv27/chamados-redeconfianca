@@ -3,37 +3,60 @@
 
 {% block sap_titulo %}Visão SAP — painel{% endblock %}
 {% block sap_cabecalho %}Visão SAP{% endblock %}
-{% block sap_subtitulo %}Pendências por loja e o que foi dado como resolvido sem sair do SAP{% endblock %}
+{% block sap_subtitulo %}O que está aberto, o que foi tratado e se o tratamento pegou no SAP{% endblock %}
 
 {% block sap_conteudo %}
 
 {% comment %}
-O ciclo: o gerente marca "resolvido". Na leitura seguinte do SAP, se a linha
-sumiu, ela sai do painel (corrigida). Se continua lá, entra em "Resolvidas, mas
-ainda pendentes" — alguém sinalizou que resolveu, a automação rodou e o problema
-continua.
+O ciclo: alguém marca "resolvido". Até a próxima leitura do SAP a linha fica
+"aguardando"; na leitura seguinte, se sumiu, foi corrigida; se continua lá, vira
+"resolvida, mas ainda pendente" — alguém sinalizou que resolveu e não resolveu.
 {% endcomment %}
-<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-    <a href="{% url 'auditoria_sap:lista' %}?{{ query }}&situacao=abertas" class="sap-card p-4 block hover:ring-2 hover:ring-sky-100">
+
+{% if leitura_atrasada %}
+<div class="sap-card p-4 mb-4 border-amber-200 bg-amber-50/60 flex flex-col sm:flex-row sm:items-center gap-3" data-leitura-atrasada>
+    <i class="fas fa-clock text-amber-500 text-xl"></i>
+    <div class="flex-1 text-sm text-amber-900">
+        <strong>A última leitura do SAP foi em {{ ultima_ok.quando|date:"d/m/Y \à\s H:i" }} ({{ ultima_ok.quando|timesince }} atrás).</strong>
+        O que foi marcado como resolvido depois disso fica <em>aguardando</em> até o SAP ser lido de novo — só então dá para saber se a correção pegou.
+    </div>
+    {% if e_gestor %}
+    <form method="post" action="{% url 'auditoria_sap:atualizar' %}">
+        {% csrf_token %}
+        <input type="hidden" name="voltar" value="{{ request.get_full_path }}">
+        <button class="px-3 py-2 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600 whitespace-nowrap"><i class="fas fa-rotate mr-1"></i>Ler o SAP agora</button>
+    </form>
+    {% endif %}
+</div>
+{% endif %}
+
+<div class="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
+    <a href="{% url 'auditoria_sap:lista' %}?{{ query }}&situacao=abertas" class="sap-card p-4 block hover:ring-2 hover:ring-sky-100" data-card="abertas">
         <p class="text-xs text-gray-500">Pendências abertas</p>
         <p class="text-3xl font-bold {% if numeros.abertas %}text-amber-600{% else %}text-emerald-600{% endif %} tabular">{{ numeros.abertas }}</p>
-        <p class="text-[11px] text-gray-400 mt-0.5">ninguém marcou ainda</p>
+        <p class="text-[11px] text-gray-400 mt-0.5">{{ numeros.valor_aberto|brl_zero }} de diferença</p>
+    </a>
+    <a href="{% url 'auditoria_sap:lista' %}?{{ query }}&situacao=aguardando" class="sap-card p-4 block hover:ring-2 hover:ring-sky-100" data-card="aguardando">
+        <p class="text-xs text-gray-500">Resolvidas, aguardando leitura</p>
+        <p class="text-3xl font-bold text-sky-700 tabular">{{ numeros.aguardando }}</p>
+        <p class="text-[11px] text-gray-400 mt-0.5">marcadas depois da última leitura</p>
     </a>
     <a href="{% url 'auditoria_sap:lista' %}?{{ query }}&situacao=pendentes" class="sap-card p-4 block hover:ring-2 hover:ring-red-100 {% if numeros.pendentes %}ring-2 ring-red-200{% endif %}" data-card="resolvidas-pendentes">
         <p class="text-xs text-gray-500">Resolvidas, mas ainda pendentes</p>
         <p class="text-3xl font-bold {% if numeros.pendentes %}text-red-600{% else %}text-gray-300{% endif %} tabular">{{ numeros.pendentes }}</p>
-        <p class="text-[11px] text-gray-400 mt-0.5">marcadas e o SAP leu de novo com o problema</p>
+        <p class="text-[11px] text-gray-400 mt-0.5">o SAP leu de novo e o problema continua</p>
     </a>
-    <a href="{% url 'auditoria_sap:lista' %}?{{ query }}&situacao=aguardando" class="sap-card p-4 block hover:ring-2 hover:ring-sky-100">
-        <p class="text-xs text-gray-500">Aguardando a próxima leitura</p>
-        <p class="text-3xl font-bold text-sky-700 tabular">{{ numeros.aguardando }}</p>
-        <p class="text-[11px] text-gray-400 mt-0.5">marcadas depois da última leitura</p>
-    </a>
-    <a href="{% url 'auditoria_sap:lista' %}?{{ query }}&situacao=todas&presenca=sairam" class="sap-card p-4 block hover:ring-2 hover:ring-emerald-100">
+    <a href="{% url 'auditoria_sap:lista' %}?{{ query }}&situacao=todas&presenca=sairam" class="sap-card p-4 block hover:ring-2 hover:ring-emerald-100" data-card="corrigidas">
         <p class="text-xs text-gray-500">Corrigidas</p>
-        <p class="text-3xl font-bold text-emerald-600 tabular">{{ corrigidas }}</p>
-        <p class="text-[11px] text-gray-400 mt-0.5">saíram do SAP</p>
+        <p class="text-3xl font-bold text-emerald-600 tabular">{{ numeros.corrigidas }}</p>
+        <p class="text-[11px] text-gray-400 mt-0.5">saíram do SAP{% if numeros.corrigidas_marcadas %} · {{ numeros.corrigidas_marcadas }} marcadas antes{% endif %}</p>
     </a>
+    <div class="sap-card p-4 col-span-2 lg:col-span-1" data-card="tratado">
+        <p class="text-xs text-gray-500">Tratado</p>
+        <p class="text-3xl font-bold text-gray-800 tabular">{{ numeros.percentual|floatformat:"-1" }}%</p>
+        <div class="sap-barra mt-2"><span style="width: {{ numeros.percentual }}%"></span></div>
+        <p class="text-[11px] text-gray-400 mt-1">{{ numeros.total }} linha{{ numeros.total|pluralize }} na auditoria</p>
+    </div>
 </div>
 
 {% include 'auditoria_sap/_filtros.html' %}
@@ -49,58 +72,63 @@ continua.
 </div>
 {% else %}
 
-<div class="sap-card overflow-hidden" data-quadro="por-loja">
+<!-- Resolvidas recentemente: o que foi marcado e o que aconteceu depois -->
+<div class="sap-card overflow-hidden mb-4" data-quadro="resolvidas">
     <div class="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between flex-wrap gap-2">
-        <h2 class="font-semibold text-gray-800 text-sm"><i class="fas fa-store text-sky-600 mr-1.5"></i>Pendências por loja</h2>
-        <span class="text-xs text-gray-400">clique na loja para detalhar</span>
+        <div>
+            <h2 class="font-semibold text-gray-800 text-sm"><i class="fas fa-circle-check text-emerald-600 mr-1.5"></i>Marcadas como resolvidas</h2>
+            <p class="text-[11px] text-gray-400 mt-0.5">As mais recentes primeiro, com o que a leitura do SAP disse depois.</p>
+        </div>
+        <a href="{% url 'auditoria_sap:lista' %}?{{ query }}&situacao=resolvidas&presenca=todas" class="text-xs text-sky-700 hover:underline">ver todas na auditoria →</a>
     </div>
     <div class="overflow-x-auto">
         <table class="w-full text-sm">
             <thead>
                 <tr class="text-[11px] uppercase tracking-wide text-gray-400 border-b border-gray-100">
-                    <th class="text-left font-medium px-5 py-2">Loja</th>
-                    <th class="text-right font-medium px-3 py-2">Abertas</th>
-                    <th class="text-right font-medium px-3 py-2">Resolvidas, mas pendentes</th>
-                    <th class="text-right font-medium px-3 py-2 hidden sm:table-cell">Aguardando leitura</th>
-                    <th class="text-left font-medium px-5 py-2 hidden md:table-cell w-1/4">Pendências</th>
+                    <th class="text-left font-medium px-5 py-2">Quando</th>
+                    <th class="text-left font-medium px-3 py-2">Situação depois</th>
+                    <th class="text-left font-medium px-3 py-2">Quem</th>
+                    <th class="text-left font-medium px-3 py-2">Loja</th>
+                    <th class="text-left font-medium px-3 py-2">Erro / venda</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-gray-50">
-                {% for l in por_loja %}
-                <tr class="hover:bg-gray-50">
-                    <td class="px-5 py-2.5">
-                        <a href="{% url 'auditoria_sap:lista' %}?{{ query }}&loja={{ l.pdv|urlencode }}" class="text-gray-800 hover:text-sky-700 font-medium">{{ l.pdv|title|default:"—" }}</a>
+                {% for linha in resolvidas %}
+                <tr class="hover:bg-gray-50 align-top" data-resolvida="{{ linha.id }}">
+                    <td class="px-5 py-2.5 text-xs text-gray-500 tabular whitespace-nowrap">{{ linha.resolvida_em|date:"d/m/Y H:i" }}</td>
+                    <td class="px-3 py-2.5 whitespace-nowrap">
+                        {% if linha.estado == 'corrigida' %}
+                        <span class="sap-chip sap-resolvida"><i class="fas fa-check"></i>Corrigida no SAP</span>
+                        {% elif linha.estado == 'pendente' %}
+                        <span class="sap-chip bg-red-50 text-red-700 border border-red-200"><i class="fas fa-triangle-exclamation"></i>Ainda pendente</span>
+                        {% else %}
+                        <span class="sap-chip bg-sky-50 text-sky-700 border border-sky-200"><i class="fas fa-hourglass-half"></i>Aguardando leitura</span>
+                        {% endif %}
                     </td>
-                    <td class="px-3 py-2.5 text-right tabular">
-                        {% if l.abertas %}<a href="{% url 'auditoria_sap:lista' %}?{{ query }}&loja={{ l.pdv|urlencode }}&situacao=abertas" class="font-semibold text-amber-600 hover:underline">{{ l.abertas }}</a>{% else %}<span class="text-gray-300">0</span>{% endif %}
-                    </td>
-                    <td class="px-3 py-2.5 text-right tabular">
-                        {% if l.pendentes %}<a href="{% url 'auditoria_sap:lista' %}?{{ query }}&loja={{ l.pdv|urlencode }}&situacao=pendentes" class="font-semibold text-red-600 hover:underline">{{ l.pendentes }}</a>{% else %}<span class="text-gray-300">0</span>{% endif %}
-                    </td>
-                    <td class="px-3 py-2.5 text-right tabular hidden sm:table-cell">
-                        {% if l.aguardando %}<a href="{% url 'auditoria_sap:lista' %}?{{ query }}&loja={{ l.pdv|urlencode }}&situacao=aguardando" class="text-sky-700 hover:underline">{{ l.aguardando }}</a>{% else %}<span class="text-gray-300">0</span>{% endif %}
-                    </td>
-                    <td class="px-5 py-2.5 hidden md:table-cell">
-                        <div class="sap-barra"><span style="width: {% widthratio l.total maior_loja 100 %}%"></span></div>
+                    <td class="px-3 py-2.5 text-gray-800">{% if linha.resolvida_por %}{{ linha.resolvida_por.full_name }}{% else %}—{% endif %}</td>
+                    <td class="px-3 py-2.5 text-gray-700 whitespace-nowrap">{{ linha.pdv|title|default:"—" }}</td>
+                    <td class="px-3 py-2.5">
+                        <a href="{% url 'auditoria_sap:lista' %}?situacao=todas&presenca=todas&q={{ linha.id_venda|default:linha.num_fat_sap|urlencode }}" class="text-gray-800 hover:text-sky-700">{{ linha.tipo_erro|default:"—" }}</a>
+                        <span class="text-xs text-gray-400">· #{{ linha.id_venda|default:"—" }}{% if linha.diferenca_em_reais %} · {{ linha.diferenca_em_reais|brl }}{% endif %}</span>
+                        {% if linha.observacao %}<p class="text-[11px] text-gray-400 italic truncate max-w-xs" title="{{ linha.observacao }}">“{{ linha.observacao }}”</p>{% endif %}
                     </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="5" class="px-5 py-6 text-center text-sm text-emerald-600"><i class="fas fa-circle-check mr-1"></i>Nenhuma pendência no filtro.</td></tr>
+                <tr><td colspan="5" class="px-5 py-6 text-center text-sm text-gray-400">Nenhuma linha marcada como resolvida no filtro.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
 </div>
 
-<div class="sap-card mt-4 overflow-hidden" data-quadro="resolvidas-pendentes">
+{% if resolvidas_pendentes %}
+<div class="sap-card mb-4 overflow-hidden" data-quadro="resolvidas-pendentes">
     <div class="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between flex-wrap gap-2">
         <div>
             <h2 class="font-semibold text-gray-800 text-sm"><i class="fas fa-triangle-exclamation text-red-500 mr-1.5"></i>Resolvidas, mas ainda pendentes</h2>
             <p class="text-[11px] text-gray-400 mt-0.5">Alguém sinalizou que resolveu, o SAP foi lido de novo{% if corte %} ({{ corte|date:"d/m H:i" }}){% endif %} e o problema continua lá.</p>
         </div>
-        {% if resolvidas_pendentes %}
         <a href="{% url 'auditoria_sap:lista' %}?{{ query }}&situacao=pendentes" class="text-xs text-sky-700 hover:underline">ver na auditoria →</a>
-        {% endif %}
     </div>
     <div class="divide-y divide-gray-50">
         {% for linha in resolvidas_pendentes %}
@@ -111,14 +139,175 @@ continua.
             <p class="text-xs text-gray-500 md:col-span-2">
                 <i class="fas fa-user-check text-gray-400 mr-1"></i>{% if linha.resolvida_por %}{{ linha.resolvida_por.full_name }}{% else %}—{% endif %}
                 em {{ linha.resolvida_em|date:"d/m H:i" }}
-                {% if linha.observacao %}<span class="block text-[11px] text-gray-400 truncate" title="{{ linha.observacao }}">“{{ linha.observacao }}”</span>{% endif %}
             </p>
         </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+    <!-- Pendências por loja -->
+    <div class="sap-card overflow-hidden lg:col-span-2" data-quadro="por-loja">
+        <div class="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between flex-wrap gap-2">
+            <h2 class="font-semibold text-gray-800 text-sm"><i class="fas fa-store text-sky-600 mr-1.5"></i>Pendências por loja</h2>
+            <span class="text-xs text-gray-400">clique na loja para detalhar</span>
+        </div>
+        <div class="overflow-x-auto max-h-[28rem] overflow-y-auto">
+            <table class="w-full text-sm">
+                <thead class="sticky top-0 bg-white">
+                    <tr class="text-[11px] uppercase tracking-wide text-gray-400 border-b border-gray-100">
+                        <th class="text-left font-medium px-5 py-2">Loja</th>
+                        <th class="text-right font-medium px-3 py-2">Abertas</th>
+                        <th class="text-right font-medium px-3 py-2 hidden sm:table-cell">Em aberto</th>
+                        <th class="text-right font-medium px-3 py-2">Aguardando</th>
+                        <th class="text-right font-medium px-3 py-2">Ainda pendentes</th>
+                        <th class="text-left font-medium px-5 py-2 hidden md:table-cell w-1/5"></th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-50">
+                    {% for l in por_loja %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-5 py-2.5">
+                            <a href="{% url 'auditoria_sap:lista' %}?{{ query }}&loja={{ l.pdv|urlencode }}" class="text-gray-800 hover:text-sky-700 font-medium">{{ l.pdv|title|default:"—" }}</a>
+                        </td>
+                        <td class="px-3 py-2.5 text-right tabular">
+                            {% if l.abertas %}<a href="{% url 'auditoria_sap:lista' %}?{{ query }}&loja={{ l.pdv|urlencode }}&situacao=abertas" class="font-semibold text-amber-600 hover:underline">{{ l.abertas }}</a>{% else %}<span class="text-gray-300">0</span>{% endif %}
+                        </td>
+                        <td class="px-3 py-2.5 text-right tabular text-xs text-gray-500 hidden sm:table-cell whitespace-nowrap">{{ l.valor|brl_zero }}</td>
+                        <td class="px-3 py-2.5 text-right tabular">
+                            {% if l.aguardando %}<a href="{% url 'auditoria_sap:lista' %}?{{ query }}&loja={{ l.pdv|urlencode }}&situacao=aguardando" class="text-sky-700 hover:underline">{{ l.aguardando }}</a>{% else %}<span class="text-gray-300">0</span>{% endif %}
+                        </td>
+                        <td class="px-3 py-2.5 text-right tabular">
+                            {% if l.pendentes %}<a href="{% url 'auditoria_sap:lista' %}?{{ query }}&loja={{ l.pdv|urlencode }}&situacao=pendentes" class="font-semibold text-red-600 hover:underline">{{ l.pendentes }}</a>{% else %}<span class="text-gray-300">0</span>{% endif %}
+                        </td>
+                        <td class="px-5 py-2.5 hidden md:table-cell">
+                            <div class="sap-barra"><span style="width: {% widthratio l.total maior_loja 100 %}%"></span></div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="6" class="px-5 py-6 text-center text-sm text-emerald-600"><i class="fas fa-circle-check mr-1"></i>Nenhuma pendência no filtro.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Quem tratou -->
+    <div class="sap-card overflow-hidden self-start" data-quadro="quem">
+        <div class="px-5 py-3.5 border-b border-gray-100">
+            <h2 class="font-semibold text-gray-800 text-sm"><i class="fas fa-user-check text-emerald-600 mr-1.5"></i>Quem tratou</h2>
+            <p class="text-[11px] text-gray-400 mt-0.5">Marcadas como resolvidas e o que o SAP confirmou.</p>
+        </div>
+        <div class="divide-y divide-gray-50">
+            {% for q in quem %}
+            <div class="px-5 py-2.5">
+                <div class="flex items-baseline justify-between gap-3">
+                    <p class="text-sm text-gray-800">{{ q.resolvida_por__first_name }} {{ q.resolvida_por__last_name }}</p>
+                    <p class="text-sm font-semibold text-gray-900 tabular">{{ q.n }}</p>
+                </div>
+                <p class="text-[11px] text-gray-400 mt-0.5">
+                    <span class="text-emerald-600">{{ q.corrigidas }} corrigida{{ q.corrigidas|pluralize }}</span> ·
+                    <span class="text-sky-700">{{ q.aguardando }} aguardando</span>{% if q.pendentes %} ·
+                    <span class="text-red-600">{{ q.pendentes }} ainda pendente{{ q.pendentes|pluralize }}</span>{% endif %}
+                </p>
+            </div>
+            {% empty %}
+            <p class="px-5 py-4 text-sm text-gray-400">Ninguém marcou linha como resolvida no filtro.</p>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+    <!-- Por tipo de erro -->
+    <div class="sap-card overflow-hidden" data-quadro="por-tipo">
+        <div class="px-5 py-3.5 border-b border-gray-100">
+            <h2 class="font-semibold text-gray-800 text-sm"><i class="fas fa-triangle-exclamation text-sky-600 mr-1.5"></i>Por tipo de erro</h2>
+        </div>
+        <div class="p-4 space-y-3">
+            {% for t in por_tipo %}
+            <a href="{% url 'auditoria_sap:lista' %}?{{ query }}&tipo={{ t.tipo_erro|urlencode }}" class="block group">
+                <div class="flex items-baseline justify-between gap-3">
+                    <p class="text-sm text-gray-700 group-hover:text-sky-700">{{ t.tipo_erro|default:"—" }}</p>
+                    <p class="text-xs text-gray-500 tabular"><strong class="text-gray-800">{{ t.abertas }}</strong> aberta{{ t.abertas|pluralize }} · {{ t.tratadas }} tratada{{ t.tratadas|pluralize }}</p>
+                </div>
+                <div class="sap-barra mt-1 flex">
+                    <span style="width: {% widthratio t.abertas maior_tipo 100 %}%; background:#F59E0B"></span>
+                    <span style="width: {% widthratio t.tratadas maior_tipo 100 %}%; background:#10B981; border-radius:0"></span>
+                </div>
+                {% if t.valor %}<p class="text-[11px] text-gray-400 mt-1">{{ t.valor|brl_zero }} de diferença em aberto</p>{% endif %}
+            </a>
+            {% empty %}
+            <p class="text-sm text-gray-400">Nada no filtro.</p>
+            {% endfor %}
+            <p class="text-[11px] text-gray-400 pt-1">
+                <span class="inline-block w-2.5 h-2.5 rounded-sm align-middle" style="background:#F59E0B"></span> abertas ·
+                <span class="inline-block w-2.5 h-2.5 rounded-sm align-middle" style="background:#10B981"></span> marcadas como resolvidas
+            </p>
+        </div>
+    </div>
+
+    <div class="space-y-4">
+        <!-- Idade das abertas -->
+        <div class="sap-card overflow-hidden" data-quadro="idade">
+            <div class="px-5 py-3.5 border-b border-gray-100">
+                <h2 class="font-semibold text-gray-800 text-sm"><i class="fas fa-hourglass-half text-amber-500 mr-1.5"></i>Há quanto tempo estão abertas</h2>
+                <p class="text-[11px] text-gray-400 mt-0.5">Pela data da venda.</p>
+            </div>
+            <div class="p-4 space-y-2.5">
+                {% for i in idade %}
+                <div>
+                    <div class="flex items-baseline justify-between gap-3 text-sm">
+                        <span class="text-gray-700">{{ i.rotulo }}</span>
+                        <span class="font-semibold text-gray-800 tabular">{{ i.n }}</span>
+                    </div>
+                    <div class="sap-barra mt-1"><span style="width: {% widthratio i.n maior_idade 100 %}%; {% if forloop.counter >= 3 %}background:#EF4444{% endif %}"></span></div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Ritmo -->
+        <div class="sap-card overflow-hidden" data-quadro="ritmo">
+            <div class="px-5 py-3.5 border-b border-gray-100 flex items-baseline justify-between gap-2">
+                <h2 class="font-semibold text-gray-800 text-sm"><i class="fas fa-chart-column text-emerald-600 mr-1.5"></i>Resolvidas por dia</h2>
+                <span class="text-xs text-gray-400">{{ ritmo_total }} nos últimos 30 dias</span>
+            </div>
+            <div class="p-4">
+                <div class="flex items-end gap-[3px] h-28">
+                    {% for d in ritmo %}
+                    <div class="flex-1 min-w-0 flex flex-col items-center justify-end h-full group"
+                         title="{{ d.dia|date:'d/m' }}: {{ d.n }} marcada{{ d.n|pluralize }}">
+                        <div class="w-full rounded-t {% if d.n %}bg-emerald-400{% else %}bg-gray-100{% endif %}"
+                             style="height: {% if d.n %}{% widthratio d.n maior_ritmo 100 %}%{% else %}3px{% endif %}"></div>
+                    </div>
+                    {% endfor %}
+                </div>
+                <div class="flex justify-between text-[10px] text-gray-400 mt-1">
+                    <span>{{ ritmo.0.dia|date:"d/m" }}</span><span>hoje</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Maiores diferenças em aberto -->
+<div class="sap-card overflow-hidden" data-quadro="maiores">
+    <div class="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between flex-wrap gap-2">
+        <h2 class="font-semibold text-gray-800 text-sm"><i class="fas fa-money-bill-trend-up text-red-500 mr-1.5"></i>Maiores diferenças de valor em aberto</h2>
+        <a href="{% url 'auditoria_sap:lista' %}?{{ query }}&situacao=abertas&ordem=diferenca" class="text-xs text-sky-700 hover:underline">ver na auditoria →</a>
+    </div>
+    <div class="divide-y divide-gray-50">
+        {% for linha in maiores %}
+        <div class="px-5 py-2.5 grid grid-cols-2 md:grid-cols-5 gap-2 items-center">
+            <p class="text-sm text-gray-700 truncate">{{ linha.pdv|title }}</p>
+            <p class="text-xs text-gray-500">{{ linha.data_venda|date:"d/m/Y" }} · #{{ linha.id_venda|default:"—" }}</p>
+            <p class="text-xs text-gray-500 truncate md:col-span-2" title="{{ linha.situacao_valor }}">{{ linha.situacao_valor|default:linha.tipo_erro }}</p>
+            <p class="text-sm font-semibold text-red-600 tabular text-right">{{ linha.diferenca_em_reais|brl }}</p>
+        </div>
         {% empty %}
-        <p class="px-5 py-6 text-center text-sm text-gray-400">
-            {% if corte %}Nenhuma: tudo o que foi marcado como resolvido saiu do SAP na leitura seguinte.
-            {% else %}O SAP ainda não foi lido com sucesso — sem leitura, não dá para conferir.{% endif %}
-        </p>
+        <p class="px-5 py-4 text-sm text-gray-400">Nada em aberto no filtro.</p>
         {% endfor %}
     </div>
 </div>
@@ -131,6 +320,7 @@ continua.
     {{ ultima.total }} linhas ({{ ultima.novas }} novas, {{ ultima.atualizadas }} alteradas,
     {{ ultima.sumiram }} que saíram) em {{ ultima.segundos|floatformat:0 }} s.
     {% if ultima.erro %}<span class="text-red-600">Erro: {{ ultima.erro }}</span>{% endif %}
+    {% if agenda.ativo %}· Leitura automática a cada {{ agenda.intervalo_horas }} h{% if proxima %}, a próxima por volta de {{ proxima|date:"d/m H:i" }}{% endif %}.{% else %}· Leitura automática desligada.{% endif %}
 </p>
 {% endif %}
 {% endif %}

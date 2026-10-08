@@ -5,6 +5,29 @@
 {% block sap_subtitulo %}Quem gere o módulo e recebe aviso a cada linha resolvida{% endblock %}
 
 {% block sap_conteudo %}
+<form method="post" class="sap-card p-5 mb-4 flex flex-col sm:flex-row sm:items-end gap-4" data-agenda>
+    {% csrf_token %}
+    <input type="hidden" name="secao" value="agenda">
+    <div class="flex-1">
+        <h2 class="font-semibold text-gray-800"><i class="fas fa-clock-rotate-left text-sky-600 mr-1.5"></i>Leitura automática do SAP</h2>
+        <p class="text-xs text-gray-500 mt-0.5">
+            Sem precisar do botão: a primeira visita ao portal depois do intervalo dispara a leitura (~30 s, em segundo plano).
+            Leitura feita pelo botão também conta.
+            {% if agenda.ativo and proxima %}Próxima por volta de <strong>{{ proxima|date:"d/m H:i" }}</strong>.{% endif %}
+        </p>
+        <label class="inline-flex items-center gap-2 mt-3 text-sm text-gray-700">
+            <input type="checkbox" name="ativo" {% if agenda.ativo %}checked{% endif %} class="rounded border-gray-300 text-sky-600">
+            Ler o SAP automaticamente
+        </label>
+    </div>
+    <div>
+        <label class="block text-xs text-gray-500 mb-1" for="sap-intervalo">A cada (horas)</label>
+        <input id="sap-intervalo" type="number" name="intervalo_horas" min="1" max="24" value="{{ agenda.intervalo_horas }}"
+               class="w-24 border border-gray-200 rounded-lg px-3 py-1.5 text-sm">
+    </div>
+    <button type="submit" class="px-4 py-2 bg-sky-600 text-white rounded-lg text-sm font-medium hover:bg-sky-700">Salvar</button>
+</form>
+
 <form method="post" class="sap-card overflow-hidden">
     {% csrf_token %}
     <div class="px-5 py-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center gap-3 justify-between">

@@ -14,8 +14,9 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
 from .espelho import sincronizar, ultima_sincronizacao
-from .models import (LIMITE_VALOR_DESPREZIVEL, LinhaAuditoria, filtro_aguardando_leitura,
-                     filtro_resolvidas_pendentes, inicio_da_ultima_leitura, q_valor_desprezivel)
+from .models import (LIMITE_VALOR_DESPREZIVEL, LinhaAuditoria, SincronizacaoAuditoria,
+                     filtro_aguardando_leitura, filtro_resolvidas_pendentes, inicio_da_ultima_leitura,
+                     q_valor_desprezivel)
 from .mysql import SapIndisponivel
 from .permissions import e_gestor as _e_gestor
 from .permissions import (CHAVE_GESTOR, gestores_escolhidos, lojas_visiveis, normalizar_loja,
@@ -236,37 +237,111 @@ def lista(request):
 @login_required
 @so_auditoria
 def painel(request):
-    """O painel: pendências por loja e o que foi dado como resolvido sem sair do SAP.
+    """O painel: o que está aberto, o que foi tratado e se o tratamento pegou.
 
-    O ciclo é: o gerente marca "resolvido"; na leitura seguinte do SAP, se a linha
-    sumiu, ela sai daqui (corrigida); se continua lá, ela entra no quadro
-    "Resolvidas, mas ainda pendentes" — alguém disse que resolveu e não resolveu.
+    O ciclo é: alguém marca "resolvido"; na leitura seguinte do SAP, se a linha
+    sumiu, ela foi corrigida; se continua lá, entra em "Resolvidas, mas ainda
+    pendentes" — alguém disse que resolveu e não resolveu. Até a leitura seguinte
+    ela fica "aguardando". O painel mostra as três coisas — e quem tratou o quê.
     """
+    from datetime import timedelta
+
+    from django.db.models.functions import TruncDate
+
+    from .models import MarcacaoAuditoria
+
     filtros = ler_filtros(request)
     pdvs = pdvs_visiveis(request.user)
     corte = inicio_da_ultima_leitura()
+    hoje = timezone.localdate()
     # O painel conta todas as situações; o filtro de situação vale só para a lista.
     base = filtrar({**filtros, 'situacao': 'todas', 'presenca': 'na'}, corte, pdvs)
+    todas_presencas = filtrar({**filtros, 'situacao': 'todas', 'presenca': 'todas'}, corte, pdvs)
 
     q_abertas = Q(resolvida=False)
     q_pendentes = filtro_resolvidas_pendentes(corte)
     q_aguardando = filtro_aguardando_leitura(corte)
-    numeros = base.aggregate(abertas=Count('id', filter=q_abertas),
-                             pendentes=Count('id', filter=q_pendentes),
-                             aguardando=Count('id', filter=q_aguardando))
-    corrigidas = filtrar({**filtros, 'situacao': 'todas', 'presenca': 'sairam'}, corte, pdvs).count()
+    valor = Coalesce(Sum(Abs(Coalesce('diferenca_valor', Value(ZERO)))), Value(ZERO),
+                     output_field=DecimalField(max_digits=16, decimal_places=2))
+    valor_aberto = Coalesce(Sum(Abs(Coalesce('diferenca_valor', Value(ZERO))), filter=q_abertas), Value(ZERO),
+                            output_field=DecimalField(max_digits=16, decimal_places=2))
 
+    numeros = base.aggregate(total=Count('id'), abertas=Count('id', filter=q_abertas),
+                             pendentes=Count('id', filter=q_pendentes),
+                             aguardando=Count('id', filter=q_aguardando), valor_aberto=valor_aberto)
+    corrigidas_qs = todas_presencas.filter(ativa=False)
+    numeros['corrigidas'] = corrigidas_qs.count()
+    numeros['corrigidas_marcadas'] = corrigidas_qs.filter(resolvida=True).count()
+    tratadas = numeros['total'] - numeros['abertas']
+    numeros['percentual'] = round(tratadas * 100 / numeros['total'], 1) if numeros['total'] else 0
+
+    # Pendências por loja.
     por_loja = list(base.values('pdv')
                     .annotate(abertas=Count('id', filter=q_abertas), pendentes=Count('id', filter=q_pendentes),
-                              aguardando=Count('id', filter=q_aguardando))
+                              aguardando=Count('id', filter=q_aguardando), valor=valor_aberto)
                     .filter(Q(abertas__gt=0) | Q(pendentes__gt=0) | Q(aguardando__gt=0))
                     .order_by('-pendentes', '-abertas', 'pdv'))
     for loja in por_loja:
         loja['total'] = loja['abertas'] + loja['pendentes']
-    maior = max((l['total'] for l in por_loja), default=0)
+    maior_loja = max((l['total'] for l in por_loja), default=0)
+
+    # Por tipo de erro.
+    por_tipo = list(base.values('tipo_erro')
+                    .annotate(abertas=Count('id', filter=q_abertas), tratadas=Count('id', filter=Q(resolvida=True)),
+                              valor=valor_aberto)
+                    .order_by('-abertas', 'tipo_erro'))
+    maior_tipo = max((t['abertas'] + t['tratadas'] for t in por_tipo), default=0)
+
+    # Idade das abertas, pela data da venda.
+    faixas = (('Até 7 dias', 0, 7), ('8 a 30 dias', 8, 30), ('31 a 60 dias', 31, 60), ('Mais de 60 dias', 61, None))
+    abertas = base.filter(q_abertas)
+    idade = []
+    for rotulo, de, ate in faixas:
+        qs = abertas.filter(data_venda__lte=hoje - timedelta(days=de))
+        if ate is not None:
+            qs = qs.filter(data_venda__gte=hoje - timedelta(days=ate))
+        idade.append({'rotulo': rotulo, 'n': qs.count()})
+    sem_data = abertas.filter(data_venda__isnull=True).count()
+    if sem_data:
+        idade.append({'rotulo': 'Sem data', 'n': sem_data})
+    maior_idade = max((i['n'] for i in idade), default=0)
+
+    # O que foi marcado como resolvido, e o que aconteceu depois.
+    resolvidas = list(todas_presencas.filter(resolvida=True).select_related('resolvida_por')
+                      .order_by('-resolvida_em')[:40])
+    for linha in resolvidas:
+        linha.estado = 'corrigida' if not linha.ativa else linha.estado_da_resolucao(corte)
+
+    # Quem tratou: resolvidas por pessoa e se o SAP confirmou.
+    quem = list(todas_presencas.filter(resolvida=True, resolvida_por__isnull=False)
+                .values('resolvida_por', 'resolvida_por__first_name', 'resolvida_por__last_name')
+                .annotate(n=Count('id'), corrigidas=Count('id', filter=Q(ativa=False)),
+                          pendentes=Count('id', filter=q_pendentes), aguardando=Count('id', filter=q_aguardando))
+                .order_by('-n')[:15])
+
+    # Ritmo: linhas marcadas como resolvidas por dia, nos últimos 30 dias.
+    inicio_ritmo = hoje - timedelta(days=29)
+    marcadas = dict(MarcacaoAuditoria.objects.filter(resolvida=True, linha__in=todas_presencas,
+                                                     quando__date__gte=inicio_ritmo)
+                    .annotate(dia=TruncDate('quando')).values('dia').annotate(n=Count('id'))
+                    .values_list('dia', 'n'))
+    ritmo = [{'dia': inicio_ritmo + timedelta(days=i), 'n': marcadas.get(inicio_ritmo + timedelta(days=i), 0)}
+             for i in range(30)]
+    maior_ritmo = max((d['n'] for d in ritmo), default=0)
+
+    maiores = list(ordenar(base.filter(q_abertas), 'diferenca')[:10])
 
     resolvidas_pendentes = list(base.filter(q_pendentes).select_related('resolvida_por')
                                 .order_by('pdv', '-resolvida_em')[:100])
+
+    from .agendador import proxima_leitura
+    from .models import AgendaLeituraSap
+
+    agenda = AgendaLeituraSap.get()
+    ultima_ok = SincronizacaoAuditoria.objects.filter(erro='').first()
+    # Atrasada: passou do intervalo da leitura automática com folga de 1 h (ou de um dia, se desligada).
+    tolerancia = timedelta(hours=(agenda.intervalo_horas + 1) if agenda.ativo else 24)
+    leitura_atrasada = bool(ultima_ok and (timezone.now() - ultima_ok.quando) > tolerancia)
 
     parametros = request.GET.copy()
     for chave in ('situacao', 'presenca', 'loja', 'pagina'):
@@ -275,11 +350,24 @@ def painel(request):
     contexto = _contexto_comum(request, filtros, pdvs)
     contexto.update({
         'numeros': numeros,
-        'corrigidas': corrigidas,
         'por_loja': por_loja,
-        'maior_loja': maior,
+        'maior_loja': maior_loja,
+        'por_tipo': por_tipo,
+        'maior_tipo': maior_tipo,
+        'idade': idade,
+        'maior_idade': maior_idade,
+        'resolvidas': resolvidas,
+        'quem': quem,
+        'ritmo': ritmo,
+        'maior_ritmo': maior_ritmo,
+        'ritmo_total': sum(d['n'] for d in ritmo),
+        'maiores': maiores,
         'resolvidas_pendentes': resolvidas_pendentes,
         'corte': corte,
+        'ultima_ok': ultima_ok,
+        'leitura_atrasada': leitura_atrasada,
+        'agenda': agenda,
+        'proxima': proxima_leitura(agenda),
         'aba': 'painel',
         # Para os links de detalhe: os filtros do painel, sem situação/loja (cada link põe a sua).
         'query': parametros.urlencode(),
@@ -366,7 +454,22 @@ def gestores(request):
     from django.contrib.auth import get_user_model
 
     from users.models import UserModuleAccess
+    from .agendador import proxima_leitura
+    from .models import AgendaLeituraSap
+
     User = get_user_model()
+    agenda = AgendaLeituraSap.get()
+    if request.method == 'POST' and request.POST.get('secao') == 'agenda':
+        agenda.ativo = request.POST.get('ativo') == 'on'
+        try:
+            agenda.intervalo_horas = max(1, min(24, int(request.POST.get('intervalo_horas') or 3)))
+        except ValueError:
+            agenda.intervalo_horas = 3
+        agenda.atualizado_por = request.user
+        agenda.save()
+        messages.success(request, f'Leitura automática do SAP a cada {agenda.intervalo_horas} h.' if agenda.ativo
+                         else 'Leitura automática do SAP desligada: só pelo botão "Atualizar do SAP".')
+        return redirect('auditoria_sap:gestores')
     atuais = set(gestores_escolhidos().values_list('pk', flat=True))
     if request.method == 'POST':
         escolhidos = {int(i) for i in request.POST.getlist('gestores') if str(i).isdigit()}
@@ -391,5 +494,6 @@ def gestores(request):
     pessoas.sort(key=lambda u: (u.pk not in atuais, (u.first_name or '').upper()))
     return render(request, 'auditoria_sap/gestores.html', {
         'pessoas': pessoas, 'atuais': atuais, 'aba': 'gestores',
+        'agenda': agenda, 'proxima': proxima_leitura(agenda),
         'pode_escolher_gestores': True, 'e_gestor': True, 'ultima': ultima_sincronizacao(),
     })

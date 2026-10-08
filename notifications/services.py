@@ -228,7 +228,15 @@ class NotificationService:
             # Adicionar email apenas para notificações importantes
             if priority in ['ALTA', 'URGENTE']:
                 channels.append(NotificationChannel.EMAIL)
-        
+
+        # Script de teste (teste_*.py) roda contra o banco de dev, com gente de verdade
+        # inscrita no push: fica só o sino (as linhas somem no rollback do teste). É a
+        # mesma trava que o WhatsApp e o e-mail já têm (core.utils.processo_de_teste).
+        from core.utils import processo_de_teste
+        if processo_de_teste():
+            channels = [NotificationChannel.IN_APP] if (
+                NotificationChannel.IN_APP in channels or NotificationChannel.ALL in channels) else []
+
         results = {}
         
         # Separar usuários por preferência de canal

@@ -109,6 +109,14 @@ def linha_sap(**troca):
 marcador = transaction.atomic()
 marcador.__enter__()
 try:
+    # A agenda da leitura automática é tabela nova: a migração entra aqui dentro e sai no rollback.
+    from django.db import connection
+    from django.db.migrations.executor import MigrationExecutor
+    _executor = MigrationExecutor(connection)
+    _alvo = [('auditoria_sap', '0002_agenda_leitura_sap')]
+    if _executor.migration_plan(_alvo):
+        _executor.migrate(_alvo)
+
     print('== O ENDEREÇO DO BANCO SAP ==')
     with mock.patch.dict(os.environ, {'SAP_MYSQL_URL': '', 'MYSQL_URI': '',
                                       'SISTEMA_PERFIL_MYSQL_URL': 'mysql://zz:segredo@painel.exemplo:3306/iadorh'},
@@ -363,7 +371,7 @@ try:
     t('resolvida que saiu na leitura seguinte some do painel',
       outra.pk not in [l.pk for l in contexto['resolvidas_pendentes']] and contexto['numeros']['aguardando'] == 0,
       contexto['numeros'])
-    t('e conta como corrigida', contexto['corrigidas'] >= 1)
+    t('e conta como corrigida', contexto['numeros']['corrigidas'] >= 1)
     t('a que continua no SAP segue no quadro', uma.pk in [l.pk for l in contexto['resolvidas_pendentes']])
     lista_pendentes = c.get('/sap/?situacao=pendentes')
     t('a lista filtra as resolvidas-pendentes e mostra o selo',
@@ -376,6 +384,96 @@ try:
     t('o painel tem os mesmos filtros da lista',
       'name="tipo"' in html and 'name="loja"' in html and 'name="q"' in html)
     t('e diz de quando é a última leitura', 'Última leitura do SAP' in html)
+
+    print('\n== PAINEL: O QUE FOI MARCADO COMO RESOLVIDO APARECE ==')
+    marcada_agora = LinhaAuditoria.objects.filter(ativa=True, resolvida=False).exclude(pk=uma.pk).first()
+    marcada_agora.marcar(chefe, True, 'acertado no SAP hoje')
+    r = c.get('/sap/painel/')
+    contexto = r.context
+    html = r.content.decode()
+    resolvidas = {l.pk: l.estado for l in contexto['resolvidas']}
+    t('a linha recém-marcada aparece em "Marcadas como resolvidas", aguardando leitura',
+      resolvidas.get(marcada_agora.pk) == 'aguardando', resolvidas)
+    t('com quem marcou e a observação', 'Marcadas como resolvidas' in html and 'acertado no SAP hoje' in html
+      and 'Aguardando leitura' in html)
+    t('a que saiu do SAP depois de marcada aparece como corrigida',
+      any(estado == 'corrigida' for estado in resolvidas.values()) or contexto['numeros']['corrigidas_marcadas'] == 0)
+    t('o cartão de aguardando conta a linha', contexto['numeros']['aguardando'] >= 1)
+    quem = {q['resolvida_por']: q for q in contexto['quem']}
+    t('"Quem tratou" conta o que cada um marcou', chefe.pk in quem and quem[chefe.pk]['n'] >= 1
+      and quem[chefe.pk]['aguardando'] >= 1, contexto['quem'])
+    t('o ritmo dos últimos 30 dias inclui a marcação de hoje', contexto['ritmo'][-1]['n'] >= 1
+      and len(contexto['ritmo']) == 30)
+    t('relatórios por tipo e por idade das abertas', contexto['por_tipo'] and len(contexto['idade']) >= 4
+      and sum(i['n'] for i in contexto['idade']) == contexto['numeros']['abertas'])
+    t('e o percentual tratado', 0 <= contexto['numeros']['percentual'] <= 100)
+    with mock.patch('auditoria_sap.views.timezone.now',
+                    return_value=SincronizacaoAuditoria.objects.filter(erro='').first().quando + timedelta(days=3)):
+        html = c.get('/sap/painel/').content.decode()
+    t('leitura do SAP velha: o painel avisa que as resolvidas ficam aguardando', 'data-leitura-atrasada' in html
+      and 'Ler o SAP agora' in html)
+    marcada_agora.marcar(chefe, False)
+
+    print('\n== LEITURA AUTOMÁTICA A CADA 3 HORAS ==')
+    from auditoria_sap import agendador
+    from auditoria_sap.models import AgendaLeituraSap
+    agenda = AgendaLeituraSap.get()
+    t('nasce ligada, a cada 3 horas', agenda.ativo and agenda.intervalo_horas == 3)
+    ultima = SincronizacaoAuditoria.objects.first().quando
+    t('a próxima é 3 h depois da última leitura (manual também conta)',
+      agendador.proxima_leitura(agenda) == ultima + timedelta(hours=3))
+    t('antes disso não está na hora', not agendador.esta_na_hora(agenda, ultima + timedelta(hours=2, minutes=59)))
+    t('depois, está', agendador.esta_na_hora(agenda, ultima + timedelta(hours=3, minutes=1)))
+    disparos = []
+
+    class ThreadFalsa:
+        def __init__(self, target=None, **kw):
+            self.alvo = target
+
+        def start(self):
+            disparos.append(self.alvo)
+
+    depois = ultima + timedelta(hours=3, minutes=5)
+    with mock.patch('core.utils.processo_de_teste', return_value=False), \
+            mock.patch.object(agendador.threading, 'Thread', ThreadFalsa), \
+            mock.patch.object(agendador.timezone, 'now', return_value=depois):
+        agendador._ultima_checagem = None
+        primeiro = agendador.disparar_se_esta_na_hora()
+        agendador._ultima_checagem = None              # outro worker, no mesmo instante
+        segundo = agendador.disparar_se_esta_na_hora()
+    t('vencido o intervalo, um worker dispara a leitura em segundo plano', primeiro and len(disparos) == 1
+      and disparos[0] is agendador._ler_em_segundo_plano)
+    t('e o outro worker não dispara de novo', not segundo and len(disparos) == 1)
+    agenda.refresh_from_db()
+    t('o carimbo da automática fica gravado', agenda.ultima_automatica == depois)
+    with mock.patch('core.utils.processo_de_teste', return_value=False), \
+            mock.patch.object(agendador.threading, 'Thread', ThreadFalsa), \
+            mock.patch.object(agendador.timezone, 'now', return_value=depois + timedelta(hours=1)):
+        agendador._ultima_checagem = None
+        t('1 h depois ainda não lê de novo', not agendador.disparar_se_esta_na_hora() and len(disparos) == 1)
+    with mock.patch.object(agendador.threading, 'Thread', ThreadFalsa), \
+            mock.patch.object(agendador.timezone, 'now', return_value=depois + timedelta(hours=9)):
+        agendador._ultima_checagem = None
+        t('script de teste nunca lê o SAP de verdade', not agendador.disparar_se_esta_na_hora() and len(disparos) == 1)
+    antes = SincronizacaoAuditoria.objects.count()
+    with mock.patch.object(mysql, 'ler_visao_geral', return_value=[linhas[0], mudada]),             mock.patch.object(agendador, 'close_old_connections'):
+        agendador._ler_em_segundo_plano()
+    feita = SincronizacaoAuditoria.objects.first()
+    t('a leitura em segundo plano lê o SAP e fica registrada (sem pessoa: foi a automática)',
+      SincronizacaoAuditoria.objects.count() == antes + 1 and feita.por is None and not feita.erro)
+    with mock.patch.object(mysql, 'ler_visao_geral', side_effect=mysql.SapIndisponivel('fora do ar')),             mock.patch.object(agendador, 'close_old_connections'):
+        agendador._ler_em_segundo_plano()
+    t('SAP fora do ar: a automática não quebra e o erro fica registrado',
+      'fora do ar' in SincronizacaoAuditoria.objects.first().erro)
+    r = c.post('/sap/gestores/', {'secao': 'agenda', 'intervalo_horas': '6'})
+    agenda.refresh_from_db()
+    t('o SUPERADMIN muda o intervalo e desliga pela aba Gestores', not agenda.ativo and agenda.intervalo_horas == 6)
+    t('desligada, não há próxima leitura', agendador.proxima_leitura(agenda) is None)
+    c.post('/sap/gestores/', {'secao': 'agenda', 'ativo': 'on', 'intervalo_horas': '3'})
+    html = c.get('/sap/painel/').content.decode()
+    t('o painel diz quando é a próxima leitura', 'Leitura automática a cada 3 h' in html)
+    import redeconfianca.settings as configuracao
+    t('o middleware está ligado', 'auditoria_sap.middleware.LeituraAgendadaSapMiddleware' in configuracao.MIDDLEWARE)
 
     print('\n== DIVERGÊNCIA DE VALOR ABAIXO DE R$ 1 É DESCONSIDERADA ==')
     def linha_valor(chave, diferenca, tipo='VALOR'):

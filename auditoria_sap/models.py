@@ -234,3 +234,30 @@ class SincronizacaoAuditoria(models.Model):
     @property
     def deu_certo(self):
         return not self.erro
+
+
+class AgendaLeituraSap(models.Model):
+    """A leitura automática do SAP (uma linha só).
+
+    Produção não tem cron: a primeira visita ao portal depois do intervalo dispara
+    a leitura numa thread (``auditoria_sap/agendador.py``). ``ultima_automatica``
+    é o carimbo que os workers disputam num UPDATE condicional — só um ganha.
+    """
+
+    ativo = models.BooleanField(default=True, verbose_name='Ler o SAP automaticamente')
+    intervalo_horas = models.PositiveSmallIntegerField(default=3, verbose_name='A cada quantas horas')
+    ultima_automatica = models.DateTimeField(null=True, blank=True, verbose_name='Última leitura automática')
+    atualizado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+
+    class Meta:
+        verbose_name = 'Agenda da leitura do SAP'
+        verbose_name_plural = 'Agenda da leitura do SAP'
+
+    def __str__(self):
+        return f'Leitura do SAP a cada {self.intervalo_horas} h'
+
+    @classmethod
+    def get(cls):
+        agenda, _ = cls.objects.get_or_create(pk=1)
+        return agenda

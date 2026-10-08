@@ -118,6 +118,7 @@ MIDDLEWARE = [
     'core.middleware.LoggingMiddleware',
     'users.session_tracking.ActiveSessionMiddleware',
     'users.pre_registration_middleware.PreRegistrationAdjustmentMiddleware',
+    'auditoria_sap.middleware.LeituraAgendadaSapMiddleware',  # lê o SAP a cada 3 h; antes dos bloqueios
     'tangerino.middleware.BloqueioFeriasMiddleware',
     'tangerino.middleware.BloqueioJornadaMiddleware',
     'cursos.middleware.BloqueioCursoMiddleware',
