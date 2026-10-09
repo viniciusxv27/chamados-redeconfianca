@@ -305,7 +305,6 @@ def _venda_form_context(request):
               for p in Plano.objects.filter(ativo=True)]
     adicionais = [{'id': a.id, 'tipo': a.tipo, 'nome': a.nome, 'valor': str(a.valor)}
                   for a in ServicoAdicional.objects.filter(ativo=True)]
-    grupamentos = sorted({g for g in ItemPreco.objects.filter(categoria='PLANOS').values_list('grupamento', flat=True) if g})
     return {
         'aba': 'nova',
         'is_superadmin': is_superadmin(request.user),
@@ -315,7 +314,7 @@ def _venda_form_context(request):
         'lojas': _lojas_do_vendedor(request.user),
         'vendedores': User.objects.filter(is_active=True).order_by('first_name', 'last_name') if is_superadmin(request.user) else [],
         'slv': {
-            'planos': planos, 'adicionais': adicionais, 'grupamentos': grupamentos,
+            'planos': planos, 'adicionais': adicionais,
             'segmentacoes': SEGMENTACOES, 'tipos_servico': VendaServico.TIPOS,
             'vivo_mais': str(ConfiguracaoVendas.atual().vivo_mais_percentual),
         },

@@ -111,9 +111,6 @@
                     <div><label class="vd-rotulo">Segmentação</label><select id="vdPaSeg" class="vd-campo"><option value="">Sem plano</option></select></div>
                     <div class="sm:col-span-2"><label class="vd-rotulo">Plano</label><select id="vdPaPlano" class="vd-campo"><option value="">—</option></select></div>
                     <div><label class="vd-rotulo">Valor pago (R$)</label><input id="vdPaValor" class="vd-campo tabular text-right" inputmode="decimal" placeholder="0,00"></div>
-                    <div class="sm:col-span-4"><label class="vd-rotulo">Grupo do plano na tabela de aparelhos</label>
-                        <select id="vdPaGrupo" class="vd-campo"><option value="">— (usa o preço com plano)</option></select>
-                        <p class="vd-ajuda">Define se o aparelho sai nesse plano (colunas da tabela de produtos).</p></div>
                 </div>
             </div>
         </div>
@@ -403,7 +400,6 @@
         $('vdPaSeg').innerHTML = '<option value="">Sem plano</option>' + SLV.segmentacoes.map(function ([k, r]) { return '<option value="' + k + '"' + (c.segmentacao === k ? ' selected' : '') + '>' + r + '</option>'; }).join('');
         opcoesPlanos($('vdPaPlano'), c.segmentacao, c.plano_id);
         $('vdPaValor').value = c.valor_pago ? moeda(c.valor_pago) : '';
-        $('vdPaGrupo').innerHTML = '<option value="">— (usa o preço com plano)</option>' + SLV.grupamentos.map(function (g) { return '<option>' + esc(g) + '</option>'; }).join('');
         $('vdPlanoAnterior').classList.remove('hidden');
     }
     $('vdPaSeg').addEventListener('change', function () { opcoesPlanos($('vdPaPlano'), this.value, ''); $('vdPaValor').value = ''; reprecificar(); recalcular(); });
@@ -413,7 +409,6 @@
         reprecificar(); recalcular();
     });
     $('vdPaValor').addEventListener('input', recalcular);
-    $('vdPaGrupo').addEventListener('change', reprecificar);
     function segCliente() { return $('vdPaSeg').value || ''; }
 
     // ── 2a. Produtos ───────────────────────────────────────────────────
@@ -434,7 +429,7 @@
             lista.classList.remove('hidden');
             let j;
             try {
-                j = await pedir(URL.buscar + '?q=' + encodeURIComponent(q) + '&segmentacao=' + segCliente() + '&grupamento=' + encodeURIComponent($('vdPaGrupo').value));
+                j = await pedir(URL.buscar + '?q=' + encodeURIComponent(q) + '&segmentacao=' + segCliente() + '&grupamento=' + '');
             } catch (err) {
                 lista.innerHTML = '<p class="p-4 text-sm text-amber-700"><i class="fas fa-wifi mr-1"></i>Não deu para buscar agora. Digite de novo para tentar.</p>';
                 return;
@@ -472,7 +467,7 @@
         const ids = estado.produtos.filter(function (p) { return p.preco_id; }).map(function (p) { return p.preco_id; });
         if (!ids.length) return;
         let j;
-        try { j = await pedir(URL.buscar + '?ids=' + ids.join(',') + '&segmentacao=' + segCliente() + '&grupamento=' + encodeURIComponent($('vdPaGrupo').value)); }
+        try { j = await pedir(URL.buscar + '?ids=' + ids.join(',') + '&segmentacao=' + segCliente() + '&grupamento=' + ''); }
         catch (err) { return; }
         (j.results || []).forEach(function (r) { estado.produtos.forEach(function (p) {
             if (p.preco_id === r.id) { p.valor_sugerido = r.valor_sugerido ? Number(r.valor_sugerido) : (p.sem_valor ? p.valor_sugerido : null); p.regra = r.regra; p.sem_valor = !r.valor_sugerido; }
@@ -724,7 +719,7 @@
                              nome: $('vdPaPlano').selectedOptions[0] ? $('vdPaPlano').selectedOptions[0].text : ''},
             produtos: estado.produtos.map(function (p) { const c = calcItem(p); return {
                 preco_id: p.preco_id, nome: p.nome, qtde: p.qtde, prateleira_infinita: p.prateleira_infinita,
-                grupamento: $('vdPaGrupo').value, valor_sugerido: p.valor_sugerido,
+                grupamento: '', valor_sugerido: p.valor_sugerido,
                 renova_vini: p.renova && p.renova_vini, renova_vini_valor: p.renova_vini_valor, renova_codigo: p.renova_codigo,
                 renova_alied: p.renova && p.renova_alied, renova_alied_valor: p.renova_alied_valor,
                 valor_final: c.editado ? p.valor_final : null}; }),

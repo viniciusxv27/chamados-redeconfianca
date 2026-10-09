@@ -1,5 +1,5 @@
 {% extends "vendas/_base_vendas.html" %}
-{% load vendas_tags %}
+{% load static vendas_tags %}
 
 {% block title %}Vendas{% endblock %}
 {% block vd_cabecalho %}{% if is_superadmin %}Vendas{% else %}Minhas vendas{% endif %}{% endblock %}
@@ -35,7 +35,7 @@
     <div class="vd-card vd-card-hover vd-entra p-4">
         <div class="flex items-start justify-between gap-2">
             <p class="text-xs text-gray-500 font-medium">Receita no filtro</p>
-            <span class="w-8 h-8 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center text-sm"><i class="fas fa-sack-dollar"></i></span>
+            <img src="{% static 'images/logo3.png' %}" alt="Rede Confiança" class="w-8 h-8 rounded-lg shadow-sm ring-1 ring-black/5">
         </div>
         <p class="text-lg sm:text-2xl font-bold text-gray-900 tabular mt-1 whitespace-nowrap" data-contar="{{ kpi_total|stringformat:'s' }}" data-dinheiro="1">{{ kpi_total|brl }}</p>
         <p class="text-[11px] text-gray-400 mt-0.5 truncate">produtos {{ kpi_produtos|brl_curto }} · serviços {{ kpi_servicos|brl_curto }}</p>

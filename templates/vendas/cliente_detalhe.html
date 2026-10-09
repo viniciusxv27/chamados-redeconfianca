@@ -69,7 +69,7 @@
                     {% for i in v.itens %}
                     <li class="flex items-start justify-between gap-3 text-[13px]">
                         <span class="min-w-0">
-                            <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold {% if i.tipo == 'P' %}bg-sky-100 text-sky-700{% else %}bg-pink-100 text-pink-700{% endif %}">{% if i.tipo == 'P' %}produto{% else %}serviço{% endif %}</span>
+                            <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold {% if i.tipo == 'P' %}bg-sky-100 text-sky-700{% else %}bg-purple-100 text-purple-700{% endif %}">{% if i.tipo == 'P' %}produto{% else %}serviço{% endif %}</span>
                             <span class="text-gray-800">{{ i.item }}</span>{% if i.plano %} <span class="text-gray-500">· {{ i.plano }}</span>{% endif %}
                             {% if i.numero_acesso %}<span class="text-gray-400 tabular"> · linha {{ i.numero_acesso }}</span>{% endif %}
                             {% if i.data_cancelamento %}<span class="text-red-600 text-[11px]"> · cancelado {{ i.data_cancelamento|date:"d/m/Y" }}</span>{% endif %}
