@@ -54,6 +54,7 @@
         {% block cx_acoes %}{% endblock %}
     </div>
 
+    {% block cx_nav %}
     <nav class="flex items-center gap-1 mt-4 overflow-x-auto -mb-px">
         {% if not so_sangrias %}{# ADM da loja (PADRÃO): só a aba Sangrias. #}
         <a href="{% url 'contagem_caixa:dashboard' %}"
@@ -93,6 +94,7 @@
         </a>
         {% endif %}
     </nav>
+    {% endblock %}
 </div>
 
 {% block cx_conteudo %}{% endblock %}

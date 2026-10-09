@@ -24,9 +24,12 @@ urlpatterns = [
     # Contas a pagar · PIS/Cofins: documentos do mês e a planilha da competência.
     path('pis-cofins/', views_piscofins.piscofins, name='piscofins'),
     path('pis-cofins/cnpj/', views_piscofins.piscofins_cnpj, name='piscofins_cnpj'),
+    path('pis-cofins/ler/', views_piscofins.piscofins_ler, name='piscofins_ler'),
     path('pis-cofins/lancar/', views_piscofins.piscofins_registrar, name='piscofins_registrar'),
     path('pis-cofins/<int:pk>/editar/', views_piscofins.piscofins_editar, name='piscofins_editar'),
     path('pis-cofins/<int:pk>/apagar/', views_piscofins.piscofins_apagar, name='piscofins_apagar'),
+    path('pis-cofins/sefaz/buscar/', views_piscofins.piscofins_sefaz_buscar, name='piscofins_sefaz_buscar'),
+    path('pis-cofins/sefaz/<int:pk>/fora/', views_piscofins.piscofins_nota_fora, name='piscofins_nota_fora'),
     path('pis-cofins/planilha/', views_piscofins.piscofins_planilha, name='piscofins_planilha'),
     path('pis-cofins/pacote/', views_piscofins.piscofins_pacote, name='piscofins_pacote'),
 ]

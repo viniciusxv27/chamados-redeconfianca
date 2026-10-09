@@ -12,6 +12,7 @@ from functools import wraps
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db.models import Count, Q, Sum
+from django.core.files.base import ContentFile
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -20,7 +21,7 @@ from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_POST
 
 from . import cnpj as receita
-from .models import DocumentoPisCofins, FornecedorPisCofins
+from .models import DocumentoPisCofins, FornecedorPisCofins, NotaRecebida, SincronizacaoDFe
 from .permissions import lojas, pode_piscofins
 from .views import ValorInvalido, _para_decimal
 
@@ -144,6 +145,42 @@ def piscofins_cnpj(request):
     return JsonResponse({'ok': True, 'fornecedor': _fornecedor_json(_gravar_fornecedor(dados), 'receita')})
 
 
+@login_required
+@_liberado
+@require_POST
+def piscofins_ler(request):
+    """Lê o arquivo escolhido no formulário e devolve os campos para pré-preencher.
+
+    Não grava nada: o arquivo vai de novo no envio do formulário.
+    """
+    from .leitura_documento import ler_documento
+
+    arquivo = request.FILES.get('arquivo')
+    if not arquivo:
+        return JsonResponse({'ok': False, 'erro': 'Escolha o arquivo.'}, status=400)
+    if arquivo.size > TAMANHO_MAXIMO:
+        return JsonResponse({'ok': False, 'erro': 'O arquivo passa de 15 MB.'})
+    if not arquivo.name.lower().endswith(EXTENSOES):
+        return JsonResponse({'ok': False, 'erro': 'Envie PDF, foto (JPG, PNG, WEBP, HEIC) ou o XML da nota.'})
+    lido = ler_documento(arquivo.read(), arquivo.name, getattr(arquivo, 'content_type', '') or '')
+    campos = lido['campos']
+    # A competência não pode passar do mês atual (o formulário recusaria).
+    hoje = timezone.localdate()
+    if campos.get('competencia') and campos['competencia'] > f'{hoje:%Y-%m}':
+        campos.pop('competencia')
+    if campos.get('cnpj'):
+        fornecedor = FornecedorPisCofins.objects.filter(cnpj=campos['cnpj']).first()
+        if fornecedor and campos.get('numero') and campos.get('tipo'):
+            repetido = DocumentoPisCofins.objects.filter(
+                fornecedor=fornecedor, tipo=campos['tipo'], numero__iexact=campos['numero']).first()
+            if repetido:
+                lido['avisos'].insert(0, f'Este documento já foi lançado (competência {repetido.competencia:%m/%Y}, '
+                                         f'R$ {repetido.valor}).')
+    if campos.get('valor'):
+        campos['valor'] = campos['valor'].replace('.', ',')
+    return JsonResponse({'ok': True, 'campos': campos, 'fonte': lido['fonte'], 'avisos': lido['avisos']})
+
+
 # ── Tela ────────────────────────────────────────────────────────────────────
 def _consulta(competencia, request):
     qs = DocumentoPisCofins.objects.filter(competencia=competencia)
@@ -205,7 +242,8 @@ def piscofins(request):
     if competencia not in [m['data'] for m in meses]:
         meses.append({'data': competencia, 'n': do_mes.count()})
 
-    documentos = list(qs.select_related('fornecedor', 'loja', 'registrado_por').order_by('-criado_em'))
+    documentos = list(qs.select_related('fornecedor', 'loja', 'registrado_por')
+                      .prefetch_related('notas_sefaz').order_by('-criado_em'))
     repetidos = _duplicados(do_mes)
     for d in documentos:
         d.possivel_duplicado = d.id in repetidos
@@ -234,7 +272,98 @@ def piscofins(request):
         'hoje': hoje,
         'query': parametros.urlencode(),
         'extensoes': ','.join(EXTENSOES),
+        **_contexto_sefaz(request, competencia),
     })
+
+
+def _contexto_sefaz(request, competencia):
+    """A visão das notas emitidas contra o CNPJ (SEFAZ) para a competência."""
+    from . import sefaz
+
+    visao = 'sefaz' if request.GET.get('visao') == 'sefaz' else 'lancados'
+    proximo = date(competencia.year + (competencia.month == 12), competencia.month % 12 + 1, 1)
+    do_mes = NotaRecebida.objects.filter(emissao__date__gte=competencia, emissao__date__lt=proximo)
+    validas = do_mes.exclude(situacao='CANCELADA')
+    a_lancar = validas.filter(documento__isnull=True, ignorada=False)
+    contexto = {
+        'visao': visao,
+        'sefaz_configurado': sefaz.configurado(),
+        'sefaz_a_lancar': a_lancar.count(),
+        'sefaz_a_lancar_valor': a_lancar.aggregate(s=Sum('valor'))['s'] or ZERO,
+    }
+    if visao != 'sefaz':
+        return contexto
+    situacao = request.GET.get('nf') or ''
+    notas = do_mes
+    if situacao == 'a_lancar':
+        notas = a_lancar
+    elif situacao == 'lancadas':
+        notas = validas.filter(documento__isnull=False)
+    elif situacao == 'fora':
+        notas = validas.filter(ignorada=True, documento__isnull=True)
+    elif situacao == 'canceladas':
+        notas = do_mes.filter(situacao='CANCELADA')
+    q = (request.GET.get('q') or '').strip()
+    if q:
+        digitos = receita.so_digitos(q)
+        filtro = Q(emitente_nome__icontains=q) | Q(numero=digitos.lstrip('0') or q)
+        if len(digitos) >= 4:
+            filtro |= Q(emitente_cnpj__contains=digitos) | Q(chave__contains=digitos)
+        notas = notas.filter(filtro)
+    sincronizacoes = {s.cnpj: s for s in SincronizacaoDFe.objects.all()}
+    contexto.update({
+        'nf_situacao': situacao,
+        'notas': list(notas.select_related('documento').order_by('-emissao')[:500]),
+        'notas_total': validas.count(),
+        'notas_valor': validas.aggregate(s=Sum('valor'))['s'] or ZERO,
+        'notas_lancadas': validas.filter(documento__isnull=False).count(),
+        'notas_fora': validas.filter(ignorada=True, documento__isnull=True).count(),
+        'notas_canceladas': do_mes.filter(situacao='CANCELADA').count(),
+        'sefaz_cnpjs': [{'cnpj': receita.formatar(c), 'sinc': sincronizacoes.get(c)} for c in sefaz.cnpjs_monitorados()],
+        'sefaz_certificado': sefaz.info_do_certificado() if contexto['sefaz_configurado'] else None,
+    })
+    return contexto
+
+
+@login_required
+@_liberado
+@require_POST
+def piscofins_sefaz_buscar(request):
+    """Busca agora as notas novas na SEFAZ (respeitando a espera de 1 hora)."""
+    from . import sefaz
+
+    if not sefaz.configurado():
+        messages.error(request, 'A busca na SEFAZ ainda não foi ligada: falta o certificado digital A1 da empresa.')
+        return _voltar(request)
+    novas, esperando, erros = 0, [], []
+    for sinc in sefaz.sincronizar_todos():
+        if getattr(sinc, 'pulada', False):
+            esperando.append(f'{receita.formatar(sinc.cnpj)} (de novo às {timezone.localtime(sinc.proxima_consulta):%H:%M})')
+        elif sinc.ultimo_cstat == 'ERRO' or sinc.ultimo_cstat not in ('137', '138', '656', ''):
+            erros.append(f'{receita.formatar(sinc.cnpj)}: {sinc.ultima_mensagem}')
+        else:
+            novas += sinc.notas_novas
+    if novas or not (esperando or erros):
+        messages.success(request, f'{novas} nota(s) nova(s) da SEFAZ.' if novas else 'Nenhuma nota nova na SEFAZ.')
+    if esperando:
+        messages.info(request, 'A SEFAZ só aceita uma consulta por hora sem novidade. Aguardando: ' + '; '.join(esperando))
+    for erro in erros:
+        messages.error(request, f'SEFAZ — {erro}')
+    return _voltar(request)
+
+
+@login_required
+@_liberado
+@require_POST
+def piscofins_nota_fora(request, pk):
+    """Marca (ou desmarca) a nota como fora do PIS/Cofins — some da lista "a lançar"."""
+    nota = get_object_or_404(NotaRecebida, pk=pk)
+    nota.ignorada = not nota.ignorada
+    nota.ignorada_por = request.user if nota.ignorada else None
+    nota.save(update_fields=['ignorada', 'ignorada_por', 'atualizada_em'])
+    messages.success(request, f'NF {nota.numero} de {nota.emitente_nome} '
+                              + ('marcada como fora do PIS/Cofins.' if nota.ignorada else 'voltou para "a lançar".'))
+    return _voltar(request)
 
 
 # ── Lançar, editar, apagar ──────────────────────────────────────────────────
@@ -269,8 +398,14 @@ def _ler_formulario(request, documento=None):
             return None, 'O arquivo passa de 15 MB.'
         if not arquivo.name.lower().endswith(EXTENSOES):
             return None, 'Envie PDF, foto (JPG, PNG, WEBP, HEIC) ou o XML da nota.'
-    elif documento is None:
-        return None, 'Anexe o arquivo: a nota, o boleto ou o recibo.'
+    nota = None
+    if request.POST.get('nota'):
+        nota = NotaRecebida.objects.filter(id=request.POST['nota']).first()
+    if not arquivo and documento is None:
+        if nota is None:
+            return None, 'Anexe o arquivo: a nota, o boleto ou o recibo.'
+        # Lançada a partir da nota da SEFAZ: o XML dela é o arquivo.
+        arquivo = ContentFile((nota.xml_completo or nota.xml_resumo).encode('utf-8'), name=f'NFe{nota.chave}.xml')
     fornecedor, erro = fornecedor_do_cnpj(request.POST.get('cnpj'), request.POST.get('razao_social'))
     if erro:
         return None, erro
@@ -286,7 +421,8 @@ def _ler_formulario(request, documento=None):
                           f'(competência {repetido.competencia:%m/%Y}, R$ {repetido.valor}).')
     return {'tipo': tipo, 'competencia': competencia, 'valor': valor, 'numero': numero,
             'data_documento': data_documento, 'loja': loja, 'fornecedor': fornecedor,
-            'descricao': (request.POST.get('descricao') or '').strip()[:255], 'arquivo': arquivo}, ''
+            'descricao': (request.POST.get('descricao') or '').strip()[:255], 'arquivo': arquivo,
+            'nota': nota}, ''
 
 
 @login_required
@@ -298,9 +434,17 @@ def piscofins_registrar(request):
         messages.error(request, erro)
         return _voltar(request, _competencia(request.POST.get('competencia')))
     arquivo = dados.pop('arquivo')
+    nota = dados.pop('nota')
     documento = DocumentoPisCofins(registrado_por=request.user, nome_arquivo=arquivo.name[:255], **dados)
     documento.arquivo = arquivo
     documento.save()
+    if nota is not None and nota.documento_id is None:
+        nota.documento = documento
+        nota.ignorada = False
+        nota.save(update_fields=['documento', 'ignorada', 'atualizada_em'])
+    else:
+        from .sefaz import vincular_lancados
+        vincular_lancados(NotaRecebida.objects.filter(emitente_cnpj=documento.fornecedor.cnpj))
     aviso = ''
     if not documento.fornecedor.situacao_ok:
         aviso = f' Atenção: o CNPJ está {documento.fornecedor.situacao} na Receita.'
@@ -319,6 +463,7 @@ def piscofins_editar(request, pk):
         messages.error(request, erro)
         return _voltar(request, documento.competencia)
     arquivo = dados.pop('arquivo')
+    dados.pop('nota')
     for campo, valor in dados.items():
         setattr(documento, campo, valor)
     if arquivo:

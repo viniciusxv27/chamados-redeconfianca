@@ -512,3 +512,70 @@ class DocumentoPisCofins(models.Model):
 
     def __str__(self):
         return f'{self.get_tipo_display()} {self.numero or ""} — {self.fornecedor.razao_social} — R$ {self.valor}'
+
+
+# ── Notas emitidas contra o CNPJ (SEFAZ, NF-e Distribuição DFe) ─────────────
+class NotaRecebida(models.Model):
+    """NF-e que um fornecedor emitiu para um CNPJ da empresa, vinda da SEFAZ."""
+
+    SITUACOES = [('AUTORIZADA', 'Autorizada'), ('CANCELADA', 'Cancelada'), ('DENEGADA', 'Denegada')]
+
+    chave = models.CharField(max_length=44, unique=True, verbose_name='Chave de acesso')
+    cnpj_destinatario = models.CharField(max_length=14, db_index=True, verbose_name='CNPJ da empresa')
+    emitente_cnpj = models.CharField(max_length=14, db_index=True, verbose_name='CNPJ do emitente')
+    emitente_nome = models.CharField(max_length=200, blank=True, verbose_name='Emitente')
+    emitente_ie = models.CharField(max_length=20, blank=True, verbose_name='IE do emitente')
+    modelo = models.CharField(max_length=2, blank=True, verbose_name='Modelo')
+    serie = models.CharField(max_length=3, blank=True, verbose_name='Série')
+    numero = models.CharField(max_length=9, blank=True, db_index=True, verbose_name='Número')
+    emissao = models.DateTimeField(null=True, blank=True, db_index=True, verbose_name='Emissão')
+    valor = models.DecimalField(max_digits=14, decimal_places=2, default=0, verbose_name='Valor')
+    situacao = models.CharField(max_length=12, choices=SITUACOES, default='AUTORIZADA', verbose_name='Situação')
+    tipo_operacao = models.CharField(max_length=1, blank=True, verbose_name='Tipo (0 entrada, 1 saída)')
+    nsu = models.BigIntegerField(default=0, verbose_name='NSU')
+    xml_resumo = models.TextField(blank=True, verbose_name='XML do resumo')
+    xml_completo = models.TextField(blank=True, verbose_name='XML completo')
+    documento = models.ForeignKey('DocumentoPisCofins', on_delete=models.SET_NULL, null=True, blank=True,
+                                  related_name='notas_sefaz', verbose_name='Lançado como')
+    ignorada = models.BooleanField(default=False, verbose_name='Fora do PIS/Cofins')
+    ignorada_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                     related_name='+', verbose_name='Marcada por')
+    recebida_em = models.DateTimeField(auto_now_add=True)
+    atualizada_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Nota recebida (SEFAZ)'
+        verbose_name_plural = 'Notas recebidas (SEFAZ)'
+        ordering = ['-emissao']
+
+    def __str__(self):
+        return f'NF {self.numero} — {self.emitente_nome} — R$ {self.valor}'
+
+    @property
+    def emitente_cnpj_formatado(self):
+        from .cnpj import formatar
+        return formatar(self.emitente_cnpj)
+
+    @property
+    def chave_formatada(self):
+        return ' '.join(self.chave[i:i + 4] for i in range(0, len(self.chave), 4))
+
+
+class SincronizacaoDFe(models.Model):
+    """Onde parou a leitura da SEFAZ para cada CNPJ (o último NSU)."""
+
+    cnpj = models.CharField(max_length=14, unique=True, verbose_name='CNPJ')
+    ult_nsu = models.BigIntegerField(default=0, verbose_name='Último NSU')
+    max_nsu = models.BigIntegerField(default=0, verbose_name='Maior NSU na SEFAZ')
+    ultima_consulta = models.DateTimeField(null=True, blank=True, verbose_name='Última consulta')
+    proxima_consulta = models.DateTimeField(null=True, blank=True, verbose_name='Próxima consulta permitida')
+    ultimo_cstat = models.CharField(max_length=10, blank=True, verbose_name='Último código')
+    ultima_mensagem = models.CharField(max_length=255, blank=True, verbose_name='Última mensagem')
+    notas_novas = models.PositiveIntegerField(default=0, verbose_name='Notas novas na última consulta')
+
+    class Meta:
+        verbose_name = 'Sincronização com a SEFAZ'
+        verbose_name_plural = 'Sincronizações com a SEFAZ'
+
+    def __str__(self):
+        return f'{self.cnpj} — NSU {self.ult_nsu}/{self.max_nsu}'

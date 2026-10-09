@@ -104,8 +104,11 @@ pdf = lambda nome='nota.pdf': SimpleUploadedFile(nome, b'%PDF-1.4 zz teste', con
 subidos = []
 
 hoje = timezone.localdate()
-mes = date(hoje.year, hoje.month, 1)
+# Os lançamentos do teste vão numa competência antiga: o mês atual já tem
+# documentos de verdade (a tela está em uso).
+mes = date(2019, 5, 1)
 comp = f'{mes:%Y-%m}'
+comp_hoje = f'{hoje:%Y-%m}'
 
 marcador = transaction.atomic()
 marcador.__enter__()
@@ -139,10 +142,11 @@ try:
     r = c_contas.get('/contagem-caixa/pis-cofins/')
     t('com a liberação caixa.piscofins entra', r.status_code == 200, r.status_code)
     html = r.content.decode()
-    t('aba PIS/Cofins na navegação', '<i class="fas fa-file-invoice-dollar mr-1.5"></i>PIS/Cofins' in html)
+    t('sem as abas do caixa (Visão geral, Sangrias)', 'Visão geral' not in html and 'fa-hand-holding-dollar mr-1.5' not in html)
     t('item no menu Financeiro', 'Contas a pagar · PIS/Cofins</div>' in html)
     r = c_chefe.get('/contagem-caixa/pis-cofins/')
     t('gestor do caixa entra', r.status_code == 200)
+    r = c_chefe.get(f'/contagem-caixa/pis-cofins/?competencia={comp}')
     t('mês vazio abre o formulário', 'Nenhum documento lançado' in r.content.decode())
 
     print('== CONSULTA DE CNPJ ==')
@@ -278,6 +282,95 @@ try:
     t('sem arquivo faltando', 'LEIA-ME_arquivos_faltando.txt' not in nomes,
       zf.read('LEIA-ME_arquivos_faltando.txt').decode() if 'LEIA-ME_arquivos_faltando.txt' in nomes else '')
     t('arquivo íntegro no pacote', zf.read([n for n in nomes if n.startswith('documentos/')][0]) == b'%PDF-1.4 zz teste')
+
+    print('== LEITURA DO ARQUIVO ==')
+    from contagem_caixa import leitura_documento as leitura
+    nfe = (f'<?xml version="1.0"?><nfeProc xmlns="http://www.portalfiscal.inf.br/nfe"><NFe><infNFe>'
+           f'<ide><nNF>4521</nNF><dhEmi>{hoje.isoformat()}T10:00:00-03:00</dhEmi></ide>'
+           f'<emit><CNPJ>{ATIVO}</CNPJ><xNome>ZZ IMOBILIARIA TESTE LTDA</xNome></emit>'
+           f'<det nItem="1"><prod><xProd>Cadeira giratória</xProd></prod></det>'
+           f'<total><ICMSTot><vNF>1234.50</vNF></ICMSTot></total></infNFe></NFe></nfeProc>').encode()
+    r = c_contas.post('/contagem-caixa/pis-cofins/ler/', {'arquivo': SimpleUploadedFile('nota.xml', nfe, 'text/xml')},
+                      HTTP_ACCEPT='application/json')
+    j = r.json()
+    c = j.get('campos', {})
+    t('XML da NF-e: lê tudo sem IA', j['ok'] and j['fonte'] == 'xml' and c.get('tipo') == 'NF' and c.get('cnpj') == ATIVO
+      and c.get('numero') == '4521' and c.get('valor') == '1234,50' and c.get('data_documento') == hoje.isoformat(), j)
+    t('competência = mês da emissão', c.get('competencia') == comp_hoje, c.get('competencia'))
+    t('descrição do produto', c.get('descricao') == 'Cadeira giratória', c.get('descricao'))
+    t('não grava nada', not DocumentoPisCofins.objects.filter(numero='4521').exists())
+
+    nfse = (f'<CompNfse xmlns="http://www.abrasf.org.br/nfse.xsd"><Nfse><InfNfse><Numero>778</Numero>'
+            f'<DataEmissao>{hoje.isoformat()}T09:00:00</DataEmissao><Competencia>{comp_hoje}-01</Competencia>'
+            f'<ValoresNfse><ValorLiquidoNfse>980.00</ValorLiquidoNfse></ValoresNfse>'
+            f'<PrestadorServico><IdentificacaoPrestador><CpfCnpj><Cnpj>{BAIXADO}</Cnpj></CpfCnpj></IdentificacaoPrestador>'
+            f'<RazaoSocial>ZZ FORNECEDOR BAIXADO ME</RazaoSocial></PrestadorServico>'
+            f'<DeclaracaoPrestacaoServico><InfDeclaracaoPrestacaoServico><Servico><Valores><ValorServicos>1000.00</ValorServicos></Valores>'
+            f'<Discriminacao>Manutenção do ar-condicionado</Discriminacao></Servico></InfDeclaracaoPrestacaoServico>'
+            f'</DeclaracaoPrestacaoServico></InfNfse></Nfse></CompNfse>').encode()
+    lido = leitura.ler_documento(nfse, 'nfse.xml')
+    c = lido['campos']
+    t('XML de NFS-e (ABRASF)', c.get('cnpj') == BAIXADO and c.get('numero') == '778' and c.get('valor') == '980.00'
+      and c.get('competencia') == comp_hoje and 'ar-condicionado' in c.get('descricao', ''), c)
+    lido = leitura.ler_documento(b'<?xml version="1.0"?><qualquer><coisa/></qualquer>', 'x.xml')
+    t('XML que não é nota avisa', not lido['campos'] and lido['avisos'], lido)
+
+    linha = '23790.12301 60000.000053 25000.456704 1 99990000150050'
+    t('linha digitável do boleto dá o valor', leitura.valor_da_linha_digitavel(f'Pague até\n{linha}\n') == '1500.50')
+    t('sem separador também', leitura.valor_da_linha_digitavel(linha.replace('.', '').replace(' ', '')) == '1500.50')
+    conta = '836200000015 245600480001 123456789012 345678901234'
+    t('conta de consumo (48 dígitos)', leitura.valor_da_linha_digitavel(conta) == '124.56',
+      leitura.valor_da_linha_digitavel(conta))
+
+    # PDF/foto pela IA (dublê): a IA leu o NOSSO CNPJ como fornecedor.
+    NOSSO = cnpj_de('393939390001')
+    leitura_cnpjs, leitura_ia, leitura_anexo = leitura.cnpjs_da_rede, leitura.ler_com_ia, None
+    import cartoes.ai as cartoes_ai
+    preparar_original = cartoes_ai.preparar_anexo
+    try:
+        leitura.cnpjs_da_rede = lambda: {NOSSO}
+        cartoes_ai.preparar_anexo = lambda conteudo, mime='': {
+            'tipo': 'pdf', 'imagens': [], 'texto': f'BENEFICIARIO ZZ IMOBILIARIA CNPJ {receita.formatar(ATIVO)}\n'
+                                                   f'PAGADOR REDE CNPJ {receita.formatar(NOSSO)}\n{linha}'}
+        leitura.ler_com_ia = lambda anexo: ({'tipo': 'BOLETO', 'fornecedor_cnpj': NOSSO, 'pagador_cnpj': ATIVO,
+                                             'fornecedor_nome': 'ZZ IMOBILIARIA', 'numero': '000123',
+                                             'data_emissao': hoje.strftime('%d/%m/%Y'), 'valor': '1500,00',
+                                             'descricao': 'Aluguel de outubro', 'competencia': comp_hoje}, '')
+        r = c_contas.post('/contagem-caixa/pis-cofins/ler/',
+                          {'arquivo': SimpleUploadedFile('boleto.pdf', b'%PDF-1.4 boleto', 'application/pdf')},
+                          HTTP_ACCEPT='application/json')
+        j = r.json()
+        c = j['campos']
+        t('PDF pela IA: lados trocados são corrigidos (fornecedor não é o nosso CNPJ)', c.get('cnpj') == ATIVO, c)
+        t('valor da linha digitável prevalece, com aviso', c.get('valor') == '1500,50'
+          and any('linha digitável' in a for a in j['avisos']), (c.get('valor'), j['avisos']))
+        t('data dd/mm/aaaa vira ISO', c.get('data_documento') == hoje.isoformat(), c.get('data_documento'))
+        t('tipo, número, descrição e competência', c.get('tipo') == 'BOLETO' and c.get('numero') == '000123'
+          and c.get('descricao') == 'Aluguel de outubro' and c.get('competencia') == comp_hoje, c)
+
+        leitura.ler_com_ia = lambda anexo: ({'fornecedor_cnpj': NOSSO, 'pagador_cnpj': '', 'valor': ''}, '')
+        cartoes_ai.preparar_anexo = lambda conteudo, mime='': {'tipo': 'imagem', 'imagens': [(b'x', 'image/png')], 'texto': ''}
+        lido = leitura.ler_documento(b'\x89PNG foto', 'foto.png', 'image/png')
+        t('só o nosso CNPJ: não preenche e avisa', 'cnpj' not in lido['campos'] and lido['avisos'], lido)
+
+        leitura.ler_com_ia = lambda anexo: (None, 'sem rede')
+        lido = leitura.ler_documento(b'\x89PNG foto', 'foto.png', 'image/png')
+        t('IA fora: pede para preencher à mão', not lido['campos'] and 'sem rede' in lido['avisos'][0], lido)
+
+        leitura.ler_com_ia = lambda anexo: ({'tipo': 'NF', 'fornecedor_cnpj': ATIVO, 'numero': '123', 'valor': '1300'}, '')
+        r = c_contas.post('/contagem-caixa/pis-cofins/ler/',
+                          {'arquivo': SimpleUploadedFile('nota.pdf', b'%PDF-1.4 nota', 'application/pdf')},
+                          HTTP_ACCEPT='application/json')
+        t('arquivo já lançado é avisado na leitura', any('já foi lançado' in a for a in r.json()['avisos']), r.json())
+    finally:
+        leitura.cnpjs_da_rede, leitura.ler_com_ia = leitura_cnpjs, leitura_ia
+        cartoes_ai.preparar_anexo = preparar_original
+    r = c_contas.post('/contagem-caixa/pis-cofins/ler/', {'arquivo': SimpleUploadedFile('x.exe', b'MZ')},
+                      HTTP_ACCEPT='application/json')
+    t('leitura recusa tipo estranho', not r.json()['ok'])
+    r = c_vend.post('/contagem-caixa/pis-cofins/ler/', {'arquivo': SimpleUploadedFile('n.xml', nfe)},
+                    HTTP_ACCEPT='application/json')
+    t('leitura fechada para quem não tem acesso', r.status_code == 403, r.status_code)
 
     print('== FORMATO DO CNPJ ==')
     t('formatar', receita.formatar(ATIVO) == f'{ATIVO[:2]}.{ATIVO[2:5]}.{ATIVO[5:8]}/{ATIVO[8:12]}-{ATIVO[12:]}')

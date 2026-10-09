@@ -5,6 +5,9 @@
 {% block cx_cabecalho %}Contas a pagar · PIS/Cofins{% endblock %}
 {% block cx_subtitulo %}Notas, boletos e recibos de aluguel do mês — a planilha da competência sai pronta no fechamento{% endblock %}
 
+{% comment %}Contas a pagar é do financeiro: sem as abas do caixa (Visão geral, Sangrias).{% endcomment %}
+{% block cx_nav %}<div class="h-4"></div>{% endblock %}
+
 {% block cx_acoes %}
 <div class="flex items-center gap-2 flex-wrap">
     <a href="{% url 'contagem_caixa:piscofins_planilha' %}?competencia={{ competencia|date:'Y-m' }}"
@@ -40,6 +43,7 @@
             <p class="text-xl font-bold text-gray-900">{{ competencia|date:"F"|capfirst }} de {{ competencia|date:"Y" }}</p>
         </div>
         <form method="get" class="flex items-center gap-2">
+            {% if visao == 'sefaz' %}<input type="hidden" name="visao" value="sefaz">{% endif %}
             <select name="competencia" onchange="this.form.submit()" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
                 {% for m in meses %}
                 <option value="{{ m.data|date:'Y-m' }}" {% if m.data == competencia %}selected{% endif %}>{{ m.data|date:"m/Y" }}{% if m.n %} · {{ m.n }} doc.{% endif %}</option>
@@ -50,11 +54,22 @@
     </div>
     <div class="flex gap-1.5 mt-3 overflow-x-auto pb-1">
         {% for m in meses|slice:":12" %}
-        <a href="?competencia={{ m.data|date:'Y-m' }}"
+        <a href="?competencia={{ m.data|date:'Y-m' }}{% if visao == 'sefaz' %}&visao=sefaz{% endif %}"
            class="shrink-0 px-3 py-1 rounded-full text-xs font-medium border {% if m.data == competencia %}bg-emerald-600 border-emerald-600 text-white{% elif m.n %}border-emerald-200 text-emerald-700 hover:bg-emerald-50{% else %}border-gray-200 text-gray-400 hover:bg-gray-50{% endif %}">
             {{ m.data|date:"M"|lower }}/{{ m.data|date:"y" }}{% if m.n %} <span class="opacity-75">{{ m.n }}</span>{% endif %}
         </a>
         {% endfor %}
+    </div>
+    <div class="flex gap-1 mt-3 border-t border-gray-100 pt-3 overflow-x-auto">
+        <a href="?competencia={{ competencia|date:'Y-m' }}"
+           class="shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium {% if visao != 'sefaz' %}bg-emerald-50 text-emerald-700{% else %}text-gray-500 hover:bg-gray-50{% endif %}">
+            <i class="fas fa-folder-open mr-1"></i>Documentos lançados <span class="opacity-70">{{ quantidade }}</span>
+        </a>
+        <a href="?competencia={{ competencia|date:'Y-m' }}&visao=sefaz"
+           class="shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium {% if visao == 'sefaz' %}bg-emerald-50 text-emerald-700{% else %}text-gray-500 hover:bg-gray-50{% endif %}">
+            <i class="fas fa-building-columns mr-1"></i>Notas no CNPJ (SEFAZ)
+            {% if sefaz_a_lancar %}<span class="ml-1 px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[11px] font-semibold">{{ sefaz_a_lancar }} a lançar</span>{% endif %}
+        </a>
     </div>
 </div>
 
@@ -63,6 +78,7 @@
       class="hidden bg-white border border-emerald-200 rounded-2xl shadow-sm p-4 sm:p-5 mb-5">
     {% csrf_token %}
     <input type="hidden" name="voltar" value="{{ request.get_full_path }}">
+    <input type="hidden" name="nota" id="pcNota" value="">
     <div class="flex items-center justify-between gap-2 mb-4">
         <h2 class="text-sm font-bold text-gray-900" id="pcFormTitulo"><i class="fas fa-file-circle-plus text-emerald-600 mr-1.5"></i>Lançar documento</h2>
         <button type="button" onclick="pcFecharFormulario()" class="text-gray-400 hover:text-gray-600" title="Fechar"><i class="fas fa-xmark"></i></button>
@@ -84,7 +100,7 @@
             <span class="block text-[11px] font-semibold text-gray-500 mb-1">Arquivo * <span class="font-normal text-gray-400">(PDF, foto ou XML da NF-e)</span></span>
             <input type="file" name="arquivo" id="pcArquivo" accept="{{ extensoes }},image/*"
                    class="w-full text-sm text-gray-600 file:mr-2 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:bg-emerald-50 file:text-emerald-700 file:text-xs">
-            <span class="block text-[10px] text-gray-400 mt-1" id="pcArquivoAviso">No XML da nota, CNPJ, número, emissão e valor se preenchem sozinhos.</span>
+            <span class="block text-[10px] text-gray-400 mt-1" id="pcArquivoAviso">Escolha o arquivo primeiro: os campos se preenchem a partir dele.</span>
         </label>
         <label class="block">
             <span class="block text-[11px] font-semibold text-gray-500 mb-1">Mês de competência *</span>
@@ -145,6 +161,15 @@
     </div>
 </form>
 
+{% if visao != 'sefaz' %}
+{% if sefaz_a_lancar %}
+<a href="?competencia={{ competencia|date:'Y-m' }}&visao=sefaz&nf=a_lancar"
+   class="flex items-center gap-3 bg-sky-50 border border-sky-200 rounded-2xl p-4 mb-5 text-sm text-sky-800 hover:border-sky-300">
+    <i class="fas fa-building-columns text-lg"></i>
+    <span class="flex-1"><strong>{{ sefaz_a_lancar }} nota{{ sefaz_a_lancar|pluralize }}</strong> emitida{{ sefaz_a_lancar|pluralize }} contra o CNPJ em {{ competencia|date:"m/Y" }} ainda não {{ sefaz_a_lancar|pluralize:"foi,foram" }} lançada{{ sefaz_a_lancar|pluralize }} ({{ sefaz_a_lancar_valor|brl_zero }}).</span>
+    <span class="font-semibold whitespace-nowrap">Ver notas <i class="fas fa-arrow-right ml-1"></i></span>
+</a>
+{% endif %}
 {# ── Números ──────────────────────────────────────────────────────────────── #}
 <div class="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-5">
     <div class="col-span-2 lg:col-span-1 bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
@@ -210,6 +235,7 @@
                         <span class="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-semibold">não conferido na Receita</span>
                         {% endif %}
                         {% if d.fornecedor.simples %}<span class="px-2 py-0.5 rounded-full bg-sky-100 text-sky-700 font-semibold">Simples</span>{% endif %}
+                        {% for n in d.notas_sefaz.all %}<span class="px-2 py-0.5 rounded-full bg-sky-100 text-sky-700 font-semibold" title="Chave {{ n.chave }}"><i class="fas fa-building-columns mr-0.5"></i>na SEFAZ</span>{% endfor %}
                         {% if d.possivel_duplicado %}<span class="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-semibold"><i class="fas fa-clone mr-0.5"></i>possível duplicado</span>{% endif %}
                         <a href="{{ d.arquivo.url }}" target="_blank" rel="noopener" class="text-emerald-700 hover:underline"><i class="fas fa-paperclip"></i> {{ d.nome_arquivo|default:"arquivo"|truncatechars:32 }}</a>
                         <a href="{{ d.fornecedor.link_receita }}" target="_blank" rel="noopener" class="text-gray-500 hover:underline"><i class="fas fa-building-columns"></i> Receita</a>
@@ -261,6 +287,9 @@
         </div>
     </div>
 </div>
+{% else %}
+{% include 'contagem_caixa/_piscofins_sefaz.html' %}
+{% endif %}
 
 {% for d in documentos %}
 <form method="post" action="{% url 'contagem_caixa:piscofins_apagar' d.id %}" id="pcApagar{{ d.id }}" class="hidden"
@@ -293,12 +322,20 @@
         form.reset();
         form.competencia.value = '{{ competencia|date:"Y-m" }}';
         arquivo.required = true;
+        document.getElementById('pcNota').value = '';
         document.getElementById('pcArquivoAtual').textContent = '';
         limparFornecedor();
+        limparAuto();
         titulo('fa-file-circle-plus', 'Lançar documento', 'Lançar');
         form.classList.remove('hidden');
         form.scrollIntoView({behavior: 'smooth', block: 'start'});
     };
+    function limparAuto() {
+        form.querySelectorAll('[data-auto]').forEach(function (el) { delete el.dataset.auto; el.classList.remove('ring-2', 'ring-emerald-300'); });
+        const a = document.getElementById('pcArquivoAviso');
+        a.className = 'block text-[10px] text-gray-400 mt-1';
+        a.textContent = 'Escolha o arquivo primeiro: os campos se preenchem a partir dele.';
+    }
     window.pcFecharFormulario = function () { form.classList.add('hidden'); };
 
     // CNPJ: máscara e consulta na Receita.
@@ -353,36 +390,77 @@
     });
     document.getElementById('pcConsultar').addEventListener('click', function () { consultar(true); });
 
-    // XML da NF-e: preenche o que estiver vazio.
+    // Arquivo escolhido: o servidor lê (XML direto; PDF e foto pela IA) e o
+    // formulário se preenche. O que a pessoa já digitou não é sobrescrito; o
+    // que veio de uma leitura anterior, é.
+    const urlLer = '{% url "contagem_caixa:piscofins_ler" %}';
+    const aviso = document.getElementById('pcArquivoAviso');
+    const csrf = form.querySelector('[name=csrfmiddlewaretoken]').value;
+    let leitura = 0;
+    form.querySelectorAll('input, select').forEach(function (el) {
+        el.addEventListener('input', function () { delete el.dataset.auto; el.classList.remove('ring-2', 'ring-emerald-300'); });
+    });
+    function preencher(el, valor) {
+        if (!el || !valor) return false;
+        if (el.value && !el.dataset.auto) return false;
+        el.value = valor;
+        el.dataset.auto = '1';
+        el.classList.add('ring-2', 'ring-emerald-300');
+        return true;
+    }
     arquivo.addEventListener('change', function () {
         const f = arquivo.files[0];
-        if (!f || !/\.xml$/i.test(f.name)) return;
-        f.text().then(function (texto) {
-            const xml = new DOMParser().parseFromString(texto, 'application/xml');
-            function pega(caminho) {
-                let no = xml;
-                for (const parte of caminho.split('/')) {
-                    no = no && no.getElementsByTagNameNS('*', parte)[0];
+        if (!f) return;
+        const minha = ++leitura;
+        aviso.className = 'block text-[11px] mt-1 text-gray-500';
+        aviso.innerHTML = '<i class="fas fa-circle-notch fa-spin mr-1"></i>Lendo o arquivo para preencher o formulário…';
+        const dados = new FormData();
+        dados.append('arquivo', f);
+        fetch(urlLer, {method: 'POST', body: dados, headers: {'X-CSRFToken': csrf, 'Accept': 'application/json'}})
+            .then(function (r) { return r.json(); })
+            .then(function (j) {
+                if (minha !== leitura) return;              // outro arquivo foi escolhido no meio
+                if (!j.ok) { aviso.className = 'block text-[11px] mt-1 text-red-600'; aviso.textContent = j.erro; return; }
+                const c = j.campos || {};
+                const preenchidos = [];
+                if (c.tipo) {
+                    const radio = form.querySelector('[name=tipo][value=' + c.tipo + ']');
+                    if (radio) { radio.checked = true; preenchidos.push('tipo'); }
                 }
-                return no ? no.textContent.trim() : '';
-            }
-            const emit = pega('emit/CNPJ'), numero = pega('ide/nNF'), emissao = (pega('ide/dhEmi') || pega('ide/dEmi')).slice(0, 10),
-                  valor = pega('total/ICMSTot/vNF');
-            const aviso = document.getElementById('pcArquivoAviso');
-            if (!emit && !valor) { aviso.textContent = 'Não reconheci este XML como NF-e — preencha à mão.'; return; }
-            form.querySelector('[name=tipo][value=NF]').checked = true;
-            if (emit && !digitos(cnpj.value)) { cnpj.value = mascara(emit); consultar(true); }
-            if (numero && !form.numero.value) form.numero.value = numero;
-            if (emissao && !form.data_documento.value) form.data_documento.value = emissao;
-            if (valor && !form.valor.value) form.valor.value = Number(valor).toFixed(2).replace('.', ',');
-            aviso.textContent = 'Dados lidos do XML da NF-e — confira antes de lançar.';
-        });
+                if (preencher(form.competencia, c.competencia)) preenchidos.push('competência');
+                if (c.cnpj && (!digitos(cnpj.value) || cnpj.dataset.auto)) {
+                    cnpj.value = mascara(c.cnpj); cnpj.dataset.auto = '1'; cnpj.classList.add('ring-2', 'ring-emerald-300');
+                    preenchidos.push('CNPJ'); consultar(true);
+                }
+                if (preencher(form.valor, c.valor)) preenchidos.push('valor');
+                if (preencher(form.numero, c.numero)) preenchidos.push('número');
+                if (preencher(form.data_documento, c.data_documento)) preenchidos.push('emissão');
+                if (preencher(form.descricao, c.descricao)) preenchidos.push('descrição');
+                preencher(form.razao_social, c.razao_social);
+                const avisos = (j.avisos || []).map(esc).join('<br>');
+                if (preenchidos.length) {
+                    aviso.className = 'block text-[11px] mt-1 ' + (avisos ? 'text-amber-700' : 'text-emerald-700');
+                    aviso.innerHTML = '<i class="fas fa-wand-magic-sparkles mr-1"></i>Preenchido pelo arquivo' +
+                        (j.fonte === 'xml' ? ' (XML)' : '') + ': ' + preenchidos.join(', ') + ' — confira antes de lançar.' +
+                        (avisos ? '<br>' + avisos : '');
+                } else {
+                    aviso.className = 'block text-[11px] mt-1 text-amber-700';
+                    aviso.innerHTML = avisos || 'Não consegui ler os dados deste arquivo — preencha à mão.';
+                }
+            })
+            .catch(function () {
+                if (minha !== leitura) return;
+                aviso.className = 'block text-[11px] mt-1 text-amber-700';
+                aviso.textContent = 'Não deu para ler o arquivo agora — preencha à mão.';
+            });
     });
 
     document.querySelectorAll('.pc-editar').forEach(function (b) {
         b.addEventListener('click', function () {
             form.reset();
             limparFornecedor();
+            limparAuto();
+            document.getElementById('pcNota').value = '';
             form.action = b.dataset.url;
             form.querySelector('[name=tipo][value=' + b.dataset.tipo + ']').checked = true;
             form.competencia.value = b.dataset.competencia;
@@ -401,7 +479,26 @@
             form.scrollIntoView({behavior: 'smooth', block: 'start'});
         });
     });
-    {% if not documentos and not filtro.tipo and not filtro.q %}pcAbrirFormulario();{% endif %}
+    // Nota da SEFAZ → formulário preenchido; o XML dela vai como arquivo.
+    document.querySelectorAll('.pc-lancar-nota').forEach(function (b) {
+        b.addEventListener('click', function () {
+            pcAbrirFormulario();
+            document.getElementById('pcNota').value = b.dataset.nota;
+            form.querySelector('[name=tipo][value=NF]').checked = true;
+            form.competencia.value = b.dataset.competencia;
+            cnpj.value = mascara(b.dataset.cnpj);
+            consultar(true);
+            form.valor.value = b.dataset.valor.replace('.', ',');
+            form.numero.value = b.dataset.numero;
+            form.data_documento.value = b.dataset.data;
+            arquivo.required = false;
+            const a = document.getElementById('pcArquivoAviso');
+            a.className = 'block text-[11px] mt-1 text-sky-700';
+            a.innerHTML = '<i class="fas fa-building-columns mr-1"></i>Dados da SEFAZ. Sem arquivo, o XML da nota vai como anexo — se tiver o PDF (DANFE), anexe.';
+            titulo('fa-building-columns', 'Lançar NF ' + b.dataset.numero + ' da SEFAZ', 'Lançar');
+        });
+    });
+    {% if not documentos and not filtro.tipo and not filtro.q and visao != 'sefaz' %}pcAbrirFormulario();{% endif %}
 })();
 </script>
 {% endblock %}

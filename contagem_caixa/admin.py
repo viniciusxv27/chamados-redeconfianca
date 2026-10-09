@@ -75,3 +75,20 @@ class DocumentoPisCofinsAdmin(admin.ModelAdmin):
     search_fields = ('numero', 'descricao', 'fornecedor__razao_social', 'fornecedor__cnpj')
     raw_id_fields = ('fornecedor', 'registrado_por')
     readonly_fields = ('criado_em', 'atualizado_em')
+
+
+from .models import NotaRecebida, SincronizacaoDFe  # noqa: E402
+
+
+@admin.register(NotaRecebida)
+class NotaRecebidaAdmin(admin.ModelAdmin):
+    list_display = ('emissao', 'numero', 'emitente_nome', 'emitente_cnpj', 'valor', 'situacao', 'documento', 'ignorada')
+    list_filter = ('situacao', 'ignorada', 'cnpj_destinatario')
+    search_fields = ('chave', 'emitente_nome', 'emitente_cnpj', 'numero')
+    raw_id_fields = ('documento', 'ignorada_por')
+    readonly_fields = ('recebida_em', 'atualizada_em')
+
+
+@admin.register(SincronizacaoDFe)
+class SincronizacaoDFeAdmin(admin.ModelAdmin):
+    list_display = ('cnpj', 'ult_nsu', 'max_nsu', 'ultima_consulta', 'proxima_consulta', 'ultimo_cstat', 'ultima_mensagem')
