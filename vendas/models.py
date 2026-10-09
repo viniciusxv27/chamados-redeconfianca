@@ -309,6 +309,19 @@ class Cliente(models.Model):
     plano_nome = models.CharField(max_length=200, blank=True, verbose_name='Plano atual (texto)')
     segmentacao = models.CharField(max_length=10, blank=True, verbose_name='Segmentação')
     valor_pago = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, verbose_name='Valor pago')
+    # Base do Vivo GO (vendas/vivogo.py): o resumo de compras que a sincronização mantém.
+    origem = models.CharField(max_length=8, default='PORTAL', db_default='PORTAL', db_index=True,
+                              choices=[('PORTAL', 'Cadastrado no portal'), ('VIVOGO', 'Base do Vivo GO')])
+    linha = models.CharField(max_length=20, blank=True, default='', db_default='', verbose_name='Última linha (Vivo GO)')
+    pdv_ultimo = models.CharField(max_length=80, blank=True, default='', db_default='', db_index=True, verbose_name='Último PDV')
+    vendedor_ultimo = models.CharField(max_length=200, blank=True, default='', db_default='', verbose_name='Último vendedor')
+    plano_vivogo = models.CharField(max_length=200, blank=True, default='', db_default='', verbose_name='Último plano (Vivo GO)')
+    primeira_compra = models.DateField(null=True, blank=True, verbose_name='Primeira compra')
+    ultima_compra = models.DateField(null=True, blank=True, db_index=True, verbose_name='Última compra')
+    qtd_vendas = models.PositiveIntegerField(default=0, db_default=0, verbose_name='Vendas')
+    total_gasto = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0'), db_default=Decimal('0'),
+                                      verbose_name='Receita total')
+    sincronizado_em = models.DateTimeField(null=True, blank=True, verbose_name='Resumo do Vivo GO em')
     criado_em = models.DateTimeField(auto_now_add=True)
     criado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
                                    related_name='+')
@@ -376,3 +389,61 @@ class ImportacaoPrecos(models.Model):
         verbose_name = 'Importação da tabela de produtos'
         verbose_name_plural = 'Importações da tabela de produtos'
         ordering = ['-quando']
+
+
+
+class CompraVivoGo(models.Model):
+    """Espelho das views vendas_produtos_2026 / vendas_servicos_2026 do MySQL do Vivo GO.
+
+    As views não têm chave nem índice (consulta por CPF varre tudo), então a
+    base vem para cá (vendas/vivogo.py). A chave é um hash da linha inteira +
+    a ordem dela entre linhas idênticas.
+    """
+
+    chave = models.CharField(max_length=48, unique=True)
+    tipo = models.CharField(max_length=1, choices=[('P', 'Produto'), ('S', 'Serviço')], db_index=True)
+    id_venda = models.CharField(max_length=30, blank=True, db_index=True)
+    data_venda = models.DateField(null=True, blank=True, db_index=True)
+    data_insercao = models.DateTimeField(null=True, blank=True, db_index=True)
+    cpf = models.CharField(max_length=14, blank=True, db_index=True, verbose_name='CPF/CNPJ do cliente')
+    nome_cliente = models.CharField(max_length=200, blank=True)
+    numero_acesso = models.CharField(max_length=20, blank=True)
+    pdv = models.CharField(max_length=80, blank=True, db_index=True)
+    coordenacao = models.CharField(max_length=80, blank=True)
+    vendedor = models.CharField(max_length=200, blank=True)
+    item = models.CharField(max_length=255, blank=True, verbose_name='Produto / serviço')
+    plano = models.CharField(max_length=200, blank=True)
+    sku = models.CharField(max_length=60, blank=True)
+    subcategoria = models.CharField(max_length=120, blank=True)
+    tipo_produto = models.CharField(max_length=120, blank=True)
+    qtd = models.IntegerField(default=1)
+    receita = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    pilar = models.CharField(max_length=60, blank=True)
+    status_servico = models.CharField(max_length=60, blank=True)
+    data_cancelamento = models.DateField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'Compra (Vivo GO)'
+        verbose_name_plural = 'Compras (Vivo GO)'
+        ordering = ['-data_venda', '-id']
+        indexes = [models.Index(fields=['cpf', 'data_venda'])]
+
+
+class SincronizacaoVivoGo(models.Model):
+    """Linha única: onde parou o espelho do Vivo GO e como foi a última leitura."""
+
+    marca = models.DateTimeField(null=True, blank=True, verbose_name='Maior DATA_INSERCAO_VENDA já lida')
+    ultima_incremental = models.DateTimeField(null=True, blank=True)
+    ultima_completa = models.DateTimeField(null=True, blank=True)
+    em_andamento_desde = models.DateTimeField(null=True, blank=True)
+    ultimo_resumo = models.CharField(max_length=255, blank=True)
+    ultimo_erro = models.CharField(max_length=500, blank=True)
+    ultimo_erro_em = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'Sincronização do Vivo GO'
+        verbose_name_plural = 'Sincronização do Vivo GO'
+
+    @classmethod
+    def get(cls):
+        return cls.objects.order_by('id').first() or cls.objects.create()

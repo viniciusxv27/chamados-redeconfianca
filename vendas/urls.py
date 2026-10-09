@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views
+from . import views, views_clientes
 
 app_name = 'vendas'
 
@@ -19,6 +19,9 @@ urlpatterns = [
     path('api/cliente/', views.api_cliente, name='api_cliente'),
     path('api/cliente/salvar/', views.api_cliente_salvar, name='api_cliente_salvar'),
     path('api/renova/', views.api_renova, name='api_renova'),
+    path('clientes/', views_clientes.clientes, name='clientes'),
+    path('clientes/sincronizar/', views_clientes.clientes_sincronizar, name='clientes_sincronizar'),
+    path('clientes/<str:cpf>/', views_clientes.cliente_detalhe, name='cliente_detalhe'),
     path('parametros/', views.parametros, name='parametros'),
     path('parametros/plano/', views.parametros_plano, name='parametros_plano'),
     path('parametros/vivo-mais/', views.parametros_vivo_mais, name='parametros_vivo_mais'),

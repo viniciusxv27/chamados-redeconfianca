@@ -509,35 +509,24 @@ def precos_create(request):
 
 @login_required
 def cliente_historico(request):
-    """JSON com o que este CPF já comprou na rede.
-
-    Só responde com o documento completo: a consulta varre a tabela inteira
-    (não há índice de CPF no MySQL), e disparar a cada tecla digitada seria
-    um ataque ao banco de vendas da empresa.
-    """
+    """JSON com o que este CPF já comprou na rede — do espelho do Vivo GO no Postgres (vendas/vivogo.py)."""
     if not can_access_vendas(request.user):
         return JsonResponse({'disponivel': False, 'erro': 'Acesso restrito.'}, status=403)
-
-    dados = buscar_historico(request.GET.get('cpf', ''))
-    compras = [{
-        'data': c['data'].strftime('%d/%m/%Y') if c.get('data') else '',
-        'item': c.get('item') or '—',
-        'tipo': c.get('tipo') or '',
-        'pdv': c.get('pdv') or '—',
-        'qtde': c.get('qtde') or 1,
-        'valor': float(c['valor']) if c.get('valor') is not None else 0.0,
-        'vendedor': c.get('vendedor') or '',
-    } for c in dados.get('compras', [])]
-
+    from .models import CompraVivoGo
+    cpf = slv.so_digitos(request.GET.get('cpf', ''))
+    if len(cpf) not in (11, 14):
+        return JsonResponse({'disponivel': True, 'encontrado': False})
+    compras = list(CompraVivoGo.objects.filter(cpf=cpf).order_by('-data_venda', '-data_insercao')[:40])
+    datas = list(CompraVivoGo.objects.filter(cpf=cpf).order_by('data_venda').values_list('data_venda', flat=True))
     return JsonResponse({
-        'disponivel': dados.get('disponivel', False),
-        'encontrado': dados.get('encontrado', False),
-        'cpf': dados.get('cpf', ''),
-        'nome': dados.get('nome', ''),
-        'total': dados.get('total', 0),
-        'primeira': dados['primeira'].strftime('%d/%m/%Y') if dados.get('primeira') else '',
-        'ultima': dados['ultima'].strftime('%d/%m/%Y') if dados.get('ultima') else '',
-        'compras': compras,
+        'disponivel': True, 'encontrado': bool(compras), 'cpf': cpf,
+        'nome': compras[0].nome_cliente if compras else '',
+        'total': CompraVivoGo.objects.filter(cpf=cpf).count(),
+        'primeira': datas[0].strftime('%d/%m/%Y') if datas and datas[0] else '',
+        'ultima': datas[-1].strftime('%d/%m/%Y') if datas and datas[-1] else '',
+        'compras': [{'data': c.data_venda.strftime('%d/%m/%Y') if c.data_venda else '', 'item': c.item or '—',
+                     'tipo': 'PRODUTO' if c.tipo == 'P' else 'SERVIÇO', 'pdv': c.pdv or '—', 'qtde': c.qtd,
+                     'valor': float(c.receita or 0), 'vendedor': c.vendedor} for c in compras],
     })
 
 
@@ -586,8 +575,19 @@ def _cliente_json(cliente):
             'telefone': cliente.telefone, 'telefone_formatado': slv.formatar_telefone(cliente.telefone),
             'cep': cliente.cep, 'logradouro': cliente.logradouro, 'numero': cliente.numero,
             'complemento': cliente.complemento, 'bairro': cliente.bairro, 'cidade': cliente.cidade, 'uf': cliente.uf,
-            'plano_id': cliente.plano_id, 'plano_nome': cliente.plano_nome, 'segmentacao': cliente.segmentacao,
-            'valor_pago': str(cliente.valor_pago) if cliente.valor_pago is not None else ''}
+            'plano_id': cliente.plano_id or _plano_pelo_nome(cliente.plano_nome), 'plano_nome': cliente.plano_nome,
+            'segmentacao': cliente.segmentacao,
+            'valor_pago': str(cliente.valor_pago) if cliente.valor_pago is not None else '',
+            'origem': cliente.origem, 'linha': cliente.linha, 'pdv_ultimo': cliente.pdv_ultimo,
+            'ultima_compra': cliente.ultima_compra.strftime('%d/%m/%Y') if cliente.ultima_compra else '',
+            'qtd_vendas': cliente.qtd_vendas}
+
+
+def _plano_pelo_nome(nome):
+    """O plano do Vivo GO, se houver um plano cadastrado no portal com o mesmo nome."""
+    if not nome:
+        return None
+    return Plano.objects.filter(nome__iexact=nome.strip(), ativo=True).values_list('id', flat=True).first()
 
 
 @login_required
@@ -612,7 +612,7 @@ def api_cliente(request):
                    'segmentacao_nome': dict(SEGMENTACOES).get(analise['plano']['segmentacao'], '')}
                   if analise['plano'] else None),
         'compras': [{'data': timezone.localtime(c['data']).strftime('%d/%m/%Y'), 'produto': c['produto'],
-                     'valor': str(c['valor']), 'venda': c['venda']} for c in analise['compras']],
+                     'valor': str(c['valor']), 'venda': c['venda'], 'pdv': c.get('pdv', '')} for c in analise['compras']],
     }})
 
 

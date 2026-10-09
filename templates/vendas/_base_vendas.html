@@ -126,6 +126,10 @@ resto é Tailwind padrão, que o tema escuro do portal já converte.
                class="vd-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'nova' %}vd-tab-ativa{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
                 <i class="fas fa-plus mr-1.5"></i>Nova venda
             </a>
+            <a href="{% url 'vendas:clientes' %}"
+               class="vd-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'clientes' %}vd-tab-ativa{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
+                <i class="fas fa-users mr-1.5"></i>Clientes
+            </a>
             <a href="{% url 'vendas:precos' %}"
                class="vd-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'precos' %}vd-tab-ativa{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
                 <i class="fas fa-tags mr-1.5"></i>Tabela de produtos

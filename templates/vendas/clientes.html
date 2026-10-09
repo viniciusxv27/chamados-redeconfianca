@@ -1,0 +1,116 @@
+{% extends "vendas/_base_vendas.html" %}
+{% load vendas_tags %}
+
+{% block title %}Clientes — Vendas{% endblock %}
+{% block vd_icone %}fa-users{% endblock %}
+{% block vd_cabecalho %}Clientes{% endblock %}
+{% block vd_subtitulo %}{% if is_superadmin %}Base inteira{% else %}Clientes da sua loja{% endif %} · Vivo GO + cadastro do portal · {{ total_base }} cliente{{ total_base|pluralize }}{% endblock %}
+
+{% block vd_acoes %}
+{% if is_superadmin %}
+<form method="post" action="{% url 'vendas:clientes_sincronizar' %}" id="vdSinc">{% csrf_token %}
+    <button class="inline-flex items-center gap-2 px-3.5 py-2 vd-card text-gray-700 text-sm font-semibold hover:bg-gray-50 disabled:opacity-60" id="vdSincBotao">
+        <i class="fas fa-rotate text-purple-600"></i><span class="hidden sm:inline">Atualizar agora</span></button>
+</form>
+{% endif %}
+<a href="{% url 'vendas:venda_create' %}" class="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-lg"><i class="fas fa-plus"></i> Nova venda</a>
+{% endblock %}
+
+{% block vd_conteudo %}
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+    <a href="?" class="vd-card vd-card-hover vd-entra p-4 block">
+        <div class="flex items-start justify-between"><p class="text-xs text-gray-500 font-medium">Clientes</p>
+            <span class="w-8 h-8 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center text-sm"><i class="fas fa-users"></i></span></div>
+        <p class="text-lg sm:text-2xl font-bold text-gray-900 tabular mt-1">{{ total_base }}</p>
+        <p class="text-[11px] text-gray-400">na base{% if not is_superadmin %} da sua loja{% endif %}</p></a>
+    <a href="?situacao=novos" class="vd-card vd-card-hover vd-entra p-4 block {% if filtro.situacao == 'novos' %}ring-2 ring-purple-300{% endif %}" style="animation-delay:.05s">
+        <div class="flex items-start justify-between"><p class="text-xs text-gray-500 font-medium">Novos no mês</p>
+            <span class="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center text-sm"><i class="fas fa-user-plus"></i></span></div>
+        <p class="text-lg sm:text-2xl font-bold text-emerald-600 tabular mt-1">{{ kpi_novos }}</p>
+        <p class="text-[11px] text-gray-400">primeira compra este mês</p></a>
+    <a href="?situacao=ativos" class="vd-card vd-card-hover vd-entra p-4 block {% if filtro.situacao == 'ativos' %}ring-2 ring-purple-300{% endif %}" style="animation-delay:.1s">
+        <div class="flex items-start justify-between"><p class="text-xs text-gray-500 font-medium">Ativos (30 dias)</p>
+            <span class="w-8 h-8 rounded-lg bg-sky-100 text-sky-700 flex items-center justify-center text-sm"><i class="fas fa-bolt"></i></span></div>
+        <p class="text-lg sm:text-2xl font-bold text-gray-900 tabular mt-1">{{ kpi_ativos }}</p>
+        <p class="text-[11px] text-gray-400">compraram no último mês</p></a>
+    <a href="?situacao=recorrentes" class="vd-card vd-card-hover vd-entra p-4 block {% if filtro.situacao == 'recorrentes' %}ring-2 ring-purple-300{% endif %}" style="animation-delay:.15s">
+        <div class="flex items-start justify-between"><p class="text-xs text-gray-500 font-medium">Recorrentes</p>
+            <span class="w-8 h-8 rounded-lg bg-pink-100 text-pink-700 flex items-center justify-center text-sm"><i class="fas fa-repeat"></i></span></div>
+        <p class="text-lg sm:text-2xl font-bold text-gray-900 tabular mt-1">{{ kpi_recorrentes }}</p>
+        <p class="text-[11px] text-gray-400">2 vendas ou mais</p></a>
+</div>
+
+<form method="get" class="vd-card p-4 mb-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 items-end">
+    <div class="sm:col-span-2">
+        <label class="vd-rotulo">Buscar</label>
+        <div class="relative"><i class="fas fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-300 text-xs"></i>
+            <input type="search" name="q" value="{{ filtro.q }}" class="vd-campo pl-8" placeholder="Nome, CPF ou telefone" autofocus></div>
+    </div>
+    <div><label class="vd-rotulo">Situação</label>
+        <select name="situacao" class="vd-campo" onchange="this.form.submit()">
+            <option value="">Todos</option>
+            <option value="novos" {% if filtro.situacao == 'novos' %}selected{% endif %}>Novos no mês</option>
+            <option value="ativos" {% if filtro.situacao == 'ativos' %}selected{% endif %}>Ativos (30 dias)</option>
+            <option value="recorrentes" {% if filtro.situacao == 'recorrentes' %}selected{% endif %}>Recorrentes</option>
+            <option value="sumidos" {% if filtro.situacao == 'sumidos' %}selected{% endif %}>Sem comprar há 6 meses</option>
+            <option value="portal" {% if filtro.situacao == 'portal' %}selected{% endif %}>Cadastrados no portal</option>
+        </select></div>
+    {% if is_superadmin %}
+    <div><label class="vd-rotulo">Último PDV</label>
+        <select name="pdv" class="vd-campo" onchange="this.form.submit()"><option value="">Todos</option>
+            {% for p in pdvs %}<option {% if filtro.pdv == p %}selected{% endif %}>{{ p }}</option>{% endfor %}</select></div>
+    {% endif %}
+    <div><label class="vd-rotulo">Ordenar</label>
+        <select name="ordem" class="vd-campo" onchange="this.form.submit()">
+            <option value="recentes" {% if filtro.ordem == 'recentes' %}selected{% endif %}>Compra mais recente</option>
+            <option value="receita" {% if filtro.ordem == 'receita' %}selected{% endif %}>Maior receita</option>
+            <option value="vendas" {% if filtro.ordem == 'vendas' %}selected{% endif %}>Mais vendas</option>
+            <option value="nome" {% if filtro.ordem == 'nome' %}selected{% endif %}>Nome</option>
+        </select></div>
+    <div class="flex gap-2">
+        <button class="flex-1 px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-semibold"><i class="fas fa-filter mr-1"></i>Filtrar</button>
+        {% if query %}<a href="{% url 'vendas:clientes' %}" class="px-3 py-2.5 border border-gray-300 rounded-lg text-gray-500 hover:bg-gray-50" title="Limpar"><i class="fas fa-xmark"></i></a>{% endif %}
+    </div>
+</form>
+
+<div class="vd-card overflow-hidden">
+    <div class="px-4 sm:px-5 py-3 border-b border-gray-100 flex items-center justify-between gap-2 flex-wrap text-xs text-gray-500">
+        <span>{{ pagina.paginator.count }} cliente{{ pagina.paginator.count|pluralize }}</span>
+        <span>{% if not vivogo_configurado %}<span class="text-amber-700">Vivo GO não configurado (VIVOGO_MYSQL_URL)</span>
+            {% elif sinc.ultimo_erro %}<span class="text-red-600" title="{{ sinc.ultimo_erro }}"><i class="fas fa-triangle-exclamation mr-1"></i>última leitura falhou {{ sinc.ultimo_erro_em|date:"d/m H:i" }}</span>
+            {% elif sinc.ultima_incremental %}<i class="fas fa-database mr-1"></i>Vivo GO atualizado {{ sinc.ultima_incremental|date:"d/m H:i" }} · a cada 5 min{% endif %}</span>
+    </div>
+    <div class="divide-y divide-gray-100">
+        {% for c in pagina %}
+        <a href="{% url 'vendas:cliente_detalhe' c.cpf %}" class="flex items-center gap-3 px-4 sm:px-5 py-3 hover:bg-purple-50/40 group">
+            <span class="w-10 h-10 shrink-0 rounded-full flex items-center justify-center text-sm font-bold {% if c.origem == 'PORTAL' %}bg-purple-100 text-purple-700{% else %}bg-sky-100 text-sky-700{% endif %}">{{ c.nome|slice:":1"|upper }}</span>
+            <div class="min-w-0 flex-1">
+                <p class="text-sm font-semibold text-gray-900 truncate">{{ c.nome }}</p>
+                <p class="text-[11px] text-gray-500 truncate tabular">{{ c.cpf_formatado }}{% if c.linha or c.telefone %} · {{ c.linha|default:c.telefone }}{% endif %}{% if c.pdv_ultimo %} · {{ c.pdv_ultimo }}{% endif %}</p>
+            </div>
+            <div class="hidden md:block text-right text-[11px] text-gray-500 w-40 truncate">{{ c.plano_nome|default:c.plano_vivogo|default:"—" }}</div>
+            <div class="text-right whitespace-nowrap">
+                <p class="text-sm font-semibold text-gray-900 tabular">{{ c.total_gasto|brl }}</p>
+                <p class="text-[10px] text-gray-400">{{ c.qtd_vendas }} venda{{ c.qtd_vendas|pluralize }}{% if c.ultima_compra %} · {{ c.ultima_compra|date:"d/m/y" }}{% endif %}</p>
+            </div>
+            <i class="fas fa-chevron-right text-gray-300 text-xs group-hover:text-purple-500 hidden sm:block"></i>
+        </a>
+        {% empty %}
+        <p class="px-5 py-14 text-center text-gray-400"><i class="fas fa-users text-gray-200 text-4xl block mb-3"></i>Nenhum cliente encontrado.</p>
+        {% endfor %}
+    </div>
+    {% if pagina.has_other_pages %}
+    <div class="px-4 sm:px-5 py-3 border-t border-gray-100 flex items-center justify-between gap-2 text-sm">
+        {% if pagina.has_previous %}<a href="?{{ query }}&page={{ pagina.previous_page_number }}" class="px-3 py-1.5 border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50">Anterior</a>{% else %}<span></span>{% endif %}
+        <span class="text-xs text-gray-400">página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span>
+        {% if pagina.has_next %}<a href="?{{ query }}&page={{ pagina.next_page_number }}" class="px-3 py-1.5 border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50">Próxima</a>{% else %}<span></span>{% endif %}
+    </div>
+    {% endif %}
+</div>
+<script>
+(function () {
+    const f = document.getElementById('vdSinc');
+    if (f) f.addEventListener('submit', function () { const b = document.getElementById('vdSincBotao'); b.disabled = true; b.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Lendo o Vivo GO…'; });
+})();
+</script>
+{% endblock %}

@@ -260,7 +260,8 @@ def pre_analise(cliente):
     plano = None
     if cliente.plano_nome or cliente.plano_id:
         plano = {'nome': cliente.plano.nome if cliente.plano else cliente.plano_nome,
-                 'segmentacao': cliente.segmentacao, 'valor': cliente.valor_pago, 'fonte': 'cadastro'}
+                 'segmentacao': cliente.segmentacao, 'valor': cliente.valor_pago,
+                 'fonte': 'Vivo GO' if cliente.origem == 'VIVOGO' and not cliente.plano_id else 'cadastro'}
     else:
         ultimo = (VendaServico.objects.filter(venda__cliente=cliente).exclude(plano=None)
                   .select_related('plano', 'venda').order_by('-venda__data_venda').first())
@@ -270,6 +271,14 @@ def pre_analise(cliente):
     compras = [{'data': p.venda.data_venda, 'produto': p.nome_produto, 'valor': p.valor_total, 'venda': p.venda_id}
                for p in VendaProduto.objects.filter(venda__cliente=cliente).select_related('venda')
                .order_by('-venda__data_venda')[:COMPRAS_NA_PRE_ANALISE]]
+    # Compras de produto no Vivo GO (espelho no Postgres — vendas/vivogo.py).
+    from datetime import datetime, time as hora
+
+    from .models import CompraVivoGo
+    for c in CompraVivoGo.objects.filter(cpf=cliente.cpf, tipo='P').order_by('-data_venda')[:COMPRAS_NA_PRE_ANALISE]:
+        compras.append({'data': timezone.make_aware(datetime.combine(c.data_venda, hora(12))) if c.data_venda else None,
+                        'produto': c.item, 'valor': c.receita or ZERO, 'venda': None, 'pdv': c.pdv})
+    compras = sorted([c for c in compras if c['data']], key=lambda c: c['data'], reverse=True)[:COMPRAS_NA_PRE_ANALISE]
     return {'plano': plano, 'compras': compras, 'vazio': not plano and not compras}
 
 

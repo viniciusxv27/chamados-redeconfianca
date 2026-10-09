@@ -73,7 +73,8 @@
             {# Confirmação do nome #}
             <div id="vdConfirma" class="hidden vd-entra rounded-xl border border-purple-200 bg-purple-50 p-4 flex items-center justify-between gap-3 flex-wrap">
                 <div><p class="text-[11px] text-purple-700 font-semibold uppercase tracking-wide">Cliente encontrado</p>
-                    <p class="text-lg font-bold text-gray-900" id="vdConfirmaNome"></p></div>
+                    <p class="text-lg font-bold text-gray-900" id="vdConfirmaNome"></p>
+                    <p class="text-[12px] text-gray-600" id="vdConfirmaOrigem"></p></div>
                 <div class="flex gap-2">
                     <button type="button" id="vdNaoE" class="px-3 py-2 rounded-lg border border-gray-300 text-sm text-gray-600 hover:bg-white">Não é ele</button>
                     <button type="button" id="vdEEle" class="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold"><i class="fas fa-check mr-1"></i>Confirmar cliente</button>
@@ -238,6 +239,7 @@
         cliente: '{% url "vendas:api_cliente" %}', salvarCliente: '{% url "vendas:api_cliente_salvar" %}',
         historico: '{% url "vendas:cliente_historico" %}', buscar: '{% url "vendas:precos_buscar" %}',
         renova: '{% url "vendas:api_renova" %}', confirmar: '{% url "vendas:venda_create" %}',
+        ficha: '{% url "vendas:cliente_detalhe" "00000000000" %}',
     };
     const CSRF = document.querySelector('[name=csrfmiddlewaretoken]').value;
     const $ = function (id) { return document.getElementById(id); };
@@ -306,6 +308,10 @@
         if (j.encontrado) {
             estado.cliente = Object.assign({}, j.cliente, {pre: j.pre_analise}); estado.novo = false;
             $('vdConfirmaNome').textContent = j.cliente.nome; $('vdConfirma').classList.remove('hidden');
+            const c = j.cliente;
+            $('vdConfirmaOrigem').innerHTML = (c.origem === 'VIVOGO' ? '<i class="fas fa-database mr-1"></i>Base do Vivo GO' : '<i class="fas fa-user-check mr-1"></i>Cadastro do portal') +
+                (c.ultima_compra ? ' · última compra ' + esc(c.ultima_compra) + (c.pdv_ultimo ? ' em ' + esc(c.pdv_ultimo) : '') : '') +
+                (c.qtd_vendas ? ' · ' + c.qtd_vendas + ' venda(s)' : '');
             avisar('<i class="fas fa-circle-check text-emerald-600 mr-1"></i>CPF ' + esc(j.cliente.cpf_formatado) + ' — confira o nome.', 'text-gray-600');
         } else {
             estado.cliente = {cpf: d, cpf_formatado: j.cpf_formatado}; estado.novo = true;
@@ -369,7 +375,7 @@
         let plano = p.plano ? '<p class="text-base font-bold text-gray-900">' + esc(p.plano.nome) + '</p><p class="text-xs text-gray-500">' +
             esc(p.plano.segmentacao_nome || '') + ' · paga ' + brl(p.plano.valor) + ' · ' + esc(p.plano.fonte) + '</p>'
             : '<p class="text-sm text-gray-500">Sem plano registrado no portal.</p>';
-        let compras = (p.compras || []).map(function (c) { return '<li class="flex justify-between gap-2"><span class="truncate">' + esc(c.data) + ' · ' + esc(c.produto) +
+        let compras = (p.compras || []).map(function (c) { return '<li class="flex justify-between gap-2"><span class="truncate">' + esc(c.data) + ' · ' + esc(c.produto) + (c.pdv ? ' <span class="text-gray-400">(' + esc(c.pdv) + ')</span>' : '') +
             '</span><span class="tabular whitespace-nowrap">' + brl(c.valor) + '</span></li>'; }).join('');
         caixa.innerHTML =
             '<div class="rounded-xl bg-purple-50 border border-purple-100 p-4"><p class="text-[11px] font-semibold text-purple-700 uppercase tracking-wide mb-1"><i class="fas fa-chart-pie mr-1"></i>Pré-análise · plano</p>' + plano + '</div>' +
@@ -382,8 +388,8 @@
             const el = $('vdVivoGo'); if (!el) return;
             if (!h.disponivel) { el.textContent = 'Histórico do Vivo GO indisponível agora.'; return; }
             if (!h.encontrado) { el.textContent = 'Nada no Vivo GO para este CPF.'; return; }
-            el.innerHTML = '<p class="font-semibold text-gray-600 mt-1">Vivo GO: ' + h.total + ' registro(s), último em ' + esc(h.ultima) + '</p><ul class="space-y-0.5 mt-0.5">' +
-                h.compras.slice(0, 5).map(function (c) { return '<li class="flex justify-between gap-2"><span class="truncate">' + esc(c.data) + ' · ' + esc(c.item) + '</span><span class="tabular">' + brl(c.valor) + '</span></li>'; }).join('') + '</ul>';
+            el.innerHTML = '<p class="font-semibold text-gray-600 mt-1"><i class="fas fa-database mr-1"></i>Vivo GO: ' + h.total + ' registro(s) de ' + esc(h.primeira) + ' a ' + esc(h.ultima) +
+                ' · <a class="text-purple-600 hover:underline" target="_blank" href="' + URL.ficha.replace('00000000000', estado.cliente.cpf) + '">ver ficha completa</a></p>';
         }).catch(function () { const el = $('vdVivoGo'); if (el) el.textContent = ''; });
     }
 
@@ -737,7 +743,9 @@
         erros.classList.remove('hidden'); erros.scrollIntoView({behavior: 'smooth', block: 'center'});
         b.disabled = false; b.innerHTML = '<i class="fas fa-check mr-1.5"></i>Confirmar venda';
     });
-    cpf.focus();
+    // Veio da ficha do cliente (?cpf=…): a busca já começa.
+    const doLink = new URLSearchParams(location.search).get('cpf');
+    if (doLink) { cpf.value = mascaraCpf(doLink); cpf.dispatchEvent(new Event('input')); } else { cpf.focus(); }
 })();
 </script>
 {% endif %}

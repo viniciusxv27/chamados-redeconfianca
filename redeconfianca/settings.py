@@ -97,6 +97,9 @@ INSTALLED_APPS = [
 # segue funcionando normalmente, apenas sem as telas de ponto e férias.
 TANGERINO_TOKEN = config('TANGERINO_TOKEN', default='')
 
+# Base do Vivo GO (views vendas_produtos_2026 / vendas_servicos_2026) — vendas/vivogo.py.
+VIVOGO_MYSQL_URL = config('VIVOGO_MYSQL_URL', default='')
+
 # Notas emitidas contra o CNPJ (SEFAZ, NF-e Distribuição DFe) — contagem_caixa/sefaz.py.
 # Nasce desligado: sem o certificado A1 (e-CNPJ) a tela só explica como ligar.
 SEFAZ_CERTIFICADO = config('SEFAZ_CERTIFICADO', default='')          # caminho do .pfx
@@ -128,6 +131,7 @@ MIDDLEWARE = [
     'users.session_tracking.ActiveSessionMiddleware',
     'users.pre_registration_middleware.PreRegistrationAdjustmentMiddleware',
     'auditoria_sap.middleware.LeituraAgendadaSapMiddleware',  # lê o SAP a cada 3 h; antes dos bloqueios
+    'vendas.middleware.EspelhoVivoGoMiddleware',  # espelho dos clientes do Vivo GO a cada 5 min
     'tangerino.middleware.BloqueioFeriasMiddleware',
     'tangerino.middleware.BloqueioJornadaMiddleware',
     'cursos.middleware.BloqueioCursoMiddleware',
