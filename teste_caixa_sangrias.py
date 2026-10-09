@@ -274,6 +274,52 @@ try:
     c.force_login(sem)
     r = c.get('/contagem-caixa/sangrias/')
     t('sem loja não abre a aba', r.status_code in (302, 403), r.status_code)
+
+    print("== ADM DA LOJA (PADRÃO no grupo \"ADM's LOJAS\") ==")
+    from communications.models import CommunicationGroup
+    grupo = CommunicationGroup.objects.filter(name__icontains="ADM's LOJAS").first()
+    t('o grupo existe no banco', grupo is not None)
+    adm = User.objects.create_user(
+        username='zz.sg.adm', email='zz.sg.adm@exemplo-teste.local', password='S3nha!teste',
+        first_name='Zz', last_name='Adm', sector=loja, hierarchy='PADRAO')
+    padrao = User.objects.create_user(
+        username='zz.sg.padrao', email='zz.sg.padrao@exemplo-teste.local', password='S3nha!teste',
+        first_name='Zz', last_name='Padrao', sector=loja, hierarchy='PADRAO')
+    grupo.members.add(adm) if hasattr(grupo, 'members') else adm.communication_groups.add(grupo)
+    c_adm, c_pad = Client(), Client()
+    c_adm.force_login(adm)
+    c_pad.force_login(padrao)
+
+    r = c_pad.get('/contagem-caixa/sangrias/')
+    t('PADRÃO fora do grupo continua barrado', r.status_code == 302 and r.url == '/', (r.status_code, getattr(r, 'url', '')))
+    r = c_adm.get(f'/contagem-caixa/sangrias/?de={de}&ate={hoje.isoformat()}')
+    html = r.content.decode()
+    t('ADM abre a aba', r.status_code == 200, r.status_code)
+    t('vê a loja dele e não a outra', 'Lavagem de carpete' in html and 'Da outra loja' not in html)
+    t('a nav mostra só Sangrias', 'Visão geral' not in html and 'Abrir uma loja' not in html)
+    t('menu lateral tem o item Sangrias e não o caixa',
+      'title="Sangrias"' in html and 'title="Contagem de Caixa"' not in html)
+    t('não confere em lote', 'Conferir marcadas' not in html)
+    r = c_adm.get('/contagem-caixa/')
+    t('o resto do caixa segue fechado', r.status_code == 302 and r.url == '/', (r.status_code, getattr(r, 'url', '')))
+    r = c_adm.get(f'/contagem-caixa/loja/{loja.id}/')
+    t('a planilha da loja também', r.status_code == 302 and r.url == '/', r.status_code)
+
+    c_adm.post('/contagem-caixa/sangrias/registrar/', {
+        'loja': loja.id, 'data': d1.isoformat(), 'valor': '7,50', 'categoria': outros.id, 'descricao': 'Fita adesiva ADM'})
+    sa = Sangria.objects.filter(descricao='Fita adesiva ADM').first()
+    t('ADM registra na loja dele', sa is not None and sa.registrada_por == adm)
+    t('e o caixa do dia recebe', dia(loja, d1).sangria_registrada == D('57.50'), dia(loja, d1).sangria_registrada)
+    c_adm.post('/contagem-caixa/sangrias/registrar/', {
+        'loja': outra.id, 'data': d1.isoformat(), 'valor': '1', 'categoria': outros.id, 'descricao': 'Fora ADM'})
+    t('não registra em outra loja', not Sangria.objects.filter(descricao='Fora ADM').exists())
+    c_adm.post(f'/contagem-caixa/sangrias/{sa.id}/apagar/')
+    t('apaga a própria', not Sangria.objects.filter(id=sa.id).exists())
+    c_pad.post('/contagem-caixa/sangrias/registrar/', {
+        'loja': loja.id, 'data': d1.isoformat(), 'valor': '1', 'categoria': outros.id, 'descricao': 'PADRAO barrado'})
+    t('POST do PADRÃO fora do grupo não grava', not Sangria.objects.filter(descricao='PADRAO barrado').exists())
+    r = c_adm.get(f'/contagem-caixa/sangrias/exportar/?de={de}&ate={hoje.isoformat()}')
+    t('ADM exporta', r.status_code == 200, r.status_code)
 finally:
     marcador.__exit__(Exception, Exception('rollback'), None)
 

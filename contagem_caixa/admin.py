@@ -56,3 +56,22 @@ class SangriaAdmin(admin.ModelAdmin):
     search_fields = ('descricao', 'favorecido', 'loja__name')
     raw_id_fields = ('registrada_por', 'conferida_por')
     readonly_fields = ('criada_em', 'atualizada_em')
+
+
+from .models import DocumentoPisCofins, FornecedorPisCofins  # noqa: E402
+
+
+@admin.register(FornecedorPisCofins)
+class FornecedorPisCofinsAdmin(admin.ModelAdmin):
+    list_display = ('razao_social', 'cnpj', 'situacao', 'simples', 'municipio', 'uf', 'consultado_em')
+    search_fields = ('razao_social', 'nome_fantasia', 'cnpj')
+    list_filter = ('situacao', 'simples', 'uf')
+
+
+@admin.register(DocumentoPisCofins)
+class DocumentoPisCofinsAdmin(admin.ModelAdmin):
+    list_display = ('competencia', 'tipo', 'numero', 'fornecedor', 'valor', 'loja', 'registrado_por', 'criado_em')
+    list_filter = ('tipo', 'competencia')
+    search_fields = ('numero', 'descricao', 'fornecedor__razao_social', 'fornecedor__cnpj')
+    raw_id_fields = ('fornecedor', 'registrado_por')
+    readonly_fields = ('criado_em', 'atualizado_em')

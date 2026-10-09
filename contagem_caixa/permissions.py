@@ -77,3 +77,61 @@ def pode_ver_caixa(user):
     if padrao_restrito(user, 'caixa'):
         return False
     return e_gestor(user) or lojas_do_usuario(user).exists() or user_has_module(user, 'caixa')
+
+
+# ── Sangrias: o ADM da loja ─────────────────────────────────────────────────
+# O PADRÃO do grupo "ADM's LOJAS" é quem paga as despesas da loja, então lança
+# e acompanha as sangrias dela — sem abrir o resto do caixa, que segue fechado
+# para o PADRÃO fora do GERENTES. O nome do grupo no banco tem espaço no fim;
+# a comparação ignora espaço e caixa.
+GRUPO_ADM_LOJAS = "ADM's LOJAS"
+
+
+def e_adm_de_loja(user):
+    if not user or not user.is_authenticated:
+        return False
+    cached = getattr(user, '_e_adm_de_loja_cache', None)
+    if cached is None:
+        from django.db.models.functions import Trim
+        try:
+            cached = (user.communication_groups.annotate(nome_limpo=Trim('name'))
+                      .filter(nome_limpo__iexact=GRUPO_ADM_LOJAS).exists())
+        except Exception:  # noqa: BLE001
+            cached = False
+        try:
+            user._e_adm_de_loja_cache = cached
+        except Exception:  # noqa: BLE001
+            pass
+    return cached
+
+
+def so_sangrias(user):
+    """PADRÃO barrado no caixa que entra só pela aba Sangrias (ADM da loja)."""
+    from users.module_access import padrao_restrito
+    return padrao_restrito(user, 'caixa') and e_adm_de_loja(user)
+
+
+def lojas_das_sangrias(user):
+    """Lojas em que a pessoa lança e vê sangrias: as do caixa, ou as do ADM."""
+    if so_sangrias(user):
+        return _lojas_em_que_esta_lotado(user)
+    return lojas_do_usuario(user)
+
+
+def pode_ver_sangrias(user):
+    return pode_ver_caixa(user) or (so_sangrias(user) and lojas_das_sangrias(user).exists())
+
+
+def padrao_restrito_sem_sangrias(user):
+    """PADRÃO barrado no caixa e que também não é ADM da loja."""
+    from users.module_access import padrao_restrito
+    return padrao_restrito(user, 'caixa') and not e_adm_de_loja(user)
+
+
+# ── Contas a pagar: PIS/Cofins ──────────────────────────────────────────────
+def pode_piscofins(user):
+    """Lança e gera a planilha de PIS/Cofins: o gestor do caixa ou quem recebeu a liberação."""
+    if not user or not user.is_authenticated:
+        return False
+    from users.module_access import user_has_module
+    return e_gestor(user) or user_has_module(user, 'caixa.piscofins')

@@ -428,3 +428,87 @@ class Sangria(models.Model):
 
     def __str__(self):
         return f'{self.loja.name} — {self.data:%d/%m/%Y} — R$ {self.valor}'
+
+
+# ── Contas a pagar: PIS/Cofins ──────────────────────────────────────────────
+def caminho_documento_piscofins(instance, filename):
+    import os
+    import uuid
+    ext = os.path.splitext(filename)[1].lower() or '.pdf'
+    return f'contagem_caixa/piscofins/{instance.competencia:%Y/%m}/{uuid.uuid4().hex}{ext}'
+
+
+class FornecedorPisCofins(models.Model):
+    """O fornecedor pelo CNPJ, com o cadastro trazido da Receita."""
+
+    cnpj = models.CharField(max_length=14, unique=True, verbose_name='CNPJ')
+    razao_social = models.CharField(max_length=200, verbose_name='Razão social')
+    nome_fantasia = models.CharField(max_length=200, blank=True, verbose_name='Nome fantasia')
+    situacao = models.CharField(max_length=40, blank=True, verbose_name='Situação cadastral')
+    atividade = models.CharField(max_length=255, blank=True, verbose_name='Atividade principal')
+    simples = models.BooleanField(null=True, blank=True, verbose_name='Optante pelo Simples')
+    municipio = models.CharField(max_length=80, blank=True, verbose_name='Município')
+    uf = models.CharField(max_length=2, blank=True, verbose_name='UF')
+    consultado_em = models.DateTimeField(null=True, blank=True, verbose_name='Consultado na Receita em')
+
+    class Meta:
+        verbose_name = 'Fornecedor (PIS/Cofins)'
+        verbose_name_plural = 'Fornecedores (PIS/Cofins)'
+        ordering = ['razao_social']
+
+    def __str__(self):
+        return f'{self.razao_social} ({self.cnpj_formatado})'
+
+    @property
+    def cnpj_formatado(self):
+        from .cnpj import formatar
+        return formatar(self.cnpj)
+
+    @property
+    def link_receita(self):
+        from .cnpj import LINK_RECEITA
+        return LINK_RECEITA.format(cnpj=self.cnpj)
+
+    @property
+    def situacao_ok(self):
+        return not self.situacao or self.situacao == 'ATIVA'
+
+
+class DocumentoPisCofins(models.Model):
+    """Nota, boleto ou recibo de aluguel lançado para a apuração do mês."""
+
+    TIPOS = [
+        ('NF', 'Nota fiscal'),
+        ('BOLETO', 'Boleto'),
+        ('ALUGUEL', 'Recibo de aluguel'),
+        ('OUTRO', 'Outro'),
+    ]
+
+    tipo = models.CharField(max_length=10, choices=TIPOS, verbose_name='Tipo')
+    competencia = models.DateField(db_index=True, verbose_name='Competência',
+                                   help_text='Sempre o dia 1º do mês de competência.')
+    fornecedor = models.ForeignKey(FornecedorPisCofins, on_delete=models.PROTECT,
+                                   related_name='documentos', verbose_name='Fornecedor')
+    valor = models.DecimalField(max_digits=14, decimal_places=2, verbose_name='Valor')
+    numero = models.CharField(max_length=60, blank=True, verbose_name='Número do documento')
+    data_documento = models.DateField(null=True, blank=True, verbose_name='Data de emissão')
+    loja = models.ForeignKey(Sector, on_delete=models.SET_NULL, null=True, blank=True,
+                             related_name='documentos_piscofins', verbose_name='Loja / unidade')
+    descricao = models.CharField(max_length=255, blank=True, verbose_name='Descrição')
+    arquivo = models.FileField(upload_to=caminho_documento_piscofins, storage=_storage_de_midia(),
+                               verbose_name='Arquivo')
+    nome_arquivo = models.CharField(max_length=255, blank=True, verbose_name='Nome original do arquivo')
+
+    registrado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='documentos_piscofins', verbose_name='Registrado por')
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Documento de PIS/Cofins'
+        verbose_name_plural = 'Documentos de PIS/Cofins'
+        ordering = ['-competencia', '-criado_em']
+
+    def __str__(self):
+        return f'{self.get_tipo_display()} {self.numero or ""} — {self.fornecedor.razao_social} — R$ {self.valor}'

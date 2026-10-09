@@ -13,7 +13,7 @@ from decimal import Decimal
 from django.db.models import Count, Sum
 
 from .models import ContagemCaixaDia, Sangria
-from .permissions import e_gestor, lojas_do_usuario
+from .permissions import e_gestor, lojas_das_sangrias
 
 ZERO = Decimal('0.00')
 
@@ -29,7 +29,7 @@ MINIMO_RECORRENTE = 3
 # ── Permissões ──────────────────────────────────────────────────────────────
 def pode_registrar(user, loja):
     """Registra sangria na loja: quem tem a loja no caixa (o gestor, em todas)."""
-    return lojas_do_usuario(user).filter(id=loja.id).exists()
+    return lojas_das_sangrias(user).filter(id=loja.id).exists()
 
 
 def pode_alterar(user, sangria):

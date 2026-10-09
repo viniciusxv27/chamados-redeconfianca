@@ -776,6 +776,18 @@
                         </li>
                         {% endif %}
                         
+                        {% if user|tem_acesso:'caixa.piscofins' %}
+                        <li>
+                            <a href="{% url 'contagem_caixa:piscofins' %}" data-rota="{% url 'contagem_caixa:piscofins' %}"
+                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-file-invoice-dollar text-emerald-400 flex-shrink-0 w-5 text-center"></i>
+                                <span class="text-sm">PIS/Cofins</span>
+                                <div class="tooltip-collapsed">Contas a pagar · PIS/Cofins</div>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-emerald-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        {% endif %}
+
                         {% if can_access_cartoes %}
                         <li>
                             <a href="{% url 'cartoes:dashboard' %}" data-rota="{% url 'cartoes:dashboard' %}"
@@ -832,6 +844,16 @@
                                         <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-sky-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                                     </a>
                                 </li>
+                                {% if sangrias_liberado %}
+                                <li>
+                                    <a href="{% url 'contagem_caixa:sangrias' %}" data-rota="{% url 'contagem_caixa:sangrias' %}" class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Sangrias">
+                                        <i class="fas fa-hand-holding-dollar text-violet-400 flex-shrink-0 w-5 text-center"></i>
+                                        <span>Sangrias</span>
+                                        <div class="tooltip-collapsed">Sangrias</div>
+                                        <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-violet-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                    </a>
+                                </li>
+                                {% endif %}
                                 {% if caixa_liberado %}
                                 <li>
                                     <a href="{% url 'contagem_caixa:dashboard' %}" data-rota="{% url 'contagem_caixa:dashboard' %}" class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Contagem de Caixa">

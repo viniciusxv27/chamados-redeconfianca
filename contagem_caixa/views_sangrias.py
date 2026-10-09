@@ -11,15 +11,28 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_POST
 
-from users.module_access import fechado_para_padrao
+from functools import wraps
+
+from users.module_access import resposta_de_bloqueio
 
 from . import sangrias as svc
 from .models import CategoriaSangria, Sangria
 from .permissions import e_gestor as _e_gestor
-from .permissions import lojas_do_usuario as _lojas_do_usuario
+from .permissions import lojas_das_sangrias as _lojas_do_usuario
+from .permissions import padrao_restrito_sem_sangrias, so_sangrias
 from .views import ValorInvalido, _para_decimal
 
 TAMANHO_MAXIMO_COMPROVANTE = 10 * 1024 * 1024
+
+
+def _sangrias_liberadas(view):
+    """A trava do caixa para o PADRÃO, com a porta do ADM da loja aberta."""
+    @wraps(view)
+    def _view(request, *args, **kwargs):
+        if padrao_restrito_sem_sangrias(request.user):
+            return resposta_de_bloqueio(request, 'caixa')
+        return view(request, *args, **kwargs)
+    return _view
 
 
 def _filtros(request, lojas):
@@ -70,7 +83,7 @@ def _atalhos(hoje):
 
 
 @login_required
-@fechado_para_padrao('caixa')
+@_sangrias_liberadas
 def sangrias(request):
     lojas = _lojas_do_usuario(request.user)
     if not lojas.exists():
@@ -90,6 +103,7 @@ def sangrias(request):
     parametros = request.GET.copy()
     return render(request, 'contagem_caixa/sangrias.html', {
         'aba': 'sangrias',
+        'so_sangrias': so_sangrias(request.user),
         'e_gestor': gestor,
         'lojas': lojas,
         'categorias': CategoriaSangria.objects.filter(ativa=True),
@@ -148,7 +162,7 @@ def _voltar(request):
 
 
 @login_required
-@fechado_para_padrao('caixa')
+@_sangrias_liberadas
 @require_POST
 def sangria_registrar(request):
     lojas = _lojas_do_usuario(request.user)
@@ -169,7 +183,7 @@ def sangria_registrar(request):
 
 
 @login_required
-@fechado_para_padrao('caixa')
+@_sangrias_liberadas
 @require_POST
 def sangria_editar(request, pk):
     sangria = get_object_or_404(Sangria, pk=pk)
@@ -199,7 +213,7 @@ def sangria_editar(request, pk):
 
 
 @login_required
-@fechado_para_padrao('caixa')
+@_sangrias_liberadas
 @require_POST
 def sangria_apagar(request, pk):
     sangria = get_object_or_404(Sangria, pk=pk)
@@ -215,7 +229,7 @@ def sangria_apagar(request, pk):
 
 
 @login_required
-@fechado_para_padrao('caixa')
+@_sangrias_liberadas
 @require_POST
 def sangria_conferir(request):
     """Marca (ou desmarca) uma ou várias sangrias como conferidas. Só o gestor."""
@@ -237,7 +251,7 @@ def sangria_conferir(request):
 
 
 @login_required
-@fechado_para_padrao('caixa')
+@_sangrias_liberadas
 @require_POST
 def sangria_categorias(request):
     """O gestor cria, renomeia, ativa e desativa categorias."""
@@ -264,7 +278,7 @@ def sangria_categorias(request):
 
 
 @login_required
-@fechado_para_padrao('caixa')
+@_sangrias_liberadas
 def sangrias_exportar(request):
     from .exportacao_sangrias import planilha_sangrias
 

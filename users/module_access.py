@@ -134,6 +134,8 @@ MODULOS = [
      'descricao': 'Contar o caixa mesmo sem estar lotado numa loja — e, sendo PADRÃO fora do grupo GERENTES, entrar no módulo.',
      'permissoes': [
          ('caixa.gestor', 'Gestor do caixa', 'Ver todas as lojas e importar a base.'),
+         ('caixa.piscofins', 'Contas a pagar · PIS/Cofins',
+          'Lançar notas, boletos e recibos de aluguel e gerar a planilha de PIS/Cofins do mês.'),
      ]},
     {'chave': 'sap', 'rotulo': 'Visão SAP (auditoria)', 'grupo': 'Administrativo',
      'acesso': True,
@@ -245,6 +247,7 @@ GATES = {
     'impulso.gestor': 'impulso.utils:is_impulso_manager',
     'caixa': 'contagem_caixa.permissions:pode_ver_caixa',
     'caixa.gestor': 'contagem_caixa.permissions:e_gestor',
+    'caixa.piscofins': 'contagem_caixa.permissions:pode_piscofins',
     'sap': 'auditoria_sap.permissions:pode_ver',
     'sap.gestor': 'auditoria_sap.permissions:e_gestor',
     'treinamentos.gestao': 'trainings.views:pode_gerenciar_treinamentos',
