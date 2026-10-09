@@ -15,7 +15,7 @@
                 <li><code>SEFAZ_CERTIFICADO</code> — caminho do arquivo .pfx (ou <code>SEFAZ_CERTIFICADO_B64</code> com o arquivo em base64);</li>
                 <li><code>SEFAZ_CERTIFICADO_SENHA</code> — a senha do certificado;</li>
                 <li><code>SEFAZ_CNPJS</code> — os CNPJs a acompanhar, separados por vírgula (o certificado da matriz consulta as filiais);</li>
-                <li><code>SEFAZ_UF</code> — código da UF da empresa (ES = 32, já é o padrão).</li>
+                <li>A UF de cada CNPJ (ES, RJ, SP…) o portal descobre sozinho pela Receita.</li>
             </ul>
             <p class="mt-2 text-[13px] text-gray-600">E agenda de hora em hora o comando <code class="px-1 rounded bg-gray-100">manage.py sincronizar_notas_sefaz</code> — a SEFAZ só aceita uma consulta por hora quando não há nota nova.</p>
         </div>
@@ -41,6 +41,7 @@
                     consultado {{ c.sinc.ultima_consulta|date:"d/m H:i" }} ({{ c.sinc.ultimo_cstat }} {{ c.sinc.ultima_mensagem|truncatechars:80 }})
                     {% if c.sinc.proxima_consulta %}· próxima a partir das {{ c.sinc.proxima_consulta|date:"H:i" }}{% endif %}
                     {% else %}<span class="text-amber-700">ainda não consultado</span>{% endif %}
+                    {% if not c.mesma_raiz %}<span class="block text-red-600 font-semibold">Outra raiz de CNPJ que a do certificado — precisa do certificado próprio desta empresa.</span>{% endif %}
                 </li>
                 {% endfor %}
             </ul>

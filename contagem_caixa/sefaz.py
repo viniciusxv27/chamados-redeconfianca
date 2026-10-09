@@ -24,7 +24,16 @@ Configuração (no ``.env``; nasce desligado):
   ``SEFAZ_CERTIFICADO_B64``: o .pfx em base64 (para container);
 - ``SEFAZ_CERTIFICADO_SENHA``;
 - ``SEFAZ_CNPJS``: CNPJs a acompanhar, separados por vírgula;
-- ``SEFAZ_UF``: código IBGE da UF do autor (ES = 32); ``SEFAZ_AMBIENTE``: 1 produção, 2 homologação.
+- ``SEFAZ_AMBIENTE``: 1 produção, 2 homologação.
+
+A UF do pedido (``cUFAutor``) é a de cada CNPJ consultado, não a da sede: o
+CNPJ do RJ vai com 33, o de SP com 35. Ela sai do cadastro da Receita
+(``cnpj.buscar``); ``SEFAZ_UF`` só vale quando a Receita não responde. As
+notas vêm do Ambiente Nacional, de qualquer estado, seja qual for a UF.
+
+O certificado consulta os CNPJs da mesma raiz (8 primeiros dígitos) que o dele:
+CNPJ de outra raiz é outra empresa e precisa do próprio certificado — o portal
+avisa e não consulta (a SEFAZ recusaria).
 """
 from __future__ import annotations
 
@@ -102,6 +111,44 @@ def _carregar_certificado():
         raise SefazErro(f'Não deu para abrir o certificado (senha ou arquivo errado): {exc}') from exc
 
 
+# Código IBGE de cada UF — o que a SEFAZ pede em cUFAutor.
+CODIGOS_UF = {
+    'RO': '11', 'AC': '12', 'AM': '13', 'RR': '14', 'PA': '15', 'AP': '16', 'TO': '17', 'MA': '21', 'PI': '22',
+    'CE': '23', 'RN': '24', 'PB': '25', 'PE': '26', 'AL': '27', 'SE': '28', 'BA': '29', 'MG': '31', 'ES': '32',
+    'RJ': '33', 'SP': '35', 'PR': '41', 'SC': '42', 'RS': '43', 'MS': '50', 'MT': '51', 'GO': '52', 'DF': '53',
+}
+
+
+def uf_do_cnpj(cnpj):
+    """Código IBGE da UF do CNPJ, pelo cadastro da Receita; SEFAZ_UF se ela não responder."""
+    try:
+        dados = receita.buscar(cnpj)
+    except receita.CnpjIndisponivel:
+        dados = None
+    sigla = (dados or {}).get('uf', '').upper()
+    return CODIGOS_UF.get(sigla) or str(_cfg('SEFAZ_UF', '32'))
+
+
+def cnpj_do_certificado(cert=None):
+    """O CNPJ do titular: o e-CNPJ da ICP-Brasil traz no nome ("RAZÃO SOCIAL:CNPJ")."""
+    if cert is None:
+        try:
+            cert = _carregar_certificado()[1]
+        except SefazErro:
+            return ''
+    from cryptography.x509.oid import NameOID
+    for atributo in cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME):
+        digitos = receita.so_digitos(str(atributo.value).rsplit(':', 1)[-1])
+        if receita.valido(digitos):
+            return digitos
+    return ''
+
+
+def mesma_raiz(cnpj, cnpj_certificado):
+    """Sem CNPJ legível no certificado, não bloqueia: a SEFAZ é quem decide."""
+    return not cnpj_certificado or cnpj[:8] == cnpj_certificado[:8]
+
+
 def info_do_certificado():
     """Titular e validade do certificado, para a tela avisar antes de vencer."""
     try:
@@ -112,6 +159,7 @@ def info_do_certificado():
     nomes = cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)
     validade = cert.not_valid_after_utc
     return {'ok': True, 'titular': nomes[0].value if nomes else '', 'validade': validade,
+            'cnpj': cnpj_do_certificado(cert),
             'vencido': validade <= timezone.now(),
             'dias_restantes': (validade - timezone.now()).days}
 
@@ -323,10 +371,20 @@ def sincronizar(cnpj, transporte=None, agora=None, lotes=LOTES_POR_SINCRONIZACAO
         sinc.pulada = True
         return sinc
     sinc.pulada = False
+    if transporte is _transporte_https:
+        do_certificado = cnpj_do_certificado()
+        if not mesma_raiz(cnpj, do_certificado):
+            sinc.ultimo_cstat = 'RAIZ'
+            sinc.ultima_mensagem = (f'O certificado é do CNPJ {receita.formatar(do_certificado)}: só consulta a mesma '
+                                    f'raiz ({do_certificado[:8]}). Este CNPJ precisa do próprio certificado.')
+            sinc.ultima_consulta, sinc.notas_novas = agora, 0
+            sinc.save()
+            return sinc
+    uf = uf_do_cnpj(cnpj)
     novas = 0
     try:
         for _ in range(lotes):
-            resposta = ler_resposta(transporte(envelope(cnpj, sinc.ult_nsu)))
+            resposta = ler_resposta(transporte(envelope(cnpj, sinc.ult_nsu, uf=uf)))
             sinc.ultimo_cstat, sinc.ultima_mensagem = resposta['cstat'], resposta['motivo'][:255]
             if resposta['cstat'] == '138':
                 with transaction.atomic():

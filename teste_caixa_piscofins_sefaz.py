@@ -237,6 +237,29 @@ try:
         conteudo = open(c_pem).read()
     t('PEM temporário criado (chave só para o dono) e apagado', existe and permissao == '0o600'
       and 'BEGIN CERTIFICATE' in conteudo and not os.path.exists(c_pem) and not os.path.exists(k_pem), permissao)
+    t('CNPJ do titular lido do certificado', sefaz.cnpj_do_certificado() == NOSSO, sefaz.cnpj_do_certificado())
+    OUTRA_RAIZ, FILIAL = cnpj_de('585858580001'), NOSSO[:8] + '0002'
+    FILIAL = cnpj_de(FILIAL)
+    t('mesma raiz: filial sim, outra empresa não', sefaz.mesma_raiz(FILIAL, NOSSO) and not sefaz.mesma_raiz(OUTRA_RAIZ, NOSSO))
+    sinc = sefaz.sincronizar(OUTRA_RAIZ, agora=agora + timedelta(days=2))
+    t('CNPJ de outra raiz: não consulta e explica', sinc.ultimo_cstat == 'RAIZ' and 'próprio certificado' in sinc.ultima_mensagem,
+      sinc.ultima_mensagem)
+
+    print('== UF DE CADA CNPJ ==')
+    buscar_original = receita.buscar
+    ufs = {NOSSO: 'ES', FILIAL: 'RJ', OUTRA_RAIZ: 'SP'}
+    receita.buscar = lambda v: {'cnpj': v, 'razao_social': 'ZZ', 'uf': ufs.get(receita.so_digitos(v), '')}
+    t('ES 32, RJ 33, SP 35', (sefaz.uf_do_cnpj(NOSSO), sefaz.uf_do_cnpj(FILIAL), sefaz.uf_do_cnpj(OUTRA_RAIZ)) == ('32', '33', '35'))
+    falsa_rj = SefazFalsa([resposta('137', 'Nenhum documento localizado', 0, 0)])
+    sefaz.sincronizar(FILIAL, transporte=falsa_rj, agora=agora)
+    t('o pedido da filial do RJ vai com cUFAutor 33', '<cUFAutor>33</cUFAutor>' in falsa_rj.pedidos[0])
+    def fora_do_ar(v):
+        raise receita.CnpjIndisponivel('fora')
+    receita.buscar = fora_do_ar
+    settings.SEFAZ_UF = '32'
+    t('Receita fora: usa SEFAZ_UF', sefaz.uf_do_cnpj(FILIAL) == '32')
+    receita.buscar = buscar_original
+
     settings.SEFAZ_CERTIFICADO_SENHA = 'errada'
     t('senha errada: erro claro', not sefaz.info_do_certificado()['ok'] and 'senha' in sefaz.info_do_certificado()['erro'])
     settings.SEFAZ_CERTIFICADO_SENHA = 'senha-teste'

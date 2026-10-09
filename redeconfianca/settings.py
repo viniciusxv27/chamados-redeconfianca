@@ -103,7 +103,7 @@ SEFAZ_CERTIFICADO = config('SEFAZ_CERTIFICADO', default='')          # caminho d
 SEFAZ_CERTIFICADO_B64 = config('SEFAZ_CERTIFICADO_B64', default='')  # ou o .pfx em base64
 SEFAZ_CERTIFICADO_SENHA = config('SEFAZ_CERTIFICADO_SENHA', default='')
 SEFAZ_CNPJS = config('SEFAZ_CNPJS', default='')                      # separados por vírgula
-SEFAZ_UF = config('SEFAZ_UF', default='32')                          # código IBGE (ES = 32)
+SEFAZ_UF = config('SEFAZ_UF', default='32')                          # reserva: a UF sai do CNPJ (Receita)
 SEFAZ_AMBIENTE = config('SEFAZ_AMBIENTE', default='1')               # 1 produção, 2 homologação
 TANGERINO_ENABLED = config('TANGERINO_ENABLED', default=False, cast=bool)
 # Hosts da API do Tangerino/Sólides. Vazio = usa o padrão histórico do cliente.

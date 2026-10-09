@@ -319,9 +319,13 @@ def _contexto_sefaz(request, competencia):
         'notas_lancadas': validas.filter(documento__isnull=False).count(),
         'notas_fora': validas.filter(ignorada=True, documento__isnull=True).count(),
         'notas_canceladas': do_mes.filter(situacao='CANCELADA').count(),
-        'sefaz_cnpjs': [{'cnpj': receita.formatar(c), 'sinc': sincronizacoes.get(c)} for c in sefaz.cnpjs_monitorados()],
-        'sefaz_certificado': sefaz.info_do_certificado() if contexto['sefaz_configurado'] else None,
     })
+    certificado = sefaz.info_do_certificado() if contexto['sefaz_configurado'] else None
+    do_certificado = (certificado or {}).get('cnpj', '')
+    contexto['sefaz_certificado'] = certificado
+    contexto['sefaz_cnpjs'] = [{'cnpj': receita.formatar(c), 'sinc': sincronizacoes.get(c),
+                                'mesma_raiz': sefaz.mesma_raiz(c, do_certificado)}
+                               for c in sefaz.cnpjs_monitorados()]
     return contexto
 
 
