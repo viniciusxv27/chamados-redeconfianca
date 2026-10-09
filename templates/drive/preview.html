@@ -4,10 +4,19 @@
 {% block drive_subtitulo %}{{ rotulo }}{% endblock %}
 
 {% block drive_conteudo %}
-<div class="mb-3">
-    <a href="{{ url_raiz }}" class="text-sm text-gray-500 hover:text-gray-700">
-        <i class="fas fa-arrow-left mr-1.5"></i>Voltar a {{ rotulo }}
+<div class="mb-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+    <a href="{{ url_voltar }}" class="inline-flex items-center gap-2 self-start px-3 py-1.5 rounded-lg bg-white border border-gray-200 text-sm text-gray-700 hover:bg-gray-50 hover:border-gray-300 shadow-sm transition-colors">
+        <i class="fas fa-arrow-left text-gray-400"></i>Voltar a <span class="font-semibold truncate max-w-[14rem]">{{ nome_voltar }}</span>
     </a>
+    {% comment %}Onde o arquivo está: da raiz até a pasta dele, cada nível clicável.{% endcomment %}
+    <nav class="flex items-center gap-1.5 text-xs text-gray-500 min-w-0 overflow-x-auto whitespace-nowrap" aria-label="Pasta do arquivo">
+        <i class="fas fa-folder-open text-amber-400"></i>
+        <a href="{{ url_raiz }}?destaque={{ meta.id }}" class="hover:text-blue-600 hover:underline">{{ rotulo }}</a>
+        {% for nome, url in trilha_arquivo %}
+        <i class="fas fa-chevron-right text-[9px] text-gray-300"></i>
+        <a href="{{ url }}{% if forloop.last %}?destaque={{ meta.id }}{% endif %}" class="hover:text-blue-600 hover:underline {% if forloop.last %}font-medium text-gray-700{% endif %}">{{ nome }}</a>
+        {% endfor %}
+    </nav>
 </div>
 
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">

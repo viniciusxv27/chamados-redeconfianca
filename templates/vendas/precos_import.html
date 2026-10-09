@@ -3,7 +3,7 @@
 {% block title %}Importar tabela de preços{% endblock %}
 {% block vd_icone %}fa-file-import{% endblock %}
 {% block vd_cabecalho %}Importar tabela de preços{% endblock %}
-{% block vd_subtitulo %}Planilha oficial — cada aba vira uma categoria{% endblock %}
+{% block vd_subtitulo %}Planilha oficial de preços da Vivo — substitui a tabela de produtos{% endblock %}
 
 {% block vd_acoes %}
 <a href="{% url 'vendas:precos' %}"
@@ -34,12 +34,12 @@
             </label>
 
             <div class="mt-4 rounded-xl bg-blue-50 border border-blue-100 p-3.5">
-                <p class="text-xs text-blue-800">
-                    <i class="fas fa-circle-info mr-1"></i>
-                    Cada aba da planilha vira uma <strong>categoria</strong>. Item já existente é
-                    atualizado pelo par categoria + nome; o que não tiver coluna própria fica
-                    guardado assim mesmo, em “outros campos”.
-                </p>
+                <p class="text-xs text-blue-800 font-semibold mb-1"><i class="fas fa-circle-info mr-1"></i>A importação substitui a tabela de produtos. Entram só estas abas:</p>
+                <ul class="text-xs text-blue-800 space-y-1 list-disc pl-5">
+                    <li><strong>SMARTPHONES</strong> e <strong>ELETRÔNICOS_LP_Conectados</strong>: a <em>Tabela Regular</em> — por grupo de plano (PRÉ, Controle, Pós, Família, Vivo V… / Multivivo, VIM…), o preço, o PIX e Vivo Pay e as parcelas de 2x a 21x. Na venda, o vendedor escolhe o grupo e a condição e o valor vem da tabela.</li>
+                    <li><strong>ELETRÔNICOS_LP_Não Conectados</strong>: o <em>PVP Base</em> é o valor.</li>
+                </ul>
+                <p class="text-xs text-blue-800 mt-2">Produto que saiu da planilha sai da tabela (se já foi vendido, fica inativo). Planos, seguros e SVAs são cadastrados na <a class="underline" href="{% url 'vendas:parametros' %}">Parametrização</a>. Se a importação falhar, a tabela atual não muda.</p>
             </div>
         </div>
     </div>
@@ -68,11 +68,12 @@
                 {% else %}<span class="text-[11px] whitespace-nowrap flex gap-1.5">
                     <span class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-semibold">+{{ imp.incluidos }}</span>
                     <span class="px-2 py-0.5 rounded-full bg-sky-100 text-sky-700 font-semibold">~{{ imp.alterados }}</span>
-                    <span class="px-2 py-0.5 rounded-full {% if imp.rejeitados %}bg-amber-100 text-amber-700{% else %}bg-gray-100 text-gray-500{% endif %} font-semibold">✕{{ imp.rejeitados|length }}</span></span>{% endif %}
+                    <span class="px-2 py-0.5 rounded-full {% if imp.rejeitados %}bg-amber-100 text-amber-700{% else %}bg-gray-100 text-gray-500{% endif %} font-semibold">✕{{ imp.rejeitados|length }}</span>
+                    {% if imp.removidos %}<span class="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-semibold">−{{ imp.removidos }}</span>{% endif %}</span>{% endif %}
             </summary>
             <div class="mt-2 text-[12px] text-gray-600 space-y-1">
                 {% if imp.erro %}<p class="text-red-700">{{ imp.erro }}</p>{% else %}
-                <p>{{ imp.incluidos }} incluído(s), {{ imp.alterados }} alterado(s), {{ imp.sem_mudanca }} sem mudança, {{ imp.rejeitados|length }} rejeitado(s).</p>
+                <p>{{ imp.incluidos }} incluído(s), {{ imp.alterados }} alterado(s), {{ imp.sem_mudanca }} sem mudança, {{ imp.removidos }} fora da tabela, {{ imp.rejeitados|length }} rejeitado(s).</p>
                 {% for r in imp.rejeitados|slice:":50" %}<p class="text-amber-800">• {{ r.aba }} — {{ r.item }}: {{ r.motivo }}</p>{% endfor %}{% endif %}
             </div>
         </details>

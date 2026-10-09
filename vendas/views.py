@@ -9,7 +9,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db import transaction
-from django.db.models import Count, DecimalField, F, Q, Sum
+from django.db.models import Case, Count, DecimalField, F, IntegerField, Q, Sum, When
 from django.db.models.functions import TruncDate
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -420,14 +420,19 @@ def precos(request):
     if not can_access_vendas(request.user):
         return _deny(request)
 
-    itens = ItemPreco.objects.all()
+    itens = ItemPreco.objects.filter(ativo=True)
     categoria = request.GET.get('categoria', '').strip()
     search = request.GET.get('search', '').strip()
     if categoria:
         itens = itens.filter(categoria=categoria)
     if search:
-        itens = itens.filter(Q(nome__icontains=search) | Q(plano__icontains=search) | Q(cod_sap__icontains=search))
-    itens = itens.order_by('categoria', 'nome')
+        itens = itens.filter(Q(nome__icontains=search) | Q(**{'extra__MARCA__icontains': search})
+                             | Q(cod_sap__icontains=search))
+    itens = itens.order_by(Case(When(nome__istartswith=search or '\x00', then=0), default=1, output_field=IntegerField()),
+                           Case(When(categoria='SMARTPHONES', then=0), When(categoria='ELETRÔNICOS_LP_Conectados', then=1),
+                                default=2, output_field=IntegerField()),
+                           Case(When(**{'extra__PORTFÓLIO': 'In'}, then=0), When(**{'extra__PORTFÓLIO': 'Out'}, then=1),
+                                default=2, output_field=IntegerField()), 'nome')
 
     paginator = Paginator(itens, 50)
     try:
@@ -444,8 +449,10 @@ def precos(request):
         'paginator': paginator,
         'categoria': categoria,
         'search': search,
-        'categorias': list(ItemPreco.objects.values_list('categoria', flat=True).distinct().order_by('categoria')),
-        'total': ItemPreco.objects.count(),
+        'categorias': list(ItemPreco.objects.filter(ativo=True).values_list('categoria', flat=True).distinct().order_by('categoria')),
+        'rotulos_categoria': {'SMARTPHONES': 'Smartphones e watches', 'ELETRÔNICOS_LP_Conectados': 'Eletrônicos conectados',
+                              'ELETRÔNICOS_LP_Não Conectados': 'Eletrônicos não conectados'},
+        'total': ItemPreco.objects.filter(ativo=True).count(),
     }
     return render(request, 'vendas/precos_list.html', context)
 
@@ -465,9 +472,11 @@ def precos_import(request):
             resumo = importar_tabela_precos(f)
             registro.incluidos, registro.alterados = resumo['incluidos'], resumo['alterados']
             registro.sem_mudanca, registro.rejeitados = resumo['sem_mudanca'], resumo['rejeitados'][:500]
+            registro.removidos = resumo['removidos'] + resumo['inativados']
             registro.save()
-            messages.success(request, f"Importação concluída: {resumo['incluidos']} incluído(s), "
-                                      f"{resumo['alterados']} alterado(s), {len(resumo['rejeitados'])} rejeitado(s).")
+            messages.success(request, f"Tabela substituída: {resumo['importados']} produto(s) — {resumo['incluidos']} novo(s), "
+                                      f"{resumo['alterados']} com preço alterado, {registro.removidos} fora da tabela, "
+                                      f"{len(resumo['rejeitados'])} rejeitado(s).")
         except Exception as exc:  # noqa: BLE001 — [Confiabilidade.NF003] a tabela vigente fica como estava
             registro.erro = str(exc)[:2000]
             registro.save()
@@ -545,14 +554,21 @@ def precos_buscar(request):
         .exclude(categoria='PLANOS')
         .filter(Q(nome__icontains=q) | Q(plano__icontains=q) | Q(cod_sap__icontains=q)
                 | Q(cod_sistema__icontains=q) | Q(**{'extra__ID DPGC__icontains': q}))
-        .order_by('categoria', 'nome')[:20]
+        # Quem começa pelo que foi digitado vem primeiro ("iphone 16" → o iPhone, não as 30 capas dele);
+        # depois aparelhos e conectados, e os que estão em linha (In) antes dos fora de linha (EOL).
+        .order_by(Case(When(nome__istartswith=q, then=0), default=1, output_field=IntegerField()),
+                  Case(When(categoria='SMARTPHONES', then=0), When(categoria='ELETRÔNICOS_LP_Conectados', then=1),
+                       default=2, output_field=IntegerField()),
+                  Case(When(**{'extra__PORTFÓLIO': 'In'}, then=0), When(**{'extra__PORTFÓLIO': 'Out'}, then=1),
+                       default=2, output_field=IntegerField()), 'nome')[:25]
     )
     segmentacao = request.GET.get('segmentacao', '')
     grupamento = request.GET.get('grupamento', '')
     results = []
     for it in qs:
-        sugerido, regra = slv.preco_sugerido(it, segmentacao, grupamento)
+        sugerido, regra = slv.preco_sugerido(it, segmentacao, grupamento, request.GET.get('condicao', ''))
         extra = it.extra if isinstance(it.extra, dict) else {}
+        tabela = extra.get('tabela') or {}
         results.append({
             'id': it.id, 'categoria': it.categoria, 'nome': it.nome, 'plano': it.plano,
             'sistema': it.sistema, 'grupamento': it.grupamento, 'cod_sap': it.cod_sap,
@@ -560,7 +576,13 @@ def precos_buscar(request):
             'valor': (str(it.valor) if it.valor is not None else ''),
             'categoria_slv': slv.categoria_slv(it),
             'valor_sugerido': str(sugerido) if sugerido is not None else '', 'regra': regra,
-            'fabricante': extra.get('FABRICANTE', ''),
+            'fabricante': extra.get('FABRICANTE', '') or extra.get('MARCA', ''),
+            'portfolio': extra.get('PORTFÓLIO', ''), 'tipo': extra.get('CATEGORIA', ''),
+            # As opções da TABELA REGULAR: grupo do plano → condição → valor (a tela troca o preço na hora).
+            # A ordem dos grupos vem da lista salva na importação (o JSONB do Postgres reordena as chaves).
+            'tabela': tabela, 'grupos': [g for g in (extra.get('grupos') or tabela) if g in tabela],
+            'grupo_padrao': slv.grupo_padrao(it, segmentacao),
+            'condicoes': {g: slv.condicoes(it, g) for g in tabela},
         })
     return JsonResponse({'results': results})
 

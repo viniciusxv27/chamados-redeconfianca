@@ -104,7 +104,7 @@ SEM_CONDICAO = ('', '-', '--', 'N/A', 'NA', 'NÃO', 'NAO', 'X', '0')
 
 # Pela coluna "Categoria" das abas que misturam tudo (PRODUTOS B2B): acessório é essencial.
 CATEGORIAS_APARELHO = ('smartphone', 'smartwatch', 'celular')
-CATEGORIAS_ESSENCIAL = ('capa', 'cabo', 'carregador', 'película', 'pelicula', 'acessório', 'acessorio', 'chip')
+CATEGORIAS_ESSENCIAL = ('essencia', 'capa', 'cabo', 'carregador', 'película', 'pelicula', 'acessório', 'acessorio', 'chip')
 
 
 def categoria_slv(item):
@@ -126,8 +126,37 @@ def _texto_extra(item, *chaves):
     return ''
 
 
-def preco_sugerido(item, segmentacao='', grupamento=''):
+# Condições da TABELA REGULAR (vendas/services.py): o preço do grupo, o PIX e as parcelas.
+COND_BASE = 'Preço'
+COND_PIX = 'PIX e Vivo Pay'
+ROTULOS_CONDICAO = {COND_BASE: 'Preço (cartão sem juros)', COND_PIX: 'PIX e Vivo Pay'}
+
+
+def condicoes(item, grupo):
+    """As condições de pagamento do grupo, na ordem da planilha: Preço, PIX, 2x … 21x."""
+    linha = ((item.extra or {}).get('tabela') or {}).get(grupo) or {}
+    ordem = [COND_BASE, COND_PIX] + [f'{n}x' for n in range(2, 25)]
+    return [c for c in ordem if c in linha]
+
+
+def grupo_padrao(item, segmentacao=''):
+    """O grupo que já vem escolhido: PRÉ para cliente Pré (ou sem plano) quando o produto tem PRÉ."""
+    grupos = (item.extra or {}).get('grupos') or []
+    if segmentacao in ('PRE', '') and grupos and grupos[0].upper().startswith('PR'):
+        return grupos[0]
+    return ''
+
+
+def preco_sugerido(item, segmentacao='', grupamento='', condicao=''):
     """[Venda de produtos.RF002] O valor do produto conforme o plano do cliente.
+
+    Produto importado com a TABELA REGULAR (smartphones e eletrônicos
+    conectados): o valor sai do grupo do plano + condição de pagamento que o
+    vendedor escolhe no item (padrão: o preço do grupo). Sem grupo escolhido,
+    o cliente Pré (ou sem plano) cai no grupo PRÉ; os demais precisam escolher.
+    "-" na planilha = o produto não sai naquele grupo.
+
+    Produto de valor único (Não Conectados: PVP Base): o valor da tabela.
 
     Devolve ``(valor ou None, regra)``. Eletrônico e essencial: o valor da
     tabela pelo SKU. Aparelho: cliente Pré (ou sem plano) paga o preço Pré da
@@ -135,6 +164,19 @@ def preco_sugerido(item, segmentacao='', grupamento=''):
     cliente diz que o aparelho não sai nele, não há valor (o vendedor preenche,
     [Apêndice A, item 8]).
     """
+    tabela = (item.extra or {}).get('tabela')
+    if tabela:
+        grupo = grupamento or grupo_padrao(item, segmentacao)
+        if not grupo:
+            return None, 'escolha o grupo do plano'
+        linha = tabela.get(grupo)
+        if not linha:
+            return None, f'não disponível no grupo {grupo}'
+        cond = condicao or COND_BASE
+        valor = dinheiro(linha.get(cond))
+        if valor is None:
+            return None, f'sem valor em {grupo} · {cond}'
+        return valor, f'{grupo} · {ROTULOS_CONDICAO.get(cond, cond)}'
     if categoria_slv(item) != 'aparelho':
         return (item.valor, 'tabela pelo SKU') if item.valor is not None else (None, 'sem valor na tabela')
     tem_coluna_pre = any(k in (item.extra or {}) for k in ('PRÉ', 'PRE-PAGO', 'PRÉ-PAGO'))
@@ -341,7 +383,7 @@ def registrar_venda(dados, usuario, loja, vendedor=None):
             continue
         qtde = max(int(p.get('qtde') or 1), 1)
         if item:
-            sugerido, regra = preco_sugerido(item, segmentacao_cliente, p.get('grupamento') or '')
+            sugerido, regra = preco_sugerido(item, segmentacao_cliente, p.get('grupamento') or '', p.get('condicao') or '')
         else:
             sugerido, regra = None, 'produto fora da tabela'
         rv = bool(p.get('renova_vini'))

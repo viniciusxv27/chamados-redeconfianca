@@ -439,7 +439,9 @@
             lista.innerHTML = achados.length ? achados.map(function (r, i) {
                 return '<button type="button" class="vd-item-busca w-full text-left px-4 py-2.5 border-b border-gray-100 last:border-0 flex items-center justify-between gap-3" data-i="' + i + '">' +
                     '<span class="min-w-0"><span class="block text-sm text-gray-900 truncate">' + esc(r.nome) + '</span><span class="block text-[11px] text-gray-500">' +
-                    esc(r.categoria_slv) + ' · ' + esc(r.categoria) + (r.sku ? ' · SKU ' + esc(r.sku) : '') + '</span></span>' +
+                    esc(r.categoria_slv) + ' · ' + esc(r.tipo || r.categoria) + (r.fabricante ? ' · ' + esc(r.fabricante) : '') +
+                    (r.portfolio && r.portfolio !== 'In' ? ' · <span class="text-amber-600">' + esc(r.portfolio) + '</span>' : '') +
+                    (r.grupos && r.grupos.length ? ' · <span class="text-purple-600">' + r.grupos.length + ' grupos de plano</span>' : '') + '</span></span>' +
                     '<span class="text-right whitespace-nowrap"><span class="block text-sm font-semibold text-gray-900 tabular">' + (r.valor_sugerido ? brl(r.valor_sugerido) : '—') + '</span>' +
                     '<span class="block text-[10px] text-gray-400">' + esc(r.regra) + '</span></span></button>';
             }).join('') : '<p class="p-4 text-sm text-gray-500">Nada encontrado para "' + esc(q) + '".</p>';
@@ -455,17 +457,38 @@
     lista.addEventListener('click', function (e) { const b = e.target.closest('[data-i]'); if (b) adicionarProduto(achados[Number(b.dataset.i)]); });
     document.addEventListener('click', function (e) { if (!e.target.closest('#vdBusca') && !e.target.closest('#vdBuscaLista')) lista.classList.add('hidden'); });
 
+    const COND_BASE = 'Preço', COND_PIX = 'PIX e Vivo Pay';
+    function rotuloCond(c) { return c === COND_BASE ? 'Preço (cartão sem juros)' : (c === COND_PIX ? 'PIX e Vivo Pay' : c); }
+    function condPadrao() { return estado.forma === 'PIX' ? COND_PIX : COND_BASE; }
+    function aplicarTabela(p) {
+        // Grupo do plano + condição → valor da TABELA REGULAR (o mesmo cálculo do servidor).
+        if (!p.tabela) return;
+        if (!p.grupo && (segCliente() === 'PRE' || !segCliente()) && p.grupos[0] && /^PR/i.test(p.grupos[0])) p.grupo = p.grupos[0];
+        const linha = p.grupo ? p.tabela[p.grupo] : null;
+        if (linha && !(p.condicao in linha)) p.condicao = COND_BASE;
+        const v = linha ? linha[p.condicao] : null;
+        p.valor_sugerido = v ? Number(v) : null;
+        p.sem_valor = !v;
+        p.regra = !p.grupo ? 'escolha o grupo do plano' : (v ? p.grupo + ' · ' + rotuloCond(p.condicao) : 'sem valor nessa condição');
+        p.valor_final = null;
+    }
     function adicionarProduto(r) {
-        estado.produtos.push({preco_id: r.id, nome: r.nome, sku: r.sku, categoria: r.categoria, categoria_slv: r.categoria_slv, regra: r.regra,
+        const p = {preco_id: r.id, nome: r.nome, sku: r.sku, categoria: r.categoria, categoria_slv: r.categoria_slv, regra: r.regra,
+            tipo: r.tipo, portfolio: r.portfolio,
             valor_sugerido: r.valor_sugerido ? Number(r.valor_sugerido) : null, sem_valor: !r.valor_sugerido, qtde: 1, prateleira_infinita: false,
             renova: false, renova_vini: false, renova_vini_valor: null, renova_codigo: '', renova_ok: null, renova_alied: false, renova_alied_valor: null,
-            valor_final: null});
+            valor_final: null,
+            tabela: r.grupos && r.grupos.length ? r.tabela : null, grupos: r.grupos || [], condicoes: r.condicoes || {},
+            grupo: r.grupo_padrao || '', condicao: condPadrao()};
+        aplicarTabela(p);
+        estado.produtos.push(p);
         busca.value = ''; lista.classList.add('hidden'); desenharProdutos(); recalcular();
     }
     async function reprecificar() {
         // Mudou o plano do cliente: o preço sugerido dos aparelhos muda junto.
-        const ids = estado.produtos.filter(function (p) { return p.preco_id; }).map(function (p) { return p.preco_id; });
-        if (!ids.length) return;
+        estado.produtos.forEach(function (p) { if (p.tabela) aplicarTabela(p); });
+        const ids = estado.produtos.filter(function (p) { return p.preco_id && !p.tabela; }).map(function (p) { return p.preco_id; });
+        if (!ids.length) { desenharProdutos(); recalcular(); return; }
         let j;
         try { j = await pedir(URL.buscar + '?ids=' + ids.join(',') + '&segmentacao=' + segCliente() + '&grupamento=' + ''); }
         catch (err) { return; }
@@ -491,10 +514,19 @@
             const aparelho = p.categoria_slv === 'aparelho';
             return '<div class="vd-entra rounded-xl border border-gray-200 p-4 space-y-3" data-p="' + i + '">' +
               '<div class="flex items-start justify-between gap-3"><div class="min-w-0"><p class="font-semibold text-gray-900">' + esc(p.nome) + '</p>' +
-              '<p class="text-[11px] text-gray-500"><span class="px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 font-semibold mr-1">' + esc(p.categoria_slv) + '</span>' + esc(p.categoria) + (p.sku ? ' · SKU ' + esc(p.sku) : '') + '</p></div>' +
+              '<p class="text-[11px] text-gray-500"><span class="px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 font-semibold mr-1">' + esc(p.categoria_slv) + '</span>' + esc(p.tipo || p.categoria) + (p.sku ? ' · SKU ' + esc(p.sku) : '') +
+              (p.portfolio && p.portfolio !== 'In' ? ' <span class="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-semibold">' + esc(p.portfolio) + '</span>' : '') + '</p></div>' +
               '<button type="button" class="text-gray-400 hover:text-red-600" data-remover="' + i + '" title="Remover"><i class="fas fa-trash"></i></button></div>' +
+              (p.tabela ? '<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">' +
+                '<div><label class="vd-rotulo">Grupo do plano *</label><select class="vd-campo' + (p.grupo ? '' : ' vd-erro') + '" data-campo="grupo">' +
+                  '<option value="">Escolha…</option>' + p.grupos.map(function (g) { return '<option' + (g === p.grupo ? ' selected' : '') + '>' + esc(g) + '</option>'; }).join('') + '</select></div>' +
+                '<div><label class="vd-rotulo">Condição de pagamento</label><select class="vd-campo" data-campo="condicao"' + (p.grupo ? '' : ' disabled') + '>' +
+                  ((p.condicoes[p.grupo] || [COND_BASE]).map(function (c) {
+                      const v = p.grupo && p.tabela[p.grupo] ? p.tabela[p.grupo][c] : null;
+                      return '<option value="' + esc(c) + '"' + (c === p.condicao ? ' selected' : '') + '>' + esc(rotuloCond(c)) + (v ? ' — ' + brl(v) : '') + '</option>';
+                  }).join('')) + '</select></div></div>' : '') +
               '<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 items-end">' +
-                '<div class="col-span-2"><label class="vd-rotulo">Valor sugerido (R$)' + (p.sem_valor ? ' *' : '') + '</label><input class="vd-campo tabular text-right' + (p.sem_valor && !p.valor_sugerido ? ' vd-erro' : '') + '" data-campo="valor_sugerido" inputmode="decimal" value="' + moeda(p.valor_sugerido) + '">' +
+                '<div class="col-span-2"><label class="vd-rotulo">Valor sugerido (R$)' + (p.sem_valor ? ' *' : '') + '</label><input class="vd-campo tabular text-right' + (p.sem_valor && !p.valor_sugerido ? ' vd-erro' : '') + '" data-campo="valor_sugerido" inputmode="decimal" value="' + moeda(p.valor_sugerido) + '"' + (p.tabela && p.valor_sugerido ? ' readonly title="Valor da tabela — ajuste o valor final no resumo"' : '') + '>' +
                   '<p class="vd-ajuda">' + esc(p.regra || '') + (p.sem_valor ? ' — informe o valor' : '') + '</p></div>' +
                 '<div><label class="vd-rotulo">Qtde</label><input class="vd-campo tabular" type="number" min="1" data-campo="qtde" value="' + p.qtde + '"></div>' +
                 '<label class="flex items-center gap-2 text-sm text-gray-700 pb-2.5 cursor-pointer"><input type="checkbox" class="rounded text-purple-600" data-campo="prateleira_infinita"' + (p.prateleira_infinita ? ' checked' : '') + '>Prateleira infinita</label>' +
@@ -527,6 +559,7 @@
         if (e.target.type === 'checkbox') { p[campo] = e.target.checked; if (campo !== 'prateleira_infinita') desenharProdutos(); }
         else if (campo === 'qtde') p.qtde = Math.max(1, Number(e.target.value) || 1);
         else if (campo === 'renova_codigo') { p.renova_codigo = e.target.value.trim().toUpperCase(); conferirRenova(p, Number(caixa.dataset.p)); }
+        else if (campo === 'grupo' || campo === 'condicao') { p[campo] = e.target.value; aplicarTabela(p); desenharProdutos(); }
         else { p[campo] = num(e.target.value); e.target.value = moeda(p[campo]); if (campo === 'valor_sugerido') p.valor_final = null; }
         recalcular();
     });
@@ -539,7 +572,15 @@
         if (j.ok) p.renova_codigo = j.codigo;
         desenharProdutos(); recalcular();
     }
-    document.querySelectorAll('[name=vdForma]').forEach(function (r) { r.addEventListener('change', function () { estado.forma = r.value; recalcular(); }); });
+    document.querySelectorAll('[name=vdForma]').forEach(function (r) { r.addEventListener('change', function () {
+        estado.forma = r.value;
+        estado.produtos.forEach(function (p) {
+            if (!p.tabela) return;
+            if (estado.forma === 'PIX' && p.condicao === COND_BASE) { p.condicao = COND_PIX; aplicarTabela(p); }
+            if (estado.forma === 'CARTAO' && p.condicao === COND_PIX) { p.condicao = COND_BASE; aplicarTabela(p); }
+        });
+        desenharProdutos(); recalcular();
+    }); });
     $('vdVivoPct').textContent = '(' + String(SLV.vivo_mais).replace('.', ',') + '%)';
     $('vdVivoMais').addEventListener('change', function () { estado.vivoMais = this.checked; estado.produtos.forEach(function (p) { p.valor_final = null; }); recalcular(); });
 
@@ -573,7 +614,7 @@
         const t = $('vdTipoServico').value, c = $('vdCamposServico');
         // [IU001] trocar o serviço limpa os campos dependentes.
         let html = '';
-        const todos = ['POS', 'CONTROLE', 'PRE', 'EMPRESAS'];
+        const todos = ['POS', 'CONTROLE', 'PRE', 'EMPRESAS', 'FIBRA'];
         if (t === 'ALTA') html = seletorPlano('Segmentação e plano *', 'novo', todos);
         if (t === 'REATIVACAO') html = seletorPlano('Segmentação e plano *', 'novo', ['POS', 'CONTROLE']);
         if (t === 'TROCA_PLANO' || t === 'MIGRACAO') {
@@ -719,7 +760,7 @@
                              nome: $('vdPaPlano').selectedOptions[0] ? $('vdPaPlano').selectedOptions[0].text : ''},
             produtos: estado.produtos.map(function (p) { const c = calcItem(p); return {
                 preco_id: p.preco_id, nome: p.nome, qtde: p.qtde, prateleira_infinita: p.prateleira_infinita,
-                grupamento: '', valor_sugerido: p.valor_sugerido,
+                grupamento: p.grupo || '', condicao: p.condicao || '', valor_sugerido: p.valor_sugerido,
                 renova_vini: p.renova && p.renova_vini, renova_vini_valor: p.renova_vini_valor, renova_codigo: p.renova_codigo,
                 renova_alied: p.renova && p.renova_alied, renova_alied_valor: p.renova_alied_valor,
                 valor_final: c.editado ? p.valor_final : null}; }),

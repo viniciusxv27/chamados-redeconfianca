@@ -232,7 +232,8 @@ class VendaServico(models.Model):
 # ═══════════════════════════════════════════════════════════════════════════
 # SLV — Sistema de Lançamento de Vendas (Documento de Requisitos v1.0)
 # ═══════════════════════════════════════════════════════════════════════════
-SEGMENTACOES = [('POS', 'Pós'), ('CONTROLE', 'Controle'), ('PRE', 'Pré'), ('EMPRESAS', 'Vivo Empresas')]
+# FIBRA: Vivo Fibra e Vivo TV de casa (os planos de empresa ficam em Vivo Empresas).
+SEGMENTACOES = [('POS', 'Pós'), ('CONTROLE', 'Controle'), ('PRE', 'Pré'), ('EMPRESAS', 'Vivo Empresas'), ('FIBRA', 'Fibra e TV')]
 
 
 class Plano(models.Model):
@@ -382,6 +383,7 @@ class ImportacaoPrecos(models.Model):
     incluidos = models.PositiveIntegerField(default=0)
     alterados = models.PositiveIntegerField(default=0)
     sem_mudanca = models.PositiveIntegerField(default=0)
+    removidos = models.PositiveIntegerField(default=0, db_default=0, help_text='Saíram da tabela (apagados ou inativados).')
     rejeitados = models.JSONField(default=list, blank=True)
     erro = models.TextField(blank=True, help_text='Se a importação falhou, a tabela vigente ficou como estava.')
 

@@ -4,6 +4,11 @@
 {% block drive_subtitulo %}{{ rotulo }}{% if pasta_liberada %} · pasta liberada para você{% endif %}{% endblock %}
 
 {% block drive_conteudo %}
+<style>
+    #dv-grid [data-id] { transition: box-shadow .35s ease, background-color .35s ease; }
+    #dv-grid .dv-destaque { box-shadow: 0 0 0 3px rgba(59,130,246,.55); background-color: rgba(59,130,246,.08); border-radius: .9rem; }
+    html.dark #dv-grid .dv-destaque { box-shadow: 0 0 0 3px rgba(96,165,250,.6); background-color: rgba(96,165,250,.12); }
+</style>
 <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
     <!-- Barra de caminho + ações -->
     <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap">
@@ -462,6 +467,29 @@ window.addEventListener('popstate', e => {
     const url = (e.state && e.state.dv) || window.location.pathname + window.location.search;
     dvIrPara(url, {semHistorico: true});
 });
+
+// Voltou de um arquivo (?destaque=<id>): a grade rola até ele e o destaca por
+// um instante — a pessoa vê de onde veio. O parâmetro sai do endereço antes de
+// a página entrar no cache e no histórico.
+(function () {
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get('destaque');
+    if (!id) return;
+    params.delete('destaque');
+    const limpo = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+    history.replaceState(history.state, '', limpo);
+    // Só depois que a página termina de carregar: antes disso a rolagem pula e o
+    // destaque acaba antes de a pessoa ver a grade.
+    function destacar() {
+        const item = document.querySelector('#dv-grid [data-id="' + CSS.escape(id) + '"]');
+        if (!item) return;
+        item.scrollIntoView({block: 'center', behavior: 'smooth'});
+        item.classList.add('dv-destaque');
+        setTimeout(function () { item.classList.remove('dv-destaque'); }, 3000);
+    }
+    if (document.readyState === 'complete') destacar();
+    else window.addEventListener('load', destacar, {once: true});
+})();
 
 // A pasta com que a página abriu entra no cache a partir do que já está na
 // tela: assim o primeiro "voltar" também é instantâneo, sem ir ao servidor.

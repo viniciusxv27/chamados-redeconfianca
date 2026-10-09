@@ -307,19 +307,94 @@ try:
     import openpyxl
     from io import BytesIO
     from django.core.files.uploadedfile import SimpleUploadedFile
+
+    def bloco(base):
+        """Um grupo da Tabela Regular: Preço, PIX (−10%) e 2x…21x (juros a partir de 13x)."""
+        if base == '-':
+            return ['-'] * 22
+        return [base, round(base * 0.9, 2)] + [base] * 11 + [round(base * (1 + 0.01 * n), 2) for n in range(1, 10)]
+
+    def cabecalho_regular(grupos):
+        cab = []
+        for g in grupos:
+            cab += [g, 'PIX\ne\nVivo Pay'] + [f'{n}x' for n in range(2, 22)]
+        return cab
+
+    def aba_regular(wb, nome, grupos, linhas):
+        ws = wb.create_sheet(nome)
+        ws.append([None] * 4 + ['TITULO'])
+        largura = len(cabecalho_regular(grupos))
+        ws.append([None] * 4 + ['Vigência', 'TABELA REGULAR'] + [None] * (largura - 1) + ['TABELA RENOVA'])
+        ws.append(['PORTFÓLIO', 'CATEGORIA', 'MARCA', 'OFERTA DE COMUNICAÇÃO', 'Nome Comercial']
+                  + cabecalho_regular(grupos) + ['DESCONTO', 'PRÉ-RENOVA'])
+        for portfolio, categoria, marca, nome, bases in linhas:
+            ws.append([portfolio, categoria, marca, 'Oferta', nome] + sum((bloco(b) for b in bases), []) + [0, 999999])
+
     wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = 'PRODUTOS'
-    ws.append(['PRODUTO', 'VALOR', 'COD SAP'])
-    ws.append(['ZZ Capa', 59.90, 'ZZCAPA'])
-    ws.append(['ZZ Capa Nova', 39.90, 'ZZCN'])
-    ws.append(['ZZ Película', 'abc', 'ZZPEL'])
+    wb.remove(wb.active)
+    wb.create_sheet('PLANOS')
+    aba_regular(wb, 'SMARTPHONES', ['PRÉ', 'PÓS INDIVIDUAL'], [
+        ('In', 'Smartphone', 'Zz', 'ZZ Phone Novo', [3000, 2500]),
+        ('EOL', 'Smartphone', 'Zz', 'ZZ Phone X', [2600, 2200]),
+        ('Out', 'Bem Estar', 'Zz', 'ZZ Watch', [1500, '-']),
+    ])
+    aba_regular(wb, 'ELETRÔNICOS_LP_Conectados', ['PRÉ', 'MULTIVIVO'], [('In', 'Box e Modem e FWT', 'Zz', 'ZZ Modem', [400, 300])])
+    ws = wb.create_sheet('ELETRÔNICOS_LP_Não Conectados')
+    ws.append([None, None, None, 'TITULO'])
+    ws.append([None, None, None, 'Vigência'])
+    ws.append(['PORTFÓLIO', 'CATEGORIA', 'MARCA', 'Nome Comercial', 'PVP Base', 'PIX\ne\nVivo Pay', '2x'])
+    ws.append(['In', 'Essenciais', 'Zz', 'ZZ Capa Nova', 39.9, 35.91, 39.9])
+    ws.append(['EOL', 'Áudio', 'Zz', 'ZZ Fone Novo', 299, 269.1, 299])
+    ws.append(['In', 'Essenciais', 'Zz', 'ZZ Película', '#N/A', None, None])
     arquivo = BytesIO()
     wb.save(arquivo)
+    usado = VendaProduto.objects.filter(preco=capa).exists()
     ca.post('/vendas/precos/importar/', {'arquivo': SimpleUploadedFile('tabela.xlsx', arquivo.getvalue())})
     imp = ImportacaoPrecos.objects.order_by('-id').first()
-    t('relatório: incluído, sem mudança e rejeitado', imp and imp.incluidos == 1 and imp.sem_mudanca == 1 and len(imp.rejeitados) == 1
-      and 'não é número' in imp.rejeitados[0]['motivo'], imp and (imp.incluidos, imp.alterados, imp.sem_mudanca, imp.rejeitados))
+    t('importação substitui a tabela: só as 3 abas', imp and not imp.erro
+      and set(ItemPreco.objects.filter(ativo=True).values_list('categoria', flat=True))
+      == {'SMARTPHONES', 'ELETRÔNICOS_LP_Conectados', 'ELETRÔNICOS_LP_Não Conectados'}, imp and (imp.erro, imp.incluidos))
+    t('relatório: 6 produtos, 1 rejeitado (PVP #N/A), o resto fora', imp.incluidos + imp.alterados == 6
+      and len(imp.rejeitados) == 1 and 'PVP Base' in imp.rejeitados[0]['motivo'] and imp.removidos >= 3,
+      (imp.incluidos, imp.alterados, imp.rejeitados, imp.removidos))
+    t('produto já vendido fica inativo (a venda continua apontando)', not usado or ItemPreco.objects.get(pk=capa.pk).ativo is False)
+    phone = ItemPreco.objects.get(categoria='SMARTPHONES', nome='ZZ Phone Novo')
+    t('tabela regular: grupos e condições', phone.extra['grupos'] == ['PRÉ', 'PÓS INDIVIDUAL']
+      and phone.extra['tabela']['PÓS INDIVIDUAL']['PIX e Vivo Pay'] == '2250.00' and phone.extra['tabela']['PRÉ']['21x'] == '3270.00'
+      and phone.valor == D('3000.00') and phone.extra['PORTFÓLIO'] == 'In', phone.extra['tabela']['PRÉ'])
+    watch = ItemPreco.objects.get(categoria='SMARTPHONES', nome='ZZ Watch')
+    t('"-" na planilha: o grupo some do produto', watch.extra['grupos'] == ['PRÉ'])
+    fone = ItemPreco.objects.get(nome='ZZ Fone Novo')
+    t('Não Conectados: PVP Base é o valor', fone.valor == D('299.00') and 'tabela' not in fone.extra)
+    t('categorias da venda', (slv.categoria_slv(phone), slv.categoria_slv(fone),
+                              slv.categoria_slv(ItemPreco.objects.get(nome='ZZ Capa Nova'))) == ('aparelho', 'eletronico', 'essencial'))
+    t('preço: grupo + condição', slv.preco_sugerido(phone, 'POS', 'PÓS INDIVIDUAL', 'PIX e Vivo Pay') == (D('2250.00'), 'PÓS INDIVIDUAL · PIX e Vivo Pay')
+      and slv.preco_sugerido(phone, 'POS', 'PÓS INDIVIDUAL', '18x')[0] == D('2650.00')
+      and slv.preco_sugerido(phone, 'PRE')[0] == D('3000.00')
+      and slv.preco_sugerido(phone, 'POS') == (None, 'escolha o grupo do plano')
+      and slv.preco_sugerido(watch, 'POS', 'PÓS INDIVIDUAL') == (None, 'não disponível no grupo PÓS INDIVIDUAL'))
+    j = vender({'cliente': {'cpf': CPF, 'nome': 'Zz Cliente Teste'}, 'forma_pagamento': 'CARTAO', 'plano_anterior': {'id': pos.id},
+                'produtos': [{'preco_id': phone.id, 'grupamento': 'PÓS INDIVIDUAL', 'condicao': '12x'}]})
+    t('venda com grupo + condição grava o valor da tabela', j.get('ok') and VendaProduto.objects.get(venda_id=j['id']).valor_sugerido == D('2500.00')
+      and VendaProduto.objects.get(venda_id=j['id']).regra_preco == 'PÓS INDIVIDUAL · 12x', j)
+    j = vender({'cliente': {'cpf': CPF, 'nome': 'Zz Cliente Teste'}, 'forma_pagamento': 'CARTAO', 'plano_anterior': {'id': pos.id},
+                'produtos': [{'preco_id': phone.id}]})
+    t('sem grupo escolhido (cliente Pós): pede o grupo', not j['ok'] and 'informe o valor' in ' '.join(j['erros']), j)
+    r = cv.get('/vendas/precos/buscar/?q=ZZ%20Phone%20Novo&segmentacao=PRE')
+    res = r.json()['results'][0]
+    t('busca devolve grupos, condições e o grupo PRÉ já escolhido para Pré', res['grupos'] == ['PRÉ', 'PÓS INDIVIDUAL']
+      and res['grupo_padrao'] == 'PRÉ' and res['condicoes']['PRÉ'][:3] == ['Preço', 'PIX e Vivo Pay', '2x'] and res['valor_sugerido'] == '3000.00', res)
+    r = cv.get('/vendas/precos/?search=ZZ')
+    html = r.content.decode()
+    t('lista de produtos mostra a grade da tabela regular', 'PÓS INDIVIDUAL' in html and 'ZZ Phone Novo' in html and 'PVP Base' in html)
+    wb2 = openpyxl.Workbook()
+    wb2.active.title = 'SMARTPHONES'
+    arquivo2 = BytesIO()
+    wb2.save(arquivo2)
+    antes = ItemPreco.objects.count()
+    ca.post('/vendas/precos/importar/', {'arquivo': SimpleUploadedFile('incompleta.xlsx', arquivo2.getvalue())})
+    imp = ImportacaoPrecos.objects.order_by('-id').first()
+    t('planilha sem as abas: falha registrada e tabela intacta', 'não tem a(s) aba(s)' in imp.erro and ItemPreco.objects.count() == antes, imp.erro)
     antes = ItemPreco.objects.count()
     ca.post('/vendas/precos/importar/', {'arquivo': SimpleUploadedFile('ruim.xlsx', b'nao e planilha')})
     imp = ImportacaoPrecos.objects.order_by('-id').first()

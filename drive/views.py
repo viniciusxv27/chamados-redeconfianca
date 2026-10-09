@@ -458,9 +458,10 @@ def file_preview(request, file_id):
 
     audit.registrar(request.user, 'VIEW', request=request, file_id=file_id,
                     file_name=meta.get('name', ''), sector=mapping.sector)
+    volta = _pasta_de_volta(request.user, mapping, meta)
     return render(request, 'drive/preview.html', {
         'meta': meta, 'mapping': mapping, 'sector': mapping.sector, 'nivel': nivel,
-        'rotulo': mapping.rotulo, 'url_raiz': mapping.url_lista(),
+        'rotulo': mapping.rotulo, 'url_raiz': mapping.url_lista(), **volta,
         'pasta_liberada': mapping.e_pasta_liberada,
         'fav': DriveFavorite.objects.filter(user=request.user, file_id=file_id).exists(),
         'visualizacao': vis.tipo(meta.get('mimeType')),
@@ -471,6 +472,36 @@ def file_preview(request, file_id):
             meta, nivel >= ORDEM['DOWNLOAD'], nivel >= ORDEM['EDIT'],
             reverse('drive:edicao_local_iniciar', args=[file_id])),
     })
+
+
+def _pasta_de_volta(user, raiz, meta):
+    """Para onde o "voltar" do arquivo leva: a pasta em que ele está, não o início da raiz.
+
+    Devolve ``url_voltar`` (com ``?destaque=<arquivo>`` para a grade rolar até
+    ele), ``nome_voltar`` e ``trilha_arquivo`` [(nome, url), ...] da raiz até a
+    pasta. Se a pasta não está dentro da raiz ou a pessoa não pode abri-la
+    (arquivo liberado avulso), volta para o início da raiz — como antes.
+    """
+    inicio = {'url_voltar': f"{raiz.url_lista()}?destaque={meta['id']}", 'nome_voltar': raiz.rotulo,
+              'trilha_arquivo': []}
+    pai = (meta.get('parents') or [''])[0]
+    if not pai or pai == raiz.folder_id:
+        return inicio
+    try:
+        if not gdrive.dentro_de(pai, raiz.folder_id):
+            return inicio
+        nivel = (perms.nivel_na_pasta(user, raiz) if raiz.e_pasta_liberada
+                 else perms.level_for_folder(user, raiz, pai))
+        if nivel < ORDEM['VIEW']:
+            return inicio
+        caminho = gdrive.caminho(pai, ate_root=raiz.folder_id)
+    except gdrive.DriveError:
+        return inicio
+    trilha = [(nome, raiz.url_lista(fid)) for fid, nome in caminho[1:]]
+    if not trilha:
+        return inicio
+    return {'url_voltar': f"{trilha[-1][1]}?destaque={meta['id']}", 'nome_voltar': trilha[-1][0],
+            'trilha_arquivo': trilha}
 
 
 @login_required

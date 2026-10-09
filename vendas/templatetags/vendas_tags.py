@@ -44,3 +44,19 @@ def last_dia(serie):
     if not serie:
         return ''
     return serie[-1]['dia'].strftime('%d/%m')
+
+
+@register.filter
+def get_item(dicionario, chave):
+    """Item de dicionário pela chave (o template não indexa dict por variável)."""
+    try:
+        return dicionario.get(chave)
+    except AttributeError:
+        return None
+
+
+@register.filter
+def brl_ou_traco(valor):
+    """Como brl, mas vazio vira "—" (célula sem preço na tabela não é R$ 0,00)."""
+    numero = _decimal(valor)
+    return '—' if numero is None else f'R$ {_br(numero)}'
