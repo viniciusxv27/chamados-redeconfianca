@@ -428,7 +428,8 @@ def precos(request):
     if search:
         itens = itens.filter(Q(nome__icontains=search) | Q(**{'extra__MARCA__icontains': search})
                              | Q(cod_sap__icontains=search))
-    itens = itens.order_by(Case(When(nome__istartswith=search or '\x00', then=0), default=1, output_field=IntegerField()),
+    comeca = [Case(When(nome__istartswith=search, then=0), default=1, output_field=IntegerField())] if search else []
+    itens = itens.order_by(*comeca,
                            Case(When(categoria='SMARTPHONES', then=0), When(categoria='ELETRÔNICOS_LP_Conectados', then=1),
                                 default=2, output_field=IntegerField()),
                            Case(When(**{'extra__PORTFÓLIO': 'In'}, then=0), When(**{'extra__PORTFÓLIO': 'Out'}, then=1),
