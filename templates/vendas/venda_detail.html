@@ -4,133 +4,124 @@
 {% block title %}Venda #{{ venda.pk }}{% endblock %}
 {% block vd_icone %}fa-receipt{% endblock %}
 {% block vd_cabecalho %}Venda #{{ venda.pk }}{% endblock %}
-{% block vd_subtitulo %}{{ venda.data_venda|date:"d/m/Y H:i" }} · {{ venda.get_comprovante_fiscal_display }}{% endblock %}
-
+{% block vd_subtitulo %}{{ venda.data_venda|date:"d/m/Y \à\s H:i" }} · {{ venda.loja.name|default:venda.pdv_nome|default:"sem PDV" }}{% endblock %}
 {% block vd_acoes %}
-<a href="{% url 'vendas:dashboard' %}"
-   class="inline-flex items-center gap-2 px-3.5 py-2 vd-card text-gray-700 text-sm font-semibold hover:bg-gray-50">
-    <i class="fas fa-arrow-left"></i> Voltar
-</a>
-<a href="{% url 'vendas:venda_create' %}"
-   class="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-lg shadow-sm">
-    <i class="fas fa-plus"></i> Nova venda
-</a>
+<a href="{% url 'vendas:dashboard' %}" class="inline-flex items-center gap-2 px-3.5 py-2 vd-card text-gray-700 text-sm font-semibold hover:bg-gray-50"><i class="fas fa-arrow-left"></i>Vendas</a>
+<button type="button" onclick="window.print()" class="inline-flex items-center gap-2 px-3.5 py-2 vd-card text-gray-700 text-sm font-semibold hover:bg-gray-50"><i class="fas fa-print"></i><span class="hidden sm:inline">Imprimir</span></button>
+<a href="{% url 'vendas:venda_create' %}" class="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-lg"><i class="fas fa-plus"></i>Nova venda</a>
 {% endblock %}
 
 {% block vd_conteudo %}
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-    <div class="lg:col-span-2 space-y-4">
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+<div class="lg:col-span-2 space-y-4">
 
-        {% if venda.produtos.all %}
-        <div class="vd-secao">
-            <div class="vd-secao-cabeca">
-                <i class="fas fa-box text-purple-600"></i>
-                <span class="text-sm font-semibold text-gray-800">Produtos</span>
-                <span class="text-xs text-gray-400 ml-auto">{{ venda.produtos.count }} item{{ venda.produtos.count|pluralize:"ns" }}</span>
-            </div>
-            <div class="overflow-x-auto">
-                <table class="min-w-full text-sm">
-                    <thead class="bg-gray-50/70 text-gray-500 text-xs uppercase">
-                        <tr>
-                            <th class="text-left px-5 py-2.5 font-medium">Produto</th>
-                            <th class="text-left px-3 py-2.5 font-medium">Marca / Modelo</th>
-                            <th class="text-center px-3 py-2.5 font-medium">Qtde</th>
-                            <th class="text-right px-5 py-2.5 font-medium">Total</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-gray-50">
-                        {% for p in venda.produtos.all %}
-                        <tr>
-                            <td class="px-5 py-2.5 text-gray-800">
-                                {{ p.nome_produto }}
-                                {% if p.categoria or p.plano %}
-                                <span class="block text-[11px] text-gray-400">{{ p.categoria }}{% if p.plano %} · {{ p.plano }}{% endif %}</span>
-                                {% endif %}
-                            </td>
-                            <td class="px-3 py-2.5 text-gray-500">{{ p.marca }} {{ p.modelo }}</td>
-                            <td class="px-3 py-2.5 text-center text-gray-600 tabular">{{ p.qtde }}</td>
-                            <td class="px-5 py-2.5 text-right font-semibold text-gray-900 tabular whitespace-nowrap">{{ p.valor_total|brl }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+    {% if venda.numero_fake %}
+    <div class="rounded-xl bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800"><i class="fas fa-phone-slash mr-1.5"></i>Venda com <strong>número fictício</strong> na linha do cliente — separada para conferência.</div>
+    {% endif %}
+
+    <div class="vd-card p-5 grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+        <div>
+            <p class="vd-rotulo">Cliente</p>
+            <p class="font-semibold text-gray-900 text-base">{{ venda.cliente_nome|default:"—" }}</p>
+            <p class="text-gray-500 tabular">{{ venda.cliente_cpf }}{% if venda.cliente_telefone %} · {{ venda.cliente_telefone }}{% endif %}</p>
+            {% if venda.cliente.endereco %}<p class="text-[12px] text-gray-500 mt-0.5">{{ venda.cliente.endereco }}</p>{% endif %}
         </div>
-        {% endif %}
-
-        {% if venda.servicos.all %}
-        <div class="vd-secao">
-            <div class="vd-secao-cabeca">
-                <i class="fas fa-headset text-pink-600"></i>
-                <span class="text-sm font-semibold text-gray-800">Serviços</span>
-                <span class="text-xs text-gray-400 ml-auto">{{ venda.servicos.count }} item{{ venda.servicos.count|pluralize:"ns" }}</span>
-            </div>
-            <div class="overflow-x-auto">
-                <table class="min-w-full text-sm">
-                    <thead class="bg-gray-50/70 text-gray-500 text-xs uppercase">
-                        <tr>
-                            <th class="text-left px-5 py-2.5 font-medium">Serviço</th>
-                            <th class="text-left px-3 py-2.5 font-medium">Plano</th>
-                            <th class="text-left px-3 py-2.5 font-medium">Nº acesso</th>
-                            <th class="text-right px-5 py-2.5 font-medium">Valor</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-gray-50">
-                        {% for s in venda.servicos.all %}
-                        <tr>
-                            <td class="px-5 py-2.5 text-gray-800">{{ s.servico }}</td>
-                            <td class="px-3 py-2.5 text-gray-500">{{ s.plano_novo|default:"—" }}</td>
-                            <td class="px-3 py-2.5 text-gray-500 tabular">{{ s.numero_acesso|default:"—" }}</td>
-                            <td class="px-5 py-2.5 text-right font-semibold text-gray-900 tabular whitespace-nowrap">{{ s.valor_plano|brl }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+        <div>
+            <p class="vd-rotulo">Vendedor / PDV</p>
+            <p class="font-semibold text-gray-900">{{ venda.vendedor.get_full_name|default:"—" }}</p>
+            <p class="text-gray-500">{{ venda.loja.name|default:venda.pdv_nome }}{% if venda.created_by and venda.created_by != venda.vendedor %} · lançado por {{ venda.created_by.get_full_name }}{% endif %}</p>
         </div>
-        {% endif %}
-
-        {% if venda.observacao %}
-        <div class="vd-card p-5">
-            <h3 class="text-sm font-bold text-gray-800 mb-2"><i class="fas fa-note-sticky text-amber-500 mr-1.5"></i>Observação</h3>
-            <p class="text-sm text-gray-600 whitespace-pre-wrap">{{ venda.observacao }}</p>
+        <div>
+            <p class="vd-rotulo">Plano que o cliente tinha</p>
+            <p class="text-gray-900">{{ venda.plano_anterior_nome|default:"sem plano" }}</p>
+            {% if venda.valor_anterior is not None %}<p class="text-gray-500">pagava {{ venda.valor_anterior|brl }}</p>{% endif %}
+        </div>
+        {% if venda.forma_pagamento %}
+        <div>
+            <p class="vd-rotulo">Pagamento</p>
+            <p class="text-gray-900"><i class="fas {% if venda.forma_pagamento == 'PIX' %}fa-qrcode{% else %}fa-credit-card{% endif %} text-purple-500 mr-1"></i>{{ venda.get_forma_pagamento_display }}
+                {% if venda.vivo_mais %}<span class="ml-1 px-1.5 py-0.5 rounded-md bg-purple-100 text-purple-700 text-[11px] font-semibold">Vivo+ {{ venda.vivo_mais_percentual|floatformat:"-2" }}%</span>{% endif %}</p>
         </div>
         {% endif %}
     </div>
 
-    <div class="lg:col-span-1 space-y-4">
-        <div class="vd-card p-5">
-            <p class="text-xs text-gray-500">Total da venda</p>
-            <p class="text-3xl font-bold text-purple-700 tabular mt-1">{{ venda.total|brl }}</p>
-            <div class="mt-3 pt-3 border-t border-gray-100 space-y-1.5 text-sm">
-                <div class="flex justify-between"><span class="text-gray-500">Produtos</span><span class="text-gray-800 tabular">{{ venda.total_produtos|brl }}</span></div>
-                <div class="flex justify-between"><span class="text-gray-500">Serviços</span><span class="text-gray-800 tabular">{{ venda.total_servicos|brl }}</span></div>
-            </div>
-        </div>
-
-        <div class="vd-card p-5">
-            <h3 class="text-sm font-bold text-gray-800 mb-3"><i class="fas fa-circle-info text-gray-400 mr-1.5"></i>Dados</h3>
-            <dl class="space-y-2.5 text-sm">
-                <div><dt class="text-xs text-gray-400">Cliente</dt>
-                     <dd class="text-gray-800">{{ venda.cliente_nome|default:"—" }}
-                     {% if venda.cliente_cpf %}<span class="block text-[11px] text-gray-400">{{ venda.cliente_cpf }}</span>{% endif %}</dd></div>
-                <div><dt class="text-xs text-gray-400">Loja / PDV</dt>
-                     <dd class="text-gray-800">{{ venda.loja.name|default:venda.pdv_nome|default:"—" }}{% if venda.uf %} · {{ venda.uf }}{% endif %}</dd></div>
-                <div><dt class="text-xs text-gray-400">Vendedor</dt>
-                     <dd class="text-gray-800">{{ venda.vendedor.full_name|default:"—" }}</dd></div>
-                {% if venda.tipo_venda %}
-                <div><dt class="text-xs text-gray-400">Tipo de venda</dt><dd class="text-gray-800">{{ venda.tipo_venda }}</dd></div>
-                {% endif %}
-                <div><dt class="text-xs text-gray-400">Estoque avançado</dt>
-                     <dd class="text-gray-800">{% if venda.estoque_avancado %}Sim{% else %}Não{% endif %}</dd></div>
-                <div class="pt-2 border-t border-gray-100">
-                    <dt class="text-xs text-gray-400">Lançado por</dt>
-                    <dd class="text-gray-600 text-xs">
-                        {{ venda.created_by.full_name|default:"—" }} · {{ venda.created_at|date:"d/m/Y H:i" }}
-                    </dd>
+    {% if venda.produtos.all %}
+    <div class="vd-card overflow-hidden">
+        <div class="px-5 py-3 border-b border-gray-100"><h2 class="text-sm font-bold text-gray-900"><i class="fas fa-box text-purple-600 mr-1.5"></i>Produtos</h2></div>
+        <div class="divide-y divide-gray-100">
+            {% for p in venda.produtos.all %}
+            <div class="px-5 py-4 {% if p.valor_editado %}bg-amber-50/60{% endif %}">
+                <div class="flex items-start justify-between gap-3">
+                    <div class="min-w-0">
+                        <p class="font-semibold text-gray-900">{% if p.qtde > 1 %}{{ p.qtde }}× {% endif %}{{ p.nome_produto }}</p>
+                        <p class="text-[11px] text-gray-500 mt-0.5">
+                            {% if p.categoria_slv %}<span class="px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 font-semibold">{{ p.categoria_slv }}</span>{% endif %}
+                            {% if p.sku %}SKU {{ p.sku }}{% endif %}{% if p.serial %} · serial {{ p.serial }}{% endif %}
+                            {% if p.prateleira_infinita %}<span class="px-1.5 py-0.5 rounded bg-sky-100 text-sky-700 font-semibold">prateleira infinita</span>{% endif %}
+                        </p>
+                    </div>
+                    <p class="text-lg font-bold text-gray-900 tabular whitespace-nowrap">{{ p.valor_total|brl }}</p>
                 </div>
-            </dl>
+                <dl class="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[12px]">
+                    <div><dt class="text-gray-500">Sugerido</dt><dd class="tabular text-gray-900">{{ p.valor_sugerido|brl }}</dd><dd class="text-[10px] text-gray-400">{{ p.regra_preco }}</dd></div>
+                    {% if p.renova_vini %}<div><dt class="text-gray-500">Renova Vini</dt><dd class="tabular text-emerald-600">− {{ p.renova_vini_valor|brl }}</dd><dd class="text-[10px] text-gray-400">{{ p.renova_codigo }}</dd></div>{% endif %}
+                    {% if p.renova_alied %}<div><dt class="text-gray-500">Renova Alied</dt><dd class="tabular text-emerald-600">− {{ p.renova_alied_valor|brl }}</dd></div>{% endif %}
+                    {% if p.desconto_vivo_mais %}<div><dt class="text-gray-500">Vivo+</dt><dd class="tabular text-emerald-600">− {{ p.desconto_vivo_mais|brl }}</dd></div>{% endif %}
+                    <div><dt class="text-gray-500">Valor final (un.)</dt><dd class="tabular font-semibold {% if p.valor_editado %}text-amber-700{% else %}text-gray-900{% endif %}">{{ p.valor_venda|brl }}</dd></div>
+                </dl>
+                {% if p.valor_editado %}
+                <p class="mt-2 text-[12px] text-amber-800"><i class="fas fa-pen-to-square mr-1"></i>Editado à mão por <strong>{{ p.editado_por.get_full_name|default:"—" }}</strong> — o sistema tinha calculado {{ p.valor_calculado|brl }}.</p>
+                {% endif %}
+            </div>
+            {% endfor %}
         </div>
     </div>
+    {% endif %}
+
+    {% if venda.servicos.all %}
+    <div class="vd-card overflow-hidden">
+        <div class="px-5 py-3 border-b border-gray-100"><h2 class="text-sm font-bold text-gray-900"><i class="fas fa-headset text-pink-600 mr-1.5"></i>Serviços</h2></div>
+        <div class="divide-y divide-gray-100">
+            {% for s in venda.servicos.all %}
+            <div class="px-5 py-4">
+                <div class="flex items-start justify-between gap-3">
+                    <div class="min-w-0">
+                        <p class="font-semibold text-gray-900">{{ s.get_tipo_servico_display|default:s.servico }}</p>
+                        <p class="text-[12px] text-gray-500 mt-0.5">
+                            {% if s.plano %}{{ s.plano.get_segmentacao_display }} · {{ s.plano.nome }}{% elif s.servico_adicional %}{{ s.servico_adicional.nome }}{% else %}{{ s.plano_novo }}{% endif %}
+                        </p>
+                    </div>
+                    <div class="text-right whitespace-nowrap">
+                        <p class="font-bold text-gray-900 tabular">{{ s.valor_plano|brl }}</p>
+                        {% if s.delta is not None %}<p class="text-[12px] {% if s.delta < 0 %}text-red-600{% else %}text-emerald-600{% endif %}">Δ {{ s.delta|brl }}</p>{% endif %}
+                    </div>
+                </div>
+                <div class="mt-2 flex flex-wrap gap-1.5 text-[11px]">
+                    {% for l in s.linhas %}<span class="px-2 py-0.5 rounded-full {% if s.numero_fake %}bg-amber-100 text-amber-800{% else %}bg-gray-100 text-gray-700{% endif %} tabular"><i class="fas fa-phone mr-0.5"></i>{{ l }}</span>{% endfor %}
+                    {% if s.plano_anterior_nome %}<span class="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">antes: {{ s.plano_anterior_nome }}{% if s.valor_anterior is not None %} ({{ s.valor_anterior|brl }}){% endif %}</span>{% endif %}
+                    {% if s.serial_simcard %}<span class="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 tabular">SimCard {{ s.serial_simcard }}</span>{% endif %}
+                    {% if s.ativacao_confirmada %}<span class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700"><i class="fas fa-check mr-0.5"></i>ativação confirmada</span>{% endif %}
+                    {% if s.novo_titular_nome %}<span class="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">novo titular: {{ s.novo_titular_nome }}</span>{% endif %}
+                    {% if s.numero_novo %}<span class="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 tabular">{{ s.numero_anterior }} → {{ s.numero_novo }}</span>{% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if venda.observacao %}
+    <div class="vd-card p-5"><p class="vd-rotulo">Observação</p><p class="text-sm text-gray-800 whitespace-pre-line">{{ venda.observacao }}</p></div>
+    {% endif %}
+</div>
+
+<aside class="vd-card p-5 lg:sticky lg:top-20 space-y-2 text-sm">
+    <h2 class="text-sm font-bold text-gray-900 mb-2"><i class="fas fa-calculator text-purple-600 mr-1.5"></i>Totais</h2>
+    <div class="flex justify-between text-gray-600"><span>Produtos</span><span class="tabular">{{ venda.total_produtos|brl }}</span></div>
+    <div class="flex justify-between text-gray-600"><span>Serviços (mensal)</span><span class="tabular">{{ venda.total_servicos|brl }}</span></div>
+    <div class="flex justify-between items-baseline pt-2 border-t border-gray-100">
+        <span class="font-semibold text-gray-900">Total</span><span class="text-2xl font-bold text-purple-700 tabular">{{ venda.total|brl }}</span></div>
+    <p class="text-[11px] text-gray-400 pt-2">Lançada em {{ venda.created_at|date:"d/m/Y H:i" }}.</p>
+</aside>
 </div>
 {% endblock %}

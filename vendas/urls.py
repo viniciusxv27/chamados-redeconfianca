@@ -14,4 +14,13 @@ urlpatterns = [
     path('precos/importar/', views.precos_import, name='precos_import'),
     path('precos/novo/', views.precos_create, name='precos_create'),
     path('<int:pk>/', views.venda_detail, name='venda_detail'),
+
+    # SLV — consultas da tela de venda e parametrização.
+    path('api/cliente/', views.api_cliente, name='api_cliente'),
+    path('api/cliente/salvar/', views.api_cliente_salvar, name='api_cliente_salvar'),
+    path('api/renova/', views.api_renova, name='api_renova'),
+    path('parametros/', views.parametros, name='parametros'),
+    path('parametros/plano/', views.parametros_plano, name='parametros_plano'),
+    path('parametros/vivo-mais/', views.parametros_vivo_mais, name='parametros_vivo_mais'),
+    path('parametros/adicional/', views.parametros_adicional, name='parametros_adicional'),
 ]

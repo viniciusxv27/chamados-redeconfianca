@@ -258,6 +258,20 @@ try:
     receita.buscar = fora_do_ar
     settings.SEFAZ_UF = '32'
     t('Receita fora: usa SEFAZ_UF', sefaz.uf_do_cnpj(FILIAL) == '32')
+    cnpjs_antes = settings.SEFAZ_CNPJS
+    settings.SEFAZ_CNPJS = f'{receita.formatar(NOSSO)}:ES, {receita.formatar(FILIAL)}:rj ,{OUTRA_RAIZ}:SP,{NOSSO}:RJ'
+    t('"CNPJ:UF" na configuração: UF de cada um, sem a Receita',
+      sefaz.cnpjs_monitorados() == [NOSSO, FILIAL, OUTRA_RAIZ]
+      and (sefaz.uf_do_cnpj(NOSSO), sefaz.uf_do_cnpj(FILIAL), sefaz.uf_do_cnpj(OUTRA_RAIZ)) == ('32', '33', '35'))
+    settings.SEFAZ_CNPJS = f'{NOSSO}:ES,{FILIAL}:RJ'
+    SincronizacaoDFe.objects.filter(cnpj__in=[NOSSO, FILIAL]).update(proxima_consulta=None)
+    falsa_t = SefazFalsa([resposta('137', 'Nenhum documento localizado', 0, 0)] * 2)
+    todos = sefaz.sincronizar_todos(transporte=falsa_t, prazo_segundos=-1)
+    t('prazo esgotado: os CNPJs ficam para depois, sem ir à SEFAZ',
+      all(s.adiada for s in todos) and not falsa_t.pedidos and len(todos) == 2)
+    todos = sefaz.sincronizar_todos(transporte=falsa_t)
+    t('sem prazo (comando agendado): consulta todos', len(falsa_t.pedidos) == 2 and not any(s.adiada for s in todos))
+    settings.SEFAZ_CNPJS = cnpjs_antes
     receita.buscar = buscar_original
 
     settings.SEFAZ_CERTIFICADO_SENHA = 'errada'
@@ -289,12 +303,12 @@ try:
     settings.SEFAZ_CERTIFICADO_B64 = base64.b64encode(pfx).decode()
 
     original = sefaz.sincronizar_todos
-    sefaz.sincronizar_todos = lambda transporte=None: [sefaz.sincronizar(
+    sefaz.sincronizar_todos = lambda transporte=None, prazo_segundos=None: [sefaz.sincronizar(
         NOSSO, transporte=SefazFalsa([resposta('137', 'Nenhum documento localizado', 5, 5)]),
         agora=timezone.now() + timedelta(days=1))]
     r = c.post('/contagem-caixa/pis-cofins/sefaz/buscar/', {'voltar': url}, follow=True)
     t('buscar agora: nenhuma nota nova', 'Nenhuma nota nova na SEFAZ' in r.content.decode())
-    sefaz.sincronizar_todos = lambda transporte=None: [sefaz.sincronizar(NOSSO, transporte=SefazFalsa([]))]
+    sefaz.sincronizar_todos = lambda transporte=None, prazo_segundos=None: [sefaz.sincronizar(NOSSO, transporte=SefazFalsa([]))]
     r = c.post('/contagem-caixa/pis-cofins/sefaz/buscar/', {'voltar': url}, follow=True)
     t('buscar antes da hora: avisa a espera', 'uma consulta por hora' in r.content.decode())
     sefaz.sincronizar_todos = original

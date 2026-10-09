@@ -370,7 +370,7 @@ html.dark .vd-secao-cabeca {
 html.dark .imp-tab-active { background: rgba(234, 88, 12, .18) !important; color: #fb923c !important; }
 html.dark .cx-tab-active  { background: rgba(139, 92, 246, .18) !important; color: #c4b5fd !important; }
 html.dark .tg-tab-active  { background: rgba(6, 182, 212, .18) !important;  color: #67e8f9 !important; }
-html.dark .vd-tab-ativa   { background: rgba(234, 88, 12, .18) !important;  color: #fb923c !important; }
+html.dark .vd-tab-ativa   { background: rgba(168, 85, 247, .16) !important; color: #d8b4fe !important; }
 
 /* Trilhos de barra de progresso */
 html.dark .imp-bar-track,
@@ -390,6 +390,13 @@ html.dark .cx-entrada {
     color: var(--tema-texto) !important;
 }
 html.dark .vd-ajuda { color: var(--tema-texto-3) !important; }
+/* Vendas (SLV): os estados do campo precisam vencer o !important acima —
+   valor editado à mão fica em destaque ([NF002]) e erro fica vermelho. */
+html.dark .vd-campo:focus { border-color: #a855f7 !important; }
+html.dark .vd-campo[readonly],
+html.dark .vd-campo:disabled { background: var(--tema-superficie-2) !important; color: var(--tema-texto-3) !important; }
+html.dark .vd-campo.vd-editado { background: rgba(245, 158, 11, .14) !important; border-color: #f59e0b !important; }
+html.dark .vd-campo.vd-erro { border-color: #ef4444 !important; }
 html.dark .btn-back {
     background: var(--tema-superficie-2) !important;
     color: var(--tema-texto-2) !important;

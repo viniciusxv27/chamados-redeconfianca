@@ -1,572 +1,744 @@
 {% extends "vendas/_base_vendas.html" %}
+{% load vendas_tags %}
 
-{% block title %}Lançar venda{% endblock %}
-{% block vd_icone %}fa-cart-plus{% endblock %}
-{% block vd_cabecalho %}Lançar venda{% endblock %}
-{% block vd_subtitulo %}Preencha os dados, adicione os itens e confirme{% endblock %}
+{% block title %}Nova venda{% endblock %}
+{% block vd_icone %}fa-cash-register{% endblock %}
+{% block vd_cabecalho %}Nova venda{% endblock %}
+{% block vd_subtitulo %}Cliente pelo CPF, produtos e serviços com o preço do plano, descontos e conferência final.{% endblock %}
 
-{% block vd_acoes %}
-<a href="{% url 'vendas:dashboard' %}"
-   class="inline-flex items-center gap-2 px-3.5 py-2 vd-card text-gray-700 text-sm font-semibold hover:bg-gray-50">
-    <i class="fas fa-arrow-left"></i> Voltar
-</a>
+{% block vd_css %}
+<style>
+    .vd-passo { scroll-margin-top: 5rem; }
+    .vd-bloqueado { opacity:.45; pointer-events:none; filter:saturate(.6); }
+    .vd-lista-busca { max-height: 22rem; overflow-y:auto; }
+    .vd-item-busca:hover, .vd-item-busca.vd-foco { background:#FAF5FF; }
+    html.dark .vd-item-busca:hover, html.dark .vd-item-busca.vd-foco { background:rgba(168,85,247,.14); }
+    .vd-modal { background: rgba(17,24,39,.55); backdrop-filter: blur(2px); }
+</style>
 {% endblock %}
 
 {% block vd_conteudo %}
-<style>
-    /* Sugestões da tabela de preços */
-    .ac-box { position:absolute; z-index:40; left:0; right:0; top:100%; margin-top:.25rem;
-        background:#fff; border:1px solid #E6E6EE; border-radius:.75rem; max-height:15rem;
-        overflow-y:auto; box-shadow:0 10px 25px rgba(16,24,40,.10); }
-    .ac-opt { padding:.55rem .75rem; cursor:pointer; border-bottom:1px solid #F5F5F8; }
-    .ac-opt:last-child { border-bottom:0; }
-    .ac-opt:hover { background:#FAF5FF; }
-    .ac-nome { display:block; font-size:.8125rem; color:#27273A; font-weight:500; }
-    .ac-meta { display:block; font-size:.6875rem; color:#9A9AA8; }
-</style>
+{{ slv|json_script:"slvDados" }}
 
-<form id="venda-form" method="post" action="{% url 'vendas:venda_create' %}">
-    {% csrf_token %}
-    <input type="hidden" name="produtos_json" id="produtos_json" value="[]">
-    <input type="hidden" name="servicos_json" id="servicos_json" value="[]">
+{% if not loja and not is_superadmin %}
+<div class="vd-card p-8 text-center max-w-xl mx-auto">
+    <span class="w-14 h-14 rounded-2xl bg-amber-100 text-amber-700 inline-flex items-center justify-center text-2xl mb-3"><i class="fas fa-store-slash"></i></span>
+    <h2 class="text-lg font-bold text-gray-900">Seu usuário não tem PDV vinculado</h2>
+    <p class="text-sm text-gray-600 mt-1">A venda sai sempre no PDV do seu cadastro no portal. Procure o administrador do portal para vincular a sua loja.</p>
+</div>
+{% else %}
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div class="lg:col-span-2 space-y-4">
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start pb-24 lg:pb-0">
+<div class="lg:col-span-2 space-y-4">
 
-            <!-- 1. Dados da venda -->
-            <div class="vd-secao">
-                <div class="vd-secao-cabeca">
-                    <span class="w-6 h-6 rounded-full bg-purple-600 text-white text-xs font-bold flex items-center justify-center">1</span>
-                    <span class="text-sm font-semibold text-gray-800">Dados da venda</span>
-                </div>
-                <div class="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                        <label class="vd-rotulo">Data da venda</label>
-                        <div class="relative">
-                            <i class="fas fa-lock absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 text-xs"></i>
-                            <input type="text" value="{{ agora|date:'d/m/Y H:i' }}" readonly
-                                   class="vd-campo bg-gray-50 text-gray-600 cursor-not-allowed pr-9">
-                        </div>
-                        <p class="vd-ajuda">A venda é registrada com a data de hoje.</p>
-                    </div>
-                    <div>
-                        <label class="vd-rotulo">Comprovante fiscal</label>
-                        <select name="comprovante_fiscal" class="vd-campo">
-                            {% for valor, rotulo in comprovante_choices %}<option value="{{ valor }}">{{ rotulo }}</option>{% endfor %}
-                        </select>
-                    </div>
-                    <div>
-                        <label class="vd-rotulo">Loja / PDV {% if not is_superadmin %}<span class="text-red-500">*</span>{% endif %}</label>
-                        <select name="loja" class="vd-campo" {% if not is_superadmin %}required{% endif %}>
-                            {% if lojas|length != 1 %}<option value="">Selecione…</option>{% endif %}
-                            {% for l in lojas %}<option value="{{ l.id }}" {% if lojas|length == 1 %}selected{% endif %}>{{ l.name }}</option>{% endfor %}
-                        </select>
-                        {% if not lojas %}
-                        <p class="vd-ajuda text-amber-600">
-                            <i class="fas fa-triangle-exclamation mr-1"></i>Você não está lotado em nenhum setor — fale com o RH.
-                        </p>
-                        {% elif not is_superadmin %}
-                        <p class="vd-ajuda">Apenas os seus setores.</p>
-                        {% endif %}
-                    </div>
-                    <div>
-                        <label class="vd-rotulo">Vendedor</label>
-                        {% if is_superadmin %}
-                        <select name="vendedor" class="vd-campo">
-                            {% for v in vendedores %}
-                            <option value="{{ v.id }}" {% if v.id == request.user.id %}selected{% endif %}>{{ v.full_name|default:v.email }}</option>
-                            {% endfor %}
-                        </select>
-                        <p class="vd-ajuda">Como administrador, você pode lançar no nome de outra pessoa.</p>
-                        {% else %}
-                        <div class="relative">
-                            <i class="fas fa-lock absolute right-3 top-1/2 -translate-y-1/2 text-gray-300 text-xs"></i>
-                            <input type="text" value="{{ request.user.full_name|default:request.user.email }}" readonly
-                                   class="vd-campo bg-gray-50 text-gray-600 cursor-not-allowed pr-9">
-                        </div>
-                        <p class="vd-ajuda">A venda sai no seu nome.</p>
-                        {% endif %}
-                    </div>
-                    <div>
-                        <label class="vd-rotulo">PDV (texto livre)</label>
-                        <input type="text" name="pdv_nome" maxlength="120" class="vd-campo" placeholder="Se não estiver na lista">
-                    </div>
-                    <div class="grid grid-cols-2 gap-3">
-                        <div>
-                            <label class="vd-rotulo">UF</label>
-                            <input type="text" name="uf" maxlength="2" class="vd-campo uppercase" placeholder="ES">
-                        </div>
-                        <div>
-                            <label class="vd-rotulo">Estoque avançado</label>
-                            <select name="estoque_avancado" class="vd-campo">
-                                <option value="nao">Não</option>
-                                <option value="sim">Sim</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 2. Cliente -->
-            <div class="vd-secao">
-                <div class="vd-secao-cabeca">
-                    <span class="w-6 h-6 rounded-full bg-purple-600 text-white text-xs font-bold flex items-center justify-center">2</span>
-                    <span class="text-sm font-semibold text-gray-800">Cliente</span>
-                    <span class="text-xs text-gray-400 ml-auto">opcional</span>
-                </div>
-                <div class="p-5 grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div class="sm:col-span-2">
-                        <label class="vd-rotulo">Nome</label>
-                        <input type="text" name="cliente_nome" maxlength="200" class="vd-campo" placeholder="Nome do cliente">
-                    </div>
-                    <div>
-                        <label class="vd-rotulo">CPF / CNPJ</label>
-                        <div class="relative">
-                            <input type="text" name="cliente_cpf" id="vdCpf" maxlength="20" class="vd-campo pr-9"
-                                   inputmode="numeric" autocomplete="off" placeholder="000.000.000-00">
-                            <i id="vdCpfIcone" class="hidden fas fa-spinner fa-spin absolute right-3 top-1/2 -translate-y-1/2 text-purple-400 text-xs"></i>
-                        </div>
-                        <p class="vd-ajuda">Ao completar, procuramos compras anteriores deste cliente.</p>
-                    </div>
-                    <div class="sm:col-span-3" id="vdHistorico"></div>
-                    <div class="sm:col-span-3">
-                        <label class="vd-rotulo">Tipo de venda</label>
-                        <input type="text" name="tipo_venda" maxlength="80" class="vd-campo" placeholder="Ex.: Migração, Nova linha, Portabilidade">
-                    </div>
-                </div>
-            </div>
-
-            <!-- 3. Produtos -->
-            <div class="vd-secao" data-item="produto">
-                <div class="vd-secao-cabeca">
-                    <span class="w-6 h-6 rounded-full bg-purple-600 text-white text-xs font-bold flex items-center justify-center">3</span>
-                    <span class="text-sm font-semibold text-gray-800">Produtos</span>
-                    <span class="text-xs text-gray-400 ml-auto">busque na tabela de preços</span>
-                </div>
-                <div class="p-5">
-                    <input type="hidden" data-f="preco_id" value="">
-                    <div class="grid grid-cols-1 sm:grid-cols-6 gap-3">
-                        <div class="sm:col-span-6 relative">
-                            <label class="vd-rotulo">Produto</label>
-                            <input type="text" data-f="nome_produto" class="vd-campo" autocomplete="off"
-                                   placeholder="Digite 2 letras para buscar na tabela de preços…">
-                        </div>
-                        <div class="sm:col-span-2"><label class="vd-rotulo">Marca</label><input type="text" data-f="marca" class="vd-campo"></div>
-                        <div class="sm:col-span-2"><label class="vd-rotulo">Modelo</label><input type="text" data-f="modelo" class="vd-campo"></div>
-                        <div class="sm:col-span-2"><label class="vd-rotulo">Categoria</label><input type="text" data-f="categoria" class="vd-campo"></div>
-                        <div class="sm:col-span-2"><label class="vd-rotulo">Plano</label><input type="text" data-f="plano" class="vd-campo"></div>
-                        <div><label class="vd-rotulo">Pilar</label><input type="text" data-f="pilar" class="vd-campo"></div>
-                        <div><label class="vd-rotulo">Qtde</label><input type="number" data-f="qtde" value="1" min="1" class="vd-campo"></div>
-                        <div class="sm:col-span-2">
-                            <label class="vd-rotulo">Valor unitário</label>
-                            <div class="relative">
-                                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">R$</span>
-                                <input type="text" data-f="valor_venda" class="vd-campo pl-9" inputmode="decimal" placeholder="0,00">
-                            </div>
-                        </div>
-                    </div>
-                    <button type="button" data-add="produto"
-                            class="mt-4 w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg
-                                   bg-purple-50 text-purple-700 text-sm font-semibold hover:bg-purple-100 border border-purple-200">
-                        <i class="fas fa-plus"></i> Adicionar produto
-                    </button>
-
-                    <div data-table="produto" class="hidden mt-4 border border-gray-100 rounded-xl overflow-hidden">
-                        <div class="overflow-x-auto">
-                            <table class="min-w-full text-sm">
-                                <thead class="bg-gray-50 text-gray-500 text-xs uppercase">
-                                    <tr>
-                                        <th class="text-left px-3 py-2 font-medium">Produto</th>
-                                        <th class="text-left px-3 py-2 font-medium">Marca / Modelo</th>
-                                        <th class="text-center px-3 py-2 font-medium">Qtde</th>
-                                        <th class="text-right px-3 py-2 font-medium">Total</th>
-                                        <th class="px-3 py-2"></th>
-                                    </tr>
-                                </thead>
-                                <tbody></tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 4. Serviços -->
-            <div class="vd-secao" data-item="servico">
-                <div class="vd-secao-cabeca">
-                    <span class="w-6 h-6 rounded-full bg-pink-600 text-white text-xs font-bold flex items-center justify-center">4</span>
-                    <span class="text-sm font-semibold text-gray-800">Serviços</span>
-                    <span class="text-xs text-gray-400 ml-auto">planos, linhas, assinaturas</span>
-                </div>
-                <div class="p-5">
-                    <input type="hidden" data-f="preco_id" value="">
-                    <div class="grid grid-cols-1 sm:grid-cols-6 gap-3">
-                        <div class="sm:col-span-6 relative">
-                            <label class="vd-rotulo">Serviço</label>
-                            <input type="text" data-f="servico" class="vd-campo" autocomplete="off"
-                                   placeholder="Digite 2 letras para buscar na tabela de preços…">
-                        </div>
-                        <div class="sm:col-span-3"><label class="vd-rotulo">Plano</label><input type="text" data-f="plano_novo" class="vd-campo"></div>
-                        <div class="sm:col-span-3"><label class="vd-rotulo">Tipo do plano</label><input type="text" data-f="tipo_plano" class="vd-campo"></div>
-                        <div class="sm:col-span-2"><label class="vd-rotulo">Nº de acesso</label><input type="text" data-f="numero_acesso" class="vd-campo" inputmode="numeric"></div>
-                        <div><label class="vd-rotulo">Pilar</label><input type="text" data-f="pilar" class="vd-campo"></div>
-                        <div class="sm:col-span-2">
-                            <label class="vd-rotulo">Valor do plano</label>
-                            <div class="relative">
-                                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">R$</span>
-                                <input type="text" data-f="valor_plano" class="vd-campo pl-9" inputmode="decimal" placeholder="0,00">
-                            </div>
-                        </div>
-                        <div><label class="vd-rotulo">Receita</label><input type="text" data-f="receita" class="vd-campo" inputmode="decimal"></div>
-                    </div>
-                    <button type="button" data-add="servico"
-                            class="mt-4 w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg
-                                   bg-pink-50 text-pink-700 text-sm font-semibold hover:bg-pink-100 border border-pink-200">
-                        <i class="fas fa-plus"></i> Adicionar serviço
-                    </button>
-
-                    <div data-table="servico" class="hidden mt-4 border border-gray-100 rounded-xl overflow-hidden">
-                        <div class="overflow-x-auto">
-                            <table class="min-w-full text-sm">
-                                <thead class="bg-gray-50 text-gray-500 text-xs uppercase">
-                                    <tr>
-                                        <th class="text-left px-3 py-2 font-medium">Serviço</th>
-                                        <th class="text-left px-3 py-2 font-medium">Plano</th>
-                                        <th class="text-right px-3 py-2 font-medium">Valor</th>
-                                        <th class="px-3 py-2"></th>
-                                    </tr>
-                                </thead>
-                                <tbody></tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="vd-secao">
-                <div class="p-5">
-                    <label class="vd-rotulo">Observação</label>
-                    <textarea name="observacao" rows="3" class="vd-campo" placeholder="Algo que precise ficar registrado…"></textarea>
-                </div>
-            </div>
+    {# ── Cabeçalho: PDV e vendedor do cadastro ([Início da venda.RF001]) ── #}
+    <div class="vd-card p-4 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+        <div>
+            <span class="vd-rotulo">PDV</span>
+            {% if is_superadmin %}
+            <select id="vdLoja" class="vd-campo">{% for l in lojas %}<option value="{{ l.id }}" {% if loja and l.id == loja.id %}selected{% endif %}>{{ l.name }}</option>{% endfor %}</select>
+            {% else %}
+            <p class="font-semibold text-gray-900 flex items-center gap-1.5"><i class="fas fa-store text-purple-500"></i>{{ loja.name }}</p>
+            {% endif %}
         </div>
-
-        <!-- Resumo fixo -->
-        <div class="lg:col-span-1">
-            <div class="vd-card p-5 lg:sticky lg:top-4">
-                <h3 class="text-sm font-bold text-gray-800 mb-3">
-                    <i class="fas fa-receipt text-purple-600 mr-1.5"></i>Resumo
-                </h3>
-                <div class="space-y-2 text-sm border-b border-gray-100 pb-3 mb-3">
-                    <div class="flex justify-between">
-                        <span class="text-gray-500">Produtos</span>
-                        <span class="text-gray-800 tabular">R$ <span id="total-produtos">0,00</span></span>
-                    </div>
-                    <div class="flex justify-between">
-                        <span class="text-gray-500">Serviços</span>
-                        <span class="text-gray-800 tabular">R$ <span id="total-servicos">0,00</span></span>
-                    </div>
-                </div>
-                <div class="flex justify-between items-baseline mb-4">
-                    <span class="text-sm font-semibold text-gray-700">Total</span>
-                    <span class="text-2xl font-bold text-purple-700 tabular">R$ <span id="total-geral">0,00</span></span>
-                </div>
-
-                <button type="submit"
-                        class="w-full px-5 py-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold shadow-sm">
-                    <i class="fas fa-check mr-1.5"></i>Lançar venda
-                </button>
-                <a href="{% url 'vendas:dashboard' %}"
-                   class="block text-center mt-2 px-5 py-2.5 rounded-xl border border-gray-300 text-gray-600 text-sm font-semibold hover:bg-gray-50">
-                    Cancelar
-                </a>
-                <p class="vd-ajuda text-center mt-3">Adicione pelo menos um produto ou serviço.</p>
-            </div>
+        <div>
+            <span class="vd-rotulo">Vendedor</span>
+            {% if is_superadmin %}
+            <select id="vdVendedor" class="vd-campo"><option value="">{{ request.user.get_full_name|default:request.user.username }} (eu)</option>
+                {% for v in vendedores %}{% if v.id != request.user.id %}<option value="{{ v.id }}">{{ v.get_full_name|default:v.username }}</option>{% endif %}{% endfor %}</select>
+            {% else %}
+            <p class="font-semibold text-gray-900 flex items-center gap-1.5"><i class="fas fa-user text-purple-500"></i>{{ request.user.get_full_name|default:request.user.username }}</p>
+            {% endif %}
+        </div>
+        <div>
+            <span class="vd-rotulo">Data e hora</span>
+            <p class="font-semibold text-gray-900 flex items-center gap-1.5"><i class="far fa-clock text-purple-500"></i><span id="vdRelogio">{{ agora|date:"d/m/Y H:i" }}</span></p>
         </div>
     </div>
-</form>
 
+    {# ── 1. Cliente ── #}
+    <section class="vd-secao vd-passo" id="passoCliente">
+        <div class="vd-secao-cabeca"><span class="vd-numero" id="numCliente">1</span>
+            <div class="min-w-0"><h2 class="text-sm font-bold text-gray-900">Cliente</h2>
+                <p class="text-[11px] text-gray-500">Digite ou cole o CPF — com ou sem pontos.</p></div></div>
+        <div class="p-4 sm:p-5 space-y-4">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                <div class="sm:col-span-1">
+                    <label class="vd-rotulo" for="vdCpf">CPF do cliente *</label>
+                    <input id="vdCpf" class="vd-campo tabular text-base" inputmode="numeric" autocomplete="off" placeholder="000.000.000-00" maxlength="14">
+                </div>
+                <p class="sm:col-span-2 text-sm" id="vdCpfAviso"></p>
+            </div>
+
+            {# Confirmação do nome #}
+            <div id="vdConfirma" class="hidden vd-entra rounded-xl border border-purple-200 bg-purple-50 p-4 flex items-center justify-between gap-3 flex-wrap">
+                <div><p class="text-[11px] text-purple-700 font-semibold uppercase tracking-wide">Cliente encontrado</p>
+                    <p class="text-lg font-bold text-gray-900" id="vdConfirmaNome"></p></div>
+                <div class="flex gap-2">
+                    <button type="button" id="vdNaoE" class="px-3 py-2 rounded-lg border border-gray-300 text-sm text-gray-600 hover:bg-white">Não é ele</button>
+                    <button type="button" id="vdEEle" class="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold"><i class="fas fa-check mr-1"></i>Confirmar cliente</button>
+                </div>
+            </div>
+
+            {# Dados do cliente (novo ou para atualizar) #}
+            <div id="vdDadosCliente" class="hidden vd-entra space-y-3">
+                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide" id="vdDadosTitulo">Dados do cliente</p>
+                <div class="grid grid-cols-1 sm:grid-cols-6 gap-3">
+                    <div class="sm:col-span-4"><label class="vd-rotulo">Nome *</label><input id="vdNome" class="vd-campo" maxlength="200"></div>
+                    <div class="sm:col-span-2"><label class="vd-rotulo">Telefone</label><input id="vdTelefone" class="vd-campo tabular" inputmode="tel" placeholder="(27) 99999-0000" maxlength="16"></div>
+                    <div class="sm:col-span-2"><label class="vd-rotulo">CEP</label><input id="vdCep" class="vd-campo tabular" inputmode="numeric" maxlength="9" placeholder="00000-000"><p class="vd-ajuda" id="vdCepAviso"></p></div>
+                    <div class="sm:col-span-4"><label class="vd-rotulo">Logradouro</label><input id="vdLogradouro" class="vd-campo" data-cep-preenche="logradouro" maxlength="200"></div>
+                    <div class="sm:col-span-1"><label class="vd-rotulo">Número</label><input id="vdNumero" class="vd-campo" maxlength="20"></div>
+                    <div class="sm:col-span-2"><label class="vd-rotulo">Complemento</label><input id="vdComplemento" class="vd-campo" maxlength="100"></div>
+                    <div class="sm:col-span-3"><label class="vd-rotulo">Bairro</label><input id="vdBairro" class="vd-campo" data-cep-preenche="bairro" maxlength="100"></div>
+                    <div class="sm:col-span-4"><label class="vd-rotulo">Cidade</label><input id="vdCidade" class="vd-campo" data-cep-preenche="cidade" maxlength="100"></div>
+                    <div class="sm:col-span-2"><label class="vd-rotulo">UF</label><input id="vdUf" class="vd-campo uppercase" data-cep-preenche="uf" maxlength="2"></div>
+                </div>
+                <div class="flex items-center justify-between gap-3 flex-wrap">
+                    <p class="text-[11px] text-gray-500" id="vdClienteNota"></p>
+                    <button type="button" id="vdSalvarCliente" class="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold"></button>
+                </div>
+            </div>
+
+            {# Pré-análise ([Início da venda.RF004]) #}
+            <div id="vdPreAnalise" class="hidden vd-entra grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+
+            {# Plano anterior ([Início da venda.RF005]) #}
+            <div id="vdPlanoAnterior" class="hidden vd-entra rounded-xl border border-gray-200 p-4">
+                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3"><i class="fas fa-sim-card mr-1"></i>Plano que o cliente tem hoje <span class="font-normal normal-case">(base do delta e do preço do aparelho)</span></p>
+                <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                    <div><label class="vd-rotulo">Segmentação</label><select id="vdPaSeg" class="vd-campo"><option value="">Sem plano</option></select></div>
+                    <div class="sm:col-span-2"><label class="vd-rotulo">Plano</label><select id="vdPaPlano" class="vd-campo"><option value="">—</option></select></div>
+                    <div><label class="vd-rotulo">Valor pago (R$)</label><input id="vdPaValor" class="vd-campo tabular text-right" inputmode="decimal" placeholder="0,00"></div>
+                    <div class="sm:col-span-4"><label class="vd-rotulo">Grupo do plano na tabela de aparelhos</label>
+                        <select id="vdPaGrupo" class="vd-campo"><option value="">— (usa o preço com plano)</option></select>
+                        <p class="vd-ajuda">Define se o aparelho sai nesse plano (colunas da tabela de produtos).</p></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    {# ── 2. O que vai lançar ── #}
+    <section class="vd-secao vd-passo vd-bloqueado" id="passoItens">
+        <div class="vd-secao-cabeca"><span class="vd-numero" id="numItens">2</span>
+            <div class="min-w-0 flex-1"><h2 class="text-sm font-bold text-gray-900">O que está sendo vendido</h2>
+                <p class="text-[11px] text-gray-500">Produtos, serviços ou os dois na mesma venda.</p></div></div>
+        <div class="p-4 sm:p-5">
+            <div class="flex gap-2 mb-4">
+                <button type="button" class="vd-chip vd-ativo" data-aba="produtos"><i class="fas fa-box"></i>Produtos <span class="px-1.5 rounded-full bg-white/25 text-[11px]" id="vdNProd">0</span></button>
+                <button type="button" class="vd-chip" data-aba="servicos"><i class="fas fa-headset"></i>Serviços <span class="px-1.5 rounded-full bg-white/25 text-[11px]" id="vdNServ">0</span></button>
+            </div>
+
+            {# Produtos #}
+            <div data-painel="produtos" class="space-y-3">
+                <div class="relative">
+                    <i class="fas fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+                    <input id="vdBusca" class="vd-campo pl-10 text-base" placeholder="Buscar produto por nome ou SKU…" autocomplete="off">
+                    <div id="vdBuscaLista" class="hidden absolute left-0 right-0 mt-1 vd-card vd-lista-busca z-30"></div>
+                </div>
+                <p class="text-[11px] text-gray-500"><i class="fas fa-circle-info mr-1"></i>O catálogo inteiro aparece na busca. Produto que não está no estoque físico: marque <strong>Prateleira infinita</strong> no item.</p>
+                <div id="vdProdutos" class="space-y-3"></div>
+
+                <div id="vdPagamento" class="hidden rounded-xl border border-gray-200 p-4">
+                    <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3"><i class="fas fa-credit-card mr-1"></i>Forma de pagamento *</p>
+                    <div class="flex flex-wrap gap-2 items-center">
+                        <label><input type="radio" name="vdForma" value="CARTAO" class="sr-only"><span class="vd-chip"><i class="fas fa-credit-card"></i>Cartão</span></label>
+                        <label><input type="radio" name="vdForma" value="PIX" class="sr-only"><span class="vd-chip"><i class="fas fa-qrcode"></i>Pix</span></label>
+                        <span class="w-px h-7 bg-gray-200 mx-1"></span>
+                        <label><input type="checkbox" id="vdVivoMais" class="sr-only"><span class="vd-chip"><i class="fas fa-star"></i>Pago pelo Vivo+ <span class="text-[11px] opacity-80" id="vdVivoPct"></span></span></label>
+                    </div>
+                </div>
+            </div>
+
+            {# Serviços #}
+            <div data-painel="servicos" class="hidden space-y-4">
+                <div>
+                    <label class="vd-rotulo">Linha(s) do cliente *</label>
+                    <div class="flex flex-wrap gap-2 items-center" id="vdLinhas"></div>
+                    <div class="flex gap-2 mt-2 max-w-sm">
+                        <input id="vdNovaLinha" class="vd-campo tabular" inputmode="tel" placeholder="(27) 99999-0000" maxlength="16">
+                        <button type="button" id="vdAddLinha" class="px-3 rounded-lg border border-gray-300 text-sm text-gray-600 hover:bg-gray-50 whitespace-nowrap"><i class="fas fa-plus"></i> Linha</button>
+                    </div>
+                    <p class="vd-ajuda">Número fictício (ex.: 999999999) é aceito, mas a venda fica marcada para conferência.</p>
+                </div>
+
+                <div class="rounded-xl border border-gray-200 p-4 space-y-3">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div><label class="vd-rotulo" for="vdTipoServico">Serviço *</label>
+                            <select id="vdTipoServico" class="vd-campo"><option value="">Escolha...</option></select></div>
+                    </div>
+                    <div id="vdCamposServico" class="space-y-3"></div>
+                    <div class="flex justify-end"><button type="button" id="vdAddServico" class="hidden px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold"><i class="fas fa-plus mr-1"></i>Adicionar serviço</button></div>
+                </div>
+                <div id="vdServicos" class="space-y-2"></div>
+            </div>
+        </div>
+    </section>
+
+    <div class="vd-card p-4">
+        <label class="vd-rotulo" for="vdObs">Observação</label>
+        <textarea id="vdObs" class="vd-campo" rows="2" maxlength="2000" placeholder="Voucher, condição especial, combinado com o cliente…"></textarea>
+    </div>
+</div>
+
+{# ── Resumo (fixo ao lado) ── #}
+<aside class="lg:sticky lg:top-20 space-y-3" id="vdResumoCaixa">
+    <div class="vd-card overflow-hidden">
+        <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+            <h2 class="text-sm font-bold text-gray-900"><i class="fas fa-receipt text-purple-600 mr-1.5"></i>Resumo da venda</h2>
+            <span class="text-[11px] text-gray-400" id="vdResumoCliente">sem cliente</span>
+        </div>
+        <div class="p-4 space-y-3 text-sm" id="vdResumo">
+            <p class="text-gray-400 text-center py-6"><i class="fas fa-basket-shopping text-2xl text-gray-200 block mb-2"></i>Os itens aparecem aqui.</p>
+        </div>
+        <div class="px-4 py-3 border-t border-gray-100 bg-gray-50 space-y-1 text-sm">
+            <div class="flex justify-between text-gray-600"><span>Produtos</span><span class="tabular" id="vdTotProd">R$ 0,00</span></div>
+            <div class="flex justify-between text-gray-600"><span>Descontos (Renova + Vivo+)</span><span class="tabular text-emerald-600" id="vdTotDesc">R$ 0,00</span></div>
+            <div class="flex justify-between text-gray-600"><span>Serviços (mensal)</span><span class="tabular" id="vdTotServ">R$ 0,00</span></div>
+            <div class="flex justify-between items-baseline pt-1 border-t border-gray-200 mt-1">
+                <span class="font-semibold text-gray-900">Total</span><span class="text-2xl font-bold text-purple-700 tabular" id="vdTotal">R$ 0,00</span></div>
+        </div>
+    </div>
+    <div id="vdErros" class="hidden vd-entra rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700"></div>
+    <div class="flex gap-2">
+        <button type="button" id="vdCancelar" class="px-4 py-3 rounded-xl border border-gray-300 text-sm text-gray-600 hover:bg-gray-50">Cancelar</button>
+        <button type="button" id="vdConfirmar" class="flex-1 px-4 py-3 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-semibold shadow-sm shadow-purple-600/30 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+            <i class="fas fa-check mr-1.5"></i>Confirmar venda</button>
+    </div>
+    <p class="text-[11px] text-gray-500 text-center">Valores calculados podem ser editados no resumo; o que for editado fica em destaque e registrado.</p>
+</aside>
+</div>
+
+{# Barra do celular #}
+<div class="lg:hidden fixed bottom-0 inset-x-0 z-40 vd-card !rounded-none !rounded-t-2xl px-4 py-3 flex items-center justify-between gap-3">
+    <div><p class="text-[11px] text-gray-500">Total</p><p class="text-lg font-bold text-purple-700 tabular" id="vdTotalMovel">R$ 0,00</p></div>
+    <button type="button" class="px-4 py-2.5 rounded-xl bg-purple-600 text-white text-sm font-semibold" onclick="document.getElementById('vdResumoCaixa').scrollIntoView({behavior:'smooth'})">Revisar e confirmar</button>
+</div>
+
+{# Pop-up de ativação ([Venda de serviços.RF008]) #}
+<div id="vdModal" class="hidden fixed inset-0 z-50 vd-modal flex items-center justify-center p-4">
+    <div class="vd-card p-6 max-w-sm w-full text-center vd-entra">
+        <span class="w-12 h-12 rounded-2xl bg-purple-100 text-purple-700 inline-flex items-center justify-center text-xl mb-3"><i class="fas fa-shield-halved"></i></span>
+        <h3 class="text-base font-bold text-gray-900" id="vdModalTitulo">O serviço foi ativado?</h3>
+        <p class="text-sm text-gray-600 mt-1" id="vdModalTexto">Confirme a ativação no sistema da operadora antes de concluir.</p>
+        <div class="flex gap-2 mt-5">
+            <button type="button" id="vdModalNao" class="flex-1 px-4 py-2.5 rounded-lg border border-gray-300 text-sm text-gray-700 hover:bg-gray-50">Ainda não</button>
+            <button type="button" id="vdModalSim" class="flex-1 px-4 py-2.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold">Sim, ativado</button>
+        </div>
+    </div>
+</div>
+
+{% include 'users/_cep_autocompletar.html' with campo_id='vdCep' aviso_id='vdCepAviso' %}
+{% csrf_token %}
 <script>
 (function () {
-  var produtos = [], servicos = [];
-  var buscarUrl = "{% url 'vendas:precos_buscar' %}";
+    'use strict';
+    const SLV = JSON.parse(document.getElementById('slvDados').textContent);
+    const URL = {
+        cliente: '{% url "vendas:api_cliente" %}', salvarCliente: '{% url "vendas:api_cliente_salvar" %}',
+        historico: '{% url "vendas:cliente_historico" %}', buscar: '{% url "vendas:precos_buscar" %}',
+        renova: '{% url "vendas:api_renova" %}', confirmar: '{% url "vendas:venda_create" %}',
+    };
+    const CSRF = document.querySelector('[name=csrfmiddlewaretoken]').value;
+    const $ = function (id) { return document.getElementById(id); };
+    const SEG = Object.fromEntries(SLV.segmentacoes);
+    const TIPOS = Object.fromEntries(SLV.tipos_servico);
+    const PCT = Number(SLV.vivo_mais) || 0;
 
-  function brl(n) { return numero(n).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
+    const estado = { cliente: null, confirmado: false, novo: false, produtos: [], servicos: [], linhas: [], forma: '', vivoMais: false };
 
-  // '8.999,00' e '8999.00' viram número. Sem isto, Number('8999,00') é NaN e o
-  // resumo mostrava R$ 0,00 mesmo com item na lista — o valor certo só
-  // aparecia depois de salvar, porque quem converte é o servidor.
-  function numero(v) {
-    if (v === null || v === undefined || v === '') return 0;
-    if (typeof v === 'number') return v;
-    var txt = String(v).replace(/[R$\s]/g, '');
-    if (txt.indexOf(',') >= 0) txt = txt.replace(/\./g, '').replace(',', '.');
-    var n = parseFloat(txt);
-    return isNaN(n) ? 0 : n;
-  }
-
-  function coletar(tipo) {
-    var wrap = document.querySelector('[data-item="' + tipo + '"]');
-    var obj = {};
-    wrap.querySelectorAll('[data-f]').forEach(function (inp) { obj[inp.getAttribute('data-f')] = inp.value.trim(); });
-    return obj;
-  }
-  function limpar(tipo) {
-    document.querySelector('[data-item="' + tipo + '"]').querySelectorAll('[data-f]').forEach(function (inp) {
-      inp.value = (inp.getAttribute('data-f') === 'qtde') ? '1' : '';
-    });
-  }
-  function atualizarTotais() {
-    var tProdutos = 0, tServicos = 0;
-    var t = 0;
-    produtos.forEach(function (p) { tProdutos += numero(p.valor_venda) * (parseInt(p.qtde, 10) || 1); });
-    servicos.forEach(function (s) { tServicos += numero(s.valor_plano); });
-    t = tProdutos + tServicos;
-    var elP = document.getElementById('total-produtos');
-    var elS = document.getElementById('total-servicos');
-    if (elP) elP.textContent = brl(tProdutos);
-    if (elS) elS.textContent = brl(tServicos);
-    document.getElementById('total-geral').textContent = brl(t);
-    document.getElementById('produtos_json').value = JSON.stringify(produtos);
-    document.getElementById('servicos_json').value = JSON.stringify(servicos);
-  }
-  function render(tipo) {
-    var lista = tipo === 'produto' ? produtos : servicos;
-    var table = document.querySelector('[data-table="' + tipo + '"]');
-    var tbody = table.querySelector('tbody');
-    table.classList.toggle('hidden', lista.length === 0);
-    tbody.innerHTML = '';
-    lista.forEach(function (it, idx) {
-      var tr = document.createElement('tr');
-      tr.className = 'border-t border-gray-100';
-      if (tipo === 'produto') {
-        tr.innerHTML = '<td class="px-3 py-1.5">' + esc(it.nome_produto) + '</td><td class="px-3 py-1.5 text-gray-500">' + esc((it.marca || '') + ' ' + (it.modelo || '')) + '</td><td class="px-3 py-1.5 text-center">' + (it.qtde || 1) + '</td><td class="px-3 py-1.5 text-right">R$ ' + brl(numero(it.valor_venda) * (parseInt(it.qtde, 10) || 1)) + '</td>';
-      } else {
-        tr.innerHTML = '<td class="px-3 py-1.5">' + esc(it.servico) + '</td><td class="px-3 py-1.5 text-gray-500">' + esc(it.plano_novo || '') + '</td><td class="px-3 py-1.5 text-right">R$ ' + brl(it.valor_plano) + '</td>';
-      }
-      var td = document.createElement('td');
-      td.className = 'px-3 py-1.5 text-right';
-      var btn = document.createElement('button');
-      btn.type = 'button'; btn.className = 'text-red-500 hover:text-red-700'; btn.innerHTML = '<i class="fas fa-trash"></i>';
-      btn.onclick = function () { lista.splice(idx, 1); render(tipo); atualizarTotais(); };
-      td.appendChild(btn); tr.appendChild(td); tbody.appendChild(tr);
-    });
-  }
-  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]; }); }
-
-  document.querySelectorAll('[data-add]').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      var tipo = btn.getAttribute('data-add');
-      var obj = coletar(tipo);
-      var chave = tipo === 'produto' ? 'nome_produto' : 'servico';
-      if (!obj[chave]) { alert('Informe o nome do ' + tipo + '.'); return; }
-      (tipo === 'produto' ? produtos : servicos).push(obj);
-      limpar(tipo); render(tipo); atualizarTotais();
-    });
-  });
-
-  document.getElementById('venda-form').addEventListener('submit', function (e) {
-    atualizarTotais();
-    if (produtos.length === 0 && servicos.length === 0) {
-      e.preventDefault();
-      alert('Adicione ao menos um produto ou serviço.');
+    // ── utilidades ─────────────────────────────────────────────────────
+    const so = function (v) { return String(v || '').replace(/\D/g, ''); };
+    function brl(n) { return 'R$ ' + (Number(n) || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
+    function num(v) {
+        if (v === null || v === undefined || v === '') return null;
+        let t = String(v).replace(/R\$|\s/g, '');
+        if (t.indexOf(',') >= 0) t = t.replace(/\./g, '').replace(',', '.');
+        const n = Number(t); return isNaN(n) ? null : Math.round(n * 100) / 100;
     }
-  });
-
-  // ---- Autocomplete da tabela de preços ----
-  function setF(tipo, field, val) {
-    var el = document.querySelector('[data-item="' + tipo + '"] [data-f="' + field + '"]');
-    if (el && val != null && val !== '') el.value = val;
-  }
-  function extraGet(extra, kws) {
-    if (!extra) return '';
-    for (var k in extra) {
-      var K = k.toUpperCase();
-      for (var i = 0; i < kws.length; i++) { if (K.indexOf(kws[i]) >= 0 && extra[k]) return extra[k]; }
+    function moeda(n) { return n === null || n === undefined ? '' : Number(n).toFixed(2).replace('.', ','); }
+    function esc(t) { const s = document.createElement('span'); s.textContent = t == null ? '' : t; return s.innerHTML; }
+    function cpfValido(v) {
+        const d = so(v); if (d.length !== 11 || /^(\d)\1{10}$/.test(d)) return false;
+        for (const t of [9, 10]) { let s = 0; for (let i = 0; i < t; i++) s += Number(d[i]) * (t + 1 - i);
+            if ((s * 10) % 11 % 10 !== Number(d[t])) return false; }
+        return true;
     }
-    return '';
-  }
-  function aplicar(it, tipo) {
-    setF(tipo, 'preco_id', String(it.id));
-    if (tipo === 'produto') {
-      setF('produto', 'nome_produto', it.nome);
-      setF('produto', 'categoria', it.categoria);
-      setF('produto', 'plano', it.plano);
-      setF('produto', 'valor_venda', it.valor);
-      setF('produto', 'marca', extraGet(it.extra, ['MARCA']));
-      setF('produto', 'modelo', extraGet(it.extra, ['MODELO']));
-    } else {
-      setF('servico', 'servico', it.nome);
-      setF('servico', 'plano_novo', it.plano);
-      setF('servico', 'tipo_plano', it.grupamento);
-      setF('servico', 'valor_plano', it.valor);
+    function mascaraCpf(v) { const d = so(v).slice(0, 11);
+        return d.replace(/^(\d{3})(\d)/, '$1.$2').replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d)/, '.$1-$2'); }
+    function mascaraTel(v) { const d = so(v).slice(0, 11);
+        if (d.length <= 2) return d; if (d.length <= 6) return '(' + d.slice(0, 2) + ') ' + d.slice(2);
+        if (d.length <= 10) return '(' + d.slice(0, 2) + ') ' + d.slice(2, 6) + '-' + d.slice(6);
+        return '(' + d.slice(0, 2) + ') ' + d.slice(2, 7) + '-' + d.slice(7); }
+    function fake(v) {
+        const d = so(v); if (!d) return false;
+        if (d === '999999999' || d === '9000000000' || d.length < 8) return true;
+        const corpo = (d.length === 10 || d.length === 11) ? d.slice(2) : d;
+        return new Set(corpo).size === 1 || /^\d0+$/.test(corpo);
     }
-  }
-  function setupAC(input, tipo) {
-    if (!input) return;
-    var box = document.createElement('div');
-    box.className = 'ac-box';
-    box.style.display = 'none';
-    input.parentNode.appendChild(box);
-    var timer;
-    input.addEventListener('input', function () {
-      setF(tipo, 'preco_id', '');  // edição manual desfaz o vínculo
-      var q = input.value.trim();
-      clearTimeout(timer);
-      if (q.length < 2) { box.style.display = 'none'; return; }
-      timer = setTimeout(function () {
-        fetch(buscarUrl + '?q=' + encodeURIComponent(q), { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-          .then(function (r) { return r.json(); })
-          .then(function (d) {
-            var results = (d && d.results) || [];
-            box.innerHTML = '';
-            if (!results.length) { box.style.display = 'none'; return; }
-            results.forEach(function (it) {
-              var opt = document.createElement('div');
-              opt.className = 'ac-opt';
-              opt.innerHTML = '<span class="ac-nome">' + esc(it.nome) + '</span><span class="ac-meta">' + esc(it.categoria) + (it.valor ? (' · R$ ' + it.valor) : '') + '</span>';
-              opt.addEventListener('mousedown', function (ev) { ev.preventDefault(); aplicar(it, tipo); box.style.display = 'none'; });
-              box.appendChild(opt);
-            });
-            box.style.display = 'block';
-          })
-          .catch(function () { box.style.display = 'none'; });
-      }, 250);
+    function telValido(v) { const d = so(v); return (d.length === 10 || d.length === 11) && Number(d.slice(0, 2)) >= 11; }
+    async function pedir(url, opcoes) {
+        const r = await fetch(url, Object.assign({headers: {'Accept': 'application/json', 'X-CSRFToken': CSRF, 'Content-Type': 'application/json'}}, opcoes || {}));
+        return r.json();
+    }
+    ['vdTelefone', 'vdNovaLinha'].forEach(function (id) { $(id).addEventListener('input', function (e) { e.target.value = mascaraTel(e.target.value); }); });
+    setInterval(function () { const d = new Date(); $('vdRelogio').textContent = d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'}); }, 30000);
+
+    // ── 1. Cliente ─────────────────────────────────────────────────────
+    const cpf = $('vdCpf'), aviso = $('vdCpfAviso');
+    function avisar(texto, cor) { aviso.className = 'sm:col-span-2 text-sm ' + (cor || 'text-gray-500'); aviso.innerHTML = texto; }
+    let ultimoCpf = '';
+    cpf.addEventListener('input', function () {
+        cpf.value = mascaraCpf(cpf.value);
+        const d = so(cpf.value);
+        cpf.classList.remove('vd-erro');
+        if (d.length < 11) { if (estado.cliente) limparCliente(); avisar(''); return; }
+        if (!cpfValido(d)) { cpf.classList.add('vd-erro'); avisar('<i class="fas fa-circle-xmark mr-1"></i>CPF inválido — confira os números.', 'text-red-600'); return; }
+        if (d === ultimoCpf) return;
+        ultimoCpf = d; buscarCliente(d);
     });
-    input.addEventListener('blur', function () { setTimeout(function () { box.style.display = 'none'; }, 150); });
-  }
-  setupAC(document.querySelector('[data-item="produto"] [data-f="nome_produto"]'), 'produto');
-  setupAC(document.querySelector('[data-item="servico"] [data-f="servico"]'), 'servico');
+    async function buscarCliente(d) {
+        avisar('<i class="fas fa-circle-notch fa-spin mr-1"></i>Buscando o cliente…');
+        let j;
+        try { j = await pedir(URL.cliente + '?cpf=' + d); }
+        catch (err) { ultimoCpf = ''; avisar('Não deu para buscar o cliente agora — apague um número e digite de novo.', 'text-amber-700'); return; }
+        if (!j.ok) { avisar(esc(j.erro), 'text-red-600'); return; }
+        if (j.encontrado) {
+            estado.cliente = Object.assign({}, j.cliente, {pre: j.pre_analise}); estado.novo = false;
+            $('vdConfirmaNome').textContent = j.cliente.nome; $('vdConfirma').classList.remove('hidden');
+            avisar('<i class="fas fa-circle-check text-emerald-600 mr-1"></i>CPF ' + esc(j.cliente.cpf_formatado) + ' — confira o nome.', 'text-gray-600');
+        } else {
+            estado.cliente = {cpf: d, cpf_formatado: j.cpf_formatado}; estado.novo = true;
+            avisar('<i class="fas fa-user-plus text-purple-600 mr-1"></i>Cliente não encontrado. Preencha o cadastro abaixo.', 'text-purple-700');
+            abrirDados(true);
+        }
+    }
+    function limparCliente() {
+        estado.cliente = null; estado.confirmado = false; ultimoCpf = '';
+        ['vdConfirma', 'vdDadosCliente', 'vdPreAnalise', 'vdPlanoAnterior'].forEach(function (id) { $(id).classList.add('hidden'); });
+        $('passoItens').classList.add('vd-bloqueado'); $('numCliente').classList.remove('vd-feito'); $('numCliente').textContent = '1';
+        $('vdResumoCliente').textContent = 'sem cliente'; recalcular();
+    }
+    $('vdNaoE').addEventListener('click', function () { cpf.value = ''; limparCliente(); avisar(''); cpf.focus(); });
+    $('vdEEle').addEventListener('click', function () { $('vdConfirma').classList.add('hidden'); abrirDados(false); confirmarCliente(); });
 
-  // ---- Histórico do cliente (MySQL do Vivo GO) ----
-  // A consulta varre a tabela inteira e leva segundos, então só dispara com o
-  // documento completo — e uma vez por documento, não a cada tecla.
-  (function () {
-    var campo = document.getElementById('vdCpf');
-    var painel = document.getElementById('vdHistorico');
-    var girando = document.getElementById('vdCpfIcone');
-    if (!campo || !painel) return;
-
-    var ultimoConsultado = '';
-    var dadosAtuais = null;
-
-    function digitos(v) { return String(v || '').replace(/\D/g, ''); }
-
-    campo.addEventListener('input', function () {
-      var d = digitos(campo.value);
-      if (d.length !== 11 && d.length !== 14) {
-        painel.innerHTML = '';
-        ultimoConsultado = '';
-        return;
-      }
-      if (d === ultimoConsultado) return;
-      ultimoConsultado = d;
-      procurar(d);
-    });
-
-    function procurar(d) {
-      girando.classList.remove('hidden');
-      painel.innerHTML = '';
-      fetch('{% url "vendas:cliente_historico" %}?cpf=' + encodeURIComponent(d),
-            { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-        .then(function (r) { return r.json(); })
-        .then(function (dados) {
-          girando.classList.add('hidden');
-          dadosAtuais = dados;
-          pintar(dados);
-        })
-        .catch(function () {
-          girando.classList.add('hidden');
-          // Falhar aqui não pode atrapalhar quem está lançando a venda.
-          painel.innerHTML = '';
+    const CAMPOS = {nome: 'vdNome', telefone: 'vdTelefone', cep: 'vdCep', logradouro: 'vdLogradouro', numero: 'vdNumero',
+                    complemento: 'vdComplemento', bairro: 'vdBairro', cidade: 'vdCidade', uf: 'vdUf'};
+    function abrirDados(novo) {
+        const c = estado.cliente || {};
+        Object.entries(CAMPOS).forEach(function ([k, id]) {
+            let v = c[k] || ''; if (k === 'telefone') v = mascaraTel(v); if (k === 'cep' && v.length === 8) v = v.slice(0, 5) + '-' + v.slice(5);
+            $(id).value = v;
         });
+        $('vdNome').readOnly = !novo;
+        $('vdDadosTitulo').textContent = novo ? 'Cadastro do novo cliente' : 'Telefone e endereço (edite se mudou)';
+        $('vdSalvarCliente').innerHTML = novo ? '<i class="fas fa-user-plus mr-1"></i>Cadastrar cliente' : '<i class="fas fa-floppy-disk mr-1"></i>Salvar alterações';
+        $('vdClienteNota').textContent = novo ? 'Nome obrigatório. O CEP preenche o endereço.' : 'O dado anterior fica guardado no histórico, com data, vendedor e PDV.';
+        $('vdDadosCliente').classList.remove('hidden');
+        if (novo) $('vdNome').focus();
+    }
+    function dadosDoForm() { const d = {cpf: estado.cliente.cpf}; Object.entries(CAMPOS).forEach(function ([k, id]) { d[k] = $(id).value.trim(); }); return d; }
+    $('vdSalvarCliente').addEventListener('click', async function () {
+        const d = dadosDoForm();
+        if (!d.nome) { $('vdNome').classList.add('vd-erro'); return; }
+        if (d.telefone && !telValido(d.telefone) && !fake(d.telefone)) { $('vdTelefone').classList.add('vd-erro'); $('vdClienteNota').textContent = 'Telefone: use DDD + número.'; return; }
+        const b = this; b.disabled = true;
+        let j;
+        try { j = await pedir(URL.salvarCliente, {method: 'POST', body: JSON.stringify(d)}); }
+        catch (err) { j = {ok: false, erro: 'Não deu para gravar agora (conexão) — tente de novo.'}; }
+        b.disabled = false;
+        if (!j.ok) { $('vdClienteNota').innerHTML = '<span class="text-red-600">' + esc(j.erro) + '</span>'; return; }
+        estado.cliente = Object.assign({}, estado.cliente, j.cliente);
+        $('vdClienteNota').innerHTML = '<span class="text-emerald-700"><i class="fas fa-check mr-1"></i>' +
+            (j.criado ? 'Cliente cadastrado.' : (j.mudou ? j.mudou + ' dado(s) atualizado(s); o anterior foi para o histórico.' : 'Nada mudou.')) + '</span>';
+        if (estado.novo) { estado.novo = false; estado.cliente.pre = {vazio: true, plano: null, compras: []}; confirmarCliente(); abrirDados(false); }
+    });
+
+    function confirmarCliente() {
+        estado.confirmado = true;
+        $('numCliente').classList.add('vd-feito'); $('numCliente').innerHTML = '<i class="fas fa-check"></i>';
+        $('passoItens').classList.remove('vd-bloqueado');
+        $('vdResumoCliente').textContent = estado.cliente.nome || '';
+        mostrarPreAnalise(); prepararPlanoAnterior();
+        estado.linhas = estado.cliente.telefone ? [so(estado.cliente.telefone)] : [];
+        desenharLinhas(); recalcular();
+    }
+    function mostrarPreAnalise() {
+        const p = estado.cliente.pre || {vazio: true};
+        const caixa = $('vdPreAnalise');
+        let plano = p.plano ? '<p class="text-base font-bold text-gray-900">' + esc(p.plano.nome) + '</p><p class="text-xs text-gray-500">' +
+            esc(p.plano.segmentacao_nome || '') + ' · paga ' + brl(p.plano.valor) + ' · ' + esc(p.plano.fonte) + '</p>'
+            : '<p class="text-sm text-gray-500">Sem plano registrado no portal.</p>';
+        let compras = (p.compras || []).map(function (c) { return '<li class="flex justify-between gap-2"><span class="truncate">' + esc(c.data) + ' · ' + esc(c.produto) +
+            '</span><span class="tabular whitespace-nowrap">' + brl(c.valor) + '</span></li>'; }).join('');
+        caixa.innerHTML =
+            '<div class="rounded-xl bg-purple-50 border border-purple-100 p-4"><p class="text-[11px] font-semibold text-purple-700 uppercase tracking-wide mb-1"><i class="fas fa-chart-pie mr-1"></i>Pré-análise · plano</p>' + plano + '</div>' +
+            '<div class="rounded-xl bg-sky-50 border border-sky-100 p-4"><p class="text-[11px] font-semibold text-sky-700 uppercase tracking-wide mb-1"><i class="fas fa-bag-shopping mr-1"></i>Últimas compras</p>' +
+            (compras ? '<ul class="text-xs text-gray-700 space-y-0.5">' + compras + '</ul>' : '<p class="text-sm text-gray-500" id="vdSemHist">' + (p.vazio ? 'Cliente sem histórico de planos ou compras.' : 'Sem compras de produto no portal.') + '</p>') +
+            '<div id="vdVivoGo" class="mt-2 text-[11px] text-gray-500"><span class="vd-skeleton inline-block h-3 w-40"></span></div></div>';
+        caixa.classList.remove('hidden');
+        // Compras antigas do Vivo GO (lento): chegam depois, sem travar a tela.
+        fetch(URL.historico + '?cpf=' + estado.cliente.cpf).then(function (r) { return r.json(); }).then(function (h) {
+            const el = $('vdVivoGo'); if (!el) return;
+            if (!h.disponivel) { el.textContent = 'Histórico do Vivo GO indisponível agora.'; return; }
+            if (!h.encontrado) { el.textContent = 'Nada no Vivo GO para este CPF.'; return; }
+            el.innerHTML = '<p class="font-semibold text-gray-600 mt-1">Vivo GO: ' + h.total + ' registro(s), último em ' + esc(h.ultima) + '</p><ul class="space-y-0.5 mt-0.5">' +
+                h.compras.slice(0, 5).map(function (c) { return '<li class="flex justify-between gap-2"><span class="truncate">' + esc(c.data) + ' · ' + esc(c.item) + '</span><span class="tabular">' + brl(c.valor) + '</span></li>'; }).join('') + '</ul>';
+        }).catch(function () { const el = $('vdVivoGo'); if (el) el.textContent = ''; });
     }
 
-    function pintar(d) {
-      if (!d.disponivel) {
-        painel.innerHTML = '<div class="rounded-xl bg-gray-50 border border-gray-200 p-3 text-xs text-gray-500">' +
-          '<i class="fas fa-plug-circle-xmark mr-1"></i>Não consegui consultar o histórico agora. ' +
-          'Pode seguir com a venda normalmente.</div>';
-        return;
-      }
-      if (!d.encontrado) {
-        painel.innerHTML = '<div class="rounded-xl bg-blue-50 border border-blue-100 p-3 text-xs text-blue-800">' +
-          '<i class="fas fa-user-plus mr-1"></i><strong>Cliente novo.</strong> ' +
-          'Nenhuma compra encontrada para este documento.</div>';
-        return;
-      }
-
-      painel.innerHTML =
-        '<div class="rounded-xl bg-emerald-50 border border-emerald-200 p-3.5">' +
-          '<div class="flex items-start justify-between gap-3 flex-wrap">' +
-            '<div class="min-w-0">' +
-              '<p class="text-sm font-semibold text-emerald-900">' +
-                '<i class="fas fa-user-check mr-1.5"></i>Cliente já comprou na rede' +
-              '</p>' +
-              '<p class="text-xs text-emerald-800/80 mt-0.5">' +
-                (d.nome ? esc(d.nome) + ' · ' : '') +
-                '<strong>' + d.total + '</strong> compra' + (d.total === 1 ? '' : 's') +
-                ' · de ' + d.primeira + ' a ' + d.ultima +
-              '</p>' +
-            '</div>' +
-            '<button type="button" id="vdVerCompras" ' +
-                    'class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold whitespace-nowrap">' +
-              '<i class="fas fa-list mr-1"></i>Ver compras' +
-            '</button>' +
-          '</div>' +
-        '</div>';
-
-      // Preenche o nome do cliente se ainda estiver vazio.
-      var campoNome = document.querySelector('input[name="cliente_nome"]');
-      if (campoNome && !campoNome.value && d.nome) campoNome.value = d.nome;
-
-      document.getElementById('vdVerCompras').addEventListener('click', abrirCompras);
+    // Plano anterior
+    function opcoesPlanos(sel, seg, escolhido, vazio) {
+        sel.innerHTML = '<option value="">' + (vazio || '—') + '</option>' + SLV.planos.filter(function (p) { return !seg || p.segmentacao === seg; })
+            .map(function (p) { return '<option value="' + p.id + '"' + (String(p.id) === String(escolhido) ? ' selected' : '') + '>' + esc(p.nome) + ' · ' + brl(p.valor) + '</option>'; }).join('');
     }
-
-    function abrirCompras() {
-      if (!dadosAtuais || !dadosAtuais.compras) return;
-      var linhas = dadosAtuais.compras.map(function (c) {
-        return '<tr class="border-t border-gray-50">' +
-          '<td class="px-3 py-2 text-gray-600 whitespace-nowrap">' + esc(c.data) + '</td>' +
-          '<td class="px-3 py-2 text-gray-800">' + esc(c.item) +
-            '<span class="block text-[10px] text-gray-400">' + esc(c.tipo) + ' · ' + esc(c.pdv) + '</span></td>' +
-          '<td class="px-3 py-2 text-center text-gray-500">' + (c.qtde || 1) + '</td>' +
-          '<td class="px-3 py-2 text-right font-semibold text-gray-900 whitespace-nowrap">R$ ' + brl(c.valor) + '</td>' +
-        '</tr>';
-      }).join('');
-
-      var fundo = document.createElement('div');
-      fundo.className = 'fixed inset-0 z-[9999] bg-black/40 flex items-center justify-center p-4';
-      fundo.innerHTML =
-        '<div class="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[85dvh] flex flex-col overflow-hidden">' +
-          '<div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between gap-3">' +
-            '<div class="min-w-0">' +
-              '<h3 class="font-bold text-gray-900 truncate">' + esc(dadosAtuais.nome || 'Cliente') + '</h3>' +
-              '<p class="text-xs text-gray-400">' + esc(dadosAtuais.cpf) + ' · ' + dadosAtuais.total + ' compra(s)</p>' +
-            '</div>' +
-            '<button type="button" data-fechar class="w-8 h-8 rounded-lg text-gray-400 hover:bg-gray-100">' +
-              '<i class="fas fa-xmark"></i></button>' +
-          '</div>' +
-          '<div class="overflow-y-auto">' +
-            '<table class="min-w-full text-sm">' +
-              '<thead class="bg-gray-50 text-gray-500 text-xs uppercase sticky top-0">' +
-                '<tr><th class="text-left px-3 py-2 font-medium">Data</th>' +
-                '<th class="text-left px-3 py-2 font-medium">Item</th>' +
-                '<th class="text-center px-3 py-2 font-medium">Qtde</th>' +
-                '<th class="text-right px-3 py-2 font-medium">Valor</th></tr>' +
-              '</thead><tbody>' + linhas + '</tbody>' +
-            '</table>' +
-          '</div>' +
-          '<div class="px-5 py-3 border-t border-gray-100 text-right">' +
-            '<button type="button" data-fechar class="px-4 py-2 rounded-lg border border-gray-300 text-gray-600 text-sm font-semibold hover:bg-gray-50">Fechar</button>' +
-          '</div>' +
-        '</div>';
-      document.body.appendChild(fundo);
-      fundo.querySelectorAll('[data-fechar]').forEach(function (b) {
-        b.addEventListener('click', function () { fundo.remove(); });
-      });
-      fundo.addEventListener('click', function (e) { if (e.target === fundo) fundo.remove(); });
+    function prepararPlanoAnterior() {
+        const c = estado.cliente;
+        $('vdPaSeg').innerHTML = '<option value="">Sem plano</option>' + SLV.segmentacoes.map(function ([k, r]) { return '<option value="' + k + '"' + (c.segmentacao === k ? ' selected' : '') + '>' + r + '</option>'; }).join('');
+        opcoesPlanos($('vdPaPlano'), c.segmentacao, c.plano_id);
+        $('vdPaValor').value = c.valor_pago ? moeda(c.valor_pago) : '';
+        $('vdPaGrupo').innerHTML = '<option value="">— (usa o preço com plano)</option>' + SLV.grupamentos.map(function (g) { return '<option>' + esc(g) + '</option>'; }).join('');
+        $('vdPlanoAnterior').classList.remove('hidden');
     }
-  })();
+    $('vdPaSeg').addEventListener('change', function () { opcoesPlanos($('vdPaPlano'), this.value, ''); $('vdPaValor').value = ''; reprecificar(); recalcular(); });
+    $('vdPaPlano').addEventListener('change', function () {
+        const p = SLV.planos.find(function (x) { return String(x.id) === this.value; }, this);
+        if (p) { $('vdPaValor').value = moeda(p.valor); $('vdPaSeg').value = p.segmentacao; }
+        reprecificar(); recalcular();
+    });
+    $('vdPaValor').addEventListener('input', recalcular);
+    $('vdPaGrupo').addEventListener('change', reprecificar);
+    function segCliente() { return $('vdPaSeg').value || ''; }
+
+    // ── 2a. Produtos ───────────────────────────────────────────────────
+    document.querySelectorAll('[data-aba]').forEach(function (b) {
+        b.addEventListener('click', function () {
+            document.querySelectorAll('[data-aba]').forEach(function (x) { x.classList.toggle('vd-ativo', x === b); });
+            document.querySelectorAll('[data-painel]').forEach(function (p) { p.classList.toggle('hidden', p.dataset.painel !== b.dataset.aba); });
+        });
+    });
+    const busca = $('vdBusca'), lista = $('vdBuscaLista');
+    let tempo = null, achados = [], foco = -1;
+    busca.addEventListener('input', function () {
+        clearTimeout(tempo);
+        const q = busca.value.trim();
+        if (q.length < 2) { lista.classList.add('hidden'); return; }
+        tempo = setTimeout(async function () {
+            lista.innerHTML = '<div class="p-3 space-y-2"><div class="vd-skeleton h-4"></div><div class="vd-skeleton h-4 w-2/3"></div></div>';
+            lista.classList.remove('hidden');
+            let j;
+            try {
+                j = await pedir(URL.buscar + '?q=' + encodeURIComponent(q) + '&segmentacao=' + segCliente() + '&grupamento=' + encodeURIComponent($('vdPaGrupo').value));
+            } catch (err) {
+                lista.innerHTML = '<p class="p-4 text-sm text-amber-700"><i class="fas fa-wifi mr-1"></i>Não deu para buscar agora. Digite de novo para tentar.</p>';
+                return;
+            }
+            if (busca.value.trim() !== q) return;          // a pessoa já digitou outra coisa
+            achados = j.results || []; foco = -1;
+            lista.innerHTML = achados.length ? achados.map(function (r, i) {
+                return '<button type="button" class="vd-item-busca w-full text-left px-4 py-2.5 border-b border-gray-100 last:border-0 flex items-center justify-between gap-3" data-i="' + i + '">' +
+                    '<span class="min-w-0"><span class="block text-sm text-gray-900 truncate">' + esc(r.nome) + '</span><span class="block text-[11px] text-gray-500">' +
+                    esc(r.categoria_slv) + ' · ' + esc(r.categoria) + (r.sku ? ' · SKU ' + esc(r.sku) : '') + '</span></span>' +
+                    '<span class="text-right whitespace-nowrap"><span class="block text-sm font-semibold text-gray-900 tabular">' + (r.valor_sugerido ? brl(r.valor_sugerido) : '—') + '</span>' +
+                    '<span class="block text-[10px] text-gray-400">' + esc(r.regra) + '</span></span></button>';
+            }).join('') : '<p class="p-4 text-sm text-gray-500">Nada encontrado para "' + esc(q) + '".</p>';
+        }, 250);
+    });
+    busca.addEventListener('keydown', function (e) {
+        const itens = lista.querySelectorAll('.vd-item-busca'); if (!itens.length) return;
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); foco = (foco + (e.key === 'ArrowDown' ? 1 : -1) + itens.length) % itens.length;
+            itens.forEach(function (x, i) { x.classList.toggle('vd-foco', i === foco); }); itens[foco].scrollIntoView({block: 'nearest'}); }
+        if (e.key === 'Enter' && foco >= 0) { e.preventDefault(); adicionarProduto(achados[foco]); }
+        if (e.key === 'Escape') lista.classList.add('hidden');
+    });
+    lista.addEventListener('click', function (e) { const b = e.target.closest('[data-i]'); if (b) adicionarProduto(achados[Number(b.dataset.i)]); });
+    document.addEventListener('click', function (e) { if (!e.target.closest('#vdBusca') && !e.target.closest('#vdBuscaLista')) lista.classList.add('hidden'); });
+
+    function adicionarProduto(r) {
+        estado.produtos.push({preco_id: r.id, nome: r.nome, sku: r.sku, categoria: r.categoria, categoria_slv: r.categoria_slv, regra: r.regra,
+            valor_sugerido: r.valor_sugerido ? Number(r.valor_sugerido) : null, sem_valor: !r.valor_sugerido, qtde: 1, prateleira_infinita: false,
+            renova: false, renova_vini: false, renova_vini_valor: null, renova_codigo: '', renova_ok: null, renova_alied: false, renova_alied_valor: null,
+            valor_final: null});
+        busca.value = ''; lista.classList.add('hidden'); desenharProdutos(); recalcular();
+    }
+    async function reprecificar() {
+        // Mudou o plano do cliente: o preço sugerido dos aparelhos muda junto.
+        const ids = estado.produtos.filter(function (p) { return p.preco_id; }).map(function (p) { return p.preco_id; });
+        if (!ids.length) return;
+        let j;
+        try { j = await pedir(URL.buscar + '?ids=' + ids.join(',') + '&segmentacao=' + segCliente() + '&grupamento=' + encodeURIComponent($('vdPaGrupo').value)); }
+        catch (err) { return; }
+        (j.results || []).forEach(function (r) { estado.produtos.forEach(function (p) {
+            if (p.preco_id === r.id) { p.valor_sugerido = r.valor_sugerido ? Number(r.valor_sugerido) : (p.sem_valor ? p.valor_sugerido : null); p.regra = r.regra; p.sem_valor = !r.valor_sugerido; }
+        }); });
+        desenharProdutos(); recalcular();
+    }
+    function calcItem(p) {
+        const sug = Number(p.valor_sugerido) || 0;
+        const rv = p.renova && p.renova_vini ? (Number(p.renova_vini_valor) || 0) : 0;
+        const ra = p.renova && p.renova_alied ? (Number(p.renova_alied_valor) || 0) : 0;
+        const base = sug - rv - ra;
+        const desc = estado.vivoMais ? Math.round(Math.max(base, 0) * PCT) / 100 : 0;
+        const calc = Math.round((base - desc) * 100) / 100;
+        const final = p.valor_final !== null ? p.valor_final : calc;
+        return {rv: rv, ra: ra, desc: desc, calc: calc, final: final, editado: p.valor_final !== null && p.valor_final !== calc};
+    }
+    function desenharProdutos() {
+        $('vdNProd').textContent = estado.produtos.length;
+        $('vdPagamento').classList.toggle('hidden', !estado.produtos.length);
+        $('vdProdutos').innerHTML = estado.produtos.map(function (p, i) {
+            const aparelho = p.categoria_slv === 'aparelho';
+            return '<div class="vd-entra rounded-xl border border-gray-200 p-4 space-y-3" data-p="' + i + '">' +
+              '<div class="flex items-start justify-between gap-3"><div class="min-w-0"><p class="font-semibold text-gray-900">' + esc(p.nome) + '</p>' +
+              '<p class="text-[11px] text-gray-500"><span class="px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 font-semibold mr-1">' + esc(p.categoria_slv) + '</span>' + esc(p.categoria) + (p.sku ? ' · SKU ' + esc(p.sku) : '') + '</p></div>' +
+              '<button type="button" class="text-gray-400 hover:text-red-600" data-remover="' + i + '" title="Remover"><i class="fas fa-trash"></i></button></div>' +
+              '<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 items-end">' +
+                '<div class="col-span-2"><label class="vd-rotulo">Valor sugerido (R$)' + (p.sem_valor ? ' *' : '') + '</label><input class="vd-campo tabular text-right' + (p.sem_valor && !p.valor_sugerido ? ' vd-erro' : '') + '" data-campo="valor_sugerido" inputmode="decimal" value="' + moeda(p.valor_sugerido) + '">' +
+                  '<p class="vd-ajuda">' + esc(p.regra || '') + (p.sem_valor ? ' — informe o valor' : '') + '</p></div>' +
+                '<div><label class="vd-rotulo">Qtde</label><input class="vd-campo tabular" type="number" min="1" data-campo="qtde" value="' + p.qtde + '"></div>' +
+                '<label class="flex items-center gap-2 text-sm text-gray-700 pb-2.5 cursor-pointer"><input type="checkbox" class="rounded text-purple-600" data-campo="prateleira_infinita"' + (p.prateleira_infinita ? ' checked' : '') + '>Prateleira infinita</label>' +
+              '</div>' +
+              (aparelho ? '<div class="rounded-lg bg-gray-50 p-3 space-y-2"><div class="flex items-center gap-2 flex-wrap text-sm"><span class="text-gray-600 font-medium">Houve Renova?</span>' +
+                '<button type="button" class="vd-chip !py-1 !px-3 text-xs' + (p.renova ? '' : ' vd-ativo') + '" data-renova="0">Não</button>' +
+                '<button type="button" class="vd-chip !py-1 !px-3 text-xs' + (p.renova ? ' vd-ativo' : '') + '" data-renova="1">Sim</button></div>' +
+                (p.renova ? '<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">' +
+                  '<div class="space-y-2"><label class="flex items-center gap-2 text-sm font-medium text-gray-700"><input type="checkbox" class="rounded text-purple-600" data-campo="renova_vini"' + (p.renova_vini ? ' checked' : '') + '>Renova Vini</label>' +
+                  (p.renova_vini ? '<input class="vd-campo tabular text-right" inputmode="decimal" placeholder="Valor (R$)" data-campo="renova_vini_valor" value="' + moeda(p.renova_vini_valor) + '">' +
+                  '<input class="vd-campo uppercase' + (p.renova_ok === false ? ' vd-erro' : '') + '" placeholder="Código do Renova (RN-000000) *" data-campo="renova_codigo" value="' + esc(p.renova_codigo) + '">' +
+                  '<p class="vd-ajuda" data-renova-aviso="' + i + '">' + (p.renova_ok === true ? '<span class="text-emerald-600"><i class="fas fa-check"></i> ' + esc(p.renova_info || 'código encontrado') + '</span>' : (p.renova_ok === false ? '<span class="text-red-600">' + esc(p.renova_info || 'código não encontrado') + '</span>' : 'Obrigatório com Renova Vini.')) + '</p>' : '') + '</div>' +
+                  '<div class="space-y-2"><label class="flex items-center gap-2 text-sm font-medium text-gray-700"><input type="checkbox" class="rounded text-purple-600" data-campo="renova_alied"' + (p.renova_alied ? ' checked' : '') + '>Renova Alied</label>' +
+                  (p.renova_alied ? '<input class="vd-campo tabular text-right" inputmode="decimal" placeholder="Valor (R$)" data-campo="renova_alied_valor" value="' + moeda(p.renova_alied_valor) + '">' : '') + '</div>' +
+                '</div>' : '') + '</div>' : '') +
+              '</div>';
+        }).join('');
+    }
+    $('vdProdutos').addEventListener('click', function (e) {
+        const caixa = e.target.closest('[data-p]'); if (!caixa) return;
+        const p = estado.produtos[Number(caixa.dataset.p)];
+        const rem = e.target.closest('[data-remover]');
+        if (rem) { estado.produtos.splice(Number(rem.dataset.remover), 1); desenharProdutos(); recalcular(); return; }
+        const r = e.target.closest('[data-renova]');
+        if (r) { p.renova = r.dataset.renova === '1'; if (!p.renova) { p.renova_vini = p.renova_alied = false; } desenharProdutos(); recalcular(); }
+    });
+    $('vdProdutos').addEventListener('change', function (e) {
+        const caixa = e.target.closest('[data-p]'); const campo = e.target.dataset.campo; if (!caixa || !campo) return;
+        const p = estado.produtos[Number(caixa.dataset.p)];
+        if (e.target.type === 'checkbox') { p[campo] = e.target.checked; if (campo !== 'prateleira_infinita') desenharProdutos(); }
+        else if (campo === 'qtde') p.qtde = Math.max(1, Number(e.target.value) || 1);
+        else if (campo === 'renova_codigo') { p.renova_codigo = e.target.value.trim().toUpperCase(); conferirRenova(p, Number(caixa.dataset.p)); }
+        else { p[campo] = num(e.target.value); e.target.value = moeda(p[campo]); if (campo === 'valor_sugerido') p.valor_final = null; }
+        recalcular();
+    });
+    async function conferirRenova(p, i) {
+        if (!so(p.renova_codigo)) { p.renova_ok = null; desenharProdutos(); return; }
+        let j;
+        try { j = await pedir(URL.renova + '?codigo=' + encodeURIComponent(p.renova_codigo)); }
+        catch (err) { j = {ok: false, erro: 'Não deu para conferir o código agora.'}; }
+        p.renova_ok = !!j.ok; p.renova_info = j.ok ? (j.codigo + (j.aparelho ? ' · ' + j.aparelho : '') + (j.ja_usado ? ' · já usado em outra venda' : '')) : j.erro;
+        if (j.ok) p.renova_codigo = j.codigo;
+        desenharProdutos(); recalcular();
+    }
+    document.querySelectorAll('[name=vdForma]').forEach(function (r) { r.addEventListener('change', function () { estado.forma = r.value; recalcular(); }); });
+    $('vdVivoPct').textContent = '(' + String(SLV.vivo_mais).replace('.', ',') + '%)';
+    $('vdVivoMais').addEventListener('change', function () { estado.vivoMais = this.checked; estado.produtos.forEach(function (p) { p.valor_final = null; }); recalcular(); });
+
+    // ── 2b. Serviços ───────────────────────────────────────────────────
+    $('vdTipoServico').innerHTML += SLV.tipos_servico.map(function ([k, r]) { return '<option value="' + k + '">' + r + '</option>'; }).join('');
+    function desenharLinhas() {
+        $('vdLinhas').innerHTML = estado.linhas.length ? estado.linhas.map(function (l, i) {
+            const f = fake(l);
+            return '<span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm tabular ' + (f ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-800') + '">' +
+                (f ? '<i class="fas fa-phone-slash" title="Número fictício"></i>' : '<i class="fas fa-phone text-gray-400"></i>') + esc(mascaraTel(l)) +
+                (f ? '<span class="text-[10px] font-semibold">fictício</span>' : '') +
+                '<button type="button" class="ml-1 text-gray-400 hover:text-red-600" data-linha="' + i + '"><i class="fas fa-xmark"></i></button></span>';
+        }).join('') : '<span class="text-sm text-gray-500">Nenhuma linha — adicione abaixo.</span>';
+        recalcular();
+    }
+    $('vdLinhas').addEventListener('click', function (e) { const b = e.target.closest('[data-linha]'); if (b) { estado.linhas.splice(Number(b.dataset.linha), 1); desenharLinhas(); } });
+    $('vdAddLinha').addEventListener('click', function () {
+        const d = so($('vdNovaLinha').value);
+        if (!d || (!telValido(d) && !fake(d))) { $('vdNovaLinha').classList.add('vd-erro'); return; }
+        $('vdNovaLinha').classList.remove('vd-erro');
+        if (estado.linhas.indexOf(d) < 0) estado.linhas.push(d);
+        $('vdNovaLinha').value = ''; desenharLinhas();
+    });
+
+    function seletorPlano(rotulo, chave, segmentos, valorSeg, valorPlano) {
+        return '<div class="space-y-2"><span class="vd-rotulo">' + rotulo + '</span><div class="flex flex-wrap gap-2">' +
+            segmentos.map(function (k) { return '<label><input type="radio" name="' + chave + 'Seg" value="' + k + '" class="sr-only"' + (valorSeg === k ? ' checked' : '') + '><span class="vd-chip !py-1.5 text-xs">' + SEG[k] + '</span></label>'; }).join('') +
+            '</div><select class="vd-campo" data-sel="' + chave + '"><option value="">Escolha a segmentação…</option></select></div>';
+    }
+    function desenharCamposServico() {
+        const t = $('vdTipoServico').value, c = $('vdCamposServico');
+        // [IU001] trocar o serviço limpa os campos dependentes.
+        let html = '';
+        const todos = ['POS', 'CONTROLE', 'PRE', 'EMPRESAS'];
+        if (t === 'ALTA') html = seletorPlano('Segmentação e plano *', 'novo', todos);
+        if (t === 'REATIVACAO') html = seletorPlano('Segmentação e plano *', 'novo', ['POS', 'CONTROLE']);
+        if (t === 'TROCA_PLANO' || t === 'MIGRACAO') {
+            html = '<div class="rounded-lg bg-gray-50 p-3 text-sm" id="vdAntPlanoInfo"></div>' +
+                seletorPlano('Plano anterior (confirme ou corrija)', 'ant', ['CONTROLE', 'POS', 'PRE'], segCliente(), $('vdPaPlano').value) +
+                seletorPlano('Novo plano *', 'novo', todos);
+        }
+        if (t === 'TROCA_SIMCARD') html = seletorPlano('Segmentação e plano do cliente *', 'novo', todos, segCliente(), $('vdPaPlano').value) +
+            '<div><label class="vd-rotulo">Serial do SimCard (ICCID) *</label><input class="vd-campo tabular" data-f="serial" inputmode="numeric" maxlength="22" placeholder="8955…"><p class="vd-ajuda">19 ou 20 números, começando por 89.</p></div>';
+        if (t === 'SEGURO' || t === 'SVA') {
+            const ops = SLV.adicionais.filter(function (a) { return a.tipo === t; });
+            html = ops.length ? '<div><label class="vd-rotulo">' + TIPOS[t] + ' contratado *</label><select class="vd-campo" data-f="adicional"><option value="">Escolha…</option>' +
+                ops.map(function (a) { return '<option value="' + a.id + '">' + esc(a.nome) + (Number(a.valor) ? ' · ' + brl(a.valor) : '') + '</option>'; }).join('') + '</select></div>'
+                : '<p class="text-sm text-amber-700"><i class="fas fa-triangle-exclamation mr-1"></i>Nenhum ' + TIPOS[t].toLowerCase() + ' cadastrado. O administrador cadastra em Parametrização.</p>';
+        }
+        if (t === 'TROCA_TITULARIDADE') html = '<div class="grid grid-cols-1 sm:grid-cols-2 gap-3"><div><label class="vd-rotulo">CPF do novo titular *</label><input class="vd-campo tabular" data-f="titular_cpf" inputmode="numeric" maxlength="14" placeholder="000.000.000-00"></div>' +
+            '<div><label class="vd-rotulo">Nome do novo titular *</label><input class="vd-campo" data-f="titular_nome" maxlength="200"></div></div>' +
+            '<p class="text-xs text-gray-500">Titular atual: <strong>' + esc((estado.cliente || {}).nome || '') + '</strong></p>' + seletorPlano('Segmentação e plano do novo titular *', 'novo', todos);
+        if (t === 'TROCA_NUMERO') html = '<p class="text-xs text-gray-500">Número atual: <strong class="tabular">' + esc(mascaraTel(estado.linhas[0] || '')) + '</strong></p>' +
+            '<div class="max-w-xs"><label class="vd-rotulo">Número novo *</label><input class="vd-campo tabular" data-f="numero_novo" inputmode="tel" maxlength="16" placeholder="(27) 99999-0000"></div>';
+        c.innerHTML = html;
+        $('vdAddServico').classList.toggle('hidden', !t);
+        c.querySelectorAll('[data-f=titular_cpf]').forEach(function (el) { el.addEventListener('input', function () { el.value = mascaraCpf(el.value); }); });
+        c.querySelectorAll('[data-f=numero_novo]').forEach(function (el) { el.addEventListener('input', function () { el.value = mascaraTel(el.value); }); });
+        ['novo', 'ant'].forEach(function (chave) {
+            const marcado = c.querySelector('[name=' + chave + 'Seg]:checked');
+            if (marcado) opcoesPlanos(c.querySelector('[data-sel=' + chave + ']'), marcado.value, chave === 'ant' ? $('vdPaPlano').value : '', 'Escolha o plano…');
+        });
+        if ($('vdAntPlanoInfo')) $('vdAntPlanoInfo').innerHTML = 'Plano atual do cliente: <strong>' + esc($('vdPaPlano').selectedOptions[0] ? $('vdPaPlano').selectedOptions[0].text : '—') + '</strong>';
+    }
+    $('vdTipoServico').addEventListener('change', desenharCamposServico);
+    $('vdCamposServico').addEventListener('change', function (e) {
+        if (e.target.name && e.target.name.endsWith('Seg')) {
+            const chave = e.target.name.replace('Seg', '');
+            opcoesPlanos($('vdCamposServico').querySelector('[data-sel=' + chave + ']'), e.target.value, '', 'Escolha o plano…');
+        }
+    });
+    let pendente = null;
+    $('vdAddServico').addEventListener('click', function () {
+        const t = $('vdTipoServico').value, c = $('vdCamposServico');
+        const v = function (sel) { const el = c.querySelector(sel); return el ? el.value.trim() : ''; };
+        const s = {tipo: t, plano_id: v('[data-sel=novo]'), plano_anterior_id: v('[data-sel=ant]'), serial: so(v('[data-f=serial]')),
+                   servico_adicional_id: v('[data-f=adicional]'), novo_titular_cpf: so(v('[data-f=titular_cpf]')),
+                   novo_titular_nome: v('[data-f=titular_nome]'), numero_novo: so(v('[data-f=numero_novo]')), ativacao_confirmada: false};
+        const erro = [];
+        if (['ALTA', 'REATIVACAO', 'TROCA_PLANO', 'MIGRACAO', 'TROCA_SIMCARD', 'TROCA_TITULARIDADE'].indexOf(t) >= 0 && !s.plano_id) erro.push('Escolha a segmentação e o plano.');
+        if (t === 'TROCA_SIMCARD' && !/^89\d{17,18}$/.test(s.serial)) erro.push('Serial do SimCard: 19 ou 20 números começando por 89.');
+        if ((t === 'SEGURO' || t === 'SVA') && !s.servico_adicional_id) erro.push('Escolha o serviço contratado.');
+        if (t === 'TROCA_TITULARIDADE' && !cpfValido(s.novo_titular_cpf)) erro.push('CPF do novo titular inválido.');
+        if (t === 'TROCA_TITULARIDADE' && !s.novo_titular_nome) erro.push('Informe o nome do novo titular.');
+        if (t === 'TROCA_NUMERO' && !telValido(s.numero_novo)) erro.push('Número novo: DDD + número.');
+        if (!estado.linhas.length) erro.push('Informe a linha do cliente.');
+        let caixaErro = c.querySelector('.vd-erro-servico');
+        if (caixaErro) caixaErro.remove();
+        if (erro.length) { c.insertAdjacentHTML('beforeend', '<p class="vd-erro-servico text-sm text-red-600">' + erro.map(esc).join('<br>') + '</p>'); return; }
+        if (t === 'SEGURO' || t === 'SVA') {
+            pendente = s; $('vdModalTitulo').textContent = 'O ' + TIPOS[t].toLowerCase() + ' foi ativado?';
+            $('vdModal').classList.remove('hidden'); return;
+        }
+        incluirServico(s);
+    });
+    $('vdModalSim').addEventListener('click', function () { pendente.ativacao_confirmada = true; incluirServico(pendente); pendente = null; $('vdModal').classList.add('hidden'); });
+    $('vdModalNao').addEventListener('click', function () {
+        pendente = null; $('vdModal').classList.add('hidden');
+        $('vdCamposServico').insertAdjacentHTML('beforeend', '<p class="vd-erro-servico text-sm text-amber-700"><i class="fas fa-circle-info mr-1"></i>Ative o serviço no sistema da operadora e adicione de novo para concluir.</p>');
+    });
+    function incluirServico(s) {
+        const plano = SLV.planos.find(function (p) { return String(p.id) === String(s.plano_id); });
+        const ant = SLV.planos.find(function (p) { return String(p.id) === String(s.plano_anterior_id); });
+        const adic = SLV.adicionais.find(function (a) { return String(a.id) === String(s.servico_adicional_id); });
+        s.rotulo = TIPOS[s.tipo]; s.plano_nome = plano ? plano.nome : ''; s.valor = plano ? Number(plano.valor) : (adic ? Number(adic.valor) : 0);
+        s.descricao = plano ? (SEG[plano.segmentacao] + ' · ' + plano.nome) : (adic ? adic.nome : (s.numero_novo ? 'Novo número ' + mascaraTel(s.numero_novo) : ''));
+        s.valor_anterior = ant ? Number(ant.valor) : num($('vdPaValor').value);
+        estado.servicos.push(s);
+        $('vdTipoServico').value = ''; desenharCamposServico(); desenharServicos(); recalcular();
+    }
+    function deltaDe(s) { return s.plano_id ? Math.round((s.valor - (s.valor_anterior || 0)) * 100) / 100 : null; }
+    function desenharServicos() {
+        $('vdNServ').textContent = estado.servicos.length;
+        $('vdServicos').innerHTML = estado.servicos.map(function (s, i) {
+            const d = deltaDe(s);
+            return '<div class="vd-entra flex items-center gap-3 rounded-xl border border-gray-200 p-3"><span class="w-9 h-9 rounded-lg bg-pink-100 text-pink-700 flex items-center justify-center shrink-0"><i class="fas fa-headset"></i></span>' +
+                '<div class="min-w-0 flex-1"><p class="text-sm font-semibold text-gray-900">' + esc(s.rotulo) + '</p><p class="text-[11px] text-gray-500 truncate">' + esc(s.descricao) +
+                (s.ativacao_confirmada ? ' · <span class="text-emerald-600"><i class="fas fa-check"></i> ativação confirmada</span>' : '') + '</p></div>' +
+                '<div class="text-right whitespace-nowrap"><p class="text-sm font-semibold tabular">' + brl(s.valor) + '</p>' +
+                (d !== null ? '<p class="text-[11px] ' + (d < 0 ? 'text-red-600' : 'text-emerald-600') + '">Δ ' + brl(d) + '</p>' : '') + '</div>' +
+                '<button type="button" class="text-gray-400 hover:text-red-600" data-remover-servico="' + i + '"><i class="fas fa-trash"></i></button></div>';
+        }).join('');
+    }
+    $('vdServicos').addEventListener('click', function (e) { const b = e.target.closest('[data-remover-servico]'); if (b) { estado.servicos.splice(Number(b.dataset.removerServico), 1); desenharServicos(); recalcular(); } });
+
+    // ── Resumo ([Venda de produtos.RF005], [Desempenho.NF002]) ────────
+    function recalcular() {
+        let totProd = 0, totDesc = 0, totServ = 0;
+        const linhasResumo = [];
+        estado.produtos.forEach(function (p, i) {
+            const c = calcItem(p), q = p.qtde || 1;
+            totProd += c.final * q; totDesc += (c.rv + c.ra + c.desc) * q;
+            linhasResumo.push('<div class="rounded-lg border ' + (c.editado ? 'border-amber-300 bg-amber-50' : 'border-gray-100') + ' p-2.5">' +
+                '<div class="flex justify-between gap-2"><span class="text-gray-800 font-medium truncate">' + (q > 1 ? q + '× ' : '') + esc(p.nome) + '</span>' +
+                (p.prateleira_infinita ? '<span class="text-[10px] px-1.5 rounded bg-sky-100 text-sky-700 whitespace-nowrap self-start">prateleira infinita</span>' : '') + '</div>' +
+                '<div class="text-[11px] text-gray-500 mt-1 space-y-0.5"><div class="flex justify-between"><span>Sugerido</span><span class="tabular">' + brl(p.valor_sugerido) + '</span></div>' +
+                (c.rv ? '<div class="flex justify-between"><span>Renova Vini</span><span class="tabular text-emerald-600">− ' + brl(c.rv) + '</span></div>' : '') +
+                (c.ra ? '<div class="flex justify-between"><span>Renova Alied</span><span class="tabular text-emerald-600">− ' + brl(c.ra) + '</span></div>' : '') +
+                (c.desc ? '<div class="flex justify-between"><span>Vivo+ (' + String(SLV.vivo_mais).replace('.', ',') + '%)</span><span class="tabular text-emerald-600">− ' + brl(c.desc) + '</span></div>' : '') + '</div>' +
+                '<div class="flex items-center justify-between gap-2 mt-2"><span class="text-xs text-gray-600">Valor final' + (c.editado ? ' <span class="text-amber-700 font-semibold">(editado)</span>' : '') + '</span>' +
+                '<input class="vd-campo !py-1 !px-2 w-28 text-right tabular font-semibold' + (c.editado ? ' vd-editado' : '') + (c.final <= 0 ? ' vd-erro' : '') + '" inputmode="decimal" data-final="' + i + '" value="' + moeda(c.final) + '"></div>' +
+                (c.editado ? '<button type="button" class="text-[11px] text-purple-600 hover:underline mt-1" data-voltar-calc="' + i + '">voltar ao calculado (' + brl(c.calc) + ')</button>' : '') +
+                (c.final <= 0 ? '<p class="text-[11px] text-red-600 mt-1">Valor final zerado ou negativo — corrija o item.</p>' : '') + '</div>');
+        });
+        estado.servicos.forEach(function (s) {
+            totServ += s.valor;
+            const d = deltaDe(s);
+            linhasResumo.push('<div class="rounded-lg border border-gray-100 p-2.5"><div class="flex justify-between gap-2"><span class="text-gray-800 font-medium truncate">' + esc(s.rotulo) + '</span><span class="tabular font-semibold">' + brl(s.valor) + '</span></div>' +
+                '<p class="text-[11px] text-gray-500 truncate">' + esc(s.descricao) + (d !== null ? ' · Δ <span class="' + (d < 0 ? 'text-red-600' : 'text-emerald-600') + '">' + brl(d) + '</span>' : '') + '</p></div>');
+        });
+        $('vdResumo').innerHTML = linhasResumo.length ? linhasResumo.join('') : '<p class="text-gray-400 text-center py-6"><i class="fas fa-basket-shopping text-2xl text-gray-200 block mb-2"></i>Os itens aparecem aqui.</p>';
+        $('vdTotProd').textContent = brl(totProd); $('vdTotDesc').textContent = (totDesc ? '− ' : '') + brl(totDesc); $('vdTotServ').textContent = brl(totServ);
+        $('vdTotal').textContent = brl(totProd + totServ); $('vdTotalMovel').textContent = brl(totProd + totServ);
+        const temItens = estado.produtos.length || estado.servicos.length;
+        $('vdConfirmar').disabled = !(estado.confirmado && temItens);
+        if (estado.confirmado && temItens) { $('numItens').classList.add('vd-feito'); $('numItens').innerHTML = '<i class="fas fa-check"></i>'; }
+        else { $('numItens').classList.remove('vd-feito'); $('numItens').textContent = '2'; }
+    }
+    $('vdResumo').addEventListener('change', function (e) {
+        const i = e.target.dataset.final; if (i === undefined) return;
+        const p = estado.produtos[Number(i)]; const v = num(e.target.value);
+        p.valor_final = v === null ? null : v; recalcular();
+    });
+    $('vdResumo').addEventListener('click', function (e) { const b = e.target.closest('[data-voltar-calc]'); if (b) { estado.produtos[Number(b.dataset.voltarCalc)].valor_final = null; recalcular(); } });
+
+    // ── Confirmar / cancelar ───────────────────────────────────────────
+    $('vdCancelar').addEventListener('click', function () {
+        if ((estado.produtos.length || estado.servicos.length || estado.cliente) && !confirm('Cancelar a venda? Nada será gravado.')) return;
+        window.location.reload();
+    });
+    $('vdConfirmar').addEventListener('click', async function () {
+        const b = this, erros = $('vdErros');
+        const dados = {
+            cliente: dadosDoForm(), linhas: estado.linhas, observacao: $('vdObs').value,
+            forma_pagamento: estado.forma, vivo_mais: estado.vivoMais,
+            plano_anterior: {id: $('vdPaPlano').value, segmentacao: $('vdPaSeg').value, valor: $('vdPaValor').value,
+                             nome: $('vdPaPlano').selectedOptions[0] ? $('vdPaPlano').selectedOptions[0].text : ''},
+            produtos: estado.produtos.map(function (p) { const c = calcItem(p); return {
+                preco_id: p.preco_id, nome: p.nome, qtde: p.qtde, prateleira_infinita: p.prateleira_infinita,
+                grupamento: $('vdPaGrupo').value, valor_sugerido: p.valor_sugerido,
+                renova_vini: p.renova && p.renova_vini, renova_vini_valor: p.renova_vini_valor, renova_codigo: p.renova_codigo,
+                renova_alied: p.renova && p.renova_alied, renova_alied_valor: p.renova_alied_valor,
+                valor_final: c.editado ? p.valor_final : null}; }),
+            servicos: estado.servicos,
+            loja_id: $('vdLoja') ? $('vdLoja').value : null, vendedor_id: $('vdVendedor') ? $('vdVendedor').value : null,
+        };
+        b.disabled = true; b.innerHTML = '<i class="fas fa-circle-notch fa-spin mr-1.5"></i>Gravando…';
+        try {
+            const j = await pedir(URL.confirmar, {method: 'POST', body: JSON.stringify(dados)});
+            if (j.ok) { window.location = j.url; return; }
+            erros.innerHTML = '<p class="font-semibold mb-1"><i class="fas fa-triangle-exclamation mr-1"></i>Corrija antes de confirmar:</p><ul class="list-disc pl-5 space-y-0.5">' +
+                j.erros.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>';
+        } catch (err) {
+            erros.textContent = 'Não deu para gravar agora (conexão). Nada foi lançado — tente de novo.';
+        }
+        erros.classList.remove('hidden'); erros.scrollIntoView({behavior: 'smooth', block: 'center'});
+        b.disabled = false; b.innerHTML = '<i class="fas fa-check mr-1.5"></i>Confirmar venda';
+    });
+    cpf.focus();
 })();
 </script>
+{% endif %}
 {% endblock %}

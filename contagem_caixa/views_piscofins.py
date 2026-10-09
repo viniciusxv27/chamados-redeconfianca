@@ -31,6 +31,8 @@ EXTENSOES = ('.pdf', '.jpg', '.jpeg', '.png', '.webp', '.heic', '.xml')
 # Cadastro do fornecedor mais velho que isto é consultado de novo na Receita.
 DIAS_PARA_RECONSULTAR = 30
 MESES_NO_SELETOR = 18
+# O botão "Buscar notas novas" não pode prender a requisição por minutos.
+PRAZO_DA_BUSCA = 40
 
 
 def _liberado(view):
@@ -339,15 +341,20 @@ def piscofins_sefaz_buscar(request):
     if not sefaz.configurado():
         messages.error(request, 'A busca na SEFAZ ainda não foi ligada: falta o certificado digital A1 da empresa.')
         return _voltar(request)
-    novas, esperando, erros = 0, [], []
-    for sinc in sefaz.sincronizar_todos():
-        if getattr(sinc, 'pulada', False):
+    novas, esperando, erros, adiados = 0, [], [], 0
+    for sinc in sefaz.sincronizar_todos(prazo_segundos=PRAZO_DA_BUSCA):
+        if getattr(sinc, 'adiada', False):
+            adiados += 1
+        elif getattr(sinc, 'pulada', False):
             esperando.append(f'{receita.formatar(sinc.cnpj)} (de novo às {timezone.localtime(sinc.proxima_consulta):%H:%M})')
         elif sinc.ultimo_cstat == 'ERRO' or sinc.ultimo_cstat not in ('137', '138', '656', ''):
             erros.append(f'{receita.formatar(sinc.cnpj)}: {sinc.ultima_mensagem}')
         else:
             novas += sinc.notas_novas
-    if novas or not (esperando or erros):
+    if adiados:
+        messages.info(request, f'{adiados} CNPJ(s) ficaram para a próxima busca (cada clique consulta por até '
+                               f'{PRAZO_DA_BUSCA} segundos) — clique de novo ou aguarde a busca automática.')
+    if novas or not (esperando or erros or adiados):
         messages.success(request, f'{novas} nota(s) nova(s) da SEFAZ.' if novas else 'Nenhuma nota nova na SEFAZ.')
     if esperando:
         messages.info(request, 'A SEFAZ só aceita uma consulta por hora sem novidade. Aguardando: ' + '; '.join(esperando))

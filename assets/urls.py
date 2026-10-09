@@ -97,6 +97,7 @@ urlpatterns = [
     # =========================================================================
     path('legado/', views.asset_list, name='list'),
     path('legado/create/', views.asset_create, name='create'),
+    path('legado/historico/', views.asset_historico, name='historico'),
     path('legado/<int:pk>/', views.asset_detail, name='detail'),
     path('legado/<int:pk>/edit/', views.asset_edit, name='edit'),
     path('legado/<int:pk>/delete/', views.asset_delete, name='delete'),

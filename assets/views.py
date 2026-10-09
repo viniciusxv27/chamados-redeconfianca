@@ -28,6 +28,7 @@ from core.middleware import log_action
 from django.urls import reverse
 
 from .setor_pdv import SETORES, conferir, pdvs_por_setor
+from . import historico
 
 
 # ============================================================================
@@ -1637,6 +1638,8 @@ def asset_bulk(request):
             messages.error(request, 'Confirme a exclusão dos ativos selecionados.')
             return redirect(voltar)
         numeros = list(ativos.order_by('patrimonio_numero').values_list('patrimonio_numero', flat=True)[:30])
+        for ativo in ativos:
+            historico.registrar(ativo, request.user, 'excluido', origem='massa')
         ativos.delete()
         log_action(request.user, 'ADMIN_ACTION',
                    f'Excluiu {total} ativo(s) legado(s) de uma vez: {", ".join(numeros)}{"…" if total > 30 else ""}',
@@ -1682,12 +1685,84 @@ def asset_bulk(request):
         messages.error(request, 'Nada foi alterado: preencha pelo menos um campo para mudar nos selecionados.')
         return redirect(voltar)
     mudancas['updated_at'] = timezone.now()       # o update() em lote não passa pelo auto_now
+    fotos_antes = {ativo.pk: historico.foto(ativo) for ativo in ativos}
     atualizados = ativos.update(**mudancas)
+    historico.registrar_varios(fotos_antes, request.user, 'massa')
     log_action(request.user, 'ADMIN_ACTION',
                f'Editou {atualizados} ativo(s) legado(s) de uma vez: {"; ".join(resumo)}', request)
     messages.success(request, f'{atualizados} ativo{"s" if atualizados != 1 else ""} atualizado{"s" if atualizados != 1 else ""}: '
                               + '; '.join(resumo) + '.')
     return redirect(voltar)
+
+
+@login_required
+def asset_historico(request):
+    """Log geral dos ativos legado: toda alteração, de todos os ativos, com filtros e Excel."""
+    from django.utils.dateparse import parse_date
+    from .models import AssetHistorico
+
+    qs = AssetHistorico.objects.select_related('asset', 'usuario')
+    q = (request.GET.get('q') or '').strip()
+    acao = request.GET.get('acao') or ''
+    origem = request.GET.get('origem') or ''
+    usuario = request.GET.get('usuario') or ''
+    de, ate = parse_date(request.GET.get('de') or ''), parse_date(request.GET.get('ate') or '')
+    if q:
+        qs = qs.filter(Q(patrimonio_numero__icontains=q) | Q(asset__nome__icontains=q))
+    if acao in dict(AssetHistorico.ACOES):
+        qs = qs.filter(acao=acao)
+    if origem in dict(AssetHistorico.ORIGENS):
+        qs = qs.filter(origem=origem)
+    if usuario.isdigit():
+        qs = qs.filter(usuario_id=int(usuario))
+    if de:
+        qs = qs.filter(quando__date__gte=de)
+    if ate:
+        qs = qs.filter(quando__date__lte=ate)
+
+    if request.GET.get('exportar') == 'xlsx':
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = 'Log dos ativos'
+        cabecalho = ['Data', 'Hora', 'N° Patrimônio', 'Ativo', 'Ação', 'Origem', 'Usuário', 'Campo', 'Antes', 'Depois']
+        for col, titulo in enumerate(cabecalho, start=1):
+            celula = ws.cell(row=1, column=col, value=titulo)
+            celula.font = Font(bold=True, color='FFFFFF')
+            celula.fill = PatternFill('solid', fgColor='4F46E5')
+            ws.column_dimensions[get_column_letter(col)].width = (12, 10, 16, 32, 12, 22, 28, 18, 32, 32)[col - 1]
+        linha = 2
+        for h in qs.order_by('-quando')[:20000]:
+            local = timezone.localtime(h.quando)
+            for m in (h.mudancas or [{}]):
+                valores = [local.date(), local.strftime('%H:%M:%S'), h.patrimonio_numero,
+                           h.asset.nome if h.asset else '', h.get_acao_display(), h.get_origem_display(),
+                           h.usuario_nome, m.get('rotulo', ''), m.get('antes', ''), m.get('depois', '')]
+                for col, valor in enumerate(valores, start=1):
+                    celula = ws.cell(row=linha, column=col, value=valor)
+                    if col == 1:
+                        celula.number_format = 'DD/MM/YYYY'
+                linha += 1
+        ws.freeze_panes = 'A2'
+        ws.auto_filter.ref = f'A1:J{max(linha - 1, 1)}'
+        resposta = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        resposta['Content-Disposition'] = f'attachment; filename="log_ativos_{timezone.now():%Y%m%d_%H%M}.xlsx"'
+        wb.save(resposta)
+        return resposta
+
+    pagina = Paginator(qs.order_by('-quando', '-id'), 50).get_page(request.GET.get('page'))
+    parametros = request.GET.copy()
+    parametros.pop('page', None)
+    return render(request, 'assets/historico.html', {
+        'pagina': pagina,
+        'filtro': {'q': q, 'acao': acao, 'origem': origem, 'usuario': usuario,
+                   'de': request.GET.get('de') or '', 'ate': request.GET.get('ate') or ''},
+        'acoes': AssetHistorico.ACOES,
+        'origens': AssetHistorico.ORIGENS,
+        'usuarios': User.objects.filter(pk__in=AssetHistorico.objects.exclude(usuario=None)
+                                        .values('usuario').distinct()).order_by('first_name', 'last_name'),
+        'query': parametros.urlencode(),
+        'total': qs.count(),
+    })
 
 
 @login_required
@@ -1697,6 +1772,7 @@ def asset_detail(request, pk):
     
     context = {
         'asset': asset,
+        'historico': asset.historico.select_related('usuario')[:300],
     }
     
     return render(request, 'assets/detail.html', context)
@@ -1711,6 +1787,7 @@ def asset_create(request):
             asset = form.save(commit=False)
             asset.created_by = request.user
             asset.save()
+            historico.registrar(asset, request.user, 'criado')
             messages.success(request, f'Ativo {asset.patrimonio_numero} criado com sucesso!')
             return redirect('assets:detail', pk=asset.pk)
     else:
@@ -1730,9 +1807,11 @@ def asset_edit(request, pk):
     asset = get_object_or_404(Asset, pk=pk)
     
     if request.method == 'POST':
+        antes = historico.foto(asset)
         form = AssetForm(request.POST, request.FILES, instance=asset)
         if form.is_valid():
             form.save()
+            historico.registrar(asset, request.user, 'editado', antes=antes)
             messages.success(request, f'Ativo {asset.patrimonio_numero} atualizado com sucesso!')
             return redirect('assets:detail', pk=asset.pk)
     else:
@@ -1754,6 +1833,7 @@ def asset_delete(request, pk):
     
     if request.method == 'POST':
         patrimonio_numero = asset.patrimonio_numero
+        historico.registrar(asset, request.user, 'excluido')
         asset.delete()
         messages.success(request, f'Ativo {patrimonio_numero} removido com sucesso!')
         return redirect('assets:list')
@@ -1923,8 +2003,10 @@ def import_assets_excel(request):
                     )
                     
                     if created:
+                        historico.registrar(asset, request.user, 'criado', origem='planilha')
                         created_count += 1
                     else:
+                        antes = historico.foto(asset)
                         # Atualizar ativo existente
                         if nome:
                             asset.nome = nome
@@ -1944,6 +2026,7 @@ def import_assets_excel(request):
                             asset.observacoes = observacoes
                         
                         asset.save()
+                        historico.registrar(asset, request.user, 'editado', antes=antes, origem='planilha')
                         updated_count += 1
                         
                 except Exception as e:

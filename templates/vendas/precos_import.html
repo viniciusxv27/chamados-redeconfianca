@@ -54,6 +54,32 @@
     </div>
 </form>
 
+{% comment %}[Parametrização.RF003] Relatório de cada importação: incluídos, alterados e rejeitados.{% endcomment %}
+<section class="vd-card overflow-hidden mt-5 max-w-3xl">
+    <div class="px-5 py-3 border-b border-gray-100"><h2 class="text-sm font-bold text-gray-900"><i class="fas fa-clipboard-list text-purple-600 mr-1.5"></i>Relatório das importações</h2>
+        <p class="text-[11px] text-gray-500">Se uma importação falha, a tabela vigente fica exatamente como estava.</p></div>
+    <div class="divide-y divide-gray-100">
+        {% for imp in importacoes %}
+        <details class="px-5 py-3 group">
+            <summary class="flex items-center justify-between gap-3 cursor-pointer list-none">
+                <span class="min-w-0"><span class="block text-sm font-medium text-gray-900 truncate">{{ imp.arquivo|default:"(arquivo)" }}</span>
+                    <span class="block text-[11px] text-gray-500">{{ imp.quando|date:"d/m/Y H:i" }} · {{ imp.usuario.get_full_name|default:"automação" }} · {{ imp.get_origem_display }}</span></span>
+                {% if imp.erro %}<span class="px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-[11px] font-semibold whitespace-nowrap">falhou</span>
+                {% else %}<span class="text-[11px] whitespace-nowrap flex gap-1.5">
+                    <span class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-semibold">+{{ imp.incluidos }}</span>
+                    <span class="px-2 py-0.5 rounded-full bg-sky-100 text-sky-700 font-semibold">~{{ imp.alterados }}</span>
+                    <span class="px-2 py-0.5 rounded-full {% if imp.rejeitados %}bg-amber-100 text-amber-700{% else %}bg-gray-100 text-gray-500{% endif %} font-semibold">✕{{ imp.rejeitados|length }}</span></span>{% endif %}
+            </summary>
+            <div class="mt-2 text-[12px] text-gray-600 space-y-1">
+                {% if imp.erro %}<p class="text-red-700">{{ imp.erro }}</p>{% else %}
+                <p>{{ imp.incluidos }} incluído(s), {{ imp.alterados }} alterado(s), {{ imp.sem_mudanca }} sem mudança, {{ imp.rejeitados|length }} rejeitado(s).</p>
+                {% for r in imp.rejeitados|slice:":50" %}<p class="text-amber-800">• {{ r.aba }} — {{ r.item }}: {{ r.motivo }}</p>{% endfor %}{% endif %}
+            </div>
+        </details>
+        {% empty %}<p class="px-5 py-6 text-center text-sm text-gray-400">Nenhuma importação registrada ainda.</p>{% endfor %}
+    </div>
+</section>
+
 <script>
 (function () {
     var campo = document.getElementById('vdArquivo');

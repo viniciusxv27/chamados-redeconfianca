@@ -964,3 +964,43 @@ class OrderItem(models.Model):
 
     def __str__(self):
         return f"{self.quantity}x {self.product.name}"
+
+
+class AssetHistorico(models.Model):
+    """Log de tudo que muda num ativo legado: quem, quando, o quê (antes → depois).
+
+    Grava um texto de cada valor (o rótulo, não a chave interna), então o log
+    continua legível mesmo que a lista de opções mude ou o ativo seja apagado —
+    por isso o número do patrimônio também fica copiado aqui.
+    """
+    ACOES = [
+        ('criado', 'Cadastrado'),
+        ('editado', 'Editado'),
+        ('excluido', 'Excluído'),
+    ]
+    ORIGENS = [
+        ('tela', 'Tela do ativo'),
+        ('massa', 'Edição em massa'),
+        ('planilha', 'Importação de planilha'),
+        ('admin', 'Admin do Django'),
+    ]
+
+    asset = models.ForeignKey(Asset, on_delete=models.SET_NULL, null=True, blank=True,
+                              related_name='historico', verbose_name='Ativo')
+    patrimonio_numero = models.CharField(max_length=20, db_index=True, verbose_name='N° Patrimônio')
+    acao = models.CharField(max_length=10, choices=ACOES, verbose_name='Ação')
+    origem = models.CharField(max_length=10, choices=ORIGENS, default='tela', verbose_name='Origem')
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                related_name='+', verbose_name='Usuário')
+    usuario_nome = models.CharField(max_length=200, blank=True, verbose_name='Nome do usuário')
+    quando = models.DateTimeField(auto_now_add=True, db_index=True, verbose_name='Data e hora')
+    mudancas = models.JSONField(default=list, blank=True, verbose_name='Mudanças',
+                                help_text='[{"campo", "rotulo", "antes", "depois"}]')
+
+    class Meta:
+        verbose_name = 'Histórico do ativo (legado)'
+        verbose_name_plural = 'Histórico dos ativos (legado)'
+        ordering = ['-quando', '-id']
+
+    def __str__(self):
+        return f'{self.patrimonio_numero} — {self.get_acao_display()} em {self.quando:%d/%m/%Y %H:%M}'

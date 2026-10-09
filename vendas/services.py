@@ -89,15 +89,25 @@ def importar_tabela_precos(file_obj, sheets=None):
     """Importa as abas alvo do arquivo para ItemPreco. Devolve um resumo por aba."""
     import openpyxl
 
+    from django.db import transaction
+
     wb = openpyxl.load_workbook(file_obj, data_only=True, read_only=True)
     alvo = sheets or SHEETS_ALVO
     agora = timezone.now()
-    resumo = {'importados': 0, 'por_categoria': {}, 'abas_ignoradas': [], 'erros': []}
+    resumo = {'importados': 0, 'por_categoria': {}, 'abas_ignoradas': [], 'erros': [],
+              'incluidos': 0, 'alterados': 0, 'sem_mudanca': 0, 'rejeitados': []}
+    # [Confiabilidade.NF003] Tudo ou nada: uma falha no meio não deixa a tabela pela metade.
+    with transaction.atomic():
+        _importar_abas(wb, alvo, agora, resumo)
+    return resumo
+
+
+def _importar_abas(wb, alvo, agora, resumo):
 
     for sheet_name in wb.sheetnames:
         if sheet_name not in alvo:
             continue
-        try:
+        if True:
             ws = wb[sheet_name]
             rows = [list(r) for r in ws.iter_rows(values_only=True)]
             if not rows:
@@ -135,6 +145,23 @@ def importar_tabela_precos(file_obj, sheets=None):
                 nome = (str(dados['nome']).strip() if dados['nome'] is not None else '')
                 if not nome or nome == '-':
                     continue
+                # Item inconsistente: valor preenchido que não é número → rejeitado, os demais seguem.
+                bruto_valor = dados['valor']
+                if bruto_valor not in (None, '') and str(bruto_valor).strip() not in ('-', '') and _to_decimal(bruto_valor) is None:
+                    resumo['rejeitados'].append({'aba': sheet_name, 'item': nome[:120],
+                                                 'motivo': f'valor "{str(bruto_valor)[:30]}" não é número'})
+                    continue
+
+                antigo = ItemPreco.objects.filter(
+                    categoria=categoria, nome=nome[:200],
+                    cod_sap=(str(dados['cod_sap']).strip()[:40] if dados['cod_sap'] else '')).first()
+                novo_valor = _to_decimal(dados['valor'])
+                if antigo is None:
+                    resumo['incluidos'] += 1
+                elif antigo.valor != novo_valor or antigo.extra != extra or not antigo.ativo:
+                    resumo['alterados'] += 1
+                else:
+                    resumo['sem_mudanca'] += 1
 
                 ItemPreco.objects.update_or_create(
                     categoria=categoria,
@@ -155,7 +182,3 @@ def importar_tabela_precos(file_obj, sheets=None):
 
             resumo['por_categoria'][categoria] = count
             resumo['importados'] += count
-        except Exception as exc:  # noqa: BLE001 - uma aba problemática não derruba o import
-            resumo['erros'].append(f'{sheet_name}: {exc}')
-
-    return resumo

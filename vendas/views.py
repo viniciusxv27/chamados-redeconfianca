@@ -13,15 +13,19 @@ from django.db.models import Count, DecimalField, F, Q, Sum
 from django.db.models.functions import TruncDate
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
+from django.views.decorators.http import require_POST
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 from users.models import Sector, User
 
-from .models import ItemPreco, Venda, VendaProduto, VendaServico
+from . import slv
+from .models import (SEGMENTACOES, Cliente, ConfiguracaoVendas, ImportacaoPrecos, ItemPreco, Plano,
+                     RegistroAlteracao, ServicoAdicional, Venda, VendaProduto, VendaServico)
 from .permissions import (can_access_vendas, is_superadmin, pode_gerenciar_precos,
                           vendas_do_usuario)
 from .clientes import buscar_historico
@@ -61,6 +65,8 @@ def _filtrar_vendas(request):
     vendedor_id = request.GET.get('vendedor', '').strip()
     tipo_venda = request.GET.get('tipo_venda', '').strip()
     comprovante = request.GET.get('comprovante', '').strip()
+    tipo_servico = request.GET.get('servico', '').strip()
+    fake = request.GET.get('fake', '').strip()
 
     if search:
         qs = qs.filter(
@@ -79,11 +85,16 @@ def _filtrar_vendas(request):
         qs = qs.filter(tipo_venda=tipo_venda)
     if comprovante:
         qs = qs.filter(comprovante_fiscal=comprovante)
+    if tipo_servico in dict(VendaServico.TIPOS):
+        qs = qs.filter(servicos__tipo_servico=tipo_servico).distinct()
+    if fake == '1':
+        # [Venda de serviços.RF001] conferência das vendas com número fictício.
+        qs = qs.filter(numero_fake=True)
 
     filtros = {
         'search': search, 'date_from': date_from, 'date_to': date_to,
         'loja': loja_id, 'vendedor': vendedor_id, 'tipo_venda': tipo_venda,
-        'comprovante': comprovante,
+        'comprovante': comprovante, 'servico': tipo_servico, 'fake': fake,
     }
     filter_query_string = urlencode({k: v for k, v in filtros.items() if v})
     return qs, filtros, filter_query_string
@@ -101,6 +112,7 @@ def dashboard(request):
         return venda_export(request)
 
     qs = qs.order_by('-data_venda', '-id')
+    lista = qs.prefetch_related('produtos', 'servicos')
 
     try:
         per_page = int(request.GET.get('per_page', '25'))
@@ -109,7 +121,7 @@ def dashboard(request):
     except (ValueError, TypeError):
         per_page = 25
 
-    paginator = Paginator(qs, per_page)
+    paginator = Paginator(lista, per_page)
     page = request.GET.get('page')
     try:
         vendas_page = paginator.page(page)
@@ -127,6 +139,7 @@ def dashboard(request):
         'lojas': Sector.objects.all().order_by('name'),
         'vendedores': User.objects.filter(is_active=True).order_by('first_name', 'last_name'),
         'comprovante_choices': Venda.COMPROVANTE_CHOICES,
+        'tipos_servico': VendaServico.TIPOS,
         'is_superadmin': is_superadmin(request.user),
         'pode_gerenciar_precos': pode_gerenciar_precos(request.user),
         'aba': 'vendas',
@@ -189,12 +202,19 @@ def _indicadores(qs, user):
         'kpi_servicos': receita_servicos,
         'kpi_no_mes': qs.filter(data_venda__date__gte=inicio_mes).count(),
         'kpi_hoje': qs.filter(data_venda__date=hoje).count(),
+        'kpi_fake': qs.filter(numero_fake=True).count(),
+        'kpi_delta': servicos.aggregate(t=Sum('delta'))['t'] or Decimal('0'),
+        'kpi_editados': produtos.filter(valor_editado=True).count(),
         'serie_dias': dias_serie,
         'top_produtos': list(produtos.values('nome_produto')
                              .annotate(n=Sum('qtde'),
                                        total=Sum(F('valor_venda') * F('qtde'),
                                                  output_field=DecimalField()))
                              .order_by('-total')[:6]),
+        'por_tipo_servico': [{'tipo': dict(VendaServico.TIPOS).get(l['tipo_servico'], l['tipo_servico'] or 'Outro'),
+                              'n': l['n'], 'delta': l['delta'] or Decimal('0')}
+                             for l in servicos.values('tipo_servico').annotate(n=Count('id'), delta=Sum('delta'))
+                             .order_by('-n')],
         'top_servicos': list(servicos.values('servico')
                              .annotate(n=Count('id'), total=Sum('valor_plano'))
                              .order_by('-total')[:6]),
@@ -214,112 +234,55 @@ def venda_detail(request, pk):
     # venda de qualquer um.
     venda = get_object_or_404(
         vendas_do_usuario(request.user, Venda.objects.select_related('loja', 'vendedor')
-                          .prefetch_related('produtos', 'servicos')), pk=pk,
+                          .prefetch_related('produtos', 'produtos__editado_por', 'servicos', 'servicos__plano',
+                                            'servicos__plano_anterior', 'servicos__servico_adicional')), pk=pk,
     )
     return render(request, 'vendas/venda_detail.html', {
         'venda': venda,
         'is_superadmin': is_superadmin(request.user),
+        'pode_gerenciar_precos': pode_gerenciar_precos(request.user),
         'aba': 'vendas',
     })
 
 
 @login_required
 def venda_create(request):
+    """[Início da venda.RF001] Nova venda: PDV e vendedor vêm do cadastro do portal.
+
+    A tela manda a venda inteira em JSON; o servidor recalcula e valida tudo
+    (slv.registrar_venda) e devolve todos os erros de uma vez.
+    """
     if not can_access_vendas(request.user):
         return _deny(request)
 
     if request.method == 'POST':
-        # A venda é sempre de agora. O campo na tela é só leitura, e aqui o
-        # valor nem é lido do POST — assim um POST forjado não consegue
-        # lançar venda com data de ontem para cair noutro fechamento.
-        data_venda = timezone.now()
-
-        loja_id = request.POST.get('loja')
-        # O vendedor é quem está lançando. O superadmin pode lançar no nome de
-        # outra pessoa; para os demais o campo é fixo.
-        if is_superadmin(request.user):
-            vendedor_id = request.POST.get('vendedor') or str(request.user.id)
-        else:
-            vendedor_id = str(request.user.id)
-
         try:
-            produtos = json.loads(request.POST.get('produtos_json') or '[]')
-            servicos = json.loads(request.POST.get('servicos_json') or '[]')
-            if not isinstance(produtos, list):
-                produtos = []
-            if not isinstance(servicos, list):
-                servicos = []
-        except (json.JSONDecodeError, TypeError):
-            produtos, servicos = [], []
-
-        if not produtos and not servicos:
-            messages.error(request, 'Adicione ao menos um produto ou serviço à venda.')
-            return render(request, 'vendas/venda_form.html', _venda_form_context(request))
-
-        # A loja escolhida precisa ser uma das que a pessoa enxerga.
-        permitidas = {l.id for l in _lojas_do_vendedor(request.user)}
-        loja_final = int(loja_id) if (loja_id or '').isdigit() else None
-        if loja_final is not None and loja_final not in permitidas:
-            messages.error(request, 'Escolha um PDV entre os seus.')
-            return render(request, 'vendas/venda_form.html', _venda_form_context(request))
-
-        with transaction.atomic():
-            venda = Venda.objects.create(
-                loja_id=loja_final,
-                pdv_nome=request.POST.get('pdv_nome', '').strip(),
-                uf=request.POST.get('uf', '').strip()[:2],
-                vendedor_id=int(vendedor_id) if (vendedor_id or '').isdigit() else None,
-                estoque_avancado=(request.POST.get('estoque_avancado') == 'sim'),
-                cliente_nome=request.POST.get('cliente_nome', '').strip(),
-                cliente_cpf=request.POST.get('cliente_cpf', '').strip(),
-                tipo_venda=request.POST.get('tipo_venda', '').strip(),
-                comprovante_fiscal=request.POST.get('comprovante_fiscal', 'NFCE'),
-                data_venda=data_venda,
-                observacao=request.POST.get('observacao', '').strip(),
-                created_by=request.user,
-            )
-            for p in produtos:
-                nome = (p.get('nome_produto') or '').strip()
-                if not nome:
-                    continue
-                VendaProduto.objects.create(
-                    venda=venda, nome_produto=nome[:200],
-                    tipo_produto=(p.get('tipo_produto') or '')[:120],
-                    categoria=(p.get('categoria') or '')[:120],
-                    subcategoria=(p.get('subcategoria') or '')[:120],
-                    marca=(p.get('marca') or '')[:80],
-                    modelo=(p.get('modelo') or '')[:200],
-                    sku=(p.get('sku') or '')[:60],
-                    serial=(p.get('serial') or '')[:120],
-                    cor=(p.get('cor') or '')[:60],
-                    qtde=int(p.get('qtde') or 1),
-                    valor_venda=_parse_decimal(p.get('valor_venda')) or Decimal('0'),
-                    plano=(p.get('plano') or '')[:200],
-                    pilar=(p.get('pilar') or '')[:40],
-                    preco_id=p.get('preco_id') or None,
-                )
-            for s in servicos:
-                nome = (s.get('servico') or '').strip()
-                if not nome:
-                    continue
-                VendaServico.objects.create(
-                    venda=venda, servico=nome[:200],
-                    servico_tecnico=(s.get('servico_tecnico') or '')[:200],
-                    tipo_plano=(s.get('tipo_plano') or '')[:120],
-                    plano_novo=(s.get('plano_novo') or '')[:200],
-                    grupamento=(s.get('grupamento') or '')[:120],
-                    numero_acesso=(s.get('numero_acesso') or '')[:40],
-                    valor_plano=_parse_decimal(s.get('valor_plano')) or Decimal('0'),
-                    receita=_parse_decimal(s.get('receita')),
-                    status_servico=(s.get('status_servico') or '')[:60],
-                    pilar=(s.get('pilar') or '')[:40],
-                    preco_id=s.get('preco_id') or None,
-                )
-
+            dados = json.loads(request.body or b'{}')
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return JsonResponse({'ok': False, 'erros': ['Envio inválido.']}, status=400)
+        loja, vendedor = _pdv_e_vendedor(request, dados)
+        try:
+            venda = slv.registrar_venda(dados, request.user, loja, vendedor)
+        except slv.VendaInvalida as exc:
+            return JsonResponse({'ok': False, 'erros': exc.erros})
         messages.success(request, f'Venda #{venda.id} lançada com sucesso.')
-        return redirect('vendas:venda_detail', pk=venda.id)
+        return JsonResponse({'ok': True, 'id': venda.id, 'url': reverse('vendas:venda_detail', args=[venda.id])})
 
     return render(request, 'vendas/venda_form.html', _venda_form_context(request))
+
+
+def _pdv_e_vendedor(request, dados):
+    """[Segurança.NF001] Vendedor e PDV saem do cadastro — o POST não muda isso.
+
+    O PDV é o setor principal do usuário (é a loja dele no portal). Só o
+    superadmin lança em nome de outra loja ou de outro vendedor.
+    """
+    if is_superadmin(request.user):
+        loja = Sector.objects.filter(pk=dados.get('loja_id')).first() if str(dados.get('loja_id') or '').isdigit() else None
+        vendedor = (User.objects.filter(pk=dados.get('vendedor_id'), is_active=True).first()
+                    if str(dados.get('vendedor_id') or '').isdigit() else None)
+        return loja or request.user.sector, vendedor or request.user
+    return request.user.sector, request.user
 
 
 def _lojas_do_vendedor(user):
@@ -338,17 +301,24 @@ def _lojas_do_vendedor(user):
 
 
 def _venda_form_context(request):
+    planos = [{'id': p.id, 'nome': p.nome, 'segmentacao': p.segmentacao, 'valor': str(p.valor)}
+              for p in Plano.objects.filter(ativo=True)]
+    adicionais = [{'id': a.id, 'tipo': a.tipo, 'nome': a.nome, 'valor': str(a.valor)}
+                  for a in ServicoAdicional.objects.filter(ativo=True)]
+    grupamentos = sorted({g for g in ItemPreco.objects.filter(categoria='PLANOS').values_list('grupamento', flat=True) if g})
     return {
         'aba': 'nova',
         'is_superadmin': is_superadmin(request.user),
+        'pode_gerenciar_precos': pode_gerenciar_precos(request.user),
         'agora': timezone.localtime(),
+        'loja': request.user.sector,
         'lojas': _lojas_do_vendedor(request.user),
-        'vendedores': User.objects.filter(is_active=True).order_by('first_name', 'last_name'),
-        'comprovante_choices': Venda.COMPROVANTE_CHOICES,
-        'now': timezone.localtime().strftime('%Y-%m-%dT%H:%M'),
-        'precos_categorias': list(
-            ItemPreco.objects.filter(ativo=True).values_list('categoria', flat=True).distinct().order_by('categoria')
-        ),
+        'vendedores': User.objects.filter(is_active=True).order_by('first_name', 'last_name') if is_superadmin(request.user) else [],
+        'slv': {
+            'planos': planos, 'adicionais': adicionais, 'grupamentos': grupamentos,
+            'segmentacoes': SEGMENTACOES, 'tipos_servico': VendaServico.TIPOS,
+            'vivo_mais': str(ConfiguracaoVendas.atual().vivo_mais_percentual),
+        },
     }
 
 
@@ -491,17 +461,21 @@ def precos_import(request):
         if not f or not (f.name or '').lower().endswith(('.xlsx', '.xlsm')):
             messages.error(request, 'Envie a planilha (.xlsx).')
             return redirect('vendas:precos_import')
+        registro = ImportacaoPrecos(usuario=request.user, arquivo=f.name[:255])
         try:
             resumo = importar_tabela_precos(f)
-            partes = ', '.join(f'{k}: {v}' for k, v in resumo['por_categoria'].items())
-            messages.success(request, f"{resumo['importados']} itens importados. {partes}")
-            if resumo['erros']:
-                messages.warning(request, 'Avisos: ' + ' | '.join(resumo['erros'][:5]))
-        except Exception as exc:  # noqa: BLE001
-            messages.error(request, f'Falha ao importar: {exc}')
-        return redirect('vendas:precos')
+            registro.incluidos, registro.alterados = resumo['incluidos'], resumo['alterados']
+            registro.sem_mudanca, registro.rejeitados = resumo['sem_mudanca'], resumo['rejeitados'][:500]
+            registro.save()
+            messages.success(request, f"Importação concluída: {resumo['incluidos']} incluído(s), "
+                                      f"{resumo['alterados']} alterado(s), {len(resumo['rejeitados'])} rejeitado(s).")
+        except Exception as exc:  # noqa: BLE001 — [Confiabilidade.NF003] a tabela vigente fica como estava
+            registro.erro = str(exc)[:2000]
+            registro.save()
+            messages.error(request, f'Falha ao importar — a tabela vigente não foi alterada: {exc}')
+        return redirect('vendas:precos_import')
 
-    return render(request, 'vendas/precos_import.html', {'aba': 'precos'})
+    return render(request, 'vendas/precos_import.html', {'aba': 'precos', 'pode_gerenciar_precos': True, 'importacoes': ImportacaoPrecos.objects.select_related('usuario')[:15]})
 
 
 @login_required
@@ -575,17 +549,206 @@ def precos_buscar(request):
     from django.http import JsonResponse
 
     q = request.GET.get('q', '').strip()
-    if len(q) < 2:
+    ids = [int(i) for i in (request.GET.get('ids') or '').split(',') if i.strip().isdigit()][:50]
+    if len(q) < 2 and not ids:
         return JsonResponse({'results': []})
-    qs = (
+    qs = ItemPreco.objects.filter(pk__in=ids) if ids else (
         ItemPreco.objects.filter(ativo=True)
-        .filter(Q(nome__icontains=q) | Q(plano__icontains=q) | Q(cod_sap__icontains=q))
+        .exclude(categoria='PLANOS')
+        .filter(Q(nome__icontains=q) | Q(plano__icontains=q) | Q(cod_sap__icontains=q)
+                | Q(cod_sistema__icontains=q) | Q(**{'extra__ID DPGC__icontains': q}))
         .order_by('categoria', 'nome')[:20]
     )
-    results = [{
-        'id': it.id, 'categoria': it.categoria, 'nome': it.nome, 'plano': it.plano,
-        'sistema': it.sistema, 'grupamento': it.grupamento, 'cod_sap': it.cod_sap,
-        'valor': (str(it.valor) if it.valor is not None else ''),
-        'extra': it.extra if isinstance(it.extra, dict) else {},
-    } for it in qs]
+    segmentacao = request.GET.get('segmentacao', '')
+    grupamento = request.GET.get('grupamento', '')
+    results = []
+    for it in qs:
+        sugerido, regra = slv.preco_sugerido(it, segmentacao, grupamento)
+        extra = it.extra if isinstance(it.extra, dict) else {}
+        results.append({
+            'id': it.id, 'categoria': it.categoria, 'nome': it.nome, 'plano': it.plano,
+            'sistema': it.sistema, 'grupamento': it.grupamento, 'cod_sap': it.cod_sap,
+            'sku': it.cod_sap or it.cod_sistema or extra.get('ID DPGC', ''),
+            'valor': (str(it.valor) if it.valor is not None else ''),
+            'categoria_slv': slv.categoria_slv(it),
+            'valor_sugerido': str(sugerido) if sugerido is not None else '', 'regra': regra,
+            'fabricante': extra.get('FABRICANTE', ''),
+        })
     return JsonResponse({'results': results})
+
+
+
+# ---------------------------------------------------------------------------
+# SLV — consultas da tela de venda
+# ---------------------------------------------------------------------------
+def _cliente_json(cliente):
+    return {'cpf': cliente.cpf, 'cpf_formatado': cliente.cpf_formatado, 'nome': cliente.nome,
+            'telefone': cliente.telefone, 'telefone_formatado': slv.formatar_telefone(cliente.telefone),
+            'cep': cliente.cep, 'logradouro': cliente.logradouro, 'numero': cliente.numero,
+            'complemento': cliente.complemento, 'bairro': cliente.bairro, 'cidade': cliente.cidade, 'uf': cliente.uf,
+            'plano_id': cliente.plano_id, 'plano_nome': cliente.plano_nome, 'segmentacao': cliente.segmentacao,
+            'valor_pago': str(cliente.valor_pago) if cliente.valor_pago is not None else ''}
+
+
+@login_required
+def api_cliente(request):
+    """[Início da venda.RF002/RF004] Busca pelo CPF (qualquer formato) + pré-análise.
+
+    Só o cadastro do portal (Postgres): responde na hora ([Desempenho.NF001]).
+    As compras antigas do Vivo GO (MySQL, lento) vêm à parte, por /vendas/cliente/.
+    """
+    if not can_access_vendas(request.user):
+        return JsonResponse({'ok': False, 'erro': 'Acesso restrito.'}, status=403)
+    cpf = slv.so_digitos(request.GET.get('cpf'))
+    if not slv.cpf_valido(cpf):
+        return JsonResponse({'ok': False, 'erro': 'CPF inválido: confira os 11 números.'})
+    cliente = Cliente.objects.select_related('plano').filter(cpf=cpf).first()
+    if not cliente:
+        return JsonResponse({'ok': True, 'encontrado': False, 'cpf': cpf, 'cpf_formatado': slv.formatar_cpf(cpf)})
+    analise = slv.pre_analise(cliente)
+    return JsonResponse({'ok': True, 'encontrado': True, 'cliente': _cliente_json(cliente), 'pre_analise': {
+        'vazio': analise['vazio'],
+        'plano': ({**analise['plano'], 'valor': str(analise['plano']['valor'] or ''),
+                   'segmentacao_nome': dict(SEGMENTACOES).get(analise['plano']['segmentacao'], '')}
+                  if analise['plano'] else None),
+        'compras': [{'data': timezone.localtime(c['data']).strftime('%d/%m/%Y'), 'produto': c['produto'],
+                     'valor': str(c['valor']), 'venda': c['venda']} for c in analise['compras']],
+    }})
+
+
+@login_required
+@require_POST
+def api_cliente_salvar(request):
+    """[Início da venda.RF002 (novo) / RF003] Grava cadastro; o anterior vai para o histórico."""
+    if not can_access_vendas(request.user):
+        return JsonResponse({'ok': False, 'erro': 'Acesso restrito.'}, status=403)
+    try:
+        dados = json.loads(request.body or b'{}')
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return JsonResponse({'ok': False, 'erro': 'Envio inválido.'}, status=400)
+    cpf = slv.so_digitos(dados.get('cpf'))
+    if not slv.cpf_valido(cpf):
+        return JsonResponse({'ok': False, 'erro': 'CPF inválido.'})
+    if not str(dados.get('nome') or '').strip():
+        return JsonResponse({'ok': False, 'erro': 'Informe o nome do cliente.'})
+    telefone = slv.so_digitos(dados.get('telefone'))
+    if telefone and not slv.telefone_valido(telefone):
+        return JsonResponse({'ok': False, 'erro': 'Telefone: use DDD + número.'})
+    loja = request.user.sector
+    cliente, criado, mudou = slv.salvar_cliente(cpf, dados, request.user, pdv=loja.name if loja else '')
+    return JsonResponse({'ok': True, 'criado': criado, 'mudou': mudou, 'cliente': _cliente_json(cliente)})
+
+
+@login_required
+def api_renova(request):
+    """Confere o Código do Renova Vini contra os checklists do portal."""
+    if not can_access_vendas(request.user):
+        return JsonResponse({'ok': False}, status=403)
+    renova = slv.renova_existe(request.GET.get('codigo'))
+    if not renova:
+        return JsonResponse({'ok': False, 'erro': 'Código do Renova não encontrado no portal.'})
+    ja_usado = VendaProduto.objects.filter(renova_codigo=renova.codigo).exists()
+    return JsonResponse({'ok': True, 'codigo': renova.codigo, 'aparelho': str(getattr(renova, 'aparelho', '') or ''),
+                         'ja_usado': ja_usado})
+
+
+# ---------------------------------------------------------------------------
+# SLV — parametrização ([Parametrização.RF001/RF002], [Venda de serviços.RF008])
+# ---------------------------------------------------------------------------
+@login_required
+def parametros(request):
+    if not pode_gerenciar_precos(request.user):
+        return _deny(request)
+    planos = list(Plano.objects.all())
+    grupos = [{'chave': k, 'rotulo': r, 'planos': [p for p in planos if p.segmentacao == k]} for k, r in SEGMENTACOES]
+    config = ConfiguracaoVendas.atual()
+    return render(request, 'vendas/parametros.html', {
+        'aba': 'parametros',
+        'grupos': grupos,
+        'segmentacoes': SEGMENTACOES,
+        'config': config,
+        'adicionais': ServicoAdicional.objects.all(),
+        'historico': RegistroAlteracao.objects.exclude(tipo='CLIENTE').select_related('usuario')[:60],
+        'pode_gerenciar_precos': True,
+    })
+
+
+def _voltar_parametros():
+    return redirect('vendas:parametros')
+
+
+@login_required
+@require_POST
+def parametros_plano(request):
+    """Novo plano ou edição; inativar no lugar de excluir."""
+    if not pode_gerenciar_precos(request.user):
+        return _deny(request)
+    plano = Plano.objects.filter(pk=request.POST.get('id')).first() if (request.POST.get('id') or '').isdigit() else None
+    nome = (request.POST.get('nome') or '').strip()[:200]
+    segmentacao = request.POST.get('segmentacao') or ''
+    valor = slv.dinheiro(request.POST.get('valor'))
+    ativo = request.POST.get('ativo') == 'on' if plano else True
+    if not nome or segmentacao not in dict(SEGMENTACOES) or valor is None or valor <= 0:
+        messages.error(request, 'Plano não gravado: informe nome, segmentação e um valor maior que zero.')
+        return _voltar_parametros()
+    if plano is None:
+        plano = Plano.objects.create(nome=nome, segmentacao=segmentacao, valor=valor)
+        slv.registrar_alteracoes('PLANO', plano, [('criado', 'Plano criado', '', f'{plano} · R$ {valor}')], request.user)
+        messages.success(request, f'Plano {nome} cadastrado.')
+        return _voltar_parametros()
+    segmentos = dict(SEGMENTACOES)
+    mudancas = [('nome', 'Nome', plano.nome, nome),
+                ('segmentacao', 'Segmentação', segmentos.get(plano.segmentacao), segmentos.get(segmentacao)),
+                ('valor', 'Valor', plano.valor, valor),
+                ('ativo', 'Situação', 'ativo' if plano.ativo else 'inativo', 'ativo' if ativo else 'inativo')]
+    plano.nome, plano.segmentacao, plano.valor, plano.ativo = nome, segmentacao, valor, ativo
+    plano.save()
+    n = slv.registrar_alteracoes('PLANO', plano, mudancas, request.user)
+    messages.success(request, f'Plano {nome} atualizado.' if n else 'Nada mudou no plano.')
+    return _voltar_parametros()
+
+
+@login_required
+@require_POST
+def parametros_vivo_mais(request):
+    if not pode_gerenciar_precos(request.user):
+        return _deny(request)
+    percentual = slv.dinheiro((request.POST.get('percentual') or '').replace('%', ''))
+    if percentual is None or not (0 <= percentual <= 100):
+        messages.error(request, 'O percentual do Vivo+ precisa estar entre 0% e 100%.')
+        return _voltar_parametros()
+    config = ConfiguracaoVendas.atual()
+    antes = config.vivo_mais_percentual
+    config.vivo_mais_percentual, config.atualizado_por = percentual, request.user
+    config.save()
+    slv.registrar_alteracoes('VIVO_MAIS', config, [('vivo_mais_percentual', 'Desconto Vivo+', f'{antes}%', f'{percentual}%')],
+                             request.user, rotulo='Vivo+')
+    messages.success(request, f'Desconto Vivo+ agora é {percentual}% — vale para as vendas lançadas a partir de agora.')
+    return _voltar_parametros()
+
+
+@login_required
+@require_POST
+def parametros_adicional(request):
+    if not pode_gerenciar_precos(request.user):
+        return _deny(request)
+    item = (ServicoAdicional.objects.filter(pk=request.POST.get('id')).first()
+            if (request.POST.get('id') or '').isdigit() else None)
+    nome = (request.POST.get('nome') or '').strip()[:200]
+    tipo = request.POST.get('tipo') or ''
+    valor = slv.dinheiro(request.POST.get('valor')) or Decimal('0')
+    ativo = request.POST.get('ativo') == 'on' if item else True
+    if not nome or tipo not in dict(ServicoAdicional.TIPOS) or valor < 0:
+        messages.error(request, 'Informe o tipo (Seguro ou SVA) e o nome.')
+        return _voltar_parametros()
+    if item is None:
+        item = ServicoAdicional.objects.create(tipo=tipo, nome=nome, valor=valor)
+        slv.registrar_alteracoes('SERVICO_ADICIONAL', item, [('criado', 'Criado', '', str(item))], request.user)
+    else:
+        mudancas = [('nome', 'Nome', item.nome, nome), ('tipo', 'Tipo', item.tipo, tipo), ('valor', 'Valor', item.valor, valor),
+                    ('ativo', 'Situação', 'ativo' if item.ativo else 'inativo', 'ativo' if ativo else 'inativo')]
+        item.nome, item.tipo, item.valor, item.ativo = nome, tipo, valor, ativo
+        item.save()
+        slv.registrar_alteracoes('SERVICO_ADICIONAL', item, mudancas, request.user)
+    messages.success(request, f'{item.get_tipo_display()} {nome} gravado.')
+    return _voltar_parametros()

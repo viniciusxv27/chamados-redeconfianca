@@ -87,6 +87,11 @@ def cnpjs_da_rede():
         pass
     for bruto in getattr(settings, 'CNPJS_DA_REDE', []) or []:
         nossos.add(receita.so_digitos(bruto))
+    try:
+        from .sefaz import cnpjs_monitorados
+        nossos.update(cnpjs_monitorados())
+    except Exception:  # noqa: BLE001
+        pass
     return {c for c in nossos if receita.valido(c)}
 
 

@@ -9,270 +9,313 @@
 {% endblock %}
 
 {% block vd_acoes %}
-<a href="?{{ filter_query_string }}&export=xlsx&tipo=produto"
-   class="inline-flex items-center gap-2 px-3.5 py-2 vd-card text-gray-700 text-sm font-semibold hover:bg-gray-50">
-    <i class="fas fa-file-excel text-emerald-600"></i><span class="hidden sm:inline">Exportar</span>
-</a>
+<div class="relative" id="vdExportar">
+    <button type="button" class="inline-flex items-center gap-2 px-3.5 py-2 vd-card text-gray-700 text-sm font-semibold hover:bg-gray-50"
+            onclick="document.getElementById('vdExportarMenu').classList.toggle('hidden')">
+        <i class="fas fa-file-export text-emerald-600"></i><span class="hidden sm:inline">Exportar</span><i class="fas fa-chevron-down text-[10px] text-gray-400"></i>
+    </button>
+    <div id="vdExportarMenu" class="hidden absolute right-0 mt-1 w-56 vd-card p-1.5 z-20 text-sm">
+        <a class="block px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-700" href="?{{ filter_query_string }}&export=xlsx&tipo=produto"><i class="fas fa-box mr-2 text-purple-600"></i>Produtos (Excel)</a>
+        <a class="block px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-700" href="?{{ filter_query_string }}&export=xlsx&tipo=servico"><i class="fas fa-headset mr-2 text-pink-600"></i>Serviços (Excel)</a>
+        <a class="block px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-700" href="?{{ filter_query_string }}&export=csv&tipo=produto"><i class="fas fa-file-csv mr-2 text-gray-400"></i>Produtos (CSV)</a>
+        <a class="block px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-700" href="?{{ filter_query_string }}&export=csv&tipo=servico"><i class="fas fa-file-csv mr-2 text-gray-400"></i>Serviços (CSV)</a>
+    </div>
+</div>
 <a href="{% url 'vendas:venda_create' %}"
-   class="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-lg shadow-sm">
-    <i class="fas fa-plus"></i> Lançar venda
+   class="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-lg shadow-sm shadow-purple-600/30">
+    <i class="fas fa-plus"></i> Nova venda
 </a>
 {% endblock %}
 
 {% block vd_conteudo %}
 
-<!-- Indicadores -->
+{# ── Indicadores ── #}
 <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-    <div class="vd-card vd-card-hover p-4">
-        <p class="text-xs text-gray-500 font-medium">Receita no filtro</p>
-        <p class="text-2xl font-bold text-gray-900 tabular mt-1">{{ kpi_total|brl }}</p>
-        <p class="text-[11px] text-gray-400 mt-0.5">
-            produtos {{ kpi_produtos|brl_curto }} · serviços {{ kpi_servicos|brl_curto }}
-        </p>
+    {% with c1="bg-purple-100 text-purple-700" %}
+    <div class="vd-card vd-card-hover vd-entra p-4">
+        <div class="flex items-start justify-between gap-2">
+            <p class="text-xs text-gray-500 font-medium">Receita no filtro</p>
+            <span class="w-8 h-8 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center text-sm"><i class="fas fa-sack-dollar"></i></span>
+        </div>
+        <p class="text-lg sm:text-2xl font-bold text-gray-900 tabular mt-1 whitespace-nowrap" data-contar="{{ kpi_total|stringformat:'s' }}" data-dinheiro="1">{{ kpi_total|brl }}</p>
+        <p class="text-[11px] text-gray-400 mt-0.5 truncate">produtos {{ kpi_produtos|brl_curto }} · serviços {{ kpi_servicos|brl_curto }}</p>
     </div>
-    <div class="vd-card vd-card-hover p-4">
-        <p class="text-xs text-gray-500 font-medium">Vendas</p>
-        <p class="text-2xl font-bold text-gray-900 tabular mt-1">{{ kpi_quantidade }}</p>
+    {% endwith %}
+    <div class="vd-card vd-card-hover vd-entra p-4" style="animation-delay:.05s">
+        <div class="flex items-start justify-between gap-2">
+            <p class="text-xs text-gray-500 font-medium">Vendas</p>
+            <span class="w-8 h-8 rounded-lg bg-pink-100 text-pink-700 flex items-center justify-center text-sm"><i class="fas fa-receipt"></i></span>
+        </div>
+        <p class="text-lg sm:text-2xl font-bold text-gray-900 tabular mt-1" data-contar="{{ kpi_quantidade }}">{{ kpi_quantidade }}</p>
+        <p class="text-[11px] text-gray-400 mt-0.5">hoje {{ kpi_hoje }} · no mês {{ kpi_no_mes }}</p>
+    </div>
+    <div class="vd-card vd-card-hover vd-entra p-4" style="animation-delay:.1s">
+        <div class="flex items-start justify-between gap-2">
+            <p class="text-xs text-gray-500 font-medium">Ticket médio</p>
+            <span class="w-8 h-8 rounded-lg bg-sky-100 text-sky-700 flex items-center justify-center text-sm"><i class="fas fa-scale-balanced"></i></span>
+        </div>
+        <p class="text-lg sm:text-2xl font-bold text-purple-700 tabular mt-1 whitespace-nowrap">{{ kpi_ticket|brl }}</p>
         <p class="text-[11px] text-gray-400 mt-0.5">{{ kpi_pecas }} peça{{ kpi_pecas|pluralize }} vendida{{ kpi_pecas|pluralize }}</p>
     </div>
-    <div class="vd-card vd-card-hover p-4">
-        <p class="text-xs text-gray-500 font-medium">Ticket médio</p>
-        <p class="text-2xl font-bold text-purple-700 tabular mt-1">{{ kpi_ticket|brl }}</p>
-    </div>
-    <div class="vd-card vd-card-hover p-4">
-        <p class="text-xs text-gray-500 font-medium">Hoje / no mês</p>
-        <p class="text-2xl font-bold text-gray-900 tabular mt-1">{{ kpi_hoje }}<span class="text-gray-300 font-normal"> / </span>{{ kpi_no_mes }}</p>
-        <p class="text-[11px] text-gray-400 mt-0.5">vendas lançadas</p>
+    <div class="vd-card vd-card-hover vd-entra p-4" style="animation-delay:.15s">
+        <div class="flex items-start justify-between gap-2">
+            <p class="text-xs text-gray-500 font-medium">Delta dos planos</p>
+            <span class="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center text-sm"><i class="fas fa-arrow-trend-up"></i></span>
+        </div>
+        <p class="text-lg sm:text-2xl font-bold tabular mt-1 whitespace-nowrap {% if kpi_delta < 0 %}text-red-600{% else %}text-emerald-600{% endif %}">{{ kpi_delta|brl }}</p>
+        <p class="text-[11px] text-gray-400 mt-0.5">novo plano − o que o cliente pagava</p>
     </div>
 </div>
 
-<!-- Últimos 30 dias -->
-<div class="vd-card p-5 mb-4">
-    <div class="flex items-center justify-between gap-2 mb-3 flex-wrap">
-        <h2 class="text-sm font-bold text-gray-800"><i class="fas fa-chart-column text-purple-600 mr-1.5"></i>Últimos 30 dias</h2>
-        <span class="text-[11px] text-gray-400">vendas por dia</span>
-    </div>
-    <div class="vd-grafico flex gap-[3px] h-24">
-        {% for d in serie_dias %}
-        <div class="vd-coluna" title="{{ d.dia|date:'d/m' }}: {{ d.n }} venda{{ d.n|pluralize }}">
-            <span style="height: {{ d.altura }}%"></span>
+{% if kpi_fake or kpi_editados %}
+<div class="flex flex-wrap gap-2 mb-4">
+    {% if kpi_fake %}
+    <a href="?{{ filter_query_string }}&fake=1" class="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm hover:border-amber-300">
+        <i class="fas fa-phone-slash"></i><strong>{{ kpi_fake }}</strong> venda{{ kpi_fake|pluralize }} com número fictício — conferir
+    </a>
+    {% endif %}
+    {% if kpi_editados %}
+    <span class="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-sky-50 border border-sky-200 text-sky-800 text-sm">
+        <i class="fas fa-pen-to-square"></i><strong>{{ kpi_editados }}</strong> ite{{ kpi_editados|pluralize:"m,ns" }} com valor final editado à mão
+    </span>
+    {% endif %}
+</div>
+{% endif %}
+
+{# ── 30 dias + serviços por tipo ── #}
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+    <div class="vd-card p-5 lg:col-span-2">
+        <div class="flex items-center justify-between gap-2 mb-3 flex-wrap">
+            <h2 class="text-sm font-bold text-gray-800"><i class="fas fa-chart-column text-purple-600 mr-1.5"></i>Últimos 30 dias</h2>
+            <span class="text-[11px] text-gray-500" id="vdDica">passe o mouse (ou toque) numa barra</span>
         </div>
-        {% endfor %}
+        <div class="vd-grafico flex gap-[3px] h-28" id="vdGrafico">
+            {% for d in serie_dias %}
+            <div class="vd-coluna cursor-pointer" data-dica="{{ d.dia|date:'d/m (D)' }}: {{ d.n }} venda{{ d.n|pluralize }}"
+                 data-dia="{{ d.dia|date:'Y-m-d' }}">
+                <span style="height: {{ d.altura }}%; animation-delay: {{ forloop.counter0 }}0ms"></span>
+            </div>
+            {% endfor %}
+        </div>
+        <div class="flex justify-between text-[10px] text-gray-400 mt-1.5">
+            <span>{{ serie_dias.0.dia|date:"d/m" }}</span>
+            <span>clique numa barra para ver as vendas do dia</span>
+            <span>{{ serie_dias|last_dia }}</span>
+        </div>
     </div>
-    <div class="flex justify-between text-[10px] text-gray-400 mt-1.5">
-        <span>{{ serie_dias.0.dia|date:"d/m" }}</span>
-        <span>{{ serie_dias|last_dia }}</span>
+    <div class="vd-card p-5">
+        <h2 class="text-sm font-bold text-gray-800 mb-3"><i class="fas fa-headset text-pink-600 mr-1.5"></i>Serviços por tipo</h2>
+        <div class="space-y-2">
+            {% for s in por_tipo_servico %}
+            <div class="flex items-center justify-between gap-3 text-sm">
+                <span class="text-gray-700 truncate min-w-0">{{ s.tipo }}</span>
+                <span class="text-right whitespace-nowrap">
+                    <span class="font-semibold text-gray-900 tabular">{{ s.n }}</span>
+                    {% if s.delta %}<span class="text-[11px] ml-1 {% if s.delta < 0 %}text-red-600{% else %}text-emerald-600{% endif %}">Δ {{ s.delta|brl_curto }}</span>{% endif %}
+                </span>
+            </div>
+            {% empty %}
+            <p class="text-sm text-gray-400 py-6 text-center">Nenhum serviço no filtro.</p>
+            {% endfor %}
+        </div>
     </div>
 </div>
 
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-    <!-- Mais vendidos -->
     <div class="vd-card p-5">
         <h2 class="text-sm font-bold text-gray-800 mb-3"><i class="fas fa-box text-purple-600 mr-1.5"></i>Produtos mais vendidos</h2>
         <div class="space-y-2.5">
             {% for p in top_produtos %}
             <div class="flex items-center justify-between gap-3 text-sm">
                 <span class="text-gray-700 truncate min-w-0">{{ p.nome_produto }}</span>
-                <span class="text-right whitespace-nowrap">
-                    <span class="text-gray-400 text-xs">{{ p.n }}×</span>
-                    <span class="font-semibold text-gray-900 ml-1.5 tabular">{{ p.total|brl }}</span>
-                </span>
+                <span class="text-right whitespace-nowrap"><span class="text-gray-400 text-xs">{{ p.n }}×</span>
+                    <span class="font-semibold text-gray-900 ml-1.5 tabular">{{ p.total|brl }}</span></span>
             </div>
-            {% empty %}
-            <p class="text-sm text-gray-400 py-4 text-center">Nenhum produto lançado ainda.</p>
-            {% endfor %}
+            {% empty %}<p class="text-sm text-gray-400 py-4 text-center">Nenhum produto no filtro.</p>{% endfor %}
         </div>
     </div>
-
+    {% if is_superadmin %}
+    <div class="vd-card p-5">
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="text-sm font-bold text-gray-800"><i class="fas fa-ranking-star text-pink-600 mr-1.5"></i>Ranking</h2>
+            <div class="flex gap-1 text-xs" role="tablist">
+                <button type="button" class="vd-chip vd-ativo !py-1 !px-2.5" data-ranking="loja">Lojas</button>
+                <button type="button" class="vd-chip !py-1 !px-2.5" data-ranking="vendedor">Vendedores</button>
+            </div>
+        </div>
+        <div class="space-y-3" data-ranking-lista="loja">
+            {% for l in por_loja %}
+            <div><div class="flex items-center justify-between text-xs mb-1"><span class="text-gray-700 truncate">{{ l.nome }}</span>
+                <span class="text-gray-900 font-semibold tabular">{{ l.n }}</span></div>
+                <div class="vd-barra"><span style="width: {{ l.fatia }}%"></span></div></div>
+            {% empty %}<p class="text-sm text-gray-400 py-4 text-center">Sem dados.</p>{% endfor %}
+        </div>
+        <div class="space-y-3 hidden" data-ranking-lista="vendedor">
+            {% for v in por_vendedor %}
+            <div><div class="flex items-center justify-between text-xs mb-1"><span class="text-gray-700 truncate">{{ v.nome }}</span>
+                <span class="text-gray-900 font-semibold tabular">{{ v.n }}</span></div>
+                <div class="vd-barra"><span style="width: {{ v.fatia }}%; background:linear-gradient(90deg,#F472B6,#DB2777)"></span></div></div>
+            {% empty %}<p class="text-sm text-gray-400 py-4 text-center">Sem dados.</p>{% endfor %}
+        </div>
+    </div>
+    {% else %}
     <div class="vd-card p-5">
         <h2 class="text-sm font-bold text-gray-800 mb-3"><i class="fas fa-headset text-pink-600 mr-1.5"></i>Serviços mais vendidos</h2>
         <div class="space-y-2.5">
             {% for s in top_servicos %}
-            <div class="flex items-center justify-between gap-3 text-sm">
-                <span class="text-gray-700 truncate min-w-0">{{ s.servico }}</span>
-                <span class="text-right whitespace-nowrap">
-                    <span class="text-gray-400 text-xs">{{ s.n }}×</span>
-                    <span class="font-semibold text-gray-900 ml-1.5 tabular">{{ s.total|brl }}</span>
-                </span>
-            </div>
-            {% empty %}
-            <p class="text-sm text-gray-400 py-4 text-center">Nenhum serviço lançado ainda.</p>
-            {% endfor %}
-        </div>
-    </div>
-</div>
-
-{% if is_superadmin %}
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-    <div class="vd-card p-5">
-        <h2 class="text-sm font-bold text-gray-800 mb-3"><i class="fas fa-store text-purple-600 mr-1.5"></i>Por loja</h2>
-        <div class="space-y-3">
-            {% for l in por_loja %}
-            <div>
-                <div class="flex items-center justify-between text-xs mb-1">
-                    <span class="text-gray-700 truncate">{{ l.nome }}</span>
-                    <span class="text-gray-900 font-semibold tabular">{{ l.n }}</span>
-                </div>
-                <div class="vd-barra"><span style="width: {{ l.fatia }}%"></span></div>
-            </div>
-            {% empty %}<p class="text-sm text-gray-400 py-4 text-center">Sem dados.</p>{% endfor %}
-        </div>
-    </div>
-    <div class="vd-card p-5">
-        <h2 class="text-sm font-bold text-gray-800 mb-3"><i class="fas fa-user-tie text-pink-600 mr-1.5"></i>Por vendedor</h2>
-        <div class="space-y-3">
-            {% for v in por_vendedor %}
-            <div>
-                <div class="flex items-center justify-between text-xs mb-1">
-                    <span class="text-gray-700 truncate">{{ v.nome }}</span>
-                    <span class="text-gray-900 font-semibold tabular">{{ v.n }}</span>
-                </div>
-                <div class="vd-barra"><span style="width: {{ v.fatia }}%; background:#DB2777"></span></div>
-            </div>
-            {% empty %}<p class="text-sm text-gray-400 py-4 text-center">Sem dados.</p>{% endfor %}
-        </div>
-    </div>
-</div>
-{% endif %}
-
-<!-- Filtros -->
-<form method="get" class="vd-card p-4 mb-4">
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <div class="lg:col-span-2">
-            <label class="vd-rotulo">Buscar</label>
-            <div class="relative">
-                <i class="fas fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-300 text-xs"></i>
-                <input type="text" name="search" value="{{ filtros.search }}" class="vd-campo pl-8"
-                       placeholder="Cliente, CPF, PDV ou nº da venda">
-            </div>
-        </div>
-        <div><label class="vd-rotulo">De</label><input type="date" name="date_from" value="{{ filtros.date_from }}" class="vd-campo"></div>
-        <div><label class="vd-rotulo">Até</label><input type="date" name="date_to" value="{{ filtros.date_to }}" class="vd-campo"></div>
-        {% if is_superadmin %}
-        <div>
-            <label class="vd-rotulo">Loja</label>
-            <select name="loja" class="vd-campo">
-                <option value="">Todas</option>
-                {% for l in lojas %}<option value="{{ l.id }}" {% if filtros.loja == l.id|stringformat:"s" %}selected{% endif %}>{{ l.name }}</option>{% endfor %}
-            </select>
-        </div>
-        <div>
-            <label class="vd-rotulo">Vendedor</label>
-            <select name="vendedor" class="vd-campo">
-                <option value="">Todos</option>
-                {% for v in vendedores %}<option value="{{ v.id }}" {% if filtros.vendedor == v.id|stringformat:"s" %}selected{% endif %}>{{ v.full_name|default:v.email }}</option>{% endfor %}
-            </select>
-        </div>
-        {% endif %}
-        <div>
-            <label class="vd-rotulo">Comprovante</label>
-            <select name="comprovante" class="vd-campo">
-                <option value="">Todos</option>
-                {% for valor, rotulo in comprovante_choices %}<option value="{{ valor }}" {% if filtros.comprovante == valor %}selected{% endif %}>{{ rotulo }}</option>{% endfor %}
-            </select>
-        </div>
-        <div class="flex items-end gap-2">
-            <button class="flex-1 px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-semibold">
-                <i class="fas fa-filter mr-1"></i>Filtrar
-            </button>
-            {% if filter_query_string %}
-            <a href="{% url 'vendas:dashboard' %}" class="px-3 py-2.5 border border-gray-300 rounded-lg text-gray-500 hover:bg-gray-50" title="Limpar">
-                <i class="fas fa-xmark"></i>
-            </a>
-            {% endif %}
-        </div>
-    </div>
-</form>
-
-<!-- Lista -->
-<div class="vd-card overflow-hidden">
-    <div class="px-5 py-3 border-b border-gray-100 flex items-center justify-between gap-2 flex-wrap">
-        <h2 class="text-sm font-bold text-gray-800"><i class="fas fa-list text-gray-400 mr-1.5"></i>Vendas</h2>
-        <span class="text-xs text-gray-400">{{ paginator.count }} registro{{ paginator.count|pluralize }}</span>
-    </div>
-
-    <!-- Telas grandes: tabela -->
-    <div class="hidden md:block vd-rolagem-x overflow-x-auto">
-        <table class="min-w-full text-sm">
-            <thead class="bg-gray-50/70 text-gray-500 text-xs uppercase tracking-wide">
-                <tr>
-                    <th class="text-left px-5 py-2.5 font-medium">Venda</th>
-                    <th class="text-left px-3 py-2.5 font-medium">Data</th>
-                    <th class="text-left px-3 py-2.5 font-medium">Cliente</th>
-                    {% if is_superadmin %}<th class="text-left px-3 py-2.5 font-medium">Loja / Vendedor</th>{% endif %}
-                    <th class="text-center px-3 py-2.5 font-medium">Itens</th>
-                    <th class="text-right px-5 py-2.5 font-medium">Total</th>
-                </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-50">
-                {% for v in vendas %}
-                <tr class="hover:bg-purple-50/30 cursor-pointer" onclick="window.location='{% url 'vendas:venda_detail' v.pk %}'">
-                    <td class="px-5 py-2.5">
-                        <span class="font-semibold text-gray-900">#{{ v.pk }}</span>
-                        <span class="block text-[11px] text-gray-400">{{ v.get_comprovante_fiscal_display }}</span>
-                    </td>
-                    <td class="px-3 py-2.5 text-gray-600 whitespace-nowrap">{{ v.data_venda|date:"d/m/Y H:i" }}</td>
-                    <td class="px-3 py-2.5 text-gray-800">
-                        {{ v.cliente_nome|default:"—" }}
-                        {% if v.cliente_cpf %}<span class="block text-[11px] text-gray-400">{{ v.cliente_cpf }}</span>{% endif %}
-                    </td>
-                    {% if is_superadmin %}
-                    <td class="px-3 py-2.5 text-gray-600">
-                        {{ v.loja.name|default:v.pdv_nome|default:"—" }}
-                        {% if v.vendedor %}<span class="block text-[11px] text-gray-400">{{ v.vendedor.full_name }}</span>{% endif %}
-                    </td>
-                    {% endif %}
-                    <td class="px-3 py-2.5 text-center text-gray-500 text-xs">
-                        {{ v.produtos.count }}p · {{ v.servicos.count }}s
-                    </td>
-                    <td class="px-5 py-2.5 text-right font-semibold text-gray-900 tabular whitespace-nowrap">{{ v.total|brl }}</td>
-                </tr>
-                {% empty %}
-                <tr><td colspan="6" class="px-5 py-14 text-center text-gray-400">
-                    <i class="fas fa-cart-shopping text-gray-200 text-3xl mb-2 block"></i>
-                    {% if filter_query_string %}Nenhuma venda com esses filtros.
-                    <a href="{% url 'vendas:dashboard' %}" class="text-purple-600 hover:underline">limpar</a>
-                    {% else %}Nenhuma venda lançada ainda.
-                    <a href="{% url 'vendas:venda_create' %}" class="text-purple-600 hover:underline">lançar a primeira</a>{% endif %}
-                </td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-
-    <!-- Celular: cartões, que a tabela não cabe -->
-    <div class="md:hidden divide-y divide-gray-50">
-        {% for v in vendas %}
-        <a href="{% url 'vendas:venda_detail' v.pk %}" class="block px-4 py-3 hover:bg-purple-50/30">
-            <div class="flex items-center justify-between gap-2">
-                <span class="font-semibold text-gray-900">#{{ v.pk }}</span>
-                <span class="font-semibold text-gray-900 tabular">{{ v.total|brl }}</span>
-            </div>
-            <p class="text-sm text-gray-700 mt-0.5 truncate">{{ v.cliente_nome|default:"Sem cliente" }}</p>
-            <p class="text-[11px] text-gray-400">
-                {{ v.data_venda|date:"d/m/Y H:i" }}
-                {% if is_superadmin and v.loja %} · {{ v.loja.name }}{% endif %}
-            </p>
-        </a>
-        {% empty %}
-        <p class="px-4 py-12 text-center text-gray-400 text-sm">Nenhuma venda por aqui.</p>
-        {% endfor %}
-    </div>
-
-    {% if paginator.num_pages > 1 %}
-    <div class="px-5 py-3 border-t border-gray-100 flex items-center justify-between gap-2 flex-wrap">
-        <span class="text-xs text-gray-400">Página {{ vendas.number }} de {{ paginator.num_pages }}</span>
-        <div class="flex gap-1">
-            {% if vendas.has_previous %}
-            <a href="?{{ filter_query_string }}&page={{ vendas.previous_page_number }}"
-               class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">Anterior</a>
-            {% endif %}
-            {% if vendas.has_next %}
-            <a href="?{{ filter_query_string }}&page={{ vendas.next_page_number }}"
-               class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">Próxima</a>
-            {% endif %}
+            <div class="flex items-center justify-between gap-3 text-sm"><span class="text-gray-700 truncate min-w-0">{{ s.servico }}</span>
+                <span class="text-right whitespace-nowrap"><span class="text-gray-400 text-xs">{{ s.n }}×</span>
+                <span class="font-semibold text-gray-900 ml-1.5 tabular">{{ s.total|brl }}</span></span></div>
+            {% empty %}<p class="text-sm text-gray-400 py-4 text-center">Nenhum serviço no filtro.</p>{% endfor %}
         </div>
     </div>
     {% endif %}
 </div>
+
+{# ── Filtros ── #}
+<form method="get" class="vd-card p-4 mb-4" id="vdFiltros">
+    <div class="flex flex-wrap items-center gap-1.5">
+        <span class="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mr-1">Período</span>
+        <button type="button" class="vd-chip !py-1 !px-3 text-xs" data-periodo="0">Hoje</button>
+        <button type="button" class="vd-chip !py-1 !px-3 text-xs" data-periodo="6">7 dias</button>
+        <button type="button" class="vd-chip !py-1 !px-3 text-xs" data-periodo="mes">Este mês</button>
+        <button type="button" class="vd-chip !py-1 !px-3 text-xs" data-periodo="29">30 dias</button>
+        <span class="flex-1"></span>
+        <label class="inline-flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
+            <input type="checkbox" name="fake" value="1" {% if filtros.fake == '1' %}checked{% endif %} class="rounded text-amber-500" onchange="this.form.submit()">
+            <i class="fas fa-phone-slash text-amber-500"></i>Só número fictício
+        </label>
+        <button type="button" class="vd-chip !py-1 !px-3 text-xs" id="vdMaisFiltros"><i class="fas fa-sliders"></i>Mais filtros</button>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-3 {% if not filtros.loja and not filtros.vendedor and not filtros.servico and not filtros.comprovante %}hidden{% endif %}" id="vdFiltrosExtra">
+        <div><label class="vd-rotulo">Tipo de serviço</label>
+            <select name="servico" class="vd-campo"><option value="">Todos</option>
+                {% for v, r in tipos_servico %}<option value="{{ v }}" {% if filtros.servico == v %}selected{% endif %}>{{ r }}</option>{% endfor %}</select></div>
+        {% if is_superadmin %}
+        <div><label class="vd-rotulo">Loja</label>
+            <select name="loja" class="vd-campo"><option value="">Todas</option>
+                {% for l in lojas %}<option value="{{ l.id }}" {% if filtros.loja == l.id|stringformat:"s" %}selected{% endif %}>{{ l.name }}</option>{% endfor %}</select></div>
+        <div><label class="vd-rotulo">Vendedor</label>
+            <select name="vendedor" class="vd-campo"><option value="">Todos</option>
+                {% for v in vendedores %}<option value="{{ v.id }}" {% if filtros.vendedor == v.id|stringformat:"s" %}selected{% endif %}>{{ v.full_name|default:v.email }}</option>{% endfor %}</select></div>
+        {% endif %}
+        <div><label class="vd-rotulo">Comprovante</label>
+            <select name="comprovante" class="vd-campo"><option value="">Todos</option>
+                {% for valor, rotulo in comprovante_choices %}<option value="{{ valor }}" {% if filtros.comprovante == valor %}selected{% endif %}>{{ rotulo }}</option>{% endfor %}</select></div>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mt-3">
+        <div class="sm:col-span-2">
+            <label class="vd-rotulo">Buscar</label>
+            <div class="relative">
+                <i class="fas fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-300 text-xs"></i>
+                <input type="search" name="search" value="{{ filtros.search }}" class="vd-campo pl-8" placeholder="Cliente, CPF, PDV ou nº da venda">
+            </div>
+        </div>
+        <div><label class="vd-rotulo">De</label><input type="date" name="date_from" value="{{ filtros.date_from }}" class="vd-campo"></div>
+        <div><label class="vd-rotulo">Até</label><input type="date" name="date_to" value="{{ filtros.date_to }}" class="vd-campo"></div>
+        <div class="flex items-end gap-2">
+            <button class="flex-1 px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-semibold"><i class="fas fa-filter mr-1"></i>Filtrar</button>
+            {% if filter_query_string %}<a href="{% url 'vendas:dashboard' %}" class="px-3 py-2.5 border border-gray-300 rounded-lg text-gray-500 hover:bg-gray-50" title="Limpar"><i class="fas fa-xmark"></i></a>{% endif %}
+        </div>
+    </div>
+</form>
+
+{# ── Lista ── #}
+<div class="vd-card overflow-hidden">
+    <div class="px-4 sm:px-5 py-3 border-b border-gray-100 flex items-center justify-between gap-2 flex-wrap">
+        <h2 class="text-sm font-bold text-gray-800"><i class="fas fa-list text-gray-400 mr-1.5"></i>Vendas</h2>
+        <span class="text-xs text-gray-400">{{ paginator.count }} registro{{ paginator.count|pluralize }}</span>
+    </div>
+    <div class="divide-y divide-gray-100">
+        {% for v in vendas %}
+        <a href="{% url 'vendas:venda_detail' v.pk %}" class="vd-entra flex items-center gap-3 px-4 sm:px-5 py-3 hover:bg-purple-50/40 group" style="animation-delay: {{ forloop.counter0 }}0ms">
+            <span class="w-10 h-10 shrink-0 rounded-xl flex items-center justify-center text-sm font-bold
+                {% if v.servicos.all and v.produtos.all %}bg-purple-100 text-purple-700{% elif v.servicos.all %}bg-pink-100 text-pink-700{% else %}bg-sky-100 text-sky-700{% endif %}">
+                <i class="fas {% if v.servicos.all and not v.produtos.all %}fa-headset{% elif v.produtos.all and not v.servicos.all %}fa-box{% else %}fa-layer-group{% endif %}"></i>
+            </span>
+            <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2 flex-wrap">
+                    <span class="font-semibold text-gray-900">#{{ v.pk }}</span>
+                    <span class="text-sm text-gray-700 truncate">{{ v.cliente_nome|default:"Sem cliente" }}</span>
+                    {% if v.numero_fake %}<span class="px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-700 text-[10px] font-semibold"><i class="fas fa-phone-slash mr-0.5"></i>nº fictício</span>{% endif %}
+                    {% if v.vivo_mais %}<span class="px-1.5 py-0.5 rounded-md bg-purple-100 text-purple-700 text-[10px] font-semibold">Vivo+</span>{% endif %}
+                </div>
+                <p class="text-[11px] text-gray-500 mt-0.5 truncate">
+                    {{ v.data_venda|date:"d/m/Y H:i" }}
+                    {% if is_superadmin %} · {{ v.loja.name|default:v.pdv_nome|default:"—" }}{% if v.vendedor %} · {{ v.vendedor.full_name }}{% endif %}{% endif %}
+                    · {% for s in v.servicos.all %}{{ s.servico }}{% if not forloop.last %}, {% endif %}{% endfor %}{% if v.servicos.all and v.produtos.all %} + {% endif %}{% with n=v.produtos.all|length %}{% if n %}{{ n }} produto{{ n|pluralize }}{% endif %}{% endwith %}
+                </p>
+            </div>
+            <span class="text-right">
+                <span class="block font-semibold text-gray-900 tabular whitespace-nowrap">{{ v.total|brl }}</span>
+                {% if v.forma_pagamento %}<span class="block text-[10px] text-gray-400">{{ v.get_forma_pagamento_display }}</span>{% endif %}
+            </span>
+            <i class="fas fa-chevron-right text-gray-300 text-xs group-hover:text-purple-500 group-hover:translate-x-0.5 transition-transform hidden sm:block"></i>
+        </a>
+        {% empty %}
+        <div class="px-5 py-14 text-center text-gray-400">
+            <i class="fas fa-cart-shopping text-gray-200 text-4xl mb-3 block"></i>
+            {% if filter_query_string %}Nenhuma venda com esses filtros. <a href="{% url 'vendas:dashboard' %}" class="text-purple-600 hover:underline">limpar</a>
+            {% else %}Nenhuma venda lançada ainda. <a href="{% url 'vendas:venda_create' %}" class="text-purple-600 hover:underline font-semibold">Lançar a primeira</a>{% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% if paginator.num_pages > 1 %}
+    <div class="px-4 sm:px-5 py-3 border-t border-gray-100 flex items-center justify-between gap-2 flex-wrap">
+        <span class="text-xs text-gray-400">Página {{ vendas.number }} de {{ paginator.num_pages }}</span>
+        <div class="flex gap-1">
+            {% if vendas.has_previous %}<a href="?{{ filter_query_string }}&page={{ vendas.previous_page_number }}" class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">Anterior</a>{% endif %}
+            {% if vendas.has_next %}<a href="?{{ filter_query_string }}&page={{ vendas.next_page_number }}" class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">Próxima</a>{% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+(function () {
+    // Dica e clique nas barras do gráfico.
+    const dica = document.getElementById('vdDica');
+    const padrao = dica.textContent;
+    document.querySelectorAll('#vdGrafico .vd-coluna').forEach(function (c) {
+        c.addEventListener('mouseenter', function () { dica.textContent = c.dataset.dica; dica.classList.add('text-purple-700', 'font-semibold'); });
+        c.addEventListener('mouseleave', function () { dica.textContent = padrao; dica.classList.remove('text-purple-700', 'font-semibold'); });
+        c.addEventListener('click', function () {
+            const f = document.getElementById('vdFiltros');
+            f.date_from.value = c.dataset.dia; f.date_to.value = c.dataset.dia; f.submit();
+        });
+    });
+    // Atalhos de período.
+    function iso(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+    document.querySelectorAll('[data-periodo]').forEach(function (b) {
+        b.addEventListener('click', function () {
+            const f = document.getElementById('vdFiltros'), hoje = new Date();
+            let de = new Date(hoje);
+            if (b.dataset.periodo === 'mes') de = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+            else de.setDate(hoje.getDate() - Number(b.dataset.periodo));
+            f.date_from.value = iso(de); f.date_to.value = iso(hoje); f.submit();
+        });
+    });
+    document.getElementById('vdMaisFiltros').addEventListener('click', function () {
+        document.getElementById('vdFiltrosExtra').classList.toggle('hidden');
+    });
+    // Ranking: lojas × vendedores.
+    document.querySelectorAll('[data-ranking]').forEach(function (b) {
+        b.addEventListener('click', function () {
+            document.querySelectorAll('[data-ranking]').forEach(function (x) { x.classList.toggle('vd-ativo', x === b); });
+            document.querySelectorAll('[data-ranking-lista]').forEach(function (l) { l.classList.toggle('hidden', l.dataset.rankingLista !== b.dataset.ranking); });
+        });
+    });
+    // Fecha o menu de exportar ao clicar fora.
+    document.addEventListener('click', function (e) {
+        if (!document.getElementById('vdExportar').contains(e.target)) document.getElementById('vdExportarMenu').classList.add('hidden');
+    });
+    // Números sobem até o valor (só a contagem inteira; dinheiro já vem formatado).
+    document.querySelectorAll('[data-contar]:not([data-dinheiro])').forEach(function (el) {
+        const alvo = Number(el.dataset.contar) || 0;
+        if (!alvo || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+        let atual = 0; const passo = Math.max(1, Math.ceil(alvo / 24));
+        const t = setInterval(function () { atual = Math.min(alvo, atual + passo); el.textContent = atual; if (atual >= alvo) clearInterval(t); }, 25);
+    });
+})();
+</script>
 {% endblock %}

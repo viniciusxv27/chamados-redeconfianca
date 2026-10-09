@@ -181,6 +181,25 @@ class AssetAdmin(admin.ModelAdmin):
     Admin do sistema legado de ativos.
     DEPRECATED: Use o novo sistema de inventário.
     """
+
+    def save_model(self, request, obj, form, change):
+        from . import historico
+        antes = historico.foto(Asset.objects.get(pk=obj.pk)) if change and obj.pk else None
+        if not change:
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)
+        historico.registrar(obj, request.user, 'editado' if change else 'criado', antes=antes, origem='admin')
+
+    def delete_model(self, request, obj):
+        from . import historico
+        historico.registrar(obj, request.user, 'excluido', origem='admin')
+        super().delete_model(request, obj)
+
+    def delete_queryset(self, request, queryset):
+        from . import historico
+        for obj in queryset:
+            historico.registrar(obj, request.user, 'excluido', origem='admin')
+        super().delete_queryset(request, queryset)
     list_display = [
         'patrimonio_numero', 
         'nome', 
@@ -240,11 +259,6 @@ class AssetAdmin(admin.ModelAdmin):
         return bool(obj.photo)
     has_photo.boolean = True
     has_photo.short_description = 'Tem Foto'
-    
-    def save_model(self, request, obj, form, change):
-        if not change:
-            obj.created_by = request.user
-        super().save_model(request, obj, form, change)
 
 
 class ItemRequestItemInline(admin.TabularInline):
@@ -310,3 +324,20 @@ class OrderAdmin(admin.ModelAdmin):
     raw_id_fields = ['requested_by', 'reviewed_by', 'delivered_by']
     date_hierarchy = 'created_at'
     inlines = [OrderItemInline]
+
+
+from .models import AssetHistorico  # noqa: E402
+
+
+@admin.register(AssetHistorico)
+class AssetHistoricoAdmin(admin.ModelAdmin):
+    list_display = ('quando', 'patrimonio_numero', 'acao', 'origem', 'usuario_nome')
+    list_filter = ('acao', 'origem')
+    search_fields = ('patrimonio_numero', 'usuario_nome')
+    readonly_fields = [f.name for f in AssetHistorico._meta.fields]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False

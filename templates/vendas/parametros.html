@@ -1,0 +1,128 @@
+{% extends "vendas/_base_vendas.html" %}
+{% load vendas_tags l10n %}
+
+{% block title %}Parametrização — Vendas{% endblock %}
+{% block vd_icone %}fa-sliders{% endblock %}
+{% block vd_cabecalho %}Parametrização{% endblock %}
+{% block vd_subtitulo %}Planos e valores, desconto Vivo+ e a lista de seguros e SVAs. Toda alteração fica no histórico.{% endblock %}
+
+{% block vd_conteudo %}
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+<div class="lg:col-span-2 space-y-4">
+
+    {# ── Planos ([Parametrização.RF001]) ── #}
+    <section class="vd-card overflow-hidden">
+        <div class="px-5 py-3 border-b border-gray-100 flex items-center justify-between gap-2 flex-wrap">
+            <h2 class="text-sm font-bold text-gray-900"><i class="fas fa-sim-card text-purple-600 mr-1.5"></i>Planos e valores</h2>
+            <button type="button" class="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold" onclick="vdPlano()"><i class="fas fa-plus mr-1"></i>Novo plano</button>
+        </div>
+        <form method="post" action="{% url 'vendas:parametros_plano' %}" id="vdFormPlano" class="hidden px-5 py-4 border-b border-gray-100 bg-gray-50 grid grid-cols-1 sm:grid-cols-6 gap-3 items-end">
+            {% csrf_token %}<input type="hidden" name="id">
+            <div class="sm:col-span-2"><label class="vd-rotulo">Nome *</label><input name="nome" class="vd-campo" required maxlength="200"></div>
+            <div><label class="vd-rotulo">Segmentação *</label><select name="segmentacao" class="vd-campo" required>
+                {% for k, r in segmentacoes %}<option value="{{ k }}">{{ r }}</option>{% endfor %}</select></div>
+            <div><label class="vd-rotulo">Valor mensal (R$) *</label><input name="valor" class="vd-campo text-right tabular" inputmode="decimal" required placeholder="0,00"></div>
+            <label class="flex items-center gap-2 text-sm text-gray-700 pb-2.5" id="vdPlanoAtivo"><input type="checkbox" name="ativo" class="rounded text-purple-600" checked>Ativo</label>
+            <div class="flex gap-2"><button type="button" class="px-3 py-2.5 rounded-lg border border-gray-300 text-sm text-gray-600" onclick="this.form.classList.add('hidden')">Cancelar</button>
+                <button class="flex-1 px-3 py-2.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold">Salvar</button></div>
+            <p class="sm:col-span-6 text-[11px] text-gray-500">Em vez de excluir, desmarque "Ativo": o plano some dos lançamentos novos e continua nas vendas e históricos antigos.</p>
+        </form>
+        <div class="divide-y divide-gray-100">
+            {% for g in grupos %}
+            <div class="px-5 py-3">
+                <p class="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">{{ g.rotulo }} <span class="font-normal">· {{ g.planos|length }}</span></p>
+                {% if g.planos %}
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {% for p in g.planos %}
+                    <button type="button" class="vd-card vd-card-hover text-left px-3 py-2.5 flex items-center justify-between gap-2 {% if not p.ativo %}opacity-60{% endif %}"
+                            onclick="vdPlano({{ p.id }}, '{{ p.nome|escapejs }}', '{{ p.segmentacao }}', '{{ p.valor|unlocalize }}', {{ p.ativo|yesno:'true,false' }})">
+                        <span class="min-w-0"><span class="block text-sm font-medium text-gray-900 truncate">{{ p.nome }}</span>
+                            {% if not p.ativo %}<span class="text-[10px] px-1.5 rounded bg-gray-200 text-gray-600">inativo</span>{% endif %}</span>
+                        <span class="text-sm font-semibold text-purple-700 tabular whitespace-nowrap">{{ p.valor|brl }}</span>
+                    </button>
+                    {% endfor %}
+                </div>
+                {% else %}<p class="text-xs text-gray-400">Nenhum plano {{ g.rotulo }} cadastrado.</p>{% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+
+    {# ── Seguros e SVAs ([Venda de serviços.RF008]) ── #}
+    <section class="vd-card overflow-hidden">
+        <div class="px-5 py-3 border-b border-gray-100 flex items-center justify-between gap-2 flex-wrap">
+            <h2 class="text-sm font-bold text-gray-900"><i class="fas fa-shield-halved text-pink-600 mr-1.5"></i>Seguros e SVAs</h2>
+            <button type="button" class="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold" onclick="vdAdicional()"><i class="fas fa-plus mr-1"></i>Novo</button>
+        </div>
+        <form method="post" action="{% url 'vendas:parametros_adicional' %}" id="vdFormAdicional" class="hidden px-5 py-4 border-b border-gray-100 bg-gray-50 grid grid-cols-1 sm:grid-cols-6 gap-3 items-end">
+            {% csrf_token %}<input type="hidden" name="id">
+            <div><label class="vd-rotulo">Tipo *</label><select name="tipo" class="vd-campo"><option value="SEGURO">Seguro</option><option value="SVA">SVA</option></select></div>
+            <div class="sm:col-span-2"><label class="vd-rotulo">Nome *</label><input name="nome" class="vd-campo" required maxlength="200"></div>
+            <div><label class="vd-rotulo">Valor (R$)</label><input name="valor" class="vd-campo text-right tabular" inputmode="decimal" placeholder="0,00"></div>
+            <label class="flex items-center gap-2 text-sm text-gray-700 pb-2.5" id="vdAdicionalAtivo"><input type="checkbox" name="ativo" class="rounded text-purple-600" checked>Ativo</label>
+            <div class="flex gap-2"><button type="button" class="px-3 py-2.5 rounded-lg border border-gray-300 text-sm text-gray-600" onclick="this.form.classList.add('hidden')">Cancelar</button>
+                <button class="flex-1 px-3 py-2.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold">Salvar</button></div>
+        </form>
+        <div class="p-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {% for a in adicionais %}
+            <button type="button" class="vd-card vd-card-hover text-left px-3 py-2.5 flex items-center justify-between gap-2 {% if not a.ativo %}opacity-60{% endif %}"
+                    onclick="vdAdicional({{ a.id }}, '{{ a.tipo }}', '{{ a.nome|escapejs }}', '{{ a.valor|unlocalize }}', {{ a.ativo|yesno:'true,false' }})">
+                <span class="min-w-0"><span class="text-[10px] px-1.5 rounded bg-pink-100 text-pink-700 font-semibold">{{ a.get_tipo_display }}</span>
+                    <span class="block text-sm font-medium text-gray-900 truncate">{{ a.nome }}</span></span>
+                <span class="text-sm font-semibold text-gray-700 tabular whitespace-nowrap">{{ a.valor|brl }}</span>
+            </button>
+            {% empty %}<p class="text-sm text-gray-400 sm:col-span-2 text-center py-4">Nenhum seguro ou SVA cadastrado — o vendedor só consegue lançar esses serviços depois do cadastro aqui.</p>{% endfor %}
+        </div>
+    </section>
+</div>
+
+<aside class="space-y-4">
+    {# ── Vivo+ ([Parametrização.RF002]) ── #}
+    <section class="vd-card p-5">
+        <h2 class="text-sm font-bold text-gray-900 mb-1"><i class="fas fa-star text-purple-600 mr-1.5"></i>Desconto Vivo+</h2>
+        <p class="text-[11px] text-gray-500 mb-3">Vale para as vendas lançadas a partir da alteração; as já registradas mantêm o percentual da época.</p>
+        <form method="post" action="{% url 'vendas:parametros_vivo_mais' %}" class="flex items-end gap-2">
+            {% csrf_token %}
+            <div class="flex-1"><label class="vd-rotulo">Percentual (0 a 100%)</label>
+                <div class="relative"><input name="percentual" class="vd-campo text-right tabular pr-8 text-lg font-bold" inputmode="decimal" value="{{ config.vivo_mais_percentual|floatformat:'-2' }}">
+                    <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">%</span></div></div>
+            <button class="px-4 py-2.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold">Salvar</button>
+        </form>
+        <p class="text-[11px] text-gray-400 mt-2">Última alteração: {{ config.atualizado_em|date:"d/m/Y H:i" }}{% if config.atualizado_por %} por {{ config.atualizado_por.get_full_name }}{% endif %}</p>
+    </section>
+
+    {# ── Histórico ([Confiabilidade.NF001]) ── #}
+    <section class="vd-card overflow-hidden">
+        <div class="px-5 py-3 border-b border-gray-100"><h2 class="text-sm font-bold text-gray-900"><i class="fas fa-clock-rotate-left text-gray-500 mr-1.5"></i>Histórico de alterações</h2></div>
+        <ol class="divide-y divide-gray-100 max-h-[32rem] overflow-y-auto">
+            {% for h in historico %}
+            <li class="px-5 py-2.5 text-[12px]">
+                <p class="text-gray-900"><strong>{{ h.objeto_rotulo }}</strong> · {{ h.rotulo }}</p>
+                <p class="mt-0.5 flex flex-wrap items-baseline gap-1.5">
+                    {% if h.antes %}<span class="px-1.5 rounded bg-red-50 text-red-700 line-through">{{ h.antes }}</span><i class="fas fa-arrow-right text-[9px] text-gray-400"></i>{% endif %}
+                    <span class="px-1.5 rounded bg-emerald-50 text-emerald-700">{{ h.depois|default:"(vazio)" }}</span></p>
+                <p class="text-gray-400 mt-0.5">{{ h.usuario_nome|default:"—" }} · {{ h.quando|date:"d/m/Y H:i" }}</p>
+            </li>
+            {% empty %}<li class="px-5 py-6 text-center text-sm text-gray-400">Nenhuma alteração ainda.</li>{% endfor %}
+        </ol>
+    </section>
+</aside>
+</div>
+
+<script>
+function vdPlano(id, nome, seg, valor, ativo) {
+    const f = document.getElementById('vdFormPlano');
+    f.elements['id'].value = id || ''; f.nome.value = nome || ''; f.segmentacao.value = seg || 'POS';
+    f.valor.value = valor ? String(valor).replace('.', ',') : ''; f.ativo.checked = ativo !== false;
+    document.getElementById('vdPlanoAtivo').classList.toggle('hidden', !id);
+    f.classList.remove('hidden'); f.nome.focus();
+}
+function vdAdicional(id, tipo, nome, valor, ativo) {
+    const f = document.getElementById('vdFormAdicional');
+    f.elements['id'].value = id || ''; f.tipo.value = tipo || 'SEGURO'; f.nome.value = nome || '';
+    f.valor.value = valor ? String(valor).replace('.', ',') : ''; f.ativo.checked = ativo !== false;
+    document.getElementById('vdAdicionalAtivo').classList.toggle('hidden', !id);
+    f.classList.remove('hidden'); f.nome.focus();
+}
+</script>
+{% endblock %}

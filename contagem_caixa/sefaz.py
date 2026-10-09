@@ -23,7 +23,8 @@ Configuração (no ``.env``; nasce desligado):
 - ``SEFAZ_CERTIFICADO``: caminho do arquivo .pfx/.p12 — ou
   ``SEFAZ_CERTIFICADO_B64``: o .pfx em base64 (para container);
 - ``SEFAZ_CERTIFICADO_SENHA``;
-- ``SEFAZ_CNPJS``: CNPJs a acompanhar, separados por vírgula;
+- ``SEFAZ_CNPJS``: CNPJs a acompanhar, separados por vírgula — de preferência
+  com a UF: ``09.163.602/0001-34:ES,09.163.602/0012-97:RJ``;
 - ``SEFAZ_AMBIENTE``: 1 produção, 2 homologação.
 
 A UF do pedido (``cUFAutor``) é a de cada CNPJ consultado, não a da sede: o
@@ -78,11 +79,22 @@ def _cfg(nome, padrao=''):
     return (getattr(settings, nome, '') or padrao)
 
 
-def cnpjs_monitorados():
+def _entradas_configuradas():
+    """SEFAZ_CNPJS → [(cnpj, sigla da UF ou '')]. Aceita "CNPJ" ou "CNPJ:UF"."""
     bruto = _cfg('SEFAZ_CNPJS')
     if isinstance(bruto, (list, tuple)):
         bruto = ','.join(bruto)
-    return [d for d in (receita.so_digitos(c) for c in str(bruto).split(',')) if receita.valido(d)]
+    entradas = []
+    for item in str(bruto).split(','):
+        numero, _, sigla = item.partition(':')
+        digitos = receita.so_digitos(numero)
+        if receita.valido(digitos) and digitos not in [c for c, _ in entradas]:
+            entradas.append((digitos, sigla.strip().upper()))
+    return entradas
+
+
+def cnpjs_monitorados():
+    return [c for c, _ in _entradas_configuradas()]
 
 
 def _pfx():
@@ -120,7 +132,13 @@ CODIGOS_UF = {
 
 
 def uf_do_cnpj(cnpj):
-    """Código IBGE da UF do CNPJ, pelo cadastro da Receita; SEFAZ_UF se ela não responder."""
+    """Código IBGE da UF do CNPJ: a escrita em SEFAZ_CNPJS ("CNPJ:UF"), senão a do
+    cadastro da Receita, senão SEFAZ_UF. As APIs públicas da Receita limitam as
+    consultas (429), então com muitas filiais a UF na configuração é o caminho certo.
+    """
+    sigla = dict(_entradas_configuradas()).get(receita.so_digitos(cnpj), '')
+    if sigla in CODIGOS_UF:
+        return CODIGOS_UF[sigla]
     try:
         dados = receita.buscar(cnpj)
     except receita.CnpjIndisponivel:
@@ -419,5 +437,28 @@ def sincronizar(cnpj, transporte=None, agora=None, lotes=LOTES_POR_SINCRONIZACAO
     return sinc
 
 
-def sincronizar_todos(transporte=None):
-    return [sincronizar(c, transporte=transporte) for c in cnpjs_monitorados()]
+def sincronizar_todos(transporte=None, prazo_segundos=None):
+    """Sincroniza os CNPJs, o consultado há mais tempo primeiro.
+
+    Com ``prazo_segundos`` (o botão da tela), para de começar CNPJ novo quando o
+    prazo passa — a requisição não pode durar minutos; o que sobrar vai no
+    próximo clique ou no comando agendado. Os que ficaram de fora voltam com
+    ``adiada = True``.
+    """
+    import time
+
+    from .models import SincronizacaoDFe
+
+    ultimas = dict(SincronizacaoDFe.objects.values_list('cnpj', 'ultima_consulta'))
+    ordem = sorted(cnpjs_monitorados(), key=lambda c: (ultimas.get(c) is not None, ultimas.get(c) or 0))
+    inicio, resultado = time.monotonic(), []
+    for cnpj in ordem:
+        if prazo_segundos is not None and time.monotonic() - inicio > prazo_segundos:
+            sinc, _ = SincronizacaoDFe.objects.get_or_create(cnpj=cnpj)
+            sinc.pulada, sinc.adiada = True, True
+            resultado.append(sinc)
+            continue
+        sinc = sincronizar(cnpj, transporte=transporte)
+        sinc.adiada = False
+        resultado.append(sinc)
+    return resultado
