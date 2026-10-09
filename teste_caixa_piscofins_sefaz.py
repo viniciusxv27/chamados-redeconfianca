@@ -130,6 +130,44 @@ def resposta(cstat, motivo, ult, maximo, docs=()):
             f'</soap:Envelope>').encode()
 
 
+NS_NFSE = 'http://www.sped.fazenda.gov.br/nfse'
+
+
+def nfse_xml(chave, prest, nome, toma, valor, compet, numero, descricao):
+    return (f'<NFSe versao="1.00" xmlns="{NS_NFSE}"><infNFSe Id="NFS{chave}"><nNFSe>{numero}</nNFSe>'
+            f'<xTribNac>Serviço</xTribNac><dhProc>{compet}T10:00:00-03:00</dhProc>'
+            f'<emit><CNPJ>{prest}</CNPJ><xNome>{nome}</xNome><email>pessoal@exemplo-teste.local</email></emit>'
+            f'<valores><vLiq>{valor}</vLiq></valores><DPS versao="1.00"><infDPS Id="DPS1"><dhEmi>{compet}T09:00:00-03:00</dhEmi>'
+            f'<serie>900</serie><dCompet>{compet}</dCompet><prest><CNPJ>{prest}</CNPJ></prest><toma><CNPJ>{toma}</CNPJ></toma>'
+            f'<serv><cServ><xDescServ>{descricao}</xDescServ></cServ></serv>'
+            f'<valores><vServPrest><vServ>{valor}</vServ></vServPrest></valores></infDPS></DPS></infNFSe></NFSe>')
+
+
+def evento_cancelamento_nfse(chave):
+    return (f'<evento versao="1.00" xmlns="{NS_NFSE}"><infEvento Id="EVT{chave}"><pedRegEvento><infPedReg>'
+            f'<chNFSe>{chave}</chNFSe><e101101><xDesc>Cancelamento de NFS-e</xDesc></e101101></infPedReg></pedRegEvento>'
+            f'</infEvento></evento>')
+
+
+def lote_adn(docs, status='DOCUMENTOS_LOCALIZADOS'):
+    return {'StatusProcessamento': status, 'Erros': [] if docs else [{'Codigo': 'E2220', 'Descricao': 'Nenhum documento localizado'}],
+            'LoteDFe': [{'NSU': nsu, 'ChaveAcesso': ch, 'TipoDocumento': tipo,
+                         'ArquivoXml': base64.b64encode(gzip.compress(xml.encode())).decode()} for nsu, tipo, ch, xml in docs]}
+
+
+class AdnFalso:
+    def __init__(self, respostas):
+        self.respostas = list(respostas)
+        self.pedidos = []
+
+    def __call__(self, cnpj, nsu):
+        self.pedidos.append((cnpj, nsu))
+        r = self.respostas.pop(0)
+        if isinstance(r, Exception):
+            raise r
+        return r
+
+
 class SefazFalsa:
     def __init__(self, respostas):
         self.respostas = list(respostas)
@@ -278,6 +316,37 @@ try:
     t('senha errada: erro claro', not sefaz.info_do_certificado()['ok'] and 'senha' in sefaz.info_do_certificado()['erro'])
     settings.SEFAZ_CERTIFICADO_SENHA = 'senha-teste'
 
+    print('== NFS-e (AMBIENTE NACIONAL) ==')
+    from contagem_caixa import nfse_nacional
+    CHS1, CHS2, CHS3 = '3205002' + FORN_B + '000000000000123' + '0' * 14, '3205002' + FORN_A + '0' * 29, '3205002' + NOSSO + '1' * 29
+    CHS1, CHS2, CHS3 = CHS1[:50].ljust(50, '0'), CHS2[:50].ljust(50, '1'), CHS3[:50].ljust(50, '2')
+    adn = AdnFalso([
+        lote_adn([(1, 'NFSE', CHS1, nfse_xml(CHS1, FORN_B, 'ZZ MANUTENCAO ME', NOSSO, '300.00', '2019-04-28', 123, 'Manutenção de câmeras e alarme')),
+                  (2, 'NFSE', CHS2, nfse_xml(CHS2, FORN_A, 'ZZ LIMPEZA LTDA', NOSSO, '850.50', '2019-05-15', 77, 'Limpeza pós-obra')),
+                  (3, 'NFSE', CHS3, nfse_xml(CHS3, NOSSO, 'NOS MESMOS', FORN_A, '99.00', '2019-05-16', 5, 'Serviço que nós prestamos'))]),
+    ])
+    sinc = nfse_nacional.sincronizar(NOSSO, transporte=adn, agora=agora)
+    t('NFS-e: lote lido, só as que a empresa tomou', sinc.notas_novas_nfse == 2 and sinc.ult_nsu_nfse == 3
+      and not NotaRecebida.objects.filter(chave=CHS3).exists(), (sinc.notas_novas_nfse, sinc.ult_nsu_nfse))
+    s1 = NotaRecebida.objects.get(chave=CHS1)
+    t('NFS-e gravada com prestador, número, valor, competência e descrição', s1.tipo_documento == 'NFSE'
+      and s1.emitente_cnpj == FORN_B and s1.numero == '123' and s1.valor == D('300.00')
+      and s1.competencia == date(2019, 4, 28) and 'câmeras' in s1.descricao and s1.xml_completo.startswith('<NFSe'))
+    t('lote menor que 50: espera 1 hora', sinc.proxima_consulta_nfse == agora + timedelta(hours=1))
+    adn2 = AdnFalso([lote_adn([(4, 'EVENTO', CHS2, evento_cancelamento_nfse(CHS2))]), lote_adn([], 'NENHUM_DOCUMENTO_LOCALIZADO')])
+    sinc = nfse_nacional.sincronizar(NOSSO, transporte=adn2, agora=agora + timedelta(minutes=30))
+    t('antes de 1 hora não consulta o ADN', sinc.pulada_nfse and not adn2.pedidos)
+    sinc = nfse_nacional.sincronizar(NOSSO, transporte=adn2, agora=agora + timedelta(hours=2))
+    t('pede a partir do último NSU', adn2.pedidos[0] == (NOSSO, 3))
+    t('evento de cancelamento marca a NFS-e', NotaRecebida.objects.get(chave=CHS2).situacao == 'CANCELADA')
+    adn3 = AdnFalso([lote_adn([], 'NENHUM_DOCUMENTO_LOCALIZADO')])
+    sinc = nfse_nacional.sincronizar(NOSSO, transporte=adn3, agora=agora + timedelta(hours=4))
+    t('nada novo: status guardado e espera', sinc.ultimo_status_nfse == 'NENHUM_DOCUMENTO_LOCALIZADO'
+      and sinc.proxima_consulta_nfse == agora + timedelta(hours=5))
+    adn4 = AdnFalso([sefaz.SefazErro('ADN respondeu HTTP 500')])
+    sinc = nfse_nacional.sincronizar(NOSSO, transporte=adn4, agora=agora + timedelta(hours=6))
+    t('erro do ADN: registra e tenta em 15 min', sinc.ultimo_status_nfse == 'ERRO' and '500' in sinc.ultima_mensagem_nfse)
+
     print('== TELA ==')
     chefe = User.objects.create_user(
         username='zz.sf.chefe', email='zz.sf.chefe@exemplo-teste.local', password='S3nha!teste',
@@ -294,6 +363,14 @@ try:
     t('mostra o certificado e a validade curta', 'ZZ EMPRESA TESTE' in html and 'renove' in html)
     t('a lançar: 2 (a cancelada não conta)', '2 a lançar' in html, 'badge')
     t('cancelada aparece riscada', 'Cancelada' in html)
+    t('NFS-e na lista pela competência (05/2019), com selo e descrição', 'ZZ MANUTENCAO ME' not in html and 'NFS-e</span>' in html
+      and 'Limpeza pós-obra' in html)
+    r = c.get('/contagem-caixa/pis-cofins/?competencia=2019-04&visao=sefaz')
+    html = r.content.decode()
+    t('a NFS-e de competência 04/2019 aparece em abril', 'ZZ MANUTENCAO ME' in html and 'data-competencia="2019-04"' in html
+      and 'data-tipo-doc="NFSE"' in html)
+    r = c.get('/contagem-caixa/pis-cofins/?competencia=2019-05&visao=sefaz&doc=NFE')
+    t('filtro só NF-e esconde as NFS-e', 'Limpeza pós-obra' not in r.content.decode() and 'ZZ FORNECEDOR A LTDA' in r.content.decode())
 
     settings.SEFAZ_CERTIFICADO_B64 = ''
     r = c.get(url)
@@ -360,7 +437,7 @@ try:
     t('filtro "a lançar"', 'nº 9999' in html and 'nº 4567' not in html)
     r = c.get(url + f'&q={FORN_B[:8]}')
     html = r.content.decode()
-    t('busca pelo CNPJ do emitente', 'ZZ FORNECEDOR B SA' in html and 'ZZ FORNECEDOR A LTDA' not in html.split('NF-e emitidas')[1])
+    t('busca pelo CNPJ do emitente', 'ZZ FORNECEDOR B SA' in html and 'ZZ FORNECEDOR A LTDA' not in html.split('Notas emitidas contra o CNPJ em')[1])
 
     vend = User.objects.create_user(username='zz.sf.v', email='zz.sf.v@exemplo-teste.local', password='S3nha!teste',
                                     first_name='Zz', last_name='V', hierarchy='SUPERVISOR')

@@ -284,7 +284,11 @@ def _contexto_sefaz(request, competencia):
 
     visao = 'sefaz' if request.GET.get('visao') == 'sefaz' else 'lancados'
     proximo = date(competencia.year + (competencia.month == 12), competencia.month % 12 + 1, 1)
-    do_mes = NotaRecebida.objects.filter(emissao__date__gte=competencia, emissao__date__lt=proximo)
+    # NF-e entra pelo mês da emissão; NFS-e, pela competência da própria nota (é ela que vale no PIS/Cofins).
+    do_mes = NotaRecebida.objects.filter(
+        Q(tipo_documento='NFE', emissao__date__gte=competencia, emissao__date__lt=proximo)
+        | Q(tipo_documento='NFSE', competencia__gte=competencia, competencia__lt=proximo)
+        | Q(tipo_documento='NFSE', competencia__isnull=True, emissao__date__gte=competencia, emissao__date__lt=proximo))
     validas = do_mes.exclude(situacao='CANCELADA')
     a_lancar = validas.filter(documento__isnull=True, ignorada=False)
     contexto = {
@@ -296,6 +300,9 @@ def _contexto_sefaz(request, competencia):
     if visao != 'sefaz':
         return contexto
     situacao = request.GET.get('nf') or ''
+    tipo_doc = request.GET.get('doc') or ''
+    if tipo_doc in ('NFE', 'NFSE'):
+        do_mes, validas, a_lancar = (x.filter(tipo_documento=tipo_doc) for x in (do_mes, validas, a_lancar))
     notas = do_mes
     if situacao == 'a_lancar':
         notas = a_lancar
@@ -315,6 +322,9 @@ def _contexto_sefaz(request, competencia):
     sincronizacoes = {s.cnpj: s for s in SincronizacaoDFe.objects.all()}
     contexto.update({
         'nf_situacao': situacao,
+        'nf_doc': tipo_doc,
+        'notas_nfe': do_mes.filter(tipo_documento='NFE').count() if not tipo_doc else None,
+        'notas_nfse': do_mes.filter(tipo_documento='NFSE').count() if not tipo_doc else None,
         'notas': list(notas.select_related('documento').order_by('-emissao')[:500]),
         'notas_total': validas.count(),
         'notas_valor': validas.aggregate(s=Sum('valor'))['s'] or ZERO,
@@ -328,6 +338,10 @@ def _contexto_sefaz(request, competencia):
     contexto['sefaz_cnpjs'] = [{'cnpj': receita.formatar(c), 'sinc': sincronizacoes.get(c),
                                 'mesma_raiz': sefaz.mesma_raiz(c, do_certificado)}
                                for c in sefaz.cnpjs_monitorados()]
+    contexto['sefaz_problemas'] = sum(
+        1 for c in contexto['sefaz_cnpjs']
+        if not c['mesma_raiz'] or (c['sinc'] and ((c['sinc'].ultimo_cstat or '') in ('ERRO', 'RAIZ')
+                                                  or (c['sinc'].ultimo_status_nfse or '') in ('ERRO', 'RAIZ'))))
     return contexto
 
 
@@ -341,20 +355,28 @@ def piscofins_sefaz_buscar(request):
     if not sefaz.configurado():
         messages.error(request, 'A busca na SEFAZ ainda não foi ligada: falta o certificado digital A1 da empresa.')
         return _voltar(request)
-    novas, esperando, erros, adiados = 0, [], [], 0
+    novas, novas_nfse, esperando, erros, adiados = 0, 0, [], [], 0
     for sinc in sefaz.sincronizar_todos(prazo_segundos=PRAZO_DA_BUSCA):
         if getattr(sinc, 'adiada', False):
             adiados += 1
-        elif getattr(sinc, 'pulada', False):
+            continue
+        if getattr(sinc, 'pulada', False):
             esperando.append(f'{receita.formatar(sinc.cnpj)} (de novo às {timezone.localtime(sinc.proxima_consulta):%H:%M})')
         elif sinc.ultimo_cstat == 'ERRO' or sinc.ultimo_cstat not in ('137', '138', '656', ''):
             erros.append(f'{receita.formatar(sinc.cnpj)}: {sinc.ultima_mensagem}')
         else:
             novas += sinc.notas_novas
+        if not getattr(sinc, 'pulada_nfse', True):
+            if getattr(sinc, 'ultimo_status_nfse', '') in ('ERRO', 'RAIZ'):
+                erros.append(f'{receita.formatar(sinc.cnpj)} (NFS-e): {sinc.ultima_mensagem_nfse}')
+            else:
+                novas_nfse += getattr(sinc, 'notas_novas_nfse', 0) or 0
     if adiados:
         messages.info(request, f'{adiados} CNPJ(s) ficaram para a próxima busca (cada clique consulta por até '
                                f'{PRAZO_DA_BUSCA} segundos) — clique de novo ou aguarde a busca automática.')
-    if novas or not (esperando or erros or adiados):
+    if novas_nfse:
+        messages.success(request, f'{novas_nfse} NFS-e nova(s) do Ambiente Nacional.')
+    if novas or not (esperando or erros or adiados or novas_nfse):
         messages.success(request, f'{novas} nota(s) nova(s) da SEFAZ.' if novas else 'Nenhuma nota nova na SEFAZ.')
     if esperando:
         messages.info(request, 'A SEFAZ só aceita uma consulta por hora sem novidade. Aguardando: ' + '; '.join(esperando))
@@ -416,7 +438,7 @@ def _ler_formulario(request, documento=None):
         if nota is None:
             return None, 'Anexe o arquivo: a nota, o boleto ou o recibo.'
         # Lançada a partir da nota da SEFAZ: o XML dela é o arquivo.
-        arquivo = ContentFile((nota.xml_completo or nota.xml_resumo).encode('utf-8'), name=f'NFe{nota.chave}.xml')
+        arquivo = ContentFile((nota.xml_completo or nota.xml_resumo).encode('utf-8'), name=f"{'NFSe' if nota.tipo_documento == 'NFSE' else 'NFe'}{nota.chave}.xml")
     fornecedor, erro = fornecedor_do_cnpj(request.POST.get('cnpj'), request.POST.get('razao_social'))
     if erro:
         return None, erro

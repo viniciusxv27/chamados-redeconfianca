@@ -491,11 +491,13 @@
             form.valor.value = b.dataset.valor.replace('.', ',');
             form.numero.value = b.dataset.numero;
             form.data_documento.value = b.dataset.data;
+            if (b.dataset.descricao) form.descricao.value = b.dataset.descricao;
             arquivo.required = false;
             const a = document.getElementById('pcArquivoAviso');
             a.className = 'block text-[11px] mt-1 text-sky-700';
             a.innerHTML = '<i class="fas fa-building-columns mr-1"></i>Dados da SEFAZ. Sem arquivo, o XML da nota vai como anexo — se tiver o PDF (DANFE), anexe.';
-            titulo('fa-building-columns', 'Lançar NF ' + b.dataset.numero + ' da SEFAZ', 'Lançar');
+            titulo('fa-building-columns', 'Lançar ' + (b.dataset.tipoDoc === 'NFSE' ? 'NFS-e ' : 'NF ') + b.dataset.numero +
+                   (b.dataset.tipoDoc === 'NFSE' ? ' do Ambiente Nacional' : ' da SEFAZ'), 'Lançar');
         });
     });
     {% if not documentos and not filtro.tipo and not filtro.q and visao != 'sefaz' %}pcAbrirFormulario();{% endif %}

@@ -437,28 +437,38 @@ def sincronizar(cnpj, transporte=None, agora=None, lotes=LOTES_POR_SINCRONIZACAO
     return sinc
 
 
-def sincronizar_todos(transporte=None, prazo_segundos=None):
-    """Sincroniza os CNPJs, o consultado há mais tempo primeiro.
+def sincronizar_todos(transporte=None, prazo_segundos=None, transporte_nfse=None):
+    """Sincroniza NF-e (SEFAZ) e NFS-e (ADN) de cada CNPJ, o consultado há mais tempo primeiro.
 
     Com ``prazo_segundos`` (o botão da tela), para de começar CNPJ novo quando o
     prazo passa — a requisição não pode durar minutos; o que sobrar vai no
     próximo clique ou no comando agendado. Os que ficaram de fora voltam com
-    ``adiada = True``.
+    ``adiada = True``. Um teste que só troca o transporte da NF-e não liga a
+    NFS-e (que sairia para a internet).
     """
     import time
 
+    from . import nfse_nacional
     from .models import SincronizacaoDFe
 
+    incluir_nfse = transporte_nfse is not None or transporte is None
     ultimas = dict(SincronizacaoDFe.objects.values_list('cnpj', 'ultima_consulta'))
     ordem = sorted(cnpjs_monitorados(), key=lambda c: (ultimas.get(c) is not None, ultimas.get(c) or 0))
     inicio, resultado = time.monotonic(), []
     for cnpj in ordem:
         if prazo_segundos is not None and time.monotonic() - inicio > prazo_segundos:
             sinc, _ = SincronizacaoDFe.objects.get_or_create(cnpj=cnpj)
-            sinc.pulada, sinc.adiada = True, True
+            sinc.pulada, sinc.adiada, sinc.pulada_nfse = True, True, True
             resultado.append(sinc)
             continue
         sinc = sincronizar(cnpj, transporte=transporte)
         sinc.adiada = False
+        if incluir_nfse:
+            depois = nfse_nacional.sincronizar(cnpj, transporte=transporte_nfse)
+            for campo in ('ult_nsu_nfse', 'ultima_consulta_nfse', 'proxima_consulta_nfse', 'ultimo_status_nfse',
+                          'ultima_mensagem_nfse', 'notas_novas_nfse', 'pulada_nfse'):
+                setattr(sinc, campo, getattr(depois, campo, None))
+        else:
+            sinc.pulada_nfse, sinc.notas_novas_nfse = True, 0
         resultado.append(sinc)
     return resultado

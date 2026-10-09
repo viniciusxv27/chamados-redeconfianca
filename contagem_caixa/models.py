@@ -520,16 +520,24 @@ class NotaRecebida(models.Model):
 
     SITUACOES = [('AUTORIZADA', 'Autorizada'), ('CANCELADA', 'Cancelada'), ('DENEGADA', 'Denegada')]
 
-    chave = models.CharField(max_length=44, unique=True, verbose_name='Chave de acesso')
+    TIPOS_DOCUMENTO = [('NFE', 'NF-e'), ('NFSE', 'NFS-e')]
+    tipo_documento = models.CharField(max_length=4, choices=TIPOS_DOCUMENTO, default='NFE', db_default='NFE',
+                                      db_index=True, verbose_name='Tipo')
+    # NF-e tem chave de 44 dígitos; NFS-e (padrão nacional), de 50.
+    chave = models.CharField(max_length=50, unique=True, verbose_name='Chave de acesso')
     cnpj_destinatario = models.CharField(max_length=14, db_index=True, verbose_name='CNPJ da empresa')
     emitente_cnpj = models.CharField(max_length=14, db_index=True, verbose_name='CNPJ do emitente')
     emitente_nome = models.CharField(max_length=200, blank=True, verbose_name='Emitente')
     emitente_ie = models.CharField(max_length=20, blank=True, verbose_name='IE do emitente')
     modelo = models.CharField(max_length=2, blank=True, verbose_name='Modelo')
-    serie = models.CharField(max_length=3, blank=True, verbose_name='Série')
-    numero = models.CharField(max_length=9, blank=True, db_index=True, verbose_name='Número')
+    serie = models.CharField(max_length=5, blank=True, verbose_name='Série')
+    numero = models.CharField(max_length=15, blank=True, db_index=True, verbose_name='Número')
     emissao = models.DateTimeField(null=True, blank=True, db_index=True, verbose_name='Emissão')
     valor = models.DecimalField(max_digits=14, decimal_places=2, default=0, verbose_name='Valor')
+    # NFS-e: competência do serviço (é ela que vale para o PIS/Cofins) e o que foi prestado.
+    competencia = models.DateField(null=True, blank=True, db_index=True, verbose_name='Competência (NFS-e)')
+    descricao = models.CharField(max_length=255, blank=True, default='', db_default='', verbose_name='Descrição do serviço')
+    valor_liquido = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True, verbose_name='Valor líquido (NFS-e)')
     situacao = models.CharField(max_length=12, choices=SITUACOES, default='AUTORIZADA', verbose_name='Situação')
     tipo_operacao = models.CharField(max_length=1, blank=True, verbose_name='Tipo (0 entrada, 1 saída)')
     nsu = models.BigIntegerField(default=0, verbose_name='NSU')
@@ -572,6 +580,13 @@ class SincronizacaoDFe(models.Model):
     ultimo_cstat = models.CharField(max_length=10, blank=True, verbose_name='Último código')
     ultima_mensagem = models.CharField(max_length=255, blank=True, verbose_name='Última mensagem')
     notas_novas = models.PositiveIntegerField(default=0, verbose_name='Notas novas na última consulta')
+    # NFS-e: Ambiente de Dados Nacional (adn.nfse.gov.br), com NSU próprio.
+    ult_nsu_nfse = models.BigIntegerField(default=0, db_default=0, verbose_name='Último NSU (NFS-e)')
+    ultima_consulta_nfse = models.DateTimeField(null=True, blank=True, verbose_name='Última consulta (NFS-e)')
+    proxima_consulta_nfse = models.DateTimeField(null=True, blank=True, verbose_name='Próxima consulta (NFS-e)')
+    ultimo_status_nfse = models.CharField(max_length=40, blank=True, default='', db_default='', verbose_name='Último status (NFS-e)')
+    ultima_mensagem_nfse = models.CharField(max_length=255, blank=True, default='', db_default='', verbose_name='Última mensagem (NFS-e)')
+    notas_novas_nfse = models.PositiveIntegerField(default=0, db_default=0, verbose_name='NFS-e novas na última consulta')
 
     class Meta:
         verbose_name = 'Sincronização com a SEFAZ'

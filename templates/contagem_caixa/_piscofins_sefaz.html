@@ -7,8 +7,8 @@
         <span class="w-11 h-11 shrink-0 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center text-lg"><i class="fas fa-plug"></i></span>
         <div class="min-w-0 text-sm text-gray-700">
             <h2 class="font-bold text-gray-900">A busca na SEFAZ ainda não está ligada</h2>
-            <p class="mt-1">Esta visão mostra <strong>todas as NF-e emitidas contra o CNPJ da empresa</strong> — direto do serviço oficial
-                <em>NF-e Distribuição DFe</em> da SEFAZ — e aponta quais ainda não foram lançadas no PIS/Cofins.
+            <p class="mt-1">Esta visão mostra <strong>todas as notas emitidas contra o CNPJ da empresa</strong> — NF-e direto do serviço oficial
+                <em>NF-e Distribuição DFe</em> da SEFAZ e NFS-e do Ambiente de Dados Nacional da NFS-e — e aponta quais ainda não foram lançadas no PIS/Cofins.
                 A Receita não tem uma API aberta para isso: o acesso é feito com o <strong>certificado digital A1 (e-CNPJ)</strong> da empresa.</p>
             <p class="mt-3 font-semibold text-gray-800">Para ligar, quem cuida do servidor coloca no <code class="px-1 rounded bg-gray-100">.env</code>:</p>
             <ul class="mt-1 space-y-0.5 text-[13px] text-gray-600 list-disc pl-5">
@@ -34,17 +34,27 @@
             {% elif sefaz_certificado %}
             <p class="text-[12px] text-red-600">{{ sefaz_certificado.erro }}</p>
             {% endif %}
-            <ul class="mt-2 space-y-1 text-[12px] text-gray-600">
+            <details class="mt-2 group">
+            <summary class="cursor-pointer list-none text-[12px] text-gray-600 select-none">
+                <i class="fas fa-chevron-right text-[9px] mr-1 transition-transform group-open:rotate-90"></i>
+                {{ sefaz_cnpjs|length }} CNPJ{{ sefaz_cnpjs|length|pluralize }} acompanhado{{ sefaz_cnpjs|length|pluralize }} (NF-e na SEFAZ e NFS-e no Ambiente Nacional)
+                {% if sefaz_problemas %}· <span class="text-red-600 font-semibold">{{ sefaz_problemas }} com problema</span>{% endif %}
+                · <span class="text-sky-700 hover:underline">ver a situação de cada um</span>
+            </summary>
+            <ul class="mt-2 space-y-1 text-[12px] text-gray-600 max-h-72 overflow-y-auto pr-1">
                 {% for c in sefaz_cnpjs %}
                 <li><span class="tabular-nums font-medium text-gray-800">{{ c.cnpj }}</span> ·
                     {% if c.sinc and c.sinc.ultima_consulta %}
                     consultado {{ c.sinc.ultima_consulta|date:"d/m H:i" }} ({{ c.sinc.ultimo_cstat }} {{ c.sinc.ultima_mensagem|truncatechars:80 }})
                     {% if c.sinc.proxima_consulta %}· próxima a partir das {{ c.sinc.proxima_consulta|date:"H:i" }}{% endif %}
                     {% else %}<span class="text-amber-700">ainda não consultado</span>{% endif %}
+                    {% if c.sinc and c.sinc.ultima_consulta_nfse %}<span class="block">NFS-e: consultado {{ c.sinc.ultima_consulta_nfse|date:"d/m H:i" }} ({{ c.sinc.ultimo_status_nfse|lower }}{% if c.sinc.ultima_mensagem_nfse and c.sinc.ultimo_status_nfse != 'NENHUM_DOCUMENTO_LOCALIZADO' %} — {{ c.sinc.ultima_mensagem_nfse|truncatechars:80 }}{% endif %})</span>
+                    {% else %}<span class="block text-amber-700">NFS-e: ainda não consultado</span>{% endif %}
                     {% if not c.mesma_raiz %}<span class="block text-red-600 font-semibold">Outra raiz de CNPJ que a do certificado — precisa do certificado próprio desta empresa.</span>{% endif %}
                 </li>
                 {% endfor %}
             </ul>
+            </details>
         </div>
         <form method="post" action="{% url 'contagem_caixa:piscofins_sefaz_buscar' %}" id="pcBuscarSefaz">
             {% csrf_token %}<input type="hidden" name="voltar" value="{{ request.get_full_path }}">
@@ -87,10 +97,18 @@
 
 <div class="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden mb-5">
     <form method="get" class="px-4 sm:px-5 py-3 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center gap-2">
-        <h2 class="text-sm font-bold text-gray-900 flex-1"><i class="fas fa-building-columns text-sky-600 mr-1.5"></i>NF-e emitidas contra o CNPJ em {{ competencia|date:"m/Y" }}</h2>
+        <div class="flex-1 min-w-0">
+            <h2 class="text-sm font-bold text-gray-900"><i class="fas fa-building-columns text-sky-600 mr-1.5"></i>Notas emitidas contra o CNPJ em {{ competencia|date:"m/Y" }}</h2>
+            <div class="flex gap-1.5 mt-1.5 text-xs">
+                <a href="?competencia={{ competencia|date:'Y-m' }}&visao=sefaz{% if nf_situacao %}&nf={{ nf_situacao }}{% endif %}" class="px-2.5 py-0.5 rounded-full border {% if not nf_doc %}bg-sky-600 border-sky-600 text-white{% else %}border-gray-200 text-gray-600 hover:bg-gray-50{% endif %}">Todas</a>
+                <a href="?competencia={{ competencia|date:'Y-m' }}&visao=sefaz&doc=NFE{% if nf_situacao %}&nf={{ nf_situacao }}{% endif %}" class="px-2.5 py-0.5 rounded-full border {% if nf_doc == 'NFE' %}bg-sky-600 border-sky-600 text-white{% else %}border-gray-200 text-gray-600 hover:bg-gray-50{% endif %}">NF-e{% if notas_nfe is not None %} · {{ notas_nfe }}{% endif %}</a>
+                <a href="?competencia={{ competencia|date:'Y-m' }}&visao=sefaz&doc=NFSE{% if nf_situacao %}&nf={{ nf_situacao }}{% endif %}" class="px-2.5 py-0.5 rounded-full border {% if nf_doc == 'NFSE' %}bg-sky-600 border-sky-600 text-white{% else %}border-gray-200 text-gray-600 hover:bg-gray-50{% endif %}">NFS-e (serviços){% if notas_nfse is not None %} · {{ notas_nfse }}{% endif %}</a>
+            </div>
+        </div>
         <input type="hidden" name="competencia" value="{{ competencia|date:'Y-m' }}">
         <input type="hidden" name="visao" value="sefaz">
         {% if nf_situacao %}<input type="hidden" name="nf" value="{{ nf_situacao }}">{% endif %}
+        {% if nf_doc %}<input type="hidden" name="doc" value="{{ nf_doc }}">{% endif %}
         <input type="search" name="q" value="{{ filtro.q }}" placeholder="Emitente, CNPJ, número, chave…"
                class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm sm:w-60">
     </form>
@@ -107,11 +125,13 @@
                     <p class="font-semibold tabular-nums whitespace-nowrap {% if n.situacao == 'CANCELADA' %}line-through text-gray-400{% else %}text-gray-900{% endif %}">{{ n.valor|brl_zero }}</p>
                 </div>
                 <p class="text-[11px] text-gray-500 mt-0.5">
-                    NF{% if n.modelo == '65' %}C{% endif %}-e nº {{ n.numero }}{% if n.serie %} série {{ n.serie }}{% endif %}
+                    {% if n.tipo_documento == 'NFSE' %}<span class="px-1.5 py-0.5 rounded bg-violet-100 text-violet-700 font-semibold">NFS-e</span> nº {{ n.numero }}{% if n.competencia %} · competência {{ n.competencia|date:"m/Y" }}{% endif %}
+                    {% else %}NF{% if n.modelo == '65' %}C{% endif %}-e nº {{ n.numero }}{% if n.serie %} série {{ n.serie }}{% endif %}{% endif %}
                     {% if n.emissao %}· emitida {{ n.emissao|date:"d/m/Y" }}{% endif %}
                     · <span class="tabular-nums">{{ n.emitente_cnpj_formatado }}</span>
                     · para <span class="tabular-nums">{{ n.cnpj_destinatario }}</span>
                 </p>
+                {% if n.descricao %}<p class="text-xs text-gray-600 mt-0.5 break-words">{{ n.descricao|truncatechars:160 }}</p>{% endif %}
                 <p class="text-[10px] text-gray-400 tabular-nums mt-0.5 break-all">{{ n.chave_formatada }}</p>
                 <div class="flex flex-wrap items-center gap-1.5 mt-1.5 text-[11px]">
                     {% if n.situacao == 'CANCELADA' %}<span class="px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-semibold">Cancelada</span>
@@ -131,7 +151,8 @@
                         <button type="button" class="pc-lancar-nota text-emerald-700 font-semibold hover:underline"
                                 data-nota="{{ n.id }}" data-cnpj="{{ n.emitente_cnpj }}" data-numero="{{ n.numero }}"
                                 data-valor="{{ n.valor|unlocalize }}" data-data="{{ n.emissao|date:'Y-m-d' }}"
-                                data-competencia="{{ n.emissao|date:'Y-m' }}"><i class="fas fa-plus mr-0.5"></i>Lançar</button>
+                                data-competencia="{% if n.competencia %}{{ n.competencia|date:'Y-m' }}{% else %}{{ n.emissao|date:'Y-m' }}{% endif %}"
+                                data-descricao="{{ n.descricao|truncatechars:250 }}" data-tipo-doc="{{ n.tipo_documento }}"><i class="fas fa-plus mr-0.5"></i>Lançar</button>
                         {% endif %}
                         <button type="submit" form="pcFora{{ n.id }}" class="text-gray-500 hover:underline">{% if n.ignorada %}voltar para "a lançar"{% else %}fora do PIS/Cofins{% endif %}</button>
                         {% endif %}
