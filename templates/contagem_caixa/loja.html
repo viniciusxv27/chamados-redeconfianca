@@ -162,6 +162,7 @@ cxModoAbertura();
                     <th class="text-right">recarga</th>
                     <th class="text-right">Agoracred</th>
                     <th class="text-right">Renova</th>
+                    <th class="text-right" title="Lançadas na aba Sangrias — mudam só por lá">sangrias</th>
                     <th class="text-right">sangria/erro</th>
                     <th class="text-right">Transferências</th>
                     <th class="text-right">Valor real</th>
@@ -188,6 +189,7 @@ cxModoAbertura();
                     <td class="text-right"><input type="text" class="cx-entrada" data-campo="recarga" value="{{ d.recarga|campo }}" placeholder="—"></td>
                     <td class="text-right"><input type="text" class="cx-entrada" data-campo="agoracred" value="{{ d.agoracred|campo }}" placeholder="—"></td>
                     <td class="text-right"><input type="text" class="cx-entrada" data-campo="renova" value="{{ d.renova|campo }}" placeholder="—"></td>
+                    <td class="text-right tabular">{% if d.sangria_registrada %}<a href="{% url 'contagem_caixa:sangrias' %}?de={{ d.data|date:'Y-m-d' }}&ate={{ d.data|date:'Y-m-d' }}&loja={{ loja.id }}" class="text-violet-700 hover:underline" title="Ver as sangrias do dia">{{ d.sangria_registrada|brl }}</a>{% else %}<span class="text-gray-300">—</span>{% endif %}</td>
                     <td class="text-right"><input type="text" class="cx-entrada" data-campo="sangria_erro" value="{{ d.sangria_erro|campo }}" placeholder="—"></td>
                     <td class="text-right"><input type="text" class="cx-entrada" data-campo="transferencias" value="{{ d.transferencias|campo }}" placeholder="—"></td>
                     <td class="text-right"><input type="text" class="cx-entrada font-semibold" data-campo="valor_real" value="{{ d.valor_real|campo }}" placeholder="—"></td>
@@ -204,7 +206,7 @@ cxModoAbertura();
 
 <p class="text-xs text-gray-400 mt-3">
     <i class="fas fa-circle-info mr-1"></i>
-    <strong>Entrada</strong> = Valor SAP − allied − recarga − Agoracred − Renova − sangria − Transferências ·
+    <strong>Entrada</strong> = Valor SAP − allied − recarga − Agoracred − Renova − sangrias (registradas na aba Sangrias) − sangria/erro − Transferências ·
     <strong>DIVERG.</strong> = (Valor SAP − Agoracred − Renova − Transferências) − Vivo go EA ·
     <strong>STATUS</strong> fica em ATENÇÃO quando os dois não batem (e o gerente da loja é avisado) ·
     <strong>Diferença</strong> = Entrada − Valor real ·

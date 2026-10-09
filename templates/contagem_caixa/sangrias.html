@@ -1,0 +1,403 @@
+{% extends 'contagem_caixa/base_caixa.html' %}
+{% load caixa_tags l10n %}
+
+{% block cx_titulo %}Sangrias — Contagem de Caixa{% endblock %}
+{% block cx_cabecalho %}Gestão de Sangrias{% endblock %}
+{% block cx_subtitulo %}O dinheiro que sai do caixa, com o motivo — cada registro já entra no caixa do dia da loja{% endblock %}
+
+{% block cx_acoes %}
+<div class="flex items-center gap-2 flex-wrap">
+    <a href="{% url 'contagem_caixa:sangrias_exportar' %}?{{ query }}"
+       class="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50">
+        <i class="fas fa-file-excel text-emerald-600"></i> Exportar Excel
+    </a>
+    <button type="button" onclick="sgAbrirFormulario()"
+            class="inline-flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold rounded-lg">
+        <i class="fas fa-plus"></i> Registrar sangria
+    </button>
+</div>
+{% endblock %}
+
+{% block cx_conteudo %}
+{% if messages %}
+<div class="mb-4 space-y-2">
+    {% for m in messages %}
+    <div class="p-3 rounded-xl text-sm border {% if m.tags == 'success' %}bg-emerald-50 border-emerald-200 text-emerald-800{% elif m.tags == 'error' %}bg-red-50 border-red-200 text-red-700{% else %}bg-sky-50 border-sky-200 text-sky-800{% endif %}">{{ m }}</div>
+    {% endfor %}
+</div>
+{% endif %}
+
+{# ── Registrar / editar ─────────────────────────────────────────────────── #}
+<form method="post" enctype="multipart/form-data" id="sgForm" action="{% url 'contagem_caixa:sangria_registrar' %}"
+      class="hidden bg-white border border-violet-200 rounded-2xl shadow-sm p-4 sm:p-5 mb-5">
+    {% csrf_token %}
+    <input type="hidden" name="voltar" value="{{ request.get_full_path }}">
+    <div class="flex items-center justify-between gap-2 mb-4">
+        <h2 class="text-sm font-bold text-gray-900" id="sgFormTitulo"><i class="fas fa-hand-holding-dollar text-violet-600 mr-1.5"></i>Registrar sangria</h2>
+        <button type="button" onclick="sgFecharFormulario()" class="text-gray-400 hover:text-gray-600" title="Fechar"><i class="fas fa-xmark"></i></button>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <label class="block">
+            <span class="block text-[11px] font-semibold text-gray-500 mb-1">Loja *</span>
+            <select name="loja" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                {% if lojas|length > 1 %}<option value="">Escolha…</option>{% endif %}
+                {% for l in lojas %}<option value="{{ l.id }}" {% if l.id == loja_padrao %}selected{% endif %}>{{ l.name }}</option>{% endfor %}
+            </select>
+        </label>
+        <label class="block">
+            <span class="block text-[11px] font-semibold text-gray-500 mb-1">Data da sangria *</span>
+            <input type="date" name="data" required value="{{ hoje|date:'Y-m-d' }}" max="{{ hoje|date:'Y-m-d' }}"
+                   class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        </label>
+        <label class="block">
+            <span class="block text-[11px] font-semibold text-gray-500 mb-1">Valor (R$) *</span>
+            <input type="text" name="valor" required inputmode="decimal" placeholder="0,00"
+                   class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-right tabular-nums">
+        </label>
+        <label class="block">
+            <span class="block text-[11px] font-semibold text-gray-500 mb-1">Categoria *</span>
+            <select name="categoria" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <option value="">Escolha…</option>
+                {% for c in categorias %}<option value="{{ c.id }}">{{ c.nome }}</option>{% endfor %}
+            </select>
+        </label>
+        <label class="block sm:col-span-2">
+            <span class="block text-[11px] font-semibold text-gray-500 mb-1">Descrição *</span>
+            <input type="text" name="descricao" required maxlength="2000" placeholder="O que foi comprado ou pago, e por quê"
+                   class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        </label>
+        <label class="block">
+            <span class="block text-[11px] font-semibold text-gray-500 mb-1">Pago a</span>
+            <input type="text" name="favorecido" maxlength="120" placeholder="Fornecedor, pessoa, estabelecimento"
+                   class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        </label>
+        <label class="block">
+            <span class="block text-[11px] font-semibold text-gray-500 mb-1">Comprovante (foto ou PDF)</span>
+            <input type="file" name="comprovante" accept="image/*,.pdf" capture="environment"
+                   class="w-full text-sm text-gray-600 file:mr-2 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:bg-violet-50 file:text-violet-700 file:text-xs">
+        </label>
+    </div>
+    <div class="flex items-center justify-between gap-3 mt-4 flex-wrap">
+        <p class="text-[11px] text-gray-500"><i class="fas fa-circle-info mr-1"></i>O valor sai da Entrada do caixa daquele dia e o saldo da loja é recalculado na hora.</p>
+        <button class="px-5 py-2.5 bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold rounded-lg" id="sgFormBotao">
+            <i class="fas fa-check mr-1"></i> Registrar
+        </button>
+    </div>
+</form>
+
+{# ── Filtros ─────────────────────────────────────────────────────────────── #}
+<form method="get" class="bg-white border border-gray-200 rounded-2xl shadow-sm p-4 mb-5">
+    <div class="flex flex-wrap items-center gap-1.5 mb-3">
+        <span class="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mr-1">Período</span>
+        {% for rotulo, de, ate in atalhos %}
+        <a href="?de={{ de|date:'Y-m-d' }}&ate={{ ate|date:'Y-m-d' }}{% if filtro.loja %}&loja={{ filtro.loja }}{% endif %}{% if filtro.categoria %}&categoria={{ filtro.categoria }}{% endif %}{% if filtro.situacao %}&situacao={{ filtro.situacao }}{% endif %}"
+           class="px-3 py-1 rounded-full text-xs font-medium border {% if filtro.inicio == de and filtro.fim == ate %}bg-violet-600 border-violet-600 text-white{% else %}border-gray-200 text-gray-600 hover:bg-gray-50{% endif %}">{{ rotulo }}</a>
+        {% endfor %}
+    </div>
+    <div class="grid grid-cols-2 lg:grid-cols-7 gap-3 items-end">
+        <label class="block"><span class="block text-[11px] font-semibold text-gray-500 mb-1">De</span>
+            <input type="date" name="de" value="{{ filtro.inicio|date:'Y-m-d' }}" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></label>
+        <label class="block"><span class="block text-[11px] font-semibold text-gray-500 mb-1">Até</span>
+            <input type="date" name="ate" value="{{ filtro.fim|date:'Y-m-d' }}" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></label>
+        {% if lojas|length > 1 %}
+        <label class="block"><span class="block text-[11px] font-semibold text-gray-500 mb-1">Loja</span>
+            <select name="loja" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <option value="">Todas</option>
+                {% for l in lojas %}<option value="{{ l.id }}" {% if filtro.loja == l.id|stringformat:'s' %}selected{% endif %}>{{ l.name }}</option>{% endfor %}
+            </select></label>
+        {% endif %}
+        <label class="block"><span class="block text-[11px] font-semibold text-gray-500 mb-1">Categoria</span>
+            <select name="categoria" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <option value="">Todas</option>
+                {% for c in categorias %}<option value="{{ c.id }}" {% if filtro.categoria == c.id|stringformat:'s' %}selected{% endif %}>{{ c.nome }}</option>{% endfor %}
+            </select></label>
+        <label class="block"><span class="block text-[11px] font-semibold text-gray-500 mb-1">Situação</span>
+            <select name="situacao" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <option value="">Todas</option>
+                <option value="a_conferir" {% if filtro.situacao == 'a_conferir' %}selected{% endif %}>A conferir</option>
+                <option value="conferidas" {% if filtro.situacao == 'conferidas' %}selected{% endif %}>Conferidas</option>
+                <option value="sem_comprovante" {% if filtro.situacao == 'sem_comprovante' %}selected{% endif %}>Sem comprovante</option>
+            </select></label>
+        <label class="block col-span-2 lg:col-span-1"><span class="block text-[11px] font-semibold text-gray-500 mb-1">Busca</span>
+            <input type="search" name="q" value="{{ filtro.q }}" placeholder="Descrição ou pago a" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></label>
+        <div class="flex gap-2 col-span-2 lg:col-span-1">
+            <button class="flex-1 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm font-semibold"><i class="fas fa-filter mr-1"></i>Filtrar</button>
+            {% if filtro_ativo %}<a href="{% url 'contagem_caixa:sangrias' %}" class="px-3 py-2 border border-gray-200 text-gray-500 rounded-lg text-sm hover:bg-gray-50" title="Limpar filtros"><i class="fas fa-xmark"></i></a>{% endif %}
+        </div>
+    </div>
+</form>
+
+{# ── Números ─────────────────────────────────────────────────────────────── #}
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+    <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+        <p class="text-[11px] text-gray-500 uppercase font-semibold tracking-wide">Total retirado</p>
+        <p class="text-lg sm:text-2xl font-bold text-gray-900 mt-1 tabular-nums whitespace-nowrap">{{ numeros.total|brl_zero }}</p>
+        <p class="text-[11px] text-gray-400 mt-0.5">{{ filtro.inicio|date:"d/m/Y" }} a {{ filtro.fim|date:"d/m/Y" }}</p>
+    </div>
+    <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+        <p class="text-[11px] text-gray-500 uppercase font-semibold tracking-wide">Sangrias</p>
+        <p class="text-lg sm:text-2xl font-bold text-gray-900 mt-1 tabular-nums whitespace-nowrap">{{ numeros.quantidade }}</p>
+        <p class="text-[11px] text-gray-400 mt-0.5">média de {{ numeros.media|brl_zero }}</p>
+    </div>
+    <a href="?de={{ filtro.inicio|date:'Y-m-d' }}&ate={{ filtro.fim|date:'Y-m-d' }}&situacao=a_conferir" class="block bg-white border border-gray-200 rounded-2xl p-4 shadow-sm hover:border-amber-300">
+        <p class="text-[11px] text-gray-500 uppercase font-semibold tracking-wide">A conferir</p>
+        <p class="text-lg sm:text-2xl font-bold mt-1 tabular-nums whitespace-nowrap {% if numeros.a_conferir %}text-amber-600{% else %}text-emerald-600{% endif %}">{{ numeros.a_conferir }}</p>
+        <p class="text-[11px] text-gray-400 mt-0.5">{{ numeros.valor_a_conferir|brl_zero }} sem conferência</p>
+    </a>
+    <a href="?de={{ filtro.inicio|date:'Y-m-d' }}&ate={{ filtro.fim|date:'Y-m-d' }}&situacao=sem_comprovante" class="block bg-white border border-gray-200 rounded-2xl p-4 shadow-sm hover:border-amber-300">
+        <p class="text-[11px] text-gray-500 uppercase font-semibold tracking-wide">Sem comprovante</p>
+        <p class="text-lg sm:text-2xl font-bold mt-1 tabular-nums whitespace-nowrap {% if numeros.sem_comprovante %}text-amber-600{% else %}text-emerald-600{% endif %}">{{ numeros.sem_comprovante }}</p>
+        <p class="text-[11px] text-gray-400 mt-0.5">sem foto ou PDF anexado</p>
+    </a>
+</div>
+
+{% if numeros.quantidade %}
+{# ── Gráficos ─────────────────────────────────────────────────────────────── #}
+<div class="grid grid-cols-1 {% if por_loja %}lg:grid-cols-3{% else %}lg:grid-cols-2{% endif %} gap-4 mb-5">
+    <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+        <h2 class="text-sm font-bold text-gray-800 mb-3"><i class="fas fa-tags text-violet-600 mr-1.5"></i>Por categoria</h2>
+        <ul class="space-y-2">
+            {% for c in por_categoria %}
+            <li>
+                <div class="flex items-center justify-between text-xs gap-2">
+                    <span class="text-gray-700 truncate">{{ c.nome }} <span class="text-gray-400">· {{ c.n }}</span></span>
+                    <span class="text-gray-900 font-semibold tabular-nums whitespace-nowrap">{{ c.total|brl_zero }} <span class="text-gray-400 font-normal">{{ c.percentual }}%</span></span>
+                </div>
+                <div class="h-1.5 rounded-full bg-gray-100 mt-1 overflow-hidden"><div class="h-full bg-violet-500 rounded-full" style="width: {{ c.barra }}%"></div></div>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% if por_loja %}
+    <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+        <h2 class="text-sm font-bold text-gray-800 mb-3"><i class="fas fa-store text-violet-600 mr-1.5"></i>Por loja</h2>
+        <ul class="space-y-2">
+            {% for l in por_loja %}
+            <li>
+                <a href="?de={{ filtro.inicio|date:'Y-m-d' }}&ate={{ filtro.fim|date:'Y-m-d' }}&loja={{ l.id }}" class="block hover:opacity-80">
+                    <div class="flex items-center justify-between text-xs gap-2">
+                        <span class="text-gray-700 truncate">{{ l.nome }} <span class="text-gray-400">· {{ l.n }}</span></span>
+                        <span class="text-gray-900 font-semibold tabular-nums whitespace-nowrap">{{ l.total|brl_zero }} <span class="text-gray-400 font-normal">{{ l.percentual }}%</span></span>
+                    </div>
+                    <div class="h-1.5 rounded-full bg-gray-100 mt-1 overflow-hidden"><div class="h-full bg-emerald-500 rounded-full" style="width: {{ l.barra }}%"></div></div>
+                </a>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+    <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+        <h2 class="text-sm font-bold text-gray-800 mb-3"><i class="fas fa-chart-column text-violet-600 mr-1.5"></i>Por mês</h2>
+        <div class="flex items-end gap-2 h-36">
+            {% for m in por_mes %}
+            <div class="flex-1 flex flex-col items-center justify-end h-full min-w-0" title="{{ m.mes|date:'m/Y' }}: {{ m.total|brl_zero }}">
+                <span class="text-[10px] text-gray-500 tabular-nums mb-1 whitespace-nowrap">{{ m.total|floatformat:0 }}</span>
+                <div class="w-full rounded-t-md bg-violet-500" style="height: {{ m.altura }}%; min-height: 3px"></div>
+                <span class="text-[10px] text-gray-500 mt-1 whitespace-nowrap">{{ m.mes|date:"M"|lower }}/{{ m.mes|date:"y" }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+{% if recorrentes or fora_do_padrao %}
+{# ── Achados ──────────────────────────────────────────────────────────────── #}
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-5">
+    <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+        <h2 class="text-sm font-bold text-gray-800"><i class="fas fa-rotate text-violet-600 mr-1.5"></i>Gastos recorrentes</h2>
+        <p class="text-[11px] text-gray-500 mb-3">O mesmo gasto (pago a / descrição e categoria) 3 vezes ou mais no período — candidato a contrato, compra em volume ou corte.</p>
+        {% if recorrentes %}
+        <ul class="divide-y divide-gray-100">
+            {% for g in recorrentes %}
+            <li class="py-2 flex items-center justify-between gap-3 text-sm">
+                <span class="min-w-0">
+                    <span class="block text-gray-800 font-medium truncate">{{ g.rotulo }}</span>
+                    <span class="block text-[11px] text-gray-500 truncate">{{ g.categoria }} · {{ g.lojas|join:", " }}</span>
+                </span>
+                <span class="text-right whitespace-nowrap">
+                    <span class="block font-semibold text-gray-900 tabular-nums">{{ g.total|brl_zero }}</span>
+                    <span class="block text-[11px] text-gray-500">{{ g.n }}× · última {{ g.ultima|date:"d/m" }}</span>
+                </span>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}<p class="text-xs text-gray-400">Nenhum gasto se repetiu tanto no período.</p>{% endif %}
+    </div>
+    <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+        <h2 class="text-sm font-bold text-gray-800"><i class="fas fa-triangle-exclamation text-amber-500 mr-1.5"></i>Fora do padrão</h2>
+        <p class="text-[11px] text-gray-500 mb-3">Sangrias acima de 3× o valor típico (mediana) da categoria no período.</p>
+        {% if fora_do_padrao %}
+        <ul class="divide-y divide-gray-100">
+            {% for s in fora_do_padrao %}
+            <li class="py-2 flex items-center justify-between gap-3 text-sm">
+                <span class="min-w-0">
+                    <span class="block text-gray-800 font-medium truncate">{{ s.descricao }}</span>
+                    <span class="block text-[11px] text-gray-500 truncate">{{ s.data|date:"d/m" }} · {{ s.loja.name }} · {{ s.categoria.nome }} (típico {{ s.mediana_categoria|brl_zero }})</span>
+                </span>
+                <span class="text-right whitespace-nowrap">
+                    <span class="block font-semibold text-red-600 tabular-nums">{{ s.valor|brl_zero }}</span>
+                    <span class="block text-[11px] text-amber-700">{{ s.vezes_mediana }}× o típico</span>
+                </span>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}<p class="text-xs text-gray-400">Nada destoa no período.</p>{% endif %}
+    </div>
+</div>
+{% endif %}
+{% endif %}
+
+{# ── Lista ────────────────────────────────────────────────────────────────── #}
+<form method="post" action="{% url 'contagem_caixa:sangria_conferir' %}" id="sgConferir"
+      class="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden mb-5">
+    {% csrf_token %}
+    <input type="hidden" name="voltar" value="{{ request.get_full_path }}">
+    <div class="px-4 sm:px-5 py-3 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <h2 class="text-sm font-bold text-gray-900"><i class="fas fa-list text-violet-600 mr-1.5"></i>Sangrias do período <span class="text-gray-400 font-normal">· {{ numeros.quantidade }}</span></h2>
+        {% if e_gestor and sangrias %}
+        <div class="flex items-center gap-2">
+            <span class="text-xs text-gray-500" id="sgSelecionadas">nenhuma marcada</span>
+            <button name="acao" value="conferir" class="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700"><i class="fas fa-check-double mr-1"></i>Conferir marcadas</button>
+            <button name="acao" value="desfazer" class="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-xs hover:bg-gray-50">Desfazer conferência</button>
+        </div>
+        {% endif %}
+    </div>
+    {% if sangrias %}
+    <div class="overflow-x-auto max-h-[40rem]">
+        <table class="min-w-full text-sm">
+            <thead class="bg-gray-50 text-gray-500 text-[11px] uppercase tracking-wide sticky top-0 z-10">
+                <tr>
+                    {% if e_gestor %}<th class="px-3 py-2.5"><input type="checkbox" id="sgTodas" class="rounded text-violet-600" title="Marcar todas"></th>{% endif %}
+                    <th class="px-3 py-2.5 text-left font-semibold">Data</th>
+                    <th class="px-3 py-2.5 text-left font-semibold">Loja</th>
+                    <th class="px-3 py-2.5 text-left font-semibold">Gasto</th>
+                    <th class="px-3 py-2.5 text-right font-semibold">Valor</th>
+                    <th class="px-3 py-2.5 text-left font-semibold">Situação</th>
+                    <th class="px-3 py-2.5 text-right font-semibold"></th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+                {% for s in sangrias %}
+                <tr class="hover:bg-gray-50 align-top">
+                    {% if e_gestor %}<td class="px-3 py-2.5"><input type="checkbox" name="sangria" value="{{ s.id }}" class="sg-marca rounded text-violet-600"></td>{% endif %}
+                    <td class="px-3 py-2.5 whitespace-nowrap text-gray-600 tabular-nums">{{ s.data|date:"d/m/Y" }}</td>
+                    <td class="px-3 py-2.5 text-gray-700 whitespace-nowrap">{{ s.loja.name }}</td>
+                    <td class="px-3 py-2.5 min-w-[16rem]">
+                        <span class="px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 text-[11px] font-medium">{{ s.categoria.nome }}</span>
+                        <p class="text-gray-900 mt-1 break-words">{{ s.descricao }}</p>
+                        <p class="text-[11px] text-gray-500">
+                            {% if s.favorecido %}pago a {{ s.favorecido }} · {% endif %}por {{ s.registrada_por.full_name|default:"—" }}
+                            · {% if s.comprovante %}<a href="{{ s.comprovante.url }}" target="_blank" rel="noopener" class="text-emerald-700 hover:underline"><i class="fas fa-paperclip"></i> comprovante</a>{% else %}<span class="text-amber-700">sem comprovante</span>{% endif %}
+                        </p>
+                    </td>
+                    <td class="px-3 py-2.5 text-right font-semibold text-gray-900 whitespace-nowrap tabular-nums">{{ s.valor|brl_zero }}</td>
+                    <td class="px-3 py-2.5 whitespace-nowrap">
+                        {% if s.conferida %}
+                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-700"><i class="fas fa-check"></i>Conferida</span>
+                        <span class="block text-[10px] text-gray-500 mt-0.5">{{ s.conferida_por.full_name|default:"" }} · {{ s.conferida_em|date:"d/m H:i" }}</span>
+                        {% else %}
+                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-700"><i class="fas fa-hourglass-half"></i>A conferir</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-3 py-2.5 text-right whitespace-nowrap">
+                        {% if s.pode_alterar %}
+                        <button type="button" class="sg-editar text-xs text-violet-600 hover:underline"
+                                data-url="{% url 'contagem_caixa:sangria_editar' s.id %}" data-loja="{{ s.loja_id }}"
+                                data-data="{{ s.data|date:'Y-m-d' }}" data-valor="{{ s.valor|unlocalize }}"
+                                data-categoria="{{ s.categoria_id }}" data-descricao="{{ s.descricao }}" data-favorecido="{{ s.favorecido }}">editar</button>
+                        <button type="submit" form="sgApagar{{ s.id }}" class="ml-2 text-xs text-red-600 hover:underline">apagar</button>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if cortada %}<p class="px-5 py-2 text-xs text-gray-500 border-t border-gray-100">Mostrando as 500 mais recentes — use os filtros ou a exportação para ver tudo.</p>{% endif %}
+    {% else %}
+    <div class="p-10 text-center text-gray-500">
+        <i class="fas fa-hand-holding-dollar text-3xl text-gray-300 mb-2"></i>
+        <p>Nenhuma sangria no período.</p>
+        <button type="button" onclick="sgAbrirFormulario()" class="mt-2 text-violet-600 hover:underline text-sm font-semibold">Registrar a primeira</button>
+    </div>
+    {% endif %}
+</form>
+
+{% for s in sangrias %}{% if s.pode_alterar %}
+<form method="post" action="{% url 'contagem_caixa:sangria_apagar' s.id %}" id="sgApagar{{ s.id }}" class="hidden"
+      onsubmit="return confirm('Apagar a sangria de {{ s.valor|brl_zero }} em {{ s.loja.name }} ({{ s.data|date:"d/m" }})? O caixa do dia é recalculado.');">
+    {% csrf_token %}<input type="hidden" name="voltar" value="{{ request.get_full_path }}">
+</form>
+{% endif %}{% endfor %}
+
+{% if e_gestor %}
+{# ── Categorias ───────────────────────────────────────────────────────────── #}
+<details class="bg-white border border-gray-200 rounded-2xl shadow-sm">
+    <summary class="px-5 py-3 cursor-pointer text-sm font-bold text-gray-800"><i class="fas fa-tags text-violet-600 mr-1.5"></i>Categorias de gasto <span class="text-gray-400 font-normal">· só o gestor ajusta</span></summary>
+    <form method="post" action="{% url 'contagem_caixa:sangria_categorias' %}" class="px-5 pb-5">
+        {% csrf_token %}
+        <input type="hidden" name="voltar" value="{{ request.get_full_path }}">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {% for c in todas_categorias %}
+            <div class="flex items-center gap-2 border border-gray-100 rounded-lg px-2 py-1.5">
+                <input type="text" name="nome_{{ c.id }}" value="{{ c.nome }}" maxlength="60" class="flex-1 min-w-0 border border-gray-200 rounded px-2 py-1 text-sm">
+                <label class="flex items-center gap-1 text-[11px] text-gray-500 whitespace-nowrap"><input type="checkbox" name="ativa_{{ c.id }}" {% if c.ativa %}checked{% endif %} class="rounded text-violet-600"> ativa</label>
+            </div>
+            {% endfor %}
+        </div>
+        <div class="flex items-center gap-2 mt-3 flex-wrap">
+            <input type="text" name="nova" maxlength="60" placeholder="Nova categoria" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            <button class="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm font-semibold">Salvar categorias</button>
+            <span class="text-[11px] text-gray-400">Desativar tira a categoria do cadastro novo; o que já foi registrado nela continua.</span>
+        </div>
+    </form>
+</details>
+{% endif %}
+
+<script>
+(function () {
+    const form = document.getElementById('sgForm');
+    const urlRegistrar = form.action;
+    window.sgAbrirFormulario = function () {
+        form.action = urlRegistrar;
+        form.reset();
+        document.getElementById('sgFormTitulo').innerHTML = '<i class="fas fa-hand-holding-dollar text-violet-600 mr-1.5"></i>Registrar sangria';
+        document.getElementById('sgFormBotao').innerHTML = '<i class="fas fa-check mr-1"></i> Registrar';
+        form.classList.remove('hidden');
+        form.scrollIntoView({behavior: 'smooth', block: 'start'});
+        form.querySelector('[name=valor]').focus();
+    };
+    window.sgFecharFormulario = function () { form.classList.add('hidden'); };
+    document.querySelectorAll('.sg-editar').forEach(function (b) {
+        b.addEventListener('click', function () {
+            form.classList.remove('hidden');
+            form.action = b.dataset.url;
+            form.loja.value = b.dataset.loja;
+            form.data.value = b.dataset.data;
+            form.valor.value = b.dataset.valor.replace('.', ',');
+            form.categoria.value = b.dataset.categoria;
+            form.descricao.value = b.dataset.descricao;
+            form.favorecido.value = b.dataset.favorecido;
+            document.getElementById('sgFormTitulo').innerHTML = '<i class="fas fa-pen text-violet-600 mr-1.5"></i>Editar sangria';
+            document.getElementById('sgFormBotao').innerHTML = '<i class="fas fa-check mr-1"></i> Salvar alterações';
+            form.scrollIntoView({behavior: 'smooth', block: 'start'});
+        });
+    });
+    // Marcar para conferir em lote.
+    const todas = document.getElementById('sgTodas');
+    const marcas = [...document.querySelectorAll('.sg-marca')];
+    const rotulo = document.getElementById('sgSelecionadas');
+    function contar() {
+        const n = marcas.filter(function (m) { return m.checked; }).length;
+        if (rotulo) rotulo.textContent = n ? n + ' marcada(s)' : 'nenhuma marcada';
+    }
+    if (todas) todas.addEventListener('change', function () { marcas.forEach(function (m) { m.checked = todas.checked; }); contar(); });
+    marcas.forEach(function (m) { m.addEventListener('change', contar); });
+    const conferir = document.getElementById('sgConferir');
+    if (conferir) conferir.addEventListener('submit', function (e) {
+        if (!marcas.some(function (m) { return m.checked; })) { e.preventDefault(); alert('Marque ao menos uma sangria.'); }
+    });
+    {% if not sangrias %}{% if not filtro_ativo %}sgAbrirFormulario();{% endif %}{% endif %}
+})();
+</script>
+{% endblock %}

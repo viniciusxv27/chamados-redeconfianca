@@ -72,6 +72,10 @@
         </select>
         {% endif %}
 
+        <a href="{% url 'contagem_caixa:sangrias' %}"
+           class="cx-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'sangrias' %}cx-tab-active{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
+            <i class="fas fa-hand-holding-dollar mr-1.5"></i>Sangrias
+        </a>
         {% if e_gestor %}
         <span class="w-px bg-gray-200 mx-1 my-2"></span>
         <a href="{% url 'contagem_caixa:importacao' %}"

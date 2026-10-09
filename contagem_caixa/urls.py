@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views
+from . import views, views_sangrias
 
 app_name = 'contagem_caixa'
 
@@ -11,4 +11,13 @@ urlpatterns = [
     path('loja/<int:loja_id>/saldo-inicial/', views.salvar_saldo_inicial,
          name='salvar_saldo_inicial'),
     path('importar/', views.importacao, name='importacao'),
+
+    # Sangrias: cada registro entra sozinho no caixa do dia da loja.
+    path('sangrias/', views_sangrias.sangrias, name='sangrias'),
+    path('sangrias/registrar/', views_sangrias.sangria_registrar, name='sangria_registrar'),
+    path('sangrias/<int:pk>/editar/', views_sangrias.sangria_editar, name='sangria_editar'),
+    path('sangrias/<int:pk>/apagar/', views_sangrias.sangria_apagar, name='sangria_apagar'),
+    path('sangrias/conferir/', views_sangrias.sangria_conferir, name='sangria_conferir'),
+    path('sangrias/categorias/', views_sangrias.sangria_categorias, name='sangria_categorias'),
+    path('sangrias/exportar/', views_sangrias.sangrias_exportar, name='sangrias_exportar'),
 ]

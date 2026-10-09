@@ -67,6 +67,12 @@ class ContagemCaixaDia(models.Model):
     agoracred = _dec('Agoracred')
     renova = _dec('Renova')
     sangria_erro = _dec('sangria/erro')
+    # Soma das sangrias registradas na aba Sangrias (model `Sangria`) para esta
+    # loja e dia. Não se digita: é regravada a cada sangria criada, alterada ou
+    # apagada. O "sangria/erro" acima continua manual, para erro e ajuste.
+    sangria_registrada = models.DecimalField(
+        max_digits=12, decimal_places=2, default=ZERO, db_default=ZERO,
+        verbose_name='Sangrias registradas')
     transferencias = _dec('Transferências')
     valor_real = _dec('Valor real')
     # A Entrada virou conta (ver a property `entrada`). O campo antigo continua
@@ -131,6 +137,7 @@ class ContagemCaixaDia(models.Model):
         return ((self.valor_sap or ZERO)
                 - self._soma(COLUNAS_NAO_SAO_CAIXA)
                 - (self.sangria_erro or ZERO)
+                - (self.sangria_registrada or ZERO)
                 - (self.transferencias or ZERO))
 
     @property
@@ -343,3 +350,81 @@ class SaldoInicialMes(models.Model):
         """{(ano, mes): valor} — usado no recálculo da corrente de saldos."""
         return {(s.ano, s.mes): s.valor
                 for s in cls.objects.filter(loja_id=loja_id)}
+
+
+# ── Sangrias ────────────────────────────────────────────────────────────────
+def caminho_comprovante_sangria(instance, filename):
+    import os
+    import uuid
+    ext = os.path.splitext(filename)[1].lower() or '.jpg'
+    return f'contagem_caixa/sangrias/{instance.data:%Y/%m}/{uuid.uuid4().hex}{ext}'
+
+
+def _storage_de_midia():
+    if getattr(settings, 'USE_S3', False):
+        from core.storage import MediaStorage
+        return MediaStorage()
+    return None
+
+
+class CategoriaSangria(models.Model):
+    """Para que o dinheiro saiu da gaveta. A lista é do gestor."""
+
+    nome = models.CharField(max_length=60, unique=True, verbose_name='Categoria')
+    ativa = models.BooleanField(default=True, verbose_name='Ativa')
+    ordem = models.PositiveSmallIntegerField(default=0, verbose_name='Ordem')
+
+    class Meta:
+        verbose_name = 'Categoria de sangria'
+        verbose_name_plural = 'Categorias de sangria'
+        ordering = ['ordem', 'nome']
+
+    def __str__(self):
+        return self.nome
+
+
+class Sangria(models.Model):
+    """Dinheiro retirado do caixa da loja, com o motivo.
+
+    Cada registro entra sozinho no dia de caixa da loja
+    (``ContagemCaixaDia.sangria_registrada``) e, por ele, na Entrada e no saldo
+    — sem planilha paralela. A conferência é do gestor: marca que viu o
+    comprovante e o valor bate.
+    """
+
+    loja = models.ForeignKey(
+        Sector, on_delete=models.CASCADE, related_name='sangrias', verbose_name='Loja')
+    data = models.DateField(db_index=True, verbose_name='Data da sangria')
+    valor = models.DecimalField(max_digits=12, decimal_places=2, verbose_name='Valor')
+    categoria = models.ForeignKey(
+        CategoriaSangria, on_delete=models.PROTECT, related_name='sangrias', verbose_name='Categoria')
+    descricao = models.TextField(verbose_name='Descrição')
+    favorecido = models.CharField(
+        max_length=120, blank=True, verbose_name='Pago a',
+        help_text='Quem recebeu o dinheiro (fornecedor, pessoa, estabelecimento).')
+    comprovante = models.FileField(
+        upload_to=caminho_comprovante_sangria, storage=_storage_de_midia(),
+        null=True, blank=True, verbose_name='Comprovante')
+
+    registrada_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='sangrias_registradas', verbose_name='Registrada por')
+    criada_em = models.DateTimeField(auto_now_add=True)
+    atualizada_em = models.DateTimeField(auto_now=True)
+
+    conferida = models.BooleanField(default=False, db_index=True, verbose_name='Conferida')
+    conferida_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='sangrias_conferidas', verbose_name='Conferida por')
+    conferida_em = models.DateTimeField(null=True, blank=True, verbose_name='Conferida em')
+    observacao_conferencia = models.CharField(
+        max_length=255, blank=True, verbose_name='Observação da conferência')
+
+    class Meta:
+        verbose_name = 'Sangria'
+        verbose_name_plural = 'Sangrias'
+        ordering = ['-data', '-criada_em']
+        indexes = [models.Index(fields=['loja', 'data'])]
+
+    def __str__(self):
+        return f'{self.loja.name} — {self.data:%d/%m/%Y} — R$ {self.valor}'

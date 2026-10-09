@@ -37,3 +37,22 @@ class ImportacaoContagemAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request):
         return False
+
+
+from .models import CategoriaSangria, Sangria  # noqa: E402
+
+
+@admin.register(CategoriaSangria)
+class CategoriaSangriaAdmin(admin.ModelAdmin):
+    list_display = ('nome', 'ativa', 'ordem')
+    list_editable = ('ativa', 'ordem')
+
+
+@admin.register(Sangria)
+class SangriaAdmin(admin.ModelAdmin):
+    list_display = ('data', 'loja', 'categoria', 'descricao', 'valor', 'conferida', 'registrada_por')
+    list_filter = ('conferida', 'categoria', 'loja')
+    date_hierarchy = 'data'
+    search_fields = ('descricao', 'favorecido', 'loja__name')
+    raw_id_fields = ('registrada_por', 'conferida_por')
+    readonly_fields = ('criada_em', 'atualizada_em')
