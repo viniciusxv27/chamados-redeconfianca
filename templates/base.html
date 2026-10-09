@@ -810,7 +810,7 @@
                         </li>
 
                         <!-- Menu Administrativo - Para usuários autorizados -->
-                        {% if user.can_manage_users or user.groups.all or can_access_impulso or caixa_abre_grupo_administrativo or user|tem_acesso:'fornecedores' or user|tem_acesso:'compras' or user|tem_acesso:'projetos.gestao' or user|tem_acesso:'treinamentos.gestao' %}
+                        {% if user.can_manage_users or user.groups.all or can_access_impulso or caixa_abre_grupo_administrativo or user|tem_acesso:'fornecedores' or user|tem_acesso:'compras' or user|tem_acesso:'projetos.gestao' or user|tem_acesso:'treinamentos.gestao' or sangrias_liberado %}
                         <li class="border-t border-gray-800 pt-2 mt-2">
                             <div class="flex items-center space-x-2 px-2 py-1 rounded-lg hover:bg-gray-800 transition-colors cursor-pointer" 
                                  onclick="toggleSubmenu('management-menu')">
