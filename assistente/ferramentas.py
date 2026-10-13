@@ -687,6 +687,9 @@ TOOLS.update(TOOLS_AGENDA_REUNIOES)
 # Metas comerciais do Power BI e Impulso: mesmas regras das telas (ver cada módulo).
 TOOLS.update(TOOLS_METAS_COMERCIAIS)
 TOOLS.update(TOOLS_IMPULSO)
+# O portal inteiro (leitura, como a própria pessoa vê) e os documentos que o assistente cria.
+from .ferramentas_portal import TOOLS_PORTAL  # noqa: E402
+TOOLS.update(TOOLS_PORTAL)
 
 
 # ─── Ações com confirmação ───────────────────────────────────────────────────

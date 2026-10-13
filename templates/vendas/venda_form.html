@@ -134,8 +134,11 @@
                     <input id="vdBusca" class="vd-campo pl-10 text-base" placeholder="Buscar produto por nome ou SKU…" autocomplete="off">
                     <div id="vdBuscaLista" class="hidden absolute left-0 right-0 mt-1 vd-card vd-lista-busca z-30"></div>
                 </div>
-                <p class="text-[11px] text-gray-500"><i class="fas fa-circle-info mr-1"></i>O catálogo inteiro aparece na busca. Produto que não está no estoque físico: marque <strong>Prateleira infinita</strong> no item.</p>
+                <p class="text-[11px] text-gray-500"><i class="fas fa-circle-info mr-1"></i>O catálogo inteiro aparece na busca. Cada peça é um item, com o seu IMEI — dois aparelhos iguais são dois itens. Produto que não está no estoque físico: marque <strong>Prateleira infinita</strong> no item.</p>
                 <div id="vdProdutos" class="space-y-3"></div>
+                <button type="button" id="vdMaisProduto" class="hidden w-full py-2.5 rounded-xl border-2 border-dashed border-purple-200 text-sm font-semibold text-purple-700 hover:bg-purple-50 hover:border-purple-300 transition-colors">
+                    <i class="fas fa-plus mr-1.5"></i>Adicionar outro produto
+                </button>
 
                 <div id="vdPagamento" class="hidden rounded-xl border border-gray-200 p-4">
                     <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3"><i class="fas fa-credit-card mr-1"></i>Forma de pagamento *</p>
@@ -475,7 +478,7 @@
     function adicionarProduto(r) {
         const p = {preco_id: r.id, nome: r.nome, sku: r.sku, categoria: r.categoria, categoria_slv: r.categoria_slv, regra: r.regra,
             tipo: r.tipo, portfolio: r.portfolio,
-            valor_sugerido: r.valor_sugerido ? Number(r.valor_sugerido) : null, sem_valor: !r.valor_sugerido, qtde: 1, prateleira_infinita: false,
+            valor_sugerido: r.valor_sugerido ? Number(r.valor_sugerido) : null, sem_valor: !r.valor_sugerido, imei: '', prateleira_infinita: false,
             renova: false, renova_vini: false, renova_vini_valor: null, renova_codigo: '', renova_ok: null, renova_alied: false, renova_alied_valor: null,
             valor_final: null,
             tabela: r.grupos && r.grupos.length ? r.tabela : null, grupos: r.grupos || [], condicoes: r.condicoes || {},
@@ -497,6 +500,23 @@
         }); });
         desenharProdutos(); recalcular();
     }
+    // IMEI: 15 números e o dígito final (Luhn) — o mesmo teste do servidor.
+    function imeiValido(v) {
+        if (!/^\d{15}$/.test(v || '')) return false;
+        let soma = 0;
+        for (let i = 0; i < 14; i++) { let d = Number(v[i]); if (i % 2) { d *= 2; if (d > 9) d -= 9; } soma += d; }
+        return (10 - soma % 10) % 10 === Number(v[14]);
+    }
+    function avisoImei(p) {
+        if (p.categoria_slv !== 'aparelho') return '';
+        if (!p.imei) return 'Obrigatório: 15 números (*#06# no aparelho ou na caixa).';
+        if (!imeiValido(p.imei)) return '<span class="text-red-600">IMEI inválido — confira os 15 números.</span>';
+        const repetido = estado.produtos.filter(function (o) { return o.imei && o.imei === p.imei; }).length > 1;
+        return repetido ? '<span class="text-red-600">Este IMEI já está em outro item da venda.</span>' : '<span class="text-emerald-600"><i class="fas fa-check"></i> IMEI ok</span>';
+    }
+    function imeiComErro(p) {
+        return p.categoria_slv === 'aparelho' && (!imeiValido(p.imei) || estado.produtos.filter(function (o) { return o.imei === p.imei; }).length > 1);
+    }
     function calcItem(p) {
         const sug = Number(p.valor_sugerido) || 0;
         const rv = p.renova && p.renova_vini ? (Number(p.renova_vini_valor) || 0) : 0;
@@ -510,6 +530,7 @@
     function desenharProdutos() {
         $('vdNProd').textContent = estado.produtos.length;
         $('vdPagamento').classList.toggle('hidden', !estado.produtos.length);
+        $('vdMaisProduto').classList.toggle('hidden', !estado.produtos.length);
         $('vdProdutos').innerHTML = estado.produtos.map(function (p, i) {
             const aparelho = p.categoria_slv === 'aparelho';
             return '<div class="vd-entra rounded-xl border border-gray-200 p-4 space-y-3" data-p="' + i + '">' +
@@ -528,8 +549,11 @@
               '<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 items-end">' +
                 '<div class="col-span-2"><label class="vd-rotulo">Valor sugerido (R$)' + (p.sem_valor ? ' *' : '') + '</label><input class="vd-campo tabular text-right' + (p.sem_valor && !p.valor_sugerido ? ' vd-erro' : '') + '" data-campo="valor_sugerido" inputmode="decimal" value="' + moeda(p.valor_sugerido) + '"' + (p.tabela && p.valor_sugerido ? ' readonly title="Valor da tabela — ajuste o valor final no resumo"' : '') + '>' +
                   '<p class="vd-ajuda">' + esc(p.regra || '') + (p.sem_valor ? ' — informe o valor' : '') + '</p></div>' +
-                '<div><label class="vd-rotulo">Qtde</label><input class="vd-campo tabular" type="number" min="1" data-campo="qtde" value="' + p.qtde + '"></div>' +
-                '<label class="flex items-center gap-2 text-sm text-gray-700 pb-2.5 cursor-pointer"><input type="checkbox" class="rounded text-purple-600" data-campo="prateleira_infinita"' + (p.prateleira_infinita ? ' checked' : '') + '>Prateleira infinita</label>' +
+                '<div class="col-span-2"><label class="vd-rotulo">' + (aparelho ? 'IMEI *' : 'Serial (se houver)') + '</label>' +
+                  '<input class="vd-campo tabular' + (aparelho && p.imei && imeiComErro(p) ? ' vd-erro' : '') + '" data-campo="imei" value="' + esc(p.imei) + '"' +
+                  (aparelho ? ' inputmode="numeric" maxlength="15" autocomplete="off" placeholder="15 números"' : ' maxlength="60" placeholder="opcional"') + '>' +
+                  (aparelho ? '<p class="vd-ajuda" data-imei-aviso="' + i + '">' + avisoImei(p) + '</p>' : '') + '</div>' +
+                '<label class="col-span-2 sm:col-span-4 flex items-center gap-2 text-sm text-gray-700 cursor-pointer"><input type="checkbox" class="rounded text-purple-600" data-campo="prateleira_infinita"' + (p.prateleira_infinita ? ' checked' : '') + '>Prateleira infinita</label>' +
               '</div>' +
               (aparelho ? '<div class="rounded-lg bg-gray-50 p-3 space-y-2"><div class="flex items-center gap-2 flex-wrap text-sm"><span class="text-gray-600 font-medium">Houve Renova?</span>' +
                 '<button type="button" class="vd-chip !py-1 !px-3 text-xs' + (p.renova ? '' : ' vd-ativo') + '" data-renova="0">Não</button>' +
@@ -545,6 +569,13 @@
               '</div>';
         }).join('');
     }
+    // IMEI: o aviso acompanha a digitação (o change sozinho só viria ao sair do campo).
+    $('vdProdutos').addEventListener('input', function (e) {
+        if (e.target.dataset.campo === 'imei') e.target.dispatchEvent(new Event('change', {bubbles: true}));
+    });
+    $('vdMaisProduto').addEventListener('click', function () {
+        busca.scrollIntoView({behavior: 'smooth', block: 'center'}); busca.focus();
+    });
     $('vdProdutos').addEventListener('click', function (e) {
         const caixa = e.target.closest('[data-p]'); if (!caixa) return;
         const p = estado.produtos[Number(caixa.dataset.p)];
@@ -557,7 +588,16 @@
         const caixa = e.target.closest('[data-p]'); const campo = e.target.dataset.campo; if (!caixa || !campo) return;
         const p = estado.produtos[Number(caixa.dataset.p)];
         if (e.target.type === 'checkbox') { p[campo] = e.target.checked; if (campo !== 'prateleira_infinita') desenharProdutos(); }
-        else if (campo === 'qtde') p.qtde = Math.max(1, Number(e.target.value) || 1);
+        else if (campo === 'imei') {
+            p.imei = p.categoria_slv === 'aparelho' ? e.target.value.replace(/\D/g, '').slice(0, 15) : e.target.value.trim();
+            e.target.value = p.imei;
+            // Atualiza o aviso de todos os aparelhos (um IMEI repetido marca os dois) sem redesenhar a tela.
+            estado.produtos.forEach(function (o, j) {
+                const aviso = document.querySelector('[data-imei-aviso="' + j + '"]'); if (aviso) aviso.innerHTML = avisoImei(o);
+                const campoImei = document.querySelector('[data-p="' + j + '"] [data-campo=imei]');
+                if (campoImei && o.categoria_slv === 'aparelho') campoImei.classList.toggle('vd-erro', !!o.imei && imeiComErro(o));
+            });
+        }
         else if (campo === 'renova_codigo') { p.renova_codigo = e.target.value.trim().toUpperCase(); conferirRenova(p, Number(caixa.dataset.p)); }
         else if (campo === 'grupo' || campo === 'condicao') { p[campo] = e.target.value; aplicarTabela(p); desenharProdutos(); }
         else { p[campo] = num(e.target.value); e.target.value = moeda(p[campo]); if (campo === 'valor_sugerido') p.valor_final = null; }
@@ -711,10 +751,11 @@
         let totProd = 0, totDesc = 0, totServ = 0;
         const linhasResumo = [];
         estado.produtos.forEach(function (p, i) {
-            const c = calcItem(p), q = p.qtde || 1;
-            totProd += c.final * q; totDesc += (c.rv + c.ra + c.desc) * q;
+            const c = calcItem(p);
+            totProd += c.final; totDesc += c.rv + c.ra + c.desc;
             linhasResumo.push('<div class="rounded-lg border ' + (c.editado ? 'border-amber-300 bg-amber-50' : 'border-gray-100') + ' p-2.5">' +
-                '<div class="flex justify-between gap-2"><span class="text-gray-800 font-medium truncate">' + (q > 1 ? q + '× ' : '') + esc(p.nome) + '</span>' +
+                '<div class="flex justify-between gap-2"><span class="min-w-0"><span class="block text-gray-800 font-medium truncate">' + esc(p.nome) + '</span>' +
+                (p.imei ? '<span class="block text-[10px] text-gray-500 tabular">' + (p.categoria_slv === 'aparelho' ? 'IMEI ' : 'Serial ') + esc(p.imei) + '</span>' : '') + '</span>' +
                 (p.prateleira_infinita ? '<span class="text-[10px] px-1.5 rounded bg-sky-100 text-sky-700 whitespace-nowrap self-start">prateleira infinita</span>' : '') + '</div>' +
                 '<div class="text-[11px] text-gray-500 mt-1 space-y-0.5"><div class="flex justify-between"><span>Sugerido</span><span class="tabular">' + brl(p.valor_sugerido) + '</span></div>' +
                 (c.rv ? '<div class="flex justify-between"><span>Renova Vini</span><span class="tabular text-emerald-600">− ' + brl(c.rv) + '</span></div>' : '') +
@@ -759,7 +800,7 @@
             plano_anterior: {id: $('vdPaPlano').value, segmentacao: $('vdPaSeg').value, valor: $('vdPaValor').value,
                              nome: $('vdPaPlano').selectedOptions[0] ? $('vdPaPlano').selectedOptions[0].text : ''},
             produtos: estado.produtos.map(function (p) { const c = calcItem(p); return {
-                preco_id: p.preco_id, nome: p.nome, qtde: p.qtde, prateleira_infinita: p.prateleira_infinita,
+                preco_id: p.preco_id, nome: p.nome, imei: p.imei, prateleira_infinita: p.prateleira_infinita,
                 grupamento: p.grupo || '', condicao: p.condicao || '', valor_sugerido: p.valor_sugerido,
                 renova_vini: p.renova && p.renova_vini, renova_vini_valor: p.renova_vini_valor, renova_codigo: p.renova_codigo,
                 renova_alied: p.renova && p.renova_alied, renova_alied_valor: p.renova_alied_valor,

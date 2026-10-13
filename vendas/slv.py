@@ -196,6 +196,20 @@ def preco_sugerido(item, segmentacao='', grupamento='', condicao=''):
 
 
 # ── Cálculo do item ─────────────────────────────────────────────────────────
+def imei_valido(imei):
+    """15 números com o dígito verificador certo (Luhn) — o IMEI de um aparelho."""
+    if not re.fullmatch(r'\d{15}', imei or ''):
+        return False
+    soma = 0
+    for posicao, digito in enumerate(int(c) for c in imei[:14]):
+        if posicao % 2:
+            digito *= 2
+            if digito > 9:
+                digito -= 9
+        soma += digito
+    return (10 - soma % 10) % 10 == int(imei[14])
+
+
 def calcular_item(sugerido, renova_vini=ZERO, renova_alied=ZERO, vivo_mais_percentual=None, qtde=1):
     """[Venda de produtos.RF003/RF004/RF005] sugerido − Renova − Vivo+ (por unidade).
 
@@ -373,15 +387,31 @@ def registrar_venda(dados, usuario, loja, vendedor=None):
         valor_anterior = plano_anterior.valor
     segmentacao_cliente = (plano_anterior.segmentacao if plano_anterior else (pa.get('segmentacao') or ''))
 
-    # Produtos
+    # Produtos — um item por peça: cada aparelho tem o seu IMEI, então não existe "quantidade".
     itens_produto = []
+    imeis_da_venda = {}
     for n, p in enumerate(produtos, start=1):
         item = ItemPreco.objects.filter(pk=p.get('preco_id')).first() if str(p.get('preco_id') or '').isdigit() else None
         nome = (item.nome if item else str(p.get('nome') or '')).strip()
         if not nome:
             erros.append(f'Produto {n}: escolha o produto.')
             continue
-        qtde = max(int(p.get('qtde') or 1), 1)
+        qtde = 1
+        categoria = categoria_slv(item) if item else str(p.get('categoria_slv') or 'eletronico')
+        serial = str(p.get('imei') or p.get('serial') or '').strip()[:120]
+        if categoria == 'aparelho':
+            serial = so_digitos(serial)
+            if not imei_valido(serial):
+                erros.append(f'{nome}: informe o IMEI do aparelho — 15 números (confira o dígito final).')
+            elif serial in imeis_da_venda:
+                erros.append(f'{nome}: o IMEI {serial} está repetido nesta venda (cada aparelho tem o seu).')
+            else:
+                imeis_da_venda[serial] = nome
+                ja = (VendaProduto.objects.filter(serial=serial, categoria_slv='aparelho')
+                      .select_related('venda').first())
+                if ja:
+                    erros.append(f'{nome}: o IMEI {serial} já foi vendido na venda #{ja.venda_id} '
+                                 f'({timezone.localtime(ja.venda.data_venda):%d/%m/%Y}).')
         if item:
             sugerido, regra = preco_sugerido(item, segmentacao_cliente, p.get('grupamento') or '', p.get('condicao') or '')
         else:
@@ -420,8 +450,7 @@ def registrar_venda(dados, usuario, loja, vendedor=None):
         itens_produto.append(dict(
             item=item, nome=nome, qtde=qtde, sugerido=sugerido, regra=regra[:120], final=final, editado=editado,
             rv=rv, rv_valor=rv_valor, ra=ra, ra_valor=ra_valor, codigo=codigo, conta=conta,
-            prateleira=bool(p.get('prateleira_infinita')), serial=str(p.get('serial') or '')[:120],
-            categoria=categoria_slv(item) if item else str(p.get('categoria_slv') or 'eletronico')))
+            prateleira=bool(p.get('prateleira_infinita')), serial=serial, categoria=categoria))
 
     # Serviços
     itens_servico = []

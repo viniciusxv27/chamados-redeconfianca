@@ -56,7 +56,7 @@
                         <p class="font-semibold text-gray-900">{% if p.qtde > 1 %}{{ p.qtde }}× {% endif %}{{ p.nome_produto }}</p>
                         <p class="text-[11px] text-gray-500 mt-0.5">
                             {% if p.categoria_slv %}<span class="px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 font-semibold">{{ p.categoria_slv }}</span>{% endif %}
-                            {% if p.sku %}SKU {{ p.sku }}{% endif %}{% if p.serial %} · serial {{ p.serial }}{% endif %}
+                            {% if p.sku %}SKU {{ p.sku }}{% endif %}{% if p.serial %} · {% if p.categoria_slv == 'aparelho' %}IMEI{% else %}serial{% endif %} <span class="tabular">{{ p.serial }}</span>{% endif %}
                             {% if p.prateleira_infinita %}<span class="px-1.5 py-0.5 rounded bg-sky-100 text-sky-700 font-semibold">prateleira infinita</span>{% endif %}
                         </p>
                     </div>

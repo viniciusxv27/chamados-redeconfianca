@@ -59,6 +59,19 @@ D = Decimal
 ok = fail = 0
 
 
+def imei_de_teste(n):
+    """IMEI válido (Luhn) a partir de um número: 14 dígitos + o verificador."""
+    base = f'3599{n:010d}'
+    soma = 0
+    for posicao, digito in enumerate(int(c) for c in base):
+        if posicao % 2:
+            digito *= 2
+            if digito > 9:
+                digito -= 9
+        soma += digito
+    return base + str((10 - soma % 10) % 10)
+
+
 def t(nome, cond, extra=''):
     global ok, fail
     if cond:
@@ -192,16 +205,20 @@ try:
     payload = {'cliente': {'cpf': CPF, 'nome': 'Zz Cliente Teste'}, 'forma_pagamento': 'PIX', 'vivo_mais': True,
                'plano_anterior': {'id': pos.id},
                'produtos': [
-                   {'preco_id': aparelho.id, 'qtde': 1, 'grupamento': 'PÓS INDIVIDUAL', 'prateleira_infinita': True,
+                   {'preco_id': aparelho.id, 'imei': imei_de_teste(1), 'grupamento': 'PÓS INDIVIDUAL', 'prateleira_infinita': True,
                     'renova_vini': True, 'renova_vini_valor': '300,00', 'renova_codigo': renova.codigo if renova else 'RN-999999',
                     'renova_alied': True, 'renova_alied_valor': '100'},
-                   {'preco_id': capa.id, 'qtde': 2, 'valor_final': '40,00'},
+                   {'preco_id': capa.id, 'valor_final': '40,00'},
+                   {'preco_id': capa.id, 'valor_final': '40,00', 'imei': 'CAPA-02'},
                ]}
     j = vender(payload)
     t('venda de produtos gravada', j.get('ok'), j)
     if j.get('ok'):
         v = Venda.objects.get(pk=j['id'])
-        p1, p2 = v.produtos.get(preco=aparelho), v.produtos.get(preco=capa)
+        p1, p2 = v.produtos.get(preco=aparelho), v.produtos.filter(preco=capa).first()
+        t('duas capas = dois itens de 1 (sem quantidade)', v.produtos.filter(preco=capa).count() == 2
+          and set(v.produtos.values_list('qtde', flat=True)) == {1})
+        t('o IMEI do aparelho fica gravado', p1.serial == imei_de_teste(1))
         # 1999 − 300 − 100 = 1599; Vivo+ 10% = 159,90 → 1439,10
         t('aparelho no preço com plano, Renova e Vivo+', p1.valor_sugerido == D('1999.00') and p1.desconto_vivo_mais == D('159.90')
           and p1.valor_venda == D('1439.10') and not p1.valor_editado, (p1.valor_sugerido, p1.desconto_vivo_mais, p1.valor_venda))
@@ -223,12 +240,40 @@ try:
       not j['ok'] and 'Cartão ou Pix' in erros and 'sem valor na tabela para este plano' in erros
       and 'Código do Renova' in erros and 'zerado ou negativo' in erros, erros)
     j = vender({'cliente': {'cpf': CPF, 'nome': 'Zz Cliente Teste'}, 'plano_anterior': {'id': ctrl.id}, 'forma_pagamento': 'CARTAO',
-                'produtos': [{'preco_id': aparelho.id, 'grupamento': 'CONTROLE ENTRADA', 'valor_sugerido': '1800'}]})
+                'produtos': [{'preco_id': aparelho.id, 'grupamento': 'CONTROLE ENTRADA', 'valor_sugerido': '1800',
+                              'imei': imei_de_teste(2)}]})
     t('sem valor para o plano: aceita o valor informado', j.get('ok') and
       VendaProduto.objects.get(venda_id=j['id']).regra_preco.endswith('(valor informado)'), j)
     j = vender({'cliente': {'cpf': CPF, 'nome': 'Zz Cliente Teste'}, 'plano_anterior': {'id': pre.id}, 'forma_pagamento': 'CARTAO',
-                'produtos': [{'preco_id': aparelho.id}]})
+                'produtos': [{'preco_id': aparelho.id, 'imei': imei_de_teste(3)}]})
     t('cliente Pré: aparelho no preço Pré', j.get('ok') and VendaProduto.objects.get(venda_id=j['id']).valor_venda == D('2499.00'))
+
+    print('== IMEI: UM POR APARELHO ==')
+    t('validador: 15 números com o dígito final certo', slv.imei_valido('490154203237518')
+      and not slv.imei_valido('490154203237519') and not slv.imei_valido('49015420323751'))
+    base_imei = {'cliente': {'cpf': CPF, 'nome': 'Zz Cliente Teste'}, 'plano_anterior': {'id': pre.id}, 'forma_pagamento': 'CARTAO'}
+    j = vender({**base_imei, 'produtos': [{'preco_id': aparelho.id}]})
+    t('aparelho sem IMEI é recusado', not j['ok'] and any('IMEI' in e for e in j['erros']), j)
+    j = vender({**base_imei, 'produtos': [{'preco_id': aparelho.id, 'imei': '490154203237519'}]})
+    t('IMEI com dígito errado é recusado', not j['ok'] and any('IMEI' in e for e in j['erros']), j)
+    j = vender({**base_imei, 'produtos': [{'preco_id': aparelho.id, 'imei': imei_de_teste(4)},
+                                          {'preco_id': aparelho.id, 'imei': imei_de_teste(4)}]})
+    t('o mesmo IMEI duas vezes na venda é recusado', not j['ok'] and any('repetido' in e for e in j['erros']), j)
+    j = vender({**base_imei, 'produtos': [{'preco_id': aparelho.id, 'imei': imei_de_teste(3)}]})
+    t('IMEI já vendido em outra venda é recusado', not j['ok'] and any('já foi vendido' in e for e in j['erros']), j)
+    j = vender({**base_imei, 'produtos': [{'preco_id': aparelho.id, 'imei': imei_de_teste(5)[:4] + ' ' + imei_de_teste(5)[4:]},
+                                          {'preco_id': aparelho.id, 'imei': imei_de_teste(6), 'qtde': 5}]})
+    t('dois aparelhos iguais, cada um com seu IMEI (com espaço ou não), viram dois itens de 1',
+      j.get('ok') and sorted(VendaProduto.objects.filter(venda_id=j['id']).values_list('serial', flat=True))
+      == sorted([imei_de_teste(5), imei_de_teste(6)])
+      and set(VendaProduto.objects.filter(venda_id=j['id']).values_list('qtde', flat=True)) == {1}, j)
+    if j.get('ok'):
+        r = cv.get(f"/vendas/{j['id']}/")
+        t('o detalhe mostra o IMEI', f'IMEI <span class="tabular">{imei_de_teste(5)}</span>' in r.content.decode())
+    html_form = cv.get('/vendas/nova/').content.decode()
+    t('a tela pede IMEI, tem "Adicionar outro produto" e não tem mais quantidade',
+      'IMEI *' in html_form and 'vdMaisProduto' in html_form and 'data-campo="qtde"' not in html_form
+      and 'imeiValido' in html_form)
 
     print('== SERVIÇOS ==')
     j = vender({'cliente': {'cpf': CPF, 'nome': 'Zz Cliente Teste'}, 'linhas': ['27998765432'], 'plano_anterior': {'id': ctrl.id},
@@ -374,11 +419,12 @@ try:
       and slv.preco_sugerido(phone, 'POS') == (None, 'escolha o grupo do plano')
       and slv.preco_sugerido(watch, 'POS', 'PÓS INDIVIDUAL') == (None, 'não disponível no grupo PÓS INDIVIDUAL'))
     j = vender({'cliente': {'cpf': CPF, 'nome': 'Zz Cliente Teste'}, 'forma_pagamento': 'CARTAO', 'plano_anterior': {'id': pos.id},
-                'produtos': [{'preco_id': phone.id, 'grupamento': 'PÓS INDIVIDUAL', 'condicao': '12x'}]})
+                'produtos': [{'preco_id': phone.id, 'grupamento': 'PÓS INDIVIDUAL', 'condicao': '12x',
+                              'imei': imei_de_teste(7)}]})
     t('venda com grupo + condição grava o valor da tabela', j.get('ok') and VendaProduto.objects.get(venda_id=j['id']).valor_sugerido == D('2500.00')
       and VendaProduto.objects.get(venda_id=j['id']).regra_preco == 'PÓS INDIVIDUAL · 12x', j)
     j = vender({'cliente': {'cpf': CPF, 'nome': 'Zz Cliente Teste'}, 'forma_pagamento': 'CARTAO', 'plano_anterior': {'id': pos.id},
-                'produtos': [{'preco_id': phone.id}]})
+                'produtos': [{'preco_id': phone.id, 'imei': imei_de_teste(8)}]})
     t('sem grupo escolhido (cliente Pós): pede o grupo', not j['ok'] and 'informe o valor' in ' '.join(j['erros']), j)
     r = cv.get('/vendas/precos/buscar/?q=ZZ%20Phone%20Novo&segmentacao=PRE')
     res = r.json()['results'][0]

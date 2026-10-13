@@ -272,7 +272,7 @@ try:
         def texto(valor):
             return SimpleNamespace(type='text', text=valor)
 
-        cliente = SimpleNamespace(messages=Mensagens())
+        cliente = SimpleNamespace(messages=Mensagens(), beta=SimpleNamespace(messages=Mensagens()))
         pelo_chat = {'titulo': 'ZZ Pelo chat', 'inicio': iso(9), 'fim': iso(9, 30)}
         with mock.patch.object(claude_client, '_cliente', return_value=(cliente, 'claude-sonnet-5')):
             roteiro[:] = [resposta(uso('agenda_criar_evento', pelo_chat, 'u1'), parar='tool_use'),

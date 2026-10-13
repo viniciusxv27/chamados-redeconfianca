@@ -1,0 +1,75 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}{{ doc.titulo }}{% endblock %}
+
+{% block content %}
+<style>
+    .rc-doc { line-height: 1.65; color: #1f2937; overflow-wrap: anywhere; }
+    .rc-doc > :first-child { margin-top: 0; }
+    .rc-doc p { margin: .55rem 0; }
+    .rc-doc h3 { font-size: 1.25rem; font-weight: 700; margin: 1.3rem 0 .5rem; color: #111827; }
+    .rc-doc h4 { font-size: 1.08rem; font-weight: 700; margin: 1.1rem 0 .4rem; color: #111827; }
+    .rc-doc h5, .rc-doc h6 { font-size: .98rem; font-weight: 700; margin: .9rem 0 .35rem; }
+    .rc-doc ul, .rc-doc ol { margin: .45rem 0; padding-left: 1.4rem; }
+    .rc-doc ul { list-style: disc; }
+    .rc-doc ol { list-style: decimal; }
+    .rc-doc li { margin: .2rem 0; }
+    .rc-doc strong { font-weight: 700; color: #111827; }
+    .rc-doc a { color: #ea580c; text-decoration: underline; }
+    .rc-doc blockquote { border-left: 3px solid #FF6B35; background: #fff7ed; padding: .4rem .8rem; color: #4b5563; margin: .6rem 0; }
+    .rc-doc hr { border: 0; border-top: 1px solid #e5e7eb; margin: 1rem 0; }
+    .rc-doc .rc-md-tabela, .rc-doc-tabela { overflow-x: auto; margin: .7rem 0; border: 1px solid #e5e7eb; border-radius: .6rem; }
+    .rc-doc table { border-collapse: collapse; width: 100%; font-size: .85rem; }
+    .rc-doc th { background: #f9fafb; font-weight: 600; text-align: left; }
+    .rc-doc th, .rc-doc td { padding: .45rem .7rem; border-bottom: 1px solid #f3f4f6; vertical-align: top; }
+    .rc-doc code { background: #f3f4f6; border-radius: .3rem; padding: 0 .3rem; font-size: .85em; }
+    html.dark .rc-doc { color: var(--tema-texto, #e7eaf0); }
+    html.dark .rc-doc h3, html.dark .rc-doc h4, html.dark .rc-doc strong { color: var(--tema-texto, #e7eaf0); }
+    html.dark .rc-doc th { background: var(--tema-superficie-2, #232a3b); }
+    html.dark .rc-doc blockquote { background: rgba(255, 107, 53, .12); color: var(--tema-texto-2, #b6bdcc); }
+    @media print {
+        body * { visibility: hidden !important; }
+        #rc-documento, #rc-documento * { visibility: visible !important; }
+        #rc-documento { position: absolute; left: 0; top: 0; width: 100%; box-shadow: none !important; border: 0 !important; }
+        .rc-sem-impressao { display: none !important; }
+        .rc-doc a { color: inherit; text-decoration: none; }
+    }
+</style>
+<div class="max-w-4xl mx-auto px-3 sm:px-4 py-4">
+    <div class="rc-sem-impressao flex items-center justify-between gap-3 mb-4 flex-wrap">
+        <a href="{% url 'assistente:documentos' %}" class="text-sm text-gray-600 hover:text-gray-900"><i class="fas fa-arrow-left mr-1"></i>Documentos</a>
+        <div class="flex flex-wrap gap-1.5 text-sm">
+            <a href="{% url 'assistente:documento_baixar' doc.id 'docx' %}" class="px-3 py-2 rounded-lg border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100"><i class="fas fa-file-word mr-1"></i>Word</a>
+            <a href="{% url 'assistente:documento_baixar' doc.id 'xlsx' %}" class="px-3 py-2 rounded-lg border border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100"><i class="fas fa-file-excel mr-1"></i>Excel</a>
+            <a href="{% url 'assistente:documento_baixar' doc.id 'md' %}" class="px-3 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50"><i class="fab fa-markdown mr-1"></i>Markdown</a>
+            <button type="button" onclick="window.print()" class="px-3 py-2 rounded-lg border border-red-200 text-red-700 bg-red-50 hover:bg-red-100"><i class="fas fa-file-pdf mr-1"></i>Imprimir / PDF</button>
+            <form method="post" action="{% url 'assistente:documento_excluir' doc.id %}" onsubmit="return confirm('Excluir este documento?');">
+                {% csrf_token %}<button class="px-3 py-2 rounded-lg border border-gray-200 text-gray-500 hover:text-red-600"><i class="fas fa-trash"></i></button>
+            </form>
+        </div>
+    </div>
+
+    <article id="rc-documento" class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 sm:p-10">
+        <h1 class="text-2xl sm:text-3xl font-bold text-gray-900">{{ doc.titulo }}</h1>
+        <p class="text-xs text-gray-400 mt-1 mb-6">Gerado pelo Assistente em {{ doc.atualizado_em|date:"d/m/Y H:i" }}{% if doc.versao > 1 %} · versão {{ doc.versao }}{% endif %} · {{ doc.user.get_full_name|default:doc.user.username }}</p>
+        <div class="rc-doc" id="rc-doc-conteudo" data-markdown>{{ doc.conteudo }}</div>
+        {% for t in doc.tabelas %}
+        <h4 class="text-lg font-bold text-gray-900 mt-6 mb-2">{{ t.titulo|default:"Tabela" }}</h4>
+        <div class="rc-doc rc-doc-tabela">
+            <table>
+                {% if t.colunas %}<thead><tr>{% for c in t.colunas %}<th>{{ c }}</th>{% endfor %}</tr></thead>{% endif %}
+                <tbody>{% for linha in t.linhas %}<tr>{% for v in linha %}<td>{{ v }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+            </table>
+        </div>
+        {% endfor %}
+    </article>
+</div>
+<script src="{% static 'js/rc-markdown.js' %}"></script>
+<script>
+(function () {
+    var el = document.getElementById('rc-doc-conteudo');
+    if (window.RCMarkdown && el) { el.innerHTML = window.RCMarkdown.render(el.textContent); }
+    {% if imprimir %}window.addEventListener('load', function () { setTimeout(function () { window.print(); }, 300); });{% endif %}
+})();
+</script>
+{% endblock %}

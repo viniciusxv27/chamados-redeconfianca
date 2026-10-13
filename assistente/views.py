@@ -10,7 +10,8 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from . import claude_client
-from .models import AssistenteConexao, AssistenteMensagem, MODELOS, MODELOS_VALIDOS
+from .models import (MODELO_PADRAO, MODELOS, MODELOS_VALIDOS, AssistenteConexao, AssistenteDocumento,
+                     AssistenteMensagem)
 
 logger = logging.getLogger(__name__)
 
@@ -23,9 +24,9 @@ def conectar(request):
     """Salva/atualiza a chave do Claude do usuário — testando antes de gravar."""
     conx = claude_client.conexao(request.user)
     chave = (request.POST.get('api_key') or '').strip()
-    modelo = (request.POST.get('modelo') or conx.modelo or 'claude-sonnet-5').strip()
+    modelo = (request.POST.get('modelo') or conx.modelo or MODELO_PADRAO).strip()
     if modelo not in MODELOS_VALIDOS:
-        modelo = 'claude-sonnet-5'
+        modelo = MODELO_PADRAO
 
     # Sem chave nova: pode ser só troca de modelo de quem já está conectado.
     if not chave:
@@ -132,3 +133,49 @@ def enviar(request):
 def limpar(request):
     AssistenteMensagem.objects.filter(user=request.user).delete()
     return redirect('assistente:chat')
+
+
+# ---------------------------------------------------------------------------
+# Documentos criados pelo assistente
+# ---------------------------------------------------------------------------
+@login_required
+def documentos(request):
+    return render(request, 'assistente/documentos.html', {
+        'documentos': AssistenteDocumento.objects.filter(user=request.user)[:200]})
+
+
+@login_required
+def documento(request, pk):
+    from django.shortcuts import get_object_or_404
+    doc = get_object_or_404(AssistenteDocumento, pk=pk, user=request.user)
+    return render(request, 'assistente/documento.html', {'doc': doc, 'imprimir': request.GET.get('imprimir') == '1'})
+
+
+FORMATOS = {
+    'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'md': 'text/markdown; charset=utf-8',
+}
+
+
+@login_required
+def documento_baixar(request, pk, formato):
+    from django.http import Http404, HttpResponse
+    from django.shortcuts import get_object_or_404
+
+    from . import documentos as gerador
+    if formato not in FORMATOS:
+        raise Http404
+    doc = get_object_or_404(AssistenteDocumento, pk=pk, user=request.user)
+    conteudo = {'docx': gerador.gerar_docx, 'xlsx': gerador.gerar_xlsx, 'md': gerador.gerar_md}[formato](doc)
+    resposta = HttpResponse(conteudo, content_type=FORMATOS[formato])
+    resposta['Content-Disposition'] = f'attachment; filename="{gerador.nome_de_arquivo(doc, formato)}"'
+    return resposta
+
+
+@login_required
+@require_POST
+def documento_excluir(request, pk):
+    AssistenteDocumento.objects.filter(pk=pk, user=request.user).delete()
+    messages.success(request, 'Documento excluído.')
+    return redirect('assistente:documentos')

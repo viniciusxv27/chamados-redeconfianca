@@ -10,16 +10,44 @@ import uuid
 from django.utils import timezone
 
 from . import ferramentas
-from .models import AssistenteConexao, MODELOS_VALIDOS
+from .models import MODELO_PADRAO, MODELOS_VALIDOS, AssistenteConexao
 
 logger = logging.getLogger(__name__)
 
-MAX_RODADAS_FERRAMENTA = 6
-MAX_TOKENS = 1500
+# Análise detalhada precisa de fôlego: abrir várias páginas, cruzar números, calcular.
+MAX_RODADAS_FERRAMENTA = 30
+MAX_CONTINUACOES = 5          # pause_turn da execução de código
+MAX_TOKENS = 16000
+
+# Raciocínio adaptativo e esforço por modelo (os da família 4.x/Haiku 4.5 não aceitam).
+PENSA = {'claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5', 'claude-opus-5', 'claude-sonnet-5'}
+ESFORCO = {'claude-opus-5-5': 'high', 'claude-sonnet-5-5': 'high', 'claude-haiku-5-5': 'medium',
+           'claude-opus-5': 'high', 'claude-sonnet-5': 'high'}
+# Execução de código (Python no ambiente da Anthropic) para contas, estatística e cruzamentos.
+EXECUTA_CODIGO = {'claude-opus-5-5', 'claude-sonnet-5-5', 'claude-opus-5', 'claude-sonnet-5'}
+FERRAMENTA_CODIGO = {'type': 'code_execution_20260521', 'name': 'code_execution'}
+# Recusa por classificador de segurança: a própria API tenta de novo em outro modelo.
+COM_FALLBACK = {'claude-opus-5-5', 'claude-sonnet-5-5'}
 
 SYSTEM = (
     "Você é o assistente do portal interno da Rede Confiança, falando com um "
     "colaborador específico. Responda em português do Brasil, de forma objetiva e cordial.\n"
+    "PORTAL INTEIRO: além das ferramentas de cada módulo, você enxerga qualquer área do portal que o "
+    "usuário enxerga. Use mapa_do_portal para saber onde está cada coisa e ler_pagina para abrir a "
+    "página como ele a veria (vendas, comissionamento, chamados, SAP, caixa, cartões, compras, "
+    "inventário, checklists, limpeza, contestação, fibras, cursos, quiz, Power BI e o resto). Abra os "
+    "links de detalhe que aparecerem e use filtros na URL. ler_pagina só lê; para agir, use as "
+    "ferramentas de ação ou passe o link.\n"
+    "ANÁLISES: quando pedirem análise, diagnóstico, comparação ou \"o que está acontecendo\", vá fundo: "
+    "colete os dados de todas as fontes relevantes (várias páginas e ferramentas), cruze-os, calcule "
+    "(totais, médias, variação, participação, ranking, tendência — use a execução de código quando houver "
+    "conta a fazer), e entregue: resumo executivo com os números-chave, achados com evidência (de onde "
+    "veio cada número), causas prováveis, riscos e próximos passos concretos com responsáveis. Diga o "
+    "que não conseguiu ver e o período dos dados. Nunca invente número.\n"
+    "DOCUMENTOS: quando pedirem relatório, documento, ata, plano, comunicado, proposta, checklist ou "
+    "\"um arquivo\" (ou quando a análise for longa), crie com criar_documento — conteúdo completo em "
+    "Markdown e as tabelas de números em 'tabelas' (viram Excel). Responda com um resumo curto e os "
+    "links (página, Word, Excel, PDF). Para ajustes, revisar_documento com o conteúdo completo novo.\n"
     "Nos módulos pessoais você só vê os dados DO PRÓPRIO usuário — perfil, chamados, ponto do "
     "dia, férias, folhas de ponto, contracheques, cursos, documentos, metas e feedbacks do "
     "Impulso, trilhas de conhecimento, elogios, Confianças (C$), notificações e pastas do Drive "
@@ -87,16 +115,16 @@ def _erro_amigavel(exc):
     return f'Falha ao falar com o Claude: {exc}'
 
 
-def testar_chave(chave, modelo='claude-sonnet-5'):
+def testar_chave(chave, modelo=MODELO_PADRAO):
     """(ok, mensagem) — valida uma chave com uma chamada mínima."""
     if not (chave or '').strip():
         return False, 'Informe a chave.'
     if modelo not in MODELOS_VALIDOS:
-        modelo = 'claude-sonnet-5'
+        modelo = MODELO_PADRAO
     try:
         from anthropic import Anthropic
         Anthropic(api_key=chave.strip()).messages.create(
-            model=modelo, max_tokens=8, messages=[{'role': 'user', 'content': 'ping'}])
+            model=modelo, max_tokens=64, messages=[{'role': 'user', 'content': 'ping'}])
         return True, 'Conexão com o Claude OK.'
     except Exception as exc:  # noqa: BLE001
         return False, _erro_amigavel(exc)
@@ -108,7 +136,7 @@ def _cliente(user):
     if not chave:
         raise NaoConectado('Conecte o seu Claude em Configurações para usar o assistente.')
     from anthropic import Anthropic
-    modelo = conx.modelo if conx.modelo in MODELOS_VALIDOS else 'claude-sonnet-5'
+    modelo = conx.modelo if conx.modelo in MODELOS_VALIDOS else MODELO_PADRAO
     return Anthropic(api_key=chave), modelo
 
 
@@ -120,6 +148,25 @@ def _agora():
     """
     agora = timezone.localtime()
     return f'[Agora: {DIAS_DA_SEMANA[agora.weekday()]}, {agora:%d/%m/%Y %H:%M} (horário de Brasília).]'
+
+
+def _parametros(modelo, codigo=True):
+    """O que muda por modelo: raciocínio, esforço, execução de código e fallback."""
+    extra = {}
+    if modelo in PENSA:
+        extra['thinking'] = {'type': 'adaptive'}
+        extra['output_config'] = {'effort': ESFORCO.get(modelo, 'high')}
+    if modelo in COM_FALLBACK:
+        extra['betas'] = ['server-side-fallback-2026-07-01']
+        extra['fallbacks'] = 'default'
+    return extra, (codigo and modelo in EXECUTA_CODIGO)
+
+
+def _chamar(client, modelo, system, tools, messages, codigo):
+    extra, com_codigo = _parametros(modelo, codigo)
+    lista = tools + ([FERRAMENTA_CODIGO] if com_codigo else [])
+    return client.beta.messages.create(
+        model=modelo, max_tokens=MAX_TOKENS, system=system, tools=lista, messages=messages, **extra)
 
 
 def responder(user, mensagem, historico=None):
@@ -138,14 +185,28 @@ def responder(user, mensagem, historico=None):
         {'type': 'text', 'text': _agora()},
     ]})
 
-    for _ in range(MAX_RODADAS_FERRAMENTA):
+    codigo = True
+    continuacoes = 0
+    rodadas = 0
+    while rodadas < MAX_RODADAS_FERRAMENTA:
         try:
-            resp = client.messages.create(
-                model=modelo, max_tokens=MAX_TOKENS, system=system, tools=tools, messages=messages)
+            resp = _chamar(client, modelo, system, tools, messages, codigo)
         except Exception as exc:  # noqa: BLE001
+            # Conta/modelo sem execução de código: segue sem ela, em vez de travar o assistente.
+            if codigo and 'code_execution' in str(exc):
+                logger.warning('Assistente: execução de código indisponível (%s); seguindo sem ela.', exc)
+                codigo = False
+                continue
             raise RuntimeError(_erro_amigavel(exc))
 
+        if resp.stop_reason == 'pause_turn' and continuacoes < MAX_CONTINUACOES:
+            # A execução de código pausou no meio: devolve o turno e a API retoma sozinha.
+            messages.append({'role': 'assistant', 'content': resp.content})
+            continuacoes += 1
+            continue
+
         if resp.stop_reason == 'tool_use':
+            rodadas += 1
             # Guarda o turno do assistente (com os pedidos de ferramenta) e
             # responde cada pedido com as permissões do próprio usuário.
             messages.append({'role': 'assistant', 'content': resp.content})
@@ -157,9 +218,16 @@ def responder(user, mensagem, historico=None):
             messages.append({'role': 'user', 'content': resultados})
             continue
 
+        if resp.stop_reason == 'refusal':
+            return ('Não posso ajudar com esse pedido do jeito que ele foi feito. '
+                    'Se for algo do trabalho, tente reformular com mais contexto.')
+
         # Sem mais ferramentas: junta o texto final.
         texto = ''.join(b.text for b in resp.content if getattr(b, 'type', None) == 'text')
+        if resp.stop_reason == 'max_tokens':
+            texto = (texto.rstrip() + '\n\n_(A resposta ficou longa e foi cortada. Peça para eu gerar um '
+                     'documento com tudo — ele não tem esse limite.)_')
         return texto.strip() or 'Não consegui formular uma resposta.'
 
     return ('Precisei de muitas consultas para responder e parei por segurança. '
-            'Tente reformular a pergunta de forma mais específica.')
+            'Tente dividir o pedido em partes menores.')

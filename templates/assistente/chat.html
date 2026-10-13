@@ -51,7 +51,7 @@
     <div class="flex items-center justify-between gap-3 mb-3 flex-wrap">
         <div>
             <h1 class="text-xl font-bold text-gray-900 flex items-center"><i class="fas fa-robot text-primary mr-2"></i>Assistente Claude</h1>
-            <p class="text-sm text-gray-500">Pergunte sobre os seus dados no portal — e peça para cuidar da sua agenda e das suas reuniões.</p>
+            <p class="text-sm text-gray-500">Pergunte sobre qualquer área do portal que você acessa, peça análises detalhadas e documentos (Word, Excel, PDF) — e deixe ele cuidar da sua agenda e das suas reuniões.</p>
         </div>
         <div class="flex items-center gap-2">
             {% if historico %}
@@ -59,6 +59,7 @@
                 {% csrf_token %}<button class="px-3 py-2 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"><i class="fas fa-eraser mr-1.5"></i>Limpar</button>
             </form>
             {% endif %}
+            <a href="{% url 'assistente:documentos' %}" class="px-3 py-2 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"><i class="fas fa-file-lines mr-1.5"></i>Documentos</a>
             <a href="{% url 'settings' %}" class="px-3 py-2 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"><i class="fas fa-cog mr-1.5"></i>Configurações</a>
         </div>
     </div>
@@ -86,6 +87,9 @@
             <i class="fas fa-comments text-3xl text-gray-200 mb-2 block"></i>
             <p class="text-sm">Comece perguntando algo sobre os seus dados no portal.</p>
             <div class="flex flex-wrap justify-center gap-2 mt-4">
+                <button type="button" class="dv-sug px-3 py-1.5 text-xs rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50">O que eu tenho pendente em todo o portal?</button>
+                <button type="button" class="dv-sug px-3 py-1.5 text-xs rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50">Faça uma análise detalhada do meu comissionamento deste mês</button>
+                <button type="button" class="dv-sug px-3 py-1.5 text-xs rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50">Crie um relatório em Word dos meus chamados em aberto</button>
                 <button type="button" class="dv-sug px-3 py-1.5 text-xs rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50">Meus chamados abertos</button>
                 <button type="button" class="dv-sug px-3 py-1.5 text-xs rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50">Tenho cursos pendentes?</button>
                 <button type="button" class="dv-sug px-3 py-1.5 text-xs rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50">Documentos que preciso assinar</button>
@@ -159,7 +163,7 @@
         bolha('user', texto);
         input.value = ''; input.style.height = 'auto';
         input.disabled = true; btn.disabled = true;
-        var pensando = bolha('assistant', 'Pensando…', 'bg-gray-50 text-gray-400 italic');
+        var pensando = bolha('assistant', 'Pensando… (análises e documentos podem levar alguns minutos)', 'bg-gray-50 text-gray-400 italic');
 
         fetch(URL_ENVIAR, {
             method: 'POST',

@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% block title %}Documentos do Assistente{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto px-3 sm:px-4 py-4">
+    <div class="flex items-center justify-between gap-3 mb-4 flex-wrap">
+        <div>
+            <h1 class="text-xl font-bold text-gray-900"><i class="fas fa-file-lines text-primary mr-2"></i>Documentos do Assistente</h1>
+            <p class="text-sm text-gray-500">Relatórios, análises, atas e planos que o assistente criou para você. Só você vê.</p>
+        </div>
+        <a href="{% url 'assistente:chat' %}" class="px-3 py-2 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"><i class="fas fa-robot mr-1.5"></i>Voltar ao assistente</a>
+    </div>
+
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm divide-y divide-gray-100">
+        {% for d in documentos %}
+        <div class="px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-2" data-documento="{{ d.id }}">
+            <a href="{% url 'assistente:documento' d.id %}" class="flex-1 min-w-0">
+                <p class="font-semibold text-gray-900 truncate">{{ d.titulo }}</p>
+                <p class="text-xs text-gray-500">Atualizado em {{ d.atualizado_em|date:"d/m/Y H:i" }}{% if d.versao > 1 %} · versão {{ d.versao }}{% endif %}</p>
+            </a>
+            <div class="flex flex-wrap gap-1.5 text-xs">
+                <a href="{% url 'assistente:documento_baixar' d.id 'docx' %}" class="px-2.5 py-1.5 rounded-lg border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100"><i class="fas fa-file-word mr-1"></i>Word</a>
+                <a href="{% url 'assistente:documento_baixar' d.id 'xlsx' %}" class="px-2.5 py-1.5 rounded-lg border border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100"><i class="fas fa-file-excel mr-1"></i>Excel</a>
+                <a href="{% url 'assistente:documento' d.id %}?imprimir=1" class="px-2.5 py-1.5 rounded-lg border border-red-200 text-red-700 bg-red-50 hover:bg-red-100"><i class="fas fa-file-pdf mr-1"></i>PDF</a>
+            </div>
+        </div>
+        {% empty %}
+        <div class="px-4 py-12 text-center text-gray-400">
+            <i class="fas fa-file-circle-plus text-3xl text-gray-200 mb-2 block"></i>
+            <p class="text-sm">Nenhum documento ainda. Peça ao assistente: "faça um relatório de…", "monte um plano de ação para…".</p>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
