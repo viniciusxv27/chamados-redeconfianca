@@ -34,7 +34,8 @@
     </div>
     <div class="cx-card p-4">
         <p class="text-xs text-gray-500">Dias em atenção</p>
-        <p class="text-2xl font-bold {% if total_atencao %}text-amber-600{% else %}text-gray-300{% endif %} tabular">{{ total_atencao }}</p>
+        <p class="text-2xl font-bold {% if total_atencao %}text-amber-600{% else %}text-gray-300{% endif %} tabular" id="cxTotalAtencao">{{ total_atencao }}</p>
+        <p class="text-[11px] text-emerald-600 mt-0.5 {% if not total_conferidos %}hidden{% endif %}" id="cxTotalConferidos"><i class="fas fa-check mr-0.5"></i><span>{{ total_conferidos }}</span> com diferença conferida</p>
     </div>
     <div class="cx-card p-4">
         <p class="text-xs text-gray-500">
@@ -182,9 +183,7 @@ cxModoAbertura();
                         <input type="text" class="cx-entrada" data-campo="valor_vivogo" value="{{ d.valor_vivogo|campo }}" placeholder="—">
                     </td>
                     <td class="text-right tabular cx-diverg {% if d.divergencia %}cx-negativo font-semibold{% else %}text-gray-300{% endif %}">{{ d.divergencia|brl }}</td>
-                    <td class="text-center">
-                        <span class="cx-status inline-block px-2 py-0.5 rounded text-[11px] font-semibold cx-{{ d.status|lower }}">{{ d.status_rotulo }}</span>
-                    </td>
+                    <td class="text-center cx-status-cel">{% include 'contagem_caixa/_status_dia.html' %}</td>
                     <td class="text-right"><input type="text" class="cx-entrada" data-campo="allied" value="{{ d.allied|campo }}" placeholder="—"></td>
                     <td class="text-right"><input type="text" class="cx-entrada" data-campo="recarga" value="{{ d.recarga|campo }}" placeholder="—"></td>
                     <td class="text-right"><input type="text" class="cx-entrada" data-campo="agoracred" value="{{ d.agoracred|campo }}" placeholder="—"></td>
@@ -208,7 +207,9 @@ cxModoAbertura();
     <i class="fas fa-circle-info mr-1"></i>
     <strong>Entrada</strong> = Valor SAP − allied − recarga − Agoracred − Renova − sangrias (registradas na aba Sangrias) − sangria/erro − Transferências ·
     <strong>DIVERG.</strong> = (Valor SAP − Agoracred − Renova − Transferências) − Vivo go EA ·
-    <strong>STATUS</strong> fica em ATENÇÃO quando os dois não batem (e o gerente da loja é avisado) ·
+    <strong>STATUS</strong> fica em ATENÇÃO quando os dois não batem (e o gerente da loja é avisado){% if pode_conferir %};
+    se a diferença já foi verificada (um ajuste manual, por exemplo), clique em <strong>dar OK</strong> — o dia fica como
+    OK · conferido, com quem conferiu e quando. Se os números mudarem depois, o OK cai e o dia volta para ATENÇÃO{% endif %} ·
     <strong>Diferença</strong> = Entrada − Valor real ·
     <strong>saldo</strong> = saldo do dia anterior + Valor real + Diferença − Depósito
     (a Diferença entra no saldo, então ele fica em dia mesmo no dia que a loja ainda não contou).
@@ -255,10 +256,7 @@ cxModoAbertura();
             div.classList.toggle('font-semibold', !!txt);
             div.classList.toggle('text-gray-300', !txt);
 
-            var st = linha.querySelector('.cx-status');
-            st.textContent = d.status_rotulo;
-            st.className = 'cx-status inline-block px-2 py-0.5 rounded text-[11px] font-semibold '
-                         + 'cx-' + d.status.toLowerCase();
+            pintarStatus(linha, d);
 
             var ent = linha.querySelector('.cx-entrada-calc');
             if (ent) ent.textContent = brl(d.entrada) || '—';
@@ -284,6 +282,50 @@ cxModoAbertura();
         })
         .catch(function () { alert('Erro de conexão ao salvar.'); });
     }
+
+    function pintarStatus(linha, d) {
+        linha.querySelector('.cx-status-cel').innerHTML = d.status_html;
+        linha.dataset.status = d.status;
+        var atencao = document.querySelectorAll('.cx-linha .cx-atencao').length;
+        var conferidos = document.querySelectorAll('.cx-linha .cx-conferido').length;
+        var total = document.getElementById('cxTotalAtencao');
+        total.textContent = atencao;
+        total.classList.toggle('text-amber-600', atencao > 0);
+        total.classList.toggle('text-gray-300', atencao === 0);
+        var conf = document.getElementById('cxTotalConferidos');
+        conf.querySelector('span').textContent = conferidos;
+        conf.classList.toggle('hidden', conferidos === 0);
+    }
+
+    // Dar OK / desfazer o OK de uma divergência já verificada.
+    var URL_CONFERIR = '{% url "contagem_caixa:conferir_dia" loja.id %}';
+    document.addEventListener('click', function (e) {
+        var botao = e.target.closest('.cx-conferir');
+        if (!botao) return;
+        var linha = botao.closest('.cx-linha');
+        var corpo = new FormData();
+        corpo.append('data', linha.dataset.data);
+        corpo.append('acao', botao.dataset.acao);
+        if (botao.dataset.acao === 'conferir') {
+            var div = linha.querySelector('.cx-diverg').textContent.trim();
+            var nota = window.prompt('Dar OK na diferença de ' + div + ' do dia '
+                + linha.querySelector('.cx-data').textContent.trim()
+                + '?\n\nObservação (opcional), ex.: ajuste manual no SAP', '');
+            if (nota === null) return;
+            corpo.append('nota', nota);
+        }
+        botao.disabled = true;
+        fetch(URL_CONFERIR, {method: 'POST', headers: {'X-CSRFToken': csrf()}, body: corpo})
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            if (!d.ok) { alert(d.erro || 'Não foi possível salvar.'); botao.disabled = false; return; }
+            pintarStatus(linha, d);
+            linha.classList.remove('cx-salvo');
+            void linha.offsetWidth;
+            linha.classList.add('cx-salvo');
+        })
+        .catch(function () { alert('Erro de conexão ao salvar.'); botao.disabled = false; });
+    });
 
     function atualizarSaldos() {
         fetch(window.location.href, {headers: {'X-Requested-With': 'XMLHttpRequest'}})

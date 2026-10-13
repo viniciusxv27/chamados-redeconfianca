@@ -8,6 +8,7 @@ from django.contrib.auth.decorators import login_required
 from django.db.models import Count, F, Sum
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -86,6 +87,12 @@ def dashboard(request):
     sap_comparavel = F('valor_sap') - F('agoracred') - F('renova') - F('transferencias')
     divergentes = list(base.filter(valor_vivogo__isnull=False)
                        .exclude(valor_vivogo=sap_comparavel).select_related('loja'))
+    # Divergência que alguém já conferiu e deu OK sai do alerta.
+    conferidos = {}
+    for d in divergentes:
+        if d.conferido:
+            conferidos[d.loja_id] = conferidos.get(d.loja_id, 0) + 1
+    divergentes = [d for d in divergentes if not d.conferido]
     a_contar = base.filter(valor_vivogo__isnull=True).exclude(valor_sap=ZERO)
 
     por_dia_da_loja = {}
@@ -108,6 +115,7 @@ def dashboard(request):
             'dias': contagem.get(loja.id, 0),
             'atencao': len(em_atencao),
             'a_contar': pendentes.get(loja.id, 0),
+            'conferidos': conferidos.get(loja.id, 0),
             'divergencia_total': sum((d.divergencia for d in em_atencao), ZERO),
             'saldo': ultimo.saldo if ultimo else ZERO,
             'ultima_data': ultimo.data if ultimo else None,
@@ -198,6 +206,25 @@ def loja_detalhe(request, loja_id):
         'lojas': _lojas_do_usuario(request.user),
         'e_gestor': _e_gestor(request.user),
         'total_atencao': sum(1 for d in dias if d.pk and d.em_atencao),
+        'total_conferidos': sum(1 for d in dias if d.pk and d.conferido),
+        'pode_conferir': _e_gestor(request.user),
+    })
+
+
+def _resposta_do_dia(request, registro, **extra):
+    """O que a planilha precisa para repintar a linha depois de gravar."""
+    return JsonResponse({
+        'ok': True,
+        'entrada': str(registro.entrada),
+        'divergencia': str(registro.divergencia),
+        'status': registro.status,
+        'status_rotulo': registro.status_rotulo,
+        'status_html': render_to_string('contagem_caixa/_status_dia.html', {
+            'd': registro, 'pode_conferir': _e_gestor(request.user)}),
+        'contado': registro.contado,
+        'diferenca': str(registro.diferenca),
+        'saldo': str(registro.saldo),
+        **extra,
     })
 
 
@@ -247,17 +274,46 @@ def salvar_dia(request, loja_id):
     # Divergência nova avisa o gerente da loja.
     avisados = notificar_atencao(registro)
 
-    return JsonResponse({
-        'ok': True,
-        'entrada': str(registro.entrada),
-        'divergencia': str(registro.divergencia),
-        'status': registro.status,
-        'status_rotulo': registro.status_rotulo,
-        'contado': registro.contado,
-        'diferenca': str(registro.diferenca),
-        'saldo': str(registro.saldo),
-        'avisados': [u.full_name for u in avisados],
-    })
+    return _resposta_do_dia(request, registro, avisados=[u.full_name for u in avisados])
+
+
+@login_required
+@fechado_para_padrao('caixa')
+@require_POST
+def conferir_dia(request, loja_id):
+    """Dá (ou tira) o OK de um dia em Atenção cuja diferença já foi verificada.
+
+    Só a gestão: é ela que responde pela conferência. O OK vale para a
+    divergência daquele momento — mudou o número, volta a ser Atenção.
+    """
+    loja = get_object_or_404(Sector, id=loja_id)
+    if loja not in _lojas_do_usuario(request.user):
+        return JsonResponse({'ok': False, 'erro': 'Sem acesso a esta loja.'}, status=403)
+    if not _e_gestor(request.user):
+        return JsonResponse({'ok': False, 'erro': 'Só a gestão do caixa dá OK em divergência.'}, status=403)
+    try:
+        dia_data = date.fromisoformat(request.POST.get('data') or '')
+    except ValueError:
+        return JsonResponse({'ok': False, 'erro': 'Data inválida.'}, status=400)
+    registro = ContagemCaixaDia.objects.filter(loja=loja, data=dia_data).first()
+    if registro is None:
+        return JsonResponse({'ok': False, 'erro': 'Esse dia não tem lançamento.'}, status=404)
+
+    if request.POST.get('acao') == 'desfazer':
+        registro.divergencia_conferida = None
+        registro.conferido_por = None
+        registro.conferido_em = None
+        registro.conferido_nota = ''
+    else:
+        if not registro.em_atencao:
+            return JsonResponse({'ok': False, 'erro': 'Esse dia não está em Atenção.'}, status=400)
+        registro.divergencia_conferida = registro.divergencia
+        registro.conferido_por = request.user
+        registro.conferido_em = timezone.now()
+        registro.conferido_nota = (request.POST.get('nota') or '').strip()[:300]
+    registro.save(update_fields=['divergencia_conferida', 'conferido_por', 'conferido_em',
+                                 'conferido_nota', 'atualizado_em'])
+    return _resposta_do_dia(request, registro)
 
 
 @login_required

@@ -94,6 +94,11 @@
                                 {{ l.a_contar }} a contar
                             </span>
                             {% endif %}
+                            {% if l.conferidos %}
+                            <span class="px-2 py-0.5 rounded text-[11px] font-semibold cx-conferido" title="Divergências já verificadas, com OK da gestão">
+                                <i class="fas fa-check mr-0.5"></i>{{ l.conferidos }} conferido{{ l.conferidos|pluralize }}
+                            </span>
+                            {% endif %}
                             {% if not l.atencao and not l.a_contar %}
                                 {% if l.dias %}
                                 <span class="px-2 py-0.5 rounded text-[11px] font-semibold cx-ok">tudo OK</span>

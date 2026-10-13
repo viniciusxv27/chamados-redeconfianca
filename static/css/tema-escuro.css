@@ -380,6 +380,7 @@ html.dark .vd-barra { background: var(--tema-superficie-3) !important; }
 html.dark .cx-ok       { background: rgba(34, 197, 94, .18) !important;  color: #4ade80 !important; }
 html.dark .cx-pendente { background: rgba(59, 130, 246, .18) !important; color: #60a5fa !important; }
 html.dark .cx-atencao  { background: rgba(245, 158, 11, .18) !important; color: #fbbf24 !important; }
+html.dark .cx-conferido { background: rgba(16, 185, 129, .12) !important; color: #6ee7b7 !important; box-shadow: inset 0 0 0 1px rgba(16, 185, 129, .35) !important; }
 html.dark .cx-negativo { color: #f87171 !important; }
 
 /* Campos e botões próprios dos módulos */

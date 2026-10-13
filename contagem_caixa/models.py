@@ -44,6 +44,7 @@ class ContagemCaixaDia(models.Model):
     class Status(models.TextChoices):
         OK = 'OK', 'OK'
         ATENCAO = 'ATENCAO', 'Atenção'
+        CONFERIDO = 'CONFERIDO', 'OK · conferido'
         PENDENTE = 'PENDENTE', 'A contar'
         SEM_MOVIMENTO = 'SEM_MOVIMENTO', 'Sem movimento'
 
@@ -87,6 +88,20 @@ class ContagemCaixaDia(models.Model):
     # Aviso ao gerente quando o dia fica em ATENÇÃO. Guardado para não
     # notificar a mesma divergência todo dia.
     notificado_em = models.DateTimeField(null=True, blank=True, verbose_name='Gerente avisado em')
+
+    # OK dado à mão num dia em Atenção: a diferença foi olhada e explicada
+    # (quase sempre um ajuste manual). Guarda o valor que foi conferido — se
+    # alguém mexer nos números e a divergência mudar, o OK deixa de valer e o
+    # dia volta para Atenção sozinho.
+    divergencia_conferida = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True,
+        verbose_name='Divergência conferida')
+    conferido_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='contagens_caixa_conferidas', verbose_name='Conferido por')
+    conferido_em = models.DateTimeField(null=True, blank=True, verbose_name='Conferido em')
+    conferido_nota = models.CharField(
+        max_length=300, blank=True, default='', db_default='', verbose_name='Nota da conferência')
 
     atualizado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
@@ -161,7 +176,16 @@ class ContagemCaixaDia(models.Model):
         if not self.contado:
             return (self.Status.PENDENTE if (self.valor_sap or ZERO) != ZERO
                     else self.Status.SEM_MOVIMENTO)
-        return self.Status.ATENCAO if self.divergencia != ZERO else self.Status.OK
+        if self.divergencia == ZERO:
+            return self.Status.OK
+        return self.Status.CONFERIDO if self.conferido else self.Status.ATENCAO
+
+    @property
+    def conferido(self):
+        """A divergência de hoje é a mesma que alguém já conferiu e deu OK?"""
+        return (self.contado and self.divergencia != ZERO
+                and self.divergencia_conferida is not None
+                and self.divergencia_conferida == self.divergencia)
 
     @property
     def status_rotulo(self):
