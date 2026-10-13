@@ -937,6 +937,8 @@ EXIT_STORE_OPTIONS = [
     'MARCILIO DE NORONHA', 'PORTO CANOA', 'JACARAÍPE', 'ITACIBÁ', 'SERRA SEDE',
     'ANCHIETA', 'PIUMA', 'ICONHA', 'BOM JESUS DE ITABAPOANA',
     'SANTO ANTONIO DE PÁDUA', 'MIRACEMA', 'SÃO FIDÉLIS', 'QUISSAMÃ',
+    # São Paulo
+    'CARAPICUÍBA', 'ITAIM PAULISTA', 'EMBU DAS ARTES',
 ]
 
 # Estrutura do formulário. Tipos suportados: 'text', 'paragraph', 'choice', 'scale'.
@@ -1100,6 +1102,38 @@ def exit_interview(request):
             except ValueError:
                 dismissal_date = None
 
+        # O colaborador não quis fazer a entrevista: registra só a recusa e a
+        # observação, sem resposta (não entra nas médias nem nos gráficos).
+        if request.POST.get('recusou') == 'on':
+            observacao = (request.POST.get('recusa_observacao') or '').strip()
+            if subject is None:
+                messages.error(request, 'Selecione o colaborador desligado antes de registrar a recusa.')
+                return redirect('feedback:exit_interview')
+            if dismissal_date is None:
+                messages.error(request, 'Informe a data de desligamento.')
+                return redirect('feedback:exit_interview')
+            if not observacao:
+                messages.error(request, 'Descreva nas observações por que a entrevista não foi feita.')
+                return redirect('feedback:exit_interview')
+            subject_sector = _primary_sector_for_user(subject)
+            participation, _ = ExitInterviewParticipation.objects.get_or_create(
+                survey_key=EXIT_INTERVIEW_KEY, user=subject, defaults={'sector': subject_sector},
+            )
+            participation.interviewer = request.user
+            participation.sector = subject_sector
+            participation.status = 'REFUSED'
+            participation.last_step = 'Recusou a entrevista'
+            participation.completed_at = timezone.now()
+            participation.dismissal_date = dismissal_date
+            participation.refusal_notes = observacao[:EXIT_OBS_MAX]
+            participation.save()
+            messages.success(
+                request,
+                f'Recusa de {subject.get_full_name() or subject.username} registrada. '
+                'Efetue o desligamento de acesso abaixo quando desejar.',
+            )
+            return redirect('feedback:exit_interview')
+
         answers = {'scale': {}, 'choice': {}, 'text': {}, 'scale_obs': {}}
         missing = []
         for question in _exit_questions():
@@ -1179,6 +1213,7 @@ def exit_interview(request):
         participation.last_step = 'Concluída'
         participation.completed_at = now
         participation.dismissal_date = dismissal_date
+        participation.refusal_notes = ''
         participation.save()
 
         messages.success(
@@ -1198,7 +1233,7 @@ def exit_interview(request):
         ExitInterviewParticipation.objects
         .filter(
             survey_key=EXIT_INTERVIEW_KEY,
-            status='COMPLETED',
+            status__in=['COMPLETED', 'REFUSED'],
             dismissal_executed_at__isnull=True,
             user__is_active=True,
         )
@@ -1324,14 +1359,16 @@ def exit_interview_report(request):
                 'COMPLETED': 'Concluída',
                 'IN_PROGRESS': 'Em andamento',
                 'NOT_STARTED': 'Não iniciou',
+                'REFUSED': 'Recusou',
             }.get(status, status),
         })
 
     detailed = rows
     if selected_sector:
         detailed = [r for r in detailed if r['sector'] and r['sector'].id == selected_sector.id]
-    if status_filter in ['completed', 'in_progress', 'not_started']:
-        status_map = {'completed': 'COMPLETED', 'in_progress': 'IN_PROGRESS', 'not_started': 'NOT_STARTED'}
+    if status_filter in ['completed', 'in_progress', 'not_started', 'refused']:
+        status_map = {'completed': 'COMPLETED', 'in_progress': 'IN_PROGRESS', 'not_started': 'NOT_STARTED',
+                      'refused': 'REFUSED'}
         detailed = [row for row in detailed if row['status'] == status_map[status_filter]]
 
     responses = ExitInterviewResponse.objects.filter(survey_key=EXIT_INTERVIEW_KEY).select_related('sector', 'user', 'interviewer')
@@ -1457,6 +1494,7 @@ def exit_interview_report(request):
         'completed': sum(1 for r in rows if r['status'] == 'COMPLETED'),
         'in_progress': sum(1 for r in rows if r['status'] == 'IN_PROGRESS'),
         'not_started': sum(1 for r in rows if r['status'] == 'NOT_STARTED'),
+        'refused': sum(1 for r in rows if r['status'] == 'REFUSED'),
         'responses': len(responses),
     }
     totals['completed_pct'] = round((totals['completed'] / totals['total']) * 100, 1) if totals['total'] else 0.0

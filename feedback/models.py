@@ -515,6 +515,7 @@ class ExitInterviewParticipation(models.Model):
     STATUS_CHOICES = [
         ('IN_PROGRESS', 'Em andamento'),
         ('COMPLETED', 'Concluída'),
+        ('REFUSED', 'Recusou a entrevista'),
     ]
 
     survey_key = models.CharField(max_length=80, default='desligamento_2026', db_index=True)
@@ -551,6 +552,12 @@ class ExitInterviewParticipation(models.Model):
     )
     dismissal_executed_at = models.DateTimeField(
         null=True, blank=True, verbose_name='Desligamento de acesso efetuado em',
+    )
+    # Quando o colaborador não quis fazer a entrevista: o entrevistador registra
+    # a recusa (status REFUSED) e explica aqui. Não gera resposta, para não
+    # entrar nas médias.
+    refusal_notes = models.TextField(
+        blank=True, default='', db_default='', verbose_name='Observações da recusa',
     )
 
     class Meta:

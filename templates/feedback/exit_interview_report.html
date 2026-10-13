@@ -11,7 +11,7 @@
       <a href="{% url 'feedback:exit_interview' %}" class="self-start px-3 py-2 bg-white border rounded-lg text-sm hover:bg-gray-50">Voltar</a>
     </div>
 
-    <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3 mb-6">
+    <div class="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-3 mb-6">
       <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
         <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Colaboradores</p>
         <p class="text-3xl font-bold text-gray-900 mt-1">{{ totals.total }}</p>
@@ -31,6 +31,10 @@
       <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
         <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Não iniciaram</p>
         <p class="text-3xl font-bold text-gray-500 mt-1">{{ totals.not_started }}</p>
+      </div>
+      <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+        <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Recusaram</p>
+        <p class="text-3xl font-bold text-amber-600 mt-1">{{ totals.refused }}</p>
       </div>
       <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
         <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Tempo médio</p>
@@ -232,6 +236,7 @@
               <option value="completed" {% if status_filter == "completed" %}selected{% endif %}>Concluída</option>
               <option value="in_progress" {% if status_filter == "in_progress" %}selected{% endif %}>Em andamento</option>
               <option value="not_started" {% if status_filter == "not_started" %}selected{% endif %}>Não iniciou</option>
+              <option value="refused" {% if status_filter == "refused" %}selected{% endif %}>Recusou</option>
             </select>
           </div>
           <button type="submit" class="px-3 py-1.5 bg-rose-600 text-white rounded-lg text-sm hover:bg-rose-700">Filtrar</button>
@@ -263,6 +268,9 @@
                 <td class="p-3">
                   {% if row.status == "COMPLETED" %}
                     <span class="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-green-100 text-green-700"><i class="fas fa-check"></i>{{ row.status_label }}</span>
+                  {% elif row.status == "REFUSED" %}
+                    <span class="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-amber-100 text-amber-800"><i class="fas fa-user-xmark"></i>{{ row.status_label }}</span>
+                    {% if row.participation.refusal_notes %}<p class="text-xs text-gray-500 mt-1 max-w-xs whitespace-pre-line">{{ row.participation.refusal_notes }}</p>{% endif %}
                   {% elif row.status == "IN_PROGRESS" %}
                     <span class="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-yellow-100 text-yellow-700"><i class="fas fa-hourglass-half"></i>{{ row.status_label }}</span>
                   {% else %}
@@ -318,7 +326,7 @@
 <script id="exit-scale-labels" type="application/json">{{ scale_labels_json|safe }}</script>
 <script id="exit-scale-values" type="application/json">{{ scale_values_json|safe }}</script>
 <script id="exit-choice-stats" type="application/json">{{ choice_stats_json|safe }}</script>
-<script id="exit-status" type="application/json">[{{ totals.completed }}, {{ totals.in_progress }}, {{ totals.not_started }}]</script>
+<script id="exit-status" type="application/json">[{{ totals.completed }}, {{ totals.in_progress }}, {{ totals.not_started }}, {{ totals.refused }}]</script>
 <script>
 (function () {
   function parseJSON(id) {
@@ -333,8 +341,8 @@
 
     const totalStatus = status.reduce((a, b) => a + b, 0);
     const pct = totalStatus ? Math.round((status[0] / totalStatus) * 100) : 0;
-    RC.doughnut('exitStatusChart', ['Concluíram', 'Em andamento', 'Não iniciaram'], status, {
-      colors: ['#10b981', '#f59e0b', '#e5e7eb'],
+    RC.doughnut('exitStatusChart', ['Concluíram', 'Em andamento', 'Não iniciaram', 'Recusaram'], status, {
+      colors: ['#10b981', '#f59e0b', '#e5e7eb', '#ea580c'],
       centerText: pct + '%', centerSub: 'concluíram',
     });
 
