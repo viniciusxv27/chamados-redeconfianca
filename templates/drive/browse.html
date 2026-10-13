@@ -8,6 +8,11 @@
     #dv-grid [data-id] { transition: box-shadow .35s ease, background-color .35s ease; }
     #dv-grid .dv-destaque { box-shadow: 0 0 0 3px rgba(59,130,246,.55); background-color: rgba(59,130,246,.08); border-radius: .9rem; }
     html.dark #dv-grid .dv-destaque { box-shadow: 0 0 0 3px rgba(96,165,250,.6); background-color: rgba(96,165,250,.12); }
+    /* Mover arrastando: o cartão que sai fica apagado e a pasta que recebe acende. */
+    #dv-grid .dv-arrastando { opacity: .45; }
+    #dv-grid .dv-alvo, #dv-trilha .dv-alvo { box-shadow: 0 0 0 2px #3b82f6; background-color: rgba(59,130,246,.10); border-radius: .75rem; }
+    html.dark #dv-grid .dv-alvo, html.dark #dv-trilha .dv-alvo { box-shadow: 0 0 0 2px #60a5fa; background-color: rgba(96,165,250,.14); }
+    .dv-mv-pasta[aria-disabled="true"] { opacity: .5; }
 </style>
 <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
     <!-- Barra de caminho + ações -->
@@ -80,6 +85,40 @@
 <form id="dv-mkdir-form" method="post" action="{{ url_mkdir }}" class="hidden">
     {% csrf_token %}<input type="hidden" name="folder_id" value="{{ folder_id }}"><input type="hidden" name="nome" id="dv-mkdir-nome">
 </form>
+{% endif %}
+{% if pode_editar %}
+{% comment %}
+"Mover para…": escolhe a pasta de destino descendo pela árvore da mesma raiz.
+A lista vem de /drive/file/<id>/mover/pastas/ — o próprio item não aparece,
+e pasta em que a pessoa não pode pôr nada fica sem o botão de confirmar.
+{% endcomment %}
+<div id="dv-mover" class="hidden fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4"
+     role="dialog" aria-modal="true" aria-labelledby="dv-mover-titulo" onclick="if (event.target === this) dvMoverFechar()">
+    <div class="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-xl flex flex-col max-h-[85vh]">
+        <div class="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
+            <div class="min-w-0 flex-1">
+                <p id="dv-mover-titulo" class="font-semibold text-gray-800 truncate">Mover</p>
+                <p class="text-[11px] text-gray-400 truncate">Escolha a pasta de destino</p>
+            </div>
+            <button type="button" onclick="dvMoverFechar()" class="w-8 h-8 rounded-lg text-gray-400 hover:bg-gray-100" aria-label="Fechar"><i class="fas fa-xmark"></i></button>
+        </div>
+        <div class="px-4 py-2 border-b border-gray-100 flex items-center gap-1.5 text-xs min-w-0">
+            <button type="button" id="dv-mover-acima" class="w-7 h-7 flex-shrink-0 rounded-md text-gray-500 hover:bg-gray-100 disabled:opacity-30" title="Voltar uma pasta" aria-label="Voltar uma pasta"><i class="fas fa-arrow-left"></i></button>
+            <div id="dv-mover-trilha" class="flex items-center gap-1 dv-scroll-x min-w-0 whitespace-nowrap"></div>
+        </div>
+        <div class="flex-1 overflow-y-auto min-h-[180px]">
+            <div id="dv-mover-lista" class="divide-y divide-gray-50"></div>
+            <p id="dv-mover-status" class="px-4 py-6 text-center text-sm text-gray-400"></p>
+        </div>
+        <div class="px-4 py-3 border-t border-gray-100 flex items-center gap-2">
+            <p id="dv-mover-aviso" class="flex-1 text-[11px] text-gray-400 min-w-0"></p>
+            <button type="button" onclick="dvMoverFechar()" class="px-3 py-2 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">Cancelar</button>
+            <button type="button" id="dv-mover-confirmar" class="px-3 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed">
+                <i class="fas fa-folder-tree mr-1.5"></i>Mover para cá
+            </button>
+        </div>
+    </div>
+</div>
 {% endif %}
 <form id="dv-rename-form" method="post" class="hidden">{% csrf_token %}<input type="hidden" name="nome" id="dv-rename-nome"><input type="hidden" name="folder_id" value="{{ folder_id }}"></form>
 
@@ -266,6 +305,156 @@ async function dvRenomear(id, nome){
         f.submit();
     }
 }
+{% if pode_editar %}
+// ── Mover: pelo menu ("Mover para…") ou arrastando até uma pasta ──────────
+// Dá para soltar num cartão de pasta ou num pedaço da trilha lá em cima (é
+// assim que algo sobe de nível). Quem confere permissão e laço de pasta dentro
+// de pasta é o servidor; aqui só não se oferece soltar o item em si mesmo.
+async function dvMover(id, destino){
+    try {
+        const dados = await dvPost('/drive/file/' + id + '/mover/', {destino: destino, folder_id: dvPastaAberta()});
+        if (!dados.ok) { dvAvisoRapido(dados.msg || 'Não deu para mover.', true); return false; }
+        // A pasta de destino mudou também: o que estiver guardado dela sai do cache.
+        DV_CACHE.forEach((_, url) => { if (url.indexOf('/f/' + destino + '/') !== -1) DV_CACHE.delete(url); });
+        await dvRecarregarPasta();
+        dvAvisoRapido(dados.msg || 'Movido.');
+        return true;
+    } catch (e) {
+        dvAvisoRapido('Não deu para mover (conexão).', true);
+        return false;
+    }
+}
+
+let dvMovendo = null;                        // {id, nome, pai} do que está no seletor
+
+function dvMoverFechar(){
+    document.getElementById('dv-mover').classList.add('hidden');
+    dvMovendo = null;
+}
+
+function dvMoverPara(id, nome){
+    dvFecharMenus();
+    dvMovendo = {id: id, nome: nome, pai: ''};
+    document.getElementById('dv-mover-titulo').textContent = 'Mover “' + nome + '”';
+    document.getElementById('dv-mover').classList.remove('hidden');
+    dvMoverAbrir(dvPastaAberta());
+}
+
+async function dvMoverAbrir(pai){
+    if (!dvMovendo) return;
+    const lista = document.getElementById('dv-mover-lista');
+    const status = document.getElementById('dv-mover-status');
+    const confirmar = document.getElementById('dv-mover-confirmar');
+    const aviso = document.getElementById('dv-mover-aviso');
+    lista.innerHTML = '';
+    status.textContent = 'Carregando pastas…';
+    confirmar.disabled = true;
+    aviso.textContent = '';
+    let dados;
+    try {
+        const r = await fetch('/drive/file/' + dvMovendo.id + '/mover/pastas/?pai=' + encodeURIComponent(pai || ''),
+                              {headers: {'X-Requested-With': 'XMLHttpRequest'}});
+        dados = await r.json();
+    } catch (e) { dados = {ok: false, msg: 'Sem conexão com o portal.'}; }
+    if (!dados.ok) {
+        // A pasta aberta pode ser o próprio item ou estar fora do alcance: recomeça da raiz.
+        if (pai) return dvMoverAbrir('');
+        status.textContent = dados.msg || 'Não deu para listar as pastas.';
+        return;
+    }
+    dvMovendo.pai = dados.pai;
+    const acima = document.getElementById('dv-mover-acima');
+    acima.disabled = !dados.acima;
+    acima.onclick = () => dvMoverAbrir(dados.acima);
+    const trilha = document.getElementById('dv-mover-trilha');
+    trilha.innerHTML = '';
+    dados.trilha.forEach((t, i) => {
+        if (i) trilha.insertAdjacentHTML('beforeend', '<i class="fas fa-chevron-right text-[9px] text-gray-300"></i>');
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = t.nome;
+        b.className = i === dados.trilha.length - 1 ? 'font-semibold text-gray-700' : 'text-blue-600 hover:underline';
+        b.onclick = () => dvMoverAbrir(t.id);
+        trilha.appendChild(b);
+    });
+    status.textContent = dados.pastas.length ? '' : 'Nenhuma subpasta aqui.';
+    dados.pastas.forEach(p => {
+        const linha = document.createElement('button');
+        linha.type = 'button';
+        linha.className = 'dv-mv-pasta w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm hover:bg-blue-50/60';
+        linha.innerHTML = '<i class="fas fa-folder text-amber-400"></i><span class="flex-1 truncate text-gray-700"></span><i class="fas fa-chevron-right text-[10px] text-gray-300"></i>';
+        linha.querySelector('span').textContent = p.nome;
+        linha.onclick = () => dvMoverAbrir(p.id);
+        lista.appendChild(linha);
+    });
+    if (dados.ja_esta_aqui) aviso.textContent = 'O item já está nesta pasta.';
+    else if (!dados.pode_aqui) aviso.textContent = 'Você não pode pôr itens nesta pasta.';
+    else aviso.innerHTML = 'Vai para <strong class="text-gray-600"></strong>';
+    const forte = aviso.querySelector('strong');
+    if (forte) forte.textContent = dados.nome;
+    confirmar.disabled = !dados.pode_aqui || dados.ja_esta_aqui;
+    confirmar.onclick = async () => {
+        confirmar.disabled = true;
+        confirmar.innerHTML = '<i class="fas fa-spinner fa-spin mr-1.5"></i>Movendo…';
+        const ok = await dvMover(dvMovendo.id, dados.pai);
+        confirmar.innerHTML = '<i class="fas fa-folder-tree mr-1.5"></i>Mover para cá';
+        if (ok) dvMoverFechar(); else confirmar.disabled = false;
+    };
+}
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && !document.getElementById('dv-mover').classList.contains('hidden')) dvMoverFechar();
+});
+
+(function(){
+    const TIPO = 'application/x-dv-item';
+    let arrastado = null;
+    const alvoDe = e => {
+        const el = e.target.closest('#dv-grid .dv-item[data-tipo="pasta"], #dv-trilha [data-pasta]');
+        if (!el || !arrastado) return null;
+        const id = el.dataset.id || el.dataset.pasta;
+        if (id === arrastado.id || id === dvPastaAberta()) return null;   // nele mesmo ou onde já está
+        return {el: el, id: id, nome: el.dataset.nome || el.textContent.trim()};
+    };
+    const limpar = () => document.querySelectorAll('.dv-alvo').forEach(el => el.classList.remove('dv-alvo'));
+    document.addEventListener('dragstart', e => {
+        const card = e.target.closest && e.target.closest('#dv-grid .dv-item[draggable="true"]');
+        if (!card) return;
+        arrastado = {id: card.dataset.id, nome: card.dataset.nome, card: card};
+        e.dataTransfer.setData(TIPO, card.dataset.id);
+        e.dataTransfer.effectAllowed = 'move';
+        // Começou no link de dentro do cartão: a "fantasma" é o cartão inteiro.
+        if (e.dataTransfer.setDragImage) e.dataTransfer.setDragImage(card, 24, 24);
+        dvFecharMenus();
+        setTimeout(() => card.classList.add('dv-arrastando'), 0);
+    });
+    document.addEventListener('dragend', () => {
+        if (arrastado) arrastado.card.classList.remove('dv-arrastando');
+        arrastado = null;
+        limpar();
+    });
+    document.addEventListener('dragover', e => {
+        if (!arrastado) return;
+        const alvo = alvoDe(e);
+        limpar();
+        if (!alvo) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        alvo.el.classList.add('dv-alvo');
+    });
+    document.addEventListener('drop', e => {
+        if (!arrastado) return;
+        const alvo = alvoDe(e);
+        const item = arrastado;
+        limpar();
+        if (!alvo) return;
+        e.preventDefault();
+        e.stopPropagation();
+        item.card.classList.remove('dv-arrastando');
+        dvMover(item.id, alvo.id);
+    }, true);
+})();
+{% endif %}
+
 // ── Nome inteiro: a escolha fica no navegador de quem clicou ───────────────
 function dvNomesInteiros(){
     const grade = document.getElementById('dv-grid');
@@ -534,10 +723,12 @@ function dvCarregarMais(btn){
 (function(){
     const drop = document.getElementById('dv-grid-wrap');
     if (!drop) return;
-    ['dragenter','dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('dragover'); }));
-    ['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); if (ev==='dragleave' && drop.contains(e.relatedTarget)) return; drop.classList.remove('dragover'); }));
+    // Arquivo vindo do computador envia; cartão sendo movido dentro da grade não.
+    const deFora = e => e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+    ['dragenter','dragover'].forEach(ev => drop.addEventListener(ev, e => { if (!deFora(e)) return; e.preventDefault(); drop.classList.add('dragover'); }));
+    ['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => { if (ev==='dragleave' && drop.contains(e.relatedTarget)) return; drop.classList.remove('dragover'); if (deFora(e)) e.preventDefault(); }));
     drop.addEventListener('drop', e => {
-        if (e.dataTransfer && e.dataTransfer.files.length) {
+        if (deFora(e) && e.dataTransfer.files.length) {
             dvEnviarArquivos(e.dataTransfer.files);
         }
     });

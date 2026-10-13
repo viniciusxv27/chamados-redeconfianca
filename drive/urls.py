@@ -26,6 +26,7 @@ urlpatterns = [
     path('file/<str:file_id>/versoes/restaurar/', views.version_restore, name='version_restore'),
     path('file/<str:file_id>/renomear/', views.file_rename, name='file_rename'),
     path('file/<str:file_id>/mover/', views.file_move, name='file_move'),
+    path('file/<str:file_id>/mover/pastas/', views.mover_pastas, name='mover_pastas'),
     path('file/<str:file_id>/substituir/', views.file_replace, name='file_replace'),
     path('file/<str:file_id>/excluir/', views.file_delete, name='file_delete'),
     path('file/<str:file_id>/favoritar/', views.favorite_toggle, name='favorite_toggle'),

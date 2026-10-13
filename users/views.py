@@ -1700,7 +1700,52 @@ def _read_pre_registration_personal_data(request):
     if values['has_dependents'] and _dependentes_pela_metade(data):
         errors.append('Cada dependente precisa de nome E documento.')
 
+    for chave in ('birth_date', 'rg_issue_date'):
+        values[chave] = _data_iso(values[chave])
+    errors.extend(_erros_de_tamanho_e_data(values))
     return values, errors
+
+
+def _data_iso(valor):
+    """'10/05/1995' → '1995-05-10'. Navegador sem campo de data manda o texto digitado."""
+    import re
+    m = re.fullmatch(r'(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})', valor or '')
+    return f'{m.group(3)}-{int(m.group(2)):02d}-{int(m.group(1)):02d}' if m else (valor or '')
+
+
+def _erros_de_tamanho_e_data(values):
+    """O que o banco recusaria, dito antes de gravar.
+
+    Sem isto, um "42/44" no tamanho da calça (cabem 3 letras) ou uma data que
+    o navegador mandou como texto passavam pela validação e estouravam no
+    `save()` — a pessoa via um erro 500 e perdia tudo o que tinha digitado.
+    """
+    erros = []
+    for chave, valor in values.items():
+        if not isinstance(valor, str) or not valor:
+            continue
+        try:
+            campo = User._meta.get_field(chave)
+        except Exception:
+            continue
+        limite = getattr(campo, 'max_length', None)
+        if limite and len(valor) > limite:
+            erros.append(f'O campo "{campo.verbose_name}" aceita no máximo {limite} caracteres '
+                          f'(veio "{valor[:40]}", com {len(valor)}).')
+    for chave in ('birth_date', 'rg_issue_date'):
+        valor = values.get(chave)
+        if not valor:
+            continue
+        try:
+            data = parse_date(valor)
+        except ValueError:
+            data = None
+        if data is None:
+            ano, _, resto = valor.partition('-')
+            legivel = '/'.join(reversed(resto.split('-'))) + '/' + ano if resto else valor
+            erros.append(f'A data "{legivel}" em "{User._meta.get_field(chave).verbose_name}" não existe. '
+                          'Confira o dia, o mês e o ano.')
+    return erros
 
 
 def _job_title_choices(atual=''):
@@ -2096,19 +2141,21 @@ def complete_pre_registration_view(request, token):
             }
             return render(request, 'users/pre_register_complete.html', context)
 
-        # Atualizar dados do colaborador
-        _apply_pre_registration_personal_data(target, values)
+        # Tudo numa transação: se algo falhar no meio, nada fica pela metade
+        # (contato de emergência gravado e cadastro ainda pendente, por exemplo).
+        with transaction.atomic():
+            _apply_pre_registration_personal_data(target, values)
 
-        # Auto-ativação: define a senha e ativa a conta
-        target.set_password(password)
-        target.is_active = True
-        target.pre_registration_status = User.PRE_REG_COMPLETED
-        target.pre_registration_completed_at = timezone.now()
-        target.pre_registration_token = None  # invalida o link após a conclusão
-        target.save()
+            # Auto-ativação: define a senha e ativa a conta
+            target.set_password(password)
+            target.is_active = True
+            target.pre_registration_status = User.PRE_REG_COMPLETED
+            target.pre_registration_completed_at = timezone.now()
+            target.pre_registration_token = None  # invalida o link após a conclusão
+            target.save()
 
-        for doc, uploaded in docs_to_save:
-            _store_user_document(target, uploaded, document_type=doc, document_name=doc.name, uploaded_by=target)
+            for doc, uploaded in docs_to_save:
+                _store_user_document(target, uploaded, document_type=doc, document_name=doc.name, uploaded_by=target)
 
         log_action(
             target,
@@ -2313,19 +2360,20 @@ def adjust_pre_registration_view(request):
             }
             return render(request, 'users/pre_register_adjust.html', context)
 
-        _apply_pre_registration_personal_data(target, values)
+        with transaction.atomic():
+            _apply_pre_registration_personal_data(target, values)
 
-        # Volta para a fila de análise e libera o acesso ao portal.
-        target.pre_registration_status = User.PRE_REG_COMPLETED
-        target.pre_registration_rejection_reason = ''
-        target.pre_registration_completed_at = timezone.now()
-        target.pre_registration_reviewed_at = None
-        target.pre_registration_reviewed_by = None
-        target.save()
-        target.pre_registration_extra_documents.clear()
+            # Volta para a fila de análise e libera o acesso ao portal.
+            target.pre_registration_status = User.PRE_REG_COMPLETED
+            target.pre_registration_rejection_reason = ''
+            target.pre_registration_completed_at = timezone.now()
+            target.pre_registration_reviewed_at = None
+            target.pre_registration_reviewed_by = None
+            target.save()
+            target.pre_registration_extra_documents.clear()
 
-        for doc, uploaded in docs_to_save:
-            _store_user_document(target, uploaded, document_type=doc, document_name=doc.name, uploaded_by=target)
+            for doc, uploaded in docs_to_save:
+                _store_user_document(target, uploaded, document_type=doc, document_name=doc.name, uploaded_by=target)
 
         log_action(
             target,

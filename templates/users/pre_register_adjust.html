@@ -69,13 +69,13 @@
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Nome Completo do Pai *</label>
-                        <input type="text" name="father_name" required
+                        <input type="text" name="father_name" maxlength="150" required
                                value="{% if form_data %}{{ form_data.father_name }}{% else %}{{ target.father_name }}{% endif %}"
                                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Nome Completo da Mãe *</label>
-                        <input type="text" name="mother_name" required
+                        <input type="text" name="mother_name" maxlength="150" required
                                value="{% if form_data %}{{ form_data.mother_name }}{% else %}{{ target.mother_name }}{% endif %}"
                                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
                     </div>
@@ -86,25 +86,25 @@
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Telefone</label>
-                        <input type="text" name="phone" placeholder="(00) 00000-0000"
+                        <input type="text" name="phone" maxlength="20" placeholder="(00) 00000-0000"
                                value="{% if form_data %}{{ form_data.phone }}{% else %}{{ target.phone }}{% endif %}"
                                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">CPF</label>
-                        <input type="text" name="cpf" placeholder="000.000.000-00"
+                        <input type="text" name="cpf" maxlength="14" placeholder="000.000.000-00"
                                value="{% if form_data %}{{ form_data.cpf }}{% else %}{{ target.cpf }}{% endif %}"
                                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">PIS</label>
-                        <input type="text" name="pis"
+                        <input type="text" name="pis" maxlength="20"
                                value="{% if form_data %}{{ form_data.pis }}{% else %}{{ target.pis }}{% endif %}"
                                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">RG *</label>
-                        <input type="text" name="rg" required
+                        <input type="text" name="rg" maxlength="20" required
                                value="{% if form_data %}{{ form_data.rg }}{% else %}{{ target.rg }}{% endif %}"
                                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
                     </div>
@@ -116,7 +116,7 @@
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Órgão Emissor *</label>
-                        <input type="text" name="rg_issuer" required placeholder="Ex: SSP/PE"
+                        <input type="text" name="rg_issuer" maxlength="50" required placeholder="Ex: SSP/PE"
                                value="{% if form_data %}{{ form_data.rg_issuer }}{% else %}{{ target.rg_issuer }}{% endif %}"
                                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
                     </div>
@@ -138,33 +138,33 @@
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Título de Eleitor <span class="text-xs text-gray-400">(opcional)</span></label>
-                        <input type="text" name="voter_title"
+                        <input type="text" name="voter_title" maxlength="20"
                                value="{% if form_data %}{{ form_data.voter_title }}{% else %}{{ target.voter_title }}{% endif %}"
                                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
                     </div>
                     <div class="grid grid-cols-2 gap-4">
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Zona <span class="text-xs text-gray-400">(opcional)</span></label>
-                            <input type="text" name="voter_zone"
+                            <input type="text" name="voter_zone" maxlength="10"
                                    value="{% if form_data %}{{ form_data.voter_zone }}{% else %}{{ target.voter_zone }}{% endif %}"
                                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Seção <span class="text-xs text-gray-400">(opcional)</span></label>
-                            <input type="text" name="voter_section"
+                            <input type="text" name="voter_section" maxlength="10"
                                    value="{% if form_data %}{{ form_data.voter_section }}{% else %}{{ target.voter_section }}{% endif %}"
                                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
                         </div>
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Tamanho Uniforme (Blusa)</label>
-                        <input type="text" name="uniform_size_shirt" placeholder="P, M, G, GG"
+                        <input type="text" name="uniform_size_shirt" maxlength="3" placeholder="P, M, G, GG"
                                value="{% if form_data %}{{ form_data.uniform_size_shirt }}{% else %}{{ target.uniform_size_shirt }}{% endif %}"
                                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Tamanho Uniforme (Calça)</label>
-                        <input type="text" name="uniform_size_pants" placeholder="P, M, G, GG, 38, 40"
+                        <input type="text" name="uniform_size_pants" maxlength="3" placeholder="P, M, G, GG, 38, 40"
                                value="{% if form_data %}{{ form_data.uniform_size_pants }}{% else %}{{ target.uniform_size_pants }}{% endif %}"
                                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
                     </div>

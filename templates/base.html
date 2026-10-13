@@ -308,6 +308,15 @@
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-primary rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </a>
                         </li>
+                        <li>
+                            <a href="{% url 'webmail:caixa' %}" data-rota="{% url 'webmail:caixa' %}"
+                               class="menu-item flex items-center gap-2.5 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-envelope text-orange-400 flex-shrink-0 w-5 text-center"></i>
+                                <span class="text-sm sidebar-text">E-mail</span>
+                                <div class="tooltip-collapsed">E-mail</div>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-orange-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
                         {% if user.is_superuser or user.hierarchy == 'SUPERADMIN' %}
                         <li>
                             <a href="{% url 'assistente:chat' %}" data-rota="{% url 'assistente:chat' %}"

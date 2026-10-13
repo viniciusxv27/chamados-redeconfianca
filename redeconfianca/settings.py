@@ -78,6 +78,7 @@ INSTALLED_APPS = [
     'contagem_caixa',  # Contagem de Caixa (controle diário por loja)
     'auditoria_sap',  # Visão SAP: auditoria SAP x Vivo go (espelho do MySQL)
     'vendas',  # Lançamento de vendas (Postgres) + tabela de preços
+    'webmail',  # E-mail institucional (cliente IMAP/SMTP do poste.io)
     'maps',  # Mapa de localização (módulo oculto, restrito à administração)
     'cursos',
     'quiz',
@@ -479,3 +480,18 @@ GOOGLE_DRIVE_SA_FILE = config('GOOGLE_DRIVE_SA_FILE', default='')
 GOOGLE_DRIVE_SA_JSON = config('GOOGLE_DRIVE_SA_JSON', default='')
 # Opcional: e-mail para delegação em todo o domínio (Google Workspace admin).
 GOOGLE_DRIVE_IMPERSONATE = config('GOOGLE_DRIVE_IMPERSONATE', default='')
+
+# ── E-mail institucional (/email/ — cliente IMAP/SMTP do poste.io) ──────────
+# Cada pessoa entra com o próprio e-mail e senha; a senha fica cifrada no banco
+# (webmail/seguranca.py). WEBMAIL_CHAVE é a chave Fernet dessa cifra — vazia,
+# ela é derivada do SECRET_KEY. Trocar a chave obriga todos a entrar de novo.
+WEBMAIL_IMAP_HOST = config('WEBMAIL_IMAP_HOST', default='mail.redeconfianca.com.br')
+WEBMAIL_IMAP_PORT = config('WEBMAIL_IMAP_PORT', default=993, cast=int)
+WEBMAIL_SMTP_HOST = config('WEBMAIL_SMTP_HOST', default='mail.redeconfianca.com.br')
+WEBMAIL_SMTP_PORT = config('WEBMAIL_SMTP_PORT', default=465, cast=int)
+WEBMAIL_DOMINIOS = config('WEBMAIL_DOMINIOS', default='redeconfianca.com.br')
+WEBMAIL_CHAVE = config('WEBMAIL_CHAVE', default='')
+# Impressão digital SHA-256 do certificado do servidor de e-mail, aceita só
+# enquanto ele não tiver um certificado válido (o poste.io vem com um
+# autoassinado). Com certificado válido aplicado, este valor deixa de ser usado.
+WEBMAIL_TLS_SHA256 = config('WEBMAIL_TLS_SHA256', default='')

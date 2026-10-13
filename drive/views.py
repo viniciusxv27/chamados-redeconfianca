@@ -688,20 +688,85 @@ def file_rename(request, file_id):
 @login_required
 @require_POST
 def file_move(request, file_id):
+    """Põe um arquivo ou uma pasta dentro de outra pasta da mesma raiz.
+
+    Quem move precisa poder EDITAR o item e também a pasta de destino (a
+    permissão pode ser só de uma subpasta). Pasta não vai para dentro de si
+    mesma nem de uma subpasta sua — o Google aceitaria e o galho sumiria da
+    árvore.
+    """
     mapping, nivel = perms.file_allowed(request.user, file_id)
     if not mapping or nivel < ORDEM['EDIT']:
         _deny(request, file_id=file_id, detalhe='move')
     destino = (request.POST.get('destino') or '').strip()
-    # RF11: mover só DENTRO do mesmo setor.
-    if not destino or not gdrive.dentro_de(destino, mapping.folder_id):
-        return _resp(request, False, 'Escolha uma pasta de destino dentro do mesmo setor.', mapping)
+    volta = request.POST.get('folder_id', '') or destino
+    if file_id == mapping.folder_id:
+        return _resp(request, False, f'"{mapping.rotulo}" é a pasta principal e não sai do lugar.', mapping, volta)
+    # RF11: mover só DENTRO da mesma raiz (setor ou pasta liberada).
+    if not _id_valido(destino) or not gdrive.dentro_de(destino, mapping.folder_id):
+        return _resp(request, False, 'Escolha uma pasta de destino dentro do mesmo setor.', mapping, volta)
     try:
-        gdrive.mover(file_id, destino)
+        item = gdrive.meta_leve(file_id, usar_cache=False) or {}
+        alvo = gdrive.meta_leve(destino) or {}
     except gdrive.DriveError as e:
-        return _resp(request, False, str(e), mapping)
-    audit.registrar(request.user, 'MOVE', request=request, file_id=file_id, sector=mapping.sector,
-                    folder_id=destino, detalhe='movido')
-    return _resp(request, True, 'Movido.', mapping, destino)
+        return _resp(request, False, str(e), mapping, volta)
+    if alvo.get('mimeType') != gdrive.FOLDER_MIME:
+        return _resp(request, False, 'O destino precisa ser uma pasta.', mapping, volta)
+    if destino in (item.get('parents') or []):
+        return _resp(request, False, f'"{item.get("name", "")}" já está em "{alvo.get("name", "")}".', mapping, volta)
+    if destino == file_id or gdrive.dentro_de(destino, file_id):
+        return _resp(request, False, 'Uma pasta não pode ir para dentro dela mesma.', mapping, volta)
+    nivel_destino = (perms.nivel_na_pasta(request.user, mapping) if mapping.e_pasta_liberada
+                     else perms.level_for_folder(request.user, mapping, destino))
+    if nivel_destino < ORDEM['EDIT']:
+        return _resp(request, False, f'Você não tem permissão para pôr itens em "{alvo.get("name", "")}".',
+                     mapping, volta)
+    try:
+        gdrive.mover(file_id, destino, ','.join(item.get('parents') or []) or None)
+    except gdrive.DriveError as e:
+        return _resp(request, False, str(e), mapping, volta)
+    nome_destino = mapping.rotulo if destino == mapping.folder_id else alvo.get('name', '')
+    audit.registrar(request.user, 'MOVE', request=request, file_id=file_id, file_name=item.get('name', ''),
+                    sector=mapping.sector, folder_id=destino, detalhe=f'movido para {nome_destino}')
+    return _resp(request, True, f'"{item.get("name", "")}" movido para "{nome_destino}".', mapping, volta,
+                 extra={'destino': destino, 'destino_nome': nome_destino})
+
+
+@login_required
+@require_GET
+def mover_pastas(request, file_id):
+    """Subpastas de ``pai`` para o seletor do "Mover para…" de ``file_id``.
+
+    Só mostra o que fica dentro da raiz do item, nunca o próprio item (nem o
+    que está abaixo dele, já que não se entra nele), e diz em quais a pessoa
+    pode pôr coisas.
+    """
+    mapping, nivel = perms.file_allowed(request.user, file_id)
+    if not mapping or nivel < ORDEM['EDIT']:
+        return JsonResponse({'ok': False, 'msg': 'Sem permissão para mover este item.'}, status=403)
+    pai = (request.GET.get('pai') or '').strip() or mapping.folder_id
+    if not _id_valido(pai) or pai == file_id or not gdrive.dentro_de(pai, mapping.folder_id) \
+            or gdrive.dentro_de(pai, file_id):
+        return JsonResponse({'ok': False, 'msg': 'Pasta inválida.'}, status=400)
+
+    def pode(folder_id):
+        if mapping.e_pasta_liberada:
+            return perms.nivel_na_pasta(request.user, mapping) >= ORDEM['EDIT']
+        return perms.level_for_folder(request.user, mapping, folder_id) >= ORDEM['EDIT']
+    try:
+        pastas, _ = gdrive.listar(pai, apenas_pastas=True, page_size=200)
+        trilha = gdrive.caminho(pai, ate_root=mapping.folder_id)
+        item = gdrive.meta_leve(file_id) or {}
+    except gdrive.DriveError as e:
+        return JsonResponse({'ok': False, 'msg': str(e)}, status=400)
+    trilha = [(mapping.folder_id, mapping.rotulo)] + [(fid, nome) for fid, nome in trilha[1:]]
+    return JsonResponse({
+        'ok': True, 'pai': pai, 'nome': trilha[-1][1],
+        'acima': trilha[-2][0] if len(trilha) > 1 else '',
+        'trilha': [{'id': fid, 'nome': nome} for fid, nome in trilha],
+        'pode_aqui': pode(pai), 'ja_esta_aqui': pai in (item.get('parents') or []),
+        'pastas': [{'id': p['id'], 'nome': p.get('name', '')} for p in pastas if p['id'] != file_id],
+    })
 
 
 @login_required

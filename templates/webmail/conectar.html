@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}E-mail{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'webmail/webmail.css' %}?v=3">
+{% endblock %}
+
+{% block content %}
+<div class="wm-entrar max-w-5xl mx-auto mt-2 sm:mt-6">
+    <div class="wm-entrar-cartao grid grid-cols-1 lg:grid-cols-5 overflow-hidden">
+        <section class="wm-entrar-lado lg:col-span-2 p-7 sm:p-9 text-white relative overflow-hidden">
+            <div class="relative z-10">
+                <span class="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-white/15 backdrop-blur mb-5">
+                    <i class="fas fa-envelope-open-text text-xl"></i>
+                </span>
+                <h1 class="text-2xl sm:text-3xl font-bold leading-tight">Seu e-mail institucional, aqui no portal</h1>
+                <p class="text-white/80 text-sm mt-3 leading-relaxed">
+                    Leia, responda e organize o e-mail da Rede Confiança sem sair do portal — com a mesma senha
+                    que você já usa no e-mail.
+                </p>
+                <ul class="mt-7 space-y-3.5 text-sm">
+                    <li class="flex gap-3"><i class="fas fa-inbox mt-0.5 w-4 text-white/70"></i><span>Caixa de entrada, enviados, rascunhos e suas pastas</span></li>
+                    <li class="flex gap-3"><i class="fas fa-chart-bar mt-0.5 w-4 text-white/70"></i><span>Visão geral: não lidas, quem mais escreve e o ritmo da semana</span></li>
+                    <li class="flex gap-3"><i class="fas fa-paperclip mt-0.5 w-4 text-white/70"></i><span>Anexos, respostas, encaminhamentos e assinatura</span></li>
+                    <li class="flex gap-3"><i class="fas fa-shield-alt mt-0.5 w-4 text-white/70"></i><span>Imagens de rastreio bloqueadas até você pedir</span></li>
+                </ul>
+            </div>
+            <div class="wm-entrar-bolha wm-b1"></div>
+            <div class="wm-entrar-bolha wm-b2"></div>
+        </section>
+
+        <section class="lg:col-span-3 p-7 sm:p-10 bg-white">
+            {% if conta and conta.senha_recusada %}
+            <div class="mb-6 flex gap-3 p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-sm">
+                <i class="fas fa-key mt-0.5"></i>
+                <div><strong>A senha do e-mail mudou.</strong> O servidor recusou a senha guardada — entre de novo com a senha atual.</div>
+            </div>
+            {% endif %}
+            <h2 class="text-xl font-bold text-gray-900">Conectar meu e-mail</h2>
+            <p class="text-sm text-gray-500 mt-1">Use o endereço e a senha do seu e-mail{% if dominio %} <strong>@{{ dominio }}</strong>{% endif %}.</p>
+
+            <form method="post" action="{% url 'webmail:conectar' %}" class="mt-7 space-y-5" id="wmFormEntrar">
+                {% csrf_token %}
+                <div>
+                    <label for="wmEmail" class="wm-rotulo">E-mail institucional</label>
+                    <div class="wm-campo-icone">
+                        <i class="fas fa-at"></i>
+                        <input id="wmEmail" name="email" type="email" required autocomplete="username"
+                               value="{{ conta.email|default:'' }}" placeholder="seu.nome@{{ dominio|default:'empresa.com.br' }}"
+                               class="wm-campo">
+                    </div>
+                </div>
+                <div>
+                    <label for="wmSenha" class="wm-rotulo">Senha do e-mail</label>
+                    <div class="wm-campo-icone">
+                        <i class="fas fa-lock"></i>
+                        <input id="wmSenha" name="senha" type="password" required autocomplete="current-password"
+                               placeholder="A senha que você usa no e-mail" class="wm-campo pr-11">
+                        <button type="button" class="wm-ver-senha" aria-label="Mostrar senha"
+                                onclick="var c=document.getElementById('wmSenha');c.type=c.type==='password'?'text':'password';this.querySelector('i').className=c.type==='password'?'fas fa-eye':'fas fa-eye-slash';">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </div>
+                </div>
+                <button type="submit" id="wmEntrarBotao" class="wm-botao-primario w-full justify-center py-3 text-[15px]">
+                    <i class="fas fa-plug"></i><span>Conectar</span>
+                </button>
+            </form>
+
+            <div class="mt-7 pt-6 border-t border-gray-100 text-xs text-gray-500 space-y-2 leading-relaxed">
+                <p><i class="fas fa-lock text-gray-400 mr-1.5"></i>A senha é conferida direto no servidor <strong>{{ servidor }}</strong> e guardada <strong>cifrada</strong>, só para o portal abrir sua caixa. Ninguém do portal consegue vê-la.</p>
+                <p><i class="fas fa-rotate text-gray-400 mr-1.5"></i>Trocou a senha do e-mail? O portal pede de novo na próxima vez.</p>
+                <p><i class="fas fa-power-off text-gray-400 mr-1.5"></i>Você pode desconectar a qualquer momento nas configurações da caixa — a senha é apagada na hora.</p>
+            </div>
+        </section>
+    </div>
+</div>
+<script>
+document.getElementById('wmFormEntrar').addEventListener('submit', function () {
+    var b = document.getElementById('wmEntrarBotao');
+    b.disabled = true;
+    b.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Conferindo no servidor…</span>';
+});
+</script>
+{% endblock %}

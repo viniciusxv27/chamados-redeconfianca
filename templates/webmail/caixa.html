@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}E-mail{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'webmail/webmail.css' %}?v=3">
+{# A caixa calcula a própria altura para caber na tela; sem isto a página rola e o topo some sob o cabeçalho. #}
+<style>#rc-conteudo { min-height: 0 !important; }</style>
+{% endblock %}
+
+{% block content %}
+<div id="wmApp" class="wm-app" data-vista="lista">
+    <!-- Topo: conta, busca e atalhos -->
+    <header class="wm-topo">
+        <button type="button" class="wm-icone-botao wm-so-movel" data-wm="abrir-pastas" title="Pastas" aria-label="Pastas">
+            <i class="fas fa-bars"></i>
+        </button>
+        <div class="flex items-center gap-2.5 min-w-0">
+            <span class="wm-avatar wm-avatar-eu" title="{{ conta.email }}">{{ iniciais }}</span>
+            <div class="min-w-0 wm-eu-texto hidden sm:block">
+                <p class="text-[13px] font-semibold truncate" style="color:var(--wm-texto)">{{ conta.remetente|default:conta.email }}</p>
+                <p class="text-[11px] truncate" style="color:var(--wm-texto-3)"><span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1 align-middle"></span>{{ conta.email }}</p>
+            </div>
+        </div>
+        <form class="wm-busca ml-1 sm:ml-4" id="wmBuscaForm" role="search" autocomplete="off">
+            <i class="fas fa-magnifying-glass"></i>
+            <input type="search" id="wmBusca" placeholder="Buscar e-mails" aria-label="Buscar e-mails">
+            <kbd>/</kbd>
+        </form>
+        <div class="flex items-center gap-0.5 ml-auto">
+            <button type="button" class="wm-icone-botao" data-wm="atualizar" title="Atualizar (R)" aria-label="Atualizar"><i class="fas fa-rotate-right"></i></button>
+            <button type="button" class="wm-icone-botao" data-wm="visao-geral" title="Visão geral" aria-label="Visão geral"><i class="fas fa-chart-bar"></i></button>
+            <button type="button" class="wm-icone-botao hidden sm:inline-flex" data-wm="atalhos" title="Atalhos do teclado (?)" aria-label="Atalhos"><i class="far fa-keyboard"></i></button>
+            <button type="button" class="wm-icone-botao" data-wm="configurar" title="Configurações" aria-label="Configurações"><i class="fas fa-gear"></i></button>
+        </div>
+    </header>
+
+    <div class="wm-corpo">
+        <div class="wm-cortina" data-wm="fechar-pastas"></div>
+
+        <!-- Pastas -->
+        <aside class="wm-coluna wm-pastas" aria-label="Pastas">
+            <button type="button" class="wm-botao-primario wm-escrever" data-wm="escrever">
+                <i class="fas fa-pen-to-square"></i><span>Escrever</span><span class="wm-kbd ml-1 opacity-80" style="background:transparent;color:#fff;border-color:rgba(255,255,255,.45)">C</span>
+            </button>
+            <nav class="mt-4 space-y-0.5" id="wmPastasPrincipais">
+                {% for i in "123456" %}<div class="wm-esqueleto h-9 mx-1 mb-1.5"></div>{% endfor %}
+            </nav>
+            <div class="wm-secao-titulo" id="wmTituloMinhas" hidden>
+                <span>Minhas pastas</span>
+                <button type="button" data-wm="nova-pasta" title="Nova pasta" class="hover:text-orange-500"><i class="fas fa-plus"></i></button>
+            </div>
+            <nav class="space-y-0.5" id="wmPastasMinhas"></nav>
+            <button type="button" data-wm="nova-pasta" id="wmNovaPastaSolta" class="wm-pasta mt-1 text-[13px]" hidden>
+                <i class="fas fa-folder-plus"></i><span class="wm-nome">Nova pasta</span>
+            </button>
+            <div class="wm-quota" id="wmQuota" hidden>
+                <div class="flex items-center justify-between text-[11px] font-semibold mb-1.5" style="color:var(--wm-texto-2)">
+                    <span><i class="fas fa-database mr-1" style="color:var(--wm-texto-3)"></i>Espaço</span><span id="wmQuotaTexto"></span>
+                </div>
+                <div class="wm-barra"><span id="wmQuotaBarra" style="width:0"></span></div>
+            </div>
+        </aside>
+
+        <!-- Lista -->
+        <section class="wm-coluna wm-lista" aria-label="Mensagens">
+            <div class="wm-lista-topo" id="wmListaTopo">
+                <button type="button" class="wm-icone-botao" data-wm="selecionar-todas" title="Selecionar todas" aria-label="Selecionar todas"><i class="far fa-square" id="wmIconeTodas"></i></button>
+                <div class="min-w-0" id="wmTituloLista">
+                    <p class="text-[15px] font-bold truncate" id="wmNomePasta" style="color:var(--wm-texto)">Caixa de entrada</p>
+                </div>
+                <div id="wmAcoesLote" class="hidden items-center gap-0.5 flex-1 min-w-0">
+                    <span class="text-[12px] font-semibold mr-1 whitespace-nowrap" id="wmQtdSelecionadas" style="color:var(--wm-laranja-escuro)"></span>
+                    <button type="button" class="wm-icone-botao" data-lote="arquivo" title="Arquivar (E)"><i class="fas fa-box-archive"></i></button>
+                    <button type="button" class="wm-icone-botao" data-lote="lixeira" title="Excluir (#)"><i class="far fa-trash-can"></i></button>
+                    <button type="button" class="wm-icone-botao" data-lote="lida" title="Marcar como lida"><i class="far fa-envelope-open"></i></button>
+                    <button type="button" class="wm-icone-botao" data-lote="nao_lida" title="Marcar como não lida"><i class="far fa-envelope"></i></button>
+                    <button type="button" class="wm-icone-botao" data-lote="mais" title="Mais"><i class="fas fa-ellipsis-vertical"></i></button>
+                </div>
+                <div class="wm-pagina" id="wmPaginacao">
+                    <span id="wmFaixa"></span>
+                    <button type="button" class="wm-icone-botao" data-wm="pagina-anterior" title="Mais recentes" aria-label="Página anterior"><i class="fas fa-chevron-left text-xs"></i></button>
+                    <button type="button" class="wm-icone-botao" data-wm="pagina-seguinte" title="Mais antigas" aria-label="Próxima página"><i class="fas fa-chevron-right text-xs"></i></button>
+                </div>
+            </div>
+            <div class="wm-filtros" id="wmFiltros">
+                <button type="button" class="wm-chip wm-ativo" data-filtro="">Todas</button>
+                <button type="button" class="wm-chip" data-filtro="nao_lidas">Não lidas</button>
+                <button type="button" class="wm-chip" data-filtro="sinalizadas"><i class="fas fa-star text-[10px] mr-1"></i>Sinalizadas</button>
+                <button type="button" class="wm-chip" data-filtro="anexos"><i class="fas fa-paperclip text-[10px] mr-1"></i>Com anexo</button>
+            </div>
+            <div class="wm-itens" id="wmItens" tabindex="-1"></div>
+            <button type="button" class="wm-fab" data-wm="escrever" title="Escrever" aria-label="Escrever"><i class="fas fa-pen"></i></button>
+        </section>
+
+        <!-- Leitura / visão geral -->
+        <section class="wm-coluna wm-leitura" id="wmLeitura" aria-label="Leitura"></section>
+    </div>
+</div>
+
+<div class="wm-avisos" id="wmAvisos" aria-live="polite"></div>
+
+{{ assinatura_padrao|json_script:"wm-assinatura-padrao" }}
+{{ conta.assinatura|json_script:"wm-assinatura" }}
+<script id="wm-config" type="application/json">{
+    "email": "{{ conta.email|escapejs }}",
+    "nome": "{{ conta.remetente|default:conta.email|escapejs }}",
+    "primeiroNome": "{{ request.user.first_name|default:request.user.username|escapejs }}",
+    "csrf": "{{ csrf_token }}",
+    "urls": {
+        "pastas": "{% url 'webmail:api_pastas' %}",
+        "criarPasta": "{% url 'webmail:api_criar_pasta' %}",
+        "lista": "{% url 'webmail:api_lista' %}",
+        "mensagem": "{% url 'webmail:api_mensagem' %}",
+        "acao": "{% url 'webmail:api_acao' %}",
+        "resumo": "{% url 'webmail:api_resumo' %}",
+        "novidades": "{% url 'webmail:api_novidades' %}",
+        "contatos": "{% url 'webmail:api_contatos' %}",
+        "enviar": "{% url 'webmail:api_enviar' %}",
+        "rascunho": "{% url 'webmail:api_rascunho' %}",
+        "anexo": "{% url 'webmail:anexo' %}",
+        "original": "{% url 'webmail:original' %}",
+        "preferencias": "{% url 'webmail:preferencias' %}",
+        "desconectar": "{% url 'webmail:desconectar' %}",
+        "caixa": "{% url 'webmail:caixa' %}"
+    }
+}</script>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'webmail/webmail.js' %}?v=3"></script>
+{% endblock %}
