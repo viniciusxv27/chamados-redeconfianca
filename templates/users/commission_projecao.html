@@ -37,6 +37,10 @@
         </div>
 
         <div class="flex flex-wrap items-center gap-2">
+            <a href="{% url 'commission_history' %}"
+               class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary bg-primary/10 border border-primary/20 rounded-lg hover:bg-primary/15 transition-colors">
+                <i class="fas fa-clock-rotate-left"></i> Histórico por cargo
+            </a>
             <a href="{% url 'commission' %}"
                class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
                 <i class="fas fa-sack-dollar"></i> Ver realizado

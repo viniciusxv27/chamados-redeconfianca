@@ -159,6 +159,7 @@ TEMPLATES = [
                 'portal_popups.context_processors.portal_popup_gate',
                 'impulso.context_processors.impulso_menu',
                 'cartoes.context_processors.cartoes_menu',
+                'webmail.context_processors.email_menu',
                 'tangerino.context_processors.tangerino_gate',
                 'contagem_caixa.context_processors.caixa_menu',
                 'maps.context_processors.coleta_posicao',

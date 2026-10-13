@@ -603,6 +603,48 @@ try:
     d = c.get('/email/api/contatos/?q=bet').json()
     t('contatos: quem tem e-mail ligado no portal', [x['email'] for x in d['contatos']] == ['beto.reis@redeconfianca.com.br'])
 
+    print('\n== IMPORTANTE E O NÚMERO DO MENU ==')
+    from django.core.cache import cache as cache_portal
+    jj = lambda **kw: c.post('/email/api/acao/', data=__import__('json').dumps(kw), content_type='application/json')
+    ultimo = SERVIDOR.pastas['INBOX'][-1].uid
+    jj(pasta='INBOX', uids=[ultimo], acao='sinalizar')
+    t('marcar como Importante usa a marca \\Flagged do servidor', '\\Flagged' in SERVIDOR.pastas['INBOX'][-1].flags)
+    d = c.get('/email/api/lista/?pasta=INBOX&filtro=importantes').json()
+    t('filtro Importantes', [m['uid'] for m in d['mensagens']] == [ultimo], d.get('mensagens'))
+    d = c.get('/email/api/resumo/').json()
+    t('a visão geral traz os importantes com remetente, assunto e prévia',
+      [m['uid'] for m in d['importantes']] == [ultimo] and d['importantes'][0]['assunto'] and 'previa' in d['importantes'][0]
+      and d['sinalizadas'] == 1, d.get('importantes'))
+    jj(pasta='INBOX', uids=[ultimo], acao='tirar_sinal')
+    t('tirar de Importante', not c.get('/email/api/resumo/').json()['importantes'])
+
+    cache_portal.clear()
+    nao_lidas = sum(1 for m in SERVIDOR.pastas['INBOX'] if '\\Seen' not in m.flags)
+    r = c.get('/email/api/contador/')
+    t('contador do menu = não lidas da caixa de entrada', r.json()['nao_lidas'] == nao_lidas, r.json())
+    conexoes = SERVIDOR.conexoes
+    SERVIDOR.pastas['INBOX'][0].flags.discard('\\Seen')
+    t('e fica no cache (outras páginas não vão ao servidor)', c.get('/email/api/contador/').json()['nao_lidas'] == nao_lidas)
+    html = c.get('/email/').content.decode()
+    t('o menu do portal mostra a bolinha com o número', f'id="rc-email-badge" data-atualizar=""' in html
+      and re.search(r'id="rc-email-badge"[^>]*>' + str(nao_lidas) + '<', html) is not None)
+    nao_lida = next(m for m in SERVIDOR.pastas['INBOX'] if '\\Seen' not in m.flags)
+    c.get(f'/email/api/mensagem/?pasta=INBOX&uid={nao_lida.uid}')
+    t('ler uma não lida desce o número guardado', cache_portal.get(f'webmail:nao_lidas:{ana.pk}') == nao_lidas - 1,
+      cache_portal.get(f'webmail:nao_lidas:{ana.pk}'))
+    jj(pasta='INBOX', uids=[nao_lida.uid], acao='nao_lida')
+    t('marcar como não lida faz recontar na próxima página', cache_portal.get(f'webmail:nao_lidas:{ana.pk}') is None)
+    cache_portal.clear()
+    html = c.get('/email/').content.decode()
+    t('número vencido: a página pede um novo depois de carregar', 'id="rc-email-badge" data-atualizar="1"' in html
+      and '/email/api/contador/' in html)
+    caio = User.objects.create_user(username='zz.webmail.caio', email='zz.caio.pessoal@exemplo-teste.local',
+                                    password='S3nha!teste', first_name='Caio')
+    cc = Client(); cc.force_login(caio)
+    html = cc.get('/email/').content.decode()
+    t('quem não conectou o e-mail não pede contador nem vê bolinha',
+      'data-atualizar="1"' not in html and re.search(r'id="rc-email-badge"[^>]*class="[^"]*hidden', html) is not None)
+
     print('\n== SENHA TROCADA NO SERVIDOR ==')
     conexoes = SERVIDOR.conexoes
     c.get('/email/api/pastas/')

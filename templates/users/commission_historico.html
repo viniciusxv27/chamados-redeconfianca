@@ -1,0 +1,245 @@
+{% extends 'base.html' %}
+{% load caixa_tags l10n %}
+
+{% block title %}Histórico de comissão por cargo{% endblock %}
+
+{% block extra_css %}
+<style>
+    .hc-card { background:#fff; border:1px solid #EDEDF0; border-radius:1rem; box-shadow:0 1px 2px rgba(16,24,40,.04); }
+    .hc-chip { display:inline-flex; align-items:center; gap:.4rem; padding:.42rem .8rem; border-radius:.7rem; border:1px solid #E5E7EB;
+               font-size:.8125rem; font-weight:500; color:#4B5563; background:#fff; cursor:pointer; user-select:none; transition:all .15s; }
+    .hc-chip:hover { border-color:#FDBA9A; color:#C2410C; }
+    input:checked + .hc-chip { background:#FF6B35; border-color:#FF6B35; color:#fff; box-shadow:0 4px 10px rgba(255,107,53,.25); }
+    .hc-campo { width:100%; border:1px solid #D9D9E3; border-radius:.7rem; padding:.5rem .7rem; font-size:.85rem; background:#fff; color:#111827; }
+    .hc-campo:focus { outline:none; border-color:#FF6B35; box-shadow:0 0 0 3px rgba(255,107,53,.15); }
+    .hc-barra { height:100%; border-radius:.45rem .45rem .15rem .15rem; background:#FFD3C0; transform-origin:bottom;
+                animation: hcSobe .6s cubic-bezier(.2,.8,.2,1) both; transition:background .15s; min-height:3px; }
+    .hc-col:hover .hc-barra { background:#FF6B35; }
+    @keyframes hcSobe { from { transform:scaleY(0); } to { transform:scaleY(1); } }
+    .tabular { font-variant-numeric: tabular-nums; }
+    .hc-tabela th { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.03em; color:#6B7280; white-space:nowrap; }
+    .hc-tabela td { white-space:nowrap; }
+    html.dark .hc-card, html.dark .hc-campo, html.dark .hc-chip { background: var(--tema-superficie) !important; border-color: var(--tema-borda) !important; color: var(--tema-texto) !important; }
+    html.dark input:checked + .hc-chip { background:#FF6B35 !important; color:#fff !important; }
+    html.dark .hc-barra { background: rgba(255,107,53,.35); }
+    html.dark .hc-mes-cabeca { background: var(--tema-superficie-2) !important; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-3 sm:px-4 py-6 max-w-7xl">
+
+    <div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 mb-5">
+        <div class="min-w-0">
+            <a href="{% url 'commission_projection' %}" class="text-xs text-gray-400 hover:text-primary"><i class="fas fa-arrow-left mr-1"></i>Médias de Comissão</a>
+            <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 flex items-center gap-2 mt-1">
+                <i class="fas fa-clock-rotate-left text-primary"></i>Histórico por cargo
+            </h1>
+            <p class="text-gray-500 text-sm mt-1">
+                Quanto cada cargo recebeu de comissão, mês a mês, desde o primeiro mês com histórico no portal{% if primeiro_mes %} ({{ meses_opcoes.0.1 }}){% endif %}.
+            </p>
+        </div>
+        <a href="?{{ query_export }}{% if query_export %}&{% endif %}exportar=xlsx"
+           class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 self-start lg:self-auto {% if not meses %}pointer-events-none opacity-40{% endif %}">
+            <i class="fas fa-file-excel text-emerald-600"></i> Exportar Excel
+        </a>
+    </div>
+
+    <!-- Filtros -->
+    <form method="get" class="hc-card p-4 sm:p-5 mb-5" id="hcFiltros">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+            <div class="lg:col-span-12">
+                <p class="text-xs font-semibold text-gray-500 mb-2">Cargo</p>
+                <div class="flex flex-wrap gap-2">
+                    {% for chave, rotulo in cargos %}
+                    <label><input type="checkbox" name="cargo" value="{{ chave }}" class="hidden" {% if chave in f_cargo %}checked{% endif %} onchange="this.form.submit()">
+                        <span class="hc-chip">{{ rotulo }}</span></label>
+                    {% empty %}<span class="text-sm text-gray-400">Sem histórico no seu escopo.</span>{% endfor %}
+                </div>
+            </div>
+            <div class="lg:col-span-4">
+                <label class="text-xs font-semibold text-gray-500 mb-1 block" for="hcSetor">Setor (loja)</label>
+                <select name="setor" id="hcSetor" class="hc-campo" onchange="this.form.submit()">
+                    <option value="">Todas as lojas</option>
+                    {% for chave, rotulo in lojas %}<option value="{{ chave }}" {% if chave in f_loja %}selected{% endif %}>{{ rotulo }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="lg:col-span-4">
+                <label class="text-xs font-semibold text-gray-500 mb-1 block" for="hcPessoa">Pessoa</label>
+                <select name="pessoa" id="hcPessoa" class="hc-campo" onchange="this.form.submit()">
+                    <option value="">Todas ({{ pessoas|length }})</option>
+                    {% for p in pessoas %}<option value="{{ p }}" {% if p == f_pessoa %}selected{% endif %}>{{ p|title }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="lg:col-span-2">
+                <label class="text-xs font-semibold text-gray-500 mb-1 block" for="hcDe">De</label>
+                <select name="de" id="hcDe" class="hc-campo" onchange="this.form.submit()">
+                    <option value="">Início</option>
+                    {% for c, r in meses_opcoes %}<option value="{{ c }}" {% if c == f_de %}selected{% endif %}>{{ r }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="lg:col-span-2">
+                <label class="text-xs font-semibold text-gray-500 mb-1 block" for="hcAte">Até</label>
+                <select name="ate" id="hcAte" class="hc-campo" onchange="this.form.submit()">
+                    <option value="">Último</option>
+                    {% for c, r in meses_opcoes %}<option value="{{ c }}" {% if c == f_ate %}selected{% endif %}>{{ r }}</option>{% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="flex items-center justify-between gap-3 mt-4 pt-3 border-t border-gray-100 flex-wrap">
+            <p class="text-sm text-gray-600"><i class="fas fa-filter text-primary mr-1.5"></i>Mostrando: <strong>{{ filtros_texto }}</strong></p>
+            {% if tem_filtro %}<a href="?" class="text-xs font-semibold text-primary hover:underline">Limpar filtros</a>{% endif %}
+        </div>
+        <noscript><button class="mt-3 px-4 py-2 bg-primary text-white rounded-lg text-sm">Filtrar</button></noscript>
+    </form>
+
+    {% if not meses %}
+    <div class="hc-card p-12 text-center">
+        <i class="fas fa-magnifying-glass-chart text-4xl text-gray-200 mb-3"></i>
+        <h3 class="text-lg font-semibold text-gray-800">Nada com esses filtros</h3>
+        <p class="text-sm text-gray-500 mt-1">Troque o cargo ou a loja — ou limpe os filtros.</p>
+    </div>
+    {% else %}
+
+    <!-- Números do topo -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+        <div class="bg-gradient-to-br from-primary to-orange-500 rounded-2xl p-5 text-white shadow-lg shadow-primary/20 col-span-2 lg:col-span-1">
+            <p class="text-white/80 text-xs font-semibold uppercase tracking-wide">Total recebido</p>
+            <p class="text-2xl sm:text-3xl font-bold tabular mt-1">{{ total.recebido|brl_zero }}</p>
+            <p class="text-white/75 text-xs mt-1">{{ meses|length }} mês{{ meses|length|pluralize:"es" }} · {% with ultimo=meses|last %}{{ meses.0.rotulo }}{% if meses|length > 1 %} a {{ ultimo.rotulo }}{% endif %}{% endwith %}</p>
+        </div>
+        <div class="hc-card p-5">
+            <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Média por mês</p>
+            <p class="text-2xl font-bold text-gray-900 tabular mt-1">{{ media_mes|brl_zero }}</p>
+            <p class="text-xs text-gray-400 mt-1">soma de todos ÷ meses</p>
+        </div>
+        <div class="hc-card p-5">
+            <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Melhor mês</p>
+            <p class="text-2xl font-bold text-emerald-600 tabular mt-1">{{ melhor_mes.total.recebido|brl_zero }}</p>
+            <p class="text-xs text-gray-400 mt-1">{{ melhor_mes.rotulo }}</p>
+        </div>
+        <div class="hc-card p-5">
+            <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Pessoas</p>
+            <p class="text-2xl font-bold text-gray-900 tabular mt-1">{{ n_pessoas }}</p>
+            <p class="text-xs text-gray-400 mt-1">que ocuparam esse recorte no período</p>
+        </div>
+    </div>
+
+    <!-- Gráfico mês a mês -->
+    <div class="hc-card p-5 mb-5">
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+            <h2 class="text-sm font-bold text-gray-900"><i class="fas fa-chart-column text-primary mr-1.5"></i>Recebido por mês</h2>
+            <span class="text-[11px] text-gray-400"><span class="inline-block w-2.5 h-2.5 rounded-sm bg-amber-300 mr-1 align-middle"></span>prévia (antes da contestação)</span>
+        </div>
+        <div class="flex items-end gap-2 sm:gap-3 mt-5" style="height:200px">
+            {% for m in meses %}
+            <a href="#mes-{{ m.chave }}" class="hc-col flex-1 min-w-0 h-full flex flex-col items-center justify-end gap-1.5 group" title="{{ m.rotulo }}: {{ m.total.recebido|brl_zero }}">
+                <span class="text-[10px] sm:text-[11px] font-semibold text-gray-600 tabular whitespace-nowrap">{{ m.total.recebido|brl_zero|cut:"R$ " }}</span>
+                <span class="w-full max-w-[56px] flex-1 relative"><span class="hc-barra absolute bottom-0 left-0 right-0 {% if m.previa %}!bg-amber-200{% endif %}" style="height:{{ m.pct|unlocalize }}%;animation-delay:{{ forloop.counter0 }}0ms"></span></span>
+                <span class="text-[10px] sm:text-[11px] text-gray-500 whitespace-nowrap">{{ m.rotulo }}</span>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+
+    {% if grade|length > 1 %}
+    <!-- Pessoa × mês -->
+    <div class="hc-card overflow-hidden mb-5">
+        <div class="px-5 py-3 border-b border-gray-100 flex items-center justify-between gap-2 flex-wrap">
+            <h2 class="text-sm font-bold text-gray-900"><i class="fas fa-table-cells text-primary mr-1.5"></i>Pessoa × mês</h2>
+            <span class="text-[11px] text-gray-400">quem esteve no cargo em cada mês e quanto recebeu</span>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full text-sm hc-tabela">
+                <thead class="bg-gray-50/70"><tr>
+                    <th class="text-left px-4 py-2.5 sticky left-0 bg-gray-50">Pessoa</th>
+                    {% for m in meses %}<th class="text-right px-3 py-2.5">{{ m.rotulo }}</th>{% endfor %}
+                    <th class="text-right px-4 py-2.5">Total</th>
+                </tr></thead>
+                <tbody class="divide-y divide-gray-50">
+                    {% for g in grade %}
+                    <tr class="hover:bg-orange-50/30">
+                        <td class="px-4 py-2 sticky left-0 bg-white">
+                            <a href="?{% for c in f_cargo %}cargo={{ c }}&{% endfor %}{% for l in f_loja %}setor={{ l }}&{% endfor %}pessoa={{ g.pessoa|urlencode }}" class="font-medium text-gray-800 hover:text-primary">{{ g.pessoa|title }}</a>
+                            <span class="block text-[11px] text-gray-400">{{ g.cargo }} · {{ g.loja }}</span>
+                        </td>
+                        {% for v in g.celulas %}<td class="px-3 py-2 text-right tabular {% if v is None %}text-gray-300{% else %}text-gray-700{% endif %}">{% if v is None %}·{% else %}{{ v|brl }}{% endif %}</td>{% endfor %}
+                        <td class="px-4 py-2 text-right tabular font-bold text-gray-900">{{ g.total|brl_zero }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot class="bg-orange-50/50 font-bold"><tr>
+                    <td class="px-4 py-2.5 sticky left-0 bg-orange-50">Total</td>
+                    {% for m in meses %}<td class="px-3 py-2.5 text-right tabular">{{ m.total.recebido|brl_zero }}</td>{% endfor %}
+                    <td class="px-4 py-2.5 text-right tabular text-primary">{{ total.recebido|brl_zero }}</td>
+                </tr></tfoot>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Detalhado por mês -->
+    <div class="hc-card overflow-hidden">
+        <div class="px-5 py-3 border-b border-gray-100 flex items-center justify-between gap-2 flex-wrap">
+            <h2 class="text-sm font-bold text-gray-900"><i class="fas fa-list-ol text-primary mr-1.5"></i>Detalhado por mês</h2>
+            <span class="text-[11px] text-gray-400">comissão + premiação + bônus + aceleradores ± IQ − descontos = recebido</span>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full text-sm hc-tabela">
+                <thead class="bg-gray-50/70"><tr>
+                    <th class="text-left px-4 py-2.5">Pessoa</th>
+                    {% for chave, rotulo in partes %}<th class="text-right px-3 py-2.5">{{ rotulo }}</th>{% endfor %}
+                    <th class="text-right px-4 py-2.5">Recebido</th>
+                </tr></thead>
+                {% for m in meses %}
+                <tbody id="mes-{{ m.chave }}" class="scroll-mt-24">
+                    <tr class="hc-mes-cabeca bg-orange-50/60">
+                        <td colspan="{{ partes|length|add:2 }}" class="px-4 py-2">
+                            <div class="flex items-center justify-between gap-3">
+                                <span class="font-bold text-gray-900">{{ m.rotulo }}
+                                    {% if m.previa %}<span class="ml-1.5 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800" title="Valor da prévia (antes da contestação); pode mudar depois da contestação.">prévia</span>{% endif %}
+                                    {% if m.rascunho %}<span class="ml-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-gray-200 text-gray-600" title="Versão ainda não liberada: só superadmin vê.">rascunho</span>{% endif %}
+                                </span>
+                                <span class="font-bold text-primary tabular">{{ m.total.recebido|brl_zero }}</span>
+                            </div>
+                        </td>
+                    </tr>
+                    {% for l in m.linhas %}
+                    <tr class="hover:bg-gray-50 border-b border-gray-50">
+                        <td class="px-4 py-2">
+                            <span class="font-medium text-gray-800">{{ l.pessoa|title }}</span>
+                            <span class="block text-[11px] text-gray-400">{{ l.cargo }} · {{ l.loja_rotulo }}</span>
+                        </td>
+                        <td class="px-3 py-2 text-right tabular text-gray-700">{{ l.comissao|brl }}</td>
+                        <td class="px-3 py-2 text-right tabular text-gray-700">{{ l.premiacao|brl }}</td>
+                        <td class="px-3 py-2 text-right tabular text-gray-700">{{ l.bonus_loja|brl }}</td>
+                        <td class="px-3 py-2 text-right tabular text-gray-700">{{ l.aceleradores|brl }}</td>
+                        <td class="px-3 py-2 text-right tabular {% if l.ajuste_iq < 0 %}text-red-600{% else %}text-gray-700{% endif %}">{{ l.ajuste_iq|brl }}</td>
+                        <td class="px-3 py-2 text-right tabular {% if l.descontos %}text-red-600{% else %}text-gray-700{% endif %}">{% if l.descontos %}− {% endif %}{{ l.descontos|brl }}</td>
+                        <td class="px-4 py-2 text-right tabular font-bold text-gray-900">{{ l.recebido|brl_zero }}</td>
+                    </tr>
+                    {% endfor %}
+                    {% if m.linhas|length > 1 %}
+                    <tr class="bg-gray-50/60 text-gray-700">
+                        <td class="px-4 py-2 text-xs font-semibold">Subtotal {{ m.rotulo }}</td>
+                        {% for chave, rotulo in partes %}<td class="px-3 py-2 text-right tabular text-xs">{% for k, v in m.total.items %}{% if k == chave %}{{ v|brl }}{% endif %}{% endfor %}</td>{% endfor %}
+                        <td class="px-4 py-2 text-right tabular font-bold">{{ m.total.recebido|brl_zero }}</td>
+                    </tr>
+                    {% endif %}
+                </tbody>
+                {% endfor %}
+                <tfoot class="bg-orange-50/50 font-bold"><tr>
+                    <td class="px-4 py-3">Total do período</td>
+                    {% for chave, rotulo in partes %}<td class="px-3 py-3 text-right tabular">{% for k, v in total.items %}{% if k == chave %}{{ v|brl }}{% endif %}{% endfor %}</td>{% endfor %}
+                    <td class="px-4 py-3 text-right tabular text-primary">{{ total.recebido|brl_zero }}</td>
+                </tr></tfoot>
+            </table>
+        </div>
+    </div>
+    <p class="text-[11px] text-gray-400 mt-3"><i class="fas fa-circle-info mr-1"></i>
+        Fonte: planilhas de comissionamento de cada mês, guardadas pelo portal. "Recebido" é a remuneração final da planilha — o mesmo valor da tela de comissionamento.
+        Meses marcados como <strong>prévia</strong> vieram da versão antes da contestação.
+    </p>
+    {% endif %}
+</div>
+{% endblock %}

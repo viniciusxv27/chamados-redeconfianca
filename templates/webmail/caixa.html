@@ -4,7 +4,7 @@
 {% block title %}E-mail{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{% static 'webmail/webmail.css' %}?v=3">
+<link rel="stylesheet" href="{% static 'webmail/webmail.css' %}?v=4">
 {# A caixa calcula a própria altura para caber na tela; sem isto a página rola e o topo some sob o cabeçalho. #}
 <style>#rc-conteudo { min-height: 0 !important; }</style>
 {% endblock %}
@@ -87,7 +87,7 @@
             <div class="wm-filtros" id="wmFiltros">
                 <button type="button" class="wm-chip wm-ativo" data-filtro="">Todas</button>
                 <button type="button" class="wm-chip" data-filtro="nao_lidas">Não lidas</button>
-                <button type="button" class="wm-chip" data-filtro="sinalizadas"><i class="fas fa-star text-[10px] mr-1"></i>Sinalizadas</button>
+                <button type="button" class="wm-chip" data-filtro="importantes"><i class="fas fa-star text-[10px] mr-1 text-amber-400"></i>Importantes</button>
                 <button type="button" class="wm-chip" data-filtro="anexos"><i class="fas fa-paperclip text-[10px] mr-1"></i>Com anexo</button>
             </div>
             <div class="wm-itens" id="wmItens" tabindex="-1"></div>
@@ -129,5 +129,5 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{% static 'webmail/webmail.js' %}?v=3"></script>
+<script src="{% static 'webmail/webmail.js' %}?v=4"></script>
 {% endblock %}

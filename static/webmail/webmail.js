@@ -191,6 +191,7 @@
         const entrada = pastaPorPapel('entrada');
         const n = entrada ? entrada.nao_lidas : 0;
         document.title = (n ? `(${n}) ` : '') + 'E-mail — ' + CFG.email;
+        if (window.rcEmailBadge) window.rcEmailBadge(n);
     }
 
     function irParaPasta(id, opcoes) {
@@ -258,7 +259,7 @@
                 </div>
                 <div class="wm-item-linha">
                     <span class="wm-item-assunto flex-1">${esc(m.assunto)}</span>
-                    <button type="button" class="wm-estrela ${m.sinalizada ? 'wm-ligada' : ''}" data-acao="estrela" title="${m.sinalizada ? 'Tirar sinal' : 'Sinalizar'}"><i class="${m.sinalizada ? 'fas' : 'far'} fa-star text-[12px]"></i></button>
+                    <button type="button" class="wm-estrela ${m.sinalizada ? 'wm-ligada' : ''}" data-acao="estrela" title="${m.sinalizada ? 'Tirar de Importante' : 'Marcar como Importante'}"><i class="${m.sinalizada ? 'fas' : 'far'} fa-star text-[12px]"></i></button>
                 </div>
                 ${m.previa ? `<div class="wm-item-previa">${esc(m.previa)}</div>` : ''}
             </div>
@@ -428,7 +429,7 @@
             <button type="button" class="wm-icone-botao" data-ler="lixeira" title="${papel === 'lixeira' ? 'Excluir para sempre' : 'Excluir (#)'}"><i class="far fa-trash-can"></i></button>
             <span class="w-px h-5 mx-1" style="background:var(--wm-borda-forte)"></span>
             <button type="button" class="wm-icone-botao" data-ler="nao_lida" title="Marcar como não lida (U)"><i class="far fa-envelope"></i></button>
-            <button type="button" class="wm-icone-botao ${msg.sinalizada ? 'wm-ativo' : ''}" data-ler="estrela" title="Sinalizar (S)"><i class="${msg.sinalizada ? 'fas text-amber-500' : 'far'} fa-star"></i></button>
+            <button type="button" class="wm-icone-botao ${msg.sinalizada ? 'wm-ativo' : ''}" data-ler="estrela" title="${msg.sinalizada ? 'Tirar de Importante (S)' : 'Marcar como Importante (S)'}"><i class="${msg.sinalizada ? 'fas text-amber-500' : 'far'} fa-star"></i></button>
             <button type="button" class="wm-icone-botao" data-ler="mover" title="Mover para…"><i class="fas fa-folder-tree"></i></button>
             <button type="button" class="wm-icone-botao" data-ler="mais" title="Mais"><i class="fas fa-ellipsis-vertical"></i></button>
             <div class="ml-auto flex items-center gap-0.5">
@@ -440,6 +441,7 @@
         <div class="wm-leitura-rolagem"><article class="wm-msg">
             <div class="flex items-start gap-3">
                 <h2 class="flex-1">${esc(msg.assunto)}</h2>
+                ${msg.sinalizada ? '<span class="wm-selo-importante" id="wmSeloImportante"><i class="fas fa-star"></i>Importante</span>' : ''}
                 <span class="text-[11px] font-semibold px-2 py-1 rounded-lg whitespace-nowrap" style="background:var(--wm-fundo);color:var(--wm-texto-2)"><i class="fas ${ICONE_PAPEL[papel] || 'fa-folder'} mr-1"></i>${esc(pastaAtual().nome)}</span>
             </div>
             <div class="wm-remetente">
@@ -553,7 +555,7 @@
         document.getElementById('wmGeralCards').innerHTML =
             card(r.nao_lidas, 'Não lidas', 'fa-envelope', '#EA580C', '#FFEDD5', 'nao_lidas')
             + card(r.hoje, 'Recebidas hoje', 'fa-sun', '#0284C7', '#E0F2FE', 'hoje')
-            + card(r.sinalizadas, 'Sinalizadas', 'fa-star', '#D97706', '#FEF3C7', 'sinalizadas')
+            + card(r.sinalizadas, 'Importantes', 'fa-star', '#D97706', '#FEF3C7', 'importantes')
             + card(r.total, 'Na caixa de entrada', 'fa-inbox', '#7C3AED', '#EDE9FE', 'entrada');
 
         const max = Math.max(1, ...r.serie.map(s => s.total));
@@ -580,7 +582,31 @@
             : `<div class="text-center py-6"><i class="fas fa-circle-check text-3xl text-emerald-400"></i><p class="text-sm mt-2" style="color:var(--wm-texto-3)">Nenhuma mensagem esperando por você.</p></div>`;
         const pastas = E.pastas.filter(p => p.total).map(p => `<button type="button" class="wm-chip" data-geral-pasta="${esc(p.id)}">
             <i class="fas ${ICONE_PAPEL[p.papel] || 'fa-folder'} mr-1 opacity-70"></i>${esc(p.nome)} <span class="opacity-60 ml-1">${p.total}</span></button>`).join('');
+        const importantes = (r.importantes || []).length ? (r.importantes || []).map(m => `
+            <button type="button" class="wm-importante ${m.lida ? '' : 'wm-nao-lida'}" data-geral-abrir="${m.uid}">
+                ${avatar(m.de, '')}
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-baseline justify-between gap-2">
+                        <span class="text-[13px] font-semibold truncate" style="color:var(--wm-texto)">${m.lida ? '' : '<span class="wm-ponto inline-block mr-1.5 align-middle"></span>'}${esc(nomeDe(m.de))}</span>
+                        <span class="text-[11px] whitespace-nowrap" style="color:var(--wm-texto-3)">${esc(dataCurta(m.data))}</span>
+                    </div>
+                    <p class="text-[13px] font-semibold truncate mt-0.5" style="color:var(--wm-texto-2)">${esc(m.assunto)}${m.anexo ? ' <i class="fas fa-paperclip text-[10px] ml-1" style="color:var(--wm-texto-3)"></i>' : ''}</p>
+                    ${m.previa ? `<p class="wm-importante-previa">${esc(m.previa)}</p>` : ''}
+                </div>
+                <i class="fas fa-star text-amber-400 text-sm mt-1"></i>
+            </button>`).join('')
+            : `<div class="text-center py-7 px-4"><span class="inline-flex w-11 h-11 rounded-2xl items-center justify-center text-lg" style="background:#FEF3C7;color:#D97706"><i class="far fa-star"></i></span>
+                <p class="text-sm font-semibold mt-2" style="color:var(--wm-texto)">Nenhum e-mail marcado como Importante</p>
+                <p class="text-[12px] mt-1" style="color:var(--wm-texto-3)">Toque na <i class="far fa-star"></i> de uma mensagem (ou aperte <span class="wm-kbd">S</span>) para ela aparecer aqui.</p></div>`;
         document.getElementById('wmGeralResto').innerHTML = `
+            <section class="wm-painel mt-3 wm-painel-importantes">
+                <div class="flex items-center justify-between gap-2">
+                    <h3><i class="fas fa-star" style="color:#F59E0B"></i>Importantes
+                        <span class="font-normal text-[11px]" style="color:var(--wm-texto-3)">${r.sinalizadas ? `${r.sinalizadas} na caixa de entrada${r.importantes.filter(m => !m.lida).length ? ` · ${r.importantes.filter(m => !m.lida).length} sem ler` : ''}` : ''}</span></h3>
+                    ${r.sinalizadas > (r.importantes || []).length ? `<button type="button" class="text-[12px] font-semibold" style="color:var(--wm-laranja-escuro)" data-geral="importantes">ver todos (${r.sinalizadas})</button>` : ''}
+                </div>
+                <div class="wm-importantes mt-2">${importantes}</div>
+            </section>
             <div class="wm-geral-linha">
                 <section class="wm-painel wm-largo"><div class="flex items-center justify-between"><h3><i class="fas fa-chart-column" style="color:var(--wm-laranja)"></i>Chegadas nos últimos 14 dias</h3>
                     <span class="text-[12px]" style="color:var(--wm-texto-3)">${semana} nos últimos 7 dias</span></div>
@@ -609,7 +635,8 @@
     // ── Ações ─────────────────────────────────────────────────────────────
     const SAI_DA_LISTA = new Set(['arquivo', 'lixeira', 'spam', 'nao_spam', 'mover', 'apagar']);
     const TEXTO_ACAO = {arquivo: 'Arquivada', lixeira: 'Movida para a lixeira', spam: 'Marcada como spam', nao_spam: 'Devolvida para a caixa de entrada',
-        mover: 'Movida', apagar: 'Excluída para sempre', lida: 'Marcada como lida', nao_lida: 'Marcada como não lida'};
+        mover: 'Movida', apagar: 'Excluída para sempre', lida: 'Marcada como lida', nao_lida: 'Marcada como não lida',
+        sinalizar: 'Marcada como Importante', tirar_sinal: 'Tirada de Importante'};
 
     async function executarAcao(acao, uids, destino) {
         uids = Array.from(uids);
@@ -706,7 +733,7 @@
             <button type="button" class="wm-icone-botao" data-fechar><i class="fas fa-xmark"></i></button></div>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-8 mt-4">
             <div>${linha(['C'], 'Escrever') + linha(['/'], 'Buscar') + linha(['J'], 'Mensagem mais antiga') + linha(['K'], 'Mensagem mais recente') + linha(['Enter'], 'Abrir') + linha(['Esc'], 'Fechar / voltar') + linha(['X'], 'Selecionar')}</div>
-            <div>${linha(['R'], 'Responder') + linha(['A'], 'Responder a todos') + linha(['F'], 'Encaminhar') + linha(['E'], 'Arquivar') + linha(['#'], 'Excluir') + linha(['S'], 'Sinalizar') + linha(['U'], 'Marcar como não lida') + linha(['Ctrl', 'Enter'], 'Enviar (ao escrever)')}</div>
+            <div>${linha(['R'], 'Responder') + linha(['A'], 'Responder a todos') + linha(['F'], 'Encaminhar') + linha(['E'], 'Arquivar') + linha(['#'], 'Excluir') + linha(['S'], 'Marcar como Importante') + linha(['U'], 'Marcar como não lida') + linha(['Ctrl', 'Enter'], 'Enviar (ao escrever)')}</div>
             </div></div>`);
     }
 
@@ -1203,8 +1230,8 @@
         if (lote) {
             if (lote.dataset.lote === 'mais') {
                 abrirMenu(lote, [
-                    {rotulo: 'Sinalizar', icone: 'fas fa-star', fn: () => executarAcao('sinalizar', E.marcadas)},
-                    {rotulo: 'Tirar sinal', icone: 'far fa-star', fn: () => executarAcao('tirar_sinal', E.marcadas)},
+                    {rotulo: 'Marcar como Importante', icone: 'fas fa-star', fn: () => executarAcao('sinalizar', E.marcadas)},
+                    {rotulo: 'Tirar de Importante', icone: 'far fa-star', fn: () => executarAcao('tirar_sinal', E.marcadas)},
                     pastaAtual().papel === 'spam' ? {rotulo: 'Não é spam', icone: 'fas fa-inbox', fn: () => executarAcao('nao_spam', E.marcadas)}
                         : {rotulo: 'Marcar como spam', icone: 'fas fa-shield-virus', fn: () => executarAcao('spam', E.marcadas)},
                     '-', ...opcoesMover(Array.from(E.marcadas)),
@@ -1224,7 +1251,7 @@
                 buscaEl.value = geral.dataset.geralBusca; E.pasta = 'INBOX'; E.busca = buscaEl.value; E.pagina = 1; desenharPastas(); carregarLista();
             } else if (geral.dataset.geralPasta) irParaPasta(geral.dataset.geralPasta, {forcar: true});
             else {
-                const f = {nao_lidas: 'nao_lidas', sinalizadas: 'sinalizadas'}[geral.dataset.geral] || '';
+                const f = {nao_lidas: 'nao_lidas', importantes: 'importantes'}[geral.dataset.geral] || '';
                 E.pasta = 'INBOX'; E.busca = ''; buscaEl.value = ''; E.filtro = f; E.pagina = 1;
                 $$('[data-filtro]').forEach(b => b.classList.toggle('wm-ativo', b.dataset.filtro === f));
                 desenharPastas(); carregarLista();
@@ -1252,6 +1279,10 @@
             msg.sinalizada = ligar;
             botao.classList.toggle('wm-ativo', ligar);
             botao.querySelector('i').className = (ligar ? 'fas text-amber-500' : 'far') + ' fa-star';
+            botao.title = ligar ? 'Tirar de Importante (S)' : 'Marcar como Importante (S)';
+            const selo = document.getElementById('wmSeloImportante');
+            if (ligar && !selo) $('.wm-msg h2', leituraEl).insertAdjacentHTML('afterend', '<span class="wm-selo-importante" id="wmSeloImportante"><i class="fas fa-star"></i>Importante</span>');
+            if (!ligar && selo) selo.remove();
             executarAcao(ligar ? 'sinalizar' : 'tirar_sinal', [msg.uid]);
         }
         else if (qual === 'nao_lida') { executarAcao('nao_lida', [msg.uid]); fecharLeitura(); }

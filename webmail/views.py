@@ -25,6 +25,7 @@ from .models import ContaEmail
 logger = logging.getLogger(__name__)
 
 TENTATIVAS = 5              # senhas erradas seguidas antes de esperar
+CONTADOR_SEGUNDOS = 90      # quanto tempo o número do menu vale sem ir ao servidor
 JANELA_TENTATIVAS = 15 * 60
 
 
@@ -36,11 +37,17 @@ def _conta(request):
     return ContaEmail.objects.filter(usuario=request.user).select_related('usuario').first()
 
 
+def _esquecer_menu(user_id):
+    from .context_processors import chave_tem_conta
+    cache.delete_many([chave_tem_conta(user_id), chave_nao_lidas(user_id)])
+
+
 def _erro(exc, conta=None):
     """Erro do servidor de e-mail → JSON; senha recusada pede para entrar de novo."""
     if isinstance(exc, cliente.SenhaRecusada) and conta is not None:
         ContaEmail.objects.filter(pk=conta.pk).update(senha_recusada=True, ultimo_erro=str(exc)[:300])
         cliente.esquecer(conta.pk)
+        _esquecer_menu(conta.usuario_id)
         return JsonResponse({'ok': False, 'erro': str(exc), 'reconectar': True}, status=401)
     if isinstance(exc, cliente.ServidorFora) and conta is not None:
         ContaEmail.objects.filter(pk=conta.pk).update(ultimo_erro=str(exc)[:300])
@@ -137,6 +144,7 @@ def conectar(request):
     conta.ultimo_acesso = timezone.now()
     conta.save()
     cliente.esquecer(conta.pk)
+    _esquecer_menu(request.user.pk)
     messages.success(request, f'Pronto! {email} está ligado ao seu usuário do portal.')
     return redirect('webmail:caixa')
 
@@ -148,6 +156,7 @@ def desconectar(request):
     if conta is not None:
         cliente.esquecer(conta.pk)
         conta.delete()
+        _esquecer_menu(request.user.pk)
         messages.success(request, 'E-mail desconectado. A senha foi apagada do portal.')
     return redirect('webmail:caixa')
 
@@ -169,7 +178,11 @@ def preferencias(request):
 @_api
 @require_GET
 def api_pastas(request, conta):
-    return JsonResponse({'ok': True, 'pastas': cliente.executar(conta, cliente.pastas)})
+    pastas = cliente.executar(conta, cliente.pastas)
+    entrada = next((p for p in pastas if p['papel'] == 'entrada'), None)
+    if entrada:
+        guardar_nao_lidas(request.user.pk, entrada['nao_lidas'])
+    return JsonResponse({'ok': True, 'pastas': pastas})
 
 
 @_api
@@ -205,6 +218,11 @@ def api_mensagem(request, conta):
         return JsonResponse({'ok': False, 'erro': 'Mensagem inválida.'}, status=400)
     dados = cliente.executar(conta, lambda s: cliente.ler(
         s, pasta, uid, imagens=request.GET.get('imagens') == '1'))
+    if dados.get('era_nao_lida') and pasta.upper() == 'INBOX':
+        # Acabou de ser lida: o número do menu desce junto, sem ir ao servidor.
+        n = cache.get(chave_nao_lidas(request.user.pk))
+        if n:
+            guardar_nao_lidas(request.user.pk, n - 1)
     return JsonResponse({'ok': True, 'mensagem': dados})
 
 
@@ -218,6 +236,8 @@ def api_acao(request, conta):
     pasta = corpo.get('pasta') or 'INBOX'
     resultado = cliente.executar(conta, lambda s: cliente.acao(
         s, pasta, corpo.get('uids') or [], corpo.get('acao') or '', corpo.get('destino') or ''))
+    # Lida/não lida, mover, excluir: o número do menu é recontado na próxima página.
+    cache.delete(chave_nao_lidas(request.user.pk))
     return JsonResponse({'ok': True, 'resultado': resultado})
 
 
@@ -230,7 +250,41 @@ def api_resumo(request, conta):
 @_api
 @require_GET
 def api_novidades(request, conta):
-    return JsonResponse({'ok': True, **cliente.executar(conta, cliente.novidades)})
+    dados = cliente.executar(conta, cliente.novidades)
+    guardar_nao_lidas(request.user.pk, dados['nao_lidas'])
+    return JsonResponse({'ok': True, **dados})
+
+
+# ── O número do menu lateral ──────────────────────────────────────────────
+# Toda página do portal mostra as não lidas ao lado de "E-mail". Ir ao servidor
+# de e-mail a cada página seria caro; o número fica no cache por pouco tempo,
+# é atualizado por quem já conversa com a caixa (a própria tela do e-mail) e,
+# fora dela, por uma chamada leve que a página faz depois de carregar.
+
+def chave_nao_lidas(user_id):
+    return f'webmail:nao_lidas:{user_id}'
+
+
+def guardar_nao_lidas(user_id, n):
+    cache.set(chave_nao_lidas(user_id), int(n or 0), CONTADOR_SEGUNDOS)
+
+
+@login_required
+@require_GET
+def api_contador(request):
+    """Não lidas da caixa de entrada, para a bolinha do menu."""
+    n = cache.get(chave_nao_lidas(request.user.pk))
+    if n is not None:
+        return JsonResponse({'ok': True, 'nao_lidas': n})
+    conta = _conta(request)
+    if conta is None or conta.senha_recusada:
+        return JsonResponse({'ok': True, 'nao_lidas': 0, 'conectado': False})
+    try:
+        n = cliente.executar(conta, cliente.novidades)['nao_lidas']
+    except cliente.ErroEmail:
+        return JsonResponse({'ok': False, 'nao_lidas': None})
+    guardar_nao_lidas(request.user.pk, n)
+    return JsonResponse({'ok': True, 'nao_lidas': n})
 
 
 @_api

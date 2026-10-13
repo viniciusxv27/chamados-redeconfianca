@@ -510,8 +510,8 @@ def listar(s, pasta, pagina=1, busca='', filtro=''):
     criterios = []
     if filtro == 'nao_lidas':
         criterios.append('UNSEEN')
-    elif filtro == 'sinalizadas':
-        criterios.append('FLAGGED')
+    elif filtro in ('importantes', 'sinalizadas'):
+        criterios.append('FLAGGED')         # "Importante" é a marca \\Flagged do IMAP
     elif filtro == 'anexos':
         criterios += ['HEADER', 'Content-Type', 'multipart/mixed']
     uids = _buscar(s, criterios, (busca or '').strip()[:200])
@@ -782,6 +782,8 @@ def resumo(s):
         'remetentes': [{'email': e, 'nome': nomes.get(e) or '', 'total': n}
                        for e, n in remetentes.most_common(6)],
         'recentes': _resumos(s, [str(u) for u in nao_lidas[:6]]),
+        # As marcadas como Importante (\\Flagged — a mesma marca do Outlook e do celular).
+        'importantes': _resumos(s, [str(u) for u in sinalizadas[:8]]),
         'quota': _quota(s),
     }
 

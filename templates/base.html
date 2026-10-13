@@ -311,9 +311,14 @@
                         <li>
                             <a href="{% url 'webmail:caixa' %}" data-rota="{% url 'webmail:caixa' %}"
                                class="menu-item flex items-center gap-2.5 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group">
-                                <i class="fas fa-envelope text-orange-400 flex-shrink-0 w-5 text-center"></i>
+                                <span class="relative flex-shrink-0 w-5 text-center">
+                                    <i class="fas fa-envelope text-orange-400"></i>
+                                    {% comment %}Não lidas da caixa de entrada: webmail/context_processors.py dá o número do cache; vencido, a página pede um novo depois de carregar.{% endcomment %}
+                                    <span id="rc-email-badge" data-atualizar="{% if email_menu.atualizar %}1{% endif %}"
+                                          class="absolute -top-2 -right-2.5 min-w-[1.05rem] h-[1.05rem] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold leading-[1.05rem] text-center ring-2 ring-gray-900 {% if not email_menu.nao_lidas %}hidden{% endif %}">{% if email_menu.nao_lidas > 99 %}99+{% else %}{{ email_menu.nao_lidas|default:'' }}{% endif %}</span>
+                                </span>
                                 <span class="text-sm sidebar-text">E-mail</span>
-                                <div class="tooltip-collapsed">E-mail</div>
+                                <div class="tooltip-collapsed">E-mail{% if email_menu.nao_lidas %} · {{ email_menu.nao_lidas }} não lida{{ email_menu.nao_lidas|pluralize }}{% endif %}</div>
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-orange-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </a>
                         </li>
@@ -4245,6 +4250,24 @@
             }
         }
         
+        // Bolinha de não lidas do E-mail no menu (a tela do e-mail também chama).
+        window.rcEmailBadge = function (n) {
+            const el = document.getElementById('rc-email-badge');
+            if (!el) return;
+            n = Number(n) || 0;
+            el.textContent = n > 99 ? '99+' : String(n);
+            el.classList.toggle('hidden', n === 0);
+        };
+        (function () {
+            const el = document.getElementById('rc-email-badge');
+            if (!el || el.dataset.atualizar !== '1') return;
+            const pedir = () => fetch('{% url "webmail:api_contador" %}', {headers: {'X-Requested-With': 'XMLHttpRequest'}})
+                .then(r => r.json()).then(d => { if (d && d.nao_lidas != null) window.rcEmailBadge(d.nao_lidas); })
+                .catch(() => {});
+            if (document.readyState === 'complete') setTimeout(pedir, 300);
+            else window.addEventListener('load', () => setTimeout(pedir, 300), {once: true});
+        })();
+
         function showToast(message, type = 'info') {
             // Simple toast implementation
             const toast = document.createElement('div');
