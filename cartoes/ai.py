@@ -197,6 +197,41 @@ def preparar_anexo(conteudo: bytes | None, mime: str = '') -> dict:
     return {'tipo': 'imagem', 'imagens': [imagem], 'texto': ''}
 
 
+MAX_COMPROVANTES = 6
+MAX_IMAGENS = 10                         # somando as páginas dos PDFs
+
+
+def preparar_anexos(arquivos) -> dict:
+    """Vários comprovantes do MESMO gasto → um anexo só, com cada parte identificada.
+
+    ``arquivos``: lista de (bytes, mime). As imagens levam o número do comprovante
+    (``Comprovante 2``) e o texto dos PDFs vem separado por comprovante.
+    """
+    imagens, textos, tipos = [], [], []
+    for numero, (conteudo, mime) in enumerate((arquivos or [])[:MAX_COMPROVANTES], start=1):
+        anexo = preparar_anexo(conteudo, mime)
+        if not anexo.get('tipo'):
+            continue
+        tipos.append(anexo['tipo'])
+        for imagem, tipo_imagem in anexo['imagens']:
+            if len(imagens) < MAX_IMAGENS:
+                imagens.append((imagem, tipo_imagem, f'Comprovante {numero}'))
+        if anexo.get('texto'):
+            textos.append(f'[Comprovante {numero}]\n{anexo["texto"]}')
+    if not tipos:
+        return {'tipo': '', 'imagens': [], 'texto': '', 'quantidade': 0}
+    tipo = tipos[0] if len(set(tipos)) == 1 else 'misto'
+    return {'tipo': tipo, 'imagens': imagens, 'texto': '\n\n'.join(textos), 'quantidade': len(tipos)}
+
+
+_VARIOS = (
+    'Estes {n} comprovantes são do MESMO gasto (por exemplo: a nota fiscal e o comprovante da maquininha, '
+    'ou o pedido e o recibo). Junte o que cada um mostra para preencher um gasto só. O "valor" é o total '
+    'efetivamente pago no cartão: não some o mesmo pagamento duas vezes quando ele aparece em mais de um '
+    'comprovante; só some se forem cobranças diferentes. Use a data e o estabelecimento da compra.'
+)
+
+
 # ---------------------------------------------------------------------------
 # A conversa com a IA
 # ---------------------------------------------------------------------------
@@ -235,13 +270,21 @@ def _mensagem_do_usuario(anexo: dict, manual_text: str, falta: list, essencial: 
         partes.append({'type': 'text', 'text': _REFORCO.format(faltou=', '.join(falta))})
     if essencial:
         partes.append({'type': 'text', 'text': _ESSENCIAL})
+    if (anexo.get('quantidade') or 0) > 1:
+        partes.append({'type': 'text', 'text': _VARIOS.format(n=anexo['quantidade'])})
     if manual_text and manual_text.strip():
         partes.append({'type': 'text',
                        'text': f'Texto informado pelo usuário:\n{manual_text.strip()}'})
     if anexo.get('texto'):
         partes.append({'type': 'text',
                        'text': f'Texto extraído do PDF do comprovante:\n{anexo["texto"]}'})
-    for conteudo, mime in anexo.get('imagens') or []:
+    rotulo_anterior = None
+    for item in anexo.get('imagens') or []:
+        conteudo, mime = item[0], item[1]
+        rotulo = item[2] if len(item) > 2 else None
+        if rotulo and rotulo != rotulo_anterior and (anexo.get('quantidade') or 0) > 1:
+            partes.append({'type': 'text', 'text': f'{rotulo}:'})
+            rotulo_anterior = rotulo
         b64 = base64.b64encode(conteudo).decode('ascii')
         partes.append({'type': 'image_url',
                        'image_url': {'url': f'data:{mime};base64,{b64}',
@@ -294,15 +337,20 @@ def _mais_completo(atual: dict | None, novo: dict) -> dict:
 
 
 def analyze_expense(image_bytes: bytes | None = None, manual_text: str = '',
-                    mime: str = 'image/jpeg', rodadas=RODADAS) -> dict:
+                    mime: str = 'image/jpeg', rodadas=RODADAS, anexos=None) -> dict:
     """Analisa uma despesa (imagem, PDF e/ou texto) e devolve dados estruturados.
+
+    ``anexos``: vários comprovantes do mesmo gasto, como lista de (bytes, mime) —
+    a IA lê todos juntos. ``image_bytes`` continua valendo para um só.
 
     Insiste enquanto faltar valor, categoria ou descrição — e o que uma rodada
     achou é aproveitado pela seguinte. Sempre devolve um dict: com ``error``
     quando não deu para falar com a IA, e com ``faltou`` quando ela respondeu
     mas alguma coisa continuou sem identificar.
     """
-    anexo = preparar_anexo(image_bytes, mime)
+    if anexos is None:
+        anexos = [(image_bytes, mime)] if image_bytes else []
+    anexo = preparar_anexos(anexos)
     tem_texto = bool((manual_text or '').strip()) or bool(anexo.get('texto'))
     if not anexo.get('imagens') and not tem_texto:
         return {'error': 'Envie a foto (ou o PDF) do comprovante ou descreva o gasto.'}
@@ -348,6 +396,7 @@ def analyze_expense(image_bytes: bytes | None = None, manual_text: str = '',
         melhor.setdefault(chave, '')
     melhor['tentativas'] = tentativas
     melhor['anexo'] = anexo.get('tipo')
+    melhor['comprovantes'] = anexo.get('quantidade') or 0
     if falta:
         melhor['faltou'] = falta
     return melhor

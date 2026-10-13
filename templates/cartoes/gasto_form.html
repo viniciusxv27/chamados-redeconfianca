@@ -29,11 +29,14 @@
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1"><i class="fas fa-camera text-gray-400 mr-1"></i> Comprovante (foto ou PDF)</label>
-          <input type="file" name="foto" id="foto" accept="image/*,application/pdf" capture="environment"
+          <label class="block text-sm font-medium text-gray-700 mb-1"><i class="fas fa-camera text-gray-400 mr-1"></i> Comprovantes (fotos ou PDF)</label>
+          <input type="file" name="foto" id="foto" accept="image/*,application/pdf" multiple
                  class="w-full text-sm border border-gray-300 rounded-lg file:mr-3 file:py-2 file:px-4 file:border-0 file:bg-purple-50 file:text-purple-700 file:font-semibold hover:file:bg-purple-100 cursor-pointer">
-          <img id="foto-preview" class="hidden mt-3 max-h-56 rounded-lg border border-gray-200" alt="Prévia do comprovante">
-          <p id="foto-nome" class="hidden mt-2 text-xs text-gray-500"><i class="fas fa-file-pdf text-red-500 mr-1"></i></p>
+          <p class="mt-1 text-[11px] text-gray-500">Pode mandar mais de um do mesmo gasto (ex.: nota fiscal + comprovante da maquininha) — até 6. A IA lê todos juntos e todos vão anexados ao chamado.</p>
+          <div id="fotos-lista" class="hidden mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2"></div>
+          <button type="button" id="btn-mais-foto" class="hidden mt-2 text-xs font-semibold text-purple-700 hover:text-purple-900">
+            <i class="fas fa-plus mr-1"></i>Adicionar outro comprovante
+          </button>
         </div>
 
         <div>
@@ -109,31 +112,64 @@
 <script>
 (function () {
   var fotoInput = document.getElementById('foto');
-  var preview = document.getElementById('foto-preview');
+  var lista = document.getElementById('fotos-lista');
+  var maisFoto = document.getElementById('btn-mais-foto');
   var btn = document.getElementById('btn-analisar');
+  var MAX_COMPROVANTES = 6;
+  // Os arquivos escolhidos ficam aqui: escolher de novo soma, não substitui.
+  var escolhidos = [];
   var status = document.getElementById('ia-status');
   var csrf = document.querySelector('[name=csrfmiddlewaretoken]').value;
   var analyzeUrl = "{% url 'cartoes:gasto_analyze' cartao.pk %}";
 
-  fotoInput.addEventListener('change', function () {
-    var f = fotoInput.files[0];
-    // PDF não tem prévia em <img>: mostra o nome do arquivo no lugar.
-    var nome = document.getElementById('foto-nome');
-    if (f && (f.type === 'application/pdf' || /\.pdf$/i.test(f.name))) {
-      preview.classList.add('hidden');
-      if (nome) {
-        nome.textContent = 'PDF escolhido: ' + f.name;
-        nome.classList.remove('hidden');
+  function sincronizar() {
+    // O <input> leva exatamente os arquivos da lista (é ele que vai no formulário ao confirmar).
+    var dt = new DataTransfer();
+    escolhidos.forEach(function (f) { dt.items.add(f); });
+    fotoInput.files = dt.files;
+    lista.innerHTML = '';
+    escolhidos.forEach(function (f, i) {
+      var item = document.createElement('div');
+      item.className = 'relative rounded-lg border border-gray-200 bg-gray-50 p-1.5 text-xs';
+      var pdf = f.type === 'application/pdf' || /\.pdf$/i.test(f.name);
+      if (pdf) {
+        var caixa = document.createElement('div');
+        caixa.className = 'h-24 flex items-center justify-center text-red-500 text-3xl';
+        caixa.innerHTML = '<i class="fas fa-file-pdf"></i>';
+        item.appendChild(caixa);
+      } else {
+        var img = document.createElement('img');
+        img.src = URL.createObjectURL(f);
+        img.alt = 'Comprovante ' + (i + 1);
+        img.className = 'h-24 w-full object-cover rounded';
+        item.appendChild(img);
       }
-    } else if (f) {
-      if (nome) nome.classList.add('hidden');
-      preview.src = URL.createObjectURL(f);
-      preview.classList.remove('hidden');
-    } else {
-      if (nome) nome.classList.add('hidden');
-      preview.classList.add('hidden');
-    }
+      var nome = document.createElement('p');
+      nome.className = 'mt-1 truncate text-gray-600';
+      nome.textContent = (i + 1) + '. ' + f.name;
+      item.appendChild(nome);
+      var remover = document.createElement('button');
+      remover.type = 'button';
+      remover.className = 'absolute top-1 right-1 w-6 h-6 rounded-full bg-black/60 text-white';
+      remover.setAttribute('aria-label', 'Remover ' + f.name);
+      remover.innerHTML = '<i class="fas fa-xmark"></i>';
+      remover.addEventListener('click', function () { escolhidos.splice(i, 1); sincronizar(); });
+      item.appendChild(remover);
+      lista.appendChild(item);
+    });
+    lista.classList.toggle('hidden', !escolhidos.length);
+    maisFoto.classList.toggle('hidden', !escolhidos.length || escolhidos.length >= MAX_COMPROVANTES);
+  }
+
+  fotoInput.addEventListener('change', function () {
+    var novos = Array.prototype.slice.call(fotoInput.files);
+    novos.forEach(function (f) {
+      var repetido = escolhidos.some(function (e) { return e.name === f.name && e.size === f.size; });
+      if (!repetido && escolhidos.length < MAX_COMPROVANTES) escolhidos.push(f);
+    });
+    sincronizar();
   });
+  maisFoto.addEventListener('click', function () { fotoInput.click(); });
 
   function setStatus(msg, kind) {
     status.className = 'text-sm mt-2 ' + (kind === 'error' ? 'text-red-600' : (kind === 'ok' ? 'text-green-600' : 'text-gray-600'));
@@ -147,21 +183,20 @@
   }
 
   btn.addEventListener('click', function () {
-    var foto = fotoInput.files[0];
     var manual = document.getElementById('manual_text').value.trim();
-    if (!foto && !manual) {
+    if (!escolhidos.length && !manual) {
       setStatus('Envie a foto do comprovante ou descreva o gasto antes de analisar.', 'error');
       return;
     }
     var fd = new FormData();
-    if (foto) fd.append('foto', foto);
+    escolhidos.forEach(function (f) { fd.append('foto', f); });
     fd.append('manual_text', manual);
     fd.append('csrfmiddlewaretoken', csrf);
 
     btn.disabled = true;
     var original = btn.innerHTML;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analisando...';
-    setStatus('Analisando o gasto com a IA...', 'info');
+    setStatus(escolhidos.length > 1 ? 'Lendo os ' + escolhidos.length + ' comprovantes com a IA...' : 'Analisando o gasto com a IA...', 'info');
 
     fetch(analyzeUrl, { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' } })
       .then(function (r) { return r.json(); })
@@ -177,7 +212,8 @@
         if (data.data && /^\d{4}-\d{2}-\d{2}$/.test(data.data)) setIf('f-data', data.data);
         document.getElementById('f-iadados').value = JSON.stringify(data);
         var extra = data.observacoes ? ' Observações: ' + data.observacoes : '';
-        setStatus('<i class="fas fa-check-circle"></i> Campos preenchidos pela IA (confiança: ' + (data.confianca || '—') + '). Revise antes de confirmar.' + extra, 'ok');
+        var lidos = data.comprovantes > 1 ? ' a partir dos ' + data.comprovantes + ' comprovantes' : '';
+        setStatus('<i class="fas fa-check-circle"></i> Campos preenchidos pela IA' + lidos + ' (confiança: ' + (data.confianca || '—') + '). Revise antes de confirmar.' + extra, 'ok');
       })
       .catch(function () {
         setStatus('Erro ao chamar a IA. Preencha os campos manualmente.', 'error');

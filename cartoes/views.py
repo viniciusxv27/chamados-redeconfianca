@@ -28,7 +28,7 @@ from users.models import User
 from .ai import analyze_expense, e_pdf, paginas_do_pdf
 from .exportacao import conciliacao_excel, conciliacao_geral_excel, extrato_excel
 from .fatura import TOLERANCIA_DIAS, compra_antiga, conciliar, janela_do_portal, ler_fatura
-from .models import AcessoCartoes, Cartao, Gasto
+from .models import AcessoCartoes, Cartao, Gasto, GastoComprovante
 from .permissions import (
     can_access_cartoes,
     can_manage_cartao,
@@ -316,7 +316,7 @@ def cartao_extrato(request, pk):
 
     # Sem período na URL o extrato mostra tudo, como sempre mostrou; os atalhos
     # e o filtro recortam.
-    todos = cartao.gastos.select_related('ticket', 'criado_por')
+    todos = cartao.gastos.select_related('ticket', 'criado_por').prefetch_related('comprovantes')
     inicio = parse_date(request.GET.get('de') or '')
     fim = parse_date(request.GET.get('ate') or '')
     if inicio and fim and inicio > fim:
@@ -734,18 +734,18 @@ def gasto_analyze(request, pk):
         return JsonResponse({'error': 'Acesso negado.'}, status=403)
 
     manual_text = request.POST.get('manual_text', '').strip()
-    image_bytes = None
-    mime = 'image/jpeg'
-    f = request.FILES.get('foto')
-    if f:
-        image_bytes = f.read()
+    anexos = []
+    # Vários comprovantes do mesmo gasto (nota + maquininha...): a IA lê todos juntos.
+    for f in request.FILES.getlist('foto')[:MAX_COMPROVANTES]:
+        conteudo = f.read()
         mime = f.content_type or 'image/jpeg'
         # O navegador manda `application/pdf`, mas alguns clientes mandam
         # genérico: o conteúdo é quem decide (a IA lê PDF de outro jeito).
-        if e_pdf(image_bytes, mime):
+        if e_pdf(conteudo, mime):
             mime = 'application/pdf'
+        anexos.append((conteudo, mime))
 
-    data = analyze_expense(image_bytes=image_bytes, manual_text=manual_text, mime=mime)
+    data = analyze_expense(manual_text=manual_text, anexos=anexos)
     return JsonResponse(data)
 
 
@@ -762,7 +762,8 @@ def gasto_create(request, pk):
         descricao = request.POST.get('descricao', '').strip()
         data_raw = request.POST.get('data_gasto', '').strip()
         valor_dec = _parse_valor(request.POST.get('valor'))
-        foto = request.FILES.get('foto')
+        arquivos = request.FILES.getlist('foto')[:MAX_COMPROVANTES]
+        foto = arquivos[0] if arquivos else None
         ia_dados_raw = request.POST.get('ia_dados', '')
 
         errors = []
@@ -802,6 +803,7 @@ def gasto_create(request, pk):
             categoria_gasto=categoria_gasto, descricao=descricao,
             foto=comprovante, origem=('FOTO' if comprovante else 'MANUAL'), ia_dados=ia_dados,
         )
+        _guardar_comprovantes(gasto, arquivos)
 
         ticket = abrir_chamado_do_gasto(cartao, gasto, request.user)
         if ticket:
@@ -854,7 +856,23 @@ def abrir_chamado_do_gasto(cartao, gasto, ator_user):
         priority='MEDIA',
     )
 
-    if gasto.foto:
+    comprovantes = list(gasto.comprovantes.all())
+    for comprovante in comprovantes:
+        # Todos os comprovantes vão para o chamado, como vieram (imagem ou PDF).
+        try:
+            comprovante.arquivo.open('rb')
+            content = comprovante.arquivo.read()
+            comprovante.arquivo.close()
+            nome = comprovante.nome_original or os.path.basename(comprovante.arquivo.name)
+            TicketAttachment.objects.create(
+                ticket=ticket, file=ContentFile(content, name=os.path.basename(comprovante.arquivo.name)),
+                original_filename=nome[:255], file_size=len(content),
+                content_type=comprovante.content_type or 'application/octet-stream', uploaded_by=ator_user,
+            )
+        except Exception:
+            pass  # anexo é best-effort; não bloqueia a abertura do chamado
+
+    if gasto.foto and not comprovantes:
         try:
             gasto.foto.open('rb')
             content = gasto.foto.read()
@@ -914,6 +932,28 @@ def _check_api_token(request):
     if not provided:
         provided = (request.headers.get('X-API-Key', '') or '').strip()
     return bool(provided) and hmac.compare_digest(provided, expected)
+
+
+MAX_COMPROVANTES = 6
+
+
+def _guardar_comprovantes(gasto, arquivos):
+    """Guarda cada comprovante como veio (imagem ou PDF), na ordem em que foi escolhido."""
+    for ordem, arquivo in enumerate(arquivos or [], start=1):
+        try:
+            arquivo.seek(0)
+        except Exception:                                       # noqa: BLE001
+            pass
+        conteudo = arquivo.read()
+        if not conteudo:
+            continue
+        nome = os.path.basename(getattr(arquivo, 'name', '') or f'comprovante-{ordem}')
+        tipo = getattr(arquivo, 'content_type', '') or ''
+        if e_pdf(conteudo, tipo):
+            tipo = 'application/pdf'
+        GastoComprovante.objects.create(
+            gasto=gasto, arquivo=ContentFile(conteudo, name=nome), nome_original=nome[:255],
+            content_type=tipo[:100], ordem=ordem)
 
 
 def _comprovante_para_o_campo(arquivo):

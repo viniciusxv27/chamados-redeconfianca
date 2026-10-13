@@ -289,6 +289,20 @@ print('\n== PELA API ==')
 marcador = transaction.atomic()
 marcador.__enter__()
 try:
+    # Comprovantes do gasto são tabela nova: a migração entra aqui e sai no rollback.
+    from django.db import connection
+    from django.db.migrations.executor import MigrationExecutor
+    _executor = MigrationExecutor(connection)
+    if _executor.migration_plan([('cartoes', '0003_comprovantes_do_gasto')]):
+        _executor.migrate([('cartoes', '0003_comprovantes_do_gasto')])
+    # Nada vai para o S3: os arquivos do teste ficam em memória.
+    from django.core.files.storage import InMemoryStorage
+    from cartoes.models import GastoComprovante
+    from tickets.models import TicketAttachment
+    _memoria = InMemoryStorage()
+    for _campo in (GastoComprovante._meta.get_field('arquivo'), Gasto._meta.get_field('foto'),
+                   TicketAttachment._meta.get_field('file')):
+        _campo.storage = _memoria
     loja = Sector.objects.create(name='ZZ Loja dos Cartões')
     dono = User.objects.create_user(
         username='zzc.dono', email='zzc.dono@exemplo-teste.local', password='S3nha!teste',
@@ -379,8 +393,62 @@ try:
     salvo = Gasto.objects.filter(descricao='ZZ gasto de teste').first()
     t('e guarda o PDF como a primeira página em imagem',
       salvo and salvo.foto and salvo.foto.name.endswith('.png'), salvo and str(salvo.foto))
-    if salvo and salvo.foto:
-        salvo.foto.delete(save=False)
+
+    print('\n== VÁRIOS COMPROVANTES DO MESMO GASTO ==')
+    from io import BytesIO
+    from PIL import Image
+
+    def png(cor):
+        saida = BytesIO()
+        Image.new('RGB', (60, 40), cor).save(saida, 'PNG')
+        return saida.getvalue()
+
+    dados, cliente = analisar([COMPLETO], anexos=[(png((200, 0, 0)), 'image/png'), (pdf, 'application/pdf')])
+    pedido = texto_dos_pedidos(cliente, 0)
+    imagens = [p for p in cliente.pedidos[0]['messages'][1]['content'] if p.get('type') == 'image_url']
+    t('a IA recebe os dois comprovantes, cada um identificado', 'Comprovante 1:' in pedido
+      and 'Comprovante 2:' in pedido and len(imagens) >= 2, pedido[:300])
+    t('e a regra de que são do MESMO gasto (não somar o mesmo pagamento duas vezes)',
+      'MESMO gasto' in pedido and 'não some o mesmo pagamento' in pedido)
+    t('o texto do PDF vem marcado com o número do comprovante', '[Comprovante 2]' in pedido)
+    t('a resposta diz quantos comprovantes leu', dados.get('comprovantes') == 2 and dados.get('anexo') == 'misto', dados)
+    dados, cliente = analisar([COMPLETO], image_bytes=png((0, 0, 200)), mime='image/png')
+    t('um comprovante só continua igual (sem a regra de vários)', 'MESMO gasto' not in texto_dos_pedidos(cliente, 0)
+      and dados.get('comprovantes') == 1)
+
+    cliente = ClienteFalso([COMPLETO])
+    with mock.patch('openai.OpenAI', return_value=cliente), \
+         mock.patch.object(ai, 'ESPERA_ENTRE_RODADAS', 0), \
+         mock.patch.object(settings, 'OPENAI_API_KEY', 'sk-zz-teste'):
+        r = ct.post(f'/cartoes/{cartao.pk}/gasto/analisar/', {'foto': [
+            SimpleUploadedFile('nota.pdf', pdf, content_type='application/pdf'),
+            SimpleUploadedFile('maquininha.png', png((0, 200, 0)), content_type='image/png')]})
+    t('a tela manda os dois comprovantes para a IA', r.status_code == 200 and r.json().get('comprovantes') == 2,
+      r.content[:200])
+
+    r = ct.post(f'/cartoes/{cartao.pk}/gasto/', {
+        'valor': '99,90', 'descricao': 'ZZ gasto com dois comprovantes', 'estabelecimento': 'ZZ Loja',
+        'categoria_gasto': 'Material', 'data_gasto': '2026-10-10',
+        'foto': [SimpleUploadedFile('maquininha.png', png((0, 200, 0)), content_type='image/png'),
+                 SimpleUploadedFile('nota.pdf', pdf, content_type='application/pdf')],
+    }, follow=True)
+    duplo = Gasto.objects.filter(descricao='ZZ gasto com dois comprovantes').first()
+    comps = list(duplo.comprovantes.all()) if duplo else []
+    t('o gasto guarda os dois comprovantes, na ordem', [c.nome_original for c in comps] == ['maquininha.png', 'nota.pdf'],
+      [c.nome_original for c in comps])
+    t('o PDF fica como PDF (e o primeiro vira a foto do extrato)', comps and comps[1].e_pdf
+      and comps[1].content_type == 'application/pdf' and duplo.foto)
+    if duplo and duplo.ticket_id:
+        anexos_chamado = sorted(TicketAttachment.objects.filter(ticket_id=duplo.ticket_id)
+                                .values_list('original_filename', flat=True))
+        t('o chamado leva os dois comprovantes', anexos_chamado == ['maquininha.png', 'nota.pdf'], anexos_chamado)
+    else:
+        print('  (categoria 99 de chamados não existe neste banco: anexos do chamado não conferidos)')
+    html = ct.get(f'/cartoes/{cartao.pk}/').content.decode()
+    t('o extrato mostra os comprovantes numerados', 'Abrir maquininha.png' in html and 'Abrir nota.pdf' in html)
+    html = ct.get(f'/cartoes/{cartao.pk}/gasto/').content.decode()
+    t('a tela aceita vários arquivos e tem "Adicionar outro comprovante"', 'multiple' in html
+      and 'Adicionar outro comprovante' in html)
 finally:
     transaction.set_rollback(True)
     marcador.__exit__(None, None, None)

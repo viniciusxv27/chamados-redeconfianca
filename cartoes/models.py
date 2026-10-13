@@ -112,6 +112,40 @@ class Gasto(models.Model):
         return f"{self.estabelecimento or 'Gasto'} — R$ {self.valor}"
 
 
+def upload_cartao_gasto_comprovante(instance, filename):
+    ext = os.path.splitext(filename)[1].lower() or '.jpg'
+    return f"cartoes/gastos/comprovantes/gasto_{uuid.uuid4().hex}{ext}"
+
+
+class GastoComprovante(models.Model):
+    """Cada comprovante de um gasto (nota fiscal, comprovante da maquininha, recibo...).
+
+    O gasto pode ter vários; o arquivo fica como veio (imagem ou PDF). O ``Gasto.foto``
+    continua sendo a imagem do primeiro — é ela que o extrato mostra e conta.
+    """
+
+    gasto = models.ForeignKey(Gasto, on_delete=models.CASCADE, related_name='comprovantes', verbose_name='Gasto')
+    arquivo = models.FileField(upload_to=upload_cartao_gasto_comprovante, storage=get_media_storage(),
+                               verbose_name='Comprovante')
+    nome_original = models.CharField(max_length=255, blank=True, verbose_name='Nome do arquivo')
+    content_type = models.CharField(max_length=100, blank=True)
+    ordem = models.PositiveSmallIntegerField(default=1)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Comprovante do gasto'
+        verbose_name_plural = 'Comprovantes do gasto'
+        ordering = ['gasto', 'ordem', 'pk']
+
+    def __str__(self):
+        return f'{self.nome_original or "comprovante"} ({self.gasto_id})'
+
+    @property
+    def e_pdf(self):
+        return (self.content_type == 'application/pdf'
+                or (self.nome_original or self.arquivo.name or '').lower().endswith('.pdf'))
+
+
 class AcessoCartoes(models.Model):
     """Quem o SUPERADMIN liberou para cuidar dos cartões.
 
