@@ -446,63 +446,86 @@ def get_excel_download_url(share_url):
     return f"https://api.onedrive.com/v1.0/shares/{sharing_token}/root/content"
 
 
+# O arquivo baixado fica na memória do próprio processo (cache "local"), não no
+# Redis: a planilha de comissão passou de 5 MB e o Redis compartilhado tem 3 s
+# de limite por operação — a gravação estourava, nada ficava guardado e cada
+# tela baixava a planilha inteira de novo do OneDrive, até o OneDrive começar a
+# responder com página HTML (limite de acessos) no lugar do arquivo.
+ARQUIVO_SEGUNDOS = 300           # cópia "fresca": dentro disso nem vai ao OneDrive
+ULTIMA_BOA_SEGUNDOS = 6 * 3600   # cópia de reserva para quando o OneDrive falhar
+# A memória é de cada processo do servidor; "Limpar cache" troca esta versão
+# (uma chave pequena no Redis) e todos os processos passam a baixar de novo.
+CHAVE_VERSAO_PLANILHAS = 'planilhas_comissao_versao'
+
+
+def esquecer_planilhas_baixadas():
+    """Faz todos os processos baixarem as planilhas de novo na próxima leitura."""
+    import time as _time
+    cache.set(CHAVE_VERSAO_PLANILHAS, int(_time.time()), None)
+
+
+def _e_planilha(conteudo):
+    """xlsx é um zip (começa com PK); .xls antigo é OLE. HTML de erro não é nenhum dos dois."""
+    return bool(conteudo) and (conteudo[:2] == b'PK' or conteudo[:4] == b'\xd0\xcf\x11\xe0')
+
+
 def download_excel_file(excel_url, cache_key_prefix="excel"):
     """
-    Baixa arquivo Excel do OneDrive e retorna como BytesIO
+    Baixa arquivo Excel do OneDrive e retorna como BytesIO.
+
+    A chave do cache é a URL (não a aba): CN, gerente e coordenador leem o mesmo
+    arquivo e não precisam baixá-lo três vezes. Só é aceito o que for planilha
+    de verdade; se o OneDrive falhar, vale a última cópia boa (até 6 h).
     """
+    from django.core.cache import caches
+    memoria = caches['local']
     url_hash = hashlib.md5(excel_url.encode('utf-8')).hexdigest()[:10]
-    cache_key = f"{cache_key_prefix}_{url_hash}_file_content"
-    cached_content = cache.get(cache_key)
-    
-    if cached_content:
+    versao = cache.get(CHAVE_VERSAO_PLANILHAS) or 0
+    chave = f"planilha_{url_hash}_v{versao}"
+    chave_reserva = f"planilha_{url_hash}_ultima_boa"
+
+    cached_content = memoria.get(chave)
+    if _e_planilha(cached_content):
         return BytesIO(cached_content), None
-    
-    download_urls = []
-    download_urls.append(get_excel_download_url(excel_url))
-    
-    if '?' in excel_url:
-        download_urls.append(excel_url + '&download=1')
-    else:
-        download_urls.append(excel_url + '?download=1')
-    
+
+    download_urls = [get_excel_download_url(excel_url)]
+    download_urls.append(excel_url + ('&download=1' if '?' in excel_url else '?download=1'))
     if 'IQ' in excel_url:
         import re
         match = re.search(r'(IQ[A-Za-z0-9_-]+)', excel_url)
         if match:
-            file_id = match.group(1)
-            download_urls.append(f"https://onedrive.live.com/download.aspx?resid={file_id}")
-    
-    response = None
+            download_urls.append(f"https://onedrive.live.com/download.aspx?resid={match.group(1)}")
+
+    conteudo = None
     last_error = None
-    
     for url in download_urls:
         try:
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            }
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
             response = requests.get(url, timeout=30, headers=headers, allow_redirects=True)
-            
-            if response.status_code == 200:
-                content_type = response.headers.get('Content-Type', '')
-                if 'excel' in content_type or 'spreadsheet' in content_type or 'octet-stream' in content_type or len(response.content) > 1000:
-                    break
-                else:
-                    last_error = f'Conteúdo não é Excel: {content_type}'
-                    response = None
-            else:
-                last_error = f'HTTP {response.status_code}'
-                response = None
         except Exception as e:
             last_error = str(e)
             continue
-    
-    if response is None or response.status_code != 200:
+        if response.status_code != 200:
+            last_error = f'HTTP {response.status_code}'
+            continue
+        if not _e_planilha(response.content):
+            # Página de login, de limite de acessos ou de erro do OneDrive.
+            tipo = response.headers.get('Content-Type', '') or 'desconhecido'
+            last_error = f'o OneDrive respondeu com uma página ({tipo}) em vez da planilha'
+            continue
+        conteudo = response.content
+        break
+
+    if conteudo is None:
+        reserva = memoria.get(chave_reserva)
+        if _e_planilha(reserva):
+            print(f"[download_excel_file] OneDrive falhou ({last_error}); usando a última cópia boa")
+            return BytesIO(reserva), None
         return None, f'Erro ao baixar planilha. Último erro: {last_error}'
-    
-    # Cache por 5 minutos
-    cache.set(cache_key, response.content, 300)
-    
-    return BytesIO(response.content), None
+
+    memoria.set(chave, conteudo, ARQUIVO_SEGUNDOS)
+    memoria.set(chave_reserva, conteudo, ULTIMA_BOA_SEGUNDOS)
+    return BytesIO(conteudo), None
 
 
 # Grafias erradas que já vieram no cabeçalho da planilha do mês. Em ago/2026 a coluna de
@@ -583,6 +606,8 @@ def fetch_excel_data(sheet_name, user_name, excel_url=None, cache_suffix=None):
         user_row = None
         for idx, row in df.iterrows():
             row_name = normalize_name(row.get(nome_col, ''))
+            if not row_name:
+                continue                   # linha sem nome casaria com qualquer pessoa
             if row_name == user_name_normalized:
                 user_row = row
                 break
@@ -3907,6 +3932,7 @@ def commission_refresh(request):
         cache.delete(f"commission_all_users_{sheet}")
         cache.delete(f"comissao_{sheet}_file_content")
     
+    esquecer_planilhas_baixadas()
     cache.delete("vendas_all_data")
     cache.delete(f"vendas_data_{user_full_name}")
     cache.delete("vendas_file_content")

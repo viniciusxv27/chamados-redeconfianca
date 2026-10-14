@@ -83,6 +83,9 @@ def limpar_cache_comissionamento():
         cache.delete_many(list(CHAVES_FIXAS))
     except Exception as exc:                                        # noqa: BLE001
         logger.warning('Cache do comissionamento: falha ao apagar chaves fixas: %s', exc)
+    # O arquivo baixado agora fica na memória de cada processo (download_excel_file).
+    from users.commission_views import esquecer_planilhas_baixadas
+    esquecer_planilhas_baixadas()
     return apagadas
 
 
