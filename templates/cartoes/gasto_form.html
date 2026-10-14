@@ -84,6 +84,16 @@
         </div>
 
         <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1" for="f-documento">
+            CNPJ/CPF do estabelecimento <span class="text-xs font-normal text-gray-400">(vai no chamado; a IA tenta ler do comprovante)</span>
+          </label>
+          <input type="text" name="documento_estabelecimento" id="f-documento" maxlength="18" inputmode="numeric"
+                 value="{{ form.documento_estabelecimento|default:'' }}" placeholder="00.000.000/0000-00"
+                 class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 font-mono tracking-wide">
+          <p id="f-documento-aviso" class="hidden text-xs text-amber-700 mt-1"><i class="fas fa-circle-info mr-1"></i>A IA não encontrou o CNPJ/CPF da loja no comprovante. Se souber, preencha.</p>
+        </div>
+
+        <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Categoria do gasto</label>
           <input type="text" name="categoria_gasto" id="f-categoria" maxlength="120"
                  value="{{ form.categoria_gasto|default:'' }}" placeholder="Ex.: Alimentação, Combustível..."
@@ -207,6 +217,8 @@
         }
         setIf('f-valor', data.valor);
         setIf('f-estabelecimento', data.estabelecimento);
+        setIf('f-documento', data.documento);
+        document.getElementById('f-documento-aviso').classList.toggle('hidden', !!data.documento);
         setIf('f-categoria', data.categoria);
         setIf('f-descricao', data.descricao);
         if (data.data && /^\d{4}-\d{2}-\d{2}$/.test(data.data)) setIf('f-data', data.data);

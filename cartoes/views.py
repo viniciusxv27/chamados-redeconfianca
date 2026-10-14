@@ -25,7 +25,7 @@ from core.evolution import enviar_texto
 from tickets.models import Category, Ticket, TicketAttachment, TicketLog
 from users.models import User
 
-from .ai import analyze_expense, e_pdf, paginas_do_pdf
+from .ai import analyze_expense, documento_valido, e_pdf, paginas_do_pdf
 from .exportacao import conciliacao_excel, conciliacao_geral_excel, extrato_excel
 from .fatura import TOLERANCIA_DIAS, compra_antiga, conciliar, janela_do_portal, ler_fatura
 from .models import AcessoCartoes, Cartao, Gasto, GastoComprovante
@@ -758,6 +758,8 @@ def gasto_create(request, pk):
 
     if request.method == 'POST':
         estabelecimento = request.POST.get('estabelecimento', '').strip()
+        documento_bruto = request.POST.get('documento_estabelecimento', '').strip()
+        documento = documento_valido(documento_bruto)
         categoria_gasto = request.POST.get('categoria_gasto', '').strip()
         descricao = request.POST.get('descricao', '').strip()
         data_raw = request.POST.get('data_gasto', '').strip()
@@ -771,6 +773,8 @@ def gasto_create(request, pk):
             errors.append('Informe um valor válido para o gasto.')
         if not descricao and not estabelecimento:
             errors.append('Informe ao menos a descrição ou o estabelecimento do gasto.')
+        if documento_bruto and not documento:
+            errors.append(f'O CNPJ/CPF "{documento_bruto}" não é válido. Confira os números ou deixe em branco.')
 
         data_gasto = parse_date(data_raw) if data_raw else None
         if not data_gasto:
@@ -799,7 +803,7 @@ def gasto_create(request, pk):
 
         gasto = Gasto.objects.create(
             cartao=cartao, criado_por=request.user, valor=valor_dec,
-            estabelecimento=estabelecimento, data_gasto=data_gasto,
+            estabelecimento=estabelecimento, documento_estabelecimento=documento, data_gasto=data_gasto,
             categoria_gasto=categoria_gasto, descricao=descricao,
             foto=comprovante, origem=('FOTO' if comprovante else 'MANUAL'), ia_dados=ia_dados,
         )
@@ -840,6 +844,7 @@ def abrir_chamado_do_gasto(cartao, gasto, ator_user):
         f'Responsável: {responsavel_nome}\n'
         f'Valor: R$ {gasto.valor}\n'
         f'Estabelecimento: {gasto.estabelecimento or "—"}\n'
+        f'CNPJ/CPF do estabelecimento: {gasto.documento_estabelecimento or "não identificado no comprovante"}\n'
         f'Data: {gasto.data_gasto.strftime("%d/%m/%Y")}\n'
         f'Categoria: {gasto.categoria_gasto or "—"}\n'
         f'Descrição: {gasto.descricao or "—"}'
@@ -1161,6 +1166,7 @@ def api_lancar_gasto(request):
     gasto = Gasto.objects.create(
         cartao=cartao, criado_por=user, valor=valor,
         estabelecimento=estabelecimento, data_gasto=data_gasto,
+        documento_estabelecimento=documento_valido(ia.get('documento')) if ia_ok else '',
         categoria_gasto=categoria_gasto, descricao=descricao_final,
         foto=foto_file, origem=('FOTO' if image_bytes else 'MANUAL'),
         ia_dados=(ia if isinstance(ia, dict) else {}),

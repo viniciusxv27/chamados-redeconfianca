@@ -88,6 +88,10 @@ class Gasto(models.Model):
     )
     valor = models.DecimalField(max_digits=12, decimal_places=2, verbose_name='Valor (R$)')
     estabelecimento = models.CharField(max_length=200, blank=True, verbose_name='Estabelecimento')
+    # CNPJ (ou CPF) de quem vendeu — vai no chamado para o financeiro achar a
+    # nota. A IA lê do comprovante; quem lança confere e corrige.
+    documento_estabelecimento = models.CharField(
+        max_length=18, blank=True, default='', db_default='', verbose_name='CNPJ/CPF do estabelecimento')
     data_gasto = models.DateField(verbose_name='Data do gasto')
     categoria_gasto = models.CharField(max_length=120, blank=True, verbose_name='Categoria do gasto')
     descricao = models.TextField(blank=True, verbose_name='Descrição')

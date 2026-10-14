@@ -366,6 +366,23 @@
         {% endif %}
     </div>
 
+    <style>
+        /* O "feito" de cada passo: maior que o padrão do navegador, verde da tela e com o ✓. */
+        .imp-check { appearance: none; -webkit-appearance: none; flex-shrink: 0; width: 1.375rem; height: 1.375rem;
+            margin: 0; border: 2px solid #CBD5E1; border-radius: .45rem; background: #fff center/70% no-repeat;
+            cursor: pointer; transition: background-color .15s, border-color .15s, box-shadow .15s, transform .15s; }
+        .imp-check:hover { border-color: #34D399; box-shadow: 0 0 0 4px rgba(16, 185, 129, .12); }
+        .imp-check:focus-visible { outline: none; box-shadow: 0 0 0 4px rgba(16, 185, 129, .3); }
+        .imp-check:checked { border-color: #10B981; background-color: #10B981;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5l3 3 6-7'/%3E%3C/svg%3E");
+            animation: impMarca .25s ease; }
+        .imp-check:checked:hover { background-color: #059669; border-color: #059669; }
+        .imp-check:disabled { opacity: .6; cursor: progress; }
+        @keyframes impMarca { 0% { transform: scale(.8); } 60% { transform: scale(1.12); } 100% { transform: scale(1); } }
+        .imp-texto { transition: color .2s; }
+        html.dark .imp-check { background-color: var(--tema-superficie-3, #2b3346); border-color: var(--tema-borda, #313a4f); }
+        html.dark .imp-check:checked { background-color: #10B981; border-color: #10B981; }
+    </style>
     <ul class="space-y-1.5" id="impListaItens">
         {% for item in itens %}
         <li class="imp-passo group p-2 rounded-lg hover:bg-gray-50" id="passo{{ item.id }}"
@@ -377,17 +394,18 @@
                     <i class="fas fa-grip-vertical text-xs"></i>
                 </span>
                 {% endif %}
-                <input type="checkbox" class="imp-check mt-0.5 rounded border-gray-300 text-emerald-600"
-                       data-item="{{ item.id }}" {% if item.concluido %}checked{% endif %}>
-                <span class="flex-1 min-w-0">
-                    <span class="text-sm {% if item.concluido %}text-gray-400 line-through{% else %}text-gray-800{% endif %}">{{ item.texto }}</span>
+                <input type="checkbox" class="imp-check" id="impCheck{{ item.id }}"
+                       data-item="{{ item.id }}" {% if item.concluido %}checked{% endif %}
+                       aria-label="Marcar “{{ item.texto }}” como feito">
+                <label for="impCheck{{ item.id }}" class="flex-1 min-w-0 cursor-pointer pt-px">
+                    <span class="imp-texto text-sm {% if item.concluido %}text-gray-400 line-through{% else %}text-gray-800{% endif %}">{{ item.texto }}</span>
                     {% if item.concluido and item.concluido_por %}
                     <span class="block text-[11px] text-gray-400">
                         por {{ item.concluido_por.get_full_name|default:item.concluido_por.email }}
                         em {{ item.concluido_em|date:"d/m H:i" }}
                     </span>
                     {% endif %}
-                </span>
+                </label>
 
                 {% if pode_mexer_itens %}
                 <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity flex-shrink-0">
@@ -759,7 +777,6 @@
     }
     document.querySelectorAll('.imp-check').forEach(function (chk) {
         chk.addEventListener('change', function () {
-            var texto = chk.parentElement.querySelector('span span') || chk.nextElementSibling.firstElementChild;
             chk.disabled = true;
             fetch('/impulso/metas/item/' + chk.dataset.item + '/check/', {
                 method: 'POST',
@@ -769,7 +786,7 @@
             .then(function (d) {
                 chk.disabled = false;
                 if (!d.ok) { chk.checked = !chk.checked; alert(d.error || 'Não foi possível marcar.'); return; }
-                var alvo = chk.closest('li').querySelector('span > span');
+                var alvo = chk.closest('li').querySelector('.imp-texto');
                 if (alvo) {
                     alvo.classList.toggle('line-through', d.concluido);
                     alvo.classList.toggle('text-gray-400', d.concluido);

@@ -57,6 +57,10 @@ _SYSTEM_PROMPT = (
 _USER_INSTRUCTION = (
     'Retorne um objeto JSON com as chaves: '
     '"estabelecimento" (string), '
+    '"documento" (CNPJ ou CPF do ESTABELECIMENTO onde a compra foi feita — o que aparece no cabeçalho '
+    'do cupom/nota, perto do nome da loja, de "CNPJ", "CPF", "C.N.P.J." ou "CNPJ/CPF do emitente". '
+    'NUNCA use o "CPF do consumidor"/"CPF do cliente" nem o CNPJ da operadora do cartão. '
+    'Só os números, ou "" se não aparecer), '
     '"valor" (número em reais, ex.: 123.45, use ponto decimal), '
     '"data" (data do gasto no formato YYYY-MM-DD, ou "" se não identificar), '
     '"categoria" (string curta, ex.: "Alimentação", "Combustível", "Hospedagem"), '
@@ -82,8 +86,66 @@ _ESSENCIAL = (
     'vazio se realmente não houver nenhum número de dinheiro no material.'
 )
 
-# O que o chamado precisa ter. É isto que decide se vale insistir.
+# O que o chamado precisa ter. É isto que decide se vale insistir. O documento
+# da loja (CNPJ/CPF) é buscado, mas não é obrigatório: muito comprovante de
+# maquininha não traz, e insistir por ele só gastaria rodadas.
 OBRIGATORIOS = ('valor', 'categoria', 'descricao')
+
+
+# ---------------------------------------------------------------------------
+# CNPJ / CPF do estabelecimento
+# ---------------------------------------------------------------------------
+def _digitos_ok(numeros: str) -> bool:
+    """Confere os dígitos verificadores de CPF (11) ou CNPJ (14)."""
+    if len(numeros) not in (11, 14) or len(set(numeros)) == 1:
+        return False
+    if len(numeros) == 11:
+        for tamanho in (9, 10):
+            soma = sum(int(numeros[i]) * (tamanho + 1 - i) for i in range(tamanho))
+            if (soma * 10 % 11) % 10 != int(numeros[tamanho]):
+                return False
+        return True
+    pesos = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+    for tamanho in (12, 13):
+        p = pesos if tamanho == 12 else [6] + pesos
+        resto = sum(int(numeros[i]) * p[i] for i in range(tamanho)) % 11
+        if (0 if resto < 2 else 11 - resto) != int(numeros[tamanho]):
+            return False
+    return True
+
+
+def formatar_documento(numeros: str) -> str:
+    if len(numeros) == 14:
+        return f'{numeros[:2]}.{numeros[2:5]}.{numeros[5:8]}/{numeros[8:12]}-{numeros[12:]}'
+    if len(numeros) == 11:
+        return f'{numeros[:3]}.{numeros[3:6]}.{numeros[6:9]}-{numeros[9:]}'
+    return numeros
+
+
+def documento_valido(bruto) -> str:
+    """'12.345.678/0001-95' formatado se os dígitos conferem; '' se não."""
+    numeros = re.sub(r'\D', '', str(bruto or ''))
+    return formatar_documento(numeros) if _digitos_ok(numeros) else ''
+
+
+_DOC_NO_TEXTO = re.compile(r'(?<!\d)(\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}|\d{3}\.?\d{3}\.?\d{3}-?\d{2})(?!\d)')
+_CONSUMIDOR = re.compile(r'consumidor|cliente|destinat|comprador|portador', re.I)
+
+
+def documento_no_texto(texto: str) -> str:
+    """O primeiro CNPJ/CPF válido do texto que não seja o do consumidor.
+
+    Reserva para quando a IA não devolve o documento: o texto do PDF quase
+    sempre traz o CNPJ do emitente nas primeiras linhas.
+    """
+    for linha in (texto or '').splitlines():
+        if _CONSUMIDOR.search(linha):
+            continue
+        for achado in _DOC_NO_TEXTO.findall(linha):
+            doc = documento_valido(achado)
+            if doc:
+                return doc
+    return ''
 
 
 def _extract_json_payload(text: str) -> dict:
@@ -394,6 +456,10 @@ def analyze_expense(image_bytes: bytes | None = None, manual_text: str = '',
 
     for chave in ('estabelecimento', 'categoria', 'data', 'descricao'):
         melhor.setdefault(chave, '')
+    # CNPJ/CPF do estabelecimento: o da IA só vale se os dígitos conferem; sem
+    # ele, procura no texto do PDF. Leitura errada vira vazio, não chute.
+    documento = documento_valido(melhor.get('documento')) or documento_no_texto(anexo.get('texto') or '')
+    melhor['documento'] = documento
     melhor['tentativas'] = tentativas
     melhor['anexo'] = anexo.get('tipo')
     melhor['comprovantes'] = anexo.get('quantidade') or 0

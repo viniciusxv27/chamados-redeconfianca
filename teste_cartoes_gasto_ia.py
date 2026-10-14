@@ -285,6 +285,7 @@ t('imagem continua passando', conteudo and mime == 'image/jpeg', mime)
 conteudo, mime = baixar(b'<html>erro</html>', 'text/html')
 t('página HTML não vira comprovante', conteudo is None and mime is None, (conteudo, mime))
 
+from tickets.models import Category
 print('\n== PELA API ==')
 marcador = transaction.atomic()
 marcador.__enter__()
@@ -293,8 +294,11 @@ try:
     from django.db import connection
     from django.db.migrations.executor import MigrationExecutor
     _executor = MigrationExecutor(connection)
-    if _executor.migration_plan([('cartoes', '0003_comprovantes_do_gasto')]):
-        _executor.migrate([('cartoes', '0003_comprovantes_do_gasto')])
+    # Até a última migração do app (nunca um número fixo: com uma migração
+    # mais nova aplicada, mirar a antiga desfaria a nova durante o teste).
+    _ultima = _executor.loader.graph.leaf_nodes('cartoes')
+    if _executor.migration_plan(_ultima):
+        _executor.migrate(_ultima)
     # Nada vai para o S3: os arquivos do teste ficam em memória.
     from django.core.files.storage import InMemoryStorage
     from cartoes.models import GastoComprovante
@@ -449,6 +453,46 @@ try:
     html = ct.get(f'/cartoes/{cartao.pk}/gasto/').content.decode()
     t('a tela aceita vários arquivos e tem "Adicionar outro comprovante"', 'multiple' in html
       and 'Adicionar outro comprovante' in html)
+
+    print('\n== CNPJ/CPF DA LOJA ==')
+    dados, _ = analisar([dict(COMPLETO, documento='11.222.333/0001-81')], manual_text='posto')
+    t('a IA devolve o CNPJ do estabelecimento, formatado', dados.get('documento') == '11.222.333/0001-81', dados.get('documento'))
+    dados, _ = analisar([dict(COMPLETO, documento='11222333000182')],
+                        image_bytes=pdf_com_texto('POSTO CENTRO CNPJ 11.222.333/0001-81 TOTAL R$ 128,90'),
+                        mime='application/pdf')
+    t('CNPJ com dígito errado é descartado e sai do texto do PDF', dados.get('documento') == '11.222.333/0001-81',
+      dados.get('documento'))
+    dados, _ = analisar([dict(COMPLETO, documento='')],
+                        image_bytes=pdf_com_texto('CPF DO CONSUMIDOR 529.982.247-25 TOTAL R$ 128,90'),
+                        mime='application/pdf')
+    t('o CPF do consumidor não vira documento da loja', dados.get('documento') == '', dados.get('documento'))
+    t('pedimos o documento à IA (e avisamos para não usar o do consumidor)',
+      'documento' in ai._USER_INSTRUCTION and 'CPF do consumidor' in ai._USER_INSTRUCTION)
+
+    status, resposta, _ = chamar({'telefone': '27999991234', 'foto_url': 'https://exemplo.local/nota.pdf'},
+                                 [dict(COMPLETO, documento='11.222.333/0001-81')], comprovante=pdf)
+    if status != 401:
+        g = Gasto.objects.filter(id=resposta.get('gasto_id')).first()
+        t('pela API o gasto guarda o CNPJ lido', g and g.documento_estabelecimento == '11.222.333/0001-81',
+          g and g.documento_estabelecimento)
+        if Category.objects.filter(id=cviews.CARTAO_CATEGORY_ID).exists() and g:
+            chamado = cviews.abrir_chamado_do_gasto(cartao, g, dono)
+            t('o chamado traz o CNPJ/CPF da loja', 'CNPJ/CPF do estabelecimento: 11.222.333/0001-81' in chamado.description,
+              chamado.description)
+        else:
+            print('  (categoria 99 de chamados não existe neste banco: texto do chamado não conferido)')
+
+    r = ct.post(f'/cartoes/{cartao.pk}/gasto/', {'valor': '50,00', 'estabelecimento': 'Loja X', 'descricao': 'ZZ doc errado',
+                                                'data_gasto': '2026-09-30', 'documento_estabelecimento': '11.111.111/1111-11'})
+    t('na tela, CNPJ inválido é recusado com aviso', 'não é válido' in r.content.decode()
+      and not Gasto.objects.filter(descricao='ZZ doc errado').exists())
+    with mock.patch.object(cviews, 'abrir_chamado_do_gasto', return_value=None):
+        ct.post(f'/cartoes/{cartao.pk}/gasto/', {'valor': '50,00', 'estabelecimento': 'Loja X', 'descricao': 'ZZ doc certo',
+                                                'data_gasto': '2026-09-30', 'documento_estabelecimento': '11222333000181'})
+    g = Gasto.objects.filter(descricao='ZZ doc certo').first()
+    t('e o válido é gravado formatado', g and g.documento_estabelecimento == '11.222.333/0001-81', g and g.documento_estabelecimento)
+    html = ct.get(f'/cartoes/{cartao.pk}/gasto/').content.decode()
+    t('o formulário tem o campo do CNPJ/CPF', 'name="documento_estabelecimento"' in html)
 finally:
     transaction.set_rollback(True)
     marcador.__exit__(None, None, None)
