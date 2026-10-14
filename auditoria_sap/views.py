@@ -1,6 +1,7 @@
 """Telas da Visão SAP: a lista da auditoria e o painel administrativo."""
 import logging
-from datetime import datetime
+import calendar
+from datetime import date, datetime
 from decimal import Decimal
 from functools import wraps
 
@@ -8,7 +9,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db.models import Count, DecimalField, Q, Sum, Value
-from django.db.models.functions import Abs, Coalesce
+from django.db.models.functions import Abs, Coalesce, TruncMonth
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -80,11 +81,50 @@ def _data(texto):
         return None
 
 
+MESES_PT = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto',
+            'setembro', 'outubro', 'novembro', 'dezembro']
+TODOS_OS_MESES = 'todos'
+
+
+def rotulo_mes(chave):
+    """'2026-10' → 'Outubro de 2026'."""
+    ano, mes = int(chave[:4]), int(chave[5:7])
+    return f'{MESES_PT[mes - 1].capitalize()} de {ano}'
+
+
+def _mes_valido(texto):
+    try:
+        ano, mes = int(texto[:4]), int(texto[5:7])
+        return f'{ano:04d}-{mes:02d}' if len(texto) == 7 and texto[4] == '-' and 1 <= mes <= 12 else ''
+    except (TypeError, ValueError):
+        return ''
+
+
 def ler_filtros(request):
-    """O que a tela está filtrando — os mesmos filtros na lista e no painel."""
+    """O que a tela está filtrando — os mesmos filtros na lista e no painel.
+
+    O período começa no **mês atual**: ninguém precisa escolher nada para ver o
+    mês corrente. O menu de mês troca para outro mês, para "todos os meses" ou,
+    com De/Até preenchidos, para um período livre.
+    """
     de, ate = _data(request.GET.get('de')), _data(request.GET.get('ate'))
     if de and ate and de > ate:
         de, ate = ate, de
+    pedido = (request.GET.get('mes') or '').strip()
+    if pedido == TODOS_OS_MESES:
+        mes = TODOS_OS_MESES
+    elif _mes_valido(pedido):
+        mes = _mes_valido(pedido)
+    elif de or ate:
+        mes = ''                                 # período personalizado (De/Até)
+    else:
+        mes = timezone.localdate().strftime('%Y-%m')
+    if mes and mes != TODOS_OS_MESES:
+        ano, numero = int(mes[:4]), int(mes[5:7])
+        de = date(ano, numero, 1)
+        ate = date(ano, numero, calendar.monthrange(ano, numero)[1])
+    elif mes == TODOS_OS_MESES:
+        de = ate = None
     situacao = request.GET.get('situacao') or 'abertas'
     if situacao not in dict(SITUACOES):
         situacao = 'abertas'
@@ -101,6 +141,7 @@ def ler_filtros(request):
         'tipo': (request.GET.get('tipo') or '').strip(),
         'loja': (request.GET.get('loja') or '').strip(),
         'de': de, 'ate': ate,
+        'mes': mes,
         'situacao': situacao,
         'presenca': presenca,
         'comparacao': comparacao,
@@ -184,8 +225,23 @@ def _contexto_comum(request, filtros, pdvs=None):
     visiveis = LinhaAuditoria.objects.filter(ativa=True).exclude(q_valor_desprezivel())
     if pdvs is not None:
         visiveis = visiveis.filter(pdv__in=pdvs)
+    atual = timezone.localdate().strftime('%Y-%m')
+    com_venda = {m.strftime('%Y-%m') for m in (visiveis.exclude(data_venda__isnull=True)
+                                                .annotate(m=TruncMonth('data_venda'))
+                                                .values_list('m', flat=True).distinct()) if m}
+    chaves = sorted(com_venda | {atual} | ({filtros['mes']} if _mes_valido(filtros['mes']) else set()), reverse=True)
+    # Olhando um mês, o que ficou aberto antes dele sairia de vista: a tela avisa.
+    abertas_antes = 0
+    if _mes_valido(filtros['mes']) and filtros['de']:
+        abertas_antes = visiveis.filter(resolvida=False, data_venda__lt=filtros['de']).count()
     return {
+        'abertas_antes': abertas_antes,
         'filtros': filtros,
+        'meses': [{'chave': c, 'rotulo': rotulo_mes(c), 'atual': c == atual} for c in chaves],
+        'mes_atual': atual,
+        'rotulo_periodo': (rotulo_mes(filtros['mes']) if _mes_valido(filtros['mes'])
+                           else 'Todos os meses' if filtros['mes'] == TODOS_OS_MESES
+                           else 'Período personalizado'),
         'tipos': (visiveis.exclude(tipo_erro='').values_list('tipo_erro', flat=True)
                   .distinct().order_by('tipo_erro')),
         'lojas': (visiveis.exclude(pdv='').values_list('pdv', flat=True).distinct().order_by('pdv')),

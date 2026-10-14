@@ -4,6 +4,23 @@ está na tela e o que está no gráfico serem sempre o mesmo recorte.
 {% endcomment %}
 <form method="get" class="sap-card p-3 sm:p-4 mb-4" id="sapFiltros">
     <div class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-2.5">
+        {% comment %}O mês vem primeiro e já começa no atual; os meses anteriores ficam no menu.{% endcomment %}
+        <div class="col-span-2">
+            <label class="sap-rotulo block mb-1" for="sapMes">Mês</label>
+            <div class="relative">
+                <i class="fas fa-calendar-days absolute left-2.5 top-1/2 -translate-y-1/2 text-sky-500 text-xs pointer-events-none"></i>
+                <select name="mes" id="sapMes"
+                        class="w-full border border-sky-200 rounded-lg pl-7 pr-2 py-1.5 text-sm font-semibold text-sky-800 bg-sky-50
+                               focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100">
+                    {% for m in meses %}
+                    <option value="{{ m.chave }}" {% if filtros.mes == m.chave %}selected{% endif %}>{{ m.rotulo }}{% if m.atual %} (atual){% endif %}</option>
+                    {% endfor %}
+                    <option value="todos" {% if filtros.mes == 'todos' %}selected{% endif %}>Todos os meses</option>
+                    <option value="" {% if not filtros.mes %}selected{% endif %}>Período personalizado…</option>
+                </select>
+            </div>
+        </div>
+
         <div class="col-span-2 xl:col-span-2">
             <label class="sap-rotulo block mb-1">Buscar</label>
             <div class="relative">
@@ -62,13 +79,13 @@ está na tela e o que está no gráfico serem sempre o mesmo recorte.
 
         <div>
             <label class="sap-rotulo block mb-1">De</label>
-            <input type="date" name="de" value="{{ filtros.de|date:'Y-m-d' }}"
-                   class="sap-auto w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm">
+            <input type="date" name="de" value="{% if not filtros.mes %}{{ filtros.de|date:'Y-m-d' }}{% endif %}"
+                   class="sap-periodo w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm">
         </div>
         <div>
             <label class="sap-rotulo block mb-1">Até</label>
-            <input type="date" name="ate" value="{{ filtros.ate|date:'Y-m-d' }}"
-                   class="sap-auto w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm">
+            <input type="date" name="ate" value="{% if not filtros.mes %}{{ filtros.ate|date:'Y-m-d' }}{% endif %}"
+                   class="sap-periodo w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm">
         </div>
 
         <div>
@@ -102,6 +119,14 @@ está na tela e o que está no gráfico serem sempre o mesmo recorte.
                title="Limpar os filtros">Limpar</a>
         </div>
     </div>
+    {% if abertas_antes %}
+    <a href="?mes=todos&situacao=abertas{% if filtros.loja %}&loja={{ filtros.loja|urlencode }}{% endif %}"
+       class="mt-3 flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-xs hover:bg-amber-100">
+        <i class="fas fa-triangle-exclamation"></i>
+        <span class="flex-1">Há <strong>{{ abertas_antes }}</strong> divergência{{ abertas_antes|pluralize }} ainda aberta{{ abertas_antes|pluralize }} de meses anteriores a {{ rotulo_periodo|lower }}.</span>
+        <span class="font-semibold whitespace-nowrap">Ver todas <i class="fas fa-arrow-right ml-0.5"></i></span>
+    </a>
+    {% endif %}
     <p class="text-[11px] text-gray-400 mt-2" data-sap-desprezivel>
         <i class="fas fa-circle-info mr-1"></i>Divergências de valor abaixo de R$ {{ limite_desprezivel|floatformat:2 }} são desconsideradas.
     </p>
@@ -112,4 +137,24 @@ está na tela e o que está no gráfico serem sempre o mesmo recorte.
 document.querySelectorAll('#sapFiltros .sap-auto').forEach(function (campo) {
     campo.addEventListener('change', function () { campo.form.submit(); });
 });
+// Mês e De/Até são duas formas de dizer o período: escolher um desfaz o outro.
+(function () {
+    var mes = document.getElementById('sapMes');
+    var datas = document.querySelectorAll('#sapFiltros .sap-periodo');
+    if (!mes) return;
+    mes.addEventListener('change', function () {
+        if (mes.value === '') {                   // "Período personalizado": vai para o De
+            if (datas[0]) datas[0].focus();
+            return;
+        }
+        datas.forEach(function (d) { d.value = ''; });
+        mes.form.submit();
+    });
+    datas.forEach(function (d) {
+        d.addEventListener('change', function () {
+            mes.value = '';
+            if (Array.prototype.every.call(datas, function (x) { return x.value; })) mes.form.submit();
+        });
+    });
+})();
 </script>

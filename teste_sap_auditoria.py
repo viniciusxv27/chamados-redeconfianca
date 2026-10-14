@@ -76,7 +76,7 @@ def t(nome, cond, extra=''):
         print(f'  FALHA {nome} {extra}')
 
 
-HOJE = date(2026, 9, 22)
+HOJE = date.today()   # o "hoje" da tela: a Visão SAP abre no mês atual
 
 
 def linha_sap(**troca):
@@ -164,7 +164,7 @@ try:
                                     and uma.pontuacao_indicios == 3),
       (uma.tipo_erro, uma.data_venda, uma.valor_sap, uma.diferenca_valor))
     t('a linha inteira fica guardada para a ficha',
-      uma.dados.get('CENTRO_SAP') == 'C001' and uma.dados.get('DATA_FATURA_SAP') == '22/09/2026',
+      uma.dados.get('CENTRO_SAP') == 'C001' and uma.dados.get('DATA_FATURA_SAP') == HOJE.strftime('%d/%m/%Y'),
       list(uma.dados.items())[:3])
     t('a diferença aparece em reais, sempre positiva', uma.diferenca_em_reais == D('0.01'))
     t('nasce aberta e ativa', not uma.resolvida and uma.ativa)
@@ -496,6 +496,32 @@ try:
     t('o painel também não conta', painel['numeros']['abertas'] == 2, painel['numeros'])
     t('a tela avisa', 'são desconsideradas' in c.get('/sap/').content.decode())
     t('a linha não é apagada do espelho (se crescer, volta)', LinhaAuditoria.objects.filter(pk=centavos.pk).exists())
+
+    print('\n== O MÊS: ATUAL POR PADRÃO, OS ANTERIORES NO MENU ==')
+    inicio_mes = HOJE.replace(day=1)
+    mes_passado = inicio_mes - timedelta(days=1)
+    antiga = LinhaAuditoria.objects.create(chave='zz-mes-passado-000000001', tipo_erro='SEM NF', pdv='ICONHA',
+                                          id_venda='MPASS1', data_venda=mes_passado, ativa=True)
+    r = c.get('/sap/?situacao=todas')
+    ids = {l.pk for l in r.context['pagina'].paginator.object_list}
+    t('sem escolher nada, abre no mês atual', r.context['filtros']['mes'] == HOJE.strftime('%Y-%m')
+      and antiga.pk not in ids and all(l.data_venda >= inicio_mes for l in r.context['pagina'].paginator.object_list))
+    html = r.content.decode()
+    t('o menu mostra o mês atual escolhido', f'value="{HOJE:%Y-%m}" selected' in html and '(atual)' in html)
+    t('e oferece o mês anterior', f'value="{mes_passado:%Y-%m}"' in html)
+    t('avisa que há abertas de meses anteriores, com link', 'ainda aberta' in html and '?mes=todos&situacao=abertas' in html)
+    r = c.get(f'/sap/?situacao=todas&mes={mes_passado:%Y-%m}')
+    ids = {l.pk for l in r.context['pagina'].paginator.object_list}
+    t('escolhendo o mês anterior, mostra só ele', antiga.pk in ids
+      and all(l.data_venda.month == mes_passado.month for l in r.context['pagina'].paginator.object_list))
+    r = c.get('/sap/?situacao=todas&mes=todos')
+    t('"Todos os meses" mostra tudo', antiga.pk in {l.pk for l in r.context['pagina'].paginator.object_list})
+    r = c.get(f'/sap/?situacao=todas&de={mes_passado:%Y-%m-%d}&ate={HOJE:%Y-%m-%d}')
+    t('De/Até continua valendo (período personalizado)', r.context['filtros']['mes'] == ''
+      and antiga.pk in {l.pk for l in r.context['pagina'].paginator.object_list})
+    painel = c.get('/sap/painel/').context
+    t('o painel usa o mesmo mês', painel['filtros']['mes'] == HOJE.strftime('%Y-%m'))
+    antiga.delete()
 
     print('\n== GESTORES ESCOLHIDOS PELO SUPERADMIN E AVISO DE RESOLVIDA ==')
     from auditoria_sap.permissions import gestores_escolhidos
