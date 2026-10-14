@@ -56,10 +56,13 @@ _SYSTEM_PROMPT = (
 
 _USER_INSTRUCTION = (
     'Retorne um objeto JSON com as chaves: '
-    '"estabelecimento" (string), '
+    '"estabelecimento" (string: o nome de quem VENDEU — loja, site, posto; nunca "Rede Confiança", '
+    'que é quem comprou), '
     '"documento" (CNPJ ou CPF do ESTABELECIMENTO onde a compra foi feita — o que aparece no cabeçalho '
     'do cupom/nota, perto do nome da loja, de "CNPJ", "CPF", "C.N.P.J." ou "CNPJ/CPF do emitente". '
     'NUNCA use o "CPF do consumidor"/"CPF do cliente" nem o CNPJ da operadora do cartão. '
+    'O COMPRADOR somos nós, a Rede Confiança: ignore todo CNPJ que comece com 03.007.331 ou '
+    '09.163.602 (aparece como destinatário/tomador/cliente na nota) — queremos o de quem VENDEU. '
     'Só os números, ou "" se não aparecer), '
     '"valor" (número em reais, ex.: 123.45, use ponto decimal), '
     '"data" (data do gasto no formato YYYY-MM-DD, ou "" se não identificar), '
@@ -122,6 +125,37 @@ def formatar_documento(numeros: str) -> str:
     return numeros
 
 
+# O comprador é a própria rede: o CNPJ dela aparece na nota como destinatário e
+# a IA às vezes o devolvia como se fosse a loja. Fica de fora tudo o que tiver a
+# raiz (8 primeiros dígitos) da empresa — a matriz e as filiais da SEFAZ_CNPJS.
+RAIZES_DA_EMPRESA = {'03007331'}
+
+
+def raizes_da_empresa() -> set:
+    raizes = set(RAIZES_DA_EMPRESA)
+    for item in str(getattr(settings, 'SEFAZ_CNPJS', '') or '').split(','):
+        numeros = re.sub(r'\D', '', item.split(':')[0])
+        if len(numeros) == 14:
+            raizes.add(numeros[:8])
+    extra = str(getattr(settings, 'CARTOES_CNPJS_PROPRIOS', '') or '')
+    for item in extra.split(','):
+        numeros = re.sub(r'\D', '', item)
+        if len(numeros) >= 8:
+            raizes.add(numeros[:8])
+    return raizes
+
+
+def e_da_empresa(documento: str) -> bool:
+    numeros = re.sub(r'\D', '', str(documento or ''))
+    return len(numeros) == 14 and numeros[:8] in raizes_da_empresa()
+
+
+def documento_do_vendedor(bruto) -> str:
+    """O CNPJ/CPF válido de quem vendeu — nunca o da própria Rede Confiança."""
+    documento = documento_valido(bruto)
+    return '' if e_da_empresa(documento) else documento
+
+
 def documento_valido(bruto) -> str:
     """'12.345.678/0001-95' formatado se os dígitos conferem; '' se não."""
     numeros = re.sub(r'\D', '', str(bruto or ''))
@@ -142,7 +176,7 @@ def documento_no_texto(texto: str) -> str:
         if _CONSUMIDOR.search(linha):
             continue
         for achado in _DOC_NO_TEXTO.findall(linha):
-            doc = documento_valido(achado)
+            doc = documento_do_vendedor(achado)
             if doc:
                 return doc
     return ''
@@ -458,7 +492,7 @@ def analyze_expense(image_bytes: bytes | None = None, manual_text: str = '',
         melhor.setdefault(chave, '')
     # CNPJ/CPF do estabelecimento: o da IA só vale se os dígitos conferem; sem
     # ele, procura no texto do PDF. Leitura errada vira vazio, não chute.
-    documento = documento_valido(melhor.get('documento')) or documento_no_texto(anexo.get('texto') or '')
+    documento = documento_do_vendedor(melhor.get('documento')) or documento_no_texto(anexo.get('texto') or '')
     melhor['documento'] = documento
     melhor['tentativas'] = tentativas
     melhor['anexo'] = anexo.get('tipo')

@@ -25,7 +25,7 @@ from core.evolution import enviar_texto
 from tickets.models import Category, Ticket, TicketAttachment, TicketLog
 from users.models import User
 
-from .ai import analyze_expense, documento_valido, e_pdf, paginas_do_pdf
+from .ai import analyze_expense, documento_do_vendedor, documento_valido, e_da_empresa, e_pdf, paginas_do_pdf
 from .exportacao import conciliacao_excel, conciliacao_geral_excel, extrato_excel
 from .fatura import TOLERANCIA_DIAS, compra_antiga, conciliar, janela_do_portal, ler_fatura
 from .models import AcessoCartoes, Cartao, Gasto, GastoComprovante
@@ -775,6 +775,9 @@ def gasto_create(request, pk):
             errors.append('Informe ao menos a descrição ou o estabelecimento do gasto.')
         if documento_bruto and not documento:
             errors.append(f'O CNPJ/CPF "{documento_bruto}" não é válido. Confira os números ou deixe em branco.')
+        elif e_da_empresa(documento):
+            errors.append(f'O CNPJ {documento} é da própria Rede Confiança (quem comprou). '
+                          'Informe o CNPJ/CPF da loja onde a compra foi feita, ou deixe em branco.')
 
         data_gasto = parse_date(data_raw) if data_raw else None
         if not data_gasto:
@@ -1166,7 +1169,7 @@ def api_lancar_gasto(request):
     gasto = Gasto.objects.create(
         cartao=cartao, criado_por=user, valor=valor,
         estabelecimento=estabelecimento, data_gasto=data_gasto,
-        documento_estabelecimento=documento_valido(ia.get('documento')) if ia_ok else '',
+        documento_estabelecimento=documento_do_vendedor(ia.get('documento')) if ia_ok else '',
         categoria_gasto=categoria_gasto, descricao=descricao_final,
         foto=foto_file, origem=('FOTO' if image_bytes else 'MANUAL'),
         ia_dados=(ia if isinstance(ia, dict) else {}),

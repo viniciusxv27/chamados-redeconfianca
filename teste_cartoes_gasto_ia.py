@@ -466,6 +466,18 @@ try:
                         image_bytes=pdf_com_texto('CPF DO CONSUMIDOR 529.982.247-25 TOTAL R$ 128,90'),
                         mime='application/pdf')
     t('o CPF do consumidor não vira documento da loja', dados.get('documento') == '', dados.get('documento'))
+    dados, _ = analisar([dict(COMPLETO, documento='03.007.331/0001-41')],
+                        image_bytes=pdf_com_texto('DEST REDE CONFIANCA 03.007.331/0001-41 TOTAL R$ 128,90'),
+                        mime='application/pdf')
+    t('o CNPJ da Rede Confiança (comprador) nunca vira o da loja', dados.get('documento') == '', dados.get('documento'))
+    dados, _ = analisar([dict(COMPLETO, documento='03007331000141')],
+                        image_bytes=pdf_com_texto('EMITENTE LOJA X CNPJ 11.222.333/0001-81 TOTAL R$ 128,90'),
+                        mime='application/pdf')
+    t('a IA devolve o nosso CNPJ: o da loja sai do texto da nota', dados.get('documento') == '11.222.333/0001-81',
+      dados.get('documento'))
+    t('as filiais (raiz da SEFAZ_CNPJS) também ficam de fora', ai.e_da_empresa('09.163.602/0001-00')
+      or '09163602' not in ai.raizes_da_empresa())
+    t('a IA é avisada de que o comprador somos nós', '03.007.331' in ai._USER_INSTRUCTION)
     t('pedimos o documento à IA (e avisamos para não usar o do consumidor)',
       'documento' in ai._USER_INSTRUCTION and 'CPF do consumidor' in ai._USER_INSTRUCTION)
 
@@ -486,6 +498,10 @@ try:
                                                 'data_gasto': '2026-09-30', 'documento_estabelecimento': '11.111.111/1111-11'})
     t('na tela, CNPJ inválido é recusado com aviso', 'não é válido' in r.content.decode()
       and not Gasto.objects.filter(descricao='ZZ doc errado').exists())
+    r = ct.post(f'/cartoes/{cartao.pk}/gasto/', {'valor': '50,00', 'estabelecimento': 'Loja X', 'descricao': 'ZZ doc nosso',
+                                                'data_gasto': '2026-09-30', 'documento_estabelecimento': '03.007.331/0001-41'})
+    t('na tela, o CNPJ da Rede Confiança é recusado com explicação', 'própria Rede Confiança' in r.content.decode()
+      and not Gasto.objects.filter(descricao='ZZ doc nosso').exists())
     with mock.patch.object(cviews, 'abrir_chamado_do_gasto', return_value=None):
         ct.post(f'/cartoes/{cartao.pk}/gasto/', {'valor': '50,00', 'estabelecimento': 'Loja X', 'descricao': 'ZZ doc certo',
                                                 'data_gasto': '2026-09-30', 'documento_estabelecimento': '11222333000181'})
