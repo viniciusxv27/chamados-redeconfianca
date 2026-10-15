@@ -74,6 +74,7 @@ urlpatterns = [
     path('meu-drive/f/<str:folder_id>/', views.meu_drive, name='meu_drive_folder'),
     path('meu-drive/a/<str:file_id>/', views.meu_drive_arquivo, name='meu_drive_arquivo'),
     path('meu-drive/a/<str:file_id>/conteudo/', views.meu_drive_conteudo, name='meu_drive_conteudo'),
+    path('meu-drive/zip/', views.meu_drive_zip, name='meu_drive_zip'),
     path('meu-drive/enviar/', views.meu_drive_upload, name='meu_drive_upload'),
     path('meu-drive/nova-pasta/', views.meu_drive_nova_pasta, name='meu_drive_nova_pasta'),
     path('meu-drive/pastas/', views.meu_drive_pastas, name='meu_drive_pastas'),

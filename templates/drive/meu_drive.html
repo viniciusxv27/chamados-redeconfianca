@@ -4,6 +4,10 @@
 {% block drive_subtitulo %}Meu Drive{% endblock %}
 
 {% block drive_conteudo %}
+<style>
+    /* Com algo marcado, a caixinha fica visível em todos (no celular já é sempre). */
+    .md-selecionando .md-sel, .md-sel:has(.md-check:checked) { opacity: 1 !important; }
+</style>
 {% comment %}
 Navegação do Drive pessoal da conta conectada. Fora do recorte por setor de
 propósito — e por isso só o SUPERADMIN chega aqui.
@@ -41,6 +45,13 @@ propósito — e por isso só o SUPERADMIN chega aqui.
                 <i class="fas fa-arrow-turn-up fa-flip-horizontal"></i>
             </a>
             {% endif %}
+            {% if not e_raiz %}
+            {% comment %}A pasta aberta inteira num ZIP (Docs/Planilhas do Google vão como Office).{% endcomment %}
+            <a href="{% url 'drive:meu_drive_zip' %}?id={{ folder_id }}&amp;pasta={{ folder_id }}" onclick="return mdBaixarZip(this.href)"
+               class="px-3 py-1.5 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50" title="Baixar esta pasta em ZIP">
+                <i class="fas fa-file-zipper sm:mr-1.5"></i><span class="hidden sm:inline">Baixar pasta</span>
+            </a>
+            {% endif %}
             <button type="button" onclick="mdNovaPasta()"
                     class="px-3 py-1.5 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">
                 <i class="fas fa-folder-plus sm:mr-1.5"></i><span class="hidden sm:inline">Nova pasta</span>
@@ -48,6 +59,17 @@ propósito — e por isso só o SUPERADMIN chega aqui.
             <button type="button" onclick="document.getElementById('md-input-upload').click()"
                     class="px-3 py-1.5 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700">
                 <i class="fas fa-upload sm:mr-1.5"></i><span class="hidden sm:inline">Enviar</span>
+            </button>
+        </div>
+    </div>
+
+    <div id="md-selecao" class="hidden px-4 py-2.5 border-b border-blue-100 bg-blue-50 flex items-center justify-between gap-3 flex-wrap text-sm">
+        <span class="text-blue-800"><i class="fas fa-square-check mr-1.5"></i><strong id="md-sel-n">0</strong> <span id="md-sel-rotulo">selecionado</span></span>
+        <div class="flex items-center gap-2">
+            <button type="button" onclick="mdSelecionarTodos()" class="px-3 py-1.5 rounded-lg text-blue-700 hover:bg-blue-100">Selecionar todos</button>
+            <button type="button" onclick="mdLimparSelecao()" class="px-3 py-1.5 rounded-lg text-gray-600 hover:bg-white">Limpar</button>
+            <button type="button" onclick="mdBaixarSelecionados()" class="px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700">
+                <i class="fas fa-download mr-1.5"></i>Baixar
             </button>
         </div>
     </div>
@@ -112,6 +134,77 @@ propósito — e por isso só o SUPERADMIN chega aqui.
                 embrulho.remove();
             })
             .catch(function () { botao.disabled = false; botao.textContent = 'Carregar mais'; });
+    };
+
+    // ── Baixar: pasta em ZIP, um arquivo direto, vários num ZIP só ───────
+    var URL_ZIP = "{% url 'drive:meu_drive_zip' %}";
+    var URL_ARQUIVO = "{% url 'drive:meu_drive_conteudo' '__ID__' %}";
+    var avisoZip = null, esperaZip = null;
+
+    function fecharAviso() {
+        if (avisoZip) { avisoZip.remove(); avisoZip = null; }
+        clearInterval(esperaZip);
+    }
+    function lerCookie(nome) {
+        var achado = document.cookie.split('; ').find(function (c) { return c.indexOf(nome + '=') === 0; });
+        return achado ? achado.slice(nome.length + 1) : '';
+    }
+
+    /* O ZIP é montado no servidor (baixa tudo do Google e comprime): em pasta
+       grande demora. O aviso fica até o servidor devolver o cookie com a marca
+       deste pedido — é quando o download começa. Se der erro, a página volta
+       com a mensagem e o aviso some junto. */
+    window.mdBaixarZip = function (href) {
+        fecharAviso();
+        var marca = Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
+        avisoZip = document.createElement('div');
+        avisoZip.className = 'fixed bottom-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-lg bg-gray-900 text-white text-sm shadow-lg';
+        avisoZip.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Preparando o ZIP… o download começa quando ficar pronto.';
+        document.body.appendChild(avisoZip);
+        esperaZip = setInterval(function () { if (lerCookie('md_zip_pronto') === marca) fecharAviso(); }, 700);
+        setTimeout(fecharAviso, 10 * 60 * 1000);
+        window.location.href = href + (href.indexOf('?') < 0 ? '?' : '&') + 't=' + marca;
+        return false;
+    };
+
+    function marcados() {
+        return Array.prototype.slice.call(document.querySelectorAll('.md-check:checked'));
+    }
+    function atualizarSelecao() {
+        var n = marcados().length;
+        document.getElementById('md-selecao').classList.toggle('hidden', !n);
+        document.getElementById('md-sel-n').textContent = n;
+        document.getElementById('md-sel-rotulo').textContent = n === 1 ? 'selecionado' : 'selecionados';
+        // Com algo marcado, as caixinhas ficam à vista em todos os cartões.
+        document.getElementById('md-grade').classList.toggle('md-selecionando', n > 0);
+        document.querySelectorAll('.md-card').forEach(function (card) {
+            var c = card.querySelector('.md-check');
+            card.classList.toggle('ring-2', c && c.checked);
+            card.classList.toggle('ring-blue-400', c && c.checked);
+        });
+    }
+    document.addEventListener('change', function (e) {
+        if (e.target.classList && e.target.classList.contains('md-check')) atualizarSelecao();
+    });
+    window.mdSelecionarTodos = function () {
+        document.querySelectorAll('.md-check').forEach(function (c) { c.checked = true; });
+        atualizarSelecao();
+    };
+    window.mdLimparSelecao = function () {
+        document.querySelectorAll('.md-check').forEach(function (c) { c.checked = false; });
+        atualizarSelecao();
+    };
+    window.mdBaixarSelecionados = function () {
+        var itens = marcados();
+        if (!itens.length) return;
+        var card = itens[0].closest('.md-card');
+        // Um arquivo só não precisa de ZIP: baixa ele mesmo.
+        if (itens.length === 1 && !card.dataset.pasta) {
+            window.location.href = URL_ARQUIVO.replace('__ID__', encodeURIComponent(itens[0].value)) + '?dl=1';
+            return;
+        }
+        var q = itens.map(function (c) { return 'id=' + encodeURIComponent(c.value); }).join('&');
+        mdBaixarZip(URL_ZIP + '?' + q + '&pasta={{ folder_id|urlencode }}');
     };
 
     var area = document.getElementById('md-area');

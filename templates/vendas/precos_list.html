@@ -3,10 +3,14 @@
 
 {% block title %}Tabela de Preços{% endblock %}
 {% block vd_icone %}fa-tags{% endblock %}
-{% block vd_cabecalho %}Tabela de produtos{% endblock %}
-{% block vd_subtitulo %}{{ total }} item{{ total|pluralize:"ns" }} cadastrado{{ total|pluralize }}{% endblock %}
+{% block vd_cabecalho %}Tabela de preços{% endblock %}
+{% block vd_subtitulo %}{{ total }} produto{{ total|pluralize }} · preço por grupo de plano, PIX e parcelas{% endblock %}
 
 {% block vd_acoes %}
+<a href="{% url 'vendas:venda_create' %}"
+   class="inline-flex items-center gap-2 px-3.5 py-2 vd-card text-gray-700 text-sm font-semibold hover:bg-gray-50">
+    <i class="fas fa-cash-register text-purple-600"></i><span class="hidden sm:inline">Nova venda</span>
+</a>
 {% if pode_gerenciar_precos %}
 <a href="{% url 'vendas:precos_import' %}"
    class="inline-flex items-center gap-2 px-3.5 py-2 vd-card text-gray-700 text-sm font-semibold hover:bg-gray-50">
@@ -14,124 +18,184 @@
 </a>
 <a href="{% url 'vendas:precos_create' %}"
    class="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-lg shadow-sm">
-    <i class="fas fa-plus"></i> Novo item
+    <i class="fas fa-plus"></i><span class="hidden sm:inline">Novo item</span>
 </a>
 {% endif %}
 {% endblock %}
 
+{% block vd_css %}
+<style>
+    .tp-card { transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
+    .tp-card:hover { transform: translateY(-2px); box-shadow: 0 14px 28px -18px rgba(88, 28, 135, .45); border-color: #E4D4FA; }
+    .tp-preco { background: linear-gradient(135deg, #FAF5FF, #FFFFFF); }
+    html.dark .tp-preco { background: rgba(168, 85, 247, .08); }
+    .tp-matriz th, .tp-matriz td { white-space: nowrap; }
+    .tp-matriz .tp-fixa { position: sticky; left: 0; z-index: 1; background: #fff; box-shadow: 1px 0 0 #F1F1F5; }
+    html.dark .tp-matriz .tp-fixa { background: var(--tema-superficie); box-shadow: 1px 0 0 var(--tema-borda); }
+    .tp-menor { background: #ECFDF5; color: #047857 !important; font-weight: 700; border-radius: .4rem; }
+    html.dark .tp-menor { background: rgba(16, 185, 129, .16); color: #6ee7b7 !important; }
+    .tp-modal { background: rgba(17, 24, 39, .55); backdrop-filter: blur(2px); }
+    mark.tp-achado { background: #FDE68A; color: inherit; border-radius: .2rem; padding: 0 .1rem; }
+</style>
+{% endblock %}
+
 {% block vd_conteudo %}
 
-<form method="get" class="vd-card p-4 mb-4">
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div class="sm:col-span-2">
-            <label class="vd-rotulo">Buscar</label>
-            <div class="relative">
-                <i class="fas fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-300 text-xs"></i>
-                <input type="text" name="search" value="{{ search }}" class="vd-campo pl-8"
-                       placeholder="Nome do produto ou marca…">
-            </div>
-        </div>
-        <div>
-            <label class="vd-rotulo">Categoria</label>
-            <div class="flex gap-2">
-                <select name="categoria" class="vd-campo">
-                    <option value="">Todas</option>
-                    {% for c in categorias %}<option value="{{ c }}" {% if categoria == c %}selected{% endif %}>{{ rotulos_categoria|get_item:c|default:c }}</option>{% endfor %}
-                </select>
-                <button class="px-4 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-semibold whitespace-nowrap">
-                    <i class="fas fa-filter"></i>
-                </button>
-            </div>
-        </div>
+{# Busca e filtros #}
+<form method="get" id="tpFiltros" class="vd-card p-4 sm:p-5 mb-4 space-y-4">
+    {% if categoria %}<input type="hidden" name="categoria" value="{{ categoria }}">{% endif %}
+    <div class="relative">
+        <i class="fas fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-purple-400"></i>
+        <input type="search" name="search" id="tpBusca" value="{{ search }}" autocomplete="off"
+               placeholder="Busque por produto, marca ou modelo — ex.: galaxy a15 128, iphone 16, jbl"
+               class="vd-campo !pl-11 !py-3 text-base">
     </div>
-    {% if search or categoria %}
-    <a href="{% url 'vendas:precos' %}" class="inline-block mt-3 text-xs text-gray-500 hover:text-purple-700">
-        <i class="fas fa-xmark mr-1"></i>limpar filtros
-    </a>
-    {% endif %}
+    <div class="flex flex-wrap gap-2">
+        <a href="?{% if search %}search={{ search|urlencode }}{% endif %}"
+           class="vd-chip {% if not categoria %}vd-ativo{% endif %}"><i class="fas fa-layer-group"></i>Tudo <span class="opacity-70 text-[11px]">{{ total }}</span></a>
+        {% for a in abas %}
+        <a href="?categoria={{ a.chave|urlencode }}{% if search %}&search={{ search|urlencode }}{% endif %}"
+           class="vd-chip {% if categoria == a.chave %}vd-ativo{% endif %}"><i class="fas {{ a.icone }}"></i>{{ a.rotulo }} <span class="opacity-70 text-[11px]">{{ a.n }}</span></a>
+        {% endfor %}
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div><label class="vd-rotulo" for="tpSub">Categoria</label>
+            <select name="sub" id="tpSub" class="vd-campo tp-auto"><option value="">Todas</option>
+                {% for nome, n in subcategorias %}<option value="{{ nome }}" {% if sub|lower == nome|lower %}selected{% endif %}>{{ nome }} ({{ n }})</option>{% endfor %}</select></div>
+        <div><label class="vd-rotulo" for="tpMarca">Marca</label>
+            <select name="marca" id="tpMarca" class="vd-campo tp-auto"><option value="">Todas</option>
+                {% for nome, n in marcas %}<option value="{{ nome }}" {% if marca|lower == nome|lower %}selected{% endif %}>{{ nome }} ({{ n }})</option>{% endfor %}</select></div>
+        <div><label class="vd-rotulo" for="tpOrdem">Ordenar</label>
+            <select name="ordem" id="tpOrdem" class="vd-campo tp-auto">
+                {% for chave, rotulo in ordens %}<option value="{{ chave }}" {% if ordem == chave %}selected{% endif %}>{{ rotulo }}</option>{% endfor %}</select></div>
+    </div>
+    <div class="flex items-center justify-between gap-2 text-xs text-gray-500">
+        <span><strong class="text-gray-900">{{ encontrados }}</strong> produto{{ encontrados|pluralize }}{% if search %} para “{{ search }}”{% endif %}</span>
+        {% if search or sub or marca or ordem or categoria %}<a href="{% url 'vendas:precos' %}" class="font-semibold text-purple-700 hover:underline"><i class="fas fa-xmark mr-1"></i>limpar filtros</a>{% endif %}
+    </div>
 </form>
 
-<!-- Atalhos por categoria -->
-{% if categorias %}
-<div class="flex flex-wrap gap-2 mb-4">
-    <a href="{% url 'vendas:precos' %}"
-       class="px-3 py-1.5 rounded-full text-xs font-medium border {% if not categoria %}bg-purple-600 text-white border-purple-600{% else %}bg-white text-gray-600 border-gray-200 hover:border-purple-300{% endif %}">
-        Todas
-    </a>
-    {% for c in categorias %}
-    <a href="?categoria={{ c|urlencode }}"
-       class="px-3 py-1.5 rounded-full text-xs font-medium border {% if categoria == c %}bg-purple-600 text-white border-purple-600{% else %}bg-white text-gray-600 border-gray-200 hover:border-purple-300{% endif %}">
-        {{ rotulos_categoria|get_item:c|default:c }}
-    </a>
-    {% endfor %}
+{# Catálogo #}
+{% if cartoes %}
+<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
+    {% for c in cartoes %}{% with i=c.item p=c.preco %}
+    <article class="tp-card vd-card overflow-hidden flex flex-col">
+        <div class="p-4 flex gap-3 items-start flex-1">
+            <span class="w-11 h-11 shrink-0 rounded-xl flex items-center justify-center text-lg
+                {% if c.categoria_slv == 'aparelho' %}bg-purple-100 text-purple-700{% elif i.categoria == 'ELETRÔNICOS_LP_Conectados' %}bg-sky-100 text-sky-700{% elif c.categoria_slv == 'essencial' %}bg-emerald-100 text-emerald-700{% else %}bg-amber-100 text-amber-700{% endif %}">
+                <i class="fas {% if c.categoria_slv == 'aparelho' %}fa-mobile-screen{% elif i.categoria == 'ELETRÔNICOS_LP_Conectados' %}fa-wifi{% elif c.categoria_slv == 'essencial' %}fa-plug{% else %}fa-headphones{% endif %}"></i>
+            </span>
+            <div class="min-w-0 flex-1">
+                <h3 class="tp-nome text-sm font-semibold text-gray-900 leading-snug line-clamp-2" title="{{ i.nome }}">{{ i.nome }}</h3>
+                <p class="text-[11px] text-gray-500 mt-0.5 truncate">{{ i.extra.MARCA|default:"—" }} · {{ i.extra.CATEGORIA|default:i.categoria }}</p>
+                <div class="flex flex-wrap gap-1 mt-1.5">
+                    {% if i.extra.PORTFÓLIO and i.extra.PORTFÓLIO != 'In' %}<span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-semibold" title="Fora de linha">{{ i.extra.PORTFÓLIO }}</span>{% endif %}
+                    {% if c.categoria_slv == 'aparelho' %}<span class="text-[10px] px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 font-semibold">IMEI</span>
+                    {% elif c.exige_serial %}<span class="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 font-semibold"><i class="fas fa-barcode mr-0.5"></i>serial obrigatório</span>{% endif %}
+                    {% if p.grupos %}<span class="text-[10px] px-1.5 py-0.5 rounded bg-sky-50 text-sky-700 font-semibold">{{ p.grupos|length }} grupo{{ p.grupos|length|pluralize }} de plano</span>{% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="tp-preco px-4 py-3 border-t border-gray-100 flex items-end justify-between gap-3">
+            <div>
+                <p class="text-[10px] font-semibold uppercase tracking-wide text-gray-400">{% if p.grupos %}a partir de{% else %}preço{% endif %}</p>
+                <p class="text-xl font-bold text-purple-700 tabular leading-tight">{% if p.a_partir is not None %}{{ p.a_partir|brl }}{% else %}—{% endif %}</p>
+                {% if p.pix %}<p class="text-[11px] text-emerald-700 tabular"><i class="fas fa-qrcode mr-0.5"></i>PIX a partir de {{ p.pix|brl }}</p>{% endif %}
+            </div>
+            {% if p.grupos %}
+            <button type="button" class="px-3 py-1.5 rounded-lg border border-purple-200 text-purple-700 text-xs font-semibold hover:bg-purple-50 whitespace-nowrap" data-tabela="tp{{ i.id }}">
+                <i class="fas fa-table-cells mr-1"></i>Ver tabela</button>
+            {% endif %}
+        </div>
+        {% if p.grupos %}
+        <template id="tp{{ i.id }}">
+            <div class="px-5 py-4 border-b border-gray-100 flex items-start gap-3">
+                <div class="min-w-0 flex-1"><h3 class="text-base font-bold text-gray-900">{{ i.nome }}</h3>
+                    <p class="text-xs text-gray-500">{{ i.extra.MARCA }} · {{ i.extra.CATEGORIA }} · <span class="tp-menor px-1">verde</span> = o menor de cada coluna</p></div>
+                <button type="button" class="w-8 h-8 rounded-lg text-gray-400 hover:bg-gray-100" data-fechar aria-label="Fechar"><i class="fas fa-xmark"></i></button>
+            </div>
+            <div class="overflow-auto max-h-[70vh]">
+                <table class="tp-matriz min-w-full text-[12px] tabular">
+                    <thead class="sticky top-0 bg-gray-50 z-[2]"><tr>
+                        <th class="tp-fixa !bg-gray-50 text-left px-3 py-2 text-gray-500 font-semibold">Grupo do plano</th>
+                        {% for col in p.colunas %}<th class="text-right px-3 py-2 text-gray-500 font-semibold">{{ col.rotulo }}</th>{% endfor %}
+                    </tr></thead>
+                    <tbody class="divide-y divide-gray-100">
+                        {% for linha in p.linhas %}<tr class="hover:bg-purple-50/40">
+                            <td class="tp-fixa px-3 py-1.5 text-gray-800 font-medium">{{ linha.grupo }}</td>
+                            {% for cel in linha.celulas %}<td class="px-3 py-1.5 text-right {% if forloop.first %}font-semibold text-gray-900{% else %}text-gray-600{% endif %}"><span class="{% if cel.menor %}tp-menor px-1.5 py-0.5{% endif %}">{% if cel.valor %}{{ cel.valor|brl }}{% else %}<span class="text-gray-300">—</span>{% endif %}</span></td>{% endfor %}
+                        </tr>{% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="px-5 py-3 text-[11px] text-gray-400 border-t border-gray-100">"—": o produto não sai nesse grupo ou nessa condição. Na venda, o preço segue o grupo do plano do cliente e as parcelas do cartão.</p>
+        </template>
+        {% endif %}
+    </article>
+    {% endwith %}{% endfor %}
+</div>
+{% else %}
+<div class="vd-card px-5 py-14 text-center text-gray-500">
+    <span class="inline-flex w-14 h-14 rounded-2xl bg-purple-50 text-purple-400 items-center justify-center text-2xl mb-3"><i class="fas fa-magnifying-glass"></i></span>
+    <p class="font-semibold text-gray-900">Nenhum produto encontrado</p>
+    <p class="text-sm mt-1">Tente menos palavras (ex.: só o modelo) ou outra categoria.</p>
 </div>
 {% endif %}
 
-<div class="vd-card overflow-hidden">
-    <div class="divide-y divide-gray-100">
-        {% for i in itens %}
-        <details class="group px-4 sm:px-5 py-3 {% if not i.ativo %}opacity-60{% endif %}">
-            <summary class="flex items-center gap-3 cursor-pointer list-none">
-                <span class="w-9 h-9 shrink-0 rounded-lg flex items-center justify-center text-sm
-                    {% if i.categoria == 'SMARTPHONES' %}bg-purple-100 text-purple-700{% elif i.categoria == 'ELETRÔNICOS_LP_Conectados' %}bg-sky-100 text-sky-700{% else %}bg-emerald-100 text-emerald-700{% endif %}">
-                    <i class="fas {% if i.categoria == 'SMARTPHONES' %}fa-mobile-screen{% elif i.categoria == 'ELETRÔNICOS_LP_Conectados' %}fa-wifi{% else %}fa-headphones{% endif %}"></i>
-                </span>
-                <span class="min-w-0 flex-1">
-                    <span class="block text-sm text-gray-900 font-medium truncate">{{ i.nome }}
-                        {% if i.extra.PORTFÓLIO and i.extra.PORTFÓLIO != 'In' %}<span class="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-semibold">{{ i.extra.PORTFÓLIO }}</span>{% endif %}
-                        {% if not i.ativo %}<span class="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">inativo</span>{% endif %}</span>
-                    <span class="block text-[11px] text-gray-500 truncate">{{ i.extra.CATEGORIA|default:i.categoria }}{% if i.extra.MARCA %} · {{ i.extra.MARCA }}{% endif %}{% if i.extra.grupos %} · {{ i.extra.grupos|length }} grupos de plano{% endif %}</span>
-                </span>
-                <span class="text-right whitespace-nowrap">
-                    <span class="block text-[10px] text-gray-400">{% if i.extra.tabela %}{{ i.extra.grupos.0 }}{% else %}PVP Base{% endif %}</span>
-                    <span class="block text-sm font-semibold text-gray-900 tabular">{% if i.valor is not None %}{{ i.valor|brl }}{% else %}—{% endif %}</span>
-                </span>
-                {% if i.extra.tabela %}<i class="fas fa-chevron-down text-gray-300 text-xs transition-transform group-open:rotate-180"></i>{% else %}<span class="w-3"></span>{% endif %}
-            </summary>
-            {% if i.extra.tabela %}
-            <div class="mt-3 overflow-x-auto">
-                <table class="min-w-full text-[12px] tabular">
-                    <thead class="text-gray-500"><tr>
-                        <th class="text-left font-medium py-1 pr-3">Grupo do plano</th>
-                        <th class="text-right font-medium py-1 px-2">Preço</th>
-                        <th class="text-right font-medium py-1 px-2">PIX e Vivo Pay</th>
-                        <th class="text-right font-medium py-1 px-2">12x</th>
-                        <th class="text-right font-medium py-1 px-2">18x</th>
-                        <th class="text-right font-medium py-1 pl-2">21x</th>
-                    </tr></thead>
-                    <tbody class="divide-y divide-gray-100">
-                        {% for grupo in i.extra.grupos %}{% with linha=i.extra.tabela|get_item:grupo %}
-                        <tr><td class="py-1 pr-3 text-gray-700 whitespace-nowrap">{{ grupo }}</td>
-                            <td class="py-1 px-2 text-right text-gray-900 font-semibold">{{ linha.Preço|brl }}</td>
-                            <td class="py-1 px-2 text-right text-emerald-700">{% for c, v in linha.items %}{% if c == 'PIX e Vivo Pay' %}{{ v|brl_ou_traco }}{% endif %}{% endfor %}</td>
-                            <td class="py-1 px-2 text-right text-gray-600">{{ linha.12x|brl_ou_traco }}</td>
-                            <td class="py-1 px-2 text-right text-gray-600">{{ linha.18x|brl_ou_traco }}</td>
-                            <td class="py-1 pl-2 text-right text-gray-600">{{ linha.21x|brl_ou_traco }}</td></tr>
-                        {% endwith %}{% endfor %}
-                    </tbody>
-                </table>
-                <p class="text-[10px] text-gray-400 mt-1">Grupos que não aparecem: o produto não sai neles ("-" na planilha). Na venda, todas as parcelas de 2x a 21x ficam disponíveis.</p>
-            </div>
-            {% endif %}
-        </details>
-        {% empty %}
-        <p class="px-5 py-14 text-center text-gray-400"><i class="fas fa-tags text-gray-200 text-3xl mb-2 block"></i>Nenhum item com esse filtro.</p>
-        {% endfor %}
+{% if paginator.num_pages > 1 %}
+<div class="mt-4 flex items-center justify-between gap-2 flex-wrap">
+    <span class="text-xs text-gray-500">Página {{ itens.number }} de {{ paginator.num_pages }}</span>
+    <div class="flex gap-1">
+        {% if itens.has_previous %}<a href="?{{ query }}&page={{ itens.previous_page_number }}" class="px-3 py-1.5 vd-card text-sm text-gray-700 hover:bg-gray-50"><i class="fas fa-chevron-left mr-1"></i>Anterior</a>{% endif %}
+        {% if itens.has_next %}<a href="?{{ query }}&page={{ itens.next_page_number }}" class="px-3 py-1.5 vd-card text-sm text-gray-700 hover:bg-gray-50">Próxima<i class="fas fa-chevron-right ml-1"></i></a>{% endif %}
     </div>
-    {% if paginator.num_pages > 1 %}
-    <div class="px-5 py-3 border-t border-gray-100 flex items-center justify-between gap-2 flex-wrap">
-        <span class="text-xs text-gray-400">Página {{ itens.number }} de {{ paginator.num_pages }}</span>
-        <div class="flex gap-1">
-            {% if itens.has_previous %}
-            <a href="?search={{ search|urlencode }}&categoria={{ categoria|urlencode }}&page={{ itens.previous_page_number }}"
-               class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">Anterior</a>
-            {% endif %}
-            {% if itens.has_next %}
-            <a href="?search={{ search|urlencode }}&categoria={{ categoria|urlencode }}&page={{ itens.next_page_number }}"
-               class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">Próxima</a>
-            {% endif %}
-        </div>
-    </div>
-    {% endif %}
 </div>
+{% endif %}
+
+<div id="tpModal" class="hidden fixed inset-0 z-50 tp-modal flex items-center justify-center p-3 sm:p-6">
+    <div class="vd-card w-full max-w-5xl overflow-hidden vd-entra" id="tpModalCaixa"></div>
+</div>
+
+<script>
+(function () {
+    const form = document.getElementById('tpFiltros');
+    // Filtros e busca recarregam sozinhos (a busca espera a pessoa parar de digitar).
+    form.querySelectorAll('.tp-auto').forEach(function (s) { s.addEventListener('change', function () { form.submit(); }); });
+    const busca = document.getElementById('tpBusca');
+    let tempo;
+    busca.addEventListener('input', function () {
+        clearTimeout(tempo);
+        tempo = setTimeout(function () { if (busca.value.trim().length !== 1) form.submit(); }, 500);
+    });
+    if (busca.value) { busca.focus(); busca.setSelectionRange(busca.value.length, busca.value.length); }
+
+    // Palavras buscadas em destaque no nome.
+    const termos = busca.value.trim().split(/\s+/).filter(function (t) { return t.length > 1; });
+    if (termos.length) {
+        const sem = function (t) { return t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); };
+        document.querySelectorAll('.tp-nome').forEach(function (h) {
+            const texto = h.textContent, base = sem(texto);
+            const marcas = new Array(texto.length).fill(false);
+            termos.forEach(function (t) { const alvo = sem(t); let i = base.indexOf(alvo);
+                while (i >= 0) { for (let k = i; k < i + alvo.length; k++) marcas[k] = true; i = base.indexOf(alvo, i + 1); } });
+            let html = '', aberto = false;
+            for (let i = 0; i < texto.length; i++) {
+                if (marcas[i] && !aberto) { html += '<mark class="tp-achado">'; aberto = true; }
+                if (!marcas[i] && aberto) { html += '</mark>'; aberto = false; }
+                const c = texto[i]; html += c === '<' ? '&lt;' : c === '&' ? '&amp;' : c;
+            }
+            h.innerHTML = html + (aberto ? '</mark>' : '');
+        });
+    }
+
+    // Tabela completa do produto
+    const modal = document.getElementById('tpModal'), caixa = document.getElementById('tpModalCaixa');
+    document.addEventListener('click', function (e) {
+        const b = e.target.closest('[data-tabela]');
+        if (b) { caixa.innerHTML = ''; caixa.appendChild(document.getElementById(b.dataset.tabela).content.cloneNode(true)); modal.classList.remove('hidden'); return; }
+        if (e.target === modal || e.target.closest('[data-fechar]')) modal.classList.add('hidden');
+    });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') modal.classList.add('hidden'); });
+})();
+</script>
 {% endblock %}

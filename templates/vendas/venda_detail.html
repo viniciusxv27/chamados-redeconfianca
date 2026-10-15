@@ -41,6 +41,9 @@
             <p class="vd-rotulo">Pagamento</p>
             <p class="text-gray-900"><i class="fas {% if venda.forma_pagamento == 'PIX' %}fa-qrcode{% else %}fa-credit-card{% endif %} text-purple-500 mr-1"></i>{{ venda.get_forma_pagamento_display }}
                 {% if venda.vivo_mais %}<span class="ml-1 px-1.5 py-0.5 rounded-md bg-purple-100 text-purple-700 text-[11px] font-semibold">Vivo+ {{ venda.vivo_mais_percentual|floatformat:"-2" }}%</span>{% endif %}</p>
+            {% if venda.forma_pagamento == 'CARTAO' and venda.nsu %}
+            <p class="text-[12px] text-gray-500 tabular">NSU {{ venda.nsu }}{% if venda.parcelas %} · {% if venda.parcelas == 1 %}à vista{% else %}{{ venda.parcelas }}x{% endif %}{% endif %}</p>
+            {% endif %}
         </div>
         {% endif %}
     </div>
@@ -63,9 +66,10 @@
                     <p class="text-lg font-bold text-gray-900 tabular whitespace-nowrap">{{ p.valor_total|brl }}</p>
                 </div>
                 <dl class="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[12px]">
-                    <div><dt class="text-gray-500">Sugerido</dt><dd class="tabular text-gray-900">{{ p.valor_sugerido|brl }}</dd><dd class="text-[10px] text-gray-400">{{ p.regra_preco }}</dd></div>
+                    <div><dt class="text-gray-500">Valor de produto</dt><dd class="tabular text-gray-900">{{ p.valor_sugerido|brl }}</dd><dd class="text-[10px] text-gray-400">{{ p.regra_preco }}</dd></div>
                     {% if p.renova_vini %}<div><dt class="text-gray-500">Renova Vini</dt><dd class="tabular text-emerald-600">− {{ p.renova_vini_valor|brl }}</dd><dd class="text-[10px] text-gray-400">{{ p.renova_codigo }}</dd></div>{% endif %}
-                    {% if p.renova_alied %}<div><dt class="text-gray-500">Renova Alied</dt><dd class="tabular text-emerald-600">− {{ p.renova_alied_valor|brl }}</dd></div>{% endif %}
+                    {% if p.renova_alied %}<div><dt class="text-gray-500">Renova Alied</dt><dd class="tabular text-emerald-600">− {{ p.renova_alied_valor|brl }}</dd>{% if p.renova_alied_pedido %}<dd class="text-[10px] text-gray-400">pedido {{ p.renova_alied_pedido }}</dd>{% endif %}</div>{% endif %}
+                    {% if p.renova_assurant %}<div><dt class="text-gray-500">Renova Assurant</dt><dd class="tabular text-emerald-600">− {{ p.renova_assurant_valor|brl }}</dd>{% if p.renova_assurant_pedido %}<dd class="text-[10px] text-gray-400">pedido {{ p.renova_assurant_pedido }}</dd>{% endif %}</div>{% endif %}
                     {% if p.desconto_vivo_mais %}<div><dt class="text-gray-500">Vivo+</dt><dd class="tabular text-emerald-600">− {{ p.desconto_vivo_mais|brl }}</dd></div>{% endif %}
                     <div><dt class="text-gray-500">Valor final (un.)</dt><dd class="tabular font-semibold {% if p.valor_editado %}text-amber-700{% else %}text-gray-900{% endif %}">{{ p.valor_venda|brl }}</dd></div>
                 </dl>
@@ -118,7 +122,7 @@
 <aside class="vd-card p-5 lg:sticky lg:top-20 space-y-2 text-sm">
     <h2 class="text-sm font-bold text-gray-900 mb-2"><i class="fas fa-calculator text-purple-600 mr-1.5"></i>Totais</h2>
     <div class="flex justify-between text-gray-600"><span>Produtos</span><span class="tabular">{{ venda.total_produtos|brl }}</span></div>
-    <div class="flex justify-between text-gray-600"><span>Serviços (mensal)</span><span class="tabular">{{ venda.total_servicos|brl }}</span></div>
+    <div class="flex justify-between text-gray-400 text-xs" title="Mensalidade dos planos: não entra no total da venda"><span>Serviços (mensal, fora do total)</span><span class="tabular">{{ venda.total_servicos|brl }}</span></div>
     <div class="flex justify-between items-baseline pt-2 border-t border-gray-100">
         <span class="font-semibold text-gray-900">Total</span><span class="text-2xl font-bold text-purple-700 tabular">{{ venda.total|brl }}</span></div>
     <p class="text-[11px] text-gray-400 pt-2">Lançada em {{ venda.created_at|date:"d/m/Y H:i" }}.</p>

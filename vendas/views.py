@@ -328,7 +328,8 @@ def _venda_form_context(request):
 _PRODUTO_HEADERS = ['Filial', 'UF', 'Produto', 'Tipo Produto', 'Categoria', 'Subcategoria',
                     'Nº Venda', 'Marca', 'Modelo', 'SKU', 'Serial', 'Cor', 'Nome Cliente',
                     'CPF/CNPJ', 'Vendedor', 'Plano', 'Tabela de preço', 'Data da venda',
-                    'Qtde', 'Valor de Venda', 'Pilar']
+                    'Qtde', 'Valor de Venda', 'Pilar', 'Forma de pagamento', 'NSU', 'Parcelas',
+                    'Renova Vini', 'Renova Alied', 'Pedido Alied', 'Renova Assurant', 'Pedido Assurant']
 
 _SERVICO_HEADERS = ['Filial', 'UF', 'Serviço', 'Serviço Técnico', 'Nº Venda', 'Data',
                     'Vendedor', 'Nome Cliente', 'CPF/CNPJ', 'Plano', 'Tipo do Plano',
@@ -345,7 +346,9 @@ def _produto_rows(vendas_qs):
             v.cliente_nome, v.cliente_cpf,
             (v.vendedor.get_full_name() if v.vendedor else ''), vp.plano, vp.tabela_preco,
             v.data_venda.strftime('%d/%m/%Y %H:%M') if v.data_venda else '',
-            vp.qtde, vp.valor_venda, vp.pilar,
+            vp.qtde, vp.valor_venda, vp.pilar, v.get_forma_pagamento_display(), v.nsu, v.parcelas or '',
+            vp.renova_vini_valor if vp.renova_vini else '', vp.renova_alied_valor if vp.renova_alied else '',
+            vp.renova_alied_pedido, vp.renova_assurant_valor if vp.renova_assurant else '', vp.renova_assurant_pedido,
         ]
 
 
@@ -415,45 +418,118 @@ def venda_export(request):
 # Tabela de preços
 # ---------------------------------------------------------------------------
 
+ABAS_PRECOS = [
+    ('SMARTPHONES', 'Smartphones e watches', 'fa-mobile-screen'),
+    ('ELETRÔNICOS_LP_Conectados', 'Eletrônicos conectados', 'fa-wifi'),
+    ('ELETRÔNICOS_LP_Não Conectados', 'Eletrônicos e acessórios', 'fa-headphones'),
+]
+ORDENS_PRECOS = [('', 'Mais relevantes'), ('nome', 'Nome (A–Z)'), ('menor', 'Menor preço'), ('maior', 'Maior preço')]
+
+
+def _resumo_de_preco(item):
+    """O "a partir de", o menor PIX e a matriz completa (grupo × condição) do produto."""
+    extra = item.extra if isinstance(item.extra, dict) else {}
+    tabela = extra.get('tabela') or {}
+    if not tabela:
+        return {'a_partir': item.valor, 'pix': None, 'grupos': [], 'colunas': [], 'linhas': []}
+    grupos = [g for g in (extra.get('grupos') or tabela) if g in tabela]
+    ordem = [slv.COND_BASE, slv.COND_PIX] + [f'{n}x' for n in range(2, 25)]
+    colunas = [c for c in ordem if any(c in tabela[g] for g in grupos)]
+    precos = [slv.dinheiro(tabela[g].get(slv.COND_BASE)) for g in grupos]
+    pix = [slv.dinheiro(tabela[g].get(slv.COND_PIX)) for g in grupos]
+    menor_por_coluna = {}
+    for c in colunas:
+        valores = [slv.dinheiro(tabela[g].get(c)) for g in grupos if tabela[g].get(c) not in (None, '')]
+        valores = [v for v in valores if v]
+        menor_por_coluna[c] = min(valores) if valores else None
+    linhas = []
+    for g in grupos:
+        celulas = []
+        for c in colunas:
+            v = slv.dinheiro(tabela[g].get(c))
+            celulas.append({'valor': v, 'menor': v is not None and v == menor_por_coluna.get(c)})
+        linhas.append({'grupo': g, 'celulas': celulas})
+    return {
+        'a_partir': min((p for p in precos if p), default=item.valor),
+        'pix': min((p for p in pix if p), default=None),
+        'grupos': grupos,
+        'colunas': [{'chave': c, 'rotulo': slv.ROTULOS_CONDICAO.get(c, c)} for c in colunas],
+        'linhas': linhas,
+    }
+
+
 @login_required
 def precos(request):
+    """A tabela de preços como catálogo: busca, abas, categorias e a tabela completa de cada produto."""
     if not can_access_vendas(request.user):
         return _deny(request)
 
-    itens = ItemPreco.objects.filter(ativo=True)
-    categoria = request.GET.get('categoria', '').strip()
+    aba = request.GET.get('categoria', '').strip()
     search = request.GET.get('search', '').strip()
-    if categoria:
-        itens = itens.filter(categoria=categoria)
-    if search:
-        itens = itens.filter(Q(nome__icontains=search) | Q(**{'extra__MARCA__icontains': search})
-                             | Q(cod_sap__icontains=search))
-    comeca = [Case(When(nome__istartswith=search, then=0), default=1, output_field=IntegerField())] if search else []
-    itens = itens.order_by(*comeca,
-                           Case(When(categoria='SMARTPHONES', then=0), When(categoria='ELETRÔNICOS_LP_Conectados', then=1),
-                                default=2, output_field=IntegerField()),
-                           Case(When(**{'extra__PORTFÓLIO': 'In'}, then=0), When(**{'extra__PORTFÓLIO': 'Out'}, then=1),
-                                default=2, output_field=IntegerField()), 'nome')
+    subcategoria = request.GET.get('sub', '').strip()
+    marca = request.GET.get('marca', '').strip()
+    ordem = request.GET.get('ordem', '').strip()
 
-    paginator = Paginator(itens, 50)
+    base = ItemPreco.objects.filter(ativo=True).exclude(categoria='PLANOS')
+    if aba:
+        base = base.filter(categoria=aba)
+    # Opções dos filtros (antes da busca: a pessoa troca de categoria sem perder a busca).
+    from collections import Counter
+    subcats, marcas = Counter(), Counter()
+    for extra in base.values_list('extra', flat=True):
+        extra = extra if isinstance(extra, dict) else {}
+        if extra.get('CATEGORIA'):
+            subcats[str(extra['CATEGORIA']).strip()] += 1
+        if extra.get('MARCA'):
+            marcas[str(extra['MARCA']).strip()] += 1
+    if subcategoria:
+        base = base.filter(**{'extra__CATEGORIA__iexact': subcategoria})
+    if marca:
+        base = base.filter(**{'extra__MARCA__iexact': marca})
+
+    if search:
+        from .busca import buscar
+        achados = buscar(search, limite=600, categoria=aba or None)
+        por_id = base.in_bulk(achados)
+        itens = [por_id[i] for i in achados if i in por_id]
+    else:
+        itens = list(base.order_by(Case(When(categoria='SMARTPHONES', then=0),
+                                        When(categoria='ELETRÔNICOS_LP_Conectados', then=1),
+                                        default=2, output_field=IntegerField()), 'nome'))
+    resumos = {i.id: _resumo_de_preco(i) for i in itens}
+    if ordem == 'nome':
+        itens.sort(key=lambda i: i.nome.lower())
+    elif ordem in ('menor', 'maior'):
+        sem = Decimal('999999999')
+        itens.sort(key=lambda i: resumos[i.id]['a_partir'] if resumos[i.id]['a_partir'] is not None else sem,
+                   reverse=ordem == 'maior')
+
+    paginator = Paginator(itens, 48)
     try:
         page = paginator.page(request.GET.get('page'))
     except PageNotAnInteger:
         page = paginator.page(1)
     except EmptyPage:
         page = paginator.page(paginator.num_pages)
+    com_serial = slv.categorias_com_serial()
+    cartoes = [{'item': i, 'preco': resumos[i.id], 'categoria_slv': slv.categoria_slv(i),
+                'exige_serial': slv.exige_serial(i, com_serial)} for i in page.object_list]
 
+    contagem_abas = dict(ItemPreco.objects.filter(ativo=True).values_list('categoria').annotate(n=Count('id')))
+    parametros = request.GET.copy()
+    parametros.pop('page', None)
     context = {
         'aba': 'precos',
         'pode_gerenciar_precos': pode_gerenciar_precos(request.user),
-        'itens': page,
-        'paginator': paginator,
-        'categoria': categoria,
-        'search': search,
-        'categorias': list(ItemPreco.objects.filter(ativo=True).values_list('categoria', flat=True).distinct().order_by('categoria')),
-        'rotulos_categoria': {'SMARTPHONES': 'Smartphones e watches', 'ELETRÔNICOS_LP_Conectados': 'Eletrônicos conectados',
-                              'ELETRÔNICOS_LP_Não Conectados': 'Eletrônicos não conectados'},
-        'total': ItemPreco.objects.filter(ativo=True).count(),
+        'cartoes': cartoes, 'itens': page, 'paginator': paginator,
+        'categoria': aba, 'search': search, 'sub': subcategoria, 'marca': marca, 'ordem': ordem,
+        'abas': [{'chave': k, 'rotulo': r, 'icone': ic, 'n': contagem_abas.get(k, 0)} for k, r, ic in ABAS_PRECOS],
+        'subcategorias': sorted(subcats.items(), key=lambda x: x[0].lower()),
+        'marcas': sorted(marcas.items(), key=lambda x: x[0].lower()),
+        'ordens': ORDENS_PRECOS,
+        'total': sum(contagem_abas.values()),
+        'encontrados': paginator.count,
+        'query': parametros.urlencode(),
     }
     return render(request, 'vendas/precos_list.html', context)
 
@@ -550,19 +626,15 @@ def precos_buscar(request):
     ids = [int(i) for i in (request.GET.get('ids') or '').split(',') if i.strip().isdigit()][:50]
     if len(q) < 2 and not ids:
         return JsonResponse({'results': []})
-    qs = ItemPreco.objects.filter(pk__in=ids) if ids else (
-        ItemPreco.objects.filter(ativo=True)
-        .exclude(categoria='PLANOS')
-        .filter(Q(nome__icontains=q) | Q(plano__icontains=q) | Q(cod_sap__icontains=q)
-                | Q(cod_sistema__icontains=q) | Q(**{'extra__ID DPGC__icontains': q}))
-        # Quem começa pelo que foi digitado vem primeiro ("iphone 16" → o iPhone, não as 30 capas dele);
-        # depois aparelhos e conectados, e os que estão em linha (In) antes dos fora de linha (EOL).
-        .order_by(Case(When(nome__istartswith=q, then=0), default=1, output_field=IntegerField()),
-                  Case(When(categoria='SMARTPHONES', then=0), When(categoria='ELETRÔNICOS_LP_Conectados', then=1),
-                       default=2, output_field=IntegerField()),
-                  Case(When(**{'extra__PORTFÓLIO': 'In'}, then=0), When(**{'extra__PORTFÓLIO': 'Out'}, then=1),
-                       default=2, output_field=IntegerField()), 'nome')[:25]
-    )
+    if ids:
+        qs = ItemPreco.objects.filter(pk__in=ids)
+    else:
+        # Palavras em qualquer ordem, sem acento; aparelho antes da capa dele (vendas/busca.py).
+        from .busca import buscar
+        achados = buscar(q, limite=30)
+        por_id = ItemPreco.objects.in_bulk(achados)
+        qs = [por_id[i] for i in achados if i in por_id]
+    com_serial = slv.categorias_com_serial()
     segmentacao = request.GET.get('segmentacao', '')
     grupamento = request.GET.get('grupamento', '')
     results = []
@@ -579,6 +651,7 @@ def precos_buscar(request):
             'valor_sugerido': str(sugerido) if sugerido is not None else '', 'regra': regra,
             'fabricante': extra.get('FABRICANTE', '') or extra.get('MARCA', ''),
             'portfolio': extra.get('PORTFÓLIO', ''), 'tipo': extra.get('CATEGORIA', ''),
+            'exige_serial': slv.exige_serial(it, com_serial),
             # As opções da TABELA REGULAR: grupo do plano → condição → valor (a tela troca o preço na hora).
             # A ordem dos grupos vem da lista salva na importação (o JSONB do Postgres reordena as chaves).
             'tabela': tabela, 'grupos': [g for g in (extra.get('grupos') or tabela) if g in tabela],
@@ -684,7 +757,25 @@ def parametros(request):
     planos = list(Plano.objects.all())
     grupos = [{'chave': k, 'rotulo': r, 'planos': [p for p in planos if p.segmentacao == k]} for k, r in SEGMENTACOES]
     config = ConfiguracaoVendas.atual()
+    # Categorias que existem na tabela (fora aparelhos, que têm IMEI), com quantos produtos cada.
+    from collections import Counter
+    contagem = Counter()
+    for it in ItemPreco.objects.filter(ativo=True).exclude(categoria='PLANOS'):
+        if slv.categoria_slv(it) != 'aparelho':
+            rotulo = str((it.extra or {}).get('CATEGORIA') or '').strip()
+            if rotulo:
+                contagem[rotulo] += 1
+    exigidas = slv.categorias_com_serial()
+    vistas, categorias_serial = set(), []
+    for nome in sorted(contagem, key=str.lower):
+        chave = slv._chave_categoria(nome)
+        if chave in vistas:                      # "Casa Inteligente" e "Casa inteligente"
+            continue
+        vistas.add(chave)
+        total = sum(n for k, n in contagem.items() if slv._chave_categoria(k) == chave)
+        categorias_serial.append({'nome': nome, 'produtos': total, 'exige': chave in exigidas})
     return render(request, 'vendas/parametros.html', {
+        'categorias_serial': categorias_serial,
         'aba': 'parametros',
         'grupos': grupos,
         'segmentacoes': SEGMENTACOES,
@@ -693,6 +784,24 @@ def parametros(request):
         'historico': RegistroAlteracao.objects.exclude(tipo='CLIENTE').select_related('usuario')[:60],
         'pode_gerenciar_precos': True,
     })
+
+
+@login_required
+@require_POST
+def parametros_serial(request):
+    """Categorias em que o serial do produto é obrigatório na venda."""
+    if not pode_gerenciar_precos(request.user):
+        return _deny(request)
+    config = ConfiguracaoVendas.atual()
+    antes = sorted(config.categorias_com_serial if config.categorias_com_serial is not None else slv.CATEGORIAS_SERIAL_PADRAO)
+    depois = sorted({c.strip() for c in request.POST.getlist('categoria') if c.strip()})
+    config.categorias_com_serial, config.atualizado_por = depois, request.user
+    config.save()
+    slv.registrar_alteracoes('SERIAL', config, [('categorias_com_serial', 'Categorias com serial',
+                                                ', '.join(antes) or '(nenhuma)', ', '.join(depois) or '(nenhuma)')],
+                             request.user, rotulo='Serial obrigatório')
+    messages.success(request, 'Serial obrigatório atualizado: ' + (', '.join(depois) or 'nenhuma categoria') + '.')
+    return _voltar_parametros()
 
 
 def _voltar_parametros():

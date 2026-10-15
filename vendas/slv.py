@@ -118,6 +118,36 @@ def categoria_slv(item):
     return 'eletronico'
 
 
+# Serial obrigatório fora dos aparelhos (que têm o IMEI): por categoria da planilha.
+# A Parametrização escolhe; sem escolha, valem as categorias de eletrônicos —
+# Essenciais (capa, película, cabo) não têm serial na caixa.
+CATEGORIAS_SERIAL_PADRAO = ('Áudio', 'Bem Estar', 'Box e Modem e FWT', 'Casa Inteligente', 'Demais Eletrônicos',
+                            'Games', 'Notebook e Tablets', 'TV')
+
+
+def _chave_categoria(texto):
+    import unicodedata
+    texto = unicodedata.normalize('NFKD', str(texto or ''))
+    return ' '.join(''.join(c for c in texto if not unicodedata.combining(c)).lower().split())
+
+
+def categorias_com_serial():
+    """As categorias (já normalizadas) em que o serial é obrigatório."""
+    from .models import ConfiguracaoVendas
+    escolhidas = ConfiguracaoVendas.atual().categorias_com_serial
+    if escolhidas is None:
+        escolhidas = CATEGORIAS_SERIAL_PADRAO
+    return {_chave_categoria(c) for c in escolhidas}
+
+
+def exige_serial(item, categorias=None):
+    """O produto (que não é aparelho) precisa de serial na venda?"""
+    if item is None or categoria_slv(item) == 'aparelho':
+        return False
+    rotulo = (item.extra or {}).get('CATEGORIA') or (item.extra or {}).get('Categoria') or ''
+    return _chave_categoria(rotulo) in (categorias if categorias is not None else categorias_com_serial())
+
+
 def _texto_extra(item, *chaves):
     extra = item.extra or {}
     for chave in chaves:
@@ -210,13 +240,14 @@ def imei_valido(imei):
     return (10 - soma % 10) % 10 == int(imei[14])
 
 
-def calcular_item(sugerido, renova_vini=ZERO, renova_alied=ZERO, vivo_mais_percentual=None, qtde=1):
-    """[Venda de produtos.RF003/RF004/RF005] sugerido − Renova − Vivo+ (por unidade).
+def calcular_item(sugerido, renova_vini=ZERO, renova_alied=ZERO, vivo_mais_percentual=None, qtde=1,
+                  renova_assurant=ZERO):
+    """[Venda de produtos.RF003/RF004/RF005] valor do produto − Renova − Vivo+ (por unidade).
 
-    O Vivo+ incide sobre o que sobra depois do Renova. Devolve
-    ``{'desconto_vivo_mais', 'valor_calculado'}``.
+    O Vivo+ incide sobre o que sobra depois do Renova (Vini, Alied e Assurant).
+    Devolve ``{'desconto_vivo_mais', 'valor_calculado'}``.
     """
-    base = (sugerido or ZERO) - (renova_vini or ZERO) - (renova_alied or ZERO)
+    base = (sugerido or ZERO) - (renova_vini or ZERO) - (renova_alied or ZERO) - (renova_assurant or ZERO)
     desconto = ZERO
     if vivo_mais_percentual:
         desconto = (max(base, ZERO) * vivo_mais_percentual / Decimal('100')).quantize(CENTAVO, ROUND_HALF_UP)
@@ -377,6 +408,19 @@ def registrar_venda(dados, usuario, loja, vendedor=None):
     vivo_mais = bool(dados.get('vivo_mais')) and bool(produtos)
     if produtos and forma not in ('CARTAO', 'PIX'):
         erros.append('Escolha a forma de pagamento: Cartão ou Pix.')
+    nsu, parcelas = '', None
+    if produtos and forma == 'CARTAO':
+        # O comprovante da maquininha: sem NSU não dá para conciliar a venda com o extrato.
+        nsu = re.sub(r'[^0-9A-Za-z]', '', str(dados.get('nsu') or '')).upper()[:30]
+        if len(nsu) < 4:
+            erros.append('Cartão: informe o NSU do comprovante da maquininha.')
+        try:
+            parcelas = int(dados.get('parcelas') or 0)
+        except (TypeError, ValueError):
+            parcelas = 0
+        if not 1 <= parcelas <= 24:
+            erros.append('Cartão: informe em quantas parcelas (1 a 24).')
+            parcelas = None
     percentual = ConfiguracaoVendas.atual().vivo_mais_percentual if vivo_mais else None
 
     # Plano anterior ([Início da venda.RF005])
@@ -390,6 +434,7 @@ def registrar_venda(dados, usuario, loja, vendedor=None):
     # Produtos — um item por peça: cada aparelho tem o seu IMEI, então não existe "quantidade".
     itens_produto = []
     imeis_da_venda = {}
+    com_serial = categorias_com_serial()
     for n, p in enumerate(produtos, start=1):
         item = ItemPreco.objects.filter(pk=p.get('preco_id')).first() if str(p.get('preco_id') or '').isdigit() else None
         nome = (item.nome if item else str(p.get('nome') or '')).strip()
@@ -412,14 +457,20 @@ def registrar_venda(dados, usuario, loja, vendedor=None):
                 if ja:
                     erros.append(f'{nome}: o IMEI {serial} já foi vendido na venda #{ja.venda_id} '
                                  f'({timezone.localtime(ja.venda.data_venda):%d/%m/%Y}).')
+        elif not serial and exige_serial(item, com_serial):
+            erros.append(f'{nome}: informe o serial do produto (está na caixa ou na etiqueta).')
         if item:
             sugerido, regra = preco_sugerido(item, segmentacao_cliente, p.get('grupamento') or '', p.get('condicao') or '')
         else:
             sugerido, regra = None, 'produto fora da tabela'
         rv = bool(p.get('renova_vini'))
         ra = bool(p.get('renova_alied'))
+        ras = bool(p.get('renova_assurant'))
         rv_valor = dinheiro(p.get('renova_vini_valor')) or ZERO if rv else ZERO
         ra_valor = dinheiro(p.get('renova_alied_valor')) or ZERO if ra else ZERO
+        ras_valor = dinheiro(p.get('renova_assurant_valor')) or ZERO if ras else ZERO
+        ra_pedido = str(p.get('renova_alied_pedido') or '').strip()[:40] if ra else ''
+        ras_pedido = str(p.get('renova_assurant_pedido') or '').strip()[:40] if ras else ''
         codigo = ''
         if rv:
             if not renova_existe(p.get('renova_codigo')):
@@ -429,13 +480,17 @@ def registrar_venda(dados, usuario, loja, vendedor=None):
                 erros.append(f'{nome}: informe o valor do Renova Vini.')
         if ra and ra_valor <= 0:
             erros.append(f'{nome}: informe o valor do Renova Alied.')
+        if ra and not ra_pedido:
+            erros.append(f'{nome}: informe o número do pedido do Renova Alied.')
+        if ras and ras_valor <= 0:
+            erros.append(f'{nome}: informe o valor do Renova Assurant.')
         informado = dinheiro(p.get('valor_sugerido'))
         if sugerido is None:
             if informado is None or informado <= 0:
                 erros.append(f'{nome}: sem valor na tabela para este plano — informe o valor.')
                 continue
             sugerido, regra = informado, f'{regra} (valor informado)'
-        conta = calcular_item(sugerido, rv_valor, ra_valor, percentual)
+        conta = calcular_item(sugerido, rv_valor, ra_valor, percentual, renova_assurant=ras_valor)
         final = conta['valor_calculado']
         editado = False
         if p.get('valor_final') not in (None, ''):
@@ -449,7 +504,8 @@ def registrar_venda(dados, usuario, loja, vendedor=None):
             erros.append(f'{nome}: o valor final ficou zerado ou negativo — corrija o item.')
         itens_produto.append(dict(
             item=item, nome=nome, qtde=qtde, sugerido=sugerido, regra=regra[:120], final=final, editado=editado,
-            rv=rv, rv_valor=rv_valor, ra=ra, ra_valor=ra_valor, codigo=codigo, conta=conta,
+            rv=rv, rv_valor=rv_valor, ra=ra, ra_valor=ra_valor, ra_pedido=ra_pedido,
+            ras=ras, ras_valor=ras_valor, ras_pedido=ras_pedido, codigo=codigo, conta=conta,
             prateleira=bool(p.get('prateleira_infinita')), serial=serial, categoria=categoria))
 
     # Serviços
@@ -536,6 +592,7 @@ def registrar_venda(dados, usuario, loja, vendedor=None):
             cliente_telefone=cliente.telefone,
             tipo_venda=' + '.join(x for x in ('Produto' if itens_produto else '', 'Serviço' if itens_servico else '') if x),
             forma_pagamento=forma if produtos else '', vivo_mais=vivo_mais, vivo_mais_percentual=percentual,
+            nsu=nsu, parcelas=parcelas,
             plano_anterior=plano_anterior, plano_anterior_nome=(plano_anterior.nome if plano_anterior else str(pa.get('nome') or ''))[:200],
             segmentacao_anterior=segmentacao_cliente[:10], valor_anterior=valor_anterior, numero_fake=fake,
             observacao=str(dados.get('observacao') or '').strip()[:2000],
@@ -549,7 +606,8 @@ def registrar_venda(dados, usuario, loja, vendedor=None):
                 plano=(plano_anterior.nome if plano_anterior else '')[:200],
                 categoria_slv=i['categoria'], prateleira_infinita=i['prateleira'], valor_sugerido=i['sugerido'],
                 regra_preco=i['regra'], renova_vini=i['rv'], renova_vini_valor=i['rv_valor'], renova_codigo=i['codigo'],
-                renova_alied=i['ra'], renova_alied_valor=i['ra_valor'],
+                renova_alied=i['ra'], renova_alied_valor=i['ra_valor'], renova_alied_pedido=i['ra_pedido'],
+                renova_assurant=i['ras'], renova_assurant_valor=i['ras_valor'], renova_assurant_pedido=i['ras_pedido'],
                 desconto_vivo_mais=i['conta']['desconto_vivo_mais'], valor_calculado=i['conta']['valor_calculado'],
                 valor_venda=i['final'], valor_editado=i['editado'], editado_por=usuario if i['editado'] else None)
         ultimo_plano = None

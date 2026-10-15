@@ -44,13 +44,49 @@ def _nome_do_arquivo(nome):
     return (limpo or 'drive')[:80] + '.zip'
 
 
-def montar_zip(file_id):
+def _manifesto_de(ids, incluir_google):
+    """Junta o manifesto de vários itens num só, cada pasta com o nome dela na frente.
+
+    Um item só fica como sempre foi (o zip da pasta abre direto no conteúdo
+    dela). Vários: cada pasta vira uma pasta dentro do zip.
+    """
+    if len(ids) == 1:
+        return uso_local.montar(ids[0], incluir_google=incluir_google)
+    junto = {'nome': '', 'arquivos': [], 'ignorados': [], 'bytes': 0, 'excedeu': False}
+    for file_id in ids:
+        parte = uso_local.montar(file_id, incluir_google=incluir_google)
+        prefixo = f"{parte['nome']}/" if parte['pasta'] else ''
+        for arquivo in parte['arquivos']:
+            junto['arquivos'].append(dict(arquivo, caminho=prefixo + (arquivo['caminho'] or arquivo['nome'])))
+        junto['ignorados'] += parte['ignorados']
+        junto['bytes'] += parte['bytes']
+        junto['excedeu'] = junto['excedeu'] or parte['excedeu']
+        # Não adianta varrer o resto: já não cabe.
+        if junto['excedeu'] or len(junto['arquivos']) > LIMITE_ARQUIVOS or junto['bytes'] > LIMITE_BYTES:
+            junto['excedeu'] = True
+            break
+    return junto
+
+
+def montar_zip(file_id, incluir_google=False):
     """(arquivo temporário do zip, nome sugerido, resumo). Fecha por conta de quem chama."""
-    manifesto = uso_local.montar(file_id)
+    return montar_zip_de([file_id], incluir_google=incluir_google)
+
+
+def montar_zip_de(ids, nome='', incluir_google=False):
+    """O zip de um ou mais itens (pastas e arquivos misturados).
+
+    `incluir_google`: Documento/Planilha/Apresentação entram convertidos para
+    Word/Excel/PowerPoint, como no "Baixar" de um arquivo só.
+    """
+    manifesto = _manifesto_de(ids, incluir_google)
     arquivos = manifesto['arquivos']
 
     if manifesto['excedeu'] or len(arquivos) > LIMITE_ARQUIVOS or manifesto['bytes'] > LIMITE_BYTES:
         raise ZipGrandeDemais(
+            f'Esta seleção passa do limite do ZIP ({LIMITE_ARQUIVOS} arquivos ou '
+            f'{LIMITE_BYTES // (1024 ** 2)} MB). Abra uma subpasta e baixe em partes.'
+            if len(ids) > 1 else
             f'Esta pasta passa do limite do ZIP ({LIMITE_ARQUIVOS} arquivos ou '
             f'{LIMITE_BYTES // (1024 ** 2)} MB). Abra uma subpasta e baixe em partes.')
     if not arquivos:
@@ -66,7 +102,17 @@ def montar_zip(file_id):
     with zipfile.ZipFile(temporario, 'w', zipfile.ZIP_DEFLATED, allowZip64=True,
                          compresslevel=1) as pacote:
         for arquivo in arquivos:
+            try:
+                conteudo, nome_baixado, _mime = gdrive.baixar(arquivo['id'])
+            except gdrive.DriveError as exc:
+                com_erro.append(arquivo['nome'])
+                logger.warning('ZIP: %s não entrou (%s)', arquivo['nome'], exc)
+                continue
             caminho = arquivo['caminho'] or arquivo['nome']
+            if arquivo.get('google') and nome_baixado:
+                # Doc do Google vem convertido: o nome ganha a extensão (.docx, .xlsx…).
+                pasta = caminho.rsplit('/', 1)[0] + '/' if '/' in caminho else ''
+                caminho = pasta + nome_baixado
             # Dois arquivos com o mesmo nome na mesma pasta: o segundo ganha sufixo.
             base, n = caminho, 2
             while caminho in dentro:
@@ -74,12 +120,6 @@ def montar_zip(file_id):
                 caminho = f'{pedaco[0]} ({n}).{pedaco[1]}' if len(pedaco) == 2 else f'{base} ({n})'
                 n += 1
             dentro.add(caminho)
-            try:
-                conteudo, _nome, _mime = gdrive.baixar(arquivo['id'])
-            except gdrive.DriveError as exc:
-                com_erro.append(arquivo['nome'])
-                logger.warning('ZIP: %s não entrou (%s)', arquivo['nome'], exc)
-                continue
             with pacote.open(caminho, 'w') as destino:
                 for pedaco_bytes in iter(lambda: conteudo.read(1024 * 256), b''):
                     destino.write(pedaco_bytes)
@@ -92,14 +132,15 @@ def montar_zip(file_id):
 
     temporario.flush()
     temporario.seek(0)
+    nome = nome or manifesto['nome']
     resumo = {
         'arquivos': len(arquivos) - len(com_erro),
         'bytes': manifesto['bytes'],
         'ignorados': manifesto['ignorados'],
         'com_erro': com_erro,
-        'nome': manifesto['nome'],
+        'nome': nome,
     }
-    return temporario, _nome_do_arquivo(manifesto['nome']), resumo
+    return temporario, _nome_do_arquivo(nome), resumo
 
 
 @login_required

@@ -1,5 +1,5 @@
 {% extends 'auditoria_sap/base_sap.html' %}
-{% load caixa_tags %}
+{% load caixa_tags sap_tags %}
 
 {% block sap_titulo %}Visão SAP — auditoria{% endblock %}
 {% block sap_subtitulo %}
@@ -65,7 +65,7 @@
             <div class="col-span-2 flex items-center justify-between lg:block">
                 <div>
                     <p class="text-sm font-semibold text-gray-800 tabular">{{ linha.data_venda|date:"d/m/Y"|default:"—" }}</p>
-                    <p class="text-xs text-gray-500">{{ linha.pdv|title|default:"—" }}</p>
+                    <p class="text-xs text-gray-500">{{ linha.pdv|loja|title|default:"—" }}</p>
                 </div>
                 <span class="sap-chip sap-situacao lg:hidden {% if linha.resolvida %}sap-resolvida{% else %}sap-aberta{% endif %}">
                     {% if linha.resolvida %}Resolvida{% else %}Aberta{% endif %}

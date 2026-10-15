@@ -523,6 +523,25 @@ try:
     t('o painel usa o mesmo mês', painel['filtros']['mes'] == HOJE.strftime('%Y-%m'))
     antiga.delete()
 
+    print('\n== L220 E L223 SÃO ITAIM PAULISTA E EMBU ==')
+    codigo = LinhaAuditoria.objects.create(chave='zz-l220-itaim-0000000001', tipo_erro='SEM NF', pdv='L220',
+                                           id_venda='L22001', data_venda=HOJE, ativa=True)
+    nome = LinhaAuditoria.objects.create(chave='zz-l220-itaim-0000000002', tipo_erro='SEM NF', pdv='ITAIM PAULISTA',
+                                         id_venda='L22002', data_venda=HOJE, ativa=True)
+    r = c.get('/sap/?situacao=todas')
+    lojas = list(r.context['lojas'])
+    t('o filtro não mostra o código L220 (vira Itaim Paulista)', 'L220' not in lojas and 'L223' not in lojas
+      and 'ITAIM PAULISTA' in lojas, lojas)
+    ids = {l.pk for l in c.get('/sap/?situacao=todas&loja=ITAIM PAULISTA').context['pagina'].paginator.object_list}
+    t('filtrar Itaim Paulista traz as linhas das duas grafias', {codigo.pk, nome.pk} <= ids)
+    t('a linha do L220 aparece com o nome da loja', 'Itaim Paulista' in c.get('/sap/?situacao=todas&q=L22001').content.decode())
+    por_loja = c.get('/sap/painel/').context['por_loja']
+    t('no painel, uma linha só para a loja', [l['pdv'] for l in por_loja].count('ITAIM PAULISTA') == 1
+      and not any(l['pdv'] == 'L220' for l in por_loja))
+    from auditoria_sap.permissions import normalizar_loja
+    t('o gerente da "Loja Embu das Artes" enxerga o L223', normalizar_loja('L223') == normalizar_loja('Loja Embu das Artes'))
+    codigo.delete(); nome.delete()
+
     print('\n== GESTORES ESCOLHIDOS PELO SUPERADMIN E AVISO DE RESOLVIDA ==')
     from auditoria_sap.permissions import gestores_escolhidos
     luiz = User.objects.create_user(username='zz.sap.luiz', email='zz.sap.luiz@exemplo-teste.local',

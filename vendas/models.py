@@ -72,6 +72,9 @@ class Venda(models.Model):
     cliente_telefone = models.CharField(max_length=20, blank=True, default='', db_default='', verbose_name='Telefone do cliente')
     forma_pagamento = models.CharField(max_length=10, blank=True, default='', db_default='',
                                        choices=[('CARTAO', 'Cartão'), ('PIX', 'Pix')], verbose_name='Forma de pagamento')
+    # Cartão: o comprovante da maquininha (NSU) e em quantas vezes.
+    nsu = models.CharField(max_length=30, blank=True, default='', db_default='', verbose_name='NSU do cartão')
+    parcelas = models.PositiveSmallIntegerField(null=True, blank=True, verbose_name='Parcelas no cartão')
     vivo_mais = models.BooleanField(default=False, db_default=False, verbose_name='Pago pelo Vivo+')
     vivo_mais_percentual = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True,
                                                verbose_name='Percentual Vivo+ (na época)')
@@ -113,7 +116,8 @@ class Venda(models.Model):
 
     @property
     def total(self):
-        return self.total_produtos + self.total_servicos
+        """A conta da venda: só os produtos. Serviço é mensalidade do plano, não é pago no balcão."""
+        return self.total_produtos
 
 
 class VendaProduto(models.Model):
@@ -154,6 +158,13 @@ class VendaProduto(models.Model):
     renova_alied = models.BooleanField(default=False, db_default=False, verbose_name='Renova Alied')
     renova_alied_valor = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0'),
                                              db_default=Decimal('0'), verbose_name='Valor Renova Alied')
+    renova_alied_pedido = models.CharField(max_length=40, blank=True, default='', db_default='',
+                                           verbose_name='Nº do pedido Renova Alied')
+    renova_assurant = models.BooleanField(default=False, db_default=False, verbose_name='Renova Assurant')
+    renova_assurant_valor = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0'),
+                                                db_default=Decimal('0'), verbose_name='Valor Renova Assurant')
+    renova_assurant_pedido = models.CharField(max_length=40, blank=True, default='', db_default='',
+                                              verbose_name='Nº do pedido/protocolo Renova Assurant')
     desconto_vivo_mais = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0'),
                                              db_default=Decimal('0'), verbose_name='Desconto Vivo+')
     valor_calculado = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True,
@@ -260,6 +271,9 @@ class ConfiguracaoVendas(models.Model):
 
     vivo_mais_percentual = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('0'),
                                                verbose_name='Desconto Vivo+ (%)')
+    # Categorias (coluna CATEGORIA da planilha) em que o serial do produto é obrigatório.
+    # Vazio (None) = o padrão: todas as de eletrônicos; Essenciais (capa, película) não.
+    categorias_com_serial = models.JSONField(null=True, blank=True, verbose_name='Categorias com serial obrigatório')
     atualizado_em = models.DateTimeField(auto_now=True)
     atualizado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
                                        related_name='+')
@@ -351,7 +365,7 @@ class Cliente(models.Model):
 class RegistroAlteracao(models.Model):
     """[Confiabilidade.NF001] Histórico: data, usuário, PDV, valor anterior e novo."""
 
-    TIPOS = [('PLANO', 'Plano'), ('VIVO_MAIS', 'Percentual Vivo+'), ('CLIENTE', 'Cliente'),
+    TIPOS = [('PLANO', 'Plano'), ('VIVO_MAIS', 'Percentual Vivo+'), ('CLIENTE', 'Cliente'), ('SERIAL', 'Serial obrigatório'),
              ('SERVICO_ADICIONAL', 'Seguro / SVA')]
     tipo = models.CharField(max_length=20, choices=TIPOS, db_index=True, verbose_name='O que mudou')
     objeto_id = models.PositiveIntegerField(null=True, blank=True, db_index=True)

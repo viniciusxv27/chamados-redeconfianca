@@ -52,6 +52,20 @@ def e_nativo_do_google(meta):
     return mime.startswith('application/vnd.google-apps') and mime != PASTA_MIME
 
 
+# Os nativos que o `gdrive.baixar` sabe converter (Word/Excel/PowerPoint; o
+# desenho sai em PDF). Atalho, formulário e mapa não têm conversão.
+EXPORTAVEIS = {
+    'application/vnd.google-apps.document',
+    'application/vnd.google-apps.spreadsheet',
+    'application/vnd.google-apps.presentation',
+    'application/vnd.google-apps.drawing',
+}
+
+
+def _entra_convertido(meta, estado):
+    return estado.get('incluir_google') and (meta.get('mimeType') or '') in EXPORTAVEIS
+
+
 def _arquivo(meta, caminho, pasta_id):
     return {
         'id': meta.get('id'),
@@ -61,6 +75,7 @@ def _arquivo(meta, caminho, pasta_id):
         'tamanho': int(meta.get('size') or 0),
         'modificado': meta.get('modifiedTime') or '',
         'md5': meta.get('md5Checksum') or '',
+        'google': e_nativo_do_google(meta),
         'url': reverse('drive:file_content', args=[meta.get('id')]) + '?dl=1',
     }
 
@@ -79,7 +94,7 @@ def _varrer(folder_id, prefixo, profundidade, estado):
                 estado['pastas'].append({'id': meta.get('id'), 'caminho': caminho})
                 _varrer(meta.get('id'), f'{caminho}/', profundidade + 1, estado)
                 continue
-            if e_nativo_do_google(meta):
+            if e_nativo_do_google(meta) and not _entra_convertido(meta, estado):
                 estado['ignorados'].append(meta.get('name') or '')
                 continue
             if len(estado['arquivos']) >= LIMITE_ARQUIVOS or estado['bytes'] > LIMITE_BYTES:
@@ -92,15 +107,19 @@ def _varrer(folder_id, prefixo, profundidade, estado):
             return
 
 
-def montar(file_id):
-    """O que vai para a cópia de trabalho de um arquivo ou de uma pasta."""
+def montar(file_id, incluir_google=False):
+    """O que vai para a cópia de trabalho de um arquivo ou de uma pasta.
+
+    `incluir_google`: Documento/Planilha/Apresentação entram (o ZIP do Meu
+    Drive os baixa convertidos para Office); o "usar localmente" não usa.
+    """
     meta = gdrive.obter(file_id, fields=CAMPOS)
     estado = {'arquivos': [], 'pastas': [], 'ignorados': [], 'fundo_demais': [],
-              'bytes': 0, 'excedeu': False}
+              'bytes': 0, 'excedeu': False, 'incluir_google': incluir_google}
 
     if e_pasta(meta):
         _varrer(file_id, '', 1, estado)
-    elif e_nativo_do_google(meta):
+    elif e_nativo_do_google(meta) and not _entra_convertido(meta, estado):
         estado['ignorados'].append(meta.get('name') or '')
     else:
         arquivo = _arquivo(meta, meta.get('name') or '', gdrive.pai_de(file_id) or '')

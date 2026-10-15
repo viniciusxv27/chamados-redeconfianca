@@ -8,7 +8,13 @@ no "Carregar mais" (AJAX), por isso não depende de nada além de `itens`,
 arquivo ou da pasta de destino — abrir o próprio atalho dava erro.
 {% endcomment %}
 {% for item in itens %}
-<div class="dv-card group relative bg-white border border-gray-100 rounded-xl">
+<div class="dv-card md-card group relative bg-white border border-gray-100 rounded-xl"
+     data-id="{{ item.alvo_id }}" data-pasta="{{ item.is_folder|yesno:'1,' }}">
+    <label class="md-sel absolute top-1.5 left-1.5 z-10 w-7 h-7 flex items-center justify-center rounded-lg bg-white/90
+                  cursor-pointer sm:opacity-0 sm:group-hover:opacity-100 transition" title="Selecionar para baixar">
+        <input type="checkbox" class="md-check w-4 h-4 accent-blue-600 cursor-pointer" value="{{ item.alvo_id }}"
+               aria-label="Selecionar {{ item.name }}">
+    </label>
     <a href="{% if item.is_folder %}{% url 'drive:meu_drive_folder' item.alvo_id %}{% else %}{% url 'drive:meu_drive_arquivo' item.alvo_id %}{% endif %}"
        class="block p-3">
         <div class="flex items-center justify-center h-14 relative">
@@ -39,7 +45,10 @@ arquivo ou da pasta de destino — abrir o próprio atalho dava erro.
             <div class="md-menu hidden absolute right-0 top-8 z-30 w-48 bg-white border border-gray-100 rounded-xl shadow-lg py-1 text-sm">
                 <a href="{% if item.is_folder %}{% url 'drive:meu_drive_folder' item.alvo_id %}{% else %}{% url 'drive:meu_drive_arquivo' item.alvo_id %}{% endif %}"
                    class="block px-3 py-1.5 hover:bg-gray-50"><i class="fas fa-eye w-4 mr-2 text-gray-400"></i>Abrir</a>
-                {% if not item.is_folder %}
+                {% if item.is_folder %}
+                <a href="{% url 'drive:meu_drive_zip' %}?id={{ item.alvo_id }}&amp;pasta={{ folder_id }}" onclick="return mdBaixarZip(this.href)"
+                   class="block px-3 py-1.5 hover:bg-gray-50"><i class="fas fa-file-zipper w-4 mr-2 text-gray-400"></i>Baixar em ZIP</a>
+                {% else %}
                 <a href="{% url 'drive:meu_drive_conteudo' item.alvo_id %}?dl=1"
                    class="block px-3 py-1.5 hover:bg-gray-50"><i class="fas fa-download w-4 mr-2 text-gray-400"></i>Baixar</a>
                 {% endif %}

@@ -91,6 +91,23 @@
         <p class="text-[11px] text-gray-400 mt-2">Última alteração: {{ config.atualizado_em|date:"d/m/Y H:i" }}{% if config.atualizado_por %} por {{ config.atualizado_por.get_full_name }}{% endif %}</p>
     </section>
 
+    {# ── Serial obrigatório por categoria ── #}
+    <section class="vd-card p-5">
+        <h2 class="text-sm font-bold text-gray-900 mb-1"><i class="fas fa-barcode text-purple-600 mr-1.5"></i>Serial obrigatório</h2>
+        <p class="text-[11px] text-gray-500 mb-3">Nas categorias marcadas, a venda só fecha com o serial do produto. Aparelhos já exigem o IMEI.</p>
+        <form method="post" action="{% url 'vendas:parametros_serial' %}" class="space-y-1.5">
+            {% csrf_token %}
+            {% for c in categorias_serial %}
+            <label class="flex items-center justify-between gap-2 text-sm text-gray-700 cursor-pointer rounded-lg px-2 py-1 hover:bg-gray-50">
+                <span class="flex items-center gap-2"><input type="checkbox" name="categoria" value="{{ c.nome }}" class="rounded text-purple-600" {% if c.exige %}checked{% endif %}>{{ c.nome }}</span>
+                <span class="text-[11px] text-gray-400 tabular">{{ c.produtos }} produto{{ c.produtos|pluralize }}</span>
+            </label>
+            {% endfor %}
+            <button class="mt-2 w-full px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold">Salvar</button>
+        </form>
+        {% if not config.categorias_com_serial and config.categorias_com_serial is None %}<p class="text-[11px] text-gray-400 mt-2">Usando o padrão: eletrônicos com serial, Essenciais sem.</p>{% endif %}
+    </section>
+
     {# ── Histórico ([Confiabilidade.NF001]) ── #}
     <section class="vd-card overflow-hidden">
         <div class="px-5 py-3 border-b border-gray-100"><h2 class="text-sm font-bold text-gray-900"><i class="fas fa-clock-rotate-left text-gray-500 mr-1.5"></i>Histórico de alterações</h2></div>

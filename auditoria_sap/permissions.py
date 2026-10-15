@@ -88,13 +88,28 @@ def gestores_escolhidos():
             .distinct().order_by('first_name', 'last_name'))
 
 
+# Lojas que o SAP às vezes escreve pelo código da filial: na tela viram o nome
+# (e o filtro de uma pega as linhas das duas grafias).
+CODIGOS_DE_LOJA = {'L220': 'ITAIM PAULISTA', 'L223': 'EMBU DAS ARTES'}
+
+
 def normalizar_loja(nome):
-    """"Loja Glória" e "GLÓRIA" viram a mesma chave: sem "Loja", sem acento, maiúsculas."""
+    """"Loja Glória" e "GLÓRIA" viram a mesma chave: sem "Loja", sem acento, maiúsculas.
+
+    O código da filial ("L220") vira o nome da loja ("ITAIM PAULISTA").
+    """
     texto = ' '.join(str(nome or '').split())
     if texto.lower().startswith('loja'):
         texto = texto[4:].lstrip(' -–—:')
     texto = unicodedata.normalize('NFKD', texto)
-    return ''.join(c for c in texto if not unicodedata.combining(c)).upper().strip()
+    texto = ''.join(c for c in texto if not unicodedata.combining(c)).upper().strip()
+    return CODIGOS_DE_LOJA.get(texto, texto)
+
+
+def nome_da_loja(pdv):
+    """O nome para mostrar: "L220" → "ITAIM PAULISTA"; o resto como veio do SAP."""
+    chave = ' '.join(str(pdv or '').split()).upper()
+    return CODIGOS_DE_LOJA.get(chave, pdv or '')
 
 
 def lojas_visiveis(user):

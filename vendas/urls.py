@@ -25,5 +25,6 @@ urlpatterns = [
     path('parametros/', views.parametros, name='parametros'),
     path('parametros/plano/', views.parametros_plano, name='parametros_plano'),
     path('parametros/vivo-mais/', views.parametros_vivo_mais, name='parametros_vivo_mais'),
+    path('parametros/serial/', views.parametros_serial, name='parametros_serial'),
     path('parametros/adicional/', views.parametros_adicional, name='parametros_adicional'),
 ]

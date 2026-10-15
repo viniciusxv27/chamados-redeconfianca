@@ -134,7 +134,7 @@
                     <input id="vdBusca" class="vd-campo pl-10 text-base" placeholder="Buscar produto por nome ou SKU…" autocomplete="off">
                     <div id="vdBuscaLista" class="hidden absolute left-0 right-0 mt-1 vd-card vd-lista-busca z-30"></div>
                 </div>
-                <p class="text-[11px] text-gray-500"><i class="fas fa-circle-info mr-1"></i>O catálogo inteiro aparece na busca. Cada peça é um item, com o seu IMEI — dois aparelhos iguais são dois itens. Produto que não está no estoque físico: marque <strong>Prateleira infinita</strong> no item.</p>
+                <p class="text-[11px] text-gray-500"><a href="{% url 'vendas:precos' %}" target="_blank" rel="noopener" class="float-right ml-2 font-semibold text-purple-700 hover:underline"><i class="fas fa-tags mr-1"></i>Tabela de preços</a><i class="fas fa-circle-info mr-1"></i>Busque por palavras, em qualquer ordem (ex.: galaxy a15 128). O catálogo inteiro aparece na busca. Cada peça é um item, com o seu IMEI — dois aparelhos iguais são dois itens. Produto que não está no estoque físico: marque <strong>Prateleira infinita</strong> no item.</p>
                 <div id="vdProdutos" class="space-y-3"></div>
                 <button type="button" id="vdMaisProduto" class="hidden w-full py-2.5 rounded-xl border-2 border-dashed border-purple-200 text-sm font-semibold text-purple-700 hover:bg-purple-50 hover:border-purple-300 transition-colors">
                     <i class="fas fa-plus mr-1.5"></i>Adicionar outro produto
@@ -148,11 +148,26 @@
                         <span class="w-px h-7 bg-gray-200 mx-1"></span>
                         <label><input type="checkbox" id="vdVivoMais" class="sr-only"><span class="vd-chip"><i class="fas fa-star"></i>Pago pelo Vivo+ <span class="text-[11px] opacity-80" id="vdVivoPct"></span></span></label>
                     </div>
+                    <div id="vdCartao" class="hidden vd-entra grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4 pt-4 border-t border-gray-100">
+                        <div class="sm:col-span-2"><label class="vd-rotulo" for="vdNsu">NSU do comprovante *</label>
+                            <input id="vdNsu" class="vd-campo tabular uppercase" maxlength="30" autocomplete="off" placeholder="Número do comprovante da maquininha">
+                            <p class="vd-ajuda">Fica no comprovante do cartão, como "NSU" ou "DOC".</p></div>
+                        <div><label class="vd-rotulo" for="vdParcelas">Parcelas *</label>
+                            <select id="vdParcelas" class="vd-campo"><option value="">Escolha…</option></select>
+                            <p class="vd-ajuda" id="vdParcelasAviso"></p></div>
+                    </div>
                 </div>
             </div>
 
             {# Serviços #}
             <div data-painel="servicos" class="hidden space-y-4">
+                <div class="rounded-xl border border-gray-200 p-4 space-y-3">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div><label class="vd-rotulo" for="vdTipoServico">Tipo do serviço *</label>
+                            <select id="vdTipoServico" class="vd-campo"><option value="">Escolha...</option></select></div>
+                    </div>
+                    <div id="vdCamposServico" class="space-y-3"></div>
+                </div>
                 <div>
                     <label class="vd-rotulo">Linha(s) do cliente *</label>
                     <div class="flex flex-wrap gap-2 items-center" id="vdLinhas"></div>
@@ -163,14 +178,7 @@
                     <p class="vd-ajuda">Número fictício (ex.: 999999999) é aceito, mas a venda fica marcada para conferência.</p>
                 </div>
 
-                <div class="rounded-xl border border-gray-200 p-4 space-y-3">
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div><label class="vd-rotulo" for="vdTipoServico">Serviço *</label>
-                            <select id="vdTipoServico" class="vd-campo"><option value="">Escolha...</option></select></div>
-                    </div>
-                    <div id="vdCamposServico" class="space-y-3"></div>
-                    <div class="flex justify-end"><button type="button" id="vdAddServico" class="hidden px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold"><i class="fas fa-plus mr-1"></i>Adicionar serviço</button></div>
-                </div>
+                <div class="flex justify-end"><button type="button" id="vdAddServico" class="hidden px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold"><i class="fas fa-plus mr-1"></i>Adicionar serviço</button></div>
                 <div id="vdServicos" class="space-y-2"></div>
             </div>
         </div>
@@ -195,7 +203,7 @@
         <div class="px-4 py-3 border-t border-gray-100 bg-gray-50 space-y-1 text-sm">
             <div class="flex justify-between text-gray-600"><span>Produtos</span><span class="tabular" id="vdTotProd">R$ 0,00</span></div>
             <div class="flex justify-between text-gray-600"><span>Descontos (Renova + Vivo+)</span><span class="tabular text-emerald-600" id="vdTotDesc">R$ 0,00</span></div>
-            <div class="flex justify-between text-gray-600"><span>Serviços (mensal)</span><span class="tabular" id="vdTotServ">R$ 0,00</span></div>
+            <div class="flex justify-between text-gray-400 text-xs" title="Mensalidade dos planos: não é paga no balcão, não entra no total"><span>Serviços (mensal, fora do total)</span><span class="tabular" id="vdTotServ">R$ 0,00</span></div>
             <div class="flex justify-between items-baseline pt-1 border-t border-gray-200 mt-1">
                 <span class="font-semibold text-gray-900">Total</span><span class="text-2xl font-bold text-purple-700 tabular" id="vdTotal">R$ 0,00</span></div>
         </div>
@@ -247,7 +255,7 @@
     const TIPOS = Object.fromEntries(SLV.tipos_servico);
     const PCT = Number(SLV.vivo_mais) || 0;
 
-    const estado = { cliente: null, confirmado: false, novo: false, produtos: [], servicos: [], linhas: [], forma: '', vivoMais: false };
+    const estado = { cliente: null, confirmado: false, novo: false, produtos: [], servicos: [], linhas: [], forma: '', vivoMais: false, nsu: '', parcelas: '' };
 
     // ── utilidades ─────────────────────────────────────────────────────
     const so = function (v) { return String(v || '').replace(/\D/g, ''); };
@@ -462,7 +470,11 @@
 
     const COND_BASE = 'Preço', COND_PIX = 'PIX e Vivo Pay';
     function rotuloCond(c) { return c === COND_BASE ? 'Preço (cartão sem juros)' : (c === COND_PIX ? 'PIX e Vivo Pay' : c); }
-    function condPadrao() { return estado.forma === 'PIX' ? COND_PIX : COND_BASE; }
+    function condPadrao() {
+        if (estado.forma === 'PIX') return COND_PIX;
+        const n = Number(estado.parcelas);
+        return estado.forma === 'CARTAO' && n > 1 ? n + 'x' : COND_BASE;   // sem a coluna, aplicarTabela volta ao preço do grupo
+    }
     function aplicarTabela(p) {
         // Grupo do plano + condição → valor da TABELA REGULAR (o mesmo cálculo do servidor).
         if (!p.tabela) return;
@@ -480,6 +492,8 @@
             tipo: r.tipo, portfolio: r.portfolio,
             valor_sugerido: r.valor_sugerido ? Number(r.valor_sugerido) : null, sem_valor: !r.valor_sugerido, imei: '', prateleira_infinita: false,
             renova: false, renova_vini: false, renova_vini_valor: null, renova_codigo: '', renova_ok: null, renova_alied: false, renova_alied_valor: null,
+            renova_alied_pedido: '', renova_assurant: false, renova_assurant_valor: null, renova_assurant_pedido: '',
+            exige_serial: !!r.exige_serial,
             valor_final: null,
             tabela: r.grupos && r.grupos.length ? r.tabela : null, grupos: r.grupos || [], condicoes: r.condicoes || {},
             grupo: r.grupo_padrao || '', condicao: condPadrao()};
@@ -521,11 +535,12 @@
         const sug = Number(p.valor_sugerido) || 0;
         const rv = p.renova && p.renova_vini ? (Number(p.renova_vini_valor) || 0) : 0;
         const ra = p.renova && p.renova_alied ? (Number(p.renova_alied_valor) || 0) : 0;
-        const base = sug - rv - ra;
+        const ras = p.renova && p.renova_assurant ? (Number(p.renova_assurant_valor) || 0) : 0;
+        const base = sug - rv - ra - ras;
         const desc = estado.vivoMais ? Math.round(Math.max(base, 0) * PCT) / 100 : 0;
         const calc = Math.round((base - desc) * 100) / 100;
         const final = p.valor_final !== null ? p.valor_final : calc;
-        return {rv: rv, ra: ra, desc: desc, calc: calc, final: final, editado: p.valor_final !== null && p.valor_final !== calc};
+        return {rv: rv, ra: ra, ras: ras, desc: desc, calc: calc, final: final, editado: p.valor_final !== null && p.valor_final !== calc};
     }
     function desenharProdutos() {
         $('vdNProd').textContent = estado.produtos.length;
@@ -547,12 +562,12 @@
                       return '<option value="' + esc(c) + '"' + (c === p.condicao ? ' selected' : '') + '>' + esc(rotuloCond(c)) + (v ? ' — ' + brl(v) : '') + '</option>';
                   }).join('')) + '</select></div></div>' : '') +
               '<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 items-end">' +
-                '<div class="col-span-2"><label class="vd-rotulo">Valor sugerido (R$)' + (p.sem_valor ? ' *' : '') + '</label><input class="vd-campo tabular text-right' + (p.sem_valor && !p.valor_sugerido ? ' vd-erro' : '') + '" data-campo="valor_sugerido" inputmode="decimal" value="' + moeda(p.valor_sugerido) + '"' + (p.tabela && p.valor_sugerido ? ' readonly title="Valor da tabela — ajuste o valor final no resumo"' : '') + '>' +
+                '<div class="col-span-2"><label class="vd-rotulo">Valor de Produto (R$)' + (p.sem_valor ? ' *' : '') + '</label><input class="vd-campo tabular text-right' + (p.sem_valor && !p.valor_sugerido ? ' vd-erro' : '') + '" data-campo="valor_sugerido" inputmode="decimal" value="' + moeda(p.valor_sugerido) + '"' + (p.tabela && p.valor_sugerido ? ' readonly title="Valor da tabela — ajuste o valor final no resumo"' : '') + '>' +
                   '<p class="vd-ajuda">' + esc(p.regra || '') + (p.sem_valor ? ' — informe o valor' : '') + '</p></div>' +
-                '<div class="col-span-2"><label class="vd-rotulo">' + (aparelho ? 'IMEI *' : 'Serial (se houver)') + '</label>' +
-                  '<input class="vd-campo tabular' + (aparelho && p.imei && imeiComErro(p) ? ' vd-erro' : '') + '" data-campo="imei" value="' + esc(p.imei) + '"' +
-                  (aparelho ? ' inputmode="numeric" maxlength="15" autocomplete="off" placeholder="15 números"' : ' maxlength="60" placeholder="opcional"') + '>' +
-                  (aparelho ? '<p class="vd-ajuda" data-imei-aviso="' + i + '">' + avisoImei(p) + '</p>' : '') + '</div>' +
+                '<div class="col-span-2"><label class="vd-rotulo">' + (aparelho ? 'IMEI *' : (p.exige_serial ? 'Serial *' : 'Serial (se houver)')) + '</label>' +
+                  '<input class="vd-campo tabular' + ((aparelho && p.imei && imeiComErro(p)) || (p.exige_serial && p.serial_tocado && !p.imei) ? ' vd-erro' : '') + '" data-campo="imei" value="' + esc(p.imei) + '"' +
+                  (aparelho ? ' inputmode="numeric" maxlength="15" autocomplete="off" placeholder="15 números"' : ' maxlength="60" autocomplete="off" placeholder="' + (p.exige_serial ? 'obrigatório para este produto' : 'opcional') + '"') + '>' +
+                  (aparelho ? '<p class="vd-ajuda" data-imei-aviso="' + i + '">' + avisoImei(p) + '</p>' : (p.exige_serial ? '<p class="vd-ajuda">Na caixa ou na etiqueta do produto.</p>' : '')) + '</div>' +
                 '<label class="col-span-2 sm:col-span-4 flex items-center gap-2 text-sm text-gray-700 cursor-pointer"><input type="checkbox" class="rounded text-purple-600" data-campo="prateleira_infinita"' + (p.prateleira_infinita ? ' checked' : '') + '>Prateleira infinita</label>' +
               '</div>' +
               (aparelho ? '<div class="rounded-lg bg-gray-50 p-3 space-y-2"><div class="flex items-center gap-2 flex-wrap text-sm"><span class="text-gray-600 font-medium">Houve Renova?</span>' +
@@ -564,7 +579,11 @@
                   '<input class="vd-campo uppercase' + (p.renova_ok === false ? ' vd-erro' : '') + '" placeholder="Código do Renova (RN-000000) *" data-campo="renova_codigo" value="' + esc(p.renova_codigo) + '">' +
                   '<p class="vd-ajuda" data-renova-aviso="' + i + '">' + (p.renova_ok === true ? '<span class="text-emerald-600"><i class="fas fa-check"></i> ' + esc(p.renova_info || 'código encontrado') + '</span>' : (p.renova_ok === false ? '<span class="text-red-600">' + esc(p.renova_info || 'código não encontrado') + '</span>' : 'Obrigatório com Renova Vini.')) + '</p>' : '') + '</div>' +
                   '<div class="space-y-2"><label class="flex items-center gap-2 text-sm font-medium text-gray-700"><input type="checkbox" class="rounded text-purple-600" data-campo="renova_alied"' + (p.renova_alied ? ' checked' : '') + '>Renova Alied</label>' +
-                  (p.renova_alied ? '<input class="vd-campo tabular text-right" inputmode="decimal" placeholder="Valor (R$)" data-campo="renova_alied_valor" value="' + moeda(p.renova_alied_valor) + '">' : '') + '</div>' +
+                  (p.renova_alied ? '<input class="vd-campo tabular text-right" inputmode="decimal" placeholder="Valor (R$)" data-campo="renova_alied_valor" value="' + moeda(p.renova_alied_valor) + '">' +
+                  '<input class="vd-campo uppercase" maxlength="40" placeholder="Nº do pedido Alied *" data-campo="renova_alied_pedido" value="' + esc(p.renova_alied_pedido) + '">' : '') + '</div>' +
+                  '<div class="space-y-2"><label class="flex items-center gap-2 text-sm font-medium text-gray-700"><input type="checkbox" class="rounded text-purple-600" data-campo="renova_assurant"' + (p.renova_assurant ? ' checked' : '') + '>Renova Assurant</label>' +
+                  (p.renova_assurant ? '<input class="vd-campo tabular text-right" inputmode="decimal" placeholder="Valor (R$)" data-campo="renova_assurant_valor" value="' + moeda(p.renova_assurant_valor) + '">' +
+                  '<input class="vd-campo uppercase" maxlength="40" placeholder="Nº do pedido/protocolo (se houver)" data-campo="renova_assurant_pedido" value="' + esc(p.renova_assurant_pedido) + '">' : '') + '</div>' +
                 '</div>' : '') + '</div>' : '') +
               '</div>';
         }).join('');
@@ -582,7 +601,7 @@
         const rem = e.target.closest('[data-remover]');
         if (rem) { estado.produtos.splice(Number(rem.dataset.remover), 1); desenharProdutos(); recalcular(); return; }
         const r = e.target.closest('[data-renova]');
-        if (r) { p.renova = r.dataset.renova === '1'; if (!p.renova) { p.renova_vini = p.renova_alied = false; } desenharProdutos(); recalcular(); }
+        if (r) { p.renova = r.dataset.renova === '1'; if (!p.renova) { p.renova_vini = p.renova_alied = p.renova_assurant = false; } desenharProdutos(); recalcular(); }
     });
     $('vdProdutos').addEventListener('change', function (e) {
         const caixa = e.target.closest('[data-p]'); const campo = e.target.dataset.campo; if (!caixa || !campo) return;
@@ -591,6 +610,7 @@
         else if (campo === 'imei') {
             p.imei = p.categoria_slv === 'aparelho' ? e.target.value.replace(/\D/g, '').slice(0, 15) : e.target.value.trim();
             e.target.value = p.imei;
+            if (p.categoria_slv !== 'aparelho') { p.serial_tocado = true; e.target.classList.toggle('vd-erro', p.exige_serial && !p.imei); }
             // Atualiza o aviso de todos os aparelhos (um IMEI repetido marca os dois) sem redesenhar a tela.
             estado.produtos.forEach(function (o, j) {
                 const aviso = document.querySelector('[data-imei-aviso="' + j + '"]'); if (aviso) aviso.innerHTML = avisoImei(o);
@@ -598,6 +618,7 @@
                 if (campoImei && o.categoria_slv === 'aparelho') campoImei.classList.toggle('vd-erro', !!o.imei && imeiComErro(o));
             });
         }
+        else if (campo === 'renova_alied_pedido' || campo === 'renova_assurant_pedido') { p[campo] = e.target.value.trim().toUpperCase(); e.target.value = p[campo]; }
         else if (campo === 'renova_codigo') { p.renova_codigo = e.target.value.trim().toUpperCase(); conferirRenova(p, Number(caixa.dataset.p)); }
         else if (campo === 'grupo' || campo === 'condicao') { p[campo] = e.target.value; aplicarTabela(p); desenharProdutos(); }
         else { p[campo] = num(e.target.value); e.target.value = moeda(p[campo]); if (campo === 'valor_sugerido') p.valor_final = null; }
@@ -612,12 +633,30 @@
         if (j.ok) p.renova_codigo = j.codigo;
         desenharProdutos(); recalcular();
     }
+    $('vdParcelas').innerHTML += Array.from({length: 21}, function (_, k) { const n = k + 1;
+        return '<option value="' + n + '">' + (n === 1 ? 'À vista (1x)' : n + 'x') + '</option>'; }).join('');
+    $('vdNsu').addEventListener('input', function () { this.value = this.value.replace(/[^0-9A-Za-z]/g, '').toUpperCase(); estado.nsu = this.value; this.classList.remove('vd-erro'); });
+    $('vdParcelas').addEventListener('change', function () {
+        estado.parcelas = this.value; this.classList.remove('vd-erro');
+        // Parcelado: o preço do aparelho é o da coluna da parcela na tabela (quando existe).
+        const n = Number(this.value), sem = [];
+        estado.produtos.forEach(function (p) {
+            if (!p.tabela || !p.grupo) return;
+            const conds = p.condicoes[p.grupo] || [];
+            const alvo = n > 1 && conds.indexOf(n + 'x') >= 0 ? n + 'x' : COND_BASE;
+            if (n > 1 && alvo === COND_BASE) sem.push(p.nome);
+            p.condicao = alvo; aplicarTabela(p);
+        });
+        $('vdParcelasAviso').textContent = sem.length ? 'Sem preço em ' + n + 'x na tabela para: ' + sem.join(', ') + ' (vale o preço do grupo).' : '';
+        desenharProdutos(); recalcular();
+    });
     document.querySelectorAll('[name=vdForma]').forEach(function (r) { r.addEventListener('change', function () {
         estado.forma = r.value;
+        $('vdCartao').classList.toggle('hidden', estado.forma !== 'CARTAO');
         estado.produtos.forEach(function (p) {
             if (!p.tabela) return;
             if (estado.forma === 'PIX' && p.condicao === COND_BASE) { p.condicao = COND_PIX; aplicarTabela(p); }
-            if (estado.forma === 'CARTAO' && p.condicao === COND_PIX) { p.condicao = COND_BASE; aplicarTabela(p); }
+            if (estado.forma === 'CARTAO' && p.condicao === COND_PIX) { p.condicao = condPadrao(); aplicarTabela(p); }
         });
         desenharProdutos(); recalcular();
     }); });
@@ -752,14 +791,15 @@
         const linhasResumo = [];
         estado.produtos.forEach(function (p, i) {
             const c = calcItem(p);
-            totProd += c.final; totDesc += c.rv + c.ra + c.desc;
+            totProd += c.final; totDesc += c.rv + c.ra + c.ras + c.desc;
             linhasResumo.push('<div class="rounded-lg border ' + (c.editado ? 'border-amber-300 bg-amber-50' : 'border-gray-100') + ' p-2.5">' +
                 '<div class="flex justify-between gap-2"><span class="min-w-0"><span class="block text-gray-800 font-medium truncate">' + esc(p.nome) + '</span>' +
                 (p.imei ? '<span class="block text-[10px] text-gray-500 tabular">' + (p.categoria_slv === 'aparelho' ? 'IMEI ' : 'Serial ') + esc(p.imei) + '</span>' : '') + '</span>' +
                 (p.prateleira_infinita ? '<span class="text-[10px] px-1.5 rounded bg-sky-100 text-sky-700 whitespace-nowrap self-start">prateleira infinita</span>' : '') + '</div>' +
-                '<div class="text-[11px] text-gray-500 mt-1 space-y-0.5"><div class="flex justify-between"><span>Sugerido</span><span class="tabular">' + brl(p.valor_sugerido) + '</span></div>' +
+                '<div class="text-[11px] text-gray-500 mt-1 space-y-0.5"><div class="flex justify-between"><span>Valor de produto</span><span class="tabular">' + brl(p.valor_sugerido) + '</span></div>' +
                 (c.rv ? '<div class="flex justify-between"><span>Renova Vini</span><span class="tabular text-emerald-600">− ' + brl(c.rv) + '</span></div>' : '') +
-                (c.ra ? '<div class="flex justify-between"><span>Renova Alied</span><span class="tabular text-emerald-600">− ' + brl(c.ra) + '</span></div>' : '') +
+                (c.ra ? '<div class="flex justify-between"><span>Renova Alied' + (p.renova_alied_pedido ? ' · pedido ' + esc(p.renova_alied_pedido) : '') + '</span><span class="tabular text-emerald-600">− ' + brl(c.ra) + '</span></div>' : '') +
+                (c.ras ? '<div class="flex justify-between"><span>Renova Assurant</span><span class="tabular text-emerald-600">− ' + brl(c.ras) + '</span></div>' : '') +
                 (c.desc ? '<div class="flex justify-between"><span>Vivo+ (' + String(SLV.vivo_mais).replace('.', ',') + '%)</span><span class="tabular text-emerald-600">− ' + brl(c.desc) + '</span></div>' : '') + '</div>' +
                 '<div class="flex items-center justify-between gap-2 mt-2"><span class="text-xs text-gray-600">Valor final' + (c.editado ? ' <span class="text-amber-700 font-semibold">(editado)</span>' : '') + '</span>' +
                 '<input class="vd-campo !py-1 !px-2 w-28 text-right tabular font-semibold' + (c.editado ? ' vd-editado' : '') + (c.final <= 0 ? ' vd-erro' : '') + '" inputmode="decimal" data-final="' + i + '" value="' + moeda(c.final) + '"></div>' +
@@ -774,7 +814,8 @@
         });
         $('vdResumo').innerHTML = linhasResumo.length ? linhasResumo.join('') : '<p class="text-gray-400 text-center py-6"><i class="fas fa-basket-shopping text-2xl text-gray-200 block mb-2"></i>Os itens aparecem aqui.</p>';
         $('vdTotProd').textContent = brl(totProd); $('vdTotDesc').textContent = (totDesc ? '− ' : '') + brl(totDesc); $('vdTotServ').textContent = brl(totServ);
-        $('vdTotal').textContent = brl(totProd + totServ); $('vdTotalMovel').textContent = brl(totProd + totServ);
+        // A conta da venda é só de produtos: serviço é mensalidade do plano.
+        $('vdTotal').textContent = brl(totProd); $('vdTotalMovel').textContent = brl(totProd);
         const temItens = estado.produtos.length || estado.servicos.length;
         $('vdConfirmar').disabled = !(estado.confirmado && temItens);
         if (estado.confirmado && temItens) { $('numItens').classList.add('vd-feito'); $('numItens').innerHTML = '<i class="fas fa-check"></i>'; }
@@ -797,13 +838,16 @@
         const dados = {
             cliente: dadosDoForm(), linhas: estado.linhas, observacao: $('vdObs').value,
             forma_pagamento: estado.forma, vivo_mais: estado.vivoMais,
+            nsu: estado.forma === 'CARTAO' ? estado.nsu : '', parcelas: estado.forma === 'CARTAO' ? estado.parcelas : '',
             plano_anterior: {id: $('vdPaPlano').value, segmentacao: $('vdPaSeg').value, valor: $('vdPaValor').value,
                              nome: $('vdPaPlano').selectedOptions[0] ? $('vdPaPlano').selectedOptions[0].text : ''},
             produtos: estado.produtos.map(function (p) { const c = calcItem(p); return {
                 preco_id: p.preco_id, nome: p.nome, imei: p.imei, prateleira_infinita: p.prateleira_infinita,
                 grupamento: p.grupo || '', condicao: p.condicao || '', valor_sugerido: p.valor_sugerido,
                 renova_vini: p.renova && p.renova_vini, renova_vini_valor: p.renova_vini_valor, renova_codigo: p.renova_codigo,
-                renova_alied: p.renova && p.renova_alied, renova_alied_valor: p.renova_alied_valor,
+                renova_alied: p.renova && p.renova_alied, renova_alied_valor: p.renova_alied_valor, renova_alied_pedido: p.renova_alied_pedido,
+                renova_assurant: p.renova && p.renova_assurant, renova_assurant_valor: p.renova_assurant_valor,
+                renova_assurant_pedido: p.renova_assurant_pedido,
                 valor_final: c.editado ? p.valor_final : null}; }),
             servicos: estado.servicos,
             loja_id: $('vdLoja') ? $('vdLoja').value : null, vendedor_id: $('vdVendedor') ? $('vdVendedor').value : null,

@@ -20,7 +20,7 @@ from .models import (LIMITE_VALOR_DESPREZIVEL, LinhaAuditoria, SincronizacaoAudi
                      q_valor_desprezivel)
 from .mysql import SapIndisponivel
 from .permissions import e_gestor as _e_gestor
-from .permissions import (CHAVE_GESTOR, gestores_escolhidos, lojas_visiveis, normalizar_loja,
+from .permissions import (CHAVE_GESTOR, gestores_escolhidos, lojas_visiveis, nome_da_loja, normalizar_loja,
                           pode_escolher_gestores)
 from .permissions import pode_ver as _pode_ver
 
@@ -173,7 +173,11 @@ def filtrar(filtros, corte=None, pdvs=None):
     if filtros['tipo']:
         qs = qs.filter(tipo_erro=filtros['tipo'])
     if filtros['loja']:
-        qs = qs.filter(pdv=filtros['loja'])
+        # A loja escolhida pega todas as grafias dela no SAP ("ITAIM PAULISTA" e "L220").
+        alvo = normalizar_loja(filtros['loja'])
+        grafias = [p for p in LinhaAuditoria.objects.exclude(pdv='').values_list('pdv', flat=True).distinct()
+                   if normalizar_loja(p) == alvo]
+        qs = qs.filter(pdv__in=grafias or [filtros['loja']])
     if filtros['de']:
         qs = qs.filter(data_venda__gte=filtros['de'])
     if filtros['ate']:
@@ -220,6 +224,12 @@ def _resumo(qs):
     return dados
 
 
+def _lojas_do_filtro(visiveis):
+    """Uma opção por loja, com o nome dela — "L220" entra como "ITAIM PAULISTA"."""
+    nomes = {nome_da_loja(p) for p in visiveis.exclude(pdv='').values_list('pdv', flat=True).distinct()}
+    return sorted(nomes)
+
+
 def _contexto_comum(request, filtros, pdvs=None):
     """O que lista e painel mostram igual: filtros, listas de escolha, espelho."""
     visiveis = LinhaAuditoria.objects.filter(ativa=True).exclude(q_valor_desprezivel())
@@ -244,7 +254,7 @@ def _contexto_comum(request, filtros, pdvs=None):
                            else 'Período personalizado'),
         'tipos': (visiveis.exclude(tipo_erro='').values_list('tipo_erro', flat=True)
                   .distinct().order_by('tipo_erro')),
-        'lojas': (visiveis.exclude(pdv='').values_list('pdv', flat=True).distinct().order_by('pdv')),
+        'lojas': _lojas_do_filtro(visiveis),
         # O gerente vê só a loja dele: a tela diz isso em vez de oferecer um
         # filtro de loja com uma opção só.
         'so_da_loja': pdvs is not None,
@@ -337,6 +347,15 @@ def painel(request):
                               aguardando=Count('id', filter=q_aguardando), valor=valor_aberto)
                     .filter(Q(abertas__gt=0) | Q(pendentes__gt=0) | Q(aguardando__gt=0))
                     .order_by('-pendentes', '-abertas', 'pdv'))
+    # "L220" e "ITAIM PAULISTA" são a mesma loja: soma numa linha só, com o nome.
+    juntas = {}
+    for loja in por_loja:
+        nome = nome_da_loja(loja['pdv'])
+        alvo = juntas.setdefault(nome, {'pdv': nome, 'abertas': 0, 'pendentes': 0, 'aguardando': 0, 'valor': ZERO})
+        for campo in ('abertas', 'pendentes', 'aguardando'):
+            alvo[campo] += loja[campo]
+        alvo['valor'] += loja['valor'] or ZERO
+    por_loja = sorted(juntas.values(), key=lambda l: (-l['pendentes'], -l['abertas'], l['pdv']))
     for loja in por_loja:
         loja['total'] = loja['abertas'] + loja['pendentes']
     maior_loja = max((l['total'] for l in por_loja), default=0)

@@ -194,7 +194,11 @@ try:
     t('cliente passa a ter o plano da alta', v.cliente.plano == pos and v.cliente.valor_pago == D('149.90'))
 
     print('== PRODUTOS ==')
-    def vender(dados, cliente=cv):
+    def vender(dados, cliente=cv, completar_cartao=True):
+        if completar_cartao and dados.get('forma_pagamento') == 'CARTAO':
+            dados = dict(dados)
+            dados.setdefault('nsu', '123456')          # cartão pede NSU e parcelas (15/10/2026)
+            dados.setdefault('parcelas', 1)
         r = cliente.post('/vendas/nova/', json.dumps(dados), content_type='application/json')
         return r.json()
     # O Renova de verdade exige o checklist inteiro; aqui basta um código que "existe".
@@ -207,7 +211,7 @@ try:
                'produtos': [
                    {'preco_id': aparelho.id, 'imei': imei_de_teste(1), 'grupamento': 'PÓS INDIVIDUAL', 'prateleira_infinita': True,
                     'renova_vini': True, 'renova_vini_valor': '300,00', 'renova_codigo': renova.codigo if renova else 'RN-999999',
-                    'renova_alied': True, 'renova_alied_valor': '100'},
+                    'renova_alied': True, 'renova_alied_valor': '100', 'renova_alied_pedido': 'AL-778899'},
                    {'preco_id': capa.id, 'valor_final': '40,00'},
                    {'preco_id': capa.id, 'valor_final': '40,00', 'imei': 'CAPA-02'},
                ]}
@@ -432,7 +436,8 @@ try:
       and res['grupo_padrao'] == 'PRÉ' and res['condicoes']['PRÉ'][:3] == ['Preço', 'PIX e Vivo Pay', '2x'] and res['valor_sugerido'] == '3000.00', res)
     r = cv.get('/vendas/precos/?search=ZZ')
     html = r.content.decode()
-    t('lista de produtos mostra a grade da tabela regular', 'PÓS INDIVIDUAL' in html and 'ZZ Phone Novo' in html and 'PVP Base' in html)
+    t('lista de produtos mostra a grade da tabela regular', 'PÓS INDIVIDUAL' in html and 'ZZ Phone Novo' in html
+      and 'Ver tabela' in html and 'a partir de' in html)
     wb2 = openpyxl.Workbook()
     wb2.active.title = 'SMARTPHONES'
     arquivo2 = BytesIO()
@@ -448,6 +453,61 @@ try:
     r = ca.get('/vendas/precos/importar/')
     t('tela de importação com relatório', 'Relatório das importações' in r.content.decode())
     slv.renova_existe = existe_original
+
+    print('\n== AJUSTES DE 15/10/2026 ==')
+    som = ItemPreco.objects.create(categoria='ELETRÔNICOS_LP_Não Conectados', nome='ZZ Caixa de Som Boom 9', valor=D('500.00'),
+                                   extra={'CATEGORIA': 'Áudio', 'MARCA': 'ZZSOM'})
+    pelicula = ItemPreco.objects.create(categoria='ELETRÔNICOS_LP_Não Conectados', nome='ZZ Pelicula Vidro', valor=D('30.00'),
+                                        extra={'CATEGORIA': 'Essenciais', 'MARCA': 'ZZSOM'})
+    celular = ItemPreco.objects.create(categoria='SMARTPHONES', nome='ZZ Galaxy Teste A99 128GB', valor=D('1500.00'),
+                                       extra={'CATEGORIA': 'Smartphone', 'MARCA': 'ZZMARCA'})
+    base_venda = {'cliente': {'cpf': CPF, 'nome': 'Zz Cliente Teste'}, 'forma_pagamento': 'PIX'}
+    j = vender(dict(base_venda, produtos=[{'preco_id': som.id}]))
+    t('eletrônico de categoria com serial: sem serial não fecha', not j.get('ok') and any('serial' in e for e in j.get('erros', [])), j)
+    j = vender(dict(base_venda, produtos=[{'preco_id': som.id, 'imei': 'SN-ABC-123'}, {'preco_id': pelicula.id}]))
+    t('com serial fecha; película (Essenciais) não pede serial', j.get('ok'), j)
+    vp = VendaProduto.objects.filter(venda_id=j.get('id'), preco=som).first()
+    t('o serial fica gravado', vp and vp.serial == 'SN-ABC-123')
+    cs = Client(); cs.force_login(admin)
+    cs.post('/vendas/parametros/serial/', {'categoria': ['TV']})
+    j = vender(dict(base_venda, produtos=[{'preco_id': som.id}]))
+    t('a Parametrização escolhe as categorias (Áudio desmarcado: não pede mais)', j.get('ok'), j)
+    cs.post('/vendas/parametros/serial/', {'categoria': list(slv.CATEGORIAS_SERIAL_PADRAO)})
+
+    j = vender(dict(base_venda, forma_pagamento='CARTAO', produtos=[{'preco_id': pelicula.id}]), completar_cartao=False)
+    t('cartão sem NSU e parcelas não fecha', not j.get('ok') and any('NSU' in e for e in j['erros'])
+      and any('parcelas' in e for e in j['erros']), j)
+    j = vender(dict(base_venda, forma_pagamento='CARTAO', nsu='nsu 0012-34', parcelas=6, produtos=[{'preco_id': pelicula.id}]),
+               completar_cartao=False)
+    venda = Venda.objects.filter(pk=j.get('id')).first()
+    t('cartão grava NSU (só letras e números) e parcelas', venda and venda.nsu == 'NSU001234' and venda.parcelas == 6, j)
+    html = cv.get(f'/vendas/{venda.id}/').content.decode() if venda else ''
+    t('a ficha mostra NSU e parcelas', 'NSU NSU001234' in html and '6x' in html)
+
+    produto_renova = {'preco_id': celular.id, 'imei': imei_de_teste(77), 'renova_alied': True, 'renova_alied_valor': '100'}
+    j = vender(dict(base_venda, produtos=[produto_renova]))
+    t('Renova Alied sem nº do pedido não fecha', not j.get('ok') and any('pedido do Renova Alied' in e for e in j['erros']), j)
+    j = vender(dict(base_venda, produtos=[dict(produto_renova, renova_alied_pedido='al-555',
+                                               renova_assurant=True, renova_assurant_valor='200,00')]))
+    vp = VendaProduto.objects.filter(venda_id=j.get('id')).first()
+    t('Renova Assurant desconta e grava, com o pedido do Alied', vp and vp.renova_assurant and vp.renova_assurant_valor == D('200.00')
+      and vp.renova_alied_pedido == 'al-555' and vp.valor_venda == D('1200.00'), (j, vp and vp.valor_venda))
+
+    j = vender(dict(base_venda, linhas=['27999887766'], produtos=[{'preco_id': pelicula.id}],
+                    servicos=[{'tipo': 'ALTA', 'plano_id': pos.id}]))
+    venda = Venda.objects.filter(pk=j.get('id')).first()
+    t('o total da venda soma só produtos (serviço é mensalidade)', venda and venda.total == D('30.00')
+      and venda.total_servicos > 0, j)
+
+    from vendas.busca import buscar
+    t('busca por palavras fora de ordem e sem acento', celular.id in buscar('a99 galaxy teste 128'))
+    t('busca: o aparelho vem antes do acessório com o mesmo nome', buscar('zz galaxy teste')[:1] == [celular.id])
+    html = cv.get('/vendas/precos/?search=boom 9').content.decode()
+    t('tabela de preços acha pela busca nova e marca serial obrigatório', 'ZZ Caixa de Som Boom 9' in html and 'serial obrigatório' in html)
+    html = cv.get('/vendas/nova/').content.decode()
+    t('formulário: "Valor de Produto", Assurant, NSU e tipo do serviço antes da linha',
+      'Valor de Produto (R$)' in html and 'Renova Assurant' in html and 'vdNsu' in html
+      and html.index('vdTipoServico') < html.index('Linha(s) do cliente'))
 finally:
     marcador.__exit__(Exception, Exception('rollback'), None)
 

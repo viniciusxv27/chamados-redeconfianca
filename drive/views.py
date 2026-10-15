@@ -14,7 +14,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.db.models import Count, Q
-from django.http import (HttpResponse, HttpResponseNotModified, JsonResponse, Http404,
+from django.http import (FileResponse, HttpResponse, HttpResponseNotModified, JsonResponse, Http404,
                          StreamingHttpResponse)
 from django.shortcuts import redirect, render, get_object_or_404
 from django.urls import reverse
@@ -1821,6 +1821,75 @@ def meu_drive_conteudo(request, file_id):
     anexo = bool(request.GET.get('dl'))
     return _servir_conteudo(request, file_id, anexo,
                             reverse('drive:meu_drive_arquivo', args=[file_id]), detalhe='Meu Drive')
+
+
+# Mais que isso numa seleção é a pasta inteira: o botão da pasta resolve.
+MAX_ITENS_ZIP = 200
+
+
+@login_required
+@require_GET
+def meu_drive_zip(request):
+    """Baixa pastas e arquivos do Meu Drive num .zip só.
+
+    `?id=…&id=…` são os itens (pastas e arquivos misturados); `pasta` é para
+    onde a tela volta se não der (limite, pasta vazia, Google fora). Documento,
+    Planilha e Apresentação do Google entram convertidos para Office — no Meu
+    Drive eles são boa parte do que existe.
+
+    `t` volta num cookie quando o zip fica pronto: a tela tira o "Preparando…"
+    na hora em que o download começa.
+    """
+    if not _exige_meu_drive(request):
+        _deny(request, detalhe='meu drive zip')
+    ids = list(dict.fromkeys(i.strip() for i in request.GET.getlist('id') if i.strip()))
+    pasta = (request.GET.get('pasta') or '').strip()
+    pasta = pasta if _id_valido(pasta) else ''
+    ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+
+    def recusa(msg):
+        if ajax:
+            return JsonResponse({'ok': False, 'msg': msg}, status=400)
+        messages.error(request, msg)
+        return redirect(_url_meu_drive(pasta))
+
+    if not ids:
+        return recusa('Escolha ao menos uma pasta ou arquivo para baixar.')
+    if len(ids) > MAX_ITENS_ZIP or not all(_id_valido(i) for i in ids):
+        return recusa(f'Seleção inválida (até {MAX_ITENS_ZIP} itens).')
+
+    from . import zip_copia
+    nome = ''
+    if len(ids) > 1:
+        try:
+            nome = gdrive.obter(pasta).get('name', '') if pasta else ''
+        except gdrive.DriveError:
+            nome = ''
+        nome = f'{nome or "Meu Drive"} - {len(ids)} itens'
+    try:
+        temporario, nome_zip, resumo = zip_copia.montar_zip_de(ids, nome=nome, incluir_google=True)
+    except zip_copia.ZipGrandeDemais as exc:
+        return recusa(str(exc))
+    except gdrive.DriveNaoConfigurado as exc:
+        return recusa(str(exc))
+    except gdrive.DriveError as exc:
+        return recusa(f'Google Drive: {exc}')
+
+    detalhe = f"Meu Drive · zip · {len(ids)} item(ns) · {resumo['arquivos']} arquivo(s)"
+    if resumo['ignorados']:
+        detalhe += f" · {len(resumo['ignorados'])} fora"
+    if resumo['com_erro']:
+        detalhe += f" · {len(resumo['com_erro'])} sem resposta"
+    audit.registrar(request.user, 'DOWNLOAD', request=request, file_id=ids[0] if len(ids) == 1 else '',
+                    folder_id=pasta, file_name=resumo['nome'], detalhe=detalhe)
+
+    resposta = FileResponse(temporario, as_attachment=True, filename=nome_zip,
+                            content_type='application/zip')
+    resposta['Cache-Control'] = 'no-store'
+    marca = request.GET.get('t', '')
+    if re.fullmatch(r'[A-Za-z0-9]{6,40}', marca):
+        resposta.set_cookie('md_zip_pronto', marca, max_age=120, samesite='Lax')
+    return resposta
 
 
 @login_required
