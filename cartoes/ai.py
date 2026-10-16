@@ -69,8 +69,17 @@ _USER_INSTRUCTION = (
     '"categoria" (string curta, ex.: "Alimentação", "Combustível", "Hospedagem"), '
     '"descricao" (texto em português, 1 a 3 frases, pronto para o chamado), '
     '"confianca" ("alta", "media" ou "baixa"), '
-    '"observacoes" (string com o que estiver ilegível ou faltando). '
+    '"observacoes" (string com o que estiver ilegível ou faltando), '
+    '"itens" (lista com cada produto/serviço da nota, na ordem: objetos com "produto" (nome como está '
+    'na nota), "quantidade" (número), "valor_unitario" (número) e "valor_total" (número, ponto decimal). '
+    'Use [] quando o comprovante não listar itens — por exemplo, só o comprovante da maquininha). '
     'Não invente valores: se algo não estiver claro, deixe vazio e registre em "observacoes".'
+)
+
+_MERCADINHO = (
+    'Esta compra é para o Mercadinho de C$ — a loja interna onde os colaboradores trocam a moeda interna '
+    '(C$) por produtos. Liste TODOS os itens da nota em "itens", um por linha, com quantidade e valores, '
+    'e use a categoria "Mercadinho C$".'
 )
 
 _REFORCO = (
@@ -360,8 +369,11 @@ def faltando(dados: dict) -> list:
     return falta
 
 
-def _mensagem_do_usuario(anexo: dict, manual_text: str, falta: list, essencial: bool) -> list:
+def _mensagem_do_usuario(anexo: dict, manual_text: str, falta: list, essencial: bool,
+                         mercadinho: bool = False) -> list:
     partes: list = [{'type': 'text', 'text': _USER_INSTRUCTION}]
+    if mercadinho:
+        partes.append({'type': 'text', 'text': _MERCADINHO})
     if falta:
         partes.append({'type': 'text', 'text': _REFORCO.format(faltou=', '.join(falta))})
     if essencial:
@@ -389,18 +401,19 @@ def _mensagem_do_usuario(anexo: dict, manual_text: str, falta: list, essencial: 
     return partes
 
 
-def _uma_rodada(cliente, rodada: dict, anexo: dict, manual_text: str, falta: list) -> dict:
+def _uma_rodada(cliente, rodada: dict, anexo: dict, manual_text: str, falta: list,
+                mercadinho: bool = False) -> dict:
     mensagens = [
         {'role': 'system', 'content': _SYSTEM_PROMPT},
         {'role': 'user', 'content': _mensagem_do_usuario(
-            anexo, manual_text, falta, rodada.get('essencial', False))},
+            anexo, manual_text, falta, rodada.get('essencial', False), mercadinho)},
     ]
 
     def pedir(modelo):
         return cliente.chat.completions.create(
             model=modelo, messages=mensagens,
             temperature=rodada.get('temperatura', 0.2),
-            max_tokens=800, response_format={'type': 'json_object'})
+            max_tokens=2500, response_format={'type': 'json_object'})
 
     try:
         resposta = pedir(rodada['modelo'])
@@ -416,6 +429,49 @@ def _uma_rodada(cliente, rodada: dict, anexo: dict, manual_text: str, falta: lis
     return dados
 
 
+MAX_ITENS = 200
+
+
+def _numero(bruto):
+    """'1.234,56' / '12,5' / 12.5 → float (ou None)."""
+    if isinstance(bruto, bool) or bruto in (None, ''):
+        return None
+    if isinstance(bruto, (int, float)):
+        return float(bruto)
+    texto = str(bruto).replace('R$', '').strip()
+    if ',' in texto and '.' in texto:
+        texto = texto.replace('.', '').replace(',', '.')
+    elif ',' in texto:
+        texto = texto.replace(',', '.')
+    try:
+        return float(texto)
+    except ValueError:
+        return None
+
+
+def limpar_itens(itens) -> list:
+    """Os itens da nota numa forma segura: produto, quantidade, unitário e total (o total se calcula se faltar)."""
+    limpos = []
+    for item in (itens if isinstance(itens, list) else [])[:MAX_ITENS]:
+        if not isinstance(item, dict):
+            continue
+        produto = ' '.join(str(item.get('produto') or '').split())[:200]
+        if not produto:
+            continue
+        quantidade = _numero(item.get('quantidade'))
+        unitario = _numero(item.get('valor_unitario'))
+        total = _numero(item.get('valor_total'))
+        if quantidade is None or quantidade <= 0:
+            quantidade = 1.0
+        if total is None and unitario is not None:
+            total = unitario * quantidade
+        if unitario is None and total is not None:
+            unitario = total / quantidade
+        limpos.append({'produto': produto, 'quantidade': round(quantidade, 3),
+                       'valor_unitario': round(unitario or 0, 2), 'valor_total': round(total or 0, 2)})
+    return limpos
+
+
 def _mais_completo(atual: dict | None, novo: dict) -> dict:
     """Junta o que cada rodada trouxe: o que já veio não se perde na seguinte."""
     if not atual:
@@ -426,6 +482,11 @@ def _mais_completo(atual: dict | None, novo: dict) -> dict:
             continue
         if str(valor or '').strip() and not str(juntos.get(chave) or '').strip():
             juntos[chave] = valor
+    # Itens: fica a lista da rodada que leu mais itens (uma lista vazia não apaga a anterior).
+    if isinstance(novo.get('itens'), list):
+        anteriores = juntos.get('itens') if isinstance(juntos.get('itens'), list) else []
+        if len(novo['itens']) > len(anteriores):
+            juntos['itens'] = novo['itens']
     # O valor só é substituído por um valor de verdade.
     if not _valor_valido(juntos.get('valor')) and _valor_valido(novo.get('valor')):
         juntos['valor'] = novo['valor']
@@ -433,7 +494,7 @@ def _mais_completo(atual: dict | None, novo: dict) -> dict:
 
 
 def analyze_expense(image_bytes: bytes | None = None, manual_text: str = '',
-                    mime: str = 'image/jpeg', rodadas=RODADAS, anexos=None) -> dict:
+                    mime: str = 'image/jpeg', rodadas=RODADAS, anexos=None, mercadinho: bool = False) -> dict:
     """Analisa uma despesa (imagem, PDF e/ou texto) e devolve dados estruturados.
 
     ``anexos``: vários comprovantes do mesmo gasto, como lista de (bytes, mime) —
@@ -470,7 +531,7 @@ def analyze_expense(image_bytes: bytes | None = None, manual_text: str = '',
     for indice, rodada in enumerate(rodadas):
         tentativas += 1
         try:
-            dados = _uma_rodada(cliente, rodada, anexo, manual_text, falta if indice else [])
+            dados = _uma_rodada(cliente, rodada, anexo, manual_text, falta if indice else [], mercadinho)
             melhor = _mais_completo(melhor, dados)
             ultimo_erro = ''
         except Exception as exc:                                # noqa: BLE001
@@ -497,6 +558,7 @@ def analyze_expense(image_bytes: bytes | None = None, manual_text: str = '',
     melhor['tentativas'] = tentativas
     melhor['anexo'] = anexo.get('tipo')
     melhor['comprovantes'] = anexo.get('quantidade') or 0
+    melhor['itens'] = limpar_itens(melhor.get('itens'))
     if falta:
         melhor['faltou'] = falta
     return melhor

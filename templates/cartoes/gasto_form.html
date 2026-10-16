@@ -45,6 +45,15 @@
                     class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"></textarea>
         </div>
 
+        <label class="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 cursor-pointer">
+          <input type="checkbox" name="mercadinho" id="f-mercadinho" class="mt-0.5 rounded text-amber-600 focus:ring-amber-500"
+                 {% if form.mercadinho %}checked{% endif %}>
+          <span>
+            <span class="block text-sm font-semibold text-amber-900"><i class="fas fa-store mr-1"></i>Mercadinho</span>
+            <span class="block text-xs text-amber-800">A compra foi para o Mercadinho de C$. A IA lista cada item da nota.</span>
+          </span>
+        </label>
+
         <button type="button" id="btn-analisar"
                 class="inline-flex items-center gap-2 px-5 py-2.5 bg-gray-900 hover:bg-black text-white font-semibold rounded-lg transition-colors">
           <i class="fas fa-robot"></i> Analisar com IA
@@ -106,6 +115,28 @@
                     class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">{{ form.descricao|default:'' }}</textarea>
         </div>
 
+        <div>
+          <div class="flex items-center justify-between gap-2 mb-1">
+            <label class="block text-sm font-medium text-gray-700"><i class="fas fa-list-ul text-gray-400 mr-1"></i> Itens da compra <span class="text-xs font-normal text-gray-400">(a IA lê da nota; confira)</span></label>
+            <button type="button" id="btn-item" class="text-xs font-semibold text-purple-700 hover:text-purple-900"><i class="fas fa-plus mr-1"></i>Item</button>
+          </div>
+          <div id="itens-vazio" class="text-xs text-gray-400 border border-dashed border-gray-200 rounded-lg px-3 py-3">Nenhum item. Depois de analisar, os itens da nota aparecem aqui — ou adicione à mão.</div>
+          <div id="itens-caixa" class="hidden overflow-x-auto border border-gray-200 rounded-lg">
+            <table class="min-w-full text-sm">
+              <thead class="bg-gray-50 text-[11px] uppercase text-gray-500">
+                <tr><th class="text-left px-2 py-1.5">Produto</th><th class="px-2 py-1.5 w-20">Qtd</th><th class="px-2 py-1.5 w-28">Unitário</th><th class="px-2 py-1.5 w-28">Total</th><th class="w-8"></th></tr>
+              </thead>
+              <tbody id="itens-corpo"></tbody>
+              <tfoot>
+                <tr class="bg-gray-50 text-xs"><td class="px-2 py-1.5 text-gray-600" colspan="3">Soma dos itens</td>
+                  <td class="px-2 py-1.5 text-right font-semibold tabular-nums" id="itens-soma">R$ 0,00</td><td></td></tr>
+              </tfoot>
+            </table>
+          </div>
+          <p id="itens-aviso" class="hidden mt-1 text-xs text-amber-700"><i class="fas fa-circle-info mr-1"></i></p>
+          <input type="hidden" name="itens_json" id="f-itens" value="{{ form.itens_json|default:'[]' }}">
+        </div>
+
         <input type="hidden" name="ia_dados" id="f-iadados" value="">
       </div>
 
@@ -126,6 +157,64 @@
   var maisFoto = document.getElementById('btn-mais-foto');
   var btn = document.getElementById('btn-analisar');
   var MAX_COMPROVANTES = 6;
+
+  // ── Itens da compra ───────────────────────────────────────────────────
+  var itens = [];
+  try { itens = JSON.parse(document.getElementById('f-itens').value || '[]') || []; } catch (e) { itens = []; }
+  function num(v) { var n = parseFloat(String(v == null ? '' : v).replace(',', '.')); return isNaN(n) ? 0 : n; }
+  function brl(v) { return 'R$ ' + num(v).toFixed(2).replace('.', ','); }
+  function desenharItens() {
+    var corpo = document.getElementById('itens-corpo');
+    corpo.innerHTML = '';
+    itens.forEach(function (it, i) {
+      var tr = document.createElement('tr');
+      tr.className = 'border-t border-gray-100';
+      [['produto', 'text', 'w-full'], ['quantidade', 'number', 'w-20 text-right'], ['valor_unitario', 'number', 'w-28 text-right'],
+       ['valor_total', 'number', 'w-28 text-right']].forEach(function (c) {
+        var td = document.createElement('td'); td.className = 'px-1 py-1';
+        var inp = document.createElement('input');
+        inp.type = c[1]; if (c[1] === 'number') { inp.step = '0.01'; inp.min = '0'; }
+        inp.className = 'px-2 py-1 border border-gray-200 rounded ' + c[2];
+        inp.value = it[c[0]] == null ? '' : it[c[0]];
+        inp.setAttribute('aria-label', c[0] + ' do item ' + (i + 1));
+        inp.addEventListener('input', function () {
+          it[c[0]] = c[1] === 'number' ? num(inp.value) : inp.value;
+          // Mudou quantidade ou unitário: o total do item acompanha.
+          if (c[0] === 'quantidade' || c[0] === 'valor_unitario') {
+            it.valor_total = Math.round(num(it.quantidade || 1) * num(it.valor_unitario) * 100) / 100;
+            var totalInp = tr.querySelectorAll('input')[3]; if (totalInp) totalInp.value = it.valor_total;
+          }
+          atualizarSoma();
+        });
+        td.appendChild(inp); tr.appendChild(td);
+      });
+      var tdx = document.createElement('td'); tdx.className = 'px-1 text-center';
+      var rem = document.createElement('button'); rem.type = 'button'; rem.className = 'text-gray-400 hover:text-red-600';
+      rem.setAttribute('aria-label', 'Remover item ' + (i + 1)); rem.innerHTML = '<i class="fas fa-xmark"></i>';
+      rem.addEventListener('click', function () { itens.splice(i, 1); desenharItens(); });
+      tdx.appendChild(rem); tr.appendChild(tdx);
+      corpo.appendChild(tr);
+    });
+    document.getElementById('itens-caixa').classList.toggle('hidden', !itens.length);
+    document.getElementById('itens-vazio').classList.toggle('hidden', !!itens.length);
+    atualizarSoma();
+  }
+  function atualizarSoma() {
+    var soma = itens.reduce(function (a, it) { return a + num(it.valor_total); }, 0);
+    document.getElementById('itens-soma').textContent = brl(soma);
+    document.getElementById('f-itens').value = JSON.stringify(itens.filter(function (it) { return String(it.produto || '').trim(); }));
+    var valor = num(document.getElementById('f-valor').value);
+    var aviso = document.getElementById('itens-aviso');
+    var difere = itens.length && valor && Math.abs(soma - valor) >= 0.01;
+    aviso.classList.toggle('hidden', !difere);
+    if (difere) aviso.innerHTML = '<i class="fas fa-circle-info mr-1"></i>A soma dos itens (' + brl(soma) + ') é diferente do valor do gasto (' + brl(valor) + ') — pode ser desconto, frete ou um item faltando.';
+  }
+  document.getElementById('btn-item').addEventListener('click', function () {
+    itens.push({produto: '', quantidade: 1, valor_unitario: 0, valor_total: 0}); desenharItens();
+    var campos = document.querySelectorAll('#itens-corpo input'); if (campos.length) campos[campos.length - 4].focus();
+  });
+  document.getElementById('f-valor').addEventListener('input', atualizarSoma);
+  desenharItens();
   // Os arquivos escolhidos ficam aqui: escolher de novo soma, não substitui.
   var escolhidos = [];
   var status = document.getElementById('ia-status');
@@ -200,6 +289,7 @@
     }
     var fd = new FormData();
     escolhidos.forEach(function (f) { fd.append('foto', f); });
+    if (document.getElementById('f-mercadinho').checked) fd.append('mercadinho', 'on');
     fd.append('manual_text', manual);
     fd.append('csrfmiddlewaretoken', csrf);
 
@@ -223,6 +313,7 @@
         setIf('f-descricao', data.descricao);
         if (data.data && /^\d{4}-\d{2}-\d{2}$/.test(data.data)) setIf('f-data', data.data);
         document.getElementById('f-iadados').value = JSON.stringify(data);
+        if (data.itens && data.itens.length) { itens = data.itens; desenharItens(); }
         var extra = data.observacoes ? ' Observações: ' + data.observacoes : '';
         var lidos = data.comprovantes > 1 ? ' a partir dos ' + data.comprovantes + ' comprovantes' : '';
         setStatus('<i class="fas fa-check-circle"></i> Campos preenchidos pela IA' + lidos + ' (confiança: ' + (data.confianca || '—') + '). Revise antes de confirmar.' + extra, 'ok');

@@ -25,7 +25,8 @@ from core.evolution import enviar_texto
 from tickets.models import Category, Ticket, TicketAttachment, TicketLog
 from users.models import User
 
-from .ai import analyze_expense, documento_do_vendedor, documento_valido, e_da_empresa, e_pdf, paginas_do_pdf
+from .ai import (analyze_expense, documento_do_vendedor, documento_valido, e_da_empresa, e_pdf, limpar_itens,
+                 paginas_do_pdf)
 from .exportacao import conciliacao_excel, conciliacao_geral_excel, extrato_excel
 from .fatura import TOLERANCIA_DIAS, compra_antiga, conciliar, janela_do_portal, ler_fatura
 from .models import AcessoCartoes, Cartao, Gasto, GastoComprovante
@@ -745,7 +746,8 @@ def gasto_analyze(request, pk):
             mime = 'application/pdf'
         anexos.append((conteudo, mime))
 
-    data = analyze_expense(manual_text=manual_text, anexos=anexos)
+    mercadinho = request.POST.get('mercadinho') in ('on', '1', 'true')
+    data = analyze_expense(manual_text=manual_text, anexos=anexos, mercadinho=mercadinho)
     return JsonResponse(data)
 
 
@@ -767,6 +769,11 @@ def gasto_create(request, pk):
         arquivos = request.FILES.getlist('foto')[:MAX_COMPROVANTES]
         foto = arquivos[0] if arquivos else None
         ia_dados_raw = request.POST.get('ia_dados', '')
+        mercadinho = request.POST.get('mercadinho') == 'on'
+        try:
+            itens = limpar_itens(json.loads(request.POST.get('itens_json') or '[]'))
+        except (json.JSONDecodeError, TypeError):
+            itens = []
 
         errors = []
         if valor_dec is None or valor_dec <= 0:
@@ -809,6 +816,7 @@ def gasto_create(request, pk):
             estabelecimento=estabelecimento, documento_estabelecimento=documento, data_gasto=data_gasto,
             categoria_gasto=categoria_gasto, descricao=descricao,
             foto=comprovante, origem=('FOTO' if comprovante else 'MANUAL'), ia_dados=ia_dados,
+            mercadinho=mercadinho, itens=itens,
         )
         _guardar_comprovantes(gasto, arquivos)
 
@@ -825,6 +833,22 @@ def gasto_create(request, pk):
         'form': {},
     }
     return render(request, 'cartoes/gasto_form.html', context)
+
+
+def _itens_no_chamado(gasto, maximo=40):
+    """Os itens da compra, um por linha, para o financeiro conferir no chamado."""
+    itens = gasto.itens or []
+    if not itens:
+        return '\n'
+    linhas = ['', '', f'Itens da compra ({len(itens)}):']
+    for item in itens[:maximo]:
+        qtd = item.get('quantidade') or 1
+        qtd_txt = f'{qtd:g}' if isinstance(qtd, (int, float)) else str(qtd)
+        linhas.append(f'- {qtd_txt} × {item.get("produto")} — R$ {item.get("valor_unitario", 0):.2f} un. = '
+                      f'R$ {item.get("valor_total", 0):.2f}')
+    if len(itens) > maximo:
+        linhas.append(f'… e mais {len(itens) - maximo} itens (ver no portal).')
+    return '\n'.join(linhas) + '\n'
 
 
 def abrir_chamado_do_gasto(cartao, gasto, ator_user):
@@ -850,10 +874,12 @@ def abrir_chamado_do_gasto(cartao, gasto, ator_user):
         f'CNPJ/CPF do estabelecimento: {gasto.documento_estabelecimento or "não identificado no comprovante"}\n'
         f'Data: {gasto.data_gasto.strftime("%d/%m/%Y")}\n'
         f'Categoria: {gasto.categoria_gasto or "—"}\n'
-        f'Descrição: {gasto.descricao or "—"}'
-        f'- Aberto por Robo de Cartões'
+        + ('Destino: Mercadinho de C$\n' if gasto.mercadinho else '')
+        + f'Descrição: {gasto.descricao or "—"}'
+        + _itens_no_chamado(gasto)
+        + f'- Aberto por Robo de Cartões'
     )
-    title = f'COMPRA: {gasto.descricao} — R${gasto.valor}'
+    title = f'COMPRA{" (Mercadinho C$)" if gasto.mercadinho else ""}: {gasto.descricao} — R${gasto.valor}'
 
     ticket = Ticket.objects.create(
         title=title[:200],
@@ -1173,6 +1199,7 @@ def api_lancar_gasto(request):
         categoria_gasto=categoria_gasto, descricao=descricao_final,
         foto=foto_file, origem=('FOTO' if image_bytes else 'MANUAL'),
         ia_dados=(ia if isinstance(ia, dict) else {}),
+        itens=limpar_itens(ia.get('itens')) if ia_ok else [],
     )
 
     ticket = abrir_chamado_do_gasto(cartao, gasto, user)

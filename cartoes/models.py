@@ -101,6 +101,10 @@ class Gasto(models.Model):
     )
     origem = models.CharField(max_length=10, choices=ORIGEM_CHOICES, default='MANUAL', verbose_name='Origem')
     ia_dados = models.JSONField(default=dict, blank=True, verbose_name='Dados extraídos pela IA')
+    # Compra destinada ao Mercadinho de C$ (a loja interna de prêmios).
+    mercadinho = models.BooleanField(default=False, db_default=False, verbose_name='Para o Mercadinho de C$')
+    # Os itens da nota: [{produto, quantidade, valor_unitario, valor_total}] — a IA lê, quem lança confere.
+    itens = models.JSONField(default=list, blank=True, verbose_name='Itens da compra')
     ticket = models.ForeignKey(
         'tickets.Ticket', on_delete=models.SET_NULL, null=True, blank=True,
         related_name='cartao_gastos', verbose_name='Chamado gerado',
@@ -114,6 +118,11 @@ class Gasto(models.Model):
 
     def __str__(self):
         return f"{self.estabelecimento or 'Gasto'} — R$ {self.valor}"
+
+    @property
+    def soma_dos_itens(self):
+        from decimal import Decimal
+        return sum((Decimal(str(i.get('valor_total') or 0)) for i in self.itens or []), Decimal('0'))
 
 
 def upload_cartao_gasto_comprovante(instance, filename):

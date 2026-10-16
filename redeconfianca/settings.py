@@ -89,6 +89,7 @@ INSTALLED_APPS = [
     'renova',  # Vini Renova: avaliação de aparelho usado (checklist, chamado e etiqueta)
     'rotina',  # Rotina Gerencial: a semana do gerente, com horários e avisos
     'apresentacoes',  # Assistente de Apresentações: slides com IA na identidade da rede
+    'facilitador',  # Facilitador: arquivos e links úteis (todos veem; SUPERADMIN gerencia)
     # 'webpush',  # Django WebPush (temporariamente removido)
 ]
 

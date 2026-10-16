@@ -1,0 +1,140 @@
+{% extends 'base.html' %}
+{% block title %}{{ recurso.titulo }} · Facilitador{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 py-6">
+  <a href="{% url 'facilitador:inicio' %}" class="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-indigo-700 mb-4">
+    <i class="fas fa-arrow-left"></i> Facilitador
+  </a>
+
+  {% if messages %}{% for message in messages %}
+  <div role="alert" class="mb-4 p-3 rounded-xl text-sm {% if message.tags == 'success' %}bg-green-50 border border-green-100 text-green-800{% else %}bg-red-50 border border-red-100 text-red-700{% endif %}">{{ message }}</div>
+  {% endfor %}{% endif %}
+
+  <div class="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+    <div class="p-5 sm:p-6 flex items-start gap-4 border-b border-gray-100">
+      <div class="w-14 h-14 shrink-0 rounded-2xl bg-{{ recurso.cor }}-50 text-{{ recurso.cor }}-600 flex items-center justify-center text-2xl">
+        <i class="fas {{ recurso.icone }}"></i>
+      </div>
+      <div class="min-w-0 flex-1">
+        <div class="flex flex-wrap items-center gap-1.5 mb-1">
+          <span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-{{ recurso.cor }}-50 text-{{ recurso.cor }}-700">{{ recurso.get_tipo_display }}</span>
+          {% if recurso.categoria %}<span class="px-2 py-0.5 rounded-full text-[11px] bg-gray-100 text-gray-600">{{ recurso.categoria }}</span>{% endif %}
+          {% if not recurso.ativo %}<span class="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-gray-800 text-white"><i class="fas fa-eye-slash mr-1"></i>Oculto</span>{% endif %}
+        </div>
+        <h1 class="text-xl font-bold text-gray-900 break-words">{{ recurso.titulo }}</h1>
+        {% if recurso.e_link %}
+        <p class="text-sm text-gray-500 break-all">{{ recurso.url }}</p>
+        {% else %}
+        <p class="text-sm text-gray-500 break-all">{{ recurso.nome_original }}{% if recurso.tamanho %} · {{ recurso.tamanho|filesizeformat }}{% endif %}</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="p-5 sm:p-6 grid gap-6 {% if recurso.e_link %}md:grid-cols-[1fr_auto]{% endif %}">
+      <div class="min-w-0">
+        <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">{% if recurso.e_link %}Explicação{% else %}Descrição{% endif %}</h2>
+        {% if recurso.descricao %}
+        <div class="text-sm text-gray-700 leading-relaxed break-words">{{ recurso.descricao|urlize|linebreaksbr }}</div>
+        {% else %}
+        <p class="text-sm text-gray-400">Sem descrição.</p>
+        {% endif %}
+
+        <div class="mt-5 flex flex-wrap gap-2">
+          {% if recurso.e_link %}
+          <a href="{% url 'facilitador:ir' recurso.pk %}" target="_blank" rel="noopener noreferrer"
+             class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-700">
+            <i class="fas fa-arrow-up-right-from-square"></i> Ir para o link
+          </a>
+          <button type="button" id="fac-copiar" data-url="{{ recurso.url }}"
+                  class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 font-medium hover:bg-gray-50">
+            <i class="fas fa-copy"></i> <span>Copiar link</span>
+          </button>
+          {% elif recurso.arquivo %}
+          <a href="{% url 'facilitador:baixar' recurso.pk %}"
+             class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-700">
+            <i class="fas fa-download"></i> Baixar arquivo
+          </a>
+          {% if recurso.e_pdf or recurso.e_imagem %}
+          <a href="{% url 'facilitador:baixar' recurso.pk %}?ver=1" target="_blank" rel="noopener"
+             class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 font-medium hover:bg-gray-50">
+            <i class="fas fa-eye"></i> Visualizar
+          </a>
+          {% endif %}
+          {% else %}
+          <p class="text-sm text-amber-700"><i class="fas fa-triangle-exclamation mr-1"></i>O arquivo não está disponível.</p>
+          {% endif %}
+        </div>
+
+        {% if not recurso.e_link and recurso.e_imagem and recurso.arquivo %}
+        <img src="{% url 'facilitador:baixar' recurso.pk %}?ver=1" alt="Prévia de {{ recurso.titulo }}"
+             class="mt-5 max-h-96 rounded-xl border border-gray-100">
+        {% endif %}
+      </div>
+
+      {% if recurso.e_link %}
+      <div class="flex flex-col items-center gap-2 md:border-l md:border-gray-100 md:pl-6">
+        <h2 class="text-xs font-semibold uppercase tracking-wide text-gray-400 self-start md:self-center">QR code</h2>
+        <div id="fac-qr" data-url="{{ recurso.url }}" class="p-3 bg-white rounded-xl border border-gray-200" role="img"
+             aria-label="QR code do link {{ recurso.titulo }}"></div>
+        <p class="text-[11px] text-gray-500 text-center max-w-[13rem]">Aponte a câmera do celular para abrir o link.</p>
+        <button type="button" id="fac-baixar-qr" class="text-xs font-semibold text-indigo-700 hover:text-indigo-900">
+          <i class="fas fa-download mr-1"></i>Baixar QR code
+        </button>
+      </div>
+      {% endif %}
+    </div>
+
+    {% if pode_gerenciar %}
+    <div class="px-5 sm:px-6 py-3 bg-gray-50 border-t border-gray-100 flex flex-wrap items-center gap-2 text-sm">
+      <span class="text-xs text-gray-500 mr-auto">
+        <i class="fas fa-chart-simple mr-1"></i>{{ recurso.acessos }} {% if recurso.e_link %}clique{{ recurso.acessos|pluralize }}{% else %}download{{ recurso.acessos|pluralize }}{% endif %}
+        · atualizado em {{ recurso.atualizado_em|date:"d/m/Y H:i" }}{% if recurso.criado_por %} · por {{ recurso.criado_por.full_name|default:recurso.criado_por.username }}{% endif %}
+      </span>
+      <a href="{% url 'facilitador:editar' recurso.pk %}" class="px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-100"><i class="fas fa-pen mr-1"></i>Editar</a>
+      <form method="post" action="{% url 'facilitador:alternar' recurso.pk %}">{% csrf_token %}
+        <button class="px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-100">
+          {% if recurso.ativo %}<i class="fas fa-eye-slash mr-1"></i>Ocultar{% else %}<i class="fas fa-eye mr-1"></i>Mostrar para todos{% endif %}
+        </button>
+      </form>
+      <form method="post" action="{% url 'facilitador:excluir' recurso.pk %}" onsubmit="return confirm('Excluir &quot;{{ recurso.titulo|escapejs }}&quot; do Facilitador? O arquivo também é apagado.');">{% csrf_token %}
+        <button class="px-3 py-1.5 rounded-lg border border-red-200 bg-white text-red-600 hover:bg-red-50"><i class="fas fa-trash mr-1"></i>Excluir</button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% if recurso.e_link %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+(function () {
+  var caixa = document.getElementById('fac-qr');
+  var url = caixa ? caixa.dataset.url : '';
+  if (caixa && window.QRCode) {
+    new QRCode(caixa, {text: url, width: 200, height: 200, correctLevel: QRCode.CorrectLevel.M});
+  } else if (caixa) {
+    caixa.innerHTML = '<p class="text-xs text-gray-500 w-48 text-center">Não foi possível gerar o QR code agora.</p>';
+  }
+  var baixarQr = document.getElementById('fac-baixar-qr');
+  if (baixarQr) baixarQr.addEventListener('click', function () {
+    var canvas = caixa.querySelector('canvas');
+    if (!canvas) return;
+    var a = document.createElement('a');
+    a.href = canvas.toDataURL('image/png');
+    a.download = 'qrcode-{{ recurso.titulo|slugify }}.png';
+    document.body.appendChild(a); a.click(); a.remove();
+  });
+  var copiar = document.getElementById('fac-copiar');
+  if (copiar) copiar.addEventListener('click', function () {
+    var rotulo = copiar.querySelector('span');
+    var feito = function () { rotulo.textContent = 'Copiado!'; setTimeout(function () { rotulo.textContent = 'Copiar link'; }, 2000); };
+    if (navigator.clipboard) { navigator.clipboard.writeText(copiar.dataset.url).then(feito); }
+    else { var t = document.createElement('textarea'); t.value = copiar.dataset.url; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); feito(); }
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

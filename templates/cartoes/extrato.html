@@ -140,6 +140,9 @@
         <label class="inline-flex items-center gap-2 text-xs text-gray-600 px-2 cursor-pointer whitespace-nowrap">
           <input type="checkbox" id="extSemFoto" class="rounded text-purple-600"> só sem comprovante
         </label>
+        <label class="inline-flex items-center gap-2 text-xs text-gray-600 px-2 cursor-pointer whitespace-nowrap">
+          <input type="checkbox" id="extMercadinho" class="rounded text-amber-600"> só Mercadinho
+        </label>
         <div class="relative sm:w-64">
           <i class="fas fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
           <input type="search" id="extBusca" placeholder="Buscar estabelecimento, valor…"
@@ -165,12 +168,39 @@
           {% for g in gastos %}
           <tr class="ext-linha hover:bg-gray-50"
               data-categoria="{{ g.categoria_gasto|default:'Sem categoria'|lower }}" data-foto="{% if g.foto %}1{% else %}0{% endif %}"
-              data-valor="{{ g.valor|unlocalize }}"
-              data-busca="{{ g.estabelecimento|lower }} {{ g.descricao|lower }} {{ g.valor|unlocalize }} {{ g.data_gasto|date:'d/m/Y' }}">
+              data-valor="{{ g.valor|unlocalize }}" data-mercadinho="{% if g.mercadinho %}1{% else %}0{% endif %}"
+              data-busca="{{ g.estabelecimento|lower }} {{ g.descricao|lower }} {{ g.valor|unlocalize }} {{ g.data_gasto|date:'d/m/Y' }}{% for i in g.itens %} {{ i.produto|lower }}{% endfor %}">
             <td class="px-4 py-2.5 whitespace-nowrap text-gray-600 tabular-nums">{{ g.data_gasto|date:"d/m/Y" }}</td>
             <td class="px-4 py-2.5 min-w-[14rem]">
-              <p class="text-gray-900 font-medium">{{ g.estabelecimento|default:"—" }}</p>
+              <p class="text-gray-900 font-medium">{{ g.estabelecimento|default:"—" }}
+                {% if g.mercadinho %}<span class="ml-1 px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-semibold align-middle" title="Compra para o Mercadinho de C$"><i class="fas fa-store mr-0.5"></i>Mercadinho</span>{% endif %}
+              </p>
               {% if g.descricao %}<p class="text-[11px] text-gray-500 truncate max-w-sm" title="{{ g.descricao }}">{{ g.descricao }}</p>{% endif %}
+              {% if g.itens %}
+              <details class="mt-1 group">
+                <summary class="cursor-pointer select-none text-[11px] font-semibold text-purple-700 hover:text-purple-900 list-none">
+                  <i class="fas fa-chevron-right text-[9px] mr-0.5 transition-transform group-open:rotate-90"></i>{{ g.itens|length }} ite{{ g.itens|length|pluralize:"m,ns" }} da compra
+                </summary>
+                <table class="mt-1.5 w-full max-w-md text-[11px] border border-gray-100 rounded">
+                  <thead class="bg-gray-50 text-gray-500 uppercase text-[10px]">
+                    <tr><th class="text-left px-2 py-1">Produto</th><th class="text-right px-2 py-1">Qtd</th><th class="text-right px-2 py-1">Unit.</th><th class="text-right px-2 py-1">Total</th></tr>
+                  </thead>
+                  <tbody class="divide-y divide-gray-50">
+                    {% for i in g.itens %}
+                    <tr><td class="px-2 py-1 text-gray-800">{{ i.produto }}</td>
+                      <td class="px-2 py-1 text-right tabular-nums text-gray-600">{{ i.quantidade|floatformat:"-3" }}</td>
+                      <td class="px-2 py-1 text-right tabular-nums text-gray-600 whitespace-nowrap">{{ i.valor_unitario|brl_zero }}</td>
+                      <td class="px-2 py-1 text-right tabular-nums font-medium text-gray-900 whitespace-nowrap">{{ i.valor_total|brl_zero }}</td></tr>
+                    {% endfor %}
+                  </tbody>
+                  <tfoot class="bg-gray-50">
+                    <tr><td colspan="3" class="px-2 py-1 text-gray-500">Soma dos itens</td>
+                      <td class="px-2 py-1 text-right tabular-nums font-semibold whitespace-nowrap {% if g.soma_dos_itens != g.valor %}text-amber-700{% endif %}"
+                          {% if g.soma_dos_itens != g.valor %}title="Diferente do valor do gasto ({{ g.valor|brl_zero }}) — desconto, frete ou item faltando"{% endif %}>{{ g.soma_dos_itens|brl_zero }}</td></tr>
+                  </tfoot>
+                </table>
+              </details>
+              {% endif %}
             </td>
             <td class="px-4 py-2.5">
               {% if g.categoria_gasto %}<span class="px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 text-[11px] font-medium">{{ g.categoria_gasto }}</span>{% else %}<span class="text-gray-300">—</span>{% endif %}
@@ -229,6 +259,7 @@
   if (!caixa || !busca) return;
   const categoria = document.getElementById('extCategoria');
   const semFoto = document.getElementById('extSemFoto');
+  const soMercadinho = document.getElementById('extMercadinho');
   const linhas = [...caixa.querySelectorAll('.ext-linha')];
   const total = document.getElementById('extTotal');
   const vazio = document.getElementById('extVazio');
@@ -241,7 +272,8 @@
     linhas.forEach(function (tr) {
       const ok = (!termo || tr.dataset.busca.includes(termo))
         && (!categoria.value || tr.dataset.categoria === categoria.value)
-        && (!semFoto.checked || tr.dataset.foto === '0');
+        && (!semFoto.checked || tr.dataset.foto === '0')
+        && (!soMercadinho.checked || tr.dataset.mercadinho === '1');
       tr.classList.toggle('hidden', !ok);
       if (ok) {
         visiveis++;
@@ -251,7 +283,7 @@
     total.textContent = brl.format(soma);
     vazio.classList.toggle('hidden', visiveis > 0);
   }
-  [busca, categoria, semFoto].forEach(function (el) { el.addEventListener('input', aplicar); el.addEventListener('change', aplicar); });
+  [busca, categoria, semFoto, soMercadinho].forEach(function (el) { el.addEventListener('input', aplicar); el.addEventListener('change', aplicar); });
 })();
 </script>
 {% endblock %}

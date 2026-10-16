@@ -285,7 +285,7 @@ t('imagem continua passando', conteudo and mime == 'image/jpeg', mime)
 conteudo, mime = baixar(b'<html>erro</html>', 'text/html')
 t('página HTML não vira comprovante', conteudo is None and mime is None, (conteudo, mime))
 
-from tickets.models import Category
+from tickets.models import Category, Ticket
 print('\n== PELA API ==')
 marcador = transaction.atomic()
 marcador.__enter__()
@@ -509,6 +509,64 @@ try:
     t('e o válido é gravado formatado', g and g.documento_estabelecimento == '11.222.333/0001-81', g and g.documento_estabelecimento)
     html = ct.get(f'/cartoes/{cartao.pk}/gasto/').content.decode()
     t('o formulário tem o campo do CNPJ/CPF', 'name="documento_estabelecimento"' in html)
+
+    print('\n== MERCADINHO E ITENS DA COMPRA ==')
+    itens_ia = [{'produto': 'Chocolate ao leite 90g', 'quantidade': 10, 'valor_unitario': '5,49', 'valor_total': 54.9},
+                {'produto': 'Refrigerante lata', 'quantidade': '6', 'valor_unitario': 3.5},
+                {'produto': '', 'quantidade': 1, 'valor_total': 2}, 'lixo']
+    dados, cliente = analisar([dict(COMPLETO, itens=itens_ia)], manual_text='nota do atacado', mercadinho=True)
+    pedido = texto_dos_pedidos(cliente, 0)
+    t('com Mercadinho marcado a IA é avisada do destino e da categoria',
+      'Mercadinho de C$' in pedido and 'Mercadinho C$' in pedido, pedido[-400:])
+    t('a IA sempre recebe o pedido de itens', '"itens"' in ai._USER_INSTRUCTION)
+    t('os itens voltam limpos (vírgula, total calculado, vazio/lixo fora)', dados.get('itens') == [
+        {'produto': 'Chocolate ao leite 90g', 'quantidade': 10.0, 'valor_unitario': 5.49, 'valor_total': 54.9},
+        {'produto': 'Refrigerante lata', 'quantidade': 6.0, 'valor_unitario': 3.5, 'valor_total': 21.0}], dados.get('itens'))
+    dados, cliente = analisar([COMPLETO], manual_text='almoço')
+    t('sem Mercadinho, nada de aviso; sem itens, lista vazia',
+      'Mercadinho de C$' not in texto_dos_pedidos(cliente, 0) and dados.get('itens') == [], dados.get('itens'))
+
+    cliente = ClienteFalso([dict(COMPLETO, itens=itens_ia[:1])])
+    with mock.patch('openai.OpenAI', return_value=cliente), \
+         mock.patch.object(ai, 'ESPERA_ENTRE_RODADAS', 0), \
+         mock.patch.object(settings, 'OPENAI_API_KEY', 'sk-zz-teste'):
+        r = ct.post(f'/cartoes/{cartao.pk}/gasto/analisar/', {'manual_text': 'nota', 'mercadinho': 'on'})
+    t('a tela manda o Mercadinho para a IA e recebe os itens', r.status_code == 200
+      and 'Mercadinho de C$' in texto_dos_pedidos(cliente, 0) and len(r.json().get('itens') or []) == 1, r.content[:300])
+
+    itens_tela = [{'produto': 'Chocolate ao leite 90g', 'quantidade': 10, 'valor_unitario': 5.49, 'valor_total': 54.9},
+                  {'produto': 'Bala', 'quantidade': 2, 'valor_unitario': 0.5}]
+    r = ct.post(f'/cartoes/{cartao.pk}/gasto/', {
+        'valor': '55,90', 'descricao': 'ZZ compra do mercadinho', 'estabelecimento': 'ZZ Atacado',
+        'categoria_gasto': 'Mercadinho C$', 'data_gasto': '2026-10-15', 'mercadinho': 'on',
+        'itens_json': json.dumps(itens_tela)}, follow=True)
+    merc = Gasto.objects.filter(descricao='ZZ compra do mercadinho').first()
+    t('o gasto grava Mercadinho e os itens', merc and merc.mercadinho and len(merc.itens) == 2
+      and merc.itens[1]['valor_total'] == 1.0, merc and merc.itens)
+    t('a soma dos itens bate com o valor', merc and merc.soma_dos_itens == merc.valor, merc and merc.soma_dos_itens)
+    if merc and merc.ticket_id:
+        chamado = Ticket.objects.get(pk=merc.ticket_id)
+        t('o chamado diz Mercadinho no título e lista os itens', 'Mercadinho C$' in chamado.title
+          and 'Destino: Mercadinho de C$' in chamado.description
+          and '10 × Chocolate ao leite 90g — R$ 5.49 un. = R$ 54.90' in chamado.description, chamado.description)
+    else:
+        print('  (categoria 99 de chamados não existe neste banco: texto do chamado não conferido)')
+    with mock.patch.object(cviews, 'abrir_chamado_do_gasto', return_value=None):
+        ct.post(f'/cartoes/{cartao.pk}/gasto/', {'valor': '10,00', 'descricao': 'ZZ sem mercadinho',
+                                                'estabelecimento': 'ZZ Padaria', 'data_gasto': '2026-10-15',
+                                                'itens_json': 'isto não é json'})
+    comum = Gasto.objects.filter(descricao='ZZ sem mercadinho').first()
+    t('sem marcar fica fora do Mercadinho; JSON quebrado não derruba o lançamento',
+      comum and not comum.mercadinho and comum.itens == [], comum and comum.itens)
+
+    html = ct.get(f'/cartoes/{cartao.pk}/').content.decode()
+    t('o extrato mostra o selo Mercadinho e o filtro', 'Compra para o Mercadinho de C$' in html and 'id="extMercadinho"' in html)
+    t('o extrato abre os itens de cada compra', '2 itens da compra' in html and 'Chocolate ao leite 90g' in html
+      and 'R$ 54,90' in html, '')
+    html = ct.get(f'/cartoes/{cartao.pk}/gasto/').content.decode()
+    t('o formulário tem o checkbox Mercadinho antes do botão de analisar',
+      'name="mercadinho"' in html and html.index('name="mercadinho"') < html.index('id="btn-analisar"'))
+    t('e o editor dos itens', 'name="itens_json"' in html and 'id="btn-item"' in html)
 finally:
     transaction.set_rollback(True)
     marcador.__exit__(None, None, None)

@@ -1,0 +1,111 @@
+{% extends 'base.html' %}
+{% block title %}{% if recurso %}Editar {{ recurso.titulo }}{% else %}Novo item{% endif %} · Facilitador{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto px-4 py-6">
+  <a href="{% if recurso %}{% url 'facilitador:detalhe' recurso.pk %}{% else %}{% url 'facilitador:inicio' %}{% endif %}"
+     class="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-indigo-700 mb-4">
+    <i class="fas fa-arrow-left"></i> Voltar
+  </a>
+  <h1 class="text-xl font-bold text-gray-800 mb-4">
+    <i class="fas fa-wand-magic-sparkles text-indigo-600 mr-2"></i>{% if recurso %}Editar item{% else %}Novo item no Facilitador{% endif %}
+  </h1>
+
+  {% if form.non_field_errors %}<div role="alert" class="mb-4 p-3 rounded-xl text-sm bg-red-50 border border-red-100 text-red-700">{{ form.non_field_errors|join:" " }}</div>{% endif %}
+
+  <form method="post" enctype="multipart/form-data" class="bg-white border border-gray-200 rounded-2xl shadow-sm p-5 sm:p-6 space-y-5">
+    {% csrf_token %}
+
+    <fieldset>
+      <legend class="block text-sm font-medium text-gray-700 mb-2">Tipo</legend>
+      <div class="grid grid-cols-2 gap-2">
+        {% for valor, rotulo in form.fields.tipo.choices %}
+        <label class="fac-tipo flex items-center gap-2 border rounded-xl px-3 py-2.5 cursor-pointer has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-50">
+          <input type="radio" name="tipo" value="{{ valor }}" class="text-indigo-600" {% if form.tipo.value == valor %}checked{% endif %}>
+          <i class="fas {% if valor == 'LINK' %}fa-link{% else %}fa-file-arrow-up{% endif %} text-indigo-500"></i>
+          <span class="text-sm font-medium text-gray-800">{{ rotulo }}</span>
+        </label>
+        {% endfor %}
+      </div>
+    </fieldset>
+
+    <div>
+      <label for="id_titulo" class="block text-sm font-medium text-gray-700 mb-1">Título *</label>
+      <input type="text" name="titulo" id="id_titulo" maxlength="150" required value="{{ form.titulo.value|default:'' }}"
+             class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+      {% for e in form.titulo.errors %}<p class="mt-1 text-xs text-red-600">{{ e }}</p>{% endfor %}
+    </div>
+
+    <div id="bloco-arquivo">
+      <label for="id_arquivo" class="block text-sm font-medium text-gray-700 mb-1">Arquivo *</label>
+      {% if recurso and recurso.arquivo %}
+      <p class="mb-1.5 text-xs text-gray-500"><i class="fas fa-paperclip mr-1"></i>Atual: <strong>{{ recurso.nome_original }}</strong>{% if recurso.tamanho %} ({{ recurso.tamanho|filesizeformat }}){% endif %}. Escolha outro só se quiser trocar.</p>
+      {% endif %}
+      <input type="file" name="arquivo" id="id_arquivo"
+             class="block w-full text-sm text-gray-600 file:mr-3 file:px-3 file:py-2 file:rounded-lg file:border-0 file:bg-indigo-50 file:text-indigo-700 file:font-medium">
+      <p class="mt-1 text-xs text-gray-400">Qualquer tipo de arquivo, até {{ max_mb }} MB.</p>
+      {% for e in form.arquivo.errors %}<p class="mt-1 text-xs text-red-600">{{ e }}</p>{% endfor %}
+    </div>
+
+    <div id="bloco-link">
+      <label for="id_url" class="block text-sm font-medium text-gray-700 mb-1">Link *</label>
+      <input type="url" name="url" id="id_url" maxlength="1000" placeholder="https://…" value="{{ form.url.value|default:'' }}"
+             class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+      <p class="mt-1 text-xs text-gray-400">O QR code é gerado sozinho a partir do link.</p>
+      {% for e in form.url.errors %}<p class="mt-1 text-xs text-red-600">{{ e }}</p>{% endfor %}
+    </div>
+
+    <div>
+      <label for="id_descricao" class="block text-sm font-medium text-gray-700 mb-1" id="rotulo-descricao">Descrição</label>
+      <textarea name="descricao" id="id_descricao" rows="6"
+                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Para que serve, como usar, quem deve usar…">{{ form.descricao.value|default:'' }}</textarea>
+      {% for e in form.descricao.errors %}<p class="mt-1 text-xs text-red-600">{{ e }}</p>{% endfor %}
+    </div>
+
+    <div class="grid sm:grid-cols-[1fr_8rem] gap-4">
+      <div>
+        <label for="id_categoria" class="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
+        <input type="text" name="categoria" id="id_categoria" maxlength="60" list="fac-categorias" value="{{ form.categoria.value|default:'' }}"
+               placeholder="Ex.: RH, Vendas, Sistemas" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        <datalist id="fac-categorias">{% for c in categorias %}<option value="{{ c }}">{% endfor %}</datalist>
+      </div>
+      <div>
+        <label for="id_ordem" class="block text-sm font-medium text-gray-700 mb-1">Ordem</label>
+        <input type="number" name="ordem" id="id_ordem" min="0" value="{{ form.ordem.value|default:0 }}"
+               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+      </div>
+    </div>
+    <p class="-mt-3 text-xs text-gray-400">Na grade, menor ordem aparece primeiro; empate vai por título.</p>
+
+    <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+      <input type="checkbox" name="ativo" class="rounded text-indigo-600" {% if form.ativo.value %}checked{% endif %}>
+      Visível para todos
+    </label>
+
+    <div class="flex justify-end gap-2 pt-2 border-t border-gray-100">
+      <a href="{% if recurso %}{% url 'facilitador:detalhe' recurso.pk %}{% else %}{% url 'facilitador:inicio' %}{% endif %}"
+         class="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 text-sm hover:bg-gray-50">Cancelar</a>
+      <button class="px-5 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">
+        <i class="fas fa-check mr-1"></i>{% if recurso %}Salvar{% else %}Publicar{% endif %}
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  var radios = document.querySelectorAll('input[name="tipo"]');
+  function aplicar() {
+    var marcado = document.querySelector('input[name="tipo"]:checked');
+    var link = marcado && marcado.value === 'LINK';
+    document.getElementById('bloco-link').classList.toggle('hidden', !link);
+    document.getElementById('bloco-arquivo').classList.toggle('hidden', link);
+    document.getElementById('rotulo-descricao').textContent = link ? 'Explicação' : 'Descrição';
+  }
+  radios.forEach(function (r) { r.addEventListener('change', aplicar); });
+  aplicar();
+})();
+</script>
+{% endblock %}
