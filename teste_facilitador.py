@@ -96,6 +96,36 @@ try:
     r = cc.get(f'/facilitador/{arq.pk}/baixar/?ver=1')
     t('visualizar abre no navegador (inline) e não conta', 'inline' in r['Content-Disposition']
       and Recurso.objects.get(pk=arq.pk).acessos == 1)
+    print('\n== QR CODE DO ARQUIVO ==')
+    import re
+    from unittest import mock
+    from django.core import signing
+    from facilitador import views as fviews
+    html = cc.get(f'/facilitador/{arq.pk}/').content.decode()
+    achado = re.search(r'id="fac-qr" data-url="([^"]+)"', html)
+    qr = achado.group(1).replace('&amp;', '&') if achado else ''
+    t('a tela do arquivo tem QR code com link absoluto de download', qr.startswith('http://testserver/facilitador/qr/')
+      and 'qrcode.min.js' in html and 'baixar o arquivo direto nele' in html, qr)
+    anon = Client()
+    r = anon.get(qr.replace('http://testserver', ''))
+    t('o celular baixa pelo QR sem login', r.status_code == 200 and b''.join(r.streaming_content) == pdf
+      and 'attachment' in r['Content-Disposition'], r.status_code)
+    t('e conta como download', Recurso.objects.get(pk=arq.pk).acessos == 2, Recurso.objects.get(pk=arq.pk).acessos)
+    caminho = qr.replace('http://testserver', '')
+    r = anon.get(caminho[:-3] + 'xyz/')
+    t('QR adulterado não baixa', r.status_code == 404 and 'Arquivo indisponível' in r.content.decode())
+    with mock.patch.object(fviews, 'QR_VALIDADE_HORAS', -1):
+        r = anon.get(caminho)
+    t('QR vencido avisa que expirou', r.status_code == 410 and 'expirou' in r.content.decode())
+    token_outro = signing.dumps({'r': arq.pk, 'a': 'facilitador/outro.pdf'}, salt='facilitador.qr', compress=True)
+    t('QR de um arquivo que foi trocado deixa de valer', anon.get(f'/facilitador/qr/{token_outro}/').status_code == 404)
+    Recurso.objects.filter(pk=arq.pk).update(ativo=False)
+    t('item oculto não baixa pelo QR', anon.get(caminho).status_code == 404)
+    html = ca.get(f'/facilitador/{arq.pk}/').content.decode()
+    t('oculto: a tela explica que o QR volta quando ficar visível', 'id="fac-qr"' not in html
+      and 'visível para todos' in html)
+    Recurso.objects.filter(pk=arq.pk).update(ativo=True)
+
     r = ca.post('/facilitador/novo/', {'tipo': 'ARQUIVO', 'titulo': 'ZZ sem arquivo', 'ordem': '0'})
     t('arquivo é obrigatório', r.status_code == 200 and 'Escolha o arquivo.' in r.content.decode()
       and not Recurso.objects.filter(titulo='ZZ sem arquivo').exists())

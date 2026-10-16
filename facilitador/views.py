@@ -2,15 +2,26 @@
 from django import forms
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core import signing
 from django.core.exceptions import PermissionDenied
 from django.db.models import F, Q
 from django.http import FileResponse, Http404, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.views.decorators.http import require_POST
 
 from .models import Recurso
 
 MAX_ARQUIVO_MB = 200
+# O QR code de arquivo baixa sem login (o celular que lê o QR quase nunca está
+# logado no portal): o link é assinado e vale por este tempo.
+QR_VALIDADE_HORAS = 24
+_SAL_QR = 'facilitador.qr'
+
+
+def token_do_qr(recurso):
+    """Link assinado do arquivo. Trocar o arquivo invalida os QR já gerados."""
+    return signing.dumps({'r': recurso.pk, 'a': recurso.arquivo.name}, salt=_SAL_QR, compress=True)
 
 
 def pode_gerenciar(user):
@@ -103,8 +114,12 @@ def inicio(request):
 @login_required
 def detalhe(request, pk):
     recurso = _visivel(request, pk)
+    qr_url = recurso.url if recurso.e_link else ''
+    if not recurso.e_link and recurso.arquivo and recurso.ativo:
+        qr_url = request.build_absolute_uri(reverse('facilitador:baixar_qr', args=[token_do_qr(recurso)]))
     return render(request, 'facilitador/detalhe.html', {
         'recurso': recurso, 'pode_gerenciar': pode_gerenciar(request.user),
+        'qr_url': qr_url, 'qr_horas': QR_VALIDADE_HORAS,
     })
 
 
@@ -121,6 +136,27 @@ def baixar(request, pk):
     except (FileNotFoundError, OSError):
         raise Http404('Arquivo não encontrado.')
     return FileResponse(conteudo, as_attachment=not ver,
+                        filename=recurso.nome_original or recurso.arquivo.name.rsplit('/', 1)[-1],
+                        content_type=recurso.content_type or None)
+
+
+def baixar_qr(request, token):
+    """Download pelo QR code, sem login: vale o link assinado (e o item visível)."""
+    try:
+        dados = signing.loads(token, salt=_SAL_QR, max_age=QR_VALIDADE_HORAS * 3600)
+    except signing.SignatureExpired:
+        return render(request, 'facilitador/qr_invalido.html', {'expirado': True, 'horas': QR_VALIDADE_HORAS}, status=410)
+    except signing.BadSignature:
+        return render(request, 'facilitador/qr_invalido.html', {'expirado': False}, status=404)
+    recurso = Recurso.objects.filter(pk=dados.get('r'), ativo=True, tipo=Recurso.TIPO_ARQUIVO).first()
+    if not recurso or not recurso.arquivo or recurso.arquivo.name != dados.get('a'):
+        return render(request, 'facilitador/qr_invalido.html', {'expirado': False}, status=404)
+    try:
+        conteudo = recurso.arquivo.open('rb')
+    except (FileNotFoundError, OSError):
+        return render(request, 'facilitador/qr_invalido.html', {'expirado': False}, status=404)
+    Recurso.objects.filter(pk=recurso.pk).update(acessos=F('acessos') + 1)
+    return FileResponse(conteudo, as_attachment=True,
                         filename=recurso.nome_original or recurso.arquivo.name.rsplit('/', 1)[-1],
                         content_type=recurso.content_type or None)
 
