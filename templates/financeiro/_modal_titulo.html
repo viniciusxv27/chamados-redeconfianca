@@ -1,0 +1,59 @@
+{% comment %}
+Lançar (sem `titulo`) ou editar (com `titulo`) um título. Parcelamento só ao lançar.
+{% endcomment %}
+<div class="fin-modal" id="{% if titulo %}finEditar{% else %}finNovo{% endif %}" role="dialog" aria-modal="true" aria-labelledby="finTituloForm">
+    <div class="sm:max-w-2xl">
+        <form method="post" enctype="multipart/form-data"
+              action="{% if titulo %}{% url 'financeiro:titulo_editar' titulo.id %}{% else %}{% url 'financeiro:titulo_novo' area %}{% endif %}">
+            {% csrf_token %}<input type="hidden" name="voltar" value="{{ request.get_full_path }}">
+            <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+                <h3 id="finTituloForm" class="font-bold text-gray-900">{% if titulo %}Editar título{% elif tipo == 'PAGAR' %}Nova conta a pagar{% else %}Nova conta a receber{% endif %}</h3>
+                <button type="button" data-fechar class="w-8 h-8 rounded-lg text-gray-400 hover:bg-gray-100" aria-label="Fechar"><i class="fas fa-xmark"></i></button>
+            </div>
+            <div class="p-5 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div class="col-span-2 sm:col-span-4"><label class="fin-label">Descrição *</label>
+                    <input name="descricao" maxlength="200" required value="{{ titulo.descricao|default:'' }}" class="fin-input" autofocus
+                           placeholder="{% if tipo == 'PAGAR' %}Ex.: Aluguel loja Glória — outubro{% else %}Ex.: Repasse de comissão Vivo — setembro{% endif %}"></div>
+                <div class="col-span-2"><label class="fin-label">{% if tipo == 'PAGAR' %}Fornecedor{% else %}Cliente / pagador{% endif %}</label>
+                    <input name="pessoa_nome" maxlength="200" value="{{ titulo.pessoa_nome|default:'' }}" class="fin-input"></div>
+                <div><label class="fin-label">CNPJ/CPF</label><input name="pessoa_documento" inputmode="numeric" value="{{ titulo.pessoa_documento|default:'' }}" class="fin-input"></div>
+                <div><label class="fin-label">Nº do documento</label><input name="numero_documento" maxlength="60" value="{{ titulo.numero_documento|default:'' }}" class="fin-input"></div>
+                <div><label class="fin-label">Emissão</label><input type="date" name="emissao" value="{% if titulo %}{{ titulo.emissao|date:'Y-m-d' }}{% else %}{{ hoje|date:'Y-m-d' }}{% endif %}" class="fin-input"></div>
+                <div><label class="fin-label">{% if titulo %}Vencimento *{% else %}1º vencimento *{% endif %}</label><input type="date" name="vencimento" required value="{{ titulo.vencimento|date:'Y-m-d' }}" class="fin-input"></div>
+                <div><label class="fin-label">Competência</label><input type="month" name="competencia" value="{{ titulo.competencia|date:'Y-m' }}" class="fin-input"></div>
+                <div><label class="fin-label">Valor (R$) *</label><input name="valor" inputmode="decimal" required value="{% if titulo %}{{ titulo.valor|stringformat:'.2f' }}{% endif %}" class="fin-input text-right tabular"></div>
+                {% if not titulo %}
+                <div><label class="fin-label">Parcelas</label><input type="number" name="parcelas" min="1" max="120" value="1" class="fin-input" id="finParcelas"></div>
+                <div><label class="fin-label">Intervalo</label>
+                    <select name="intervalo" class="fin-input"><option value="MENSAL">Mensal</option><option value="7">7 dias</option><option value="14">14 dias</option><option value="15">15 dias</option><option value="21">21 dias</option><option value="28">28 dias</option><option value="30">30 dias</option></select></div>
+                <div class="col-span-2 flex items-end pb-2 text-xs text-gray-600 gap-3" id="finValorModo">
+                    <label class="flex items-center gap-1.5"><input type="radio" name="valor_modo" value="total" checked class="accent-emerald-600">o valor é o total</label>
+                    <label class="flex items-center gap-1.5"><input type="radio" name="valor_modo" value="parcela" class="accent-emerald-600">é o de cada parcela</label>
+                </div>
+                {% endif %}
+                <div class="col-span-2"><label class="fin-label">Plano de contas</label>
+                    <select name="plano" class="fin-input"><option value="">—</option>
+                        {% for p in planos %}<option value="{{ p.id }}" {% if titulo.plano_id == p.id %}selected{% endif %}>{{ p.codigo }} {{ p.nome }}</option>{% endfor %}</select>
+                    {% if not planos %}<p class="text-[11px] text-gray-400 mt-1">O plano de contas está vazio — crie em "Plano de contas".</p>{% endif %}</div>
+                <div class="col-span-2"><label class="fin-label">Loja</label>
+                    <select name="loja" class="fin-input"><option value="">Escritório / sem loja</option>
+                        {% for l in lojas %}<option value="{{ l.id }}" {% if titulo.loja_id == l.id %}selected{% endif %}>{{ l.name }}</option>{% endfor %}</select></div>
+                <div class="col-span-2"><label class="fin-label">Conta prevista</label>
+                    <select name="conta_prevista" class="fin-input"><option value="">—</option>
+                        {% for c in contas %}<option value="{{ c.id }}" {% if titulo.conta_prevista_id == c.id %}selected{% endif %}>{{ c.nome }}</option>{% endfor %}</select></div>
+                <div class="col-span-2"><label class="fin-label">Forma prevista</label>
+                    <select name="forma" class="fin-input"><option value="">—</option>
+                        {% for k, r in formas %}<option value="{{ k }}" {% if titulo.forma == k %}selected{% endif %}>{{ r }}</option>{% endfor %}</select></div>
+                <div class="col-span-2 sm:col-span-3"><label class="fin-label">Linha digitável (boleto)</label><input name="codigo_barras" inputmode="numeric" value="{{ titulo.codigo_barras|default:'' }}" class="fin-input tabular"></div>
+                <div><label class="fin-label">Chave PIX do favorecido</label><input name="pix_favorecido" maxlength="120" value="{{ titulo.pix_favorecido|default:'' }}" class="fin-input"></div>
+                <div class="col-span-2 sm:col-span-4"><label class="fin-label">Observação</label><textarea name="observacao" rows="2" class="fin-input">{{ titulo.observacao|default:'' }}</textarea></div>
+                <div class="col-span-2 sm:col-span-4"><label class="fin-label">Anexo (nota, boleto, contrato){% if titulo.anexo %} — já tem: {{ titulo.anexo_nome }}{% endif %}</label>
+                    <input type="file" name="anexo" accept=".pdf,.jpg,.jpeg,.png,.webp,.xml" class="text-sm"></div>
+            </div>
+            <div class="px-5 py-3 border-t border-gray-100 bg-gray-50 flex justify-end gap-2">
+                <button type="button" data-fechar class="fin-btn fin-btn-claro">Cancelar</button>
+                <button type="submit" class="fin-btn fin-btn-verde"><i class="fas fa-check"></i>{% if titulo %}Salvar{% else %}Lançar{% endif %}</button>
+            </div>
+        </form>
+    </div>
+</div>

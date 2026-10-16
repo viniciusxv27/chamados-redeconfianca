@@ -1,0 +1,106 @@
+{% extends 'financeiro/base_financeiro.html' %}
+{% load caixa_tags %}
+{% block fin_titulo %}{{ conta.nome }}{% endblock %}
+{% block fin_cabecalho %}{{ conta.nome }}{% if not conta.ativa %} <span class="fin-chip bg-gray-100 text-gray-600 align-middle">Inativa</span>{% endif %}{% endblock %}
+{% block fin_subtitulo %}{{ conta.descricao_bancaria|default:conta.get_tipo_display }}{% if conta.loja %} · {{ conta.loja.name }}{% endif %} · saldo hoje {{ saldo_hoje|brl_zero }}{% endblock %}
+{% block fin_acoes %}
+<a href="{% url 'financeiro:bancos' %}" class="fin-btn fin-btn-claro"><i class="fas fa-arrow-left"></i>Contas</a>
+{% if pode.conciliacao_ver %}<a href="{% url 'financeiro:conciliacao' %}?conta={{ conta.id }}" class="fin-btn fin-btn-claro"><i class="fas fa-scale-balanced"></i>Conciliar</a>{% endif %}
+{% if pode.bancos_editar %}<button type="button" data-abrir="#finConta" class="fin-btn fin-btn-claro"><i class="fas fa-pen"></i>Editar</button>{% endif %}
+{% if pode.bancos_lancar and conta.ativa %}
+<button type="button" data-abrir="#finTransferir" class="fin-btn fin-btn-claro"><i class="fas fa-right-left"></i>Transferir</button>
+<button type="button" data-abrir="#finAvulso" class="fin-btn fin-btn-verde"><i class="fas fa-plus"></i>Lançamento avulso</button>
+{% endif %}
+{% endblock %}
+
+{% block fin_conteudo %}
+<form method="get" class="fin-card p-3 mb-4 flex flex-wrap items-end gap-2">
+    <div><label class="fin-label">De</label><input type="date" name="de" value="{{ de|date:'Y-m-d' }}" class="fin-input"></div>
+    <div><label class="fin-label">Até</label><input type="date" name="ate" value="{{ ate|date:'Y-m-d' }}" class="fin-input"></div>
+    <label class="flex items-center gap-1.5 text-sm text-gray-600 pb-2"><input type="checkbox" name="estornados" value="1" {% if mostrar_estornados %}checked{% endif %} class="accent-emerald-600">mostrar estornados</label>
+    <button class="fin-btn fin-btn-verde" data-livre><i class="fas fa-filter"></i>Ver</button>
+</form>
+
+<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+    <div class="fin-card p-3"><p class="text-[11px] uppercase font-semibold text-gray-500">Saldo anterior</p><p class="text-lg font-bold tabular">{{ saldo_anterior|brl_zero }}</p></div>
+    <div class="fin-card p-3"><p class="text-[11px] uppercase font-semibold text-gray-500">Entradas</p><p class="text-lg font-bold tabular text-emerald-700">{{ entradas|brl_zero }}</p></div>
+    <div class="fin-card p-3"><p class="text-[11px] uppercase font-semibold text-gray-500">Saídas</p><p class="text-lg font-bold tabular text-rose-700">{{ saidas|brl_zero }}</p></div>
+    <div class="fin-card p-3"><p class="text-[11px] uppercase font-semibold text-gray-500">Saldo em {{ ate|date:"d/m" }}</p><p class="text-lg font-bold tabular {% if saldo_final < 0 %}text-red-600{% endif %}">{{ saldo_final|brl_zero }}</p></div>
+</div>
+
+<div class="fin-card overflow-hidden">
+    <div class="overflow-x-auto">
+    <table class="fin-tabela">
+        <thead><tr><th>Data</th><th>Descrição</th><th>Origem</th><th class="text-right">Valor</th><th class="text-right">Saldo</th><th></th></tr></thead>
+        <tbody>
+        {% for m in movimentos %}
+        <tr class="{% if m.estornado %}opacity-50{% endif %}">
+            <td class="tabular whitespace-nowrap">{{ m.data|date:"d/m/Y" }}</td>
+            <td class="min-w-[14rem]">
+                {% if m.baixa %}<a href="{% url 'financeiro:titulo' m.baixa.titulo_id %}" class="text-gray-900 hover:text-emerald-700 {% if m.estornado %}line-through{% endif %}">{{ m.descricao }}</a>{% else %}<span class="{% if m.estornado %}line-through{% endif %}">{{ m.descricao }}</span>{% endif %}
+                <p class="text-[11px] text-gray-500">{% if m.plano %}{{ m.plano.codigo }} {{ m.plano.nome }} · {% endif %}{{ m.criado_por.get_full_name|default:"" }}</p>
+            </td>
+            <td class="text-xs whitespace-nowrap">{{ m.get_origem_display }}{% if m.conciliado %}<span class="fin-chip bg-emerald-50 text-emerald-700 ml-1"><i class="fas fa-check"></i>conciliado</span>{% endif %}</td>
+            <td class="text-right tabular font-semibold whitespace-nowrap {% if m.valor < 0 %}text-rose-700{% else %}text-emerald-700{% endif %}">{{ m.valor|brl_zero }}</td>
+            <td class="text-right tabular whitespace-nowrap text-gray-600">{% if not m.estornado %}{{ m.saldo_corrente|brl_zero }}{% endif %}</td>
+            <td class="text-right whitespace-nowrap text-xs">
+                {% if pode.bancos_lancar and not m.estornado and m.origem != 'BAIXA' %}<button type="button" data-abrir="#finEstornarMov{{ m.id }}" class="text-red-600 hover:underline">estornar</button>{% endif %}
+            </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="text-center text-gray-400 py-10">Nenhum movimento no período.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+</div>
+
+{% if pode.bancos_lancar %}
+<div class="fin-modal" id="finAvulso" role="dialog" aria-modal="true">
+    <div class="sm:max-w-md">
+        <form method="post" action="{% url 'financeiro:conta_avulso' conta.id %}">
+            {% csrf_token %}
+            <div class="px-5 py-4 border-b border-gray-100"><h3 class="font-bold text-gray-900">Lançamento avulso em {{ conta.nome }}</h3>
+                <p class="text-xs text-gray-500">Tarifa, rendimento, ajuste — o que não é título.</p></div>
+            <div class="p-5 grid grid-cols-2 gap-3">
+                <div class="col-span-2 flex gap-4 text-sm"><label class="flex items-center gap-1.5"><input type="radio" name="sentido" value="saida" checked class="accent-rose-600">Saída</label><label class="flex items-center gap-1.5"><input type="radio" name="sentido" value="entrada" class="accent-emerald-600">Entrada</label></div>
+                <div><label class="fin-label">Data</label><input type="date" name="data" value="{{ hoje|date:'Y-m-d' }}" class="fin-input" required></div>
+                <div><label class="fin-label">Valor (R$)</label><input name="valor" inputmode="decimal" required class="fin-input text-right tabular" autofocus></div>
+                <div class="col-span-2"><label class="fin-label">Descrição</label><input name="descricao" required maxlength="200" class="fin-input" placeholder="Ex.: Tarifa de manutenção"></div>
+                <div class="col-span-2"><label class="fin-label">Plano de contas</label><select name="plano" class="fin-input"><option value="">—</option>{% for p in planos %}<option value="{{ p.id }}">{{ p.codigo }} {{ p.nome }}</option>{% endfor %}</select></div>
+            </div>
+            <div class="px-5 py-3 border-t border-gray-100 bg-gray-50 flex justify-end gap-2"><button type="button" data-fechar class="fin-btn fin-btn-claro">Cancelar</button><button type="submit" class="fin-btn fin-btn-verde"><i class="fas fa-check"></i>Lançar</button></div>
+        </form>
+    </div>
+</div>
+<div class="fin-modal" id="finTransferir" role="dialog" aria-modal="true">
+    <div class="sm:max-w-md">
+        <form method="post" action="{% url 'financeiro:conta_transferir' conta.id %}">
+            {% csrf_token %}
+            <div class="px-5 py-4 border-b border-gray-100"><h3 class="font-bold text-gray-900">Transferir de {{ conta.nome }}</h3></div>
+            <div class="p-5 grid grid-cols-2 gap-3">
+                <div class="col-span-2"><label class="fin-label">Para</label><select name="destino" required class="fin-input"><option value="">Escolha…</option>{% for c in contas %}<option value="{{ c.id }}">{{ c.nome }}</option>{% endfor %}</select></div>
+                <div><label class="fin-label">Data</label><input type="date" name="data" value="{{ hoje|date:'Y-m-d' }}" class="fin-input" required></div>
+                <div><label class="fin-label">Valor (R$)</label><input name="valor" inputmode="decimal" required class="fin-input text-right tabular"></div>
+                <div class="col-span-2"><label class="fin-label">Descrição (opcional)</label><input name="descricao" maxlength="200" class="fin-input"></div>
+            </div>
+            <div class="px-5 py-3 border-t border-gray-100 bg-gray-50 flex justify-end gap-2"><button type="button" data-fechar class="fin-btn fin-btn-claro">Cancelar</button><button type="submit" class="fin-btn fin-btn-verde"><i class="fas fa-right-left"></i>Transferir</button></div>
+        </form>
+    </div>
+</div>
+{% for m in movimentos %}{% if not m.estornado and m.origem != 'BAIXA' %}
+<div class="fin-modal" id="finEstornarMov{{ m.id }}" role="dialog" aria-modal="true">
+    <div class="sm:max-w-md">
+        <form method="post" action="{% url 'financeiro:movimento_estornar' m.id %}">
+            {% csrf_token %}
+            <div class="px-5 py-4 border-b border-gray-100"><h3 class="font-bold text-gray-900">Estornar "{{ m.descricao }}"</h3>{% if m.transferencia %}<p class="text-xs text-gray-500">É uma transferência: as duas pontas são estornadas.</p>{% endif %}</div>
+            <div class="p-5"><label class="fin-label">Motivo</label><input name="motivo" required minlength="5" maxlength="255" class="fin-input" autofocus></div>
+            <div class="px-5 py-3 border-t border-gray-100 bg-gray-50 flex justify-end gap-2"><button type="button" data-fechar class="fin-btn fin-btn-claro">Voltar</button><button type="submit" class="fin-btn bg-red-600 text-white hover:bg-red-700">Estornar</button></div>
+        </form>
+    </div>
+</div>
+{% endif %}{% endfor %}
+{% endif %}
+
+{% if pode.bancos_editar %}{% include 'financeiro/_modal_conta.html' %}{% endif %}
+{% endblock %}

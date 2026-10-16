@@ -1,0 +1,189 @@
+{% extends 'financeiro/base_financeiro.html' %}
+{% load caixa_tags l10n %}
+{% block fin_titulo %}{{ titulo.descricao }}{% endblock %}
+{% block fin_cabecalho %}{{ titulo.descricao }}{% if titulo.rotulo_parcela %} <span class="text-gray-400 font-medium">{{ titulo.rotulo_parcela }}</span>{% endif %}{% endblock %}
+{% block fin_subtitulo %}{{ titulo.get_tipo_display }} · vence {{ titulo.vencimento|date:"d/m/Y" }}{% if titulo.loja %} · {{ titulo.loja.name }}{% endif %}{% endblock %}
+{% block fin_acoes %}
+<a href="{% if titulo.tipo == 'PAGAR' %}{% url 'financeiro:pagar' %}{% else %}{% url 'financeiro:receber' %}{% endif %}" class="fin-btn fin-btn-claro"><i class="fas fa-arrow-left"></i>Voltar</a>
+{% if pode_editar and titulo.status != 'CANCELADO' %}<button type="button" data-abrir="#finEditar" class="fin-btn fin-btn-claro"><i class="fas fa-pen"></i>Editar</button>{% endif %}
+{% if pode.baixas_baixar and titulo.status != 'QUITADO' and titulo.status != 'CANCELADO' %}
+<button type="button" data-abrir="#finModalBaixa" class="fin-btn fin-btn-verde"><i class="fas fa-check"></i>{% if titulo.tipo == 'PAGAR' %}Pagar{% else %}Receber{% endif %}</button>
+{% endif %}
+{% endblock %}
+
+{% block fin_conteudo %}
+<div class="grid lg:grid-cols-3 gap-4">
+    <div class="lg:col-span-2 space-y-4">
+        <div class="fin-card p-5">
+            <div class="flex items-start justify-between gap-3 flex-wrap">
+                <div>
+                    <p class="text-xs text-gray-500">Valor</p>
+                    <p class="text-3xl font-bold tabular text-gray-900">{{ titulo.valor|brl_zero }}</p>
+                    <p class="text-sm text-gray-600 mt-1">Baixado {{ titulo.valor_baixado|brl_zero }} · <strong>saldo {{ titulo.saldo|brl_zero }}</strong></p>
+                </div>
+                {% if titulo.vencido %}<span class="fin-chip st-VENCIDO text-sm">Vencido</span>{% else %}<span class="fin-chip st-{{ titulo.status }} text-sm">{{ titulo.get_status_display }}</span>{% endif %}
+            </div>
+            <dl class="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3 mt-5 text-sm">
+                <div><dt class="text-[11px] text-gray-500 uppercase font-semibold">{% if titulo.tipo == 'PAGAR' %}Fornecedor{% else %}Cliente{% endif %}</dt><dd class="text-gray-900">{{ titulo.pessoa_nome|default:"—" }}{% if titulo.pessoa_documento %}<span class="block text-xs text-gray-500 tabular">{{ titulo.pessoa_documento }}</span>{% endif %}</dd></div>
+                <div><dt class="text-[11px] text-gray-500 uppercase font-semibold">Documento</dt><dd>{{ titulo.numero_documento|default:"—" }}</dd></div>
+                <div><dt class="text-[11px] text-gray-500 uppercase font-semibold">Emissão · competência</dt><dd>{{ titulo.emissao|date:"d/m/Y" }}{% if titulo.competencia %} · {{ titulo.competencia|date:"m/Y" }}{% endif %}</dd></div>
+                <div><dt class="text-[11px] text-gray-500 uppercase font-semibold">Plano de contas</dt><dd>{% if titulo.plano %}{{ titulo.plano.codigo }} {{ titulo.plano.nome }}{% else %}—{% endif %}</dd></div>
+                <div><dt class="text-[11px] text-gray-500 uppercase font-semibold">Conta e forma previstas</dt><dd>{{ titulo.conta_prevista.nome|default:"—" }}{% if titulo.forma %} · {{ titulo.get_forma_display }}{% endif %}</dd></div>
+                <div><dt class="text-[11px] text-gray-500 uppercase font-semibold">Origem</dt><dd>{{ titulo.get_origem_display }}{% if titulo.nota %} · NF {{ titulo.nota.numero }}{% endif %}</dd></div>
+                {% if titulo.codigo_barras %}<div class="col-span-2 sm:col-span-3"><dt class="text-[11px] text-gray-500 uppercase font-semibold">Linha digitável</dt>
+                    <dd class="tabular break-all flex items-center gap-2">{{ titulo.codigo_barras }} <button type="button" class="text-emerald-700 text-xs hover:underline" onclick="navigator.clipboard.writeText('{{ titulo.codigo_barras }}');this.textContent='copiado'">copiar</button></dd></div>{% endif %}
+                {% if titulo.pix_favorecido %}<div class="col-span-2 sm:col-span-3"><dt class="text-[11px] text-gray-500 uppercase font-semibold">PIX do favorecido</dt><dd class="break-all">{{ titulo.pix_favorecido }}</dd></div>{% endif %}
+                {% if titulo.observacao %}<div class="col-span-2 sm:col-span-3"><dt class="text-[11px] text-gray-500 uppercase font-semibold">Observação</dt><dd class="whitespace-pre-line">{{ titulo.observacao }}</dd></div>{% endif %}
+                {% if titulo.anexo %}<div class="col-span-2 sm:col-span-3"><dt class="text-[11px] text-gray-500 uppercase font-semibold">Anexo</dt><dd><a href="{% url 'financeiro:anexo' 'titulo' titulo.id %}" target="_blank" rel="noopener" class="text-emerald-700 hover:underline"><i class="fas fa-paperclip mr-1"></i>{{ titulo.anexo_nome|default:"abrir" }}</a></dd></div>{% endif %}
+                {% if titulo.status == 'CANCELADO' %}<div class="col-span-2 sm:col-span-3 rounded-lg bg-gray-50 p-3 text-gray-600">Cancelado por {{ titulo.cancelado_por.get_full_name|default:"—" }} em {{ titulo.cancelado_em|date:"d/m/Y H:i" }} — {{ titulo.motivo_cancelamento }}</div>{% endif %}
+            </dl>
+        </div>
+
+        <div class="fin-card overflow-hidden">
+            <div class="px-4 py-3 border-b border-gray-100"><h2 class="font-bold text-sm text-gray-900"><i class="fas fa-circle-check text-gray-400 mr-1.5"></i>{% if titulo.tipo == 'PAGAR' %}Pagamentos{% else %}Recebimentos{% endif %}</h2></div>
+            <ul class="divide-y divide-gray-100 text-sm">
+                {% for b in baixas %}
+                <li class="px-4 py-3 {% if b.estornada %}bg-gray-50{% endif %}">
+                    <div class="flex items-start justify-between gap-3 flex-wrap">
+                        <div class="min-w-0">
+                            <p class="{% if b.estornada %}line-through text-gray-400{% else %}text-gray-900 font-medium{% endif %}">{{ b.data|date:"d/m/Y" }} · {{ b.conta.nome }} · {{ b.get_forma_display }}</p>
+                            <p class="text-[11px] text-gray-500">principal {{ b.valor|brl_zero }}{% if b.juros %} · juros {{ b.juros|brl_zero }}{% endif %}{% if b.multa %} · multa {{ b.multa|brl_zero }}{% endif %}{% if b.desconto %} · desconto {{ b.desconto|brl_zero }}{% endif %}
+                                · por {{ b.criado_por.get_full_name|default:"—" }} em {{ b.criado_em|date:"d/m/Y H:i" }}{% if b.observacao %} · {{ b.observacao }}{% endif %}</p>
+                            {% if b.estornada %}<p class="text-[11px] text-red-600">Estornada por {{ b.estornada_por.get_full_name|default:"—" }} em {{ b.estornada_em|date:"d/m/Y H:i" }} — {{ b.motivo_estorno }}</p>{% endif %}
+                            {% if b.comprovante %}<a href="{% url 'financeiro:anexo' 'baixa' b.id %}" target="_blank" rel="noopener" class="text-[11px] text-emerald-700 hover:underline"><i class="fas fa-paperclip mr-0.5"></i>comprovante</a>{% endif %}
+                        </div>
+                        <div class="text-right">
+                            <p class="font-bold tabular {% if b.estornada %}text-gray-400 line-through{% endif %}">{{ b.total|brl_zero }}</p>
+                            {% if pode.baixas_estornar and not b.estornada %}
+                            <div class="flex gap-3 justify-end mt-1 text-xs">
+                                <button type="button" data-abrir="#finEditarBaixa{{ b.id }}" class="text-gray-600 hover:underline">corrigir</button>
+                                <button type="button" data-abrir="#finEstornar{{ b.id }}" class="text-red-600 hover:underline">estornar</button>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </li>
+                {% empty %}
+                <li class="px-4 py-6 text-center text-gray-400">Nenhuma baixa ainda.</li>
+                {% endfor %}
+            </ul>
+        </div>
+
+        {% if historico is not None %}
+        <div class="fin-card overflow-hidden">
+            <div class="px-4 py-3 border-b border-gray-100"><h2 class="font-bold text-sm text-gray-900"><i class="fas fa-fingerprint text-gray-400 mr-1.5"></i>Rastreabilidade deste título</h2></div>
+            <ul class="divide-y divide-gray-100 text-sm">
+                {% for r in historico %}
+                <li class="px-4 py-2.5">
+                    <p class="text-gray-800"><strong>{{ r.usuario_nome }}</strong>{% if r.usuario_setor %} <span class="text-gray-400">({{ r.usuario_setor }})</span>{% endif %} · {{ r.descricao }}</p>
+                    <p class="text-[11px] text-gray-500">{{ r.quando|date:"d/m/Y H:i:s" }} · IP {{ r.ip|default:"—" }} · {{ r.dispositivo|truncatechars:70 }}</p>
+                    {% if r.depois and r.acao != 'CRIAR' %}<p class="text-[11px] text-gray-500 mt-0.5">{% for k, v in r.depois.items %}<span class="mr-2"><span class="text-gray-400">{{ k }}:</span> {% if r.antes %}{% for k2, v2 in r.antes.items %}{% if k2 == k %}<s>{{ v2|default:"—" }}</s> → {% endif %}{% endfor %}{% endif %}{{ v|default:"—" }}</span>{% endfor %}</p>{% endif %}
+                </li>
+                {% empty %}<li class="px-4 py-4 text-gray-400">Sem registros.</li>{% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="space-y-4">
+        {% if irmaos %}
+        <div class="fin-card overflow-hidden">
+            <div class="px-4 py-3 border-b border-gray-100"><h2 class="font-bold text-sm text-gray-900">Outras parcelas</h2></div>
+            <ul class="divide-y divide-gray-100 text-sm">
+                {% for p in irmaos %}
+                <li><a href="{% url 'financeiro:titulo' p.id %}" class="px-4 py-2 flex items-center justify-between hover:bg-gray-50">
+                    <span>{{ p.rotulo_parcela }} · {{ p.vencimento|date:"d/m/Y" }}</span>
+                    <span class="flex items-center gap-2"><span class="tabular">{{ p.valor|brl_zero }}</span><span class="fin-chip st-{{ p.status }}">{{ p.get_status_display }}</span></span>
+                </a></li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+        <div class="fin-card p-4 text-xs text-gray-500 space-y-1">
+            <p>Lançado por <strong class="text-gray-700">{{ titulo.criado_por.get_full_name|default:"—" }}</strong> em {{ titulo.criado_em|date:"d/m/Y H:i" }}</p>
+            <p>Última alteração em {{ titulo.atualizado_em|date:"d/m/Y H:i" }}</p>
+        </div>
+        {% if pode_cancelar and titulo.status != 'CANCELADO' %}
+        <div class="fin-card p-4">
+            <h2 class="font-bold text-sm text-gray-900 mb-2">Cancelar ou excluir</h2>
+            {% if titulo.status == 'ABERTO' and not baixas %}
+            <form method="post" action="{% url 'financeiro:titulo_excluir' titulo.id %}" onsubmit="return confirm('Excluir este título? Ele some da lista (fica só na rastreabilidade).');" class="mb-3">
+                {% csrf_token %}<button class="text-sm text-red-600 hover:underline"><i class="fas fa-trash-can mr-1"></i>Excluir (lançado por engano)</button>
+            </form>
+            {% endif %}
+            <form method="post" action="{% url 'financeiro:titulo_cancelar' titulo.id %}" class="space-y-2">
+                {% csrf_token %}
+                <input name="motivo" required minlength="5" maxlength="255" placeholder="Motivo do cancelamento" class="fin-input">
+                <button class="fin-btn fin-btn-claro text-red-600 w-full justify-center"><i class="fas fa-ban"></i>Cancelar título</button>
+                {% if titulo.status == 'PARCIAL' %}<p class="text-[11px] text-gray-500">Tem baixa: estorne antes de cancelar.</p>{% endif %}
+            </form>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{% if pode.baixas_baixar %}
+<div class="fin-modal" id="finModalBaixa" role="dialog" aria-modal="true">
+    <div class="sm:max-w-lg">
+        <form method="post" action="{% url 'financeiro:titulo_baixar' titulo.id %}" enctype="multipart/form-data">
+            {% csrf_token %}
+            <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+                <div><h3 class="font-bold text-gray-900">{% if titulo.tipo == 'PAGAR' %}Pagar{% else %}Receber{% endif %}</h3><p class="text-xs text-gray-500">Saldo {{ titulo.saldo|brl_zero }}</p></div>
+                <button type="button" data-fechar class="w-8 h-8 rounded-lg text-gray-400 hover:bg-gray-100" aria-label="Fechar"><i class="fas fa-xmark"></i></button>
+            </div>
+            {% include 'financeiro/_campos_baixa.html' %}
+            <div class="px-5 py-3 border-t border-gray-100 bg-gray-50 flex justify-end gap-2">
+                <button type="button" data-fechar class="fin-btn fin-btn-claro">Cancelar</button>
+                <button type="submit" class="fin-btn fin-btn-verde"><i class="fas fa-check"></i>Confirmar</button>
+            </div>
+        </form>
+    </div>
+</div>
+<script>
+(function () {
+    var f = document.querySelector('#finModalBaixa form');
+    f.valor.value = '{{ titulo.saldo|stringformat:".2f" }}'.replace('.', ',');
+    {% if titulo.forma %}f.forma.value = '{{ titulo.forma }}';{% endif %}
+    {% if titulo.conta_prevista_id %}f.conta.value = '{{ titulo.conta_prevista_id }}';{% endif %}
+    f.dispatchEvent(new Event('input'));
+})();
+</script>
+{% endif %}
+
+{% if pode.baixas_estornar %}
+{% for b in baixas %}{% if not b.estornada %}
+<div class="fin-modal" id="finEditarBaixa{{ b.id }}" role="dialog" aria-modal="true">
+    <div class="sm:max-w-lg">
+        <form method="post" action="{% url 'financeiro:baixa_editar' b.id %}" enctype="multipart/form-data">
+            {% csrf_token %}
+            <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+                <h3 class="font-bold text-gray-900">Corrigir baixa de {{ b.data|date:"d/m/Y" }}</h3>
+                <button type="button" data-fechar class="w-8 h-8 rounded-lg text-gray-400 hover:bg-gray-100" aria-label="Fechar"><i class="fas fa-xmark"></i></button>
+            </div>
+            {% include 'financeiro/_campos_baixa.html' with baixa=b %}
+            <div class="px-5 py-3 border-t border-gray-100 bg-gray-50 flex justify-end gap-2">
+                <button type="button" data-fechar class="fin-btn fin-btn-claro">Cancelar</button>
+                <button type="submit" class="fin-btn fin-btn-verde"><i class="fas fa-check"></i>Salvar correção</button>
+            </div>
+        </form>
+    </div>
+</div>
+<div class="fin-modal" id="finEstornar{{ b.id }}" role="dialog" aria-modal="true">
+    <div class="sm:max-w-md">
+        <form method="post" action="{% url 'financeiro:baixa_estornar' b.id %}">
+            {% csrf_token %}
+            <div class="px-5 py-4 border-b border-gray-100"><h3 class="font-bold text-gray-900">Estornar a baixa de {{ b.total|brl_zero }}</h3>
+                <p class="text-xs text-gray-500 mt-1">A baixa fica no histórico como estornada e o título volta a ficar em aberto.</p></div>
+            <div class="p-5"><label class="fin-label">Motivo</label><input name="motivo" required minlength="5" maxlength="255" class="fin-input" autofocus></div>
+            <div class="px-5 py-3 border-t border-gray-100 bg-gray-50 flex justify-end gap-2">
+                <button type="button" data-fechar class="fin-btn fin-btn-claro">Voltar</button>
+                <button type="submit" class="fin-btn bg-red-600 text-white hover:bg-red-700"><i class="fas fa-rotate-left"></i>Estornar</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}{% endfor %}
+{% endif %}
+
+{% if pode_editar and titulo.status != 'CANCELADO' %}{% include 'financeiro/_modal_titulo.html' %}{% endif %}
+{% endblock %}

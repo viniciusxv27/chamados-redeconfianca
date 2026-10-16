@@ -1,0 +1,119 @@
+{% extends 'financeiro/base_financeiro.html' %}
+{% load caixa_tags %}
+{% block fin_titulo %}Conciliação bancária{% endblock %}
+{% block fin_cabecalho %}Conciliação bancária{% endblock %}
+{% block fin_subtitulo %}{% if conta %}{{ conta.nome }} — extrato do banco × movimentos do portal{% else %}Cadastre uma conta bancária primeiro{% endif %}{% endblock %}
+{% block fin_acoes %}
+{% if contas %}
+<form method="get"><select name="conta" onchange="this.form.submit()" class="fin-input !w-56">{% for c in contas %}<option value="{{ c.id }}" {% if conta.id == c.id %}selected{% endif %}>{{ c.nome }}</option>{% endfor %}</select></form>
+{% if pode.conciliacao_conciliar and conta %}<button type="button" data-abrir="#finImportar" class="fin-btn fin-btn-verde"><i class="fas fa-file-import"></i>Importar extrato</button>{% endif %}
+{% endif %}
+{% endblock %}
+
+{% block fin_conteudo %}
+{% if not conta %}
+<div class="fin-card p-10 text-center text-gray-500"><i class="fas fa-building-columns text-4xl text-gray-300 mb-3"></i><p>Nenhuma conta bancária ativa. {% if pode.bancos_editar %}<a href="{% url 'financeiro:bancos' %}" class="text-emerald-700 hover:underline">Cadastrar conta</a>{% endif %}</p></div>
+{% else %}
+<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+    <a href="?conta={{ conta.id }}&situacao=pendentes" class="fin-card p-3 {% if situacao == 'pendentes' %}!border-amber-400{% endif %}"><p class="text-[11px] uppercase font-semibold text-gray-500">Do extrato, a conciliar</p><p class="text-lg font-bold tabular {% if n_pendentes %}text-amber-700{% else %}text-emerald-700{% endif %}">{{ n_pendentes }}</p></a>
+    <a href="?conta={{ conta.id }}&situacao=conciliadas" class="fin-card p-3 {% if situacao == 'conciliadas' %}!border-emerald-400{% endif %}"><p class="text-[11px] uppercase font-semibold text-gray-500">Conciliadas</p><p class="text-lg font-bold tabular">{{ n_conciliadas }}</p></a>
+    <a href="?conta={{ conta.id }}&situacao=ignoradas" class="fin-card p-3 {% if situacao == 'ignoradas' %}!border-gray-400{% endif %}"><p class="text-[11px] uppercase font-semibold text-gray-500">Ignoradas</p><p class="text-lg font-bold tabular">{{ n_ignoradas }}</p></a>
+    <div class="fin-card p-3"><p class="text-[11px] uppercase font-semibold text-gray-500">No portal, sem par no extrato</p><p class="text-lg font-bold tabular">{{ movimentos_sem_extrato }}</p><p class="text-[11px] text-gray-400">saldo do portal {{ saldo_portal|brl_zero }}</p></div>
+</div>
+
+{% if pode.conciliacao_conciliar and n_pendentes %}
+<form method="post" action="{% url 'financeiro:conciliacao_automatica' conta.id %}" class="mb-3 text-right">{% csrf_token %}
+    <button class="fin-btn fin-btn-claro"><i class="fas fa-wand-magic-sparkles text-emerald-600"></i>Conciliar os pares certos sozinho</button></form>
+{% endif %}
+
+<div class="fin-card overflow-hidden">
+    <ul class="divide-y divide-gray-100">
+        {% for l in linhas %}
+        <li class="px-4 py-3">
+            <div class="flex items-start gap-3 flex-wrap">
+                <span class="w-9 h-9 rounded-lg shrink-0 flex items-center justify-center {% if l.movimento_id %}bg-emerald-50 text-emerald-600{% elif l.ignorada %}bg-gray-100 text-gray-400{% else %}bg-amber-50 text-amber-600{% endif %}">
+                    <i class="fas {% if l.movimento_id %}fa-check{% elif l.ignorada %}fa-eye-slash{% else %}fa-question{% endif %}"></i></span>
+                <div class="min-w-0 flex-1">
+                    <div class="flex items-start justify-between gap-3">
+                        <p class="text-sm text-gray-900 break-words">{{ l.descricao|default:"(sem descrição)" }}</p>
+                        <p class="tabular font-bold whitespace-nowrap {% if l.valor < 0 %}text-rose-700{% else %}text-emerald-700{% endif %}">{{ l.valor|brl_zero }}</p>
+                    </div>
+                    <p class="text-[11px] text-gray-500">{{ l.data|date:"d/m/Y" }}{% if l.documento %} · doc {{ l.documento }}{% endif %}</p>
+                    {% if l.movimento_id %}
+                    <p class="text-[12px] text-emerald-800 mt-1"><i class="fas fa-link mr-1"></i>{{ l.movimento.descricao }} · {{ l.movimento.data|date:"d/m" }} · {{ l.movimento.valor|brl_zero }}
+                        <span class="text-gray-400">— {{ l.conciliada_por.get_full_name|default:"automático" }} {{ l.conciliada_em|date:"d/m H:i" }}</span></p>
+                    {% endif %}
+                    {% if pode.conciliacao_conciliar %}
+                    <div class="flex flex-wrap items-center gap-2 mt-2 text-xs">
+                        {% if l.movimento_id %}
+                        <form method="post" action="{% url 'financeiro:linha_desfazer' l.id %}">{% csrf_token %}<input type="hidden" name="voltar" value="{{ request.get_full_path }}"><button class="text-gray-600 hover:underline">desfazer</button></form>
+                        {% elif not l.ignorada %}
+                        {% for s in l.sugestoes %}
+                        <form method="post" action="{% url 'financeiro:linha_conciliar' l.id %}">{% csrf_token %}<input type="hidden" name="voltar" value="{{ request.get_full_path }}"><input type="hidden" name="movimento" value="{{ s.id }}">
+                            <button class="px-2 py-1 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700"><i class="fas fa-link mr-1"></i>{{ s.descricao|truncatechars:40 }} ({{ s.data|date:"d/m" }})</button></form>
+                        {% endfor %}
+                        <form method="post" action="{% url 'financeiro:linha_conciliar' l.id %}" class="flex items-center gap-1">{% csrf_token %}<input type="hidden" name="voltar" value="{{ request.get_full_path }}">
+                            <select name="movimento" class="border border-gray-200 rounded-lg px-2 py-1 max-w-[16rem]"><option value="">outro movimento…</option>
+                                {% for m in livres %}<option value="{{ m.id }}">{{ m.data|date:"d/m" }} · {{ m.valor|brl_zero }} · {{ m.descricao|truncatechars:40 }}</option>{% endfor %}</select>
+                            <button class="px-2 py-1 rounded-lg border border-gray-200 hover:bg-gray-50">ligar</button></form>
+                        {% if pode.bancos_lancar %}<button type="button" data-abrir="#finLancar{{ l.id }}" class="text-emerald-700 hover:underline">lançar na conta (tarifa, rendimento…)</button>{% endif %}
+                        <form method="post" action="{% url 'financeiro:linha_ignorar' l.id %}">{% csrf_token %}<input type="hidden" name="voltar" value="{{ request.get_full_path }}"><button class="text-gray-500 hover:underline">ignorar</button></form>
+                        {% else %}
+                        <form method="post" action="{% url 'financeiro:linha_ignorar' l.id %}">{% csrf_token %}<input type="hidden" name="voltar" value="{{ request.get_full_path }}"><button class="text-gray-600 hover:underline">voltar para pendentes</button></form>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </li>
+        {% empty %}
+        <li class="p-10 text-center text-gray-400">
+            {% if situacao == 'pendentes' %}<i class="fas fa-circle-check text-3xl text-emerald-300 mb-2 block"></i>Nada pendente. Importe o extrato do banco (OFX ou CSV) para conferir.{% else %}Nada aqui.{% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% if pagina.has_other_pages %}
+    <div class="px-4 py-3 border-t border-gray-100 flex justify-between text-sm"><span class="text-gray-500">Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span>
+        <div class="flex gap-2">{% if pagina.has_previous %}<a href="?conta={{ conta.id }}&situacao={{ situacao }}&p={{ pagina.previous_page_number }}" class="fin-btn fin-btn-claro">Anterior</a>{% endif %}{% if pagina.has_next %}<a href="?conta={{ conta.id }}&situacao={{ situacao }}&p={{ pagina.next_page_number }}" class="fin-btn fin-btn-claro">Próxima</a>{% endif %}</div></div>
+    {% endif %}
+</div>
+
+{% if importacoes %}
+<p class="text-xs text-gray-500 mt-3">Últimas importações: {% for i in importacoes %}{{ i.arquivo_nome }} ({{ i.formato }}, {{ i.inicio|date:"d/m" }}–{{ i.fim|date:"d/m" }}, {{ i.linhas_novas }} novas) em {{ i.importado_em|date:"d/m H:i" }}{% if not forloop.last %}; {% endif %}{% endfor %}</p>
+{% endif %}
+
+{% if pode.conciliacao_conciliar %}
+<div class="fin-modal" id="finImportar" role="dialog" aria-modal="true">
+    <div class="sm:max-w-md">
+        <form method="post" action="{% url 'financeiro:conciliacao_importar' conta.id %}" enctype="multipart/form-data">
+            {% csrf_token %}
+            <div class="px-5 py-4 border-b border-gray-100"><h3 class="font-bold text-gray-900">Importar extrato de {{ conta.nome }}</h3></div>
+            <div class="p-5 space-y-3 text-sm text-gray-600">
+                <p>No internet banking, exporte o extrato em <strong>OFX</strong> (também chamado "Money" ou "Quicken") — é o formato mais confiável. CSV também serve, com colunas de data, descrição e valor (ou crédito e débito).</p>
+                <p>Linhas repetidas não entram duas vezes. Os pares certos (mesmo valor, até 3 dias, um candidato só) conciliam sozinhos.</p>
+                <input type="file" name="arquivo" accept=".ofx,.qfx,.csv,.txt" required class="text-sm">
+            </div>
+            <div class="px-5 py-3 border-t border-gray-100 bg-gray-50 flex justify-end gap-2"><button type="button" data-fechar class="fin-btn fin-btn-claro">Cancelar</button><button type="submit" class="fin-btn fin-btn-verde"><i class="fas fa-file-import"></i>Importar</button></div>
+        </form>
+    </div>
+</div>
+{% if pode.bancos_lancar %}
+{% for l in linhas %}{% if not l.movimento_id and not l.ignorada %}
+<div class="fin-modal" id="finLancar{{ l.id }}" role="dialog" aria-modal="true">
+    <div class="sm:max-w-md">
+        <form method="post" action="{% url 'financeiro:linha_lancar' l.id %}">
+            {% csrf_token %}<input type="hidden" name="voltar" value="{{ request.get_full_path }}">
+            <div class="px-5 py-4 border-b border-gray-100"><h3 class="font-bold text-gray-900">Lançar {{ l.valor|brl_zero }} em {{ conta.nome }}</h3><p class="text-xs text-gray-500">{{ l.data|date:"d/m/Y" }} · já entra conciliado com esta linha</p></div>
+            <div class="p-5 space-y-3">
+                <div><label class="fin-label">Descrição</label><input name="descricao" value="{{ l.descricao }}" maxlength="200" class="fin-input"></div>
+                <div><label class="fin-label">Plano de contas</label><select name="plano" class="fin-input"><option value="">—</option>{% for p in planos %}<option value="{{ p.id }}">{{ p.codigo }} {{ p.nome }}</option>{% endfor %}</select></div>
+            </div>
+            <div class="px-5 py-3 border-t border-gray-100 bg-gray-50 flex justify-end gap-2"><button type="button" data-fechar class="fin-btn fin-btn-claro">Cancelar</button><button type="submit" class="fin-btn fin-btn-verde">Lançar e conciliar</button></div>
+        </form>
+    </div>
+</div>
+{% endif %}{% endfor %}
+{% endif %}
+{% endif %}
+{% endif %}
+{% endblock %}

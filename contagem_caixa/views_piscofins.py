@@ -278,6 +278,14 @@ def piscofins(request):
     })
 
 
+def _com_manifestacao(notas):
+    """Cada nota ganha `manifestacao`: a última registrada na SEFAZ (ou None)."""
+    for nota in notas:
+        feitas = sorted((m for m in nota.manifestacoes.all() if m.sucesso), key=lambda m: (m.enviado_em, m.id))
+        nota.manifestacao = feitas[-1] if feitas else None
+    return notas
+
+
 def _contexto_sefaz(request, competencia):
     """A visão das notas emitidas contra o CNPJ (SEFAZ) para a competência."""
     from . import sefaz
@@ -325,7 +333,8 @@ def _contexto_sefaz(request, competencia):
         'nf_doc': tipo_doc,
         'notas_nfe': do_mes.filter(tipo_documento='NFE').count() if not tipo_doc else None,
         'notas_nfse': do_mes.filter(tipo_documento='NFSE').count() if not tipo_doc else None,
-        'notas': list(notas.select_related('documento').order_by('-emissao')[:500]),
+        'notas': _com_manifestacao(list(notas.select_related('documento').prefetch_related('manifestacoes')
+                                         .order_by('-emissao')[:500])),
         'notas_total': validas.count(),
         'notas_valor': validas.aggregate(s=Sum('valor'))['s'] or ZERO,
         'notas_lancadas': validas.filter(documento__isnull=False).count(),
@@ -335,6 +344,7 @@ def _contexto_sefaz(request, competencia):
     certificado = sefaz.info_do_certificado() if contexto['sefaz_configurado'] else None
     do_certificado = (certificado or {}).get('cnpj', '')
     contexto['sefaz_certificado'] = certificado
+    contexto['sefaz_cnpjs_lista'] = [(c, receita.formatar(c)) for c in sefaz.cnpjs_monitorados()]
     contexto['sefaz_cnpjs'] = [{'cnpj': receita.formatar(c), 'sinc': sincronizacoes.get(c),
                                 'mesma_raiz': sefaz.mesma_raiz(c, do_certificado)}
                                for c in sefaz.cnpjs_monitorados()]

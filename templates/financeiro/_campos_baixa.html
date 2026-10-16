@@ -1,0 +1,35 @@
+{% load l10n %}
+{% comment %}Campos da baixa (dar baixa e corrigir baixa). Opcional: `baixa` para preencher.{% endcomment %}
+<div class="p-5 grid grid-cols-2 gap-3 fin-campos-baixa">
+    <div><label class="fin-label">Data do pagamento</label>
+        <input type="date" name="data" value="{% if baixa %}{{ baixa.data|date:'Y-m-d' }}{% else %}{{ hoje|date:'Y-m-d' }}{% endif %}" class="fin-input" required></div>
+    <div><label class="fin-label">Valor principal (R$)</label>
+        <input type="text" inputmode="decimal" name="valor" value="{% if baixa %}{{ baixa.valor|stringformat:'.2f' }}{% endif %}" class="fin-input text-right tabular" required autofocus></div>
+    <div><label class="fin-label">Juros (R$)</label><input type="text" inputmode="decimal" name="juros" value="{% if baixa and baixa.juros %}{{ baixa.juros|stringformat:'.2f' }}{% endif %}" class="fin-input text-right tabular" placeholder="0,00"></div>
+    <div><label class="fin-label">Multa (R$)</label><input type="text" inputmode="decimal" name="multa" value="{% if baixa and baixa.multa %}{{ baixa.multa|stringformat:'.2f' }}{% endif %}" class="fin-input text-right tabular" placeholder="0,00"></div>
+    <div><label class="fin-label">Desconto (R$)</label><input type="text" inputmode="decimal" name="desconto" value="{% if baixa and baixa.desconto %}{{ baixa.desconto|stringformat:'.2f' }}{% endif %}" class="fin-input text-right tabular" placeholder="0,00"></div>
+    <div class="flex flex-col justify-end"><p class="text-[11px] text-gray-500">Total que sai/entra na conta</p><p class="font-bold tabular text-gray-900 fin-total-baixa">—</p></div>
+    <div><label class="fin-label">Conta bancária</label>
+        <select name="conta" class="fin-input" required><option value="">Escolha…</option>{% for c in contas %}<option value="{{ c.id }}" {% if baixa and baixa.conta_id == c.id %}selected{% endif %}>{{ c.nome }}</option>{% endfor %}</select></div>
+    <div><label class="fin-label">Forma</label>
+        <select name="forma" class="fin-input" required><option value="">Escolha…</option>{% for k, r in formas %}<option value="{{ k }}" {% if baixa and baixa.forma == k %}selected{% endif %}>{{ r }}</option>{% endfor %}</select></div>
+    <div class="col-span-2"><label class="fin-label">Observação</label><input type="text" name="observacao" maxlength="255" value="{{ baixa.observacao|default:'' }}" class="fin-input"></div>
+    <div class="col-span-2"><label class="fin-label">Comprovante (PDF ou imagem){% if baixa and baixa.comprovante %} — já tem um; envie outro só para trocar{% endif %}</label>
+        <input type="file" name="comprovante" accept=".pdf,.jpg,.jpeg,.png,.webp" class="text-sm"></div>
+    {% if not contas %}<p class="col-span-2 text-sm text-amber-700"><i class="fas fa-triangle-exclamation mr-1"></i>Cadastre uma conta bancária antes de dar baixa.</p>{% endif %}
+</div>
+<script>
+(function () {
+    function num(v) { v = (v || '').trim().replace(/\s|R\$/g, ''); if (v.indexOf(',') >= 0) v = v.replace(/\./g, '').replace(',', '.'); return Number(v) || 0; }
+    document.querySelectorAll('.fin-campos-baixa').forEach(function (bloco) {
+        if (bloco.dataset.pronto) return; bloco.dataset.pronto = '1';
+        var form = bloco.closest('form');
+        function total() {
+            var t = num(form.valor.value) + num(form.juros.value) + num(form.multa.value) - num(form.desconto.value);
+            bloco.querySelector('.fin-total-baixa').textContent = t.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
+        }
+        form.addEventListener('input', total);
+        total();
+    });
+})();
+</script>

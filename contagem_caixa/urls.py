@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views, views_piscofins, views_sangrias
+from . import views, views_notas, views_piscofins, views_sangrias
 
 app_name = 'contagem_caixa'
 
@@ -31,6 +31,12 @@ urlpatterns = [
     path('pis-cofins/<int:pk>/apagar/', views_piscofins.piscofins_apagar, name='piscofins_apagar'),
     path('pis-cofins/sefaz/buscar/', views_piscofins.piscofins_sefaz_buscar, name='piscofins_sefaz_buscar'),
     path('pis-cofins/sefaz/<int:pk>/fora/', views_piscofins.piscofins_nota_fora, name='piscofins_nota_fora'),
+    path('pis-cofins/nota/<int:pk>/', views_notas.nota, name='piscofins_nota'),
+    path('pis-cofins/nota/<int:pk>/xml/', views_notas.nota_xml, name='piscofins_nota_xml'),
+    path('pis-cofins/nota/<int:pk>/manifestar/', views_notas.manifestar, name='piscofins_manifestar'),
+    path('pis-cofins/nota/<int:pk>/baixar-xml/', views_notas.baixar_xml, name='piscofins_baixar_xml'),
+    path('pis-cofins/nota/<int:pk>/entrada/', views_notas.dar_entrada, name='piscofins_entrada'),
+    path('pis-cofins/sefaz/chave/', views_notas.importar_chave, name='piscofins_importar_chave'),
     path('pis-cofins/planilha/', views_piscofins.piscofins_planilha, name='piscofins_planilha'),
     path('pis-cofins/pacote/', views_piscofins.piscofins_pacote, name='piscofins_pacote'),
 ]

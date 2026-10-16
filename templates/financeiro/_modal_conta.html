@@ -1,0 +1,33 @@
+{% comment %}Cadastrar (sem `conta`) ou editar (com `conta`) uma conta bancária.{% endcomment %}
+<div class="fin-modal" id="finConta" role="dialog" aria-modal="true" aria-labelledby="finContaTitulo">
+    <div class="sm:max-w-2xl">
+        <form method="post" action="{% if conta %}{% url 'financeiro:conta_editar' conta.id %}{% else %}{% url 'financeiro:conta_nova' %}{% endif %}">
+            {% csrf_token %}
+            <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+                <h3 id="finContaTitulo" class="font-bold text-gray-900">{% if conta %}Editar conta{% else %}Nova conta bancária{% endif %}</h3>
+                <button type="button" data-fechar class="w-8 h-8 rounded-lg text-gray-400 hover:bg-gray-100" aria-label="Fechar"><i class="fas fa-xmark"></i></button>
+            </div>
+            <div class="p-5 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div class="col-span-2"><label class="fin-label">Apelido *</label><input name="nome" required maxlength="80" value="{{ conta.nome|default:'' }}" class="fin-input" placeholder="Ex.: Itaú Matriz" autofocus></div>
+                <div class="col-span-2"><label class="fin-label">Tipo</label><select name="tipo" class="fin-input">{% for k, r in tipos %}<option value="{{ k }}" {% if conta.tipo == k %}selected{% endif %}>{{ r }}</option>{% endfor %}</select></div>
+                <div><label class="fin-label">Cód. banco</label><input name="banco_codigo" maxlength="5" value="{{ conta.banco_codigo|default:'' }}" class="fin-input" placeholder="341"></div>
+                <div><label class="fin-label">Banco</label><input name="banco_nome" maxlength="80" value="{{ conta.banco_nome|default:'' }}" class="fin-input" placeholder="Itaú"></div>
+                <div><label class="fin-label">Agência</label><input name="agencia" maxlength="10" value="{{ conta.agencia|default:'' }}" class="fin-input"></div>
+                <div class="grid grid-cols-3 gap-1"><div class="col-span-2"><label class="fin-label">Conta</label><input name="conta" maxlength="20" value="{{ conta.conta|default:'' }}" class="fin-input"></div>
+                    <div><label class="fin-label">Díg.</label><input name="digito" maxlength="2" value="{{ conta.digito|default:'' }}" class="fin-input"></div></div>
+                <div class="col-span-2"><label class="fin-label">Titular</label><input name="titular_nome" maxlength="150" value="{{ conta.titular_nome|default:'' }}" class="fin-input"></div>
+                <div><label class="fin-label">CNPJ/CPF do titular</label><input name="titular_documento" inputmode="numeric" value="{{ conta.titular_documento|default:'' }}" class="fin-input"></div>
+                <div><label class="fin-label">Loja</label><select name="loja" class="fin-input"><option value="">Empresa / escritório</option>{% for l in lojas %}<option value="{{ l.id }}" {% if conta.loja_id == l.id %}selected{% endif %}>{{ l.name }}</option>{% endfor %}</select></div>
+                <div class="col-span-2"><label class="fin-label">Chave PIX</label><input name="chave_pix" maxlength="120" value="{{ conta.chave_pix|default:'' }}" class="fin-input"></div>
+                <div><label class="fin-label">Saldo inicial (R$)</label><input name="saldo_inicial" inputmode="decimal" value="{% if conta %}{{ conta.saldo_inicial|stringformat:'.2f' }}{% endif %}" class="fin-input text-right tabular" placeholder="0,00"></div>
+                <div><label class="fin-label">Saldo em</label><input type="date" name="data_saldo_inicial" value="{% if conta %}{{ conta.data_saldo_inicial|date:'Y-m-d' }}{% else %}{{ hoje|date:'Y-m-d' }}{% endif %}" class="fin-input"></div>
+                <div class="col-span-2 sm:col-span-4"><label class="fin-label">Observação</label><input name="observacao" value="{{ conta.observacao|default:'' }}" class="fin-input"></div>
+                {% if conta %}<label class="col-span-2 flex items-center gap-2 text-sm"><input type="hidden" name="ativa" value="off"><input type="checkbox" name="ativa" value="on" {% if conta.ativa %}checked{% endif %} class="accent-emerald-600">Conta ativa</label>{% endif %}
+            </div>
+            <div class="px-5 py-3 border-t border-gray-100 bg-gray-50 flex justify-end gap-2">
+                <button type="button" data-fechar class="fin-btn fin-btn-claro">Cancelar</button>
+                <button type="submit" class="fin-btn fin-btn-verde"><i class="fas fa-check"></i>Salvar</button>
+            </div>
+        </form>
+    </div>
+</div>

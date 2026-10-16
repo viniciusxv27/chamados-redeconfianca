@@ -1,0 +1,35 @@
+{% extends 'financeiro/base_financeiro.html' %}
+{% load caixa_tags %}
+{% block fin_titulo %}Contas bancárias{% endblock %}
+{% block fin_cabecalho %}Contas bancárias{% endblock %}
+{% block fin_subtitulo %}Cadastro das contas e saldo de cada uma · total {{ saldo_total|brl_zero }}{% endblock %}
+{% block fin_acoes %}{% if pode.bancos_editar %}<button type="button" data-abrir="#finConta" class="fin-btn fin-btn-verde"><i class="fas fa-plus"></i>Nova conta</button>{% endif %}{% endblock %}
+
+{% block fin_conteudo %}
+<div class="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
+    {% for c in contas %}
+    <a href="{% url 'financeiro:conta' c.id %}" class="fin-card p-5 hover:border-emerald-200 block {% if not c.ativa %}opacity-60{% endif %}">
+        <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+                <p class="font-bold text-gray-900 truncate">{{ c.nome }}</p>
+                <p class="text-xs text-gray-500 truncate">{{ c.descricao_bancaria|default:c.get_tipo_display }}</p>
+                {% if c.loja %}<p class="text-[11px] text-gray-400">{{ c.loja.name }}</p>{% endif %}
+            </div>
+            <span class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0"><i class="fas {% if c.tipo == 'CAIXA' %}fa-cash-register{% else %}fa-building-columns{% endif %}"></i></span>
+        </div>
+        <p class="text-2xl font-bold tabular mt-4 {% if c.saldo_atual < 0 %}text-red-600{% else %}text-gray-900{% endif %}">{{ c.saldo_atual|brl_zero }}</p>
+        <div class="flex items-center gap-2 mt-1 text-[11px]">
+            {% if not c.ativa %}<span class="fin-chip bg-gray-100 text-gray-600">Inativa</span>{% endif %}
+            {% if c.pendentes %}<span class="fin-chip bg-amber-100 text-amber-800">{{ c.pendentes }} linha{{ c.pendentes|pluralize }} do extrato a conciliar</span>{% endif %}
+        </div>
+    </a>
+    {% empty %}
+    <div class="fin-card p-10 text-center text-gray-500 sm:col-span-2 xl:col-span-3">
+        <i class="fas fa-building-columns text-4xl text-gray-300 mb-3"></i>
+        <p>Nenhuma conta cadastrada ainda. Cadastre as contas da empresa (e o "caixa" em dinheiro, se quiser) para registrar as baixas.</p>
+    </div>
+    {% endfor %}
+</div>
+
+{% if pode.bancos_editar %}{% include 'financeiro/_modal_conta.html' %}{% endif %}
+{% endblock %}

@@ -1,0 +1,90 @@
+{% extends 'financeiro/base_financeiro.html' %}
+{% block fin_titulo %}Plano de contas{% endblock %}
+{% block fin_cabecalho %}Plano de contas{% endblock %}
+{% block fin_subtitulo %}As contas que classificam receitas e despesas · só as analíticas recebem lançamento{% endblock %}
+{% block fin_acoes %}
+<a href="?{% if not mostrar_inativas %}inativas=1{% endif %}" class="fin-btn fin-btn-claro">{% if mostrar_inativas %}Esconder inativas{% else %}Mostrar inativas{% endif %}</a>
+{% if pode.plano_editar %}<button type="button" data-abrir="#finPlano" data-codigo="" class="fin-btn fin-btn-verde"><i class="fas fa-plus"></i>Nova conta</button>{% endif %}
+{% endblock %}
+
+{% block fin_conteudo %}
+{% if not contas %}
+<div class="fin-card p-10 text-center text-gray-500">
+    <i class="fas fa-sitemap text-4xl text-gray-300 mb-3"></i>
+    <p>O plano de contas está vazio.</p>
+    {% if pode.plano_editar %}
+    <form method="post" action="{% url 'financeiro:plano_padrao' %}" class="mt-4">{% csrf_token %}
+        <button class="fin-btn fin-btn-verde"><i class="fas fa-wand-magic-sparkles"></i>Criar plano padrão (rede de lojas de telefonia)</button></form>
+    <p class="text-xs text-gray-400 mt-2">Receitas (vendas, comissões da operadora, serviços) e despesas (pessoal, ocupação, mercadorias, administrativas, financeiras, impostos). Depois é só ajustar.</p>
+    {% endif %}
+</div>
+{% else %}
+<div class="fin-card overflow-hidden">
+    <ul class="divide-y divide-gray-100 text-sm">
+        {% for c in contas %}{% if c.ativa or mostrar_inativas %}
+        <li class="px-4 py-2 flex items-center gap-3 {% if not c.ativa %}opacity-50{% endif %} {% if not c.analitica %}bg-gray-50{% endif %}">
+            <span class="tabular text-gray-400 w-24 shrink-0">{{ c.codigo }}</span>
+            <span class="flex-1 min-w-0 {% if not c.analitica %}font-bold text-gray-900{% else %}text-gray-800{% endif %}" style="padding-left: {{ c.nivel }}rem">{{ c.nome }}
+                {% if c.descricao %}<span class="block text-[11px] text-gray-400 font-normal">{{ c.descricao }}</span>{% endif %}</span>
+            <span class="fin-chip {% if c.tipo == 'RECEITA' %}bg-emerald-50 text-emerald-700{% else %}bg-rose-50 text-rose-700{% endif %}">{{ c.get_tipo_display }}</span>
+            {% if c.analitica %}<span class="text-[11px] text-gray-400 w-20 text-right">{{ c.n_titulos }} título{{ c.n_titulos|pluralize }}</span>{% else %}<span class="text-[11px] text-gray-400 w-20 text-right">grupo</span>{% endif %}
+            {% if pode.plano_editar %}
+            <span class="flex items-center gap-2 text-xs w-36 justify-end">
+                {% if not c.analitica or c.n_titulos == 0 %}<button type="button" data-abrir="#finPlano" data-codigo="{{ c.codigo }}." class="text-emerald-700 hover:underline">+ subconta</button>{% endif %}
+                <button type="button" data-abrir="#finPlanoEditar" data-id="{{ c.id }}" data-codigo="{{ c.codigo }}" data-nome="{{ c.nome }}" data-descricao="{{ c.descricao }}" data-tipo="{{ c.tipo }}" data-raiz="{% if not c.pai_id %}1{% endif %}" class="text-gray-600 hover:underline">editar</button>
+                <form method="post" action="{% url 'financeiro:plano_ativar' c.id %}">{% csrf_token %}<button class="text-gray-500 hover:underline">{% if c.ativa %}desativar{% else %}reativar{% endif %}</button></form>
+            </span>
+            {% endif %}
+        </li>
+        {% endif %}{% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+{% if pode.plano_editar %}
+<div class="fin-modal" id="finPlano" role="dialog" aria-modal="true">
+    <div class="sm:max-w-md">
+        <form method="post" action="{% url 'financeiro:plano_nova' %}">
+            {% csrf_token %}
+            <div class="px-5 py-4 border-b border-gray-100"><h3 class="font-bold text-gray-900">Nova conta</h3><p class="text-xs text-gray-500">O código diz onde ela fica: 2.2.07 entra dentro de 2.2.</p></div>
+            <div class="p-5 grid grid-cols-3 gap-3">
+                <div><label class="fin-label">Código</label><input name="codigo" required class="fin-input tabular" autofocus></div>
+                <div class="col-span-2"><label class="fin-label">Nome</label><input name="nome" required maxlength="120" class="fin-input"></div>
+                <div class="col-span-3"><label class="fin-label">Tipo (só vale para conta de 1º nível)</label><select name="tipo" class="fin-input"><option value="DESPESA">Despesa</option><option value="RECEITA">Receita</option></select></div>
+                <div class="col-span-3"><label class="fin-label">Descrição (opcional)</label><input name="descricao" maxlength="255" class="fin-input"></div>
+            </div>
+            <div class="px-5 py-3 border-t border-gray-100 bg-gray-50 flex justify-end gap-2"><button type="button" data-fechar class="fin-btn fin-btn-claro">Cancelar</button><button type="submit" class="fin-btn fin-btn-verde">Criar</button></div>
+        </form>
+    </div>
+</div>
+<div class="fin-modal" id="finPlanoEditar" role="dialog" aria-modal="true">
+    <div class="sm:max-w-md">
+        <form method="post" id="finPlanoEditarForm">
+            {% csrf_token %}
+            <div class="px-5 py-4 border-b border-gray-100"><h3 class="font-bold text-gray-900">Editar conta <span id="finPlanoCodigo" class="tabular text-gray-500"></span></h3></div>
+            <div class="p-5 space-y-3">
+                <input type="hidden" name="codigo">
+                <div><label class="fin-label">Nome</label><input name="nome" required maxlength="120" class="fin-input"></div>
+                <div id="finPlanoTipo"><label class="fin-label">Tipo</label><select name="tipo" class="fin-input"><option value="DESPESA">Despesa</option><option value="RECEITA">Receita</option></select></div>
+                <div><label class="fin-label">Descrição</label><input name="descricao" maxlength="255" class="fin-input"></div>
+            </div>
+            <div class="px-5 py-3 border-t border-gray-100 bg-gray-50 flex justify-end gap-2"><button type="button" data-fechar class="fin-btn fin-btn-claro">Cancelar</button><button type="submit" class="fin-btn fin-btn-verde">Salvar</button></div>
+        </form>
+    </div>
+</div>
+<script>
+window.finAoAbrir = function (modal, botao) {
+    if (modal.id === 'finPlano') {
+        modal.querySelector('[name=codigo]').value = botao.dataset.codigo || '';
+    } else if (modal.id === 'finPlanoEditar') {
+        var f = document.getElementById('finPlanoEditarForm');
+        f.action = "{% url 'financeiro:plano_editar' 0 %}".replace('/0/', '/' + botao.dataset.id + '/');
+        f.codigo.value = botao.dataset.codigo; f.nome.value = botao.dataset.nome;
+        f.descricao.value = botao.dataset.descricao; f.tipo.value = botao.dataset.tipo;
+        document.getElementById('finPlanoCodigo').textContent = botao.dataset.codigo;
+        document.getElementById('finPlanoTipo').classList.toggle('hidden', !botao.dataset.raiz);
+    }
+};
+</script>
+{% endif %}
+{% endblock %}

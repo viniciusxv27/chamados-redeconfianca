@@ -1,0 +1,128 @@
+{% extends 'base.html' %}
+{% load caixa_tags %}
+
+{% block title %}{% block fin_titulo %}Financeiro{% endblock %}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .fin-card { background:#fff; border:1px solid #EDEDF0; border-radius:1rem;
+                box-shadow:0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.06); }
+    .fin-hero { background:
+        radial-gradient(1100px 200px at 0% 0%, rgba(5,150,105,.10), transparent 60%),
+        radial-gradient(900px 200px at 100% 0%, rgba(14,116,144,.08), transparent 60%),
+        linear-gradient(180deg,#FFFFFF 0%, #FBFBFC 100%); }
+    .fin-tab { position:relative; white-space:nowrap; }
+    .fin-tab-ativa { color:#047857; background:#ECFDF5; }
+    .fin-tab-ativa::after { content:''; position:absolute; left:.75rem; right:.75rem; bottom:-1px;
+        height:2px; background:#059669; border-radius:2px; }
+    .tabular { font-variant-numeric: tabular-nums; }
+    .fin-input { width:100%; border:1px solid #D1D5DB; border-radius:.5rem; padding:.45rem .7rem; font-size:.875rem; background:#fff; }
+    .fin-input:focus { outline:none; border-color:#10B981; box-shadow:0 0 0 3px rgba(16,185,129,.15); }
+    .fin-label { display:block; font-size:.75rem; font-weight:600; color:#4B5563; margin-bottom:.25rem; }
+    .fin-btn { display:inline-flex; align-items:center; gap:.4rem; padding:.5rem 1rem; border-radius:.5rem;
+               font-size:.875rem; font-weight:600; }
+    .fin-btn-verde { background:#059669; color:#fff; } .fin-btn-verde:hover { background:#047857; }
+    .fin-btn-claro { background:#fff; color:#374151; border:1px solid #E5E7EB; } .fin-btn-claro:hover { background:#F9FAFB; }
+    .fin-chip { display:inline-flex; align-items:center; gap:.25rem; padding:.1rem .5rem; border-radius:9999px;
+                font-size:11px; font-weight:600; white-space:nowrap; }
+    .st-ABERTO { background:#EFF6FF; color:#1D4ED8; } .st-PARCIAL { background:#FEF3C7; color:#92400E; }
+    .st-QUITADO { background:#DCFCE7; color:#166534; } .st-CANCELADO { background:#F4F4F5; color:#71717A; }
+    .st-VENCIDO { background:#FEE2E2; color:#B91C1C; }
+    .fin-modal { position:fixed; inset:0; z-index:60; background:rgba(17,24,39,.55); display:none;
+                 align-items:flex-end; justify-content:center; padding:0; }
+    .fin-modal.aberto { display:flex; }
+    @media (min-width:640px) { .fin-modal { align-items:center; padding:1.5rem; } }
+    .fin-modal > div { background:#fff; width:100%; max-height:92vh; overflow-y:auto; border-radius:1rem 1rem 0 0; }
+    @media (min-width:640px) { .fin-modal > div { border-radius:1rem; } }
+    table.fin-tabela { width:100%; font-size:.8125rem; }
+    table.fin-tabela th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.03em; color:#6B7280;
+                          font-weight:600; padding:.55rem .75rem; background:#F9FAFB; border-bottom:1px solid #F3F4F6; white-space:nowrap; }
+    table.fin-tabela td { padding:.6rem .75rem; border-bottom:1px solid #F3F4F6; vertical-align:top; }
+    table.fin-tabela tbody tr:hover td { background:#FAFAFA; }
+</style>
+{% block fin_css %}{% endblock %}
+{% endblock %}
+
+{% block content %}
+<div class="fin-hero -mx-2 sm:-mx-4 lg:-mx-6 -mt-2 sm:-mt-4 lg:-mt-6 px-2 sm:px-4 lg:px-6 pt-5 pb-0 mb-5 border-b border-gray-100">
+    <div class="flex items-start justify-between gap-4 flex-wrap">
+        <div class="min-w-0">
+            <h1 class="text-2xl font-bold text-gray-900">{% block fin_cabecalho %}Financeiro{% endblock %}</h1>
+            <p class="text-sm text-gray-500 mt-0.5">{% block fin_subtitulo %}Contas, bancos e conciliações da rede{% endblock %}</p>
+        </div>
+        <div class="flex items-center gap-2 flex-wrap">{% block fin_acoes %}{% endblock %}</div>
+    </div>
+
+    <nav class="flex items-center gap-1 mt-4 overflow-x-auto -mb-px" aria-label="Partes do Financeiro">
+        <a href="{% url 'financeiro:painel' %}" class="fin-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'painel' %}fin-tab-ativa{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}"><i class="fas fa-chart-pie mr-1.5"></i>Painel</a>
+        {% for chave, rotulo, icone in menu_fin %}
+            {% if chave == 'pagar' %}
+            <a href="{% url 'financeiro:pagar' %}" class="fin-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'pagar' %}fin-tab-ativa{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}"><i class="fas {{ icone }} mr-1.5"></i>A pagar</a>
+            <a href="{% url 'financeiro:pagas' %}" class="fin-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'pagas' %}fin-tab-ativa{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}"><i class="fas fa-circle-check mr-1.5"></i>Pagas</a>
+            {% elif chave == 'receber' %}
+            <a href="{% url 'financeiro:receber' %}" class="fin-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'receber' %}fin-tab-ativa{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}"><i class="fas {{ icone }} mr-1.5"></i>A receber</a>
+            <a href="{% url 'financeiro:recebidas' %}" class="fin-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'recebidas' %}fin-tab-ativa{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}"><i class="fas fa-circle-check mr-1.5"></i>Recebidas</a>
+            {% elif chave == 'caixa' %}
+            <a href="{% url 'financeiro:caixa' %}" class="fin-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'caixa' %}fin-tab-ativa{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}"><i class="fas {{ icone }} mr-1.5"></i>Caixa das lojas</a>
+            {% elif chave == 'bancos' %}
+            <a href="{% url 'financeiro:bancos' %}" class="fin-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'bancos' %}fin-tab-ativa{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}"><i class="fas {{ icone }} mr-1.5"></i>Contas bancárias</a>
+            {% elif chave == 'conciliacao' %}
+            <a href="{% url 'financeiro:conciliacao' %}" class="fin-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'conciliacao' %}fin-tab-ativa{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}"><i class="fas {{ icone }} mr-1.5"></i>Conciliação bancária</a>
+            {% elif chave == 'cartoes' %}
+            <a href="{% url 'financeiro:cartoes' %}" class="fin-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'cartoes' %}fin-tab-ativa{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}"><i class="fas {{ icone }} mr-1.5"></i>Cartões</a>
+            {% elif chave == 'plano' %}
+            <a href="{% url 'financeiro:plano' %}" class="fin-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'plano' %}fin-tab-ativa{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}"><i class="fas {{ icone }} mr-1.5"></i>Plano de contas</a>
+            {% elif chave == 'auditoria' %}
+            <a href="{% url 'financeiro:auditoria' %}" class="fin-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'auditoria' %}fin-tab-ativa{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}"><i class="fas {{ icone }} mr-1.5"></i>Rastreabilidade</a>
+            {% endif %}
+        {% endfor %}
+        {% if pode_baixas %}
+        <a href="{% url 'financeiro:baixas' %}" class="fin-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'baixas' %}fin-tab-ativa{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}"><i class="fas fa-list-check mr-1.5"></i>Baixa de títulos</a>
+        {% endif %}
+        {% if e_superadmin %}
+        <a href="{% url 'financeiro:acessos' %}" class="fin-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'acessos' %}fin-tab-ativa{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}"><i class="fas fa-user-shield mr-1.5"></i>Acessos</a>
+        {% endif %}
+    </nav>
+</div>
+
+{% if messages %}
+<div class="space-y-2 mb-4">
+    {% for message in messages %}
+    <div class="p-3 rounded-xl text-sm border {% if message.tags == 'error' %}bg-red-50 border-red-100 text-red-700{% elif message.tags == 'success' %}bg-emerald-50 border-emerald-100 text-emerald-700{% elif message.tags == 'warning' %}bg-amber-50 border-amber-100 text-amber-800{% else %}bg-blue-50 border-blue-100 text-blue-700{% endif %}">{{ message }}</div>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% block fin_conteudo %}{% endblock %}
+
+<script>
+/* Modais do módulo: data-abrir="#id" abre, data-fechar fecha, Esc fecha. */
+(function () {
+    document.addEventListener('click', function (e) {
+        var abre = e.target.closest('[data-abrir]');
+        if (abre) {
+            var modal = document.querySelector(abre.dataset.abrir);
+            if (modal) {
+                modal.classList.add('aberto');
+                if (window.finAoAbrir) window.finAoAbrir(modal, abre);
+                var foco = modal.querySelector('[autofocus]');
+                if (foco) setTimeout(function () { foco.focus(); }, 50);
+            }
+            return;
+        }
+        if (e.target.closest('[data-fechar]') || e.target.classList.contains('fin-modal')) {
+            var aberto = e.target.closest('.fin-modal');
+            if (aberto) aberto.classList.remove('aberto');
+        }
+    });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') document.querySelectorAll('.fin-modal.aberto').forEach(function (m) { m.classList.remove('aberto'); });
+    });
+    // Botão de envio desliga no submit: evita baixa em dobro com clique duplo.
+    document.addEventListener('submit', function (e) {
+        var b = e.target.querySelector('button[type=submit]:not([data-livre]), button:not([type]):not([data-livre])');
+        if (b && !e.defaultPrevented) { setTimeout(function () { b.disabled = true; }, 0); }
+    });
+})();
+</script>
+{% endblock %}

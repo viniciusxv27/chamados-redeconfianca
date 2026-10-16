@@ -1,0 +1,54 @@
+{% extends 'financeiro/base_financeiro.html' %}
+{% load caixa_tags %}
+{% block fin_titulo %}Rastreabilidade{% endblock %}
+{% block fin_cabecalho %}Rastreabilidade{% endblock %}
+{% block fin_subtitulo %}Quem fez cada movimento, o quê, quando, de onde — com o antes e o depois{% endblock %}
+
+{% block fin_conteudo %}
+<form method="get" class="fin-card p-3 mb-4 grid grid-cols-2 md:grid-cols-7 gap-2 items-end">
+    <div class="col-span-2"><label class="fin-label">Busca</label><input type="search" name="q" value="{{ filtro.q }}" class="fin-input" placeholder="Descrição, pessoa ou IP"></div>
+    <div><label class="fin-label">De</label><input type="date" name="de" value="{{ filtro.de }}" class="fin-input"></div>
+    <div><label class="fin-label">Até</label><input type="date" name="ate" value="{{ filtro.ate }}" class="fin-input"></div>
+    <div><label class="fin-label">Pessoa</label><select name="usuario" class="fin-input"><option value="">Todas</option>{% for p in pessoas %}<option value="{{ p.id }}" {% if filtro.usuario == p.id|stringformat:'s' %}selected{% endif %}>{{ p.get_full_name|default:p.email }}</option>{% endfor %}</select></div>
+    <div><label class="fin-label">Ação</label><select name="acao" class="fin-input"><option value="">Todas</option>{% for k, r in acoes %}<option value="{{ k }}" {% if filtro.acao == k %}selected{% endif %}>{{ r }}</option>{% endfor %}</select></div>
+    <div><label class="fin-label">Área</label><select name="area" class="fin-input"><option value="">Todas</option>{% for k, r in areas %}<option value="{{ k }}" {% if filtro.area == k %}selected{% endif %}>{{ r }}</option>{% endfor %}</select></div>
+    <div class="col-span-2 md:col-span-7 flex justify-end gap-2"><a href="?" class="fin-btn fin-btn-claro">Limpar</a><button class="fin-btn fin-btn-verde" data-livre><i class="fas fa-filter"></i>Filtrar</button></div>
+</form>
+
+<div class="fin-card overflow-hidden">
+    <div class="overflow-x-auto">
+    <table class="fin-tabela">
+        <thead><tr><th>Quando</th><th>Quem</th><th>O que</th><th class="text-right">Valor</th><th>Onde</th></tr></thead>
+        <tbody>
+        {% for r in registros %}
+        <tr>
+            <td class="tabular whitespace-nowrap text-xs">{{ r.quando|date:"d/m/Y" }}<span class="block text-gray-500">{{ r.quando|date:"H:i:s" }}</span></td>
+            <td class="text-xs whitespace-nowrap"><strong class="text-gray-900">{{ r.usuario_nome }}</strong>{% if r.usuario_setor %}<span class="block text-gray-500">{{ r.usuario_setor }}</span>{% endif %}</td>
+            <td class="min-w-[18rem]">
+                <span class="fin-chip bg-gray-100 text-gray-700 mr-1">{{ r.get_acao_display }}</span>{{ r.descricao }}
+                {% if r.loja %}<span class="block text-[11px] text-gray-500">Loja: {{ r.loja.name }}</span>{% endif %}
+                {% if r.depois and r.acao != 'CRIAR' %}
+                <details class="mt-1"><summary class="text-[11px] text-emerald-700 cursor-pointer">antes → depois</summary>
+                    <dl class="text-[11px] mt-1 space-y-0.5">{% for k, v in r.depois.items %}<div><dt class="inline text-gray-500">{{ k }}:</dt>
+                        <dd class="inline">{% if r.antes %}{% for k2, v2 in r.antes.items %}{% if k2 == k %}<s class="text-red-600">{{ v2|default:"—" }}</s> → {% endif %}{% endfor %}{% endif %}<span class="text-emerald-700">{{ v|default:"—" }}</span></dd></div>{% endfor %}</dl></details>
+                {% elif r.antes and r.acao == 'EXCLUIR' %}
+                <details class="mt-1"><summary class="text-[11px] text-emerald-700 cursor-pointer">o que foi excluído</summary>
+                    <dl class="text-[11px] mt-1">{% for k, v in r.antes.items %}<div><dt class="inline text-gray-500">{{ k }}:</dt> <dd class="inline">{{ v|default:"—" }}</dd></div>{% endfor %}</dl></details>
+                {% endif %}
+                {% if r.objeto_tipo == 'titulo' and r.objeto_id %}<a href="{% url 'financeiro:titulo' r.objeto_id %}" class="text-[11px] text-emerald-700 hover:underline">abrir título</a>{% endif %}
+            </td>
+            <td class="text-right tabular whitespace-nowrap">{% if r.valor is not None %}{{ r.valor|brl_zero }}{% endif %}</td>
+            <td class="text-[11px] text-gray-500 max-w-[16rem]">IP {{ r.ip|default:"—" }}<span class="block truncate" title="{{ r.dispositivo }}">{{ r.dispositivo|default:"" }}</span><span class="block truncate">{{ r.rota }}</span></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="text-center text-gray-400 py-10">Nenhum registro.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+    {% if pagina.has_other_pages %}
+    <div class="px-4 py-3 border-t border-gray-100 flex justify-between text-sm"><span class="text-gray-500">Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span>
+        <div class="flex gap-2">{% if pagina.has_previous %}<a href="?{{ query }}&p={{ pagina.previous_page_number }}" class="fin-btn fin-btn-claro">Anterior</a>{% endif %}{% if pagina.has_next %}<a href="?{{ query }}&p={{ pagina.next_page_number }}" class="fin-btn fin-btn-claro">Próxima</a>{% endif %}</div></div>
+    {% endif %}
+</div>
+{% endblock %}

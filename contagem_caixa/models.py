@@ -618,3 +618,41 @@ class SincronizacaoDFe(models.Model):
 
     def __str__(self):
         return f'{self.cnpj} — NSU {self.ult_nsu}/{self.max_nsu}'
+
+
+class ManifestacaoNFe(models.Model):
+    """Manifestação do destinatário enviada à SEFAZ (evento da NF-e).
+
+    Ciência libera o XML completo; Confirmação, Desconhecimento e Operação não
+    realizada são conclusivas. Cada tentativa fica registrada, com o que foi
+    enviado e o que a SEFAZ respondeu.
+    """
+
+    TIPOS = [
+        ('210210', 'Ciência da operação'),
+        ('210200', 'Confirmação da operação'),
+        ('210220', 'Desconhecimento da operação'),
+        ('210240', 'Operação não realizada'),
+    ]
+
+    nota = models.ForeignKey(NotaRecebida, on_delete=models.CASCADE, related_name='manifestacoes',
+                             verbose_name='Nota')
+    tipo = models.CharField(max_length=6, choices=TIPOS, verbose_name='Evento')
+    justificativa = models.CharField(max_length=255, blank=True, verbose_name='Justificativa')
+    sucesso = models.BooleanField(default=False, verbose_name='Registrada na SEFAZ')
+    cstat = models.CharField(max_length=10, blank=True, verbose_name='Código')
+    motivo = models.CharField(max_length=255, blank=True, verbose_name='Resposta')
+    protocolo = models.CharField(max_length=20, blank=True, verbose_name='Protocolo')
+    xml_enviado = models.TextField(blank=True)
+    xml_retorno = models.TextField(blank=True)
+    enviado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='+', verbose_name='Enviado por')
+    enviado_em = models.DateTimeField(auto_now_add=True, verbose_name='Enviado em')
+
+    class Meta:
+        ordering = ['-enviado_em', '-id']
+        verbose_name = 'Manifestação da NF-e'
+        verbose_name_plural = 'Manifestações da NF-e'
+
+    def __str__(self):
+        return f'{self.get_tipo_display()} · NF {self.nota.numero} · {self.cstat}'

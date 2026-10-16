@@ -79,6 +79,7 @@ INSTALLED_APPS = [
     'auditoria_sap',  # Visão SAP: auditoria SAP x Vivo go (espelho do MySQL)
     'vendas',  # Lançamento de vendas (Postgres) + tabela de preços
     'webmail',  # E-mail institucional (cliente IMAP/SMTP do poste.io)
+    'financeiro',  # Financeiro: títulos, baixas, bancos, conciliações e plano de contas
     'maps',  # Mapa de localização (módulo oculto, restrito à administração)
     'cursos',
     'quiz',
@@ -161,6 +162,7 @@ TEMPLATES = [
                 'impulso.context_processors.impulso_menu',
                 'cartoes.context_processors.cartoes_menu',
                 'webmail.context_processors.email_menu',
+                'financeiro.context_processors.financeiro_menu',
                 'tangerino.context_processors.tangerino_gate',
                 'contagem_caixa.context_processors.caixa_menu',
                 'maps.context_processors.coleta_posicao',

@@ -1,0 +1,79 @@
+{% extends 'financeiro/base_financeiro.html' %}
+{% block fin_titulo %}Acessos ao Financeiro{% endblock %}
+{% block fin_cabecalho %}Quem entra no Financeiro{% endblock %}
+{% block fin_subtitulo %}O SUPERADMIN tem tudo. Aqui ele libera, pessoa por pessoa, cada parte e cada ação — e, se quiser, só algumas lojas.{% endblock %}
+{% block fin_acoes %}<button type="button" data-abrir="#finNovoAcesso" class="fin-btn fin-btn-verde"><i class="fas fa-user-plus"></i>Liberar alguém</button>{% endblock %}
+
+{% block fin_css %}
+<style>
+    .fin-matriz td, .fin-matriz th { padding:.4rem .6rem; border-bottom:1px solid #F3F4F6; font-size:.8125rem; }
+    .fin-matriz th { text-align:left; color:#6B7280; font-size:11px; text-transform:uppercase; font-weight:600; }
+</style>
+{% endblock %}
+
+{% block fin_conteudo %}
+<div class="space-y-4">
+    {% for a in liberados %}
+    <details class="fin-card overflow-hidden" id="acesso-{{ a.id }}" {% if request.GET.abrir == a.id|stringformat:'s' %}open{% endif %}>
+        <summary class="px-5 py-3 flex items-center justify-between gap-3 cursor-pointer list-none">
+            <div class="min-w-0">
+                <p class="font-semibold text-gray-900">{{ a.user.get_full_name|default:a.user.email }} {% if not a.ativo %}<span class="fin-chip bg-gray-100 text-gray-600">Suspenso</span>{% endif %}</p>
+                <p class="text-[11px] text-gray-500">{% if a.user.sector %}{{ a.user.sector.name }} · {% endif %}{{ a.chaves|length }} permissão(ões) · {% if a.ids_lojas %}{{ a.ids_lojas|length }} loja(s){% else %}todas as lojas{% endif %}
+                    · por {{ a.concedido_por.get_full_name|default:"—" }} em {{ a.atualizado_em|date:"d/m/Y H:i" }}{% if a.observacao %} · {{ a.observacao }}{% endif %}</p>
+            </div>
+            <span class="text-xs text-emerald-700 whitespace-nowrap">editar <i class="fas fa-chevron-down text-[9px]"></i></span>
+        </summary>
+        <form method="post" class="border-t border-gray-100">
+            {% csrf_token %}<input type="hidden" name="user" value="{{ a.user_id }}">
+            {% include 'financeiro/_matriz_acesso.html' with chaves=a.chaves ids_lojas=a.ids_lojas acesso=a %}
+            <div class="px-5 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between gap-2 flex-wrap">
+                <button type="submit" name="remover" value="1" class="text-sm text-red-600 hover:underline" onclick="return confirm('Tirar o acesso de {{ a.user.get_full_name|default:a.user.email|escapejs }} ao Financeiro?');" data-livre>Tirar acesso</button>
+                <button type="submit" class="fin-btn fin-btn-verde"><i class="fas fa-check"></i>Salvar</button>
+            </div>
+        </form>
+    </details>
+    {% empty %}
+    <div class="fin-card p-10 text-center text-gray-500"><i class="fas fa-user-shield text-4xl text-gray-300 mb-3"></i><p>Ninguém liberado ainda — só o SUPERADMIN entra no Financeiro.</p></div>
+    {% endfor %}
+</div>
+
+<div class="fin-modal" id="finNovoAcesso" role="dialog" aria-modal="true">
+    <div class="sm:max-w-4xl">
+        <form method="post">
+            {% csrf_token %}
+            <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between"><h3 class="font-bold text-gray-900">Liberar o Financeiro para alguém</h3>
+                <button type="button" data-fechar class="w-8 h-8 rounded-lg text-gray-400 hover:bg-gray-100" aria-label="Fechar"><i class="fas fa-xmark"></i></button></div>
+            <div class="px-5 pt-4">
+                <label class="fin-label">Pessoa</label>
+                <input type="search" id="finBuscaPessoa" placeholder="Buscar por nome ou setor…" class="fin-input mb-2">
+                <div class="border border-gray-200 rounded-lg max-h-48 overflow-y-auto divide-y divide-gray-50">
+                    {% for p in candidatos %}
+                    <label data-pessoa="{{ p.get_full_name|default:p.email|lower }} {{ p.sector.name|default:''|lower }}" class="flex items-center gap-2 px-3 py-1.5 hover:bg-emerald-50/50 cursor-pointer text-sm">
+                        <input type="radio" name="user" value="{{ p.id }}" required class="accent-emerald-600"><span class="truncate">{{ p.get_full_name|default:p.email }}</span>
+                        {% if p.sector %}<span class="text-[11px] text-gray-400 truncate">{{ p.sector.name }}</span>{% endif %}</label>
+                    {% endfor %}
+                </div>
+            </div>
+            {% include 'financeiro/_matriz_acesso.html' with chaves=None ids_lojas=None acesso=None %}
+            <div class="px-5 py-3 border-t border-gray-100 bg-gray-50 flex justify-end gap-2"><button type="button" data-fechar class="fin-btn fin-btn-claro">Cancelar</button><button type="submit" class="fin-btn fin-btn-verde"><i class="fas fa-check"></i>Liberar</button></div>
+        </form>
+    </div>
+</div>
+
+<script>
+(function () {
+    var busca = document.getElementById('finBuscaPessoa');
+    busca.addEventListener('input', function () {
+        var t = busca.value.trim().toLowerCase();
+        document.querySelectorAll('[data-pessoa]').forEach(function (el) { el.classList.toggle('hidden', t && el.dataset.pessoa.indexOf(t) < 0); });
+    });
+    // "Tudo" de uma área marca/desmarca as ações dela.
+    document.addEventListener('change', function (e) {
+        if (e.target.dataset.area) {
+            e.target.closest('tr').querySelectorAll('input[name=permissoes]').forEach(function (c) { c.checked = e.target.checked; });
+        }
+    });
+    if (location.hash) { var d = document.querySelector(location.hash); if (d && d.tagName === 'DETAILS') d.open = true; }
+})();
+</script>
+{% endblock %}

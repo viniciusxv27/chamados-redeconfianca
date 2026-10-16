@@ -1,0 +1,53 @@
+{% extends 'financeiro/base_financeiro.html' %}
+{% load caixa_tags %}
+{% block fin_titulo %}{% if tipo == 'PAGAR' %}Contas pagas{% else %}Contas recebidas{% endif %}{% endblock %}
+{% block fin_cabecalho %}{% if tipo == 'PAGAR' %}Contas pagas{% else %}Contas recebidas{% endif %}{% endblock %}
+{% block fin_subtitulo %}Edite ou cancele (estorne) os títulos já {% if tipo == 'PAGAR' %}pagos{% else %}recebidos{% endif %}{% endblock %}
+
+{% block fin_conteudo %}
+<form method="get" class="fin-card p-3 mb-4 grid grid-cols-2 md:grid-cols-7 gap-2 items-end">
+    <div class="col-span-2"><label class="fin-label">Busca</label><input type="search" name="q" value="{{ filtro.q }}" class="fin-input" placeholder="Descrição, fornecedor, nº"></div>
+    <div><label class="fin-label">Pago de</label><input type="date" name="de" value="{{ filtro.de }}" class="fin-input"></div>
+    <div><label class="fin-label">até</label><input type="date" name="ate" value="{{ filtro.ate }}" class="fin-input"></div>
+    <div><label class="fin-label">Loja</label><select name="loja" class="fin-input"><option value="">Todas</option>{% for l in lojas %}<option value="{{ l.id }}" {% if filtro.loja == l.id|stringformat:'s' %}selected{% endif %}>{{ l.name }}</option>{% endfor %}</select></div>
+    <div><label class="fin-label">Conta</label><select name="conta" class="fin-input"><option value="">Todas</option>{% for c in contas %}<option value="{{ c.id }}" {% if filtro.conta == c.id|stringformat:'s' %}selected{% endif %}>{{ c.nome }}</option>{% endfor %}</select></div>
+    <div><label class="fin-label">Mostrar</label><select name="estornadas" class="fin-input">
+        <option value="">Válidas</option><option value="1" {% if filtro.estornadas == '1' %}selected{% endif %}>Só estornadas</option><option value="todas" {% if filtro.estornadas == 'todas' %}selected{% endif %}>Todas</option></select></div>
+    <div class="col-span-2 md:col-span-7 flex justify-end gap-2"><a href="?" class="fin-btn fin-btn-claro">Limpar</a><button class="fin-btn fin-btn-verde" data-livre><i class="fas fa-filter"></i>Filtrar</button></div>
+</form>
+
+<div class="grid grid-cols-3 gap-3 mb-4">
+    <div class="fin-card p-3"><p class="text-[11px] uppercase font-semibold text-gray-500">Total {% if tipo == 'PAGAR' %}pago{% else %}recebido{% endif %}</p><p class="text-lg font-bold tabular">{{ total|brl_zero }}</p></div>
+    <div class="fin-card p-3"><p class="text-[11px] uppercase font-semibold text-gray-500">Juros e multa</p><p class="text-lg font-bold tabular text-rose-700">{{ total_juros|brl_zero }}</p></div>
+    <div class="fin-card p-3"><p class="text-[11px] uppercase font-semibold text-gray-500">Descontos</p><p class="text-lg font-bold tabular text-emerald-700">{{ total_desconto|brl_zero }}</p></div>
+</div>
+
+<div class="fin-card overflow-hidden">
+    <div class="overflow-x-auto">
+    <table class="fin-tabela">
+        <thead><tr><th>Data</th><th>Título</th><th>Loja</th><th>Conta · forma</th><th class="text-right">Total</th><th>Por</th><th></th></tr></thead>
+        <tbody>
+        {% for b in baixas %}
+        <tr class="{% if b.estornada %}opacity-60{% endif %}">
+            <td class="tabular whitespace-nowrap">{{ b.data|date:"d/m/Y" }}</td>
+            <td class="min-w-[14rem]"><a href="{% url 'financeiro:titulo' b.titulo_id %}" class="font-medium text-gray-900 hover:text-emerald-700 {% if b.estornada %}line-through{% endif %}">{{ b.titulo.descricao }}</a>{% if b.titulo.rotulo_parcela %} <span class="text-xs text-gray-400">{{ b.titulo.rotulo_parcela }}</span>{% endif %}
+                <p class="text-[11px] text-gray-500">{{ b.titulo.pessoa_nome }}{% if b.observacao %} · {{ b.observacao }}{% endif %}</p>
+                {% if b.estornada %}<p class="text-[11px] text-red-600">Estornada: {{ b.motivo_estorno }}</p>{% endif %}</td>
+            <td class="text-xs text-gray-600 whitespace-nowrap">{{ b.titulo.loja.name|default:"—" }}</td>
+            <td class="text-xs whitespace-nowrap">{{ b.conta.nome }}<span class="block text-gray-500">{{ b.get_forma_display }}</span></td>
+            <td class="text-right tabular font-semibold whitespace-nowrap">{{ b.total|brl_zero }}{% if b.juros or b.multa %}<span class="block text-[11px] text-rose-600 font-normal">+{{ b.juros|add:b.multa|brl_zero }}</span>{% endif %}</td>
+            <td class="text-xs text-gray-500 whitespace-nowrap">{{ b.criado_por.get_full_name|default:"—" }}<span class="block">{{ b.criado_em|date:"d/m H:i" }}</span></td>
+            <td class="text-right whitespace-nowrap text-xs">
+                {% if b.comprovante %}<a href="{% url 'financeiro:anexo' 'baixa' b.id %}" target="_blank" rel="noopener" class="text-gray-500 hover:underline mr-2"><i class="fas fa-paperclip"></i></a>{% endif %}
+                {% if pode.baixas_estornar and not b.estornada %}<a href="{% url 'financeiro:titulo' b.titulo_id %}" class="text-emerald-700 font-semibold hover:underline">editar / estornar</a>{% endif %}
+            </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="text-center text-gray-400 py-10">Nenhuma baixa no período.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+    {% if limitado %}<p class="px-4 py-2 text-xs text-amber-700 border-t border-gray-100">Mostrando as 500 mais recentes — estreite o período.</p>{% endif %}
+</div>
+{% endblock %}

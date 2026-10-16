@@ -1,0 +1,32 @@
+{% load fin_tags %}
+{% comment %}Matriz área × ação, lojas e situação do acesso. Params: chaves (set), ids_lojas (set), acesso.{% endcomment %}
+<div class="px-5 py-4">
+    <table class="w-full fin-matriz table-fixed">
+        <thead><tr><th style="width:46%">Parte do módulo</th><th style="width:3.5rem">Tudo</th><th>Ações</th></tr></thead>
+        <tbody>
+        {% for chave, rotulo, icone, descricao, acoes in areas %}
+        <tr>
+            <td class="align-top"><p class="font-semibold text-gray-800"><i class="fas {{ icone }} text-gray-400 w-4 mr-1"></i>{{ rotulo }}</p><p class="text-[11px] text-gray-500">{{ descricao }}</p></td>
+            <td class="align-top"><input type="checkbox" data-area="{{ chave }}" class="accent-emerald-600" aria-label="Tudo de {{ rotulo }}"></td>
+            <td class="align-top"><div class="flex flex-wrap gap-x-4 gap-y-1">
+                {% for acao, rotulo_acao in acoes %}{% with c=chave|add:'.'|add:acao %}
+                <label class="flex items-center gap-1.5 text-sm text-gray-700 whitespace-nowrap"><input type="checkbox" name="permissoes" value="{{ c }}" {% if chaves|contem:c %}checked{% endif %} class="accent-emerald-600">{{ rotulo_acao }}</label>
+                {% endwith %}{% endfor %}
+            </div></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    <div class="grid sm:grid-cols-3 gap-4 mt-4">
+        <div class="sm:col-span-2">
+            <p class="fin-label">Lojas que enxerga <span class="font-normal text-gray-400">(nenhuma marcada = todas)</span></p>
+            <div class="border border-gray-200 rounded-lg p-2 max-h-40 overflow-y-auto grid grid-cols-2 gap-x-3 gap-y-1">
+                {% for l in lojas %}<label class="flex items-center gap-1.5 text-xs text-gray-700"><input type="checkbox" name="lojas" value="{{ l.id }}" {% if ids_lojas|contem:l.id %}checked{% endif %} class="accent-emerald-600">{{ l.name }}</label>{% endfor %}
+            </div>
+        </div>
+        <div class="space-y-3">
+            <div><label class="fin-label">Observação</label><input name="observacao" maxlength="200" value="{{ acesso.observacao|default:'' }}" class="fin-input" placeholder="Ex.: financeiro da matriz"></div>
+            <label class="flex items-center gap-2 text-sm"><input type="hidden" name="ativo" value="off"><input type="checkbox" name="ativo" value="on" {% if not acesso or acesso.ativo %}checked{% endif %} class="accent-emerald-600">Acesso ativo</label>
+        </div>
+    </div>
+</div>
