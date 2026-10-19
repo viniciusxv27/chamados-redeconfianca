@@ -3,200 +3,404 @@
 
 {% block extra_css %}
 <style>
-  .hc { --hc-acc: #4F46E5; --hc-acc-suave: rgba(79,70,229,.10); }
-  .hc .hc-tab { position: relative; padding: .55rem .9rem; font-size: .875rem; font-weight: 600; color: #6B7280; border-radius: .6rem; white-space: nowrap; }
-  .hc .hc-tab:hover { color: #111827; background: rgba(0,0,0,.04); }
-  .hc .hc-tab[aria-selected="true"] { color: var(--hc-acc); background: var(--hc-acc-suave); }
-  .hc .hc-chip { display: inline-flex; align-items: center; gap: .25rem; padding: .05rem .5rem; border-radius: 9999px; font-size: 11px; font-weight: 600; white-space: nowrap; }
-  .hc table.hc-tab-pessoas { width: 100%; font-size: .8125rem; }
-  .hc table.hc-tab-pessoas th { text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: .03em; color: #6B7280; font-weight: 600; padding: .5rem .6rem; white-space: nowrap; border-bottom: 1px solid #F3F4F6; }
-  .hc table.hc-tab-pessoas td { padding: .55rem .6rem; border-bottom: 1px solid #F3F4F6; vertical-align: top; }
-  .hc table.hc-tab-pessoas tr.hc-grupo td { background: #F9FAFB; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #6B7280; padding: .3rem .6rem; }
-  .hc table.hc-tab-pessoas tbody tr.hc-linha:hover td { background: #FAFAFF; }
-  .hc .hc-obs { width: 100%; min-width: 9rem; border: 1px dashed transparent; border-radius: .4rem; padding: .15rem .35rem; background: transparent; font-size: .78rem; }
-  .hc .hc-obs:hover { border-color: #D1D5DB; }
-  .hc .hc-obs:focus { outline: none; border-style: solid; border-color: var(--hc-acc); background: #fff; box-shadow: 0 0 0 3px var(--hc-acc-suave); }
-  .hc .hc-alerta-proxima { background: #FEF3C7; color: #92400E; border-radius: .3rem; padding: 0 .25rem; font-weight: 600; }
-  .hc details.hc-hist summary { list-style: none; cursor: pointer; }
-  .hc details.hc-hist summary::-webkit-details-marker { display: none; }
-  .hc-gaveta { position: fixed; inset: 0; z-index: 70; display: none; }
+  /* Quadro de HC — IDV do portal: laranja #FF6B35, grafite #2C3E50, Montserrat. */
+  .hc { --pri: #FF6B35; --pri-esc: #E85A26; --pri-suave: rgba(255,107,53,.12); --navy: #2C3E50; --navy-2: #1F2D3B;
+        --sup: #FFFFFF; --sup-2: #F8FAFC; --sup-3: #F1F5F9; --txt: #1F2937; --txt-2: #4B5563; --txt-3: #9CA3AF;
+        --borda: #E5E7EB; --borda-suave: #F1F5F9; --sombra: 0 1px 2px rgba(16,24,40,.05), 0 4px 14px rgba(16,24,40,.06);
+        --sombra-lg: 0 18px 40px rgba(16,24,40,.16); color: var(--txt); font-family: Montserrat, ui-sans-serif, system-ui; }
+  html.dark .hc { --sup: var(--tema-superficie, #1b2130); --sup-2: var(--tema-superficie-2, #232a3b); --sup-3: var(--tema-superficie-3, #2b3346);
+                  --txt: var(--tema-texto, #e7eaf0); --txt-2: var(--tema-texto-2, #b6bdcc); --txt-3: var(--tema-texto-3, #8b93a5);
+                  --borda: var(--tema-borda, #313a4f); --borda-suave: var(--tema-borda-suave, #262e40); --pri-suave: rgba(255,107,53,.18);
+                  --sombra: 0 1px 2px rgba(0,0,0,.3); --sombra-lg: 0 18px 40px rgba(0,0,0,.45); }
+  .hc .card { background: var(--sup); border: 1px solid var(--borda); border-radius: 1.1rem; box-shadow: var(--sombra); }
+  .hc .t2 { color: var(--txt-2); } .hc .t3 { color: var(--txt-3); }
+  .hc .tabular { font-variant-numeric: tabular-nums; }
+
+  /* herói */
+  .hc .heroi { position: relative; overflow: hidden; border-radius: 1.4rem; color: #fff;
+               background: radial-gradient(700px 240px at 100% 0%, rgba(255,107,53,.35), transparent 60%),
+                           linear-gradient(135deg, var(--navy) 0%, var(--navy-2) 100%); box-shadow: var(--sombra-lg); }
+  .hc .heroi::after { content: ''; position: absolute; right: -60px; bottom: -80px; width: 260px; height: 260px; border-radius: 50%;
+                      background: rgba(255,255,255,.04); pointer-events: none; }
+  .hc .kpi { position: relative; display: block; width: 100%; text-align: left; border-radius: 1rem; padding: .85rem 1rem;
+             background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.10); transition: transform .2s, background .2s; }
+  .hc button.kpi:hover { transform: translateY(-2px); background: rgba(255,255,255,.13); }
+  .hc .kpi b { display: block; font-size: 1.65rem; font-weight: 800; letter-spacing: -.02em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .hc .kpi span { font-size: .72rem; color: rgba(255,255,255,.75); font-weight: 600; }
+  .hc .kpi i { position: absolute; right: .8rem; top: .8rem; color: rgba(255,255,255,.45); }
+  .hc .kpi.destaque b { color: #FFB089; }
+  .hc .bt { display: inline-flex; align-items: center; gap: .45rem; padding: .6rem 1rem; border-radius: .8rem; font-size: .85rem; font-weight: 700; transition: all .15s; }
+  .hc .bt-pri { background: var(--pri); color: #fff; box-shadow: 0 6px 16px rgba(255,107,53,.35); }
+  .hc .bt-pri:hover { background: var(--pri-esc); transform: translateY(-1px); }
+  .hc .bt-vidro { background: rgba(255,255,255,.1); color: #fff; border: 1px solid rgba(255,255,255,.2); }
+  .hc .bt-vidro:hover { background: rgba(255,255,255,.18); }
+  .hc .bt-claro { background: var(--sup); color: var(--txt); border: 1px solid var(--borda); }
+  .hc .bt-claro:hover { border-color: var(--pri); color: var(--pri-esc); }
+  .hc .bt:disabled { opacity: .4; cursor: not-allowed; transform: none; box-shadow: none; }
+
+  /* abas e barra */
+  .hc .abas { display: inline-flex; gap: .25rem; padding: .3rem; border-radius: 1rem; background: var(--sup); border: 1px solid var(--borda); box-shadow: var(--sombra); max-width: 100%; overflow-x: auto; }
+  .hc .aba { display: inline-flex; align-items: center; gap: .4rem; padding: .5rem .9rem; border-radius: .75rem; font-size: .84rem; font-weight: 700; color: var(--txt-2); white-space: nowrap; transition: all .15s; }
+  .hc .aba:hover { color: var(--txt); background: var(--sup-3); }
+  .hc .aba[aria-selected="true"] { background: var(--pri); color: #fff; box-shadow: 0 4px 12px rgba(255,107,53,.3); }
+  .hc .aba .n { font-size: 11px; padding: 0 .4rem; border-radius: 9999px; background: rgba(0,0,0,.08); }
+  .hc .aba[aria-selected="true"] .n { background: rgba(255,255,255,.25); }
+  .hc .barra { position: sticky; top: .5rem; z-index: 25; background: color-mix(in srgb, var(--sup) 92%, transparent);
+               backdrop-filter: blur(10px); border: 1px solid var(--borda); border-radius: 1rem; box-shadow: var(--sombra); }
+  .hc .campo { width: 100%; border: 1px solid var(--borda); background: var(--sup); color: var(--txt); border-radius: .7rem; padding: .55rem .8rem; font-size: .85rem; }
+  .hc .campo:focus { outline: none; border-color: var(--pri); box-shadow: 0 0 0 3px var(--pri-suave); }
+  .hc .pilula { display: inline-flex; align-items: center; gap: .35rem; padding: .35rem .75rem; border-radius: 9999px; font-size: .78rem; font-weight: 700;
+                border: 1px solid var(--borda); background: var(--sup); color: var(--txt-2); white-space: nowrap; transition: all .15s; }
+  .hc .pilula:hover { border-color: var(--pri); color: var(--pri-esc); }
+  .hc .pilula[aria-pressed="true"] { background: var(--pri-suave); border-color: var(--pri); color: var(--pri-esc); }
+  .hc .pilula .n { font-size: 10.5px; color: var(--txt-3); }
+  .hc .rolagem-x { overflow-x: auto; scrollbar-width: thin; -webkit-mask-image: linear-gradient(90deg, #000 92%, transparent); mask-image: linear-gradient(90deg, #000 92%, transparent); }
+
+  /* cores por grupo de cargo */
+  .hc .g-coordenacao { --g: #475569; } .hc .g-gerente { --g: #FF6B35; } .hc .g-gerente-operacional { --g: #F59E0B; }
+  .hc .g-administrativo { --g: #0EA5E9; } .hc .g-recepcao { --g: #8B5CF6; } .hc .g-consultor-pleno { --g: #10B981; }
+  .hc .g-consultor { --g: #14B8A6; } .hc .g-sniper-itinerante { --g: #F43F5E; } .hc .g-outros, .hc .g-sem-cargo { --g: #94A3B8; }
+  .hc .chip-g { display: inline-flex; align-items: center; gap: .3rem; padding: .1rem .55rem; border-radius: 9999px; font-size: 11px; font-weight: 700;
+                color: var(--g); background: color-mix(in srgb, var(--g) 13%, transparent); white-space: nowrap; }
+  .hc .chip-g::before { content: ''; width: .45rem; height: .45rem; border-radius: 50%; background: var(--g); }
+  .hc .avatar { flex: 0 0 auto; width: 2.25rem; height: 2.25rem; border-radius: .8rem; display: grid; place-items: center; font-size: .75rem; font-weight: 800;
+                color: #fff; background: linear-gradient(135deg, var(--g), color-mix(in srgb, var(--g) 70%, #000)); }
+  .hc .avatar.p { width: 1.9rem; height: 1.9rem; border-radius: .65rem; font-size: .68rem; }
+  .hc .tag { display: inline-flex; align-items: center; gap: .25rem; padding: .05rem .5rem; border-radius: 9999px; font-size: 10.5px; font-weight: 700; white-space: nowrap; }
+  .hc .tag-ok { background: #DCFCE7; color: #15803D; } .hc .tag-alerta { background: #FEF3C7; color: #B45309; }
+  .hc .tag-erro { background: #FEE2E2; color: #B91C1C; } .hc .tag-info { background: var(--pri-suave); color: var(--pri-esc); }
+  .hc .tag-cinza { background: var(--sup-3); color: var(--txt-2); }
+  html.dark .hc .tag-ok { background: rgba(34,197,94,.15); color: #86EFAC; } html.dark .hc .tag-alerta { background: rgba(245,158,11,.18); color: #FCD34D; }
+  html.dark .hc .tag-erro { background: rgba(239,68,68,.18); color: #FCA5A5; }
+
+  /* loja */
+  .hc .loja { transition: box-shadow .2s, border-color .2s, transform .2s; }
+  .hc .loja.alvo-drop { border-color: var(--pri); box-shadow: 0 0 0 4px var(--pri-suave), var(--sombra-lg); transform: scale(1.005); }
+  .hc .barra-hc { display: flex; height: .45rem; border-radius: 9999px; overflow: hidden; background: var(--sup-3); }
+  .hc .barra-hc span { height: 100%; background: var(--g); transition: width .6s; }
+  .hc .loja-corpo { display: grid; grid-template-rows: 1fr; transition: grid-template-rows .3s; }
+  .hc .loja.fechada .loja-corpo { grid-template-rows: 0fr; }
+  .hc .loja-corpo > div { overflow: hidden; }
+  .hc .loja.fechada .seta { transform: rotate(-90deg); }
+  .hc .seta { transition: transform .2s; }
+
+  /* tabela */
+  .hc table.pessoas { width: 100%; font-size: .8rem; border-collapse: separate; border-spacing: 0; }
+  .hc table.pessoas th { position: sticky; top: 0; z-index: 1; text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em;
+                         color: var(--txt-3); font-weight: 700; padding: .55rem .65rem; background: var(--sup-2); white-space: nowrap; border-bottom: 1px solid var(--borda); }
+  .hc table.pessoas td { padding: .6rem .65rem; border-bottom: 1px solid var(--borda-suave); vertical-align: middle; }
+  .hc table.pessoas tbody tr.item { transition: background .15s; }
+  .hc table.pessoas tbody tr.item:hover td { background: var(--sup-2); }
+  .hc table.pessoas tbody tr.item:hover .acoes { opacity: 1; }
+  .hc .acoes { opacity: .55; transition: opacity .15s; }
+  .hc [draggable="true"] { cursor: grab; }
+  .hc .arrastando { opacity: .45; }
+  .hc .obs { width: 100%; min-width: 9rem; border: 1px dashed transparent; border-radius: .5rem; padding: .2rem .4rem; background: transparent; color: var(--txt); font-size: .78rem; }
+  .hc .obs:hover { border-color: var(--borda); }
+  .hc .obs:focus { outline: none; border-style: solid; border-color: var(--pri); background: var(--sup); box-shadow: 0 0 0 3px var(--pri-suave); }
+  .hc .exp-proxima { background: #FEF3C7; color: #92400E; border-radius: .35rem; padding: 0 .3rem; font-weight: 700; }
+  html.dark .hc .exp-proxima { background: rgba(245,158,11,.2); color: #FCD34D; }
+  .hc .exp-passou { color: var(--txt-3); }
+
+  /* cartões de pessoa */
+  .hc .grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: .75rem; padding: .9rem; }
+  .hc .pcard { position: relative; border: 1px solid var(--borda); border-radius: 1rem; padding: .85rem; background: var(--sup); transition: all .2s; }
+  .hc .pcard::before { content: ''; position: absolute; left: 0; top: .9rem; bottom: .9rem; width: 3px; border-radius: 0 3px 3px 0; background: var(--g); }
+  .hc .pcard:hover { border-color: color-mix(in srgb, var(--g) 50%, var(--borda)); box-shadow: var(--sombra-lg); transform: translateY(-2px); }
+  .hc .vaga-card { border: 1.5px dashed #F59E0B; background: repeating-linear-gradient(135deg, transparent, transparent 8px, rgba(245,158,11,.05) 8px, rgba(245,158,11,.05) 16px); }
+  .hc[data-vista="tabela"] .so-cartoes, .hc[data-vista="cartoes"] .so-tabela { display: none !important; }
+
+  /* histórico */
+  .hc details.hist summary { list-style: none; cursor: pointer; }
+  .hc details.hist summary::-webkit-details-marker { display: none; }
+
+  /* gaveta */
+  .hc-gaveta { position: fixed; inset: 0; z-index: 80; display: none; }
   .hc-gaveta.aberta { display: block; }
-  .hc-gaveta .fundo { position: absolute; inset: 0; background: rgba(17,24,39,.5); }
-  .hc-gaveta .painel { position: absolute; top: 0; right: 0; height: 100%; width: min(640px, 100vw); background: #fff; overflow-y: auto;
-                      box-shadow: -20px 0 50px rgba(0,0,0,.2); animation: hc-entrar .25s ease-out; }
-  @keyframes hc-entrar { from { transform: translateX(30px); opacity: 0; } to { transform: none; opacity: 1; } }
-  .hc-toast { position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 20px); opacity: 0; z-index: 90; transition: all .3s; pointer-events: none;
-              background: rgba(17,24,39,.92); color: #fff; padding: .7rem 1.1rem; border-radius: .8rem; font-size: .875rem; max-width: min(620px, 92vw); }
+  .hc-gaveta .fundo { position: absolute; inset: 0; background: rgba(15,23,42,.55); backdrop-filter: blur(3px); animation: hc-fade .2s; }
+  .hc-gaveta .painel { position: absolute; top: 0; right: 0; height: 100%; width: min(680px, 100vw); background: var(--sup); color: var(--txt);
+                       display: flex; flex-direction: column; box-shadow: -24px 0 60px rgba(0,0,0,.25); animation: hc-entrar .3s cubic-bezier(.2,.8,.2,1); }
+  .hc-gaveta .painel.estreito { width: min(460px, 100vw); }
+  .hc-gaveta .cab { background: linear-gradient(135deg, var(--navy), var(--navy-2)); color: #fff; padding: 1.1rem 1.4rem; }
+  .hc-gaveta .corpo { flex: 1; overflow-y: auto; padding: 1.25rem 1.4rem; }
+  .hc-gaveta .rodape { border-top: 1px solid var(--borda); padding: .9rem 1.4rem; background: var(--sup); display: flex; gap: .5rem; justify-content: flex-end; flex-wrap: wrap; }
+  @keyframes hc-entrar { from { transform: translateX(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+  @keyframes hc-fade { from { opacity: 0; } to { opacity: 1; } }
+  .hc .passos { display: flex; gap: .35rem; margin-top: .9rem; }
+  .hc .passo { flex: 1; font-size: 10.5px; font-weight: 700; color: rgba(255,255,255,.55); }
+  .hc .passo::before { content: ''; display: block; height: .25rem; border-radius: 9999px; background: rgba(255,255,255,.2); margin-bottom: .35rem; transition: background .3s; }
+  .hc .passo.feito { color: rgba(255,255,255,.9); } .hc .passo.feito::before { background: var(--pri); }
+  .hc .opcao { position: relative; display: flex; flex-direction: column; align-items: center; gap: .35rem; padding: .8rem .5rem; border-radius: .9rem;
+               border: 1.5px solid var(--borda); background: var(--sup); font-size: .78rem; font-weight: 700; color: var(--txt-2); cursor: pointer; text-align: center; transition: all .15s; }
+  .hc .opcao i { font-size: 1.1rem; color: var(--txt-3); transition: color .15s; }
+  .hc .opcao:hover { border-color: var(--pri); }
+  .hc .opcao input { position: absolute; opacity: 0; pointer-events: none; }
+  .hc .opcao:has(input:checked) { border-color: var(--pri); background: var(--pri-suave); color: var(--pri-esc); }
+  .hc .opcao:has(input:checked) i { color: var(--pri); }
+  .hc .opcao.perigo:has(input:checked) { border-color: #EF4444; background: rgba(239,68,68,.1); color: #B91C1C; }
+  .hc .opcao.perigo:has(input:checked) i { color: #EF4444; }
+  .hc .opcao:has(input:focus-visible) { box-shadow: 0 0 0 3px var(--pri-suave); }
+  .hc .sim { border: 1px solid color-mix(in srgb, var(--pri) 35%, var(--borda)); background: color-mix(in srgb, var(--pri) 5%, var(--sup)); border-radius: 1rem; padding: 1rem; animation: hc-fade .3s; }
+  .hc .comp { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: .5rem; }
+  .hc .delta-mais { color: #059669; } .hc .delta-menos { color: #DC2626; }
+
+  /* linha do tempo */
+  .hc .tempo { position: relative; padding-left: 1.6rem; }
+  .hc .tempo::before { content: ''; position: absolute; left: .55rem; top: .3rem; bottom: .3rem; width: 2px; background: var(--borda); }
+  .hc .tempo > li { position: relative; }
+  .hc .tempo .ponto { position: absolute; left: -1.6rem; top: .9rem; width: 1.15rem; height: 1.15rem; border-radius: 50%; display: grid; place-items: center;
+                      font-size: .55rem; color: #fff; background: var(--g, var(--txt-3)); box-shadow: 0 0 0 3px var(--sup); }
+
+  .hc-toast { position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 20px); opacity: 0; z-index: 95; transition: all .3s; pointer-events: none;
+              display: flex; align-items: center; gap: .6rem; background: #1F2937; color: #fff; padding: .75rem 1.1rem; border-radius: .9rem;
+              font-size: .85rem; font-weight: 600; max-width: min(620px, 92vw); box-shadow: 0 12px 30px rgba(0,0,0,.25); border-left: 4px solid var(--pri, #FF6B35); }
   .hc-toast.visivel { opacity: 1; transform: translate(-50%, 0); }
-  .hc-toast.erro { background: #B91C1C; }
-  .hc .hc-delta-mais { color: #047857; } .hc .hc-delta-menos { color: #B91C1C; }
-  @media (prefers-reduced-motion: reduce) { .hc-gaveta .painel { animation: none; } .hc-toast { transition: none; } }
+  .hc-toast.erro { border-left-color: #EF4444; }
+  .hc :focus-visible { outline: 3px solid rgba(255,107,53,.45); outline-offset: 2px; }
+  .hc kbd { font-size: 10px; padding: 0 .3rem; border-radius: .3rem; border: 1px solid var(--borda); color: var(--txt-3); }
+
   @media (max-width: 767px) {
-    .hc table.hc-tab-pessoas thead { display: none; }
-    .hc table.hc-tab-pessoas tr.hc-linha { display: block; border-bottom: 1px solid #E5E7EB; padding: .4rem 0; }
-    .hc table.hc-tab-pessoas tr.hc-linha td { display: flex; gap: .5rem; border: 0; padding: .15rem .6rem; }
-    .hc table.hc-tab-pessoas tr.hc-linha td[data-label]::before { content: attr(data-label); flex: 0 0 6.5rem; font-size: 10.5px; text-transform: uppercase; color: #9CA3AF; font-weight: 600; padding-top: 2px; }
-    .hc table.hc-tab-pessoas tr.hc-grupo td { display: block; }
+    .hc table.pessoas thead { display: none; }
+    .hc table.pessoas tr.item { display: block; border-bottom: 1px solid var(--borda); padding: .5rem 0; }
+    .hc table.pessoas tr.item td { display: flex; gap: .5rem; border: 0; padding: .15rem .8rem; }
+    .hc table.pessoas tr.item td[data-label]::before { content: attr(data-label); flex: 0 0 6.5rem; font-size: 10px; text-transform: uppercase; color: var(--txt-3); font-weight: 700; padding-top: 2px; }
+    .hc .acoes { opacity: 1; }
+    .hc .grade { grid-template-columns: 1fr; padding: .6rem; }
+    .hc .barra { position: static; }
   }
-  html.dark .hc table.hc-tab-pessoas th, html.dark .hc table.hc-tab-pessoas td { border-color: rgba(255,255,255,.08); }
-  html.dark .hc table.hc-tab-pessoas tr.hc-grupo td { background: rgba(255,255,255,.04); color: #9CA3AF; }
-  html.dark .hc table.hc-tab-pessoas tbody tr.hc-linha:hover td { background: rgba(255,255,255,.03); }
-  html.dark .hc .hc-tab { color: #9CA3AF; } html.dark .hc .hc-tab:hover { color: #F3F4F6; background: rgba(255,255,255,.06); }
-  html.dark .hc .hc-tab[aria-selected="true"] { color: #A5B4FC; background: rgba(129,140,248,.15); }
-  html.dark .hc .hc-obs:focus { background: #111827; color: #F3F4F6; }
-  html.dark .hc .hc-alerta-proxima { background: rgba(245,158,11,.2); color: #FCD34D; }
-  html.dark .hc-gaveta .painel, html.dark .hc-painel-cab, html.dark .hc-painel-rodape { background: #111827; color: #E5E7EB; }
+  @media (prefers-reduced-motion: reduce) {
+    .hc *, .hc-gaveta * { animation: none !important; transition: none !important; }
+  }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="hc max-w-[1500px] mx-auto px-3 sm:px-4 py-5">
-  <div class="flex items-start justify-between gap-3 flex-wrap mb-4">
-    <div>
-      <h1 class="text-2xl font-bold text-gray-900"><i class="fas fa-people-roof text-indigo-600 mr-2"></i>Quadro de HC</h1>
-      <p class="text-sm text-gray-500">Loja a loja, ligado ao cadastro: o que muda lá aparece aqui, e o que muda aqui grava lá.</p>
+<div class="hc max-w-[1560px] mx-auto px-3 sm:px-5 py-5" data-vista="tabela">
+
+  <!-- ===================== HERÓI ===================== -->
+  <section class="heroi p-5 sm:p-7 mb-5">
+    <div class="relative z-10 flex items-start justify-between gap-4 flex-wrap">
+      <div class="min-w-0">
+        <p class="text-[11px] font-bold uppercase tracking-[.18em] text-orange-300">Gestão corporativa</p>
+        <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight mt-1"><i class="fas fa-users mr-2 text-orange-400"></i>Quadro de HC</h1>
+        <p class="text-sm text-white/70 mt-1 max-w-xl">Loja a loja, ligado ao cadastro: o que muda lá aparece aqui, e o que muda aqui grava lá.</p>
+      </div>
+      <div class="flex gap-2 flex-wrap">
+        <button type="button" class="bt bt-vidro" data-abrir-vaga=""><i class="fas fa-user-plus"></i>Abrir vaga</button>
+        <button type="button" class="bt bt-pri" data-movimentar="" title="Atalho: N"><i class="fas fa-people-arrows"></i>Nova movimentação</button>
+      </div>
     </div>
-    <div class="flex gap-2 flex-wrap">
-      <button type="button" class="px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50" data-abrir-vaga="">
-        <i class="fas fa-user-plus mr-1"></i>Abrir vaga
-      </button>
-      <button type="button" class="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 shadow-sm" data-movimentar="">
-        <i class="fas fa-people-arrows mr-1"></i>Nova movimentação
-      </button>
+    <div class="relative z-10 grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2.5 mt-6">
+      <button type="button" class="kpi" data-kpi="todos"><i class="fas fa-users"></i><b data-contar="{{ q.total }}">{{ q.total }}</b><span>Colaboradores</span></button>
+      <div class="kpi"><i class="fas fa-store"></i><b data-contar="{{ q.lojas }}">{{ q.lojas }}</b><span>Lojas</span></div>
+      <button type="button" class="kpi {% if q.vagas %}destaque{% endif %}" data-kpi="vagas"><i class="fas fa-user-clock"></i><b data-contar="{{ q.vagas }}">{{ q.vagas }}</b><span>Vagas em aberto</span></button>
+      <button type="button" class="kpi {% if q.sem_gerente %}destaque{% endif %}" data-kpi="sem-gerente"><i class="fas fa-triangle-exclamation"></i><b data-contar="{{ q.sem_gerente }}">{{ q.sem_gerente }}</b><span>Lojas sem gerente</span></button>
+      <button type="button" class="kpi" data-kpi="experiencia"><i class="fas fa-hourglass-half"></i><b data-contar="{{ q.exp_proximas }}">{{ q.exp_proximas }}</b><span>Experiência em 7 dias</span></button>
+      <button type="button" class="kpi {% if para_hoje %}destaque{% endif %}" data-ir-aba="futuras"><i class="fas fa-calendar-day"></i><b data-contar="{{ futuras|length }}">{{ futuras|length }}</b><span>Agendadas{% if para_hoje %} · {{ para_hoje }} p/ hoje{% endif %}</span></button>
     </div>
-  </div>
+  </section>
 
   {% if messages %}{% for message in messages %}
   <div role="alert" class="mb-3 p-3 rounded-xl text-sm {% if message.tags == 'error' %}bg-red-50 text-red-700{% else %}bg-green-50 text-green-800{% endif %}">{{ message }}</div>
   {% endfor %}{% endif %}
 
   {% if para_hoje %}
-  <button type="button" data-ir-aba="futuras" class="w-full text-left mb-4 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-sm flex items-center gap-2 hover:bg-amber-100">
-    <i class="fas fa-bell"></i><span><b>{{ para_hoje }}</b> movimentação(ões) agendada(s) para hoje ou atrasada(s). Clique para aplicar.</span>
+  <button type="button" data-ir-aba="futuras" class="w-full text-left mb-4 p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-sm flex items-center gap-3 hover:bg-amber-100 transition">
+    <span class="w-9 h-9 rounded-xl bg-amber-400 text-white grid place-items-center animate-pulse"><i class="fas fa-bell"></i></span>
+    <span><b>{{ para_hoje }}</b> movimentação(ões) para hoje ou atrasada(s). Clique para aplicar.</span>
+    <i class="fas fa-arrow-right ml-auto"></i>
   </button>
   {% endif %}
 
-  <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-    <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm"><p class="text-xs text-gray-500">Colaboradores no quadro</p><p class="text-2xl font-bold text-gray-900 tabular-nums">{{ q.total }}</p></div>
-    <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm"><p class="text-xs text-gray-500">Lojas</p><p class="text-2xl font-bold text-gray-900 tabular-nums">{{ q.lojas }}</p></div>
-    <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm"><p class="text-xs text-gray-500">Vagas em aberto</p><p class="text-2xl font-bold text-amber-600 tabular-nums">{{ q.vagas }}</p></div>
-    <button type="button" data-ir-aba="futuras" class="text-left bg-white border border-gray-200 rounded-2xl p-4 shadow-sm hover:border-indigo-300"><p class="text-xs text-gray-500">Movimentações agendadas</p><p class="text-2xl font-bold text-indigo-600 tabular-nums">{{ futuras|length }}</p></button>
-  </div>
-
-  <div class="flex gap-1 overflow-x-auto mb-4 border-b border-gray-200 pb-2" role="tablist" aria-label="Partes do quadro">
-    <button type="button" class="hc-tab" role="tab" data-aba="quadro" aria-selected="{% if aba == 'quadro' %}true{% else %}false{% endif %}"><i class="fas fa-table-cells mr-1"></i>Quadro</button>
-    <button type="button" class="hc-tab" role="tab" data-aba="futuras" aria-selected="{% if aba == 'futuras' %}true{% else %}false{% endif %}"><i class="fas fa-calendar-day mr-1"></i>Movimentações futuras{% if futuras %} <span class="hc-chip bg-indigo-100 text-indigo-700">{{ futuras|length }}</span>{% endif %}</button>
-    <button type="button" class="hc-tab" role="tab" data-aba="historico" aria-selected="{% if aba == 'historico' %}true{% else %}false{% endif %}"><i class="fas fa-clock-rotate-left mr-1"></i>Histórico</button>
-    <button type="button" class="hc-tab" role="tab" data-aba="carteiras" aria-selected="{% if aba == 'carteiras' %}true{% else %}false{% endif %}"><i class="fas fa-layer-group mr-1"></i>Carteiras</button>
+  <!-- ===================== ABAS ===================== -->
+  <div class="flex items-center justify-between gap-3 flex-wrap mb-4">
+    <div class="abas" role="tablist" aria-label="Partes do quadro">
+      <button type="button" class="aba" role="tab" data-aba="quadro" aria-selected="{% if aba == 'quadro' %}true{% else %}false{% endif %}"><i class="fas fa-table-cells-large"></i>Quadro</button>
+      <button type="button" class="aba" role="tab" data-aba="futuras" aria-selected="{% if aba == 'futuras' %}true{% else %}false{% endif %}"><i class="fas fa-calendar-day"></i>Movimentações futuras{% if futuras %}<span class="n">{{ futuras|length }}</span>{% endif %}</button>
+      <button type="button" class="aba" role="tab" data-aba="historico" aria-selected="{% if aba == 'historico' %}true{% else %}false{% endif %}"><i class="fas fa-clock-rotate-left"></i>Histórico</button>
+      <button type="button" class="aba" role="tab" data-aba="carteiras" aria-selected="{% if aba == 'carteiras' %}true{% else %}false{% endif %}"><i class="fas fa-layer-group"></i>Carteiras</button>
+    </div>
+    <p class="text-[11px] t3 hidden md:block"><kbd>/</kbd> buscar · <kbd>N</kbd> nova movimentação · arraste uma pessoa até outra loja para movê-la</p>
   </div>
 
   <!-- ===================== QUADRO ===================== -->
   <section data-painel="quadro" {% if aba != 'quadro' %}hidden{% endif %}>
-    <div class="sticky top-0 z-20 bg-gray-50/90 backdrop-blur py-2 -mx-1 px-1 mb-3 flex flex-wrap gap-2 items-center">
-      <div class="relative flex-1 min-w-[12rem]">
-        <i class="fas fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
-        <input type="search" id="fBusca" placeholder="Buscar nome, login, cargo, cidade…  ( / )" aria-label="Buscar no quadro"
-               class="w-full border border-gray-300 rounded-lg pl-8 pr-3 py-2 text-sm bg-white">
+    <div class="barra p-2.5 mb-4 space-y-2.5">
+      <div class="flex flex-wrap gap-2 items-center">
+        <div class="relative flex-1 min-w-[13rem]">
+          <i class="fas fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 t3 text-xs"></i>
+          <input type="search" id="fBusca" placeholder="Buscar nome, login, cargo, cidade…" aria-label="Buscar no quadro" class="campo" style="padding-left:2rem">
+        </div>
+        <select id="fLoja" aria-label="Loja" class="campo" style="width:auto;min-width:11rem">
+          <option value="">Todas as lojas</option>
+          {% for c in q.carteiras %}{% for b in c.lojas %}<option value="{{ b.setor.id }}" data-carteira="{{ c.id }}">{{ b.setor.name }}</option>{% endfor %}{% endfor %}
+        </select>
+        <select id="fCargo" aria-label="Cargo" class="campo" style="width:auto;min-width:11rem">
+          <option value="">Todos os cargos</option>
+          {% for c in cargos %}<option>{{ c }}</option>{% endfor %}
+        </select>
+        <div class="flex gap-1 p-1 rounded-xl border" style="border-color:var(--borda)" role="group" aria-label="Visualização">
+          <button type="button" class="pilula !border-0" data-vista="tabela" aria-pressed="true" title="Tabela"><i class="fas fa-table-list"></i><span class="hidden sm:inline">Tabela</span></button>
+          <button type="button" class="pilula !border-0" data-vista="cartoes" aria-pressed="false" title="Cartões"><i class="fas fa-grip"></i><span class="hidden sm:inline">Cartões</span></button>
+        </div>
       </div>
-      <select id="fCarteira" aria-label="Carteira" class="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
-        <option value="">Todas as carteiras</option>
-        {% for c in q.carteiras %}<option value="{{ c.id }}">{{ c.nome }}</option>{% endfor %}
-      </select>
-      <select id="fLoja" aria-label="Loja" class="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
-        <option value="">Todas as lojas</option>
-        {% for c in q.carteiras %}{% for b in c.lojas %}<option value="{{ b.setor.id }}" data-carteira="{{ c.id }}">{{ b.setor.name }}</option>{% endfor %}{% endfor %}
-      </select>
-      <select id="fCargo" aria-label="Cargo" class="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
-        <option value="">Todos os cargos</option>
-        {% for c in cargos %}<option>{{ c }}</option>{% endfor %}
-      </select>
-      <label class="inline-flex items-center gap-2 text-xs text-gray-600 px-2 cursor-pointer"><input type="checkbox" id="fAlertas" class="rounded text-indigo-600"> só com alerta</label>
-      <span class="text-xs text-gray-500" id="contador"></span>
+      <div class="flex flex-wrap gap-2 items-center">
+        <div class="rolagem-x flex gap-1.5 flex-1 min-w-0 pb-0.5" role="group" aria-label="Carteiras">
+          <button type="button" class="pilula" data-carteira-filtro="" aria-pressed="true">Todas <span class="n">{{ q.total }}</span></button>
+          {% for c in q.carteiras %}<button type="button" class="pilula" data-carteira-filtro="{{ c.id }}" aria-pressed="false">{{ c.nome }} <span class="n">{{ c.total }}</span></button>{% endfor %}
+        </div>
+        <div class="flex gap-1.5 flex-wrap" role="group" aria-label="Filtros rápidos">
+          <button type="button" class="pilula" data-rapido="alerta" aria-pressed="false"><i class="fas fa-bell text-amber-500"></i>Com alerta</button>
+          <button type="button" class="pilula" data-rapido="vaga" aria-pressed="false"><i class="fas fa-user-clock text-amber-500"></i>Vagas</button>
+          <button type="button" class="pilula" data-rapido="novo" aria-pressed="false"><i class="fas fa-seedling text-green-500"></i>Novos</button>
+          <button type="button" class="pilula" id="btRecolher" title="Recolher/abrir todas as lojas" aria-label="Recolher ou abrir todas as lojas"><i class="fas fa-down-left-and-up-right-to-center"></i></button>
+        </div>
+        <span class="text-xs t3 tabular" id="contador" aria-live="polite"></span>
+      </div>
     </div>
 
     {% for c in q.carteiras %}
-    <div class="mb-6" data-carteira="{{ c.id }}">
-      <div class="flex items-center justify-between gap-2 mb-2 flex-wrap">
-        <button type="button" class="flex items-center gap-2 text-left" data-recolher="carteira-{{ c.id }}" aria-expanded="true">
-          <i class="fas fa-chevron-down text-xs text-gray-400 transition-transform"></i>
-          <span class="text-lg font-bold text-gray-900">{{ c.nome }}</span>
-          {% if c.coordenacao %}<span class="text-sm text-gray-500">· coordenação {{ c.coordenacao }}</span>{% endif %}
-        </button>
-        <div class="flex gap-1.5 text-xs">
-          <span class="hc-chip bg-gray-100 text-gray-700">{{ c.lojas|length }} loja(s)</span>
-          <span class="hc-chip bg-indigo-50 text-indigo-700">{{ c.total }} pessoas</span>
-          {% if c.vagas %}<span class="hc-chip bg-amber-50 text-amber-700">{{ c.vagas }} vaga(s)</span>{% endif %}
+    <div class="mb-7" data-carteira="{{ c.id }}">
+      <div class="flex items-end justify-between gap-3 mb-3 flex-wrap px-1">
+        <div class="flex items-center gap-3 min-w-0">
+          <span class="w-10 h-10 rounded-xl grid place-items-center text-white font-extrabold text-sm" style="background:linear-gradient(135deg,#2C3E50,#1F2D3B)">{{ c.nome|slice:":2" }}</span>
+          <div class="min-w-0">
+            <h2 class="text-lg font-extrabold tracking-tight">{{ c.nome }}</h2>
+            <p class="text-xs t2">{% if c.coordenacao %}Coordenação {{ c.coordenacao }} · {% endif %}{{ c.lojas|length }} loja(s) · {{ c.total }} pessoas{% if c.vagas %} · <span class="text-amber-600 font-bold">{{ c.vagas }} vaga(s)</span>{% endif %}</p>
+          </div>
         </div>
       </div>
-      <div class="grid gap-3" id="carteira-{{ c.id }}">
+      <div class="grid gap-3.5">
         {% for b in c.lojas %}
-        <article class="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden" data-loja="{{ b.setor.id }}" data-loja-carteira="{{ c.id }}">
-          <header class="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-2 flex-wrap">
-            <div class="min-w-0">
-              <h2 class="font-bold text-gray-900">{{ b.setor.name }} {% if b.setor.adabas %}<span class="text-xs font-normal text-gray-400">{{ b.setor.adabas }}</span>{% endif %}</h2>
-              <div class="flex flex-wrap gap-1 mt-1">
-                {% for grupo, n in b.resumo %}<span class="hc-chip bg-gray-100 text-gray-600">{{ n }} {{ grupo }}</span>{% endfor %}
-                {% if b.vagas %}<span class="hc-chip bg-amber-100 text-amber-800">{{ b.vagas|length }} vaga(s)</span>{% endif %}
-                {% if b.sem_gerente %}<span class="hc-chip bg-red-100 text-red-700" data-alerta><i class="fas fa-triangle-exclamation"></i>sem gerente</span>{% endif %}
+        <article class="loja card overflow-hidden" data-loja="{{ b.setor.id }}" data-loja-carteira="{{ c.id }}" data-loja-nome="{{ b.setor.name }}"
+                 {% if b.sem_gerente %}data-sem-gerente{% endif %}>
+          <header class="px-4 py-3.5 flex items-center gap-3 flex-wrap">
+            <button type="button" class="flex items-center gap-3 min-w-0 flex-1 text-left" data-alternar-loja aria-expanded="true">
+              <i class="fas fa-chevron-down seta text-xs t3"></i>
+              <div class="min-w-0">
+                <h3 class="font-extrabold text-[15px] leading-tight">{{ b.setor.name }} {% if b.setor.adabas %}<span class="text-[11px] font-semibold t3">{{ b.setor.adabas }}</span>{% endif %}</h3>
+                <div class="flex flex-wrap gap-1 mt-1.5">
+                  {% for grupo, n in b.resumo %}<span class="chip-g g-{{ grupo|slugify }}">{{ n }} {{ grupo }}</span>{% endfor %}
+                  {% if b.vagas %}<span class="tag tag-alerta"><i class="fas fa-user-clock"></i>{{ b.vagas|length }} vaga(s)</span>{% endif %}
+                  {% if b.sem_gerente %}<span class="tag tag-erro"><i class="fas fa-triangle-exclamation"></i>sem gerente</span>{% endif %}
+                </div>
               </div>
+            </button>
+            <div class="flex items-center gap-3">
+              <div class="text-right">
+                <p class="text-2xl font-extrabold leading-none tabular">{{ b.total }}</p>
+                <p class="text-[10px] t3 font-bold uppercase">pessoas</p>
+              </div>
+              <button type="button" class="bt bt-claro !py-1.5 !px-2.5 !text-xs" data-abrir-vaga="{{ b.setor.id }}" aria-label="Abrir vaga na {{ b.setor.name }}"><i class="fas fa-plus"></i><span class="hidden sm:inline">vaga</span></button>
             </div>
-            <div class="flex items-center gap-2">
-              <span class="text-sm font-semibold text-gray-700 tabular-nums">{{ b.total }}</span>
-              <button type="button" class="text-xs font-semibold text-indigo-700 hover:text-indigo-900 px-2 py-1 rounded hover:bg-indigo-50" data-abrir-vaga="{{ b.setor.id }}"><i class="fas fa-plus"></i> vaga</button>
-            </div>
+            {% if b.total %}
+            <div class="barra-hc w-full" aria-hidden="true">{% for grupo, n in b.resumo %}<span class="g-{{ grupo|slugify }}" style="width:{% widthratio n b.total 100 %}%" title="{{ n }} {{ grupo }}"></span>{% endfor %}</div>
+            {% endif %}
           </header>
-          <div class="overflow-x-auto">
-            <table class="hc-tab-pessoas">
-              <thead><tr><th>Cargo</th><th>Nome</th><th>Cidade onde reside</th><th>Login</th><th>Nascimento</th><th>Contratação</th><th>Exp. 1ª janela</th><th>Exp. 2ª janela</th><th>Obs.</th><th>Telefone</th><th><span class="sr-only">Ações</span></th></tr></thead>
-              <tbody>
-                {% regroup b.pessoas by grupo as grupos %}
-                {% for g in grupos %}
-                <tr class="hc-grupo"><td colspan="11">{{ g.grouper }} · {{ g.list|length }}</td></tr>
-                {% for p in g.list %}
-                <tr class="hc-linha" data-pessoa="{{ p.id }}" data-cargo="{{ p.cargo }}"
-                    data-busca="{{ p.nome|lower }} {{ p.login }} {{ p.cargo|lower }} {{ p.cidade|lower }}"
-                    {% if p.exp1_alerta == 'proxima' or p.exp2_alerta == 'proxima' or p.agendadas or p.sai_em %}data-alerta{% endif %}>
-                  <td data-label="Cargo" class="text-gray-600 whitespace-nowrap">{{ p.cargo|default:"—" }}</td>
-                  <td data-label="Nome" class="min-w-[14rem]">
-                    <div class="font-semibold text-gray-900">{{ p.nome }}
-                      {% if p.novo %}<span class="hc-chip bg-green-100 text-green-700">novo</span>{% endif %}
-                      {% if p.status %}<span class="hc-chip bg-gray-100 text-gray-600">{{ p.status }}</span>{% endif %}
-                      {% if p.sai_em %}<span class="hc-chip bg-red-100 text-red-700">sai {{ p.sai_em|date:"d/m" }}</span>{% endif %}
-                    </div>
-                    {% for a in p.agendadas %}<div class="text-[11px] text-indigo-700"><i class="fas fa-calendar-day"></i> {{ a.data|date:"d/m" }}: {{ a.resumo }}</div>{% endfor %}
-                    {% if p.historico %}
-                    <details class="hc-hist text-[11px] text-gray-500 mt-0.5">
-                      <summary title="Ver histórico"><i class="fas fa-clock-rotate-left"></i> {{ p.historico.0.frase }} <span class="text-gray-400">· {{ p.historico.0.quando }}</span>{% if p.historico|length > 1 %} <span class="text-indigo-600 font-semibold">+{{ p.historico|length|add:"-1" }}</span>{% endif %}</summary>
-                      <ul class="mt-1 space-y-0.5 border-l-2 border-gray-200 pl-2">
-                        {% for h in p.historico|slice:"1:" %}<li>{{ h.frase }} <span class="text-gray-400">· {{ h.quando }}</span></li>{% endfor %}
-                      </ul>
-                    </details>
-                    {% elif p.contratacao %}<div class="text-[11px] text-gray-400">Entrou em {{ p.contratacao|date:"d/m/Y" }}</div>{% endif %}
-                  </td>
-                  <td data-label="Cidade" class="text-gray-600">{{ p.cidade|default:"—" }}</td>
-                  <td data-label="Login" class="tabular-nums">{{ p.login|default:"—" }}</td>
-                  <td data-label="Nascimento" class="tabular-nums">{{ p.nascimento|date:"d/m/Y"|default:"—" }}</td>
-                  <td data-label="Contratação" class="tabular-nums">{{ p.contratacao|date:"d/m/Y"|default:"—" }}</td>
-                  <td data-label="Exp. 1ª" class="tabular-nums"><span class="{% if p.exp1_alerta == 'proxima' %}hc-alerta-proxima{% elif p.exp1_alerta == 'passou' %}text-gray-400{% endif %}">{{ p.exp1|date:"d/m/Y"|default:"—" }}</span></td>
-                  <td data-label="Exp. 2ª" class="tabular-nums"><span class="{% if p.exp2_alerta == 'proxima' %}hc-alerta-proxima{% elif p.exp2_alerta == 'passou' %}text-gray-400{% endif %}">{{ p.exp2|date:"d/m/Y"|default:"—" }}</span></td>
-                  <td data-label="Obs."><input class="hc-obs" value="{{ p.observacao }}" data-obs="{{ p.id }}" maxlength="500" aria-label="Observação de {{ p.nome }}" placeholder="—"></td>
-                  <td data-label="Telefone" class="whitespace-nowrap tabular-nums">{{ p.telefone|default:"—" }}</td>
-                  <td class="text-right"><button type="button" class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-600 hover:text-white" data-movimentar="{{ p.id }}" aria-label="Movimentar {{ p.nome }}"><i class="fas fa-people-arrows"></i><span class="hidden xl:inline"> Movimentar</span></button></td>
-                </tr>
-                {% endfor %}
-                {% endfor %}
-                {% for v in b.vagas %}
-                <tr class="hc-linha" data-cargo="{{ v.cargo }}" data-busca="vaga em aberto {{ v.cargo|lower }}" data-alerta>
-                  <td data-label="Cargo" class="text-gray-600">{{ v.cargo }}</td>
-                  <td data-label="Nome" colspan="7"><span class="hc-chip bg-amber-100 text-amber-800"><i class="fas fa-user-clock"></i>VAGA EM ABERTO</span> <span class="text-[11px] text-gray-400">aberta em {{ v.criado_em|date:"d/m/Y" }}{% if v.criado_por %} por {{ v.criado_por.get_full_name }}{% endif %}</span></td>
-                  <td data-label="Obs." colspan="2" class="text-xs text-gray-600">{{ v.observacao|default:"—" }}</td>
-                  <td class="text-right"><button type="button" class="px-2.5 py-1 rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-100" data-fechar-vaga="{{ v.id }}" aria-label="Fechar vaga de {{ v.cargo }}"><i class="fas fa-check"></i> Fechar</button></td>
-                </tr>
-                {% endfor %}
-                {% if not b.pessoas and not b.vagas %}<tr><td colspan="11" class="text-center text-sm text-gray-400 py-6">Ninguém nesta loja.</td></tr>{% endif %}
-              </tbody>
-            </table>
-          </div>
+          <div class="loja-corpo"><div>
+            <!-- tabela -->
+            <div class="so-tabela overflow-x-auto border-t" style="border-color:var(--borda)">
+              <table class="pessoas">
+                <thead><tr><th>Nome</th><th>Cargo</th><th>Cidade onde reside</th><th>Login</th><th>Nascimento</th><th>Contratação</th><th>Exp. 1ª janela</th><th>Exp. 2ª janela</th><th>Obs.</th><th>Telefone</th><th><span class="sr-only">Ações</span></th></tr></thead>
+                <tbody>
+                  {% for p in b.pessoas %}
+                  <tr class="item g-{{ p.grupo|slugify }}" data-item data-pessoa="{{ p.id }}" data-cargo="{{ p.cargo }}" draggable="true"
+                      data-busca="{{ p.nome|lower }} {{ p.login }} {{ p.cargo|lower }} {{ p.cidade|lower }}"
+                      {% if p.novo %}data-novo{% endif %}
+                      {% if p.exp1_alerta == 'proxima' or p.exp2_alerta == 'proxima' %}data-experiencia{% endif %}
+                      {% if p.exp1_alerta == 'proxima' or p.exp2_alerta == 'proxima' or p.agendadas or p.sai_em %}data-alerta{% endif %}>
+                    <td data-label="Nome" class="min-w-[15rem]">
+                      <div class="flex items-start gap-2.5">
+                        <span class="avatar p" aria-hidden="true">{{ p.iniciais }}</span>
+                        <div class="min-w-0">
+                          <div class="font-bold leading-tight">{{ p.nome }}
+                            {% if p.novo %}<span class="tag tag-ok">novo</span>{% endif %}
+                            {% if p.status %}<span class="tag tag-cinza">{{ p.status }}</span>{% endif %}
+                            {% if p.sai_em %}<span class="tag tag-erro">sai {{ p.sai_em|date:"d/m" }}</span>{% endif %}
+                          </div>
+                          {% for a in p.agendadas %}<div class="text-[11px] font-semibold" style="color:var(--pri-esc)"><i class="fas fa-calendar-day"></i> {{ a.data|date:"d/m" }}: {{ a.resumo }}</div>{% endfor %}
+                          {% if p.historico %}
+                          <details class="hist text-[11px] t2 mt-0.5">
+                            <summary title="Ver histórico"><i class="fas fa-clock-rotate-left t3"></i> {{ p.historico.0.frase }} <span class="t3">· {{ p.historico.0.quando }}</span>{% if p.historico|length > 1 %} <span class="font-bold" style="color:var(--pri-esc)">+{{ p.historico|length|add:"-1" }}</span>{% endif %}</summary>
+                            <ul class="mt-1 space-y-0.5 border-l-2 pl-2" style="border-color:var(--borda)">
+                              {% for h in p.historico|slice:"1:" %}<li>{{ h.frase }} <span class="t3">· {{ h.quando }}</span></li>{% endfor %}
+                            </ul>
+                          </details>
+                          {% elif p.contratacao %}<div class="text-[11px] t3">Entrou em {{ p.contratacao|date:"d/m/Y" }}</div>{% endif %}
+                        </div>
+                      </div>
+                    </td>
+                    <td data-label="Cargo"><span class="chip-g g-{{ p.grupo|slugify }}">{{ p.cargo|default:"sem cargo" }}</span></td>
+                    <td data-label="Cidade" class="t2">{{ p.cidade|default:"—" }}</td>
+                    <td data-label="Login" class="tabular">{{ p.login|default:"—" }}</td>
+                    <td data-label="Nascimento" class="tabular">{{ p.nascimento|date:"d/m/Y"|default:"—" }}</td>
+                    <td data-label="Contratação" class="tabular">{{ p.contratacao|date:"d/m/Y"|default:"—" }}</td>
+                    <td data-label="Exp. 1ª" class="tabular"><span class="{% if p.exp1_alerta == 'proxima' %}exp-proxima{% elif p.exp1_alerta == 'passou' %}exp-passou{% endif %}">{{ p.exp1|date:"d/m/Y"|default:"—" }}</span></td>
+                    <td data-label="Exp. 2ª" class="tabular"><span class="{% if p.exp2_alerta == 'proxima' %}exp-proxima{% elif p.exp2_alerta == 'passou' %}exp-passou{% endif %}">{{ p.exp2|date:"d/m/Y"|default:"—" }}</span></td>
+                    <td data-label="Obs."><input class="obs" value="{{ p.observacao }}" data-obs="{{ p.id }}" maxlength="500" aria-label="Observação de {{ p.nome }}" placeholder="adicionar…"></td>
+                    <td data-label="Telefone" class="whitespace-nowrap tabular">{% if p.telefone %}<a href="tel:{{ p.telefone|cut:' '|cut:'-' }}" class="hover:underline">{{ p.telefone }}</a>{% else %}—{% endif %}</td>
+                    <td class="text-right"><div class="acoes"><button type="button" class="bt bt-claro !py-1 !px-2.5 !text-xs" data-movimentar="{{ p.id }}" aria-label="Movimentar {{ p.nome }}"><i class="fas fa-people-arrows"></i><span class="hidden xl:inline">Movimentar</span></button></div></td>
+                  </tr>
+                  {% endfor %}
+                  {% for v in b.vagas %}
+                  <tr class="item" data-item data-vaga data-cargo="{{ v.cargo }}" data-busca="vaga em aberto {{ v.cargo|lower }}" data-alerta>
+                    <td data-label="Nome"><div class="flex items-center gap-2.5"><span class="avatar p" style="--g:#F59E0B" aria-hidden="true"><i class="fas fa-user-clock"></i></span>
+                      <div><span class="tag tag-alerta">VAGA EM ABERTO</span><div class="text-[11px] t3">aberta em {{ v.criado_em|date:"d/m/Y" }}{% if v.criado_por %} por {{ v.criado_por.get_full_name }}{% endif %}</div></div></div></td>
+                    <td data-label="Cargo"><span class="chip-g g-outros">{{ v.cargo }}</span></td>
+                    <td data-label="Obs." colspan="8" class="text-xs t2">{{ v.observacao|default:"—" }}</td>
+                    <td class="text-right"><button type="button" class="bt bt-claro !py-1 !px-2.5 !text-xs" data-fechar-vaga="{{ v.id }}" aria-label="Fechar vaga de {{ v.cargo }}"><i class="fas fa-check"></i>Fechar</button></td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            <!-- cartões -->
+            <div class="so-cartoes grade border-t" style="border-color:var(--borda)">
+              {% for p in b.pessoas %}
+              <div class="pcard g-{{ p.grupo|slugify }}" data-item data-pessoa="{{ p.id }}" data-cargo="{{ p.cargo }}" draggable="true"
+                   data-busca="{{ p.nome|lower }} {{ p.login }} {{ p.cargo|lower }} {{ p.cidade|lower }}"
+                   {% if p.novo %}data-novo{% endif %}
+                   {% if p.exp1_alerta == 'proxima' or p.exp2_alerta == 'proxima' %}data-experiencia{% endif %}
+                   {% if p.exp1_alerta == 'proxima' or p.exp2_alerta == 'proxima' or p.agendadas or p.sai_em %}data-alerta{% endif %}>
+                <div class="flex items-start gap-2.5">
+                  <span class="avatar" aria-hidden="true">{{ p.iniciais }}</span>
+                  <div class="min-w-0 flex-1">
+                    <p class="font-bold leading-tight truncate" title="{{ p.nome }}">{{ p.nome }}</p>
+                    <span class="chip-g g-{{ p.grupo|slugify }} mt-1">{{ p.cargo|default:"sem cargo" }}</span>
+                  </div>
+                  <button type="button" class="t3 hover:text-orange-500 px-1" data-movimentar="{{ p.id }}" aria-label="Movimentar {{ p.nome }}"><i class="fas fa-people-arrows"></i></button>
+                </div>
+                <div class="flex flex-wrap gap-1 mt-2">
+                  {% if p.novo %}<span class="tag tag-ok">novo</span>{% endif %}
+                  {% if p.sai_em %}<span class="tag tag-erro">sai {{ p.sai_em|date:"d/m" }}</span>{% endif %}
+                  {% if p.exp1_alerta == 'proxima' %}<span class="tag tag-alerta">1ª janela {{ p.exp1|date:"d/m" }}</span>{% endif %}
+                  {% if p.exp2_alerta == 'proxima' %}<span class="tag tag-alerta">2ª janela {{ p.exp2|date:"d/m" }}</span>{% endif %}
+                  {% for a in p.agendadas %}<span class="tag tag-info" title="{{ a.resumo }}"><i class="fas fa-calendar-day"></i>{{ a.data|date:"d/m" }}</span>{% endfor %}
+                </div>
+                <dl class="grid grid-cols-2 gap-x-3 gap-y-1 mt-2 text-[11px]">
+                  <div><dt class="t3">Login</dt><dd class="font-semibold tabular">{{ p.login|default:"—" }}</dd></div>
+                  <div><dt class="t3">Contratação</dt><dd class="font-semibold tabular">{{ p.contratacao|date:"d/m/Y"|default:"—" }}</dd></div>
+                  <div class="col-span-2"><dt class="t3">Cidade</dt><dd class="font-semibold truncate">{{ p.cidade|default:"—" }}</dd></div>
+                </dl>
+                {% if p.historico %}<p class="text-[11px] t2 mt-2 line-clamp-2" title="{{ p.historico.0.frase }}"><i class="fas fa-clock-rotate-left t3"></i> {{ p.historico.0.frase }}</p>{% endif %}
+                <input class="obs mt-2" value="{{ p.observacao }}" data-obs="{{ p.id }}" maxlength="500" aria-label="Observação de {{ p.nome }}" placeholder="adicionar observação…">
+                {% if p.telefone %}<a href="tel:{{ p.telefone|cut:' '|cut:'-' }}" class="mt-1 inline-flex items-center gap-1 text-[11px] t2 hover:underline"><i class="fas fa-phone t3"></i>{{ p.telefone }}</a>{% endif %}
+              </div>
+              {% endfor %}
+              {% for v in b.vagas %}
+              <div class="pcard vaga-card" data-item data-vaga data-cargo="{{ v.cargo }}" data-busca="vaga em aberto {{ v.cargo|lower }}" data-alerta>
+                <div class="flex items-start gap-2.5">
+                  <span class="avatar" style="--g:#F59E0B" aria-hidden="true"><i class="fas fa-user-clock"></i></span>
+                  <div class="min-w-0 flex-1"><span class="tag tag-alerta">VAGA EM ABERTO</span><p class="font-bold mt-1">{{ v.cargo }}</p></div>
+                  <button type="button" class="t3 hover:text-green-600 px-1" data-fechar-vaga="{{ v.id }}" aria-label="Fechar vaga de {{ v.cargo }}"><i class="fas fa-check"></i></button>
+                </div>
+                <p class="text-[11px] t2 mt-2">{{ v.observacao|default:"Sem observação." }}</p>
+                <p class="text-[10px] t3 mt-1">aberta em {{ v.criado_em|date:"d/m/Y" }}</p>
+              </div>
+              {% endfor %}
+            </div>
+            {% if not b.pessoas and not b.vagas %}<p class="text-center text-sm t3 py-6 border-t" style="border-color:var(--borda)">Ninguém nesta loja. Arraste alguém para cá ou abra uma vaga.</p>{% endif %}
+          </div></div>
         </article>
         {% endfor %}
       </div>
@@ -204,104 +408,119 @@
     {% endfor %}
 
     {% if q.sem_loja %}
-    <div class="mb-6 bg-white border border-red-200 rounded-2xl p-4">
-      <h2 class="font-bold text-red-700 mb-2"><i class="fas fa-user-slash mr-1"></i>Sem loja no cadastro ({{ q.sem_loja|length }})</h2>
+    <div class="mb-6 card p-4" style="border-color:#FCA5A5">
+      <h2 class="font-extrabold text-red-600 mb-2"><i class="fas fa-user-slash mr-1"></i>Sem loja no cadastro ({{ q.sem_loja|length }})</h2>
       <div class="flex flex-wrap gap-2">
-        {% for p in q.sem_loja %}<button type="button" class="hc-chip bg-red-50 text-red-700 hover:bg-red-100" data-movimentar="{{ p.id }}">{{ p.nome }} · {{ p.cargo|default:"sem cargo" }}</button>{% endfor %}
+        {% for p in q.sem_loja %}<button type="button" class="pilula" data-movimentar="{{ p.id }}">{{ p.nome }} · {{ p.cargo|default:"sem cargo" }}</button>{% endfor %}
       </div>
     </div>
     {% endif %}
-    <p id="vazioBusca" hidden class="text-center text-sm text-gray-500 py-10">Nada encontrado com esses filtros.</p>
+    <div id="vazioBusca" hidden class="card p-10 text-center">
+      <i class="fas fa-magnifying-glass text-3xl t3 mb-2"></i><p class="font-bold">Nada encontrado com esses filtros.</p>
+      <button type="button" class="bt bt-claro mt-3" id="btLimparFiltros">Limpar filtros</button>
+    </div>
   </section>
 
   <!-- ===================== FUTURAS ===================== -->
   <section data-painel="futuras" {% if aba != 'futuras' %}hidden{% endif %}>
     {% if futuras %}
-    <ol class="space-y-2">
+    <ol class="tempo space-y-3">
       {% for m in futuras %}
-      <li class="bg-white border {% if m.data <= hoje %}border-amber-300{% else %}border-gray-200{% endif %} rounded-2xl p-4 shadow-sm flex flex-col sm:flex-row sm:items-center gap-3">
-        <div class="text-center sm:w-20 shrink-0">
-          <div class="text-2xl font-bold text-gray-900 tabular-nums">{{ m.data|date:"d" }}</div>
-          <div class="text-xs text-gray-500 uppercase">{{ m.data|date:"M Y" }}</div>
-          <div class="mt-1 text-[11px] font-semibold {% if m.data < hoje %}text-red-600{% elif m.data == hoje %}text-amber-600{% else %}text-indigo-600{% endif %}" data-falta="{{ m.data|date:'Y-m-d' }}"></div>
-        </div>
-        <div class="flex-1 min-w-0">
-          <p class="font-semibold text-gray-900">{{ m.resumo }}</p>
-          {% if m.observacao %}<p class="text-sm text-gray-600">{{ m.observacao }}</p>{% endif %}
-          <p class="text-xs text-gray-400 mt-1">Agendada por {{ m.criado_por.get_full_name|default:"—" }} em {{ m.criado_em|date:"d/m/Y H:i" }}
-            {% if m.lembrete_2d_em %} · lembrete enviado {{ m.lembrete_2d_em|date:"d/m H:i" }}{% endif %}</p>
-        </div>
-        <div class="flex gap-2 shrink-0">
-          <button type="button" class="px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700" data-aplicar="{{ m.id }}" data-resumo="{{ m.resumo }}"><i class="fas fa-check"></i> Aplicar agora</button>
-          <button type="button" class="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50" data-cancelar="{{ m.id }}" data-resumo="{{ m.resumo }}">Cancelar</button>
+      <li class="{% if m.desligar %}g-sniper-itinerante{% elif m.novo_setor %}g-administrativo{% elif m.novo_cargo %}g-consultor-pleno{% else %}g-gerente-operacional{% endif %}">
+        <span class="ponto"><i class="fas {% if m.desligar %}fa-user-minus{% elif m.novo_setor %}fa-right-left{% elif m.novo_cargo %}fa-arrow-up{% elif m.novo_nome %}fa-signature{% else %}fa-bell{% endif %}"></i></span>
+        <div class="card p-4 flex flex-col sm:flex-row sm:items-center gap-3 {% if m.data <= hoje %}ring-2 ring-amber-300{% endif %}">
+          <div class="sm:w-24 shrink-0 flex sm:block items-center gap-3">
+            <div class="text-3xl font-extrabold leading-none tabular">{{ m.data|date:"d" }}</div>
+            <div class="text-[11px] t3 font-bold uppercase">{{ m.data|date:"M Y" }}</div>
+            <div class="tag mt-1" data-falta="{{ m.data|date:'Y-m-d' }}"></div>
+          </div>
+          <div class="flex-1 min-w-0">
+            <p class="font-bold">{{ m.resumo }}</p>
+            {% if m.observacao %}<p class="text-sm t2 mt-0.5"><i class="far fa-comment t3"></i> {{ m.observacao }}</p>{% endif %}
+            <p class="text-[11px] t3 mt-1">Agendada por {{ m.criado_por.get_full_name|default:"—" }} em {{ m.criado_em|date:"d/m/Y H:i" }}
+              {% if m.lembrete_2d_em %} · <i class="fas fa-bell"></i> lembrete enviado {{ m.lembrete_2d_em|date:"d/m H:i" }}{% endif %}</p>
+          </div>
+          <div class="flex gap-2 shrink-0">
+            <button type="button" class="bt bt-pri !py-2" data-aplicar="{{ m.id }}" data-resumo="{{ m.resumo }}"><i class="fas fa-check"></i>Aplicar agora</button>
+            <button type="button" class="bt bt-claro !py-2" data-cancelar="{{ m.id }}" data-resumo="{{ m.resumo }}">Cancelar</button>
+          </div>
         </div>
       </li>
       {% endfor %}
     </ol>
     {% else %}
-    <div class="bg-white border border-dashed border-gray-300 rounded-2xl p-10 text-center text-gray-500">
-      <i class="fas fa-calendar-check text-3xl text-gray-300 mb-2"></i>
-      <p>Nenhuma movimentação agendada. Em "Nova movimentação", escolha uma data futura para agendar; o lembrete sobe 2 dias antes.</p>
+    <div class="card p-12 text-center">
+      <span class="w-14 h-14 rounded-2xl grid place-items-center mx-auto mb-3" style="background:var(--pri-suave);color:var(--pri)"><i class="fas fa-calendar-check text-2xl"></i></span>
+      <p class="font-bold">Nenhuma movimentação agendada.</p>
+      <p class="text-sm t2 mt-1">Em "Nova movimentação", escolha uma data futura para agendar; o lembrete sobe 2 dias antes.</p>
+      <button type="button" class="bt bt-pri mt-4" data-movimentar=""><i class="fas fa-plus"></i>Agendar movimentação</button>
     </div>
     {% endif %}
   </section>
 
   <!-- ===================== HISTÓRICO ===================== -->
   <section data-painel="historico" {% if aba != 'historico' %}hidden{% endif %}>
-    <input type="search" id="fHist" placeholder="Filtrar histórico…" aria-label="Filtrar histórico" class="w-full sm:w-80 border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white mb-3">
+    <div class="flex flex-wrap gap-2 mb-4">
+      <input type="search" id="fHist" placeholder="Filtrar histórico…" aria-label="Filtrar histórico" class="campo" style="max-width:20rem">
+      <button type="button" class="pilula" data-hist="" aria-pressed="true">Tudo</button>
+      <button type="button" class="pilula" data-hist="APLICADA" aria-pressed="false"><i class="fas fa-check text-green-500"></i>Aplicadas</button>
+      <button type="button" class="pilula" data-hist="CANCELADA" aria-pressed="false"><i class="fas fa-ban t3"></i>Canceladas</button>
+    </div>
     {% if historico %}
-    <ol class="relative border-l-2 border-gray-200 ml-2 space-y-3" id="listaHist">
+    <ol class="tempo space-y-2.5" id="listaHist">
       {% for m in historico %}
-      <li class="ml-4" data-busca="{{ m.resumo|lower }} {{ m.observacao|lower }}">
-        <span class="absolute -left-[7px] mt-1.5 w-3 h-3 rounded-full {% if m.situacao == 'APLICADA' %}bg-green-500{% else %}bg-gray-400{% endif %}"></span>
-        <p class="text-sm text-gray-900"><b>{{ m.resumo }}</b></p>
-        <p class="text-xs text-gray-500">
-          {% if m.situacao == 'APLICADA' %}Aplicada em {{ m.aplicado_em|date:"d/m/Y H:i" }} por {{ m.aplicado_por.get_full_name|default:"—" }}
-          {% else %}Cancelada em {{ m.cancelado_em|date:"d/m/Y H:i" }} por {{ m.cancelado_por.get_full_name|default:"—" }}{% endif %}
-          · data da movimentação {{ m.data|date:"d/m/Y" }}{% if m.observacao %} · {{ m.observacao }}{% endif %}
-        </p>
+      <li data-busca="{{ m.resumo|lower }} {{ m.observacao|lower }}" data-situacao="{{ m.situacao }}" style="--g:{% if m.situacao == 'APLICADA' %}#10B981{% else %}#94A3B8{% endif %}">
+        <span class="ponto"><i class="fas {% if m.situacao == 'APLICADA' %}fa-check{% else %}fa-ban{% endif %}"></i></span>
+        <div class="card px-4 py-3">
+          <p class="text-sm font-bold">{{ m.resumo }}</p>
+          <p class="text-[11px] t3 mt-0.5">
+            {% if m.situacao == 'APLICADA' %}Aplicada em {{ m.aplicado_em|date:"d/m/Y H:i" }} por {{ m.aplicado_por.get_full_name|default:"—" }}
+            {% else %}Cancelada em {{ m.cancelado_em|date:"d/m/Y H:i" }} por {{ m.cancelado_por.get_full_name|default:"—" }}{% endif %}
+            · data da movimentação {{ m.data|date:"d/m/Y" }}{% if m.observacao %} · {{ m.observacao }}{% endif %}
+          </p>
+        </div>
       </li>
       {% endfor %}
     </ol>
-    {% else %}<p class="text-sm text-gray-500">Nenhuma movimentação feita pelo quadro ainda. As alterações feitas pelo cadastro aparecem ao lado do nome de cada pessoa.</p>{% endif %}
+    {% else %}<div class="card p-10 text-center text-sm t2">Nenhuma movimentação feita pelo quadro ainda. As alterações feitas pelo cadastro aparecem ao lado do nome de cada pessoa.</div>{% endif %}
   </section>
 
   <!-- ===================== CARTEIRAS ===================== -->
   <section data-painel="carteiras" {% if aba != 'carteiras' %}hidden{% endif %}>
-    <div class="grid lg:grid-cols-[1fr_24rem] gap-4">
-      <div class="space-y-3">
+    <div class="grid lg:grid-cols-[1fr_25rem] gap-4">
+      <div class="grid sm:grid-cols-2 gap-3 content-start">
         {% for c in carteiras %}
-        <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
-          <div class="flex items-center justify-between gap-2 flex-wrap">
-            <div><h3 class="font-bold text-gray-900">{{ c.nome }}</h3><p class="text-xs text-gray-500">Coordenação: {{ c.coordenacao|default:"—" }} · ordem {{ c.ordem }}</p></div>
-            <div class="flex gap-2">
-              <button type="button" class="text-xs font-semibold text-indigo-700 px-2 py-1 rounded hover:bg-indigo-50" data-editar-carteira="{{ c.id }}"
-                      data-nome="{{ c.nome }}" data-coordenador="{{ c.coordenador_id|default:'' }}" data-coordenador-nome="{{ c.coordenador_nome }}" data-ordem="{{ c.ordem }}"
-                      data-lojas="{% for s in c.lojas.all %}{{ s.id }}{% if not forloop.last %},{% endif %}{% endfor %}"><i class="fas fa-pen"></i> Editar</button>
-              <button type="button" class="text-xs font-semibold text-red-600 px-2 py-1 rounded hover:bg-red-50" data-excluir-carteira="{{ c.id }}" data-nome="{{ c.nome }}"><i class="fas fa-trash"></i></button>
-            </div>
+        <div class="card p-4">
+          <div class="flex items-start gap-3">
+            <span class="w-10 h-10 rounded-xl grid place-items-center text-white font-extrabold text-sm shrink-0" style="background:linear-gradient(135deg,#2C3E50,#1F2D3B)">{{ c.nome|slice:":2" }}</span>
+            <div class="flex-1 min-w-0"><h3 class="font-extrabold">{{ c.nome }}</h3><p class="text-xs t2">Coordenação: {{ c.coordenacao|default:"—" }} · ordem {{ c.ordem }}</p></div>
+            <button type="button" class="t3 hover:text-orange-500 px-1.5 py-1" data-editar-carteira="{{ c.id }}" aria-label="Editar {{ c.nome }}"
+                    data-nome="{{ c.nome }}" data-coordenador="{{ c.coordenador_id|default:'' }}" data-coordenador-nome="{{ c.coordenador_nome }}" data-ordem="{{ c.ordem }}"
+                    data-lojas="{% for s in c.lojas.all %}{{ s.id }}{% if not forloop.last %},{% endif %}{% endfor %}"><i class="fas fa-pen"></i></button>
+            <button type="button" class="t3 hover:text-red-500 px-1.5 py-1" data-excluir-carteira="{{ c.id }}" data-nome="{{ c.nome }}" aria-label="Excluir {{ c.nome }}"><i class="fas fa-trash"></i></button>
           </div>
-          <div class="flex flex-wrap gap-1 mt-2">{% for s in c.lojas.all %}<span class="hc-chip bg-gray-100 text-gray-700">{{ s.name }}</span>{% empty %}<span class="text-xs text-gray-400">Nenhuma loja.</span>{% endfor %}</div>
+          <div class="flex flex-wrap gap-1 mt-3">{% for s in c.lojas.all %}<span class="tag tag-cinza">{{ s.name }}</span>{% empty %}<span class="text-xs t3">Nenhuma loja.</span>{% endfor %}</div>
         </div>
-        {% empty %}<p class="text-sm text-gray-500">Nenhuma carteira ainda.</p>{% endfor %}
+        {% empty %}<p class="text-sm t2">Nenhuma carteira ainda.</p>{% endfor %}
       </div>
-      <form id="formCarteira" class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm space-y-3 h-fit lg:sticky lg:top-4">
-        <h3 class="font-bold text-gray-900" id="tituloCarteira">Nova carteira</h3>
+      <form id="formCarteira" class="card p-4 space-y-3 h-fit lg:sticky lg:top-4">
+        <h3 class="font-extrabold" id="tituloCarteira">Nova carteira</h3>
         <input type="hidden" name="id">
-        <div><label class="block text-xs font-semibold text-gray-600 mb-1" for="cNome">Nome</label><input id="cNome" name="nome" required maxlength="120" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></div>
-        <div><label class="block text-xs font-semibold text-gray-600 mb-1" for="cCoord">Coordenador (usuário)</label>
-          <select id="cCoord" name="coordenador" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"><option value="">—</option>{% for u in coordenadores %}<option value="{{ u.id }}">{{ u.get_full_name }}</option>{% endfor %}</select></div>
+        <div><label class="block text-xs font-bold t2 mb-1" for="cNome">Nome</label><input id="cNome" name="nome" required maxlength="120" class="campo"></div>
+        <div><label class="block text-xs font-bold t2 mb-1" for="cCoord">Coordenador (usuário)</label>
+          <select id="cCoord" name="coordenador" class="campo"><option value="">—</option>{% for u in coordenadores %}<option value="{{ u.id }}">{{ u.get_full_name }}</option>{% endfor %}</select></div>
         <div class="grid grid-cols-[1fr_5rem] gap-2">
-          <div><label class="block text-xs font-semibold text-gray-600 mb-1" for="cCoordNome">Coordenação (texto)</label><input id="cCoordNome" name="coordenador_nome" maxlength="120" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></div>
-          <div><label class="block text-xs font-semibold text-gray-600 mb-1" for="cOrdem">Ordem</label><input id="cOrdem" name="ordem" type="number" min="0" value="0" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></div>
+          <div><label class="block text-xs font-bold t2 mb-1" for="cCoordNome">Coordenação (texto)</label><input id="cCoordNome" name="coordenador_nome" maxlength="120" class="campo"></div>
+          <div><label class="block text-xs font-bold t2 mb-1" for="cOrdem">Ordem</label><input id="cOrdem" name="ordem" type="number" min="0" value="0" class="campo"></div>
         </div>
-        <fieldset><legend class="block text-xs font-semibold text-gray-600 mb-1">Lojas</legend>
-          <div class="max-h-64 overflow-y-auto border border-gray-200 rounded-lg p-2 space-y-1">
-            {% for s in setores %}<label class="flex items-center gap-2 text-sm"><input type="checkbox" name="lojas" value="{{ s.id }}" class="rounded text-indigo-600"> {{ s.name }}</label>{% endfor %}
+        <fieldset><legend class="block text-xs font-bold t2 mb-1">Lojas</legend>
+          <input type="search" id="cFiltroLojas" placeholder="Filtrar lojas…" class="campo mb-2" aria-label="Filtrar lojas">
+          <div class="max-h-64 overflow-y-auto rounded-xl border p-2 space-y-0.5" style="border-color:var(--borda)">
+            {% for s in setores %}<label class="flex items-center gap-2 text-sm px-1.5 py-1 rounded-lg hover:bg-gray-50" data-loja-op="{{ s.name|lower }}"><input type="checkbox" name="lojas" value="{{ s.id }}" class="rounded text-orange-500"> {{ s.name }}</label>{% endfor %}
           </div>
-          <p class="text-[11px] text-gray-400 mt-1">Cada loja fica em uma carteira só: marcar aqui tira de outra.</p>
+          <p class="text-[11px] t3 mt-1">Cada loja fica em uma carteira só: marcar aqui tira de outra.</p>
         </fieldset>
-        <div class="flex gap-2 justify-end"><button type="reset" class="px-3 py-2 rounded-lg border border-gray-200 text-sm" id="cLimpar">Limpar</button><button class="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">Salvar carteira</button></div>
+        <div class="flex gap-2 justify-end"><button type="reset" class="bt bt-claro" id="cLimpar">Limpar</button><button class="bt bt-pri">Salvar carteira</button></div>
       </form>
     </div>
   </section>
@@ -310,67 +529,83 @@
   <div class="hc-gaveta" id="gaveta" role="dialog" aria-modal="true" aria-labelledby="gTitulo">
     <div class="fundo" data-fechar-gaveta></div>
     <div class="painel">
-      <div class="hc-painel-cab sticky top-0 z-10 bg-white border-b border-gray-200 px-5 py-4 flex items-center justify-between">
-        <h2 id="gTitulo" class="text-lg font-bold">Nova movimentação</h2>
-        <button type="button" class="text-gray-500 hover:text-gray-800 px-2 py-1" data-fechar-gaveta aria-label="Fechar"><i class="fas fa-xmark text-lg"></i></button>
+      <div class="cab">
+        <div class="flex items-center justify-between gap-3">
+          <div class="min-w-0"><p class="text-[11px] font-bold uppercase tracking-widest text-orange-300">Quadro de HC</p>
+            <h2 id="gTitulo" class="text-lg font-extrabold truncate">Nova movimentação</h2></div>
+          <button type="button" class="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20" data-fechar-gaveta aria-label="Fechar"><i class="fas fa-xmark"></i></button>
+        </div>
+        <div class="passos" aria-hidden="true">
+          <span class="passo" data-passo="1">1 · Quem</span><span class="passo" data-passo="2">2 · O que muda</span>
+          <span class="passo" data-passo="3">3 · Simulação</span><span class="passo" data-passo="4">4 · Confirmar</span>
+        </div>
       </div>
-      <form id="formMov" class="p-5 space-y-4">
+      <form id="formMov" class="corpo space-y-5" novalidate>
         <div>
-          <label class="block text-xs font-semibold text-gray-600 mb-1" for="mPessoa">Colaborador</label>
-          <input id="mPessoaBusca" list="listaPessoas" placeholder="Digite o nome…" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" aria-label="Buscar colaborador">
-          <datalist id="listaPessoas"></datalist>
-          <input type="hidden" id="mPessoa" name="colaborador">
-          <p class="text-xs text-gray-500 mt-1" id="mAtual"></p>
+          <label class="block text-xs font-bold t2 mb-1" for="mPessoaBusca">Colaborador</label>
+          <div class="flex items-center gap-3">
+            <span class="avatar g-outros" id="mAvatar" aria-hidden="true">?</span>
+            <div class="flex-1 min-w-0">
+              <input id="mPessoaBusca" list="listaPessoas" placeholder="Digite o nome…" class="campo" aria-label="Buscar colaborador" autocomplete="off">
+              <datalist id="listaPessoas"></datalist>
+              <input type="hidden" id="mPessoa" name="colaborador">
+              <p class="text-xs t2 mt-1" id="mAtual"></p>
+            </div>
+          </div>
         </div>
         <fieldset>
-          <legend class="block text-xs font-semibold text-gray-600 mb-1">O que muda</legend>
-          <div class="flex flex-wrap gap-2">
-            <label class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 text-sm cursor-pointer has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-50"><input type="checkbox" data-acao="loja" class="rounded text-indigo-600"> Loja</label>
-            <label class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 text-sm cursor-pointer has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-50"><input type="checkbox" data-acao="cargo" class="rounded text-indigo-600"> Cargo / promoção</label>
-            <label class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 text-sm cursor-pointer has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-50"><input type="checkbox" data-acao="nome" class="rounded text-indigo-600"> Nome</label>
-            <label class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 text-sm cursor-pointer has-[:checked]:border-red-500 has-[:checked]:bg-red-50"><input type="checkbox" data-acao="desligar" class="rounded text-red-600"> Desligar</label>
-            <label class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 text-sm cursor-pointer has-[:checked]:border-amber-500 has-[:checked]:bg-amber-50"><input type="checkbox" data-acao="lembrete" class="rounded text-amber-600"> Só lembrete</label>
+          <legend class="block text-xs font-bold t2 mb-2">O que muda</legend>
+          <div class="grid grid-cols-3 sm:grid-cols-5 gap-2">
+            <label class="opcao"><input type="checkbox" data-acao="loja"><i class="fas fa-right-left"></i>Loja</label>
+            <label class="opcao"><input type="checkbox" data-acao="cargo"><i class="fas fa-arrow-up-wide-short"></i>Cargo / promoção</label>
+            <label class="opcao"><input type="checkbox" data-acao="nome"><i class="fas fa-signature"></i>Nome</label>
+            <label class="opcao perigo"><input type="checkbox" data-acao="desligar"><i class="fas fa-user-minus"></i>Desligar</label>
+            <label class="opcao"><input type="checkbox" data-acao="lembrete"><i class="fas fa-bell"></i>Só lembrete</label>
           </div>
         </fieldset>
-        <div data-campo="loja" hidden><label class="block text-xs font-semibold text-gray-600 mb-1" for="mLoja">Nova loja</label><select id="mLoja" name="novo_setor" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></select></div>
-        <div data-campo="cargo" hidden><label class="block text-xs font-semibold text-gray-600 mb-1" for="mCargo">Novo cargo</label>
-          <select id="mCargo" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></select>
-          <input id="mCargoOutro" placeholder="Nome do cargo novo" maxlength="100" hidden class="mt-2 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" aria-label="Cargo novo"></div>
-        <div data-campo="nome" hidden><label class="block text-xs font-semibold text-gray-600 mb-1" for="mNome">Nome completo</label><input id="mNome" name="novo_nome" maxlength="150" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></div>
-        <div data-campo="lembrete" hidden><label class="block text-xs font-semibold text-gray-600 mb-1" for="mLembrete">Lembrete</label><input id="mLembrete" name="lembrete" maxlength="200" placeholder="Ex.: férias da Fulana, conversar sobre promoção…" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></div>
+        <div data-campo="loja" hidden><label class="block text-xs font-bold t2 mb-1" for="mLoja">Nova loja</label><select id="mLoja" name="novo_setor" class="campo"></select></div>
+        <div data-campo="cargo" hidden><label class="block text-xs font-bold t2 mb-1" for="mCargo">Novo cargo</label>
+          <select id="mCargo" class="campo"></select>
+          <input id="mCargoOutro" placeholder="Nome do cargo novo" maxlength="100" hidden class="campo mt-2" aria-label="Cargo novo"></div>
+        <div data-campo="nome" hidden><label class="block text-xs font-bold t2 mb-1" for="mNome">Nome completo</label><input id="mNome" name="novo_nome" maxlength="150" class="campo"></div>
+        <div data-campo="lembrete" hidden><label class="block text-xs font-bold t2 mb-1" for="mLembrete">Lembrete</label><input id="mLembrete" name="lembrete" maxlength="200" placeholder="Ex.: férias da Fulana, conversar sobre promoção…" class="campo"></div>
         <div class="grid sm:grid-cols-2 gap-3">
-          <div><label class="block text-xs font-semibold text-gray-600 mb-1" for="mData">Data</label><input id="mData" name="data" type="date" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-            <p class="text-[11px] text-gray-500 mt-1" id="mDataDica">Hoje = aplica na hora. Data futura = agenda (lembrete 2 dias antes).</p></div>
-          <div><label class="block text-xs font-semibold text-gray-600 mb-1" for="mObs">Observação</label><input id="mObs" name="observacao" maxlength="500" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></div>
+          <div><label class="block text-xs font-bold t2 mb-1" for="mData">Data</label><input id="mData" name="data" type="date" required class="campo">
+            <div class="flex flex-wrap gap-1 mt-1.5" role="group" aria-label="Atalhos de data">
+              <button type="button" class="pilula !py-0.5 !text-[11px]" data-dias="0">Hoje</button>
+              <button type="button" class="pilula !py-0.5 !text-[11px]" data-dias="7">+7 dias</button>
+              <button type="button" class="pilula !py-0.5 !text-[11px]" data-dias="15">+15 dias</button>
+              <button type="button" class="pilula !py-0.5 !text-[11px]" data-dias="30">+30 dias</button>
+            </div>
+            <p class="text-[11px] t3 mt-1" id="mDataDica">Hoje aplica na hora; data futura agenda (lembrete 2 dias antes).</p></div>
+          <div><label class="block text-xs font-bold t2 mb-1" for="mObs">Observação</label><textarea id="mObs" name="observacao" maxlength="500" rows="3" class="campo"></textarea></div>
         </div>
-
-        <div id="mSimulacao" hidden class="rounded-xl border border-indigo-200 bg-indigo-50/50 p-4 space-y-3"></div>
-
-        <div class="hc-painel-rodape flex gap-2 justify-end sticky bottom-0 -mx-5 px-5 py-3 bg-white border-t border-gray-200">
-          <button type="button" class="px-3 py-2 rounded-lg border border-gray-200 text-sm" data-fechar-gaveta>Cancelar</button>
-          <button type="button" id="btSimular" class="px-4 py-2 rounded-lg border border-indigo-300 text-indigo-700 text-sm font-semibold hover:bg-indigo-50"><i class="fas fa-flask"></i> Simular</button>
-          <button type="button" id="btConfirmar" disabled class="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed" title="Simule antes de salvar"><i class="fas fa-check"></i> Confirmar</button>
-        </div>
+        <div id="mSimulacao" hidden class="sim space-y-3" aria-live="polite"></div>
       </form>
+      <div class="rodape">
+        <button type="button" class="bt bt-claro" data-fechar-gaveta>Cancelar</button>
+        <button type="button" id="btSimular" class="bt bt-claro" style="border-color:var(--pri);color:var(--pri-esc)"><i class="fas fa-flask"></i>Simular</button>
+        <button type="button" id="btConfirmar" disabled class="bt bt-pri" title="Simule antes de salvar"><i class="fas fa-check"></i>Confirmar</button>
+      </div>
     </div>
   </div>
 
   <!-- vaga -->
   <div class="hc-gaveta" id="gavetaVaga" role="dialog" aria-modal="true" aria-labelledby="vTitulo">
     <div class="fundo" data-fechar-gaveta></div>
-    <div class="painel" style="width:min(440px,100vw)">
-      <div class="border-b border-gray-200 px-5 py-4 flex items-center justify-between"><h2 id="vTitulo" class="text-lg font-bold">Abrir vaga</h2>
-        <button type="button" class="text-gray-500 px-2 py-1" data-fechar-gaveta aria-label="Fechar"><i class="fas fa-xmark text-lg"></i></button></div>
-      <form id="formVaga" class="p-5 space-y-3">
-        <div><label class="block text-xs font-semibold text-gray-600 mb-1" for="vLoja">Loja</label><select id="vLoja" name="setor" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></select></div>
-        <div><label class="block text-xs font-semibold text-gray-600 mb-1" for="vCargo">Cargo</label><select id="vCargo" name="cargo" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></select></div>
-        <div><label class="block text-xs font-semibold text-gray-600 mb-1" for="vObs">Observação</label><input id="vObs" name="observacao" maxlength="300" placeholder="Ex.: substituição da Fulana" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></div>
-        <div class="flex justify-end gap-2"><button type="button" class="px-3 py-2 rounded-lg border border-gray-200 text-sm" data-fechar-gaveta>Cancelar</button><button class="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold">Abrir vaga</button></div>
+    <div class="painel estreito">
+      <div class="cab flex items-center justify-between"><h2 id="vTitulo" class="text-lg font-extrabold"><i class="fas fa-user-plus text-orange-400 mr-1"></i>Abrir vaga</h2>
+        <button type="button" class="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20" data-fechar-gaveta aria-label="Fechar"><i class="fas fa-xmark"></i></button></div>
+      <form id="formVaga" class="corpo space-y-3">
+        <div><label class="block text-xs font-bold t2 mb-1" for="vLoja">Loja</label><select id="vLoja" name="setor" required class="campo"></select></div>
+        <div><label class="block text-xs font-bold t2 mb-1" for="vCargo">Cargo</label><select id="vCargo" name="cargo" required class="campo"></select></div>
+        <div><label class="block text-xs font-bold t2 mb-1" for="vObs">Observação</label><input id="vObs" name="observacao" maxlength="300" placeholder="Ex.: substituição da Fulana" class="campo"></div>
+        <div class="flex justify-end gap-2 pt-2"><button type="button" class="bt bt-claro" data-fechar-gaveta>Cancelar</button><button class="bt bt-pri"><i class="fas fa-check"></i>Abrir vaga</button></div>
       </form>
     </div>
   </div>
 
-  <div class="hc-toast" id="toast" role="status" aria-live="polite"></div>
+  <div class="hc-toast" id="toast" role="status" aria-live="polite"><i class="fas fa-circle-check"></i><span></span></div>
 </div>
 {{ json_js|json_script:"hc-dados" }}
 {% endblock %}
@@ -379,23 +614,30 @@
 <script>
 (function () {
   const D = JSON.parse(document.getElementById('hc-dados').textContent);
+  const RAIZ = document.querySelector('.hc');
   const $ = (s, el = document) => el.querySelector(s);
   const $$ = (s, el = document) => [...el.querySelectorAll(s)];
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+  const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  const slug = s => norm(s).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const memo = {ler(k) { try { return localStorage.getItem('hc-' + k); } catch (e) { return null; } },
+                gravar(k, v) { try { localStorage.setItem('hc-' + k, v); } catch (e) {} }};
+  const semMovimento = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const CSRF = '{{ csrf_token }}';
   const URL_ = {
     simular: "{% url 'quadro_hc:simular' %}", movimentar: "{% url 'quadro_hc:movimentar' %}",
     observacao: "{% url 'quadro_hc:observacao' %}", vaga: "{% url 'quadro_hc:vaga_abrir' %}",
     carteira: "{% url 'quadro_hc:carteira_salvar' %}",
-    aplicar: id => `{% url 'quadro_hc:mov_aplicar' 0 %}`.replace('/0/', `/${id}/`),
-    cancelar: id => `{% url 'quadro_hc:mov_cancelar' 0 %}`.replace('/0/', `/${id}/`),
-    fecharVaga: id => `{% url 'quadro_hc:vaga_fechar' 0 %}`.replace('/0/', `/${id}/`),
-    excluirCarteira: id => `{% url 'quadro_hc:carteira_excluir' 0 %}`.replace('/0/', `/${id}/`),
+    aplicar: id => "{% url 'quadro_hc:mov_aplicar' 0 %}".replace('/0/', `/${id}/`),
+    cancelar: id => "{% url 'quadro_hc:mov_cancelar' 0 %}".replace('/0/', `/${id}/`),
+    fecharVaga: id => "{% url 'quadro_hc:vaga_fechar' 0 %}".replace('/0/', `/${id}/`),
+    excluirCarteira: id => "{% url 'quadro_hc:carteira_excluir' 0 %}".replace('/0/', `/${id}/`),
   };
 
   function toast(msg, erro) {
-    const t = $('#toast'); t.textContent = msg; t.classList.toggle('erro', !!erro); t.classList.add('visivel');
-    clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('visivel'), erro ? 6000 : 3500);
+    const t = $('#toast'); t.querySelector('span').textContent = msg; t.classList.toggle('erro', !!erro);
+    t.querySelector('i').className = erro ? 'fas fa-circle-xmark text-red-400' : 'fas fa-circle-check text-orange-400';
+    t.classList.add('visivel'); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('visivel'), erro ? 6000 : 3500);
   }
   async function api(url, corpo) {
     const r = await fetch(url, {method: 'POST', credentials: 'same-origin',
@@ -410,6 +652,14 @@
   }
   try { const m = sessionStorage.getItem('hc-msg'); if (m) { toast(m); sessionStorage.removeItem('hc-msg'); } } catch (e) {}
 
+  /* ---------- números animados ---------- */
+  if (!semMovimento) $$('[data-contar]').forEach(el => {
+    const alvo = +el.dataset.contar || 0; if (!alvo) return;
+    const t0 = performance.now(), dur = 700;
+    const passo = t => { const p = Math.min(1, (t - t0) / dur); el.textContent = Math.round(alvo * (1 - Math.pow(1 - p, 3))); if (p < 1) requestAnimationFrame(passo); };
+    el.textContent = '0'; requestAnimationFrame(passo);
+  });
+
   /* ---------- abas ---------- */
   function irAba(a) {
     $$('[data-aba]').forEach(b => b.setAttribute('aria-selected', b.dataset.aba === a ? 'true' : 'false'));
@@ -419,53 +669,102 @@
   $$('[data-aba]').forEach(b => b.addEventListener('click', () => irAba(b.dataset.aba)));
   $$('[data-ir-aba]').forEach(b => b.addEventListener('click', () => irAba(b.dataset.irAba)));
 
-  /* ---------- filtros do quadro ---------- */
-  const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  /* ---------- filtros ---------- */
+  const estado = {carteira: '', rapido: '', semGerente: false};
   function filtrar() {
-    const termo = norm($('#fBusca').value.trim()), cart = $('#fCarteira').value, loja = $('#fLoja').value,
-          cargo = $('#fCargo').value, alerta = $('#fAlertas').checked;
+    const termo = norm($('#fBusca').value.trim()), loja = $('#fLoja').value, cargo = $('#fCargo').value;
+    const sel = RAIZ.dataset.vista === 'cartoes' ? '.so-cartoes [data-item]' : '.so-tabela [data-item]';
     let visiveis = 0;
     $$('[data-loja]').forEach(card => {
-      const okLoja = (!cart || card.dataset.lojaCarteira === cart) && (!loja || card.dataset.loja === loja);
+      const okLoja = (!estado.carteira || card.dataset.lojaCarteira === estado.carteira) && (!loja || card.dataset.loja === loja)
+        && (!estado.semGerente || card.hasAttribute('data-sem-gerente'));
       let n = 0;
-      $$('tr.hc-linha', card).forEach(tr => {
-        const ok = okLoja && (!termo || norm(tr.dataset.busca).includes(termo)) && (!cargo || tr.dataset.cargo === cargo)
-          && (!alerta || tr.hasAttribute('data-alerta'));
-        tr.hidden = !ok; if (ok) n++;
+      $$(sel, card).forEach(it => {
+        const r = estado.rapido;
+        const ok = okLoja && (!termo || norm(it.dataset.busca).includes(termo)) && (!cargo || it.dataset.cargo === cargo)
+          && (!r || (r === 'alerta' && it.hasAttribute('data-alerta')) || (r === 'vaga' && it.hasAttribute('data-vaga'))
+                 || (r === 'novo' && it.hasAttribute('data-novo')) || (r === 'experiencia' && it.hasAttribute('data-experiencia')));
+        it.hidden = !ok; if (ok) n++;
       });
-      $$('tr.hc-grupo', card).forEach(g => {
-        let prox = g.nextElementSibling, algum = false;
-        while (prox && !prox.classList.contains('hc-grupo')) { if (prox.classList.contains('hc-linha') && !prox.hidden) algum = true; prox = prox.nextElementSibling; }
-        g.hidden = !algum;
-      });
-      const filtrando = termo || cargo || alerta;
-      card.hidden = !okLoja || (filtrando && !n && !(alerta && card.querySelector('[data-alerta]:not(tr)')));
+      const filtrando = termo || cargo || estado.rapido;
+      card.hidden = !okLoja || (filtrando && !n);
       if (!card.hidden) visiveis += n;
+      if (filtrando && n) abrirLoja(card, true);
     });
-    $$('[data-carteira]').forEach(sec => { if (sec.tagName === 'DIV') sec.hidden = !$$('[data-loja]', sec).some(c => !c.hidden); });
-    $('#contador').textContent = `${visiveis} pessoa(s)/vaga(s)`;
-    $('#vazioBusca').hidden = visiveis > 0;
-    $$('#fLoja option[data-carteira]').forEach(o => o.hidden = !!cart && o.dataset.carteira !== cart);
+    $$('div[data-carteira]').forEach(sec => sec.hidden = !$$('[data-loja]', sec).some(c => !c.hidden));
+    $('#contador').textContent = `${visiveis} ${visiveis === 1 ? 'resultado' : 'resultados'}`;
+    $('#vazioBusca').hidden = $$('[data-loja]').some(c => !c.hidden);
+    $$('#fLoja option[data-carteira]').forEach(o => o.hidden = !!estado.carteira && o.dataset.carteira !== estado.carteira);
   }
-  ['#fBusca', '#fCarteira', '#fLoja', '#fCargo', '#fAlertas'].forEach(s => $(s).addEventListener('input', filtrar));
+  ['#fBusca', '#fLoja', '#fCargo'].forEach(s => $(s).addEventListener('input', filtrar));
+  $$('[data-carteira-filtro]').forEach(b => b.addEventListener('click', () => {
+    estado.carteira = b.dataset.carteiraFiltro; $('#fLoja').value = '';
+    $$('[data-carteira-filtro]').forEach(x => x.setAttribute('aria-pressed', x === b ? 'true' : 'false')); filtrar();
+  }));
+  function rapido(r) {
+    estado.rapido = estado.rapido === r ? '' : r;
+    $$('[data-rapido]').forEach(x => x.setAttribute('aria-pressed', x.dataset.rapido === estado.rapido ? 'true' : 'false')); filtrar();
+  }
+  $$('[data-rapido]').forEach(b => b.addEventListener('click', () => rapido(b.dataset.rapido)));
+  function limparFiltros() {
+    $('#fBusca').value = ''; $('#fLoja').value = ''; $('#fCargo').value = ''; estado.carteira = ''; estado.rapido = ''; estado.semGerente = false;
+    $$('[data-carteira-filtro]').forEach(x => x.setAttribute('aria-pressed', x.dataset.carteiraFiltro === '' ? 'true' : 'false'));
+    $$('[data-rapido]').forEach(x => x.setAttribute('aria-pressed', 'false')); filtrar();
+  }
+  $('#btLimparFiltros').addEventListener('click', limparFiltros);
+  $$('[data-kpi]').forEach(b => b.addEventListener('click', () => {
+    irAba('quadro'); limparFiltros();
+    const k = b.dataset.kpi;
+    if (k === 'vagas') rapido('vaga');
+    else if (k === 'experiencia') rapido('experiencia');
+    else if (k === 'sem-gerente') { estado.semGerente = true; filtrar(); }
+    $('.barra').scrollIntoView({behavior: semMovimento ? 'auto' : 'smooth', block: 'start'});
+  }));
+
+  /* ---------- vista tabela/cartões ---------- */
+  function vista(v) {
+    RAIZ.dataset.vista = v; memo.gravar('vista', v);
+    $$('button[data-vista]').forEach(b => b.setAttribute('aria-pressed', b.dataset.vista === v ? 'true' : 'false'));
+    filtrar();
+  }
+  $$('button[data-vista]').forEach(b => b.addEventListener('click', () => vista(b.dataset.vista)));
+
+  /* ---------- lojas recolhíveis ---------- */
+  const fechadas = new Set((memo.ler('fechadas') || '').split(',').filter(Boolean));
+  function abrirLoja(card, abrir) {
+    card.classList.toggle('fechada', !abrir);
+    card.querySelector('[data-alternar-loja]').setAttribute('aria-expanded', abrir ? 'true' : 'false');
+  }
+  $$('[data-loja]').forEach(card => {
+    if (fechadas.has(card.dataset.loja)) abrirLoja(card, false);
+    card.querySelector('[data-alternar-loja]').addEventListener('click', () => {
+      const abrir = card.classList.contains('fechada'); abrirLoja(card, abrir);
+      abrir ? fechadas.delete(card.dataset.loja) : fechadas.add(card.dataset.loja); memo.gravar('fechadas', [...fechadas].join(','));
+    });
+  });
+  $('#btRecolher').addEventListener('click', () => {
+    const todas = $$('[data-loja]'), recolher = todas.some(c => !c.classList.contains('fechada'));
+    todas.forEach(c => { abrirLoja(c, !recolher); recolher ? fechadas.add(c.dataset.loja) : fechadas.delete(c.dataset.loja); });
+    memo.gravar('fechadas', [...fechadas].join(','));
+  });
+
   document.addEventListener('keydown', e => {
-    if (e.key === '/' && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) { e.preventDefault(); irAba('quadro'); $('#fBusca').focus(); }
+    const digitando = /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName);
+    if (e.key === '/' && !digitando) { e.preventDefault(); irAba('quadro'); $('#fBusca').focus(); }
+    if ((e.key === 'n' || e.key === 'N') && !digitando && !e.ctrlKey && !e.metaKey && !$('.hc-gaveta.aberta')) { e.preventDefault(); abrirMovimentar(''); }
     if (e.key === 'Escape') fecharGavetas();
   });
-  $$('[data-recolher]').forEach(b => b.addEventListener('click', () => {
-    const alvo = document.getElementById(b.dataset.recolher), aberto = b.getAttribute('aria-expanded') === 'true';
-    alvo.hidden = aberto; b.setAttribute('aria-expanded', aberto ? 'false' : 'true');
-    b.querySelector('i').style.transform = aberto ? 'rotate(-90deg)' : '';
-  }));
-  filtrar();
 
   /* ---------- observação (salva ao sair do campo) ---------- */
   $$('[data-obs]').forEach(inp => {
     inp.dataset.valor = inp.value;
     const salvar = async () => {
       if (inp.value === inp.dataset.valor) return;
-      try { await api(URL_.observacao, {colaborador: inp.dataset.obs, texto: inp.value}); inp.dataset.valor = inp.value; toast('Observação salva'); }
-      catch (e) { toast(e.message, true); }
+      try {
+        await api(URL_.observacao, {colaborador: inp.dataset.obs, texto: inp.value});
+        $$(`[data-obs="${inp.dataset.obs}"]`).forEach(o => { o.value = inp.value; o.dataset.valor = inp.value; });
+        toast('Observação salva');
+      } catch (e) { toast(e.message, true); }
     };
     inp.addEventListener('blur', salvar);
     inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); inp.blur(); } });
@@ -473,9 +772,19 @@
 
   /* ---------- gavetas ---------- */
   let focoAntes = null;
-  function abrirGaveta(id) { focoAntes = document.activeElement; const g = document.getElementById(id); g.classList.add('aberta'); document.body.style.overflow = 'hidden'; setTimeout(() => (g.querySelector('input:not([type=hidden]), select'))?.focus(), 50); }
-  function fecharGavetas() { $$('.hc-gaveta.aberta').forEach(g => g.classList.remove('aberta')); document.body.style.overflow = ''; focoAntes?.focus?.(); }
+  function abrirGaveta(id) {
+    focoAntes = document.activeElement; const g = document.getElementById(id); g.classList.add('aberta'); document.body.style.overflow = 'hidden';
+    setTimeout(() => (g.querySelector('.corpo input:not([type=hidden]), .corpo select'))?.focus(), 60);
+  }
+  function fecharGavetas() { if (!$('.hc-gaveta.aberta')) return; $$('.hc-gaveta.aberta').forEach(g => g.classList.remove('aberta')); document.body.style.overflow = ''; focoAntes?.focus?.(); }
   $$('[data-fechar-gaveta]').forEach(b => b.addEventListener('click', fecharGavetas));
+  $$('.hc-gaveta').forEach(g => g.addEventListener('keydown', e => {
+    if (e.key !== 'Tab') return;
+    const f = $$('button:not([disabled]), input:not([type=hidden]):not([hidden]), select, textarea, a[href]', g).filter(x => x.offsetParent !== null);
+    if (!f.length) return;
+    if (e.shiftKey && document.activeElement === f[0]) { e.preventDefault(); f[f.length - 1].focus(); }
+    else if (!e.shiftKey && document.activeElement === f[f.length - 1]) { e.preventDefault(); f[0].focus(); }
+  }));
 
   const pessoas = Object.fromEntries(D.pessoas.map(p => [String(p.id), p]));
   const setorNome = Object.fromEntries(D.setores.map(s => [String(s.id), s.nome]));
@@ -485,17 +794,38 @@
   const opCargos = D.cargos.map(c => `<option>${esc(c)}</option>`).join('');
   $('#mCargo').innerHTML = opCargos + '<option value="__outro">Outro (cargo novo)…</option>'; $('#vCargo').innerHTML = opCargos;
 
+  function grupoDoCargo(c) {
+    const n = norm(c).toUpperCase();
+    if (!n) return 'sem-cargo';
+    if (n.includes('GERENTE') && n.includes('OPERACIONAL')) return 'gerente-operacional';
+    if (n.includes('GERENTE')) return 'gerente';
+    if (n.includes('COORDENADOR') || n.includes('SUPERVISOR')) return 'coordenacao';
+    if (n.includes('ADMINISTRATIV') || n === 'ADM' || n.includes('BKO')) return 'administrativo';
+    if (n.includes('RECEPCION')) return 'recepcao';
+    if (n.includes('CONSULTOR') && (/ PL\b/.test(' ' + n) || n.includes('PLENO'))) return 'consultor-pleno';
+    if (n.includes('CONSULTOR')) return 'consultor';
+    return 'outros';
+  }
+  let simulado = null;
+  function passos(n) { $$('#gaveta [data-passo]').forEach(p => p.classList.toggle('feito', +p.dataset.passo <= n)); }
+  function atualizarPassos() {
+    const temPessoa = !!$('#mPessoa').value || $('[data-acao=lembrete]').checked;
+    const temMudanca = $$('[data-acao]').some(c => c.checked);
+    passos(simulado ? 3 : temPessoa && temMudanca ? 2 : temPessoa ? 1 : 0);
+  }
+  function invalidar() { simulado = null; $('#btConfirmar').disabled = true; $('#mSimulacao').hidden = true; atualizarPassos(); }
   function escolherPessoa(id) {
     const p = pessoas[String(id)];
     $('#mPessoa').value = p ? p.id : '';
     $('#mPessoaBusca').value = p ? p.nome : '';
-    $('#mAtual').textContent = p ? `Hoje: ${p.cargo || 'sem cargo'} · ${setorNome[p.setor] || 'sem loja'}` : '';
+    $('#mAtual').innerHTML = p ? `Hoje: <b>${esc(p.cargo || 'sem cargo')}</b> · ${esc(setorNome[p.setor] || 'sem loja')}` : '';
+    const av = $('#mAvatar'); av.className = `avatar g-${p ? grupoDoCargo(p.cargo) : 'outros'}`;
+    av.textContent = p ? p.nome.split(/\s+/).slice(0, 2).map(x => x[0]).join('').toUpperCase() : '?';
     if (p) { $('#mNome').value = p.nome; if (p.setor) $('#mLoja').value = p.setor; if (p.cargo) $('#mCargo').value = p.cargo; }
     invalidar();
   }
   $('#mPessoaBusca').addEventListener('change', () => {
-    const p = D.pessoas.find(x => x.nome === $('#mPessoaBusca').value);
-    escolherPessoa(p ? p.id : '');
+    const p = D.pessoas.find(x => x.nome === $('#mPessoaBusca').value); escolherPessoa(p ? p.id : '');
   });
   function mostrarCampos() {
     $$('[data-acao]').forEach(c => { const campo = $(`[data-campo="${c.dataset.acao}"]`); if (campo) campo.hidden = !c.checked; });
@@ -507,19 +837,45 @@
     mostrarCampos(); invalidar();
   }));
   $('#mCargo').addEventListener('change', () => { $('#mCargoOutro').hidden = $('#mCargo').value !== '__outro'; invalidar(); });
-  $$('#formMov input, #formMov select').forEach(el => el.addEventListener('input', invalidar));
-  $('#mData').addEventListener('input', () => {
+  $$('#formMov input, #formMov select, #formMov textarea').forEach(el => el.addEventListener('input', invalidar));
+  function dicaData() {
     const fut = $('#mData').value > D.hoje;
-    $('#btConfirmar').innerHTML = fut ? '<i class="fas fa-calendar-check"></i> Confirmar agendamento' : '<i class="fas fa-check"></i> Confirmar e aplicar';
-  });
+    $('#btConfirmar').innerHTML = fut ? '<i class="fas fa-calendar-check"></i>Confirmar agendamento' : '<i class="fas fa-check"></i>Confirmar e aplicar';
+    $('#mDataDica').textContent = fut ? 'Data futura: fica agendada e o lembrete sobe 2 dias antes.' : 'Hoje (ou data passada): aplica na hora no cadastro.';
+  }
+  $('#mData').addEventListener('input', dicaData);
+  $$('[data-dias]').forEach(b => b.addEventListener('click', () => {
+    const d = new Date(D.hoje + 'T12:00:00'); d.setDate(d.getDate() + +b.dataset.dias);
+    $('#mData').value = d.toISOString().slice(0, 10); dicaData(); invalidar();
+  }));
 
-  function abrirMovimentar(id) {
-    $('#formMov').reset(); $('#mData').value = D.hoje; $('#mData').dispatchEvent(new Event('input'));
-    escolherPessoa(id || ''); mostrarCampos(); invalidar();
+  function abrirMovimentar(id, preLoja) {
+    $('#formMov').reset(); $('#mData').value = D.hoje; dicaData();
+    escolherPessoa(id || '');
+    if (preLoja) { $('[data-acao=loja]').checked = true; $('#mLoja').value = preLoja; }
+    mostrarCampos(); invalidar();
     $('#gTitulo').textContent = id && pessoas[String(id)] ? `Movimentar ${pessoas[String(id)].nome}` : 'Nova movimentação';
     abrirGaveta('gaveta');
   }
   $$('[data-movimentar]').forEach(b => b.addEventListener('click', () => abrirMovimentar(b.dataset.movimentar)));
+
+  /* ---------- arrastar uma pessoa para outra loja ---------- */
+  let arrastado = null;
+  $$('[draggable="true"][data-pessoa]').forEach(el => {
+    el.addEventListener('dragstart', e => { arrastado = el.dataset.pessoa; el.classList.add('arrastando'); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', arrastado); });
+    el.addEventListener('dragend', () => { el.classList.remove('arrastando'); $$('.alvo-drop').forEach(x => x.classList.remove('alvo-drop')); arrastado = null; });
+  });
+  $$('[data-loja]').forEach(card => {
+    card.addEventListener('dragover', e => { if (!arrastado) return; e.preventDefault(); card.classList.add('alvo-drop'); });
+    card.addEventListener('dragleave', e => { if (!card.contains(e.relatedTarget)) card.classList.remove('alvo-drop'); });
+    card.addEventListener('drop', e => {
+      e.preventDefault(); card.classList.remove('alvo-drop');
+      const id = e.dataTransfer.getData('text/plain') || arrastado; const p = pessoas[String(id)];
+      if (!p) return;
+      if (String(p.setor) === card.dataset.loja) { toast(`${p.nome} já está na ${card.dataset.lojaNome}.`); return; }
+      abrirMovimentar(id, card.dataset.loja);
+    });
+  });
 
   function lerForm() {
     const marcado = a => $(`[data-acao=${a}]`).checked;
@@ -529,35 +885,39 @@
             novo_nome: marcado('nome') ? $('#mNome').value : '', desligar: marcado('desligar'),
             lembrete: marcado('lembrete') ? $('#mLembrete').value : ''};
   }
-  let simulado = null;
-  function invalidar() { simulado = null; $('#btConfirmar').disabled = true; $('#mSimulacao').hidden = true; }
 
   function desenharSimulacao(s) {
-    const linhasMud = s.mudancas.map(m => `<tr><td class="pr-3 text-gray-500">${esc(m.campo)}</td><td class="pr-2 line-through text-gray-400">${esc(m.antes)}</td><td><i class="fas fa-arrow-right text-gray-400 mx-1"></i><b>${esc(m.depois)}</b></td></tr>`).join('');
-    const impacto = s.impacto.map(l => `<div class="bg-white rounded-lg border border-gray-200 p-3">
-      <p class="font-semibold text-sm mb-1">${esc(l.loja)} <span class="text-xs text-gray-500">${l.total_antes} → ${l.total_depois} pessoas</span></p>
-      <table class="text-xs w-full">${l.linhas.map(x => { const d = x.depois - x.antes;
-        return `<tr><td class="text-gray-600">${esc(x.grupo)}</td><td class="text-right tabular-nums">${x.antes}</td><td class="text-right tabular-nums w-10">→ ${x.depois}</td><td class="text-right w-10 font-semibold ${d > 0 ? 'hc-delta-mais' : d < 0 ? 'hc-delta-menos' : 'text-gray-300'}">${d > 0 ? '+' + d : d || '='}</td></tr>`; }).join('')}</table></div>`).join('');
+    const mud = s.mudancas.map(m => `<div class="comp text-sm"><span class="t3 line-through truncate text-right">${esc(m.antes)}</span>
+        <span class="tag tag-info">${esc(m.campo)} <i class="fas fa-arrow-right"></i></span><b class="truncate">${esc(m.depois)}</b></div>`).join('');
+    const impacto = s.impacto.map(l => {
+      const max = Math.max(1, ...l.linhas.map(x => Math.max(x.antes, x.depois)));
+      return `<div class="card p-3">
+        <p class="font-bold text-sm mb-2 flex justify-between gap-2"><span class="truncate">${esc(l.loja)}</span><span class="t2 tabular">${l.total_antes} → <b>${l.total_depois}</b></span></p>
+        ${l.linhas.map(x => { const d = x.depois - x.antes, g = slug(x.grupo);
+          return `<div class="g-${g} text-xs mb-1.5"><div class="flex justify-between"><span class="t2">${esc(x.grupo)}</span>
+            <span class="tabular font-bold ${d > 0 ? 'delta-mais' : d < 0 ? 'delta-menos' : 't3'}">${x.antes} → ${x.depois}${d ? ` (${d > 0 ? '+' : ''}${d})` : ''}</span></div>
+            <div class="barra-hc mt-0.5"><span style="width:${x.depois / max * 100}%"></span></div></div>`; }).join('')}</div>`; }).join('');
     $('#mSimulacao').innerHTML = `
-      <p class="text-sm font-bold text-indigo-900"><i class="fas fa-flask"></i> Simulação</p>
-      <p class="text-sm"><b>${esc(s.resumo)}</b></p>
-      <p class="text-xs text-indigo-800"><i class="fas ${s.agendar ? 'fa-calendar-day' : 'fa-bolt'}"></i> ${esc(s.quando)}</p>
-      ${linhasMud ? `<table class="text-sm">${linhasMud}</table>` : ''}
+      <div class="flex items-center gap-2"><span class="w-8 h-8 rounded-lg grid place-items-center text-white" style="background:var(--pri)"><i class="fas fa-flask"></i></span>
+        <div><p class="text-xs font-bold uppercase tracking-wider" style="color:var(--pri-esc)">Simulação</p>
+        <p class="text-[11px] t2"><i class="fas ${s.agendar ? 'fa-calendar-day' : 'fa-bolt'}"></i> ${esc(s.quando)}</p></div></div>
+      <p class="text-sm font-bold">${esc(s.resumo)}</p>
+      ${mud ? `<div class="space-y-1.5">${mud}</div>` : ''}
       ${impacto ? `<div class="grid sm:grid-cols-2 gap-2">${impacto}</div>` : ''}
-      ${s.avisos.length ? `<ul class="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-2 space-y-0.5">${s.avisos.map(a => `<li><i class="fas fa-triangle-exclamation"></i> ${esc(a)}</li>`).join('')}</ul>` : ''}`;
+      ${s.avisos.length ? `<ul class="text-xs rounded-xl p-2.5 space-y-1 tag-alerta" style="display:block">${s.avisos.map(a => `<li><i class="fas fa-triangle-exclamation"></i> ${esc(a)}</li>`).join('')}</ul>` : ''}`;
     $('#mSimulacao').hidden = false;
-    $('#mSimulacao').scrollIntoView({behavior: 'smooth', block: 'nearest'});
+    $('#mSimulacao').scrollIntoView({behavior: semMovimento ? 'auto' : 'smooth', block: 'nearest'});
   }
   $('#btSimular').addEventListener('click', async () => {
-    const b = $('#btSimular'); b.disabled = true;
-    try { const dados = lerForm(); const s = await api(URL_.simular, dados); simulado = JSON.stringify(dados); desenharSimulacao(s); $('#btConfirmar').disabled = false; }
+    const b = $('#btSimular'); b.disabled = true; b.querySelector('i').className = 'fas fa-spinner fa-spin';
+    try { const dados = lerForm(); const s = await api(URL_.simular, dados); simulado = JSON.stringify(dados); desenharSimulacao(s); $('#btConfirmar').disabled = false; passos(3); $('#btConfirmar').focus(); }
     catch (e) { toast(e.message, true); invalidar(); }
-    finally { b.disabled = false; }
+    finally { b.disabled = false; b.querySelector('i').className = 'fas fa-flask'; }
   });
   $('#btConfirmar').addEventListener('click', async () => {
     const dados = lerForm();
     if (!simulado || simulado !== JSON.stringify(dados)) { invalidar(); toast('Algo mudou: simule de novo antes de salvar.', true); return; }
-    const b = $('#btConfirmar'); b.disabled = true;
+    const b = $('#btConfirmar'); b.disabled = true; passos(4);
     try { const r = await api(URL_.movimentar, dados); recarregar(r.situacao === 'AGENDADA' ? 'futuras' : 'quadro', r.msg); }
     catch (e) { toast(e.message, true); b.disabled = false; }
   });
@@ -581,10 +941,12 @@
   $$('[data-falta]').forEach(el => {
     const d = Math.round((new Date(el.dataset.falta + 'T00:00:00') - hoje) / 864e5);
     el.textContent = d < 0 ? `atrasada ${-d} dia(s)` : d === 0 ? 'hoje' : d === 1 ? 'amanhã' : `em ${d} dias`;
+    el.classList.add(d < 0 ? 'tag-erro' : d <= 2 ? 'tag-alerta' : 'tag-info');
   });
   $$('[data-aplicar]').forEach(b => b.addEventListener('click', async () => {
     if (!confirm(`Aplicar agora no cadastro?\n\n${b.dataset.resumo}`)) return;
-    try { const r = await api(URL_.aplicar(b.dataset.aplicar)); recarregar('futuras', r.msg); } catch (e) { toast(e.message, true); }
+    b.disabled = true;
+    try { const r = await api(URL_.aplicar(b.dataset.aplicar)); recarregar('futuras', r.msg); } catch (e) { toast(e.message, true); b.disabled = false; }
   }));
   $$('[data-cancelar]').forEach(b => b.addEventListener('click', async () => {
     if (!confirm(`Cancelar esta movimentação?\n\n${b.dataset.resumo}`)) return;
@@ -592,9 +954,15 @@
   }));
 
   /* ---------- histórico ---------- */
-  $('#fHist').addEventListener('input', () => {
-    const t = norm($('#fHist').value); $$('#listaHist li').forEach(li => li.hidden = !!t && !norm(li.dataset.busca).includes(t));
-  });
+  let situacaoHist = '';
+  function filtrarHist() {
+    const t = norm($('#fHist').value);
+    $$('#listaHist > li').forEach(li => li.hidden = (!!t && !norm(li.dataset.busca).includes(t)) || (!!situacaoHist && li.dataset.situacao !== situacaoHist));
+  }
+  $('#fHist').addEventListener('input', filtrarHist);
+  $$('[data-hist]').forEach(b => b.addEventListener('click', () => {
+    situacaoHist = b.dataset.hist; $$('[data-hist]').forEach(x => x.setAttribute('aria-pressed', x === b ? 'true' : 'false')); filtrarHist();
+  }));
 
   /* ---------- carteiras ---------- */
   const fc = $('#formCarteira');
@@ -604,8 +972,12 @@
     const ids = (b.dataset.lojas || '').split(',');
     $$('input[name=lojas]', fc).forEach(c => c.checked = ids.includes(c.value));
     $('#tituloCarteira').textContent = `Editar ${b.dataset.nome}`; fc.nome.focus();
+    fc.scrollIntoView({behavior: semMovimento ? 'auto' : 'smooth', block: 'nearest'});
   }));
   $('#cLimpar').addEventListener('click', () => { fc.id.value = ''; $('#tituloCarteira').textContent = 'Nova carteira'; });
+  $('#cFiltroLojas').addEventListener('input', () => {
+    const t = norm($('#cFiltroLojas').value); $$('[data-loja-op]', fc).forEach(l => l.hidden = !!t && !norm(l.dataset.lojaOp).includes(t));
+  });
   fc.addEventListener('submit', async e => {
     e.preventDefault();
     const corpo = {id: fc.id.value, nome: fc.nome.value, coordenador: fc.coordenador.value, coordenador_nome: fc.coordenador_nome.value,
@@ -616,6 +988,10 @@
     if (!confirm(`Excluir a carteira ${b.dataset.nome}? As lojas não são apagadas.`)) return;
     try { const r = await api(URL_.excluirCarteira(b.dataset.excluirCarteira)); recarregar('carteiras', r.msg); } catch (e) { toast(e.message, true); }
   }));
+
+  // Sem escolha salva, o celular abre em cartões (a tabela empilhada fica longa demais).
+  const salva = memo.ler('vista');
+  vista(salva === 'cartoes' || salva === 'tabela' ? salva : (window.matchMedia('(max-width: 767px)').matches ? 'cartoes' : 'tabela'));
 })();
 </script>
 {% endblock %}

@@ -139,6 +139,7 @@ def _pessoa(u, obs, hist, agendadas, hoje):
         'observacao': obs.get(u.id, ''), 'historico': hist.get(u.id, []), 'agendadas': agendadas.get(u.id, []),
         'sai_em': u.demission_date, 'status': u.get_status_display() if u.status != User.STATUS_ATIVO else '',
         'novo': bool(adm and adm >= hoje - timedelta(days=30)), 'setor_id': u.sector_id,
+        'iniciais': ''.join(x[:1] for x in nome_completo(u).split()[:2]).upper() or '?',
     }
 
 
@@ -188,7 +189,11 @@ def montar_quadro(hoje=None) -> dict:
     if apoio:
         carteiras.append({'id': -1, 'nome': 'Escritório e áreas de apoio', 'coordenacao': '', 'lojas': apoio,
                           'total': sum(b['total'] for b in apoio), 'vagas': sum(len(b['vagas']) for b in apoio)})
+    todas = [b for c in carteiras for b in c['lojas']]
     return {'carteiras': carteiras, 'sem_loja': sem_loja, 'total': len(pessoas),
+            'sem_gerente': sum(1 for b in todas if b['sem_gerente']),
+            'exp_proximas': sum(1 for b in todas for p in b['pessoas']
+                                if 'proxima' in (p['exp1_alerta'], p['exp2_alerta'])),
             'vagas': sum(len(v) for v in vagas.values()),
             'lojas': sum(1 for c in carteiras for b in c['lojas'] if e_loja(b['setor']))}
 

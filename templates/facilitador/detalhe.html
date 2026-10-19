@@ -97,7 +97,7 @@
     {% if pode_gerenciar %}
     <div class="px-5 sm:px-6 py-3 bg-gray-50 border-t border-gray-100 flex flex-wrap items-center gap-2 text-sm">
       <span class="text-xs text-gray-500 mr-auto">
-        <i class="fas fa-chart-simple mr-1"></i>{{ recurso.acessos }} {% if recurso.e_link %}clique{{ recurso.acessos|pluralize }}{% else %}download{{ recurso.acessos|pluralize }}{% endif %}
+        <i class="fas fa-chart-column mr-1"></i>{{ recurso.acessos }} {% if recurso.e_link %}clique{{ recurso.acessos|pluralize }}{% else %}download{{ recurso.acessos|pluralize }}{% endif %}
         · atualizado em {{ recurso.atualizado_em|date:"d/m/Y H:i" }}{% if recurso.criado_por %} · por {{ recurso.criado_por.full_name|default:recurso.criado_por.username }}{% endif %}
       </span>
       <a href="{% url 'facilitador:editar' recurso.pk %}" class="px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-100"><i class="fas fa-pen mr-1"></i>Editar</a>

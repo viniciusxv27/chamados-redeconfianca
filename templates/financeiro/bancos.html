@@ -9,7 +9,7 @@
 {% if contas %}
 <div class="flex items-center gap-3 flex-wrap mb-4">
     <div class="fin-card fin-kpi flex-1 min-w-[14rem]" style="--fin-kpi-cor:#059669">
-        <p class="fin-kpi-rotulo"><span class="fin-kpi-icone bg-emerald-50 text-emerald-600"><i class="fas fa-sack-dollar"></i></span>Saldo das contas ativas</p>
+        <p class="fin-kpi-rotulo"><span class="fin-kpi-icone bg-emerald-50 text-emerald-600"><i class="fas fa-coins"></i></span>Saldo das contas ativas</p>
         <p class="fin-kpi-valor text-2xl {% if saldo_total < 0 %}text-red-600{% endif %}" data-fin-num="{{ saldo_total|unlocalize }}">{{ saldo_total|brl_zero }}</p>
         <p class="fin-kpi-nota">{{ contas|length }} conta{{ contas|length|pluralize }} cadastrada{{ contas|length|pluralize }}</p>
     </div>
