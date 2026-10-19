@@ -1,261 +1,689 @@
 {% extends "base.html" %}
+{% load l10n %}
 {% block title %}Fibras - Kanban{% endblock %}
 
+{% block extra_css %}
+{% include 'fibras/_fb_estilo.html' %}
+<style>
+/* ---- Kanban ---- */
+.fb .fb-kpis.kb { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+@media (max-width: 1280px) { .fb .fb-kpis.kb { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 767px) {
+  .fb .fb-kpis.kb { display: flex; overflow-x: auto; scroll-snap-type: x proximity; gap: 10px; margin: 0 -12px 16px; padding: 4px 12px 6px; scrollbar-width: none; }
+  .fb .fb-kpis.kb::-webkit-scrollbar { display: none; }
+  .fb .fb-kpis.kb .fb-kpi { flex: 0 0 142px; scroll-snap-align: start; }
+}
+.fb-ferramentas { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.fb-ferramentas .fb-resultado { font-size: 12.5px; color: var(--fb-suave); font-variant-numeric: tabular-nums; }
+.fb-ferramentas .fb-dir { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+.fb-import { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; }
+.fb-drop { position: relative; display: flex; align-items: center; gap: 14px; border: 1.5px dashed rgba(127,127,127,.35); border-radius: var(--fb-raio);
+  padding: 12px 14px; background: var(--fb-campo); cursor: pointer; transition: all .2s var(--fb-ease); min-width: 0; }
+.fb-drop:hover, .fb-drop.sobre { border-color: var(--fb-pri); background: var(--fb-card); }
+.fb-drop .fb-drop-ico { width: 38px; height: 38px; flex: 0 0 38px; border-radius: 11px; display: grid; place-items: center; background: #E3F5E8; color: #1E9E4A; }
+html.dark .fb-drop .fb-drop-ico { background: rgba(52,199,89,.16); color: #5EDB82; }
+.fb-drop b { display: block; font-size: 13.5px; }
+.fb-drop span { display: block; font-size: 12px; color: var(--fb-suave); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fb-drop input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
+@media (max-width: 640px) { .fb-import { grid-template-columns: 1fr; } }
+
+.fb-board-wrap { position: relative; }
+.fb-board-wrap::before, .fb-board-wrap::after { content: ""; position: absolute; top: 0; bottom: 12px; width: 36px; pointer-events: none; z-index: 3; opacity: 0; transition: opacity .25s; }
+.fb-board-wrap::before { left: 0; background: linear-gradient(90deg, var(--fb-bg), transparent); }
+.fb-board-wrap::after { right: 0; background: linear-gradient(270deg, var(--fb-bg), transparent); }
+.fb-board-wrap.mais-esq::before, .fb-board-wrap.mais-dir::after { opacity: 1; }
+.fb-board { display: flex; gap: 12px; overflow-x: auto; padding: 2px 2px 12px; scroll-behavior: smooth; overscroll-behavior-x: contain; }
+.fb-col { flex: 1 0 248px; min-width: 248px; max-width: 420px; display: flex; flex-direction: column; background: var(--fb-card-2); border-radius: 18px;
+  box-shadow: inset 0 0 0 1px var(--fb-linha); transition: flex-basis .3s var(--fb-ease), min-width .3s var(--fb-ease), box-shadow .2s, background .2s; animation: fb-entrar .45s var(--fb-ease) both; }
+html.dark .fb-col { background: rgba(255,255,255,.02); }
+.fb-col-cab { padding: 12px 12px 10px 14px; display: flex; align-items: flex-start; gap: 8px; border-bottom: 1px solid var(--fb-linha); position: relative; }
+.fb-col-cab::before { content: ""; position: absolute; left: 14px; right: 14px; top: 0; height: 3px; border-radius: 0 0 3px 3px; background: var(--st); }
+.fb-col-tit { flex: 1; min-width: 0; }
+.fb-col-tit h3 { margin: 0; font-size: 14px; font-weight: 700; letter-spacing: -0.01em; display: flex; align-items: center; gap: 8px; }
+.fb-col-tit h3 .fb-cont { font-size: 11.5px; font-weight: 700; padding: 1px 8px; border-radius: 980px; background: color-mix(in srgb, var(--st) 14%, transparent); color: var(--st); font-variant-numeric: tabular-nums; }
+.fb-col-tit p { margin: 3px 0 0; font-size: 12px; color: var(--fb-suave); font-variant-numeric: tabular-nums; }
+.fb-col-tit p b { color: var(--fb-texto); font-weight: 600; }
+.fb-col-btn { border: 0; background: transparent; color: var(--fb-suave); width: 28px; height: 28px; border-radius: 8px; cursor: pointer; flex: 0 0 28px; transition: all .2s; }
+.fb-col-btn:hover { background: var(--fb-campo); color: var(--fb-texto); }
+.fb-col-btn i { transition: transform .3s var(--fb-ease); }
+.fb-col .kanban-col { padding: 10px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; max-height: 68vh; min-height: 90px; flex: 1; border-radius: 0 0 18px 18px; transition: background .2s; }
+.fb-col .fb-vazio { padding: 18px 10px; }
+.fb-col.recolhida { flex: 0 0 54px; min-width: 54px; cursor: pointer; }
+.fb-col.recolhida .fb-col-cab { flex-direction: column; align-items: center; border-bottom: 0; padding: 12px 6px; height: 100%; }
+.fb-col.recolhida .fb-col-tit { writing-mode: vertical-rl; transform: rotate(180deg); display: flex; align-items: center; }
+.fb-col.recolhida .fb-col-tit p { display: none; }
+.fb-col.recolhida .fb-col-btn { order: -1; }
+.fb-col.recolhida .fb-col-btn i { transform: rotate(-90deg); }
+.fb-col.recolhida .kanban-col, .fb-col.recolhida .fb-vazio { display: none; }
+.fb-col.realce { box-shadow: inset 0 0 0 2px var(--st), var(--fb-sombra-lg); }
+/* Arrastar e soltar */
+.fb-board.arrastando .fb-col:not(.somente-leitura) .kanban-col { background: color-mix(in srgb, var(--st) 5%, transparent); outline: 2px dashed color-mix(in srgb, var(--st) 35%, transparent); outline-offset: -6px; }
+.fb-board.arrastando .fb-col.alvo { box-shadow: inset 0 0 0 2px var(--st), var(--fb-sombra-lg); }
+.fb-board.arrastando .fb-col.alvo .kanban-col { background: color-mix(in srgb, var(--st) 11%, transparent); outline-color: var(--st); }
+.fb-board.arrastando .fb-col.somente-leitura { opacity: .55; }
+.fb-ghost { opacity: .35; }
+.fb-ghost.kanban-card { background: color-mix(in srgb, var(--st) 10%, var(--fb-card)); box-shadow: inset 0 0 0 2px dashed var(--st); }
+.fb-chosen.kanban-card { box-shadow: 0 0 0 2px var(--fb-pri), var(--fb-sombra-lg); }
+.fb-drag.kanban-card { transform: rotate(2deg); }
+.kanban-card.salvando { opacity: .7; }
+.kanban-card.salvando::after { content: "\f110"; font-family: "Font Awesome 6 Free"; font-weight: 900; position: absolute; right: 10px; bottom: 10px; color: var(--fb-pri); animation: fb-girar .8s linear infinite; font-size: 12px; }
+@keyframes fb-pulso { 0% { box-shadow: 0 0 0 0 rgba(255,107,53,.55); } 100% { box-shadow: 0 0 0 12px rgba(255,107,53,0); } }
+.kanban-card.chegou { animation: fb-pulso .9s var(--fb-ease); }
+/* Cartão */
+.fb .kanban-card { position: relative; background: var(--fb-card); border-radius: 14px; padding: 11px 12px 11px 14px; box-shadow: 0 1px 2px rgba(0,0,0,.05), 0 0 0 1px var(--fb-linha);
+  cursor: pointer; transition: transform .2s var(--fb-ease), box-shadow .2s var(--fb-ease); font-size: 12.5px; min-width: 0; }
+.fb .kanban-card::before { content: ""; position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px; border-radius: 0 3px 3px 0; background: var(--st); opacity: .85; }
+.fb .kanban-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,.08), 0 0 0 1px var(--fb-linha); }
+html.dark .fb .kanban-card:hover { box-shadow: 0 8px 24px rgba(0,0,0,.4), 0 0 0 1px rgba(255,255,255,.12); }
+.fb .kanban-card.arrastavel { cursor: grab; }
+.fb .kanban-card.arrastavel:active { cursor: grabbing; }
+.fb .kanban-card.nova-resposta { box-shadow: 0 0 0 2px #818CF8, 0 4px 14px rgba(99,102,241,.18); background: color-mix(in srgb, #6366F1 6%, var(--fb-card)); }
+.fb-k-topo { display: flex; align-items: flex-start; gap: 6px; }
+.fb-k-nome { flex: 1; min-width: 0; font-weight: 650; font-size: 13.5px; letter-spacing: -0.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fb-texto); }
+.fb-k-nome:hover { color: var(--fb-pri); }
+.fb-k-acao { border: 0; background: transparent; color: var(--fb-suave); width: 24px; height: 24px; border-radius: 7px; cursor: pointer; flex: 0 0 24px; font-size: 11px; opacity: .6; transition: all .15s; }
+.fb .kanban-card:hover .fb-k-acao, .fb-k-acao:focus-visible { opacity: 1; }
+.fb-k-acao:hover { background: var(--fb-campo); color: var(--fb-pri); }
+.fb-k-grip { color: var(--fb-suave); opacity: .45; font-size: 11px; padding-top: 5px; }
+.fb-k-meta { color: var(--fb-suave); font-size: 11.5px; margin-top: 2px; overflow-wrap: anywhere; }
+.fb-k-linha { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 6px; font-size: 11.5px; color: var(--fb-suave-2); }
+.fb-k-end { color: var(--fb-suave-2); font-size: 11.5px; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fb-k-rodape { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--fb-linha); }
+.fb-k-rodape .vend { color: var(--fb-suave-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; font-size: 11.5px; }
+.fb-k-rodape .valor { font-weight: 700; color: var(--fb-pri); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.fb-k-retorno { margin-top: 7px; font-size: 11.5px; background: #FFF8E6; color: #7A5200; border-radius: 9px; padding: 5px 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html.dark .fb-k-retorno { background: rgba(245,165,36,.12); color: #F5C26B; }
+.fb-k-novo { margin-top: 6px; display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; color: #4F46E5; }
+html.dark .fb-k-novo { color: #A5B4FC; }
+.fb-k-novo i { font-size: 6px; animation: fb-piscar 1.4s ease-in-out infinite; }
+@keyframes fb-piscar { 50% { opacity: .2; } }
+.fb-end-div { color: var(--fb-vermelho); font-weight: 600; }
+/* Pré-visualização: botões de mover */
+.fb-mover { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin-top: 8px; }
+.fb-mover button { display: flex; align-items: center; gap: 8px; border: 0; cursor: pointer; padding: 9px 12px; border-radius: 12px; background: var(--fb-campo); font-size: 12.5px; font-weight: 600; text-align: left; transition: all .15s; }
+.fb-mover button:hover { background: color-mix(in srgb, var(--st) 14%, transparent); color: var(--st); }
+.fb-mover button[aria-current="true"] { box-shadow: inset 0 0 0 2px var(--st); cursor: default; }
+/* Ordens inconsistentes */
+.fb-inc summary { list-style: none; cursor: pointer; flex-wrap: nowrap; align-items: flex-start; }
+.fb-inc summary > div { min-width: 0; }
+.fb-inc summary::-webkit-details-marker { display: none; }
+.fb-inc summary .fa-chevron-down { transition: transform .3s var(--fb-ease); color: var(--fb-suave); }
+.fb-inc[open] summary .fa-chevron-down { transform: rotate(180deg); }
+.fb-inc-lista { max-height: 300px; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; margin-top: 12px; }
+.fb-inc-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 12px; border-radius: 12px; background: var(--fb-campo); font-size: 12.5px; min-width: 0; }
+.fb-inc-item .ord { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 700; }
+.fb-inc-item .st { color: var(--fb-suave); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.fb-inc-item .qd { color: var(--fb-suave); white-space: nowrap; font-size: 11.5px; }
+@media (max-width: 767px) {
+  .fb-board { scroll-snap-type: x mandatory; gap: 10px; margin: 0 -12px; padding: 2px 12px 12px; scroll-padding: 0 12px; }
+  .fb-col { flex: 0 0 86%; min-width: 0; max-width: none; scroll-snap-align: start; }
+  .fb-col.recolhida { flex: 0 0 54px; }
+  .fb-col .kanban-col { max-height: 62vh; }
+  .fb .kanban-card .fb-k-acao { opacity: 1; }
+  .fb-ferramentas .fb-dir { margin-left: 0; }
+}
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="min-h-screen bg-gray-50 p-4">
-  <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+<div class="fb" id="fbKanban">
+  <div class="fb-cab">
     <div>
-      <h1 class="text-2xl font-bold text-gray-900 flex items-center gap-2">
-        <i class="fas fa-network-wired text-primary"></i>
-        Fibras — Acompanhamento (Mês corrente)
-      </h1>
-      <p class="text-sm text-gray-600">
-        Status segmentado conforme retorno da Ilha.
-        {% if is_ilha %}<span class="ml-2 text-xs text-primary font-semibold"><i class="fas fa-hand-pointer"></i> Arraste os cards para mudar o status</span>{% endif %}
+      <h1><span class="fb-ico" aria-hidden="true"><i class="fas fa-network-wired"></i></span> Fibras — Acompanhamento</h1>
+      <p>Mês corrente · status segmentado conforme retorno da Ilha.
+        {% if is_ilha %}<span class="fb-dica"><i class="fas fa-hand-pointer" aria-hidden="true"></i> Arraste os cards para mudar o status</span>{% endif %}
       </p>
     </div>
-    <div class="flex gap-2 flex-wrap">
-      <div class="inline-flex rounded-lg border border-gray-300 bg-white overflow-hidden text-sm shadow-sm">
-        <button type="button" class="px-3 py-2 bg-primary text-white"><i class="fas fa-columns"></i> Kanban</button>
-        <a href="{% url 'fibras:lista' %}" class="px-3 py-2 hover:bg-gray-50 text-gray-700"><i class="fas fa-list"></i> Lista</a>
-      </div>
-      <a href="{% url 'fibras:relatorio' %}" class="px-3 py-2 bg-white border rounded-lg text-sm hover:bg-gray-50">
-        <i class="fas fa-chart-bar"></i> Relatório
+    <div class="fb-acoes">
+      <a href="{% url 'fibras:export_canceladas_csv' %}" class="fb-btn perigo" title="Exporta as fibras canceladas na planilha de Gestão Documental (Receita zerada)">
+        <i class="fas fa-file-csv" aria-hidden="true"></i> Exportar canceladas
       </a>
-      {% if is_ilha %}
-      <a href="{% url 'fibras:validacao' %}" class="px-3 py-2 bg-orange-500 text-white rounded-lg text-sm font-semibold shadow-sm hover:bg-orange-600"
-         title="Cruzamento completo: Base de Vendas × Esteira de Vendas Vivo">
-        <i class="fas fa-code-compare"></i> Validação Base × Esteira
-      </a>
-      {% endif %}
-      <a href="{% url 'fibras:export_canceladas_csv' %}" class="px-3 py-2 bg-gradient-to-r from-red-700 to-red-900 text-white rounded-lg text-sm font-semibold shadow hover:shadow-lg transition-all" title="Exporta as fibras canceladas na planilha de Gestão Documental (Receita zerada)">
-        <i class="fas fa-file-csv"></i> Exportar canceladas
-      </a>
-      {% if filtro_b2b %}
-      <a href="{% url 'fibras:kanban' %}" class="px-3 py-2 bg-indigo-600 text-white border border-indigo-600 rounded-lg text-sm hover:bg-indigo-700" title="Mostrando apenas fibras B2B (documento &gt; 11 caracteres)">
-        <i class="fas fa-building"></i> B2B (ativo)
-      </a>
-      {% else %}
-      <a href="?b2b=1" class="px-3 py-2 bg-white border rounded-lg text-sm hover:bg-gray-50" title="Ver apenas fibras de empresa (documento &gt; 11 caracteres)">
-        <i class="fas fa-building"></i> B2B
-      </a>
-      {% endif %}
       {% if can_import %}
-      <form method="post" action="{% url 'fibras:importar_planilha' %}" enctype="multipart/form-data" class="inline-flex items-center gap-2 bg-white border rounded-lg px-2 py-1">{% csrf_token %}
-        <label class="text-xs font-semibold text-gray-700 flex items-center gap-1 cursor-pointer">
-          <i class="fas fa-file-excel text-green-700"></i>
-          <span>Esteira Vivo (ANALÍTICO):</span>
-          <input type="file" name="planilha" accept=".xlsx" required class="text-xs">
-        </label>
-        <button class="px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700" title="Importa a Esteira de Vendas Vivo e cruza com a Base de Vendas (protocolo, loja e data ±1)">
-          <i class="fas fa-upload"></i> Importar
-        </button>
-      </form>
+      <button type="button" class="fb-btn sucesso" data-fb-toggle="fbImport" aria-expanded="false" aria-controls="fbImport">
+        <i class="fas fa-file-excel" aria-hidden="true"></i> Importar Esteira
+      </button>
       {% endif %}
     </div>
   </div>
 
-  <form method="get" class="bg-white border rounded-lg p-3 mb-4 flex gap-2 flex-wrap">
-    {% if filtro_b2b %}<input type="hidden" name="b2b" value="1">{% endif %}
-    <input type="text" name="pdv" value="{{ filtro_pdv }}" placeholder="Filtrar por PDV" class="px-3 py-1.5 border rounded text-sm">
-    <input type="text" name="vendedor" value="{{ filtro_vendedor }}" placeholder="Filtrar por vendedor" class="px-3 py-1.5 border rounded text-sm">
-    <input type="text" name="venda" value="{{ filtro_venda }}" placeholder="Nº da venda" class="px-3 py-1.5 border rounded text-sm">
-    <input type="text" name="ordem" value="{{ filtro_ordem }}" placeholder="Ordem / Protocolo" class="px-3 py-1.5 border rounded text-sm">
-    <button class="px-3 py-1.5 bg-gray-100 border rounded text-sm">Filtrar</button>
-    <a href="{% url 'fibras:kanban' %}" class="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900">Limpar</a>
-  </form>
-
-  {% if messages %}{% for m in messages %}<div class="mb-3 p-3 rounded bg-blue-50 text-sm">{{ m }}</div>{% endfor %}{% endif %}
-
-  <div id="kanbanBoard" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3">
-    {% for col in colunas %}
-    <div class="bg-white rounded-lg border border-gray-200 flex flex-col shadow-sm">
-      <div class="px-3 py-2 border-b rounded-t-lg
-        {% if col.key == 'agendado' %}bg-blue-50
-        {% elif col.key == 'pendente' %}bg-amber-50
-        {% elif col.key == 'problema' %}bg-red-50
-        {% elif col.key == 'instalado' %}bg-green-50
-        {% elif col.key == 'nao_localizado' %}bg-purple-50
-        {% else %}bg-gray-100{% endif %}">
-        <div class="flex items-center gap-2">
-          <span class="w-2 h-2 rounded-full
-            {% if col.key == 'agendado' %}bg-blue-500
-            {% elif col.key == 'pendente' %}bg-amber-500
-            {% elif col.key == 'problema' %}bg-red-500
-            {% elif col.key == 'instalado' %}bg-green-500
-            {% elif col.key == 'nao_localizado' %}bg-purple-500
-            {% else %}bg-gray-500{% endif %}"></span>
-          <h3 class="text-sm font-bold
-            {% if col.key == 'agendado' %}text-blue-800
-            {% elif col.key == 'pendente' %}text-amber-800
-            {% elif col.key == 'problema' %}text-red-800
-            {% elif col.key == 'instalado' %}text-green-800
-            {% elif col.key == 'nao_localizado' %}text-purple-800
-            {% else %}text-gray-800{% endif %}">{{ col.label }}</h3>
-        </div>
-        <p class="text-xs text-gray-600 mt-0.5">
-          <span class="font-semibold">{{ col.count }}</span> venda(s) · <span class="font-semibold">R$ {{ col.total }}</span>
-        </p>
-      </div>
-      <div class="p-2 space-y-2 overflow-y-auto kanban-col"
-           data-status="{{ col.key }}"
-           style="max-height:70vh; min-height: 80px;">
-        {% for f in col.items %}
-        {% with inc=f.incidentes.first %}
-        <div class="kanban-card group block p-2 border rounded bg-white hover:bg-gray-50 hover:shadow transition-all {% if is_ilha %}cursor-grab active:cursor-grabbing{% else %}cursor-pointer{% endif %} {% if inc and inc.has_unread_reply_for_opener and inc.aberto_por_id == request.user.id %}!bg-indigo-50 ring-2 ring-indigo-400{% endif %}"
-             data-pk="{{ f.pk }}"
-             data-url="{% url 'fibras:detail' f.pk %}">
-          <div class="flex items-start justify-between gap-1">
-            <div class="font-semibold text-sm text-gray-900 truncate flex-1">{{ f.cliente|default:"—" }}</div>
-            {% if is_ilha %}<i class="fas fa-grip-vertical text-gray-300 group-hover:text-gray-500 text-xs mt-0.5"></i>{% endif %}
-          </div>
-          <div class="text-xs text-gray-500">{{ f.cpf }} · Venda {{ f.numero_da_venda }}{% if f.numero_protocolo %} · Prot. {{ f.numero_protocolo }}{% endif %}</div>
-          {% if f.ordem_vinculada %}
-          <div class="text-[11px] mt-0.5 flex items-center gap-1 flex-wrap">
-            <span class="text-gray-600">ORDEM <b>{{ f.ordem_vinculada }}</b></span>
-            <span class="px-1.5 rounded-full font-semibold {% if f.assertividade == 'Alta' %}bg-green-100 text-green-700{% elif f.assertividade == 'Manual' %}bg-blue-100 text-blue-700{% elif f.assertividade == 'Média' %}bg-yellow-100 text-yellow-800{% else %}bg-orange-100 text-orange-700{% endif %}"
-                  title="Assertividade do cruzamento com a Esteira Vivo">{{ f.assertividade }}</span>
-            {% if f.conferencia_endereco == 'Divergente' or f.conferencia_endereco == 'Parcialmente divergente' %}<span class="text-red-600" title="{{ f.detalhe_endereco }}"><i class="fas fa-location-dot"></i> endereço</span>{% endif %}
-          </div>
-          {% elif f.status_cruzamento == 'Venda B2B' %}
-          <div class="text-[11px] mt-0.5"><span class="px-1.5 rounded-full bg-purple-100 text-purple-700 font-semibold">B2B</span></div>
-          {% endif %}
-          <div class="text-xs text-gray-700 truncate">{{ f.endereco|default:"" }}</div>
-          <div class="text-xs mt-1 flex items-center justify-between">
-            <span class="text-gray-600 truncate">{{ f.vendedor }}</span>
-            <span class="font-semibold text-primary whitespace-nowrap">R$ {{ f.valor }}</span>
-          </div>
-          {% if f.retorno_myrella %}
-          <div class="mt-1 text-xs bg-yellow-50 border border-yellow-200 rounded px-2 py-1 truncate">
-            <i class="fas fa-comment text-yellow-600"></i> {{ f.retorno_myrella }}
-          </div>
-          {% endif %}
-          {% if inc and inc.has_unread_reply_for_opener and inc.aberto_por_id == request.user.id %}
-          <div class="mt-1 text-[10px] inline-flex items-center gap-1 text-indigo-700 font-semibold">
-            <i class="fas fa-circle text-[6px] animate-pulse"></i> Nova resposta do Suporte
-          </div>
-          {% endif %}
-        </div>
-        {% endwith %}
-        {% empty %}
-        <p class="text-xs text-gray-400 italic text-center py-4">Nenhuma venda.</p>
-        {% endfor %}
-      </div>
+  <div class="fb-barra-topo">
+    {% include 'fibras/_fb_nav.html' with ativo='kanban' %}
+    <div class="fb-acoes">
+      {% if filtro_b2b %}
+      <a href="{% url 'fibras:kanban' %}" class="fb-btn roxo on" title="Mostrando apenas fibras B2B (documento &gt; 11 caracteres). Clique para ver todas.">
+        <i class="fas fa-building" aria-hidden="true"></i> B2B (ativo) <i class="fas fa-xmark" aria-hidden="true"></i>
+      </a>
+      {% else %}
+      <a href="?b2b=1" class="fb-btn roxo" title="Ver apenas fibras de empresa (documento &gt; 11 caracteres)">
+        <i class="fas fa-building" aria-hidden="true"></i> B2B
+      </a>
+      {% endif %}
     </div>
+  </div>
+
+  {% if can_import %}
+  <section class="fb-card fb-recolhivel" id="fbImport" aria-label="Importar planilha da Esteira">
+    <form method="post" action="{% url 'fibras:importar_planilha' %}" enctype="multipart/form-data" class="fb-import" id="fbImportForm">{% csrf_token %}
+      <label class="fb-drop" id="fbDrop">
+        <span class="fb-drop-ico" aria-hidden="true"><i class="fas fa-file-excel"></i></span>
+        <span style="min-width:0">
+          <b>Esteira Vivo (ANALÍTICO): <span style="display:inline;color:inherit;font-size:inherit" id="fbArqNome">escolha ou arraste o .xlsx</span></b>
+          <span>Importa a Esteira de Vendas Vivo e cruza com a Base de Vendas (protocolo, loja e data ±1).</span>
+        </span>
+        <input type="file" name="planilha" accept=".xlsx" required aria-label="Arquivo .xlsx da Esteira Vivo (ANALÍTICO)">
+      </label>
+      <button class="fb-btn primario" type="submit" title="Importa a Esteira de Vendas Vivo e cruza com a Base de Vendas (protocolo, loja e data ±1)">
+        <i class="fas fa-upload" aria-hidden="true"></i> Importar
+      </button>
+    </form>
+  </section>
+  {% endif %}
+
+  {# KPIs por coluna (clique leva até a coluna) #}
+  <div class="fb-kpis kb" id="fbKpis" aria-label="Resumo por status">
+    <button type="button" class="fb-kpi destaque" data-kpi="total" aria-label="Total no quadro">
+      <div class="fb-kpi-topo"><span>Total</span><i class="fas fa-layer-group" aria-hidden="true"></i></div>
+      <b data-kpi-qtd>—</b>
+      <small data-kpi-valor>&nbsp;</small>
+    </button>
+    {% for col in colunas %}
+    <button type="button" class="fb-kpi" data-st="{{ col.key }}" data-kpi="{{ col.key }}" style="animation-delay: {{ forloop.counter }}0ms" aria-label="Ir para a coluna {{ col.label }}">
+      <div class="fb-kpi-topo"><span>{{ col.label }}</span>
+        <i class="fas {% if col.key == 'agendado' %}fa-calendar-check{% elif col.key == 'pendente' %}fa-hourglass-half{% elif col.key == 'problema' %}fa-triangle-exclamation{% elif col.key == 'instalado' %}fa-circle-check{% elif col.key == 'cancelado' %}fa-ban{% else %}fa-circle-question{% endif %}" aria-hidden="true"></i>
+      </div>
+      <b data-kpi-qtd>{{ col.count }}</b>
+      <small data-kpi-valor>R$ {{ col.total|floatformat:"2g" }}</small>
+      <div class="fb-kpi-bar" aria-hidden="true"><span></span></div>
+    </button>
     {% endfor %}
   </div>
 
-  {% if inconsistencias %}
-  <div class="mt-6 bg-white rounded-lg border border-gray-200 shadow-sm">
-    <div class="px-4 py-2 border-b bg-gray-50 rounded-t-lg flex items-center justify-between">
-      <h3 class="text-sm font-bold text-gray-800 flex items-center gap-2">
-        <i class="fas fa-triangle-exclamation text-amber-500"></i>
-        Ordens inconsistentes da planilha
-        <span class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full text-xs">{{ inconsistencias_count }}</span>
-      </h3>
-      <span class="text-xs text-gray-500">Ordens da planilha sem protocolo correspondente no banco. Saem daqui automaticamente quando o número for ajustado.</span>
+  {# Busca instantânea + filtros do servidor #}
+  <div class="fb-ferramentas">
+    <div class="fb-busca">
+      <i class="fas fa-magnifying-glass" aria-hidden="true"></i>
+      <input type="search" id="fbBusca" class="fb-campo" placeholder="Buscar nos cards: cliente, venda, protocolo/ORDEM, vendedor, PDV…" aria-label="Buscar nos cards" autocomplete="off">
+      <kbd aria-hidden="true">/</kbd>
     </div>
-    <div class="max-h-64 overflow-y-auto divide-y text-sm">
+    <span class="fb-resultado" id="fbResultado" aria-live="polite"></span>
+    <div class="fb-dir">
+      <button type="button" class="fb-btn leve pequeno fb-filtro-toggle" data-fb-toggle="fbFiltros" aria-expanded="false" aria-controls="fbFiltros">
+        <i class="fas fa-sliders" aria-hidden="true"></i> Filtros
+        <span class="fb-badge" id="fbFiltrosQtd" hidden></span>
+      </button>
+      <button type="button" class="fb-btn leve pequeno" id="fbRecolherTudo"><i class="fas fa-compress" aria-hidden="true"></i> Recolher vazias</button>
+      <button type="button" class="fb-btn leve pequeno" id="fbExpandirTudo"><i class="fas fa-expand" aria-hidden="true"></i> Expandir todas</button>
+    </div>
+  </div>
+
+  <form method="get" class="fb-card fb-filtros-painel" id="fbFiltros" style="padding:14px 16px" aria-label="Filtros do servidor">
+    {% if filtro_b2b %}<input type="hidden" name="b2b" value="1">{% endif %}
+    <div class="fb-filtros">
+      <div><label class="fb-rotulo" for="fPdv">PDV</label><input id="fPdv" type="text" name="pdv" value="{{ filtro_pdv }}" placeholder="Filtrar por PDV" class="fb-campo"></div>
+      <div><label class="fb-rotulo" for="fVend">Vendedor</label><input id="fVend" type="text" name="vendedor" value="{{ filtro_vendedor }}" placeholder="Filtrar por vendedor" class="fb-campo"></div>
+      <div><label class="fb-rotulo" for="fVenda">Nº da venda</label><input id="fVenda" type="text" name="venda" value="{{ filtro_venda }}" placeholder="Nº da venda" class="fb-campo"></div>
+      <div><label class="fb-rotulo" for="fOrdem">Ordem / Protocolo</label><input id="fOrdem" type="text" name="ordem" value="{{ filtro_ordem }}" placeholder="Ordem / Protocolo" class="fb-campo"></div>
+      <div class="fb-filtros-acoes">
+        <button class="fb-btn primario" type="submit"><i class="fas fa-filter" aria-hidden="true"></i> Filtrar</button>
+        <a href="{% url 'fibras:kanban' %}" class="fb-btn leve">Limpar</a>
+      </div>
+    </div>
+  </form>
+
+  <div class="fb-board-wrap" id="fbBoardWrap">
+  <div id="kanbanBoard" class="fb-board" aria-label="Quadro de fibras por status">
+    {% for col in colunas %}
+    <section class="fb-col{% if col.key == 'nao_localizado' %} somente-leitura{% endif %}" data-st="{{ col.key }}" data-col="{{ col.key }}" data-label="{{ col.label }}" aria-label="{{ col.label }}" style="animation-delay: {{ forloop.counter }}0ms">
+      <header class="fb-col-cab">
+        <div class="fb-col-tit">
+          <h3><span class="st-ponto" aria-hidden="true"></span>{{ col.label }} <span class="fb-cont" data-col-qtd>{{ col.count }}</span></h3>
+          <p><b data-col-qtd-txt>{{ col.count }}</b> venda(s) · <b data-col-valor>R$ {{ col.total|floatformat:"2g" }}</b></p>
+        </div>
+        <button type="button" class="fb-col-btn" data-recolher aria-expanded="true" aria-label="Recolher coluna {{ col.label }}"><i class="fas fa-chevron-up" aria-hidden="true"></i></button>
+      </header>
+      <div class="kanban-col" data-status="{{ col.key }}">
+        {% for f in col.items %}
+        {% with inc=f.incidentes.first %}
+        <article class="kanban-card{% if is_ilha and col.key != 'nao_localizado' %} arrastavel{% endif %}{% if inc and inc.aberto_por_id == request.user.id and inc.has_unread_reply_for_opener %} nova-resposta{% endif %}"
+             data-st="{{ col.key }}" data-pk="{{ f.pk }}" data-valor="{{ f.valor|unlocalize }}"
+             data-url="{% url 'fibras:detail' f.pk %}"
+             data-busca="{{ f.cliente }} {{ f.numero_da_venda }} {{ f.numero_protocolo }} {{ f.ordem_vinculada }} {{ f.vendedor }} {{ f.pdv }} {{ f.cpf }}">
+          <div class="fb-k-topo">
+            <a class="fb-k-nome" href="{% url 'fibras:detail' f.pk %}" title="{{ f.cliente|default:'—' }}">{{ f.cliente|default:"—" }}</a>
+            <button type="button" class="fb-k-acao fb-peek-btn" aria-label="Pré-visualizar venda {{ f.numero_da_venda }}" title="Pré-visualizar"><i class="fas fa-eye" aria-hidden="true"></i></button>
+            {% if is_ilha and col.key != 'nao_localizado' %}<i class="fas fa-grip-vertical fb-k-grip" aria-hidden="true"></i>{% endif %}
+          </div>
+          <div class="fb-k-meta">{{ f.cpf }} · Venda {{ f.numero_da_venda }}{% if f.numero_protocolo %} · Prot. {{ f.numero_protocolo }}{% endif %}</div>
+          {% if f.ordem_vinculada %}
+          <div class="fb-k-linha">
+            <span>ORDEM <b>{{ f.ordem_vinculada }}</b></span>
+            <span class="fb-tag {% if f.assertividade == 'Alta' %}alta{% elif f.assertividade == 'Manual' %}manual{% elif f.assertividade == 'Média' %}media{% else %}baixa{% endif %}" title="Assertividade do cruzamento com a Esteira Vivo">{{ f.assertividade }}</span>
+            {% if f.conferencia_endereco == 'Divergente' or f.conferencia_endereco == 'Parcialmente divergente' %}<span class="fb-end-div" title="{{ f.detalhe_endereco }}"><i class="fas fa-location-dot" aria-hidden="true"></i> endereço</span>{% endif %}
+          </div>
+          {% elif f.status_cruzamento == 'Venda B2B' %}
+          <div class="fb-k-linha"><span class="fb-tag b2b">B2B</span></div>
+          {% endif %}
+          {% if f.endereco %}<div class="fb-k-end" title="{{ f.endereco }}"><i class="fas fa-location-dot" aria-hidden="true" style="opacity:.5"></i> {{ f.endereco }}</div>{% endif %}
+          <div class="fb-k-rodape">
+            <span class="vend" title="{{ f.vendedor }}{% if f.pdv %} · {{ f.pdv }}{% endif %}">{{ f.vendedor }}</span>
+            <span class="valor">R$ {{ f.valor|floatformat:"2g" }}</span>
+          </div>
+          {% if f.retorno_myrella %}
+          <div class="fb-k-retorno" title="{{ f.retorno_myrella }}"><i class="fas fa-comment" aria-hidden="true"></i> {{ f.retorno_myrella }}</div>
+          {% endif %}
+          {% if inc and inc.aberto_por_id == request.user.id and inc.has_unread_reply_for_opener %}
+          <div class="fb-k-novo"><i class="fas fa-circle" aria-hidden="true"></i> Nova resposta do Suporte</div>
+          {% endif %}
+          {# Dados da pré-visualização (já escapados pelo Django; o JS só clona) #}
+          <div class="fb-peek" hidden>
+            <dl class="fb-grade-info">
+              <div class="fb-info"><dt>Nº da venda</dt><dd>{{ f.numero_da_venda }}</dd></div>
+              <div class="fb-info"><dt>CPF / CNPJ</dt><dd>{{ f.cpf|default:"—" }}</dd></div>
+              <div class="fb-info"><dt>Protocolo</dt><dd>{{ f.numero_protocolo|default:"—" }}</dd></div>
+              <div class="fb-info"><dt>Data da venda</dt><dd>{{ f.data_da_venda|date:"d/m/Y"|default:"—" }}</dd></div>
+              <div class="fb-info"><dt>Valor</dt><dd>R$ {{ f.valor|floatformat:"2g" }}</dd></div>
+              <div class="fb-info"><dt>Nº de acesso</dt><dd>{{ f.numero_acesso|default:"—" }}</dd></div>
+              <div class="fb-info"><dt>Vendedor</dt><dd>{{ f.vendedor|default:"—" }}</dd></div>
+              <div class="fb-info"><dt>PDV</dt><dd>{{ f.pdv|default:"—" }}</dd></div>
+              <div class="fb-info larga"><dt>Plano</dt><dd>{{ f.plano|default:"—" }}</dd></div>
+              <div class="fb-info larga"><dt>Endereço</dt><dd>{{ f.endereco|default:"—" }}</dd></div>
+              {% if f.sla_agenda %}<div class="fb-info"><dt>SLA Agenda</dt><dd>{{ f.sla_agenda }}</dd></div>{% endif %}
+              {% if f.etapa_instalacao %}<div class="fb-info"><dt>Etapa instalação</dt><dd>{{ f.etapa_instalacao }}</dd></div>{% endif %}
+              {% if f.status_cruzamento %}<div class="fb-info"><dt>Cruzamento</dt><dd>{{ f.status_cruzamento }}{% if f.assertividade %} · {{ f.assertividade }}{% endif %}</dd></div>{% endif %}
+              {% if f.ordem_vinculada %}<div class="fb-info"><dt>ORDEM vinculada</dt><dd>{{ f.ordem_vinculada }}</dd></div>{% endif %}
+              {% if f.conferencia_endereco %}<div class="fb-info larga"><dt>Conferência de endereço</dt><dd>{{ f.conferencia_endereco }}{% if f.detalhe_endereco %} — {{ f.detalhe_endereco }}{% endif %}</dd></div>{% endif %}
+            </dl>
+            {% if f.motivo_planilha %}<div class="fb-aviso erro"><i class="fas fa-triangle-exclamation" aria-hidden="true"></i><div><b class="fb-aviso-tit">Motivo da planilha</b>{{ f.motivo_planilha }}</div></div>{% endif %}
+            {% if f.retorno_myrella %}<div class="fb-aviso"><i class="fas fa-comment" aria-hidden="true"></i><div><b class="fb-aviso-tit">Retorno da Ilha</b>{{ f.retorno_myrella }}</div></div>{% endif %}
+            {% if f.motivo_cruzamento %}<div class="fb-aviso info"><i class="fas fa-code-compare" aria-hidden="true"></i><div><b class="fb-aviso-tit">Cruzamento</b>{{ f.motivo_cruzamento }}</div></div>{% endif %}
+          </div>
+        </article>
+        {% endwith %}
+        {% endfor %}
+      </div>
+      <div class="fb-vazio" data-vazio{% if col.items %} hidden{% endif %}>
+        <i class="fas {% if col.key == 'nao_localizado' %}fa-magnifying-glass-location{% else %}fa-inbox{% endif %}" aria-hidden="true"></i>
+        <b data-vazio-tit>Nenhuma venda.</b>
+        <span data-vazio-txt>{% if col.key == 'nao_localizado' %}Tudo certo: todas as vendas apareceram na planilha mais recente.{% elif is_ilha %}Arraste um card para cá para mudar o status.{% else %}Quando houver vendas neste status elas aparecem aqui.{% endif %}</span>
+      </div>
+    </section>
+    {% endfor %}
+  </div>
+  </div>
+
+  {% if inconsistencias %}
+  <details class="fb-card fb-inc" style="margin-top:18px" open>
+    <summary class="fb-card-cab" style="margin-bottom:0">
+      <div>
+        <h3><i class="fas fa-triangle-exclamation" aria-hidden="true" style="background:rgba(224,138,0,.14);color:#E08A00"></i> Ordens inconsistentes da planilha <span class="fb-tag aviso">{{ inconsistencias_count }}</span></h3>
+        <p>Ordens da planilha sem protocolo correspondente no banco. Saem daqui automaticamente quando o número for ajustado.</p>
+      </div>
+      <i class="fas fa-chevron-down" aria-hidden="true"></i>
+    </summary>
+    <div class="fb-busca" style="margin-top:12px;max-width:320px">
+      <i class="fas fa-magnifying-glass" aria-hidden="true"></i>
+      <input type="search" id="fbIncBusca" class="fb-campo" placeholder="Filtrar ordens…" aria-label="Filtrar ordens inconsistentes" autocomplete="off">
+    </div>
+    <div class="fb-inc-lista" id="fbIncLista">
       {% for inc in inconsistencias %}
-      <div class="px-4 py-2 flex items-center justify-between gap-3">
-        <div class="flex items-center gap-3 min-w-0">
-          <span class="font-mono font-semibold text-gray-800">{{ inc.ordem }}</span>
-          {% if inc.status_raw %}<span class="text-xs text-gray-500 truncate">{{ inc.status_raw }}</span>{% endif %}
+      <div class="fb-inc-item" data-busca="{{ inc.ordem }} {{ inc.status_raw }}">
+        <div style="min-width:0;display:flex;flex-direction:column">
+          <span class="ord">{{ inc.ordem }}</span>
+          {% if inc.status_raw %}<span class="st" title="{{ inc.status_raw }}">{{ inc.status_raw }}</span>{% endif %}
         </div>
-        <div class="text-xs text-gray-400 whitespace-nowrap">
-          {% if inc.occurrences > 1 %}<span class="mr-2">{{ inc.occurrences }}×</span>{% endif %}
-          {{ inc.last_seen_at|date:"d/m H:i" }}
-        </div>
+        <span class="qd">{% if inc.occurrences > 1 %}<span class="fb-tag" style="margin-right:4px">{{ inc.occurrences }}×</span>{% endif %}{{ inc.last_seen_at|date:"d/m H:i" }}</span>
       </div>
       {% endfor %}
     </div>
-  </div>
+  </details>
   {% endif %}
+
+  <dialog class="fb-dialog" id="fbPeek" aria-labelledby="fbPeekTit">
+    <header>
+      <span class="st-pill" id="fbPeekSt"></span>
+      <b id="fbPeekTit"></b>
+      <button type="button" class="fb-btn icone leve" data-fechar aria-label="Fechar pré-visualização"><i class="fas fa-xmark" aria-hidden="true"></i></button>
+    </header>
+    <div class="fb-dialog-corpo">
+      <div id="fbPeekCorpo"></div>
+      {% if is_ilha %}
+      <div id="fbPeekMover" hidden>
+        <p class="fb-rotulo" style="margin:18px 0 0">Mover para</p>
+        <div class="fb-mover" id="fbPeekMoverBtns"></div>
+      </div>
+      {% endif %}
+    </div>
+    <footer>
+      <a class="fb-btn primario" id="fbPeekAbrir" href="#"><i class="fas fa-arrow-up-right-from-square" aria-hidden="true"></i> Abrir detalhes</a>
+      <button type="button" class="fb-btn leve" data-fechar>Fechar</button>
+    </footer>
+  </dialog>
 </div>
 
-<div id="dndToast" class="fixed bottom-4 right-4 z-50 hidden px-4 py-3 rounded-lg shadow-lg text-sm text-white"></div>
+{% include 'fibras/_fb_comum.html' %}
+{{ status_choices|json_script:"fb-status-choices" }}
+<span id="fbCsrf" hidden data-token="{{ csrf_token }}"></span>
+{% url 'fibras:change_status_ajax' 0 as url_status_modelo %}
+<span id="fbUrlStatus" hidden data-url="{{ url_status_modelo }}"></span>
 
 {% if is_ilha %}
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 {% endif %}
 <script>
-(function() {
-  const board = document.getElementById('kanbanBoard');
+(function () {
+  var board = document.getElementById('kanbanBoard');
   if (!board) return;
+  var FB = window.FB;
+  var IS_ILHA = {% if is_ilha %}true{% else %}false{% endif %};
+  var cols = Array.prototype.slice.call(board.querySelectorAll('.fb-col'));
+  var kpis = document.getElementById('fbKpis');
+  var statusLabels = {};
+  try { JSON.parse(document.getElementById('fb-status-choices').textContent).forEach(function (p) { statusLabels[p[0]] = p[1]; }); } catch (e) {}
+  statusLabels.nao_localizado = 'Não localizado';
+  var elUrl = document.getElementById('fbUrlStatus');
+  var urlModelo = elUrl ? elUrl.dataset.url : '';
+  function urlStatus(pk) { return urlModelo ? urlModelo.replace(/\/0\/status\/ajax\/$/, '/' + encodeURIComponent(pk) + '/status/ajax/') : '/fibras/' + encodeURIComponent(pk) + '/status/ajax/'; }
+  function csrf() { return FB.csrf() || (document.getElementById('fbCsrf') || { dataset: {} }).dataset.token || ''; }
+  function colDe(key) { return board.querySelector('.fb-col[data-col="' + key + '"]'); }
+  function cardsDe(col) { return Array.prototype.slice.call(col.querySelectorAll('.kanban-card')); }
 
-  function getCSRF() {
-    const v = document.cookie.split('; ').find(r => r.startsWith('csrftoken='));
-    return v ? v.split('=')[1] : '';
-  }
-
-  function toast(msg, ok) {
-    const t = document.getElementById('dndToast');
-    t.textContent = msg;
-    t.className = 'fixed bottom-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg text-sm text-white ' +
-      (ok ? 'bg-green-600' : 'bg-red-600');
-    t.classList.remove('hidden');
-    setTimeout(() => t.classList.add('hidden'), 2800);
-  }
-
-  let suppressClick = false;
-
-  board.addEventListener('click', function(e) {
-    if (suppressClick) { suppressClick = false; return; }
-    const card = e.target.closest('.kanban-card');
-    if (card) {
-      const url = card.dataset.url;
-      if (url) window.location.href = url;
+  /* ---------- Totais (colunas + KPIs) ---------- */
+  var busca = document.getElementById('fbBusca');
+  var resultado = document.getElementById('fbResultado');
+  var primeira = true;
+  function atualizarTotais() {
+    var ativo = busca && busca.value.trim() !== '';
+    var totQ = 0, totV = 0, totVis = 0, totTodos = 0, dados = [];
+    cols.forEach(function (col) {
+      var cs = cardsDe(col), n = cs.length, vis = 0, soma = 0;
+      cs.forEach(function (c) { if (!c.hidden) { vis++; soma += parseFloat(c.dataset.valor) || 0; } });
+      totTodos += n; totVis += vis; totQ += vis; totV += soma;
+      var key = col.dataset.col;
+      var badge = col.querySelector('[data-col-qtd]');
+      badge.textContent = ativo ? (vis + '/' + n) : n;
+      col.querySelector('[data-col-qtd-txt]').textContent = ativo ? (vis + ' de ' + n) : n;
+      col.querySelector('[data-col-valor]').textContent = FB.brl(soma);
+      var vazio = col.querySelector('[data-vazio]');
+      vazio.hidden = vis > 0;
+      if (n > 0 && vis === 0) {
+        vazio.querySelector('[data-vazio-tit]').textContent = 'Nada encontrado aqui.';
+        vazio.querySelector('[data-vazio-txt]').textContent = 'Nenhum card desta coluna corresponde à busca.';
+      } else if (n === 0) {
+        vazio.querySelector('[data-vazio-tit]').textContent = 'Nenhuma venda.';
+        vazio.querySelector('[data-vazio-txt]').textContent = vazio.dataset.txtOriginal || vazio.querySelector('[data-vazio-txt]').textContent;
+      }
+      if (!vazio.dataset.txtOriginal && n === 0) vazio.dataset.txtOriginal = vazio.querySelector('[data-vazio-txt]').textContent;
+      dados.push({ key: key, q: vis, v: soma });
+    });
+    if (kpis) {
+      dados.forEach(function (d) {
+        var k = kpis.querySelector('[data-kpi="' + d.key + '"]');
+        if (!k) return;
+        FB.contar(k.querySelector('[data-kpi-qtd]'), d.q, 'int', primeira ? 0 : undefined);
+        k.querySelector('[data-kpi-valor]').textContent = FB.brl(d.v);
+        var bar = k.querySelector('.fb-kpi-bar span');
+        if (bar) bar.style.width = (totQ ? Math.round(d.q / totQ * 100) : 0) + '%';
+        k.title = d.q + ' venda(s) · ' + FB.brl(d.v) + (totQ ? ' · ' + Math.round(d.q / totQ * 100) + '% do quadro' : '');
+      });
+      var t = kpis.querySelector('[data-kpi="total"]');
+      FB.contar(t.querySelector('[data-kpi-qtd]'), totQ, 'int', primeira ? 0 : undefined);
+      t.querySelector('[data-kpi-valor]').textContent = FB.brl(totV);
     }
+    if (resultado) resultado.textContent = ativo ? (totVis + ' de ' + totTodos + ' card(s)') : (totTodos + ' card(s) no quadro');
+    primeira = false;
+  }
+
+  /* ---------- Busca instantânea ---------- */
+  var cacheBusca = new WeakMap();
+  function textoCard(c) { var t = cacheBusca.get(c); if (t === undefined) { t = FB.normalizar(c.dataset.busca); cacheBusca.set(c, t); } return t; }
+  var tBusca = null;
+  function filtrar() {
+    var termos = FB.normalizar(busca.value.trim()).split(/\s+/).filter(Boolean);
+    board.querySelectorAll('.kanban-card').forEach(function (c) {
+      var txt = textoCard(c);
+      c.hidden = !termos.every(function (t) { return txt.indexOf(t) !== -1; });
+    });
+    atualizarTotais();
+  }
+  if (busca) {
+    busca.addEventListener('input', function () { clearTimeout(tBusca); tBusca = setTimeout(filtrar, 120); });
+    busca.addEventListener('keydown', function (e) { if (e.key === 'Escape') { busca.value = ''; filtrar(); busca.blur(); } });
+  }
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
+    var t = e.target;
+    if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+    if (busca) { e.preventDefault(); busca.focus(); }
   });
 
-  {% if is_ilha %}
-  if (typeof Sortable !== 'undefined') {
-    const cols = board.querySelectorAll('.kanban-col');
-    cols.forEach(col => {
-      const isReadOnly = col.dataset.status === 'nao_localizado';
-      new Sortable(col, {
-        group: { name: 'fibras', pull: !isReadOnly, put: !isReadOnly },
-        animation: 160,
-        ghostClass: 'opacity-40',
-        chosenClass: 'ring-2',
-        onStart: function() { suppressClick = true; },
-        onEnd: function() { setTimeout(() => { suppressClick = false; }, 100); },
-        onAdd: function(evt) {
-          const card = evt.item;
-          const newStatus = evt.to.dataset.status;
-          const pk = card.dataset.pk;
-          const oldCol = evt.from;
-          if (newStatus === 'nao_localizado') {
-            oldCol.appendChild(card);
-            return;
-          }
+  /* ---------- Recolher colunas ---------- */
+  var recolhidas = FB.ler('kanban-recolhidas', []);
+  function setRecolhida(col, sim, salvar) {
+    col.classList.toggle('recolhida', sim);
+    var b = col.querySelector('[data-recolher]');
+    b.setAttribute('aria-expanded', sim ? 'false' : 'true');
+    b.setAttribute('aria-label', (sim ? 'Expandir coluna ' : 'Recolher coluna ') + col.dataset.label);
+    if (salvar) salvarRecolhidas();
+  }
+  cols.forEach(function (col) {
+    if (recolhidas.indexOf(col.dataset.col) !== -1) setRecolhida(col, true, false);
+    col.querySelector('[data-recolher]').addEventListener('click', function (e) {
+      e.stopPropagation();
+      setRecolhida(col, !col.classList.contains('recolhida'), true);
+    });
+    col.addEventListener('click', function (e) {
+      if (col.classList.contains('recolhida') && !e.target.closest('[data-recolher]')) setRecolhida(col, false, true);
+    });
+  });
+  var bRec = document.getElementById('fbRecolherTudo'), bExp = document.getElementById('fbExpandirTudo');
+  function salvarRecolhidas() { FB.guardar('kanban-recolhidas', cols.filter(function (c) { return c.classList.contains('recolhida'); }).map(function (c) { return c.dataset.col; })); }
+  if (bRec) bRec.addEventListener('click', function () { cols.forEach(function (c) { if (!cardsDe(c).some(function (x) { return !x.hidden; })) setRecolhida(c, true, false); }); salvarRecolhidas(); });
+  if (bExp) bExp.addEventListener('click', function () { cols.forEach(function (c) { setRecolhida(c, false, false); }); salvarRecolhidas(); });
 
-          fetch(`/fibras/${pk}/status/ajax/`, {
-            method: 'POST',
-            headers: {
-              'X-CSRFToken': getCSRF(),
-              'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: `status=${encodeURIComponent(newStatus)}`,
-          })
-          .then(r => r.json().then(j => ({ status: r.status, body: j })))
-          .then(({status, body}) => {
-            if (body.ok) {
-              toast(`Status atualizado: ${body.status_label}`, true);
-            } else {
-              oldCol.appendChild(card);
-              toast(body.error || 'Falha ao atualizar', false);
-            }
-          })
-          .catch(() => {
-            oldCol.appendChild(card);
-            toast('Erro de rede', false);
-          });
+  // Quantos filtros do servidor estão ativos (badge do botão "Filtros" no celular)
+  var fq = document.getElementById('fbFiltrosQtd');
+  if (fq) {
+    var nAtivos = Array.prototype.filter.call(document.querySelectorAll('#fbFiltros input[type=text]'), function (i) { return i.value.trim() !== ''; }).length;
+    if (nAtivos) { fq.textContent = nAtivos; fq.hidden = false; }
+  }
+
+  /* ---------- KPIs: clique leva até a coluna ---------- */
+  function irPara(col) {
+    if (!col) return;
+    if (col.classList.contains('recolhida')) setRecolhida(col, false, true);
+    var alvo = col.offsetLeft - board.offsetLeft - (window.innerWidth < 768 ? 12 : 2);
+    board.scrollTo({ left: Math.max(0, alvo), behavior: 'smooth' });
+    var topo = board.getBoundingClientRect().top;
+    if (topo < 0 || topo > window.innerHeight * 0.6) board.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    col.classList.add('realce');
+    setTimeout(function () { col.classList.remove('realce'); }, 1200);
+  }
+  if (kpis) kpis.addEventListener('click', function (e) {
+    var k = e.target.closest('[data-kpi]');
+    if (!k) return;
+    if (k.dataset.kpi === 'total') { board.scrollTo({ left: 0, behavior: 'smooth' }); board.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
+    irPara(colDe(k.dataset.kpi));
+  });
+  // No celular, o KPI da coluna visível fica marcado (funciona como abas)
+  if ('IntersectionObserver' in window && kpis) {
+    var io = new IntersectionObserver(function (ents) {
+      if (window.innerWidth >= 768) return;
+      ents.forEach(function (en) {
+        if (!en.isIntersecting) return;
+        kpis.querySelectorAll('.fb-kpi.ativo').forEach(function (x) { x.classList.remove('ativo'); });
+        var k = kpis.querySelector('[data-kpi="' + en.target.dataset.col + '"]');
+        if (k) { k.classList.add('ativo'); k.scrollIntoView({ inline: 'nearest', block: 'nearest' }); }
+      });
+    }, { root: board, threshold: 0.6 });
+    cols.forEach(function (c) { io.observe(c); });
+  }
+
+  /* ---------- Abrir card / pré-visualização ---------- */
+  var suppressClick = false;
+  var dlg = document.getElementById('fbPeek');
+  var cardAberto = null;
+  board.addEventListener('click', function (e) {
+    if (suppressClick) { suppressClick = false; return; }
+    var card = e.target.closest('.kanban-card');
+    if (!card) return;
+    if (e.target.closest('.fb-peek-btn')) { e.preventDefault(); abrirPeek(card); return; }
+    if (e.target.closest('a, button')) return;
+    if (card.dataset.url) window.location.href = card.dataset.url;
+  });
+  function abrirPeek(card) {
+    if (!dlg || typeof dlg.showModal !== 'function') { window.location.href = card.dataset.url; return; }
+    cardAberto = card;
+    var st = card.dataset.st;
+    document.getElementById('fbPeekTit').textContent = card.querySelector('.fb-k-nome').textContent;
+    var pill = document.getElementById('fbPeekSt');
+    pill.setAttribute('data-st', st);
+    pill.textContent = statusLabels[st] || st;
+    var corpo = document.getElementById('fbPeekCorpo');
+    corpo.innerHTML = '';
+    var src = card.querySelector('.fb-peek');
+    if (src) { var cl = src.cloneNode(true); cl.hidden = false; corpo.appendChild(cl); }
+    document.getElementById('fbPeekAbrir').href = card.dataset.url;
+    var mover = document.getElementById('fbPeekMover');
+    if (mover) {
+      var btns = document.getElementById('fbPeekMoverBtns');
+      btns.innerHTML = '';
+      mover.hidden = !(IS_ILHA && typeof Sortable !== 'undefined' && st !== 'nao_localizado');
+      Object.keys(statusLabels).forEach(function (k) {
+        if (k === 'nao_localizado') return;
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.setAttribute('data-st', k);
+        b.innerHTML = '<span class="st-ponto" aria-hidden="true"></span>';
+        b.appendChild(document.createTextNode(statusLabels[k]));
+        if (k === st) b.setAttribute('aria-current', 'true');
+        b.addEventListener('click', function () {
+          if (k === cardAberto.dataset.st) return;
+          var de = cardAberto.parentElement;
+          var idx = cardsDe(de).indexOf(cardAberto);
+          var para = colDe(k).querySelector('.kanban-col');
+          para.insertBefore(cardAberto, para.firstChild);
+          mudarStatus(cardAberto, k, de, idx);
+          dlg.close();
+        });
+        btns.appendChild(b);
+      });
+    }
+    dlg.showModal();
+  }
+  if (dlg) {
+    dlg.addEventListener('click', function (e) { if (e.target === dlg || e.target.closest('[data-fechar]')) dlg.close(); });
+    dlg.addEventListener('close', function () { if (cardAberto) { var a = cardAberto.querySelector('.fb-peek-btn'); if (a && document.contains(a)) a.focus(); } });
+  }
+
+  /* ---------- Mudança de status (otimista, com desfazer em caso de erro) ---------- */
+  function voltar(card, deCol, idx) {
+    var irmaos = cardsDe(deCol).filter(function (c) { return c !== card; });
+    deCol.insertBefore(card, irmaos[idx] || null);
+    card.dataset.st = deCol.dataset.status;
+    atualizarTotais();
+  }
+  function mudarStatus(card, novo, deCol, idx) {
+    var antigo = card.dataset.st;
+    card.dataset.st = novo;
+    card.classList.add('salvando');
+    atualizarTotais();
+    fetch(urlStatus(card.dataset.pk), {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'X-CSRFToken': csrf(), 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+      body: 'status=' + encodeURIComponent(novo)
+    })
+      .then(function (r) { return r.json().then(function (j) { return { status: r.status, body: j }; }, function () { return { status: r.status, body: { ok: false, error: 'Resposta inesperada do servidor (' + r.status + ')' } }; }); })
+      .then(function (res) {
+        card.classList.remove('salvando');
+        if (res.body && res.body.ok) {
+          card.classList.remove('chegou'); void card.offsetWidth; card.classList.add('chegou');
+          FB.toast('Status atualizado: ' + (res.body.status_label || statusLabels[novo] || novo), true);
+        } else {
+          voltar(card, deCol, idx);
+          var err = res.body && res.body.error;
+          FB.toast(err === 'permission' ? 'Sem permissão para mudar o status.' : (err || 'Falha ao atualizar'), false);
+        }
+      })
+      .catch(function () {
+        card.classList.remove('salvando');
+        voltar(card, deCol, idx);
+        FB.toast('Erro de rede — o card voltou para "' + (statusLabels[antigo] || antigo) + '".', false);
+      });
+  }
+
+  if (IS_ILHA && typeof Sortable !== 'undefined') {
+    board.querySelectorAll('.kanban-col').forEach(function (list) {
+      var leitura = list.dataset.status === 'nao_localizado';
+      new Sortable(list, {
+        group: { name: 'fibras', pull: !leitura, put: !leitura },
+        sort: false,
+        draggable: '.kanban-card',
+        filter: 'a, .fb-peek-btn',
+        preventOnFilter: false,
+        animation: 180,
+        delay: 160,
+        delayOnTouchOnly: true,
+        fallbackTolerance: 4,
+        ghostClass: 'fb-ghost',
+        chosenClass: 'fb-chosen',
+        dragClass: 'fb-drag',
+        onStart: function () { suppressClick = true; board.classList.add('arrastando'); },
+        onMove: function (evt) {
+          cols.forEach(function (c) { c.classList.remove('alvo'); });
+          var c = evt.to.closest('.fb-col');
+          if (c && !c.classList.contains('somente-leitura')) c.classList.add('alvo');
         },
+        onEnd: function () {
+          board.classList.remove('arrastando');
+          cols.forEach(function (c) { c.classList.remove('alvo'); });
+          setTimeout(function () { suppressClick = false; }, 100);
+        },
+        onAdd: function (evt) {
+          var card = evt.item, novo = evt.to.dataset.status;
+          var idx = typeof evt.oldDraggableIndex === 'number' ? evt.oldDraggableIndex : evt.oldIndex;
+          if (novo === 'nao_localizado') { voltar(card, evt.from, idx); return; }
+          mudarStatus(card, novo, evt.from, idx);
+        }
       });
     });
   }
-  {% endif %}
+
+  /* ---------- Importação: nome do arquivo + arrastar arquivo ---------- */
+  var drop = document.getElementById('fbDrop');
+  if (drop) {
+    var inp = drop.querySelector('input[type=file]'), nome = document.getElementById('fbArqNome');
+    inp.addEventListener('change', function () { nome.textContent = inp.files && inp.files[0] ? inp.files[0].name : 'escolha ou arraste o .xlsx'; });
+    ['dragenter', 'dragover'].forEach(function (ev) { drop.addEventListener(ev, function () { drop.classList.add('sobre'); }); });
+    ['dragleave', 'drop'].forEach(function (ev) { drop.addEventListener(ev, function () { drop.classList.remove('sobre'); }); });
+    document.getElementById('fbImportForm').addEventListener('submit', function (e) {
+      var b = e.target.querySelector('button[type=submit]');
+      b.disabled = true;
+      b.querySelector('i').className = 'fas fa-spinner fa-spin';
+      b.lastChild.textContent = ' Importando…';
+    });
+  }
+
+  /* ---------- Ordens inconsistentes: filtro rápido ---------- */
+  var incB = document.getElementById('fbIncBusca');
+  if (incB) incB.addEventListener('input', function () {
+    var q = FB.normalizar(incB.value.trim());
+    document.querySelectorAll('#fbIncLista .fb-inc-item').forEach(function (it) { it.hidden = q && FB.normalizar(it.dataset.busca).indexOf(q) === -1; });
+  });
+
+  /* Sombra nas bordas quando há colunas fora da tela */
+  var wrap = document.getElementById('fbBoardWrap');
+  function bordas() {
+    if (!wrap) return;
+    wrap.classList.toggle('mais-esq', board.scrollLeft > 4);
+    wrap.classList.toggle('mais-dir', board.scrollLeft + board.clientWidth < board.scrollWidth - 4);
+  }
+  board.addEventListener('scroll', bordas, { passive: true });
+  window.addEventListener('resize', bordas);
+  cols.forEach(function (c) { c.addEventListener('transitionend', bordas); });
+
+  atualizarTotais();
+  bordas();
 })();
 </script>
 {% endblock %}

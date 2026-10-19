@@ -1,143 +1,224 @@
 {% extends "base.html" %}
 {% block title %}Fibra {{ fibra.numero_da_venda }}{% endblock %}
 
-{% block content %}
-<div class="min-h-screen bg-gray-50 p-4 max-w-5xl mx-auto">
-  <a href="{% url 'fibras:kanban' %}" class="text-sm text-primary hover:underline">&larr; Voltar ao Kanban</a>
+{% block extra_css %}
+{% include 'fibras/_fb_estilo.html' %}
+<style>
+.fb-det { max-width: 1120px; margin: 0 auto; }
+.fb-heroi { position: relative; overflow: hidden; }
+.fb-heroi::after { content: ""; position: absolute; right: -60px; top: -60px; width: 220px; height: 220px; border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--st) 22%, transparent), transparent 70%); pointer-events: none; }
+.fb-heroi-topo { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; flex-wrap: wrap; position: relative; z-index: 1; }
+.fb-heroi h1 { margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.15; overflow-wrap: anywhere; }
+.fb-heroi .fb-heroi-sub { margin: 6px 0 0; color: var(--fb-suave-2); font-size: 13.5px; display: flex; gap: 6px 14px; flex-wrap: wrap; }
+.fb-heroi .fb-heroi-sub span { display: inline-flex; align-items: center; gap: 6px; }
+.fb-copiar { border: 0; background: var(--fb-campo); color: var(--fb-suave-2); border-radius: 7px; width: 24px; height: 24px; cursor: pointer; font-size: 11px; }
+.fb-copiar:hover { color: var(--fb-pri); }
+.fb-heroi .st-pill { font-size: 13px; padding: 5px 14px; }
+.fb-heroi-valor { font-size: 24px; font-weight: 700; color: var(--fb-pri); letter-spacing: -0.02em; text-align: right; font-variant-numeric: tabular-nums; }
+.fb-heroi-valor small { display: block; font-size: 11.5px; font-weight: 500; color: var(--fb-suave); letter-spacing: 0; }
+.fb-det-grade { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 18px; align-items: start; }
+@media (max-width: 1023px) { .fb-det-grade { grid-template-columns: minmax(0, 1fr); } }
+.fb-cruz { background: var(--fb-campo); border-radius: 16px; padding: 14px 16px; margin-top: 14px; }
+.fb-cruz h3 { margin: 0 0 10px; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--fb-suave-2); font-weight: 700; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.fb-cruz .fb-info { background: var(--fb-card); }
+.fb-cruz p { margin: 10px 0 0; font-size: 13px; }
+.fb-status-opcoes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+.fb-status-opcoes label { position: relative; display: flex; align-items: center; gap: 8px; padding: 9px 11px; border-radius: 12px; background: var(--fb-campo); cursor: pointer;
+  font-size: 12.5px; font-weight: 600; transition: all .15s; }
+.fb-status-opcoes label:hover { background: color-mix(in srgb, var(--st) 12%, var(--fb-campo)); }
+.fb-status-opcoes input { position: absolute; opacity: 0; pointer-events: none; }
+.fb-status-opcoes label:has(input:checked) { background: color-mix(in srgb, var(--st) 16%, var(--fb-card)); color: var(--st); box-shadow: inset 0 0 0 2px var(--st); }
+.fb-status-opcoes label:has(input:focus-visible) { outline: 3px solid rgba(255,107,53,.5); outline-offset: 2px; }
+.fb-linha-tempo { position: relative; margin: 0; padding: 0 0 0 22px; list-style: none; }
+.fb-linha-tempo::before { content: ""; position: absolute; left: 7px; top: 6px; bottom: 6px; width: 2px; background: var(--fb-linha); border-radius: 2px; }
+.fb-linha-tempo li { position: relative; padding: 0 0 14px; }
+.fb-linha-tempo li:last-child { padding-bottom: 0; }
+.fb-linha-tempo li::before { content: ""; position: absolute; left: -20px; top: 5px; width: 10px; height: 10px; border-radius: 50%; background: var(--st, var(--fb-pri)); box-shadow: 0 0 0 3px var(--fb-card); }
+.fb-lt-cab { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--fb-suave); }
+.fb-lt-cab b { color: var(--fb-texto); font-weight: 600; }
+.fb-lt-txt { margin: 4px 0 0; font-size: 13.5px; overflow-wrap: anywhere; }
+.fb-lt-resp { margin: 6px 0 0; font-size: 13px; padding: 8px 10px; border-radius: 10px; background: var(--fb-campo); color: var(--fb-suave-2); font-style: italic; }
+.fb-contador { font-size: 11.5px; color: var(--fb-suave); text-align: right; margin-top: 4px; }
+.fb-pegajoso { position: sticky; top: 12px; }
+@media (max-width: 640px) {
+  .fb-heroi h1 { font-size: 22px; }
+  .fb-heroi-topo { flex-direction: column; gap: 6px; }
+  .fb-heroi-valor { text-align: left; font-size: 20px; }
+  .fb-heroi-valor small { display: inline; margin-left: 8px; }
+  .fb-det .fb-grade-info { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fb-status-opcoes { grid-template-columns: 1fr; }
+}
+@media (max-width: 1023px) { .fb-pegajoso { position: static; } }
+</style>
+{% endblock %}
 
-  <div class="bg-white rounded-lg border p-4 sm:p-6 mt-3">
-    <div class="flex items-start justify-between gap-2">
-      <div>
-        <h1 class="text-2xl font-bold text-gray-900">{{ fibra.cliente|default:"—" }}</h1>
-        <p class="text-sm text-gray-500">Venda <strong>{{ fibra.numero_da_venda }}</strong> · CPF {{ fibra.cpf|default:"—" }}</p>
+{% block content %}
+<div class="fb" id="fbDetalhe">
+ <div class="fb-det">
+  <a href="{% url 'fibras:kanban' %}" class="fb-voltar"><i class="fas fa-arrow-left" aria-hidden="true"></i> Voltar ao Kanban</a>
+
+  <section class="fb-card fb-heroi" data-st="{{ fibra.status }}">
+    <div class="fb-heroi-topo">
+      <div style="min-width:0;flex:1">
+        <span class="st-pill" data-st="{{ fibra.status }}">{{ fibra.get_status_display }}</span>
+        <h1 style="margin-top:10px">{{ fibra.cliente|default:"—" }}</h1>
+        <p class="fb-heroi-sub">
+          <span>Venda <strong>{{ fibra.numero_da_venda }}</strong> <button type="button" class="fb-copiar" data-copiar="{{ fibra.numero_da_venda }}" aria-label="Copiar número da venda" title="Copiar"><i class="far fa-copy" aria-hidden="true"></i></button></span>
+          <span>CPF {{ fibra.cpf|default:"—" }}</span>
+          {% if fibra.numero_protocolo %}<span>Protocolo {{ fibra.numero_protocolo }} <button type="button" class="fb-copiar" data-copiar="{{ fibra.numero_protocolo }}" aria-label="Copiar protocolo" title="Copiar"><i class="far fa-copy" aria-hidden="true"></i></button></span>{% endif %}
+        </p>
       </div>
-      <span class="px-3 py-1 rounded-full text-xs font-semibold bg-primary text-white">
-        {{ fibra.get_status_display }}
-      </span>
+      <div class="fb-heroi-valor">R$ {{ fibra.valor|floatformat:"2g" }}<small>{{ fibra.data_da_venda|date:"d/m/Y"|default:"sem data" }}</small></div>
     </div>
 
-    <dl class="grid grid-cols-2 md:grid-cols-3 gap-3 mt-4 text-sm">
-      <div><dt class="text-gray-500">Endereço</dt><dd class="font-semibold">{{ fibra.endereco|default:"—" }}</dd></div>
-      <div><dt class="text-gray-500">Plano</dt><dd class="font-semibold">{{ fibra.plano|default:"—" }}</dd></div>
-      <div><dt class="text-gray-500">Nº de acesso</dt><dd class="font-semibold">{{ fibra.numero_acesso|default:"—" }}</dd></div>
-      <div><dt class="text-gray-500">Valor</dt><dd class="font-semibold text-primary">R$ {{ fibra.valor }}</dd></div>
-      <div><dt class="text-gray-500">Vendedor</dt><dd class="font-semibold">{{ fibra.vendedor|default:"—" }}</dd></div>
-      <div><dt class="text-gray-500">PDV</dt><dd class="font-semibold">{{ fibra.pdv|default:"—" }}</dd></div>
-      <div><dt class="text-gray-500">Data da venda</dt><dd class="font-semibold">{{ fibra.data_da_venda|date:"d/m/Y" }}</dd></div>
-      <div><dt class="text-gray-500">Serviço técnico</dt><dd class="font-semibold">{{ fibra.servico_tecnico|default:"—" }}</dd></div>
-      <div>
-        <dt class="text-gray-500">Nº do protocolo</dt>
-        <dd class="font-semibold">{{ fibra.numero_protocolo|default:"—" }}</dd>
-      </div>
-      <div>
-        <dt class="text-gray-500">Ordem (planilha)</dt>
-        <dd class="font-semibold">{{ fibra.ordem_planilha|default:"—" }}</dd>
-      </div>
-      <div>
-        <dt class="text-gray-500">SLA Agenda</dt>
-        <dd class="font-semibold">{{ fibra.sla_agenda|default:"—" }}</dd>
-      </div>
-      <div>
-        <dt class="text-gray-500">Motivo (planilha)</dt>
-        <dd class="font-semibold">{{ fibra.motivo_planilha|default:"—" }}</dd>
-      </div>
+    <dl class="fb-grade-info" style="margin-top:18px">
+      <div class="fb-info larga"><dt>Endereço</dt><dd>{{ fibra.endereco|default:"—" }}</dd></div>
+      <div class="fb-info larga"><dt>Plano</dt><dd>{{ fibra.plano|default:"—" }}</dd></div>
+      <div class="fb-info"><dt>Nº de acesso</dt><dd>{{ fibra.numero_acesso|default:"—" }}</dd></div>
+      <div class="fb-info"><dt>Valor</dt><dd style="color:var(--fb-pri)">R$ {{ fibra.valor }}</dd></div>
+      <div class="fb-info"><dt>Vendedor</dt><dd>{{ fibra.vendedor|default:"—" }}</dd></div>
+      <div class="fb-info"><dt>PDV</dt><dd>{{ fibra.pdv|default:"—" }}</dd></div>
+      <div class="fb-info"><dt>Data da venda</dt><dd>{{ fibra.data_da_venda|date:"d/m/Y" }}</dd></div>
+      <div class="fb-info"><dt>Serviço técnico</dt><dd>{{ fibra.servico_tecnico|default:"—" }}</dd></div>
+      <div class="fb-info"><dt>Nº do protocolo</dt><dd>{{ fibra.numero_protocolo|default:"—" }}</dd></div>
+      <div class="fb-info"><dt>Ordem (planilha)</dt><dd>{{ fibra.ordem_planilha|default:"—" }}</dd></div>
+      <div class="fb-info"><dt>SLA Agenda</dt><dd>{{ fibra.sla_agenda|default:"—" }}</dd></div>
+      <div class="fb-info"><dt>Motivo (planilha)</dt><dd>{{ fibra.motivo_planilha|default:"—" }}</dd></div>
     </dl>
 
     {% if fibra.status_cruzamento %}
-    <div class="mt-4 p-3 bg-gray-50 border border-gray-200 rounded text-sm">
-      <p class="text-xs text-gray-500 font-semibold uppercase mb-2"><i class="fas fa-code-compare"></i> Cruzamento com a Esteira de Vendas Vivo</p>
-      <dl class="grid grid-cols-2 gap-x-4 gap-y-2">
-        <div><dt class="text-gray-500">Resultado</dt><dd class="font-semibold">{{ fibra.status_cruzamento }}{% if fibra.assertividade %} · {{ fibra.assertividade }}{% endif %}</dd></div>
-        <div><dt class="text-gray-500">ORDEM vinculada</dt><dd class="font-semibold">{{ fibra.ordem_vinculada|default:"—" }}</dd></div>
-        <div><dt class="text-gray-500">Etapa / status instalação</dt><dd class="font-semibold">{{ fibra.etapa_instalacao|default:"—" }}{% if fibra.ordem_vinculada and fibra.status_planilha_raw %} · {{ fibra.status_planilha_raw }}{% endif %}</dd></div>
-        <div><dt class="text-gray-500">Endereço</dt><dd class="font-semibold" title="{{ fibra.detalhe_endereco }}">{{ fibra.conferencia_endereco|default:"—" }}</dd></div>
+    <div class="fb-cruz">
+      <h3><i class="fas fa-code-compare" aria-hidden="true" style="color:var(--fb-pri)"></i> Cruzamento com a Esteira de Vendas Vivo
+        {% if fibra.assertividade %}<span class="fb-tag {% if fibra.assertividade == 'Alta' %}alta{% elif fibra.assertividade == 'Manual' %}manual{% elif fibra.assertividade == 'Média' %}media{% else %}baixa{% endif %}">{{ fibra.assertividade }}</span>{% endif %}
+        {% if fibra.status_cruzamento == 'Venda B2B' %}<span class="fb-tag b2b">B2B</span>{% elif fibra.status_cruzamento == 'Não localizada' %}<span class="fb-tag nl">Não localizada</span>{% endif %}
+      </h3>
+      <dl class="fb-grade-info">
+        <div class="fb-info"><dt>Resultado</dt><dd>{{ fibra.status_cruzamento }}{% if fibra.assertividade %} · {{ fibra.assertividade }}{% endif %}</dd></div>
+        <div class="fb-info"><dt>ORDEM vinculada</dt><dd>{{ fibra.ordem_vinculada|default:"—" }}</dd></div>
+        <div class="fb-info"><dt>Etapa / status instalação</dt><dd>{{ fibra.etapa_instalacao|default:"—" }}{% if fibra.ordem_vinculada and fibra.status_planilha_raw %} · {{ fibra.status_planilha_raw }}{% endif %}</dd></div>
+        <div class="fb-info"><dt>Endereço</dt><dd title="{{ fibra.detalhe_endereco }}"{% if fibra.conferencia_endereco == 'Divergente' or fibra.conferencia_endereco == 'Parcialmente divergente' %} style="color:var(--fb-vermelho)"{% endif %}>{{ fibra.conferencia_endereco|default:"—" }}</dd></div>
       </dl>
-      {% if fibra.motivo_cruzamento %}<p class="mt-2 text-gray-700">{{ fibra.motivo_cruzamento }}</p>{% endif %}
-      {% if fibra.observacao_cruzamento %}<p class="mt-1 text-xs text-gray-500">{{ fibra.observacao_cruzamento }}</p>{% endif %}
-      {% if fibra.comentario_cruzamento %}<p class="mt-1 text-xs text-gray-600"><i class="far fa-comment"></i> {{ fibra.comentario_cruzamento }}</p>{% endif %}
-      {% if is_ilha %}<a href="{% url 'fibras:validacao' %}" class="inline-block mt-2 text-xs font-semibold text-orange-600 hover:underline">Abrir na validação</a>{% endif %}
+      {% if fibra.motivo_cruzamento %}<p>{{ fibra.motivo_cruzamento }}</p>{% endif %}
+      {% if fibra.observacao_cruzamento %}<p class="fb-mut" style="margin-top:4px">{{ fibra.observacao_cruzamento }}</p>{% endif %}
+      {% if fibra.comentario_cruzamento %}<p class="fb-mut" style="margin-top:4px"><i class="far fa-comment" aria-hidden="true"></i> {{ fibra.comentario_cruzamento }}</p>{% endif %}
+      {% if is_ilha %}<a href="{% url 'fibras:validacao' %}" class="fb-btn pequeno" style="margin-top:10px"><i class="fas fa-arrow-up-right-from-square" aria-hidden="true"></i> Abrir na validação</a>{% endif %}
     </div>
     {% endif %}
 
     {% if fibra.motivo_planilha %}
-    <div class="mt-4 p-3 bg-red-50 border border-red-200 rounded">
-      <p class="text-xs text-red-600 font-semibold uppercase mb-1">
-        <i class="fas fa-exclamation-triangle"></i> Motivo da planilha
-      </p>
-      <p class="text-sm">{{ fibra.motivo_planilha }}</p>
-    </div>
+    <div class="fb-aviso erro"><i class="fas fa-exclamation-triangle" aria-hidden="true"></i><div><b class="fb-aviso-tit">Motivo da planilha</b>{{ fibra.motivo_planilha }}</div></div>
     {% endif %}
-
     {% if fibra.retorno_myrella %}
-    <div class="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded">
-      <p class="text-xs text-gray-500 font-semibold uppercase mb-1">Retorno da Ilha</p>
-      <p class="text-sm">{{ fibra.retorno_myrella }}</p>
-    </div>
+    <div class="fb-aviso"><i class="fas fa-comment-dots" aria-hidden="true"></i><div><b class="fb-aviso-tit">Retorno da Ilha</b>{{ fibra.retorno_myrella }}</div></div>
     {% endif %}
+  </section>
+
+  <div class="fb-det-grade">
+    <div style="min-width:0">
+      <!-- Incidentes -->
+      <section class="fb-card" style="animation-delay:60ms">
+        <div class="fb-card-cab">
+          <h2><i class="fas fa-life-ring" aria-hidden="true"></i> Incidentes <span class="fb-tag">{{ incidentes|length }}</span></h2>
+          <a href="{% url 'fibras:chat' fibra.pk %}" class="fb-btn pequeno"><i class="fas fa-comments" aria-hidden="true"></i> Chat reverso</a>
+        </div>
+        {% if incidentes %}
+        <ol class="fb-linha-tempo">
+          {% for i in incidentes %}
+          <li style="--st: {% if i.status == 'resolvido' %}var(--fb-verde){% elif i.status == 'em_tratativa' %}var(--st-pendente){% else %}var(--fb-pri){% endif %}">
+            <div class="fb-lt-cab">
+              <span><b>{{ i.aberto_por.get_full_name|default:i.aberto_por.username }}</b></span>
+              <span>{{ i.aberto_em|date:"d/m/Y H:i" }} · <span class="fb-tag {% if i.status == 'resolvido' %}alta{% elif i.status == 'em_tratativa' %}media{% else %}baixa{% endif %}">{{ i.get_status_display }}</span></span>
+            </div>
+            <p class="fb-lt-txt">{{ i.observacao }}</p>
+            {% if i.resposta %}<p class="fb-lt-resp">Ilha: {{ i.resposta }}</p>{% endif %}
+          </li>
+          {% endfor %}
+        </ol>
+        {% else %}
+        <div class="fb-vazio"><i class="fas fa-circle-check" aria-hidden="true"></i><b>Nenhum incidente registrado.</b>Precisa de ajuste? Abra um incidente ao lado.</div>
+        {% endif %}
+      </section>
+
+      <!-- Histórico -->
+      <section class="fb-card" style="animation-delay:120ms">
+        <div class="fb-card-cab"><h2><i class="fas fa-clock-rotate-left" aria-hidden="true"></i> Histórico de status</h2></div>
+        {% if historico %}
+        <ol class="fb-linha-tempo">
+          {% for h in historico %}
+          <li data-st="{{ h.status_novo }}">
+            <div class="fb-lt-cab">
+              <span>{{ h.status_anterior|default:"—" }} → <b>{{ h.status_novo }}</b> ({{ h.alterado_por.get_full_name|default:h.alterado_por.username }})</span>
+              <span>{{ h.alterado_em|date:"d/m/Y H:i" }}</span>
+            </div>
+            {% if h.retorno %}<p class="fb-lt-txt fb-mut">{{ h.retorno }}</p>{% endif %}
+          </li>
+          {% endfor %}
+        </ol>
+        {% else %}
+        <div class="fb-vazio"><i class="fas fa-clock" aria-hidden="true"></i><b>Sem histórico.</b>As mudanças de status aparecem aqui.</div>
+        {% endif %}
+      </section>
+    </div>
+
+    <aside class="fb-pegajoso" style="min-width:0">
+      {% if is_ilha %}
+      <section class="fb-card" style="animation-delay:80ms">
+        <div class="fb-card-cab"><h2><i class="fas fa-arrows-rotate" aria-hidden="true"></i> Alterar status</h2></div>
+        <form method="post" action="{% url 'fibras:change_status' fibra.pk %}" id="fbFormStatus">{% csrf_token %}
+          <fieldset style="border:0;margin:0;padding:0">
+            <legend class="fb-rotulo">Novo status</legend>
+            <div class="fb-status-opcoes">
+              {% for k, l in status_choices %}
+              <label data-st="{{ k }}"><input type="radio" name="status" value="{{ k }}" {% if k == fibra.status %}checked{% endif %}><span class="st-ponto" aria-hidden="true"></span>{{ l }}</label>
+              {% endfor %}
+            </div>
+          </fieldset>
+          <label class="fb-rotulo" for="fbRetorno">Retorno (opcional)</label>
+          <textarea id="fbRetorno" name="retorno" rows="3" class="fb-campo" placeholder="Retorno (opcional)">{{ fibra.retorno_myrella }}</textarea>
+          <button class="fb-btn primario" type="submit" style="width:100%;margin-top:10px"><i class="fas fa-check" aria-hidden="true"></i> Salvar</button>
+        </form>
+      </section>
+      {% endif %}
+
+      <section class="fb-card" style="animation-delay:100ms">
+        <div class="fb-card-cab"><h2><i class="fas fa-exclamation-circle" aria-hidden="true"></i> Abrir incidente / pedir ajuste</h2></div>
+        <form method="post" action="{% url 'fibras:abrir_incidente' fibra.pk %}" id="fbFormIncidente">{% csrf_token %}
+          <label class="fb-rotulo" for="fbObs">Observação</label>
+          <textarea id="fbObs" name="observacao" rows="4" class="fb-campo" placeholder="Descreva o ajuste solicitado..." required></textarea>
+          <div class="fb-contador" id="fbObsCont" aria-live="polite"></div>
+          <button class="fb-btn primario" type="submit" style="width:100%;margin-top:8px"><i class="fas fa-paper-plane" aria-hidden="true"></i> Abrir incidente</button>
+          <p class="fb-mut" style="margin:8px 0 0">A tratativa aparece também em Suporte → SUPORTE FIXA.</p>
+        </form>
+      </section>
+    </aside>
   </div>
-
-  {% if messages %}{% for m in messages %}<div class="mt-3 p-3 rounded bg-blue-50 text-sm">{{ m }}</div>{% endfor %}{% endif %}
-
-  <div class="grid md:grid-cols-2 gap-4 mt-4">
-    <!-- Ações da Ilha -->
-    {% if is_ilha %}
-    <div class="bg-white rounded-lg border p-4">
-      <h3 class="font-bold mb-2">Alterar status</h3>
-      <form method="post" action="{% url 'fibras:change_status' fibra.pk %}" class="space-y-2">{% csrf_token %}
-        <select name="status" class="w-full px-2 py-1.5 border rounded text-sm">
-          {% for k, l in status_choices %}<option value="{{ k }}" {% if k == fibra.status %}selected{% endif %}>{{ l }}</option>{% endfor %}
-        </select>
-        <textarea name="retorno" rows="2" class="w-full px-2 py-1.5 border rounded text-sm" placeholder="Retorno (opcional)">{{ fibra.retorno_myrella }}</textarea>
-        <button class="px-3 py-1.5 bg-primary text-white rounded text-sm w-full">Salvar</button>
-      </form>
-    </div>
-    {% endif %}
-
-    <!-- Abrir incidente -->
-    <div class="bg-white rounded-lg border p-4">
-      <h3 class="font-bold mb-2">Abrir incidente / pedir ajuste</h3>
-      <form method="post" action="{% url 'fibras:abrir_incidente' fibra.pk %}" class="space-y-2">{% csrf_token %}
-        <textarea name="observacao" rows="3" class="w-full px-2 py-1.5 border rounded text-sm" placeholder="Descreva o ajuste solicitado..." required></textarea>
-        <button class="px-3 py-1.5 bg-orange-500 text-white rounded text-sm w-full">
-          <i class="fas fa-exclamation-circle"></i> Abrir incidente
-        </button>
-      </form>
-    </div>
-  </div>
-
-  <!-- Incidentes -->
-  <div class="bg-white rounded-lg border p-4 mt-4">
-    <div class="flex items-center justify-between mb-2">
-      <h3 class="font-bold">Incidentes</h3>
-      <a href="{% url 'fibras:chat' fibra.pk %}" class="text-sm text-primary hover:underline">
-        <i class="fas fa-comments"></i> Chat reverso
-      </a>
-    </div>
-    {% for i in incidentes %}
-    <div class="border-t py-2 text-sm">
-      <div class="flex justify-between text-xs text-gray-500">
-        <span>{{ i.aberto_por.get_full_name|default:i.aberto_por.username }}</span>
-        <span>{{ i.aberto_em|date:"d/m/Y H:i" }} · {{ i.get_status_display }}</span>
-      </div>
-      <p class="mt-1">{{ i.observacao }}</p>
-      {% if i.resposta %}<p class="mt-1 text-gray-700 italic">Ilha: {{ i.resposta }}</p>{% endif %}
-    </div>
-    {% empty %}
-    <p class="text-sm text-gray-400 italic">Nenhum incidente registrado.</p>
-    {% endfor %}
-  </div>
-
-  <!-- Histórico -->
-  <div class="bg-white rounded-lg border p-4 mt-4">
-    <h3 class="font-bold mb-2">Histórico de status</h3>
-    {% for h in historico %}
-    <div class="text-xs border-t py-1 flex justify-between">
-      <span>{{ h.status_anterior|default:"—" }} → <strong>{{ h.status_novo }}</strong> ({{ h.alterado_por.get_full_name|default:h.alterado_por.username }})</span>
-      <span class="text-gray-500">{{ h.alterado_em|date:"d/m/Y H:i" }}</span>
-    </div>
-    {% empty %}
-    <p class="text-sm text-gray-400 italic">Sem histórico.</p>
-    {% endfor %}
-  </div>
+ </div>
 </div>
+
+{% include 'fibras/_fb_comum.html' %}
+<script>
+(function () {
+  var FB = window.FB;
+  document.querySelectorAll('[data-copiar]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var v = b.getAttribute('data-copiar');
+      if (navigator.clipboard) navigator.clipboard.writeText(v).then(function () { FB.toast('Copiado: ' + v, true); }, function () { FB.toast('Não foi possível copiar.', false); });
+    });
+  });
+  var obs = document.getElementById('fbObs'), cont = document.getElementById('fbObsCont');
+  if (obs && cont) {
+    var upd = function () { cont.textContent = obs.value.length ? obs.value.length + ' caractere(s)' : ''; };
+    obs.addEventListener('input', upd);
+  }
+  ['fbFormStatus', 'fbFormIncidente'].forEach(function (id) {
+    var f = document.getElementById(id);
+    if (!f) return;
+    f.addEventListener('submit', function () {
+      var b = f.querySelector('button[type=submit]');
+      setTimeout(function () { b.disabled = true; b.querySelector('i').className = 'fas fa-spinner fa-spin'; }, 0);
+    });
+  });
+})();
+</script>
 {% endblock %}

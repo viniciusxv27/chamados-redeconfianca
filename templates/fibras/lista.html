@@ -1,110 +1,287 @@
 {% extends "base.html" %}
+{% load l10n %}
 {% block title %}Fibras - Lista{% endblock %}
 
+{% block extra_css %}
+{% include 'fibras/_fb_estilo.html' %}
+<style>
+.fb-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+.fb-chip { display: inline-flex; align-items: center; gap: 7px; padding: 5px 12px; border-radius: 980px; border: 0; background: var(--fb-card); box-shadow: inset 0 0 0 1px var(--fb-linha);
+  color: var(--fb-suave-2); font-size: 12.5px; font-weight: 500; cursor: pointer; transition: all .15s; white-space: nowrap; }
+.fb-chip:hover { color: var(--fb-texto); }
+.fb-chip .n { font-variant-numeric: tabular-nums; font-size: 11px; font-weight: 700; padding: 0 6px; border-radius: 980px; background: var(--fb-campo); }
+.fb-chip[aria-pressed="true"] { background: color-mix(in srgb, var(--st, var(--fb-pri)) 14%, var(--fb-card)); color: var(--st, var(--fb-pri)); box-shadow: inset 0 0 0 1.5px var(--st, var(--fb-pri)); font-weight: 600; }
+.fb-tabela-wrap { background: var(--fb-card); border-radius: var(--fb-raio-lg); box-shadow: var(--fb-sombra); overflow: auto; max-height: 72vh; animation: fb-entrar .45s var(--fb-ease) both; }
+.fb-tabela { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.fb-tabela th, .fb-tabela td { padding: 10px 12px; border-bottom: 1px solid var(--fb-linha); text-align: left; vertical-align: top; }
+.fb-tabela thead th { position: sticky; top: 0; z-index: 2; background: color-mix(in srgb, var(--fb-card-2) 94%, transparent); backdrop-filter: blur(10px);
+  font-size: 12px; font-weight: 600; color: var(--fb-suave-2); white-space: nowrap; }
+.fb-tabela th button { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; border-radius: 6px; }
+.fb-tabela th button:hover { color: var(--fb-texto); }
+.fb-tabela th button:focus-visible { outline: 3px solid rgba(255,107,53,.5); outline-offset: 2px; }
+.fb-tabela th button i { font-size: 10px; opacity: .35; }
+.fb-tabela th[aria-sort="ascending"] button, .fb-tabela th[aria-sort="descending"] button { color: var(--fb-pri); }
+.fb-tabela th[aria-sort] button i { opacity: 1; }
+.fb-tabela .num { text-align: right; }
+.fb-tabela .centro { text-align: center; }
+.fb-tabela tbody tr { transition: background .12s; cursor: pointer; }
+.fb-tabela tbody tr:hover { background: var(--fb-hover); }
+.fb-tabela tbody tr:last-child td { border-bottom: 0; }
+.fb-tabela tbody tr.nova-resposta { background: color-mix(in srgb, #6366F1 8%, var(--fb-card)); box-shadow: inset 3px 0 0 #818CF8; }
+.fb-tabela .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+.fb-tabela .sub { display: block; font-size: 11.5px; color: var(--fb-suave); }
+.fb-tabela .forte { font-weight: 600; }
+.fb-tabela .valor { font-weight: 700; color: var(--fb-pri); white-space: nowrap; }
+.fb-tabela .retorno { color: var(--fb-suave-2); font-size: 12px; min-width: 130px; max-width: 220px; }
+.fb-tabela .cel-plano { min-width: 120px; max-width: 170px; }
+.fb-tabela th, .fb-tabela td { padding-left: 10px; padding-right: 10px; }
+.fb-abrir { display: inline-flex; align-items: center; gap: 5px; padding: 5px 12px; border-radius: 980px; font-size: 12px; font-weight: 600; background: var(--fb-pri-suave); color: var(--fb-pri-esc) !important; white-space: nowrap; transition: all .15s; }
+html.dark .fb-abrir { color: #FF9C73 !important; }
+.fb-abrir:hover { background: var(--fb-pri); color: #fff !important; }
+.fb-novo { display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 700; color: #4F46E5; margin-left: 4px; }
+html.dark .fb-novo { color: #A5B4FC; }
+.fb-novo i { font-size: 6px; }
+.fb-rodape-lista { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 10px; font-size: 12.5px; color: var(--fb-suave); }
+@media (max-width: 767px) {
+  .fb-tabela-wrap { background: transparent; box-shadow: none; max-height: none; overflow: visible; }
+  .fb-tabela thead { display: none; }
+  .fb-tabela, .fb-tabela tbody { display: block; }
+  .fb-tabela tbody tr { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; background: var(--fb-card); border-radius: 16px; box-shadow: var(--fb-sombra); padding: 12px 14px; margin-bottom: 10px; }
+  .fb-tabela tbody tr.nova-resposta { box-shadow: 0 0 0 2px #818CF8; }
+  .fb-tabela td { border: 0; padding: 0; min-width: 0; text-align: left !important; }
+  .fb-tabela td::before { content: attr(data-label); display: block; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--fb-suave); margin-bottom: 1px; }
+  .fb-tabela td.cel-cliente { grid-column: 1 / -1; font-size: 15px; order: -2; }
+  .fb-tabela td.cel-cliente::before, .fb-tabela td.cel-acao::before, .fb-tabela td.cel-status::before { display: none; }
+  .fb-tabela td.cel-status { order: -1; grid-column: 1 / -1; }
+  .fb-tabela td.cel-retorno, .fb-tabela td.cel-plano { grid-column: 1 / -1; max-width: none; }
+  .fb-tabela td.cel-acao { grid-column: 1 / -1; }
+  .fb-tabela td.cel-acao .fb-abrir { width: 100%; justify-content: center; padding: 8px; }
+  .fb-tabela td.cel-vazio { grid-column: 1 / -1; }
+  .fb-tabela td.cel-vazio::before { display: none; }
+  .fb-tabela td.cel-retorno:empty { display: none; }
+}
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="min-h-screen bg-gray-50 p-4">
-  <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+<div class="fb" id="fbLista">
+  <div class="fb-cab">
     <div>
-      <h1 class="text-2xl font-bold text-gray-900 flex items-center gap-2">
-        <i class="fas fa-network-wired text-primary"></i>
-        Fibras — Lista (Mês corrente)
-      </h1>
-      <p class="text-sm text-gray-600">Tabela completa para busca e filtragem.</p>
+      <h1><span class="fb-ico" aria-hidden="true"><i class="fas fa-network-wired"></i></span> Fibras — Lista</h1>
+      <p>Mês corrente · tabela completa para busca e filtragem.</p>
     </div>
-    <div class="flex gap-2 flex-wrap">
-      <div class="inline-flex rounded-lg border border-gray-300 bg-white overflow-hidden text-sm shadow-sm">
-        <a href="{% url 'fibras:kanban' %}" class="px-3 py-2 hover:bg-gray-50 text-gray-700"><i class="fas fa-columns"></i> Kanban</a>
-        <button type="button" class="px-3 py-2 bg-primary text-white"><i class="fas fa-list"></i> Lista</button>
-      </div>
-      <a href="{% url 'fibras:relatorio' %}" class="px-3 py-2 bg-white border rounded-lg text-sm hover:bg-gray-50">
-        <i class="fas fa-chart-bar"></i> Relatório
-      </a>
+    <div class="fb-acoes">
       {% if can_import %}
-      <form method="post" action="{% url 'fibras:importar_planilha' %}" enctype="multipart/form-data" class="inline-flex items-center gap-2 bg-white border rounded-lg px-2 py-1">{% csrf_token %}
-        <label class="text-xs font-semibold text-gray-700 flex items-center gap-1 cursor-pointer">
-          <i class="fas fa-file-excel text-green-700"></i>
-          <span>Planilha:</span>
-          <input type="file" name="planilha" accept=".xlsx" required class="text-xs">
-        </label>
-        <button class="px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700">
-          <i class="fas fa-upload"></i> Importar
-        </button>
-      </form>
+      <button type="button" class="fb-btn sucesso" data-fb-toggle="fbImport" aria-expanded="false" aria-controls="fbImport">
+        <i class="fas fa-file-excel" aria-hidden="true"></i> Importar planilha
+      </button>
       {% endif %}
     </div>
   </div>
 
-  <form method="get" class="bg-white border rounded-lg p-3 mb-4 flex flex-wrap gap-2">
-    <select name="status" class="px-2 py-1.5 border rounded text-sm">
-      <option value="">Todos os status</option>
-      {% for k, l in status_choices %}<option value="{{ k }}" {% if k == filtro_status %}selected{% endif %}>{{ l }}</option>{% endfor %}
-    </select>
-    <input type="text" name="pdv" value="{{ filtro_pdv }}" placeholder="Filtrar por PDV" class="px-3 py-1.5 border rounded text-sm">
-    <input type="text" name="vendedor" value="{{ filtro_vendedor }}" placeholder="Filtrar por vendedor" class="px-3 py-1.5 border rounded text-sm">
-    <input type="text" name="venda" value="{{ filtro_venda }}" placeholder="Nº da venda" class="px-3 py-1.5 border rounded text-sm">
-    <input type="text" name="ordem" value="{{ filtro_ordem }}" placeholder="Ordem / Protocolo" class="px-3 py-1.5 border rounded text-sm">
-    <button class="px-3 py-1.5 bg-gray-100 border rounded text-sm hover:bg-gray-200">Filtrar</button>
-    <a href="{% url 'fibras:lista' %}" class="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900">Limpar</a>
+  <div class="fb-barra-topo">
+    {% include 'fibras/_fb_nav.html' with ativo='lista' %}
+  </div>
+
+  {% if can_import %}
+  <section class="fb-card fb-recolhivel" id="fbImport" aria-label="Importar planilha">
+    <form method="post" action="{% url 'fibras:importar_planilha' %}" enctype="multipart/form-data" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap" id="fbImportForm">{% csrf_token %}
+      <label class="fb-rotulo" style="margin:0;display:flex;align-items:center;gap:8px;flex:1 1 260px;min-width:0">
+        <i class="fas fa-file-excel" aria-hidden="true" style="color:#1E9E4A"></i>
+        <span>Planilha:</span>
+        <input type="file" name="planilha" accept=".xlsx" required class="fb-campo" style="padding:6px 8px">
+      </label>
+      <button class="fb-btn primario" type="submit"><i class="fas fa-upload" aria-hidden="true"></i> Importar</button>
+    </form>
+  </section>
+  {% endif %}
+
+  <div class="fb-ferramentas" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
+    <div class="fb-busca">
+      <i class="fas fa-magnifying-glass" aria-hidden="true"></i>
+      <input type="search" id="fbBusca" class="fb-campo" placeholder="Buscar: cliente, venda, CPF, vendedor, PDV, plano…" aria-label="Buscar na lista" autocomplete="off">
+      <kbd aria-hidden="true">/</kbd>
+    </div>
+    <span class="fb-mut" id="fbResultado" aria-live="polite"></span>
+    <button type="button" class="fb-btn leve pequeno fb-filtro-toggle" data-fb-toggle="fbFiltros" aria-expanded="false" aria-controls="fbFiltros" style="margin-left:auto">
+      <i class="fas fa-sliders" aria-hidden="true"></i> Filtros <span class="fb-badge" id="fbFiltrosQtd" hidden></span>
+    </button>
+  </div>
+
+  <form method="get" class="fb-card fb-filtros-painel" id="fbFiltros" style="padding:14px 16px" aria-label="Filtros do servidor">
+    <div class="fb-filtros">
+      <div><label class="fb-rotulo" for="fStatus">Status</label>
+        <select id="fStatus" name="status" class="fb-campo">
+          <option value="">Todos os status</option>
+          {% for k, l in status_choices %}<option value="{{ k }}" {% if k == filtro_status %}selected{% endif %}>{{ l }}</option>{% endfor %}
+        </select>
+      </div>
+      <div><label class="fb-rotulo" for="fPdv">PDV</label><input id="fPdv" type="text" name="pdv" value="{{ filtro_pdv }}" placeholder="Filtrar por PDV" class="fb-campo"></div>
+      <div><label class="fb-rotulo" for="fVend">Vendedor</label><input id="fVend" type="text" name="vendedor" value="{{ filtro_vendedor }}" placeholder="Filtrar por vendedor" class="fb-campo"></div>
+      <div><label class="fb-rotulo" for="fVenda">Nº da venda</label><input id="fVenda" type="text" name="venda" value="{{ filtro_venda }}" placeholder="Nº da venda" class="fb-campo"></div>
+      <div><label class="fb-rotulo" for="fOrdem">Ordem / Protocolo</label><input id="fOrdem" type="text" name="ordem" value="{{ filtro_ordem }}" placeholder="Ordem / Protocolo" class="fb-campo"></div>
+      <div class="fb-filtros-acoes">
+        <button class="fb-btn primario" type="submit"><i class="fas fa-filter" aria-hidden="true"></i> Filtrar</button>
+        <a href="{% url 'fibras:lista' %}" class="fb-btn leve">Limpar</a>
+      </div>
+    </div>
   </form>
 
-  {% if messages %}{% for m in messages %}<div class="mb-3 p-3 rounded bg-blue-50 text-sm">{{ m }}</div>{% endfor %}{% endif %}
+  {% if fibras %}
+  <div class="fb-chips" id="fbChips" role="group" aria-label="Filtrar por status (instantâneo)">
+    <button type="button" class="fb-chip" data-chip="" aria-pressed="true">Todos <span class="n" data-n>0</span></button>
+    {% for k, l in status_choices %}
+    <button type="button" class="fb-chip" data-chip="{{ k }}" data-st="{{ k }}" aria-pressed="false"><span class="st-ponto" aria-hidden="true"></span>{{ l }} <span class="n" data-n>0</span></button>
+    {% endfor %}
+  </div>
+  {% endif %}
 
-  <div class="bg-white rounded-lg border shadow-sm overflow-x-auto">
-    <table class="w-full text-sm">
-      <thead class="bg-gray-50 text-gray-700 sticky top-0">
+  <div class="fb-tabela-wrap">
+    <table class="fb-tabela" id="fbTabela">
+      <thead>
         <tr>
-          <th class="px-3 py-2 text-left">Venda</th>
-          <th class="px-3 py-2 text-left">Cliente</th>
-          <th class="px-3 py-2 text-left">CPF / Acesso</th>
-          <th class="px-3 py-2 text-left">Plano</th>
-          <th class="px-3 py-2 text-right">Valor</th>
-          <th class="px-3 py-2 text-left">Vendedor / PDV</th>
-          <th class="px-3 py-2 text-left">Data</th>
-          <th class="px-3 py-2 text-center">Status</th>
-          <th class="px-3 py-2 text-left">Retorno Myrella</th>
-          <th class="px-3 py-2"></th>
+          <th scope="col"><button type="button" data-ord="venda">Venda <i class="fas fa-sort" aria-hidden="true"></i></button></th>
+          <th scope="col"><button type="button" data-ord="cliente">Cliente <i class="fas fa-sort" aria-hidden="true"></i></button></th>
+          <th scope="col">CPF / Acesso</th>
+          <th scope="col">Plano</th>
+          <th scope="col" class="num"><button type="button" data-ord="valor" data-tipo="num">Valor <i class="fas fa-sort" aria-hidden="true"></i></button></th>
+          <th scope="col"><button type="button" data-ord="vendedor">Vendedor / PDV <i class="fas fa-sort" aria-hidden="true"></i></button></th>
+          <th scope="col"><button type="button" data-ord="data">Data <i class="fas fa-sort" aria-hidden="true"></i></button></th>
+          <th scope="col" class="centro"><button type="button" data-ord="status">Status <i class="fas fa-sort" aria-hidden="true"></i></button></th>
+          <th scope="col">Retorno Myrella</th>
+          <th scope="col"><span class="sr-only">Ações</span></th>
         </tr>
       </thead>
       <tbody>
         {% for f in fibras %}
         {% with inc=f.incidentes.first %}
-        <tr class="border-t hover:bg-gray-50 {% if inc and inc.has_unread_reply_for_opener and inc.aberto_por_id == request.user.id %}!bg-indigo-50 ring-1 ring-indigo-300{% endif %}">
-          <td class="px-3 py-2 font-mono text-xs">{{ f.numero_da_venda }}
-            {% if inc and inc.has_unread_reply_for_opener and inc.aberto_por_id == request.user.id %}
-              <span class="ml-1 inline-flex items-center gap-1 text-[10px] text-indigo-700 font-semibold"><i class="fas fa-circle text-[6px] animate-pulse"></i> nova resposta</span>
+        <tr class="{% if inc and inc.aberto_por_id == request.user.id and inc.has_unread_reply_for_opener %}nova-resposta{% endif %}"
+            data-url="{% url 'fibras:detail' f.pk %}" data-st="{{ f.status }}"
+            data-venda="{{ f.numero_da_venda }}" data-cliente="{{ f.cliente }}" data-valor="{{ f.valor|unlocalize }}"
+            data-vendedor="{{ f.vendedor }}" data-data="{{ f.data_da_venda|date:'Y-m-d' }}" data-status="{{ f.get_status_display }}"
+            data-busca="{{ f.numero_da_venda }} {{ f.cliente }} {{ f.cpf }} {{ f.numero_acesso }} {{ f.plano }} {{ f.vendedor }} {{ f.pdv }} {{ f.numero_protocolo }} {{ f.retorno_myrella }}">
+          <td data-label="Venda" class="mono">{{ f.numero_da_venda }}
+            {% if inc and inc.aberto_por_id == request.user.id and inc.has_unread_reply_for_opener %}
+              <span class="fb-novo"><i class="fas fa-circle" aria-hidden="true"></i> nova resposta</span>
             {% endif %}
           </td>
-          <td class="px-3 py-2 font-semibold">{{ f.cliente|default:"—" }}</td>
-          <td class="px-3 py-2 text-xs">{{ f.cpf }}<br><span class="text-gray-500">{{ f.numero_acesso }}</span></td>
-          <td class="px-3 py-2 text-xs">{{ f.plano|truncatechars:35 }}</td>
-          <td class="px-3 py-2 text-right font-semibold text-primary whitespace-nowrap">R$ {{ f.valor }}</td>
-          <td class="px-3 py-2 text-xs">{{ f.vendedor }}<br><span class="text-gray-500">{{ f.pdv }}</span></td>
-          <td class="px-3 py-2 text-xs whitespace-nowrap">{{ f.data_da_venda|date:"d/m/Y" }}</td>
-          <td class="px-3 py-2 text-center">
-            <span class="text-xs px-2 py-0.5 rounded-full font-semibold
-              {% if f.status == 'agendado' %}bg-blue-100 text-blue-800
-              {% elif f.status == 'pendente' %}bg-amber-100 text-amber-800
-              {% elif f.status == 'problema' %}bg-red-100 text-red-800
-              {% elif f.status == 'instalado' %}bg-green-100 text-green-800
-              {% else %}bg-gray-200 text-gray-700{% endif %}">
-              {{ f.get_status_display }}
-            </span>
-          </td>
-          <td class="px-3 py-2 text-xs text-gray-700">{{ f.retorno_myrella|truncatechars:60 }}</td>
-          <td class="px-3 py-2 text-right">
-            <a href="{% url 'fibras:detail' f.pk %}" class="text-primary text-xs hover:underline">Abrir</a>
-          </td>
+          <td data-label="Cliente" class="cel-cliente forte">{{ f.cliente|default:"—" }}</td>
+          <td data-label="CPF / Acesso" style="font-size:12px">{{ f.cpf }}<span class="sub">{{ f.numero_acesso }}</span></td>
+          <td data-label="Plano" class="cel-plano" style="font-size:12px" title="{{ f.plano }}">{{ f.plano|truncatechars:35 }}</td>
+          <td data-label="Valor" class="num valor">R$ {{ f.valor|floatformat:"2g" }}</td>
+          <td data-label="Vendedor / PDV" style="font-size:12px">{{ f.vendedor }}<span class="sub">{{ f.pdv }}</span></td>
+          <td data-label="Data" style="font-size:12px;white-space:nowrap">{{ f.data_da_venda|date:"d/m/Y" }}</td>
+          <td data-label="Status" class="centro cel-status"><span class="st-pill" data-st="{{ f.status }}">{{ f.get_status_display }}</span></td>
+          <td data-label="Retorno Myrella" class="retorno cel-retorno" title="{{ f.retorno_myrella }}">{{ f.retorno_myrella|truncatechars:60 }}</td>
+          <td class="num cel-acao"><a href="{% url 'fibras:detail' f.pk %}" class="fb-abrir">Abrir <i class="fas fa-arrow-right" aria-hidden="true"></i></a></td>
         </tr>
         {% endwith %}
         {% empty %}
-        <tr><td colspan="10" class="px-3 py-10 text-center text-gray-400 italic">Nenhuma fibra encontrada com os filtros atuais.</td></tr>
+        <tr><td colspan="10" class="cel-vazio"><div class="fb-vazio"><i class="fas fa-inbox" aria-hidden="true"></i><b>Nenhuma fibra encontrada com os filtros atuais.</b>Tente limpar os filtros ou buscar por outro termo.</div></td></tr>
         {% endfor %}
+        <tr id="fbSemResultado" hidden><td colspan="10" class="cel-vazio"><div class="fb-vazio"><i class="fas fa-magnifying-glass" aria-hidden="true"></i><b>Nada encontrado na busca.</b>Nenhuma linha corresponde ao termo ou status escolhido.</div></td></tr>
       </tbody>
     </table>
   </div>
 
   {% if fibras %}
-  <p class="text-xs text-gray-500 mt-2">{{ fibras|length }} venda(s) listada(s).</p>
+  <div class="fb-rodape-lista">
+    <span>{{ fibras|length }} venda(s) listada(s).</span>
+    <span id="fbSomaVisivel"></span>
+  </div>
   {% endif %}
 </div>
+
+{% include 'fibras/_fb_comum.html' %}
+<script>
+(function () {
+  var FB = window.FB;
+  var tabela = document.getElementById('fbTabela');
+  if (!tabela) return;
+  var tbody = tabela.tBodies[0];
+  var linhas = Array.prototype.slice.call(tbody.querySelectorAll('tr[data-url]'));
+  var semRes = document.getElementById('fbSemResultado');
+  var busca = document.getElementById('fbBusca');
+  var resultado = document.getElementById('fbResultado');
+  var chips = document.getElementById('fbChips');
+  var stAtivo = '';
+  linhas.forEach(function (tr) { tr._busca = FB.normalizar(tr.dataset.busca); });
+
+  function aplicar() {
+    var termos = FB.normalizar(busca.value.trim()).split(/\s+/).filter(Boolean);
+    var vis = 0, soma = 0, porSt = {};
+    linhas.forEach(function (tr) {
+      var casaBusca = termos.every(function (t) { return tr._busca.indexOf(t) !== -1; });
+      if (casaBusca) porSt[tr.dataset.st] = (porSt[tr.dataset.st] || 0) + 1;
+      var ok = casaBusca && (!stAtivo || tr.dataset.st === stAtivo);
+      tr.hidden = !ok;
+      if (ok) { vis++; soma += parseFloat(tr.dataset.valor) || 0; }
+    });
+    if (semRes) semRes.hidden = !(linhas.length && vis === 0);
+    if (chips) {
+      var tot = 0;
+      chips.querySelectorAll('[data-chip]').forEach(function (c) {
+        var k = c.dataset.chip, n = k ? (porSt[k] || 0) : 0;
+        if (k) { tot += n; c.querySelector('[data-n]').textContent = FB.int(n); }
+        c.hidden = !!k && n === 0 && k !== stAtivo;
+      });
+      chips.querySelector('[data-chip=""] [data-n]').textContent = FB.int(tot);
+    }
+    var filtrando = termos.length || stAtivo;
+    if (resultado) resultado.textContent = linhas.length ? (filtrando ? vis + ' de ' + linhas.length + ' linha(s)' : linhas.length + ' linha(s)') : '';
+    var sv = document.getElementById('fbSomaVisivel');
+    if (sv) sv.textContent = (filtrando ? 'Soma das visíveis: ' : 'Soma: ') + FB.brl(soma);
+  }
+  var tmr = null;
+  busca.addEventListener('input', function () { clearTimeout(tmr); tmr = setTimeout(aplicar, 100); });
+  busca.addEventListener('keydown', function (e) { if (e.key === 'Escape') { busca.value = ''; aplicar(); } });
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
+    var t = e.target;
+    if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+    e.preventDefault(); busca.focus();
+  });
+  if (chips) chips.addEventListener('click', function (e) {
+    var c = e.target.closest('[data-chip]');
+    if (!c) return;
+    stAtivo = c.dataset.chip;
+    chips.querySelectorAll('[data-chip]').forEach(function (x) { x.setAttribute('aria-pressed', x === c ? 'true' : 'false'); });
+    aplicar();
+  });
+
+  /* Ordenação por coluna (clique alterna crescente/decrescente) */
+  var coll = new Intl.Collator('pt-BR', { numeric: true, sensitivity: 'base' });
+  tabela.querySelectorAll('th button[data-ord]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var th = b.closest('th'), chave = b.dataset.ord, num = b.dataset.tipo === 'num';
+      var dir = th.getAttribute('aria-sort') === 'ascending' ? 'descending' : 'ascending';
+      tabela.querySelectorAll('thead th').forEach(function (x) { x.removeAttribute('aria-sort'); var i = x.querySelector('button i'); if (i) i.className = 'fas fa-sort'; });
+      th.setAttribute('aria-sort', dir);
+      b.querySelector('i').className = 'fas ' + (dir === 'ascending' ? 'fa-sort-up' : 'fa-sort-down');
+      var m = dir === 'ascending' ? 1 : -1;
+      linhas.sort(function (a, c) {
+        var x = a.dataset[chave] || '', y = c.dataset[chave] || '';
+        if (num) return ((parseFloat(x) || 0) - (parseFloat(y) || 0)) * m;
+        if (!x && y) return 1; if (x && !y) return -1;
+        return coll.compare(x, y) * m;
+      });
+      linhas.forEach(function (tr) { tbody.insertBefore(tr, semRes); });
+    });
+  });
+
+  /* Linha inteira abre a fibra (o link "Abrir" continua sendo o alvo acessível) */
+  tbody.addEventListener('click', function (e) {
+    if (e.target.closest('a, button')) return;
+    var tr = e.target.closest('tr[data-url]');
+    if (tr && !(window.getSelection && String(window.getSelection()))) window.location.href = tr.dataset.url;
+  });
+
+  var fq = document.getElementById('fbFiltrosQtd');
+  if (fq) {
+    var n = Array.prototype.filter.call(document.querySelectorAll('#fbFiltros input[type=text], #fbFiltros select'), function (i) { return i.value.trim() !== ''; }).length;
+    if (n) { fq.textContent = n; fq.hidden = false; }
+  }
+  aplicar();
+})();
+</script>
 {% endblock %}

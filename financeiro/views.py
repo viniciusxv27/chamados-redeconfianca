@@ -114,6 +114,29 @@ def _titulo_ou_404(request, pk):
 
 
 # ── Painel ──────────────────────────────────────────────────────────────────
+def _projecao(titulos, hoje, ve_pagar, ve_receber):
+    """Saldo em aberto por faixa de vencimento (só leitura, para o gráfico do painel)."""
+    faixas = [('Vencidos', None, hoje - timedelta(days=1)), ('Hoje', hoje, hoje),
+              ('1–7 dias', hoje + timedelta(days=1), hoje + timedelta(days=7)),
+              ('8–15 dias', hoje + timedelta(days=8), hoje + timedelta(days=15)),
+              ('16–30 dias', hoje + timedelta(days=16), hoje + timedelta(days=30)),
+              ('Depois', hoje + timedelta(days=31), None)]
+    saida = {'rotulos': [f[0] for f in faixas], 'pagar': [], 'receber': []}
+    for tipo, chave, ve in (('PAGAR', 'pagar', ve_pagar), ('RECEBER', 'receber', ve_receber)):
+        if not ve:
+            saida[chave] = None
+            continue
+        for _r, de, ate in faixas:
+            qs = titulos.filter(tipo=tipo)
+            if de:
+                qs = qs.filter(vencimento__gte=de)
+            if ate:
+                qs = qs.filter(vencimento__lte=ate)
+            agg = qs.aggregate(v=Sum('valor'), b=Sum('valor_baixado'))
+            saida[chave].append(float((agg['v'] or ZERO) - (agg['b'] or ZERO)))
+    return saida
+
+
 @login_required
 @exige()
 def painel(request):
@@ -136,6 +159,7 @@ def painel(request):
         'pagar': resumo('PAGAR') if pode(user, 'pagar') else None,
         'receber': resumo('RECEBER') if pode(user, 'receber') else None,
         'proximos': list(titulos.filter(vencimento__lte=semana).select_related('loja').order_by('vencimento')[:12]),
+        'projecao': _projecao(titulos, hoje, pode(user, 'pagar'), pode(user, 'receber')),
     })
     if pode(user, 'bancos'):
         contas = list(filtrar_por_loja(ContaBancaria.objects.filter(ativa=True), user))
@@ -151,6 +175,7 @@ def painel(request):
         contexto['cartoes_pendentes'] = cartoes.filter(status__in=('PENDENTE', 'DIVERGENTE')).count()
     if pode(user, 'auditoria'):
         contexto['ultimos'] = list(LogFinanceiro.objects.select_related('usuario')[:8])
+    contexto['pendencias'] = (contexto.get('extrato_pendente') or 0) + (contexto.get('cartoes_pendentes') or 0)
     return render(request, 'financeiro/painel.html', contexto)
 
 

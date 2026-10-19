@@ -5,116 +5,149 @@
 {% block fin_subtitulo %}{% if modo == 'baixas' %}Marque os títulos e baixe de uma vez, ou um a um{% elif tipo == 'PAGAR' %}Baixe ou edite os títulos a pagar{% else %}Baixe ou edite os títulos a receber{% endif %}{% endblock %}
 {% block fin_acoes %}
 {% if pode_editar %}
-<button type="button" data-abrir="#finNovo" class="fin-btn fin-btn-verde"><i class="fas fa-plus"></i>{% if tipo == 'PAGAR' %}Nova conta a pagar{% else %}Nova conta a receber{% endif %}</button>
+<button type="button" data-abrir="#finNovo" data-fin-atalho-novo class="fin-btn fin-btn-verde"><i class="fas fa-plus"></i>{% if tipo == 'PAGAR' %}Nova conta a pagar{% else %}Nova conta a receber{% endif %}<span class="fin-kbd">N</span></button>
 {% endif %}
 {% endblock %}
 
 {% block fin_conteudo %}
-{# ── Filtro ── #}
-<form method="get" class="fin-card p-3 mb-4">
-    <div class="flex flex-wrap gap-1.5 mb-3">
-        {% for chave, rotulo in situacoes %}
-        <button name="situacao" value="{{ chave }}" class="px-3 py-1 rounded-full text-xs font-semibold border {% if filtro.situacao == chave %}bg-emerald-600 border-emerald-600 text-white{% else %}border-gray-200 text-gray-600 hover:bg-gray-50{% endif %}" data-livre>{{ rotulo }}</button>
-        {% endfor %}
+{# ── Filtro (os campos ficam espalhados na tela e apontam para este form) ── #}
+<form method="get" id="finFiltro"><input type="hidden" name="situacao" value="{{ filtro.situacao }}" disabled id="finSituacaoAtual"></form>
+
+<div class="fin-ferramentas mb-3">
+    <div class="fin-card p-2.5 sm:p-3">
+        <div class="fin-rolavel-x" role="group" aria-label="Situação">
+            {% for chave, rotulo in situacoes %}
+            <button form="finFiltro" name="situacao" value="{{ chave }}" class="fin-pilula {% if filtro.situacao == chave %}fin-pilula-ativa{% endif %}" {% if filtro.situacao == chave %}aria-pressed="true"{% endif %} data-livre>{% if chave == 'vencidos' %}<i class="fas fa-circle-exclamation text-[10px]"></i>{% elif chave == 'hoje' %}<i class="fas fa-calendar-day text-[10px]"></i>{% endif %}{{ rotulo }}</button>
+            {% endfor %}
+        </div>
+        <div class="flex items-center gap-2 mt-2.5">
+            <label class="fin-busca flex-1 min-w-0">
+                <i class="fas fa-magnifying-glass"></i>
+                <input type="search" class="fin-input" placeholder="Filtrar nesta página…" aria-label="Filtrar os títulos desta página" data-fin-filtrar="#finTabela" data-fin-atalho-busca autocomplete="off">
+                <span class="fin-kbd" aria-hidden="true">/</span>
+            </label>
+            <span class="fin-contagem hidden sm:inline" data-fin-contagem="#finTabela" aria-live="polite"></span>
+            <button type="button" class="fin-btn fin-btn-claro shrink-0" data-fin-filtros-botao="#finPainelFiltros" aria-controls="finPainelFiltros">
+                <i class="fas fa-sliders"></i><span class="hidden sm:inline">Filtros</span><span class="fin-selo" hidden></span><i class="fas fa-chevron-down text-[10px] transition-transform"></i>
+            </button>
+        </div>
     </div>
-    <input type="hidden" name="situacao" value="{{ filtro.situacao }}" disabled id="finSituacaoAtual">
-    <div class="grid grid-cols-2 md:grid-cols-6 gap-2">
-        <div class="col-span-2"><label class="fin-label">Busca</label>
-            <input type="search" name="q" value="{{ filtro.q }}" placeholder="Descrição, fornecedor, CNPJ, nº, código de barras" class="fin-input"></div>
-        <div><label class="fin-label">Vencimento de</label><input type="date" name="de" value="{{ filtro.de }}" class="fin-input"></div>
-        <div><label class="fin-label">até</label><input type="date" name="ate" value="{{ filtro.ate }}" class="fin-input"></div>
-        <div><label class="fin-label">Loja</label>
-            <select name="loja" class="fin-input"><option value="">Todas</option><option value="sem" {% if filtro.loja == 'sem' %}selected{% endif %}>Sem loja (escritório)</option>
-                {% for l in lojas %}<option value="{{ l.id }}" {% if filtro.loja == l.id|stringformat:'s' %}selected{% endif %}>{{ l.name }}</option>{% endfor %}</select></div>
-        <div><label class="fin-label">Plano de contas</label>
-            <select name="plano" class="fin-input"><option value="">Todos</option>
-                {% for p in planos_filtro %}<option value="{{ p.id }}" {% if filtro.plano == p.id|stringformat:'s' %}selected{% endif %}>{{ p.codigo }} {{ p.nome }}</option>{% endfor %}</select></div>
+</div>
+
+<div id="finPainelFiltros" class="fin-painel-filtros mb-4">
+    <div>
+        <div class="fin-card p-3">
+            <div class="grid grid-cols-2 md:grid-cols-6 gap-2">
+                <div class="col-span-2"><label class="fin-label" for="finQ">Busca (todas as páginas)</label>
+                    <input type="search" id="finQ" form="finFiltro" name="q" value="{{ filtro.q }}" placeholder="Descrição, fornecedor, CNPJ, nº, código de barras" class="fin-input"></div>
+                <div><label class="fin-label" for="finDe">Vencimento de</label><input type="date" id="finDe" form="finFiltro" name="de" value="{{ filtro.de }}" class="fin-input"></div>
+                <div><label class="fin-label" for="finAte">até</label><input type="date" id="finAte" form="finFiltro" name="ate" value="{{ filtro.ate }}" class="fin-input"></div>
+                <div><label class="fin-label" for="finLoja">Loja</label>
+                    <select id="finLoja" form="finFiltro" name="loja" class="fin-input"><option value="">Todas</option><option value="sem" {% if filtro.loja == 'sem' %}selected{% endif %}>Sem loja (escritório)</option>
+                        {% for l in lojas %}<option value="{{ l.id }}" {% if filtro.loja == l.id|stringformat:'s' %}selected{% endif %}>{{ l.name }}</option>{% endfor %}</select></div>
+                <div><label class="fin-label" for="finPlanoF">Plano de contas</label>
+                    <select id="finPlanoF" form="finFiltro" name="plano" class="fin-input"><option value="">Todos</option>
+                        {% for p in planos_filtro %}<option value="{{ p.id }}" {% if filtro.plano == p.id|stringformat:'s' %}selected{% endif %}>{{ p.codigo }} {{ p.nome }}</option>{% endfor %}</select></div>
+            </div>
+            <div class="flex justify-end gap-2 mt-3">
+                <a href="?" class="fin-btn fin-btn-claro"><i class="fas fa-eraser"></i>Limpar</a>
+                <button form="finFiltro" class="fin-btn fin-btn-verde" data-livre onclick="document.getElementById('finSituacaoAtual').disabled=false"><i class="fas fa-filter"></i>Filtrar</button>
+            </div>
+        </div>
     </div>
-    <div class="flex justify-end gap-2 mt-2">
-        <a href="?" class="fin-btn fin-btn-claro">Limpar</a>
-        <button class="fin-btn fin-btn-verde" data-livre onclick="document.getElementById('finSituacaoAtual').disabled=false"><i class="fas fa-filter"></i>Filtrar</button>
-    </div>
-</form>
+</div>
 
 {# ── Totais ── #}
-<div class="grid grid-cols-3 gap-3 mb-4">
-    <div class="fin-card p-3"><p class="text-[11px] uppercase font-semibold text-gray-500">Títulos</p><p class="text-lg font-bold tabular">{{ totais.n }}</p></div>
-    <div class="fin-card p-3"><p class="text-[11px] uppercase font-semibold text-gray-500">Valor</p><p class="text-lg font-bold tabular">{{ totais.valor|brl_zero }}</p></div>
-    <div class="fin-card p-3"><p class="text-[11px] uppercase font-semibold text-gray-500">{% if tipo == 'RECEBER' %}A receber{% else %}Saldo em aberto{% endif %}</p><p class="text-lg font-bold tabular text-emerald-700">{{ totais.saldo|brl_zero }}</p></div>
+<div class="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3 mb-4 fin-entra">
+    <div class="fin-card fin-kpi" style="--fin-kpi-cor:#94A3B8"><p class="fin-kpi-rotulo">Títulos</p><p class="fin-kpi-valor" data-fin-num="{{ totais.n }}" data-fin-formato="int">{{ totais.n }}</p></div>
+    <div class="fin-card fin-kpi" style="--fin-kpi-cor:#64748B"><p class="fin-kpi-rotulo">Valor</p><p class="fin-kpi-valor text-base sm:text-xl" data-fin-num="{{ totais.valor|unlocalize }}">{{ totais.valor|brl_zero }}</p></div>
+    <div class="fin-card fin-kpi col-span-2 sm:col-span-1" style="--fin-kpi-cor:#059669"><p class="fin-kpi-rotulo">{% if tipo == 'RECEBER' %}A receber{% else %}Saldo em aberto{% endif %}</p><p class="fin-kpi-valor text-base sm:text-xl text-emerald-700" data-fin-num="{{ totais.saldo|unlocalize }}">{{ totais.saldo|brl_zero }}</p></div>
 </div>
 
 {# ── Lista ── #}
 <form method="post" action="{% url 'financeiro:baixar_lote' %}" id="finLote">
 {% csrf_token %}<input type="hidden" name="voltar" value="{{ request.get_full_path }}">
 <div class="fin-card overflow-hidden">
-    {% if pode.baixas_baixar %}
-    <div id="finBarraLote" class="hidden px-4 py-2.5 bg-emerald-50 border-b border-emerald-100 flex items-center justify-between gap-3 flex-wrap text-sm">
-        <span class="text-emerald-900"><strong id="finLoteN">0</strong> marcado(s) · saldo <strong id="finLoteTotal" class="tabular">R$ 0,00</strong></span>
-        <button type="button" data-abrir="#finModalLote" class="fin-btn fin-btn-verde"><i class="fas fa-check-double"></i>Baixar marcados</button>
-    </div>
-    {% endif %}
     <div class="overflow-x-auto">
-    <table class="fin-tabela">
+    <table class="fin-tabela fin-empilha" id="finTabela" data-fin-ordenar>
         <thead><tr>
-            {% if pode.baixas_baixar %}<th class="w-8"><input type="checkbox" id="finTodos" class="accent-emerald-600" aria-label="Marcar todos"></th>{% endif %}
-            <th>Vencimento</th>{% if not tipo %}<th>Tipo</th>{% endif %}<th>Descrição</th><th>Loja</th><th class="text-right">Valor</th><th class="text-right">Saldo</th><th>Situação</th><th></th>
+            {% if pode.baixas_baixar %}<th class="w-8" data-rotulo=""><input type="checkbox" id="finTodos" class="accent-emerald-600 w-4 h-4" aria-label="Marcar todos os visíveis"></th>{% endif %}
+            <th>Vencimento</th>{% if not tipo %}<th>Tipo</th>{% endif %}<th>Descrição</th><th>Loja</th><th class="text-right">Valor</th><th class="text-right">Saldo</th><th>Situação</th><th data-rotulo=""></th>
         </tr></thead>
         <tbody>
         {% for t in titulos %}
         <tr>
-            {% if pode.baixas_baixar %}<td>{% if t.status == 'ABERTO' or t.status == 'PARCIAL' %}<input type="checkbox" name="titulos" value="{{ t.id }}" data-saldo="{{ t.saldo|unlocalize }}" class="fin-marca accent-emerald-600" aria-label="Marcar {{ t.descricao }}">{% endif %}</td>{% endif %}
-            <td class="tabular whitespace-nowrap {% if t.vencido %}text-red-600 font-semibold{% endif %}">{{ t.vencimento|date:"d/m/Y" }}</td>
-            {% if not tipo %}<td><span class="fin-chip {% if t.tipo == 'PAGAR' %}bg-rose-50 text-rose-700{% else %}bg-emerald-50 text-emerald-700{% endif %}">{% if t.tipo == 'PAGAR' %}Pagar{% else %}Receber{% endif %}</span></td>{% endif %}
-            <td class="min-w-[14rem]">
-                <a href="{% url 'financeiro:titulo' t.id %}" class="font-medium text-gray-900 hover:text-emerald-700">{{ t.descricao }}</a>{% if t.rotulo_parcela %} <span class="text-gray-400 text-xs">{{ t.rotulo_parcela }}</span>{% endif %}
+            {% if pode.baixas_baixar %}<td class="fin-td-marca">{% if t.status == 'ABERTO' or t.status == 'PARCIAL' %}<input type="checkbox" name="titulos" value="{{ t.id }}" data-saldo="{{ t.saldo|unlocalize }}" class="fin-marca accent-emerald-600 w-4 h-4" aria-label="Marcar {{ t.descricao }}">{% endif %}</td>{% endif %}
+            <td class="tabular whitespace-nowrap {% if t.vencido %}text-red-600 font-semibold{% endif %}" data-v="{{ t.vencimento|date:'Y-m-d' }}"><span>{% if t.vencido %}<i class="fas fa-circle-exclamation text-[10px] mr-1"></i>{% endif %}{{ t.vencimento|date:"d/m/Y" }}</span></td>
+            {% if not tipo %}<td><span class="fin-chip {% if t.tipo == 'PAGAR' %}bg-rose-50 text-rose-700{% else %}bg-emerald-50 text-emerald-700{% endif %}"><i class="fas {% if t.tipo == 'PAGAR' %}fa-arrow-up{% else %}fa-arrow-down{% endif %} text-[9px]"></i>{% if t.tipo == 'PAGAR' %}Pagar{% else %}Receber{% endif %}</span></td>{% endif %}
+            <td class="min-w-[14rem] fin-td-principal" data-v="{{ t.descricao }}">
+                <a href="{% url 'financeiro:titulo' t.id %}" class="font-semibold text-gray-900 hover:text-emerald-700">{{ t.descricao }}</a>{% if t.rotulo_parcela %} <span class="text-gray-400 text-xs">{{ t.rotulo_parcela }}</span>{% endif %}
                 <p class="text-[11px] text-gray-500">{{ t.pessoa_nome|default:"" }}{% if t.numero_documento %} · nº {{ t.numero_documento }}{% endif %}{% if t.plano %} · {{ t.plano.codigo }} {{ t.plano.nome }}{% endif %}</p>
             </td>
             <td class="text-xs text-gray-600 whitespace-nowrap">{{ t.loja.name|default:"—" }}</td>
-            <td class="text-right tabular whitespace-nowrap">{{ t.valor|brl_zero }}</td>
-            <td class="text-right tabular whitespace-nowrap font-semibold">{{ t.saldo|brl_zero }}</td>
+            <td class="text-right tabular whitespace-nowrap" data-v="{{ t.valor|unlocalize }}">{{ t.valor|brl_zero }}</td>
+            <td class="text-right tabular whitespace-nowrap font-bold" data-v="{{ t.saldo|unlocalize }}">{{ t.saldo|brl_zero }}</td>
             <td>{% if t.vencido %}<span class="fin-chip st-VENCIDO">Vencido</span>{% else %}<span class="fin-chip st-{{ t.status }}">{{ t.get_status_display }}</span>{% endif %}</td>
-            <td class="whitespace-nowrap text-right">
+            <td class="whitespace-nowrap text-right fin-td-acoes">
+                <div class="fin-acoes-linha">
                 {% if pode.baixas_baixar and t.status != 'QUITADO' and t.status != 'CANCELADO' %}
-                <button type="button" class="text-emerald-700 text-xs font-semibold hover:underline" data-abrir="#finModalBaixa"
+                <button type="button" class="fin-acao fin-acao-verde" data-abrir="#finModalBaixa"
                         data-titulo="{{ t.id }}" data-descricao="{{ t.descricao }}{% if t.rotulo_parcela %} ({{ t.rotulo_parcela }}){% endif %}"
                         data-saldo="{{ t.saldo|unlocalize }}" data-forma="{{ t.forma }}" data-conta="{{ t.conta_prevista_id|default:'' }}"
-                        data-tipo="{{ t.tipo }}">{% if t.tipo == 'PAGAR' %}Pagar{% else %}Receber{% endif %}</button>
+                        data-tipo="{{ t.tipo }}"><i class="fas fa-check"></i>{% if t.tipo == 'PAGAR' %}Pagar{% else %}Receber{% endif %}</button>
                 {% endif %}
-                <a href="{% url 'financeiro:titulo' t.id %}" class="ml-2 text-gray-500 text-xs hover:underline">abrir</a>
+                <a href="{% url 'financeiro:titulo' t.id %}" class="fin-acao"><i class="fas fa-arrow-up-right-from-square text-[10px]"></i>abrir</a>
+                </div>
             </td>
         </tr>
         {% empty %}
-        <tr><td colspan="9" class="text-center text-gray-400 py-10">Nenhum título com esse filtro.</td></tr>
+        <tr><td colspan="9" class="fin-vazio"><div class="fin-vazio-icone"><i class="fas fa-receipt"></i></div>Nenhum título com esse filtro.</td></tr>
         {% endfor %}
         </tbody>
     </table>
     </div>
     {% if pagina.has_other_pages %}
-    <div class="px-4 py-3 border-t border-gray-100 flex items-center justify-between text-sm">
-        <span class="text-gray-500">Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span>
+    <div class="px-4 py-3 border-t border-gray-100 flex items-center justify-between gap-2 text-sm flex-wrap">
+        <span class="text-gray-500">Página <strong class="text-gray-800">{{ pagina.number }}</strong> de {{ pagina.paginator.num_pages }}</span>
         <div class="flex gap-2">
-            {% if pagina.has_previous %}<a href="?{{ query }}&p={{ pagina.previous_page_number }}" class="fin-btn fin-btn-claro">Anterior</a>{% endif %}
-            {% if pagina.has_next %}<a href="?{{ query }}&p={{ pagina.next_page_number }}" class="fin-btn fin-btn-claro">Próxima</a>{% endif %}
+            {% if pagina.has_previous %}<a href="?{{ query }}&p={{ pagina.previous_page_number }}" class="fin-btn fin-btn-claro"><i class="fas fa-chevron-left text-xs"></i>Anterior</a>{% endif %}
+            {% if pagina.has_next %}<a href="?{{ query }}&p={{ pagina.next_page_number }}" class="fin-btn fin-btn-claro">Próxima<i class="fas fa-chevron-right text-xs"></i></a>{% endif %}
         </div>
     </div>
     {% endif %}
 </div>
 
+{% if pode.baixas_baixar %}
+{# ── Barra flutuante da seleção ── #}
+<div id="finBarraLote" class="fin-flutuante" aria-live="polite">
+    <div>
+        <span class="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center shrink-0"><i class="fas fa-check-double"></i></span>
+        <div class="min-w-0 flex-1 leading-tight">
+            <p class="text-sm"><strong id="finLoteN" class="tabular">0</strong> marcado(s)</p>
+            <p class="text-xs text-emerald-100">saldo <strong id="finLoteTotal" class="tabular text-white">R$ 0,00</strong></p>
+        </div>
+        <button type="button" class="fin-btn fin-btn-claro px-3" id="finLoteLimpar" title="Desmarcar todos"><i class="fas fa-xmark"></i><span class="hidden sm:inline">Limpar</span></button>
+        <button type="button" data-abrir="#finModalLote" class="fin-btn fin-btn-verde"><i class="fas fa-check-double"></i>Baixar<span class="hidden sm:inline"> marcados</span></button>
+    </div>
+</div>
+{% endif %}
+
 {# ── Baixa em lote ── #}
 <div class="fin-modal" id="finModalLote" role="dialog" aria-modal="true" aria-labelledby="finLoteTitulo">
     <div class="sm:max-w-md">
         <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-            <h3 id="finLoteTitulo" class="font-bold text-gray-900">Baixar os títulos marcados</h3>
+            <div class="min-w-0"><h3 id="finLoteTitulo" class="font-bold text-gray-900">Baixar os títulos marcados</h3>
+                <p class="text-xs text-gray-500" id="finLoteResumo"></p></div>
             <button type="button" data-fechar class="w-8 h-8 rounded-lg text-gray-400 hover:bg-gray-100" aria-label="Fechar"><i class="fas fa-xmark"></i></button>
         </div>
         <div class="p-5 space-y-3">
-            <p class="text-sm text-gray-600">Cada título é baixado pelo saldo, sem juros nem desconto. Para pagar com juros ou parcial, baixe um a um.</p>
+            <p class="text-sm text-gray-600 rounded-xl bg-gray-50 p-3"><i class="fas fa-circle-info text-gray-400 mr-1"></i>Cada título é baixado pelo saldo, sem juros nem desconto. Para pagar com juros ou parcial, baixe um a um.</p>
             <div><label class="fin-label">Data do pagamento</label><input type="date" name="data" value="{{ hoje|date:'Y-m-d' }}" class="fin-input" required></div>
             <div><label class="fin-label">Conta bancária</label>
                 <select name="conta" class="fin-input" required><option value="">Escolha…</option>{% for c in contas %}<option value="{{ c.id }}">{{ c.nome }}</option>{% endfor %}</select></div>
             <div><label class="fin-label">Forma</label>
                 <select name="forma" class="fin-input" required><option value="">Escolha…</option>{% for k, r in formas %}<option value="{{ k }}">{{ r }}</option>{% endfor %}</select></div>
-            {% if not contas %}<p class="text-sm text-amber-700">Cadastre uma conta bancária antes de baixar.</p>{% endif %}
+            {% if not contas %}<p class="text-sm text-amber-700"><i class="fas fa-triangle-exclamation mr-1"></i>Cadastre uma conta bancária antes de baixar.</p>{% endif %}
         </div>
         <div class="px-5 py-3 border-t border-gray-100 bg-gray-50 flex justify-end gap-2">
             <button type="button" data-fechar class="fin-btn fin-btn-claro">Cancelar</button>
@@ -148,6 +181,11 @@
 (function () {
     var urlBaixa = "{% url 'financeiro:titulo_baixar' 0 %}";
     window.finAoAbrir = function (modal, botao) {
+        if (modal.id === 'finModalLote') {
+            var r = resumo();
+            document.getElementById('finLoteResumo').textContent = r.n + ' título(s) · ' + window.Fin.brl(r.total);
+            return;
+        }
         if (modal.id !== 'finModalBaixa') return;
         var f = document.getElementById('finFormBaixa');
         f.action = urlBaixa.replace('/0/', '/' + botao.dataset.titulo + '/');
@@ -159,18 +197,47 @@
         f.dispatchEvent(new Event('input'));
     };
     var marcas = function () { return Array.prototype.slice.call(document.querySelectorAll('.fin-marca')); };
-    function atualizar() {
-        var marcadas = marcas().filter(function (c) { return c.checked; });
-        var barra = document.getElementById('finBarraLote');
-        if (!barra) return;
-        barra.classList.toggle('hidden', !marcadas.length);
-        document.getElementById('finLoteN').textContent = marcadas.length;
-        var total = marcadas.reduce(function (s, c) { return s + Number(c.dataset.saldo); }, 0);
-        document.getElementById('finLoteTotal').textContent = total.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
+    var visiveis = function () { return marcas().filter(function (c) { return !c.closest('tr').hidden; }); };
+    function resumo() {
+        var m = marcas().filter(function (c) { return c.checked; });
+        return {n: m.length, total: m.reduce(function (s, c) { return s + Number(c.dataset.saldo); }, 0)};
     }
-    document.addEventListener('change', function (e) { if (e.target.classList.contains('fin-marca')) atualizar(); });
+    var app = document.getElementById('finApp');
+    function atualizar() {
+        var barra = document.getElementById('finBarraLote');
+        marcas().forEach(function (c) { c.closest('tr').classList.toggle('fin-marcada', c.checked); });
+        if (!barra) return;
+        var r = resumo();
+        barra.classList.toggle('fin-visivel', r.n > 0);
+        app.style.paddingBottom = r.n ? '5.5rem' : '';
+        document.getElementById('finLoteN').textContent = r.n;
+        document.getElementById('finLoteTotal').textContent = window.Fin.brl(r.total);
+        var todos = document.getElementById('finTodos');
+        if (todos) {
+            var v = visiveis(), marcadas = v.filter(function (c) { return c.checked; }).length;
+            todos.checked = v.length > 0 && marcadas === v.length;
+            todos.indeterminate = marcadas > 0 && marcadas < v.length;
+        }
+    }
+    // Shift+clique marca o intervalo entre o último marcado e este.
+    var ultima = null;
+    document.addEventListener('click', function (e) {
+        var c = e.target.closest('.fin-marca');
+        if (!c) return;
+        if (e.shiftKey && ultima && ultima !== c) {
+            var v = visiveis(), a = v.indexOf(ultima), b = v.indexOf(c);
+            if (a >= 0 && b >= 0) v.slice(Math.min(a, b), Math.max(a, b) + 1).forEach(function (x) { x.checked = c.checked; });
+        }
+        ultima = c;
+        atualizar();
+    });
     var todos = document.getElementById('finTodos');
-    if (todos) todos.addEventListener('change', function () { marcas().forEach(function (c) { c.checked = todos.checked; }); atualizar(); });
+    if (todos) todos.addEventListener('change', function () { visiveis().forEach(function (c) { c.checked = todos.checked; }); atualizar(); });
+    var limpar = document.getElementById('finLoteLimpar');
+    if (limpar) limpar.addEventListener('click', function () { marcas().forEach(function (c) { c.checked = false; }); atualizar(); });
+    var busca = document.querySelector('[data-fin-filtrar="#finTabela"]');
+    if (busca) busca.finDepois = atualizar;
+    atualizar();
     if (new URLSearchParams(location.search).get('novo') === '1') {
         var botao = document.querySelector('[data-abrir="#finNovo"]');
         if (botao) botao.click();

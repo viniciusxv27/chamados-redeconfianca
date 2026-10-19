@@ -2,38 +2,57 @@
 {% block fin_titulo %}Acessos ao Financeiro{% endblock %}
 {% block fin_cabecalho %}Quem entra no Financeiro{% endblock %}
 {% block fin_subtitulo %}O SUPERADMIN tem tudo. Aqui ele libera, pessoa por pessoa, cada parte e cada ação — e, se quiser, só algumas lojas.{% endblock %}
-{% block fin_acoes %}<button type="button" data-abrir="#finNovoAcesso" class="fin-btn fin-btn-verde"><i class="fas fa-user-plus"></i>Liberar alguém</button>{% endblock %}
+{% block fin_acoes %}<button type="button" data-abrir="#finNovoAcesso" data-fin-atalho-novo class="fin-btn fin-btn-verde"><i class="fas fa-user-plus"></i>Liberar alguém</button>{% endblock %}
 
 {% block fin_css %}
 <style>
-    .fin-matriz td, .fin-matriz th { padding:.4rem .6rem; border-bottom:1px solid #F3F4F6; font-size:.8125rem; }
-    .fin-matriz th { text-align:left; color:#6B7280; font-size:11px; text-transform:uppercase; font-weight:600; }
+    .fin-matriz td, .fin-matriz th { padding:.5rem .6rem; border-bottom:1px solid var(--fin-borda-2); font-size:.8125rem; }
+    .fin-matriz th { text-align:left; color:var(--fin-texto-3); font-size:11px; text-transform:uppercase; font-weight:600; }
+    .fin-matriz tbody tr:hover td { background:var(--fin-sup-2); }
+    @media (max-width:639px) {
+        .fin-matriz, .fin-matriz tbody, .fin-matriz tr, .fin-matriz td { display:block; width:auto !important; }
+        .fin-matriz thead { display:none; }
+        .fin-matriz tr { border:1px solid var(--fin-borda); border-radius:.75rem; margin-bottom:.6rem; padding:.25rem 0; }
+        .fin-matriz td { border:0; padding:.3rem .75rem; }
+    }
+    .fin-acesso summary::-webkit-details-marker { display:none; }
+    .fin-acesso[open] .fin-acesso-seta { transform:rotate(180deg); }
 </style>
 {% endblock %}
 
 {% block fin_conteudo %}
-<div class="space-y-4">
+{% if liberados|length > 3 %}
+<div class="fin-ferramentas mb-3">
+    <div class="fin-card p-2.5 sm:p-3 flex items-center gap-2">
+        <label class="fin-busca flex-1 min-w-0"><i class="fas fa-magnifying-glass"></i>
+            <input type="search" class="fin-input" placeholder="Filtrar pessoas liberadas…" aria-label="Filtrar pessoas liberadas" data-fin-filtrar="#finLiberados" data-fin-atalho-busca autocomplete="off"><span class="fin-kbd" aria-hidden="true">/</span></label>
+        <span class="fin-contagem hidden sm:inline" data-fin-contagem="#finLiberados" aria-live="polite"></span>
+    </div>
+</div>
+{% endif %}
+<div class="space-y-3 fin-entra" id="finLiberados" data-fin-itens="details">
     {% for a in liberados %}
-    <details class="fin-card overflow-hidden" id="acesso-{{ a.id }}" {% if request.GET.abrir == a.id|stringformat:'s' %}open{% endif %}>
-        <summary class="px-5 py-3 flex items-center justify-between gap-3 cursor-pointer list-none">
-            <div class="min-w-0">
+    <details class="fin-card overflow-hidden fin-acesso" id="acesso-{{ a.id }}" data-fin-busca="{{ a.user.get_full_name }} {{ a.user.email }} {{ a.user.sector.name|default:'' }} {{ a.observacao }}" {% if request.GET.abrir == a.id|stringformat:'s' %}open{% endif %}>
+        <summary class="px-4 sm:px-5 py-3 flex items-center justify-between gap-3 cursor-pointer list-none hover:bg-gray-50/60 transition-colors">
+            <span class="w-10 h-10 rounded-full shrink-0 inline-flex items-center justify-center font-bold text-sm {% if a.ativo %}bg-emerald-50 text-emerald-700{% else %}bg-gray-100 text-gray-500{% endif %}" aria-hidden="true">{{ a.user.get_full_name|default:a.user.email|slice:":1"|upper }}</span>
+            <div class="min-w-0 flex-1">
                 <p class="font-semibold text-gray-900">{{ a.user.get_full_name|default:a.user.email }} {% if not a.ativo %}<span class="fin-chip bg-gray-100 text-gray-600">Suspenso</span>{% endif %}</p>
                 <p class="text-[11px] text-gray-500">{% if a.user.sector %}{{ a.user.sector.name }} · {% endif %}{{ a.chaves|length }} permissão(ões) · {% if a.ids_lojas %}{{ a.ids_lojas|length }} loja(s){% else %}todas as lojas{% endif %}
                     · por {{ a.concedido_por.get_full_name|default:"—" }} em {{ a.atualizado_em|date:"d/m/Y H:i" }}{% if a.observacao %} · {{ a.observacao }}{% endif %}</p>
             </div>
-            <span class="text-xs text-emerald-700 whitespace-nowrap">editar <i class="fas fa-chevron-down text-[9px]"></i></span>
+            <span class="fin-acao fin-acao-verde shrink-0">editar <i class="fas fa-chevron-down text-[9px] fin-acesso-seta transition-transform"></i></span>
         </summary>
         <form method="post" class="border-t border-gray-100">
             {% csrf_token %}<input type="hidden" name="user" value="{{ a.user_id }}">
             {% include 'financeiro/_matriz_acesso.html' with chaves=a.chaves ids_lojas=a.ids_lojas acesso=a %}
             <div class="px-5 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between gap-2 flex-wrap">
-                <button type="submit" name="remover" value="1" class="text-sm text-red-600 hover:underline" onclick="return confirm('Tirar o acesso de {{ a.user.get_full_name|default:a.user.email|escapejs }} ao Financeiro?');" data-livre>Tirar acesso</button>
+                <button type="submit" name="remover" value="1" class="fin-acao fin-acao-perigo" data-fin-confirmar="A pessoa deixa de entrar no Financeiro. Dá para liberar de novo depois." data-fin-titulo="Tirar o acesso de {{ a.user.get_full_name|default:a.user.email }} ao Financeiro?" data-fin-botao="Tirar acesso" data-livre><i class="fas fa-user-slash text-[10px]"></i>Tirar acesso</button>
                 <button type="submit" class="fin-btn fin-btn-verde"><i class="fas fa-check"></i>Salvar</button>
             </div>
         </form>
     </details>
     {% empty %}
-    <div class="fin-card p-10 text-center text-gray-500"><i class="fas fa-user-shield text-4xl text-gray-300 mb-3"></i><p>Ninguém liberado ainda — só o SUPERADMIN entra no Financeiro.</p></div>
+    <div class="fin-card fin-vazio" data-fin-nao-filtra><div class="fin-vazio-icone"><i class="fas fa-user-shield"></i></div><p>Ninguém liberado ainda — só o SUPERADMIN entra no Financeiro.</p></div>
     {% endfor %}
 </div>
 
@@ -48,7 +67,7 @@
                 <input type="search" id="finBuscaPessoa" placeholder="Buscar por nome ou setor…" class="fin-input mb-2">
                 <div class="border border-gray-200 rounded-lg max-h-48 overflow-y-auto divide-y divide-gray-50">
                     {% for p in candidatos %}
-                    <label data-pessoa="{{ p.get_full_name|default:p.email|lower }} {{ p.sector.name|default:''|lower }}" class="flex items-center gap-2 px-3 py-1.5 hover:bg-emerald-50/50 cursor-pointer text-sm">
+                    <label data-pessoa="{{ p.get_full_name|default:p.email|lower }} {{ p.sector.name|default:''|lower }}" class="flex items-center gap-2 px-3 py-2 min-h-[40px] hover:bg-emerald-50/50 cursor-pointer text-sm has-[:checked]:bg-emerald-50">
                         <input type="radio" name="user" value="{{ p.id }}" required class="accent-emerald-600"><span class="truncate">{{ p.get_full_name|default:p.email }}</span>
                         {% if p.sector %}<span class="text-[11px] text-gray-400 truncate">{{ p.sector.name }}</span>{% endif %}</label>
                     {% endfor %}

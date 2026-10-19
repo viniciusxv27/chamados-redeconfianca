@@ -1,0 +1,76 @@
+{# Utilitários JS compartilhados pelas telas do /fibras: toast, escape, contadores animados, painel de filtros, mensagens do Django. #}
+<div class="fb-toast" id="fbToast" role="status" aria-live="polite"><i class="fas fa-circle-check"></i><span></span></div>
+<script>
+window.FB = window.FB || (function () {
+  var toastTimer = null;
+  var reduz = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var fmtBRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+  var fmtInt = new Intl.NumberFormat('pt-BR');
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function toast(msg, ok) {
+    var t = document.getElementById('fbToast');
+    if (!t) return;
+    t.querySelector('span').textContent = msg;
+    t.classList.toggle('erro', ok === false);
+    t.querySelector('i').className = ok === false ? 'fas fa-circle-exclamation' : 'fas fa-circle-check';
+    t.classList.add('visivel');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.classList.remove('visivel'); }, 3200);
+  }
+  function csrf() {
+    var v = document.cookie.split('; ').find(function (r) { return r.indexOf('csrftoken=') === 0; });
+    if (v) return decodeURIComponent(v.split('=')[1]);
+    var i = document.querySelector('input[name=csrfmiddlewaretoken]');
+    return i ? i.value : '';
+  }
+  function brl(n) { return fmtBRL.format(Number(n) || 0); }
+  function int(n) { return fmtInt.format(Math.round(Number(n) || 0)); }
+  // Anima o texto do elemento de "de" até "para"; formato: 'int' | 'brl' | 'pct'
+  function contar(el, para, formato, de) {
+    if (!el) return;
+    var f = formato === 'brl' ? brl : formato === 'pct' ? function (n) { return (Math.round(n * 10) / 10).toLocaleString('pt-BR') + '%'; } : int;
+    var ini = typeof de === 'number' ? de : Number(el.dataset.atual || 0);
+    el.dataset.atual = para;
+    if (reduz || ini === para) { el.textContent = f(para); return; }
+    var t0 = null, dur = 700;
+    function passo(ts) {
+      if (t0 === null) t0 = ts;
+      var p = Math.min(1, (ts - t0) / dur), e = 1 - Math.pow(1 - p, 3);
+      el.textContent = f(ini + (para - ini) * e);
+      if (p < 1) requestAnimationFrame(passo); else el.textContent = f(para);
+    }
+    requestAnimationFrame(passo);
+  }
+  function guardar(chave, valor) { try { localStorage.setItem('fibras:' + chave, JSON.stringify(valor)); } catch (e) {} }
+  function ler(chave, padrao) { try { var v = localStorage.getItem('fibras:' + chave); return v === null ? padrao : JSON.parse(v); } catch (e) { return padrao; } }
+  function normalizar(s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
+
+  // Painel de filtros recolhível (celular)
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-fb-toggle]');
+    if (!b) return;
+    var alvo = document.getElementById(b.getAttribute('data-fb-toggle'));
+    if (!alvo) return;
+    var aberto = alvo.classList.toggle('aberto');
+    b.setAttribute('aria-expanded', aberto ? 'true' : 'false');
+  });
+
+  // Mensagens do Django viram toast (o banner do base.html continua aparecendo)
+  document.addEventListener('DOMContentLoaded', function () {
+    var m = document.getElementById('fb-mensagens');
+    if (!m) return;
+    try {
+      var lista = JSON.parse(m.textContent);
+      if (lista.length) toast(lista[lista.length - 1].texto, lista[lista.length - 1].tag !== 'error');
+    } catch (e) {}
+  });
+
+  return { esc: esc, toast: toast, csrf: csrf, brl: brl, int: int, contar: contar, guardar: guardar, ler: ler, normalizar: normalizar };
+})();
+</script>
+{% if messages %}<script type="application/json" id="fb-mensagens">[{% for m in messages %}{"texto": "{{ m|escapejs }}", "tag": "{{ m.tags|escapejs }}"}{% if not forloop.last %},{% endif %}{% endfor %}]</script>{% endif %}

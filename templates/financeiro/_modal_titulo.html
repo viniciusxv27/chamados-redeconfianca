@@ -7,7 +7,7 @@ Lançar (sem `titulo`) ou editar (com `titulo`) um título. Parcelamento só ao 
               action="{% if titulo %}{% url 'financeiro:titulo_editar' titulo.id %}{% else %}{% url 'financeiro:titulo_novo' area %}{% endif %}">
             {% csrf_token %}<input type="hidden" name="voltar" value="{{ request.get_full_path }}">
             <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-                <h3 id="finTituloForm" class="font-bold text-gray-900">{% if titulo %}Editar título{% elif tipo == 'PAGAR' %}Nova conta a pagar{% else %}Nova conta a receber{% endif %}</h3>
+                <h3 id="finTituloForm" class="font-bold text-gray-900 flex items-center gap-2"><span class="fin-kpi-icone {% if tipo == 'PAGAR' or titulo.tipo == 'PAGAR' %}bg-rose-50 text-rose-600{% else %}bg-emerald-50 text-emerald-600{% endif %}"><i class="fas {% if titulo %}fa-pen{% else %}fa-plus{% endif %}"></i></span>{% if titulo %}Editar título{% elif tipo == 'PAGAR' %}Nova conta a pagar{% else %}Nova conta a receber{% endif %}</h3>
                 <button type="button" data-fechar class="w-8 h-8 rounded-lg text-gray-400 hover:bg-gray-100" aria-label="Fechar"><i class="fas fa-xmark"></i></button>
             </div>
             <div class="p-5 grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -30,6 +30,7 @@ Lançar (sem `titulo`) ou editar (com `titulo`) um título. Parcelamento só ao 
                     <label class="flex items-center gap-1.5"><input type="radio" name="valor_modo" value="total" checked class="accent-emerald-600">o valor é o total</label>
                     <label class="flex items-center gap-1.5"><input type="radio" name="valor_modo" value="parcela" class="accent-emerald-600">é o de cada parcela</label>
                 </div>
+                <p class="col-span-2 sm:col-span-4 text-xs rounded-lg bg-emerald-50 text-emerald-800 px-3 py-2" id="finPreviaParcelas" hidden aria-live="polite"></p>
                 {% endif %}
                 <div class="col-span-2"><label class="fin-label">Plano de contas</label>
                     <select name="plano" class="fin-input"><option value="">—</option>
@@ -48,7 +49,7 @@ Lançar (sem `titulo`) ou editar (com `titulo`) um título. Parcelamento só ao 
                 <div><label class="fin-label">Chave PIX do favorecido</label><input name="pix_favorecido" maxlength="120" value="{{ titulo.pix_favorecido|default:'' }}" class="fin-input"></div>
                 <div class="col-span-2 sm:col-span-4"><label class="fin-label">Observação</label><textarea name="observacao" rows="2" class="fin-input">{{ titulo.observacao|default:'' }}</textarea></div>
                 <div class="col-span-2 sm:col-span-4"><label class="fin-label">Anexo (nota, boleto, contrato){% if titulo.anexo %} — já tem: {{ titulo.anexo_nome }}{% endif %}</label>
-                    <input type="file" name="anexo" accept=".pdf,.jpg,.jpeg,.png,.webp,.xml" class="text-sm"></div>
+                    <input type="file" name="anexo" accept=".pdf,.jpg,.jpeg,.png,.webp,.xml" class="block w-full text-sm text-gray-600 file:mr-3 file:rounded-lg file:border-0 file:bg-emerald-50 file:px-3 file:py-2 file:text-emerald-700 file:font-semibold hover:file:bg-emerald-100"></div>
             </div>
             <div class="px-5 py-3 border-t border-gray-100 bg-gray-50 flex justify-end gap-2">
                 <button type="button" data-fechar class="fin-btn fin-btn-claro">Cancelar</button>
@@ -57,3 +58,23 @@ Lançar (sem `titulo`) ou editar (com `titulo`) um título. Parcelamento só ao 
         </form>
     </div>
 </div>
+{% if not titulo %}
+<script>
+(function () {
+    /* Prévia das parcelas enquanto digita (só mostra; quem calcula de verdade é o servidor). */
+    var modal = document.getElementById('finNovo');
+    if (!modal) return;
+    var f = modal.querySelector('form'), previa = document.getElementById('finPreviaParcelas');
+    function num(v) { v = (v || '').trim().replace(/\s|R\$/g, ''); if (v.indexOf(',') >= 0) v = v.replace(/\./g, '').replace(',', '.'); return Number(v) || 0; }
+    function pintar() {
+        var n = parseInt(f.parcelas.value, 10) || 1, v = num(f.valor.value);
+        var modo = (f.querySelector('[name=valor_modo]:checked') || {}).value;
+        if (n < 2 || !v) { previa.hidden = true; return; }
+        var cada = modo === 'parcela' ? v : v / n, total = modo === 'parcela' ? v * n : v;
+        previa.textContent = n + ' parcelas de ' + window.Fin.brl(cada) + ' · total ' + window.Fin.brl(total);
+        previa.hidden = false;
+    }
+    f.addEventListener('input', pintar); f.addEventListener('change', pintar);
+})();
+</script>
+{% endif %}

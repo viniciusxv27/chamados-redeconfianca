@@ -1,0 +1,236 @@
+{# Linguagem visual do módulo /fibras (mesma da tela de Validação: laranja #FF6B35, cartões arredondados, segmentados, tags). #}
+{# Tudo escopado em .fb para não vazar para o portal; variantes html.dark redefinem só as variáveis. #}
+<style>
+.fb {
+  --fb-pri: #FF6B35; --fb-pri-esc: #E85A26; --fb-pri-clara: #FFEFE8; --fb-pri-suave: rgba(255,107,53,.12);
+  --fb-bg: #F5F5F7; --fb-card: #FFFFFF; --fb-card-2: #FAFAFC; --fb-texto: #1D1D1F; --fb-suave: #86868B; --fb-suave-2: #6E6E73;
+  --fb-linha: rgba(0,0,0,.08); --fb-campo: #F2F2F7; --fb-campo-2: #E8E8ED; --fb-hover: #F7F7FA;
+  --fb-verde: #1E9E4A; --fb-vermelho: #E0352B; --fb-amarelo: #B25E00; --fb-azul: #0071E3; --fb-roxo: #6B4FA0;
+  --fb-raio: 14px; --fb-raio-lg: 20px;
+  --fb-sombra: 0 1px 2px rgba(0,0,0,.04), 0 4px 16px rgba(0,0,0,.04);
+  --fb-sombra-lg: 0 12px 40px rgba(0,0,0,.12);
+  --fb-ease: cubic-bezier(.2,.8,.2,1);
+  /* cores por status */
+  --st-agendado: #0071E3; --st-pendente: #E08A00; --st-problema: #E0352B; --st-instalado: #1E9E4A;
+  --st-cancelado: #6E6E73; --st-nao_localizado: #7C4DCC;
+  background: var(--fb-bg); color: var(--fb-texto); border-radius: 18px; padding: 22px 26px 40px;
+  font: 14px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", Roboto, sans-serif;
+  letter-spacing: -0.005em; -webkit-font-smoothing: antialiased; min-width: 0; max-width: 100%;
+}
+html.dark .fb {
+  --fb-bg: #12161f; --fb-card: #1b2130; --fb-card-2: #1f2636; --fb-texto: #e7eaf0; --fb-suave: #8b93a5; --fb-suave-2: #b6bdcc;
+  --fb-linha: rgba(255,255,255,.08); --fb-campo: #232a3b; --fb-campo-2: #2b3346; --fb-hover: #232a3b;
+  --fb-pri-clara: rgba(255,107,53,.16);
+  --fb-sombra: 0 1px 2px rgba(0,0,0,.3), 0 4px 16px rgba(0,0,0,.25);
+  --fb-sombra-lg: 0 12px 40px rgba(0,0,0,.5);
+  --st-agendado: #4A9EFF; --st-pendente: #F5A524; --st-problema: #FF6961; --st-instalado: #34C759;
+  --st-cancelado: #9AA3B5; --st-nao_localizado: #A98BF0;
+  --fb-verde: #34C759; --fb-vermelho: #FF6961; --fb-amarelo: #F5A524; --fb-azul: #4A9EFF; --fb-roxo: #A98BF0;
+}
+.fb *, .fb *::before, .fb *::after { box-sizing: border-box; }
+.fb [hidden] { display: none !important; }
+.fb a { color: inherit; text-decoration: none; }
+.fb button, .fb input, .fb select, .fb textarea { font-family: inherit; letter-spacing: inherit; color: inherit; }
+.fb ::selection { background: var(--fb-pri-suave); }
+.fb :focus-visible { outline: 3px solid rgba(255,107,53,.5); outline-offset: 2px; border-radius: 8px; }
+@keyframes fb-entrar { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes fb-girar { to { transform: rotate(360deg); } }
+@keyframes fb-brilho { 0% { background-position: -200px 0; } 100% { background-position: calc(200px + 100%) 0; } }
+@media (prefers-reduced-motion: reduce) { .fb *, .fb *::before, .fb *::after { animation: none !important; transition: none !important; } }
+
+/* Status: cada elemento com data-st recebe --st (cor) */
+.fb [data-st] { --st: var(--fb-suave-2); }
+.fb [data-st="agendado"] { --st: var(--st-agendado); }
+.fb [data-st="pendente"] { --st: var(--st-pendente); }
+.fb [data-st="problema"] { --st: var(--st-problema); }
+.fb [data-st="instalado"] { --st: var(--st-instalado); }
+.fb [data-st="cancelado"] { --st: var(--st-cancelado); }
+.fb [data-st="nao_localizado"] { --st: var(--st-nao_localizado); }
+.fb .st-ponto { width: 9px; height: 9px; border-radius: 50%; background: var(--st); flex: 0 0 9px; box-shadow: 0 0 0 3px color-mix(in srgb, var(--st) 18%, transparent); }
+.fb .st-pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 11px; border-radius: 980px; font-size: 12px; font-weight: 600;
+  background: color-mix(in srgb, var(--st) 14%, transparent); color: var(--st); white-space: nowrap; }
+.fb .st-pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--st); }
+
+/* Cabeçalho da página */
+.fb-cab { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; animation: fb-entrar .45s var(--fb-ease); }
+.fb-cab h1 { font-size: 30px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.15; margin: 0; display: flex; align-items: center; gap: 12px; }
+.fb-cab h1 .fb-ico { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; font-size: 17px; color: #fff;
+  background: linear-gradient(135deg, #FF7A45, #FF5A1F); box-shadow: 0 6px 16px rgba(255,107,53,.3); flex: 0 0 40px; }
+.fb-cab p { margin: 6px 0 0; color: var(--fb-suave-2); font-size: 14px; }
+.fb-cab .fb-dica { display: inline-flex; align-items: center; gap: 6px; margin-left: 6px; color: var(--fb-pri); font-weight: 600; font-size: 12.5px; }
+.fb-voltar { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; color: var(--fb-pri) !important; margin-bottom: 8px; }
+.fb-voltar:hover { text-decoration: underline; }
+.fb-barra-topo { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; }
+.fb-acoes { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+/* Segmentado (navegação entre telas do módulo) */
+.fb-seg { display: inline-flex; padding: 3px; background: var(--fb-campo-2); border-radius: 11px; gap: 2px; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.fb-seg::-webkit-scrollbar { display: none; }
+.fb-seg a, .fb-seg button { border: 0; background: transparent; color: var(--fb-suave-2); font-size: 13px; font-weight: 500; padding: 6px 14px;
+  border-radius: 8px; transition: all .2s var(--fb-ease); display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; cursor: pointer; }
+.fb-seg a:hover, .fb-seg button:hover { color: var(--fb-texto); background: rgba(255,255,255,.5); }
+html.dark .fb-seg a:hover, html.dark .fb-seg button:hover { background: rgba(255,255,255,.06); }
+.fb-seg .ativo, .fb-seg [aria-current="page"], .fb-seg [aria-pressed="true"] { background: var(--fb-card); color: var(--fb-texto); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.12), 0 1px 1px rgba(0,0,0,.04); }
+.fb-seg .fb-seg-destaque { color: var(--fb-pri); }
+
+/* Botões */
+.fb-btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; font-size: 13px; font-weight: 500; border: 0; cursor: pointer;
+  background: var(--fb-card); color: var(--fb-texto) !important; border-radius: 980px; padding: 7px 15px; white-space: nowrap; text-decoration: none;
+  box-shadow: inset 0 0 0 1px var(--fb-linha), var(--fb-sombra); transition: all .2s var(--fb-ease); line-height: 1.3; }
+.fb-btn:hover { background: var(--fb-hover); transform: translateY(-1px); }
+.fb-btn:active { transform: scale(.97); }
+.fb-btn.primario { background: var(--fb-pri); color: #fff !important; font-weight: 600; box-shadow: 0 2px 8px rgba(255,107,53,.28); }
+.fb-btn.primario:hover { background: var(--fb-pri-esc); }
+.fb-btn.sucesso { background: color-mix(in srgb, var(--fb-verde) 14%, transparent); color: var(--fb-verde) !important; box-shadow: none; font-weight: 600; }
+.fb-btn.sucesso:hover { background: var(--fb-verde); color: #fff !important; }
+.fb-btn.perigo { background: color-mix(in srgb, var(--fb-vermelho) 12%, transparent); color: var(--fb-vermelho) !important; box-shadow: none; font-weight: 600; }
+.fb-btn.perigo:hover { background: var(--fb-vermelho); color: #fff !important; }
+.fb-btn.roxo { background: color-mix(in srgb, #6366F1 14%, transparent); color: #4F46E5 !important; box-shadow: none; font-weight: 600; }
+html.dark .fb-btn.roxo { color: #A5B4FC !important; }
+.fb-btn.roxo.on { background: #4F46E5; color: #fff !important; }
+.fb-btn.leve { background: var(--fb-campo); box-shadow: none; }
+.fb-btn.leve:hover { background: var(--fb-campo-2); }
+.fb-btn.pequeno { padding: 4px 11px; font-size: 12px; }
+.fb-btn.icone { width: 32px; height: 32px; padding: 0; border-radius: 10px; }
+.fb-btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+.fb-btn .fb-badge { background: var(--fb-pri); color: #fff; font-size: 10.5px; font-weight: 700; border-radius: 980px; padding: 0 6px; min-width: 18px; text-align: center; }
+
+/* Cartões */
+.fb-card { background: var(--fb-card); border-radius: var(--fb-raio-lg); padding: 20px 22px; box-shadow: var(--fb-sombra); margin-bottom: 18px; animation: fb-entrar .45s var(--fb-ease) both; min-width: 0; }
+.fb-card-cab { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.fb-card-cab h2, .fb-card-cab h3 { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; margin: 0; display: flex; align-items: center; gap: 10px; }
+.fb-card-cab h2 > i, .fb-card-cab h3 > i, .fb-ico-sm { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; font-size: 13px;
+  background: var(--fb-pri-suave); color: var(--fb-pri); flex: 0 0 30px; }
+.fb-card-cab p { margin: 2px 0 0; color: var(--fb-suave); font-size: 12.5px; }
+.fb-mut { color: var(--fb-suave); font-size: 12.5px; }
+
+/* Campos */
+.fb-campo, .fb select.fb-campo { width: 100%; padding: 9px 12px; border: 0; border-radius: 10px; background: var(--fb-campo); color: var(--fb-texto); font-size: 13.5px; transition: box-shadow .15s; }
+.fb-campo::placeholder { color: var(--fb-suave); }
+.fb-campo:focus { outline: none; box-shadow: 0 0 0 3.5px rgba(255,107,53,.28); }
+html.dark .fb .fb-campo { background-color: var(--fb-campo); color: var(--fb-texto); }
+html.dark .fb .fb-busca .fb-campo { background-color: var(--fb-card); }
+.fb-rotulo { display: block; font-size: 12px; font-weight: 500; color: var(--fb-suave-2); margin-bottom: 5px; }
+.fb-busca { position: relative; flex: 1 1 260px; min-width: 0; max-width: 460px; }
+.fb-busca i.fa-magnifying-glass { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--fb-suave); font-size: 13px; pointer-events: none; }
+.fb-busca .fb-campo { padding-left: 34px; padding-right: 64px; background: var(--fb-card); box-shadow: inset 0 0 0 1px var(--fb-linha); }
+.fb-busca .fb-campo:focus { box-shadow: inset 0 0 0 1px var(--fb-pri), 0 0 0 3.5px rgba(255,107,53,.2); }
+.fb-busca kbd { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font: 600 11px/1 inherit; color: var(--fb-suave); background: var(--fb-campo);
+  border-radius: 6px; padding: 4px 7px; }
+.fb-busca .fb-limpar { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); border: 0; background: var(--fb-campo); color: var(--fb-suave-2);
+  width: 26px; height: 26px; border-radius: 8px; cursor: pointer; }
+
+/* Painel de filtros do servidor (recolhe no celular) */
+.fb-filtros { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; align-items: end; }
+.fb-filtros .fb-filtros-acoes { display: flex; gap: 8px; align-items: center; }
+.fb-filtro-toggle { display: none; }
+.fb-recolhivel:not(.aberto) { display: none; }
+.fb-recolhivel.aberto { animation: fb-entrar .3s var(--fb-ease); }
+@media (max-width: 767px) {
+  .fb-filtro-toggle { display: inline-flex; }
+  .fb-filtros-painel:not(.aberto) { display: none; }
+}
+
+/* Tags (assertividade, B2B etc. — mesmas cores da Validação) */
+.fb-tag { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 980px;
+  background: var(--fb-campo); color: var(--fb-suave-2); white-space: nowrap; line-height: 1.5; }
+.fb-tag.alta { background: #E3F5E8; color: #1E9E4A; }
+.fb-tag.media { background: #FFF4E0; color: #B25E00; }
+.fb-tag.baixa { background: #FDEBDD; color: #C2501A; }
+.fb-tag.manual { background: #E5F0FC; color: #0071E3; }
+.fb-tag.nl { background: #FDECEB; color: #E0352B; }
+.fb-tag.b2b { background: #EFEAF7; color: #6B4FA0; }
+.fb-tag.aviso { background: #FFF4E0; color: #B25E00; }
+.fb-tag.novo { background: #E0E7FF; color: #4338CA; }
+html.dark .fb-tag.alta { background: rgba(52,199,89,.16); color: #5EDB82; }
+html.dark .fb-tag.media { background: rgba(245,165,36,.16); color: #F5B54A; }
+html.dark .fb-tag.baixa { background: rgba(255,140,80,.16); color: #FF9C66; }
+html.dark .fb-tag.manual { background: rgba(74,158,255,.16); color: #7DB8FF; }
+html.dark .fb-tag.nl { background: rgba(255,105,97,.16); color: #FF8A84; }
+html.dark .fb-tag.b2b { background: rgba(169,139,240,.18); color: #C3ADFF; }
+html.dark .fb-tag.aviso { background: rgba(245,165,36,.16); color: #F5B54A; }
+html.dark .fb-tag.novo { background: rgba(129,140,248,.2); color: #A5B4FC; }
+.fb-tag i { font-size: 9px; }
+
+/* KPIs */
+.fb-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 18px; }
+.fb-kpi { position: relative; text-align: left; border: 0; background: var(--fb-card); border-radius: var(--fb-raio-lg); padding: 14px 16px 14px 18px;
+  box-shadow: var(--fb-sombra); min-width: 0; cursor: pointer; overflow: hidden; color: var(--fb-texto) !important; display: block;
+  transition: transform .3s var(--fb-ease), box-shadow .3s; animation: fb-entrar .45s var(--fb-ease) both; }
+.fb-kpi::before { content: ""; position: absolute; left: 0; top: 14px; bottom: 14px; width: 3px; border-radius: 0 3px 3px 0; background: var(--st, var(--fb-pri)); }
+.fb-kpi:hover { transform: translateY(-2px); box-shadow: var(--fb-sombra-lg); }
+.fb-kpi.ativo { box-shadow: inset 0 0 0 2px var(--st, var(--fb-pri)), var(--fb-sombra-lg); }
+.fb-kpi-topo { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.fb-kpi-topo span { color: var(--fb-suave-2); font-size: 12px; font-weight: 500; line-height: 1.25; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.fb-kpi-topo i { width: 26px; height: 26px; flex: 0 0 26px; border-radius: 8px; display: grid; place-items: center; font-size: 11px;
+  background: color-mix(in srgb, var(--st, var(--fb-pri)) 14%, transparent); color: var(--st, var(--fb-pri)); }
+.fb-kpi b { display: block; margin-top: 6px; font-size: 26px; font-weight: 700; letter-spacing: -0.025em; font-variant-numeric: tabular-nums; line-height: 1.15; white-space: nowrap; }
+.fb-kpi small { display: block; margin-top: 3px; font-size: 12px; color: var(--fb-suave); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fb-kpi.destaque { background: linear-gradient(135deg, #FF7A45, #FF5A1F); color: #fff !important; }
+.fb-kpi.destaque::before { display: none; }
+.fb-kpi.destaque .fb-kpi-topo span, .fb-kpi.destaque small { color: rgba(255,255,255,.88); }
+.fb-kpi.destaque .fb-kpi-topo i { background: rgba(255,255,255,.2); color: #fff; }
+.fb-kpi .fb-kpi-bar { height: 4px; border-radius: 980px; background: var(--fb-campo); margin-top: 10px; overflow: hidden; }
+.fb-kpi .fb-kpi-bar span { display: block; height: 100%; border-radius: inherit; background: var(--st, var(--fb-pri)); width: 0; transition: width .9s var(--fb-ease); }
+
+/* Barra de proporção por status */
+.fb-prop { display: flex; height: 8px; border-radius: 980px; overflow: hidden; background: var(--fb-campo); margin: -6px 0 18px; }
+.fb-prop span { height: 100%; background: var(--st); transition: width .6s var(--fb-ease); }
+
+/* Info tiles */
+.fb-grade-info { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+.fb-info { background: var(--fb-campo); border-radius: 12px; padding: 10px 12px; min-width: 0; }
+.fb-info dt, .fb-info > span { display: block; font-size: 11.5px; color: var(--fb-suave); }
+.fb-info dd, .fb-info > b { display: block; margin: 0; font-size: 13.5px; font-weight: 600; overflow-wrap: anywhere; }
+.fb-info.larga { grid-column: 1 / -1; }
+
+/* Avisos */
+.fb-aviso { display: flex; gap: 12px; align-items: flex-start; padding: 12px 16px; border-radius: var(--fb-raio); background: #FFF8EC; font-size: 13px; margin-top: 14px; }
+.fb-aviso > i { color: #E08A00; margin-top: 3px; }
+.fb-aviso.erro { background: #FDECEB; } .fb-aviso.erro > i { color: var(--fb-vermelho); }
+.fb-aviso.info { background: #EEF5FD; } .fb-aviso.info > i { color: var(--fb-azul); }
+html.dark .fb-aviso { background: rgba(245,165,36,.1); }
+html.dark .fb-aviso.erro { background: rgba(255,105,97,.1); }
+html.dark .fb-aviso.info { background: rgba(74,158,255,.1); }
+.fb-aviso b.fb-aviso-tit { display: block; font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--fb-suave-2); margin-bottom: 2px; }
+
+/* Vazio / skeleton */
+.fb-vazio { text-align: center; padding: 28px 14px; color: var(--fb-suave); font-size: 12.5px; }
+.fb-vazio i { font-size: 18px; color: var(--fb-pri); background: var(--fb-pri-clara); width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; margin: 0 auto 10px; }
+.fb-vazio b { display: block; color: var(--fb-texto); font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+.fb-skel { border-radius: 12px; background: linear-gradient(90deg, var(--fb-campo) 0, var(--fb-campo-2) 40px, var(--fb-campo) 80px) no-repeat; background-size: 200px 100%;
+  background-color: var(--fb-campo); animation: fb-brilho 1.2s linear infinite; }
+
+/* Toast */
+.fb-toast { position: fixed; left: 50%; bottom: 28px; transform: translate(-50%, 20px); opacity: 0; pointer-events: none; z-index: 80;
+  background: rgba(29,29,31,.9); color: #fff; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  padding: 11px 18px; border-radius: 14px; font-size: 13px; font-weight: 500; box-shadow: 0 12px 40px rgba(0,0,0,.25);
+  transition: all .35s cubic-bezier(.2,.8,.2,1); display: flex; align-items: center; gap: 10px; max-width: min(640px, calc(100vw - 32px));
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+.fb-toast i { color: #34C759; }
+.fb-toast.erro i { color: #FF6961; }
+.fb-toast.visivel { opacity: 1; transform: translate(-50%, 0); }
+
+/* Diálogo (pré-visualização) */
+.fb-dialog { border: 0; padding: 0; color: var(--fb-texto); background: var(--fb-card); border-radius: 22px 0 0 22px; margin: 0 0 0 auto;
+  height: 100vh; max-height: 100vh; width: min(520px, 100vw); max-width: none; box-shadow: 0 30px 80px rgba(0,0,0,.28); }
+.fb-dialog[open] { display: flex; flex-direction: column; animation: fb-painel .35s var(--fb-ease); }
+.fb-dialog::backdrop { background: rgba(0,0,0,.25); backdrop-filter: blur(5px); }
+@keyframes fb-painel { from { transform: translateX(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+.fb-dialog header { padding: 16px 20px; border-bottom: 1px solid var(--fb-linha); display: flex; align-items: center; gap: 12px; }
+.fb-dialog header b { flex: 1; min-width: 0; font-size: 17px; font-weight: 700; letter-spacing: -0.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fb-dialog .fb-dialog-corpo { padding: 16px 20px 24px; overflow: auto; flex: 1; }
+.fb-dialog footer { padding: 12px 20px; border-top: 1px solid var(--fb-linha); display: flex; gap: 8px; flex-wrap: wrap; }
+@media (max-width: 640px) { .fb-dialog { border-radius: 20px 20px 0 0; margin: auto 0 0 0; height: auto; max-height: 88vh; width: 100vw; } }
+
+@media (max-width: 1080px) { .fb { padding: 18px 16px 32px; } .fb-cab h1 { font-size: 25px; } }
+@media (max-width: 640px) {
+  .fb { padding: 14px 12px 28px; border-radius: 14px; }
+  .fb-cab h1 { font-size: 21px; gap: 10px; }
+  .fb-cab h1 .fb-ico { width: 34px; height: 34px; flex-basis: 34px; font-size: 14px; }
+  .fb-card { padding: 16px 14px; border-radius: 16px; }
+  .fb-kpi b { font-size: 21px; }
+  .fb-busca { max-width: none; flex-basis: 100%; }
+  .fb-busca kbd { display: none; }
+}
+</style>

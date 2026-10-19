@@ -468,6 +468,7 @@ def relatorio(request):
         'chart_qtd': chart_qtd,
         'chart_receita': chart_receita,
         'chart_colors': chart_colors,
+        'is_ilha': _is_ilha(request.user),  # só para mostrar o atalho da Validação na navegação
     })
 
 

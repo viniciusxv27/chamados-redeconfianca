@@ -1,0 +1,7 @@
+{# Navegação entre as telas do /fibras. Uso: {% include 'fibras/_fb_nav.html' with ativo='kanban' %} #}
+<nav class="fb-seg" aria-label="Telas de Fibras">
+  <a href="{% url 'fibras:kanban' %}"{% if ativo == 'kanban' %} class="ativo" aria-current="page"{% endif %}><i class="fas fa-columns" aria-hidden="true"></i> Kanban</a>
+  <a href="{% url 'fibras:lista' %}"{% if ativo == 'lista' %} class="ativo" aria-current="page"{% endif %}><i class="fas fa-list" aria-hidden="true"></i> Lista</a>
+  <a href="{% url 'fibras:relatorio' %}"{% if ativo == 'relatorio' %} class="ativo" aria-current="page"{% endif %}><i class="fas fa-chart-bar" aria-hidden="true"></i> Relatório</a>
+  {% if is_ilha %}<a href="{% url 'fibras:validacao' %}" class="fb-seg-destaque" title="Cruzamento completo: Base de Vendas × Esteira de Vendas Vivo"><i class="fas fa-code-compare" aria-hidden="true"></i> Validação Base × Esteira</a>{% endif %}
+</nav>

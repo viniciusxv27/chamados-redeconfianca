@@ -1,11 +1,12 @@
 {% extends 'financeiro/base_financeiro.html' %}
-{% load caixa_tags %}
+{% load caixa_tags l10n %}
 {% block fin_titulo %}Caixa das lojas{% endblock %}
 {% block fin_cabecalho %}Caixa das lojas{% endblock %}
 {% block fin_subtitulo %}{% if loja %}{{ loja.name }} — o financeiro da loja num lugar só{% else %}Escolha a loja{% endif %}{% endblock %}
 {% block fin_acoes %}
-<form method="get">
-    <select name="loja" onchange="this.form.submit()" class="fin-input !w-64">
+<form method="get" class="w-full sm:w-auto">
+    <label class="sr-only" for="finLojaSel">Loja</label>
+    <select id="finLojaSel" name="loja" onchange="this.form.submit()" class="fin-input sm:!w-64">
         <option value="">Escolha a loja…</option>
         {% for l in lojas %}<option value="{{ l.id }}" {% if loja.id == l.id %}selected{% endif %}>{{ l.name }}</option>{% endfor %}
     </select>
@@ -14,38 +15,43 @@
 
 {% block fin_conteudo %}
 {% if not loja %}
-<div class="fin-card p-10 text-center text-gray-500">
-    <i class="fas fa-store text-4xl text-gray-300 mb-3"></i>
-    <p>Escolha uma loja para ver a conciliação de cartões, as contas a pagar e a receber e o que já foi pago e recebido.</p>
-    <div class="flex flex-wrap justify-center gap-2 mt-5 max-w-3xl mx-auto">
+<div class="fin-card p-6 sm:p-10 text-center text-gray-500">
+    <div class="fin-vazio-icone"><i class="fas fa-store"></i></div>
+    <p class="max-w-xl mx-auto">Escolha uma loja para ver a conciliação de cartões, as contas a pagar e a receber e o que já foi pago e recebido.</p>
+    {% if lojas|length > 8 %}
+    <label class="fin-busca max-w-sm mx-auto mt-5 block"><i class="fas fa-magnifying-glass"></i>
+        <input type="search" class="fin-input" placeholder="Procurar loja…" aria-label="Procurar loja" data-fin-filtrar="#finLojas" data-fin-atalho-busca autocomplete="off"><span class="fin-kbd" aria-hidden="true">/</span></label>
+    {% endif %}
+    <div class="flex flex-wrap justify-center gap-2 mt-5 max-w-3xl mx-auto" id="finLojas">
         {% for l in lojas %}
-        <a href="?loja={{ l.id }}" class="px-3 py-1.5 rounded-full border border-gray-200 text-sm text-gray-700 hover:border-emerald-300 hover:bg-emerald-50">{{ l.name }}</a>
+        <a href="?loja={{ l.id }}" class="fin-pilula text-sm"><i class="fas fa-store text-[10px] opacity-60"></i>{{ l.name }}</a>
         {% endfor %}
     </div>
 </div>
 {% else %}
-<div class="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
+<div class="grid sm:grid-cols-2 xl:grid-cols-3 gap-4 fin-entra">
     {% for c in cartoes %}
-    <div class="fin-card p-5 flex flex-col">
+    <a href="{{ c.url }}" class="fin-card p-5 flex flex-col group">
         <div class="flex items-start gap-3">
-            <span class="w-11 h-11 rounded-xl flex items-center justify-center text-lg shrink-0
+            <span class="w-12 h-12 rounded-2xl flex items-center justify-center text-lg shrink-0 transition-transform group-hover:scale-110 group-hover:-rotate-6
                 {% if c.cor == 'rose' %}bg-rose-50 text-rose-600{% elif c.cor == 'emerald' %}bg-emerald-50 text-emerald-600{% elif c.cor == 'violet' %}bg-violet-50 text-violet-600{% elif c.cor == 'sky' %}bg-sky-50 text-sky-600{% else %}bg-teal-50 text-teal-600{% endif %}">
                 <i class="fas {{ c.icone }}"></i>
             </span>
-            <div class="min-w-0">
+            <div class="min-w-0 flex-1">
                 <h2 class="font-bold text-gray-900">{{ c.titulo }}</h2>
                 <p class="text-sm text-gray-500">{{ c.texto }}</p>
             </div>
+            {% if c.alerta %}<span class="fin-chip st-VENCIDO shrink-0">atenção</span>{% endif %}
         </div>
         <div class="mt-4 flex-1">
-            {% if c.valor is not None %}<p class="text-2xl font-bold tabular text-gray-900">{{ c.valor|brl_zero }}</p>{% endif %}
+            {% if c.valor is not None %}<p class="text-2xl font-extrabold tabular text-gray-900 tracking-tight" data-fin-num="{{ c.valor|unlocalize }}">{{ c.valor|brl_zero }}</p>{% endif %}
             <p class="text-sm {% if c.alerta %}text-amber-700 font-semibold{% else %}text-gray-600{% endif %}">{{ c.numero }}</p>
             {% if c.detalhe %}<p class="text-xs {% if c.alerta %}text-red-600{% else %}text-gray-400{% endif %}">{{ c.detalhe }}</p>{% endif %}
         </div>
-        <a href="{{ c.url }}" class="fin-btn fin-btn-verde justify-center mt-4"><i class="fas fa-magnifying-glass-dollar"></i>Avaliar</a>
-    </div>
+        <span class="fin-btn fin-btn-verde justify-center mt-4 w-full"><i class="fas fa-magnifying-glass-dollar"></i>Avaliar<i class="fas fa-arrow-right text-xs transition-transform group-hover:translate-x-1"></i></span>
+    </a>
     {% empty %}
-    <div class="fin-card p-8 text-center text-gray-500 sm:col-span-2 xl:col-span-3">
+    <div class="fin-card fin-vazio sm:col-span-2 xl:col-span-3">
         Nenhuma parte do caixa das lojas está liberada para o seu usuário além desta visão.
     </div>
     {% endfor %}

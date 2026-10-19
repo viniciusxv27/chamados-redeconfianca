@@ -1,32 +1,48 @@
 {% extends 'financeiro/base_financeiro.html' %}
-{% load caixa_tags %}
+{% load caixa_tags l10n %}
 {% block fin_titulo %}Contas bancárias{% endblock %}
 {% block fin_cabecalho %}Contas bancárias{% endblock %}
 {% block fin_subtitulo %}Cadastro das contas e saldo de cada uma · total {{ saldo_total|brl_zero }}{% endblock %}
-{% block fin_acoes %}{% if pode.bancos_editar %}<button type="button" data-abrir="#finConta" class="fin-btn fin-btn-verde"><i class="fas fa-plus"></i>Nova conta</button>{% endif %}{% endblock %}
+{% block fin_acoes %}{% if pode.bancos_editar %}<button type="button" data-abrir="#finConta" data-fin-atalho-novo class="fin-btn fin-btn-verde"><i class="fas fa-plus"></i>Nova conta<span class="fin-kbd">N</span></button>{% endif %}{% endblock %}
 
 {% block fin_conteudo %}
-<div class="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
+{% if contas %}
+<div class="flex items-center gap-3 flex-wrap mb-4">
+    <div class="fin-card fin-kpi flex-1 min-w-[14rem]" style="--fin-kpi-cor:#059669">
+        <p class="fin-kpi-rotulo"><span class="fin-kpi-icone bg-emerald-50 text-emerald-600"><i class="fas fa-sack-dollar"></i></span>Saldo das contas ativas</p>
+        <p class="fin-kpi-valor text-2xl {% if saldo_total < 0 %}text-red-600{% endif %}" data-fin-num="{{ saldo_total|unlocalize }}">{{ saldo_total|brl_zero }}</p>
+        <p class="fin-kpi-nota">{{ contas|length }} conta{{ contas|length|pluralize }} cadastrada{{ contas|length|pluralize }}</p>
+    </div>
+    {% if contas|length > 3 %}
+    <label class="fin-busca w-full sm:w-72"><i class="fas fa-magnifying-glass"></i>
+        <input type="search" class="fin-input" placeholder="Filtrar contas…" aria-label="Filtrar contas" data-fin-filtrar="#finContas" data-fin-atalho-busca autocomplete="off"><span class="fin-kbd" aria-hidden="true">/</span></label>
+    {% endif %}
+</div>
+{% endif %}
+
+<div class="grid sm:grid-cols-2 xl:grid-cols-3 gap-4 fin-entra" id="finContas">
     {% for c in contas %}
-    <a href="{% url 'financeiro:conta' c.id %}" class="fin-card p-5 hover:border-emerald-200 block {% if not c.ativa %}opacity-60{% endif %}">
+    <a href="{% url 'financeiro:conta' c.id %}" class="fin-card p-5 block group {% if not c.ativa %}opacity-60{% endif %}">
         <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
-                <p class="font-bold text-gray-900 truncate">{{ c.nome }}</p>
+                <p class="font-bold text-gray-900 truncate group-hover:text-emerald-700 transition-colors">{{ c.nome }}</p>
                 <p class="text-xs text-gray-500 truncate">{{ c.descricao_bancaria|default:c.get_tipo_display }}</p>
-                {% if c.loja %}<p class="text-[11px] text-gray-400">{{ c.loja.name }}</p>{% endif %}
+                {% if c.loja %}<p class="text-[11px] text-gray-400 truncate"><i class="fas fa-store mr-1"></i>{{ c.loja.name }}</p>{% endif %}
             </div>
-            <span class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0"><i class="fas {% if c.tipo == 'CAIXA' %}fa-cash-register{% else %}fa-building-columns{% endif %}"></i></span>
+            <span class="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 transition-transform group-hover:scale-110 group-hover:-rotate-6"><i class="fas {% if c.tipo == 'CAIXA' %}fa-cash-register{% else %}fa-building-columns{% endif %}"></i></span>
         </div>
-        <p class="text-2xl font-bold tabular mt-4 {% if c.saldo_atual < 0 %}text-red-600{% else %}text-gray-900{% endif %}">{{ c.saldo_atual|brl_zero }}</p>
-        <div class="flex items-center gap-2 mt-1 text-[11px]">
-            {% if not c.ativa %}<span class="fin-chip bg-gray-100 text-gray-600">Inativa</span>{% endif %}
-            {% if c.pendentes %}<span class="fin-chip bg-amber-100 text-amber-800">{{ c.pendentes }} linha{{ c.pendentes|pluralize }} do extrato a conciliar</span>{% endif %}
+        <p class="text-2xl font-extrabold tabular mt-4 tracking-tight {% if c.saldo_atual < 0 %}text-red-600{% else %}text-gray-900{% endif %}" data-fin-num="{{ c.saldo_atual|unlocalize }}">{{ c.saldo_atual|brl_zero }}</p>
+        <div class="flex items-center gap-2 mt-1 text-[11px] flex-wrap min-h-[1.5rem]">
+            {% if not c.ativa %}<span class="fin-chip st-CANCELADO">Inativa</span>{% endif %}
+            {% if c.pendentes %}<span class="fin-chip bg-amber-100 text-amber-800"><i class="fas fa-scale-balanced"></i>{{ c.pendentes }} linha{{ c.pendentes|pluralize }} do extrato a conciliar</span>{% endif %}
+            <span class="ml-auto text-emerald-700 font-semibold opacity-0 group-hover:opacity-100 transition-opacity">ver extrato <i class="fas fa-arrow-right text-[9px]"></i></span>
         </div>
     </a>
     {% empty %}
-    <div class="fin-card p-10 text-center text-gray-500 sm:col-span-2 xl:col-span-3">
-        <i class="fas fa-building-columns text-4xl text-gray-300 mb-3"></i>
-        <p>Nenhuma conta cadastrada ainda. Cadastre as contas da empresa (e o "caixa" em dinheiro, se quiser) para registrar as baixas.</p>
+    <div class="fin-card fin-vazio sm:col-span-2 xl:col-span-3" data-fin-nao-filtra>
+        <div class="fin-vazio-icone"><i class="fas fa-building-columns"></i></div>
+        <p class="max-w-md mx-auto">Nenhuma conta cadastrada ainda. Cadastre as contas da empresa (e o "caixa" em dinheiro, se quiser) para registrar as baixas.</p>
+        {% if pode.bancos_editar %}<button type="button" data-abrir="#finConta" class="fin-btn fin-btn-verde mt-4"><i class="fas fa-plus"></i>Cadastrar a primeira conta</button>{% endif %}
     </div>
     {% endfor %}
 </div>

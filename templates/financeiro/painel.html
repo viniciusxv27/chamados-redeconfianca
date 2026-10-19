@@ -1,41 +1,113 @@
 {% extends 'financeiro/base_financeiro.html' %}
-{% load caixa_tags %}
+{% load caixa_tags l10n %}
 {% block fin_titulo %}Financeiro{% endblock %}
+{% block fin_cabecalho %}Painel financeiro{% endblock %}
 {% block fin_subtitulo %}O que vence, o que entrou e o que falta conciliar · {{ hoje|date:"d/m/Y" }}{% endblock %}
 {% block fin_acoes %}
-{% if pode.pagar_editar %}<a href="{% url 'financeiro:pagar' %}?novo=1" class="fin-btn fin-btn-claro"><i class="fas fa-plus text-rose-500"></i>Conta a pagar</a>{% endif %}
+{% if pode.pagar_editar %}<a href="{% url 'financeiro:pagar' %}?novo=1" class="fin-btn fin-btn-claro" data-fin-atalho-novo><i class="fas fa-plus text-rose-500"></i>Conta a pagar<span class="fin-kbd">N</span></a>{% endif %}
 {% if pode.receber_editar %}<a href="{% url 'financeiro:receber' %}?novo=1" class="fin-btn fin-btn-claro"><i class="fas fa-plus text-emerald-600"></i>Conta a receber</a>{% endif %}
 {% endblock %}
 
 {% block fin_conteudo %}
+{# ── Indicadores ── #}
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5 fin-entra">
+    {% if contas is not None %}
+    <a href="{% url 'financeiro:bancos' %}" class="fin-card fin-kpi" style="--fin-kpi-cor:#10B981">
+        <p class="fin-kpi-rotulo"><span class="fin-kpi-icone bg-emerald-50 text-emerald-600"><i class="fas fa-building-columns"></i></span>Saldo em contas</p>
+        <p class="fin-kpi-valor {% if saldo_total < 0 %}text-red-600{% endif %}" data-fin-num="{{ saldo_total|unlocalize }}">{{ saldo_total|brl_zero }}</p>
+        <p class="fin-kpi-nota">{{ contas|length }} conta{{ contas|length|pluralize }} ativa{{ contas|length|pluralize }}</p>
+    </a>
+    {% endif %}
+    {% if pagar %}
+    <a href="{% url 'financeiro:pagar' %}" class="fin-card fin-kpi" style="--fin-kpi-cor:#E11D48">
+        <p class="fin-kpi-rotulo"><span class="fin-kpi-icone bg-rose-50 text-rose-600"><i class="fas fa-arrow-up"></i></span>A pagar em aberto</p>
+        <p class="fin-kpi-valor" data-fin-num="{{ pagar.total.valor|unlocalize }}">{{ pagar.total.valor|brl_zero }}</p>
+        <p class="fin-kpi-nota">{% if pagar.vencidos.n %}<span class="text-red-600 font-semibold"><i class="fas fa-circle-exclamation mr-0.5"></i>{{ pagar.vencidos.n }} vencido{{ pagar.vencidos.n|pluralize }}</span> · {% endif %}{{ pagar.total.n }} título{{ pagar.total.n|pluralize }}</p>
+    </a>
+    {% endif %}
+    {% if receber %}
+    <a href="{% url 'financeiro:receber' %}" class="fin-card fin-kpi" style="--fin-kpi-cor:#059669">
+        <p class="fin-kpi-rotulo"><span class="fin-kpi-icone bg-emerald-50 text-emerald-600"><i class="fas fa-arrow-down"></i></span>A receber em aberto</p>
+        <p class="fin-kpi-valor" data-fin-num="{{ receber.total.valor|unlocalize }}">{{ receber.total.valor|brl_zero }}</p>
+        <p class="fin-kpi-nota">{% if receber.vencidos.n %}<span class="text-red-600 font-semibold"><i class="fas fa-circle-exclamation mr-0.5"></i>{{ receber.vencidos.n }} atrasado{{ receber.vencidos.n|pluralize }}</span> · {% endif %}{{ receber.total.n }} título{{ receber.total.n|pluralize }}</p>
+    </a>
+    {% endif %}
+    {% if extrato_pendente is not None or cartoes_pendentes is not None %}
+    <a href="{% if extrato_pendente is not None %}{% url 'financeiro:conciliacao' %}{% else %}{% url 'financeiro:cartoes' %}{% endif %}" class="fin-card fin-kpi" style="--fin-kpi-cor:{% if pendencias %}#F59E0B{% else %}#10B981{% endif %}">
+        <p class="fin-kpi-rotulo"><span class="fin-kpi-icone {% if pendencias %}bg-amber-50 text-amber-600{% else %}bg-emerald-50 text-emerald-600{% endif %}"><i class="fas fa-scale-balanced"></i></span>A conciliar</p>
+        <p class="fin-kpi-valor" data-fin-num="{{ pendencias }}" data-fin-formato="int">{{ pendencias }}</p>
+        <p class="fin-kpi-nota">{% if extrato_pendente is not None %}{{ extrato_pendente }} do extrato{% endif %}{% if extrato_pendente is not None and cartoes_pendentes is not None %} · {% endif %}{% if cartoes_pendentes is not None %}{{ cartoes_pendentes }} de cartão{% endif %}</p>
+    </a>
+    {% endif %}
+</div>
+
+{# ── Gráfico + atalhos ── #}
+<div class="grid lg:grid-cols-3 gap-4 mb-5">
+    {% if pagar or receber %}
+    <div class="fin-card lg:col-span-2 overflow-hidden">
+        <div class="fin-cab">
+            <div class="min-w-0"><h2><i class="fas fa-chart-column text-gray-400 mr-1.5"></i>Fluxo previsto por vencimento</h2>
+                <p class="text-[11px] text-gray-500">Saldo em aberto dos títulos, por faixa de vencimento</p></div>
+            <button type="button" class="fin-link shrink-0" id="finVerTabela" aria-expanded="false"><i class="fas fa-table"></i>ver em tabela</button>
+        </div>
+        <div class="p-3 sm:p-4">
+            <div class="relative h-56 sm:h-64" id="finGraficoCaixa">
+                <div class="fin-esqueleto absolute inset-0" id="finGraficoEsqueleto" aria-hidden="true"></div>
+                <canvas id="finGrafico" role="img" aria-label="Gráfico de barras: saldo a pagar e a receber por faixa de vencimento"></canvas>
+            </div>
+            <div class="hidden overflow-x-auto mt-2" id="finGraficoTabela"></div>
+        </div>
+        {{ projecao|json_script:"finProjecao" }}
+    </div>
+    {% endif %}
+    <div class="fin-card overflow-hidden {% if not pagar and not receber %}lg:col-span-3{% endif %}">
+        <div class="fin-cab"><h2><i class="fas fa-bolt text-gray-400 mr-1.5"></i>Atalhos</h2></div>
+        <div class="p-3 grid grid-cols-2 gap-2">
+            {% if pode.pagar_editar %}<a href="{% url 'financeiro:pagar' %}?novo=1" class="fin-card fin-card-vivo p-3 flex flex-col gap-2 text-sm"><span class="fin-kpi-icone bg-rose-50 text-rose-600"><i class="fas fa-file-invoice-dollar"></i></span><span class="font-semibold text-gray-800">Lançar conta a pagar</span></a>{% endif %}
+            {% if pode.receber_editar %}<a href="{% url 'financeiro:receber' %}?novo=1" class="fin-card fin-card-vivo p-3 flex flex-col gap-2 text-sm"><span class="fin-kpi-icone bg-emerald-50 text-emerald-600"><i class="fas fa-hand-holding-dollar"></i></span><span class="font-semibold text-gray-800">Lançar conta a receber</span></a>{% endif %}
+            {% if pode_baixas %}<a href="{% url 'financeiro:baixas' %}" class="fin-card fin-card-vivo p-3 flex flex-col gap-2 text-sm"><span class="fin-kpi-icone bg-sky-50 text-sky-600"><i class="fas fa-list-check"></i></span><span class="font-semibold text-gray-800">Baixar títulos</span></a>{% endif %}
+            {% if pode.conciliacao_ver %}<a href="{% url 'financeiro:conciliacao' %}" class="fin-card fin-card-vivo p-3 flex flex-col gap-2 text-sm"><span class="fin-kpi-icone bg-amber-50 text-amber-600"><i class="fas fa-file-import"></i></span><span class="font-semibold text-gray-800">Conciliar extrato</span></a>{% endif %}
+            {% if pode.cartoes_ver %}<a href="{% url 'financeiro:cartoes' %}" class="fin-card fin-card-vivo p-3 flex flex-col gap-2 text-sm"><span class="fin-kpi-icone bg-violet-50 text-violet-600"><i class="fas fa-credit-card"></i></span><span class="font-semibold text-gray-800">Conferir cartões</span></a>{% endif %}
+            {% if pode.bancos_ver %}<a href="{% url 'financeiro:bancos' %}" class="fin-card fin-card-vivo p-3 flex flex-col gap-2 text-sm"><span class="fin-kpi-icone bg-teal-50 text-teal-600"><i class="fas fa-building-columns"></i></span><span class="font-semibold text-gray-800">Contas bancárias</span></a>{% endif %}
+            {% if pode.caixa_ver %}<a href="{% url 'financeiro:caixa' %}" class="fin-card fin-card-vivo p-3 flex flex-col gap-2 text-sm"><span class="fin-kpi-icone bg-gray-100 text-gray-600"><i class="fas fa-store"></i></span><span class="font-semibold text-gray-800">Caixa das lojas</span></a>{% endif %}
+            {% if pode.plano_ver %}<a href="{% url 'financeiro:plano' %}" class="fin-card fin-card-vivo p-3 flex flex-col gap-2 text-sm"><span class="fin-kpi-icone bg-gray-100 text-gray-600"><i class="fas fa-sitemap"></i></span><span class="font-semibold text-gray-800">Plano de contas</span></a>{% endif %}
+        </div>
+    </div>
+</div>
+
+{# ── A pagar / a receber por faixa ── #}
 {% if pagar or receber %}
 <div class="grid lg:grid-cols-2 gap-4 mb-5">
     {% if pagar %}
     <div class="fin-card p-4">
         <div class="flex items-center justify-between">
             <h2 class="font-bold text-gray-900"><i class="fas fa-file-invoice-dollar text-rose-500 mr-1.5"></i>A pagar</h2>
-            <a href="{% url 'financeiro:pagar' %}" class="text-xs text-emerald-700 hover:underline">ver tudo</a>
+            <a href="{% url 'financeiro:pagar' %}" class="fin-link">ver tudo <i class="fas fa-arrow-right text-[10px]"></i></a>
         </div>
         <div class="grid grid-cols-2 2xl:grid-cols-4 gap-2 mt-3">
-            <a href="{% url 'financeiro:pagar' %}?situacao=vencidos" class="rounded-xl p-3 {% if pagar.vencidos.n %}bg-red-50 hover:bg-red-100{% else %}bg-gray-50 hover:bg-gray-100{% endif %}">
-                <p class="text-[11px] font-semibold uppercase {% if pagar.vencidos.n %}text-red-700{% else %}text-gray-500{% endif %}">Vencidos</p>
+            <a href="{% url 'financeiro:pagar' %}?situacao=vencidos" class="fin-card-vivo rounded-xl p-3 border border-transparent {% if pagar.vencidos.n %}bg-red-50 hover:bg-red-100{% else %}bg-gray-50 hover:bg-gray-100{% endif %}">
+                <p class="text-[11px] font-semibold uppercase {% if pagar.vencidos.n %}text-red-700{% else %}text-gray-500{% endif %}">{% if pagar.vencidos.n %}<i class="fas fa-circle-exclamation mr-0.5"></i>{% endif %}Vencidos</p>
                 <p class="font-bold tabular whitespace-nowrap {% if pagar.vencidos.n %}text-red-700{% else %}text-gray-800{% endif %}">{{ pagar.vencidos.valor|brl_zero }}</p>
                 <p class="text-[11px] text-gray-500">{{ pagar.vencidos.n }} título{{ pagar.vencidos.n|pluralize }}</p>
+                <div class="fin-barrinha mt-2"><span style="width:{% widthratio pagar.vencidos.valor pagar.total.valor 100 %}%;background:#EF4444"></span></div>
             </a>
-            <a href="{% url 'financeiro:pagar' %}?situacao=hoje" class="rounded-xl p-3 bg-amber-50 hover:bg-amber-100">
+            <a href="{% url 'financeiro:pagar' %}?situacao=hoje" class="fin-card-vivo rounded-xl p-3 border border-transparent bg-amber-50 hover:bg-amber-100">
                 <p class="text-[11px] font-semibold uppercase text-amber-800">Hoje</p>
                 <p class="font-bold tabular whitespace-nowrap text-gray-900">{{ pagar.hoje.valor|brl_zero }}</p>
                 <p class="text-[11px] text-gray-500">{{ pagar.hoje.n }} título{{ pagar.hoje.n|pluralize }}</p>
+                <div class="fin-barrinha mt-2"><span style="width:{% widthratio pagar.hoje.valor pagar.total.valor 100 %}%;background:#F59E0B"></span></div>
             </a>
-            <a href="{% url 'financeiro:pagar' %}?situacao=semana" class="rounded-xl p-3 bg-gray-50 hover:bg-gray-100">
+            <a href="{% url 'financeiro:pagar' %}?situacao=semana" class="fin-card-vivo rounded-xl p-3 border border-transparent bg-gray-50 hover:bg-gray-100">
                 <p class="text-[11px] font-semibold uppercase text-gray-500">Próx. 7 dias</p>
                 <p class="font-bold tabular whitespace-nowrap text-gray-900">{{ pagar.semana.valor|brl_zero }}</p>
                 <p class="text-[11px] text-gray-500">{{ pagar.semana.n }} título{{ pagar.semana.n|pluralize }}</p>
+                <div class="fin-barrinha mt-2"><span style="width:{% widthratio pagar.semana.valor pagar.total.valor 100 %}%;background:#E11D48"></span></div>
             </a>
-            <a href="{% url 'financeiro:pagar' %}" class="rounded-xl p-3 bg-gray-50 hover:bg-gray-100">
+            <a href="{% url 'financeiro:pagar' %}" class="fin-card-vivo rounded-xl p-3 border border-transparent bg-gray-50 hover:bg-gray-100">
                 <p class="text-[11px] font-semibold uppercase text-gray-500">Em aberto</p>
                 <p class="font-bold tabular whitespace-nowrap text-gray-900">{{ pagar.total.valor|brl_zero }}</p>
                 <p class="text-[11px] text-gray-500">{{ pagar.total.n }} título{{ pagar.total.n|pluralize }}</p>
+                <div class="fin-barrinha mt-2"><span style="width:100%;background:#94A3B8"></span></div>
             </a>
         </div>
     </div>
@@ -44,28 +116,32 @@
     <div class="fin-card p-4">
         <div class="flex items-center justify-between">
             <h2 class="font-bold text-gray-900"><i class="fas fa-hand-holding-dollar text-emerald-600 mr-1.5"></i>A receber</h2>
-            <a href="{% url 'financeiro:receber' %}" class="text-xs text-emerald-700 hover:underline">ver tudo</a>
+            <a href="{% url 'financeiro:receber' %}" class="fin-link">ver tudo <i class="fas fa-arrow-right text-[10px]"></i></a>
         </div>
         <div class="grid grid-cols-2 2xl:grid-cols-4 gap-2 mt-3">
-            <a href="{% url 'financeiro:receber' %}?situacao=vencidos" class="rounded-xl p-3 {% if receber.vencidos.n %}bg-red-50 hover:bg-red-100{% else %}bg-gray-50 hover:bg-gray-100{% endif %}">
-                <p class="text-[11px] font-semibold uppercase {% if receber.vencidos.n %}text-red-700{% else %}text-gray-500{% endif %}">Atrasados</p>
+            <a href="{% url 'financeiro:receber' %}?situacao=vencidos" class="fin-card-vivo rounded-xl p-3 border border-transparent {% if receber.vencidos.n %}bg-red-50 hover:bg-red-100{% else %}bg-gray-50 hover:bg-gray-100{% endif %}">
+                <p class="text-[11px] font-semibold uppercase {% if receber.vencidos.n %}text-red-700{% else %}text-gray-500{% endif %}">{% if receber.vencidos.n %}<i class="fas fa-circle-exclamation mr-0.5"></i>{% endif %}Atrasados</p>
                 <p class="font-bold tabular whitespace-nowrap {% if receber.vencidos.n %}text-red-700{% else %}text-gray-800{% endif %}">{{ receber.vencidos.valor|brl_zero }}</p>
                 <p class="text-[11px] text-gray-500">{{ receber.vencidos.n }} título{{ receber.vencidos.n|pluralize }}</p>
+                <div class="fin-barrinha mt-2"><span style="width:{% widthratio receber.vencidos.valor receber.total.valor 100 %}%;background:#EF4444"></span></div>
             </a>
-            <a href="{% url 'financeiro:receber' %}?situacao=hoje" class="rounded-xl p-3 bg-emerald-50 hover:bg-emerald-100">
+            <a href="{% url 'financeiro:receber' %}?situacao=hoje" class="fin-card-vivo rounded-xl p-3 border border-transparent bg-emerald-50 hover:bg-emerald-100">
                 <p class="text-[11px] font-semibold uppercase text-emerald-800">Hoje</p>
                 <p class="font-bold tabular whitespace-nowrap text-gray-900">{{ receber.hoje.valor|brl_zero }}</p>
                 <p class="text-[11px] text-gray-500">{{ receber.hoje.n }} título{{ receber.hoje.n|pluralize }}</p>
+                <div class="fin-barrinha mt-2"><span style="width:{% widthratio receber.hoje.valor receber.total.valor 100 %}%"></span></div>
             </a>
-            <a href="{% url 'financeiro:receber' %}?situacao=semana" class="rounded-xl p-3 bg-gray-50 hover:bg-gray-100">
+            <a href="{% url 'financeiro:receber' %}?situacao=semana" class="fin-card-vivo rounded-xl p-3 border border-transparent bg-gray-50 hover:bg-gray-100">
                 <p class="text-[11px] font-semibold uppercase text-gray-500">Próx. 7 dias</p>
                 <p class="font-bold tabular whitespace-nowrap text-gray-900">{{ receber.semana.valor|brl_zero }}</p>
                 <p class="text-[11px] text-gray-500">{{ receber.semana.n }} título{{ receber.semana.n|pluralize }}</p>
+                <div class="fin-barrinha mt-2"><span style="width:{% widthratio receber.semana.valor receber.total.valor 100 %}%"></span></div>
             </a>
-            <a href="{% url 'financeiro:receber' %}" class="rounded-xl p-3 bg-gray-50 hover:bg-gray-100">
+            <a href="{% url 'financeiro:receber' %}" class="fin-card-vivo rounded-xl p-3 border border-transparent bg-gray-50 hover:bg-gray-100">
                 <p class="text-[11px] font-semibold uppercase text-gray-500">Em aberto</p>
                 <p class="font-bold tabular whitespace-nowrap text-gray-900">{{ receber.total.valor|brl_zero }}</p>
                 <p class="text-[11px] text-gray-500">{{ receber.total.n }} título{{ receber.total.n|pluralize }}</p>
+                <div class="fin-barrinha mt-2"><span style="width:100%;background:#94A3B8"></span></div>
             </a>
         </div>
     </div>
@@ -75,46 +151,47 @@
 
 <div class="grid lg:grid-cols-3 gap-4 mb-5">
     <div class="fin-card lg:col-span-2 overflow-hidden">
-        <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-            <h2 class="font-bold text-gray-900 text-sm"><i class="fas fa-calendar-day text-gray-400 mr-1.5"></i>Vencidos e próximos 7 dias</h2>
-            {% if pode_baixas %}<a href="{% url 'financeiro:baixas' %}" class="text-xs text-emerald-700 hover:underline">baixar títulos</a>{% endif %}
+        <div class="fin-cab">
+            <h2><i class="fas fa-calendar-day text-gray-400 mr-1.5"></i>Vencidos e próximos 7 dias</h2>
+            {% if pode_baixas %}<a href="{% url 'financeiro:baixas' %}" class="fin-link">baixar títulos <i class="fas fa-arrow-right text-[10px]"></i></a>{% endif %}
         </div>
         {% if proximos %}
         <ul class="divide-y divide-gray-100">
             {% for t in proximos %}
             <li>
-                <a href="{% url 'financeiro:titulo' t.id %}" class="px-4 py-2.5 flex items-center gap-3 hover:bg-gray-50">
-                    <span class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 {% if t.tipo == 'PAGAR' %}bg-rose-50 text-rose-600{% else %}bg-emerald-50 text-emerald-600{% endif %}">
+                <a href="{% url 'financeiro:titulo' t.id %}" class="group px-4 py-2.5 flex items-center gap-3 hover:bg-gray-50 transition-colors">
+                    <span class="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-110 {% if t.tipo == 'PAGAR' %}bg-rose-50 text-rose-600{% else %}bg-emerald-50 text-emerald-600{% endif %}">
                         <i class="fas {% if t.tipo == 'PAGAR' %}fa-arrow-up{% else %}fa-arrow-down{% endif %} text-xs"></i>
                     </span>
                     <div class="min-w-0 flex-1">
-                        <p class="text-sm text-gray-900 truncate">{{ t.descricao }}{% if t.rotulo_parcela %} <span class="text-gray-400">{{ t.rotulo_parcela }}</span>{% endif %}</p>
+                        <p class="text-sm text-gray-900 truncate font-medium">{{ t.descricao }}{% if t.rotulo_parcela %} <span class="text-gray-400 font-normal">{{ t.rotulo_parcela }}</span>{% endif %}</p>
                         <p class="text-[11px] text-gray-500 truncate">{{ t.pessoa_nome|default:"—" }}{% if t.loja %} · {{ t.loja.name }}{% endif %}</p>
                     </div>
                     <div class="text-right shrink-0">
                         <p class="text-sm font-semibold tabular text-gray-900">{{ t.saldo|brl_zero }}</p>
                         <p class="text-[11px] {% if t.vencido %}text-red-600 font-semibold{% elif t.vencimento == hoje %}text-amber-700 font-semibold{% else %}text-gray-500{% endif %}">{% if t.vencido %}venceu {% elif t.vencimento == hoje %}hoje · {% endif %}{{ t.vencimento|date:"d/m" }}</p>
                     </div>
+                    <i class="fas fa-chevron-right text-[10px] text-gray-300 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition hidden sm:block"></i>
                 </a>
             </li>
             {% endfor %}
         </ul>
         {% else %}
-        <p class="p-8 text-center text-sm text-gray-400"><i class="fas fa-mug-hot text-2xl block mb-2 text-gray-300"></i>Nada vencido nem vencendo nesta semana.</p>
+        <div class="fin-vazio"><div class="fin-vazio-icone"><i class="fas fa-mug-hot"></i></div>Nada vencido nem vencendo nesta semana.</div>
         {% endif %}
     </div>
 
     <div class="space-y-4">
         {% if contas is not None %}
         <div class="fin-card overflow-hidden">
-            <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-                <h2 class="font-bold text-gray-900 text-sm"><i class="fas fa-building-columns text-gray-400 mr-1.5"></i>Saldos</h2>
+            <div class="fin-cab">
+                <h2><i class="fas fa-building-columns text-gray-400 mr-1.5"></i>Saldos</h2>
                 <span class="text-sm font-bold tabular {% if saldo_total < 0 %}text-red-600{% else %}text-gray-900{% endif %}">{{ saldo_total|brl_zero }}</span>
             </div>
             <ul class="divide-y divide-gray-100">
                 {% for c in contas %}
-                <li><a href="{% url 'financeiro:conta' c.id %}" class="px-4 py-2 flex items-center justify-between gap-2 hover:bg-gray-50 text-sm">
-                    <span class="truncate text-gray-700">{{ c.nome }}</span>
+                <li><a href="{% url 'financeiro:conta' c.id %}" class="px-4 py-2.5 flex items-center justify-between gap-2 hover:bg-gray-50 text-sm transition-colors">
+                    <span class="truncate text-gray-700 flex items-center gap-2"><i class="fas {% if c.tipo == 'CAIXA' %}fa-cash-register{% else %}fa-building-columns{% endif %} text-[11px] text-gray-400"></i>{{ c.nome }}</span>
                     <span class="tabular font-semibold {% if c.saldo_atual < 0 %}text-red-600{% else %}text-gray-900{% endif %}">{{ c.saldo_atual|brl_zero }}</span>
                 </a></li>
                 {% empty %}
@@ -127,13 +204,13 @@
         <div class="fin-card p-4 space-y-2 text-sm">
             <h2 class="font-bold text-gray-900 text-sm"><i class="fas fa-scale-balanced text-gray-400 mr-1.5"></i>A conciliar</h2>
             {% if extrato_pendente is not None %}
-            <a href="{% url 'financeiro:conciliacao' %}" class="flex items-center justify-between rounded-lg px-3 py-2 {% if extrato_pendente %}bg-amber-50 text-amber-900{% else %}bg-gray-50 text-gray-600{% endif %} hover:opacity-90">
-                <span>Linhas do extrato bancário</span><strong class="tabular">{{ extrato_pendente }}</strong>
+            <a href="{% url 'financeiro:conciliacao' %}" class="flex items-center justify-between rounded-xl px-3 py-2.5 min-h-[44px] transition {% if extrato_pendente %}bg-amber-50 text-amber-900 hover:bg-amber-100{% else %}bg-gray-50 text-gray-600 hover:bg-gray-100{% endif %}">
+                <span><i class="fas fa-file-lines mr-1.5 opacity-60"></i>Linhas do extrato bancário</span><strong class="tabular">{{ extrato_pendente }}</strong>
             </a>
             {% endif %}
             {% if cartoes_pendentes is not None %}
-            <a href="{% url 'financeiro:cartoes' %}" class="flex items-center justify-between rounded-lg px-3 py-2 {% if cartoes_pendentes %}bg-amber-50 text-amber-900{% else %}bg-gray-50 text-gray-600{% endif %} hover:opacity-90">
-                <span>Vendas no cartão a conferir</span><strong class="tabular">{{ cartoes_pendentes }}</strong>
+            <a href="{% url 'financeiro:cartoes' %}" class="flex items-center justify-between rounded-xl px-3 py-2.5 min-h-[44px] transition {% if cartoes_pendentes %}bg-amber-50 text-amber-900 hover:bg-amber-100{% else %}bg-gray-50 text-gray-600 hover:bg-gray-100{% endif %}">
+                <span><i class="fas fa-credit-card mr-1.5 opacity-60"></i>Vendas no cartão a conferir</span><strong class="tabular">{{ cartoes_pendentes }}</strong>
             </a>
             {% endif %}
         </div>
@@ -147,21 +224,101 @@
 
 {% if ultimos is not None %}
 <div class="fin-card overflow-hidden">
-    <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-        <h2 class="font-bold text-gray-900 text-sm"><i class="fas fa-fingerprint text-gray-400 mr-1.5"></i>Últimos movimentos</h2>
-        <a href="{% url 'financeiro:auditoria' %}" class="text-xs text-emerald-700 hover:underline">rastreabilidade completa</a>
+    <div class="fin-cab">
+        <h2><i class="fas fa-fingerprint text-gray-400 mr-1.5"></i>Últimos movimentos</h2>
+        <a href="{% url 'financeiro:auditoria' %}" class="fin-link">rastreabilidade completa <i class="fas fa-arrow-right text-[10px]"></i></a>
     </div>
-    <ul class="divide-y divide-gray-100 text-sm">
+    <ul class="fin-tempo text-sm">
         {% for r in ultimos %}
-        <li class="px-4 py-2 flex items-start gap-3">
-            <span class="text-[11px] text-gray-400 tabular w-24 shrink-0 pt-0.5">{{ r.quando|date:"d/m H:i" }}</span>
-            <p class="flex-1 min-w-0 text-gray-700"><strong class="font-semibold text-gray-900">{{ r.usuario_nome }}</strong> · {{ r.descricao }}</p>
-            {% if r.valor is not None %}<span class="tabular text-gray-600 shrink-0">{{ r.valor|brl_zero }}</span>{% endif %}
+        <li>
+            <span class="fin-ponto {% if r.acao == 'BAIXAR' %}fin-ponto-verde{% elif r.acao == 'ESTORNAR' or r.acao == 'CANCELAR' or r.acao == 'EXCLUIR' %}fin-ponto-vermelho{% elif r.acao == 'EDITAR' %}fin-ponto-ambar{% else %}fin-ponto-azul{% endif %}"></span>
+            <div class="flex items-start gap-3 flex-wrap sm:flex-nowrap">
+                <p class="flex-1 min-w-0 text-gray-700"><strong class="font-semibold text-gray-900">{{ r.usuario_nome }}</strong> · {{ r.descricao }}
+                    <span class="block text-[11px] text-gray-400 tabular">{{ r.quando|date:"d/m H:i" }}</span></p>
+                {% if r.valor is not None %}<span class="tabular text-gray-600 shrink-0 font-semibold">{{ r.valor|brl_zero }}</span>{% endif %}
+            </div>
         </li>
         {% empty %}
-        <li class="px-4 py-6 text-center text-gray-400">Nenhum movimento ainda.</li>
+        <li class="fin-vazio">Nenhum movimento ainda.</li>
         {% endfor %}
     </ul>
 </div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% if pagar or receber %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+<script>
+(function () {
+    var dados = JSON.parse(document.getElementById('finProjecao').textContent);
+    var escuro = document.documentElement.classList.contains('dark');
+    var series = [];
+    // Cores checadas para daltonismo (rosa escuro × verde claro); no escuro, um passo mais vivo cada.
+    if (dados.pagar) series.push({label: 'A pagar', data: dados.pagar, cor: escuro ? '#E11D48' : '#BE123C'});
+    if (dados.receber) series.push({label: 'A receber', data: dados.receber, cor: escuro ? '#2FCB8E' : '#10B981'});
+    var caixa = document.getElementById('finGraficoCaixa'), esqueleto = document.getElementById('finGraficoEsqueleto');
+    var total = series.reduce(function (s, x) { return s + x.data.reduce(function (a, b) { return a + b; }, 0); }, 0);
+
+    // Tabela (alternativa acessível ao gráfico), montada com textContent.
+    var tabela = document.getElementById('finGraficoTabela');
+    (function () {
+        var t = document.createElement('table'); t.className = 'fin-tabela';
+        var cab = t.createTHead().insertRow();
+        ['Vencimento'].concat(series.map(function (s) { return s.label; })).forEach(function (r, i) {
+            var th = document.createElement('th'); th.textContent = r; if (i) th.className = 'text-right'; cab.appendChild(th);
+        });
+        var corpo = t.createTBody();
+        dados.rotulos.forEach(function (r, i) {
+            var tr = corpo.insertRow(); tr.insertCell().textContent = r;
+            series.forEach(function (s) { var td = tr.insertCell(); td.className = 'text-right tabular'; td.textContent = window.Fin.brl(s.data[i]); });
+        });
+        tabela.appendChild(t);
+    })();
+    var botaoTabela = document.getElementById('finVerTabela');
+    botaoTabela.addEventListener('click', function () {
+        var abre = tabela.classList.toggle('hidden') === false;
+        botaoTabela.setAttribute('aria-expanded', abre ? 'true' : 'false');
+        botaoTabela.lastChild.textContent = abre ? 'esconder tabela' : 'ver em tabela';
+    });
+
+    function semGrafico(msg) {
+        esqueleto.remove();
+        var d = document.createElement('div'); d.className = 'fin-vazio absolute inset-0 flex flex-col items-center justify-center';
+        var ic = document.createElement('div'); ic.className = 'fin-vazio-icone'; ic.innerHTML = '<i class="fas fa-chart-column"></i>';
+        d.appendChild(ic); d.appendChild(document.createTextNode(msg)); caixa.appendChild(d);
+        document.getElementById('finGrafico').remove();
+    }
+    if (!total) { semGrafico('Nenhum título em aberto para projetar.'); return; }
+    if (!window.Chart) { semGrafico('O gráfico não carregou — veja os números na tabela.'); tabela.classList.remove('hidden'); return; }
+
+    var texto = escuro ? '#b6bdcc' : '#6B7280', grade = escuro ? 'rgba(255,255,255,.07)' : 'rgba(17,24,39,.06)';
+    var reduz = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var compacto = function (v) { return Number(v).toLocaleString('pt-BR', {notation: 'compact', maximumFractionDigits: 1}); };
+    esqueleto.remove();
+    new window.Chart(document.getElementById('finGrafico'), {
+        type: 'bar',
+        data: {labels: dados.rotulos, datasets: series.map(function (s) {
+            return {label: s.label, data: s.data, backgroundColor: s.cor, hoverBackgroundColor: s.cor, borderRadius: 4,
+                    borderSkipped: 'start', maxBarThickness: 30, categoryPercentage: 0.7, barPercentage: 0.9,
+                    borderColor: escuro ? '#1b2130' : '#FFFFFF', borderWidth: {left: 1, right: 1}};
+        })},
+        options: {
+            responsive: true, maintainAspectRatio: false, animation: reduz ? false : {duration: 700, easing: 'easeOutCubic'},
+            interaction: {mode: 'index', intersect: false},
+            plugins: {
+                legend: {position: 'top', align: 'end', labels: {color: texto, usePointStyle: true, pointStyle: 'rectRounded', boxWidth: 10, font: {family: 'Montserrat', size: 11, weight: '600'}}},
+                tooltip: {backgroundColor: escuro ? '#0f141c' : '#111827', padding: 10, cornerRadius: 8, titleFont: {family: 'Montserrat', weight: '700'},
+                          bodyFont: {family: 'Montserrat'}, callbacks: {label: function (c) { return ' ' + c.dataset.label + ': ' + window.Fin.brl(c.parsed.y); }}}
+            },
+            scales: {
+                x: {grid: {display: false}, border: {color: grade}, ticks: {color: texto, font: {family: 'Montserrat', size: 11}}},
+                y: {beginAtZero: true, grid: {color: grade}, border: {display: false}, ticks: {color: texto, font: {family: 'Montserrat', size: 10}, maxTicksLimit: 5,
+                    callback: function (v) { return 'R$ ' + compacto(v); }}}
+            }
+        }
+    });
+})();
+</script>
 {% endif %}
 {% endblock %}

@@ -102,6 +102,14 @@ def conta_salvar(request, pk=None):
     return _voltar(request, reverse('financeiro:conta', args=[conta.pk]))
 
 
+def _serie_saldo(de, saldo_anterior, linhas):
+    pontos = {de.isoformat(): float(saldo_anterior)}
+    for m in linhas:
+        if not m.estornado:
+            pontos[m.data.isoformat()] = float(m.saldo_corrente)
+    return [{'d': d, 'v': v} for d, v in sorted(pontos.items())]
+
+
 @login_required
 @exige('bancos.ver')
 def conta(request, pk):
@@ -130,6 +138,8 @@ def conta(request, pk):
         'lojas': lojas_do(request.user), 'tipos': ContaBancaria.TIPOS,
         'planos': PlanoConta.objects.filter(ativa=True, analitica=True),
         'mostrar_estornados': request.GET.get('estornados') == '1',
+        # Só para o gráfico da evolução do saldo (um ponto por dia, o último saldo do dia).
+        'serie_saldo': _serie_saldo(de, saldo_anterior, linhas),
     })
     return render(request, 'financeiro/conta.html', contexto)
 

@@ -8,14 +8,14 @@
     <div><label class="fin-label">Juros (R$)</label><input type="text" inputmode="decimal" name="juros" value="{% if baixa and baixa.juros %}{{ baixa.juros|stringformat:'.2f' }}{% endif %}" class="fin-input text-right tabular" placeholder="0,00"></div>
     <div><label class="fin-label">Multa (R$)</label><input type="text" inputmode="decimal" name="multa" value="{% if baixa and baixa.multa %}{{ baixa.multa|stringformat:'.2f' }}{% endif %}" class="fin-input text-right tabular" placeholder="0,00"></div>
     <div><label class="fin-label">Desconto (R$)</label><input type="text" inputmode="decimal" name="desconto" value="{% if baixa and baixa.desconto %}{{ baixa.desconto|stringformat:'.2f' }}{% endif %}" class="fin-input text-right tabular" placeholder="0,00"></div>
-    <div class="flex flex-col justify-end"><p class="text-[11px] text-gray-500">Total que sai/entra na conta</p><p class="font-bold tabular text-gray-900 fin-total-baixa">—</p></div>
+    <div class="flex flex-col justify-center rounded-xl bg-emerald-50 border border-emerald-100 px-3 py-2"><p class="text-[11px] text-emerald-800 font-semibold">Total que sai/entra na conta</p><p class="text-lg font-extrabold tabular text-emerald-900 fin-total-baixa" aria-live="polite">—</p></div>
     <div><label class="fin-label">Conta bancária</label>
         <select name="conta" class="fin-input" required><option value="">Escolha…</option>{% for c in contas %}<option value="{{ c.id }}" {% if baixa and baixa.conta_id == c.id %}selected{% endif %}>{{ c.nome }}</option>{% endfor %}</select></div>
     <div><label class="fin-label">Forma</label>
         <select name="forma" class="fin-input" required><option value="">Escolha…</option>{% for k, r in formas %}<option value="{{ k }}" {% if baixa and baixa.forma == k %}selected{% endif %}>{{ r }}</option>{% endfor %}</select></div>
     <div class="col-span-2"><label class="fin-label">Observação</label><input type="text" name="observacao" maxlength="255" value="{{ baixa.observacao|default:'' }}" class="fin-input"></div>
     <div class="col-span-2"><label class="fin-label">Comprovante (PDF ou imagem){% if baixa and baixa.comprovante %} — já tem um; envie outro só para trocar{% endif %}</label>
-        <input type="file" name="comprovante" accept=".pdf,.jpg,.jpeg,.png,.webp" class="text-sm"></div>
+        <input type="file" name="comprovante" accept=".pdf,.jpg,.jpeg,.png,.webp" class="block w-full text-sm text-gray-600 file:mr-3 file:rounded-lg file:border-0 file:bg-emerald-50 file:px-3 file:py-2 file:text-emerald-700 file:font-semibold hover:file:bg-emerald-100"></div>
     {% if not contas %}<p class="col-span-2 text-sm text-amber-700"><i class="fas fa-triangle-exclamation mr-1"></i>Cadastre uma conta bancária antes de dar baixa.</p>{% endif %}
 </div>
 <script>

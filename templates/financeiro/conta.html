@@ -1,5 +1,5 @@
 {% extends 'financeiro/base_financeiro.html' %}
-{% load caixa_tags %}
+{% load caixa_tags l10n %}
 {% block fin_titulo %}{{ conta.nome }}{% endblock %}
 {% block fin_cabecalho %}{{ conta.nome }}{% if not conta.ativa %} <span class="fin-chip bg-gray-100 text-gray-600 align-middle">Inativa</span>{% endif %}{% endblock %}
 {% block fin_subtitulo %}{{ conta.descricao_bancaria|default:conta.get_tipo_display }}{% if conta.loja %} · {{ conta.loja.name }}{% endif %} · saldo hoje {{ saldo_hoje|brl_zero }}{% endblock %}
@@ -14,41 +14,85 @@
 {% endblock %}
 
 {% block fin_conteudo %}
-<form method="get" class="fin-card p-3 mb-4 flex flex-wrap items-end gap-2">
-    <div><label class="fin-label">De</label><input type="date" name="de" value="{{ de|date:'Y-m-d' }}" class="fin-input"></div>
-    <div><label class="fin-label">Até</label><input type="date" name="ate" value="{{ ate|date:'Y-m-d' }}" class="fin-input"></div>
-    <label class="flex items-center gap-1.5 text-sm text-gray-600 pb-2"><input type="checkbox" name="estornados" value="1" {% if mostrar_estornados %}checked{% endif %} class="accent-emerald-600">mostrar estornados</label>
-    <button class="fin-btn fin-btn-verde" data-livre><i class="fas fa-filter"></i>Ver</button>
-</form>
+<div class="fin-ferramentas mb-4">
+    <form method="get" class="fin-card p-2.5 sm:p-3 flex flex-wrap items-end gap-2" id="finPeriodo">
+        <div class="fin-rolavel-x w-full md:w-auto md:flex-1 order-first" role="group" aria-label="Períodos rápidos">
+            <button type="button" class="fin-pilula" data-periodo="mes">Este mês</button>
+            <button type="button" class="fin-pilula" data-periodo="anterior">Mês passado</button>
+            <button type="button" class="fin-pilula" data-periodo="30">Últimos 30 dias</button>
+            <button type="button" class="fin-pilula" data-periodo="90">Últimos 90 dias</button>
+        </div>
+        <div class="flex-1 min-w-[8.5rem] md:flex-none"><label class="fin-label" for="finDe">De</label><input type="date" id="finDe" name="de" value="{{ de|date:'Y-m-d' }}" class="fin-input"></div>
+        <div class="flex-1 min-w-[8.5rem] md:flex-none"><label class="fin-label" for="finAte">Até</label><input type="date" id="finAte" name="ate" value="{{ ate|date:'Y-m-d' }}" class="fin-input"></div>
+        <label class="flex items-center gap-1.5 text-sm text-gray-600 min-h-[40px] px-1"><input type="checkbox" name="estornados" value="1" {% if mostrar_estornados %}checked{% endif %} class="accent-emerald-600 w-4 h-4">mostrar estornados</label>
+        <button class="fin-btn fin-btn-verde" data-livre><i class="fas fa-filter"></i>Ver</button>
+    </form>
+</div>
 
-<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-    <div class="fin-card p-3"><p class="text-[11px] uppercase font-semibold text-gray-500">Saldo anterior</p><p class="text-lg font-bold tabular">{{ saldo_anterior|brl_zero }}</p></div>
-    <div class="fin-card p-3"><p class="text-[11px] uppercase font-semibold text-gray-500">Entradas</p><p class="text-lg font-bold tabular text-emerald-700">{{ entradas|brl_zero }}</p></div>
-    <div class="fin-card p-3"><p class="text-[11px] uppercase font-semibold text-gray-500">Saídas</p><p class="text-lg font-bold tabular text-rose-700">{{ saidas|brl_zero }}</p></div>
-    <div class="fin-card p-3"><p class="text-[11px] uppercase font-semibold text-gray-500">Saldo em {{ ate|date:"d/m" }}</p><p class="text-lg font-bold tabular {% if saldo_final < 0 %}text-red-600{% endif %}">{{ saldo_final|brl_zero }}</p></div>
+<div class="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 mb-4 fin-entra">
+    <div class="fin-card fin-kpi" style="--fin-kpi-cor:#94A3B8"><p class="fin-kpi-rotulo">Saldo anterior</p><p class="fin-kpi-valor {% if saldo_anterior < 0 %}text-red-600{% endif %}" data-fin-num="{{ saldo_anterior|unlocalize }}">{{ saldo_anterior|brl_zero }}</p><p class="fin-kpi-nota">antes de {{ de|date:"d/m" }}</p></div>
+    <div class="fin-card fin-kpi" style="--fin-kpi-cor:#10B981"><p class="fin-kpi-rotulo"><i class="fas fa-arrow-down text-emerald-600"></i>Entradas</p><p class="fin-kpi-valor text-emerald-700" data-fin-num="{{ entradas|unlocalize }}">{{ entradas|brl_zero }}</p></div>
+    <div class="fin-card fin-kpi" style="--fin-kpi-cor:#E11D48"><p class="fin-kpi-rotulo"><i class="fas fa-arrow-up text-rose-600"></i>Saídas</p><p class="fin-kpi-valor text-rose-700" data-fin-num="{{ saidas|unlocalize }}">{{ saidas|brl_zero }}</p></div>
+    <div class="fin-card fin-kpi" style="--fin-kpi-cor:#059669"><p class="fin-kpi-rotulo">Saldo em {{ ate|date:"d/m" }}</p><p class="fin-kpi-valor {% if saldo_final < 0 %}text-red-600{% endif %}" data-fin-num="{{ saldo_final|unlocalize }}">{{ saldo_final|brl_zero }}</p></div>
+</div>
+
+<div class="grid lg:grid-cols-3 gap-4 mb-4 items-start">
+    <div class="fin-card lg:col-span-2 overflow-hidden min-w-0">
+        <div class="fin-cab"><h2><i class="fas fa-chart-line text-gray-400 mr-1.5"></i>Evolução do saldo</h2><span class="text-[11px] text-gray-500">{{ de|date:"d/m" }} a {{ ate|date:"d/m/Y" }}</span></div>
+        <div class="p-3 sm:p-4"><div class="relative h-48 sm:h-56" id="finSaldoCaixa">
+            <div class="fin-esqueleto absolute inset-0" id="finSaldoEsqueleto" aria-hidden="true"></div>
+            <canvas id="finSaldoGrafico" role="img" aria-label="Linha do saldo da conta ao longo do período"></canvas>
+        </div></div>
+        {{ serie_saldo|json_script:"finSerieSaldo" }}
+    </div>
+    <div class="fin-card overflow-hidden fin-lateral min-w-0">
+        <div class="fin-cab"><h2><i class="fas fa-id-card text-gray-400 mr-1.5"></i>Dados da conta</h2><span class="fin-chip {% if conta.ativa %}st-QUITADO{% else %}st-CANCELADO{% endif %}">{% if conta.ativa %}Ativa{% else %}Inativa{% endif %}</span></div>
+        <dl class="fin-fatos grid-cols-2 text-sm">
+            <div><dt>Banco</dt><dd class="break-words">{% if conta.banco_codigo %}{{ conta.banco_codigo }} · {% endif %}{{ conta.banco_nome|default:"—" }}</dd></div>
+            <div><dt>Tipo</dt><dd>{{ conta.get_tipo_display }}</dd></div>
+            <div><dt>Agência</dt><dd class="tabular">{{ conta.agencia|default:"—" }}</dd></div>
+            <div><dt>Conta</dt><dd class="tabular">{{ conta.conta|default:"—" }}{% if conta.digito %}-{{ conta.digito }}{% endif %}</dd></div>
+            <div class="col-span-2"><dt>Titular</dt><dd class="break-words">{{ conta.titular_nome|default:"—" }}{% if conta.titular_documento %}<span class="block text-xs text-gray-500 tabular">{{ conta.titular_documento }}</span>{% endif %}</dd></div>
+            {% if conta.chave_pix %}<div class="col-span-2"><dt>Chave PIX</dt><dd class="flex items-center gap-2 flex-wrap"><span class="break-all">{{ conta.chave_pix }}</span><button type="button" class="fin-acao fin-acao-verde" data-fin-copiar="{{ conta.chave_pix }}" data-fin-copiado="Chave PIX copiada."><i class="fas fa-copy"></i>copiar</button></dd></div>{% endif %}
+            <div class="col-span-2"><dt>Saldo hoje</dt><dd class="text-lg font-extrabold tabular {% if saldo_hoje < 0 %}text-red-600{% endif %}">{{ saldo_hoje|brl_zero }}</dd></div>
+        </dl>
+    </div>
 </div>
 
 <div class="fin-card overflow-hidden">
+    <div class="fin-cab flex-wrap">
+        <h2><i class="fas fa-list text-gray-400 mr-1.5"></i>Movimentos</h2>
+        <div class="flex items-center gap-2 flex-1 justify-end min-w-[12rem]">
+            <span class="fin-contagem hidden sm:inline" data-fin-contagem="#finTabela"></span>
+            <label class="fin-busca w-full sm:w-64"><i class="fas fa-magnifying-glass"></i>
+                <input type="search" class="fin-input" placeholder="Filtrar movimentos…" aria-label="Filtrar movimentos" data-fin-filtrar="#finTabela" data-fin-atalho-busca autocomplete="off"><span class="fin-kbd" aria-hidden="true">/</span></label>
+        </div>
+    </div>
     <div class="overflow-x-auto">
-    <table class="fin-tabela">
-        <thead><tr><th>Data</th><th>Descrição</th><th>Origem</th><th class="text-right">Valor</th><th class="text-right">Saldo</th><th></th></tr></thead>
+    <table class="fin-tabela fin-empilha" id="finTabela" data-fin-ordenar>
+        <thead><tr><th>Data</th><th>Descrição</th><th>Origem</th><th class="text-right">Valor</th><th class="text-right">Saldo</th><th data-rotulo=""></th></tr></thead>
         <tbody>
         {% for m in movimentos %}
         <tr class="{% if m.estornado %}opacity-50{% endif %}">
-            <td class="tabular whitespace-nowrap">{{ m.data|date:"d/m/Y" }}</td>
-            <td class="min-w-[14rem]">
-                {% if m.baixa %}<a href="{% url 'financeiro:titulo' m.baixa.titulo_id %}" class="text-gray-900 hover:text-emerald-700 {% if m.estornado %}line-through{% endif %}">{{ m.descricao }}</a>{% else %}<span class="{% if m.estornado %}line-through{% endif %}">{{ m.descricao }}</span>{% endif %}
-                <p class="text-[11px] text-gray-500">{% if m.plano %}{{ m.plano.codigo }} {{ m.plano.nome }} · {% endif %}{{ m.criado_por.get_full_name|default:"" }}</p>
+            <td class="tabular whitespace-nowrap" data-v="{{ m.data|date:'Y-m-d' }}">{{ m.data|date:"d/m/Y" }}</td>
+            <td class="min-w-[14rem] fin-td-principal" data-v="{{ m.descricao }}">
+                <span class="inline-flex items-center gap-2">
+                <span class="w-7 h-7 rounded-lg shrink-0 inline-flex items-center justify-center text-[10px] {% if m.valor < 0 %}bg-rose-50 text-rose-600{% else %}bg-emerald-50 text-emerald-600{% endif %}"><i class="fas {% if m.valor < 0 %}fa-arrow-up{% else %}fa-arrow-down{% endif %}"></i></span>
+                {% if m.baixa %}<a href="{% url 'financeiro:titulo' m.baixa.titulo_id %}" class="font-semibold text-gray-900 hover:text-emerald-700 {% if m.estornado %}line-through{% endif %}">{{ m.descricao }}</a>{% else %}<span class="font-semibold text-gray-900 {% if m.estornado %}line-through{% endif %}">{{ m.descricao }}</span>{% endif %}
+                </span>
+                <p class="text-[11px] text-gray-500 mt-0.5">{% if m.plano %}{{ m.plano.codigo }} {{ m.plano.nome }} · {% endif %}{{ m.criado_por.get_full_name|default:"" }}</p>
             </td>
-            <td class="text-xs whitespace-nowrap">{{ m.get_origem_display }}{% if m.conciliado %}<span class="fin-chip bg-emerald-50 text-emerald-700 ml-1"><i class="fas fa-check"></i>conciliado</span>{% endif %}</td>
-            <td class="text-right tabular font-semibold whitespace-nowrap {% if m.valor < 0 %}text-rose-700{% else %}text-emerald-700{% endif %}">{{ m.valor|brl_zero }}</td>
-            <td class="text-right tabular whitespace-nowrap text-gray-600">{% if not m.estornado %}{{ m.saldo_corrente|brl_zero }}{% endif %}</td>
-            <td class="text-right whitespace-nowrap text-xs">
-                {% if pode.bancos_lancar and not m.estornado and m.origem != 'BAIXA' %}<button type="button" data-abrir="#finEstornarMov{{ m.id }}" class="text-red-600 hover:underline">estornar</button>{% endif %}
+            <td class="text-xs whitespace-nowrap">{{ m.get_origem_display }}{% if m.conciliado %}<span class="fin-chip bg-emerald-50 text-emerald-700 ml-1"><i class="fas fa-check"></i>conciliado</span>{% endif %}{% if m.estornado %}<span class="fin-chip st-CANCELADO ml-1">estornado</span>{% endif %}</td>
+            <td class="text-right tabular font-bold whitespace-nowrap {% if m.valor < 0 %}text-rose-700{% else %}text-emerald-700{% endif %}" data-v="{{ m.valor|unlocalize }}">{{ m.valor|brl_zero }}</td>
+            <td class="text-right tabular whitespace-nowrap text-gray-600" data-v="{% if not m.estornado %}{{ m.saldo_corrente|unlocalize }}{% endif %}">{% if not m.estornado %}{{ m.saldo_corrente|brl_zero }}{% endif %}</td>
+            <td class="text-right whitespace-nowrap text-xs fin-td-acoes">
+                <div class="fin-acoes-linha">
+                {% if pode.bancos_lancar and not m.estornado and m.origem != 'BAIXA' %}<button type="button" data-abrir="#finEstornarMov{{ m.id }}" class="fin-acao fin-acao-perigo"><i class="fas fa-rotate-left text-[10px]"></i>estornar</button>{% endif %}
+                </div>
             </td>
         </tr>
         {% empty %}
-        <tr><td colspan="6" class="text-center text-gray-400 py-10">Nenhum movimento no período.</td></tr>
+        <tr><td colspan="6" class="fin-vazio"><div class="fin-vazio-icone"><i class="fas fa-money-bill-transfer"></i></div>Nenhum movimento no período.</td></tr>
         {% endfor %}
         </tbody>
     </table>
@@ -93,9 +137,9 @@
     <div class="sm:max-w-md">
         <form method="post" action="{% url 'financeiro:movimento_estornar' m.id %}">
             {% csrf_token %}
-            <div class="px-5 py-4 border-b border-gray-100"><h3 class="font-bold text-gray-900">Estornar "{{ m.descricao }}"</h3>{% if m.transferencia %}<p class="text-xs text-gray-500">É uma transferência: as duas pontas são estornadas.</p>{% endif %}</div>
+            <div class="px-5 py-4 border-b border-gray-100"><h3 class="font-bold text-gray-900"><i class="fas fa-rotate-left text-red-500 mr-1.5"></i>Estornar "{{ m.descricao }}"</h3>{% if m.transferencia %}<p class="text-xs text-gray-500">É uma transferência: as duas pontas são estornadas.</p>{% endif %}</div>
             <div class="p-5"><label class="fin-label">Motivo</label><input name="motivo" required minlength="5" maxlength="255" class="fin-input" autofocus></div>
-            <div class="px-5 py-3 border-t border-gray-100 bg-gray-50 flex justify-end gap-2"><button type="button" data-fechar class="fin-btn fin-btn-claro">Voltar</button><button type="submit" class="fin-btn bg-red-600 text-white hover:bg-red-700">Estornar</button></div>
+            <div class="px-5 py-3 border-t border-gray-100 bg-gray-50 flex justify-end gap-2"><button type="button" data-fechar class="fin-btn fin-btn-claro">Voltar</button><button type="submit" class="fin-btn fin-btn-perigo"><i class="fas fa-rotate-left"></i>Estornar</button></div>
         </form>
     </div>
 </div>
@@ -103,4 +147,62 @@
 {% endif %}
 
 {% if pode.bancos_editar %}{% include 'financeiro/_modal_conta.html' %}{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" crossorigin="anonymous"></script>
+<script>
+(function () {
+    /* Períodos rápidos: preenchem as datas e consultam. */
+    var form = document.getElementById('finPeriodo');
+    function iso(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+    form.querySelectorAll('[data-periodo]').forEach(function (b) {
+        var hoje = new Date(), de, ate = hoje, p = b.dataset.periodo;
+        if (p === 'mes') de = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+        else if (p === 'anterior') { de = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1); ate = new Date(hoje.getFullYear(), hoje.getMonth(), 0); }
+        else { de = new Date(hoje); de.setDate(de.getDate() - Number(p)); }
+        if (form.de.value === iso(de) && form.ate.value === iso(ate)) { b.classList.add('fin-pilula-ativa'); b.setAttribute('aria-pressed', 'true'); }
+        b.addEventListener('click', function () { form.de.value = iso(de); form.ate.value = iso(ate); form.requestSubmit ? form.requestSubmit() : form.submit(); });
+    });
+
+    /* Evolução do saldo. */
+    var serie = JSON.parse(document.getElementById('finSerieSaldo').textContent);
+    var caixa = document.getElementById('finSaldoCaixa'), esq = document.getElementById('finSaldoEsqueleto'), canvas = document.getElementById('finSaldoGrafico');
+    function vazio(msg) {
+        esq.remove(); canvas.remove();
+        var d = document.createElement('div'); d.className = 'fin-vazio absolute inset-0 flex flex-col items-center justify-center';
+        var ic = document.createElement('div'); ic.className = 'fin-vazio-icone'; ic.innerHTML = '<i class="fas fa-chart-line"></i>';
+        d.appendChild(ic); d.appendChild(document.createTextNode(msg)); caixa.appendChild(d);
+    }
+    if (serie.length < 2) { vazio('Sem movimentos no período para desenhar a evolução.'); return; }
+    if (!window.Chart) { vazio('O gráfico não carregou — os números estão na tabela abaixo.'); return; }
+    var escuro = document.documentElement.classList.contains('dark');
+    var texto = escuro ? '#b6bdcc' : '#6B7280', grade = escuro ? 'rgba(255,255,255,.07)' : 'rgba(17,24,39,.06)';
+    var cor = escuro ? '#2FCB8E' : '#059669';
+    var reduz = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var ctx = canvas.getContext('2d');
+    var grad = ctx.createLinearGradient(0, 0, 0, caixa.clientHeight || 220);
+    grad.addColorStop(0, escuro ? 'rgba(47,203,142,.28)' : 'rgba(5,150,105,.18)'); grad.addColorStop(1, 'rgba(5,150,105,0)');
+    function rotulo(d) { var p = d.split('-'); return p[2] + '/' + p[1]; }
+    esq.remove();
+    new window.Chart(canvas, {
+        type: 'line',
+        data: {labels: serie.map(function (x) { return rotulo(x.d); }), datasets: [{label: 'Saldo', data: serie.map(function (x) { return x.v; }),
+            borderColor: cor, backgroundColor: grad, fill: true, borderWidth: 2, tension: 0.25, pointRadius: serie.length > 40 ? 0 : 3,
+            pointHoverRadius: 5, pointBackgroundColor: cor, pointBorderColor: escuro ? '#1b2130' : '#FFFFFF', pointBorderWidth: 2}]},
+        options: {
+            responsive: true, maintainAspectRatio: false, animation: reduz ? false : {duration: 700},
+            interaction: {mode: 'index', intersect: false},
+            plugins: {legend: {display: false},
+                tooltip: {backgroundColor: escuro ? '#0f141c' : '#111827', padding: 10, cornerRadius: 8, displayColors: false,
+                          callbacks: {label: function (c) { return 'Saldo: ' + window.Fin.brl(c.parsed.y); }}}},
+            scales: {
+                x: {grid: {display: false}, border: {color: grade}, ticks: {color: texto, maxTicksLimit: 8, font: {family: 'Montserrat', size: 10}}},
+                y: {grid: {color: grade}, border: {display: false}, ticks: {color: texto, maxTicksLimit: 5, font: {family: 'Montserrat', size: 10},
+                    callback: function (v) { return 'R$ ' + Number(v).toLocaleString('pt-BR', {notation: 'compact', maximumFractionDigits: 1}); }}}
+            }
+        }
+    });
+})();
+</script>
 {% endblock %}

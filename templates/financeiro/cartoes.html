@@ -1,73 +1,93 @@
 {% extends 'financeiro/base_financeiro.html' %}
-{% load caixa_tags %}
+{% load caixa_tags l10n %}
 {% block fin_titulo %}Conciliação de cartões{% endblock %}
 {% block fin_cabecalho %}Conciliação de cartões{% endblock %}
 {% block fin_subtitulo %}Relatório da adquirente × vendas no cartão do portal, pelo NSU{% endblock %}
 {% block fin_acoes %}
 {% if pode.cartoes_conciliar %}
 <button type="button" data-abrir="#finEstab" class="fin-btn fin-btn-claro"><i class="fas fa-store"></i>Estabelecimentos</button>
-<form method="post" action="{% url 'financeiro:cartoes_reconciliar' %}">{% csrf_token %}<button class="fin-btn fin-btn-claro"><i class="fas fa-rotate"></i>Casar de novo</button></form>
+<form method="post" action="{% url 'financeiro:cartoes_reconciliar' %}" class="flex-1 sm:flex-none">{% csrf_token %}<button class="fin-btn fin-btn-claro w-full"><i class="fas fa-rotate"></i>Casar de novo</button></form>
 <button type="button" data-abrir="#finImportarCartoes" class="fin-btn fin-btn-verde"><i class="fas fa-file-import"></i>Importar relatório</button>
 {% endif %}
 {% endblock %}
 
 {% block fin_conteudo %}
-<form method="get" class="fin-card p-3 mb-4 grid grid-cols-2 md:grid-cols-6 gap-2 items-end">
-    <div><label class="fin-label">Venda de</label><input type="date" name="de" value="{{ filtro.de }}" class="fin-input"></div>
-    <div><label class="fin-label">até</label><input type="date" name="ate" value="{{ filtro.ate }}" class="fin-input"></div>
-    <div><label class="fin-label">Loja</label><select name="loja" class="fin-input"><option value="">Todas</option>{% for l in lojas %}<option value="{{ l.id }}" {% if filtro.loja == l.id|stringformat:'s' %}selected{% endif %}>{{ l.name }}</option>{% endfor %}</select></div>
-    <div><label class="fin-label">Situação</label><select name="status" class="fin-input"><option value="">Todas</option>{% for k, r in status_choices %}<option value="{{ k }}" {% if filtro.status == k %}selected{% endif %}>{{ r }}</option>{% endfor %}</select></div>
-    <div><label class="fin-label">NSU / autorização</label><input name="q" value="{{ filtro.q }}" class="fin-input"></div>
-    <button class="fin-btn fin-btn-verde justify-center" data-livre><i class="fas fa-filter"></i>Filtrar</button>
-</form>
+<form method="get" id="finFiltro"></form>
 
-<div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
-    <div class="fin-card p-3"><p class="text-[11px] uppercase font-semibold text-gray-500">Bruto</p><p class="text-lg font-bold tabular">{{ totais.bruto|brl_zero }}</p><p class="text-[11px] text-gray-400">{{ totais.n }} venda(s)</p></div>
-    <div class="fin-card p-3"><p class="text-[11px] uppercase font-semibold text-gray-500">Taxas</p><p class="text-lg font-bold tabular text-rose-700">{{ totais.taxa|brl_zero }}</p></div>
-    <div class="fin-card p-3"><p class="text-[11px] uppercase font-semibold text-gray-500">Líquido</p><p class="text-lg font-bold tabular text-emerald-700">{{ totais.liquido|brl_zero }}</p></div>
-    <div class="fin-card p-3"><p class="text-[11px] uppercase font-semibold text-gray-500">Conciliadas</p><p class="text-lg font-bold tabular">{{ contagem.CONCILIADO|default:0 }}</p></div>
-    <div class="fin-card p-3"><p class="text-[11px] uppercase font-semibold text-gray-500">Sem par · divergentes</p><p class="text-lg font-bold tabular {% if contagem.PENDENTE or contagem.DIVERGENTE %}text-amber-700{% endif %}">{{ contagem.PENDENTE|default:0 }} · {{ contagem.DIVERGENTE|default:0 }}</p></div>
+<div class="fin-ferramentas mb-3">
+    <div class="fin-card p-2.5 sm:p-3 flex items-center gap-2">
+        <label class="fin-busca flex-1 min-w-0">
+            <i class="fas fa-magnifying-glass"></i>
+            <input type="search" class="fin-input" placeholder="Filtrar nesta página (NSU, loja, bandeira…)" aria-label="Filtrar as vendas desta página" data-fin-filtrar="#finTabela" data-fin-atalho-busca autocomplete="off">
+            <span class="fin-kbd" aria-hidden="true">/</span>
+        </label>
+        <span class="fin-contagem hidden sm:inline" data-fin-contagem="#finTabela" aria-live="polite"></span>
+        <button type="button" class="fin-btn fin-btn-claro shrink-0" data-fin-filtros-botao="#finPainelFiltros" aria-controls="finPainelFiltros">
+            <i class="fas fa-sliders"></i><span class="hidden sm:inline">Filtros</span><span class="fin-selo" hidden></span><i class="fas fa-chevron-down text-[10px] transition-transform"></i>
+        </button>
+    </div>
+</div>
+
+<div id="finPainelFiltros" class="fin-painel-filtros mb-4">
+    <div>
+        <div class="fin-card p-3 grid grid-cols-2 md:grid-cols-6 gap-2 items-end">
+            <div><label class="fin-label" for="finDe">Venda de</label><input type="date" id="finDe" form="finFiltro" name="de" value="{{ filtro.de }}" class="fin-input" data-fin-nao-conta></div>
+            <div><label class="fin-label" for="finAte">até</label><input type="date" id="finAte" form="finFiltro" name="ate" value="{{ filtro.ate }}" class="fin-input" data-fin-nao-conta></div>
+            <div><label class="fin-label" for="finLoja">Loja</label><select id="finLoja" form="finFiltro" name="loja" class="fin-input"><option value="">Todas</option>{% for l in lojas %}<option value="{{ l.id }}" {% if filtro.loja == l.id|stringformat:'s' %}selected{% endif %}>{{ l.name }}</option>{% endfor %}</select></div>
+            <div><label class="fin-label" for="finSt">Situação</label><select id="finSt" form="finFiltro" name="status" class="fin-input"><option value="">Todas</option>{% for k, r in status_choices %}<option value="{{ k }}" {% if filtro.status == k %}selected{% endif %}>{{ r }}</option>{% endfor %}</select></div>
+            <div><label class="fin-label" for="finQ">NSU / autorização</label><input id="finQ" form="finFiltro" name="q" value="{{ filtro.q }}" class="fin-input"></div>
+            <button form="finFiltro" class="fin-btn fin-btn-verde justify-center" data-livre><i class="fas fa-filter"></i>Filtrar</button>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-2 md:grid-cols-5 gap-2 sm:gap-3 mb-4 fin-entra">
+    <div class="fin-card fin-kpi" style="--fin-kpi-cor:#64748B"><p class="fin-kpi-rotulo">Bruto</p><p class="fin-kpi-valor" data-fin-num="{{ totais.bruto|default:0|unlocalize }}">{{ totais.bruto|brl_zero }}</p><p class="fin-kpi-nota">{{ totais.n }} venda(s)</p></div>
+    <div class="fin-card fin-kpi" style="--fin-kpi-cor:#E11D48"><p class="fin-kpi-rotulo">Taxas</p><p class="fin-kpi-valor text-rose-700" data-fin-num="{{ totais.taxa|default:0|unlocalize }}">{{ totais.taxa|brl_zero }}</p></div>
+    <div class="fin-card fin-kpi" style="--fin-kpi-cor:#059669"><p class="fin-kpi-rotulo">Líquido</p><p class="fin-kpi-valor text-emerald-700" data-fin-num="{{ totais.liquido|default:0|unlocalize }}">{{ totais.liquido|brl_zero }}</p></div>
+    <div class="fin-card fin-kpi" style="--fin-kpi-cor:#10B981"><p class="fin-kpi-rotulo"><i class="fas fa-check text-emerald-600"></i>Conciliadas</p><p class="fin-kpi-valor" data-fin-num="{{ contagem.CONCILIADO|default:0 }}" data-fin-formato="int">{{ contagem.CONCILIADO|default:0 }}</p></div>
+    <div class="fin-card fin-kpi col-span-2 md:col-span-1" style="--fin-kpi-cor:{% if contagem.PENDENTE or contagem.DIVERGENTE %}#F59E0B{% else %}#94A3B8{% endif %}"><p class="fin-kpi-rotulo">Sem par · divergentes</p><p class="fin-kpi-valor {% if contagem.PENDENTE or contagem.DIVERGENTE %}text-amber-700{% endif %}">{{ contagem.PENDENTE|default:0 }} · {{ contagem.DIVERGENTE|default:0 }}</p></div>
 </div>
 
 <div class="fin-card overflow-hidden mb-5">
-    <div class="px-4 py-3 border-b border-gray-100"><h2 class="font-bold text-sm text-gray-900"><i class="fas fa-credit-card text-gray-400 mr-1.5"></i>Vendas segundo a adquirente</h2></div>
+    <div class="fin-cab"><h2><i class="fas fa-credit-card text-gray-400 mr-1.5"></i>Vendas segundo a adquirente</h2></div>
     <div class="overflow-x-auto">
-    <table class="fin-tabela">
-        <thead><tr><th>Venda</th><th>NSU</th><th>Loja</th><th>Bandeira · parcelas</th><th class="text-right">Bruto</th><th class="text-right">Líquido</th><th>Previsão</th><th>Venda no portal</th><th>Situação</th><th></th></tr></thead>
+    <table class="fin-tabela fin-empilha" id="finTabela" data-fin-ordenar>
+        <thead><tr><th>Venda</th><th>NSU</th><th>Loja</th><th>Bandeira · parcelas</th><th class="text-right">Bruto</th><th class="text-right">Líquido</th><th>Previsão</th><th>Venda no portal</th><th>Situação</th><th data-rotulo=""></th></tr></thead>
         <tbody>
         {% for r in recebiveis %}
         <tr>
-            <td class="tabular whitespace-nowrap">{{ r.data_venda|date:"d/m/Y" }}</td>
-            <td class="tabular">{{ r.nsu }}{% if r.autorizacao %}<span class="block text-[11px] text-gray-400">aut. {{ r.autorizacao }}</span>{% endif %}</td>
+            <td class="tabular whitespace-nowrap" data-v="{{ r.data_venda|date:'Y-m-d' }}">{{ r.data_venda|date:"d/m/Y" }}</td>
+            <td class="tabular fin-td-principal" data-v="{{ r.nsu }}"><span class="font-semibold text-gray-900">NSU {{ r.nsu }}</span>{% if r.autorizacao %}<span class="block text-[11px] text-gray-400">aut. {{ r.autorizacao }}</span>{% endif %}</td>
             <td class="text-xs whitespace-nowrap">{{ r.loja.name|default:"—" }}{% if not r.loja and r.estabelecimento %}<span class="block text-[11px] text-amber-700">EC {{ r.estabelecimento }} sem loja</span>{% endif %}</td>
             <td class="text-xs">{{ r.bandeira|default:"—" }}{% if r.modalidade %} · {{ r.modalidade }}{% endif %} · {{ r.parcelas }}x</td>
-            <td class="text-right tabular whitespace-nowrap">{{ r.valor_bruto|brl_zero }}</td>
-            <td class="text-right tabular whitespace-nowrap text-gray-600">{{ r.valor_liquido|brl }}</td>
-            <td class="tabular text-xs whitespace-nowrap">{{ r.previsao_pagamento|date:"d/m/Y"|default:"—" }}</td>
+            <td class="text-right tabular whitespace-nowrap font-semibold" data-v="{{ r.valor_bruto|unlocalize }}">{{ r.valor_bruto|brl_zero }}</td>
+            <td class="text-right tabular whitespace-nowrap text-gray-600" data-v="{{ r.valor_liquido|default:0|unlocalize }}">{{ r.valor_liquido|brl }}</td>
+            <td class="tabular text-xs whitespace-nowrap" data-v="{{ r.previsao_pagamento|date:'Y-m-d' }}">{{ r.previsao_pagamento|date:"d/m/Y"|default:"—" }}</td>
             <td class="text-xs">{% if r.venda %}#{{ r.venda.id }} · {{ r.venda.total|brl_zero }}<span class="block text-gray-400">{{ r.venda.data_venda|date:"d/m H:i" }}</span>{% else %}—{% endif %}</td>
             <td><span class="fin-chip {% if r.status == 'CONCILIADO' %}st-QUITADO{% elif r.status == 'DIVERGENTE' %}st-VENCIDO{% elif r.status == 'IGNORADO' %}st-CANCELADO{% else %}st-PARCIAL{% endif %}">{{ r.get_status_display }}</span>
                 {% if r.observacao %}<span class="block text-[11px] text-gray-500 mt-0.5">{{ r.observacao }}</span>{% endif %}</td>
-            <td class="whitespace-nowrap text-right text-xs">{% if pode.cartoes_conciliar %}<button type="button" data-abrir="#finRec{{ r.id }}" class="text-emerald-700 font-semibold hover:underline">tratar</button>{% endif %}</td>
+            <td class="whitespace-nowrap text-right text-xs fin-td-acoes"><div class="fin-acoes-linha">{% if pode.cartoes_conciliar %}<button type="button" data-abrir="#finRec{{ r.id }}" class="fin-acao fin-acao-verde"><i class="fas fa-screwdriver-wrench text-[10px]"></i>tratar</button>{% endif %}</div></td>
         </tr>
         {% empty %}
-        <tr><td colspan="10" class="text-center text-gray-400 py-10">Nenhuma venda da adquirente no período. Importe o relatório de vendas (CSV ou Excel) da Cielo, Rede, Stone, Getnet…</td></tr>
+        <tr><td colspan="10" class="fin-vazio"><div class="fin-vazio-icone"><i class="fas fa-credit-card"></i></div>Nenhuma venda da adquirente no período. Importe o relatório de vendas (CSV ou Excel) da Cielo, Rede, Stone, Getnet…</td></tr>
         {% endfor %}
         </tbody>
     </table>
     </div>
     {% if pagina.has_other_pages %}
-    <div class="px-4 py-3 border-t border-gray-100 flex justify-between text-sm"><span class="text-gray-500">Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span>
-        <div class="flex gap-2">{% if pagina.has_previous %}<a href="?{{ query }}&p={{ pagina.previous_page_number }}" class="fin-btn fin-btn-claro">Anterior</a>{% endif %}{% if pagina.has_next %}<a href="?{{ query }}&p={{ pagina.next_page_number }}" class="fin-btn fin-btn-claro">Próxima</a>{% endif %}</div></div>
+    <div class="px-4 py-3 border-t border-gray-100 flex items-center justify-between gap-2 text-sm flex-wrap"><span class="text-gray-500">Página <strong class="text-gray-800">{{ pagina.number }}</strong> de {{ pagina.paginator.num_pages }}</span>
+        <div class="flex gap-2">{% if pagina.has_previous %}<a href="?{{ query }}&p={{ pagina.previous_page_number }}" class="fin-btn fin-btn-claro"><i class="fas fa-chevron-left text-xs"></i>Anterior</a>{% endif %}{% if pagina.has_next %}<a href="?{{ query }}&p={{ pagina.next_page_number }}" class="fin-btn fin-btn-claro">Próxima<i class="fas fa-chevron-right text-xs"></i></a>{% endif %}</div></div>
     {% endif %}
 </div>
 
 <div class="fin-card overflow-hidden">
-    <div class="px-4 py-3 border-b border-gray-100"><h2 class="font-bold text-sm text-gray-900"><i class="fas fa-receipt text-gray-400 mr-1.5"></i>Vendas no cartão do portal sem par na adquirente ({{ vendas_sem_par|length }})</h2>
-        <p class="text-[11px] text-gray-500">Vendas lançadas em /vendas com cartão e NSU, no período, que nenhum relatório importado cobriu.</p></div>
+    <div class="fin-cab flex-wrap"><div class="min-w-0"><h2><i class="fas fa-receipt text-gray-400 mr-1.5"></i>Vendas no cartão do portal sem par na adquirente ({{ vendas_sem_par|length }})</h2>
+        <p class="text-[11px] text-gray-500">Vendas lançadas em /vendas com cartão e NSU, no período, que nenhum relatório importado cobriu.</p></div></div>
     <ul class="divide-y divide-gray-100 text-sm">
         {% for v in vendas_sem_par %}
-        <li class="px-4 py-2 flex items-center justify-between gap-3"><span>#{{ v.id }} · {{ v.data_venda|date:"d/m/Y H:i" }} · NSU <strong class="tabular">{{ v.nsu }}</strong> · {{ v.parcelas|default:1 }}x · {{ v.loja.name|default:v.pdv_nome }}</span><span class="tabular font-semibold">{{ v.total|brl_zero }}</span></li>
-        {% empty %}<li class="px-4 py-4 text-gray-400">Nenhuma.</li>{% endfor %}
+        <li class="px-4 py-2.5 flex items-center justify-between gap-3 hover:bg-gray-50/60"><span class="min-w-0 break-words"><i class="fas fa-link-slash text-amber-500 text-[11px] mr-1.5"></i>#{{ v.id }} · {{ v.data_venda|date:"d/m/Y H:i" }} · NSU <strong class="tabular">{{ v.nsu }}</strong> · {{ v.parcelas|default:1 }}x · {{ v.loja.name|default:v.pdv_nome }}</span><span class="tabular font-semibold shrink-0">{{ v.total|brl_zero }}</span></li>
+        {% empty %}<li class="fin-vazio py-6">Nenhuma.</li>{% endfor %}
     </ul>
 </div>
 
@@ -82,7 +102,7 @@
                 <div><label class="fin-label">Adquirente</label><input name="adquirente" list="finAdquirentes" maxlength="40" class="fin-input" placeholder="Cielo, Rede, Stone…">
                     <datalist id="finAdquirentes"><option>Cielo</option><option>Rede</option><option>Stone</option><option>Getnet</option><option>PagSeguro</option><option>SafraPay</option><option>Mercado Pago</option></datalist></div>
                 <div><label class="fin-label">Loja (quando o relatório é de uma loja só)</label><select name="loja" class="fin-input"><option value="">Pelo estabelecimento</option>{% for l in lojas %}<option value="{{ l.id }}">{{ l.name }}</option>{% endfor %}</select></div>
-                <input type="file" name="arquivo" accept=".csv,.txt,.xlsx" required class="text-sm">
+                <label class="block rounded-xl border-2 border-dashed border-gray-200 p-4 text-center hover:border-emerald-300 hover:bg-emerald-50/40 transition cursor-pointer"><i class="fas fa-cloud-arrow-up text-2xl text-emerald-500 block mb-1"></i><span class="text-xs text-gray-500">CSV, TXT ou Excel (.xlsx)</span><input type="file" name="arquivo" accept=".csv,.txt,.xlsx" required class="block w-full text-sm mt-2 text-gray-600 file:mr-3 file:rounded-lg file:border-0 file:bg-emerald-50 file:px-3 file:py-2 file:text-emerald-700 file:font-semibold"></label>
             </div>
             <div class="px-5 py-3 border-t border-gray-100 bg-gray-50 flex justify-end gap-2"><button type="button" data-fechar class="fin-btn fin-btn-claro">Cancelar</button><button type="submit" class="fin-btn fin-btn-verde"><i class="fas fa-file-import"></i>Importar</button></div>
         </form>
@@ -94,7 +114,7 @@
         <ul class="divide-y divide-gray-100 text-sm max-h-64 overflow-y-auto">
             {% for e in estabelecimentos %}
             <li class="px-5 py-2 flex items-center justify-between gap-2"><span><strong class="tabular">{{ e.codigo }}</strong>{% if e.adquirente %} · {{ e.adquirente }}{% endif %} → {{ e.loja.name }}</span>
-                <form method="post" action="{% url 'financeiro:cartoes_estabelecimento' %}">{% csrf_token %}<input type="hidden" name="codigo" value="{{ e.codigo }}"><input type="hidden" name="remover" value="1"><button class="text-xs text-red-600 hover:underline">tirar</button></form></li>
+                <form method="post" action="{% url 'financeiro:cartoes_estabelecimento' %}" data-fin-confirmar="As vendas desse estabelecimento deixam de cair nesta loja automaticamente." data-fin-titulo="Tirar a ligação do EC {{ e.codigo }}?" data-fin-botao="Tirar">{% csrf_token %}<input type="hidden" name="codigo" value="{{ e.codigo }}"><input type="hidden" name="remover" value="1"><button class="fin-acao fin-acao-perigo"><i class="fas fa-link-slash text-[10px]"></i>tirar</button></form></li>
             {% empty %}<li class="px-5 py-3 text-gray-400">Nenhum estabelecimento ligado a loja ainda.</li>{% endfor %}
         </ul>
         <form method="post" action="{% url 'financeiro:cartoes_estabelecimento' %}" class="p-5 border-t border-gray-100 grid grid-cols-2 gap-2">

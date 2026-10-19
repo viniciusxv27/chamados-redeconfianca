@@ -3,42 +3,118 @@
 {% block fin_cabecalho %}Plano de contas{% endblock %}
 {% block fin_subtitulo %}As contas que classificam receitas e despesas · só as analíticas recebem lançamento{% endblock %}
 {% block fin_acoes %}
-<a href="?{% if not mostrar_inativas %}inativas=1{% endif %}" class="fin-btn fin-btn-claro">{% if mostrar_inativas %}Esconder inativas{% else %}Mostrar inativas{% endif %}</a>
-{% if pode.plano_editar %}<button type="button" data-abrir="#finPlano" data-codigo="" class="fin-btn fin-btn-verde"><i class="fas fa-plus"></i>Nova conta</button>{% endif %}
+<a href="?{% if not mostrar_inativas %}inativas=1{% endif %}" class="fin-btn fin-btn-claro"><i class="fas {% if mostrar_inativas %}fa-eye-slash{% else %}fa-eye{% endif %}"></i>{% if mostrar_inativas %}Esconder inativas{% else %}Mostrar inativas{% endif %}</a>
+{% if pode.plano_editar %}<button type="button" data-abrir="#finPlano" data-codigo="" data-fin-atalho-novo class="fin-btn fin-btn-verde"><i class="fas fa-plus"></i>Nova conta<span class="fin-kbd">N</span></button>{% endif %}
+{% endblock %}
+
+{% block fin_css %}
+<style>
+    .fin-arvore li.fin-arvore-oculta { display:none; }
+    .fin-arvore.fin-filtrando li.fin-arvore-oculta { display:block; }
+    .fin-arvore .fin-recuo { padding-left:calc(var(--nivel, 0) * .7rem); }
+    @media (min-width:640px) { .fin-arvore .fin-recuo { padding-left:calc(var(--nivel, 0) * 1.1rem); } }
+    .fin-arvore .fin-seta-arvore { transition:transform .2s; }
+    .fin-arvore li.fin-fechado .fin-seta-arvore { transform:rotate(-90deg); }
+    .fin-arvore .fin-guia { position:relative; }
+    .fin-arvore .fin-guia::before { content:''; position:absolute; left:calc(var(--nivel, 0) * .7rem - .45rem); top:-.5rem; bottom:-.5rem; width:1px; background:var(--fin-borda); }
+    @media (min-width:640px) { .fin-arvore .fin-guia::before { left:calc(var(--nivel, 0) * 1.1rem - .55rem); } }
+    .fin-arvore li[data-nivel="0"] .fin-guia::before { display:none; }
+</style>
 {% endblock %}
 
 {% block fin_conteudo %}
 {% if not contas %}
-<div class="fin-card p-10 text-center text-gray-500">
-    <i class="fas fa-sitemap text-4xl text-gray-300 mb-3"></i>
+<div class="fin-card fin-vazio">
+    <div class="fin-vazio-icone"><i class="fas fa-sitemap"></i></div>
     <p>O plano de contas está vazio.</p>
     {% if pode.plano_editar %}
     <form method="post" action="{% url 'financeiro:plano_padrao' %}" class="mt-4">{% csrf_token %}
         <button class="fin-btn fin-btn-verde"><i class="fas fa-wand-magic-sparkles"></i>Criar plano padrão (rede de lojas de telefonia)</button></form>
-    <p class="text-xs text-gray-400 mt-2">Receitas (vendas, comissões da operadora, serviços) e despesas (pessoal, ocupação, mercadorias, administrativas, financeiras, impostos). Depois é só ajustar.</p>
+    <p class="text-xs text-gray-400 mt-2 max-w-lg mx-auto">Receitas (vendas, comissões da operadora, serviços) e despesas (pessoal, ocupação, mercadorias, administrativas, financeiras, impostos). Depois é só ajustar.</p>
     {% endif %}
 </div>
 {% else %}
+<div class="fin-ferramentas mb-3">
+    <div class="fin-card p-2.5 sm:p-3 flex items-center gap-2 flex-wrap">
+        <label class="fin-busca flex-1 min-w-[12rem]">
+            <i class="fas fa-magnifying-glass"></i>
+            <input type="search" class="fin-input" placeholder="Filtrar por código ou nome…" aria-label="Filtrar o plano de contas" data-fin-filtrar="#finArvore" data-fin-atalho-busca autocomplete="off">
+            <span class="fin-kbd" aria-hidden="true">/</span>
+        </label>
+        <span class="fin-contagem hidden sm:inline" data-fin-contagem="#finArvore" aria-live="polite"></span>
+        <div class="flex gap-1">
+            <button type="button" class="fin-btn fin-btn-claro px-3" id="finExpandir" title="Expandir tudo"><i class="fas fa-up-right-and-down-left-from-center"></i><span class="hidden md:inline">Expandir</span></button>
+            <button type="button" class="fin-btn fin-btn-claro px-3" id="finRecolher" title="Recolher tudo"><i class="fas fa-down-left-and-up-right-to-center"></i><span class="hidden md:inline">Recolher</span></button>
+        </div>
+    </div>
+</div>
+
 <div class="fin-card overflow-hidden">
-    <ul class="divide-y divide-gray-100 text-sm">
+    <ul class="divide-y divide-gray-100 text-sm fin-arvore" id="finArvore">
         {% for c in contas %}{% if c.ativa or mostrar_inativas %}
-        <li class="px-4 py-2 flex items-center gap-3 {% if not c.ativa %}opacity-50{% endif %} {% if not c.analitica %}bg-gray-50{% endif %}">
-            <span class="tabular text-gray-400 w-24 shrink-0">{{ c.codigo }}</span>
-            <span class="flex-1 min-w-0 {% if not c.analitica %}font-bold text-gray-900{% else %}text-gray-800{% endif %}" style="padding-left: {{ c.nivel }}rem">{{ c.nome }}
-                {% if c.descricao %}<span class="block text-[11px] text-gray-400 font-normal">{{ c.descricao }}</span>{% endif %}</span>
-            <span class="fin-chip {% if c.tipo == 'RECEITA' %}bg-emerald-50 text-emerald-700{% else %}bg-rose-50 text-rose-700{% endif %}">{{ c.get_tipo_display }}</span>
-            {% if c.analitica %}<span class="text-[11px] text-gray-400 w-20 text-right">{{ c.n_titulos }} título{{ c.n_titulos|pluralize }}</span>{% else %}<span class="text-[11px] text-gray-400 w-20 text-right">grupo</span>{% endif %}
-            {% if pode.plano_editar %}
-            <span class="flex items-center gap-2 text-xs w-36 justify-end">
-                {% if not c.analitica or c.n_titulos == 0 %}<button type="button" data-abrir="#finPlano" data-codigo="{{ c.codigo }}." class="text-emerald-700 hover:underline">+ subconta</button>{% endif %}
-                <button type="button" data-abrir="#finPlanoEditar" data-id="{{ c.id }}" data-codigo="{{ c.codigo }}" data-nome="{{ c.nome }}" data-descricao="{{ c.descricao }}" data-tipo="{{ c.tipo }}" data-raiz="{% if not c.pai_id %}1{% endif %}" class="text-gray-600 hover:underline">editar</button>
-                <form method="post" action="{% url 'financeiro:plano_ativar' c.id %}">{% csrf_token %}<button class="text-gray-500 hover:underline">{% if c.ativa %}desativar{% else %}reativar{% endif %}</button></form>
-            </span>
-            {% endif %}
+        <li data-codigo="{{ c.codigo }}" data-nivel="{{ c.nivel }}" data-fin-busca="{{ c.codigo }} {{ c.nome }} {{ c.descricao }}" class="{% if not c.analitica %}bg-gray-50{% endif %} transition-colors hover:bg-emerald-50/30">
+            <div class="px-3 sm:px-4 py-2 flex items-center gap-x-3 gap-y-1 flex-wrap {% if not c.ativa %}opacity-50{% endif %}">
+                <div class="flex items-center gap-2 flex-1 min-w-[12rem] fin-recuo fin-guia" style="--nivel: {{ c.nivel }}">
+                    {% if not c.analitica %}
+                    <button type="button" class="fin-btn-icone w-8 h-8 shrink-0" data-fin-arvore aria-expanded="true" aria-label="Recolher ou expandir {{ c.nome }}"><i class="fas fa-chevron-down text-[11px] fin-seta-arvore"></i></button>
+                    {% else %}<span class="w-8 shrink-0 text-center text-gray-300"><i class="fas fa-circle text-[5px]"></i></span>{% endif %}
+                    <span class="tabular text-gray-400 shrink-0 text-xs sm:text-sm">{{ c.codigo }}</span>
+                    <span class="min-w-0 {% if not c.analitica %}font-bold text-gray-900{% else %}text-gray-800{% endif %}">{{ c.nome }}
+                        {% if c.descricao %}<span class="block text-[11px] text-gray-400 font-normal">{{ c.descricao }}</span>{% endif %}</span>
+                </div>
+                <div class="flex items-center gap-2 ml-auto pl-10 sm:pl-0">
+                    <span class="fin-chip {% if c.tipo == 'RECEITA' %}bg-emerald-50 text-emerald-700{% else %}bg-rose-50 text-rose-700{% endif %}">{{ c.get_tipo_display }}</span>
+                    {% if c.analitica %}<span class="text-[11px] text-gray-400 w-20 text-right">{{ c.n_titulos }} título{{ c.n_titulos|pluralize }}</span>{% else %}<span class="text-[11px] text-gray-400 w-20 text-right">grupo</span>{% endif %}
+                    {% if pode.plano_editar %}
+                    <span class="fin-acoes-linha">
+                        {% if not c.analitica or c.n_titulos == 0 %}<button type="button" data-abrir="#finPlano" data-codigo="{{ c.codigo }}." class="fin-acao fin-acao-verde" title="Nova subconta"><i class="fas fa-plus text-[10px]"></i><span class="hidden lg:inline">subconta</span></button>{% endif %}
+                        <button type="button" data-abrir="#finPlanoEditar" data-id="{{ c.id }}" data-codigo="{{ c.codigo }}" data-nome="{{ c.nome }}" data-descricao="{{ c.descricao }}" data-tipo="{{ c.tipo }}" data-raiz="{% if not c.pai_id %}1{% endif %}" class="fin-acao" title="Editar"><i class="fas fa-pen text-[10px]"></i><span class="hidden lg:inline">editar</span></button>
+                        <form method="post" action="{% url 'financeiro:plano_ativar' c.id %}">{% csrf_token %}<button class="fin-acao" title="{% if c.ativa %}Desativar{% else %}Reativar{% endif %}"><i class="fas {% if c.ativa %}fa-toggle-on text-emerald-600{% else %}fa-toggle-off{% endif %}"></i><span class="hidden lg:inline">{% if c.ativa %}desativar{% else %}reativar{% endif %}</span></button></form>
+                    </span>
+                    {% endif %}
+                </div>
+            </div>
         </li>
         {% endif %}{% endfor %}
     </ul>
 </div>
+<script>
+(function () {
+    /* Árvore: recolhe/expande grupos pelo código (2.2 contém 2.2.07). */
+    var ul = document.getElementById('finArvore');
+    var itens = Array.prototype.slice.call(ul.querySelectorAll('li[data-codigo]'));
+    function pintar() {
+        var fechados = itens.filter(function (li) { return li.classList.contains('fin-fechado'); }).map(function (li) { return li.dataset.codigo + '.'; });
+        itens.forEach(function (li) {
+            var c = li.dataset.codigo;
+            li.classList.toggle('fin-arvore-oculta', fechados.some(function (p) { return c.indexOf(p) === 0; }));
+        });
+        ul.querySelectorAll('[data-fin-arvore]').forEach(function (b) { b.setAttribute('aria-expanded', b.closest('li').classList.contains('fin-fechado') ? 'false' : 'true'); });
+    }
+    ul.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-fin-arvore]');
+        if (!b) return;
+        b.closest('li').classList.toggle('fin-fechado'); pintar();
+    });
+    document.getElementById('finExpandir').addEventListener('click', function () { itens.forEach(function (li) { li.classList.remove('fin-fechado'); }); pintar(); });
+    document.getElementById('finRecolher').addEventListener('click', function () {
+        itens.forEach(function (li) { if (li.querySelector('[data-fin-arvore]') && li.dataset.nivel !== '0') li.classList.add('fin-fechado'); }); pintar();
+    });
+    // Na busca, quem combina leva junto os grupos acima dele.
+    var porCodigo = {};
+    itens.forEach(function (li) { porCodigo[li.dataset.codigo] = li; });
+    var busca = document.querySelector('[data-fin-filtrar="#finArvore"]');
+    if (busca) busca.finDepois = function (termos) {
+        ul.classList.toggle('fin-filtrando', termos.length > 0);
+        if (!termos.length) return;
+        itens.forEach(function (li) {
+            if (li.hidden) return;
+            var partes = li.dataset.codigo.split('.');
+            for (var i = partes.length - 1; i > 0; i--) { var pai = porCodigo[partes.slice(0, i).join('.')]; if (pai) pai.hidden = false; }
+        });
+    };
+})();
+</script>
 {% endif %}
 
 {% if pode.plano_editar %}
