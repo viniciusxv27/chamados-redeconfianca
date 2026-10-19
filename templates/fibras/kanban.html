@@ -22,6 +22,12 @@
       <a href="{% url 'fibras:relatorio' %}" class="px-3 py-2 bg-white border rounded-lg text-sm hover:bg-gray-50">
         <i class="fas fa-chart-bar"></i> Relatório
       </a>
+      {% if is_ilha %}
+      <a href="{% url 'fibras:validacao' %}" class="px-3 py-2 bg-orange-500 text-white rounded-lg text-sm font-semibold shadow-sm hover:bg-orange-600"
+         title="Cruzamento completo: Base de Vendas × Esteira de Vendas Vivo">
+        <i class="fas fa-code-compare"></i> Validação Base × Esteira
+      </a>
+      {% endif %}
       <a href="{% url 'fibras:export_canceladas_csv' %}" class="px-3 py-2 bg-gradient-to-r from-red-700 to-red-900 text-white rounded-lg text-sm font-semibold shadow hover:shadow-lg transition-all" title="Exporta as fibras canceladas na planilha de Gestão Documental (Receita zerada)">
         <i class="fas fa-file-csv"></i> Exportar canceladas
       </a>
@@ -38,10 +44,10 @@
       <form method="post" action="{% url 'fibras:importar_planilha' %}" enctype="multipart/form-data" class="inline-flex items-center gap-2 bg-white border rounded-lg px-2 py-1">{% csrf_token %}
         <label class="text-xs font-semibold text-gray-700 flex items-center gap-1 cursor-pointer">
           <i class="fas fa-file-excel text-green-700"></i>
-          <span>Planilha:</span>
+          <span>Esteira Vivo (ANALÍTICO):</span>
           <input type="file" name="planilha" accept=".xlsx" required class="text-xs">
         </label>
-        <button class="px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700" title="Atualiza o status das fibras pela coluna Nº_protocolo">
+        <button class="px-2 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700" title="Importa a Esteira de Vendas Vivo e cruza com a Base de Vendas (protocolo, loja e data ±1)">
           <i class="fas fa-upload"></i> Importar
         </button>
       </form>
@@ -104,6 +110,16 @@
             {% if is_ilha %}<i class="fas fa-grip-vertical text-gray-300 group-hover:text-gray-500 text-xs mt-0.5"></i>{% endif %}
           </div>
           <div class="text-xs text-gray-500">{{ f.cpf }} · Venda {{ f.numero_da_venda }}{% if f.numero_protocolo %} · Prot. {{ f.numero_protocolo }}{% endif %}</div>
+          {% if f.ordem_vinculada %}
+          <div class="text-[11px] mt-0.5 flex items-center gap-1 flex-wrap">
+            <span class="text-gray-600">ORDEM <b>{{ f.ordem_vinculada }}</b></span>
+            <span class="px-1.5 rounded-full font-semibold {% if f.assertividade == 'Alta' %}bg-green-100 text-green-700{% elif f.assertividade == 'Manual' %}bg-blue-100 text-blue-700{% elif f.assertividade == 'Média' %}bg-yellow-100 text-yellow-800{% else %}bg-orange-100 text-orange-700{% endif %}"
+                  title="Assertividade do cruzamento com a Esteira Vivo">{{ f.assertividade }}</span>
+            {% if f.conferencia_endereco == 'Divergente' or f.conferencia_endereco == 'Parcialmente divergente' %}<span class="text-red-600" title="{{ f.detalhe_endereco }}"><i class="fas fa-location-dot"></i> endereço</span>{% endif %}
+          </div>
+          {% elif f.status_cruzamento == 'Venda B2B' %}
+          <div class="text-[11px] mt-0.5"><span class="px-1.5 rounded-full bg-purple-100 text-purple-700 font-semibold">B2B</span></div>
+          {% endif %}
           <div class="text-xs text-gray-700 truncate">{{ f.endereco|default:"" }}</div>
           <div class="text-xs mt-1 flex items-center justify-between">
             <span class="text-gray-600 truncate">{{ f.vendedor }}</span>

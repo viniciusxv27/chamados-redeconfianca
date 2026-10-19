@@ -20,6 +20,9 @@ Pillow==10.4.0
 openpyxl==3.1.5
 pandas==2.2.3
 numpy==1.26.4
+# Cruzamento Base de Vendas x Esteira Vivo (/fibras/validacao/)
+rapidfuzz==3.9.7
+scipy==1.13.1
 
 # Development Tools
 django-debug-toolbar==4.4.6

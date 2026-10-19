@@ -339,269 +339,43 @@ def _map_planilha_status(raw: str) -> Optional[str]:
 
 
 def import_planilha_xlsx(file_obj, *, by_user=None) -> dict:
-    """Importa a planilha diária e atualiza as fibras casando por protocolo.
+    """Importa a Esteira de Vendas Vivo (ANALÍTICO DE VENDAS) e roda o cruzamento completo.
 
-    Lê o arquivo .xlsx com ``openpyxl``, localiza:
-      - Coluna do protocolo (header ``ORDEM`` — equivalente ao ``Nº_protocolo``
-        no MySQL — ou, como fallback, header contendo ``PROTOCOLO``).
-      - Coluna de status (header contém ``STATUS`` ou ``SITUA``;
-        prioriza ``STATUS INSTALACAO``).
-
-    Para cada linha:
-      - Tenta achar a ``Fibra`` local por ``numero_protocolo``.
-      - Se não existir, busca no MySQL (``vendas_servicos.Nº_protocolo``) e
-        faz upsert local, então casa novamente.
-      - Atualiza ``ordem_planilha`` (posição da linha), ``status`` (via
-        :func:`_map_planilha_status`) e ``status_planilha_raw``.
-
-    Retorna ``{'matched', 'updated_status', 'created_from_mysql', 'not_found',
-    'not_found_count', 'rows'}``.
+    1. Guarda a planilha (só as colunas do cruzamento) no lugar da anterior.
+    2. Sincroniza as vendas de Fixa do MySQL (a Base de Vendas).
+    3. Cruza Base de Vendas x Esteira com o motor da ferramenta "Validação de
+       Vendas Go" (protocolo exato/aproximado, loja, data ±1, quantidade
+       loja/dia, ajustes manuais) e grava o resultado em cada fibra; a ORDEM
+       vinculada dita o status do kanban. Ver ``fibras/validacao.py``.
+    4. Remove as fibras que sumiram da planilha e não tiveram tratativa.
     """
-    try:
-        import openpyxl  # type: ignore
-    except ImportError as e:
-        raise RuntimeError('openpyxl não instalado no servidor.') from e
+    from .validacao import executar, importar_esteira
 
-    wb = openpyxl.load_workbook(file_obj, data_only=True, read_only=True)
-    ws = wb.active
-
-    # Encontra a linha de cabeçalho.
-    header_row_idx = None
-    headers: list[str] = []
-    for i, row in enumerate(ws.iter_rows(min_row=1, max_row=15, values_only=True), start=1):
-        norm = [_normalize(c) for c in row]
-        if any(c == 'ORDEM' or 'PROTOCOLO' in c for c in norm):
-            header_row_idx = i
-            headers = norm
-            break
-    if header_row_idx is None:
-        raise RuntimeError("Coluna 'ORDEM' (protocolo) não encontrada na planilha.")
-
-    # Prioriza 'ORDEM' exato; cai para qualquer coluna com 'PROTOCOLO'.
-    proto_idx = next((j for j, c in enumerate(headers) if c == 'ORDEM'), None)
-    if proto_idx is None:
-        proto_idx = next((j for j, c in enumerate(headers) if 'PROTOCOLO' in c), None)
-    if proto_idx is None:
-        raise RuntimeError("Coluna 'ORDEM' (protocolo) não encontrada na planilha.")
-
-    # Prioriza 'STATUS INSTALACAO'; cai para qualquer coluna com STATUS/SITUA.
-    status_idx = next(
-        (j for j, c in enumerate(headers) if 'STATUS' in c and 'INSTALAC' in c),
-        None,
-    )
-    if status_idx is None:
-        status_idx = next(
-            (j for j, c in enumerate(headers) if 'STATUS' in c or 'SITUA' in c),
-            None,
-        )
-
-    # Coluna 'SLA AGENDA' (ou contendo SLA + AGEND); fallback só SLA.
-    sla_idx = next(
-        (j for j, c in enumerate(headers) if 'SLA' in c and 'AGEND' in c),
-        None,
-    )
-    if sla_idx is None:
-        sla_idx = next((j for j, c in enumerate(headers) if 'SLA' in c), None)
-
-    # Coluna 'MOTIVO' (usada em vendas com problema).
-    motivo_idx = next((j for j, c in enumerate(headers) if 'MOTIVO' in c), None)
-
-    # 1ª passada: coleta protocolos e status_raw mantendo a ordem da planilha.
-    parsed: list[tuple[str, str, str, str]] = []  # (proto, status_raw, sla, motivo)
-    for row in ws.iter_rows(min_row=header_row_idx + 1, values_only=True):
-        if not row or all(c is None or str(c).strip() == '' for c in row):
-            continue
-        proto = (str(row[proto_idx]).strip() if proto_idx < len(row) and row[proto_idx] is not None else '')
-        status_raw = ''
-        if status_idx is not None and status_idx < len(row) and row[status_idx] is not None:
-            status_raw = str(row[status_idx]).strip()
-        sla_val = ''
-        if sla_idx is not None and sla_idx < len(row) and row[sla_idx] is not None:
-            sla_val = str(row[sla_idx]).strip()
-        motivo_val = ''
-        if motivo_idx is not None and motivo_idx < len(row) and row[motivo_idx] is not None:
-            motivo_val = str(row[motivo_idx]).strip()
-        parsed.append((proto, status_raw, sla_val, motivo_val))
-
-    total_rows = len(parsed)
-    protocols = [p for p, _, _, _ in parsed if p]
-
-    # Antes de cruzar, sincroniza com as vendas do MySQL (pilar FIXA +
-    # Serviço Técnico = "Alta Banda Larga") do mês corrente. Isso garante
-    # que o "não localizadas" (vendas no banco e fora da planilha) e as
-    # "Ordens inconsistentes" (planilha sem venda no banco) fiquem
-    # consistentes com o que está ativo no MySQL.
-    sync_created = 0
+    imp = importar_esteira(file_obj, nome=getattr(file_obj, 'name', ''), by_user=by_user)
     try:
         sync_stats = sync_fibras()
-        sync_created = int(sync_stats.get('created') or 0)
     except Exception:
         sync_stats = {}
-
-    # Cross com o banco local. Protocolos que ainda assim não existirem
-    # localmente NÃO são criados a partir do MySQL — eles ficam apenas em
-    # "Ordens inconsistentes da planilha" para conferência.
-    existing_map: dict[str, Fibra] = {
-        f.numero_protocolo: f
-        for f in Fibra.objects.filter(numero_protocolo__in=protocols)
-    }
-    created_from_mysql = sync_created
-
-    # --- Fallback: para protocolos da planilha que ainda não bateram,
-    # compara apenas pelos dígitos (remove letras e "-" do protocolo do banco).
-    # Isso evita marcar como "Não localizada" vendas que diferem apenas por
-    # prefixo/sufixo alfanumérico no Nº de Protocolo armazenado.
-    pending_planilha = [p for p in protocols if p not in existing_map]
-    if pending_planilha:
-        digits_to_planilha: dict[str, str] = {}
-        for p in pending_planilha:
-            d = _digits_only(p)
-            if d:
-                digits_to_planilha.setdefault(d, p)
-        if digits_to_planilha:
-            # Varre Fibras com protocolo preenchido procurando match por dígitos.
-            for f in (
-                Fibra.objects.exclude(numero_protocolo='')
-                .only('id', 'numero_protocolo')
-                .iterator()
-            ):
-                d = _digits_only(f.numero_protocolo)
-                if not d:
-                    continue
-                planilha_proto = digits_to_planilha.get(d)
-                if planilha_proto and planilha_proto not in existing_map:
-                    existing_map[planilha_proto] = f
-
-    matched = 0
-    updated_status = 0
-    not_found: list[str] = []
-    now = timezone.now()
-
-    # Mantém um mapa proto -> status_raw para registrar inconsistências.
-    unmatched_status: dict[str, str] = {}
-
-    for ordem, (proto, status_raw, sla_val, motivo_val) in enumerate(parsed, start=1):
-        if not proto:
-            continue
-        fibra = existing_map.get(proto)
-        if not fibra:
-            not_found.append(proto)
-            unmatched_status[proto] = status_raw
-            continue
-        matched += 1
-        fibra.ordem_planilha = ordem
-        fibra.last_planilha_at = now
-        fibra.status_planilha_raw = status_raw[:120]
-        fibra.sla_agenda = sla_val[:120]
-        fibra.motivo_planilha = motivo_val[:255]
-        update_fields = [
-            'ordem_planilha', 'last_planilha_at', 'status_planilha_raw',
-            'sla_agenda', 'motivo_planilha',
-        ]
-
-        mapped = _map_planilha_status(status_raw)
-        if mapped and mapped != fibra.status:
-            old = fibra.status
-            fibra.status = mapped
-            update_fields.append('status')
-            updated_status += 1
-            try:
-                FibraStatusHistory.objects.create(
-                    fibra=fibra,
-                    status_anterior=old,
-                    status_novo=mapped,
-                    retorno=f'Import planilha: {status_raw[:80]}',
-                    alterado_por=by_user,
-                )
-            except Exception:
-                pass
-            _notify_vendor(fibra, old, mapped)
-
-        fibra.save(update_fields=update_fields)
-
-    # --- Persistência de inconsistências (ORDEMs da planilha sem match local).
-    inc_created = 0
-    inc_updated = 0
-    for proto, status_raw in unmatched_status.items():
-        obj, was_created = PlanilhaOrdemInconsistente.objects.get_or_create(
-            ordem=proto,
-            defaults={'status_raw': status_raw[:120]},
-        )
-        if was_created:
-            inc_created += 1
-        else:
-            obj.status_raw = status_raw[:120]
-            obj.occurrences = (obj.occurrences or 0) + 1
-            obj.save(update_fields=['status_raw', 'occurrences', 'last_seen_at'])
-            inc_updated += 1
-
-    # --- Sweep: qualquer inconsistência cuja ordem agora bata com algum
-    # Fibra.numero_protocolo é considerada resolvida e removida.
-    inc_resolved = _sweep_inconsistencias()
-
-    # --- Limpeza: fibras FIXA que estavam em planilhas anteriores mas não
-    # vieram nesta importação podem sair, EXCETO se foram "mexidas" (retorno
-    # da ilha preenchido, histórico de status com alteração manual, mensagens
-    # de chat) ou estão "em tratativa" (incidente aberto/em andamento).
-    pruned = _prune_stale_fibras(import_ts=now)
-
+    inicio = timezone.now()
+    antes = PlanilhaOrdemInconsistente.objects.count()
+    cruz = executar(None, by_user=by_user, origem='importacao')
+    k = cruz.kpis
+    pruned = _prune_stale_fibras(import_ts=inicio)
+    depois = PlanilhaOrdemInconsistente.objects.count()
     return {
-        'rows': total_rows,
-        'matched': matched,
-        'updated_status': updated_status,
-        'created_from_mysql': created_from_mysql,
-        'not_found': not_found[:20],
-        'not_found_count': len(not_found),
-        'inconsistencias_novas': inc_created,
-        'inconsistencias_atualizadas': inc_updated,
-        'inconsistencias_resolvidas': inc_resolved,
+        'rows': imp.linhas,
+        'matched': k.get('pedidos', 0) - k.get('nao_localizada', 0) - k.get('b2b', 0),
+        'updated_status': FibraStatusHistory.objects.filter(alterado_em__gte=inicio,
+                                                            retorno__startswith='Esteira Vivo:').count(),
+        'created_from_mysql': int(sync_stats.get('created') or 0),
+        'not_found': [],
+        'not_found_count': k.get('nao_lancada', 0),
+        'nao_localizadas': k.get('nao_localizada', 0),
+        'kpis': k,
+        'inconsistencias_novas': max(0, depois - antes),
+        'inconsistencias_resolvidas': max(0, antes - depois),
         'removidas': pruned,
     }
-
-
-def _sweep_inconsistencias() -> int:
-    """Remove ordens inconsistentes que agora batem com algum protocolo no DB.
-
-    Faz dois passes: (1) match direto pelo ``numero_protocolo`` e
-    (2) match por dígitos apenas (remove letras e ``-``) para cobrir casos
-    em que o protocolo no banco tem prefixo/sufixo alfanumérico.
-    """
-    pendentes = list(
-        PlanilhaOrdemInconsistente.objects.values_list('ordem', flat=True)
-    )
-    if not pendentes:
-        return 0
-
-    achados: set[str] = set()
-    direct = set(
-        Fibra.objects.filter(numero_protocolo__in=pendentes)
-        .exclude(numero_protocolo='')
-        .values_list('numero_protocolo', flat=True)
-    )
-    achados.update(direct)
-
-    # Passe 2: comparação por dígitos apenas.
-    pendentes_restantes = [p for p in pendentes if p not in direct]
-    if pendentes_restantes:
-        digits_to_ordem: dict[str, str] = {}
-        for p in pendentes_restantes:
-            d = _digits_only(p)
-            if d:
-                digits_to_ordem.setdefault(d, p)
-        if digits_to_ordem:
-            for proto in (
-                Fibra.objects.exclude(numero_protocolo='')
-                .values_list('numero_protocolo', flat=True)
-                .iterator()
-            ):
-                d = _digits_only(proto)
-                if d and d in digits_to_ordem:
-                    achados.add(digits_to_ordem[d])
-
-    if not achados:
-        return 0
-    deleted, _ = PlanilhaOrdemInconsistente.objects.filter(ordem__in=achados).delete()
-    return int(deleted)
 
 
 def _prune_stale_fibras(*, import_ts) -> int:

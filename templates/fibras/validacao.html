@@ -1,0 +1,890 @@
+{% extends 'base.html' %}
+{% block title %}Validação de Fibras · Base de Vendas × Esteira Vivo{% endblock %}
+{% block extra_css %}
+<style>
+.vv {
+    --primaria: #FF6B35; --primaria-escura: #E85A26; --primaria-clara: #FFEFE8; --primaria-suave: rgba(255, 107, 53, .12);
+    --grafite: #1D1D1F; --grafite-2: #3A3A3C; --grafite-3: #48484A;
+    --bg: #F5F5F7; --card: #FFFFFF; --texto: #1D1D1F; --suave: #86868B; --suave-2: #6E6E73;
+    --linha: rgba(0, 0, 0, .08); --campo: #F2F2F7; --campo-2: #E8E8ED;
+    --verde: #1E9E4A; --vermelho: #E0352B; --amarelo: #B25E00; --azul-info: #0071E3;
+    --raio: 14px; --raio-lg: 20px;
+    --sombra: 0 1px 2px rgba(0, 0, 0, .04), 0 4px 16px rgba(0, 0, 0, .04);
+    --sombra-lg: 0 12px 40px rgba(0, 0, 0, .12);
+    --transicao: cubic-bezier(.2, .8, .2, 1);
+  }
+.vv * { box-sizing: border-box; }
+.vv button, .vv input, .vv select, .vv textarea { font-family: inherit; letter-spacing: inherit; }
+.vv ::selection { background: var(--primaria-suave); }
+.vv [hidden] { display: none !important; }
+.vv .principal { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.vv .topo { position: sticky; top: 0; z-index: 30; height: 60px; padding: 0 28px; display: flex; align-items: center;
+          justify-content: space-between; gap: 16px; background: rgba(245, 245, 247, .78);
+          backdrop-filter: saturate(180%) blur(20px); border-bottom: 1px solid var(--linha); }
+.vv .segmentado { display: inline-flex; padding: 2px; background: var(--campo-2); border-radius: 9px; gap: 2px; }
+.vv .segmentado button { border: 0; background: transparent; color: var(--grafite-3); font-size: 13px; font-weight: 500;
+                       padding: 5px 16px; border-radius: 7px; box-shadow: none; transition: all .2s var(--transicao); }
+.vv .segmentado button:hover { color: var(--texto); background: rgba(255,255,255,.5); }
+.vv .segmentado button.ativo { background: #fff; color: var(--texto); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.12), 0 1px 1px rgba(0,0,0,.04); }
+.vv .topo-acoes { display: flex; align-items: center; gap: 8px; }
+.vv .conteudo { padding: 28px 36px 64px; max-width: 1560px; width: 100%; }
+.vv .titulo-pagina { margin-bottom: 22px; animation: vv-entrar .5s var(--transicao); }
+.vv .titulo-pagina h1 { font-size: 34px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.15; margin: 0; }
+.vv .titulo-pagina p { margin: 6px 0 0; color: var(--suave-2); font-size: 15px; }
+@keyframes vv-entrar { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.vv .card { background: var(--card); border-radius: var(--raio-lg); padding: 22px 24px; margin-bottom: 20px; box-shadow: var(--sombra);
+          animation: vv-entrar .45s var(--transicao); }
+.vv .card-cab { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.vv .card-cab h2 { font-size: 19px; font-weight: 700; letter-spacing: -0.02em; margin: 0; display: flex; align-items: center; gap: 10px; }
+.vv .card-cab h2 > i { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; font-size: 13px;
+                     background: var(--primaria-suave); color: var(--primaria); }
+.vv .card-cab p { margin: 2px 0 0; color: var(--suave); font-size: 13px; }
+.vv .card-cab-acoes { display: flex; gap: 8px; flex-wrap: wrap; }
+.vv .vazio { text-align: center; padding: 56px 20px; color: var(--suave); }
+.vv .vazio i { font-size: 30px; color: var(--primaria); background: var(--primaria-clara); width: 64px; height: 64px; border-radius: 18px;
+             display: grid; place-items: center; margin: 0 auto 14px; }
+.vv .vazio b { display: block; color: var(--texto); font-size: 17px; font-weight: 600; margin-bottom: 4px; letter-spacing: -0.01em; }
+.vv .fluxo { display: grid; grid-template-columns: repeat(3, 1fr); background: var(--card); border-radius: var(--raio-lg);
+           box-shadow: var(--sombra); margin-bottom: 20px; overflow: hidden; animation: vv-entrar .45s var(--transicao); }
+.vv .passo { display: flex; align-items: center; gap: 12px; padding: 16px 20px; }
+.vv .passo + .passo { border-left: 1px solid var(--linha); }
+.vv .passo .bolinha { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; flex: 0 0 28px;
+                    background: var(--campo); color: var(--suave-2); font-size: 12px; font-weight: 700; transition: all .3s var(--transicao); }
+.vv .passo b { display: block; font-size: 13.5px; font-weight: 600; }
+.vv .passo small { display: block; color: var(--suave); font-size: 12px; line-height: 1.35; }
+.vv .passo.atual .bolinha { background: var(--primaria); color: #fff; box-shadow: 0 0 0 4px var(--primaria-suave); }
+.vv .passo.feito .bolinha { background: var(--verde); color: #fff; }
+.vv .passo.feito .bolinha span { display: none; }
+.vv .passo.feito .bolinha::after { font-family: "Font Awesome 6 Free"; font-weight: 900; content: "\f00c"; font-size: 11px; }
+.vv .grid-arq { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.vv .slot { position: relative; border: 1.5px dashed rgba(0,0,0,.14); border-radius: var(--raio); padding: 14px 14px 14px 62px;
+          background: var(--campo); cursor: pointer; transition: all .25s var(--transicao); min-height: 80px; }
+.vv .slot::before { font-family: "Font Awesome 6 Free"; font-weight: 900; content: "\f15c"; position: absolute; left: 14px; top: 50%;
+                  transform: translateY(-50%); width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center;
+                  background: #fff; color: var(--primaria); font-size: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.vv .slot:hover, .vv .slot.arrastando { border-color: var(--primaria); background: #fff; transform: translateY(-1px); box-shadow: var(--sombra-lg); }
+.vv .slot.ok { border-style: solid; border-color: transparent; background: #F0FAF3; }
+.vv .slot.ok::before { content: "\f00c"; color: #fff; background: var(--verde); }
+.vv .slot.erro { background: #FDECEB; }
+.vv .slot b { display: block; font-size: 14px; font-weight: 600; }
+.vv .slot span { color: var(--suave); font-size: 12px; }
+.vv .slot .estado { font-size: 12px; margin-top: 4px; display: block; font-weight: 500; color: var(--primaria); }
+.vv .slot.ok .estado { color: var(--verde); }
+.vv button { font: inherit; font-size: 13px; font-weight: 500; border: 0; background: var(--campo-2); color: var(--texto);
+           border-radius: 980px; padding: 7px 15px; cursor: pointer; transition: all .2s var(--transicao); }
+.vv button:hover { background: #DCDCE1; }
+.vv button:active:not(:disabled) { transform: scale(.97); }
+.vv button.primario { background: var(--primaria); color: #fff; font-weight: 600; box-shadow: 0 2px 8px rgba(255,107,53,.28); }
+.vv button.primario:hover { background: var(--primaria-escura); }
+.vv button.secundario { background: #fff; color: var(--texto); box-shadow: inset 0 0 0 1px var(--linha), var(--sombra); }
+.vv button.secundario:hover { background: #FAFAFA; }
+.vv button.perigo { background: #FDECEB; color: var(--vermelho); }
+.vv button.perigo:hover { background: var(--vermelho); color: #fff; }
+.vv button.sucesso { background: #E3F5E8; color: var(--verde); }
+.vv button.sucesso:hover { background: var(--verde); color: #fff; }
+.vv button:disabled, .vv button:disabled:hover { opacity: .4; cursor: not-allowed; transform: none; box-shadow: none; }
+.vv button i { margin-right: 6px; }
+.vv button.carregando { pointer-events: none; }
+.vv button.carregando i { animation: vv-girar .8s linear infinite; }
+.vv button.carregando i::before { content: "\f110"; }
+@keyframes vv-girar { to { transform: rotate(360deg); } }
+.vv input:focus, .vv select:focus, .vv textarea:focus { outline: none; box-shadow: 0 0 0 3.5px rgba(255,107,53,.25) !important; }
+.vv .params { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px 18px; }
+.vv .params label, .vv .rotulo { display: block; font-size: 12px; font-weight: 500; color: var(--suave-2); margin-bottom: 5px; }
+.vv .params input, .vv .params select, .vv .campo { width: 100%; padding: 9px 12px; border: 0; border-radius: 10px; background: var(--campo); font: inherit; color: var(--texto); }
+.vv textarea.campo { min-height: 70px; resize: vertical; }
+.vv .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.vv .chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 980px; background: var(--campo);
+          color: var(--suave-2); font-size: 12.5px; font-weight: 500; cursor: pointer; user-select: none; transition: all .15s; }
+.vv .chip input { display: none; }
+.vv .chip.on { background: var(--primaria-suave); color: var(--primaria-escura); font-weight: 600; }
+.vv .chip.on::before { font-family: "Font Awesome 6 Free"; font-weight: 900; content: "\f00c"; font-size: 10px; }
+.vv .bloco { margin-top: 16px; }
+.vv .bloco-cab { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.vv .bloco-cab .rotulo { margin: 0; }
+.vv .link { background: none; padding: 0; color: var(--primaria); font-size: 12px; font-weight: 600; box-shadow: none; }
+.vv .link:hover { background: none; text-decoration: underline; }
+.vv .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.vv .kpi { background: var(--card); border-radius: var(--raio-lg); padding: 16px 18px; box-shadow: var(--sombra); min-width: 0; cursor: pointer;
+         transition: transform .3s var(--transicao), box-shadow .3s; animation: vv-entrar .45s var(--transicao) both; container-type: inline-size; }
+.vv .kpi:hover { transform: translateY(-2px); box-shadow: var(--sombra-lg); }
+.vv .kpi-topo { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.vv .kpi-topo span { color: var(--suave-2); font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vv .kpi-topo i { width: 26px; height: 26px; flex: 0 0 26px; border-radius: 8px; display: grid; place-items: center; font-size: 11px;
+                background: var(--campo); color: var(--suave-2); }
+.vv .kpi b { display: block; margin-top: 6px; font-size: clamp(16px, 14cqi, 28px); font-weight: 700; letter-spacing: -0.025em;
+           font-variant-numeric: tabular-nums; white-space: nowrap; line-height: 1.15; }
+.vv .kpi-det { display: block; margin-top: 4px; font-size: 11.5px; color: var(--suave); line-height: 1.35; }
+.vv .kpi.destaque { background: linear-gradient(135deg, #FF7A45, #FF5A1F); }
+.vv .kpi.destaque .kpi-topo span, .vv .kpi.destaque .kpi-det { color: rgba(255,255,255,.85); }
+.vv .kpi.destaque b { color: #fff; }
+.vv .kpi.destaque .kpi-topo i { background: rgba(255,255,255,.2); color: #fff; }
+.vv .kpi.k-alta .kpi-topo i { background: #E3F5E8; color: var(--verde); }
+.vv .kpi.k-media .kpi-topo i { background: #FFF4E0; color: #E08A00; }
+.vv .kpi.k-baixa .kpi-topo i { background: #FDEBDD; color: #D2601A; }
+.vv .kpi.k-manual .kpi-topo i { background: #E5F0FC; color: var(--azul-info); }
+.vv .kpi.k-nl .kpi-topo i { background: #FDECEB; color: var(--vermelho); }
+.vv .kpi.k-b2b .kpi-topo i { background: #EFEAF7; color: #6B4FA0; }
+.vv .barra { display: flex; height: 8px; border-radius: 980px; overflow: hidden; background: var(--campo); margin-bottom: 20px; }
+.vv .barra span { height: 100%; transition: width .5s var(--transicao); }
+.vv table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.vv th, .vv td { padding: 10px 12px; border-bottom: 1px solid var(--linha); text-align: left; white-space: nowrap; }
+.vv th { position: sticky; top: 0; z-index: 1; background: rgba(250, 250, 252, .96); backdrop-filter: blur(10px);
+       font-size: 12px; font-weight: 600; color: var(--suave-2); cursor: pointer; user-select: none; }
+.vv th:hover { color: var(--texto); }
+.vv th.ord::after { content: " ↑"; color: var(--primaria); }
+.vv th.ord.desc::after { content: " ↓"; }
+.vv td.num, .vv th.num { text-align: right; }
+.vv tbody tr { transition: background .12s; }
+.vv tbody tr:hover { background: #F7F7FA; }
+.vv tbody tr:last-child td { border-bottom: 0; }
+.vv td .sub { font-size: 11.5px; color: var(--suave); }
+.vv td.quebra { white-space: normal; min-width: 220px; max-width: 340px; }
+.vv .ver { padding: 5px 13px; font-size: 12px; background: var(--primaria-suave); color: var(--primaria-escura); font-weight: 600; }
+.vv .ver:hover { background: var(--primaria); color: #fff; }
+.vv .rolagem { overflow: auto; max-height: 66vh; border-radius: var(--raio); border: 1px solid var(--linha); }
+.vv .filtros { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+.vv .filtros input, .vv .filtros select { padding: 7px 12px; border: 0; border-radius: 9px; font: inherit; font-size: 13px; background: var(--campo); color: var(--texto); }
+.vv .filtros input { min-width: 260px; padding-left: 32px;
+                   background: var(--campo) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2386868B' stroke-width='2.5' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E") no-repeat 11px center; }
+.vv .mut { color: var(--suave); font-size: 12.5px; }
+.vv .tag { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 980px;
+         background: var(--campo); color: var(--suave-2); }
+.vv .tag.alta { background: #E3F5E8; color: var(--verde); }
+.vv .tag.media { background: #FFF4E0; color: var(--amarelo); }
+.vv .tag.baixa { background: #FDEBDD; color: #C2501A; }
+.vv .tag.manual { background: #E5F0FC; color: var(--azul-info); }
+.vv .tag.nl { background: #FDECEB; color: var(--vermelho); }
+.vv .tag.b2b { background: #EFEAF7; color: #6B4FA0; }
+.vv .tag.ok { background: #E3F5E8; color: var(--verde); }
+.vv .tag.cinza { background: var(--campo-2); color: var(--suave-2); }
+.vv .tag i { margin: 0; font-size: 9px; }
+.vv .aviso-box { display: flex; gap: 12px; align-items: flex-start; padding: 12px 16px; border-radius: var(--raio); background: #FFF8EC;
+               color: var(--grafite-3); font-size: 13px; margin-bottom: 16px; }
+.vv .aviso-box i { color: #E08A00; margin-top: 2px; }
+.vv .aviso-box.erro { background: #FDECEB; }
+.vv .aviso-box.erro i { color: var(--vermelho); }
+.vv .aviso-box.info { background: #EEF5FD; }
+.vv .aviso-box.info i { color: var(--azul-info); }
+.vv .regras { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; }
+.vv .regra { background: var(--campo); border-radius: var(--raio); padding: 12px 14px; font-size: 12.5px; color: var(--grafite-3); }
+.vv .regra b { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--texto); margin-bottom: 3px; }
+.vv .toast { position: fixed; left: 50%; bottom: 28px; transform: translate(-50%, 20px); opacity: 0; pointer-events: none; z-index: 60;
+           background: rgba(29, 29, 31, .86); color: #fff; backdrop-filter: blur(20px);
+           padding: 11px 18px; border-radius: 14px; font-size: 13px; font-weight: 500; box-shadow: var(--sombra-lg);
+           transition: all .35s var(--transicao); display: flex; align-items: center; gap: 10px; max-width: min(640px, 90vw); }
+.vv .toast i { color: #34C759; }
+.vv .toast.erro i { color: #FF6961; }
+.vv .toast.visivel { opacity: 1; transform: translate(-50%, 0); }
+.vv dialog { border: none; padding: 0; color: var(--texto); background: #fff;
+           box-shadow: 0 30px 80px rgba(0,0,0,.28), 0 0 0 1px rgba(0,0,0,.06); }
+.vv dialog::backdrop { background: rgba(0, 0, 0, .22); backdrop-filter: blur(6px); }
+.vv #modal { margin: 0 0 0 auto; height: 100vh; max-height: 100vh; width: min(980px, 96vw); max-width: none; border-radius: 22px 0 0 22px; }
+.vv #modal[open] { animation: vv-painel .38s var(--transicao); display: flex; flex-direction: column; }
+@keyframes vv-painel { from { transform: translateX(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+.vv dialog header { padding: 16px 22px; border-bottom: 1px solid var(--linha); display: flex; justify-content: space-between;
+                  align-items: center; gap: 12px; }
+.vv dialog header > b { font-size: 17px; font-weight: 700; letter-spacing: -0.01em; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vv dialog .corpo { padding: 18px 22px 28px; overflow: auto; flex: 1; }
+.vv dialog th { position: static; }
+.vv .sec-titulo { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; margin: 22px 0 10px; display: flex; align-items: center; gap: 8px; }
+.vv .sec-titulo i { color: var(--primaria); }
+.vv .grade-info { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+.vv .info { background: var(--campo); border-radius: 12px; padding: 10px 12px; min-width: 0; }
+.vv .info span { display: block; font-size: 11.5px; color: var(--suave); }
+.vv .info b { display: block; font-size: 13.5px; font-weight: 600; overflow-wrap: anywhere; }
+.vv .acoes-linha { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.vv .vincular { display: flex; gap: 8px; align-items: center; }
+.vv .vincular input { max-width: 200px; }
+.vv button, .vv .tag, .vv .chip { white-space: nowrap; }
+@media (max-width: 1080px) {
+.vv .topo { padding: 0 16px; }
+.vv .conteudo { padding: 20px 16px 48px; }
+.vv .titulo-pagina h1 { font-size: 26px; }
+.vv .fluxo { grid-template-columns: 1fr; }
+.vv .passo + .passo { border-left: 0; border-top: 1px solid var(--linha); }
+.vv .segmentado button { padding: 5px 10px; }
+}
+/* Ajustes para viver dentro do portal */
+.vv { background: var(--bg); color: var(--texto); letter-spacing: -0.005em; border-radius: 18px; min-height: 100%;
+      font: 14px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", Roboto, sans-serif;
+      -webkit-font-smoothing: antialiased; }
+.vv .topo { position: relative; top: auto; height: auto; min-height: 60px; padding: 10px 28px; flex-wrap: wrap; border-radius: 18px 18px 0 0; }
+.vv .segmentado .cont { margin-left: 4px; font-size: 11px; background: #fff; color: var(--suave-2); border-radius: 980px; padding: 0 7px; }
+.vv .botao-link { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; padding: 7px 15px;
+                  border-radius: 980px; color: var(--texto); background: #fff; box-shadow: inset 0 0 0 1px var(--linha); text-decoration: none; }
+.vv .botao-link:hover { background: #FAFAFA; }
+.vv .botao-link.pequeno { padding: 4px 11px; font-size: 12px; }
+.vv .slot.fixo { cursor: default; }
+.vv .slot.fixo:hover { transform: none; box-shadow: none; }
+.vv .slot.carregando { pointer-events: none; opacity: .7; }
+.vv .slot.carregando::before { content: "\f110"; animation: vv-girar .8s linear infinite; }
+.vv .slot[data-tipo=go]::before { content: "\f2f1"; }
+.vv .slot.ok[data-tipo=go]::before { content: "\f00c"; }
+.vv .kpi:focus-visible, .vv .slot:focus-visible { outline: 3px solid rgba(255,107,53,.45); outline-offset: 2px; }
+@media (max-width: 640px) {
+  .vv .filtros input { min-width: 0; width: 100%; }
+  .vv .titulo-pagina h1 { font-size: 22px; }
+  .vv .vincular { flex-wrap: wrap; }
+}
+
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="vv">
+  <main class="principal">
+    <header class="topo">
+      <div class="segmentado" role="tablist" aria-label="Seções da validação">
+        <button class="ativo" data-view="validacao">Cruzamento</button>
+        <button data-view="ajustes">Ajustes <span class="cont" id="contAjustes">0</span></button>
+        <button data-view="lojas">Lojas</button>
+        <button data-view="bases">Bases tratadas</button>
+      </div>
+      <div class="topo-acoes">
+        <a class="botao-link" href="{% url 'fibras:kanban' %}"><i class="fa-solid fa-table-columns"></i>Kanban</a>
+        <button class="secundario" id="btExportar" disabled><i class="fa-solid fa-file-excel"></i>Exportar Excel</button>
+        <button class="primario" id="btCruzar" disabled><i class="fa-solid fa-bolt"></i>Cruzar</button>
+      </div>
+    </header>
+
+    <div class="conteudo">
+      <div class="titulo-pagina">
+        <h1 id="tituloView">Base de Vendas × Esteira Vivo</h1>
+        <p id="subtituloView"></p>
+      </div>
+      <div id="erroGeral" class="aviso-box erro" hidden><i class="fa-solid fa-circle-xmark"></i><div></div></div>
+
+      <!-- ====================== CRUZAMENTO ====================== -->
+      <div data-secao="validacao">
+        <section class="fluxo" aria-label="Etapas">
+          <div class="passo" id="passo1"><span class="bolinha"><span>1</span></span>
+            <div><b>Bases</b><small id="passo1Txt">Base de Vendas, Esteira Vivo e Dados Lojas</small></div></div>
+          <div class="passo" id="passo2"><span class="bolinha"><span>2</span></span>
+            <div><b>Lojas e escopo</b><small id="passo2Txt">FILIAL → ADABAS e período</small></div></div>
+          <div class="passo" id="passo3"><span class="bolinha"><span>3</span></span>
+            <div><b>Cruzar e tratar</b><small id="passo3Txt">Disponível após as bases</small></div></div>
+        </section>
+
+        <section class="card">
+          <div class="card-cab">
+            <div>
+              <h2><i class="fa-solid fa-arrow-up-from-bracket"></i>Bases</h2>
+              <p>A Base de Vendas e os Dados Lojas vêm do portal. A Esteira Vivo é a planilha ANALÍTICO DE VENDAS: clique ou arraste para importar (o cruzamento roda na hora).</p>
+            </div>
+          </div>
+          <div class="grid-arq" id="slots"></div>
+        </section>
+
+        <section class="card" id="cardEscopo" hidden>
+          <div class="card-cab">
+            <div>
+              <h2><i class="fa-solid fa-sliders"></i>Escopo da Esteira de Vendas Vivo</h2>
+              <p>O que entra no pareamento e no relatório de <i>Venda não lançada</i>.</p>
+            </div>
+            <div class="card-cab-acoes"><button class="secundario" id="btRegras"><i class="fa-solid fa-circle-info"></i>Como funciona</button></div>
+          </div>
+          <div class="params">
+            <div><label for="pIni">Data inicial</label><input type="date" id="pIni"></div>
+            <div><label for="pFim">Data final</label><input type="date" id="pFim"></div>
+            <div><label for="pJanela">Tolerância de data (± dias)</label><input type="number" id="pJanela" min="0" max="1" value="1"
+                 title="Diferença de data aceita entre as bases: no máximo 1 dia a mais ou a menos"></div>
+          </div>
+          <div class="bloco">
+            <div class="bloco-cab"><span class="rotulo">Lojas (ADABAS)</span>
+              <button class="link" data-todos="pLojas">todas</button><button class="link" data-nenhum="pLojas">nenhuma</button></div>
+            <div class="chips" id="pLojas"></div>
+          </div>
+          <div class="bloco">
+            <div class="bloco-cab"><span class="rotulo">Etapas de instalação</span>
+              <button class="link" data-todos="pEtapas">todas</button><button class="link" data-nenhum="pEtapas">nenhuma</button></div>
+            <div class="chips" id="pEtapas"></div>
+          </div>
+          <div class="regras" id="regras" hidden style="margin-top:18px">
+            <div class="regra"><b>Regra da loja <span class="tag cinza">obrigatória</span></b>A loja precisa ser a mesma nas duas bases. A data pode variar 1 dia para mais ou para menos.</div>
+            <div class="regra"><b>1. Protocolo exato <span class="tag alta">Alta</span></b>Mesma loja e data ±1 dia, após remover apóstrofo, espaços, traços e o "A" do final.</div>
+            <div class="regra"><b>2. Loja/dia + aproximado <span class="tag alta">Alta</span></b>Mesma loja e dia, até 2 caracteres diferentes (faltando, sobrando, trocado ou invertido).</div>
+            <div class="regra"><b>3. Mesma loja, data ±1 <span class="tag media">Média</span></b>Protocolo quase igual (até 2 caracteres), mesma loja, 1 dia de diferença.</div>
+            <div class="regra"><b>4. Exato, loja/data divergente <span class="tag baixa">Muito baixa</span></b>Protocolo idêntico, mas loja diferente ou data fora de ±1 dia. A observação detalha as duas bases.</div>
+            <div class="regra"><b>5. Quantidade loja/dia <span class="tag media">Média</span></b>Pareia as vendas do dia: mesmo tamanho de protocolo ou mesmo vendedor.</div>
+            <div class="regra"><b>5. Quantidade loja/dia <span class="tag baixa">Muito baixa</span></b>Só loja e dia coincidem.</div>
+            <div class="regra"><b>Aproximado em outra loja <span class="tag nl">Não localizada</span></b>Não é vinculado. A observação mostra a ORDEM, a loja e a data de cada base.</div>
+            <div class="regra"><b>Venda B2B <span class="tag b2b">B2B</span></b>Protocolo com letras e números e cliente com CNPJ. Fica fora do pareamento.</div>
+            <div class="regra"><b>Sobras <span class="tag nl">Não localizada</span></b>Base de Vendas sem par. Do lado da Esteira Vivo: <i>Venda não lançada</i>.</div>
+            <div class="regra"><b>Endereço <span class="tag media">só sinaliza</span></b>Compara logradouro, número e CEP das vendas localizadas. Não altera a assertividade.</div>
+            <div class="regra"><b>Kanban <span class="tag manual">status</span></b>O status de instalação da ORDEM vinculada move a fibra no kanban, como a planilha diária já fazia.</div>
+          </div>
+        </section>
+
+        <div class="kpis" id="kpis" hidden></div>
+        <div class="barra" id="barra" hidden></div>
+
+        <section class="card" id="vazioRes">
+          <div class="vazio"><i class="fa-solid fa-bolt"></i><b>Nenhum cruzamento ainda</b>
+            Importe a Esteira Vivo, confira o escopo e clique em Cruzar.</div>
+        </section>
+
+        <section class="card" id="painelRes" hidden>
+          <div class="card-cab">
+            <div>
+              <h2><i class="fa-solid fa-list-check"></i><span id="resTitulo">Resultado da Base de Vendas</span></h2>
+              <p id="resSub">Clique em ver para abrir o pedido, confirmar, rejeitar ou vincular outra ORDEM.</p>
+            </div>
+            <div class="segmentado" id="segRes">
+              <button class="ativo" data-res="go">Base de Vendas</button>
+              <button data-res="nl">Vendas não lançadas</button>
+              <button data-res="resumo">Resumo loja/dia</button>
+            </div>
+          </div>
+          <div class="filtros" id="filtrosGo">
+            <input id="fBusca" placeholder="Buscar protocolo, ORDEM, vendedor, venda, cliente" aria-label="Buscar">
+            <select id="fStatus" aria-label="Status"><option value="">Todos os status</option></select>
+            <select id="fAssert" aria-label="Assertividade"><option value="">Todas as assertividades</option></select>
+            <select id="fFilial" aria-label="Filial"><option value="">Todas as filiais</option></select>
+            <select id="fInst" aria-label="Status de instalação"><option value="">Todos os status de instalação</option></select>
+            <select id="fEnd" aria-label="Endereço"><option value="">Todos os endereços</option><option value="div">Divergente ou parcial</option>
+              <option>Divergente</option><option>Parcialmente divergente</option><option>Confere</option></select>
+            <span class="mut" id="contador"></span>
+          </div>
+          <div class="filtros" id="filtrosNl" hidden>
+            <input id="fBuscaNl" placeholder="Buscar ORDEM, vendedor, loja" aria-label="Buscar venda não lançada">
+            <span class="mut" id="contadorNl"></span>
+          </div>
+          <div class="rolagem"><table id="tabela"></table></div>
+          <p class="mut" id="quando" style="margin:10px 0 0"></p>
+        </section>
+      </div>
+
+      <!-- ====================== AJUSTES ====================== -->
+      <div data-secao="ajustes" hidden>
+        <section class="card">
+          <div class="card-cab">
+            <div>
+              <h2><i class="fa-solid fa-pen-to-square"></i>Ajustes registrados</h2>
+              <p>Ficam salvos na venda e são aplicados em todos os próximos cruzamentos.</p>
+            </div>
+            <div class="card-cab-acoes"><button class="perigo" id="btLimpar"><i class="fa-solid fa-trash"></i>Limpar todos</button></div>
+          </div>
+          <div id="listaAjustes"></div>
+        </section>
+        <section class="card">
+          <div class="card-cab">
+            <div>
+              <h2><i class="fa-solid fa-magnifying-glass"></i>Pedidos para revisar</h2>
+              <p>Não localizados e vínculos de assertividade Média ou Muito baixa.</p>
+            </div>
+          </div>
+          <div class="filtros">
+            <select id="fRevisar" aria-label="O que revisar">
+              <option value="nl">Não localizadas</option>
+              <option value="baixa">Muito baixa</option>
+              <option value="media">Média</option>
+              <option value="end">Endereço divergente</option>
+            </select>
+            <span class="mut" id="contRevisar"></span>
+          </div>
+          <div class="rolagem"><table id="tabRevisar"></table></div>
+        </section>
+      </div>
+
+      <!-- ====================== LOJAS ====================== -->
+      <div data-secao="lojas" hidden>
+        <section class="card">
+          <div class="card-cab">
+            <div>
+              <h2><i class="fa-solid fa-store"></i>FILIAL (Base de Vendas) → ADABAS (Esteira Vivo)</h2>
+              <p>Sugerido comparando a FILIAL com o nome dos setores que têm ADABAS. Corrija se necessário e salve.</p>
+            </div>
+            <div class="card-cab-acoes"><button class="primario" id="btSalvarLojas"><i class="fa-solid fa-floppy-disk"></i>Salvar</button></div>
+          </div>
+          <div class="rolagem"><table id="tabLojas"></table></div>
+          <div id="foraGo" style="margin-top:16px"></div>
+        </section>
+      </div>
+
+      <!-- ====================== BASES ====================== -->
+      <div data-secao="bases" hidden>
+        <section class="card">
+          <div class="card-cab">
+            <div>
+              <h2><i class="fa-solid fa-table-columns"></i>Bases tratadas</h2>
+              <p>Somente as colunas utilizadas no cruzamento.</p>
+            </div>
+          </div>
+          <div class="segmentado" id="segBases" style="margin-bottom:14px">
+            <button class="ativo" data-base="go">Base de Vendas</button>
+            <button data-base="an">Esteira de Vendas Vivo</button>
+            <button data-base="lj">Dados Lojas</button>
+          </div>
+          <div id="infoBase"></div>
+          <div class="rolagem"><table id="tabBase"></table></div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <dialog id="modal" aria-labelledby="mTitulo">
+    <header><b id="mTitulo">Pedido</b><button id="mFechar"><i class="fa-solid fa-xmark"></i>Fechar</button></header>
+    <div class="corpo" id="mCorpo"></div>
+  </dialog>
+
+  <input type="file" id="arquivo" accept=".xlsx,.xls" hidden>
+  <div class="toast" id="toast" role="status" aria-live="polite"><i class="fa-solid fa-circle-check"></i><span></span></div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let EST = null, RES = null, VIEW = "validacao", ABA_RES = "go", BASE_SEL = "go", ORD = {col: null, desc: false};
+const URL_ = {
+  estado: "{% url 'fibras:validacao_estado' %}", cruzar: "{% url 'fibras:validacao_cruzar' %}",
+  pedido: "{% url 'fibras:validacao_pedido' %}", ajuste: "{% url 'fibras:validacao_ajuste' %}",
+  limpar: "{% url 'fibras:validacao_ajustes_limpar' %}", lojas: "{% url 'fibras:validacao_lojas' %}",
+  importar: "{% url 'fibras:validacao_importar' %}", sincronizar: "{% url 'fibras:validacao_sincronizar' %}",
+  previa: "{% url 'fibras:validacao_previa' %}", baixar: "{% url 'fibras:validacao_baixar' %}",
+};
+const CSRF = "{{ csrf_token }}";
+
+const TITULOS = {
+  validacao: ["Base de Vendas × Esteira Vivo", "Localiza cada venda de fibra na Esteira de Vendas Vivo, classifica a assertividade e atualiza o kanban."],
+  ajustes: ["Ajustes manuais", "Confirme, rejeite ou vincule ORDENS manualmente. Os ajustes valem para os próximos cruzamentos."],
+  lojas: ["Correspondência de lojas", "Liga a FILIAL da Base de Vendas ao código ADABAS da Esteira de Vendas Vivo."],
+  bases: ["Bases tratadas", "As três bases apenas com as colunas utilizadas no cruzamento."],
+};
+
+async function api(rota, corpo) {
+  const op = {method: corpo !== undefined ? "POST" : "GET", headers: {"X-CSRFToken": CSRF}, credentials: "same-origin"};
+  if (corpo instanceof FormData) op.body = corpo;
+  else if (corpo !== undefined) { op.body = JSON.stringify(corpo); op.headers["Content-Type"] = "application/json"; }
+  const r = await fetch(rota, op);
+  const j = await r.json().catch(() => ({erro: "Resposta inválida do servidor"}));
+  if (!r.ok || j.erro) throw new Error(j.erro || r.statusText);
+  return j;
+}
+function toast(msg, erro) {
+  const t = $("#toast"); t.classList.toggle("erro", !!erro);
+  t.querySelector("i").className = erro ? "fa-solid fa-circle-xmark" : "fa-solid fa-circle-check";
+  t.querySelector("span").textContent = msg; t.classList.add("visivel");
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove("visivel"), erro ? 6000 : 4200);
+}
+async function comBotao(bt, fn) {
+  bt.classList.add("carregando"); bt.disabled = true;
+  try { return await fn(); } catch (e) { toast(e.message, true); } finally { bt.classList.remove("carregando"); bt.disabled = false; }
+}
+
+/* ---------- tags ---------- */
+function tagAssert(a) {
+  const m = {"Alta": "alta", "Média": "media", "Muito baixa": "baixa", "Manual": "manual"};
+  return a && a !== "-" ? `<span class="tag ${m[a] || ""}">${esc(a)}</span>` : `<span class="mut">—</span>`;
+}
+function tagStatus(s) {
+  const m = {"Localizada": ["ok", "fa-check"], "Não localizada": ["nl", "fa-xmark"], "Venda B2B": ["b2b", "fa-building"],
+             "Venda não lançada": ["cinza", "fa-ban"]};
+  const [c, i] = m[s] || ["", "fa-circle"];
+  return `<span class="tag ${c}"><i class="fa-solid ${i}"></i>${esc(s)}</span>`;
+}
+function tagEnd(conf, det) {
+  if (!conf) return `<span class="mut">—</span>`;
+  const m = {"Confere": ["ok", "fa-check"], "Parcialmente divergente": ["media", "fa-triangle-exclamation"],
+             "Divergente": ["nl", "fa-location-dot"], "Sem dados para conferir": ["cinza", "fa-question"]};
+  const [c, i] = m[conf] || ["cinza", "fa-question"];
+  return `<span class="tag ${c}" title="${esc(det)}"><i class="fa-solid ${i}"></i>${esc(conf)}</span>`;
+}
+function tagInst(etapa, status) {
+  if (!status && !etapa) return `<span class="mut">—</span>`;
+  const e = (etapa || "").toUpperCase();
+  const c = e.includes("INSTALADA") ? "ok" : e.includes("CANCEL") ? "nl" : e.includes("PEND") ? "media" : "cinza";
+  return `<span class="tag ${c}">${esc(status || etapa)}</span>`;
+}
+
+/* ---------- navegação ---------- */
+function irPara(v) {
+  VIEW = v;
+  $$("[data-view]").forEach(b => b.classList.toggle("ativo", b.dataset.view === v));
+  $$("[data-secao]").forEach(s => s.hidden = s.dataset.secao !== v);
+  $("#tituloView").textContent = TITULOS[v][0]; $("#subtituloView").textContent = TITULOS[v][1];
+  if (v === "bases") carregarBase();
+  if (v === "ajustes") renderAjustes();
+  if (v === "lojas") renderLojas();
+}
+$$("[data-view]").forEach(b => b.addEventListener("click", () => irPara(b.dataset.view)));
+
+/* ---------- estado ---------- */
+async function atualizar() {
+  try { EST = await api(URL_.estado); } catch (e) { toast(e.message, true); return; }
+  RES = EST.resultado || null;
+  render();
+}
+function render() {
+  const err = $("#erroGeral");
+  err.hidden = !EST.erro; err.querySelector("div").textContent = EST.erro || "";
+  const acao = {go: "Clique para sincronizar com o Vivo GO", an: "Clique ou arraste o ANALÍTICO DE VENDAS para importar", lj: "Setores com ADABAS no cadastro"};
+  $("#slots").innerHTML = Object.entries(EST.arquivos).map(([t, a]) => `
+    <div class="slot ${a.ok ? "ok" : ""} ${t === "lj" ? "fixo" : ""}" data-tipo="${t}" ${t !== "lj" ? 'role="button" tabindex="0"' : ""} title="${esc(acao[t])}">
+      <b>${esc(a.rotulo)}</b>
+      <span>${a.ok ? `${esc(a.nome)} · ${a.linhas.toLocaleString("pt-BR")} ${t === "lj" ? "lojas" : "linhas"}` : (t === "an" ? "Nenhuma Esteira importada" : "Vazio")}</span>
+      <span class="estado">${a.ok ? esc(a.detalhe) : esc(acao[t])}</span>
+    </div>`).join("");
+  $$(".slot[data-tipo=an]").forEach(s => {
+    const abrir = () => $("#arquivo").click();
+    s.addEventListener("click", abrir);
+    s.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); abrir(); } });
+    s.addEventListener("dragover", e => { e.preventDefault(); s.classList.add("arrastando"); });
+    s.addEventListener("dragleave", () => s.classList.remove("arrastando"));
+    s.addEventListener("drop", e => { e.preventDefault(); s.classList.remove("arrastando"); enviar(e.dataTransfer.files[0], s); });
+  });
+  $$(".slot[data-tipo=go]").forEach(s => {
+    const sinc = () => comSlot(s, async () => { EST = await api(URL_.sincronizar, {}); RES = EST.resultado || null; render(); toast(EST.msg); });
+    s.addEventListener("click", sinc);
+    s.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); sinc(); } });
+  });
+  const basesOk = Object.values(EST.arquivos).every(a => a.ok) && !EST.erro;
+  const semLoja = (EST.lojas || []).filter(l => !l.adabas).length;
+  passo(1, basesOk ? "feito" : "atual", basesOk ? "3 bases prontas" : "Importe a Esteira Vivo");
+  passo(2, !basesOk ? "" : RES ? "feito" : "atual",
+        !basesOk ? "FILIAL → ADABAS e período" : semLoja ? `${semLoja} filial(is) sem ADABAS` : "Todas as filiais com ADABAS");
+  passo(3, RES ? "feito" : basesOk ? "atual" : "", RES ? `Último: ${RES.quando}` : basesOk ? "Clique em Cruzar" : "Disponível após as bases");
+  $("#btCruzar").disabled = !basesOk;
+  $("#btExportar").disabled = !RES;
+  $("#cardEscopo").hidden = !basesOk;
+  if (basesOk && EST.escopo) preencherEscopo();
+  const aj = EST.ajustes || {};
+  $("#contAjustes").textContent = (aj.manuais || 0) + (aj.rejeitados || 0);
+  renderResultado();
+  if (VIEW === "lojas") renderLojas();
+  if (VIEW === "ajustes") renderAjustes();
+}
+async function comSlot(s, fn) {
+  if (s.classList.contains("carregando")) return;
+  s.classList.add("carregando");
+  try { await fn(); } catch (e) { toast(e.message, true); } finally { s.classList.remove("carregando"); }
+}
+function passo(n, cls, txt) {
+  const p = $("#passo" + n); p.className = "passo " + cls; $("#passo" + n + "Txt").textContent = txt;
+}
+function preencherEscopo() {
+  const e = EST.escopo;
+  $("#pIni").value = e.ini; $("#pFim").value = e.fim; $("#pJanela").value = e.janela;
+  $("#pLojas").innerHTML = e.lojas_todas.map(l => chip(l.adabas, `${l.pdv || l.adabas}`, e.lojas.includes(l.adabas), l.adabas)).join("")
+    || '<span class="mut">Nenhuma loja na Esteira.</span>';
+  $("#pEtapas").innerHTML = e.etapas_todas.map(x => chip(x, x, !e.etapas.length || e.etapas.includes(x))).join("")
+    || '<span class="mut">A Esteira não tem a coluna de etapa.</span>';
+  $$(".chip input").forEach(i => i.addEventListener("change", () => i.parentElement.classList.toggle("on", i.checked)));
+}
+function chip(valor, rotulo, on, titulo) {
+  return `<label class="chip ${on ? "on" : ""}" title="${esc(titulo || "")}"><input type="checkbox" value="${esc(valor)}" ${on ? "checked" : ""}>${esc(rotulo)}</label>`;
+}
+$$("[data-todos],[data-nenhum]").forEach(b => b.addEventListener("click", () => {
+  const alvo = b.dataset.todos || b.dataset.nenhum, on = !!b.dataset.todos;
+  $$(`#${alvo} input`).forEach(i => { i.checked = on; i.parentElement.classList.toggle("on", on); });
+}));
+$("#btRegras").addEventListener("click", () => $("#regras").hidden = !$("#regras").hidden);
+
+/* ---------- importar a Esteira ---------- */
+$("#arquivo").addEventListener("change", e => { enviar(e.target.files[0], $(".slot[data-tipo=an]")); e.target.value = ""; });
+async function enviar(f, slot) {
+  if (!f) return;
+  const fd = new FormData(); fd.append("arquivo", f);
+  toast(`Importando ${f.name} e cruzando…`);
+  await comSlot(slot || $(".slot[data-tipo=an]"), async () => {
+    EST = await api(URL_.importar, fd); RES = EST.resultado || null; render(); toast(EST.msg || `${f.name} importado`);
+  });
+}
+
+/* ---------- cruzar ---------- */
+$("#btCruzar").addEventListener("click", e => comBotao(e.currentTarget, async () => {
+  const param = {ini: $("#pIni").value, fim: $("#pFim").value, janela: +$("#pJanela").value || 0,
+                 lojas: $$("#pLojas input:checked").map(i => i.value), etapas: $$("#pEtapas input:checked").map(i => i.value)};
+  if (!param.ini || !param.fim) throw new Error("Informe o período.");
+  RES = await api(URL_.cruzar, param);
+  EST = await api(URL_.estado); RES = EST.resultado || RES;
+  irPara("validacao"); render();
+  toast(`Cruzamento concluído: ${RES.kpis.pedidos} pedidos analisados`);
+}));
+$("#btExportar").addEventListener("click", () => { location.href = URL_.baixar + "?o=resultado"; });
+
+/* ---------- resultado ---------- */
+const KPIS = [
+  ["pedidos", "Pedidos Base de Vendas", "fa-receipt", "destaque", k => `${k.linhas} linhas · combos agrupados`, null],
+  ["alta", "Alta", "fa-circle-check", "k-alta", k => `${k.exato} com protocolo exato`, ["assert", "Alta"]],
+  ["media", "Média", "fa-circle-half-stroke", "k-media", () => "protocolo aproximado", ["assert", "Média"]],
+  ["muito_baixa", "Muito baixa", "fa-circle-exclamation", "k-baixa", () => "loja/data divergente ou só loja e dia", ["assert", "Muito baixa"]],
+  ["manual", "Manual", "fa-hand-pointer", "k-manual", () => "vínculos confirmados", ["assert", "Manual"]],
+  ["nao_localizada", "Não localizadas", "fa-circle-xmark", "k-nl", () => "sem par na Esteira Vivo", ["status", "Não localizada"]],
+  ["b2b", "Vendas B2B", "fa-building", "k-b2b", () => "CNPJ + protocolo alfanumérico", ["status", "Venda B2B"]],
+  ["nao_lancada", "Não lançadas", "fa-ban", "", () => "na Esteira, sem Base de Vendas", ["nl"]],
+  ["end_diverge", "Endereço divergente", "fa-map-location-dot", "k-media", k => `${k.end_confere} conferem`, ["end", "div"]],
+];
+function renderResultado() {
+  const tem = !!RES;
+  $("#kpis").hidden = $("#barra").hidden = $("#painelRes").hidden = !tem; $("#vazioRes").hidden = tem;
+  if (!tem) return;
+  const k = RES.kpis;
+  $("#kpis").innerHTML = KPIS.map(([c, rot, ic, cls, det], i) => `
+    <div class="kpi ${cls}" data-i="${i}" role="button" tabindex="0"><div class="kpi-topo"><span>${rot}</span><i class="fa-solid ${ic}"></i></div>
+      <b>${(k[c] || 0).toLocaleString("pt-BR")}</b><span class="kpi-det">${det(k)}</span></div>`).join("");
+  $$("#kpis .kpi").forEach(el => el.addEventListener("click", () => {
+    const f = KPIS[+el.dataset.i][5];
+    if (!f) { limparFiltros(); trocarAba("go"); return; }
+    if (f[0] === "nl") { trocarAba("nl"); return; }
+    limparFiltros(); $({assert: "#fAssert", status: "#fStatus", end: "#fEnd"}[f[0]]).value = f[1]; trocarAba("go");
+  }));
+  const tot = k.pedidos + k.nao_lancada || 1;
+  $("#barra").innerHTML = [[k.alta, "#1E9E4A"], [k.manual, "#0071E3"], [k.media, "#F5A623"], [k.muito_baixa, "#E8742E"],
+    [k.nao_localizada, "#E0352B"], [k.b2b, "#8E6FC4"], [k.nao_lancada, "#B8B8BF"]]
+    .map(([v, c]) => `<span style="width:${v / tot * 100}%;background:${c}" title="${v}"></span>`).join("");
+  opcoes("#fStatus", RES.go.map(r => r.status), "Todos os status");
+  opcoes("#fAssert", RES.go.map(r => r.assert).filter(a => a !== "-"), "Todas as assertividades");
+  opcoes("#fFilial", RES.go.map(r => r.filial), "Todas as filiais");
+  opcoes("#fInst", RES.go.map(r => r.status_inst).filter(Boolean), "Todos os status de instalação");
+  $("#quando").textContent = `Cruzamento de ${RES.quando}${RES.por ? " por " + RES.por : ""} (${RES.origem})`;
+  desenharTabela();
+}
+function opcoes(sel, valores, todos) {
+  const el = $(sel), atual = el.value;
+  el.innerHTML = `<option value="">${todos}</option>` + [...new Set(valores)].sort().map(v => `<option>${esc(v)}</option>`).join("");
+  el.value = [...el.options].some(o => o.value === atual) ? atual : "";
+}
+function limparFiltros() { ["#fBusca", "#fStatus", "#fAssert", "#fFilial", "#fInst", "#fEnd"].forEach(s => $(s).value = ""); }
+function trocarAba(a) {
+  ABA_RES = a; ORD = {col: null, desc: false};
+  $$("#segRes button").forEach(b => b.classList.toggle("ativo", b.dataset.res === a));
+  $("#filtrosGo").hidden = a !== "go"; $("#filtrosNl").hidden = a !== "nl";
+  $("#resTitulo").textContent = {go: "Resultado da Base de Vendas", nl: "Vendas não lançadas", resumo: "Resumo por loja e dia"}[a];
+  $("#resSub").textContent = {go: "Clique em ver para abrir o pedido, confirmar, rejeitar ou vincular outra ORDEM.",
+    nl: "Vendas da Esteira de Vendas Vivo (dentro do escopo) que não foram encontradas na Base de Vendas.",
+    resumo: "Quantidade de pedidos da Base de Vendas e de vendas da Esteira Vivo por loja e dia, com o resultado do cruzamento."}[a];
+  desenharTabela();
+  $("#painelRes").scrollIntoView({behavior: "smooth", block: "start"});
+}
+$$("#segRes button").forEach(b => b.addEventListener("click", () => trocarAba(b.dataset.res)));
+["#fBusca", "#fStatus", "#fAssert", "#fFilial", "#fInst", "#fEnd", "#fBuscaNl"].forEach(s => $(s).addEventListener("input", desenharTabela));
+
+function ordenar(linhas, chaveFn) {
+  if (!ORD.col) return linhas;
+  const dataBR = v => /^\d{2}\/\d{2}\/\d{4}$/.test(v) ? v.split("/").reverse().join("") : v;
+  return [...linhas].sort((a, b) => {
+    let x = dataBR(chaveFn(a, ORD.col)), y = dataBR(chaveFn(b, ORD.col));
+    const r = typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y), "pt-BR", {numeric: true});
+    return ORD.desc ? -r : r;
+  });
+}
+function cabecalho(cols) {
+  return `<thead><tr>${cols.map(([k, r, cls]) => `<th data-col="${esc(k)}" class="${cls || ""} ${ORD.col === k ? "ord" + (ORD.desc ? " desc" : "") : ""}">${esc(r)}</th>`).join("")}</tr></thead>`;
+}
+function ligarOrdenacao(tab, redesenhar) {
+  $$("th[data-col]", tab).forEach(th => th.addEventListener("click", () => {
+    const c = th.dataset.col; if (!c) return;
+    ORD = {col: c, desc: ORD.col === c ? !ORD.desc : false}; redesenhar();
+  }));
+}
+
+function desenharTabela() {
+  const tab = $("#tabela");
+  if (!RES) return;
+  if (ABA_RES === "go") {
+    const b = $("#fBusca").value.trim().toUpperCase(), s = $("#fStatus").value, a = $("#fAssert").value,
+          f = $("#fFilial").value, inst = $("#fInst").value, en = $("#fEnd").value;
+    const filtroEnd = r => !en || (en === "div" ? ["Divergente", "Parcialmente divergente"].includes(r.endereco) : r.endereco === en);
+    let ls = RES.go.filter(r => (!s || r.status === s) && (!a || r.assert === a) && (!f || r.filial === f) && (!inst || r.status_inst === inst) && filtroEnd(r)
+      && (!b || [r.protocolo, r.tratado, r.ordem, r.vendedor, r.venda, r.plano, r.cliente].some(v => String(v).toUpperCase().includes(b))));
+    ls = ordenar(ls, (r, c) => r[c]);
+    $("#contador").textContent = `${ls.length.toLocaleString("pt-BR")} de ${RES.go.length.toLocaleString("pt-BR")} linhas`;
+    const cols = [["filial", "Filial / data"], ["vendedor", "Vendedor / serviço"], ["tratado", "Protocolo Go"], ["status", "Status"],
+      ["assert", "Assertividade"], ["ordem", "ORDEM"], ["status_inst", "Status instalação"], ["endereco", "Endereço"], ["motivo", "Motivo / observação"], ["", ""]];
+    tab.innerHTML = cabecalho(cols) + "<tbody>" + ls.map(r => `<tr>
+      <td><b>${esc(r.filial)}</b><div class="sub">${esc(r.data)} · venda ${esc(r.venda)}</div></td>
+      <td>${esc(r.vendedor)}<div class="sub">${esc(r.servico)} · ${esc(r.plano)}</div></td>
+      <td><b>${esc(r.tratado) || '<span class="mut">vazio</span>'}</b><div class="sub">${esc(r.formato)}</div></td>
+      <td>${tagStatus(r.status)}<div class="sub">kanban: ${esc(r.kanban)}</div></td>
+      <td>${tagAssert(r.assert)}</td>
+      <td><b>${esc(r.ordem) || '<span class="mut">—</span>'}</b>${r.ordem ? `<div class="sub">${esc(r.metodo)}</div>` : ""}</td>
+      <td>${tagInst(r.etapa, r.status_inst)}</td>
+      <td>${tagEnd(r.endereco, r.end_det)}</td>
+      <td class="quebra">${esc(r.motivo)}${r.end_det && (r.endereco !== "Confere" || r.end_det.includes("tolerada")) ? `<div class="sub"><i class="fa-solid fa-location-dot"></i> ${esc(r.end_det)}</div>` : ""}${r.obs ? `<div class="sub">${esc(r.obs)}</div>` : ""}${r.comentario ? `<div class="sub"><i class="fa-regular fa-comment"></i> ${esc(r.comentario)}</div>` : ""}</td>
+      <td><button class="ver" data-pid="${esc(r.pid)}">ver</button></td></tr>`).join("") + "</tbody>";
+    $$(".ver", tab).forEach(bt => bt.addEventListener("click", () => abrirPedido(bt.dataset.pid)));
+  } else if (ABA_RES === "nl") {
+    const b = $("#fBuscaNl").value.trim().toUpperCase();
+    let ls = RES.nl.filter(r => !b || [r.ordem, r.vendedor, r.adabas].some(v => String(v).toUpperCase().includes(b)));
+    ls = ordenar(ls, (r, c) => r[c]);
+    $("#contadorNl").textContent = `${ls.length} vendas`;
+    const pdv = Object.fromEntries((EST.opcoes_lojas || []).map(o => [o.adabas, o.pdv]));
+    tab.innerHTML = cabecalho([["data", "Data"], ["adabas", "Loja"], ["ordem", "ORDEM"], ["produto", "Produto"], ["vendedor", "Vendedor"],
+      ["status_inst", "Status instalação"], ["", "Observação"]]) + "<tbody>" + ls.map(r => `<tr>
+      <td>${esc(r.data)}</td><td><b>${esc(pdv[r.adabas] || r.adabas)}</b><div class="sub">${esc(r.adabas)}</div></td>
+      <td><b>${esc(r.ordem)}</b></td><td>${esc(r.produto)}</td><td>${esc(r.vendedor)}</td>
+      <td>${tagInst(r.etapa, r.status_inst)}</td><td>${tagStatus("Venda não lançada")}</td></tr>`).join("") + "</tbody>";
+  } else {
+    const t = RES.resumo, idx = Object.fromEntries(t.colunas.map((c, i) => [c, i]));
+    const ls = ordenar(t.linhas, (r, c) => r[idx[c]]);
+    tab.innerHTML = t.linhas.length ? cabecalho(t.colunas.map((c, i) => [c, c, i > 2 ? "num" : ""])) + "<tbody>" + ls.map(r =>
+      `<tr>${r.map((v, i) => `<td class="${i > 2 ? "num" : ""}">${i > 2 && !v ? '<span class="mut">0</span>' : esc(v)}</td>`).join("")}</tr>`).join("") + "</tbody>"
+      : '<tbody><tr><td class="mut">Sem dados.</td></tr></tbody>';
+  }
+  ligarOrdenacao(tab, desenharTabela);
+}
+
+/* ---------- detalhe do pedido ---------- */
+async function abrirPedido(pid) {
+  let d;
+  try { d = await api(URL_.pedido + "?pid=" + encodeURIComponent(pid)); } catch (e) { toast(e.message, true); return; }
+  const v = d.venda, an = d.analitico;
+  $("#mTitulo").textContent = `${d.linhas.length > 1 ? "Pedido combo" : "Pedido"} · protocolo ${v.protocolo || "vazio"}`;
+  const info = (rot, x) => `<div class="info"><span>${esc(rot)}</span><b>${x === "" || x == null ? '<span class="mut">—</span>' : esc(x)}</b></div>`;
+  const sug = d.sugestoes, sc = Object.fromEntries(sug.colunas.map((k, i) => [k, i]));
+  $("#mCorpo").innerHTML = `
+    <div class="acoes-linha" style="margin-bottom:14px">${tagStatus(d.status)} ${tagAssert(d.assertividade)}
+      ${d.manual ? '<span class="tag manual"><i class="fa-solid fa-hand-pointer"></i>ajuste manual</span>' : ""}
+      <span class="mut">${esc(d.metodo !== "-" ? d.metodo : "")}</span>
+      <a class="botao-link pequeno" href="${esc(v.url)}" target="_blank" rel="noopener"><i class="fa-solid fa-arrow-up-right-from-square"></i>Abrir a fibra (${esc(v.kanban)})</a></div>
+    ${d.motivo ? `<div class="aviso-box info"><i class="fa-solid fa-circle-info"></i><div>${esc(d.motivo)}</div></div>` : ""}
+    ${d.obs ? `<p class="mut">${esc(d.obs)}</p>` : ""}
+
+    <div class="sec-titulo"><i class="fa-solid fa-store"></i>Base de Vendas</div>
+    <div class="grade-info">
+      ${info("Filial", v.filial)}${info("Data", v.data)}${info("Vendedor", v.vendedor)}${info("Cliente", v.cliente)}
+      ${info("Protocolo original", v.protocolo)}${info("Formato do protocolo", v.formato)}
+      ${info("Loja ADABAS", v.adabas ? `${v.adabas}${v.loja ? " — " + v.loja : ""}` : "")}
+    </div>
+    <div class="rolagem" style="margin-top:10px;max-height:200px"><table>${cabecalho([["", "Serviço"], ["", "Nº da venda"], ["", "Plano"], ["", "CPF/CNPJ"]])}<tbody>
+      ${d.linhas.map(r => `<tr><td>${esc(r.servico)}</td><td>${esc(r.venda)}</td><td>${esc(r.plano)}</td><td>${esc(r.cpf)}</td></tr>`).join("")}</tbody></table></div>
+
+    <div class="sec-titulo"><i class="fa-solid fa-file-lines"></i>Esteira de Vendas Vivo — ORDEM vinculada</div>
+    ${d.ordem ? `<div class="grade-info">
+      ${info("ORDEM", d.ordem)}${info("Data de criação", an["DATA_CRIAÇÃO"])}${info("ADABAS", an["ADABAS"])}
+      ${info("Vendedor", an["NOME VENDEDOR"])}${info("Produto", an["PRODUTO"])}
+      ${info("Etapa instalação", an["ETAPA INSTALACAO"])}${info("Status instalação", an["STATUS INSTALACAO"])}
+      ${info("Venda comissionada", an["VENDA COMISSIONADA"])}${an["SLA AGENDA"] ? info("SLA agenda", an["SLA AGENDA"]) : ""}${an["MOTIVO"] ? info("Motivo", an["MOTIVO"]) : ""}</div>
+      <div class="acoes-linha" style="margin-top:12px">
+        ${d.assertividade !== "Manual" ? `<button class="sucesso" data-acao="confirmar"><i class="fa-solid fa-check"></i>Confirmar vínculo</button>` : ""}
+        <button class="perigo" data-acao="rejeitar"><i class="fa-solid fa-xmark"></i>Rejeitar vínculo</button>
+      </div>`
+    : `<div class="aviso-box"><i class="fa-solid fa-triangle-exclamation"></i><div>${d.status === "Venda B2B"
+        ? "Venda B2B: não consta na Esteira de Vendas Vivo. Se mesmo assim quiser vincular, informe a ORDEM abaixo."
+        : "Nenhuma ORDEM vinculada. Use as sugestões abaixo ou informe a ORDEM manualmente."}</div></div>`}
+    ${d.rejeitadas.length ? `<p class="mut">ORDENS rejeitadas para este pedido: ${d.rejeitadas.map(esc).join(", ")}</p>` : ""}
+
+    ${d.ordem ? `<div class="sec-titulo"><i class="fa-solid fa-map-location-dot"></i>Conferência de endereço ${tagEnd(d.endereco, d.end_det)}</div>
+      <div class="grade-info">
+        ${info("Base de Vendas", v.endereco)}
+        ${info("Esteira Vivo", [an["LOGRADOURO"], an["NUMERO"], an["CEP"] ? "CEP " + an["CEP"] : ""].filter(x => x).join(", "))}
+      </div>${d.end_det && (d.endereco !== "Confere" || d.end_det.includes("tolerada")) ? `<p class="mut">${esc(d.end_det)}</p>` : ""}` : ""}
+
+    <div class="sec-titulo"><i class="fa-solid fa-link"></i>Vincular outra ORDEM</div>
+    <div class="vincular"><input class="campo" id="mOrdem" placeholder="ORDEM da Esteira Vivo" aria-label="ORDEM da Esteira Vivo" inputmode="numeric">
+      <button class="primario" data-acao="vincular"><i class="fa-solid fa-link"></i>Vincular</button>
+      ${d.manual || d.rejeitadas.length ? `<button data-acao="desfazer"><i class="fa-solid fa-rotate-left"></i>Desfazer ajustes</button>` : ""}</div>
+
+    <div class="sec-titulo"><i class="fa-solid fa-wand-magic-sparkles"></i>Sugestões de ORDEM</div>
+    ${sug.linhas.length ? `<div class="rolagem" style="max-height:320px"><table>${cabecalho([["", "ORDEM"], ["", "Loja"], ["", "Data"], ["", "Vendedor"],
+      ["", "Dif. caracteres", "num"], ["", "Dif. dias", "num"], ["", ""], ["", ""]])}<tbody>
+      ${sug.linhas.map(s => `<tr><td><b>${esc(s[sc.ORDEM])}</b></td>
+        <td>${esc(s[sc.PDV] || s[sc.ADABAS])} ${s[sc["MESMA LOJA"]] ? '<span class="tag ok">mesma loja</span>' : ""}</td>
+        <td>${esc(s[sc.DATA])}</td><td>${esc(s[sc.VENDEDOR])} ${s[sc["MESMO VENDEDOR"]] ? '<span class="tag ok">mesmo</span>' : ""}</td>
+        <td class="num">${esc(s[sc["CARACTERES DIFERENTES"]])}</td><td class="num">${esc(s[sc["DIAS DE DIFERENÇA"]])}</td>
+        <td>${s[sc["JÁ VINCULADA"]] ? '<span class="tag cinza">já vinculada</span>' : ""}</td>
+        <td><button class="ver" data-usar="${esc(s[sc.ORDEM])}">vincular</button></td></tr>`).join("")}</tbody></table></div>`
+      : '<p class="mut">Nenhuma ORDEM próxima encontrada.</p>'}
+
+    <div class="sec-titulo"><i class="fa-regular fa-comment"></i>Comentário</div>
+    <textarea class="campo" id="mComent" placeholder="Observação sobre este pedido" aria-label="Comentário">${esc(d.comentario)}</textarea>
+    <div class="acoes-linha" style="margin-top:8px"><button class="secundario" data-acao="comentar"><i class="fa-solid fa-floppy-disk"></i>Salvar comentário</button></div>`;
+  const agir = (acao, ordem) => async e => comBotao(e.currentTarget, async () => {
+    const corpo = {pid, acao, ordem: ordem ?? d.ordem, comentario: $("#mComent").value};
+    if (acao === "vincular") corpo.ordem = ordem ?? $("#mOrdem").value;
+    RES = await api(URL_.ajuste, corpo);
+    EST.resultado = RES; EST.ajustes = RES.ajustes; render();
+    toast({confirmar: "Vínculo confirmado", rejeitar: "Vínculo rejeitado — pedido recruzado", vincular: "ORDEM vinculada",
+           desfazer: "Ajustes desfeitos", comentar: "Comentário salvo"}[acao]);
+    abrirPedido(pid);
+  });
+  $$("[data-acao]", $("#mCorpo")).forEach(b => b.addEventListener("click", agir(b.dataset.acao)));
+  $$("[data-usar]", $("#mCorpo")).forEach(b => b.addEventListener("click", agir("vincular", b.dataset.usar)));
+  if (!$("#modal").open) $("#modal").showModal();
+}
+$("#mFechar").addEventListener("click", () => $("#modal").close());
+$("#modal").addEventListener("click", e => { if (e.target === $("#modal")) $("#modal").close(); });
+
+/* ---------- ajustes ---------- */
+function renderAjustes() {
+  if (!RES) {
+    $("#listaAjustes").innerHTML = '<div class="vazio"><i class="fa-solid fa-pen-to-square"></i><b>Execute o cruzamento primeiro</b>Os ajustes aparecem aqui depois do cruzamento.</div>';
+    $("#tabRevisar").innerHTML = ""; return;
+  }
+  const porPid = {};
+  RES.go.forEach(r => { if (!porPid[r.pid]) porPid[r.pid] = r; });
+  const aj = Object.values(porPid).filter(r => r.manual || r.comentario);
+  const a = EST.ajustes || RES.ajustes;
+  $("#listaAjustes").innerHTML = `<p class="mut" style="margin-top:0">${a.manuais} vínculos manuais/confirmados · ${a.rejeitados} rejeitados · ${a.comentarios} comentários</p>` +
+    (aj.length ? `<div class="rolagem"><table>${cabecalho([["", "Filial / data"], ["", "Protocolo Go"], ["", "ORDEM"], ["", "Assertividade"], ["", "Status instalação"], ["", "Comentário"], ["", ""]])}<tbody>
+    ${aj.map(r => `<tr><td><b>${esc(r.filial)}</b><div class="sub">${esc(r.data)}</div></td><td>${esc(r.tratado)}</td><td><b>${esc(r.ordem) || "—"}</b></td>
+      <td>${tagAssert(r.assert)}</td><td>${tagInst(r.etapa, r.status_inst)}</td><td class="quebra">${esc(r.comentario)}</td>
+      <td><button class="ver" data-pid="${esc(r.pid)}">ver</button></td></tr>`).join("")}</tbody></table></div>` : "");
+  const f = $("#fRevisar").value;
+  const rev = Object.values(porPid).filter(r => f === "nl" ? r.status === "Não localizada" : f === "baixa" ? r.assert === "Muito baixa"
+    : f === "end" ? ["Divergente", "Parcialmente divergente"].includes(r.endereco) : r.assert === "Média");
+  $("#contRevisar").textContent = `${rev.length} pedidos`;
+  $("#tabRevisar").innerHTML = cabecalho([["", "Filial / data"], ["", "Vendedor"], ["", "Protocolo Go"], ["", "ORDEM"], ["", "Motivo / observação"], ["", ""]]) + "<tbody>" +
+    rev.map(r => `<tr><td><b>${esc(r.filial)}</b><div class="sub">${esc(r.data)}</div></td><td>${esc(r.vendedor)}<div class="sub">${esc(r.servico)}</div></td>
+      <td><b>${esc(r.tratado) || "—"}</b><div class="sub">${esc(r.formato)}</div></td><td>${esc(r.ordem) || "—"}</td>
+      <td class="quebra">${esc(r.motivo || r.obs)}</td><td><button class="ver" data-pid="${esc(r.pid)}">ver</button></td></tr>`).join("") + "</tbody>";
+  $$("[data-secao=ajustes] .ver").forEach(bt => bt.addEventListener("click", () => abrirPedido(bt.dataset.pid)));
+}
+$("#fRevisar").addEventListener("change", renderAjustes);
+$("#btLimpar").addEventListener("click", e => {
+  if (!confirm("Remover todos os ajustes manuais, rejeições e comentários?")) return;
+  comBotao(e.currentTarget, async () => {
+    EST = await api(URL_.limpar, {}); RES = EST.resultado || null; render(); toast("Ajustes removidos");
+  });
+});
+
+/* ---------- lojas ---------- */
+function renderLojas() {
+  if (!EST?.lojas) { $("#tabLojas").innerHTML = ""; return; }
+  const ops = EST.opcoes_lojas;
+  $("#tabLojas").innerHTML = cabecalho([["", "FILIAL (Base de Vendas)"], ["", "ADABAS — PDV"], ["", "Origem"]]) + "<tbody>" +
+    EST.lojas.map(l => `<tr><td><b>${esc(l.filial)}</b></td>
+      <td><select class="campo" data-filial="${esc(l.filial)}" style="max-width:360px" aria-label="ADABAS de ${esc(l.filial)}"><option value="">— sem correspondência —</option>
+        ${ops.map(o => `<option value="${esc(o.adabas)}" ${o.adabas === l.adabas ? "selected" : ""}>${esc(o.adabas)} — ${esc(o.pdv || "(sem setor)")}</option>`).join("")}</select></td>
+      <td>${l.adabas ? `<span class="tag ${l.origem.startsWith("Nome id") ? "ok" : "manual"}">${esc(l.origem)}</span>` : '<span class="tag nl">sem correspondência</span>'}</td></tr>`).join("") + "</tbody>";
+  $("#foraGo").innerHTML = EST.fora_go.length ? `<div class="aviso-box info"><i class="fa-solid fa-circle-info"></i><div>
+    Lojas na Esteira Vivo sem filial na Base de Vendas (ficam fora do escopo por padrão): ${EST.fora_go.map(l => `<b>${esc(l.pdv || l.adabas)}</b> (${esc(l.adabas)})`).join(", ")}</div></div>` : "";
+}
+$("#btSalvarLojas").addEventListener("click", e => comBotao(e.currentTarget, async () => {
+  const mapa = Object.fromEntries($$("#tabLojas select").map(s => [s.dataset.filial, s.value]));
+  EST = await api(URL_.lojas, {mapa}); RES = EST.resultado || null;
+  render(); toast(RES ? "Lojas salvas e cruzamento refeito" : "Correspondência salva");
+}));
+
+/* ---------- bases ---------- */
+$$("#segBases button").forEach(b => b.addEventListener("click", () => {
+  BASE_SEL = b.dataset.base; $$("#segBases button").forEach(x => x.classList.toggle("ativo", x === b)); carregarBase();
+}));
+async function carregarBase() {
+  const a = EST?.arquivos?.[BASE_SEL];
+  if (!a?.ok) { $("#infoBase").innerHTML = '<div class="aviso-box erro"><i class="fa-solid fa-circle-xmark"></i><div>Base vazia.</div></div>'; $("#tabBase").innerHTML = ""; return; }
+  const extra = BASE_SEL === "an" && a.colunas ? `<div class="chips" style="margin-bottom:12px">${a.colunas.map(([s, r]) => `<span class="chip on" title="Solicitada: ${esc(s)}">${esc(r)}</span>`).join("")}
+      ${(a.ausentes || []).map(s => `<span class="tag nl">${esc(s)} não encontrada</span>`).join("")}</div>` : "";
+  const nota = {go: "Vendas de fibra do portal no período do escopo (com ± a tolerância de data).",
+                an: `Esteira importada: ${a.linhas.toLocaleString("pt-BR")} linhas${a.colunas_orig ? ` · ${a.colunas.length} de ${a.colunas_orig} colunas` : ""}.`,
+                lj: "Setores do portal com o código ADABAS preenchido."}[BASE_SEL];
+  $("#infoBase").innerHTML = `
+    <div class="acoes-linha" style="margin-bottom:12px"><span class="mut">${esc(nota)} Prévia das 200 primeiras linhas.</span>
+      <button class="secundario" id="btBaixarBase"><i class="fa-solid fa-download"></i>Baixar tratada</button></div>${extra}`;
+  $("#btBaixarBase").addEventListener("click", () => { location.href = URL_.baixar + "?o=" + BASE_SEL; });
+  try {
+    const t = await api(URL_.previa + "?tipo=" + BASE_SEL);
+    $("#tabBase").innerHTML = cabecalho(t.colunas.map(c => ["", c])) + "<tbody>" + t.linhas.map(r => `<tr>${r.map(v => `<td>${esc(v)}</td>`).join("")}</tr>`).join("") + "</tbody>";
+  } catch (e) { toast(e.message, true); }
+}
+
+irPara("validacao");
+atualizar();
+})();
+</script>
+{% endblock %}

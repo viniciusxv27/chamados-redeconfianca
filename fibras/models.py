@@ -75,6 +75,27 @@ class Fibra(models.Model):
         'Motivo (planilha)', max_length=255, blank=True,
         help_text='Valor da coluna MOTIVO na última importação (vendas com problema).',
     )
+    etapa_instalacao = models.CharField('Etapa instalação (Esteira)', max_length=120, blank=True)
+
+    # Cruzamento com a Esteira de Vendas Vivo (fibras/validacao.py)
+    cruzamento = models.ForeignKey('Cruzamento', on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name='fibras', help_text='Último cruzamento em que a venda entrou.')
+    adabas = models.CharField('Loja ADABAS', max_length=40, blank=True)
+    protocolo_tratado = models.CharField(max_length=60, blank=True)
+    formato_protocolo = models.CharField(max_length=60, blank=True)
+    status_cruzamento = models.CharField(max_length=30, blank=True, db_index=True,
+                                         help_text='Localizada / Não localizada / Venda B2B')
+    assertividade = models.CharField(max_length=20, blank=True, help_text='Alta / Média / Muito baixa / Manual')
+    ordem_vinculada = models.CharField('ORDEM vinculada', max_length=40, blank=True, db_index=True)
+    metodo_cruzamento = models.CharField(max_length=80, blank=True)
+    motivo_cruzamento = models.TextField(blank=True)
+    observacao_cruzamento = models.TextField(blank=True)
+    conferencia_endereco = models.CharField(max_length=40, blank=True)
+    detalhe_endereco = models.TextField(blank=True)
+    # Ajustes manuais: valem para todos os próximos cruzamentos
+    ordem_manual = models.CharField('ORDEM confirmada/vinculada à mão', max_length=40, blank=True)
+    ordens_rejeitadas = models.JSONField(default=list, blank=True)
+    comentario_cruzamento = models.TextField('Comentário do cruzamento', blank=True)
 
     class Meta:
         verbose_name = 'Fibra'
@@ -231,3 +252,99 @@ class PlanilhaOrdemInconsistente(models.Model):
 
     def __str__(self):
         return f"Ordem {self.ordem} (sem match)"
+
+
+# ---------------------------------------------------------------------------
+# Cruzamento Base de Vendas (fibras do portal) x Esteira de Vendas Vivo
+# (planilha ANALÍTICO DE VENDAS). Mesmo motor da ferramenta "Validação de
+# Vendas Go" — ver fibras/cruzamento.py e fibras/validacao.py.
+# ---------------------------------------------------------------------------
+
+class EsteiraImportacao(models.Model):
+    """Uma importação da planilha da Esteira de Vendas Vivo (ANALÍTICO)."""
+    nome_arquivo = models.CharField(max_length=255, blank=True)
+    linhas = models.PositiveIntegerField(default=0)
+    colunas_originais = models.PositiveIntegerField(default=0)
+    colunas = models.JSONField(default=list, blank=True, help_text='[[coluna solicitada, coluna do arquivo], ...]')
+    ausentes = models.JSONField(default=list, blank=True)
+    importado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                      related_name='+')
+    importado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-importado_em']
+        verbose_name = 'Importação da Esteira Vivo'
+        verbose_name_plural = 'Importações da Esteira Vivo'
+
+    def __str__(self):
+        return f'{self.nome_arquivo} ({self.linhas} linhas)'
+
+
+class EsteiraVenda(models.Model):
+    """Uma linha da Esteira de Vendas Vivo (só a importação mais recente fica guardada)."""
+    importacao = models.ForeignKey(EsteiraImportacao, on_delete=models.CASCADE, related_name='vendas')
+    linha = models.PositiveIntegerField(default=0, help_text='Posição na planilha.')
+    ordem = models.CharField(max_length=40, blank=True, db_index=True)
+    adabas = models.CharField(max_length=40, blank=True, db_index=True)
+    data_criacao = models.DateField(null=True, blank=True)
+    etapa_instalacao = models.CharField(max_length=120, blank=True)
+    status_instalacao = models.CharField(max_length=120, blank=True)
+    produto = models.CharField(max_length=200, blank=True)
+    nome_vendedor = models.CharField(max_length=200, blank=True)
+    sla_agenda = models.CharField(max_length=120, blank=True)
+    motivo = models.CharField(max_length=255, blank=True)
+    dados = models.JSONField(default=dict, blank=True, help_text='Colunas usadas, com os nomes do motor.')
+    # Resultado do último cruzamento
+    no_escopo = models.BooleanField(default=False)
+    fibra = models.ForeignKey(Fibra, on_delete=models.SET_NULL, null=True, blank=True, related_name='esteira_vendas')
+
+    class Meta:
+        ordering = ['linha']
+        verbose_name = 'Venda da Esteira Vivo'
+        verbose_name_plural = 'Vendas da Esteira Vivo'
+
+    def __str__(self):
+        return f'ORDEM {self.ordem}'
+
+
+class FilialAdabas(models.Model):
+    """FILIAL da Base de Vendas (PDV do Vivo GO) -> ADABAS da Esteira Vivo, salvo na tela de lojas."""
+    filial = models.CharField(max_length=160, unique=True)
+    adabas = models.CharField(max_length=40, blank=True, help_text='Vazio = sem correspondência.')
+    atualizado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                       related_name='+')
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['filial']
+        verbose_name = 'Correspondência FILIAL → ADABAS'
+        verbose_name_plural = 'Correspondências FILIAL → ADABAS'
+
+    def __str__(self):
+        return f'{self.filial} → {self.adabas or "—"}'
+
+
+class Cruzamento(models.Model):
+    """Uma execução do cruzamento: parâmetros, indicadores e resumo loja/dia."""
+    ORIGENS = [('importacao', 'Importação da Esteira'), ('manual', 'Cruzar (tela)'), ('ajuste', 'Ajuste manual'),
+               ('lojas', 'Correspondência de lojas')]
+    executado_em = models.DateTimeField(auto_now_add=True)
+    executado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                      related_name='+')
+    origem = models.CharField(max_length=20, choices=ORIGENS, default='manual')
+    importacao = models.ForeignKey(EsteiraImportacao, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    ini = models.DateField()
+    fim = models.DateField()
+    janela = models.PositiveSmallIntegerField(default=1)
+    lojas = models.JSONField(default=list, blank=True)
+    etapas = models.JSONField(default=list, blank=True)
+    kpis = models.JSONField(default=dict, blank=True)
+    resumo = models.JSONField(default=dict, blank=True, help_text='{"colunas": [...], "linhas": [[...]]}')
+
+    class Meta:
+        ordering = ['-executado_em']
+        verbose_name = 'Cruzamento Base de Vendas x Esteira Vivo'
+        verbose_name_plural = 'Cruzamentos Base de Vendas x Esteira Vivo'
+
+    def __str__(self):
+        return f'Cruzamento {self.executado_em:%d/%m/%Y %H:%M}'

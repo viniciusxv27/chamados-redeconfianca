@@ -49,7 +49,7 @@ def kanban(request):
     if ordem:
         # Aceita o nº de ORDEM da planilha (== numero_protocolo) ou a posição
         # numérica (ordem_planilha). Tenta os dois para ser flexível.
-        cond = _Q(numero_protocolo__icontains=ordem)
+        cond = _Q(numero_protocolo__icontains=ordem) | _Q(ordem_vinculada__icontains=ordem)
         if ordem.isdigit():
             cond |= _Q(ordem_planilha=int(ordem))
         qs = qs.filter(cond)
@@ -232,12 +232,10 @@ def importar_planilha(request):
         return redirect('fibras:kanban')
     messages.success(
         request,
-        f"Planilha importada: {stats['matched']} fibras casadas, "
-        f"{stats['updated_status']} com status atualizado, "
-        f"{stats['not_found_count']} protocolos não encontrados "
-        f"(de {stats['rows']} linhas). "
-        f"Inconsistências: +{stats.get('inconsistencias_novas', 0)} novas, "
-        f"{stats.get('inconsistencias_resolvidas', 0)} resolvidas. "
+        f"Esteira importada ({stats['rows']} linhas) e cruzada com a Base de Vendas: "
+        f"{stats['matched']} localizadas, {stats['nao_localizadas']} não localizadas, "
+        f"{stats['not_found_count']} vendas não lançadas, "
+        f"{stats['updated_status']} com status atualizado. "
         f"Removidas (sumiram da planilha e sem tratativa): {stats.get('removidas', 0)}."
     )
     return redirect('fibras:kanban')
@@ -594,3 +592,156 @@ def export_canceladas_csv(request):
         writer.writerow(row)
 
     return response
+
+
+# ---------------------------------------------------------------------------
+# Validação: Base de Vendas x Esteira de Vendas Vivo (acompanhamento completo)
+# ---------------------------------------------------------------------------
+
+def _validacao_api(fn):
+    """Só a Ilha; erros viram JSON {erro} para a tela mostrar."""
+    import functools
+    import json
+    import logging
+
+    from .validacao import ErroValidacao
+
+    @functools.wraps(fn)
+    @login_required
+    def envolto(request, *args, **kwargs):
+        if not _is_ilha(request.user):
+            return JsonResponse({'erro': 'Sem permissão para a validação de fibras.'}, status=403)
+        try:
+            corpo = {}
+            if request.method == 'POST' and request.content_type == 'application/json':
+                corpo = json.loads(request.body or b'{}')
+            return fn(request, corpo, *args, **kwargs)
+        except ErroValidacao as e:
+            return JsonResponse({'erro': str(e)}, status=400)
+        except Exception as e:  # noqa: BLE001
+            logging.getLogger(__name__).exception('Erro na validação de fibras')
+            return JsonResponse({'erro': f'{type(e).__name__}: {e}'}, status=500)
+    return envolto
+
+
+@login_required
+def validacao(request):
+    if not _is_ilha(request.user):
+        messages.error(request, 'A validação de fibras é da Ilha (Supervisor, Administrativo e Admin).')
+        return redirect('fibras:kanban')
+    return render(request, 'fibras/validacao.html', {})
+
+
+@_validacao_api
+def validacao_estado(request, corpo):
+    from .validacao import estado_json
+    return JsonResponse(estado_json())
+
+
+@require_POST
+@_validacao_api
+def validacao_cruzar(request, corpo):
+    from .validacao import executar, resultado_json
+    cruz = executar(corpo, by_user=request.user, origem='manual')
+    return JsonResponse(resultado_json(cruz))
+
+
+@_validacao_api
+def validacao_pedido(request, corpo):
+    from .validacao import ErroValidacao, detalhe_json
+    fibra = Fibra.objects.filter(pk=request.GET.get('pid') or 0).first()
+    if not fibra:
+        raise ErroValidacao('Pedido não encontrado.')
+    return JsonResponse(detalhe_json(fibra))
+
+
+@require_POST
+@_validacao_api
+def validacao_ajuste(request, corpo):
+    from .validacao import (ErroValidacao, aplicar_ajuste, executar, parametros_atuais, resultado_json,
+                            ultimo_cruzamento)
+    fibra = Fibra.objects.filter(pk=corpo.get('pid') or 0).first()
+    if not fibra:
+        raise ErroValidacao('Pedido não encontrado.')
+    acao = corpo.get('acao') or ''
+    if acao not in ('confirmar', 'rejeitar', 'vincular', 'desfazer', 'comentar'):
+        raise ErroValidacao('Ação inválida.')
+    aplicar_ajuste(fibra, acao, corpo.get('ordem') or '', corpo.get('comentario') if 'comentario' in corpo else None)
+    # Comentário não muda o pareamento; o resto refaz o cruzamento com os mesmos parâmetros.
+    if acao == 'comentar' and ultimo_cruzamento():
+        cruz = ultimo_cruzamento()
+    else:
+        cruz = executar(parametros_atuais(), by_user=request.user, origem='ajuste')
+    return JsonResponse(resultado_json(cruz))
+
+
+@require_POST
+@_validacao_api
+def validacao_ajustes_limpar(request, corpo):
+    from .validacao import estado_json, executar, limpar_ajustes, parametros_atuais, ultimo_cruzamento
+    limpar_ajustes()
+    if ultimo_cruzamento():
+        executar(parametros_atuais(), by_user=request.user, origem='ajuste')
+    return JsonResponse(estado_json())
+
+
+@require_POST
+@_validacao_api
+def validacao_lojas(request, corpo):
+    from .validacao import estado_json, executar, parametros_atuais, salvar_lojas, ultimo_cruzamento
+    mapa = corpo.get('mapa') or {}
+    if not isinstance(mapa, dict):
+        mapa = {}
+    salvar_lojas(mapa, by_user=request.user)
+    if ultimo_cruzamento():
+        p = parametros_atuais()
+        # Lojas que passaram a ter FILIAL entram no escopo.
+        p['lojas'] = sorted(set(p['lojas']) | {str(a) for a in mapa.values() if a})
+        executar(p, by_user=request.user, origem='lojas')
+    return JsonResponse(estado_json())
+
+
+@require_POST
+@_validacao_api
+def validacao_importar(request, corpo):
+    from .validacao import ErroValidacao, estado_json
+    arquivo = request.FILES.get('arquivo')
+    if not arquivo:
+        raise ErroValidacao('Selecione o arquivo .xlsx da Esteira de Vendas Vivo.')
+    if not arquivo.name.lower().endswith(('.xlsx', '.xls')):
+        raise ErroValidacao('Envie um arquivo .xlsx.')
+    stats = import_planilha_xlsx(arquivo, by_user=request.user)
+    estado = estado_json()
+    removidas = f"; {stats['removidas']} fibras antigas removidas" if stats.get('removidas') else ''
+    estado['msg'] = (f"{arquivo.name}: {stats['rows']} linhas. Cruzamento feito: {stats['matched']} localizadas, "
+                     f"{stats['nao_localizadas']} não localizadas, {stats['not_found_count']} não lançadas"
+                     f"{removidas}.")
+    return JsonResponse(estado)
+
+
+@require_POST
+@_validacao_api
+def validacao_sincronizar(request, corpo):
+    from .validacao import estado_json
+    stats = sync_fibras()
+    estado = estado_json()
+    estado['msg'] = (f"Base de Vendas sincronizada: {stats['created']} novas, {stats['updated']} atualizadas "
+                     f"(de {stats['total_in_source']} no Vivo GO).")
+    return JsonResponse(estado)
+
+
+@_validacao_api
+def validacao_previa(request, corpo):
+    from .validacao import previa
+    return JsonResponse(previa(request.GET.get('tipo') or ''))
+
+
+@_validacao_api
+def validacao_baixar(request, corpo):
+    from urllib.parse import quote
+
+    from .validacao import arquivo
+    nome, dados = arquivo(request.GET.get('o') or 'resultado')
+    resposta = HttpResponse(dados, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    resposta['Content-Disposition'] = "attachment; filename*=UTF-8''" + quote(nome)
+    return resposta
