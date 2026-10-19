@@ -61,7 +61,7 @@ _USER_INSTRUCTION = (
     '"documento" (CNPJ ou CPF do ESTABELECIMENTO onde a compra foi feita — o que aparece no cabeçalho '
     'do cupom/nota, perto do nome da loja, de "CNPJ", "CPF", "C.N.P.J." ou "CNPJ/CPF do emitente". '
     'NUNCA use o "CPF do consumidor"/"CPF do cliente" nem o CNPJ da operadora do cartão. '
-    'O COMPRADOR somos nós, a Rede Confiança: ignore todo CNPJ que comece com 03.007.331 ou '
+    'O COMPRADOR somos nós, a Rede Confiança: ignore todo CNPJ que comece com 09.163.602 ou '
     '09.163.602 (aparece como destinatário/tomador/cliente na nota) — queremos o de quem VENDEU. '
     'Só os números, ou "" se não aparecer), '
     '"valor" (número em reais, ex.: 123.45, use ponto decimal), '
@@ -137,7 +137,7 @@ def formatar_documento(numeros: str) -> str:
 # O comprador é a própria rede: o CNPJ dela aparece na nota como destinatário e
 # a IA às vezes o devolvia como se fosse a loja. Fica de fora tudo o que tiver a
 # raiz (8 primeiros dígitos) da empresa — a matriz e as filiais da SEFAZ_CNPJS.
-RAIZES_DA_EMPRESA = {'03007331'}
+RAIZES_DA_EMPRESA = {'09163602'}
 
 
 def raizes_da_empresa() -> set:

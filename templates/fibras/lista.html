@@ -68,7 +68,7 @@ html.dark .fb-novo { color: #A5B4FC; }
   <div class="fb-cab">
     <div>
       <h1><span class="fb-ico" aria-hidden="true"><i class="fas fa-network-wired"></i></span> Fibras — Lista</h1>
-      <p>Mês corrente · tabela completa para busca e filtragem.</p>
+      <p>{% if periodo_ativo %}Período: {{ periodo_rotulo }}{% else %}Mês corrente{% endif %} · tabela completa para busca e filtragem.</p>
     </div>
     <div class="fb-acoes">
       {% if can_import %}
@@ -120,12 +120,14 @@ html.dark .fb-novo { color: #A5B4FC; }
       <div><label class="fb-rotulo" for="fVend">Vendedor</label><input id="fVend" type="text" name="vendedor" value="{{ filtro_vendedor }}" placeholder="Filtrar por vendedor" class="fb-campo"></div>
       <div><label class="fb-rotulo" for="fVenda">Nº da venda</label><input id="fVenda" type="text" name="venda" value="{{ filtro_venda }}" placeholder="Nº da venda" class="fb-campo"></div>
       <div><label class="fb-rotulo" for="fOrdem">Ordem / Protocolo</label><input id="fOrdem" type="text" name="ordem" value="{{ filtro_ordem }}" placeholder="Ordem / Protocolo" class="fb-campo"></div>
+      {% include 'fibras/_fb_periodo.html' %}
       <div class="fb-filtros-acoes">
         <button class="fb-btn primario" type="submit"><i class="fas fa-filter" aria-hidden="true"></i> Filtrar</button>
         <a href="{% url 'fibras:lista' %}" class="fb-btn leve">Limpar</a>
       </div>
     </div>
   </form>
+  {% include 'fibras/_fb_periodo_chip.html' %}
 
   {% if fibras %}
   <div class="fb-chips" id="fbChips" role="group" aria-label="Filtrar por status (instantâneo)">
@@ -279,6 +281,8 @@ html.dark .fb-novo { color: #A5B4FC; }
   var fq = document.getElementById('fbFiltrosQtd');
   if (fq) {
     var n = Array.prototype.filter.call(document.querySelectorAll('#fbFiltros input[type=text], #fbFiltros select'), function (i) { return i.value.trim() !== ''; }).length;
+    // O período (De/Até) conta como um filtro só.
+    if (Array.prototype.some.call(document.querySelectorAll('#fbFiltros input[type=date]'), function (i) { return i.value !== ''; })) n++;
     if (n) { fq.textContent = n; fq.hidden = false; }
   }
   aplicar();

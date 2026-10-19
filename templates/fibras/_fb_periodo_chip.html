@@ -1,0 +1,10 @@
+{# Chip do período ativo; o "x" volta para a mesma tela mantendo os outros filtros. #}
+{% if periodo_ativo %}
+<div class="fb-periodo-ativo">
+  <span class="fb-periodo-chip">
+    <i class="fas fa-calendar-days" aria-hidden="true"></i>
+    <span>Período: <b>{{ periodo_rotulo }}</b></span>
+    <a href="{{ sem_periodo_url }}" class="fb-periodo-x" title="Remover o filtro de período" aria-label="Remover o filtro de período {{ periodo_rotulo }}"><i class="fas fa-xmark" aria-hidden="true"></i></a>
+  </span>
+</div>
+{% endif %}

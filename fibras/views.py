@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from decimal import Decimal
 
 from django.contrib import messages
@@ -24,6 +25,69 @@ def _is_ilha(user) -> bool:
 
 def _can_import_planilha(user) -> bool:
     return _is_ilha(user) or is_gerente(user)
+
+
+# ---------------------------------------------------------------------------
+# Filtro de período (data da venda): ?de=AAAA-MM-DD&ate=AAAA-MM-DD
+# Vale para kanban, lista, relatório e exportações. Data inválida é ignorada.
+# ---------------------------------------------------------------------------
+
+def _data_param(valor):
+    valor = (valor or '').strip()
+    if not valor:
+        return None
+    try:
+        return date.fromisoformat(valor)
+    except ValueError:
+        return None
+
+
+def _periodo(request):
+    """(de, ate) válidos do GET; se vierem invertidos, desinverte."""
+    de = _data_param(request.GET.get('de'))
+    ate = _data_param(request.GET.get('ate'))
+    if de and ate and de > ate:
+        de, ate = ate, de
+    return de, ate
+
+
+def _filtrar_periodo(qs, de, ate):
+    if de:
+        qs = qs.filter(data_da_venda__gte=de)
+    if ate:
+        qs = qs.filter(data_da_venda__lte=ate)
+    return qs
+
+
+def _ctx_periodo(request, de, ate):
+    """Contexto do período para os templates: campos, chip e links que o preservam."""
+    from urllib.parse import urlencode
+
+    par = {}
+    if de:
+        par['de'] = de.isoformat()
+    if ate:
+        par['ate'] = ate.isoformat()
+    if de and ate:
+        rotulo = de.strftime('%d/%m/%Y') if de == ate else f"{de.strftime('%d/%m/%Y')} a {ate.strftime('%d/%m/%Y')}"
+    elif de:
+        rotulo = f"a partir de {de.strftime('%d/%m/%Y')}"
+    elif ate:
+        rotulo = f"até {ate.strftime('%d/%m/%Y')}"
+    else:
+        rotulo = ''
+    # Link do "x" do chip: a mesma página com os demais filtros, sem o período.
+    resto = request.GET.copy()
+    resto.pop('de', None)
+    resto.pop('ate', None)
+    return {
+        'filtro_de': par.get('de', ''),
+        'filtro_ate': par.get('ate', ''),
+        'periodo_ativo': bool(par),
+        'periodo_rotulo': rotulo,
+        'periodo_qs': urlencode(par),
+        'sem_periodo_url': request.path + (f'?{resto.urlencode()}' if resto else ''),
+    }
 
 
 @login_required
@@ -53,6 +117,9 @@ def kanban(request):
         if ordem.isdigit():
             cond |= _Q(ordem_planilha=int(ordem))
         qs = qs.filter(cond)
+    # Período (data da venda) — vale para todas as colunas, inclusive "Não localizado".
+    de, ate = _periodo(request)
+    qs = _filtrar_periodo(qs, de, ate)
 
     # Coluna "Não localizado": vendas de fibra cujo protocolo não aparece na
     # planilha atual (last_planilha_at antes do último import OU nulo). Só
@@ -116,6 +183,7 @@ def kanban(request):
         'status_choices': Fibra.STATUS_CHOICES,
         'inconsistencias': inconsistencias,
         'inconsistencias_count': len(inconsistencias),
+        **_ctx_periodo(request, de, ate),
     })
 
 
@@ -142,6 +210,8 @@ def lista(request):
         if ordem.isdigit():
             cond |= _Q(ordem_planilha=int(ordem))
         qs = qs.filter(cond)
+    de, ate = _periodo(request)
+    qs = _filtrar_periodo(qs, de, ate)
 
     return render(request, 'fibras/lista.html', {
         'fibras': qs.order_by('ordem_planilha', '-data_da_venda', '-id'),
@@ -153,6 +223,7 @@ def lista(request):
         'filtro_venda': venda,
         'filtro_ordem': ordem,
         'status_choices': Fibra.STATUS_CHOICES,
+        **_ctx_periodo(request, de, ate),
     })
 
 
@@ -365,7 +436,8 @@ def sync_now(request):
 
 @login_required
 def relatorio(request):
-    qs = fibras_for_user(request.user)
+    de, ate = _periodo(request)
+    qs = _filtrar_periodo(fibras_for_user(request.user), de, ate)
     total = qs.count() or 1  # evita divisão por zero
     receita_total = qs.aggregate(t=Sum('valor'))['t'] or Decimal('0')
 
@@ -469,6 +541,7 @@ def relatorio(request):
         'chart_receita': chart_receita,
         'chart_colors': chart_colors,
         'is_ilha': _is_ilha(request.user),  # só para mostrar o atalho da Validação na navegação
+        **_ctx_periodo(request, de, ate),
     })
 
 
@@ -483,7 +556,8 @@ def export_excel(request):
     from openpyxl.styles import Font, PatternFill, Alignment
     from openpyxl.utils import get_column_letter
 
-    qs = fibras_for_user(request.user).order_by('-data_da_venda', '-id')
+    de, ate = _periodo(request)
+    qs = _filtrar_periodo(fibras_for_user(request.user), de, ate).order_by('-data_da_venda', '-id')
 
     status = (request.GET.get('status') or '').strip()
     status_valido = dict(Fibra.STATUS_CHOICES)
@@ -546,8 +620,9 @@ def export_canceladas_csv(request):
     from validad1.views import GESTAO_DOCUMENTAL_HEADER
     from validad1.models import format_numero_acesso
 
+    de, ate = _periodo(request)
     qs = (
-        fibras_for_user(request.user)
+        _filtrar_periodo(fibras_for_user(request.user), de, ate)
         .filter(status=Fibra.STATUS_CANCELADO)
         .order_by('-data_da_venda', '-id')
     )

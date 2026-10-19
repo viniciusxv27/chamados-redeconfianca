@@ -67,20 +67,34 @@
  <div class="fb-rel">
   <div class="fb-cab">
     <div>
-      <a href="{% url 'fibras:kanban' %}" class="fb-voltar"><i class="fas fa-arrow-left" aria-hidden="true"></i> Voltar ao Kanban</a>
+      <a href="{% url 'fibras:kanban' %}{% if periodo_qs %}?{{ periodo_qs }}{% endif %}" class="fb-voltar"><i class="fas fa-arrow-left" aria-hidden="true"></i> Voltar ao Kanban</a>
       <h1><span class="fb-ico" aria-hidden="true"><i class="fas fa-chart-bar"></i></span> Relatório de Fibras</h1>
-      <p>Visão geral do mês corrente · acompanhamento Myrella</p>
+      <p>{% if periodo_ativo %}Período: {{ periodo_rotulo }}{% else %}Visão geral do mês corrente{% endif %} · acompanhamento Myrella</p>
     </div>
     <div class="fb-acoes">
-      <a href="{% url 'fibras:export_excel' %}" class="fb-btn sucesso"><i class="fas fa-file-excel" aria-hidden="true"></i> Exportar Excel</a>
-      <a href="{% url 'fibras:export_excel' %}?status=cancelado" class="fb-btn perigo"><i class="fas fa-file-excel" aria-hidden="true"></i> Exportar canceladas</a>
-      <a href="{% url 'fibras:export_canceladas_csv' %}" class="fb-btn perigo"><i class="fas fa-file-csv" aria-hidden="true"></i> Exportar canceladas (Gestão Documental)</a>
+      <a href="{% url 'fibras:export_excel' %}{% if periodo_qs %}?{{ periodo_qs }}{% endif %}" class="fb-btn sucesso"><i class="fas fa-file-excel" aria-hidden="true"></i> Exportar Excel</a>
+      <a href="{% url 'fibras:export_excel' %}?status=cancelado{% if periodo_qs %}&amp;{{ periodo_qs }}{% endif %}" class="fb-btn perigo"><i class="fas fa-file-excel" aria-hidden="true"></i> Exportar canceladas</a>
+      <a href="{% url 'fibras:export_canceladas_csv' %}{% if periodo_qs %}?{{ periodo_qs }}{% endif %}" class="fb-btn perigo"><i class="fas fa-file-csv" aria-hidden="true"></i> Exportar canceladas (Gestão Documental)</a>
     </div>
   </div>
 
   <div class="fb-barra-topo">
     {% include 'fibras/_fb_nav.html' with ativo='relatorio' %}
+    <button type="button" class="fb-btn leve pequeno fb-filtro-toggle" data-fb-toggle="fbFiltros" aria-expanded="false" aria-controls="fbFiltros">
+      <i class="fas fa-calendar-days" aria-hidden="true"></i> Período{% if periodo_ativo %} <span class="fb-badge">1</span>{% endif %}
+    </button>
   </div>
+
+  <form method="get" class="fb-card fb-filtros-painel" id="fbFiltros" style="padding:14px 16px" aria-label="Período do relatório">
+    <div class="fb-filtros">
+      {% include 'fibras/_fb_periodo.html' %}
+      <div class="fb-filtros-acoes">
+        <button class="fb-btn primario" type="submit"><i class="fas fa-filter" aria-hidden="true"></i> Filtrar</button>
+        <a href="{% url 'fibras:relatorio' %}" class="fb-btn leve">Limpar</a>
+      </div>
+    </div>
+  </form>
+  {% include 'fibras/_fb_periodo_chip.html' %}
 
   <!-- KPI principais -->
   <div class="fb-herois">
@@ -90,19 +104,19 @@
       <b data-contar="{{ receita_total|unlocalize }}" data-fmt="brl">R$ {{ receita_total|floatformat:"2g" }}</b>
       <p><i class="fas fa-network-wired" aria-hidden="true"></i> {{ total }} venda(s) no total</p>
     </div>
-    <a href="{% url 'fibras:lista' %}?status=instalado" class="fb-heroi-kpi verde" style="animation-delay:60ms">
+    <a href="{% url 'fibras:lista' %}?status=instalado{% if periodo_qs %}&amp;{{ periodo_qs }}{% endif %}" class="fb-heroi-kpi verde" style="animation-delay:60ms">
       <i class="fas fa-check-circle bg-ico" aria-hidden="true"></i>
       <span class="r">Instaladas</span>
       <b><span data-contar="{{ qtd_install }}">{{ qtd_install }}</span> <small>({{ percent_install }}%)</small></b>
       <p>R$ {{ receita_install|floatformat:"2g" }} em receita</p>
     </a>
-    <a href="{% url 'fibras:lista' %}?status=cancelado" class="fb-heroi-kpi vermelho" style="animation-delay:120ms">
+    <a href="{% url 'fibras:lista' %}?status=cancelado{% if periodo_qs %}&amp;{{ periodo_qs }}{% endif %}" class="fb-heroi-kpi vermelho" style="animation-delay:120ms">
       <i class="fas fa-times-circle bg-ico" aria-hidden="true"></i>
       <span class="r">Canceladas</span>
       <b><span data-contar="{{ qtd_cancel }}">{{ qtd_cancel }}</span> <small>({{ percent_cancel }}%)</small></b>
       <p>R$ {{ receita_cancel|floatformat:"2g" }} perdidos</p>
     </a>
-    <a href="{% url 'fibras:kanban' %}" class="fb-heroi-kpi roxo" style="animation-delay:180ms">
+    <a href="{% url 'fibras:kanban' %}{% if periodo_qs %}?{{ periodo_qs }}{% endif %}" class="fb-heroi-kpi roxo" style="animation-delay:180ms">
       <i class="fas fa-question-circle bg-ico" aria-hidden="true"></i>
       <span class="r">Não localizadas</span>
       <b><span data-contar="{{ qtd_nao_loc }}">{{ qtd_nao_loc }}</span> <small>({{ percent_nao_loc }}%)</small></b>
@@ -113,7 +127,7 @@
   <!-- Blocos por status -->
   <div class="fb-kpis blocos">
     {% for b in blocos %}
-    <a href="{% if b.key == 'nao_localizado' %}{% url 'fibras:kanban' %}{% else %}{% url 'fibras:lista' %}?status={{ b.key }}{% endif %}" class="fb-kpi" data-st="{{ b.key }}" style="animation-delay: {{ forloop.counter }}0ms">
+    <a href="{% if b.key == 'nao_localizado' %}{% url 'fibras:kanban' %}{% if periodo_qs %}?{{ periodo_qs }}{% endif %}{% else %}{% url 'fibras:lista' %}?status={{ b.key }}{% if periodo_qs %}&amp;{{ periodo_qs }}{% endif %}{% endif %}" class="fb-kpi" data-st="{{ b.key }}" style="animation-delay: {{ forloop.counter }}0ms">
       <div class="fb-kpi-topo"><span>{{ b.label }}</span>
         <i class="fas {% if b.key == 'agendado' %}fa-calendar-check{% elif b.key == 'pendente' %}fa-hourglass-half{% elif b.key == 'problema' %}fa-triangle-exclamation{% elif b.key == 'instalado' %}fa-circle-check{% elif b.key == 'cancelado' %}fa-ban{% else %}fa-circle-question{% endif %}" aria-hidden="true"></i>
       </div>

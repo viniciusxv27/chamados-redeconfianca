@@ -1,0 +1,621 @@
+{% extends 'base.html' %}
+{% block title %}Quadro de HC{% endblock %}
+
+{% block extra_css %}
+<style>
+  .hc { --hc-acc: #4F46E5; --hc-acc-suave: rgba(79,70,229,.10); }
+  .hc .hc-tab { position: relative; padding: .55rem .9rem; font-size: .875rem; font-weight: 600; color: #6B7280; border-radius: .6rem; white-space: nowrap; }
+  .hc .hc-tab:hover { color: #111827; background: rgba(0,0,0,.04); }
+  .hc .hc-tab[aria-selected="true"] { color: var(--hc-acc); background: var(--hc-acc-suave); }
+  .hc .hc-chip { display: inline-flex; align-items: center; gap: .25rem; padding: .05rem .5rem; border-radius: 9999px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+  .hc table.hc-tab-pessoas { width: 100%; font-size: .8125rem; }
+  .hc table.hc-tab-pessoas th { text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: .03em; color: #6B7280; font-weight: 600; padding: .5rem .6rem; white-space: nowrap; border-bottom: 1px solid #F3F4F6; }
+  .hc table.hc-tab-pessoas td { padding: .55rem .6rem; border-bottom: 1px solid #F3F4F6; vertical-align: top; }
+  .hc table.hc-tab-pessoas tr.hc-grupo td { background: #F9FAFB; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #6B7280; padding: .3rem .6rem; }
+  .hc table.hc-tab-pessoas tbody tr.hc-linha:hover td { background: #FAFAFF; }
+  .hc .hc-obs { width: 100%; min-width: 9rem; border: 1px dashed transparent; border-radius: .4rem; padding: .15rem .35rem; background: transparent; font-size: .78rem; }
+  .hc .hc-obs:hover { border-color: #D1D5DB; }
+  .hc .hc-obs:focus { outline: none; border-style: solid; border-color: var(--hc-acc); background: #fff; box-shadow: 0 0 0 3px var(--hc-acc-suave); }
+  .hc .hc-alerta-proxima { background: #FEF3C7; color: #92400E; border-radius: .3rem; padding: 0 .25rem; font-weight: 600; }
+  .hc details.hc-hist summary { list-style: none; cursor: pointer; }
+  .hc details.hc-hist summary::-webkit-details-marker { display: none; }
+  .hc-gaveta { position: fixed; inset: 0; z-index: 70; display: none; }
+  .hc-gaveta.aberta { display: block; }
+  .hc-gaveta .fundo { position: absolute; inset: 0; background: rgba(17,24,39,.5); }
+  .hc-gaveta .painel { position: absolute; top: 0; right: 0; height: 100%; width: min(640px, 100vw); background: #fff; overflow-y: auto;
+                      box-shadow: -20px 0 50px rgba(0,0,0,.2); animation: hc-entrar .25s ease-out; }
+  @keyframes hc-entrar { from { transform: translateX(30px); opacity: 0; } to { transform: none; opacity: 1; } }
+  .hc-toast { position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 20px); opacity: 0; z-index: 90; transition: all .3s; pointer-events: none;
+              background: rgba(17,24,39,.92); color: #fff; padding: .7rem 1.1rem; border-radius: .8rem; font-size: .875rem; max-width: min(620px, 92vw); }
+  .hc-toast.visivel { opacity: 1; transform: translate(-50%, 0); }
+  .hc-toast.erro { background: #B91C1C; }
+  .hc .hc-delta-mais { color: #047857; } .hc .hc-delta-menos { color: #B91C1C; }
+  @media (prefers-reduced-motion: reduce) { .hc-gaveta .painel { animation: none; } .hc-toast { transition: none; } }
+  @media (max-width: 767px) {
+    .hc table.hc-tab-pessoas thead { display: none; }
+    .hc table.hc-tab-pessoas tr.hc-linha { display: block; border-bottom: 1px solid #E5E7EB; padding: .4rem 0; }
+    .hc table.hc-tab-pessoas tr.hc-linha td { display: flex; gap: .5rem; border: 0; padding: .15rem .6rem; }
+    .hc table.hc-tab-pessoas tr.hc-linha td[data-label]::before { content: attr(data-label); flex: 0 0 6.5rem; font-size: 10.5px; text-transform: uppercase; color: #9CA3AF; font-weight: 600; padding-top: 2px; }
+    .hc table.hc-tab-pessoas tr.hc-grupo td { display: block; }
+  }
+  html.dark .hc table.hc-tab-pessoas th, html.dark .hc table.hc-tab-pessoas td { border-color: rgba(255,255,255,.08); }
+  html.dark .hc table.hc-tab-pessoas tr.hc-grupo td { background: rgba(255,255,255,.04); color: #9CA3AF; }
+  html.dark .hc table.hc-tab-pessoas tbody tr.hc-linha:hover td { background: rgba(255,255,255,.03); }
+  html.dark .hc .hc-tab { color: #9CA3AF; } html.dark .hc .hc-tab:hover { color: #F3F4F6; background: rgba(255,255,255,.06); }
+  html.dark .hc .hc-tab[aria-selected="true"] { color: #A5B4FC; background: rgba(129,140,248,.15); }
+  html.dark .hc .hc-obs:focus { background: #111827; color: #F3F4F6; }
+  html.dark .hc .hc-alerta-proxima { background: rgba(245,158,11,.2); color: #FCD34D; }
+  html.dark .hc-gaveta .painel, html.dark .hc-painel-cab, html.dark .hc-painel-rodape { background: #111827; color: #E5E7EB; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="hc max-w-[1500px] mx-auto px-3 sm:px-4 py-5">
+  <div class="flex items-start justify-between gap-3 flex-wrap mb-4">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-900"><i class="fas fa-people-roof text-indigo-600 mr-2"></i>Quadro de HC</h1>
+      <p class="text-sm text-gray-500">Loja a loja, ligado ao cadastro: o que muda lá aparece aqui, e o que muda aqui grava lá.</p>
+    </div>
+    <div class="flex gap-2 flex-wrap">
+      <button type="button" class="px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50" data-abrir-vaga="">
+        <i class="fas fa-user-plus mr-1"></i>Abrir vaga
+      </button>
+      <button type="button" class="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 shadow-sm" data-movimentar="">
+        <i class="fas fa-people-arrows mr-1"></i>Nova movimentação
+      </button>
+    </div>
+  </div>
+
+  {% if messages %}{% for message in messages %}
+  <div role="alert" class="mb-3 p-3 rounded-xl text-sm {% if message.tags == 'error' %}bg-red-50 text-red-700{% else %}bg-green-50 text-green-800{% endif %}">{{ message }}</div>
+  {% endfor %}{% endif %}
+
+  {% if para_hoje %}
+  <button type="button" data-ir-aba="futuras" class="w-full text-left mb-4 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-sm flex items-center gap-2 hover:bg-amber-100">
+    <i class="fas fa-bell"></i><span><b>{{ para_hoje }}</b> movimentação(ões) agendada(s) para hoje ou atrasada(s). Clique para aplicar.</span>
+  </button>
+  {% endif %}
+
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+    <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm"><p class="text-xs text-gray-500">Colaboradores no quadro</p><p class="text-2xl font-bold text-gray-900 tabular-nums">{{ q.total }}</p></div>
+    <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm"><p class="text-xs text-gray-500">Lojas</p><p class="text-2xl font-bold text-gray-900 tabular-nums">{{ q.lojas }}</p></div>
+    <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm"><p class="text-xs text-gray-500">Vagas em aberto</p><p class="text-2xl font-bold text-amber-600 tabular-nums">{{ q.vagas }}</p></div>
+    <button type="button" data-ir-aba="futuras" class="text-left bg-white border border-gray-200 rounded-2xl p-4 shadow-sm hover:border-indigo-300"><p class="text-xs text-gray-500">Movimentações agendadas</p><p class="text-2xl font-bold text-indigo-600 tabular-nums">{{ futuras|length }}</p></button>
+  </div>
+
+  <div class="flex gap-1 overflow-x-auto mb-4 border-b border-gray-200 pb-2" role="tablist" aria-label="Partes do quadro">
+    <button type="button" class="hc-tab" role="tab" data-aba="quadro" aria-selected="{% if aba == 'quadro' %}true{% else %}false{% endif %}"><i class="fas fa-table-cells mr-1"></i>Quadro</button>
+    <button type="button" class="hc-tab" role="tab" data-aba="futuras" aria-selected="{% if aba == 'futuras' %}true{% else %}false{% endif %}"><i class="fas fa-calendar-day mr-1"></i>Movimentações futuras{% if futuras %} <span class="hc-chip bg-indigo-100 text-indigo-700">{{ futuras|length }}</span>{% endif %}</button>
+    <button type="button" class="hc-tab" role="tab" data-aba="historico" aria-selected="{% if aba == 'historico' %}true{% else %}false{% endif %}"><i class="fas fa-clock-rotate-left mr-1"></i>Histórico</button>
+    <button type="button" class="hc-tab" role="tab" data-aba="carteiras" aria-selected="{% if aba == 'carteiras' %}true{% else %}false{% endif %}"><i class="fas fa-layer-group mr-1"></i>Carteiras</button>
+  </div>
+
+  <!-- ===================== QUADRO ===================== -->
+  <section data-painel="quadro" {% if aba != 'quadro' %}hidden{% endif %}>
+    <div class="sticky top-0 z-20 bg-gray-50/90 backdrop-blur py-2 -mx-1 px-1 mb-3 flex flex-wrap gap-2 items-center">
+      <div class="relative flex-1 min-w-[12rem]">
+        <i class="fas fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+        <input type="search" id="fBusca" placeholder="Buscar nome, login, cargo, cidade…  ( / )" aria-label="Buscar no quadro"
+               class="w-full border border-gray-300 rounded-lg pl-8 pr-3 py-2 text-sm bg-white">
+      </div>
+      <select id="fCarteira" aria-label="Carteira" class="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
+        <option value="">Todas as carteiras</option>
+        {% for c in q.carteiras %}<option value="{{ c.id }}">{{ c.nome }}</option>{% endfor %}
+      </select>
+      <select id="fLoja" aria-label="Loja" class="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
+        <option value="">Todas as lojas</option>
+        {% for c in q.carteiras %}{% for b in c.lojas %}<option value="{{ b.setor.id }}" data-carteira="{{ c.id }}">{{ b.setor.name }}</option>{% endfor %}{% endfor %}
+      </select>
+      <select id="fCargo" aria-label="Cargo" class="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
+        <option value="">Todos os cargos</option>
+        {% for c in cargos %}<option>{{ c }}</option>{% endfor %}
+      </select>
+      <label class="inline-flex items-center gap-2 text-xs text-gray-600 px-2 cursor-pointer"><input type="checkbox" id="fAlertas" class="rounded text-indigo-600"> só com alerta</label>
+      <span class="text-xs text-gray-500" id="contador"></span>
+    </div>
+
+    {% for c in q.carteiras %}
+    <div class="mb-6" data-carteira="{{ c.id }}">
+      <div class="flex items-center justify-between gap-2 mb-2 flex-wrap">
+        <button type="button" class="flex items-center gap-2 text-left" data-recolher="carteira-{{ c.id }}" aria-expanded="true">
+          <i class="fas fa-chevron-down text-xs text-gray-400 transition-transform"></i>
+          <span class="text-lg font-bold text-gray-900">{{ c.nome }}</span>
+          {% if c.coordenacao %}<span class="text-sm text-gray-500">· coordenação {{ c.coordenacao }}</span>{% endif %}
+        </button>
+        <div class="flex gap-1.5 text-xs">
+          <span class="hc-chip bg-gray-100 text-gray-700">{{ c.lojas|length }} loja(s)</span>
+          <span class="hc-chip bg-indigo-50 text-indigo-700">{{ c.total }} pessoas</span>
+          {% if c.vagas %}<span class="hc-chip bg-amber-50 text-amber-700">{{ c.vagas }} vaga(s)</span>{% endif %}
+        </div>
+      </div>
+      <div class="grid gap-3" id="carteira-{{ c.id }}">
+        {% for b in c.lojas %}
+        <article class="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden" data-loja="{{ b.setor.id }}" data-loja-carteira="{{ c.id }}">
+          <header class="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-2 flex-wrap">
+            <div class="min-w-0">
+              <h2 class="font-bold text-gray-900">{{ b.setor.name }} {% if b.setor.adabas %}<span class="text-xs font-normal text-gray-400">{{ b.setor.adabas }}</span>{% endif %}</h2>
+              <div class="flex flex-wrap gap-1 mt-1">
+                {% for grupo, n in b.resumo %}<span class="hc-chip bg-gray-100 text-gray-600">{{ n }} {{ grupo }}</span>{% endfor %}
+                {% if b.vagas %}<span class="hc-chip bg-amber-100 text-amber-800">{{ b.vagas|length }} vaga(s)</span>{% endif %}
+                {% if b.sem_gerente %}<span class="hc-chip bg-red-100 text-red-700" data-alerta><i class="fas fa-triangle-exclamation"></i>sem gerente</span>{% endif %}
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-sm font-semibold text-gray-700 tabular-nums">{{ b.total }}</span>
+              <button type="button" class="text-xs font-semibold text-indigo-700 hover:text-indigo-900 px-2 py-1 rounded hover:bg-indigo-50" data-abrir-vaga="{{ b.setor.id }}"><i class="fas fa-plus"></i> vaga</button>
+            </div>
+          </header>
+          <div class="overflow-x-auto">
+            <table class="hc-tab-pessoas">
+              <thead><tr><th>Cargo</th><th>Nome</th><th>Cidade onde reside</th><th>Login</th><th>Nascimento</th><th>Contratação</th><th>Exp. 1ª janela</th><th>Exp. 2ª janela</th><th>Obs.</th><th>Telefone</th><th><span class="sr-only">Ações</span></th></tr></thead>
+              <tbody>
+                {% regroup b.pessoas by grupo as grupos %}
+                {% for g in grupos %}
+                <tr class="hc-grupo"><td colspan="11">{{ g.grouper }} · {{ g.list|length }}</td></tr>
+                {% for p in g.list %}
+                <tr class="hc-linha" data-pessoa="{{ p.id }}" data-cargo="{{ p.cargo }}"
+                    data-busca="{{ p.nome|lower }} {{ p.login }} {{ p.cargo|lower }} {{ p.cidade|lower }}"
+                    {% if p.exp1_alerta == 'proxima' or p.exp2_alerta == 'proxima' or p.agendadas or p.sai_em %}data-alerta{% endif %}>
+                  <td data-label="Cargo" class="text-gray-600 whitespace-nowrap">{{ p.cargo|default:"—" }}</td>
+                  <td data-label="Nome" class="min-w-[14rem]">
+                    <div class="font-semibold text-gray-900">{{ p.nome }}
+                      {% if p.novo %}<span class="hc-chip bg-green-100 text-green-700">novo</span>{% endif %}
+                      {% if p.status %}<span class="hc-chip bg-gray-100 text-gray-600">{{ p.status }}</span>{% endif %}
+                      {% if p.sai_em %}<span class="hc-chip bg-red-100 text-red-700">sai {{ p.sai_em|date:"d/m" }}</span>{% endif %}
+                    </div>
+                    {% for a in p.agendadas %}<div class="text-[11px] text-indigo-700"><i class="fas fa-calendar-day"></i> {{ a.data|date:"d/m" }}: {{ a.resumo }}</div>{% endfor %}
+                    {% if p.historico %}
+                    <details class="hc-hist text-[11px] text-gray-500 mt-0.5">
+                      <summary title="Ver histórico"><i class="fas fa-clock-rotate-left"></i> {{ p.historico.0.frase }} <span class="text-gray-400">· {{ p.historico.0.quando }}</span>{% if p.historico|length > 1 %} <span class="text-indigo-600 font-semibold">+{{ p.historico|length|add:"-1" }}</span>{% endif %}</summary>
+                      <ul class="mt-1 space-y-0.5 border-l-2 border-gray-200 pl-2">
+                        {% for h in p.historico|slice:"1:" %}<li>{{ h.frase }} <span class="text-gray-400">· {{ h.quando }}</span></li>{% endfor %}
+                      </ul>
+                    </details>
+                    {% elif p.contratacao %}<div class="text-[11px] text-gray-400">Entrou em {{ p.contratacao|date:"d/m/Y" }}</div>{% endif %}
+                  </td>
+                  <td data-label="Cidade" class="text-gray-600">{{ p.cidade|default:"—" }}</td>
+                  <td data-label="Login" class="tabular-nums">{{ p.login|default:"—" }}</td>
+                  <td data-label="Nascimento" class="tabular-nums">{{ p.nascimento|date:"d/m/Y"|default:"—" }}</td>
+                  <td data-label="Contratação" class="tabular-nums">{{ p.contratacao|date:"d/m/Y"|default:"—" }}</td>
+                  <td data-label="Exp. 1ª" class="tabular-nums"><span class="{% if p.exp1_alerta == 'proxima' %}hc-alerta-proxima{% elif p.exp1_alerta == 'passou' %}text-gray-400{% endif %}">{{ p.exp1|date:"d/m/Y"|default:"—" }}</span></td>
+                  <td data-label="Exp. 2ª" class="tabular-nums"><span class="{% if p.exp2_alerta == 'proxima' %}hc-alerta-proxima{% elif p.exp2_alerta == 'passou' %}text-gray-400{% endif %}">{{ p.exp2|date:"d/m/Y"|default:"—" }}</span></td>
+                  <td data-label="Obs."><input class="hc-obs" value="{{ p.observacao }}" data-obs="{{ p.id }}" maxlength="500" aria-label="Observação de {{ p.nome }}" placeholder="—"></td>
+                  <td data-label="Telefone" class="whitespace-nowrap tabular-nums">{{ p.telefone|default:"—" }}</td>
+                  <td class="text-right"><button type="button" class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-600 hover:text-white" data-movimentar="{{ p.id }}" aria-label="Movimentar {{ p.nome }}"><i class="fas fa-people-arrows"></i><span class="hidden xl:inline"> Movimentar</span></button></td>
+                </tr>
+                {% endfor %}
+                {% endfor %}
+                {% for v in b.vagas %}
+                <tr class="hc-linha" data-cargo="{{ v.cargo }}" data-busca="vaga em aberto {{ v.cargo|lower }}" data-alerta>
+                  <td data-label="Cargo" class="text-gray-600">{{ v.cargo }}</td>
+                  <td data-label="Nome" colspan="7"><span class="hc-chip bg-amber-100 text-amber-800"><i class="fas fa-user-clock"></i>VAGA EM ABERTO</span> <span class="text-[11px] text-gray-400">aberta em {{ v.criado_em|date:"d/m/Y" }}{% if v.criado_por %} por {{ v.criado_por.get_full_name }}{% endif %}</span></td>
+                  <td data-label="Obs." colspan="2" class="text-xs text-gray-600">{{ v.observacao|default:"—" }}</td>
+                  <td class="text-right"><button type="button" class="px-2.5 py-1 rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-100" data-fechar-vaga="{{ v.id }}" aria-label="Fechar vaga de {{ v.cargo }}"><i class="fas fa-check"></i> Fechar</button></td>
+                </tr>
+                {% endfor %}
+                {% if not b.pessoas and not b.vagas %}<tr><td colspan="11" class="text-center text-sm text-gray-400 py-6">Ninguém nesta loja.</td></tr>{% endif %}
+              </tbody>
+            </table>
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+
+    {% if q.sem_loja %}
+    <div class="mb-6 bg-white border border-red-200 rounded-2xl p-4">
+      <h2 class="font-bold text-red-700 mb-2"><i class="fas fa-user-slash mr-1"></i>Sem loja no cadastro ({{ q.sem_loja|length }})</h2>
+      <div class="flex flex-wrap gap-2">
+        {% for p in q.sem_loja %}<button type="button" class="hc-chip bg-red-50 text-red-700 hover:bg-red-100" data-movimentar="{{ p.id }}">{{ p.nome }} · {{ p.cargo|default:"sem cargo" }}</button>{% endfor %}
+      </div>
+    </div>
+    {% endif %}
+    <p id="vazioBusca" hidden class="text-center text-sm text-gray-500 py-10">Nada encontrado com esses filtros.</p>
+  </section>
+
+  <!-- ===================== FUTURAS ===================== -->
+  <section data-painel="futuras" {% if aba != 'futuras' %}hidden{% endif %}>
+    {% if futuras %}
+    <ol class="space-y-2">
+      {% for m in futuras %}
+      <li class="bg-white border {% if m.data <= hoje %}border-amber-300{% else %}border-gray-200{% endif %} rounded-2xl p-4 shadow-sm flex flex-col sm:flex-row sm:items-center gap-3">
+        <div class="text-center sm:w-20 shrink-0">
+          <div class="text-2xl font-bold text-gray-900 tabular-nums">{{ m.data|date:"d" }}</div>
+          <div class="text-xs text-gray-500 uppercase">{{ m.data|date:"M Y" }}</div>
+          <div class="mt-1 text-[11px] font-semibold {% if m.data < hoje %}text-red-600{% elif m.data == hoje %}text-amber-600{% else %}text-indigo-600{% endif %}" data-falta="{{ m.data|date:'Y-m-d' }}"></div>
+        </div>
+        <div class="flex-1 min-w-0">
+          <p class="font-semibold text-gray-900">{{ m.resumo }}</p>
+          {% if m.observacao %}<p class="text-sm text-gray-600">{{ m.observacao }}</p>{% endif %}
+          <p class="text-xs text-gray-400 mt-1">Agendada por {{ m.criado_por.get_full_name|default:"—" }} em {{ m.criado_em|date:"d/m/Y H:i" }}
+            {% if m.lembrete_2d_em %} · lembrete enviado {{ m.lembrete_2d_em|date:"d/m H:i" }}{% endif %}</p>
+        </div>
+        <div class="flex gap-2 shrink-0">
+          <button type="button" class="px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700" data-aplicar="{{ m.id }}" data-resumo="{{ m.resumo }}"><i class="fas fa-check"></i> Aplicar agora</button>
+          <button type="button" class="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50" data-cancelar="{{ m.id }}" data-resumo="{{ m.resumo }}">Cancelar</button>
+        </div>
+      </li>
+      {% endfor %}
+    </ol>
+    {% else %}
+    <div class="bg-white border border-dashed border-gray-300 rounded-2xl p-10 text-center text-gray-500">
+      <i class="fas fa-calendar-check text-3xl text-gray-300 mb-2"></i>
+      <p>Nenhuma movimentação agendada. Em "Nova movimentação", escolha uma data futura para agendar; o lembrete sobe 2 dias antes.</p>
+    </div>
+    {% endif %}
+  </section>
+
+  <!-- ===================== HISTÓRICO ===================== -->
+  <section data-painel="historico" {% if aba != 'historico' %}hidden{% endif %}>
+    <input type="search" id="fHist" placeholder="Filtrar histórico…" aria-label="Filtrar histórico" class="w-full sm:w-80 border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white mb-3">
+    {% if historico %}
+    <ol class="relative border-l-2 border-gray-200 ml-2 space-y-3" id="listaHist">
+      {% for m in historico %}
+      <li class="ml-4" data-busca="{{ m.resumo|lower }} {{ m.observacao|lower }}">
+        <span class="absolute -left-[7px] mt-1.5 w-3 h-3 rounded-full {% if m.situacao == 'APLICADA' %}bg-green-500{% else %}bg-gray-400{% endif %}"></span>
+        <p class="text-sm text-gray-900"><b>{{ m.resumo }}</b></p>
+        <p class="text-xs text-gray-500">
+          {% if m.situacao == 'APLICADA' %}Aplicada em {{ m.aplicado_em|date:"d/m/Y H:i" }} por {{ m.aplicado_por.get_full_name|default:"—" }}
+          {% else %}Cancelada em {{ m.cancelado_em|date:"d/m/Y H:i" }} por {{ m.cancelado_por.get_full_name|default:"—" }}{% endif %}
+          · data da movimentação {{ m.data|date:"d/m/Y" }}{% if m.observacao %} · {{ m.observacao }}{% endif %}
+        </p>
+      </li>
+      {% endfor %}
+    </ol>
+    {% else %}<p class="text-sm text-gray-500">Nenhuma movimentação feita pelo quadro ainda. As alterações feitas pelo cadastro aparecem ao lado do nome de cada pessoa.</p>{% endif %}
+  </section>
+
+  <!-- ===================== CARTEIRAS ===================== -->
+  <section data-painel="carteiras" {% if aba != 'carteiras' %}hidden{% endif %}>
+    <div class="grid lg:grid-cols-[1fr_24rem] gap-4">
+      <div class="space-y-3">
+        {% for c in carteiras %}
+        <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+          <div class="flex items-center justify-between gap-2 flex-wrap">
+            <div><h3 class="font-bold text-gray-900">{{ c.nome }}</h3><p class="text-xs text-gray-500">Coordenação: {{ c.coordenacao|default:"—" }} · ordem {{ c.ordem }}</p></div>
+            <div class="flex gap-2">
+              <button type="button" class="text-xs font-semibold text-indigo-700 px-2 py-1 rounded hover:bg-indigo-50" data-editar-carteira="{{ c.id }}"
+                      data-nome="{{ c.nome }}" data-coordenador="{{ c.coordenador_id|default:'' }}" data-coordenador-nome="{{ c.coordenador_nome }}" data-ordem="{{ c.ordem }}"
+                      data-lojas="{% for s in c.lojas.all %}{{ s.id }}{% if not forloop.last %},{% endif %}{% endfor %}"><i class="fas fa-pen"></i> Editar</button>
+              <button type="button" class="text-xs font-semibold text-red-600 px-2 py-1 rounded hover:bg-red-50" data-excluir-carteira="{{ c.id }}" data-nome="{{ c.nome }}"><i class="fas fa-trash"></i></button>
+            </div>
+          </div>
+          <div class="flex flex-wrap gap-1 mt-2">{% for s in c.lojas.all %}<span class="hc-chip bg-gray-100 text-gray-700">{{ s.name }}</span>{% empty %}<span class="text-xs text-gray-400">Nenhuma loja.</span>{% endfor %}</div>
+        </div>
+        {% empty %}<p class="text-sm text-gray-500">Nenhuma carteira ainda.</p>{% endfor %}
+      </div>
+      <form id="formCarteira" class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm space-y-3 h-fit lg:sticky lg:top-4">
+        <h3 class="font-bold text-gray-900" id="tituloCarteira">Nova carteira</h3>
+        <input type="hidden" name="id">
+        <div><label class="block text-xs font-semibold text-gray-600 mb-1" for="cNome">Nome</label><input id="cNome" name="nome" required maxlength="120" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></div>
+        <div><label class="block text-xs font-semibold text-gray-600 mb-1" for="cCoord">Coordenador (usuário)</label>
+          <select id="cCoord" name="coordenador" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"><option value="">—</option>{% for u in coordenadores %}<option value="{{ u.id }}">{{ u.get_full_name }}</option>{% endfor %}</select></div>
+        <div class="grid grid-cols-[1fr_5rem] gap-2">
+          <div><label class="block text-xs font-semibold text-gray-600 mb-1" for="cCoordNome">Coordenação (texto)</label><input id="cCoordNome" name="coordenador_nome" maxlength="120" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></div>
+          <div><label class="block text-xs font-semibold text-gray-600 mb-1" for="cOrdem">Ordem</label><input id="cOrdem" name="ordem" type="number" min="0" value="0" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></div>
+        </div>
+        <fieldset><legend class="block text-xs font-semibold text-gray-600 mb-1">Lojas</legend>
+          <div class="max-h-64 overflow-y-auto border border-gray-200 rounded-lg p-2 space-y-1">
+            {% for s in setores %}<label class="flex items-center gap-2 text-sm"><input type="checkbox" name="lojas" value="{{ s.id }}" class="rounded text-indigo-600"> {{ s.name }}</label>{% endfor %}
+          </div>
+          <p class="text-[11px] text-gray-400 mt-1">Cada loja fica em uma carteira só: marcar aqui tira de outra.</p>
+        </fieldset>
+        <div class="flex gap-2 justify-end"><button type="reset" class="px-3 py-2 rounded-lg border border-gray-200 text-sm" id="cLimpar">Limpar</button><button class="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">Salvar carteira</button></div>
+      </form>
+    </div>
+  </section>
+
+  <!-- ===================== GAVETA: MOVIMENTAR ===================== -->
+  <div class="hc-gaveta" id="gaveta" role="dialog" aria-modal="true" aria-labelledby="gTitulo">
+    <div class="fundo" data-fechar-gaveta></div>
+    <div class="painel">
+      <div class="hc-painel-cab sticky top-0 z-10 bg-white border-b border-gray-200 px-5 py-4 flex items-center justify-between">
+        <h2 id="gTitulo" class="text-lg font-bold">Nova movimentação</h2>
+        <button type="button" class="text-gray-500 hover:text-gray-800 px-2 py-1" data-fechar-gaveta aria-label="Fechar"><i class="fas fa-xmark text-lg"></i></button>
+      </div>
+      <form id="formMov" class="p-5 space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1" for="mPessoa">Colaborador</label>
+          <input id="mPessoaBusca" list="listaPessoas" placeholder="Digite o nome…" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" aria-label="Buscar colaborador">
+          <datalist id="listaPessoas"></datalist>
+          <input type="hidden" id="mPessoa" name="colaborador">
+          <p class="text-xs text-gray-500 mt-1" id="mAtual"></p>
+        </div>
+        <fieldset>
+          <legend class="block text-xs font-semibold text-gray-600 mb-1">O que muda</legend>
+          <div class="flex flex-wrap gap-2">
+            <label class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 text-sm cursor-pointer has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-50"><input type="checkbox" data-acao="loja" class="rounded text-indigo-600"> Loja</label>
+            <label class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 text-sm cursor-pointer has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-50"><input type="checkbox" data-acao="cargo" class="rounded text-indigo-600"> Cargo / promoção</label>
+            <label class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 text-sm cursor-pointer has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-50"><input type="checkbox" data-acao="nome" class="rounded text-indigo-600"> Nome</label>
+            <label class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 text-sm cursor-pointer has-[:checked]:border-red-500 has-[:checked]:bg-red-50"><input type="checkbox" data-acao="desligar" class="rounded text-red-600"> Desligar</label>
+            <label class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 text-sm cursor-pointer has-[:checked]:border-amber-500 has-[:checked]:bg-amber-50"><input type="checkbox" data-acao="lembrete" class="rounded text-amber-600"> Só lembrete</label>
+          </div>
+        </fieldset>
+        <div data-campo="loja" hidden><label class="block text-xs font-semibold text-gray-600 mb-1" for="mLoja">Nova loja</label><select id="mLoja" name="novo_setor" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></select></div>
+        <div data-campo="cargo" hidden><label class="block text-xs font-semibold text-gray-600 mb-1" for="mCargo">Novo cargo</label>
+          <select id="mCargo" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></select>
+          <input id="mCargoOutro" placeholder="Nome do cargo novo" maxlength="100" hidden class="mt-2 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" aria-label="Cargo novo"></div>
+        <div data-campo="nome" hidden><label class="block text-xs font-semibold text-gray-600 mb-1" for="mNome">Nome completo</label><input id="mNome" name="novo_nome" maxlength="150" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></div>
+        <div data-campo="lembrete" hidden><label class="block text-xs font-semibold text-gray-600 mb-1" for="mLembrete">Lembrete</label><input id="mLembrete" name="lembrete" maxlength="200" placeholder="Ex.: férias da Fulana, conversar sobre promoção…" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></div>
+        <div class="grid sm:grid-cols-2 gap-3">
+          <div><label class="block text-xs font-semibold text-gray-600 mb-1" for="mData">Data</label><input id="mData" name="data" type="date" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+            <p class="text-[11px] text-gray-500 mt-1" id="mDataDica">Hoje = aplica na hora. Data futura = agenda (lembrete 2 dias antes).</p></div>
+          <div><label class="block text-xs font-semibold text-gray-600 mb-1" for="mObs">Observação</label><input id="mObs" name="observacao" maxlength="500" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></div>
+        </div>
+
+        <div id="mSimulacao" hidden class="rounded-xl border border-indigo-200 bg-indigo-50/50 p-4 space-y-3"></div>
+
+        <div class="hc-painel-rodape flex gap-2 justify-end sticky bottom-0 -mx-5 px-5 py-3 bg-white border-t border-gray-200">
+          <button type="button" class="px-3 py-2 rounded-lg border border-gray-200 text-sm" data-fechar-gaveta>Cancelar</button>
+          <button type="button" id="btSimular" class="px-4 py-2 rounded-lg border border-indigo-300 text-indigo-700 text-sm font-semibold hover:bg-indigo-50"><i class="fas fa-flask"></i> Simular</button>
+          <button type="button" id="btConfirmar" disabled class="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed" title="Simule antes de salvar"><i class="fas fa-check"></i> Confirmar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- vaga -->
+  <div class="hc-gaveta" id="gavetaVaga" role="dialog" aria-modal="true" aria-labelledby="vTitulo">
+    <div class="fundo" data-fechar-gaveta></div>
+    <div class="painel" style="width:min(440px,100vw)">
+      <div class="border-b border-gray-200 px-5 py-4 flex items-center justify-between"><h2 id="vTitulo" class="text-lg font-bold">Abrir vaga</h2>
+        <button type="button" class="text-gray-500 px-2 py-1" data-fechar-gaveta aria-label="Fechar"><i class="fas fa-xmark text-lg"></i></button></div>
+      <form id="formVaga" class="p-5 space-y-3">
+        <div><label class="block text-xs font-semibold text-gray-600 mb-1" for="vLoja">Loja</label><select id="vLoja" name="setor" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></select></div>
+        <div><label class="block text-xs font-semibold text-gray-600 mb-1" for="vCargo">Cargo</label><select id="vCargo" name="cargo" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></select></div>
+        <div><label class="block text-xs font-semibold text-gray-600 mb-1" for="vObs">Observação</label><input id="vObs" name="observacao" maxlength="300" placeholder="Ex.: substituição da Fulana" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></div>
+        <div class="flex justify-end gap-2"><button type="button" class="px-3 py-2 rounded-lg border border-gray-200 text-sm" data-fechar-gaveta>Cancelar</button><button class="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold">Abrir vaga</button></div>
+      </form>
+    </div>
+  </div>
+
+  <div class="hc-toast" id="toast" role="status" aria-live="polite"></div>
+</div>
+{{ json_js|json_script:"hc-dados" }}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  const D = JSON.parse(document.getElementById('hc-dados').textContent);
+  const $ = (s, el = document) => el.querySelector(s);
+  const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+  const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+  const CSRF = '{{ csrf_token }}';
+  const URL_ = {
+    simular: "{% url 'quadro_hc:simular' %}", movimentar: "{% url 'quadro_hc:movimentar' %}",
+    observacao: "{% url 'quadro_hc:observacao' %}", vaga: "{% url 'quadro_hc:vaga_abrir' %}",
+    carteira: "{% url 'quadro_hc:carteira_salvar' %}",
+    aplicar: id => `{% url 'quadro_hc:mov_aplicar' 0 %}`.replace('/0/', `/${id}/`),
+    cancelar: id => `{% url 'quadro_hc:mov_cancelar' 0 %}`.replace('/0/', `/${id}/`),
+    fecharVaga: id => `{% url 'quadro_hc:vaga_fechar' 0 %}`.replace('/0/', `/${id}/`),
+    excluirCarteira: id => `{% url 'quadro_hc:carteira_excluir' 0 %}`.replace('/0/', `/${id}/`),
+  };
+
+  function toast(msg, erro) {
+    const t = $('#toast'); t.textContent = msg; t.classList.toggle('erro', !!erro); t.classList.add('visivel');
+    clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('visivel'), erro ? 6000 : 3500);
+  }
+  async function api(url, corpo) {
+    const r = await fetch(url, {method: 'POST', credentials: 'same-origin',
+      headers: {'X-CSRFToken': CSRF, 'Content-Type': 'application/json'}, body: JSON.stringify(corpo || {})});
+    const j = await r.json().catch(() => ({erro: 'Resposta inválida do servidor'}));
+    if (!r.ok || j.erro) throw new Error(j.erro || r.statusText);
+    return j;
+  }
+  function recarregar(aba, msg) {
+    try { sessionStorage.setItem('hc-msg', msg || ''); } catch (e) {}
+    const u = new URL(location.href); u.searchParams.set('aba', aba); location.href = u.toString();
+  }
+  try { const m = sessionStorage.getItem('hc-msg'); if (m) { toast(m); sessionStorage.removeItem('hc-msg'); } } catch (e) {}
+
+  /* ---------- abas ---------- */
+  function irAba(a) {
+    $$('[data-aba]').forEach(b => b.setAttribute('aria-selected', b.dataset.aba === a ? 'true' : 'false'));
+    $$('[data-painel]').forEach(p => p.hidden = p.dataset.painel !== a);
+    const u = new URL(location.href); u.searchParams.set('aba', a); history.replaceState(null, '', u);
+  }
+  $$('[data-aba]').forEach(b => b.addEventListener('click', () => irAba(b.dataset.aba)));
+  $$('[data-ir-aba]').forEach(b => b.addEventListener('click', () => irAba(b.dataset.irAba)));
+
+  /* ---------- filtros do quadro ---------- */
+  const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  function filtrar() {
+    const termo = norm($('#fBusca').value.trim()), cart = $('#fCarteira').value, loja = $('#fLoja').value,
+          cargo = $('#fCargo').value, alerta = $('#fAlertas').checked;
+    let visiveis = 0;
+    $$('[data-loja]').forEach(card => {
+      const okLoja = (!cart || card.dataset.lojaCarteira === cart) && (!loja || card.dataset.loja === loja);
+      let n = 0;
+      $$('tr.hc-linha', card).forEach(tr => {
+        const ok = okLoja && (!termo || norm(tr.dataset.busca).includes(termo)) && (!cargo || tr.dataset.cargo === cargo)
+          && (!alerta || tr.hasAttribute('data-alerta'));
+        tr.hidden = !ok; if (ok) n++;
+      });
+      $$('tr.hc-grupo', card).forEach(g => {
+        let prox = g.nextElementSibling, algum = false;
+        while (prox && !prox.classList.contains('hc-grupo')) { if (prox.classList.contains('hc-linha') && !prox.hidden) algum = true; prox = prox.nextElementSibling; }
+        g.hidden = !algum;
+      });
+      const filtrando = termo || cargo || alerta;
+      card.hidden = !okLoja || (filtrando && !n && !(alerta && card.querySelector('[data-alerta]:not(tr)')));
+      if (!card.hidden) visiveis += n;
+    });
+    $$('[data-carteira]').forEach(sec => { if (sec.tagName === 'DIV') sec.hidden = !$$('[data-loja]', sec).some(c => !c.hidden); });
+    $('#contador').textContent = `${visiveis} pessoa(s)/vaga(s)`;
+    $('#vazioBusca').hidden = visiveis > 0;
+    $$('#fLoja option[data-carteira]').forEach(o => o.hidden = !!cart && o.dataset.carteira !== cart);
+  }
+  ['#fBusca', '#fCarteira', '#fLoja', '#fCargo', '#fAlertas'].forEach(s => $(s).addEventListener('input', filtrar));
+  document.addEventListener('keydown', e => {
+    if (e.key === '/' && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) { e.preventDefault(); irAba('quadro'); $('#fBusca').focus(); }
+    if (e.key === 'Escape') fecharGavetas();
+  });
+  $$('[data-recolher]').forEach(b => b.addEventListener('click', () => {
+    const alvo = document.getElementById(b.dataset.recolher), aberto = b.getAttribute('aria-expanded') === 'true';
+    alvo.hidden = aberto; b.setAttribute('aria-expanded', aberto ? 'false' : 'true');
+    b.querySelector('i').style.transform = aberto ? 'rotate(-90deg)' : '';
+  }));
+  filtrar();
+
+  /* ---------- observação (salva ao sair do campo) ---------- */
+  $$('[data-obs]').forEach(inp => {
+    inp.dataset.valor = inp.value;
+    const salvar = async () => {
+      if (inp.value === inp.dataset.valor) return;
+      try { await api(URL_.observacao, {colaborador: inp.dataset.obs, texto: inp.value}); inp.dataset.valor = inp.value; toast('Observação salva'); }
+      catch (e) { toast(e.message, true); }
+    };
+    inp.addEventListener('blur', salvar);
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); inp.blur(); } });
+  });
+
+  /* ---------- gavetas ---------- */
+  let focoAntes = null;
+  function abrirGaveta(id) { focoAntes = document.activeElement; const g = document.getElementById(id); g.classList.add('aberta'); document.body.style.overflow = 'hidden'; setTimeout(() => (g.querySelector('input:not([type=hidden]), select'))?.focus(), 50); }
+  function fecharGavetas() { $$('.hc-gaveta.aberta').forEach(g => g.classList.remove('aberta')); document.body.style.overflow = ''; focoAntes?.focus?.(); }
+  $$('[data-fechar-gaveta]').forEach(b => b.addEventListener('click', fecharGavetas));
+
+  const pessoas = Object.fromEntries(D.pessoas.map(p => [String(p.id), p]));
+  const setorNome = Object.fromEntries(D.setores.map(s => [String(s.id), s.nome]));
+  $('#listaPessoas').innerHTML = D.pessoas.map(p => `<option value="${esc(p.nome)}">${esc(p.cargo || '')} · ${esc(setorNome[p.setor] || 'sem loja')}</option>`).join('');
+  const opLojas = D.setores.map(s => `<option value="${s.id}">${esc(s.nome)}</option>`).join('');
+  $('#mLoja').innerHTML = opLojas; $('#vLoja').innerHTML = opLojas;
+  const opCargos = D.cargos.map(c => `<option>${esc(c)}</option>`).join('');
+  $('#mCargo').innerHTML = opCargos + '<option value="__outro">Outro (cargo novo)…</option>'; $('#vCargo').innerHTML = opCargos;
+
+  function escolherPessoa(id) {
+    const p = pessoas[String(id)];
+    $('#mPessoa').value = p ? p.id : '';
+    $('#mPessoaBusca').value = p ? p.nome : '';
+    $('#mAtual').textContent = p ? `Hoje: ${p.cargo || 'sem cargo'} · ${setorNome[p.setor] || 'sem loja'}` : '';
+    if (p) { $('#mNome').value = p.nome; if (p.setor) $('#mLoja').value = p.setor; if (p.cargo) $('#mCargo').value = p.cargo; }
+    invalidar();
+  }
+  $('#mPessoaBusca').addEventListener('change', () => {
+    const p = D.pessoas.find(x => x.nome === $('#mPessoaBusca').value);
+    escolherPessoa(p ? p.id : '');
+  });
+  function mostrarCampos() {
+    $$('[data-acao]').forEach(c => { const campo = $(`[data-campo="${c.dataset.acao}"]`); if (campo) campo.hidden = !c.checked; });
+    $('#mCargoOutro').hidden = $('#mCargo').value !== '__outro' || $('[data-campo=cargo]').hidden;
+  }
+  $$('[data-acao]').forEach(c => c.addEventListener('change', () => {
+    if (c.dataset.acao === 'desligar' && c.checked) { $('[data-acao=loja]').checked = false; $('[data-acao=cargo]').checked = false; }
+    if ((c.dataset.acao === 'loja' || c.dataset.acao === 'cargo') && c.checked) $('[data-acao=desligar]').checked = false;
+    mostrarCampos(); invalidar();
+  }));
+  $('#mCargo').addEventListener('change', () => { $('#mCargoOutro').hidden = $('#mCargo').value !== '__outro'; invalidar(); });
+  $$('#formMov input, #formMov select').forEach(el => el.addEventListener('input', invalidar));
+  $('#mData').addEventListener('input', () => {
+    const fut = $('#mData').value > D.hoje;
+    $('#btConfirmar').innerHTML = fut ? '<i class="fas fa-calendar-check"></i> Confirmar agendamento' : '<i class="fas fa-check"></i> Confirmar e aplicar';
+  });
+
+  function abrirMovimentar(id) {
+    $('#formMov').reset(); $('#mData').value = D.hoje; $('#mData').dispatchEvent(new Event('input'));
+    escolherPessoa(id || ''); mostrarCampos(); invalidar();
+    $('#gTitulo').textContent = id && pessoas[String(id)] ? `Movimentar ${pessoas[String(id)].nome}` : 'Nova movimentação';
+    abrirGaveta('gaveta');
+  }
+  $$('[data-movimentar]').forEach(b => b.addEventListener('click', () => abrirMovimentar(b.dataset.movimentar)));
+
+  function lerForm() {
+    const marcado = a => $(`[data-acao=${a}]`).checked;
+    const cargo = $('#mCargo').value === '__outro' ? $('#mCargoOutro').value : $('#mCargo').value;
+    return {colaborador: $('#mPessoa').value, data: $('#mData').value, observacao: $('#mObs').value,
+            novo_setor: marcado('loja') ? $('#mLoja').value : '', novo_cargo: marcado('cargo') ? cargo : '',
+            novo_nome: marcado('nome') ? $('#mNome').value : '', desligar: marcado('desligar'),
+            lembrete: marcado('lembrete') ? $('#mLembrete').value : ''};
+  }
+  let simulado = null;
+  function invalidar() { simulado = null; $('#btConfirmar').disabled = true; $('#mSimulacao').hidden = true; }
+
+  function desenharSimulacao(s) {
+    const linhasMud = s.mudancas.map(m => `<tr><td class="pr-3 text-gray-500">${esc(m.campo)}</td><td class="pr-2 line-through text-gray-400">${esc(m.antes)}</td><td><i class="fas fa-arrow-right text-gray-400 mx-1"></i><b>${esc(m.depois)}</b></td></tr>`).join('');
+    const impacto = s.impacto.map(l => `<div class="bg-white rounded-lg border border-gray-200 p-3">
+      <p class="font-semibold text-sm mb-1">${esc(l.loja)} <span class="text-xs text-gray-500">${l.total_antes} → ${l.total_depois} pessoas</span></p>
+      <table class="text-xs w-full">${l.linhas.map(x => { const d = x.depois - x.antes;
+        return `<tr><td class="text-gray-600">${esc(x.grupo)}</td><td class="text-right tabular-nums">${x.antes}</td><td class="text-right tabular-nums w-10">→ ${x.depois}</td><td class="text-right w-10 font-semibold ${d > 0 ? 'hc-delta-mais' : d < 0 ? 'hc-delta-menos' : 'text-gray-300'}">${d > 0 ? '+' + d : d || '='}</td></tr>`; }).join('')}</table></div>`).join('');
+    $('#mSimulacao').innerHTML = `
+      <p class="text-sm font-bold text-indigo-900"><i class="fas fa-flask"></i> Simulação</p>
+      <p class="text-sm"><b>${esc(s.resumo)}</b></p>
+      <p class="text-xs text-indigo-800"><i class="fas ${s.agendar ? 'fa-calendar-day' : 'fa-bolt'}"></i> ${esc(s.quando)}</p>
+      ${linhasMud ? `<table class="text-sm">${linhasMud}</table>` : ''}
+      ${impacto ? `<div class="grid sm:grid-cols-2 gap-2">${impacto}</div>` : ''}
+      ${s.avisos.length ? `<ul class="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-2 space-y-0.5">${s.avisos.map(a => `<li><i class="fas fa-triangle-exclamation"></i> ${esc(a)}</li>`).join('')}</ul>` : ''}`;
+    $('#mSimulacao').hidden = false;
+    $('#mSimulacao').scrollIntoView({behavior: 'smooth', block: 'nearest'});
+  }
+  $('#btSimular').addEventListener('click', async () => {
+    const b = $('#btSimular'); b.disabled = true;
+    try { const dados = lerForm(); const s = await api(URL_.simular, dados); simulado = JSON.stringify(dados); desenharSimulacao(s); $('#btConfirmar').disabled = false; }
+    catch (e) { toast(e.message, true); invalidar(); }
+    finally { b.disabled = false; }
+  });
+  $('#btConfirmar').addEventListener('click', async () => {
+    const dados = lerForm();
+    if (!simulado || simulado !== JSON.stringify(dados)) { invalidar(); toast('Algo mudou: simule de novo antes de salvar.', true); return; }
+    const b = $('#btConfirmar'); b.disabled = true;
+    try { const r = await api(URL_.movimentar, dados); recarregar(r.situacao === 'AGENDADA' ? 'futuras' : 'quadro', r.msg); }
+    catch (e) { toast(e.message, true); b.disabled = false; }
+  });
+
+  /* ---------- vagas ---------- */
+  $$('[data-abrir-vaga]').forEach(b => b.addEventListener('click', () => {
+    $('#formVaga').reset(); if (b.dataset.abrirVaga) $('#vLoja').value = b.dataset.abrirVaga; abrirGaveta('gavetaVaga');
+  }));
+  $('#formVaga').addEventListener('submit', async e => {
+    e.preventDefault();
+    try { const r = await api(URL_.vaga, {setor: $('#vLoja').value, cargo: $('#vCargo').value, observacao: $('#vObs').value}); recarregar('quadro', r.msg); }
+    catch (er) { toast(er.message, true); }
+  });
+  $$('[data-fechar-vaga]').forEach(b => b.addEventListener('click', async () => {
+    if (!confirm('Fechar esta vaga?')) return;
+    try { const r = await api(URL_.fecharVaga(b.dataset.fecharVaga)); recarregar('quadro', r.msg); } catch (e) { toast(e.message, true); }
+  }));
+
+  /* ---------- futuras ---------- */
+  const hoje = new Date(D.hoje + 'T00:00:00');
+  $$('[data-falta]').forEach(el => {
+    const d = Math.round((new Date(el.dataset.falta + 'T00:00:00') - hoje) / 864e5);
+    el.textContent = d < 0 ? `atrasada ${-d} dia(s)` : d === 0 ? 'hoje' : d === 1 ? 'amanhã' : `em ${d} dias`;
+  });
+  $$('[data-aplicar]').forEach(b => b.addEventListener('click', async () => {
+    if (!confirm(`Aplicar agora no cadastro?\n\n${b.dataset.resumo}`)) return;
+    try { const r = await api(URL_.aplicar(b.dataset.aplicar)); recarregar('futuras', r.msg); } catch (e) { toast(e.message, true); }
+  }));
+  $$('[data-cancelar]').forEach(b => b.addEventListener('click', async () => {
+    if (!confirm(`Cancelar esta movimentação?\n\n${b.dataset.resumo}`)) return;
+    try { const r = await api(URL_.cancelar(b.dataset.cancelar)); recarregar('futuras', r.msg); } catch (e) { toast(e.message, true); }
+  }));
+
+  /* ---------- histórico ---------- */
+  $('#fHist').addEventListener('input', () => {
+    const t = norm($('#fHist').value); $$('#listaHist li').forEach(li => li.hidden = !!t && !norm(li.dataset.busca).includes(t));
+  });
+
+  /* ---------- carteiras ---------- */
+  const fc = $('#formCarteira');
+  $$('[data-editar-carteira]').forEach(b => b.addEventListener('click', () => {
+    fc.reset(); fc.id.value = b.dataset.editarCarteira; fc.nome.value = b.dataset.nome; fc.coordenador.value = b.dataset.coordenador;
+    fc.coordenador_nome.value = b.dataset.coordenadorNome; fc.ordem.value = b.dataset.ordem;
+    const ids = (b.dataset.lojas || '').split(',');
+    $$('input[name=lojas]', fc).forEach(c => c.checked = ids.includes(c.value));
+    $('#tituloCarteira').textContent = `Editar ${b.dataset.nome}`; fc.nome.focus();
+  }));
+  $('#cLimpar').addEventListener('click', () => { fc.id.value = ''; $('#tituloCarteira').textContent = 'Nova carteira'; });
+  fc.addEventListener('submit', async e => {
+    e.preventDefault();
+    const corpo = {id: fc.id.value, nome: fc.nome.value, coordenador: fc.coordenador.value, coordenador_nome: fc.coordenador_nome.value,
+                   ordem: fc.ordem.value, lojas: $$('input[name=lojas]:checked', fc).map(c => c.value)};
+    try { const r = await api(URL_.carteira, corpo); recarregar('carteiras', r.msg); } catch (er) { toast(er.message, true); }
+  });
+  $$('[data-excluir-carteira]').forEach(b => b.addEventListener('click', async () => {
+    if (!confirm(`Excluir a carteira ${b.dataset.nome}? As lojas não são apagadas.`)) return;
+    try { const r = await api(URL_.excluirCarteira(b.dataset.excluirCarteira)); recarregar('carteiras', r.msg); } catch (e) { toast(e.message, true); }
+  }));
+})();
+</script>
+{% endblock %}

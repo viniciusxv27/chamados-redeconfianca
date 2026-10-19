@@ -130,12 +130,12 @@ html.dark .fb-k-novo { color: #A5B4FC; }
   <div class="fb-cab">
     <div>
       <h1><span class="fb-ico" aria-hidden="true"><i class="fas fa-network-wired"></i></span> Fibras — Acompanhamento</h1>
-      <p>Mês corrente · status segmentado conforme retorno da Ilha.
+      <p>{% if periodo_ativo %}Período: {{ periodo_rotulo }}{% else %}Mês corrente{% endif %} · status segmentado conforme retorno da Ilha.
         {% if is_ilha %}<span class="fb-dica"><i class="fas fa-hand-pointer" aria-hidden="true"></i> Arraste os cards para mudar o status</span>{% endif %}
       </p>
     </div>
     <div class="fb-acoes">
-      <a href="{% url 'fibras:export_canceladas_csv' %}" class="fb-btn perigo" title="Exporta as fibras canceladas na planilha de Gestão Documental (Receita zerada)">
+      <a href="{% url 'fibras:export_canceladas_csv' %}{% if periodo_qs %}?{{ periodo_qs }}{% endif %}" class="fb-btn perigo" title="Exporta as fibras canceladas na planilha de Gestão Documental (Receita zerada){% if periodo_ativo %} · período: {{ periodo_rotulo }}{% endif %}">
         <i class="fas fa-file-csv" aria-hidden="true"></i> Exportar canceladas
       </a>
       {% if can_import %}
@@ -150,11 +150,11 @@ html.dark .fb-k-novo { color: #A5B4FC; }
     {% include 'fibras/_fb_nav.html' with ativo='kanban' %}
     <div class="fb-acoes">
       {% if filtro_b2b %}
-      <a href="{% url 'fibras:kanban' %}" class="fb-btn roxo on" title="Mostrando apenas fibras B2B (documento &gt; 11 caracteres). Clique para ver todas.">
+      <a href="{% url 'fibras:kanban' %}{% if periodo_qs %}?{{ periodo_qs }}{% endif %}" class="fb-btn roxo on" title="Mostrando apenas fibras B2B (documento &gt; 11 caracteres). Clique para ver todas.">
         <i class="fas fa-building" aria-hidden="true"></i> B2B (ativo) <i class="fas fa-xmark" aria-hidden="true"></i>
       </a>
       {% else %}
-      <a href="?b2b=1" class="fb-btn roxo" title="Ver apenas fibras de empresa (documento &gt; 11 caracteres)">
+      <a href="?b2b=1{% if periodo_qs %}&amp;{{ periodo_qs }}{% endif %}" class="fb-btn roxo" title="Ver apenas fibras de empresa (documento &gt; 11 caracteres)">
         <i class="fas fa-building" aria-hidden="true"></i> B2B
       </a>
       {% endif %}
@@ -223,12 +223,14 @@ html.dark .fb-k-novo { color: #A5B4FC; }
       <div><label class="fb-rotulo" for="fVend">Vendedor</label><input id="fVend" type="text" name="vendedor" value="{{ filtro_vendedor }}" placeholder="Filtrar por vendedor" class="fb-campo"></div>
       <div><label class="fb-rotulo" for="fVenda">Nº da venda</label><input id="fVenda" type="text" name="venda" value="{{ filtro_venda }}" placeholder="Nº da venda" class="fb-campo"></div>
       <div><label class="fb-rotulo" for="fOrdem">Ordem / Protocolo</label><input id="fOrdem" type="text" name="ordem" value="{{ filtro_ordem }}" placeholder="Ordem / Protocolo" class="fb-campo"></div>
+      {% include 'fibras/_fb_periodo.html' %}
       <div class="fb-filtros-acoes">
         <button class="fb-btn primario" type="submit"><i class="fas fa-filter" aria-hidden="true"></i> Filtrar</button>
         <a href="{% url 'fibras:kanban' %}" class="fb-btn leve">Limpar</a>
       </div>
     </div>
   </form>
+  {% include 'fibras/_fb_periodo_chip.html' %}
 
   <div class="fb-board-wrap" id="fbBoardWrap">
   <div id="kanbanBoard" class="fb-board" aria-label="Quadro de fibras por status">
@@ -484,6 +486,8 @@ html.dark .fb-k-novo { color: #A5B4FC; }
   var fq = document.getElementById('fbFiltrosQtd');
   if (fq) {
     var nAtivos = Array.prototype.filter.call(document.querySelectorAll('#fbFiltros input[type=text]'), function (i) { return i.value.trim() !== ''; }).length;
+    // O período (De/Até) conta como um filtro só.
+    if (Array.prototype.some.call(document.querySelectorAll('#fbFiltros input[type=date]'), function (i) { return i.value !== ''; })) nAtivos++;
     if (nAtivos) { fq.textContent = nAtivos; fq.hidden = false; }
   }
 

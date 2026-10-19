@@ -1,0 +1,11 @@
+{# Período pela data da venda, dentro do <form method="get"> de filtros. Os atalhos só preenchem De/Até e enviam (JS em _fb_comum.html). #}
+<div class="fb-periodo" role="group" aria-label="Período da venda">
+  <div class="fb-periodo-campo"><label class="fb-rotulo" for="fDe">Venda de</label><input id="fDe" type="date" name="de" value="{{ filtro_de }}" class="fb-campo"></div>
+  <div class="fb-periodo-campo"><label class="fb-rotulo" for="fAte">até</label><input id="fAte" type="date" name="ate" value="{{ filtro_ate }}" class="fb-campo"></div>
+  <div class="fb-periodo-atalhos" role="group" aria-label="Atalhos de período">
+    <button type="button" class="fb-btn leve pequeno" data-fb-periodo="hoje" aria-pressed="false">Hoje</button>
+    <button type="button" class="fb-btn leve pequeno" data-fb-periodo="7d" aria-pressed="false">Últimos 7 dias</button>
+    <button type="button" class="fb-btn leve pequeno" data-fb-periodo="mes" aria-pressed="false">Este mês</button>
+    <button type="button" class="fb-btn leve pequeno" data-fb-periodo="mes_passado" aria-pressed="false">Mês passado</button>
+  </div>
+</div>

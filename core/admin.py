@@ -213,3 +213,12 @@ class TaskCategoryAdmin(admin.ModelAdmin):
     list_filter = ('is_active', 'created_at')
     search_fields = ('name', 'description')
     ordering = ('name',)
+
+
+from .models import TarefaDiaria  # noqa: E402
+
+
+@admin.register(TarefaDiaria)
+class TarefaDiariaAdmin(admin.ModelAdmin):
+    list_display = ('chave', 'descricao', 'ultima_execucao', 'ultimo_fim', 'sucesso')
+    readonly_fields = ('chave', 'descricao', 'ultima_execucao', 'ultimo_fim', 'sucesso', 'detalhe')

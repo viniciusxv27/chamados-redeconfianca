@@ -94,3 +94,38 @@ class SniperAssignment(models.Model):
         sniper_name = self.sniper.get_full_name() or self.sniper.email
         coord_name = self.coordinator.get_full_name() or self.coordinator.email
         return f"Sniper {sniper_name} → Coordenador {coord_name}"
+
+
+class ProjecaoSimulador(models.Model):
+    """A projeção do simulador de cada pessoa, gravada uma vez por dia (08:00).
+
+    É a mesma conta da tabela da rede (/simulator/tabela/, ``simulator/tabela.py``):
+    o motor rodado no modo Realizado e no modo Projeção para cada colaborador.
+    Cada dia gera um retrato novo — a linha do dia é refeita se rodar de novo.
+    """
+    referencia = models.DateField('Dia', db_index=True)
+    user = models.ForeignKey('users.User', on_delete=models.SET_NULL, null=True, blank=True,
+                             related_name='projecoes_simulador')
+    nome = models.CharField(max_length=200)
+    papel = models.CharField(max_length=30, blank=True)
+    papel_rotulo = models.CharField(max_length=60, blank=True)
+    loja = models.CharField(max_length=120, blank=True)
+    setor = models.ForeignKey('users.Sector', on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    coordenador = models.CharField(max_length=200, blank=True)
+    realizado = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    projecao = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    diferenca = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    motivo = models.CharField(max_length=500, blank=True)
+    fatores = models.JSONField(default=list, blank=True)
+    tem_dados = models.BooleanField(default=False)
+    erro = models.CharField(max_length=200, blank=True)
+    gerado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-referencia', '-projecao']
+        constraints = [models.UniqueConstraint(fields=['referencia', 'user'], name='projecao_simulador_dia_pessoa')]
+        verbose_name = 'Projeção do simulador (diária)'
+        verbose_name_plural = 'Projeções do simulador (diárias)'
+
+    def __str__(self):
+        return f'{self.referencia:%d/%m/%Y} · {self.nome}: R$ {self.projecao}'

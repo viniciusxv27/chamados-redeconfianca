@@ -140,6 +140,7 @@ urlpatterns = [
     path('renova/', include('renova.urls')),  # Vini Renova (avaliação de aparelho usado)
     path('rotina-gerencial/', include('rotina.urls')),  # Rotina Gerencial
     path('apresentacoes/', include('apresentacoes.urls')),  # Assistente de Apresentações
+    path('quadro-hc/', include('quadro_hc.urls')),  # Quadro de HC (só SUPERADMIN)
     path('facilitador/', include('facilitador.urls')),  # Facilitador: arquivos e links úteis
     path('', include('tangerino.urls')),  # Ponto e Férias (integração Tangerino)
     path('reports/', include('core.reports_urls')),  # Sistema de denúncias

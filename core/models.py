@@ -1325,3 +1325,24 @@ class AdminChecklistAssignment(models.Model):
     
     def __str__(self):
         return f"{self.task_template.title} → {self.user.get_full_name()}"
+
+
+class TarefaDiaria(models.Model):
+    """Carimbo das tarefas que rodam uma vez por dia sem cron (ver core/agendador_diario.py).
+
+    A primeira requisição depois do horário "ganha" o dia com um UPDATE
+    condicional neste registro; só esse worker executa a tarefa.
+    """
+    chave = models.CharField(max_length=60, unique=True)
+    descricao = models.CharField(max_length=150, blank=True)
+    ultima_execucao = models.DateTimeField(null=True, blank=True, help_text='Quando o dia foi reservado.')
+    ultimo_fim = models.DateTimeField(null=True, blank=True)
+    sucesso = models.BooleanField(null=True, blank=True)
+    detalhe = models.TextField(blank=True)
+
+    class Meta:
+        verbose_name = 'Tarefa diária'
+        verbose_name_plural = 'Tarefas diárias'
+
+    def __str__(self):
+        return self.descricao or self.chave

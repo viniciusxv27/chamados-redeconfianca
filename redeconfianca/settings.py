@@ -90,6 +90,7 @@ INSTALLED_APPS = [
     'renova',  # Vini Renova: avaliação de aparelho usado (checklist, chamado e etiqueta)
     'rotina',  # Rotina Gerencial: a semana do gerente, com horários e avisos
     'apresentacoes',  # Assistente de Apresentações: slides com IA na identidade da rede
+    'quadro_hc',  # Quadro de HC loja a loja (só SUPERADMIN)
     'facilitador',  # Facilitador: arquivos e links úteis (todos veem; SUPERADMIN gerencia)
     # 'webpush',  # Django WebPush (temporariamente removido)
 ]
@@ -133,6 +134,7 @@ MIDDLEWARE = [
     'core.middleware.LoggingMiddleware',
     'users.session_tracking.ActiveSessionMiddleware',
     'users.pre_registration_middleware.PreRegistrationAdjustmentMiddleware',
+    'core.agendador_diario.TarefasDiariasMiddleware',  # tarefas diárias sem cron (projeção do simulador, lembretes do HC)
     'auditoria_sap.middleware.LeituraAgendadaSapMiddleware',  # lê o SAP a cada 3 h; antes dos bloqueios
     'vendas.middleware.EspelhoVivoGoMiddleware',  # espelho dos clientes do Vivo GO a cada 5 min
     'tangerino.middleware.BloqueioFeriasMiddleware',

@@ -60,6 +60,41 @@ window.FB = window.FB || (function () {
     b.setAttribute('aria-expanded', aberto ? 'true' : 'false');
   });
 
+  // Atalhos de período (data da venda): preenchem De/Até do formulário e enviam.
+  function isoData(d) {
+    var m = d.getMonth() + 1, dia = d.getDate();
+    return d.getFullYear() + '-' + (m < 10 ? '0' : '') + m + '-' + (dia < 10 ? '0' : '') + dia;
+  }
+  function intervalo(tipo) {
+    var hoje = new Date(); hoje.setHours(12, 0, 0, 0);
+    var a = hoje.getFullYear(), m = hoje.getMonth();
+    if (tipo === 'hoje') return [hoje, hoje];
+    if (tipo === '7d') { var ini = new Date(hoje); ini.setDate(hoje.getDate() - 6); return [ini, hoje]; }
+    if (tipo === 'mes') return [new Date(a, m, 1, 12), hoje];
+    if (tipo === 'mes_passado') return [new Date(a, m - 1, 1, 12), new Date(a, m, 0, 12)];
+    return null;
+  }
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-fb-periodo]');
+    if (!b) return;
+    var f = b.closest('form'), r = intervalo(b.getAttribute('data-fb-periodo'));
+    if (!f || !r) return;
+    var de = f.querySelector('input[name=de]'), ate = f.querySelector('input[name=ate]');
+    if (!de || !ate) return;
+    de.value = isoData(r[0]);
+    ate.value = isoData(r[1]);
+    if (f.requestSubmit) f.requestSubmit(); else f.submit();
+  });
+  function marcarAtalhos() {
+    document.querySelectorAll('[data-fb-periodo]').forEach(function (b) {
+      var f = b.closest('form'), r = intervalo(b.getAttribute('data-fb-periodo'));
+      var de = f && f.querySelector('input[name=de]'), ate = f && f.querySelector('input[name=ate]');
+      var ativo = !!(r && de && ate && de.value === isoData(r[0]) && ate.value === isoData(r[1]));
+      b.setAttribute('aria-pressed', ativo ? 'true' : 'false');
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', marcarAtalhos); else marcarAtalhos();
+
   // Mensagens do Django viram toast (o banner do base.html continua aparecendo)
   document.addEventListener('DOMContentLoaded', function () {
     var m = document.getElementById('fb-mensagens');

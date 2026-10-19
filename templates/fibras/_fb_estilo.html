@@ -131,6 +131,25 @@ html.dark .fb .fb-busca .fb-campo { background-color: var(--fb-card); }
   .fb-filtros-painel:not(.aberto) { display: none; }
 }
 
+/* Período (data da venda): ocupa a linha inteira do painel de filtros */
+.fb-periodo { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+.fb-periodo-campo { flex: 0 1 170px; min-width: 140px; }
+.fb-periodo .fb-campo[type="date"] { min-height: 38px; }
+html.dark .fb .fb-campo[type="date"] { color-scheme: dark; }
+.fb-periodo-atalhos { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding-bottom: 4px; }
+.fb-periodo-atalhos .fb-btn[aria-pressed="true"] { background: var(--fb-pri-suave); color: var(--fb-pri) !important; box-shadow: inset 0 0 0 1.5px var(--fb-pri); font-weight: 600; }
+.fb-periodo-ativo { display: flex; flex-wrap: wrap; gap: 6px; margin: -6px 0 14px; }
+.fb-periodo-chip { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; padding: 4px 4px 4px 12px; border-radius: 980px; font-size: 12.5px;
+  background: var(--fb-pri-suave); color: var(--fb-texto); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fb-pri) 35%, transparent); animation: fb-entrar .3s var(--fb-ease); }
+.fb-periodo-chip > i { color: var(--fb-pri); }
+.fb-periodo-chip b { font-weight: 600; }
+.fb-periodo-x { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; color: var(--fb-suave-2) !important; transition: all .15s; flex: 0 0 24px; }
+.fb-periodo-x:hover { background: var(--fb-pri); color: #fff !important; }
+@media (max-width: 767px) {
+  .fb-periodo-campo { flex: 1 1 140px; }
+  .fb-periodo-atalhos { width: 100%; }
+}
+
 /* Tags (assertividade, B2B etc. — mesmas cores da Validação) */
 .fb-tag { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 980px;
   background: var(--fb-campo); color: var(--fb-suave-2); white-space: nowrap; line-height: 1.5; }
