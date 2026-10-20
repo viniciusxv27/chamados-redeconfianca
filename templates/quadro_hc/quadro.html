@@ -95,7 +95,7 @@
   .hc .acoes { opacity: .55; transition: opacity .15s; }
   .hc [draggable="true"] { cursor: grab; }
   .hc .arrastando { opacity: .45; }
-  .hc .obs { width: 100%; min-width: 9rem; border: 1px dashed transparent; border-radius: .5rem; padding: .2rem .4rem; background: transparent; color: var(--txt); font-size: .78rem; }
+  .hc .obs { width: 100%; min-width: 7rem; border: 1px dashed transparent; border-radius: .5rem; padding: .2rem .4rem; background: transparent; color: var(--txt); font-size: .78rem; }
   .hc .obs:hover { border-color: var(--borda); }
   .hc .obs:focus { outline: none; border-style: solid; border-color: var(--pri); background: var(--sup); box-shadow: 0 0 0 3px var(--pri-suave); }
   .hc .exp-proxima { background: #FEF3C7; color: #92400E; border-radius: .35rem; padding: 0 .3rem; font-weight: 700; }
@@ -204,6 +204,13 @@
   <div role="alert" class="mb-3 p-3 rounded-xl text-sm {% if message.tags == 'error' %}bg-red-50 text-red-700{% else %}bg-green-50 text-green-800{% endif %}">{{ message }}</div>
   {% endfor %}{% endif %}
 
+  {% if q.demissao_antiga %}
+  <button type="button" data-rapido-aviso="demissao" class="w-full text-left mb-4 p-3.5 rounded-2xl bg-red-50 border border-red-200 text-red-900 text-sm flex items-center gap-3 hover:bg-red-100 transition">
+    <span class="w-9 h-9 rounded-xl bg-red-500 text-white grid place-items-center"><i class="fas fa-calendar-xmark"></i></span>
+    <span><b>{{ q.demissao_antiga }}</b> pessoa(s) trabalham (login e status ativos), mas o cadastro tem data de demissão no passado. Elas entram no quadro; confira a demissão no cadastro. Clique para ver.</span>
+    <i class="fas fa-arrow-right ml-auto"></i>
+  </button>
+  {% endif %}
   {% if para_hoje %}
   <button type="button" data-ir-aba="futuras" class="w-full text-left mb-4 p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-sm flex items-center gap-3 hover:bg-amber-100 transition">
     <span class="w-9 h-9 rounded-xl bg-amber-400 text-white grid place-items-center animate-pulse"><i class="fas fa-bell"></i></span>
@@ -245,7 +252,7 @@
         </div>
       </div>
       <div class="flex flex-wrap gap-2 items-center">
-        <div class="rolagem-x flex gap-1.5 flex-1 min-w-0 pb-0.5" role="group" aria-label="Carteiras">
+        <div class="rolagem-x flex gap-1.5 w-full min-w-0 pb-0.5" role="group" aria-label="Carteiras">
           <button type="button" class="pilula" data-carteira-filtro="" aria-pressed="true">Todas <span class="n">{{ q.total }}</span></button>
           {% for c in q.carteiras %}<button type="button" class="pilula" data-carteira-filtro="{{ c.id }}" aria-pressed="false">{{ c.nome }} <span class="n">{{ c.total }}</span></button>{% endfor %}
         </div>
@@ -253,6 +260,8 @@
           <button type="button" class="pilula" data-rapido="alerta" aria-pressed="false"><i class="fas fa-bell text-amber-500"></i>Com alerta</button>
           <button type="button" class="pilula" data-rapido="vaga" aria-pressed="false"><i class="fas fa-user-clock text-amber-500"></i>Vagas</button>
           <button type="button" class="pilula" data-rapido="novo" aria-pressed="false"><i class="fas fa-seedling text-green-500"></i>Novos</button>
+          {% if q.demissao_antiga %}<button type="button" class="pilula" data-rapido="demissao" aria-pressed="false" title="Trabalham, mas o cadastro tem demissão antiga"><i class="fas fa-calendar-xmark text-red-500"></i>Demissão no cadastro <span class="n">{{ q.demissao_antiga }}</span></button>{% endif %}
+          <button type="button" class="pilula" data-rapido="ajustado" aria-pressed="false" title="Função ou loja que não vêm do cargo/loja do cadastro"><i class="fas fa-sliders text-sky-500"></i>Ajustados</button>
           <button type="button" class="pilula" id="btRecolher" title="Recolher/abrir todas as lojas" aria-label="Recolher ou abrir todas as lojas"><i class="fas fa-down-left-and-up-right-to-center"></i></button>
         </div>
         <span class="text-xs t3 tabular" id="contador" aria-live="polite"></span>
@@ -283,6 +292,7 @@
                   {% for grupo, n in b.resumo %}<span class="chip-g g-{{ grupo|slugify }}">{{ n }} {{ grupo }}</span>{% endfor %}
                   {% if b.vagas %}<span class="tag tag-alerta"><i class="fas fa-user-clock"></i>{{ b.vagas|length }} vaga(s)</span>{% endif %}
                   {% if b.sem_gerente %}<span class="tag tag-erro"><i class="fas fa-triangle-exclamation"></i>sem gerente</span>{% endif %}
+                  {% if b.total_previsto %}<span class="tag {% if b.falta %}tag-alerta{% else %}tag-ok{% endif %}" title="{% for c in b.comparacao %}{{ c.grupo }}: {{ c.real }}/{{ c.previsto }}{% if not forloop.last %} · {% endif %}{% endfor %}"><i class="fas fa-bullseye"></i>HC {{ b.total }}/{{ b.total_previsto }}{% if b.falta %} · falta{{ b.falta|pluralize:"m" }} {{ b.falta }}{% endif %}</span>{% endif %}
                 </div>
               </div>
             </button>
@@ -291,6 +301,7 @@
                 <p class="text-2xl font-extrabold leading-none tabular">{{ b.total }}</p>
                 <p class="text-[10px] t3 font-bold uppercase">pessoas</p>
               </div>
+              <button type="button" class="bt bt-claro !py-1.5 !px-2.5 !text-xs" data-previsto="{{ b.setor.id }}" data-loja-nome="{{ b.setor.name }}" data-qtds="{% for g, n in b.previsto.items %}{{ g }}={{ n }}{% if not forloop.last %};{% endif %}{% endfor %}" data-reais="{% for g, n in b.resumo %}{{ g }}={{ n }}{% if not forloop.last %};{% endif %}{% endfor %}" aria-label="HC previsto da {{ b.setor.name }}" title="HC previsto (quadro ideal)"><i class="fas fa-bullseye"></i><span class="hidden sm:inline">HC</span></button>
               <button type="button" class="bt bt-claro !py-1.5 !px-2.5 !text-xs" data-abrir-vaga="{{ b.setor.id }}" aria-label="Abrir vaga na {{ b.setor.name }}"><i class="fas fa-plus"></i><span class="hidden sm:inline">vaga</span></button>
             </div>
             {% if b.total %}
@@ -301,15 +312,15 @@
             <!-- tabela -->
             <div class="so-tabela overflow-x-auto border-t" style="border-color:var(--borda)">
               <table class="pessoas">
-                <thead><tr><th>Nome</th><th>Cargo</th><th>Cidade onde reside</th><th>Login</th><th>Nascimento</th><th>Contratação</th><th>Exp. 1ª janela</th><th>Exp. 2ª janela</th><th>Obs.</th><th>Telefone</th><th><span class="sr-only">Ações</span></th></tr></thead>
+                <thead><tr><th>Nome</th><th>Cargo</th><th class="hidden 2xl:table-cell">Cidade onde reside</th><th>Login</th><th class="hidden 2xl:table-cell">Nascimento</th><th>Contratação</th><th>Exp. 1ª</th><th>Exp. 2ª</th><th>Obs.</th><th class="hidden 2xl:table-cell">Telefone</th><th><span class="sr-only">Ações</span></th></tr></thead>
                 <tbody>
                   {% for p in b.pessoas %}
-                  <tr class="item g-{{ p.grupo|slugify }}" data-item data-pessoa="{{ p.id }}" data-cargo="{{ p.cargo }}" draggable="true"
+                  <tr class="item g-{{ p.grupo|slugify }}" data-item data-pessoa="{{ p.id }}" data-cargo="{{ p.cargo }}" draggable="true" {% if p.demissao_antiga %}data-demissao{% endif %} {% if p.ajuste or p.origem_funcao != 'cargo' %}data-ajustado{% endif %}
                       data-busca="{{ p.nome|lower }} {{ p.login }} {{ p.cargo|lower }} {{ p.cidade|lower }}"
                       {% if p.novo %}data-novo{% endif %}
                       {% if p.exp1_alerta == 'proxima' or p.exp2_alerta == 'proxima' %}data-experiencia{% endif %}
                       {% if p.exp1_alerta == 'proxima' or p.exp2_alerta == 'proxima' or p.agendadas or p.sai_em %}data-alerta{% endif %}>
-                    <td data-label="Nome" class="min-w-[15rem]">
+                    <td data-label="Nome" class="min-w-[13rem]">
                       <div class="flex items-start gap-2.5">
                         <span class="avatar p" aria-hidden="true">{{ p.iniciais }}</span>
                         <div class="min-w-0">
@@ -317,6 +328,7 @@
                             {% if p.novo %}<span class="tag tag-ok">novo</span>{% endif %}
                             {% if p.status %}<span class="tag tag-cinza">{{ p.status }}</span>{% endif %}
                             {% if p.sai_em %}<span class="tag tag-erro">sai {{ p.sai_em|date:"d/m" }}</span>{% endif %}
+                            {% include 'quadro_hc/_marcas.html' %}
                           </div>
                           {% for a in p.agendadas %}<div class="text-[11px] font-semibold" style="color:var(--pri-esc)"><i class="fas fa-calendar-day"></i> {{ a.data|date:"d/m" }}: {{ a.resumo }}</div>{% endfor %}
                           {% if p.historico %}
@@ -331,15 +343,15 @@
                       </div>
                     </td>
                     <td data-label="Cargo"><span class="chip-g g-{{ p.grupo|slugify }}">{{ p.cargo|default:"sem cargo" }}</span></td>
-                    <td data-label="Cidade" class="t2">{{ p.cidade|default:"—" }}</td>
+                    <td data-label="Cidade" class="t2 hidden 2xl:table-cell">{{ p.cidade|default:"—" }}</td>
                     <td data-label="Login" class="tabular">{{ p.login|default:"—" }}</td>
-                    <td data-label="Nascimento" class="tabular">{{ p.nascimento|date:"d/m/Y"|default:"—" }}</td>
-                    <td data-label="Contratação" class="tabular">{{ p.contratacao|date:"d/m/Y"|default:"—" }}</td>
-                    <td data-label="Exp. 1ª" class="tabular"><span class="{% if p.exp1_alerta == 'proxima' %}exp-proxima{% elif p.exp1_alerta == 'passou' %}exp-passou{% endif %}">{{ p.exp1|date:"d/m/Y"|default:"—" }}</span></td>
-                    <td data-label="Exp. 2ª" class="tabular"><span class="{% if p.exp2_alerta == 'proxima' %}exp-proxima{% elif p.exp2_alerta == 'passou' %}exp-passou{% endif %}">{{ p.exp2|date:"d/m/Y"|default:"—" }}</span></td>
+                    <td data-label="Nascimento" class="tabular hidden 2xl:table-cell">{{ p.nascimento|date:"d/m/Y"|default:"—" }}</td>
+                    <td data-label="Contratação" class="tabular whitespace-nowrap">{{ p.contratacao|date:"d/m/y"|default:"—" }}</td>
+                    <td data-label="Exp. 1ª" class="tabular whitespace-nowrap"><span class="{% if p.exp1_alerta == 'proxima' %}exp-proxima{% elif p.exp1_alerta == 'passou' %}exp-passou{% endif %}">{{ p.exp1|date:"d/m/y"|default:"—" }}</span></td>
+                    <td data-label="Exp. 2ª" class="tabular whitespace-nowrap"><span class="{% if p.exp2_alerta == 'proxima' %}exp-proxima{% elif p.exp2_alerta == 'passou' %}exp-passou{% endif %}">{{ p.exp2|date:"d/m/y"|default:"—" }}</span></td>
                     <td data-label="Obs."><input class="obs" value="{{ p.observacao }}" data-obs="{{ p.id }}" maxlength="500" aria-label="Observação de {{ p.nome }}" placeholder="adicionar…"></td>
-                    <td data-label="Telefone" class="whitespace-nowrap tabular">{% if p.telefone %}<a href="tel:{{ p.telefone|cut:' '|cut:'-' }}" class="hover:underline">{{ p.telefone }}</a>{% else %}—{% endif %}</td>
-                    <td class="text-right"><div class="acoes"><button type="button" class="bt bt-claro !py-1 !px-2.5 !text-xs" data-movimentar="{{ p.id }}" aria-label="Movimentar {{ p.nome }}"><i class="fas fa-people-arrows"></i><span class="hidden xl:inline">Movimentar</span></button></div></td>
+                    <td data-label="Telefone" class="whitespace-nowrap tabular hidden 2xl:table-cell">{% if p.telefone %}<a href="tel:{{ p.telefone|cut:' '|cut:'-' }}" class="hover:underline">{{ p.telefone }}</a>{% else %}—{% endif %}</td>
+                    <td class="text-right"><div class="acoes flex gap-1 justify-end"><button type="button" class="bt bt-claro !py-1 !px-2 !text-xs" data-ajustar="{{ p.id }}" data-nome="{{ p.nome }}" data-cargo-cad="{{ p.cargo|default:'sem cargo' }}" data-funcao="{{ p.ajuste.funcao|default:'' }}" data-setor="{{ p.ajuste.setor|default:'' }}" data-situacao="{{ p.ajuste.situacao|default:'AUTO' }}" data-motivo="{{ p.ajuste.motivo|default:'' }}" data-demissao="{{ p.demissao_antiga|date:'d/m/Y' }}" aria-label="Ajustar {{ p.nome }} no quadro" title="Ajuste manual no quadro"><i class="fas fa-sliders"></i></button><button type="button" class="bt bt-claro !py-1 !px-2.5 !text-xs" data-movimentar="{{ p.id }}" aria-label="Movimentar {{ p.nome }}"><i class="fas fa-people-arrows"></i><span class="hidden 2xl:inline">Movimentar</span></button></div></td>
                   </tr>
                   {% endfor %}
                   {% for v in b.vagas %}
@@ -357,7 +369,7 @@
             <!-- cartões -->
             <div class="so-cartoes grade border-t" style="border-color:var(--borda)">
               {% for p in b.pessoas %}
-              <div class="pcard g-{{ p.grupo|slugify }}" data-item data-pessoa="{{ p.id }}" data-cargo="{{ p.cargo }}" draggable="true"
+              <div class="pcard g-{{ p.grupo|slugify }}" data-item data-pessoa="{{ p.id }}" data-cargo="{{ p.cargo }}" draggable="true" {% if p.demissao_antiga %}data-demissao{% endif %} {% if p.ajuste or p.origem_funcao != 'cargo' %}data-ajustado{% endif %}
                    data-busca="{{ p.nome|lower }} {{ p.login }} {{ p.cargo|lower }} {{ p.cidade|lower }}"
                    {% if p.novo %}data-novo{% endif %}
                    {% if p.exp1_alerta == 'proxima' or p.exp2_alerta == 'proxima' %}data-experiencia{% endif %}
@@ -365,14 +377,16 @@
                 <div class="flex items-start gap-2.5">
                   <span class="avatar" aria-hidden="true">{{ p.iniciais }}</span>
                   <div class="min-w-0 flex-1">
-                    <p class="font-bold leading-tight truncate" title="{{ p.nome }}">{{ p.nome }}</p>
+                    <p class="font-bold leading-tight line-clamp-2 break-words" title="{{ p.nome }}">{{ p.nome }}</p>
                     <span class="chip-g g-{{ p.grupo|slugify }} mt-1">{{ p.cargo|default:"sem cargo" }}</span>
                   </div>
+                  <button type="button" class="t3 hover:text-orange-500 px-1" data-ajustar="{{ p.id }}" data-nome="{{ p.nome }}" data-cargo-cad="{{ p.cargo|default:'sem cargo' }}" data-funcao="{{ p.ajuste.funcao|default:'' }}" data-setor="{{ p.ajuste.setor|default:'' }}" data-situacao="{{ p.ajuste.situacao|default:'AUTO' }}" data-motivo="{{ p.ajuste.motivo|default:'' }}" data-demissao="{{ p.demissao_antiga|date:'d/m/Y' }}" aria-label="Ajustar {{ p.nome }} no quadro" title="Ajuste manual"><i class="fas fa-sliders"></i></button>
                   <button type="button" class="t3 hover:text-orange-500 px-1" data-movimentar="{{ p.id }}" aria-label="Movimentar {{ p.nome }}"><i class="fas fa-people-arrows"></i></button>
                 </div>
                 <div class="flex flex-wrap gap-1 mt-2">
                   {% if p.novo %}<span class="tag tag-ok">novo</span>{% endif %}
                   {% if p.sai_em %}<span class="tag tag-erro">sai {{ p.sai_em|date:"d/m" }}</span>{% endif %}
+                  {% include 'quadro_hc/_marcas.html' %}
                   {% if p.exp1_alerta == 'proxima' %}<span class="tag tag-alerta">1ª janela {{ p.exp1|date:"d/m" }}</span>{% endif %}
                   {% if p.exp2_alerta == 'proxima' %}<span class="tag tag-alerta">2ª janela {{ p.exp2|date:"d/m" }}</span>{% endif %}
                   {% for a in p.agendadas %}<span class="tag tag-info" title="{{ a.resumo }}"><i class="fas fa-calendar-day"></i>{{ a.data|date:"d/m" }}</span>{% endfor %}
@@ -412,6 +426,14 @@
       <h2 class="font-extrabold text-red-600 mb-2"><i class="fas fa-user-slash mr-1"></i>Sem loja no cadastro ({{ q.sem_loja|length }})</h2>
       <div class="flex flex-wrap gap-2">
         {% for p in q.sem_loja %}<button type="button" class="pilula" data-movimentar="{{ p.id }}">{{ p.nome }} · {{ p.cargo|default:"sem cargo" }}</button>{% endfor %}
+      </div>
+    </div>
+    {% endif %}
+    {% if q.fora %}
+    <div class="mb-6 card p-4">
+      <h2 class="font-extrabold mb-2"><i class="fas fa-user-minus mr-1 t3"></i>Fora do quadro por ajuste manual ({{ q.fora|length }})</h2>
+      <div class="flex flex-wrap gap-2">
+        {% for p in q.fora %}<button type="button" class="pilula" data-ajustar="{{ p.id }}" data-nome="{{ p.nome }}" data-cargo-cad="{{ p.cargo|default:'sem cargo' }}" data-situacao="EXCLUIR" data-motivo="{{ p.motivo }}" data-funcao="" data-setor="" title="{{ p.motivo }}">{{ p.nome }} · {{ p.loja }}</button>{% endfor %}
       </div>
     </div>
     {% endif %}
@@ -605,6 +627,63 @@
     </div>
   </div>
 
+  <!-- ajuste manual da pessoa -->
+  <div class="hc-gaveta" id="gavetaAjuste" role="dialog" aria-modal="true" aria-labelledby="aTitulo">
+    <div class="fundo" data-fechar-gaveta></div>
+    <div class="painel estreito">
+      <div class="cab flex items-center justify-between gap-3">
+        <div class="min-w-0"><p class="text-[11px] font-bold uppercase tracking-wider text-orange-300">Ajuste manual no quadro</p>
+          <h2 id="aTitulo" class="text-lg font-extrabold truncate">—</h2><p class="text-xs text-white/70" id="aCargo"></p></div>
+        <button type="button" class="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 shrink-0" data-fechar-gaveta aria-label="Fechar"><i class="fas fa-xmark"></i></button></div>
+      <form id="formAjuste" class="corpo space-y-4">
+        <input type="hidden" name="colaborador">
+        <p class="text-sm t2">Muda só a conta do quadro — o cadastro fica como está. Para mudar o cadastro de verdade, use <b>Movimentar</b>.</p>
+        <p id="aDemissao" hidden class="text-xs p-2.5 rounded-xl bg-red-50 text-red-800"></p>
+        <div><label class="block text-xs font-bold t2 mb-1" for="aFuncao">Função no quadro</label>
+          <select id="aFuncao" name="funcao" class="campo"><option value="">Pelo cargo do cadastro</option>{% for f in funcoes %}<option>{{ f }}</option>{% endfor %}</select>
+          <p class="text-[11px] t3 mt-1">Ex.: a gerente que está com cargo de consultora no cadastro.</p></div>
+        <div><label class="block text-xs font-bold t2 mb-1" for="aSetor">Loja onde conta</label>
+          <select id="aSetor" name="setor" class="campo"><option value="">A loja do cadastro</option>{% for s in setores %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select></div>
+        <fieldset><legend class="block text-xs font-bold t2 mb-1">Entra na conta?</legend>
+          <div class="grid grid-cols-3 gap-2">
+            <label class="opcao"><input type="radio" name="situacao" value="AUTO" checked><i class="fas fa-id-card"></i>Pelo cadastro</label>
+            <label class="opcao"><input type="radio" name="situacao" value="INCLUIR"><i class="fas fa-user-check"></i>Contar sempre</label>
+            <label class="opcao perigo"><input type="radio" name="situacao" value="EXCLUIR"><i class="fas fa-user-minus"></i>Não contar</label>
+          </div></fieldset>
+        <div><label class="block text-xs font-bold t2 mb-1" for="aMotivo">Motivo</label>
+          <input id="aMotivo" name="motivo" maxlength="300" class="campo" placeholder="Ex.: é a gerente da loja; cargo errado no cadastro"></div>
+        <div class="flex justify-between gap-2 pt-2">
+          <button type="button" class="bt bt-claro" id="aLimpar" title="Volta a seguir o cadastro"><i class="fas fa-rotate-left"></i>Tirar ajuste</button>
+          <div class="flex gap-2"><button type="button" class="bt bt-claro" data-fechar-gaveta>Cancelar</button><button class="bt bt-pri"><i class="fas fa-check"></i>Salvar</button></div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- HC previsto da loja -->
+  <div class="hc-gaveta" id="gavetaPrevisto" role="dialog" aria-modal="true" aria-labelledby="pTitulo">
+    <div class="fundo" data-fechar-gaveta></div>
+    <div class="painel estreito">
+      <div class="cab flex items-center justify-between gap-3">
+        <div class="min-w-0"><p class="text-[11px] font-bold uppercase tracking-wider text-orange-300">HC previsto (quadro ideal)</p>
+          <h2 id="pTitulo" class="text-lg font-extrabold truncate">—</h2></div>
+        <button type="button" class="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 shrink-0" data-fechar-gaveta aria-label="Fechar"><i class="fas fa-xmark"></i></button></div>
+      <form id="formPrevisto" class="corpo space-y-3">
+        <input type="hidden" name="setor">
+        <p class="text-sm t2">Quantas pessoas de cada função a loja deveria ter. O cabeçalho da loja passa a mostrar real/previsto e quantas faltam.</p>
+        <div class="space-y-2" id="pLinhas">
+          {% for f in funcoes %}
+          <div class="flex items-center gap-3"><label class="flex-1 text-sm font-semibold" for="p{{ forloop.counter }}"><span class="chip-g g-{{ f|slugify }}">{{ f }}</span></label>
+            <span class="text-xs t3 w-16 text-right" data-real="{{ f }}"></span>
+            <input id="p{{ forloop.counter }}" type="number" min="0" max="99" inputmode="numeric" class="campo !w-20 text-center tabular" data-funcao="{{ f }}"></div>
+          {% endfor %}
+        </div>
+        <p class="text-sm font-bold text-right">Total previsto: <span id="pTotal" class="tabular">0</span></p>
+        <div class="flex justify-end gap-2 pt-2"><button type="button" class="bt bt-claro" data-fechar-gaveta>Cancelar</button><button class="bt bt-pri"><i class="fas fa-check"></i>Salvar</button></div>
+      </form>
+    </div>
+  </div>
+
   <div class="hc-toast" id="toast" role="status" aria-live="polite"><i class="fas fa-circle-check"></i><span></span></div>
 </div>
 {{ json_js|json_script:"hc-dados" }}
@@ -628,6 +707,7 @@
     simular: "{% url 'quadro_hc:simular' %}", movimentar: "{% url 'quadro_hc:movimentar' %}",
     observacao: "{% url 'quadro_hc:observacao' %}", vaga: "{% url 'quadro_hc:vaga_abrir' %}",
     carteira: "{% url 'quadro_hc:carteira_salvar' %}",
+    ajuste: "{% url 'quadro_hc:ajuste' %}", previsto: "{% url 'quadro_hc:previsto' %}",
     aplicar: id => "{% url 'quadro_hc:mov_aplicar' 0 %}".replace('/0/', `/${id}/`),
     cancelar: id => "{% url 'quadro_hc:mov_cancelar' 0 %}".replace('/0/', `/${id}/`),
     fecharVaga: id => "{% url 'quadro_hc:vaga_fechar' 0 %}".replace('/0/', `/${id}/`),
@@ -683,7 +763,8 @@
         const r = estado.rapido;
         const ok = okLoja && (!termo || norm(it.dataset.busca).includes(termo)) && (!cargo || it.dataset.cargo === cargo)
           && (!r || (r === 'alerta' && it.hasAttribute('data-alerta')) || (r === 'vaga' && it.hasAttribute('data-vaga'))
-                 || (r === 'novo' && it.hasAttribute('data-novo')) || (r === 'experiencia' && it.hasAttribute('data-experiencia')));
+                 || (r === 'novo' && it.hasAttribute('data-novo')) || (r === 'experiencia' && it.hasAttribute('data-experiencia'))
+                 || (r === 'demissao' && it.hasAttribute('data-demissao')) || (r === 'ajustado' && it.hasAttribute('data-ajustado')));
         it.hidden = !ok; if (ok) n++;
       });
       const filtrando = termo || cargo || estado.rapido;
@@ -923,6 +1004,57 @@
   });
 
   /* ---------- vagas ---------- */
+
+  /* ---------- ajuste manual da pessoa ---------- */
+  const fa = $('#formAjuste');
+  function abrirAjuste(b) {
+    fa.reset();
+    fa.colaborador.value = b.dataset.ajustar;
+    $('#aTitulo').textContent = b.dataset.nome || '';
+    $('#aCargo').textContent = 'Cadastro: ' + (b.dataset.cargoCad || 'sem cargo');
+    fa.funcao.value = b.dataset.funcao || '';
+    fa.setor.value = b.dataset.setor || '';
+    (fa.querySelector(`input[name=situacao][value="${b.dataset.situacao || 'AUTO'}"]`) || fa.situacao[0]).checked = true;
+    fa.motivo.value = b.dataset.motivo || '';
+    const d = $('#aDemissao');
+    d.hidden = !b.dataset.demissao;
+    d.textContent = b.dataset.demissao ? `O cadastro tem demissão em ${b.dataset.demissao}, mas a pessoa está ativa. Ela já conta no quadro; se a demissão é real, use Movimentar → Desligar.` : '';
+    abrirGaveta('gavetaAjuste');
+  }
+  $$('[data-ajustar]').forEach(b => b.addEventListener('click', () => abrirAjuste(b)));
+  async function enviarAjuste(corpo) {
+    try { const r = await api(URL_.ajuste, corpo); fecharGavetas(); recarregar('quadro', r.msg); }
+    catch (e) { toast(e.message, true); }
+  }
+  fa.addEventListener('submit', e => {
+    e.preventDefault();
+    enviarAjuste({colaborador: fa.colaborador.value, funcao: fa.funcao.value, setor: fa.setor.value,
+                  situacao: (fa.querySelector('input[name=situacao]:checked') || {}).value || 'AUTO', motivo: fa.motivo.value});
+  });
+  $('#aLimpar').addEventListener('click', () => enviarAjuste({colaborador: fa.colaborador.value, situacao: 'AUTO'}));
+
+  /* ---------- HC previsto da loja ---------- */
+  const fp = $('#formPrevisto');
+  const lerPares = t => Object.fromEntries((t || '').split(';').filter(Boolean).map(x => { const i = x.lastIndexOf('='); return [x.slice(0, i), +x.slice(i + 1)]; }));
+  function totalPrevisto() { $('#pTotal').textContent = $$('[data-funcao]', fp).reduce((s, i) => s + (+i.value || 0), 0); }
+  $$('[data-previsto]').forEach(b => b.addEventListener('click', () => {
+    const qtds = lerPares(b.dataset.qtds), reais = lerPares(b.dataset.reais);
+    fp.setor.value = b.dataset.previsto;
+    $('#pTitulo').textContent = b.dataset.lojaNome || '';
+    $$('[data-funcao]', fp).forEach(i => { i.value = qtds[i.dataset.funcao] || ''; });
+    $$('[data-real]', fp).forEach(s => { s.textContent = `hoje ${reais[s.dataset.real] || 0}`; });
+    totalPrevisto(); abrirGaveta('gavetaPrevisto');
+  }));
+  fp.addEventListener('input', totalPrevisto);
+  fp.addEventListener('submit', async e => {
+    e.preventDefault();
+    const quantidades = Object.fromEntries($$('[data-funcao]', fp).map(i => [i.dataset.funcao, +i.value || 0]));
+    try { const r = await api(URL_.previsto, {setor: fp.setor.value, quantidades}); fecharGavetas(); recarregar('quadro', r.msg); }
+    catch (er) { toast(er.message, true); }
+  });
+  const aviso = $('[data-rapido-aviso]');
+  if (aviso) aviso.addEventListener('click', () => { irAba('quadro'); limparFiltros(); rapido(aviso.dataset.rapidoAviso); $('.barra').scrollIntoView({behavior: semMovimento ? 'auto' : 'smooth'}); });
+
   $$('[data-abrir-vaga]').forEach(b => b.addEventListener('click', () => {
     $('#formVaga').reset(); if (b.dataset.abrirVaga) $('#vLoja').value = b.dataset.abrirVaga; abrirGaveta('gavetaVaga');
   }));

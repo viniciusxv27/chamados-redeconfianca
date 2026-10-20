@@ -2295,6 +2295,7 @@ def export_tickets_csv(tickets):
         'Solicitante',
         'Email Solicitante',
         'PDV',
+        'Loja/Local',
         'Responsável',
         'Data Criação',
         'Data Atualização',
@@ -2355,6 +2356,7 @@ def export_tickets_csv(tickets):
             ticket.created_by.get_full_name() if ticket.created_by else '',
             ticket.created_by.email if ticket.created_by else '',
             ticket.created_by.pdv if ticket.created_by else '',
+            ticket.store_location or '',
             ticket.assigned_to.get_full_name() if ticket.assigned_to else 'Não atribuído',
             ticket.created_at.strftime('%d/%m/%Y %H:%M'),
             ticket.updated_at.strftime('%d/%m/%Y %H:%M'),
@@ -2399,6 +2401,7 @@ def export_tickets_xlsx(tickets):
         'Solicitante',
         'Email Solicitante',
         'PDV',
+        'Loja/Local',
         'Responsável',
         'Data Criação',
         'Data Atualização',
@@ -2426,12 +2429,13 @@ def export_tickets_xlsx(tickets):
         7: 22,  # Solicitante
         8: 28,  # Email
         9: 18,  # PDV
-        10: 22, # Responsável
-        11: 16, # Data Criação
-        12: 16, # Data Atualização
-        13: 60, # Descrição Completa
-        14: 50, # Imagens
-        15: 50  # Arquivos
+        10: 24, # Loja/Local
+        11: 22, # Responsável
+        12: 16, # Data Criação
+        13: 16, # Data Atualização
+        14: 60, # Descrição Completa
+        15: 50, # Imagens
+        16: 50  # Arquivos
     }
     
     for col, width in column_widths.items():
@@ -2492,27 +2496,32 @@ def export_tickets_xlsx(tickets):
         cell.alignment = data_alignment
         cell.border = thin_border
         
-        # Coluna 10: Responsável
-        cell = ws.cell(row=row_num, column=10, value=ticket.assigned_to.get_full_name() if ticket.assigned_to else 'Não atribuído')
+        # Coluna 10: Loja/Local (o que o solicitante escolheu no chamado)
+        cell = ws.cell(row=row_num, column=10, value=ticket.store_location or '')
+        cell.alignment = data_alignment
+        cell.border = thin_border
+
+        # Coluna 11: Responsável
+        cell = ws.cell(row=row_num, column=11, value=ticket.assigned_to.get_full_name() if ticket.assigned_to else 'Não atribuído')
         cell.alignment = data_alignment
         cell.border = thin_border
         
-        # Coluna 11: Data Criação
-        cell = ws.cell(row=row_num, column=11, value=ticket.created_at.strftime('%d/%m/%Y %H:%M'))
+        # Coluna 12: Data Criação
+        cell = ws.cell(row=row_num, column=12, value=ticket.created_at.strftime('%d/%m/%Y %H:%M'))
         cell.alignment = Alignment(horizontal="center", vertical="center")
         cell.border = thin_border
         
-        # Coluna 12: Data Atualização
-        cell = ws.cell(row=row_num, column=12, value=ticket.updated_at.strftime('%d/%m/%Y %H:%M'))
+        # Coluna 13: Data Atualização
+        cell = ws.cell(row=row_num, column=13, value=ticket.updated_at.strftime('%d/%m/%Y %H:%M'))
         cell.alignment = Alignment(horizontal="center", vertical="center")
         cell.border = thin_border
         
-        # Coluna 13: Descrição Completa (SEM CORTE)
-        cell = ws.cell(row=row_num, column=13, value=ticket.description)
+        # Coluna 14: Descrição Completa (SEM CORTE)
+        cell = ws.cell(row=row_num, column=14, value=ticket.description)
         cell.alignment = data_alignment
         cell.border = thin_border
         
-        # Colunas 13 e 14: Anexos (Imagens e Arquivos)
+        # Colunas 15 e 16: Anexos (Imagens e Arquivos)
         attachments = ticket.attachments.all()
         
         if attachments.exists():
@@ -2552,29 +2561,29 @@ def export_tickets_xlsx(tickets):
                 else:
                     files.append(attachment_info)
             
-            # Coluna 14: Imagens
+            # Coluna 15: Imagens
             images_text = '\n\n'.join(images) if images else 'Nenhuma imagem'
-            cell = ws.cell(row=row_num, column=14, value=images_text)
+            cell = ws.cell(row=row_num, column=15, value=images_text)
             cell.alignment = data_alignment
             cell.border = thin_border
             if images:
                 cell.font = link_font
             
-            # Coluna 15: Arquivos
+            # Coluna 16: Arquivos
             files_text = '\n\n'.join(files) if files else 'Nenhum arquivo'
-            cell = ws.cell(row=row_num, column=15, value=files_text)
+            cell = ws.cell(row=row_num, column=16, value=files_text)
             cell.alignment = data_alignment
             cell.border = thin_border
             if files:
                 cell.font = link_font
         else:
             # Sem anexos
-            cell = ws.cell(row=row_num, column=14, value='Nenhuma imagem')
+            cell = ws.cell(row=row_num, column=15, value='Nenhuma imagem')
             cell.alignment = data_alignment
             cell.border = thin_border
             cell.font = Font(color="999999", italic=True)
             
-            cell = ws.cell(row=row_num, column=15, value='Nenhum arquivo')
+            cell = ws.cell(row=row_num, column=16, value='Nenhum arquivo')
             cell.alignment = data_alignment
             cell.border = thin_border
             cell.font = Font(color="999999", italic=True)

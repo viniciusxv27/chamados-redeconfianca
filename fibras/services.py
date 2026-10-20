@@ -164,6 +164,24 @@ def fetch_fibras_by_protocols(protocols: Iterable[str]) -> list[dict]:
     return rows
 
 
+def _campos_do_mysql(r: dict) -> dict:
+    """Os campos da Fibra que vêm do Vivo GO (sem status: esse é da ilha)."""
+    return {
+        'numero_protocolo': (str(r.get('numero_protocolo') or '')).strip(),
+        'cpf': (r.get('cpf') or '').strip() if r.get('cpf') else '',
+        'cliente': (r.get('cliente') or '').strip() if r.get('cliente') else '',
+        'endereco': (r.get('endereco') or '').strip() if r.get('endereco') else '',
+        'numero_acesso': (str(r.get('numero_acesso') or '')).strip(),
+        'plano': (r.get('plano') or '').strip() if r.get('plano') else '',
+        'valor': Decimal(str(r.get('valor') or 0)),
+        'pdv': (r.get('pdv') or '').strip() if r.get('pdv') else '',
+        'vendedor': (r.get('vendedor') or '').strip() if r.get('vendedor') else '',
+        'data_da_venda': r['data_da_venda'].date() if hasattr(r.get('data_da_venda'), 'hour') else r.get('data_da_venda'),
+        'pilar': (r.get('pilar') or '').strip() if r.get('pilar') else '',
+        'servico_tecnico': (r.get('servico_tecnico') or '').strip() if r.get('servico_tecnico') else '',
+    }
+
+
 def _upsert_fibra_from_mysql_row(r: dict) -> tuple[Optional[Fibra], bool]:
     """Cria ou atualiza uma Fibra a partir de um dict do MySQL.
 
@@ -177,20 +195,7 @@ def _upsert_fibra_from_mysql_row(r: dict) -> tuple[Optional[Fibra], bool]:
     venda_ativa = (str(r.get('venda_ativa') or '')).strip()
     cancelada = venda_ativa == '0'
 
-    common = {
-        'numero_protocolo': (str(r.get('numero_protocolo') or '')).strip(),
-        'cpf': (r.get('cpf') or '').strip() if r.get('cpf') else '',
-        'cliente': (r.get('cliente') or '').strip() if r.get('cliente') else '',
-        'endereco': (r.get('endereco') or '').strip() if r.get('endereco') else '',
-        'numero_acesso': (str(r.get('numero_acesso') or '')).strip(),
-        'plano': (r.get('plano') or '').strip() if r.get('plano') else '',
-        'valor': Decimal(str(r.get('valor') or 0)),
-        'pdv': (r.get('pdv') or '').strip() if r.get('pdv') else '',
-        'vendedor': (r.get('vendedor') or '').strip() if r.get('vendedor') else '',
-        'data_da_venda': r.get('data_da_venda'),
-        'pilar': (r.get('pilar') or '').strip() if r.get('pilar') else '',
-        'servico_tecnico': (r.get('servico_tecnico') or '').strip() if r.get('servico_tecnico') else '',
-    }
+    common = _campos_do_mysql(r)
 
     existing = Fibra.objects.filter(numero_da_venda=numero).first()
     if existing:
@@ -221,16 +226,72 @@ def sync_fibras(*, year: Optional[int] = None, month: Optional[int] = None) -> d
     Retorna estatísticas (created, updated).
     """
     raw = fetch_fibras_from_mysql(year=year, month=month)
-    created = 0
-    updated = 0
+    # Em lote: uma consulta para os que já existem, bulk_create/bulk_update para o
+    # resto. Linha a linha eram ~2 consultas por venda no banco remoto — 3 mil
+    # vendas levavam 3 minutos e estouravam a requisição.
+    linhas = {}
     for r in raw:
-        _, was_created = _upsert_fibra_from_mysql_row(r)
-        if was_created:
-            created += 1
-        else:
-            updated += 1
-
+        numero = (str(r.get('numero_da_venda') or '')).strip()
+        if numero:
+            linhas[numero] = r
+    existentes = {f.numero_da_venda: f for f in Fibra.objects.filter(numero_da_venda__in=list(linhas))}
+    novas, alteradas = [], []
+    campos = list(_campos_do_mysql({}).keys())
+    for numero, r in linhas.items():
+        comum = _campos_do_mysql(r)
+        cancelada = (str(r.get('venda_ativa') or '')).strip() == '0'
+        f = existentes.get(numero)
+        if f is None:
+            novas.append(Fibra(numero_da_venda=numero,
+                               status=Fibra.STATUS_CANCELADO if cancelada else Fibra.STATUS_AGENDADO, **comum))
+            continue
+        mudou = False
+        for campo, valor in comum.items():
+            if getattr(f, campo) != valor:
+                setattr(f, campo, valor)
+                mudou = True
+        if cancelada and f.status != Fibra.STATUS_CANCELADO:
+            f.status = Fibra.STATUS_CANCELADO
+            mudou = True
+        if mudou:
+            alteradas.append(f)
+    Fibra.objects.bulk_create(novas, batch_size=500)
+    if alteradas:
+        Fibra.objects.bulk_update(alteradas, campos + ['status'], batch_size=500)
+    if existentes:
+        # O save() de antes carimbava last_synced_at em toda venda vista; mantém.
+        Fibra.objects.filter(numero_da_venda__in=list(existentes)).update(last_synced_at=timezone.now())
+    created, updated = len(novas), len(linhas) - len(novas)
     return {'created': created, 'updated': updated, 'total_in_source': len(raw)}
+
+
+def meses_entre(ini: date, fim: date) -> list[tuple[int, int]]:
+    meses, ano, mes = [], ini.year, ini.month
+    while (ano, mes) <= (fim.year, fim.month):
+        meses.append((ano, mes))
+        ano, mes = (ano + 1, 1) if mes == 12 else (ano, mes + 1)
+    return meses
+
+
+def sync_fibras_periodo(ini: Optional[date] = None, fim: Optional[date] = None) -> dict:
+    """Sincroniza todos os meses do período (e o mês corrente).
+
+    O sync_fibras() traz só um mês. O cruzamento usa o período inteiro da Esteira
+    (ex.: 01/08 a 05/10): com só o mês corrente sincronizado, as vendas de agosto
+    e setembro não existiam na Base e toda a Esteira desses meses aparecia como
+    "venda não lançada".
+    """
+    hoje = timezone.localdate()
+    ini, fim = ini or hoje, fim or hoje
+    meses = meses_entre(min(ini, fim), max(ini, fim))
+    if (hoje.year, hoje.month) not in meses:
+        meses.append((hoje.year, hoje.month))
+    total = {'created': 0, 'updated': 0, 'total_in_source': 0, 'meses': len(meses)}
+    for ano, mes in meses[-24:]:  # trava de segurança: no máximo 2 anos por vez
+        stats = sync_fibras(year=ano, month=mes)
+        for k in ('created', 'updated', 'total_in_source'):
+            total[k] += stats[k]
+    return total
 
 
 # ---------------------------------------------------------------------------
@@ -353,7 +414,10 @@ def import_planilha_xlsx(file_obj, *, by_user=None) -> dict:
 
     imp = importar_esteira(file_obj, nome=getattr(file_obj, 'name', ''), by_user=by_user)
     try:
-        sync_stats = sync_fibras()
+        from .validacao import escopo_padrao
+        escopo = escopo_padrao()
+        sync_stats = sync_fibras_periodo(date.fromisoformat(escopo['ini']) - timedelta(days=1),
+                                         date.fromisoformat(escopo['fim']) + timedelta(days=1))
     except Exception:
         sync_stats = {}
     inicio = timezone.now()
@@ -379,10 +443,10 @@ def import_planilha_xlsx(file_obj, *, by_user=None) -> dict:
 
 
 def _prune_stale_fibras(*, import_ts) -> int:
-    """Remove fibras FIXA que sumiram da planilha atual.
+    """Remove fibras criadas só pela planilha que sumiram da planilha atual.
 
     Critérios para apagar:
-      - pilar contém 'FIXA' (ou está vazio — fibras criadas só via planilha);
+      - pilar vazio (fibra criada só via planilha — a do Vivo GO nunca é apagada);
       - já tinha sido vista em uma planilha antes (``last_planilha_at`` não nulo)
         e essa última visita é anterior à importação atual (``import_ts``).
 
@@ -399,10 +463,14 @@ def _prune_stale_fibras(*, import_ts) -> int:
         FibraChatMessage, FibraIncidente, FibraStatusHistory,
     )
 
+    # Só some o que nasceu da planilha (sem pilar). Venda que veio do Vivo GO
+    # (pilar FIXA) existe de verdade: apagá-la porque não casou neste
+    # cruzamento tirava da Base todo mês fora do período da Esteira importada
+    # (jul–set/2026 sumiram assim) e a divergência explodia.
     base = Fibra.objects.filter(
         last_planilha_at__isnull=False,
         last_planilha_at__lt=import_ts,
-    ).filter(Q(pilar__icontains='FIXA') | Q(pilar=''))
+    ).filter(pilar='')
 
     if not base.exists():
         return 0

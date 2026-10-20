@@ -164,7 +164,6 @@ cxModoAbertura();
                     <th class="text-right">Agoracred</th>
                     <th class="text-right">Renova</th>
                     <th class="text-right" title="Lançadas na aba Sangrias — mudam só por lá">sangrias</th>
-                    <th class="text-right">sangria/erro</th>
                     <th class="text-right">Transferências</th>
                     <th class="text-right">Valor real</th>
                     <th class="text-right">Entrada</th>
@@ -188,8 +187,7 @@ cxModoAbertura();
                     <td class="text-right"><input type="text" class="cx-entrada" data-campo="recarga" value="{{ d.recarga|campo }}" placeholder="—"></td>
                     <td class="text-right"><input type="text" class="cx-entrada" data-campo="agoracred" value="{{ d.agoracred|campo }}" placeholder="—"></td>
                     <td class="text-right"><input type="text" class="cx-entrada" data-campo="renova" value="{{ d.renova|campo }}" placeholder="—"></td>
-                    <td class="text-right tabular">{% if d.sangria_registrada %}<a href="{% url 'contagem_caixa:sangrias' %}?de={{ d.data|date:'Y-m-d' }}&ate={{ d.data|date:'Y-m-d' }}&loja={{ loja.id }}" class="text-violet-700 hover:underline" title="Ver as sangrias do dia">{{ d.sangria_registrada|brl }}</a>{% else %}<span class="text-gray-300">—</span>{% endif %}</td>
-                    <td class="text-right"><input type="text" class="cx-entrada" data-campo="sangria_erro" value="{{ d.sangria_erro|campo }}" placeholder="—"></td>
+                    <td class="text-right tabular">{% if d.sangrias_total %}<a href="{% url 'contagem_caixa:sangrias' %}?de={{ d.data|date:'Y-m-d' }}&ate={{ d.data|date:'Y-m-d' }}&loja={{ loja.id }}" class="text-violet-700 hover:underline" title="{% if d.sangria_erro %}Inclui {{ d.sangria_erro|brl }} lançado à mão na antiga coluna sangria/erro. {% endif %}Ver as sangrias do dia">{{ d.sangrias_total|brl }}{% if d.sangria_erro %}<sup class="text-amber-600">*</sup>{% endif %}</a>{% else %}<span class="text-gray-300">—</span>{% endif %}</td>
                     <td class="text-right"><input type="text" class="cx-entrada" data-campo="transferencias" value="{{ d.transferencias|campo }}" placeholder="—"></td>
                     <td class="text-right"><input type="text" class="cx-entrada font-semibold" data-campo="valor_real" value="{{ d.valor_real|campo }}" placeholder="—"></td>
                     <td class="text-right tabular cx-entrada-calc text-gray-700">{{ d.entrada|brl }}</td>
@@ -205,8 +203,9 @@ cxModoAbertura();
 
 <p class="text-xs text-gray-400 mt-3">
     <i class="fas fa-circle-info mr-1"></i>
-    <strong>Entrada</strong> = Valor SAP − allied − recarga − Agoracred − Renova − sangrias (registradas na aba Sangrias) − sangria/erro − Transferências ·
-    <strong>DIVERG.</strong> = (Valor SAP − Agoracred − Renova − Transferências) − Vivo go EA ·
+    <strong>Entrada</strong> = Valor SAP − allied − recarga − Agoracred − Renova − sangrias (registradas na aba Sangrias) − Transferências ·
+    <strong>DIVERG.</strong> = (Valor SAP − recarga − Agoracred − Renova − Transferências) − Vivo go EA ·
+    <sup class="text-amber-600">*</sup> sangria com valor lançado na antiga coluna sangria/erro (continua na conta) ·
     <strong>STATUS</strong> fica em ATENÇÃO quando os dois não batem (e o gerente da loja é avisado){% if pode_conferir %};
     se a diferença já foi verificada (um ajuste manual, por exemplo), clique em <strong>dar OK</strong> — o dia fica como
     OK · conferido, com quem conferiu e quando. Se os números mudarem depois, o OK cai e o dia volta para ATENÇÃO{% endif %} ·

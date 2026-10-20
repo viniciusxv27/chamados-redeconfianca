@@ -129,9 +129,35 @@ def padrao_restrito_sem_sangrias(user):
 
 
 # ── Contas a pagar: PIS/Cofins ──────────────────────────────────────────────
+GRUPO_SEM_PISCOFINS = 'COORDENADORES'
+
+
 def pode_piscofins(user):
-    """Lança e gera a planilha de PIS/Cofins: o gestor do caixa ou quem recebeu a liberação."""
+    """Lança e gera a planilha de PIS/Cofins: o gestor do caixa ou quem recebeu a liberação.
+
+    Quem está no grupo COORDENADORES não vê (pedido de 20/10/2026), mesmo sendo
+    gestor do caixa pela hierarquia (ADMIN) — só com a liberação individual
+    "caixa.piscofins", que é escolha explícita do SUPERADMIN. O SUPERADMIN segue vendo.
+    """
     if not user or not user.is_authenticated:
         return False
     from users.module_access import user_has_module
-    return e_gestor(user) or user_has_module(user, 'caixa.piscofins')
+    if user_has_module(user, 'caixa.piscofins'):
+        return True
+    if not (user.is_superuser or getattr(user, 'hierarchy', '') == 'SUPERADMIN') and _no_grupo(user, GRUPO_SEM_PISCOFINS):
+        return False
+    return e_gestor(user)
+
+
+def _no_grupo(user, nome):
+    cache = getattr(user, '_grupos_cx_cache', None)
+    if cache is None:
+        try:
+            cache = {n.upper() for n in user.communication_groups.values_list('name', flat=True)}
+        except Exception:  # noqa: BLE001
+            cache = set()
+        try:
+            user._grupos_cx_cache = cache
+        except Exception:  # noqa: BLE001
+            pass
+    return nome.upper() in cache

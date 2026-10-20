@@ -13,7 +13,7 @@ from django.views.decorators.http import require_POST
 from users.models import Sector, User
 
 from . import servicos
-from .models import Carteira, MovimentacaoHC, ObservacaoHC, VagaHC
+from .models import FUNCOES, Carteira, MovimentacaoHC, ObservacaoHC, VagaHC
 from .servicos import ErroQuadro
 
 logger = logging.getLogger(__name__)
@@ -66,7 +66,9 @@ def quadro(request):
         'carteiras': Carteira.objects.prefetch_related('lojas').select_related('coordenador'),
         'coordenadores': User.objects.filter(is_active=True).filter(job_title__icontains='COORDENADOR')
         .order_by('first_name'),
+        'funcoes': [f for f, _r in FUNCOES],
         'json_js': {'setores': [{'id': s.id, 'nome': s.name} for s in setores], 'pessoas': pessoas,
+                    'funcoes': [f for f, _r in FUNCOES],
                     'cargos': servicos.cargos_disponiveis(), 'hoje': hoje.isoformat()},
         'aba': request.GET.get('aba') or 'quadro',
     })
@@ -161,3 +163,18 @@ def carteira_excluir(request, dados, pk):
     carteira = get_object_or_404(Carteira, pk=pk)
     carteira.delete()
     return JsonResponse({'ok': True, 'msg': 'Carteira excluída (as lojas voltam para "sem carteira").'})
+
+
+@_api
+def ajuste(request, dados):
+    """Ajuste manual de uma pessoa no quadro (função, loja, contar ou não) — o cadastro não muda."""
+    feito = servicos.salvar_ajuste(dict(dados), request.user)
+    msg = 'Ajuste manual salvo.' if feito else 'Ajuste manual retirado: a pessoa volta a seguir o cadastro.'
+    return JsonResponse({'ok': True, 'msg': msg})
+
+
+@_api
+def previsto(request, dados):
+    """HC previsto da loja por função (o quadro ideal), digitado à mão."""
+    total = servicos.salvar_previsto(dados.get('setor'), dados.get('quantidades') or {}, request.user)
+    return JsonResponse({'ok': True, 'msg': f'HC previsto salvo: {total} pessoa(s).' if total else 'HC previsto zerado.'})

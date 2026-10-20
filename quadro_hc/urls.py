@@ -13,6 +13,8 @@ urlpatterns = [
     path('observacao/', views.observacao, name='observacao'),
     path('vaga/', views.vaga_abrir, name='vaga_abrir'),
     path('vaga/<int:pk>/fechar/', views.vaga_fechar, name='vaga_fechar'),
+    path('ajuste/', views.ajuste, name='ajuste'),
+    path('previsto/', views.previsto, name='previsto'),
     path('carteira/', views.carteira_salvar, name='carteira_salvar'),
     path('carteira/<int:pk>/excluir/', views.carteira_excluir, name='carteira_excluir'),
 ]

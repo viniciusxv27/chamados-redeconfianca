@@ -12,7 +12,7 @@ from django.utils import timezone
 
 from users.models import Sector, User, UserChangeLog
 
-from .models import Carteira, MovimentacaoHC, ObservacaoHC, VagaHC
+from .models import AjusteHC, Carteira, HCPrevisto, MovimentacaoHC, ObservacaoHC, VagaHC
 
 logger = logging.getLogger(__name__)
 
@@ -75,10 +75,52 @@ def cargos_disponiveis() -> list[str]:
 # ---------------------------------------------------------------------------
 # Quem está no quadro
 # ---------------------------------------------------------------------------
+# Grupos de comunicação que o portal usa para "gerente da loja" (o mesmo GERENTES
+# de comissão, contestação e caixa; "Gerente / ADM" é o das lojas com gerente-adm).
+GRUPOS_DE_GERENTE = ('GERENTES', 'GERENTE / ADM')
+STATUS_TRABALHANDO = (User.STATUS_ATIVO, User.STATUS_AFASTADO, User.STATUS_FERIAS)
+
+
 def ativos(hoje=None):
+    """Quem está no quadro: login ativo e não desligado.
+
+    Desligado é quem tem demissão até hoje **e** status que não é de quem
+    trabalha. Em 20/10/2026 eram 20 pessoas com login ativo, status ATIVO,
+    entrando no portal na semana — e demissão antiga no cadastro (quase todas
+    01/11/2024, algumas antes da própria admissão). O quadro as escondia, 7
+    delas gerentes: daí as lojas "sem gerente". Agora elas aparecem, marcadas
+    para conferir a demissão.
+    """
     hoje = hoje or timezone.localdate()
     return (User.objects.filter(is_active=True)
-            .filter(Q(demission_date__isnull=True) | Q(demission_date__gt=hoje)))
+            .filter(Q(demission_date__isnull=True) | Q(demission_date__gt=hoje)
+                    | Q(status__in=STATUS_TRABALHANDO)))
+
+
+def ids_gerentes_por_grupo() -> set:
+    nomes = Q()
+    for n in GRUPOS_DE_GERENTE:
+        nomes |= Q(communication_groups__name__iexact=n)
+    return set(User.objects.filter(is_active=True).filter(nomes).values_list('id', flat=True))
+
+
+def funcao_da_pessoa(u, ajuste=None, gerentes=frozenset()) -> tuple[int, str, str]:
+    """(ordem, grupo, de onde veio): o ajuste manual manda; depois o grupo GERENTES na loja; depois o cargo."""
+    if ajuste is not None and ajuste.funcao:
+        return _ORDEM_POR_GRUPO.get(ajuste.funcao, 8), ajuste.funcao, 'manual'
+    ordem, grupo = grupo_do_cargo(u.job_title)
+    if u.id in gerentes and ordem not in (1, 2) and u.sector_id and e_loja(u.sector):
+        # Está no grupo de gerentes e lotado numa loja: é o gerente dela, seja qual for o cargo escrito.
+        return 1, 'Gerente', 'grupo'
+    return ordem, grupo, 'cargo'
+
+
+def _login(valor) -> str:
+    """O login veio de planilha como número: "81079439.0" vira "81079439"."""
+    texto = str(valor or '').strip()
+    if texto.endswith('.0') and texto[:-2].isdigit():
+        return texto[:-2]
+    return texto
 
 
 def e_loja(setor) -> bool:
@@ -119,7 +161,7 @@ def historico_por_pessoa(ids, limite=6) -> dict:
     return saida
 
 
-def _pessoa(u, obs, hist, agendadas, hoje):
+def _pessoa(u, obs, hist, agendadas, hoje, ajuste=None, gerentes=frozenset()):
     adm = u.admission_date
     exp1 = adm + timedelta(days=EXPERIENCIA_1) if adm else None
     exp2 = adm + timedelta(days=EXPERIENCIA_2) if adm else None
@@ -130,15 +172,21 @@ def _pessoa(u, obs, hist, agendadas, hoje):
         if hoje <= d <= hoje + timedelta(days=7):
             return 'proxima'
         return 'passou' if d < hoje else ''
-    ordem, grupo = grupo_do_cargo(u.job_title)
+    ordem, grupo, origem_funcao = funcao_da_pessoa(u, ajuste, gerentes)
+    demissao_antiga = bool(u.demission_date and u.demission_date <= hoje)
     return {
         'id': u.id, 'nome': nome_completo(u), 'cargo': ' '.join((u.job_title or '').split()), 'grupo': grupo,
-        'ordem': ordem, 'cidade': ' - '.join(x for x in (u.neighborhood, u.city) if x), 'login': u.login_code,
+        'ordem': ordem, 'cidade': ' - '.join(x for x in (u.neighborhood, u.city) if x), 'login': _login(u.login_code),
         'nascimento': u.birth_date, 'contratacao': adm, 'exp1': exp1, 'exp2': exp2,
         'exp1_alerta': alerta(exp1), 'exp2_alerta': alerta(exp2), 'telefone': u.phone,
         'observacao': obs.get(u.id, ''), 'historico': hist.get(u.id, []), 'agendadas': agendadas.get(u.id, []),
-        'sai_em': u.demission_date, 'status': u.get_status_display() if u.status != User.STATUS_ATIVO else '',
-        'novo': bool(adm and adm >= hoje - timedelta(days=30)), 'setor_id': u.sector_id,
+        'sai_em': u.demission_date if not demissao_antiga else None, 'demissao_antiga': u.demission_date if demissao_antiga else None,
+        'origem_funcao': origem_funcao, 'cargo_grupo': grupo_do_cargo(u.job_title)[1],
+        'ajuste': ({'funcao': ajuste.funcao, 'setor': ajuste.setor_id, 'setor_nome': ajuste.setor.name if ajuste.setor else '',
+                    'situacao': ajuste.situacao, 'motivo': ajuste.motivo} if ajuste else None),
+        'status': u.get_status_display() if u.status != User.STATUS_ATIVO else '',
+        'novo': bool(adm and adm >= hoje - timedelta(days=30)),
+        'setor_id': (ajuste.setor_id if ajuste and ajuste.setor_id else u.sector_id), 'setor_cadastro': u.sector_id,
         'iniciais': ''.join(x[:1] for x in nome_completo(u).split()[:2]).upper() or '?',
     }
 
@@ -146,7 +194,13 @@ def _pessoa(u, obs, hist, agendadas, hoje):
 def montar_quadro(hoje=None) -> dict:
     """Carteira → loja → pessoas (ordenadas por cargo), com vagas, observações e histórico."""
     hoje = hoje or timezone.localdate()
-    pessoas = list(ativos(hoje).select_related('sector').order_by('first_name', 'last_name'))
+    ajustes = {a.colaborador_id: a for a in AjusteHC.objects.select_related('setor')}
+    incluir = [cid for cid, a in ajustes.items() if a.situacao == AjusteHC.INCLUIR]
+    pessoas = list(User.objects.filter(Q(pk__in=ativos(hoje).values('pk')) | Q(pk__in=incluir))
+                   .select_related('sector').order_by('first_name', 'last_name'))
+    fora = [u for u in pessoas if getattr(ajustes.get(u.id), 'situacao', '') == AjusteHC.EXCLUIR]
+    pessoas = [u for u in pessoas if u not in fora]
+    gerentes = ids_gerentes_por_grupo()
     ids = [p.id for p in pessoas]
     obs = dict(ObservacaoHC.objects.filter(colaborador_id__in=ids).values_list('colaborador_id', 'texto'))
     hist = historico_por_pessoa(ids)
@@ -160,16 +214,25 @@ def montar_quadro(hoje=None) -> dict:
     por_setor = defaultdict(list)
     sem_loja = []
     for u in pessoas:
-        linha = _pessoa(u, obs, hist, agendadas, hoje)
-        (por_setor[u.sector_id] if u.sector_id else sem_loja).append(linha)
+        linha = _pessoa(u, obs, hist, agendadas, hoje, ajustes.get(u.id), gerentes)
+        (por_setor[linha['setor_id']] if linha['setor_id'] else sem_loja).append(linha)
+    previsto = defaultdict(dict)
+    for h in HCPrevisto.objects.filter(quantidade__gt=0):
+        previsto[h.setor_id][h.funcao] = h.quantidade
 
     def bloco(setor):
         gente = sorted(por_setor.get(setor.id, []), key=lambda p: (p['ordem'], _norm(p['cargo']), _norm(p['nome'])))
         contagem = Counter(p['grupo'] for p in gente)
         abertas = vagas.get(setor.id, [])
+        prev = previsto.get(setor.id, {})
+        comparacao = [{'grupo': g, 'real': contagem.get(g, 0), 'previsto': prev[g], 'falta': prev[g] - contagem.get(g, 0)}
+                      for g in sorted(prev, key=grupo_ordem)]
         return {'setor': setor, 'pessoas': gente, 'vagas': abertas, 'total': len(gente),
                 'resumo': sorted(contagem.items(), key=lambda kv: grupo_ordem(kv[0])),
-                'sem_gerente': e_loja(setor) and not any(p['ordem'] == 1 for p in gente)}
+                # Gerente de vendas ou operacional — pelo cargo, pelo grupo GERENTES ou por ajuste manual.
+                'sem_gerente': e_loja(setor) and not any(p['ordem'] in (1, 2) for p in gente),
+                'previsto': prev, 'comparacao': comparacao, 'total_previsto': sum(prev.values()),
+                'falta': sum(max(c['falta'], 0) for c in comparacao)}
 
     carteiras = []
     usados = set()
@@ -191,6 +254,11 @@ def montar_quadro(hoje=None) -> dict:
                           'total': sum(b['total'] for b in apoio), 'vagas': sum(len(b['vagas']) for b in apoio)})
     todas = [b for c in carteiras for b in c['lojas']]
     return {'carteiras': carteiras, 'sem_loja': sem_loja, 'total': len(pessoas),
+            'fora': [{'id': u.id, 'nome': nome_completo(u), 'cargo': u.job_title or '', 'loja': _loja(u.sector),
+                      'motivo': ajustes[u.id].motivo} for u in fora],
+            'demissao_antiga': sum(1 for b in todas for p in b['pessoas'] if p['demissao_antiga'])
+            + sum(1 for p in sem_loja if p['demissao_antiga']),
+            'ajustes': sum(1 for a in ajustes.values() if a.funcao or a.setor_id or a.situacao != AjusteHC.AUTO),
             'sem_gerente': sum(1 for b in todas if b['sem_gerente']),
             'exp_proximas': sum(1 for b in todas for p in b['pessoas']
                                 if 'proxima' in (p['exp1_alerta'], p['exp2_alerta'])),
@@ -204,6 +272,58 @@ _ORDEM_GRUPOS = ['Coordenação', 'Gerente', 'Gerente operacional', 'Administrat
 
 def grupo_ordem(grupo):
     return _ORDEM_GRUPOS.index(grupo) if grupo in _ORDEM_GRUPOS else 99
+
+
+# Ordem da tabela (a do grupo_do_cargo) para a função escolhida à mão.
+_ORDEM_POR_GRUPO = {'Coordenação': 0, 'Gerente': 1, 'Gerente operacional': 2, 'Administrativo': 3, 'Recepção': 4,
+                    'Consultor pleno': 5, 'Consultor': 6, 'Sniper / itinerante': 7, 'Outros': 8, 'Sem cargo': 9}
+
+
+# ---------------------------------------------------------------------------
+# Ajuste manual
+# ---------------------------------------------------------------------------
+def salvar_ajuste(dados: dict, autor) -> AjusteHC | None:
+    pessoa = User.objects.filter(pk=dados.get('colaborador') or 0).first()
+    if not pessoa:
+        raise ErroQuadro('Colaborador não encontrado.')
+    funcao = str(dados.get('funcao') or '').strip()
+    if funcao and funcao not in _ORDEM_POR_GRUPO:
+        raise ErroQuadro('Função inválida.')
+    situacao = str(dados.get('situacao') or AjusteHC.AUTO)
+    if situacao not in dict(AjusteHC.SITUACOES):
+        raise ErroQuadro('Situação inválida.')
+    setor = Sector.objects.filter(pk=dados.get('setor')).first() if str(dados.get('setor') or '').isdigit() else None
+    if setor and setor.id == pessoa.sector_id:
+        setor = None
+    motivo = str(dados.get('motivo') or '').strip()[:300]
+    if not funcao and not setor and situacao == AjusteHC.AUTO:
+        AjusteHC.objects.filter(colaborador=pessoa).delete()
+        return None
+    if not motivo:
+        raise ErroQuadro('Diga o motivo do ajuste (fica registrado no quadro).')
+    ajuste, _ = AjusteHC.objects.update_or_create(colaborador=pessoa, defaults={
+        'funcao': funcao, 'setor': setor, 'situacao': situacao, 'motivo': motivo, 'atualizado_por': autor})
+    return ajuste
+
+
+def salvar_previsto(setor_id, quantidades: dict, autor) -> int:
+    setor = Sector.objects.filter(pk=setor_id or 0).first()
+    if not setor:
+        raise ErroQuadro('Loja não encontrada.')
+    total = 0
+    for funcao, valor in (quantidades or {}).items():
+        if funcao not in _ORDEM_POR_GRUPO:
+            continue
+        try:
+            n = max(0, min(int(valor or 0), 99))
+        except (TypeError, ValueError):
+            raise ErroQuadro(f'Quantidade inválida para {funcao}.')
+        if n:
+            HCPrevisto.objects.update_or_create(setor=setor, funcao=funcao, defaults={'quantidade': n, 'atualizado_por': autor})
+        else:
+            HCPrevisto.objects.filter(setor=setor, funcao=funcao).delete()
+        total += n
+    return total
 
 
 # ---------------------------------------------------------------------------

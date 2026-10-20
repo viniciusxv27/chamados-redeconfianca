@@ -28,8 +28,9 @@ ZERO = Decimal('0.00')
 
 # Campos que a tela preenche. O Valor SAP não entra: ele vem da importação.
 # A Entrada saiu daqui: virou conta (SAP − parceiros − sangria − transferências).
+# sangria/erro saiu da tela (20/10/2026): sangria se lança na aba Sangrias.
 CAMPOS_EDITAVEIS = ('valor_vivogo', 'allied', 'recarga', 'agoracred', 'renova',
-                    'sangria_erro', 'transferencias', 'valor_real', 'deposito')
+                    'transferencias', 'valor_real', 'deposito')
 
 # Campo em branco aqui significa "ainda não contei", e não "contei e deu zero".
 # É o que separa um dia pendente de uma divergência que alerta o gerente.

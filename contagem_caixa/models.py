@@ -28,8 +28,10 @@ ZERO = Decimal('0.00')
 COLUNAS_NAO_SAO_CAIXA = ('allied', 'recarga', 'agoracred', 'renova')
 
 # Fora da comparação com o Vivo go: o Vivo go não registra estes lançamentos,
-# então mantê-los no SAP faria toda loja parecer divergente todo dia.
-COLUNAS_FORA_DA_DIVERGENCIA = ('agoracred', 'renova', 'transferencias')
+# então mantê-los no SAP faria toda loja parecer divergente todo dia. A recarga
+# entrou aqui em 20/10/2026 (pedido do financeiro): ela é lançada no SAP e não
+# no Vivo go, e deixava o dia em ATENÇÃO pelo valor exato da recarga.
+COLUNAS_FORA_DA_DIVERGENCIA = ('recarga', 'agoracred', 'renova', 'transferencias')
 
 
 def _dec(campo_verbose, **extra):
@@ -135,8 +137,8 @@ class ContagemCaixaDia(models.Model):
     def sap_comparavel(self):
         """O SAP na mesma régua do Vivo go.
 
-        Agoracred, Renova e Transferências entram no SAP mas não aparecem no
-        Vivo go. Comparar sem descontá-los acusaria divergência todo dia em
+        Recarga, Agoracred, Renova e Transferências entram no SAP mas não
+        aparecem no Vivo go. Comparar sem descontá-los acusaria divergência todo dia em
         toda loja — e um alerta que sempre dispara deixa de ser alerta.
         """
         return (self.valor_sap or ZERO) - self._soma(COLUNAS_FORA_DA_DIVERGENCIA)
@@ -154,6 +156,17 @@ class ContagemCaixaDia(models.Model):
                 - (self.sangria_erro or ZERO)
                 - (self.sangria_registrada or ZERO)
                 - (self.transferencias or ZERO))
+
+    @property
+    def sangrias_total(self):
+        """As sangrias do dia: as da aba Sangrias + o antigo "sangria/erro" digitado à mão.
+
+        A coluna sangria/erro saiu da tela em 20/10/2026 (as sangrias se lançam
+        na aba própria). O que já tinha sido digitado nela continua valendo na
+        Entrada e no saldo — tirar mudaria o saldo de 29 dias já fechados — e
+        aparece somado aqui.
+        """
+        return (self.sangria_registrada or ZERO) + (self.sangria_erro or ZERO)
 
     @property
     def divergencia(self):

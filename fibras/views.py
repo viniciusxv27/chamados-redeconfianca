@@ -717,7 +717,17 @@ def validacao_estado(request, corpo):
 @require_POST
 @_validacao_api
 def validacao_cruzar(request, corpo):
-    from .validacao import executar, resultado_json
+    from datetime import date as _date, timedelta as _td
+
+    from .services import sync_fibras_periodo
+    from .validacao import _param_limpo, executar, resultado_json
+    # A Base de Vendas do período tem de estar no portal antes de cruzar: mês
+    # que não foi sincronizado vira "venda não lançada" na Esteira inteira.
+    p = _param_limpo(corpo)
+    try:
+        sync_fibras_periodo(_date.fromisoformat(p['ini']) - _td(days=1), _date.fromisoformat(p['fim']) + _td(days=1))
+    except Exception:  # noqa: BLE001 — Vivo GO fora do ar: cruza com o que já está no portal
+        pass
     cruz = executar(corpo, by_user=request.user, origem='manual')
     return JsonResponse(resultado_json(cruz))
 
@@ -798,11 +808,15 @@ def validacao_importar(request, corpo):
 @require_POST
 @_validacao_api
 def validacao_sincronizar(request, corpo):
-    from .validacao import estado_json
-    stats = sync_fibras()
+    from datetime import date as _date, timedelta as _td
+
+    from .services import sync_fibras_periodo
+    from .validacao import estado_json, parametros_atuais
+    p = parametros_atuais()
+    stats = sync_fibras_periodo(_date.fromisoformat(p['ini']) - _td(days=1), _date.fromisoformat(p['fim']) + _td(days=1))
     estado = estado_json()
-    estado['msg'] = (f"Base de Vendas sincronizada: {stats['created']} novas, {stats['updated']} atualizadas "
-                     f"(de {stats['total_in_source']} no Vivo GO).")
+    estado['msg'] = (f"Base de Vendas sincronizada ({stats['meses']} mês(es) do período): {stats['created']} novas, "
+                     f"{stats['updated']} atualizadas (de {stats['total_in_source']} no Vivo GO).")
     return JsonResponse(estado)
 
 

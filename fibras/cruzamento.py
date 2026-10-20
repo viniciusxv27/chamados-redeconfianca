@@ -249,12 +249,19 @@ def tratar_base(df: pd.DataFrame, desejadas: list[str]) -> tuple[pd.DataFrame, d
 # --------------------------------------------------------------------------- #
 # Lojas
 # --------------------------------------------------------------------------- #
+def _nome_loja(nome) -> str:
+    """Nome da loja sem a palavra "LOJA": a Base de Vendas grava "MONTSERRAT" e o setor é
+    "Loja Montserrat". Com o prefixo, a nota do nome parecido caía abaixo de 85% e 16 das 19
+    lojas ficavam sem ADABAS — e sem ADABAS a venda não casa com a Esteira."""
+    return " ".join(t for t in normalizar_loja(nome).split() if t != "LOJA")
+
+
 def sugerir_mapeamento(filiais: list[str], lojas: pd.DataFrame, col_adabas: str,
                        col_pdv: str, salvo: dict | None = None) -> pd.DataFrame:
     """FILIAL (Base de Vendas) -> ADABAS, comparando o nome com o PDV do DADOS LOJAS."""
     salvo = salvo or {}
     lojas = lojas.dropna(subset=[col_adabas, col_pdv])
-    pdvs = {normalizar_loja(r[col_pdv]): (r[col_pdv], r[col_adabas]) for _, r in lojas.iterrows()}
+    pdvs = {_nome_loja(r[col_pdv]): (r[col_pdv], r[col_adabas]) for _, r in lojas.iterrows()}
     linhas = []
     for f in sorted({str(x) for x in filiais if pd.notna(x)}):
         if f in salvo:
@@ -263,7 +270,7 @@ def sugerir_mapeamento(filiais: list[str], lojas: pd.DataFrame, col_adabas: str,
             linhas.append({"FILIAL (Base de Vendas)": f, "ADABAS": adabas or "", "PDV": pdv,
                            "Origem": "Salvo pelo usuário"})
             continue
-        n = normalizar_loja(f)
+        n = _nome_loja(f)
         if n in pdvs:
             pdv, adabas = pdvs[n]
             origem = "Nome idêntico"

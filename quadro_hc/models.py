@@ -116,3 +116,52 @@ class MovimentacaoHC(models.Model):
 
     def __str__(self):
         return self.resumo or f'Movimentação {self.pk}'
+
+
+FUNCOES = [('Coordenação', 'Coordenação'), ('Gerente', 'Gerente'), ('Gerente operacional', 'Gerente operacional'),
+           ('Administrativo', 'Administrativo'), ('Recepção', 'Recepção'), ('Consultor pleno', 'Consultor pleno'),
+           ('Consultor', 'Consultor'), ('Sniper / itinerante', 'Sniper / itinerante'), ('Outros', 'Outros')]
+
+
+class AjusteHC(models.Model):
+    """Ajuste manual de uma pessoa no quadro — sem mexer no cadastro.
+
+    Para quando o cadastro não conta a verdade do quadro: a gerente que tem
+    cargo de consultor, quem está com demissão antiga no cadastro mas trabalha,
+    quem fica numa loja mas está lotado em outra, quem não entra na conta.
+    """
+    AUTO, INCLUIR, EXCLUIR = 'AUTO', 'INCLUIR', 'EXCLUIR'
+    SITUACOES = [(AUTO, 'Pelo cadastro'), (INCLUIR, 'Contar no quadro'), (EXCLUIR, 'Não contar no quadro')]
+
+    colaborador = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='ajuste_hc')
+    funcao = models.CharField('Função no quadro', max_length=30, choices=FUNCOES, blank=True,
+                              help_text='Vazio = pelo cargo do cadastro.')
+    setor = models.ForeignKey('users.Sector', on_delete=models.SET_NULL, null=True, blank=True, related_name='+',
+                              verbose_name='Loja no quadro', help_text='Vazio = a loja do cadastro.')
+    situacao = models.CharField(max_length=8, choices=SITUACOES, default=AUTO)
+    motivo = models.CharField(max_length=300, blank=True)
+    atualizado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                       related_name='+')
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Ajuste manual do quadro'
+        verbose_name_plural = 'Ajustes manuais do quadro'
+
+    def __str__(self):
+        return f'Ajuste de {self.colaborador}'
+
+
+class HCPrevisto(models.Model):
+    """Quantas pessoas de cada função a loja deveria ter (o HC ideal), digitado à mão."""
+    setor = models.ForeignKey('users.Sector', on_delete=models.CASCADE, related_name='hc_previsto')
+    funcao = models.CharField(max_length=30, choices=FUNCOES)
+    quantidade = models.PositiveSmallIntegerField(default=0)
+    atualizado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                       related_name='+')
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['setor', 'funcao'], name='hc_previsto_unico')]
+        verbose_name = 'HC previsto'
+        verbose_name_plural = 'HC previsto'
