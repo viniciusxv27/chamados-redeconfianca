@@ -1179,6 +1179,32 @@ COLUNAS_META_PLANILHA = {
 }
 
 
+def coordenacao_pela_carteira(pdv: str) -> Tuple[str, List[str]]:
+    """(coordenador, lojas) da carteira de /simulator/admin/stores/ que tem esta loja.
+
+    Reserva para loja que a planilha de comissão não traz — as de SP (Itaim
+    Paulista, Embu das Artes, Carapicuíba) não têm linha nela, então a
+    coluna COORDENAÇÃO não existia e "Meta / Proj. / Ating. Coord." saíam em
+    branco. A carteira do coordenador já é a fonte do cálculo dele mesmo.
+    Com mais de uma carteira com a loja, vale a do coordenador ativo.
+    """
+    alvo = normalize_text(pdv)
+    if not alvo:
+        return '', []
+    acessos = (CoordinatorStoreAccess.objects.select_related('coordinator')
+               .prefetch_related('sectors').order_by('-coordinator__is_active', 'id'))
+    for acesso in acessos:
+        lojas = []
+        for sector in acesso.sectors.order_by('name'):
+            nome = nome_da_loja(sector)
+            if nome and nome not in lojas:
+                lojas.append(nome)
+        if alvo in {normalize_text(n) for n in lojas}:
+            c = acesso.coordinator
+            return (c.first_name or c.get_full_name() or c.email or '').strip().upper(), lojas
+    return '', []
+
+
 def metas_das_lojas(pdvs: List[str], realized: pd.DataFrame) -> Dict[str, float]:
     """Meta da coordenação = soma das metas das lojas dela.
 
@@ -1915,6 +1941,10 @@ def _compute_gerente_simulation_base(
                     coord_name = str(row.get('COORDENAÇÃO') or '').strip()
                     if coord_name:
                         break
+    # Loja fora da planilha (SP): a coordenação vem da carteira do coordenador.
+    coord_pdvs_carteira: List[str] = []
+    if pdv and not coord_name:
+        coord_name, coord_pdvs_carteira = coordenacao_pela_carteira(pdv)
 
     meta_map = {
         'movel': sumifs(realized, 'META_MOVEL', 'PDV', pdv),
@@ -2020,9 +2050,12 @@ def _compute_gerente_simulation_base(
         'sva': sumifs(realized, 'META_SVA', 'COORDENAÇÃO', coord_name),
     }
     coord_meta['fixa'] = meta_fixa_da_coordenacao(realized, projection, coord_name)
+    if coord_pdvs_carteira:
+        # SP: soma as metas das lojas da carteira (Power BI), como o cálculo do coordenador.
+        coord_meta = metas_das_lojas(coord_pdvs_carteira, realized)
     if view_mode == VIEW_REALIZADO:
         # Realizado do coordenador via MySQL (soma de todas as lojas que ele coordena).
-        coord_pdvs = get_pdvs_of_coord(realized, coord_name) or get_pdvs_of_coord(projection, coord_name)
+        coord_pdvs = coord_pdvs_carteira or get_pdvs_of_coord(realized, coord_name) or get_pdvs_of_coord(projection, coord_name)
         mysql_coord = get_realized_sales_from_mysql(pdvs=coord_pdvs) if coord_pdvs else get_realized_sales_from_mysql(coord_name=coord_name)
         coord_proj = {
             'movel': mysql_coord.get('movel', 0.0),
@@ -2036,7 +2069,7 @@ def _compute_gerente_simulation_base(
         }
     else:
         # VIEW_PROJECAO / VIEW_SIMULADOR: coord_proj via MySQL D-1 projetado por DU.
-        coord_pdvs = get_pdvs_of_coord(realized, coord_name) or get_pdvs_of_coord(projection, coord_name)
+        coord_pdvs = coord_pdvs_carteira or get_pdvs_of_coord(realized, coord_name) or get_pdvs_of_coord(projection, coord_name)
         mysql_coord = get_realized_sales_from_mysql(pdvs=coord_pdvs) if coord_pdvs else get_realized_sales_from_mysql(coord_name=coord_name)
         du_passed_c, du_total_c = get_business_days_info()
         coord_proj = {

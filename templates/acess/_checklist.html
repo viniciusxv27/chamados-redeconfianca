@@ -1,0 +1,12 @@
+{% comment %}Checklist da Etapa 4 da ficha `c`: cada item salva sozinho (com a versão da ficha).{% endcomment %}
+{% with url=request.get_full_path %}
+{% for item, rotulo, marcado, dica in c.itens_checklist %}
+<form method="post" action="{% url 'acess:esteira_acao' c.id %}" class="flex items-start gap-2 py-1">
+    {% csrf_token %}<input type="hidden" name="acao" value="checklist"><input type="hidden" name="item" value="{{ item }}">
+    <input type="hidden" name="versao" value="{{ c.versao }}"><input type="hidden" name="voltar" value="{{ url }}">
+    <input type="hidden" name="marcado" value="{% if marcado %}0{% else %}1{% endif %}">
+    <button class="w-5 h-5 mt-0.5 rounded border flex items-center justify-center shrink-0 {% if marcado %}bg-emerald-500 border-emerald-500 text-white{% else %}border-gray-300 hover:border-amber-500{% endif %}" {% if not p.sistemas_concluir %}disabled{% endif %} aria-label="{% if marcado %}Desmarcar{% else %}Marcar{% endif %} {{ rotulo }}">{% if marcado %}<i class="fas fa-check text-[10px]"></i>{% endif %}</button>
+    <span class="text-sm {% if marcado %}text-gray-800{% else %}text-gray-600{% endif %}">{{ rotulo }}<span class="block text-[11px] text-gray-400">{{ dica }}</span></span>
+</form>
+{% endfor %}
+{% endwith %}

@@ -1,0 +1,13 @@
+{% comment %}Campos do novo chamado (o colaborador vem de fora: hidden ou select).{% endcomment %}
+<div class="px-5 py-4 border-b border-gray-100"><h3 class="font-bold">Novo chamado</h3><p class="text-xs text-gray-500">O número é o do chamado externo (Helpus, VivoNow…): o portal acompanha, não abre lá.</p></div>
+<div class="p-5 grid grid-cols-2 gap-3">
+    {% if colabs %}<div class="col-span-2"><label class="ac-label">Colaborador *</label><select name="colaborador" required class="ac-input"><option value="">Escolha…</option>{% for x in colabs %}<option value="{{ x.id }}">{{ x.nome }}{% if x.login %} · {{ x.login }}{% endif %}</option>{% endfor %}</select></div>{% endif %}
+    <div><label class="ac-label">Nº do chamado *</label><input name="codigo" required maxlength="100" class="ac-input"></div>
+    <div><label class="ac-label">Motivo *</label><select name="motivo" required class="ac-input">{% for k, r in motivos %}<option value="{{ k }}">{{ r }}</option>{% endfor %}</select></div>
+    <div class="col-span-2"><label class="ac-label">Sistemas envolvidos</label>
+        <div class="grid grid-cols-3 gap-1 text-xs border border-gray-200 rounded-lg p-2 max-h-36 overflow-y-auto">{% for s in sistemas_chamado %}<label class="flex items-center gap-1"><input type="checkbox" name="sistemas" value="{{ s }}" class="accent-amber-600">{{ s }}</label>{% endfor %}</div></div>
+    <div class="col-span-2"><label class="ac-label">Observação</label><textarea name="observacao" rows="3" maxlength="3000" class="ac-input"></textarea></div>
+    <div><label class="ac-label">Prazo</label><select name="minutos" class="ac-input"><option value="60">1 hora</option><option value="240">4 horas</option><option value="480" selected>8 horas</option><option value="1440">1 dia</option><option value="2880">2 dias</option><option value="4320">3 dias</option><option value="10080">7 dias</option></select></div>
+    <div><label class="ac-label">ou data e hora</label><input type="datetime-local" name="quando" class="ac-input"></div>
+</div>
+<div class="px-5 py-3 border-t border-gray-100 bg-gray-50 flex justify-end gap-2"><button type="button" data-fechar class="ac-btn ac-btn-claro">Cancelar</button><button type="submit" class="ac-btn ac-btn-pri">Abrir chamado</button></div>

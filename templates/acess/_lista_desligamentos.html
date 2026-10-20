@@ -1,0 +1,16 @@
+{% comment %}Lista de desligamentos (pendentes de execução ou agendados).{% endcomment %}
+<ul class="divide-y divide-gray-100 text-sm">
+    {% for c in lista %}
+    <li class="px-4 py-3 flex items-start gap-3 flex-wrap">
+        <div class="min-w-0 flex-1">
+            <a href="{% url 'acess:ficha' c.id %}" class="font-semibold text-gray-900 hover:text-amber-700">{{ c.nome }}</a> <span class="text-[11px] text-gray-500">{{ c.local.name|default:"" }}</span>
+            <p class="text-[11px] text-gray-600">Saída {{ c.saida_empresa|date:"d/m/Y" }} · execução <strong>{{ c.desligamento_em|date:"d/m/Y" }}</strong>{% if c.desligamento_motivo %} · {{ c.desligamento_motivo }}{% endif %}</p>
+        </div>
+        <button type="button" class="ac-btn ac-btn-claro ac-btn-mini" data-abrir="#acAgendar" data-colab="{{ c.id }}" data-versao="{{ c.versao }}" data-saida="{{ c.saida_empresa|date:'Y-m-d' }}" data-execucao="{{ c.desligamento_em|date:'Y-m-d' }}" data-motivo="{{ c.desligamento_motivo }}">Alterar datas</button>
+        <form method="post" action="{% url 'acess:desligamento_acao' c.id %}" onsubmit="return confirm('Cancelar o desligamento de {{ c.nome|escapejs }}?')">{% csrf_token %}<input type="hidden" name="acao" value="cancelar"><input type="hidden" name="versao" value="{{ c.versao }}"><input type="hidden" name="voltar" value="{{ request.get_full_path }}"><button class="ac-btn ac-btn-claro ac-btn-mini">Cancelar</button></form>
+        {% if confirmar %}
+        <form method="post" action="{% url 'acess:desligamento_acao' c.id %}" onsubmit="return confirm('Confirmar que os acessos de {{ c.nome|escapejs }} foram revogados nos sistemas? A ficha será arquivada.')">{% csrf_token %}<input type="hidden" name="acao" value="confirmar"><input type="hidden" name="confirmo" value="1"><input type="hidden" name="versao" value="{{ c.versao }}"><input type="hidden" name="voltar" value="{{ request.get_full_path }}"><button class="ac-btn ac-btn-pri ac-btn-mini"><i class="fas fa-check"></i>Confirmar desligamento</button></form>
+        {% endif %}
+    </li>
+    {% empty %}<li class="px-4 py-4 text-gray-400">Nenhum.</li>{% endfor %}
+</ul>

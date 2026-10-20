@@ -1,0 +1,15 @@
+{% comment %}As funções do Acess (chaves = set liberado) + trata chamados + situação.{% endcomment %}
+<div class="px-5 py-4">
+    <div class="grid sm:grid-cols-2 gap-x-6 gap-y-2">
+        {% for chave, rotulo, descricao, _exige in funcoes %}
+        <label class="flex items-start gap-2 text-sm cursor-pointer"><input type="checkbox" name="permissoes" value="{{ chave }}" {% if chaves and chave in chaves %}checked{% endif %} class="mt-1 accent-amber-600">
+            <span><strong class="text-gray-800">{{ rotulo }}</strong><span class="block text-[11px] text-gray-500">{{ descricao }}</span></span></label>
+        {% endfor %}
+    </div>
+    <p class="text-[11px] text-gray-500 mt-3">Operações em colaboradores levam junto "Consultar colaboradores"; em chamados, "Consultar chamados".</p>
+    <div class="grid sm:grid-cols-3 gap-3 mt-3">
+        <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="trata_chamados" {% if acesso.trata_chamados %}checked{% endif %} class="accent-amber-600">Pode ser responsável por chamados</label>
+        <label class="flex items-center gap-2 text-sm"><input type="hidden" name="ativo" value="off"><input type="checkbox" name="ativo" value="on" {% if not acesso or acesso.ativo %}checked{% endif %} class="accent-amber-600">Acesso ativo</label>
+        <input name="observacao" maxlength="200" value="{{ acesso.observacao|default:'' }}" placeholder="Observação" class="ac-input">
+    </div>
+</div>

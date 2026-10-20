@@ -1,0 +1,80 @@
+{% extends 'acess/base.html' %}
+{% block ac_titulo %}Acess · Chamados{% endblock %}
+{% block ac_cabecalho %}Chamados{% endblock %}
+{% block ac_subtitulo %}Acompanhamento: prazo original, próxima verificação, responsável e encerramento{% endblock %}
+{% block ac_acoes %}{% if p.chamados_criar %}<button type="button" class="ac-btn ac-btn-pri" data-abrir="#acNovoChamado"><i class="fas fa-plus"></i>Novo chamado</button>{% endif %}{% endblock %}
+
+{% block ac_conteudo %}
+<form method="get" class="ac-card p-3 mb-4 flex flex-wrap items-end gap-2">
+    <div class="flex gap-1.5 flex-wrap">
+        <button name="status" value="todos" class="px-3 py-1 rounded-full text-xs font-semibold border {% if st == 'todos' %}bg-amber-600 border-amber-600 text-white{% else %}border-gray-200 text-gray-600{% endif %}" data-livre>Todos</button>
+        <button name="status" value="andamento" class="px-3 py-1 rounded-full text-xs font-semibold border {% if st == 'andamento' %}bg-amber-600 border-amber-600 text-white{% else %}border-gray-200 text-gray-600{% endif %}" data-livre>Em andamento</button>
+        <button name="status" value="vencido" class="px-3 py-1 rounded-full text-xs font-semibold border {% if st == 'vencido' %}bg-red-600 border-red-600 text-white{% else %}border-gray-200 text-gray-600{% endif %}" data-livre>SLA vencido</button>
+        <button name="status" value="concluidos" class="px-3 py-1 rounded-full text-xs font-semibold border {% if st == 'concluidos' %}bg-emerald-600 border-emerald-600 text-white{% else %}border-gray-200 text-gray-600{% endif %}" data-livre>Concluídos</button>
+    </div>
+    <input type="search" name="q" value="{{ q }}" placeholder="Número, nome, local, observação…" class="ac-input !w-72 ml-auto">
+</form>
+
+<div class="space-y-2">
+    {% for ch in chamados %}
+    <details class="ac-card ac-det overflow-hidden" {% if q %}open{% endif %}>
+        <summary class="px-4 py-3 flex items-center gap-3 flex-wrap text-sm">
+            <span class="ac-chip {% if ch.status == 'CONCLUIDO' %}s-OK{% elif ch.sla_vencido %}bg-red-100 text-red-700{% else %}bg-indigo-50 text-indigo-700{% endif %}">#{{ ch.codigo }}</span>
+            <span class="font-semibold text-gray-900">{{ ch.colaborador.nome }}</span>
+            <span class="text-gray-600">{{ ch.get_motivo_display }}</span>
+            {% if ch.sistemas %}<span class="text-[11px] text-gray-500">{{ ch.sistemas|join:", " }}</span>{% endif %}
+            <span class="ml-auto text-[11px] text-gray-500">{{ ch.responsavel.get_full_name|default:"sem responsável" }}</span>
+            <span class="text-[11px] tabular {% if ch.verificacao_vencida %}text-red-600 font-semibold{% else %}text-gray-500{% endif %}">{% if ch.status == 'CONCLUIDO' %}concluído {{ ch.concluido_em|date:"d/m H:i" }}{% else %}verificar {{ ch.proxima_verificacao|date:"d/m H:i" }}{% endif %}</span>
+        </summary>
+        <div class="border-t border-gray-100 p-4 grid md:grid-cols-3 gap-4 text-sm">
+            <div class="space-y-1 text-xs text-gray-700">
+                <p><strong>Colaborador:</strong> <a href="{% url 'acess:ficha' ch.colaborador_id %}" class="text-amber-700 hover:underline">{{ ch.colaborador.nome }}</a> · {{ ch.colaborador.login|default:"sem login" }}</p>
+                <p><strong>Local:</strong> {{ ch.colaborador.local.name|default:"—" }}{% if ch.colaborador.loja_vinculo %} · vínculo {{ ch.colaborador.loja_vinculo.name }}{% endif %} · ADABAS {{ ch.colaborador.unidade_adabas|default:"—" }}</p>
+                <p><strong>Aberto:</strong> {{ ch.aberto_em|date:"d/m/Y H:i" }} por {{ ch.criado_por.get_full_name|default:"—" }}</p>
+                <p><strong>SLA original:</strong> {{ ch.sla_original|date:"d/m/Y H:i" }}{% if ch.sla_vencido %} <span class="text-red-600 font-semibold">vencido</span>{% endif %}</p>
+                <p><strong>Próxima verificação:</strong> {{ ch.proxima_verificacao|date:"d/m/Y H:i" }}</p>
+                {% if ch.status == 'CONCLUIDO' %}<p><strong>Concluído por:</strong> {{ ch.concluido_por.get_full_name|default:"—" }} em {{ ch.concluido_em|date:"d/m/Y H:i" }}</p>{% endif %}
+                {% if ch.observacao %}<p class="whitespace-pre-line pt-1">{{ ch.observacao }}</p>{% endif %}
+            </div>
+            <div>
+                <p class="text-[11px] uppercase font-semibold text-gray-500 mb-1">Histórico do chamado</p>
+                <ul class="text-xs space-y-1">{% for e in ch.eventos.all %}<li><span class="text-gray-400 tabular">{{ e.quando|date:"d/m H:i" }}</span> {{ e.usuario.get_full_name|default:"sistema" }} · {{ e.detalhe }}</li>{% endfor %}</ul>
+            </div>
+            <div class="space-y-2">
+                {% if pode_tratar and ch.status == 'ANDAMENTO' %}
+                <form method="post" action="{% url 'acess:chamado_acao' ch.id %}" class="flex gap-1.5">
+                    {% csrf_token %}<input type="hidden" name="acao" value="reagendar"><input type="hidden" name="versao" value="{{ ch.versao }}"><input type="hidden" name="voltar" value="{{ request.get_full_path }}">
+                    <select name="minutos" class="ac-input"><option value="30">+30 min</option><option value="60">+1 hora</option><option value="240">+4 horas</option><option value="1440" selected>+1 dia</option><option value="2880">+2 dias</option></select>
+                    <button class="ac-btn ac-btn-claro ac-btn-mini whitespace-nowrap">Ainda em andamento</button></form>
+                <form method="post" action="{% url 'acess:chamado_acao' ch.id %}" class="flex gap-1.5">
+                    {% csrf_token %}<input type="hidden" name="acao" value="atribuir"><input type="hidden" name="versao" value="{{ ch.versao }}"><input type="hidden" name="voltar" value="{{ request.get_full_path }}">
+                    <select name="responsavel" class="ac-input"><option value="">Sem responsável</option><option value="eu">Assumir (eu)</option>{% for r in responsaveis %}<option value="{{ r.id }}" {% if ch.responsavel_id == r.id %}selected{% endif %}>{{ r.get_full_name }}</option>{% endfor %}</select>
+                    <button class="ac-btn ac-btn-claro ac-btn-mini">Atribuir</button></form>
+                <form method="post" action="{% url 'acess:chamado_acao' ch.id %}" onsubmit="return confirm('Concluir o chamado #{{ ch.codigo|escapejs }}?')">
+                    {% csrf_token %}<input type="hidden" name="acao" value="concluir"><input type="hidden" name="versao" value="{{ ch.versao }}"><input type="hidden" name="voltar" value="{{ request.get_full_path }}">
+                    <button class="ac-btn ac-btn-pri w-full justify-center"><i class="fas fa-check"></i>Concluído</button></form>
+                {% endif %}
+                {% if ch.colaborador.telefone %}<button type="button" class="ac-btn ac-btn-claro ac-btn-mini" data-wa="{% url 'acess:whatsapp' ch.colaborador_id %}" data-modelo="{% if ch.status == 'CONCLUIDO' %}chamado_concluido{% else %}contato{% endif %}"><i class="fab fa-whatsapp text-emerald-600"></i>WhatsApp</button>{% endif %}
+            </div>
+        </div>
+    </details>
+    {% empty %}
+    <div class="ac-card p-10 text-center text-gray-400"><i class="fas fa-headset text-3xl mb-2"></i><p>Nenhum chamado com esse filtro.</p></div>
+    {% endfor %}
+</div>
+{% if pagina.has_other_pages %}
+<div class="mt-3 flex justify-between text-sm"><span class="text-gray-500">Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span>
+    <div class="flex gap-2">{% if pagina.has_previous %}<a href="?status={{ st }}&q={{ q|urlencode }}&p={{ pagina.previous_page_number }}" class="ac-btn ac-btn-claro">Anterior</a>{% endif %}{% if pagina.has_next %}<a href="?status={{ st }}&q={{ q|urlencode }}&p={{ pagina.next_page_number }}" class="ac-btn ac-btn-claro">Próxima</a>{% endif %}</div></div>
+{% endif %}
+
+{% if p.chamados_criar %}
+<div class="ac-modal" id="acNovoChamado" role="dialog" aria-modal="true">
+    <div class="sm:max-w-lg">
+        <form method="post" action="{% url 'acess:chamado_novo' %}">{% csrf_token %}<input type="hidden" name="voltar" value="{{ request.get_full_path }}">
+            {% include 'acess/_campos_chamado.html' %}
+        </form>
+    </div>
+</div>
+{% endif %}
+{% include 'acess/_whatsapp.html' %}
+{% endblock %}

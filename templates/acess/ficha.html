@@ -1,0 +1,129 @@
+{% extends 'acess/base.html' %}
+{% block ac_titulo %}{{ c.nome }} · Acess{% endblock %}
+{% block ac_cabecalho %}{{ c.nome }}{% endblock %}
+{% block ac_subtitulo %}{{ c.cargo|default:"Cargo não informado" }} · {{ c.local.name|default:"sem local" }}{% if c.unidade_adabas %} · ADABAS {{ c.unidade_adabas }}{% endif %}{% if c.status == 'DESLIGADO' %} · <span class="text-red-600 font-semibold">arquivado</span>{% endif %}{% endblock %}
+{% block ac_acoes %}
+<a href="{% url 'acess:colaboradores' %}" class="ac-btn ac-btn-claro"><i class="fas fa-arrow-left"></i>Colaboradores</a>
+{% if c.telefone %}<button type="button" class="ac-btn ac-btn-claro" data-wa="{% url 'acess:whatsapp' c.id %}" data-modelo="contato"><i class="fab fa-whatsapp text-emerald-600"></i>WhatsApp</button>{% endif %}
+{% if c.etapa_calculada %}<a href="{% url 'acess:pendentes' %}?etapa={{ c.etapa_calculada }}&q={{ c.nome|urlencode }}" class="ac-btn ac-btn-pri"><i class="fas fa-list-check"></i>Etapa {{ c.etapa_calculada }} da esteira</a>{% endif %}
+{% endblock %}
+
+{% block ac_conteudo %}
+<div class="grid lg:grid-cols-3 gap-4">
+<div class="lg:col-span-2 space-y-4">
+    {# Esteira #}
+    <div class="ac-card p-4">
+        <div class="flex items-center gap-2 flex-wrap text-xs">
+            {% for n, r in etapas %}
+            <span class="flex items-center gap-1.5 px-2.5 py-1 rounded-full {% if c.etapa_calculada == n %}bg-amber-500 text-white font-bold{% elif c.etapa_calculada == 0 and c.entrega_login == 'ENVIADO' or c.etapa_calculada > n %}bg-emerald-100 text-emerald-700{% else %}bg-gray-100 text-gray-500{% endif %}">{{ n }}. {{ r }}</span>
+            {% endfor %}
+            {% if c.entrega_login == 'ENVIADO' %}<span class="ac-chip s-OK ml-auto"><i class="fas fa-check"></i>Login liberado {{ c.liberado_em|date:"d/m/Y H:i" }}</span>{% elif c.etapa_calculada %}<span class="ml-auto text-gray-500">há {{ c.dias_na_etapa }} dia(s) nesta etapa</span>{% endif %}
+        </div>
+        {% if c.desligamento_situacao %}<p class="mt-3 text-sm p-2 rounded-lg bg-red-50 text-red-800"><i class="fas fa-user-xmark mr-1"></i>{{ c.desligamento_situacao }}{% if c.desligamento_em %} · execução {{ c.desligamento_em|date:"d/m/Y" }} (saída {{ c.saida_empresa|date:"d/m/Y" }}){% endif %}{% if c.desligamento_motivo %} — {{ c.desligamento_motivo }}{% endif %}</p>{% endif %}
+    </div>
+
+    {# Sistemas #}
+    <form method="post" action="{% url 'acess:ficha_acao' c.id %}" class="ac-card overflow-hidden">
+        {% csrf_token %}<input type="hidden" name="acao" value="sistemas"><input type="hidden" name="versao" value="{{ c.versao }}">
+        <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between"><h2 class="font-bold text-sm"><i class="fas fa-server text-gray-400 mr-1.5"></i>Sistemas</h2>
+            <span class="text-[11px] text-gray-500">OK é o registro da operação, não um teste do acesso.</span></div>
+        <div class="p-4 grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {% for s, st in sistemas %}
+            <label class="flex items-center justify-between gap-2 rounded-lg border border-gray-100 px-2.5 py-1.5 text-sm">
+                <span class="font-semibold text-gray-800">{{ s }}</span>
+                {% if p.sistemas_concluir and c.status == 'ATIVO' %}
+                <select name="sis_{{ forloop.counter0 }}" class="text-xs rounded border border-gray-200 px-1 py-0.5 s-{{ st }}">{% for o in status_opcoes %}<option value="{{ o }}" {% if o == st %}selected{% endif %}>{{ o|default:"(vazio)" }}</option>{% endfor %}</select>
+                {% else %}<span class="ac-chip s-{{ st }}">{{ st|default:"(vazio)" }}</span>{% endif %}
+            </label>
+            {% endfor %}
+        </div>
+        {% if p.sistemas_concluir and c.status == 'ATIVO' %}<div class="px-4 py-2.5 border-t border-gray-100 bg-gray-50 text-right"><button class="ac-btn ac-btn-pri"><i class="fas fa-check"></i>Salvar sistemas</button></div>{% endif %}
+    </form>
+
+    {# Chamados #}
+    {% if p.chamados_ver %}
+    <div class="ac-card overflow-hidden">
+        <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between"><h2 class="font-bold text-sm"><i class="fas fa-headset text-gray-400 mr-1.5"></i>Chamados</h2>
+            {% if p.chamados_criar and c.status == 'ATIVO' %}<button type="button" class="ac-btn ac-btn-claro ac-btn-mini" data-abrir="#acChamado"><i class="fas fa-plus"></i>Novo chamado</button>{% endif %}</div>
+        <ul class="divide-y divide-gray-100 text-sm">
+            {% for ch in chamados %}
+            <li class="px-4 py-2.5 flex items-center gap-3"><span class="ac-chip {% if ch.status == 'CONCLUIDO' %}s-OK{% elif ch.sla_vencido %}bg-red-100 text-red-700{% else %}bg-indigo-50 text-indigo-700{% endif %}">#{{ ch.codigo }}</span>
+                <span class="flex-1">{{ ch.get_motivo_display }}{% if ch.sistemas %} · {{ ch.sistemas|join:", " }}{% endif %}</span>
+                <span class="text-[11px] text-gray-500">{% if ch.status == 'CONCLUIDO' %}concluído {{ ch.concluido_em|date:"d/m H:i" }}{% else %}verificar {{ ch.proxima_verificacao|date:"d/m H:i" }}{% endif %}</span>
+                <a href="{% url 'acess:chamados' %}?status=todos&q={{ ch.codigo|urlencode }}" class="text-amber-700 text-xs hover:underline">abrir</a></li>
+            {% empty %}<li class="px-4 py-4 text-gray-400">Nenhum chamado.</li>{% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    {% if historico is not None %}
+    <div class="ac-card overflow-hidden">
+        <div class="px-4 py-3 border-b border-gray-100"><h2 class="font-bold text-sm"><i class="fas fa-clock-rotate-left text-gray-400 mr-1.5"></i>Histórico</h2></div>
+        <ul class="divide-y divide-gray-100 text-sm">
+            {% for h in historico %}
+            <li class="px-4 py-2"><p class="text-gray-800"><strong>{{ h.usuario_nome }}</strong> · {{ h.descricao }}</p>
+                <p class="text-[11px] text-gray-500">{{ h.quando|date:"d/m/Y H:i" }}{% if h.depois and h.antes %} · {% for k, v in h.depois.items %}{{ k }}: {% for k2, v2 in h.antes.items %}{% if k2 == k %}<s>{{ v2|default:"—" }}</s> → {% endif %}{% endfor %}{{ v|default:"—" }}{% if not forloop.last %}; {% endif %}{% endfor %}{% endif %}</p></li>
+            {% empty %}<li class="px-4 py-4 text-gray-400">Sem registros.</li>{% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+</div>
+
+<div class="space-y-4">
+    {# Dados pessoais #}
+    <form method="post" action="{% url 'acess:ficha_acao' c.id %}" class="ac-card p-4 space-y-2.5">
+        {% csrf_token %}<input type="hidden" name="acao" value="dados"><input type="hidden" name="versao" value="{{ c.versao }}">
+        <h2 class="font-bold text-sm"><i class="fas fa-id-card text-gray-400 mr-1.5"></i>Dados pessoais</h2>
+        {% with editar=p.colaboradores_editar %}
+        <div><label class="ac-label">Nome</label><input name="nome" value="{{ c.nome }}" class="ac-input" {% if not editar %}readonly{% endif %}></div>
+        <div class="grid grid-cols-2 gap-2">
+            <div><label class="ac-label">CPF</label><input name="cpf" value="{{ c.cpf_formatado }}" class="ac-input tabular" {% if not editar %}readonly{% endif %}></div>
+            <div><label class="ac-label">Nascimento</label><input type="date" name="nascimento" value="{{ c.nascimento|date:'Y-m-d' }}" class="ac-input" {% if not editar %}readonly{% endif %}></div>
+        </div>
+        <div><label class="ac-label">E-mail</label><input name="email" value="{{ c.email }}" class="ac-input" {% if not editar %}readonly{% endif %}></div>
+        <div><label class="ac-label">Telefone</label><input name="telefone" value="{{ c.telefone }}" class="ac-input" {% if not editar %}readonly{% endif %}></div>
+        <div><label class="ac-label">Cargo (PERFIL GEFAC)</label><input name="cargo" value="{{ c.cargo }}" class="ac-input" {% if not editar %}readonly{% endif %}></div>
+        <div><label class="ac-label">Login / matrícula</label><div class="flex items-center gap-2"><input value="{{ c.login|default:'' }}" class="ac-input tabular" readonly>{% if c.login %}<button type="button" data-copiar="{{ c.login }}" class="text-gray-400"><i class="far fa-copy"></i></button>{% endif %}</div>
+            <p class="text-[10px] text-gray-400 mt-0.5">Preenchido pela esteira (Etapa 2); vai também para o Login/Código do cadastro do portal.</p></div>
+        {% if editar and c.status == 'ATIVO' %}<button class="ac-btn ac-btn-pri w-full justify-center"><i class="fas fa-check"></i>Salvar dados</button>{% endif %}
+        {% endwith %}
+        {% if c.user %}<p class="text-[11px] text-gray-500"><i class="fas fa-link"></i> Usuário do portal: {{ c.user.get_full_name }} · {{ c.get_origem_display }}</p>{% endif %}
+    </form>
+
+    {# Local e vínculo #}
+    <form method="post" action="{% url 'acess:ficha_acao' c.id %}" class="ac-card p-4 space-y-2.5">
+        {% csrf_token %}<input type="hidden" name="acao" value="transferir"><input type="hidden" name="versao" value="{{ c.versao }}">
+        <h2 class="font-bold text-sm"><i class="fas fa-store text-gray-400 mr-1.5"></i>Local e vínculo</h2>
+        <div><label class="ac-label">Local de trabalho</label><select name="local" class="ac-input" {% if not p.colaboradores_transferir %}disabled{% endif %}>{% for s in setores %}<option value="{{ s.id }}" {% if c.local_id == s.id %}selected{% endif %}>{{ s.name }}</option>{% endfor %}</select></div>
+        <div><label class="ac-label">Loja de vínculo (define o ADABAS)</label><select name="loja_vinculo" class="ac-input" {% if not p.colaboradores_transferir %}disabled{% endif %}><option value="">Não informado</option>{% for s in unidades %}{% if s.adabas %}<option value="{{ s.id }}" {% if c.loja_vinculo_id == s.id %}selected{% endif %}>{{ s.name }} · {{ s.adabas }}</option>{% endif %}{% endfor %}</select></div>
+        <p class="text-[11px] text-gray-500">ADABAS: <strong>{{ c.unidade_adabas|default:"não informado" }}</strong> · perfil regional da liberação: <strong>{{ perfil_requerido }}</strong></p>
+        {% if p.colaboradores_transferir and c.status == 'ATIVO' %}<button class="ac-btn ac-btn-claro w-full justify-center"><i class="fas fa-right-left"></i>Transferir</button>{% endif %}
+    </form>
+
+    {% if p.colaboradores_excluir and c.status == 'ATIVO' %}
+    <div class="ac-card p-4">
+        <h2 class="font-bold text-sm text-red-700"><i class="fas fa-box-archive mr-1.5"></i>Excluir (arquivar)</h2>
+        <p class="text-[11px] text-gray-500 mt-1">A ficha vira desligada e o histórico fica. Não revoga acessos externos. Para desligamento programado, use Desligamentos.</p>
+        <form method="post" action="{% url 'acess:ficha_acao' c.id %}" class="mt-2 space-y-2">
+            {% csrf_token %}<input type="hidden" name="acao" value="excluir"><input type="hidden" name="versao" value="{{ c.versao }}">
+            <input name="motivo" maxlength="300" placeholder="Motivo" class="ac-input">
+            <input type="password" name="senha" required placeholder="Sua senha do portal" class="ac-input" autocomplete="current-password">
+            <button class="ac-btn ac-btn-claro text-red-600 w-full justify-center" onclick="return confirm('Arquivar {{ c.nome|escapejs }}?')">Arquivar ficha</button>
+        </form>
+    </div>
+    {% endif %}
+</div>
+</div>
+
+{% if p.chamados_criar %}
+<div class="ac-modal" id="acChamado" role="dialog" aria-modal="true">
+    <div class="sm:max-w-lg">
+        <form method="post" action="{% url 'acess:chamado_novo' %}">
+            {% csrf_token %}<input type="hidden" name="colaborador" value="{{ c.id }}"><input type="hidden" name="voltar" value="{{ request.get_full_path }}">
+            {% include 'acess/_campos_chamado.html' %}
+        </form>
+    </div>
+</div>
+{% endif %}
+{% include 'acess/_whatsapp.html' %}
+{% endblock %}

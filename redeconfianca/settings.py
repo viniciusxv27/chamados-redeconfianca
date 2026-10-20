@@ -80,6 +80,7 @@ INSTALLED_APPS = [
     'vendas',  # Lançamento de vendas (Postgres) + tabela de preços
     'webmail',  # E-mail institucional (cliente IMAP/SMTP do poste.io)
     'financeiro',  # Financeiro: títulos, baixas, bancos, conciliações e plano de contas
+    'acess',  # Confiança Acess: esteira dos acessos corporativos (só SUPERADMIN + liberados)
     'maps',  # Mapa de localização (módulo oculto, restrito à administração)
     'cursos',
     'quiz',
@@ -165,6 +166,7 @@ TEMPLATES = [
                 'cartoes.context_processors.cartoes_menu',
                 'webmail.context_processors.email_menu',
                 'financeiro.context_processors.financeiro_menu',
+                'acess.context_processors.acess_menu',
                 'tangerino.context_processors.tangerino_gate',
                 'contagem_caixa.context_processors.caixa_menu',
                 'maps.context_processors.coleta_posicao',

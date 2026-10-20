@@ -1,0 +1,22 @@
+{% extends 'acess/base.html' %}
+{% block ac_titulo %}Acess · Mensagens{% endblock %}
+{% block ac_cabecalho %}Mensagens{% endblock %}
+{% block ac_subtitulo %}Modelos de WhatsApp. Salvar um modelo não envia nada.{% endblock %}
+
+{% block ac_conteudo %}
+<div class="ac-card p-3 mb-4 text-sm text-gray-600">Variáveis: {% for v in variaveis %}<code class="px-1 rounded bg-gray-100">{% templatetag openvariable %}{{ v }}{% templatetag closevariable %}</code> {% endfor %}
+    <span class="text-[11px] text-gray-500 block mt-1">nome · login (matrícula) · cpf3 (3 primeiros dígitos do CPF) · loja (local de trabalho) · senha (digitada na hora, não é gravada).</span></div>
+<div class="grid md:grid-cols-2 gap-4">
+    {% for m in modelos %}
+    <form method="post" class="ac-card p-4 space-y-2">
+        {% csrf_token %}<input type="hidden" name="id" value="{{ m.id }}">
+        <h2 class="font-bold text-sm">{{ m.titulo }}</h2>
+        <textarea name="texto" rows="6" maxlength="4000" class="ac-input" {% if not p.mensagens_gerenciar %}readonly{% endif %}>{{ m.texto }}</textarea>
+        <div class="flex items-center justify-between text-[11px] text-gray-500">
+            <span>{% if m.atualizado_por %}Editado por {{ m.atualizado_por.get_full_name }} em {{ m.atualizado_em|date:"d/m/Y H:i" }}{% else %}Texto padrão{% endif %}</span>
+            {% if p.mensagens_gerenciar %}<button class="ac-btn ac-btn-pri ac-btn-mini">Salvar</button>{% endif %}
+        </div>
+    </form>
+    {% endfor %}
+</div>
+{% endblock %}

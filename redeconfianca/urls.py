@@ -127,6 +127,7 @@ urlpatterns = [
     path('vendas/', include('vendas.urls')),  # Lançamento de vendas + tabela de preços
     path('email/', include('webmail.urls')),  # E-mail institucional (poste.io)
     path('financeiro/', include('financeiro.urls')),  # Financeiro (SUPERADMIN + liberados)
+    path('acess/', include('acess.urls')),  # Confiança Acess (SUPERADMIN + liberados)
     path('contagem-caixa/', include('contagem_caixa.urls')),  # Contagem de Caixa
     path('sap/', include('auditoria_sap.urls')),  # Visão SAP (auditoria SAP x Vivo go)
     # Módulo oculto: não aparece em menu nenhum, acesso conferido na view.

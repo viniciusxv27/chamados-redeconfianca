@@ -1,0 +1,53 @@
+{% extends 'acess/base.html' %}
+{% block ac_titulo %}Acess · Acessos{% endblock %}
+{% block ac_cabecalho %}Quem entra no Acess{% endblock %}
+{% block ac_subtitulo %}O SUPERADMIN tem tudo. Aqui ele libera, pessoa por pessoa, cada função do módulo.{% endblock %}
+{% block ac_acoes %}<button type="button" class="ac-btn ac-btn-pri" data-abrir="#acNovoAcesso"><i class="fas fa-user-plus"></i>Liberar alguém</button>{% endblock %}
+
+{% block ac_conteudo %}
+<div class="space-y-3">
+    {% for a in liberados %}
+    <details class="ac-card ac-det overflow-hidden">
+        <summary class="px-5 py-3 flex items-center justify-between gap-3">
+            <div><p class="font-semibold text-gray-900">{{ a.user.get_full_name|default:a.user.email }} {% if not a.ativo %}<span class="ac-chip bg-gray-100 text-gray-600">suspenso</span>{% endif %}{% if a.trata_chamados %} <span class="ac-chip bg-indigo-50 text-indigo-700">trata chamados</span>{% endif %}</p>
+                <p class="text-[11px] text-gray-500">{% if a.user.sector %}{{ a.user.sector.name }} · {% endif %}{{ a.chaves|length }} função(ões) · por {{ a.concedido_por.get_full_name|default:"—" }} em {{ a.atualizado_em|date:"d/m/Y H:i" }}{% if a.observacao %} · {{ a.observacao }}{% endif %}</p></div>
+            <span class="text-xs text-amber-700">editar</span>
+        </summary>
+        <form method="post" class="border-t border-gray-100">
+            {% csrf_token %}<input type="hidden" name="user" value="{{ a.user_id }}">
+            {% include 'acess/_matriz.html' with chaves=a.chaves acesso=a %}
+            <div class="px-5 py-3 bg-gray-50 border-t border-gray-100 flex justify-between">
+                <button type="submit" name="remover" value="1" class="text-sm text-red-600 hover:underline" data-livre onclick="return confirm('Tirar o acesso ao Acess?')">Tirar acesso</button>
+                <button type="submit" class="ac-btn ac-btn-pri"><i class="fas fa-check"></i>Salvar</button>
+            </div>
+        </form>
+    </details>
+    {% empty %}
+    <div class="ac-card p-10 text-center text-gray-500"><i class="fas fa-user-shield text-3xl text-gray-300 mb-2"></i><p>Ninguém liberado ainda — só o SUPERADMIN entra no Acess.</p></div>
+    {% endfor %}
+</div>
+
+<div class="ac-modal" id="acNovoAcesso" role="dialog" aria-modal="true">
+    <div class="sm:max-w-3xl">
+        <form method="post">
+            {% csrf_token %}
+            <div class="px-5 py-4 border-b border-gray-100"><h3 class="font-bold">Liberar o Acess para alguém</h3></div>
+            <div class="px-5 pt-4">
+                <label class="ac-label">Pessoa</label>
+                <input type="search" id="acBusca" placeholder="Buscar por nome ou setor…" class="ac-input mb-2">
+                <div class="border border-gray-200 rounded-lg max-h-44 overflow-y-auto divide-y divide-gray-50">
+                    {% for u in candidatos %}<label data-p="{{ u.get_full_name|default:u.email|lower }} {{ u.sector.name|default:''|lower }}" class="flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-amber-50/50 cursor-pointer"><input type="radio" name="user" value="{{ u.id }}" required class="accent-amber-600">{{ u.get_full_name|default:u.email }}{% if u.sector %}<span class="text-[11px] text-gray-400">{{ u.sector.name }}</span>{% endif %}</label>{% endfor %}
+                </div>
+            </div>
+            {% include 'acess/_matriz.html' with chaves=None acesso=None %}
+            <div class="px-5 py-3 border-t border-gray-100 bg-gray-50 flex justify-end gap-2"><button type="button" data-fechar class="ac-btn ac-btn-claro">Cancelar</button><button type="submit" class="ac-btn ac-btn-pri">Liberar</button></div>
+        </form>
+    </div>
+</div>
+<script>
+document.getElementById('acBusca').addEventListener('input', function () {
+    var t = this.value.trim().toLowerCase();
+    document.querySelectorAll('[data-p]').forEach(function (el) { el.hidden = t && el.dataset.p.indexOf(t) < 0; });
+});
+</script>
+{% endblock %}

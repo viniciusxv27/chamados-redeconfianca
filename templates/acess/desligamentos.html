@@ -1,0 +1,58 @@
+{% extends 'acess/base.html' %}
+{% block ac_titulo %}Acess · Desligamentos{% endblock %}
+{% block ac_cabecalho %}Desligamentos{% endblock %}
+{% block ac_subtitulo %}Saída da empresa × execução nos acessos — a revogação lá fora é manual, aqui se agenda e confirma{% endblock %}
+{% block ac_acoes %}<button type="button" class="ac-btn ac-btn-pri" data-abrir="#acAgendar" data-colab=""><i class="fas fa-calendar-plus"></i>Agendar desligamento</button>{% endblock %}
+
+{% block ac_conteudo %}
+<div class="space-y-5">
+    <div class="ac-card overflow-hidden">
+        <div class="px-4 py-3 border-b border-gray-100"><h2 class="font-bold text-sm text-red-700"><i class="fas fa-bell mr-1.5"></i>Ação manual pendente ({{ pendentes_execucao|length }})</h2><p class="text-[11px] text-gray-500">A data chegou: revogue os acessos nos sistemas e confirme aqui.</p></div>
+        {% include 'acess/_lista_desligamentos.html' with lista=pendentes_execucao confirmar=True %}
+    </div>
+    <div class="ac-card overflow-hidden">
+        <div class="px-4 py-3 border-b border-gray-100"><h2 class="font-bold text-sm"><i class="fas fa-calendar mr-1.5 text-gray-400"></i>Agendados ({{ agendados|length }})</h2></div>
+        {% include 'acess/_lista_desligamentos.html' with lista=agendados confirmar=True %}
+    </div>
+    <details class="ac-card ac-det overflow-hidden">
+        <summary class="px-4 py-3 font-bold text-sm"><i class="fas fa-box-archive mr-1.5 text-gray-400"></i>Desligados / arquivados ({{ arquivados|length }})</summary>
+        <ul class="divide-y divide-gray-100 text-sm border-t border-gray-100">
+            {% for c in arquivados %}<li class="px-4 py-2 flex items-center gap-3"><a href="{% url 'acess:ficha' c.id %}" class="font-semibold hover:text-amber-700">{{ c.nome }}</a><span class="text-[11px] text-gray-500">{{ c.local.name|default:"" }}</span><span class="ml-auto text-[11px] text-gray-500">arquivado {{ c.desligado_em|date:"d/m/Y H:i" }}{% if c.saida_empresa %} · saída {{ c.saida_empresa|date:"d/m/Y" }}{% endif %}</span></li>
+            {% empty %}<li class="px-4 py-4 text-gray-400">Nenhum.</li>{% endfor %}
+        </ul>
+    </details>
+</div>
+
+<div class="ac-modal" id="acAgendar" role="dialog" aria-modal="true">
+    <div class="sm:max-w-md">
+        <form method="post" id="acAgendarForm">
+            {% csrf_token %}<input type="hidden" name="acao" value="agendar"><input type="hidden" name="versao" id="acAgVersao"><input type="hidden" name="voltar" value="{{ request.get_full_path }}">
+            <div class="px-5 py-4 border-b border-gray-100"><h3 class="font-bold">Agendar desligamento</h3></div>
+            <div class="p-5 space-y-3">
+                <div id="acAgPessoa"><label class="ac-label">Colaborador</label><select id="acAgColab" class="ac-input"><option value="">Escolha…</option>{% for c in ativos %}<option value="{{ c.id }}" data-versao="{{ c.versao }}">{{ c.nome }}{% if c.local %} · {{ c.local.name }}{% endif %}</option>{% endfor %}</select></div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div><label class="ac-label">Saída da empresa</label><input type="date" name="saida" required class="ac-input"></div>
+                    <div><label class="ac-label">Execução do desligamento</label><input type="date" name="execucao" required min="{{ hoje|date:'Y-m-d' }}" class="ac-input"></div>
+                </div>
+                <p class="text-[11px] text-gray-500">A execução é hoje ou depois, e não antes da saída.</p>
+                <div><label class="ac-label">Motivo</label><textarea name="motivo" rows="2" maxlength="1000" class="ac-input"></textarea></div>
+            </div>
+            <div class="px-5 py-3 border-t border-gray-100 bg-gray-50 flex justify-end gap-2"><button type="button" data-fechar class="ac-btn ac-btn-claro">Cancelar</button><button type="submit" class="ac-btn ac-btn-pri">Agendar</button></div>
+        </form>
+    </div>
+</div>
+<script>
+(function () {
+    var base = "{% url 'acess:desligamento_acao' 0 %}", f = document.getElementById('acAgendarForm'), sel = document.getElementById('acAgColab');
+    function apontar(id, versao) { f.action = base.replace('/0/', '/' + id + '/'); document.getElementById('acAgVersao').value = versao || ''; }
+    sel.addEventListener('change', function () { var o = sel.selectedOptions[0]; apontar(sel.value, o && o.dataset.versao); });
+    window.acAoAbrir = function (m, b) {
+        if (m.id !== 'acAgendar') return;
+        document.getElementById('acAgPessoa').hidden = !!b.dataset.colab;
+        if (b.dataset.colab) { apontar(b.dataset.colab, b.dataset.versao); f.saida.value = b.dataset.saida || ''; f.execucao.value = b.dataset.execucao || ''; f.motivo.value = b.dataset.motivo || ''; }
+        else { sel.value = ''; f.reset(); }
+    };
+    f.addEventListener('submit', function (e) { if (!f.action || /\/0\/$/.test(f.action) || f.action === location.href) { e.preventDefault(); alert('Escolha o colaborador.'); } });
+})();
+</script>
+{% endblock %}

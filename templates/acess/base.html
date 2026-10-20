@@ -1,0 +1,99 @@
+{% extends 'base.html' %}
+
+{% block title %}{% block ac_titulo %}Acess{% endblock %}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .ac-card { background:#fff; border:1px solid #EDEDF0; border-radius:1rem; box-shadow:0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.06); }
+    .ac-hero { background: radial-gradient(900px 220px at 0% 0%, rgba(245,158,11,.14), transparent 60%),
+        radial-gradient(900px 220px at 100% 0%, rgba(79,70,229,.10), transparent 60%), linear-gradient(180deg,#FFF 0%,#FBFBFC 100%); }
+    .ac-tab { position:relative; white-space:nowrap; }
+    .ac-tab-ativa { color:#B45309; background:#FFFBEB; }
+    .ac-tab-ativa::after { content:''; position:absolute; left:.75rem; right:.75rem; bottom:-1px; height:2px; background:#D97706; border-radius:2px; }
+    .ac-n { font-size:10px; padding:0 .35rem; border-radius:9999px; background:#FEF3C7; color:#92400E; margin-left:.25rem; font-weight:700; }
+    .tabular { font-variant-numeric: tabular-nums; }
+    .ac-input { width:100%; border:1px solid #D1D5DB; border-radius:.5rem; padding:.45rem .7rem; font-size:.875rem; background:#fff; }
+    .ac-input:focus { outline:none; border-color:#F59E0B; box-shadow:0 0 0 3px rgba(245,158,11,.18); }
+    .ac-label { display:block; font-size:.72rem; font-weight:600; color:#4B5563; margin-bottom:.2rem; }
+    .ac-btn { display:inline-flex; align-items:center; gap:.4rem; padding:.45rem .9rem; border-radius:.5rem; font-size:.85rem; font-weight:600; }
+    .ac-btn-pri { background:#D97706; color:#fff; } .ac-btn-pri:hover { background:#B45309; }
+    .ac-btn-claro { background:#fff; color:#374151; border:1px solid #E5E7EB; } .ac-btn-claro:hover { background:#F9FAFB; }
+    .ac-btn-mini { padding:.25rem .55rem; font-size:.75rem; border-radius:.4rem; }
+    .ac-chip { display:inline-flex; align-items:center; gap:.25rem; padding:.05rem .5rem; border-radius:9999px; font-size:11px; font-weight:600; white-space:nowrap; }
+    .s-OK { background:#DCFCE7; color:#166534; } .s-PENDENTE, .s- { background:#FEF3C7; color:#92400E; }
+    .s-BLACKLIST { background:#111827; color:#fff; }
+    .ac-modal { position:fixed; inset:0; z-index:60; background:rgba(17,24,39,.55); display:none; align-items:flex-end; justify-content:center; }
+    .ac-modal.aberto { display:flex; }
+    @media (min-width:640px) { .ac-modal { align-items:center; padding:1.5rem; } }
+    .ac-modal > div { background:#fff; width:100%; max-height:92vh; overflow-y:auto; border-radius:1rem 1rem 0 0; }
+    @media (min-width:640px) { .ac-modal > div { border-radius:1rem; } }
+    table.ac-tabela { width:100%; font-size:.8125rem; }
+    table.ac-tabela th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.03em; color:#6B7280; font-weight:600; padding:.55rem .7rem; background:#F9FAFB; border-bottom:1px solid #F3F4F6; white-space:nowrap; }
+    table.ac-tabela td { padding:.55rem .7rem; border-bottom:1px solid #F3F4F6; vertical-align:top; }
+    table.ac-tabela tbody tr:hover td { background:#FAFAFA; }
+    details.ac-det > summary { list-style:none; cursor:pointer; } details.ac-det > summary::-webkit-details-marker { display:none; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="ac-hero -mx-2 sm:-mx-4 lg:-mx-6 -mt-2 sm:-mt-4 lg:-mt-6 px-2 sm:px-4 lg:px-6 pt-5 pb-0 mb-5 border-b border-gray-100">
+    <div class="flex items-start justify-between gap-4 flex-wrap">
+        <div class="min-w-0">
+            <p class="text-[11px] font-bold uppercase tracking-[.16em] text-amber-600"><i class="fas fa-key mr-1"></i>Confiança Acess</p>
+            <h1 class="text-2xl font-bold text-gray-900">{% block ac_cabecalho %}Acess{% endblock %}</h1>
+            <p class="text-sm text-gray-500 mt-0.5">{% block ac_subtitulo %}Cadastro, esteira de liberação, chamados e desligamentos dos acessos{% endblock %}</p>
+        </div>
+        <div class="flex items-center gap-2 flex-wrap">{% block ac_acoes %}{% endblock %}</div>
+    </div>
+    <nav class="flex items-center gap-1 mt-4 overflow-x-auto -mb-px" aria-label="Partes do Acess">
+        {% for chave, rotulo, icone, _perm in abas %}
+        <a href="{% url 'acess:'|add:chave %}" class="ac-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == chave %}ac-tab-ativa{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
+            <i class="fas {{ icone }} mr-1.5"></i>{{ rotulo }}{% if chave == 'pendentes' and contadores.pendentes %}<span class="ac-n">{{ contadores.pendentes }}</span>{% elif chave == 'chamados' and contadores.chamados %}<span class="ac-n">{{ contadores.chamados }}</span>{% elif chave == 'desligamentos' and contadores.desligamentos %}<span class="ac-n">{{ contadores.desligamentos }}</span>{% endif %}</a>
+        {% endfor %}
+        {% if e_superadmin %}
+        <a href="{% url 'acess:acessos' %}" class="ac-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'acessos' %}ac-tab-ativa{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}"><i class="fas fa-user-shield mr-1.5"></i>Acessos</a>
+        {% endif %}
+    </nav>
+</div>
+
+{% if messages %}
+<div class="space-y-2 mb-4">{% for m in messages %}
+    <div class="p-3 rounded-xl text-sm border {% if m.tags == 'error' %}bg-red-50 border-red-100 text-red-700{% elif m.tags == 'success' %}bg-emerald-50 border-emerald-100 text-emerald-700{% elif m.tags == 'warning' %}bg-amber-50 border-amber-100 text-amber-800{% else %}bg-blue-50 border-blue-100 text-blue-700{% endif %}">{{ m }}</div>{% endfor %}</div>
+{% endif %}
+
+{% block ac_conteudo %}{% endblock %}
+
+<script>
+(function () {
+    document.addEventListener('click', function (e) {
+        var abre = e.target.closest('[data-abrir]');
+        if (abre) {
+            var modal = document.querySelector(abre.dataset.abrir);
+            if (modal) { modal.classList.add('aberto'); if (window.acAoAbrir) window.acAoAbrir(modal, abre); }
+            return;
+        }
+        if (e.target.closest('[data-fechar]') || e.target.classList.contains('ac-modal')) {
+            var m = e.target.closest('.ac-modal'); if (m) m.classList.remove('aberto');
+        }
+    });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') document.querySelectorAll('.ac-modal.aberto').forEach(function (m) { m.classList.remove('aberto'); }); });
+    document.addEventListener('submit', function (e) {
+        var b = e.target.querySelector('button[type=submit]:not([data-livre]), button:not([type]):not([data-livre])');
+        if (b && !e.defaultPrevented) setTimeout(function () { b.disabled = true; }, 0);
+    });
+    /* Copiar: data-copiar="texto" */
+    document.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-copiar]'); if (!b) return;
+        navigator.clipboard && navigator.clipboard.writeText(b.dataset.copiar);
+        var i = b.querySelector('i'); if (i) { i.className = 'fas fa-check text-emerald-600'; setTimeout(function () { i.className = 'far fa-copy'; }, 1200); }
+    });
+})();
+/* WhatsApp: monta a mensagem no servidor e abre o WhatsApp — quem envia é o operador. */
+window.acWhatsapp = function (url, modelo, senha) {
+    var dados = new FormData(); dados.append('modelo', modelo); if (senha) dados.append('senha', senha);
+    dados.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+    return fetch(url, {method: 'POST', body: dados, headers: {'X-Requested-With': 'XMLHttpRequest'}, credentials: 'same-origin'})
+        .then(function (r) { return r.json(); });
+};
+</script>
+{% endblock %}

@@ -1,0 +1,96 @@
+{% extends 'acess/base.html' %}
+{% block ac_titulo %}Acess · Dashboard{% endblock %}
+{% block ac_cabecalho %}Dashboard{% endblock %}
+
+{% block ac_conteudo %}
+{% if p.colaboradores_ver %}
+{% include 'acess/_filtros.html' %}
+<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+    <a href="{% url 'acess:pendentes' %}" class="ac-card p-4 hover:border-amber-300"><p class="text-[11px] uppercase font-semibold text-gray-500">Total de pendências</p><p class="text-2xl font-bold tabular text-amber-700">{{ k_pendencias }}</p><p class="text-[11px] text-gray-400">colaboradores com sistema pendente</p></a>
+    <a href="{% url 'acess:liberados' %}" class="ac-card p-4 hover:border-amber-300"><p class="text-[11px] uppercase font-semibold text-gray-500">Logins criados</p><p class="text-2xl font-bold tabular">{{ k_logins }}</p><p class="text-[11px] text-gray-400">com matrícula válida</p></a>
+    <a href="{% url 'acess:lojas' %}" class="ac-card p-4 hover:border-amber-300"><p class="text-[11px] uppercase font-semibold text-gray-500">Unidades ativas</p><p class="text-2xl font-bold tabular">{{ k_unidades }}</p><p class="text-[11px] text-gray-400">com colaboradores</p></a>
+    {% if p.chamados_ver %}<a href="{% url 'acess:chamados' %}" class="ac-card p-4 hover:border-amber-300"><p class="text-[11px] uppercase font-semibold text-gray-500">Chamados abertos</p><p class="text-2xl font-bold tabular">{{ contadores.chamados|default:0 }}</p><p class="text-[11px] text-gray-400">em acompanhamento</p></a>{% endif %}
+</div>
+
+<form method="post" action="{% url 'acess:concluir_lote' %}" id="acLote" class="ac-card overflow-hidden mb-5">
+    {% csrf_token %}
+    <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap">
+        <div><h2 class="font-bold text-gray-900 text-sm"><i class="fas fa-triangle-exclamation text-amber-500 mr-1.5"></i>Acessos pendentes de quem já tem login ({{ pendentes_login|length }})</h2>
+            <p class="text-[11px] text-gray-500">Diferente da esteira: aqui estão os sistemas que ainda faltam depois do login criado.</p></div>
+        {% if p.sistemas_concluir and pendentes_login %}
+        <div class="flex items-center gap-2 text-sm">
+            <label class="flex items-center gap-1.5 text-gray-600"><input type="checkbox" id="acTodos" class="accent-amber-600">Selecionar todos</label>
+            <button type="button" class="ac-btn ac-btn-pri" data-abrir="#acModalLote" id="acBtnLote" disabled><i class="fas fa-check-double"></i>Concluir selecionados</button>
+        </div>
+        {% endif %}
+    </div>
+    <div class="overflow-x-auto">
+    <table class="ac-tabela">
+        <thead><tr>{% if p.sistemas_concluir %}<th class="w-8"></th>{% endif %}<th>Colaborador</th><th>Local</th><th>Login</th><th>Pendências</th><th></th></tr></thead>
+        <tbody>
+        {% for c in pendentes_login %}
+        <tr>
+            {% if p.sistemas_concluir %}<td><input type="checkbox" name="ids" value="{{ c.id }}" data-n="{{ c.pendencias|length }}" class="ac-marca accent-amber-600" aria-label="Marcar {{ c.nome }}"></td>{% endif %}
+            <td><a href="{% url 'acess:ficha' c.id %}" class="font-semibold text-gray-900 hover:text-amber-700">{{ c.nome }}</a><p class="text-[11px] text-gray-500">{{ c.cargo|default:"Cargo não informado" }}</p></td>
+            <td class="text-xs">{{ c.local.name|default:"—" }}<span class="block text-gray-400">{{ c.unidade_adabas|default:"" }}</span></td>
+            <td class="tabular">{{ c.login }}</td>
+            <td><details class="ac-det"><summary class="flex flex-wrap gap-1">{% for s in c.pendencias|slice:":2" %}<span class="ac-chip s-PENDENTE">{{ s }}</span>{% endfor %}{% if c.pendencias|length > 2 %}<span class="ac-chip bg-gray-100 text-gray-600">+{{ c.pendencias|length|add:"-2" }}</span>{% endif %}</summary>
+                <div class="flex flex-wrap gap-1 mt-1">{% for s in c.pendencias|slice:"2:" %}<span class="ac-chip s-PENDENTE">{{ s }}</span>{% endfor %}</div></details></td>
+            <td class="text-right whitespace-nowrap">
+                {% if c.telefone %}<button type="button" class="ac-btn ac-btn-claro ac-btn-mini" data-wa="{% url 'acess:whatsapp' c.id %}" data-modelo="contato" title="WhatsApp"><i class="fab fa-whatsapp text-emerald-600"></i></button>{% endif %}
+                <a href="{% url 'acess:ficha' c.id %}" class="ac-btn ac-btn-claro ac-btn-mini">{% if p.sistemas_concluir %}Gerenciar{% else %}Ver ficha{% endif %}</a>
+            </td>
+        </tr>
+        {% empty %}<tr><td colspan="6" class="text-center text-gray-400 py-8">Ninguém com login e sistema pendente.</td></tr>{% endfor %}
+        </tbody>
+    </table>
+    </div>
+    <div class="ac-modal" id="acModalLote" role="dialog" aria-modal="true">
+        <div class="sm:max-w-md">
+            <div class="px-5 py-4 border-b border-gray-100"><h3 class="font-bold">Concluir pendências</h3></div>
+            <div class="p-5 text-sm text-gray-700 space-y-2">
+                <p><strong id="acLoteResumo"></strong></p>
+                <p>Os sistemas vazios ou PENDENTE viram OK. BLACKLIST não muda, e quem está na Etapa 4 precisa passar pela liberação.</p>
+                <p class="text-amber-800 bg-amber-50 rounded-lg p-2">Confirme só depois de verificar que as ações foram feitas nos sistemas externos.</p>
+            </div>
+            <div class="px-5 py-3 border-t border-gray-100 bg-gray-50 flex justify-end gap-2"><button type="button" data-fechar class="ac-btn ac-btn-claro">Cancelar</button><button type="submit" class="ac-btn ac-btn-pri">Confirmar</button></div>
+        </div>
+    </div>
+</form>
+{% endif %}
+
+{% if chamados_abertos is not None %}
+<div class="ac-card overflow-hidden">
+    <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between"><h2 class="font-bold text-gray-900 text-sm"><i class="fas fa-headset text-indigo-500 mr-1.5"></i>Chamados em acompanhamento</h2><a href="{% url 'acess:chamados' %}" class="text-xs text-amber-700 hover:underline">ver todos</a></div>
+    <ul class="divide-y divide-gray-100 text-sm">
+        {% for ch in chamados_abertos %}
+        <li><details class="ac-det px-4 py-2.5"><summary class="flex items-center gap-3">
+            <span class="ac-chip {% if ch.sla_vencido %}bg-red-100 text-red-700{% elif ch.verificacao_vencida %}bg-amber-100 text-amber-800{% else %}bg-indigo-50 text-indigo-700{% endif %}">#{{ ch.codigo }}</span>
+            <span class="flex-1 min-w-0 truncate">{{ ch.colaborador.nome }} · {{ ch.get_motivo_display }}</span>
+            <span class="text-[11px] tabular {% if ch.verificacao_vencida %}text-red-600 font-semibold{% else %}text-gray-500{% endif %}">verificar {{ ch.proxima_verificacao|date:"d/m H:i" }}</span></summary>
+            <div class="text-xs text-gray-600 mt-2 pl-1 space-y-0.5">
+                <p>Prazo original: {{ ch.sla_original|date:"d/m/Y H:i" }}{% if ch.sla_vencido %} <span class="text-red-600 font-semibold">(SLA vencido)</span>{% endif %} · responsável: {{ ch.responsavel.get_full_name|default:"sem responsável" }}</p>
+                {% if ch.sistemas %}<p>Sistemas: {{ ch.sistemas|join:", " }}</p>{% endif %}
+                <a href="{% url 'acess:chamados' %}?q={{ ch.codigo|urlencode }}" class="text-amber-700 hover:underline">abrir o chamado</a>
+            </div></details></li>
+        {% empty %}<li class="px-4 py-6 text-center text-gray-400">Nenhum chamado aberto.</li>{% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+{% include 'acess/_whatsapp.html' %}
+<script>
+(function () {
+    var marcas = function () { return Array.prototype.slice.call(document.querySelectorAll('.ac-marca')); };
+    function atualizar() {
+        var m = marcas().filter(function (c) { return c.checked; });
+        var b = document.getElementById('acBtnLote'); if (b) b.disabled = !m.length;
+        var n = m.reduce(function (s, c) { return s + (+c.dataset.n || 0); }, 0);
+        var r = document.getElementById('acLoteResumo'); if (r) r.textContent = m.length + ' colaborador(es) · ' + n + ' pendência(s)';
+    }
+    document.addEventListener('change', function (e) { if (e.target.classList.contains('ac-marca')) atualizar(); });
+    var t = document.getElementById('acTodos');
+    if (t) t.addEventListener('change', function () { marcas().forEach(function (c) { c.checked = t.checked; }); atualizar(); });
+})();
+</script>
+{% endblock %}

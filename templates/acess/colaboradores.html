@@ -1,0 +1,90 @@
+{% extends 'acess/base.html' %}
+{% block ac_titulo %}Acess · Colaboradores{% endblock %}
+{% block ac_cabecalho %}Colaboradores{% endblock %}
+{% block ac_subtitulo %}Diretório: ficha, duplicados e exportação em Excel{% endblock %}
+{% block ac_acoes %}
+<button type="button" class="ac-btn ac-btn-claro" data-abrir="#acExcel" {% if not colaboradores %}disabled{% endif %}><i class="fas fa-file-excel text-emerald-600"></i>Exportar Excel ({{ colaboradores|length }})</button>
+{% if p.colaboradores_cadastrar %}<button type="button" class="ac-btn ac-btn-pri" data-abrir="#acNovo"><i class="fas fa-user-plus"></i>Novo colaborador</button>{% endif %}
+{% endblock %}
+
+{% block ac_conteudo %}
+{% include 'acess/_filtros.html' with mostrar_dup=True %}
+<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+    <div class="ac-card p-3"><p class="text-[11px] uppercase font-semibold text-gray-500">Total</p><p class="text-xl font-bold tabular">{{ k_total }}</p></div>
+    <a href="?acessos=sem" class="ac-card p-3 hover:border-amber-300"><p class="text-[11px] uppercase font-semibold text-gray-500">Sem pendências</p><p class="text-xl font-bold tabular text-emerald-700">{{ k_ok }}</p></a>
+    <a href="?acessos=com" class="ac-card p-3 hover:border-amber-300"><p class="text-[11px] uppercase font-semibold text-gray-500">Com pendências</p><p class="text-xl font-bold tabular text-amber-700">{{ k_pend }}</p></a>
+    <a href="{% url 'acess:lojas' %}" class="ac-card p-3 hover:border-amber-300"><p class="text-[11px] uppercase font-semibold text-gray-500">Unidades</p><p class="text-xl font-bold tabular">{{ k_unidades }}</p></a>
+</div>
+<div class="ac-card overflow-hidden">
+    <div class="overflow-x-auto">
+    <table class="ac-tabela">
+        <thead><tr><th>Nome</th><th>Cargo</th><th>Loja / ADABAS</th><th>Login</th><th>Situação</th><th></th></tr></thead>
+        <tbody>
+        {% for c in colaboradores %}
+        <tr class="cursor-pointer" onclick="if(!event.target.closest('button,a,summary,details'))location.href='{% url 'acess:ficha' c.id %}'">
+            <td class="min-w-[14rem]"><span class="font-semibold text-gray-900">{{ c.nome }}</span>
+                <button type="button" class="text-gray-400 hover:text-gray-700 ml-1" data-copiar="{{ c.nome }}" title="Copiar nome"><i class="far fa-copy"></i></button>
+                <details class="ac-det text-[11px] text-gray-500 mt-0.5"><summary class="text-amber-700">Detalhes do usuário</summary>
+                    <p>CPF {{ c.cpf_formatado|default:"—" }} · nascimento {{ c.nascimento|date:"d/m/Y"|default:"—" }}</p><p>{{ c.email|default:"sem e-mail" }}</p></details></td>
+            <td class="text-xs">{{ c.cargo|default:"Cargo não informado" }}</td>
+            <td class="text-xs">{{ c.local.name|default:"—" }}{% if c.loja_vinculo and c.loja_vinculo != c.local %}<span class="block text-indigo-600">vínculo {{ c.loja_vinculo.name }}</span>{% endif %}<span class="block text-gray-500 tabular">{{ c.unidade_adabas|default:"ADABAS não informado" }}</span></td>
+            <td class="tabular">{% if c.login %}{{ c.login }} <button type="button" class="text-gray-400 hover:text-gray-700" data-copiar="{{ c.login }}" title="Copiar login"><i class="far fa-copy"></i></button>{% else %}<span class="text-gray-400">—</span>{% endif %}</td>
+            <td><span class="ac-chip s-{% if c.situacao == 'Pendente' %}PENDENTE{% else %}{{ c.situacao }}{% endif %}">{{ c.situacao }}</span>{% if c.etapa_calculada %}<span class="block text-[11px] text-gray-500 mt-0.5">etapa {{ c.etapa_calculada }}</span>{% endif %}</td>
+            <td class="text-right whitespace-nowrap">
+                {% if c.telefone %}<button type="button" class="ac-btn ac-btn-claro ac-btn-mini" data-wa="{% url 'acess:whatsapp' c.id %}" data-modelo="contato" title="WhatsApp"><i class="fab fa-whatsapp text-emerald-600"></i></button>{% endif %}
+                <a href="{% url 'acess:ficha' c.id %}" class="ac-btn ac-btn-claro ac-btn-mini" title="Ficha"><i class="fas fa-pen"></i></a>
+            </td>
+        </tr>
+        {% empty %}<tr><td colspan="6" class="text-center text-gray-400 py-10">Nenhum colaborador encontrado. Revise a pesquisa e os filtros.</td></tr>{% endfor %}
+        </tbody>
+    </table>
+    </div>
+</div>
+
+<div class="ac-modal" id="acExcel" role="dialog" aria-modal="true">
+    <div class="sm:max-w-md">
+        <form method="get" action="{% url 'acess:exportar' %}">
+            {% for k, v in request.GET.items %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+            <div class="px-5 py-4 border-b border-gray-100"><h3 class="font-bold">Exportar {{ colaboradores|length }} colaborador(es)</h3><p class="text-xs text-gray-500">Vale a lista com os filtros atuais. Sistemas, senhas e histórico não vão no arquivo.</p></div>
+            <div class="p-5">
+                <div class="flex gap-3 text-xs mb-2"><button type="button" class="text-amber-700 hover:underline" onclick="this.form.querySelectorAll('[name=col]').forEach(function(c){c.checked=true})">Selecionar todas</button><button type="button" class="text-gray-500 hover:underline" onclick="this.form.querySelectorAll('[name=col]').forEach(function(c){c.checked=false})">Desmarcar todas</button></div>
+                <div class="grid grid-cols-2 gap-1.5">{% for k, r in colunas_excel %}<label class="flex items-center gap-2 text-sm"><input type="checkbox" name="col" value="{{ k }}" {% if k in 'nome cpf cargo local adabas login' %}checked{% endif %} class="accent-amber-600">{{ r }}</label>{% endfor %}</div>
+            </div>
+            <div class="px-5 py-3 border-t border-gray-100 bg-gray-50 flex justify-end gap-2"><button type="button" data-fechar class="ac-btn ac-btn-claro">Cancelar</button><button class="ac-btn ac-btn-pri" data-livre><i class="fas fa-download"></i>Baixar Excel</button></div>
+        </form>
+    </div>
+</div>
+
+{% if p.colaboradores_cadastrar %}
+<div class="ac-modal" id="acNovo" role="dialog" aria-modal="true">
+    <div class="sm:max-w-xl">
+        <form method="post" action="{% url 'acess:novo' %}">
+            {% csrf_token %}
+            <div class="px-5 py-4 border-b border-gray-100"><h3 class="font-bold">Novo colaborador</h3><p class="text-xs text-gray-500">Quem tem pré-cadastro aprovado já entra sozinho. Aqui é para os demais.</p></div>
+            <div class="p-5 grid grid-cols-2 gap-3">
+                <div class="col-span-2"><label class="ac-label">Usuário do portal (preenche os dados)</label>
+                    <select name="user" class="ac-input" id="acNovoUser"><option value="">— cadastrar à mão —</option>{% for u in usuarios_sem_ficha %}<option value="{{ u.id }}">{{ u.get_full_name|default:u.email }}{% if u.sector %} · {{ u.sector.name }}{% endif %}</option>{% endfor %}</select></div>
+                <div class="col-span-2 ac-manual"><label class="ac-label">Nome *</label><input name="nome" class="ac-input"></div>
+                <div><label class="ac-label">CPF *</label><input name="cpf" inputmode="numeric" class="ac-input" placeholder="000.000.000-00"></div>
+                <div class="ac-manual"><label class="ac-label">Nascimento</label><input type="date" name="nascimento" class="ac-input"></div>
+                <div class="ac-manual"><label class="ac-label">E-mail</label><input name="email" class="ac-input"></div>
+                <div class="ac-manual"><label class="ac-label">Telefone</label><input name="telefone" class="ac-input"></div>
+                <div class="col-span-2 ac-manual"><label class="ac-label">Cargo (PERFIL GEFAC)</label><input name="cargo" class="ac-input" list="acCargos"><datalist id="acCargos">{% for c in cargos %}<option>{{ c }}</option>{% endfor %}</datalist></div>
+                <div><label class="ac-label">Local de trabalho *</label><select name="local" class="ac-input"><option value="">{% if usuarios_sem_ficha %}o do cadastro do portal{% else %}Escolha…{% endif %}</option>{% for s in unidades %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}</select></div>
+                <div><label class="ac-label">Loja de vínculo</label><select name="loja_vinculo" class="ac-input"><option value="">—</option>{% for s in unidades %}{% if s.adabas %}<option value="{{ s.id }}">{{ s.name }}</option>{% endif %}{% endfor %}</select></div>
+                <p class="col-span-2 text-[11px] text-gray-500">Os 13 sistemas começam PENDENTE e a pessoa entra na Etapa 1 (GEFAC).</p>
+            </div>
+            <div class="px-5 py-3 border-t border-gray-100 bg-gray-50 flex justify-end gap-2"><button type="button" data-fechar class="ac-btn ac-btn-claro">Cancelar</button><button type="submit" class="ac-btn ac-btn-pri">Cadastrar</button></div>
+        </form>
+    </div>
+</div>
+<script>
+(function () {
+    var s = document.getElementById('acNovoUser');
+    function alternar() { document.querySelectorAll('.ac-manual').forEach(function (el) { el.hidden = !!s.value; }); }
+    s.addEventListener('change', alternar); alternar();
+})();
+</script>
+{% endif %}
+{% include 'acess/_whatsapp.html' %}
+{% endblock %}

@@ -1,0 +1,27 @@
+{% extends 'acess/base.html' %}
+{% block ac_titulo %}Acess · Logins liberados{% endblock %}
+{% block ac_cabecalho %}Logins liberados{% endblock %}
+{% block ac_subtitulo %}Quem teve a entrega do login confirmada — a data é a da confirmação registrada no portal{% endblock %}
+
+{% block ac_conteudo %}
+{% include 'acess/_filtros.html' %}
+<div class="ac-card overflow-hidden">
+    <div class="overflow-x-auto">
+    <table class="ac-tabela">
+        <thead><tr><th>Liberado em</th><th>Colaborador</th><th>Local / vínculo</th><th>ADABAS</th><th>Matrícula</th><th></th></tr></thead>
+        <tbody>
+        {% for c in colaboradores %}
+        <tr>
+            <td class="tabular whitespace-nowrap">{% if c.liberado_em %}{{ c.liberado_em|date:"d/m/Y H:i" }}{% else %}<span class="text-gray-400">sem data registrada</span>{% endif %}</td>
+            <td><span class="font-semibold text-gray-900">{{ c.nome }}</span> <span class="text-[11px] text-gray-500">{{ c.cargo }}</span>{% if c.status == 'DESLIGADO' %} <span class="ac-chip bg-red-100 text-red-700">desligado</span>{% endif %}</td>
+            <td class="text-xs">{{ c.local.name|default:"—" }}{% if c.loja_vinculo and c.loja_vinculo != c.local %}<span class="block text-indigo-600">vínculo {{ c.loja_vinculo.name }}</span>{% endif %}</td>
+            <td class="tabular text-xs">{{ c.unidade_adabas|default:"—" }}</td>
+            <td class="tabular">{{ c.login }} <button type="button" class="text-gray-400 hover:text-gray-700" data-copiar="{{ c.login }}"><i class="far fa-copy"></i></button></td>
+            <td class="text-right"><a href="{% url 'acess:ficha' c.id %}" class="ac-btn ac-btn-claro ac-btn-mini">Ficha</a></td>
+        </tr>
+        {% empty %}<tr><td colspan="6" class="text-center text-gray-400 py-10">Nenhuma liberação confirmada com esses filtros.</td></tr>{% endfor %}
+        </tbody>
+    </table>
+    </div>
+</div>
+{% endblock %}

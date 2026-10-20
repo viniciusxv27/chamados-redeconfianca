@@ -2242,6 +2242,13 @@ def approve_pre_registration_view(request, user_id):
         f'Pré-cadastro aprovado: {target.full_name} ({target.email})',
         request
     )
+    # Aprovado o pré-cadastro, a pessoa já entra na esteira de acessos (Acess, Etapa 1 — GEFAC).
+    try:
+        from acess.servicos import entrar_no_fluxo
+        entrar_no_fluxo(target, por=request.user, request=request)
+    except Exception:  # noqa: BLE001 — o Acess não pode impedir a aprovação
+        import logging
+        logging.getLogger(__name__).exception('Pré-cadastro %s não entrou no Acess', target.pk)
     messages.success(request, f'Pré-cadastro de {target.full_name} aprovado.')
     return redirect(_safe_next_url(request))
 

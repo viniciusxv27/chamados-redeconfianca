@@ -1,0 +1,53 @@
+{% comment %}
+Botões data-wa="url" data-modelo="chave" (opcional data-senha="1" para pedir a senha).
+Prepara o texto no servidor e abre o WhatsApp; o envio é do operador — o portal não manda nada.
+{% endcomment %}
+<div class="ac-modal" id="acModalWa" role="dialog" aria-modal="true">
+    <div class="sm:max-w-lg">
+        <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between"><h3 class="font-bold"><i class="fab fa-whatsapp text-emerald-600 mr-1"></i>Mensagem pelo WhatsApp</h3>
+            <button type="button" data-fechar class="w-8 h-8 rounded-lg text-gray-400 hover:bg-gray-100" aria-label="Fechar"><i class="fas fa-xmark"></i></button></div>
+        <div class="p-5 space-y-3 text-sm">
+            <div id="acWaSenha" hidden><label class="ac-label">Senha a comunicar (não fica gravada)</label><input type="text" id="acWaSenhaInput" class="ac-input" autocomplete="off"></div>
+            <div><label class="ac-label">Modelo</label><select id="acWaModelo" class="ac-input">{% for m in modelos %}<option value="{{ m.chave }}">{{ m.titulo }}</option>{% endfor %}</select></div>
+            <button type="button" id="acWaGerar" class="ac-btn ac-btn-claro"><i class="fas fa-wand-magic-sparkles"></i>Montar mensagem</button>
+            <p id="acWaErro" class="text-red-600 text-sm" hidden></p>
+            <textarea id="acWaTexto" rows="6" class="ac-input" readonly hidden></textarea>
+            <p class="text-[11px] text-gray-500">Abrir o WhatsApp não confirma o envio: quem envia é você.</p>
+        </div>
+        <div class="px-5 py-3 border-t border-gray-100 bg-gray-50 flex justify-end gap-2">
+            <button type="button" id="acWaCopiar" class="ac-btn ac-btn-claro" disabled><i class="far fa-copy"></i>Copiar</button>
+            <a id="acWaAbrir" href="#" target="_blank" rel="noopener" class="ac-btn ac-btn-pri pointer-events-none opacity-50"><i class="fab fa-whatsapp"></i>Abrir WhatsApp</a>
+        </div>
+    </div>
+</div>
+<script>
+(function () {
+    var url = '', modal = document.getElementById('acModalWa');
+    function limpar() {
+        document.getElementById('acWaErro').hidden = true; document.getElementById('acWaTexto').hidden = true;
+        document.getElementById('acWaCopiar').disabled = true;
+        var a = document.getElementById('acWaAbrir'); a.classList.add('pointer-events-none', 'opacity-50'); a.href = '#';
+    }
+    document.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-wa]'); if (!b) return;
+        url = b.dataset.wa; limpar();
+        if (b.dataset.modelo) document.getElementById('acWaModelo').value = b.dataset.modelo;
+        document.getElementById('acWaSenha').hidden = !b.dataset.senha;
+        document.getElementById('acWaSenhaInput').value = '';
+        modal.classList.add('aberto');
+        if (!b.dataset.senha) gerar();
+    });
+    function gerar() {
+        limpar();
+        acWhatsapp(url, document.getElementById('acWaModelo').value, document.getElementById('acWaSenhaInput').value).then(function (d) {
+            if (!d.ok) { var e = document.getElementById('acWaErro'); e.textContent = d.erro; e.hidden = false; return; }
+            var t = document.getElementById('acWaTexto'); t.value = d.texto; t.hidden = false;
+            document.getElementById('acWaCopiar').disabled = false;
+            var a = document.getElementById('acWaAbrir'); a.href = d.link; a.classList.remove('pointer-events-none', 'opacity-50');
+        });
+    }
+    document.getElementById('acWaGerar').addEventListener('click', gerar);
+    document.getElementById('acWaModelo').addEventListener('change', limpar);
+    document.getElementById('acWaCopiar').addEventListener('click', function () { navigator.clipboard.writeText(document.getElementById('acWaTexto').value); this.innerHTML = '<i class="fas fa-check"></i>Copiado'; });
+})();
+</script>

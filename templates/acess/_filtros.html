@@ -1,0 +1,17 @@
+{% comment %}Filtros comuns: pesquisa, cargo, estado, local, vínculo e acessos. Param opcional: extra (html de campos a mais).{% endcomment %}
+<form method="get" class="ac-card p-3 mb-4">
+    {% if etapa %}<input type="hidden" name="etapa" value="{{ etapa }}">{% endif %}
+    <div class="grid grid-cols-2 md:grid-cols-7 gap-2 items-end">
+        <div class="col-span-2"><label class="ac-label">Pesquisa</label><input type="search" name="q" value="{{ filtro.q }}" placeholder="Nome, e-mail, login, CPF ou ADABAS" class="ac-input"></div>
+        <div><label class="ac-label">Cargo</label><select name="cargo" class="ac-input"><option value="">Todos</option><option value="-" {% if filtro.cargo == '-' %}selected{% endif %}>Cargo não informado</option>{% for c in cargos %}<option {% if filtro.cargo == c %}selected{% endif %}>{{ c }}</option>{% endfor %}</select></div>
+        <div><label class="ac-label">Estado</label><select name="uf" class="ac-input"><option value="">Todos</option>{% for u in ufs %}<option {% if filtro.uf == u %}selected{% endif %}>{{ u }}</option>{% endfor %}</select></div>
+        <div><label class="ac-label">Local de trabalho</label><select name="local" class="ac-input"><option value="">Todos</option>{% for s in unidades %}<option value="{{ s.id }}" {% if filtro.local == s.id|stringformat:'s' %}selected{% endif %}>{{ s.name }}</option>{% endfor %}</select></div>
+        <div><label class="ac-label">Loja de vínculo</label><select name="vinculo" class="ac-input"><option value="">Todas</option><option value="-" {% if filtro.vinculo == '-' %}selected{% endif %}>Não informado</option>{% for s in unidades %}<option value="{{ s.id }}" {% if filtro.vinculo == s.id|stringformat:'s' %}selected{% endif %}>{{ s.name }}</option>{% endfor %}</select></div>
+        <div><label class="ac-label">Acessos</label><select name="acessos" class="ac-input"><option value="">Todos</option><option value="com" {% if filtro.acessos == 'com' %}selected{% endif %}>Com pendências</option><option value="sem" {% if filtro.acessos == 'sem' %}selected{% endif %}>Sem pendências</option></select></div>
+    </div>
+    <div class="flex flex-wrap justify-end gap-2 mt-2">
+        {% if mostrar_dup %}<a href="?dup={% if filtro.dup != "1" %}1{% endif %}" class="ac-btn ac-btn-claro {% if filtro.dup == "1" %}!border-amber-400 !bg-amber-50{% endif %} {% if not n_duplicados %}opacity-50 pointer-events-none{% endif %}" title="CPF, login, e-mail ou nome + nascimento repetidos"><i class="fas fa-clone"></i>Duplicados ({{ n_duplicados }})</a>{% endif %}
+        <a href="?{% if etapa %}etapa={{ etapa }}{% endif %}" class="ac-btn ac-btn-claro">Limpar filtros</a>
+        <button class="ac-btn ac-btn-pri" data-livre><i class="fas fa-filter"></i>Filtrar</button>
+    </div>
+</form>

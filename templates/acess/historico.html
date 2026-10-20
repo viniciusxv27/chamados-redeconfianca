@@ -1,0 +1,39 @@
+{% extends 'acess/base.html' %}
+{% block ac_titulo %}Acess · Histórico{% endblock %}
+{% block ac_cabecalho %}Histórico{% endblock %}
+{% block ac_subtitulo %}Quem fez cada alteração, quando, de onde, com o antes e o depois{% endblock %}
+
+{% block ac_conteudo %}
+<form method="get" class="ac-card p-3 mb-4 grid grid-cols-2 md:grid-cols-6 gap-2 items-end">
+    <div class="col-span-2"><label class="ac-label">Pesquisa</label><input type="search" name="q" value="{{ filtro.q }}" class="ac-input" placeholder="Descrição, operador ou colaborador"></div>
+    <div><label class="ac-label">Categoria</label><select name="categoria" class="ac-input"><option value="">Todas</option>{% for k, r in categorias %}{% if k != 'ADMIN' or e_superadmin %}<option value="{{ k }}" {% if filtro.categoria == k %}selected{% endif %}>{{ r }}</option>{% endif %}{% endfor %}</select></div>
+    <div><label class="ac-label">Loja</label><select name="local" class="ac-input"><option value="">Todas</option>{% for s in unidades %}<option value="{{ s.id }}" {% if filtro.local == s.id|stringformat:'s' %}selected{% endif %}>{{ s.name }}</option>{% endfor %}</select></div>
+    <div><label class="ac-label">De</label><input type="date" name="de" value="{{ filtro.de }}" class="ac-input"></div>
+    <div><label class="ac-label">Até</label><input type="date" name="ate" value="{{ filtro.ate }}" class="ac-input"></div>
+    <div class="col-span-2 md:col-span-6 flex justify-end gap-2"><a href="?" class="ac-btn ac-btn-claro">Limpar</a><button class="ac-btn ac-btn-pri" data-livre><i class="fas fa-filter"></i>Filtrar</button></div>
+</form>
+<div class="ac-card overflow-hidden">
+    <div class="overflow-x-auto">
+    <table class="ac-tabela">
+        <thead><tr><th>Quando</th><th>Operador</th><th>O que</th><th>Colaborador</th><th>De onde</th></tr></thead>
+        <tbody>
+        {% for r in registros %}
+        <tr>
+            <td class="tabular whitespace-nowrap text-xs">{{ r.quando|date:"d/m/Y" }}<span class="block text-gray-500">{{ r.quando|date:"H:i:s" }}</span></td>
+            <td class="text-xs whitespace-nowrap font-semibold">{{ r.usuario_nome }}</td>
+            <td class="min-w-[18rem]"><span class="ac-chip bg-gray-100 text-gray-700 mr-1">{{ r.get_categoria_display }}</span>{{ r.descricao }}
+                {% if r.depois %}<details class="ac-det mt-1"><summary class="text-[11px] text-amber-700">detalhes</summary>
+                    <dl class="text-[11px] mt-1">{% for k, v in r.depois.items %}<div><dt class="inline text-gray-500">{{ k }}:</dt> <dd class="inline">{% if r.antes %}{% for k2, v2 in r.antes.items %}{% if k2 == k %}<s class="text-red-600">{{ v2|default:"—" }}</s> → {% endif %}{% endfor %}{% endif %}<span class="text-emerald-700">{{ v|default:"—" }}</span></dd></div>{% endfor %}</dl></details>{% endif %}</td>
+            <td class="text-xs">{% if r.colaborador %}<a href="{% url 'acess:ficha' r.colaborador_id %}" class="text-amber-700 hover:underline">{{ r.colaborador.nome }}</a><span class="block text-gray-500">{{ r.colaborador.local.name|default:"" }}</span>{% else %}—{% endif %}</td>
+            <td class="text-[11px] text-gray-500">IP {{ r.ip|default:"—" }}</td>
+        </tr>
+        {% empty %}<tr><td colspan="5" class="text-center text-gray-400 py-10">Nenhum registro.</td></tr>{% endfor %}
+        </tbody>
+    </table>
+    </div>
+    {% if pagina.has_other_pages %}
+    <div class="px-4 py-3 border-t border-gray-100 flex justify-between text-sm"><span class="text-gray-500">Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span>
+        <div class="flex gap-2">{% if pagina.has_previous %}<a href="?{{ query }}&p={{ pagina.previous_page_number }}" class="ac-btn ac-btn-claro">Anterior</a>{% endif %}{% if pagina.has_next %}<a href="?{{ query }}&p={{ pagina.next_page_number }}" class="ac-btn ac-btn-claro">Próxima</a>{% endif %}</div></div>
+    {% endif %}
+</div>
+{% endblock %}
