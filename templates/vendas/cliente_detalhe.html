@@ -7,7 +7,7 @@
 {% block vd_subtitulo %}<span class="tabular">{{ cliente.cpf_formatado }}</span> · {% if cliente.origem == 'VIVOGO' %}base do Vivo GO{% else %}cadastrado no portal{% endif %}{% endblock %}
 {% block vd_acoes %}
 <a href="{% url 'vendas:clientes' %}" class="inline-flex items-center gap-2 px-3.5 py-2 vd-card text-gray-700 text-sm font-semibold hover:bg-gray-50"><i class="fas fa-arrow-left"></i>Clientes</a>
-<a href="{% url 'vendas:venda_create' %}?cpf={{ cliente.cpf }}" class="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-lg"><i class="fas fa-cart-plus"></i>Nova venda para este cliente</a>
+{% if vd_pode.vendas_lancar %}<a href="{% url 'vendas:venda_create' %}?cpf={{ cliente.cpf }}" class="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-lg"><i class="fas fa-cart-plus"></i>Nova venda para este cliente</a>{% endif %}
 {% endblock %}
 
 {% block vd_conteudo %}

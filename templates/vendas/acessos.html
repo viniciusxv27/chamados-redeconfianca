@@ -1,0 +1,67 @@
+{% extends "vendas/_base_vendas.html" %}
+
+{% block title %}Acessos — Vendas{% endblock %}
+{% block vd_icone %}fa-user-shield{% endblock %}
+{% block vd_cabecalho %}Quem entra em Vendas{% endblock %}
+{% block vd_subtitulo %}O SUPERADMIN tem tudo. Aqui ele libera, pessoa por pessoa, cada parte do módulo.{% endblock %}
+
+{% block vd_conteudo %}
+<div class="space-y-3">
+    <details class="vd-card overflow-hidden" id="vdNovoAcesso" {% if not liberados %}open{% endif %}>
+        <summary class="px-5 py-3 flex items-center gap-2 cursor-pointer font-semibold text-purple-700"><i class="fas fa-user-plus"></i>Liberar alguém</summary>
+        <form method="post" class="border-t border-gray-100">
+            {% csrf_token %}
+            <div class="px-5 pt-4">
+                <label class="vd-rotulo">Pessoa</label>
+                <input type="search" id="vdBuscaPessoa" placeholder="Buscar por nome ou loja…" class="vd-campo mb-2">
+                <div class="border border-gray-200 rounded-lg max-h-48 overflow-y-auto divide-y divide-gray-50">
+                    {% for u in candidatos %}<label data-p="{{ u.get_full_name|default:u.email|lower }} {{ u.sector.name|default:''|lower }}" class="flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-purple-50/50 cursor-pointer"><input type="radio" name="user" value="{{ u.id }}" required class="accent-purple-600">{{ u.get_full_name|default:u.email }}{% if u.sector %}<span class="text-[11px] text-gray-400">{{ u.sector.name }}</span>{% endif %}</label>{% endfor %}
+                </div>
+            </div>
+            {% include 'vendas/_matriz_acesso.html' with chaves=None acesso=None %}
+            <div class="px-5 py-3 border-t border-gray-100 bg-gray-50 flex justify-end">
+                <button type="submit" class="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-lg"><i class="fas fa-check"></i>Liberar</button>
+            </div>
+        </form>
+    </details>
+
+    {% for a in liberados %}
+    <details class="vd-card overflow-hidden">
+        <summary class="px-5 py-3 flex items-center justify-between gap-3 cursor-pointer">
+            <div class="min-w-0">
+                <p class="font-semibold text-gray-900">{{ a.user.get_full_name|default:a.user.email }}{% if not a.ativo %} <span class="ml-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[11px]">suspenso</span>{% endif %}</p>
+                <p class="text-[11px] text-gray-500">{% if a.user.sector %}{{ a.user.sector.name }} · {% endif %}{{ a.chaves|length }} função(ões) · por {{ a.concedido_por.get_full_name|default:"—" }} em {{ a.atualizado_em|date:"d/m/Y H:i" }}{% if a.observacao %} · {{ a.observacao }}{% endif %}</p>
+                <p class="mt-1 flex flex-wrap gap-1">{% for chave, rotulo, _d, _e in funcoes %}{% if chave in a.chaves %}<span class="px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 text-[11px]">{{ rotulo }}</span>{% endif %}{% endfor %}</p>
+            </div>
+            <span class="text-xs text-purple-700 shrink-0">editar</span>
+        </summary>
+        <form method="post" class="border-t border-gray-100">
+            {% csrf_token %}<input type="hidden" name="user" value="{{ a.user_id }}">
+            {% include 'vendas/_matriz_acesso.html' with chaves=a.chaves acesso=a %}
+            <div class="px-5 py-3 bg-gray-50 border-t border-gray-100 flex justify-between">
+                <button type="submit" name="remover" value="1" formnovalidate class="text-sm text-red-600 hover:underline" onclick="return confirm('Tirar o acesso a Vendas?')">Tirar acesso</button>
+                <button type="submit" class="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-lg"><i class="fas fa-check"></i>Salvar</button>
+            </div>
+        </form>
+    </details>
+    {% empty %}
+    <div class="vd-card p-10 text-center text-gray-500"><i class="fas fa-user-shield text-3xl text-gray-300 mb-2"></i><p>Ninguém liberado ainda — só o SUPERADMIN entra em Vendas.</p></div>
+    {% endfor %}
+
+    {% if historico %}
+    <details class="vd-card overflow-hidden">
+        <summary class="px-5 py-3 font-semibold text-sm cursor-pointer"><i class="fas fa-clock-rotate-left text-gray-400 mr-1.5"></i>Histórico de liberações</summary>
+        <ul class="divide-y divide-gray-100 text-sm border-t border-gray-100">
+            {% for h in historico %}<li class="px-5 py-2"><span class="font-semibold">{{ h.objeto_rotulo }}</span> · {{ h.rotulo }}: <span class="text-gray-500">{{ h.antes|default:"—" }}</span> → <span class="text-gray-900">{{ h.depois|default:"—" }}</span>
+                <span class="block text-[11px] text-gray-400">{{ h.usuario_nome|default:"—" }} em {{ h.quando|date:"d/m/Y H:i" }}</span></li>{% endfor %}
+        </ul>
+    </details>
+    {% endif %}
+</div>
+<script>
+document.getElementById('vdBuscaPessoa').addEventListener('input', function () {
+    var t = this.value.trim().toLowerCase();
+    document.querySelectorAll('#vdNovoAcesso [data-p]').forEach(function (el) { el.hidden = t && el.dataset.p.indexOf(t) < 0; });
+});
+</script>
+{% endblock %}

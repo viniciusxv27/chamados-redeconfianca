@@ -1,0 +1,14 @@
+{% comment %}As funções de Vendas (chaves = o que já está liberado) + situação e observação.{% endcomment %}
+<div class="px-5 py-4">
+    <div class="grid sm:grid-cols-2 gap-x-6 gap-y-2.5">
+        {% for chave, rotulo, descricao, _exige in funcoes %}
+        <label class="flex items-start gap-2 text-sm cursor-pointer"><input type="checkbox" name="permissoes" value="{{ chave }}" {% if chaves and chave in chaves %}checked{% endif %} class="mt-1 accent-purple-600">
+            <span><strong class="text-gray-800">{{ rotulo }}</strong><span class="block text-[11px] text-gray-500">{{ descricao }}</span></span></label>
+        {% endfor %}
+    </div>
+    <p class="text-[11px] text-gray-500 mt-3">Toda função leva junto "Ver módulo"; "Lançar por outra loja/vendedor" leva "Lançar venda" e "Atualizar base do Vivo GO" leva "Consultar clientes".</p>
+    <div class="grid sm:grid-cols-2 gap-3 mt-3 items-center">
+        <label class="flex items-center gap-2 text-sm"><input type="hidden" name="ativo" value="off"><input type="checkbox" name="ativo" value="on" {% if not acesso or acesso.ativo %}checked{% endif %} class="accent-purple-600">Acesso ativo</label>
+        <input name="observacao" maxlength="200" value="{{ acesso.observacao|default:'' }}" placeholder="Observação (opcional)" class="vd-campo">
+    </div>
+</div>

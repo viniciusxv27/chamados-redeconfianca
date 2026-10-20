@@ -366,7 +366,7 @@ class RegistroAlteracao(models.Model):
     """[Confiabilidade.NF001] Histórico: data, usuário, PDV, valor anterior e novo."""
 
     TIPOS = [('PLANO', 'Plano'), ('VIVO_MAIS', 'Percentual Vivo+'), ('CLIENTE', 'Cliente'), ('SERIAL', 'Serial obrigatório'),
-             ('SERVICO_ADICIONAL', 'Seguro / SVA')]
+             ('SERVICO_ADICIONAL', 'Seguro / SVA'), ('ACESSO', 'Acesso ao módulo')]
     tipo = models.CharField(max_length=20, choices=TIPOS, db_index=True, verbose_name='O que mudou')
     objeto_id = models.PositiveIntegerField(null=True, blank=True, db_index=True)
     objeto_rotulo = models.CharField(max_length=200, blank=True, verbose_name='Registro')
@@ -463,3 +463,20 @@ class SincronizacaoVivoGo(models.Model):
     @classmethod
     def get(cls):
         return cls.objects.order_by('id').first() or cls.objects.create()
+
+
+class AcessoVendas(models.Model):
+    """O que o SUPERADMIN liberou para uma pessoa em Vendas (chaves de permissions.FUNCOES)."""
+
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='acesso_vendas')
+    ativo = models.BooleanField(default=True)
+    permissoes = models.JSONField(default=list, blank=True)
+    observacao = models.CharField(max_length=200, blank=True)
+    concedido_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                      related_name='+')
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Acesso a Vendas'
+        verbose_name_plural = 'Acessos a Vendas'

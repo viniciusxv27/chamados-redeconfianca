@@ -26,15 +26,9 @@ from users.models import Sector, User
 from . import slv
 from .models import (SEGMENTACOES, Cliente, ConfiguracaoVendas, ImportacaoPrecos, ItemPreco, Plano,
                      RegistroAlteracao, ServicoAdicional, Venda, VendaProduto, VendaServico)
-from .permissions import (can_access_vendas, is_superadmin, pode_gerenciar_precos,
-                          vendas_do_usuario)
+from .permissions import exige, pode, ve_rede, vendas_do_usuario
 from .clientes import buscar_historico
 from .services import importar_tabela_precos
-
-
-def _deny(request):
-    messages.error(request, 'Acesso restrito.')
-    return redirect('home')
 
 
 def _parse_decimal(raw):
@@ -101,15 +95,13 @@ def _filtrar_vendas(request):
 
 
 @login_required
+@exige('modulo.ver')
 def dashboard(request):
-    if not can_access_vendas(request.user):
-        return _deny(request)
-
     qs, filtros, filter_query_string = _filtrar_vendas(request)
 
     export_format = request.GET.get('export', '')
     if export_format in ('csv', 'xlsx'):
-        return venda_export(request)
+        return venda_export(request)  # o @exige do venda_export barra quem não exporta
 
     qs = qs.order_by('-data_venda', '-id')
     lista = qs.prefetch_related('produtos', 'servicos')
@@ -140,8 +132,6 @@ def dashboard(request):
         'vendedores': User.objects.filter(is_active=True).order_by('first_name', 'last_name'),
         'comprovante_choices': Venda.COMPROVANTE_CHOICES,
         'tipos_servico': VendaServico.TIPOS,
-        'is_superadmin': is_superadmin(request.user),
-        'pode_gerenciar_precos': pode_gerenciar_precos(request.user),
         'aba': 'vendas',
     }
     context.update(_indicadores(qs, request.user))
@@ -220,16 +210,15 @@ def _indicadores(qs, user):
                              .order_by('-total')[:6]),
     }
     # O ranking de gente e de loja só faz sentido para quem vê mais de uma.
-    if is_superadmin(user):
+    if ve_rede(user):
         indicadores['por_loja'] = _ranking('loja', 'loja__name')
         indicadores['por_vendedor'] = _ranking('vendedor', 'vendedor__first_name')
     return indicadores
 
 
 @login_required
+@exige('modulo.ver')
 def venda_detail(request, pk):
-    if not can_access_vendas(request.user):
-        return _deny(request)
     # O recorte vale aqui também: sem isso, trocar o número na URL abriria a
     # venda de qualquer um.
     venda = get_object_or_404(
@@ -239,22 +228,18 @@ def venda_detail(request, pk):
     )
     return render(request, 'vendas/venda_detail.html', {
         'venda': venda,
-        'is_superadmin': is_superadmin(request.user),
-        'pode_gerenciar_precos': pode_gerenciar_precos(request.user),
         'aba': 'vendas',
     })
 
 
 @login_required
+@exige('vendas.lancar')
 def venda_create(request):
     """[Início da venda.RF001] Nova venda: PDV e vendedor vêm do cadastro do portal.
 
     A tela manda a venda inteira em JSON; o servidor recalcula e valida tudo
     (slv.registrar_venda) e devolve todos os erros de uma vez.
     """
-    if not can_access_vendas(request.user):
-        return _deny(request)
-
     if request.method == 'POST':
         try:
             dados = json.loads(request.body or b'{}')
@@ -277,7 +262,7 @@ def _pdv_e_vendedor(request, dados):
     O PDV é o setor principal do usuário (é a loja dele no portal). Só o
     superadmin lança em nome de outra loja ou de outro vendedor.
     """
-    if is_superadmin(request.user):
+    if pode(request.user, 'vendas.lancar_outros'):
         loja = Sector.objects.filter(pk=dados.get('loja_id')).first() if str(dados.get('loja_id') or '').isdigit() else None
         vendedor = (User.objects.filter(pk=dados.get('vendedor_id'), is_active=True).first()
                     if str(dados.get('vendedor_id') or '').isdigit() else None)
@@ -292,7 +277,7 @@ def _lojas_do_vendedor(user):
     errada — e venda na loja errada é comissão na pessoa errada. O superadmin
     continua vendo todas, porque lança em nome de qualquer loja.
     """
-    if is_superadmin(user):
+    if pode(user, 'vendas.lancar_outros'):
         return Sector.objects.all().order_by('name')
     ids = {s.id for s in user.sectors.all()}
     if user.sector_id:
@@ -307,12 +292,11 @@ def _venda_form_context(request):
                   for a in ServicoAdicional.objects.filter(ativo=True)]
     return {
         'aba': 'nova',
-        'is_superadmin': is_superadmin(request.user),
-        'pode_gerenciar_precos': pode_gerenciar_precos(request.user),
         'agora': timezone.localtime(),
         'loja': request.user.sector,
         'lojas': _lojas_do_vendedor(request.user),
-        'vendedores': User.objects.filter(is_active=True).order_by('first_name', 'last_name') if is_superadmin(request.user) else [],
+        'vendedores': (User.objects.filter(is_active=True).order_by('first_name', 'last_name')
+                       if pode(request.user, 'vendas.lancar_outros') else []),
         'slv': {
             'planos': planos, 'adicionais': adicionais,
             'segmentacoes': SEGMENTACOES, 'tipos_servico': VendaServico.TIPOS,
@@ -365,10 +349,8 @@ def _servico_rows(vendas_qs):
 
 
 @login_required
+@exige('vendas.exportar')
 def venda_export(request):
-    if not can_access_vendas(request.user):
-        return _deny(request)
-
     qs, _filtros, _qsstr = _filtrar_vendas(request)
     tipo = request.GET.get('tipo', 'produto')
     fmt = request.GET.get('export', 'csv')
@@ -459,11 +441,9 @@ def _resumo_de_preco(item):
 
 
 @login_required
+@exige('modulo.ver')
 def precos(request):
     """A tabela de preços como catálogo: busca, abas, categorias e a tabela completa de cada produto."""
-    if not can_access_vendas(request.user):
-        return _deny(request)
-
     aba = request.GET.get('categoria', '').strip()
     search = request.GET.get('search', '').strip()
     subcategoria = request.GET.get('sub', '').strip()
@@ -520,7 +500,6 @@ def precos(request):
     parametros.pop('page', None)
     context = {
         'aba': 'precos',
-        'pode_gerenciar_precos': pode_gerenciar_precos(request.user),
         'cartoes': cartoes, 'itens': page, 'paginator': paginator,
         'categoria': aba, 'search': search, 'sub': subcategoria, 'marca': marca, 'ordem': ordem,
         'abas': [{'chave': k, 'rotulo': r, 'icone': ic, 'n': contagem_abas.get(k, 0)} for k, r, ic in ABAS_PRECOS],
@@ -535,10 +514,8 @@ def precos(request):
 
 
 @login_required
+@exige('produtos.importar')
 def precos_import(request):
-    if not pode_gerenciar_precos(request.user):
-        return _deny(request)
-
     if request.method == 'POST':
         f = request.FILES.get('arquivo')
         if not f or not (f.name or '').lower().endswith(('.xlsx', '.xlsm')):
@@ -560,14 +537,12 @@ def precos_import(request):
             messages.error(request, f'Falha ao importar — a tabela vigente não foi alterada: {exc}')
         return redirect('vendas:precos_import')
 
-    return render(request, 'vendas/precos_import.html', {'aba': 'precos', 'pode_gerenciar_precos': True, 'importacoes': ImportacaoPrecos.objects.select_related('usuario')[:15]})
+    return render(request, 'vendas/precos_import.html', {'aba': 'precos', 'importacoes': ImportacaoPrecos.objects.select_related('usuario')[:15]})
 
 
 @login_required
+@exige('produtos.criar')
 def precos_create(request):
-    if not pode_gerenciar_precos(request.user):
-        return _deny(request)
-
     if request.method == 'POST':
         nome = request.POST.get('nome', '').strip()
         categoria = request.POST.get('categoria', '').strip()
@@ -595,7 +570,7 @@ def precos_create(request):
 @login_required
 def cliente_historico(request):
     """JSON com o que este CPF já comprou na rede — do espelho do Vivo GO no Postgres (vendas/vivogo.py)."""
-    if not can_access_vendas(request.user):
+    if not (pode(request.user, 'vendas.lancar') or pode(request.user, 'clientes.ver')):
         return JsonResponse({'disponivel': False, 'erro': 'Acesso restrito.'}, status=403)
     from .models import CompraVivoGo
     cpf = slv.so_digitos(request.GET.get('cpf', ''))
@@ -618,7 +593,7 @@ def cliente_historico(request):
 @login_required
 def precos_buscar(request):
     """Autocomplete da tabela de preços (JSON) para o formulário de venda."""
-    if not can_access_vendas(request.user):
+    if not pode(request.user, 'modulo.ver'):
         return HttpResponse(status=403)
     from django.http import JsonResponse
 
@@ -692,7 +667,7 @@ def api_cliente(request):
     Só o cadastro do portal (Postgres): responde na hora ([Desempenho.NF001]).
     As compras antigas do Vivo GO (MySQL, lento) vêm à parte, por /vendas/cliente/.
     """
-    if not can_access_vendas(request.user):
+    if not pode(request.user, 'vendas.lancar'):
         return JsonResponse({'ok': False, 'erro': 'Acesso restrito.'}, status=403)
     cpf = slv.so_digitos(request.GET.get('cpf'))
     if not slv.cpf_valido(cpf):
@@ -715,7 +690,7 @@ def api_cliente(request):
 @require_POST
 def api_cliente_salvar(request):
     """[Início da venda.RF002 (novo) / RF003] Grava cadastro; o anterior vai para o histórico."""
-    if not can_access_vendas(request.user):
+    if not pode(request.user, 'vendas.lancar'):
         return JsonResponse({'ok': False, 'erro': 'Acesso restrito.'}, status=403)
     try:
         dados = json.loads(request.body or b'{}')
@@ -737,7 +712,7 @@ def api_cliente_salvar(request):
 @login_required
 def api_renova(request):
     """Confere o Código do Renova Vini contra os checklists do portal."""
-    if not can_access_vendas(request.user):
+    if not pode(request.user, 'vendas.lancar'):
         return JsonResponse({'ok': False}, status=403)
     renova = slv.renova_existe(request.GET.get('codigo'))
     if not renova:
@@ -751,9 +726,8 @@ def api_renova(request):
 # SLV — parametrização ([Parametrização.RF001/RF002], [Venda de serviços.RF008])
 # ---------------------------------------------------------------------------
 @login_required
+@exige('parametros.gerenciar')
 def parametros(request):
-    if not pode_gerenciar_precos(request.user):
-        return _deny(request)
     planos = list(Plano.objects.all())
     grupos = [{'chave': k, 'rotulo': r, 'planos': [p for p in planos if p.segmentacao == k]} for k, r in SEGMENTACOES]
     config = ConfiguracaoVendas.atual()
@@ -781,17 +755,15 @@ def parametros(request):
         'segmentacoes': SEGMENTACOES,
         'config': config,
         'adicionais': ServicoAdicional.objects.all(),
-        'historico': RegistroAlteracao.objects.exclude(tipo='CLIENTE').select_related('usuario')[:60],
-        'pode_gerenciar_precos': True,
+        'historico': RegistroAlteracao.objects.exclude(tipo__in=['CLIENTE', 'ACESSO']).select_related('usuario')[:60],
     })
 
 
 @login_required
 @require_POST
+@exige('parametros.gerenciar')
 def parametros_serial(request):
     """Categorias em que o serial do produto é obrigatório na venda."""
-    if not pode_gerenciar_precos(request.user):
-        return _deny(request)
     config = ConfiguracaoVendas.atual()
     antes = sorted(config.categorias_com_serial if config.categorias_com_serial is not None else slv.CATEGORIAS_SERIAL_PADRAO)
     depois = sorted({c.strip() for c in request.POST.getlist('categoria') if c.strip()})
@@ -810,10 +782,9 @@ def _voltar_parametros():
 
 @login_required
 @require_POST
+@exige('parametros.gerenciar')
 def parametros_plano(request):
     """Novo plano ou edição; inativar no lugar de excluir."""
-    if not pode_gerenciar_precos(request.user):
-        return _deny(request)
     plano = Plano.objects.filter(pk=request.POST.get('id')).first() if (request.POST.get('id') or '').isdigit() else None
     nome = (request.POST.get('nome') or '').strip()[:200]
     segmentacao = request.POST.get('segmentacao') or ''
@@ -841,9 +812,8 @@ def parametros_plano(request):
 
 @login_required
 @require_POST
+@exige('parametros.gerenciar')
 def parametros_vivo_mais(request):
-    if not pode_gerenciar_precos(request.user):
-        return _deny(request)
     percentual = slv.dinheiro((request.POST.get('percentual') or '').replace('%', ''))
     if percentual is None or not (0 <= percentual <= 100):
         messages.error(request, 'O percentual do Vivo+ precisa estar entre 0% e 100%.')
@@ -860,9 +830,8 @@ def parametros_vivo_mais(request):
 
 @login_required
 @require_POST
+@exige('parametros.gerenciar')
 def parametros_adicional(request):
-    if not pode_gerenciar_precos(request.user):
-        return _deny(request)
     item = (ServicoAdicional.objects.filter(pk=request.POST.get('id')).first()
             if (request.POST.get('id') or '').isdigit() else None)
     nome = (request.POST.get('nome') or '').strip()[:200]

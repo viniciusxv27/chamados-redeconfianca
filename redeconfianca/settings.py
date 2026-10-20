@@ -167,6 +167,7 @@ TEMPLATES = [
                 'webmail.context_processors.email_menu',
                 'financeiro.context_processors.financeiro_menu',
                 'acess.context_processors.acess_menu',
+                'vendas.context_processors.vendas_menu',
                 'tangerino.context_processors.tangerino_gate',
                 'contagem_caixa.context_processors.caixa_menu',
                 'maps.context_processors.coleta_posicao',

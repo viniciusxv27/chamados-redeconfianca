@@ -12,14 +12,13 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db.models import Q
-from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from . import slv, vivogo
 from .models import Cliente, CompraVivoGo, RegistroAlteracao, SincronizacaoVivoGo, Venda
-from .permissions import can_access_vendas, is_superadmin, pode_gerenciar_precos
+from .permissions import exige, ve_rede
 
 
 def _normal(texto):
@@ -41,7 +40,7 @@ def pdv_da_loja(loja):
 
 def clientes_do_usuario(user):
     qs = Cliente.objects.all()
-    if is_superadmin(user):
+    if ve_rede(user):
         return qs
     loja = getattr(user, 'sector', None)
     pdv = pdv_da_loja(loja)
@@ -52,10 +51,8 @@ def clientes_do_usuario(user):
 
 
 @login_required
+@exige('clientes.ver')
 def clientes(request):
-    if not can_access_vendas(request.user):
-        messages.error(request, 'Acesso restrito.')
-        return redirect('home')
     base = clientes_do_usuario(request.user)
     qs = base
     q = (request.GET.get('q') or '').strip()
@@ -79,7 +76,7 @@ def clientes(request):
     elif situacao == 'portal':
         qs = qs.filter(origem='PORTAL')
     pdv = request.GET.get('pdv') or ''
-    if pdv and is_superadmin(request.user):
+    if pdv and ve_rede(request.user):
         qs = qs.filter(pdv_ultimo=pdv)
     ordem = request.GET.get('ordem') or 'recentes'
     ordens = {'recentes': ['-ultima_compra', 'nome'], 'receita': ['-total_gasto', 'nome'], 'nome': ['nome'],
@@ -91,8 +88,6 @@ def clientes(request):
     sinc = SincronizacaoVivoGo.get()
     return render(request, 'vendas/clientes.html', {
         'aba': 'clientes',
-        'is_superadmin': is_superadmin(request.user),
-        'pode_gerenciar_precos': pode_gerenciar_precos(request.user),
         'pagina': pagina,
         'filtro': {'q': q, 'situacao': situacao, 'pdv': pdv, 'ordem': ordem},
         'query': parametros.urlencode(),
@@ -101,17 +96,15 @@ def clientes(request):
         'kpi_ativos': base.filter(ultima_compra__gte=hoje - timedelta(days=30)).count(),
         'kpi_recorrentes': base.filter(qtd_vendas__gte=2).count(),
         'pdvs': (list(Cliente.objects.exclude(pdv_ultimo='').values_list('pdv_ultimo', flat=True).distinct()
-                      .order_by('pdv_ultimo')) if is_superadmin(request.user) else []),
+                      .order_by('pdv_ultimo')) if ve_rede(request.user) else []),
         'sinc': sinc,
         'vivogo_configurado': vivogo.configurado(),
     })
 
 
 @login_required
+@exige('clientes.ver')
 def cliente_detalhe(request, cpf):
-    if not can_access_vendas(request.user):
-        messages.error(request, 'Acesso restrito.')
-        return redirect('home')
     cpf = slv.so_digitos(cpf)
     cliente = get_object_or_404(clientes_do_usuario(request.user), cpf=cpf)
     compras = list(CompraVivoGo.objects.filter(cpf=cpf).order_by('-data_venda', '-data_insercao')[:300])
@@ -125,8 +118,6 @@ def cliente_detalhe(request, cpf):
         indice[chave]['itens'].append(c)
     return render(request, 'vendas/cliente_detalhe.html', {
         'aba': 'clientes',
-        'is_superadmin': is_superadmin(request.user),
-        'pode_gerenciar_precos': pode_gerenciar_precos(request.user),
         'cliente': cliente,
         'vendas_vivogo': vendas_vivogo,
         'vendas_portal': Venda.objects.filter(cliente=cliente).prefetch_related('produtos', 'servicos')
@@ -139,10 +130,9 @@ def cliente_detalhe(request, cpf):
 
 @login_required
 @require_POST
+@exige('clientes.sincronizar')
 def clientes_sincronizar(request):
-    """O SUPERADMIN atualiza na hora (o automático roda de 5 em 5 minutos)."""
-    if not is_superadmin(request.user):
-        raise Http404
+    """Quem tem a função atualiza na hora (o automático roda de 5 em 5 minutos)."""
     try:
         resumo = vivogo.sincronizar()
         messages.success(request, f'Base do Vivo GO atualizada — {resumo}.')

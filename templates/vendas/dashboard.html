@@ -2,13 +2,14 @@
 {% load static vendas_tags %}
 
 {% block title %}Vendas{% endblock %}
-{% block vd_cabecalho %}{% if is_superadmin %}Vendas{% else %}Minhas vendas{% endif %}{% endblock %}
+{% block vd_cabecalho %}{% if vd_pode.rede_ver %}Vendas{% else %}Minhas vendas{% endif %}{% endblock %}
 {% block vd_subtitulo %}
-    {% if is_superadmin %}Toda a empresa · {{ paginator.count }} venda{{ paginator.count|pluralize }} no filtro atual
+    {% if vd_pode.rede_ver %}Toda a empresa · {{ paginator.count }} venda{{ paginator.count|pluralize }} no filtro atual
     {% else %}O que você vendeu ou lançou · {{ paginator.count }} venda{{ paginator.count|pluralize }}{% endif %}
 {% endblock %}
 
 {% block vd_acoes %}
+{% if vd_pode.vendas_exportar %}
 <div class="relative" id="vdExportar">
     <button type="button" class="inline-flex items-center gap-2 px-3.5 py-2 vd-card text-gray-700 text-sm font-semibold hover:bg-gray-50"
             onclick="document.getElementById('vdExportarMenu').classList.toggle('hidden')">
@@ -21,10 +22,13 @@
         <a class="block px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-700" href="?{{ filter_query_string }}&export=csv&tipo=servico"><i class="fas fa-file-csv mr-2 text-gray-400"></i>Serviços (CSV)</a>
     </div>
 </div>
+{% endif %}
+{% if vd_pode.vendas_lancar %}
 <a href="{% url 'vendas:venda_create' %}"
    class="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-lg shadow-sm shadow-purple-600/30">
     <i class="fas fa-plus"></i> Nova venda
 </a>
+{% endif %}
 {% endblock %}
 
 {% block vd_conteudo %}
@@ -134,7 +138,7 @@
             {% empty %}<p class="text-sm text-gray-400 py-4 text-center">Nenhum produto no filtro.</p>{% endfor %}
         </div>
     </div>
-    {% if is_superadmin %}
+    {% if vd_pode.rede_ver %}
     <div class="vd-card p-5">
         <div class="flex items-center justify-between mb-3">
             <h2 class="text-sm font-bold text-gray-800"><i class="fas fa-ranking-star text-pink-600 mr-1.5"></i>Ranking</h2>
@@ -191,7 +195,7 @@
         <div><label class="vd-rotulo">Tipo de serviço</label>
             <select name="servico" class="vd-campo"><option value="">Todos</option>
                 {% for v, r in tipos_servico %}<option value="{{ v }}" {% if filtros.servico == v %}selected{% endif %}>{{ r }}</option>{% endfor %}</select></div>
-        {% if is_superadmin %}
+        {% if vd_pode.rede_ver %}
         <div><label class="vd-rotulo">Loja</label>
             <select name="loja" class="vd-campo"><option value="">Todas</option>
                 {% for l in lojas %}<option value="{{ l.id }}" {% if filtros.loja == l.id|stringformat:"s" %}selected{% endif %}>{{ l.name }}</option>{% endfor %}</select></div>
@@ -242,7 +246,7 @@
                 </div>
                 <p class="text-[11px] text-gray-500 mt-0.5 truncate">
                     {{ v.data_venda|date:"d/m/Y H:i" }}
-                    {% if is_superadmin %} · {{ v.loja.name|default:v.pdv_nome|default:"—" }}{% if v.vendedor %} · {{ v.vendedor.full_name }}{% endif %}{% endif %}
+                    {% if vd_pode.rede_ver %} · {{ v.loja.name|default:v.pdv_nome|default:"—" }}{% if v.vendedor %} · {{ v.vendedor.full_name }}{% endif %}{% endif %}
                     · {% for s in v.servicos.all %}{{ s.servico }}{% if not forloop.last %}, {% endif %}{% endfor %}{% if v.servicos.all and v.produtos.all %} + {% endif %}{% with n=v.produtos.all|length %}{% if n %}{{ n }} produto{{ n|pluralize }}{% endif %}{% endwith %}
                 </p>
             </div>
@@ -256,7 +260,7 @@
         <div class="px-5 py-14 text-center text-gray-400">
             <i class="fas fa-cart-shopping text-gray-200 text-4xl mb-3 block"></i>
             {% if filter_query_string %}Nenhuma venda com esses filtros. <a href="{% url 'vendas:dashboard' %}" class="text-purple-600 hover:underline">limpar</a>
-            {% else %}Nenhuma venda lançada ainda. <a href="{% url 'vendas:venda_create' %}" class="text-purple-600 hover:underline font-semibold">Lançar a primeira</a>{% endif %}
+            {% else %}Nenhuma venda lançada ainda.{% if vd_pode.vendas_lancar %} <a href="{% url 'vendas:venda_create' %}" class="text-purple-600 hover:underline font-semibold">Lançar a primeira</a>{% endif %}{% endif %}
         </div>
         {% endfor %}
     </div>
@@ -307,7 +311,8 @@
     });
     // Fecha o menu de exportar ao clicar fora.
     document.addEventListener('click', function (e) {
-        if (!document.getElementById('vdExportar').contains(e.target)) document.getElementById('vdExportarMenu').classList.add('hidden');
+        var menu = document.getElementById('vdExportar');
+        if (menu && !menu.contains(e.target)) document.getElementById('vdExportarMenu').classList.add('hidden');
     });
     // Números sobem até o valor (só a contagem inteira; dinheiro já vem formatado).
     document.querySelectorAll('[data-contar]:not([data-dinheiro])').forEach(function (el) {

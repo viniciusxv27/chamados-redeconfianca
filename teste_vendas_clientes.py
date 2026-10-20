@@ -189,6 +189,9 @@ try:
                                      first_name='Ana', last_name='Gestora', hierarchy='SUPERADMIN', is_superuser=True, sector=loja)
     vend = User.objects.create_user(username='zz.vg.vend', email='zz.vg.vend@exemplo-teste.local', password='S3nha!teste',
                                     first_name='Beto', last_name='Vendedor', hierarchy='PADRAO', sector=loja)
+    from vendas.models import AcessoVendas
+    # desde 20/10/2026 Vendas só abre para quem o SUPERADMIN libera
+    AcessoVendas.objects.create(user=vend, permissoes=['modulo.ver', 'vendas.lancar', 'clientes.ver', 'vendas.exportar'])
     ca, cv = Client(), Client()
     ca.force_login(admin)
     cv.force_login(vend)
@@ -229,7 +232,7 @@ try:
     t('ficha do cliente: histórico do Vivo GO e nova venda', r.status_code == 200 and 'Histórico no Vivo GO' in html
       and 'Alta Pós' in html and f'?cpf={CPF_A}' in html)
     r = cv.post('/vendas/clientes/sincronizar/')
-    t('vendedor não força a sincronização', r.status_code == 404)
+    t('vendedor não força a sincronização (sem a função)', r.status_code == 302 and r.url == '/vendas/', r.status_code)
     r = ca.get('/vendas/')
     t('aba Clientes na navegação', 'fa-users mr-1.5"></i>Clientes' in r.content.decode())
 finally:

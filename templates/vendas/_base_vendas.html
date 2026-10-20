@@ -122,22 +122,32 @@ resto é Tailwind padrão, que o tema escuro do portal já converte.
                class="vd-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'vendas' %}vd-tab-ativa{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
                 <i class="fas fa-chart-line mr-1.5"></i>Vendas
             </a>
+            {% if vd_pode.vendas_lancar %}
             <a href="{% url 'vendas:venda_create' %}"
                class="vd-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'nova' %}vd-tab-ativa{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
                 <i class="fas fa-plus mr-1.5"></i>Nova venda
             </a>
+            {% endif %}
+            {% if vd_pode.clientes_ver %}
             <a href="{% url 'vendas:clientes' %}"
                class="vd-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'clientes' %}vd-tab-ativa{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
                 <i class="fas fa-users mr-1.5"></i>Clientes
             </a>
+            {% endif %}
             <a href="{% url 'vendas:precos' %}"
                class="vd-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'precos' %}vd-tab-ativa{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
                 <i class="fas fa-tags mr-1.5"></i>Tabela de produtos
             </a>
-            {% if pode_gerenciar_precos %}
+            {% if vd_pode.parametros_gerenciar %}
             <a href="{% url 'vendas:parametros' %}"
                class="vd-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'parametros' %}vd-tab-ativa{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
                 <i class="fas fa-sliders mr-1.5"></i>Parametrização
+            </a>
+            {% endif %}
+            {% if vd_pode.acessos %}
+            <a href="{% url 'vendas:acessos' %}"
+               class="vd-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'acessos' %}vd-tab-ativa{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
+                <i class="fas fa-user-shield mr-1.5"></i>Acessos
             </a>
             {% endif %}
         </nav>

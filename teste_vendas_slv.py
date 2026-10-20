@@ -130,6 +130,9 @@ try:
                                     first_name='Beto', last_name='Vendedor', hierarchy='PADRAO', sector=loja)
     sem_pdv = User.objects.create_user(username='zz.slv.sem', email='zz.slv.sem@exemplo-teste.local', password='S3nha!teste',
                                        first_name='Caio', last_name='SemLoja', hierarchy='PADRAO')
+    from vendas.models import AcessoVendas
+    for _p in (vend, sem_pdv):  # desde 20/10/2026 Vendas só abre para quem o SUPERADMIN libera
+        AcessoVendas.objects.create(user=_p, permissoes=['modulo.ver', 'vendas.lancar', 'clientes.ver', 'vendas.exportar'])
     ca, cv, cs = Client(), Client(), Client()
     ca.force_login(admin)
     cv.force_login(vend)

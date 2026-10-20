@@ -39,7 +39,7 @@
                     <li><strong>SMARTPHONES</strong> e <strong>ELETRÔNICOS_LP_Conectados</strong>: a <em>Tabela Regular</em> — por grupo de plano (PRÉ, Controle, Pós, Família, Vivo V… / Multivivo, VIM…), o preço, o PIX e Vivo Pay e as parcelas de 2x a 21x. Na venda, o vendedor escolhe o grupo e a condição e o valor vem da tabela.</li>
                     <li><strong>ELETRÔNICOS_LP_Não Conectados</strong>: o <em>PVP Base</em> é o valor.</li>
                 </ul>
-                <p class="text-xs text-blue-800 mt-2">Produto que saiu da planilha sai da tabela (se já foi vendido, fica inativo). Planos, seguros e SVAs são cadastrados na <a class="underline" href="{% url 'vendas:parametros' %}">Parametrização</a>. Se a importação falhar, a tabela atual não muda.</p>
+                <p class="text-xs text-blue-800 mt-2">Produto que saiu da planilha sai da tabela (se já foi vendido, fica inativo). Planos, seguros e SVAs são cadastrados na {% if vd_pode.parametros_gerenciar %}<a class="underline" href="{% url 'vendas:parametros' %}">Parametrização</a>{% else %}Parametrização{% endif %}. Se a importação falhar, a tabela atual não muda.</p>
             </div>
         </div>
     </div>

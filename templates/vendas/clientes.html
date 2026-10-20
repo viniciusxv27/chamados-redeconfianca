@@ -4,16 +4,16 @@
 {% block title %}Clientes — Vendas{% endblock %}
 {% block vd_icone %}fa-users{% endblock %}
 {% block vd_cabecalho %}Clientes{% endblock %}
-{% block vd_subtitulo %}{% if is_superadmin %}Base inteira{% else %}Clientes da sua loja{% endif %} · Vivo GO + cadastro do portal · {{ total_base }} cliente{{ total_base|pluralize }}{% endblock %}
+{% block vd_subtitulo %}{% if vd_pode.rede_ver %}Base inteira{% else %}Clientes da sua loja{% endif %} · Vivo GO + cadastro do portal · {{ total_base }} cliente{{ total_base|pluralize }}{% endblock %}
 
 {% block vd_acoes %}
-{% if is_superadmin %}
+{% if vd_pode.clientes_sincronizar %}
 <form method="post" action="{% url 'vendas:clientes_sincronizar' %}" id="vdSinc">{% csrf_token %}
     <button class="inline-flex items-center gap-2 px-3.5 py-2 vd-card text-gray-700 text-sm font-semibold hover:bg-gray-50 disabled:opacity-60" id="vdSincBotao">
         <i class="fas fa-rotate text-purple-600"></i><span class="hidden sm:inline">Atualizar agora</span></button>
 </form>
 {% endif %}
-<a href="{% url 'vendas:venda_create' %}" class="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-lg"><i class="fas fa-plus"></i> Nova venda</a>
+{% if vd_pode.vendas_lancar %}<a href="{% url 'vendas:venda_create' %}" class="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-lg"><i class="fas fa-plus"></i> Nova venda</a>{% endif %}
 {% endblock %}
 
 {% block vd_conteudo %}
@@ -22,7 +22,7 @@
         <div class="flex items-start justify-between"><p class="text-xs text-gray-500 font-medium">Clientes</p>
             <span class="w-8 h-8 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center text-sm"><i class="fas fa-users"></i></span></div>
         <p class="text-lg sm:text-2xl font-bold text-gray-900 tabular mt-1">{{ total_base }}</p>
-        <p class="text-[11px] text-gray-400">na base{% if not is_superadmin %} da sua loja{% endif %}</p></a>
+        <p class="text-[11px] text-gray-400">na base{% if not vd_pode.rede_ver %} da sua loja{% endif %}</p></a>
     <a href="?situacao=novos" class="vd-card vd-card-hover vd-entra p-4 block {% if filtro.situacao == 'novos' %}ring-2 ring-purple-300{% endif %}" style="animation-delay:.05s">
         <div class="flex items-start justify-between"><p class="text-xs text-gray-500 font-medium">Novos no mês</p>
             <span class="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center text-sm"><i class="fas fa-user-plus"></i></span></div>
@@ -55,7 +55,7 @@
             <option value="sumidos" {% if filtro.situacao == 'sumidos' %}selected{% endif %}>Sem comprar há 6 meses</option>
             <option value="portal" {% if filtro.situacao == 'portal' %}selected{% endif %}>Cadastrados no portal</option>
         </select></div>
-    {% if is_superadmin %}
+    {% if vd_pode.rede_ver %}
     <div><label class="vd-rotulo">Último PDV</label>
         <select name="pdv" class="vd-campo" onchange="this.form.submit()"><option value="">Todos</option>
             {% for p in pdvs %}<option {% if filtro.pdv == p %}selected{% endif %}>{{ p }}</option>{% endfor %}</select></div>

@@ -7,15 +7,19 @@
 {% block vd_subtitulo %}{{ total }} produto{{ total|pluralize }} · preço por grupo de plano, PIX e parcelas{% endblock %}
 
 {% block vd_acoes %}
+{% if vd_pode.vendas_lancar %}
 <a href="{% url 'vendas:venda_create' %}"
    class="inline-flex items-center gap-2 px-3.5 py-2 vd-card text-gray-700 text-sm font-semibold hover:bg-gray-50">
     <i class="fas fa-cash-register text-purple-600"></i><span class="hidden sm:inline">Nova venda</span>
 </a>
-{% if pode_gerenciar_precos %}
+{% endif %}
+{% if vd_pode.produtos_importar %}
 <a href="{% url 'vendas:precos_import' %}"
    class="inline-flex items-center gap-2 px-3.5 py-2 vd-card text-gray-700 text-sm font-semibold hover:bg-gray-50">
     <i class="fas fa-file-import text-emerald-600"></i><span class="hidden sm:inline">Importar</span>
 </a>
+{% endif %}
+{% if vd_pode.produtos_criar %}
 <a href="{% url 'vendas:precos_create' %}"
    class="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-lg shadow-sm">
     <i class="fas fa-plus"></i><span class="hidden sm:inline">Novo item</span>
