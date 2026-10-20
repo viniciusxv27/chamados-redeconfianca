@@ -194,6 +194,18 @@ try:
         t('sem função marcada não libera', not AcessoVendas.objects.filter(user=nada).exists())
         r = cc.get('/vendas/acessos/')
         t('tela de acessos mostra o histórico', 'Histórico de liberações' in html(r))
+        h = html(r)
+        t('lista todos os usuários ativos (com e sem acesso)',
+          all(f'data-editar="{x.pk}"' in h for x in (vend, nada)) and 'ZZ Chefe' in h)
+        t('SUPERADMIN aparece sem botão (já tem tudo)', f'data-editar="{chefe.pk}"' not in h and 'Tem o módulo inteiro' in h)
+        from users.models import User as _U
+        t('quantidade = ativos + liberados', h.count('data-grupo=') == _U.objects.filter(is_active=True).count(),
+          (h.count('data-grupo='), _U.objects.filter(is_active=True).count()))
+        cc.post('/vendas/acessos/', {'user': nada.pk, 'permissoes': ['modulo.ver'], 'ativo': 'on', 'observacao': 'teste <b>'})
+        h = html(cc.get('/vendas/acessos/'))
+        t('qualquer um da lista pode ser liberado', AcessoVendas.objects.filter(user=nada).exists()
+          and 'data-chaves="modulo.ver"' in h and 'teste &lt;b&gt;' in h)
+        AcessoVendas.objects.filter(user=nada).delete()
         h = html(cc.get('/vendas/parametros/'))
         t('histórico da parametrização não mistura acessos', 'Funções' not in h or 'ZZ Vendedora' not in h)
         cn2 = Client()

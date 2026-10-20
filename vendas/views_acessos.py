@@ -52,17 +52,26 @@ def acessos(request):
                 messages.success(request, f'Acesso de {pessoa.get_full_name()} salvo: {len(chaves)} função(ões).')
         return redirect('vendas:acessos')
 
-    liberados = list(AcessoVendas.objects.select_related('user', 'user__sector', 'concedido_por')
-                     .order_by('-ativo', 'user__first_name'))
-    for a in liberados:
-        a.chaves = set(a.permissoes or [])
-    candidatos = (User.objects.filter(is_active=True).exclude(id__in=[a.user_id for a in liberados])
-                  .exclude(Q(is_superuser=True) | Q(hierarchy='SUPERADMIN')).select_related('sector')
-                  .order_by('first_name', 'last_name'))
+    # Todo mundo ativo aparece (e quem tem liberação mesmo inativo), para o SUPERADMIN escolher qualquer um.
+    acessos_ = {a.user_id: a for a in AcessoVendas.objects.select_related('concedido_por')}
+    usuarios = (User.objects.filter(Q(is_active=True) | Q(id__in=list(acessos_))).select_related('sector')
+                .order_by('first_name', 'last_name', 'username'))
+    pessoas, contagem = [], {'todos': 0, 'com': 0, 'sem': 0, 'super': 0}
+    for u in usuarios:
+        a = acessos_.get(u.id)
+        if is_superadmin(u):
+            grupo = 'super'
+        elif a:
+            grupo = 'com'
+        else:
+            grupo = 'sem'
+        contagem['todos'] += 1
+        contagem[grupo] += 1
+        pessoas.append({'u': u, 'acesso': a, 'grupo': grupo, 'chaves': set(a.permissoes or []) if a else set()})
     return render(request, 'vendas/acessos.html', {
         'aba': 'acessos',
-        'liberados': liberados,
-        'candidatos': candidatos,
+        'pessoas': pessoas,
+        'contagem': contagem,
         'funcoes': FUNCOES,
         'historico': RegistroAlteracao.objects.filter(tipo='ACESSO').select_related('usuario')[:40],
     })

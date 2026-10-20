@@ -3,65 +3,127 @@
 {% block title %}Acessos — Vendas{% endblock %}
 {% block vd_icone %}fa-user-shield{% endblock %}
 {% block vd_cabecalho %}Quem entra em Vendas{% endblock %}
-{% block vd_subtitulo %}O SUPERADMIN tem tudo. Aqui ele libera, pessoa por pessoa, cada parte do módulo.{% endblock %}
+{% block vd_subtitulo %}O SUPERADMIN tem tudo. Aqui ele escolhe qualquer usuário e libera, parte por parte, o módulo.{% endblock %}
+
+{% block vd_css %}
+<style>
+    .vd-modal { background: rgba(17,24,39,.55); backdrop-filter: blur(2px); }
+    .vd-filtro.ativo { background:#F3E8FF; border-color:#C084FC; color:#6B21A8; }
+    html.dark .vd-filtro.ativo { background:rgba(168,85,247,.18); color:#E9D5FF; }
+</style>
+{% endblock %}
 
 {% block vd_conteudo %}
-<div class="space-y-3">
-    <details class="vd-card overflow-hidden" id="vdNovoAcesso" {% if not liberados %}open{% endif %}>
-        <summary class="px-5 py-3 flex items-center gap-2 cursor-pointer font-semibold text-purple-700"><i class="fas fa-user-plus"></i>Liberar alguém</summary>
-        <form method="post" class="border-t border-gray-100">
-            {% csrf_token %}
-            <div class="px-5 pt-4">
-                <label class="vd-rotulo">Pessoa</label>
-                <input type="search" id="vdBuscaPessoa" placeholder="Buscar por nome ou loja…" class="vd-campo mb-2">
-                <div class="border border-gray-200 rounded-lg max-h-48 overflow-y-auto divide-y divide-gray-50">
-                    {% for u in candidatos %}<label data-p="{{ u.get_full_name|default:u.email|lower }} {{ u.sector.name|default:''|lower }}" class="flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-purple-50/50 cursor-pointer"><input type="radio" name="user" value="{{ u.id }}" required class="accent-purple-600">{{ u.get_full_name|default:u.email }}{% if u.sector %}<span class="text-[11px] text-gray-400">{{ u.sector.name }}</span>{% endif %}</label>{% endfor %}
-                </div>
-            </div>
-            {% include 'vendas/_matriz_acesso.html' with chaves=None acesso=None %}
-            <div class="px-5 py-3 border-t border-gray-100 bg-gray-50 flex justify-end">
-                <button type="submit" class="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-lg"><i class="fas fa-check"></i>Liberar</button>
-            </div>
-        </form>
-    </details>
+<div class="vd-card p-4 mb-3 space-y-3">
+    <div class="relative">
+        <i class="fas fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+        <input type="search" id="vdBuscaPessoa" placeholder="Buscar por nome, e-mail, loja ou hierarquia…" class="vd-campo !pl-9" autocomplete="off">
+    </div>
+    <div class="flex flex-wrap gap-2 text-sm">
+        <button type="button" class="vd-filtro ativo px-3 py-1.5 rounded-full border border-gray-200" data-filtro="todos">Todos <b>{{ contagem.todos }}</b></button>
+        <button type="button" class="vd-filtro px-3 py-1.5 rounded-full border border-gray-200" data-filtro="com">Com acesso <b>{{ contagem.com }}</b></button>
+        <button type="button" class="vd-filtro px-3 py-1.5 rounded-full border border-gray-200" data-filtro="sem">Sem acesso <b>{{ contagem.sem }}</b></button>
+        <button type="button" class="vd-filtro px-3 py-1.5 rounded-full border border-gray-200" data-filtro="super">SUPERADMIN <b>{{ contagem.super }}</b></button>
+    </div>
+</div>
 
-    {% for a in liberados %}
-    <details class="vd-card overflow-hidden">
-        <summary class="px-5 py-3 flex items-center justify-between gap-3 cursor-pointer">
-            <div class="min-w-0">
-                <p class="font-semibold text-gray-900">{{ a.user.get_full_name|default:a.user.email }}{% if not a.ativo %} <span class="ml-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[11px]">suspenso</span>{% endif %}</p>
-                <p class="text-[11px] text-gray-500">{% if a.user.sector %}{{ a.user.sector.name }} · {% endif %}{{ a.chaves|length }} função(ões) · por {{ a.concedido_por.get_full_name|default:"—" }} em {{ a.atualizado_em|date:"d/m/Y H:i" }}{% if a.observacao %} · {{ a.observacao }}{% endif %}</p>
-                <p class="mt-1 flex flex-wrap gap-1">{% for chave, rotulo, _d, _e in funcoes %}{% if chave in a.chaves %}<span class="px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 text-[11px]">{{ rotulo }}</span>{% endif %}{% endfor %}</p>
+<div class="vd-card overflow-hidden">
+    <ul class="divide-y divide-gray-100" id="vdPessoas">
+        {% for p in pessoas %}{% with u=p.u a=p.acesso %}
+        <li class="px-4 py-3 flex items-center gap-3" data-grupo="{{ p.grupo }}"
+            data-p="{{ u.get_full_name|lower }} {{ u.username|lower }} {{ u.email|lower }} {{ u.sector.name|default:''|lower }} {{ u.get_hierarchy_display|lower }}">
+            <span class="w-9 h-9 rounded-full shrink-0 grid place-items-center text-sm font-bold {% if p.grupo == 'super' %}bg-amber-100 text-amber-700{% elif a and a.ativo %}bg-purple-100 text-purple-700{% else %}bg-gray-100 text-gray-500{% endif %}">{{ u.first_name|default:u.username|first|upper }}</span>
+            <div class="flex-1 min-w-0">
+                <p class="font-semibold text-gray-900 truncate">{{ u.get_full_name|default:u.username }}
+                    {% if not u.is_active %}<span class="ml-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[11px]">inativo</span>{% endif %}
+                    {% if a and not a.ativo %}<span class="ml-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[11px]">suspenso</span>{% endif %}</p>
+                <p class="text-[11px] text-gray-500 truncate">{{ u.sector.name|default:"Sem loja" }} · {{ u.get_hierarchy_display }}{% if a %} · liberado por {{ a.concedido_por.get_full_name|default:"—" }} em {{ a.atualizado_em|date:"d/m/Y" }}{% endif %}{% if a.observacao %} · {{ a.observacao }}{% endif %}</p>
+                {% if p.grupo == 'super' %}
+                <p class="mt-1"><span class="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[11px]">Tem o módulo inteiro</span></p>
+                {% elif a %}
+                <p class="mt-1 flex flex-wrap gap-1">{% for chave, rotulo, _d, _e in funcoes %}{% if chave in p.chaves %}<span class="px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 text-[11px]">{{ rotulo }}</span>{% endif %}{% endfor %}</p>
+                {% endif %}
             </div>
-            <span class="text-xs text-purple-700 shrink-0">editar</span>
-        </summary>
-        <form method="post" class="border-t border-gray-100">
-            {% csrf_token %}<input type="hidden" name="user" value="{{ a.user_id }}">
-            {% include 'vendas/_matriz_acesso.html' with chaves=a.chaves acesso=a %}
-            <div class="px-5 py-3 bg-gray-50 border-t border-gray-100 flex justify-between">
-                <button type="submit" name="remover" value="1" formnovalidate class="text-sm text-red-600 hover:underline" onclick="return confirm('Tirar o acesso a Vendas?')">Tirar acesso</button>
+            {% if p.grupo != 'super' and u.is_active %}
+            <button type="button" class="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold rounded-lg {% if a %}vd-card text-purple-700 hover:bg-purple-50{% else %}bg-purple-600 hover:bg-purple-700 text-white{% endif %}"
+                    data-editar="{{ u.id }}" data-nome="{{ u.get_full_name|default:u.username }}" data-loja="{{ u.sector.name|default:'Sem loja' }}"
+                    data-chaves="{{ a.permissoes|join:',' }}" data-tem="{% if a %}1{% endif %}" data-ativo="{% if not a or a.ativo %}1{% endif %}"
+                    data-obs="{{ a.observacao|default:'' }}"><i class="fas {% if a %}fa-pen{% else %}fa-user-plus{% endif %}"></i>{% if a %}Editar{% else %}Liberar{% endif %}</button>
+            {% endif %}
+        </li>
+        {% endwith %}{% endfor %}
+    </ul>
+    <p id="vdNenhum" class="hidden px-4 py-10 text-center text-gray-400 text-sm">Ninguém com essa busca.</p>
+</div>
+
+{% if historico %}
+<details class="vd-card overflow-hidden mt-3">
+    <summary class="px-5 py-3 font-semibold text-sm cursor-pointer"><i class="fas fa-clock-rotate-left text-gray-400 mr-1.5"></i>Histórico de liberações</summary>
+    <ul class="divide-y divide-gray-100 text-sm border-t border-gray-100">
+        {% for h in historico %}<li class="px-5 py-2"><span class="font-semibold">{{ h.objeto_rotulo }}</span> · {{ h.rotulo }}: <span class="text-gray-500">{{ h.antes|default:"—" }}</span> → <span class="text-gray-900">{{ h.depois|default:"—" }}</span>
+            <span class="block text-[11px] text-gray-400">{{ h.usuario_nome|default:"—" }} em {{ h.quando|date:"d/m/Y H:i" }}</span></li>{% endfor %}
+    </ul>
+</details>
+{% endif %}
+
+<div id="vdEditor" class="hidden fixed inset-0 z-50 vd-modal flex items-end sm:items-center justify-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="vdEditorNome">
+    <form method="post" class="vd-card w-full sm:max-w-3xl max-h-[92vh] overflow-y-auto !rounded-b-none sm:!rounded-2xl">
+        {% csrf_token %}<input type="hidden" name="user" id="vdEditorUser">
+        <div class="px-5 py-4 border-b border-gray-100 flex items-start justify-between gap-3">
+            <div><h3 class="font-bold text-gray-900" id="vdEditorNome"></h3><p class="text-[11px] text-gray-500" id="vdEditorLoja"></p></div>
+            <button type="button" data-fechar class="text-gray-400 hover:text-gray-700 px-2" aria-label="Fechar"><i class="fas fa-xmark"></i></button>
+        </div>
+        {% include 'vendas/_matriz_acesso.html' with chaves=None acesso=None %}
+        <div class="px-5 py-3 bg-gray-50 border-t border-gray-100 flex justify-between items-center gap-2 sticky bottom-0">
+            <button type="submit" name="remover" value="1" formnovalidate id="vdEditorTirar" class="text-sm text-red-600 hover:underline" onclick="return confirm('Tirar o acesso a Vendas?')">Tirar acesso</button>
+            <div class="flex gap-2 ml-auto">
+                <button type="button" data-fechar class="px-4 py-2 vd-card text-sm font-semibold text-gray-700 hover:bg-gray-50">Cancelar</button>
                 <button type="submit" class="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-lg"><i class="fas fa-check"></i>Salvar</button>
             </div>
-        </form>
-    </details>
-    {% empty %}
-    <div class="vd-card p-10 text-center text-gray-500"><i class="fas fa-user-shield text-3xl text-gray-300 mb-2"></i><p>Ninguém liberado ainda — só o SUPERADMIN entra em Vendas.</p></div>
-    {% endfor %}
-
-    {% if historico %}
-    <details class="vd-card overflow-hidden">
-        <summary class="px-5 py-3 font-semibold text-sm cursor-pointer"><i class="fas fa-clock-rotate-left text-gray-400 mr-1.5"></i>Histórico de liberações</summary>
-        <ul class="divide-y divide-gray-100 text-sm border-t border-gray-100">
-            {% for h in historico %}<li class="px-5 py-2"><span class="font-semibold">{{ h.objeto_rotulo }}</span> · {{ h.rotulo }}: <span class="text-gray-500">{{ h.antes|default:"—" }}</span> → <span class="text-gray-900">{{ h.depois|default:"—" }}</span>
-                <span class="block text-[11px] text-gray-400">{{ h.usuario_nome|default:"—" }} em {{ h.quando|date:"d/m/Y H:i" }}</span></li>{% endfor %}
-        </ul>
-    </details>
-    {% endif %}
+        </div>
+    </form>
 </div>
+
 <script>
-document.getElementById('vdBuscaPessoa').addEventListener('input', function () {
-    var t = this.value.trim().toLowerCase();
-    document.querySelectorAll('#vdNovoAcesso [data-p]').forEach(function (el) { el.hidden = t && el.dataset.p.indexOf(t) < 0; });
-});
+(function () {
+    var busca = document.getElementById('vdBuscaPessoa'), filtro = 'todos';
+    var itens = Array.prototype.slice.call(document.querySelectorAll('#vdPessoas > li'));
+    function semAcento(x) { return x.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
+    itens.forEach(function (li) { li.dataset.p = semAcento(li.dataset.p); });
+    function aplicar() {
+        var t = semAcento(busca.value.trim()), n = 0;
+        itens.forEach(function (li) {
+            var ve = (filtro === 'todos' || li.dataset.grupo === filtro) && (!t || li.dataset.p.indexOf(t) >= 0);
+            li.style.display = ve ? '' : 'none'; if (ve) n++;  // o "flex" da linha venceria o atributo hidden
+        });
+        document.getElementById('vdNenhum').classList.toggle('hidden', n > 0);
+    }
+    busca.addEventListener('input', aplicar);
+    document.querySelectorAll('.vd-filtro').forEach(function (b) {
+        b.addEventListener('click', function () {
+            document.querySelectorAll('.vd-filtro').forEach(function (x) { x.classList.toggle('ativo', x === b); });
+            filtro = b.dataset.filtro; aplicar();
+        });
+    });
+
+    var modal = document.getElementById('vdEditor'), form = modal.querySelector('form'), ultimo = null;
+    function fechar() { modal.classList.add('hidden'); document.body.style.overflow = ''; if (ultimo) ultimo.focus(); }
+    document.getElementById('vdPessoas').addEventListener('click', function (e) {
+        var b = e.target.closest('[data-editar]'); if (!b) return;
+        ultimo = b;
+        var chaves = (b.dataset.chaves || '').split(',');
+        document.getElementById('vdEditorUser').value = b.dataset.editar;
+        document.getElementById('vdEditorNome').textContent = (b.dataset.tem ? 'Acesso de ' : 'Liberar Vendas para ') + b.dataset.nome;
+        document.getElementById('vdEditorLoja').textContent = b.dataset.loja;
+        form.querySelectorAll('input[name="permissoes"]').forEach(function (c) { c.checked = chaves.indexOf(c.value) >= 0; });
+        form.querySelector('input[type="checkbox"][name="ativo"]').checked = !!b.dataset.ativo;
+        form.querySelector('input[name="observacao"]').value = b.dataset.obs || '';
+        document.getElementById('vdEditorTirar').hidden = !b.dataset.tem;
+        modal.classList.remove('hidden'); document.body.style.overflow = 'hidden';
+        form.querySelector('input[name="permissoes"]').focus();
+    });
+    modal.addEventListener('click', function (e) { if (e.target === modal || e.target.closest('[data-fechar]')) fechar(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !modal.classList.contains('hidden')) fechar(); });
+})();
 </script>
 {% endblock %}

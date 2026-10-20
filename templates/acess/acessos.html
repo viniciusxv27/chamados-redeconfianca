@@ -47,7 +47,7 @@
 <script>
 document.getElementById('acBusca').addEventListener('input', function () {
     var t = this.value.trim().toLowerCase();
-    document.querySelectorAll('[data-p]').forEach(function (el) { el.hidden = t && el.dataset.p.indexOf(t) < 0; });
+    document.querySelectorAll('[data-p]').forEach(function (el) { el.style.display = t && el.dataset.p.indexOf(t) < 0 ? 'none' : '';  // o "flex" venceria o atributo hidden });
 });
 </script>
 {% endblock %}
