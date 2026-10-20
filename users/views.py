@@ -8131,3 +8131,30 @@ def hc_validar_view(request, sector_id):
     messages.success(request, f'Quadro da {loja.name} conferido: {quadro} pessoa(s).')
     volta = f"?mes={dados['referencia']:%Y-%m}" if pedido else ''
     return redirect(reverse('hc') + volta)
+
+
+@login_required
+@require_POST
+def salvar_menu_favoritos(request):
+    """Grava os menus favoritos da pessoa (endereços, na ordem do menu).
+
+    A lista guarda só endereços internos; quais deles aparecem é decidido no
+    menu, que já sai filtrado pelas permissões — favorito de um menu que a
+    pessoa não vê mais simplesmente não aparece.
+    """
+    import json as _json
+    try:
+        dados = _json.loads(request.body or b'{}')
+    except ValueError:
+        return JsonResponse({'erro': 'Dados inválidos.'}, status=400)
+    lista = dados.get('favoritos')
+    if not isinstance(lista, list):
+        return JsonResponse({'erro': 'Lista de favoritos inválida.'}, status=400)
+    limpos = []
+    for rota in lista:
+        rota = str(rota or '').strip()
+        if rota.startswith('/') and not rota.startswith('//') and len(rota) <= 200 and rota not in limpos:
+            limpos.append(rota)
+    request.user.menu_favoritos = limpos[:40]
+    request.user.save(update_fields=['menu_favoritos'])
+    return JsonResponse({'ok': True, 'favoritos': request.user.menu_favoritos})

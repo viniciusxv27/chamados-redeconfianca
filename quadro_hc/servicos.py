@@ -227,12 +227,18 @@ def montar_quadro(hoje=None) -> dict:
         prev = previsto.get(setor.id, {})
         comparacao = [{'grupo': g, 'real': contagem.get(g, 0), 'previsto': prev[g], 'falta': prev[g] - contagem.get(g, 0)}
                       for g in sorted(prev, key=grupo_ordem)]
+        # Abaixo do HC previsto: uma "Vaga em aberto" para cada pessoa que falta na função. A vaga
+        # aberta à mão para a mesma função já conta (não aparece duas vezes).
+        manuais = Counter(grupo_do_cargo(v.cargo)[1] for v in abertas)
+        previstas = [{'grupo': c['grupo'], 'real': c['real'], 'previsto': c['previsto']} for c in comparacao
+                     for _ in range(max(0, c['falta'] - manuais.get(c['grupo'], 0)))]
         return {'setor': setor, 'pessoas': gente, 'vagas': abertas, 'total': len(gente),
                 'resumo': sorted(contagem.items(), key=lambda kv: grupo_ordem(kv[0])),
                 # Gerente de vendas ou operacional — pelo cargo, pelo grupo GERENTES ou por ajuste manual.
                 'sem_gerente': e_loja(setor) and not any(p['ordem'] in (1, 2) for p in gente),
                 'previsto': prev, 'comparacao': comparacao, 'total_previsto': sum(prev.values()),
-                'falta': sum(max(c['falta'], 0) for c in comparacao)}
+                'falta': sum(max(c['falta'], 0) for c in comparacao), 'vagas_previstas': previstas,
+                'total_vagas': len(abertas) + len(previstas)}
 
     carteiras = []
     usados = set()
@@ -241,17 +247,18 @@ def montar_quadro(hoje=None) -> dict:
         usados.update(s.id for s in lojas)
         blocos = [bloco(s) for s in lojas]
         carteiras.append({'id': c.id, 'nome': c.nome, 'coordenacao': c.coordenacao, 'lojas': blocos,
-                          'total': sum(b['total'] for b in blocos), 'vagas': sum(len(b['vagas']) for b in blocos)})
+                          'total': sum(b['total'] for b in blocos), 'vagas': sum(b['total_vagas'] for b in blocos)})
     restantes = [s for s in Sector.objects.order_by('name') if s.id not in usados]
-    lojas_soltas = [bloco(s) for s in restantes if e_loja(s) and (por_setor.get(s.id) or vagas.get(s.id))]
-    apoio = [bloco(s) for s in restantes if not e_loja(s) and (por_setor.get(s.id) or vagas.get(s.id))]
+    tem = lambda s: por_setor.get(s.id) or vagas.get(s.id) or previsto.get(s.id)  # noqa: E731
+    lojas_soltas = [bloco(s) for s in restantes if e_loja(s) and tem(s)]
+    apoio = [bloco(s) for s in restantes if not e_loja(s) and tem(s)]
     if lojas_soltas:
         carteiras.append({'id': 0, 'nome': 'Lojas sem carteira', 'coordenacao': '', 'lojas': lojas_soltas,
                           'total': sum(b['total'] for b in lojas_soltas),
-                          'vagas': sum(len(b['vagas']) for b in lojas_soltas)})
+                          'vagas': sum(b['total_vagas'] for b in lojas_soltas)})
     if apoio:
         carteiras.append({'id': -1, 'nome': 'Escritório e áreas de apoio', 'coordenacao': '', 'lojas': apoio,
-                          'total': sum(b['total'] for b in apoio), 'vagas': sum(len(b['vagas']) for b in apoio)})
+                          'total': sum(b['total'] for b in apoio), 'vagas': sum(b['total_vagas'] for b in apoio)})
     todas = [b for c in carteiras for b in c['lojas']]
     return {'carteiras': carteiras, 'sem_loja': sem_loja, 'total': len(pessoas),
             'fora': [{'id': u.id, 'nome': nome_completo(u), 'cargo': u.job_title or '', 'loja': _loja(u.sector),
@@ -262,7 +269,8 @@ def montar_quadro(hoje=None) -> dict:
             'sem_gerente': sum(1 for b in todas if b['sem_gerente']),
             'exp_proximas': sum(1 for b in todas for p in b['pessoas']
                                 if 'proxima' in (p['exp1_alerta'], p['exp2_alerta'])),
-            'vagas': sum(len(v) for v in vagas.values()),
+            'vagas': sum(b['total_vagas'] for b in todas),
+            'vagas_previstas': sum(len(b['vagas_previstas']) for b in todas),
             'lojas': sum(1 for c in carteiras for b in c['lojas'] if e_loja(b['setor']))}
 
 

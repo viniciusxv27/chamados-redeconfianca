@@ -497,6 +497,9 @@ class User(AbstractUser):
     ]
     
     email = models.EmailField(unique=True)
+    menu_favoritos = models.JSONField(
+        default=list, blank=True, verbose_name="Menus favoritos",
+        help_text="Endereços dos itens do menu que a pessoa favoritou, na ordem escolhida (aparecem abaixo de Home e Power BI).")
     theme = models.CharField(
         max_length=5, default='light', verbose_name="Tema do portal",
         choices=[('light', 'Claro'), ('dark', 'Escuro')],

@@ -309,31 +309,6 @@
                             </a>
                         </li>
                         <li>
-                            <a href="{% url 'webmail:caixa' %}" data-rota="{% url 'webmail:caixa' %}"
-                               class="menu-item flex items-center gap-2.5 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group">
-                                <span class="relative flex-shrink-0 w-5 text-center">
-                                    <i class="fas fa-envelope text-orange-400"></i>
-                                    {% comment %}Não lidas da caixa de entrada: webmail/context_processors.py dá o número do cache; vencido, a página pede um novo depois de carregar.{% endcomment %}
-                                    <span id="rc-email-badge" data-atualizar="{% if email_menu.atualizar %}1{% endif %}"
-                                          class="absolute -top-2 -right-2.5 min-w-[1.05rem] h-[1.05rem] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold leading-[1.05rem] text-center ring-2 ring-gray-900 {% if not email_menu.nao_lidas %}hidden{% endif %}">{% if email_menu.nao_lidas > 99 %}99+{% else %}{{ email_menu.nao_lidas|default:'' }}{% endif %}</span>
-                                </span>
-                                <span class="text-sm sidebar-text">E-mail</span>
-                                <div class="tooltip-collapsed">E-mail{% if email_menu.nao_lidas %} · {{ email_menu.nao_lidas }} não lida{{ email_menu.nao_lidas|pluralize }}{% endif %}</div>
-                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-orange-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
-                        </li>
-                        {% if user.is_superuser or user.hierarchy == 'SUPERADMIN' %}
-                        <li>
-                            <a href="{% url 'assistente:chat' %}" data-rota="{% url 'assistente:chat' %}"
-                               class="menu-item flex items-center gap-2.5 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group">
-                                <i class="fas fa-robot text-violet-400 flex-shrink-0 w-5 text-center"></i>
-                                <span class="text-sm sidebar-text">Assistente Claude</span>
-                                <div class="tooltip-collapsed">Assistente Claude</div>
-                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-violet-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
-                        </li>
-                        {% endif %}
-                        <li>
                             <a href="{% url 'power_bi:list' %}" data-rota="{% url 'power_bi:list' %}"
                                class="menu-item flex items-center gap-2.5 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group">
                                 <i class="fas fa-chart-bar text-cyan-400 flex-shrink-0 w-5 text-center"></i>
@@ -342,32 +317,11 @@
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-cyan-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </a>
                         </li>
-                        <li>
-                            <a href="{% url 'communications:communications_list' %}" data-rota="{% url 'communications:communications_list' %}"
-                               class="menu-item flex items-center gap-2.5 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group">
-                                <i class="fas fa-bullhorn text-red-400 flex-shrink-0 w-5 text-center"></i>
-                                <span class="text-sm sidebar-text">Comunicados</span>
-                                <div class="tooltip-collapsed">Comunicados</div>
-                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-red-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="{% url 'compliments:dashboard' %}" data-rota="{% url 'compliments:dashboard' %}"
-                               class="menu-item flex items-center gap-2.5 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group">
-                                <i class="fas fa-star text-yellow-400 flex-shrink-0 w-5 text-center"></i>
-                                <span class="text-sm sidebar-text">Elogios</span>
-                                <div class="tooltip-collapsed">Elogios</div>
-                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-yellow-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="{% url 'marketplace' %}" data-rota="{% url 'marketplace' %}"
-                               class="menu-item flex items-center gap-2.5 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group">
-                                <i class="fas fa-store text-emerald-400 flex-shrink-0 w-5 text-center"></i>
-                                <span class="text-sm sidebar-text">Mercadinho</span>
-                                <div class="tooltip-collapsed">Mercadinho</div>
-                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-emerald-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
+                        {% comment %}Favoritos da pessoa (/users/profile/): cópias dos itens do menu que ela vê, na ordem que escolheu.{% endcomment %}
+                        <li id="rc-favoritos-bloco" class="hidden">
+                            <span title="Favoritos (organize em Meu perfil)" class="flex items-center gap-1.5 px-2 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-[.08em] text-gray-500 sidebar-text"><i class="fas fa-star text-yellow-400"></i>Favoritos</span>
+                            <span class="hidden sidebar-so-fechado block mx-2 my-1 border-t border-gray-800"></span>
+                            <ul id="rc-favoritos" class="space-y-0.5"></ul>
                         </li>
 
                         <li class="pt-3 pb-1">
@@ -406,6 +360,15 @@
                             </a>
                         </li>
                         <li>
+                            <a href="{% url 'communications:communications_list' %}" data-rota="{% url 'communications:communications_list' %}"
+                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-bullhorn text-red-400 flex-shrink-0 w-5 text-center"></i>
+                                <span class="text-sm">Comunicados</span>
+                                <div class="tooltip-collapsed">Comunicados</div>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-red-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        <li>
                             <a href="{% url 'contracheque:my_payslips' %}" data-rota="{% url 'contracheque:my_payslips' %}"
                                class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
                                 <i class="fas fa-file-invoice-dollar text-green-400 flex-shrink-0 w-5 text-center"></i>
@@ -435,6 +398,15 @@
                                 <span class="text-sm">Documentos</span>
                                 <div class="tooltip-collapsed">Documentos</div>
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-sky-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="{% url 'compliments:dashboard' %}" data-rota="{% url 'compliments:dashboard' %}"
+                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-star text-yellow-400 flex-shrink-0 w-5 text-center"></i>
+                                <span class="text-sm">Elogios</span>
+                                <div class="tooltip-collapsed">Elogios</div>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-yellow-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </a>
                         </li>
                         <li>
@@ -484,6 +456,15 @@
                                 <span class="text-sm">Folha de Ponto</span>
                                 <div class="tooltip-collapsed">Folha de Ponto</div>
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-teal-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="{% url 'marketplace' %}" data-rota="{% url 'marketplace' %}"
+                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-store text-emerald-400 flex-shrink-0 w-5 text-center"></i>
+                                <span class="text-sm">Mercadinho</span>
+                                <div class="tooltip-collapsed">Mercadinho</div>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-emerald-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </a>
                         </li>
                         <li>
@@ -718,6 +699,17 @@
                         </li>
                         <li class="submenu-content hidden" id="financeiro-menu">
                             <ul class="space-y-0.5 ml-4 pl-2.5 border-l border-gray-800">
+                        {% if acess_liberado %}
+                        <li>
+                            <a href="{% url 'acess:dashboard' %}" data-rota="{% url 'acess:dashboard' %}"
+                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-key text-amber-400 flex-shrink-0 w-5 text-center"></i>
+                                <span class="text-sm">Acess</span>
+                                <div class="tooltip-collapsed">Confiança Acess · acessos dos colaboradores</div>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-amber-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        {% endif %}
                         {% if apresentacoes_liberado %}
                         <li>
                             <a href="{% url 'apresentacoes:inicio' %}" data-rota="{% url 'apresentacoes:inicio' %}"
@@ -726,6 +718,17 @@
                                 <span class="text-sm flex-1">Apresentações</span>
                                 <div class="tooltip-collapsed">Apresentações</div>
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-fuchsia-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% if user.is_superuser or user.hierarchy == 'SUPERADMIN' %}
+                        <li>
+                            <a href="{% url 'assistente:chat' %}" data-rota="{% url 'assistente:chat' %}"
+                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-robot text-violet-400 flex-shrink-0 w-5 text-center"></i>
+                                <span class="text-sm">Assistente Claude</span>
+                                <div class="tooltip-collapsed">Assistente Claude</div>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-violet-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </a>
                         </li>
                         {% endif %}
@@ -761,6 +764,20 @@
                             </a>
                         </li>
                         {% endif %}
+                        <li>
+                            <a href="{% url 'webmail:caixa' %}" data-rota="{% url 'webmail:caixa' %}"
+                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                <span class="relative flex-shrink-0 w-5 text-center">
+                                    <i class="fas fa-envelope text-orange-400"></i>
+                                    {% comment %}Não lidas da caixa de entrada: webmail/context_processors.py dá o número do cache; vencido, a página pede um novo depois de carregar.{% endcomment %}
+                                    <span id="rc-email-badge" data-atualizar="{% if email_menu.atualizar %}1{% endif %}"
+                                          class="absolute -top-2 -right-2.5 min-w-[1.05rem] h-[1.05rem] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold leading-[1.05rem] text-center ring-2 ring-gray-900 {% if not email_menu.nao_lidas %}hidden{% endif %}">{% if email_menu.nao_lidas > 99 %}99+{% else %}{{ email_menu.nao_lidas|default:'' }}{% endif %}</span>
+                                </span>
+                                <span class="text-sm">E-mail</span>
+                                <div class="tooltip-collapsed">E-mail{% if email_menu.nao_lidas %} · {{ email_menu.nao_lidas }} não lida{{ email_menu.nao_lidas|pluralize }}{% endif %}</div>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-orange-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
                         {% if show_exit_interview_menu %}
                         <li>
                             <a href="{% url 'feedback:exit_interview' %}" data-rota="{% url 'feedback:exit_interview' %}"
@@ -813,17 +830,6 @@
                                 <span class="text-sm">Quadro de HC</span>
                                 <div class="tooltip-collapsed">Quadro de HC</div>
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-indigo-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
-                        </li>
-                        {% endif %}
-                        {% if acess_liberado %}
-                        <li>
-                            <a href="{% url 'acess:dashboard' %}" data-rota="{% url 'acess:dashboard' %}"
-                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
-                                <i class="fas fa-key text-amber-400 flex-shrink-0 w-5 text-center"></i>
-                                <span class="text-sm">Acess</span>
-                                <div class="tooltip-collapsed">Confiança Acess · acessos dos colaboradores</div>
-                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-amber-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </a>
                         </li>
                         {% endif %}
@@ -1114,6 +1120,7 @@
                         </li>
                             </ul>
 
+                        {{ user.menu_favoritos|default_if_none:""|json_script:"rc-favoritos-dados" }}
                     <script>
                     // Grupo sem nenhum item liberado some junto com o cabeçalho.
                     // A decisão de mostrar cada item já foi tomada no servidor,
@@ -1129,6 +1136,35 @@
                             if (cabecalho && cabecalho.querySelector('.menu-grupo')) cabecalho.remove();
                             sub.remove();
                         });
+
+                        // Favoritos: clona o item que a pessoa vê (a permissão já foi decidida no
+                        // servidor); favorito de um menu que ela perdeu simplesmente não aparece.
+                        (function () {
+                            var dados = document.getElementById('rc-favoritos-dados');
+                            var lista = document.getElementById('rc-favoritos');
+                            if (!dados || !lista) return;
+                            var rotas = [];
+                            try { rotas = JSON.parse(dados.textContent) || []; } catch (e) { rotas = []; }
+                            rotas.forEach(function (rota) {
+                                var original = null;
+                                document.querySelectorAll('#sidebar .menu-item[href]').forEach(function (a) {
+                                    var r = a.dataset.rota || a.getAttribute('href');
+                                    if (!original && r === rota && !a.closest('#rc-favoritos')) original = a;
+                                });
+                                if (!original) return;
+                                var copia = original.cloneNode(true);
+                                copia.classList.remove('text-xs');
+                                copia.removeAttribute('id');
+                                copia.querySelectorAll('[id]').forEach(function (x) { x.removeAttribute('id'); });
+                                var rotulo = copia.querySelector('span.text-sm') || Array.prototype.find.call(
+                                    copia.querySelectorAll('span'), function (x) { return !x.className && x.textContent.trim(); });
+                                if (rotulo) rotulo.classList.add('sidebar-text');
+                                var li = document.createElement('li');
+                                li.appendChild(copia);
+                                lista.appendChild(li);
+                            });
+                            if (lista.children.length) document.getElementById('rc-favoritos-bloco').classList.remove('hidden');
+                        })();
 
                         // Rótulo de seção que ficou sem nada embaixo também sai.
                         document.querySelectorAll('#sidebar .tracking-wider').forEach(function (rotulo) {
@@ -1225,11 +1261,15 @@
                                 </div>
                             </div>
                             
-                            <!-- Search -->
-                            <div class="relative hidden lg:block">
-                                <input type="text" placeholder="Pesquisar..." class="bg-gray-100 rounded-full px-4 py-2 w-48 xl:w-64 focus:outline-none focus:ring-2 focus:ring-primary">
-                                <i class="fas fa-search absolute right-3 top-3 text-gray-400"></i>
-                            </div>
+                            <!-- Busca global (abre a paleta: módulos, funções, configurações e registros do portal) -->
+                            <button type="button" data-rc-busca class="lg:hidden p-2 text-gray-600 hover:text-primary rounded-lg hover:bg-gray-100" aria-label="Buscar no portal">
+                                <i class="fas fa-search"></i>
+                            </button>
+                            <button type="button" data-rc-busca class="hidden lg:flex items-center gap-2 bg-gray-100 hover:bg-gray-200 rounded-full pl-4 pr-2 py-2 w-48 xl:w-64 text-sm text-gray-500 transition-colors" aria-label="Buscar no portal (Ctrl+K)">
+                                <i class="fas fa-search text-gray-400"></i>
+                                <span class="flex-1 text-left truncate">Pesquisar no portal…</span>
+                                <kbd class="hidden xl:inline text-[10px] font-semibold text-gray-400 border border-gray-300 rounded px-1.5 py-0.5">Ctrl K</kbd>
+                            </button>
                             
                             <!-- User Menu -->
                             <div class="relative">
@@ -2042,7 +2082,7 @@
             var melhor = null;
             document.querySelectorAll('#sidebar .menu-item[data-rota]').forEach(function (a) {
                 var rota = a.dataset.rota;
-                if (!rota || rota === '/') return;
+                if (!rota || rota === '/' || a.closest('#rc-favoritos')) return;
                 if (aqui === rota || aqui.indexOf(rota) === 0) {
                     if (!melhor || rota.length > melhor.dataset.rota.length) melhor = a;
                 }
@@ -2053,6 +2093,9 @@
             if (!melhor) return;
 
             melhor.classList.add('ativo');
+            document.querySelectorAll('#rc-favoritos .menu-item').forEach(function (a) {
+                if (a.dataset.rota === melhor.dataset.rota) a.classList.add('ativo');
+            });
 
             // Abre o grupo que contém o item ativo, sem depender do que a
             // pessoa deixou aberto da última vez.
@@ -2756,6 +2799,201 @@
         </div>
     </div>
 
+
+    {% if user.is_authenticated %}
+    <!-- ===================== Busca global (Ctrl+K) ===================== -->
+    <style>
+      #rc-busca { position: fixed; inset: 0; z-index: 100; display: none; }
+      #rc-busca.aberta { display: block; }
+      #rc-busca .fundo { position: absolute; inset: 0; background: rgba(15,23,42,.5); backdrop-filter: blur(3px); }
+      #rc-busca .caixa { position: relative; margin: 8vh auto 0; width: min(680px, calc(100vw - 24px)); max-height: 80vh; display: flex; flex-direction: column;
+                         background: #fff; border-radius: 1.1rem; box-shadow: 0 30px 80px rgba(0,0,0,.3); overflow: hidden; animation: rcBuscaEntrar .18s ease-out; }
+      @keyframes rcBuscaEntrar { from { transform: translateY(-8px) scale(.98); opacity: 0; } to { transform: none; opacity: 1; } }
+      #rc-busca .res { overflow-y: auto; padding: .4rem; }
+      #rc-busca .grupo { padding: .55rem .75rem .25rem; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #9CA3AF; }
+      #rc-busca .item { display: flex; align-items: center; gap: .75rem; padding: .55rem .75rem; border-radius: .7rem; color: #1F2937; text-decoration: none; }
+      #rc-busca .item .ic { width: 2rem; height: 2rem; border-radius: .6rem; display: grid; place-items: center; background: #F3F4F6; color: #6B7280; flex: 0 0 auto; font-size: .85rem; }
+      #rc-busca .item.sel { background: rgba(255,107,53,.1); }
+      #rc-busca .item.sel .ic { background: #FF6B35; color: #fff; }
+      #rc-busca .item b { font-weight: 700; color: #E85A26; }
+      #rc-busca kbd { font-size: 10px; font-weight: 600; color: #6B7280; border: 1px solid #E5E7EB; border-radius: .3rem; padding: 0 .35rem; background: #F9FAFB; }
+      html.dark #rc-busca .caixa { background: var(--tema-superficie, #1b2130); color: var(--tema-texto, #e7eaf0); }
+      html.dark #rc-busca .item { color: var(--tema-texto, #e7eaf0); }
+      html.dark #rc-busca .item .ic { background: var(--tema-superficie-3, #2b3346); color: var(--tema-texto-2, #b6bdcc); }
+      html.dark #rc-busca kbd { background: transparent; border-color: var(--tema-borda, #313a4f); color: var(--tema-texto-3, #8b93a5); }
+      html.dark #rc-busca input { color: var(--tema-texto, #e7eaf0); }
+      @media (max-width: 640px) { #rc-busca .caixa { margin-top: 0; width: 100vw; height: 100dvh; max-height: none; border-radius: 0; } }
+      @media (prefers-reduced-motion: reduce) { #rc-busca .caixa { animation: none; } }
+    </style>
+    <div id="rc-busca" role="dialog" aria-modal="true" aria-label="Buscar no portal">
+      <div class="fundo" data-rc-fechar></div>
+      <div class="caixa">
+        <div class="flex items-center gap-3 px-4 py-3 border-b border-gray-200">
+          <i class="fas fa-search text-primary"></i>
+          <input id="rc-busca-campo" type="search" autocomplete="off" spellcheck="false" placeholder="Buscar módulos, funções, configurações, chamados, pessoas…"
+                 class="flex-1 bg-transparent border-0 outline-none focus:ring-0 text-base py-1" aria-label="O que você procura?" aria-controls="rc-busca-res" role="combobox" aria-expanded="true">
+          <span id="rc-busca-carregando" class="hidden text-gray-400"><i class="fas fa-spinner fa-spin"></i></span>
+          <button type="button" class="text-gray-400 hover:text-gray-700 px-1" data-rc-fechar aria-label="Fechar"><kbd>Esc</kbd></button>
+        </div>
+        <div id="rc-busca-res" class="res" role="listbox"></div>
+        <div class="hidden sm:flex items-center gap-4 px-4 py-2 border-t border-gray-200 text-[11px] text-gray-500">
+          <span><kbd>↑</kbd> <kbd>↓</kbd> navegar</span><span><kbd>Enter</kbd> abrir</span><span><kbd>Ctrl</kbd> <kbd>K</kbd> abre de qualquer tela</span>
+        </div>
+      </div>
+    </div>
+    <script>
+    (function () {
+      var raiz = document.getElementById('rc-busca'), campo = document.getElementById('rc-busca-campo'), res = document.getElementById('rc-busca-res');
+      if (!raiz) return;
+      var URL_DADOS = '{% url "busca_global" %}';
+      var esc = function (v) { return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]; }); };
+      var norm = function (v) { return String(v || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); };
+      var indice = null, selecionado = 0, itensAtuais = [], pedido = null, temporizador = null, foco = null;
+
+      // Funções e configurações que não estão no menu lateral (com palavras que as pessoas digitam).
+      var EXTRAS = [
+        {titulo: 'Meu perfil', url: '{% url "profile" %}', icone: 'fas fa-user', grupo: 'Funções e configurações', chaves: 'perfil dados pessoais foto telefone email'},
+        {titulo: 'Menu favorito', url: '{% url "profile" %}#cardFavoritos', icone: 'fas fa-star', grupo: 'Funções e configurações', chaves: 'favoritos favoritar atalhos ordenar menu'},
+        {titulo: 'Alterar senha', url: '{% url "change_password" %}', icone: 'fas fa-key', grupo: 'Funções e configurações', chaves: 'senha seguranca trocar'},
+        {titulo: 'Configurações', url: '{% url "settings" %}', icone: 'fas fa-gear', grupo: 'Funções e configurações', chaves: 'tema escuro claro preferencias notificacoes aparencia'},
+        {titulo: 'Notificações', url: '{% url "notifications:dashboard" %}', icone: 'fas fa-bell', grupo: 'Funções e configurações', chaves: 'avisos alertas sino'},
+        {titulo: 'Ajuda e tutoriais', url: '{% url "help_tutorials" %}', icone: 'fas fa-circle-question', grupo: 'Funções e configurações', chaves: 'ajuda tutorial como usar duvida'}
+      ];
+
+      function montarIndice() {
+        var lista = [], vistos = {};
+        function add(item) { if (!item.url || vistos[item.url + '|' + item.titulo]) return; vistos[item.url + '|' + item.titulo] = 1; item.busca = norm(item.titulo + ' ' + item.grupo + ' ' + (item.chaves || '')); lista.push(item); }
+        document.querySelectorAll('#sidebar .menu-item[href]').forEach(function (a) {
+          if (a.closest('#rc-favoritos') || a.getAttribute('href') === '#') return;
+          var rotulo = a.querySelector('span.text-sm') || Array.prototype.find.call(a.querySelectorAll('span'), function (x) { return !x.className && x.textContent.trim(); });
+          var icone = a.querySelector('i.fas, i.far, i.fa-solid');
+          var sub = a.closest('.submenu-content'), grupo = 'Módulos';
+          if (sub && sub.previousElementSibling) { var g = sub.previousElementSibling.querySelector('.menu-grupo span, span.sidebar-text'); if (g) grupo = g.textContent.trim(); }
+          if (grupo === grupo.toUpperCase()) grupo = grupo.charAt(0) + grupo.slice(1).toLowerCase();
+          var dica = a.querySelector('.tooltip-collapsed');
+          add({titulo: (rotulo ? rotulo.textContent : a.textContent).trim().replace(/\s+/g, ' '), url: a.getAttribute('href'),
+               icone: icone ? icone.className.replace(/text-\S+/g, '') : 'fas fa-link', grupo: grupo, chaves: dica ? dica.textContent : ''});
+        });
+        document.querySelectorAll('#userMenuDropdown a[href]').forEach(function (a) {
+          var i = a.querySelector('i');
+          add({titulo: a.textContent.trim().replace(/\s+/g, ' '), url: a.getAttribute('href'), icone: i ? i.className.replace(/text-\S+|mr-\S+/g, '') : 'fas fa-link', grupo: 'Funções e configurações'});
+        });
+        EXTRAS.forEach(add);
+        return lista;
+      }
+
+      function pontuar(item, termos, frase) {
+        var t = norm(item.titulo), pts = 0;
+        for (var i = 0; i < termos.length; i++) if (item.busca.indexOf(termos[i]) < 0) return 0;
+        if (t === frase) pts += 100; if (t.indexOf(frase) === 0) pts += 50;
+        if ((' ' + t).indexOf(' ' + frase) >= 0) pts += 25; if (t.indexOf(frase) >= 0) pts += 10;
+        return pts + 1;
+      }
+      function realcar(texto, q) {
+        var n = norm(texto), i = q ? n.indexOf(norm(q)) : -1;
+        if (i < 0 || n.length !== texto.length) return esc(texto);
+        return esc(texto.slice(0, i)) + '<b>' + esc(texto.slice(i, i + q.length)) + '</b>' + esc(texto.slice(i + q.length));
+      }
+      function recentes() { try { return JSON.parse(localStorage.getItem('rc-busca-recentes') || '[]'); } catch (e) { return []; } }
+      function lembrar(item) {
+        try {
+          var r = recentes().filter(function (x) { return x.url !== item.url; });
+          r.unshift({titulo: item.titulo, url: item.url, icone: item.icone, grupo: item.grupo});
+          localStorage.setItem('rc-busca-recentes', JSON.stringify(r.slice(0, 6)));
+        } catch (e) {}
+      }
+
+      function desenhar(grupos, q) {
+        itensAtuais = [];
+        var html = '';
+        grupos.forEach(function (g) {
+          if (!g.itens.length) return;
+          html += '<div class="grupo">' + esc(g.titulo) + '</div>';
+          g.itens.forEach(function (it) {
+            var i = itensAtuais.length; itensAtuais.push(it);
+            html += '<a class="item" role="option" id="rc-busca-op-' + i + '" data-i="' + i + '" href="' + esc(it.url) + '">' +
+              '<span class="ic"><i class="' + esc(it.icone || 'fas fa-link') + '"></i></span>' +
+              '<span class="min-w-0 flex-1"><span class="block text-sm font-semibold truncate">' + realcar(it.titulo, q) + '</span>' +
+              (it.sub || it.grupo ? '<span class="block text-[11px] text-gray-500 truncate">' + esc(it.sub || it.grupo) + '</span>' : '') + '</span>' +
+              '<i class="fas fa-arrow-turn-down rotate-90 text-gray-300 text-xs"></i></a>';
+          });
+        });
+        if (!html) html = q ? '<p class="p-8 text-center text-sm text-gray-500"><i class="fas fa-magnifying-glass text-2xl text-gray-300 block mb-2"></i>Nada encontrado para “' + esc(q) + '”.</p>'
+                           : '<p class="p-8 text-center text-sm text-gray-500">Digite para buscar módulos, funções, configurações, chamados, comunicados, Facilitador e mais.</p>';
+        res.innerHTML = html;
+        selecionar(0);
+      }
+      function selecionar(i) {
+        selecionado = Math.max(0, Math.min(i, itensAtuais.length - 1));
+        res.querySelectorAll('.item').forEach(function (el) { el.classList.toggle('sel', +el.dataset.i === selecionado); el.setAttribute('aria-selected', +el.dataset.i === selecionado ? 'true' : 'false'); });
+        var el = document.getElementById('rc-busca-op-' + selecionado);
+        if (el) { el.scrollIntoView({block: 'nearest'}); campo.setAttribute('aria-activedescendant', el.id); }
+      }
+
+      function buscar() {
+        var q = campo.value.trim(), frase = norm(q), termos = frase.split(/\s+/).filter(Boolean);
+        indice = indice || montarIndice();
+        if (!q) {
+          var fav = [];
+          document.querySelectorAll('#rc-favoritos .menu-item').forEach(function (a) {
+            var item = indice.filter(function (x) { return x.url === a.getAttribute('href'); })[0]; if (item) fav.push(item);
+          });
+          desenhar([{titulo: 'Recentes', itens: recentes()}, {titulo: 'Favoritos', itens: fav}], '');
+          return;
+        }
+        var locais = indice.map(function (it) { return {it: it, p: pontuar(it, termos, frase)}; })
+          .filter(function (x) { return x.p; }).sort(function (a, b) { return b.p - a.p; }).map(function (x) { return x.it; });
+        var porGrupo = {}, ordem = [];
+        locais.slice(0, 12).forEach(function (it) {
+          var g = it.grupo === 'Funções e configurações' ? it.grupo : 'Módulos';
+          if (!porGrupo[g]) { porGrupo[g] = []; ordem.push(g); }
+          porGrupo[g].push(it.grupo !== g ? Object.assign({}, it, {sub: it.grupo}) : it);
+        });
+        var grupos = ordem.map(function (g) { return {titulo: g, itens: porGrupo[g]}; });
+        desenhar(grupos, q);
+        clearTimeout(temporizador);
+        if (q.length < 2) return;
+        temporizador = setTimeout(function () {
+          if (pedido) pedido.abort();
+          pedido = new AbortController();
+          document.getElementById('rc-busca-carregando').classList.remove('hidden');
+          fetch(URL_DADOS + '?q=' + encodeURIComponent(q), {credentials: 'same-origin', signal: pedido.signal})
+            .then(function (r) { return r.ok ? r.json() : {grupos: []}; })
+            .then(function (d) { if (campo.value.trim() === q) desenhar(grupos.concat(d.grupos || []), q); })
+            .catch(function () {})
+            .finally(function () { document.getElementById('rc-busca-carregando').classList.add('hidden'); });
+        }, 220);
+      }
+
+      function abrir() {
+        foco = document.activeElement; indice = null;
+        raiz.classList.add('aberta'); document.body.style.overflow = 'hidden';
+        campo.value = ''; buscar(); setTimeout(function () { campo.focus(); }, 30);
+      }
+      function fechar() { raiz.classList.remove('aberta'); document.body.style.overflow = ''; if (foco && foco.focus) foco.focus(); }
+      function ir(i) { var it = itensAtuais[i]; if (!it) return; lembrar(it); fechar(); window.location.href = it.url; }
+
+      document.querySelectorAll('[data-rc-busca]').forEach(function (b) { b.addEventListener('click', abrir); });
+      raiz.querySelectorAll('[data-rc-fechar]').forEach(function (b) { b.addEventListener('click', fechar); });
+      campo.addEventListener('input', buscar);
+      campo.addEventListener('keydown', function (e) {
+        if (e.key === 'ArrowDown') { e.preventDefault(); selecionar(selecionado + 1); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); selecionar(selecionado - 1); }
+        else if (e.key === 'Enter') { e.preventDefault(); ir(selecionado); }
+        else if (e.key === 'Escape') { e.preventDefault(); fechar(); }
+      });
+      res.addEventListener('click', function (e) {
+        var a = e.target.closest('.item'); if (!a) return;
+        if (e.ctrlKey || e.metaKey || e.shiftKey || e.button === 1) { lembrar(itensAtuais[+a.dataset.i]); return; }
+        e.preventDefault(); ir(+a.dataset.i);
+      });
+      res.addEventListener('mousemove', function (e) { var a = e.target.closest('.item'); if (a && +a.dataset.i !== selecionado) selecionar(+a.dataset.i); });
+      document.addEventListener('keydown', function (e) {
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); raiz.classList.contains('aberta') ? fechar() : abrir(); }
+      });
+    })();
+    </script>
+    {% endif %}
     {% block extra_js %}{% endblock %}
     
     <script>

@@ -290,7 +290,7 @@
                 <h3 class="font-extrabold text-[15px] leading-tight">{{ b.setor.name }} {% if b.setor.adabas %}<span class="text-[11px] font-semibold t3">{{ b.setor.adabas }}</span>{% endif %}</h3>
                 <div class="flex flex-wrap gap-1 mt-1.5">
                   {% for grupo, n in b.resumo %}<span class="chip-g g-{{ grupo|slugify }}">{{ n }} {{ grupo }}</span>{% endfor %}
-                  {% if b.vagas %}<span class="tag tag-alerta"><i class="fas fa-user-clock"></i>{{ b.vagas|length }} vaga(s)</span>{% endif %}
+                  {% if b.total_vagas %}<span class="tag tag-alerta"><i class="fas fa-user-clock"></i>{{ b.total_vagas }} vaga(s)</span>{% endif %}
                   {% if b.sem_gerente %}<span class="tag tag-erro"><i class="fas fa-triangle-exclamation"></i>sem gerente</span>{% endif %}
                   {% if b.total_previsto %}<span class="tag {% if b.falta %}tag-alerta{% else %}tag-ok{% endif %}" title="{% for c in b.comparacao %}{{ c.grupo }}: {{ c.real }}/{{ c.previsto }}{% if not forloop.last %} · {% endif %}{% endfor %}"><i class="fas fa-bullseye"></i>HC {{ b.total }}/{{ b.total_previsto }}{% if b.falta %} · falta{{ b.falta|pluralize:"m" }} {{ b.falta }}{% endif %}</span>{% endif %}
                 </div>
@@ -363,6 +363,15 @@
                     <td class="text-right"><button type="button" class="bt bt-claro !py-1 !px-2.5 !text-xs" data-fechar-vaga="{{ v.id }}" aria-label="Fechar vaga de {{ v.cargo }}"><i class="fas fa-check"></i>Fechar</button></td>
                   </tr>
                   {% endfor %}
+                  {% for v in b.vagas_previstas %}
+                  <tr class="item" data-item data-vaga data-vaga-prevista data-cargo="" data-busca="vaga em aberto {{ v.grupo|lower }} hc previsto" data-alerta>
+                    <td data-label="Nome"><div class="flex items-center gap-2.5"><span class="avatar p g-{{ v.grupo|slugify }}" aria-hidden="true"><i class="fas fa-user-plus"></i></span>
+                      <div><span class="tag tag-alerta">VAGA EM ABERTO</span><div class="text-[11px] t3">pelo HC previsto: {{ v.real }} de {{ v.previsto }} {{ v.grupo|lower }}</div></div></div></td>
+                    <td data-label="Função"><span class="chip-g g-{{ v.grupo|slugify }}">{{ v.grupo }}</span></td>
+                    <td data-label="Obs." colspan="8" class="text-xs t2">Falta gente para o quadro ideal da loja.</td>
+                    <td class="text-right"><button type="button" class="bt bt-claro !py-1 !px-2.5 !text-xs" data-preencher="{{ b.setor.id }}" aria-label="Preencher vaga de {{ v.grupo }} na {{ b.setor.name }}"><i class="fas fa-user-plus"></i>Preencher</button></td>
+                  </tr>
+                  {% endfor %}
                 </tbody>
               </table>
             </div>
@@ -412,8 +421,18 @@
                 <p class="text-[10px] t3 mt-1">aberta em {{ v.criado_em|date:"d/m/Y" }}</p>
               </div>
               {% endfor %}
+              {% for v in b.vagas_previstas %}
+              <div class="pcard vaga-card" data-item data-vaga data-vaga-prevista data-cargo="" data-busca="vaga em aberto {{ v.grupo|lower }} hc previsto" data-alerta>
+                <div class="flex items-start gap-2.5">
+                  <span class="avatar g-{{ v.grupo|slugify }}" aria-hidden="true"><i class="fas fa-user-plus"></i></span>
+                  <div class="min-w-0 flex-1"><span class="tag tag-alerta">VAGA EM ABERTO</span><p class="font-bold mt-1">{{ v.grupo }}</p></div>
+                </div>
+                <p class="text-[11px] t2 mt-2">Pelo HC previsto: {{ v.real }} de {{ v.previsto }} {{ v.grupo|lower }}.</p>
+                <button type="button" class="bt bt-claro !py-1 !px-2.5 !text-xs mt-2" data-preencher="{{ b.setor.id }}" aria-label="Preencher vaga de {{ v.grupo }} na {{ b.setor.name }}"><i class="fas fa-user-plus"></i>Preencher</button>
+              </div>
+              {% endfor %}
             </div>
-            {% if not b.pessoas and not b.vagas %}<p class="text-center text-sm t3 py-6 border-t" style="border-color:var(--borda)">Ninguém nesta loja. Arraste alguém para cá ou abra uma vaga.</p>{% endif %}
+            {% if not b.pessoas and not b.vagas and not b.vagas_previstas %}<p class="text-center text-sm t3 py-6 border-t" style="border-color:var(--borda)">Ninguém nesta loja. Arraste alguém para cá ou abra uma vaga.</p>{% endif %}
           </div></div>
         </article>
         {% endfor %}
@@ -939,6 +958,7 @@
     abrirGaveta('gaveta');
   }
   $$('[data-movimentar]').forEach(b => b.addEventListener('click', () => abrirMovimentar(b.dataset.movimentar)));
+  $$('[data-preencher]').forEach(b => b.addEventListener('click', () => abrirMovimentar('', b.dataset.preencher)));
 
   /* ---------- arrastar uma pessoa para outra loja ---------- */
   let arrastado = null;

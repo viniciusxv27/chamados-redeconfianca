@@ -16,6 +16,8 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include, re_path
+
+from core import busca as core_busca
 from django.conf import settings
 from django.conf.urls.static import static
 from django.views.static import serve
@@ -141,6 +143,7 @@ urlpatterns = [
     path('renova/', include('renova.urls')),  # Vini Renova (avaliação de aparelho usado)
     path('rotina-gerencial/', include('rotina.urls')),  # Rotina Gerencial
     path('apresentacoes/', include('apresentacoes.urls')),  # Assistente de Apresentações
+    path('busca-global/', core_busca.busca_global, name='busca_global'),  # busca do menu superior
     path('quadro-hc/', include('quadro_hc.urls')),  # Quadro de HC (só SUPERADMIN)
     path('facilitador/', include('facilitador.urls')),  # Facilitador: arquivos e links úteis
     path('', include('tangerino.urls')),  # Ponto e Férias (integração Tangerino)

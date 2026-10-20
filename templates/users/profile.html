@@ -228,6 +228,33 @@
             </form>
         </div>
 
+        <!-- Menu favorito -->
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden" id="cardFavoritos">
+            <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-900"><i class="fas fa-star text-yellow-400 mr-1"></i>Menu favorito</h3>
+                    <p class="text-sm text-gray-600">Escolha os menus que aparecem logo abaixo de Home e Power BI, na ordem que quiser.</p>
+                </div>
+                <button type="button" id="favSalvar" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors text-sm font-semibold disabled:opacity-40" disabled>
+                    <i class="fas fa-floppy-disk mr-1"></i>Salvar favoritos
+                </button>
+            </div>
+            <div class="p-6 grid lg:grid-cols-2 gap-6">
+                <div>
+                    <h4 class="text-sm font-semibold text-gray-900 mb-2">Seus favoritos <span class="text-gray-400 font-normal" id="favContador"></span></h4>
+                    <p class="text-xs text-gray-500 mb-2">Arraste para ordenar (ou use as setas).</p>
+                    <ol id="favLista" class="space-y-1.5 min-h-[3rem]" aria-label="Favoritos na ordem do menu"></ol>
+                    <p id="favVazio" class="text-sm text-gray-400 border border-dashed border-gray-300 rounded-lg p-4 text-center">Nenhum favorito ainda. Marque a estrela ao lado de um menu.</p>
+                </div>
+                <div>
+                    <h4 class="text-sm font-semibold text-gray-900 mb-2">Menus que você acessa</h4>
+                    <input type="search" id="favBusca" placeholder="Filtrar menus…" aria-label="Filtrar menus"
+                           class="w-full mb-2 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent">
+                    <div id="favCatalogo" class="max-h-96 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-100"></div>
+                </div>
+            </div>
+        </div>
+
         <!-- Security Settings -->
         <div class="bg-white rounded-xl shadow-sm overflow-hidden">
             <div class="px-6 py-4 border-b border-gray-200">
@@ -251,6 +278,7 @@
     </div>
 </div>
 
+{{ user.menu_favoritos|json_script:"perfil-favoritos" }}
 <script>
 function toggleEdit() {
     // Nome e sobrenome ficam de fora: são somente leitura nesta tela.
@@ -327,6 +355,97 @@ function submitPhoto() {
         });
     }
 }
+
+// ---------- Menu favorito ----------
+(function () {
+    const salvos = JSON.parse(document.getElementById('perfil-favoritos').textContent || '[]') || [];
+    const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+    const norm = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    // O catálogo é o próprio menu da pessoa: só aparece o que ela vê.
+    const catalogo = [], vistos = new Set();
+    document.querySelectorAll('#sidebar .menu-item[href]').forEach(a => {
+        if (a.closest('#rc-favoritos')) return;
+        const rota = a.dataset.rota || a.getAttribute('href');
+        if (vistos.has(rota)) return;
+        vistos.add(rota);
+        const rotuloEl = a.querySelector('span.text-sm') || [...a.querySelectorAll('span')].find(x => !x.className && x.textContent.trim());
+        const rotulo = (rotuloEl ? rotuloEl.textContent : a.textContent).trim().replace(/\s+/g, ' ');
+        const icone = a.querySelector('i.fas, i.fa-solid, i.far');
+        const sub = a.closest('.submenu-content');
+        let grupo = sub && sub.previousElementSibling ? (sub.previousElementSibling.querySelector('.menu-grupo span, span.sidebar-text') || {}).textContent : 'Início';
+        grupo = (grupo || 'Início').trim();
+        if (grupo === grupo.toUpperCase()) grupo = grupo.charAt(0) + grupo.slice(1).toLowerCase();
+        if (!rota || rota === '#' || !rota.startsWith('/')) return;
+        catalogo.push({rota, rotulo, icone: icone ? icone.className : 'fas fa-link', grupo});
+    });
+    const porRota = Object.fromEntries(catalogo.map(c => [c.rota, c]));
+    let favoritos = salvos.filter(r => porRota[r]);
+    const original = JSON.stringify(favoritos);
+    const lista = document.getElementById('favLista'), btSalvar = document.getElementById('favSalvar');
+
+    function marcarSujo() { btSalvar.disabled = JSON.stringify(favoritos) === original; }
+    function desenharLista() {
+        lista.innerHTML = favoritos.map((r, i) => {
+            const c = porRota[r];
+            return `<li draggable="true" data-rota="${esc(r)}" class="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 cursor-grab">
+                <i class="fas fa-grip-vertical text-gray-300"></i><i class="${esc(c.icone)} w-5 text-center"></i>
+                <span class="flex-1 text-sm font-medium text-gray-900 truncate">${esc(c.rotulo)}<span class="text-xs text-gray-400 font-normal"> · ${esc(c.grupo)}</span></span>
+                <button type="button" class="px-1.5 text-gray-400 hover:text-gray-700 disabled:opacity-30" data-mover="-1" ${i === 0 ? 'disabled' : ''} aria-label="Subir ${esc(c.rotulo)}"><i class="fas fa-arrow-up"></i></button>
+                <button type="button" class="px-1.5 text-gray-400 hover:text-gray-700 disabled:opacity-30" data-mover="1" ${i === favoritos.length - 1 ? 'disabled' : ''} aria-label="Descer ${esc(c.rotulo)}"><i class="fas fa-arrow-down"></i></button>
+                <button type="button" class="px-1.5 text-gray-400 hover:text-red-600" data-tirar aria-label="Tirar ${esc(c.rotulo)} dos favoritos"><i class="fas fa-xmark"></i></button></li>`;
+        }).join('');
+        document.getElementById('favVazio').hidden = favoritos.length > 0;
+        document.getElementById('favContador').textContent = favoritos.length ? `(${favoritos.length})` : '';
+        desenharCatalogo(); marcarSujo();
+    }
+    function desenharCatalogo() {
+        const t = norm(document.getElementById('favBusca').value);
+        const grupos = {};
+        catalogo.filter(c => !t || norm(c.rotulo + ' ' + c.grupo).includes(t)).forEach(c => (grupos[c.grupo] = grupos[c.grupo] || []).push(c));
+        document.getElementById('favCatalogo').innerHTML = Object.entries(grupos).map(([g, itens]) =>
+            `<div class="px-3 py-1.5 bg-gray-50 text-[11px] font-semibold uppercase tracking-wider text-gray-500">${esc(g)}</div>` +
+            itens.map(c => { const on = favoritos.includes(c.rota);
+                return `<button type="button" data-alternar="${esc(c.rota)}" aria-pressed="${on}" class="w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-orange-50">
+                  <i class="${esc(c.icone)} w-5 text-center"></i><span class="flex-1 truncate">${esc(c.rotulo)}</span>
+                  <i class="${on ? 'fas text-yellow-400' : 'far text-gray-300'} fa-star" aria-hidden="true"></i></button>`; }).join('')
+        ).join('') || '<p class="p-4 text-sm text-gray-400 text-center">Nenhum menu encontrado.</p>';
+    }
+    document.getElementById('favBusca').addEventListener('input', desenharCatalogo);
+    document.getElementById('favCatalogo').addEventListener('click', e => {
+        const b = e.target.closest('[data-alternar]'); if (!b) return;
+        const r = b.dataset.alternar;
+        favoritos = favoritos.includes(r) ? favoritos.filter(x => x !== r) : [...favoritos, r];
+        desenharLista();
+    });
+    lista.addEventListener('click', e => {
+        const li = e.target.closest('li'); if (!li) return;
+        const i = favoritos.indexOf(li.dataset.rota);
+        if (e.target.closest('[data-tirar]')) favoritos.splice(i, 1);
+        const m = e.target.closest('[data-mover]');
+        if (m) { const j = i + +m.dataset.mover; [favoritos[i], favoritos[j]] = [favoritos[j], favoritos[i]]; }
+        desenharLista();
+    });
+    let arrastado = null;
+    lista.addEventListener('dragstart', e => { arrastado = e.target.closest('li'); if (arrastado) arrastado.classList.add('opacity-50'); });
+    lista.addEventListener('dragend', () => { if (arrastado) arrastado.classList.remove('opacity-50'); arrastado = null;
+        favoritos = [...lista.querySelectorAll('li')].map(li => li.dataset.rota); desenharLista(); });
+    lista.addEventListener('dragover', e => {
+        e.preventDefault(); const alvo = e.target.closest('li'); if (!arrastado || !alvo || alvo === arrastado) return;
+        const r = alvo.getBoundingClientRect();
+        lista.insertBefore(arrastado, e.clientY > r.top + r.height / 2 ? alvo.nextSibling : alvo);
+    });
+    btSalvar.addEventListener('click', async () => {
+        btSalvar.disabled = true;
+        try {
+            const r = await fetch('{% url "salvar_menu_favoritos" %}', {method: 'POST', credentials: 'same-origin',
+                headers: {'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/json'}, body: JSON.stringify({favoritos})});
+            const j = await r.json();
+            if (!r.ok || j.erro) throw new Error(j.erro || 'Não foi possível salvar.');
+            location.reload();
+        } catch (e) { alert(e.message); btSalvar.disabled = false; }
+    });
+    desenharLista();
+})();
 </script>
 
 <!-- Modal de Upload de Foto -->

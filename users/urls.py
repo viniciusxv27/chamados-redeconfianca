@@ -23,6 +23,7 @@ urlpatterns = [
     path('profile/', views.profile_view, name='profile'),
     path('profile/update/', views.update_profile_view, name='update_profile'),
     path('profile/photo/', views.upload_profile_photo_ajax, name='upload_profile_photo'),
+    path('profile/favoritos/', views.salvar_menu_favoritos, name='salvar_menu_favoritos'),
     path('settings/', views.settings_view, name='settings'),
     path('settings/update/', views.update_settings_view, name='update_settings'),
     path('settings/tema/', views.set_theme_view, name='set_theme'),

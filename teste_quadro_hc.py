@@ -284,6 +284,20 @@ try:
     r = post('/quadro-hc/previsto/', {'setor': G.pk, 'quantidades': {'Consultor': 'x'}})
     t('quantidade inválida avisa', r.status_code == 400)
 
+    print('\n== VAGA EM ABERTO PELO HC PREVISTO ==')
+    falta_cons = comp['Consultor']['falta']
+    previstas = [v['grupo'] for v in bg['vagas_previstas']]
+    t('um card "Vaga em aberto" para cada pessoa que falta', previstas.count('Consultor') == falta_cons > 0, previstas)
+    t('função completa não gera vaga', 'Gerente' not in previstas or comp['Gerente']['falta'] > 0)
+    html = ca.get('/quadro-hc/').content.decode()
+    t('a tela mostra o card com o motivo', 'pelo HC previsto' in html and 'data-vaga-prevista' in html and 'data-preencher=' in html)
+    VagaHC.objects.create(setor=G, cargo='CONSULTOR DE VENDAS', observacao='já aberta', criado_por=chefe)
+    q = servicos.montar_quadro()
+    bg = next(b for c in q['carteiras'] for b in c['lojas'] if b['setor'].id == G.id)
+    t('vaga aberta à mão para a função conta (não duplica)',
+      [v['grupo'] for v in bg['vagas_previstas']].count('Consultor') == falta_cons - 1 and bg['total_vagas'] == falta_cons)
+    t('o topo soma as vagas previstas', q['vagas'] >= bg['total_vagas'] and q['vagas_previstas'] >= falta_cons - 1)
+
     print('\n== AGENDADOR DIÁRIO ==')
     chamadas = []
     tarefas = [('zz_teste', time(8, 0), 'builtins.print', 'teste')]
