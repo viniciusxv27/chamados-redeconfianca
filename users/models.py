@@ -1194,6 +1194,13 @@ class UserDocument(models.Model):
         verbose_name="Enviado por"
     )
     uploaded_at = models.DateTimeField(auto_now_add=True)
+    ORIGEM_PRE_CADASTRO, ORIGEM_POSTERIOR = 'PRE_CADASTRO', 'POSTERIOR'
+    # Vazio nos documentos de antes do campo (e nos gravados por servidor ainda sem ele):
+    # aí vale quem enviou — no pré-cadastro é a própria pessoa (ver do_pre_cadastro).
+    origem = models.CharField(
+        max_length=20, null=True, blank=True,
+        choices=[(ORIGEM_PRE_CADASTRO, 'Enviado no pré-cadastro'), (ORIGEM_POSTERIOR, 'Adicionado depois')],
+        verbose_name="Origem")
 
     class Meta:
         verbose_name = "Documento do Colaborador"
@@ -1202,6 +1209,12 @@ class UserDocument(models.Model):
 
     def __str__(self):
         return f"{self.user} - {self.display_name}"
+
+    @property
+    def do_pre_cadastro(self):
+        if self.origem:
+            return self.origem == self.ORIGEM_PRE_CADASTRO
+        return bool(self.uploaded_by_id) and self.uploaded_by_id == self.user_id
 
     @property
     def display_name(self):

@@ -11,3 +11,6 @@ class CommunicationsConfig(AppConfig):
             from . import popup_checkers  # noqa: F401
         except Exception:
             pass
+        # Grupo por cargo: mudou o cargo, entra/sai dos grupos sozinho.
+        from .cargos import conectar
+        conectar()

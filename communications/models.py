@@ -41,6 +41,32 @@ class CommunicationGroup(models.Model):
         return self.name
 
 
+class CargoDoGrupo(models.Model):
+    """Cargo (User.job_title) que põe a pessoa no grupo sozinho — ver communications/cargos.py."""
+    grupo = models.ForeignKey(CommunicationGroup, on_delete=models.CASCADE, related_name='cargos')
+    cargo = models.CharField(max_length=100, verbose_name="Cargo")
+
+    class Meta:
+        verbose_name = "Cargo do grupo"
+        verbose_name_plural = "Cargos do grupo"
+        unique_together = [('grupo', 'cargo')]
+        ordering = ['cargo']
+
+    def __str__(self):
+        return f'{self.grupo} ← {self.cargo}'
+
+
+class MembroPeloCargo(models.Model):
+    """Quem entrou no grupo pelo cargo. Só esses saem quando o cargo muda; quem foi posto à mão fica."""
+    grupo = models.ForeignKey(CommunicationGroup, on_delete=models.CASCADE, related_name='membros_pelo_cargo')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='+')
+    cargo = models.CharField(max_length=100, blank=True)
+    desde = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [('grupo', 'user')]
+
+
 class Communication(models.Model):
     SENDER_GROUP_CHOICES = [
     ]

@@ -1408,7 +1408,8 @@ def _aplicar_como_foto_de_perfil(target_user, uploaded_file):
         return False
 
 
-def _store_user_document(target_user, uploaded_file, document_type=None, document_name='', uploaded_by=None):
+def _store_user_document(target_user, uploaded_file, document_type=None, document_name='', uploaded_by=None,
+                         origem=UserDocument.ORIGEM_POSTERIOR):
     """Cria um UserDocument a partir de um arquivo enviado.
 
     Quando o tipo do documento está marcado como "usar como foto de perfil",
@@ -1423,6 +1424,7 @@ def _store_user_document(target_user, uploaded_file, document_type=None, documen
         file_size=uploaded_file.size,
         content_type=getattr(uploaded_file, 'content_type', '') or '',
         uploaded_by=uploaded_by,
+        origem=origem,
     )
 
     if document_type is not None and getattr(document_type, 'use_as_profile_photo', False):
@@ -2155,7 +2157,8 @@ def complete_pre_registration_view(request, token):
             target.save()
 
             for doc, uploaded in docs_to_save:
-                _store_user_document(target, uploaded, document_type=doc, document_name=doc.name, uploaded_by=target)
+                _store_user_document(target, uploaded, document_type=doc, document_name=doc.name, uploaded_by=target,
+                                     origem=UserDocument.ORIGEM_PRE_CADASTRO)
 
         log_action(
             target,
@@ -2380,7 +2383,8 @@ def adjust_pre_registration_view(request):
             target.pre_registration_extra_documents.clear()
 
             for doc, uploaded in docs_to_save:
-                _store_user_document(target, uploaded, document_type=doc, document_name=doc.name, uploaded_by=target)
+                _store_user_document(target, uploaded, document_type=doc, document_name=doc.name, uploaded_by=target,
+                                     origem=UserDocument.ORIGEM_PRE_CADASTRO)
 
         log_action(
             target,
@@ -2439,10 +2443,25 @@ def view_user_profile_view(request, user_id):
             reverse('complete_pre_registration', kwargs={'token': target.pre_registration_token})
         )
 
+    # Separados: o que a pessoa mandou no pré-cadastro × o que entrou depois (gestor).
+    documents = list(documents)
+    docs_pre_cadastro = [d for d in documents if d.do_pre_cadastro]
+    docs_posteriores = [d for d in documents if not d.do_pre_cadastro]
+    teve_pre_cadastro = target.pre_registration_status != User.PRE_REG_NONE or bool(docs_pre_cadastro)
+    grupos_documentos = [
+        ('Adicionados depois' if teve_pre_cadastro else 'Adicionados pela gestão', 'fa-folder-plus', 'text-blue-600',
+         docs_posteriores, 'Nenhum documento adicionado depois do pré-cadastro.' if teve_pre_cadastro
+         else 'Nenhum documento adicionado.'),
+    ]
+    if teve_pre_cadastro:
+        grupos_documentos.insert(0, ('Enviados no pré-cadastro', 'fa-user-check', 'text-emerald-600', docs_pre_cadastro,
+                                     'Nenhum documento veio do pré-cadastro.'))
+
     context = {
         'user': request.user,
         'target': target,
         'documents': documents,
+        'grupos_documentos': grupos_documentos,
         'signed_documents': signed_documents,
         'pending_documents': pending_documents,
         'required_documents': RequiredDocument.objects.filter(is_active=True),
@@ -5438,47 +5457,86 @@ def create_group_view(request):
 
 @login_required
 def edit_group_view(request, group_id):
-    """Editar grupo de comunicação"""
+    """Editar grupo de comunicação: membros à mão + cargos que põem a pessoa no grupo sozinho."""
+    import re
+
     if not request.user.can_manage_users():
         messages.error(request, 'Você não tem permissão para realizar esta ação.')
         return redirect('dashboard')
     
-    from communications.models import CommunicationGroup
+    from communications.cargos import normalizar, sincronizar_grupo
+    from communications.models import CargoDoGrupo, CommunicationGroup, MembroPeloCargo
     group = get_object_or_404(CommunicationGroup, id=group_id)
     
     if request.method == 'POST':
         name = request.POST.get('name')
         description = request.POST.get('description', '')
         user_ids = request.POST.getlist('users')
+        cargos = {}
+        for c in request.POST.getlist('cargos'):
+            limpo = re.sub(r'\s+', ' ', c or '').strip()[:100]
+            if limpo:
+                cargos.setdefault(normalizar(limpo), limpo)
         
         try:
-            group.name = name
-            group.description = description
-            group.save()
+            with transaction.atomic():
+                group.name = name
+                group.description = description
+                group.save()
+                
+                # Quem entrou pelo cargo não vem no POST (a caixa fica travada): continua até o cargo sair.
+                pelo_cargo = set(MembroPeloCargo.objects.filter(grupo=group).values_list('user_id', flat=True))
+                escolhidos = {int(u) for u in user_ids if str(u).isdigit()} | pelo_cargo
+                if escolhidos:
+                    group.members.set(User.objects.filter(id__in=escolhidos))
+                else:
+                    group.members.clear()
+
+                antes = {normalizar(c): c for c in group.cargos.values_list('cargo', flat=True)}
+                CargoDoGrupo.objects.filter(grupo=group).exclude(cargo__in=list(cargos.values())).delete()
+                for cargo in cargos.values():
+                    CargoDoGrupo.objects.get_or_create(grupo=group, cargo=cargo)
+                entraram, sairam = sincronizar_grupo(group)
             
-            if user_ids:
-                users = User.objects.filter(id__in=user_ids)
-                group.members.set(users)
-            else:
-                group.members.clear()
-            
+            mudou_cargo = sorted(antes.values()) != sorted(cargos.values())
             log_action(
                 request.user,
                 'GROUP_UPDATE',
-                f'Grupo atualizado: {group.name}',
+                f'Grupo atualizado: {group.name}'
+                + (f' — cargos: {", ".join(sorted(cargos.values())) or "nenhum"}' if mudou_cargo else '')
+                + (f' — {len(entraram)} entrou(aram) e {len(sairam)} saiu(íram) pelo cargo' if entraram or sairam else ''),
                 request
             )
             
-            messages.success(request, f'Grupo "{group.name}" atualizado com sucesso!')
+            extra = ''
+            if entraram or sairam:
+                extra = f' Pelo cargo: {len(entraram)} entrou(aram), {len(sairam)} saiu(íram).'
+            messages.success(request, f'Grupo "{group.name}" atualizado com sucesso!{extra}')
             return redirect('manage_groups')
             
         except Exception as e:
             messages.error(request, f'Erro ao atualizar grupo: {str(e)}')
     
-    users = User.objects.filter(is_active=True).order_by('first_name', 'last_name')
+    users = User.objects.filter(is_active=True).select_related('sector').order_by('first_name', 'last_name')
+    pelo_cargo = dict(MembroPeloCargo.objects.filter(grupo=group).values_list('user_id', 'cargo'))
+    member_ids = set(group.members.values_list('id', flat=True))
+    marcados = {normalizar(c) for c in group.cargos.values_list('cargo', flat=True)}
+    pessoas_por_cargo = {}
+    for cargo in User.objects.filter(is_active=True).exclude(job_title='').values_list('job_title', flat=True):
+        chave = normalizar(cargo)
+        pessoas_por_cargo[chave] = pessoas_por_cargo.get(chave, 0) + 1
+    opcoes = {normalizar(c): c for c in _job_title_choices()}
+    for c in group.cargos.values_list('cargo', flat=True):  # cargo do grupo que ninguém mais tem continua na lista
+        opcoes.setdefault(normalizar(c), c)
+    cargo_opcoes = sorted(({'nome': nome, 'pessoas': pessoas_por_cargo.get(chave, 0), 'marcado': chave in marcados}
+                           for chave, nome in opcoes.items()), key=lambda o: (not o['marcado'], o['nome'].upper()))
     context = {
         'group': group,
         'users': users,
+        'member_ids': member_ids,
+        'pelo_cargo': pelo_cargo,
+        'cargo_opcoes': cargo_opcoes,
+        'cargos_marcados': [o for o in cargo_opcoes if o['marcado']],
         'user': request.user,
     }
     return render(request, 'admin/edit_group.html', context)
