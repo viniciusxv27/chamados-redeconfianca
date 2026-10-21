@@ -4345,9 +4345,13 @@ def profile_view(request):
         status__in=['OPEN', 'IN_PROGRESS', 'PENDING']
     ).count()
     
+    from communications.views import _ve_painel_de_experiencia
+
     context = {
         'user': request.user,
         'user_tickets_count': user_tickets_count,
+        # Só quem recebe o popup "Alertas de Janela de Experiência" vê a opção de desligá-lo.
+        've_painel_experiencia': _ve_painel_de_experiencia(request.user),
     }
     return render(request, 'users/profile.html', context)
 
@@ -8158,3 +8162,19 @@ def salvar_menu_favoritos(request):
     request.user.menu_favoritos = limpos[:40]
     request.user.save(update_fields=['menu_favoritos'])
     return JsonResponse({'ok': True, 'favoritos': request.user.menu_favoritos})
+
+
+@login_required
+@require_POST
+def salvar_popup_experiencia(request):
+    """Liga/desliga o popup "Alertas de Janela de Experiência" da home (vem ligado)."""
+    import json as _json
+    try:
+        ativo = _json.loads(request.body or b'{}').get('ativo')
+    except ValueError:
+        ativo = None
+    if not isinstance(ativo, bool):
+        return JsonResponse({'erro': 'Informe ativo (verdadeiro ou falso).'}, status=400)
+    request.user.popup_janela_experiencia = ativo
+    request.user.save(update_fields=['popup_janela_experiencia'])
+    return JsonResponse({'ok': True, 'ativo': ativo})

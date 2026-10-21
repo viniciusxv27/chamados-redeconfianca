@@ -171,7 +171,9 @@ def home_feed(request):
     page_number = request.GET.get('page')
     communications = paginator.get_page(page_number)
 
-    show_experience_window_popup = _ve_painel_de_experiencia(request.user)
+    # Quem recebe o painel pode desligar o popup em Meu perfil (vem ligado para todos).
+    show_experience_window_popup = (_ve_painel_de_experiencia(request.user)
+                                    and getattr(request.user, 'popup_janela_experiencia', True))
     experience_window_data = _get_experience_window_alerts_for_dp() if show_experience_window_popup else {
         'first_window_active': [],
         'second_window_active': [],

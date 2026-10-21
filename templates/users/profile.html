@@ -228,6 +228,51 @@
             </form>
         </div>
 
+        {% if ve_painel_experiencia %}
+        <!-- Preferências da home -->
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden" id="cardPopupExperiencia">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h3 class="text-lg font-semibold text-gray-900"><i class="fas fa-house text-primary mr-1"></i>Preferências da home</h3>
+            </div>
+            <div class="p-6">
+                <div class="flex items-center justify-between gap-4">
+                    <div>
+                        <h4 class="text-sm font-medium text-gray-900">Alertas de Janela de Experiência</h4>
+                        <p class="text-sm text-gray-600">Mostrar o popup com os colaboradores na 1ª e 2ª janela ao abrir a home.</p>
+                        <p class="text-xs mt-1" id="popupExpStatus" aria-live="polite"></p>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer shrink-0">
+                        <input type="checkbox" id="popupExperiencia" class="sr-only peer" {% if user.popup_janela_experiencia %}checked{% endif %}
+                               aria-label="Mostrar o popup Alertas de Janela de Experiência na home">
+                        <span class="w-11 h-6 bg-gray-300 rounded-full peer-checked:bg-primary transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-focus-visible:ring-offset-2"></span>
+                        <span class="absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform peer-checked:translate-x-5"></span>
+                    </label>
+                </div>
+            </div>
+        </div>
+        <script>
+        (function () {
+            const caixa = document.getElementById('popupExperiencia'), status = document.getElementById('popupExpStatus');
+            caixa.addEventListener('change', async () => {
+                const ativo = caixa.checked;
+                caixa.disabled = true;
+                try {
+                    const r = await fetch('{% url "salvar_popup_experiencia" %}', {method: 'POST', credentials: 'same-origin',
+                        headers: {'X-CSRFToken': '{{ csrf_token }}', 'Content-Type': 'application/json'}, body: JSON.stringify({ativo})});
+                    const j = await r.json();
+                    if (!r.ok || j.erro) throw new Error(j.erro || 'Não foi possível salvar.');
+                    status.className = 'text-xs mt-1 text-green-700';
+                    status.textContent = ativo ? 'Ligado: o popup volta a aparecer na home.' : 'Desligado: o popup não aparece mais na home.';
+                } catch (e) {
+                    caixa.checked = !ativo;
+                    status.className = 'text-xs mt-1 text-red-600';
+                    status.textContent = e.message;
+                } finally { caixa.disabled = false; }
+            });
+        })();
+        </script>
+        {% endif %}
+
         <!-- Menu favorito -->
         <div class="bg-white rounded-xl shadow-sm overflow-hidden" id="cardFavoritos">
             <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between gap-3 flex-wrap">

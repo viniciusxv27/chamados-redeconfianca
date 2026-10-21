@@ -497,6 +497,9 @@ class User(AbstractUser):
     ]
     
     email = models.EmailField(unique=True)
+    popup_janela_experiencia = models.BooleanField(
+        default=True, db_default=True, verbose_name="Popup de janela de experiência na home",
+        help_text="Para quem recebe o popup \"Alertas de Janela de Experiência\": ligado por padrão; a pessoa desliga em Meu perfil.")
     menu_favoritos = models.JSONField(
         default=list, blank=True, verbose_name="Menus favoritos",
         help_text="Endereços dos itens do menu que a pessoa favoritou, na ordem escolhida (aparecem abaixo de Home e Power BI).")
