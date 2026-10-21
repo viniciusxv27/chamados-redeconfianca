@@ -400,7 +400,7 @@ def _map_planilha_status(raw: str) -> Optional[str]:
 
 
 def import_planilha_xlsx(file_obj, *, by_user=None) -> dict:
-    """Importa a Esteira de Vendas Vivo (ANALÍTICO DE VENDAS) e roda o cruzamento completo.
+    """Importa a Esteira de Vendas Vivo (ANALÍTICO DE VENDAS ou Base analítica – FIXA) e roda o cruzamento completo.
 
     1. Guarda a planilha (só as colunas do cruzamento) no lugar da anterior.
     2. Sincroniza as vendas de Fixa do MySQL (a Base de Vendas).
@@ -427,6 +427,7 @@ def import_planilha_xlsx(file_obj, *, by_user=None) -> dict:
     pruned = _prune_stale_fibras(import_ts=inicio)
     depois = PlanilhaOrdemInconsistente.objects.count()
     return {
+        'formato': getattr(imp, 'formato', ''),
         'rows': imp.linhas,
         'matched': k.get('pedidos', 0) - k.get('nao_localizada', 0) - k.get('b2b', 0),
         'updated_status': FibraStatusHistory.objects.filter(alterado_em__gte=inicio,

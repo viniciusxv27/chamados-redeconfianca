@@ -27,6 +27,36 @@ html.dark .fb-drop .fb-drop-ico { background: rgba(52,199,89,.16); color: #5EDB8
 .fb-drop input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
 @media (max-width: 640px) { .fb-import { grid-template-columns: 1fr; } }
 
+/* ---- Validação Base × Esteira (os mesmos indicadores da /fibras/validacao) ---- */
+.fb-val { background: var(--fb-card); border-radius: var(--fb-raio-lg); box-shadow: var(--fb-sombra); padding: 14px 16px; margin-bottom: 16px; }
+.fb-val-cab { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.fb-val-cab h2 { font-size: 15px; font-weight: 700; margin: 0; display: flex; align-items: center; gap: 8px; }
+.fb-val-cab p { margin: 2px 0 0; font-size: 12px; color: var(--fb-suave); }
+.fb-val-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 8px; }
+.fb-vk { text-align: left; border: 1px solid var(--fb-linha); background: var(--fb-card-2); border-radius: var(--fb-raio); padding: 9px 11px; cursor: pointer;
+  transition: border-color .15s var(--fb-ease), transform .15s var(--fb-ease); min-width: 0; }
+.fb-vk:hover { transform: translateY(-1px); border-color: var(--fb-pri); }
+.fb-vk.ativo { border-color: var(--fb-pri); background: var(--fb-pri-clara); box-shadow: 0 0 0 2px var(--fb-pri-suave); }
+.fb-vk-topo { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 11.5px; color: var(--fb-suave-2); font-weight: 600; }
+.fb-vk-topo span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fb-vk-topo i { width: 22px; height: 22px; flex: 0 0 22px; border-radius: 7px; display: grid; place-items: center; font-size: 10px; background: var(--fb-campo); color: var(--fb-suave-2); }
+.fb-vk.k-alta .fb-vk-topo i { background: #E3F5E8; color: var(--fb-verde); }
+.fb-vk.k-media .fb-vk-topo i { background: #FFF4E0; color: #E08A00; }
+.fb-vk.k-baixa .fb-vk-topo i { background: #FDEBDD; color: #D2601A; }
+.fb-vk.k-manual .fb-vk-topo i { background: #E5F0FC; color: var(--fb-azul); }
+.fb-vk.k-nl .fb-vk-topo i { background: #FDECEB; color: var(--fb-vermelho); }
+.fb-vk.k-b2b .fb-vk-topo i { background: #EFEAF7; color: var(--fb-roxo); }
+html.dark .fb-vk .fb-vk-topo i { background: var(--fb-campo-2); }
+.fb-vk b { display: block; font-size: 20px; font-weight: 700; letter-spacing: -0.02em; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.fb-vk small { display: block; font-size: 11px; color: var(--fb-suave); line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fb-val-barra { display: flex; height: 6px; border-radius: 6px; overflow: hidden; background: var(--fb-campo); margin-top: 10px; }
+.fb-val-barra span { display: block; height: 100%; }
+@media (max-width: 767px) {
+  .fb-val-grade { display: flex; overflow-x: auto; scroll-snap-type: x proximity; margin: 0 -4px; padding: 2px 4px 6px; scrollbar-width: none; }
+  .fb-val-grade::-webkit-scrollbar { display: none; }
+  .fb-val-grade .fb-vk { flex: 0 0 132px; scroll-snap-align: start; }
+}
+
 .fb-board-wrap { position: relative; }
 .fb-board-wrap::before, .fb-board-wrap::after { content: ""; position: absolute; top: 0; bottom: 12px; width: 36px; pointer-events: none; z-index: 3; opacity: 0; transition: opacity .25s; }
 .fb-board-wrap::before { left: 0; background: linear-gradient(90deg, var(--fb-bg), transparent); }
@@ -130,7 +160,7 @@ html.dark .fb-k-novo { color: #A5B4FC; }
   <div class="fb-cab">
     <div>
       <h1><span class="fb-ico" aria-hidden="true"><i class="fas fa-network-wired"></i></span> Fibras — Acompanhamento</h1>
-      <p>{% if periodo_ativo %}Período: {{ periodo_rotulo }}{% else %}Mês corrente{% endif %} · status segmentado conforme retorno da Ilha.
+      <p>{% if periodo_ativo %}Período: {{ periodo_rotulo }}{% else %}Todo o período{% endif %} · status segmentado conforme retorno da Ilha.
         {% if is_ilha %}<span class="fb-dica"><i class="fas fa-hand-pointer" aria-hidden="true"></i> Arraste os cards para mudar o status</span>{% endif %}
       </p>
     </div>
@@ -167,10 +197,10 @@ html.dark .fb-k-novo { color: #A5B4FC; }
       <label class="fb-drop" id="fbDrop">
         <span class="fb-drop-ico" aria-hidden="true"><i class="fas fa-file-excel"></i></span>
         <span style="min-width:0">
-          <b>Esteira Vivo (ANALÍTICO): <span style="display:inline;color:inherit;font-size:inherit" id="fbArqNome">escolha ou arraste o .xlsx</span></b>
-          <span>Importa a Esteira de Vendas Vivo e cruza com a Base de Vendas (protocolo, loja e data ±1).</span>
+          <b>Esteira Vivo (ANALÍTICO ou Base analítica – FIXA): <span style="display:inline;color:inherit;font-size:inherit" id="fbArqNome">escolha ou arraste o .xlsx</span></b>
+          <span>Importa a Esteira de Vendas Vivo e cruza com a Base de Vendas (protocolo, loja e data ±1) — a mesma importação da Validação.</span>
         </span>
-        <input type="file" name="planilha" accept=".xlsx" required aria-label="Arquivo .xlsx da Esteira Vivo (ANALÍTICO)">
+        <input type="file" name="planilha" accept=".xlsx" required aria-label="Arquivo .xlsx da Esteira Vivo (ANALÍTICO ou Base analítica – FIXA)"><input type="hidden" name="voltar" value="{{ request.get_full_path }}">
       </label>
       <button class="fb-btn primario" type="submit" title="Importa a Esteira de Vendas Vivo e cruza com a Base de Vendas (protocolo, loja e data ±1)">
         <i class="fas fa-upload" aria-hidden="true"></i> Importar
@@ -178,6 +208,49 @@ html.dark .fb-k-novo { color: #A5B4FC; }
     </form>
   </section>
   {% endif %}
+
+  {# Validação Base × Esteira: os mesmos indicadores da /fibras/validacao, contados nas vendas deste quadro. Clique filtra os cards. #}
+  {% with v=validacao %}
+  <section class="fb-val" id="fbVal" aria-label="Validação Base de Vendas × Esteira Vivo">
+    <div class="fb-val-cab">
+      <div>
+        <h2><i class="fas fa-code-compare" aria-hidden="true" style="color:var(--fb-pri)"></i> Validação Base × Esteira <span class="fb-tag">{{ v.k.pedidos }} venda{{ v.k.pedidos|pluralize }}{% if periodo_ativo %} · {{ periodo_rotulo }}{% endif %}</span></h2>
+        <p>{% if v.cruzamento %}Último cruzamento: {{ v.cruzamento.executado_em|date:"d/m/Y H:i" }}{% if v.cruzamento.executado_por %} por {{ v.cruzamento.executado_por.get_full_name }}{% endif %} ({{ v.cruzamento.ini|date:"d/m" }} a {{ v.cruzamento.fim|date:"d/m/Y" }}){% else %}Nenhum cruzamento feito ainda.{% endif %}{% if v.importacao %} · Esteira: {{ v.importacao.nome_arquivo }} ({{ v.importacao.importado_em|date:"d/m H:i" }}){% else %} · Esteira não importada{% endif %}</p>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button type="button" class="fb-btn leve pequeno" id="fbValLimpar" hidden><i class="fas fa-xmark" aria-hidden="true"></i> Tirar filtro</button>
+        {% if is_ilha %}
+        {% if v.importacao and periodo_ativo %}<button type="button" class="fb-btn pequeno" id="fbValCruzar" data-url="{% url 'fibras:validacao_cruzar' %}" data-ini="{{ filtro_de }}" data-fim="{{ filtro_ate }}" title="Roda o cruzamento Base × Esteira no período do quadro (o mesmo da tela de Validação)"><i class="fas fa-rotate" aria-hidden="true"></i> Validar o período</button>{% endif %}
+        <a href="{% url 'fibras:validacao' %}" class="fb-btn pequeno"><i class="fas fa-up-right-from-square" aria-hidden="true"></i> Validação completa</a>
+        {% endif %}
+      </div>
+    </div>
+    <div class="fb-val-grade" role="group" aria-label="Filtrar os cards pelo resultado da validação">
+      {% for c in v.cards %}
+      <button type="button" class="fb-vk {{ c.classe }}" data-vfiltro="{{ c.tipo }}|{{ c.valor }}" aria-pressed="false" title="Mostrar só os cards: {{ c.rotulo }}">
+        <div class="fb-vk-topo"><span>{{ c.rotulo }}</span><i class="fas {{ c.icone }}" aria-hidden="true"></i></div>
+        <b>{{ c.n }}</b><small>{{ c.detalhe }}</small>
+      </button>
+      {% endfor %}
+      {% if v.nao_lancada is not None %}
+      <a class="fb-vk" href="#fbInconsistencias" title="Vendas da Esteira Vivo no período que não estão na Base de Vendas">
+        <div class="fb-vk-topo"><span>Não lançadas</span><i class="fas fa-ban" aria-hidden="true"></i></div>
+        <b>{{ v.nao_lancada }}</b><small>na Esteira, sem Base de Vendas</small>
+      </a>
+      {% endif %}
+    </div>
+    {% if v.k.pedidos %}
+    <div class="fb-val-barra" aria-hidden="true">
+      <span style="width:{% widthratio v.k.alta v.k.pedidos 100 %}%;background:#1E9E4A"></span>
+      <span style="width:{% widthratio v.k.manual v.k.pedidos 100 %}%;background:#0071E3"></span>
+      <span style="width:{% widthratio v.k.media v.k.pedidos 100 %}%;background:#F5A623"></span>
+      <span style="width:{% widthratio v.k.muito_baixa v.k.pedidos 100 %}%;background:#E8742E"></span>
+      <span style="width:{% widthratio v.k.nao_localizada v.k.pedidos 100 %}%;background:#E0352B"></span>
+      <span style="width:{% widthratio v.k.b2b v.k.pedidos 100 %}%;background:#8E6FC4"></span>
+    </div>
+    {% endif %}
+  </section>
+  {% endwith %}
 
   {# KPIs por coluna (clique leva até a coluna) #}
   <div class="fb-kpis kb" id="fbKpis" aria-label="Resumo por status">
@@ -249,6 +322,7 @@ html.dark .fb-k-novo { color: #A5B4FC; }
         <article class="kanban-card{% if is_ilha and col.key != 'nao_localizado' %} arrastavel{% endif %}{% if inc and inc.aberto_por_id == request.user.id and inc.has_unread_reply_for_opener %} nova-resposta{% endif %}"
              data-st="{{ col.key }}" data-pk="{{ f.pk }}" data-valor="{{ f.valor|unlocalize }}"
              data-url="{% url 'fibras:detail' f.pk %}"
+             data-assert="{{ f.assertividade }}" data-cruz="{{ f.status_cruzamento }}" data-end="{% if f.conferencia_endereco == 'Divergente' or f.conferencia_endereco == 'Parcialmente divergente' %}div{% endif %}"
              data-busca="{{ f.cliente }} {{ f.numero_da_venda }} {{ f.numero_protocolo }} {{ f.ordem_vinculada }} {{ f.vendedor }} {{ f.pdv }} {{ f.cpf }}">
           <div class="fb-k-topo">
             <a class="fb-k-nome" href="{% url 'fibras:detail' f.pk %}" title="{{ f.cliente|default:'—' }}">{{ f.cliente|default:"—" }}</a>
@@ -314,7 +388,7 @@ html.dark .fb-k-novo { color: #A5B4FC; }
   </div>
 
   {% if inconsistencias %}
-  <details class="fb-card fb-inc" style="margin-top:18px" open>
+  <details class="fb-card fb-inc" id="fbInconsistencias" style="margin-top:18px" open>
     <summary class="fb-card-cab" style="margin-bottom:0">
       <div>
         <h3><i class="fas fa-triangle-exclamation" aria-hidden="true" style="background:rgba(224,138,0,.14);color:#E08A00"></i> Ordens inconsistentes da planilha <span class="fb-tag aviso">{{ inconsistencias_count }}</span></h3>
@@ -393,8 +467,9 @@ html.dark .fb-k-novo { color: #A5B4FC; }
   var busca = document.getElementById('fbBusca');
   var resultado = document.getElementById('fbResultado');
   var primeira = true;
+  var vFiltro = '';  /* "tipo|valor" do indicador da validação clicado (vazio = sem filtro) */
   function atualizarTotais() {
-    var ativo = busca && busca.value.trim() !== '';
+    var ativo = (busca && busca.value.trim() !== '') || vFiltro !== '';
     var totQ = 0, totV = 0, totVis = 0, totTodos = 0, dados = [];
     cols.forEach(function (col) {
       var cs = cardsDe(col), n = cs.length, vis = 0, soma = 0;
@@ -439,14 +514,51 @@ html.dark .fb-k-novo { color: #A5B4FC; }
   var cacheBusca = new WeakMap();
   function textoCard(c) { var t = cacheBusca.get(c); if (t === undefined) { t = FB.normalizar(c.dataset.busca); cacheBusca.set(c, t); } return t; }
   var tBusca = null;
+  function passaValidacao(c) {
+    if (!vFiltro) return true;
+    var p = vFiltro.split('|'), tipo = p[0], valor = p.slice(1).join('|');
+    var campo = { assert: c.dataset.assert, cruz: c.dataset.cruz, end: c.dataset.end }[tipo];
+    return (campo || '') === valor;
+  }
   function filtrar() {
-    var termos = FB.normalizar(busca.value.trim()).split(/\s+/).filter(Boolean);
+    var termos = busca ? FB.normalizar(busca.value.trim()).split(/\s+/).filter(Boolean) : [];
     board.querySelectorAll('.kanban-card').forEach(function (c) {
       var txt = textoCard(c);
-      c.hidden = !termos.every(function (t) { return txt.indexOf(t) !== -1; });
+      c.hidden = !(passaValidacao(c) && termos.every(function (t) { return txt.indexOf(t) !== -1; }));
     });
     atualizarTotais();
   }
+
+  /* ---------- Validação Base × Esteira: clique no indicador filtra os cards ---------- */
+  var vBotoes = Array.prototype.slice.call(document.querySelectorAll('#fbVal [data-vfiltro]'));
+  var vLimpar = document.getElementById('fbValLimpar');
+  function marcarValidacao() {
+    vBotoes.forEach(function (b) { var on = b.dataset.vfiltro === vFiltro; b.classList.toggle('ativo', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); });
+    if (vLimpar) vLimpar.hidden = !vFiltro;
+  }
+  vBotoes.forEach(function (b) {
+    b.addEventListener('click', function () { vFiltro = vFiltro === b.dataset.vfiltro ? '' : b.dataset.vfiltro; marcarValidacao(); filtrar(); });
+  });
+  if (vLimpar) vLimpar.addEventListener('click', function () { vFiltro = ''; marcarValidacao(); filtrar(); });
+  var vCruzar = document.getElementById('fbValCruzar');
+  if (vCruzar) vCruzar.addEventListener('click', function () {
+    vCruzar.disabled = true;
+    vCruzar.innerHTML = '<i class="fas fa-circle-notch fa-spin" aria-hidden="true"></i> Validando…';
+    fetch(vCruzar.dataset.url, { method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() },
+      body: JSON.stringify({ ini: vCruzar.dataset.ini, fim: vCruzar.dataset.fim }) })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (!res.ok) throw new Error(res.j.erro || 'Falha ao validar.');
+        FB.toast('Validação feita: ' + ((res.j.kpis || {}).pedidos || 0) + ' pedido(s) analisados. Atualizando…', true);
+        setTimeout(function () { location.reload(); }, 900);
+      })
+      .catch(function (e) {
+        FB.toast(e.message || 'Falha ao validar.', false);
+        vCruzar.disabled = false;
+        vCruzar.innerHTML = '<i class="fas fa-rotate" aria-hidden="true"></i> Validar o período';
+      });
+  });
   if (busca) {
     busca.addEventListener('input', function () { clearTimeout(tBusca); tBusca = setTimeout(filtrar, 120); });
     busca.addEventListener('keydown', function (e) { if (e.key === 'Escape') { busca.value = ''; filtrar(); busca.blur(); } });

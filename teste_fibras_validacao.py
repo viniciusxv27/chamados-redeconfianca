@@ -214,7 +214,7 @@ try:
     t('baixar a Esteira tratada', r.status_code == 200 and r['Content-Disposition'].startswith('attachment'))
 
     print('\n== TELAS ==')
-    html = ci.get('/fibras/?ordem=7123456789').content.decode()
+    html = ci.get('/fibras/?ordem=7123456789&periodo=todos').content.decode()
     t('kanban filtra pela ORDEM vinculada e mostra a assertividade', 'ZZV1' in html and 'ORDEM <b>7123456789</b>' in html)
     html = ci.get(f'/fibras/{f1.pk}/').content.decode()
     t('a fibra mostra o cruzamento', 'Cruzamento com a Esteira de Vendas Vivo' in html and '7123456789' in html)

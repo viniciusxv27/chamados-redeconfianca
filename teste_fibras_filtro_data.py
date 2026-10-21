@@ -88,7 +88,9 @@ try:
 
     print('== KANBAN ==')
     r, cols = kanban({})
-    t('sem período mostra tudo', r.status_code == 200 and todas(cols) == TODAS, todas(cols))
+    t('sem período abre no mês corrente (nada de 2031)', r.status_code == 200 and not todas(cols) & TODAS, todas(cols))
+    r, cols = kanban({'periodo': 'todos'})
+    t('?periodo=todos mostra tudo', r.status_code == 200 and todas(cols) == TODAS, todas(cols))
     r, cols = kanban({'de': '2031-03-01', 'ate': '2031-03-31'})
     t('março: só as vendas de março (limites inclusivos)', todas(cols) == MARCO, todas(cols))
     t('"Não localizado" também respeita o período', cols['nao_localizado'] == {'ZZDTA', 'ZZDTD'}, cols['nao_localizado'])
@@ -98,9 +100,9 @@ try:
     html = r.content.decode()
     t('campos de data preenchidos', 'name="de" value="2031-03-01"' in html and 'name="ate" value="2031-03-31"' in html)
     t('atalhos de período no painel', 'data-fb-periodo="hoje"' in html and 'data-fb-periodo="mes_passado"' in html)
-    t('chip do período ativo', 'Período: <b>01/03/2031 a 31/03/2031</b>' in html)
-    t('o "x" do chip tira só o período (mantém o PDV)',
-      'href="/fibras/?pdv=ZZ+LOJA+DATAFILTRO" class="fb-periodo-x"' in html)
+    t('chip do período ativo (mês inteiro pelo nome)', 'Período: <b>março de 2031</b>' in html)
+    t('o "x" do chip mostra todo o período (mantém o PDV)',
+      'href="/fibras/?pdv=ZZ+LOJA+DATAFILTRO&amp;periodo=todos" class="fb-periodo-x"' in html)
     t('a navegação leva o período', 'href="/fibras/lista/?de=2031-03-01&amp;ate=2031-03-31"' in html)
     t('o CSV de canceladas leva o período', '/fibras/export/canceladas-csv/?de=2031-03-01&amp;ate=2031-03-31' in html)
 

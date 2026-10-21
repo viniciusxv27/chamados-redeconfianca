@@ -55,27 +55,107 @@ def _texto(valor) -> str:
     return cz.para_texto_id(valor)
 
 
+def checar_arquivo(arquivo):
+    """A mesma conferência do arquivo nas duas telas (kanban e validação)."""
+    if not arquivo:
+        raise ErroValidacao('Selecione o arquivo da Esteira (ANALÍTICO DE VENDAS ou Base analítica – FIXA).')
+    if not (arquivo.name or '').lower().endswith('.xlsx'):
+        raise ErroValidacao('Envie a planilha em .xlsx (no Excel: Salvar como → Pasta de Trabalho do Excel).')
+
+
 def _ler_planilha(file_obj) -> pd.DataFrame:
-    """Lê o .xlsx achando a linha de cabeçalho (a que tem ORDEM) nas 15 primeiras."""
+    """Lê o .xlsx achando a linha de cabeçalho (a que tem ORDEM ou NU_ORDM_SRVC) nas 15 primeiras."""
     conteudo = file_obj.read() if hasattr(file_obj, 'read') else file_obj
     topo = pd.read_excel(io.BytesIO(conteudo), header=None, nrows=15)
     cabecalho = 0
     for i, linha in topo.iterrows():
         chaves = {cz.chave_coluna(v) for v in linha if isinstance(v, str)}
-        if 'ORDEM' in chaves:
+        if 'ORDEM' in chaves or 'NUORDMSRVC' in chaves:
             cabecalho = i
             break
     return pd.read_excel(io.BytesIO(conteudo), header=cabecalho)
 
 
+# ---------------------------------------------------------------------------
+# Base analítica – FIXA (Vivo): uma linha por ORDEM e indicador comercial
+# ("VENDAS BRUTAS" +1, "CANCELAMENTOS" -1). Vira a Esteira com uma linha por ORDEM.
+# Venda bruta é a venda registrada (há ORDEM bruta ainda "3.5 AGENDADA" no
+# ANALÍTICO), então não muda o status do kanban; cancelamento leva a Cancelado.
+# ---------------------------------------------------------------------------
+FORMATO_ANALITICO, FORMATO_BASE_FIXA = 'ANALÍTICO DE VENDAS', 'Base analítica – FIXA'
+COLUNAS_BASE_FIXA = ['NU_ORDM_SRVC', 'CD_CRDN', 'DT_MVMT', 'DS_INDC_CMRC']
+EXTRAS_BASE_FIXA = ['NOME', 'LOGIN_VENDEDOR', 'DS_SGMT_PRDT', 'TECNOLOGIA', 'QTD']
+STATUS_FIXA_CANCELADA, STATUS_FIXA_BRUTA = 'CANCELADA (Base analítica FIXA)', 'VENDA BRUTA (Base analítica FIXA)'
+
+
+def e_base_fixa(bruto: pd.DataFrame) -> bool:
+    _, faltam = cz.resolver_colunas(bruto, COLUNAS_BASE_FIXA)
+    return not faltam
+
+
+def _data_fixa(valor):
+    if isinstance(valor, str) and re.match(r'\s*\d{4}-\d{2}-\d{2}', valor):
+        return pd.to_datetime(valor.strip()[:10], errors='coerce')
+    return pd.to_datetime(valor, errors='coerce', dayfirst=True)
+
+
+def base_fixa_para_esteira(bruto: pd.DataFrame) -> pd.DataFrame:
+    """Junta as linhas de cada ORDEM e devolve as colunas do ANALÍTICO (+ MOTIVO)."""
+    mapa, _ = cz.resolver_colunas(bruto, COLUNAS_BASE_FIXA + EXTRAS_BASE_FIXA)
+    ordens = {}
+    for _, r in bruto.iterrows():
+        ordem = re.sub(r'\D', '', _texto(r[mapa['NU_ORDM_SRVC']]))
+        if not ordem:
+            continue
+        o = ordens.setdefault(ordem, {'brutas': 0, 'cancel': 0, 'qtd': 0, 'datas_brutas': [], 'datas': [],
+                                      'adabas': '', 'nome': '', 'login': '', 'produto': ''})
+        cancel = 'CANCEL' in cz.chave_coluna(_texto(r[mapa['DS_INDC_CMRC']]))
+        o['cancel' if cancel else 'brutas'] += 1
+        try:
+            o['qtd'] += int(float(r[mapa['QTD']])) if 'QTD' in mapa and _texto(r[mapa['QTD']]) else (-1 if cancel else 1)
+        except (TypeError, ValueError):
+            o['qtd'] += -1 if cancel else 1
+        data = _data_fixa(r[mapa['DT_MVMT']])
+        if pd.notna(data):
+            o['datas'].append(data)
+            if not cancel:
+                o['datas_brutas'].append(data)
+        for chave, col in (('adabas', 'CD_CRDN'), ('nome', 'NOME'), ('login', 'LOGIN_VENDEDOR')):
+            if not o[chave] and col in mapa:
+                o[chave] = _texto(r[mapa[col]])
+        if not o['produto']:
+            o['produto'] = ' '.join(x for x in (_texto(r[mapa[c]]) if c in mapa else '' for c in
+                                                ('DS_SGMT_PRDT', 'TECNOLOGIA')) if x)
+    linhas = []
+    for ordem, o in ordens.items():
+        cancelada = o['cancel'] > 0 and o['qtd'] <= 0
+        datas = o['datas_brutas'] or o['datas']
+        linhas.append({
+            'DATA_CRIAÇÃO': min(datas) if datas else pd.NaT,
+            'ETAPA INSTALACAO': 'CANCELAMENTO' if cancelada else 'VENDA BRUTA',
+            'STATUS INSTALACAO': STATUS_FIXA_CANCELADA if cancelada else STATUS_FIXA_BRUTA,
+            'ORDEM': ordem, 'PRODUTO': o['produto'], 'ADABAS': o['adabas'],
+            'LOGRADOURO': '', 'CEP': '', 'NUMERO': '', 'LOGIN': o['login'], 'NOME VENDEDOR': o['nome'],
+            'VENDA COMISSIONADA': '',
+            'MOTIVO': (f"Base analítica FIXA: {o['brutas']} venda(s) bruta(s), {o['cancel']} cancelamento(s)"
+                       if o['cancel'] else ''),
+        })
+    return pd.DataFrame(linhas, columns=cz.COLUNAS_ANALITICO + ['MOTIVO'])
+
+
 def importar_esteira(file_obj, *, nome='', by_user=None) -> EsteiraImportacao:
     """Guarda a Esteira (só as colunas do cruzamento) no lugar da importação anterior."""
     bruto = _ler_planilha(file_obj)
+    formato = FORMATO_ANALITICO
+    if e_base_fixa(bruto):
+        bruto, formato = base_fixa_para_esteira(bruto), FORMATO_BASE_FIXA
+        if bruto.empty:
+            raise ErroValidacao('Base analítica – FIXA sem nenhuma ORDEM (coluna NU_ORDM_SRVC vazia).')
     tratada, mapa, ausentes = cz.tratar_base(bruto, cz.COLUNAS_ANALITICO)
     faltam = [c for c in OBRIGATORIAS_ESTEIRA if c in ausentes]
     if faltam:
         raise ErroValidacao('Esteira de Vendas Vivo: coluna(s) ' + ', '.join(faltam) + ' não encontrada(s). '
-                            'Envie o ANALÍTICO DE VENDAS.')
+                            'Envie o ANALÍTICO DE VENDAS ou a Base analítica – FIXA.')
     extras, _ = cz.resolver_colunas(bruto, EXTRAS_ESTEIRA)
     datas = pd.to_datetime(tratada[mapa['DATA_CRIAÇÃO']], errors='coerce', dayfirst=True)
 
@@ -106,6 +186,7 @@ def importar_esteira(file_obj, *, nome='', by_user=None) -> EsteiraImportacao:
                 dados=dados))
         EsteiraVenda.objects.bulk_create(novas, batch_size=1000)
         EsteiraVenda.objects.exclude(importacao=imp).delete()
+    imp.formato = formato  # só para a mensagem da tela
     return imp
 
 
@@ -233,7 +314,7 @@ def calcular(param: dict | None = None) -> dict:
     """Roda o motor sem gravar nada. Devolve os DataFrames e o contexto."""
     imp = ultima_importacao()
     if not imp:
-        raise ErroValidacao('Importe a Esteira de Vendas Vivo (ANALÍTICO DE VENDAS) primeiro.')
+        raise ErroValidacao('Importe a Esteira de Vendas Vivo (ANALÍTICO DE VENDAS ou Base analítica – FIXA) primeiro.')
     p = _param_limpo(param)
     ini, fim = date.fromisoformat(p['ini']), date.fromisoformat(p['fim'])
     an = base_esteira(imp)
@@ -512,7 +593,7 @@ def estado_json() -> dict:
         esc['etapas_todas'] = sorted(x for x in an['ETAPA INSTALACAO'].dropna().astype(str).unique() if x)
         r['escopo'] = esc
     else:
-        r['erro'] = 'Importe a Esteira de Vendas Vivo (ANALÍTICO DE VENDAS) para cruzar.'
+        r['erro'] = 'Importe a Esteira de Vendas Vivo (ANALÍTICO DE VENDAS ou Base analítica – FIXA) para cruzar.'
     res = resultado_json()
     if res:
         r['resultado'] = res

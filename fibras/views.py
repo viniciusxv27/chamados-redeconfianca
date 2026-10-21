@@ -51,6 +51,25 @@ def _periodo(request):
     return de, ate
 
 
+MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro',
+         'novembro', 'dezembro']
+
+
+def _fim_do_mes(dia):
+    from calendar import monthrange
+    return dia.replace(day=monthrange(dia.year, dia.month)[1])
+
+
+def _periodo_ou_mes(request):
+    """O kanban abre no mês corrente. Quem limpou as datas (de/ate vazios) ou pediu
+    ?periodo=todos vê tudo."""
+    de, ate = _periodo(request)
+    if de or ate or 'de' in request.GET or 'ate' in request.GET or request.GET.get('periodo') == 'todos':
+        return de, ate
+    hoje = timezone.localdate()
+    return hoje.replace(day=1), _fim_do_mes(hoje)
+
+
 def _filtrar_periodo(qs, de, ate):
     if de:
         qs = qs.filter(data_da_venda__gte=de)
@@ -68,7 +87,9 @@ def _ctx_periodo(request, de, ate):
         par['de'] = de.isoformat()
     if ate:
         par['ate'] = ate.isoformat()
-    if de and ate:
+    if de and ate and de.day == 1 and ate == _fim_do_mes(de):
+        rotulo = f"{MESES[de.month - 1]} de {de.year}"
+    elif de and ate:
         rotulo = de.strftime('%d/%m/%Y') if de == ate else f"{de.strftime('%d/%m/%Y')} a {ate.strftime('%d/%m/%Y')}"
     elif de:
         rotulo = f"a partir de {de.strftime('%d/%m/%Y')}"
@@ -118,7 +139,8 @@ def kanban(request):
             cond |= _Q(ordem_planilha=int(ordem))
         qs = qs.filter(cond)
     # Período (data da venda) — vale para todas as colunas, inclusive "Não localizado".
-    de, ate = _periodo(request)
+    # Sem período na URL, abre no mês corrente.
+    de, ate = _periodo_ou_mes(request)
     qs = _filtrar_periodo(qs, de, ate)
 
     # Coluna "Não localizado": vendas de fibra cujo protocolo não aparece na
@@ -171,7 +193,17 @@ def kanban(request):
         PlanilhaOrdemInconsistente.objects.order_by('-last_seen_at')[:200]
     )
 
+    ctx_periodo = _ctx_periodo(request, de, ate)
+    if ctx_periodo['periodo_ativo']:
+        # O "x" do período mostra tudo (sem ele, o kanban voltaria para o mês).
+        resto = request.GET.copy()
+        resto.pop('de', None)
+        resto.pop('ate', None)
+        resto['periodo'] = 'todos'
+        ctx_periodo['sem_periodo_url'] = f'{request.path}?{resto.urlencode()}'
+
     return render(request, 'fibras/kanban.html', {
+        'validacao': _validacao_do_quadro(qs, de, ate, _is_ilha(request.user)),
         'colunas': colunas,
         'is_ilha': _is_ilha(request.user),
         'can_import': _can_import_planilha(request.user),
@@ -183,8 +215,59 @@ def kanban(request):
         'status_choices': Fibra.STATUS_CHOICES,
         'inconsistencias': inconsistencias,
         'inconsistencias_count': len(inconsistencias),
-        **_ctx_periodo(request, de, ate),
+        **ctx_periodo,
     })
+
+
+def _validacao_do_quadro(qs, de, ate, is_ilha):
+    """Os indicadores da /fibras/validacao contados nas vendas do quadro (mesmo período e recorte)."""
+    from django.db.models import Q
+
+    from . import cruzamento as cz
+    from .models import EsteiraVenda
+    from .validacao import ultima_importacao, ultimo_cruzamento
+
+    k = qs.aggregate(
+        pedidos=Count('id'),
+        alta=Count('id', filter=Q(assertividade=cz.ALTA)),
+        media=Count('id', filter=Q(assertividade=cz.MEDIA)),
+        muito_baixa=Count('id', filter=Q(assertividade=cz.MUITO_BAIXA)),
+        manual=Count('id', filter=Q(assertividade=cz.MANUAL)),
+        nao_localizada=Count('id', filter=Q(status_cruzamento=cz.NAO_LOCALIZADA)),
+        b2b=Count('id', filter=Q(status_cruzamento=cz.B2B)),
+        end_diverge=Count('id', filter=Q(conferencia_endereco__in=[cz.END_DIVERGE, cz.END_PARCIAL])),
+        sem_cruzamento=Count('id', filter=Q(status_cruzamento='')),
+    )
+    imp = ultima_importacao()
+    nao_lancada = None
+    if is_ilha and imp:
+        esteira = EsteiraVenda.objects.filter(importacao=imp, no_escopo=True, fibra__isnull=True)
+        if de:
+            esteira = esteira.filter(data_criacao__gte=de)
+        if ate:
+            esteira = esteira.filter(data_criacao__lte=ate)
+        nao_lancada = esteira.count()
+    cards = [
+        ('alta', 'Alta', 'fa-circle-check', 'k-alta', 'assert', cz.ALTA, 'protocolo exato'),
+        ('media', 'Média', 'fa-circle-half-stroke', 'k-media', 'assert', cz.MEDIA, 'protocolo aproximado'),
+        ('muito_baixa', 'Muito baixa', 'fa-circle-exclamation', 'k-baixa', 'assert', cz.MUITO_BAIXA,
+         'loja/data divergente ou só loja e dia'),
+        ('manual', 'Manual', 'fa-hand-pointer', 'k-manual', 'assert', cz.MANUAL, 'vínculos confirmados'),
+        ('nao_localizada', 'Não localizadas', 'fa-circle-xmark', 'k-nl', 'cruz', cz.NAO_LOCALIZADA,
+         'sem par na Esteira Vivo'),
+        ('b2b', 'Vendas B2B', 'fa-building', 'k-b2b', 'cruz', cz.B2B, 'CNPJ + protocolo alfanumérico'),
+        ('end_diverge', 'Endereço divergente', 'fa-map-location-dot', 'k-media', 'end', 'div',
+         'endereço da venda × Esteira'),
+        ('sem_cruzamento', 'Sem cruzamento', 'fa-hourglass', '', 'cruz', '', 'ainda não validadas'),
+    ]
+    return {
+        'k': k,
+        'nao_lancada': nao_lancada,
+        'importacao': imp,
+        'cruzamento': ultimo_cruzamento(),
+        'cards': [{'chave': c, 'rotulo': r, 'icone': i, 'classe': cl, 'tipo': t, 'valor': v, 'detalhe': d, 'n': k[c]}
+                  for c, r, i, cl, t, v, d in cards],
+    }
 
 
 @login_required
@@ -289,27 +372,28 @@ def importar_planilha(request):
     if not _can_import_planilha(request.user):
         messages.error(request, 'Sem permissão para importar planilha.')
         return redirect('fibras:kanban')
+    from .validacao import ErroValidacao, checar_arquivo
     file_obj = request.FILES.get('planilha')
-    if not file_obj:
-        messages.error(request, 'Selecione o arquivo .xlsx da planilha.')
-        return redirect('fibras:kanban')
-    if not file_obj.name.lower().endswith('.xlsx'):
-        messages.error(request, 'Envie um arquivo .xlsx.')
-        return redirect('fibras:kanban')
+    voltar = request.POST.get('voltar') or ''
+    destino = voltar if voltar.startswith('/fibras/') else reverse('fibras:kanban')
     try:
+        checar_arquivo(file_obj)
         stats = import_planilha_xlsx(file_obj, by_user=request.user)
+    except ErroValidacao as e:
+        messages.error(request, str(e))
+        return redirect(destino)
     except Exception as e:
         messages.error(request, f'Falha ao importar planilha: {e}')
-        return redirect('fibras:kanban')
+        return redirect(destino)
     messages.success(
         request,
-        f"Esteira importada ({stats['rows']} linhas) e cruzada com a Base de Vendas: "
+        f"{stats.get('formato') or 'Esteira'} importada ({stats['rows']} ORDEM(s)) e cruzada com a Base de Vendas: "
         f"{stats['matched']} localizadas, {stats['nao_localizadas']} não localizadas, "
         f"{stats['not_found_count']} vendas não lançadas, "
         f"{stats['updated_status']} com status atualizado. "
         f"Removidas (sumiram da planilha e sem tratativa): {stats.get('removidas', 0)}."
     )
-    return redirect('fibras:kanban')
+    return redirect(destino)
 
 
 @login_required
@@ -790,16 +874,14 @@ def validacao_lojas(request, corpo):
 @require_POST
 @_validacao_api
 def validacao_importar(request, corpo):
-    from .validacao import ErroValidacao, estado_json
+    from .validacao import checar_arquivo, estado_json
     arquivo = request.FILES.get('arquivo')
-    if not arquivo:
-        raise ErroValidacao('Selecione o arquivo .xlsx da Esteira de Vendas Vivo.')
-    if not arquivo.name.lower().endswith(('.xlsx', '.xls')):
-        raise ErroValidacao('Envie um arquivo .xlsx.')
+    checar_arquivo(arquivo)
     stats = import_planilha_xlsx(arquivo, by_user=request.user)
     estado = estado_json()
     removidas = f"; {stats['removidas']} fibras antigas removidas" if stats.get('removidas') else ''
-    estado['msg'] = (f"{arquivo.name}: {stats['rows']} linhas. Cruzamento feito: {stats['matched']} localizadas, "
+    estado['msg'] = (f"{arquivo.name} ({stats.get('formato') or 'Esteira'}): {stats['rows']} ORDEM(s). "
+                     f"Cruzamento feito: {stats['matched']} localizadas, "
                      f"{stats['nao_localizadas']} não localizadas, {stats['not_found_count']} não lançadas"
                      f"{removidas}.")
     return JsonResponse(estado)
