@@ -67,6 +67,9 @@ try:
         t('ADABAS ESD0267-016 ligado ao CNPJ e ao nome da Vivo', serra.cnpj_vivo == '02.558.157/1140-95'
           and serra.nome_loja_vivo == 'EA MASTERCEL SERRA VI ES', (serra.cnpj_vivo, serra.nome_loja_vivo))
         t('as 21 lojas da planilha preenchidas', Sector.objects.exclude(adabas='').exclude(cnpj_vivo='').count() >= 21)
+        sp = Sector.objects.get(adabas='SPREV002-003')
+        t('lojas de SP (users/0049): Carapicuíba', sp.cnpj_vivo == '09.163.602/0028-54' and sp.nome_loja_vivo == 'VIVO CARAPICUIBA SP')
+        t('nenhuma loja com ADABAS sem os dados da Vivo', not Sector.objects.exclude(adabas='').filter(cnpj_vivo='').exists())
 
         print('— /users/manage/sectors/')
         h = c.get('/users/manage/sectors/').content.decode()
@@ -95,6 +98,7 @@ try:
         h = c.get('/acess/lojas/?q=ZZ+Pessoa+Vivo').content.decode()
         t('ao lado do ADABAS: nome e CNPJ da Vivo, com copiar', 'EA ZZ TESTE ES' in h and 'CNPJ 12.345.678/0001-95' in h
           and 'data-copiar="12.345.678/0001-95"' in h and 'data-copiar="EA ZZ TESTE ES"' in h)
+        t('botão de copiar ao lado do ADABAS', 'data-copiar="ZZV0001-001" title="Copiar o ADABAS"' in h)
         t('o "Copiar tudo" da ficha leva CNPJ e loja da Vivo', 'CNPJ Vivo: 12.345.678/0001-95' in col.texto_para_copiar
           and 'Loja Vivo: EA ZZ TESTE ES' in col.texto_para_copiar)
 finally:

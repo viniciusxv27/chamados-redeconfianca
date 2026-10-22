@@ -16,7 +16,7 @@
         <summary class="px-4 py-3 flex items-center gap-3 flex-wrap">
             <span class="w-9 h-9 rounded-xl grid place-items-center {% if u.sede %}bg-indigo-50 text-indigo-600{% else %}bg-amber-50 text-amber-600{% endif %}"><i class="fas {% if u.sede %}fa-building{% else %}fa-store{% endif %}"></i></span>
             <div class="flex-1 min-w-0">
-                <p class="font-bold text-gray-900">{{ u.setor.name|default:"Sem local" }} {% if u.setor.adabas %}<span class="text-[11px] text-gray-400 font-semibold">{{ u.setor.adabas }}</span>{% endif %}{% if u.uf %} <span class="ac-chip bg-gray-100 text-gray-600">{{ u.uf }}</span>{% endif %}</p>
+                <p class="font-bold text-gray-900">{{ u.setor.name|default:"Sem local" }} {% if u.setor.adabas %}<span class="text-[11px] text-gray-400 font-semibold tabular">{{ u.setor.adabas }}<button type="button" class="ac-copiar align-middle" data-copiar="{{ u.setor.adabas }}" title="Copiar o ADABAS" aria-label="Copiar o ADABAS {{ u.setor.adabas }}"><i class="far fa-copy"></i></button></span>{% endif %}{% if u.uf %} <span class="ac-chip bg-gray-100 text-gray-600">{{ u.uf }}</span>{% endif %}</p>
                 {% if u.setor.cnpj_vivo or u.setor.nome_loja_vivo %}
                 <p class="text-[11px] text-violet-700 font-semibold flex flex-wrap items-center gap-x-2">
                     {% if u.setor.nome_loja_vivo %}<span title="Nome da loja na Vivo">{{ u.setor.nome_loja_vivo }}<button type="button" class="ac-copiar align-middle" data-copiar="{{ u.setor.nome_loja_vivo }}" title="Copiar o nome da loja na Vivo" aria-label="Copiar o nome da loja na Vivo"><i class="far fa-copy"></i></button></span>{% endif %}
