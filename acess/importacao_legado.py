@@ -141,7 +141,9 @@ class Importador:
     def colaboradores(self):
         todas = list(Colaborador.objects.all())
         self._fichas_legado = {c.legado_id: c for c in todas if c.legado_id}
-        self._fichas_cpf = {c.cpf: c for c in todas if c.cpf}
+        # CPF só casa com ficha que já estava no portal (não importada): o Acess antigo tem CPF
+        # repetido (readmissões, cadastros em dobro) e cada ficha antiga vira uma ficha aqui.
+        self._fichas_cpf = {c.cpf: c for c in todas if c.cpf and not c.legado_id}
         for linha in self.t.get('colaboradores', []):
             p = linha['payload']
             legado = p.get('RC_ID') or linha.get('entity_id')
@@ -177,7 +179,7 @@ class Importador:
                 'pendente_desde': _data_hora(p.get('RC_PENDENTE_DESDE')) or timezone.now(),
                 'origem': 'LEGADO', 'versao': int(p.get('RC_VERSION') or 1),
             }
-            c = self._fichas_legado.get(legado) or (self._fichas_cpf.get(cpf) if cpf else None)
+            c = self._fichas_legado.get(legado) or (self._fichas_cpf.pop(cpf, None) if cpf else None)
             novo = c is None
             if novo:
                 c = Colaborador(legado_id=legado, criado_por=self.autor)
@@ -192,6 +194,9 @@ class Importador:
                     self.rel['fichas ligadas a pessoa do portal'] += 1
             c.etapa = c.etapa_calculada
             c.save()
+            etapa_antiga = {'GEFAC': 1, 'LOGIN': 2, 'ACADEMIA': 3, 'LIBERACAO': 4}.get(str(p.get('RC_ETAPA') or '').upper(), 0)
+            if c.status == Colaborador.ATIVO and etapa_antiga != c.etapa:
+                self.rel[f'etapa recalculada (antes {etapa_antiga}, agora {c.etapa})'] += 1
             self.colab_por_legado[legado] = c
             self.rel['fichas criadas' if novo else 'fichas atualizadas'] += 1
             self.rel[f'fichas {c.status.lower()}'] += 1
