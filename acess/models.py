@@ -301,6 +301,31 @@ class Solicitacao(models.Model):
         return f'SOL-{self.pk}'
 
 
+class AvisoInativacao(models.Model):
+    """Usuário inativado no portal com ficha ativa no Acess: o time decide desligar já ou agendar (PPL)."""
+
+    PENDENTE, IMEDIATO, AGENDADO, DESCARTADO = 'PENDENTE', 'IMEDIATO', 'AGENDADO', 'DESCARTADO'
+    STATUS = [(PENDENTE, 'Aguardando decisão'), (IMEDIATO, 'Desligamento imediato'),
+              (AGENDADO, 'Desligamento agendado'), (DESCARTADO, 'Descartado')]
+
+    colaborador = models.ForeignKey(Colaborador, on_delete=models.CASCADE, related_name='avisos_inativacao')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                             related_name='+')
+    inativado_em = models.DateTimeField(default=timezone.now, db_index=True)
+    status = models.CharField(max_length=12, choices=STATUS, default=PENDENTE, db_index=True)
+    execucao = models.DateField(null=True, blank=True, help_text='Dia escolhido para o desligamento.')
+    observacao = models.CharField(max_length=300, blank=True)
+    decidido_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                     related_name='+')
+    decidido_em = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-inativado_em']
+
+    def __str__(self):
+        return f'{self.colaborador} inativado em {self.inativado_em:%d/%m/%Y}'
+
+
 class ModeloMensagem(models.Model):
     """Modelos de WhatsApp. Variáveis: {{nome}} {{login}} {{cpf3}} {{loja}} {{senha}}."""
 

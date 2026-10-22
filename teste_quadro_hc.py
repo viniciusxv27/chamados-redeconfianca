@@ -314,7 +314,7 @@ try:
         mais_tarde = timezone.make_aware(datetime.combine(hoje, time(15, 0)))
         t('uma vez por dia', agendador_diario.disparar_tarefas_vencidas(mais_tarde, em_thread=False) == [] and chamadas == [1])
         t('grava o resultado', TarefaDiaria.objects.get(chave='zz_teste').sucesso is True)
-    t('as duas tarefas reais estão registradas', {t_[0] for t_ in agendador_diario.TAREFAS} == {'simulador_projecao', 'quadro_hc_lembretes'})
+    t('as tarefas reais estão registradas', {'simulador_projecao', 'quadro_hc_lembretes'} <= {t_[0] for t_ in agendador_diario.TAREFAS})
 finally:
     transaction.set_rollback(True)
     marcador.__exit__(None, None, None)

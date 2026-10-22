@@ -8,7 +8,7 @@ from urllib.parse import quote
 from django.db import transaction
 from django.utils import timezone
 
-from .models import (MOTIVOS_CHAMADO, SISTEMAS, SISTEMAS_CHAMADO, STATUS_SISTEMA, Chamado, Colaborador,
+from .models import (AvisoInativacao, MOTIVOS_CHAMADO, SISTEMAS, SISTEMAS_CHAMADO, STATUS_SISTEMA, Chamado, Colaborador,
                      EventoChamado, LogAcess, ModeloMensagem, Solicitacao)
 
 
@@ -752,3 +752,93 @@ def responder_solicitacao(sol, status, resposta, usuario=None, request=None):
               colaborador=sol.colaborador, usuario=usuario)
     avisar_solicitante(sol, f'Pedido de acesso {sol.get_status_display().lower()}', resposta[:500])
     return sol
+
+
+# ── Usuário inativado no portal → decidir o desligamento nos acessos ───────
+def quem_cuida_desligamentos():
+    """Quem tem "Gerenciar desligamentos" liberado no Acess; sem ninguém, os SUPERADMIN."""
+    from django.contrib.auth import get_user_model
+    from django.db.models import Q
+
+    from .permissoes import pode
+    User = get_user_model()
+    gente = [u for u in User.objects.filter(is_active=True, acesso_acess__ativo=True) if pode(u, 'desligamentos.gerenciar')]
+    return gente or list(User.objects.filter(is_active=True).filter(Q(hierarchy='SUPERADMIN') | Q(is_superuser=True)))
+
+
+def ficha_ativa_do_usuario(user):
+    c = Colaborador.objects.filter(user=user, status=Colaborador.ATIVO).order_by('-id').first()
+    if c is None and so_digitos(getattr(user, 'cpf', '')):
+        c = Colaborador.objects.filter(cpf=so_digitos(user.cpf), status=Colaborador.ATIVO).order_by('-id').first()
+    return c
+
+
+def avisar_inativacao(user):
+    """O usuário ficou inativo no portal: o Acess pergunta se o desligamento é imediato ou agendado (PPL)."""
+    c = ficha_ativa_do_usuario(user)
+    if c is None or c.desligamento_em:
+        return None  # sem ficha ativa, ou o desligamento já está agendado
+    if AvisoInativacao.objects.filter(colaborador=c, status=AvisoInativacao.PENDENTE).exists():
+        return None
+    aviso = AvisoInativacao.objects.create(colaborador=c, user=user)
+    registrar(None, 'USUARIO_INATIVADO', 'DESLIGAMENTO',
+              f'{c.nome} foi inativado no portal: decidir se o desligamento é imediato ou agendado', colaborador=c)
+    _notificar(quem_cuida_desligamentos(), f'{c.nome} inativado no portal',
+               'O desligamento nos acessos vai ser imediato ou agendado (para não impactar o PPL)? Decida no Acess.',
+               '/acess/desligamentos/#inativados')
+    return aviso
+
+
+def descartar_avisos_do_reativado(user):
+    return AvisoInativacao.objects.filter(colaborador__user=user, status=AvisoInativacao.PENDENTE).update(
+        status=AvisoInativacao.DESCARTADO, observacao='Usuário reativado no portal', decidido_em=timezone.now())
+
+
+def avisar_desligamentos_de_hoje(colaboradores):
+    if not colaboradores:
+        return
+    nomes = ', '.join(c.nome for c in colaboradores[:8]) + (f' e mais {len(colaboradores) - 8}' if len(colaboradores) > 8 else '')
+    _notificar(quem_cuida_desligamentos(), 'Desligamento de hoje no Acess' if len(colaboradores) == 1
+               else f'{len(colaboradores)} desligamentos de hoje no Acess',
+               f'{nomes}: revogue os acessos nos sistemas e confirme em Desligamentos.', '/acess/desligamentos/')
+
+
+def avisar_desligamentos_do_dia(hoje=None):
+    """Tarefa diária (core/agendador_diario.py): no dia escolhido, chega a notificação."""
+    hoje = hoje or timezone.localdate()
+    gente = list(Colaborador.objects.filter(status=Colaborador.ATIVO, desligamento_em=hoje).order_by('nome'))
+    avisar_desligamentos_de_hoje(gente)
+    return f'{len(gente)} desligamento(s) de hoje avisado(s)'
+
+
+@transaction.atomic
+def decidir_inativacao(aviso, decisao, execucao=None, usuario=None, request=None, observacao=''):
+    aviso = AvisoInativacao.objects.select_for_update().select_related('colaborador').get(pk=aviso.pk)
+    if aviso.status != AvisoInativacao.PENDENTE:
+        raise RegraAcess('Este aviso já foi decidido.')
+    c, hoje = aviso.colaborador, timezone.localdate()
+    observacao = str(observacao or '').strip()[:300]
+    if decisao == 'descartar':
+        if not observacao:
+            raise RegraAcess('Diga por que não vai haver desligamento (ex.: inativado por engano).')
+        aviso.status = AvisoInativacao.DESCARTADO
+        registrar(request, 'INATIVACAO_DESCARTADA', 'DESLIGAMENTO', f'Sem desligamento para {c.nome}: {observacao}',
+                  colaborador=c, usuario=usuario)
+    elif decisao in ('imediato', 'agendar'):
+        if decisao == 'imediato':
+            execucao = hoje
+        elif not execucao:
+            raise RegraAcess('Escolha o dia do desligamento.')
+        inativado = timezone.localdate(aviso.inativado_em)
+        motivo = f'Usuário inativado no portal em {inativado:%d/%m/%Y}' + (f' — {observacao}' if observacao else '')
+        agendar_desligamento(c, min(inativado, execucao), execucao, motivo, None, usuario, request)
+        aviso.status = AvisoInativacao.IMEDIATO if decisao == 'imediato' else AvisoInativacao.AGENDADO
+        aviso.execucao = execucao
+        if execucao == hoje:
+            c.refresh_from_db()
+            avisar_desligamentos_de_hoje([c])
+    else:
+        raise RegraAcess('Decisão inválida.')
+    aviso.observacao, aviso.decidido_por, aviso.decidido_em = observacao, usuario, timezone.now()
+    aviso.save(update_fields=['status', 'execucao', 'observacao', 'decidido_por', 'decidido_em'])
+    return aviso

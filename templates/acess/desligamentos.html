@@ -6,6 +6,37 @@
 
 {% block ac_conteudo %}
 <div class="space-y-5">
+    {% if inativados %}
+    <div class="ac-card overflow-hidden border-2 !border-amber-300" id="inativados">
+        <div class="px-4 py-3 border-b border-amber-100 bg-amber-50"><h2 class="font-bold text-sm text-amber-900"><i class="fas fa-user-slash mr-1.5"></i>Inativados no portal: imediato ou agendado? ({{ inativados|length }})</h2>
+            <p class="text-[11px] text-amber-800">A pessoa ficou inativa no cadastro do portal e ainda tem a ficha ativa aqui. Desligue agora ou agende para o dia certo, para não impactar o PPL. O agendado entra em "Agendados" e, no dia, chega a notificação.</p></div>
+        <ul class="divide-y divide-gray-100">
+            {% for a in inativados %}
+            <li class="p-4 space-y-3 text-sm">
+                <div><a href="{% url 'acess:ficha' a.colaborador_id %}" class="font-semibold hover:text-amber-700">{{ a.colaborador.nome }}</a>
+                    <span class="text-[11px] text-gray-500">· {{ a.colaborador.local.name|default:"sem local" }}{% if a.colaborador.login %} · login {{ a.colaborador.login }}{% endif %} · inativado no portal em {{ a.inativado_em|date:"d/m/Y H:i" }}</span></div>
+                <div class="grid sm:grid-cols-3 gap-2">
+                    <form method="post" action="{% url 'acess:inativacao_decidir' a.id %}" class="space-y-1.5 rounded-lg border border-gray-100 p-2" onsubmit="return confirm('Desligar {{ a.colaborador.nome|escapejs }} hoje?')">
+                        {% csrf_token %}<input type="hidden" name="decisao" value="imediato"><input type="hidden" name="voltar" value="{{ request.get_full_path }}">
+                        <input name="observacao" maxlength="300" placeholder="Observação (opcional)" class="ac-input">
+                        <button class="ac-btn ac-btn-pri w-full justify-center"><i class="fas fa-bolt"></i>Desligar agora</button>
+                    </form>
+                    <form method="post" action="{% url 'acess:inativacao_decidir' a.id %}" class="space-y-1.5 rounded-lg border border-gray-100 p-2">
+                        {% csrf_token %}<input type="hidden" name="decisao" value="agendar"><input type="hidden" name="voltar" value="{{ request.get_full_path }}">
+                        <input type="date" name="execucao" required min="{{ hoje|date:'Y-m-d' }}" class="ac-input" aria-label="Dia do desligamento de {{ a.colaborador.nome }}">
+                        <button class="ac-btn ac-btn-claro w-full justify-center"><i class="fas fa-calendar-plus"></i>Agendar (PPL)</button>
+                    </form>
+                    <form method="post" action="{% url 'acess:inativacao_decidir' a.id %}" class="space-y-1.5 rounded-lg border border-gray-100 p-2">
+                        {% csrf_token %}<input type="hidden" name="decisao" value="descartar"><input type="hidden" name="voltar" value="{{ request.get_full_path }}">
+                        <input name="observacao" maxlength="300" required placeholder="Não desligar: por quê?" class="ac-input">
+                        <button class="ac-btn ac-btn-claro w-full justify-center text-gray-600"><i class="fas fa-xmark"></i>Sem desligamento</button>
+                    </form>
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
     <div class="ac-card overflow-hidden">
         <div class="px-4 py-3 border-b border-gray-100"><h2 class="font-bold text-sm text-red-700"><i class="fas fa-bell mr-1.5"></i>Ação manual pendente ({{ pendentes_execucao|length }})</h2><p class="text-[11px] text-gray-500">A data chegou: revogue os acessos nos sistemas e confirme aqui.</p></div>
         {% include 'acess/_lista_desligamentos.html' with lista=pendentes_execucao confirmar=True %}

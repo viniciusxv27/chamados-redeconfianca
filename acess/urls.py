@@ -26,6 +26,7 @@ urlpatterns = [
     path('historico/', views.historico, name='historico'),
     path('desligamentos/', views.desligamentos, name='desligamentos'),
     path('desligamentos/<int:pk>/', views.desligamento_acao, name='desligamento_acao'),
+    path('desligamentos/inativado/<int:pk>/', views.inativacao_decidir, name='inativacao_decidir'),
     path('mensagens/', views.mensagens, name='mensagens'),
     path('acessos/', views.acessos, name='acessos'),
 ]

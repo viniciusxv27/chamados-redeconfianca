@@ -18,7 +18,7 @@ from django.views.decorators.http import require_POST
 from users.models import Sector
 
 from . import servicos as sv
-from .models import (MOTIVOS_CHAMADO, SISTEMAS, SISTEMAS_CHAMADO, STATUS_SISTEMA, AcessoAcess, Chamado, Colaborador,
+from .models import (AvisoInativacao, MOTIVOS_CHAMADO, SISTEMAS, SISTEMAS_CHAMADO, STATUS_SISTEMA, AcessoAcess, Chamado, Colaborador,
                      LogAcess, ModeloMensagem, Solicitacao)
 from .permissoes import FUNCOES, completar, e_superadmin, exige, pode, trata_chamados
 
@@ -49,8 +49,9 @@ def _ctx(request, aba, **extra):
         contadores['chamados'] = Chamado.objects.filter(status=Chamado.ANDAMENTO).count()
         contadores['solicitacoes'] = Solicitacao.objects.filter(status=Solicitacao.ABERTA).count()
     if perms['desligamentos_gerenciar']:
+        contadores['inativados'] = AvisoInativacao.objects.filter(status=AvisoInativacao.PENDENTE).count()
         contadores['desligamentos'] = Colaborador.objects.filter(
-            status=Colaborador.ATIVO, desligamento_em__lte=timezone.localdate()).count()
+            status=Colaborador.ATIVO, desligamento_em__lte=timezone.localdate()).count() + contadores['inativados']
     sv.garantir_modelos()
     extra.setdefault('modelos', ModeloMensagem.objects.all())
     return dict(aba=aba, abas=abas, p=perms, e_superadmin=e_superadmin(u), contadores=contadores, **extra)
@@ -620,6 +621,8 @@ def desligamentos(request):
         pendentes_execucao=list(base.filter(status=Colaborador.ATIVO, desligamento_em__lte=hoje).order_by('desligamento_em')),
         agendados=list(base.filter(status=Colaborador.ATIVO, desligamento_em__gt=hoje).order_by('desligamento_em')),
         arquivados=list(base.filter(status=Colaborador.DESLIGADO).order_by('-desligado_em')[:200]),
+        inativados=list(AvisoInativacao.objects.filter(status=AvisoInativacao.PENDENTE)
+                        .select_related('colaborador', 'colaborador__local', 'user').order_by('inativado_em')),
         ativos=base.filter(status=Colaborador.ATIVO, desligamento_em__isnull=True).order_by('nome')))
 
 
@@ -642,6 +645,25 @@ def desligamento_acao(request, pk):
                 raise sv.RegraAcess('Confirme que a execução foi feita nos sistemas externos.')
             sv.arquivar(c, p.get('versao'), u, request, exige_agendamento=True)
             messages.success(request, f'Desligamento de {c.nome} confirmado e ficha arquivada.')
+    except sv.RegraAcess as exc:
+        _erro(request, exc)
+    return _voltar(request, reverse('acess:desligamentos'))
+
+
+@login_required
+@exige('desligamentos.gerenciar')
+@require_POST
+def inativacao_decidir(request, pk):
+    """Usuário inativado no portal: desligar já, agendar (PPL) ou não desligar."""
+    aviso = get_object_or_404(AvisoInativacao.objects.select_related('colaborador'), pk=pk)
+    p = request.POST
+    try:
+        sv.decidir_inativacao(aviso, p.get('decisao'), parse_date(p.get('execucao') or ''), request.user, request,
+                              observacao=p.get('observacao'))
+        nome = aviso.colaborador.nome
+        messages.success(request, {'imediato': f'Desligamento de {nome} para hoje: está em "Ação manual pendente".',
+                                   'agendar': f'Desligamento de {nome} agendado; no dia chega a notificação.',
+                                   'descartar': f'Aviso de {nome} encerrado sem desligamento.'}.get(p.get('decisao'), 'Feito.'))
     except sv.RegraAcess as exc:
         _erro(request, exc)
     return _voltar(request, reverse('acess:desligamentos'))

@@ -28,6 +28,8 @@ TAREFAS = [
      'Projeção do simulador de cada pessoa'),
     ('quadro_hc_lembretes', time(8, 0), 'quadro_hc.servicos.enviar_lembretes',
      'Lembretes das movimentações do Quadro de HC'),
+    ('acess_desligamentos_do_dia', time(7, 30), 'acess.servicos.avisar_desligamentos_do_dia',
+     'Acess: aviso dos desligamentos agendados para o dia'),
 ]
 
 _ultima_checagem = None
