@@ -53,7 +53,8 @@ class Colaborador(models.Model):
 
     ATIVO, DESLIGADO = 'ATIVO', 'DESLIGADO'
     ENTREGA = [('', '—'), ('PENDENTE', 'Pendente'), ('ENVIADO', 'Enviado')]
-    ORIGENS = [('PRE_CADASTRO', 'Pré-cadastro aprovado'), ('MANUAL', 'Cadastro manual'), ('PORTAL', 'Usuário do portal')]
+    ORIGENS = [('PRE_CADASTRO', 'Pré-cadastro aprovado'), ('MANUAL', 'Cadastro manual'), ('PORTAL', 'Usuário do portal'),
+               ('LEGADO', 'Importado do Acess anterior')]
 
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
                                 related_name='ficha_acess', verbose_name='Usuário do portal')
@@ -86,6 +87,8 @@ class Colaborador(models.Model):
     desligado_em = models.DateTimeField(null=True, blank=True)
 
     origem = models.CharField(max_length=12, choices=ORIGENS, default='MANUAL')
+    legado_id = models.CharField(max_length=80, blank=True, default='', db_default='', db_index=True,
+                                 help_text='ID no Confiança Acess anterior (importação de 21/10/2026).')
     versao = models.PositiveIntegerField(default=1)
     criado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
                                    related_name='+')
@@ -185,6 +188,8 @@ class Chamado(models.Model):
     criado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
                                    related_name='+')
     versao = models.PositiveIntegerField(default=1)
+    legado_id = models.CharField(max_length=80, blank=True, default='', db_default='', db_index=True,
+                                 help_text='ID no Confiança Acess anterior (importação de 21/10/2026).')
 
     class Meta:
         ordering = ['-aberto_em']
@@ -208,6 +213,8 @@ class EventoChamado(models.Model):
                                 related_name='+')
     tipo = models.CharField(max_length=12)
     detalhe = models.CharField(max_length=500, blank=True)
+    legado_id = models.CharField(max_length=80, blank=True, default='', db_default='', db_index=True,
+                                 help_text='ID no Confiança Acess anterior (importação de 21/10/2026).')
 
     class Meta:
         ordering = ['quando', 'id']
@@ -232,6 +239,8 @@ class LogAcess(models.Model):
     antes = models.JSONField(null=True, blank=True)
     depois = models.JSONField(null=True, blank=True)
     ip = models.GenericIPAddressField(null=True, blank=True)
+    legado_id = models.CharField(max_length=80, blank=True, default='', db_default='', db_index=True,
+                                 help_text='ID no Confiança Acess anterior (importação de 21/10/2026).')
 
     class Meta:
         ordering = ['-quando', '-id']
