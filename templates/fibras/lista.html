@@ -34,6 +34,12 @@
 .fb-tabela .valor { font-weight: 700; color: var(--fb-pri); white-space: nowrap; }
 .fb-tabela .retorno { color: var(--fb-suave-2); font-size: 12px; min-width: 130px; max-width: 220px; }
 .fb-tabela .cel-plano { min-width: 120px; max-width: 170px; }
+/* Status editável (Ilha): o seletor tem a cor do status, como a pílula. */
+.fb-st-select { appearance: none; -webkit-appearance: none; border: 0; border-radius: 980px; padding: 4px 26px 4px 11px; font-size: 12px; font-weight: 600; cursor: pointer;
+  background: color-mix(in srgb, var(--st) 14%, transparent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2386868B' stroke-width='1.6' fill='none'/%3E%3C/svg%3E") no-repeat right 9px center;
+  color: var(--st); max-width: 100%; }
+.fb-st-select:disabled { opacity: .55; cursor: progress; }
+.fb-tabela .cel-ordem { white-space: nowrap; }
 .fb-tabela th, .fb-tabela td { padding-left: 10px; padding-right: 10px; }
 .fb-abrir { display: inline-flex; align-items: center; gap: 5px; padding: 5px 12px; border-radius: 980px; font-size: 12px; font-weight: 600; background: var(--fb-pri-suave); color: var(--fb-pri-esc) !important; white-space: nowrap; transition: all .15s; }
 html.dark .fb-abrir { color: #FF9C73 !important; }
@@ -143,6 +149,7 @@ html.dark .fb-novo { color: #A5B4FC; }
       <thead>
         <tr>
           <th scope="col"><button type="button" data-ord="venda">Venda <i class="fas fa-sort" aria-hidden="true"></i></button></th>
+          <th scope="col"><button type="button" data-ord="ordem" title="ORDEM da Esteira Vivo ligada à venda (e o protocolo)">Ordem <i class="fas fa-sort" aria-hidden="true"></i></button></th>
           <th scope="col"><button type="button" data-ord="cliente">Cliente <i class="fas fa-sort" aria-hidden="true"></i></button></th>
           <th scope="col">CPF / Acesso</th>
           <th scope="col">Plano</th>
@@ -161,27 +168,29 @@ html.dark .fb-novo { color: #A5B4FC; }
             data-url="{% url 'fibras:detail' f.pk %}" data-st="{{ f.status }}"
             data-venda="{{ f.numero_da_venda }}" data-cliente="{{ f.cliente }}" data-valor="{{ f.valor|unlocalize }}"
             data-vendedor="{{ f.vendedor }}" data-data="{{ f.data_da_venda|date:'Y-m-d' }}" data-status="{{ f.get_status_display }}"
-            data-busca="{{ f.numero_da_venda }} {{ f.cliente }} {{ f.cpf }} {{ f.numero_acesso }} {{ f.plano }} {{ f.vendedor }} {{ f.pdv }} {{ f.numero_protocolo }} {{ f.retorno_myrella }}">
+            data-ordem="{{ f.ordem_vinculada|default:f.numero_protocolo }}" data-pk="{{ f.pk }}"
+            data-busca="{{ f.numero_da_venda }} {{ f.cliente }} {{ f.cpf }} {{ f.numero_acesso }} {{ f.plano }} {{ f.vendedor }} {{ f.pdv }} {{ f.numero_protocolo }} {{ f.ordem_vinculada }} {{ f.retorno_myrella }}">
           <td data-label="Venda" class="mono">{{ f.numero_da_venda }}
             {% if inc and inc.aberto_por_id == request.user.id and inc.has_unread_reply_for_opener %}
               <span class="fb-novo"><i class="fas fa-circle" aria-hidden="true"></i> nova resposta</span>
             {% endif %}
           </td>
+          <td data-label="Ordem" class="mono cel-ordem">{% if f.ordem_vinculada %}{{ f.ordem_vinculada }}{% else %}<span title="Sem ORDEM da Esteira vinculada" style="color:var(--fb-suave)">—</span>{% endif %}{% if f.numero_protocolo and f.numero_protocolo != f.ordem_vinculada %}<span class="sub" title="Protocolo da venda">prot. {{ f.numero_protocolo }}</span>{% endif %}</td>
           <td data-label="Cliente" class="cel-cliente forte">{{ f.cliente|default:"—" }}</td>
           <td data-label="CPF / Acesso" style="font-size:12px">{{ f.cpf }}<span class="sub">{{ f.numero_acesso }}</span></td>
           <td data-label="Plano" class="cel-plano" style="font-size:12px" title="{{ f.plano }}">{{ f.plano|truncatechars:35 }}</td>
           <td data-label="Valor" class="num valor">R$ {{ f.valor|floatformat:"2g" }}</td>
           <td data-label="Vendedor / PDV" style="font-size:12px">{{ f.vendedor }}<span class="sub">{{ f.pdv }}</span></td>
           <td data-label="Data" style="font-size:12px;white-space:nowrap">{{ f.data_da_venda|date:"d/m/Y" }}</td>
-          <td data-label="Status" class="centro cel-status"><span class="st-pill" data-st="{{ f.status }}">{{ f.get_status_display }}</span></td>
+          <td data-label="Status" class="centro cel-status">{% if is_ilha %}<select class="fb-st-select" data-st="{{ f.status }}" data-mudar-status aria-label="Status da venda {{ f.numero_da_venda }}">{% for k, l in status_choices %}<option value="{{ k }}" {% if k == f.status %}selected{% endif %}>{{ l }}</option>{% endfor %}</select>{% else %}<span class="st-pill" data-st="{{ f.status }}">{{ f.get_status_display }}</span>{% endif %}</td>
           <td data-label="Retorno Myrella" class="retorno cel-retorno" title="{{ f.retorno_myrella }}">{{ f.retorno_myrella|truncatechars:60 }}</td>
           <td class="num cel-acao"><a href="{% url 'fibras:detail' f.pk %}" class="fb-abrir">Abrir <i class="fas fa-arrow-right" aria-hidden="true"></i></a></td>
         </tr>
         {% endwith %}
         {% empty %}
-        <tr><td colspan="10" class="cel-vazio"><div class="fb-vazio"><i class="fas fa-inbox" aria-hidden="true"></i><b>Nenhuma fibra encontrada com os filtros atuais.</b>Tente limpar os filtros ou buscar por outro termo.</div></td></tr>
+        <tr><td colspan="11" class="cel-vazio"><div class="fb-vazio"><i class="fas fa-inbox" aria-hidden="true"></i><b>Nenhuma fibra encontrada com os filtros atuais.</b>Tente limpar os filtros ou buscar por outro termo.</div></td></tr>
         {% endfor %}
-        <tr id="fbSemResultado" hidden><td colspan="10" class="cel-vazio"><div class="fb-vazio"><i class="fas fa-magnifying-glass" aria-hidden="true"></i><b>Nada encontrado na busca.</b>Nenhuma linha corresponde ao termo ou status escolhido.</div></td></tr>
+        <tr id="fbSemResultado" hidden><td colspan="11" class="cel-vazio"><div class="fb-vazio"><i class="fas fa-magnifying-glass" aria-hidden="true"></i><b>Nada encontrado na busca.</b>Nenhuma linha corresponde ao termo ou status escolhido.</div></td></tr>
       </tbody>
     </table>
   </div>
@@ -195,6 +204,9 @@ html.dark .fb-novo { color: #A5B4FC; }
 </div>
 
 {% include 'fibras/_fb_comum.html' %}
+<span id="fbCsrf" hidden data-token="{{ csrf_token }}"></span>
+{% url 'fibras:change_status_ajax' 0 as url_status_modelo %}
+<span id="fbUrlStatus" hidden data-url="{{ url_status_modelo }}"></span>
 <script>
 (function () {
   var FB = window.FB;
@@ -271,9 +283,30 @@ html.dark .fb-novo { color: #A5B4FC; }
     });
   });
 
+  /* Status na própria linha (Ilha): o mesmo endpoint do arrastar do kanban. */
+  var urlStatus = (document.getElementById('fbUrlStatus') || { dataset: {} }).dataset.url || '';
+  var tokenCsrf = (document.getElementById('fbCsrf') || { dataset: {} }).dataset.token || '';
+  tbody.addEventListener('change', function (e) {
+    var sel = e.target.closest('[data-mudar-status]'); if (!sel) return;
+    var tr = sel.closest('tr[data-pk]'), antes = sel.dataset.st, novo = sel.value;
+    sel.disabled = true;
+    var corpo = new FormData(); corpo.append('status', novo);
+    fetch(urlStatus.replace(/\/0\/status\/ajax\/$/, '/' + tr.dataset.pk + '/status/ajax/'), {
+      method: 'POST', body: corpo, credentials: 'same-origin', headers: { 'X-CSRFToken': FB.csrf() || tokenCsrf, 'X-Requested-With': 'XMLHttpRequest' }
+    }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok && j.ok, j: j }; }); })
+      .then(function (res) {
+        if (!res.ok) throw new Error(res.j.error === 'permission' ? 'Sem permissão para mudar o status.' : (res.j.error || 'Não foi possível mudar o status.'));
+        sel.dataset.st = tr.dataset.st = res.j.status; tr.dataset.status = res.j.status_label;
+        FB.toast('Venda ' + tr.dataset.venda + ': ' + res.j.status_label + '.', true);
+        aplicar();
+      })
+      .catch(function (err) { sel.value = antes; FB.toast(err.message, false); })
+      .then(function () { sel.disabled = false; });
+  });
+
   /* Linha inteira abre a fibra (o link "Abrir" continua sendo o alvo acessível) */
   tbody.addEventListener('click', function (e) {
-    if (e.target.closest('a, button')) return;
+    if (e.target.closest('a, button, select')) return;
     var tr = e.target.closest('tr[data-url]');
     if (tr && !(window.getSelection && String(window.getSelection()))) window.location.href = tr.dataset.url;
   });

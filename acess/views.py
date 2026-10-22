@@ -6,6 +6,7 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Count, Q
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -18,7 +19,7 @@ from users.models import Sector
 
 from . import servicos as sv
 from .models import (MOTIVOS_CHAMADO, SISTEMAS, SISTEMAS_CHAMADO, STATUS_SISTEMA, AcessoAcess, Chamado, Colaborador,
-                     LogAcess, ModeloMensagem)
+                     LogAcess, ModeloMensagem, Solicitacao)
 from .permissoes import FUNCOES, completar, e_superadmin, exige, pode, trata_chamados
 
 User = get_user_model()
@@ -27,6 +28,7 @@ ABAS = [('dashboard', 'Dashboard', 'fa-gauge-high', None), ('lojas', 'Lojas & Se
         ('pendentes', 'Acessos pendentes', 'fa-list-check', 'colaboradores.ver'),
         ('liberados', 'Logins liberados', 'fa-circle-check', 'colaboradores.ver'),
         ('chamados', 'Chamados', 'fa-headset', 'chamados.ver'),
+        ('solicitacoes', 'Solicitações', 'fa-inbox', 'chamados.ver'),
         ('historico', 'Histórico', 'fa-clock-rotate-left', 'historico.ver'),
         ('desligamentos', 'Desligamentos', 'fa-user-xmark', 'desligamentos.gerenciar'),
         ('mensagens', 'Mensagens', 'fa-comment-dots', None)]
@@ -45,6 +47,7 @@ def _ctx(request, aba, **extra):
         contadores['pendentes'] = ativos.filter(etapa__in=(1, 2, 3, 4)).count()
     if perms['chamados_ver']:
         contadores['chamados'] = Chamado.objects.filter(status=Chamado.ANDAMENTO).count()
+        contadores['solicitacoes'] = Solicitacao.objects.filter(status=Solicitacao.ABERTA).count()
     if perms['desligamentos_gerenciar']:
         contadores['desligamentos'] = Colaborador.objects.filter(
             status=Colaborador.ATIVO, desligamento_em__lte=timezone.localdate()).count()
@@ -279,25 +282,31 @@ def ficha(request, pk):
 @exige('colaboradores.ver')
 @require_POST
 def ficha_acao(request, pk):
+    """Ações da ficha. Pela tela (fetch) responde JSON: salva sem recarregar e devolve a versão nova,
+    para o próximo bloco salvo na mesma tela não esbarrar no "alterada por outra pessoa"."""
     c = get_object_or_404(Colaborador, pk=pk)
     p, u = request.POST, request.user
     acao, versao = p.get('acao'), p.get('versao')
+    por_fetch = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
     precisa = {'dados': 'colaboradores.editar', 'transferir': 'colaboradores.transferir',
                'sistemas': 'sistemas.concluir', 'excluir': 'colaboradores.excluir'}.get(acao)
     if not precisa or not pode(u, precisa):
-        messages.error(request, 'Esta ação não está liberada para o seu usuário.')
+        aviso = 'Esta ação não está liberada para o seu usuário.'
+        if por_fetch:
+            return JsonResponse({'ok': False, 'erro': aviso}, status=403)
+        messages.error(request, aviso)
         return redirect('acess:ficha', pk)
     try:
         if acao == 'dados':
-            sv.editar_dados(c, {k: p.get(k) for k in ('nome', 'cpf', 'nascimento', 'email', 'telefone', 'cargo')},
-                            versao, u, request)
-            messages.success(request, 'Dados salvos.')
+            c = sv.editar_dados(c, {k: p.get(k) for k in ('nome', 'cpf', 'nascimento', 'email', 'telefone', 'cargo')},
+                                versao, u, request)
+            msg = 'Dados salvos.'
         elif acao == 'transferir':
-            sv.transferir(c, _setor(p.get('local')), _setor(p.get('loja_vinculo')), versao, u, request)
-            messages.success(request, 'Local e vínculo salvos.')
+            c = sv.transferir(c, _setor(p.get('local')), _setor(p.get('loja_vinculo')), versao, u, request)
+            msg = 'Local e vínculo salvos.'
         elif acao == 'sistemas':
-            sv.alterar_sistemas(c, {s: p.get(f'sis_{i}', '') for i, s in enumerate(SISTEMAS)}, versao, u, request)
-            messages.success(request, 'Sistemas salvos.')
+            c = sv.alterar_sistemas(c, {s: p.get(f'sis_{i}', '') for i, s in enumerate(SISTEMAS)}, versao, u, request)
+            msg = 'Sistemas salvos.'
         elif acao == 'excluir':
             if not u.check_password(p.get('senha') or ''):
                 raise sv.RegraAcess('Senha incorreta: para excluir, confirme a sua senha do portal.')
@@ -305,7 +314,19 @@ def ficha_acao(request, pk):
             messages.success(request, f'{c.nome} arquivado (o histórico fica; os acessos externos não são revogados).')
             return redirect('acess:colaboradores')
     except sv.RegraAcess as exc:
+        if por_fetch:
+            return JsonResponse({'ok': False, 'erro': str(exc), 'conflito': isinstance(exc, sv.Conflito)}, status=400)
         _erro(request, exc)
+        return redirect('acess:ficha', pk)
+    if por_fetch:
+        c = Colaborador.objects.select_related('local', 'loja_vinculo').get(pk=c.pk)
+        return JsonResponse({'ok': True, 'msg': msg, 'versao': c.versao, 'quando': timezone.localtime().strftime('%H:%M'),
+                             'dados': {'nome': c.nome, 'cpf': c.cpf_formatado, 'email': c.email, 'telefone': c.telefone,
+                                       'cargo': c.cargo, 'nascimento': c.nascimento.isoformat() if c.nascimento else ''},
+                             'sistemas': {s: c.status_de(s) for s in SISTEMAS},
+                             'copia': {k: v for _r, k, v in c.dados_para_copiar()}, 'copia_tudo': c.texto_para_copiar,
+                             'recarregar': acao == 'transferir'})
+    messages.success(request, msg)
     return redirect('acess:ficha', pk)
 
 
@@ -429,7 +450,8 @@ def chamados(request):
         qs = qs.filter(status=Chamado.CONCLUIDO)
     q = (request.GET.get('q') or '').strip()
     if q:
-        qs = qs.filter(Q(codigo__icontains=q) | Q(colaborador__nome__icontains=q) | Q(observacao__icontains=q)
+        qs = qs.filter(Q(codigo__icontains=sv.codigo_chamado(q) or q) | Q(colaborador__nome__icontains=q)
+                       | Q(observacao__icontains=q)
                        | Q(colaborador__local__name__icontains=q) | Q(colaborador__login__icontains=q))
     pagina = Paginator(qs.prefetch_related('eventos__usuario'), 50).get_page(request.GET.get('p'))
     responsaveis = [x for x in User.objects.filter(is_active=True).filter(
@@ -459,9 +481,14 @@ def chamado_novo(request):
     try:
         if resp is not None and not trata_chamados(resp):
             raise sv.RegraAcess('O responsável precisa tratar chamados.')
-        ch = sv.criar_chamado(c, p.get('codigo'), p.get('motivo'), p.getlist('sistemas'), p.get('observacao'),
-                              minutos=minutos, quando=quando, responsavel=resp, usuario=request.user, request=request)
-        messages.success(request, f'Chamado #{ch.codigo} aberto.')
+        sol = Solicitacao.objects.filter(pk=_int(p.get('solicitacao')) or 0).first() if p.get('solicitacao') else None
+        with transaction.atomic():
+            ch = sv.criar_chamado(c, p.get('codigo'), p.get('motivo'), p.getlist('sistemas'), p.get('observacao'),
+                                  minutos=minutos, quando=quando, responsavel=resp, usuario=request.user,
+                                  request=request)
+            if sol is not None:
+                sv.vincular_solicitacao(sol, ch, request.user)
+        messages.success(request, f'Chamado #{ch.codigo} aberto.' + (f' O pedido {sol.numero} foi avisado.' if sol else ''))
     except sv.RegraAcess as exc:
         _erro(request, exc)
     return _voltar(request, reverse('acess:chamados'))
@@ -489,6 +516,68 @@ def chamado_acao(request, pk):
     except sv.RegraAcess as exc:
         _erro(request, exc)
     return _voltar(request, reverse('acess:chamados'))
+
+
+# ── Solicitações (janela de Suporte do portal) ─────────────────────────────
+@login_required
+def solicitar(request):
+    """A aba "Acessos" da janela de Suporte: qualquer pessoa logada pede um chamado de acesso.
+    GET devolve o formulário (motivos, sistemas, a ficha e os pedidos dela); POST cria o pedido."""
+    import json
+
+    u = request.user
+    if request.method == 'POST':
+        try:
+            corpo = json.loads(request.body or b'{}') if request.content_type == 'application/json' else request.POST
+            sistemas = corpo.get('sistemas') if isinstance(corpo, dict) else corpo.getlist('sistemas')
+            sol = sv.criar_solicitacao(u, corpo.get('motivo'), sistemas or [], corpo.get('descricao'),
+                                       corpo.get('contato'), request)
+        except (ValueError, sv.RegraAcess) as exc:
+            return JsonResponse({'ok': False, 'erro': str(exc) if isinstance(exc, sv.RegraAcess) else 'Envio inválido.'},
+                                status=400)
+        return JsonResponse({'ok': True, 'numero': sol.numero,
+                             'msg': f'Pedido {sol.numero} enviado ao time de Acessos. Você recebe um aviso quando o '
+                                    f'chamado for aberto.'})
+    ficha = sv.ficha_do_usuario(u)
+    minhas = Solicitacao.objects.filter(solicitante=u).select_related('chamado')[:8]
+    return JsonResponse({
+        'motivos': [{'valor': k, 'rotulo': r} for k, r in MOTIVOS_CHAMADO],
+        'sistemas': SISTEMAS_CHAMADO,
+        'ficha': {'nome': ficha.nome, 'login': ficha.login, 'loja': (ficha.local.name if ficha.local else '')}
+        if ficha else None,
+        'contato': getattr(u, 'phone', '') or '',
+        'minhas': [{'numero': s.numero, 'motivo': s.get_motivo_display(), 'status': s.status,
+                    'status_rotulo': s.get_status_display(), 'quando': timezone.localtime(s.criado_em).strftime('%d/%m %H:%M'),
+                    'chamado': s.chamado.codigo if s.chamado else '', 'resposta': s.resposta} for s in minhas],
+    })
+
+
+@login_required
+@exige('chamados.ver')
+def solicitacoes(request):
+    st = request.GET.get('status') or 'abertas'
+    qs = Solicitacao.objects.select_related('solicitante', 'solicitante__sector', 'colaborador', 'colaborador__local',
+                                            'colaborador__loja_vinculo', 'chamado', 'tratado_por')
+    if st == 'abertas':
+        qs = qs.filter(status=Solicitacao.ABERTA).order_by('criado_em')
+    pagina = Paginator(qs, 40).get_page(request.GET.get('p'))
+    return render(request, 'acess/solicitacoes.html', _ctx(
+        request, 'solicitacoes', pagina=pagina, solicitacoes=pagina.object_list, st=st, motivos=MOTIVOS_CHAMADO,
+        sistemas_chamado=SISTEMAS_CHAMADO,
+        pode_tratar=pode(request.user, 'chamados.tratar'), pode_criar=pode(request.user, 'chamados.criar')))
+
+
+@login_required
+@exige('chamados.tratar')
+@require_POST
+def solicitacao_responder(request, pk):
+    sol = get_object_or_404(Solicitacao, pk=pk)
+    try:
+        sv.responder_solicitacao(sol, request.POST.get('status'), request.POST.get('resposta'), request.user, request)
+        messages.success(request, f'Pedido {sol.numero} respondido.')
+    except sv.RegraAcess as exc:
+        _erro(request, exc)
+    return _voltar(request, reverse('acess:solicitacoes'))
 
 
 # ── Histórico ───────────────────────────────────────────────────────────────

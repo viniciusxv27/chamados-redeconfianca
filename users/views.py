@@ -1,4 +1,5 @@
 import datetime
+import re
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
@@ -3108,6 +3109,17 @@ def import_cs_excel_view(request):
     return redirect('manage_cs')
 
 
+def _campos_vivo_do_setor(post):
+    """CNPJ Vivo e Nome loja (Vivo), ligados ao ADABAS. Devolve (campos, erro)."""
+    cnpj = re.sub(r'\D', '', post.get('cnpj_vivo', '') or '')
+    if cnpj and len(cnpj) != 14:
+        return None, 'CNPJ Vivo: informe os 14 números (ex.: 02.558.157/1140-95).'
+    if cnpj:
+        cnpj = f'{cnpj[:2]}.{cnpj[2:5]}.{cnpj[5:8]}/{cnpj[8:12]}-{cnpj[12:]}'
+    nome = ' '.join((post.get('nome_loja_vivo', '') or '').split()).upper()[:120]
+    return {'cnpj_vivo': cnpj, 'nome_loja_vivo': nome}, None
+
+
 @login_required
 def manage_sectors_view(request):
     """Gerenciar setores"""
@@ -3134,15 +3146,19 @@ def create_sector_view(request):
         name = request.POST.get('name')
         description = request.POST.get('description', '')
         adabas = request.POST.get('adabas', '').strip()
+        vivo, erro_vivo = _campos_vivo_do_setor(request.POST)
 
         try:
-            if Sector.objects.filter(name=name).exists():
+            if erro_vivo:
+                messages.error(request, erro_vivo)
+            elif Sector.objects.filter(name=name).exists():
                 messages.error(request, 'Setor com este nome já existe.')
             else:
                 sector = Sector.objects.create(
                     name=name,
                     description=description,
-                    adabas=adabas
+                    adabas=adabas,
+                    **vivo
                 )
                 
                 log_action(
@@ -3177,15 +3193,20 @@ def edit_sector_view(request, sector_id):
         name = request.POST.get('name')
         description = request.POST.get('description', '')
         adabas = request.POST.get('adabas', '').strip()
+        vivo, erro_vivo = _campos_vivo_do_setor(request.POST)
 
         try:
-            if Sector.objects.filter(name=name).exclude(id=sector_id).exists():
+            if erro_vivo:
+                messages.error(request, erro_vivo)
+            elif Sector.objects.filter(name=name).exclude(id=sector_id).exists():
                 messages.error(request, 'Setor com este nome já existe.')
             else:
                 old_name = sector.name
                 sector.name = name
                 sector.description = description
                 sector.adabas = adabas
+                sector.cnpj_vivo = vivo['cnpj_vivo']
+                sector.nome_loja_vivo = vivo['nome_loja_vivo']
                 sector.save()
                 
                 log_action(

@@ -23,7 +23,7 @@
     </div>
 
     {# Sistemas #}
-    <form method="post" action="{% url 'acess:ficha_acao' c.id %}" class="ac-card overflow-hidden">
+    <form method="post" action="{% url 'acess:ficha_acao' c.id %}" class="ac-card overflow-hidden" data-ficha-form data-autosalvar>
         {% csrf_token %}<input type="hidden" name="acao" value="sistemas"><input type="hidden" name="versao" value="{{ c.versao }}">
         <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between"><h2 class="font-bold text-sm"><i class="fas fa-server text-gray-400 mr-1.5"></i>Sistemas</h2>
             <span class="text-[11px] text-gray-500">OK é o registro da operação, não um teste do acesso.</span></div>
@@ -37,7 +37,7 @@
             </label>
             {% endfor %}
         </div>
-        {% if p.sistemas_concluir and c.status == 'ATIVO' %}<div class="px-4 py-2.5 border-t border-gray-100 bg-gray-50 text-right"><button class="ac-btn ac-btn-pri"><i class="fas fa-check"></i>Salvar sistemas</button></div>{% endif %}
+        {% if p.sistemas_concluir and c.status == 'ATIVO' %}<div class="px-4 py-2.5 border-t border-gray-100 bg-gray-50 flex items-center justify-end gap-3"><span class="text-[11px] text-gray-500" data-situacao>Ao trocar um status, ele já é salvo.</span><button class="ac-btn ac-btn-pri" data-livre><i class="fas fa-check"></i>Salvar sistemas</button></div>{% endif %}
     </form>
 
     {# Chamados #}
@@ -47,7 +47,7 @@
             {% if p.chamados_criar and c.status == 'ATIVO' %}<button type="button" class="ac-btn ac-btn-claro ac-btn-mini" data-abrir="#acChamado"><i class="fas fa-plus"></i>Novo chamado</button>{% endif %}</div>
         <ul class="divide-y divide-gray-100 text-sm">
             {% for ch in chamados %}
-            <li class="px-4 py-2.5 flex items-center gap-3"><span class="ac-chip {% if ch.status == 'CONCLUIDO' %}s-OK{% elif ch.sla_vencido %}bg-red-100 text-red-700{% else %}bg-indigo-50 text-indigo-700{% endif %}">#{{ ch.codigo }}</span>
+            <li class="px-4 py-2.5 flex items-center gap-3"><span class="inline-flex items-center"><span class="ac-chip {% if ch.status == 'CONCLUIDO' %}s-OK{% elif ch.sla_vencido %}bg-red-100 text-red-700{% else %}bg-indigo-50 text-indigo-700{% endif %}">#{{ ch.codigo }}</span><button type="button" class="ac-copiar" data-copiar="{{ ch.codigo }}" title="Copiar o nº do chamado (sem o #)" aria-label="Copiar o número do chamado {{ ch.codigo }}"><i class="far fa-copy"></i></button></span>
                 <span class="flex-1">{{ ch.get_motivo_display }}{% if ch.sistemas %} · {{ ch.sistemas|join:", " }}{% endif %}</span>
                 <span class="text-[11px] text-gray-500">{% if ch.status == 'CONCLUIDO' %}concluído {{ ch.concluido_em|date:"d/m H:i" }}{% else %}verificar {{ ch.proxima_verificacao|date:"d/m H:i" }}{% endif %}</span>
                 <a href="{% url 'acess:chamados' %}?status=todos&q={{ ch.codigo|urlencode }}" class="text-amber-700 text-xs hover:underline">abrir</a></li>
@@ -70,8 +70,17 @@
 </div>
 
 <div class="space-y-4">
+    {# Para abrir chamado: cada dado com botão de copiar #}
+    <div class="ac-card p-4" id="acCopiaFicha">
+        <div class="flex items-center justify-between gap-2 mb-1">
+            <h2 class="font-bold text-sm"><i class="far fa-copy text-gray-400 mr-1.5"></i>Para abrir chamado</h2>
+            <button type="button" class="ac-btn ac-btn-claro ac-btn-mini" data-copiar="{{ c.texto_para_copiar }}" data-copia-tudo><i class="far fa-copy"></i>Copiar tudo</button>
+        </div>
+        {% include 'acess/_copiar_dados.html' %}
+    </div>
+
     {# Dados pessoais #}
-    <form method="post" action="{% url 'acess:ficha_acao' c.id %}" class="ac-card p-4 space-y-2.5">
+    <form method="post" action="{% url 'acess:ficha_acao' c.id %}" class="ac-card p-4 space-y-2.5" data-ficha-form>
         {% csrf_token %}<input type="hidden" name="acao" value="dados"><input type="hidden" name="versao" value="{{ c.versao }}">
         <h2 class="font-bold text-sm"><i class="fas fa-id-card text-gray-400 mr-1.5"></i>Dados pessoais</h2>
         {% with editar=p.colaboradores_editar %}
@@ -85,19 +94,21 @@
         <div><label class="ac-label">Cargo (PERFIL GEFAC)</label><input name="cargo" value="{{ c.cargo }}" class="ac-input" {% if not editar %}readonly{% endif %}></div>
         <div><label class="ac-label">Login / matrícula</label><div class="flex items-center gap-2"><input value="{{ c.login|default:'' }}" class="ac-input tabular" readonly>{% if c.login %}<button type="button" data-copiar="{{ c.login }}" class="text-gray-400"><i class="far fa-copy"></i></button>{% endif %}</div>
             <p class="text-[10px] text-gray-400 mt-0.5">Preenchido pela esteira (Etapa 2); vai também para o Login/Código do cadastro do portal.</p></div>
-        {% if editar and c.status == 'ATIVO' %}<button class="ac-btn ac-btn-pri w-full justify-center"><i class="fas fa-check"></i>Salvar dados</button>{% endif %}
+        {% if editar and c.status == 'ATIVO' %}<button class="ac-btn ac-btn-pri w-full justify-center" data-livre><i class="fas fa-check"></i>Salvar dados</button>
+        <p class="text-[11px] text-center text-gray-500" data-situacao></p>{% endif %}
         {% endwith %}
         {% if c.user %}<p class="text-[11px] text-gray-500"><i class="fas fa-link"></i> Usuário do portal: {{ c.user.get_full_name }} · {{ c.get_origem_display }}</p>{% endif %}
     </form>
 
     {# Local e vínculo #}
-    <form method="post" action="{% url 'acess:ficha_acao' c.id %}" class="ac-card p-4 space-y-2.5">
+    <form method="post" action="{% url 'acess:ficha_acao' c.id %}" class="ac-card p-4 space-y-2.5" data-ficha-form>
         {% csrf_token %}<input type="hidden" name="acao" value="transferir"><input type="hidden" name="versao" value="{{ c.versao }}">
         <h2 class="font-bold text-sm"><i class="fas fa-store text-gray-400 mr-1.5"></i>Local e vínculo</h2>
         <div><label class="ac-label">Local de trabalho</label><select name="local" class="ac-input" {% if not p.colaboradores_transferir %}disabled{% endif %}>{% for s in setores %}<option value="{{ s.id }}" {% if c.local_id == s.id %}selected{% endif %}>{{ s.name }}</option>{% endfor %}</select></div>
         <div><label class="ac-label">Loja de vínculo (define o ADABAS)</label><select name="loja_vinculo" class="ac-input" {% if not p.colaboradores_transferir %}disabled{% endif %}><option value="">Não informado</option>{% for s in unidades %}{% if s.adabas %}<option value="{{ s.id }}" {% if c.loja_vinculo_id == s.id %}selected{% endif %}>{{ s.name }} · {{ s.adabas }}</option>{% endif %}{% endfor %}</select></div>
         <p class="text-[11px] text-gray-500">ADABAS: <strong>{{ c.unidade_adabas|default:"não informado" }}</strong> · perfil regional da liberação: <strong>{{ perfil_requerido }}</strong></p>
-        {% if p.colaboradores_transferir and c.status == 'ATIVO' %}<button class="ac-btn ac-btn-claro w-full justify-center"><i class="fas fa-right-left"></i>Transferir</button>{% endif %}
+        {% if p.colaboradores_transferir and c.status == 'ATIVO' %}<button class="ac-btn ac-btn-claro w-full justify-center" data-livre><i class="fas fa-right-left"></i>Transferir</button>
+        <p class="text-[11px] text-center text-gray-500" data-situacao></p>{% endif %}
     </form>
 
     {% if p.colaboradores_excluir and c.status == 'ATIVO' %}
@@ -126,4 +137,73 @@
 </div>
 {% endif %}
 {% include 'acess/_whatsapp.html' %}
+<script>
+/* Salvar sem recarregar: cada bloco grava sozinho e mostra "Salvo às HH:MM". A versão nova vai para
+   todos os blocos, para o segundo salvamento na mesma tela não cair no "alterada por outra pessoa".
+   Alteração não salva fica marcada e o navegador avisa antes de sair. */
+(function () {
+    var forms = Array.prototype.slice.call(document.querySelectorAll('[data-ficha-form]'));
+    function situacao(f, texto, cor) {
+        var el = f.querySelector('[data-situacao]'); if (!el) return;
+        el.textContent = texto; el.className = el.className.replace(/ ?text-(gray|emerald|red|amber)-\d+/g, '') + ' ' + cor;
+    }
+    function sujo(f, sim) {
+        f.dataset.sujo = sim ? '1' : '';
+        var b = f.querySelector('button[data-livre]');
+        if (b) b.classList.toggle('ring-2', sim), b.classList.toggle('ring-amber-400', sim);
+        if (sim) situacao(f, 'Alterações não salvas', 'text-amber-700');
+    }
+    function versaoNova(v) { document.querySelectorAll('input[name="versao"]').forEach(function (i) { if (i.form && i.form.action.indexOf('/acao/') > -1) i.value = v; }); }
+    function salvar(f) {
+        var b = f.querySelector('button[data-livre]');
+        if (f.dataset.salvando) { f.dataset.denovo = '1'; return; }
+        f.dataset.salvando = '1'; if (b) b.disabled = true;
+        situacao(f, 'Salvando…', 'text-gray-500');
+        var dados = new FormData(f);
+        fetch(f.action, {method: 'POST', body: dados, credentials: 'same-origin', headers: {'X-Requested-With': 'XMLHttpRequest'}})
+            .then(function (r) { return r.json().catch(function () { return {ok: false, erro: 'Resposta inesperada do servidor (sessão expirada?). Atualize a página.'}; }); })
+            .then(function (j) {
+                if (!j.ok) {
+                    situacao(f, j.erro || 'Não foi possível salvar.', 'text-red-600');
+                    if (j.conflito && confirm((j.erro || '') + '\n\nAtualizar a ficha agora? (o que você digitou neste bloco se perde)')) location.reload();
+                    return;
+                }
+                versaoNova(j.versao); sujo(f, false);
+                situacao(f, 'Salvo às ' + j.quando + ' ✓', 'text-emerald-700');
+                if (j.recarregar) { location.reload(); return; }
+                if (j.copia) {
+                    Object.keys(j.copia).forEach(function (k) {
+                        var li = document.querySelector('#acCopiaFicha [data-copia-linha="' + k + '"]'); if (!li) return;
+                        li.hidden = !j.copia[k];
+                        li.querySelector('[data-copia-valor]').textContent = j.copia[k];
+                        li.querySelector('[data-copiar]').dataset.copiar = j.copia[k];
+                    });
+                    var tudo = document.querySelector('#acCopiaFicha [data-copia-tudo]'); if (tudo) tudo.dataset.copiar = j.copia_tudo || '';
+                }
+                if (f.querySelector('input[name="acao"]').value === 'dados' && j.dados) {
+                    Object.keys(j.dados).forEach(function (k) { var i = f.querySelector('[name="' + k + '"]'); if (i) i.value = j.dados[k]; });
+                }
+                if (j.sistemas) f.querySelectorAll('select[name^="sis_"]').forEach(function (sel) {
+                    sel.className = sel.className.replace(/ ?s-\S*/g, '') + ' s-' + (sel.value || '');
+                });
+            })
+            .catch(function () { situacao(f, 'Sem conexão: nada foi salvo. Tente de novo.', 'text-red-600'); })
+            .then(function () {
+                delete f.dataset.salvando; if (b) b.disabled = false;
+                if (f.dataset.denovo) { delete f.dataset.denovo; salvar(f); }
+            });
+    }
+    forms.forEach(function (f) {
+        f.addEventListener('submit', function (e) { e.preventDefault(); salvar(f); });
+        f.addEventListener('input', function () { sujo(f, true); });
+        f.addEventListener('change', function (e) {
+            sujo(f, true);
+            if (f.hasAttribute('data-autosalvar') && e.target.tagName === 'SELECT') salvar(f);
+        });
+    });
+    window.addEventListener('beforeunload', function (e) {
+        if (forms.some(function (f) { return f.dataset.sujo; })) { e.preventDefault(); e.returnValue = ''; }
+    });
+})();
+</script>
 {% endblock %}

@@ -1,0 +1,10 @@
+{% comment %}Dados da pessoa com um botão de copiar em cada um (para abrir chamado). Uso: include com c=colaborador.{% endcomment %}
+<ul class="divide-y divide-gray-100 text-sm" data-copia-lista>
+    {% for rotulo, chave, valor in c.dados_para_copiar %}
+    <li class="flex items-center gap-2 py-1.5" data-copia-linha="{{ chave }}"{% if not valor %} hidden{% endif %}>
+        <span class="w-[4.5rem] shrink-0 text-[10px] uppercase font-semibold text-gray-400">{{ rotulo }}</span>
+        <span class="flex-1 min-w-0 break-words text-gray-900 text-[13px] leading-snug {% if chave == 'cpf' or chave == 'login' or chave == 'nascimento' %}tabular{% endif %}" style="overflow-wrap:break-word" data-copia-valor>{{ valor }}</span>
+        <button type="button" class="ac-copiar" data-copiar="{{ valor }}" title="Copiar {{ rotulo|lower }}" aria-label="Copiar {{ rotulo|lower }}"><i class="far fa-copy"></i></button>
+    </li>
+    {% endfor %}
+</ul>

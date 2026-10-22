@@ -468,6 +468,12 @@ class Sector(models.Model):
         max_length=30, blank=True, default='', verbose_name="ADABAS",
         help_text="Código ADABAS da loja (ex.: ESD0267-013). Vazio para setores que não possuem."
     )
+    # Ligados ao ADABAS (planilha "Acompanhamento E.A" da Vivo): o CNPJ e o nome da loja no cadastro da Vivo.
+    cnpj_vivo = models.CharField(max_length=18, blank=True, default='', db_default='', verbose_name="CNPJ Vivo",
+                                 help_text="CNPJ da loja no cadastro da Vivo (ligado ao ADABAS).")
+    nome_loja_vivo = models.CharField(max_length=120, blank=True, default='', db_default='',
+                                      verbose_name="Nome loja (Vivo)",
+                                      help_text='Nome da loja na Vivo, coluna "NOME LOJAS" (ex.: EA MASTERCEL SERRA VI ES).')
     team_logo = models.ImageField(
         upload_to=upload_sector_team_logo,
         storage=get_media_storage(),

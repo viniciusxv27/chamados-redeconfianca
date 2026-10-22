@@ -392,10 +392,20 @@ class Meta(models.Model):
             return self.colaborador_id in equipe_ids
         return get_colaboradores_do_gestor(user).filter(id=self.colaborador_id).exists()
 
+    def dono_edita_texto(self, user):
+        """O dono ajusta o título e a descrição da própria atividade enquanto ela não foi concluída.
+
+        Só o texto: prazo e recorrência continuam com quem gerencia. Depois de
+        concluída (e avaliada) o texto fica como estava quando valeu pontos.
+        """
+        return bool(user and getattr(user, 'is_authenticated', False)
+                    and self.colaborador_id == user.id and self.status != self.Status.CONCLUIDA)
+
     def pode_editar(self, user, equipe_ids=None, metas_de_ideia=None):
-        """Quem edita o texto da atividade: quem a gerencia — ou o ponto focal."""
+        """Quem edita o texto da atividade: quem a gerencia, o ponto focal — ou o próprio dono."""
         return (self.pode_gerenciar(user, equipe_ids)
-                or self.e_ponto_focal(user, metas_de_ideia))
+                or self.e_ponto_focal(user, metas_de_ideia)
+                or self.dono_edita_texto(user))
 
     def pode_solicitar_duplicacao(self, user):
         """Quem PEDE ao gestor para duplicar, em vez de duplicar direto.

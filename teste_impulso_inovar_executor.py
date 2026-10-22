@@ -232,9 +232,26 @@ t('mas sem o botão de duplicar', 'imp-duplicar' not in detalhe)
 
 comum = Meta.objects.create(gestor=gestor, colaborador=executor, titulo='ZZ Atividade comum',
                             descricao='ZZ', prazo=prazo, created_by=gestor)
-t('dono de atividade comum continua sem editar', not comum.pode_editar(executor))
+# 22/10/2026: o dono edita título e descrição da própria atividade (o prazo segue com o gestor).
+t('dono de atividade comum edita o texto dela', comum.pode_editar(executor) and not comum.pode_gerenciar(executor))
+r = c_exec.get(f'/impulso/metas/{comum.id}/editar/')
+h = r.content.decode()
+t('a tela abre só com título e descrição', r.status_code == 200 and 'name="titulo"' in h and 'name="prazo"' not in h
+  and 'Esta atividade é sua' in h)
+c_exec.post(f'/impulso/metas/{comum.id}/editar/', {'titulo': 'ZZ Atividade comum (ajustada)',
+                                                   'descricao': 'ZZ nova descrição', 'prazo': '2001-01-01'})
+comum.refresh_from_db()
+t('grava título e descrição, sem mexer no prazo', comum.titulo == 'ZZ Atividade comum (ajustada)'
+  and comum.descricao == 'ZZ nova descrição' and comum.prazo == prazo)
+t('a mudança vira comentário', comum.comentarios.filter(mensagem__contains='descrição atualizada').exists())
+comum.status = Meta.Status.CONCLUIDA
+comum.save(update_fields=['status'])
+t('concluída, o dono não edita mais', not comum.pode_editar(executor))
 r = c_exec.get(f'/impulso/metas/{comum.id}/editar/', follow=True)
 t('e a tela o manda de volta', 'não pode editar' in r.content.decode())
+alheia = Meta.objects.create(gestor=gestor, colaborador=gestor, titulo='ZZ De outro', descricao='ZZ', prazo=prazo,
+                             created_by=gestor)
+t('meta de outra pessoa continua sem edição', not alheia.pode_editar(executor))
 
 print('\n== DECIDIR DE NOVO NÃO DUPLICA ==')
 novo_prazo = hoje + timedelta(days=20)

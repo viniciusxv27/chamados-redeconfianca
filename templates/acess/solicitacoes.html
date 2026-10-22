@@ -1,0 +1,92 @@
+{% extends 'acess/base.html' %}
+{% block ac_titulo %}Acess · Solicitações{% endblock %}
+{% block ac_cabecalho %}Solicitações{% endblock %}
+{% block ac_subtitulo %}Pedidos de chamado feitos pela janela de Suporte do portal (aba "Acessos"). Abra o chamado com os dados já preenchidos.{% endblock %}
+
+{% block ac_conteudo %}
+<div class="flex gap-2 mb-3 text-sm">
+    <a href="?status=abertas" class="ac-btn ac-btn-claro {% if st == 'abertas' %}!border-amber-400 !bg-amber-50{% endif %}">Aguardando{% if contadores.solicitacoes %} <span class="ac-n">{{ contadores.solicitacoes }}</span>{% endif %}</a>
+    <a href="?status=todas" class="ac-btn ac-btn-claro {% if st == 'todas' %}!border-amber-400 !bg-amber-50{% endif %}">Todas</a>
+</div>
+<div class="space-y-3">
+    {% for s in solicitacoes %}
+    <div class="ac-card overflow-hidden" id="sol{{ s.id }}">
+        <div class="px-4 py-3 flex items-center gap-3 flex-wrap border-b border-gray-100">
+            <span class="ac-chip bg-gray-100 text-gray-700 tabular">{{ s.numero }}</span>
+            <span class="font-semibold text-gray-900">{{ s.solicitante.get_full_name|default:s.solicitante.email }}</span>
+            <span class="text-gray-600 text-sm">{{ s.get_motivo_display }}</span>
+            {% if s.sistemas %}<span class="text-[11px] text-gray-500">{{ s.sistemas|join:", " }}</span>{% endif %}
+            <span class="ml-auto text-[11px] text-gray-500">{{ s.criado_em|date:"d/m/Y H:i" }}</span>
+            <span class="ac-chip {% if s.status == 'ABERTA' %}bg-amber-100 text-amber-800{% elif s.status == 'EM_CHAMADO' %}bg-indigo-50 text-indigo-700{% elif s.status == 'RESOLVIDA' %}s-OK{% else %}bg-red-100 text-red-700{% endif %}">{{ s.get_status_display }}</span>
+        </div>
+        <div class="p-4 grid md:grid-cols-3 gap-4 text-sm">
+            <div class="md:col-span-1 space-y-1.5">
+                <p class="text-[11px] uppercase font-semibold text-gray-500">O que a pessoa escreveu</p>
+                <p class="whitespace-pre-line text-gray-800">{{ s.descricao }}</p>
+                {% if s.contato %}<p class="text-xs text-gray-600"><i class="fas fa-phone mr-1 text-gray-400"></i>{{ s.contato }}<button type="button" class="ac-copiar align-middle" data-copiar="{{ s.contato }}" title="Copiar o contato" aria-label="Copiar o contato"><i class="far fa-copy"></i></button></p>{% endif %}
+                {% if s.solicitante.sector %}<p class="text-xs text-gray-500"><i class="fas fa-store mr-1 text-gray-400"></i>{{ s.solicitante.sector.name }}</p>{% endif %}
+                {% if s.chamado %}<p class="text-xs"><a href="{% url 'acess:chamados' %}?status=todos&q={{ s.chamado.codigo|urlencode }}" class="text-amber-700 hover:underline"><i class="fas fa-headset mr-1"></i>Chamado #{{ s.chamado.codigo }}</a></p>{% endif %}
+                {% if s.resposta %}<p class="text-xs p-2 rounded-lg bg-gray-50 text-gray-700"><strong>Resposta:</strong> {{ s.resposta }}</p>{% endif %}
+                {% if s.tratado_por %}<p class="text-[11px] text-gray-400">Tratado por {{ s.tratado_por.get_full_name }} em {{ s.tratado_em|date:"d/m/Y H:i" }}</p>{% endif %}
+            </div>
+            <div class="md:col-span-1">
+                {% if s.colaborador %}
+                <div class="flex items-center justify-between gap-2"><p class="text-[11px] uppercase font-semibold text-gray-500">Para abrir chamado</p>
+                    <button type="button" class="ac-btn ac-btn-claro ac-btn-mini" data-copiar="{{ s.colaborador.texto_para_copiar }}&#10;Motivo: {{ s.get_motivo_display }}{% if s.sistemas %}&#10;Sistemas: {{ s.sistemas|join:', ' }}{% endif %}&#10;Descrição: {{ s.descricao }}"><i class="far fa-copy"></i>Copiar tudo</button></div>
+                {% include 'acess/_copiar_dados.html' with c=s.colaborador %}
+                <a href="{% url 'acess:ficha' s.colaborador_id %}" class="text-xs text-amber-700 hover:underline">Abrir a ficha</a>
+                {% else %}
+                <p class="text-xs p-2 rounded-lg bg-amber-50 text-amber-900"><i class="fas fa-triangle-exclamation mr-1"></i>Quem pediu não tem ficha no Acess (nem pelo CPF). Cadastre em <a href="{% url 'acess:colaboradores' %}" class="underline">Colaboradores</a> para abrir o chamado, ou responda ao lado.</p>
+                {% endif %}
+            </div>
+            <div class="md:col-span-1 space-y-2">
+                {% if s.status == 'ABERTA' %}
+                {% if pode_criar and s.colaborador %}
+                <button type="button" class="ac-btn ac-btn-pri w-full justify-center" data-abrir="#acChamadoSol" data-sol="{{ s.id }}" data-colab="{{ s.colaborador_id }}"
+                        data-motivo="{{ s.motivo }}" data-sistemas="{{ s.sistemas|join:'|' }}" data-obs="Pedido {{ s.numero }} pelo Suporte — {{ s.descricao }}"><i class="fas fa-plus"></i>Abrir chamado</button>
+                {% endif %}
+                {% if pode_tratar %}
+                <form method="post" action="{% url 'acess:solicitacao_responder' s.id %}" class="space-y-1.5">
+                    {% csrf_token %}<input type="hidden" name="voltar" value="{{ request.get_full_path }}">
+                    <textarea name="resposta" rows="2" maxlength="1000" required placeholder="Resposta para quem pediu (sem abrir chamado)" class="ac-input"></textarea>
+                    <div class="flex gap-1.5">
+                        <button name="status" value="RESOLVIDA" class="ac-btn ac-btn-claro ac-btn-mini flex-1 justify-center"><i class="fas fa-check"></i>Resolvido sem chamado</button>
+                        <button name="status" value="RECUSADA" class="ac-btn ac-btn-claro ac-btn-mini flex-1 justify-center text-red-600" onclick="return confirm('Recusar o pedido {{ s.numero }}?')"><i class="fas fa-xmark"></i>Recusar</button>
+                    </div>
+                </form>
+                {% endif %}
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% empty %}
+    <div class="ac-card p-10 text-center text-gray-400"><i class="fas fa-inbox text-3xl mb-2"></i><p>{% if st == 'abertas' %}Nenhum pedido aguardando.{% else %}Nenhum pedido ainda.{% endif %}</p>
+        <p class="text-xs mt-1">Os pedidos chegam pela janela de Suporte do portal, aba "Acessos".</p></div>
+    {% endfor %}
+</div>
+{% if pagina.has_other_pages %}
+<div class="mt-3 flex justify-between text-sm"><span class="text-gray-500">Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span>
+    <div class="flex gap-2">{% if pagina.has_previous %}<a href="?status={{ st }}&p={{ pagina.previous_page_number }}" class="ac-btn ac-btn-claro">Anterior</a>{% endif %}{% if pagina.has_next %}<a href="?status={{ st }}&p={{ pagina.next_page_number }}" class="ac-btn ac-btn-claro">Próxima</a>{% endif %}</div></div>
+{% endif %}
+
+{% if pode_criar %}
+<div class="ac-modal" id="acChamadoSol" role="dialog" aria-modal="true">
+    <div class="sm:max-w-lg">
+        <form method="post" action="{% url 'acess:chamado_novo' %}" id="acChamadoSolForm">{% csrf_token %}
+            <input type="hidden" name="voltar" value="{{ request.get_full_path }}"><input type="hidden" name="colaborador"><input type="hidden" name="solicitacao">
+            {% include 'acess/_campos_chamado.html' %}
+        </form>
+    </div>
+</div>
+<script>
+window.acAoAbrir = function (m, b) {
+    if (m.id !== 'acChamadoSol') return;
+    var f = document.getElementById('acChamadoSolForm'), sis = (b.dataset.sistemas || '').split('|');
+    f.colaborador.value = b.dataset.colab; f.solicitacao.value = b.dataset.sol;
+    f.motivo.value = b.dataset.motivo; f.observacao.value = b.dataset.obs || ''; f.codigo.value = '';
+    f.querySelectorAll('input[name="sistemas"]').forEach(function (c) { c.checked = sis.indexOf(c.value) > -1; });
+    setTimeout(function () { f.codigo.focus(); }, 50);
+};
+</script>
+{% endif %}
+{% endblock %}

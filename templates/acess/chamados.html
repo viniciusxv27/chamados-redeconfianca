@@ -19,14 +19,21 @@
     {% for ch in chamados %}
     <details class="ac-card ac-det overflow-hidden" {% if q %}open{% endif %}>
         <summary class="px-4 py-3 flex items-center gap-3 flex-wrap text-sm">
-            <span class="ac-chip {% if ch.status == 'CONCLUIDO' %}s-OK{% elif ch.sla_vencido %}bg-red-100 text-red-700{% else %}bg-indigo-50 text-indigo-700{% endif %}">#{{ ch.codigo }}</span>
+            <span class="inline-flex items-center"><span class="ac-chip {% if ch.status == 'CONCLUIDO' %}s-OK{% elif ch.sla_vencido %}bg-red-100 text-red-700{% else %}bg-indigo-50 text-indigo-700{% endif %}">#{{ ch.codigo }}</span><button type="button" class="ac-copiar" data-copiar="{{ ch.codigo }}" title="Copiar o nº do chamado (sem o #)" aria-label="Copiar o número do chamado {{ ch.codigo }}"><i class="far fa-copy"></i></button></span>
             <span class="font-semibold text-gray-900">{{ ch.colaborador.nome }}</span>
             <span class="text-gray-600">{{ ch.get_motivo_display }}</span>
             {% if ch.sistemas %}<span class="text-[11px] text-gray-500">{{ ch.sistemas|join:", " }}</span>{% endif %}
             <span class="ml-auto text-[11px] text-gray-500">{{ ch.responsavel.get_full_name|default:"sem responsável" }}</span>
             <span class="text-[11px] tabular {% if ch.verificacao_vencida %}text-red-600 font-semibold{% else %}text-gray-500{% endif %}">{% if ch.status == 'CONCLUIDO' %}concluído {{ ch.concluido_em|date:"d/m H:i" }}{% else %}verificar {{ ch.proxima_verificacao|date:"d/m H:i" }}{% endif %}</span>
         </summary>
-        <div class="border-t border-gray-100 p-4 grid md:grid-cols-3 gap-4 text-sm">
+        <div class="border-t border-gray-100 px-4 pt-3">
+            <div class="rounded-xl border border-gray-100 bg-gray-50/60 px-3 py-1">
+                <div class="flex items-center justify-between gap-2 pt-1.5"><p class="text-[11px] uppercase font-semibold text-gray-500">Para abrir chamado</p>
+                    <button type="button" class="ac-btn ac-btn-claro ac-btn-mini" data-copiar="Chamado: {{ ch.codigo }}&#10;{{ ch.colaborador.texto_para_copiar }}"><i class="far fa-copy"></i>Copiar tudo</button></div>
+                {% include 'acess/_copiar_dados.html' with c=ch.colaborador %}
+            </div>
+        </div>
+        <div class="p-4 grid md:grid-cols-3 gap-4 text-sm">
             <div class="space-y-1 text-xs text-gray-700">
                 <p><strong>Colaborador:</strong> <a href="{% url 'acess:ficha' ch.colaborador_id %}" class="text-amber-700 hover:underline">{{ ch.colaborador.nome }}</a> · {{ ch.colaborador.login|default:"sem login" }}</p>
                 <p><strong>Local:</strong> {{ ch.colaborador.local.name|default:"—" }}{% if ch.colaborador.loja_vinculo %} · vínculo {{ ch.colaborador.loja_vinculo.name }}{% endif %} · ADABAS {{ ch.colaborador.unidade_adabas|default:"—" }}</p>

@@ -1243,7 +1243,7 @@ def meta_editar(request, meta_id):
         # O prazo pode ir para trás numa edição — a atividade já existe e às
         # vezes o combinado mudou. O que não pode é nascer vencida, e isso a
         # tela de criação já barra.
-        antes = {'titulo': meta.titulo, 'prazo': meta.prazo}
+        antes = {'titulo': meta.titulo, 'descricao': meta.descricao, 'prazo': meta.prazo}
         meta.titulo = titulo[:200]
         meta.descricao = descricao
         meta.prazo = prazo
@@ -1259,6 +1259,8 @@ def meta_editar(request, meta_id):
         mudou = []
         if antes['titulo'] != meta.titulo:
             mudou.append(f'título: "{antes["titulo"]}" → "{meta.titulo}"')
+        if antes['descricao'] != meta.descricao:
+            mudou.append('descrição atualizada')
         if antes['prazo'] != meta.prazo:
             mudou.append(f'prazo: {antes["prazo"]:%d/%m/%Y} → {meta.prazo:%d/%m/%Y}')
         if mudou:
@@ -1266,7 +1268,11 @@ def meta_editar(request, meta_id):
             MetaComentario.objects.create(
                 meta=meta, autor=request.user,
                 mensagem=f'{quem} editou a atividade — ' + '; '.join(mudou))
-            _notify([u for u in meta.responsaveis if u.id != request.user.id],
+            # O dono mexendo no texto da própria meta: o gestor fica sabendo.
+            avisar = list(meta.responsaveis)
+            if meta.gestor_id and meta.gestor not in avisar:
+                avisar.append(meta.gestor)
+            _notify([u for u in avisar if u.id != request.user.id],
                     'Atividade alterada',
                     f'"{meta.titulo}" foi editada por {quem}.',
                     f'/impulso/metas/{meta.id}/')
@@ -1279,6 +1285,7 @@ def meta_editar(request, meta_id):
         'recorrencias': Meta.Recorrencia.choices,
         'manda_no_prazo': manda_no_prazo,
         'sou_ponto_focal': meta.e_ponto_focal(request.user),
+        'sou_dono_so_texto': not manda_no_prazo and meta.dono_edita_texto(request.user),
         'ideia_de_origem': meta.ideias_originadas.first(),
         'active_tab': 'confiar',
     })

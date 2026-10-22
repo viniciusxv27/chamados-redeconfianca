@@ -159,6 +159,28 @@ class Colaborador(models.Model):
         c = self.cpf or ''
         return f'{c[:3]}.{c[3:6]}.{c[6:9]}-{c[9:]}' if len(c) == 11 else c
 
+    def dados_para_copiar(self):
+        """O que se cola ao abrir chamado: (rótulo, chave, valor). CPF só com números, data dd/mm/aaaa."""
+        loja = self.loja_vinculo or self.local
+        com_adabas = next((x for x in (self.loja_vinculo, self.local) if x is not None and (x.adabas or '').strip()), None)
+        return [
+            ('Nome', 'nome', self.nome or ''),
+            ('CPF', 'cpf', self.cpf or ''),
+            ('Nascimento', 'nascimento', self.nascimento.strftime('%d/%m/%Y') if self.nascimento else ''),
+            ('E-mail', 'email', self.email or ''),
+            ('Telefone', 'telefone', self.telefone or ''),
+            ('Login', 'login', self.login or ''),
+            ('Cargo', 'cargo', self.cargo or ''),
+            ('Loja', 'loja', loja.name if loja else ''),
+            ('ADABAS', 'adabas', self.unidade_adabas),
+            ('CNPJ Vivo', 'cnpj_vivo', getattr(com_adabas, 'cnpj_vivo', '') or ''),
+            ('Loja Vivo', 'loja_vivo', getattr(com_adabas, 'nome_loja_vivo', '') or ''),
+        ]
+
+    @property
+    def texto_para_copiar(self):
+        return '\n'.join(f'{rotulo}: {valor}' for rotulo, _chave, valor in self.dados_para_copiar() if valor)
+
     @property
     def desligamento_situacao(self):
         if self.status == self.DESLIGADO:
@@ -244,6 +266,39 @@ class LogAcess(models.Model):
 
     class Meta:
         ordering = ['-quando', '-id']
+
+
+class Solicitacao(models.Model):
+    """Pedido de chamado de acesso feito pela janela de Suporte do portal; o time do Acess abre o chamado."""
+
+    ABERTA, EM_CHAMADO, RESOLVIDA, RECUSADA = 'ABERTA', 'EM_CHAMADO', 'RESOLVIDA', 'RECUSADA'
+    STATUS = [(ABERTA, 'Aguardando o time de Acessos'), (EM_CHAMADO, 'Chamado aberto'),
+              (RESOLVIDA, 'Resolvida'), (RECUSADA, 'Recusada')]
+
+    solicitante = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='+')
+    colaborador = models.ForeignKey(Colaborador, on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='solicitacoes', help_text='A ficha de quem pediu, se houver.')
+    motivo = models.CharField(max_length=20, choices=MOTIVOS_CHAMADO)
+    sistemas = models.JSONField(default=list, blank=True)
+    descricao = models.TextField(max_length=2000)
+    contato = models.CharField(max_length=40, blank=True)
+    status = models.CharField(max_length=12, choices=STATUS, default=ABERTA, db_index=True)
+    chamado = models.ForeignKey(Chamado, on_delete=models.SET_NULL, null=True, blank=True, related_name='solicitacoes')
+    resposta = models.TextField(max_length=1000, blank=True)
+    tratado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='+')
+    tratado_em = models.DateTimeField(null=True, blank=True)
+    criado_em = models.DateTimeField(default=timezone.now, db_index=True)
+
+    class Meta:
+        ordering = ['-criado_em']
+
+    def __str__(self):
+        return f'SOL-{self.pk} · {self.get_motivo_display()}'
+
+    @property
+    def numero(self):
+        return f'SOL-{self.pk}'
 
 
 class ModeloMensagem(models.Model):

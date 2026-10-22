@@ -60,6 +60,21 @@
                     >
                     <p class="text-xs text-gray-500 mt-1">Código ADABAS da loja. Setores que não são loja ficam vazios.</p>
                 </div>
+                <div class="grid sm:grid-cols-2 gap-4 rounded-lg border border-gray-200 bg-gray-50 p-4">
+                    <p class="sm:col-span-2 text-xs text-gray-600"><i class="fas fa-link mr-1 text-gray-400"></i>Ligados ao ADABAS: como a loja está no cadastro da Vivo.</p>
+                    <div>
+                        <label for="cnpj_vivo" class="block text-sm font-semibold text-gray-700 mb-2">CNPJ Vivo</label>
+                        <input type="text" name="cnpj_vivo" id="cnpj_vivo" maxlength="18" inputmode="numeric" value="{{ sector.cnpj_vivo }}"
+                               class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary"
+                               placeholder="00.000.000/0000-00">
+                    </div>
+                    <div>
+                        <label for="nome_loja_vivo" class="block text-sm font-semibold text-gray-700 mb-2">Nome loja (Vivo)</label>
+                        <input type="text" name="nome_loja_vivo" id="nome_loja_vivo" maxlength="120" value="{{ sector.nome_loja_vivo }}"
+                               class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary"
+                               placeholder="Ex: EA MASTERCEL SERRA VI ES">
+                    </div>
+                </div>
             </div>
             
             <!-- Actions -->

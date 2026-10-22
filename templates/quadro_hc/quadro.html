@@ -39,7 +39,7 @@
   .hc .bt:disabled { opacity: .4; cursor: not-allowed; transform: none; box-shadow: none; }
 
   /* abas e barra */
-  .hc .abas { display: inline-flex; gap: .25rem; padding: .3rem; border-radius: 1rem; background: var(--sup); border: 1px solid var(--borda); box-shadow: var(--sombra); max-width: 100%; overflow-x: auto; }
+  .hc .abas { display: inline-flex; flex-wrap: wrap; gap: .25rem; padding: .3rem; border-radius: 1rem; background: var(--sup); border: 1px solid var(--borda); box-shadow: var(--sombra); max-width: 100%; }
   .hc .aba { display: inline-flex; align-items: center; gap: .4rem; padding: .5rem .9rem; border-radius: .75rem; font-size: .84rem; font-weight: 700; color: var(--txt-2); white-space: nowrap; transition: all .15s; }
   .hc .aba:hover { color: var(--txt); background: var(--sup-3); }
   .hc .aba[aria-selected="true"] { background: var(--pri); color: #fff; box-shadow: 0 4px 12px rgba(255,107,53,.3); }
@@ -54,7 +54,7 @@
   .hc .pilula:hover { border-color: var(--pri); color: var(--pri-esc); }
   .hc .pilula[aria-pressed="true"] { background: var(--pri-suave); border-color: var(--pri); color: var(--pri-esc); }
   .hc .pilula .n { font-size: 10.5px; color: var(--txt-3); }
-  .hc .rolagem-x { overflow-x: auto; scrollbar-width: thin; -webkit-mask-image: linear-gradient(90deg, #000 92%, transparent); mask-image: linear-gradient(90deg, #000 92%, transparent); }
+  .hc .rolagem-x { flex-wrap: wrap; }
 
   /* cores por grupo de cargo */
   .hc .g-coordenacao { --g: #475569; } .hc .g-gerente { --g: #FF6B35; } .hc .g-gerente-operacional { --g: #F59E0B; }
@@ -84,11 +84,36 @@
   .hc .loja.fechada .seta { transform: rotate(-90deg); }
   .hc .seta { transition: transform .2s; }
 
-  /* tabela */
+  /* tabela: cabe na largura da loja (sem rolar para o lado). A largura que manda é a do bloco da loja
+     (container query), não a da janela: com o menu lateral aberto sobra bem menos espaço. */
+  .hc .so-tabela { container-type: inline-size; }
   .hc table.pessoas { width: 100%; font-size: .8rem; border-collapse: separate; border-spacing: 0; }
   .hc table.pessoas th { position: sticky; top: 0; z-index: 1; text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em;
-                         color: var(--txt-3); font-weight: 700; padding: .55rem .65rem; background: var(--sup-2); white-space: nowrap; border-bottom: 1px solid var(--borda); }
-  .hc table.pessoas td { padding: .6rem .65rem; border-bottom: 1px solid var(--borda-suave); vertical-align: middle; }
+                         color: var(--txt-3); font-weight: 700; padding: .55rem .5rem; background: var(--sup-2); border-bottom: 1px solid var(--borda); }
+  .hc table.pessoas td { padding: .55rem .5rem; border-bottom: 1px solid var(--borda-suave); vertical-align: middle; overflow-wrap: break-word; }
+  .hc table.pessoas .col-nome { width: 30%; min-width: 0; }
+  .hc table.pessoas .chip-g { white-space: normal; line-height: 1.25; }
+  .hc table.pessoas .tag { white-space: normal; }
+  .hc table.pessoas .chip-g::before { flex: 0 0 auto; }
+  .hc table.pessoas .obs { min-width: 0; }
+  .hc .col-extra, .hc .txt-mov { display: none; }
+  @container (min-width: 1240px) {
+    .hc table.pessoas .col-extra { display: table-cell; }
+    .hc .txt-mov { display: inline; }
+  }
+  /* bloco estreito: cada pessoa vira um cartão com todos os campos */
+  @container (max-width: 760px) {
+    .hc table.pessoas thead { display: none; }
+    .hc table.pessoas, .hc table.pessoas tbody { display: block; }
+    .hc table.pessoas tr.item { display: block; border-bottom: 1px solid var(--borda); padding: .5rem 0; }
+    .hc table.pessoas tr.item td, .hc table.pessoas tr.item td.col-extra { display: flex; gap: .5rem; border: 0; padding: .15rem .8rem; width: auto; }
+    .hc table.pessoas tr.item td[data-label]::before { content: attr(data-label); flex: 0 0 6.5rem; font-size: 10px; text-transform: uppercase; color: var(--txt-3); font-weight: 700; padding-top: 2px; }
+    .hc table.pessoas tr.item td > * { flex: 1 1 auto; min-width: 0; }
+    .hc table.pessoas tr.item td:last-child { justify-content: flex-end; }
+    .hc table.pessoas tr.item td:last-child > * { flex: 0 0 auto; }
+    .hc .acoes { opacity: 1; }
+    .hc .txt-mov { display: inline; }
+  }
   .hc table.pessoas tbody tr.item { transition: background .15s; }
   .hc table.pessoas tbody tr.item:hover td { background: var(--sup-2); }
   .hc table.pessoas tbody tr.item:hover .acoes { opacity: 1; }
@@ -160,11 +185,6 @@
   .hc kbd { font-size: 10px; padding: 0 .3rem; border-radius: .3rem; border: 1px solid var(--borda); color: var(--txt-3); }
 
   @media (max-width: 767px) {
-    .hc table.pessoas thead { display: none; }
-    .hc table.pessoas tr.item { display: block; border-bottom: 1px solid var(--borda); padding: .5rem 0; }
-    .hc table.pessoas tr.item td { display: flex; gap: .5rem; border: 0; padding: .15rem .8rem; }
-    .hc table.pessoas tr.item td[data-label]::before { content: attr(data-label); flex: 0 0 6.5rem; font-size: 10px; text-transform: uppercase; color: var(--txt-3); font-weight: 700; padding-top: 2px; }
-    .hc .acoes { opacity: 1; }
     .hc .grade { grid-template-columns: 1fr; padding: .6rem; }
     .hc .barra { position: static; }
   }
@@ -310,9 +330,10 @@
           </header>
           <div class="loja-corpo"><div>
             <!-- tabela -->
-            <div class="so-tabela overflow-x-auto border-t" style="border-color:var(--borda)">
-              <table class="pessoas">
-                <thead><tr><th>Nome</th><th>Cargo</th><th class="hidden 2xl:table-cell">Cidade onde reside</th><th>Login</th><th class="hidden 2xl:table-cell">Nascimento</th><th>Contratação</th><th>Exp. 1ª</th><th>Exp. 2ª</th><th>Obs.</th><th class="hidden 2xl:table-cell">Telefone</th><th><span class="sr-only">Ações</span></th></tr></thead>
+            <div class="so-tabela border-t" style="border-color:var(--borda)">
+              {% comment %}data-rc-wrapped: o script global do base.html não embrulha esta tabela num bloco com rolagem lateral (ela se ajusta à largura da loja).{% endcomment %}
+              <table class="pessoas" data-rc-wrapped="1">
+                <thead><tr><th class="col-nome">Nome</th><th>Cargo</th><th class="col-extra">Cidade onde reside</th><th>Login</th><th class="col-extra">Nascimento</th><th>Contratação</th><th>Exp. 1ª</th><th>Exp. 2ª</th><th>Obs.</th><th class="col-extra">Telefone</th><th><span class="sr-only">Ações</span></th></tr></thead>
                 <tbody>
                   {% for p in b.pessoas %}
                   <tr class="item g-{{ p.grupo|slugify }}" data-item data-pessoa="{{ p.id }}" data-cargo="{{ p.cargo }}" draggable="true" {% if p.demissao_antiga %}data-demissao{% endif %} {% if p.ajuste or p.origem_funcao != 'cargo' %}data-ajustado{% endif %}
@@ -320,7 +341,7 @@
                       {% if p.novo %}data-novo{% endif %}
                       {% if p.exp1_alerta == 'proxima' or p.exp2_alerta == 'proxima' %}data-experiencia{% endif %}
                       {% if p.exp1_alerta == 'proxima' or p.exp2_alerta == 'proxima' or p.agendadas or p.sai_em %}data-alerta{% endif %}>
-                    <td data-label="Nome" class="min-w-[13rem]">
+                    <td data-label="Nome" class="col-nome">
                       <div class="flex items-start gap-2.5">
                         <span class="avatar p" aria-hidden="true">{{ p.iniciais }}</span>
                         <div class="min-w-0">
@@ -343,15 +364,15 @@
                       </div>
                     </td>
                     <td data-label="Cargo"><span class="chip-g g-{{ p.grupo|slugify }}">{{ p.cargo|default:"sem cargo" }}</span></td>
-                    <td data-label="Cidade" class="t2 hidden 2xl:table-cell">{{ p.cidade|default:"—" }}</td>
+                    <td data-label="Cidade" class="t2 col-extra">{{ p.cidade|default:"—" }}</td>
                     <td data-label="Login" class="tabular">{{ p.login|default:"—" }}</td>
-                    <td data-label="Nascimento" class="tabular hidden 2xl:table-cell">{{ p.nascimento|date:"d/m/Y"|default:"—" }}</td>
+                    <td data-label="Nascimento" class="tabular col-extra">{{ p.nascimento|date:"d/m/Y"|default:"—" }}</td>
                     <td data-label="Contratação" class="tabular whitespace-nowrap">{{ p.contratacao|date:"d/m/y"|default:"—" }}</td>
                     <td data-label="Exp. 1ª" class="tabular whitespace-nowrap"><span class="{% if p.exp1_alerta == 'proxima' %}exp-proxima{% elif p.exp1_alerta == 'passou' %}exp-passou{% endif %}">{{ p.exp1|date:"d/m/y"|default:"—" }}</span></td>
                     <td data-label="Exp. 2ª" class="tabular whitespace-nowrap"><span class="{% if p.exp2_alerta == 'proxima' %}exp-proxima{% elif p.exp2_alerta == 'passou' %}exp-passou{% endif %}">{{ p.exp2|date:"d/m/y"|default:"—" }}</span></td>
                     <td data-label="Obs."><input class="obs" value="{{ p.observacao }}" data-obs="{{ p.id }}" maxlength="500" aria-label="Observação de {{ p.nome }}" placeholder="adicionar…"></td>
-                    <td data-label="Telefone" class="whitespace-nowrap tabular hidden 2xl:table-cell">{% if p.telefone %}<a href="tel:{{ p.telefone|cut:' '|cut:'-' }}" class="hover:underline">{{ p.telefone }}</a>{% else %}—{% endif %}</td>
-                    <td class="text-right"><div class="acoes flex gap-1 justify-end"><button type="button" class="bt bt-claro !py-1 !px-2 !text-xs" data-ajustar="{{ p.id }}" data-nome="{{ p.nome }}" data-cargo-cad="{{ p.cargo|default:'sem cargo' }}" data-funcao="{{ p.ajuste.funcao|default:'' }}" data-setor="{{ p.ajuste.setor|default:'' }}" data-situacao="{{ p.ajuste.situacao|default:'AUTO' }}" data-motivo="{{ p.ajuste.motivo|default:'' }}" data-demissao="{{ p.demissao_antiga|date:'d/m/Y' }}" aria-label="Ajustar {{ p.nome }} no quadro" title="Ajuste manual no quadro"><i class="fas fa-sliders"></i></button><button type="button" class="bt bt-claro !py-1 !px-2.5 !text-xs" data-movimentar="{{ p.id }}" aria-label="Movimentar {{ p.nome }}"><i class="fas fa-people-arrows"></i><span class="hidden 2xl:inline">Movimentar</span></button></div></td>
+                    <td data-label="Telefone" class="whitespace-nowrap tabular col-extra">{% if p.telefone %}<a href="tel:{{ p.telefone|cut:' '|cut:'-' }}" class="hover:underline">{{ p.telefone }}</a>{% else %}—{% endif %}</td>
+                    <td class="text-right"><div class="acoes flex gap-1 justify-end"><button type="button" class="bt bt-claro !py-1 !px-2 !text-xs" data-ajustar="{{ p.id }}" data-nome="{{ p.nome }}" data-cargo-cad="{{ p.cargo|default:'sem cargo' }}" data-funcao="{{ p.ajuste.funcao|default:'' }}" data-setor="{{ p.ajuste.setor|default:'' }}" data-situacao="{{ p.ajuste.situacao|default:'AUTO' }}" data-motivo="{{ p.ajuste.motivo|default:'' }}" data-demissao="{{ p.demissao_antiga|date:'d/m/Y' }}" aria-label="Ajustar {{ p.nome }} no quadro" title="Ajuste manual no quadro"><i class="fas fa-sliders"></i></button><button type="button" class="bt bt-claro !py-1 !px-2.5 !text-xs" data-movimentar="{{ p.id }}" aria-label="Movimentar {{ p.nome }}"><i class="fas fa-people-arrows"></i><span class="txt-mov">Movimentar</span></button></div></td>
                   </tr>
                   {% endfor %}
                   {% for v in b.vagas %}

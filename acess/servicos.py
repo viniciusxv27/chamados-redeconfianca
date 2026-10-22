@@ -9,7 +9,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from .models import (MOTIVOS_CHAMADO, SISTEMAS, SISTEMAS_CHAMADO, STATUS_SISTEMA, Chamado, Colaborador,
-                     EventoChamado, LogAcess, ModeloMensagem)
+                     EventoChamado, LogAcess, ModeloMensagem, Solicitacao)
 
 
 class RegraAcess(Exception):
@@ -28,6 +28,11 @@ def so_digitos(texto):
 def norm(texto):
     t = unicodedata.normalize('NFKD', str(texto or ''))
     return ' '.join(''.join(c for c in t if not unicodedata.combining(c)).upper().split())
+
+
+def codigo_chamado(texto):
+    """Nº do chamado sem o "#" da frente (o Acess anterior gravava "#564695"; a tela já põe o #)."""
+    return str(texto or '').strip().lstrip('#').strip()
 
 
 def cpf_valido(cpf):
@@ -423,7 +428,7 @@ def _prazo(minutos=None, quando=None):
 @transaction.atomic
 def criar_chamado(c, codigo, motivo, sistemas, observacao, minutos=None, quando=None, responsavel=None,
                   usuario=None, request=None):
-    codigo = str(codigo or '').strip()
+    codigo = codigo_chamado(codigo)
     if not codigo or len(codigo) > 100:
         raise RegraAcess('Informe o número do chamado (até 100 caracteres).')
     if Chamado.objects.filter(codigo__iexact=codigo, status=Chamado.ANDAMENTO).exists():
@@ -453,6 +458,12 @@ def _concluir_chamado(ch, usuario, detalhe='Concluído'):
     ch.versao += 1
     ch.save(update_fields=['status', 'concluido_por', 'concluido_em', 'versao'])
     EventoChamado.objects.create(chamado=ch, usuario=usuario, tipo='CONCLUIDO', detalhe=detalhe)
+    for sol in Solicitacao.objects.filter(chamado=ch, status=Solicitacao.EM_CHAMADO):
+        sol.status, sol.tratado_em = Solicitacao.RESOLVIDA, timezone.now()
+        sol.tratado_por = sol.tratado_por or usuario
+        sol.save(update_fields=['status', 'tratado_em', 'tratado_por'])
+        avisar_solicitante(sol, f'Chamado #{ch.codigo} concluído',
+                           f'O chamado de acesso que você pediu ({sol.get_motivo_display().lower()}) foi concluído.')
 
 
 @transaction.atomic
@@ -645,3 +656,99 @@ def duplicados(qs):
         if len(g) > 1:
             ids |= g
     return ids
+
+
+# ── Solicitações pela janela de Suporte do portal ──────────────────────────
+ABERTAS_POR_PESSOA = 5
+
+
+def ficha_do_usuario(user):
+    """A ficha do Acess de quem pediu: ligada ao usuário ou, se não houver, pelo CPF."""
+    c = Colaborador.objects.filter(user=user).order_by('status', '-id').first()
+    if c is None and so_digitos(getattr(user, 'cpf', '')):
+        c = Colaborador.objects.filter(cpf=so_digitos(user.cpf)).order_by('status', '-id').first()
+    return c
+
+
+def _notificar(usuarios, titulo, mensagem, url):
+    try:
+        from core.models import Notification
+        Notification.objects.bulk_create([Notification(user=u, title=titulo[:200], message=mensagem,
+                                                       notification_type='TICKET', related_url=url) for u in usuarios])
+    except Exception:  # noqa: BLE001 — aviso nunca derruba o pedido
+        pass
+
+
+def avisar_solicitante(sol, titulo, mensagem):
+    _notificar([sol.solicitante], titulo, mensagem, '/')
+
+
+def quem_trata_chamados():
+    from django.contrib.auth import get_user_model
+    from django.db.models import Q
+
+    from .permissoes import trata_chamados
+    gente = get_user_model().objects.filter(is_active=True).filter(
+        Q(acesso_acess__trata_chamados=True, acesso_acess__ativo=True)).distinct()
+    return [u for u in gente if trata_chamados(u)]
+
+
+@transaction.atomic
+def criar_solicitacao(user, motivo, sistemas, descricao, contato='', request=None):
+    if motivo not in dict(MOTIVOS_CHAMADO):
+        raise RegraAcess('Escolha o motivo.')
+    sistemas = [s for s in dict.fromkeys(sistemas or []) if s]
+    fora = [s for s in sistemas if s not in SISTEMAS_CHAMADO]
+    if fora:
+        raise RegraAcess(f'Sistema fora do catálogo: {", ".join(fora)}.')
+    descricao = str(descricao or '').strip()
+    if len(descricao) < 5:
+        raise RegraAcess('Conte em poucas palavras o que está acontecendo.')
+    if len(descricao) > 2000:
+        raise RegraAcess('A descrição vai até 2.000 caracteres.')
+    if Solicitacao.objects.filter(solicitante=user, status=Solicitacao.ABERTA).count() >= ABERTAS_POR_PESSOA:
+        raise RegraAcess('Você já tem pedidos aguardando o time de Acessos. Aguarde o retorno deles.')
+    c = ficha_do_usuario(user)
+    sol = Solicitacao.objects.create(solicitante=user, colaborador=c, motivo=motivo, sistemas=sistemas,
+                                     descricao=descricao, contato=str(contato or '').strip()[:40])
+    registrar(request, 'SOLICITACAO_ABERTA', 'CHAMADO',
+              f'{user.get_full_name() or user.email} pediu chamado pelo Suporte ({sol.numero}: '
+              f'{sol.get_motivo_display()})', colaborador=c, usuario=user)
+    _notificar(quem_trata_chamados(), f'Pedido de acesso {sol.numero}',
+               f'{user.get_full_name() or user.email}: {sol.get_motivo_display()}'
+               + (f' · {", ".join(sistemas)}' if sistemas else ''), '/acess/solicitacoes/')
+    return sol
+
+
+@transaction.atomic
+def vincular_solicitacao(sol, chamado, usuario=None):
+    sol = Solicitacao.objects.select_for_update().get(pk=sol.pk)
+    if sol.status != Solicitacao.ABERTA:
+        raise RegraAcess(f'O pedido {sol.numero} já foi tratado.')
+    sol.status, sol.chamado = Solicitacao.EM_CHAMADO, chamado
+    sol.colaborador = sol.colaborador or chamado.colaborador
+    sol.tratado_por, sol.tratado_em = usuario, timezone.now()
+    sol.save(update_fields=['status', 'chamado', 'colaborador', 'tratado_por', 'tratado_em'])
+    avisar_solicitante(sol, f'Chamado #{chamado.codigo} aberto',
+                       f'O time de Acessos abriu o chamado #{chamado.codigo} para o seu pedido '
+                       f'({sol.get_motivo_display().lower()}).')
+    return sol
+
+
+@transaction.atomic
+def responder_solicitacao(sol, status, resposta, usuario=None, request=None):
+    sol = Solicitacao.objects.select_for_update().get(pk=sol.pk)
+    if sol.status != Solicitacao.ABERTA:
+        raise RegraAcess(f'O pedido {sol.numero} já foi tratado.')
+    if status not in (Solicitacao.RESOLVIDA, Solicitacao.RECUSADA):
+        raise RegraAcess('Ação inválida.')
+    resposta = str(resposta or '').strip()
+    if not resposta:
+        raise RegraAcess('Escreva a resposta para quem pediu.')
+    sol.status, sol.resposta = status, resposta[:1000]
+    sol.tratado_por, sol.tratado_em = usuario, timezone.now()
+    sol.save(update_fields=['status', 'resposta', 'tratado_por', 'tratado_em'])
+    registrar(request, 'SOLICITACAO_' + status, 'CHAMADO', f'{sol.numero} {sol.get_status_display().lower()}: {resposta[:200]}',
+              colaborador=sol.colaborador, usuario=usuario)
+    avisar_solicitante(sol, f'Pedido de acesso {sol.get_status_display().lower()}', resposta[:500])
+    return sol

@@ -17,6 +17,12 @@
             <span class="w-9 h-9 rounded-xl grid place-items-center {% if u.sede %}bg-indigo-50 text-indigo-600{% else %}bg-amber-50 text-amber-600{% endif %}"><i class="fas {% if u.sede %}fa-building{% else %}fa-store{% endif %}"></i></span>
             <div class="flex-1 min-w-0">
                 <p class="font-bold text-gray-900">{{ u.setor.name|default:"Sem local" }} {% if u.setor.adabas %}<span class="text-[11px] text-gray-400 font-semibold">{{ u.setor.adabas }}</span>{% endif %}{% if u.uf %} <span class="ac-chip bg-gray-100 text-gray-600">{{ u.uf }}</span>{% endif %}</p>
+                {% if u.setor.cnpj_vivo or u.setor.nome_loja_vivo %}
+                <p class="text-[11px] text-violet-700 font-semibold flex flex-wrap items-center gap-x-2">
+                    {% if u.setor.nome_loja_vivo %}<span title="Nome da loja na Vivo">{{ u.setor.nome_loja_vivo }}<button type="button" class="ac-copiar align-middle" data-copiar="{{ u.setor.nome_loja_vivo }}" title="Copiar o nome da loja na Vivo" aria-label="Copiar o nome da loja na Vivo"><i class="far fa-copy"></i></button></span>{% endif %}
+                    {% if u.setor.cnpj_vivo %}<span class="tabular" title="CNPJ Vivo">CNPJ {{ u.setor.cnpj_vivo }}<button type="button" class="ac-copiar align-middle" data-copiar="{{ u.setor.cnpj_vivo }}" title="Copiar o CNPJ Vivo" aria-label="Copiar o CNPJ Vivo"><i class="far fa-copy"></i></button></span>{% endif %}
+                </p>
+                {% endif %}
                 <p class="text-[11px] text-gray-500">{{ u.gente|length }} colaborador(es){% if u.sede %} · sede (sem ADABAS próprio){% endif %}</p>
             </div>
             {% if u.pendentes %}<span class="ac-chip s-PENDENTE">{{ u.pendentes }} com pendência</span>{% else %}<span class="ac-chip s-OK">tudo OK</span>{% endif %}
@@ -28,12 +34,12 @@
             <tbody>
             {% for c in u.gente %}
             <tr>
-                <td><span class="font-semibold text-gray-900">{{ c.nome }}</span> <span class="text-[11px] text-gray-500">{{ c.cargo|default:"Cargo não informado" }}</span>
+                <td><span class="font-semibold text-gray-900">{{ c.nome }}</span><button type="button" class="ac-copiar align-middle" data-copiar="{{ c.nome }}" title="Copiar o nome" aria-label="Copiar o nome"><i class="far fa-copy"></i></button> <span class="text-[11px] text-gray-500">{{ c.cargo|default:"Cargo não informado" }}</span>
                     {% if c.loja_vinculo and c.loja_vinculo != c.local %}<span class="block text-[11px] text-indigo-600"><i class="fas fa-link"></i> vínculo {{ c.loja_vinculo.name }} · {{ c.unidade_adabas }}</span>{% endif %}
                     {% if c.desligamento_situacao %}<span class="block text-[11px] text-red-600"><i class="fas fa-user-xmark"></i> {{ c.desligamento_situacao }} {{ c.desligamento_em|date:"d/m/Y" }}</span>{% endif %}</td>
-                <td class="tabular text-xs">{{ c.cpf_formatado|default:"—" }}</td>
-                <td class="tabular text-xs">{{ c.nascimento|date:"d/m/Y"|default:"—" }}</td>
-                <td class="tabular">{{ c.login|default:"—" }}</td>
+                <td class="tabular text-xs whitespace-nowrap">{{ c.cpf_formatado|default:"—" }}{% if c.cpf %}<button type="button" class="ac-copiar align-middle" data-copiar="{{ c.cpf }}" title="Copiar o CPF (só números)" aria-label="Copiar o CPF"><i class="far fa-copy"></i></button>{% endif %}</td>
+                <td class="tabular text-xs whitespace-nowrap">{{ c.nascimento|date:"d/m/Y"|default:"—" }}{% if c.nascimento %}<button type="button" class="ac-copiar align-middle" data-copiar="{{ c.nascimento|date:'d/m/Y' }}" title="Copiar a data de nascimento" aria-label="Copiar a data de nascimento"><i class="far fa-copy"></i></button>{% endif %}</td>
+                <td class="tabular whitespace-nowrap">{{ c.login|default:"—" }}{% if c.login %}<button type="button" class="ac-copiar align-middle" data-copiar="{{ c.login }}" title="Copiar o login" aria-label="Copiar o login"><i class="far fa-copy"></i></button>{% endif %}</td>
                 <td><span class="ac-chip s-{% if c.situacao == 'Pendente' %}PENDENTE{% else %}{{ c.situacao }}{% endif %}">{{ c.situacao }}</span>{% if c.tem_chamado %} <a href="{% url 'acess:chamados' %}?q={{ c.nome|urlencode }}" class="ac-chip bg-indigo-50 text-indigo-700"><i class="fas fa-headset"></i>chamado</a>{% endif %}</td>
                 <td class="text-right"><a href="{% url 'acess:ficha' c.id %}" class="ac-btn ac-btn-claro ac-btn-mini">Ficha</a></td>
             </tr>

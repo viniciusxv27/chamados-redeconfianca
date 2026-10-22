@@ -28,7 +28,7 @@ from django.utils.dateparse import parse_datetime
 
 from . import dump_legado
 from .models import (SISTEMAS, SISTEMAS_CHAMADO, Chamado, Colaborador, EventoChamado, LogAcess, ModeloMensagem)
-from .servicos import cpf_valido, norm, so_digitos
+from .servicos import codigo_chamado, cpf_valido, norm, so_digitos
 
 User = get_user_model()
 
@@ -239,7 +239,7 @@ class Importador:
             limite = _data_hora(p.get('SLA_LIMITE')) or aberto
             concluido = str(p.get('STATUS') or '').upper().startswith('CONCLU')
             campos = {
-                'colaborador': c, 'codigo': str(p.get('CHAMADO') or '').strip()[:100] or '—', 'motivo': motivo,
+                'colaborador': c, 'codigo': codigo_chamado(p.get('CHAMADO'))[:100] or '—', 'motivo': motivo,
                 'sistemas': sistemas, 'observacao': obs[:3000], 'aberto_em': aberto, 'sla_original': limite,
                 'proxima_verificacao': _data_hora(p.get('PROXIMA_VERIFICACAO')) or limite,
                 'status': Chamado.CONCLUIDO if concluido else Chamado.ANDAMENTO,
