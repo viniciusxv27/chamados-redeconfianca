@@ -1385,6 +1385,8 @@ class Dependent(models.Model):
         max_length=30, verbose_name="Documento",
         help_text="CPF ou número da certidão de nascimento.",
     )
+    # Vazio nos dependentes cadastrados antes de 22/10/2026; o pré-cadastro passou a pedir.
+    birth_date = models.DateField(null=True, blank=True, verbose_name="Data de nascimento")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

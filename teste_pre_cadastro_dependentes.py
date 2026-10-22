@@ -117,34 +117,47 @@ try:
     t('"não" é resposta válida e o resto da ficha está ok', not erros, erros)
     t('e a leitura guarda o "não"', valores['has_dependents'] is False)
 
-    print('\n== "SIM" PRECISA DE NOME E DOCUMENTO ==')
+    print('\n== "SIM" PRECISA DE NOME, DOCUMENTO E NASCIMENTO (22/10/2026) ==')
+    PELA_METADE = 'Cada dependente precisa de nome, documento E data de nascimento (dd/mm/aaaa).'
     valores, erros = ler(has_dependents='sim')
     t('sim sem ninguém é erro',
-      'Informe o nome e o documento de cada dependente.' in erros, erros)
+      'Informe o nome, o documento e a data de nascimento de cada dependente.' in erros, erros)
     valores, erros = ler(has_dependents='sim', dependent_name_1='ZZDep Filho')
-    t('só o nome é erro', 'Cada dependente precisa de nome E documento.' in erros, erros)
+    t('só o nome é erro', PELA_METADE in erros, erros)
     valores, erros = ler(has_dependents='sim', dependent_document_1='111.222.333-44')
-    t('só o documento também', 'Cada dependente precisa de nome E documento.' in erros, erros)
+    t('só o documento também', PELA_METADE in erros, erros)
+    valores, erros = ler(has_dependents='sim', dependent_name_1='ZZDep Filho', dependent_document_1='111.222.333-44')
+    t('sem a data de nascimento também', PELA_METADE in erros, erros)
+    valores, erros = ler(has_dependents='sim', dependent_name_1='ZZDep Filho', dependent_document_1='111.222.333-44',
+                         dependent_birth_1='2099-01-01')
+    t('nascimento no futuro é erro', any('no futuro' in e for e in erros), erros)
+    valores, erros = ler(has_dependents='sim', dependent_name_1='ZZDep Filho', dependent_document_1='111.222.333-44',
+                         dependent_birth_1='31/02/2015')
+    t('data que não existe é erro', PELA_METADE in erros, erros)
     valores, erros = ler(has_dependents='sim',
                          dependent_name_1='ZZDep Filho', dependent_document_1='111.222.333-44',
-                         dependent_name_2='ZZDep Filha', dependent_document_2='555.666.777-88')
+                         dependent_birth_1='2015-03-10',
+                         dependent_name_2='ZZDep Filha', dependent_document_2='555.666.777-88',
+                         dependent_birth_2='20/07/2018')
     t('dois dependentes completos passam', not erros, erros)
     t('e a leitura traz os dois, na ordem',
       [d['name'] for d in valores['dependents']] == ['ZZDep Filho', 'ZZDep Filha'], valores['dependents'])
     t('com o documento junto', valores['dependents'][1]['document'] == '555.666.777-88')
+    t('e a data de nascimento (dd/mm/aaaa digitado também vale)',
+      str(valores['dependents'][0]['birth_date']) == '2015-03-10' and str(valores['dependents'][1]['birth_date']) == '2018-07-20')
 
     print('\n== GRAVAÇÃO ==')
     _apply_pre_registration_personal_data(novo, valores)
     novo.save()
     novo.refresh_from_db()
     t('grava a resposta', novo.has_dependents)
-    t('e a lista inteira',
-      [(d.name, d.document) for d in novo.dependents.all()]
-      == [('ZZDep Filho', '111.222.333-44'), ('ZZDep Filha', '555.666.777-88')])
+    t('e a lista inteira, com o nascimento',
+      [(d.name, d.document, str(d.birth_date)) for d in novo.dependents.all()]
+      == [('ZZDep Filho', '111.222.333-44', '2015-03-10'), ('ZZDep Filha', '555.666.777-88', '2018-07-20')])
 
     # Reenvio com um a menos: a lista do formulário substitui a anterior.
     valores, _ = ler(has_dependents='sim', dependent_name_1='ZZDep Filho',
-                     dependent_document_1='111.222.333-44')
+                     dependent_document_1='111.222.333-44', dependent_birth_1='2015-03-10')
     _apply_pre_registration_personal_data(novo, valores)
     novo.save(); novo.refresh_from_db()
     t('reenviar com um a menos remove o que saiu', novo.dependents.count() == 1)
@@ -157,10 +170,12 @@ try:
       not novo.has_dependents and novo.dependents.count() == 0)
 
     print('\n== AS LINHAS DO FORMULÁRIO ==')
-    Dependent.objects.create(user=novo, name='ZZDep Filho', document='111.222.333-44')
+    from datetime import date as _d
+    Dependent.objects.create(user=novo, name='ZZDep Filho', document='111.222.333-44', birth_date=_d(2015, 3, 10))
     linhas = _dependent_rows(RequestFactory().get('/x/'), novo)
     t('o GET devolve o que está salvo na primeira linha',
-      linhas[0]['name'] == 'ZZDep Filho' and linhas[0]['document'] == '111.222.333-44')
+      linhas[0]['name'] == 'ZZDep Filho' and linhas[0]['document'] == '111.222.333-44'
+      and linhas[0]['birth_date'] == '2015-03-10')
     t('as demais vêm vazias e escondidas',
       not linhas[1]['preenchido'] and not linhas[1]['primeira'])
     t('cabem quantos ele tiver (até o limite do modelo)',
@@ -177,8 +192,9 @@ try:
     html = publico.get(f'/users/pre-cadastro/{novo.pre_registration_token}/').content.decode()
     t('a tela pública pergunta', 'Possui dependentes' in html
       and 'name="has_dependents"' in html)
-    t('e tem as linhas de nome e documento',
-      'name="dependent_name_1"' in html and 'name="dependent_document_1"' in html)
+    t('e tem as linhas de nome, documento e nascimento',
+      'name="dependent_name_1"' in html and 'name="dependent_document_1"' in html
+      and 'type="date" name="dependent_birth_1"' in html)
     t('com o botão de adicionar mais', 'Adicionar dependente' in html)
     t('nenhum campo de dependente é obrigatório no HTML (o "Não" esconde o bloco)',
       'name="dependent_name_1" maxlength="150" value="" required' not in html
@@ -190,7 +206,8 @@ try:
         password='S3nha!teste', hierarchy='SUPERADMIN', is_staff=True, is_superuser=True)
     c = Client(); c.force_login(gestor)
     html = c.get(f'/users/manage/users/{novo.id}/profile/').content.decode()
-    t('o perfil mostra os dependentes', 'Dependentes' in html and 'ZZDep Filho' in html)
+    t('o perfil mostra os dependentes, com o nascimento', 'Dependentes' in html and 'ZZDep Filho' in html
+      and 'nasc. 10/03/2015' in html)
     html = c.get(f'/users/manage/users/{novo.id}/profile/print/').content.decode()
     t('a ficha cadastral também', 'Dependentes' in html and 'ZZDep Filho' in html
       and 'Possui dependentes' in html)

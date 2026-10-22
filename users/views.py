@@ -1699,9 +1699,11 @@ def _read_pre_registration_personal_data(request):
     if (data.get('has_dependents') or '').strip() not in ('sim', 'nao'):
         errors.append('Informe se você possui dependentes.')
     elif values['has_dependents'] and not values['dependents']:
-        errors.append('Informe o nome e o documento de cada dependente.')
+        errors.append('Informe o nome, o documento e a data de nascimento de cada dependente.')
     if values['has_dependents'] and _dependentes_pela_metade(data):
-        errors.append('Cada dependente precisa de nome E documento.')
+        errors.append('Cada dependente precisa de nome, documento E data de nascimento (dd/mm/aaaa).')
+    if values['has_dependents'] and _nascimento_de_dependente_no_futuro(data):
+        errors.append('A data de nascimento de um dependente está no futuro: confira.')
 
     for chave in ('birth_date', 'rg_issue_date'):
         values[chave] = _data_iso(values[chave])
@@ -1955,37 +1957,57 @@ def _dependent_rows(request, target):
         if request.method == 'POST':
             nome = (request.POST.get(f'dependent_name_{i}') or '').strip()
             documento = (request.POST.get(f'dependent_document_{i}') or '').strip()
+            nascimento = _data_iso((request.POST.get(f'dependent_birth_{i}') or '').strip())
         else:
             atual = existentes[i - 1] if len(existentes) >= i else None
             nome = atual.name if atual else ''
             documento = atual.document if atual else ''
+            nascimento = atual.birth_date.isoformat() if atual and atual.birth_date else ''
         linhas.append({
-            'idx': i, 'name': nome, 'document': documento,
+            'idx': i, 'name': nome, 'document': documento, 'birth_date': nascimento,
             'primeira': i == 1,
-            'preenchido': bool(nome or documento),
+            'preenchido': bool(nome or documento or nascimento),
         })
     return linhas
 
 
+def _nascimento_do_dependente(data, i):
+    """A data de nascimento da linha i como date (None se vazia ou inválida)."""
+    from datetime import date as _date
+    texto = _data_iso((data.get(f'dependent_birth_{i}') or '').strip())
+    try:
+        return _date.fromisoformat(texto) if texto else None
+    except ValueError:
+        return None
+
+
 def _read_dependentes(data):
-    """Lê os dependentes do formulário. Só entra quem tem nome E documento."""
+    """Lê os dependentes do formulário. Só entra quem tem nome, documento E data de nascimento."""
     dependentes = []
     for i in range(1, Dependent.MAX_POR_USUARIO + 1):
         nome = (data.get(f'dependent_name_{i}') or '').strip()
         documento = (data.get(f'dependent_document_{i}') or '').strip()
-        if nome and documento:
-            dependentes.append({'name': nome[:150], 'document': documento[:30]})
+        nascimento = _nascimento_do_dependente(data, i)
+        if nome and documento and nascimento:
+            dependentes.append({'name': nome[:150], 'document': documento[:30], 'birth_date': nascimento})
     return dependentes
 
 
 def _dependentes_pela_metade(data):
-    """Alguma linha de dependente ficou com só um dos dois campos?"""
+    """Alguma linha de dependente começou a ser preenchida e ficou faltando nome, documento ou nascimento?"""
     for i in range(1, Dependent.MAX_POR_USUARIO + 1):
         nome = (data.get(f'dependent_name_{i}') or '').strip()
         documento = (data.get(f'dependent_document_{i}') or '').strip()
-        if bool(nome) != bool(documento):
+        nascimento_txt = (data.get(f'dependent_birth_{i}') or '').strip()
+        if (nome or documento or nascimento_txt) and not (nome and documento and _nascimento_do_dependente(data, i)):
             return True
     return False
+
+
+def _nascimento_de_dependente_no_futuro(data):
+    from django.utils import timezone as _tz
+    hoje = _tz.localdate()
+    return any((d := _nascimento_do_dependente(data, i)) and d > hoje for i in range(1, Dependent.MAX_POR_USUARIO + 1))
 
 
 def _read_emergency_contacts(data):

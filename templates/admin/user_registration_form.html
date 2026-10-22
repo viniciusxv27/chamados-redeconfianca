@@ -462,8 +462,8 @@
                 <span class="value">{{ dependente.name }}</span>
             </div>
             <div class="field">
-                <span class="label">Documento</span>
-                <span class="value">{{ dependente.document }}</span>
+                <span class="label">Documento · Nascimento</span>
+                <span class="value">{{ dependente.document }}{% if dependente.birth_date %} · {{ dependente.birth_date|date:"d/m/Y" }}{% endif %}</span>
             </div>
             {% empty %}
             {% if target.has_dependents %}

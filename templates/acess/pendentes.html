@@ -30,6 +30,7 @@
             <div class="min-w-0 flex-1">
                 <a href="{% url 'acess:ficha' c.id %}" class="font-semibold text-gray-900 hover:text-amber-700">{{ c.nome }}</a>
                 <span class="text-[11px] text-gray-500">{{ c.cargo|default:"Cargo não informado" }}</span>
+                {% if c.admissao_futura %}<p class="text-[11px] font-semibold text-indigo-700"><i class="fas fa-calendar-day mr-1"></i>{% if etapa == 1 %}Criar no GEFAC em {{ c.admissao_futura|date:"d/m/Y" }}{% else %}Admissão em {{ c.admissao_futura|date:"d/m/Y" }}{% endif %} <span class="font-normal text-indigo-500">(admissão daqui a {{ c.dias_ate_admissao }} dia{{ c.dias_ate_admissao|pluralize }})</span></p>{% endif %}
                 <p class="text-[11px] text-gray-600">ADABAS <strong class="tabular">{{ c.unidade_adabas|default:"não informado" }}</strong>{% if c.login %} · login <strong class="tabular">{{ c.login }}</strong>{% endif %} ·
                     <span class="{% if c.dias_na_etapa >= 7 %}text-red-600 font-semibold{% elif c.dias_na_etapa >= 3 %}text-amber-700 font-semibold{% endif %}">há {{ c.dias_na_etapa }} dia(s) na etapa</span></p>
                 <details class="ac-det text-[11px] text-gray-500 mt-0.5"><summary class="text-amber-700">Detalhes do usuário</summary>

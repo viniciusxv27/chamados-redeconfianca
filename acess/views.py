@@ -346,7 +346,14 @@ def pendentes(request):
     for grupo in por_etapa.values():
         grupo.sort(key=lambda c: c.pendente_desde)
     linhas = por_etapa.get(etapa, [])
+    # Admissão no futuro (cadastro do portal): a data em que é para criar no GEFAC aparece embaixo do nome.
+    hoje = timezone.localdate()
+    admissoes = dict(User.objects.filter(id__in=[c.user_id for c in linhas if c.user_id])
+                     .values_list('id', 'admission_date'))
     for c in linhas:
+        admissao = admissoes.get(c.user_id)
+        c.admissao_futura = admissao if admissao and admissao > hoje else None
+        c.dias_ate_admissao = (admissao - hoje).days if c.admissao_futura else None
         c.chamado_lib = sv.chamado_de_liberacao(c) if etapa == 4 else None
         c.perfil_requerido = sv.perfil_regional_requerido(c)
         c.checklist_ok = sv.checklist_completo(c) if etapa == 4 else False

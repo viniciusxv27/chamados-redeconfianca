@@ -242,7 +242,7 @@
                 {% for dependente in target.dependents.all %}
                 <div class="flex items-center justify-between gap-3 py-2 {% if not forloop.first %}border-t border-gray-100{% endif %}">
                     <span class="text-gray-800">{{ dependente.name }}</span>
-                    <span class="text-gray-500">{{ dependente.document }}</span>
+                    <span class="text-gray-500">{{ dependente.document }}{% if dependente.birth_date %} · nasc. {{ dependente.birth_date|date:"d/m/Y" }}{% endif %}</span>
                 </div>
                 {% empty %}
                 <p class="text-gray-400">{% if target.has_dependents %}Nenhum dependente informado.{% else %}O colaborador informou que não possui dependentes.{% endif %}</p>
