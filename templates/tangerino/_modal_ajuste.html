@@ -1,0 +1,115 @@
+{% comment %}Modal de ajuste de ponto. "Meu ponto" pede (vai para aprovação); a tela do setor responsável edita direto
+(data-direto). Abre com window.tgAbrirAjuste({dia, eventos, usuarioId, nome, direto}).{% endcomment %}
+<div id="tgAjuste" class="hidden fixed inset-0 z-[9995] bg-black/60 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="tgAjusteTitulo">
+    <form id="tgAjusteForm" class="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
+        <div class="px-6 py-4 bg-cyan-600 text-white">
+            <h3 class="font-bold" id="tgAjusteTitulo"><i class="fas fa-user-clock mr-2"></i>Ajustar ponto</h3>
+            <p class="text-xs text-cyan-100" id="tgAjusteSub"></p>
+        </div>
+        <div class="px-6 py-5 space-y-3 text-sm">
+            <div class="grid grid-cols-3 gap-1.5" role="radiogroup" aria-label="Tipo de ajuste">
+                <label class="tg-aj-tipo"><input type="radio" name="tipo" value="ALTERAR" checked class="sr-only"><span>Alterar horário</span></label>
+                <label class="tg-aj-tipo"><input type="radio" name="tipo" value="INCLUIR" class="sr-only"><span>Incluir batida</span></label>
+                <label class="tg-aj-tipo"><input type="radio" name="tipo" value="EXCLUIR" class="sr-only"><span>Remover par</span></label>
+            </div>
+            <div data-campo="antigo">
+                <label class="block text-gray-600 mb-1" for="tgAjusteAntigo">Batida</label>
+                <select id="tgAjusteAntigo" class="w-full border border-gray-300 rounded-lg px-3 py-2"></select>
+                <p class="text-[11px] text-gray-400 mt-1" data-so-excluir hidden>Remove a entrada e a saída daquele par na Sólides.</p>
+            </div>
+            <div data-campo="novo">
+                <label class="block text-gray-600 mb-1" for="tgAjusteNovo">Horário certo</label>
+                <input type="datetime-local" id="tgAjusteNovo" class="w-full border border-gray-300 rounded-lg px-3 py-2">
+            </div>
+            <div data-campo="justificativa">
+                <label class="block text-gray-600 mb-1" for="tgAjusteJust">Justificativa (Sólides)</label>
+                <select id="tgAjusteJust" class="w-full border border-gray-300 rounded-lg px-3 py-2">
+                    <option value="">Escolha…</option>
+                    {% for j in justificativas %}<option value="{{ j.id }}">{{ j.description }}</option>{% endfor %}
+                </select>
+                {% if not justificativas %}<p class="text-[11px] text-amber-700 mt-1">A Sólides não devolveu as justificativas agora: incluir batida fica indisponível.</p>{% endif %}
+            </div>
+            <div>
+                <label class="block text-gray-600 mb-1" for="tgAjusteMotivo">Motivo</label>
+                <textarea id="tgAjusteMotivo" rows="2" maxlength="1000" required placeholder="Ex.: esqueci de bater a volta do almoço"
+                          class="w-full border border-gray-300 rounded-lg px-3 py-2"></textarea>
+            </div>
+            <p id="tgAjusteAviso" class="hidden text-xs rounded-lg p-2"></p>
+        </div>
+        <div class="px-6 py-3 bg-gray-50 border-t border-gray-100 flex justify-end gap-2">
+            <button type="button" data-fechar-ajuste class="px-4 py-2 rounded-lg border border-gray-300 text-gray-700">Cancelar</button>
+            <button type="submit" id="tgAjusteEnviar" class="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white font-medium disabled:opacity-60">Enviar</button>
+        </div>
+    </form>
+</div>
+<style>
+.tg-aj-tipo { display:block; cursor:pointer; text-align:center; font-size:12px; font-weight:600; border:1px solid #d1d5db; border-radius:.6rem; padding:.45rem .3rem; color:#374151; }
+.tg-aj-tipo:has(input:checked) { border-color:#0891b2; background:#ecfeff; color:#0e7490; }
+.tg-aj-tipo:has(input:focus-visible) { outline:2px solid #0891b2; outline-offset:2px; }
+</style>
+<script>
+(function () {
+    var modal = document.getElementById('tgAjuste'), form = document.getElementById('tgAjusteForm');
+    var URL_SOLICITAR = '{% url "tangerino:ajuste_solicitar" %}', atual = {};
+    function el(id) { return document.getElementById(id); }
+    function csrf() { var m = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/); return m ? decodeURIComponent(m[1]) : ''; }
+    function aviso(t, ok) {
+        var a = el('tgAjusteAviso'); a.textContent = t; a.classList.remove('hidden', 'bg-red-50', 'text-red-700', 'bg-emerald-50', 'text-emerald-800');
+        a.classList.add(ok ? 'bg-emerald-50' : 'bg-red-50', ok ? 'text-emerald-800' : 'text-red-700');
+    }
+    function tipo() { return form.querySelector('input[name="tipo"]:checked').value; }
+    function mostrarCampos() {
+        var t = tipo();
+        form.querySelector('[data-campo="antigo"]').hidden = t === 'INCLUIR';
+        form.querySelector('[data-campo="novo"]').hidden = t === 'EXCLUIR';
+        form.querySelector('[data-campo="justificativa"]').hidden = t !== 'INCLUIR';
+        form.querySelector('[data-so-excluir]').hidden = t !== 'EXCLUIR';
+        var sel = el('tgAjusteAntigo');
+        if (t === 'EXCLUIR') Array.prototype.forEach.call(sel.options, function (o) { o.disabled = o.dataset.tipo !== 'ENTRADA'; });
+        else Array.prototype.forEach.call(sel.options, function (o) { o.disabled = false; });
+        if (sel.selectedOptions[0] && sel.selectedOptions[0].disabled) { var ok = Array.prototype.find.call(sel.options, function (o) { return !o.disabled; }); if (ok) sel.value = ok.value; }
+    }
+    window.tgAbrirAjuste = function (opc) {
+        atual = opc || {};
+        var eventos = atual.eventos || [];
+        el('tgAjusteSub').textContent = (atual.nome ? atual.nome + ' · ' : '') + atual.dia.split('-').reverse().join('/')
+            + (atual.direto ? ' · edição direta (grava na Sólides na hora)' : ' · vai para aprovação');
+        el('tgAjusteEnviar').textContent = atual.direto ? 'Gravar na Sólides' : 'Pedir ajuste';
+        var sel = el('tgAjusteAntigo'); sel.replaceChildren();
+        eventos.forEach(function (e) {
+            var o = document.createElement('option'); o.value = e.iso; o.dataset.tipo = e.tipo;
+            o.textContent = e.hhmm + ' — ' + (e.tipo === 'ENTRADA' ? 'entrada' : 'saída'); sel.appendChild(o);
+        });
+        form.querySelector('input[value="ALTERAR"]').disabled = form.querySelector('input[value="EXCLUIR"]').disabled = !eventos.length;
+        form.querySelector('input[value="' + (eventos.length ? 'ALTERAR' : 'INCLUIR') + '"]').checked = true;
+        el('tgAjusteNovo').value = atual.dia + 'T' + (eventos[0] ? eventos[0].hhmm : '08:00');
+        el('tgAjusteMotivo').value = ''; el('tgAjusteAviso').classList.add('hidden');
+        mostrarCampos();
+        modal.classList.remove('hidden'); el('tgAjusteMotivo').focus();
+    };
+    form.addEventListener('change', function (e) { if (e.target.name === 'tipo') mostrarCampos(); });
+    modal.addEventListener('click', function (e) { if (e.target === modal || e.target.closest('[data-fechar-ajuste]')) modal.classList.add('hidden'); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') modal.classList.add('hidden'); });
+    form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var t = tipo(), just = el('tgAjusteJust'), b = el('tgAjusteEnviar');
+        var corpo = {tipo: t, dia: atual.dia, motivo: el('tgAjusteMotivo').value, direto: atual.direto ? '1' : '',
+                     usuario_id: atual.usuarioId || '', antigo: t === 'INCLUIR' ? '' : el('tgAjusteAntigo').value,
+                     novo: t === 'EXCLUIR' ? '' : el('tgAjusteNovo').value,
+                     justificativa_id: t === 'INCLUIR' ? just.value : '',
+                     justificativa_texto: t === 'INCLUIR' && just.selectedOptions[0] ? just.selectedOptions[0].textContent : ''};
+        if (t === 'EXCLUIR' && !confirm('Remover o par entrada/saída na Sólides?')) return;
+        b.disabled = true;
+        fetch(URL_SOLICITAR, {method: 'POST', credentials: 'same-origin', headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf()},
+                              body: JSON.stringify(corpo)})
+            .then(function (r) { return r.json(); })
+            .then(function (j) {
+                if (!j.ok) { aviso(j.erro || 'Não foi possível.', false); return; }
+                aviso(j.msg, true);
+                setTimeout(function () { location.reload(); }, 1100);
+            })
+            .catch(function () { aviso('Sem conexão: nada foi enviado.', false); })
+            .then(function () { b.disabled = false; });
+    });
+})();
+</script>

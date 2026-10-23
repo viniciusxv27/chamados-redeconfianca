@@ -66,6 +66,17 @@ class ConfiguracaoTangerino(models.Model):
         default=False, verbose_name='Avisar sobre o intervalo',
         help_text='Popup de almoço esquecido e de intervalo passando do limite.')
 
+    # Ajuste de ponto pelo portal (23/10/2026): o colaborador pede, o setor escolhido pelo SUPERADMIN
+    # aprova (ou edita direto o ponto de qualquer um) e a mudança vai para a Sólides. Nasce desligado.
+    ajustes_ativo = models.BooleanField(
+        default=False, db_default=False, verbose_name='Ajuste de ponto pelo portal',
+        help_text='Ligado: o colaborador pede ajuste em /ponto e o setor responsável aprova; '
+                  'a mudança é gravada na Sólides.')
+    ajustes_setor = models.ForeignKey(
+        'users.Sector', on_delete=models.SET_NULL, null=True, blank=True, related_name='+',
+        verbose_name='Setor que controla os ajustes',
+        help_text='Quem tem este setor como setor principal aprova os pedidos e edita o ponto de qualquer pessoa.')
+
     almoco_minimo_minutos = models.PositiveSmallIntegerField(
         default=60, verbose_name='Duração mínima do intervalo (minutos)',
         help_text='A volta do almoço é recusada antes disso.')
@@ -838,3 +849,63 @@ class EnvioAnalisePonto(models.Model):
 
     def __str__(self):
         return f'{self.get_tipo_display()} · {self.user} · {self.periodo_fim:%d/%m/%Y}'
+
+
+
+# ─── Ajuste de ponto pelo portal ─────────────────────────────────────────────
+
+class SolicitacaoAjustePonto(models.Model):
+    """Pedido de ajuste do ponto (ou edição direta do setor responsável), com o que foi para a Sólides.
+
+    Cada pedido é uma operação na Sólides: alterar o horário de uma batida, incluir uma
+    batida esquecida ou remover um par entrada/saída. ``punch_id`` é o id da marcação na
+    API de ponto, procurado pelo horário antigo na hora de aplicar.
+    """
+
+    ALTERAR, INCLUIR, EXCLUIR = 'ALTERAR', 'INCLUIR', 'EXCLUIR'
+    TIPOS = [(ALTERAR, 'Alterar horário'), (INCLUIR, 'Incluir batida'), (EXCLUIR, 'Remover par entrada/saída')]
+    PENDENTE, APLICADA, RECUSADA, ERRO, CANCELADA = 'PENDENTE', 'APLICADA', 'RECUSADA', 'ERRO', 'CANCELADA'
+    STATUS = [(PENDENTE, 'Aguardando aprovação'), (APLICADA, 'Aplicada na Sólides'), (RECUSADA, 'Recusada'),
+              (ERRO, 'Aprovada, mas a Sólides recusou'), (CANCELADA, 'Cancelada')]
+
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='ajustes_de_ponto',
+                                verbose_name='De quem é o ponto')
+    employee_id = models.BigIntegerField(verbose_name='Funcionário no Tangerino')
+    solicitante = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                                    related_name='+', verbose_name='Quem pediu')
+    direto = models.BooleanField(default=False, verbose_name='Editado direto pelo setor responsável')
+    tipo = models.CharField(max_length=10, choices=TIPOS)
+    dia = models.DateField(db_index=True)
+    horario_antigo = models.DateTimeField(null=True, blank=True, help_text='A batida que muda ou sai.')
+    horario_novo = models.DateTimeField(null=True, blank=True, help_text='O horário certo (alterar/incluir).')
+    justificativa_id = models.BigIntegerField(null=True, blank=True)
+    justificativa_texto = models.CharField(max_length=200, blank=True)
+    motivo = models.TextField(max_length=1000)
+    status = models.CharField(max_length=10, choices=STATUS, default=PENDENTE, db_index=True)
+    decidido_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                     related_name='+')
+    decidido_em = models.DateTimeField(null=True, blank=True)
+    resposta = models.TextField(max_length=1000, blank=True, help_text='Motivo da recusa.')
+    punch_id = models.BigIntegerField(null=True, blank=True)
+    retorno_solides = models.TextField(blank=True)
+    aplicada_em = models.DateTimeField(null=True, blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ['-criado_em']
+        verbose_name = 'Ajuste de ponto'
+        verbose_name_plural = 'Ajustes de ponto'
+
+    def __str__(self):
+        return f'{self.get_tipo_display()} · {self.usuario} · {self.dia:%d/%m/%Y}'
+
+    @property
+    def resumo(self):
+        from django.utils import timezone
+        antigo = timezone.localtime(self.horario_antigo).strftime('%H:%M') if self.horario_antigo else ''
+        novo = timezone.localtime(self.horario_novo).strftime('%H:%M') if self.horario_novo else ''
+        if self.tipo == self.ALTERAR:
+            return f'{antigo} → {novo}'
+        if self.tipo == self.INCLUIR:
+            return f'incluir {novo}'
+        return f'remover o par que começa às {antigo}'

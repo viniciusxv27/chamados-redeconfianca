@@ -21,6 +21,10 @@ def tangerino_gate(request):
             'tangerino_liberado': liberado,
             'tangerino_widget_home': liberado and config.mostrar_widget_home,
             'tangerino_popup_ferias': liberado and config.mostrar_popup_ferias,
+            # Aba "Ajustes de ponto": o setor que o SUPERADMIN escolheu (só com a função ligada).
+            'tangerino_ajustes_responsavel': bool(config.ajustes_ativo and config.ajustes_setor_id and (
+                usuario.is_superuser or getattr(usuario, 'hierarchy', '') == 'SUPERADMIN'
+                or (usuario.sector_id and usuario.sector_id == config.ajustes_setor_id))),
         }
     except Exception as exc:            # nunca derruba a renderização do portal
         logger.warning('Gate do Tangerino indisponível: %s', exc)

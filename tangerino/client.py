@@ -574,8 +574,11 @@ def registrar_ponto(employee_id, quando=None, latitude=None, longitude=None,
 
 
 def registrar_ponto_atrasado(employee_id, quando, justificativa_id, observacao='',
-                             foto_base64=''):
-    """Marcação retroativa (ponto esquecido), que exige justificativa."""
+                             foto_base64='', aprovada=False):
+    """Marcação retroativa (ponto esquecido), que exige justificativa.
+
+    ``aprovada``: veio do ajuste de ponto já aprovado no portal; vai com ``status=APPROVED``.
+    """
     corpo = {
         'employeeId': employee_id,
         'date': para_wire(quando),          # em UTC, mesmo motivo do ponto normal
@@ -595,10 +598,71 @@ def registrar_ponto_atrasado(employee_id, quando, justificativa_id, observacao='
             logger.warning('Foto da marcação retroativa não subiu: %s', exc)
     if observacao:
         corpo['observationEmployee'] = observacao[:250]
+        corpo['comments'] = observacao[:250]
+    if aprovada:
+        corpo['status'] = 'APPROVED'
     resposta = _post(PUNCH_BASE, '/register/late/1.1', corpo) or {}
     if resposta.get('success') is False:
         raise TangerinoError(resposta.get('message') or 'O Tangerino recusou a marcação.')
     return resposta
+
+
+# ─── Ajuste de marcações (API de ponto: apis.tangerino.com.br/punch) ─────────
+# Conforme o Swagger (v2/api-docs) lido em 23/10/2026. Até o primeiro uso real não se sabe se
+# a Sólides aplica na hora ou deixa a alteração pendente lá dentro — o retorno fica guardado.
+
+def _instante(valor):
+    """dateIn/dateOut da API de ponto: millis ou texto ISO -> datetime local."""
+    if valor in (None, ''):
+        return None
+    if isinstance(valor, (int, float)):
+        return de_millis(valor)
+    from django.utils.dateparse import parse_datetime
+    dt = parse_datetime(str(valor))
+    if dt is None:
+        return None
+    return timezone.localtime(dt if timezone.is_aware(dt) else timezone.make_aware(dt))
+
+
+def marcacoes_com_id(employee_id, dia):
+    """As marcações do dia com o id da API de ponto (o espelho do portal não traz esse id)."""
+    params = {'employeeId': employee_id, 'startDateInMillis': para_millis(dia),
+              'endDateInMillis': fim_do_dia_millis(dia), 'size': 200, 'page': 0}
+    dados = _get(PUNCH_BASE, '/', params) or {}
+    itens = dados.get('content') if isinstance(dados, dict) else dados
+    saida = []
+    for p in itens or []:
+        saida.append({'id': p.get('id'), 'entrada': _instante(p.get('dateIn')),
+                      'saida': _instante(p.get('dateOut')), 'status': p.get('status')})
+    return saida
+
+
+def achar_marcacao(employee_id, quando):
+    """O id da marcação que tem esta batida (entrada ou saída), no mesmo minuto."""
+    alvo = timezone.localtime(quando).replace(second=0, microsecond=0)
+    for p in marcacoes_com_id(employee_id, timezone.localtime(quando).date()):
+        for lado in ('entrada', 'saida'):
+            if p[lado] and p[lado].replace(second=0, microsecond=0) == alvo:
+                return p['id'], p[lado]
+    raise TangerinoError(f'Não achei na Sólides a batida das {alvo:%H:%M} de {alvo:%d/%m/%Y} '
+                         '(ela pode já ter sido alterada).')
+
+
+def alterar_marcacao(employee_id, punch_id, antigo, novo, observacao=''):
+    """POST /modify/punch/1.1: troca o horário de uma batida (entrada ou saída) da marcação."""
+    corpo = {'employeeId': employee_id, 'punchId': punch_id, 'punchOldDateHour': para_millis(antigo),
+             'punchNewDateHour': para_millis(novo)}
+    if observacao:
+        corpo['observation'] = observacao[:250]
+    resposta = _post(PUNCH_BASE, '/modify/punch/1.1', corpo) or {}
+    if isinstance(resposta, dict) and resposta.get('success') is False:
+        raise TangerinoError(resposta.get('message') or 'A Sólides recusou a alteração.')
+    return resposta
+
+
+def excluir_marcacao(employee_id, punch_id):
+    """DELETE /punches/{punchId}/employee/{employeeId}: remove a marcação (o par entrada/saída)."""
+    return _request('DELETE', PUNCH_BASE, f'/punches/{punch_id}/employee/{employee_id}') or {}
 
 
 # ─── Ajustes / Férias ────────────────────────────────────────────────────────

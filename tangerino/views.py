@@ -198,13 +198,27 @@ def meu_ponto(request):
             contexto.update(_previsto_x_feito(contexto['dias'], hoje, rotulo='periodo'))
             contexto['jornada'] = _resumo_da_jornada(request.user)
             contexto['justificativas'] = justificativas_edicao()
+            contexto['ajuste_eventos'] = _eventos_por_dia(contexto['dias'])
         except TangerinoError as exc:
             contexto['erro'] = str(exc)
+
+    from . import ajustes as ajustes_svc
+    contexto['ajustes_ligado'] = ajustes_svc.ligado(config) and contexto['vinculado']
+    if contexto['ajustes_ligado']:
+        contexto['meus_ajustes'] = list(request.user.ajustes_de_ponto.select_related('decidido_por')[:10])
+        if 'justificativas' not in contexto:
+            contexto['justificativas'] = justificativas_edicao()
 
     from .models import nao_bate_ponto
     contexto['isento_de_ponto'] = nao_bate_ponto(request.user)
 
     return render(request, 'tangerino/meu_ponto.html', contexto)
+
+
+def _eventos_por_dia(dias):
+    """{'AAAA-MM-DD': [{tipo, iso, hhmm}]} das batidas de cada dia, para o modal de ajuste."""
+    return {d['dia'].isoformat(): [{'tipo': e['tipo'], 'iso': e['quando'].isoformat(), 'hhmm': e['quando'].strftime('%H:%M')}
+                                   for e in d['eventos']] for d in dias}
 
 
 def _previsto_x_feito(dias, hoje, rotulo):
@@ -1112,6 +1126,26 @@ def configuracao(request):
     if request.method == 'POST' and request.POST.get('secao') == 'analise_manual':
         return _disparar_analise(request)
 
+    if request.method == 'POST' and request.POST.get('secao') == 'ajustes':
+        # Formulário próprio (como o do agendamento) e só do SUPERADMIN: escolhe o setor que aprova
+        # os ajustes de ponto e edita o ponto de qualquer pessoa.
+        from . import ajustes as ajustes_svc
+        if not ajustes_svc.e_superadmin(request.user):
+            messages.error(request, 'Só o SUPERADMIN define quem controla os ajustes de ponto.')
+            return redirect('tangerino:configuracao')
+        from users.models import Sector
+        setor_id = request.POST.get('ajustes_setor') or ''
+        config.ajustes_setor = Sector.objects.filter(pk=setor_id).first() if setor_id.isdigit() else None
+        config.ajustes_ativo = request.POST.get('ajustes_ativo') == 'on'
+        if config.ajustes_ativo and not config.ajustes_setor:
+            messages.error(request, 'Escolha o setor responsável antes de ligar o ajuste de ponto.')
+            return redirect('tangerino:configuracao')
+        config.atualizado_por = request.user
+        config.save(update_fields=['ajustes_setor', 'ajustes_ativo', 'atualizado_por', 'atualizado_em'])
+        messages.success(request, (f'Ajuste de ponto ligado; quem controla é o setor {config.ajustes_setor.name}.'
+                                   if config.ajustes_ativo else 'Ajuste de ponto pelo portal desligado.'))
+        return redirect('tangerino:configuracao')
+
     if request.method == 'POST' and request.POST.get('secao') == 'agendamento':
         # Formulário próprio, com os campos do agendamento e mais nada. Sem este
         # desvio ele cairia no bloco de baixo, que lê 12 checkboxes de uma vez —
@@ -1178,6 +1212,16 @@ def configuracao(request):
             tipo=SincronizacaoTangerino.Tipo.FERIAS).first(),
         'tentativas_ponto': RegistroPontoPortal.objects.all()[:10],
     }
+    from users.models import Sector
+
+    from . import ajustes as ajustes_svc
+    from .models import SolicitacaoAjustePonto
+    contexto.update({
+        'pode_definir_ajustes': ajustes_svc.e_superadmin(request.user),
+        'setores': Sector.objects.order_by('name'),
+        'ajustes_responsaveis': ajustes_svc.responsaveis(config),
+        'ajustes_pendentes': SolicitacaoAjustePonto.objects.filter(status=SolicitacaoAjustePonto.PENDENTE).count(),
+    })
     contexto.update(_contexto_da_analise(request))
     return render(request, 'tangerino/configuracao.html', contexto)
 
@@ -1387,3 +1431,116 @@ def vincular_manual(request):
     usuario.save(update_fields=['tangerino_employee_id', 'tangerino_synced_at'])
     messages.success(request, f'{usuario.full_name} vinculado ao funcionário {employee_id}.')
     return redirect('tangerino:vinculos')
+
+
+
+# ─── Ajuste de ponto pelo portal ─────────────────────────────────────────────
+
+def _instante_do_post(valor):
+    """'2026-10-20T08:01' ou ISO completo -> datetime aware (None se vazio/inválido)."""
+    from django.utils.dateparse import parse_datetime
+    dt = parse_datetime(str(valor or '').strip()) if valor else None
+    if dt is None:
+        return None
+    return dt if timezone.is_aware(dt) else timezone.make_aware(dt)
+
+
+@login_required
+@require_POST
+def ajuste_solicitar(request):
+    """Pedido de ajuste (o próprio ponto) ou edição direta do setor responsável (qualquer pessoa)."""
+    from . import ajustes as ajustes_svc
+    try:
+        corpo = json.loads(request.body or b'{}') if request.content_type == 'application/json' else request.POST
+        direto = str(corpo.get('direto') or '') in ('1', 'true', 'True')
+        alvo = request.user
+        if direto and corpo.get('usuario_id'):
+            alvo = get_user_model().objects.filter(pk=int(corpo.get('usuario_id'))).first()
+            if alvo is None:
+                raise ajustes_svc.RegraAjuste('Pessoa não encontrada.')
+        sol = ajustes_svc.criar(
+            alvo, request.user, corpo.get('tipo'), parse_date(str(corpo.get('dia') or '')),
+            antigo=_instante_do_post(corpo.get('antigo')), novo=_instante_do_post(corpo.get('novo')),
+            motivo=corpo.get('motivo'), justificativa_id=int(corpo.get('justificativa_id') or 0) or None,
+            justificativa_texto=corpo.get('justificativa_texto') or '', direto=direto)
+    except (ValueError, TypeError):
+        return JsonResponse({'ok': False, 'erro': 'Envio inválido.'}, status=400)
+    except ajustes_svc.RegraAjuste as exc:
+        return JsonResponse({'ok': False, 'erro': str(exc)}, status=400)
+    if sol.status == sol.ERRO:
+        return JsonResponse({'ok': False, 'erro': f'A Sólides recusou: {sol.retorno_solides[:300]}',
+                             'id': sol.id}, status=200)
+    msg = ('Ajuste gravado na Sólides.' if sol.status == sol.APLICADA
+           else 'Pedido enviado ao setor responsável. Você recebe um aviso quando for decidido.')
+    return JsonResponse({'ok': True, 'id': sol.id, 'status': sol.status, 'msg': msg})
+
+
+@login_required
+def ajustes(request):
+    """Tela do setor responsável: pedidos para aprovar e edição direta do ponto de qualquer pessoa."""
+    from . import ajustes as ajustes_svc
+    from .models import SolicitacaoAjustePonto as Sol
+    config = ConfiguracaoTangerino.get()
+    if not ajustes_svc.e_responsavel(request.user, config):
+        messages.error(request, 'A tela de ajustes de ponto é do setor responsável.')
+        return redirect('tangerino:meu_ponto')
+    base = Sol.objects.select_related('usuario', 'solicitante', 'decidido_por')
+    pessoas = (get_user_model().objects.filter(is_active=True, tangerino_employee_id__isnull=False)
+               .select_related('sector').order_by('first_name', 'last_name'))
+    return render(request, 'tangerino/ajustes.html', {
+        'aba': 'ajustes', 'config': config, 'e_gestor': e_gestor(request.user),
+        'pendentes': list(base.filter(status__in=[Sol.PENDENTE, Sol.ERRO]).order_by('criado_em')),
+        'historico': list(base.exclude(status__in=[Sol.PENDENTE, Sol.ERRO])[:60]),
+        'pessoas': pessoas, 'tipos': Sol.TIPOS, 'justificativas': justificativas_edicao(),
+        'hoje': timezone.localdate(),
+    })
+
+
+@login_required
+def ajuste_dia(request):
+    """As batidas de uma pessoa num dia (JSON), para o setor responsável editar."""
+    from . import ajustes as ajustes_svc
+    if not ajustes_svc.e_responsavel(request.user):
+        return JsonResponse({'ok': False, 'erro': 'Sem permissão.'}, status=403)
+    pessoa = get_user_model().objects.filter(pk=request.GET.get('usuario_id') or 0).first()
+    dia = parse_date(request.GET.get('dia') or '')
+    if not pessoa or not pessoa.tangerino_employee_id or not dia:
+        return JsonResponse({'ok': False, 'erro': 'Escolha a pessoa (vinculada à Sólides) e o dia.'}, status=400)
+    try:
+        pares = listar_marcacoes(dia, dia, employee_id=pessoa.tangerino_employee_id, usar_cache=False)
+    except TangerinoError as exc:
+        return JsonResponse({'ok': False, 'erro': str(exc)}, status=200)
+    eventos = ponto_svc._eventos(pares)
+    return JsonResponse({'ok': True, 'nome': pessoa.get_full_name(), 'eventos': [
+        {'tipo': e['tipo'], 'iso': e['quando'].isoformat(), 'hhmm': e['quando'].strftime('%H:%M')} for e in eventos]})
+
+
+@login_required
+@require_POST
+def ajuste_decidir(request, pk):
+    from . import ajustes as ajustes_svc
+    from .models import SolicitacaoAjustePonto as Sol
+    sol = Sol.objects.filter(pk=pk).first()
+    if sol is None:
+        messages.error(request, 'Pedido não encontrado.')
+        return redirect('tangerino:ajustes')
+    acao = request.POST.get('acao')
+    try:
+        if acao == 'aprovar':
+            sol = ajustes_svc.aprovar(sol, request.user)
+            if sol.status == Sol.APLICADA:
+                messages.success(request, f'Ajuste de {sol.usuario.get_full_name()} gravado na Sólides.')
+            else:
+                messages.error(request, f'A Sólides recusou: {sol.retorno_solides[:300]}')
+        elif acao == 'recusar':
+            ajustes_svc.recusar(sol, request.user, request.POST.get('resposta'))
+            messages.success(request, 'Pedido recusado; a pessoa foi avisada.')
+        elif acao == 'cancelar':
+            ajustes_svc.cancelar(sol, request.user)
+            messages.success(request, 'Pedido cancelado.')
+            return redirect('tangerino:meu_ponto')
+    except ajustes_svc.RegraAjuste as exc:
+        messages.error(request, str(exc))
+        if acao == 'cancelar':
+            return redirect('tangerino:meu_ponto')
+    return redirect('tangerino:ajustes')

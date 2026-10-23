@@ -280,6 +280,41 @@
 </div>
 
 <!-- Sincronização automática diária -->
+<div class="tg-card p-5 mt-4" id="ajustes">
+    <h2 class="text-sm font-semibold text-gray-700 mb-1">
+        <i class="fas fa-user-clock text-cyan-600 mr-1.5"></i>Ajuste de ponto pelo portal
+        {% if config.ajustes_ativo %}<span class="ml-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[11px]">ligado</span>{% else %}<span class="ml-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[11px]">desligado</span>{% endif %}
+    </h2>
+    <p class="text-xs text-gray-400 mb-4">
+        O colaborador pede o ajuste em Meu ponto (alterar um horário, incluir uma batida esquecida ou remover um par).
+        O pedido vai para o setor escolhido aqui: quem tem esse setor como setor principal aprova — e o portal grava na
+        Sólides —, recusa, ou edita direto o ponto de qualquer pessoa, inclusive o próprio.
+        {% if ajustes_pendentes %}<strong class="text-amber-700">{{ ajustes_pendentes }} pedido(s) aguardando.</strong>{% endif %}
+    </p>
+    {% if pode_definir_ajustes %}
+    <form method="post" class="space-y-4">
+        {% csrf_token %}
+        <input type="hidden" name="secao" value="ajustes">
+        <div class="max-w-md">
+            <label class="block text-xs font-medium text-gray-600 mb-1" for="ajustesSetor">Setor que controla os ajustes</label>
+            <select name="ajustes_setor" id="ajustesSetor" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <option value="">Escolha o setor…</option>
+                {% for s in setores %}<option value="{{ s.id }}" {% if config.ajustes_setor_id == s.id %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
+            </select>
+            {% if config.ajustes_setor %}<p class="text-[11px] text-gray-500 mt-1">{{ ajustes_responsaveis|length }} pessoa(s) com este setor principal{% if ajustes_responsaveis %}: {% for u in ajustes_responsaveis|slice:":6" %}{{ u.get_full_name }}{% if not forloop.last %}, {% endif %}{% endfor %}{% if ajustes_responsaveis|length > 6 %}…{% endif %}{% endif %}.</p>{% endif %}
+        </div>
+        <label class="flex items-start gap-3 cursor-pointer">
+            <input type="checkbox" name="ajustes_ativo" class="mt-0.5 rounded" {% if config.ajustes_ativo %}checked{% endif %}>
+            <span class="text-sm text-gray-700">Ligar o ajuste de ponto pelo portal
+                <span class="block text-xs text-gray-400">Mexe no ponto oficial na Sólides. Avise a rede antes de ligar.</span></span>
+        </label>
+        <button class="bg-cyan-600 hover:bg-cyan-700 text-white text-sm font-medium px-4 py-2 rounded-lg">Salvar</button>
+    </form>
+    {% else %}
+    <p class="text-sm text-gray-600">Setor responsável: <strong>{{ config.ajustes_setor.name|default:"não definido" }}</strong>. Só o SUPERADMIN altera.</p>
+    {% endif %}
+</div>
+
 <div class="tg-card p-5 mt-4">
     <h2 class="text-sm font-semibold text-gray-700 mb-1">
         <i class="fas fa-clock text-cyan-600 mr-1.5"></i>Sincronização automática

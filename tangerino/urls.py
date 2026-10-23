@@ -12,6 +12,10 @@ urlpatterns = [
     path('ponto/folhas/', views.folhas_sincronizadas, name='folhas_sincronizadas'),
     path('ponto/relatorio/', views.relatorio, name='relatorio'),
     path('ponto/relatorio.xlsx', views.relatorio_excel, name='relatorio_excel'),
+    path('ponto/ajustes/', views.ajustes, name='ajustes'),
+    path('ponto/ajustes/solicitar/', views.ajuste_solicitar, name='ajuste_solicitar'),
+    path('ponto/ajustes/dia/', views.ajuste_dia, name='ajuste_dia'),
+    path('ponto/ajustes/<int:pk>/decidir/', views.ajuste_decidir, name='ajuste_decidir'),
 
     # Escala (quadro semanal montado no portal)
     path('ponto/escala/', views.escala, name='escala'),

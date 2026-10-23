@@ -1,0 +1,94 @@
+{% extends 'tangerino/base_tangerino.html' %}
+
+{% block tg_titulo %}Ajustes de ponto{% endblock %}
+{% block tg_cabecalho %}Ajustes de ponto{% endblock %}
+{% block tg_subtitulo %}Setor responsável: {{ config.ajustes_setor.name }} · o que for aprovado ou editado aqui vai para a Sólides{% endblock %}
+
+{% block tg_conteudo %}
+<div class="space-y-4">
+    <div class="tg-card p-5">
+        <h2 class="text-sm font-semibold text-gray-700 mb-1"><i class="fas fa-pen-to-square text-cyan-600 mr-1.5"></i>Editar o ponto de alguém</h2>
+        <p class="text-xs text-gray-400 mb-3">Qualquer pessoa vinculada à Sólides, inclusive você. A edição direta grava na Sólides na hora (fica no histórico abaixo).</p>
+        <div class="flex flex-wrap items-end gap-2">
+            <div class="flex-1 min-w-[14rem]"><label class="block text-xs text-gray-600 mb-1" for="ajPessoa">Pessoa</label>
+                <select id="ajPessoa" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    <option value="">Escolha…</option>
+                    {% for p in pessoas %}<option value="{{ p.id }}" {% if p.id == user.id %}data-eu{% endif %}>{{ p.get_full_name|default:p.email }}{% if p.sector %} · {{ p.sector.name }}{% endif %}{% if p.id == user.id %} (você){% endif %}</option>{% endfor %}
+                </select></div>
+            <div><label class="block text-xs text-gray-600 mb-1" for="ajDia">Dia</label>
+                <input type="date" id="ajDia" max="{{ hoje|date:'Y-m-d' }}" value="{{ hoje|date:'Y-m-d' }}" class="border border-gray-300 rounded-lg px-3 py-2 text-sm"></div>
+            <button type="button" id="ajCarregar" class="bg-cyan-600 hover:bg-cyan-700 text-white text-sm font-medium px-4 py-2 rounded-lg">Ver batidas</button>
+        </div>
+        <div id="ajBatidas" class="mt-3 text-sm"></div>
+    </div>
+
+    <div class="tg-card overflow-hidden">
+        <div class="px-5 py-3.5 border-b border-gray-100"><h2 class="font-semibold text-gray-800 text-sm"><i class="fas fa-inbox text-cyan-600 mr-1.5"></i>Aguardando decisão ({{ pendentes|length }})</h2></div>
+        <ul class="divide-y divide-gray-50 text-sm">
+            {% for a in pendentes %}
+            <li class="px-5 py-3 grid md:grid-cols-3 gap-3">
+                <div class="md:col-span-2 min-w-0">
+                    <p><strong>{{ a.usuario.get_full_name }}</strong> · {{ a.dia|date:"d/m/Y" }} · {{ a.get_tipo_display }} <span class="text-gray-600">({{ a.resumo }})</span>
+                        {% if a.status == 'ERRO' %}<span class="ml-1 px-2 py-0.5 rounded-full text-[11px] bg-red-50 text-red-700">a Sólides recusou</span>{% endif %}</p>
+                    <p class="text-xs text-gray-600 mt-0.5">Motivo: {{ a.motivo }}{% if a.justificativa_texto %} · justificativa: {{ a.justificativa_texto }}{% endif %}</p>
+                    <p class="text-[11px] text-gray-400">Pedido em {{ a.criado_em|date:"d/m/Y H:i" }}{% if a.solicitante and a.solicitante_id != a.usuario_id %} por {{ a.solicitante.get_full_name }}{% endif %}</p>
+                    {% if a.status == 'ERRO' %}<p class="text-[11px] text-red-700 mt-1 break-words">{{ a.retorno_solides|truncatechars:300 }}</p>{% endif %}
+                </div>
+                <div class="space-y-1.5">
+                    <form method="post" action="{% url 'tangerino:ajuste_decidir' a.id %}" onsubmit="return confirm('Aprovar e gravar na Sólides?')">{% csrf_token %}<input type="hidden" name="acao" value="aprovar">
+                        <button class="w-full bg-cyan-600 hover:bg-cyan-700 text-white text-sm font-medium px-3 py-1.5 rounded-lg"><i class="fas fa-check mr-1"></i>{% if a.status == 'ERRO' %}Tentar de novo{% else %}Aprovar{% endif %}</button></form>
+                    <form method="post" action="{% url 'tangerino:ajuste_decidir' a.id %}" class="flex gap-1.5">{% csrf_token %}<input type="hidden" name="acao" value="recusar">
+                        <input name="resposta" required maxlength="1000" placeholder="Motivo da recusa" class="flex-1 min-w-0 border border-gray-300 rounded-lg px-2 py-1.5 text-xs">
+                        <button class="border border-gray-300 text-gray-700 text-xs px-2.5 rounded-lg hover:border-red-400 hover:text-red-600">Recusar</button></form>
+                </div>
+            </li>
+            {% empty %}<li class="px-5 py-6 text-center text-gray-400">Nenhum pedido aguardando.</li>{% endfor %}
+        </ul>
+    </div>
+
+    <details class="tg-card overflow-hidden">
+        <summary class="px-5 py-3.5 font-semibold text-gray-800 text-sm cursor-pointer"><i class="fas fa-clock-rotate-left text-gray-400 mr-1.5"></i>Histórico ({{ historico|length }})</summary>
+        <ul class="divide-y divide-gray-50 text-sm border-t border-gray-100">
+            {% for a in historico %}
+            <li class="px-5 py-2.5 flex flex-wrap items-center gap-2">
+                <span>{{ a.usuario.get_full_name }} · {{ a.dia|date:"d/m/Y" }} · {{ a.get_tipo_display }} <span class="text-gray-500">({{ a.resumo }})</span></span>
+                <span class="px-2 py-0.5 rounded-full text-[11px] {% if a.status == 'APLICADA' %}bg-emerald-50 text-emerald-700{% elif a.status == 'CANCELADA' %}bg-gray-100 text-gray-600{% else %}bg-red-50 text-red-700{% endif %}">{{ a.get_status_display }}{% if a.direto %} · edição direta{% endif %}</span>
+                <span class="text-[11px] text-gray-400 ml-auto">{% if a.decidido_por %}{{ a.decidido_por.get_full_name }} · {{ a.decidido_em|date:"d/m/Y H:i" }}{% endif %}</span>
+            </li>
+            {% empty %}<li class="px-5 py-4 text-gray-400">Nada ainda.</li>{% endfor %}
+        </ul>
+    </details>
+</div>
+
+{% include 'tangerino/_modal_ajuste.html' %}
+<script>
+(function () {
+    var URL_DIA = '{% url "tangerino:ajuste_dia" %}', caixa = document.getElementById('ajBatidas');
+    function linha(texto, cls) { var p = document.createElement('p'); p.className = cls || 'text-gray-500'; p.textContent = texto; return p; }
+    document.getElementById('ajCarregar').addEventListener('click', function () {
+        var pessoa = document.getElementById('ajPessoa'), dia = document.getElementById('ajDia').value;
+        if (!pessoa.value || !dia) { caixa.replaceChildren(linha('Escolha a pessoa e o dia.', 'text-red-600')); return; }
+        caixa.replaceChildren(linha('Buscando na Sólides…'));
+        fetch(URL_DIA + '?usuario_id=' + encodeURIComponent(pessoa.value) + '&dia=' + encodeURIComponent(dia), {credentials: 'same-origin'})
+            .then(function (r) { return r.json(); })
+            .then(function (j) {
+                caixa.replaceChildren();
+                if (!j.ok) { caixa.appendChild(linha(j.erro || 'Não foi possível buscar.', 'text-red-600')); return; }
+                var lista = document.createElement('div'); lista.className = 'flex flex-wrap items-center gap-1.5';
+                if (!j.eventos.length) lista.appendChild(linha('Sem batidas neste dia.'));
+                j.eventos.forEach(function (e) {
+                    var s = document.createElement('span');
+                    s.className = 'px-2 py-0.5 rounded text-xs ' + (e.tipo === 'ENTRADA' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700');
+                    s.textContent = e.hhmm; lista.appendChild(s);
+                });
+                var b = document.createElement('button'); b.type = 'button';
+                b.className = 'ml-2 text-xs px-3 py-1.5 rounded-lg bg-cyan-50 text-cyan-800 hover:bg-cyan-100 font-medium';
+                b.textContent = 'Ajustar este dia';
+                b.addEventListener('click', function () { window.tgAbrirAjuste({dia: dia, eventos: j.eventos, usuarioId: pessoa.value, nome: j.nome, direto: true}); });
+                lista.appendChild(b); caixa.appendChild(lista);
+            })
+            .catch(function () { caixa.replaceChildren(linha('Sem conexão.', 'text-red-600')); });
+    });
+})();
+</script>
+{% endblock %}

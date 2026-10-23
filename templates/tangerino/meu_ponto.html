@@ -299,6 +299,7 @@
                     <span class="px-2 py-0.5 rounded text-xs bg-amber-100 text-amber-800">em aberto</span>
                     {% endif %}
                 </div>
+                {% if ajustes_ligado %}<button type="button" class="tg-ajustar text-[11px] text-cyan-700 hover:underline flex-shrink-0" data-dia="{{ d.dia|date:'Y-m-d' }}" aria-label="Ajustar o ponto de {{ d.dia|date:'d/m' }}"><i class="fas fa-pen"></i> Ajustar</button>{% endif %}
                 <span class="text-sm tabular flex-shrink-0 text-right {% if d.segundos %}text-gray-800 font-medium{% else %}text-gray-300{% endif %}">
                     {% if d.segundos %}{{ d.horas }}{% else %}—{% endif %}
                     {% if d.previsto %}
@@ -312,6 +313,38 @@
         </div>
     </div>
 </div>
+
+{% if ajustes_ligado %}
+<div class="tg-card overflow-hidden mt-4" id="meusAjustes">
+    <div class="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
+        <h2 class="font-semibold text-gray-800 text-sm"><i class="fas fa-user-clock text-cyan-600 mr-1.5"></i>Meus pedidos de ajuste</h2>
+        <span class="text-[11px] text-gray-400">Use "Ajustar" em um dia acima; o setor responsável aprova e o ajuste vai para a Sólides.</span>
+    </div>
+    <ul class="divide-y divide-gray-50 text-sm">
+        {% for a in meus_ajustes %}
+        <li class="px-5 py-2.5 flex items-center gap-3 flex-wrap">
+            <span class="text-gray-700">{{ a.dia|date:"d/m" }} · {{ a.get_tipo_display }} <span class="text-gray-500">({{ a.resumo }})</span></span>
+            <span class="px-2 py-0.5 rounded-full text-[11px] {% if a.status == 'APLICADA' %}bg-emerald-50 text-emerald-700{% elif a.status == 'PENDENTE' %}bg-amber-50 text-amber-800{% elif a.status == 'CANCELADA' %}bg-gray-100 text-gray-600{% else %}bg-red-50 text-red-700{% endif %}">{{ a.get_status_display }}</span>
+            {% if a.resposta %}<span class="text-[11px] text-gray-500">— {{ a.resposta }}</span>{% endif %}
+            {% if a.status == 'PENDENTE' and a.solicitante_id == user.id %}
+            <form method="post" action="{% url 'tangerino:ajuste_decidir' a.id %}" class="ml-auto">{% csrf_token %}<input type="hidden" name="acao" value="cancelar">
+                <button class="text-[11px] text-gray-500 hover:text-red-600 hover:underline">Cancelar pedido</button></form>
+            {% endif %}
+        </li>
+        {% empty %}<li class="px-5 py-4 text-gray-400 text-sm">Nenhum pedido ainda.</li>{% endfor %}
+    </ul>
+</div>
+{{ ajuste_eventos|json_script:"tgAjusteEventos" }}
+{% include 'tangerino/_modal_ajuste.html' %}
+<script>
+(function () {
+    var dados = JSON.parse((document.getElementById('tgAjusteEventos') || {}).textContent || '{}');
+    document.querySelectorAll('.tg-ajustar').forEach(function (b) {
+        b.addEventListener('click', function () { window.tgAbrirAjuste({dia: b.dataset.dia, eventos: dados[b.dataset.dia] || []}); });
+    });
+})();
+</script>
+{% endif %}
 
 <!-- Modal de marcação retroativa -->
 {% if pode_ponto_atrasado %}
