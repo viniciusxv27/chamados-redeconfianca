@@ -152,16 +152,23 @@
       {% endif %}
     </div>
     {% if gastos %}
+    <style>
+      .ext-ord { display:inline-flex; align-items:center; gap:.35rem; font:inherit; text-transform:inherit; letter-spacing:inherit; color:inherit; cursor:pointer; }
+      .ext-ord:hover, th[aria-sort="ascending"] .ext-ord, th[aria-sort="descending"] .ext-ord { color:#6d28d9; }
+      .ext-ord i { font-size:10px; opacity:.55; }
+      th[aria-sort="ascending"] .ext-ord i, th[aria-sort="descending"] .ext-ord i { opacity:1; }
+    </style>
     <div class="overflow-x-auto max-h-[40rem]">
       <table class="min-w-full text-sm">
         <thead class="bg-gray-50 text-gray-500 text-[11px] uppercase tracking-wide sticky top-0 z-10">
           <tr>
-            <th class="px-4 py-2.5 text-left font-semibold">Data</th>
-            <th class="px-4 py-2.5 text-left font-semibold">Estabelecimento</th>
-            <th class="px-4 py-2.5 text-left font-semibold">Categoria</th>
-            <th class="px-4 py-2.5 text-left font-semibold">Lançado por</th>
-            <th class="px-4 py-2.5 text-center font-semibold">Comprovante · chamado</th>
-            <th class="px-4 py-2.5 text-right font-semibold">Valor</th>
+            {% comment %}Cada título ordena a tabela (crescente/decrescente), sem recarregar; a busca e os filtros continuam valendo.{% endcomment %}
+            <th class="px-4 py-2.5 text-left font-semibold" aria-sort="none"><button type="button" class="ext-ord" data-ord="data">Data <i class="fas fa-sort" aria-hidden="true"></i></button></th>
+            <th class="px-4 py-2.5 text-left font-semibold" aria-sort="none"><button type="button" class="ext-ord" data-ord="estab">Estabelecimento <i class="fas fa-sort" aria-hidden="true"></i></button></th>
+            <th class="px-4 py-2.5 text-left font-semibold" aria-sort="none"><button type="button" class="ext-ord" data-ord="categoria">Categoria <i class="fas fa-sort" aria-hidden="true"></i></button></th>
+            <th class="px-4 py-2.5 text-left font-semibold" aria-sort="none"><button type="button" class="ext-ord" data-ord="lancado">Lançado por <i class="fas fa-sort" aria-hidden="true"></i></button></th>
+            <th class="px-4 py-2.5 text-center font-semibold" aria-sort="none"><button type="button" class="ext-ord" data-ord="comp" data-num="1">Comprovante · chamado <i class="fas fa-sort" aria-hidden="true"></i></button></th>
+            <th class="px-4 py-2.5 text-right font-semibold" aria-sort="none"><button type="button" class="ext-ord" data-ord="valor" data-num="1">Valor <i class="fas fa-sort" aria-hidden="true"></i></button></th>
           </tr>
         </thead>
         <tbody class="divide-y divide-gray-100">
@@ -169,6 +176,8 @@
           <tr class="ext-linha hover:bg-gray-50"
               data-categoria="{{ g.categoria_gasto|default:'Sem categoria'|lower }}" data-foto="{% if g.foto %}1{% else %}0{% endif %}"
               data-valor="{{ g.valor|unlocalize }}" data-mercadinho="{% if g.mercadinho %}1{% else %}0{% endif %}"
+              data-data="{{ g.data_gasto|date:'Y-m-d' }}" data-estab="{{ g.estabelecimento|default:'' }}" data-lancado="{{ g.criado_por.full_name|default:'' }}"
+              data-comp="{% with n=g.comprovantes.all|length %}{% if n %}{{ n }}{% elif g.foto %}1{% else %}0{% endif %}{% endwith %}.{{ g.ticket_id|default:0|stringformat:'09d' }}"
               data-busca="{{ g.estabelecimento|lower }} {{ g.descricao|lower }} {{ g.valor|unlocalize }} {{ g.data_gasto|date:'d/m/Y' }}{% for i in g.itens %} {{ i.produto|lower }}{% endfor %}">
             <td class="px-4 py-2.5 whitespace-nowrap text-gray-600 tabular-nums">{{ g.data_gasto|date:"d/m/Y" }}</td>
             <td class="px-4 py-2.5 min-w-[14rem]">
@@ -284,6 +293,32 @@
     vazio.classList.toggle('hidden', visiveis > 0);
   }
   [busca, categoria, semFoto, soMercadinho].forEach(function (el) { el.addEventListener('input', aplicar); el.addEventListener('change', aplicar); });
+
+  /* Ordenação pelo título da coluna: o 1º clique é crescente, o seguinte decrescente.
+     Os textos usam a ordem do português (acento e caixa não atrapalham; "—" vazio vai para o fim). */
+  const corpo = vazio.parentNode;
+  const coll = new Intl.Collator('pt-BR', {numeric: true, sensitivity: 'base'});
+  caixa.querySelectorAll('thead .ext-ord').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const th = b.closest('th'), chave = b.dataset.ord, num = b.dataset.num === '1';
+      const dir = th.getAttribute('aria-sort') === 'ascending' ? 'descending' : 'ascending';
+      caixa.querySelectorAll('thead th[aria-sort]').forEach(function (x) {
+        x.setAttribute('aria-sort', 'none');
+        const i = x.querySelector('.ext-ord i'); if (i) i.className = 'fas fa-sort';
+      });
+      th.setAttribute('aria-sort', dir);
+      b.querySelector('i').className = 'fas ' + (dir === 'ascending' ? 'fa-sort-up' : 'fa-sort-down');
+      const m = dir === 'ascending' ? 1 : -1;
+      linhas.sort(function (a, c) {
+        const x = a.dataset[chave] || '', y = c.dataset[chave] || '';
+        if (num) return ((parseFloat(x) || 0) - (parseFloat(y) || 0)) * m;
+        if (!x && y) return 1;
+        if (x && !y) return -1;
+        return coll.compare(x, y) * m;
+      });
+      linhas.forEach(function (tr) { corpo.insertBefore(tr, vazio); });
+    });
+  });
 })();
 </script>
 {% endblock %}
