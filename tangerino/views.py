@@ -5,6 +5,7 @@ import logging
 from datetime import date, timedelta
 
 from django.contrib import messages
+from django.db import transaction
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse, JsonResponse
@@ -649,6 +650,9 @@ def _montar_grade(colaboradores, dias, mapa):
                 'volta_almoco': ed.volta_almoco if ed else None,
                 'saida': ed.saida if ed else None,
                 'folga': ed.folga if ed else False,
+                'feriado': ed.feriado if ed else False,
+                'tipo': ed.tipo if ed else '',
+                'horas': (ed.minutos / 60) if ed else 0,
             })
             minutos += ed.minutos if ed else 0
         grade.append({
@@ -688,6 +692,7 @@ def escala(request):
         'dias': list(zip(dias, DIAS_PT)),
         'semana_anterior': (semana_inicio - timedelta(days=7)).isoformat(),
         'semana_proxima': (semana_inicio + timedelta(days=7)).isoformat(),
+        'semana_anterior_rotulo': f"{semana_inicio - timedelta(days=7):%d/%m} a {semana_inicio - timedelta(days=1):%d/%m}",
         'ano': ano, 'mes': mes, 'mes_nome': MESES_PT[mes],
         'semanas': escala_svc.semanas_do_mes(ano, mes),
         'pode_gerenciar': pode_gerenciar,
@@ -752,16 +757,19 @@ def escala_salvar(request):
         planos = []
         for d in dias:
             iso = d.isoformat()
-            folga = request.POST.get(f'folga_{uid}_{iso}') == 'on'
+            # Tipo do dia: Trabalho, Folga ou Feriado (o checkbox antigo de folga ainda vale).
+            tipo = (request.POST.get(f'tipo_{uid}_{iso}') or '').upper()
+            folga = tipo == 'FOLGA' or (not tipo and request.POST.get(f'folga_{uid}_{iso}') == 'on')
+            feriado = tipo == 'FERIADO'
             entrada = parse_time(request.POST.get(f'entrada_{uid}_{iso}') or '')
             saida_almoco = parse_time(request.POST.get(f'saida_almoco_{uid}_{iso}') or '')
             volta_almoco = parse_time(request.POST.get(f'volta_almoco_{uid}_{iso}') or '')
             saida = parse_time(request.POST.get(f'saida_{uid}_{iso}') or '')
             horarios = (entrada, saida_almoco, volta_almoco, saida)
-            planos.append((d, folga, horarios, bool(folga or any(horarios))))
+            planos.append((d, folga, feriado, horarios, bool(folga or feriado or any(horarios))))
 
         obj = Escala.objects.filter(colaborador_id=uid, semana_inicio=semana_inicio).first()
-        algo = any(p[3] for p in planos)
+        algo = any(p[4] for p in planos)
         if not obj and not algo:
             continue
         if not obj:
@@ -772,15 +780,17 @@ def escala_salvar(request):
             obj.atualizado_por = request.user
             obj.save(update_fields=['atualizado_por', 'atualizado_em'])
 
-        for d, folga, horarios, tem in planos:
+        for d, folga, feriado, horarios, tem in planos:
             if tem:
                 entrada, saida_almoco, volta_almoco, saida = horarios
+                livre = folga or feriado
                 EscalaDia.objects.update_or_create(
                     escala=obj, data=d,
-                    defaults={'entrada': None if folga else entrada,
-                              'saida_almoco': None if folga else saida_almoco,
-                              'volta_almoco': None if folga else volta_almoco,
-                              'saida': None if folga else saida, 'folga': folga})
+                    defaults={'entrada': None if livre else entrada,
+                              'saida_almoco': None if livre else saida_almoco,
+                              'volta_almoco': None if livre else volta_almoco,
+                              'saida': None if livre else saida, 'folga': folga and not feriado,
+                              'feriado': feriado})
             else:
                 EscalaDia.objects.filter(escala=obj, data=d).delete()
         salvos += 1
@@ -790,6 +800,55 @@ def escala_salvar(request):
     if request.POST.get('setor'):
         destino += f"&setor={request.POST['setor']}"
     return redirect(destino)
+
+
+@login_required
+@require_POST
+def escala_replicar(request):
+    """Copia a escala da semana anterior para a semana escolhida (quem o gestor escala, no setor filtrado).
+
+    Para cada pessoa que tem escala na semana anterior, a semana escolhida passa a ser igual:
+    mesmos tipos de dia e horários, dia a dia (segunda → segunda...). Quem não tinha escala
+    na semana anterior fica como está.
+    """
+    if not escala_svc.pode_gerenciar(request.user):
+        messages.error(request, 'Você não tem acesso para editar escalas.')
+        return redirect('tangerino:escala')
+    try:
+        semana_inicio = escala_svc.monday_of(date.fromisoformat(request.POST['inicio']))
+    except (KeyError, ValueError):
+        messages.error(request, 'Semana inválida.')
+        return redirect('tangerino:escala')
+    setor_id = (request.POST.get('setor') or '').strip()
+    anterior = semana_inicio - timedelta(days=7)
+    ids = [c.id for c in escala_svc.colaboradores_geridos(request.user, setor_id=setor_id or None)]
+    copiadas = 0
+    with transaction.atomic():
+        for origem in (Escala.objects.filter(colaborador_id__in=ids, semana_inicio=anterior)
+                       .prefetch_related('dias')):
+            dias = [d for d in origem.dias.all() if d.preenchido]
+            if not dias:
+                continue
+            destino, criada = Escala.objects.get_or_create(
+                colaborador_id=origem.colaborador_id, semana_inicio=semana_inicio,
+                defaults={'criado_por': request.user, 'atualizado_por': request.user})
+            if not criada:
+                destino.atualizado_por = request.user
+                destino.save(update_fields=['atualizado_por', 'atualizado_em'])
+            destino.dias.all().delete()
+            EscalaDia.objects.bulk_create([EscalaDia(
+                escala=destino, data=d.data + timedelta(days=7), entrada=d.entrada, saida_almoco=d.saida_almoco,
+                volta_almoco=d.volta_almoco, saida=d.saida, folga=d.folga, feriado=d.feriado,
+                observacao=d.observacao) for d in dias])
+            copiadas += 1
+    if copiadas:
+        messages.success(request, f'Escala da semana de {anterior:%d/%m} replicada para {copiadas} colaborador(es).')
+    else:
+        messages.info(request, f'Ninguém desta lista tinha escala na semana de {anterior:%d/%m}: nada foi copiado.')
+    destino_url = f"{reverse('tangerino:escala')}?inicio={semana_inicio.isoformat()}"
+    if setor_id:
+        destino_url += f"&setor={setor_id}"
+    return redirect(destino_url)
 
 
 @login_required

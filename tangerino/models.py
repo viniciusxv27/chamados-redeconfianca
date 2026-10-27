@@ -720,6 +720,8 @@ class EscalaDia(models.Model):
         null=True, blank=True, verbose_name='Volta do almoço')
     saida = models.TimeField(null=True, blank=True, verbose_name='Saída')
     folga = models.BooleanField(default=False, verbose_name='Folga')
+    # Feriado conta como a folga (sem horas, sem cobrança de batida), mas aparece como feriado.
+    feriado = models.BooleanField(default=False, db_default=False, verbose_name='Feriado')
     observacao = models.CharField(
         max_length=120, blank=True, default='', verbose_name='Observação')
 
@@ -732,6 +734,8 @@ class EscalaDia(models.Model):
         ]
 
     def __str__(self):
+        if self.feriado:
+            return f"{self.data:%d/%m}: feriado"
         if self.folga:
             return f"{self.data:%d/%m}: folga"
         if self.entrada and self.saida:
@@ -741,7 +745,7 @@ class EscalaDia(models.Model):
     @property
     def preenchido(self):
         """Tem algo que valha a pena guardar (folga ou algum horário)."""
-        return bool(self.folga or self.entrada or self.saida
+        return bool(self.folga or self.feriado or self.entrada or self.saida
                     or self.saida_almoco or self.volta_almoco or self.observacao)
 
     @property
@@ -752,7 +756,11 @@ class EscalaDia(models.Model):
         lida como do dia seguinte, não como número negativo.
         """
         return minutos_do_dia(self.entrada, self.saida_almoco,
-                              self.volta_almoco, self.saida, self.folga)
+                              self.volta_almoco, self.saida, self.folga or self.feriado)
+
+    @property
+    def tipo(self):
+        return 'FERIADO' if self.feriado else ('FOLGA' if self.folga else 'TRABALHO')
 
     @property
     def horas(self):

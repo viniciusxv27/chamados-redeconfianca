@@ -350,7 +350,8 @@ def cartao_extrato(request, pk):
         'total': total,
         'quantidade': len(gastos),
         'ticket_medio': (total / len(gastos)) if gastos else Decimal('0'),
-        'sem_comprovante': sum(1 for g in gastos if not g.foto),
+        # Comprovante é a foto antiga ou qualquer anexo novo (o mesmo critério do filtro da tabela).
+        'sem_comprovante': sum(1 for g in gastos if not (g.foto or g.comprovantes.all())),
         'sem_chamado': sum(1 for g in gastos if not g.ticket_id),
         'por_categoria': por_categoria,
         'por_mes': por_mes,

@@ -7,13 +7,28 @@
 {% block extra_css %}
 {{ block.super }}
 <style>
-    .esc-grid th, .esc-grid td { border: 1px solid #EDEDF0; }
-    .esc-grid thead th { background: #F9FAFB; }
-    .esc-nome { position: sticky; left: 0; background: #fff; z-index: 1; }
-    .esc-grid thead .esc-nome { background: #F9FAFB; z-index: 2; }
-    .esc-time { width: 100%; border: 1px solid #E5E7EB; border-radius: .375rem;
-                padding: .2rem .35rem; font-size: .78rem; font-variant-numeric: tabular-nums; }
-    .esc-hoje { box-shadow: inset 0 2px 0 #0891B2; }
+    /* Grade da escala: cabe na tela (colunas fixas, resumo por célula); o editor abre ao clicar. */
+    .esc-grid { table-layout: fixed; width: 100%; min-width: 860px; border-collapse: separate; border-spacing: 0; }
+    .esc-grid th, .esc-grid td { border-bottom: 1px solid #EDEDF0; border-right: 1px solid #F3F4F6; }
+    .esc-grid thead th { background: #F9FAFB; position: sticky; top: 0; z-index: 2; }
+    .esc-nome { position: sticky; left: 0; background: #fff; z-index: 1; width: 12.5rem; }
+    .esc-grid thead .esc-nome { background: #F9FAFB; z-index: 3; }
+    .esc-hoje { background: #ECFEFF !important; }
+    .esc-time { width: 100%; border: 1px solid #E5E7EB; border-radius: .5rem; padding: .35rem .5rem; font-size: .85rem; font-variant-numeric: tabular-nums; }
+    .esc-resumo { display: block; width: 100%; min-height: 3.6rem; text-align: left; border-radius: .6rem; padding: .35rem .45rem; border: 1px solid transparent; transition: border-color .15s, background .15s; }
+    .esc-resumo:hover, .esc-resumo:focus-visible { border-color: #67E8F9; background: #F0FDFF; outline: none; }
+    .esc-resumo .h { display: block; font-weight: 600; font-size: .8rem; color: #111827; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .esc-resumo .a { display: block; font-size: .68rem; color: #6B7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .esc-resumo .t { display: inline-block; margin-top: .15rem; font-size: .68rem; font-weight: 600; color: #0E7490; }
+    .esc-resumo.vazio { border: 1px dashed #D1D5DB; color: #9CA3AF; font-size: .72rem; display: grid; place-items: center; }
+    .esc-resumo.folga { background: #F3F4F6; color: #6B7280; font-size: .78rem; font-weight: 600; display: grid; place-items: center; }
+    .esc-resumo.feriado { background: #F5F3FF; color: #6D28D9; font-size: .78rem; font-weight: 600; display: grid; place-items: center; }
+    .esc-seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: .35rem; }
+    .esc-seg label { cursor: pointer; text-align: center; font-size: .78rem; font-weight: 600; border: 1px solid #D1D5DB; border-radius: .6rem; padding: .45rem .3rem; color: #374151; }
+    .esc-seg label:has(input:checked) { border-color: #0891B2; background: #ECFEFF; color: #0E7490; }
+    .esc-seg label:has(input:focus-visible) { outline: 2px solid #0891B2; outline-offset: 2px; }
+    .esc-dia-btn { font-size: .62rem; font-weight: 600; color: #7C3AED; }
+    .esc-dia-btn:hover { text-decoration: underline; }
 </style>
 {% endblock %}
 
@@ -65,7 +80,12 @@
 
 {% if pode_gerenciar %}
 {# ── Grade editável (gestores) ───────────────────────────────────────── #}
-<form method="post" action="{% url 'tangerino:escala_salvar' %}">
+{% if grade %}
+<form method="post" action="{% url 'tangerino:escala_replicar' %}" id="escReplicarForm" class="hidden">
+    {% csrf_token %}<input type="hidden" name="inicio" value="{{ semana_inicio|date:'Y-m-d' }}"><input type="hidden" name="setor" value="{{ setor_escolhido }}">
+</form>
+{% endif %}
+<form method="post" action="{% url 'tangerino:escala_salvar' %}" id="escForm">
     {% csrf_token %}
     <input type="hidden" name="inicio" value="{{ semana_inicio|date:'Y-m-d' }}">
     <input type="hidden" name="setor" value="{{ setor_escolhido }}">
@@ -84,29 +104,38 @@
                 </span>
                 {% endif %}
             </h3>
-            <p class="text-xs text-gray-400">Marque <strong>Folga</strong> ou preencha os quatro horários do dia:
-               entrada, saída para o almoço, volta do almoço e saída. A meta é {{ horas_meta }}h por semana.</p>
+            <div class="flex items-center gap-2 flex-wrap">
+                <p class="text-xs text-gray-400">Clique num dia para editar: trabalho (4 horários), folga ou feriado. Meta: {{ horas_meta }}h/semana.</p>
+                {% if grade %}
+                <button type="button" id="escReplicar" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-cyan-200 text-cyan-800 bg-cyan-50 hover:bg-cyan-100"
+                        title="Copia a escala da semana {{ semana_anterior_rotulo }} para esta semana">
+                    <i class="fas fa-clone"></i>Replicar semana passada
+                </button>
+                {% endif %}
+            </div>
         </div>
 
-        <div class="tg-scroll-x">
-            <table class="esc-grid min-w-full border-collapse text-sm">
+        <div class="overflow-x-auto">
+            {% comment %}data-rc-wrapped: fora do embrulho global (que esticaria a tabela); a rolagem só aparece em tela estreita.{% endcomment %}
+            <table class="esc-grid text-sm" data-rc-wrapped="1">
                 <thead>
                     <tr>
-                        <th class="esc-nome text-left px-3 py-2 text-xs font-semibold text-gray-500 min-w-[180px]">Colaborador</th>
+                        <th class="esc-nome text-left px-3 py-2 text-xs font-semibold text-gray-500">Colaborador</th>
                         {% for d, nome in dias %}
-                        <th class="px-2 py-2 text-center text-xs font-semibold text-gray-500 min-w-[120px] {% if d == hoje %}esc-hoje{% endif %}">
+                        <th class="px-1.5 py-2 text-center text-xs font-semibold text-gray-500 {% if d == hoje %}esc-hoje{% endif %}" data-iso="{{ d|date:'Y-m-d' }}">
                             {{ nome }}<span class="block text-[11px] font-normal text-gray-400">{{ d|date:'d/m' }}</span>
+                            {% if grade %}<button type="button" class="esc-dia-btn" data-feriado-todos="{{ d|date:'Y-m-d' }}" title="Marcar feriado para todos neste dia">feriado p/ todos</button>{% endif %}
                         </th>
                         {% endfor %}
                     </tr>
                 </thead>
                 <tbody>
                     {% for linha in grade %}
-                    <tr>
-                        <td class="esc-nome px-3 py-2 align-top" data-linha="{{ linha.colaborador.id }}">
+                    <tr data-linha="{{ linha.colaborador.id }}">
+                        <td class="esc-nome px-3 py-2 align-top">
                             <input type="hidden" name="colaborador" value="{{ linha.colaborador.id }}">
-                            <p class="font-medium text-gray-800 leading-tight">{{ linha.colaborador.full_name }}</p>
-                            <p class="text-[11px] text-gray-400">{{ linha.colaborador.sector.name|default:"Sem setor" }}</p>
+                            <p class="font-medium text-gray-800 leading-tight truncate" title="{{ linha.colaborador.full_name }}">{{ linha.colaborador.full_name }}</p>
+                            <p class="text-[11px] text-gray-400 truncate">{{ linha.colaborador.sector.name|default:"Sem setor" }}</p>
                             <span class="esc-total inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-[11px] font-semibold
                                          {% if linha.abaixo %}bg-amber-100 text-amber-700{% else %}bg-emerald-100 text-emerald-700{% endif %}"
                                   data-meta="{{ horas_meta }}" title="Horas da semana somando o que está preenchido">
@@ -114,33 +143,24 @@
                                 <span class="esc-total-txt">{{ linha.horas|floatformat:1 }}h</span>
                             </span>
                             <span class="esc-aviso block text-[11px] text-amber-600 mt-0.5 {% if not linha.abaixo %}hidden{% endif %}">
-                                abaixo das {{ horas_meta }}h semanais
+                                abaixo das {{ horas_meta }}h
                             </span>
                             <button type="button" onclick="escAbrirSemana(this)"
-                                    class="esc-repetir mt-1.5 text-[11px] text-cyan-700 hover:underline">
-                                <i class="fas fa-clone mr-1"></i>Definir a semana toda
+                                    class="esc-repetir mt-1 text-[11px] text-cyan-700 hover:underline">
+                                <i class="fas fa-wand-magic-sparkles mr-1"></i>Definir a semana toda
                             </button>
                         </td>
                         {% for cel in linha.celulas %}
-                        <td class="px-2 py-2 align-top {% if cel.data == hoje %}esc-hoje{% endif %}">
-                            {% with iso=cel.data|date:'Y-m-d' cid=linha.colaborador.id %}
-                            <label class="flex items-center gap-1 text-[11px] text-gray-500 mb-1 cursor-pointer">
-                                <input type="checkbox" name="folga_{{ cid }}_{{ iso }}" {% if cel.folga %}checked{% endif %}
-                                       class="esc-folga rounded text-cyan-600 focus:ring-cyan-500" onchange="escToggleFolga(this)">
-                                Folga
-                            </label>
-                            <div class="esc-horarios space-y-1 {% if cel.folga %}hidden{% endif %}">
-                                <input type="time" name="entrada_{{ cid }}_{{ iso }}" value="{{ cel.entrada|time:'H:i' }}"
-                                       class="esc-time esc-h" data-papel="entrada" title="Entrada" aria-label="Entrada">
-                                <input type="time" name="saida_almoco_{{ cid }}_{{ iso }}" value="{{ cel.saida_almoco|time:'H:i' }}"
-                                       class="esc-time esc-h" data-papel="saida_almoco" title="Saída para o almoço" aria-label="Saída para o almoço">
-                                <input type="time" name="volta_almoco_{{ cid }}_{{ iso }}" value="{{ cel.volta_almoco|time:'H:i' }}"
-                                       class="esc-time esc-h" data-papel="volta_almoco" title="Volta do almoço" aria-label="Volta do almoço">
-                                <input type="time" name="saida_{{ cid }}_{{ iso }}" value="{{ cel.saida|time:'H:i' }}"
-                                       class="esc-time esc-h" data-papel="saida" title="Saída" aria-label="Saída">
-                            </div>
-                            {% endwith %}
+                        {% with iso=cel.data|date:'Y-m-d' cid=linha.colaborador.id %}
+                        <td class="esc-cel px-1 py-1 align-top {% if cel.data == hoje %}esc-hoje{% endif %}" data-iso="{{ iso }}">
+                            <input type="hidden" name="tipo_{{ cid }}_{{ iso }}" value="{{ cel.tipo }}" class="esc-tipo">
+                            <input type="hidden" name="entrada_{{ cid }}_{{ iso }}" value="{{ cel.entrada|time:'H:i' }}" class="esc-h" data-papel="entrada">
+                            <input type="hidden" name="saida_almoco_{{ cid }}_{{ iso }}" value="{{ cel.saida_almoco|time:'H:i' }}" class="esc-h" data-papel="saida_almoco">
+                            <input type="hidden" name="volta_almoco_{{ cid }}_{{ iso }}" value="{{ cel.volta_almoco|time:'H:i' }}" class="esc-h" data-papel="volta_almoco">
+                            <input type="hidden" name="saida_{{ cid }}_{{ iso }}" value="{{ cel.saida|time:'H:i' }}" class="esc-h" data-papel="saida">
+                            <button type="button" class="esc-resumo" aria-label="Editar {{ linha.colaborador.full_name }} em {{ cel.data|date:'d/m' }}"></button>
                         </td>
+                        {% endwith %}
                         {% endfor %}
                     </tr>
                     {% empty %}
@@ -158,14 +178,42 @@
     </div>
 
     {% if grade %}
-    <div class="mt-3 flex items-center justify-end gap-3">
+    <div class="mt-3 flex items-center justify-end gap-3 sticky bottom-2 z-10">
+        <span id="escSujo" class="hidden text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1">Alterações não salvas</span>
         <span class="text-xs text-gray-400">A escala fica visível para cada colaborador.</span>
-        <button type="submit" class="inline-flex items-center px-4 py-2 text-sm font-medium bg-cyan-600 text-white rounded-lg hover:bg-cyan-700">
+        <button type="submit" class="inline-flex items-center px-4 py-2 text-sm font-medium bg-cyan-600 text-white rounded-lg hover:bg-cyan-700 shadow">
             <i class="fas fa-check mr-2"></i> Salvar escala
         </button>
     </div>
     {% endif %}
 </form>
+
+{# Editor de um dia (abre ao clicar na célula) #}
+<div id="escEditor" class="fixed inset-0 bg-black/50 z-50 hidden items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="escEdTitulo">
+    <div class="tg-card w-full max-w-sm p-5">
+        <h3 class="font-semibold text-gray-800" id="escEdTitulo"></h3>
+        <p class="text-xs text-gray-400 mb-3" id="escEdSub"></p>
+        <div class="esc-seg mb-3" role="radiogroup" aria-label="Tipo do dia">
+            <label><input type="radio" name="escEdTipo" value="TRABALHO" class="sr-only">Trabalho</label>
+            <label><input type="radio" name="escEdTipo" value="FOLGA" class="sr-only"><i class="fas fa-mug-hot mr-1"></i>Folga</label>
+            <label><input type="radio" name="escEdTipo" value="FERIADO" class="sr-only"><i class="fas fa-flag mr-1"></i>Feriado</label>
+        </div>
+        <div id="escEdHorarios" class="grid grid-cols-2 gap-2 mb-2">
+            <div><label class="block text-[11px] font-medium text-gray-600 mb-0.5" for="escEdEntrada">Entrada</label><input type="time" id="escEdEntrada" class="esc-time"></div>
+            <div><label class="block text-[11px] font-medium text-gray-600 mb-0.5" for="escEdSaidaAlmoco">Saída p/ almoço</label><input type="time" id="escEdSaidaAlmoco" class="esc-time"></div>
+            <div><label class="block text-[11px] font-medium text-gray-600 mb-0.5" for="escEdVoltaAlmoco">Volta do almoço</label><input type="time" id="escEdVoltaAlmoco" class="esc-time"></div>
+            <div><label class="block text-[11px] font-medium text-gray-600 mb-0.5" for="escEdSaida">Saída</label><input type="time" id="escEdSaida" class="esc-time"></div>
+        </div>
+        <p class="text-xs text-gray-500 mb-4" id="escEdHoras"></p>
+        <div class="flex items-center justify-between gap-2">
+            <button type="button" id="escEdLimpar" class="text-xs text-gray-500 hover:text-red-600 hover:underline">Limpar o dia</button>
+            <div class="flex gap-2">
+                <button type="button" id="escEdCancelar" class="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50">Cancelar</button>
+                <button type="button" id="escEdAplicar" class="px-3 py-2 rounded-lg bg-cyan-600 text-white text-sm hover:bg-cyan-700">Aplicar</button>
+            </div>
+        </div>
+    </div>
+</div>
 
 {% else %}
 {# ── Leitura da própria escala (colaborador) ─────────────────────────── #}
@@ -188,7 +236,9 @@
                 {% if item.data == hoje %}<span class="ml-2 text-[10px] uppercase font-semibold text-cyan-700 bg-cyan-100 px-1.5 py-0.5 rounded">hoje</span>{% endif %}
             </div>
             <div class="text-sm tabular">
-                {% if item.dia and item.dia.folga %}
+                {% if item.dia and item.dia.feriado %}
+                    <span class="text-violet-600 font-medium"><i class="fas fa-flag mr-1"></i>Feriado</span>
+                {% elif item.dia and item.dia.folga %}
                     <span class="text-gray-400"><i class="fas fa-mug-hot mr-1"></i>Folga</span>
                 {% elif item.dia and item.dia.entrada %}
                     <span class="font-medium text-gray-800">{{ item.dia.entrada|time:'H:i' }} <span class="text-gray-300">–</span> {{ item.dia.saida|time:'H:i'|default:'—' }}</span>
@@ -265,7 +315,7 @@
         </h3>
         <p class="text-xs text-gray-500 mb-4">
             Os horários abaixo vão para <strong id="escModalNome"></strong> em todos os dias
-            escolhidos. Dia marcado como <strong>folga</strong> não é tocado.
+            escolhidos. Dia marcado como <strong>folga</strong> ou <strong>feriado</strong> não é tocado.
         </p>
 
         <div class="grid grid-cols-2 gap-3 mb-4">
@@ -306,165 +356,196 @@
 </div>
 
 <script>
-// Definir a semana toda: em vez de digitar quatro horários em sete dias, a
-// pessoa digita uma vez e escolhe os dias. Folga fica de fora — quem marcou
-// folga não quer que ela seja sobrescrita por um preenchimento em massa.
-let escLinhaAlvo = null;
-
-function escAbrirSemana(botao) {
-    escLinhaAlvo = botao.closest('tr');
-    const nome = escLinhaAlvo.querySelector('.esc-nome p');
-    document.getElementById('escModalNome').textContent = nome ? nome.textContent.trim() : '';
-
-    const dias = document.getElementById('escSemDias');
-    dias.innerHTML = '';
-    escLinhaAlvo.querySelectorAll('td').forEach(function (celula, indice) {
-        const folga = celula.querySelector('.esc-folga');
-        if (!folga) return;                      // a primeira célula é o nome
-        const iso = folga.name.split('_').pop();
-        const cabecalho = document.querySelectorAll('.esc-grid thead th')[indice];
-        const rotulo = cabecalho ? cabecalho.textContent.trim().split('\n')[0] : iso;
-
-        const marca = document.createElement('label');
-        marca.className = 'flex items-center gap-1.5 text-xs text-gray-700 px-2 py-1 rounded-lg border border-gray-200 cursor-pointer';
-        marca.innerHTML = '<input type="checkbox" class="esc-sem-dia rounded text-cyan-600" ' +
-                          (folga.checked ? '' : 'checked ') + (folga.checked ? 'disabled ' : '') +
-                          'data-indice="' + indice + '">' +
-                          '<span>' + rotulo + (folga.checked ? ' (folga)' : '') + '</span>';
-        if (folga.checked) marca.classList.add('opacity-50');
-        dias.appendChild(marca);
-    });
-
-    escPrevia();
-    dias.querySelectorAll('input').forEach(i => i.addEventListener('change', escPrevia));
-    ['escSemEntrada', 'escSemSaidaAlmoco', 'escSemVoltaAlmoco', 'escSemSaida']
-        .forEach(id => document.getElementById(id).addEventListener('input', escPrevia));
-
-    const modal = document.getElementById('escModalSemana');
-    modal.classList.remove('hidden');
-    modal.classList.add('flex');
-}
-
-function escPrevia() {
-    const dias = document.querySelectorAll('.esc-sem-dia:checked').length;
-    const minutos = escMinutosDoDiaModal() * dias;
-    document.getElementById('escSemPrevia').textContent =
-        dias + ' dia(s) × ' + (escMinutosDoDiaModal() / 60).toFixed(2).replace('.', ',') +
-        'h = ' + (minutos / 60).toFixed(1).replace('.', ',') + 'h na semana.';
-}
-
-function escMinutosDoDiaModal() {
-    const v = id => escMinutos(document.getElementById(id).value);
-    const entrada = v('escSemEntrada'), saidaAlmoco = v('escSemSaidaAlmoco');
-    const voltaAlmoco = v('escSemVoltaAlmoco'), saida = v('escSemSaida');
-    return (saidaAlmoco !== null && voltaAlmoco !== null)
-        ? escIntervalo(entrada, saidaAlmoco) + escIntervalo(voltaAlmoco, saida)
-        : escIntervalo(entrada, saida);
-}
-
-function escFecharSemana() {
-    const modal = document.getElementById('escModalSemana');
-    modal.classList.add('hidden');
-    modal.classList.remove('flex');
-    escLinhaAlvo = null;
-}
-
-function escAplicarSemana() {
-    if (!escLinhaAlvo) return;
-    const valores = {
-        entrada: document.getElementById('escSemEntrada').value,
-        saida_almoco: document.getElementById('escSemSaidaAlmoco').value,
-        volta_almoco: document.getElementById('escSemVoltaAlmoco').value,
-        saida: document.getElementById('escSemSaida').value
-    };
-    const celulas = escLinhaAlvo.querySelectorAll('td');
-    document.querySelectorAll('.esc-sem-dia:checked').forEach(function (marca) {
-        const celula = celulas[parseInt(marca.dataset.indice, 10)];
-        if (!celula) return;
-        const folga = celula.querySelector('.esc-folga');
-        if (!folga || folga.checked) return;         // folga não se mexe
-        Object.keys(valores).forEach(function (papel) {
-            const campo = celula.querySelector('.esc-h[data-papel="' + papel + '"]');
-            if (campo) campo.value = valores[papel];
-        });
-    });
-    escRecalcular(escLinhaAlvo);
-    escFecharSemana();
-}
-
-document.addEventListener('click', function (ev) {
-    if (ev.target.id === 'escModalSemana') escFecharSemana();
-});
-
-function escToggleFolga(cb) {
-    const cell = cb.closest('td');
-    const horarios = cell.querySelector('.esc-horarios');
-    if (!horarios) return;
-    horarios.classList.toggle('hidden', cb.checked);
-    if (cb.checked) horarios.querySelectorAll('input[type=time]').forEach(i => i.value = '');
-    escRecalcular(cb.closest('tr'));
-}
-
-// Soma as horas da semana enquanto a pessoa digita. A mesma conta do servidor:
-// com almoço preenchido soma os dois turnos; sem almoço, entrada até saída.
+// ── Escala: cada célula guarda tipo + 4 horários em campos escondidos; o resumo é desenhado
+// a partir deles e o editor de um dia (ou "Definir a semana toda") só mexe nesses campos.
+const ESC_DIAS = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
 function escMinutos(valor) {
     if (!valor) return null;
     const [h, m] = valor.split(':').map(Number);
     if (isNaN(h) || isNaN(m)) return null;
     return h * 60 + m;
 }
-
 function escIntervalo(ini, fim) {
     if (ini === null || fim === null) return 0;
     return (fim < ini ? fim + 1440 : fim) - ini;
 }
-
+function escContaDia(v) {
+    const e = escMinutos(v.entrada), sa = escMinutos(v.saida_almoco), va = escMinutos(v.volta_almoco), s = escMinutos(v.saida);
+    return (sa !== null && va !== null) ? escIntervalo(e, sa) + escIntervalo(va, s) : escIntervalo(e, s);
+}
+function escHoras(min) { return (min / 60).toFixed(1).replace('.', ',') + 'h'; }
+function escLer(celula) {
+    const v = {tipo: celula.querySelector('.esc-tipo').value};
+    celula.querySelectorAll('.esc-h').forEach(function (i) { v[i.dataset.papel] = i.value; });
+    if (!v.tipo && (v.entrada || v.saida)) v.tipo = 'TRABALHO';
+    return v;
+}
+function escGravar(celula, v) {
+    celula.querySelector('.esc-tipo').value = v.tipo || '';
+    celula.querySelectorAll('.esc-h').forEach(function (i) { i.value = v.tipo === 'TRABALHO' ? (v[i.dataset.papel] || '') : ''; });
+    escDesenhar(celula);
+    escRecalcular(celula.closest('tr'));
+    escMarcarSujo();
+}
+function escDesenhar(celula) {
+    const v = escLer(celula), b = celula.querySelector('.esc-resumo');
+    b.className = 'esc-resumo';
+    b.replaceChildren();
+    function linha(cls, texto) { const s = document.createElement('span'); s.className = cls; s.textContent = texto; b.appendChild(s); }
+    if (v.tipo === 'FOLGA') { b.classList.add('folga'); b.textContent = 'Folga'; return; }
+    if (v.tipo === 'FERIADO') { b.classList.add('feriado'); b.textContent = 'Feriado'; return; }
+    if (!v.entrada && !v.saida) { b.classList.add('vazio'); b.textContent = '+ definir'; return; }
+    linha('h', (v.entrada || '--:--') + ' – ' + (v.saida || '--:--'));
+    if (v.saida_almoco && v.volta_almoco) {
+        const a = document.createElement('span'); a.className = 'a'; a.title = 'Almoço ' + v.saida_almoco + ' às ' + v.volta_almoco;
+        const ic = document.createElement('i'); ic.className = 'fas fa-utensils mr-1 text-[9px]'; ic.setAttribute('aria-hidden', 'true');
+        a.append(ic, v.saida_almoco + '–' + v.volta_almoco); b.appendChild(a);
+    }
+    linha('t', escHoras(escContaDia(v)));
+}
 function escRecalcular(linha) {
     if (!linha) return;
     const marcador = linha.querySelector('.esc-total');
     if (!marcador) return;
-
     let minutos = 0;
-    linha.querySelectorAll('td').forEach(function (celula) {
-        const folga = celula.querySelector('.esc-folga');
-        if (!folga || folga.checked) return;
-        const val = papel => {
-            const el = celula.querySelector('.esc-h[data-papel="' + papel + '"]');
-            return el ? escMinutos(el.value) : null;
-        };
-        const entrada = val('entrada'), saidaAlmoco = val('saida_almoco');
-        const voltaAlmoco = val('volta_almoco'), saida = val('saida');
-        minutos += (saidaAlmoco !== null && voltaAlmoco !== null)
-            ? escIntervalo(entrada, saidaAlmoco) + escIntervalo(voltaAlmoco, saida)
-            : escIntervalo(entrada, saida);
-    });
-
-    const meta = parseFloat(marcador.dataset.meta || '44') * 60;
-    const abaixo = minutos < meta;
-    const horas = (minutos / 60).toFixed(1).replace('.', ',');
-    marcador.querySelector('.esc-total-txt').textContent = horas + 'h';
-    marcador.classList.toggle('bg-amber-100', abaixo);
-    marcador.classList.toggle('text-amber-700', abaixo);
-    marcador.classList.toggle('bg-emerald-100', !abaixo);
-    marcador.classList.toggle('text-emerald-700', !abaixo);
+    linha.querySelectorAll('.esc-cel').forEach(function (c) { const v = escLer(c); if (v.tipo === 'TRABALHO') minutos += escContaDia(v); });
+    const meta = parseFloat(marcador.dataset.meta || '44') * 60, abaixo = minutos < meta;
+    marcador.querySelector('.esc-total-txt').textContent = escHoras(minutos);
+    marcador.classList.toggle('bg-amber-100', abaixo); marcador.classList.toggle('text-amber-700', abaixo);
+    marcador.classList.toggle('bg-emerald-100', !abaixo); marcador.classList.toggle('text-emerald-700', !abaixo);
     const icone = marcador.querySelector('i');
-    if (icone) {
-        icone.classList.toggle('fa-triangle-exclamation', abaixo);
-        icone.classList.toggle('fa-check', !abaixo);
-    }
+    if (icone) { icone.classList.toggle('fa-triangle-exclamation', abaixo); icone.classList.toggle('fa-check', !abaixo); }
     const aviso = linha.querySelector('.esc-aviso');
     if (aviso) aviso.classList.toggle('hidden', !abaixo);
 }
+let escSujo = false;
+function escMarcarSujo() { escSujo = true; const s = document.getElementById('escSujo'); if (s) s.classList.remove('hidden'); }
+window.addEventListener('beforeunload', function (e) { if (escSujo) { e.preventDefault(); e.returnValue = ''; } });
+const escForm = document.getElementById('escForm');
+if (escForm) escForm.addEventListener('submit', function () { escSujo = false; });
 
-document.addEventListener('input', function (ev) {
-    if (ev.target.classList && ev.target.classList.contains('esc-h')) {
-        escRecalcular(ev.target.closest('tr'));
+// Editor de um dia
+let escCelulaAlvo = null;
+const escEd = document.getElementById('escEditor');
+function escTipoEd() { const r = document.querySelector('input[name="escEdTipo"]:checked'); return r ? r.value : 'TRABALHO'; }
+function escEdValores() {
+    return {tipo: escTipoEd(), entrada: document.getElementById('escEdEntrada').value,
+            saida_almoco: document.getElementById('escEdSaidaAlmoco').value,
+            volta_almoco: document.getElementById('escEdVoltaAlmoco').value, saida: document.getElementById('escEdSaida').value};
+}
+function escEdAtualizar() {
+    const v = escEdValores();
+    document.getElementById('escEdHorarios').classList.toggle('hidden', v.tipo !== 'TRABALHO');
+    document.getElementById('escEdHoras').textContent = v.tipo === 'TRABALHO' ? 'Horas do dia: ' + escHoras(escContaDia(v)) : (v.tipo === 'FERIADO' ? 'Feriado: sem horas e sem cobrança de batida.' : 'Folga: sem horas.');
+}
+function escAbrirDia(celula) {
+    escCelulaAlvo = celula;
+    const v = escLer(celula), linha = celula.closest('tr'), iso = celula.dataset.iso;
+    const idx = [...linha.querySelectorAll('.esc-cel')].indexOf(celula);
+    document.getElementById('escEdTitulo').textContent = linha.querySelector('.esc-nome p').textContent.trim();
+    document.getElementById('escEdSub').textContent = ESC_DIAS[idx] + ', ' + iso.split('-').reverse().slice(0, 2).join('/');
+    document.querySelector('input[name="escEdTipo"][value="' + (v.tipo || 'TRABALHO') + '"]').checked = true;
+    document.getElementById('escEdEntrada').value = v.entrada || '';
+    document.getElementById('escEdSaidaAlmoco').value = v.saida_almoco || '';
+    document.getElementById('escEdVoltaAlmoco').value = v.volta_almoco || '';
+    document.getElementById('escEdSaida').value = v.saida || '';
+    escEdAtualizar();
+    escEd.classList.remove('hidden'); escEd.classList.add('flex');
+    (v.tipo === 'TRABALHO' || !v.tipo ? document.getElementById('escEdEntrada') : document.querySelector('input[name="escEdTipo"]:checked')).focus();
+}
+function escFecharDia() { escEd.classList.add('hidden'); escEd.classList.remove('flex'); if (escCelulaAlvo) escCelulaAlvo.querySelector('.esc-resumo').focus(); escCelulaAlvo = null; }
+if (escEd) {
+    escEd.addEventListener('change', escEdAtualizar);
+    escEd.addEventListener('input', escEdAtualizar);
+    document.getElementById('escEdAplicar').addEventListener('click', function () {
+        const v = escEdValores();
+        if (v.tipo === 'TRABALHO' && !v.entrada && !v.saida) v.tipo = '';
+        escGravar(escCelulaAlvo, v); escFecharDia();
+    });
+    document.getElementById('escEdLimpar').addEventListener('click', function () { escGravar(escCelulaAlvo, {tipo: ''}); escFecharDia(); });
+    document.getElementById('escEdCancelar').addEventListener('click', escFecharDia);
+    escEd.addEventListener('click', function (e) { if (e.target === escEd) escFecharDia(); });
+}
+document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    if (escEd && !escEd.classList.contains('hidden')) escFecharDia();
+    if (!document.getElementById('escModalSemana').classList.contains('hidden')) escFecharSemana();
+});
+document.addEventListener('click', function (e) {
+    const b = e.target.closest('.esc-resumo');
+    if (b) { escAbrirDia(b.closest('.esc-cel')); return; }
+    const f = e.target.closest('[data-feriado-todos]');
+    if (f) {
+        const iso = f.dataset.feriadoTodos;
+        if (!confirm('Marcar feriado para todos em ' + iso.split('-').reverse().join('/') + '? (salve a escala depois)')) return;
+        document.querySelectorAll('.esc-cel[data-iso="' + iso + '"]').forEach(function (c) { escGravar(c, {tipo: 'FERIADO'}); });
     }
 });
 
-document.addEventListener('DOMContentLoaded', function () {
-    document.querySelectorAll('.esc-grid tbody tr').forEach(escRecalcular);
+// Replicar semana passada
+const escRep = document.getElementById('escReplicar');
+if (escRep) escRep.addEventListener('click', function () {
+    if (escSujo && !confirm('Há alterações não salvas nesta semana: elas se perdem. Continuar?')) return;
+    if (!confirm('Copiar a escala da semana {{ semana_anterior_rotulo }} para esta semana?\n\nQuem tem escala na semana passada fica com esta semana igual (os dias preenchidos aqui são trocados). Quem não tinha fica como está.')) return;
+    escSujo = false;
+    document.getElementById('escReplicarForm').submit();
 });
+
+// Definir a semana toda: digita os horários uma vez e escolhe os dias. Folga e feriado ficam de fora.
+let escLinhaAlvo = null;
+function escAbrirSemana(botao) {
+    escLinhaAlvo = botao.closest('tr');
+    document.getElementById('escModalNome').textContent = escLinhaAlvo.querySelector('.esc-nome p').textContent.trim();
+    const dias = document.getElementById('escSemDias');
+    dias.replaceChildren();
+    escLinhaAlvo.querySelectorAll('.esc-cel').forEach(function (celula, indice) {
+        const v = escLer(celula), livre = v.tipo === 'FOLGA' || v.tipo === 'FERIADO';
+        const marca = document.createElement('label');
+        marca.className = 'flex items-center gap-1.5 text-xs text-gray-700 px-2 py-1 rounded-lg border border-gray-200 cursor-pointer' + (livre ? ' opacity-50' : '');
+        const cb = document.createElement('input');
+        cb.type = 'checkbox'; cb.className = 'esc-sem-dia rounded text-cyan-600'; cb.dataset.indice = indice;
+        cb.checked = !livre && indice < 5; cb.disabled = livre;
+        cb.addEventListener('change', escPrevia);
+        const t = document.createElement('span');
+        t.textContent = ESC_DIAS[indice].slice(0, 3) + (livre ? (v.tipo === 'FERIADO' ? ' (feriado)' : ' (folga)') : '');
+        marca.append(cb, t); dias.appendChild(marca);
+    });
+    escPrevia();
+    const modal = document.getElementById('escModalSemana');
+    modal.classList.remove('hidden'); modal.classList.add('flex');
+}
+function escMinutosDoDiaModal() {
+    return escContaDia({entrada: document.getElementById('escSemEntrada').value, saida_almoco: document.getElementById('escSemSaidaAlmoco').value,
+                        volta_almoco: document.getElementById('escSemVoltaAlmoco').value, saida: document.getElementById('escSemSaida').value});
+}
+function escPrevia() {
+    const dias = document.querySelectorAll('.esc-sem-dia:checked').length, porDia = escMinutosDoDiaModal();
+    document.getElementById('escSemPrevia').textContent = dias + ' dia(s) × ' + escHoras(porDia) + ' = ' + escHoras(porDia * dias) + ' na semana.';
+}
+['escSemEntrada', 'escSemSaidaAlmoco', 'escSemVoltaAlmoco', 'escSemSaida'].forEach(function (id) {
+    const el = document.getElementById(id); if (el) el.addEventListener('input', escPrevia);
+});
+function escFecharSemana() {
+    const modal = document.getElementById('escModalSemana');
+    modal.classList.add('hidden'); modal.classList.remove('flex'); escLinhaAlvo = null;
+}
+function escAplicarSemana() {
+    if (!escLinhaAlvo) return;
+    const v = {tipo: 'TRABALHO', entrada: document.getElementById('escSemEntrada').value,
+               saida_almoco: document.getElementById('escSemSaidaAlmoco').value,
+               volta_almoco: document.getElementById('escSemVoltaAlmoco').value, saida: document.getElementById('escSemSaida').value};
+    const celulas = escLinhaAlvo.querySelectorAll('.esc-cel');
+    document.querySelectorAll('.esc-sem-dia:checked').forEach(function (marca) {
+        const celula = celulas[parseInt(marca.dataset.indice, 10)];
+        if (celula) escGravar(celula, v);
+    });
+    escFecharSemana();
+}
+document.addEventListener('click', function (ev) { if (ev.target.id === 'escModalSemana') escFecharSemana(); });
+
+document.querySelectorAll('.esc-cel').forEach(escDesenhar);
+document.querySelectorAll('.esc-grid tbody tr').forEach(escRecalcular);
+
 (function () {
     const busca = document.getElementById('esc-gestor-busca');
     if (!busca) return;

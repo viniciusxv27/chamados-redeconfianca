@@ -20,6 +20,7 @@ urlpatterns = [
     # Escala (quadro semanal montado no portal)
     path('ponto/escala/', views.escala, name='escala'),
     path('ponto/escala/salvar/', views.escala_salvar, name='escala_salvar'),
+    path('ponto/escala/replicar/', views.escala_replicar, name='escala_replicar'),
     path('ponto/escala/gestores/', views.escala_gestores, name='escala_gestores'),
 
     # Férias

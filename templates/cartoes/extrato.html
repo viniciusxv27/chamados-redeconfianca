@@ -54,16 +54,16 @@
           <p class="text-2xl font-bold text-gray-900 mt-1 tabular-nums">{{ quantidade }}</p>
           <p class="text-[11px] text-gray-400 mt-0.5">ticket médio {{ ticket_medio|brl_zero }}</p>
         </div>
-        <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
-          <p class="text-[11px] text-gray-500 uppercase font-semibold tracking-wide">Sem comprovante</p>
+        <button type="button" data-filtrar="extSemFoto" class="text-left bg-white border border-gray-200 rounded-2xl p-4 shadow-sm hover:border-purple-300 hover:shadow transition" title="Mostrar só esses no extrato">
+          <p class="text-[11px] text-gray-500 uppercase font-semibold tracking-wide">Sem comprovante <i class="fas fa-filter text-[9px] text-gray-300"></i></p>
           <p class="text-2xl font-bold mt-1 tabular-nums {% if sem_comprovante %}text-amber-600{% else %}text-emerald-600{% endif %}">{{ sem_comprovante }}</p>
-          <p class="text-[11px] text-gray-400 mt-0.5">sem foto anexada</p>
-        </div>
-        <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
-          <p class="text-[11px] text-gray-500 uppercase font-semibold tracking-wide">Sem chamado</p>
+          <p class="text-[11px] text-gray-400 mt-0.5">sem foto nem anexo</p>
+        </button>
+        <button type="button" data-filtrar="extSemChamado" class="text-left bg-white border border-gray-200 rounded-2xl p-4 shadow-sm hover:border-purple-300 hover:shadow transition" title="Mostrar só esses no extrato">
+          <p class="text-[11px] text-gray-500 uppercase font-semibold tracking-wide">Sem chamado <i class="fas fa-filter text-[9px] text-gray-300"></i></p>
           <p class="text-2xl font-bold mt-1 tabular-nums {% if sem_chamado %}text-amber-600{% else %}text-emerald-600{% endif %}">{{ sem_chamado }}</p>
           <p class="text-[11px] text-gray-400 mt-0.5">gasto sem chamado aberto</p>
-        </div>
+        </button>
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1">
@@ -141,6 +141,9 @@
           <input type="checkbox" id="extSemFoto" class="rounded text-purple-600"> só sem comprovante
         </label>
         <label class="inline-flex items-center gap-2 text-xs text-gray-600 px-2 cursor-pointer whitespace-nowrap">
+          <input type="checkbox" id="extSemChamado" class="rounded text-purple-600"> só sem chamado
+        </label>
+        <label class="inline-flex items-center gap-2 text-xs text-gray-600 px-2 cursor-pointer whitespace-nowrap">
           <input type="checkbox" id="extMercadinho" class="rounded text-amber-600"> só Mercadinho
         </label>
         <div class="relative sm:w-64">
@@ -174,7 +177,8 @@
         <tbody class="divide-y divide-gray-100">
           {% for g in gastos %}
           <tr class="ext-linha hover:bg-gray-50"
-              data-categoria="{{ g.categoria_gasto|default:'Sem categoria'|lower }}" data-foto="{% if g.foto %}1{% else %}0{% endif %}"
+              data-categoria="{{ g.categoria_gasto|default:'Sem categoria'|lower }}" data-foto="{% if g.foto or g.comprovantes.all %}1{% else %}0{% endif %}"
+              data-chamado="{% if g.ticket_id %}1{% else %}0{% endif %}"
               data-valor="{{ g.valor|unlocalize }}" data-mercadinho="{% if g.mercadinho %}1{% else %}0{% endif %}"
               data-data="{{ g.data_gasto|date:'Y-m-d' }}" data-estab="{{ g.estabelecimento|default:'' }}" data-lancado="{{ g.criado_por.full_name|default:'' }}"
               data-comp="{% with n=g.comprovantes.all|length %}{% if n %}{{ n }}{% elif g.foto %}1{% else %}0{% endif %}{% endwith %}.{{ g.ticket_id|default:0|stringformat:'09d' }}"
@@ -269,6 +273,7 @@
   const categoria = document.getElementById('extCategoria');
   const semFoto = document.getElementById('extSemFoto');
   const soMercadinho = document.getElementById('extMercadinho');
+  const semChamado = document.getElementById('extSemChamado');
   const linhas = [...caixa.querySelectorAll('.ext-linha')];
   const total = document.getElementById('extTotal');
   const vazio = document.getElementById('extVazio');
@@ -282,6 +287,7 @@
       const ok = (!termo || tr.dataset.busca.includes(termo))
         && (!categoria.value || tr.dataset.categoria === categoria.value)
         && (!semFoto.checked || tr.dataset.foto === '0')
+        && (!semChamado.checked || tr.dataset.chamado === '0')
         && (!soMercadinho.checked || tr.dataset.mercadinho === '1');
       tr.classList.toggle('hidden', !ok);
       if (ok) {
@@ -292,7 +298,15 @@
     total.textContent = brl.format(soma);
     vazio.classList.toggle('hidden', visiveis > 0);
   }
-  [busca, categoria, semFoto, soMercadinho].forEach(function (el) { el.addEventListener('input', aplicar); el.addEventListener('change', aplicar); });
+  // Os cartões "Sem comprovante" / "Sem chamado" do topo ligam o filtro e levam até o extrato.
+  document.querySelectorAll('[data-filtrar]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const caixaFiltro = document.getElementById(b.dataset.filtrar);
+      caixaFiltro.checked = true; aplicar();
+      caixa.scrollIntoView({behavior: 'smooth', block: 'start'});
+    });
+  });
+  [busca, categoria, semFoto, semChamado, soMercadinho].forEach(function (el) { el.addEventListener('input', aplicar); el.addEventListener('change', aplicar); });
 
   /* Ordenação pelo título da coluna: o 1º clique é crescente, o seguinte decrescente.
      Os textos usam a ordem do português (acento e caixa não atrapalham; "—" vazio vai para o fim). */

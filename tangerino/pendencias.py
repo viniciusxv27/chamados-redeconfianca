@@ -93,7 +93,8 @@ def _escalas_do_portal(pessoas, inicio, fim):
             .select_related('escala'))
     saida = {}
     for dia in dias:
-        minutos = minutos_do_dia(dia.entrada, dia.saida_almoco, dia.volta_almoco, dia.saida, dia.folga)
+        minutos = minutos_do_dia(dia.entrada, dia.saida_almoco, dia.volta_almoco, dia.saida,
+                                 dia.folga or dia.feriado)
         saida[(dia.escala.colaborador_id, dia.data)] = minutos * 60
     return saida
 
