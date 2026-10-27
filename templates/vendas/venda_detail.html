@@ -108,7 +108,7 @@
                 </div>
                 <div class="mt-2 flex flex-wrap gap-1.5 text-[11px]">
                     {% for l in s.linhas %}<span class="px-2 py-0.5 rounded-full {% if s.numero_fake %}bg-amber-100 text-amber-800{% else %}bg-gray-100 text-gray-700{% endif %} tabular"><i class="fas fa-phone mr-0.5"></i>{{ l }}</span>{% endfor %}
-                    {% if s.plano_anterior_nome %}<span class="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">antes: {{ s.plano_anterior_nome }}{% if s.valor_anterior is not None %} ({{ s.valor_anterior|brl }}){% endif %}</span>{% endif %}
+                    {% if s.plano_anterior_nome %}<span class="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">antes: {{ s.plano_anterior_nome }}{% if s.valor_anterior is not None %} ({{ s.valor_anterior|brl }}){% endif %}{% if s.plano_anterior_fora_id %} <span class="text-amber-700">· fora do portfólio</span>{% endif %}</span>{% endif %}
                     {% if s.serial_simcard %}<span class="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 tabular">SimCard {{ s.serial_simcard }}</span>{% endif %}
                     {% if s.ativacao_confirmada %}<span class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700"><i class="fas fa-check mr-0.5"></i>ativação confirmada</span>{% endif %}
                     {% if s.novo_titular_nome %}<span class="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">novo titular: {{ s.novo_titular_nome }}</span>{% endif %}

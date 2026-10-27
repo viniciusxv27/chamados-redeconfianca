@@ -241,6 +241,8 @@ class VendaServico(models.Model):
     plano_anterior = models.ForeignKey('Plano', on_delete=models.SET_NULL, null=True, blank=True, related_name='+',
                                        verbose_name='Plano anterior')
     plano_anterior_nome = models.CharField(max_length=200, blank=True, default='', db_default='', verbose_name='Plano anterior (texto)')
+    plano_anterior_fora = models.ForeignKey('PlanoForaPortfolio', on_delete=models.SET_NULL, null=True, blank=True,
+                                            related_name='+', verbose_name='Plano anterior fora do portfólio')
     valor_anterior = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, verbose_name='Valor anterior')
     delta = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, verbose_name='Delta')
     linhas = models.JSONField(default=list, db_default=[], blank=True, verbose_name='Linhas do cliente')
@@ -287,6 +289,35 @@ class Plano(models.Model):
 
     def __str__(self):
         return f'{self.get_segmentacao_display()} — {self.nome}'
+
+
+class PlanoForaPortfolio(models.Model):
+    """Plano que o cliente tem e a Vivo não vende mais (ou que nunca entrou na Parametrização).
+
+    Só aparece no plano anterior da Reativação, Migração e Troca de plano. A lista nasce do
+    histórico do VivoGo (vendas_servicos: plano novo e plano antigo de cada venda), sem os nomes
+    que já existem como plano normal (planos_fora.importar_do_vivogo).
+    """
+
+    ORIGENS = [('VIVOGO', 'Histórico do VivoGo'), ('MANUAL', 'Cadastro manual')]
+
+    nome = models.CharField(max_length=200, verbose_name='Nome do plano')
+    valor = models.DecimalField(max_digits=12, decimal_places=2, verbose_name='Valor mensal (R$)')
+    segmentacao = models.CharField(max_length=10, choices=SEGMENTACOES, blank=True, default='', verbose_name='Segmentação')
+    ativo = models.BooleanField(default=True, verbose_name='Ativo')
+    origem = models.CharField(max_length=10, choices=ORIGENS, default='VIVOGO', verbose_name='Origem')
+    vendas = models.PositiveIntegerField(default=0, verbose_name='Vendas no VivoGo')
+    ultima_venda = models.DateField(null=True, blank=True, verbose_name='Última venda no VivoGo')
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Plano fora do portfólio'
+        verbose_name_plural = 'Planos fora do portfólio'
+        ordering = ['nome', 'valor']
+        constraints = [models.UniqueConstraint(fields=['nome', 'valor'], name='vendas_plano_fora_nome_valor')]
+
+    def __str__(self):
+        return f'{self.nome} — R$ {self.valor}'
 
 
 class ConfiguracaoVendas(models.Model):
@@ -389,7 +420,8 @@ class RegistroAlteracao(models.Model):
     """[Confiabilidade.NF001] Histórico: data, usuário, PDV, valor anterior e novo."""
 
     TIPOS = [('PLANO', 'Plano'), ('VIVO_MAIS', 'Percentual Vivo+'), ('CLIENTE', 'Cliente'), ('SERIAL', 'Serial obrigatório'),
-             ('SERVICO_ADICIONAL', 'Seguro / SVA'), ('ACESSO', 'Acesso ao módulo')]
+             ('SERVICO_ADICIONAL', 'Seguro / SVA'), ('ACESSO', 'Acesso ao módulo'),
+             ('PLANO_FORA', 'Plano fora do portfólio')]
     tipo = models.CharField(max_length=20, choices=TIPOS, db_index=True, verbose_name='O que mudou')
     objeto_id = models.PositiveIntegerField(null=True, blank=True, db_index=True)
     objeto_rotulo = models.CharField(max_length=200, blank=True, verbose_name='Registro')

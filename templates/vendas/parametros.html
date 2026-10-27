@@ -74,6 +74,48 @@
             {% empty %}<p class="text-sm text-gray-400 sm:col-span-2 text-center py-4">Nenhum seguro ou SVA cadastrado — o vendedor só consegue lançar esses serviços depois do cadastro aqui.</p>{% endfor %}
         </div>
     </section>
+
+    {% comment %}Planos fora do portfólio (27/10/2026): o plano que o cliente tem e não é vendido — só no plano anterior da Reativação, Migração e Troca de plano.{% endcomment %}
+    <section class="vd-card overflow-hidden" id="foraPortfolio">
+        <div class="px-5 py-3 border-b border-gray-100 flex items-center justify-between gap-2 flex-wrap">
+            <h2 class="text-sm font-bold text-gray-900"><i class="fas fa-box-archive text-amber-600 mr-1.5"></i>Planos que não têm no portfólio <span class="font-normal text-gray-500">· {{ planos_fora_total }}</span></h2>
+            <div class="flex gap-2">
+                <form method="post" action="{% url 'vendas:parametros_fora' %}" onsubmit="this.querySelector('button').disabled=true;this.querySelector('button').innerHTML='<i class=\'fas fa-circle-notch fa-spin mr-1\'></i>Lendo o VivoGo…'">
+                    {% csrf_token %}<input type="hidden" name="acao" value="importar">
+                    <button class="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 text-xs font-semibold" title="Lê os planos (novo e antigo) das vendas de serviço do VivoGo até 27/10/2026 e sobe os que não são plano normal"><i class="fas fa-rotate mr-1"></i>Atualizar do VivoGo</button>
+                </form>
+                <button type="button" class="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold" onclick="vdFora()"><i class="fas fa-plus mr-1"></i>Novo</button>
+            </div>
+        </div>
+        <form method="post" action="{% url 'vendas:parametros_fora' %}" id="vdFormFora" class="hidden px-5 py-4 border-b border-gray-100 bg-gray-50 grid grid-cols-1 sm:grid-cols-6 gap-3 items-end">
+            {% csrf_token %}<input type="hidden" name="id">
+            <div class="sm:col-span-2"><label class="vd-rotulo">Nome *</label><input name="nome" class="vd-campo" required maxlength="200"></div>
+            <div><label class="vd-rotulo">Segmentação</label><select name="segmentacao" class="vd-campo"><option value="">—</option>
+                {% for k, r in segmentacoes %}<option value="{{ k }}">{{ r }}</option>{% endfor %}</select></div>
+            <div><label class="vd-rotulo">Valor mensal (R$) *</label><input name="valor" class="vd-campo text-right tabular" inputmode="decimal" required placeholder="0,00"></div>
+            <label class="flex items-center gap-2 text-sm text-gray-700 pb-2.5" id="vdForaAtivo"><input type="checkbox" name="ativo" class="rounded text-purple-600" checked>Ativo</label>
+            <div class="flex gap-2"><button type="button" class="px-3 py-2.5 rounded-lg border border-gray-300 text-sm text-gray-600" onclick="this.form.classList.add('hidden')">Cancelar</button>
+                <button class="flex-1 px-3 py-2.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold">Salvar</button></div>
+        </form>
+        <div class="px-5 pt-3">
+            <p class="text-[11px] text-gray-500 mb-2"><i class="fas fa-circle-info mr-1"></i>Aparecem só como <strong>plano anterior</strong> na venda de Reativação, Migração e Troca de plano. Nome que já é plano normal (de qualquer segmentação) não entra.</p>
+            <div class="relative"><i class="fas fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+                <input type="search" id="vdBuscaFora" class="vd-campo !pl-8" placeholder="Buscar plano ou valor…" autocomplete="off" aria-label="Buscar plano fora do portfólio"></div>
+        </div>
+        <ul class="divide-y divide-gray-100 max-h-[28rem] overflow-y-auto mt-2" id="vdListaFora">
+            {% for p in planos_fora %}
+            <li>
+                <button type="button" class="w-full text-left px-5 py-2 flex items-center justify-between gap-3 hover:bg-gray-50 {% if not p.ativo %}opacity-60{% endif %}"
+                        onclick="vdFora({{ p.id }}, '{{ p.nome|escapejs }}', '{{ p.segmentacao }}', '{{ p.valor|unlocalize }}', {{ p.ativo|yesno:'true,false' }})">
+                    <span class="min-w-0"><span class="block text-sm text-gray-900 truncate">{{ p.nome }}</span>
+                        <span class="text-[10px] text-gray-500">{{ p.get_segmentacao_display|default:"sem segmentação" }}{% if p.vendas %} · {{ p.vendas }} venda{{ p.vendas|pluralize }} no VivoGo{% endif %}{% if p.ultima_venda %} · última em {{ p.ultima_venda|date:"d/m/Y" }}{% endif %}{% if p.origem == 'MANUAL' %} · cadastro manual{% endif %}{% if not p.ativo %} · <span class="px-1 rounded bg-gray-200 text-gray-600">inativo</span>{% endif %}</span></span>
+                    <span class="text-sm font-semibold text-amber-700 tabular whitespace-nowrap">{{ p.valor|brl }}</span>
+                </button>
+            </li>
+            {% empty %}<li class="px-5 py-6 text-center text-sm text-gray-400">Nenhum plano ainda — use "Atualizar do VivoGo".</li>{% endfor %}
+        </ul>
+        <p id="vdForaRodape" class="px-5 py-2 text-[11px] text-gray-400 border-t border-gray-100">{% if planos_fora_total > planos_fora|length %}Mostrando os {{ planos_fora|length }} mais vendidos de {{ planos_fora_total }} — busque para achar os outros.{% endif %}</p>
+    </section>
 </div>
 
 <aside class="space-y-4">
@@ -134,6 +176,43 @@ function vdPlano(id, nome, seg, valor, ativo) {
     document.getElementById('vdPlanoAtivo').classList.toggle('hidden', !id);
     f.classList.remove('hidden'); f.nome.focus();
 }
+function vdFora(id, nome, seg, valor, ativo) {
+    const f = document.getElementById('vdFormFora');
+    f.elements['id'].value = id || ''; f.nome.value = nome || ''; f.segmentacao.value = seg || '';
+    f.valor.value = valor ? String(valor).replace('.', ',') : ''; f.ativo.checked = ativo !== false;
+    document.getElementById('vdForaAtivo').classList.toggle('hidden', !id);
+    f.classList.remove('hidden'); f.nome.focus();
+}
+(function () {
+    // Busca no servidor: a lista tem milhares de planos (histórico do VivoGo) e não cabe na página.
+    const busca = document.getElementById('vdBuscaFora'); if (!busca) return;
+    const lista = document.getElementById('vdListaFora'), rodape = document.getElementById('vdForaRodape');
+    const inicial = lista.innerHTML, rodapeInicial = rodape.innerHTML;
+    const esc = function (t) { const s = document.createElement('span'); s.textContent = t == null ? '' : t; return s.innerHTML; };
+    const brl = function (n) { return 'R$ ' + Number(n).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}); };
+    let t = null, itens = [];
+    busca.addEventListener('input', function () {
+        clearTimeout(t);
+        const q = busca.value.trim();
+        if (q.length < 2) { lista.innerHTML = inicial; rodape.innerHTML = rodapeInicial; return; }
+        t = setTimeout(async function () {
+            const r = await fetch('{% url "vendas:api_planos_fora" %}?admin=1&q=' + encodeURIComponent(q), {headers: {'Accept': 'application/json'}});
+            itens = (await r.json()).itens || [];
+            lista.innerHTML = itens.length ? itens.map(function (p, i) {
+                return '<li><button type="button" class="w-full text-left px-5 py-2 flex items-center justify-between gap-3 hover:bg-gray-50' + (p.ativo ? '' : ' opacity-60') + '" data-i="' + i + '">' +
+                    '<span class="min-w-0"><span class="block text-sm text-gray-900 truncate">' + esc(p.nome) + '</span><span class="text-[10px] text-gray-500">' +
+                    esc(p.segmentacao || 'sem segmentação') + (p.vendas ? ' · ' + p.vendas + ' venda' + (p.vendas > 1 ? 's' : '') + ' no VivoGo' : '') +
+                    (p.ultima ? ' · última em ' + p.ultima : '') + (p.manual ? ' · cadastro manual' : '') + (p.ativo ? '' : ' · inativo') + '</span></span>' +
+                    '<span class="text-sm font-semibold text-amber-700 tabular whitespace-nowrap">' + brl(p.valor) + '</span></button></li>';
+            }).join('') : '<li class="px-5 py-6 text-center text-sm text-gray-400">Nenhum plano com essa busca.</li>';
+            rodape.textContent = itens.length === 100 ? 'Mostrando os 100 primeiros — refine a busca.' : '';
+        }, 250);
+    });
+    lista.addEventListener('click', function (e) {
+        const b = e.target.closest('[data-i]'); if (!b) return;
+        const p = itens[Number(b.dataset.i)]; vdFora(p.id, p.nome, p.seg, p.valor, p.ativo);
+    });
+})();
 function vdAdicional(id, tipo, nome, valor, ativo) {
     const f = document.getElementById('vdFormAdicional');
     f.elements['id'].value = id || ''; f.tipo.value = tipo || 'SEGURO'; f.nome.value = nome || '';

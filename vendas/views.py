@@ -24,7 +24,7 @@ from openpyxl.utils import get_column_letter
 from users.models import Sector, User
 
 from . import slv
-from .models import (SEGMENTACOES, Cliente, ConfiguracaoVendas, ImportacaoPrecos, ItemPreco, Plano,
+from .models import (SEGMENTACOES, Cliente, ConfiguracaoVendas, ImportacaoPrecos, ItemPreco, Plano, PlanoForaPortfolio,
                      RegistroAlteracao, ServicoAdicional, Venda, VendaProduto, VendaServico)
 from .permissions import exige, pode, ve_rede, vendas_do_usuario
 from .clientes import buscar_historico
@@ -765,6 +765,9 @@ def parametros(request):
         'segmentacoes': SEGMENTACOES,
         'config': config,
         'adicionais': ServicoAdicional.objects.all(),
+        # São milhares (histórico do VivoGo): a tela abre com os mais vendidos e acha o resto pela busca.
+        'planos_fora': PlanoForaPortfolio.objects.order_by('-vendas', 'nome')[:50],
+        'planos_fora_total': PlanoForaPortfolio.objects.count(),
         'historico': RegistroAlteracao.objects.exclude(tipo__in=['CLIENTE', 'ACESSO']).select_related('usuario')[:60],
     })
 
@@ -836,6 +839,86 @@ def parametros_vivo_mais(request):
                              request.user, rotulo='Vivo+')
     messages.success(request, f'Desconto Vivo+ agora é {percentual}% — vale para as vendas lançadas a partir de agora.')
     return _voltar_parametros()
+
+
+@login_required
+@require_POST
+@exige('parametros.gerenciar')
+def parametros_fora(request):
+    """Planos fora do portfólio: atualizar do VivoGo, cadastrar à mão, editar e inativar."""
+    from .planos_fora import chave, importar_do_vivogo
+
+    if request.POST.get('acao') == 'importar':
+        try:
+            r = importar_do_vivogo()
+        except Exception as exc:  # noqa: BLE001 — VivoGo fora do ar: a tela avisa, nada muda
+            messages.error(request, f'Não deu para ler o VivoGo agora ({type(exc).__name__}). Nada mudou.')
+            return _voltar_parametros()
+        slv.registrar_alteracoes('PLANO_FORA', None, [('importado', 'Atualizado do VivoGo', '',
+                                                       f"{r['novos']} novos · {r['atualizados']} atualizados")],
+                                 request.user, rotulo='Planos fora do portfólio')
+        messages.success(request, f"VivoGo lido: {r['novos']} plano(s) novo(s) na lista, {r['atualizados']} atualizado(s) "
+                                  f"e {r['ja_normais']} que já são plano normal ficaram de fora.")
+        return _voltar_parametros()
+
+    item = (PlanoForaPortfolio.objects.filter(pk=request.POST.get('id')).first()
+            if (request.POST.get('id') or '').isdigit() else None)
+    nome = ' '.join((request.POST.get('nome') or '').split())[:200]
+    segmentacao = request.POST.get('segmentacao') or ''
+    valor = slv.dinheiro(request.POST.get('valor'))
+    ativo = request.POST.get('ativo') == 'on' if item else True
+    if not nome or valor is None or valor < 0 or (segmentacao and segmentacao not in dict(SEGMENTACOES)):
+        messages.error(request, 'Plano fora do portfólio não gravado: informe nome e valor.')
+        return _voltar_parametros()
+    if chave(nome) in {chave(n) for n in Plano.objects.values_list('nome', flat=True)}:
+        messages.error(request, f'"{nome}" já é plano normal — escolha-o na lista de planos.')
+        return _voltar_parametros()
+    repetido = PlanoForaPortfolio.objects.filter(nome__iexact=nome, valor=valor).exclude(pk=getattr(item, 'pk', None))
+    if repetido.exists():
+        messages.error(request, f'"{nome}" de R$ {valor} já está na lista.')
+        return _voltar_parametros()
+    segmentos = dict(SEGMENTACOES)
+    if item is None:
+        item = PlanoForaPortfolio.objects.create(nome=nome, valor=valor, segmentacao=segmentacao, origem='MANUAL')
+        slv.registrar_alteracoes('PLANO_FORA', item, [('criado', 'Plano fora do portfólio criado', '', str(item))], request.user)
+    else:
+        mudancas = [('nome', 'Nome', item.nome, nome), ('valor', 'Valor', item.valor, valor),
+                    ('segmentacao', 'Segmentação', segmentos.get(item.segmentacao, ''), segmentos.get(segmentacao, '')),
+                    ('ativo', 'Situação', 'ativo' if item.ativo else 'inativo', 'ativo' if ativo else 'inativo')]
+        item.nome, item.valor, item.segmentacao, item.ativo = nome, valor, segmentacao, ativo
+        item.save()
+        slv.registrar_alteracoes('PLANO_FORA', item, mudancas, request.user)
+    messages.success(request, f'Plano fora do portfólio {nome} gravado.')
+    return _voltar_parametros()
+
+
+@login_required
+@exige('vendas.lancar', 'parametros.gerenciar')
+def api_planos_fora(request):
+    """Busca do plano anterior fora do portfólio (Reativação, Migração e Troca de plano).
+
+    ``?admin=1`` (Parametrização) traz também os inativos e o histórico de vendas.
+    """
+    from .planos_fora import chave
+
+    admin = request.GET.get('admin') == '1' and pode(request.user, 'parametros.gerenciar')
+
+    # Comparado sem acento em Python: "pos" acha "Pós" (são poucos milhares de linhas).
+    termos = chave(request.GET.get('q')).split()[:6]
+    segmentos = dict(SEGMENTACOES)
+    itens = []
+    qs = PlanoForaPortfolio.objects.all() if admin else PlanoForaPortfolio.objects.filter(ativo=True)
+    for p in qs.order_by('-vendas', 'nome'):
+        alvo = chave(f'{p.nome} {p.valor} {p.valor}'.replace('.', ',', 1))
+        if all(t in alvo for t in termos):
+            item = {'id': p.id, 'nome': p.nome, 'valor': str(p.valor), 'segmentacao': segmentos.get(p.segmentacao, '')}
+            if admin:
+                item.update(seg=p.segmentacao, ativo=p.ativo, vendas=p.vendas, manual=p.origem == 'MANUAL',
+                            ultima=p.ultima_venda.strftime('%d/%m/%Y') if p.ultima_venda else '')
+            itens.append(item)
+            if len(itens) == (100 if admin else 30):
+                break
+    return JsonResponse({'ok': True, 'itens': itens})
 
 
 @login_required

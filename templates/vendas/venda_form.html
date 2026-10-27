@@ -242,7 +242,7 @@
     const URL = {
         cliente: '{% url "vendas:api_cliente" %}', salvarCliente: '{% url "vendas:api_cliente_salvar" %}',
         historico: '{% url "vendas:cliente_historico" %}', buscar: '{% url "vendas:precos_buscar" %}',
-        renova: '{% url "vendas:api_renova" %}', confirmar: '{% url "vendas:venda_create" %}',
+        renova: '{% url "vendas:api_renova" %}', planosFora: '{% url "vendas:api_planos_fora" %}', confirmar: '{% url "vendas:venda_create" %}',
         ficha: '{% url "vendas:cliente_detalhe" "00000000000" %}',
     };
     const CSRF = document.querySelector('[name=csrfmiddlewaretoken]').value;
@@ -757,18 +757,65 @@
             segmentos.map(function (k) { return '<label><input type="radio" name="' + chave + 'Seg" value="' + k + '" class="sr-only"' + (valorSeg === k ? ' checked' : '') + '><span class="vd-chip !py-1.5 text-xs">' + SEG[k] + '</span></label>'; }).join('') +
             '</div><select class="vd-campo" data-sel="' + chave + '"><option value="">Escolha a segmentação…</option></select></div>';
     }
+    // Plano que o cliente tem e a Vivo não vende mais (Parametrização → Planos que não têm no portfólio).
+    let foraEscolhido = null, tFora = null;
+    function campoPlanoFora() {
+        return '<div class="rounded-lg border border-amber-200 bg-amber-50/60 p-3 space-y-1.5">' +
+            '<label class="vd-rotulo" for="vdForaBusca"><i class="fas fa-box-archive text-amber-600 mr-1"></i>Plano anterior que não tem no portfólio</label>' +
+            '<div class="relative"><input id="vdForaBusca" class="vd-campo" autocomplete="off" placeholder="Busque o plano antigo do cliente (nome ou valor)…">' +
+            '<div id="vdForaLista" class="hidden absolute left-0 right-0 mt-1 vd-card vd-lista-busca z-30 max-h-64 overflow-y-auto"></div></div>' +
+            '<input type="hidden" data-f="fora"><p class="vd-ajuda" id="vdForaNota">Só quando o plano do cliente não está na lista de planos. Ele vale como plano anterior.</p></div>';
+    }
+    function marcarFora(p) {
+        foraEscolhido = p;
+        const c = $('vdCamposServico'), oculto = c.querySelector('[data-f=fora]'); if (!oculto) return;
+        oculto.value = p ? p.id : '';
+        $('vdForaBusca').value = p ? p.nome : '';
+        $('vdForaNota').innerHTML = p ? '<span class="text-amber-800 font-semibold">Plano anterior: ' + esc(p.nome) + ' · ' + brl(p.valor) + '</span> ' +
+            '<button type="button" class="ml-1 text-purple-700 hover:underline" data-fora-limpar>tirar</button>'
+            : 'Só quando o plano do cliente não está na lista de planos. Ele vale como plano anterior.';
+    }
+    $('vdCamposServico').addEventListener('input', function (e) {
+        if (e.target.id !== 'vdForaBusca') return;
+        if (foraEscolhido) marcarFora(null);
+        clearTimeout(tFora);
+        const q = e.target.value.trim(), lista = $('vdForaLista');
+        if (q.length < 2) { lista.classList.add('hidden'); return; }
+        tFora = setTimeout(async function () {
+            let j;
+            try { j = await pedir(URL.planosFora + '?q=' + encodeURIComponent(q)); } catch (err) { j = {itens: []}; }
+            const itens = j.itens || [];
+            lista._itens = itens;
+            lista.innerHTML = itens.length ? itens.map(function (p, i) {
+                return '<button type="button" class="w-full text-left px-3 py-2 hover:bg-purple-50 flex justify-between gap-2 text-sm" data-fora-i="' + i + '">' +
+                    '<span class="min-w-0"><span class="block truncate">' + esc(p.nome) + '</span><span class="text-[10px] text-gray-500">' + esc(p.segmentacao || 'sem segmentação') + '</span></span>' +
+                    '<span class="tabular font-semibold whitespace-nowrap">' + brl(p.valor) + '</span></button>';
+            }).join('') : '<p class="px-3 py-2 text-sm text-gray-500">Nenhum plano com essa busca.</p>';
+            lista.classList.remove('hidden');
+        }, 200);
+    });
+    $('vdCamposServico').addEventListener('click', function (e) {
+        const b = e.target.closest('[data-fora-i]');
+        if (b) { const lista = $('vdForaLista'); marcarFora(lista._itens[Number(b.dataset.foraI)]); lista.classList.add('hidden'); return; }
+        if (e.target.closest('[data-fora-limpar]')) marcarFora(null);
+    });
+    document.addEventListener('click', function (e) {
+        const lista = $('vdForaLista');
+        if (lista && !e.target.closest('#vdForaLista') && e.target.id !== 'vdForaBusca') lista.classList.add('hidden');
+    });
     function desenharCamposServico() {
         const t = $('vdTipoServico').value, c = $('vdCamposServico');
         // [IU001] trocar o serviço limpa os campos dependentes.
         let html = '';
         const todos = ['POS', 'CONTROLE', 'PRE', 'EMPRESAS', 'FIBRA'];
         if (t === 'ALTA') html = seletorPlano('Segmentação e plano *', 'novo', todos);
-        if (t === 'REATIVACAO') html = seletorPlano('Segmentação e plano *', 'novo', ['POS', 'CONTROLE']);
+        if (t === 'REATIVACAO') html = seletorPlano('Segmentação e plano *', 'novo', ['POS', 'CONTROLE']) + campoPlanoFora();
         if (t === 'TROCA_PLANO' || t === 'MIGRACAO') {
             html = '<div class="rounded-lg bg-gray-50 p-3 text-sm" id="vdAntPlanoInfo"></div>' +
                 seletorPlano('Plano anterior (confirme ou corrija)', 'ant', ['CONTROLE', 'POS', 'PRE'], segCliente(), $('vdPaPlano').value) +
-                seletorPlano('Novo plano *', 'novo', todos);
+                campoPlanoFora() + seletorPlano('Novo plano *', 'novo', todos);
         }
+        foraEscolhido = null;
         if (t === 'TROCA_SIMCARD') html = seletorPlano('Segmentação e plano do cliente *', 'novo', todos, segCliente(), $('vdPaPlano').value) +
             '<div><label class="vd-rotulo">Serial do SimCard (ICCID) *</label><input class="vd-campo tabular" data-f="serial" inputmode="numeric" maxlength="22" placeholder="8955…"><p class="vd-ajuda">19 ou 20 números, começando por 89.</p></div>';
         if (t === 'SEGURO' || t === 'SVA') {
@@ -805,7 +852,9 @@
         const v = function (sel) { const el = c.querySelector(sel); return el ? el.value.trim() : ''; };
         const s = {tipo: t, plano_id: v('[data-sel=novo]'), plano_anterior_id: v('[data-sel=ant]'), serial: so(v('[data-f=serial]')),
                    servico_adicional_id: v('[data-f=adicional]'), novo_titular_cpf: so(v('[data-f=titular_cpf]')),
-                   novo_titular_nome: v('[data-f=titular_nome]'), numero_novo: so(v('[data-f=numero_novo]')), ativacao_confirmada: false};
+                   novo_titular_nome: v('[data-f=titular_nome]'), numero_novo: so(v('[data-f=numero_novo]')), ativacao_confirmada: false,
+                   plano_fora_id: v('[data-f=fora]')};
+        if (foraEscolhido && s.plano_fora_id) s.plano_fora = foraEscolhido;
         const erro = [];
         if (['ALTA', 'REATIVACAO', 'TROCA_PLANO', 'MIGRACAO', 'TROCA_SIMCARD', 'TROCA_TITULARIDADE'].indexOf(t) >= 0 && !s.plano_id) erro.push('Escolha a segmentação e o plano.');
         if (t === 'TROCA_SIMCARD' && !/^89\d{17,18}$/.test(s.serial)) erro.push('Serial do SimCard: 19 ou 20 números começando por 89.');
@@ -834,7 +883,8 @@
         const adic = SLV.adicionais.find(function (a) { return String(a.id) === String(s.servico_adicional_id); });
         s.rotulo = TIPOS[s.tipo]; s.plano_nome = plano ? plano.nome : ''; s.valor = plano ? Number(plano.valor) : (adic ? Number(adic.valor) : 0);
         s.descricao = plano ? (SEG[plano.segmentacao] + ' · ' + plano.nome) : (adic ? adic.nome : (s.numero_novo ? 'Novo número ' + mascaraTel(s.numero_novo) : ''));
-        s.valor_anterior = ant ? Number(ant.valor) : num($('vdPaValor').value);
+        s.valor_anterior = s.plano_fora ? Number(s.plano_fora.valor) : (ant ? Number(ant.valor) : num($('vdPaValor').value));
+        if (s.plano_fora) s.descricao += ' · antes: ' + s.plano_fora.nome + ' (fora do portfólio)';
         estado.servicos.push(s);
         $('vdTipoServico').value = ''; desenharCamposServico(); desenharServicos(); recalcular();
     }

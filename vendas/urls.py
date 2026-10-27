@@ -28,4 +28,6 @@ urlpatterns = [
     path('parametros/vivo-mais/', views.parametros_vivo_mais, name='parametros_vivo_mais'),
     path('parametros/serial/', views.parametros_serial, name='parametros_serial'),
     path('parametros/adicional/', views.parametros_adicional, name='parametros_adicional'),
+    path('parametros/fora-do-portfolio/', views.parametros_fora, name='parametros_fora'),
+    path('api/planos-fora/', views.api_planos_fora, name='api_planos_fora'),
 ]
