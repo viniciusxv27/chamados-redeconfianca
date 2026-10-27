@@ -349,11 +349,21 @@ def _nota_conteudos(user, tipos, pontos, inicio, fim, periodo_dentro_do_mes=Fals
     recusados = feitas.filter(
         aprovacao=ConclusaoConteudo.Aprovacao.RECUSADA).count()
     nota = pontos * Decimal(concluidos) / Decimal(total)
+    # O que entrou na conta, item a item: sem isto a tela dizia "3 de 4" e ninguém achava o 4º
+    # (um vídeo junto dos POPs, um conteúdo "para toda a equipe", uma entrega ainda não conferida).
+    # Só texto e bool: o detalhamento vai para um JSONField no fechamento do mês.
+    situacao = dict(feitas.values_list('conteudo_id', 'aprovacao'))
+    com_destino = set(ConteudoConectar.objects.filter(id__in=ids, obrigatorio_para__isnull=False)
+                      .values_list('id', flat=True))
+    itens = [{'id': c.id, 'titulo': c.titulo, 'tipo': c.get_tipo_display(), 'para_todos': c.id not in com_destino,
+              'situacao': situacao.get(c.id) or 'NAO_FEITO'}
+             for c in sorted(conteudos, key=lambda c: (c.tipo, c.titulo.lower()))]
     return _quantize(nota), pontos, {
         'total': total, 'concluidos': concluidos,
         # A tela precisa distinguir "ainda não fiz" de "fiz e espera
         # conferência": o segundo não é culpa de quem fez.
         'aguardando': aguardando, 'recusados': recusados,
+        'itens': itens,
     }
 
 
@@ -647,6 +657,21 @@ def blocos_resumo(dados):
     ]
 
 
+def _info_conteudos(d):
+    """"3 de 4 aprovado(s) · 1 aguardando conferência · 3 POP + 1 vídeo" — o que a conta enxergou."""
+    partes = ['%s de %s aprovado(s)' % (d.get('concluidos', 0), d.get('total', 0))]
+    if d.get('aguardando'):
+        partes.append('%s aguardando conferência' % d['aguardando'])
+    if d.get('recusados'):
+        partes.append('%s recusado(s)' % d['recusados'])
+    tipos = {}
+    for item in d.get('itens') or []:
+        tipos[item['tipo']] = tipos.get(item['tipo'], 0) + 1
+    if len(tipos) > 1:
+        partes.append(' + '.join('%s %s' % (n, t) for t, n in sorted(tipos.items())))
+    return ' · '.join(partes)
+
+
 def linhas_detalhadas(dados):
     """Formata o cálculo para as telas de detalhamento (uma linha por item)."""
     d = dados['detalhes']
@@ -677,15 +702,15 @@ def linhas_detalhadas(dados):
          'info': _info_assiduidade(d['assiduidade'])},
         {'bloco': 'CONECTAR', 'item': 'Curso do mês',
          'pontos': dados['p_curso'], 'max': pt('curso', tabela=tabela),
-         'info': ('%s de %s concluído(s)' % (
-             d['curso'].get('concluidos', 0), d['curso'].get('total', 0)))
-         if not d['curso'].get('sem_conteudo') else 'Nenhum curso obrigatório no mês'},
+         'info': _info_conteudos(d['curso'])
+         if not d['curso'].get('sem_conteudo') else 'Nenhum curso obrigatório no mês',
+         'itens': d['curso'].get('itens') or []},
         {'bloco': 'CONECTAR', 'item': 'Vídeos e POPs',
          'pontos': dados['p_videos_pops'], 'max': pt('videos_pops', tabela=tabela),
-         'info': ('%s de %s concluído(s)' % (
-             d['videos_pops'].get('concluidos', 0), d['videos_pops'].get('total', 0)))
+         'info': _info_conteudos(d['videos_pops'])
          if not d['videos_pops'].get('sem_conteudo')
-         else 'Nenhum vídeo/POP obrigatório com período dentro do mês'},
+         else 'Nenhum vídeo/POP obrigatório com período dentro do mês',
+         'itens': d['videos_pops'].get('itens') or []},
         {'bloco': 'CONECTAR', 'item': 'Projeto foco',
          'pontos': dados['p_projeto_foco'], 'max': pt('projeto_foco', tabela=tabela),
          'info': _info_projeto_foco(d['projeto_foco'])},

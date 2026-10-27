@@ -2235,7 +2235,11 @@ def conectar_list(request):
     # "o conteúdo chamado Ana". Quem procura conteúdo tem o título na tela.
     f = filtros_impulso.ler(request)
     if f['nome'] or f['setor']:
-        conteudos = filtros_impulso.por(conteudos, f, 'obrigatorio_para')
+        # O conteúdo "para toda a equipe" (sem destinatário) também é da pessoa procurada — e conta
+        # na pontuação dela. Sem ele aqui, a lista mostrava 3 POPs e o acompanhamento contava 4.
+        da_pessoa = set(filtros_impulso.por(conteudos, f, 'obrigatorio_para').values_list('id', flat=True))
+        para_todos = set(conteudos.filter(obrigatorio_para__isnull=True).values_list('id', flat=True))
+        conteudos = conteudos.filter(id__in=da_pessoa | para_todos)
     # Conteúdo sem período vale sempre e continua aparecendo no mês filtrado —
     # é a maior parte do catálogo, sumir com ele esvaziaria a tela.
     conteudos = filtros_impulso.por_periodo(conteudos, f, 'inicio', 'fim')

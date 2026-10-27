@@ -70,6 +70,19 @@
                 <div class="flex-1 min-w-0">
                     <p class="text-sm text-gray-800">{{ l.item }}</p>
                     <p class="text-xs text-gray-400">{{ l.info }}</p>
+                    {% if l.itens %}
+                    <ul class="mt-1.5 space-y-0.5">
+                        {% for it in l.itens %}
+                        <li class="flex items-center gap-1.5 flex-wrap text-[11px]">
+                            <span class="px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 font-semibold">{{ it.tipo }}</span>
+                            <a href="{% url 'impulso:conteudo_detail' it.id %}" class="text-gray-700 hover:text-orange-600 hover:underline">{{ it.titulo }}</a>
+                            {% if it.para_todos %}<span class="px-1.5 py-0.5 rounded bg-cyan-50 text-cyan-700" title="Sem destinatário: vale para toda a equipe">para toda a equipe</span>{% endif %}
+                            <span class="px-1.5 py-0.5 rounded {% if it.situacao == 'APROVADA' %}bg-emerald-50 text-emerald-700{% elif it.situacao == 'PENDENTE' %}bg-amber-50 text-amber-700{% elif it.situacao == 'RECUSADA' %}bg-red-50 text-red-700{% else %}bg-gray-50 text-gray-500{% endif %}">
+                                {% if it.situacao == 'APROVADA' %}aprovado{% elif it.situacao == 'PENDENTE' %}concluído · aguardando conferência{% elif it.situacao == 'RECUSADA' %}recusado{% else %}não feito{% endif %}</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% endif %}
                 </div>
                 <span class="text-sm font-semibold tabular-nums text-gray-900 flex-shrink-0">{{ l.pontos|floatformat:"-1" }}<span class="text-gray-400 font-normal">/{{ l.max|floatformat:"-1" }}</span></span>
             </div>
