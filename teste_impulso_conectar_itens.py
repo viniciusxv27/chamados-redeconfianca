@@ -181,5 +181,16 @@ t('mostra os POPs dela', 'ZZI POP 1' in html)
 t('o filtro valeu (POP de outra pessoa some)', 'ZZI POP do Bruno' not in html)
 t('mostra o POP "para toda a equipe"', 'ZZI POP da equipe toda' in html)
 
+print('Link longo no curso (27/10/2026: link de campanha com 269 caracteres dava erro 500)')
+longo = 'https://www.exemplo-teste.local/curso?utm_medium=email&_hsenc=' + 'x' * 220
+r = cli.post('/impulso/conectar/novo/', {'grupo': 'CURSO', 'titulo': 'ZZI Curso de link longo', 'url': longo,
+                                         'obrigatorio': 'on', 'obrigatorio_para': [ana.id]})
+c = ConteudoConectar.objects.filter(titulo='ZZI Curso de link longo').first()
+t('curso com link de 280+ caracteres é criado inteiro', r.status_code == 302 and c and c.url == longo, r.status_code)
+r = cli.post('/impulso/conectar/novo/', {'grupo': 'CURSO', 'titulo': 'ZZI Curso de link enorme', 'url': longo + 'y' * 2000},
+             follow=True)
+t('link acima de 2000 volta com aviso, sem erro', r.status_code == 200
+  and 'passa de 2000 caracteres' in r.content.decode() and not ConteudoConectar.objects.filter(titulo='ZZI Curso de link enorme').exists())
+
 print(f'\n{ok} OK, {fail} falha(s)')
 sys.exit(1 if fail else 0)

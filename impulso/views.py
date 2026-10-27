@@ -61,6 +61,11 @@ def _int_or_none(value, lo=None, hi=None):
     return v
 
 
+# Tamanho das colunas de link do Impulso (migração 0026). Antes eram 200 e um link de
+# campanha (utm_, _hsenc…) derrubava a tela com erro 500 ao gravar.
+LIMITE_DO_LINK = 2000
+
+
 def _notify(users, title, message, url):
     try:
         NotificationMixin.create_notifications_for_users(
@@ -1506,6 +1511,9 @@ def conteudo_editar(request, conteudo_id):
         if not titulo:
             messages.error(request, 'Informe o título.')
             return redirect('impulso:conteudo_editar', conteudo_id=conteudo.id)
+        if len((request.POST.get('url') or '').strip()) > LIMITE_DO_LINK:
+            messages.error(request, f'O link passa de {LIMITE_DO_LINK} caracteres — encurte (tire os parâmetros de rastreio).')
+            return redirect('impulso:conteudo_editar', conteudo_id=conteudo.id)
 
         grupo = (request.POST.get('grupo') or conteudo.grupo) if completa else conteudo.grupo
         if grupo not in dict(ConteudoConectar.GRUPOS):
@@ -2464,6 +2472,9 @@ def conteudo_create(request):
         titulo = (request.POST.get('titulo') or '').strip()
         if not titulo:
             messages.error(request, 'Informe o título.')
+            return redirect('impulso:conteudo_create')
+        if len((request.POST.get('url') or '').strip()) > LIMITE_DO_LINK:
+            messages.error(request, f'O link passa de {LIMITE_DO_LINK} caracteres — encurte (tire os parâmetros de rastreio).')
             return redirect('impulso:conteudo_create')
 
         # Quem sobe pode mandar quantos arquivos quiser: o primeiro documento e

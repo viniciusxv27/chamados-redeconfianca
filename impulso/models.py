@@ -186,7 +186,7 @@ class Meta(models.Model):
     order = models.PositiveIntegerField(default=0, verbose_name='Ordem no Kanban')
 
     # Entrega do colaborador
-    entrega_link = models.URLField(
+    entrega_link = models.URLField(max_length=2000,
         blank=True, verbose_name='Link da entrega',
         help_text='Link da tarefa ou projeto entregue (opcional).')
     entregue_em = models.DateTimeField(null=True, blank=True, verbose_name='Entregue em')
@@ -555,7 +555,7 @@ class MetaAnexo(models.Model):
     arquivo = models.FileField(
         upload_to=upload_meta_anexo, storage=get_media_storage(),
         null=True, blank=True, verbose_name='Arquivo')
-    url = models.URLField(blank=True, verbose_name='URL')
+    url = models.URLField(max_length=2000, blank=True, verbose_name='URL')
 
     enviado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
@@ -772,7 +772,7 @@ class ConteudoConectar(models.Model):
         upload_to=upload_conteudo, storage=get_media_storage(),
         null=True, blank=True, verbose_name='Vídeo',
         help_text='Vídeo que acompanha o POP ou o material (opcional).')
-    url = models.URLField(blank=True, verbose_name='Link externo',
+    url = models.URLField(max_length=2000, blank=True, verbose_name='Link externo',
                           help_text='Link do curso/vídeo (opcional).')
 
     obrigatorio = models.BooleanField(default=True, verbose_name='Obrigatório')
@@ -1203,7 +1203,7 @@ class EntregaConteudo(models.Model):
     arquivo = models.FileField(
         upload_to=upload_entrega, storage=get_media_storage(),
         null=True, blank=True, verbose_name='Arquivo')
-    url = models.URLField(blank=True, verbose_name='Link')
+    url = models.URLField(max_length=2000, blank=True, verbose_name='Link')
     titulo = models.CharField(
         max_length=200, blank=True, verbose_name='Descrição',
         help_text='O que é este item (opcional).')
@@ -1454,7 +1454,7 @@ class ProjetoAnexo(models.Model):
     arquivo = models.FileField(
         upload_to=upload_projeto_anexo, storage=get_media_storage(),
         null=True, blank=True, verbose_name='Arquivo')
-    url = models.URLField(blank=True, verbose_name='URL')
+    url = models.URLField(max_length=2000, blank=True, verbose_name='URL')
 
     enviado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
