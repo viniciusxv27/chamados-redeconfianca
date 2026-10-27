@@ -487,6 +487,38 @@ try:
     html = cv.get(f'/vendas/{venda.id}/').content.decode() if venda else ''
     t('a ficha mostra NSU e parcelas', 'NSU NSU001234' in html and '6x' in html)
 
+    print('== MAIS DE UM PAGAMENTO (27/10/2026) ==')
+    unit = venda.total if venda else D('0')
+    dois = [{'preco_id': pelicula.id}, {'preco_id': pelicula.id}]
+    pix_e_cartoes = [{'forma': 'PIX', 'valor': str(unit)},
+                     {'forma': 'CARTAO', 'valor': str(unit / 2), 'nsu': 'AAA111', 'parcelas': 3},
+                     {'forma': 'CARTAO', 'valor': str(unit - unit / 2), 'nsu': 'BBB222', 'parcelas': 1}]
+    j = vender(dict(base_venda, forma_pagamento='', pagamentos=pix_e_cartoes, produtos=dois))
+    venda2 = Venda.objects.filter(pk=j.get('id')).first()
+    pgs = list(venda2.pagamentos.all()) if venda2 else []
+    t('Pix + dois cartões fecha e grava as três partes', j.get('ok') and [p.forma for p in pgs] == ['PIX', 'CARTAO', 'CARTAO']
+      and sum(p.valor for p in pgs) == venda2.total, j)
+    t('o resumo da venda vira "Mais de uma", com o 1º cartão', venda2 and venda2.forma_pagamento == 'MISTO'
+      and venda2.nsu == 'AAA111' and venda2.parcelas == 3)
+    html = cv.get(f'/vendas/{venda2.id}/').content.decode() if venda2 else ''
+    t('a ficha lista cada pagamento', 'Mais de uma' in html and 'NSU AAA111' in html and 'NSU BBB222' in html and '3x' in html)
+    falta = [dict(pix_e_cartoes[0]), dict(pix_e_cartoes[1])]
+    j = vender(dict(base_venda, pagamentos=falta, produtos=dois))
+    t('pagamentos que não fecham com o total não gravam (diz quanto falta)', not j.get('ok')
+      and any('falta' in e for e in j['erros']), j)
+    repetido = [dict(pix_e_cartoes[1], valor=str(unit)), dict(pix_e_cartoes[1], valor=str(unit))]
+    j = vender(dict(base_venda, pagamentos=repetido, produtos=dois))
+    t('o mesmo NSU em dois cartões não passa', not j.get('ok') and any('já está em outro cartão' in e for e in j['erros']), j)
+    j = vender(dict(base_venda, pagamentos=[{'forma': 'CARTAO', 'valor': str(unit), 'nsu': 'CCC333', 'parcelas': 2},
+                                             {'forma': 'CARTAO', 'valor': str(unit), 'nsu': 'DDD444', 'parcelas': 10}],
+                    produtos=dois))
+    venda3 = Venda.objects.filter(pk=j.get('id')).first()
+    t('dois cartões só: forma Cartão', j.get('ok') and venda3.forma_pagamento == 'CARTAO' and venda3.pagamentos.count() == 2, j)
+    j = vender(dict(base_venda, produtos=[{'preco_id': pelicula.id}]))
+    venda4 = Venda.objects.filter(pk=j.get('id')).first()
+    t('forma única (jeito antigo) vira um pagamento do valor inteiro', j.get('ok') and venda4.pagamentos.count() == 1
+      and venda4.pagamentos.get().valor == venda4.total, j)
+
     produto_renova = {'preco_id': celular.id, 'imei': imei_de_teste(77), 'renova_alied': True, 'renova_alied_valor': '100'}
     j = vender(dict(base_venda, produtos=[produto_renova]))
     t('Renova Alied sem nº do pedido não fecha', not j.get('ok') and any('pedido do Renova Alied' in e for e in j['erros']), j)

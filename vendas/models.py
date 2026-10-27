@@ -71,8 +71,10 @@ class Venda(models.Model):
                                 related_name='vendas', verbose_name='Cliente (cadastro)')
     cliente_telefone = models.CharField(max_length=20, blank=True, default='', db_default='', verbose_name='Telefone do cliente')
     forma_pagamento = models.CharField(max_length=10, blank=True, default='', db_default='',
-                                       choices=[('CARTAO', 'Cartão'), ('PIX', 'Pix')], verbose_name='Forma de pagamento')
-    # Cartão: o comprovante da maquininha (NSU) e em quantas vezes.
+                                       choices=[('CARTAO', 'Cartão'), ('PIX', 'Pix'), ('MISTO', 'Mais de uma')],
+                                       verbose_name='Forma de pagamento')
+    # Cartão: o comprovante da maquininha (NSU) e em quantas vezes. Com mais de um pagamento (27/10/2026)
+    # o detalhe fica em PagamentoVenda; aqui vale o resumo (forma única ou MISTO, NSU/parcelas do 1º cartão).
     nsu = models.CharField(max_length=30, blank=True, default='', db_default='', verbose_name='NSU do cartão')
     parcelas = models.PositiveSmallIntegerField(null=True, blank=True, verbose_name='Parcelas no cartão')
     vivo_mais = models.BooleanField(default=False, db_default=False, verbose_name='Pago pelo Vivo+')
@@ -118,6 +120,27 @@ class Venda(models.Model):
     def total(self):
         """A conta da venda: só os produtos. Serviço é mensalidade do plano, não é pago no balcão."""
         return self.total_produtos
+
+
+class PagamentoVenda(models.Model):
+    """Uma parte do pagamento da venda: a venda pode ser paga com Pix + cartão, ou com vários cartões."""
+
+    FORMAS = [('CARTAO', 'Cartão'), ('PIX', 'Pix')]
+
+    venda = models.ForeignKey(Venda, on_delete=models.CASCADE, related_name='pagamentos', verbose_name='Venda')
+    ordem = models.PositiveSmallIntegerField(default=1)
+    forma = models.CharField(max_length=10, choices=FORMAS, verbose_name='Forma')
+    valor = models.DecimalField(max_digits=12, decimal_places=2, verbose_name='Valor')
+    nsu = models.CharField(max_length=30, blank=True, default='', verbose_name='NSU do cartão')
+    parcelas = models.PositiveSmallIntegerField(null=True, blank=True, verbose_name='Parcelas no cartão')
+
+    class Meta:
+        ordering = ['venda', 'ordem']
+        verbose_name = 'Pagamento da venda'
+        verbose_name_plural = 'Pagamentos da venda'
+
+    def __str__(self):
+        return f'{self.get_forma_display()} {self.valor}'
 
 
 class VendaProduto(models.Model):

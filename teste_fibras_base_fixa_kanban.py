@@ -79,6 +79,11 @@ try:
                                         first_name='ZZ', last_name='Ilha', hierarchy='SUPERVISOR')
         comum = User.objects.create_user(username='zzfx.adm', email='zzfx.adm@exemplo-teste.local', password='x',
                                          first_name='ZZ', last_name='Coord', hierarchy='COORDENADOR')
+        # Desde 27/10/2026 o módulo é do SUPERADMIN e de quem ele libera em /fibras/acessos/.
+        from fibras.models import AcessoFibras
+        from fibras.permissoes import CHAVES, completar
+        AcessoFibras.objects.create(user=ilha, permissoes=completar(CHAVES))
+        AcessoFibras.objects.create(user=comum, permissoes=completar(['rede.ver']))
         ci, cc = Client(), Client()
         ci.force_login(ilha)
         cc.force_login(comum)

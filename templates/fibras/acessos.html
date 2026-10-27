@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% block title %}Fibras - Acessos{% endblock %}
+
+{% block extra_css %}
+{% include 'fibras/_fb_estilo.html' %}
+<style>
+.fb-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.fb-chip { display: inline-flex; align-items: center; gap: 7px; padding: 5px 12px; border-radius: 980px; border: 0; background: var(--fb-card); box-shadow: inset 0 0 0 1px var(--fb-linha);
+  color: var(--fb-suave-2); font-size: 12.5px; font-weight: 500; cursor: pointer; white-space: nowrap; }
+.fb-chip .n { font-variant-numeric: tabular-nums; font-size: 11px; font-weight: 700; padding: 0 6px; border-radius: 980px; background: var(--fb-campo); }
+.fb-chip[aria-pressed="true"] { background: var(--fb-pri-clara); color: var(--fb-pri); box-shadow: inset 0 0 0 1px rgba(255,107,53,.4); }
+.fb-pessoas { list-style: none; margin: 0; padding: 0; }
+.fb-pessoa { display: flex; align-items: center; gap: 12px; padding: 12px 4px; border-top: 1px solid var(--fb-linha); }
+.fb-pessoa:first-child { border-top: 0; }
+.fb-pessoa .av { width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0; display: grid; place-items: center; font-weight: 700; font-size: 14px; background: var(--fb-campo); color: var(--fb-suave-2); }
+.fb-pessoa .av.com { background: var(--fb-pri-clara); color: var(--fb-pri); }
+.fb-pessoa .av.super { background: #FFF4E0; color: #B25E00; }
+.fb-pessoa .info { flex: 1; min-width: 0; }
+.fb-pessoa .nome { font-weight: 600; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fb-pessoa .meta { margin: 0; font-size: 11.5px; color: var(--fb-suave); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fb-pessoa .tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+.fb-acc-modal { position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,.35); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.fb-acc-modal form { background: var(--fb-card); border-radius: 20px; width: 100%; max-width: 720px; max-height: 92vh; overflow-y: auto; box-shadow: var(--fb-sombra-lg); }
+.fb-acc-modal .cab { padding: 16px 20px; border-bottom: 1px solid var(--fb-linha); display: flex; align-items: flex-start; gap: 12px; }
+.fb-acc-modal .corpo { padding: 16px 20px; }
+.fb-acc-modal .rodape { padding: 12px 20px; border-top: 1px solid var(--fb-linha); display: flex; align-items: center; gap: 8px; position: sticky; bottom: 0; background: var(--fb-card-2); }
+.fb-funcoes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 22px; }
+.fb-funcoes label { display: flex; gap: 9px; align-items: flex-start; cursor: pointer; font-size: 13.5px; }
+.fb-funcoes input { margin-top: 3px; accent-color: var(--fb-pri); }
+.fb-funcoes small { display: block; font-size: 11.5px; color: var(--fb-suave); }
+.fb-historico li { padding: 8px 0; border-top: 1px solid var(--fb-linha); font-size: 13px; }
+.fb-historico li:first-child { border-top: 0; }
+@media (max-width: 640px) {
+  .fb { padding: 16px 14px 32px; }
+  .fb-funcoes { grid-template-columns: minmax(0, 1fr); }
+  .fb-acc-modal { align-items: flex-end; padding: 0; }
+  .fb-acc-modal form { border-radius: 20px 20px 0 0; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="fb">
+  <div class="fb-cab">
+    <div>
+      <h1><span class="fb-ico" aria-hidden="true"><i class="fas fa-user-shield"></i></span> Fibras — Acessos</h1>
+      <p>O SUPERADMIN tem tudo. Aqui ele escolhe qualquer usuário e libera, parte por parte, o módulo. Quem tem acesso vê "Fibras" no menu.</p>
+    </div>
+  </div>
+
+  <div class="fb-barra-topo">
+    {% include 'fibras/_fb_nav.html' with ativo='acessos' %}
+  </div>
+
+  <section class="fb-card">
+    <div class="fb-busca" style="position:relative;margin-bottom:12px">
+      <i class="fas fa-magnifying-glass" aria-hidden="true" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--fb-suave);font-size:13px"></i>
+      <input type="search" id="fbBuscaPessoa" class="fb-campo" placeholder="Buscar por nome, e-mail, loja ou hierarquia…" autocomplete="off" aria-label="Buscar pessoa">
+    </div>
+    <div class="fb-chips" role="group" aria-label="Filtrar pessoas">
+      <button type="button" class="fb-chip" data-filtro="todos" aria-pressed="true">Todos <span class="n">{{ contagem.todos }}</span></button>
+      <button type="button" class="fb-chip" data-filtro="com" aria-pressed="false">Com acesso <span class="n">{{ contagem.com }}</span></button>
+      <button type="button" class="fb-chip" data-filtro="sem" aria-pressed="false">Sem acesso <span class="n">{{ contagem.sem }}</span></button>
+      <button type="button" class="fb-chip" data-filtro="super" aria-pressed="false">SUPERADMIN <span class="n">{{ contagem.super }}</span></button>
+    </div>
+  </section>
+
+  <section class="fb-card">
+    <ul class="fb-pessoas" id="fbPessoas">
+      {% for p in pessoas %}{% with u=p.u a=p.acesso %}
+      <li class="fb-pessoa" data-grupo="{{ p.grupo }}"
+          data-p="{{ u.get_full_name|lower }} {{ u.username|lower }} {{ u.email|lower }} {{ u.sector.name|default:''|lower }} {{ u.get_hierarchy_display|lower }}">
+        <span class="av {% if p.grupo == 'super' %}super{% elif a and a.ativo %}com{% endif %}" aria-hidden="true">{{ u.first_name|default:u.username|first|upper }}</span>
+        <div class="info">
+          <p class="nome">{{ u.get_full_name|default:u.username }}
+            {% if not u.is_active %}<span class="fb-tag">inativo</span>{% endif %}
+            {% if a and not a.ativo %}<span class="fb-tag aviso">suspenso</span>{% endif %}</p>
+          <p class="meta">{{ u.sector.name|default:"Sem loja" }} · {{ u.get_hierarchy_display }}{% if a %} · liberado por {{ a.concedido_por.get_full_name|default:"—" }} em {{ a.atualizado_em|date:"d/m/Y" }}{% endif %}{% if a.observacao %} · {{ a.observacao }}{% endif %}</p>
+          {% if p.grupo == 'super' %}
+          <div class="tags"><span class="fb-tag media">Tem o módulo inteiro</span></div>
+          {% elif a %}
+          <div class="tags">{% for chave, rotulo, _d, _e in funcoes %}{% if chave in p.chaves %}<span class="fb-tag novo">{{ rotulo }}</span>{% endif %}{% endfor %}</div>
+          {% endif %}
+        </div>
+        {% if p.grupo != 'super' and u.is_active %}
+        <button type="button" class="fb-btn {% if a %}leve{% else %}primario{% endif %} pequeno"
+                data-editar="{{ u.id }}" data-nome="{{ u.get_full_name|default:u.username }}" data-loja="{{ u.sector.name|default:'Sem loja' }}"
+                data-chaves="{{ a.permissoes|join:',' }}" data-tem="{% if a %}1{% endif %}" data-ativo="{% if not a or a.ativo %}1{% endif %}"
+                data-obs="{{ a.observacao|default:'' }}"><i class="fas {% if a %}fa-pen{% else %}fa-user-plus{% endif %}" aria-hidden="true"></i> {% if a %}Editar{% else %}Liberar{% endif %}</button>
+        {% endif %}
+      </li>
+      {% endwith %}{% endfor %}
+    </ul>
+    <p id="fbNenhum" class="fb-mut" hidden style="text-align:center;padding:30px 0">Ninguém com essa busca.</p>
+  </section>
+
+  {% if historico %}
+  <details class="fb-card">
+    <summary style="cursor:pointer;font-weight:600"><i class="fas fa-clock-rotate-left" aria-hidden="true" style="color:var(--fb-suave)"></i> Histórico de liberações</summary>
+    <ul class="fb-historico" style="list-style:none;margin:10px 0 0;padding:0">
+      {% for h in historico %}<li><b>{{ h.pessoa_nome }}</b>: <span class="fb-mut">{{ h.antes|default:"—" }}</span> → {{ h.depois|default:"—" }}
+        <span class="fb-mut" style="display:block;font-size:11px">{{ h.por_nome|default:"—" }} em {{ h.quando|date:"d/m/Y H:i" }}</span></li>{% endfor %}
+    </ul>
+  </details>
+  {% endif %}
+
+  <div id="fbEditor" class="fb-acc-modal" hidden role="dialog" aria-modal="true" aria-labelledby="fbEditorNome">
+    <form method="post">
+      {% csrf_token %}<input type="hidden" name="user" id="fbEditorUser">
+      <div class="cab">
+        <div style="flex:1;min-width:0"><b id="fbEditorNome" style="font-size:16px"></b><p class="fb-mut" id="fbEditorLoja" style="margin:2px 0 0"></p></div>
+        <button type="button" data-fechar class="fb-btn icone leve" aria-label="Fechar"><i class="fas fa-xmark" aria-hidden="true"></i></button>
+      </div>
+      <div class="corpo">
+        <div class="fb-funcoes">
+          {% for chave, rotulo, descricao, _exige in funcoes %}
+          <label><input type="checkbox" name="permissoes" value="{{ chave }}"><span><b>{{ rotulo }}</b><small>{{ descricao }}</small></span></label>
+          {% endfor %}
+        </div>
+        <p class="fb-mut" style="margin:14px 0 0">Toda função leva junto "Ver módulo"; "Validação Base × Esteira" leva "Ver a rede inteira" (o cruzamento é da rede). Sem "Ver a loja" nem "Ver a rede", a pessoa vê só as vendas dela.</p>
+        <div style="display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px;align-items:center;margin-top:14px">
+          <label style="display:flex;align-items:center;gap:8px;font-size:13.5px"><input type="hidden" name="ativo" value="off"><input type="checkbox" name="ativo" value="on" style="accent-color:var(--fb-pri)"> Acesso ativo</label>
+          <input name="observacao" maxlength="200" placeholder="Observação (opcional)" class="fb-campo" aria-label="Observação">
+        </div>
+      </div>
+      <div class="rodape">
+        <button type="submit" name="remover" value="1" formnovalidate id="fbEditorTirar" class="fb-btn leve pequeno" style="color:var(--fb-vermelho)" onclick="return confirm('Tirar o acesso a Fibras?')">Tirar acesso</button>
+        <span style="flex:1"></span>
+        <button type="button" data-fechar class="fb-btn leve">Cancelar</button>
+        <button type="submit" class="fb-btn primario"><i class="fas fa-check" aria-hidden="true"></i> Salvar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+(function () {
+  var busca = document.getElementById('fbBuscaPessoa'), filtro = 'todos';
+  var itens = Array.prototype.slice.call(document.querySelectorAll('#fbPessoas > li'));
+  function semAcento(x) { return x.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
+  itens.forEach(function (li) { li.dataset.p = semAcento(li.dataset.p); });
+  function aplicar() {
+    var t = semAcento(busca.value.trim()), n = 0;
+    itens.forEach(function (li) {
+      var ve = (filtro === 'todos' || li.dataset.grupo === filtro) && (!t || li.dataset.p.indexOf(t) >= 0);
+      li.hidden = !ve; if (ve) n++;
+    });
+    document.getElementById('fbNenhum').hidden = n > 0;
+  }
+  busca.addEventListener('input', aplicar);
+  document.querySelectorAll('.fb-chip[data-filtro]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      document.querySelectorAll('.fb-chip[data-filtro]').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+      filtro = b.dataset.filtro; aplicar();
+    });
+  });
+
+  var modal = document.getElementById('fbEditor'), form = modal.querySelector('form'), ultimo = null;
+  function fechar() { modal.hidden = true; document.body.style.overflow = ''; if (ultimo) ultimo.focus(); }
+  document.getElementById('fbPessoas').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-editar]'); if (!b) return;
+    ultimo = b;
+    var chaves = (b.dataset.chaves || '').split(',');
+    document.getElementById('fbEditorUser').value = b.dataset.editar;
+    document.getElementById('fbEditorNome').textContent = (b.dataset.tem ? 'Acesso de ' : 'Liberar Fibras para ') + b.dataset.nome;
+    document.getElementById('fbEditorLoja').textContent = b.dataset.loja;
+    form.querySelectorAll('input[name="permissoes"]').forEach(function (c) { c.checked = chaves.indexOf(c.value) >= 0; });
+    form.querySelector('input[type="checkbox"][name="ativo"]').checked = !!b.dataset.ativo;
+    form.querySelector('input[name="observacao"]').value = b.dataset.obs || '';
+    document.getElementById('fbEditorTirar').hidden = !b.dataset.tem;
+    modal.hidden = false; document.body.style.overflow = 'hidden';
+    form.querySelector('input[name="permissoes"]').focus();
+  });
+  modal.addEventListener('click', function (e) { if (e.target === modal || e.target.closest('[data-fechar]')) fechar(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !modal.hidden) fechar(); });
+})();
+</script>
+{% endblock %}

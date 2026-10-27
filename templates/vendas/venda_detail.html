@@ -39,11 +39,17 @@
         {% if venda.forma_pagamento %}
         <div>
             <p class="vd-rotulo">Pagamento</p>
-            <p class="text-gray-900"><i class="fas {% if venda.forma_pagamento == 'PIX' %}fa-qrcode{% else %}fa-credit-card{% endif %} text-purple-500 mr-1"></i>{{ venda.get_forma_pagamento_display }}
+            <p class="text-gray-900"><i class="fas {% if venda.forma_pagamento == 'PIX' %}fa-qrcode{% elif venda.forma_pagamento == 'MISTO' %}fa-wallet{% else %}fa-credit-card{% endif %} text-purple-500 mr-1"></i>{{ venda.get_forma_pagamento_display }}
                 {% if venda.vivo_mais %}<span class="ml-1 px-1.5 py-0.5 rounded-md bg-purple-100 text-purple-700 text-[11px] font-semibold">Vivo+ {{ venda.vivo_mais_percentual|floatformat:"-2" }}%</span>{% endif %}</p>
-            {% if venda.forma_pagamento == 'CARTAO' and venda.nsu %}
+            {% with pgs=venda.pagamentos.all %}
+            {% if pgs|length > 1 %}
+            <ul class="mt-1 space-y-0.5 text-[12px] text-gray-600 tabular">
+                {% for pg in pgs %}<li><i class="fas {% if pg.forma == 'PIX' %}fa-qrcode{% else %}fa-credit-card{% endif %} text-gray-400 mr-1"></i>{{ pg.get_forma_display }} {{ pg.valor|brl }}{% if pg.forma == 'CARTAO' %} · NSU {{ pg.nsu }}{% if pg.parcelas %} · {% if pg.parcelas == 1 %}à vista{% else %}{{ pg.parcelas }}x{% endif %}{% endif %}{% endif %}</li>{% endfor %}
+            </ul>
+            {% elif venda.forma_pagamento == 'CARTAO' and venda.nsu %}
             <p class="text-[12px] text-gray-500 tabular">NSU {{ venda.nsu }}{% if venda.parcelas %} · {% if venda.parcelas == 1 %}à vista{% else %}{{ venda.parcelas }}x{% endif %}{% endif %}</p>
             {% endif %}
+            {% endwith %}
         </div>
         {% endif %}
     </div>

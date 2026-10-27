@@ -1,12 +1,13 @@
 from django.urls import path
 
-from . import views
+from . import views, views_acessos
 
 app_name = 'fibras'
 
 urlpatterns = [
     path('', views.kanban, name='kanban'),
     path('lista/', views.lista, name='lista'),
+    path('acessos/', views_acessos.acessos, name='acessos'),
     path('sync/', views.sync_now, name='sync_now'),
     path('importar/', views.importar_planilha, name='importar_planilha'),
     path('relatorio/', views.relatorio, name='relatorio'),

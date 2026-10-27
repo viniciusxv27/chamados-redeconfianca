@@ -72,9 +72,11 @@
       <p>{% if periodo_ativo %}Período: {{ periodo_rotulo }}{% else %}Visão geral do mês corrente{% endif %} · acompanhamento Myrella</p>
     </div>
     <div class="fb-acoes">
+      {% if fb_pode.exportar %}
       <a href="{% url 'fibras:export_excel' %}{% if periodo_qs %}?{{ periodo_qs }}{% endif %}" class="fb-btn sucesso"><i class="fas fa-file-excel" aria-hidden="true"></i> Exportar Excel</a>
       <a href="{% url 'fibras:export_excel' %}?status=cancelado{% if periodo_qs %}&amp;{{ periodo_qs }}{% endif %}" class="fb-btn perigo"><i class="fas fa-file-excel" aria-hidden="true"></i> Exportar canceladas</a>
       <a href="{% url 'fibras:export_canceladas_csv' %}{% if periodo_qs %}?{{ periodo_qs }}{% endif %}" class="fb-btn perigo"><i class="fas fa-file-csv" aria-hidden="true"></i> Exportar canceladas (Gestão Documental)</a>
+      {% endif %}
     </div>
   </div>
 

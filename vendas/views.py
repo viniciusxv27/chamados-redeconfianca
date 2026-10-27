@@ -223,7 +223,7 @@ def venda_detail(request, pk):
     # venda de qualquer um.
     venda = get_object_or_404(
         vendas_do_usuario(request.user, Venda.objects.select_related('loja', 'vendedor')
-                          .prefetch_related('produtos', 'produtos__editado_por', 'servicos', 'servicos__plano',
+                          .prefetch_related('produtos', 'produtos__editado_por', 'servicos', 'servicos__plano', 'pagamentos',
                                             'servicos__plano_anterior', 'servicos__servico_adicional')), pk=pk,
     )
     return render(request, 'vendas/venda_detail.html', {
@@ -322,7 +322,8 @@ _SERVICO_HEADERS = ['Filial', 'UF', 'Serviço', 'Serviço Técnico', 'Nº Venda'
 
 
 def _produto_rows(vendas_qs):
-    for vp in VendaProduto.objects.filter(venda__in=vendas_qs).select_related('venda', 'venda__loja', 'venda__vendedor'):
+    for vp in (VendaProduto.objects.filter(venda__in=vendas_qs).select_related('venda', 'venda__loja', 'venda__vendedor')
+               .prefetch_related('venda__pagamentos')):
         v = vp.venda
         yield [
             v.loja.name if v.loja else v.pdv_nome, v.uf, vp.nome_produto, vp.tipo_produto,
@@ -330,10 +331,19 @@ def _produto_rows(vendas_qs):
             v.cliente_nome, v.cliente_cpf,
             (v.vendedor.get_full_name() if v.vendedor else ''), vp.plano, vp.tabela_preco,
             v.data_venda.strftime('%d/%m/%Y %H:%M') if v.data_venda else '',
-            vp.qtde, vp.valor_venda, vp.pilar, v.get_forma_pagamento_display(), v.nsu, v.parcelas or '',
+            vp.qtde, vp.valor_venda, vp.pilar, *_pagamento_csv(v),
             vp.renova_vini_valor if vp.renova_vini else '', vp.renova_alied_valor if vp.renova_alied else '',
             vp.renova_alied_pedido, vp.renova_assurant_valor if vp.renova_assurant else '', vp.renova_assurant_pedido,
         ]
+
+
+def _pagamento_csv(v):
+    """Forma, NSU e parcelas; com mais de um pagamento, cada parte junta com " + " (na mesma ordem nas três)."""
+    pgs = list(v.pagamentos.all())
+    if len(pgs) < 2:
+        return v.get_forma_pagamento_display(), v.nsu, v.parcelas or ''
+    return (' + '.join(f'{p.get_forma_display()} {p.valor}' for p in pgs),
+            ' + '.join(p.nsu or '-' for p in pgs), ' + '.join(str(p.parcelas or '-') for p in pgs))
 
 
 def _servico_rows(vendas_qs):

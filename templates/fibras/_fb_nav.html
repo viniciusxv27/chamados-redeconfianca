@@ -3,5 +3,6 @@
   <a href="{% url 'fibras:kanban' %}{% if periodo_qs %}?{{ periodo_qs }}{% endif %}"{% if ativo == 'kanban' %} class="ativo" aria-current="page"{% endif %}><i class="fas fa-columns" aria-hidden="true"></i> Kanban</a>
   <a href="{% url 'fibras:lista' %}{% if periodo_qs %}?{{ periodo_qs }}{% endif %}"{% if ativo == 'lista' %} class="ativo" aria-current="page"{% endif %}><i class="fas fa-list" aria-hidden="true"></i> Lista</a>
   <a href="{% url 'fibras:relatorio' %}{% if periodo_qs %}?{{ periodo_qs }}{% endif %}"{% if ativo == 'relatorio' %} class="ativo" aria-current="page"{% endif %}><i class="fas fa-chart-bar" aria-hidden="true"></i> Relatório</a>
-  {% if is_ilha %}<a href="{% url 'fibras:validacao' %}" class="fb-seg-destaque" title="Cruzamento completo: Base de Vendas × Esteira de Vendas Vivo"><i class="fas fa-code-compare" aria-hidden="true"></i> Validação Base × Esteira</a>{% endif %}
+  {% if fb_pode.validacao_usar %}<a href="{% url 'fibras:validacao' %}" class="fb-seg-destaque" title="Cruzamento completo: Base de Vendas × Esteira de Vendas Vivo"><i class="fas fa-code-compare" aria-hidden="true"></i> Validação Base × Esteira</a>{% endif %}
+  {% if fb_pode.acessos %}<a href="{% url 'fibras:acessos' %}"{% if ativo == 'acessos' %} class="ativo" aria-current="page"{% endif %} title="Quem entra em Fibras e o que cada um pode fazer"><i class="fas fa-user-shield" aria-hidden="true"></i> Acessos</a>{% endif %}
 </nav>

@@ -13,18 +13,8 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from .models import Fibra, FibraIncidente, FibraChat, FibraChatMessage
-from .services import change_status, fibras_for_user, import_planilha_xlsx, is_gerente, sync_fibras
-
-
-def _is_ilha(user) -> bool:
-    """Quem pode mexer em status / chat reverso / fechar incidentes."""
-    return user.is_superuser or getattr(user, 'hierarchy', '') in (
-        'ADMIN', 'SUPERADMIN', 'SUPERVISOR', 'ADMINISTRATIVO',
-    )
-
-
-def _can_import_planilha(user) -> bool:
-    return _is_ilha(user) or is_gerente(user)
+from .permissoes import exige, fibras_visiveis, pode
+from .services import change_status, import_planilha_xlsx, sync_fibras
 
 
 # ---------------------------------------------------------------------------
@@ -112,10 +102,11 @@ def _ctx_periodo(request, de, ate):
 
 
 @login_required
+@exige('modulo.ver')
 def kanban(request):
     from django.db.models import Q as _Q
     from django.db.models.functions import Length
-    qs = fibras_for_user(request.user)
+    qs = fibras_visiveis(request.user)
     # filtros simples
     pdv = (request.GET.get('pdv') or '').strip()
     vendedor = (request.GET.get('vendedor') or '').strip()
@@ -202,11 +193,16 @@ def kanban(request):
         resto['periodo'] = 'todos'
         ctx_periodo['sem_periodo_url'] = f'{request.path}?{resto.urlencode()}'
 
+    # O botão "Cruzar" usa o período do quadro; sem período (ou com uma ponta só), fecha no mês.
+    hoje = timezone.localdate()
+    cruzar_ini = de or (ate or hoje).replace(day=1)
+    cruzar_fim = ate or (hoje if cruzar_ini <= hoje <= _fim_do_mes(cruzar_ini) else _fim_do_mes(cruzar_ini))
+
     return render(request, 'fibras/kanban.html', {
-        'validacao': _validacao_do_quadro(qs, de, ate, _is_ilha(request.user)),
+        'cruzar_ini': cruzar_ini,
+        'cruzar_fim': cruzar_fim,
+        'validacao': _validacao_do_quadro(qs, de, ate, pode(request.user, 'validacao.usar')),
         'colunas': colunas,
-        'is_ilha': _is_ilha(request.user),
-        'can_import': _can_import_planilha(request.user),
         'filtro_pdv': pdv,
         'filtro_vendedor': vendedor,
         'filtro_venda': venda,
@@ -271,10 +267,11 @@ def _validacao_do_quadro(qs, de, ate, is_ilha):
 
 
 @login_required
+@exige('modulo.ver')
 def lista(request):
     """Visão em lista (tabela) alternativa ao kanban."""
     from django.db.models import Q as _Q
-    qs = fibras_for_user(request.user)
+    qs = fibras_visiveis(request.user)
     pdv = (request.GET.get('pdv') or '').strip()
     vendedor = (request.GET.get('vendedor') or '').strip()
     status = (request.GET.get('status') or '').strip()
@@ -298,8 +295,6 @@ def lista(request):
 
     return render(request, 'fibras/lista.html', {
         'fibras': qs.order_by('ordem_planilha', '-data_da_venda', '-id'),
-        'is_ilha': _is_ilha(request.user),
-        'can_import': _can_import_planilha(request.user),
         'filtro_pdv': pdv,
         'filtro_vendedor': vendedor,
         'filtro_status': status,
@@ -311,26 +306,24 @@ def lista(request):
 
 
 @login_required
+@exige('modulo.ver')
 def detail(request, pk: int):
-    fibra = get_object_or_404(Fibra, pk=pk)
+    fibra = get_object_or_404(fibras_visiveis(request.user), pk=pk)
     incidentes = fibra.incidentes.select_related('aberto_por').all()
     historico = fibra.status_history.select_related('alterado_por')[:50]
     return render(request, 'fibras/detail.html', {
         'fibra': fibra,
         'incidentes': incidentes,
         'historico': historico,
-        'is_ilha': _is_ilha(request.user),
         'status_choices': Fibra.STATUS_CHOICES,
     })
 
 
 @login_required
+@exige('status.alterar')
 @require_POST
 def change_status_view(request, pk: int):
-    if not _is_ilha(request.user):
-        messages.error(request, 'Apenas a Ilha pode alterar o status da fibra.')
-        return redirect('fibras:detail', pk=pk)
-    fibra = get_object_or_404(Fibra, pk=pk)
+    fibra = get_object_or_404(fibras_visiveis(request.user), pk=pk)
     new_status = (request.POST.get('status') or '').strip()
     retorno = (request.POST.get('retorno') or '').strip()
     try:
@@ -342,6 +335,7 @@ def change_status_view(request, pk: int):
 
 
 @login_required
+@exige('status.alterar')
 @require_POST
 def change_status_ajax(request, pk: int):
     """Endpoint usado pelo drag&drop do Kanban — retorna JSON.
@@ -349,9 +343,7 @@ def change_status_ajax(request, pk: int):
     Mantido para compatibilidade, porém o status passa a ser ditado pela
     planilha diária: por isso só a Ilha (Supervisor/Admin) pode mudar manualmente.
     """
-    if not _is_ilha(request.user):
-        return JsonResponse({'ok': False, 'error': 'permission'}, status=403)
-    fibra = get_object_or_404(Fibra, pk=pk)
+    fibra = get_object_or_404(fibras_visiveis(request.user), pk=pk)
     new_status = (request.POST.get('status') or '').strip()
     try:
         change_status(fibra, new_status, changed_by=request.user, retorno='')
@@ -366,12 +358,10 @@ def change_status_ajax(request, pk: int):
 
 
 @login_required
+@exige('planilha.importar')
 @require_POST
 def importar_planilha(request):
     """Upload manual da planilha diária (.xlsx). Atualiza o Kanban/Lista."""
-    if not _can_import_planilha(request.user):
-        messages.error(request, 'Sem permissão para importar planilha.')
-        return redirect('fibras:kanban')
     from .validacao import ErroValidacao, checar_arquivo
     file_obj = request.FILES.get('planilha')
     voltar = request.POST.get('voltar') or ''
@@ -397,9 +387,10 @@ def importar_planilha(request):
 
 
 @login_required
+@exige('tratativa.abrir')
 @require_POST
 def abrir_incidente(request, pk: int):
-    fibra = get_object_or_404(Fibra, pk=pk)
+    fibra = get_object_or_404(fibras_visiveis(request.user), pk=pk)
     observacao = (request.POST.get('observacao') or '').strip()
     if not observacao:
         messages.error(request, 'Descreva a observação do incidente.')
@@ -446,9 +437,10 @@ def abrir_incidente(request, pk: int):
 
 
 @login_required
+@exige('tratativa.abrir')
 def chat_view(request, pk: int):
     """Chat da tratativa. Se houver SupportChat vinculado, usa-o como fonte única."""
-    fibra = get_object_or_404(Fibra, pk=pk)
+    fibra = get_object_or_404(fibras_visiveis(request.user), pk=pk)
     incidente = fibra.incidentes.filter(support_chat__isnull=False).order_by('-aberto_em').first()
 
     if incidente and incidente.support_chat_id:
@@ -463,7 +455,6 @@ def chat_view(request, pk: int):
             'support_chat': support_chat,
             'mensagens_support': mensagens_support,
             'incidente': incidente,
-            'is_ilha': _is_ilha(request.user),
         })
 
     # Fallback: chat legado (FibraChat).
@@ -474,14 +465,14 @@ def chat_view(request, pk: int):
     )
     return render(request, 'fibras/chat.html', {
         'fibra': fibra, 'chat': chat, 'mensagens': mensagens,
-        'is_ilha': _is_ilha(request.user),
     })
 
 
 @login_required
+@exige('tratativa.abrir')
 @require_POST
 def chat_post(request, pk: int):
-    fibra = get_object_or_404(Fibra, pk=pk)
+    fibra = get_object_or_404(fibras_visiveis(request.user), pk=pk)
     texto = (request.POST.get('texto') or '').strip()
     if not texto:
         return redirect('fibras:chat', pk=pk)
@@ -504,11 +495,9 @@ def chat_post(request, pk: int):
 
 
 @login_required
+@exige('validacao.usar')
 @require_POST
 def sync_now(request):
-    if not _is_ilha(request.user):
-        messages.error(request, 'Sem permissão.')
-        return redirect('fibras:kanban')
     stats = sync_fibras()
     messages.success(
         request,
@@ -519,9 +508,10 @@ def sync_now(request):
 
 
 @login_required
+@exige('modulo.ver')
 def relatorio(request):
     de, ate = _periodo(request)
-    qs = _filtrar_periodo(fibras_for_user(request.user), de, ate)
+    qs = _filtrar_periodo(fibras_visiveis(request.user), de, ate)
     total = qs.count() or 1  # evita divisão por zero
     receita_total = qs.aggregate(t=Sum('valor'))['t'] or Decimal('0')
 
@@ -624,12 +614,12 @@ def relatorio(request):
         'chart_qtd': chart_qtd,
         'chart_receita': chart_receita,
         'chart_colors': chart_colors,
-        'is_ilha': _is_ilha(request.user),  # só para mostrar o atalho da Validação na navegação
         **_ctx_periodo(request, de, ate),
     })
 
 
 @login_required
+@exige('exportar')
 def export_excel(request):
     """Exporta as fibras do mês corrente para um arquivo .xlsx.
 
@@ -641,7 +631,7 @@ def export_excel(request):
     from openpyxl.utils import get_column_letter
 
     de, ate = _periodo(request)
-    qs = _filtrar_periodo(fibras_for_user(request.user), de, ate).order_by('-data_da_venda', '-id')
+    qs = _filtrar_periodo(fibras_visiveis(request.user), de, ate).order_by('-data_da_venda', '-id')
 
     status = (request.GET.get('status') or '').strip()
     status_valido = dict(Fibra.STATUS_CHOICES)
@@ -696,6 +686,7 @@ def export_excel(request):
 
 
 @login_required
+@exige('exportar')
 def export_canceladas_csv(request):
     """Exporta as fibras *canceladas* no formato da planilha de Gestão
     Documental (a mesma usada em /validad1), com o status atualizado e a
@@ -706,7 +697,7 @@ def export_canceladas_csv(request):
 
     de, ate = _periodo(request)
     qs = (
-        _filtrar_periodo(fibras_for_user(request.user), de, ate)
+        _filtrar_periodo(fibras_visiveis(request.user), de, ate)
         .filter(status=Fibra.STATUS_CANCELADO)
         .order_by('-data_da_venda', '-id')
     )
@@ -769,7 +760,7 @@ def _validacao_api(fn):
     @functools.wraps(fn)
     @login_required
     def envolto(request, *args, **kwargs):
-        if not _is_ilha(request.user):
+        if not pode(request.user, 'validacao.usar'):
             return JsonResponse({'erro': 'Sem permissão para a validação de fibras.'}, status=403)
         try:
             corpo = {}
@@ -785,10 +776,8 @@ def _validacao_api(fn):
 
 
 @login_required
+@exige('validacao.usar')
 def validacao(request):
-    if not _is_ilha(request.user):
-        messages.error(request, 'A validação de fibras é da Ilha (Supervisor, Administrativo e Admin).')
-        return redirect('fibras:kanban')
     return render(request, 'fibras/validacao.html', {})
 
 

@@ -348,3 +348,42 @@ class Cruzamento(models.Model):
 
     def __str__(self):
         return f'Cruzamento {self.executado_em:%d/%m/%Y %H:%M}'
+
+
+class AcessoFibras(models.Model):
+    """O que o SUPERADMIN liberou para uma pessoa em Fibras (chaves de permissoes.FUNCOES)."""
+
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='acesso_fibras')
+    ativo = models.BooleanField(default=True)
+    permissoes = models.JSONField(default=list, blank=True)
+    observacao = models.CharField(max_length=200, blank=True)
+    concedido_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                      related_name='+')
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Acesso a Fibras'
+        verbose_name_plural = 'Acessos a Fibras'
+
+    def __str__(self):
+        return f'{self.user} — {len(self.permissoes or [])} função(ões)'
+
+
+class HistoricoAcessoFibras(models.Model):
+    """Quem liberou ou tirou o quê, com os nomes gravados (a pessoa pode sair do portal)."""
+
+    pessoa = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                               related_name='+')
+    pessoa_nome = models.CharField(max_length=200)
+    antes = models.TextField(blank=True)
+    depois = models.TextField(blank=True)
+    por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                            related_name='+')
+    por_nome = models.CharField(max_length=200, blank=True)
+    quando = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-quando']
+        verbose_name = 'Histórico de acesso a Fibras'
+        verbose_name_plural = 'Histórico de acessos a Fibras'

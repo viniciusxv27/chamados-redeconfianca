@@ -294,66 +294,7 @@ def sync_fibras_periodo(ini: Optional[date] = None, fim: Optional[date] = None) 
     return total
 
 
-# ---------------------------------------------------------------------------
-# Filtragem por usuário (consultor / coordenador / gerente)
-# ---------------------------------------------------------------------------
-
-def is_gerente(user) -> bool:
-    """Gerente = hierarchy PADRAO e está no grupo de comunicação 'GERENTES'."""
-    if getattr(user, 'hierarchy', '') != 'PADRAO':
-        return False
-    try:
-        return user.communication_groups.filter(name__iexact='GERENTES').exists()
-    except Exception:
-        return False
-
-
-def _user_loja_names(user) -> list[str]:
-    """Nome(s) de loja do gerente, a partir de ``user.sector`` e ``user.sectors``."""
-    names: list[str] = []
-    sector = getattr(user, 'sector', None)
-    if sector and getattr(sector, 'name', ''):
-        names.append(sector.name.strip())
-    try:
-        for s in user.sectors.all():
-            n = (getattr(s, 'name', '') or '').strip()
-            if n and n not in names:
-                names.append(n)
-    except Exception:
-        pass
-    return names
-
-
-def fibras_for_user(user) -> 'models.QuerySet[Fibra]':
-    """Devolve um queryset das fibras visíveis para o usuário.
-
-    - Padrão consultor: apenas as fibras em que ele é o vendedor.
-    - Gerente (PADRAO + grupo GERENTES): todas as fibras do(s) seu(s) setor(es)
-      (match por PDV contendo o nome da loja).
-    - Coordenador/Admin/SuperAdmin: todas (filtros aplicados na view).
-    """
-    from django.db.models import Q
-
-    qs = Fibra.objects.all()
-    hierarchy = getattr(user, 'hierarchy', 'PADRAO')
-    if hierarchy != 'PADRAO':
-        return qs
-
-    if is_gerente(user):
-        lojas = _user_loja_names(user)
-        if not lojas:
-            return qs.none()
-        cond = Q()
-        for nome in lojas:
-            cond |= Q(pdv__icontains=nome)
-        return qs.filter(cond)
-
-    nome = _normalize(user.get_full_name() or user.username)
-    ids = [
-        f.id for f in qs.only('id', 'vendedor')
-        if _normalize(f.vendedor) == nome
-    ]
-    return qs.filter(id__in=ids)
+# Quem vê o quê em /fibras: permissoes.fibras_visiveis (liberação do SUPERADMIN em /fibras/acessos/).
 
 
 # ---------------------------------------------------------------------------

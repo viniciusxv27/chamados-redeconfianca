@@ -370,6 +370,60 @@ def pre_analise(cliente):
 
 
 # ── Gravar a venda ──────────────────────────────────────────────────────────
+def _brl(valor):
+    return 'R$ ' + f'{valor:,.2f}'.replace(',', '_').replace('.', ',').replace('_', '.')
+
+
+def ler_pagamentos(dados, total, erros):
+    """As partes do pagamento: [{forma, valor, nsu, parcelas}], somando o total dos produtos.
+
+    A tela manda ``pagamentos``; quem ainda manda a forma única (``forma_pagamento``/``nsu``/
+    ``parcelas``) vira um pagamento só, do valor inteiro.
+    """
+    brutos = dados.get('pagamentos')
+    if not isinstance(brutos, list) or not brutos:
+        brutos = [{'forma': dados.get('forma_pagamento') or '', 'valor': total,
+                   'nsu': dados.get('nsu'), 'parcelas': dados.get('parcelas')}] if dados.get('forma_pagamento') else []
+    if not brutos:
+        erros.append('Escolha a forma de pagamento: Cartão ou Pix.')
+        return []
+    saida, nsus = [], set()
+    for n, b in enumerate(b for b in brutos if isinstance(b, dict)):
+        rotulo = f'Pagamento {n + 1}' if len(brutos) > 1 else 'Pagamento'
+        forma = str(b.get('forma') or '').upper()
+        if forma not in ('CARTAO', 'PIX'):
+            erros.append(f'{rotulo}: escolha Cartão ou Pix.')
+            continue
+        valor = dinheiro(b.get('valor'))
+        if valor is None or valor <= 0:
+            erros.append(f'{rotulo}: informe o valor.')
+            continue
+        pg = {'forma': forma, 'valor': valor, 'nsu': '', 'parcelas': None}
+        if forma == 'CARTAO':
+            rotulo = f'Cartão {sum(1 for x in saida if x["forma"] == "CARTAO") + 1}' if len(brutos) > 1 else 'Cartão'
+            # O comprovante da maquininha: sem NSU não dá para conciliar a venda com o extrato.
+            nsu = re.sub(r'[^0-9A-Za-z]', '', str(b.get('nsu') or '')).upper()[:30]
+            if len(nsu) < 4:
+                erros.append(f'{rotulo}: informe o NSU do comprovante da maquininha.')
+            elif nsu in nsus:
+                erros.append(f'{rotulo}: o NSU {nsu} já está em outro cartão desta venda.')
+            nsus.add(nsu)
+            try:
+                parcelas = int(b.get('parcelas') or 0)
+            except (TypeError, ValueError):
+                parcelas = 0
+            if not 1 <= parcelas <= 24:
+                erros.append(f'{rotulo}: informe em quantas parcelas (1 a 24).')
+                parcelas = None
+            pg.update(nsu=nsu, parcelas=parcelas)
+        saida.append(pg)
+    pago = sum((pg['valor'] for pg in saida), Decimal('0'))
+    if saida and len(saida) == len(brutos) and pago != total:
+        erros.append(f'Os pagamentos somam {_brl(pago)} e a venda dá {_brl(total)} — '
+                     f'{"falta" if pago < total else "sobra"} {_brl(abs(total - pago))}.')
+    return saida
+
+
 class VendaInvalida(Exception):
     def __init__(self, erros):
         super().__init__('; '.join(erros))
@@ -382,7 +436,8 @@ def registrar_venda(dados, usuario, loja, vendedor=None):
     ``dados`` é o JSON da tela. Erros vão juntos em ``VendaInvalida`` — o
     vendedor vê tudo que falta de uma vez, não um erro por envio.
     """
-    from .models import ConfiguracaoVendas, ItemPreco, Plano, ServicoAdicional, Venda, VendaProduto, VendaServico
+    from .models import (ConfiguracaoVendas, ItemPreco, PagamentoVenda, Plano, ServicoAdicional, Venda, VendaProduto,
+                         VendaServico)
 
     erros = []
     vendedor = vendedor or usuario
@@ -403,24 +458,7 @@ def registrar_venda(dados, usuario, loja, vendedor=None):
     if not produtos and not servicos:
         erros.append('Adicione ao menos um produto ou serviço.')
 
-    # Pagamento ([Venda de produtos.RF004]) — só faz sentido com produto.
-    forma = dados.get('forma_pagamento') or ''
     vivo_mais = bool(dados.get('vivo_mais')) and bool(produtos)
-    if produtos and forma not in ('CARTAO', 'PIX'):
-        erros.append('Escolha a forma de pagamento: Cartão ou Pix.')
-    nsu, parcelas = '', None
-    if produtos and forma == 'CARTAO':
-        # O comprovante da maquininha: sem NSU não dá para conciliar a venda com o extrato.
-        nsu = re.sub(r'[^0-9A-Za-z]', '', str(dados.get('nsu') or '')).upper()[:30]
-        if len(nsu) < 4:
-            erros.append('Cartão: informe o NSU do comprovante da maquininha.')
-        try:
-            parcelas = int(dados.get('parcelas') or 0)
-        except (TypeError, ValueError):
-            parcelas = 0
-        if not 1 <= parcelas <= 24:
-            erros.append('Cartão: informe em quantas parcelas (1 a 24).')
-            parcelas = None
     percentual = ConfiguracaoVendas.atual().vivo_mais_percentual if vivo_mais else None
 
     # Plano anterior ([Início da venda.RF005])
@@ -508,6 +546,14 @@ def registrar_venda(dados, usuario, loja, vendedor=None):
             ras=ras, ras_valor=ras_valor, ras_pedido=ras_pedido, codigo=codigo, conta=conta,
             prateleira=bool(p.get('prateleira_infinita')), serial=serial, categoria=categoria))
 
+    # Pagamento ([Venda de produtos.RF004]) — só faz sentido com produto, e fecha com o total dos produtos.
+    pagamentos = ler_pagamentos(dados, sum((i['final'] * i['qtde'] for i in itens_produto), Decimal('0')),
+                                erros) if produtos else []
+    formas = {pg['forma'] for pg in pagamentos}
+    forma = (formas.pop() if len(formas) == 1 else 'MISTO') if pagamentos else ''
+    cartao = next((pg for pg in pagamentos if pg['forma'] == 'CARTAO'), None)
+    nsu, parcelas = (cartao['nsu'], cartao['parcelas']) if cartao else ('', None)
+
     # Serviços
     itens_servico = []
     tipos = dict(VendaServico.TIPOS)
@@ -591,12 +637,14 @@ def registrar_venda(dados, usuario, loja, vendedor=None):
             data_venda=timezone.now(), cliente=cliente, cliente_nome=cliente.nome, cliente_cpf=formatar_cpf(cpf),
             cliente_telefone=cliente.telefone,
             tipo_venda=' + '.join(x for x in ('Produto' if itens_produto else '', 'Serviço' if itens_servico else '') if x),
-            forma_pagamento=forma if produtos else '', vivo_mais=vivo_mais, vivo_mais_percentual=percentual,
+            forma_pagamento=forma, vivo_mais=vivo_mais, vivo_mais_percentual=percentual,
             nsu=nsu, parcelas=parcelas,
             plano_anterior=plano_anterior, plano_anterior_nome=(plano_anterior.nome if plano_anterior else str(pa.get('nome') or ''))[:200],
             segmentacao_anterior=segmentacao_cliente[:10], valor_anterior=valor_anterior, numero_fake=fake,
             observacao=str(dados.get('observacao') or '').strip()[:2000],
         )
+        for n, pg in enumerate(pagamentos, start=1):
+            PagamentoVenda.objects.create(venda=venda, ordem=n, **pg)
         for i in itens_produto:
             item = i['item']
             VendaProduto.objects.create(

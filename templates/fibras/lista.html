@@ -77,7 +77,7 @@ html.dark .fb-novo { color: #A5B4FC; }
       <p>{% if periodo_ativo %}Período: {{ periodo_rotulo }}{% else %}Mês corrente{% endif %} · tabela completa para busca e filtragem.</p>
     </div>
     <div class="fb-acoes">
-      {% if can_import %}
+      {% if fb_pode.planilha_importar %}
       <button type="button" class="fb-btn sucesso" data-fb-toggle="fbImport" aria-expanded="false" aria-controls="fbImport">
         <i class="fas fa-file-excel" aria-hidden="true"></i> Importar planilha
       </button>
@@ -89,7 +89,7 @@ html.dark .fb-novo { color: #A5B4FC; }
     {% include 'fibras/_fb_nav.html' with ativo='lista' %}
   </div>
 
-  {% if can_import %}
+  {% if fb_pode.planilha_importar %}
   <section class="fb-card fb-recolhivel" id="fbImport" aria-label="Importar planilha">
     <form method="post" action="{% url 'fibras:importar_planilha' %}" enctype="multipart/form-data" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap" id="fbImportForm">{% csrf_token %}
       <label class="fb-rotulo" style="margin:0;display:flex;align-items:center;gap:8px;flex:1 1 260px;min-width:0">
@@ -182,7 +182,7 @@ html.dark .fb-novo { color: #A5B4FC; }
           <td data-label="Valor" class="num valor">R$ {{ f.valor|floatformat:"2g" }}</td>
           <td data-label="Vendedor / PDV" style="font-size:12px">{{ f.vendedor }}<span class="sub">{{ f.pdv }}</span></td>
           <td data-label="Data" style="font-size:12px;white-space:nowrap">{{ f.data_da_venda|date:"d/m/Y" }}</td>
-          <td data-label="Status" class="centro cel-status">{% if is_ilha %}<select class="fb-st-select" data-st="{{ f.status }}" data-mudar-status aria-label="Status da venda {{ f.numero_da_venda }}">{% for k, l in status_choices %}<option value="{{ k }}" {% if k == f.status %}selected{% endif %}>{{ l }}</option>{% endfor %}</select>{% else %}<span class="st-pill" data-st="{{ f.status }}">{{ f.get_status_display }}</span>{% endif %}</td>
+          <td data-label="Status" class="centro cel-status">{% if fb_pode.status_alterar %}<select class="fb-st-select" data-st="{{ f.status }}" data-mudar-status aria-label="Status da venda {{ f.numero_da_venda }}">{% for k, l in status_choices %}<option value="{{ k }}" {% if k == f.status %}selected{% endif %}>{{ l }}</option>{% endfor %}</select>{% else %}<span class="st-pill" data-st="{{ f.status }}">{{ f.get_status_display }}</span>{% endif %}</td>
           <td data-label="Retorno Myrella" class="retorno cel-retorno" title="{{ f.retorno_myrella }}">{{ f.retorno_myrella|truncatechars:60 }}</td>
           <td class="num cel-acao"><a href="{% url 'fibras:detail' f.pk %}" class="fb-abrir">Abrir <i class="fas fa-arrow-right" aria-hidden="true"></i></a></td>
         </tr>

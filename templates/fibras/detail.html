@@ -102,7 +102,7 @@
       {% if fibra.motivo_cruzamento %}<p>{{ fibra.motivo_cruzamento }}</p>{% endif %}
       {% if fibra.observacao_cruzamento %}<p class="fb-mut" style="margin-top:4px">{{ fibra.observacao_cruzamento }}</p>{% endif %}
       {% if fibra.comentario_cruzamento %}<p class="fb-mut" style="margin-top:4px"><i class="far fa-comment" aria-hidden="true"></i> {{ fibra.comentario_cruzamento }}</p>{% endif %}
-      {% if is_ilha %}<a href="{% url 'fibras:validacao' %}" class="fb-btn pequeno" style="margin-top:10px"><i class="fas fa-arrow-up-right-from-square" aria-hidden="true"></i> Abrir na validação</a>{% endif %}
+      {% if fb_pode.validacao_usar %}<a href="{% url 'fibras:validacao' %}" class="fb-btn pequeno" style="margin-top:10px"><i class="fas fa-arrow-up-right-from-square" aria-hidden="true"></i> Abrir na validação</a>{% endif %}
     </div>
     {% endif %}
 
@@ -120,7 +120,7 @@
       <section class="fb-card" style="animation-delay:60ms">
         <div class="fb-card-cab">
           <h2><i class="fas fa-life-ring" aria-hidden="true"></i> Incidentes <span class="fb-tag">{{ incidentes|length }}</span></h2>
-          <a href="{% url 'fibras:chat' fibra.pk %}" class="fb-btn pequeno"><i class="fas fa-comments" aria-hidden="true"></i> Chat reverso</a>
+          {% if fb_pode.tratativa_abrir %}<a href="{% url 'fibras:chat' fibra.pk %}" class="fb-btn pequeno"><i class="fas fa-comments" aria-hidden="true"></i> Chat reverso</a>{% endif %}
         </div>
         {% if incidentes %}
         <ol class="fb-linha-tempo">
@@ -162,7 +162,7 @@
     </div>
 
     <aside class="fb-pegajoso" style="min-width:0">
-      {% if is_ilha %}
+      {% if fb_pode.status_alterar %}
       <section class="fb-card" style="animation-delay:80ms">
         <div class="fb-card-cab"><h2><i class="fas fa-arrows-rotate" aria-hidden="true"></i> Alterar status</h2></div>
         <form method="post" action="{% url 'fibras:change_status' fibra.pk %}" id="fbFormStatus">{% csrf_token %}
@@ -181,6 +181,7 @@
       </section>
       {% endif %}
 
+      {% if fb_pode.tratativa_abrir %}
       <section class="fb-card" style="animation-delay:100ms">
         <div class="fb-card-cab"><h2><i class="fas fa-exclamation-circle" aria-hidden="true"></i> Abrir incidente / pedir ajuste</h2></div>
         <form method="post" action="{% url 'fibras:abrir_incidente' fibra.pk %}" id="fbFormIncidente">{% csrf_token %}
@@ -191,6 +192,7 @@
           <p class="fb-mut" style="margin:8px 0 0">A tratativa aparece também em Suporte → SUPORTE FIXA.</p>
         </form>
       </section>
+      {% endif %}
     </aside>
   </div>
  </div>

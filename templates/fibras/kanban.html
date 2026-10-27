@@ -161,17 +161,26 @@ html.dark .fb-k-novo { color: #A5B4FC; }
     <div>
       <h1><span class="fb-ico" aria-hidden="true"><i class="fas fa-network-wired"></i></span> Fibras — Acompanhamento</h1>
       <p>{% if periodo_ativo %}Período: {{ periodo_rotulo }}{% else %}Todo o período{% endif %} · status segmentado conforme retorno da Ilha.
-        {% if is_ilha %}<span class="fb-dica"><i class="fas fa-hand-pointer" aria-hidden="true"></i> Arraste os cards para mudar o status</span>{% endif %}
+        {% if fb_pode.status_alterar %}<span class="fb-dica"><i class="fas fa-hand-pointer" aria-hidden="true"></i> Arraste os cards para mudar o status</span>{% endif %}
       </p>
     </div>
     <div class="fb-acoes">
+      {% if fb_pode.validacao_usar %}
+      <button type="button" class="fb-btn primario" id="fbValCruzar" data-url="{% url 'fibras:validacao_cruzar' %}"
+              data-ini="{{ cruzar_ini|date:'Y-m-d' }}" data-fim="{{ cruzar_fim|date:'Y-m-d' }}"
+              {% if not validacao.importacao %}disabled title="Importe a Esteira primeiro"{% else %}title="Cruza a Base de Vendas com a Esteira Vivo de {{ cruzar_ini|date:'d/m/Y' }} a {{ cruzar_fim|date:'d/m/Y' }} (a mesma conta da tela de Validação)"{% endif %}>
+        <i class="fas fa-code-compare" aria-hidden="true"></i> Cruzar Base × Esteira
+      </button>
+      {% endif %}
+      {% if fb_pode.planilha_importar %}
+      <button type="button" class="fb-btn sucesso" id="fbImportar" title="Escolha o .xlsx da Esteira Vivo (ANALÍTICO ou Base analítica – FIXA): importa e já cruza com a Base de Vendas">
+        <i class="fas fa-file-excel" aria-hidden="true"></i> Importar Esteira
+      </button>
+      {% endif %}
+      {% if fb_pode.exportar %}
       <a href="{% url 'fibras:export_canceladas_csv' %}{% if periodo_qs %}?{{ periodo_qs }}{% endif %}" class="fb-btn perigo" title="Exporta as fibras canceladas na planilha de Gestão Documental (Receita zerada){% if periodo_ativo %} · período: {{ periodo_rotulo }}{% endif %}">
         <i class="fas fa-file-csv" aria-hidden="true"></i> Exportar canceladas
       </a>
-      {% if can_import %}
-      <button type="button" class="fb-btn sucesso" data-fb-toggle="fbImport" aria-expanded="false" aria-controls="fbImport">
-        <i class="fas fa-file-excel" aria-hidden="true"></i> Importar Esteira
-      </button>
       {% endif %}
     </div>
   </div>
@@ -191,8 +200,8 @@ html.dark .fb-k-novo { color: #A5B4FC; }
     </div>
   </div>
 
-  {% if can_import %}
-  <section class="fb-card fb-recolhivel" id="fbImport" aria-label="Importar planilha da Esteira">
+  {% if fb_pode.planilha_importar %}
+  <section class="fb-card" id="fbImport" aria-label="Importar planilha da Esteira" hidden>
     <form method="post" action="{% url 'fibras:importar_planilha' %}" enctype="multipart/form-data" class="fb-import" id="fbImportForm">{% csrf_token %}
       <label class="fb-drop" id="fbDrop">
         <span class="fb-drop-ico" aria-hidden="true"><i class="fas fa-file-excel"></i></span>
@@ -219,8 +228,7 @@ html.dark .fb-k-novo { color: #A5B4FC; }
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button type="button" class="fb-btn leve pequeno" id="fbValLimpar" hidden><i class="fas fa-xmark" aria-hidden="true"></i> Tirar filtro</button>
-        {% if is_ilha %}
-        {% if v.importacao and periodo_ativo %}<button type="button" class="fb-btn pequeno" id="fbValCruzar" data-url="{% url 'fibras:validacao_cruzar' %}" data-ini="{{ filtro_de }}" data-fim="{{ filtro_ate }}" title="Roda o cruzamento Base × Esteira no período do quadro (o mesmo da tela de Validação)"><i class="fas fa-rotate" aria-hidden="true"></i> Validar o período</button>{% endif %}
+        {% if fb_pode.validacao_usar %}
         <a href="{% url 'fibras:validacao' %}" class="fb-btn pequeno"><i class="fas fa-up-right-from-square" aria-hidden="true"></i> Validação completa</a>
         {% endif %}
       </div>
@@ -319,7 +327,7 @@ html.dark .fb-k-novo { color: #A5B4FC; }
       <div class="kanban-col" data-status="{{ col.key }}">
         {% for f in col.items %}
         {% with inc=f.incidentes.first %}
-        <article class="kanban-card{% if is_ilha and col.key != 'nao_localizado' %} arrastavel{% endif %}{% if inc and inc.aberto_por_id == request.user.id and inc.has_unread_reply_for_opener %} nova-resposta{% endif %}"
+        <article class="kanban-card{% if fb_pode.status_alterar and col.key != 'nao_localizado' %} arrastavel{% endif %}{% if inc and inc.aberto_por_id == request.user.id and inc.has_unread_reply_for_opener %} nova-resposta{% endif %}"
              data-st="{{ col.key }}" data-pk="{{ f.pk }}" data-valor="{{ f.valor|unlocalize }}"
              data-url="{% url 'fibras:detail' f.pk %}"
              data-assert="{{ f.assertividade }}" data-cruz="{{ f.status_cruzamento }}" data-end="{% if f.conferencia_endereco == 'Divergente' or f.conferencia_endereco == 'Parcialmente divergente' %}div{% endif %}"
@@ -327,7 +335,7 @@ html.dark .fb-k-novo { color: #A5B4FC; }
           <div class="fb-k-topo">
             <a class="fb-k-nome" href="{% url 'fibras:detail' f.pk %}" title="{{ f.cliente|default:'—' }}">{{ f.cliente|default:"—" }}</a>
             <button type="button" class="fb-k-acao fb-peek-btn" aria-label="Pré-visualizar venda {{ f.numero_da_venda }}" title="Pré-visualizar"><i class="fas fa-eye" aria-hidden="true"></i></button>
-            {% if is_ilha and col.key != 'nao_localizado' %}<i class="fas fa-grip-vertical fb-k-grip" aria-hidden="true"></i>{% endif %}
+            {% if fb_pode.status_alterar and col.key != 'nao_localizado' %}<i class="fas fa-grip-vertical fb-k-grip" aria-hidden="true"></i>{% endif %}
           </div>
           <div class="fb-k-meta">{{ f.cpf }} · Venda {{ f.numero_da_venda }}{% if f.numero_protocolo %} · Prot. {{ f.numero_protocolo }}{% endif %}</div>
           {% if f.ordem_vinculada %}
@@ -380,7 +388,7 @@ html.dark .fb-k-novo { color: #A5B4FC; }
       <div class="fb-vazio" data-vazio{% if col.items %} hidden{% endif %}>
         <i class="fas {% if col.key == 'nao_localizado' %}fa-magnifying-glass-location{% else %}fa-inbox{% endif %}" aria-hidden="true"></i>
         <b data-vazio-tit>Nenhuma venda.</b>
-        <span data-vazio-txt>{% if col.key == 'nao_localizado' %}Tudo certo: todas as vendas apareceram na planilha mais recente.{% elif is_ilha %}Arraste um card para cá para mudar o status.{% else %}Quando houver vendas neste status elas aparecem aqui.{% endif %}</span>
+        <span data-vazio-txt>{% if col.key == 'nao_localizado' %}Tudo certo: todas as vendas apareceram na planilha mais recente.{% elif fb_pode.status_alterar %}Arraste um card para cá para mudar o status.{% else %}Quando houver vendas neste status elas aparecem aqui.{% endif %}</span>
       </div>
     </section>
     {% endfor %}
@@ -422,7 +430,7 @@ html.dark .fb-k-novo { color: #A5B4FC; }
     </header>
     <div class="fb-dialog-corpo">
       <div id="fbPeekCorpo"></div>
-      {% if is_ilha %}
+      {% if fb_pode.status_alterar %}
       <div id="fbPeekMover" hidden>
         <p class="fb-rotulo" style="margin:18px 0 0">Mover para</p>
         <div class="fb-mover" id="fbPeekMoverBtns"></div>
@@ -442,7 +450,7 @@ html.dark .fb-k-novo { color: #A5B4FC; }
 {% url 'fibras:change_status_ajax' 0 as url_status_modelo %}
 <span id="fbUrlStatus" hidden data-url="{{ url_status_modelo }}"></span>
 
-{% if is_ilha %}
+{% if fb_pode.status_alterar %}
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 {% endif %}
 <script>
@@ -450,7 +458,7 @@ html.dark .fb-k-novo { color: #A5B4FC; }
   var board = document.getElementById('kanbanBoard');
   if (!board) return;
   var FB = window.FB;
-  var IS_ILHA = {% if is_ilha %}true{% else %}false{% endif %};
+  var IS_ILHA = {% if fb_pode.status_alterar %}true{% else %}false{% endif %};
   var cols = Array.prototype.slice.call(board.querySelectorAll('.fb-col'));
   var kpis = document.getElementById('fbKpis');
   var statusLabels = {};
@@ -543,20 +551,20 @@ html.dark .fb-k-novo { color: #A5B4FC; }
   var vCruzar = document.getElementById('fbValCruzar');
   if (vCruzar) vCruzar.addEventListener('click', function () {
     vCruzar.disabled = true;
-    vCruzar.innerHTML = '<i class="fas fa-circle-notch fa-spin" aria-hidden="true"></i> Validando…';
+    vCruzar.innerHTML = '<i class="fas fa-circle-notch fa-spin" aria-hidden="true"></i> Cruzando…';
     fetch(vCruzar.dataset.url, { method: 'POST', credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf() },
       body: JSON.stringify({ ini: vCruzar.dataset.ini, fim: vCruzar.dataset.fim }) })
       .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
       .then(function (res) {
-        if (!res.ok) throw new Error(res.j.erro || 'Falha ao validar.');
-        FB.toast('Validação feita: ' + ((res.j.kpis || {}).pedidos || 0) + ' pedido(s) analisados. Atualizando…', true);
+        if (!res.ok) throw new Error(res.j.erro || 'Falha ao cruzar.');
+        FB.toast('Cruzamento feito: ' + ((res.j.kpis || {}).pedidos || 0) + ' pedido(s) analisados. Atualizando…', true);
         setTimeout(function () { location.reload(); }, 900);
       })
       .catch(function (e) {
-        FB.toast(e.message || 'Falha ao validar.', false);
+        FB.toast(e.message || 'Falha ao cruzar.', false);
         vCruzar.disabled = false;
-        vCruzar.innerHTML = '<i class="fas fa-rotate" aria-hidden="true"></i> Validar o período';
+        vCruzar.innerHTML = '<i class="fas fa-code-compare" aria-hidden="true"></i> Cruzar Base × Esteira';
       });
   });
   if (busca) {
@@ -766,7 +774,26 @@ html.dark .fb-k-novo { color: #A5B4FC; }
   }
 
   /* ---------- Importação: nome do arquivo + arrastar arquivo ---------- */
-  var drop = document.getElementById('fbDrop');
+  var drop = document.getElementById('fbDrop'), bImportar = document.getElementById('fbImportar');
+  if (drop && bImportar) {
+    // Um clique: escolhe o arquivo e já importa (o arquivo também pode ser solto em cima do botão).
+    var entrada = drop.querySelector('input[type=file]'), formImp = document.getElementById('fbImportForm');
+    var enviar = function () {
+      if (!entrada.files || !entrada.files[0]) return;
+      bImportar.disabled = true;
+      bImportar.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Importando ' + entrada.files[0].name + '…';
+      formImp.submit();
+    };
+    bImportar.addEventListener('click', function () { entrada.click(); });
+    entrada.addEventListener('change', enviar);
+    bImportar.addEventListener('dragover', function (e) { e.preventDefault(); bImportar.classList.add('on'); });
+    bImportar.addEventListener('dragleave', function () { bImportar.classList.remove('on'); });
+    bImportar.addEventListener('drop', function (e) {
+      e.preventDefault(); bImportar.classList.remove('on');
+      if (!e.dataTransfer.files.length) return;
+      entrada.files = e.dataTransfer.files; enviar();
+    });
+  }
   if (drop) {
     var inp = drop.querySelector('input[type=file]'), nome = document.getElementById('fbArqNome');
     inp.addEventListener('change', function () { nome.textContent = inp.files && inp.files[0] ? inp.files[0].name : 'escolha ou arraste o .xlsx'; });
