@@ -174,6 +174,23 @@ class MarcacaoAuditoria(models.Model):
 LIMITE_VALOR_DESPREZIVEL = Decimal('1.00')
 
 
+# O que a loja de fato precisa ajustar (28/10/2026). Os outros tipos da auditoria
+# (valor, produto, documento, data, loja, bônus fabricante) continuam no espelho,
+# mas saem da Visão SAP. Cada grupo é uma aba.
+GRUPOS_DA_TELA = (
+    ('serial', 'Serial não encontrado', ('SERIAL ERRADO NO VIVO GO', 'SERIAL AUSENTE NO VIVO GO')),
+    ('vivogo', 'Lançado no SAP e não no Vivo GO', ('VENDA NÃO ENCONTRADA NO VIVO GO',)),
+    ('sem_nf', 'Sem NF', ('SEM NF',)),
+)
+TIPOS_DA_TELA = tuple(t for _c, _r, tipos in GRUPOS_DA_TELA for t in tipos)
+
+
+def q_da_tela(grupo=''):
+    """Só os tipos que a Visão SAP mostra; com ``grupo``, só os daquela aba."""
+    tipos = dict((c, t) for c, _r, t in GRUPOS_DA_TELA).get(grupo, TIPOS_DA_TELA)
+    return models.Q(tipo_erro__in=tipos)
+
+
 def q_valor_desprezivel():
     limite = LIMITE_VALOR_DESPREZIVEL
     return models.Q(tipo_erro__iexact='VALOR', diferenca_valor__gt=-limite, diferenca_valor__lt=limite)

@@ -1,0 +1,19 @@
+{% comment %}
+As abas da Visão SAP (28/10/2026): só o que a loja precisa ajustar, cada grupo numa aba.
+O número é o que está no filtro (mês, loja, situação, busca) em cada aba. Trocar de aba
+mantém os outros filtros e zera o tipo e a página.
+{% endcomment %}
+<div class="sap-card p-1.5 mb-4 flex gap-1.5 overflow-x-auto" role="tablist" aria-label="O que ajustar">
+    {% if com_todos %}
+    <a href="?{% if query_sem_grupo %}{{ query_sem_grupo }}&amp;{% endif %}grupo=todos" role="tab" aria-selected="{% if filtros.grupo == 'todos' %}true{% else %}false{% endif %}"
+       class="shrink-0 flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold whitespace-nowrap {% if filtros.grupo == 'todos' %}bg-sky-600 text-white{% else %}text-gray-600 hover:bg-gray-50{% endif %}">
+        Todos <span class="px-1.5 rounded-full text-[11px] tabular {% if filtros.grupo == 'todos' %}bg-white/25{% else %}bg-gray-100{% endif %}">{{ total_grupos }}</span></a>
+    {% endif %}
+    {% for g in grupos %}
+    <a href="?{% if query_sem_grupo %}{{ query_sem_grupo }}&amp;{% endif %}grupo={{ g.chave }}" role="tab" aria-selected="{% if filtros.grupo == g.chave %}true{% else %}false{% endif %}"
+       class="shrink-0 flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold whitespace-nowrap {% if filtros.grupo == g.chave %}bg-sky-600 text-white{% else %}text-gray-600 hover:bg-gray-50{% endif %}">
+        <i class="fas {% if g.chave == 'serial' %}fa-barcode{% elif g.chave == 'vivogo' %}fa-cart-arrow-down{% else %}fa-file-invoice{% endif %} text-xs" aria-hidden="true"></i>
+        {{ g.rotulo }}
+        <span class="px-1.5 rounded-full text-[11px] tabular {% if filtros.grupo == g.chave %}bg-white/25{% elif g.n %}bg-amber-100 text-amber-800{% else %}bg-gray-100 text-gray-500{% endif %}">{{ g.n }}</span></a>
+    {% endfor %}
+</div>

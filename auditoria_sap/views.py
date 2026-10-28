@@ -15,8 +15,8 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
 from .espelho import sincronizar, ultima_sincronizacao
-from .models import (LIMITE_VALOR_DESPREZIVEL, LinhaAuditoria, SincronizacaoAuditoria,
-                     filtro_aguardando_leitura, filtro_resolvidas_pendentes, inicio_da_ultima_leitura,
+from .models import (GRUPOS_DA_TELA, LIMITE_VALOR_DESPREZIVEL, LinhaAuditoria, SincronizacaoAuditoria,
+                     filtro_aguardando_leitura, filtro_resolvidas_pendentes, inicio_da_ultima_leitura, q_da_tela,
                      q_valor_desprezivel)
 from .mysql import SapIndisponivel
 from .permissions import e_gestor as _e_gestor
@@ -100,7 +100,7 @@ def _mes_valido(texto):
         return ''
 
 
-def ler_filtros(request):
+def ler_filtros(request, grupo_padrao=''):
     """O que a tela está filtrando — os mesmos filtros na lista e no painel.
 
     O período começa no **mês atual**: ninguém precisa escolher nada para ver o
@@ -137,7 +137,12 @@ def ler_filtros(request):
     comparacao = request.GET.get('comparacao') or ''
     if comparacao not in dict(COMPARACOES):
         comparacao = ''
+    # A aba (serial / lançado no SAP e não no Vivo GO / sem NF). "todos" junta as três.
+    grupo = request.GET.get('grupo')
+    if grupo is None or (grupo not in {c for c, _r, _t in GRUPOS_DA_TELA} and grupo != 'todos'):
+        grupo = grupo_padrao or 'todos'
     return {
+        'grupo': grupo,
         'tipo': (request.GET.get('tipo') or '').strip(),
         'loja': (request.GET.get('loja') or '').strip(),
         'de': de, 'ate': ate,
@@ -155,7 +160,8 @@ def filtrar(filtros, corte=None, pdvs=None):
 
     Divergência de valor abaixo de R$ 1 fica de fora de tudo (``q_valor_desprezivel``).
     """
-    qs = LinhaAuditoria.objects.exclude(q_valor_desprezivel())
+    qs = LinhaAuditoria.objects.filter(q_da_tela('' if filtros.get('grupo', 'todos') == 'todos' else filtros['grupo']))
+    qs = qs.exclude(q_valor_desprezivel())
     if pdvs is not None:
         qs = qs.filter(pdv__in=pdvs)
     if filtros['presenca'] == 'na':
@@ -230,11 +236,24 @@ def _lojas_do_filtro(visiveis):
     return sorted(nomes)
 
 
+def _query_sem(request, *chaves):
+    """Os filtros da URL sem algumas chaves (para os links que trocam só elas)."""
+    parametros = request.GET.copy()
+    for chave in chaves:
+        parametros.pop(chave, None)
+    return parametros.urlencode()
+
+
 def _contexto_comum(request, filtros, pdvs=None):
     """O que lista e painel mostram igual: filtros, listas de escolha, espelho."""
-    visiveis = LinhaAuditoria.objects.filter(ativa=True).exclude(q_valor_desprezivel())
+    visiveis = LinhaAuditoria.objects.filter(q_da_tela(), ativa=True).exclude(q_valor_desprezivel())
     if pdvs is not None:
         visiveis = visiveis.filter(pdv__in=pdvs)
+    # As abas, com o que está aberto em cada uma nos demais filtros (mês, loja, busca…).
+    sem_aba = filtrar({**filtros, 'grupo': 'todos', 'tipo': ''}, pdvs=pdvs)
+    contagem = dict(sem_aba.values_list('tipo_erro').annotate(n=Count('id')).values_list('tipo_erro', 'n'))
+    grupos = [{'chave': c, 'rotulo': r, 'n': sum(contagem.get(t, 0) for t in tipos)} for c, r, tipos in GRUPOS_DA_TELA]
+    tipos_da_aba = dict((c, t) for c, _r, t in GRUPOS_DA_TELA).get(filtros['grupo'])
     atual = timezone.localdate().strftime('%Y-%m')
     com_venda = {m.strftime('%Y-%m') for m in (visiveis.exclude(data_venda__isnull=True)
                                                 .annotate(m=TruncMonth('data_venda'))
@@ -252,8 +271,12 @@ def _contexto_comum(request, filtros, pdvs=None):
         'rotulo_periodo': (rotulo_mes(filtros['mes']) if _mes_valido(filtros['mes'])
                            else 'Todos os meses' if filtros['mes'] == TODOS_OS_MESES
                            else 'Período personalizado'),
-        'tipos': (visiveis.exclude(tipo_erro='').values_list('tipo_erro', flat=True)
-                  .distinct().order_by('tipo_erro')),
+        'grupos': grupos,
+        'query_sem_grupo': _query_sem(request, 'grupo', 'tipo', 'pagina'),
+        'total_grupos': sum(g['n'] for g in grupos),
+        # Tipo do erro só faz sentido dentro da aba (Serial tem dois: errado e ausente).
+        'tipos': (visiveis.filter(tipo_erro__in=tipos_da_aba) if tipos_da_aba else visiveis)
+                  .exclude(tipo_erro='').values_list('tipo_erro', flat=True).distinct().order_by('tipo_erro'),
         'lojas': _lojas_do_filtro(visiveis),
         # O gerente vê só a loja dele: a tela diz isso em vez de oferecer um
         # filtro de loja com uma opção só.
@@ -275,8 +298,8 @@ def _contexto_comum(request, filtros, pdvs=None):
 @login_required
 @so_auditoria
 def lista(request):
-    """A auditoria linha a linha, com filtro, ordem e o botão de resolver."""
-    filtros = ler_filtros(request)
+    """A auditoria linha a linha, com filtro, ordem e o botão de resolver. Abre na aba Serial."""
+    filtros = ler_filtros(request, grupo_padrao='serial')
     pdvs = pdvs_visiveis(request.user)
     qs = ordenar(filtrar(filtros, pdvs=pdvs), filtros['ordem'])
     resumo = _resumo(qs)
@@ -453,7 +476,9 @@ def painel(request):
 def _linha_visivel(user, linha_id):
     """A linha, se ela for de uma loja que a pessoa vê — senão 404, nem pela URL."""
     pdvs = pdvs_visiveis(user)
-    qs = LinhaAuditoria.objects.all() if pdvs is None else LinhaAuditoria.objects.filter(pdv__in=pdvs)
+    qs = LinhaAuditoria.objects.filter(q_da_tela())
+    if pdvs is not None:
+        qs = qs.filter(pdv__in=pdvs)
     return get_object_or_404(qs, id=linha_id)
 
 

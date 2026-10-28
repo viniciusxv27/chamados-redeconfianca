@@ -59,6 +59,7 @@ O ciclo: alguém marca "resolvido". Até a próxima leitura do SAP a linha fica
     </div>
 </div>
 
+{% include 'auditoria_sap/_grupos.html' with com_todos=True %}
 {% include 'auditoria_sap/_filtros.html' %}
 
 {% if not tem_espelho %}

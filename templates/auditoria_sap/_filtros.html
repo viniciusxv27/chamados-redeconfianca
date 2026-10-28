@@ -3,6 +3,7 @@ Barra de filtros da Visão SAP — a mesma na auditoria e no painel, para o que
 está na tela e o que está no gráfico serem sempre o mesmo recorte.
 {% endcomment %}
 <form method="get" class="sap-card p-3 sm:p-4 mb-4" id="sapFiltros">
+    <input type="hidden" name="grupo" value="{{ filtros.grupo }}">
     <div class="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-2.5">
         {% comment %}O mês vem primeiro e já começa no atual; os meses anteriores ficam no menu.{% endcomment %}
         <div class="col-span-2">

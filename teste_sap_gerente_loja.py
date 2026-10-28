@@ -89,7 +89,7 @@ try:
 
     def linha(n, pdv, cliente):
         return LinhaAuditoria.objects.create(
-            chave=f'zzsap{n:035d}', tipo_erro='SEM NF', pdv=pdv, id_venda=f'ZZ{n}',
+            chave=f'zzsap{n:035d}', tipo_erro='SERIAL ERRADO NO VIVO GO',   # a aba em que a lista abre pdv=pdv, id_venda=f'ZZ{n}',
             nome_cliente=cliente, data_venda=timezone.localdate(), dados={'CLIENTE': cliente})
 
     minha1 = linha(1, 'ZZ PORTO TESTE', 'ZZSAP Cliente da minha loja 1')

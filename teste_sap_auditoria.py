@@ -240,7 +240,7 @@ try:
 
     print('\n== A TELA DA AUDITORIA ==')
     c = Client(); c.force_login(chefe)
-    r = c.get('/sap/')
+    r = c.get('/sap/?grupo=todos')
     t('a auditoria abre', r.status_code == 200, r.status_code)
     html = r.content.decode()
     t('mostra a linha da venda', '2728717' in html and 'Cliente De Teste' in html.title() or 'CLIENTE DE TESTE' in html)
@@ -255,47 +255,47 @@ try:
     visiveis = {l.id_venda for l in r.context['pagina']}
     t('por padrão mostra só as abertas (a resolvida sai)', '2728717' not in visiveis, visiveis)
 
-    r = c.get('/sap/?situacao=todas')
+    r = c.get('/sap/?grupo=todos&situacao=todas')
     t('pedindo todas, a resolvida volta', any(l.resolvida for l in r.context['pagina']))
 
-    r = c.get('/sap/?situacao=todas&tipo=VENDA N%C3%83O ENCONTRADA NO VIVO GO')
+    r = c.get('/sap/?grupo=todos&situacao=todas&tipo=VENDA N%C3%83O ENCONTRADA NO VIVO GO')
     t('o filtro por tipo recorta',
       all(l.tipo_erro == 'VENDA NÃO ENCONTRADA NO VIVO GO' for l in r.context['pagina'])
       and len(r.context['pagina']) == 1, [l.tipo_erro for l in r.context['pagina']])
 
-    r = c.get('/sap/?situacao=todas&loja=PIUMA')
+    r = c.get('/sap/?grupo=todos&situacao=todas&loja=PIUMA')
     t('o filtro por loja também', all(l.pdv == 'PIUMA' for l in r.context['pagina'])
       and len(r.context['pagina']) >= 1)
 
-    r = c.get('/sap/?situacao=todas&q=2728999')
+    r = c.get('/sap/?grupo=todos&situacao=todas&q=2728999')
     t('a busca acha pela venda', len(r.context['pagina']) == 1
       and r.context['pagina'][0].id_venda == '2728999')
-    r = c.get('/sap/?situacao=todas&q=OUTRO CLIENTE')
+    r = c.get('/sap/?grupo=todos&situacao=todas&q=OUTRO CLIENTE')
     t('e pelo nome do cliente', len(r.context['pagina']) == 1)
 
-    r = c.get(f'/sap/?situacao=todas&de={HOJE:%Y-%m-%d}')
+    r = c.get(f'/sap/?grupo=todos&situacao=todas&de={HOJE:%Y-%m-%d}')
     t('o período corta o que é mais antigo',
       all(l.data_venda >= HOJE for l in r.context['pagina']))
 
-    r = c.get('/sap/?situacao=todas&comparacao=valor')
+    r = c.get('/sap/?grupo=todos&situacao=todas&comparacao=valor')
     t('dá para ver só o que diverge no valor',
       all('DIVERG' in l.status_valor for l in r.context['pagina']))
 
-    r = c.get('/sap/?situacao=todas&presenca=sairam')
+    r = c.get('/sap/?grupo=todos&situacao=todas&presenca=sairam')
     t('e só o que já saiu do SAP', all(not l.ativa for l in r.context['pagina'])
       and len(r.context['pagina']) >= 1)
 
-    r = c.get('/sap/?situacao=todas&ordem=diferenca')
+    r = c.get('/sap/?grupo=todos&situacao=todas&ordem=diferenca')
     valores = [abs(l.diferenca_valor or D('0')) for l in r.context['pagina']]
     t('a ordem por diferença traz a maior primeiro', valores == sorted(valores, reverse=True), valores)
 
-    r = c.get('/sap/')
+    r = c.get('/sap/?grupo=todos')
     t('a tela diz de quando são os dados', 'Dados de' in r.content.decode())
     t('e oferece atualizar para quem pode', 'Atualizar do SAP' in r.content.decode())
 
     cc = Client(); cc.force_login(comum)
-    t('quem só tem a liberação de ver também abre', cc.get('/sap/').status_code == 200)
-    t('mas não vê o botão de atualizar', 'Atualizar do SAP' not in cc.get('/sap/').content.decode())
+    t('quem só tem a liberação de ver também abre', cc.get('/sap/?grupo=todos').status_code == 200)
+    t('mas não vê o botão de atualizar', 'Atualizar do SAP' not in cc.get('/sap/?grupo=todos').content.decode())
     r = cc.post('/sap/atualizar/', follow=True)
     t('e um POST direto não atualiza', 'Só a administração' in r.content.decode())
 
@@ -359,7 +359,7 @@ try:
     contexto = c.get('/sap/painel/').context
     t('marcada depois da última leitura: aguardando a próxima, não pendente',
       outra.pk not in [l.pk for l in contexto['resolvidas_pendentes']] and contexto['numeros']['aguardando'] >= 1)
-    lista_aguardando = c.get('/sap/?situacao=aguardando')
+    lista_aguardando = c.get('/sap/?grupo=todos&situacao=aguardando')
     t('a lista filtra as que aguardam e mostra o selo',
       outra.pk in [l.pk for l in lista_aguardando.context['pagina']]
       and 'Aguardando leitura' in lista_aguardando.content.decode())
@@ -373,7 +373,7 @@ try:
       contexto['numeros'])
     t('e conta como corrigida', contexto['numeros']['corrigidas'] >= 1)
     t('a que continua no SAP segue no quadro', uma.pk in [l.pk for l in contexto['resolvidas_pendentes']])
-    lista_pendentes = c.get('/sap/?situacao=pendentes')
+    lista_pendentes = c.get('/sap/?grupo=todos&situacao=pendentes')
     t('a lista filtra as resolvidas-pendentes e mostra o selo',
       [l.pk for l in lista_pendentes.context['pagina']] == [uma.pk]
       and 'Ainda pendente no SAP' in lista_pendentes.content.decode())
@@ -475,34 +475,48 @@ try:
     import redeconfianca.settings as configuracao
     t('o middleware está ligado', 'auditoria_sap.middleware.LeituraAgendadaSapMiddleware' in configuracao.MIDDLEWARE)
 
-    print('\n== DIVERGÊNCIA DE VALOR ABAIXO DE R$ 1 É DESCONSIDERADA ==')
-    def linha_valor(chave, diferenca, tipo='VALOR'):
+    print('\n== SÓ O QUE A LOJA AJUSTA, CADA GRUPO NUMA ABA (28/10/2026) ==')
+    def linha_tipo(chave, tipo, diferenca=None):
         return LinhaAuditoria.objects.create(
             chave=chave, tipo_erro=tipo, pdv='ICONHA', id_venda=chave[-6:], data_venda=HOJE,
-            diferenca_valor=diferenca, status_valor='DIVERGENTE', ativa=True)
-    centavos = linha_valor('zz-valor-centavos-000001', D('-0.99'))
-    real = linha_valor('zz-valor-um-real-0000002', D('1.00'))
-    grande = linha_valor('zz-valor-grande-00000003', D('25.40'))
-    produto = linha_valor('zz-produto-centavos-0004', D('0.21'), tipo='PRODUTO')
-    ids = {l.pk for l in c.get('/sap/?situacao=todas&tipo=VALOR').context['pagina']}
-    t('VALOR com menos de R$ 1 some da lista', centavos.pk not in ids, ids)
-    t('R$ 1,00 ou mais continua', real.pk in ids and grande.pk in ids)
-    ids = {l.pk for l in c.get('/sap/?situacao=todas').context['pagina'].paginator.object_list}
-    t('outro tipo de erro com centavos continua (o problema dele é outro)', produto.pk in ids)
-    ids = {l.pk for l in c.get('/sap/?situacao=todas&comparacao=valor').context['pagina'].paginator.object_list}
-    t('no filtro "divergência em valor", centavos de qualquer tipo ficam de fora',
-      produto.pk not in ids and centavos.pk not in ids and grande.pk in ids)
-    painel = c.get('/sap/painel/?tipo=VALOR').context
-    t('o painel também não conta', painel['numeros']['abertas'] == 2, painel['numeros'])
-    t('a tela avisa', 'são desconsideradas' in c.get('/sap/').content.decode())
-    t('a linha não é apagada do espelho (se crescer, volta)', LinhaAuditoria.objects.filter(pk=centavos.pk).exists())
+            diferenca_valor=diferenca, status_valor='DIVERGENTE' if diferenca else '', ativa=True)
+    valor = linha_tipo('zz-tipo-valor-0000000001', 'VALOR', D('25.40'))
+    produto = linha_tipo('zz-tipo-produto-00000002', 'PRODUTO', D('3.00'))
+    serial = linha_tipo('zz-tipo-serial-000000003', 'SERIAL ERRADO NO VIVO GO')
+    grande = linha_tipo('zz-valor-grande-00000003', 'SEM NF', D('25.40'))   # usada adiante, no aviso ao gestor
+    ausente = linha_tipo('zz-tipo-ausente-00000004', 'SERIAL AUSENTE NO VIVO GO')
+    todas_ids = {l.pk for l in c.get('/sap/?grupo=todos&situacao=todas').context['pagina'].paginator.object_list}
+    t('valor, produto e os outros tipos saem da tela', valor.pk not in todas_ids and produto.pk not in todas_ids)
+    t('mesmo pedindo pelo tipo', not c.get('/sap/?grupo=todos&situacao=todas&tipo=VALOR').context['pagina'].paginator.count)
+    t('a ficha deles dá 404', c.get(f'/sap/linha/{valor.pk}/').status_code == 404)
+    t('o painel não conta', not any(x['tipo_erro'] in ('VALOR', 'PRODUTO')
+                                    for x in c.get('/sap/painel/').context['por_tipo']))
+    t('continuam no espelho', LinhaAuditoria.objects.filter(pk__in=[valor.pk, produto.pk]).count() == 2)
+    r = c.get('/sap/?situacao=todas&presenca=todas')
+    linhas_aba = list(r.context['pagina'].paginator.object_list)
+    t('a lista abre na aba Serial (errado e ausente)', r.context['filtros']['grupo'] == 'serial'
+      and {serial.pk, ausente.pk} <= {l.pk for l in linhas_aba}
+      and {l.tipo_erro for l in linhas_aba} <= {'SERIAL ERRADO NO VIVO GO', 'SERIAL AUSENTE NO VIVO GO'})
+    abas = {g['chave']: g['n'] for g in r.context['grupos']}
+    t('as abas contam cada grupo no filtro', abas['serial'] == len(linhas_aba) and abas['vivogo'] >= 1
+      and abas['sem_nf'] >= 1, abas)
+    html = r.content.decode()
+    t('as três abas aparecem', all(x in html for x in ('Serial não encontrado', 'Lançado no SAP e não no Vivo GO', 'Sem NF')))
+    ids = {l.tipo_erro for l in c.get('/sap/?situacao=todas&presenca=todas&grupo=vivogo').context['pagina'].paginator.object_list}
+    t('aba Lançado no SAP e não no Vivo GO', ids == {'VENDA NÃO ENCONTRADA NO VIVO GO'}, ids)
+    ids = {l.tipo_erro for l in c.get('/sap/?situacao=todas&presenca=todas&grupo=sem_nf').context['pagina'].paginator.object_list}
+    t('aba Sem NF', ids == {'SEM NF'}, ids)
+    t('o filtro guarda a aba', 'name="grupo" value="sem_nf"' in c.get('/sap/?grupo=sem_nf').content.decode())
+    t('o painel abre com as três juntas', c.get('/sap/painel/').context['filtros']['grupo'] == 'todos')
+    for l in (serial, ausente):
+        l.delete()
 
     print('\n== O MÊS: ATUAL POR PADRÃO, OS ANTERIORES NO MENU ==')
     inicio_mes = HOJE.replace(day=1)
     mes_passado = inicio_mes - timedelta(days=1)
     antiga = LinhaAuditoria.objects.create(chave='zz-mes-passado-000000001', tipo_erro='SEM NF', pdv='ICONHA',
                                           id_venda='MPASS1', data_venda=mes_passado, ativa=True)
-    r = c.get('/sap/?situacao=todas')
+    r = c.get('/sap/?grupo=todos&situacao=todas')
     ids = {l.pk for l in r.context['pagina'].paginator.object_list}
     t('sem escolher nada, abre no mês atual', r.context['filtros']['mes'] == HOJE.strftime('%Y-%m')
       and antiga.pk not in ids and all(l.data_venda >= inicio_mes for l in r.context['pagina'].paginator.object_list))
@@ -510,13 +524,13 @@ try:
     t('o menu mostra o mês atual escolhido', f'value="{HOJE:%Y-%m}" selected' in html and '(atual)' in html)
     t('e oferece o mês anterior', f'value="{mes_passado:%Y-%m}"' in html)
     t('avisa que há abertas de meses anteriores, com link', 'ainda aberta' in html and '?mes=todos&situacao=abertas' in html)
-    r = c.get(f'/sap/?situacao=todas&mes={mes_passado:%Y-%m}')
+    r = c.get(f'/sap/?grupo=todos&situacao=todas&mes={mes_passado:%Y-%m}')
     ids = {l.pk for l in r.context['pagina'].paginator.object_list}
     t('escolhendo o mês anterior, mostra só ele', antiga.pk in ids
       and all(l.data_venda.month == mes_passado.month for l in r.context['pagina'].paginator.object_list))
-    r = c.get('/sap/?situacao=todas&mes=todos')
+    r = c.get('/sap/?grupo=todos&situacao=todas&mes=todos')
     t('"Todos os meses" mostra tudo', antiga.pk in {l.pk for l in r.context['pagina'].paginator.object_list})
-    r = c.get(f'/sap/?situacao=todas&de={mes_passado:%Y-%m-%d}&ate={HOJE:%Y-%m-%d}')
+    r = c.get(f'/sap/?grupo=todos&situacao=todas&de={mes_passado:%Y-%m-%d}&ate={HOJE:%Y-%m-%d}')
     t('De/Até continua valendo (período personalizado)', r.context['filtros']['mes'] == ''
       and antiga.pk in {l.pk for l in r.context['pagina'].paginator.object_list})
     painel = c.get('/sap/painel/').context
@@ -528,13 +542,13 @@ try:
                                            id_venda='L22001', data_venda=HOJE, ativa=True)
     nome = LinhaAuditoria.objects.create(chave='zz-l220-itaim-0000000002', tipo_erro='SEM NF', pdv='ITAIM PAULISTA',
                                          id_venda='L22002', data_venda=HOJE, ativa=True)
-    r = c.get('/sap/?situacao=todas')
+    r = c.get('/sap/?grupo=todos&situacao=todas')
     lojas = list(r.context['lojas'])
     t('o filtro não mostra o código L220 (vira Itaim Paulista)', 'L220' not in lojas and 'L223' not in lojas
       and 'ITAIM PAULISTA' in lojas, lojas)
-    ids = {l.pk for l in c.get('/sap/?situacao=todas&loja=ITAIM PAULISTA').context['pagina'].paginator.object_list}
+    ids = {l.pk for l in c.get('/sap/?grupo=todos&situacao=todas&loja=ITAIM PAULISTA').context['pagina'].paginator.object_list}
     t('filtrar Itaim Paulista traz as linhas das duas grafias', {codigo.pk, nome.pk} <= ids)
-    t('a linha do L220 aparece com o nome da loja', 'Itaim Paulista' in c.get('/sap/?situacao=todas&q=L22001').content.decode())
+    t('a linha do L220 aparece com o nome da loja', 'Itaim Paulista' in c.get('/sap/?grupo=todos&situacao=todas&q=L22001').content.decode())
     por_loja = c.get('/sap/painel/').context['por_loja']
     t('no painel, uma linha só para a loja', [l['pdv'] for l in por_loja].count('ITAIM PAULISTA') == 1
       and not any(l['pdv'] == 'L220' for l in por_loja))
@@ -585,9 +599,9 @@ try:
                          ('o filtro recarrega sozinho', 'sap-auto'),
                          ('marcar não recarrega a página', 'function (d)'),
                          ('a ficha abre por AJAX', 'sapFicha')):
-        t(nome, pedaco in c.get('/sap/').content.decode())
+        t(nome, pedaco in c.get('/sap/?grupo=todos').content.decode())
     t('nenhum comentário de template vazou na tela',
-      '{#' not in c.get('/sap/').content.decode() and '{#' not in html)
+      '{#' not in c.get('/sap/?grupo=todos').content.decode() and '{#' not in html)
 finally:
     transaction.set_rollback(True)
     marcador.__exit__(None, None, None)
