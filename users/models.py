@@ -528,7 +528,8 @@ class User(AbstractUser):
     pis = models.CharField(max_length=20, blank=True, verbose_name="PIS")
     birth_date = models.DateField(null=True, blank=True, verbose_name="Data de Nascimento")
     admission_date = models.DateField(null=True, blank=True, verbose_name="Data de Admissão")
-    has_experience_window = models.BooleanField(default=False, verbose_name="Se Há Janela de Experiencia")
+    # Todo usuário novo nasce com a janela marcada (28/10/2026); quem não tem, desmarca na edição.
+    has_experience_window = models.BooleanField(default=True, db_default=True, verbose_name="Se Há Janela de Experiencia")
     demission_date = models.DateField(null=True, blank=True, verbose_name="Data de Demissão")
     job_title = models.CharField(max_length=100, blank=True, verbose_name="Cargo")
     login_code = models.CharField(max_length=20, blank=True, verbose_name="Login/Código")

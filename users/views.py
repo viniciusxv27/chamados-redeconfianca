@@ -601,7 +601,8 @@ def import_users_excel(request):
                     birth_date_parsed = _parse_date_excel(birth_date)
                     admission_date_parsed = _parse_date_excel(admission_date)
                     demission_date_parsed = _parse_date_excel(demission_date)
-                    has_experience_window_parsed = _parse_bool_excel(has_experience_window, default=False) if has_window_columns else None
+                    # Célula vazia = None: o usuário novo nasce com a janela marcada; o existente segue a regra de antes.
+                    has_experience_window_parsed = _parse_bool_excel(has_experience_window, default=None) if has_window_columns else None
                     normalized_cpf = normalize_cpf(cpf)
                     
                     # Verificar se usuário já existe
@@ -621,7 +622,7 @@ def import_users_excel(request):
                             'job_title': job_title or '',
                             'birth_date': birth_date_parsed,
                             'admission_date': admission_date_parsed,
-                            'has_experience_window': has_experience_window_parsed if has_experience_window_parsed is not None else False,
+                            'has_experience_window': has_experience_window_parsed if has_experience_window_parsed is not None else True,
                             'demission_date': demission_date_parsed,
                             'login_code': login_code or '',
                             'pdv': pdv or '',
@@ -664,7 +665,7 @@ def import_users_excel(request):
                         if admission_date_parsed:
                             user.admission_date = admission_date_parsed
                         if has_window_columns:
-                            user.has_experience_window = has_experience_window_parsed
+                            user.has_experience_window = bool(has_experience_window_parsed)
                             user.demission_date = demission_date_parsed
                         if login_code:
                             user.login_code = login_code

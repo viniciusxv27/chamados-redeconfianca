@@ -935,11 +935,35 @@ EXIT_STORE_OPTIONS = [
     'MASTERPLACE', 'ESCRITÓRIO', 'CENTRO DE VILA VELHA', 'CENTRO DE VITÓRIA',
     'GLÓRIA', 'NORTE SUL', 'MONTSERRAT', 'SHOPPING LARANJEIRAS',
     'MARCILIO DE NORONHA', 'PORTO CANOA', 'JACARAÍPE', 'ITACIBÁ', 'SERRA SEDE',
-    'ANCHIETA', 'PIUMA', 'ICONHA', 'BOM JESUS DE ITABAPOANA',
+    'ANCHIETA', 'PIUMA', 'ICONHA', 'JARDIM CAMBURI', 'BOM JESUS DE ITABAPOANA',
     'SANTO ANTONIO DE PÁDUA', 'MIRACEMA', 'SÃO FIDÉLIS', 'QUISSAMÃ',
     # São Paulo
     'CARAPICUÍBA', 'ITAIM PAULISTA', 'EMBU DAS ARTES',
 ]
+
+EXIT_TIPOS_SAIDA = ['Pedido de demissão', 'Dispensa pela empresa', 'Término do contrato de experiência',
+                    'Acordo entre as partes', 'Justa causa']
+EXIT_MOTIVOS_REAIS = ['Nova oportunidade de trabalho', 'Concorrente', 'Salário/benefícios', 'Fixo',
+                      'Falta de reconhecimento', 'Falta de perspectiva de crescimento', 'Problemas com liderança',
+                      'Clima de equipe', 'Onboarding', 'Desempenho/metas', 'Questões pessoais']
+# Antes de 28/10/2026 "Fui desligado pela empresa" era uma opção do motivo.
+EXIT_MOTIVO_ANTIGO_DESLIGADO = 'Fui desligado pela empresa'
+EXIT_MOTIVO_NAO_REGISTRADO = 'Não registrado (entrevista antiga)'
+
+
+def _normalizar_respostas_desligamento(answers):
+    """Respostas antigas na régua nova (só em memória — o que foi gravado não muda).
+
+    "Fui desligado pela empresa" vira o tipo de saída "Dispensa pela empresa", e o
+    motivo real, que não foi perguntado, fica como não registrado.
+    """
+    answers = {k: dict(v) if isinstance(v, dict) else v for k, v in (answers or {}).items()}
+    choice = answers.setdefault('choice', {})
+    if 'tipo_saida' not in choice and choice.get('motivo_desligamento') == EXIT_MOTIVO_ANTIGO_DESLIGADO:
+        choice['tipo_saida'] = 'Dispensa pela empresa'
+        choice['motivo_desligamento'] = EXIT_MOTIVO_NAO_REGISTRADO
+    return answers
+
 
 # Estrutura do formulário. Tipos suportados: 'text', 'paragraph', 'choice', 'scale'.
 EXIT_INTERVIEW_SECTIONS = [
@@ -962,12 +986,15 @@ EXIT_INTERVIEW_SECTIONS = [
         'key': 'motivo',
         'title': 'Bloco 2 – Motivo do Desligamento',
         'questions': [
+            # Tipo de saída e motivo real são perguntas diferentes (28/10/2026): "fui desligado"
+            # dizia como a pessoa saiu, não por quê — e escondia o motivo de metade das saídas.
+            {'key': 'tipo_saida', 'type': 'choice', 'required': True,
+             'label': 'Qual foi o tipo de saída?', 'options': EXIT_TIPOS_SAIDA},
             {'key': 'motivo_desligamento', 'type': 'choice', 'required': True,
-             'label': 'Qual o motivo do desligamento?',
-             'options': ['Nova oportunidade de trabalho', 'Salário/benefícios',
-                         'Falta de reconhecimento', 'Falta de perspectiva de crescimento',
-                         'Problemas com liderança', 'Clima de equipe', 'Questões pessoais',
-                         'Fui desligado pela empresa']},
+             'label': 'Qual o motivo real da saída? (o que de fato pesou, mesmo quando a empresa desligou)',
+             'options': EXIT_MOTIVOS_REAIS},
+            {'key': 'o_que_faria_ficar', 'type': 'paragraph', 'required': False,
+             'label': 'O que te faria ficar?'},
             {'key': 'nota_treinamentos', 'type': 'scale', 'required': True,
              'label': 'Em uma escala de 1 a 5, qual nota você dá para os treinamentos aplicados pela empresa?'},
             {'key': 'nota_lideranca', 'type': 'scale', 'required': True,
@@ -1018,6 +1045,29 @@ EXIT_VIDEO_EXTS = ('.mp4', '.mov', '.m4v', '.webm', '.mkv', '.avi',
 # 4 GB cobre uma entrevista longa gravada em alta qualidade. Este é o limite da
 # aplicação; o caminho de rede (proxy/gateway) pode ter um teto próprio menor.
 EXIT_VIDEO_MAX_BYTES = 4 * 1024 * 1024 * 1024
+
+
+def _chave_loja(nome):
+    import unicodedata
+    texto = unicodedata.normalize('NFKD', str(nome or '').upper())
+    texto = ''.join(c for c in texto if not unicodedata.combining(c))
+    texto = ' '.join(texto.replace('LOJA ', ' ').split())
+    return EXIT_LOJA_APELIDOS.get(texto, texto)
+
+
+# Como o cadastro de setores escreve a loja × como a entrevista oferece.
+EXIT_LOJA_APELIDOS = {'CENTRO VIX': 'CENTRO DE VITORIA', 'CENTRO VILA VELHA': 'CENTRO DE VILA VELHA',
+                      'LARANJEIRAS': 'SHOPPING LARANJEIRAS', 'BOM JESUS DO ITABAPOANA': 'BOM JESUS DE ITABAPOANA'}
+
+
+def _loja_da_entrevista(setor):
+    """A opção de loja que corresponde ao setor da pessoa (inclusive as de SP), ou ''."""
+    if not setor:
+        return ''
+    alvo = _chave_loja(setor.name)
+    achada = next((op for op in EXIT_STORE_OPTIONS if _chave_loja(op) == alvo), '')
+    # Setor que não é loja (DP, Ilha, Trade…) é o escritório.
+    return achada or ('' if str(setor.name).strip().lower().startswith('loja') else 'ESCRITÓRIO')
 
 
 def _exit_questions():
@@ -1175,6 +1225,10 @@ def exit_interview(request):
         if dismissal_date is None:
             messages.error(request, 'Informe a data de desligamento.')
             return redirect('feedback:exit_interview')
+        if not answers['choice'].get('loja'):
+            loja = _loja_da_entrevista(_primary_sector_for_user(subject))
+            if loja:
+                answers['choice']['loja'] = loja
         if missing:
             messages.error(request, 'Responda todas as perguntas obrigatórias antes de registrar.')
             return redirect('feedback:exit_interview')
@@ -1182,14 +1236,24 @@ def exit_interview(request):
         subject_sector = _primary_sector_for_user(subject)
         now = timezone.now()
 
-        resposta = ExitInterviewResponse.objects.create(
-            survey_key=EXIT_INTERVIEW_KEY,
-            user=subject,
-            interviewer=request.user,
-            sector=subject_sector,
-            answers=answers,
-            duration_seconds=None,
-        )
+        # Uma entrevista por pessoa: registrar de novo (clique duplo, reenvio para subir o
+        # vídeo) atualiza a que existe. Antes cada envio virava um registro e o relatório
+        # contava a mesma saída duas ou três vezes.
+        resposta = (ExitInterviewResponse.objects.filter(survey_key=EXIT_INTERVIEW_KEY, user=subject)
+                    .order_by('-submitted_at').first())
+        ja_existia = resposta is not None
+        if ja_existia:
+            resposta.interviewer, resposta.sector, resposta.answers = request.user, subject_sector, answers
+            resposta.save(update_fields=['interviewer', 'sector', 'answers'])
+        else:
+            resposta = ExitInterviewResponse.objects.create(
+                survey_key=EXIT_INTERVIEW_KEY,
+                user=subject,
+                interviewer=request.user,
+                sector=subject_sector,
+                answers=answers,
+                duration_seconds=None,
+            )
 
         video = request.FILES.get('entrevista_video')
         aviso_video = ''
@@ -1218,7 +1282,8 @@ def exit_interview(request):
 
         messages.success(
             request,
-            f'Entrevista de {subject.get_full_name() or subject.username} registrada. '
+            f'Entrevista de {subject.get_full_name() or subject.username} '
+            f'{"atualizada (ela já tinha uma — não foi criada outra)" if ja_existia else "registrada"}. '
             'Confira abaixo e efetue o desligamento de acesso quando desejar.',
         )
         if aviso_video:
@@ -1240,12 +1305,15 @@ def exit_interview(request):
         .select_related('user', 'sector', 'interviewer')
         .order_by('-completed_at')
     )
-    candidate_users = (
+    candidate_users = list(
         User.objects.filter(is_active=True)
         .exclude(pk=request.user.pk)
         .select_related('sector')
         .order_by('first_name', 'last_name')
     )
+    # Escolher o colaborador já marca a loja dele (pelo setor principal) — inclusive as de SP.
+    for u in candidate_users:
+        u.loja_entrevista = _loja_da_entrevista(u.sector)
 
     from .models import ExitInterviewRecording
     gravacoes = (ExitInterviewRecording.objects
@@ -1378,6 +1446,8 @@ def _build_exit_report_context(request):
     if selected_sector:
         responses = responses.filter(sector=selected_sector)
     responses = list(responses)
+    for r in responses:
+        r.answers = _normalizar_respostas_desligamento(r.answers)
     exit_label_map = {q['key']: q['label'] for q in _exit_questions()}
     exit_type_map = {q['key']: q['type'] for q in _exit_questions()}
     if answer_key in exit_type_map:

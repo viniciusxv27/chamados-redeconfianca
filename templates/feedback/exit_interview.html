@@ -93,7 +93,7 @@
                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:border-rose-500">
                 <option value="">Selecione o colaborador…</option>
                 {% for u in candidate_users %}
-                  <option value="{{ u.id }}">{{ u.get_full_name|default:u.username }}{% if u.sector %} — {{ u.sector.name }}{% endif %}</option>
+                  <option value="{{ u.id }}" data-loja="{{ u.loja_entrevista }}">{{ u.get_full_name|default:u.username }}{% if u.sector %} — {{ u.sector.name }}{% endif %}</option>
                 {% endfor %}
               </select>
             </div>
@@ -387,6 +387,14 @@
     steps[current].querySelectorAll('fieldset').forEach(fieldset => fieldset.classList.remove('border-red-300'));
     return true;
   }
+
+  // A loja vem do setor do colaborador escolhido (dá para trocar).
+  document.getElementById('subject_id').addEventListener('change', function () {
+    const loja = (this.selectedOptions[0] || {}).dataset ? this.selectedOptions[0].dataset.loja : '';
+    if (!loja) return;
+    const opcao = Array.from(document.querySelectorAll('input[name="loja"]')).find(i => i.value === loja);
+    if (opcao) opcao.checked = true;
+  });
 
   function validateSubject() {
     const subject = document.getElementById('subject_id');
