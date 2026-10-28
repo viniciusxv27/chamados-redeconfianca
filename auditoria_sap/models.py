@@ -71,6 +71,9 @@ class LinhaAuditoria(models.Model):
     diferenca_dias = models.IntegerField(null=True, blank=True, verbose_name='Diferença em dias')
     diferenca_explicita = models.TextField(blank=True, verbose_name='O que está diferente')
     pontuacao_indicios = models.IntegerField(null=True, blank=True, verbose_name='Pontuação dos indícios')
+    # Vem da SAP.zs103_final (a view não traz), pela nota fiscal — 28/10/2026.
+    forma_pagamento = models.CharField(max_length=80, blank=True, default='', db_default='',
+                                       verbose_name='Forma de pagamento')
     dados = models.JSONField(default=dict, blank=True, verbose_name='Linha completa')
 
     # ── controle do espelho ─────────────────────────────────────────────────

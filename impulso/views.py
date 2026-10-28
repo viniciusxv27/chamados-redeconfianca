@@ -216,7 +216,7 @@ def _por_prazo(metas, hoje=None):
 # guardado, então filtro novo precisa ser acrescentado junto.
 # O Voltar da meta precisa devolver o Kanban exatamente como estava — inclusive
 # o filtro por nome e setor, senão a pessoa perde a busca a cada card aberto.
-FILTROS_KANBAN = ('colaborador', filtros_impulso.PARAM_NOME, filtros_impulso.PARAM_SETOR,
+FILTROS_KANBAN = ('colaborador', 'criadas_por_mim', filtros_impulso.PARAM_NOME, filtros_impulso.PARAM_SETOR,
                   filtros_impulso.PARAM_MES)
 CHAVE_FILTROS_KANBAN = 'impulso_kanban_filtros'
 
@@ -249,17 +249,22 @@ def _url_kanban(request):
     return f'{base}?{urlencode(limpos)}' if limpos else base
 
 
-@impulso_member_required
-def metas_kanban(request):
-    user = request.user
-    gestor = is_impulso_manager(user)
-    metas = _metas_do_usuario(user).select_related('colaborador', 'gestor')
+# A coluna "Concluída" junta o mês inteiro (1.215 cards num mês de 28/10/2026):
+# abre com estes e o resto vem por "Mostrar mais", sem recarregar a página.
+CONCLUIDAS_POR_VEZ = 40
 
-    escolhidos = _guardar_filtros_kanban(request)
+
+def _metas_do_kanban(request):
+    """(queryset, filtros, colaborador_id): o recorte do Kanban, igual na tela e no "Mostrar mais"."""
+    user = request.user
+    metas = _metas_do_usuario(user).select_related('colaborador', 'gestor')
 
     colaborador_id = _int_or_none(request.GET.get('colaborador'))
     if colaborador_id:
         metas = metas.filter(colaborador_id=colaborador_id)
+    # "Criadas por mim": o que esta pessoa pôs no Kanban dos outros (e no próprio).
+    if request.GET.get('criadas_por_mim') == '1':
+        metas = metas.filter(created_by=user)
 
     # Nome e setor valem para o responsável ou para o gestor da meta: quem
     # digita o nome de um gestor quer as metas que ele acompanha, não zero.
@@ -269,12 +274,17 @@ def metas_kanban(request):
     # O mês corta pelo prazo: a pergunta do Kanban é "o que vence quando",
     # não "o que foi cadastrado quando".
     metas = filtros_impulso.por_mes(metas, f, 'prazo')
+    return metas, f, colaborador_id
 
-    # O template não passa argumentos para métodos, então a permissão de
-    # exclusão é resolvida aqui, uma vez por card.
-    metas = list(metas)
+
+def _marcar_cards(metas, user, gestor):
+    """O que cada card mostra e permite — resolvido aqui, porque o template não passa argumentos.
+
+    Devolve a equipe do gestor (o modal de duplicar usa).
+    """
     vistas = {v.meta_id: v.visto_em for v in
               MetaVisualizacao.objects.filter(user=user, meta__in=metas)}
+    _preparar_cards(metas, user, vistas)
     # A equipe do gestor sai numa consulta só, não uma por card.
     equipe_ids = (set(get_colaboradores_do_gestor(user).values_list('id', flat=True))
                   if gestor else set())
@@ -284,6 +294,15 @@ def metas_kanban(request):
     em_parceria = set(Meta.participantes.through.objects
                       .filter(user_id=user.id, meta_id__in=[m.id for m in metas])
                       .values_list('meta_id', flat=True))
+    user._impulso_gestor_neste_kanban = gestor
+    try:
+        _regras_dos_cards(metas, user, gestor, equipe_ids, em_parceria)
+    finally:
+        del user._impulso_gestor_neste_kanban
+    return equipe_ids
+
+
+def _regras_dos_cards(metas, user, gestor, equipe_ids, em_parceria):
     for m in metas:
         m.em_parceria = m.id in em_parceria and m.colaborador_id != user.id
         m.pode_apagar = m.pode_excluir(user, equipe_ids=equipe_ids)
@@ -294,17 +313,39 @@ def metas_kanban(request):
         # Kanban de quem não é gestor todo card já é dele (dono ou participante),
         # então isto não custa uma consulta por card.
         m.duplicar_por_pedido = (not m.pode_duplicar) and (not gestor or m.colaborador_id == user.id)
-        m.novidades = m.novidades_para(user)
         m.tem_novidade = any(m.novidades.values())
         m.feitos, m.total_itens = m.progresso_itens
+
+
+def _ordem_das_concluidas(metas):
+    return metas.order_by('-prazo', '-id')
+
+
+@impulso_member_required
+def metas_kanban(request):
+    user = request.user
+    gestor = is_impulso_manager(user)
+    escolhidos = _guardar_filtros_kanban(request)
+    qs, f, colaborador_id = _metas_do_kanban(request)
+
+    # Concluída é contada inteira, mas só os primeiros cards vêm agora.
+    abertas = list(qs.exclude(status=Meta.Status.CONCLUIDA).prefetch_related('itens'))
+    concluidas_qs = _ordem_das_concluidas(qs.filter(status=Meta.Status.CONCLUIDA))
+    total_concluidas = concluidas_qs.count()
+    concluidas = list(concluidas_qs.prefetch_related('itens')[:CONCLUIDAS_POR_VEZ])
+    metas = abertas + concluidas
+    equipe_ids = _marcar_cards(metas, user, gestor)
 
     colunas = []
     for status in Meta.KANBAN_STATUSES:
         do_status = [m for m in metas if m.status == status.value]
+        e_concluida = status == Meta.Status.CONCLUIDA
         colunas.append({
             'status': status.value,
             'label': status.label,
             'metas': do_status,
+            'total': total_concluidas if e_concluida else len(do_status),
+            'restantes': (total_concluidas - len(do_status)) if e_concluida else 0,
             # A coluna "A Fazer" ganha o corte por prazo: a pergunta de quem
             # abre o Kanban de manhã é "o que vence hoje?", e uma pilha única
             # não responde isso.
@@ -331,9 +372,76 @@ def metas_kanban(request):
         'active_tab': 'confiar',
         # Trocar o colaborador no seletor não pode desfazer a busca nem o mês.
         'manter_no_colaborador': {c: v for c, v in escolhidos.items() if c != 'colaborador'},
+        'criadas_por_mim': request.GET.get('criadas_por_mim') == '1',
+        # O "Mostrar mais" pede as próximas com os mesmos filtros da tela.
+        'query_kanban': request.GET.urlencode(),
+        'concluidas_por_vez': CONCLUIDAS_POR_VEZ,
         **filtros_impulso.contexto(request, f),
     }
     return render(request, 'impulso/metas_kanban.html', context)
+
+
+@impulso_member_required
+def metas_kanban_concluidas(request):
+    """As próximas concluídas do Kanban (o "Mostrar mais"), já em HTML de card."""
+    from django.template.loader import render_to_string
+
+    user = request.user
+    gestor = is_impulso_manager(user)
+    inicio = max(_int_or_none(request.GET.get('inicio')) or 0, 0)
+    qs, _f, _c = _metas_do_kanban(request)
+    concluidas_qs = _ordem_das_concluidas(qs.filter(status=Meta.Status.CONCLUIDA))
+    total = concluidas_qs.count()
+    metas = list(concluidas_qs.prefetch_related('itens')[inicio:inicio + CONCLUIDAS_POR_VEZ])
+    _marcar_cards(metas, user, gestor)
+    # Um render só: por card, os processadores de contexto do portal rodariam de novo a cada um.
+    html = render_to_string('impulso/_cards_concluidas.html',
+                            {'metas': metas, 'col': {'status': Meta.Status.CONCLUIDA.value}}, request=request)
+    return JsonResponse({'ok': True, 'html': html, 'proximo': inicio + len(metas),
+                         'restantes': max(total - inicio - len(metas), 0)})
+
+
+def _preparar_cards(metas, user, vistas):
+    """Novidades e "o que some junto" de todos os cards em quatro consultas.
+
+    Antes cada card fazia as suas (visto por último, três contagens de novidade
+    e mais três do aviso de exclusão): com o Kanban inteiro de quem vê todas as
+    metas, eram milhares de idas ao banco e a tela levava minutos. A conta é a
+    mesma de ``Meta.novidades_para`` e ``Meta.impacto_da_exclusao``.
+    """
+    from collections import Counter, defaultdict
+
+    from django.db.models import Count
+
+    from .models import MetaAnexo, MetaComentario
+
+    ids = [m.id for m in metas]
+    comentarios, anexos = defaultdict(list), defaultdict(list)
+    for meta_id, autor_id, quando in (MetaComentario.objects.filter(meta_id__in=ids)
+                                      .values_list('meta_id', 'autor_id', 'criado_em')):
+        comentarios[meta_id].append((autor_id, quando))
+    for meta_id, autor_id, quando in (MetaAnexo.objects.filter(meta_id__in=ids)
+                                      .values_list('meta_id', 'enviado_por_id', 'enviado_em')):
+        anexos[meta_id].append((autor_id, quando))
+    ocorrencias = Counter(dict(Meta.objects.filter(recorrencia_de_id__in=ids).values('recorrencia_de_id')
+                               .annotate(n=Count('id')).values_list('recorrencia_de_id', 'n')))
+
+    def novos(registros, desde):
+        return sum(1 for autor, quando in registros if autor != user.id and (not desde or quando > desde))
+
+    for m in metas:
+        desde = vistas.get(m.id)
+        itens = m.itens.all()                         # prefetch: o to-do também dá o progresso
+        m.novidades = {
+            'comentarios': novos(comentarios[m.id], desde),
+            'anexos': novos(anexos[m.id], desde),
+            'itens': sum(1 for i in itens if i.concluido and i.concluido_por_id != user.id
+                         and (not desde or (i.concluido_em and i.concluido_em > desde))),
+            'entregue': bool(m.entregue_em and (not desde or m.entregue_em > desde)
+                             and m.status == Meta.Status.ENTREGUE),
+        }
+        m._impacto_pronto = {'anexos': len(anexos[m.id]), 'comentarios': len(comentarios[m.id]),
+                             'avaliada': m.is_avaliada, 'ocorrencias': ocorrencias[m.id]}
 
 
 def _convites_pendentes(user):
@@ -492,6 +600,10 @@ def meta_create(request):
         if prazo < hoje:
             messages.error(request, 'O prazo não pode ser anterior a hoje.')
             return redirect('impulso:meta_create')
+        foto, audio, erro_midia = _midia_da_descricao(request)
+        if erro_midia:
+            messages.error(request, erro_midia)
+            return redirect('impulso:meta_create')
 
         # Gestor criando para a própria área: aprovada. Para outra área, vai
         # para o gestor de lá. Colaborador: depende do que ele escolheu.
@@ -499,6 +611,7 @@ def meta_create(request):
         meta = Meta.objects.create(
             gestor=gestor, colaborador=colaborador, titulo=titulo,
             descricao=descricao, recorrencia=recorrencia, prazo=prazo,
+            descricao_foto=foto, descricao_audio=audio,
             apenas_dias_uteis=apenas_dias_uteis,
             aprovacao=Meta.Aprovacao.APROVADA if ja_aprovada else Meta.Aprovacao.PENDENTE,
             solicitada_por=request.user if (fora_da_area or not sou_gestor) else None,
@@ -1065,18 +1178,62 @@ def meta_update_status(request, meta_id):
             {'ok': False, 'error': 'Status inválido. A conclusão é feita na avaliação do gestor.'},
             status=400)
 
+    antes = meta.status
     meta.status = novo
+    avisados = []
     if novo == Meta.Status.ENTREGUE and not meta.entregue_em:
         meta.entregue_em = timezone.now()
-        _notify(_gestores_da_meta(meta), 'Meta entregue',
+        avisados = _gestores_da_meta(meta)
+        _notify(avisados, 'Meta entregue',
                 f'"{meta.titulo}" foi marcada como entregue.',
                 f'/impulso/metas/{meta.id}/')
     meta.save(update_fields=['status', 'entregue_em', 'updated_at'])
+    _avisar_criador_superadmin(meta, request.user, antes, avisados)
     return JsonResponse({'ok': True, 'status': meta.status})
+
+
+FOTO_DESCRICAO = ('jpg', 'jpeg', 'png', 'webp', 'gif', 'heic', 'heif')
+AUDIO_DESCRICAO = ('mp3', 'm4a', 'aac', 'ogg', 'oga', 'opus', 'webm', 'wav', 'mp4')
+FOTO_DESCRICAO_MAX = 10 * 1024 * 1024
+AUDIO_DESCRICAO_MAX = 25 * 1024 * 1024
+
+
+def _midia_da_descricao(request):
+    """(foto, áudio, erro) da descrição da meta — os dois opcionais."""
+    def ext(arquivo):
+        return arquivo.name.rsplit('.', 1)[-1].lower() if '.' in arquivo.name else ''
+
+    foto, audio = request.FILES.get('descricao_foto'), request.FILES.get('descricao_audio')
+    if foto and (ext(foto) not in FOTO_DESCRICAO or not (foto.content_type or 'image/').startswith('image/')):
+        return None, None, 'A foto da descrição precisa ser uma imagem (JPG, PNG, WEBP, GIF ou HEIC).'
+    if foto and foto.size > FOTO_DESCRICAO_MAX:
+        return None, None, f'A foto tem {foto.size / 1024 / 1024:.1f} MB; o limite é 10 MB.'
+    if audio and ext(audio) not in AUDIO_DESCRICAO:
+        return None, None, 'O áudio da descrição precisa ser MP3, M4A, AAC, OGG, OPUS, WEBM ou WAV.'
+    if audio and audio.size > AUDIO_DESCRICAO_MAX:
+        return None, None, f'O áudio tem {audio.size / 1024 / 1024:.1f} MB; o limite é 25 MB.'
+    return foto, audio, None
 
 
 def _gestores_da_meta(meta):
     return [meta.gestor] if meta.gestor_id else []
+
+
+def _avisar_criador_superadmin(meta, ator, antes, ja_avisados=()):
+    """O SUPERADMIN que criou a meta acompanha cada mudança de status dela (28/10/2026).
+
+    Não avisa quem mexeu nem quem já recebeu o aviso desta mesma mudança (o gestor da meta).
+    """
+    criador = meta.created_by
+    if (not criador or not e_superadmin(criador) or criador.id == getattr(ator, 'id', None)
+            or antes == meta.status or criador.id in {u.id for u in ja_avisados if u}):
+        return
+    rotulos = dict(Meta.Status.choices)
+    quem = (ator.get_full_name() or ator.email) if ator else 'alguém'
+    _notify([criador], f'Meta {rotulos.get(meta.status, meta.status).lower()}',
+            f'"{meta.titulo}" ({meta.colaborador.get_full_name() or meta.colaborador.email}): '
+            f'{rotulos.get(antes, antes)} → {rotulos.get(meta.status, meta.status)}, por {quem}.',
+            f'/impulso/metas/{meta.id}/')
 
 
 @require_POST
@@ -1093,12 +1250,14 @@ def meta_entregar(request, meta_id):
     link = (request.POST.get('entrega_link') or '').strip()
     if link:
         meta.entrega_link = link
+    antes = meta.status
     meta.status = Meta.Status.ENTREGUE
     meta.entregue_em = timezone.now()
     meta.save(update_fields=['entrega_link', 'status', 'entregue_em', 'updated_at'])
     _notify(_gestores_da_meta(meta), 'Meta entregue',
             f'"{meta.titulo}" foi entregue por {request.user.get_full_name() or request.user.email}.',
             f'/impulso/metas/{meta.id}/')
+    _avisar_criador_superadmin(meta, request.user, antes, _gestores_da_meta(meta))
     messages.success(request, 'Meta marcada como entregue.')
     return redirect('impulso:meta_detail', meta_id=meta.id)
 
@@ -1127,11 +1286,13 @@ def meta_avaliar(request, meta_id):
     meta.avaliacao_comentario = (request.POST.get('avaliacao_comentario') or '').strip()
     meta.avaliado_em = timezone.now()
     meta.avaliado_por = request.user
+    antes = meta.status
     meta.status = Meta.Status.CONCLUIDA
     meta.save()
     _notify([meta.colaborador], 'Meta avaliada',
             f'Sua meta "{meta.titulo}" foi avaliada: qualidade {nota_q}/5, prazo {nota_p}/5.',
             f'/impulso/metas/{meta.id}/')
+    _avisar_criador_superadmin(meta, request.user, antes, [meta.colaborador])
 
     # Recorrência: concluir uma meta que se repete já abre a próxima ocorrência.
     proxima = meta.criar_proxima_ocorrencia()
@@ -1248,14 +1409,28 @@ def meta_editar(request, meta_id):
         # O prazo pode ir para trás numa edição — a atividade já existe e às
         # vezes o combinado mudou. O que não pode é nascer vencida, e isso a
         # tela de criação já barra.
-        antes = {'titulo': meta.titulo, 'descricao': meta.descricao, 'prazo': meta.prazo}
+        foto, audio, erro_midia = _midia_da_descricao(request)
+        if erro_midia:
+            messages.error(request, erro_midia)
+            return redirect('impulso:meta_editar', meta_id=meta.id)
+        antes = {'titulo': meta.titulo, 'descricao': meta.descricao, 'prazo': meta.prazo,
+                 'midia': (meta.descricao_foto.name, meta.descricao_audio.name)}
+        # O arquivo antigo fica no armazenamento: a repetição ou a cópia da meta pode apontar para ele.
+        if foto:
+            meta.descricao_foto = foto
+        elif request.POST.get('tirar_foto') == '1':
+            meta.descricao_foto = None
+        if audio:
+            meta.descricao_audio = audio
+        elif request.POST.get('tirar_audio') == '1':
+            meta.descricao_audio = None
         meta.titulo = titulo[:200]
         meta.descricao = descricao
         meta.prazo = prazo
         meta.recorrencia = recorrencia
         meta.apenas_dias_uteis = apenas_dias_uteis
         meta.save(update_fields=['titulo', 'descricao', 'prazo', 'recorrencia',
-                                 'apenas_dias_uteis'])
+                                 'apenas_dias_uteis', 'descricao_foto', 'descricao_audio'])
         if aviso_dia_util:
             messages.info(request, aviso_dia_util)
 
@@ -1266,6 +1441,8 @@ def meta_editar(request, meta_id):
             mudou.append(f'título: "{antes["titulo"]}" → "{meta.titulo}"')
         if antes['descricao'] != meta.descricao:
             mudou.append('descrição atualizada')
+        if antes['midia'] != (meta.descricao_foto.name, meta.descricao_audio.name):
+            mudou.append('foto/áudio da descrição atualizados')
         if antes['prazo'] != meta.prazo:
             mudou.append(f'prazo: {antes["prazo"]:%d/%m/%Y} → {meta.prazo:%d/%m/%Y}')
         if mudou:
@@ -1361,6 +1538,8 @@ def meta_duplicar(request, meta_id):
         colaborador=colaborador,
         titulo=titulo,
         descricao=original.descricao,
+        descricao_foto=original.descricao_foto.name or None,
+        descricao_audio=original.descricao_audio.name or None,
         recorrencia=original.recorrencia,
         apenas_dias_uteis=original.apenas_dias_uteis,
         prazo=prazo,
@@ -1456,6 +1635,8 @@ def meta_duplicar_solicitar(request, meta_id):
         copia = Meta.objects.create(
             gestor=gestor, colaborador=request.user, titulo=titulo,
             descricao=original.descricao, recorrencia=original.recorrencia,
+            descricao_foto=original.descricao_foto.name or None,
+            descricao_audio=original.descricao_audio.name or None,
             apenas_dias_uteis=original.apenas_dias_uteis, prazo=prazo,
             aprovacao=Meta.Aprovacao.PENDENTE, solicitada_por=request.user,
             created_by=request.user, duplicada_de=original,

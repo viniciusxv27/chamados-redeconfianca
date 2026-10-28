@@ -42,6 +42,11 @@ def is_impulso_manager(user):
         return False
     if user.is_superuser:
         return True
+    # O Kanban já sabe a resposta e a deixa no usuário enquanto monta os cards:
+    # sem isso eram duas consultas por card (pode_excluir e pode_gerenciar).
+    ja_sabido = getattr(user, '_impulso_gestor_neste_kanban', None)
+    if ja_sabido is not None:
+        return ja_sabido
     from users.module_access import user_has_module
     return _in_group(user, GRUPO_GESTOR) or user_has_module(user, 'impulso.gestor')
 

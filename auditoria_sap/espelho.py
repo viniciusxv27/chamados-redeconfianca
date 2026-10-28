@@ -175,6 +175,11 @@ def sincronizar(por=None):
     if sumiram:
         LinhaAuditoria.objects.bulk_update(sumiram, ['ativa', 'sumiu_em'], batch_size=500)
 
+    try:
+        preencher_formas_de_pagamento()
+    except mysql.SapIndisponivel:                     # a auditoria já foi lida; o pagamento vem na próxima
+        logger.warning('Auditoria SAP: formas de pagamento não lidas agora', exc_info=True)
+
     resumo = {
         'novas': len(novas),
         'atualizadas': len(alteradas),
@@ -186,6 +191,19 @@ def sincronizar(por=None):
         por=por if getattr(por, 'pk', None) else None, **resumo)
     logger.info('Auditoria SAP sincronizada: %s', resumo)
     return resumo
+
+
+def preencher_formas_de_pagamento(formas=None):
+    """Põe em cada linha a forma de pagamento da nota (SAP.zs103_final). Devolve quantas mudaram."""
+    formas = mysql.ler_formas_de_pagamento() if formas is None else formas
+    mudaram = []
+    for linha in LinhaAuditoria.objects.exclude(num_fat_sap='').only('id', 'num_fat_sap', 'forma_pagamento'):
+        forma = formas.get(linha.num_fat_sap.strip(), '')[:80]
+        if forma and forma != linha.forma_pagamento:
+            linha.forma_pagamento = forma
+            mudaram.append(linha)
+    LinhaAuditoria.objects.bulk_update(mudaram, ['forma_pagamento'], batch_size=500)
+    return len(mudaram)
 
 
 def ultima_sincronizacao():

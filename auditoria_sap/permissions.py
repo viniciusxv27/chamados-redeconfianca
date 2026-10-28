@@ -90,7 +90,7 @@ def gestores_escolhidos():
 
 # Lojas que o SAP às vezes escreve pelo código da filial: na tela viram o nome
 # (e o filtro de uma pega as linhas das duas grafias).
-CODIGOS_DE_LOJA = {'L220': 'ITAIM PAULISTA', 'L223': 'EMBU DAS ARTES'}
+CODIGOS_DE_LOJA = {'L220': 'ITAIM PAULISTA', 'L222': 'CARAPICUIBA', 'L223': 'EMBU DAS ARTES'}
 
 
 def normalizar_loja(nome):

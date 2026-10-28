@@ -1,0 +1,71 @@
+{% comment %}Foto e áudio da descrição (opcionais). Uso: include com meta=… na edição; sem meta na criação.{% endcomment %}
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-3" id="impMidiaDescricao">
+    <div class="rounded-lg border border-dashed border-gray-300 p-3">
+        <label class="block text-sm font-medium text-gray-700 mb-1" for="impDescFoto"><i class="fas fa-image text-orange-500 mr-1"></i>Foto (opcional)</label>
+        {% if meta.descricao_foto %}
+        <div class="mb-2 flex items-center gap-2">
+            <img src="{{ meta.descricao_foto.url }}" alt="Foto atual da descrição" class="h-14 w-14 object-cover rounded border border-gray-200">
+            <label class="text-xs text-gray-600 flex items-center gap-1"><input type="checkbox" name="tirar_foto" value="1" class="rounded"> Tirar a foto</label>
+        </div>
+        {% endif %}
+        <input type="file" name="descricao_foto" id="impDescFoto" accept="image/*" class="block w-full text-xs text-gray-600 file:mr-2 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:bg-orange-50 file:text-orange-700">
+        <img id="impDescFotoPrevia" alt="" class="hidden mt-2 max-h-32 rounded border border-gray-200">
+        <p class="text-[11px] text-gray-400 mt-1">Até 10 MB.{% if meta.descricao_foto %} Escolher outra troca a atual.{% endif %}</p>
+    </div>
+    <div class="rounded-lg border border-dashed border-gray-300 p-3">
+        <label class="block text-sm font-medium text-gray-700 mb-1" for="impDescAudio"><i class="fas fa-microphone text-orange-500 mr-1"></i>Áudio (opcional)</label>
+        {% if meta.descricao_audio %}
+        <div class="mb-2"><audio controls preload="none" src="{{ meta.descricao_audio.url }}" class="w-full h-9"></audio>
+            <label class="text-xs text-gray-600 flex items-center gap-1 mt-1"><input type="checkbox" name="tirar_audio" value="1" class="rounded"> Tirar o áudio</label></div>
+        {% endif %}
+        <div class="flex items-center gap-2 flex-wrap">
+            <button type="button" id="impGravar" class="hidden px-3 py-1.5 rounded-lg bg-orange-50 text-orange-700 text-xs font-semibold hover:bg-orange-100"><i class="fas fa-circle mr-1"></i>Gravar</button>
+            <span id="impGravando" class="hidden text-xs text-red-600 font-semibold tabular-nums"><i class="fas fa-circle fa-beat-fade mr-1"></i><span>0:00</span></span>
+            <input type="file" name="descricao_audio" id="impDescAudio" accept="audio/*" class="block flex-1 min-w-0 text-xs text-gray-600 file:mr-2 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:bg-gray-100 file:text-gray-700">
+        </div>
+        <audio id="impDescAudioPrevia" controls class="hidden w-full h-9 mt-2"></audio>
+        <p class="text-[11px] text-gray-400 mt-1">Grave na hora ou escolha um arquivo (até 25 MB).</p>
+    </div>
+</div>
+<script>
+(function () {
+    var foto = document.getElementById('impDescFoto'), previaFoto = document.getElementById('impDescFotoPrevia');
+    foto.addEventListener('change', function () {
+        var f = foto.files[0]; previaFoto.classList.toggle('hidden', !f);
+        if (f) previaFoto.src = URL.createObjectURL(f);
+    });
+    var audio = document.getElementById('impDescAudio'), previa = document.getElementById('impDescAudioPrevia');
+    function mostrar(f) { previa.classList.toggle('hidden', !f); if (f) previa.src = URL.createObjectURL(f); }
+    audio.addEventListener('change', function () { mostrar(audio.files[0]); });
+
+    // Gravar pelo microfone (quando o navegador deixa): o áudio vira o arquivo do campo.
+    var botao = document.getElementById('impGravar'), relogio = document.getElementById('impGravando');
+    if (!(navigator.mediaDevices && window.MediaRecorder && window.DataTransfer)) return;
+    botao.classList.remove('hidden');
+    var gravador = null, pedacos = [], inicio = 0, tique = null;
+    botao.addEventListener('click', async function () {
+        if (gravador) { gravador.stop(); return; }
+        var fluxo;
+        try { fluxo = await navigator.mediaDevices.getUserMedia({audio: true}); }
+        catch (e) { alert('Não deu para usar o microfone. Libere o acesso no navegador ou escolha um arquivo.'); return; }
+        pedacos = []; gravador = new MediaRecorder(fluxo);
+        gravador.ondataavailable = function (e) { if (e.data.size) pedacos.push(e.data); };
+        gravador.onstop = function () {
+            fluxo.getTracks().forEach(function (t) { t.stop(); });
+            clearInterval(tique); relogio.classList.add('hidden');
+            botao.innerHTML = '<i class="fas fa-circle mr-1"></i>Gravar de novo';
+            var tipo = gravador.mimeType || 'audio/webm', extensao = tipo.indexOf('mp4') >= 0 ? 'm4a' : (tipo.indexOf('ogg') >= 0 ? 'ogg' : 'webm');
+            var arquivo = new File(pedacos, 'descricao-' + Date.now() + '.' + extensao, {type: tipo});
+            var dt = new DataTransfer(); dt.items.add(arquivo); audio.files = dt.files; mostrar(arquivo);
+            gravador = null;
+        };
+        gravador.start(); inicio = Date.now();
+        botao.innerHTML = '<i class="fas fa-stop mr-1"></i>Parar';
+        relogio.classList.remove('hidden');
+        tique = setInterval(function () {
+            var s = Math.floor((Date.now() - inicio) / 1000);
+            relogio.querySelector('span').textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+        }, 500);
+    });
+})();
+</script>

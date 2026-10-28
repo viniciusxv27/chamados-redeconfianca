@@ -52,8 +52,9 @@
                 text-[11px] uppercase tracking-wide text-gray-500 font-medium">
         <div class="col-span-2">Data · Loja</div>
         <div class="col-span-2">Tipo do erro</div>
-        <div class="col-span-3">Venda</div>
+        <div class="col-span-2">Venda</div>
         <div class="col-span-3">O que está diferente</div>
+        <div class="col-span-1">Pagamento</div>
         <div class="col-span-1 text-right">Diferença</div>
         <div class="col-span-1 text-right">Situação</div>
     </div>
@@ -83,7 +84,7 @@
                 {% endif %}
             </div>
 
-            <div class="col-span-3 mt-2 lg:mt-0">
+            <div class="col-span-2 mt-2 lg:mt-0 min-w-0">
                 <p class="text-sm text-gray-800">
                     {% if linha.id_venda %}<span class="font-medium">#{{ linha.id_venda }}</span>{% else %}<span class="text-gray-400">sem venda no Vivo go</span>{% endif %}
                     {% if linha.num_fat_sap %}<span class="text-gray-400"> · NF {{ linha.num_fat_sap }}</span>{% endif %}
@@ -97,6 +98,12 @@
             <div class="col-span-3 mt-2 lg:mt-0">
                 <p class="sap-rotulo lg:hidden">O que está diferente</p>
                 <p class="text-xs text-gray-600 leading-snug">{{ linha.diferenca_explicita|default:linha.situacao_valor|default:"—" }}</p>
+            </div>
+
+            <div class="col-span-1 mt-2 lg:mt-0">
+                <p class="sap-rotulo lg:hidden">Forma de pagamento</p>
+                {% if linha.forma_pagamento %}<p class="text-xs text-gray-700 leading-snug" title="Forma de pagamento no SAP (ZS103)">{{ linha.forma_pagamento|title }}</p>
+                {% else %}<p class="text-xs text-gray-300">—</p>{% endif %}
             </div>
 
             <div class="col-span-1 mt-2 lg:mt-0 lg:text-right">

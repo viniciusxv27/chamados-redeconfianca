@@ -1,0 +1,16 @@
+{% comment %}Foto e áudio da descrição da meta, quando houver.{% endcomment %}
+{% if meta.descricao_foto or meta.descricao_audio %}
+<div class="mt-3 flex flex-col sm:flex-row gap-3 sm:items-start">
+    {% if meta.descricao_foto %}
+    <a href="{{ meta.descricao_foto.url }}" target="_blank" rel="noopener" class="block shrink-0" title="Abrir a foto">
+        <img src="{{ meta.descricao_foto.url }}" alt="Foto da descrição" loading="lazy" class="max-h-56 max-w-full rounded-lg border border-gray-200 object-contain">
+    </a>
+    {% endif %}
+    {% if meta.descricao_audio %}
+    <div class="flex-1 min-w-0">
+        <p class="text-xs text-gray-500 mb-1"><i class="fas fa-microphone mr-1"></i>Áudio da descrição</p>
+        <audio controls preload="none" src="{{ meta.descricao_audio.url }}" class="w-full"></audio>
+    </div>
+    {% endif %}
+</div>
+{% endif %}

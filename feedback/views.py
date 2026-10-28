@@ -1318,8 +1318,11 @@ def exit_interview_dismiss(request, user_id):
     return redirect('feedback:exit_interview')
 
 
-@exit_interview_access_required
-def exit_interview_report(request):
+def _build_exit_report_context(request):
+    """Tudo o que o relatório da entrevista de desligamento mostra, com os filtros da URL.
+
+    A tela e a exportação em Excel usam esta mesma conta.
+    """
     status_filter = (request.GET.get('status') or '').strip().lower()
     sector_filter_id = request.GET.get('sector')
     answer_key = (request.GET.get('q_key') or '').strip()
@@ -1500,7 +1503,7 @@ def exit_interview_report(request):
     totals['completed_pct'] = round((totals['completed'] / totals['total']) * 100, 1) if totals['total'] else 0.0
 
     import json
-    return render(request, 'feedback/exit_interview_report.html', {
+    return {
         'totals': totals,
         'detailed': detailed,
         'scale_stats': scale_stats,
@@ -1523,7 +1526,140 @@ def exit_interview_report(request):
              'data': [i['count'] for i in c['items']]}
             for c in choice_stats
         ]),
-    })
+        'questions': _exit_questions(),
+        'responses': responses,
+    }
+
+
+@exit_interview_access_required
+def exit_interview_report(request):
+    return render(request, 'feedback/exit_interview_report.html', _build_exit_report_context(request))
+
+
+@exit_interview_access_required
+def exit_interview_report_export(request):
+    """O relatório da entrevista de desligamento em .xlsx, com os mesmos filtros da tela.
+
+    Abas: resumo, participação, notas por pergunta, múltipla escolha, comentários e
+    uma linha por entrevista com todas as respostas.
+    """
+    import openpyxl
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+
+    ctx = _build_exit_report_context(request)
+    cabecalho_fundo = PatternFill('solid', fgColor='0284C7')
+    cabecalho_fonte = Font(bold=True, color='FFFFFF', name='Calibri', size=11)
+
+    def cabecalho(ws, colunas, linha=1):
+        for n, titulo in enumerate(colunas, 1):
+            c = ws.cell(row=linha, column=n, value=titulo)
+            c.fill, c.font = cabecalho_fundo, cabecalho_fonte
+            c.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        ws.freeze_panes = f'A{linha + 1}'          # pelo endereço: ws.cell() criaria a linha vazia
+
+    def larguras(ws, valores):
+        for n, w in enumerate(valores, 1):
+            ws.column_dimensions[get_column_letter(n)].width = w
+
+    def nome(u):
+        return (u.get_full_name() or u.username) if u else ''
+
+    def quando(dt):
+        return timezone.localtime(dt).strftime('%d/%m/%Y %H:%M') if dt else ''
+
+    wb = openpyxl.Workbook()
+
+    ws = wb.active
+    ws.title = 'Resumo'
+    ws['A1'] = 'Relatório da Entrevista de Desligamento'
+    ws['A1'].font = Font(bold=True, size=13, color='0F172A')
+    filtros = []
+    if ctx['selected_sector']:
+        filtros.append(f"Setor: {ctx['selected_sector'].name}")
+    if ctx['status_filter']:
+        filtros.append('Situação: ' + {'completed': 'Concluída', 'in_progress': 'Em andamento', 'not_started': 'Não iniciou',
+                                       'refused': 'Recusou'}.get(ctx['status_filter'], ctx['status_filter']))
+    if ctx['answer_key']:
+        rotulo = next((q['label'] for q in ctx['questions'] if q['key'] == ctx['answer_key']), ctx['answer_key'])
+        filtros.append(f"Resposta: {rotulo} = {ctx['answer_val']}")
+    ws['A2'] = 'Filtros aplicados: ' + ('; '.join(filtros) if filtros else 'Nenhum')
+    ws['A2'].font = Font(italic=True, color='64748B')
+    ws['A3'] = f"Gerado em {timezone.localtime().strftime('%d/%m/%Y %H:%M')} por {nome(request.user)}"
+    ws['A3'].font = Font(italic=True, color='64748B')
+    t = ctx['totals']
+    cabecalho(ws, ['Indicador', 'Valor'], linha=5)
+    for n, (rotulo, valor) in enumerate([
+            ('Colaboradores', t['total']), ('Concluíram', t['completed']), ('Em andamento', t['in_progress']),
+            ('Não iniciaram', t['not_started']), ('Recusaram', t['refused']), ('% Conclusão', f"{t['completed_pct']}%"),
+            ('Entrevistas registradas', t['responses']), ('Tempo médio', ctx['avg_duration_display'] or '-')], 6):
+        ws.cell(row=n, column=1, value=rotulo)
+        ws.cell(row=n, column=2, value=valor)
+    larguras(ws, [38, 24])
+
+    ws = wb.create_sheet('Participação')
+    cabecalho(ws, ['Colaborador', 'Setor', 'Situação', 'Entrevistador', 'Última atualização'])
+    for r in ctx['detailed']:
+        p = r['participation']
+        ws.append([nome(r['user']), r['sector'].name if r['sector'] else '', r['status_label'],
+                   nome(getattr(p, 'interviewer', None)), quando(getattr(p, 'updated_at', None))])
+    larguras(ws, [34, 26, 16, 28, 18])
+
+    ws = wb.create_sheet('Notas por pergunta')
+    cabecalho(ws, ['Pergunta', 'Média (1 a 5)', 'Respostas'])
+    for s_ in ctx['scale_stats']:
+        ws.append([s_['label'], s_['avg'], s_['count']])
+    larguras(ws, [70, 14, 12])
+
+    ws = wb.create_sheet('Múltipla escolha')
+    cabecalho(ws, ['Pergunta', 'Opção', 'Respostas', '%'])
+    for c in ctx['choice_stats']:
+        for item in c['items']:
+            ws.append([c['label'], item['option'], item['count'], item['pct']])
+    larguras(ws, [60, 40, 12, 8])
+
+    ws = wb.create_sheet('Comentários')
+    cabecalho(ws, ['Pergunta', 'Comentário'])
+    for bloco in ctx['open_blocks']:
+        for texto in bloco['answers']:
+            ws.append([bloco['label'], texto])
+    for linha in ws.iter_rows(min_row=2):
+        for c in linha:
+            c.alignment = Alignment(wrap_text=True, vertical='top')
+    larguras(ws, [50, 90])
+
+    # Uma linha por entrevista; cada pergunta é uma coluna (nota com a observação ao lado).
+    ws = wb.create_sheet('Respostas')
+    colunas = ['Colaborador', 'Setor', 'Entrevistador', 'Data', 'Duração', 'Média']
+    chaves = []
+    for q in ctx['questions']:
+        if q['type'] in ('scale', 'choice', 'text', 'paragraph'):
+            colunas.append(q['label'])
+            chaves.append((q['key'], q['type'], False))
+            if q['type'] == 'scale':
+                colunas.append(f"{q['label']} — observação")
+                chaves.append((q['key'], q['type'], True))
+    cabecalho(ws, colunas)
+    for r in ctx['response_rows']:
+        resp = r['response']
+        ans = resp.answers or {}
+        linha = [nome(r['user']), r['sector'].name if r['sector'] else '', nome(r['interviewer']),
+                 quando(resp.submitted_at), r['duration_display'] or '', r['avg']]
+        for chave, tipo, obs in chaves:
+            if tipo == 'scale':
+                linha.append((ans.get('scale_obs', {}) if obs else ans.get('scale', {})).get(chave, ''))
+            elif tipo == 'choice':
+                linha.append(ans.get('choice', {}).get(chave, ''))
+            else:
+                linha.append(ans.get('text', {}).get(chave, ''))
+        ws.append(linha)
+    larguras(ws, [30, 22, 26, 16, 10, 8] + [28] * (len(colunas) - 6))
+
+    resposta = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    resposta['Content-Disposition'] = (
+        f'attachment; filename="entrevista_desligamento_{timezone.localtime().strftime("%Y%m%d_%H%M")}.xlsx"')
+    wb.save(resposta)
+    return resposta
 
 
 @exit_interview_access_required

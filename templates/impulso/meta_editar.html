@@ -39,7 +39,7 @@
         {% endfor %}
     {% endif %}
 
-    <form method="post" class="imp-card p-5 space-y-4">
+    <form method="post" class="imp-card p-5 space-y-4" enctype="multipart/form-data">
         {% csrf_token %}
 
         <div>
@@ -53,6 +53,7 @@
             <textarea name="descricao" rows="5"
                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">{{ meta.descricao }}</textarea>
         </div>
+        {% include 'impulso/_descricao_midia_campos.html' %}
 
         {% if manda_no_prazo %}
         <div class="grid sm:grid-cols-2 gap-4">

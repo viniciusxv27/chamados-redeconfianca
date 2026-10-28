@@ -9,6 +9,7 @@ urlpatterns = [
 
     # CONFIAR — metas / kanban
     path('metas/', views.metas_kanban, name='metas_kanban'),
+    path('metas/concluidas/', views.metas_kanban_concluidas, name='metas_kanban_concluidas'),
     path('metas/nova/', views.meta_create, name='meta_create'),
     path('metas/solicitacoes/', views.meta_solicitacoes, name='meta_solicitacoes'),
     path('metas/<int:meta_id>/decidir/', views.meta_decidir, name='meta_decidir'),

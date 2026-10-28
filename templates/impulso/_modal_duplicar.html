@@ -61,8 +61,10 @@ original, que vem marcado).
         modal.classList.add('hidden');
     }
 
-    document.querySelectorAll('.imp-duplicar').forEach(function (b) {
-        b.addEventListener('click', function (e) {
+    // Por delegação: vale também para cards que chegam depois (o "Mostrar mais" do Kanban).
+    document.addEventListener('click', function (e) {
+        var b = e.target.closest('.imp-duplicar'); if (!b) return;
+        (function () {
             e.stopPropagation();          // não dispara o arrastar do card
             e.preventDefault();
             form.action = b.dataset.url || ('/impulso/metas/' + b.dataset.id + '/duplicar/');
@@ -75,7 +77,7 @@ original, que vem marcado).
             avisar();
             modal.classList.remove('hidden');
             select.focus();
-        });
+        })();
     });
 
     select.addEventListener('change', avisar);

@@ -54,6 +54,10 @@ def upload_meta_anexo(instance, filename):
     return f"impulso/metas/{instance.meta_id or 'novos'}/{_uuid_name(filename)}"
 
 
+def upload_meta_descricao(instance, filename):
+    return f"impulso/metas/descricao/{_uuid_name(filename)}"
+
+
 def upload_projeto_anexo(instance, filename):
     return f"impulso/projetos/{instance.projeto_id or 'novos'}/{_uuid_name(filename)}"
 
@@ -135,6 +139,12 @@ class Meta(models.Model):
     descricao = models.TextField(
         verbose_name='Descrição',
         help_text='Descreva a meta de forma clara, por textos.')
+    # Opcionais (28/10/2026): às vezes uma foto ou um áudio explica melhor que o texto.
+    # Repetição e cópia apontam para o mesmo arquivo (nada é duplicado no armazenamento).
+    descricao_foto = models.FileField(upload_to=upload_meta_descricao, storage=get_media_storage(),
+                                      null=True, blank=True, verbose_name='Foto da descrição')
+    descricao_audio = models.FileField(upload_to=upload_meta_descricao, storage=get_media_storage(),
+                                       null=True, blank=True, verbose_name='Áudio da descrição')
     recorrencia = models.CharField(
         max_length=12, choices=Recorrencia.choices,
         default=Recorrencia.UNICA, verbose_name='Recorrência')
@@ -438,7 +448,14 @@ class Meta(models.Model):
 
     @property
     def impacto_da_exclusao(self):
-        """O que some junto — usado no aviso de confirmação."""
+        """O que some junto — usado no aviso de confirmação.
+
+        O Kanban calcula isto para todos os cards de uma vez (``_impacto_pronto``):
+        três contagens por card deixavam a tela de quem vê todas as metas em minutos.
+        """
+        pronto = self.__dict__.get('_impacto_pronto')
+        if pronto is not None:
+            return pronto
         return {
             'anexos': self.anexos.count(),
             'comentarios': self.comentarios.count(),
@@ -489,6 +506,8 @@ class Meta(models.Model):
             colaborador_id=self.colaborador_id,
             titulo=self.titulo,
             descricao=self.descricao,
+            descricao_foto=self.descricao_foto.name or None,
+            descricao_audio=self.descricao_audio.name or None,
             recorrencia=self.recorrencia,
             recorrencia_ativa=True,
             recorrencia_de=self,

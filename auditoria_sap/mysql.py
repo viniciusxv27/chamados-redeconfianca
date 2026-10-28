@@ -91,6 +91,24 @@ def conexao():
         raise SapIndisponivel(f'Não deu para conectar no MySQL do SAP: {exc}') from exc
 
 
+def ler_formas_de_pagamento():
+    """{nota fiscal: forma de pagamento} da SAP.zs103_final (a view da auditoria não traz)."""
+    con = conexao()
+    try:
+        with con.cursor() as cur:
+            cur.execute("SELECT num_fat, forma_pagamento FROM zs103_final "
+                        "WHERE num_fat <> '' AND forma_pagamento <> '' ORDER BY id")
+            # A carga mais nova vem depois (id maior) e vale.
+            return {str(r['num_fat']).strip(): str(r['forma_pagamento']).strip() for r in cur.fetchall()}
+    except Exception as exc:                                     # noqa: BLE001
+        raise SapIndisponivel(f'Falha lendo zs103_final: {exc}') from exc
+    finally:
+        try:
+            con.close()
+        except Exception:                                        # noqa: BLE001
+            pass
+
+
 def ler_visao_geral():
     """Todas as linhas da auditoria, como vieram da view (lista de dicts)."""
     con = conexao()

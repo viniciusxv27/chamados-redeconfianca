@@ -53,7 +53,7 @@
             </button>
         </div>
 
-        <form method="post" class="space-y-4" id="impMetaForm">
+        <form method="post" class="space-y-4" id="impMetaForm" enctype="multipart/form-data">
             {% csrf_token %}
 
             {% if sou_gestor %}
@@ -202,6 +202,7 @@
                 <label class="block text-sm font-medium text-gray-700 mb-1">Descrição (clara, por textos) *</label>
                 <textarea name="descricao" required rows="4" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Descreva a meta de forma clara e objetiva…"></textarea>
             </div>
+            {% include 'impulso/_descricao_midia_campos.html' %}
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {% if sou_gestor %}
             <div>
