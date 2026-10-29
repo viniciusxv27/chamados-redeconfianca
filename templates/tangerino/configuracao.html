@@ -22,8 +22,16 @@
         <label class="flex items-start gap-3 p-3 rounded-xl hover:bg-gray-50 cursor-pointer">
             <input type="checkbox" name="ativo" class="mt-1 rounded border-gray-300" {% if config.ativo %}checked{% endif %}>
             <span>
-                <span class="block text-sm font-medium text-gray-800">Módulo Ponto e Férias ativo</span>
-                <span class="block text-xs text-gray-500">Desmarcado, as telas somem para todo mundo. Superusuários continuam entrando — senão não haveria como religar.</span>
+                <span class="block text-sm font-medium text-gray-800"><i class="fas fa-fingerprint text-cyan-600 mr-1"></i>Ponto ativo</span>
+                <span class="block text-xs text-gray-500">Desmarcado, as telas de ponto (Meu ponto, folha, cartão da home) somem para todo mundo. Superusuários continuam entrando — senão não haveria como religar.</span>
+            </span>
+        </label>
+
+        <label class="flex items-start gap-3 p-3 rounded-xl hover:bg-gray-50 cursor-pointer">
+            <input type="checkbox" name="ferias_ativo" class="mt-1 rounded border-gray-300" {% if config.ferias_ativo %}checked{% endif %}>
+            <span>
+                <span class="block text-sm font-medium text-gray-800"><i class="fas fa-umbrella-beach text-teal-600 mr-1"></i>Férias ativa</span>
+                <span class="block text-xs text-gray-500">Desmarcado, o menu, as telas, o popup e o bloqueio de férias somem para todos — menos para o SUPERADMIN. O ponto continua como estiver acima.</span>
             </span>
         </label>
 

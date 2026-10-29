@@ -23,9 +23,14 @@ class ConfiguracaoTangerino(models.Model):
     """
 
     ativo = models.BooleanField(
-        default=True, verbose_name='Módulo Ponto e Férias ativo',
-        help_text='Desmarque para esconder as telas de ponto e férias. '
+        default=True, verbose_name='Ponto ativo',
+        help_text='Desmarque para esconder as telas de ponto. '
                   'Superusuários continuam entrando, para poder religar.')
+    # Férias liga e desliga sozinha (29/10/2026): desligada, some para todo mundo menos o SUPERADMIN
+    # — inclusive para a ADMINISTRAÇÃO, que continua vendo o ponto.
+    ferias_ativo = models.BooleanField(
+        default=True, db_default=True, verbose_name='Férias ativa',
+        help_text='Desmarque para esconder as telas e o popup de férias de todos, menos do SUPERADMIN.')
     restrito_ao_grupo = models.BooleanField(
         default=True, verbose_name='Liberar apenas para o grupo escolhido',
         help_text='Desmarque para liberar o módulo para todo o portal.')
@@ -130,7 +135,23 @@ class ConfiguracaoTangerino(models.Model):
         return obj
 
     def libera(self, user):
-        """O usuário enxerga o módulo?
+        """O usuário enxerga alguma parte do módulo (ponto ou férias)?"""
+        return self.libera_ponto(user) or self.libera_ferias(user)
+
+    def libera_ferias(self, user):
+        """O usuário enxerga as férias? Desligada, só o SUPERADMIN (para conferir e religar)."""
+        if not (user and user.is_authenticated):
+            return False
+        if user.is_superuser or getattr(user, 'hierarchy', '') == 'SUPERADMIN':
+            return True
+        if not self.ferias_ativo:
+            return False
+        if getattr(user, 'can_manage_rh', lambda: False)():
+            return True
+        return self._libera_pelo_grupo(user)
+
+    def libera_ponto(self, user):
+        """O usuário enxerga o ponto?
 
         O superusuário é checado ANTES de `ativo` de propósito: a tela que
         religa o módulo vive dentro dele, então desligar com o superusuário
@@ -145,6 +166,9 @@ class ConfiguracaoTangerino(models.Model):
             return True
         if not self.ativo:
             return False
+        return self._libera_pelo_grupo(user)
+
+    def _libera_pelo_grupo(self, user):
         # Liberação individual (SUPERADMIN na tela do usuário) fura a restrição
         # de grupo, mas continua respeitando o módulo estar ativo.
         from users.module_access import user_has_module

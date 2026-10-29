@@ -16,11 +16,13 @@ def tangerino_gate(request):
     try:
         from .models import ConfiguracaoTangerino
         config = ConfiguracaoTangerino.get()
-        liberado = config.libera(usuario)
+        liberado = config.libera_ponto(usuario)
+        ferias = config.libera_ferias(usuario)
         return {
-            'tangerino_liberado': liberado,
+            'tangerino_liberado': liberado,                 # ponto
+            'tangerino_ferias_liberado': ferias,
             'tangerino_widget_home': liberado and config.mostrar_widget_home,
-            'tangerino_popup_ferias': liberado and config.mostrar_popup_ferias,
+            'tangerino_popup_ferias': ferias and config.mostrar_popup_ferias,
             # Aba "Ajustes de ponto": o setor que o SUPERADMIN escolheu (só com a função ligada).
             'tangerino_ajustes_responsavel': bool(config.ajustes_ativo and config.ajustes_setor_id and (
                 usuario.is_superuser or getattr(usuario, 'hierarchy', '') == 'SUPERADMIN'

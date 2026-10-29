@@ -68,8 +68,23 @@ def modulo_liberado(view_func):
     def _wrapped(request, *args, **kwargs):
         if not request.user.is_authenticated:
             return redirect('login')
-        if not ConfiguracaoTangerino.get().libera(request.user):
-            messages.error(request, 'O módulo de Ponto e Férias não está liberado para você.')
+        if not ConfiguracaoTangerino.get().libera_ponto(request.user):
+            messages.error(request, 'O Ponto não está liberado para você.')
+            return redirect('home')
+        return view_func(request, *args, **kwargs)
+    return _wrapped
+
+
+def ferias_liberadas(view_func):
+    """Como ``modulo_liberado``, para as telas de férias (que ligam e desligam à parte do ponto)."""
+    from functools import wraps
+
+    @wraps(view_func)
+    def _wrapped(request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return redirect('login')
+        if not ConfiguracaoTangerino.get().libera_ferias(request.user):
+            messages.error(request, 'As Férias não estão liberadas para você.')
             return redirect('home')
         return view_func(request, *args, **kwargs)
     return _wrapped
@@ -868,7 +883,7 @@ def escala_gestores(request):
 
 # ─── Férias ──────────────────────────────────────────────────────────────────
 
-@modulo_liberado
+@ferias_liberadas
 @login_required
 def minhas_ferias(request):
     contexto = {
@@ -882,7 +897,7 @@ def minhas_ferias(request):
     return render(request, 'tangerino/minhas_ferias.html', contexto)
 
 
-@modulo_liberado
+@ferias_liberadas
 @login_required
 def ferias_equipe(request):
     if not e_gestor(request.user):
@@ -926,7 +941,7 @@ def em_ferias(request):
     })
 
 
-@modulo_liberado
+@ferias_liberadas
 @login_required
 def api_ferias_popup(request):
     """Conteúdo do popup de férias (JSON), consultado uma vez por dia."""
@@ -1228,7 +1243,7 @@ def configuracao(request):
         return redirect('tangerino:configuracao')
 
     if request.method == 'POST':
-        for campo in ('ativo', 'restrito_ao_grupo', 'permitir_bater_ponto', 'exigir_foto',
+        for campo in ('ativo', 'ferias_ativo', 'restrito_ao_grupo', 'permitir_bater_ponto', 'exigir_foto',
                       'permitir_ponto_atrasado', 'mostrar_widget_home',
                       'mostrar_popup_ferias', 'bloquear_navegacao_ferias',
                       'bloquear_sem_entrada', 'bloquear_durante_almoco',

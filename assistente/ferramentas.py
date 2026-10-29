@@ -198,8 +198,19 @@ def _meu_ponto(user, args):
     return '\n'.join(linhas)
 
 
+def _ferias_liberadas(user):
+    """Férias desligada em /ponto/configuracao/ também some do assistente."""
+    try:
+        from tangerino.models import ConfiguracaoTangerino
+        return ConfiguracaoTangerino.get().libera_ferias(user)
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _minhas_ferias(user, args):
     from tangerino.ferias import situacao_do_usuario
+    if not _ferias_liberadas(user):
+        return 'As férias não estão disponíveis no portal agora.'
     r = situacao_do_usuario(user)
     if not r.get('disponivel'):
         if r.get('motivo') == 'sem_vinculo':
@@ -432,7 +443,8 @@ def _resumo_geral(user, args):
     _tenta('Documentos', _docs)
     _tenta('Metas', _metas)
     _tenta('Ponto hoje', _ponto)
-    _tenta('Férias', _ferias)
+    if _ferias_liberadas(user):
+        _tenta('Férias', _ferias)
     _tenta('Notificações', _notif)
     _tenta('Confianças', _cs)
     return '\n'.join(linhas)

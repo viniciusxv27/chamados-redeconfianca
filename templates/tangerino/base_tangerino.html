@@ -64,18 +64,24 @@
 
     <nav class="flex gap-1 mt-4 tg-scroll-x -mb-px">
         {% if not esconder_abas_ponto %}
+        {% if tangerino_liberado %}
         <a href="{% url 'tangerino:meu_ponto' %}"
            class="tg-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'ponto' %}tg-tab-active{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
             <i class="fas fa-fingerprint mr-1.5"></i>Meu ponto
         </a>
+        {% endif %}
+        {% if tangerino_ferias_liberado %}
         <a href="{% url 'tangerino:minhas_ferias' %}"
            class="tg-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'ferias' %}tg-tab-active{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
             <i class="fas fa-umbrella-beach mr-1.5"></i>Minhas férias
         </a>
+        {% endif %}
+        {% if tangerino_liberado %}
         <a href="{% url 'tangerino:folhas_sincronizadas' %}"
            class="tg-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'folhas' %}tg-tab-active{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
             <i class="fas fa-file-lines mr-1.5"></i>Folha sincronizada
         </a>
+        {% endif %}
         {% endif %}
         <a href="{% url 'tangerino:escala' %}"
            class="tg-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'escala' %}tg-tab-active{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
@@ -97,10 +103,12 @@
            class="tg-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'relatorio' %}tg-tab-active{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
             <i class="fas fa-file-excel mr-1.5"></i>Relatório
         </a>
+        {% if tangerino_ferias_liberado %}
         <a href="{% url 'tangerino:ferias_equipe' %}"
            class="tg-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'ferias_equipe' %}tg-tab-active{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
             <i class="fas fa-calendar-check mr-1.5"></i>Férias da equipe
         </a>
+        {% endif %}
         <a href="{% url 'tangerino:vinculos' %}"
            class="tg-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'vinculos' %}tg-tab-active{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
             <i class="fas fa-link mr-1.5"></i>Vínculos

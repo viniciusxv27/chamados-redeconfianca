@@ -59,7 +59,7 @@ class BloqueioFeriasMiddleware:
             # liberado — quem está fora do grupo nem sabe que ele existe.
             from .models import ConfiguracaoTangerino
             config = ConfiguracaoTangerino.get()
-            if not (config.bloquear_navegacao_ferias and config.libera(usuario)):
+            if not (config.bloquear_navegacao_ferias and config.libera_ferias(usuario)):
                 return self.get_response(request)
 
             if esta_de_ferias(usuario):
@@ -155,7 +155,7 @@ def decidir_bloqueio(user):
     config = ConfiguracaoTangerino.get()
     regras_ligadas = (config.bloquear_sem_entrada or config.bloquear_durante_almoco
                       or config.bloquear_saida_pendente)
-    if not regras_ligadas or not config.libera(user):
+    if not regras_ligadas or not config.libera_ponto(user):
         return None
     if not getattr(user, 'tangerino_employee_id', None):
         return None
