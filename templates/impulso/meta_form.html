@@ -56,6 +56,23 @@
         <form method="post" class="space-y-4" id="impMetaForm" enctype="multipart/form-data">
             {% csrf_token %}
 
+            {% if sou_superadmin %}
+            {% comment %}
+            Só o SUPERADMIN escolhe. Desmarcado (padrão) a meta nasce aprovada
+            por ele; marcado, segue a aprovação do gestor como sempre.
+            {% endcomment %}
+            <label class="flex items-start gap-2.5 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 cursor-pointer">
+                <input type="checkbox" name="enviar_aprovacao" id="impEnviarAprovacao"
+                       class="mt-0.5 rounded text-orange-600 focus:ring-orange-500">
+                <span>
+                    <span class="block text-sm font-medium text-gray-800">Enviar para aprovação do Gestor</span>
+                    <span class="block text-xs text-gray-500 mt-0.5" id="impAjudaEnviarAprovacao">
+                        Desmarcado, a meta já entra aprovada por você, sem passar pelo gestor.
+                    </span>
+                </span>
+            </label>
+            {% endif %}
+
             {% if sou_gestor %}
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Colaborador *</label>
@@ -108,6 +125,23 @@
                     aprovação. Fale com o RH antes de criar a demanda.
                 </p>
             </div>
+
+            {% if sou_superadmin %}
+            {% comment %}
+            SUPERADMIN pedindo aprovação sendo ele o gestor responsável: quem
+            aprova é um gestor da área do colaborador.
+            {% endcomment %}
+            <div id="impAprovSA" class="hidden p-4 rounded-xl bg-amber-50 border border-amber-200">
+                <label for="impGestorAprovadorSA" class="block text-xs font-medium text-amber-900 mb-1">Enviar para aprovação de</label>
+                <select name="gestor_aprovador" id="impGestorAprovadorSA" disabled
+                        class="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm bg-white">
+                </select>
+                <p id="impSemGestorSA" class="hidden text-xs text-red-700 font-medium mt-1">
+                    A área deste colaborador não tem outro gestor do Impulso para aprovar.
+                    Escolha outro gestor responsável ou desmarque "Enviar para aprovação do Gestor".
+                </p>
+            </div>
+            {% endif %}
             {% else %}
             {% if adms_lojas %}
             <div>
@@ -127,7 +161,8 @@
             {% endif %}
 
             <div id="impBlocoParaMim" class="space-y-4{% if not gestores_do_setor %} hidden{% endif %}">
-            <div>
+            {% comment %}Para o SUPERADMIN quem decide é a caixa lá em cima; o rádio só acompanha.{% endcomment %}
+            <div{% if sou_superadmin %} class="hidden"{% endif %}>
                 <span class="block text-sm font-medium text-gray-700 mb-2">Esta atividade precisa da autorização do gestor?</span>
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <label class="imp-aprov flex items-start gap-2.5 border border-gray-200 rounded-lg p-3 cursor-pointer hover:bg-orange-50">
@@ -310,11 +345,17 @@
 </script>
 
 {{ fora_da_area|json_script:"impForaJson" }}
+{% if sou_superadmin %}{{ gestores_da_area_sa|json_script:"impAreaSAJson" }}{% endif %}
 <script>
 // Colaborador de outra área: avisa na hora da escolha e pergunta para qual
 // gestor de lá vai a aprovação. Descobrir isso só depois de salvar faria a
 // pessoa achar que a meta entrou no Kanban quando ela está parada esperando.
 function impChecarArea() {
+    impChecarAreaBase();
+    impFluxoSuperadmin();
+}
+
+function impChecarAreaBase() {
     var dados = document.getElementById('impForaJson');
     var sel = document.getElementById('impColaborador');
     var caixa = document.getElementById('impForaDaArea');
@@ -322,6 +363,10 @@ function impChecarArea() {
 
     var fora = JSON.parse(dados.textContent || '{}');
     var info = fora[sel.value];
+    // SUPERADMIN criando direto: a aprovação é dele, então a trava de outra
+    // área não vale — o gestor responsável é o escolhido no seletor.
+    var sa = document.getElementById('impEnviarAprovacao');
+    if (sa && !sa.checked) info = undefined;
     // ADM de loja de outra área é a exceção: quem aprova e avalia é o gestor
     // escolhido aqui mesmo, qualquer um do Impulso.
     var adm = !!(info && info.adm_loja);
@@ -383,6 +428,67 @@ function impResumo(texto) {
     var el = document.getElementById('impResumoGestor');
     if (el) el.textContent = texto;
 }
+
+// SUPERADMIN: "Enviar para aprovação do Gestor". Desmarcado, a meta nasce
+// aprovada; marcado, segue a aprovação de sempre — e, se ele mesmo é o gestor
+// responsável, quem aprova é um gestor da área do colaborador.
+function impFluxoSuperadmin() {
+    var sa = document.getElementById('impEnviarAprovacao');
+    var caixa = document.getElementById('impAprovSA');
+    var lista = document.getElementById('impGestorAprovadorSA');
+    var colab = document.getElementById('impColaborador');
+    var g = document.getElementById('impGestor');
+    if (!sa || !caixa || !lista || !colab || !g) return;
+
+    var mostrar = false;
+    var fora = JSON.parse((document.getElementById('impForaJson') || {}).textContent || '{}');
+    var info = fora[colab.value];
+    if (!sa.checked) {
+        impResumo('A meta entra direto no Kanban do colaborador, já aprovada por você.');
+    } else if (info && (!info.adm_loja || g.value !== g.dataset.eu)) {
+        // Outra área (ou ADM de loja com outro gestor): o fluxo de sempre, já explicado.
+    } else if (g.value !== g.dataset.eu) {
+        impResumo('A meta vai para aprovação de ' + g.options[g.selectedIndex].textContent.trim()
+                  + ' antes de entrar no Kanban.');
+    } else if (colab.value) {
+        mostrar = true;
+        var area = JSON.parse((document.getElementById('impAreaSAJson') || {}).textContent || '{}');
+        var gestores = area[colab.value] || [];
+        lista.innerHTML = '';
+        gestores.forEach(function (x) {
+            var op = document.createElement('option');
+            op.value = x.id;
+            op.textContent = x.nome;
+            lista.appendChild(op);
+        });
+        lista.classList.toggle('hidden', !gestores.length);
+        document.getElementById('impSemGestorSA').classList.toggle('hidden', gestores.length > 0);
+        impResumo('A meta vai para aprovação de um gestor da área do colaborador antes de entrar no Kanban.');
+    } else {
+        impResumo('A meta vai para aprovação do gestor antes de entrar no Kanban.');
+    }
+    caixa.classList.toggle('hidden', !mostrar);
+    lista.disabled = !mostrar;
+}
+
+(function () {
+    var sa = document.getElementById('impEnviarAprovacao');
+    if (!sa) return;
+    sa.addEventListener('change', function () {
+        // Quem não é gestor tem o rádio de autorização: a caixa manda nele,
+        // para os textos da tela acompanharem a escolha.
+        var radio = document.querySelector('input[name="precisa_aprovacao"][value="'
+                                           + (sa.checked ? 'sim' : 'nao') + '"]');
+        if (radio && !radio.checked) {
+            radio.checked = true;
+            radio.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        impChecarArea();
+    });
+    document.addEventListener('DOMContentLoaded', function () {
+        sa.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+})();
 document.addEventListener('DOMContentLoaded', impChecarArea);
 </script>
 
@@ -414,6 +520,7 @@ document.addEventListener('DOMContentLoaded', impChecarArea);
     const blocoMim = document.getElementById('impBlocoParaMim');
     const blocoAdm = document.getElementById('impBlocoAdm');
     const botao = document.getElementById('impBotaoEnviar');
+    const saCaixa = document.getElementById('impEnviarAprovacao');
 
     function pintar() {
         // Para alguém de ADM's LOJAS o que vale é o bloco do gestor aprovador;
@@ -432,11 +539,15 @@ document.addEventListener('DOMContentLoaded', impChecarArea);
             document.querySelectorAll('.imp-nome-alvo').forEach(function (el) { el.textContent = nome; });
             const tituloAlvo = document.getElementById('tituloForm');
             if (tituloAlvo) tituloAlvo.textContent = 'Nova atividade para ' + nome;
+            // SUPERADMIN sem marcar "Enviar para aprovação do Gestor": entra já aprovada.
+            const saDireto = !!(saCaixa && !saCaixa.checked);
             if (resumo) {
-                resumo.textContent = 'O gestor escolhido aprova antes de a atividade entrar no Kanban de '
-                    + nome + ' e avalia a entrega no fim.';
+                resumo.textContent = saDireto
+                    ? 'A atividade entra já aprovada no Kanban de ' + nome + '; o gestor escolhido avalia a entrega no fim.'
+                    : 'O gestor escolhido aprova antes de a atividade entrar no Kanban de '
+                      + nome + ' e avalia a entrega no fim.';
             }
-            if (botao) botao.textContent = 'Enviar para aprovação';
+            if (botao) botao.textContent = saDireto ? 'Criar atividade' : 'Enviar para aprovação';
             return;
         }
         if (botao) botao.textContent = 'Enviar solicitação';
@@ -470,6 +581,7 @@ document.addEventListener('DOMContentLoaded', impChecarArea);
 
     opcoes.forEach(function (o) { o.addEventListener('change', pintar); });
     if (alvo) alvo.addEventListener('change', pintar);
+    if (saCaixa) saCaixa.addEventListener('change', pintar);
     pintar();
 })();
 </script>
@@ -513,7 +625,8 @@ document.addEventListener('DOMContentLoaded', impChecarArea);
     function vazio(dados) {
         const algumCampo = Object.entries(dados.campos).some(function ([nome, v]) {
             // O gestor e a recorrência já vêm preenchidos; sozinhos não são rascunho.
-            if (nome === 'gestor' || nome === 'recorrencia' || nome === 'precisa_aprovacao') return false;
+            if (nome === 'gestor' || nome === 'recorrencia' || nome === 'precisa_aprovacao'
+                || nome === 'enviar_aprovacao') return false;
             // "Para mim" é o padrão (valor vazio); escolher um ADM já é rascunho.
             return typeof v === 'string' ? v.trim() !== '' : v === true;
         });
@@ -568,7 +681,7 @@ document.addEventListener('DOMContentLoaded', impChecarArea);
         });
 
         // Os campos mudaram por script; quem depende de 'change' precisa saber.
-        form.querySelectorAll('#impParaQuem, input[name="precisa_aprovacao"], #impRecorrencia, #impGestor')
+        form.querySelectorAll('#impParaQuem, input[name="precisa_aprovacao"], #impRecorrencia, #impGestor, #impEnviarAprovacao')
             .forEach(function (el) { el.dispatchEvent(new Event('change', { bubbles: true })); });
 
         if (aviso) {
@@ -588,7 +701,7 @@ document.addEventListener('DOMContentLoaded', impChecarArea);
             try { localStorage.removeItem(CHAVE); } catch (e) {}
             form.reset();
             if (aviso) aviso.classList.add('hidden');
-            form.querySelectorAll('#impParaQuem, input[name="precisa_aprovacao"], #impRecorrencia, #impGestor')
+            form.querySelectorAll('#impParaQuem, input[name="precisa_aprovacao"], #impRecorrencia, #impGestor, #impEnviarAprovacao')
                 .forEach(function (el) { el.dispatchEvent(new Event('change', { bubbles: true })); });
         });
     }

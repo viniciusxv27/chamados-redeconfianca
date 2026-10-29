@@ -216,8 +216,8 @@ def _por_prazo(metas, hoje=None):
 # guardado, então filtro novo precisa ser acrescentado junto.
 # O Voltar da meta precisa devolver o Kanban exatamente como estava — inclusive
 # o filtro por nome e setor, senão a pessoa perde a busca a cada card aberto.
-FILTROS_KANBAN = ('colaborador', 'criadas_por_mim', filtros_impulso.PARAM_NOME, filtros_impulso.PARAM_SETOR,
-                  filtros_impulso.PARAM_MES)
+FILTROS_KANBAN = ('colaborador', 'criadas_por_mim', 'criado_por', filtros_impulso.PARAM_NOME,
+                  filtros_impulso.PARAM_SETOR, filtros_impulso.PARAM_MES)
 CHAVE_FILTROS_KANBAN = 'impulso_kanban_filtros'
 
 
@@ -254,6 +254,19 @@ def _url_kanban(request):
 CONCLUIDAS_POR_VEZ = 40
 
 
+def _criado_por_do_kanban(request):
+    """O id do filtro "Criado por" — None para quem não é SUPERADMIN."""
+    if not e_superadmin(request.user):
+        return None
+    return _int_or_none(request.GET.get('criado_por'), lo=1)
+
+
+def _criadores_de_metas(user):
+    """Quem criou alguma meta que esta pessoa enxerga no Kanban (o seletor "Criado por")."""
+    ids = _metas_do_usuario(user).exclude(created_by=None).values('created_by_id')
+    return User.objects.filter(id__in=ids).order_by('first_name', 'last_name', 'email')
+
+
 def _metas_do_kanban(request):
     """(queryset, filtros, colaborador_id): o recorte do Kanban, igual na tela e no "Mostrar mais"."""
     user = request.user
@@ -265,6 +278,11 @@ def _metas_do_kanban(request):
     # "Criadas por mim": o que esta pessoa pôs no Kanban dos outros (e no próprio).
     if request.GET.get('criadas_por_mim') == '1':
         metas = metas.filter(created_by=user)
+    # "Criado por": só o SUPERADMIN escolhe de quem. Para os demais o parâmetro
+    # é ignorado — a lista de quem não é SUPERADMIN não muda por URL.
+    criado_por_id = _criado_por_do_kanban(request)
+    if criado_por_id:
+        metas = metas.filter(created_by_id=criado_por_id)
 
     # Nome e setor valem para o responsável ou para o gestor da meta: quem
     # digita o nome de um gestor quer as metas que ele acompanha, não zero.
@@ -373,6 +391,11 @@ def metas_kanban(request):
         # Trocar o colaborador no seletor não pode desfazer a busca nem o mês.
         'manter_no_colaborador': {c: v for c, v in escolhidos.items() if c != 'colaborador'},
         'criadas_por_mim': request.GET.get('criadas_por_mim') == '1',
+        # Filtro "Criado por": só o SUPERADMIN vê o seletor (e só para ele vale).
+        'filtra_criador': e_superadmin(user),
+        'criadores': _criadores_de_metas(user) if e_superadmin(user) else None,
+        'criado_por_id': _criado_por_do_kanban(request),
+        'manter_no_criador': {c: v for c, v in escolhidos.items() if c != 'criado_por'},
         # O "Mostrar mais" pede as próximas com os mesmos filtros da tela.
         'query_kanban': request.GET.urlencode(),
         'concluidas_por_vez': CONCLUIDAS_POR_VEZ,
@@ -476,6 +499,40 @@ def _prazo_em_dia_util(prazo, apenas_dias_uteis):
                       f'{ajustado:%d/%m/%Y} (somente dias úteis).')
 
 
+def _gestores_da_area_por_colaborador(quem):
+    """{id do colaborador: [{id, nome}]} — os gestores do Impulso de cada área, menos `quem`.
+
+    A mesma régua de ``get_gestores_do_setor`` (algum setor em comum, principal
+    ou vinculado), montada para todos de uma vez: uma consulta por colaborador
+    deixaria a tela de criação lenta para quem enxerga a rede inteira.
+    """
+    from collections import defaultdict
+
+    def setores(qs):
+        mapa = defaultdict(set)
+        for uid, sid in qs.values_list('id', 'sector_id'):
+            if sid:
+                mapa[uid].add(sid)
+        for uid, sid in User.sectors.through.objects.filter(
+                user_id__in=qs.values('id')).values_list('user_id', 'sector_id'):
+            mapa[uid].add(sid)
+        return mapa
+
+    gestores_qs = get_gestores().exclude(id=quem.id)
+    gestores = list(gestores_qs)
+    setores_g = setores(gestores_qs)
+    colaboradores = get_colaboradores()
+    setores_c = setores(colaboradores)
+    mapa = {}
+    for cid in colaboradores.values_list('id', flat=True):
+        meus = setores_c.get(cid)
+        if not meus:
+            continue
+        mapa[str(cid)] = [{'id': g.id, 'nome': g.get_full_name() or g.email}
+                          for g in gestores if g.id != cid and setores_g.get(g.id, set()) & meus]
+    return mapa
+
+
 @impulso_member_required
 def meta_create(request):
     """Cria a meta (gestor) ou solicita uma ao gestor do próprio setor (colaborador).
@@ -487,6 +544,7 @@ def meta_create(request):
     área), a atividade espera a aprovação dele antes de entrar no Kanban.
     """
     sou_gestor = is_impulso_manager(request.user)
+    sou_superadmin = e_superadmin(request.user)
     adms_lojas = get_adms_lojas()
     sou_adm_loja = adms_lojas.filter(id=request.user.id).exists()
     # ADM de loja pedindo para si também escolhe qualquer gestor — a mesma régua
@@ -504,6 +562,14 @@ def meta_create(request):
         apenas_dias_uteis = (recorrencia != Meta.Recorrencia.UNICA
                              and request.POST.get('apenas_dias_uteis') == 'on')
         prazo, aviso_dia_util = _prazo_em_dia_util(prazo, apenas_dias_uteis)
+
+        # SUPERADMIN escolhe se a meta passa pelo gestor ("Enviar para aprovação
+        # do Gestor"). Desmarcado — o padrão — ela já nasce aprovada por ele,
+        # registrada como se ele tivesse aprovado. De quem não é SUPERADMIN o
+        # campo é ignorado: o fluxo dele continua o de sempre.
+        sa_pede_aprovacao = sou_superadmin and request.POST.get('enviar_aprovacao') == 'on'
+        sa_direto = sou_superadmin and not sa_pede_aprovacao
+        sa_encaminhou = False    # SUPERADMIN pediu aprovação de meta que entraria direto
 
         fora_da_area = False
         pedido_adm = False       # atividade para ADM de loja esperando o gestor escolhido aprovar
@@ -525,7 +591,8 @@ def meta_create(request):
             # Demanda para gente de OUTRA área não entra na fila direto: quem
             # responde pela área do colaborador precisa aprovar. Sem isso, um
             # gestor encheria a agenda da equipe de outro sem ele saber.
-            if colaborador is not None:
+            # O SUPERADMIN que cria direto dispensa a trava: a aprovação é dele.
+            if colaborador is not None and not sa_direto:
                 da_minha_area = (get_colaboradores_do_gestor(request.user)
                                  .filter(id=colaborador.id).exists())
                 if not da_minha_area and adms_lojas.filter(id=colaborador.id).exists():
@@ -551,6 +618,26 @@ def meta_create(request):
                         id=_int_or_none(request.POST.get('gestor_aprovador'))).first()
                     gestor = aprovador or gestores_da_area.first()
                     fora_da_area = True
+
+            # SUPERADMIN marcou "Enviar para aprovação do Gestor" numa meta que
+            # entraria direto: vai para o gestor responsável escolhido — ou, se
+            # ele escolheu a si mesmo, para um gestor da área do colaborador.
+            if sa_pede_aprovacao and colaborador is not None and not fora_da_area:
+                if gestor.id == request.user.id:
+                    gestores_da_area = get_gestores_do_setor(colaborador).exclude(
+                        id=request.user.id)
+                    if not gestores_da_area.exists():
+                        messages.error(
+                            request,
+                            f'Não há gestor do Impulso na área de '
+                            f'{colaborador.get_full_name() or colaborador.email} para aprovar. '
+                            f'Escolha outro gestor responsável ou desmarque '
+                            f'"Enviar para aprovação do Gestor".')
+                        return redirect('impulso:meta_create')
+                    gestor = (gestores_da_area.filter(
+                        id=_int_or_none(request.POST.get('gestor_aprovador'))).first()
+                        or gestores_da_area.first())
+                fora_da_area = sa_encaminhou = True
         else:
             alvo_id = _int_or_none(request.POST.get('colaborador'))
             if alvo_id and alvo_id != request.user.id:
@@ -567,7 +654,8 @@ def meta_create(request):
                 if not gestor:
                     messages.error(request, 'Escolha o gestor que vai aprovar e avaliar a atividade.')
                     return redirect('impulso:meta_create')
-                pedido_adm = precisa_aprovacao = True
+                # SUPERADMIN criando direto: já nasce aprovada por ele.
+                pedido_adm = precisa_aprovacao = not sa_direto
             else:
                 # Para si mesmo: pede ao gestor do SEU setor (ADM de loja, a
                 # qualquer gestor). Não dá para criar tarefa para terceiros fora
@@ -587,6 +675,10 @@ def meta_create(request):
                 # dispensada: é ele quem avalia a meta no fim, e sem esse vínculo a
                 # atividade não teria como ser concluída nem valer nota.
                 precisa_aprovacao = (request.POST.get('precisa_aprovacao') or 'sim') != 'nao'
+                if sou_superadmin:
+                    # Para o SUPERADMIN quem decide é a caixa "Enviar para
+                    # aprovação do Gestor", não o rádio.
+                    precisa_aprovacao = sa_pede_aprovacao
 
         if not (colaborador and titulo and descricao and prazo):
             campo = 'colaborador, título, descrição e prazo' if sou_gestor else 'título, descrição e prazo'
@@ -608,6 +700,9 @@ def meta_create(request):
         # Gestor criando para a própria área: aprovada. Para outra área, vai
         # para o gestor de lá. Colaborador: depende do que ele escolheu.
         ja_aprovada = (sou_gestor and not fora_da_area) or (not sou_gestor and not precisa_aprovacao)
+        # SUPERADMIN criando direto: a aprovação fica registrada como dele,
+        # do mesmo jeito que o "aprovar" da solicitação grava.
+        aprovada_pelo_sa = sa_direto and ja_aprovada
         meta = Meta.objects.create(
             gestor=gestor, colaborador=colaborador, titulo=titulo,
             descricao=descricao, recorrencia=recorrencia, prazo=prazo,
@@ -615,6 +710,8 @@ def meta_create(request):
             apenas_dias_uteis=apenas_dias_uteis,
             aprovacao=Meta.Aprovacao.APROVADA if ja_aprovada else Meta.Aprovacao.PENDENTE,
             solicitada_por=request.user if (fora_da_area or not sou_gestor) else None,
+            decidida_por=request.user if aprovada_pelo_sa else None,
+            decidida_em=timezone.now() if aprovada_pelo_sa else None,
             created_by=request.user,
         )
         if aviso_dia_util:
@@ -655,6 +752,29 @@ def meta_create(request):
                 request,
                 f'Atividade enviada para {gestor.get_full_name() or gestor.email} aprovar. '
                 f'Ela entra no Kanban de {nome} depois disso — acompanhe em Solicitações.')
+        elif sa_encaminhou:
+            # SUPERADMIN pediu a aprovação: só o gestor que vai decidir é avisado.
+            nome = colaborador.get_full_name() or colaborador.email
+            _notify([gestor], 'Nova atividade para aprovar',
+                    f'{quem} criou "{meta.titulo}" para {nome} e pediu a sua aprovação. '
+                    f'Aprove ou recuse.',
+                    f'/impulso/metas/{meta.id}/')
+            messages.success(
+                request,
+                f'Meta enviada para {gestor.get_full_name() or gestor.email} aprovar. '
+                f'Ela entra no Kanban de {nome} depois disso — acompanhe em Solicitações.')
+        elif aprovada_pelo_sa and not sou_gestor and colaborador.id != request.user.id:
+            # SUPERADMIN (sem ser gestor) criando direto para um ADM de loja: a
+            # meta já está no Kanban dele e o gestor escolhido avalia no fim.
+            nome = colaborador.get_full_name() or colaborador.email
+            _notify([colaborador], 'Nova meta atribuída',
+                    f'"{meta.titulo}" foi atribuída a você.',
+                    f'/impulso/metas/{meta.id}/')
+            _notify([gestor], 'Meta criada no seu nome',
+                    f'{quem} criou "{meta.titulo}" para {nome} com você como gestor '
+                    f'responsável, já aprovada. A avaliação no fim é sua.',
+                    f'/impulso/metas/{meta.id}/')
+            messages.success(request, f'Atividade criada e já aprovada — está no Kanban de {nome}.')
         elif sou_gestor and fora_da_area:
             # A área de destino decide; quem pediu fica sabendo que está parado.
             _notify(list(get_gestores_do_setor(colaborador).exclude(id=request.user.id)),
@@ -727,6 +847,11 @@ def meta_create(request):
 
     context = {
         'sou_gestor': sou_gestor,
+        'sou_superadmin': sou_superadmin,
+        # SUPERADMIN gestor que pede aprovação sendo ele o gestor responsável:
+        # a meta vai para um gestor da área do colaborador — a tela oferece quem.
+        'gestores_da_area_sa': (_gestores_da_area_por_colaborador(request.user)
+                                if sou_superadmin and sou_gestor else {}),
         'sou_adm_loja': sou_adm_loja,
         'colaboradores': get_colaboradores() if sou_gestor else None,
         # Chamar colega do setor para fazer junto — vale para todo mundo, não

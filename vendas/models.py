@@ -328,6 +328,11 @@ class ConfiguracaoVendas(models.Model):
     # Categorias (coluna CATEGORIA da planilha) em que o serial do produto é obrigatório.
     # Vazio (None) = o padrão: todas as de eletrônicos; Essenciais (capa, película) não.
     categorias_com_serial = models.JSONField(null=True, blank=True, verbose_name='Categorias com serial obrigatório')
+    # Quem o SUPERADMIN marcou, na última importação da tabela, para receber no WhatsApp o
+    # que subiu e o que baixou (vendas/aviso_precos.py). Vira a seleção padrão da próxima.
+    aviso_precos_destinatarios = models.ManyToManyField(
+        settings.AUTH_USER_MODEL, blank=True, related_name='+',
+        verbose_name='Aviso de preços no WhatsApp: quem recebe')
     atualizado_em = models.DateTimeField(auto_now=True)
     atualizado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
                                        related_name='+')

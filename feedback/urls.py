@@ -18,6 +18,7 @@ urlpatterns = [
     path('entrevista-desligamento/relatorio/exportar/', views.exit_interview_report_export, name='exit_interview_report_export'),
     path('entrevista-desligamento/<int:user_id>/desligar/', views.exit_interview_dismiss, name='exit_interview_dismiss'),
     path('entrevista-desligamento/<int:user_id>/zerar/', views.exit_interview_reset, name='exit_interview_reset'),
+    path('entrevista-desligamento/<int:user_id>/acordo/', views.exit_interview_acordo, name='exit_interview_acordo'),
     # Vídeo da entrevista + leitura da IA
     path('entrevista-desligamento/<int:response_id>/video/',
          views.exit_interview_video_upload, name='exit_interview_video_upload'),

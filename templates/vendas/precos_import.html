@@ -13,6 +13,52 @@
 {% endblock %}
 
 {% block vd_conteudo %}
+{% if resultado %}
+{% comment %}Resultado da importação: o que subiu / baixou / entrou / saiu e o aviso no WhatsApp (vendas/aviso_precos.py).{% endcomment %}
+<section class="vd-card overflow-hidden mb-5 max-w-3xl" id="vdResultado">
+    <div class="px-5 py-3 border-b border-gray-100">
+        <h2 class="text-sm font-bold text-gray-900"><i class="fas fa-chart-line text-purple-600 mr-1.5"></i>O que mudou nesta importação</h2>
+        <p class="text-[11px] text-gray-500">{{ resultado.arquivo }} · Preço = "a partir de" (menor preço entre os grupos); PIX = menor PIX e Vivo Pay. A direção vem do Preço (ou do PIX, se só ele mudou).</p>
+    </div>
+    {% with c=resultado.variacao.contagens %}
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 p-4">
+        <div class="rounded-lg bg-red-50 px-3 py-2"><p class="text-[11px] text-red-700">Subiram</p><p class="text-lg font-bold text-red-800">{{ c.subiram }}</p></div>
+        <div class="rounded-lg bg-emerald-50 px-3 py-2"><p class="text-[11px] text-emerald-700">Diminuíram</p><p class="text-lg font-bold text-emerald-800">{{ c.diminuiram }}</p></div>
+        <div class="rounded-lg bg-sky-50 px-3 py-2"><p class="text-[11px] text-sky-700">Novos</p><p class="text-lg font-bold text-sky-800">{{ c.novos }}</p></div>
+        <div class="rounded-lg bg-gray-100 px-3 py-2"><p class="text-[11px] text-gray-600">Saíram da tabela</p><p class="text-lg font-bold text-gray-800">{{ c.removidos }}</p></div>
+    </div>
+    {% endwith %}
+    {% if resultado.variacao.outros %}<p class="px-5 pb-3 text-[11px] text-gray-500">{{ resultado.variacao.outros }} produto(s) com ajuste só nas parcelas ou em grupos que não são o mais barato.</p>{% endif %}
+    <div class="divide-y divide-gray-100 text-[12px] border-t border-gray-100">
+        {% for lista in resultado_listas %}{% if lista.itens %}
+        <details class="px-5 py-2.5"{% if lista.aberta %} open{% endif %}>
+            <summary class="cursor-pointer font-semibold {{ lista.cor }}">{{ lista.titulo }} ({{ lista.total }}){% if lista.total > lista.itens|length %} — mostrando {{ lista.itens|length }}{% endif %}</summary>
+            <ul class="mt-1.5 space-y-0.5 text-gray-700 max-h-72 overflow-y-auto">
+                {% for i in lista.itens %}<li><span class="font-medium">{{ i.nome }}</span> <span class="text-gray-400">· {{ i.categoria }}</span>
+                    {% if i.mudancas %}— {% for m in i.mudancas %}{{ m.coluna }} {{ m.de }} → {{ m.para }} <strong>({{ m.pct }})</strong>{% if not forloop.last %}; {% endif %}{% endfor %}{% else %}— {{ i.preco }}{% endif %}</li>{% endfor %}
+            </ul>
+        </details>
+        {% endif %}{% endfor %}
+    </div>
+    {% if resultado.erro_aviso %}<p class="px-5 py-3 text-sm text-red-700 border-t border-gray-100">{{ resultado.erro_aviso }}</p>{% endif %}
+    {% if resultado.envios %}
+    <div class="px-5 py-3 border-t border-gray-100" id="vdResultadoEnvios">
+        <p class="text-sm font-semibold text-gray-800 mb-1.5"><i class="fab fa-whatsapp text-emerald-600 mr-1.5"></i>Aviso no WhatsApp</p>
+        <ul class="text-[12px] space-y-1">
+            {% for e in resultado.envios %}
+            <li class="flex flex-wrap items-start gap-x-2">
+                {% if e.status == 'enviado' %}<span class="px-1.5 rounded bg-emerald-100 text-emerald-700 font-semibold">enviado</span>
+                {% elif e.status == 'sem_telefone' %}<span class="px-1.5 rounded bg-amber-100 text-amber-700 font-semibold">sem telefone</span>
+                {% else %}<span class="px-1.5 rounded bg-red-100 text-red-700 font-semibold">falhou</span>{% endif %}
+                <span class="text-gray-800">{{ e.nome }}</span>{% if e.detalhe %}<span class="text-gray-500 break-all">— {{ e.detalhe }}</span>{% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+</section>
+{% endif %}
+
 <form method="post" enctype="multipart/form-data" class="max-w-2xl">
     {% csrf_token %}
 
@@ -43,6 +89,39 @@
             </div>
         </div>
     </div>
+
+    {% if pode_avisar %}
+    {% comment %}Só o SUPERADMIN: quem recebe no WhatsApp o que subiu e o que baixou. A seleção fica salva para a próxima.{% endcomment %}
+    <div class="vd-secao mb-4" id="vdAviso">
+        <input type="hidden" name="aviso_form" value="1">
+        <div class="vd-secao-cabeca">
+            <i class="fab fa-whatsapp text-emerald-600"></i>
+            <span class="text-sm font-semibold text-gray-800">Avisar no WhatsApp</span>
+            <span class="ml-auto text-[11px] text-gray-500"><span id="vdAvisoQtd">{{ aviso_escolhidos }}</span> selecionado(s)</span>
+        </div>
+        <div class="p-5">
+            <p class="text-xs text-gray-500 mb-2">Depois de importar, cada pessoa marcada recebe uma mensagem com os produtos que subiram e os que diminuíram de preço (e os novos e os que saíram). A seleção fica marcada para a próxima importação.</p>
+            <input type="search" id="vdAvisoBusca" placeholder="Buscar pessoa ou loja…" autocomplete="off"
+                   class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mb-2">
+            <div class="max-h-64 overflow-y-auto border border-gray-100 rounded-lg divide-y divide-gray-50">
+                {% for p in aviso_pessoas %}
+                <label class="vd-aviso-pessoa flex items-center gap-3 px-3 py-2 {% if p.tem_telefone %}cursor-pointer hover:bg-gray-50{% else %}bg-amber-50/40{% endif %}"
+                       data-busca="{{ p.get_full_name|lower }} {{ p.username|lower }} {{ p.sector.name|default:''|lower }}">
+                    <input type="checkbox" name="aviso_destinatarios" value="{{ p.id }}" class="rounded"
+                           {% if p.escolhido %}checked{% endif %}{% if not p.tem_telefone and not p.escolhido %} disabled{% endif %}>
+                    <span class="min-w-0 flex-1">
+                        <span class="block text-sm text-gray-800 truncate">{{ p.get_full_name|default:p.username }}</span>
+                        <span class="block text-[11px] text-gray-400 truncate">{{ p.sector.name|default:'sem loja' }}</span>
+                    </span>
+                    {% if p.tem_telefone %}<span class="text-[11px] text-emerald-700 whitespace-nowrap"><i class="fas fa-phone mr-1"></i>com telefone</span>
+                    {% else %}<span class="vd-sem-telefone text-[11px] text-amber-700 whitespace-nowrap" title="Sem telefone válido no cadastro: não recebe."><i class="fas fa-triangle-exclamation mr-1"></i>sem telefone</span>{% endif %}
+                </label>
+                {% empty %}<p class="px-3 py-4 text-center text-sm text-gray-400">Nenhuma pessoa ativa.</p>{% endfor %}
+            </div>
+            <p class="text-[11px] text-gray-400 mt-1">Quem está sem telefone válido no cadastro não recebe, mesmo marcado — aparece como "sem telefone" no resultado.</p>
+        </div>
+    </div>
+    {% endif %}
 
     <div class="flex items-center justify-end gap-3">
         <a href="{% url 'vendas:precos' %}" class="px-5 py-2.5 rounded-lg border border-gray-300 text-gray-700 text-sm font-semibold hover:bg-gray-50">
@@ -114,6 +193,30 @@
             campo.files = e.dataTransfer.files;
             mostrar();
         }
+    });
+})();
+
+// Aviso no WhatsApp: busca na lista (sem acento) e contagem dos marcados.
+(function () {
+    var caixa = document.getElementById('vdAviso');
+    if (!caixa) return;
+    var busca = document.getElementById('vdAvisoBusca');
+    var qtd = document.getElementById('vdAvisoQtd');
+    var pessoas = caixa.querySelectorAll('.vd-aviso-pessoa');
+
+    function semAcento(t) {
+        return (t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    }
+    busca.addEventListener('input', function () {
+        var termo = semAcento(busca.value.trim());
+        pessoas.forEach(function (el) {
+            el.style.display = !termo || semAcento(el.getAttribute('data-busca')).indexOf(termo) !== -1 ? '' : 'none';
+        });
+    });
+    // Enter na busca não envia a planilha.
+    busca.addEventListener('keydown', function (e) { if (e.key === 'Enter') e.preventDefault(); });
+    caixa.addEventListener('change', function () {
+        qtd.textContent = caixa.querySelectorAll('input[name="aviso_destinatarios"]:checked').length;
     });
 })();
 </script>

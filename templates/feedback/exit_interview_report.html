@@ -57,6 +57,7 @@
         </div>
         <form method="get" class="flex flex-wrap gap-2 items-end">
           <input type="hidden" name="status" value="{{ status_filter }}">
+          <input type="hidden" name="acordo" value="{{ acordo_filter }}">
           <div>
             <label class="block text-xs text-gray-500">Setor</label>
             <select name="sector" class="border rounded-lg px-2 py-1 text-sm">
@@ -246,8 +247,17 @@
               <option value="refused" {% if status_filter == "refused" %}selected{% endif %}>Recusou</option>
             </select>
           </div>
+          <div>
+            <label class="block text-xs text-gray-500" title="Só considera colaboradores já desligados (inativos)">Acordo (desligados)</label>
+            <select name="acordo" class="border rounded-lg px-2 py-1 text-sm">
+              <option value="" {% if not acordo_filter %}selected{% endif %}>Todos</option>
+              <option value="sim" {% if acordo_filter == "sim" %}selected{% endif %}>Sim, foi acordo</option>
+              <option value="nao" {% if acordo_filter == "nao" %}selected{% endif %}>Não foi acordo</option>
+              <option value="nao_informado" {% if acordo_filter == "nao_informado" %}selected{% endif %}>Não informado</option>
+            </select>
+          </div>
           <button type="submit" class="px-3 py-1.5 bg-rose-600 text-white rounded-lg text-sm hover:bg-rose-700">Filtrar</button>
-          {% if status_filter %}
+          {% if status_filter or acordo_filter %}
             <a href="{% url 'feedback:exit_interview_report' %}" class="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">Limpar</a>
           {% endif %}
         </form>
@@ -261,6 +271,7 @@
               <th class="p-3 text-left">Status</th>
               <th class="p-3 text-left hidden md:table-cell">Última etapa</th>
               <th class="p-3 text-left hidden md:table-cell">Concluído em</th>
+              <th class="p-3 text-left">Acordo</th>
               <th class="p-3 text-right">Ações</th>
             </tr>
           </thead>
@@ -286,6 +297,20 @@
                 </td>
                 <td class="p-3 text-gray-600 hidden md:table-cell">{{ row.participation.last_step|default:"-" }}</td>
                 <td class="p-3 text-gray-600 hidden md:table-cell">{{ row.participation.completed_at|date:"d/m/Y H:i"|default:"-" }}</td>
+                <td class="p-3" data-acordo="{{ row.acordo|default_if_none:'' }}">
+                  {% if row.inativo %}
+                    {% if row.acordo == "SIM" %}
+                      <span class="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-sky-100 text-sky-800"><i class="fas fa-handshake"></i>{{ row.acordo_label }}</span>
+                    {% elif row.acordo == "NAO" %}
+                      <span class="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-slate-100 text-slate-700"><i class="fas fa-xmark"></i>{{ row.acordo_label }}</span>
+                    {% else %}
+                      <span class="text-xs text-gray-400">{{ row.acordo_label }}</span>
+                    {% endif %}
+                    {% if row.acordo_observacao %}<p class="text-xs text-gray-500 mt-1 max-w-xs whitespace-pre-line">{{ row.acordo_observacao }}</p>{% endif %}
+                  {% else %}
+                    <span class="text-xs text-gray-300" title="Colaborador ainda ativo">—</span>
+                  {% endif %}
+                </td>
                 <td class="p-3 text-right">
                   {% if row.status != "NOT_STARTED" %}
                     <form method="post" action="{% url 'feedback:exit_interview_reset' row.user.id %}" onsubmit="return confirm('Zerar a entrevista de {{ row.user.get_full_name|default:row.user.username|escapejs }}? Ele(a) poderá responder novamente.');">
@@ -298,7 +323,7 @@
                 </td>
               </tr>
             {% empty %}
-              <tr><td colspan="6" class="p-6 text-center text-gray-500">Nenhum colaborador encontrado com os filtros atuais.</td></tr>
+              <tr><td colspan="7" class="p-6 text-center text-gray-500">Nenhum colaborador encontrado com os filtros atuais.</td></tr>
             {% endfor %}
           </tbody>
         </table>

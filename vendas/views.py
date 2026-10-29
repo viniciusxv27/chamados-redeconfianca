@@ -26,7 +26,7 @@ from users.models import Sector, User
 from . import slv
 from .models import (SEGMENTACOES, Cliente, ConfiguracaoVendas, ImportacaoPrecos, ItemPreco, Plano, PlanoForaPortfolio,
                      RegistroAlteracao, ServicoAdicional, Venda, VendaProduto, VendaServico)
-from .permissions import exige, pode, ve_rede, vendas_do_usuario
+from .permissions import exige, is_superadmin, pode, ve_rede, vendas_do_usuario
 from .clientes import buscar_historico
 from .services import importar_tabela_precos
 
@@ -523,14 +523,27 @@ def precos(request):
     return render(request, 'vendas/precos_list.html', context)
 
 
+SESSAO_RESULTADO_IMPORTACAO = 'vendas_precos_import_resultado'
+
+
 @login_required
 @exige('produtos.importar')
 def precos_import(request):
+    from . import aviso_precos
+
+    # Só o SUPERADMIN escolhe quem recebe o aviso no WhatsApp; de outro perfil, o campo é ignorado.
+    pode_avisar = is_superadmin(request.user)
     if request.method == 'POST':
         f = request.FILES.get('arquivo')
         if not f or not (f.name or '').lower().endswith(('.xlsx', '.xlsm')):
             messages.error(request, 'Envie a planilha (.xlsx).')
             return redirect('vendas:precos_import')
+        destinatarios = []
+        if pode_avisar and request.POST.get('aviso_form') == '1':
+            ids = [int(i) for i in request.POST.getlist('aviso_destinatarios') if str(i).isdigit()]
+            destinatarios = list(User.objects.filter(pk__in=ids, is_active=True).order_by('first_name', 'last_name'))
+            if not aviso_precos.salvar_destinatarios(destinatarios, request.user):
+                messages.warning(request, 'Não deu para lembrar a seleção do aviso (falta aplicar a migração de Vendas).')
         registro = ImportacaoPrecos(usuario=request.user, arquivo=f.name[:255])
         try:
             resumo = importar_tabela_precos(f)
@@ -545,9 +558,42 @@ def precos_import(request):
             registro.erro = str(exc)[:2000]
             registro.save()
             messages.error(request, f'Falha ao importar — a tabela vigente não foi alterada: {exc}')
+            return redirect('vendas:precos_import')
+
+        # A tabela já está gravada: daqui para baixo nada desfaz a importação.
+        resultado = {'arquivo': registro.arquivo, 'envios': None}
+        try:
+            variacao = resumo.get('variacao') or {'subiram': [], 'diminuiram': [], 'novos': [], 'removidos': [], 'outros': 0}
+            resultado['variacao'] = aviso_precos.para_tela(variacao)
+            if destinatarios:
+                resultado['envios'] = aviso_precos.avisar(destinatarios, variacao, arquivo=registro.arquivo,
+                                                          quando=timezone.localtime(registro.quando))
+        except Exception as exc:  # noqa: BLE001
+            resultado['erro_aviso'] = f'O aviso no WhatsApp não saiu: {exc}'[:300]
+        request.session[SESSAO_RESULTADO_IMPORTACAO] = resultado
         return redirect('vendas:precos_import')
 
-    return render(request, 'vendas/precos_import.html', {'aba': 'precos', 'importacoes': ImportacaoPrecos.objects.select_related('usuario')[:15]})
+    resultado = request.session.pop(SESSAO_RESULTADO_IMPORTACAO, None)
+    context = {'aba': 'precos', 'importacoes': ImportacaoPrecos.objects.select_related('usuario')[:15],
+               'resultado': resultado, 'pode_avisar': pode_avisar}
+    if resultado and resultado.get('variacao'):
+        v = resultado['variacao']
+        context['resultado_listas'] = [
+            {'titulo': titulo, 'itens': v.get(chave) or [], 'total': v['contagens'].get(chave, 0), 'cor': cor, 'aberta': aberta}
+            for titulo, chave, cor, aberta in (('Subiram', 'subiram', 'text-red-700', True),
+                                               ('Diminuíram', 'diminuiram', 'text-emerald-700', True),
+                                               ('Novos', 'novos', 'text-sky-700', False),
+                                               ('Saíram da tabela', 'removidos', 'text-gray-700', False))]
+    if pode_avisar:
+        escolhidos = aviso_precos.destinatarios_salvos()
+        pessoas = list(User.objects.filter(Q(is_active=True) | Q(pk__in=escolhidos)).select_related('sector')
+                       .order_by('first_name', 'last_name'))
+        for p in pessoas:
+            p.tem_telefone = bool(aviso_precos.numero_do(p))
+            p.escolhido = p.pk in escolhidos
+        pessoas.sort(key=lambda p: not p.escolhido)          # os marcados primeiro
+        context.update(aviso_pessoas=pessoas, aviso_escolhidos=sum(p.escolhido for p in pessoas))
+    return render(request, 'vendas/precos_import.html', context)
 
 
 @login_required

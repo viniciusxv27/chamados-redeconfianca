@@ -147,7 +147,11 @@ def importar_tabela_precos(file_obj, sheets=None):
     agora = timezone.now()
 
     with transaction.atomic():
+        from .aviso_precos import calcular_variacao, precos_do_item
         from .models import VendaProduto, VendaServico
+        # Retrato de antes, para o aviso do que subiu / baixou (vendas/aviso_precos.py).
+        antes = {(i.categoria, i.nome): precos_do_item(i.valor, i.extra)
+                 for i in ItemPreco.objects.filter(categoria__in=SHEETS_ALVO, ativo=True).only('categoria', 'nome', 'valor', 'extra')}
         manter = set()
         for aba, produtos in lidos.items():
             existentes = {i.nome: i for i in ItemPreco.objects.filter(categoria=aba)}
@@ -178,4 +182,7 @@ def importar_tabela_precos(file_obj, sheets=None):
             set(VendaServico.objects.filter(preco__in=fora).values_list('preco_id', flat=True))
         resumo['inativados'] = fora.filter(pk__in=usados, ativo=True).update(ativo=False)
         resumo['removidos'] = fora.exclude(pk__in=usados).delete()[0]
+    depois = {(aba, nome): precos_do_item(valor, extra)
+              for aba, produtos in lidos.items() for nome, (valor, extra) in produtos.items()}
+    resumo['variacao'] = calcular_variacao(antes, depois)
     return resumo

@@ -559,6 +559,23 @@ class ExitInterviewParticipation(models.Model):
     refusal_notes = models.TextField(
         blank=True, default='', db_default='', verbose_name='Observações da recusa',
     )
+    # Desligamento por acordo: só se informa para quem já está inativo.
+    ACORDO_SIM = 'SIM'
+    ACORDO_NAO = 'NAO'
+    ACORDO_CHOICES = [
+        ('', 'Não informado'),
+        (ACORDO_SIM, 'Sim, foi acordo'),
+        (ACORDO_NAO, 'Não foi acordo'),
+    ]
+    ACORDO_OBS_MAX = 500
+    acordo = models.CharField(
+        max_length=3, choices=ACORDO_CHOICES, blank=True, default='', db_default='',
+        verbose_name='Acordo',
+    )
+    acordo_observacao = models.CharField(
+        max_length=ACORDO_OBS_MAX, blank=True, default='', db_default='',
+        verbose_name='Observação do acordo',
+    )
 
     class Meta:
         unique_together = ('survey_key', 'user')

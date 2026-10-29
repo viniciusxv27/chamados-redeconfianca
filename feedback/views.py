@@ -3,7 +3,7 @@ from functools import wraps
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.db.models import Avg, Count, Max, Q
+from django.db.models import Avg, Count, F, Max, Q
 from django.http import HttpResponse, JsonResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -1038,6 +1038,10 @@ EXIT_SCALE_OPTIONS = [1, 2, 3, 4, 5]
 # nome da própria pergunta no POST.
 EXIT_OBS_PREFIX = 'obs_'
 EXIT_OBS_MAX = 2000
+# Filtro de acordo do relatório (só considera colaboradores inativos).
+EXIT_ACORDO_FILTROS = {'sim': 'SIM', 'nao': 'NAO', 'nao_informado': ''}
+# Quantos desligados a tela da entrevista lista para informar o acordo.
+EXIT_DESLIGADOS_MAX = 50
 
 # Vídeo da entrevista: o que aceitamos e até onde.
 EXIT_VIDEO_EXTS = ('.mp4', '.mov', '.m4v', '.webm', '.mkv', '.avi',
@@ -1305,6 +1309,15 @@ def exit_interview(request):
         .select_related('user', 'sector', 'interviewer')
         .order_by('-completed_at')
     )
+    # Já desligados (login inativo ou situação Inativo): aqui se informa o acordo.
+    desligados = list(
+        ExitInterviewParticipation.objects
+        .filter(survey_key=EXIT_INTERVIEW_KEY)
+        .filter(Q(user__is_active=False) | Q(user__status='INATIVO'))
+        .select_related('user', 'sector')
+        .order_by(F('dismissal_executed_at').desc(nulls_last=True), '-dismissal_date', '-updated_at')
+        [:EXIT_DESLIGADOS_MAX]
+    )
     candidate_users = list(
         User.objects.filter(is_active=True)
         .exclude(pk=request.user.pk)
@@ -1332,11 +1345,53 @@ def exit_interview(request):
         'scale_options': EXIT_SCALE_OPTIONS,
         'candidate_users': candidate_users,
         'pending_dismissal': pending_dismissal,
+        'desligados': desligados,
+        'desligados_max': EXIT_DESLIGADOS_MAX,
+        'acordo_choices': ExitInterviewParticipation.ACORDO_CHOICES,
+        'acordo_obs_max': ExitInterviewParticipation.ACORDO_OBS_MAX,
         'today': timezone.localdate(),
         'is_superadmin': _is_superadmin(request.user),
         'can_manage_surveys': _can_manage_surveys(request.user),
         'can_configure_exit_interview_access': _is_superadmin(request.user),
     })
+
+
+def _usuario_inativo(user) -> bool:
+    """Desligado: login inativo ou situação Inativo no cadastro."""
+    return bool(user) and (not user.is_active or getattr(user, 'status', '') == 'INATIVO')
+
+
+def _ler_acordo(data):
+    """Lê `acordo` e `acordo_observacao` do POST. Devolve (acordo, observação, válido)."""
+    acordo = (data.get('acordo') or '').strip().upper()
+    obs = (data.get('acordo_observacao') or '').strip()[:ExitInterviewParticipation.ACORDO_OBS_MAX]
+    validos = {valor for valor, _ in ExitInterviewParticipation.ACORDO_CHOICES}
+    return acordo, obs, acordo in validos
+
+
+@exit_interview_access_required
+@require_POST
+def exit_interview_acordo(request, user_id):
+    """Grava se o desligamento foi por acordo. Só vale para colaborador inativo
+    que já tem participação na entrevista (registrada, recusada ou desligada)."""
+    target = get_object_or_404(User, pk=user_id)
+    nome = target.get_full_name() or target.username
+    if not _usuario_inativo(target):
+        messages.error(request, f'{nome} ainda está ativo: o acordo só é informado depois do desligamento.')
+        return redirect('feedback:exit_interview')
+    participation = (ExitInterviewParticipation.objects
+                     .filter(survey_key=EXIT_INTERVIEW_KEY, user=target).first())
+    if participation is None:
+        messages.error(request, f'{nome} não tem entrevista de desligamento registrada.')
+        return redirect('feedback:exit_interview')
+    acordo, obs, valido = _ler_acordo(request.POST)
+    if not valido:
+        messages.error(request, 'Opção de acordo inválida.')
+        return redirect('feedback:exit_interview')
+    participation.acordo, participation.acordo_observacao = acordo, obs
+    participation.save(update_fields=['acordo', 'acordo_observacao', 'updated_at'])
+    messages.success(request, f'Acordo de {nome} salvo: {participation.get_acordo_display()}.')
+    return redirect('feedback:exit_interview')
 
 
 @exit_interview_access_required
@@ -1368,15 +1423,26 @@ def exit_interview_dismiss(request, user_id):
     if dismissal_date is None:
         dismissal_date = timezone.localdate()
 
+    # Acordo é opcional aqui; só mexe nele se o formulário mandou o campo.
+    acordo_enviado = 'acordo' in request.POST
+    acordo, acordo_obs, acordo_ok = _ler_acordo(request.POST)
+    if acordo_enviado and not acordo_ok:
+        messages.error(request, 'Opção de acordo inválida.')
+        return redirect('feedback:exit_interview')
+
     target.is_active = False
-    target.admission_date = dismissal_date
+    target.demission_date = dismissal_date
     target.status = "INATIVO"
     target.save(update_fields=['is_active', 'demission_date', 'status'])
 
     if participation:
         participation.dismissal_date = dismissal_date
         participation.dismissal_executed_at = timezone.now()
-        participation.save(update_fields=['dismissal_date', 'dismissal_executed_at', 'updated_at'])
+        campos = ['dismissal_date', 'dismissal_executed_at', 'updated_at']
+        if acordo_enviado:
+            participation.acordo, participation.acordo_observacao = acordo, acordo_obs
+            campos += ['acordo', 'acordo_observacao']
+        participation.save(update_fields=campos)
 
     messages.success(
         request,
@@ -1395,6 +1461,9 @@ def _build_exit_report_context(request):
     sector_filter_id = request.GET.get('sector')
     answer_key = (request.GET.get('q_key') or '').strip()
     answer_val = (request.GET.get('q_val') or '').strip()
+    acordo_filter = (request.GET.get('acordo') or '').strip().lower()
+    if acordo_filter not in EXIT_ACORDO_FILTROS:
+        acordo_filter = ''
 
     selected_sector = None
     if sector_filter_id:
@@ -1421,9 +1490,15 @@ def _build_exit_report_context(request):
     for user in users_qs:
         participation = participations.get(user.id)
         status = participation.status if participation else 'NOT_STARTED'
+        inativo = _usuario_inativo(user)
         rows.append({
             'user': user,
             'sector': participation.sector if participation and participation.sector else _primary_sector_for_user(user),
+            # Acordo só existe para quem já foi desligado (inativo).
+            'inativo': inativo,
+            'acordo': (participation.acordo if participation else '') if inativo else None,
+            'acordo_label': (participation.get_acordo_display() if participation else 'Não informado') if inativo else '',
+            'acordo_observacao': (participation.acordo_observacao if participation else '') if inativo else '',
             'participation': participation,
             'status': status,
             'status_label': {
@@ -1441,6 +1516,9 @@ def _build_exit_report_context(request):
         status_map = {'completed': 'COMPLETED', 'in_progress': 'IN_PROGRESS', 'not_started': 'NOT_STARTED',
                       'refused': 'REFUSED'}
         detailed = [row for row in detailed if row['status'] == status_map[status_filter]]
+    if acordo_filter:
+        valor = EXIT_ACORDO_FILTROS[acordo_filter]
+        detailed = [row for row in detailed if row['inativo'] and row['acordo'] == valor]
 
     responses = ExitInterviewResponse.objects.filter(survey_key=EXIT_INTERVIEW_KEY).select_related('sector', 'user', 'interviewer')
     if selected_sector:
@@ -1581,6 +1659,7 @@ def _build_exit_report_context(request):
         'open_blocks': open_blocks,
         'dropout': dropout,
         'status_filter': status_filter,
+        'acordo_filter': acordo_filter,
         'selected_sector': selected_sector,
         'all_sectors': Sector.objects.all().order_by('name'),
         'survey_key': EXIT_INTERVIEW_KEY,
@@ -1653,6 +1732,8 @@ def exit_interview_report_export(request):
     if ctx['answer_key']:
         rotulo = next((q['label'] for q in ctx['questions'] if q['key'] == ctx['answer_key']), ctx['answer_key'])
         filtros.append(f"Resposta: {rotulo} = {ctx['answer_val']}")
+    if ctx['acordo_filter']:
+        filtros.append('Acordo: ' + {'sim': 'Sim', 'nao': 'Não', 'nao_informado': 'Não informado'}[ctx['acordo_filter']])
     ws['A2'] = 'Filtros aplicados: ' + ('; '.join(filtros) if filtros else 'Nenhum')
     ws['A2'].font = Font(italic=True, color='64748B')
     ws['A3'] = f"Gerado em {timezone.localtime().strftime('%d/%m/%Y %H:%M')} por {nome(request.user)}"
@@ -1668,12 +1749,14 @@ def exit_interview_report_export(request):
     larguras(ws, [38, 24])
 
     ws = wb.create_sheet('Participação')
-    cabecalho(ws, ['Colaborador', 'Setor', 'Situação', 'Entrevistador', 'Última atualização'])
+    cabecalho(ws, ['Colaborador', 'Setor', 'Situação', 'Entrevistador', 'Última atualização',
+                   'Acordo', 'Observação do acordo'])
     for r in ctx['detailed']:
         p = r['participation']
         ws.append([nome(r['user']), r['sector'].name if r['sector'] else '', r['status_label'],
-                   nome(getattr(p, 'interviewer', None)), quando(getattr(p, 'updated_at', None))])
-    larguras(ws, [34, 26, 16, 28, 18])
+                   nome(getattr(p, 'interviewer', None)), quando(getattr(p, 'updated_at', None)),
+                   r['acordo_label'], r['acordo_observacao']])
+    larguras(ws, [34, 26, 16, 28, 18, 18, 40])
 
     ws = wb.create_sheet('Notas por pergunta')
     cabecalho(ws, ['Pergunta', 'Média (1 a 5)', 'Respostas'])
