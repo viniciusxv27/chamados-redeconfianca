@@ -41,6 +41,8 @@
         {% endif %}{% endfor %}
     </div>
     {% if resultado.erro_aviso %}<p class="px-5 py-3 text-sm text-red-700 border-t border-gray-100">{{ resultado.erro_aviso }}</p>{% endif %}
+    {% if resultado.popup %}<p class="px-5 py-3 text-sm text-purple-800 border-t border-gray-100"><i class="fas fa-bell mr-1.5"></i>Aviso no portal publicado: consultores, gerentes e ADM veem o popup por 7 dias, até clicar em "Ciente".</p>{% endif %}
+    {% if resultado.erro_popup %}<p class="px-5 py-3 text-sm text-red-700 border-t border-gray-100">{{ resultado.erro_popup }}</p>{% endif %}
     {% if resultado.envios %}
     <div class="px-5 py-3 border-t border-gray-100" id="vdResultadoEnvios">
         <p class="text-sm font-semibold text-gray-800 mb-1.5"><i class="fab fa-whatsapp text-emerald-600 mr-1.5"></i>Aviso no WhatsApp</p>
@@ -119,9 +121,41 @@
                 {% empty %}<p class="px-3 py-4 text-center text-sm text-gray-400">Nenhuma pessoa ativa.</p>{% endfor %}
             </div>
             <p class="text-[11px] text-gray-400 mt-1">Quem está sem telefone válido no cadastro não recebe, mesmo marcado — aparece como "sem telefone" no resultado.</p>
+
+            {% comment %}Grupos de que o número do portal participa: uma mensagem por grupo. A seleção também fica salva.{% endcomment %}
+            <div class="mt-4 pt-4 border-t border-gray-100" id="vdAvisoGrupos">
+                <div class="flex items-center gap-2 mb-2">
+                    <i class="fas fa-users text-emerald-600"></i>
+                    <span class="text-sm font-semibold text-gray-800">Grupos do WhatsApp</span>
+                    <span class="text-[11px] text-gray-500"><span id="vdAvisoGruposQtd">{{ aviso_grupos_escolhidos }}</span> selecionado(s)</span>
+                    <a href="?grupos=atualizar#vdAvisoGrupos" class="ml-auto text-[11px] text-purple-700 hover:underline" title="Consulta de novo os grupos do número"><i class="fas fa-rotate mr-1"></i>Atualizar lista</a>
+                </div>
+                {% if aviso_grupos_erro %}<p class="text-[12px] text-amber-700 mb-2"><i class="fas fa-triangle-exclamation mr-1"></i>Não deu para listar os grupos agora: {{ aviso_grupos_erro }}{% if aviso_grupos %} Os já salvos continuam valendo.{% endif %}</p>{% endif %}
+                {% if aviso_grupos %}
+                <input type="search" id="vdAvisoGruposBusca" placeholder="Buscar grupo…" autocomplete="off"
+                       class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mb-2">
+                <div class="max-h-56 overflow-y-auto border border-gray-100 rounded-lg divide-y divide-gray-50">
+                    {% for g in aviso_grupos %}
+                    <label class="vd-aviso-grupo flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-gray-50" data-busca="{{ g.nome|lower }}">
+                        <input type="checkbox" name="aviso_grupos" value="{{ g.id }}|{{ g.nome }}" class="rounded" {% if g.escolhido %}checked{% endif %}>
+                        <span class="min-w-0 flex-1 text-sm text-gray-800 truncate">{{ g.nome }}</span>
+                        {% if g.fora %}<span class="text-[11px] text-amber-700 whitespace-nowrap" title="Estava salvo, mas a consulta de agora não trouxe: o número pode ter saído do grupo.">não veio na consulta</span>
+                        {% elif g.membros %}<span class="text-[11px] text-gray-400 whitespace-nowrap">{{ g.membros }} pessoa{{ g.membros|pluralize }}</span>{% endif %}
+                    </label>
+                    {% endfor %}
+                </div>
+                {% elif not aviso_grupos_erro %}<p class="text-[12px] text-gray-400">O número do portal não está em nenhum grupo.</p>{% endif %}
+            </div>
         </div>
     </div>
     {% endif %}
+
+    <label class="vd-secao mb-4 flex items-start gap-3 p-4 cursor-pointer" id="vdAvisoPopup">
+        <input type="hidden" name="aviso_popup" value="off">
+        <input type="checkbox" name="aviso_popup" value="on" checked class="rounded mt-0.5">
+        <span><span class="block text-sm font-semibold text-gray-800"><i class="fas fa-bell text-purple-600 mr-1.5"></i>Avisar no portal (popup)</span>
+            <span class="block text-xs text-gray-500">Consultores, gerentes e ADM (usuários Padrão) veem um popup com o que mudou, por 7 dias, até clicar em "Ciente". O aviso da tabela anterior sai do ar.</span></span>
+    </label>
 
     <div class="flex items-center justify-end gap-3">
         <a href="{% url 'vendas:precos' %}" class="px-5 py-2.5 rounded-lg border border-gray-300 text-gray-700 text-sm font-semibold hover:bg-gray-50">
@@ -217,7 +251,19 @@
     busca.addEventListener('keydown', function (e) { if (e.key === 'Enter') e.preventDefault(); });
     caixa.addEventListener('change', function () {
         qtd.textContent = caixa.querySelectorAll('input[name="aviso_destinatarios"]:checked').length;
+        var qg = document.getElementById('vdAvisoGruposQtd');
+        if (qg) qg.textContent = caixa.querySelectorAll('input[name="aviso_grupos"]:checked').length;
     });
+    var buscaG = document.getElementById('vdAvisoGruposBusca');
+    if (buscaG) {
+        buscaG.addEventListener('input', function () {
+            var termo = semAcento(buscaG.value.trim());
+            caixa.querySelectorAll('.vd-aviso-grupo').forEach(function (el) {
+                el.style.display = !termo || semAcento(el.getAttribute('data-busca')).indexOf(termo) !== -1 ? '' : 'none';
+            });
+        });
+        buscaG.addEventListener('keydown', function (e) { if (e.key === 'Enter') e.preventDefault(); });
+    }
 })();
 </script>
 {% endblock %}

@@ -124,48 +124,66 @@ def _linha_mudanca(item):
     return f"• {_curto(item['nome'])}: " + '; '.join(partes)
 
 
+NUMEROS = ('1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟')
+ICONE_COLUNA = {'Preço': '💳', 'PIX': '⚡'}
+SEPARADOR = '━━━━━━━━━━━━━━━━'
+
+
+def _itens_whatsapp(itens, n):
+    """Cada produto num bloco: número, nome em negrito e uma linha por preço que mudou."""
+    linhas = []
+    for pos, item in enumerate(itens[:n]):
+        marca = NUMEROS[pos] if pos < len(NUMEROS) else '▪️'
+        linhas.append(f"{marca} *{_curto(item['nome'], 55)}*")
+        for m in item['mudancas']:
+            seta = '🔺' if m['para'] > m['de'] else '🔻'
+            linhas.append(f"      {ICONE_COLUNA.get(m['coluna'], '•')} {m['coluna']}: {brl(m['de'])} ➜ *{brl(m['para'])}* "
+                          f"{seta} _{pct_texto(m['pct'])}_")
+    return linhas
+
+
 def _bloco_nomes(titulo, itens, top):
     if not itens:
         return []
     nomes = ', '.join(_curto(i['nome'], 40) for i in itens[:top])
-    mais = f' (+{len(itens) - top} outros)' if len(itens) > top else ''
-    return ['', f'*{titulo} ({len(itens)}):* {nomes}{mais}']
+    mais = f' _+{len(itens) - top} outros_' if len(itens) > top else ''
+    return ['', f'{titulo} ({len(itens)})', f'{nomes}{mais}']
 
 
-def montar_mensagem(variacao, *, arquivo='', quando=None, nome='', top=TOP_MUDANCAS, limite=LIMITE_MENSAGEM):
+def montar_mensagem(variacao, *, quando=None, nome='', top=TOP_MUDANCAS, limite=LIMITE_MENSAGEM):
     """A mensagem do WhatsApp: contagens + as maiores altas e quedas, e quantos ficaram de fora.
 
     Se passar de ``limite`` caracteres, mostra menos produtos por lista até caber.
     """
+    c = {k: len(variacao[k]) for k in ('subiram', 'diminuiram', 'novos', 'removidos')}
+
     def montar(n, n_listas):
         linhas = []
         if nome:
-            linhas.append(f'Olá, {nome}!')
-        cab = '📊 *Tabela de preços atualizada*'
+            linhas += [f'👋 Olá, *{nome}*!', '']
+        linhas.append('📢 *TABELA DE PREÇOS ATUALIZADA* 🛍️')
         if quando:
-            cab += f" — {quando.strftime('%d/%m/%Y %H:%M')}"
-        linhas.append(cab)
-        if arquivo:
-            linhas.append(f'Arquivo: {_curto(arquivo, 80)}')
-        linhas += ['',
-                   f"⬆️ Subiram: {len(variacao['subiram'])}",
-                   f"⬇️ Diminuíram: {len(variacao['diminuiram'])}",
-                   f"🆕 Novos: {len(variacao['novos'])}",
-                   f"❌ Saíram da tabela: {len(variacao['removidos'])}"]
+            linhas.append(f"🗓️ {quando.strftime('%d/%m/%Y')} às {quando.strftime('%H:%M')}")
+        linhas += ['', SEPARADOR,
+                   f"📈 Subiram: *{c['subiram']}*",
+                   f"📉 Baixaram: *{c['diminuiram']}*",
+                   f"✨ Novos: *{c['novos']}*",
+                   f"🚫 Saíram: *{c['removidos']}*"]
         if variacao.get('outros'):
-            linhas.append(f"🔧 Outros ajustes (parcelas/grupos): {variacao['outros']}")
-        for titulo, itens in (('⬆️ Maiores altas', variacao['subiram']), ('⬇️ Maiores quedas', variacao['diminuiram'])):
+            linhas.append(f"🔧 Outros ajustes (parcelas/grupos): *{variacao['outros']}*")
+        linhas.append(SEPARADOR)
+        for titulo, itens in (('🔥 *MAIORES ALTAS*', variacao['subiram']), ('💸 *MAIORES QUEDAS*', variacao['diminuiram'])):
             if not itens:
                 continue
-            linhas += ['', f'*{titulo}:*'] + [_linha_mudanca(i) for i in itens[:n]]
+            linhas += ['', titulo, ''] + _itens_whatsapp(itens, n)
             if len(itens) > n:
-                linhas.append(f'… e mais {len(itens) - n}.')
-        linhas += _bloco_nomes('🆕 Novos', variacao['novos'], n_listas)
-        linhas += _bloco_nomes('❌ Saíram', variacao['removidos'], n_listas)
-        if not any(variacao[k] for k in ('subiram', 'diminuiram', 'novos', 'removidos')):
-            linhas += ['', 'Nenhum preço mudou.']
-        linhas += ['', 'Preço = "a partir de" (menor preço entre os grupos); PIX = menor PIX e Vivo Pay.',
-                   'Detalhes no portal: Vendas › Tabela de preços.']
+                linhas.append(f'      _… e mais {len(itens) - n}_')
+        linhas += _bloco_nomes('✨ *CHEGARAM*', variacao['novos'], n_listas)
+        linhas += _bloco_nomes('🚫 *SAÍRAM DA TABELA*', variacao['removidos'], n_listas)
+        if not any(c.values()):
+            linhas += ['', '✅ Nenhum preço mudou.']
+        linhas += ['', '💡 _Preço = "a partir de" (menor entre os grupos) · PIX = PIX e Vivo Pay_',
+                   '👉 Confira no portal: *Vendas › Tabela de preços*', '', 'Boas vendas! 🚀']
         return '\n'.join(linhas)
 
     n, n_listas = top, TOP_LISTAS
@@ -233,7 +251,113 @@ def salvar_destinatarios(usuarios, por=None):
         return False
 
 
-def avisar(usuarios, variacao, *, arquivo='', quando=None):
+CHAVE_CACHE_GRUPOS = 'vendas:aviso_precos:grupos_whatsapp'
+
+
+def grupos_do_whatsapp(atualizar=False):
+    """(grupos, erro) — os grupos do número do portal, guardados por 10 min (a consulta é lenta)."""
+    from django.core.cache import cache
+
+    from core import evolution
+
+    if not atualizar:
+        guardado = cache.get(CHAVE_CACHE_GRUPOS)
+        if guardado is not None:
+            return guardado, ''
+    ok, grupos, detalhe = evolution.listar_grupos()
+    if ok:
+        cache.set(CHAVE_CACHE_GRUPOS, grupos, 600)
+        return grupos, ''
+    return [], detalhe
+
+
+def grupos_salvos():
+    """[{'id', 'nome'}] da última seleção (lista vazia se o banco ainda não tem a coluna)."""
+    from .models import ConfiguracaoVendas
+    try:
+        with transaction.atomic():
+            return [g for g in (ConfiguracaoVendas.atual().aviso_precos_grupos or [])
+                    if isinstance(g, dict) and str(g.get('id', '')).endswith('@g.us')]
+    except DatabaseError:
+        logger.warning('Aviso de preços: coluna dos grupos ainda não existe (falta migrate).')
+        return []
+
+
+def salvar_grupos(grupos):
+    from .models import ConfiguracaoVendas
+    try:
+        with transaction.atomic():
+            config = ConfiguracaoVendas.atual()
+            ConfiguracaoVendas.objects.filter(pk=config.pk).update(aviso_precos_grupos=grupos)
+        return True
+    except DatabaseError:
+        logger.warning('Aviso de preços: não gravei os grupos (falta migrate?).', exc_info=True)
+        return False
+
+
+def avisar_grupos(grupos, variacao, *, quando=None):
+    """Uma mensagem por grupo (sem o "Olá, fulano"). Nunca levanta."""
+    from core import evolution
+
+    resultado = []
+    texto = montar_mensagem(variacao, quando=quando)
+    for g in grupos:
+        linha = {'id': g['id'], 'nome': f"Grupo: {g.get('nome') or g['id']}", 'status': 'falhou', 'detalhe': ''}
+        try:
+            ok, detalhe = evolution.enviar_texto(g['id'], texto, timeout=15)
+            linha.update(status='enviado' if ok else 'falhou', detalhe='' if ok else str(detalhe or '')[:200])
+        except Exception as exc:  # noqa: BLE001
+            logger.exception('Aviso de preços: falha ao enviar para o grupo %s', g['id'])
+            linha.update(detalhe=f'Erro inesperado: {exc}'[:200])
+        resultado.append(linha)
+    return resultado
+
+
+# ── Aviso no portal (popup) ────────────────────────────────────────────────────
+
+POPUP_DIAS = 7                         # depois disso some sozinho, mesmo para quem não viu
+POPUP_HIERARQUIAS = ['PADRAO']         # consultores, gerentes e ADM de loja
+
+
+def texto_do_popup(variacao, top=5):
+    """O que mudou, em texto simples (o popup mostra quebras de linha, não negrito)."""
+    c = {k: len(variacao[k]) for k in ('subiram', 'diminuiram', 'novos', 'removidos')}
+    linhas = [f"Subiram {c['subiram']} · Diminuíram {c['diminuiram']} · Novos {c['novos']} · Saíram {c['removidos']}"]
+    for titulo, itens in (('Maiores altas', variacao['subiram']), ('Maiores quedas', variacao['diminuiram'])):
+        if itens:
+            linhas += ['', f'{titulo}:'] + [_linha_mudanca(i) for i in itens[:top]]
+            if len(itens) > top:
+                linhas.append(f'… e mais {len(itens) - top}.')
+    if not any(c.values()):
+        linhas += ['', 'Nenhum preço mudou.']
+    linhas += ['', 'Confira os valores antes de fechar a próxima venda.']
+    return '\n'.join(linhas)[:3000]
+
+
+def criar_popup(importacao, variacao, por=None):
+    """Popup "Ciente" para os usuários Padrão; desativa o da importação anterior. Devolve o popup."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from portal_popups.models import PortalPopup
+
+    from .models import ImportacaoPrecos
+
+    anteriores = ImportacaoPrecos.objects.exclude(popup=None).exclude(pk=importacao.pk).values('popup')
+    PortalPopup.objects.filter(pk__in=anteriores, is_active=True).update(is_active=False)
+    quando = timezone.localtime(importacao.quando)
+    popup = PortalPopup.objects.create(
+        title=f"Tabela de preços atualizada — {quando:%d/%m %H:%M}", message=texto_do_popup(variacao),
+        icon='fas fa-tags', color='purple', completion_mode=PortalPopup.MODE_ACK,
+        action_label='Ciente', target_hierarchies=POPUP_HIERARQUIAS,
+        blocking_mode=PortalPopup.BLOCK_NEVER, start_at=timezone.now(),
+        end_at=timezone.now() + timedelta(days=POPUP_DIAS), created_by=por if getattr(por, 'pk', None) else None)
+    ImportacaoPrecos.objects.filter(pk=importacao.pk).update(popup=popup)
+    return popup
+
+
+def avisar(usuarios, variacao, *, quando=None):
     """Uma mensagem por pessoa. Nunca levanta: devolve o resultado de cada uma.
 
     [{'id', 'nome', 'status': 'enviado'|'falhou'|'sem_telefone', 'detalhe'}]
@@ -252,7 +376,7 @@ def avisar(usuarios, variacao, *, arquivo='', quando=None):
                 linha.update(status='sem_telefone', detalhe=problema(getattr(user, 'phone', '') or '')
                              or 'telefone do cadastro inválido')
             else:
-                texto = montar_mensagem(variacao, arquivo=arquivo, quando=quando,
+                texto = montar_mensagem(variacao, quando=quando,
                                         nome=(user.first_name or nome).split(' ')[0])
                 ok, detalhe = evolution.enviar_texto(numero, texto, timeout=15)
                 linha.update(status='enviado' if ok else 'falhou', detalhe='' if ok else str(detalhe or '')[:200])

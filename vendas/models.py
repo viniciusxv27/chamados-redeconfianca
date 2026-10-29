@@ -333,6 +333,9 @@ class ConfiguracaoVendas(models.Model):
     aviso_precos_destinatarios = models.ManyToManyField(
         settings.AUTH_USER_MODEL, blank=True, related_name='+',
         verbose_name='Aviso de preços no WhatsApp: quem recebe')
+    # Grupos do WhatsApp (o número do portal participa deles): [{'id': '…@g.us', 'nome': '…'}] — 29/10/2026.
+    aviso_precos_grupos = models.JSONField(default=list, blank=True, null=True,
+                                           verbose_name='Aviso de preços no WhatsApp: grupos')
     atualizado_em = models.DateTimeField(auto_now=True)
     atualizado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
                                        related_name='+')
@@ -460,6 +463,9 @@ class ImportacaoPrecos(models.Model):
     removidos = models.PositiveIntegerField(default=0, db_default=0, help_text='Saíram da tabela (apagados ou inativados).')
     rejeitados = models.JSONField(default=list, blank=True)
     erro = models.TextField(blank=True, help_text='Se a importação falhou, a tabela vigente ficou como estava.')
+    # O aviso no portal desta importação (o da anterior é desativado quando sai um novo).
+    popup = models.ForeignKey('portal_popups.PortalPopup', on_delete=models.SET_NULL, null=True, blank=True,
+                              related_name='+')
 
     class Meta:
         verbose_name = 'Importação da tabela de produtos'

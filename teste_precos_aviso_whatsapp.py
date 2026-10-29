@@ -163,13 +163,15 @@ try:
       and misto[1]['pct'] < 0, misto)
 
     print('\n== MENSAGEM ==')
-    msg = montar_mensagem(v, arquivo='tabela.xlsx', quando=datetime(2026, 10, 29, 14, 30), nome='Ana')
-    t('cabeçalho, nome, data e arquivo', msg.startswith('Olá, Ana!') and '29/10/2026 14:30' in msg and 'tabela.xlsx' in msg, msg)
-    t('contagens', '⬆️ Subiram: 2' in msg and '⬇️ Diminuíram: 2' in msg and '🆕 Novos: 1' in msg
-      and 'Saíram da tabela: 1' in msg and 'Outros ajustes (parcelas/grupos): 1' in msg, msg)
-    t('linha com de → para e %', '• Sobe: Preço R$ 1.000,00 → R$ 1.100,00 (+10,0%); PIX R$ 900,00 → R$ 990,00 (+10,0%)' in msg, msg)
-    t('queda com sinal', '• Desce: Preço R$ 2.000,00 → R$ 1.500,00 (-25,0%)' in msg)
-    t('novos e saíram pelo nome', '*🆕 Novos (1):* Novo' in msg and '*❌ Saíram (1):* Saiu' in msg)
+    msg = montar_mensagem(v, quando=datetime(2026, 10, 29, 14, 30), nome='Ana')
+    t('cabeçalho, nome e data (sem o arquivo)', msg.startswith('👋 Olá, *Ana*!') and '🗓️ 29/10/2026 às 14:30' in msg
+      and 'TABELA DE PREÇOS ATUALIZADA' in msg and 'Arquivo' not in msg, msg)
+    t('contagens', '📈 Subiram: *2*' in msg and '📉 Baixaram: *2*' in msg and '✨ Novos: *1*' in msg
+      and '🚫 Saíram: *1*' in msg and 'Outros ajustes (parcelas/grupos): *1*' in msg, msg)
+    t('um bloco por produto, uma linha por preço', '1️⃣ *Sobe*' in msg
+      and '💳 Preço: R$ 1.000,00 ➜ *R$ 1.100,00* 🔺 _+10,0%_' in msg and '⚡ PIX: R$ 900,00 ➜ *R$ 990,00* 🔺 _+10,0%_' in msg, msg)
+    t('queda com sinal', '💳 Preço: R$ 2.000,00 ➜ *R$ 1.500,00* 🔻 _-25,0%_' in msg)
+    t('novos e saíram pelo nome', '✨ *CHEGARAM* (1)\nNovo' in msg and '🚫 *SAÍRAM DA TABELA* (1)\nSaiu' in msg)
     print('     ---- exemplo ----\n' + '\n'.join('     ' + l for l in msg.splitlines()) + '\n     -----------------')
 
     grande_antes = {(S, f'Aparelho {n:03d} ' + 'X' * 80): {'Preço': D('1000.00'), 'PIX': D('900.00'), 'tabela': None}
@@ -179,14 +181,14 @@ try:
     for n in range(150):
         grande_depois[(S, f'Novo {n:03d} ' + 'Y' * 80)] = {'Preço': D('10'), 'PIX': None, 'tabela': None}
     vg = calcular_variacao(grande_antes, grande_depois)
-    msg = montar_mensagem(vg, arquivo='x.xlsx')
-    t('300 altas: só as 10 maiores e "e mais 290"', msg.count('\n• ') == 10 and '… e mais 290.' in msg
+    msg = montar_mensagem(vg)
+    t('300 altas: só as 10 maiores e "e mais 290"', msg.count('💳 Preço:') == 10 and '_… e mais 290_' in msg
       and 'Aparelho 299' in msg, msg[:400])
     t('mensagem cabe no limite', len(msg) <= aviso_precos.LIMITE_MENSAGEM, len(msg))
     pequena = montar_mensagem(vg, limite=900)
-    t('limite apertado: corta produtos até caber', len(pequena) <= 900 and '⬆️ Subiram: 300' in pequena, len(pequena))
+    t('limite apertado: corta produtos até caber', len(pequena) <= 900 and '📈 Subiram: *300*' in pequena, len(pequena))
     t('limite absurdo nunca passa do teto', len(montar_mensagem(vg, limite=120)) <= 120)
-    t('nada mudou: diz isso', 'Nenhum preço mudou.' in montar_mensagem(calcular_variacao(antes, antes)))
+    t('nada mudou: diz isso', '✅ Nenhum preço mudou.' in montar_mensagem(calcular_variacao(antes, antes)))
 
     print('\n== IMPORTAÇÃO + AVISO ==')
 
@@ -243,9 +245,10 @@ try:
     t('uma mensagem por pessoa com telefone (2), nenhuma para quem não tem', m.call_count == 2
       and sorted(n for n, _ in chamadas) == ['5527999990001', '5527999990002'], chamadas)
     texto = dict(chamadas).get('5527999990001', '')
-    t('mensagem com o que subiu e o que baixou', 'Olá, Rita!' in texto and '• ZZAV Phone Sobe: Preço R$ 2.500,00 → R$ 2.750,00 (+10,0%)' in texto
-      and 'ZZAV Phone Desce: Preço R$ 1.800,00 → R$ 1.500,00 (-16,7%)' in texto
-      and 'ZZAV Capa: Preço R$ 39,90 → R$ 49,90 (+25,1%)' in texto, texto[:1500])
+    t('mensagem com o que subiu e o que baixou', 'Olá, *Rita*!' in texto and '*ZZAV Phone Sobe*' in texto
+      and 'Preço: R$ 2.500,00 ➜ *R$ 2.750,00* 🔺 _+10,0%_' in texto
+      and '*ZZAV Phone Desce*' in texto and 'Preço: R$ 1.800,00 ➜ *R$ 1.500,00* 🔻 _-16,7%_' in texto
+      and 'Preço: R$ 39,90 ➜ *R$ 49,90* 🔺 _+25,1%_' in texto and 'nova.xlsx' not in texto, texto[:1500])
     t('mensagem dentro do limite', 0 < len(texto) <= aviso_precos.LIMITE_MENSAGEM, len(texto))
     t('a seleção ficou salva', set(ConfiguracaoVendas.atual().aviso_precos_destinatarios.values_list('id', flat=True))
       == {r1.id, r2.id, r3.id})
@@ -296,6 +299,78 @@ try:
         cs.post('/vendas/precos/importar/', {'arquivo': SimpleUploadedFile('ruim.xlsx', b'nao e planilha'),
                                              'aviso_form': '1', 'aviso_destinatarios': [str(r1.id)]})
     t('importação que falha não manda aviso', m.call_count == 0 and ImportacaoPrecos.objects.order_by('-id').first().erro)
+
+    print('\n== GRUPOS DO WHATSAPP (29/10/2026) ==')
+    import io, json as _json
+    from django.core.cache import cache
+    from core import evolution as _ev
+    from portal_popups.models import PortalPopup
+
+    class Resposta(io.BytesIO):
+        status = 200
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+    bruto = [{'id': '120363000000000001@g.us', 'subject': 'ZZAV Gerentes', 'size': 12},
+             {'id': '120363000000000002@g.us', 'subject': 'ZZAV Lojas', 'participants': [1, 2, 3]},
+             {'id': '5527999990001@s.whatsapp.net', 'subject': 'contato, não é grupo'}]
+    with mock.patch('core.utils.processo_de_teste', return_value=False), \
+            mock.patch.object(settings, 'EVOLUTION_API_URL', 'https://evolution.exemplo-teste.local', create=True), \
+            mock.patch.object(settings, 'EVOLUTION_API_KEY', 'zz', create=True), \
+            mock.patch.object(settings, 'EVOLUTION_INSTANCE', 'zz', create=True), \
+            mock.patch('core.evolution.urlrequest.urlopen', return_value=Resposta(_json.dumps(bruto).encode())) as abriu:
+        ok_g, grupos_g, _d = _ev.listar_grupos()
+    t('lista só os grupos (@g.us), com nome e tamanho', ok_g and [g['nome'] for g in grupos_g] == ['ZZAV Gerentes', 'ZZAV Lojas']
+      and grupos_g[0]['membros'] == 12 and grupos_g[1]['membros'] == 3, grupos_g)
+    t('a consulta é só leitura (GET em fetchAllGroups)', abriu.call_args[0][0].get_method() == 'GET'
+      and 'group/fetchAllGroups/' in abriu.call_args[0][0].full_url)
+    t('em processo de teste a consulta não sai', _ev.listar_grupos()[0] is False)
+
+    cache.delete(aviso_precos.CHAVE_CACHE_GRUPOS)
+    with mock.patch('core.evolution.listar_grupos', return_value=(True, grupos_g, '')):
+        html = cs.get('/vendas/precos/importar/').content.decode()
+    t('a tela lista os grupos do número', 'ZZAV Gerentes' in html and 'name="aviso_grupos"' in html and '12 pessoas' in html)
+    g1 = grupos_g[0]
+    with mock.patch('core.evolution.enviar_texto', return_value=(True, 'ok')) as m:
+        r = cs.post('/vendas/precos/importar/', {'arquivo': SimpleUploadedFile('grupo.xlsx', planilha(base_sm, base_pvp)),
+                                                 'aviso_form': '1', 'aviso_destinatarios': [str(r1.id)],
+                                                 'aviso_grupos': [f"{g1['id']}|{g1['nome']}", 'lixo|nao e grupo']})
+    destinos = [c.args[0] for c in m.call_args_list]
+    t('vai para a pessoa e para o grupo, uma mensagem cada', sorted(destinos) == sorted(['5527999990001', g1['id']]), destinos)
+    texto_grupo = next(c.args[1] for c in m.call_args_list if c.args[0] == g1['id'])
+    t('a mensagem do grupo não tem "Olá, fulano"', 'Olá' not in texto_grupo and 'TABELA DE PREÇOS ATUALIZADA' in texto_grupo)
+    t('o grupo fica salvo (o que não é grupo é ignorado)', aviso_precos.grupos_salvos() == [{'id': g1['id'], 'nome': g1['nome']}])
+    r_res = cs.get('/vendas/precos/importar/')
+    res = r_res.context
+    t('a tela diz que o popup foi publicado', 'Aviso no portal publicado' in r_res.content.decode())
+    t('o resultado mostra o grupo', any(e['nome'] == 'Grupo: ZZAV Gerentes' and e['status'] == 'enviado' for e in res['resultado']['envios']))
+    with mock.patch('core.evolution.listar_grupos', return_value=(False, [], 'fora do ar')):
+        cache.delete(aviso_precos.CHAVE_CACHE_GRUPOS)
+        r = cs.get('/vendas/precos/importar/')
+    html = r.content.decode()
+    t('consulta fora do ar: avisa e mantém o salvo marcado', 'Não deu para listar os grupos agora' in html
+      and re.search(r'value="120363000000000001@g.us\|ZZAV Gerentes"[^>]*checked', html) is not None
+      and 'não veio na consulta' in html)
+
+    print('\n== POPUP NO PORTAL ==')
+    imp = ImportacaoPrecos.objects.order_by('-id').first()
+    pop = imp.popup
+    padrao = pessoa('zzav.padrao', first_name='Consultor', hierarchy='PADRAO')
+    gerencia = pessoa('zzav.adm', first_name='Adm', hierarchy='ADMIN')
+    t('a importação publica o popup', pop is not None and pop.is_active and pop.completion_mode == 'ACK'
+      and pop.target_hierarchies == ['PADRAO'] and 'Subiram' in pop.message, pop and pop.message[:200])
+    t('vale para consultor/gerente/ADM de loja (Padrão), não para a administração', pop.applies_to(padrao)
+      and not pop.applies_to(gerencia))
+    t('fica no ar por 7 dias e não bloqueia', pop.blocking_mode == 'NEVER' and pop.end_at and pop.is_within_window())
+    with mock.patch('core.evolution.enviar_texto', return_value=(True, 'ok')):
+        cs.post('/vendas/precos/importar/', {'arquivo': SimpleUploadedFile('nova2.xlsx', planilha(novo_sm, novo_pvp)),
+                                             'aviso_form': '1'})
+    nova = ImportacaoPrecos.objects.order_by('-id').first()
+    pop.refresh_from_db()
+    t('a nova tabela tira o popup anterior do ar', not pop.is_active and nova.popup and nova.popup.is_active)
+    t('o texto traz o que mudou', 'ZZAV Phone Sobe' in nova.popup.message, nova.popup.message[:300])
+    cs.post('/vendas/precos/importar/', {'arquivo': SimpleUploadedFile('semaviso.xlsx', planilha(base_sm, base_pvp)),
+                                         'aviso_form': '1', 'aviso_popup': 'off'})
+    t('desmarcar "Avisar no portal" não publica', ImportacaoPrecos.objects.order_by('-id').first().popup is None)
 finally:
     transaction.set_rollback(True)
     marcador.__exit__(None, None, None)

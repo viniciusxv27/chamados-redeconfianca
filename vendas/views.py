@@ -1,5 +1,6 @@
 import csv
 import json
+import logging
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 from io import BytesIO
@@ -29,6 +30,8 @@ from .models import (SEGMENTACOES, Cliente, ConfiguracaoVendas, ImportacaoPrecos
 from .permissions import exige, is_superadmin, pode, ve_rede, vendas_do_usuario
 from .clientes import buscar_historico
 from .services import importar_tabela_precos
+
+logger = logging.getLogger(__name__)
 
 
 def _parse_decimal(raw):
@@ -538,12 +541,18 @@ def precos_import(request):
         if not f or not (f.name or '').lower().endswith(('.xlsx', '.xlsm')):
             messages.error(request, 'Envie a planilha (.xlsx).')
             return redirect('vendas:precos_import')
-        destinatarios = []
+        destinatarios, grupos = [], []
         if pode_avisar and request.POST.get('aviso_form') == '1':
             ids = [int(i) for i in request.POST.getlist('aviso_destinatarios') if str(i).isdigit()]
             destinatarios = list(User.objects.filter(pk__in=ids, is_active=True).order_by('first_name', 'last_name'))
-            if not aviso_precos.salvar_destinatarios(destinatarios, request.user):
+            # Grupo vem como "jid|nome": o nome fica salvo para a tela mostrar mesmo sem consultar o WhatsApp.
+            for valor in request.POST.getlist('aviso_grupos'):
+                jid, _sep, nome = str(valor).partition('|')
+                if jid.strip().endswith('@g.us') and jid.strip() not in {g['id'] for g in grupos}:
+                    grupos.append({'id': jid.strip()[:120], 'nome': nome.strip()[:200] or jid.strip()})
+            if not (aviso_precos.salvar_destinatarios(destinatarios, request.user) and aviso_precos.salvar_grupos(grupos)):
                 messages.warning(request, 'Não deu para lembrar a seleção do aviso (falta aplicar a migração de Vendas).')
+
         registro = ImportacaoPrecos(usuario=request.user, arquivo=f.name[:255])
         try:
             resumo = importar_tabela_precos(f)
@@ -565,11 +574,20 @@ def precos_import(request):
         try:
             variacao = resumo.get('variacao') or {'subiram': [], 'diminuiram': [], 'novos': [], 'removidos': [], 'outros': 0}
             resultado['variacao'] = aviso_precos.para_tela(variacao)
-            if destinatarios:
-                resultado['envios'] = aviso_precos.avisar(destinatarios, variacao, arquivo=registro.arquivo,
-                                                          quando=timezone.localtime(registro.quando))
+            if destinatarios or grupos:
+                quando = timezone.localtime(registro.quando)
+                resultado['envios'] = (aviso_precos.avisar(destinatarios, variacao, quando=quando)
+                                       + aviso_precos.avisar_grupos(grupos, variacao, quando=quando))
         except Exception as exc:  # noqa: BLE001
             resultado['erro_aviso'] = f'O aviso no WhatsApp não saiu: {exc}'[:300]
+        # Popup no portal para consultores, gerentes e ADM (usuários Padrão) — vem marcado.
+        if request.POST.get('aviso_popup', 'on') == 'on':
+            try:
+                aviso_precos.criar_popup(registro, variacao, por=request.user)
+                resultado['popup'] = True
+            except Exception as exc:  # noqa: BLE001 — a tabela já foi gravada
+                logger.exception('Aviso de preços: popup não criado')
+                resultado['erro_popup'] = f'O aviso no portal não saiu: {exc}'[:300]
         request.session[SESSAO_RESULTADO_IMPORTACAO] = resultado
         return redirect('vendas:precos_import')
 
@@ -592,7 +610,14 @@ def precos_import(request):
             p.tem_telefone = bool(aviso_precos.numero_do(p))
             p.escolhido = p.pk in escolhidos
         pessoas.sort(key=lambda p: not p.escolhido)          # os marcados primeiro
-        context.update(aviso_pessoas=pessoas, aviso_escolhidos=sum(p.escolhido for p in pessoas))
+        # Grupos: os do número (consulta guardada por 10 min) + os já salvos que a consulta não trouxe.
+        salvos = {g['id']: g for g in aviso_precos.grupos_salvos()}
+        do_numero, erro_grupos = aviso_precos.grupos_do_whatsapp(atualizar=request.GET.get('grupos') == 'atualizar')
+        grupos = [dict(g, escolhido=g['id'] in salvos) for g in do_numero]
+        grupos += [dict(g, escolhido=True, fora=True) for jid, g in salvos.items() if jid not in {x['id'] for x in do_numero}]
+        grupos.sort(key=lambda g: (not g['escolhido'], g['nome'].lower()))
+        context.update(aviso_pessoas=pessoas, aviso_escolhidos=sum(p.escolhido for p in pessoas),
+                       aviso_grupos=grupos, aviso_grupos_escolhidos=len(salvos), aviso_grupos_erro=erro_grupos)
     return render(request, 'vendas/precos_import.html', context)
 
 

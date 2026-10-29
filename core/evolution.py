@@ -41,6 +41,43 @@ def normalizar_numero(numero: str) -> str:
     return normalizar(texto)
 
 
+def listar_grupos(*, timeout: int = 15):
+    """Grupos de que o número da instância participa: ``(ok, [{'id', 'nome', 'membros'}], detalhe)``.
+
+    Só leitura (``group/fetchAllGroups``). Nunca lança exceção.
+    """
+    from core.utils import processo_de_teste
+    if processo_de_teste():
+        return False, [], 'Consulta bloqueada: processo de teste.'
+    base = (getattr(settings, 'EVOLUTION_API_URL', '') or '').rstrip('/')
+    chave = getattr(settings, 'EVOLUTION_API_KEY', '') or ''
+    instancia = getattr(settings, 'EVOLUTION_INSTANCE', '') or ''
+    if not (base and chave and instancia):
+        return False, [], 'Evolution API não configurada (EVOLUTION_API_URL/EVOLUTION_API_KEY/EVOLUTION_INSTANCE).'
+    url = f'{base}/group/fetchAllGroups/{quote(instancia, safe="")}?getParticipants=false'
+    req = urlrequest.Request(url, method='GET', headers={'apikey': chave})
+    try:
+        with urlrequest.urlopen(req, timeout=timeout) as resp:
+            dados = json.loads(resp.read().decode('utf-8', errors='replace') or '[]')
+    except urlerror.HTTPError as exc:
+        return False, [], f'HTTP {exc.code} ao listar os grupos.'
+    except urlerror.URLError as exc:
+        return False, [], f'Falha de rede ao contatar a Evolution API: {exc.reason}'
+    except Exception as exc:  # noqa: BLE001
+        logger.exception('Evolution API: erro ao listar grupos')
+        return False, [], f'Erro inesperado: {exc}'
+    if isinstance(dados, dict):                  # algumas versões embrulham a lista
+        dados = dados.get('groups') or dados.get('data') or []
+    grupos = []
+    for g in dados if isinstance(dados, list) else []:
+        jid = str((g or {}).get('id') or '').strip()
+        if jid.endswith('@g.us'):
+            grupos.append({'id': jid, 'nome': str(g.get('subject') or jid).strip()[:200],
+                           'membros': g.get('size') or len(g.get('participants') or []) or None})
+    grupos.sort(key=lambda g: g['nome'].lower())
+    return True, grupos, ''
+
+
 def enviar_texto(numero: str, texto: str, *, timeout: int = 10) -> Tuple[bool, str]:
     """Envia uma mensagem de texto pela instância configurada."""
     # Teste nunca manda WhatsApp: o banco de dev tem telefone de gente de verdade.
