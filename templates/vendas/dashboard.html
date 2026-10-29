@@ -252,6 +252,7 @@
             </div>
             <span class="text-right">
                 <span class="block font-semibold text-gray-900 tabular whitespace-nowrap">{{ v.total|brl }}</span>
+                {% if v.servicos.all %}<span class="block text-[11px] font-semibold text-pink-700 tabular whitespace-nowrap" title="Soma do valor dos planos (mensalidade, não é paga no balcão)"><i class="fas fa-headset mr-0.5"></i>{{ v.total_servicos|brl }}<span class="font-normal text-pink-500">/mês</span></span>{% endif %}
                 {% if v.forma_pagamento %}<span class="block text-[10px] text-gray-400">{{ v.get_forma_pagamento_display }}</span>{% endif %}
             </span>
             <i class="fas fa-chevron-right text-gray-300 text-xs group-hover:text-purple-500 group-hover:translate-x-0.5 transition-transform hidden sm:block"></i>

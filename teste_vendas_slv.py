@@ -171,7 +171,8 @@ try:
     t('cadastro do cliente novo', r.json()['ok'] and r.json()['criado'] and Cliente.objects.get(cpf=CPF).uf == 'ES')
     r = cv.post('/vendas/api/cliente/salvar/', json.dumps({'cpf': CPF, 'nome': 'Zz Cliente Teste', 'telefone': '(27) 99876-5432',
                                                            'cidade': 'Vitória', 'uf': 'ES'}), content_type='application/json')
-    t('sem alteração: nada gravado', r.json()['mudou'] == 0 and not RegistroAlteracao.objects.filter(tipo='CLIENTE').exists())
+    t('sem alteração: nada gravado', r.json()['mudou'] == 0
+      and not RegistroAlteracao.objects.filter(tipo='CLIENTE', objeto_id=Cliente.objects.get(cpf=CPF).id).exists())
     r = cv.post('/vendas/api/cliente/salvar/', json.dumps({'cpf': CPF, 'nome': 'Zz Cliente Teste', 'telefone': '(27) 3333-4444',
                                                            'cidade': 'Serra', 'uf': 'ES'}), content_type='application/json')
     hist = RegistroAlteracao.objects.filter(tipo='CLIENTE', campo='telefone').first()

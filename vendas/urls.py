@@ -18,6 +18,7 @@ urlpatterns = [
     # SLV — consultas da tela de venda e parametrização.
     path('api/cliente/', views.api_cliente, name='api_cliente'),
     path('api/cliente/salvar/', views.api_cliente_salvar, name='api_cliente_salvar'),
+    path('api/cnpj/', views.api_cnpj, name='api_cnpj'),
     path('api/renova/', views.api_renova, name='api_renova'),
     path('clientes/', views_clientes.clientes, name='clientes'),
     path('clientes/sincronizar/', views_clientes.clientes_sincronizar, name='clientes_sincronizar'),

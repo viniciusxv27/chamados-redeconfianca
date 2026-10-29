@@ -368,9 +368,9 @@ class ServicoAdicional(models.Model):
 
 
 class Cliente(models.Model):
-    """[Início da venda.RF002/RF003] Cliente identificado pelo CPF (11 dígitos)."""
+    """[Início da venda.RF002/RF003] Cliente identificado pelo CPF (11 dígitos) ou CNPJ (14), só números."""
 
-    cpf = models.CharField(max_length=11, unique=True, verbose_name='CPF')
+    cpf = models.CharField(max_length=14, unique=True, verbose_name='CPF/CNPJ')
     nome = models.CharField(max_length=200, verbose_name='Nome')
     telefone = models.CharField(max_length=20, blank=True, verbose_name='Telefone')
     cep = models.CharField(max_length=9, blank=True, verbose_name='CEP')
@@ -414,8 +414,12 @@ class Cliente(models.Model):
 
     @property
     def cpf_formatado(self):
-        d = self.cpf
-        return f'{d[:3]}.{d[3:6]}.{d[6:9]}-{d[9:]}' if len(d) == 11 else d
+        from .slv import formatar_cpf
+        return formatar_cpf(self.cpf)
+
+    @property
+    def e_empresa(self):
+        return len(self.cpf) == 14
 
     @property
     def endereco(self):

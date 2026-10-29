@@ -4,7 +4,7 @@
 {% block title %}Nova venda{% endblock %}
 {% block vd_icone %}fa-cash-register{% endblock %}
 {% block vd_cabecalho %}Nova venda{% endblock %}
-{% block vd_subtitulo %}Cliente pelo CPF, produtos e serviços com o preço do plano, descontos e conferência final.{% endblock %}
+{% block vd_subtitulo %}Cliente pelo CPF ou CNPJ, produtos e serviços com o preço do plano, descontos e conferência final.{% endblock %}
 
 {% block vd_css %}
 <style>
@@ -60,12 +60,12 @@
     <section class="vd-secao vd-passo" id="passoCliente">
         <div class="vd-secao-cabeca"><span class="vd-numero" id="numCliente">1</span>
             <div class="min-w-0"><h2 class="text-sm font-bold text-gray-900">Cliente</h2>
-                <p class="text-[11px] text-gray-500">Digite ou cole o CPF — com ou sem pontos.</p></div></div>
+                <p class="text-[11px] text-gray-500">Digite ou cole o CPF ou o CNPJ — com ou sem pontos. Empresa nova vem preenchida pela Receita.</p></div></div>
         <div class="p-4 sm:p-5 space-y-4">
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
                 <div class="sm:col-span-1">
-                    <label class="vd-rotulo" for="vdCpf">CPF do cliente *</label>
-                    <input id="vdCpf" class="vd-campo tabular text-base" inputmode="numeric" autocomplete="off" placeholder="000.000.000-00" maxlength="14">
+                    <label class="vd-rotulo" for="vdCpf">CPF ou CNPJ do cliente *</label>
+                    <input id="vdCpf" class="vd-campo tabular text-base" inputmode="numeric" autocomplete="off" placeholder="000.000.000-00 ou 00.000.000/0000-00" maxlength="18">
                 </div>
                 <p class="sm:col-span-2 text-sm" id="vdCpfAviso"></p>
             </div>
@@ -243,7 +243,7 @@
         cliente: '{% url "vendas:api_cliente" %}', salvarCliente: '{% url "vendas:api_cliente_salvar" %}',
         historico: '{% url "vendas:cliente_historico" %}', buscar: '{% url "vendas:precos_buscar" %}',
         renova: '{% url "vendas:api_renova" %}', planosFora: '{% url "vendas:api_planos_fora" %}', confirmar: '{% url "vendas:venda_create" %}',
-        ficha: '{% url "vendas:cliente_detalhe" "00000000000" %}',
+        ficha: '{% url "vendas:cliente_detalhe" "00000000000" %}', cnpj: '{% url "vendas:api_cnpj" %}',
     };
     const CSRF = document.querySelector('[name=csrfmiddlewaretoken]').value;
     const $ = function (id) { return document.getElementById(id); };
@@ -271,6 +271,16 @@
             if ((s * 10) % 11 % 10 !== Number(d[t])) return false; }
         return true;
     }
+    function cnpjValido(v) {
+        const d = so(v); if (d.length !== 14 || /^(\d)\1{13}$/.test(d)) return false;
+        for (const t of [12, 13]) { const pesos = []; for (let p = t - 7; p > 1; p--) pesos.push(p); for (let p = 9; p > 1; p--) pesos.push(p);
+            let s = 0; for (let i = 0; i < t; i++) s += Number(d[i]) * pesos[i];
+            const r = s % 11; if ((r < 2 ? 0 : 11 - r) !== Number(d[t])) return false; }
+        return true;
+    }
+    // Até 11 números é CPF; do 12º em diante vira CNPJ (00.000.000/0000-00).
+    function mascaraDoc(v) { const d = so(v).slice(0, 14); if (d.length <= 11) return mascaraCpf(d);
+        return d.replace(/^(\d{2})(\d)/, '$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d)/, '.$1/$2').replace(/(\d{4})(\d)/, '$1-$2'); }
     function mascaraCpf(v) { const d = so(v).slice(0, 11);
         return d.replace(/^(\d{3})(\d)/, '$1.$2').replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d)/, '.$1-$2'); }
     function mascaraTel(v) { const d = so(v).slice(0, 11);
@@ -294,15 +304,21 @@
     // ── 1. Cliente ─────────────────────────────────────────────────────
     const cpf = $('vdCpf'), aviso = $('vdCpfAviso');
     function avisar(texto, cor) { aviso.className = 'sm:col-span-2 text-sm ' + (cor || 'text-gray-500'); aviso.innerHTML = texto; }
-    let ultimoCpf = '';
-    cpf.addEventListener('input', function () {
-        cpf.value = mascaraCpf(cpf.value);
+    let ultimoCpf = '', esperaCpf = null;
+    cpf.addEventListener('input', function (e) {
+        cpf.value = mascaraDoc(cpf.value);
         const d = so(cpf.value);
-        cpf.classList.remove('vd-erro');
-        if (d.length < 11) { if (estado.cliente) limparCliente(); avisar(''); return; }
-        if (!cpfValido(d)) { cpf.classList.add('vd-erro'); avisar('<i class="fas fa-circle-xmark mr-1"></i>CPF inválido — confira os números.', 'text-red-600'); return; }
-        if (d === ultimoCpf) return;
-        ultimoCpf = d; buscarCliente(d);
+        cpf.classList.remove('vd-erro'); clearTimeout(esperaCpf);
+        if (estado.cliente && d !== ultimoCpf) limparCliente();
+        if (d.length < 11 || d.length === 12 || d.length === 13) { avisar(''); return; }
+        const valido = d.length === 14 ? cnpjValido(d) : cpfValido(d), tipo = d.length === 14 ? 'CNPJ' : 'CPF';
+        // Com 11 números pode ser um CNPJ ainda sendo digitado: espera um instante (colado, vai direto).
+        const espera = (d.length === 11 && e.inputType && e.inputType.indexOf('insertFromPaste') < 0) ? 700 : 0;
+        esperaCpf = setTimeout(function () {
+            if (!valido) { cpf.classList.add('vd-erro'); avisar('<i class="fas fa-circle-xmark mr-1"></i>' + tipo + ' inválido — confira os números.', 'text-red-600'); return; }
+            if (d === ultimoCpf) return;
+            ultimoCpf = d; buscarCliente(d);
+        }, espera);
     });
     async function buscarCliente(d) {
         avisar('<i class="fas fa-circle-notch fa-spin mr-1"></i>Buscando o cliente…');
@@ -317,12 +333,35 @@
             $('vdConfirmaOrigem').innerHTML = (c.origem === 'VIVOGO' ? '<i class="fas fa-database mr-1"></i>Base do Vivo GO' : '<i class="fas fa-user-check mr-1"></i>Cadastro do portal') +
                 (c.ultima_compra ? ' · última compra ' + esc(c.ultima_compra) + (c.pdv_ultimo ? ' em ' + esc(c.pdv_ultimo) : '') : '') +
                 (c.qtd_vendas ? ' · ' + c.qtd_vendas + ' venda(s)' : '');
-            avisar('<i class="fas fa-circle-check text-emerald-600 mr-1"></i>CPF ' + esc(j.cliente.cpf_formatado) + ' — confira o nome.', 'text-gray-600');
+            avisar('<i class="fas fa-circle-check text-emerald-600 mr-1"></i>' + (d.length === 14 ? 'CNPJ ' : 'CPF ') + esc(j.cliente.cpf_formatado) + ' — confira o nome.', 'text-gray-600');
         } else {
             estado.cliente = {cpf: d, cpf_formatado: j.cpf_formatado}; estado.novo = true;
             avisar('<i class="fas fa-user-plus text-purple-600 mr-1"></i>Cliente não encontrado. Preencha o cadastro abaixo.', 'text-purple-700');
             abrirDados(true);
+            if (d.length === 14) dadosDaReceita(d);
         }
+    }
+    // Empresa nova: razão social, telefone e endereço vêm das APIs públicas da Receita.
+    // Só preenche campo vazio — o que o vendedor já digitou fica.
+    async function dadosDaReceita(d) {
+        avisar('<i class="fas fa-circle-notch fa-spin mr-1"></i>Empresa nova — buscando os dados na Receita…', 'text-purple-700');
+        let j;
+        try { j = await pedir(URL.cnpj + '?cnpj=' + d); } catch (err) { j = {ok: false, erro: 'Não deu para consultar a Receita agora. Preencha os dados à mão.'}; }
+        if (!estado.cliente || estado.cliente.cpf !== d || !estado.novo) return;      // trocou o documento no meio
+        if (!j.ok) { avisar('<i class="fas fa-triangle-exclamation mr-1"></i>' + esc(j.erro), 'text-amber-700'); return; }
+        const e = j.empresa;
+        const valores = {nome: e.razao_social, telefone: e.telefone, cep: e.cep, logradouro: e.logradouro, numero: e.numero,
+                         complemento: e.complemento, bairro: e.bairro, cidade: e.cidade, uf: e.uf};
+        Object.entries(valores).forEach(function ([k, v]) {
+            const el = $(CAMPOS[k]); if (!v || el.value.trim()) return;
+            if (k === 'telefone') v = mascaraTel(v); if (k === 'cep' && v.length === 8) v = v.slice(0, 5) + '-' + v.slice(5);
+            el.value = v;
+        });
+        const ativa = !e.situacao || e.situacao.toUpperCase() === 'ATIVA';
+        avisar(ativa ? '<i class="fas fa-building text-purple-600 mr-1"></i>Empresa nova — dados preenchidos pela Receita (' + esc(j.fonte) + '). Confira e cadastre.'
+                     : '<i class="fas fa-triangle-exclamation mr-1"></i>Atenção: na Receita este CNPJ está <strong>' + esc(e.situacao) + '</strong>. Confira antes de vender.',
+               ativa ? 'text-purple-700' : 'text-red-600');
+        $('vdClienteNota').innerHTML = esc('Situação na Receita: ' + (e.situacao || '—')) + (e.nome_fantasia ? ' · Nome fantasia: <strong>' + esc(e.nome_fantasia) + '</strong>' : '') + ' · Nome obrigatório.';
     }
     function limparCliente() {
         estado.cliente = null; estado.confirmado = false; ultimoCpf = '';
@@ -392,7 +431,7 @@
         fetch(URL.historico + '?cpf=' + estado.cliente.cpf).then(function (r) { return r.json(); }).then(function (h) {
             const el = $('vdVivoGo'); if (!el) return;
             if (!h.disponivel) { el.textContent = 'Histórico do Vivo GO indisponível agora.'; return; }
-            if (!h.encontrado) { el.textContent = 'Nada no Vivo GO para este CPF.'; return; }
+            if (!h.encontrado) { el.textContent = 'Nada no Vivo GO para este ' + (estado.cliente.cpf.length === 14 ? 'CNPJ.' : 'CPF.'); return; }
             el.innerHTML = '<p class="font-semibold text-gray-600 mt-1"><i class="fas fa-database mr-1"></i>Vivo GO: ' + h.total + ' registro(s) de ' + esc(h.primeira) + ' a ' + esc(h.ultima) +
                 ' · <a class="text-purple-600 hover:underline" target="_blank" href="' + URL.ficha.replace('00000000000', estado.cliente.cpf) + '">ver ficha completa</a></p>';
         }).catch(function () { const el = $('vdVivoGo'); if (el) el.textContent = ''; });
@@ -986,7 +1025,7 @@
     });
     // Veio da ficha do cliente (?cpf=…): a busca já começa.
     const doLink = new URLSearchParams(location.search).get('cpf');
-    if (doLink) { cpf.value = mascaraCpf(doLink); cpf.dispatchEvent(new Event('input')); } else { cpf.focus(); }
+    if (doLink) { cpf.value = mascaraDoc(doLink); cpf.dispatchEvent(new Event('input')); } else { cpf.focus(); }
 })();
 </script>
 {% endif %}

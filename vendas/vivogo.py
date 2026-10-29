@@ -186,14 +186,14 @@ def _gravar_linhas(dados, completa, escopo=None):
 
 
 def atualizar_clientes(cpfs):
-    """Resumo de compras de cada CPF → vendas.Cliente (cria quem ainda não existe).
+    """Resumo de compras de cada CPF/CNPJ → vendas.Cliente (cria quem ainda não existe).
 
     O cadastro do portal manda: nome e telefone só são preenchidos quando
     estão vazios (ou o cliente veio do próprio Vivo GO).
     """
     from .models import Cliente, CompraVivoGo
 
-    cpfs = [c for c in cpfs if len(c) == 11]
+    cpfs = [c for c in cpfs if len(c) in (11, 14)]       # CPF ou CNPJ
     agora = timezone.now()
     criados = atualizados = 0
     for i in range(0, len(cpfs), 2000):

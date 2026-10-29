@@ -39,8 +39,29 @@ def cpf_valido(valor):
 
 
 def formatar_cpf(valor):
+    """CPF ou CNPJ, com a pontuação de cada um (o resto volta como veio)."""
     d = so_digitos(valor)
+    if len(d) == 14:
+        return f'{d[:2]}.{d[2:5]}.{d[5:8]}/{d[8:12]}-{d[12:]}'
     return f'{d[:3]}.{d[3:6]}.{d[6:9]}-{d[9:]}' if len(d) == 11 else d
+
+
+def cnpj_valido(valor):
+    """14 dígitos, com os dois verificadores certos (pesos 5..2,9..2 e 6..2,9..2)."""
+    d = so_digitos(valor)
+    if len(d) != 14 or d == d[0] * 14:
+        return False
+    for tamanho in (12, 13):
+        pesos = list(range(tamanho - 7, 1, -1)) + list(range(9, 1, -1))
+        resto = sum(int(d[i]) * pesos[i] for i in range(tamanho)) % 11
+        if (0 if resto < 2 else 11 - resto) != int(d[tamanho]):
+            return False
+    return True
+
+
+def documento_valido(valor):
+    """Cliente pode ser pessoa física (CPF) ou empresa (CNPJ)."""
+    return cpf_valido(valor) or cnpj_valido(valor)
 
 
 def telefone_valido(valor):
@@ -451,8 +472,8 @@ def registrar_venda(dados, usuario, loja, vendedor=None):
     # Cliente
     c = dados.get('cliente') or {}
     cpf = so_digitos(c.get('cpf'))
-    if not cpf_valido(cpf):
-        erros.append('CPF do cliente inválido.')
+    if not documento_valido(cpf):
+        erros.append('CPF/CNPJ do cliente inválido.')
     elif not str(c.get('nome') or '').strip():
         erros.append('Informe o nome do cliente.')
     telefone = so_digitos(c.get('telefone'))

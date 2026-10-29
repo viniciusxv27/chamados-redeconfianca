@@ -24,7 +24,7 @@ from openpyxl.utils import get_column_letter
 
 from users.models import Sector, User
 
-from . import slv
+from . import cnpj, slv
 from .models import (SEGMENTACOES, Cliente, ConfiguracaoVendas, ImportacaoPrecos, ItemPreco, Plano, PlanoForaPortfolio,
                      RegistroAlteracao, ServicoAdicional, Venda, VendaProduto, VendaServico)
 from .permissions import exige, is_superadmin, pode, ve_rede, vendas_do_usuario
@@ -751,8 +751,9 @@ def api_cliente(request):
     if not pode(request.user, 'vendas.lancar'):
         return JsonResponse({'ok': False, 'erro': 'Acesso restrito.'}, status=403)
     cpf = slv.so_digitos(request.GET.get('cpf'))
-    if not slv.cpf_valido(cpf):
-        return JsonResponse({'ok': False, 'erro': 'CPF inválido: confira os 11 números.'})
+    if not slv.documento_valido(cpf):
+        return JsonResponse({'ok': False, 'erro': 'CNPJ inválido: confira os 14 números.' if len(cpf) == 14
+                             else 'CPF inválido: confira os 11 números.'})
     cliente = Cliente.objects.select_related('plano').filter(cpf=cpf).first()
     if not cliente:
         return JsonResponse({'ok': True, 'encontrado': False, 'cpf': cpf, 'cpf_formatado': slv.formatar_cpf(cpf)})
@@ -778,8 +779,8 @@ def api_cliente_salvar(request):
     except (json.JSONDecodeError, UnicodeDecodeError):
         return JsonResponse({'ok': False, 'erro': 'Envio inválido.'}, status=400)
     cpf = slv.so_digitos(dados.get('cpf'))
-    if not slv.cpf_valido(cpf):
-        return JsonResponse({'ok': False, 'erro': 'CPF inválido.'})
+    if not slv.documento_valido(cpf):
+        return JsonResponse({'ok': False, 'erro': 'CPF/CNPJ inválido.'})
     if not str(dados.get('nome') or '').strip():
         return JsonResponse({'ok': False, 'erro': 'Informe o nome do cliente.'})
     telefone = slv.so_digitos(dados.get('telefone'))
@@ -788,6 +789,14 @@ def api_cliente_salvar(request):
     loja = request.user.sector
     cliente, criado, mudou = slv.salvar_cliente(cpf, dados, request.user, pdv=loja.name if loja else '')
     return JsonResponse({'ok': True, 'criado': criado, 'mudou': mudou, 'cliente': _cliente_json(cliente)})
+
+
+@login_required
+def api_cnpj(request):
+    """Dados da empresa nas APIs públicas da Receita, para preencher o cadastro do cliente PJ."""
+    if not pode(request.user, 'vendas.lancar'):
+        return JsonResponse({'ok': False, 'erro': 'Acesso restrito.'}, status=403)
+    return JsonResponse(cnpj.consultar(request.GET.get('cnpj')))
 
 
 @login_required
