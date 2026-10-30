@@ -1,12 +1,19 @@
 from django.urls import path
 
-from . import views, views_admin, views_banco
+from . import views, views_admin, views_banco, views_fechamento
 
 app_name = 'financeiro'
 
 urlpatterns = [
     path('', views.painel, name='painel'),
     path('caixa/', views.caixa, name='caixa'),
+
+    # Fechamento de caixa (dia D aberto até 10h de D+1)
+    path('fechamento/', views_fechamento.fechamento, name='fechamento'),
+    path('fechamento/salvar/', views_fechamento.fechamento_salvar, name='fechamento_salvar'),
+    path('fechamento/bloquear/', views_fechamento.fechamento_bloquear, name='fechamento_bloquear'),
+    path('fechamento/regra/', views_fechamento.fechamento_config, name='fechamento_config'),
+    path('fechamento/acessos/', views_fechamento.fechamento_acessos, name='fechamento_acessos'),
 
     # Títulos
     path('pagar/', views.pagar, name='pagar'),

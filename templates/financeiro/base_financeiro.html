@@ -368,6 +368,9 @@ window.Fin.brl = function (n) { return Number(n || 0).toLocaleString('pt-BR', {s
             <a href="{% url 'financeiro:auditoria' %}" class="fin-tab {% if aba == 'auditoria' %}fin-tab-ativa{% endif %}" {% if aba == 'auditoria' %}aria-current="page"{% endif %}><i class="fas {{ icone }}"></i><span>Rastreabilidade</span></a>
             {% endif %}
         {% endfor %}
+        {% if pode_fechamento %}
+        <a href="{% url 'financeiro:fechamento' %}" class="fin-tab {% if aba == 'fechamento' %}fin-tab-ativa{% endif %}" {% if aba == 'fechamento' %}aria-current="page"{% endif %}><i class="fas fa-cash-register"></i><span>Fechamento de caixa</span></a>
+        {% endif %}
         {% if pode_baixas %}
         <a href="{% url 'financeiro:baixas' %}" class="fin-tab {% if aba == 'baixas' %}fin-tab-ativa{% endif %}" {% if aba == 'baixas' %}aria-current="page"{% endif %}><i class="fas fa-list-check"></i><span>Baixa de títulos</span></a>
         {% endif %}

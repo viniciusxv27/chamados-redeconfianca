@@ -1,0 +1,70 @@
+{% extends 'financeiro/base_financeiro.html' %}
+{% block fin_titulo %}Acessos · Fechamento de caixa{% endblock %}
+{% block fin_cabecalho %}Quem acessa o Fechamento de caixa{% endblock %}
+{% block fin_subtitulo %}O SUPERADMIN vê tudo. Libere pessoa por pessoa.{% endblock %}
+{% block fin_acoes %}<a class="fin-btn fin-btn-claro" href="{% url 'financeiro:fechamento' %}"><i class="fas fa-arrow-left"></i>Voltar ao fechamento</a>{% endblock %}
+
+{% block fin_conteudo %}
+<div class="grid sm:grid-cols-2 gap-4 mb-4">
+    <div class="fin-card p-4"><span class="fin-chip st-QUITADO"><i class="fas fa-user-gear text-[10px]"></i>Gestor</span>
+        <p class="text-sm text-gray-600 mt-2">Vê <b>todas as lojas</b>, preenche e corrige o fechamento dentro do prazo e bloqueia ou desbloqueia o dia.</p></div>
+    <div class="fin-card p-4"><span class="fin-chip st-ABERTO"><i class="fas fa-eye text-[10px]"></i>Visualizador</span>
+        <p class="text-sm text-gray-600 mt-2">Vê <b>uma loja só</b>, a que você escolher. Só leitura.</p></div>
+</div>
+
+<section class="fin-card mb-4">
+    <div class="fin-cab"><h2><i class="fas fa-user-plus text-emerald-600 mr-1"></i>Liberar</h2></div>
+    <form method="post" class="p-4 grid gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.5fr)_auto] items-end" id="fchNovo">{% csrf_token %}
+        <input type="hidden" name="acao" value="adicionar">
+        <label class="block"><span class="text-xs font-semibold text-gray-500">Pessoa</span>
+            <select name="user" class="fin-input" required><option value="">Escolha…</option>
+                {% for u in usuarios %}<option value="{{ u.id }}">{{ u.get_full_name|default:u.username }}{% if u.sector %} · {{ u.sector.name }}{% endif %}</option>{% endfor %}</select></label>
+        <label class="block"><span class="text-xs font-semibold text-gray-500">Papel</span>
+            <select name="papel" class="fin-input" data-papel>{% for v, r in papeis %}<option value="{{ v }}" {% if v == 'VISUALIZADOR' %}selected{% endif %}>{{ r }}</option>{% endfor %}</select></label>
+        <label class="block" data-so-visualizador><span class="text-xs font-semibold text-gray-500">Loja</span>
+            <select name="loja" class="fin-input"><option value="">Escolha a loja…</option>
+                {% for l in lojas %}<option value="{{ l.id }}">{{ l.name }}</option>{% endfor %}</select></label>
+        <button class="fin-btn fin-btn-verde"><i class="fas fa-check"></i>Liberar</button>
+    </form>
+</section>
+
+<section class="fin-card">
+    <div class="fin-cab"><h2>Liberados ({{ acessos|length }})</h2></div>
+    {% if acessos %}
+    <div class="overflow-x-auto">
+    <table class="fin-tabela">
+        <thead><tr><th>Pessoa</th><th>Papel e loja</th><th style="width:60px"></th></tr></thead>
+        <tbody>
+        {% for a in acessos %}
+        <tr>
+            <td><strong>{{ a.user.get_full_name|default:a.user.username }}</strong>{% if a.user.sector %}<div class="text-xs text-gray-500">{{ a.user.sector.name }}</div>{% endif %}</td>
+            <td>
+                <form method="post" class="flex gap-2 flex-wrap items-center">{% csrf_token %}
+                    <input type="hidden" name="acao" value="salvar"><input type="hidden" name="user" value="{{ a.user_id }}">
+                    <select name="papel" class="fin-input !w-auto" data-papel>{% for v, r in papeis %}<option value="{{ v }}" {% if a.papel == v %}selected{% endif %}>{{ r }}</option>{% endfor %}</select>
+                    <select name="loja" class="fin-input !w-auto" data-so-visualizador><option value="">Escolha a loja…</option>
+                        {% for l in lojas %}<option value="{{ l.id }}" {% if a.loja_id == l.id %}selected{% endif %}>{{ l.name }}</option>{% endfor %}</select>
+                    <button class="fin-btn fin-btn-claro"><i class="fas fa-floppy-disk"></i>Salvar</button>
+                </form>
+            </td>
+            <td><form method="post" data-fin-confirmar="Tirar o acesso de {{ a.user.get_full_name }}?">{% csrf_token %}<input type="hidden" name="acesso" value="{{ a.id }}">
+                <button class="fin-btn fin-btn-icone" name="acao" value="remover" title="Remover" aria-label="Remover"><i class="fas fa-trash"></i></button></form></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+    {% else %}<div class="fin-vazio">Por enquanto só o SUPERADMIN vê o Fechamento de caixa.</div>{% endif %}
+</section>
+{% endblock %}
+
+{% block extra_js %}{{ block.super }}
+<script>
+document.querySelectorAll('form').forEach(function (f) {
+    const papel = f.querySelector('[data-papel]'), loja = f.querySelector('[data-so-visualizador]');
+    if (!papel || !loja) return;
+    function ajustar() { const v = papel.value === 'VISUALIZADOR'; loja.hidden = !v; const s = loja.tagName === 'SELECT' ? loja : loja.querySelector('select'); s.required = v; }
+    papel.addEventListener('change', ajustar); ajustar();
+});
+</script>
+{% endblock %}

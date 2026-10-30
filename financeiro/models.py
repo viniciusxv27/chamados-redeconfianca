@@ -17,6 +17,7 @@ Como o dinheiro anda aqui:
   mudança — nada no módulo muda sem passar por ele.
 """
 import uuid
+from datetime import time
 from decimal import Decimal
 
 from django.conf import settings
@@ -411,6 +412,7 @@ class LogFinanceiro(models.Model):
         ('BAIXAR', 'Baixou'), ('ESTORNAR', 'Estornou'), ('EDITAR_BAIXA', 'Editou a baixa'),
         ('IMPORTAR', 'Importou'), ('CONCILIAR', 'Conciliou'), ('DESCONCILIAR', 'Desfez a conciliação'),
         ('ACESSO', 'Mudou acessos'), ('EXPORTAR', 'Exportou'), ('MANIFESTAR', 'Manifestou nota'),
+        ('BLOQUEAR', 'Bloqueou'), ('DESBLOQUEAR', 'Desbloqueou'),
     ]
 
     quando = models.DateTimeField(default=timezone.now, db_index=True, verbose_name='Quando')
@@ -440,3 +442,94 @@ class LogFinanceiro(models.Model):
 
     def __str__(self):
         return f'{self.quando:%d/%m/%Y %H:%M} · {self.usuario_nome} · {self.descricao}'
+
+
+# ── Fechamento de caixa (30/10/2026) ────────────────────────────────────────
+class ConfiguracaoFechamento(models.Model):
+    """Registro único: o prazo do fechamento e se ele trava as alterações."""
+
+    travar_apos_prazo = models.BooleanField(
+        default=True, verbose_name='Bloquear alterações depois do prazo',
+        help_text='Ligado, o fechamento do dia só muda até a hora limite do dia seguinte (o SUPERADMIN continua podendo).')
+    hora_limite = models.TimeField(default=time(10, 0), verbose_name='Hora limite do dia seguinte')
+    atualizado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                       related_name='+')
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Configuração do fechamento de caixa'
+        verbose_name_plural = 'Configuração do fechamento de caixa'
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def atual(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+
+class AcessoFechamento(models.Model):
+    """Liberação individual do Fechamento de caixa (só o SUPERADMIN mexe).
+
+    Gestor: todas as lojas, preenche, edita e bloqueia. Visualizador: só a loja
+    escolhida, só leitura.
+    """
+
+    GESTOR = 'GESTOR'
+    VISUALIZADOR = 'VISUALIZADOR'
+    PAPEIS = [(GESTOR, 'Gestor · todas as lojas'), (VISUALIZADOR, 'Visualizador · uma loja')]
+
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+                                related_name='acesso_fechamento', verbose_name='Pessoa')
+    papel = models.CharField(max_length=12, choices=PAPEIS, default=VISUALIZADOR, verbose_name='Papel')
+    loja = models.ForeignKey('users.Sector', on_delete=models.CASCADE, null=True, blank=True, related_name='+',
+                             verbose_name='Loja (visualizador)')
+    liberado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                     related_name='+')
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Acesso ao fechamento de caixa'
+        verbose_name_plural = 'Acessos ao fechamento de caixa'
+
+    def __str__(self):
+        return f'{self.user} — {self.get_papel_display()}'
+
+
+class FechamentoCaixa(models.Model):
+    """O fechamento do caixa de uma loja num dia."""
+
+    loja = models.ForeignKey('users.Sector', on_delete=models.CASCADE, related_name='+', verbose_name='Loja')
+    data = models.DateField(db_index=True, verbose_name='Dia')
+    entradas = _dinheiro(default=Decimal('0'), verbose_name='Entradas')
+    sangrias = _dinheiro(default=Decimal('0'), verbose_name='Sangrias')
+    caixa_fisico = _dinheiro(null=True, blank=True, verbose_name='Contagem do caixa físico')
+    agoracred = _dinheiro(default=Decimal('0'), verbose_name='AgoraCred')
+    renova_allied_qtd = models.PositiveIntegerField(default=0, verbose_name='Renova Allied (quantidade)')
+    observacao = models.TextField(blank=True, verbose_name='Observação')
+    bloqueado = models.BooleanField(default=False, verbose_name='Bloqueado')
+    bloqueado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                      related_name='+')
+    bloqueado_em = models.DateTimeField(null=True, blank=True)
+    criado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name='+')
+    atualizado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                       related_name='+')
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    CAMPOS = ('entradas', 'sangrias', 'caixa_fisico', 'agoracred', 'renova_allied_qtd', 'observacao')
+
+    class Meta:
+        verbose_name = 'Fechamento de caixa'
+        verbose_name_plural = 'Fechamentos de caixa'
+        ordering = ['-data', 'loja__name']
+        constraints = [models.UniqueConstraint(fields=['loja', 'data'], name='fin_fechamento_loja_dia')]
+
+    def __str__(self):
+        return f'Fechamento {self.loja} {self.data:%d/%m/%Y}'
+
+    def retrato(self):
+        return {c: (str(getattr(self, c)) if getattr(self, c) is not None else None) for c in self.CAMPOS}

@@ -1,0 +1,201 @@
+{% extends 'financeiro/base_financeiro.html' %}
+{% load caixa_tags %}
+{% block fin_titulo %}Fechamento de caixa{% endblock %}
+{% block fin_cabecalho %}Fechamento de caixa{% endblock %}
+{% block fin_subtitulo %}{{ dia|date:"l, d/m/Y" }} · entradas, sangrias, caixa físico, AgoraCred e Renova Allied{% endblock %}
+{% block fin_css %}
+<style>
+    .fch-nav { display:flex; align-items:center; gap:.35rem; }
+    .fch-nav input { width:auto; }
+    .fch-faixa { display:flex; align-items:center; gap:.9rem; flex-wrap:wrap; padding:.9rem 1rem; border-radius:1rem; border:1px solid; }
+    .fch-faixa.aberto { background:#ECFDF5; border-color:#A7F3D0; color:#065F46; }
+    .fch-faixa.vencido { background:#FEF2F2; border-color:#FECACA; color:#991B1B; }
+    .fch-faixa.futuro { background:var(--fin-sup-2); border-color:var(--fin-borda); color:var(--fin-texto-2); }
+    html.dark .fch-faixa.aberto { background:rgba(16,185,129,.12); border-color:rgba(16,185,129,.3); color:#6EE7B7; }
+    html.dark .fch-faixa.vencido { background:rgba(239,68,68,.12); border-color:rgba(239,68,68,.3); color:#FCA5A5; }
+    .fch-faixa .ic { width:40px; height:40px; border-radius:12px; display:grid; place-items:center; background:rgba(255,255,255,.6); font-size:1.05rem; flex-shrink:0; }
+    html.dark .fch-faixa .ic { background:rgba(255,255,255,.06); }
+    .fch-trava { margin-left:auto; display:flex; align-items:center; gap:.6rem; flex-wrap:wrap; }
+    .fch-switch { position:relative; width:46px; height:26px; border-radius:999px; border:0; cursor:pointer; background:#D1D5DB; transition:background .2s; flex-shrink:0; }
+    .fch-switch::after { content:''; position:absolute; top:3px; left:3px; width:20px; height:20px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.25); transition:transform .2s; }
+    .fch-switch[aria-checked="true"] { background:#059669; }
+    .fch-switch[aria-checked="true"]::after { transform:translateX(20px); }
+    .fch-resumo { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:.75rem; }
+    .fch-resumo .fin-card { padding:.85rem 1rem; }
+    .fch-resumo b { display:block; font-size:1.5rem; font-weight:800; color:var(--fin-texto); line-height:1.1; }
+    .fch-resumo span { font-size:.75rem; color:var(--fin-texto-3); }
+    .fch-loja { overflow:hidden; }
+    .fch-loja[data-estado="bloqueado"] { border-color:#FCD34D; }
+    .fch-campos { display:grid; grid-template-columns:repeat(5, minmax(0, 1fr)); gap:.75rem; padding:1rem; }
+    .fch-campo label { display:block; font-size:11px; font-weight:700; letter-spacing:.03em; text-transform:uppercase; color:var(--fin-texto-3); margin-bottom:.3rem; }
+    .fch-campo .fin-input { text-align:right; font-variant-numeric:tabular-nums; }
+    .fch-sug { display:inline-flex; align-items:center; gap:.3rem; margin-top:.3rem; font-size:11px; color:var(--fin-texto-3); background:none; border:0; padding:0; cursor:pointer; }
+    .fch-sug:hover { color:#059669; }
+    .fch-sug.difere { color:#B45309; font-weight:600; }
+    html.dark .fch-sug.difere { color:#FCD34D; }
+    .fch-valor { font-size:1.05rem; font-weight:700; color:var(--fin-texto); font-variant-numeric:tabular-nums; }
+    .fch-rodape { display:flex; align-items:center; gap:.6rem; flex-wrap:wrap; padding:0 1rem 1rem; }
+    .fch-rodape .fin-input { flex:1; min-width:220px; }
+    .fch-quem { font-size:11.5px; color:var(--fin-texto-3); }
+    .st-BLOQUEADO { background:#FEF3C7; color:#92400E; } html.dark .st-BLOQUEADO { background:rgba(245,158,11,.18); color:#FCD34D; }
+    .st-PREENCHIDO { background:#DCFCE7; color:#166534; } html.dark .st-PREENCHIDO { background:rgba(34,197,94,.18); color:#86EFAC; }
+    .st-FALTA { background:#F4F4F5; color:#52525B; } html.dark .st-FALTA { background:rgba(161,161,170,.16); color:#D4D4D8; }
+    @media (max-width: 1024px) { .fch-campos { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 560px) { .fch-campos, .fch-resumo { grid-template-columns:1fr; } .fch-trava { margin-left:0; } }
+</style>
+{% endblock %}
+
+{% block fin_acoes %}
+<form method="get" class="fch-nav">
+    <a class="fin-btn fin-btn-claro fin-btn-icone" href="?data={{ dia_anterior|date:'Y-m-d' }}" aria-label="Dia anterior"><i class="fas fa-chevron-left"></i></a>
+    <input type="date" name="data" value="{{ dia|date:'Y-m-d' }}" max="{{ hoje|date:'Y-m-d' }}" class="fin-input" onchange="this.form.submit()" aria-label="Dia">
+    {% if dia < hoje %}<a class="fin-btn fin-btn-claro fin-btn-icone" href="?data={{ dia_seguinte|date:'Y-m-d' }}" aria-label="Dia seguinte"><i class="fas fa-chevron-right"></i></a>{% endif %}
+</form>
+{% if e_superadmin %}<a class="fin-btn fin-btn-claro" href="{% url 'financeiro:fechamento_acessos' %}"><i class="fas fa-user-shield"></i>Quem acessa</a>{% endif %}
+{% endblock %}
+
+{% block fin_conteudo %}
+<div class="fch-faixa {{ estado_dia }} mb-4">
+    <span class="ic"><i class="fas {% if estado_dia == 'vencido' %}fa-lock{% else %}fa-clock{% endif %}"></i></span>
+    <div>
+        {% if estado_dia == 'futuro' %}
+        <strong>Este dia ainda não terminou.</strong><div class="text-sm">O fechamento abre no próprio dia.</div>
+        {% elif estado_dia == 'vencido' %}
+        <strong>Prazo encerrado em {{ prazo|date:"d/m \à\s H:i" }}.</strong>
+        <div class="text-sm">O fechamento de {{ dia|date:"d/m" }} não pode mais ser alterado{% if papel == 'SUPERADMIN' %} — só você, como SUPERADMIN, ainda consegue{% endif %}.</div>
+        {% else %}
+        <strong>Aberto para conferência até {{ prazo|date:"d/m \à\s H:i" }}.</strong>
+        <div class="text-sm">{% if config.travar_apos_prazo %}Depois disso o dia trava sozinho.{% elif prazo_passou %}O prazo já passou, mas o bloqueio depois do prazo está desligado: o dia continua editável.{% else %}O bloqueio depois do prazo está desligado: o dia continua editável.{% endif %}</div>
+        {% endif %}
+    </div>
+    <div class="fch-trava">
+        {% if e_superadmin %}
+        <form method="post" action="{% url 'financeiro:fechamento_config' %}" class="flex items-center gap-2">{% csrf_token %}
+            <input type="hidden" name="voltar" value="{{ request.get_full_path }}">
+            <input type="hidden" name="travar_apos_prazo" value="{% if config.travar_apos_prazo %}0{% else %}1{% endif %}">
+            <button type="submit" class="fch-switch" role="switch" aria-checked="{% if config.travar_apos_prazo %}true{% else %}false{% endif %}" aria-label="Bloquear alterações depois do prazo"></button>
+            <span class="text-sm font-semibold">Bloquear após {{ config.hora_limite|time:"H:i" }} do dia seguinte</span>
+        </form>
+        {% else %}
+        <span class="fin-chip {% if config.travar_apos_prazo %}st-BLOQUEADO{% else %}st-FALTA{% endif %}"><i class="fas fa-lock text-[10px]"></i>Bloqueio após o prazo {% if config.travar_apos_prazo %}ligado{% else %}desligado{% endif %}</span>
+        {% endif %}
+    </div>
+</div>
+
+{% if linhas|length > 1 %}
+<div class="fch-resumo mb-4">
+    <div class="fin-card"><b>{{ preenchidos }}<span style="font-size:1rem"> / {{ linhas|length }}</span></b><span>lojas com fechamento</span></div>
+    <div class="fin-card"><b>{{ bloqueados }}</b><span>bloqueada{{ bloqueados|pluralize }} manualmente</span></div>
+    <div class="fin-card"><label class="fin-busca block"><i class="fas fa-magnifying-glass"></i><input type="search" class="fin-input" placeholder="Procurar loja…" data-fin-filtrar="#fchLojas" aria-label="Procurar loja"></label></div>
+</div>
+{% endif %}
+
+{% if not linhas %}
+<div class="fin-card fin-vazio">Nenhuma loja para mostrar.</div>
+{% endif %}
+
+<div class="space-y-4" id="fchLojas">
+{% for l in linhas %}
+<section class="fin-card fch-loja" data-estado="{{ l.estado }}" data-fin-busca="{{ l.loja.name }}">
+    <div class="fin-cab">
+        <h2 class="flex items-center gap-2"><i class="fas fa-store text-emerald-600 text-xs"></i>{{ l.loja.name }}</h2>
+        <div class="flex items-center gap-2 flex-wrap justify-end">
+            {% if l.f.bloqueado %}<span class="fin-chip st-BLOQUEADO"><i class="fas fa-lock text-[10px]"></i>Bloqueado{% if l.f.bloqueado_por %} por {{ l.f.bloqueado_por.first_name|title }}{% endif %}</span>
+            {% elif l.estado == 'vencido' %}<span class="fin-chip st-VENCIDO">Prazo encerrado</span>
+            {% elif l.f %}<span class="fin-chip st-PREENCHIDO">Preenchido</span>
+            {% else %}<span class="fin-chip st-FALTA">A preencher</span>{% endif %}
+            {% if pode_editar and l.estado != 'futuro' %}
+            <form method="post" action="{% url 'financeiro:fechamento_bloquear' %}" {% if not l.f.bloqueado %}data-fin-confirmar="Bloquear o fechamento da {{ l.loja.name }} de {{ dia|date:'d/m' }}? Ninguém além do SUPERADMIN e dos gestores consegue desbloquear."{% endif %}>{% csrf_token %}
+                <input type="hidden" name="loja" value="{{ l.loja.id }}"><input type="hidden" name="data" value="{{ dia|date:'Y-m-d' }}">
+                {% if l.f.bloqueado %}<button class="fin-btn fin-btn-claro" name="acao" value="desbloquear"><i class="fas fa-lock-open"></i>Desbloquear</button>
+                {% else %}<button class="fin-btn fin-btn-claro" name="acao" value="bloquear"><i class="fas fa-lock"></i>Bloquear</button>{% endif %}
+            </form>
+            {% endif %}
+        </div>
+    </div>
+    {% if l.pode_alterar %}
+    <form method="post" action="{% url 'financeiro:fechamento_salvar' %}">{% csrf_token %}
+        <input type="hidden" name="loja" value="{{ l.loja.id }}"><input type="hidden" name="data" value="{{ dia|date:'Y-m-d' }}">
+        <div class="fch-campos">
+            <div class="fch-campo"><label for="e{{ l.loja.id }}">Entradas</label>
+                <input id="e{{ l.loja.id }}" name="entradas" class="fin-input" inputmode="decimal" value="{% if l.f %}{{ l.f.entradas|floatformat:2 }}{% endif %}" placeholder="0,00">
+                {% if l.sug.entradas is not None %}<button type="button" class="fch-sug" data-para="e{{ l.loja.id }}" data-valor="{{ l.sug.entradas|floatformat:2 }}"><i class="fas fa-wand-magic-sparkles"></i>Contagem: {{ l.sug.entradas|brl_zero }}</button>{% endif %}</div>
+            <div class="fch-campo"><label for="s{{ l.loja.id }}">Sangrias</label>
+                <input id="s{{ l.loja.id }}" name="sangrias" class="fin-input" inputmode="decimal" value="{% if l.f %}{{ l.f.sangrias|floatformat:2 }}{% endif %}" placeholder="0,00">
+                {% if l.sug.sangrias is not None %}<button type="button" class="fch-sug" data-para="s{{ l.loja.id }}" data-valor="{{ l.sug.sangrias|floatformat:2 }}"><i class="fas fa-wand-magic-sparkles"></i>Registradas: {{ l.sug.sangrias|brl_zero }}</button>{% endif %}</div>
+            <div class="fch-campo"><label for="c{{ l.loja.id }}">Caixa físico (contado)</label>
+                <input id="c{{ l.loja.id }}" name="caixa_fisico" class="fin-input" inputmode="decimal" value="{% if l.f and l.f.caixa_fisico is not None %}{{ l.f.caixa_fisico|floatformat:2 }}{% endif %}" placeholder="0,00">
+                {% if l.sug.caixa_fisico is not None %}<button type="button" class="fch-sug" data-para="c{{ l.loja.id }}" data-valor="{{ l.sug.caixa_fisico|floatformat:2 }}"><i class="fas fa-wand-magic-sparkles"></i>Valor real: {{ l.sug.caixa_fisico|brl_zero }}</button>{% endif %}</div>
+            <div class="fch-campo"><label for="a{{ l.loja.id }}">AgoraCred</label>
+                <input id="a{{ l.loja.id }}" name="agoracred" class="fin-input" inputmode="decimal" value="{% if l.f %}{{ l.f.agoracred|floatformat:2 }}{% endif %}" placeholder="0,00">
+                {% if l.sug.agoracred is not None %}<button type="button" class="fch-sug" data-para="a{{ l.loja.id }}" data-valor="{{ l.sug.agoracred|floatformat:2 }}"><i class="fas fa-wand-magic-sparkles"></i>Contagem: {{ l.sug.agoracred|brl_zero }}</button>{% endif %}</div>
+            <div class="fch-campo"><label for="r{{ l.loja.id }}">Renova Allied (qtd.)</label>
+                <input id="r{{ l.loja.id }}" name="renova_allied_qtd" class="fin-input" inputmode="numeric" pattern="[0-9]*" value="{% if l.f %}{{ l.f.renova_allied_qtd }}{% endif %}" placeholder="0">
+                <button type="button" class="fch-sug" data-para="r{{ l.loja.id }}" data-valor="{{ l.sug.renova_allied_qtd }}"><i class="fas fa-wand-magic-sparkles"></i>Vendas: {{ l.sug.renova_allied_qtd }}</button></div>
+        </div>
+        <div class="fch-rodape">
+            <input name="observacao" class="fin-input" maxlength="2000" value="{{ l.f.observacao|default:'' }}" placeholder="Observação (opcional)">
+            <button type="button" class="fin-btn fin-btn-claro" data-usar-sistema><i class="fas fa-wand-magic-sparkles"></i>Usar valores do sistema</button>
+            <button class="fin-btn fin-btn-verde"><i class="fas fa-floppy-disk"></i>Salvar</button>
+        </div>
+    </form>
+    {% else %}
+    <div class="fch-campos">
+        <div class="fch-campo"><label>Entradas</label><div class="fch-valor">{% if l.f %}{{ l.f.entradas|brl_zero }}{% else %}—{% endif %}</div></div>
+        <div class="fch-campo"><label>Sangrias</label><div class="fch-valor">{% if l.f %}{{ l.f.sangrias|brl_zero }}{% else %}—{% endif %}</div></div>
+        <div class="fch-campo"><label>Caixa físico</label><div class="fch-valor">{% if l.f and l.f.caixa_fisico is not None %}{{ l.f.caixa_fisico|brl_zero }}{% else %}—{% endif %}</div></div>
+        <div class="fch-campo"><label>AgoraCred</label><div class="fch-valor">{% if l.f %}{{ l.f.agoracred|brl_zero }}{% else %}—{% endif %}</div></div>
+        <div class="fch-campo"><label>Renova Allied (qtd.)</label><div class="fch-valor">{% if l.f %}{{ l.f.renova_allied_qtd }}{% else %}—{% endif %}</div></div>
+    </div>
+    {% if l.f.observacao %}<p class="px-4 pb-3 text-sm text-gray-600"><i class="far fa-comment mr-1"></i>{{ l.f.observacao }}</p>{% endif %}
+    {% endif %}
+    {% if l.f %}<p class="fch-quem px-4 pb-3">Atualizado {{ l.f.atualizado_em|date:"d/m H:i" }}{% if l.f.atualizado_por %} por {{ l.f.atualizado_por.get_full_name }}{% endif %}</p>{% endif %}
+</section>
+{% endfor %}
+</div>
+
+{% if historico %}
+<section class="fin-card mt-5">
+    <div class="fin-cab"><h2>Últimos fechamentos · {{ linhas.0.loja.name }}</h2></div>
+    <div class="overflow-x-auto">
+    <table class="fin-tabela">
+        <thead><tr><th>Dia</th><th class="text-right">Entradas</th><th class="text-right">Sangrias</th><th class="text-right">Caixa físico</th><th class="text-right">AgoraCred</th><th class="text-right">Allied</th><th></th></tr></thead>
+        <tbody>
+        {% for h in historico %}
+        <tr><td><a class="font-semibold text-emerald-700" href="?data={{ h.data|date:'Y-m-d' }}">{{ h.data|date:"d/m/Y" }}</a></td>
+            <td class="text-right tabular">{{ h.entradas|brl_zero }}</td><td class="text-right tabular">{{ h.sangrias|brl_zero }}</td>
+            <td class="text-right tabular">{% if h.caixa_fisico is not None %}{{ h.caixa_fisico|brl_zero }}{% else %}—{% endif %}</td>
+            <td class="text-right tabular">{{ h.agoracred|brl_zero }}</td><td class="text-right tabular">{{ h.renova_allied_qtd }}</td>
+            <td>{% if h.bloqueado %}<span class="fin-chip st-BLOQUEADO">Bloqueado</span>{% endif %}</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+</section>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}{{ block.super }}
+<script>
+(function () {
+    // "1.234,56" e "1234.56" valem o mesmo número.
+    function num(v) { v = String(v || '').replace(/R\$|\s/g, ''); if (v.indexOf(',') >= 0) v = v.replace(/\./g, '').replace(',', '.'); return Number(v); }
+    // A sugestão fica em destaque quando o valor digitado é diferente do que o sistema registrou.
+    function marcar(b) {
+        const campo = document.getElementById(b.dataset.para);
+        b.classList.toggle('difere', campo.value.trim() !== '' && num(campo.value) !== num(b.dataset.valor));
+    }
+    document.querySelectorAll('.fch-sug').forEach(function (b) {
+        b.title = 'Usar este valor';
+        b.addEventListener('click', function () { const c = document.getElementById(b.dataset.para); c.value = b.dataset.valor; c.dispatchEvent(new Event('input')); });
+        document.getElementById(b.dataset.para).addEventListener('input', function () { marcar(b); });
+        marcar(b);
+    });
+    document.querySelectorAll('[data-usar-sistema]').forEach(function (b) {
+        b.addEventListener('click', function () {
+            b.closest('form').querySelectorAll('.fch-sug').forEach(function (s) { const c = document.getElementById(s.dataset.para); c.value = s.dataset.valor; c.dispatchEvent(new Event('input')); });
+        });
+    });
+})();
+</script>
+{% endblock %}

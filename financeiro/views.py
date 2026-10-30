@@ -88,7 +88,12 @@ def _contexto_base(request, aba):
         'pagar.ver', 'pagar.editar', 'pagar.cancelar', 'receber.ver', 'receber.editar', 'receber.cancelar',
         'baixas.baixar', 'baixas.estornar', 'bancos.ver', 'bancos.editar', 'bancos.lancar', 'conciliacao.ver',
         'conciliacao.conciliar', 'cartoes.ver', 'cartoes.conciliar', 'plano.ver', 'plano.editar', 'auditoria.ver',
-        'caixa.ver')}, 'pode_baixas': pode(user, 'baixas')}
+        'caixa.ver')}, 'pode_baixas': pode(user, 'baixas'), 'pode_fechamento': _pode_ver_fechamento(user)}
+
+
+def _pode_ver_fechamento(user):
+    from .fechamento import pode_ver
+    return pode_ver(user)
 
 
 def _formulario_basico(request, tipo=None):
@@ -140,6 +145,9 @@ def _projecao(titulos, hoje, ve_pagar, ve_receber):
 @login_required
 @exige()
 def painel(request):
+    from .permissoes import chaves_de
+    if not e_superadmin(request.user) and not chaves_de(request.user):
+        return redirect('financeiro:fechamento')            # só tem o Fechamento de caixa
     hoje = timezone.localdate()
     semana = hoje + timedelta(days=7)
     user = request.user

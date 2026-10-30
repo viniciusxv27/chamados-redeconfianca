@@ -89,7 +89,10 @@ def pode(user, chave):
 
 
 def pode_entrar(user):
-    return e_superadmin(user) or bool(chaves_de(user))
+    if e_superadmin(user) or bool(chaves_de(user)):
+        return True
+    from .fechamento import pode_ver                       # quem só tem o Fechamento de caixa
+    return pode_ver(user)
 
 
 def lojas_permitidas(user):
