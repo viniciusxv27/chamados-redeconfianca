@@ -290,8 +290,14 @@ def _metas_do_kanban(request):
     f = filtros_impulso.ler(request, mes_padrao=filtros_impulso.mes_atual())
     metas = filtros_impulso.por(metas, f, ['colaborador', 'gestor'])
     # O mês corta pelo prazo: a pergunta do Kanban é "o que vence quando",
-    # não "o que foi cadastrado quando".
-    metas = filtros_impulso.por_mes(metas, f, 'prazo')
+    # não "o que foi cadastrado quando". No mês corrente entra também o que está
+    # em aberto com prazo depois do fim do mês: o seletor não oferece meses à
+    # frente, e a meta criada hoje para a semana que vem sumia de todo Kanban (30/10/2026).
+    if f['inicio'] and f['mes'] == filtros_impulso.mes_atual():
+        metas = metas.filter(Q(prazo__gte=f['inicio'], prazo__lte=f['fim'])
+                             | (Q(prazo__gt=f['fim']) & ~Q(status=Meta.Status.CONCLUIDA)))
+    else:
+        metas = filtros_impulso.por_mes(metas, f, 'prazo')
     return metas, f, colaborador_id
 
 

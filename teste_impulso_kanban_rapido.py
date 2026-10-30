@@ -241,5 +241,22 @@ if comm:
     t('a original continua com os dela', Meta.objects.get(pk=comm.pk).descricao_audio.name == comm.descricao_audio.name)
     t('a edição vira comentário', MetaComentario.objects.filter(meta=alvo2, mensagem__icontains='foto/áudio').exists())
 
+print('Prazo no mês que vem (30/10/2026: metas 4441/4442 sumiam do Kanban)')
+fim_do_mes = (hoje.replace(day=28) + datetime.timedelta(days=4)).replace(day=1) - datetime.timedelta(days=1)
+depois = fim_do_mes + datetime.timedelta(days=5)
+futura = meta('ZZK prazo no mês que vem', prazo=depois)
+futura_feita = meta('ZZK concluída no mês que vem', status=Meta.Status.CONCLUIDA, prazo=depois, nota_qualidade=4, nota_prazo=4)
+antiga = meta('ZZK de dois meses atrás', prazo=hoje.replace(day=1) - datetime.timedelta(days=40))
+for cliente, quem in ((cs, 'quem criou'), (cg, 'o gestor'), (ca, 'o responsável')):
+    h = cliente.get('/impulso/metas/').content.decode()
+    t(f'{quem}: a meta em aberto com prazo no mês que vem aparece no mês atual', 'ZZK prazo no mês que vem' in h)
+h = cs.get('/impulso/metas/').content.decode()
+t('a concluída do mês que vem não entra no mês atual', 'ZZK concluída no mês que vem' not in h)
+t('o corte do mês continua para o passado', 'ZZK de dois meses atrás' not in h)
+mes_passado = (hoje.replace(day=1) - datetime.timedelta(days=1)).strftime('%Y-%m')
+t('escolhendo o mês passado, a do mês que vem não aparece', 'ZZK prazo no mês que vem' not in cs.get('/impulso/metas/', {'mes': mes_passado}).content.decode())
+t('"Todos os meses" mostra as duas', all(x in cs.get('/impulso/metas/', {'mes': ''}).content.decode()
+                                         for x in ('ZZK prazo no mês que vem', 'ZZK de dois meses atrás')))
+
 print(f'\n{ok} OK, {fail} falha(s)')
 sys.exit(1 if fail else 0)
