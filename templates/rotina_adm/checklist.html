@@ -1,0 +1,80 @@
+{% extends 'rotina_adm/_base.html' %}
+{% block ra_titulo %}Check-list das lojas{% endblock %}
+{% block ra_conteudo %}
+<header class="ra-topo">
+    <div class="ra-titulo"><span class="ra-escudo"><i class="fas fa-list-check"></i></span>
+        <div><h1>Check-list das lojas</h1><p>Monte a lista diária de cada loja ou copie a de outra.</p></div></div>
+    <a class="ra-botao" href="{% url 'rotina_adm:painel' %}?loja={{ loja.id }}"><i class="fas fa-arrow-left"></i>Voltar para a central</a>
+</header>
+
+<div class="ra-grade-baixo" style="grid-template-columns: minmax(0, 4fr) minmax(0, 8fr)">
+    <aside class="ra-card ra-secao">
+        <div class="ra-secao-titulo" style="margin-bottom:10px"><div><h2>Lojas</h2><p>Quantos itens cada uma tem</p></div></div>
+        <div style="display:flex;flex-direction:column;gap:2px;max-height:520px;overflow:auto">
+            {% for l, n in lojas %}
+            <a href="?loja={{ l.id }}" class="ra-chamado" style="padding:8px 10px;border-radius:10px;border:0;{% if l.id == loja.id %}background:var(--ra-roxo-claro){% endif %}">
+                <span class="meio"><strong style="{% if l.id == loja.id %}color:var(--ra-roxo){% endif %}">{{ l.name }}</strong></span>
+                <span class="ra-selo {% if n %}verde{% else %}cinza{% endif %}">{{ n }} ite{{ n|pluralize:"m,ns" }}</span>
+            </a>
+            {% endfor %}
+        </div>
+    </aside>
+
+    <div>
+        <section class="ra-card ra-secao">
+            <div class="ra-secao-cabeca">
+                <div class="ra-secao-titulo"><span class="ic" style="background:var(--ra-verde-claro);color:var(--ra-verde)"><i class="fas fa-store"></i></span>
+                    <div><h2>{{ loja.name }}</h2><p>{{ itens|length }} ite{{ itens|length|pluralize:"m,ns" }} no check-list diário</p></div></div>
+            </div>
+            {% if itens %}
+            <table class="ra-tabela">
+                <thead><tr><th style="width:56px">Ordem</th><th>Item</th><th style="width:130px">Até que horas</th><th style="width:120px"></th></tr></thead>
+                <tbody>
+                {% for item in itens %}
+                <tr>
+                    <td>
+                        <form method="post" style="display:flex;gap:2px">{% csrf_token %}<input type="hidden" name="loja" value="{{ loja.id }}"><input type="hidden" name="item" value="{{ item.id }}">
+                            <button class="ra-icone-botao" name="acao" value="subir" title="Subir" {% if forloop.first %}disabled{% endif %}><i class="fas fa-arrow-up"></i></button>
+                            <button class="ra-icone-botao" name="acao" value="descer" title="Descer" {% if forloop.last %}disabled{% endif %}><i class="fas fa-arrow-down"></i></button>
+                        </form>
+                    </td>
+                    <td colspan="3">
+                        <form method="post" style="display:flex;gap:8px;align-items:center">{% csrf_token %}
+                            <input type="hidden" name="loja" value="{{ loja.id }}"><input type="hidden" name="item" value="{{ item.id }}">
+                            <input class="ra-campo" name="titulo" value="{{ item.titulo }}" maxlength="200" style="flex:1;min-width:0" aria-label="Item">
+                            <input class="ra-campo" type="time" name="horario" value="{{ item.horario|time:'H:i' }}" style="width:120px" aria-label="Até que horas">
+                            <button class="ra-icone-botao" name="acao" value="salvar" title="Salvar"><i class="fas fa-floppy-disk"></i></button>
+                            <button class="ra-icone-botao perigo" name="acao" value="remover" title="Remover" onclick="return confirm('Remover este item do check-list da {{ loja.name|escapejs }}?')"><i class="fas fa-trash"></i></button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="ra-vazio"><i class="fas fa-clipboard-list"></i>Esta loja ainda não tem check-list. Adicione itens abaixo ou copie de outra loja.</div>
+            {% endif %}
+            <form method="post" style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">{% csrf_token %}
+                <input type="hidden" name="loja" value="{{ loja.id }}">
+                <input class="ra-campo" name="titulo" maxlength="200" placeholder="Novo item — ex.: Abertura da loja e conferência dos PDVs" style="flex:1;min-width:220px" required>
+                <input class="ra-campo" type="time" name="horario" style="width:120px" title="Até que horas (opcional)">
+                <button class="ra-botao primario" name="acao" value="adicionar"><i class="fas fa-plus"></i>Adicionar</button>
+            </form>
+        </section>
+
+        <section class="ra-card ra-secao">
+            <div class="ra-secao-titulo" style="margin-bottom:12px"><span class="ic" style="background:var(--ra-azul-claro);color:var(--ra-azul)"><i class="fas fa-copy"></i></span>
+                <div><h2>Copiar de outra loja</h2><p>Traz os itens da loja escolhida para a {{ loja.name }}. Item com o mesmo nome não duplica.</p></div></div>
+            <form method="post" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">{% csrf_token %}
+                <input type="hidden" name="loja" value="{{ loja.id }}">
+                <select class="ra-campo" name="origem" required style="min-width:240px">
+                    <option value="">Escolha a loja de origem…</option>
+                    {% for l, n in lojas %}{% if l.id != loja.id and n %}<option value="{{ l.id }}">{{ l.name }} ({{ n }} ite{{ n|pluralize:"m,ns" }})</option>{% endif %}{% endfor %}
+                </select>
+                <label style="display:flex;gap:6px;align-items:center;font-size:13px;color:var(--ra-texto-2)"><input type="checkbox" name="substituir"> Substituir a lista atual</label>
+                <button class="ra-botao primario" name="acao" value="copiar" onclick="return !this.form.substituir.checked || confirm('Os itens atuais da {{ loja.name|escapejs }} saem da lista. Continuar?')"><i class="fas fa-copy"></i>Copiar</button>
+            </form>
+        </section>
+    </div>
+</div>
+{% endblock %}

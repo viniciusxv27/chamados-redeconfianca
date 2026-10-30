@@ -141,6 +141,7 @@ urlpatterns = [
     path('drive/', include('drive.urls')),  # Drive: espelho do Google Drive (fora do menu)
     path('assistente/', include('assistente.urls')),  # Assistente Claude do usuário
     path('renova/', include('renova.urls')),  # Vini Renova (avaliação de aparelho usado)
+    path('rotina-adm/', include('rotina_adm.urls')),  # Rotina ADM (central do ADM de loja)
     path('rotina-gerencial/', include('rotina.urls')),  # Rotina Gerencial
     path('apresentacoes/', include('apresentacoes.urls')),  # Assistente de Apresentações
     path('busca-global/', core_busca.busca_global, name='busca_global'),  # busca do menu superior

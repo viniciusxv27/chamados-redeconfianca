@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}{% block ra_titulo %}Rotina ADM{% endblock %} · Rede Confiança{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'rotina_adm/rotina_adm.css' %}?v=1">{% endblock %}
+{% block content %}
+<div class="ra">
+    {% if gestor %}
+    <nav class="ra-abas">
+        <a href="{% url 'rotina_adm:painel' %}{% if loja %}?loja={{ loja.id }}{% endif %}" class="{% if aba == 'painel' %}ativa{% endif %}"><i class="fas fa-gauge-high mr-1"></i>Central da loja</a>
+        <a href="{% url 'rotina_adm:checklist_editar' %}{% if loja %}?loja={{ loja.id }}{% endif %}" class="{% if aba == 'checklist' %}ativa{% endif %}"><i class="fas fa-list-check mr-1"></i>Check-list das lojas</a>
+        {% if superadmin %}<a href="{% url 'rotina_adm:acessos' %}" class="{% if aba == 'acessos' %}ativa{% endif %}"><i class="fas fa-user-shield mr-1"></i>Acessos</a>{% endif %}
+    </nav>
+    {% endif %}
+    {% if messages %}
+    <div style="margin-bottom:14px">
+        {% for m in messages %}<div class="ra-selo {% if m.tags == 'error' %}vermelho{% else %}verde{% endif %}" style="padding:8px 14px;font-size:13px;border-radius:12px;display:flex">{{ m }}</div>{% endfor %}
+    </div>
+    {% endif %}
+    {% block ra_conteudo %}{% endblock %}
+</div>
+{% endblock %}

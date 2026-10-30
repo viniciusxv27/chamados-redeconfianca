@@ -1,0 +1,220 @@
+{% extends 'rotina_adm/_base.html' %}
+{% block ra_conteudo %}
+<header class="ra-topo">
+    <div class="ra-titulo">
+        <span class="ra-escudo"><i class="fas fa-shield-alt"></i></span>
+        <div><h1>Rotina ADM</h1><p>Central operacional da loja{% if loja %} · {{ loja.name }}{% endif %}</p></div>
+    </div>
+    <div class="ra-acoes">
+        <div class="ra-data">
+            <i class="far fa-calendar"></i>
+            <div>
+                <small>{{ hoje_extenso }}</small>
+                {% if gestor %}
+                <form method="get" id="raFormLoja">
+                    {% if request.GET.pessoa %}<input type="hidden" name="pessoa" value="{{ request.GET.pessoa }}">{% endif %}
+                    <select name="loja" aria-label="Loja" onchange="this.form.submit()">
+                        {% for l in lojas %}<option value="{{ l.id }}" {% if loja and l.id == loja.id %}selected{% endif %}>{{ l.name }}</option>{% endfor %}
+                    </select>
+                </form>
+                {% else %}<strong>{{ loja.name|default:"Sem loja" }}</strong>{% endif %}
+            </div>
+        </div>
+        {% if gestor %}<a class="ra-botao" href="{% url 'rotina_adm:checklist_editar' %}{% if loja %}?loja={{ loja.id }}{% endif %}"><i class="fas fa-list-check"></i>Montar check-list</a>{% endif %}
+    </div>
+</header>
+
+{% if not loja %}
+<div class="ra-card ra-vazio" style="padding:40px"><i class="fas fa-store-slash"></i>
+    Seu setor principal não é uma loja. Peça ao SUPERADMIN para ajustar seu cadastro{% if not gestor %} ou liberar você como Gestor{% endif %}.</div>
+{% else %}
+
+{# ── Indicadores ── #}
+<section class="ra-grade-kpi">
+    <article class="ra-card ra-kpi vermelho">
+        <span class="ra-kpi-icone"><i class="fas fa-bullhorn"></i></span>
+        <div class="ra-kpi-corpo">
+            <div class="ra-kpi-cabeca"><h3>Chamados em aberto da loja</h3>
+                {% if chamados_total %}<button type="button" class="ra-link" data-abrir="raModalChamados">Ver detalhes <i class="fas fa-chevron-right text-[10px]"></i></button>{% endif %}</div>
+            <p class="ra-numero">{{ chamados_total }}</p>
+            <p class="ra-sub">aberto{{ chamados_total|pluralize }} por quem é da {{ loja.name }}</p>
+        </div>
+    </article>
+    <article class="ra-card ra-kpi ambar">
+        <span class="ra-kpi-icone"><i class="fas fa-file-invoice"></i></span>
+        <div class="ra-kpi-corpo">
+            <div class="ra-kpi-cabeca"><h3>Pendências fiscais</h3>
+                {% if fiscal.pdv %}<a class="ra-link" href="{% url 'auditoria_sap:lista' %}?grupo=sem_nf&mes=todos&loja={{ fiscal.pdv|urlencode }}">Ver na Visão SAP <i class="fas fa-chevron-right text-[10px]"></i></a>{% endif %}</div>
+            <p class="ra-numero">{% if fiscal.disponivel %}{{ fiscal.total }}{% else %}—{% endif %}</p>
+            <p class="ra-sub">{% if not fiscal.disponivel %}Visão SAP indisponível agora{% elif not fiscal.pdvs %}loja sem linhas na Visão SAP{% else %}venda{{ fiscal.total|pluralize }} sem NF em aberto · <b>{{ fiscal.mes }}</b> neste mês{% endif %}</p>
+        </div>
+    </article>
+    <article class="ra-card ra-kpi verde">
+        <span class="ra-anel" style="--p: {{ checklist_pct }}"><span>{{ checklist_pct }}%</span></span>
+        <div class="ra-kpi-corpo">
+            <div class="ra-kpi-cabeca"><h3>Check-list de hoje</h3><a class="ra-link" href="#raChecklist">Ir para a lista <i class="fas fa-chevron-down text-[10px]"></i></a></div>
+            <p class="ra-numero">{{ checklist_feitos }}<span style="font-size:20px;color:var(--ra-texto-3)">/{{ checklist|length }}</span></p>
+            <p class="ra-sub">{% if not checklist %}nenhum item montado para a loja{% elif checklist_feitos == checklist|length %}tudo feito hoje 🎉{% else %}ite{{ checklist|length|pluralize:"m,ns" }} concluído{{ checklist|length|pluralize }}{% endif %}</p>
+        </div>
+    </article>
+</section>
+
+{# ── Contagem de estoque LVUT (exemplo) ── #}
+<section class="ra-card ra-secao">
+    <div class="ra-secao-cabeca">
+        <div class="ra-secao-titulo"><span class="ic" style="background:var(--ra-roxo-claro);color:var(--ra-roxo)"><i class="fas fa-cubes"></i></span>
+            <div><h2>Contagem de Estoque LVUT</h2><p>Acompanhe a saúde do estoque por categoria e registre ocorrências.</p></div></div>
+        <span class="ra-selo cinza" title="Os números ainda não vêm de nenhum sistema"><i class="fas fa-flask"></i>Dados de exemplo</span>
+    </div>
+    <div class="ra-lvut">
+        {% for c in lvut %}
+        <div class="ra-lvut-item">
+            <div class="ra-lvut-topo"><span class="ra-lvut-ic {{ c.cor }}"><i class="fas {{ c.icone }}"></i></span>
+                <div><strong>{{ c.nome }}</strong><span class="ra-selo {{ c.tom }}">{{ c.status }}</span></div></div>
+            <div class="ra-barra"><i class="{{ c.tom }}" style="width: {{ c.pct }}%"></i></div>
+            <small>{{ c.nota }}</small>
+        </div>
+        {% endfor %}
+    </div>
+    <div class="ra-faixas">
+        <a class="ra-faixa vermelho" aria-disabled="true" title="Em breve, junto com a contagem LVUT de verdade" onclick="return false" href="#">
+            <span class="ic"><i class="fas fa-exclamation-triangle"></i></span>
+            <div><strong>Informar ocorrência</strong><small>Registrar divergência encontrada na contagem LVUT · em breve</small></div>
+            <span class="seta"><i class="fas fa-arrow-right"></i></span></a>
+        <a class="ra-faixa azul" href="{% url 'ticket_create' %}">
+            <span class="ic"><i class="fas fa-headset"></i></span>
+            <div><strong>Visão suporte / transferência</strong><small>Abrir um chamado para o suporte da loja</small></div>
+            <span class="seta"><i class="fas fa-arrow-right"></i></span></a>
+    </div>
+</section>
+
+<section class="ra-grade-baixo">
+    {# ── Check-list diário ── #}
+    <article class="ra-card ra-secao" id="raChecklist">
+        <div class="ra-secao-cabeca">
+            <div class="ra-secao-titulo"><span class="ic" style="background:var(--ra-verde-claro);color:var(--ra-verde)"><i class="fas fa-list-check"></i></span>
+                <div><h2>Check-list diário da loja</h2><p>{{ hoje|date:"d/m/Y" }} · marque conforme for fazendo</p></div></div>
+            {% if gestor %}<a class="ra-link" href="{% url 'rotina_adm:checklist_editar' %}?loja={{ loja.id }}">Editar itens <i class="fas fa-pen text-[10px]"></i></a>{% endif %}
+        </div>
+        {% if checklist %}
+        <div class="ra-progresso"><div class="ra-barra"><i class="verde" id="raBarraCheck" style="width: {{ checklist_pct }}%"></i></div>
+            <span id="raContaCheck">{{ checklist_feitos }} de {{ checklist|length }}</span></div>
+        <ul class="ra-check" data-total="{{ checklist|length }}">
+            {% for l in checklist %}
+            <li class="{% if l.marcacao %}feito{% endif %}" data-item="{{ l.item.id }}">
+                <button type="button" class="ra-caixa" aria-label="Marcar {{ l.item.titulo }}" {% if not pode_marcar %}disabled{% endif %}><i class="fas fa-check"></i></button>
+                <span class="texto">{{ l.item.titulo }}
+                    <span class="quem">{% if l.marcacao %}feito às {{ l.marcacao.feito_em|time:"H:i" }}{% if l.marcacao.feito_por %} por {{ l.marcacao.feito_por.full_name }}{% endif %}{% endif %}</span></span>
+                {% if l.marcacao %}<span class="ra-selo verde estado">Feito</span>
+                {% elif l.atrasado %}<span class="ra-selo vermelho estado">Atrasado</span>
+                {% else %}<span class="ra-selo amarelo estado">Pendente</span>{% endif %}
+                <span class="hora">{% if l.item.horario %}até {{ l.item.horario|time:"H:i" }}{% endif %}</span>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <div class="ra-vazio"><i class="fas fa-clipboard-list"></i>Nenhum item no check-list da {{ loja.name }}.
+            {% if gestor %}<br><a class="ra-link" href="{% url 'rotina_adm:checklist_editar' %}?loja={{ loja.id }}">Montar agora ou copiar de outra loja</a>{% else %}<br>O gestor ainda não montou a lista.{% endif %}</div>
+        {% endif %}
+    </article>
+
+    {# ── Agenda semanal (Rotina Gerencial) ── #}
+    <article class="ra-card ra-secao">
+        <div class="ra-secao-cabeca">
+            <div class="ra-secao-titulo"><span class="ic" style="background:var(--ra-vermelho-claro);color:var(--ra-vermelho)"><i class="far fa-calendar-days"></i></span>
+                <div><h2>Agenda semanal</h2><p>Da Rotina Gerencial{% if pessoa != request.user %} de {{ pessoa.full_name }}{% endif %}{% if agenda %} · {{ agenda.feitas }} de {{ agenda.total }} concluída{{ agenda.total|pluralize }}{% endif %}</p></div></div>
+            <div class="ra-semana">
+                <a href="?{% if gestor %}loja={{ loja.id }}&{% endif %}{% if request.GET.pessoa %}pessoa={{ request.GET.pessoa }}&{% endif %}semana={{ semana_anterior }}" aria-label="Semana anterior"><i class="fas fa-chevron-left"></i></a>
+                <span>{{ segunda|date:"d/m" }} a {% if agenda %}{{ agenda.fim|date:"d/m/Y" }}{% else %}{{ segunda|date:"Y" }}{% endif %}</span>
+                <a href="?{% if gestor %}loja={{ loja.id }}&{% endif %}{% if request.GET.pessoa %}pessoa={{ request.GET.pessoa }}&{% endif %}semana={{ semana_seguinte }}" aria-label="Próxima semana"><i class="fas fa-chevron-right"></i></a>
+            </div>
+        </div>
+        {% if gestor and pessoas_com_rotina %}
+        <form method="get" style="margin:-4px 0 10px">
+            <input type="hidden" name="loja" value="{{ loja.id }}"><input type="hidden" name="semana" value="{{ segunda|date:'Y-m-d' }}">
+            <select name="pessoa" class="ra-campo" style="width:100%;max-width:340px" onchange="this.form.submit()" aria-label="Agenda de quem">
+                <option value="">Minha agenda</option>
+                {% for p in pessoas_com_rotina %}<option value="{{ p.id }}" {% if pessoa.id == p.id and pessoa != request.user %}selected{% endif %}>{{ p.full_name }}{% if p.sector %} · {{ p.sector.name }}{% endif %}</option>{% endfor %}
+            </select>
+        </form>
+        {% endif %}
+        {% if agenda is None %}
+        <div class="ra-vazio"><i class="far fa-calendar-xmark"></i>{% if pessoa == request.user %}Você ainda não tem Rotina Gerencial.{% else %}{{ pessoa.full_name }} não tem Rotina Gerencial ativa.{% endif %}</div>
+        {% else %}
+        <div class="ra-agenda">
+            {% for d in agenda.dias %}
+            <div class="ra-dia {% if d.hoje %}hoje{% endif %}">
+                <div class="ra-dia-nome">{{ d.curto }}<small>{{ d.data|date:"d/m" }}</small></div>
+                <div>
+                    {% for i in d.itens %}
+                    <div class="ra-ativ {% if i.feita %}feita{% endif %}">
+                        <span class="bola" style="background: {{ i.cor }}"></span>
+                        <span class="hora">{{ i.atividade.inicio|time:"H:i" }}</span>
+                        <span class="nome">{{ i.atividade.titulo }}{% if i.atividade.descricao %}<small>{{ i.atividade.descricao|truncatechars:90 }}</small>{% endif %}</span>
+                        {% if i.feita %}<span class="estado ra-selo verde"><i class="fas fa-check"></i></span>{% elif i.perdida %}<span class="estado ra-selo cinza">não concluída</span>{% endif %}
+                    </div>
+                    {% empty %}<p class="ra-dia-livre">Sem atividades</p>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% if pessoa == request.user %}<p style="margin:10px 0 0;text-align:right"><a class="ra-link" href="{% url 'rotina:minha' %}">Abrir minha Rotina Gerencial <i class="fas fa-arrow-right text-[10px]"></i></a></p>{% endif %}
+        {% endif %}
+    </article>
+</section>
+
+<dialog class="ra-modal" id="raModalChamados">
+    <div class="ra-modal-cabeca"><h3>Chamados em aberto · {{ loja.name }} ({{ chamados_total }})</h3><button type="button" data-fechar aria-label="Fechar"><i class="fas fa-xmark"></i></button></div>
+    {% for t in chamados %}
+    <a class="ra-chamado" href="{% url 'ticket_detail' t.id %}">
+        <span class="id">#{{ t.id }}</span>
+        <span class="meio"><strong>{{ t.title }}</strong><small>{{ t.created_by.full_name }} · para {{ t.sector.name }} · {{ t.created_at|date:"d/m/Y" }}{% if t.assigned_to %} · com {{ t.assigned_to.full_name }}{% endif %}</small></span>
+        <span class="ra-selo {% if t.status == 'EM_ANDAMENTO' %}azul{% elif t.status == 'REABERTO' %}vermelho{% elif t.status == 'AGUARDANDO_APROVACAO' %}roxo{% else %}amarelo{% endif %}">{{ t.get_status_display }}</span>
+    </a>
+    {% endfor %}
+    {% if chamados_total > chamados|length %}<p class="ra-vazio" style="padding:14px">Mostrando os {{ chamados|length }} mais recentes.</p>{% endif %}
+</dialog>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    document.querySelectorAll('[data-abrir]').forEach(function (b) {
+        b.addEventListener('click', function () { document.getElementById(b.dataset.abrir).showModal(); });
+    });
+    document.querySelectorAll('.ra-modal').forEach(function (m) {
+        m.addEventListener('click', function (e) { if (e.target === m || e.target.closest('[data-fechar]')) m.close(); });
+    });
+    const lista = document.querySelector('.ra-check');
+    if (!lista) return;
+    const csrf = (document.cookie.match(/csrftoken=([^;]+)/) || [])[1] || '';
+    const url = '{% url "rotina_adm:checklist_marcar" 0 %}';
+    function atualizar() {
+        const total = Number(lista.dataset.total), feitos = lista.querySelectorAll('li.feito').length;
+        const pct = total ? Math.round(feitos * 100 / total) : 0;
+        document.getElementById('raBarraCheck').style.width = pct + '%';
+        document.getElementById('raContaCheck').textContent = feitos + ' de ' + total;
+        const anel = document.querySelector('.ra-anel'); if (anel) { anel.style.setProperty('--p', pct); anel.querySelector('span').textContent = pct + '%'; }
+        const num = document.querySelector('.ra-kpi.verde .ra-numero'); if (num) num.firstChild.textContent = feitos;
+    }
+    lista.addEventListener('click', async function (e) {
+        const b = e.target.closest('.ra-caixa'); if (!b || b.disabled) return;
+        const li = b.closest('li'), feito = !li.classList.contains('feito');
+        b.disabled = true; li.classList.toggle('feito', feito); atualizar();
+        let j;
+        try {
+            const r = await fetch(url.replace('/0/', '/' + li.dataset.item + '/'), {method: 'POST',
+                headers: {'X-CSRFToken': csrf, 'Content-Type': 'application/json'}, body: JSON.stringify({feito: feito})});
+            j = await r.json();
+        } catch (err) { j = {ok: false, erro: 'Sem conexão — tente de novo.'}; }
+        b.disabled = false;
+        if (!j.ok) { li.classList.toggle('feito', !feito); atualizar(); alert(j.erro || 'Não deu para salvar.'); return; }
+        const estado = li.querySelector('.estado'), quem = li.querySelector('.quem');
+        if (j.feito) { estado.className = 'ra-selo verde estado'; estado.textContent = 'Feito'; quem.textContent = 'feito às ' + j.hora + (j.quem ? ' por ' + j.quem : ''); }
+        else { estado.className = 'ra-selo amarelo estado'; estado.textContent = 'Pendente'; quem.textContent = ''; }
+    });
+})();
+</script>
+{% endblock %}

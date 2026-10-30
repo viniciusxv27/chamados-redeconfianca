@@ -1,0 +1,50 @@
+{% extends 'rotina_adm/_base.html' %}
+{% block ra_titulo %}Acessos · Rotina ADM{% endblock %}
+{% block ra_conteudo %}
+<header class="ra-topo">
+    <div class="ra-titulo"><span class="ra-escudo"><i class="fas fa-user-shield"></i></span>
+        <div><h1>Quem acessa a Rotina ADM</h1><p>O SUPERADMIN sempre entra. Libere grupos ou pessoas.</p></div></div>
+</header>
+
+<section class="ra-grade-kpi" style="grid-template-columns:1fr 1fr">
+    <div class="ra-card ra-secao" style="margin:0"><span class="ra-selo azul" style="margin-bottom:8px"><i class="fas fa-eye"></i>Visualizador</span>
+        <p class="ra-sub">Vê a central da loja do setor principal dele e marca o check-list do dia.</p></div>
+    <div class="ra-card ra-secao" style="margin:0"><span class="ra-selo roxo" style="margin-bottom:8px"><i class="fas fa-user-gear"></i>Gestor</span>
+        <p class="ra-sub">Vê qualquer loja, monta e copia o check-list de cada uma e olha a agenda de outras pessoas.</p></div>
+</section>
+
+<section class="ra-card ra-secao">
+    <div class="ra-secao-titulo" style="margin-bottom:12px"><span class="ic" style="background:var(--ra-roxo-claro);color:var(--ra-roxo)"><i class="fas fa-plus"></i></span>
+        <div><h2>Liberar</h2><p>Escolha um grupo de comunicação ou uma pessoa.</p></div></div>
+    <form method="post" style="display:flex;gap:10px;flex-wrap:wrap">{% csrf_token %}
+        <select class="ra-campo" name="alvo" required style="flex:1;min-width:260px">
+            <option value="">Grupo ou pessoa…</option>
+            <optgroup label="Grupos">{% for g in grupos %}<option value="g:{{ g.id }}">{{ g.name }}</option>{% endfor %}</optgroup>
+            <optgroup label="Pessoas">{% for u in usuarios %}<option value="u:{{ u.id }}">{{ u.full_name|default:u.username }}{% if u.sector %} · {{ u.sector.name }}{% endif %}</option>{% endfor %}</optgroup>
+        </select>
+        <select class="ra-campo" name="papel">{% for v, r in papeis %}<option value="{{ v }}">{{ r }}</option>{% endfor %}</select>
+        <button class="ra-botao primario" name="acao" value="adicionar"><i class="fas fa-check"></i>Liberar</button>
+    </form>
+</section>
+
+<section class="ra-card ra-secao">
+    <div class="ra-secao-titulo" style="margin-bottom:8px"><div><h2>Liberados ({{ acessos|length }})</h2></div></div>
+    {% if acessos %}
+    <table class="ra-tabela">
+        <thead><tr><th>Quem</th><th style="width:220px">Papel</th><th style="width:60px"></th></tr></thead>
+        <tbody>
+        {% for a in acessos %}
+        <tr>
+            <td>{% if a.grupo %}<i class="fas fa-users" style="color:var(--ra-texto-3);margin-right:6px"></i><strong>{{ a.grupo.name }}</strong> <span class="ra-sub">· grupo · {{ a.membros }} pessoa{{ a.membros|pluralize }}</span>
+                {% else %}<i class="fas fa-user" style="color:var(--ra-texto-3);margin-right:6px"></i><strong>{{ a.user.full_name|default:a.user.username }}</strong>{% if a.user.sector %} <span class="ra-sub">· {{ a.user.sector.name }}</span>{% endif %}{% endif %}</td>
+            <td><form method="post">{% csrf_token %}<input type="hidden" name="acesso" value="{{ a.id }}"><input type="hidden" name="acao" value="papel">
+                <select class="ra-campo" name="papel" onchange="this.form.submit()" aria-label="Papel">{% for v, r in papeis %}<option value="{{ v }}" {% if a.papel == v %}selected{% endif %}>{{ r }}</option>{% endfor %}</select></form></td>
+            <td><form method="post" onsubmit="return confirm('Tirar o acesso?')">{% csrf_token %}<input type="hidden" name="acesso" value="{{ a.id }}">
+                <button class="ra-icone-botao perigo" name="acao" value="remover" title="Remover"><i class="fas fa-trash"></i></button></form></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}<div class="ra-vazio"><i class="fas fa-lock"></i>Por enquanto só o SUPERADMIN entra.</div>{% endif %}
+</section>
+{% endblock %}
