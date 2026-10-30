@@ -298,7 +298,9 @@ def _gate_checklists(user):
 
 
 def _gate_limpeza(user):
-    return not padrao_restrito(user, 'limpeza')
+    # Também quem o SUPERADMIN liberou em /limpeza/acessos/ (Gerenciar ou Ver).
+    from limpeza.permissoes import pode_entrar
+    return pode_entrar(user)
 
 
 def _gate_experiencia(user):

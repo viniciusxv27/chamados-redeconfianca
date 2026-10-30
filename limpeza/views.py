@@ -9,8 +9,8 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from users.models import Sector, User
-from users.module_access import fechado_para_padrao
 
+from .permissoes import edita_qualquer_checklist, entrada_limpeza, pode_gerenciar, ve_a_rede, ve_tudo
 from .models import (
     LimpezaAnswer,
     LimpezaQuestion,
@@ -27,13 +27,8 @@ OPCOES_RESPOSTA = [
 
 
 def _is_gerente_or_superadmin(user):
-    """Verifica se o usuário é gerente (no grupo 'Gerentes') ou superadmin."""
-    if user.hierarchy == 'SUPERADMIN' or user.hierarchy == 'ADMINISTRATIVO' or user.is_superuser:
-        return True
-    return (
-        user.groups.filter(name='Gerentes').exists()
-        or user.groups.filter(name__iexact='ADMINS').exists()
-    )
+    """Gerencia a Limpeza: pela hierarquia/grupo ou liberado pelo SUPERADMIN como "Gerenciar"."""
+    return pode_gerenciar(user)
 
 
 def _is_superadmin(user):
@@ -51,7 +46,7 @@ def _get_user_sectors(user):
 # ─── Dashboard ────────────────────────────────────────────────────────────────
 
 @login_required
-@fechado_para_padrao('limpeza')
+@entrada_limpeza
 def dashboard(request):
     """Lista as limpezas já feitas e dá o atalho para registrar uma nova.
 
@@ -66,7 +61,7 @@ def dashboard(request):
     registros = (LimpezaTodo.objects
                  .filter(realizada_em__isnull=False)
                  .select_related('sector', 'template', 'realizada_por'))
-    if not is_gerente:
+    if not ve_tudo(user):
         # Quem não é gestor vê os setores dele e o que ele mesmo registrou.
         registros = registros.filter(
             models.Q(sector__in=user_sectors) | models.Q(realizada_por=user))
@@ -85,8 +80,10 @@ def dashboard(request):
         'registros_hoje': registros.filter(realizada_em__date=hoje).count(),
         'is_superadmin': is_superadmin,
         'is_gerente': is_gerente,
+        've_relatorios': ve_tudo(user),
+        'pode_liberar': is_superadmin,
         'setores': (Sector.objects.all().order_by('name')
-                    if is_gerente else user_sectors),
+                    if ve_tudo(user) else user_sectors),
         'setor_id': setor_id,
         'tem_template': LimpezaTemplate.objects.filter(is_active=True).exists(),
     }
@@ -96,7 +93,7 @@ def dashboard(request):
 # ─── Registrar uma limpeza ────────────────────────────────────────────────────
 
 @login_required
-@fechado_para_padrao('limpeza')
+@entrada_limpeza
 def registro_novo(request):
     """Checklist da limpeza: uma pergunta, três opções, e pronto."""
     template = (LimpezaTemplate.objects.filter(is_active=True)
@@ -252,14 +249,14 @@ def _perguntas_para_tela(perguntas, respostas, ids_faltando, dados_post):
 
 
 @login_required
-@fechado_para_padrao('limpeza')
+@entrada_limpeza
 def registro_detalhe(request, registro_id):
     """Ver uma limpeza registrada: quem fez, quando e o checklist."""
     registro = get_object_or_404(
         LimpezaTodo.objects.select_related('sector', 'template', 'realizada_por'),
         id=registro_id)
 
-    if not _is_gerente_or_superadmin(request.user):
+    if not ve_tudo(request.user):
         permitido = (registro.realizada_por_id == request.user.id
                      or registro.sector in _get_user_sectors(request.user))
         if not permitido:
@@ -279,7 +276,7 @@ def registro_detalhe(request, registro_id):
 
 
 @login_required
-@fechado_para_padrao('limpeza')
+@entrada_limpeza
 def template_list(request):
     user = request.user
     if not _is_gerente_or_superadmin(user):
@@ -287,7 +284,7 @@ def template_list(request):
         return redirect('limpeza:dashboard')
 
     templates = LimpezaTemplate.objects.filter(is_active=True).select_related('created_by')
-    if not _is_superadmin(user):
+    if not edita_qualquer_checklist(user):
         templates = templates.filter(created_by=user)
 
     return render(request, 'limpeza/template_list.html', {
@@ -297,7 +294,7 @@ def template_list(request):
 
 
 @login_required
-@fechado_para_padrao('limpeza')
+@entrada_limpeza
 def template_create(request):
     user = request.user
     if not _is_gerente_or_superadmin(user):
@@ -357,12 +354,12 @@ def template_create(request):
 
 
 @login_required
-@fechado_para_padrao('limpeza')
+@entrada_limpeza
 def template_edit(request, template_id):
     user = request.user
     template = get_object_or_404(LimpezaTemplate, id=template_id, is_active=True)
 
-    if not _is_superadmin(user) and template.created_by != user:
+    if not edita_qualquer_checklist(user) and template.created_by != user:
         messages.error(request, 'Você não tem permissão.')
         return redirect('limpeza:template_list')
 
@@ -412,13 +409,13 @@ def template_edit(request, template_id):
 
 
 @login_required
-@fechado_para_padrao('limpeza')
+@entrada_limpeza
 @require_POST
 def template_delete(request, template_id):
     user = request.user
     template = get_object_or_404(LimpezaTemplate, id=template_id)
 
-    if not _is_superadmin(user) and template.created_by != user:
+    if not edita_qualquer_checklist(user) and template.created_by != user:
         messages.error(request, 'Você não tem permissão.')
         return redirect('limpeza:template_list')
 
@@ -429,7 +426,7 @@ def template_delete(request, template_id):
 
 
 @login_required
-@fechado_para_padrao('limpeza')
+@entrada_limpeza
 def import_template_pdf(request):
     """Importa template a partir de PDF de checklist."""
     user = request.user
@@ -519,14 +516,15 @@ def import_template_pdf(request):
 # ─── Relatórios ──────────────────────────────────────────────────────────────
 
 @login_required
-@fechado_para_padrao('limpeza')
+@entrada_limpeza
 def reports(request):
     user = request.user
-    if not _is_gerente_or_superadmin(user):
+    if not ve_tudo(user):
         messages.error(request, 'Sem permissão.')
         return redirect('limpeza:dashboard')
 
-    is_superadmin = _is_superadmin(user)
+    # SUPERADMIN e quem ele liberou veem a rede; o gerente pela hierarquia, os setores dele.
+    is_superadmin = ve_a_rede(user)
 
     # Filtros
     month_filter = request.GET.get('month')
@@ -598,13 +596,14 @@ def reports(request):
 
 
 @login_required
-@fechado_para_padrao('limpeza')
+@entrada_limpeza
 def export_report(request):
     user = request.user
-    if not _is_gerente_or_superadmin(user):
+    if not ve_tudo(user):
         return HttpResponse(status=403)
 
-    is_superadmin = _is_superadmin(user)
+    # SUPERADMIN e quem ele liberou veem a rede; o gerente pela hierarquia, os setores dele.
+    is_superadmin = ve_a_rede(user)
 
     todos = LimpezaTodo.objects.select_related(
         'template', 'sector', 'launched_by', 'submitted_by', 'evaluated_by'
@@ -662,14 +661,15 @@ def export_report(request):
 # ─── Histórico / Arquivo ─────────────────────────────────────────────────────
 
 @login_required
-@fechado_para_padrao('limpeza')
+@entrada_limpeza
 def archive(request):
     user = request.user
-    if not _is_gerente_or_superadmin(user):
+    if not ve_tudo(user):
         messages.error(request, 'Sem permissão.')
         return redirect('limpeza:dashboard')
 
-    is_superadmin = _is_superadmin(user)
+    # SUPERADMIN e quem ele liberou veem a rede; o gerente pela hierarquia, os setores dele.
+    is_superadmin = ve_a_rede(user)
 
     if is_superadmin:
         todos = LimpezaTodo.objects.all()
@@ -687,3 +687,37 @@ def archive(request):
     })
 
 
+
+
+# ─── Acessos ──────────────────────────────────────────────────────────────────
+
+@login_required
+def acessos(request):
+    """SUPERADMIN libera pessoas para Gerenciar ou só Ver a Limpeza."""
+    from .models import AcessoLimpeza
+    from .permissoes import e_superadmin
+    if not e_superadmin(request.user):
+        messages.error(request, 'Só o SUPERADMIN libera a Limpeza.')
+        return redirect('limpeza:dashboard')
+    if request.method == 'POST':
+        acao = request.POST.get('acao')
+        papel = request.POST.get('papel') if request.POST.get('papel') in dict(AcessoLimpeza.PAPEIS) else AcessoLimpeza.VER
+        if acao in ('adicionar', 'salvar'):
+            alvo = User.objects.filter(pk=request.POST.get('user') or 0, is_active=True).first()
+            if alvo is None:
+                messages.error(request, 'Escolha a pessoa.')
+            else:
+                a, _ = AcessoLimpeza.objects.update_or_create(user=alvo, defaults={'papel': papel, 'liberado_por': request.user})
+                messages.success(request, f'{alvo.get_full_name() or alvo.username}: {a.get_papel_display()}.')
+        elif acao == 'remover':
+            a = get_object_or_404(AcessoLimpeza, pk=request.POST.get('acesso'))
+            a.delete()
+            messages.success(request, 'Acesso removido.')
+        return redirect('limpeza:acessos')
+
+    lista = list(AcessoLimpeza.objects.select_related('user', 'user__sector', 'liberado_por').order_by('papel', 'user__first_name'))
+    return render(request, 'limpeza/acessos.html', {
+        'acessos': lista, 'papeis': AcessoLimpeza.PAPEIS,
+        'usuarios': (User.objects.filter(is_active=True).exclude(pk__in=[a.user_id for a in lista])
+                     .select_related('sector').order_by('first_name', 'last_name')),
+    })

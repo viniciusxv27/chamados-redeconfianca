@@ -340,3 +340,31 @@ class LimpezaEvaluator(models.Model):
 
     def __str__(self):
         return f"Avaliador: {self.user.get_full_name() or self.user.username}"
+
+
+class AcessoLimpeza(models.Model):
+    """Liberação individual da Limpeza, dada pelo SUPERADMIN (30/10/2026).
+
+    Gerenciar: tudo o que o gestor faz (checklists de qualquer autor, relatórios,
+    arquivo, todas as lojas). Ver: entra mesmo sendo PADRÃO e vê os registros,
+    relatórios e o arquivo de todas as lojas, sem mexer nos checklists. Quem já
+    entrava pela hierarquia continua entrando.
+    """
+
+    GERENCIAR = 'GERENCIAR'
+    VER = 'VER'
+    PAPEIS = [(GERENCIAR, 'Gerenciar'), (VER, 'Ver')]
+
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+                                related_name='acesso_limpeza', verbose_name='Pessoa')
+    papel = models.CharField(max_length=10, choices=PAPEIS, default=VER, verbose_name='Papel')
+    liberado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                     related_name='+')
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Acesso à Limpeza'
+        verbose_name_plural = 'Acessos à Limpeza'
+
+    def __str__(self):
+        return f'{self.user} — {self.get_papel_display()}'

@@ -11,11 +11,19 @@
             <p class="text-sm text-gray-500">Registro das limpezas realizadas</p>
         </div>
         <div class="flex items-center gap-2 flex-wrap">
+            {% if pode_liberar %}
+            <a href="{% url 'limpeza:acessos' %}"
+               class="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm hover:bg-gray-50">
+                <i class="fas fa-user-shield mr-1.5"></i>Acessos
+            </a>
+            {% endif %}
             {% if is_gerente %}
             <a href="{% url 'limpeza:template_list' %}"
                class="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm hover:bg-gray-50">
                 <i class="fas fa-list-check mr-1.5"></i>Checklists
             </a>
+            {% endif %}
+            {% if ve_relatorios %}
             <a href="{% url 'limpeza:reports' %}"
                class="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-600 text-sm hover:bg-gray-50">
                 <i class="fas fa-chart-column mr-1.5"></i>Relatórios

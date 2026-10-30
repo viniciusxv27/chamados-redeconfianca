@@ -24,4 +24,7 @@ urlpatterns = [
 
     # Arquivo
     path('arquivo/', views.archive, name='archive'),
+
+    # Quem acessa (SUPERADMIN libera pessoa a pessoa: Gerenciar ou Ver)
+    path('acessos/', views.acessos, name='acessos'),
 ]
