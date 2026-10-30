@@ -508,6 +508,9 @@ class FechamentoCaixa(models.Model):
     caixa_fisico = _dinheiro(null=True, blank=True, verbose_name='Contagem do caixa físico')
     agoracred = _dinheiro(default=Decimal('0'), verbose_name='AgoraCred')
     renova_allied_qtd = models.PositiveIntegerField(default=0, verbose_name='Renova Allied (quantidade)')
+    # db_default: o código commitado (sem estas colunas) roda nos outros servidores no mesmo banco.
+    renova_vini_valor = _dinheiro(default=Decimal('0'), db_default=Decimal('0'), verbose_name='Renova Vini (valor)')
+    renova_vini_qtd = models.PositiveIntegerField(default=0, db_default=0, verbose_name='Renova Vini (quantidade)')
     observacao = models.TextField(blank=True, verbose_name='Observação')
     bloqueado = models.BooleanField(default=False, verbose_name='Bloqueado')
     bloqueado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
@@ -520,7 +523,8 @@ class FechamentoCaixa(models.Model):
     criado_em = models.DateTimeField(auto_now_add=True)
     atualizado_em = models.DateTimeField(auto_now=True)
 
-    CAMPOS = ('entradas', 'sangrias', 'caixa_fisico', 'agoracred', 'renova_allied_qtd', 'observacao')
+    CAMPOS = ('entradas', 'sangrias', 'caixa_fisico', 'agoracred', 'renova_allied_qtd', 'renova_vini_valor',
+              'renova_vini_qtd', 'observacao')
 
     class Meta:
         verbose_name = 'Fechamento de caixa'

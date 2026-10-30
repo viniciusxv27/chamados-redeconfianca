@@ -134,7 +134,8 @@ nada, cn = usuario('nada')
 
 def campos(loja, dia=DIA, **extra):
     d = {'loja': loja.id, 'data': dia.isoformat(), 'entradas': '1.234,56', 'sangrias': '100', 'caixa_fisico': '1134,56',
-         'agoracred': '50,00', 'renova_allied_qtd': '2', 'observacao': 'ok'}
+         'agoracred': '50,00', 'renova_allied_qtd': '2', 'renova_vini_valor': '1.150,00', 'renova_vini_qtd': '3',
+         'observacao': 'ok'}
     d.update(extra)
     return d
 
@@ -178,6 +179,8 @@ v = Venda.objects.create(data_venda=dt.datetime(2026, 10, 20, 15, tzinfo=TZ), lo
 VendaProduto.objects.create(venda=v, nome_produto='A', renova_alied=True)
 VendaProduto.objects.create(venda=v, nome_produto='B', renova_alied=True)
 VendaProduto.objects.create(venda=v, nome_produto='C')
+VendaProduto.objects.create(venda=v, nome_produto='E', renova_vini=True, renova_vini_valor=D('400'))
+VendaProduto.objects.create(venda=v, nome_produto='F', renova_vini=True, renova_vini_valor=D('250.50'))
 v2 = Venda.objects.create(data_venda=dt.datetime(2026, 10, 21, 1, tzinfo=TZ), loja=gloria)
 VendaProduto.objects.create(venda=v2, nome_produto='D', renova_alied=True)
 from financeiro import fechamento as fch
@@ -185,9 +188,11 @@ sug = fch.sugestoes([gloria], DIA)[gloria.id]
 t('entradas e sangrias vêm da Contagem de Caixa', sug['entradas'] == cx.entrada and sug['sangrias'] == cx.sangrias_total, sug)
 t('caixa físico = valor real; AgoraCred da contagem', sug['caixa_fisico'] == D('1300') and sug['agoracred'] == D('40'))
 t('Renova Allied conta os itens do dia (o do dia seguinte fica fora)', sug['renova_allied_qtd'] == 2, sug)
+t('Renova Vini: quantidade e soma do valor das vendas do dia', sug['renova_vini_qtd'] == 2 and sug['renova_vini_valor'] == D('650.50'), sug)
 with relogio(DIA + dt.timedelta(days=1), 9):
     h = cg.get('/financeiro/fechamento/').content.decode()
-t('a tela mostra as sugestões para usar', 'Valor real: R$ 1.300,00' in h and 'Vendas: 2' in h and 'Usar valores do sistema' in h,
+t('a tela mostra as sugestões para usar', 'Valor real: R$ 1.300,00' in h and 'Vendas: 2' in h and 'Usar valores do sistema' in h
+  and 'Vendas: R$ 650,50' in h and 'name="renova_vini_qtd"' in h,
   h[h.find('fch-sug'):h.find('fch-sug') + 200])
 
 print('Prazo')
@@ -196,7 +201,8 @@ with relogio(DIA + dt.timedelta(days=1), 9, 59):
 f = FechamentoCaixa.objects.filter(loja=gloria, data=DIA).first()
 t('às 9h59 do dia seguinte o gestor grava', f is not None)
 t('valores lidos no formato brasileiro', f and f.entradas == D('1234.56') and f.caixa_fisico == D('1134.56')
-  and f.agoracred == D('50') and f.renova_allied_qtd == 2 and f.atualizado_por == gestor)
+  and f.agoracred == D('50') and f.renova_allied_qtd == 2 and f.atualizado_por == gestor
+  and f.renova_vini_valor == D('1150') and f.renova_vini_qtd == 3)
 t('gravar fica na rastreabilidade', LogFinanceiro.objects.filter(area='fechamento', acao='CRIAR', objeto_id=str(f.pk)).exists())
 with relogio(DIA + dt.timedelta(days=1), 10, 1):
     cg.post('/financeiro/fechamento/salvar/', campos(gloria, entradas='999'))
@@ -242,6 +248,8 @@ with relogio(DIA, 18):
     t('dia que ainda não chegou não grava', not FechamentoCaixa.objects.filter(data=DIA + dt.timedelta(days=1)).exists())
     cg.post('/financeiro/fechamento/salvar/', campos(gloria, renova_allied_qtd='2,5'))
     t('Allied quebrado é recusado', FechamentoCaixa.objects.get(pk=f.pk).renova_allied_qtd == 2)
+    cg.post('/financeiro/fechamento/salvar/', campos(gloria, renova_vini_qtd='-1'))
+    t('quantidade de Vini negativa é recusada', FechamentoCaixa.objects.get(pk=f.pk).renova_vini_qtd == 3)
     cg.post('/financeiro/fechamento/salvar/', campos(gloria, entradas='abc'))
     t('valor que não é número é recusado', FechamentoCaixa.objects.get(pk=f.pk).entradas == D('2'))
     cg.post('/financeiro/fechamento/salvar/', campos(gloria, caixa_fisico=''))
@@ -252,7 +260,8 @@ with relogio(DIA, 18):
 print('Visualizador: histórico e remoção')
 with relogio(DIA + dt.timedelta(days=3), 9):
     h = cv.get('/financeiro/fechamento/').content.decode()
-    t('visualizador vê os últimos fechamentos da loja', 'Últimos fechamentos · Loja Glória' in h and '20/10/2026' in h)
+    t('visualizador vê os últimos fechamentos da loja', 'Últimos fechamentos · Loja Glória' in h and '20/10/2026' in h
+      and 'Vini (qtd.)' in h and 'R$ 1.150,00' in h)
 # O mesmo relógio do resto: a sessão do portal cai se o relógio "pula" dias (rastreio de sessão ativa).
 with relogio(DIA + dt.timedelta(days=3), 9, 5):
     cs.post('/financeiro/fechamento/acessos/', {'acao': 'remover', 'acesso': AcessoFechamento.objects.get(user=vis).id})

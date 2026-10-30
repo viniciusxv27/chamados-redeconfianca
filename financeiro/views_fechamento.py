@@ -93,11 +93,13 @@ def fechamento_salvar(request):
             'caixa_fisico': (dinheiro(request.POST.get('caixa_fisico'), campo='caixa físico')
                              if (request.POST.get('caixa_fisico') or '').strip() else None),
             'agoracred': dinheiro(request.POST.get('agoracred'), campo='AgoraCred'),
+            'renova_vini_valor': dinheiro(request.POST.get('renova_vini_valor'), campo='valor do Renova Vini'),
         }
-        bruto = (request.POST.get('renova_allied_qtd') or '0').strip()
-        if not bruto.isdigit():
-            raise Invalido('A quantidade de Renova Allied tem que ser um número inteiro.')
-        valores['renova_allied_qtd'] = int(bruto)
+        for campo, nome in (('renova_allied_qtd', 'Renova Allied'), ('renova_vini_qtd', 'Renova Vini')):
+            bruto = (request.POST.get(campo) or '0').strip() or '0'
+            if not bruto.isdigit():
+                raise Invalido(f'A quantidade de {nome} tem que ser um número inteiro.')
+            valores[campo] = int(bruto)
     except Invalido as exc:
         messages.error(request, f'{loja.name}: {exc}')
         return redirect(_url(dia))

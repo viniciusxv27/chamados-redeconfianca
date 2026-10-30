@@ -2,7 +2,7 @@
 {% load caixa_tags %}
 {% block fin_titulo %}Fechamento de caixa{% endblock %}
 {% block fin_cabecalho %}Fechamento de caixa{% endblock %}
-{% block fin_subtitulo %}{{ dia|date:"l, d/m/Y" }} · entradas, sangrias, caixa físico, AgoraCred e Renova Allied{% endblock %}
+{% block fin_subtitulo %}{{ dia|date:"l, d/m/Y" }} · entradas, sangrias, caixa físico, AgoraCred, Renova Allied e Renova Vini{% endblock %}
 {% block fin_css %}
 <style>
     .fch-nav { display:flex; align-items:center; gap:.35rem; }
@@ -26,7 +26,7 @@
     .fch-resumo span { font-size:.75rem; color:var(--fin-texto-3); }
     .fch-loja { overflow:hidden; }
     .fch-loja[data-estado="bloqueado"] { border-color:#FCD34D; }
-    .fch-campos { display:grid; grid-template-columns:repeat(5, minmax(0, 1fr)); gap:.75rem; padding:1rem; }
+    .fch-campos { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:.75rem; padding:1rem; }
     .fch-campo label { display:block; font-size:11px; font-weight:700; letter-spacing:.03em; text-transform:uppercase; color:var(--fin-texto-3); margin-bottom:.3rem; }
     .fch-campo .fin-input { text-align:right; font-variant-numeric:tabular-nums; }
     .fch-sug { display:inline-flex; align-items:center; gap:.3rem; margin-top:.3rem; font-size:11px; color:var(--fin-texto-3); background:none; border:0; padding:0; cursor:pointer; }
@@ -132,6 +132,12 @@
             <div class="fch-campo"><label for="r{{ l.loja.id }}">Renova Allied (qtd.)</label>
                 <input id="r{{ l.loja.id }}" name="renova_allied_qtd" class="fin-input" inputmode="numeric" pattern="[0-9]*" value="{% if l.f %}{{ l.f.renova_allied_qtd }}{% endif %}" placeholder="0">
                 <button type="button" class="fch-sug" data-para="r{{ l.loja.id }}" data-valor="{{ l.sug.renova_allied_qtd }}"><i class="fas fa-wand-magic-sparkles"></i>Vendas: {{ l.sug.renova_allied_qtd }}</button></div>
+            <div class="fch-campo"><label for="vv{{ l.loja.id }}">Renova Vini (valor)</label>
+                <input id="vv{{ l.loja.id }}" name="renova_vini_valor" class="fin-input" inputmode="decimal" value="{% if l.f %}{{ l.f.renova_vini_valor|floatformat:2 }}{% endif %}" placeholder="0,00">
+                <button type="button" class="fch-sug" data-para="vv{{ l.loja.id }}" data-valor="{{ l.sug.renova_vini_valor|floatformat:2 }}"><i class="fas fa-wand-magic-sparkles"></i>Vendas: {{ l.sug.renova_vini_valor|brl_zero }}</button></div>
+            <div class="fch-campo"><label for="vq{{ l.loja.id }}">Renova Vini (qtd.)</label>
+                <input id="vq{{ l.loja.id }}" name="renova_vini_qtd" class="fin-input" inputmode="numeric" pattern="[0-9]*" value="{% if l.f %}{{ l.f.renova_vini_qtd }}{% endif %}" placeholder="0">
+                <button type="button" class="fch-sug" data-para="vq{{ l.loja.id }}" data-valor="{{ l.sug.renova_vini_qtd }}"><i class="fas fa-wand-magic-sparkles"></i>Vendas: {{ l.sug.renova_vini_qtd }}</button></div>
         </div>
         <div class="fch-rodape">
             <input name="observacao" class="fin-input" maxlength="2000" value="{{ l.f.observacao|default:'' }}" placeholder="Observação (opcional)">
@@ -146,6 +152,8 @@
         <div class="fch-campo"><label>Caixa físico</label><div class="fch-valor">{% if l.f and l.f.caixa_fisico is not None %}{{ l.f.caixa_fisico|brl_zero }}{% else %}—{% endif %}</div></div>
         <div class="fch-campo"><label>AgoraCred</label><div class="fch-valor">{% if l.f %}{{ l.f.agoracred|brl_zero }}{% else %}—{% endif %}</div></div>
         <div class="fch-campo"><label>Renova Allied (qtd.)</label><div class="fch-valor">{% if l.f %}{{ l.f.renova_allied_qtd }}{% else %}—{% endif %}</div></div>
+        <div class="fch-campo"><label>Renova Vini (valor)</label><div class="fch-valor">{% if l.f %}{{ l.f.renova_vini_valor|brl_zero }}{% else %}—{% endif %}</div></div>
+        <div class="fch-campo"><label>Renova Vini (qtd.)</label><div class="fch-valor">{% if l.f %}{{ l.f.renova_vini_qtd }}{% else %}—{% endif %}</div></div>
     </div>
     {% if l.f.observacao %}<p class="px-4 pb-3 text-sm text-gray-600"><i class="far fa-comment mr-1"></i>{{ l.f.observacao }}</p>{% endif %}
     {% endif %}
@@ -159,13 +167,14 @@
     <div class="fin-cab"><h2>Últimos fechamentos · {{ linhas.0.loja.name }}</h2></div>
     <div class="overflow-x-auto">
     <table class="fin-tabela">
-        <thead><tr><th>Dia</th><th class="text-right">Entradas</th><th class="text-right">Sangrias</th><th class="text-right">Caixa físico</th><th class="text-right">AgoraCred</th><th class="text-right">Allied</th><th></th></tr></thead>
+        <thead><tr><th>Dia</th><th class="text-right">Entradas</th><th class="text-right">Sangrias</th><th class="text-right">Caixa físico</th><th class="text-right">AgoraCred</th><th class="text-right">Allied</th><th class="text-right">Vini (R$)</th><th class="text-right">Vini (qtd.)</th><th></th></tr></thead>
         <tbody>
         {% for h in historico %}
         <tr><td><a class="font-semibold text-emerald-700" href="?data={{ h.data|date:'Y-m-d' }}">{{ h.data|date:"d/m/Y" }}</a></td>
             <td class="text-right tabular">{{ h.entradas|brl_zero }}</td><td class="text-right tabular">{{ h.sangrias|brl_zero }}</td>
             <td class="text-right tabular">{% if h.caixa_fisico is not None %}{{ h.caixa_fisico|brl_zero }}{% else %}—{% endif %}</td>
             <td class="text-right tabular">{{ h.agoracred|brl_zero }}</td><td class="text-right tabular">{{ h.renova_allied_qtd }}</td>
+            <td class="text-right tabular">{{ h.renova_vini_valor|brl_zero }}</td><td class="text-right tabular">{{ h.renova_vini_qtd }}</td>
             <td>{% if h.bloqueado %}<span class="fin-chip st-BLOQUEADO">Bloqueado</span>{% endif %}</td></tr>
         {% endfor %}
         </tbody>
