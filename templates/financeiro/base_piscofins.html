@@ -1,0 +1,8 @@
+{% extends 'financeiro/base_financeiro.html' %}
+{% comment %}PIS/Cofins mora no Financeiro (03/11/2026): as telas seguem com os blocos cx_ e entram na casca do Financeiro.{% endcomment %}
+{% block fin_titulo %}{% block cx_titulo %}PIS/Cofins{% endblock %}{% endblock %}
+{% block fin_cabecalho %}{% block cx_cabecalho %}PIS/Cofins{% endblock %}{% endblock %}
+{% block fin_subtitulo %}{% block cx_subtitulo %}{% endblock %}{% endblock %}
+{% block fin_acoes %}{% block cx_acoes %}{% endblock %}{% endblock %}
+{% block fin_css %}<style>.tabular { font-variant-numeric: tabular-nums; }</style>{% endblock %}
+{% block fin_conteudo %}{% block cx_conteudo %}{% endblock %}{% endblock %}

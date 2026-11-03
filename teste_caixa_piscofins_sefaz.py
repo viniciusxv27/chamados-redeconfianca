@@ -355,7 +355,7 @@ try:
     c.force_login(chefe)
     receita.buscar = lambda v: {'cnpj': receita.so_digitos(v), 'razao_social': 'ZZ FORNECEDOR B SA', 'nome_fantasia': '',
                                 'situacao': 'ATIVA', 'atividade': '', 'simples': False, 'municipio': '', 'uf': 'ES'}
-    url = '/contagem-caixa/pis-cofins/?competencia=2019-05&visao=sefaz'
+    url = '/financeiro/pis-cofins/?competencia=2019-05&visao=sefaz'
     r = c.get(url)
     html = r.content.decode()
     t('visão SEFAZ abre', r.status_code == 200, r.status_code)
@@ -365,11 +365,11 @@ try:
     t('cancelada aparece riscada', 'Cancelada' in html)
     t('NFS-e na lista pela competência (05/2019), com selo e descrição', 'ZZ MANUTENCAO ME' not in html and 'NFS-e</span>' in html
       and 'Limpeza pós-obra' in html)
-    r = c.get('/contagem-caixa/pis-cofins/?competencia=2019-04&visao=sefaz')
+    r = c.get('/financeiro/pis-cofins/?competencia=2019-04&visao=sefaz')
     html = r.content.decode()
     t('a NFS-e de competência 04/2019 aparece em abril', 'ZZ MANUTENCAO ME' in html and 'data-competencia="2019-04"' in html
       and 'data-tipo-doc="NFSE"' in html)
-    r = c.get('/contagem-caixa/pis-cofins/?competencia=2019-05&visao=sefaz&doc=NFE')
+    r = c.get('/financeiro/pis-cofins/?competencia=2019-05&visao=sefaz&doc=NFE')
     t('filtro só NF-e esconde as NFS-e', 'Limpeza pós-obra' not in r.content.decode() and 'ZZ FORNECEDOR A LTDA' in r.content.decode())
 
     settings.SEFAZ_CERTIFICADO_B64 = ''
@@ -415,19 +415,19 @@ try:
     r = c.get(url)
     html = r.content.decode()
     t('sem nada a lançar no mês', 'a lançar</span>' not in html and 'Lançada em 05/2019' in html)
-    r = c.get('/contagem-caixa/pis-cofins/?competencia=2019-05')
+    r = c.get('/financeiro/pis-cofins/?competencia=2019-05')
     t('na visão dos lançados, o selo "na SEFAZ"', 'na SEFAZ' in r.content.decode())
 
     # Fora do PIS/Cofins.
     ch4 = chave(FORN_B, 9999)
     sefaz.processar_documento(NOSSO, 6, 'resNFe_v1.01.xsd', res_nfe(ch4, FORN_B, 'ZZ FORNECEDOR B SA', '50.00', 9))
     n4 = NotaRecebida.objects.get(chave=ch4)
-    r = c.get('/contagem-caixa/pis-cofins/?competencia=2019-05')
+    r = c.get('/financeiro/pis-cofins/?competencia=2019-05')
     t('lançados avisa a nota que falta', '1 nota</strong> emitida contra o CNPJ em 05/2019' in r.content.decode())
     c.post(f'/contagem-caixa/pis-cofins/sefaz/{n4.id}/fora/', {'voltar': url})
     n4.refresh_from_db()
     t('marca fora do PIS/Cofins, com quem marcou', n4.ignorada and n4.ignorada_por == chefe)
-    r = c.get('/contagem-caixa/pis-cofins/?competencia=2019-05')
+    r = c.get('/financeiro/pis-cofins/?competencia=2019-05')
     t('e o aviso some', 'emitida contra o CNPJ em 05/2019' not in r.content.decode())
     c.post(f'/contagem-caixa/pis-cofins/sefaz/{n4.id}/fora/', {'voltar': url})
     n4.refresh_from_db()

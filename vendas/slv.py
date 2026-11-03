@@ -447,6 +447,7 @@ def ler_pagamentos(dados, total, erros):
 
 # Serviços em que o plano anterior pode ser um plano fora do portfólio.
 TIPOS_COM_PLANO_FORA = ('REATIVACAO', 'MIGRACAO', 'TROCA_PLANO')
+CLIENTE_SEM_PLANO = 'Cliente sem plano'
 
 
 class VendaInvalida(Exception):
@@ -597,7 +598,7 @@ def registrar_venda(dados, usuario, loja, vendedor=None):
         rotulo = tipos[tipo]
         reg = dict(tipo=tipo, rotulo=rotulo, plano=None, plano_anterior=None, segmentacao='', valor_anterior=None,
                    adicional=None, serial='', novo_titular_cpf='', novo_titular_nome='', numero_novo='',
-                   ativacao=False, valor=ZERO, fora=None)
+                   ativacao=False, valor=ZERO, fora=None, sem_plano=False)
         if tipo in ('ALTA', 'REATIVACAO', 'TROCA_PLANO', 'MIGRACAO', 'TROCA_SIMCARD', 'TROCA_TITULARIDADE'):
             plano = Plano.objects.filter(pk=s.get('plano_id')).first() if str(s.get('plano_id') or '').isdigit() else None
             if plano is None:
@@ -610,9 +611,13 @@ def registrar_venda(dados, usuario, loja, vendedor=None):
         # Plano que o cliente tem e a Vivo não vende mais: vale como plano anterior (27/10/2026).
         fora = (PlanoForaPortfolio.objects.filter(pk=s.get('plano_fora_id')).first()
                 if tipo in TIPOS_COM_PLANO_FORA and str(s.get('plano_fora_id') or '').isdigit() else None)
-        if tipo in TIPOS_COM_PLANO_FORA and s.get('plano_fora_id') and fora is None:
+        # "Cliente sem Plano" (03/11/2026): não tinha plano antes; o delta é o valor inteiro do plano novo.
+        sem_plano = tipo in TIPOS_COM_PLANO_FORA and bool(s.get('sem_plano'))
+        if tipo in TIPOS_COM_PLANO_FORA and s.get('plano_fora_id') and fora is None and not sem_plano:
             erros.append(f'{rotulo}: o plano fora do portfólio escolhido não existe mais — escolha de novo.')
-        if fora is not None:
+        if sem_plano:
+            reg.update(sem_plano=True, fora=None, plano_anterior=None, valor_anterior=ZERO)
+        elif fora is not None:
             reg.update(fora=fora, plano_anterior=None, valor_anterior=fora.valor)
         elif tipo in ('TROCA_PLANO', 'MIGRACAO'):
             anterior = (Plano.objects.filter(pk=s.get('plano_anterior_id')).first()
@@ -696,8 +701,8 @@ def registrar_venda(dados, usuario, loja, vendedor=None):
                 venda=venda, servico=s['rotulo'], tipo_servico=s['tipo'], segmentacao=s['segmentacao'],
                 plano=s['plano'], plano_novo=(s['plano'].nome if s['plano'] else (s['adicional'].nome if s['adicional'] else ''))[:200],
                 tipo_plano=s['segmentacao'], plano_anterior=s['plano_anterior'],
-                plano_anterior_nome=(s['fora'].nome if s['fora'] else (s['plano_anterior'].nome if s['plano_anterior']
-                                     else venda.plano_anterior_nome))[:200],
+                plano_anterior_nome=(CLIENTE_SEM_PLANO if s['sem_plano'] else s['fora'].nome if s['fora']
+                                     else (s['plano_anterior'].nome if s['plano_anterior'] else venda.plano_anterior_nome))[:200],
                 plano_anterior_fora=s['fora'],
                 valor_anterior=s['valor_anterior'], valor_plano=s['valor'], delta=s['delta'],
                 linhas=linhas_cliente, numero_acesso=(linhas_cliente[0] if linhas_cliente else '')[:40],

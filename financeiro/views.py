@@ -17,7 +17,7 @@ from contagem_caixa.permissions import lojas as todas_as_lojas
 
 from . import servicos
 from .models import (Baixa, ContaBancaria, ExtratoLinha, LogFinanceiro, PlanoConta, RecebivelCartao, Titulo)
-from .permissoes import AREAS, e_superadmin, exige, filtrar_por_loja, lojas_permitidas, pode, ve_loja
+from .permissoes import AREAS, e_superadmin, exige, filtrar_por_loja, lojas_permitidas, pode, pode_piscofins, ve_loja
 
 ZERO = Decimal('0.00')
 TAMANHO_MAXIMO = 15 * 1024 * 1024
@@ -88,7 +88,8 @@ def _contexto_base(request, aba):
         'pagar.ver', 'pagar.editar', 'pagar.cancelar', 'receber.ver', 'receber.editar', 'receber.cancelar',
         'baixas.baixar', 'baixas.estornar', 'bancos.ver', 'bancos.editar', 'bancos.lancar', 'conciliacao.ver',
         'conciliacao.conciliar', 'cartoes.ver', 'cartoes.conciliar', 'plano.ver', 'plano.editar', 'auditoria.ver',
-        'caixa.ver')}, 'pode_baixas': pode(user, 'baixas'), 'pode_fechamento': _pode_ver_fechamento(user)}
+        'caixa.ver')}, 'pode_baixas': pode(user, 'baixas'), 'pode_fechamento': _pode_ver_fechamento(user),
+        'pode_piscofins': pode_piscofins(user)}
 
 
 def _pode_ver_fechamento(user):
@@ -147,7 +148,8 @@ def _projecao(titulos, hoje, ve_pagar, ve_receber):
 def painel(request):
     from .permissoes import chaves_de
     if not e_superadmin(request.user) and not chaves_de(request.user):
-        return redirect('financeiro:fechamento')            # só tem o Fechamento de caixa
+        # Só tem o Fechamento de caixa ou o PIS/Cofins: o painel estaria vazio.
+        return redirect('financeiro:fechamento' if _pode_ver_fechamento(request.user) else 'financeiro:piscofins')
     hoje = timezone.localdate()
     semana = hoje + timedelta(days=7)
     user = request.user

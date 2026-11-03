@@ -29,6 +29,11 @@ def _registrar(request, acao, descricao, obj=None, valor=None, depois=None):
         pass
 
 
+def _contexto_base(request, aba):
+    from financeiro.views import _contexto_base as base
+    return base(request, aba)
+
+
 def _pode_lancar_titulos(user):
     try:
         from financeiro.permissoes import pode
@@ -53,6 +58,7 @@ def nota(request, pk):
         'tipos_manifestacao': ManifestacaoNFe.TIPOS, 'sefaz_configurado': sefaz.configurado(),
         'lojas_todas': lojas(), 'hoje': timezone.localdate(),
         'xml_texto': nota_fiscal.xml_bonito(nota.xml_completo or nota.xml_resumo),
+        **_contexto_base(request, 'piscofins'),
         'pode_titulos': _pode_lancar_titulos(request.user),
         'titulos': list(nota.titulos.all()) if hasattr(nota, 'titulos') else [],
         'competencia_sugerida': (nota.competencia or (nota.emissao and timezone.localtime(nota.emissao).date())
@@ -125,12 +131,12 @@ def importar_chave(request):
         nota, mensagem = manifestacao.importar_por_chave(chave, cnpj)
     except (manifestacao.ManifestacaoInvalida, sefaz.SefazErro) as exc:
         messages.error(request, str(exc))
-        return redirect(reverse('contagem_caixa:piscofins') + '?visao=sefaz')
+        return redirect(reverse('financeiro:piscofins') + '?visao=sefaz')
     _registrar(request, 'IMPORTAR', f'Importou pela chave {chave}: {mensagem}', obj=nota,
                valor=nota.valor if nota else None)
     if nota is None:
         messages.error(request, mensagem)
-        return redirect(reverse('contagem_caixa:piscofins') + '?visao=sefaz')
+        return redirect(reverse('financeiro:piscofins') + '?visao=sefaz')
     messages.success(request, f'NF {nota.numero} de {nota.emitente_nome}: {mensagem}')
     return redirect('contagem_caixa:piscofins_nota', nota.pk)
 

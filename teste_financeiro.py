@@ -103,7 +103,13 @@ try:
         t('e vê o item no menu', '/financeiro/' in cc.get('/').content.decode())
         r = ca.get('/financeiro/')
         t('quem não foi liberado não entra', r.status_code == 302, r.status_code)
-        t('nem vê o item no menu', 'href="/financeiro/"' not in ca.get('/').content.decode())
+        # Gestor do caixa (ADMIN) chega ao PIS/Cofins pelo Financeiro (03/11/2026): vê o item, mas só aquela aba.
+        from contagem_caixa.permissions import pode_piscofins
+        menu = ca.get('/').content.decode()
+        if pode_piscofins(ana):
+            t('quem só tem PIS/Cofins cai nele', r.url == '/financeiro/pis-cofins/', r.url)
+        else:
+            t('nem vê o item no menu', 'href="/financeiro/"' not in menu)
         t('e não abre a tela de acessos', ca.get('/financeiro/acessos/').status_code == 302)
 
         r = cc.post('/financeiro/acessos/', {'user': ana.id, 'permissoes': ['pagar.ver', 'baixas.baixar', 'caixa.ver'],

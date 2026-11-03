@@ -128,6 +128,12 @@ resto é Tailwind padrão, que o tema escuro do portal já converte.
                 <i class="fas fa-plus mr-1.5"></i>Nova venda
             </a>
             {% endif %}
+            {% if vd_pode.vendas_lancar or vd_pode.rede_ver %}
+            <a href="{% url 'vendas:orcamentos' %}"
+               class="vd-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'orcamentos' %}vd-tab-ativa{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
+                <i class="fas fa-file-signature mr-1.5"></i>Orçamentos
+            </a>
+            {% endif %}
             {% if vd_pode.clientes_ver %}
             <a href="{% url 'vendas:clientes' %}"
                class="vd-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'clientes' %}vd-tab-ativa{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">

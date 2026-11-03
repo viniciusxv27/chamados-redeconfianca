@@ -1,12 +1,17 @@
 from django.urls import path
 
-from . import views, views_admin, views_banco, views_fechamento
+from contagem_caixa import views_piscofins
+
+from . import views, views_admin, views_banco, views_fechamento, views_importacao
 
 app_name = 'financeiro'
 
 urlpatterns = [
     path('', views.painel, name='painel'),
     path('caixa/', views.caixa, name='caixa'),
+
+    # PIS/Cofins (a tela; as ações seguem em /contagem-caixa/pis-cofins/...)
+    path('pis-cofins/', views_piscofins.piscofins, name='piscofins'),
 
     # Fechamento de caixa (dia D aberto até 10h de D+1)
     path('fechamento/', views_fechamento.fechamento, name='fechamento'),
@@ -17,6 +22,8 @@ urlpatterns = [
 
     # Títulos
     path('pagar/', views.pagar, name='pagar'),
+    path('pagar/importar/', views_importacao.importar, name='pagar_importar'),
+    path('pagar/importar/modelo.csv', views_importacao.importar_modelo, name='pagar_importar_modelo'),
     path('receber/', views.receber, name='receber'),
     path('<str:area>/novo/', views.titulo_novo, name='titulo_novo'),
     path('titulo/<int:pk>/', views.titulo, name='titulo'),

@@ -23,7 +23,7 @@ urlpatterns = [
     path('sangrias/exportar/', views_sangrias.sangrias_exportar, name='sangrias_exportar'),
 
     # Contas a pagar · PIS/Cofins: documentos do mês e a planilha da competência.
-    path('pis-cofins/', views_piscofins.piscofins, name='piscofins'),
+    path('pis-cofins/', views_piscofins.piscofins_endereco_antigo, name='piscofins'),
     path('pis-cofins/cnpj/', views_piscofins.piscofins_cnpj, name='piscofins_cnpj'),
     path('pis-cofins/ler/', views_piscofins.piscofins_ler, name='piscofins_ler'),
     path('pis-cofins/lancar/', views_piscofins.piscofins_registrar, name='piscofins_registrar'),

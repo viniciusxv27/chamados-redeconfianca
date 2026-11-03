@@ -550,3 +550,45 @@ class AcessoVendas(models.Model):
     class Meta:
         verbose_name = 'Acesso a Vendas'
         verbose_name_plural = 'Acessos a Vendas'
+
+
+class Orcamento(models.Model):
+    """Orçamento mandado ao cliente pelo WhatsApp (03/11/2026).
+
+    O registro nasce antes do envio: se o processo cair no meio, fica a marca de que
+    algo pode ter saído, e o vendedor não manda duas vezes sem saber.
+    """
+
+    PILARES = [('MOVEL', 'Móvel'), ('FIXA', 'Fixa'), ('SMARTPHONES', 'Smartphones'), ('ELETRONICOS', 'Eletrônicos'),
+               ('ESSENCIAIS', 'Essenciais'), ('SEGUROS', 'Seguros'), ('SVA', 'SVA')]
+    STATUS = [('ENVIANDO', 'Enviando'), ('ENVIADO', 'Enviado'), ('FALHA', 'Não enviado')]
+
+    cliente_nome = models.CharField(max_length=200, verbose_name='Nome do cliente')
+    pilar = models.CharField(max_length=12, choices=PILARES, verbose_name='Pilar')
+    numero = models.CharField(max_length=20, db_index=True, verbose_name='Número do cliente')
+    texto = models.TextField(verbose_name='Orçamento')
+    mensagem = models.TextField(verbose_name='Mensagem enviada')
+    status = models.CharField(max_length=8, choices=STATUS, default='ENVIANDO', db_index=True, verbose_name='Situação')
+    erro = models.CharField(max_length=255, blank=True, verbose_name='Motivo da falha')
+    vendedor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='+',
+                                 verbose_name='Vendedor')
+    vendedor_nome = models.CharField(max_length=200, blank=True, verbose_name='Vendedor (na hora)')
+    loja = models.ForeignKey('users.Sector', on_delete=models.SET_NULL, null=True, blank=True, related_name='+',
+                             verbose_name='Loja')
+    tentativas = models.PositiveSmallIntegerField(default=0, verbose_name='Tentativas')
+    enviado_em = models.DateTimeField(null=True, blank=True, verbose_name='Enviado em')
+    criado_em = models.DateTimeField(auto_now_add=True, db_index=True, verbose_name='Criado em')
+
+    class Meta:
+        verbose_name = 'Orçamento'
+        verbose_name_plural = 'Orçamentos'
+        ordering = ['-criado_em', '-id']
+
+    def __str__(self):
+        return f'Orçamento {self.get_pilar_display()} — {self.cliente_nome}'
+
+    @property
+    def numero_formatado(self):
+        from .slv import formatar_telefone
+        d = self.numero[2:] if self.numero.startswith('55') and len(self.numero) > 11 else self.numero
+        return formatar_telefone(d)

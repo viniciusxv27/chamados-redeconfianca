@@ -1,4 +1,4 @@
-{% extends 'contagem_caixa/base_caixa.html' %}
+{% extends 'financeiro/base_piscofins.html' %}
 {% load caixa_tags l10n %}
 
 {% block cx_titulo %}{% if nota.tipo_documento == 'NFSE' %}NFS-e{% else %}NF-e{% endif %} {{ nota.numero }} — {{ nota.emitente_nome }}{% endblock %}
@@ -7,7 +7,7 @@
 {% block cx_nav %}<div class="h-4"></div>{% endblock %}
 {% block cx_acoes %}
 <div class="flex items-center gap-2 flex-wrap no-print">
-    <a href="{% url 'contagem_caixa:piscofins' %}?visao=sefaz&competencia={{ competencia_sugerida }}" class="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50"><i class="fas fa-arrow-left"></i>Notas no CNPJ</a>
+    <a href="{% url 'financeiro:piscofins' %}?visao=sefaz&competencia={{ competencia_sugerida }}" class="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50"><i class="fas fa-arrow-left"></i>Notas no CNPJ</a>
     <a href="{% url 'contagem_caixa:piscofins_nota_xml' nota.id %}" class="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50"><i class="fas fa-file-code text-sky-600"></i>XML</a>
     {% if dados %}<button type="button" onclick="window.print()" class="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50"><i class="fas fa-print"></i>Imprimir</button>{% endif %}
 </div>

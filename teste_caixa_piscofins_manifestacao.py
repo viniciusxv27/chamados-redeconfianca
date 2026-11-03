@@ -288,7 +288,7 @@ try:
         t('só com resumo, explica a ciência', 'Só o resumo da SEFAZ' in html and 'Ciência da operação' in html)
         r = c.get(f'/contagem-caixa/pis-cofins/nota/{n1.id}/xml/')
         t('baixa o XML', r.status_code == 200 and f'NFe{CH1}.xml' in r['Content-Disposition'])
-        html = c.get('/contagem-caixa/pis-cofins/?visao=sefaz&competencia=2019-05').content.decode()
+        html = c.get('/financeiro/pis-cofins/?visao=sefaz&competencia=2019-05').content.decode()
         t('a lista das notas leva à nota', f'/contagem-caixa/pis-cofins/nota/{n1.id}/' in html)
         t('com o selo da manifestação', 'Confirmação da operação' in html)
         t('e o campo de importar pela chave', '/contagem-caixa/pis-cofins/sefaz/chave/' in html)

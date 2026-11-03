@@ -17,7 +17,7 @@ FUNCOES = [
     ('modulo.ver', 'Ver módulo', 'Entrar em Vendas: as vendas que a pessoa fez ou lançou e a tabela de produtos.', []),
     ('rede.ver', 'Ver a rede inteira', 'Vendas e clientes de todas as lojas, com o ranking por loja e vendedor.',
      ['modulo.ver']),
-    ('vendas.lancar', 'Lançar venda', 'Nova venda pela loja dele, com cadastro do cliente e conferência do Renova.',
+    ('vendas.lancar', 'Lançar venda', 'Nova venda pela loja dele, com cadastro do cliente e conferência do Renova, e enviar orçamento ao cliente no WhatsApp.',
      ['modulo.ver']),
     ('vendas.lancar_outros', 'Lançar por outra loja/vendedor', 'Escolher o PDV e o vendedor ao lançar.',
      ['modulo.ver', 'vendas.lancar']),

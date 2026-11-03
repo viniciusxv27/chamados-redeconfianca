@@ -449,6 +449,17 @@
                             </a>
                         </li>
                         {% endif %}
+                        {% if fibras_liberado %}
+                        <li>
+                            <a href="{% url 'fibras:kanban' %}" data-rota="{% url 'fibras:kanban' %}"
+                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-network-wired text-sky-400 flex-shrink-0 w-5 text-center"></i>
+                                <span class="text-sm">Fibras</span>
+                                <div class="tooltip-collapsed">Fibras</div>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-sky-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        {% endif %}
                         <li>
                             <a href="{% url 'folhaponto:my_folhas' %}" data-rota="{% url 'folhaponto:my_folhas' %}"
                                class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
@@ -538,17 +549,6 @@
                             </a>
                         </li>
                         {% endif %}
-                        {% if fibras_liberado %}
-                        <li>
-                            <a href="{% url 'fibras:kanban' %}" data-rota="{% url 'fibras:kanban' %}"
-                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
-                                <i class="fas fa-network-wired text-sky-400 flex-shrink-0 w-5 text-center"></i>
-                                <span class="text-sm">Fibras</span>
-                                <div class="tooltip-collapsed">Fibras</div>
-                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-sky-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
-                        </li>
-                        {% endif %}
                         {% if renova_liberado %}
                         <li>
                             <a href="{% url 'renova:inicio' %}" data-rota="{% url 'renova:inicio' %}"
@@ -570,142 +570,43 @@
                         </li>
                         <li>
                             <div class="menu-grupo flex items-center gap-2.5 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group cursor-pointer"
-                                 onclick="toggleSubmenu('gestao-menu')" title="Gestão Operacional">
-                                <i class="fas fa-layer-group text-orange-400 flex-shrink-0 w-5 text-center"></i>
-                                <span class="text-sm flex-1 sidebar-text">Gestão Operacional</span>
-                                <i class="fas fa-chevron-down text-gray-500 text-[10px] submenu-toggle transition-transform duration-300" id="gestao-menu-icon"></i>
-                                <div class="tooltip-collapsed">Gestão Operacional</div>
-                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-orange-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                 onclick="toggleSubmenu('tickets-menu')" title="Chamados">
+                                <i class="fas fa-headset text-blue-400 flex-shrink-0 w-5 text-center"></i>
+                                <span class="text-sm flex-1 sidebar-text">Chamados</span>
+                                <i class="fas fa-chevron-down text-gray-500 text-[10px] submenu-toggle transition-transform duration-300" id="tickets-menu-icon"></i>
+                                <div class="tooltip-collapsed">Chamados</div>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-blue-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </div>
                         </li>
-                        <li class="submenu-content hidden" id="gestao-menu">
+                        <li class="submenu-content hidden" id="tickets-menu">
                             <ul class="space-y-0.5 ml-4 pl-2.5 border-l border-gray-800">
                         <li>
-                            <a href="{% url 'agenda:calendar' %}" data-rota="{% url 'agenda:calendar' %}"
+                            <a href="{% url 'tickets_list' %}" data-rota="{% url 'tickets_list' %}"
                                class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
-                                <i class="fas fa-calendar-alt text-indigo-400 flex-shrink-0 w-5 text-center"></i>
-                                <span class="text-sm">Agenda</span>
-                                <div class="tooltip-collapsed">Agenda</div>
-                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-indigo-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                <i class="fas fa-ticket text-orange-400 flex-shrink-0 w-5 text-center"></i>
+                                <span class="text-sm">Meus Tickets</span>
+                                <div class="tooltip-collapsed">Meus Tickets</div>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-orange-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </a>
                         </li>
                         <li>
-                            <a href="{% url 'files:files_list' %}" data-rota="{% url 'files:files_list' %}"
+                            <a href="{% url 'ticket_create' %}" data-rota="{% url 'ticket_create' %}"
                                class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
-                                <i class="fas fa-folder-open text-amber-400 flex-shrink-0 w-5 text-center"></i>
-                                <span class="text-sm">Arquivos</span>
-                                <div class="tooltip-collapsed">Arquivos</div>
-                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-amber-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
-                        </li>
-                        {% if user|tem_acesso:'checklists' %}
-                        <li>
-                            <a href="{% url 'checklists:dashboard' %}" data-rota="{% url 'checklists:dashboard' %}"
-                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
-                                <i class="fas fa-clipboard-check text-emerald-400 flex-shrink-0 w-5 text-center"></i>
-                                <span class="text-sm">Checklists ADM</span>
-                                <div class="tooltip-collapsed">Checklists ADM</div>
+                                <i class="fas fa-plus-circle text-emerald-400 flex-shrink-0 w-5 text-center"></i>
+                                <span class="text-sm">Novo</span>
+                                <div class="tooltip-collapsed">Novo</div>
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-emerald-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </a>
                         </li>
-                        {% endif %}
-                        {% if can_access_contestacao_menu %}
                         <li>
-                            <a href="{% url 'contestacao:exclusion_list' %}" data-rota="{% url 'contestacao:exclusion_list' %}"
+                            <a href="{% url 'dashboard' %}" data-rota="{% url 'dashboard' %}"
                                class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
-                                <i class="fas fa-scale-balanced text-red-400 flex-shrink-0 w-5 text-center"></i>
-                                <span class="text-sm">Contestação</span>
-                                <div class="tooltip-collapsed">Contestação</div>
-                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-red-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
-                        </li>
-                        {% endif %}
-                        {% if drive_liberado %}
-                        <li>
-                            <a href="{% url 'drive:index' %}" data-rota="{% url 'drive:index' %}"
-                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
-                                <i class="fas fa-hard-drive text-sky-400 flex-shrink-0 w-5 text-center"></i>
-                                <span class="text-sm">Drive</span>
-                                <div class="tooltip-collapsed">Drive</div>
-                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-sky-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
-                        </li>
-                        {% endif %}
-                        <li>
-                            <a href="{% url 'feedback:dashboard' %}" data-rota="{% url 'feedback:dashboard' %}"
-                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
-                                <i class="fas fa-comments text-violet-400 flex-shrink-0 w-5 text-center"></i>
-                                <span class="text-sm">Feedbacks</span>
-                                <div class="tooltip-collapsed">Feedbacks</div>
-                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-violet-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
-                        </li>
-                        {% if user|tem_acesso:'limpeza' %}
-                        <li>
-                            <a href="{% url 'limpeza:dashboard' %}" data-rota="{% url 'limpeza:dashboard' %}"
-                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
-                                <i class="fas fa-broom text-lime-400 flex-shrink-0 w-5 text-center"></i>
-                                <span class="text-sm">Limpeza</span>
-                                <div class="tooltip-collapsed">Limpeza</div>
-                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-lime-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
-                        </li>
-                        {% endif %}
-                        <li>
-                            <a href="{% url 'tasks_dashboard' %}" data-rota="{% url 'tasks_dashboard' %}"
-                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
-                                <i class="fas fa-tasks text-blue-400 flex-shrink-0 w-5 text-center"></i>
-                                <span class="text-sm">Minhas Tarefas</span>
-                                <div class="tooltip-collapsed">Minhas Tarefas</div>
+                                <i class="fas fa-gauge-high text-blue-400 flex-shrink-0 w-5 text-center"></i>
+                                <span class="text-sm">Ver Dashboard</span>
+                                <div class="tooltip-collapsed">Ver Dashboard</div>
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-blue-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </a>
                         </li>
-                        {% load projects_tags %}
-                        {% if user|can_access_projects %}
-                        <li>
-                            <a href="{% url 'projects:dashboard' %}" data-rota="{% url 'projects:dashboard' %}"
-                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
-                                <i class="fas fa-project-diagram text-purple-400 flex-shrink-0 w-5 text-center"></i>
-                                <span class="text-sm">Projetos</span>
-                                <div class="tooltip-collapsed">Projetos</div>
-                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-purple-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
-                        </li>
-                        {% endif %}
-                        {% if rotina_no_menu or rotina_admin %}
-                        <li>
-                            <a href="{% url 'rotina:minha' %}" data-rota="{% url 'rotina:minha' %}"
-                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
-                                <i class="fas fa-calendar-week text-orange-400 flex-shrink-0 w-5 text-center"></i>
-                                <span class="text-sm flex-1">Rotina Gerencial</span>
-                                <div class="tooltip-collapsed">Rotina Gerencial</div>
-                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-orange-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
-                        </li>
-                        {% endif %}
-                        {% if rotina_adm_liberada %}
-                        <li>
-                            <a href="{% url 'rotina_adm:painel' %}" data-rota="{% url 'rotina_adm:painel' %}"
-                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
-                                <i class="fas fa-shield-alt text-violet-400 flex-shrink-0 w-5 text-center"></i>
-                                <span class="text-sm flex-1">Rotina ADM</span>
-                                <div class="tooltip-collapsed">Rotina ADM</div>
-                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-violet-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
-                        </li>
-                        {% endif %}
-                        {% if user|sap_na_gestao %}
-                        {% comment %}Gerente de loja: a Visão SAP da loja dele. A administração segue com ela no ADMINISTRATIVO.{% endcomment %}
-                        <li>
-                            <a href="{% url 'auditoria_sap:lista' %}" data-rota="{% url 'auditoria_sap:lista' %}"
-                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Visão SAP">
-                                <i class="fas fa-magnifying-glass-dollar text-sky-400 flex-shrink-0 w-5 text-center"></i>
-                                <span class="text-sm">Visão SAP</span>
-                                <div class="tooltip-collapsed">Visão SAP</div>
-                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-sky-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
-                        </li>
-                        {% endif %}
                             </ul>
                         </li>
                         {% comment %}Gestão Corporativa: o antigo grupo Financeiro (id financeiro-menu mantido para o estado salvo do menu).{% endcomment %}
@@ -833,17 +734,6 @@
                             </a>
                         </li>
                         {% endif %}
-                        {% if user|tem_acesso:'caixa.piscofins' %}
-                        <li>
-                            <a href="{% url 'contagem_caixa:piscofins' %}" data-rota="{% url 'contagem_caixa:piscofins' %}"
-                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
-                                <i class="fas fa-file-invoice-dollar text-emerald-400 flex-shrink-0 w-5 text-center"></i>
-                                <span class="text-sm">PIS/Cofins</span>
-                                <div class="tooltip-collapsed">Contas a pagar · PIS/Cofins</div>
-                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-emerald-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
-                        </li>
-                        {% endif %}
                         {% if user.is_superuser or user.hierarchy == 'SUPERADMIN' %}
                         <li>
                             <a href="{% url 'quadro_hc:quadro' %}" data-rota="{% url 'quadro_hc:quadro' %}"
@@ -869,43 +759,142 @@
                         </li>
                         <li>
                             <div class="menu-grupo flex items-center gap-2.5 p-2 rounded-lg hover:bg-gray-800 transition-colors relative group cursor-pointer"
-                                 onclick="toggleSubmenu('tickets-menu')" title="Chamados">
-                                <i class="fas fa-headset text-blue-400 flex-shrink-0 w-5 text-center"></i>
-                                <span class="text-sm flex-1 sidebar-text">Chamados</span>
-                                <i class="fas fa-chevron-down text-gray-500 text-[10px] submenu-toggle transition-transform duration-300" id="tickets-menu-icon"></i>
-                                <div class="tooltip-collapsed">Chamados</div>
-                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-blue-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                 onclick="toggleSubmenu('gestao-menu')" title="Gestão Operacional">
+                                <i class="fas fa-layer-group text-orange-400 flex-shrink-0 w-5 text-center"></i>
+                                <span class="text-sm flex-1 sidebar-text">Gestão Operacional</span>
+                                <i class="fas fa-chevron-down text-gray-500 text-[10px] submenu-toggle transition-transform duration-300" id="gestao-menu-icon"></i>
+                                <div class="tooltip-collapsed">Gestão Operacional</div>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-orange-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </div>
                         </li>
-                        <li class="submenu-content hidden" id="tickets-menu">
+                        <li class="submenu-content hidden" id="gestao-menu">
                             <ul class="space-y-0.5 ml-4 pl-2.5 border-l border-gray-800">
                         <li>
-                            <a href="{% url 'tickets_list' %}" data-rota="{% url 'tickets_list' %}"
+                            <a href="{% url 'agenda:calendar' %}" data-rota="{% url 'agenda:calendar' %}"
                                class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
-                                <i class="fas fa-ticket text-orange-400 flex-shrink-0 w-5 text-center"></i>
-                                <span class="text-sm">Meus Tickets</span>
-                                <div class="tooltip-collapsed">Meus Tickets</div>
-                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-orange-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                <i class="fas fa-calendar-alt text-indigo-400 flex-shrink-0 w-5 text-center"></i>
+                                <span class="text-sm">Agenda</span>
+                                <div class="tooltip-collapsed">Agenda</div>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-indigo-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </a>
                         </li>
                         <li>
-                            <a href="{% url 'ticket_create' %}" data-rota="{% url 'ticket_create' %}"
+                            <a href="{% url 'files:files_list' %}" data-rota="{% url 'files:files_list' %}"
                                class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
-                                <i class="fas fa-plus-circle text-emerald-400 flex-shrink-0 w-5 text-center"></i>
-                                <span class="text-sm">Novo</span>
-                                <div class="tooltip-collapsed">Novo</div>
+                                <i class="fas fa-folder-open text-amber-400 flex-shrink-0 w-5 text-center"></i>
+                                <span class="text-sm">Arquivos</span>
+                                <div class="tooltip-collapsed">Arquivos</div>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-amber-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        {% if user|tem_acesso:'checklists' %}
+                        <li>
+                            <a href="{% url 'checklists:dashboard' %}" data-rota="{% url 'checklists:dashboard' %}"
+                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-clipboard-check text-emerald-400 flex-shrink-0 w-5 text-center"></i>
+                                <span class="text-sm">Checklists ADM</span>
+                                <div class="tooltip-collapsed">Checklists ADM</div>
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-emerald-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </a>
                         </li>
+                        {% endif %}
+                        {% if can_access_contestacao_menu %}
                         <li>
-                            <a href="{% url 'dashboard' %}" data-rota="{% url 'dashboard' %}"
+                            <a href="{% url 'contestacao:exclusion_list' %}" data-rota="{% url 'contestacao:exclusion_list' %}"
                                class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
-                                <i class="fas fa-gauge-high text-blue-400 flex-shrink-0 w-5 text-center"></i>
-                                <span class="text-sm">Ver Dashboard</span>
-                                <div class="tooltip-collapsed">Ver Dashboard</div>
+                                <i class="fas fa-scale-balanced text-red-400 flex-shrink-0 w-5 text-center"></i>
+                                <span class="text-sm">Contestação</span>
+                                <div class="tooltip-collapsed">Contestação</div>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-red-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% if drive_liberado %}
+                        <li>
+                            <a href="{% url 'drive:index' %}" data-rota="{% url 'drive:index' %}"
+                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-hard-drive text-sky-400 flex-shrink-0 w-5 text-center"></i>
+                                <span class="text-sm">Drive</span>
+                                <div class="tooltip-collapsed">Drive</div>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-sky-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        {% endif %}
+                        <li>
+                            <a href="{% url 'feedback:dashboard' %}" data-rota="{% url 'feedback:dashboard' %}"
+                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-comments text-violet-400 flex-shrink-0 w-5 text-center"></i>
+                                <span class="text-sm">Feedbacks</span>
+                                <div class="tooltip-collapsed">Feedbacks</div>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-violet-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        {% if user|tem_acesso:'limpeza' %}
+                        <li>
+                            <a href="{% url 'limpeza:dashboard' %}" data-rota="{% url 'limpeza:dashboard' %}"
+                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-broom text-lime-400 flex-shrink-0 w-5 text-center"></i>
+                                <span class="text-sm">Limpeza</span>
+                                <div class="tooltip-collapsed">Limpeza</div>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-lime-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        {% endif %}
+                        <li>
+                            <a href="{% url 'tasks_dashboard' %}" data-rota="{% url 'tasks_dashboard' %}"
+                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-tasks text-blue-400 flex-shrink-0 w-5 text-center"></i>
+                                <span class="text-sm">Minhas Tarefas</span>
+                                <div class="tooltip-collapsed">Minhas Tarefas</div>
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-blue-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </a>
                         </li>
+                        {% load projects_tags %}
+                        {% if user|can_access_projects %}
+                        <li>
+                            <a href="{% url 'projects:dashboard' %}" data-rota="{% url 'projects:dashboard' %}"
+                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-project-diagram text-purple-400 flex-shrink-0 w-5 text-center"></i>
+                                <span class="text-sm">Projetos</span>
+                                <div class="tooltip-collapsed">Projetos</div>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-purple-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% if rotina_adm_liberada %}
+                        <li>
+                            <a href="{% url 'rotina_adm:painel' %}" data-rota="{% url 'rotina_adm:painel' %}"
+                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-shield-alt text-violet-400 flex-shrink-0 w-5 text-center"></i>
+                                <span class="text-sm flex-1">Rotina ADM</span>
+                                <div class="tooltip-collapsed">Rotina ADM</div>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-violet-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% if rotina_no_menu or rotina_admin %}
+                        <li>
+                            <a href="{% url 'rotina:minha' %}" data-rota="{% url 'rotina:minha' %}"
+                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-calendar-week text-orange-400 flex-shrink-0 w-5 text-center"></i>
+                                <span class="text-sm flex-1">Rotina Gerencial</span>
+                                <div class="tooltip-collapsed">Rotina Gerencial</div>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-orange-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% if user|sap_na_gestao %}
+                        {% comment %}Gerente de loja: a Visão SAP da loja dele. A administração segue com ela no ADMINISTRATIVO.{% endcomment %}
+                        <li>
+                            <a href="{% url 'auditoria_sap:lista' %}" data-rota="{% url 'auditoria_sap:lista' %}"
+                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group" title="Visão SAP">
+                                <i class="fas fa-magnifying-glass-dollar text-sky-400 flex-shrink-0 w-5 text-center"></i>
+                                <span class="text-sm">Visão SAP</span>
+                                <div class="tooltip-collapsed">Visão SAP</div>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-sky-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        {% endif %}
                             </ul>
                         </li>
 

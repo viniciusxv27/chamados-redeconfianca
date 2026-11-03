@@ -11,6 +11,7 @@ from functools import wraps
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db import transaction
 from django.db.models import Count, Q, Sum
 from django.core.files.base import ContentFile
 from django.http import HttpResponse, JsonResponse
@@ -66,9 +67,9 @@ def _meses(ate, n):
 
 def _voltar(request, competencia=None):
     destino = request.POST.get('voltar') or ''
-    if destino.startswith('/contagem-caixa/pis-cofins/'):
+    if destino.startswith(('/contagem-caixa/pis-cofins/', '/financeiro/pis-cofins/')):
         return redirect(destino)
-    url = reverse('contagem_caixa:piscofins')
+    url = reverse('financeiro:piscofins')
     return redirect(f'{url}?competencia={competencia:%Y-%m}' if competencia else url)
 
 
@@ -223,6 +224,13 @@ def _duplicados(qs):
 
 
 @login_required
+def piscofins_endereco_antigo(request):
+    """A tela foi para /financeiro/pis-cofins/ (03/11/2026): link salvo não quebra."""
+    consulta = request.META.get('QUERY_STRING')
+    return redirect(reverse('financeiro:piscofins') + (f'?{consulta}' if consulta else ''))
+
+
+@login_required
 @_liberado
 def piscofins(request):
     hoje = timezone.localdate()
@@ -257,8 +265,14 @@ def piscofins(request):
 
     parametros = request.GET.copy()
     parametros['competencia'] = f'{competencia:%Y-%m}'
+    from financeiro.models import Titulo
+    from financeiro.permissoes import pode, ve_loja
+    from financeiro.views import _contexto_base
     return render(request, 'contagem_caixa/piscofins.html', {
-        'aba': 'piscofins',
+        **_contexto_base(request, 'piscofins'),
+        'pode_titulos': pode(request.user, 'pagar.editar'),
+        'formas_titulo': Titulo.FORMAS,
+        'lojas_rateio': [l for l in lojas() if ve_loja(request.user, l.id)],
         'competencia': competencia,
         'competencia_atual': atual,
         'meses': meses,
@@ -468,11 +482,87 @@ def _ler_formulario(request, documento=None):
             'nota': nota}, ''
 
 
+def _ler_conta_a_pagar(request, dados):
+    """O "Lançar como Conta a Pagar". Devolve (None, '') sem a opção; (campos, '') ou (None, erro).
+
+    ``partes`` é [(loja, valor)]: uma só sem rateio. Com rateio a soma tem de bater com o valor do
+    documento, ao centavo: é o que evita pagar a mais ou a menos que a nota.
+    """
+    if request.POST.get('lancar_pagar') != '1':
+        return None, ''
+    from financeiro.models import Titulo
+    from financeiro.permissoes import pode, ve_loja
+    if not pode(request.user, 'pagar.editar'):
+        return None, 'Lançar contas a pagar no Financeiro não está liberado para o seu usuário.'
+    nota = dados.get('nota')
+    if nota is not None and nota.titulos.exclude(status='CANCELADO').exists():
+        return None, 'Esta nota já tem contas a pagar no Financeiro.'
+    vencimento = parse_date(request.POST.get('pagar_vencimento') or '')
+    if vencimento is None:
+        return None, 'Conta a pagar: informe a data de vencimento.'
+    descricao = (request.POST.get('pagar_descricao') or '').strip()[:200]
+    if not descricao:
+        return None, 'Conta a pagar: informe a descrição.'
+    forma = request.POST.get('pagar_forma') or ''
+    if forma not in dict(Titulo.FORMAS):
+        return None, 'Conta a pagar: escolha a forma de pagamento.'
+    if request.POST.get('rateio') != '1':
+        if dados['loja'] is not None and not ve_loja(request.user, dados['loja'].id):
+            return None, 'Conta a pagar: esta loja não está liberada para o seu usuário.'
+        return {'vencimento': vencimento, 'descricao': descricao, 'forma': forma, 'partes': [(dados['loja'], dados['valor'])],
+                'rateio': False}, ''
+    ids = [i for i in dict.fromkeys(request.POST.getlist('rateio_loja')) if i.isdigit()]
+    disponiveis = {str(l.id): l for l in lojas().filter(id__in=ids) if ve_loja(request.user, l.id)}
+    if not ids or len(disponiveis) != len(ids):
+        return None, 'Rateio: selecione as lojas.'
+    partes = []
+    for i in ids:
+        loja = disponiveis[i]
+        try:
+            valor = _para_decimal(request.POST.get(f'rateio_valor_{i}'))
+        except ValorInvalido:
+            return None, f'Rateio: valor inválido em {loja.name}.'
+        if valor is None or valor <= 0:
+            return None, f'Rateio: informe um valor maior que zero em {loja.name}.'
+        partes.append((loja, valor))
+    soma = sum(v for _l, v in partes)
+    if soma != dados['valor']:
+        return None, f'Rateio não bate: as lojas somam R$ {soma} e o documento é de R$ {dados["valor"]}.'
+    return {'vencimento': vencimento, 'descricao': descricao, 'forma': forma, 'partes': partes, 'rateio': True}, ''
+
+
+def _criar_contas_a_pagar(request, documento, nota, conta):
+    """Um título por loja do rateio, no mesmo grupo: na tela de um aparecem os outros."""
+    import uuid
+
+    from financeiro import servicos
+    from financeiro.models import Titulo
+    grupo = uuid.uuid4()
+    fornecedor = documento.fornecedor
+    criados = []
+    for loja, valor in conta['partes']:
+        criados += servicos.criar_titulos(
+            {'tipo': 'PAGAR', 'descricao': conta['descricao'], 'pessoa_nome': fornecedor.razao_social[:200],
+             'pessoa_documento': fornecedor.cnpj, 'numero_documento': documento.numero,
+             'emissao': documento.data_documento or timezone.localdate(), 'vencimento': conta['vencimento'],
+             'competencia': documento.competencia, 'valor': valor, 'loja': loja, 'forma': conta['forma'],
+             'origem': 'PISCOFINS', 'nota': nota,
+             'observacao': (f'Rateio de R$ {documento.valor} entre {len(conta["partes"])} lojas.' if conta['rateio'] else '')},
+            usuario=request.user, request=request)
+    # O arquivo é o do documento: aponta para o mesmo, sem subir uma cópia por loja.
+    Titulo.objects.filter(pk__in=[t.pk for t in criados]).update(
+        grupo=grupo, anexo=documento.arquivo.name, anexo_nome=documento.nome_arquivo[:255])
+    return criados
+
+
 @login_required
 @_liberado
 @require_POST
 def piscofins_registrar(request):
     dados, erro = _ler_formulario(request)
+    conta = None
+    if not erro:
+        conta, erro = _ler_conta_a_pagar(request, dados)
     if erro:
         messages.error(request, erro)
         return _voltar(request, _competencia(request.POST.get('competencia')))
@@ -480,7 +570,12 @@ def piscofins_registrar(request):
     nota = dados.pop('nota')
     documento = DocumentoPisCofins(registrado_por=request.user, nome_arquivo=arquivo.name[:255], **dados)
     documento.arquivo = arquivo
-    documento.save()
+    titulos = []
+    # Junto: ou o documento e as contas entram, ou nada entra.
+    with transaction.atomic():
+        documento.save()
+        if conta:
+            titulos = _criar_contas_a_pagar(request, documento, nota, conta)
     if nota is not None and nota.documento_id is None:
         nota.documento = documento
         nota.ignorada = False
@@ -492,7 +587,8 @@ def piscofins_registrar(request):
     if not documento.fornecedor.situacao_ok:
         aviso = f' Atenção: o CNPJ está {documento.fornecedor.situacao} na Receita.'
     messages.success(request, f'{documento.get_tipo_display()} de {documento.fornecedor.razao_social} '
-                              f'(R$ {documento.valor}) lançado na competência {documento.competencia:%m/%Y}.{aviso}')
+                              f'(R$ {documento.valor}) lançado na competência {documento.competencia:%m/%Y}'
+                              + (f' e {len(titulos)} conta(s) a pagar criada(s) no Financeiro' if titulos else '') + f'.{aviso}')
     return _voltar(request, documento.competencia)
 
 

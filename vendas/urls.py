@@ -1,12 +1,14 @@
 from django.urls import path
 
-from . import views, views_acessos, views_clientes
+from . import views, views_acessos, views_clientes, views_orcamentos
 
 app_name = 'vendas'
 
 urlpatterns = [
     path('', views.dashboard, name='dashboard'),
     path('nova/', views.venda_create, name='venda_create'),
+    path('orcamentos/', views_orcamentos.orcamentos, name='orcamentos'),
+    path('orcamentos/<int:pk>/reenviar/', views_orcamentos.orcamento_reenviar, name='orcamento_reenviar'),
     path('exportar/', views.venda_export, name='venda_export'),
     path('cliente/', views.cliente_historico, name='cliente_historico'),
     path('precos/', views.precos, name='precos'),

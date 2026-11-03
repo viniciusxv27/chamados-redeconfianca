@@ -175,6 +175,10 @@ class Titulo(models.Model):
     pessoa_nome = models.CharField(max_length=200, blank=True, verbose_name='Fornecedor / cliente')
     pessoa_documento = models.CharField(max_length=14, blank=True, db_index=True, verbose_name='CNPJ/CPF')
     numero_documento = models.CharField(max_length=60, blank=True, verbose_name='Nº do documento')
+    # Nº do movimento no sistema de origem (importação): é a chave para reimportar sem duplicar.
+    # db_default: o código já commitado (sem esta coluna) roda nos outros servidores no mesmo banco.
+    numero_movimento = models.CharField(max_length=30, blank=True, default='', db_default='', db_index=True,
+                                        verbose_name='Nº do movimento (origem)')
     plano = models.ForeignKey(PlanoConta, on_delete=models.PROTECT, null=True, blank=True,
                               related_name='titulos', verbose_name='Plano de contas')
     loja = models.ForeignKey('users.Sector', on_delete=models.SET_NULL, null=True, blank=True,

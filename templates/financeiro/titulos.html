@@ -4,6 +4,9 @@
 {% block fin_cabecalho %}{% if modo == 'baixas' %}Baixa de títulos{% elif tipo == 'PAGAR' %}Contas a pagar{% else %}Contas a receber{% endif %}{% endblock %}
 {% block fin_subtitulo %}{% if modo == 'baixas' %}Marque os títulos e baixe de uma vez, ou um a um{% elif tipo == 'PAGAR' %}Baixe ou edite os títulos a pagar{% else %}Baixe ou edite os títulos a receber{% endif %}{% endblock %}
 {% block fin_acoes %}
+{% if pode_editar and tipo == 'PAGAR' and modo != 'baixas' %}
+<a href="{% url 'financeiro:pagar_importar' %}" class="fin-btn fin-btn-claro"><i class="fas fa-file-import"></i>Importar</a>
+{% endif %}
 {% if pode_editar %}
 <button type="button" data-abrir="#finNovo" data-fin-atalho-novo class="fin-btn fin-btn-verde"><i class="fas fa-plus"></i>{% if tipo == 'PAGAR' %}Nova conta a pagar{% else %}Nova conta a receber{% endif %}<span class="fin-kbd">N</span></button>
 {% endif %}

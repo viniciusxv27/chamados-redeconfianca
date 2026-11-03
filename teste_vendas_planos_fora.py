@@ -197,5 +197,24 @@ h = cs.get('/vendas/nova/').content.decode()
 t('a tela da venda tem a busca do plano fora (só nos três serviços)', 'campoPlanoFora()' in h
   and "if (t === 'ALTA') html = seletorPlano('Segmentação e plano *', 'novo', todos);" in h)
 
+print('Cliente sem Plano (03/11/2026)')
+j = vender([{'tipo': 'MIGRACAO', 'plano_id': pos.id, 'sem_plano': True, 'plano_anterior_id': ctrl.id, 'plano_fora_id': f59.id},
+            {'tipo': 'TROCA_PLANO', 'plano_id': pos.id, 'sem_plano': True},
+            {'tipo': 'REATIVACAO', 'plano_id': pos.id, 'sem_plano': True},
+            {'tipo': 'ALTA', 'plano_id': pos.id, 'sem_plano': True}])
+t('a venda fecha', j.get('ok'), j)
+sv = {s.tipo_servico: s for s in VendaServico.objects.filter(venda_id=j.get('id'))}
+for tipo in ('MIGRACAO', 'TROCA_PLANO', 'REATIVACAO'):
+    x = sv.get(tipo)
+    t(f'{tipo}: sem plano anterior, delta = valor inteiro', x and x.plano_anterior_id is None and x.plano_anterior_fora_id is None
+      and x.plano_anterior_nome == 'Cliente sem plano' and x.valor_anterior == D('0') and x.delta == D('130.00'),
+      x and (x.plano_anterior_nome, x.valor_anterior, x.delta))
+t('em Alta a opção não vale', sv['ALTA'].plano_anterior_nome != 'Cliente sem plano')
+r = cs.post('/vendas/nova/', json.dumps({'cliente': {'cpf': CPF, 'nome': 'Zz Cliente Planos'}, 'linhas': ['27998765432'],
+                                         'servicos': [{'tipo': 'MIGRACAO', 'plano_id': pos.id, 'sem_plano': True}]}), content_type='application/json').json()
+t('sem plano no topo da venda também passa', r.get('ok'), r)
+h = cs.get('/vendas/nova/').content.decode()
+t('a tela tem a opção', 'Cliente sem Plano' in h and 'data-plano-antigo' in h)
+
 print(f'\n{ok} OK, {fail} falha(s)')
 sys.exit(1 if fail else 0)

@@ -1,0 +1,71 @@
+{% extends 'financeiro/base_financeiro.html' %}
+{% load caixa_tags %}
+{% block fin_titulo %}Importar contas a pagar{% endblock %}
+{% block fin_cabecalho %}Importar contas a pagar{% endblock %}
+{% block fin_subtitulo %}{% if analise %}Confira antes de gravar: nada entrou ainda{% else %}Suba o CSV do relatório de contas a pagar{% endif %}{% endblock %}
+{% block fin_acoes %}
+<a class="fin-btn fin-btn-claro" href="{% url 'financeiro:pagar_importar_modelo' %}"><i class="fas fa-download"></i>Baixar modelo</a>
+<a class="fin-btn fin-btn-claro" href="{% url 'financeiro:pagar' %}"><i class="fas fa-arrow-left"></i>Voltar</a>
+{% endblock %}
+
+{% block fin_conteudo %}
+{% if not analise %}
+<section class="fin-card p-5 max-w-2xl">
+    <form method="post" enctype="multipart/form-data" class="space-y-4">{% csrf_token %}
+        <label class="block"><span class="block text-sm font-semibold text-gray-700 mb-1">Arquivo CSV</span>
+            <input type="file" name="arquivo" accept=".csv,text/csv" required class="fin-input"></label>
+        <button class="fin-btn fin-btn-verde"><i class="fas fa-magnifying-glass"></i>Conferir</button>
+    </form>
+    <ul class="text-sm text-gray-600 mt-5 space-y-1.5 list-disc pl-5">
+        <li>Use o "Relatório de Contas a pagar e já pagas", separado por ponto e vírgula, ou o modelo acima.</li>
+        <li>Você vê o resumo antes de gravar.</li>
+        <li>Pode subir de novo: o que já entrou (mesmo Nº do movimento e vencimento) não duplica nem é alterado.</li>
+        <li>Conta já paga fica de fora: dar baixa mexe no saldo do banco.</li>
+    </ul>
+</section>
+{% else %}
+<div class="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
+    <div class="fin-card p-4 col-span-2 lg:col-span-1"><p class="text-xs text-gray-500">Vão entrar</p><p class="text-2xl font-extrabold text-gray-900">{{ analise.novos|length }}</p><p class="text-sm text-gray-600 tabular">{{ analise.total|brl_zero }}</p></div>
+    <div class="fin-card p-4"><p class="text-xs text-gray-500">Já importadas</p><p class="text-2xl font-extrabold text-gray-900">{{ analise.ja_existem }}</p></div>
+    <div class="fin-card p-4"><p class="text-xs text-gray-500">Repetidas na planilha</p><p class="text-2xl font-extrabold text-gray-900">{{ analise.repetidas|length }}</p></div>
+    <div class="fin-card p-4"><p class="text-xs text-gray-500">Já pagas (fora)</p><p class="text-2xl font-extrabold text-gray-900">{{ analise.pagas|length }}</p></div>
+    <div class="fin-card p-4"><p class="text-xs text-gray-500">Recusadas</p><p class="text-2xl font-extrabold {% if analise.rejeitadas %}text-red-600{% else %}text-gray-900{% endif %}">{{ analise.rejeitadas|length }}</p></div>
+</div>
+
+<form method="post" class="fin-card p-4 mb-4 flex items-center justify-between gap-3 flex-wrap">{% csrf_token %}
+    <input type="hidden" name="etapa" value="confirmar"><input type="hidden" name="nome" value="{{ nome }}">
+    <textarea name="conteudo" hidden>{{ conteudo }}</textarea>
+    <p class="text-sm text-gray-700"><i class="fas fa-file-csv text-emerald-600 mr-1"></i><b>{{ nome }}</b>{% if analise.planos_novos %} · {{ analise.planos_novos|length }} conta{{ analise.planos_novos|length|pluralize }} nova{{ analise.planos_novos|length|pluralize }} no plano de contas{% endif %}</p>
+    <div class="flex gap-2">
+        <a class="fin-btn fin-btn-claro" href="{% url 'financeiro:pagar_importar' %}">Outro arquivo</a>
+        <button class="fin-btn fin-btn-verde" {% if not analise.novos %}disabled{% endif %}><i class="fas fa-check"></i>Importar {{ analise.novos|length }}</button>
+    </div>
+</form>
+
+{% if analise.sem_loja %}
+<div class="fin-card p-4 mb-4 text-sm text-gray-700"><p class="font-semibold mb-1"><i class="fas fa-store-slash text-amber-600 mr-1"></i>Filiais que não são loja no portal: entram sem loja (geral), com a filial na observação</p>
+    {% for filial, n in analise.filiais_sem_loja %}<span class="fin-pilula text-xs mr-1">{{ filial }} · {{ n }}</span>{% endfor %}</div>
+{% endif %}
+{% if analise.repetidas %}
+<div class="fin-card p-4 mb-4 text-sm text-gray-700"><p class="font-semibold mb-1"><i class="fas fa-clone text-amber-600 mr-1"></i>Linhas repetidas (mesmo movimento e vencimento): só a primeira entra</p>
+    <ul class="space-y-0.5">{% for n, fornecedor, venc, valor in analise.repetidas %}<li>Linha {{ n }} · {{ fornecedor }} · {{ venc|date:"d/m/Y" }} · {{ valor|brl_zero }}</li>{% endfor %}</ul></div>
+{% endif %}
+{% if analise.pagas %}
+<div class="fin-card p-4 mb-4 text-sm text-gray-700"><p class="font-semibold mb-1"><i class="fas fa-circle-check text-gray-400 mr-1"></i>Já pagas: ficam de fora</p>
+    <ul class="space-y-0.5">{% for n, fornecedor, venc, valor in analise.pagas %}<li>Linha {{ n }} · {{ fornecedor }} · {{ venc|date:"d/m/Y" }} · {{ valor|brl_zero }}</li>{% endfor %}</ul></div>
+{% endif %}
+{% if analise.rejeitadas %}
+<div class="fin-card p-4 mb-4 text-sm text-red-700"><p class="font-semibold mb-1"><i class="fas fa-triangle-exclamation mr-1"></i>Recusadas</p>
+    <ul class="space-y-0.5">{% for n, motivo in analise.rejeitadas %}<li>Linha {{ n }}: {{ motivo }}</li>{% endfor %}</ul></div>
+{% endif %}
+{% if amostra %}
+<section class="fin-card overflow-hidden">
+    <div class="fin-cab"><h2>Primeiras {{ amostra|length }} de {{ analise.novos|length }}</h2></div>
+    <div class="overflow-x-auto"><table class="fin-tabela">
+        <thead><tr><th>Vencimento</th><th>Fornecedor</th><th>Descrição</th><th>Loja</th><th>Forma</th><th>Parcela</th><th class="text-right">Valor</th></tr></thead>
+        <tbody>{% for n in amostra %}<tr><td>{{ n.vencimento|date:"d/m/Y" }}</td><td>{{ n.pessoa_nome }}</td><td>{{ n.descricao|truncatechars:60 }}</td><td>{{ n.loja.name|default:"—" }}</td><td>{{ n.forma }}</td><td>{% if n.parcelas > 1 %}{{ n.parcela }}/{{ n.parcelas }}{% endif %}</td><td class="text-right tabular">{{ n.valor|brl_zero }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+</section>
+{% endif %}
+{% endif %}
+{% endblock %}

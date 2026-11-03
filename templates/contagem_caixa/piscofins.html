@@ -1,4 +1,4 @@
-{% extends 'contagem_caixa/base_caixa.html' %}
+{% extends 'financeiro/base_piscofins.html' %}
 {% load caixa_tags l10n %}
 
 {% block cx_titulo %}PIS/Cofins — Contas a pagar{% endblock %}
@@ -153,6 +153,60 @@
                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
         </label>
     </div>
+    {% if pode_titulos %}
+    <div id="pcPagarBloco" class="mt-4 rounded-xl border border-gray-200 p-3 sm:p-4">
+        <label class="flex items-center gap-2 text-sm font-semibold text-gray-800 cursor-pointer">
+            <input type="checkbox" name="lancar_pagar" value="1" id="pcPagar" class="rounded border-gray-300">
+            <i class="fas fa-file-invoice-dollar text-emerald-600"></i>Lançar como Conta a Pagar
+        </label>
+        <div id="pcPagarCampos" class="hidden mt-3">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
+                <label class="block">
+                    <span class="block text-[11px] font-semibold text-gray-500 mb-1">Data de vencimento *</span>
+                    <input type="date" name="pagar_vencimento" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                </label>
+                <label class="block lg:col-span-2 sm:col-span-2">
+                    <span class="block text-[11px] font-semibold text-gray-500 mb-1">Descrição *</span>
+                    <input type="text" name="pagar_descricao" maxlength="200" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                </label>
+                <label class="block">
+                    <span class="block text-[11px] font-semibold text-gray-500 mb-1">Forma de pagamento *</span>
+                    <select name="pagar_forma" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                        <option value="">Escolha…</option>
+                        {% for v, r in formas_titulo %}<option value="{{ v }}">{{ r }}</option>{% endfor %}
+                    </select>
+                </label>
+            </div>
+            <div class="mt-3">
+                <input type="hidden" name="rateio" value="0" id="pcRateioAtivo">
+                <button type="button" id="pcRateioBotao" aria-expanded="false" class="px-3 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50"><i class="fas fa-code-branch mr-1.5"></i>Rateio</button>
+                <span class="text-[11px] text-gray-500 ml-2" id="pcRateioDica">Sem rateio, a conta fica na loja escolhida acima.</span>
+            </div>
+            <div id="pcRateio" class="hidden mt-3 rounded-lg bg-gray-50 border border-gray-200 p-3">
+                <div class="flex items-center justify-between gap-2 flex-wrap mb-2">
+                    <p class="text-xs font-semibold text-gray-600">Marque as lojas: o valor se divide igual, e você pode mudar cada um.</p>
+                    <div class="flex gap-1.5">
+                        <button type="button" id="pcRateioTodas" class="px-2.5 py-1 rounded-md border border-gray-200 bg-white text-xs text-gray-600 hover:bg-gray-50">Todas</button>
+                        <button type="button" id="pcRateioNenhuma" class="px-2.5 py-1 rounded-md border border-gray-200 bg-white text-xs text-gray-600 hover:bg-gray-50">Nenhuma</button>
+                        <button type="button" id="pcRateioIgual" class="px-2.5 py-1 rounded-md border border-gray-200 bg-white text-xs text-gray-600 hover:bg-gray-50">Dividir igual</button>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-3 gap-x-4 gap-y-1.5 max-h-72 overflow-y-auto pr-1">
+                    {% for l in lojas_rateio %}
+                    <div class="flex items-center gap-2 min-w-0" data-rateio-linha>
+                        <label class="flex items-center gap-2 flex-1 min-w-0 text-sm text-gray-700 cursor-pointer">
+                            <input type="checkbox" name="rateio_loja" value="{{ l.id }}" class="rounded border-gray-300 shrink-0"><span class="truncate" title="{{ l.name }}">{{ l.name }}</span>
+                        </label>
+                        <input type="text" name="rateio_valor_{{ l.id }}" inputmode="decimal" placeholder="0,00" disabled aria-label="Valor de {{ l.name }}"
+                               class="w-24 shrink-0 border border-gray-300 rounded-md px-2 py-1 text-sm text-right tabular-nums disabled:bg-gray-100 disabled:text-gray-400">
+                    </div>
+                    {% endfor %}
+                </div>
+                <p class="mt-3 text-sm font-semibold" id="pcRateioAviso" role="status"></p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
     <div class="flex items-center justify-between gap-3 mt-4 flex-wrap">
         <p class="text-[11px] text-gray-500" id="pcArquivoAtual"></p>
         <button class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-lg" id="pcFormBotao">
@@ -308,6 +362,86 @@
     const razaoBloco = document.getElementById('pcRazaoBloco');
     const arquivo = document.getElementById('pcArquivo');
 
+    // ── Lançar como Conta a Pagar + rateio ─────────────────────────────
+    const blocoPagar = document.getElementById('pcPagarBloco');
+    const rateio = (function () {
+        if (!blocoPagar) return {prontoParaEnviar: function () { return true; }, limpar: function () {}, mostrar: function () {}};
+        const pagar = document.getElementById('pcPagar'), campos = document.getElementById('pcPagarCampos');
+        const painel = document.getElementById('pcRateio'), ativo = document.getElementById('pcRateioAtivo');
+        const botao = document.getElementById('pcRateioBotao'), aviso = document.getElementById('pcRateioAviso');
+        const linhas = Array.from(blocoPagar.querySelectorAll('[data-rateio-linha]')).map(function (el) {
+            return {marca: el.querySelector('[type=checkbox]'), valor: el.querySelector('[type=text]')};
+        });
+        let manual = false;
+        const obrigatorios = ['pagar_vencimento', 'pagar_descricao', 'pagar_forma'];
+        function centavos(texto) {
+            let t = String(texto || '').replace(/R\$|\s/g, '');
+            if (t.indexOf(',') >= 0) t = t.replace(/\./g, '').replace(',', '.');
+            const n = Number(t);
+            return t === '' || isNaN(n) ? 0 : Math.round(n * 100);
+        }
+        function reais(c) { return (c / 100).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}); }
+        function marcadas() { return linhas.filter(function (l) { return l.marca.checked; }); }
+        function dividir() {
+            const m = marcadas(), total = centavos(form.valor.value);
+            if (m.length && total) {
+                const base = Math.floor(total / m.length);
+                m.forEach(function (l, i) { l.valor.value = reais(i === m.length - 1 ? total - base * (m.length - 1) : base).replace(/\./g, ''); });
+            }
+            manual = false;
+            conferir();
+        }
+        function diferenca() {
+            return marcadas().reduce(function (s, l) { return s + centavos(l.valor.value); }, 0) - centavos(form.valor.value);
+        }
+        function conferir() {
+            linhas.forEach(function (l) { l.valor.disabled = !l.marca.checked; if (!l.marca.checked) l.valor.value = ''; });
+            const m = marcadas();
+            if (!m.length) { aviso.className = 'mt-3 text-sm font-semibold text-gray-500'; aviso.textContent = 'Nenhuma loja marcada.'; return; }
+            if (!centavos(form.valor.value)) { aviso.className = 'mt-3 text-sm font-semibold text-amber-700'; aviso.textContent = 'Informe o valor do documento.'; return; }
+            const d = diferenca(), texto = m.length + (m.length === 1 ? ' loja · ' : ' lojas · ') + 'R$ ' + reais(centavos(form.valor.value) + d) + ' de R$ ' + reais(centavos(form.valor.value));
+            if (d === 0) { aviso.className = 'mt-3 text-sm font-semibold text-emerald-700'; aviso.innerHTML = '<i class="fas fa-circle-check mr-1"></i>' + texto + ': bate com o total.'; return; }
+            aviso.className = 'mt-3 text-sm font-semibold text-red-600';
+            aviso.innerHTML = '<i class="fas fa-triangle-exclamation mr-1"></i>' + texto + ': ' + (d > 0 ? 'passou R$ ' + reais(d) : 'faltam R$ ' + reais(-d)) + '. O valor não bate com o total.';
+        }
+        function abrirRateio(abrir) {
+            painel.classList.toggle('hidden', !abrir);
+            ativo.value = abrir ? '1' : '0';
+            botao.setAttribute('aria-expanded', abrir ? 'true' : 'false');
+            botao.classList.toggle('bg-emerald-50', abrir);
+            document.getElementById('pcRateioDica').textContent = abrir ? 'A conta se divide: um título por loja.' : 'Sem rateio, a conta fica na loja escolhida acima.';
+            if (abrir && !manual) dividir(); else conferir();
+        }
+        function abrirPagar(abrir) {
+            campos.classList.toggle('hidden', !abrir);
+            obrigatorios.forEach(function (n) { form[n].required = abrir; });
+            if (abrir && !form.pagar_descricao.value) form.pagar_descricao.value = form.descricao.value;
+        }
+        pagar.addEventListener('change', function () { abrirPagar(pagar.checked); });
+        botao.addEventListener('click', function () { abrirRateio(ativo.value !== '1'); });
+        linhas.forEach(function (l) {
+            l.marca.addEventListener('change', function () { if (manual) conferir(); else dividir(); if (l.marca.checked) l.valor.disabled = false; });
+            l.valor.addEventListener('input', function () { manual = true; conferir(); });
+        });
+        document.getElementById('pcRateioTodas').addEventListener('click', function () { linhas.forEach(function (l) { l.marca.checked = true; }); dividir(); });
+        document.getElementById('pcRateioNenhuma').addEventListener('click', function () { linhas.forEach(function (l) { l.marca.checked = false; }); manual = false; conferir(); });
+        document.getElementById('pcRateioIgual').addEventListener('click', dividir);
+        form.valor.addEventListener('input', function () { if (ativo.value === '1') { if (manual) conferir(); else dividir(); } });
+        return {
+            // O valor pode ter vindo da leitura do arquivo, sem evento: confere de novo antes de enviar.
+            prontoParaEnviar: function () {
+                if (!pagar.checked || ativo.value !== '1') return true;
+                if (!manual) dividir(); else conferir();
+                if (marcadas().length && diferenca() === 0) return true;
+                aviso.scrollIntoView({behavior: 'smooth', block: 'center'});
+                return false;
+            },
+            limpar: function () { manual = false; abrirPagar(false); abrirRateio(false); },
+            mostrar: function (sim) { blocoPagar.classList.toggle('hidden', !sim); },
+        };
+    })();
+    form.addEventListener('submit', function (e) { if (!rateio.prontoParaEnviar()) e.preventDefault(); });
+
     function titulo(icone, texto, botao) {
         document.getElementById('pcFormTitulo').innerHTML = '<i class="fas ' + icone + ' text-emerald-600 mr-1.5"></i>' + texto;
         document.getElementById('pcFormBotao').innerHTML = '<i class="fas fa-check mr-1"></i> ' + botao;
@@ -327,6 +461,7 @@
         limparFornecedor();
         limparAuto();
         titulo('fa-file-circle-plus', 'Lançar documento', 'Lançar');
+        rateio.limpar(); rateio.mostrar(true);
         form.classList.remove('hidden');
         form.scrollIntoView({behavior: 'smooth', block: 'start'});
     };
@@ -475,6 +610,7 @@
             arquivo.required = false;
             document.getElementById('pcArquivoAtual').textContent = 'Arquivo atual: ' + (b.dataset.arquivo || 'anexado') + ' — envie outro só para trocar.';
             titulo('fa-pen', 'Editar documento', 'Salvar alterações');
+            rateio.limpar(); rateio.mostrar(false);    // a conta a pagar nasce no lançamento
             form.classList.remove('hidden');
             form.scrollIntoView({behavior: 'smooth', block: 'start'});
         });

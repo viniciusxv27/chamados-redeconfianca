@@ -92,7 +92,13 @@ def pode_entrar(user):
     if e_superadmin(user) or bool(chaves_de(user)):
         return True
     from .fechamento import pode_ver                       # quem só tem o Fechamento de caixa
-    return pode_ver(user)
+    return pode_ver(user) or pode_piscofins(user)
+
+
+def pode_piscofins(user):
+    """PIS/Cofins fica no Financeiro, com a regra de sempre (gestor do caixa ou liberação caixa.piscofins)."""
+    from contagem_caixa.permissions import pode_piscofins as regra
+    return regra(user)
 
 
 def lojas_permitidas(user):

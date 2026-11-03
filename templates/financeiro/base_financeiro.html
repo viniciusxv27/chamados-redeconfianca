@@ -371,6 +371,9 @@ window.Fin.brl = function (n) { return Number(n || 0).toLocaleString('pt-BR', {s
         {% if pode_fechamento %}
         <a href="{% url 'financeiro:fechamento' %}" class="fin-tab {% if aba == 'fechamento' %}fin-tab-ativa{% endif %}" {% if aba == 'fechamento' %}aria-current="page"{% endif %}><i class="fas fa-cash-register"></i><span>Fechamento de caixa</span></a>
         {% endif %}
+        {% if pode_piscofins %}
+        <a href="{% url 'financeiro:piscofins' %}" class="fin-tab {% if aba == 'piscofins' %}fin-tab-ativa{% endif %}" {% if aba == 'piscofins' %}aria-current="page"{% endif %}><i class="fas fa-file-invoice-dollar"></i><span>PIS/Cofins</span></a>
+        {% endif %}
         {% if pode_baixas %}
         <a href="{% url 'financeiro:baixas' %}" class="fin-tab {% if aba == 'baixas' %}fin-tab-ativa{% endif %}" {% if aba == 'baixas' %}aria-current="page"{% endif %}><i class="fas fa-list-check"></i><span>Baixa de títulos</span></a>
         {% endif %}
