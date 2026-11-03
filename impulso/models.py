@@ -2075,3 +2075,27 @@ class ParceriaMeta(models.Model):
     @property
     def esta_pendente(self):
         return self.status == self.Status.PENDENTE
+
+
+class RascunhoDecisaoIdeia(models.Model):
+    """A decisão escolhida na lista do Inovar, antes de aplicar (03/11/2026).
+
+    Grava a cada escolha: fechar a aba, cair a conexão ou o envio falhar não perde
+    nada. Sai quando a decisão é aplicada; o que não passa na conferência continua aqui.
+    """
+
+    DECISOES = [('segue', 'Vai seguir'), ('nao', 'Não vai seguir')]
+
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='+', verbose_name='Quem decide')
+    ideia = models.ForeignKey(Ideia, on_delete=models.CASCADE, related_name='rascunhos_de_decisao', verbose_name='Ideia')
+    decisao = models.CharField(max_length=5, choices=DECISOES, verbose_name='Decisão')
+    resposta = models.TextField(blank=True, verbose_name='Retorno ao autor')
+    executor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+', verbose_name='Ponto focal')
+    prazo = models.DateField(null=True, blank=True, verbose_name='Prazo')
+    status_da_ideia = models.CharField(max_length=20, blank=True, verbose_name='Situação da ideia ao salvar')
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Rascunho de decisão do Inovar'
+        verbose_name_plural = 'Rascunhos de decisão do Inovar'
+        constraints = [models.UniqueConstraint(fields=['usuario', 'ideia'], name='impulso_rascunho_decisao_unico')]

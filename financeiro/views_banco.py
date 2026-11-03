@@ -13,7 +13,7 @@ from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_POST
 
 from . import auditoria, extrato, servicos
-from .models import ContaBancaria, ExtratoLinha, MovimentoBancario, PlanoConta
+from .models import ContaBancaria, ExtratoImportacao, ExtratoLinha, MovimentoBancario, PlanoConta, Titulo
 from .permissoes import exige, filtrar_por_loja, pode
 from .views import Invalido, _contexto_base, _voltar, data, dinheiro, lojas_do
 
@@ -226,13 +226,24 @@ def conciliacao(request):
                   .select_related('baixa__titulo').order_by('-data', '-id')[:400])
     for linha in pagina.object_list:
         linha.sugestoes = extrato.candidatos(linha, livres) if not linha.movimento_id and not linha.ignorada else []
+    # O outro lado da tela: contas a pagar para o que saiu do banco, a receber para o que entrou.
+    pendentes_da_pagina = [l for l in pagina.object_list if not l.movimento_id and not l.ignorada]
+    titulos = _titulos_para_comparar(request.user)
+    comparacao = extrato.comparar(pendentes_da_pagina, titulos)
+    for linha in pendentes_da_pagina:
+        linha.situacao_par = comparacao[linha.id]['situacao']
+    importacoes = list(conta.importacoes.select_related('importado_por')
+                       .annotate(n_conciliadas=Count('linhas__movimento'))[:5])
     contexto.update({
+        'comparacao_dados': _dados_da_comparacao(pendentes_da_pagina, titulos, comparacao),
+        'pode_comparar': pode(request.user, 'pagar') or pode(request.user, 'receber'),
+        'pode_baixar_titulo': pode(request.user, 'conciliacao.conciliar') and pode(request.user, 'baixas.baixar'),
         'situacao': situacao, 'pagina': pagina, 'linhas': pagina.object_list, 'livres': livres,
         'n_pendentes': ExtratoLinha.objects.filter(conta=conta, movimento__isnull=True, ignorada=False).count(),
         'n_conciliadas': ExtratoLinha.objects.filter(conta=conta, movimento__isnull=False).count(),
         'n_ignoradas': ExtratoLinha.objects.filter(conta=conta, ignorada=True).count(),
         'movimentos_sem_extrato': len(livres),
-        'importacoes': list(conta.importacoes.select_related('importado_por')[:5]),
+        'importacoes': importacoes,
         'planos': PlanoConta.objects.filter(ativa=True, analitica=True),
         'saldo_portal': conta.saldo(),
     })
@@ -258,6 +269,25 @@ def conciliacao_importar(request, pk):
         except extrato.ExtratoInvalido as exc:
             messages.error(request, str(exc))
     return redirect(reverse('financeiro:conciliacao') + f'?conta={conta.pk}')
+
+
+def _titulos_para_comparar(user):
+    tipos = [t for t, area in (('PAGAR', 'pagar'), ('RECEBER', 'receber')) if pode(user, area)]
+    return list(filtrar_por_loja(Titulo.objects.filter(tipo__in=tipos, status__in=('ABERTO', 'PARCIAL')), user)
+                .select_related('loja').order_by('vencimento', 'id'))
+
+
+def _dados_da_comparacao(linhas, titulos, comparacao):
+    """O que o painel da direita precisa no navegador: trocar de linha não vai ao servidor."""
+    return {
+        'titulos': {t.id: {'id': t.id, 'tipo': t.tipo, 'pessoa': t.pessoa_nome, 'descricao': t.descricao,
+                           'documento': t.pessoa_documento, 'numero': t.numero_documento,
+                           'vencimento': t.vencimento.strftime('%d/%m/%Y'), 'saldo': str(t.saldo),
+                           'loja': t.loja.name if t.loja else '', 'parcela': t.rotulo_parcela}
+                    for t in titulos},
+        'linhas': {l.id: {'id': l.id, 'valor': str(l.valor), 'descricao': l.descricao, 'data': l.data.strftime('%d/%m/%Y'),
+                          'pares': comparacao[l.id]['pares']} for l in linhas},
+    }
 
 
 def _linha(request, pk):
@@ -287,10 +317,56 @@ def linha_conciliar(request, pk):
 @login_required
 @exige('conciliacao.conciliar')
 @require_POST
+def linha_conciliar_titulo(request, pk):
+    """Concilia a linha com uma conta a pagar/receber: dá a baixa com o valor do banco."""
+    linha = _linha(request, pk)
+    volta = _voltar(request, reverse('financeiro:conciliacao') + f'?conta={linha.conta_id}')
+    if not pode(request.user, 'baixas.baixar'):
+        messages.error(request, 'Conciliar com título dá a baixa: precisa da permissão "Dar baixa".')
+        return volta
+    titulo = next((t for t in _titulos_para_comparar(request.user) if str(t.pk) == (request.POST.get('titulo') or '')), None)
+    if titulo is None:
+        messages.error(request, 'Esta conta não está mais em aberto (ou não está liberada para você).')
+        return volta
+    try:
+        baixa = extrato.conciliar_com_titulo(linha, titulo, usuario=request.user, request=request)
+    except (servicos.RegraFinanceira, ValueError) as exc:
+        messages.error(request, str(exc))
+        return volta
+    titulo.refresh_from_db()
+    if baixa.juros:
+        messages.warning(request, f'Conciliado: {titulo.pessoa_nome or titulo.descricao} quitada, com R$ {baixa.juros} de diferença em juros.')
+    elif titulo.status == 'PARCIAL':
+        messages.warning(request, f'Conciliado com baixa parcial: ainda faltam R$ {titulo.saldo} de {titulo.pessoa_nome or titulo.descricao}.')
+    else:
+        messages.success(request, f'Conciliado: {titulo.pessoa_nome or titulo.descricao} quitada.')
+    return volta
+
+
+@login_required
+@exige('conciliacao.conciliar')
+@require_POST
+def importacao_excluir(request, pk):
+    importacao = get_object_or_404(ExtratoImportacao.objects.filter(conta__in=_contas(request.user)).select_related('conta'), pk=pk)
+    conta_id = importacao.conta_id
+    try:
+        n = extrato.excluir_importacao(importacao, usuario=request.user, request=request)
+        messages.success(request, f'Extrato excluído: {n} linha(s).')
+    except ValueError as exc:
+        messages.error(request, str(exc))
+    return redirect(reverse('financeiro:conciliacao') + f'?conta={conta_id}')
+
+
+@login_required
+@exige('conciliacao.conciliar')
+@require_POST
 def linha_desfazer(request, pk):
     linha = _linha(request, pk)
-    extrato.desconciliar(linha, usuario=request.user, request=request)
-    messages.success(request, 'Conciliação desfeita.')
+    try:
+        estornou = extrato.desfazer_conciliacao(linha, usuario=request.user, request=request)
+        messages.success(request, 'Conciliação desfeita e baixa do título estornada.' if estornou else 'Conciliação desfeita.')
+    except (servicos.RegraFinanceira, ValueError) as exc:
+        messages.error(request, str(exc))
     return _voltar(request, reverse('financeiro:conciliacao') + f'?conta={linha.conta_id}')
 
 

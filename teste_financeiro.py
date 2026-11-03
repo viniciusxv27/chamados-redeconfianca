@@ -17,31 +17,72 @@ O que este teste cobre:
 - rastreabilidade: quem, o quê, quando, IP, dispositivo, antes/depois;
 - todas as telas abrem.
 
-Transação desfeita no fim; nada sai para a rede.
+Roda num sqlite descartável: o plano de contas padrão só nasce num plano vazio, e o dev já tem a carga real.
+Nada sai para a rede.
 """
-import os
-import sys
 from datetime import timedelta
 from decimal import Decimal
+import os
+import pathlib
+import sys
+import tempfile
 from unittest import mock
 
 import django
 
+# Banco e arquivos descartáveis: a tabela das entregas e a coluna
+# `exige_entrega` só existem no Postgres compartilhado depois do migrate, e o
+# migrate é dele. O schema aqui sai direto dos models (`--run-syncdb`), como em
+# qualquer outra sessão — nada toca o banco de verdade nem o MinIO.
+PASTA = pathlib.Path(tempfile.mkdtemp(prefix='zz-fin-'))
+(PASTA / 'zz_fin_settings.py').write_text(f"""
+from redeconfianca.settings import *              # noqa: F401,F403
+
+DATABASES = {{'default': {{'ENGINE': 'django.db.backends.sqlite3',
+                          'NAME': r'{PASTA}/banco.sqlite3'}}}}
+
+
+class SemMigrations:
+    def __contains__(self, item):
+        return True
+
+    def __getitem__(self, item):
+        return None
+
+
+MIGRATION_MODULES = SemMigrations()
+
+USE_S3 = False
+MEDIA_ROOT = r'{PASTA}/media'
+MEDIA_URL = '/media/'
+STORAGES = {{
+    'default': {{'BACKEND': 'django.core.files.storage.FileSystemStorage'}},
+    'staticfiles': {{'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'}},
+}}
+DEBUG = False
+OPENAI_API_KEY = ''
+ALLOWED_HOSTS = ['testserver', 'localhost', '127.0.0.1']
+CACHES = {{
+    'default': {{'BACKEND': 'django.core.cache.backends.locmem.LocMemCache', 'LOCATION': 'zz-fin'}},
+    'local': {{'BACKEND': 'django.core.cache.backends.locmem.LocMemCache', 'LOCATION': 'zz-fin-2'}},
+}}
+""")
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'redeconfianca.settings')
+sys.path.insert(0, str(PASTA))
+os.environ['DJANGO_SETTINGS_MODULE'] = 'zz_fin_settings'
 os.environ.setdefault('RC_VARREDURA_ROTINA', '0')
 
-from django.conf import settings
-
-settings.CACHES = {
-    'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache', 'LOCATION': 'zz-fin'},
-    'local': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache', 'LOCATION': 'zz-fin-2'},
-}
 django.setup()
 
+from django.conf import settings
+from django.core.management import call_command
+from django.test import Client
 from django.test.utils import setup_test_environment
 
 setup_test_environment()
+call_command('migrate', run_syncdb=True, verbosity=0)
+
 if 'testserver' not in settings.ALLOWED_HOSTS:
     settings.ALLOWED_HOSTS.append('testserver')
 

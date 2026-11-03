@@ -3,11 +3,14 @@
 Blocos: dashboard, CONFIAR (metas/kanban/feedback), CONECTAR (conteúdos/projeto foco),
 INOVAR (ideias) e ACOMPANHAMENTO (faixas).
 """
+import json
+import logging
 from datetime import date, timedelta
 from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.db.models import Q
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -30,7 +33,7 @@ from .models import (
     ExcecaoAssiduidade, Ideia, entregas_disponiveis,
     ImpulsoFeedback,
     Meta, MetaAnexo, MetaComentario, MetaItem, MetaVisualizacao, PontuacaoMensal,
-    ProjetoAnexo, ProjetoFoco, TarefaProjeto,
+    ProjetoAnexo, ProjetoFoco, RascunhoDecisaoIdeia, TarefaProjeto,
 )
 from .scoring import (calcular_pontuacao, filtros_de_tarefa_do_mes, linhas_detalhadas,
                       ordenar_ranking)
@@ -64,6 +67,8 @@ def _int_or_none(value, lo=None, hi=None):
 # Tamanho das colunas de link do Impulso (migração 0026). Antes eram 200 e um link de
 # campanha (utm_, _hsenc…) derrubava a tela com erro 500 ao gravar.
 LIMITE_DO_LINK = 2000
+
+logger = logging.getLogger(__name__)
 
 
 def _notify(users, title, message, url):
@@ -3769,7 +3774,14 @@ def inovar_list(request):
         if ideia.sou_participante:
             ids_participando.add(ideia.id)
 
+    # O que este gestor já escolheu e ainda não aplicou volta preenchido.
+    guardados = _rascunhos_validos(request.user) if gestor else []
+    na_lista = {i.id for i in lista}
     context = {
+        'rascunhos': {r.ideia_id: {'decisao': r.decisao, 'resposta': r.resposta, 'executor': r.executor_id,
+                                   'prazo': r.prazo.isoformat() if r.prazo else ''}
+                      for r in guardados if r.ideia_id in na_lista},
+        'rascunhos_fora': sum(1 for r in guardados if r.ideia_id not in na_lista),
         'ideias': lista,
         'is_gestor': gestor,
         've_autoria': ve_autoria,
@@ -4056,6 +4068,46 @@ def ideia_update_status(request, ideia_id):
     return redirect('impulso:inovar_list')
 
 
+def _guardar_rascunho(usuario, ideia, decisao, resposta, executor_id, prazo):
+    """Grava (ou tira, com a decisão em branco) a escolha de uma ideia."""
+    if decisao not in ('segue', 'nao'):
+        RascunhoDecisaoIdeia.objects.filter(usuario=usuario, ideia=ideia).delete()
+        return None
+    rascunho, _ = RascunhoDecisaoIdeia.objects.update_or_create(
+        usuario=usuario, ideia=ideia,
+        defaults={'decisao': decisao, 'resposta': resposta, 'executor_id': executor_id, 'prazo': prazo,
+                  'status_da_ideia': ideia.status})
+    return rascunho
+
+
+def _rascunhos_validos(usuario):
+    """As decisões guardadas. A ideia que mudou de situação nesse meio-tempo (outro gestor decidiu) perde o rascunho."""
+    validos = []
+    vencidos = []
+    for r in RascunhoDecisaoIdeia.objects.filter(usuario=usuario).select_related('ideia'):
+        (vencidos if r.status_da_ideia != r.ideia.status else validos).append(r)
+    if vencidos:
+        RascunhoDecisaoIdeia.objects.filter(pk__in=[r.pk for r in vencidos]).delete()
+    return validos
+
+
+@require_POST
+@impulso_manager_required
+def inovar_rascunho(request):
+    """Salva a decisão assim que ela é escolhida na tela."""
+    try:
+        corpo = json.loads(request.body or b'{}')
+    except (ValueError, UnicodeDecodeError):
+        return JsonResponse({'ok': False, 'erro': 'Envio inválido.'}, status=400)
+    ideia = Ideia.objects.filter(id=_int_or_none(corpo.get('ideia'))).first()
+    if ideia is None:
+        return JsonResponse({'ok': False, 'erro': 'Ideia não encontrada.'}, status=404)
+    executor_id = get_colaboradores().filter(id=_int_or_none(corpo.get('executor'))).values_list('id', flat=True).first()
+    prazo = parse_date(str(corpo.get('prazo') or '')) or None
+    _guardar_rascunho(request.user, ideia, str(corpo.get('decisao') or ''), str(corpo.get('resposta') or '').strip(), executor_id, prazo)
+    return JsonResponse({'ok': True})
+
+
 @require_POST
 @impulso_manager_required
 def inovar_decidir_lote(request):
@@ -4080,6 +4132,18 @@ def inovar_decidir_lote(request):
     aprovadas = recusadas = 0
     problemas = []
 
+    # Primeiro guarda tudo o que chegou: se algo der errado daqui em diante, nada se perde.
+    for ideia_id in marcadas:
+        ideia = ideias.get(int(ideia_id))
+        if ideia is not None:
+            _guardar_rascunho(request.user, ideia, (request.POST.get(f'decisao_{ideia_id}') or '').strip(),
+                              (request.POST.get(f'resposta_{ideia_id}') or '').strip(),
+                              colaboradores.filter(id=_int_or_none(request.POST.get(f'executor_{ideia_id}'))).values_list('id', flat=True).first(),
+                              parse_date(request.POST.get(f'prazo_{ideia_id}') or '') or None)
+
+    def _feita(ideia):
+        RascunhoDecisaoIdeia.objects.filter(usuario=request.user, ideia=ideia).delete()
+
     for ideia_id in marcadas:
         ideia = ideias.get(int(ideia_id))
         if ideia is None:
@@ -4093,6 +4157,7 @@ def inovar_decidir_lote(request):
             ideia.status = Ideia.Status.ARQUIVADA
             ideia.resposta_gestor = resposta
             ideia.save(update_fields=['status', 'resposta_gestor', 'atualizado_em'])
+            _feita(ideia)
             _notify([ideia.autor], 'Atualização na sua ideia',
                     f'Sua ideia sobre "{ideia.setor_impacto}" agora está: '
                     f'{ideia.get_status_display()}.', '/impulso/inovar/')
@@ -4113,9 +4178,16 @@ def inovar_decidir_lote(request):
         ideia.resposta_gestor = resposta
         ideia.executor = executor
         ideia.prazo = prazo
-        ideia.save(update_fields=['status', 'resposta_gestor', 'executor', 'prazo',
-                                  'atualizado_em'])
-        _aplicar_decisao_da_ideia(ideia, True, executor, prazo, request.user)
+        # Junto: a ideia não fica "aprovada" sem a atividade do executor. Se falhar, as outras seguem e esta fica guardada.
+        try:
+            with transaction.atomic():
+                ideia.save(update_fields=['status', 'resposta_gestor', 'executor', 'prazo', 'atualizado_em'])
+                _aplicar_decisao_da_ideia(ideia, True, executor, prazo, request.user)
+        except Exception:  # noqa: BLE001
+            logger.exception('Inovar: falha ao aprovar a ideia %s no lote', ideia.id)
+            problemas.append(f'“{ideia.titulo_da_atividade()}”: não consegui abrir a atividade, tente de novo')
+            continue
+        _feita(ideia)
         _notify([ideia.autor], 'Atualização na sua ideia',
                 f'Sua ideia sobre "{ideia.setor_impacto}" agora está: '
                 f'{ideia.get_status_display()}.', '/impulso/inovar/')
@@ -4129,7 +4201,7 @@ def inovar_decidir_lote(request):
             partes.append(f'{recusadas} recusada(s)')
         messages.success(request, 'Decisões aplicadas: ' + ' · '.join(partes) + '.')
     if problemas:
-        messages.warning(request, 'Ficaram sem decidir — ' + '; '.join(problemas[:5])
+        messages.warning(request, 'Ficaram sem decidir (continuam guardadas na lista) — ' + '; '.join(problemas[:5])
                          + ('…' if len(problemas) > 5 else ''))
     if not (aprovadas or recusadas or problemas):
         messages.info(request, 'Nenhuma decisão foi preenchida.')

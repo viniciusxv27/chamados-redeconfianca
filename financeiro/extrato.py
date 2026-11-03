@@ -250,3 +250,126 @@ def criar_movimento_da_linha(linha, plano=None, descricao='', usuario=None, requ
 def periodo_padrao():
     hoje = timezone.localdate()
     return hoje - timedelta(days=45), hoje
+
+
+# ── Comparação com contas a pagar e a receber ───────────────────────────────
+# Linha negativa do banco é saída: compara com A PAGAR. Positiva é entrada: com A RECEBER.
+MARCA_BAIXA = 'Conciliação do extrato'     # a baixa nascida aqui é estornada ao desfazer a conciliação
+PARES_POR_LINHA = 12
+PALAVRAS_DO_BANCO = {
+    'pix', 'emitido', 'recebido', 'outra', 'mesma', 'pagamento', 'recebimento', 'cred', 'debito', 'credito', 'transf',
+    'contas', 'conta', 'tit', 'titulo', 'boleto', 'pago', 'ted', 'doc', 'str', 'fav', 'favorecido', 'tarifa',
+    'ltda', 'brasil', 'loja', 'para', 'referente', 'servicos', 'comercio', 'cobranca', 'liquidacao', 'intercredis',
+}
+CNPJ_NO_TEXTO = re.compile(r'\b(\d{2})\.?(\d{3})\.?(\d{3})\b')
+CPF_MASCARADO = re.compile(r'\*{3}\.?(\d{3})\.?(\d{3})-?\*{2}')
+
+
+def _palavras(texto):
+    limpo = re.sub(r'[^a-z0-9 ]', ' ', _sem_acento(texto or '').lower())
+    return {p for p in limpo.split() if len(p) >= 4 and not p.isdigit() and p not in PALAVRAS_DO_BANCO}
+
+
+def _documentos_no_texto(texto):
+    """Raízes de CNPJ (8 dígitos) e o miolo de CPF mascarado (6) que o banco escreve na descrição."""
+    return ({''.join(m) for m in CNPJ_NO_TEXTO.findall(texto or '')}, {''.join(m) for m in CPF_MASCARADO.findall(texto or '')})
+
+
+def comparar(linhas, titulos):
+    """{linha.id: {'situacao', 'pares'}}: os títulos do lado certo, do que mais bate ao que menos bate.
+
+    situacao: 'bate' (valor e descrição/documento), 'valor' (só valor), 'descricao' (só descrição/documento)
+    ou '' (nada parecido). Cada par diz o que bateu, para a tela mostrar sem adivinhar.
+    """
+    preparados = []
+    for t in titulos:
+        doc = t.pessoa_documento or ''
+        preparados.append((t, t.saldo, _palavras(f'{t.pessoa_nome} {t.descricao}'),
+                           doc[:8] if len(doc) == 14 else '', doc[3:9] if len(doc) == 11 else ''))
+    saida = {}
+    for linha in linhas:
+        tipo = 'PAGAR' if linha.valor < 0 else 'RECEBER'
+        alvo = abs(linha.valor)
+        palavras = _palavras(linha.descricao)
+        cnpjs, cpfs = _documentos_no_texto(linha.descricao)
+        pares = []
+        for t, saldo, nomes, raiz, miolo in preparados:
+            if t.tipo != tipo or saldo <= 0:
+                continue
+            valor = saldo == alvo
+            documento = bool((raiz and raiz in cnpjs) or (miolo and miolo in cpfs))
+            comuns = palavras & nomes
+            if not (valor or documento or comuns):
+                continue
+            dias = abs((t.vencimento - linha.data).days)
+            chave = (valor and (documento or bool(comuns)), valor, documento, len(comuns), -dias)
+            pares.append((chave, {'id': t.id, 'valor': valor, 'documento': documento, 'descricao': bool(comuns),
+                                  'dias': dias}))
+        pares.sort(key=lambda p: p[0], reverse=True)
+        melhor = pares[0][1] if pares else None
+        situacao = ''
+        if melhor:
+            parecida = melhor['documento'] or melhor['descricao']
+            situacao = 'bate' if melhor['valor'] and parecida else ('valor' if melhor['valor'] else 'descricao')
+        saida[linha.id] = {'situacao': situacao, 'pares': [p[1] for p in pares[:PARES_POR_LINHA]]}
+    return saida
+
+
+def _forma_da_linha(linha, titulo):
+    texto = _sem_acento(linha.descricao or '').upper()
+    if 'PIX' in texto:
+        return 'PIX'
+    if 'TED' in texto or 'TRANSF' in texto:
+        return 'TED'
+    if 'BOLETO' in texto or 'LIQUIDACAO' in texto:
+        return 'BOLETO'
+    return titulo.forma or 'OUTRO'
+
+
+def conciliar_com_titulo(linha, titulo, usuario=None, request=None):
+    """Dá a baixa do título com o valor do banco e liga a linha ao movimento gerado.
+
+    O movimento sai sempre igual à linha: menor que o saldo é baixa parcial; maior, a
+    diferença entra como juros.
+    """
+    from .servicos import baixar
+    if linha.movimento_id:
+        raise ValueError('Esta linha do extrato já está conciliada.')
+    esperado = 'PAGAR' if linha.valor < 0 else 'RECEBER'
+    if titulo.tipo != esperado:
+        raise ValueError('Valor negativo concilia com conta a pagar; positivo, com conta a receber.')
+    alvo = abs(linha.valor)
+    with transaction.atomic():
+        principal = min(alvo, titulo.saldo)
+        baixa = baixar(titulo, linha.data, principal, linha.conta, _forma_da_linha(linha, titulo),
+                       juros=alvo - principal, observacao=MARCA_BAIXA, usuario=usuario, request=request)
+        conciliar(linha, baixa.movimento, usuario=usuario, request=request)
+    return baixa
+
+
+def desfazer_conciliacao(linha, usuario=None, request=None):
+    """A baixa criada pela conciliação é estornada junto; movimento lançado fora daqui só se solta."""
+    from .servicos import estornar_baixa
+    movimento = linha.movimento
+    if movimento is None:
+        return False
+    baixa = movimento.baixa
+    if baixa is not None and baixa.observacao == MARCA_BAIXA and not baixa.estornada:
+        estornar_baixa(baixa, 'Conciliação do extrato desfeita', usuario=usuario, request=request)
+        return True
+    desconciliar(linha, usuario=usuario, request=request)
+    return False
+
+
+def excluir_importacao(importacao, usuario=None, request=None):
+    """Apaga o extrato importado (a importação e as linhas), se nada dele foi conciliado."""
+    linhas = importacao.linhas.all()
+    if linhas.filter(movimento__isnull=False).exists():
+        raise ValueError('Este extrato tem linha conciliada: desfaça a conciliação antes de excluir.')
+    with transaction.atomic():
+        n = linhas.count()
+        auditoria.registrar(request, 'EXCLUIR', f'Excluiu o extrato {importacao.arquivo_nome} ({n} linha(s)) de {importacao.conta.nome}'[:300],
+                            area='conciliacao', loja=importacao.conta.loja, usuario=usuario)
+        linhas.delete()
+        importacao.delete()
+    return n

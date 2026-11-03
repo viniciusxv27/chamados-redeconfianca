@@ -101,6 +101,7 @@ urlpatterns = [
     path('inovar/<int:ideia_id>/editar/', views.ideia_edit, name='ideia_edit'),
     path('inovar/<int:ideia_id>/status/', views.ideia_update_status, name='ideia_update_status'),
     path('inovar/decidir-lote/', views.inovar_decidir_lote, name='inovar_decidir_lote'),
+    path('inovar/rascunho/', views.inovar_rascunho, name='inovar_rascunho'),
 
     # ACOMPANHAMENTO
     path('acompanhamento/', views.acompanhamento, name='acompanhamento'),
