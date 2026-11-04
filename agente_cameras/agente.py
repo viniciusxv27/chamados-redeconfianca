@@ -9,21 +9,74 @@ import logging
 import sys
 import threading
 import time
-from datetime import datetime
+import os
+import uuid
+from datetime import datetime, timedelta
 from urllib.parse import quote
 
 import requests
 
 from descoberta import descobrir
-from regras import Analisador
+from regras import ZONA_MOSTRUARIO, ZONA_PORTA, Analisador, Metricas, zonas_do_tipo
 
-VERSAO = '1.1'
+VERSAO = '1.2'
+SEGUNDOS_POR_QUADRO_NA_PORTA = 0.33   # a pessoa cruza a porta em 1 a 3 s: um quadro por segundo perde gente
+EVENTOS_POR_ENVIO = 200
+EVENTOS_NA_FILA = 5000
 SEGUNDOS_ENTRE_DESCOBERTAS = 600
 SEGUNDOS_SEM_QUADRO = 300
 SEGUNDOS_ENTRE_QUADROS = 1.0
 TIMEOUT = 15
 LARGURA_FOTO = 640
 log = logging.getLogger('agente')
+
+
+class FilaDeEventos:
+    """O que foi medido e ainda não chegou ao portal. Fica em arquivo: internet ou luz caem, a medição não some."""
+
+    def __init__(self, caminho):
+        self.caminho, self.trava = caminho, threading.Lock()
+        try:
+            with open(caminho, encoding='utf-8') as arquivo:
+                self.eventos = json.load(arquivo)
+        except (OSError, ValueError):
+            self.eventos = []
+
+    def _gravar(self):
+        try:
+            temporario = self.caminho + '.tmp'
+            with open(temporario, 'w', encoding='utf-8') as arquivo:
+                json.dump(self.eventos, arquivo)
+            os.replace(temporario, self.caminho)
+        except OSError as erro:
+            log.warning('Fila de medições não gravada: %s', type(erro).__name__)
+
+    def adicionar(self, eventos):
+        with self.trava:
+            self.eventos = (self.eventos + eventos)[-EVENTOS_NA_FILA:]
+            self._gravar()
+
+    def enviar(self, portal):
+        with self.trava:
+            lote = self.eventos[:EVENTOS_POR_ENVIO]
+        if not lote:
+            return
+        portal.metricas(lote)   # se falhar, levanta e o lote fica para a próxima
+        with self.trava:
+            enviados = {e['chave'] for e in lote}
+            self.eventos = [e for e in self.eventos if e['chave'] not in enviados]
+            self._gravar()
+
+
+def carimbar(eventos, agora, momento):
+    """Troca o relógio interno pela data e hora de verdade, com uma chave para o portal não contar duas vezes."""
+    saida = []
+    for evento in eventos:
+        saida.append({'chave': uuid.uuid4().hex, 'tipo': evento['tipo'], 'zona': evento['zona'],
+                      'duracao': evento['duracao'], 'pessoas': evento['pessoas'],
+                      'inicio': (momento - timedelta(seconds=agora - evento['inicio'])).isoformat(),
+                      'fim': (momento - timedelta(seconds=agora - evento['fim'])).isoformat()})
+    return saida
 
 
 class Portal:
@@ -39,6 +92,9 @@ class Portal:
         r = self.sessao.post(self.base + 'sinal/', data={'versao': VERSAO}, timeout=TIMEOUT)
         r.raise_for_status()
         return r.json()
+
+    def metricas(self, eventos):
+        self.sessao.post(self.base + 'metricas/', json={'eventos': eventos}, timeout=TIMEOUT).raise_for_status()
 
     def descoberta(self, resultado):
         dados = {**resultado, 'canais': ','.join(str(c) for c in resultado.get('canais', []))}
@@ -73,6 +129,7 @@ class Detector:
     def __init__(self, modelo='yolov8n.pt'):
         from ultralytics import YOLO
         self.modelo = YOLO(modelo)
+        self.trava = threading.Lock()   # as câmeras dividem o mesmo modelo
 
     @classmethod
     def se_instalado(cls, modelo):
@@ -86,7 +143,9 @@ class Detector:
     def __call__(self, quadro):
         altura, largura = quadro.shape[:2]
         saida = []
-        for caixa in self.modelo.predict(quadro, classes=list(self.CLASSES), verbose=False)[0].boxes:
+        with self.trava:
+            caixas = self.modelo.predict(quadro, classes=list(self.CLASSES), verbose=False)[0].boxes
+        for caixa in caixas:
             x1, y1, x2, y2 = caixa.xyxy[0].tolist()
             saida.append({'classe': self.CLASSES[int(caixa.cls[0])], 'conf': float(caixa.conf[0]),
                           'caixa': (x1 / largura, y1 / altura, (x2 - x1) / largura, (y2 - y1) / altura)})
@@ -105,9 +164,11 @@ def _jpg(quadro):
 class Camera(threading.Thread):
     """Uma por canal: guarda o último quadro e analisa um por segundo."""
 
-    def __init__(self, numero, url, portal, detector, estado):
+    def __init__(self, numero, url, portal, detector, estado, fila=None):
         super().__init__(daemon=True)
         self.numero, self.url, self.portal, self.detector, self.estado = numero, url, portal, detector, estado
+        self.fila = fila
+        self.metricas = Metricas()
         self.ultimo = None
         self.ultimo_quadro_em = time.monotonic()
         self.analisador = Analisador()
@@ -129,7 +190,8 @@ class Camera(threading.Thread):
                 self.ultimo = quadro
                 agora = self.ultimo_quadro_em = time.monotonic()
                 if agora >= proxima:
-                    proxima = agora + SEGUNDOS_ENTRE_QUADROS
+                    zonas = (self.estado.get('canais', {}).get(self.numero) or {}).get('zonas') or []
+                    proxima = agora + (SEGUNDOS_POR_QUADRO_NA_PORTA if zonas_do_tipo(zonas, ZONA_PORTA) else SEGUNDOS_ENTRE_QUADROS)
                     self.analisar(quadro, agora)
             captura.release()
 
@@ -137,14 +199,35 @@ class Camera(threading.Thread):
         config = self.estado.get('canais', {}).get(self.numero)
         if not config or not config['ia'] or self.detector is None:
             return
-        self.analisador.zonas = config['zonas']
+        self.analisador.zonas = zonas_do_tipo(config['zonas'], ZONA_MOSTRUARIO)
         aberta = loja_aberta(self.estado['abre_as'], self.estado['fecha_as'])
-        for evento in self.analisador.analisar(self.detector(quadro), agora, aberta):
+        deteccoes = self.detector(quadro)
+        _medir(self, deteccoes, config['zonas'], agora, aberta)
+        for evento in self.analisador.analisar(deteccoes, agora, aberta):
             try:
                 self.portal.alerta(self.numero, evento, _jpg(quadro))
                 log.info('Alerta %s no canal %s', evento.tipo, self.numero)
             except requests.RequestException as erro:
                 log.warning('Alerta não enviado: %s', type(erro).__name__)
+
+
+def _medir(camera, deteccoes, zonas, agora, aberta):
+    if camera.fila is None:
+        return
+    m = camera.metricas
+    matinal = camera.estado.get('matinal') or {}
+    m.zonas = zonas
+    m.matinal_inicio = matinal.get('inicio', m.matinal_inicio)
+    m.matinal_fim = matinal.get('fim', m.matinal_fim)
+    m.matinal_minimo = matinal.get('minimo', m.matinal_minimo)
+    pessoas = [d['caixa'] for d in deteccoes if d['classe'] == 'person' and d['conf'] >= 0.5]
+    momento = datetime.now().astimezone()
+    eventos = m.analisar(pessoas, agora, momento.strftime('%H:%M'), aberta)
+    if eventos:
+        lista = carimbar(eventos, agora, momento)
+        for evento in lista:
+            evento['canal'] = camera.numero
+        camera.fila.adicionar(lista)
 
 
 def precisa_descobrir(gravador, cameras, ultima, agora):
@@ -161,6 +244,7 @@ def rodar(config):
     detector = Detector.se_instalado(config.get('modelo', 'yolov8n.pt')) if config.get('analisar', True) else None
     estado, cameras = {}, {}
     ultima_descoberta = None
+    fila = FilaDeEventos(os.path.join(config.get('_pasta', '.'), 'fila_medicoes.json'))
     while True:
         espera = 30
         try:
@@ -182,14 +266,14 @@ def rodar(config):
                     time.sleep(1)
                     continue
                 if gravador['ip']:
-                    estado.update(abre_as=resposta['abre_as'], fecha_as=resposta['fecha_as'],
+                    estado.update(abre_as=resposta['abre_as'], fecha_as=resposta['fecha_as'], matinal=resposta.get('matinal'),
                                   canais={c['numero']: c for c in resposta['canais']})
                     for numero in estado['canais']:
                         url = endereco_rtsp(gravador, numero)
                         if numero in cameras and cameras[numero].url != url:
                             cameras.pop(numero).parar.set()
                         if numero not in cameras:
-                            cameras[numero] = Camera(numero, url, portal, detector, estado)
+                            cameras[numero] = Camera(numero, url, portal, detector, estado, fila)
                             cameras[numero].start()
                     for numero in set(cameras) - set(estado['canais']):
                         cameras.pop(numero).parar.set()
@@ -201,6 +285,7 @@ def rodar(config):
                             fotos[canal_numero] = _jpg(camera.ultimo)
                     if fotos:
                         portal.fotos(fotos)
+                    fila.enviar(portal)
         except requests.RequestException as erro:
             # Só o tipo: a mensagem completa pode trazer endereço e cabeçalho.
             log.warning('Sem contato com o portal: %s', type(erro).__name__)
@@ -209,5 +294,6 @@ def rodar(config):
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')
-    with open(sys.argv[1] if len(sys.argv) > 1 else 'config.json', encoding='utf-8') as arquivo:
-        rodar(json.load(arquivo))
+    caminho_config = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else 'config.json')
+    with open(caminho_config, encoding='utf-8') as arquivo:
+        rodar({**json.load(arquivo), '_pasta': os.path.dirname(caminho_config)})

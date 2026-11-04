@@ -28,7 +28,10 @@
     <header><input id="caNome" aria-label="Nome da câmera" maxlength="80"><button type="button" id="caFechar" aria-label="Fechar"><i class="fas fa-times"></i></button></header>
     <div class="ca-palco" id="caPalco"><img id="caFoto" alt="Imagem da câmera" hidden><div id="caSemFoto" class="ca-sem-imagem"><i class="fas fa-circle-notch fa-spin"></i><small>Pedindo a imagem à loja…</small></div><div id="caZonas"></div></div>
     <footer>
-        <p><i class="fas fa-vector-square"></i>Arraste sobre a imagem para marcar o mostruário. Clique numa área para remover.</p>
+        <label class="ca-chave">Marcar <select id="caTipoZona" aria-label="O que marcar">
+            <option value="MOSTRUARIO">Mostruário</option><option value="PORTA">Porta (conta entradas)</option><option value="MESA">Cadeira do cliente (tempo na mesa)</option><option value="TELA">Frente da tela (matinal)</option>
+        </select></label>
+        <p id="caDicaZona"><i class="fas fa-vector-square"></i>Arraste sobre a imagem. Clique numa área para remover.</p>
         <label class="ca-chave"><input type="checkbox" id="caIa"> Analisar esta câmera</label>
         <button type="button" class="ca-botao" id="caSalvar"><i class="fas fa-check"></i>Salvar</button>
     </footer>
@@ -55,11 +58,19 @@
     }
     var ciclo = setInterval(buscar, 10000); buscar();
     function ritmo(ms) { clearInterval(ciclo); ciclo = setInterval(buscar, ms); }
+    var SETAS = {direita: '→', esquerda: '←', cima: '↑', baixo: '↓'}, ROTULOS = {MOSTRUARIO: 'Mostruário', PORTA: 'Porta', MESA: 'Mesa', TELA: 'Tela'};
+    var DICAS = {MOSTRUARIO: 'Arraste sobre os aparelhos expostos.', PORTA: 'Arraste cobrindo a porta, começando do lado de fora e terminando dentro da loja: a seta é o sentido de entrada.', MESA: 'Marque só a cadeira do cliente, não a do vendedor.', TELA: 'Marque o chão em frente à tela, onde a equipe fica reunida.'};
+    var tipoZona = document.getElementById('caTipoZona'), dicaZona = document.getElementById('caDicaZona');
+    tipoZona.addEventListener('change', function () { dicaZona.textContent = DICAS[tipoZona.value] + ' Clique numa área para remover.'; });
+    function nomeNovo(tipo) {
+        var base = ROTULOS[tipo], n = zonas.filter(function (z) { return (z.tipo || 'MOSTRUARIO') === tipo; }).length + 1;
+        return tipo === 'MESA' || n > 1 ? base + ' ' + n : base;
+    }
     function desenhar() {
         caixa.innerHTML = '';
         zonas.forEach(function (z, i) {
             var d = document.createElement('button');
-            d.type = 'button'; d.className = 'ca-zona'; d.textContent = z.nome; d.title = 'Remover área';
+            d.type = 'button'; d.className = 'ca-zona tipo-' + (z.tipo || 'MOSTRUARIO'); d.textContent = z.nome + (z.tipo === 'PORTA' ? ' ' + SETAS[z.sentido || 'baixo'] : ''); d.title = 'Remover área';
             d.style.cssText = 'left:' + z.x * 100 + '%;top:' + z.y * 100 + '%;width:' + z.w * 100 + '%;height:' + z.h * 100 + '%';
             d.addEventListener('click', function () { zonas.splice(i, 1); desenhar(); });
             caixa.appendChild(d);
@@ -90,8 +101,15 @@
         rascunho.style.cssText = 'left:' + c.x * 100 + '%;top:' + c.y * 100 + '%;width:' + c.w * 100 + '%;height:' + c.h * 100 + '%';
     });
     palco.addEventListener('pointerup', function (ev) {
-        if (!inicio) return; var c = caixaDe(ponto(ev)); inicio = null;
-        if (c.w > 0.02 && c.h > 0.02) { c.nome = 'Mostruário'; zonas.push(c); }
+        if (!inicio) return; var fimDoArraste = ponto(ev), inicioDoArraste = inicio, c = caixaDe(fimDoArraste); inicio = null;
+        if (c.w > 0.02 && c.h > 0.02) {
+            c.tipo = tipoZona.value; c.nome = nomeNovo(c.tipo);
+            if (c.tipo === 'PORTA') {
+                var dx = (fimDoArraste.x - inicioDoArraste.x) * 16 / 9, dy = fimDoArraste.y - inicioDoArraste.y; // a imagem é 16:9: compara o que a pessoa viu arrastar
+                c.sentido = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'direita' : 'esquerda') : (dy > 0 ? 'baixo' : 'cima');
+            }
+            zonas.push(c);
+        }
         desenhar();
     });
     document.getElementById('caSalvar').addEventListener('click', function () {

@@ -145,3 +145,21 @@ html.dark .ca {
 .ca-erro { color: var(--ca-vermelho); white-space: normal; max-width: 280px; }
 .ca-celula-agente small { display: block; white-space: normal; max-width: 280px; }
 .ca-sem-imagem small { padding: 0 10px; text-align: center; }
+.ca-kpis-4 { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.ca-kpi-tempo { font-size: 20px !important; }
+.ca-filtros label { font-size: 11.5px; color: var(--ca-texto-2); display: flex; flex-direction: column; gap: 2px; }
+.ca-filtros input, .ca-filtros select { background: var(--ca-card); color: var(--ca-texto); border: 1px solid var(--ca-borda); border-radius: 10px; padding: 7px 9px; font-size: 13px; }
+.ca-filtros .ca-botao { align-self: flex-end; }
+.ca-indicadores .num { text-align: right; font-variant-numeric: tabular-nums; }
+.ca-indicadores td { white-space: normal; }
+.ca-falta { color: var(--ca-texto-3); white-space: nowrap; }
+.ca-sim, .ca-nao { display: inline-flex; gap: 5px; align-items: baseline; }
+.ca-sim i { color: var(--ca-verde); }
+.ca-nao i { color: var(--ca-texto-3); }
+.ca-subinha td { color: var(--ca-texto-2); font-size: 12px; padding-top: 4px; padding-bottom: 4px; }
+.ca-subinha td:first-child { padding-left: 20px; }
+.ca-notas ul { margin: 0; padding-left: 18px; list-style: disc; }
+.ca-notas li { margin-bottom: 4px; }
+.ca-zona.tipo-PORTA { border-color: #22c55e; background: rgba(34,197,94,.18); }
+.ca-zona.tipo-MESA { border-color: #38bdf8; background: rgba(56,189,248,.18); }
+.ca-zona.tipo-TELA { border-color: #a78bfa; background: rgba(167,139,250,.2); }

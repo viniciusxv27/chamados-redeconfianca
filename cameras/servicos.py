@@ -7,8 +7,9 @@ from datetime import timedelta
 from django.core.cache import cache
 from django.core.files.base import ContentFile
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
-from .models import AlertaCamera, Canal, Gravador
+from .models import AlertaCamera, Canal, EventoLoja, Gravador
 
 FOTO_VALIDADE = 300        # segundos no cache: é imagem ao vivo, não arquivo
 FOTO_TAMANHO_MAX = 400 * 1024
@@ -76,6 +77,8 @@ def resposta_do_sinal(gravador, canais):
                      'usuario': gravador.usuario, 'senha': gravador.senha},
         'abre_as': gravador.abre_as.strftime('%H:%M'),
         'fecha_as': gravador.fecha_as.strftime('%H:%M'),
+        'matinal': {'inicio': gravador.matinal_inicio.strftime('%H:%M'), 'fim': gravador.matinal_fim.strftime('%H:%M'),
+                    'minimo': gravador.matinal_minutos * 60},
         'canais': [{'numero': c.numero, 'ia': c.ia_ativa, 'zonas': c.zonas} for c in canais if c.ativo],
     }
 
@@ -139,3 +142,39 @@ def registrar_descoberta(gravador, dados):
         Canal.objects.get_or_create(gravador=gravador, numero=numero)
     gravador.canais.filter(numero__in=canais).update(ativo=True)
     gravador.canais.exclude(numero__in=canais).update(ativo=False)
+
+
+EVENTOS_POR_PEDIDO = 500
+EVENTO_MAIS_ANTIGO_DIAS = 30
+
+
+def _momento(texto):
+    momento = parse_datetime(str(texto or ''))
+    if momento is None:
+        raise ValueError
+    return momento if timezone.is_aware(momento) else timezone.make_aware(momento)
+
+
+def registrar_eventos(gravador, eventos):
+    """Grava as medições. Reenvio não conta duas vezes; item estragado cai sozinho, sem perder o lote."""
+    agora = timezone.now()
+    canais = {c.numero: c.id for c in gravador.canais.all()}
+    novos = []
+    for item in (eventos or [])[:EVENTOS_POR_PEDIDO]:
+        try:
+            tipo, chave = item['tipo'], str(item['chave'])[:32]
+            inicio, fim = _momento(item['inicio']), _momento(item['fim'])
+            duracao, pessoas = int(item.get('duracao') or 0), int(item.get('pessoas') or 0)
+        except (KeyError, TypeError, ValueError):
+            continue
+        if (tipo not in EventoLoja.Tipo.values or not chave or inicio > fim or duracao < 0 or pessoas < 0 or pessoas > 500
+                or duracao > 86400 or fim > agora + timedelta(hours=1)
+                or fim < agora - timedelta(days=EVENTO_MAIS_ANTIGO_DIAS)):
+            continue
+        local = timezone.localtime(fim)
+        novos.append(EventoLoja(gravador=gravador, canal_id=canais.get(item.get('canal')), chave=chave, tipo=tipo,
+                                zona=str(item.get('zona') or '')[:40], inicio=inicio, fim=fim, data=local.date(),
+                                hora=local.hour, duracao=duracao, pessoas=pessoas))
+    EventoLoja.objects.bulk_create(novos, ignore_conflicts=True)
+    return len(novos)
+

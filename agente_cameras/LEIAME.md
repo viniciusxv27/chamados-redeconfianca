@@ -11,4 +11,6 @@ Precisa de: RTSP ligado no gravador e internet no computador. A análise usa uma
 
 Em `/cameras/loja/<id>/`, abra cada câmera e marque o mostruário arrastando sobre a imagem. Sem área marcada, só vale o alerta de pessoa com a loja fechada.
 
+Para as medições, marque também: **Porta** (arraste de fora para dentro), **Cadeira do cliente** em cada mesa e **Frente da tela** do matinal. A câmera da porta analisa 3 imagens por segundo; as outras, 1.
+
 `config.json` guarda o token da loja: não coloque em pasta compartilhada. Baixar o instalador de novo troca o token, e o agente antigo para.

@@ -1,6 +1,7 @@
 import io
 import json
 import zipfile
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from django.conf import settings
@@ -15,6 +16,7 @@ from users.models import Sector
 
 from . import servicos
 from .importacao import importar_planilha
+from .indicadores import indicadores_do_periodo
 from .models import AcessoCamera, AlertaCamera, Canal, ConfigCameras, Gravador
 from .permissoes import exige_superadmin
 
@@ -89,15 +91,31 @@ def loja(request, gravador_id):
     })
 
 
+TIPOS_DE_ZONA = {'MOSTRUARIO': 'Mostruário', 'PORTA': 'Porta', 'MESA': 'Mesa', 'TELA': 'Tela'}
+SENTIDOS = ('direita', 'esquerda', 'cima', 'baixo')
+
+
 def _zonas_validas(bruto):
-    zonas = []
+    zonas, nomes = [], set()
     for z in bruto if isinstance(bruto, list) else []:
         try:
             x, y, w, h = (round(max(0.0, min(1.0, float(z[k]))), 4) for k in 'xywh')
         except (KeyError, TypeError, ValueError):
             continue
-        if w > 0.01 and h > 0.01:
-            zonas.append({'nome': str(z.get('nome') or 'Mostruário')[:40], 'x': x, 'y': y, 'w': w, 'h': h})
+        if w <= 0.01 or h <= 0.01:
+            continue
+        tipo = z.get('tipo') if z.get('tipo') in TIPOS_DE_ZONA else 'MOSTRUARIO'
+        base = str(z.get('nome') or TIPOS_DE_ZONA[tipo])[:36]
+        # O agente mede por nome: duas mesas com o mesmo nome virariam uma só.
+        nome, n = base, 1
+        while nome in nomes:
+            n += 1
+            nome = f'{base} {n}'
+        nomes.add(nome)
+        zona = {'nome': nome, 'tipo': tipo, 'x': x, 'y': y, 'w': w, 'h': h}
+        if tipo == 'PORTA':
+            zona['sentido'] = z.get('sentido') if z.get('sentido') in SENTIDOS else 'baixo'
+        zonas.append(zona)
     return zonas[:12]
 
 
@@ -117,6 +135,28 @@ def canal_salvar(request, canal_id):
         canal.ia_ativa = bool(corpo['ia_ativa'])
     canal.save()
     return JsonResponse({'ok': True, 'zonas': canal.zonas, 'titulo': canal.titulo})
+
+
+def _data_do_get(request, campo, padrao):
+    try:
+        return datetime.strptime(request.GET.get(campo) or '', '%Y-%m-%d').date()
+    except ValueError:
+        return padrao
+
+
+@exige_superadmin
+def indicadores(request):
+    hoje = timezone.localdate()
+    de = _data_do_get(request, 'de', hoje)
+    ate = max(_data_do_get(request, 'ate', de), de)
+    ate = min(ate, de + timedelta(days=92))
+    loja_id = request.GET.get('loja', '')
+    dados = indicadores_do_periodo(de, ate, int(loja_id) if loja_id.isdigit() else None)
+    _registrar(request, 'ver_indicadores')
+    return render(request, 'cameras/indicadores.html', {
+        'aba': 'indicadores', 'de': de, 'ate': ate, 'loja_id': loja_id, 'um_dia': de == ate, 'hoje': hoje,
+        'lojas': Gravador.objects.filter(tem_equipamento=True), **dados,
+    })
 
 
 @exige_superadmin
@@ -224,6 +264,12 @@ def gravador_editar(request, gravador_id):
             return redirect('cameras:gravador_editar', gravador.id)
         gravador.abre_as = request.POST.get('abre_as') or gravador.abre_as
         gravador.fecha_as = request.POST.get('fecha_as') or gravador.fecha_as
+        gravador.matinal_inicio = request.POST.get('matinal_inicio') or gravador.matinal_inicio
+        gravador.matinal_fim = request.POST.get('matinal_fim') or gravador.matinal_fim
+        try:
+            gravador.matinal_minutos = max(1, min(120, int(request.POST.get('matinal_minutos') or gravador.matinal_minutos)))
+        except ValueError:
+            pass
         # Em branco mantém a senha atual: ela nunca volta para a tela.
         if request.POST.get('senha'):
             gravador.definir_senha(request.POST['senha'])

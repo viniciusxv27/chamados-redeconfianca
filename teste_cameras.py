@@ -70,6 +70,7 @@ from unittest.mock import patch
 import openpyxl
 import requests
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.utils import timezone
 
 from cameras.importacao import importar_planilha
 from cameras.models import AcessoCamera, AlertaCamera, Canal, ConfigCameras, Gravador
@@ -463,9 +464,9 @@ def start_falso(self):
 
 with patch.object(ag_mod, 'Portal', return_value=pf), patch.object(ag_mod.Detector, 'se_instalado', return_value=None), \
         patch.object(ag_mod, 'descobrir', return_value={'ip': '192.168.0.9', 'porta': 554, 'caminho': '/c?x={canal}', 'canais': [1, 2]}) as procura, \
-        patch.object(Camera, 'start', start_falso), patch.object(ag_mod, '_jpg', return_value=b'jpg'), patch.object(ag_mod.time, 'sleep'):
+        patch.object(Camera, 'start', start_falso), patch.object(ag_mod, '_jpg', return_value=b'jpg'), patch.object(ag_mod.time, 'sleep'), patch.object(PortalFalso, 'metricas', create=True):
     try:
-        ag_mod.rodar({'portal': 'https://x', 'token': 't'})
+        ag_mod.rodar({'portal': 'https://x', 'token': 't', '_pasta': tempfile.mkdtemp()})
     except Fim:
         pass
 t('sem IP: procura e manda o que achou', procura.call_count == 1 and procura.call_args[0][:3] == ('admin', 'a@b', 'S1') and pf.achados[0]['ip'] == '192.168.0.9', procura.call_args)
@@ -477,5 +478,163 @@ try:
         t('sem o pacote de IA, o agente segue só com imagem', ag_mod.Detector.se_instalado('x') is None)
 except Exception as exc:
     t('sem o pacote de IA, o agente segue só com imagem', False, exc)
+
+print('medições: regras')
+from regras import Metricas, Rastreador, cruzou_para_dentro, zonas_do_tipo
+from agente import FilaDeEventos, carimbar
+PORTA = {'nome': 'Porta', 'tipo': 'PORTA', 'x': .2, 'y': .4, 'w': .4, 'h': .2, 'sentido': 'baixo'}
+MESA = {'nome': 'Mesa 1', 'tipo': 'MESA', 'x': .6, 'y': .5, 'w': .2, 'h': .3}
+TELA = {'nome': 'Tela', 'tipo': 'TELA', 'x': .0, 'y': .0, 'w': .5, 'h': .5}
+def pessoa_pes(x, y): return (x - .05, y - .2, .1, .2)
+def tipos(ev): return [e['tipo'] for e in ev if e['tipo'] != 'COBERTURA']
+t('mostruário antigo sem tipo continua mostruário', len(zonas_do_tipo([{'nome': 'a'}, MESA], 'MOSTRUARIO')) == 1)
+t('cruzar para dentro', cruzou_para_dentro(PORTA, (.4, .45), (.4, .55)))
+t('cruzar para fora não conta', not cruzou_para_dentro(PORTA, (.4, .55), (.4, .45)))
+t('passar ao lado da porta não conta', not cruzou_para_dentro(PORTA, (.9, .45), (.9, .55)))
+t('sentido lateral', cruzou_para_dentro({**PORTA, 'sentido': 'esquerda'}, (.45, .5), (.35, .5)))
+def caminho(m, pontos, inicio=0, passo=.33, aberta=True, hora='10:00'):
+    saida = []
+    for i, ponto in enumerate(pontos):
+        saida += m.analisar([pessoa_pes(*p) for p in ponto], inicio + i * passo, hora, aberta)
+    return saida
+m = Metricas([PORTA])
+s1 = caminho(m, [[(.4, y)] for y in (.42, .46, .49, .52, .57)])
+t('uma pessoa entrando conta 1', tipos(s1) == ['ENTRADA'], s1)
+t('ficar parado na linha não conta de novo', tipos(caminho(Metricas([PORTA]), [[(.4, y)] for y in (.49, .51, .49, .51, .49, .51)])) == ['ENTRADA'])
+t('duas pessoas juntas contam 2', tipos(caminho(Metricas([PORTA]), [[(.3, y), (.5, y)] for y in (.42, .46, .52, .57)])) == ['ENTRADA', 'ENTRADA'])
+t('quem sai não conta', tipos(caminho(Metricas([PORTA]), [[(.4, y)] for y in (.57, .52, .46, .42)])) == [])
+t('dois em sentidos opostos: conta só quem entra', tipos(caminho(Metricas([PORTA]), [[(.3, a), (.5, b)] for a, b in ((.42, .58), (.46, .54), (.52, .46), (.57, .42))])) == ['ENTRADA'])
+t('loja fechada não conta', tipos(caminho(Metricas([PORTA]), [[(.4, y)] for y in (.42, .52, .57)], aberta=False)) == [])
+t('sem porta marcada não conta', tipos(caminho(Metricas([]), [[(.4, y)] for y in (.42, .52, .57)])) == [])
+m = Metricas([PORTA])
+primeira = caminho(m, [[(.4, y)] for y in (.42, .52)])
+segunda = caminho(m, [[], [], []], inicio=10, passo=5) + caminho(m, [[(.4, y)] for y in (.42, .52)], inicio=30)
+t('pessoa diferente, depois, conta de novo', tipos(primeira + segunda) == ['ENTRADA', 'ENTRADA'], primeira + segunda)
+r_ = Rastreador()
+a1 = r_.atualizar([(.1, .1), (.9, .9)], 0); a2 = r_.atualizar([(.12, .1), (.88, .9)], 1)
+t('rastreador mantém cada um', {k: v for k, v in a2.items()}.keys() == a1.keys() and a2[list(a1)[0]][0] == .12)
+t('longe demais é outra pessoa', set(r_.atualizar([(.5, .5)], 2)).isdisjoint(a1))
+t('primeira análise da hora registra a cobertura', [e['tipo'] for e in Metricas([]).analisar([], 0, '10:00')] == ['COBERTURA'])
+mc = Metricas([]); mc.analisar([], 0, '10:00')
+t('uma cobertura por hora', mc.analisar([], 1, '10:30') == [] and [e['tipo'] for e in mc.analisar([], 2, '11:00')] == ['COBERTURA'])
+def mesa(cheia, inicio=0, passo=1):
+    m = Metricas([MESA]); saida = []
+    for i, c in enumerate(cheia):
+        saida += m.analisar([(.65, .55, .1, .1)] if c else [], inicio + i * passo, '10:00')
+    return [e for e in saida if e['tipo'] == 'ATENDIMENTO']
+ate = mesa([True] * 301 + [False] * 60)
+t('tempo na mesa: 5 minutos', len(ate) == 1 and ate[0]['duracao'] == 300 and ate[0]['zona'] == 'Mesa 1', ate)
+t('passou pela cadeira: não é atendimento', mesa([True] * 30 + [False] * 60) == [])
+t('detector piscou: não parte o atendimento', len(x := mesa([True] * 100 + [False] * 20 + [True] * 100 + [False] * 60)) == 1 and x[0]['duracao'] == 219, x)
+t('dois clientes separados', len(mesa([True] * 100 + [False] * 60 + [True] * 100 + [False] * 60)) == 2)
+t('ainda sentado: não fecha antes da hora', mesa([True] * 500) == [])
+def grupo(n): return [(.1 + i * .05, .1, .05, .1) for i in range(n)]
+def matinal(seq, minimo=300):
+    m = Metricas([TELA], matinal_minimo=minimo); saida = []
+    for i, (n, hora) in enumerate(seq):
+        saida += m.analisar(grupo(n), i * 10, hora)
+    return [e for e in saida if e['tipo'] == 'MATINAL']
+x = matinal([(4, '08:00')] * 40 + [(0, '08:07')] * 10)
+t('matinal: 4 pessoas por mais de 5 min', len(x) == 1 and x[0]['pessoas'] == 4 and x[0]['duracao'] == 390, x)
+t('2 pessoas não é matinal', matinal([(2, '08:00')] * 40 + [(0, '08:07')] * 10) == [])
+t('3 pessoas já é matinal', len(matinal([(3, '08:00')] * 40 + [(0, '08:07')] * 10)) == 1)
+t('menos de 5 min não é matinal', matinal([(4, '08:00')] * 20 + [(0, '08:07')] * 10) == [])
+t('depois das 9h não é matinal', matinal([(4, '09:00')] * 40 + [(0, '09:07')] * 10) == [])
+t('antes das 5h não é matinal', matinal([(4, '04:30')] * 40 + [(0, '04:38')] * 10) == [])
+x = matinal([(4, '08:50')] * 40 + [(4, '09:00')] * 5)
+t('passou das 9h: fecha sem contar o resto', len(x) == 1 and x[0]['duracao'] == 390, x)
+t('saiu um por instantes: é a mesma matinal', len(matinal([(4, '08:00')] * 20 + [(1, '08:03')] * 3 + [(4, '08:04')] * 20 + [(0, '08:08')] * 10)) == 1)
+momento = timezone.localtime()
+c_ = carimbar([{'tipo': 'ATENDIMENTO', 'zona': 'M', 'inicio': 100, 'fim': 400, 'duracao': 300, 'pessoas': 1}], 460, momento)[0]
+t('carimbo volta à hora real', c_['fim'] == (momento - dt.timedelta(seconds=60)).isoformat() and c_['inicio'] == (momento - dt.timedelta(seconds=360)).isoformat() and len(c_['chave']) == 32)
+caminho_fila = os.path.join(tempfile.mkdtemp(), 'fila.json')
+fila = FilaDeEventos(caminho_fila); fila.adicionar([c_])
+t('fila sobrevive a reiniciar', FilaDeEventos(caminho_fila).eventos == [c_])
+class PortalQueda:
+    def __init__(self): self.falhar, self.recebidos = True, []
+    def metricas(self, lote):
+        if self.falhar:
+            raise requests.ConnectionError('fora')
+        self.recebidos += lote
+pq = PortalQueda()
+try:
+    fila.enviar(pq); caiu = False
+except requests.ConnectionError:
+    caiu = True
+t('portal fora: guarda para depois', caiu and fila.eventos == [c_])
+pq.falhar = False; fila.enviar(pq)
+t('voltou: envia e esvazia', pq.recebidos == [c_] and fila.eventos == [] and FilaDeEventos(caminho_fila).eventos == [])
+
+print('medições: portal')
+from cameras.indicadores import formatar_duracao, indicadores_do_periodo
+from cameras.models import EventoLoja
+EventoLoja.objects.all().delete()
+gm = Gravador.objects.create(loja='LOJA MEDIDA'); tok = gm.gerar_token()
+cm = Canal.objects.create(gravador=gm, numero=1, zonas=[PORTA, MESA, TELA])
+agm = {'HTTP_AUTHORIZATION': f'Bearer {tok}'}
+Gravador.objects.filter(pk=gm.pk).update(ultimo_contato=timezone.now())
+agora_ = timezone.localtime().replace(hour=10, minute=0, second=0, microsecond=0)
+if agora_ > timezone.localtime():
+    agora_ = agora_ - dt.timedelta(days=1)
+dia_ = agora_.date()
+oito = agora_.replace(hour=8)
+def ev(chave, tipo, inicio, fim=None, **k):
+    return {'chave': chave, 'tipo': tipo, 'canal': 1, 'zona': k.pop('zona', ''), 'inicio': inicio.isoformat(), 'fim': (fim or inicio).isoformat(), 'duracao': k.pop('duracao', 0), 'pessoas': k.pop('pessoas', 0)}
+post = lambda lista, **kw: anon.post('/cameras/agente/metricas/', _j.dumps({'eventos': lista}), content_type='application/json', **{**agm, **kw})
+lote = [ev('c1', 'COBERTURA', oito), ev('c2', 'COBERTURA', agora_), ev('e1', 'ENTRADA', agora_, zona='Porta', pessoas=1), ev('e2', 'ENTRADA', agora_, zona='Porta', pessoas=1),
+        ev('e3', 'ENTRADA', agora_ - dt.timedelta(hours=1), zona='Porta', pessoas=1), ev('a1', 'ATENDIMENTO', agora_ - dt.timedelta(seconds=300), agora_, zona='Mesa 1', duracao=300, pessoas=1),
+        ev('a2', 'ATENDIMENTO', agora_ - dt.timedelta(seconds=100), agora_, zona='Mesa 1', duracao=100, pessoas=1), ev('m1', 'MATINAL', oito, oito + dt.timedelta(minutes=10), zona='Tela', duracao=600, pessoas=5)]
+r = post(lote)
+t('recebe as medições', r.status_code == 200 and EventoLoja.objects.filter(gravador=gm).count() == 8, r.content)
+t('reenvio não conta duas vezes', post(lote).status_code == 200 and EventoLoja.objects.filter(gravador=gm).count() == 8)
+t('sem token: recusa', anon.post('/cameras/agente/metricas/', '{}', content_type='application/json').status_code == 401)
+t('JSON quebrado: recusa', anon.post('/cameras/agente/metricas/', '{x', content_type='application/json', **agm).status_code == 400)
+ruins = [{'chave': 'r1'}, ev('r2', 'INVENTADO', agora_), ev('r3', 'ENTRADA', timezone.now() + dt.timedelta(days=2)), ev('r4', 'ENTRADA', timezone.now() - dt.timedelta(days=90)),
+         {**ev('r5', 'ATENDIMENTO', agora_), 'duracao': -5}, ev('r6', 'ATENDIMENTO', agora_, agora_ - dt.timedelta(hours=1))]
+post(ruins + [ev('bom', 'ENTRADA', agora_, zona='Porta')])
+t('item estragado cai, o bom entra', EventoLoja.objects.filter(gravador=gm, chave='bom').exists() and not EventoLoja.objects.filter(chave__in=['r1', 'r2', 'r3', 'r4', 'r5', 'r6']).exists())
+EventoLoja.objects.filter(chave='bom').delete()
+ConfigCameras.objects.update(ativo=False)
+post([ev('off', 'ENTRADA', agora_)])
+t('módulo desligado não grava medição', not EventoLoja.objects.filter(chave='off').exists())
+ConfigCameras.objects.update(ativo=True)
+d_ = indicadores_do_periodo(dia_, dia_, gm.id)
+l_ = d_['linhas'][0]
+t('conta os clientes', l_['entradas'] == 3 and d_['total_entradas'] == 3)
+t('hora de pico', l_['pico'] == f'{agora_.hour:02d}h (2)', l_['pico'])
+t('matinal do dia', l_['matinal_dias'] == 1 and l_['matinais'][0]['pessoas'] == 5 and not l_['matinal_aviso'])
+t('tempo médio e maior na mesa', l_['atendimentos'] == 2 and l_['media_segundos'] == 200 and l_['maior'] == '5 min 00 s', l_)
+t('formato do tempo', formatar_duracao(45) == '45 s' and formatar_duracao(200) == '3 min 20 s' and formatar_duracao(3900) == '1h05' and formatar_duracao(None) == '—')
+Canal.objects.create(gravador=gm, numero=2, zonas=[{**MESA, 'nome': 'Mesa 2'}])
+post([ev('a3', 'ATENDIMENTO', agora_ - dt.timedelta(seconds=60), agora_, zona='Mesa 2', duracao=60, pessoas=1)])
+t('separa por mesa', [m['nome'] for m in indicadores_do_periodo(dia_, dia_, gm.id)['linhas'][0]['por_mesa']] == ['Mesa 1', 'Mesa 2'])
+h = cs.get(f'/cameras/indicadores/?de={dia_}&ate={dia_}&loja={gm.id}').content.decode()
+t('tela mostra os números', 'LOJA MEDIDA' in h and 'data-total-entradas>3<' in h and 'Sim' in h and '5 pessoas' in h and 'Mesa 2' in h)
+t('tela avisa que inclui funcionários e não mede o olhar', 'Inclui funcionários' in h and 'não para onde elas olham' in h)
+t('colaborador comum não vê', cc.get('/cameras/indicadores/').status_code == 302)
+t('data inválida não quebra', cs.get('/cameras/indicadores/?de=abc&ate=x').status_code == 200)
+ontem = dia_ - dt.timedelta(days=1)
+sem = indicadores_do_periodo(ontem, ontem, gm.id)['linhas'][0]
+t('sem cobertura é sem medição, não zero', sem['entradas'] is None and sem['entradas_aviso'] == 'Sem medição' and sem['matinal_aviso'] == 'Sem medição' and sem['atendimentos'] is None, sem['entradas_aviso'])
+post([ev('c9', 'COBERTURA', agora_ - dt.timedelta(days=1))])
+tarde = indicadores_do_periodo(ontem, ontem, gm.id)['linhas'][0]
+t('cobriu só depois da janela: entrada zero, matinal sem medição', tarde['entradas'] == 0 and tarde['matinal_aviso'] == 'Sem medição', tarde['matinal_aviso'])
+post([ev('c10', 'COBERTURA', oito - dt.timedelta(days=1))])
+nao = indicadores_do_periodo(ontem, ontem, gm.id)['linhas'][0]
+t('cobriu a janela e nada aconteceu: não houve matinal', nao['matinal_aviso'] == '' and nao['matinal_dias'] == 0)
+gsem = Gravador.objects.create(loja='LOJA SEM AGENTE')
+t('sem agente diz isso', indicadores_do_periodo(dia_, dia_, gsem.id)['linhas'][0]['entradas_aviso'] == 'Agente não instalado')
+gz = Gravador.objects.create(loja='LOJA SEM AREA', ultimo_contato=timezone.now()); Canal.objects.create(gravador=gz, numero=1)
+lz = indicadores_do_periodo(dia_, dia_, gz.id)['linhas'][0]
+t('sem área marcada pede para marcar', lz['entradas_aviso'] == 'Marque a porta' and lz['mesas_aviso'] == 'Marque a mesa' and lz['matinal_aviso'] == 'Marque a tela')
+r = cs.post(f'/cameras/canal/{cm.id}/salvar/', _j.dumps({'zonas': [{'nome': 'Mesa', 'tipo': 'MESA', 'x': .1, 'y': .1, 'w': .2, 'h': .2}, {'nome': 'Mesa', 'tipo': 'MESA', 'x': .4, 'y': .1, 'w': .2, 'h': .2}, {'tipo': 'PORTA', 'sentido': 'cima', 'x': .1, 'y': .5, 'w': .2, 'h': .2}, {'tipo': 'INVENTADO', 'sentido': 'x', 'x': .5, 'y': .5, 'w': .2, 'h': .2}]}), content_type='application/json')
+z_ = r.json()['zonas']
+t('áreas guardam o tipo e o sentido', z_[2]['tipo'] == 'PORTA' and z_[2]['sentido'] == 'cima' and z_[3]['tipo'] == 'MOSTRUARIO' and 'sentido' not in z_[3], z_)
+t('duas mesas com o mesmo nome viram duas', z_[0]['nome'] == 'Mesa' and z_[1]['nome'] == 'Mesa 2')
+r = anon.post('/cameras/agente/sinal/', **agm).json()
+t('agente recebe o horário da matinal', r['matinal'] == {'inicio': '05:00', 'fim': '09:00', 'minimo': 300}, r.get('matinal'))
+cs.post(f'/cameras/configuracao/{gm.id}/', {'loja': 'LOJA MEDIDA', 'caminho_rtsp': '/x?c={canal}', 'porta_rtsp': 554, 'canais': 2, 'tem_equipamento': '1', 'abre_as': '09:00', 'fecha_as': '18:00', 'matinal_inicio': '06:30', 'matinal_fim': '08:30', 'matinal_minutos': '10'})
+gm.refresh_from_db()
+t('horário da matinal por loja', gm.matinal_inicio.strftime('%H:%M') == '06:30' and gm.matinal_minutos == 10)
 
 print(f'\n{ok} OK, {fail} falha(s)')

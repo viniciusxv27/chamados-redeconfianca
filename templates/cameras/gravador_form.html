@@ -16,6 +16,9 @@
     <label class="inteiro">Caminho RTSP<input name="caminho_rtsp" value="{{ gravador.caminho_rtsp }}"><small>Use {canal} no lugar do número. O padrão serve para Intelbras; confira o do Motorola na instalação.</small></label>
     <label>Abre às<input type="time" name="abre_as" value="{{ gravador.abre_as|time:'H:i' }}"></label>
     <label>Fecha às<input type="time" name="fecha_as" value="{{ gravador.fecha_as|time:'H:i' }}"></label>
+    <label>Matinal a partir de<input type="time" name="matinal_inicio" value="{{ gravador.matinal_inicio|time:'H:i' }}"></label>
+    <label>Matinal antes de<input type="time" name="matinal_fim" value="{{ gravador.matinal_fim|time:'H:i' }}"></label>
+    <label>Matinal dura ao menos (min)<input type="number" name="matinal_minutos" min="1" max="120" value="{{ gravador.matinal_minutos }}"></label>
     <div class="inteiro ca-fim"><a class="ca-botao claro" href="{% url 'cameras:configuracao' %}">Cancelar</a><button class="ca-botao">Salvar</button></div>
 </form>
 {% endblock %}

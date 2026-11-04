@@ -1,4 +1,5 @@
 """API do agente da loja. Sem sessão: cada gravador tem o seu token e só enxerga o que é dele."""
+import json
 from functools import wraps
 
 from django.http import JsonResponse
@@ -75,3 +76,16 @@ def receber_descoberta(request, gravador):
     except servicos.DescobertaRecusada as erro:
         return JsonResponse({'erro': str(erro)}, status=400)
     return JsonResponse({'ok': True})
+
+
+@_do_agente
+def receber_metricas(request, gravador):
+    try:
+        corpo = json.loads(request.body or b'{}')
+    except ValueError:
+        return JsonResponse({'erro': 'JSON inválido.'}, status=400)
+    eventos = corpo.get('eventos') if isinstance(corpo, dict) else None
+    if not isinstance(eventos, list):
+        return JsonResponse({'erro': 'Faltam os eventos.'}, status=400)
+    return JsonResponse({'ok': True, 'gravados': servicos.registrar_eventos(gravador, eventos)})
+

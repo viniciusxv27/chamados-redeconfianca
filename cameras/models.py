@@ -49,6 +49,11 @@ class Gravador(models.Model):
     abre_as = models.TimeField(default=time(8, 0), verbose_name='Abre às')
     fecha_as = models.TimeField(default=time(20, 0), verbose_name='Fecha às')
 
+    # O matinal: gente reunida na área da tela, dentro deste horário, por pelo menos este tempo.
+    matinal_inicio = models.TimeField(default=time(5, 0), db_default=time(5, 0), verbose_name='Matinal a partir de')
+    matinal_fim = models.TimeField(default=time(9, 0), db_default=time(9, 0), verbose_name='Matinal antes de')
+    matinal_minutos = models.PositiveSmallIntegerField(default=5, db_default=5, verbose_name='Matinal dura ao menos (min)')
+
     token_hash = models.CharField(max_length=64, blank=True, editable=False, db_index=True)
     ultimo_contato = models.DateTimeField(null=True, blank=True, editable=False)
     versao_agente = models.CharField(max_length=30, blank=True, editable=False)
@@ -159,6 +164,35 @@ class AlertaCamera(models.Model):
         verbose_name = 'Alerta de câmera'
         verbose_name_plural = 'Alertas de câmera'
         ordering = ['-criado_em']
+
+
+class EventoLoja(models.Model):
+    """O que o agente mediu. Só contagem e tempo: sem imagem e sem identificar ninguém."""
+
+    class Tipo(models.TextChoices):
+        ENTRADA = 'ENTRADA', 'Entrada pela porta'
+        ATENDIMENTO = 'ATENDIMENTO', 'Tempo na mesa'
+        MATINAL = 'MATINAL', 'Matinal'
+        COBERTURA = 'COBERTURA', 'Câmera analisando nesta hora'
+
+    gravador = models.ForeignKey(Gravador, on_delete=models.CASCADE, related_name='eventos')
+    canal = models.ForeignKey(Canal, on_delete=models.SET_NULL, null=True, blank=True, related_name='eventos')
+    chave = models.CharField(max_length=32)
+    tipo = models.CharField(max_length=12, choices=Tipo.choices)
+    zona = models.CharField(max_length=40, blank=True)
+    inicio = models.DateTimeField()
+    fim = models.DateTimeField()
+    data = models.DateField()
+    hora = models.PositiveSmallIntegerField()
+    duracao = models.PositiveIntegerField(default=0, verbose_name='Segundos')
+    pessoas = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        verbose_name = 'Medição da loja'
+        verbose_name_plural = 'Medições das lojas'
+        ordering = ['-fim']
+        constraints = [models.UniqueConstraint(fields=['gravador', 'chave'], name='cameras_evento_uma_vez')]
+        indexes = [models.Index(fields=['data', 'tipo', 'gravador'], name='cameras_evento_dia_idx')]
 
 
 class AcessoCamera(models.Model):
