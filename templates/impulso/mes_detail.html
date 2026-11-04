@@ -13,7 +13,10 @@
             <div class="flex items-center gap-2">
                 <h2 class="text-xl font-bold text-gray-900">{{ mes.referencia|date:"F Y"|capfirst }}</h2>
                 <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold
-                    {% if mes.is_fechado %}bg-orange-100 text-orange-700{% else %}bg-emerald-100 text-emerald-700{% endif %}">{{ mes.get_status_display }}</span>
+                    {% if mes.corte_em %}
+            <p class="text-xs text-amber-700 mt-1"><i class="fas fa-calendar-xmark mr-1"></i>Conta só o que aconteceu antes de {{ mes.corte_em|date:"d/m/Y" }}: o que foi aprovado ou avaliado depois fica de fora.</p>
+            {% endif %}
+            {% if mes.is_fechado %}bg-orange-100 text-orange-700{% else %}bg-emerald-100 text-emerald-700{% endif %}">{{ mes.get_status_display }}</span>
             </div>
             {% if mes.is_fechado %}
             <p class="text-xs text-gray-400 mt-1">Fechado em {{ mes.fechado_em|date:"d/m/Y H:i" }}{% if mes.fechado_por %} por {{ mes.fechado_por.get_full_name|default:mes.fechado_por.email }}{% endif %}</p>

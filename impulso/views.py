@@ -35,7 +35,7 @@ from .models import (
     Meta, MetaAnexo, MetaComentario, MetaItem, MetaVisualizacao, PontuacaoMensal,
     ProjetoAnexo, ProjetoFoco, RascunhoDecisaoIdeia, TarefaProjeto,
 )
-from .scoring import (calcular_pontuacao, filtros_de_tarefa_do_mes, linhas_detalhadas,
+from .scoring import (calcular_pontuacao, filtros_de_tarefa_do_mes, linhas_detalhadas, periodo_do_mes,
                       ordenar_ranking)
 from .utils import (
     FAIXAS, calcular_faixa, e_superadmin, faixa_info, get_adms_lojas, get_colaboradores,
@@ -4251,21 +4251,31 @@ def _aplicar_decisao_da_ideia(ideia, aprovando, executor, prazo, quem):
 # ---------------------------------------------------------------------------
 # ACOMPANHAMENTO — Faixas, ranking e detalhamento
 # ---------------------------------------------------------------------------
+def _periodo_do_acompanhamento():
+    """(início, fim, CicloMes): o mês do ciclo ainda não finalizado, ou o do calendário sem ciclo aberto."""
+    mes = ciclos_service.mes_em_conferencia()
+    inicio, fim = ciclos_service.periodo_do_mes_obj(mes) if mes else periodo_do_mes()
+    return inicio, fim, mes
+
+
 @impulso_member_required
 def acompanhamento(request):
-    """Pontuação do mês corrente (ao vivo) + ranking + faixas."""
+    """Pontuação do mês em conferência (ao vivo) + ranking + faixas."""
     f = filtros_impulso.ler(request)
     colaboradores = filtros_impulso.pessoas(get_colaboradores(), f)
+    inicio, fim, mes_ciclo = _periodo_do_acompanhamento()
     ranking = []
     for c in colaboradores:
-        dados = calcular_pontuacao(c)
+        dados = calcular_pontuacao(c, inicio=inicio, fim=fim)
         ranking.append({'user': c, 'dados': dados, 'faixa': faixa_info(dados['faixa'])})
     # A ordem e o desempate (assiduidade → metas concluídas → ideias
     # aprovadas) moram no scoring, junto do cálculo que os alimenta.
     ranking = ordenar_ranking(ranking)
 
-    minha = calcular_pontuacao(request.user)
+    minha = calcular_pontuacao(request.user, inicio=inicio, fim=fim)
     context = {
+        'mes_ciclo': mes_ciclo,
+        'mes_atrasado': bool(mes_ciclo and fim < timezone.localdate()),
         'ranking': ranking,
         'minha': minha,
         'minha_faixa_info': faixa_info(minha['faixa']),
@@ -4287,17 +4297,26 @@ def detalhe_colaborador(request, user_id):
         messages.error(request, 'Você só pode ver o seu próprio detalhamento.')
         return redirect('impulso:acompanhamento')
 
-    # Mês corrente ao vivo
-    atual = calcular_pontuacao(alvo)
     # Histórico já fechado
     historico = (PontuacaoMensal.objects.filter(user=alvo)
-                 .select_related('mes', 'mes__ciclo', 'setor')
+                 .select_related('mes', 'mes__ciclo', 'setor', 'user')
                  .order_by('-mes__referencia'))
 
-    mes_id = _int_or_none(request.GET.get('mes'))
-    snapshot = historico.filter(mes_id=mes_id).first() if mes_id else None
+    # ?mes= manda na tela inteira: mês finalizado mostra o que foi salvo; aberto, a conta ao vivo dele.
+    # Sem o parâmetro, o mês em conferência (o mesmo do acompanhamento).
+    mes_escolhido = CicloMes.objects.select_related('ciclo').filter(id=_int_or_none(request.GET.get('mes'))).first()
+    snapshot = historico.filter(mes=mes_escolhido).first() if mes_escolhido and mes_escolhido.is_fechado else None
+    if snapshot:
+        atual = ciclos_service.dados_da_pontuacao(snapshot)
+    else:
+        if mes_escolhido:
+            inicio, fim = ciclos_service.periodo_do_mes_obj(mes_escolhido)
+        else:
+            inicio, fim, _mes = _periodo_do_acompanhamento()
+        atual = calcular_pontuacao(alvo, inicio=inicio, fim=fim)
 
     context = {
+        'mes_escolhido': mes_escolhido,
         'alvo': alvo,
         'atual': atual,
         'atual_faixa': faixa_info(atual['faixa']),

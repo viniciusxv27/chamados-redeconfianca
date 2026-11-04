@@ -31,6 +31,19 @@ def periodo_do_mes_obj(mes):
     return inicio, fim
 
 
+def mes_em_conferencia(hoje=None):
+    """O mês que o acompanhamento mostra: o mais antigo do ciclo que ainda não foi finalizado.
+
+    Virar o calendário não muda de mês: o anterior segue na tela, para conferência, até ser
+    finalizado e ter o ranking. Sem mês aberto até hoje (nenhum ciclo em andamento), devolve None
+    e vale o mês do calendário.
+    """
+    hoje = hoje or timezone.localdate()
+    return (CicloMes.objects
+            .filter(status=CicloMes.Status.ABERTO, ciclo__status='ABERTO', referencia__lte=date(hoje.year, hoje.month, 1))
+            .select_related('ciclo').order_by('referencia').first())
+
+
 def meses_entre(inicio, fim):
     """Lista de primeiros-dias-de-mês entre duas datas (inclusive)."""
     meses = []
@@ -133,6 +146,43 @@ def _recalcular(pontuacao):
     pontuacao.percentual = percentual.quantize(Decimal('0.01'))
     pontuacao.faixa = faixa_por_score(pontuacao.percentual)
     pontuacao.confiancas_previstas = CONFIANCAS_POR_MES if pontuacao.faixa in FAIXAS_PREMIADAS else 0
+
+
+def dados_da_pontuacao(pontuacao):
+    """O mês fechado no mesmo formato de `calcular_pontuacao`, para as telas de detalhamento.
+
+    Vem do que foi salvo (com o ajuste manual, se houver): recalcular mostraria a situação de
+    hoje, não a que valeu no fechamento.
+    """
+    from .scoring import maximos, pesos, periodo_do_mes
+    user = pontuacao.user
+    tabela = pesos(user)
+    max_confiar, max_conectar, max_inovar, max_total = maximos(user)
+    salvos = pontuacao.detalhes or {}
+    detalhes = {chave: salvos.get(chave) or {}
+                for chave in ('metas', 'feedback', 'assiduidade', 'curso', 'videos_pops', 'projeto_foco', 'inovar')}
+    assiduidade = detalhes['assiduidade']
+    # Os mesmos "não houve item no mês" do cálculo ao vivo.
+    sem_item = [('metas_conclusao', detalhes['metas'].get('sem_metas')),
+                ('metas_qualidade', not detalhes['metas'].get('avaliadas')),
+                ('feedback', detalhes['feedback'].get('sem_feedback')),
+                ('assiduidade', assiduidade.get('sem_folha') or assiduidade.get('sem_dias_avaliaveis')
+                 or assiduidade.get('indisponivel')),
+                ('curso', detalhes['curso'].get('sem_conteudo')),
+                ('videos_pops', detalhes['videos_pops'].get('sem_conteudo')),
+                ('projeto_foco', detalhes['projeto_foco'].get('sem_tarefas'))]
+    valor = {campo: Decimal(getattr(pontuacao, campo)) for campo, _, _ in CAMPOS_PONTOS}
+    inicio, fim = periodo_do_mes(pontuacao.mes.referencia)
+    return {
+        'inicio': inicio, 'fim': fim, **valor,
+        'confiar': valor['p_metas_qualidade'] + valor['p_metas_conclusao'] + valor['p_feedback'] + valor['p_assiduidade'],
+        'confiar_max': max_confiar,
+        'conectar': valor['p_curso'] + valor['p_videos_pops'] + valor['p_projeto_foco'], 'conectar_max': max_conectar,
+        'inovar': valor['p_ideias'] + valor['p_ideia_aprovada'], 'inovar_max': max_inovar,
+        'total': pontuacao.total, 'aplicavel': pontuacao.pontos_aplicaveis, 'percentual': pontuacao.percentual,
+        'faixa': pontuacao.faixa, 'pesos': tabela, 'detalhes': detalhes,
+        'pontos_sem_oportunidade': sum((tabela.get(peso, Decimal('0')) for peso, sem in sem_item if sem), Decimal('0')),
+    }
 
 
 def _resumo(pontuacao):

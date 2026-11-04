@@ -39,7 +39,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from .assiduidade import nota_assiduidade
-from .models import (ConclusaoConteudo, ConteudoConectar, Ideia, Meta,
+from .models import (CicloMes, ConclusaoConteudo, ConteudoConectar, Ideia, Meta,
                      ProjetoFoco, TarefaProjeto)
 from .utils import faixa_por_score
 
@@ -167,19 +167,23 @@ def periodo_do_mes(referencia=None):
 # ---------------------------------------------------------------------------
 # CONFIAR
 # ---------------------------------------------------------------------------
-def _nota_metas(user, inicio, fim):
+def _nota_metas(user, inicio, fim, corte=None):
     """20 pontos: 10 pela qualidade média + 10 pelo percentual de conclusão."""
     # Só meta aprovada conta. Uma solicitação parada na fila do gestor (ou
     # recusada) não pode entrar no denominador e derrubar a nota de quem
     # simplesmente pediu uma tarefa.
     metas = Meta.objects.filter(colaborador=user, prazo__gte=inicio, prazo__lte=fim,
                                 aprovacao=Meta.Aprovacao.APROVADA)
+    if corte:
+        metas = metas.exclude(created_at__gte=corte)
     total = metas.count()
     if not total:
         return ZERO, ZERO, ZERO, ZERO, {'sem_metas': True}
 
-    concluidas = metas.filter(status=Meta.Status.CONCLUIDA).count()
-    avaliadas = list(metas.filter(nota_qualidade__isnull=False, nota_prazo__isnull=False))
+    # Com corte, a meta entregue ou avaliada depois dele ainda estava em aberto naquele instante.
+    no_corte = metas.exclude(avaliado_em__gte=corte).exclude(entregue_em__gte=corte) if corte else metas
+    concluidas = no_corte.filter(status=Meta.Status.CONCLUIDA).count()
+    avaliadas = list(no_corte.filter(nota_qualidade__isnull=False, nota_prazo__isnull=False))
 
     # Conclusão (0-10)
     p_conclusao = pt('metas_conclusao', user) * Decimal(concluidas) / Decimal(total)
@@ -276,7 +280,7 @@ def avaliar_feedback(fb):
     }
 
 
-def _nota_feedback(user, inicio, fim):
+def _nota_feedback(user, inicio, fim, corte=None):
     """10 pontos se algum feedback do mês fechar por um dos três caminhos."""
     try:
         from feedback.models import Feedback
@@ -286,6 +290,8 @@ def _nota_feedback(user, inicio, fim):
     feedbacks = (Feedback.objects
                  .filter(evaluatee=user, data__gte=inicio, data__lte=fim)
                  .order_by('-data', '-created_at'))
+    if corte:
+        feedbacks = feedbacks.exclude(created_at__gte=corte)
 
     escolhido = None
     for fb in feedbacks:
@@ -331,7 +337,7 @@ def _conteudos_do_usuario(user, tipos, inicio, fim, periodo_dentro_do_mes=False)
     return qs.distinct()
 
 
-def _nota_conteudos(user, tipos, pontos, inicio, fim, periodo_dentro_do_mes=False):
+def _nota_conteudos(user, tipos, pontos, inicio, fim, periodo_dentro_do_mes=False, corte=None):
     conteudos = list(_conteudos_do_usuario(user, tipos, inicio, fim, periodo_dentro_do_mes))
     total = len(conteudos)
     if not total:
@@ -340,19 +346,23 @@ def _nota_conteudos(user, tipos, pontos, inicio, fim, periodo_dentro_do_mes=Fals
     ids = [c.id for c in conteudos]
     feitas = ConclusaoConteudo.objects.filter(
         user=user, conteudo_id__in=ids, concluido=True)
+    if corte:
+        feitas = feitas.exclude(concluido_em__gte=corte)
+    # Com corte, o que foi conferido depois dele ainda esperava conferência naquele instante.
+    decididas = feitas.exclude(decidida_em__gte=corte) if corte else feitas
     # Só pontua o que o gestor conferiu — mesma régua do Confiar, onde a
     # entrega passa pela avaliação. "Marquei como feito" não é "está feito".
-    concluidos = feitas.filter(
+    concluidos = decididas.filter(
         aprovacao=ConclusaoConteudo.Aprovacao.APROVADA).count()
-    aguardando = feitas.filter(
-        aprovacao=ConclusaoConteudo.Aprovacao.PENDENTE).count()
-    recusados = feitas.filter(
+    recusados = decididas.filter(
         aprovacao=ConclusaoConteudo.Aprovacao.RECUSADA).count()
+    aguardando = feitas.count() - concluidos - recusados
     nota = pontos * Decimal(concluidos) / Decimal(total)
     # O que entrou na conta, item a item: sem isto a tela dizia "3 de 4" e ninguém achava o 4º
     # (um vídeo junto dos POPs, um conteúdo "para toda a equipe", uma entrega ainda não conferida).
     # Só texto e bool: o detalhamento vai para um JSONField no fechamento do mês.
-    situacao = dict(feitas.values_list('conteudo_id', 'aprovacao'))
+    situacao = {conteudo_id: ConclusaoConteudo.Aprovacao.PENDENTE for conteudo_id in feitas.values_list('conteudo_id', flat=True)}
+    situacao.update(decididas.values_list('conteudo_id', 'aprovacao'))
     com_destino = set(ConteudoConectar.objects.filter(id__in=ids, obrigatorio_para__isnull=False)
                       .values_list('id', flat=True))
     itens = [{'id': c.id, 'titulo': c.titulo, 'tipo': c.get_tipo_display(), 'para_todos': c.id not in com_destino,
@@ -384,7 +394,7 @@ def filtros_de_tarefa_do_mes(inicio, fim):
     return feita_no_mes, prazo_no_mes & aberta_no_fim
 
 
-def _nota_projeto_foco(user, inicio, fim):
+def _nota_projeto_foco(user, inicio, fim, corte=None):
     """Os pontos do Projeto FOCO, em duas metades.
 
     Metade pela entrega da parte da pessoa; a outra metade quando o projeto é
@@ -404,6 +414,8 @@ def _nota_projeto_foco(user, inicio, fim):
     feita_no_mes, devida_no_mes = filtros_de_tarefa_do_mes(inicio, fim)
     tarefas = TarefaProjeto.objects.filter(
         responsavel=user, projeto__ativo=True).filter(feita_no_mes | devida_no_mes)
+    if corte:
+        tarefas = tarefas.exclude(criado_em__gte=corte)
     total = tarefas.count()
     if not total:
         return ZERO, ZERO, {'sem_tarefas': True}
@@ -419,7 +431,10 @@ def _nota_projeto_foco(user, inicio, fim):
     # é o SUPERADMIN (ProjetoFoco.Aprovacao).
     entregues = ProjetoFoco.objects.filter(
         id__in=ids, concluido=True,
-        aprovacao=ProjetoFoco.Aprovacao.APROVADA).count()
+        aprovacao=ProjetoFoco.Aprovacao.APROVADA)
+    if corte:
+        entregues = entregues.exclude(decidida_em__gte=corte).exclude(concluido_em__gte=corte)
+    entregues = entregues.count()
     nota_conclusao = metade * Decimal(entregues) / Decimal(len(ids)) if ids else ZERO
 
     return _quantize(nota_entrega + nota_conclusao), maximo, {
@@ -434,7 +449,7 @@ def _nota_projeto_foco(user, inicio, fim):
 # ---------------------------------------------------------------------------
 # INOVAR
 # ---------------------------------------------------------------------------
-def _nota_inovar(user, inicio, fim):
+def _nota_inovar(user, inicio, fim, corte=None):
     # Conta a ideia para quem escreveu e para quem foi incluído nela: sem o
     # `distinct`, uma pessoa que é autora E participante contaria duas vezes.
     ideias = Ideia.objects.filter(
@@ -444,6 +459,9 @@ def _nota_inovar(user, inicio, fim):
     propostas = ideias.count()
     projetos = ideias.filter(tipo=Ideia.Tipo.PROJETO).count()
     aprovadas = ideias.filter(status=Ideia.Status.APROVADA)
+    if corte:
+        # A ideia não guarda a data da decisão: a atividade que a aprovação abre é quem diz.
+        aprovadas = aprovadas.exclude(meta_gerada__created_at__gte=corte)
     # Para as 3 ideias vale qualquer tipo; para os pontos de aprovação, só
     # projeto. `aprovadas` (de qualquer tipo) segue sendo o desempate do ranking.
     projetos_aprovados = aprovadas.filter(tipo=Ideia.Tipo.PROJETO).count()
@@ -514,22 +532,27 @@ def _info_assiduidade(detalhe):
 # ---------------------------------------------------------------------------
 def calcular_pontuacao(user, inicio=None, fim=None, referencia=None):
     """Pontuação completa do colaborador no período (padrão: mês corrente)."""
+    corte = None
     if inicio is None or fim is None:
         inicio, fim = periodo_do_mes(referencia)
+    else:
+        # Mês com corte (CicloMes.corte_em): a conta é a mesma no fechamento e nas telas do mês.
+        corte = (CicloMes.objects.filter(referencia=inicio, corte_em__isnull=False)
+                 .values_list('corte_em', flat=True).first())
 
-    (p_metas_q, ap_metas_q, p_metas_c, ap_metas_c, det_metas) = _nota_metas(user, inicio, fim)
-    p_feedback, ap_feedback, det_feedback = _nota_feedback(user, inicio, fim)
+    (p_metas_q, ap_metas_q, p_metas_c, ap_metas_c, det_metas) = _nota_metas(user, inicio, fim, corte)
+    p_feedback, ap_feedback, det_feedback = _nota_feedback(user, inicio, fim, corte)
     p_assid, ap_assid, det_assid = nota_assiduidade(user, inicio.year, inicio.month)
 
     p_curso, ap_curso, det_curso = _nota_conteudos(
-        user, [ConteudoConectar.Tipo.CURSO], pt('curso', user), inicio, fim)
+        user, [ConteudoConectar.Tipo.CURSO], pt('curso', user), inicio, fim, corte=corte)
     # Vídeos e POPs só contam no mês que contém o período inteiro deles.
     p_vp, ap_vp, det_vp = _nota_conteudos(
         user, [ConteudoConectar.Tipo.VIDEO, ConteudoConectar.Tipo.POP],
-        pt('videos_pops', user), inicio, fim, periodo_dentro_do_mes=True)
-    p_proj, ap_proj, det_proj = _nota_projeto_foco(user, inicio, fim)
+        pt('videos_pops', user), inicio, fim, periodo_dentro_do_mes=True, corte=corte)
+    p_proj, ap_proj, det_proj = _nota_projeto_foco(user, inicio, fim, corte)
 
-    (p_ideias, ap_ideias, p_aprov, ap_aprov, det_inovar) = _nota_inovar(user, inicio, fim)
+    (p_ideias, ap_ideias, p_aprov, ap_aprov, det_inovar) = _nota_inovar(user, inicio, fim, corte)
 
     confiar = p_metas_q + p_metas_c + p_feedback + p_assid
     conectar = p_curso + p_vp + p_proj

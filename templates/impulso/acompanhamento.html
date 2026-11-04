@@ -12,12 +12,19 @@
 </div>
 {% endif %}
 
+{% if mes_atrasado %}
+<div class="imp-card p-3 sm:p-4 mb-4 border-amber-300 bg-amber-50 flex items-center justify-between gap-3 flex-wrap">
+    <p class="text-sm text-amber-900"><i class="fas fa-magnifying-glass-chart mr-1.5"></i><strong>{{ mes_ciclo.referencia|date:"F/Y"|capfirst }} em conferência.</strong> O mês seguinte só aparece aqui depois que este for finalizado e tiver o ranking.</p>
+    <a href="{% url 'impulso:mes_detail' mes_ciclo.id %}" class="text-sm font-medium text-amber-900 underline whitespace-nowrap">Ver o mês no ciclo</a>
+</div>
+{% endif %}
+
 <!-- Minha pontuação -->
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
     <div class="imp-card p-5 lg:col-span-2">
         <div class="flex items-center justify-between mb-4">
             <div>
-                <h2 class="text-sm font-semibold text-gray-700">Minha pontuação — mês corrente</h2>
+                <h2 class="text-sm font-semibold text-gray-700">Minha pontuação — {{ minha.inicio|date:"F/Y" }}</h2>
                 <p class="text-xs text-gray-400">{{ minha.inicio|date:"d/m/Y" }} a {{ minha.fim|date:"d/m/Y" }}</p>
             </div>
             <a href="{% url 'impulso:detalhe_colaborador' user.id %}" class="text-xs px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200">Ver detalhamento</a>
@@ -71,7 +78,7 @@
 <!-- Ranking -->
 <div class="imp-card overflow-hidden">
     <div class="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between flex-wrap gap-2">
-        <h2 class="font-semibold text-gray-800 text-sm"><i class="fas fa-ranking-star text-orange-500 mr-2"></i>Ranking do mês</h2>
+        <h2 class="font-semibold text-gray-800 text-sm"><i class="fas fa-ranking-star text-orange-500 mr-2"></i>Ranking de {{ minha.inicio|date:"F/Y" }}</h2>
         <span class="text-xs text-gray-400">Pontuação ao vivo — congelada ao finalizar o mês</span>
     </div>
     <div class="overflow-x-auto">

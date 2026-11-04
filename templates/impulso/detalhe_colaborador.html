@@ -3,16 +3,21 @@
 
 {% block impulso_content %}
 <div class="mb-4">
+    {% if mes_escolhido %}
+    <a href="{% url 'impulso:mes_detail' mes_escolhido.id %}" class="text-sm text-gray-500 hover:text-gray-900"><i class="fas fa-arrow-left mr-1"></i>Voltar a {{ mes_escolhido.referencia|date:"F/Y" }}</a>
+    {% else %}
     <a href="{% url 'impulso:acompanhamento' %}" class="text-sm text-gray-500 hover:text-gray-900"><i class="fas fa-arrow-left mr-1"></i>Voltar ao ranking</a>
+    {% endif %}
 </div>
 
 <!-- Cabeçalho do colaborador -->
 <div class="imp-card p-5 mb-4">
     <div class="flex flex-col sm:flex-row items-center gap-6">
-        {% include 'impulso/_anel.html' with pct=atual.percentual cor=atual_faixa.cor sub="mês atual" %}
+        {% include 'impulso/_anel.html' with pct=atual.percentual cor=atual_faixa.cor sub="do mês" %}
         <div class="flex-1 w-full text-center sm:text-left">
             <h2 class="text-xl font-bold text-gray-900">{{ alvo.get_full_name|default:alvo.email }}</h2>
             <p class="text-sm text-gray-500">{{ alvo.job_title|default:"—" }}{% if alvo.sector %} · {{ alvo.sector.name }}{% endif %}</p>
+            <p class="text-sm font-semibold text-gray-700 mt-1" data-mes-da-tela><i class="far fa-calendar text-orange-500 mr-1"></i>{{ atual.inicio|date:"F/Y"|capfirst }}{% if snapshot %} · finalizado{% elif mes_escolhido and mes_escolhido.is_fechado %} · finalizado, sem pontuação salva desta pessoa: conta ao vivo{% else %} · em conferência (ao vivo){% endif %}</p>
             <div class="flex items-center justify-center sm:justify-start gap-2 mt-3 flex-wrap">
                 <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-bold text-white shadow-sm bg-gradient-to-r {{ atual_faixa.grad }}">
                     <i class="{{ atual_faixa.icon }}"></i>{{ atual_faixa.label }}
@@ -41,7 +46,7 @@
     <div class="flex gap-3 overflow-x-auto pb-1 imp-scroll-x">
         {% for m in medalhas reversed %}
         <a href="?mes={{ m.p.mes_id }}" class="flex-shrink-0 w-28 p-3 rounded-xl border text-center transition-all
-           {% if snapshot and snapshot.mes_id == m.p.mes_id %}border-orange-300 bg-orange-50 ring-2 ring-orange-200{% else %}border-gray-200 hover:border-gray-300 hover:bg-gray-50{% endif %}">
+           {% if mes_escolhido.id == m.p.mes_id %}border-orange-300 bg-orange-50 ring-2 ring-orange-200{% else %}border-gray-200 hover:border-gray-300 hover:bg-gray-50{% endif %}">
             <span class="w-11 h-11 mx-auto rounded-full flex items-center justify-center text-white bg-gradient-to-br {{ m.faixa.grad }} shadow-sm">
                 <i class="{{ m.faixa.icon }}"></i>
             </span>
@@ -57,10 +62,10 @@
 </div>
 
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-    <!-- Detalhamento do mês atual -->
+    <!-- Detalhamento do mês em conferência -->
     <div class="imp-card overflow-hidden">
         <div class="px-5 py-3.5 border-b border-gray-100">
-            <h2 class="font-semibold text-gray-800 text-sm"><i class="fas fa-list-ol text-orange-500 mr-2"></i>Mês atual — item a item</h2>
+            <h2 class="font-semibold text-gray-800 text-sm"><i class="fas fa-list-ol text-orange-500 mr-2"></i>{{ atual.inicio|date:"F/Y"|capfirst }} — item a item</h2>
         </div>
         <div class="divide-y divide-gray-50">
             {% for l in linhas %}

@@ -1752,6 +1752,12 @@ class CicloMes(models.Model):
     status = models.CharField(
         max_length=10, choices=Status.choices,
         default=Status.ABERTO, verbose_name='Status')
+    # Vazio é a regra de sempre: vale a situação no dia do fechamento (aprovar e conferir o mês
+    # depois que ele acaba conta). Preenchido, o que aconteceu a partir daqui não conta neste mês,
+    # e continua não contando se ele for reaberto e fechado de novo.
+    corte_em = models.DateTimeField(
+        null=True, blank=True, verbose_name='Só conta o que aconteceu antes de',
+        help_text='Vale para criação, entrega, avaliação, conferência e aprovação.')
 
     fechado_em = models.DateTimeField(null=True, blank=True, verbose_name='Fechado em')
     fechado_por = models.ForeignKey(
