@@ -14,9 +14,12 @@ from urllib.parse import quote
 
 import requests
 
+from descoberta import descobrir
 from regras import Analisador
 
-VERSAO = '1.0'
+VERSAO = '1.1'
+SEGUNDOS_ENTRE_DESCOBERTAS = 600
+SEGUNDOS_SEM_QUADRO = 300
 SEGUNDOS_ENTRE_QUADROS = 1.0
 TIMEOUT = 15
 LARGURA_FOTO = 640
@@ -36,6 +39,10 @@ class Portal:
         r = self.sessao.post(self.base + 'sinal/', data={'versao': VERSAO}, timeout=TIMEOUT)
         r.raise_for_status()
         return r.json()
+
+    def descoberta(self, resultado):
+        dados = {**resultado, 'canais': ','.join(str(c) for c in resultado.get('canais', []))}
+        self.sessao.post(self.base + 'descoberta/', data=dados, timeout=TIMEOUT).raise_for_status()
 
     def fotos(self, fotos):
         arquivos = {f'canal_{n}': ('foto.jpg', jpg, 'image/jpeg') for n, jpg in fotos.items()}
@@ -67,6 +74,15 @@ class Detector:
         from ultralytics import YOLO
         self.modelo = YOLO(modelo)
 
+    @classmethod
+    def se_instalado(cls, modelo):
+        """Sem a parte de IA instalada, o agente segue mandando imagem."""
+        try:
+            return cls(modelo)
+        except ImportError:
+            log.warning('Análise desligada: pacote de IA não instalado')
+            return None
+
     def __call__(self, quadro):
         altura, largura = quadro.shape[:2]
         saida = []
@@ -93,6 +109,7 @@ class Camera(threading.Thread):
         super().__init__(daemon=True)
         self.numero, self.url, self.portal, self.detector, self.estado = numero, url, portal, detector, estado
         self.ultimo = None
+        self.ultimo_quadro_em = time.monotonic()
         self.analisador = Analisador()
         self.parar = threading.Event()
 
@@ -110,7 +127,7 @@ class Camera(threading.Thread):
                 if not ok:
                     break
                 self.ultimo = quadro
-                agora = time.monotonic()
+                agora = self.ultimo_quadro_em = time.monotonic()
                 if agora >= proxima:
                     proxima = agora + SEGUNDOS_ENTRE_QUADROS
                     self.analisar(quadro, agora)
@@ -130,10 +147,20 @@ class Camera(threading.Thread):
                 log.warning('Alerta não enviado: %s', type(erro).__name__)
 
 
+def precisa_descobrir(gravador, cameras, ultima, agora):
+    """Sem IP, ou com todas as câmeras sem imagem (o IP pode ter mudado), procura de novo, sem insistir."""
+    if ultima is not None and agora - ultima < SEGUNDOS_ENTRE_DESCOBERTAS:
+        return False
+    if not gravador['ip']:
+        return True
+    return bool(cameras) and all(agora - c.ultimo_quadro_em > SEGUNDOS_SEM_QUADRO for c in cameras.values())
+
+
 def rodar(config):
     portal = Portal(config['portal'], config['token'])
-    detector = Detector(config.get('modelo', 'yolov8n.pt')) if config.get('analisar', True) else None
+    detector = Detector.se_instalado(config.get('modelo', 'yolov8n.pt')) if config.get('analisar', True) else None
     estado, cameras = {}, {}
+    ultima_descoberta = None
     while True:
         espera = 30
         try:
@@ -143,25 +170,37 @@ def rodar(config):
                 for camera in cameras.values():
                     camera.parar.set()
                 cameras.clear()
-            elif not resposta['gravador']['ip']:
-                log.warning('Falta o IP do gravador em Configuração, no portal')
             else:
-                estado.update(abre_as=resposta['abre_as'], fecha_as=resposta['fecha_as'],
-                              canais={c['numero']: c for c in resposta['canais']})
-                for numero in estado['canais']:
-                    if numero not in cameras:
-                        cameras[numero] = Camera(numero, endereco_rtsp(resposta['gravador'], numero), portal, detector, estado)
-                        cameras[numero].start()
-                for numero in set(cameras) - set(estado['canais']):
-                    cameras.pop(numero).parar.set()
-                pedidas = [resposta['foco']] if resposta.get('foco') else resposta.get('fotos', [])
-                fotos = {}
-                for canal_numero in pedidas:
-                    camera = next((c for n, c in cameras.items() if n == canal_numero), None)
-                    if camera is not None and camera.ultimo is not None:
-                        fotos[canal_numero] = _jpg(camera.ultimo)
-                if fotos:
-                    portal.fotos(fotos)
+                gravador = resposta['gravador']
+                if precisa_descobrir(gravador, cameras, ultima_descoberta, time.monotonic()):
+                    ultima_descoberta = time.monotonic()
+                    log.info('Procurando o gravador na rede')
+                    achado = descobrir(gravador['usuario'], gravador['senha'], gravador.get('serial', ''),
+                                       gravador['caminho'], config.get('ips', ()))
+                    portal.descoberta(achado)
+                    log.info('Procura: %s', achado.get('ip') or achado.get('erro'))
+                    time.sleep(1)
+                    continue
+                if gravador['ip']:
+                    estado.update(abre_as=resposta['abre_as'], fecha_as=resposta['fecha_as'],
+                                  canais={c['numero']: c for c in resposta['canais']})
+                    for numero in estado['canais']:
+                        url = endereco_rtsp(gravador, numero)
+                        if numero in cameras and cameras[numero].url != url:
+                            cameras.pop(numero).parar.set()
+                        if numero not in cameras:
+                            cameras[numero] = Camera(numero, url, portal, detector, estado)
+                            cameras[numero].start()
+                    for numero in set(cameras) - set(estado['canais']):
+                        cameras.pop(numero).parar.set()
+                    pedidas = [resposta['foco']] if resposta.get('foco') else resposta.get('fotos', [])
+                    fotos = {}
+                    for canal_numero in pedidas:
+                        camera = cameras.get(canal_numero)
+                        if camera is not None and camera.ultimo is not None:
+                            fotos[canal_numero] = _jpg(camera.ultimo)
+                    if fotos:
+                        portal.fotos(fotos)
         except requests.RequestException as erro:
             # Só o tipo: a mensagem completa pode trazer endereço e cabeçalho.
             log.warning('Sem contato com o portal: %s', type(erro).__name__)

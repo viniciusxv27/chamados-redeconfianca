@@ -16,8 +16,10 @@ urlpatterns = [
     path('configuracao/', views.configuracao, name='configuracao'),
     path('configuracao/importar/', views.importar, name='importar'),
     path('configuracao/<int:gravador_id>/', views.gravador_editar, name='gravador_editar'),
+    path('configuracao/<int:gravador_id>/instalador/', views.gravador_instalador, name='gravador_instalador'),
     path('configuracao/<int:gravador_id>/token/', views.gravador_token, name='gravador_token'),
     path('agente/sinal/', views_agente.sinal, name='agente_sinal'),
+    path('agente/descoberta/', views_agente.receber_descoberta, name='agente_descoberta'),
     path('agente/fotos/', views_agente.receber_fotos, name='agente_fotos'),
     path('agente/alerta/', views_agente.receber_alerta, name='agente_alerta'),
 ]

@@ -8,6 +8,9 @@
 {% if not config.ativo %}
 <div class="ca-faixa"><i class="fas fa-power-off"></i><div><strong>Módulo desligado.</strong> As lojas não enviam imagem nem alerta até você ligar em <a href="{% url 'cameras:configuracao' %}">Configuração</a>. Avise as equipes antes de ligar.</div></div>
 {% endif %}
+{% if sem_contato %}
+<div class="ca-faixa" data-faixa-sem-agente><i class="fas fa-plug-circle-xmark"></i><div><strong>{{ sem_contato }} de {{ total_lojas }} lojas sem imagem porque o agente ainda não foi instalado.</strong> O gravador em modo Cloud só fala com o aplicativo, então é um computador na loja que lê as câmeras. Baixe o instalador da loja em <a href="{% url 'cameras:configuracao' %}">Configuração</a>; o resto é automático.</div></div>
+{% endif %}
 <section class="ca-kpis">
     <article class="ca-kpi"><span>Lojas online</span><strong><b id="caOnline">{{ online }}</b><small>/{{ total_lojas }}</small></strong></article>
     <article class="ca-kpi"><span>Câmeras</span><strong>{{ total_cameras }}</strong></article>
@@ -23,7 +26,7 @@
             <a class="ca-tela" href="{% if g.tem_equipamento %}{% url 'cameras:loja' g.id %}{% else %}{% url 'cameras:gravador_editar' g.id %}{% endif %}" data-busca="{{ g.loja|lower }} {{ g.coordenador|lower }}" data-loja="{{ g.id }}">
                 <span class="ca-imagem">
                     {% if g.principal %}<img data-canal="{{ g.principal.id }}" alt="{{ g.principal.titulo }} da loja {{ g.loja }}" hidden>{% endif %}
-                    <span class="ca-sem-imagem"><i class="fas {% if g.tem_equipamento %}fa-video-slash{% else %}fa-store-slash{% endif %}"></i><small>{% if g.tem_equipamento %}Aguardando imagem{% else %}Sem gravador{% endif %}</small></span>
+                    <span class="ca-sem-imagem"><i class="fas {% if g.tem_equipamento %}fa-video-slash{% else %}fa-store-slash{% endif %}"></i><small>{% if not g.tem_equipamento %}Sem gravador{% elif g.erro_agente %}{{ g.erro_agente|truncatechars:60 }}{% elif not g.ultimo_contato %}Agente não instalado{% elif not g.online %}Agente sem contato{% else %}Aguardando imagem{% endif %}</small></span>
                     {% if g.novos %}<em class="ca-selo-alerta"><i class="fas fa-triangle-exclamation"></i>{{ g.novos }}</em>{% endif %}
                 </span>
                 <span class="ca-legenda"><span class="ca-ponto {{ g.situacao }}" data-situacao></span><strong>{{ g.loja }}</strong><small>{{ g.canais_ativos|length }} câm.</small></span>

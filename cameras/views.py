@@ -1,8 +1,12 @@
+import io
 import json
+import zipfile
+from pathlib import Path
 
+from django.conf import settings
 from django.contrib import messages
 from django.db.models import Count, Q
-from django.http import FileResponse, Http404, JsonResponse
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -32,10 +36,12 @@ def painel(request):
         g.canais_ativos = [c for c in g.canais.all() if c.ativo]
         g.principal = g.canais_ativos[0] if g.canais_ativos else None
     com_equipamento = [g for g in gravadores if g.tem_equipamento]
+    sem_contato = [g for g in com_equipamento if not g.ultimo_contato]
     servicos.marcar_vendo_mosaico()
     _registrar(request, 'ver_mosaico')
     return render(request, 'cameras/painel.html', {
         'aba': 'painel', 'gravadores': gravadores, 'config': ConfigCameras.atual(),
+        'sem_contato': len(sem_contato),
         'total_lojas': len(com_equipamento), 'online': sum(g.online for g in com_equipamento),
         'total_cameras': sum(len(g.canais_ativos) for g in com_equipamento),
         'novos': sum(g.novos for g in gravadores),
@@ -169,7 +175,8 @@ def configuracao(request):
                          else 'Módulo desligado: as lojas pararam de mandar imagem e alerta.')
         return redirect('cameras:configuracao')
     return render(request, 'cameras/configuracao.html', {
-        'aba': 'configuracao', 'config': config, 'gravadores': Gravador.objects.select_related('setor'),
+        'aba': 'configuracao', 'config': config,
+        'gravadores': Gravador.objects.select_related('setor').annotate(canais_ativos_qtd=Count('canais', filter=Q(canais__ativo=True))),
         'token_novo': request.session.pop('cameras_token_novo', None),
         'acessos': AcessoCamera.objects.select_related('user', 'gravador')[:30],
         'endereco': request.build_absolute_uri('/').rstrip('/'),
@@ -232,6 +239,37 @@ def gravador_editar(request, gravador_id):
         'aba': 'configuracao', 'gravador': gravador, 'setores': Sector.objects.order_by('name'),
         'quantos': gravador.canais.filter(ativo=True).count() or 1,
     })
+
+
+ARQUIVOS_DO_AGENTE = ('agente.py', 'descoberta.py', 'regras.py', 'requirements.txt', 'requirements-ia.txt',
+                      'instalar.bat', 'instalar.ps1', 'instalar.sh', 'LEIAME.md')
+
+
+def _endereco_do_portal(request):
+    endereco = request.build_absolute_uri('/').rstrip('/')
+    # Atrás do proxy o Django pode achar que é http, e o agente recusa endereço sem https.
+    if endereco.startswith('http://') and request.get_host().split(':')[0] not in ('localhost', '127.0.0.1'):
+        endereco = 'https://' + endereco[len('http://'):]
+    return endereco
+
+
+@exige_superadmin
+@require_POST
+def gravador_instalador(request, gravador_id):
+    """O pacote da loja, pronto para clicar: o token sai junto e a senha o agente busca no portal."""
+    gravador = get_object_or_404(Gravador, pk=gravador_id, tem_equipamento=True)
+    pasta = Path(settings.BASE_DIR) / 'agente_cameras'
+    config = {'portal': _endereco_do_portal(request), 'token': gravador.gerar_token(), 'analisar': True, 'modelo': 'yolov8n.pt'}
+    conteudo = io.BytesIO()
+    with zipfile.ZipFile(conteudo, 'w', zipfile.ZIP_DEFLATED) as pacote:
+        for nome in ARQUIVOS_DO_AGENTE:
+            pacote.write(pasta / nome, f'agente-cameras/{nome}')
+        pacote.writestr('agente-cameras/config.json', json.dumps(config, indent=2))
+    _registrar(request, 'baixar_instalador', gravador)
+    resposta = HttpResponse(conteudo.getvalue(), content_type='application/zip')
+    resposta['Content-Disposition'] = f'attachment; filename="agente-cameras-{gravador.id}.zip"'
+    resposta['Cache-Control'] = 'no-store'
+    return resposta
 
 
 @exige_superadmin

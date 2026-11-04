@@ -142,3 +142,6 @@ html.dark .ca {
 .ca-abas { scrollbar-width: none; }
 .ca-abas::-webkit-scrollbar { display: none; }
 @media (max-width: 560px) { .ca-mosaico:not(.largo) .ca-legenda small { display: none; } }
+.ca-erro { color: var(--ca-vermelho); white-space: normal; max-width: 280px; }
+.ca-celula-agente small { display: block; white-space: normal; max-width: 280px; }
+.ca-sem-imagem small { padding: 0 10px; text-align: center; }

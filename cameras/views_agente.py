@@ -66,3 +66,12 @@ def receber_alerta(request, gravador):
     except servicos.AlertaRecusado as erro:
         return JsonResponse({'erro': str(erro)}, status=429 if 'Limite' in str(erro) else 400)
     return JsonResponse({'ok': True, 'alerta': alerta.id, 'repeticoes': alerta.repeticoes})
+
+
+@_do_agente
+def receber_descoberta(request, gravador):
+    try:
+        servicos.registrar_descoberta(gravador, request.POST)
+    except servicos.DescobertaRecusada as erro:
+        return JsonResponse({'erro': str(erro)}, status=400)
+    return JsonResponse({'ok': True})

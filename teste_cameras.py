@@ -282,4 +282,200 @@ t('sem área marcada: aparelho não alerta', s == [], s)
 s = rodar(Analisador(Z), [(i, [{**APA, 'caixa': (.8, .8, .05, .05)}], True) for i in range(40)] + [(40, [FORA], True)] + [(41 + i, [], True) for i in range(40)])
 t('aparelho fora da área (na mão de alguém): nada', s == [], s)
 
+print('instalador e descoberta no portal')
+cache.clear()
+g3 = Gravador.objects.create(loja='LOJA NOVA'); g3.definir_senha(SENHA); g3.save()
+t('colaborador comum não baixa o instalador', cc.post(f'/cameras/configuracao/{g3.id}/instalador/').status_code == 302 and not Gravador.objects.get(pk=g3.id).token_hash)
+t('GET não gera token', cs.get(f'/cameras/configuracao/{g3.id}/instalador/').status_code == 405 and not Gravador.objects.get(pk=g3.id).token_hash)
+r = cs.post(f'/cameras/configuracao/{g3.id}/instalador/')
+import zipfile as _z
+pacote = _z.ZipFile(io.BytesIO(r.content))
+nomes = pacote.namelist()
+cfg = _j.loads(pacote.read('agente-cameras/config.json'))
+g3.refresh_from_db()
+t('pacote vem completo', r['Content-Type'] == 'application/zip' and {'agente-cameras/' + n for n in ('agente.py', 'descoberta.py', 'regras.py', 'instalar.bat', 'instalar.ps1', 'instalar.sh', 'config.json')} <= set(nomes), nomes)
+t('token no pacote funciona e fica só resumido', g3.token_hash == Gravador.resumo(cfg['token']))
+todo = b''.join(pacote.read(n) for n in nomes)
+t('senha do gravador fora do pacote', SENHA.encode() not in todo)
+t('sem download para loja sem gravador', cs.post(f'/cameras/configuracao/{sem.id}/instalador/').status_code == 404)
+t('download fica registrado', AcessoCamera.objects.filter(acao='baixar_instalador', gravador=g3).exists())
+ag3 = {'HTTP_AUTHORIZATION': 'Bearer ' + cfg['token']}
+hp = cs.get('/cameras/').content.decode()
+t('tela diz por que está sem imagem', 'data-faixa-sem-agente' in hp and 'Agente não instalado' in hp)
+r = anon.post('/cameras/agente/sinal/', **ag3).json()
+t('agente recebe o serial para procurar', r['gravador']['serial'] == '' and r['gravador']['ip'] == '')
+anon.post('/cameras/agente/descoberta/', {'erro': 'O gravador em 192.168.0.9 recusou o usuário e a senha do cadastro.'}, **ag3)
+g3.refresh_from_db()
+t('erro do agente chega no cadastro', 'recusou' in g3.erro_agente and 'recusou' in cs.get('/cameras/configuracao/').content.decode())
+for ruim, motivo in (({'ip': '8.8.8.8', 'caminho': '/a?c={canal}', 'canais': '1'}, 'IP público'), ({'ip': 'x', 'caminho': '/a?c={canal}', 'canais': '1'}, 'IP inválido'),
+                     ({'ip': '192.168.0.9', 'caminho': 'http://mal/{canal}', 'canais': '1'}, 'caminho estranho'), ({'ip': '192.168.0.9', 'caminho': '/a', 'canais': '1'}, 'sem canal'),
+                     ({'ip': '192.168.0.9', 'caminho': '/a?c={canal}', 'canais': ''}, 'sem câmeras'), ({'ip': '192.168.0.9', 'caminho': '/a?c={canal}', 'canais': '1,99'}, 'canal absurdo')):
+    t(f'descoberta recusa {motivo}', anon.post('/cameras/agente/descoberta/', ruim, **ag3).status_code == 400 and not Gravador.objects.get(pk=g3.id).ip_local)
+t('sem token não registra', anon.post('/cameras/agente/descoberta/', {'ip': '192.168.0.9'}).status_code == 401)
+r = anon.post('/cameras/agente/descoberta/', {'ip': '192.168.0.50', 'porta': '554', 'caminho': '/cam?c={canal}', 'canais': '1,2,3,4,5,6', 'serial': 'DIFERENTE', 'modelo': 'NVD'}, **ag3)
+g3.refresh_from_db()
+t('descoberta preenche tudo sozinha', r.status_code == 200 and g3.ip_local == '192.168.0.50' and g3.caminho_rtsp == '/cam?c={canal}' and g3.canais.filter(ativo=True).count() == 6 and not g3.erro_agente)
+t('apaga o erro antigo e avisa serial diferente', g3.serial == '' and not g3.serial_diferente)
+Gravador.objects.filter(pk=g3.pk).update(serial='CADASTRO'); g3.refresh_from_db()
+t('serial do cadastro diferente do achado aparece', g3.serial_diferente and 'data-serial-diferente' in cs.get('/cameras/configuracao/').content.decode())
+anon.post('/cameras/agente/descoberta/', {'ip': '192.168.0.50', 'caminho': '/cam?c={canal}', 'canais': '1,2'}, **ag3)
+t('câmera que sumiu sai da tela', g3.canais.filter(ativo=True).count() == 2)
+r = anon.post('/cameras/agente/sinal/', **ag3).json()
+t('próximo sinal já traz o gravador achado', r['gravador']['ip'] == '192.168.0.50' and [c['numero'] for c in r['canais']] == [1, 2])
+ConfigCameras.objects.update(ativo=False)
+anon.post('/cameras/agente/descoberta/', {'ip': '192.168.0.77', 'caminho': '/cam?c={canal}', 'canais': '1'}, **ag3)
+t('módulo desligado não grava descoberta', Gravador.objects.get(pk=g3.id).ip_local == '192.168.0.50')
+ConfigCameras.objects.update(ativo=True)
+
+print('agente: procura do gravador (servidor RTSP falso, em localhost)')
+import hashlib as _h
+import socket as _s
+import threading as _t
+import descoberta as dsc
+from agente import Camera, precisa_descobrir
+
+
+def md5(x):
+    return _h.md5(x.encode()).hexdigest()
+
+
+class FalsoGravador:
+    """Fala o suficiente de RTSP com Digest. Conta o que recebeu, para provar que a senha não passa aberta."""
+
+    def __init__(self, usuario='admin', senha='s3nha', caminho='/cam/realmonitor?channel={canal}&subtype=1', canais=4, basic=False):
+        self.usuario, self.senha, self.caminho, self.canais, self.basic = usuario, senha, caminho, canais, basic
+        self.recebido = ''
+        self.sock = _s.socket(); self.sock.setsockopt(_s.SOL_SOCKET, _s.SO_REUSEADDR, 1); self.sock.bind(('127.0.0.1', 0)); self.sock.listen(32)
+        self.porta = self.sock.getsockname()[1]
+        _t.Thread(target=self.rodar, daemon=True).start()
+
+    def rodar(self):
+        while True:
+            try:
+                con, _ = self.sock.accept()
+            except OSError:
+                return
+            _t.Thread(target=self.atender, args=(con,), daemon=True).start()
+
+    def atender(self, con):
+        while True:
+            dados = con.recv(4096).decode('latin-1')
+            if not dados:
+                return con.close()
+            self.recebido += dados
+            uri = dados.split(' ')[1]
+            caminho = uri.split(str(self.porta), 1)[1]
+            cseq = re.search(r'CSeq: (\d+)', dados).group(1)
+            aut = re.search(r'response="(\w+)"', dados)
+            if self.basic:
+                con.sendall(f'RTSP/1.0 401 Unauthorized\r\nCSeq: {cseq}\r\nWWW-Authenticate: Basic realm="x"\r\n\r\n'.encode())
+            elif not aut:
+                con.sendall(f'RTSP/1.0 401 Unauthorized\r\nCSeq: {cseq}\r\nWWW-Authenticate: Digest realm="R", nonce="N1"\r\n\r\n'.encode())
+            else:
+                certo = md5(f"{md5(f'{self.usuario}:R:{self.senha}')}:N1:{md5(f'DESCRIBE:{uri}')}")
+                validos = {self.caminho.replace('{canal}', str(n)) for n in range(1, self.canais + 1)}
+                codigo = '401 Unauthorized' if aut.group(1) != certo else ('200 OK' if caminho in validos else '404 Not Found')
+                con.sendall(f'RTSP/1.0 {codigo}\r\nCSeq: {cseq}\r\n\r\n'.encode())
+
+
+fg = FalsoGravador()
+CAM = fg.caminho.replace('{canal}', '1')
+t('senha certa abre', dsc.testar_rtsp('127.0.0.1', fg.porta, CAM, 'admin', 's3nha') == 200)
+t('senha errada: 401', dsc.testar_rtsp('127.0.0.1', fg.porta, CAM, 'admin', 'errada') == 401)
+t('caminho errado: 404', dsc.testar_rtsp('127.0.0.1', fg.porta, '/nada', 'admin', 's3nha') == 404)
+t('a senha nunca viaja na rede', 's3nha' not in fg.recebido and 'errada' not in fg.recebido)
+t('conta 4 câmeras', dsc.contar_canais('127.0.0.1', fg.porta, fg.caminho, 'admin', 's3nha') == [1, 2, 3, 4])
+fb = FalsoGravador(basic=True)
+t('quem só aceita senha aberta não recebe a senha', dsc.testar_rtsp('127.0.0.1', fb.porta, CAM, 'admin', 's3nha') == -1 and 's3nha' not in fb.recebido and 'Authorization' not in fb.recebido)
+t('porta fechada: 0', dsc.testar_rtsp('127.0.0.1', 1, CAM, 'admin', 's3nha') == 0)
+sem_busca = dict(buscar_dhip=lambda: {}, buscar_onvif=lambda: set(), faixa_local=lambda: [])
+with patch.multiple(dsc, **sem_busca):
+    r = dsc.descobrir('admin', 's3nha', ips_extra=['127.0.0.1'], porta=fg.porta)
+    t('acha sozinho IP, caminho e câmeras', r.get('ip') == '127.0.0.1' and r['caminho'] == fg.caminho and r['canais'] == [1, 2, 3, 4], r)
+    f2 = FalsoGravador(caminho='/stream{canal}', canais=2)
+    r = dsc.descobrir('admin', 's3nha', ips_extra=['127.0.0.1'], porta=f2.porta)
+    t('gravador de outra família: acha o caminho dele', r.get('caminho') == '/stream{canal}' and r['canais'] == [1, 2], r)
+    t('senha errada vira motivo para a tela', 'recusou' in dsc.descobrir('admin', 'x', ips_extra=['127.0.0.1'], porta=fg.porta).get('erro', ''))
+    t('rede sem gravador vira motivo para a tela', 'mesma rede' in dsc.descobrir('admin', 'x').get('erro', ''))
+    t('aparelho sem vídeo vira motivo para a tela', 'nenhum abriu' in dsc.descobrir('admin', 's3nha', ips_extra=['127.0.0.1'], porta=FalsoGravador(caminho='/x{canal}').porta).get('erro', ''))
+    with patch.object(dsc, 'buscar_dhip', return_value={'10.9.9.1': {'serial': 'OUTRO', 'modelo': ''}, '127.0.0.1': {'serial': 'CERTO', 'modelo': 'NVD'}}):
+        ordem, _ = dsc._candidatos('certo')
+        t('serial do cadastro é tentado primeiro', ordem[0] == '127.0.0.1', ordem)
+        r = dsc.descobrir('admin', 's3nha', 'CERTO', porta=fg.porta)
+        t('devolve serial e modelo achados', r.get('serial') == 'CERTO' and r['modelo'] == 'NVD', r)
+resp = b' ' * 32 + _j.dumps({'params': {'deviceInfo': {'IPv4Address': {'IPAddress': '192.168.1.108'}, 'SerialNo': 'ABC', 'DeviceType': 'NVD'}}}).encode() + b'\x00'
+t('lê a resposta da busca do gravador', dsc.ler_resposta_dhip(resp) == ('192.168.1.108', 'ABC', 'NVD'))
+t('resposta estranha não derruba', dsc.ler_resposta_dhip(b'lixo') is None and dsc.ler_resposta_dhip(b'{"params": 1}') is None)
+t('lê o endereço do ONVIF', dsc.ler_resposta_onvif(b'<a:XAddrs>http://192.168.1.20/onvif/device_service</a:XAddrs>') == ['192.168.1.20'])
+pac = dsc._dhip_pacote()
+t('pacote da busca tem o cabeçalho certo', pac[4:8] == b'DHIP' and pac[32:33] == b'{')
+
+
+class Cam:
+    def __init__(self, idade):
+        self.ultimo_quadro_em = 1000 - idade
+
+
+t('sem IP: procura', precisa_descobrir({'ip': ''}, {}, None, 1000))
+t('sem IP, mas procurou agora: espera', not precisa_descobrir({'ip': ''}, {}, 900, 1000))
+t('sem IP: tenta de novo depois do intervalo', precisa_descobrir({'ip': ''}, {}, 300, 1000))
+t('câmeras com imagem: não procura', not precisa_descobrir({'ip': '1.1.1.1'}, {1: Cam(10), 2: Cam(999)}, None, 1000))
+t('todas sem imagem (IP mudou): procura', precisa_descobrir({'ip': '1.1.1.1'}, {1: Cam(400), 2: Cam(999)}, None, 1000))
+
+print('agente: o laço principal')
+import agente as ag_mod
+
+
+class Fim(Exception):
+    pass
+
+
+class PortalFalso:
+    def __init__(self, respostas):
+        self.respostas, self.achados, self.fotos_recebidas = list(respostas), [], []
+
+    def sinal(self):
+        if not self.respostas:
+            raise Fim
+        return self.respostas.pop(0)
+
+    def descoberta(self, resultado):
+        self.achados.append(resultado)
+
+    def fotos(self, fotos):
+        self.fotos_recebidas.append(fotos)
+
+
+base_sinal = {'ativo': True, 'proximo_sinal': 1, 'fotos': [], 'foco': None, 'abre_as': '08:00', 'fecha_as': '20:00', 'canais': []}
+sem_ip = {**base_sinal, 'gravador': {'ip': '', 'porta': 554, 'caminho': '/c?x={canal}', 'usuario': 'admin', 'senha': 'a@b', 'serial': 'S1'}}
+com_ip = {**base_sinal, 'fotos': [1], 'canais': [{'numero': 1, 'ia': True, 'zonas': []}, {'numero': 2, 'ia': True, 'zonas': []}],
+          'gravador': {**sem_ip['gravador'], 'ip': '192.168.0.9'}}
+outro_ip = {**com_ip, 'gravador': {**com_ip['gravador'], 'ip': '192.168.0.10'}}
+pf = PortalFalso([sem_ip, com_ip, outro_ip, {'ativo': False, 'proximo_sinal': 1}])
+iniciadas, paradas = [], []
+real_start = Camera.start
+
+
+def start_falso(self):
+    self.ultimo = object()
+    iniciadas.append(self.url)
+
+
+with patch.object(ag_mod, 'Portal', return_value=pf), patch.object(ag_mod.Detector, 'se_instalado', return_value=None), \
+        patch.object(ag_mod, 'descobrir', return_value={'ip': '192.168.0.9', 'porta': 554, 'caminho': '/c?x={canal}', 'canais': [1, 2]}) as procura, \
+        patch.object(Camera, 'start', start_falso), patch.object(ag_mod, '_jpg', return_value=b'jpg'), patch.object(ag_mod.time, 'sleep'):
+    try:
+        ag_mod.rodar({'portal': 'https://x', 'token': 't'})
+    except Fim:
+        pass
+t('sem IP: procura e manda o que achou', procura.call_count == 1 and procura.call_args[0][:3] == ('admin', 'a@b', 'S1') and pf.achados[0]['ip'] == '192.168.0.9', procura.call_args)
+t('com IP: abre as câmeras com a senha protegida no endereço', any('admin:a%40b@192.168.0.9:554/c?x=1' in u for u in iniciadas), iniciadas)
+t('manda só a foto pedida', pf.fotos_recebidas and list(pf.fotos_recebidas[0]) == [1], pf.fotos_recebidas)
+t('IP mudou: reabre no novo', any('192.168.0.10' in u for u in iniciadas), iniciadas)
+try:
+    with patch.dict(sys.modules, {'ultralytics': None}):
+        t('sem o pacote de IA, o agente segue só com imagem', ag_mod.Detector.se_instalado('x') is None)
+except Exception as exc:
+    t('sem o pacote de IA, o agente segue só com imagem', False, exc)
+
 print(f'\n{ok} OK, {fail} falha(s)')
