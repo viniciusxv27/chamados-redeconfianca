@@ -65,6 +65,10 @@ class Gravador(models.Model):
     token_hash = models.CharField(max_length=64, blank=True, editable=False, db_index=True)
     ultimo_contato = models.DateTimeField(null=True, blank=True, editable=False)
     versao_agente = models.CharField(max_length=30, blank=True, editable=False)
+    # Diagnóstico à distância: como está o vídeo ao vivo e o fim do log do computador da loja.
+    ao_vivo_situacao = models.CharField(max_length=200, blank=True, db_default='', editable=False)
+    log_agente = models.TextField(blank=True, db_default='', editable=False)
+    log_agente_em = models.DateTimeField(null=True, blank=True, editable=False)
     # O que o agente achou sozinho na rede da loja, e o motivo quando não achou.
     serial_detectado = models.CharField(max_length=60, blank=True, db_default='', editable=False)
     modelo_detectado = models.CharField(max_length=80, blank=True, db_default='', editable=False)
@@ -237,6 +241,10 @@ class SessaoAoVivo(models.Model):
     estado = models.CharField(max_length=10, choices=ESTADOS, default=PEDIDA, db_index=True)
     criada_em = models.DateTimeField(auto_now_add=True, db_index=True)
     atualizada_em = models.DateTimeField(auto_now=True)
+    # O estado final apaga o caminho: estes guardam até onde a sessão chegou.
+    entregue_em = models.DateTimeField(null=True, blank=True)
+    respondida_em = models.DateTimeField(null=True, blank=True)
+    conectada_em = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         verbose_name = 'Sessão de vídeo ao vivo'

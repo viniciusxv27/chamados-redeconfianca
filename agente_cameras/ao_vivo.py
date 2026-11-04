@@ -5,7 +5,10 @@ imagem mais nítida possível e quase não gasta processador. H.265 o navegador 
 caso é convertido para H.264 no computador da loja, o que custa bem mais.
 """
 import asyncio
+import faulthandler
 import logging
+import os
+import re
 import threading
 import time
 from fractions import Fraction
@@ -28,6 +31,9 @@ MAX_ALTA_QUALIDADE = 4       # upload da loja e conexões do gravador são limit
 LARGURA_MAXIMA_CONVERTIDA = 1280
 TEMPO_MAXIMO_SESSAO = 4 * 3600
 ESPERA_PADRAO = 4
+ABERTURAS_AO_MESMO_TEMPO = 4  # computador de loja é fraco: abrir 16 câmeras de uma vez travava tudo
+MAX_ESPERA_DA_CAMERA = 20
+SEM_SINAL_DE_VIDA = 45        # segundos sem o laço andar: travou
 BASE_DE_TEMPO = Fraction(1, 90000)
 FILA_MAXIMA = 90
 
@@ -148,6 +154,22 @@ class TrilhaDaCamera(MediaStreamTrack):
         super().stop()
 
 
+def limpar_candidatos_locais(sdp):
+    """O Chrome esconde o IP local atrás de nomes .local. Resolver esses nomes exige multicast, que no Windows pode
+    travar; sem eles a conexão segue pelos outros caminhos, e na mesma rede o endereço é descoberto na conexão."""
+    return '\r\n'.join(linha for linha in sdp.splitlines() if not (linha.startswith('a=candidate') and '.local ' in linha)) + '\r\n'
+
+
+def sem_senha(texto):
+    """Erro do leitor de vídeo pode trazer o endereço inteiro, com usuário e senha."""
+    return re.sub(r'rtsp://[^\s\'"]*@', 'rtsp://***@', str(texto))
+
+
+def novo_laco():
+    # No Windows o laço padrão (Proactor) derruba o UDP com erros de porta inalcançável, comuns em WebRTC.
+    return asyncio.SelectorEventLoop() if os.name == 'nt' else asyncio.new_event_loop()
+
+
 class AoVivo(threading.Thread):
     """Fica perguntando ao portal se alguém quer ver uma câmera, e atende cada pedido."""
 
@@ -158,32 +180,59 @@ class AoVivo(threading.Thread):
         self.sessao = requests.Session()
         self.sessao.headers['Authorization'] = f'Bearer {token}'
         self.conexoes = {}
+        self.vivo_em = time.monotonic()
+        self.atraso = 0.0
+        self.erros = 0
+        self.ultimo_erro = ''
+        self.parar = False
+        self.abertura = asyncio.Semaphore(ABERTURAS_AO_MESMO_TEMPO)
 
     def run(self):
-        asyncio.run(self.laco())
+        laco = novo_laco()
+        asyncio.set_event_loop(laco)
+        laco.run_until_complete(self.laco())
+
+    def travado(self):
+        return not self.is_alive() or time.monotonic() - self.vivo_em > SEM_SINAL_DE_VIDA
+
+    def resumo(self):
+        """Para o portal: dá para saber de longe se esta parte está funcionando."""
+        return (f'{"parado" if self.travado() else "ok"} sessoes={len(self.conexoes)} atraso={self.atraso:.1f}s '
+                f'erros={self.erros} {self.ultimo_erro}')[:200]
+
+    def _erro(self, onde, erro):
+        self.erros += 1
+        self.ultimo_erro = sem_senha(f'{onde}: {type(erro).__name__} {erro}')[:120]
+        log.warning('Ao vivo, %s', self.ultimo_erro)
 
     async def laco(self):
         espera = ESPERA_PADRAO
-        while True:
+        while not self.parar:
+            inicio = time.monotonic()
+            self.vivo_em = inicio
             try:
                 resposta = await asyncio.to_thread(self.sessao.post, self.base, json={'ativas': list(self.conexoes)}, timeout=15)
                 resposta.raise_for_status()
                 dados = resposta.json()
                 espera = dados.get('proximo', ESPERA_PADRAO)
                 for fechar in dados.get('fechar', []):
-                    await self.encerrar(fechar)
+                    asyncio.ensure_future(self.encerrar(fechar))
                 for oferta in dados.get('ofertas', []):
                     asyncio.ensure_future(self.atender(oferta))
-            except (requests.RequestException, ValueError) as erro:
-                log.warning('Ao vivo sem contato com o portal: %s', type(erro).__name__)
+            except asyncio.CancelledError:
+                raise
+            except Exception as erro:  # noqa: BLE001 — nada aqui pode parar o vídeo da loja inteira
+                self._erro('pergunta ao portal', erro)
                 espera = ESPERA_PADRAO * 2
+            antes = time.monotonic()
             await asyncio.sleep(espera)
+            self.atraso = max(0.0, time.monotonic() - antes - espera)
 
     async def responder(self, sessao_id, **dados):
         try:
             await asyncio.to_thread(self.sessao.post, self.base + 'resposta/', json={'id': sessao_id, **dados}, timeout=15)
-        except requests.RequestException as erro:
-            log.warning('Resposta do ao vivo não enviada: %s', type(erro).__name__)
+        except Exception as erro:  # noqa: BLE001
+            self._erro('resposta ao portal', erro)
 
     def _lotado(self, qualidade):
         if len(self.conexoes) >= MAX_SESSOES:
@@ -192,14 +241,29 @@ class AoVivo(threading.Thread):
 
     async def encerrar(self, sessao_id):
         conexao = self.conexoes.pop(sessao_id, None)
-        if conexao:
+        if not conexao:
+            return
+        try:
             conexao['trilha'].stop()
             await conexao['pc'].close()
+        except Exception as erro:  # noqa: BLE001 — fechar não pode derrubar os outros vídeos
+            self._erro('fechar vídeo', erro)
 
     async def atender(self, oferta):
-        sessao_id, qualidade = oferta['id'], oferta.get('qualidade', 'BAIXA')
-        if self._lotado(qualidade):
-            return await self.responder(sessao_id, erro='Limite de vídeos ao vivo deste computador.')
+        sessao_id, qualidade = oferta.get('id'), oferta.get('qualidade', 'BAIXA')
+        try:
+            if self._lotado(qualidade):
+                return await self.responder(sessao_id, erro='Limite de vídeos ao vivo deste computador.')
+            async with self.abertura:
+                await self._abrir_sessao(sessao_id, qualidade, oferta)
+        except Exception as erro:  # noqa: BLE001 — um pedido estranho não derruba os outros vídeos
+            if sessao_id not in self.conexoes and 'canal' in oferta and 'sdp' in oferta:
+                return   # A pessoa saiu da tela enquanto o vídeo abria: é fechamento normal, não erro.
+            self._erro('abrir vídeo', erro)
+            await self.encerrar(sessao_id)
+            await self.responder(sessao_id, erro=f'Falha ao abrir o vídeo ({type(erro).__name__}).')
+
+    async def _abrir_sessao(self, sessao_id, qualidade, oferta):
         url = self.endereco(oferta['canal'], qualidade)
         if not url:
             return await self.responder(sessao_id, erro='O agente ainda não achou o gravador.')
@@ -212,20 +276,48 @@ class AoVivo(threading.Thread):
             if pc.connectionState in ('failed', 'closed'):
                 await self.encerrar(sessao_id)
 
-        try:
-            await asyncio.to_thread(trilha.pronta.wait, 20)
-            if trilha.erro or not trilha.codec:
-                await self.encerrar(sessao_id)
-                return await self.responder(sessao_id, erro=f'A câmera não abriu ({trilha.erro or "sem resposta"}).')
-            # Só H.264, e antes de ler a oferta: depois disso o aiortc já escolheu o VP8, que não sabe levar o vídeo pronto.
-            pc.addTrack(trilha)
-            codecs = [c for c in RTCRtpSender.getCapabilities('video').codecs if c.mimeType.lower() in ('video/h264', 'video/rtx')]
-            pc.getTransceivers()[0].setCodecPreferences(codecs)
-            await pc.setRemoteDescription(RTCSessionDescription(sdp=oferta['sdp'], type='offer'))
-            await pc.setLocalDescription(await pc.createAnswer())
-            await self.responder(sessao_id, sdp=pc.localDescription.sdp, codec=trilha.codec)
-        except Exception as erro:  # noqa: BLE001 — um pedido estranho não derruba os outros vídeos
-            log.warning('Pedido de vídeo ao vivo falhou: %s %s', type(erro).__name__, erro)
+        fim = time.monotonic() + MAX_ESPERA_DA_CAMERA
+        while not trilha.pronta.is_set() and time.monotonic() < fim:
+            await asyncio.sleep(0.05)
+        if sessao_id not in self.conexoes:
+            return
+        if trilha.erro or not trilha.codec:
             await self.encerrar(sessao_id)
-            return await self.responder(sessao_id, erro=f'Falha ao abrir o vídeo ({type(erro).__name__}).')
+            return await self.responder(sessao_id, erro=f'A câmera não abriu ({trilha.erro or "sem resposta"}).')
+        # Só H.264, e antes de ler a oferta: depois disso o aiortc já escolheu o VP8, que não sabe levar o vídeo pronto.
+        pc.addTrack(trilha)
+        codecs = [c for c in RTCRtpSender.getCapabilities('video').codecs if c.mimeType.lower() in ('video/h264', 'video/rtx')]
+        pc.getTransceivers()[0].setCodecPreferences(codecs)
+        await pc.setRemoteDescription(RTCSessionDescription(sdp=limpar_candidatos_locais(oferta['sdp']), type='offer'))
+        await pc.setLocalDescription(await pc.createAnswer())
+        await self.responder(sessao_id, sdp=pc.localDescription.sdp, codec=trilha.codec)
         asyncio.get_running_loop().call_later(TEMPO_MAXIMO_SESSAO, lambda: asyncio.ensure_future(self.encerrar(sessao_id)))
+
+
+class Vigia:
+    """Se a parte do vídeo cair ou travar, registra onde parou e sobe outra. O resto do agente não depende dela."""
+
+    def __init__(self, criar, destino_do_log=None):
+        self.criar, self.destino_do_log = criar, destino_do_log
+        self.atual = criar()
+        self.atual.start()
+        self.reinicios = 0
+
+    def conferir(self):
+        if not self.atual.travado():
+            return
+        if self.destino_do_log:
+            try:
+                with open(self.destino_do_log, 'a', encoding='utf-8') as arquivo:
+                    arquivo.write('--- ao vivo travou, situação das threads:\n')
+                    faulthandler.dump_traceback(file=arquivo, all_threads=True)
+            except OSError:
+                pass
+        log.warning('Ao vivo parado (%s); subindo de novo', self.atual.resumo())
+        self.atual.parar = True
+        self.atual = self.criar()
+        self.atual.start()
+        self.reinicios += 1
+
+    def resumo(self):
+        return f'{self.atual.resumo()} reinicios={self.reinicios}'[:200]

@@ -40,6 +40,10 @@ def sinal(request, gravador):
     # O agente respondeu: o que o instalador avisou ficou para trás.
     if gravador.erro_agente.startswith('Instalador:'):
         campos['erro_agente'] = gravador.erro_agente = ''
+    if 'ao_vivo' in request.POST:
+        campos['ao_vivo_situacao'] = request.POST['ao_vivo'][:200]
+    if 'log' in request.POST:
+        campos['log_agente'], campos['log_agente_em'] = request.POST['log'][-8000:], timezone.now()
     aviso = request.POST.get('aviso', '').strip()[:255]
     if aviso:
         campos['erro_agente'] = gravador.erro_agente = aviso

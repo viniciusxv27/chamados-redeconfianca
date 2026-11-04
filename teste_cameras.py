@@ -471,7 +471,7 @@ class PortalFalso:
     def __init__(self, respostas):
         self.respostas, self.achados, self.fotos_recebidas = list(respostas), [], []
 
-    def sinal(self, aviso=''):
+    def sinal(self, aviso='', extras=None):
         if not self.respostas:
             raise Fim
         return self.respostas.pop(0)
@@ -845,9 +845,22 @@ ConfigCameras.objects.update(ativo=False)
 t('módulo desligado não abre vídeo', abrir(cs, {'canal': cv1.id, 'sdp': SDP}).status_code == 403)
 ConfigCameras.objects.update(ativo=True)
 h = cs.get(f'/cameras/loja/{gv.id}/').content.decode()
+s9 = abrir(cs, {'canal': cv1.id, 'sdp': SDP}).json()['sessoes'][0]['id']
+cs.post('/cameras/aovivo/estado/', {'ids': s9, 'estado': 'FECHADA'})
+responder({'id': s9, 'sdp': 'ATRASADA', 'codec': 'h264'})
+sess9 = SessaoAoVivo.objects.get(id=s9)
+t('resposta atrasada não reabre sessão fechada', sess9.estado == 'FECHADA' and sess9.respondida_em)
+s10 = abrir(cs, {'canal': cv1.id, 'sdp': SDP}).json()['sessoes'][0]['id']
+pedir(); responder({'id': s10, 'sdp': 'R', 'codec': 'h264'}); cs.post('/cameras/aovivo/estado/', {'ids': s10, 'estado': 'CONECTADA'}); cs.post('/cameras/aovivo/estado/', {'ids': s10, 'estado': 'FECHADA'})
+sess10 = SessaoAoVivo.objects.get(id=s10)
+t('registro guarda até onde a sessão chegou', sess10.entregue_em and sess10.respondida_em and sess10.conectada_em and sess10.estado == 'FECHADA')
+r = anon.post('/cameras/agente/sinal/', {'versao': '2.2', 'ao_vivo': 'ok sessoes=1', 'log': 'linha ' * 3000}, **agv)
+gv.refresh_from_db()
+t('diagnóstico do agente chega ao portal', gv.ao_vivo_situacao == 'ok sessoes=1' and len(gv.log_agente) <= 8000 and gv.log_agente_em)
 t('tela da loja traz o vídeo e o reprodutor', 'data-ao-vivo' in h and 'cameras/ao-vivo.js' in h and 'id="caVideo"' in h and 'id="caTelaCheia"' in h)
 hp = cs.get('/cameras/').content.decode()
 t('mosaico traz o vídeo de quem está online', f'data-ao-vivo="{cv1.id}"' in hp and f'data-ao-vivo="{coff.id}"' not in hp)
+t('tela da loja traz o contador', 'caContadorVivo' in h)
 t('configuração pede reinstalar quem está com agente antigo', 'data-sem-ao-vivo' in cs.get('/cameras/configuracao/').content.decode())
 
 print(f'\n{ok} OK, {fail} falha(s)')

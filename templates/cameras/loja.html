@@ -5,7 +5,7 @@
 <header class="ca-topo">
     <div class="ca-titulo"><a class="ca-voltar" href="{% url 'cameras:painel' %}" aria-label="Voltar ao mosaico"><i class="fas fa-arrow-left"></i></a>
         <div><h1>{{ gravador.loja }}</h1><p><span class="ca-ponto {{ gravador.situacao }}"></span>{% if gravador.situacao == 'online' %}Agente online{% elif gravador.situacao == 'sem_agente' %}Agente ainda não instalado{% else %}Agente sem contato{% if gravador.ultimo_contato %} desde {{ gravador.ultimo_contato|date:"d/m H:i" }}{% endif %}{% endif %}{% if gravador.coordenador %} · {{ gravador.coordenador }}{% endif %}</p></div></div>
-    <a class="ca-botao claro" href="{% url 'cameras:gravador_editar' gravador.id %}"><i class="fas fa-gear"></i>Ajustes da loja</a>
+    <div class="ca-filtros"><span id="caContadorVivo" class="ca-contador-vivo" hidden></span><a class="ca-botao claro" href="{% url 'cameras:gravador_editar' gravador.id %}"><i class="fas fa-gear"></i>Ajustes da loja</a></div>
 </header>
 <div class="ca-grade-painel">
     <div class="ca-mosaico largo">
@@ -38,7 +38,7 @@
     </footer>
 </dialog>
 {{ zonas_json|json_script:"caZonasDados" }}
-<script src="{% static 'cameras/ao-vivo.js' %}?v=1"></script>
+<script src="{% static 'cameras/ao-vivo.js' %}?v=2"></script>
 <script>
 (function () {
     var loja = {{ gravador.id }}, imagens = Array.from(document.querySelectorAll('.ca-mosaico img[data-canal]')), desde = 0;
@@ -65,9 +65,15 @@
     var vivo = temVivo ? new CamerasAoVivo({abrir: "{% url 'cameras:ao_vivo_abrir' %}", respostas: "{% url 'cameras:ao_vivo_respostas' %}", estado: "{% url 'cameras:ao_vivo_estado' %}", csrf: '{{ csrf_token }}'}) : null;
     var pequenos = Array.from(document.querySelectorAll('video[data-ao-vivo]')), visiveis = new Set();
     var videoGrande = document.getElementById('caVideo'), estadoVivo = document.getElementById('caEstadoVivo');
+    var contador = document.getElementById('caContadorVivo');
+    function contar() {
+        var aoVivo = document.querySelectorAll('.ca-selo-vivo:not([hidden])').length;
+        contador.hidden = !aoVivo && !foco;
+        contador.textContent = aoVivo + ' de ' + pequenos.length + ' ao vivo na tela';
+    }
     function ligarPequeno(video) {
         var selo = video.parentElement.querySelector('.ca-selo-vivo');
-        vivo.ligar(video.dataset.aoVivo * 1, video, 'BAIXA', function (e) { selo.hidden = e !== 'vivo'; });
+        vivo.ligar(video.dataset.aoVivo * 1, video, 'BAIXA', function (e) { selo.hidden = e !== 'vivo'; contar(); });
     }
     var observador = temVivo ? new IntersectionObserver(function (itens) {
         itens.forEach(function (item) {

@@ -105,16 +105,17 @@
     this.timerFila = this.fila.length ? setTimeout(function () { eu._enviarFila(); }, 120) : null;
     lote = lote.filter(function (s) { return s.viva && s.pc; });
     if (!lote.length) return;
+    var ofertas = lote.map(function (s) { return {canal: s.canal, qualidade: s.qualidade, sdp: s.pc.localDescription.sdp}; });
     fetch(this.urls.abrir, {
       method: 'POST', credentials: 'same-origin',
       headers: {'Content-Type': 'application/json', 'X-CSRFToken': this._csrf()},
-      body: JSON.stringify({sessoes: lote.map(function (s) {
-        return {canal: s.canal, qualidade: s.qualidade, sdp: s.pc.localDescription.sdp};
-      })})
+      body: JSON.stringify({sessoes: ofertas})
     }).then(function (r) { return r.json(); }).then(function (d) {
       if (!d.sessoes) throw new Error(d.erro || 'erro');
       lote.forEach(function (s, i) {
         var item = d.sessoes[i] || {};
+        // Fechou enquanto o pedido ia: sem avisar, o computador da loja abriria um vídeo que ninguém vê.
+        if (!s.viva) { if (item.id) eu._estado([item.id], 'FECHADA'); return; }
         if (item.erro) return eu._falhar(s, item.erro, item.atualizar);
         s.id = item.id;
         s.pedidoEm = Date.now();
@@ -142,6 +143,7 @@
             delete eu.esperando[id];
             if (r.erro) return eu._falhar(s, r.erro);
             s.codec = r.codec;
+            if (!s.pc) return;
             s.pc.setRemoteDescription({type: 'answer', sdp: r.sdp}).catch(function () { eu._falhar(s, 'Resposta de vídeo inválida.'); });
           } else if (Date.now() - s.pedidoEm > RESPOSTA_MAXIMA) {
             delete eu.esperando[id];

@@ -210,6 +210,7 @@ AO_VIVO_MARCA_VALIDADE = 30
 AO_VIVO_SDP_MAXIMO = 20000
 AO_VIVO_SESSAO_ANTIGA_HORAS = 24
 AO_VIVO_PEDIDOS_POR_VEZ = 32
+AO_VIVO_PEDIDO_VALE = 30       # o navegador desiste antes disso
 
 
 def _chave_ao_vivo(gravador_id):
@@ -256,7 +257,11 @@ def respostas_das_sessoes(user, ids):
 def atualizar_estado_sessoes(user, ids, estado):
     if estado not in (SessaoAoVivo.CONECTADA, SessaoAoVivo.FALHOU, SessaoAoVivo.FECHADA):
         return 0
-    feitas = SessaoAoVivo.objects.filter(id__in=ids, user=user).update(estado=estado, atualizada_em=timezone.now())
+    agora = timezone.now()
+    campos = {'estado': estado, 'atualizada_em': agora}
+    if estado == SessaoAoVivo.CONECTADA:
+        campos['conectada_em'] = agora
+    feitas = SessaoAoVivo.objects.filter(id__in=ids, user=user).update(**campos)
     if estado == SessaoAoVivo.FECHADA:
         # O agente precisa saber logo: cada vídeo aberto ocupa upload da loja e uma conexão do gravador.
         for gravador_id in SessaoAoVivo.objects.filter(id__in=ids, user=user).values_list('gravador_id', flat=True).distinct():
@@ -270,8 +275,9 @@ def pedidos_para_o_agente(gravador_id, ativas):
     if not ativas and not cache.get(_chave_ao_vivo(gravador_id)):
         return {'ofertas': [], 'fechar': [], 'proximo': AO_VIVO_ESPERA_PARADO}
     ofertas = list(SessaoAoVivo.objects.filter(gravador_id=gravador_id, estado=SessaoAoVivo.PEDIDA,
-                                               criada_em__gte=timezone.now() - timedelta(seconds=60)).select_related('canal'))
-    SessaoAoVivo.objects.filter(id__in=[o.id for o in ofertas]).update(estado=SessaoAoVivo.ENTREGUE, atualizada_em=timezone.now())
+                                               criada_em__gte=timezone.now() - timedelta(seconds=AO_VIVO_PEDIDO_VALE)).select_related('canal'))
+    agora = timezone.now()
+    SessaoAoVivo.objects.filter(id__in=[o.id for o in ofertas]).update(estado=SessaoAoVivo.ENTREGUE, entregue_em=agora, atualizada_em=agora)
     fechar = []
     if ativas:
         try:
@@ -285,16 +291,21 @@ def pedidos_para_o_agente(gravador_id, ativas):
 
 
 def resposta_do_agente(gravador_id, dados):
-    campos = {'atualizada_em': timezone.now()}
+    agora = timezone.now()
+    campos = {'atualizada_em': agora, 'respondida_em': agora}
     if dados.get('erro'):
-        campos.update(erro=str(dados['erro'])[:200], estado=SessaoAoVivo.FALHOU)
+        campos.update(erro=str(dados['erro'])[:200])
     else:
         sdp = str(dados.get('sdp') or '')
         if not sdp or len(sdp) > AO_VIVO_SDP_MAXIMO:
             return 0
-        campos.update(resposta=sdp, codec=str(dados.get('codec') or '')[:20], estado=SessaoAoVivo.RESPONDIDA)
+        campos.update(resposta=sdp, codec=str(dados.get('codec') or '')[:20])
     try:
-        return SessaoAoVivo.objects.filter(id=dados.get('id'), gravador_id=gravador_id).update(**campos)
+        # Quem já desistiu continua fechado: a resposta atrasada não pode reabrir a sessão.
+        sessao = SessaoAoVivo.objects.filter(id=dados.get('id'), gravador_id=gravador_id)
+        if not sessao.filter(estado__in=[SessaoAoVivo.FALHOU, SessaoAoVivo.FECHADA]).exists():
+            campos['estado'] = SessaoAoVivo.FALHOU if dados.get('erro') else SessaoAoVivo.RESPONDIDA
+        return sessao.update(**campos)
     except (ValueError, ValidationError):
         return 0
 

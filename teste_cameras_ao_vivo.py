@@ -129,6 +129,110 @@ async def rodar():
     await agente.atender({'id': 's6', 'canal': 'h264', 'qualidade': 'BAIXA', 'sdp': 'isto nao e sdp'})
     t('pedido estranho vira erro, sem derrubar', 'erro' in agente.respostas['s6'] and 's6' not in agente.conexoes, agente.respostas['s6'])
 
+    print('muitos pedidos, abrindo e fechando no meio (a grade e a troca de tela)')
+    a5 = Agente()
+    pcs = []
+
+    async def oferta(i):
+        pc = RTCPeerConnection()
+        pc.addTransceiver('video', direction='recvonly')
+        await pc.setLocalDescription(await pc.createOffer())
+        pcs.append(pc)
+        return {'id': f'm{i}', 'canal': 'h264', 'qualidade': 'BAIXA', 'sdp': pc.localDescription.sdp}
+
+    ofertas = [await oferta(i) for i in range(12)]
+    tarefas = [asyncio.ensure_future(a5.atender(o)) for o in ofertas]
+    await asyncio.sleep(0.3)
+    for i in range(0, 12, 3):
+        await a5.encerrar(f'm{i}')
+    inicio_lag = time.monotonic()
+    await asyncio.sleep(0.2)
+    t('o laço segue andando com as câmeras abrindo', time.monotonic() - inicio_lag < 1.5, time.monotonic() - inicio_lag)
+    await asyncio.wait_for(asyncio.gather(*tarefas), 60)
+    fechadas = [f'm{i}' for i in range(0, 12, 3)]
+    abertas = [o['id'] for o in ofertas if o['id'] not in fechadas]
+    t('todos os pedidos têm resposta', set(abertas) <= set(a5.respostas), sorted(a5.respostas))
+    t('os que continuaram responderam certo', all('sdp' in a5.respostas[i] for i in abertas), {i: a5.respostas[i].get('erro') for i in abertas})
+    t('nenhum erro acumulado', a5.erros == 0, a5.ultimo_erro)
+    for chave in list(a5.conexoes):
+        await a5.encerrar(chave)
+    for pc in pcs:
+        await pc.close()
+    t('fecha tudo limpo', not a5.conexoes and a5.erros == 0, a5.ultimo_erro)
+
+    print('não trava')
+    sdp_ = 'v=0\r\na=candidate:1 1 udp 1 abc.local 5000 typ host\r\na=candidate:2 1 udp 1 1.2.3.4 5000 typ srflx\r\na=mid:0\r\n'
+    limpo = ao_vivo.limpar_candidatos_locais(sdp_)
+    t('tira os nomes .local, fica o resto', '.local' not in limpo and '1.2.3.4' in limpo and 'a=mid:0' in limpo)
+    t('senha some do texto de erro', 'segredo' not in ao_vivo.sem_senha("Connection refused: 'rtsp://admin:segredo@10.0.0.1:554/x'") and '10.0.0.1' in ao_vivo.sem_senha("'rtsp://admin:segredo@10.0.0.1:554/x'"))
+
+    class PortalDoido:
+        def __init__(self):
+            self.vezes = 0
+            self.headers = {}
+
+        def post(self, url, json=None, timeout=None):
+            self.vezes += 1
+            if self.vezes == 1:
+                raise TypeError('bug qualquer')
+            return self
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {'ofertas': [], 'fechar': ['nao-existe'], 'proximo': 0.01} if self.vezes < 5 else {'ofertas': [{'id': 'ruim'}], 'fechar': [], 'proximo': 0.01}
+
+    a2 = Agente()
+    a2.sessao = PortalDoido()
+    ao_vivo.ESPERA_PADRAO, guardada = 0.01, ao_vivo.ESPERA_PADRAO
+    tarefa = asyncio.ensure_future(a2.laco())
+    await asyncio.sleep(0.6)
+    ao_vivo.ESPERA_PADRAO = guardada
+    t('erro inesperado não mata a parte do vídeo', a2.sessao.vezes > 5 and not tarefa.done(), (a2.sessao.vezes, tarefa.done()))
+    t('e fica registrado para o portal', a2.erros >= 1 and a2.ultimo_erro and 'erros=' in a2.resumo(), a2.ultimo_erro)
+    t('pedido sem câmera não derruba', 'ruim' in a2.respostas and 'erro' in a2.respostas['ruim'], a2.respostas)
+    tarefa.cancel()
+
+    class Quebra:
+        def stop(self):
+            raise RuntimeError('fechar falhou')
+
+    a3 = Agente()
+    a3.conexoes['q'] = {'pc': None, 'trilha': Quebra(), 'qualidade': 'BAIXA'}
+    await a3.encerrar('q')
+    t('fechar com erro não derruba', 'q' not in a3.conexoes and a3.erros == 1)
+
+    class Falsa:
+        def __init__(self):
+            self.parar, self.iniciada, self._travada = False, False, False
+
+        def start(self):
+            self.iniciada = True
+
+        def travado(self):
+            return self._travada
+
+        def resumo(self):
+            return 'falsa'
+
+    criadas = []
+
+    def criar():
+        criadas.append(Falsa())
+        return criadas[-1]
+
+    registro = tempfile.mktemp()
+    vigia = ao_vivo.Vigia(criar, registro)
+    vigia.conferir()
+    t('sem problema, o vigia não mexe', len(criadas) == 1)
+    criadas[0]._travada = True
+    vigia.conferir()
+    t('travou: sobe outra e para a antiga', len(criadas) == 2 and criadas[1].iniciada and criadas[0].parar and vigia.reinicios == 1)
+    t('e registra onde travou', 'threads' in open(registro, encoding='utf-8').read())
+    a4 = Agente()
+    t('thread que nunca rodou conta como parada', a4.travado())
+
     print('limites')
     falso = {f'x{i}': {'qualidade': 'ALTA', 'trilha': None, 'pc': None} for i in range(ao_vivo.MAX_ALTA_QUALIDADE)}
     agente.conexoes.update(falso)

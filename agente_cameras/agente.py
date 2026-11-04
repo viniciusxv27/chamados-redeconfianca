@@ -11,6 +11,7 @@ import sys
 import threading
 import time
 import os
+import re
 import uuid
 from datetime import datetime, timedelta
 from urllib.parse import quote
@@ -20,7 +21,9 @@ import requests
 from descoberta import descobrir
 from regras import ZONA_MOSTRUARIO, ZONA_PORTA, Analisador, Metricas, zonas_do_tipo
 
-VERSAO = '2.1'
+VERSAO = '2.2'
+TAMANHO_DO_LOG = 6000
+SEGUNDOS_ENTRE_LOGS = 120
 SEGUNDOS_POR_QUADRO_NA_PORTA = 0.33   # a pessoa cruza a porta em 1 a 3 s: um quadro por segundo perde gente
 EVENTOS_POR_ENVIO = 200
 EVENTOS_NA_FILA = 5000
@@ -90,8 +93,8 @@ class Portal:
         self.sessao = requests.Session()
         self.sessao.headers['Authorization'] = f'Bearer {token}'
 
-    def sinal(self, aviso=''):
-        r = self.sessao.post(self.base + 'sinal/', data={'versao': VERSAO, 'aviso': aviso}, timeout=TIMEOUT)
+    def sinal(self, aviso='', extras=None):
+        r = self.sessao.post(self.base + 'sinal/', data={'versao': VERSAO, 'aviso': aviso, **(extras or {})}, timeout=TIMEOUT)
         r.raise_for_status()
         return r.json()
 
@@ -213,19 +216,31 @@ def _medir(camera, deteccoes, zonas, agora, aberta):
 
 
 def iniciar_ao_vivo(config, estado):
-    """Sem as peças do vídeo ao vivo, o agente segue mandando imagens. Devolve o aviso para o portal."""
+    """Sem as peças do vídeo ao vivo, o agente segue mandando imagens. Devolve (vigia, aviso para o portal)."""
     def endereco(numero, qualidade):
         gravador = estado.get('gravador') or {}
         if not gravador.get('ip'):
             return ''
         return endereco_rtsp({**gravador, 'caminho': caminho_da_qualidade(gravador['caminho'], qualidade)}, numero)
     try:
-        from ao_vivo import AoVivo, caminho_da_qualidade
-        AoVivo(config['portal'], config['token'], endereco).start()
-        return ''
+        from ao_vivo import AoVivo, Vigia, caminho_da_qualidade
+        arquivo_de_log = os.path.join(config.get('_pasta', '.'), 'agente.log')
+        return Vigia(lambda: AoVivo(config['portal'], config['token'], endereco), arquivo_de_log), ''
     except Exception as erro:  # noqa: BLE001 — falta de DLL no Windows aparece aqui
         log.warning('Vídeo ao vivo desligado: %s', erro)
-        return f'Vídeo ao vivo desligado neste computador: {type(erro).__name__}'
+        return None, f'Vídeo ao vivo desligado neste computador: {type(erro).__name__}'
+
+
+def fim_do_log(pasta, tamanho=TAMANHO_DO_LOG):
+    """O fim do agente.log, sem senha, para dar para ver de longe o que houve na loja."""
+    try:
+        with open(os.path.join(pasta, 'agente.log'), 'rb') as arquivo:
+            arquivo.seek(0, os.SEEK_END)
+            arquivo.seek(max(0, arquivo.tell() - tamanho))
+            texto = arquivo.read().decode('utf-8', 'replace')
+    except OSError:
+        return ''
+    return re.sub(r'rtsp://[^\s\'"]*@', 'rtsp://***@', texto)
 
 
 def precisa_descobrir(gravador, cameras, ultima, agora):
@@ -243,12 +258,21 @@ def rodar(config):
     detector, aviso = carregar_detector(os.path.join(pasta, config.get('modelo', 'yolox_tiny.onnx'))) if config.get('analisar', True) else (None, '')
     estado, cameras = {}, {}
     ultima_descoberta = None
-    aviso = iniciar_ao_vivo(config, estado) or aviso
+    vigia, aviso_vivo = iniciar_ao_vivo(config, estado)
+    aviso = aviso_vivo or aviso
+    log_enviado_em = 0.0
     fila = FilaDeEventos(os.path.join(pasta, 'fila_medicoes.json'))
     while True:
         espera = 30
         try:
-            resposta = portal.sinal(aviso)
+            extras = {}
+            if vigia:
+                vigia.conferir()
+                extras['ao_vivo'] = vigia.resumo()
+            if time.monotonic() - log_enviado_em > SEGUNDOS_ENTRE_LOGS or not log_enviado_em:
+                log_enviado_em = time.monotonic()
+                extras['log'] = fim_do_log(pasta)
+            resposta = portal.sinal(aviso, extras)
             aviso = ''
             espera = resposta.get('proximo_sinal', 30)
             if not resposta.get('ativo'):

@@ -175,3 +175,4 @@ html.dark .ca {
 .ca-tela-cheia { position: absolute; top: 8px; right: 8px; z-index: 3; width: 34px; height: 34px; border-radius: 8px; background: rgba(0,0,0,.6); color: #fff; }
 .ca-janela { width: min(1280px, calc(100vw - 24px)); }
 .ca-palco { max-height: calc(100vh - 170px); margin: 0 auto; }
+.ca-contador-vivo { align-self: center; background: var(--ca-vermelho-claro); color: var(--ca-vermelho); font-size: 12.5px; font-weight: 700; border-radius: 99px; padding: 5px 12px; }
