@@ -37,7 +37,7 @@
                     {% if g.erro_agente %}<small class="ca-erro" data-erro-agente>{{ g.erro_agente }}</small>{% elif g.ip_local and g.descoberta_em %}<small>Gravador achado em {{ g.ip_local }} · {{ g.canais_ativos_qtd }} câm.</small>{% endif %}
                     {% if g.serial_diferente %}<small class="ca-ambar" data-serial-diferente>Serial na loja: {{ g.serial_detectado }}</small>{% endif %}</td>
                 <td class="ca-acoes-linha"><a class="ca-botao claro pequeno" href="{% url 'cameras:gravador_editar' g.id %}">Editar</a>
-                    {% if g.tem_equipamento %}<form method="post" action="{% url 'cameras:gravador_instalador' g.id %}" {% if g.ultimo_contato %}onsubmit="return confirm('Baixar de novo troca o token: o agente que está nessa loja para até instalar o novo. Continuar?');"{% endif %}>{% csrf_token %}<button class="ca-botao pequeno"><i class="fas fa-download"></i>Baixar instalador</button></form>{% endif %}</td>
+                    {% if g.tem_equipamento %}<form method="post" action="{% url 'cameras:gravador_instalador' g.id %}">{% csrf_token %}<button class="ca-botao pequeno"><i class="fas fa-download"></i>Baixar instalador</button></form>{% endif %}</td>
             </tr>
             {% empty %}<tr><td colspan="6" class="ca-vazio-texto">Importe a planilha para começar.</td></tr>{% endfor %}
         </tbody>
@@ -45,7 +45,8 @@
 </section>
 <section class="ca-card ca-bloco">
     <h2><i class="fas fa-microchip"></i>Agente da loja</h2>
-    <p>O gravador em modo Cloud só fala com o aplicativo, então um computador ligado na rede da loja lê as câmeras. Baixe o instalador na linha da loja, extraia o ZIP nesse computador (botão direito, "Extrair tudo") e clique duas vezes em <code>instalar.bat</code>. O Python vem junto, sem instalar nada antes, e o andamento aparece aqui na linha da loja. O agente acha o gravador, testa a senha do cadastro, descobre o caminho do vídeo e quantas câmeras existem, sem mexer em nada no gravador. O RTSP precisa estar ligado nele.</p>
+    <p>O gravador em modo Cloud só fala com o aplicativo, então um computador ligado na rede da loja lê as câmeras. Baixe o instalador na linha da loja, leve para esse computador e clique duas vezes. Não precisa extrair nem instalar nada antes: é um arquivo só, com tudo dentro, e ele acha o gravador sozinho. O andamento aparece aqui na linha da loja. Não renomeie o arquivo: o código da loja está no nome, e vale por 7 dias.</p>
+    <p>Se o Windows avisar que protegeu o computador, clique em <b>Mais informações</b> e <b>Executar assim mesmo</b>. Precisa de Windows 10 ou 11 de 64 bits, e do RTSP ligado no gravador.</p>
 </section>
 <section class="ca-card ca-tabela-caixa">
     <h2><i class="fas fa-clipboard-list"></i>Últimos acessos</h2>

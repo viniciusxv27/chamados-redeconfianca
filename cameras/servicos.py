@@ -1,11 +1,15 @@
 """O que o agente da loja conversa com o portal, e as fotos que ficam só no cache."""
 import base64
 import ipaddress
+import re
 import time
+import unicodedata
 from datetime import timedelta
 
+from django.conf import settings
 from django.core.cache import cache
 from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
@@ -177,4 +181,23 @@ def registrar_eventos(gravador, eventos):
                                 hora=local.hour, duracao=duracao, pessoas=pessoas))
     EventoLoja.objects.bulk_create(novos, ignore_conflicts=True)
     return len(novos)
+
+
+def nome_do_instalador(gravador, codigo):
+    loja = re.sub(r'[^A-Z0-9]+', '-', unicodedata.normalize('NFKD', gravador.loja).encode('ascii', 'ignore').decode().upper()).strip('-')
+    return f'Instalar-Cameras-{loja or gravador.id}-{codigo}.exe'
+
+
+def link_do_instalador(arquivo, nome):
+    """Link temporário que baixa com o nome da loja. O bucket é público, mas é a assinatura que permite escolher o nome."""
+    import boto3
+    from botocore.config import Config
+
+    chave = default_storage._normalize_name(arquivo)
+    cliente = boto3.client('s3', endpoint_url=settings.AWS_S3_ENDPOINT_URL, region_name=settings.AWS_S3_REGION_NAME,
+                           aws_access_key_id=settings.AWS_ACCESS_KEY_ID, aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+                           config=Config(signature_version='s3v4'))
+    return cliente.generate_presigned_url('get_object', ExpiresIn=3600, Params={
+        'Bucket': settings.AWS_STORAGE_BUCKET_NAME, 'Key': chave,
+        'ResponseContentDisposition': f'attachment; filename="{nome}"', 'ResponseContentType': 'application/octet-stream'})
 

@@ -69,6 +69,7 @@ from unittest.mock import patch
 
 import openpyxl
 import requests
+from django.core.files.storage import default_storage
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.utils import timezone
 
@@ -285,21 +286,43 @@ t('aparelho fora da área (na mão de alguém): nada', s == [], s)
 
 print('instalador e descoberta no portal')
 cache.clear()
-g3 = Gravador.objects.create(loja='LOJA NOVA'); g3.definir_senha(SENHA); g3.save()
-t('colaborador comum não baixa o instalador', cc.post(f'/cameras/configuracao/{g3.id}/instalador/').status_code == 302 and not Gravador.objects.get(pk=g3.id).token_hash)
-t('GET não gera token', cs.get(f'/cameras/configuracao/{g3.id}/instalador/').status_code == 405 and not Gravador.objects.get(pk=g3.id).token_hash)
-r = cs.post(f'/cameras/configuracao/{g3.id}/instalador/')
-import zipfile as _z
-pacote = _z.ZipFile(io.BytesIO(r.content))
-nomes = pacote.namelist()
-cfg = _j.loads(pacote.read('agente-cameras/config.json'))
-g3.refresh_from_db()
-t('pacote vem completo', r['Content-Type'] == 'application/zip' and {'agente-cameras/' + n for n in ('agente.py', 'descoberta.py', 'regras.py', 'instalar.bat', 'instalar.ps1', 'instalar.sh', 'config.json')} <= set(nomes), nomes)
-t('token no pacote funciona e fica só resumido', g3.token_hash == Gravador.resumo(cfg['token']))
-todo = b''.join(pacote.read(n) for n in nomes)
-t('senha do gravador fora do pacote', SENHA.encode() not in todo)
+from django.core.management import call_command
+g3 = Gravador.objects.create(loja='LOJA NOVA Ação'); g3.definir_senha(SENHA); g3.save()
+r = cs.post(f'/cameras/configuracao/{g3.id}/instalador/', follow=True)
+t('sem instalador publicado: avisa', 'ainda não foi publicado' in r.content.decode())
+exe = pathlib.Path(tempfile.mkdtemp()) / 'AgenteCameras.exe'
+exe.write_bytes(b'MZ' + b'0' * 100)
+call_command('publicar_instalador_cameras', str(exe), verbosity=0)
+primeiro = ConfigCameras.atual().instalador_arquivo
+t('publica o exe', primeiro.startswith('cameras/instalador/') and default_storage.exists(primeiro))
+falso = pathlib.Path(tempfile.mkdtemp()) / 'x.exe'; falso.write_bytes(b'nada')
+try:
+    call_command('publicar_instalador_cameras', str(falso), verbosity=0); recusou = False
+except Exception:
+    recusou = True
+t('recusa o que não é exe do Windows', recusou)
+t('colaborador comum não baixa', cc.post(f'/cameras/configuracao/{g3.id}/instalador/').status_code == 302 and not Gravador.objects.get(pk=g3.id).codigo_hash)
+t('GET não gera código', cs.get(f'/cameras/configuracao/{g3.id}/instalador/').status_code == 405)
 t('sem download para loja sem gravador', cs.post(f'/cameras/configuracao/{sem.id}/instalador/').status_code == 404)
+r = cs.post(f'/cameras/configuracao/{g3.id}/instalador/')
+nome_baixado = re.search(r'filename="([^"]+)"', r['Content-Disposition']).group(1)
+g3.refresh_from_db()
+t('baixa com o nome da loja e o código', re.fullmatch(r'Instalar-Cameras-LOJA-NOVA-ACAO-[A-Z0-9]{12}\.exe', nome_baixado) and b''.join(r.streaming_content).startswith(b'MZ'), nome_baixado)
+t('no banco só o resumo do código', nome_baixado.split('-')[-1][:12] not in g3.codigo_hash and not g3.token_hash)
 t('download fica registrado', AcessoCamera.objects.filter(acao='baixar_instalador', gravador=g3).exists())
+from cameras.servicos import nome_do_instalador
+t('nome só com letras e números, sem acento', nome_do_instalador(Gravador(loja='SÃO JOSÉ / CENTRO'), 'ABC') == 'Instalar-Cameras-SAO-JOSE-CENTRO-ABC.exe')
+codigo_real = nome_baixado.split('-')[-1][:12]
+t('código errado não ativa', anon.post('/cameras/agente/ativar/', {'codigo': 'ZZZZZZZZZZZZ'}).status_code == 403)
+t('sem código não ativa', anon.post('/cameras/agente/ativar/', {}).status_code == 403 and anon.get('/cameras/agente/ativar/').status_code == 405)
+Gravador.objects.filter(pk=g3.pk).update(codigo_validade=timezone.now() - dt.timedelta(minutes=1))
+t('código vencido não ativa', anon.post('/cameras/agente/ativar/', {'codigo': codigo_real}).status_code == 403)
+Gravador.objects.filter(pk=g3.pk).update(codigo_validade=timezone.now() + dt.timedelta(days=1))
+r = anon.post('/cameras/agente/ativar/', {'codigo': codigo_real.lower()})
+cfg = {'token': r.json()['token']}
+g3.refresh_from_db()
+t('código certo vira token da loja', r.status_code == 200 and r.json()['loja'] == 'LOJA NOVA Ação' and g3.token_hash == Gravador.resumo(cfg['token']))
+t('resposta sem a senha do gravador', SENHA not in r.content.decode())
 ag3 = {'HTTP_AUTHORIZATION': 'Bearer ' + cfg['token']}
 hp = cs.get('/cameras/').content.decode()
 t('tela diz por que está sem imagem', 'data-faixa-sem-agente' in hp and 'Agente não instalado' in hp)
@@ -328,18 +351,7 @@ anon.post('/cameras/agente/descoberta/', {'ip': '192.168.0.77', 'caminho': '/cam
 t('módulo desligado não grava descoberta', Gravador.objects.get(pk=g3.id).ip_local == '192.168.0.50')
 ConfigCameras.objects.update(ativo=True)
 
-print('instalador: arquivos e aviso ao portal')
-bat = pacote.read('agente-cameras/instalar.bat')
-ps1 = pacote.read('agente-cameras/instalar.ps1').decode('utf-8-sig')
-t('bat em ASCII e com fim de linha do Windows', bat.isascii() and bat.count(b'\r\n') == bat.count(b'\n'))
-t('bat avisa quando abrem de dentro do ZIP', b'goto compactado' in bat and b'Extrair tudo' in bat)
-t('bat não fecha sem a pessoa mandar', bat.count(b'pause') >= 3)
-t('ps1 com BOM, para o Windows ler os acentos', pacote.read('agente-cameras/instalar.ps1').startswith(b'\xef\xbb\xbf'))
-t('ps1 ignora o atalho falso da Microsoft Store', "WindowsApps" in ps1)
-t('ps1 só aceita Python assinado', 'Python Software Foundation' in ps1 and 'Get-AuthenticodeSignature' in ps1)
-t('tarefa sem o limite de 3 dias do Windows', '[TimeSpan]::Zero' in ps1)
-t('permissão por SID, sem depender do idioma', 'S-1-5-32-544' in ps1 and 'Administradores' not in ps1)
-t('blocos do ps1 balanceados', ps1.count('{') == ps1.count('}') and ps1.count('(') == ps1.count(')'), (ps1.count('{'), ps1.count('}'), ps1.count('('), ps1.count(')')))
+print('instalador: aviso ao portal')
 gi = Gravador.objects.create(loja='LOJA INSTALANDO'); ti = gi.gerar_token(); agi = {'HTTP_AUTHORIZATION': f'Bearer {ti}'}
 r = anon.post('/cameras/agente/descoberta/', 'erro=' + 'Instalador%3A%20falhou%3A%20sem%20permiss%C3%A3o', content_type='application/x-www-form-urlencoded', **agi)
 gi.refresh_from_db()
@@ -459,7 +471,7 @@ class PortalFalso:
     def __init__(self, respostas):
         self.respostas, self.achados, self.fotos_recebidas = list(respostas), [], []
 
-    def sinal(self):
+    def sinal(self, aviso=''):
         if not self.respostas:
             raise Fim
         return self.respostas.pop(0)
@@ -486,7 +498,7 @@ def start_falso(self):
     iniciadas.append(self.url)
 
 
-with patch.object(ag_mod, 'Portal', return_value=pf), patch.object(ag_mod.Detector, 'se_instalado', return_value=None), \
+with patch.object(ag_mod, 'Portal', return_value=pf), patch.object(ag_mod, 'carregar_detector', return_value=(None, '')), \
         patch.object(ag_mod, 'descobrir', return_value={'ip': '192.168.0.9', 'porta': 554, 'caminho': '/c?x={canal}', 'canais': [1, 2]}) as procura, \
         patch.object(Camera, 'start', start_falso), patch.object(ag_mod, '_jpg', return_value=b'jpg'), patch.object(ag_mod.time, 'sleep'), patch.object(PortalFalso, 'metricas', create=True):
     try:
@@ -497,11 +509,113 @@ t('sem IP: procura e manda o que achou', procura.call_count == 1 and procura.cal
 t('com IP: abre as câmeras com a senha protegida no endereço', any('admin:a%40b@192.168.0.9:554/c?x=1' in u for u in iniciadas), iniciadas)
 t('manda só a foto pedida', pf.fotos_recebidas and list(pf.fotos_recebidas[0]) == [1], pf.fotos_recebidas)
 t('IP mudou: reabre no novo', any('192.168.0.10' in u for u in iniciadas), iniciadas)
-try:
-    with patch.dict(sys.modules, {'ultralytics': None}):
-        t('sem o pacote de IA, o agente segue só com imagem', ag_mod.Detector.se_instalado('x') is None)
-except Exception as exc:
-    t('sem o pacote de IA, o agente segue só com imagem', False, exc)
+with patch.dict(sys.modules, {'detector': None}):
+    det_, aviso_ = ag_mod.carregar_detector('x.onnx')
+t('sem a análise, o agente segue só com imagem e avisa', det_ is None and 'Análise desligada' in aviso_, aviso_)
+r = anon.post('/cameras/agente/sinal/', {'aviso': aviso_}, **ag3)
+t('aviso do agente aparece na linha da loja', 'Análise desligada' in Gravador.objects.get(pk=g3.id).erro_agente)
+Gravador.objects.filter(pk=g3.pk).update(erro_agente='')
+
+print('instalador do Windows: etapa final')
+import xml.dom.minidom as _md
+import instalar as ins
+
+
+class Resposta:
+    def __init__(self, codigo=200, dados=None):
+        self.status_code, self._dados = codigo, dados or {}
+
+    def json(self):
+        return self._dados
+
+
+class HttpFalso:
+    def __init__(self, ativar=None, cair=False):
+        self.ativar, self.cair, self.pedidos = ativar or Resposta(200, {'token': 'TOK', 'loja': 'LOJA X'}), cair, []
+
+    def post(self, url, data=None, headers=None, timeout=None):
+        self.pedidos.append((url, data, headers))
+        if self.cair:
+            raise OSError('sem rede')
+        return self.ativar if url.endswith('/ativar/') else Resposta()
+
+
+class Roda:
+    def __init__(self, falha=None, pasta=None):
+        self.falha, self.pasta, self.comandos = falha, pasta, []
+
+    def __call__(self, *comando):
+        self.comandos.append(comando)
+        if comando[0] == 'schtasks' and comando[1] == '/Run':
+            open(os.path.join(self.pasta, 'agente.log'), 'w').close()
+        erro = self.falha and self.falha in ' '.join(comando)
+        return mock.Mock(returncode=1 if erro else 0, stderr='motivo do Windows' if erro else '', stdout='')
+
+
+def montar_instalacao(**k):
+    pasta = tempfile.mkdtemp()
+    with open(os.path.join(pasta, 'portal.txt'), 'w') as arq:
+        arq.write('https://portal.exemplo/\n')
+    roda = Roda(k.pop('falha', None), pasta)
+    http = k.pop('http', None) or HttpFalso()
+    return ins.Instalacao(pasta, rodar=roda, esperar=lambda s: None, http=http), roda, http, pasta
+
+
+def rodar_instalador(nome='Instalar-Cameras-LOJA-ABCDEFGH2345.exe', **k):
+    inst, roda, http, pasta = montar_instalacao(**k)
+    codigo = ins.principal(['instalar.py', nome], inst)
+    with open(os.path.join(pasta, 'resultado.txt'), encoding='utf-16') as arq:
+        return codigo, arq.read(), roda, http, pasta
+
+
+t('lê o código do nome', ins.codigo_do_arquivo('Instalar-Cameras-SERRA-SEDE-ABCDEFGH2345.exe') == 'ABCDEFGH2345')
+t('baixou duas vezes: " (1)" não atrapalha', ins.codigo_do_arquivo('Instalar-Cameras-X-ABCDEFGH2345 (1).exe') == 'ABCDEFGH2345')
+t('nome sem código', ins.codigo_do_arquivo('AgenteCameras.exe') == '' and ins.codigo_do_arquivo('') == '')
+c_, msg, roda, http, pasta = rodar_instalador()
+t('instalação inteira dá certo e fala a loja', c_ == 0 and 'LOJA X' in msg, msg)
+t('troca o código pelo token', http.pedidos[0][0] == 'https://portal.exemplo/cameras/agente/ativar/' and http.pedidos[0][1] == {'codigo': 'ABCDEFGH2345'})
+with open(os.path.join(pasta, 'config.json')) as arq:
+    cfg_ins = _j.load(arq)
+t('grava a configuração', cfg_ins['token'] == 'TOK' and cfg_ins['portal'] == 'https://portal.exemplo' and cfg_ins['modelo'] == 'yolox_tiny.onnx')
+t('confere as três peças antes de ligar', [c[2] for c in roda.comandos if c[1] == '-c'] == ['import cv2', 'import onnxruntime', 'import numpy'])
+ordem = [c[1] for c in roda.comandos if c[0] == 'schtasks']
+t('cria, reinicia e confere a tarefa', ordem == ['/Create', '/End', '/Run', '/Query'], ordem)
+t('protege o token por SID', any(c[0] == 'icacls' and '*S-1-5-32-544:F' in c for c in roda.comandos))
+t('avisa cada passo no portal', sum(1 for p in http.pedidos if p[0].endswith('/descoberta/')) == 2)
+with open(os.path.join(pasta, 'tarefa.xml'), encoding='utf-16') as arq:
+    texto_xml = arq.read()
+doc = _md.parseString(texto_xml.encode('utf-16'))
+t('XML da tarefa válido, sem limite de 3 dias, como SYSTEM, ao ligar', doc.getElementsByTagName('ExecutionTimeLimit')[0].firstChild.data == 'PT0S' and doc.getElementsByTagName('UserId')[0].firstChild.data == 'S-1-5-18' and doc.getElementsByTagName('BootTrigger'))
+xml_amp = ins.xml_da_tarefa(r'C:\Program Data\A&B')
+t('caminho com & não quebra o XML', _md.parseString(xml_amp.encode('utf-16')) and 'A&amp;B' in xml_amp)
+c_, msg, *_x = rodar_instalador('renomeado.exe')
+t('sem código e sem instalação anterior: explica', c_ == 1 and 'sem renomear' in msg, msg)
+inst, roda, http, pasta = montar_instalacao()
+with open(os.path.join(pasta, 'config.json'), 'w') as arq:
+    _j.dump({'portal': 'x', 'token': 'ANTIGO'}, arq)
+t('renomeado em reinstalação: segue com a loja de antes', ins.principal(['i', 'renomeado.exe'], inst) == 0 and inst.token == 'ANTIGO')
+c_, msg, *_x = rodar_instalador(http=HttpFalso(cair=True))
+t('sem internet: explica', c_ == 1 and 'Sem conexão' in msg, msg)
+c_, msg, *_x = rodar_instalador(http=HttpFalso(ativar=Resposta(403)))
+t('código vencido: manda baixar de novo', c_ == 1 and 'Baixe de novo' in msg, msg)
+c_, msg, *_x = rodar_instalador(http=HttpFalso(ativar=Resposta(404)))
+t('portal sem a versão nova: explica', c_ == 1 and 'ainda não tem' in msg, msg)
+c_, msg, roda, *_x = rodar_instalador(falha='import cv2')
+t('peça que não abre: nomeia qual e não liga', c_ == 1 and 'leitura de vídeo' in msg and 'motivo do Windows' in msg and not any(c[0] == 'schtasks' for c in roda.comandos), msg)
+c_, msg, roda, http, _p = rodar_instalador(falha='/Create')
+t('falha ao criar a tarefa: mostra e avisa o portal', c_ == 1 and 'não criou' in msg and any('falhou' in (p[1] or {}).get('erro', '') for p in http.pedidos), msg)
+inst, roda, http, pasta = montar_instalacao()
+inst.conferir_pecas = mock.Mock(side_effect=ValueError('estranho'))
+t('erro inesperado também vira mensagem', ins.principal(['i', 'I-ABCDEFGH2345.exe'], inst) == 1)
+inst, roda, http, pasta = montar_instalacao()
+roda_sem_log = lambda *c: mock.Mock(returncode=0, stderr='', stdout='')
+inst.rodar = roda_sem_log
+t('agente que não sobe não vira falso "pronto"', ins.principal(['i', 'I-ABCDEFGH2345.exe'], inst) == 1)
+nsi = pathlib.Path('agente_cameras/instalador.nsi').read_text(encoding='utf-8')
+t('instalador pede administrador e confere 64 bits e Windows 10', 'RequestExecutionLevel admin' in nsi and 'RunningX64' in nsi and 'AtLeastWin10' in nsi)
+import construir_instalador as ci
+t('o arquivo de caminhos põe a pasta do agente no alcance do Python', '..' in ci.PTH.split('\n') and 'import site' in ci.PTH)
+t('empacota tudo que o agente importa', set(ci.ARQUIVOS) >= {'agente.py', 'descoberta.py', 'detector.py', 'regras.py', 'instalar.py'})
 
 print('medições: regras')
 from regras import Metricas, Rastreador, cruzou_para_dentro, zonas_do_tipo

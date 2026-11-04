@@ -1,13 +1,11 @@
-import io
 import json
-import zipfile
 from datetime import datetime, timedelta
-from pathlib import Path
 
 from django.conf import settings
 from django.contrib import messages
 from django.db.models import Count, Q
-from django.http import FileResponse, Http404, HttpResponse, JsonResponse
+from django.core.files.storage import default_storage
+from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -287,35 +285,20 @@ def gravador_editar(request, gravador_id):
     })
 
 
-ARQUIVOS_DO_AGENTE = ('agente.py', 'descoberta.py', 'regras.py', 'requirements.txt', 'requirements-ia.txt',
-                      'instalar.bat', 'instalar.ps1', 'instalar.sh', 'LEIAME.md')
-
-
-def _endereco_do_portal(request):
-    endereco = request.build_absolute_uri('/').rstrip('/')
-    # Atrás do proxy o Django pode achar que é http, e o agente recusa endereço sem https.
-    if endereco.startswith('http://') and request.get_host().split(':')[0] not in ('localhost', '127.0.0.1'):
-        endereco = 'https://' + endereco[len('http://'):]
-    return endereco
-
-
 @exige_superadmin
 @require_POST
 def gravador_instalador(request, gravador_id):
-    """O pacote da loja, pronto para clicar: o token sai junto e a senha o agente busca no portal."""
+    """O mesmo .exe para todas as lojas: o que muda é o código no nome do arquivo baixado."""
     gravador = get_object_or_404(Gravador, pk=gravador_id, tem_equipamento=True)
-    pasta = Path(settings.BASE_DIR) / 'agente_cameras'
-    config = {'portal': _endereco_do_portal(request), 'token': gravador.gerar_token(), 'analisar': True, 'modelo': 'yolov8n.pt'}
-    conteudo = io.BytesIO()
-    with zipfile.ZipFile(conteudo, 'w', zipfile.ZIP_DEFLATED) as pacote:
-        for nome in ARQUIVOS_DO_AGENTE:
-            pacote.write(pasta / nome, f'agente-cameras/{nome}')
-        pacote.writestr('agente-cameras/config.json', json.dumps(config, indent=2))
+    arquivo = ConfigCameras.atual().instalador_arquivo
+    if not arquivo:
+        messages.error(request, 'O instalador ainda não foi publicado neste portal.')
+        return redirect('cameras:configuracao')
+    nome = servicos.nome_do_instalador(gravador, gravador.gerar_codigo())
     _registrar(request, 'baixar_instalador', gravador)
-    resposta = HttpResponse(conteudo.getvalue(), content_type='application/zip')
-    resposta['Content-Disposition'] = f'attachment; filename="agente-cameras-{gravador.id}.zip"'
-    resposta['Cache-Control'] = 'no-store'
-    return resposta
+    if settings.STORAGES['default']['BACKEND'].endswith('FileSystemStorage'):
+        return FileResponse(default_storage.open(arquivo, 'rb'), as_attachment=True, filename=nome)
+    return redirect(servicos.link_do_instalador(arquivo, nome))
 
 
 @exige_superadmin

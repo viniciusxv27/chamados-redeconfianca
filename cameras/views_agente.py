@@ -39,6 +39,9 @@ def sinal(request, gravador):
     # O agente respondeu: o que o instalador avisou ficou para trás.
     if gravador.erro_agente.startswith('Instalador:'):
         campos['erro_agente'] = gravador.erro_agente = ''
+    aviso = request.POST.get('aviso', '').strip()[:255]
+    if aviso:
+        campos['erro_agente'] = gravador.erro_agente = aviso
     Gravador.objects.filter(pk=gravador.pk).update(**campos)
     return JsonResponse(servicos.resposta_do_sinal(gravador, list(gravador.canais.all())))
 
@@ -91,4 +94,16 @@ def receber_metricas(request, gravador):
     if not isinstance(eventos, list):
         return JsonResponse({'erro': 'Faltam os eventos.'}, status=400)
     return JsonResponse({'ok': True, 'gravados': servicos.registrar_eventos(gravador, eventos)})
+
+
+@csrf_exempt
+@require_POST
+def ativar(request):
+    """O instalador troca o código do nome do arquivo pelo token da loja. Vale até vencer: dá para reinstalar."""
+    codigo = request.POST.get('codigo', '').strip().upper()
+    gravador = Gravador.objects.filter(codigo_hash=Gravador.resumo(codigo), codigo_validade__gt=timezone.now(),
+                                       tem_equipamento=True).first() if codigo else None
+    if gravador is None:
+        return JsonResponse({'erro': 'Código inválido ou vencido.'}, status=403)
+    return JsonResponse({'token': gravador.gerar_token(), 'loja': gravador.loja})
 

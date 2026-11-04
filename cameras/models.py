@@ -6,7 +6,7 @@ que ficam só no cache, e os alertas. Alerta é suspeita para uma pessoa conferi
 import hashlib
 import secrets
 import uuid
-from datetime import time
+from datetime import time, timedelta
 
 from django.conf import settings
 from django.db import models
@@ -15,12 +15,16 @@ from django.utils import timezone
 from webmail.seguranca import cifrar, decifrar
 
 MINUTOS_ONLINE = 3
+DIAS_DO_CODIGO = 7
 
 
 class ConfigCameras(models.Model):
     """Uma linha só. Nasce desligado: a loja só começa a mandar imagem depois do aviso à rede."""
     ativo = models.BooleanField(default=False, verbose_name='Receber imagens e alertas das lojas')
     alterado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    # O .exe publicado por manage.py publicar_instalador_cameras: é o mesmo para todas as lojas.
+    instalador_arquivo = models.CharField(max_length=200, blank=True, db_default='', editable=False)
+    instalador_em = models.DateTimeField(null=True, blank=True, editable=False)
     alterado_em = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -54,6 +58,9 @@ class Gravador(models.Model):
     matinal_fim = models.TimeField(default=time(9, 0), db_default=time(9, 0), verbose_name='Matinal antes de')
     matinal_minutos = models.PositiveSmallIntegerField(default=5, db_default=5, verbose_name='Matinal dura ao menos (min)')
 
+    # O código no nome do instalador baixado: vira o token da loja quando o instalador roda.
+    codigo_hash = models.CharField(max_length=64, blank=True, db_default='', editable=False, db_index=True)
+    codigo_validade = models.DateTimeField(null=True, blank=True, editable=False)
     token_hash = models.CharField(max_length=64, blank=True, editable=False, db_index=True)
     ultimo_contato = models.DateTimeField(null=True, blank=True, editable=False)
     versao_agente = models.CharField(max_length=30, blank=True, editable=False)
@@ -85,6 +92,14 @@ class Gravador(models.Model):
         self.token_hash = self.resumo(token)
         self.save(update_fields=['token_hash'])
         return token
+
+    def gerar_codigo(self):
+        """Sem letras e números que se confundem. O token só muda quando o instalador roda: baixar não derruba ninguém."""
+        codigo = ''.join(secrets.choice('ABCDEFGHJKMNPQRSTUVWXYZ23456789') for _ in range(12))
+        self.codigo_hash = self.resumo(codigo)
+        self.codigo_validade = timezone.now() + timedelta(days=DIAS_DO_CODIGO)
+        self.save(update_fields=['codigo_hash', 'codigo_validade'])
+        return codigo
 
     @staticmethod
     def resumo(token):
