@@ -224,3 +224,4 @@ static/_d_*.html
 
 # Agente de câmeras: guarda o token da loja
 agente_cameras/config.json
+agente_cameras/dist/

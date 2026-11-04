@@ -20,7 +20,7 @@ import requests
 from descoberta import descobrir
 from regras import ZONA_MOSTRUARIO, ZONA_PORTA, Analisador, Metricas, zonas_do_tipo
 
-VERSAO = '1.2'
+VERSAO = '2.0'
 SEGUNDOS_POR_QUADRO_NA_PORTA = 0.33   # a pessoa cruza a porta em 1 a 3 s: um quadro por segundo perde gente
 EVENTOS_POR_ENVIO = 200
 EVENTOS_NA_FILA = 5000
@@ -89,8 +89,8 @@ class Portal:
         self.sessao = requests.Session()
         self.sessao.headers['Authorization'] = f'Bearer {token}'
 
-    def sinal(self):
-        r = self.sessao.post(self.base + 'sinal/', data={'versao': VERSAO}, timeout=TIMEOUT)
+    def sinal(self, aviso=''):
+        r = self.sessao.post(self.base + 'sinal/', data={'versao': VERSAO, 'aviso': aviso}, timeout=TIMEOUT)
         r.raise_for_status()
         return r.json()
 
@@ -123,34 +123,14 @@ def loja_aberta(abre, fecha, agora=None):
     return abre <= atual < fecha
 
 
-class Detector:
-    """YOLO com só duas classes: pessoa e celular."""
-    CLASSES = {0: 'person', 67: 'cell phone'}
-
-    def __init__(self, modelo='yolov8n.pt'):
-        from ultralytics import YOLO
-        self.modelo = YOLO(modelo)
-        self.trava = threading.Lock()   # as câmeras dividem o mesmo modelo
-
-    @classmethod
-    def se_instalado(cls, modelo):
-        """Sem a parte de IA instalada, o agente segue mandando imagem."""
-        try:
-            return cls(modelo)
-        except ImportError:
-            log.warning('Análise desligada: pacote de IA não instalado')
-            return None
-
-    def __call__(self, quadro):
-        altura, largura = quadro.shape[:2]
-        saida = []
-        with self.trava:
-            caixas = self.modelo.predict(quadro, classes=list(self.CLASSES), verbose=False)[0].boxes
-        for caixa in caixas:
-            x1, y1, x2, y2 = caixa.xyxy[0].tolist()
-            saida.append({'classe': self.CLASSES[int(caixa.cls[0])], 'conf': float(caixa.conf[0]),
-                          'caixa': (x1 / largura, y1 / altura, (x2 - x1) / largura, (y2 - y1) / altura)})
-        return saida
+def carregar_detector(modelo):
+    """Sem a análise, o agente segue mandando imagem. Devolve (detector, aviso para o portal)."""
+    try:
+        from detector import Detector
+        return Detector(modelo), ''
+    except Exception as erro:  # noqa: BLE001 — o ONNX falha de vários jeitos num computador sem as DLLs
+        log.warning('Análise desligada: %s', erro)
+        return None, f'Análise desligada neste computador: {type(erro).__name__}'
 
 
 def _jpg(quadro):
@@ -242,14 +222,16 @@ def precisa_descobrir(gravador, cameras, ultima, agora):
 
 def rodar(config):
     portal = Portal(config['portal'], config['token'])
-    detector = Detector.se_instalado(config.get('modelo', 'yolov8n.pt')) if config.get('analisar', True) else None
+    pasta = config.get('_pasta', '.')
+    detector, aviso = carregar_detector(os.path.join(pasta, config.get('modelo', 'yolox_tiny.onnx'))) if config.get('analisar', True) else (None, '')
     estado, cameras = {}, {}
     ultima_descoberta = None
-    fila = FilaDeEventos(os.path.join(config.get('_pasta', '.'), 'fila_medicoes.json'))
+    fila = FilaDeEventos(os.path.join(pasta, 'fila_medicoes.json'))
     while True:
         espera = 30
         try:
-            resposta = portal.sinal()
+            resposta = portal.sinal(aviso)
+            aviso = ''
             espera = resposta.get('proximo_sinal', 30)
             if not resposta.get('ativo'):
                 for camera in cameras.values():
@@ -297,7 +279,6 @@ if __name__ == '__main__':
     caminho_config = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else 'config.json')
     # Rodando como tarefa do Windows não há tela: o arquivo é o único jeito de saber o que houve.
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s', handlers=[
-        logging.StreamHandler(),
         RotatingFileHandler(os.path.join(os.path.dirname(caminho_config), 'agente.log'), maxBytes=1_000_000, backupCount=2)])
     with open(caminho_config, encoding='utf-8') as arquivo:
         rodar({**json.load(arquivo), '_pasta': os.path.dirname(caminho_config)})
