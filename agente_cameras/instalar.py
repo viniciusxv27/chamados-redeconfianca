@@ -119,7 +119,8 @@ class Instalacao:
 
     def conferir_pecas(self):
         python = self.caminho(os.path.join('runtime', 'python.exe'))
-        for modulo, nome in (('cv2', 'leitura de vídeo'), ('onnxruntime', 'análise de imagem'), ('numpy', 'cálculo')):
+        for modulo, nome in (('cv2', 'leitura de vídeo'), ('onnxruntime', 'análise de imagem'), ('numpy', 'cálculo'),
+                             ('av', 'vídeo ao vivo'), ('aiortc', 'transmissão ao vivo')):
             r = self.rodar(python, '-c', f'import {modulo}')
             if r.returncode != 0:
                 raise Falhou(f'A peça "{nome}" não abriu neste computador: {(r.stderr or "").strip()[-200:]}')
@@ -127,6 +128,13 @@ class Instalacao:
     def proteger_token(self):
         # Por SID: o nome do grupo de administradores muda com o idioma do Windows.
         self.rodar('icacls', self.caminho('config.json'), '/inheritance:r', '/grant:r', '*S-1-5-18:F', '*S-1-5-32-544:F')
+
+    def liberar_firewall(self):
+        # Sem isto o Firewall do Windows corta o vídeo direto para quem está na mesma rede. Falhar não impede o resto.
+        python = self.caminho(os.path.join('runtime', 'python.exe'))
+        self.rodar('netsh', 'advfirewall', 'firewall', 'delete', 'rule', f'name={TAREFA}')
+        self.rodar('netsh', 'advfirewall', 'firewall', 'add', 'rule', f'name={TAREFA}', 'dir=in', 'action=allow',
+                   f'program={python}', 'protocol=udp', 'enable=yes')
 
     def criar_tarefa(self):
         caminho = self.caminho('tarefa.xml')
@@ -154,6 +162,7 @@ class Instalacao:
         self.passo('conferindo as peças')
         self.conferir_pecas()
         self.proteger_token()
+        self.liberar_firewall()
         self.passo('ligando o agente')
         self.criar_tarefa()
         self.confirmar_agente()

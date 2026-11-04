@@ -1,4 +1,5 @@
 {% extends 'cameras/_base.html' %}
+{% load static %}
 {% block ca_titulo %}{{ gravador.loja }}{% endblock %}
 {% block ca_conteudo %}
 <header class="ca-topo">
@@ -10,7 +11,7 @@
     <div class="ca-mosaico largo">
         {% for c in canais %}
         <button type="button" class="ca-tela" data-abrir="{{ c.id }}" data-titulo="{{ c.titulo }}" data-ia="{{ c.ia_ativa|yesno:'1,0' }}">
-            <span class="ca-imagem"><img data-canal="{{ c.id }}" alt="{{ c.titulo }}" hidden><span class="ca-sem-imagem"><i class="fas fa-video-slash"></i><small>Aguardando imagem</small></span></span>
+            <span class="ca-imagem"><img data-canal="{{ c.id }}" alt="{{ c.titulo }}" hidden><span class="ca-sem-imagem"><i class="fas fa-video-slash"></i><small>Aguardando imagem</small></span><video class="ca-video" data-ao-vivo="{{ c.id }}" muted playsinline hidden></video><em class="ca-selo-vivo" hidden>AO VIVO</em></span>
             <span class="ca-legenda"><strong data-nome>{{ c.titulo }}</strong><small>{% if c.zonas %}{{ c.zonas|length }} área(s){% else %}sem área marcada{% endif %}</small></span>
         </button>
         {% empty %}<div class="ca-vazio ca-card"><i class="fas fa-video-slash"></i><p>Nenhuma câmera nesta loja.</p></div>{% endfor %}
@@ -26,7 +27,7 @@
 
 <dialog id="caJanela" class="ca-janela">
     <header><input id="caNome" aria-label="Nome da câmera" maxlength="80"><button type="button" id="caFechar" aria-label="Fechar"><i class="fas fa-times"></i></button></header>
-    <div class="ca-palco" id="caPalco"><img id="caFoto" alt="Imagem da câmera" hidden><div id="caSemFoto" class="ca-sem-imagem"><i class="fas fa-circle-notch fa-spin"></i><small>Pedindo a imagem à loja…</small></div><div id="caZonas"></div></div>
+    <div class="ca-palco" id="caPalco"><video id="caVideo" class="ca-video-grande" muted playsinline hidden></video><span id="caEstadoVivo" class="ca-estado-vivo" hidden></span><button type="button" id="caTelaCheia" class="ca-tela-cheia" aria-label="Tela cheia" title="Tela cheia"><i class="fas fa-expand"></i></button><img id="caFoto" alt="Imagem da câmera" hidden><div id="caSemFoto" class="ca-sem-imagem"><i class="fas fa-circle-notch fa-spin"></i><small>Pedindo a imagem à loja…</small></div><div id="caZonas"></div></div>
     <footer>
         <label class="ca-chave">Marcar <select id="caTipoZona" aria-label="O que marcar">
             <option value="MOSTRUARIO">Mostruário</option><option value="PORTA">Porta (conta entradas)</option><option value="MESA">Cadeira do cliente (tempo na mesa)</option><option value="TELA">Frente da tela (matinal)</option>
@@ -37,6 +38,7 @@
     </footer>
 </dialog>
 {{ zonas_json|json_script:"caZonasDados" }}
+<script src="{% static 'cameras/ao-vivo.js' %}?v=1"></script>
 <script>
 (function () {
     var loja = {{ gravador.id }}, imagens = Array.from(document.querySelectorAll('.ca-mosaico img[data-canal]')), desde = 0;
@@ -58,6 +60,61 @@
     }
     var ciclo = setInterval(buscar, 10000); buscar();
     function ritmo(ms) { clearInterval(ciclo); ciclo = setInterval(buscar, ms); }
+    // Vídeo ao vivo. A câmera aberta vem na qualidade principal e as outras param, para sobrar upload da loja para ela.
+    var temVivo = window.CamerasAoVivo && CamerasAoVivo.disponivel() && {{ gravador.tem_ao_vivo|yesno:"true,false" }};
+    var vivo = temVivo ? new CamerasAoVivo({abrir: "{% url 'cameras:ao_vivo_abrir' %}", respostas: "{% url 'cameras:ao_vivo_respostas' %}", estado: "{% url 'cameras:ao_vivo_estado' %}", csrf: '{{ csrf_token }}'}) : null;
+    var pequenos = Array.from(document.querySelectorAll('video[data-ao-vivo]')), visiveis = new Set();
+    var videoGrande = document.getElementById('caVideo'), estadoVivo = document.getElementById('caEstadoVivo');
+    function ligarPequeno(video) {
+        var selo = video.parentElement.querySelector('.ca-selo-vivo');
+        vivo.ligar(video.dataset.aoVivo * 1, video, 'BAIXA', function (e) { selo.hidden = e !== 'vivo'; });
+    }
+    var observador = temVivo ? new IntersectionObserver(function (itens) {
+        itens.forEach(function (item) {
+            var video = item.target.querySelector('video[data-ao-vivo]');
+            if (item.isIntersecting) {
+                visiveis.add(video);
+                if (!foco && !document.hidden) ligarPequeno(video);
+            } else {
+                visiveis.delete(video);
+                vivo.desligar(video.dataset.aoVivo * 1);
+                item.target.querySelector('.ca-selo-vivo').hidden = true;
+            }
+        });
+    }, {rootMargin: '100px'}) : null;
+    if (temVivo) {
+        // Observa o quadro: o vídeo começa escondido e, sem tamanho, nunca "entra na tela".
+        pequenos.forEach(function (v) { observador.observe(v.parentElement); });
+        document.addEventListener('visibilitychange', function () {
+            if (document.hidden) { vivo.desligarTudo(); }
+            else if (foco) { ligarGrande(); }
+            else { visiveis.forEach(ligarPequeno); }
+        });
+    }
+    function ligarGrande() {
+        estadoVivo.hidden = false;
+        estadoVivo.className = 'ca-estado-vivo';
+        estadoVivo.textContent = 'Conectando ao vivo em alta qualidade…';
+        vivo.ligar(foco, videoGrande, 'ALTA', function (e, info) {
+            if (e === 'vivo') {
+                estadoVivo.className = 'ca-estado-vivo no-ar';
+                estadoVivo.textContent = 'AO VIVO · ' + info.largura + '×' + info.altura + (info.codec === 'h264' ? '' : ' · convertido');
+                palco.style.aspectRatio = info.largura + ' / ' + info.altura;
+                ritmo(15000);
+            } else if (e === 'falhou') {
+                estadoVivo.className = 'ca-estado-vivo erro';
+                estadoVivo.textContent = 'Sem vídeo ao vivo: ' + info.motivo + ' Mostrando imagens.';
+                ritmo(3000);
+            }
+        });
+    }
+    document.getElementById('caTelaCheia').addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        var alvo = videoGrande.hidden ? palco : videoGrande;
+        if (document.fullscreenElement) document.exitFullscreen();
+        else if (alvo.requestFullscreen) alvo.requestFullscreen();
+        else if (videoGrande.webkitEnterFullscreen) videoGrande.webkitEnterFullscreen();
+    });
     var SETAS = {direita: '→', esquerda: '←', cima: '↑', baixo: '↓'}, ROTULOS = {MOSTRUARIO: 'Mostruário', PORTA: 'Porta', MESA: 'Mesa', TELA: 'Tela'};
     var DICAS = {MOSTRUARIO: 'Arraste sobre os aparelhos expostos.', PORTA: 'Arraste cobrindo a porta, começando do lado de fora e terminando dentro da loja: a seta é o sentido de entrada.', MESA: 'Marque só a cadeira do cliente, não a do vendedor.', TELA: 'Marque o chão em frente à tela, onde a equipe fica reunida.'};
     var tipoZona = document.getElementById('caTipoZona'), dicaZona = document.getElementById('caDicaZona');
@@ -84,15 +141,25 @@
             var pequena = b.querySelector('img');
             fotoGrande.hidden = pequena.hidden; fotoGrande.src = pequena.src || '';
             document.getElementById('caSemFoto').hidden = !pequena.hidden;
+            palco.style.aspectRatio = '';
             desenhar(); janela.showModal(); ritmo(3000); buscar();
+            if (temVivo) { vivo.desligarTudo(); ligarGrande(); }
         });
     });
-    janela.addEventListener('close', function () { foco = 0; ritmo(10000); });
+    janela.addEventListener('close', function () {
+        foco = 0; ritmo(10000);
+        if (temVivo) {
+            vivo.desligarTudo();
+            pequenos.forEach(function (v) { v.parentElement.querySelector('.ca-selo-vivo').hidden = true; });
+            estadoVivo.hidden = true;
+            visiveis.forEach(ligarPequeno);
+        }
+    });
     document.getElementById('caFechar').addEventListener('click', function () { janela.close(); });
     var inicio = null, rascunho = null;
     function ponto(ev) { var r = palco.getBoundingClientRect(); return {x: Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width)), y: Math.max(0, Math.min(1, (ev.clientY - r.top) / r.height))}; }
     palco.addEventListener('pointerdown', function (ev) {
-        if (ev.target.classList.contains('ca-zona')) return;
+        if (ev.target.classList.contains('ca-zona') || ev.target.closest('.ca-tela-cheia')) return;
         inicio = ponto(ev); rascunho = document.createElement('div'); rascunho.className = 'ca-zona rascunho'; caixa.appendChild(rascunho); palco.setPointerCapture(ev.pointerId); ev.preventDefault();
     });
     function caixaDe(p) { return {x: Math.min(inicio.x, p.x), y: Math.min(inicio.y, p.y), w: Math.abs(p.x - inicio.x), h: Math.abs(p.y - inicio.y)}; }

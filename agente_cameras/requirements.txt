@@ -2,3 +2,5 @@ requests>=2.31
 opencv-python-headless>=4.9,<5
 onnxruntime>=1.18
 numpy>=1.26
+aiortc>=1.9
+av>=12

@@ -2,6 +2,7 @@
 import json
 from functools import wraps
 
+from django.core.cache import cache
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
@@ -106,4 +107,51 @@ def ativar(request):
     if gravador is None:
         return JsonResponse({'erro': 'Código inválido ou vencido.'}, status=403)
     return JsonResponse({'token': gravador.gerar_token(), 'loja': gravador.loja})
+
+
+TOKEN_NO_CACHE = 300
+
+
+def _gravador_do_token_em_cache(request):
+    """Esta rota é perguntada a cada poucos segundos por todas as lojas: não vai ao banco à toa."""
+    cabecalho = request.headers.get('Authorization', '')
+    token = cabecalho[7:].strip() if cabecalho.startswith('Bearer ') else ''
+    if not token:
+        return None
+    resumo = Gravador.resumo(token)
+    chave = f'cameras:token:{resumo}'
+    gravador_id = cache.get(chave)
+    if gravador_id is None:
+        gravador_id = Gravador.objects.filter(token_hash=resumo, tem_equipamento=True).values_list('id', flat=True).first()
+        if gravador_id:
+            cache.set(chave, gravador_id, TOKEN_NO_CACHE)
+    return gravador_id
+
+
+@csrf_exempt
+@require_POST
+def ao_vivo_pedidos(request):
+    gravador_id = _gravador_do_token_em_cache(request)
+    if not gravador_id:
+        return JsonResponse({'erro': 'Token inválido.'}, status=401)
+    try:
+        corpo = json.loads(request.body or b'{}')
+    except ValueError:
+        return JsonResponse({'erro': 'JSON inválido.'}, status=400)
+    return JsonResponse(servicos.pedidos_para_o_agente(gravador_id, corpo.get('ativas') if isinstance(corpo, dict) else None))
+
+
+@csrf_exempt
+@require_POST
+def ao_vivo_resposta(request):
+    gravador_id = _gravador_do_token_em_cache(request)
+    if not gravador_id:
+        return JsonResponse({'erro': 'Token inválido.'}, status=401)
+    try:
+        corpo = json.loads(request.body or b'{}')
+    except ValueError:
+        return JsonResponse({'erro': 'JSON inválido.'}, status=400)
+    if not isinstance(corpo, dict) or not servicos.resposta_do_agente(gravador_id, corpo):
+        return JsonResponse({'erro': 'Sessão inválida.'}, status=400)
+    return JsonResponse({'ok': True})
 

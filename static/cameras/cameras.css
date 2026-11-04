@@ -163,3 +163,15 @@ html.dark .ca {
 .ca-zona.tipo-PORTA { border-color: #22c55e; background: rgba(34,197,94,.18); }
 .ca-zona.tipo-MESA { border-color: #38bdf8; background: rgba(56,189,248,.18); }
 .ca-zona.tipo-TELA { border-color: #a78bfa; background: rgba(167,139,250,.2); }
+.ca-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #0d1117; z-index: 1; }
+.ca-selo-vivo { position: absolute; top: 8px; left: 8px; z-index: 2; background: #dc2626; color: #fff; font-style: normal; font-size: 10px; font-weight: 800; letter-spacing: .04em; border-radius: 5px; padding: 1px 6px; }
+.ca-selo-alerta { z-index: 2; }
+.ca-video-grande { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; background: #0d1117; pointer-events: none; }
+#caZonas { position: absolute; inset: 0; pointer-events: none; }
+#caZonas .ca-zona { pointer-events: auto; z-index: 2; }
+.ca-estado-vivo { position: absolute; top: 10px; left: 10px; z-index: 3; background: rgba(0,0,0,.72); color: #fff; font-size: 12px; font-weight: 600; border-radius: 7px; padding: 3px 9px; pointer-events: none; max-width: calc(100% - 70px); }
+.ca-estado-vivo.no-ar { background: #dc2626; font-weight: 800; }
+.ca-estado-vivo.erro { background: rgba(180,83,9,.92); }
+.ca-tela-cheia { position: absolute; top: 8px; right: 8px; z-index: 3; width: 34px; height: 34px; border-radius: 8px; background: rgba(0,0,0,.6); color: #fff; }
+.ca-janela { width: min(1280px, calc(100vw - 24px)); }
+.ca-palco { max-height: calc(100vh - 170px); margin: 0 auto; }

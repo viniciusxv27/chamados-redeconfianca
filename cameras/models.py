@@ -16,6 +16,7 @@ from webmail.seguranca import cifrar, decifrar
 
 MINUTOS_ONLINE = 3
 DIAS_DO_CODIGO = 7
+VERSAO_COM_AO_VIVO = (2, 1)
 
 
 class ConfigCameras(models.Model):
@@ -108,6 +109,13 @@ class Gravador(models.Model):
     @property
     def online(self):
         return bool(self.ultimo_contato and (timezone.now() - self.ultimo_contato).total_seconds() < MINUTOS_ONLINE * 60)
+
+    @property
+    def tem_ao_vivo(self):
+        try:
+            return tuple(int(p) for p in self.versao_agente.split('.')[:2]) >= VERSAO_COM_AO_VIVO
+        except ValueError:
+            return False
 
     @property
     def serial_diferente(self):
@@ -208,6 +216,33 @@ class EventoLoja(models.Model):
         ordering = ['-fim']
         constraints = [models.UniqueConstraint(fields=['gravador', 'chave'], name='cameras_evento_uma_vez')]
         indexes = [models.Index(fields=['data', 'tipo', 'gravador'], name='cameras_evento_dia_idx')]
+
+
+class SessaoAoVivo(models.Model):
+    """Um pedido de vídeo ao vivo. O portal só apresenta os dois lados: o vídeo vai direto da loja ao navegador."""
+    BAIXA, ALTA = 'BAIXA', 'ALTA'
+    PEDIDA, ENTREGUE, RESPONDIDA, CONECTADA, FALHOU, FECHADA = 'PEDIDA', 'ENTREGUE', 'RESPONDIDA', 'CONECTADA', 'FALHOU', 'FECHADA'
+    ESTADOS = [(PEDIDA, 'Pedida'), (ENTREGUE, 'Entregue ao agente'), (RESPONDIDA, 'Respondida'), (CONECTADA, 'Conectada'),
+               (FALHOU, 'Falhou'), (FECHADA, 'Fechada')]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    gravador = models.ForeignKey(Gravador, on_delete=models.CASCADE, related_name='sessoes_ao_vivo')
+    canal = models.ForeignKey(Canal, on_delete=models.CASCADE, related_name='sessoes_ao_vivo')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='+')
+    qualidade = models.CharField(max_length=5, default=BAIXA)
+    oferta = models.TextField(blank=True)
+    resposta = models.TextField(blank=True)
+    erro = models.CharField(max_length=200, blank=True)
+    codec = models.CharField(max_length=20, blank=True)
+    estado = models.CharField(max_length=10, choices=ESTADOS, default=PEDIDA, db_index=True)
+    criada_em = models.DateTimeField(auto_now_add=True, db_index=True)
+    atualizada_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Sessão de vídeo ao vivo'
+        verbose_name_plural = 'Sessões de vídeo ao vivo'
+        ordering = ['-criada_em']
+        indexes = [models.Index(fields=['gravador', 'estado'], name='cameras_sessao_grav_idx')]
 
 
 class AcessoCamera(models.Model):

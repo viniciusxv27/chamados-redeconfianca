@@ -34,6 +34,7 @@
                 <td class="ca-mono">{{ g.serial|default:"—" }}</td>
                 <td>{% if g.senha_cifrada %}<i class="fas fa-lock ca-verde" title="Guardada cifrada"></i>{% else %}—{% endif %}</td>
                 <td class="ca-celula-agente"><span class="ca-ponto {{ g.situacao }}"></span>{% if g.situacao == 'online' %}Online{% elif g.ultimo_contato %}Sem contato desde {{ g.ultimo_contato|date:"d/m H:i" }}{% elif g.situacao == 'sem_agente' or g.token_hash %}Não instalado{% else %}Sem gravador{% endif %}
+                    {% if g.versao_agente and not g.tem_ao_vivo %}<small class="ca-ambar" data-sem-ao-vivo>Reinstale para ter vídeo ao vivo</small>{% endif %}
                     {% if g.erro_agente %}<small class="ca-erro" data-erro-agente>{{ g.erro_agente }}</small>{% elif g.ip_local and g.descoberta_em %}<small>Gravador achado em {{ g.ip_local }} · {{ g.canais_ativos_qtd }} câm.</small>{% endif %}
                     {% if g.serial_diferente %}<small class="ca-ambar" data-serial-diferente>Serial na loja: {{ g.serial_detectado }}</small>{% endif %}</td>
                 <td class="ca-acoes-linha"><a class="ca-botao claro pequeno" href="{% url 'cameras:gravador_editar' g.id %}">Editar</a>

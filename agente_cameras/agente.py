@@ -20,7 +20,7 @@ import requests
 from descoberta import descobrir
 from regras import ZONA_MOSTRUARIO, ZONA_PORTA, Analisador, Metricas, zonas_do_tipo
 
-VERSAO = '2.0'
+VERSAO = '2.1'
 SEGUNDOS_POR_QUADRO_NA_PORTA = 0.33   # a pessoa cruza a porta em 1 a 3 s: um quadro por segundo perde gente
 EVENTOS_POR_ENVIO = 200
 EVENTOS_NA_FILA = 5000
@@ -29,6 +29,7 @@ SEGUNDOS_SEM_QUADRO = 300
 SEGUNDOS_ENTRE_QUADROS = 1.0
 TIMEOUT = 15
 LARGURA_FOTO = 640
+LARGURA_FOTO_FOCO = 1280
 log = logging.getLogger('agente')
 
 
@@ -133,12 +134,12 @@ def carregar_detector(modelo):
         return None, f'Análise desligada neste computador: {type(erro).__name__}'
 
 
-def _jpg(quadro):
+def _jpg(quadro, maximo=LARGURA_FOTO, qualidade=70):
     import cv2
     altura, largura = quadro.shape[:2]
-    if largura > LARGURA_FOTO:
-        quadro = cv2.resize(quadro, (LARGURA_FOTO, int(altura * LARGURA_FOTO / largura)))
-    ok, dados = cv2.imencode('.jpg', quadro, [cv2.IMWRITE_JPEG_QUALITY, 70])
+    if largura > maximo:
+        quadro = cv2.resize(quadro, (maximo, int(altura * maximo / largura)))
+    ok, dados = cv2.imencode('.jpg', quadro, [cv2.IMWRITE_JPEG_QUALITY, qualidade])
     return dados.tobytes() if ok else None
 
 
@@ -211,6 +212,22 @@ def _medir(camera, deteccoes, zonas, agora, aberta):
         camera.fila.adicionar(lista)
 
 
+def iniciar_ao_vivo(config, estado):
+    """Sem as peças do vídeo ao vivo, o agente segue mandando imagens. Devolve o aviso para o portal."""
+    def endereco(numero, qualidade):
+        gravador = estado.get('gravador') or {}
+        if not gravador.get('ip'):
+            return ''
+        return endereco_rtsp({**gravador, 'caminho': caminho_da_qualidade(gravador['caminho'], qualidade)}, numero)
+    try:
+        from ao_vivo import AoVivo, caminho_da_qualidade
+        AoVivo(config['portal'], config['token'], endereco).start()
+        return ''
+    except Exception as erro:  # noqa: BLE001 — falta de DLL no Windows aparece aqui
+        log.warning('Vídeo ao vivo desligado: %s', erro)
+        return f'Vídeo ao vivo desligado neste computador: {type(erro).__name__}'
+
+
 def precisa_descobrir(gravador, cameras, ultima, agora):
     """Sem IP, ou com todas as câmeras sem imagem (o IP pode ter mudado), procura de novo, sem insistir."""
     if ultima is not None and agora - ultima < SEGUNDOS_ENTRE_DESCOBERTAS:
@@ -226,6 +243,7 @@ def rodar(config):
     detector, aviso = carregar_detector(os.path.join(pasta, config.get('modelo', 'yolox_tiny.onnx'))) if config.get('analisar', True) else (None, '')
     estado, cameras = {}, {}
     ultima_descoberta = None
+    aviso = iniciar_ao_vivo(config, estado) or aviso
     fila = FilaDeEventos(os.path.join(pasta, 'fila_medicoes.json'))
     while True:
         espera = 30
@@ -238,7 +256,7 @@ def rodar(config):
                     camera.parar.set()
                 cameras.clear()
             else:
-                gravador = resposta['gravador']
+                gravador = estado['gravador'] = resposta['gravador']
                 if precisa_descobrir(gravador, cameras, ultima_descoberta, time.monotonic()):
                     ultima_descoberta = time.monotonic()
                     log.info('Procurando o gravador na rede')
@@ -260,12 +278,13 @@ def rodar(config):
                             cameras[numero].start()
                     for numero in set(cameras) - set(estado['canais']):
                         cameras.pop(numero).parar.set()
-                    pedidas = [resposta['foco']] if resposta.get('foco') else resposta.get('fotos', [])
+                    foco = resposta.get('foco')
+                    pedidas = [foco] if foco else resposta.get('fotos', [])
                     fotos = {}
                     for canal_numero in pedidas:
                         camera = cameras.get(canal_numero)
                         if camera is not None and camera.ultimo is not None:
-                            fotos[canal_numero] = _jpg(camera.ultimo)
+                            fotos[canal_numero] = _jpg(camera.ultimo, LARGURA_FOTO_FOCO, 80) if foco else _jpg(camera.ultimo)
                     if fotos:
                         portal.fotos(fotos)
                     fila.enviar(portal)

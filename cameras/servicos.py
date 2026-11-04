@@ -8,12 +8,13 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.core.cache import cache
+from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
-from .models import AlertaCamera, Canal, EventoLoja, Gravador
+from .models import AlertaCamera, Canal, EventoLoja, Gravador, SessaoAoVivo
 
 FOTO_VALIDADE = 300        # segundos no cache: é imagem ao vivo, não arquivo
 FOTO_TAMANHO_MAX = 400 * 1024
@@ -200,4 +201,100 @@ def link_do_instalador(arquivo, nome):
     return cliente.generate_presigned_url('get_object', ExpiresIn=3600, Params={
         'Bucket': settings.AWS_STORAGE_BUCKET_NAME, 'Key': chave,
         'ResponseContentDisposition': f'attachment; filename="{nome}"', 'ResponseContentType': 'application/octet-stream'})
+
+
+# ── Vídeo ao vivo ──────────────────────────────────────────────────────────────
+AO_VIVO_ESPERA_PARADO = 4      # segundos entre as perguntas do agente, sem ninguém pedindo vídeo
+AO_VIVO_ESPERA_ATIVO = 1
+AO_VIVO_MARCA_VALIDADE = 30
+AO_VIVO_SDP_MAXIMO = 20000
+AO_VIVO_SESSAO_ANTIGA_HORAS = 24
+AO_VIVO_PEDIDOS_POR_VEZ = 32
+
+
+def _chave_ao_vivo(gravador_id):
+    return f'cameras:aovivo:tem:{gravador_id}'
+
+
+def marcar_ao_vivo(gravador_id):
+    cache.set(_chave_ao_vivo(gravador_id), 1, AO_VIVO_MARCA_VALIDADE)
+
+
+def abrir_sessoes(user, pedidos):
+    """[{canal, qualidade, sdp}] → [{id} ou {erro}], na mesma ordem. Só o pedido: quem atende é o agente da loja."""
+    limite = timezone.now() - timedelta(hours=AO_VIVO_SESSAO_ANTIGA_HORAS)
+    SessaoAoVivo.objects.filter(criada_em__lt=limite).delete()
+    pedidos = (pedidos or [])[:AO_VIVO_PEDIDOS_POR_VEZ]
+    ids = [p.get('canal') for p in pedidos if isinstance(p, dict)]
+    canais = {c.id: c for c in Canal.objects.filter(id__in=[i for i in ids if isinstance(i, int)], ativo=True).select_related('gravador')}
+    saida, lojas = [], set()
+    for pedido in pedidos:
+        canal = canais.get(pedido.get('canal')) if isinstance(pedido, dict) else None
+        sdp = str(pedido.get('sdp') or '') if isinstance(pedido, dict) else ''
+        if canal is None or not sdp or len(sdp) > AO_VIVO_SDP_MAXIMO:
+            saida.append({'erro': 'Pedido inválido.'})
+            continue
+        if not canal.gravador.online:
+            saida.append({'erro': 'Agente da loja sem contato.'})
+            continue
+        if not canal.gravador.tem_ao_vivo:
+            saida.append({'erro': 'Reinstale o agente desta loja para ter vídeo ao vivo.', 'atualizar': True})
+            continue
+        qualidade = SessaoAoVivo.ALTA if pedido.get('qualidade') == SessaoAoVivo.ALTA else SessaoAoVivo.BAIXA
+        sessao = SessaoAoVivo.objects.create(gravador=canal.gravador, canal=canal, user=user, qualidade=qualidade, oferta=sdp)
+        marcar_ao_vivo(canal.gravador_id)
+        lojas.add(canal.gravador_id)
+        saida.append({'id': str(sessao.id)})
+    return saida, lojas
+
+
+def respostas_das_sessoes(user, ids):
+    sessoes = SessaoAoVivo.objects.filter(id__in=ids, user=user).only('id', 'resposta', 'erro', 'codec', 'estado')
+    return {str(s.id): {'sdp': s.resposta, 'erro': s.erro, 'codec': s.codec} for s in sessoes if s.resposta or s.erro}
+
+
+def atualizar_estado_sessoes(user, ids, estado):
+    if estado not in (SessaoAoVivo.CONECTADA, SessaoAoVivo.FALHOU, SessaoAoVivo.FECHADA):
+        return 0
+    feitas = SessaoAoVivo.objects.filter(id__in=ids, user=user).update(estado=estado, atualizada_em=timezone.now())
+    if estado == SessaoAoVivo.FECHADA:
+        # O agente precisa saber logo: cada vídeo aberto ocupa upload da loja e uma conexão do gravador.
+        for gravador_id in SessaoAoVivo.objects.filter(id__in=ids, user=user).values_list('gravador_id', flat=True).distinct():
+            marcar_ao_vivo(gravador_id)
+    return feitas
+
+
+def pedidos_para_o_agente(gravador_id, ativas):
+    """O que o agente deve abrir e fechar. Parado, responde só com o cache, sem ir ao banco."""
+    ativas = [a for a in (ativas or []) if isinstance(a, str)][:64]
+    if not ativas and not cache.get(_chave_ao_vivo(gravador_id)):
+        return {'ofertas': [], 'fechar': [], 'proximo': AO_VIVO_ESPERA_PARADO}
+    ofertas = list(SessaoAoVivo.objects.filter(gravador_id=gravador_id, estado=SessaoAoVivo.PEDIDA,
+                                               criada_em__gte=timezone.now() - timedelta(seconds=60)).select_related('canal'))
+    SessaoAoVivo.objects.filter(id__in=[o.id for o in ofertas]).update(estado=SessaoAoVivo.ENTREGUE, atualizada_em=timezone.now())
+    fechar = []
+    if ativas:
+        try:
+            abertas = {str(i) for i in SessaoAoVivo.objects.filter(id__in=ativas).exclude(
+                estado__in=[SessaoAoVivo.FECHADA, SessaoAoVivo.FALHOU]).values_list('id', flat=True)}
+        except (ValueError, ValidationError):
+            abertas = set()
+        fechar = [a for a in ativas if a not in abertas]
+    return {'ofertas': [{'id': str(o.id), 'canal': o.canal.numero, 'qualidade': o.qualidade, 'sdp': o.oferta} for o in ofertas],
+            'fechar': fechar, 'proximo': AO_VIVO_ESPERA_ATIVO}
+
+
+def resposta_do_agente(gravador_id, dados):
+    campos = {'atualizada_em': timezone.now()}
+    if dados.get('erro'):
+        campos.update(erro=str(dados['erro'])[:200], estado=SessaoAoVivo.FALHOU)
+    else:
+        sdp = str(dados.get('sdp') or '')
+        if not sdp or len(sdp) > AO_VIVO_SDP_MAXIMO:
+            return 0
+        campos.update(resposta=sdp, codec=str(dados.get('codec') or '')[:20], estado=SessaoAoVivo.RESPONDIDA)
+    try:
+        return SessaoAoVivo.objects.filter(id=dados.get('id'), gravador_id=gravador_id).update(**campos)
+    except (ValueError, ValidationError):
+        return 0
 

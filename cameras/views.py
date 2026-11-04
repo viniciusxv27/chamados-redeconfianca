@@ -1,4 +1,5 @@
 import json
+import uuid
 from datetime import datetime, timedelta
 
 from django.conf import settings
@@ -133,6 +134,46 @@ def canal_salvar(request, canal_id):
         canal.ia_ativa = bool(corpo['ia_ativa'])
     canal.save()
     return JsonResponse({'ok': True, 'zonas': canal.zonas, 'titulo': canal.titulo})
+
+
+@exige_superadmin
+@require_POST
+def ao_vivo_abrir(request):
+    try:
+        pedidos = json.loads(request.body or b'{}').get('sessoes')
+    except (ValueError, AttributeError):
+        return JsonResponse({'erro': 'Dados inválidos.'}, status=400)
+    if not isinstance(pedidos, list):
+        return JsonResponse({'erro': 'Dados inválidos.'}, status=400)
+    if not ConfigCameras.atual().ativo:
+        return JsonResponse({'erro': 'Módulo desligado.'}, status=403)
+    saida, lojas = servicos.abrir_sessoes(request.user, pedidos)
+    for gravador in Gravador.objects.filter(id__in=lojas):
+        _registrar(request, 'ver_ao_vivo', gravador)
+    return JsonResponse({'sessoes': saida})
+
+
+def _ids_validos(valores):
+    validos = []
+    for valor in valores[:64]:
+        try:
+            validos.append(uuid.UUID(str(valor)))
+        except ValueError:
+            pass
+    return validos
+
+
+@exige_superadmin
+def ao_vivo_respostas(request):
+    return JsonResponse({'respostas': servicos.respostas_das_sessoes(request.user, _ids_validos(request.GET.get('ids', '').split(',')))})
+
+
+@exige_superadmin
+@require_POST
+def ao_vivo_estado(request):
+    # Por formulário, para funcionar também ao fechar a aba (navigator.sendBeacon).
+    feitas = servicos.atualizar_estado_sessoes(request.user, _ids_validos(request.POST.get('ids', '').split(',')), request.POST.get('estado', ''))
+    return JsonResponse({'ok': True, 'feitas': feitas})
 
 
 def _data_do_get(request, campo, padrao):

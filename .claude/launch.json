@@ -12,6 +12,15 @@
       ],
       "port": 8009,
       "url": "http://127.0.0.1:8009"
+    },
+    {
+      "name": "zz-vivo",
+      "runtimeExecutable": "venv/bin/python",
+      "runtimeArgs": [
+        "/private/tmp/claude-501/-Users-teste-Downloads-chamados-redeconfianca/ce7e9f64-a0a6-48dc-89fe-2170d0758a23/scratchpad/harness_vivo.py"
+      ],
+      "port": 8793,
+      "url": "http://127.0.0.1:8793"
     }
   ]
 }

@@ -1,4 +1,5 @@
 {% extends 'cameras/_base.html' %}
+{% load static %}
 {% block ca_conteudo %}
 <header class="ca-topo">
     <div class="ca-titulo"><span class="ca-escudo"><i class="fas fa-video"></i></span>
@@ -26,6 +27,7 @@
             <a class="ca-tela" href="{% if g.tem_equipamento %}{% url 'cameras:loja' g.id %}{% else %}{% url 'cameras:gravador_editar' g.id %}{% endif %}" data-busca="{{ g.loja|lower }} {{ g.coordenador|lower }}" data-loja="{{ g.id }}">
                 <span class="ca-imagem">
                     {% if g.principal %}<img data-canal="{{ g.principal.id }}" alt="{{ g.principal.titulo }} da loja {{ g.loja }}" hidden>{% endif %}
+                    {% if g.principal and g.online %}<video class="ca-video" data-ao-vivo="{{ g.principal.id }}" muted playsinline hidden></video><em class="ca-selo-vivo" hidden>AO VIVO</em>{% endif %}
                     <span class="ca-sem-imagem"><i class="fas {% if g.tem_equipamento %}fa-video-slash{% else %}fa-store-slash{% endif %}"></i><small>{% if not g.tem_equipamento %}Sem gravador{% elif g.erro_agente %}{{ g.erro_agente|truncatechars:60 }}{% elif not g.ultimo_contato %}Agente não instalado{% elif not g.online %}Agente sem contato{% else %}Aguardando imagem{% endif %}</small></span>
                     {% if g.novos %}<em class="ca-selo-alerta"><i class="fas fa-triangle-exclamation"></i>{{ g.novos }}</em>{% endif %}
                 </span>
@@ -43,6 +45,40 @@
         <a class="ca-link" href="{% url 'cameras:alertas' %}">Ver todos <i class="fas fa-chevron-right"></i></a>
     </aside>
 </div>
+<script src="{% static 'cameras/ao-vivo.js' %}?v=1"></script>
+<script>
+(function () {
+    // Só o que está na tela transmite: cada vídeo ocupa upload da loja.
+    if (!window.CamerasAoVivo || !CamerasAoVivo.disponivel()) return;
+    var vivo = new CamerasAoVivo({abrir: "{% url 'cameras:ao_vivo_abrir' %}", respostas: "{% url 'cameras:ao_vivo_respostas' %}", estado: "{% url 'cameras:ao_vivo_estado' %}", csrf: '{{ csrf_token }}'});
+    var videos = Array.from(document.querySelectorAll('video[data-ao-vivo]')), visiveis = new Set();
+    function ligar(video) {
+        var selo = video.parentElement.querySelector('.ca-selo-vivo');
+        vivo.ligar(video.dataset.aoVivo * 1, video, 'BAIXA', function (estado) {
+            selo.hidden = estado !== 'vivo';
+        });
+    }
+    var observador = new IntersectionObserver(function (itens) {
+        itens.forEach(function (item) {
+            var video = item.target.querySelector('video[data-ao-vivo]');
+            if (item.isIntersecting) {
+                visiveis.add(video);
+                if (!document.hidden) ligar(video);
+            } else {
+                visiveis.delete(video);
+                vivo.desligar(video.dataset.aoVivo * 1);
+                item.target.querySelector('.ca-selo-vivo').hidden = true;
+            }
+        });
+    }, {rootMargin: '100px'});
+    // Observa o quadro: o vídeo começa escondido e, sem tamanho, nunca "entra na tela".
+    videos.forEach(function (v) { observador.observe(v.parentElement); });
+    document.addEventListener('visibilitychange', function () {
+        if (document.hidden) vivo.desligarTudo();
+        else visiveis.forEach(ligar);
+    });
+})();
+</script>
 <script>
 (function () {
     var imagens = Array.from(document.querySelectorAll('#caMosaico img[data-canal]')), desde = 0;

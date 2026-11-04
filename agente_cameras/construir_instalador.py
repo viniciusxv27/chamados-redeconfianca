@@ -23,7 +23,7 @@ PYTHON_SHA256 = '4acbed6dd1c744b0376e3b1cf57ce906f9dc9e95e68824584c8099a63025a3c
 MODELO_URL = 'https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_tiny.onnx'
 MODELO_SHA256 = '427cc366d34e27ff7a03e2899b5e3671425c262ea2291f88bb942bc1cc70b0f7'
 PORTAL_PADRAO = 'https://chamados.redeconfianca.com.br'
-ARQUIVOS = ('agente.py', 'descoberta.py', 'detector.py', 'regras.py', 'instalar.py')
+ARQUIVOS = ('agente.py', 'ao_vivo.py', 'descoberta.py', 'detector.py', 'regras.py', 'instalar.py')
 # python.exe e python312.zip ficam em runtime; ".." é a pasta do agente. Com este arquivo o Python
 # não acrescenta a pasta do script sozinho: sem o "..", "from descoberta import" falharia no Windows.
 PTH = 'python312.zip\n.\nLib\\site-packages\n..\nimport site\n'
@@ -82,7 +82,8 @@ def conferir(pasta):
     pacotes = runtime / 'Lib' / 'site-packages'
     obrigatorios = [runtime / n for n in ('python.exe', 'python312.dll', 'python312.zip', 'python312._pth', 'vcruntime140.dll', 'msvcp140.dll')]
     obrigatorios += [pacotes / 'requests' / '__init__.py', pacotes / 'cv2' / '__init__.py', pacotes / 'numpy' / '__init__.py',
-                     pacotes / 'onnxruntime' / '__init__.py', pacotes / 'certifi' / 'cacert.pem', pasta / 'yolox_tiny.onnx', pasta / 'agente.py']
+                     pacotes / 'onnxruntime' / '__init__.py', pacotes / 'certifi' / 'cacert.pem', pacotes / 'aiortc' / '__init__.py',
+                     pacotes / 'av' / '__init__.py', pasta / 'yolox_tiny.onnx', pasta / 'agente.py', pasta / 'ao_vivo.py']
     faltando = [str(c.relative_to(pasta)) for c in obrigatorios if not c.exists()]
     if faltando:
         sys.exit(f'Faltam peças no pacote: {faltando}')
