@@ -15,6 +15,14 @@ O agente acha o gravador na rede, testa o usuário e a senha do cadastro, descob
 
 Em `/cameras/loja/<id>/`, abra cada câmera e marque as áreas: **Mostruário**, **Porta** (arraste de fora para dentro), **Cadeira do cliente** e **Frente da tela** do matinal. A câmera da porta analisa 3 imagens por segundo; as outras, 1.
 
+## Vídeo ao vivo
+
+Vai direto do computador da loja para o navegador (WebRTC), criptografado e sem passar pelo servidor do portal. As miniaturas usam a qualidade menor do gravador; ao abrir uma câmera, vem a principal, sem recompressão. Câmera em H.265 é convertida para H.264, o que gasta bem mais processador. Em redes muito fechadas o vídeo pode não conectar: a tela avisa e segue com imagens. A tentativa fica registrada em `SessaoAoVivo`.
+
+## Testar
+
+`teste_cameras.py` cobre o portal. `teste_cameras_ao_vivo.py` passa por RTSP e WebRTC de verdade na própria máquina (instruções no começo do arquivo).
+
 ## Gerar uma versão nova
 
 Em qualquer sistema com `makensis` (Mac: `brew install nsis`):
