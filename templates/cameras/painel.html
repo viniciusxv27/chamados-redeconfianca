@@ -73,9 +73,16 @@
     }, {rootMargin: '100px'});
     // Observa o quadro: o vídeo começa escondido e, sem tamanho, nunca "entra na tela".
     videos.forEach(function (v) { observador.observe(v.parentElement); });
+    // Aba escondida por um instante não derruba o vídeo: reconectar leva segundos. Só depois de um minuto libera o upload da loja.
+    var timerOculta = null, desligado = false;
     document.addEventListener('visibilitychange', function () {
-        if (document.hidden) vivo.desligarTudo();
-        else visiveis.forEach(ligar);
+        clearTimeout(timerOculta);
+        if (document.hidden) {
+            timerOculta = setTimeout(function () { desligado = true; vivo.desligarTudo(); }, 60000);
+        } else if (desligado) {
+            desligado = false;
+            visiveis.forEach(ligar);
+        }
     });
 })();
 </script>

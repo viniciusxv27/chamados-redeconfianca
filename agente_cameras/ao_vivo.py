@@ -10,12 +10,17 @@ import threading
 import time
 from fractions import Fraction
 
+import aioice.ice
 import av
 import requests
 from aiortc import RTCConfiguration, RTCIceServer, RTCPeerConnection, RTCRtpSender, RTCSessionDescription
 from aiortc.mediastreams import MediaStreamError, MediaStreamTrack
 
 log = logging.getLogger('agente')
+
+# Uma interface de rede sem resposta (VPN, por exemplo) fazia cada vídeo esperar 5 s para abrir.
+ESPERA_DOS_ENDERECOS = 2
+aioice.ice.Connection.get_component_candidates.__defaults__ = (ESPERA_DOS_ENDERECOS,)
 
 STUN = 'stun:stun.l.google.com:19302'
 MAX_SESSOES = 24
@@ -83,33 +88,35 @@ class TrilhaDaCamera(MediaStreamTrack):
 
     def _ler(self):
         try:
-            contêiner = self._abrir(self.url, options={'rtsp_transport': 'tcp', 'fflags': 'nobuffer', 'flags': 'low_delay',
-                                                       'max_delay': '500000', 'timeout': '10000000'}, timeout=15)
+            conteiner = self._abrir(self.url, options={'rtsp_transport': 'tcp', 'fflags': 'nobuffer', 'flags': 'low_delay',
+                                                       'max_delay': '500000', 'timeout': '10000000',
+                                                       # Por padrão o leitor analisa 5 s de vídeo antes de começar.
+                                                       'analyzeduration': '500000', 'probesize': '500000'}, timeout=15)
         except Exception as erro:  # noqa: BLE001 — câmera fora do ar, senha trocada: o navegador precisa saber
             self.erro = type(erro).__name__
             self.pronta.set()
             self.laco.call_soon_threadsafe(self.fila.put_nowait, None)
             return
         try:
-            entrada = contêiner.streams.video[0]
+            entrada = conteiner.streams.video[0]
             self.codec = entrada.codec_context.name
             self.pronta.set()
             if self.codec == 'h264':
-                self._repassar(contêiner, entrada)
+                self._repassar(conteiner, entrada)
             else:
-                self._converter(contêiner, entrada)
+                self._converter(conteiner, entrada)
         except Exception as erro:  # noqa: BLE001
             log.warning('Vídeo ao vivo parou: %s', type(erro).__name__)
             self.erro = self.erro or type(erro).__name__
             self.pronta.set()
         finally:
-            contêiner.close()
+            conteiner.close()
             self.laco.call_soon_threadsafe(self.fila.put_nowait, None)
 
-    def _repassar(self, contêiner, entrada):
+    def _repassar(self, conteiner, entrada):
         # Parte dos gravadores só manda as configurações do vídeo no começo: sem repeti-las, quem entra depois não abre.
         filtro = av.bitstream.BitStreamFilterContext('dump_extra=freq=keyframe', entrada)
-        for pacote in contêiner.demux(entrada):
+        for pacote in conteiner.demux(entrada):
             if self.parar_leitura.is_set():
                 return
             if pacote.dts is None and pacote.size == 0:
@@ -117,8 +124,8 @@ class TrilhaDaCamera(MediaStreamTrack):
             for saida in filtro.filter(pacote):
                 self._colocar(self._carimbar(saida), saida.is_keyframe)
 
-    def _converter(self, contêiner, entrada):
-        for pacote in contêiner.demux(entrada):
+    def _converter(self, conteiner, entrada):
+        for pacote in conteiner.demux(entrada):
             if self.parar_leitura.is_set():
                 return
             for quadro in pacote.decode():

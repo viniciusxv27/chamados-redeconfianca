@@ -54,7 +54,7 @@
                 var f = d.fotos[img.dataset.canal];
                 if (!f) return;
                 img.src = 'data:image/jpeg;base64,' + f.b64; img.hidden = false; desde = Math.max(desde, f.em);
-                if (+img.dataset.canal === foco) { fotoGrande.src = img.src; fotoGrande.hidden = false; document.getElementById('caSemFoto').hidden = true; }
+                if (+img.dataset.canal === foco) { fotoGrande.src = img.src; fotoGrande.hidden = !videoGrande.hidden; document.getElementById('caSemFoto').hidden = true; }
             });
         }).catch(function () {});
     }
@@ -85,10 +85,16 @@
     if (temVivo) {
         // Observa o quadro: o vídeo começa escondido e, sem tamanho, nunca "entra na tela".
         pequenos.forEach(function (v) { observador.observe(v.parentElement); });
+        // Aba escondida por um instante não derruba o vídeo: reconectar leva segundos. Só depois de um minuto libera o upload da loja.
+        var timerOculta = null, desligado = false;
         document.addEventListener('visibilitychange', function () {
-            if (document.hidden) { vivo.desligarTudo(); }
-            else if (foco) { ligarGrande(); }
-            else { visiveis.forEach(ligarPequeno); }
+            clearTimeout(timerOculta);
+            if (document.hidden) {
+                timerOculta = setTimeout(function () { desligado = true; vivo.desligarTudo(); }, 60000);
+            } else if (desligado) {
+                desligado = false;
+                if (foco) { ligarGrande(); } else { visiveis.forEach(ligarPequeno); }
+            }
         });
     }
     function ligarGrande() {
@@ -100,10 +106,13 @@
                 estadoVivo.className = 'ca-estado-vivo no-ar';
                 estadoVivo.textContent = 'AO VIVO · ' + info.largura + '×' + info.altura + (info.codec === 'h264' ? '' : ' · convertido');
                 palco.style.aspectRatio = info.largura + ' / ' + info.altura;
+                document.getElementById('caSemFoto').hidden = true;
+                fotoGrande.hidden = true;
                 ritmo(15000);
             } else if (e === 'falhou') {
                 estadoVivo.className = 'ca-estado-vivo erro';
                 estadoVivo.textContent = 'Sem vídeo ao vivo: ' + info.motivo + ' Mostrando imagens.';
+                if (fotoGrande.getAttribute('src')) fotoGrande.hidden = false;
                 ritmo(3000);
             }
         });

@@ -577,7 +577,8 @@ t('troca o código pelo token', http.pedidos[0][0] == 'https://portal.exemplo/ca
 with open(os.path.join(pasta, 'config.json')) as arq:
     cfg_ins = _j.load(arq)
 t('grava a configuração', cfg_ins['token'] == 'TOK' and cfg_ins['portal'] == 'https://portal.exemplo' and cfg_ins['modelo'] == 'yolox_tiny.onnx')
-t('confere as três peças antes de ligar', [c[2] for c in roda.comandos if c[1] == '-c'] == ['import cv2', 'import onnxruntime', 'import numpy'])
+t('confere as peças antes de ligar', [c[2] for c in roda.comandos if c[1] == '-c'] == ['import cv2', 'import onnxruntime', 'import numpy', 'import av', 'import aiortc'])
+t('libera o vídeo no Firewall do Windows, só UDP e só para o agente', any(c[0] == 'netsh' and 'add' in c and 'protocol=udp' in c and any('runtime' in p for p in c) for c in roda.comandos))
 ordem = [c[1] for c in roda.comandos if c[0] == 'schtasks']
 t('cria, reinicia e confere a tarefa', ordem == ['/Create', '/End', '/Run', '/Query'], ordem)
 t('protege o token por SID', any(c[0] == 'icacls' and '*S-1-5-32-544:F' in c for c in roda.comandos))
@@ -615,7 +616,7 @@ nsi = pathlib.Path('agente_cameras/instalador.nsi').read_text(encoding='utf-8')
 t('instalador pede administrador e confere 64 bits e Windows 10', 'RequestExecutionLevel admin' in nsi and 'RunningX64' in nsi and 'AtLeastWin10' in nsi)
 import construir_instalador as ci
 t('o arquivo de caminhos põe a pasta do agente no alcance do Python', '..' in ci.PTH.split('\n') and 'import site' in ci.PTH)
-t('empacota tudo que o agente importa', set(ci.ARQUIVOS) >= {'agente.py', 'descoberta.py', 'detector.py', 'regras.py', 'instalar.py'})
+t('empacota tudo que o agente importa', set(ci.ARQUIVOS) >= {'agente.py', 'ao_vivo.py', 'descoberta.py', 'detector.py', 'regras.py', 'instalar.py'})
 
 print('medições: regras')
 from regras import Metricas, Rastreador, cruzou_para_dentro, zonas_do_tipo
@@ -774,5 +775,79 @@ t('agente recebe o horário da matinal', r['matinal'] == {'inicio': '05:00', 'fi
 cs.post(f'/cameras/configuracao/{gm.id}/', {'loja': 'LOJA MEDIDA', 'caminho_rtsp': '/x?c={canal}', 'porta_rtsp': 554, 'canais': 2, 'tem_equipamento': '1', 'abre_as': '09:00', 'fecha_as': '18:00', 'matinal_inicio': '06:30', 'matinal_fim': '08:30', 'matinal_minutos': '10'})
 gm.refresh_from_db()
 t('horário da matinal por loja', gm.matinal_inicio.strftime('%H:%M') == '06:30' and gm.matinal_minutos == 10)
+
+print('vídeo ao vivo: portal')
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
+from cameras.models import SessaoAoVivo
+SessaoAoVivo.objects.all().delete()
+cache.clear()
+ConfigCameras.objects.update(ativo=True)
+gv = Gravador.objects.create(loja='LOJA VIVO', versao_agente='2.1', ultimo_contato=timezone.now()); tv = gv.gerar_token()
+cv1 = Canal.objects.create(gravador=gv, numero=7); cv2 = Canal.objects.create(gravador=gv, numero=8)
+agv = {'HTTP_AUTHORIZATION': f'Bearer {tv}'}
+gold = Gravador.objects.create(loja='LOJA ANTIGA', versao_agente='2.0', ultimo_contato=timezone.now()); cold = Canal.objects.create(gravador=gold, numero=1)
+goff = Gravador.objects.create(loja='LOJA FORA', versao_agente='2.1', ultimo_contato=timezone.now() - dt.timedelta(hours=1)); coff = Canal.objects.create(gravador=goff, numero=1)
+SDP = 'v=0 oferta do navegador'
+def abrir(cliente, *itens):
+    return cliente.post('/cameras/aovivo/abrir/', _j.dumps({'sessoes': list(itens)}), content_type='application/json')
+def pedir(*ativas, **k):
+    return anon.post('/cameras/agente/aovivo/', _j.dumps({'ativas': list(ativas)}), content_type='application/json', **{**agv, **k})
+def responder(dados, **k):
+    return anon.post('/cameras/agente/aovivo/resposta/', _j.dumps(dados), content_type='application/json', **{**agv, **k})
+t('versão 2.1 tem ao vivo, 2.0 não, sem versão não', gv.tem_ao_vivo and not gold.tem_ao_vivo and not Gravador(versao_agente='').tem_ao_vivo and not Gravador(versao_agente='x').tem_ao_vivo)
+t('colaborador comum não pede vídeo', abrir(cc, {'canal': cv1.id, 'sdp': SDP}).status_code == 302 and not SessaoAoVivo.objects.exists())
+t('sem login não pede vídeo', anon.post('/cameras/aovivo/abrir/', '{}', content_type='application/json').status_code in (302, 403))
+r = pedir()
+t('agente parado: nada a fazer', r.status_code == 200 and r.json() == {'ofertas': [], 'fechar': [], 'proximo': 4}, r.content)
+with CaptureQueriesContext(connection) as parado:
+    pedir()
+vistas = [q['sql'] for q in parado.captured_queries if 'cameras_' in q['sql']]
+t('a pergunta parada não vai às tabelas das câmeras', not vistas, vistas)
+t('token errado: 401', pedir(HTTP_AUTHORIZATION='Bearer x').status_code == 401 and anon.post('/cameras/agente/aovivo/').status_code == 401)
+t('JSON quebrado: 400', anon.post('/cameras/agente/aovivo/', '{x', content_type='application/json', **agv).status_code == 400)
+r = abrir(cs, {'canal': cv1.id, 'qualidade': 'ALTA', 'sdp': SDP}, {'canal': cv2.id, 'qualidade': 'x', 'sdp': SDP}, {'canal': cold.id, 'sdp': SDP}, {'canal': coff.id, 'sdp': SDP}, {'canal': 999999, 'sdp': SDP}, {'canal': cv1.id, 'sdp': ''}, {'canal': cv1.id, 'sdp': 'x' * 30000}, 'lixo').json()['sessoes']
+t('pedido certo vira sessão', 'id' in r[0] and 'id' in r[1], r[:2])
+t('agente antigo: pede para reinstalar', r[2].get('atualizar') and 'Reinstale' in r[2]['erro'], r[2])
+t('agente fora do ar: avisa', 'sem contato' in r[3].get('erro', ''), r[3])
+t('canal inexistente, sem oferta, oferta enorme e lixo: recusa', all('erro' in x for x in r[4:]) and SessaoAoVivo.objects.count() == 2)
+s1, s2 = r[0]['id'], r[1]['id']
+t('qualidade desconhecida vira baixa', SessaoAoVivo.objects.get(id=s2).qualidade == 'BAIXA' and SessaoAoVivo.objects.get(id=s1).qualidade == 'ALTA')
+t('quem viu fica registrado', AcessoCamera.objects.filter(acao='ver_ao_vivo', gravador=gv).count() == 1)
+r = pedir().json()
+t('agente recebe as ofertas com o número da câmera', {o['id']: o['canal'] for o in r['ofertas']} == {s1: 7, s2: 8} and r['ofertas'][0]['sdp'] == SDP and r['proximo'] == 1, r)
+t('e não recebe de novo', pedir().json()['ofertas'] == [])
+agb = {'HTTP_AUTHORIZATION': 'Bearer ' + gold.gerar_token()}
+t('outra loja não recebe nem responde', pedir(**agb).json()['ofertas'] == [] and responder({'id': s1, 'sdp': 'invasor'}, **agb).status_code == 400 and not SessaoAoVivo.objects.get(id=s1).resposta)
+t('resposta inválida: 400', responder({'id': s1}).status_code == 400 and responder({'id': 'x', 'sdp': 'a'}).status_code == 400 and responder({'id': s1, 'sdp': 'x' * 30000}).status_code == 400)
+t('resposta certa', responder({'id': s1, 'sdp': 'ANSWER', 'codec': 'h264'}).status_code == 200)
+responder({'id': s2, 'erro': 'A câmera não abriu.'})
+ouvidos = cs.get(f'/cameras/aovivo/respostas/?ids={s1},{s2},lixo').json()['respostas']
+t('navegador recebe resposta e erro', ouvidos[s1] == {'sdp': 'ANSWER', 'erro': '', 'codec': 'h264'} and ouvidos[s2]['erro'] == 'A câmera não abriu.', ouvidos)
+outro_chefe = User.objects.create_user(username='zzc.chefe2', email='zzc.chefe2@exemplo-teste.local', password='S3nha!teste', first_name='C2', hierarchy='SUPERADMIN')
+cs2 = Client(); cs2.force_login(outro_chefe)
+t('outra pessoa não lê a sessão de quem pediu', cs2.get(f'/cameras/aovivo/respostas/?ids={s1}').json()['respostas'] == {})
+t('colaborador comum não lê', cc.get(f'/cameras/aovivo/respostas/?ids={s1}').status_code == 302)
+t('outra pessoa não fecha a sessão', cs2.post('/cameras/aovivo/estado/', {'ids': s1, 'estado': 'FECHADA'}).json()['feitas'] == 0)
+t('estado inventado é ignorado', cs.post('/cameras/aovivo/estado/', {'ids': s1, 'estado': 'X'}).json()['feitas'] == 0)
+cs.post('/cameras/aovivo/estado/', {'ids': s1, 'estado': 'CONECTADA'})
+t('conexão fica registrada, para diagnosticar', SessaoAoVivo.objects.get(id=s1).estado == 'CONECTADA')
+t('sessão aberta continua', pedir(s1).json()['fechar'] == [])
+cs.post('/cameras/aovivo/estado/', {'ids': s1, 'estado': 'FECHADA'})
+t('fechou no navegador: agente é avisado', pedir(s1).json()['fechar'] == [s1])
+t('id estranho do agente não derruba', pedir('nao-e-id', 5).status_code == 200)
+SessaoAoVivo.objects.filter(id=s2).update(estado='PEDIDA', criada_em=timezone.now() - dt.timedelta(minutes=5))
+t('pedido velho não é entregue', pedir().json()['ofertas'] == [])
+SessaoAoVivo.objects.filter(id=s2).update(criada_em=timezone.now() - dt.timedelta(days=2))
+abrir(cs, {'canal': cv1.id, 'sdp': SDP})
+t('sessões antigas são limpas', not SessaoAoVivo.objects.filter(id=s2).exists())
+ConfigCameras.objects.update(ativo=False)
+t('módulo desligado não abre vídeo', abrir(cs, {'canal': cv1.id, 'sdp': SDP}).status_code == 403)
+ConfigCameras.objects.update(ativo=True)
+h = cs.get(f'/cameras/loja/{gv.id}/').content.decode()
+t('tela da loja traz o vídeo e o reprodutor', 'data-ao-vivo' in h and 'cameras/ao-vivo.js' in h and 'id="caVideo"' in h and 'id="caTelaCheia"' in h)
+hp = cs.get('/cameras/').content.decode()
+t('mosaico traz o vídeo de quem está online', f'data-ao-vivo="{cv1.id}"' in hp and f'data-ao-vivo="{coff.id}"' not in hp)
+t('configuração pede reinstalar quem está com agente antigo', 'data-sem-ao-vivo' in cs.get('/cameras/configuracao/').content.decode())
 
 print(f'\n{ok} OK, {fail} falha(s)')
