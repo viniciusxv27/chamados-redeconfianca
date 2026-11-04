@@ -1,0 +1,27 @@
+{% if caixa_divergencias %}
+<dialog id="caixaDivergencias" class="rounded-2xl p-0 w-[min(32rem,calc(100vw-2rem))] shadow-2xl" data-assinatura="{% for d in caixa_divergencias %}{{ d.data }}:{{ d.diferenca }};{% endfor %}">
+    <div class="px-5 py-4 bg-amber-50 border-b border-amber-200"><h2 class="font-bold text-amber-900"><i class="fas fa-triangle-exclamation mr-2"></i>Divergência no caixa da loja</h2>
+        <p class="text-xs text-amber-800 mt-0.5">O Vivo GO não bate com o SAP nestes dias. Confira e ajuste.</p></div>
+    <ul class="divide-y divide-gray-100 max-h-72 overflow-y-auto">
+        {% for d in caixa_divergencias %}
+        <li class="px-5 py-2.5 text-sm"><div class="flex justify-between gap-3"><strong class="text-gray-900">{{ d.data }}</strong><span class="font-semibold text-red-600 whitespace-nowrap">R$ {{ d.diferenca }}</span></div>
+            <p class="text-xs text-gray-500">SAP R$ {{ d.sap }} · Vivo GO R$ {{ d.vivogo }}</p></li>
+        {% endfor %}
+    </ul>
+    <div class="px-5 py-3 flex justify-end gap-2 bg-gray-50">
+        <button type="button" data-fechar class="px-4 py-2 rounded-lg bg-white border border-gray-200 text-sm text-gray-700">Ver depois</button>
+        {% if caixa_divergencias.0.url %}<a href="{{ caixa_divergencias.0.url }}" class="px-4 py-2 rounded-lg bg-primary text-white text-sm font-semibold">Abrir o caixa</a>{% endif %}
+    </div>
+</dialog>
+<script>
+(function () {
+    // Uma vez por dia e por conjunto de divergências: popup a cada página vira ruído.
+    var janela = document.getElementById('caixaDivergencias');
+    if (!janela || !janela.showModal) return;
+    var chave = 'caixa-divergencia:' + new Date().toISOString().slice(0, 10) + ':' + janela.dataset.assinatura, visto = false;
+    try { visto = localStorage.getItem(chave) === '1'; localStorage.setItem(chave, '1'); } catch (e) { visto = false; }
+    janela.querySelector('[data-fechar]').addEventListener('click', function () { janela.close(); });
+    if (!visto) janela.showModal();
+})();
+</script>
+{% endif %}

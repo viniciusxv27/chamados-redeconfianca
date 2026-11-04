@@ -6,6 +6,28 @@
 
 {% block ac_conteudo %}
 <div class="space-y-5">
+    {% if pedidos %}
+    <div class="ac-card overflow-hidden border-2 !border-sky-300" id="pedidos">
+        <div class="px-4 py-3 border-b border-sky-100 bg-sky-50"><h2 class="font-bold text-sm text-sky-900"><i class="fas fa-inbox mr-1.5"></i>Pedidos do RH e do Financeiro ({{ pedidos|length }})</h2></div>
+        <ul class="divide-y divide-gray-100">
+            {% for p in pedidos %}
+            <li class="p-4 space-y-2 text-sm" data-pedido="{{ p.id }}">
+                <div><a href="{% url 'acess:ficha' p.colaborador_id %}" class="font-semibold hover:text-sky-700">{{ p.colaborador.nome }}</a>
+                    <span class="text-[11px] text-gray-500">· {{ p.colaborador.local.name|default:"sem local" }} · {{ p.get_tipo_display }} · pedido por {{ p.solicitante.get_full_name|default:"—" }} em {{ p.criado_em|date:"d/m/Y" }}</span></div>
+                <p class="text-xs text-gray-600">Saída: {{ p.saida_empresa|date:"d/m/Y" }}{% if p.observacao %} · {{ p.observacao }}{% endif %}</p>
+                <div class="grid sm:grid-cols-2 gap-2">
+                    <form method="post" action="{% url 'acess:pedido_desligamento_decidir' p.id %}" class="flex items-end gap-2 flex-wrap">{% csrf_token %}<input type="hidden" name="decisao" value="agendar">
+                        <label class="text-xs flex-1 min-w-[9rem]">Execução<input type="date" name="execucao" required value="{{ p.execucao_sugerida|date:'Y-m-d' }}" class="ac-input w-full"></label>
+                        <button class="ac-btn ac-btn-pri">Agendar</button></form>
+                    <form method="post" action="{% url 'acess:pedido_desligamento_decidir' p.id %}" class="flex items-end gap-2 flex-wrap">{% csrf_token %}<input type="hidden" name="decisao" value="recusar">
+                        <label class="text-xs flex-1 min-w-[9rem]">Motivo da recusa<input name="resposta" required maxlength="500" class="ac-input w-full"></label>
+                        <button class="ac-btn">Recusar</button></form>
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
     {% if inativados %}
     <div class="ac-card overflow-hidden border-2 !border-amber-300" id="inativados">
         <div class="px-4 py-3 border-b border-amber-100 bg-amber-50"><h2 class="font-bold text-sm text-amber-900"><i class="fas fa-user-slash mr-1.5"></i>Inativados no portal: imediato ou agendado? ({{ inativados|length }})</h2>

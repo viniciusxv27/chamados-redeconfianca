@@ -1,0 +1,21 @@
+{% extends 'cameras/_base.html' %}
+{% block ca_titulo %}{{ gravador.loja }}{% endblock %}
+{% block ca_conteudo %}
+<header class="ca-topo"><div class="ca-titulo"><a class="ca-voltar" href="{% url 'cameras:configuracao' %}" aria-label="Voltar"><i class="fas fa-arrow-left"></i></a><div><h1>{{ gravador.loja }}</h1><p>Dados do gravador e horário da loja</p></div></div></header>
+<form method="post" class="ca-card ca-form">{% csrf_token %}
+    <label>Loja<input name="loja" value="{{ gravador.loja }}" required></label>
+    <label>Coordenação<input name="coordenador" value="{{ gravador.coordenador }}"></label>
+    <label>Setor no portal<select name="setor"><option value="">—</option>{% for s in setores %}<option value="{{ s.id }}" {% if gravador.setor_id == s.id %}selected{% endif %}>{{ s.name }}</option>{% endfor %}</select></label>
+    <label>Tem gravador?<select name="tem_equipamento"><option value="1" {% if gravador.tem_equipamento %}selected{% endif %}>Sim</option><option value="0" {% if not gravador.tem_equipamento %}selected{% endif %}>Não</option></select></label>
+    <label>Serial<input name="serial" value="{{ gravador.serial }}"></label>
+    <label>Quantidade de câmeras<input type="number" name="canais" min="1" max="64" value="{{ quantos }}"></label>
+    <label>Usuário<input name="usuario" value="{{ gravador.usuario }}" autocomplete="off"></label>
+    <label>Senha<input type="password" name="senha" autocomplete="new-password" placeholder="{% if gravador.senha_cifrada %}Em branco mantém a atual{% else %}Sem senha guardada{% endif %}"></label>
+    <label>IP do gravador na loja<input name="ip_local" value="{{ gravador.ip_local }}" placeholder="192.168.1.108"></label>
+    <label>Porta RTSP<input type="number" name="porta_rtsp" value="{{ gravador.porta_rtsp }}"></label>
+    <label class="inteiro">Caminho RTSP<input name="caminho_rtsp" value="{{ gravador.caminho_rtsp }}"><small>Use {canal} no lugar do número. O padrão serve para Intelbras; confira o do Motorola na instalação.</small></label>
+    <label>Abre às<input type="time" name="abre_as" value="{{ gravador.abre_as|time:'H:i' }}"></label>
+    <label>Fecha às<input type="time" name="fecha_as" value="{{ gravador.fecha_as|time:'H:i' }}"></label>
+    <div class="inteiro ca-fim"><a class="ca-botao claro" href="{% url 'cameras:configuracao' %}">Cancelar</a><button class="ca-botao">Salvar</button></div>
+</form>
+{% endblock %}

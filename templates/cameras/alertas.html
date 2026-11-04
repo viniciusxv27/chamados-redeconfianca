@@ -1,0 +1,26 @@
+{% extends 'cameras/_base.html' %}
+{% block ca_titulo %}Alertas{% endblock %}
+{% block ca_conteudo %}
+<header class="ca-topo">
+    <div class="ca-titulo"><span class="ca-escudo"><i class="fas fa-bell"></i></span><div><h1>Alertas</h1><p>Cada alerta é uma suspeita da análise automática. Confira a imagem antes de agir.</p></div></div>
+    <form method="get" class="ca-filtros">
+        <select name="status" aria-label="Situação" onchange="this.form.submit()">
+            <option value="abertos" {% if status == 'abertos' %}selected{% endif %}>Abertos</option>
+            <option value="todos" {% if status == 'todos' %}selected{% endif %}>Todos</option>
+            {% for v, r in status_opcoes %}<option value="{{ v }}" {% if status == v %}selected{% endif %}>{{ r }}</option>{% endfor %}
+        </select>
+        <select name="loja" aria-label="Loja" onchange="this.form.submit()">
+            <option value="">Todas as lojas</option>
+            {% for l in lojas %}<option value="{{ l.id }}" {% if loja_id == l.id|stringformat:"d" %}selected{% endif %}>{{ l.loja }}</option>{% endfor %}
+        </select>
+    </form>
+</header>
+<div class="ca-alertas">
+    {% for a in alertas %}
+    <a class="ca-card ca-alerta" href="{% url 'cameras:alerta_detalhe' a.id %}">
+        <span class="ca-imagem">{% if a.foto %}<img loading="lazy" src="{% url 'cameras:alerta_foto' a.id %}" alt="Imagem do alerta">{% else %}<span class="ca-sem-imagem"><i class="fas fa-image"></i><small>Sem imagem</small></span>{% endif %}<em class="ca-confianca">{{ a.confianca }}%</em></span>
+        <span class="ca-alerta-corpo"><strong>{{ a.gravador.loja }}</strong><span>{{ a.get_tipo_display }}</span><small>{{ a.canal.titulo|default:"" }} · {{ a.criado_em|date:"d/m/Y H:i" }}{% if a.repeticoes > 1 %} · {{ a.repeticoes }}x{% endif %}</small><i class="ca-status {{ a.status }}">{{ a.get_status_display }}</i></span>
+    </a>
+    {% empty %}<div class="ca-vazio ca-card"><i class="fas fa-check-circle"></i><p>Nenhum alerta com esse filtro.</p></div>{% endfor %}
+</div>
+{% endblock %}

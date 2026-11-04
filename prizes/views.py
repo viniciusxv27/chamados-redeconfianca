@@ -9,7 +9,12 @@ from django.utils import timezone
 from decimal import Decimal
 from datetime import timedelta
 
-from .models import Prize, PrizeCategory, Redemption, CSTransaction, PrizeDiscount
+from django.core.exceptions import ValidationError
+from django.core.validators import URLValidator
+
+from core.models import Notification
+
+from .models import Prize, PrizeCategory, Redemption, CSTransaction, PrizeDiscount, SugestaoProduto
 from users.models import User
 
 
@@ -814,3 +819,57 @@ def validate_discount_code(request):
         return JsonResponse({'valid': False, 'error': 'Código de desconto não encontrado'})
     except Exception as e:
         return JsonResponse({'valid': False, 'error': str(e)})
+
+
+SUGESTOES_ABERTAS_POR_PESSOA = 5
+
+
+@login_required
+@require_POST
+def sugerir_produto(request):
+    """O colaborador manda o link. Só http(s): o link vira botão na tela de quem analisa."""
+    link = (request.POST.get('link') or '').strip()
+    try:
+        URLValidator(schemes=['http', 'https'])(link)
+    except ValidationError:
+        messages.error(request, 'Informe o link completo do produto, começando com https://.')
+        return redirect('marketplace')
+    abertas = SugestaoProduto.objects.filter(user=request.user, status=SugestaoProduto.PENDENTE).count()
+    if abertas >= SUGESTOES_ABERTAS_POR_PESSOA:
+        messages.error(request, 'Você já tem sugestões em análise. Aguarde a resposta delas.')
+        return redirect('marketplace')
+    SugestaoProduto.objects.create(user=request.user, link=link[:2000],
+                                   nome=(request.POST.get('nome') or '').strip()[:150],
+                                   observacao=(request.POST.get('observacao') or '').strip()[:500])
+    messages.success(request, 'Sugestão enviada para análise. Obrigado!')
+    return redirect('marketplace')
+
+
+@login_required
+def sugestoes_produto(request):
+    if not request.user.can_manage_prizes():
+        messages.error(request, 'Acesso negado.')
+        return redirect('marketplace')
+    if request.method == 'POST':
+        sugestao = get_object_or_404(SugestaoProduto, pk=request.POST.get('sugestao') or 0)
+        decisao = request.POST.get('decisao')
+        if decisao in (SugestaoProduto.APROVADA, SugestaoProduto.RECUSADA):
+            sugestao.status = decisao
+            sugestao.resposta = (request.POST.get('resposta') or '').strip()[:500]
+            sugestao.analisado_por, sugestao.analisado_em = request.user, timezone.now()
+            sugestao.save(update_fields=['status', 'resposta', 'analisado_por', 'analisado_em'])
+            Notification.objects.create(
+                user=sugestao.user, title='Sua sugestão para o Mercadinho',
+                message=f'{sugestao.nome or "O produto sugerido"}: {sugestao.get_status_display()}.'
+                        + (f' {sugestao.resposta}' if sugestao.resposta else ''),
+                notification_type='SYSTEM', related_url='/prizes/')
+            messages.success(request, 'Resposta registrada.')
+        return redirect('sugestoes_produto')
+    situacao = request.GET.get('situacao') or SugestaoProduto.PENDENTE
+    lista = SugestaoProduto.objects.select_related('user', 'user__sector', 'analisado_por')
+    if situacao != 'todas':
+        lista = lista.filter(status=situacao)
+    return render(request, 'prizes/sugestoes.html', {
+        'sugestoes': lista[:300], 'situacao': situacao, 'status': SugestaoProduto.STATUS,
+        'pendentes': SugestaoProduto.objects.filter(status=SugestaoProduto.PENDENTE).count(),
+    })

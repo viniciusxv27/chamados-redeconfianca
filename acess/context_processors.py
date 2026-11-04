@@ -1,4 +1,4 @@
-from .permissoes import pode_entrar
+from .permissoes import pode_entrar, pode_pedir_desligamento
 
 
 def acess_menu(request):
@@ -7,6 +7,6 @@ def acess_menu(request):
     if not (user and user.is_authenticated):
         return {}
     try:
-        return {'acess_liberado': pode_entrar(user)}
+        return {'acess_liberado': pode_entrar(user), 'acess_pede_desligamento': pode_pedir_desligamento(user)}
     except Exception:  # noqa: BLE001 — tabela ainda não migrada noutro servidor
-        return {'acess_liberado': False}
+        return {'acess_liberado': False, 'acess_pede_desligamento': False}

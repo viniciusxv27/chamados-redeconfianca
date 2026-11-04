@@ -1,0 +1,46 @@
+<style>
+    /* ── Despesas recorrentes: situação por cor (sempre com ícone ou texto junto) ── */
+    .rec-PAGO { background:#DCFCE7; color:#166534; } .rec-PARCIAL { background:#FEF3C7; color:#92400E; }
+    .rec-VENCIDO { background:#FEE2E2; color:#B91C1C; } .rec-A_VENCER { background:#FFEDD5; color:#9A3412; }
+    .rec-PENDENTE { background:#DBEAFE; color:#1E40AF; } .rec-PREVISTO { background:transparent; color:var(--fin-texto-3); box-shadow:inset 0 0 0 1px var(--fin-borda); }
+    .rec-SEM_COBRANCA { background:var(--fin-sup-3); color:var(--fin-texto-3); } .rec-FORA { background:transparent; color:var(--fin-texto-3); }
+    html.dark .rec-PAGO { background:rgba(34,197,94,.18); color:#86EFAC; } html.dark .rec-PARCIAL { background:rgba(245,158,11,.18); color:#FCD34D; }
+    html.dark .rec-VENCIDO { background:rgba(239,68,68,.22); color:#FCA5A5; } html.dark .rec-A_VENCER { background:rgba(249,115,22,.2); color:#FDBA74; }
+    html.dark .rec-PENDENTE { background:rgba(59,130,246,.2); color:#93C5FD; }
+    .rec-chip { display:inline-flex; align-items:center; gap:.3rem; padding:.15rem .55rem; border-radius:9999px; font-size:11px; font-weight:600; white-space:nowrap; line-height:1.4; }
+
+    .rec-rolagem { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+    table.rec-grade { width:100%; border-collapse:separate; border-spacing:0; font-size:.75rem; }
+    table.rec-grade th, table.rec-grade td { border-bottom:1px solid var(--fin-borda-2); padding:.2rem; color:var(--fin-texto); background:var(--fin-sup); }
+    table.rec-grade thead th { background:var(--fin-sup-2); font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--fin-texto-3); padding:.45rem .25rem; text-align:center; white-space:nowrap; }
+    table.rec-grade thead th a { display:block; border-radius:.4rem; padding:.1rem .2rem; }
+    table.rec-grade thead th a:hover { color:var(--fin-verde-texto); }
+    table.rec-grade thead th.rec-corrente a { color:var(--fin-verde-texto); }
+    table.rec-grade th.rec-ativo, table.rec-grade td.rec-ativo { background:var(--fin-verde-bg); }
+    table.rec-grade .rec-fixa { position:sticky; left:0; z-index:2; text-align:left; min-width:13rem; max-width:17rem; padding:.4rem .6rem; box-shadow:1px 0 0 var(--fin-borda); }
+    table.rec-grade thead .rec-fixa { z-index:3; }
+    table.rec-grade tr.rec-grupo th { background:var(--fin-sup-2); text-align:left; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--fin-texto-2); padding:.4rem .6rem; }
+    table.rec-grade tr.rec-grupo span { position:sticky; left:.6rem; }
+    table.rec-grade tfoot td, table.rec-grade tfoot th { background:var(--fin-sup-2); font-weight:700; text-align:right; padding:.5rem .45rem; border-bottom:0; white-space:nowrap; }
+    table.rec-grade tfoot .rec-fixa { text-align:left; }
+    @media (max-width:639px) { table.rec-grade .rec-fixa { min-width:8.5rem; max-width:9.5rem; padding:.4rem .45rem; } }
+    .rec-cel { display:block; min-width:5.4rem; min-height:2.5rem; padding:.28rem .4rem; border-radius:.45rem; text-align:right; font-variant-numeric:tabular-nums; line-height:1.25; transition:box-shadow .15s, transform .1s; }
+    a.rec-cel:hover { box-shadow:0 0 0 2px var(--fin-verde-anel); }
+    .rec-valor { display:block; font-weight:600; white-space:nowrap; }
+    .rec-PREVISTO .rec-valor, .rec-estimado .rec-valor { font-weight:500; font-style:italic; }
+    .rec-marcas { display:flex; justify-content:flex-end; align-items:center; gap:.3rem; font-size:10px; white-space:nowrap; min-height:.85rem; }
+    .rec-ALTA { box-shadow:inset 0 0 0 2px #DC2626; } .rec-QUEDA { box-shadow:inset 0 0 0 2px #2563EB; }
+    html.dark .rec-ALTA { box-shadow:inset 0 0 0 2px #F87171; } html.dark .rec-QUEDA { box-shadow:inset 0 0 0 2px #60A5FA; }
+    .rec-seta-ALTA { color:#B91C1C; font-weight:700; } .rec-seta-QUEDA { color:#1D4ED8; font-weight:700; }
+    html.dark .rec-seta-ALTA { color:#FCA5A5; } html.dark .rec-seta-QUEDA { color:#93C5FD; }
+    .rec-selo { display:inline-flex; align-items:center; gap:.2rem; padding:.05rem .4rem; border-radius:9999px; font-size:10px; font-weight:600; white-space:nowrap; background:#FEE2E2; color:#B91C1C; }
+    html.dark .rec-selo { background:rgba(239,68,68,.2); color:#FCA5A5; }
+    .rec-selo-neutro { background:var(--fin-sup-3); color:var(--fin-texto-3); }
+    html.dark .rec-selo-neutro { background:var(--fin-sup-3); color:var(--fin-texto-3); }
+    .rec-legenda { display:flex; flex-wrap:wrap; gap:.35rem; }
+    .rec-linha { display:flex; align-items:center; justify-content:space-between; gap:.75rem; padding:.6rem 1rem; border-bottom:1px solid var(--fin-borda-2); color:var(--fin-texto); }
+    .rec-linha:last-child { border-bottom:0; }
+    a.rec-linha:hover { background:var(--fin-sup-2); }
+    .rec-nota { font-size:11px; color:var(--fin-texto-3); }
+    .rec-rolavel { max-height:22rem; overflow-y:auto; }
+</style>

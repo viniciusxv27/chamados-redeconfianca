@@ -18,9 +18,9 @@ from django.views.decorators.http import require_POST
 from users.models import Sector
 
 from . import servicos as sv
-from .models import (AvisoInativacao, MOTIVOS_CHAMADO, SISTEMAS, SISTEMAS_CHAMADO, STATUS_SISTEMA, AcessoAcess, Chamado, Colaborador,
+from .models import (AvisoInativacao, PedidoDesligamento, MOTIVOS_CHAMADO, SISTEMAS, SISTEMAS_CHAMADO, STATUS_SISTEMA, AcessoAcess, Chamado, Colaborador,
                      LogAcess, ModeloMensagem, Solicitacao)
-from .permissoes import FUNCOES, completar, e_superadmin, exige, pode, trata_chamados
+from .permissoes import FUNCOES, completar, e_superadmin, exige, pode, pode_pedir_desligamento, trata_chamados
 
 User = get_user_model()
 ABAS = [('dashboard', 'Dashboard', 'fa-gauge-high', None), ('lojas', 'Lojas & Sede', 'fa-store', 'colaboradores.ver'),
@@ -628,6 +628,8 @@ def desligamentos(request):
         pendentes_execucao=list(base.filter(status=Colaborador.ATIVO, desligamento_em__lte=hoje).order_by('desligamento_em')),
         agendados=list(base.filter(status=Colaborador.ATIVO, desligamento_em__gt=hoje).order_by('desligamento_em')),
         arquivados=list(base.filter(status=Colaborador.DESLIGADO).order_by('-desligado_em')[:200]),
+        pedidos=list(PedidoDesligamento.objects.filter(status=PedidoDesligamento.ABERTO)
+                     .select_related('colaborador', 'colaborador__local', 'solicitante').order_by('criado_em')),
         inativados=list(AvisoInativacao.objects.filter(status=AvisoInativacao.PENDENTE)
                         .select_related('colaborador', 'colaborador__local', 'user').order_by('inativado_em')),
         ativos=base.filter(status=Colaborador.ATIVO, desligamento_em__isnull=True).order_by('nome')))
@@ -744,3 +746,41 @@ def acessos(request):
                   .exclude(Q(is_superuser=True) | Q(hierarchy='SUPERADMIN')).select_related('sector').order_by('first_name'))
     return render(request, 'acess/acessos.html', _ctx(request, 'acessos', liberados=liberados_, candidatos=candidatos,
                                                       funcoes=FUNCOES))
+
+
+@login_required
+def pedir_desligamento(request):
+    """O atalho do RH e do Financeiro: abre o pedido sem precisar do resto do Acess."""
+    if not pode_pedir_desligamento(request.user):
+        messages.error(request, 'Esta tela é do RH, do DP e do Financeiro.')
+        return redirect('home')
+    hoje = timezone.localdate()
+    if request.method == 'POST':
+        c = get_object_or_404(Colaborador, pk=request.POST.get('colaborador') or 0)
+        try:
+            sv.criar_pedido_desligamento(c, request.POST.get('tipo'), parse_date(request.POST.get('saida') or ''),
+                                         parse_date(request.POST.get('execucao') or ''), request.POST.get('observacao'),
+                                         request.user, request)
+            messages.success(request, f'Pedido de {c.nome} enviado ao time de Acessos.')
+        except (sv.RegraAcess, ValueError) as exc:
+            messages.error(request, str(exc))
+        return redirect('acess:pedir_desligamento')
+    return render(request, 'acess/pedir_desligamento.html', {
+        'hoje': hoje, 'sugestao': sv.primeiro_dia_do_mes_seguinte(hoje), 'tipos': PedidoDesligamento.TIPOS,
+        'colaboradores': Colaborador.objects.filter(status=Colaborador.ATIVO).select_related('local').order_by('nome'),
+        'meus': PedidoDesligamento.objects.filter(solicitante=request.user).select_related('colaborador')[:30],
+    })
+
+
+@login_required
+@exige('desligamentos.gerenciar')
+@require_POST
+def pedido_desligamento_decidir(request, pk):
+    pedido = get_object_or_404(PedidoDesligamento, pk=pk)
+    try:
+        sv.decidir_pedido_desligamento(pedido, request.POST.get('decisao'), parse_date(request.POST.get('execucao') or ''),
+                                       request.POST.get('resposta'), request.user, request)
+        messages.success(request, 'Pedido tratado.')
+    except sv.RegraAcess as exc:
+        _erro(request, exc)
+    return _voltar(request, reverse('acess:desligamentos'))

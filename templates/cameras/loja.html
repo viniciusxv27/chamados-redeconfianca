@@ -1,0 +1,110 @@
+{% extends 'cameras/_base.html' %}
+{% block ca_titulo %}{{ gravador.loja }}{% endblock %}
+{% block ca_conteudo %}
+<header class="ca-topo">
+    <div class="ca-titulo"><a class="ca-voltar" href="{% url 'cameras:painel' %}" aria-label="Voltar ao mosaico"><i class="fas fa-arrow-left"></i></a>
+        <div><h1>{{ gravador.loja }}</h1><p><span class="ca-ponto {{ gravador.situacao }}"></span>{% if gravador.situacao == 'online' %}Agente online{% elif gravador.situacao == 'sem_agente' %}Agente ainda não instalado{% else %}Agente sem contato{% if gravador.ultimo_contato %} desde {{ gravador.ultimo_contato|date:"d/m H:i" }}{% endif %}{% endif %}{% if gravador.coordenador %} · {{ gravador.coordenador }}{% endif %}</p></div></div>
+    <a class="ca-botao claro" href="{% url 'cameras:gravador_editar' gravador.id %}"><i class="fas fa-gear"></i>Ajustes da loja</a>
+</header>
+<div class="ca-grade-painel">
+    <div class="ca-mosaico largo">
+        {% for c in canais %}
+        <button type="button" class="ca-tela" data-abrir="{{ c.id }}" data-titulo="{{ c.titulo }}" data-ia="{{ c.ia_ativa|yesno:'1,0' }}">
+            <span class="ca-imagem"><img data-canal="{{ c.id }}" alt="{{ c.titulo }}" hidden><span class="ca-sem-imagem"><i class="fas fa-video-slash"></i><small>Aguardando imagem</small></span></span>
+            <span class="ca-legenda"><strong data-nome>{{ c.titulo }}</strong><small>{% if c.zonas %}{{ c.zonas|length }} área(s){% else %}sem área marcada{% endif %}</small></span>
+        </button>
+        {% empty %}<div class="ca-vazio ca-card"><i class="fas fa-video-slash"></i><p>Nenhuma câmera nesta loja.</p></div>{% endfor %}
+    </div>
+    <aside class="ca-card ca-feed">
+        <h2><i class="fas fa-bell"></i>Últimos alertas</h2>
+        {% for a in alertas %}
+        <a href="{% url 'cameras:alerta_detalhe' a.id %}" class="ca-feed-item"><span class="ca-tipo {{ a.tipo }}"><i class="fas fa-triangle-exclamation"></i></span>
+            <span><strong>{{ a.get_tipo_display }}</strong><small>{{ a.canal.titulo|default:"" }}</small><small>{{ a.criado_em|date:"d/m H:i" }} · {{ a.get_status_display }}</small></span></a>
+        {% empty %}<p class="ca-vazio-texto"><i class="fas fa-check-circle"></i>Nenhum alerta nesta loja.</p>{% endfor %}
+    </aside>
+</div>
+
+<dialog id="caJanela" class="ca-janela">
+    <header><input id="caNome" aria-label="Nome da câmera" maxlength="80"><button type="button" id="caFechar" aria-label="Fechar"><i class="fas fa-times"></i></button></header>
+    <div class="ca-palco" id="caPalco"><img id="caFoto" alt="Imagem da câmera" hidden><div id="caSemFoto" class="ca-sem-imagem"><i class="fas fa-circle-notch fa-spin"></i><small>Pedindo a imagem à loja…</small></div><div id="caZonas"></div></div>
+    <footer>
+        <p><i class="fas fa-vector-square"></i>Arraste sobre a imagem para marcar o mostruário. Clique numa área para remover.</p>
+        <label class="ca-chave"><input type="checkbox" id="caIa"> Analisar esta câmera</label>
+        <button type="button" class="ca-botao" id="caSalvar"><i class="fas fa-check"></i>Salvar</button>
+    </footer>
+</dialog>
+{{ zonas_json|json_script:"caZonasDados" }}
+<script>
+(function () {
+    var loja = {{ gravador.id }}, imagens = Array.from(document.querySelectorAll('.ca-mosaico img[data-canal]')), desde = 0;
+    var ids = imagens.map(function (i) { return i.dataset.canal; }).join(',');
+    var janela = document.getElementById('caJanela'), palco = document.getElementById('caPalco'), caixa = document.getElementById('caZonas');
+    var zonasPorCanal = JSON.parse(document.getElementById('caZonasDados').textContent), foco = 0, zonas = [], botao = null;
+    var fotoGrande = document.getElementById('caFoto');
+    function buscar() {
+        if (document.hidden || !ids) return;
+        fetch("{% url 'cameras:fotos' %}?loja=" + loja + '&canais=' + ids + '&desde=' + desde + (foco ? '&foco=' + foco : '')).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+            if (!d) return;
+            imagens.forEach(function (img) {
+                var f = d.fotos[img.dataset.canal];
+                if (!f) return;
+                img.src = 'data:image/jpeg;base64,' + f.b64; img.hidden = false; desde = Math.max(desde, f.em);
+                if (+img.dataset.canal === foco) { fotoGrande.src = img.src; fotoGrande.hidden = false; document.getElementById('caSemFoto').hidden = true; }
+            });
+        }).catch(function () {});
+    }
+    var ciclo = setInterval(buscar, 10000); buscar();
+    function ritmo(ms) { clearInterval(ciclo); ciclo = setInterval(buscar, ms); }
+    function desenhar() {
+        caixa.innerHTML = '';
+        zonas.forEach(function (z, i) {
+            var d = document.createElement('button');
+            d.type = 'button'; d.className = 'ca-zona'; d.textContent = z.nome; d.title = 'Remover área';
+            d.style.cssText = 'left:' + z.x * 100 + '%;top:' + z.y * 100 + '%;width:' + z.w * 100 + '%;height:' + z.h * 100 + '%';
+            d.addEventListener('click', function () { zonas.splice(i, 1); desenhar(); });
+            caixa.appendChild(d);
+        });
+    }
+    document.querySelectorAll('[data-abrir]').forEach(function (b) {
+        b.addEventListener('click', function () {
+            botao = b; foco = +b.dataset.abrir; zonas = (zonasPorCanal[foco] || []).map(function (z) { return Object.assign({}, z); });
+            document.getElementById('caNome').value = b.dataset.titulo;
+            document.getElementById('caIa').checked = b.dataset.ia === '1';
+            var pequena = b.querySelector('img');
+            fotoGrande.hidden = pequena.hidden; fotoGrande.src = pequena.src || '';
+            document.getElementById('caSemFoto').hidden = !pequena.hidden;
+            desenhar(); janela.showModal(); ritmo(3000); buscar();
+        });
+    });
+    janela.addEventListener('close', function () { foco = 0; ritmo(10000); });
+    document.getElementById('caFechar').addEventListener('click', function () { janela.close(); });
+    var inicio = null, rascunho = null;
+    function ponto(ev) { var r = palco.getBoundingClientRect(); return {x: Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width)), y: Math.max(0, Math.min(1, (ev.clientY - r.top) / r.height))}; }
+    palco.addEventListener('pointerdown', function (ev) {
+        if (ev.target.classList.contains('ca-zona')) return;
+        inicio = ponto(ev); rascunho = document.createElement('div'); rascunho.className = 'ca-zona rascunho'; caixa.appendChild(rascunho); palco.setPointerCapture(ev.pointerId); ev.preventDefault();
+    });
+    function caixaDe(p) { return {x: Math.min(inicio.x, p.x), y: Math.min(inicio.y, p.y), w: Math.abs(p.x - inicio.x), h: Math.abs(p.y - inicio.y)}; }
+    palco.addEventListener('pointermove', function (ev) {
+        if (!inicio) return; var c = caixaDe(ponto(ev));
+        rascunho.style.cssText = 'left:' + c.x * 100 + '%;top:' + c.y * 100 + '%;width:' + c.w * 100 + '%;height:' + c.h * 100 + '%';
+    });
+    palco.addEventListener('pointerup', function (ev) {
+        if (!inicio) return; var c = caixaDe(ponto(ev)); inicio = null;
+        if (c.w > 0.02 && c.h > 0.02) { c.nome = 'Mostruário'; zonas.push(c); }
+        desenhar();
+    });
+    document.getElementById('caSalvar').addEventListener('click', function () {
+        var nome = document.getElementById('caNome').value, ia = document.getElementById('caIa').checked;
+        fetch('/cameras/canal/' + foco + '/salvar/', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}'}, body: JSON.stringify({nome: nome, ia_ativa: ia, zonas: zonas})})
+            .then(function (r) { return r.json(); }).then(function (d) {
+                if (d.erro) { alert(d.erro); return; }
+                zonasPorCanal[foco] = d.zonas; botao.dataset.titulo = d.titulo; botao.dataset.ia = ia ? '1' : '0';
+                botao.querySelector('[data-nome]').textContent = d.titulo;
+                botao.querySelector('.ca-legenda small').textContent = d.zonas.length ? d.zonas.length + ' área(s)' : 'sem área marcada';
+                janela.close();
+            }).catch(function () { alert('Não consegui salvar. Tente de novo.'); });
+    });
+})();
+</script>
+{% endblock %}

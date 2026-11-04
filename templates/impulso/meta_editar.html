@@ -55,6 +55,17 @@
         </div>
         {% include 'impulso/_descricao_midia_campos.html' %}
 
+        <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Prioridade</label>
+                    <select name="prioridade" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                        {% for value, label in prioridades %}
+                        <option value="{{ value }}" {% if value == meta.prioridade %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+{% if corrige_cadastro %}<p class="text-xs text-gray-500">Você cadastrou esta atividade e ela ainda está em "A Fazer": dá para corrigir o prazo dentro do mesmo mês.</p>{% endif %}
+
         {% if manda_no_prazo %}
         <div class="grid sm:grid-cols-2 gap-4">
             <div>

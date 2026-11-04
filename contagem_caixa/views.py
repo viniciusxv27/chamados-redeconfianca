@@ -350,6 +350,7 @@ def importacao(request):
         if config.modo not in dict(ConfiguracaoContagem.Modo.choices):
             config.modo = ConfiguracaoContagem.Modo.FORMA_PGTO
         config.notificar_gerente = request.POST.get('notificar_gerente') == 'on'
+        config.notificar_whatsapp = request.POST.get('notificar_whatsapp') == 'on'
         config.save()
 
         confirmar = request.POST.get('confirmar') == '1'

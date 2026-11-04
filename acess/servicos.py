@@ -842,3 +842,66 @@ def decidir_inativacao(aviso, decisao, execucao=None, usuario=None, request=None
     aviso.observacao, aviso.decidido_por, aviso.decidido_em = observacao, usuario, timezone.now()
     aviso.save(update_fields=['status', 'execucao', 'observacao', 'decidido_por', 'decidido_em'])
     return aviso
+
+
+def _usuarios_que_cuidam_de_desligamento():
+    from django.contrib.auth import get_user_model
+
+    from .permissoes import pode
+    gente = get_user_model().objects.filter(is_active=True, acesso_acess__ativo=True).distinct()
+    return [u for u in gente if pode(u, 'desligamentos.gerenciar')]
+
+
+def primeiro_dia_do_mes_seguinte(dia):
+    return (dia.replace(day=28) + timedelta(days=4)).replace(day=1)
+
+
+def criar_pedido_desligamento(colaborador, tipo, saida, execucao, observacao, usuario, request=None):
+    from .models import PedidoDesligamento as Pedido
+    if colaborador.status != Colaborador.ATIVO:
+        raise RegraAcess('A ficha desta pessoa já está arquivada.')
+    if tipo not in dict(Pedido.TIPOS):
+        raise RegraAcess('Escolha o tipo do pedido.')
+    if not saida or not execucao:
+        raise RegraAcess('Informe a saída da empresa e a execução sugerida.')
+    if execucao < timezone.localdate():
+        raise RegraAcess('A execução sugerida precisa ser hoje ou depois.')
+    if execucao < saida:
+        raise RegraAcess('A execução não pode ser antes da saída da empresa.')
+    if Pedido.objects.filter(colaborador=colaborador, status=Pedido.ABERTO).exists():
+        raise RegraAcess(f'Já existe um pedido em aberto para {colaborador.nome}.')
+    pedido = Pedido.objects.create(colaborador=colaborador, tipo=tipo, saida_empresa=saida, execucao_sugerida=execucao,
+                                   observacao=str(observacao or '').strip()[:1000], solicitante=usuario)
+    registrar(request, 'DESLIGAMENTO_PEDIDO', 'DESLIGAMENTO',
+              f'{usuario.get_full_name() or usuario.email} pediu {pedido.get_tipo_display().lower()} de {colaborador.nome}',
+              colaborador=colaborador, usuario=usuario)
+    _notificar(_usuarios_que_cuidam_de_desligamento(), f'Pedido de desligamento: {colaborador.nome}',
+               f'{usuario.get_full_name() or usuario.email} pediu para {execucao:%d/%m/%Y}.', '/acess/desligamentos/')
+    return pedido
+
+
+def decidir_pedido_desligamento(pedido, decisao, execucao, resposta, usuario, request=None):
+    """Agendar usa o mesmo caminho do agendamento feito na tela; recusar exige o motivo."""
+    from .models import PedidoDesligamento as Pedido
+    with transaction.atomic():
+        pedido = Pedido.objects.select_for_update().select_related('colaborador', 'solicitante').get(pk=pedido.pk)
+        if pedido.status != Pedido.ABERTO:
+            raise RegraAcess('Este pedido já foi tratado.')
+        resposta = str(resposta or '').strip()[:500]
+        if decisao == 'agendar':
+            c = pedido.colaborador
+            agendar_desligamento(c, pedido.saida_empresa, execucao or pedido.execucao_sugerida,
+                                 pedido.observacao or 'Pedido do RH/Financeiro', c.versao, usuario, request)
+            pedido.status = Pedido.AGENDADO
+        elif decisao == 'recusar':
+            if not resposta:
+                raise RegraAcess('Diga por que o pedido foi recusado.')
+            pedido.status = Pedido.RECUSADO
+        else:
+            raise RegraAcess('Decisão inválida.')
+        pedido.resposta, pedido.tratado_por, pedido.tratado_em = resposta, usuario, timezone.now()
+        pedido.save(update_fields=['status', 'resposta', 'tratado_por', 'tratado_em'])
+    if pedido.solicitante:
+        _notificar([pedido.solicitante], f'Pedido de desligamento: {pedido.colaborador.nome}',
+                   pedido.get_status_display() + (f': {resposta}' if resposta else '.'), '/acess/pedir-desligamento/')
+    return pedido

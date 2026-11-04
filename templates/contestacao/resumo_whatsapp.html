@@ -1,0 +1,239 @@
+{% extends 'base.html' %}
+{% block title %}Resumo do ciclo no WhatsApp{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto px-4 py-6">
+
+    <a href="{% url 'contestacao:exclusion_list' %}" class="text-sm text-gray-500 hover:text-gray-700 mb-3 inline-block">
+        <i class="fas fa-arrow-left mr-1.5"></i>Voltar para a lista
+    </a>
+
+    <h1 class="text-xl font-bold text-gray-800 mb-1">
+        <i class="fab fa-whatsapp text-green-600 mr-2"></i>Resumo do ciclo no WhatsApp
+    </h1>
+    <p class="text-sm text-gray-500 mb-5">
+        Quando o ciclo fecha, quem estiver marcado aqui recebe uma mensagem com os totais e o link do PDF com
+        o detalhe de cada venda. Sai uma vez por ciclo.
+    </p>
+
+    {% if not qtd_marcadas %}
+    <div class="mb-5 p-3 rounded-xl text-sm bg-amber-50 border border-amber-200 text-amber-800">
+        <i class="fas fa-circle-info mr-1.5"></i>Ninguém escolhido ainda: nada é enviado até você marcar quem recebe.
+    </div>
+    {% endif %}
+
+    <section class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-6">
+        <div class="flex items-start justify-between gap-3 flex-wrap mb-3">
+            <div class="min-w-0">
+                <h2 class="text-sm font-semibold text-gray-700">Ciclo atual</h2>
+                {% if estado.lote %}
+                <p class="text-xs text-gray-500">
+                    Planilha sincronizada em {{ estado.lote.created_at|date:"d/m/Y H:i" }} ·
+                    {{ estado.contestacoes }} contestação(ões) · {{ lojas_prontas }} de {{ estado.lojas|length }} lojas prontas
+                </p>
+                {% endif %}
+            </div>
+            {% if estado.envio %}
+            <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">Resumo já criado</span>
+            {% elif estado.fechado %}
+            <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">Fechado</span>
+            {% else %}
+            <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">Ainda não fechou</span>
+            {% endif %}
+        </div>
+
+        {% if estado.motivos %}
+        <ul class="text-sm text-gray-600 list-disc pl-5 space-y-0.5 mb-3">
+            {% for motivo in estado.motivos %}<li>{{ motivo }}</li>{% endfor %}
+        </ul>
+        {% elif not estado.envio %}
+        <p class="text-sm text-gray-600 mb-3">
+            Todas as lojas estão prontas. {% if qtd_marcadas %}O resumo sai no próximo de acordo ou análise salvos, ou às 8h30 do dia seguinte, ou agora pelo botão.{% else %}Falta só escolher quem recebe.{% endif %}
+        </p>
+        {% endif %}
+
+        <p class="text-xs text-gray-500 mb-3">
+            Regra: a janela de contestação terminou, sem liberação avulsa em vigor, e toda contestação teve análise do
+            gestor e resposta da loja (de acordo ou negação). <strong>Loja sem contestação conta como pronta quando a
+            janela termina</strong> e sai no PDF como "sem contestação".
+        </p>
+
+        {% if estado.lojas %}
+        <details class="mb-3" {% if not estado.fechado %}open{% endif %}>
+            <summary class="text-sm font-medium text-gray-700 cursor-pointer">Situação por loja</summary>
+            <div class="mt-2 divide-y divide-gray-100 border border-gray-100 rounded-xl">
+                {% for loja in estado.lojas %}
+                <div class="px-3 py-2 flex items-start justify-between gap-3 flex-wrap">
+                    <div class="min-w-0">
+                        <p class="text-sm font-medium text-gray-800">{{ loja.filial }}</p>
+                        <p class="text-xs text-gray-500">
+                            {% if loja.contestacoes %}{{ loja.contestacoes }} contestação(ões) · R$ {{ loja.valor|floatformat:"2g" }}{% else %}Nenhuma contestação neste ciclo{% endif %}
+                            {% if loja.falta_analise %} · {{ loja.falta_analise }} sem análise{% endif %}
+                            {% if loja.falta_de_acordo %} · {{ loja.falta_de_acordo }} sem de acordo ({{ loja.quem|join:", " }}){% endif %}
+                        </p>
+                    </div>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium {% if loja.pronta %}bg-green-100 text-green-800{% else %}bg-amber-100 text-amber-800{% endif %}">{{ loja.rotulo }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </details>
+        {% endif %}
+
+        {% if estado.lote and not estado.envio %}
+        <form method="post" action="{% url 'contestacao:resumo_whatsapp_enviar' %}"
+              data-confirmar="{% if estado.fechado %}Enviar agora o resumo do ciclo para {{ qtd_marcadas }} pessoa(s)?{% else %}Este ciclo AINDA NÃO FECHOU. Enviar agora para {{ qtd_marcadas }} pessoa(s)? O PDF vai avisar o que está em aberto, e o envio automático deste ciclo não sai depois.{% endif %}"
+              onsubmit="return confirm(this.dataset.confirmar);">
+            {% csrf_token %}
+            <button type="submit" {% if not qtd_marcadas or not estado.contestacoes %}disabled{% endif %}
+                    class="px-4 py-2 rounded-lg bg-green-600 text-white text-sm font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                <i class="fab fa-whatsapp mr-1.5"></i>{% if estado.fechado %}Enviar agora{% else %}Enviar agora mesmo sem fechar{% endif %}
+            </button>
+        </form>
+        {% endif %}
+    </section>
+
+    <section class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-6">
+        <div class="flex items-center justify-between gap-3 flex-wrap mb-1">
+            <h2 class="text-sm font-semibold text-gray-700">Quem recebe</h2>
+            <span class="text-xs text-gray-500"><span id="qtdMarcadas">{{ qtd_marcadas }}</span> marcada(s)</span>
+        </div>
+        {% if marcadas_sem_telefone %}
+        <div class="my-3 p-3 rounded-xl text-sm bg-red-50 border border-red-100 text-red-700">
+            <i class="fas fa-triangle-exclamation mr-1.5"></i>Sem telefone que sirva, não vão receber até corrigir o cadastro:
+            {% for p in marcadas_sem_telefone %}<strong>{{ p.nome }}</strong> ({{ p.problema }}){% if not forloop.last %}, {% endif %}{% endfor %}.
+        </div>
+        {% endif %}
+        <form method="post">
+            {% csrf_token %}
+            <input type="search" id="buscaPessoa" placeholder="Buscar por nome ou setor" aria-label="Buscar por nome ou setor"
+                   class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm mt-2 mb-2">
+            <div class="max-h-96 overflow-y-auto border border-gray-100 rounded-xl divide-y divide-gray-100">
+                {% for p in pessoas %}
+                <label class="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-gray-50" data-pessoa="{{ p.nome|lower }} {{ p.setor|lower }}">
+                    <input type="checkbox" name="usuarios" value="{{ p.id }}" {% if p.marcada %}checked{% endif %} class="rounded border-gray-300 shrink-0">
+                    <span class="min-w-0 flex-1">
+                        <span class="block text-sm text-gray-800 truncate">{{ p.nome }}</span>
+                        <span class="block text-xs text-gray-500 truncate">{{ p.setor|default:"Sem setor" }}</span>
+                    </span>
+                    {% if p.numero %}
+                    <span class="text-xs text-gray-500 shrink-0 hidden sm:inline">{{ p.numero }}</span>
+                    {% else %}
+                    <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 shrink-0">{{ p.problema|capfirst }}</span>
+                    {% endif %}
+                </label>
+                {% endfor %}
+            </div>
+            <button type="submit" class="mt-3 px-5 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700">
+                <i class="fas fa-floppy-disk mr-1.5"></i>Salvar seleção
+            </button>
+        </form>
+    </section>
+
+    <section class="mb-6">
+        <h2 class="text-sm font-semibold text-gray-600 mb-2">Histórico de envios</h2>
+        {% for envio in envios %}
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 mb-3">
+            <div class="flex items-start justify-between gap-3 flex-wrap mb-2">
+                <div class="min-w-0">
+                    <p class="text-sm font-medium text-gray-800">Ciclo da planilha de {{ envio.lote.created_at|date:"d/m/Y H:i" }}</p>
+                    <p class="text-xs text-gray-500">
+                        {{ envio.criado_em|date:"d/m/Y H:i" }} · {{ envio.get_origem_display }}{% if envio.disparado_por %} por {{ envio.disparado_por.get_full_name|default:envio.disparado_por.username }}{% endif %}
+                        {% if not envio.ciclo_fechado %} · <strong>antes de o ciclo fechar</strong>{% endif %}
+                        · {{ envio.qtd_enviados }} enviado(s), {{ envio.qtd_faltam }} faltando
+                    </p>
+                </div>
+                {% if envio.pdf %}
+                <a href="{% url 'contestacao:resumo_whatsapp_pdf' envio.pk %}" target="_blank" rel="noopener"
+                   class="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 shrink-0">
+                    <i class="fas fa-file-pdf text-red-500 mr-1"></i>Ver PDF
+                </a>
+                {% endif %}
+            </div>
+            {% if envio.erro %}
+            <p class="mb-2 p-2 rounded-lg text-xs bg-red-50 border border-red-100 text-red-700">Não conseguiu preparar o PDF: {{ envio.erro }}. A fila continua: use o botão de reenviar.</p>
+            {% endif %}
+            <div class="divide-y divide-gray-100 border border-gray-100 rounded-xl mb-3">
+                {% for linha in envio.linhas_tela %}
+                <div class="px-3 py-2 flex items-start justify-between gap-3 flex-wrap">
+                    <div class="min-w-0 flex-1">
+                        <p class="text-sm text-gray-800">{{ linha.nome }}</p>
+                        <p class="text-xs text-gray-500">
+                            {% if linha.enviado_em %}Recebeu em {{ linha.enviado_em|date:"d/m/Y H:i" }}{% endif %}
+                            {% if linha.detalhe %}{{ linha.detalhe }}{% endif %}
+                        </p>
+                        {% if linha.tentativas > 1 %}
+                        <details class="text-xs text-gray-500 mt-0.5">
+                            <summary class="cursor-pointer">{{ linha.tentativas }} tentativas</summary>
+                            <ul class="pl-3 mt-1 space-y-0.5">
+                                {% for t in linha.tentativas_tela %}<li>{{ t.em|date:"d/m/Y H:i" }}: {{ t.rotulo }}{% if t.detalhe %} ({{ t.detalhe }}){% endif %}</li>{% endfor %}
+                            </ul>
+                        </details>
+                        {% endif %}
+                    </div>
+                    <div class="flex items-center gap-2 shrink-0">
+                        <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium
+                            {% if linha.situacao == 'enviado' %}bg-green-100 text-green-800
+                            {% elif linha.situacao == 'falhou' %}bg-red-100 text-red-800
+                            {% elif linha.situacao == 'sem_telefone' %}bg-amber-100 text-amber-800
+                            {% else %}bg-gray-100 text-gray-700{% endif %}">{{ linha.get_situacao_display }}</span>
+                        {% if linha.situacao != 'pendente' and linha.situacao != 'enviando' %}
+                        <form method="post" action="{% url 'contestacao:resumo_whatsapp_enviar' %}"
+                              data-confirmar="Reenviar o resumo para {{ linha.nome }}?" onsubmit="return confirm(this.dataset.confirmar);">
+                            {% csrf_token %}
+                            <input type="hidden" name="envio" value="{{ envio.pk }}">
+                            <input type="hidden" name="linha" value="{{ linha.pk }}">
+                            <button type="submit" class="text-xs px-2 py-1 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">Reenviar</button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            <div class="flex items-center gap-2 flex-wrap">
+                <form method="post" action="{% url 'contestacao:resumo_whatsapp_enviar' %}"
+                      data-confirmar="Reenviar para quem falhou, ficou sem telefone, está na fila ou entrou na seleção depois? Quem já recebeu não recebe de novo."
+                      onsubmit="return confirm(this.dataset.confirmar);">
+                    {% csrf_token %}
+                    <input type="hidden" name="envio" value="{{ envio.pk }}">
+                    <input type="hidden" name="alvo" value="faltantes">
+                    <button type="submit" class="px-3 py-1.5 rounded-lg bg-green-600 text-white text-xs font-medium hover:bg-green-700">
+                        <i class="fas fa-rotate-right mr-1"></i>Reenviar para quem falta
+                    </button>
+                </form>
+                <form method="post" action="{% url 'contestacao:resumo_whatsapp_enviar' %}"
+                      data-confirmar="Refazer o PDF com os dados de agora e mandar DE NOVO para todos os selecionados, inclusive quem já recebeu?"
+                      onsubmit="return confirm(this.dataset.confirmar);">
+                    {% csrf_token %}
+                    <input type="hidden" name="envio" value="{{ envio.pk }}">
+                    <input type="hidden" name="alvo" value="todos">
+                    <button type="submit" class="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 text-xs font-medium hover:bg-gray-50">
+                        Refazer e mandar a todos
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% empty %}
+        <p class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 text-sm text-gray-500">Nenhum envio ainda.</p>
+        {% endfor %}
+    </section>
+</div>
+
+<script>
+(function () {
+    var busca = document.getElementById('buscaPessoa');
+    var linhas = Array.prototype.slice.call(document.querySelectorAll('[data-pessoa]'));
+    var contador = document.getElementById('qtdMarcadas');
+    function semAcento(texto) { return texto.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
+    busca.addEventListener('input', function () {
+        var termo = semAcento(busca.value.trim());
+        linhas.forEach(function (linha) {
+            linha.style.display = semAcento(linha.dataset.pessoa).indexOf(termo) === -1 ? 'none' : '';
+        });
+    });
+    document.addEventListener('change', function (e) {
+        if (e.target.name !== 'usuarios') return;
+        contador.textContent = document.querySelectorAll('input[name="usuarios"]:checked').length;
+    });
+})();
+</script>
+{% endblock %}

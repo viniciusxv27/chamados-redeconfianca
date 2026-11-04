@@ -1,0 +1,118 @@
+{% load caixa_tags %}
+<div class="px-5 py-4 border-b border-gray-100 flex items-start justify-between gap-3">
+    <div class="min-w-0">
+        <p class="fin-migalha">{{ competencia|date:"F/Y" }} · {{ d.tipo }}</p>
+        <h3 class="font-bold text-gray-900 break-words">{{ d.nome }}</h3>
+        <p class="text-xs text-gray-500">{{ d.loja.name|default:"Escritório" }}{% if d.fornecedor %} · {{ d.fornecedor }}{% endif %}</p>
+    </div>
+    <div class="flex items-center gap-2 shrink-0">
+        {% if c.situacao != 'FORA' %}<span class="rec-chip rec-{{ c.situacao }}">{% if c.icone %}<i class="fas {{ c.icone }} text-[10px]"></i>{% endif %}{{ c.rotulo }}</span>{% endif %}
+        {% if not em_pagina %}<button type="button" data-fechar class="w-8 h-8 rounded-lg text-gray-400 hover:bg-gray-100" aria-label="Fechar"><i class="fas fa-xmark"></i></button>{% endif %}
+    </div>
+</div>
+
+<dl class="fin-fatos grid-cols-2 sm:grid-cols-4 text-sm">
+    <div><dt>Valor{% if c.estimado %} esperado{% endif %}</dt><dd class="tabular font-semibold">{% if c.valor is not None %}{{ c.valor|brl_zero }}{% else %}—{% endif %}</dd></div>
+    <div><dt>Vencimento</dt><dd class="tabular">{{ c.vencimento|date:"d/m/Y"|default:"—" }}</dd></div>
+    <div><dt>Pago</dt><dd class="tabular">{% if c.pago_valor %}{{ c.pago_valor|brl_zero }}{% else %}—{% endif %}{% if c.pago_em %}<span class="block rec-nota">em {{ c.pago_em|date:"d/m/Y" }}</span>{% endif %}</dd></div>
+    <div><dt>{% if c.base_esperado %}Valor esperado{% else %}Média anterior{% endif %}</dt><dd class="tabular">{% if c.media is not None %}{{ c.media|brl_zero }}{% if c.variacao is not None %}<span class="block rec-nota {% if c.alerta %}rec-seta-{{ c.alerta }}{% endif %}">{{ c.variacao_txt }} neste mês</span>{% endif %}{% else %}—{% endif %}</dd></div>
+</dl>
+
+<div class="p-5 space-y-5">
+    {% if c.alerta == 'ALTA' %}<p class="text-sm rounded-xl rec-VENCIDO p-3"><i class="fas fa-arrow-trend-up mr-1"></i>Acima do limite: {{ c.variacao_txt }} sobre {% if c.base_esperado %}o valor esperado{% else %}a média dos últimos meses{% endif %}.</p>
+    {% elif c.alerta == 'QUEDA' %}<p class="text-sm rounded-xl rec-PENDENTE p-3"><i class="fas fa-arrow-trend-down mr-1"></i>Abaixo do habitual: {{ c.variacao_txt }} sobre {% if c.base_esperado %}o valor esperado{% else %}a média dos últimos meses{% endif %}.</p>{% endif %}
+    {% if c.dias_atraso_pago %}<p class="text-sm rounded-xl rec-A_VENCER p-3"><i class="fas fa-clock mr-1"></i>Paga {{ c.dias_atraso_pago }} dia(s) depois do vencimento.</p>{% endif %}
+    {% if c.parcial %}<p class="text-sm rounded-xl rec-PARCIAL p-3"><i class="fas fa-circle-half-stroke mr-1"></i>Falta pagar {{ c.saldo|brl_zero }}.</p>{% endif %}
+    {% if c.estimado %}<p class="rec-nota"><i class="fas fa-circle-info mr-1"></i>Sem conta lançada neste mês: o valor é o esperado do cadastro e não entra na média.</p>{% endif %}
+    {% if esperado_diverge %}<p class="rec-nota">O cadastro espera {{ d.valor_esperado|brl_zero }}; a diferença neste mês é de {{ diferenca_esperado|brl_zero }}.</p>{% endif %}
+
+    {% if vinculos %}
+    <section>
+        <h4 class="text-sm font-bold text-gray-900 mb-2">Títulos vinculados</h4>
+        <ul class="fin-card overflow-hidden">
+            {% for v in vinculos %}
+            <li class="rec-linha">
+                <div class="min-w-0">
+                    {% if ve_pagar %}<a href="{% url 'financeiro:titulo' v.titulo.id %}" class="font-semibold hover:text-emerald-700 break-words">{{ v.titulo.descricao }}</a>{% else %}<span class="font-semibold break-words">{{ v.titulo.descricao }}</span>{% endif %}
+                    <p class="rec-nota">{% if v.titulo.pessoa_nome %}{{ v.titulo.pessoa_nome }} · {% endif %}vence {{ v.titulo.vencimento|date:"d/m/Y" }} · {{ v.titulo.valor|brl_zero }}</p>
+                </div>
+                <div class="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+                    {% if v.titulo.vencido %}<span class="fin-chip st-VENCIDO">Vencido</span>{% else %}<span class="fin-chip st-{{ v.titulo.status }}">{{ v.titulo.get_status_display }}</span>{% endif %}
+                    {% if pode_editar %}<form method="post" action="{% url 'financeiro:recorrente_desvincular' v.id %}">{% csrf_token %}<input type="hidden" name="voltar" value="{{ caminho }}"><button class="fin-acao fin-acao-perigo" title="O título continua em Contas a Pagar"><i class="fas fa-link-slash text-[10px]"></i>Desvincular</button></form>{% endif %}
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+        {% if tem_titulo %}<p class="rec-nota mt-1.5">A situação do mês acompanha o título: a baixa é feita em Contas a Pagar.</p>{% endif %}
+    </section>
+    {% endif %}
+
+    {% if pode_editar %}
+    <section>
+        <h4 class="text-sm font-bold text-gray-900 mb-2">{% if tem_titulo %}Observação do mês{% else %}Anotar à mão{% endif %}</h4>
+        <form method="post" action="{% url 'financeiro:recorrente_mes' d.id competencia.year competencia.month %}" class="space-y-3">
+            {% csrf_token %}<input type="hidden" name="voltar" value="{{ caminho }}">
+            {% if not tem_titulo %}
+            <p class="rec-nota">Para contas que não passam por Contas a Pagar. Anotar não dá baixa nem mexe em banco.</p>
+            <div class="grid grid-cols-2 gap-3">
+                <div><label class="fin-label" for="recMValor">Valor da conta (R$)</label><input id="recMValor" name="valor" inputmode="decimal" value="{% if registro.valor is not None %}{{ registro.valor|campo }}{% endif %}" class="fin-input" placeholder="{{ d.valor_esperado|campo }}"></div>
+                <div><label class="fin-label" for="recMVenc">Vencimento neste mês</label><input id="recMVenc" name="vencimento" type="date" value="{{ registro.vencimento|date:'Y-m-d' }}" class="fin-input"></div>
+                <div><label class="fin-label" for="recMPago">Pago em</label><input id="recMPago" name="pago_em" type="date" value="{{ registro.pago_em|date:'Y-m-d' }}" class="fin-input"></div>
+                <div><label class="fin-label" for="recMValorPago">Valor pago (R$)</label><input id="recMValorPago" name="valor_pago" inputmode="decimal" value="{% if registro.valor_pago is not None %}{{ registro.valor_pago|campo }}{% endif %}" class="fin-input" placeholder="igual ao da conta"></div>
+            </div>
+            <label class="flex items-center gap-2 text-sm min-h-[32px] cursor-pointer"><input type="checkbox" name="sem_cobranca" {% if registro.sem_cobranca %}checked{% endif %} class="accent-emerald-600 w-4 h-4">Não houve cobrança neste mês</label>
+            {% endif %}
+            <div><label class="fin-label" for="recMObs">Observação</label><input id="recMObs" name="observacao" maxlength="255" value="{{ registro.observacao|default:'' }}" class="fin-input" placeholder="Ex.: reajuste de contrato em novembro"></div>
+            <div class="flex justify-end gap-2 flex-wrap">
+                {% if registro and not tem_titulo %}<button name="limpar" value="1" class="fin-btn fin-btn-claro" data-livre data-fin-confirmar="O valor, o pagamento e a observação anotados neste mês são apagados. O histórico fica na Rastreabilidade." data-fin-titulo="Limpar a anotação?" data-fin-botao="Limpar"><i class="fas fa-eraser"></i>Limpar</button>{% endif %}
+                <button class="fin-btn fin-btn-verde"><i class="fas fa-check"></i>Salvar</button>
+            </div>
+        </form>
+    </section>
+    {% elif registro.observacao %}
+    <p class="text-sm text-gray-600"><strong>Observação:</strong> {{ registro.observacao }}</p>
+    {% endif %}
+
+    {% if pode_vincular and c.situacao != 'SEM_COBRANCA' and not registro.pago_em %}
+    <section>
+        <h4 class="text-sm font-bold text-gray-900 mb-2">Vincular título de Contas a Pagar</h4>
+        {% if candidatos %}
+        <ul class="fin-card overflow-hidden mb-3">
+            {% for t in candidatos %}{% include 'financeiro/_recorrente_titulo_opcao.html' %}{% endfor %}
+        </ul>
+        {% else %}<p class="rec-nota mb-2">Nenhum título deste mês combina com o cadastro.</p>{% endif %}
+        <form method="get" action="{% url 'financeiro:recorrente_mes' d.id competencia.year competencia.month %}" data-rec-busca class="flex gap-2">
+            <input type="hidden" name="voltar" value="{{ caminho }}">
+            <input type="search" name="buscar" value="{{ busca }}" class="fin-input flex-1 min-w-0" placeholder="Buscar por descrição, fornecedor, nº ou CNPJ" aria-label="Buscar outro título">
+            <button class="fin-btn fin-btn-claro shrink-0" data-livre><i class="fas fa-magnifying-glass"></i><span class="hidden sm:inline">Buscar</span></button>
+        </form>
+        {% if busca %}
+        <p class="rec-nota mt-2">Títulos sem despesa, vencendo de 2 meses antes a 2 meses depois.</p>
+        <ul class="fin-card overflow-hidden mt-1">
+            {% for t in achados %}{% include 'financeiro/_recorrente_titulo_opcao.html' %}{% empty %}<li class="fin-vazio">Nada encontrado.</li>{% endfor %}
+        </ul>
+        {% endif %}
+    </section>
+    {% endif %}
+
+    {% if pode_lancar and c.situacao != 'SEM_COBRANCA' %}
+    <section>
+        <h4 class="text-sm font-bold text-gray-900 mb-2">Lançar em Contas a Pagar</h4>
+        <form method="post" action="{% url 'financeiro:recorrente_lancar' d.id competencia.year competencia.month %}" class="grid grid-cols-2 sm:grid-cols-3 gap-3 items-end" data-fin-confirmar="Cria um título a pagar de verdade, já vinculado a este mês." data-fin-titulo="Lançar a conta?" data-fin-botao="Lançar">
+            {% csrf_token %}<input type="hidden" name="voltar" value="{{ caminho }}">
+            <div><label class="fin-label" for="recLValor">Valor (R$)</label><input id="recLValor" name="valor" inputmode="decimal" required value="{% if c.valor is not None %}{{ c.valor|campo }}{% else %}{{ d.valor_esperado|campo }}{% endif %}" class="fin-input"></div>
+            <div><label class="fin-label" for="recLVenc">Vencimento</label><input id="recLVenc" name="vencimento" type="date" required value="{% if c.vencimento %}{{ c.vencimento|date:'Y-m-d' }}{% endif %}" class="fin-input"></div>
+            <button class="fin-btn fin-btn-claro col-span-2 sm:col-span-1"><i class="fas fa-file-invoice-dollar"></i>Lançar</button>
+        </form>
+    </section>
+    {% endif %}
+
+    {% if historico %}
+    <section>
+        <h4 class="text-sm font-bold text-gray-900 mb-2">Últimos meses com valor</h4>
+        <ul class="flex flex-wrap gap-2">
+            {% for h in historico %}<li class="rec-chip rec-{{ h.situacao }} tabular" title="{{ h.rotulo }}">{{ h.competencia|date:"m/Y" }} · R$ {{ h.texto }}</li>{% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+</div>

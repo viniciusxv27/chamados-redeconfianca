@@ -351,6 +351,8 @@ window.Fin.brl = function (n) { return Number(n || 0).toLocaleString('pt-BR', {s
             {% if chave == 'pagar' %}
             <a href="{% url 'financeiro:pagar' %}" class="fin-tab {% if aba == 'pagar' %}fin-tab-ativa{% endif %}" {% if aba == 'pagar' %}aria-current="page"{% endif %}><i class="fas {{ icone }}"></i><span>A pagar</span></a>
             <a href="{% url 'financeiro:pagas' %}" class="fin-tab {% if aba == 'pagas' %}fin-tab-ativa{% endif %}" {% if aba == 'pagas' %}aria-current="page"{% endif %}><i class="fas fa-circle-check"></i><span>Pagas</span></a>
+            {% elif chave == 'recorrentes' %}
+            <a href="{% url 'financeiro:recorrentes' %}" class="fin-tab {% if aba == 'recorrentes' %}fin-tab-ativa{% endif %}" {% if aba == 'recorrentes' %}aria-current="page"{% endif %}><i class="fas {{ icone }}"></i><span>Recorrentes</span></a>
             {% elif chave == 'receber' %}
             <a href="{% url 'financeiro:receber' %}" class="fin-tab {% if aba == 'receber' %}fin-tab-ativa{% endif %}" {% if aba == 'receber' %}aria-current="page"{% endif %}><i class="fas {{ icone }}"></i><span>A receber</span></a>
             <a href="{% url 'financeiro:recebidas' %}" class="fin-tab {% if aba == 'recebidas' %}fin-tab-ativa{% endif %}" {% if aba == 'recebidas' %}aria-current="page"{% endif %}><i class="fas fa-circle-check"></i><span>Recebidas</span></a>

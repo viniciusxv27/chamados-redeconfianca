@@ -6,7 +6,7 @@ import unicodedata
 from collections import Counter, defaultdict
 from datetime import date, timedelta
 
-from django.db import transaction
+from django.db import DatabaseError, transaction
 from django.db.models import Q
 from django.utils import timezone
 
@@ -22,9 +22,30 @@ LEMBRETE_DIAS_ANTES = 2
 CAMPOS_HISTORICO = ('sector', 'job_title', 'first_name', 'last_name', 'demission_date', 'is_active')
 
 
-def pode_acessar(user) -> bool:
+def e_superadmin(user) -> bool:
     return bool(user and user.is_authenticated
                 and (user.is_superuser or getattr(user, 'hierarchy', '') == 'SUPERADMIN'))
+
+
+def _papel_liberado(user):
+    """'GERENCIAR', 'VER' ou None, guardado no usuário: o menu pergunta em toda página."""
+    if not (user and user.is_authenticated):
+        return None
+    if not hasattr(user, '_quadro_hc_papel'):
+        from .models import AcessoQuadroHC
+        try:
+            user._quadro_hc_papel = AcessoQuadroHC.objects.filter(user=user).values_list('papel', flat=True).first()
+        except DatabaseError:  # servidor que ainda não rodou o migrate
+            user._quadro_hc_papel = None
+    return user._quadro_hc_papel
+
+
+def pode_acessar(user) -> bool:
+    return e_superadmin(user) or _papel_liberado(user) is not None
+
+
+def pode_gerenciar(user) -> bool:
+    return e_superadmin(user) or _papel_liberado(user) == 'GERENCIAR'
 
 
 def _norm(texto) -> str:

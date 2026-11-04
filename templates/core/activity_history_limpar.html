@@ -1,0 +1,212 @@
+{% extends 'base.html' %}
+
+{% block title %}Limpar histórico - Rede Confiança{% endblock %}
+
+{% block extra_css %}
+<style>
+    .ah-card { background:#fff; border:1px solid #ECECF1; border-radius:1rem;
+               box-shadow:0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.06); }
+    html.dark .ah-card { background:var(--tema-superficie); border-color:var(--tema-borda); box-shadow:none; }
+    .tabular { font-variant-numeric:tabular-nums; }
+    .ah-trilho { height:.65rem; border-radius:999px; background:#E2E8F0; overflow:hidden; }
+    html.dark .ah-trilho { background:var(--tema-superficie-3); }
+    .ah-progresso { height:100%; width:0; background:#DC2626; transition:width .2s; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto p-3 sm:p-5">
+    <a href="{% url 'core:activity_history' %}" class="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-indigo-700 mb-3 min-h-[2.5rem]">
+        <i class="fas fa-arrow-left"></i>Voltar ao histórico
+    </a>
+
+    <h1 class="text-2xl font-bold text-gray-900 flex items-center gap-2.5 mb-4">
+        <span class="w-9 h-9 rounded-xl bg-red-100 text-red-700 flex items-center justify-center"><i class="fas fa-broom"></i></span>
+        Limpar histórico com mais de 1 ano
+    </h1>
+
+    <div class="ah-card p-4 sm:p-5 mb-4">
+        {% if previa.total %}
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+            <div>
+                <p class="text-xs text-gray-500">Registros que sairão</p>
+                <p class="text-2xl font-bold text-red-600 tabular" id="ahPrevisto">{{ previa.total }}</p>
+            </div>
+            <div>
+                <p class="text-xs text-gray-500">Mais antigo</p>
+                <p class="text-lg font-semibold text-gray-900 tabular">{{ previa.mais_antigo|date:"d/m/Y" }}</p>
+            </div>
+            <div>
+                <p class="text-xs text-gray-500">Até antes de</p>
+                <p class="text-lg font-semibold text-gray-900 tabular">{{ previa.corte|date:"d/m/Y" }}</p>
+            </div>
+        </div>
+
+        <p class="text-sm text-gray-700 mb-1"><strong>Não dá para desfazer.</strong> Os registros saem do banco, inclusive das exportações futuras.</p>
+        <p class="text-xs text-gray-500 mb-4">
+            A limpeza alcança só o Histórico de Atividades. O histórico de alterações de cadastro e as posições do mapa
+            não são tocados. A limpeza roda em lotes de {{ lote }} e fica registrada, com seu nome, no próprio histórico.
+        </p>
+
+        <div id="ahConfirmar">
+            {% csrf_token %}
+            <label for="ahPalavra" class="block text-sm font-semibold text-gray-700 mb-1">Para confirmar, digite <span class="font-mono text-red-700">{{ palavra }}</span></label>
+            <div class="flex items-stretch gap-2 flex-wrap">
+                <input id="ahPalavra" type="text" autocomplete="off" spellcheck="false"
+                       class="flex-1 min-w-[10rem] border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <button id="ahExecutar" type="button" disabled
+                        class="inline-flex items-center justify-center gap-2 px-4 min-h-[2.5rem] rounded-lg text-sm font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed">
+                    <i class="fas fa-broom"></i>Apagar {{ previa.total }} registro{{ previa.total|pluralize }}
+                </button>
+            </div>
+        </div>
+
+        <div id="ahAndamento" style="display:none" aria-live="polite">
+            <div class="flex items-center justify-between text-sm mb-1.5">
+                <span class="text-gray-700" id="ahEstado">Apagando...</span>
+                <span class="text-gray-500 tabular" id="ahContagem"></span>
+            </div>
+            <div class="ah-trilho"><div class="ah-progresso" id="ahBarra"></div></div>
+            <p class="text-xs text-gray-500 mt-2" id="ahDica">Pode parar a qualquer momento: o que já saiu fica registrado e o restante sai numa próxima limpeza.</p>
+            <button id="ahDeNovo" type="button" style="display:none"
+                    class="mt-3 inline-flex items-center gap-2 px-4 min-h-[2.5rem] rounded-lg text-sm font-semibold text-white bg-red-600 hover:bg-red-700">
+                <i class="fas fa-rotate-right"></i>Continuar de onde parou
+            </button>
+        </div>
+        <p id="ahErro" class="text-sm text-red-700 mt-3" style="display:none" role="alert"></p>
+        {% else %}
+        <p class="text-sm text-gray-700"><i class="fas fa-circle-check text-emerald-600 mr-1.5"></i>Não há registros anteriores a {{ previa.corte|date:"d/m/Y" }}. Nada a limpar.</p>
+        {% endif %}
+    </div>
+
+    <div class="ah-card overflow-hidden">
+        <div class="px-4 py-3 border-b border-gray-100">
+            <h2 class="text-sm font-bold text-gray-800"><i class="fas fa-list-check text-indigo-600 mr-1.5"></i>Limpezas anteriores</h2>
+        </div>
+        <div class="divide-y divide-gray-100">
+            {% for l in anteriores %}
+            <div class="px-4 py-2.5 flex items-center justify-between gap-3 flex-wrap text-sm">
+                <div class="min-w-0">
+                    <p class="text-gray-800">{{ l.executado_por_nome }}</p>
+                    <p class="text-xs text-gray-500 tabular">{{ l.iniciado_em|date:"d/m/Y H:i" }} · anteriores a {{ l.corte|date:"d/m/Y" }}</p>
+                </div>
+                <div class="text-right">
+                    <p class="font-semibold text-gray-900 tabular">{{ l.removidos }} de {{ l.previsto }}</p>
+                    <p class="text-xs text-gray-500">{{ l.get_situacao_display }}</p>
+                </div>
+            </div>
+            {% empty %}
+            <p class="px-4 py-6 text-center text-xs text-gray-400">Nenhuma limpeza feita até agora.</p>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+{% if previa.total %}
+<script>
+(function () {
+    var PALAVRA = '{{ palavra|escapejs }}';
+    var CORTE = '{{ previa.corte|date:"Y-m-d" }}';
+    var URL_INICIAR = '{% url "core:limpar_historico_iniciar" %}';
+    var URL_LOTE = '{% url "core:limpar_historico_lote" 0 %}';
+    var URL_VOLTAR = '{% url "core:activity_history" %}';
+    var TENTATIVAS = 3;
+
+    var campo = document.getElementById('ahPalavra');
+    var executar = document.getElementById('ahExecutar');
+    var erro = document.getElementById('ahErro');
+    var deNovo = document.getElementById('ahDeNovo');
+    var token = document.querySelector('#ahConfirmar input[name=csrfmiddlewaretoken]').value;
+    var limpezaId = null, previsto = 0, removidos = 0, falhas = 0;
+
+    function mostrarErro(texto) { erro.textContent = texto; erro.style.display = texto ? 'block' : 'none'; }
+
+    function postar(url, corpo) {
+        return fetch(url, {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'X-CSRFToken': token, 'Content-Type': 'application/json',
+                       'X-Requested-With': 'XMLHttpRequest' },
+            body: JSON.stringify(corpo || {})
+        }).then(function (r) {
+            return r.json().catch(function () { return {}; }).then(function (d) {
+                if (!r.ok) {
+                    var e = new Error(d.erro || 'O servidor não respondeu como esperado.');
+                    e.definitivo = r.status >= 400 && r.status < 500;
+                    throw e;
+                }
+                return d;
+            });
+        });
+    }
+
+    function pintar() {
+        var fracao = previsto ? Math.min(100, Math.round(removidos * 100 / previsto)) : 100;
+        document.getElementById('ahBarra').style.width = fracao + '%';
+        document.getElementById('ahContagem').textContent =
+            removidos.toLocaleString('pt-BR') + ' de ' + previsto.toLocaleString('pt-BR');
+    }
+
+    function concluir() {
+        document.getElementById('ahEstado').textContent = 'Limpeza concluída.';
+        document.getElementById('ahDica').innerHTML = '';
+        var link = document.createElement('a');
+        link.href = URL_VOLTAR; link.textContent = 'Voltar ao histórico';
+        link.className = 'text-indigo-700 font-semibold hover:underline';
+        document.getElementById('ahDica').appendChild(link);
+    }
+
+    function parar(texto) {
+        document.getElementById('ahEstado').textContent = 'Limpeza parada.';
+        mostrarErro(texto);
+        deNovo.style.display = 'inline-flex';
+    }
+
+    // Um lote de cada vez: a resposta de um é que pede o próximo, e cada um é uma
+    // requisição curta, que não prende o gunicorn nem o banco.
+    function proximoLote() {
+        postar(URL_LOTE.replace('/0/', '/' + limpezaId + '/')).then(function (d) {
+            falhas = 0;
+            removidos = d.removidos; previsto = d.previsto;
+            pintar();
+            if (d.concluido) { concluir(); return; }
+            setTimeout(proximoLote, 150);
+        }).catch(function (e) {
+            if (!e.definitivo && ++falhas < TENTATIVAS) {
+                setTimeout(proximoLote, 1500 * falhas);
+                return;
+            }
+            parar(e.message + ' Nada se perde: ' + removidos.toLocaleString('pt-BR') + ' já saíram e o resto continua no histórico.');
+        });
+    }
+
+    campo.addEventListener('input', function () {
+        executar.disabled = campo.value.trim() !== PALAVRA;
+    });
+
+    executar.addEventListener('click', function () {
+        if (campo.value.trim() !== PALAVRA) { return; }
+        executar.disabled = true;
+        mostrarErro('');
+        postar(URL_INICIAR, { confirmacao: campo.value.trim(), corte: CORTE }).then(function (d) {
+            limpezaId = d.id; previsto = d.previsto; removidos = d.removidos;
+            document.getElementById('ahConfirmar').style.display = 'none';
+            document.getElementById('ahAndamento').style.display = 'block';
+            pintar();
+            proximoLote();
+        }).catch(function (e) {
+            executar.disabled = false;
+            mostrarErro(e.message);
+        });
+    });
+
+    deNovo.addEventListener('click', function () {
+        deNovo.style.display = 'none';
+        mostrarErro('');
+        falhas = 0;
+        document.getElementById('ahEstado').textContent = 'Apagando...';
+        proximoLote();
+    });
+})();
+</script>
+{% endif %}
+{% endblock %}

@@ -300,3 +300,27 @@ class CSTransaction(models.Model):
         from django.utils import timezone
         delta = self.expiration_date - timezone.now().date()
         return delta.days
+
+
+class SugestaoProduto(models.Model):
+    """Link de produto que o colaborador sugere para o Mercadinho; a empresa analisa se é viável."""
+    PENDENTE, APROVADA, RECUSADA = 'PENDENTE', 'APROVADA', 'RECUSADA'
+    STATUS = [(PENDENTE, 'Em análise'), (APROVADA, 'Aprovada'), (RECUSADA, 'Não incluída')]
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='sugestoes_mercadinho', verbose_name='Quem sugeriu')
+    link = models.URLField(max_length=2000, verbose_name='Link do produto')
+    nome = models.CharField(max_length=150, blank=True, verbose_name='Nome do produto')
+    observacao = models.CharField(max_length=500, blank=True, verbose_name='Por que sugerir')
+    status = models.CharField(max_length=10, choices=STATUS, default=PENDENTE, db_index=True, verbose_name='Situação')
+    resposta = models.CharField(max_length=500, blank=True, verbose_name='Resposta')
+    analisado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    analisado_em = models.DateTimeField(null=True, blank=True)
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Sugestão de produto'
+        verbose_name_plural = 'Sugestões de produto'
+        ordering = ['-criado_em']
+
+    def __str__(self):
+        return self.nome or self.link

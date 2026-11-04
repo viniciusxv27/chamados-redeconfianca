@@ -1,14 +1,16 @@
 {% extends 'base.html' %}
+{% load trilhas_treinamentos %}
 {% load static %}
 
 {% block title %}Gerenciar {{ trail.title }} - Trilhas de Conhecimento{% endblock %}
 
 {% block content %}
-<div class="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 p-6">
+{% abas_trilhas_treinamentos 'gerir_trilhas' %}
+<div class="min-h-screen bg-gray-50 p-4 sm:p-6">
     <div class="max-w-7xl mx-auto">
         
         <!-- Header -->
-        <div class="bg-white rounded-3xl shadow-2xl p-4 sm:p-6 lg:p-8 mb-8">
+        <div class="bg-white rounded-xl shadow-sm p-4 sm:p-6 lg:p-8 mb-8">
             <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
                 <div class="flex items-center">
                     <div class="w-16 h-16 rounded-2xl flex items-center justify-center text-4xl mr-4"
@@ -27,7 +29,7 @@
 
                 <div class="flex flex-wrap gap-2">
                     <a href="{% url 'knowledge_trails:edit_trail' trail.id %}" 
-                       class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-all">
+                       class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-orange-600 transition-all">
                         <i class="fas fa-edit mr-1"></i> Editar Trilha
                     </a>
                     <a href="{% url 'knowledge_trails:edit_trail_map' trail.id %}" 
@@ -127,7 +129,7 @@
                         </div>
                         
                         <div class="text-right">
-                            <p class="text-2xl font-bold text-purple-600">{{ progress.total_points_earned }}</p>
+                            <p class="text-2xl font-bold text-primary">{{ progress.total_points_earned }}</p>
                             <p class="text-xs text-gray-500">pontos</p>
                         </div>
                     </div>

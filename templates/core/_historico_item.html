@@ -1,0 +1,55 @@
+<article class="ah-item ah-c-{{ log.acao.cor }}" data-log="{{ log.id }}">
+    <span class="ah-icone"><i class="fas {{ log.acao.icone }}"></i></span>
+    <div class="min-w-0 flex-1">
+        <div class="flex items-center gap-x-2 gap-y-1 flex-wrap">
+            {% if log.user %}
+            <a href="?user={{ log.user_id }}" class="text-sm font-semibold text-gray-900 hover:underline">{{ log.user.get_full_name|default:log.user.username }}</a>
+            {% else %}
+            <span class="text-sm font-semibold text-gray-900"><i class="fas fa-robot text-xs mr-1 text-gray-400"></i>Sistema</span>
+            {% endif %}
+            <span class="ah-selo">{{ log.acao.rotulo }}</span>
+            <span class="ah-modulo">{{ log.acao.modulo_rotulo }}</span>
+            <span class="ml-auto text-xs text-gray-500 tabular whitespace-nowrap" title="{{ log.created_at|date:'d/m/Y H:i:s' }}">{{ log.created_at|date:"H:i" }}</span>
+        </div>
+
+        <p class="text-[13px] text-gray-700 mt-0.5" style="overflow-wrap:anywhere">{{ log.titulo|truncatechars:400 }}</p>
+
+        {% if log.mudancas %}
+        <div class="ah-diff">
+            {% for m in log.mudancas %}
+            <div class="ah-diff-linha">
+                <span class="ah-diff-campo">{{ m.campo }}</span>
+                {% if m.antes is None %}
+                <span class="ah-sem-antes">antes não registrado</span>
+                {% else %}
+                <del class="ah-antes">{{ m.antes|default:"vazio" }}</del>
+                {% endif %}
+                <i class="fas fa-arrow-right ah-seta" aria-label="mudou para"></i>
+                <ins class="ah-depois" style="text-decoration:none">{{ m.depois|default:"vazio" }}</ins>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <div class="flex items-center gap-x-3 gap-y-1 flex-wrap mt-0.5">
+            {% if log.user.sector %}
+            <span class="text-[11px] text-gray-400" title="Setor atual do cadastro"><i class="fas fa-store mr-1"></i>{{ log.user.sector.name }}</span>
+            {% endif %}
+            {% if log.ip_address %}
+            <span class="text-[11px] text-gray-400 tabular" title="Endereço IP"><i class="fas fa-network-wired mr-1"></i>{{ log.ip_address }}</span>
+            {% endif %}
+        </div>
+
+        {% if log.posicao %}
+        <a class="ah-mapa" href="{% url 'maps:mapa' %}?usuario={{ log.user_id }}&amp;em={{ log.em_param }}" data-mapa="1">
+            <i class="fas fa-location-dot"></i>
+            <span>
+                {% if log.posicao.minutos == 0 %}Posição no mesmo minuto{% else %}Posição {{ log.posicao.minutos }} min {% if log.posicao.antes %}antes{% else %}depois{% endif %}{% endif %}
+                · {{ log.posicao.origem_rotulo }}
+                · <span class="tabular">{{ log.posicao.latitude|floatformat:4 }}, {{ log.posicao.longitude|floatformat:4 }}</span>
+                · ver no mapa
+            </span>
+        </a>
+        {% endif %}
+    </div>
+</article>

@@ -2,7 +2,7 @@
 import logging
 import re
 import unicodedata
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from django.utils import timezone
@@ -343,4 +343,62 @@ def notificar_atencao(dia):
 
     dia.notificado_em = timezone.now()
     dia.save(update_fields=['notificado_em'])
+    if config.notificar_whatsapp:
+        _avisar_divergencia_no_whatsapp(dia, pessoas)
     return pessoas
+
+
+def _adms_da_loja(loja):
+    from django.contrib.auth import get_user_model
+    from django.db.models import Q
+    return list(get_user_model().objects.filter(
+        Q(sector=loja) | Q(sectors=loja), is_active=True,
+        communication_groups__name__istartswith="ADM's LOJAS").distinct())
+
+
+def _avisar_divergencia_no_whatsapp(dia, gerentes):
+    """Só com o interruptor ligado em Importação. Falha de envio não atrapalha a importação."""
+    from core.evolution import enviar_texto
+    texto = (f'⚠️ Divergência no caixa da {dia.loja.name} em {dia.data:%d/%m/%Y}.\n'
+             f'SAP: R$ {dia.valor_sap} · Vivo GO: R$ {dia.valor_vivogo} · diferença: R$ {dia.divergencia}.\n'
+             f'Confira e ajuste na Contagem de Caixa do portal.')
+    enviados = set()
+    for pessoa in [*gerentes, *_adms_da_loja(dia.loja)]:
+        if pessoa.id in enviados or not pessoa.phone:
+            continue
+        enviados.add(pessoa.id)
+        try:
+            ok, erro = enviar_texto(pessoa.phone, texto, timeout=5)
+            if not ok:
+                logger.warning('WhatsApp da divergência de caixa não saiu (%s): %s', pessoa.id, erro)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning('WhatsApp da divergência de caixa falhou (%s): %s', pessoa.id, type(exc).__name__)
+
+
+DIAS_DO_AVISO_DE_DIVERGENCIA = 15
+
+
+def divergencias_para_avisar(user):
+    """Dias em Atenção da loja do gerente ou do ADM, para o popup. Cache curto: o menu roda em toda página."""
+    from django.core.cache import caches
+    from django.db.models import F
+    from .permissions import e_adm_de_loja, pode_ver_caixa
+
+    if not (user and user.is_authenticated and user.sector_id):
+        return []
+    if 'GERENTE' not in (user.job_title or '').upper() and not e_adm_de_loja(user):
+        return []
+    cache, chave = caches['local'], f'caixa:divergencias:{user.pk}'
+    guardado = cache.get(chave)
+    if guardado is not None:
+        return guardado
+    desde = timezone.localdate() - timedelta(days=DIAS_DO_AVISO_DE_DIVERGENCIA)
+    sap_comparavel = F('valor_sap') - F('agoracred') - F('renova') - F('transferencias')
+    dias = (ContagemCaixaDia.objects.filter(loja_id=user.sector_id, data__gte=desde, valor_vivogo__isnull=False)
+            .exclude(valor_vivogo=sap_comparavel).select_related('loja').order_by('-data')[:10])
+    abre_caixa = pode_ver_caixa(user)
+    lista = [{'loja': d.loja.name, 'data': f'{d.data:%d/%m/%Y}', 'sap': str(d.valor_sap), 'vivogo': str(d.valor_vivogo),
+              'diferenca': str(d.divergencia), 'url': f'/contagem-caixa/loja/{d.loja_id}/' if abre_caixa else ''}
+             for d in dias if d.em_atencao]
+    cache.set(chave, lista, 300)
+    return lista

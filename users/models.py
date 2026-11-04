@@ -1,3 +1,6 @@
+import re
+import unicodedata
+
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.conf import settings
@@ -919,6 +922,14 @@ class User(AbstractUser):
     def nivel_hierarquia(self):
         return self.ESCALA_HIERARQUIA.get(self.hierarchy, 0)
 
+    def pode_ver_atestados(self):
+        """Atestado é dado de saúde: só SUPERADMIN e quem é do RH/DP, por grupo ou pelo setor principal."""
+        if self.is_superuser or self.hierarchy == 'SUPERADMIN':
+            return True
+        if self.sector_id and self.sector.name.strip().upper() in ('RH', 'DEPARTAMENTO PESSOAL', 'DP'):
+            return True
+        return self.communication_groups.filter(name__in=['RH', 'DP']).exists()
+
     def can_edit_users(self):
         """Abre a edição de cadastro de funcionário.
 
@@ -1162,6 +1173,38 @@ class RequiredDocument(models.Model):
         return self.name
 
 
+CATEGORIA_DOC_PESSOAL, CATEGORIA_DOC_ADMISSIONAL, CATEGORIA_DOC_ATESTADO = 'PESSOAL', 'ADMISSIONAL', 'ATESTADO'
+CATEGORIA_DOC_DECLARACAO, CATEGORIA_DOC_OUTROS = 'DECLARACAO', 'OUTROS'
+CATEGORIAS_DOCUMENTO = [
+    (CATEGORIA_DOC_PESSOAL, 'Documentos Pessoais'),
+    (CATEGORIA_DOC_ADMISSIONAL, 'Documentos Admissionais'),
+    (CATEGORIA_DOC_ATESTADO, 'Atestados'),
+    (CATEGORIA_DOC_DECLARACAO, 'Declarações'),
+    (CATEGORIA_DOC_OUTROS, 'Outros Documentos'),
+]
+# Sem categoria escolhida (documentos antigos e o pré-cadastro), vale o nome. Atestado primeiro:
+# errar para o lado restrito é o erro barato.
+_PALAVRAS_DA_CATEGORIA = [
+    (CATEGORIA_DOC_ATESTADO, ('atestado', 'afastamento', 'licenca medica', 'laudo')),
+    (CATEGORIA_DOC_DECLARACAO, ('declarac', 'justificativa')),
+    (CATEGORIA_DOC_ADMISSIONAL, ('contrato', 'admiss', 'termo', 'ficha', 'aso', 'ctps', 'carteira de trabalho')),
+    (CATEGORIA_DOC_PESSOAL, ('rg', 'cpf', 'cnh', 'identidade', 'residencia', 'certidao', 'titulo de eleitor',
+                             'reservista', 'nascimento', 'casamento', 'foto', 'pis', 'vacina')),
+]
+
+
+def inferir_categoria_documento(nome):
+    limpo = unicodedata.normalize('NFKD', str(nome or '')).encode('ascii', 'ignore').decode().lower()
+    palavras = re.findall(r'[a-z0-9]+', limpo)
+    texto = ' '.join(palavras)
+    for categoria, chaves in _PALAVRAS_DA_CATEGORIA:
+        for chave in chaves:
+            # Siglas curtas só valem como palavra inteira: "rg" não pode casar com "cargo".
+            if (chave in palavras) if len(chave) <= 3 else (chave in texto):
+                return categoria
+    return CATEGORIA_DOC_OUTROS
+
+
 class UserDocument(models.Model):
     """Documento enviado por um colaborador (no pré-cadastro ou pelo gestor)."""
     user = models.ForeignKey(
@@ -1208,6 +1251,10 @@ class UserDocument(models.Model):
         max_length=20, null=True, blank=True,
         choices=[(ORIGEM_PRE_CADASTRO, 'Enviado no pré-cadastro'), (ORIGEM_POSTERIOR, 'Adicionado depois')],
         verbose_name="Origem")
+    # Vazio: a categoria sai do nome (`categoria_efetiva`), até alguém do RH/DP classificar.
+    categoria = models.CharField(
+        max_length=14, blank=True, default='', db_default='', choices=CATEGORIAS_DOCUMENTO,
+        verbose_name="Categoria")
 
     class Meta:
         verbose_name = "Documento do Colaborador"
@@ -1216,6 +1263,14 @@ class UserDocument(models.Model):
 
     def __str__(self):
         return f"{self.user} - {self.display_name}"
+
+    @property
+    def categoria_efetiva(self):
+        return self.categoria or inferir_categoria_documento(self.display_name)
+
+    @property
+    def restrito(self):
+        return self.categoria_efetiva == CATEGORIA_DOC_ATESTADO
 
     @property
     def do_pre_cadastro(self):

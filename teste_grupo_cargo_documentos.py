@@ -101,18 +101,17 @@ try:
           fonte.count('origem=UserDocument.ORIGEM_PRE_CADASTRO') == 2)
         r = ca.get(f'/users/manage/users/{novo.pk}/profile/')
         h = html(r)
-        i_pre, i_dep = h.find('Enviados no pré-cadastro'), h.find('Adicionados depois')
-        t('perfil abre com as duas seções', r.status_code == 200 and 0 < i_pre < i_dep, r.status_code)
-        t('RG e CPF na seção do pré-cadastro', i_pre < h.find('RG ZZ') < i_dep and i_pre < h.find('CPF antigo ZZ') < i_dep)
-        t('contrato na seção de depois, com quem enviou', h.find('Contrato ZZ') > i_dep and 'por ZZ Gestora' in h[i_dep:])
-        t('contadores por seção', '(2)' in h[i_pre:i_dep] and '(1)' in h[i_dep:i_dep + 400])
+        t('perfil abre em seções por categoria', r.status_code == 200 and 'Documentos Pessoais' in h and 'Documentos Admissionais' in h, r.status_code)
+        i_pes, i_adm = h.find('fa-id-card text-blue-600'), h.find('fa-file-signature text-emerald-600')
+        t('RG e CPF na seção de pessoais', i_pes < h.find('RG ZZ') < i_adm and i_pes < h.find('CPF antigo ZZ') < i_adm)
+        t('contrato na seção de admissionais, com quem enviou', h.find('Contrato ZZ') > i_adm and 'por ZZ Gestora' in h[i_adm:])
+        t('a linha diz o que veio do pré-cadastro', h.count('>pré-cadastro<') == 2, h.count('>pré-cadastro<'))
         normal = User.objects.create_user(username='zz.gc.normal', email='zz.gc.normal@exemplo-teste.local', password='x',
                                           first_name='ZZ', last_name='Normal', sector=loja)
         UserDocument.objects.create(user=normal, document_name='Doc ZZ', file='zz/d.pdf', original_filename='d.pdf',
                                     uploaded_by=adm, origem=UserDocument.ORIGEM_POSTERIOR)
         h = html(ca.get(f'/users/manage/users/{normal.pk}/profile/'))
-        t('sem pré-cadastro: sem a seção vazia do pré-cadastro', 'Enviados no pré-cadastro' not in h
-          and 'Adicionados pela gestão' in h)
+        t('sem pré-cadastro: nenhum selo de pré-cadastro', '>pré-cadastro<' not in h)
 
         print('— Grupo por cargo')
         g = CommunicationGroup.objects.create(name='ZZ Gerentes', created_by=adm)

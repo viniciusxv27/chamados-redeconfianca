@@ -1,0 +1,9 @@
+{% extends 'financeiro/base_financeiro.html' %}
+{% block fin_titulo %}Despesas recorrentes{% endblock %}
+{% block fin_cabecalho %}{{ d.nome }}{% endblock %}
+{% block fin_subtitulo %}Despesas recorrentes{% endblock %}
+{% block fin_css %}{% include 'financeiro/_recorrente_css.html' %}{% endblock %}
+{% block fin_acoes %}<a href="{{ caminho }}" class="fin-btn fin-btn-claro"><i class="fas fa-arrow-left"></i>Voltar à grade</a>{% endblock %}
+{% block fin_conteudo %}
+<div class="fin-card overflow-hidden max-w-3xl mx-auto mb-6">{% include fragmento %}</div>
+{% endblock %}

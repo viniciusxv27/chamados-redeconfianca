@@ -1,6 +1,7 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.core.paginator import Paginator
 from django.http import JsonResponse, HttpResponse
 from django.db.models import Count, Sum, Q, Prefetch
 from django.utils import timezone
@@ -11,6 +12,7 @@ from .models import (
     KnowledgeTrail, TrailModule, Lesson, QuizQuestion, QuizOption, QuizAnswer,
     TrailProgress, LessonProgress, Certificate
 )
+from .modulo import pode_gerir_trilhas
 from users.models import Sector, User
 import json
 
@@ -77,8 +79,14 @@ def trails_dashboard(request):
     
     # Adicionar progresso do usuário
     trail_data = []
+    # Só lê. get_progress grava linha "não iniciado" em toda trilha, e esta tela é
+    # a entrada de Trilhas e Treinamentos: quem só veio ver um treinamento inflaria
+    # o total de manage_trail e impediria apagar a trilha (delete_trail olha isso).
+    progresso_por_trilha = {
+        p.trail_id: p for p in TrailProgress.objects.filter(user=user, trail__in=[t.pk for t in trails])
+    }
     for trail in trails:
-        progress = trail.get_progress(user)
+        progress = progresso_por_trilha.get(trail.pk)
         completion = trail.get_completion_percentage(user)
         
         # Determinar se pode gerenciar esta trilha
@@ -118,11 +126,8 @@ def trails_dashboard(request):
     certificates = Certificate.objects.filter(user=user).select_related('trail').order_by('-issued_at')[:5]
     
     # Verificar se pode criar trilhas
-    can_create = False
-    if hasattr(user, 'hierarchy'):
-        if user.hierarchy in ['SUPERADMIN', 'ADMIN', 'SUPERVISOR']:
-            can_create = True
-    
+    can_create = pode_gerir_trilhas(user)
+
     context = {
         'trail_data': trail_data,
         'user_stats': user_stats,
@@ -540,6 +545,55 @@ def download_certificate_pdf(request, certificate_id):
 
 
 # ============= VIEWS DE GERENCIAMENTO (SUPERVISORES) =============
+
+@login_required
+def manage_trails(request):
+    """A aba "Gerenciar trilhas": todas as que a pessoa cuida, inclusive as inativas.
+
+    A tela da trilha continua sendo manage_trail. Aqui é só a lista que levava
+    até ela — o painel mostra apenas as ativas, e a inativa só era achada no Admin.
+    """
+    user = request.user
+    if not pode_gerir_trilhas(user):
+        messages.error(request, 'Você não tem permissão para gerenciar trilhas.')
+        return redirect('knowledge_trails:dashboard')
+
+    trilhas = KnowledgeTrail.objects.select_related('sector').order_by('-is_active', 'title')
+    if not (user.is_superuser or user.hierarchy in ('SUPERADMIN', 'ADMIN')):
+        # Mesma conta de _can_manage_trail: setores adicionais + setor principal.
+        setores = list(user.sectors.all())
+        if user.sector:
+            setores.append(user.sector)
+        trilhas = trilhas.filter(sector__in=setores)
+
+    stats = {
+        'total': trilhas.count(),
+        'active': trilhas.filter(is_active=True).count(),
+        'inactive': trilhas.filter(is_active=False).count(),
+    }
+
+    status_filter = request.GET.get('status', 'all')
+    if status_filter == 'active':
+        trilhas = trilhas.filter(is_active=True)
+    elif status_filter == 'inactive':
+        trilhas = trilhas.filter(is_active=False)
+
+    search = request.GET.get('search', '').strip()
+    if search:
+        trilhas = trilhas.filter(title__icontains=search)
+
+    trilhas = trilhas.annotate(
+        # "not_started" fica de fora: a linha nasce só de abrir a trilha.
+        pessoas=Count('user_progresses', filter=Q(user_progresses__status__in=['in_progress', 'completed']), distinct=True),
+        concluiram=Count('user_progresses', filter=Q(user_progresses__status='completed'), distinct=True),
+    )
+    return render(request, 'knowledge_trails/manage_trails.html', {
+        'page_obj': Paginator(trilhas, 20).get_page(request.GET.get('page')),
+        'stats': stats,
+        'status_filter': status_filter,
+        'search': search,
+    })
+
 
 @login_required
 def manage_trail(request, trail_id):

@@ -2,7 +2,7 @@ from django.urls import path
 
 from contagem_caixa import views_piscofins
 
-from . import views, views_admin, views_banco, views_fechamento, views_importacao
+from . import views, views_admin, views_banco, views_fechamento, views_importacao, views_recorrentes
 
 app_name = 'financeiro'
 
@@ -19,6 +19,18 @@ urlpatterns = [
     path('fechamento/bloquear/', views_fechamento.fechamento_bloquear, name='fechamento_bloquear'),
     path('fechamento/regra/', views_fechamento.fechamento_config, name='fechamento_config'),
     path('fechamento/acessos/', views_fechamento.fechamento_acessos, name='fechamento_acessos'),
+
+    # Despesas recorrentes
+    path('recorrentes/', views_recorrentes.recorrentes, name='recorrentes'),
+    path('recorrentes/excel/', views_recorrentes.excel, name='recorrentes_excel'),
+    path('recorrentes/nova/', views_recorrentes.despesa_nova, name='recorrente_nova'),
+    path('recorrentes/vincular-sugestoes/', views_recorrentes.vincular_sugestoes, name='recorrentes_vincular_sugestoes'),
+    path('recorrentes/vinculo/<int:pk>/desvincular/', views_recorrentes.desvincular, name='recorrente_desvincular'),
+    path('recorrentes/<int:pk>/editar/', views_recorrentes.despesa_editar, name='recorrente_editar'),
+    path('recorrentes/<int:pk>/excluir/', views_recorrentes.despesa_excluir, name='recorrente_excluir'),
+    path('recorrentes/<int:pk>/mes/<int:ano>/<int:mes>/', views_recorrentes.mes_detalhe, name='recorrente_mes'),
+    path('recorrentes/<int:pk>/mes/<int:ano>/<int:mes>/vincular/', views_recorrentes.vincular, name='recorrente_vincular'),
+    path('recorrentes/<int:pk>/mes/<int:ano>/<int:mes>/lancar/', views_recorrentes.lancar, name='recorrente_lancar'),
 
     # Títulos
     path('pagar/', views.pagar, name='pagar'),

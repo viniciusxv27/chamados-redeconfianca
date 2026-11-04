@@ -1,12 +1,14 @@
 {% extends "base.html" %}
+{% load trilhas_treinamentos %}
 {% load static %}
 
 {% block title %}Editor de Minimapa - {{ trail.title }}{% endblock %}
 
 {% block content %}
-<div class="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 p-6">
+{% abas_trilhas_treinamentos 'gerir_trilhas' %}
+<div class="min-h-screen bg-gray-50 p-4 sm:p-6">
     <div class="mb-6">
-        <div class="bg-gradient-to-r from-purple-600 to-pink-600 rounded-3xl shadow-2xl text-white p-4 sm:p-6 lg:p-8">
+        <div class="bg-primary rounded-xl shadow-sm text-white p-4 sm:p-6 lg:p-8">
             <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
                 <div>
                     <h3 class="text-2xl sm:text-3xl font-bold mb-2 flex items-center gap-3">
@@ -39,7 +41,7 @@
             <div class="bg-white rounded-3xl shadow-xl overflow-hidden">
                 <div class="bg-white border-b-2 border-gray-100 p-6">
                     <h5 class="text-xl font-bold text-gray-800 flex items-center gap-2">
-                        <i class="fas fa-edit text-purple-600"></i>
+                        <i class="fas fa-edit text-primary"></i>
                         Arraste os Módulos
                     </h5>
                 </div>
@@ -96,7 +98,7 @@
             <div class="bg-white rounded-3xl shadow-xl overflow-hidden">
                 <div class="bg-white border-b-2 border-gray-100 p-6">
                     <h5 class="text-xl font-bold text-gray-800 flex items-center gap-2">
-                        <i class="fas fa-list text-purple-600"></i>
+                        <i class="fas fa-list text-primary"></i>
                         Módulos
                     </h5>
                 </div>
@@ -115,7 +117,7 @@
                                     <span id="pos-{{ module.id }}">X: {{ module.map_x }} Y: {{ module.map_y }}</span>
                                 </div>
                             </div>
-                            <span class="px-2 py-1 bg-purple-600 text-white text-xs rounded-full font-semibold">{{ module.order }}</span>
+                            <span class="px-2 py-1 bg-primary text-white text-xs rounded-full font-semibold">{{ module.order }}</span>
                         </div>
                         {% endfor %}
                     </div>
@@ -131,7 +133,7 @@
             <div class="bg-white rounded-3xl shadow-xl overflow-hidden">
                 <div class="bg-white border-b-2 border-gray-100 p-6">
                     <h5 class="text-xl font-bold text-gray-800 flex items-center gap-2">
-                        <i class="fas fa-keyboard text-purple-600"></i>
+                        <i class="fas fa-keyboard text-primary"></i>
                         Atalhos
                     </h5>
                 </div>

@@ -1,16 +1,18 @@
 {% extends "base.html" %}
+{% load trilhas_treinamentos %}
 {% load static %}
 
 {% block title %}Respostas de {{ target_user.get_full_name|default:target_user.username }} - {{ lesson.title }}{% endblock %}
 
 {% block content %}
+{% abas_trilhas_treinamentos 'gerir_trilhas' %}
 <div class="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 p-3 sm:p-6">
     <div class="max-w-6xl mx-auto">
         <!-- Breadcrumb -->
         <div class="mb-6 flex flex-wrap items-center gap-2 text-sm text-gray-600">
-            <a href="{% url 'knowledge_trails:dashboard' %}" class="hover:text-purple-600 transition-colors">Dashboard</a>
+            <a href="{% url 'knowledge_trails:dashboard' %}" class="hover:text-primary transition-colors">Trilhas e Treinamentos</a>
             <i class="fas fa-chevron-right text-xs"></i>
-            <a href="{% url 'knowledge_trails:edit_trail' trail.id %}" class="hover:text-purple-600 transition-colors">
+            <a href="{% url 'knowledge_trails:edit_trail' trail.id %}" class="hover:text-primary transition-colors">
                 {% if trail.icon %}
                 <img src="{{ trail.icon.url }}" alt="Logo da trilha" class="inline-block w-5 h-5 rounded object-cover align-middle mr-1">
                 {% else %}
@@ -19,15 +21,15 @@
                 {{ trail.title }}
             </a>
             <i class="fas fa-chevron-right text-xs"></i>
-            <a href="{% url 'knowledge_trails:edit_lesson' lesson.id %}" class="hover:text-purple-600 transition-colors">{{ lesson.title }}</a>
+            <a href="{% url 'knowledge_trails:edit_lesson' lesson.id %}" class="hover:text-primary transition-colors">{{ lesson.title }}</a>
             <i class="fas fa-chevron-right text-xs"></i>
-            <a href="{% url 'knowledge_trails:quiz_answers' lesson.id %}" class="hover:text-purple-600 transition-colors">Respostas</a>
+            <a href="{% url 'knowledge_trails:quiz_answers' lesson.id %}" class="hover:text-primary transition-colors">Respostas</a>
             <i class="fas fa-chevron-right text-xs"></i>
             <span class="text-gray-800 font-semibold">{{ target_user.get_full_name|default:target_user.username }}</span>
         </div>
 
-        <div class="bg-white rounded-3xl shadow-2xl overflow-hidden">
-            <div class="bg-gradient-to-r from-indigo-600 to-purple-600 text-white p-5 sm:p-8">
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+            <div class="bg-primary text-white p-5 sm:p-8">
                 <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
                     <div class="flex items-center gap-4">
                         {% if target_user.profile_picture %}
@@ -60,7 +62,7 @@
                         <a href="?attempt={{ attempt_num }}"
                            class="px-4 py-2 rounded-lg font-semibold transition-all duration-300
                                   {% if attempt_num == current_attempt %}
-                                  bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg
+                                  bg-primary text-white shadow-lg
                                   {% else %}
                                   bg-gray-100 text-gray-600 hover:bg-gray-200
                                   {% endif %}">
@@ -281,7 +283,7 @@
 
                     {% if can_manage and answers %}
                     <div class="mt-6 flex justify-end">
-                        <button type="submit" class="px-8 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold rounded-xl transition-all shadow-lg hover:shadow-xl flex items-center gap-2">
+                        <button type="submit" class="px-8 py-3 bg-primary hover:bg-orange-600 text-white font-bold rounded-xl transition-all shadow-lg hover:shadow-xl flex items-center gap-2">
                             <i class="fas fa-save"></i> Salvar Avaliações
                         </button>
                     </div>

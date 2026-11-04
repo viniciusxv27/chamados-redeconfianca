@@ -1,0 +1,44 @@
+{% load static %}
+{% comment %}
+Botão flutuante do assistente, acima do chat de suporte. Vai em toda página logada,
+então aqui não pode ter consulta nenhuma: o que depende do banco é pedido pelo
+static/js/rc-assistente.js quando a janela abre.
+{% endcomment %}
+<link rel="stylesheet" href="{% static 'css/rc-assistente.css' %}">
+<div id="rcAssist"
+     data-uid="{{ user.pk }}"
+     data-csrf="{{ csrf_token }}"
+     data-url-estado="{% url 'assistente:colaborador_estado' %}"
+     data-url-perguntar="{% url 'assistente:colaborador_perguntar' %}"
+     data-url-claude="{% url 'assistente:enviar' %}"
+     data-url-markdown="{% static 'js/rc-markdown.js' %}">
+    <button type="button" class="rca-fab" id="rcaFab" aria-label="Abrir o assistente" aria-expanded="false" aria-controls="rcaJanela" title="Assistente virtual">
+        <i class="fas fa-robot" aria-hidden="true"></i>
+    </button>
+
+    <section class="rca-janela" id="rcaJanela" role="dialog" aria-label="Assistente virtual" hidden>
+        <header class="rca-topo">
+            <span class="rca-topo-icone"><i class="fas fa-robot" aria-hidden="true"></i></span>
+            <div class="rca-topo-texto">
+                <strong>Assistente</strong>
+                <small id="rcaSubtitulo">Dúvidas, POPs e páginas</small>
+            </div>
+            <a class="rca-topo-botao" id="rcaPagina" href="#" title="Abrir a página do Assistente Claude" aria-label="Abrir a página do Assistente Claude" hidden><i class="fas fa-up-right-from-square" aria-hidden="true"></i></a>
+            <button type="button" class="rca-topo-botao" id="rcaLimpar" title="Limpar a conversa" aria-label="Limpar a conversa"><i class="fas fa-eraser" aria-hidden="true"></i></button>
+            <button type="button" class="rca-topo-botao" id="rcaFechar" title="Fechar" aria-label="Fechar o assistente"><i class="fas fa-xmark" aria-hidden="true"></i></button>
+        </header>
+
+        <div class="rca-modos" id="rcaModos" role="tablist" hidden>
+            <button type="button" role="tab" data-modo="orienta" class="rca-modo">Orientação</button>
+            <button type="button" role="tab" data-modo="claude" class="rca-modo">Claude</button>
+        </div>
+
+        <div class="rca-msgs" id="rcaMsgs" aria-live="polite"></div>
+
+        <form class="rca-entrada" id="rcaForm">
+            <textarea id="rcaTexto" rows="1" maxlength="2000" placeholder="Escreva a sua dúvida..." aria-label="Escreva a sua dúvida"></textarea>
+            <button type="submit" id="rcaEnviar" aria-label="Enviar" title="Enviar"><i class="fas fa-paper-plane" aria-hidden="true"></i></button>
+        </form>
+    </section>
+</div>
+<script src="{% static 'js/rc-assistente.js' %}" defer></script>

@@ -1,0 +1,24 @@
+<div class="bg-white border-b border-gray-200" data-modulo="trilhas-treinamentos">
+    <div class="px-4 sm:px-6 pt-3">
+        <p class="text-sm font-semibold text-gray-500 flex items-center gap-2">
+            <i class="fas fa-graduation-cap text-primary"></i>Trilhas e Treinamentos
+        </p>
+        <nav class="flex gap-1 overflow-x-auto -mb-px mt-1" style="scrollbar-width: none;" aria-label="Partes de Trilhas e Treinamentos">
+            {% for aba in abas %}
+            <a href="{{ aba.url }}" data-aba="{{ aba.chave }}"
+               {% if aba.chave == ativa %}aria-current="page"{% endif %}
+               class="flex items-center gap-2 whitespace-nowrap px-3 sm:px-4 py-2.5 text-sm font-medium border-b-2 transition-colors {% if aba.chave == ativa %}border-primary text-primary{% else %}border-transparent text-gray-600 hover:text-primary hover:border-gray-300{% endif %}">
+                <i class="{{ aba.icone }} text-xs"></i>{{ aba.rotulo }}
+            </a>
+            {% endfor %}
+        </nav>
+        <script>
+        (function () {
+            // No celular a aba ativa pode estar fora da faixa: traz para a vista.
+            var nav = document.currentScript.previousElementSibling;
+            var ativa = nav.querySelector('[aria-current="page"]');
+            if (ativa) nav.scrollLeft = ativa.offsetLeft - nav.offsetLeft - 16;
+        })();
+        </script>
+    </div>
+</div>

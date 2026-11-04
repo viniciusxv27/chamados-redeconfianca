@@ -21,7 +21,9 @@ from rest_framework.permissions import IsAuthenticated
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill
 from openpyxl.utils import get_column_letter
-from .models import (User, Sector, UserSession, normalize_cpf, RequiredDocument, UserDocument,
+from .models import (CATEGORIA_DOC_ADMISSIONAL, CATEGORIA_DOC_ATESTADO, CATEGORIA_DOC_DECLARACAO, CATEGORIA_DOC_OUTROS,
+                     CATEGORIA_DOC_PESSOAL, CATEGORIAS_DOCUMENTO,
+                     User, Sector, UserSession, normalize_cpf, RequiredDocument, UserDocument,
                      EmergencyContact, Dependent)
 from .serializers import UserSerializer, SectorSerializer
 from core.middleware import log_action
@@ -1118,6 +1120,35 @@ def _ip_do_pedido(request):
     return request.META.get('REMOTE_ADDR') or None
 
 
+@login_required
+@require_POST
+def edit_user_group_view(request, user_id):
+    """Põe ou tira a pessoa de um grupo pela tela de edição. Mesma regra de quem pode editar o cadastro."""
+    from communications.models import CommunicationGroup, MembroPeloCargo
+    from .models import UserChangeLog
+
+    alvo = get_object_or_404(User, id=user_id)
+    if not (request.user.can_edit_users() and request.user.pode_editar_usuario(alvo)):
+        return JsonResponse({'ok': False, 'erro': 'Você não pode alterar esta pessoa.'}, status=403)
+    grupo = CommunicationGroup.objects.filter(id=request.POST.get('grupo') or 0).first()
+    acao = request.POST.get('acao')
+    if not grupo or acao not in ('adicionar', 'remover'):
+        return JsonResponse({'ok': False, 'erro': 'Grupo ou ação inválidos.'}, status=400)
+    if acao == 'adicionar':
+        grupo.members.add(alvo)
+        # Posto à mão é decisão do gestor: não sai sozinho se o cargo mudar.
+        MembroPeloCargo.objects.filter(grupo=grupo, user=alvo).delete()
+    else:
+        # O registro "pelo cargo" fica: é ele que impede o cargo de pôr a pessoa de volta no próximo save.
+        grupo.members.remove(alvo)
+    UserChangeLog.objects.create(
+        target=alvo, changed_by=request.user, field='grupos', field_label='Grupos',
+        old_value=grupo.name if acao == 'remover' else '—', new_value=grupo.name if acao == 'adicionar' else '—',
+        ip=request.META.get('REMOTE_ADDR'))
+    log_action(request.user, 'USER_UPDATE', f'{alvo.full_name}: {acao} do grupo {grupo.name}', request)
+    return JsonResponse({'ok': True})
+
+
 def edit_user_view(request, user_id):
     """Editar usuário existente. SUPERADMIN e ADMINISTRAÇÃO."""
     if not request.user.can_edit_users():
@@ -1328,7 +1359,15 @@ def edit_user_view(request, user_id):
     from .models import UserModuleAccess
     liberados = set(UserModuleAccess.objects
                     .filter(user=user_to_edit).values_list('module_key', flat=True))
+    from communications.models import CommunicationGroup, MembroPeloCargo
+    pelo_cargo = set(MembroPeloCargo.objects.filter(user=user_to_edit).values_list('grupo_id', flat=True))
+    grupos_da_pessoa = list(user_to_edit.communication_groups.order_by('name'))
+    for grupo in grupos_da_pessoa:
+        grupo.pelo_cargo = grupo.id in pelo_cargo
     context = {
+        'grupos_da_pessoa': grupos_da_pessoa,
+        'grupos_para_adicionar': CommunicationGroup.objects.filter(is_active=True).exclude(
+            id__in=[g.id for g in grupos_da_pessoa]).order_by('name'),
         'user_to_edit': user_to_edit,
         'sectors': Sector.objects.all(),
         'hierarchy_choices': request.user.assignable_hierarchy_choices(),
@@ -1433,6 +1472,24 @@ def _store_user_document(target_user, uploaded_file, document_type=None, documen
         _aplicar_como_foto_de_perfil(target_user, uploaded_file)
 
     return documento
+
+
+ICONES_CATEGORIA_DOCUMENTO = {
+    CATEGORIA_DOC_PESSOAL: ('fa-id-card', 'text-blue-600'),
+    CATEGORIA_DOC_ADMISSIONAL: ('fa-file-signature', 'text-emerald-600'),
+    CATEGORIA_DOC_ATESTADO: ('fa-notes-medical', 'text-red-600'),
+    CATEGORIA_DOC_DECLARACAO: ('fa-file-lines', 'text-violet-600'),
+    CATEGORIA_DOC_OUTROS: ('fa-folder', 'text-gray-500'),
+}
+
+
+def _documentos_visiveis(quem_ve, target):
+    """(documentos que esta pessoa pode ver, quantos ficaram de fora por serem atestados)."""
+    documentos = list(target.documents.all().select_related('document_type', 'uploaded_by'))
+    if quem_ve.pode_ver_atestados():
+        return documentos, 0
+    visiveis = [d for d in documentos if not d.restrito]
+    return visiveis, len(documentos) - len(visiveis)
 
 
 @login_required
@@ -2447,7 +2504,7 @@ def view_user_profile_view(request, user_id):
         User.objects.prefetch_related('sectors', 'documents'),
         id=user_id
     )
-    documents = target.documents.all().select_related('document_type', 'uploaded_by')
+    documents, documentos_restritos = _documentos_visiveis(request.user, target)
 
     # Documentos de assinatura eletrônica (app documentos): assinados e pendentes.
     from documentos.models import DocumentSignature
@@ -2468,24 +2525,25 @@ def view_user_profile_view(request, user_id):
         )
 
     # Separados: o que a pessoa mandou no pré-cadastro × o que entrou depois (gestor).
-    documents = list(documents)
-    docs_pre_cadastro = [d for d in documents if d.do_pre_cadastro]
-    docs_posteriores = [d for d in documents if not d.do_pre_cadastro]
-    teve_pre_cadastro = target.pre_registration_status != User.PRE_REG_NONE or bool(docs_pre_cadastro)
-    grupos_documentos = [
-        ('Adicionados depois' if teve_pre_cadastro else 'Adicionados pela gestão', 'fa-folder-plus', 'text-blue-600',
-         docs_posteriores, 'Nenhum documento adicionado depois do pré-cadastro.' if teve_pre_cadastro
-         else 'Nenhum documento adicionado.'),
-    ]
-    if teve_pre_cadastro:
-        grupos_documentos.insert(0, ('Enviados no pré-cadastro', 'fa-user-check', 'text-emerald-600', docs_pre_cadastro,
-                                     'Nenhum documento veio do pré-cadastro.'))
+    # Uma seção por categoria; a linha do documento diz se veio do pré-cadastro.
+    pode_atestados = request.user.pode_ver_atestados()
+    grupos_documentos = []
+    for categoria, rotulo in CATEGORIAS_DOCUMENTO:
+        if categoria == CATEGORIA_DOC_ATESTADO and not pode_atestados:
+            continue
+        icone, cor = ICONES_CATEGORIA_DOCUMENTO[categoria]
+        grupos_documentos.append((rotulo, icone, cor, [d for d in documents if d.categoria_efetiva == categoria],
+                                  'Nenhum documento nesta categoria.'))
+    categorias_para_escolher = [c for c in CATEGORIAS_DOCUMENTO if pode_atestados or c[0] != CATEGORIA_DOC_ATESTADO]
 
     context = {
         'user': request.user,
         'target': target,
         'documents': documents,
         'grupos_documentos': grupos_documentos,
+        'documentos_restritos': documentos_restritos,
+        'categorias_documento': CATEGORIAS_DOCUMENTO,
+        'categorias_para_escolher': categorias_para_escolher,
         'signed_documents': signed_documents,
         'pending_documents': pending_documents,
         'required_documents': RequiredDocument.objects.filter(is_active=True),
@@ -2509,7 +2567,7 @@ def print_user_profile_view(request, user_id):
     context = {
         'user': request.user,
         'target': target,
-        'documents': target.documents.all().select_related('document_type'),
+        'documents': _documentos_visiveis(request.user, target)[0],
         'printed_at': timezone.now(),
     }
     return render(request, 'admin/user_registration_form.html', context)
@@ -2537,8 +2595,12 @@ def admin_upload_user_document_view(request, user_id):
     doc_type_id = request.POST.get('document_type') or None
     doc_type = RequiredDocument.objects.filter(id=doc_type_id).first() if doc_type_id else None
     custom_name = request.POST.get('document_name', '').strip()
+    categoria = request.POST.get('categoria', '')
 
-    _store_user_document(target, uploaded, document_type=doc_type, document_name=custom_name, uploaded_by=request.user)
+    documento = _store_user_document(target, uploaded, document_type=doc_type, document_name=custom_name, uploaded_by=request.user)
+
+    if categoria in dict(CATEGORIAS_DOCUMENTO):
+        UserDocument.objects.filter(pk=documento.pk).update(categoria=categoria)
 
     log_action(
         request.user,
@@ -2552,6 +2614,24 @@ def admin_upload_user_document_view(request, user_id):
 
 @login_required
 @require_POST
+def user_document_categoria_view(request, document_id):
+    """Reclassifica um documento. Atestado entra e sai da categoria só pela mão de quem pode vê-lo."""
+    if not request.user.can_manage_users():
+        return JsonResponse({'ok': False, 'erro': 'Sem permissão.'}, status=403)
+    doc = get_object_or_404(UserDocument, id=document_id)
+    categoria = request.POST.get('categoria', '')
+    if categoria not in dict(CATEGORIAS_DOCUMENTO):
+        return JsonResponse({'ok': False, 'erro': 'Categoria inválida.'}, status=400)
+    if (doc.restrito or categoria == CATEGORIA_DOC_ATESTADO) and not request.user.pode_ver_atestados():
+        return JsonResponse({'ok': False, 'erro': 'Atestados ficam restritos ao RH/DP e ao SUPERADMIN.'}, status=403)
+    antes = doc.categoria_efetiva
+    UserDocument.objects.filter(pk=doc.pk).update(categoria=categoria)
+    log_action(request.user, 'USER_UPDATE', f'Documento "{doc.display_name}" de {doc.user.full_name}: categoria {antes} → {categoria}', request)
+    return JsonResponse({'ok': True})
+
+
+@login_required
+@require_POST
 def delete_user_document_view(request, document_id):
     """Remove um documento de um colaborador."""
     if not request.user.can_manage_users():
@@ -2559,6 +2639,9 @@ def delete_user_document_view(request, document_id):
         return redirect('dashboard')
 
     doc = get_object_or_404(UserDocument, id=document_id)
+    if doc.restrito and not request.user.pode_ver_atestados():
+        messages.error(request, 'Atestados ficam restritos ao RH/DP e ao SUPERADMIN.')
+        return redirect('view_user_profile', user_id=doc.user_id)
     target_id = doc.user_id
     name = doc.display_name
     try:
@@ -2602,7 +2685,7 @@ def download_user_documents_zip(request, user_id):
         return redirect('dashboard')
 
     target = get_object_or_404(User, id=user_id)
-    documents = list(target.documents.all().select_related('document_type'))
+    documents = _documentos_visiveis(request.user, target)[0]
     if not documents:
         messages.info(request, 'Este colaborador não possui documentos para baixar.')
         return redirect('view_user_profile', user_id=target.id)

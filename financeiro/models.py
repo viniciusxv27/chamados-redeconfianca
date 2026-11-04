@@ -16,6 +16,7 @@ Como o dinheiro anda aqui:
 - **Log** guarda quem fez o quê, quando, de onde e o antes/depois de cada
   mudança — nada no módulo muda sem passar por ele.
 """
+import calendar
 import uuid
 from datetime import time
 from decimal import Decimal
@@ -541,3 +542,91 @@ class FechamentoCaixa(models.Model):
 
     def retrato(self):
         return {c: (str(getattr(self, c)) if getattr(self, c) is not None else None) for c in self.CAMPOS}
+
+
+# ── Despesas recorrentes (04/11/2026) ───────────────────────────────────────
+class DespesaRecorrente(models.Model):
+    """Uma conta que volta todo mês: a água da loja, o aluguel, a internet da sala 101.
+
+    O que ela custou em cada mês fica em ``DespesaMes``: vem do título de Contas
+    a Pagar ligado ao mês ou, se a conta não passa por lá, do que foi anotado à mão.
+    """
+
+    nome = models.CharField(max_length=120, verbose_name='Nome')
+    tipo = models.CharField(max_length=60, db_index=True, verbose_name='Tipo de despesa')
+    fornecedor = models.CharField(max_length=200, blank=True, verbose_name='Fornecedor')
+    fornecedor_documento = models.CharField(max_length=14, blank=True, verbose_name='CNPJ/CPF do fornecedor')
+    loja = models.ForeignKey('users.Sector', on_delete=models.SET_NULL, null=True, blank=True,
+                             related_name='+', verbose_name='Loja (vazio = escritório)')
+    plano = models.ForeignKey(PlanoConta, on_delete=models.SET_NULL, null=True, blank=True,
+                              related_name='+', verbose_name='Plano de contas')
+    valor_esperado = _dinheiro(verbose_name='Valor esperado')
+    dia_vencimento = models.PositiveSmallIntegerField(verbose_name='Dia do vencimento')
+    termo_titulo = models.CharField(max_length=80, blank=True, verbose_name='Palavra na descrição do título',
+                                    help_text='Separa contas do mesmo fornecedor (ex.: "SALA 101").')
+    inicio = models.DateField(verbose_name='Acompanhar desde (mês)')
+    ativa = models.BooleanField(default=True, db_index=True, verbose_name='Ativa')
+    observacao = models.TextField(blank=True, verbose_name='Observação')
+    criado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name='+', verbose_name='Cadastrada por')
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['tipo', 'nome', 'id']
+        verbose_name = 'Despesa recorrente'
+        verbose_name_plural = 'Despesas recorrentes'
+
+    def __str__(self):
+        return self.nome
+
+    def vencimento_em(self, competencia):
+        """O dia do vencimento naquele mês (dia 31 em fevereiro cai no último dia)."""
+        ultimo = calendar.monthrange(competencia.year, competencia.month)[1]
+        return competencia.replace(day=min(self.dia_vencimento, ultimo))
+
+
+class DespesaMes(models.Model):
+    """O mês de uma despesa. Com título vinculado, valor e situação vêm do título."""
+
+    despesa = models.ForeignKey(DespesaRecorrente, on_delete=models.CASCADE, related_name='meses',
+                                verbose_name='Despesa')
+    competencia = models.DateField(db_index=True, verbose_name='Mês')
+    valor = _dinheiro(null=True, blank=True, verbose_name='Valor da conta')
+    vencimento = models.DateField(null=True, blank=True, verbose_name='Vencimento neste mês')
+    pago_em = models.DateField(null=True, blank=True, verbose_name='Pago em')
+    valor_pago = _dinheiro(null=True, blank=True, verbose_name='Valor pago')
+    sem_cobranca = models.BooleanField(default=False, verbose_name='Sem cobrança neste mês')
+    observacao = models.CharField(max_length=255, blank=True, verbose_name='Observação')
+    atualizado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                       related_name='+', verbose_name='Atualizado por')
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['despesa', 'competencia']
+        verbose_name = 'Mês da despesa recorrente'
+        verbose_name_plural = 'Meses das despesas recorrentes'
+        constraints = [models.UniqueConstraint(fields=['despesa', 'competencia'], name='fin_despesa_mes_unico')]
+
+    def __str__(self):
+        return f'{self.despesa} · {self.competencia:%m/%Y}'
+
+
+class DespesaMesTitulo(models.Model):
+    """Título de Contas a Pagar ligado a um mês. Um mês pode ter vários; o título, um só mês."""
+
+    mes = models.ForeignKey(DespesaMes, on_delete=models.CASCADE, related_name='vinculos', verbose_name='Mês')
+    titulo = models.OneToOneField(Titulo, on_delete=models.CASCADE, related_name='vinculo_recorrente',
+                                  verbose_name='Título')
+    vinculado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                      related_name='+', verbose_name='Vinculado por')
+    vinculado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['titulo__vencimento', 'id']
+        verbose_name = 'Título do mês da despesa'
+        verbose_name_plural = 'Títulos dos meses das despesas'
+
+    def __str__(self):
+        return f'{self.mes} ← {self.titulo_id}'

@@ -58,6 +58,10 @@ def upload_meta_descricao(instance, filename):
     return f"impulso/metas/descricao/{_uuid_name(filename)}"
 
 
+def upload_ideia_anexo(instance, filename):
+    return f"impulso/ideias/{_uuid_name(filename)}"
+
+
 def upload_projeto_anexo(instance, filename):
     return f"impulso/projetos/{instance.projeto_id or 'novos'}/{_uuid_name(filename)}"
 
@@ -113,6 +117,13 @@ class Meta(models.Model):
         PENDENTE = 'PENDENTE', 'Aguardando aprovação do gestor'
         RECUSADA = 'RECUSADA', 'Recusada'
 
+    # Os mesmos nomes da prioridade dos chamados.
+    class Prioridade(models.TextChoices):
+        BAIXA = 'BAIXA', 'Baixa'
+        MEDIA = 'MEDIA', 'Média'
+        ALTA = 'ALTA', 'Alta'
+        CRITICA = 'CRITICA', 'Crítica'
+
     class Status(models.TextChoices):
         A_FAZER = 'A_FAZER', 'A Fazer'
         EM_ANDAMENTO = 'EM_ANDAMENTO', 'Em Andamento'
@@ -164,6 +175,9 @@ class Meta(models.Model):
         default=False, verbose_name='Somente dias úteis',
         help_text='Prazo que cair no fim de semana passa para o próximo dia útil.')
     prazo = models.DateField(verbose_name='Prazo')
+    prioridade = models.CharField(
+        max_length=8, choices=Prioridade.choices, default=Prioridade.MEDIA, db_default='MEDIA',
+        verbose_name='Prioridade')
 
     # Solicitação feita pelo colaborador, que o gestor precisa aprovar.
     # Metas criadas pelo próprio gestor já nascem APROVADA.
@@ -333,8 +347,9 @@ class Meta(models.Model):
         secundário. Antes valia só o que ele mesmo criou ou aprovou, e o gestor
         ficava sem poder limpar card de gente da própria área.
 
-        Colaborador nunca apaga — nem a meta dele, nem a que ele mesmo pediu:
-        seria uma saída fácil para sumir com tarefa ruim antes da avaliação.
+        Colaborador só apaga o que ele mesmo cadastrou e nem começou
+        (`dono_corrige_cadastro`). Tarefa recebida de outra pessoa continua fora
+        do alcance: seria uma saída fácil para sumir com ela antes da avaliação.
         Solicitação ainda pendente também não se apaga: para essa existe o
         "recusar", que avisa quem pediu em vez de a coisa sumir calada.
         """
@@ -342,6 +357,8 @@ class Meta(models.Model):
             return False
         if self.pendente_aprovacao:
             return False
+        if self.dono_corrige_cadastro(user):
+            return True
         if user.is_superuser:
             return True
         from .utils import (get_colaboradores_do_gestor,     # tardio: utils importa models
@@ -410,6 +427,15 @@ class Meta(models.Model):
         """
         return bool(user and getattr(user, 'is_authenticated', False)
                     and self.colaborador_id == user.id and self.status != self.Status.CONCLUIDA)
+
+    def dono_corrige_cadastro(self, user):
+        """Cadastrou errado: quem criou a própria atividade corrige ou apaga enquanto está em "A Fazer".
+
+        Vale só para o que a pessoa mesma cadastrou para si; o que veio do gestor segue com ele.
+        """
+        return bool(user and getattr(user, 'is_authenticated', False)
+                    and self.colaborador_id == user.id and self.created_by_id == user.id
+                    and self.status == self.Status.A_FAZER and not self.is_avaliada)
 
     def pode_editar(self, user, equipe_ids=None, metas_de_ideia=None):
         """Quem edita o texto da atividade: quem a gerencia, o ponto focal — ou o próprio dono."""
@@ -493,10 +519,13 @@ class Meta(models.Model):
         return proximo_dia_util(dia) if (self.apenas_dias_uteis and dia) else dia
 
     def criar_proxima_ocorrencia(self):
-        """Gera a próxima ocorrência de uma meta recorrente concluída.
+        """Gera a próxima ocorrência de uma meta recorrente, já na entrega.
+
+        Esperar a avaliação segurava o dia de quem tem tarefa diária: a de amanhã
+        só existia depois que o gestor avaliasse a de hoje.
 
         Idempotente: se esta meta já gerou uma continuação, não gera outra —
-        importante porque o gestor pode reabrir e reavaliar a mesma meta.
+        a mesma meta passa pela entrega e pela avaliação, e pode ser reaberta.
         """
         proximo = self.proximo_prazo()
         if not proximo or self.ocorrencias.exists():
@@ -513,6 +542,7 @@ class Meta(models.Model):
             recorrencia_de=self,
             apenas_dias_uteis=self.apenas_dias_uteis,
             prazo=proximo,
+            prioridade=self.prioridade,
             aprovacao=self.Aprovacao.APROVADA,
             created_by_id=self.created_by_id,
         )
@@ -1627,6 +1657,22 @@ class Ideia(models.Model):
         if self.resposta_gestor:
             partes += ['', f'Retorno de quem aprovou: {self.resposta_gestor}']
         return '\n'.join(partes).strip()
+
+
+class IdeiaAnexo(models.Model):
+    """Arquivo que exemplifica a ideia. Sem "enviado por": a ideia é avaliada sem autor."""
+    ideia = models.ForeignKey(Ideia, on_delete=models.CASCADE, related_name='anexos', verbose_name='Ideia')
+    arquivo = models.FileField(upload_to=upload_ideia_anexo, storage=get_media_storage(), verbose_name='Arquivo')
+    nome = models.CharField(max_length=200, verbose_name='Nome do arquivo')
+    enviado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Anexo de Ideia'
+        verbose_name_plural = 'Anexos de Ideias'
+        ordering = ['id']
+
+    def __str__(self):
+        return self.nome
 
 
 class AcessoAutoriaIdeia(models.Model):

@@ -84,6 +84,12 @@
                     <i class="fas fa-pen text-xs"></i>
                 </a>
                 {% endif %}
+                {% if pode_excluir_meta and not is_gestor_da_meta %}
+                <form method="post" action="{% url 'impulso:meta_excluir' meta.id %}" onsubmit="return confirm('Excluir esta atividade? O gestor será avisado.');">
+                    {% csrf_token %}
+                    <button type="submit" title="Excluir atividade" class="w-7 h-7 rounded-md text-gray-300 hover:text-red-600 hover:bg-red-50 flex items-center justify-center"><i class="fas fa-trash-can text-xs"></i></button>
+                </form>
+                {% endif %}
                 {% if pode_duplicar_meta %}
                 {# Abre a escolha de para quem vai a cópia; o formulário fica no fim da página. #}
                 <button type="button" title="Duplicar atividade"
@@ -118,7 +124,9 @@
                     <span class="ml-1 px-1.5 py-0.5 rounded bg-sky-50 text-sky-700" title="Fim de semana passa para a segunda-feira">somente dias úteis</span>
                     {% endif %}
                 </span>
+                <span data-criada-em><i class="fas fa-calendar-plus mr-1"></i>Criada em: {{ meta.created_at|date:"d/m/Y" }}{% if meta.created_by %} por {{ meta.created_by.get_full_name|default:meta.created_by.email }}{% endif %}</span>
                 <span class="{% if meta.is_overdue %}text-red-600 font-semibold{% endif %}"><i class="fas fa-clock mr-1"></i>Prazo: {{ meta.prazo|date:"d/m/Y" }}</span>
+                <span data-prioridade><i class="fas fa-flag mr-1"></i>Prioridade: {% include 'impulso/_selo_prioridade.html' with p=meta %}</span>
                 <span><i class="fas fa-user-tie mr-1"></i>Gestor: {{ meta.gestor.get_full_name|default:meta.gestor.email }}</span>
                 <span><i class="fas fa-user mr-1"></i>Colaborador: {{ meta.colaborador.get_full_name|default:meta.colaborador.email }}</span>
             </div>

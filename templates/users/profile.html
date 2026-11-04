@@ -407,10 +407,12 @@ function submitPhoto() {
     const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
     const norm = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
     // O catálogo é o próprio menu da pessoa: só aparece o que ela vê.
-    const catalogo = [], vistos = new Set();
+    const catalogo = [], vistos = new Set(), rotaNova = {};
     document.querySelectorAll('#sidebar .menu-item[href]').forEach(a => {
         if (a.closest('#rc-favoritos')) return;
         const rota = a.dataset.rota || a.getAttribute('href');
+        // Item que juntou dois menus: quem favoritou a rota antiga segue com o favorito.
+        (a.dataset.rotasAntigas || '').split(' ').filter(Boolean).forEach(r => { rotaNova[r] = rota; });
         if (vistos.has(rota)) return;
         vistos.add(rota);
         const rotuloEl = a.querySelector('span.text-sm') || [...a.querySelectorAll('span')].find(x => !x.className && x.textContent.trim());
@@ -424,7 +426,7 @@ function submitPhoto() {
         catalogo.push({rota, rotulo, icone: icone ? icone.className : 'fas fa-link', grupo});
     });
     const porRota = Object.fromEntries(catalogo.map(c => [c.rota, c]));
-    let favoritos = salvos.filter(r => porRota[r]);
+    let favoritos = [...new Set(salvos.map(r => rotaNova[r] || r))].filter(r => porRota[r]);
     const original = JSON.stringify(favoritos);
     const lista = document.getElementById('favLista'), btSalvar = document.getElementById('favSalvar');
 

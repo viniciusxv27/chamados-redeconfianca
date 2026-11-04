@@ -308,7 +308,7 @@
 
         <!-- Botões de Ação -->
         <div class="actions-container">
-            <a href="{% url 'knowledge_trails:download_certificate_pdf' certificate.id %}" class="btn-download" target="_blank">
+            <a href="{% url 'knowledge_trails:download_certificate' certificate.id %}" class="btn-download" target="_blank">
                 <i class="fas fa-download"></i> Download PDF
             </a>
             <a href="{% url 'knowledge_trails:trail_detail' certificate.trail.id %}" class="btn-back">

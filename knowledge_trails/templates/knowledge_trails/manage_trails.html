@@ -1,0 +1,136 @@
+{% extends 'base.html' %}
+{% load trilhas_treinamentos %}
+
+{% block title %}Gerenciar Trilhas{% endblock %}
+
+{% block content %}
+{% abas_trilhas_treinamentos 'gerir_trilhas' %}
+<div class="min-h-screen bg-gray-50">
+    <div class="bg-white shadow-sm border-b border-gray-200 mb-6">
+        <div class="px-4 sm:px-6 py-4">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-900 flex items-center">
+                        <i class="fas fa-sliders text-primary mr-3"></i>
+                        Gerenciar Trilhas
+                    </h1>
+                    <p class="text-gray-600 mt-1">{% if user.hierarchy == 'SUPERVISOR' and not user.is_superuser %}As trilhas dos seus setores, ativas e inativas{% else %}Todas as trilhas, ativas e inativas{% endif %}</p>
+                </div>
+                <div class="flex flex-wrap gap-3">
+                    <a href="{% url 'knowledge_trails:create_trail' %}" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors flex items-center">
+                        <i class="fas fa-plus-circle mr-2"></i>
+                        Nova Trilha
+                    </a>
+                    {% if user.is_staff %}
+                    <a href="/admin/knowledge_trails/" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center">
+                        <i class="fas fa-cog mr-2"></i>
+                        Admin
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 mb-6">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
+            <div class="bg-white rounded-xl shadow-sm p-6 flex items-center">
+                <div class="p-3 bg-blue-100 rounded-lg"><i class="fas fa-route text-blue-600 text-xl"></i></div>
+                <div class="ml-4">
+                    <h3 class="text-2xl font-bold text-gray-900">{{ stats.total }}</h3>
+                    <p class="text-gray-600 text-sm">Total</p>
+                </div>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm p-6 flex items-center">
+                <div class="p-3 bg-green-100 rounded-lg"><i class="fas fa-check-circle text-green-600 text-xl"></i></div>
+                <div class="ml-4">
+                    <h3 class="text-2xl font-bold text-gray-900">{{ stats.active }}</h3>
+                    <p class="text-gray-600 text-sm">Ativas</p>
+                </div>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm p-6 flex items-center">
+                <div class="p-3 bg-red-100 rounded-lg"><i class="fas fa-pause-circle text-red-600 text-xl"></i></div>
+                <div class="ml-4">
+                    <h3 class="text-2xl font-bold text-gray-900">{{ stats.inactive }}</h3>
+                    <p class="text-gray-600 text-sm">Inativas</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 mb-6">
+        <div class="bg-white rounded-xl shadow-sm p-4 sm:p-6">
+            <form method="get" class="flex flex-wrap items-center gap-4">
+                <div class="flex-1 min-w-0 basis-56">
+                    <input type="text" name="search" value="{{ search }}" placeholder="Buscar por título..." aria-label="Buscar por título"
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                </div>
+                <select name="status" aria-label="Situação" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                    <option value="all" {% if status_filter == 'all' %}selected{% endif %}>Todas</option>
+                    <option value="active" {% if status_filter == 'active' %}selected{% endif %}>Apenas ativas</option>
+                    <option value="inactive" {% if status_filter == 'inactive' %}selected{% endif %}>Apenas inativas</option>
+                </select>
+                <button type="submit" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors">
+                    <i class="fas fa-search mr-2"></i>Filtrar
+                </button>
+                {% if search or status_filter != 'all' %}
+                <a href="{% url 'knowledge_trails:manage_trails' %}" class="text-gray-600 hover:text-gray-800">
+                    <i class="fas fa-times mr-1"></i>Limpar
+                </a>
+                {% endif %}
+            </form>
+        </div>
+    </div>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 pb-6">
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+            <ul class="divide-y divide-gray-200">
+                {% for trilha in page_obj %}
+                <li class="p-4 sm:px-6 flex flex-col md:flex-row md:items-center gap-3 md:gap-6" data-trilha="{{ trilha.pk }}">
+                    <div class="flex items-center gap-3 flex-1 min-w-0">
+                        <div class="w-12 h-12 rounded-lg flex items-center justify-center text-2xl flex-shrink-0" style="background-color: {{ trilha.color }}20;">
+                            {% if trilha.icon %}<img src="{{ trilha.icon.url }}" alt="" class="w-10 h-10 rounded-lg object-cover">{% else %}{{ trilha.icon_emoji }}{% endif %}
+                        </div>
+                        <div class="min-w-0">
+                            <p class="font-semibold text-gray-900 truncate">{{ trilha.title }}</p>
+                            <p class="text-sm text-gray-500 truncate">{{ trilha.sector.name }}</p>
+                        </div>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-gray-600">
+                        {% if trilha.is_active %}
+                        <span class="px-3 py-1 bg-green-100 text-green-800 rounded-full font-medium"><i class="fas fa-check-circle mr-1"></i>Ativa</span>
+                        {% else %}
+                        <span class="px-3 py-1 bg-red-100 text-red-800 rounded-full font-medium"><i class="fas fa-pause-circle mr-1"></i>Inativa</span>
+                        {% endif %}
+                        <span><i class="fas fa-users mr-1 text-gray-400"></i>{{ trilha.pessoas }} iniciaram</span>
+                        <span><i class="fas fa-flag-checkered mr-1 text-gray-400"></i>{{ trilha.concluiram }} concluíram</span>
+                    </div>
+                    <div class="flex items-center gap-2 flex-shrink-0">
+                        <a href="{% url 'knowledge_trails:manage_trail' trilha.pk %}" class="bg-primary text-white px-3 py-2 rounded-lg hover:bg-orange-600 transition-colors text-sm">
+                            <i class="fas fa-sliders mr-1"></i>Gerenciar
+                        </a>
+                        <a href="{% url 'knowledge_trails:edit_trail' trilha.pk %}" class="bg-gray-100 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-200 transition-colors text-sm">
+                            <i class="fas fa-pen mr-1"></i>Editar
+                        </a>
+                    </div>
+                </li>
+                {% empty %}
+                <li class="text-center py-12 px-4 text-gray-500">
+                    <i class="fas fa-route text-4xl text-gray-300 mb-4"></i>
+                    <p>{% if search or status_filter != 'all' %}Nenhuma trilha com esses filtros.{% else %}Nenhuma trilha para gerenciar ainda.{% endif %}</p>
+                </li>
+                {% endfor %}
+            </ul>
+            {% if page_obj.has_other_pages %}
+            <div class="px-4 sm:px-6 py-4 border-t border-gray-200 flex items-center justify-between gap-3 text-sm text-gray-600">
+                <span>Mostrando {{ page_obj.start_index }} a {{ page_obj.end_index }} de {{ page_obj.paginator.count }}</span>
+                <span class="flex items-center gap-3">
+                    {% if page_obj.has_previous %}<a class="hover:text-primary" href="?page={{ page_obj.previous_page_number }}&amp;search={{ search|urlencode }}&amp;status={{ status_filter|urlencode }}"><i class="fas fa-chevron-left mr-1"></i>Anterior</a>{% endif %}
+                    {% if page_obj.has_next %}<a class="hover:text-primary" href="?page={{ page_obj.next_page_number }}&amp;search={{ search|urlencode }}&amp;status={{ status_filter|urlencode }}">Próxima<i class="fas fa-chevron-right ml-1"></i></a>{% endif %}
+                </span>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

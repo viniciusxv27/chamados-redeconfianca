@@ -25,13 +25,13 @@ def _ip(request):
 
 
 def _api(fn):
-    """Só SUPERADMIN; JSON no corpo; erros viram {erro}."""
+    """Só quem gerencia o quadro; JSON no corpo; erros viram {erro}."""
     @functools.wraps(fn)
     @login_required
     @require_POST
     def envolto(request, *args, **kwargs):
-        if not servicos.pode_acessar(request.user):
-            return JsonResponse({'erro': 'Só o SUPERADMIN acessa o Quadro de HC.'}, status=403)
+        if not servicos.pode_gerenciar(request.user):
+            return JsonResponse({'erro': 'Seu acesso ao Quadro de HC é só para ver.'}, status=403)
         try:
             dados = json.loads(request.body or b'{}') if request.content_type == 'application/json' else request.POST
             return fn(request, dados, *args, **kwargs)
@@ -46,7 +46,7 @@ def _api(fn):
 @login_required
 def quadro(request):
     if not servicos.pode_acessar(request.user):
-        messages.error(request, 'O Quadro de HC é só para o SUPERADMIN.')
+        messages.error(request, 'O Quadro de HC é só para quem o SUPERADMIN liberou.')
         return redirect('dashboard')
     hoje = timezone.localdate()
     dados = servicos.montar_quadro(hoje)
@@ -60,6 +60,8 @@ def quadro(request):
                for c in dados['carteiras'] for b in c['lojas'] for p in b['pessoas']] + \
               [{'id': p['id'], 'nome': p['nome'], 'cargo': p['cargo'], 'setor': None} for p in dados['sem_loja']]
     return render(request, 'quadro_hc/quadro.html', {
+        'pode_gerenciar': servicos.pode_gerenciar(request.user),
+        'e_superadmin': servicos.e_superadmin(request.user),
         'q': dados, 'hoje': hoje, 'futuras': futuras, 'historico': historico,
         'para_hoje': sum(1 for m in futuras if m.data <= hoje),
         'cargos': servicos.cargos_disponiveis(), 'setores': setores,
@@ -178,3 +180,33 @@ def previsto(request, dados):
     """HC previsto da loja por função (o quadro ideal), digitado à mão."""
     total = servicos.salvar_previsto(dados.get('setor'), dados.get('quantidades') or {}, request.user)
     return JsonResponse({'ok': True, 'msg': f'HC previsto salvo: {total} pessoa(s).' if total else 'HC previsto zerado.'})
+
+
+@login_required
+def acessos(request):
+    """SUPERADMIN escolhe quem vê e quem gerencia o quadro."""
+    from django.contrib.auth import get_user_model
+    from .models import AcessoQuadroHC
+    if not servicos.e_superadmin(request.user):
+        messages.error(request, 'Só o SUPERADMIN libera o Quadro de HC.')
+        return redirect('dashboard')
+    if request.method == 'POST':
+        acao = request.POST.get('acao')
+        if acao in ('adicionar', 'salvar'):
+            papel = request.POST.get('papel') if request.POST.get('papel') in dict(AcessoQuadroHC.PAPEIS) else AcessoQuadroHC.VER
+            alvo = get_user_model().objects.filter(pk=request.POST.get('user') or 0, is_active=True).first()
+            if alvo is None:
+                messages.error(request, 'Escolha a pessoa.')
+            else:
+                a, _ = AcessoQuadroHC.objects.update_or_create(user=alvo, defaults={'papel': papel, 'liberado_por': request.user})
+                messages.success(request, f'{alvo.get_full_name() or alvo.username}: {a.get_papel_display()}.')
+        elif acao == 'remover':
+            AcessoQuadroHC.objects.filter(pk=request.POST.get('acesso') or 0).delete()
+            messages.success(request, 'Acesso removido.')
+        return redirect('quadro_hc:acessos')
+    lista = list(AcessoQuadroHC.objects.select_related('user', 'user__sector', 'liberado_por').order_by('papel', 'user__first_name'))
+    return render(request, 'quadro_hc/acessos.html', {
+        'acessos': lista, 'papeis': AcessoQuadroHC.PAPEIS,
+        'usuarios': (get_user_model().objects.filter(is_active=True).exclude(pk__in=[a.user_id for a in lista])
+                     .select_related('sector').order_by('first_name', 'last_name')),
+    })

@@ -6,6 +6,7 @@ app_name = 'quadro_hc'
 
 urlpatterns = [
     path('', views.quadro, name='quadro'),
+    path('acessos/', views.acessos, name='acessos'),
     path('simular/', views.simular, name='simular'),
     path('movimentar/', views.movimentar, name='movimentar'),
     path('movimentacao/<int:pk>/aplicar/', views.mov_aplicar, name='mov_aplicar'),

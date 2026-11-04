@@ -405,3 +405,116 @@ class LiberacaoContestacao(models.Model):
         return (cls.objects.filter(setor_id__in=ids, ativa=True,
                                    prazo__gt=timezone.now())
                 .select_related('setor').order_by('-prazo').first())
+
+
+class DestinatarioResumoCiclo(models.Model):
+    """Quem recebe no WhatsApp o resumo do ciclo. O SUPERADMIN escolhe.
+
+    Nasce vazia de propósito: sem ninguém aqui, nada sai — nem o fechamento do
+    ciclo é "gasto" com um envio para ninguém.
+    """
+
+    usuario = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name='destinatario_resumo_contestacao', verbose_name='Usuário')
+    incluido_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='+', verbose_name='Incluído por')
+    incluido_em = models.DateTimeField(auto_now_add=True, verbose_name='Incluído em')
+
+    class Meta:
+        verbose_name = 'Destinatário do resumo do ciclo'
+        verbose_name_plural = 'Destinatários do resumo do ciclo'
+
+    def __str__(self):
+        return f'{self.usuario}'
+
+
+class EnvioResumoCiclo(models.Model):
+    """O resumo de um ciclo (lote da BASE_EXCLUSAO): existe no máximo um por lote.
+
+    O ``OneToOneField`` é a trava contra envio duplo: duas lojas dando o de
+    acordo ao mesmo tempo, em workers diferentes, tentam criar a mesma linha e
+    o banco deixa passar só uma.
+    """
+
+    AUTOMATICO = 'automatico'
+    MANUAL = 'manual'
+    ORIGENS = [(AUTOMATICO, 'Automático (ciclo fechou)'), (MANUAL, 'Manual (SUPERADMIN)')]
+
+    lote = models.OneToOneField(
+        ExclusionSyncBatch, on_delete=models.CASCADE,
+        related_name='envio_resumo', verbose_name='Ciclo (lote)')
+    origem = models.CharField(max_length=12, choices=ORIGENS, default=AUTOMATICO, verbose_name='Origem')
+    disparado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='+', verbose_name='Disparado por')
+    ciclo_fechado = models.BooleanField(
+        default=True, verbose_name='Ciclo estava fechado',
+        help_text='Falso quando o SUPERADMIN mandou antes de todas as lojas terminarem.')
+    # Foto do que foi mandado: a contestação continua mudando depois do envio.
+    pdf = models.FileField(
+        upload_to='contestacoes/resumos/%Y/%m/', storage=get_media_storage(),
+        blank=True, null=True, verbose_name='PDF do resumo')
+    pdf_gerado_em = models.DateTimeField(null=True, blank=True, verbose_name='PDF gerado em')
+    texto = models.TextField(blank=True, default='', verbose_name='Mensagem')
+    totais = models.JSONField(blank=True, default=dict, verbose_name='Totais')
+    erro = models.CharField(max_length=500, blank=True, default='', verbose_name='Erro ao preparar')
+    criado_em = models.DateTimeField(auto_now_add=True, verbose_name='Criado em')
+    concluido_em = models.DateTimeField(null=True, blank=True, verbose_name='Concluído em')
+
+    class Meta:
+        verbose_name = 'Envio do resumo do ciclo'
+        verbose_name_plural = 'Envios do resumo do ciclo'
+        ordering = ['-criado_em']
+
+    def __str__(self):
+        return f'Resumo do lote {self.lote_id} ({self.criado_em:%d/%m/%Y %H:%M})'
+
+
+class EnvioResumoDestinatario(models.Model):
+    """Uma pessoa dentro de um envio.
+
+    Só fica ``enviado`` quem a integração confirmou. O UPDATE condicional de
+    ``pendente`` para ``enviando`` decide quem manda, então a thread do fechamento,
+    o agendador e o botão podem se cruzar sem a pessoa receber duas vezes.
+    """
+
+    PENDENTE = 'pendente'
+    ENVIANDO = 'enviando'
+    ENVIADO = 'enviado'
+    FALHOU = 'falhou'
+    SEM_TELEFONE = 'sem_telefone'
+    SITUACOES = [
+        (PENDENTE, 'Na fila'),
+        (ENVIANDO, 'Enviando'),
+        (ENVIADO, 'Enviado'),
+        (FALHOU, 'Falhou'),
+        (SEM_TELEFONE, 'Sem telefone'),
+    ]
+
+    envio = models.ForeignKey(EnvioResumoCiclo, on_delete=models.CASCADE, related_name='linhas', verbose_name='Envio')
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='resumos_contestacao_recebidos', verbose_name='Usuário')
+    nome = models.CharField(max_length=200, blank=True, default='', verbose_name='Nome')
+    numero = models.CharField(max_length=30, blank=True, default='', verbose_name='Número usado')
+    situacao = models.CharField(max_length=12, choices=SITUACOES, default=PENDENTE, db_index=True, verbose_name='Situação')
+    detalhe = models.CharField(max_length=300, blank=True, default='', verbose_name='Detalhe')
+    tentativas = models.PositiveSmallIntegerField(default=0, verbose_name='Tentativas')
+    enviando_desde = models.DateTimeField(null=True, blank=True, verbose_name='Enviando desde')
+    enviado_em = models.DateTimeField(null=True, blank=True, verbose_name='Enviado em')
+    # [{'em': iso, 'situacao': ..., 'detalhe': ...}]: a linha é reaproveitada no reenvio
+    # e sem isto a falha de ontem sumiria do histórico.
+    historico = models.JSONField(blank=True, default=list, verbose_name='Tentativas anteriores')
+
+    class Meta:
+        verbose_name = 'Destinatário de um envio do resumo'
+        verbose_name_plural = 'Destinatários de um envio do resumo'
+        ordering = ['nome']
+        constraints = [
+            models.UniqueConstraint(fields=['envio', 'usuario'], name='uniq_envio_resumo_usuario'),
+        ]
+
+    def __str__(self):
+        return f'{self.nome} – {self.get_situacao_display()}'

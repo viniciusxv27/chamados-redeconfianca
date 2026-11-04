@@ -206,6 +206,8 @@
         <p class="text-sm text-white/70 mt-1 max-w-xl">Loja a loja, ligado ao cadastro: o que muda lá aparece aqui, e o que muda aqui grava lá.</p>
       </div>
       <div class="flex gap-2 flex-wrap">
+        {% if e_superadmin %}<a href="{% url 'quadro_hc:acessos' %}" class="bt bt-vidro"><i class="fas fa-user-shield"></i>Acessos</a>{% endif %}
+        {% if not pode_gerenciar %}<span class="bt bt-vidro" data-so-leitura><i class="fas fa-eye"></i>Só visualização</span><style>.hc .acoes, .hc [data-abrir-vaga], .hc [data-movimentar] { display: none !important; }</style>{% endif %}
         <button type="button" class="bt bt-vidro" data-abrir-vaga=""><i class="fas fa-user-plus"></i>Abrir vaga</button>
         <button type="button" class="bt bt-pri" data-movimentar="" title="Atalho: N"><i class="fas fa-people-arrows"></i>Nova movimentação</button>
       </div>

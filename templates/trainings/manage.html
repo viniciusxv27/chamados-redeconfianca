@@ -1,8 +1,10 @@
 {% extends 'base.html' %}
+{% load trilhas_treinamentos %}
 
 {% block title %}Gerenciar Treinamentos{% endblock %}
 
 {% block content %}
+{% abas_trilhas_treinamentos 'gerir_treinamentos' %}
 <div class="min-h-screen bg-gray-50">
     <!-- Header -->
     <div class="bg-white shadow-sm border-b border-gray-200 mb-6">
@@ -19,6 +21,10 @@
                     <a href="{% url 'training_upload' %}" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors flex items-center">
                         <i class="fas fa-upload mr-2"></i>
                         Novo Treinamento
+                    </a>
+                    <a href="{% url 'manage_training_categories' %}" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center">
+                        <i class="fas fa-tags mr-2"></i>
+                        Categorias
                     </a>
                     <a href="{% url 'trainings_list' %}" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors flex items-center">
                         <i class="fas fa-arrow-left mr-2"></i>

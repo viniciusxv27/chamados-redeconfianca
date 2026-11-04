@@ -1,13 +1,15 @@
 {% extends "base.html" %}
+{% load trilhas_treinamentos %}
 {% load static %}
 
 {% block title %}Editar {{ trail.title }} - Trilhas de Conhecimento{% endblock %}
 
 {% block content %}
-<div class="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 p-6">
+{% abas_trilhas_treinamentos 'gerir_trilhas' %}
+<div class="min-h-screen bg-gray-50 p-4 sm:p-6">
     <!-- Cabeçalho -->
     <div class="mb-6">
-        <div class="bg-gradient-to-r from-purple-600 to-pink-600 rounded-3xl shadow-2xl text-white p-4 sm:p-6 lg:p-8">
+        <div class="bg-primary rounded-xl shadow-sm text-white p-4 sm:p-6 lg:p-8">
             <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
                 <div>
                     <h3 class="text-2xl sm:text-3xl font-bold mb-2 flex items-center gap-3">
@@ -46,7 +48,7 @@
             <div class="bg-white rounded-3xl shadow-xl overflow-hidden">
                 <div class="bg-white border-b-2 border-gray-100 p-6">
                     <h5 class="text-xl font-bold text-gray-800 flex items-center gap-2">
-                        <i class="fas fa-edit text-purple-600"></i>
+                        <i class="fas fa-edit text-primary"></i>
                         Informações da Trilha
                     </h5>
                 </div>
@@ -150,7 +152,7 @@
                         <div class="space-y-2 pt-2">
                             <div class="flex items-center">
                                 <input type="checkbox" 
-                                       class="w-5 h-5 text-purple-600 border-2 border-gray-300 rounded focus:ring-2 focus:ring-purple-200" 
+                                       class="w-5 h-5 text-primary border-2 border-gray-300 rounded focus:ring-2 focus:ring-purple-200" 
                                        id="enable_certificate" 
                                        name="enable_certificate" 
                                        {% if trail.enable_certificate %}checked{% endif %}>
@@ -161,7 +163,7 @@
                             
                             <div class="flex items-center">
                                 <input type="checkbox" 
-                                       class="w-5 h-5 text-purple-600 border-2 border-gray-300 rounded focus:ring-2 focus:ring-purple-200" 
+                                       class="w-5 h-5 text-primary border-2 border-gray-300 rounded focus:ring-2 focus:ring-purple-200" 
                                        id="is_active" 
                                        name="is_active" 
                                        {% if trail.is_active %}checked{% endif %}>
@@ -174,7 +176,7 @@
                         <!-- Obrigatoriedade -->
                         <div class="pt-4 border-t-2 border-gray-100">
                             <h6 class="text-lg font-bold text-gray-800 mb-2 flex items-center gap-2">
-                                <i class="fas fa-user-check text-purple-600"></i>
+                                <i class="fas fa-user-check text-primary"></i>
                                 Obrigatoriedade
                             </h6>
                             <p class="text-sm text-gray-500 mb-3">
@@ -237,7 +239,7 @@
                                 {% for u in available_users %}
                                 <label class="flex items-center gap-3 px-4 py-2 hover:bg-purple-50 cursor-pointer mandatory-user-row" data-name="{{ u.full_name|lower }} {{ u.email|lower }}">
                                     <input type="checkbox" name="mandatory_users" value="{{ u.id }}"
-                                           class="w-4 h-4 text-purple-600 border-2 border-gray-300 rounded focus:ring-2 focus:ring-purple-200"
+                                           class="w-4 h-4 text-primary border-2 border-gray-300 rounded focus:ring-2 focus:ring-purple-200"
                                            {% if u.id in selected_user_ids %}checked{% endif %}>
                                     <span class="text-sm text-gray-700">{{ u.full_name }}
                                         {% if u.email %}<span class="text-xs text-gray-400">- {{ u.email }}</span>{% endif %}
@@ -250,7 +252,7 @@
                         </div>
 
                         <div class="flex gap-3 pt-4">
-                            <button type="submit" class="flex-1 px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl flex items-center justify-center gap-2">
+                            <button type="submit" class="flex-1 px-6 py-3 bg-primary hover:bg-orange-600 text-white rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl flex items-center justify-center gap-2">
                                 <i class="fas fa-save"></i> Salvar Alterações
                             </button>
                             <button type="button" class="px-6 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl" onclick="document.getElementById('deleteModal').classList.remove('hidden')">
@@ -267,10 +269,10 @@
             <div class="bg-white rounded-3xl shadow-xl overflow-hidden">
                 <div class="bg-white border-b-2 border-gray-100 p-6 flex flex-wrap justify-between items-center gap-3">
                     <h5 class="text-xl font-bold text-gray-800 flex items-center gap-2">
-                        <i class="fas fa-map text-purple-600"></i>
+                        <i class="fas fa-map text-primary"></i>
                         Minimapa da Trilha
                     </h5>
-                    <a href="{% url 'knowledge_trails:edit_trail_map' trail.id %}" class="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-lg transition-all duration-300 flex items-center gap-2 text-sm">
+                    <a href="{% url 'knowledge_trails:edit_trail_map' trail.id %}" class="px-4 py-2 bg-primary hover:bg-orange-600 text-white rounded-lg transition-all duration-300 flex items-center gap-2 text-sm">
                         <i class="fas fa-edit"></i> Editar Posições
                     </a>
                 </div>
@@ -331,7 +333,7 @@
         <div class="bg-white rounded-3xl shadow-xl overflow-hidden">
             <div class="bg-white border-b-2 border-gray-100 p-6 flex flex-wrap justify-between items-center gap-3">
                 <h5 class="text-xl font-bold text-gray-800 flex items-center gap-2">
-                    <i class="fas fa-list text-purple-600"></i>
+                    <i class="fas fa-list text-primary"></i>
                     Módulos e Lições
                 </h5>
                 <a href="{% url 'knowledge_trails:create_module' trail.id %}" class="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-all duration-300 flex items-center gap-2 text-sm">
@@ -352,7 +354,7 @@
                                 <span class="text-2xl">{{ module.icon_emoji }}</span>
                                 {% endif %}
                                 <strong class="text-lg text-gray-800">{{ module.title }}</strong>
-                                <span class="px-3 py-1 bg-purple-600 text-white text-sm rounded-full">
+                                <span class="px-3 py-1 bg-primary text-white text-sm rounded-full">
                                     {{ module.lessons.count }} liç{{ module.lessons.count|pluralize:"ão,ões" }}
                                 </span>
                             </div>
@@ -417,7 +419,7 @@
                 <div class="text-center py-12">
                     <i class="fas fa-folder-open text-gray-300 text-6xl mb-4"></i>
                     <p class="text-gray-500 mb-4">Nenhum módulo criado ainda.</p>
-                    <a href="{% url 'knowledge_trails:create_module' trail.id %}" class="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl">
+                    <a href="{% url 'knowledge_trails:create_module' trail.id %}" class="inline-flex items-center gap-2 px-6 py-3 bg-primary hover:bg-orange-600 text-white rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl">
                         <i class="fas fa-plus"></i> Criar Primeiro Módulo
                     </a>
                 </div>

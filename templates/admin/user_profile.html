@@ -290,14 +290,23 @@
                     </div>
                 {% endif %}
 
+                {% if documentos_restritos %}<p class="mb-4 text-xs text-gray-500" data-docs-restritos><i class="fas fa-lock mr-1"></i>{{ documentos_restritos }} atestado(s) com acesso restrito ao RH/DP e ao SUPERADMIN.</p>{% endif %}
+
                 <!-- Adicionar documento (gestor) -->
                 <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
                     <h4 class="font-medium text-blue-900 mb-3 flex items-center text-sm">
                         <i class="fas fa-plus mr-2"></i> Adicionar documento
                     </h4>
                     <form method="post" action="{% url 'admin_upload_user_document' target.id %}" enctype="multipart/form-data"
-                          class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                          class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
                         {% csrf_token %}
+                        <div>
+                            <label class="block text-xs font-medium text-blue-900 mb-1">Categoria</label>
+                            <select name="categoria" class="w-full px-3 py-2 border border-blue-300 rounded-lg bg-white text-sm">
+                                <option value="">Pelo nome do documento</option>
+                                {% for valor, rotulo in categorias_documento %}<option value="{{ valor }}">{{ rotulo }}</option>{% endfor %}
+                            </select>
+                        </div>
                         <div>
                             <label class="block text-xs font-medium text-blue-900 mb-1">Tipo</label>
                             <select name="document_type" class="w-full px-3 py-2 border border-blue-300 rounded-lg bg-white text-sm">
@@ -317,7 +326,7 @@
                             <input type="file" name="file" required accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx"
                                    class="w-full text-sm text-gray-700 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-sm file:bg-blue-500 file:text-white hover:file:bg-blue-600">
                         </div>
-                        <div class="sm:col-span-3 flex justify-end">
+                        <div class="sm:col-span-2 lg:col-span-4 flex justify-end">
                             <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm inline-flex items-center">
                                 <i class="fas fa-upload mr-2"></i> Enviar documento
                             </button>
@@ -527,4 +536,16 @@
     }
 </script>
 {% endif %}
+<script>
+document.querySelectorAll('.js-doc-categoria').forEach(function (sel) {
+    var antes = sel.value;
+    sel.addEventListener('change', function () {
+        var corpo = new URLSearchParams({categoria: sel.value, csrfmiddlewaretoken: '{{ csrf_token }}'});
+        fetch(sel.dataset.url, {method: 'POST', body: corpo}).then(function (r) { return r.json(); }).then(function (d) {
+            if (!d.ok) { alert(d.erro || 'Não foi possível mudar a categoria.'); sel.value = antes; return; }
+            window.location.reload();
+        }).catch(function () { alert('Erro de conexão.'); sel.value = antes; });
+    });
+});
+</script>
 {% endblock %}

@@ -4,6 +4,8 @@ Módulo oculto: fora do menu e restrito à administração. A regra de acesso é
 conferida no servidor, na tela e na API — endereço não divulgado não é controle
 de acesso.
 """
+from datetime import datetime
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse, JsonResponse
@@ -17,7 +19,9 @@ from users.models import Sector, User
 from . import tiles
 from .models import ConfiguracaoMapa, PosicaoRegistrada
 from .permissions import pode_ver_mapa
-from .servicos import DIAS_PADRAO, FRESCO_MINUTOS, posicoes
+from .servicos import (
+    DIAS_PADRAO, FRESCO_MINUTOS, JANELA_MOMENTO_MINUTOS, posicao_no_momento, posicoes,
+)
 
 
 def _payload(i):
@@ -27,7 +31,8 @@ def _payload(i):
         'foto': i['foto'], 'lat': i['latitude'], 'lon': i['longitude'],
         'precisao': i['precisao'], 'quando': i['quando'], 'recente': i['recente'],
         'ao_vivo': i['ao_vivo'], 'origem': i['origem'],
-        'momento': i['momento'].strftime('%d/%m/%Y %H:%M'),
+        # Hora de Brasília: o banco devolve em UTC, e o balão mostrava 3 horas a mais.
+        'momento': timezone.localtime(i['momento']).strftime('%d/%m/%Y %H:%M'),
     }
 
 
@@ -57,6 +62,25 @@ def _filtrar(request):
     return pessoas, {'setor': setor_id, 'usuario': usuario_id, 'q': busca}
 
 
+def _momento_pedido(request):
+    """`?usuario=<id>&em=<data e hora>`: uma pessoa num momento, vindo do histórico.
+
+    A URL leva só quem e quando; a posição é buscada aqui, depois da permissão. Inclui
+    ex-colaborador, que o recorte normal do mapa deixa de fora, porque o histórico
+    continua falando dele. Devolve (pessoa, momento) ou (None, None).
+    """
+    usuario_id = (request.GET.get('usuario') or '').strip()
+    em = (request.GET.get('em') or '').strip()
+    if not (usuario_id.isdigit() and em):
+        return None, None
+    try:
+        momento = timezone.make_aware(datetime.strptime(em, '%Y-%m-%dT%H:%M:%S'))
+    except ValueError:
+        return None, None
+    pessoa = User.objects.select_related('sector').filter(id=int(usuario_id)).first()
+    return (pessoa, momento) if pessoa else (None, None)
+
+
 @login_required
 def mapa(request):
     if not pode_ver_mapa(request.user):
@@ -68,17 +92,29 @@ def mapa(request):
     except ValueError:
         dias = DIAS_PADRAO
 
-    encontradas = posicoes(usuarios=pessoas, dias=dias)
+    pessoa_momento, momento = _momento_pedido(request)
+    if pessoa_momento:
+        encontradas = posicao_no_momento(pessoa_momento, momento)
+    else:
+        encontradas = posicoes(usuarios=pessoas, dias=dias)
     recentes = [p for p in encontradas if p['recente']]
 
+    # O atalho para o histórico segue a regra do histórico, não a do mapa.
+    from core.historico import pode_ver_historico
+    url_historico = reverse('core:activity_history') if pode_ver_historico(request.user) else ''
+
     return render(request, 'maps/mapa.html', {
+        'pessoa_momento': pessoa_momento,
+        'momento': momento,
+        'janela_momento': JANELA_MOMENTO_MINUTOS,
+        'url_historico': url_historico,
         'posicoes': encontradas,
         # O mesmo conteúdo que a API devolve, para o mapa já nascer desenhado.
         'posicoes_json': [_payload(i) for i in encontradas],
         'total': len(encontradas),
         'recentes': len(recentes),
         'ao_vivo': sum(1 for p in encontradas if p['ao_vivo']),
-        'sem_posicao': pessoas.count() - len(encontradas),
+        'sem_posicao': (1 if pessoa_momento else pessoas.count()) - len(encontradas),
         'setores': Sector.objects.all().order_by('name'),
         'pessoas': User.objects.filter(is_active=True).order_by('first_name', 'last_name'),
         'filtros': filtros,
@@ -128,7 +164,11 @@ def api_posicoes(request):
     except ValueError:
         dias = DIAS_PADRAO
 
-    itens = posicoes(usuarios=pessoas, dias=dias)
+    pessoa_momento, momento = _momento_pedido(request)
+    if pessoa_momento:
+        itens = posicao_no_momento(pessoa_momento, momento)
+    else:
+        itens = posicoes(usuarios=pessoas, dias=dias)
     return JsonResponse({
         'atualizado_em': timezone.localtime().strftime('%H:%M:%S'),
         'total': len(itens),

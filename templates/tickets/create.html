@@ -4,6 +4,7 @@
 {% block title %}Novo Chamado - Rede Confiança{% endblock %}
 
 {% block content %}
+{% if prefill.ativo %}{{ prefill|json_script:"chamado-preenchido" }}{% endif %}
 <style>
 /* Placeholder para o editor contenteditable */
 #description-editor:empty:before {
@@ -57,6 +58,12 @@
         </nav>
     </div>
     
+    {% if prefill.ativo %}
+    <div class="mb-4 mx-4 sm:mx-0 rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-800">
+        <i class="fas fa-robot mr-1.5"></i>O assistente deixou o chamado preenchido. Revise tudo e, se estiver certo, clique em <strong>Abrir Chamado</strong>: nada foi enviado ainda.
+    </div>
+    {% endif %}
+
     <!-- Form -->
     <div class="bg-white rounded-lg shadow-sm p-4 sm:p-6 mx-4 sm:mx-0">
         <form method="post" enctype="multipart/form-data" class="space-y-4 sm:space-y-6">
@@ -73,6 +80,8 @@
                     name="title" 
                     id="title" 
                     required
+                    maxlength="200"
+                    value="{{ prefill.title }}"
                     class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                     placeholder="Digite o título do chamado"
                 >
@@ -90,7 +99,7 @@
                     >
                         <option value="">Selecione o setor</option>
                         {% for sector in sectors %}
-                            <option value="{{ sector.id }}">{{ sector.name }}</option>
+                            <option value="{{ sector.id }}"{% if prefill.sector == sector.id %} selected{% endif %}>{{ sector.name }}</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -392,7 +401,7 @@ function loadCategories() {
     categorySelect.innerHTML = '<option value="">Carregando...</option>';
     
     if (sectorId) {
-        fetch(`/tickets/api/categories-by-sector/?sector_id=${sectorId}`)
+        return fetch(`/tickets/api/categories-by-sector/?sector_id=${sectorId}`)
             .then(response => response.json())
             .then(data => {
                 categorySelect.innerHTML = '<option value="">Selecione a categoria</option>';
@@ -701,6 +710,33 @@ function showMessage(message, type = 'info') {
     }, 5000);
 }
 
+// O que veio preenchido na URL (link do assistente). A mensagem entra depois do
+// texto padrão da categoria, e sempre como texto: nunca vira HTML.
+function aplicarPreenchimento(preenchido) {
+    const editor = document.getElementById('description-editor');
+    function poeMensagem() {
+        if (preenchido.description) {
+            if (editor.textContent.trim()) editor.appendChild(document.createElement('br'));
+            editor.appendChild(document.createTextNode(preenchido.description));
+        }
+        document.getElementById('description').value = editor.innerHTML;
+    }
+    if (!preenchido.sector) {
+        poeMensagem();
+        return;
+    }
+    loadSectorUsers();
+    toggleStoreLocationRequirement();
+    const categorias = loadCategories();
+    (categorias || Promise.resolve()).then(function () {
+        if (preenchido.category) {
+            document.getElementById('category').value = String(preenchido.category);
+            updateCategoryDefaults();
+        }
+        poeMensagem();
+    });
+}
+
 // Inicialização quando DOM estiver pronto
 document.addEventListener('DOMContentLoaded', function() {
     const fileInput = document.getElementById('file-input');
@@ -843,6 +879,11 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         // Se não há arquivos ou já está fazendo upload, deixa o form seguir normalmente
     });
+
+    const dadosPreenchidos = document.getElementById('chamado-preenchido');
+    if (dadosPreenchidos) {
+        aplicarPreenchimento(JSON.parse(dadosPreenchidos.textContent));
+    }
 });
 
 // Função para enviar formulário com arquivos

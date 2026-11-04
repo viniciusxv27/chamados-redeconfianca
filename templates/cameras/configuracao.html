@@ -1,0 +1,55 @@
+{% extends 'cameras/_base.html' %}
+{% block ca_titulo %}Configuração{% endblock %}
+{% block ca_conteudo %}
+<header class="ca-topo"><div class="ca-titulo"><span class="ca-escudo"><i class="fas fa-gear"></i></span><div><h1>Configuração</h1><p>Lojas, senhas dos gravadores e agente de cada loja</p></div></div></header>
+{% if token_novo %}
+<div class="ca-card ca-token"><h2><i class="fas fa-key"></i>Token de {{ token_novo.loja }}</h2><p>Copie agora: ele não aparece de novo. Use no <code>config.json</code> do agente dessa loja.</p><code data-token>{{ token_novo.token }}</code></div>
+{% endif %}
+<div class="ca-grade-config">
+    <section class="ca-card ca-bloco">
+        <h2><i class="fas fa-power-off"></i>Recebimento das lojas</h2>
+        <p>{% if config.ativo %}<strong class="ca-verde">Ligado.</strong> As lojas com agente enviam imagem e alerta.{% else %}<strong>Desligado.</strong> Nenhuma loja envia imagem ou alerta, e o agente não recebe a senha do gravador.{% endif %}</p>
+        <form method="post" {% if not config.ativo %}onsubmit="return confirm('Avisou as equipes das lojas sobre a análise de imagem?');"{% endif %}>{% csrf_token %}
+            <input type="hidden" name="ativo" value="{% if config.ativo %}0{% else %}1{% endif %}">
+            <button class="ca-botao {% if config.ativo %}claro{% endif %}">{% if config.ativo %}Desligar{% else %}Ligar{% endif %}</button>
+        </form>
+    </section>
+    <section class="ca-card ca-bloco">
+        <h2><i class="fas fa-file-excel"></i>Importar a planilha</h2>
+        <p>Colunas: Loja, Coordenados, app, Login, Serial e Senha. A senha entra cifrada, e o arquivo não fica guardado. Lojas já cadastradas são atualizadas.</p>
+        <form method="post" action="{% url 'cameras:importar' %}" enctype="multipart/form-data" class="ca-linha-form">{% csrf_token %}
+            <input type="file" name="planilha" accept=".xlsx" required aria-label="Planilha de câmeras"><button class="ca-botao">Importar</button>
+        </form>
+    </section>
+</div>
+<section class="ca-card ca-tabela-caixa">
+    <h2><i class="fas fa-store"></i>Lojas</h2>
+    <table class="ca-tabela">
+        <thead><tr><th>Loja</th><th>Coordenação</th><th>Serial</th><th>Senha</th><th>Agente</th><th></th></tr></thead>
+        <tbody>
+            {% for g in gravadores %}
+            <tr>
+                <td><strong>{{ g.loja }}</strong>{% if not g.setor %}<small class="ca-ambar">sem setor</small>{% endif %}</td>
+                <td>{{ g.coordenador|default:"—" }}</td>
+                <td class="ca-mono">{{ g.serial|default:"—" }}</td>
+                <td>{% if g.senha_cifrada %}<i class="fas fa-lock ca-verde" title="Guardada cifrada"></i>{% else %}—{% endif %}</td>
+                <td><span class="ca-ponto {{ g.situacao }}"></span>{% if g.situacao == 'online' %}Online{% elif g.situacao == 'offline' %}Sem contato{% elif g.situacao == 'sem_agente' %}Não instalado{% else %}Sem gravador{% endif %}</td>
+                <td class="ca-acoes-linha"><a class="ca-botao claro pequeno" href="{% url 'cameras:gravador_editar' g.id %}">Editar</a>
+                    {% if g.tem_equipamento %}<form method="post" action="{% url 'cameras:gravador_token' g.id %}" {% if g.token_hash %}onsubmit="return confirm('O token atual para de funcionar. Gerar outro?');"{% endif %}>{% csrf_token %}<button class="ca-botao claro pequeno">{% if g.token_hash %}Trocar token{% else %}Gerar token{% endif %}</button></form>{% endif %}</td>
+            </tr>
+            {% empty %}<tr><td colspan="6" class="ca-vazio-texto">Importe a planilha para começar.</td></tr>{% endfor %}
+        </tbody>
+    </table>
+</section>
+<section class="ca-card ca-bloco">
+    <h2><i class="fas fa-microchip"></i>Agente da loja</h2>
+    <p>O gravador em modo Cloud só fala com o aplicativo, então um computador ligado na rede da loja lê as câmeras. Instalação na pasta <code>agente_cameras</code> do projeto, com o endereço <code>{{ endereco }}</code> e o token da loja.</p>
+</section>
+<section class="ca-card ca-tabela-caixa">
+    <h2><i class="fas fa-clipboard-list"></i>Últimos acessos</h2>
+    <table class="ca-tabela"><thead><tr><th>Quando</th><th>Quem</th><th>Ação</th><th>Loja</th></tr></thead><tbody>
+        {% for a in acessos %}<tr><td>{{ a.em|date:"d/m H:i" }}</td><td>{{ a.user.get_full_name|default:"—" }}</td><td>{{ a.acao }}{% if a.detalhe %} · {{ a.detalhe }}{% endif %}</td><td>{{ a.gravador.loja|default:"—" }}</td></tr>
+        {% empty %}<tr><td colspan="4" class="ca-vazio-texto">Nenhum acesso ainda.</td></tr>{% endfor %}
+    </tbody></table>
+</section>
+{% endblock %}

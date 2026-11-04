@@ -1,0 +1,11 @@
+{% load caixa_tags %}
+<li class="rec-linha">
+    <div class="min-w-0">
+        <a href="{% url 'financeiro:titulo' t.id %}" class="font-semibold hover:text-emerald-700 break-words">{{ t.descricao }}</a>
+        <p class="rec-nota">{% if t.pessoa_nome %}{{ t.pessoa_nome }} · {% endif %}{{ t.loja.name|default:"Escritório" }} · vence {{ t.vencimento|date:"d/m/Y" }}{% if t.status == 'QUITADO' %} · quitado{% endif %}</p>
+    </div>
+    <div class="flex items-center gap-2 shrink-0">
+        <span class="tabular font-semibold text-sm whitespace-nowrap">{{ t.valor|brl_zero }}</span>
+        <form method="post" action="{% url 'financeiro:recorrente_vincular' d.id competencia.year competencia.month %}">{% csrf_token %}<input type="hidden" name="voltar" value="{{ caminho }}"><input type="hidden" name="titulo" value="{{ t.id }}"><button class="fin-acao fin-acao-verde"><i class="fas fa-link text-[10px]"></i>Vincular</button></form>
+    </div>
+</li>

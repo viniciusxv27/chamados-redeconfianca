@@ -165,3 +165,23 @@ class HCPrevisto(models.Model):
         constraints = [models.UniqueConstraint(fields=['setor', 'funcao'], name='hc_previsto_unico')]
         verbose_name = 'HC previsto'
         verbose_name_plural = 'HC previsto'
+
+
+class AcessoQuadroHC(models.Model):
+    """Quem o SUPERADMIN liberou para ver ou gerenciar o quadro. O SUPERADMIN entra sempre."""
+    GERENCIAR, VER = 'GERENCIAR', 'VER'
+    PAPEIS = [(GERENCIAR, 'Gerenciar'), (VER, 'Ver')]
+
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+                                related_name='acesso_quadro_hc', verbose_name='Pessoa')
+    papel = models.CharField(max_length=10, choices=PAPEIS, default=VER, verbose_name='Papel')
+    liberado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                     related_name='+', verbose_name='Liberado por')
+    liberado_em = models.DateTimeField(auto_now=True, verbose_name='Liberado em')
+
+    class Meta:
+        verbose_name = 'Acesso ao Quadro de HC'
+        verbose_name_plural = 'Acessos ao Quadro de HC'
+
+    def __str__(self):
+        return f'{self.user} · {self.get_papel_display()}'

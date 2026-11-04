@@ -1,16 +1,18 @@
 {% extends "base.html" %}
+{% load trilhas_treinamentos %}
 {% load static %}
 
 {% block title %}Editar Lição - {{ lesson.title }}{% endblock %}
 
 {% block content %}
-<div class="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 p-6">
+{% abas_trilhas_treinamentos 'gerir_trilhas' %}
+<div class="min-h-screen bg-gray-50 p-4 sm:p-6">
     <div class="max-w-5xl mx-auto">
         <!-- Breadcrumb -->
         <div class="mb-6 flex items-center gap-2 text-sm text-gray-600">
-            <a href="{% url 'knowledge_trails:dashboard' %}" class="hover:text-purple-600 transition-colors">Dashboard</a>
+            <a href="{% url 'knowledge_trails:dashboard' %}" class="hover:text-primary transition-colors">Trilhas e Treinamentos</a>
             <i class="fas fa-chevron-right text-xs"></i>
-            <a href="{% url 'knowledge_trails:edit_trail' trail.id %}" class="hover:text-purple-600 transition-colors">
+            <a href="{% url 'knowledge_trails:edit_trail' trail.id %}" class="hover:text-primary transition-colors">
                 {% if trail.icon %}
                 <img src="{{ trail.icon.url }}" alt="Logo da trilha" class="inline-block w-5 h-5 rounded object-cover align-middle mr-1">
                 {% else %}
@@ -22,8 +24,8 @@
             <span class="text-gray-800 font-semibold">Editar {{ lesson.title }}</span>
         </div>
 
-        <div class="bg-white rounded-3xl shadow-2xl overflow-hidden">
-            <div class="bg-gradient-to-r from-purple-600 to-pink-600 text-white p-4 sm:p-6 lg:p-8">
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+            <div class="bg-primary text-white p-4 sm:p-6 lg:p-8">
                 <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
                     <div>
                         <h2 class="text-2xl sm:text-3xl font-bold flex items-center gap-3">
@@ -70,7 +72,7 @@
                 <!-- Informações Básicas -->
                 <div class="border-t-2 border-gray-100 pt-6">
                     <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                        <i class="fas fa-file-alt text-purple-600"></i>
+                        <i class="fas fa-file-alt text-primary"></i>
                         Informações Básicas
                     </h3>
 
@@ -114,7 +116,7 @@
                 <!-- Conteúdo -->
                 <div id="content-section" class="border-t-2 border-gray-100 pt-6">
                     <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                        <i class="fas fa-align-left text-purple-600"></i>
+                        <i class="fas fa-align-left text-primary"></i>
                         Conteúdo da Lição
                     </h3>
                     <div>
@@ -128,7 +130,7 @@
                 <!-- Vídeo -->
                 <div id="video-section" class="border-t-2 border-gray-100 pt-6">
                     <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                        <i class="fas fa-video text-purple-600"></i>
+                        <i class="fas fa-video text-primary"></i>
                         Vídeo
                     </h3>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -155,7 +157,7 @@
                 <!-- Documento -->
                 <div id="document-section" class="border-t-2 border-gray-100 pt-6">
                     <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                        <i class="fas fa-file-pdf text-purple-600"></i>
+                        <i class="fas fa-file-pdf text-primary"></i>
                         Documento
                     </h3>
                     <div>
@@ -174,7 +176,7 @@
                 <!-- Slides (Imagens) -->
                 <div id="slides-images-section" class="border-t-2 border-gray-100 pt-6">
                     <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                        <i class="fas fa-images text-purple-600"></i>
+                        <i class="fas fa-images text-primary"></i>
                         Slides (Imagens)
                     </h3>
                     <div class="bg-blue-50 border-2 border-blue-200 rounded-xl p-4 mb-4">
@@ -211,7 +213,7 @@
                 <!-- Slides (PDF) -->
                 <div id="slides-pdf-section" class="border-t-2 border-gray-100 pt-6">
                     <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                        <i class="fas fa-file-powerpoint text-purple-600"></i>
+                        <i class="fas fa-file-powerpoint text-primary"></i>
                         Slides (PDF)
                     </h3>
                     <div class="bg-blue-50 border-2 border-blue-200 rounded-xl p-4 mb-4">
@@ -241,7 +243,7 @@
                 <!-- Configurações -->
                 <div class="border-t-2 border-gray-100 pt-6">
                     <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
-                        <i class="fas fa-cog text-purple-600"></i>
+                        <i class="fas fa-cog text-primary"></i>
                         Configurações
                     </h3>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -279,7 +281,7 @@
                         <a href="{% url 'knowledge_trails:edit_trail' trail.id %}" class="px-6 py-3 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl transition-all duration-300 flex items-center gap-2">
                             <i class="fas fa-times"></i> Cancelar
                         </a>
-                        <button type="submit" class="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-xl transition-all duration-300 flex items-center gap-2 shadow-lg hover:shadow-xl">
+                        <button type="submit" class="px-6 py-3 bg-primary hover:bg-orange-600 text-white rounded-xl transition-all duration-300 flex items-center gap-2 shadow-lg hover:shadow-xl">
                             <i class="fas fa-save"></i> Salvar Alterações
                         </button>
                     </div>
@@ -340,7 +342,7 @@ document.getElementById('slide_images')?.addEventListener('change', function(e) 
                 div.className = 'relative rounded-xl overflow-hidden border-2 border-gray-200 aspect-video bg-gray-100';
                 div.innerHTML = `
                     <img src="${e.target.result}" class="w-full h-full object-cover" alt="Slide ${index + 1}">
-                    <span class="absolute top-2 left-2 bg-purple-600 text-white text-xs font-bold px-2 py-1 rounded-full">${index + 1}</span>
+                    <span class="absolute top-2 left-2 bg-primary text-white text-xs font-bold px-2 py-1 rounded-full">${index + 1}</span>
                 `;
                 preview.appendChild(div);
             };

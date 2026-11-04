@@ -82,6 +82,10 @@ class ContagemCaixaDia(models.Model):
     # aqui para não descartar o que já tiver sido digitado à mão.
     entrada_manual = _dec('Entrada (digitada)')
     deposito = _dec('Depósito')
+    # Quanto do Depósito veio das sangrias: a soma é refeita sem apagar o que foi digitado à mão.
+    deposito_sangrias = models.DecimalField(
+        max_digits=12, decimal_places=2, default=0, db_default=0, editable=False,
+        verbose_name='Depósito vindo das sangrias')
     observacao = models.TextField(blank=True, verbose_name='Observação')
 
     # Saldo é acumulado: guardado para não recalcular a série toda a cada tela.
@@ -283,6 +287,10 @@ class ConfiguracaoContagem(models.Model):
         max_length=120, blank=True, verbose_name='Filtrar pelo valor',
         help_text='Valor que a coluna acima precisa ter. Vazio = sem filtro.')
 
+    notificar_whatsapp = models.BooleanField(
+        default=False, db_default=False,
+        verbose_name='Avisar também por WhatsApp',
+        help_text='Manda a divergência no WhatsApp do gerente e do ADM da loja.')
     notificar_gerente = models.BooleanField(
         default=True, verbose_name='Avisar o gerente quando ficar em Atenção')
 
@@ -410,6 +418,8 @@ class CategoriaSangria(models.Model):
     nome = models.CharField(max_length=60, unique=True, verbose_name='Categoria')
     ativa = models.BooleanField(default=True, verbose_name='Ativa')
     ordem = models.PositiveSmallIntegerField(default=0, verbose_name='Ordem')
+    # Dinheiro que foi ao banco não é gasto: vai para a coluna Depósito, não para a sangria.
+    vai_para_deposito = models.BooleanField(default=False, db_default=False, verbose_name='Vai para a coluna Depósito')
 
     class Meta:
         verbose_name = 'Categoria de sangria'

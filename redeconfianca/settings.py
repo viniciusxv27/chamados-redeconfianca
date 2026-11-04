@@ -89,10 +89,11 @@ INSTALLED_APPS = [
     'drive',  # Drive: espelho do Google Drive da empresa com permissão por setor
     'assistente',  # Assistente Claude (chave por usuário; acesso aos dados do próprio usuário)
     'renova',  # Vini Renova: avaliação de aparelho usado (checklist, chamado e etiqueta)
+    'cameras',  # Câmeras das lojas: mosaico e alertas de possível furto (SUPERADMIN)
     'rotina_adm',  # Rotina ADM: central do ADM de loja (chamados, SAP, check-list, agenda)
     'rotina',  # Rotina Gerencial: a semana do gerente, com horários e avisos
     'apresentacoes',  # Assistente de Apresentações: slides com IA na identidade da rede
-    'quadro_hc',  # Quadro de HC loja a loja (só SUPERADMIN)
+    'quadro_hc',  # Quadro de HC loja a loja (SUPERADMIN e quem ele liberar)
     'facilitador',  # Facilitador: arquivos e links úteis (todos veem; SUPERADMIN gerencia)
     # 'webpush',  # Django WebPush (temporariamente removido)
 ]
@@ -181,6 +182,8 @@ TEMPLATES = [
                 'quiz.context_processors.quiz_menu',
                 'rotina.context_processors.rotina_menu',
                 'rotina_adm.context_processors.rotina_adm_menu',
+                'cameras.context_processors.cameras_menu',
+                'quadro_hc.context_processors.quadro_hc_menu',
                 'apresentacoes.context_processors.apresentacoes_menu',
                 'users.context_processors_commission.comissionamento_menu',
             ],

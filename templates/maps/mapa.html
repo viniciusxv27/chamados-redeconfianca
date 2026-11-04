@@ -63,11 +63,40 @@ endereço, em outro domínio, e a tela avisa se nem assim carregar.
                 <span id="mpAtualizado" class="tabular">{{ agora|date:"H:i:s" }}</span>
             </p>
         </div>
+        {% if not pessoa_momento %}
         <label class="flex items-center gap-2 text-sm text-gray-600 mp-card px-3.5 py-2">
             <input type="checkbox" id="mpAuto" checked class="rounded border-gray-300 text-violet-600">
             Atualizar sozinho
         </label>
+        {% endif %}
     </div>
+
+    {% if pessoa_momento %}
+    <div class="mp-card p-3.5 mb-4 border-l-4 border-violet-400 flex items-start justify-between gap-3 flex-wrap" id="mpMomento">
+        <div class="min-w-0">
+            <p class="text-sm text-gray-800">
+                <i class="fas fa-clock-rotate-left text-violet-600 mr-1.5"></i>
+                <strong>{{ pessoa_momento.get_full_name|default:pessoa_momento.email }}</strong>
+                em {{ momento|date:"d/m/Y" }} às {{ momento|date:"H:i" }}
+            </p>
+            <p class="text-xs text-gray-500 mt-1">
+                {% if posicoes %}
+                    Posição registrada mais próxima desse momento, às {{ posicoes.0.momento|date:"H:i" }}. Não é onde a pessoa está agora.
+                {% else %}
+                    Nenhuma posição registrada até {{ janela_momento }} min antes ou depois desse momento.
+                {% endif %}
+            </p>
+        </div>
+        <div class="flex items-center gap-3 text-xs whitespace-nowrap">
+            {% if url_historico %}
+            <a href="{{ url_historico }}?user={{ pessoa_momento.id }}&amp;date_from={{ momento|date:'Y-m-d' }}&amp;date_to={{ momento|date:'Y-m-d' }}" class="text-violet-700 hover:underline font-semibold">
+                <i class="fas fa-history mr-1"></i>Histórico desse dia
+            </a>
+            {% endif %}
+            <a href="{% url 'maps:mapa' %}" class="text-gray-500 hover:underline">Ver mapa atual</a>
+        </div>
+    </div>
+    {% endif %}
 
     <!-- Números -->
     {% if not coleta_ativa %}
@@ -207,6 +236,12 @@ endereço, em outro domínio, e a tela avisa se nem assim carregar.
                             {{ p.setor|default:"sem setor" }}{% if p.cargo %} · {{ p.cargo }}{% endif %}
                         </p>
                     </div>
+                    {% if url_historico %}
+                    <a href="{{ url_historico }}?user={{ p.id }}" title="Histórico de {{ p.nome }}" aria-label="Histórico de {{ p.nome }}"
+                       class="mp-historico flex-shrink-0 w-11 h-11 -mr-2 flex items-center justify-center rounded-lg text-gray-400 hover:text-violet-700 hover:bg-violet-50">
+                        <i class="fas fa-history text-sm"></i>
+                    </a>
+                    {% endif %}
                 </div>
                 {% empty %}
                 <div class="px-4 py-12 text-center text-gray-400">
@@ -253,6 +288,8 @@ function mpIniciar() {
     // O servidor já mandou as posições nesta página. Desenhar a partir daí faz
     // o mapa aparecer preenchido no primeiro quadro — e, se a consulta de
     // atualização falhar, ele continua mostrando algo em vez de ficar cinza.
+    var URL_HISTORICO = '{{ url_historico|escapejs }}';
+    var MODO_MOMENTO = {{ pessoa_momento|yesno:"true,false" }};
     var dadosIniciais = [];
     try { dadosIniciais = JSON.parse(document.getElementById('mpDados').textContent) || []; }
     catch (e) { dadosIniciais = []; }
@@ -384,6 +421,8 @@ function mpIniciar() {
             '<span style="font-size:12px">' + escapar(p.momento) + ' · <strong>' + escapar(p.quando) + '</strong></span>' +
             (p.precisao ? '<br><span style="font-size:11px;color:#9ca3af">precisão ~' + Math.round(p.precisao) + ' m</span>' : '') +
             '<br><span style="font-size:11px;color:#9ca3af">origem: ' + escapar(p.origem) + '</span>' +
+            (URL_HISTORICO ? '<br><a href="' + escapar(URL_HISTORICO) + '?user=' + encodeURIComponent(p.id) +
+                '" style="font-size:12px;font-weight:600"><i class="fas fa-history"></i> Ver histórico</a>' : '') +
             '</div>';
     }
 
@@ -464,7 +503,8 @@ function mpIniciar() {
 
     // Clicar no nome centraliza no mapa.
     document.querySelectorAll('.mp-pessoa').forEach(function (linha) {
-        linha.addEventListener('click', function () {
+        linha.addEventListener('click', function (ev) {
+            if (ev.target.closest('a')) { return; }   // o atalho para o histórico navega
             document.querySelectorAll('.mp-pessoa').forEach(function (o) {
                 o.classList.remove('selecionada');
             });
@@ -483,8 +523,16 @@ function mpIniciar() {
     var tentativas = 0;
     var aguardaAltura = setInterval(function () {
         enquadrar(ultimosPontos);
-        if (jaEnquadrou || ++tentativas > 20) { clearInterval(aguardaAltura); }
+        if (jaEnquadrou || ++tentativas > 20) {
+            clearInterval(aguardaAltura);
+            // Vindo do histórico há um ponto só: o balão já diz de quando ele é.
+            if (MODO_MOMENTO && jaEnquadrou) {
+                Object.keys(marcadores).forEach(function (id) { marcadores[id].openPopup(); });
+            }
+        }
     }, 100);
+    // Vindo do histórico, a tela mostra um momento que já passou: não há o que atualizar.
+    if (MODO_MOMENTO) { return; }
     atualizar();
 
     // Recarrega sozinho, e para quando a aba sai da frente — mapa aberto numa

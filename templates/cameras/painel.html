@@ -1,0 +1,78 @@
+{% extends 'cameras/_base.html' %}
+{% block ca_conteudo %}
+<header class="ca-topo">
+    <div class="ca-titulo"><span class="ca-escudo"><i class="fas fa-video"></i></span>
+        <div><h1>Câmeras das lojas</h1><p>Imagens atualizadas enquanto a tela está aberta · alertas para conferência humana</p></div></div>
+    <label class="ca-busca"><i class="fas fa-search"></i><input type="search" id="caBusca" placeholder="Buscar loja ou coordenação" aria-label="Buscar loja"></label>
+</header>
+{% if not config.ativo %}
+<div class="ca-faixa"><i class="fas fa-power-off"></i><div><strong>Módulo desligado.</strong> As lojas não enviam imagem nem alerta até você ligar em <a href="{% url 'cameras:configuracao' %}">Configuração</a>. Avise as equipes antes de ligar.</div></div>
+{% endif %}
+<section class="ca-kpis">
+    <article class="ca-kpi"><span>Lojas online</span><strong><b id="caOnline">{{ online }}</b><small>/{{ total_lojas }}</small></strong></article>
+    <article class="ca-kpi"><span>Câmeras</span><strong>{{ total_cameras }}</strong></article>
+    <article class="ca-kpi {% if novos %}alerta{% endif %}"><span>Alertas novos</span><strong id="caNovos">{{ novos }}</strong></article>
+</section>
+<div class="ca-grade-painel">
+    <section>
+        {% if not gravadores %}
+        <div class="ca-vazio ca-card"><i class="fas fa-file-excel"></i><p>Nenhuma loja cadastrada ainda.</p><a class="ca-botao" href="{% url 'cameras:configuracao' %}">Importar a planilha</a></div>
+        {% endif %}
+        <div class="ca-mosaico" id="caMosaico">
+            {% for g in gravadores %}
+            <a class="ca-tela" href="{% if g.tem_equipamento %}{% url 'cameras:loja' g.id %}{% else %}{% url 'cameras:gravador_editar' g.id %}{% endif %}" data-busca="{{ g.loja|lower }} {{ g.coordenador|lower }}" data-loja="{{ g.id }}">
+                <span class="ca-imagem">
+                    {% if g.principal %}<img data-canal="{{ g.principal.id }}" alt="{{ g.principal.titulo }} da loja {{ g.loja }}" hidden>{% endif %}
+                    <span class="ca-sem-imagem"><i class="fas {% if g.tem_equipamento %}fa-video-slash{% else %}fa-store-slash{% endif %}"></i><small>{% if g.tem_equipamento %}Aguardando imagem{% else %}Sem gravador{% endif %}</small></span>
+                    {% if g.novos %}<em class="ca-selo-alerta"><i class="fas fa-triangle-exclamation"></i>{{ g.novos }}</em>{% endif %}
+                </span>
+                <span class="ca-legenda"><span class="ca-ponto {{ g.situacao }}" data-situacao></span><strong>{{ g.loja }}</strong><small>{{ g.canais_ativos|length }} câm.</small></span>
+            </a>
+            {% endfor %}
+        </div>
+    </section>
+    <aside class="ca-card ca-feed">
+        <h2><i class="fas fa-bell"></i>Para conferir</h2>
+        {% for a in recentes %}
+        <a href="{% url 'cameras:alerta_detalhe' a.id %}" class="ca-feed-item"><span class="ca-tipo {{ a.tipo }}"><i class="fas fa-triangle-exclamation"></i></span>
+            <span><strong>{{ a.gravador.loja }}</strong><small>{{ a.get_tipo_display }}</small><small>{{ a.criado_em|date:"d/m H:i" }} · {{ a.confianca }}%{% if a.status == 'ANALISE' %} · em análise{% endif %}</small></span></a>
+        {% empty %}<p class="ca-vazio-texto"><i class="fas fa-check-circle"></i>Nenhum alerta aberto.</p>{% endfor %}
+        <a class="ca-link" href="{% url 'cameras:alertas' %}">Ver todos <i class="fas fa-chevron-right"></i></a>
+    </aside>
+</div>
+<script>
+(function () {
+    var imagens = Array.from(document.querySelectorAll('#caMosaico img[data-canal]')), desde = 0;
+    var ids = imagens.map(function (i) { return i.dataset.canal; }).join(',');
+    function fotos() {
+        if (document.hidden || !ids) return;
+        fetch("{% url 'cameras:fotos' %}?canais=" + ids + '&desde=' + desde).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+            if (!d) return;
+            imagens.forEach(function (img) {
+                var f = d.fotos[img.dataset.canal];
+                if (!f) return;
+                img.src = 'data:image/jpeg;base64,' + f.b64; img.hidden = false; desde = Math.max(desde, f.em);
+            });
+        }).catch(function () {});
+    }
+    function estado() {
+        if (document.hidden) return;
+        fetch("{% url 'cameras:estado' %}").then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+            if (!d) return;
+            document.getElementById('caNovos').textContent = d.novos;
+            var online = 0;
+            document.querySelectorAll('#caMosaico [data-loja]').forEach(function (t) {
+                var s = d.lojas[t.dataset.loja]; if (s === 'online') online++;
+                if (s) t.querySelector('[data-situacao]').className = 'ca-ponto ' + s;
+            });
+            document.getElementById('caOnline').textContent = online;
+        }).catch(function () {});
+    }
+    fotos(); setInterval(fotos, 15000); setInterval(estado, 30000);
+    document.getElementById('caBusca').addEventListener('input', function () {
+        var termo = this.value.trim().toLowerCase();
+        document.querySelectorAll('#caMosaico [data-busca]').forEach(function (t) { t.hidden = termo && !t.dataset.busca.includes(termo); });
+    });
+})();
+</script>
+{% endblock %}

@@ -59,6 +59,8 @@ diferentes do cartão na primeira alteração.
         </div>
     </div>
 
+    {% if m.prioridade != 'MEDIA' %}<div class="mt-1.5" data-card-prioridade>{% include 'impulso/_selo_prioridade.html' with p=m %}</div>{% endif %}
+
     {% if is_gestor %}
     <div class="flex items-center gap-1.5 mt-2">
         <span class="w-5 h-5 rounded-full bg-orange-100 text-orange-700 flex items-center justify-center text-[10px] font-bold flex-shrink-0">{{ m.colaborador.get_full_name|default:m.colaborador.email|slice:":1"|upper }}</span>

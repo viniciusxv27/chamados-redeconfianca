@@ -221,3 +221,6 @@ gunicorn.sock
 static/_p_*.html
 static/_t_*.html
 static/_d_*.html
+
+# Agente de câmeras: guarda o token da loja
+agente_cameras/config.json

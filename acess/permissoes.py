@@ -74,6 +74,23 @@ def pode_entrar(user):
     return e_superadmin(user) or bool(chaves_de(user))
 
 
+GRUPOS_PEDEM_DESLIGAMENTO = ('RH', 'DP', 'FINANCEIRO')
+SETORES_PEDEM_DESLIGAMENTO = ('RH', 'DEPARTAMENTO PESSOAL', 'DP', 'FINANCEIRO')
+
+
+def pode_pedir_desligamento(user):
+    """O atalho do RH e do Financeiro: quem é de lá pede, sem ganhar o resto do Acess."""
+    if not (user and getattr(user, 'is_authenticated', False)):
+        return False
+    if e_superadmin(user) or pode(user, 'desligamentos.gerenciar'):
+        return True
+    if not hasattr(user, '_acess_pede_desligamento'):
+        setor = (user.sector.name if user.sector_id else '').strip().upper()
+        user._acess_pede_desligamento = (setor in SETORES_PEDEM_DESLIGAMENTO
+                                         or user.communication_groups.filter(name__in=GRUPOS_PEDEM_DESLIGAMENTO).exists())
+    return user._acess_pede_desligamento
+
+
 def trata_chamados(user):
     if e_superadmin(user):
         return True

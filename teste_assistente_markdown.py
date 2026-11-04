@@ -113,8 +113,10 @@ t('o SYSTEM pede Markdown simples', 'Markdown simples' in claude_client.SYSTEM)
 marcador = transaction.atomic()
 marcador.__enter__()
 try:
+    # SUPERADMIN: para os outros, /assistente/ agora é o modo colaborador (teste_assistente_colaborador.py).
     pessoa = User.objects.create_user(username='zzmd.pessoa', email='zzmd.pessoa@exemplo-teste.local',
-                                      password='S3nha!teste', first_name='ZZ', last_name='Markdown')
+                                      password='S3nha!teste', first_name='ZZ', last_name='Markdown',
+                                      hierarchy='SUPERADMIN')
     AssistenteMensagem.objects.create(user=pessoa, papel='user', conteudo='quais **metas**?')
     AssistenteMensagem.objects.create(user=pessoa, papel='assistant', conteudo='### Metas\n- **Vendas** <b>x</b>')
     c = Client()

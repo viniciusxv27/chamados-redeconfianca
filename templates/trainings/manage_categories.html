@@ -1,9 +1,11 @@
 {% extends 'base.html' %}
+{% load trilhas_treinamentos %}
 {% load static %}
 
 {% block title %}Gerenciar Categorias de Treinamento{% endblock %}
 
 {% block content %}
+{% abas_trilhas_treinamentos 'gerir_treinamentos' %}
 <div class="min-h-screen bg-gray-50">
     <!-- Header -->
     <div class="bg-white shadow-sm border-b border-gray-200 mb-6">

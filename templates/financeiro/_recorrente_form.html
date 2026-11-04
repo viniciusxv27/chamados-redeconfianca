@@ -1,0 +1,45 @@
+{% load caixa_tags %}
+<form method="post" action="{% if d %}{% url 'financeiro:recorrente_editar' d.id %}{% else %}{% url 'financeiro:recorrente_nova' %}{% endif %}">
+    {% csrf_token %}<input type="hidden" name="voltar" value="{{ caminho }}">
+    <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between gap-3">
+        <div class="min-w-0"><h3 class="font-bold text-gray-900">{% if d %}Editar despesa recorrente{% else %}Nova despesa recorrente{% endif %}</h3>
+            <p class="text-xs text-gray-500">Cadastrar não lança nada em Contas a Pagar.</p></div>
+        {% if not em_pagina %}<button type="button" data-fechar class="w-8 h-8 rounded-lg text-gray-400 hover:bg-gray-100 shrink-0" aria-label="Fechar"><i class="fas fa-xmark"></i></button>{% endif %}
+    </div>
+    <div class="p-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div class="sm:col-span-2"><label class="fin-label" for="recNome{{ d.id|default:'' }}">Nome</label>
+            <input id="recNome{{ d.id|default:'' }}" name="nome" maxlength="120" required value="{{ d.nome|default:'' }}" class="fin-input" placeholder="Ex.: Água da Loja Glória"></div>
+        <div><label class="fin-label" for="recTipo{{ d.id|default:'' }}">Tipo de despesa</label>
+            <input id="recTipo{{ d.id|default:'' }}" name="tipo" maxlength="60" required list="recTipos{{ d.id|default:'' }}" value="{{ d.tipo|default:'' }}" class="fin-input" placeholder="Água, internet, aluguel..." autocomplete="off">
+            <datalist id="recTipos{{ d.id|default:'' }}">{% for t in tipos_lista %}<option value="{{ t }}"></option>{% endfor %}</datalist></div>
+        <div><label class="fin-label" for="recLoja{{ d.id|default:'' }}">Loja</label>
+            <select id="recLoja{{ d.id|default:'' }}" name="loja" class="fin-input"><option value="">Escritório / sem loja</option>
+                {% for l in lojas %}<option value="{{ l.id }}" {% if d.loja_id == l.id %}selected{% endif %}>{{ l.name }}</option>{% endfor %}</select></div>
+        <div><label class="fin-label" for="recForn{{ d.id|default:'' }}">Fornecedor</label>
+            <input id="recForn{{ d.id|default:'' }}" name="fornecedor" maxlength="200" value="{{ d.fornecedor|default:'' }}" class="fin-input"></div>
+        <div><label class="fin-label" for="recDoc{{ d.id|default:'' }}">CNPJ/CPF do fornecedor</label>
+            <input id="recDoc{{ d.id|default:'' }}" name="fornecedor_documento" inputmode="numeric" maxlength="18" value="{{ d.fornecedor_documento|default:'' }}" class="fin-input"></div>
+        <div><label class="fin-label" for="recValor{{ d.id|default:'' }}">Valor esperado (R$)</label>
+            <input id="recValor{{ d.id|default:'' }}" name="valor_esperado" inputmode="decimal" required value="{% if d %}{{ d.valor_esperado|campo }}{% endif %}" class="fin-input" placeholder="0,00"></div>
+        <div><label class="fin-label" for="recDia{{ d.id|default:'' }}">Dia do vencimento</label>
+            <input id="recDia{{ d.id|default:'' }}" name="dia_vencimento" type="number" min="1" max="31" required value="{{ d.dia_vencimento|default:'' }}" class="fin-input"></div>
+        <div><label class="fin-label" for="recInicio{{ d.id|default:'' }}">Acompanhar desde</label>
+            <input id="recInicio{{ d.id|default:'' }}" name="inicio" type="month" required value="{% if d %}{{ d.inicio|date:'Y-m' }}{% else %}{{ hoje_mes|date:'Y-m' }}{% endif %}" class="fin-input">
+            <p class="rec-nota mt-1">Antes deste mês nada é cobrado como vencido.</p></div>
+        <div><label class="fin-label" for="recPlano{{ d.id|default:'' }}">Plano de contas <span class="font-normal text-gray-400">(opcional)</span></label>
+            <select id="recPlano{{ d.id|default:'' }}" name="plano" class="fin-input"><option value="">Nenhum</option>
+                {% for p in planos %}<option value="{{ p.id }}" {% if d.plano_id == p.id %}selected{% endif %}>{{ p.codigo }} {{ p.nome }}</option>{% endfor %}</select></div>
+        <div class="sm:col-span-2"><label class="fin-label" for="recTermo{{ d.id|default:'' }}">Palavra na descrição do título <span class="font-normal text-gray-400">(opcional)</span></label>
+            <input id="recTermo{{ d.id|default:'' }}" name="termo_titulo" maxlength="80" value="{{ d.termo_titulo|default:'' }}" class="fin-input" placeholder='Ex.: SALA 101'>
+            <p class="rec-nota mt-1">Ajuda a achar o título certo quando o mesmo fornecedor manda várias contas no mês.</p></div>
+        <div class="sm:col-span-2"><label class="fin-label" for="recObs{{ d.id|default:'' }}">Observação</label>
+            <textarea id="recObs{{ d.id|default:'' }}" name="observacao" rows="2" class="fin-input">{{ d.observacao|default:'' }}</textarea></div>
+        <label class="flex items-center gap-2 text-sm sm:col-span-2 min-h-[32px] cursor-pointer"><input type="hidden" name="ativa" value="off"><input type="checkbox" name="ativa" value="on" {% if not d or d.ativa %}checked{% endif %} class="accent-emerald-600 w-4 h-4">Despesa ativa</label>
+    </div>
+    <div class="px-5 py-3 border-t border-gray-100 bg-gray-50 flex justify-end gap-2 flex-wrap">
+        {% if d %}<button type="submit" form="recExcluir{{ d.id }}" class="fin-btn fin-btn-claro mr-auto" data-fin-confirmar="A despesa some da grade. Só é possível se ela ainda não tem nada anotado." data-fin-titulo="Excluir a despesa?" data-fin-botao="Excluir"><i class="fas fa-trash"></i>Excluir</button>{% endif %}
+        {% if not em_pagina %}<button type="button" data-fechar class="fin-btn fin-btn-claro">Cancelar</button>{% endif %}
+        <button type="submit" class="fin-btn fin-btn-verde"><i class="fas fa-check"></i>Salvar</button>
+    </div>
+</form>
+{% if d %}<form method="post" action="{% url 'financeiro:recorrente_excluir' d.id %}" id="recExcluir{{ d.id }}" data-fin-confirmar="A despesa some da grade. Só é possível se ela ainda não tem nada anotado." data-fin-titulo="Excluir a despesa?" data-fin-botao="Excluir">{% csrf_token %}<input type="hidden" name="voltar" value="{{ caminho }}"></form>{% endif %}

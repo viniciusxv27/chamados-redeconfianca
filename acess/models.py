@@ -338,3 +338,34 @@ class ModeloMensagem(models.Model):
 
     class Meta:
         ordering = ['id']
+
+
+class PedidoDesligamento(models.Model):
+    """RH e Financeiro pedem o desligamento pelo portal, em vez de mandar no WhatsApp.
+
+    Quem cuida dos desligamentos no Acess agenda a execução: no meio do mês normalmente fica para o
+    início do mês seguinte, para não pesar no PPL.
+    """
+    DESLIGAMENTO, INATIVACAO = 'DESLIGAMENTO', 'INATIVACAO'
+    TIPOS = [(DESLIGAMENTO, 'Desligamento'), (INATIVACAO, 'Inativação de usuário desligado')]
+    ABERTO, AGENDADO, RECUSADO = 'ABERTO', 'AGENDADO', 'RECUSADO'
+    STATUS = [(ABERTO, 'Aguardando o Acess'), (AGENDADO, 'Agendado'), (RECUSADO, 'Recusado')]
+
+    colaborador = models.ForeignKey(Colaborador, on_delete=models.CASCADE, related_name='pedidos_desligamento')
+    tipo = models.CharField(max_length=12, choices=TIPOS, default=DESLIGAMENTO)
+    saida_empresa = models.DateField(verbose_name='Saída da empresa')
+    execucao_sugerida = models.DateField(verbose_name='Execução sugerida')
+    observacao = models.TextField(max_length=1000, blank=True, verbose_name='Observação')
+    solicitante = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                                    related_name='pedidos_desligamento')
+    status = models.CharField(max_length=10, choices=STATUS, default=ABERTO, db_index=True)
+    resposta = models.CharField(max_length=500, blank=True)
+    tratado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='+')
+    tratado_em = models.DateTimeField(null=True, blank=True)
+    criado_em = models.DateTimeField(default=timezone.now, db_index=True)
+
+    class Meta:
+        verbose_name = 'Pedido de desligamento'
+        verbose_name_plural = 'Pedidos de desligamento'
+        ordering = ['-criado_em']

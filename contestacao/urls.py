@@ -1,5 +1,5 @@
 from django.urls import path
-from . import views
+from . import views, views_resumo
 
 app_name = 'contestacao'
 
@@ -30,6 +30,10 @@ urlpatterns = [
     path('minhas/', views.my_contestations, name='my_contestations'),
     path('gerenciar/', views.manage_contestations, name='manage_contestations'),
     path('liberar-setor/', views.liberar_setor, name='liberar_setor'),
+    # Resumo do ciclo no WhatsApp (só SUPERADMIN; o PDF abre também para quem recebeu).
+    path('resumo-whatsapp/', views_resumo.resumo_whatsapp, name='resumo_whatsapp'),
+    path('resumo-whatsapp/enviar/', views_resumo.resumo_whatsapp_enviar, name='resumo_whatsapp_enviar'),
+    path('resumo-whatsapp/pdf/<int:pk>/', views_resumo.resumo_whatsapp_pdf, name='resumo_whatsapp_pdf'),
     path('gerenciar/editar/<int:pk>/', views.update_contestation_manage, name='update_contestation_manage'),
     path('gerenciar/atualizar-valor/<int:pk>/', views.update_contested_sale_value, name='update_contested_sale_value'),
     path('gerenciar/liberar-gestor-global/', views.manage_global_contestation_managers, name='manage_global_contestation_managers'),

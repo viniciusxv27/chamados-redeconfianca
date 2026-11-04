@@ -13,7 +13,8 @@ from django.db.models import Sum
 from django.utils import timezone
 
 from . import auditoria
-from .models import Baixa, MovimentoBancario, Titulo
+from .importacao_titulos import chave_texto
+from .models import Baixa, DespesaMes, DespesaMesTitulo, DespesaRecorrente, MovimentoBancario, Titulo
 
 ZERO = Decimal('0.00')
 CENTAVO = Decimal('0.01')
@@ -327,3 +328,178 @@ def estornar_movimento(movimento, motivo, usuario=None, request=None):
     auditoria.registrar(request, 'ESTORNAR', f'Estornou o lançamento "{movimento.descricao}" — {motivo.strip()}',
                         area='bancos', obj=movimento, valor=movimento.valor, loja=movimento.conta.loja,
                         usuario=usuario)
+
+
+# ── Despesas recorrentes ────────────────────────────────────────────────────
+def _tipo_padronizado(tipo):
+    """"agua" e "Água" são o mesmo tipo: vale a grafia que já existe (senão o filtro racha em dois)."""
+    tipo = ' '.join((tipo or '').split())[:60]
+    if not tipo:
+        raise RegraFinanceira('Escolha o tipo da despesa (água, internet, aluguel...).')
+    chave = chave_texto(tipo)
+    for existente in DespesaRecorrente.objects.order_by('tipo').values_list('tipo', flat=True).distinct():
+        if chave_texto(existente) == chave:
+            return existente
+    return tipo
+
+
+def _conferir_despesa(campos, despesa=None):
+    if not (campos.get('nome') or '').strip():
+        raise RegraFinanceira('Dê um nome para a despesa.')
+    if Decimal(campos['valor_esperado']) <= ZERO:
+        raise RegraFinanceira('O valor esperado precisa ser maior que zero.')
+    if not 1 <= int(campos['dia_vencimento']) <= 31:
+        raise RegraFinanceira('O dia do vencimento vai de 1 a 31.')
+    documento = campos.get('fornecedor_documento') or ''
+    if documento and len(documento) not in (11, 14):
+        raise RegraFinanceira('O CNPJ/CPF precisa ter 11 ou 14 dígitos.')
+    iguais = DespesaRecorrente.objects.filter(nome__iexact=campos['nome'].strip(), loja=campos.get('loja'), ativa=True)
+    if despesa is not None:
+        iguais = iguais.exclude(pk=despesa.pk)
+    if campos.get('ativa', True) and iguais.exists():
+        raise RegraFinanceira('Já existe uma despesa ativa com esse nome nessa loja.')
+
+
+@transaction.atomic
+def criar_despesa(campos, usuario=None, request=None):
+    _conferir_despesa(campos)
+    campos = dict(campos, nome=campos['nome'].strip(), tipo=_tipo_padronizado(campos.get('tipo')),
+                  inicio=campos['inicio'].replace(day=1))
+    despesa = DespesaRecorrente.objects.create(criado_por=usuario, **campos)
+    auditoria.registrar(request, 'CRIAR', f'Cadastrou a despesa recorrente: {despesa.nome}', area='recorrentes',
+                        obj=despesa, valor=despesa.valor_esperado, depois=auditoria.foto(despesa), usuario=usuario)
+    return despesa
+
+
+@transaction.atomic
+def editar_despesa(despesa, campos, usuario=None, request=None):
+    despesa = DespesaRecorrente.objects.select_for_update().get(pk=despesa.pk)
+    _conferir_despesa(campos, despesa)
+    campos = dict(campos, nome=campos['nome'].strip(), tipo=_tipo_padronizado(campos.get('tipo')),
+                  inicio=campos['inicio'].replace(day=1))
+    antes = auditoria.foto(despesa)
+    for nome, valor in campos.items():
+        setattr(despesa, nome, valor)
+    despesa.save()
+    a, d = auditoria.diferenca(antes, auditoria.foto(despesa))
+    if d:
+        auditoria.registrar(request, 'EDITAR', f'Editou a despesa recorrente: {despesa.nome}', area='recorrentes',
+                            obj=despesa, valor=despesa.valor_esperado, antes=a, depois=d, usuario=usuario)
+    return despesa
+
+
+@transaction.atomic
+def excluir_despesa(despesa, usuario=None, request=None):
+    """Só some a que não tem nada anotado: a que tem histórico se desativa."""
+    despesa = DespesaRecorrente.objects.select_for_update().get(pk=despesa.pk)
+    tem_dado = (DespesaMesTitulo.objects.filter(mes__despesa=despesa).exists()
+                or despesa.meses.exclude(valor__isnull=True, pago_em__isnull=True, sem_cobranca=False,
+                                         observacao='').exists())
+    if tem_dado:
+        raise RegraFinanceira('Esta despesa já tem histórico: desative em vez de excluir.')
+    auditoria.registrar(request, 'EXCLUIR', f'Excluiu a despesa recorrente: {despesa.nome}', area='recorrentes',
+                        obj=despesa, valor=despesa.valor_esperado, loja=despesa.loja, antes=auditoria.foto(despesa),
+                        usuario=usuario)
+    despesa.delete()
+
+
+def _mes_da_despesa(despesa, competencia, usuario=None):
+    return DespesaMes.objects.select_for_update().get_or_create(
+        despesa=despesa, competencia=competencia.replace(day=1), defaults={'atualizado_por': usuario})
+
+
+def _titulos_validos(mes):
+    return mes.vinculos.exclude(titulo__status='CANCELADO')
+
+
+@transaction.atomic
+def salvar_mes_despesa(despesa, competencia, valor=None, vencimento=None, pago_em=None, valor_pago=None,
+                       sem_cobranca=False, observacao='', usuario=None, request=None):
+    """O que se anota à mão num mês. Não dá baixa nem mexe em banco: é só o acompanhamento."""
+    mes, _criado = _mes_da_despesa(despesa, competencia, usuario)
+    antes = auditoria.foto(mes)
+    observacao = (observacao or '').strip()[:255]
+    if _titulos_validos(mes).exists():
+        if valor is not None or pago_em is not None or valor_pago is not None or vencimento is not None or sem_cobranca:
+            raise RegraFinanceira('Este mês tem título vinculado: valor e pagamento vêm dele. '
+                                  'Dê a baixa em Contas a Pagar ou desvincule o título.')
+    else:
+        if sem_cobranca and (valor is not None or pago_em is not None or valor_pago is not None):
+            raise RegraFinanceira('Mês sem cobrança não tem valor nem pagamento.')
+        if valor is not None and valor <= ZERO:
+            raise RegraFinanceira('O valor precisa ser maior que zero. Se não houve conta, marque "sem cobrança".')
+        if valor_pago is not None and valor_pago <= ZERO:
+            raise RegraFinanceira('O valor pago precisa ser maior que zero.')
+        if valor_pago is not None and pago_em is None:
+            raise RegraFinanceira('Informe a data do pagamento.')
+        if pago_em is not None:
+            if pago_em > timezone.localdate():
+                raise RegraFinanceira('A data do pagamento não pode ser no futuro.')
+            if valor is None and valor_pago is None:
+                raise RegraFinanceira('Informe o valor da conta para marcar como paga.')
+            valor_pago = valor_pago if valor_pago is not None else valor
+            valor = valor if valor is not None else valor_pago
+        mes.valor, mes.vencimento, mes.pago_em, mes.valor_pago = valor, vencimento, pago_em, valor_pago
+        mes.sem_cobranca = sem_cobranca
+    mes.observacao = observacao
+    mes.atualizado_por = usuario
+    mes.save()
+    a, d = auditoria.diferenca(antes, auditoria.foto(mes))
+    a, d = {k: v for k, v in a.items() if k != 'atualizado_por'}, {k: v for k, v in d.items() if k != 'atualizado_por'}
+    if d:
+        auditoria.registrar(request, 'EDITAR', f'Anotou {competencia:%m/%Y} da despesa {despesa.nome}', area='recorrentes',
+                            obj=mes, valor=mes.valor, loja=despesa.loja, antes=a, depois=d, usuario=usuario)
+    return mes
+
+
+@transaction.atomic
+def vincular_titulo(despesa, competencia, titulo, usuario=None, request=None):
+    """Liga um título a um mês: dali em diante valor e situação do mês vêm dele."""
+    titulo = Titulo.objects.select_for_update().get(pk=titulo.pk)
+    if titulo.tipo != 'PAGAR':
+        raise RegraFinanceira('Só título a pagar entra em despesa recorrente.')
+    if titulo.status == 'CANCELADO':
+        raise RegraFinanceira('Este título está cancelado.')
+    existente = DespesaMesTitulo.objects.select_related('mes__despesa').filter(titulo=titulo).first()
+    if existente is not None:
+        raise RegraFinanceira(f'Este título já está em {existente.mes.despesa.nome} '
+                              f'({existente.mes.competencia:%m/%Y}).')
+    mes, _criado = _mes_da_despesa(despesa, competencia, usuario)
+    if mes.pago_em is not None:
+        raise RegraFinanceira('Este mês foi anotado como pago à mão: limpe a anotação antes de vincular.')
+    vinculo = DespesaMesTitulo.objects.create(mes=mes, titulo=titulo, vinculado_por=usuario)
+    if mes.sem_cobranca:
+        mes.sem_cobranca = False
+        mes.save(update_fields=['sem_cobranca', 'atualizado_em'])
+    auditoria.registrar(request, 'EDITAR', f'Vinculou o título "{titulo.descricao}" a {competencia:%m/%Y} da despesa '
+                        f'{despesa.nome}', area='recorrentes', obj=mes, valor=titulo.valor, loja=despesa.loja,
+                        depois={'titulo': titulo.pk}, usuario=usuario)
+    return vinculo
+
+
+@transaction.atomic
+def desvincular_titulo(vinculo, usuario=None, request=None):
+    vinculo = DespesaMesTitulo.objects.select_related('mes__despesa__loja', 'titulo').get(pk=vinculo.pk)
+    mes, titulo = vinculo.mes, vinculo.titulo
+    vinculo.delete()
+    auditoria.registrar(request, 'EDITAR', f'Desvinculou o título "{titulo.descricao}" de {mes.competencia:%m/%Y} da '
+                        f'despesa {mes.despesa.nome}', area='recorrentes', obj=mes, valor=titulo.valor,
+                        loja=mes.despesa.loja, antes={'titulo': titulo.pk}, usuario=usuario)
+    return mes
+
+
+@transaction.atomic
+def lancar_titulo_da_despesa(despesa, competencia, valor, vencimento, usuario=None, request=None):
+    """Alguém pediu: abre a conta a pagar do mês e já deixa vinculada. Nunca roda sozinho."""
+    mes = DespesaMes.objects.filter(despesa=despesa, competencia=competencia.replace(day=1)).first()
+    if mes is not None and mes.pago_em is not None:
+        raise RegraFinanceira('Este mês foi anotado como pago à mão: não há o que lançar.')
+    if mes is not None and _titulos_validos(mes).exists():
+        raise RegraFinanceira('Este mês já tem título vinculado.')
+    criados = criar_titulos({
+        'tipo': 'PAGAR', 'descricao': f'{despesa.nome} - {competencia:%m/%Y}'[:200],
+        'pessoa_nome': despesa.fornecedor[:200], 'pessoa_documento': despesa.fornecedor_documento,
+        'plano': despesa.plano, 'loja': despesa.loja, 'vencimento': vencimento, 'valor': valor,
+        'competencia': competencia.replace(day=1)}, usuario=usuario, request=request)
+    vincular_titulo(despesa, competencia, criados[0], usuario=usuario, request=request)
+    return criados[0]

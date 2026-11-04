@@ -15,6 +15,7 @@ urlpatterns = [
     path('certificate/<int:certificate_id>/download/', views.download_certificate_pdf, name='download_certificate'),
     
     # Gerenciamento (Supervisores)
+    path('manage/', views.manage_trails, name='manage_trails'),
     path('manage/<int:trail_id>/', views.manage_trail, name='manage_trail'),
     path('manage/<int:trail_id>/edit-map/', views.edit_trail_map, name='edit_trail_map'),
     

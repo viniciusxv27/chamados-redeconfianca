@@ -1,16 +1,18 @@
 {% extends "base.html" %}
+{% load trilhas_treinamentos %}
 {% load static %}
 
 {% block title %}Respostas do Quiz - {{ lesson.title }}{% endblock %}
 
 {% block content %}
-<div class="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 p-6">
+{% abas_trilhas_treinamentos 'gerir_trilhas' %}
+<div class="min-h-screen bg-gray-50 p-4 sm:p-6">
     <div class="max-w-6xl mx-auto">
         <!-- Breadcrumb -->
         <div class="mb-6 flex items-center gap-2 text-sm text-gray-600">
-            <a href="{% url 'knowledge_trails:dashboard' %}" class="hover:text-purple-600 transition-colors">Dashboard</a>
+            <a href="{% url 'knowledge_trails:dashboard' %}" class="hover:text-primary transition-colors">Trilhas e Treinamentos</a>
             <i class="fas fa-chevron-right text-xs"></i>
-            <a href="{% url 'knowledge_trails:edit_trail' trail.id %}" class="hover:text-purple-600 transition-colors">
+            <a href="{% url 'knowledge_trails:edit_trail' trail.id %}" class="hover:text-primary transition-colors">
                 {% if trail.icon %}
                 <img src="{{ trail.icon.url }}" alt="Logo da trilha" class="inline-block w-5 h-5 rounded object-cover align-middle mr-1">
                 {% else %}
@@ -19,15 +21,15 @@
                 {{ trail.title }}
             </a>
             <i class="fas fa-chevron-right text-xs"></i>
-            <a href="{% url 'knowledge_trails:edit_lesson' lesson.id %}" class="hover:text-purple-600 transition-colors">{{ lesson.title }}</a>
+            <a href="{% url 'knowledge_trails:edit_lesson' lesson.id %}" class="hover:text-primary transition-colors">{{ lesson.title }}</a>
             <i class="fas fa-chevron-right text-xs"></i>
-            <a href="{% url 'knowledge_trails:edit_lesson_quiz' lesson.id %}" class="hover:text-purple-600 transition-colors">Gerenciar Quiz</a>
+            <a href="{% url 'knowledge_trails:edit_lesson_quiz' lesson.id %}" class="hover:text-primary transition-colors">Gerenciar Quiz</a>
             <i class="fas fa-chevron-right text-xs"></i>
             <span class="text-gray-800 font-semibold">Respostas</span>
         </div>
 
-        <div class="bg-white rounded-3xl shadow-2xl overflow-hidden">
-            <div class="bg-gradient-to-r from-indigo-600 to-purple-600 text-white p-4 sm:p-8">
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+            <div class="bg-primary text-white p-4 sm:p-8">
                 <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
                     <div>
                         <h2 class="text-2xl sm:text-3xl font-bold flex items-center gap-3">
@@ -110,7 +112,7 @@
                 <div class="bg-gray-50 rounded-2xl overflow-hidden border border-gray-200">
                     <div class="px-6 py-4 bg-gray-100 border-b border-gray-200">
                         <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
-                            <i class="fas fa-list-alt text-purple-600"></i>
+                            <i class="fas fa-list-alt text-primary"></i>
                             Participantes
                         </h3>
                     </div>
@@ -163,7 +165,7 @@
                                     <td class="px-6 py-4 text-center">
                                         <div class="flex items-center justify-center gap-2">
                                             <div class="w-20 bg-gray-200 rounded-full h-2.5">
-                                                <div class="bg-gradient-to-r from-purple-500 to-pink-500 h-2.5 rounded-full transition-all duration-500" style="width: {{ data.percentage }}%"></div>
+                                                <div class="bg-primary h-2.5 rounded-full transition-all duration-500" style="width: {{ data.percentage }}%"></div>
                                             </div>
                                             <span class="text-sm font-semibold text-gray-700">{{ data.percentage|floatformat:0 }}%</span>
                                         </div>
@@ -178,7 +180,7 @@
                                     </td>
                                     <td class="px-6 py-4 text-center">
                                         <a href="{% url 'knowledge_trails:user_quiz_detail' lesson.id data.user.id %}" 
-                                           class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-sm font-semibold rounded-lg hover:from-purple-700 hover:to-pink-700 transition-all duration-300 shadow-md hover:shadow-lg">
+                                           class="inline-flex items-center px-4 py-2 bg-primary text-white text-sm font-semibold rounded-lg hover:bg-orange-600 transition-all duration-300 shadow-md hover:shadow-lg">
                                             <i class="fas fa-eye mr-2"></i> Ver Detalhes
                                         </a>
                                     </td>

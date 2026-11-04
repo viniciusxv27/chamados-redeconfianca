@@ -1,0 +1,16 @@
+<details class="bg-white rounded-lg shadow-md mb-6" data-sugerir-produto>
+    <summary class="cursor-pointer select-none px-5 py-3 text-sm font-semibold text-gray-800"><i class="fas fa-lightbulb text-amber-500 mr-2"></i>Sugerir um produto para o Mercadinho</summary>
+    <form method="post" action="{% url 'sugerir_produto' %}" class="px-5 pb-5 grid grid-cols-1 md:grid-cols-2 gap-3">
+        {% csrf_token %}
+        <label class="block text-sm md:col-span-2"><span class="font-medium text-gray-700">Link do produto *</span>
+            <input type="url" name="link" required maxlength="2000" placeholder="https://" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg"></label>
+        <label class="block text-sm"><span class="font-medium text-gray-700">Nome do produto</span>
+            <input type="text" name="nome" maxlength="150" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg"></label>
+        <label class="block text-sm"><span class="font-medium text-gray-700">Por que sugerir</span>
+            <input type="text" name="observacao" maxlength="500" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-lg"></label>
+        <div class="md:col-span-2 flex items-center justify-between gap-3 flex-wrap">
+            <p class="text-xs text-gray-500">A empresa analisa se é viável incluir, e você recebe a resposta nas notificações.</p>
+            <button class="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700">Enviar sugestão</button>
+        </div>
+    </form>
+</details>

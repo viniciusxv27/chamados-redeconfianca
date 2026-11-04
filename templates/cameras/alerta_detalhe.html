@@ -1,0 +1,26 @@
+{% extends 'cameras/_base.html' %}
+{% block ca_titulo %}Alerta{% endblock %}
+{% block ca_conteudo %}
+<header class="ca-topo"><div class="ca-titulo"><a class="ca-voltar" href="{% url 'cameras:alertas' %}" aria-label="Voltar aos alertas"><i class="fas fa-arrow-left"></i></a><div><h1>{{ alerta.get_tipo_display }}</h1><p>{{ alerta.gravador.loja }}{% if alerta.canal %} · {{ alerta.canal.titulo }}{% endif %} · {{ alerta.criado_em|date:"d/m/Y H:i" }}</p></div></div><i class="ca-status {{ alerta.status }}">{{ alerta.get_status_display }}</i></header>
+<div class="ca-grade-alerta">
+    <div class="ca-card ca-foto-alerta">{% if alerta.foto %}<img src="{% url 'cameras:alerta_foto' alerta.id %}" alt="Imagem do momento do alerta">{% else %}<div class="ca-vazio"><i class="fas fa-image"></i><p>O agente não enviou imagem.</p></div>{% endif %}</div>
+    <div class="ca-card ca-painel-lateral">
+        <dl>
+            <dt>Motivo</dt><dd>{{ alerta.motivo|default:"—" }}</dd>
+            <dt>Confiança da análise</dt><dd><span class="ca-barra"><span style="width:{{ alerta.confianca }}%"></span></span>{{ alerta.confianca }}%</dd>
+            {% if alerta.repeticoes > 1 %}<dt>Repetições</dt><dd>{{ alerta.repeticoes }} vezes, até {{ alerta.ultimo_em|date:"H:i" }}</dd>{% endif %}
+            {% if alerta.tratado_por %}<dt>Tratado por</dt><dd>{{ alerta.tratado_por.get_full_name }} em {{ alerta.tratado_em|date:"d/m/Y H:i" }}</dd>{% endif %}
+        </dl>
+        <p class="ca-aviso-humano"><i class="fas fa-user-check"></i>A análise aponta movimento suspeito, não culpados. Confira a gravação no aplicativo da loja antes de falar com alguém.</p>
+        <form method="post">{% csrf_token %}
+            <label for="caObs">Observação</label>
+            <textarea id="caObs" name="observacao" rows="3" placeholder="O que foi visto na gravação">{{ alerta.observacao }}</textarea>
+            <div class="ca-decisao">
+                <button class="ca-botao claro" name="status" value="ANALISE">Em análise</button>
+                <button class="ca-botao claro" name="status" value="FALSO">Falso alarme</button>
+                <button class="ca-botao perigo" name="status" value="CONFIRMADO">Confirmar furto</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

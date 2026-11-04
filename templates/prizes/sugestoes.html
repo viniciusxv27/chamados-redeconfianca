@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+{% block title %}Sugestões de produtos{% endblock %}
+{% block content %}
+<div class="container mx-auto px-4 py-6 max-w-5xl">
+    <div class="flex items-center justify-between gap-3 flex-wrap mb-5">
+        <div><h1 class="text-2xl font-bold text-gray-900"><i class="fas fa-lightbulb text-amber-500 mr-2"></i>Sugestões de produtos</h1>
+            <p class="text-sm text-gray-500">{{ pendentes }} em análise. Veja o link e responda se é viável incluir no Mercadinho.</p></div>
+        <div class="flex gap-2 flex-wrap">
+            <form method="get"><select name="situacao" aria-label="Situação" onchange="this.form.submit()" class="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
+                {% for v, r in status %}<option value="{{ v }}" {% if situacao == v %}selected{% endif %}>{{ r }}</option>{% endfor %}
+                <option value="todas" {% if situacao == 'todas' %}selected{% endif %}>Todas</option></select></form>
+            <a href="{% url 'manage_prizes' %}" class="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 text-sm">Voltar</a>
+        </div>
+    </div>
+    {% for m in messages %}<div class="mb-3 px-4 py-2 rounded-lg text-sm {% if m.tags == 'error' %}bg-red-50 text-red-700{% else %}bg-green-50 text-green-700{% endif %}">{{ m }}</div>{% endfor %}
+    <div class="space-y-3">
+        {% for s in sugestoes %}
+        <article class="bg-white rounded-xl border border-gray-200 p-4">
+            <div class="flex items-start justify-between gap-3 flex-wrap">
+                <div class="min-w-0">
+                    <a href="{{ s.link }}" target="_blank" rel="noopener noreferrer" class="font-semibold text-blue-700 hover:underline break-all">{{ s.nome|default:s.link }} <i class="fas fa-up-right-from-square text-xs"></i></a>
+                    <p class="text-xs text-gray-500 mt-0.5">{{ s.user.get_full_name|default:s.user.email }}{% if s.user.sector %} · {{ s.user.sector.name }}{% endif %} · {{ s.criado_em|date:"d/m/Y H:i" }}</p>
+                    {% if s.observacao %}<p class="text-sm text-gray-700 mt-1">{{ s.observacao }}</p>{% endif %}
+                </div>
+                <span class="px-2 py-0.5 rounded-full text-xs font-semibold {% if s.status == 'APROVADA' %}bg-emerald-100 text-emerald-700{% elif s.status == 'RECUSADA' %}bg-gray-100 text-gray-600{% else %}bg-amber-100 text-amber-700{% endif %}">{{ s.get_status_display }}</span>
+            </div>
+            {% if s.status == 'PENDENTE' %}
+            <form method="post" class="mt-3 flex flex-col sm:flex-row gap-2">{% csrf_token %}<input type="hidden" name="sugestao" value="{{ s.id }}">
+                <input name="resposta" maxlength="500" aria-label="Resposta" placeholder="Resposta para quem sugeriu (opcional)" class="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                <button name="decisao" value="APROVADA" class="px-3 py-2 rounded-lg bg-emerald-600 text-white text-sm">Aprovar</button>
+                <button name="decisao" value="RECUSADA" class="px-3 py-2 rounded-lg bg-gray-200 text-gray-700 text-sm">Não incluir</button>
+            </form>
+            {% elif s.resposta %}<p class="text-sm text-gray-600 mt-2"><i class="fas fa-reply text-gray-400 mr-1"></i>{{ s.resposta }}</p>{% endif %}
+        </article>
+        {% empty %}<p class="text-center text-sm text-gray-400 py-10">Nenhuma sugestão nesta situação.</p>{% endfor %}
+    </div>
+</div>
+{% endblock %}

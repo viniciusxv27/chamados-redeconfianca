@@ -1,5 +1,7 @@
 from django.db import models
 from django.conf import settings
+from datetime import timedelta
+
 from django.utils import timezone
 from users.models import Sector, User
 from core.utils import upload_ticket_attachment
@@ -1170,6 +1172,10 @@ def get_media_storage():
 
 class TicketAttachment(models.Model):
     """Modelo para anexos de tickets"""
+
+    # Quem anexou errado apaga sozinho por este tempo, com o chamado ainda em andamento.
+    HORAS_PARA_APAGAR = 24
+    SITUACOES_ENCERRADAS = ('RESOLVIDO', 'FECHADO', 'ENCERRADO_SEM_SOLUCAO', 'REJEITADO')
     
     ticket = models.ForeignKey(
         Ticket, 
@@ -1209,6 +1215,13 @@ class TicketAttachment(models.Model):
         verbose_name_plural = "Anexos dos Chamados"
         ordering = ['-uploaded_at']
     
+    def pode_apagar(self, user):
+        if user.can_delete_ticket_attachments():
+            return True
+        return (self.uploaded_by_id == user.id
+                and self.ticket.status not in self.SITUACOES_ENCERRADAS
+                and timezone.now() - self.uploaded_at < timedelta(hours=self.HORAS_PARA_APAGAR))
+
     def __str__(self):
         return f"#{self.ticket.id} - {self.original_filename}"
     

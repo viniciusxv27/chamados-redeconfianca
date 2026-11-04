@@ -9,6 +9,8 @@ urlpatterns = [
     path('redeem/<int:prize_id>/', views.redeem_prize, name='redeem_prize'),
     
     # Histórico do usuário
+    path('sugerir/', views.sugerir_produto, name='sugerir_produto'),
+    path('sugestoes/', views.sugestoes_produto, name='sugestoes_produto'),
     path('my-redemptions/', views.redemption_history, name='redemption_history'),
     
     # Gerenciamento (admin)

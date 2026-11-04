@@ -49,18 +49,20 @@ def sincronizar_dia(loja_id, data):
     """Regrava a soma das sangrias do dia no caixa e refaz o saldo dali em diante."""
     from .servicos import recalcular_saldos
 
-    soma = (Sangria.objects.filter(loja_id=loja_id, data=data)
-            .aggregate(s=Sum('valor'))['s']) or ZERO
+    do_dia = Sangria.objects.filter(loja_id=loja_id, data=data)
+    soma = do_dia.exclude(categoria__vai_para_deposito=True).aggregate(s=Sum('valor'))['s'] or ZERO
+    depositos = do_dia.filter(categoria__vai_para_deposito=True).aggregate(s=Sum('valor'))['s'] or ZERO
     dia = ContagemCaixaDia.objects.filter(loja_id=loja_id, data=data).first()
     if dia is None:
-        if not soma:
+        if not soma and not depositos:
             return None
         # Sangria em dia sem importação ainda: o dia nasce com ela, e a
         # importação do SAP depois só preenche o Valor SAP.
         dia = ContagemCaixaDia.objects.create(loja_id=loja_id, data=data)
-    if dia.sangria_registrada != soma:
-        dia.sangria_registrada = soma
-        dia.save(update_fields=['sangria_registrada', 'atualizado_em'])
+    if dia.sangria_registrada != soma or dia.deposito_sangrias != depositos:
+        dia.deposito = (dia.deposito or ZERO) - dia.deposito_sangrias + depositos
+        dia.sangria_registrada, dia.deposito_sangrias = soma, depositos
+        dia.save(update_fields=['sangria_registrada', 'deposito', 'deposito_sangrias', 'atualizado_em'])
     recalcular_saldos(loja_id, desde=data)
     return dia
 
@@ -72,8 +74,13 @@ def _chave_texto(texto):
     return ' '.join(palavras[:4])
 
 
+def so_gastos(qs):
+    """O que saiu como gasto. Depósito é dinheiro que foi para o banco: fica fora das análises."""
+    return qs.exclude(categoria__vai_para_deposito=True)
+
+
 def resumo(qs):
-    dados = qs.aggregate(total=Sum('valor'), quantidade=Count('id'))
+    dados = so_gastos(qs).aggregate(total=Sum('valor'), quantidade=Count('id'))
     total, quantidade = dados['total'] or ZERO, dados['quantidade'] or 0
     return {
         'total': total,
@@ -94,13 +101,13 @@ def _com_fatia(linhas, total):
 
 
 def por_categoria(qs, total):
-    linhas = list(qs.values('categoria__nome').annotate(total=Sum('valor'), n=Count('id'))
+    linhas = list(so_gastos(qs).values('categoria__nome').annotate(total=Sum('valor'), n=Count('id'))
                   .order_by('-total'))
     return _com_fatia([{'nome': l['categoria__nome'], 'total': l['total'], 'n': l['n']} for l in linhas], total)
 
 
 def por_loja(qs, total):
-    linhas = list(qs.values('loja_id', 'loja__name').annotate(total=Sum('valor'), n=Count('id'))
+    linhas = list(so_gastos(qs).values('loja_id', 'loja__name').annotate(total=Sum('valor'), n=Count('id'))
                   .order_by('-total'))
     return _com_fatia([{'id': l['loja_id'], 'nome': l['loja__name'], 'total': l['total'], 'n': l['n']}
                        for l in linhas], total)

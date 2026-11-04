@@ -1,9 +1,12 @@
 {% extends 'base.html' %}
+{% load trilhas_treinamentos %}
 {% load training_filters %}
+{% load acessos %}
 
 {% block title %}Treinamentos{% endblock %}
 
 {% block content %}
+{% abas_trilhas_treinamentos 'treinamentos' %}
 <div class="min-h-screen bg-gray-50">
     <!-- Header -->
     <div class="bg-white shadow-sm border-b border-gray-200 mb-6">
@@ -17,7 +20,7 @@
                     <p class="text-gray-600 mt-1">Acesse vídeos educativos e materiais de treinamento</p>
                 </div>
                 <div class="flex flex-wrap gap-3">
-                    {% if user.can_manage_users %}
+                    {% if user|tem_acesso:'treinamentos.gestao' %}
                         <a href="{% url 'training_upload' %}" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors flex items-center">
                             <i class="fas fa-upload mr-2"></i>
                             Novo Treinamento

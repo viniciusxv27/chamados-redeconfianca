@@ -1,0 +1,6 @@
+{
+  "portal": "https://endereco-do-portal",
+  "token": "token gerado em /cameras/configuracao/",
+  "analisar": true,
+  "modelo": "yolov8n.pt"
+}

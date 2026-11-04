@@ -694,6 +694,64 @@
             </form>
         </div>
 
+        <!-- Grupos da pessoa -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mt-6" id="gruposDaPessoa"
+             data-url="{% url 'edit_user_group' user_to_edit.id %}">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h3 class="text-lg font-semibold text-gray-900"><i class="fas fa-users text-gray-500 mr-2"></i>Grupos</h3>
+                <p class="text-sm text-gray-500 mt-0.5">A mudança vale na hora, sem precisar salvar o cadastro. Grupos liberam módulos e acessos.</p>
+            </div>
+            <div class="p-6">
+                <div class="flex flex-wrap gap-2 mb-4" data-lista-grupos>
+                    {% for g in grupos_da_pessoa %}
+                    <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-orange-50 text-orange-800 text-sm" data-grupo="{{ g.id }}" data-nome="{{ g.name }}">
+                        {{ g.name }}{% if g.pelo_cargo %}<small class="text-[10px] text-orange-600" title="Entrou sozinho por causa do cargo">pelo cargo</small>{% endif %}
+                        <button type="button" class="js-tirar-grupo text-orange-400 hover:text-red-600" aria-label="Tirar de {{ g.name }}" title="Tirar do grupo"><i class="fas fa-xmark"></i></button>
+                    </span>
+                    {% endfor %}
+                    <p class="text-sm text-gray-400 {% if grupos_da_pessoa %}hidden{% endif %}" data-sem-grupo>Esta pessoa não está em nenhum grupo.</p>
+                </div>
+                <div class="flex flex-col sm:flex-row gap-2">
+                    <select id="grupoParaAdicionar" aria-label="Grupo para adicionar" class="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white">
+                        <option value="">Escolha um grupo…</option>
+                        {% for g in grupos_para_adicionar %}<option value="{{ g.id }}">{{ g.name }}</option>{% endfor %}
+                    </select>
+                    <button type="button" id="grupoAdicionar" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-orange-600 text-sm font-medium"><i class="fas fa-plus mr-1"></i>Adicionar</button>
+                </div>
+            </div>
+        </div>
+        <script>
+        (function () {
+            var caixa = document.getElementById('gruposDaPessoa'), lista = caixa.querySelector('[data-lista-grupos]'), sel = document.getElementById('grupoParaAdicionar');
+            function enviar(acao, grupo) {
+                var corpo = new URLSearchParams({acao: acao, grupo: grupo, csrfmiddlewaretoken: '{{ csrf_token }}'});
+                return fetch(caixa.dataset.url, {method: 'POST', body: corpo}).then(function (r) { return r.json(); }).then(function (d) {
+                    if (!d.ok) throw new Error(d.erro || 'Não foi possível alterar o grupo.');
+                }).catch(function (e) { alert(e.message || 'Erro de conexão.'); throw e; });
+            }
+            function atualizarVazio() { lista.querySelector('[data-sem-grupo]').classList.toggle('hidden', !!lista.querySelector('[data-grupo]')); }
+            function selo(id, nome) {
+                var s = document.createElement('span');
+                s.className = 'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-orange-50 text-orange-800 text-sm'; s.dataset.grupo = id; s.dataset.nome = nome; s.textContent = nome + ' ';
+                var b = document.createElement('button');
+                b.type = 'button'; b.className = 'js-tirar-grupo text-orange-400 hover:text-red-600'; b.setAttribute('aria-label', 'Tirar de ' + nome); b.innerHTML = '<i class="fas fa-xmark"></i>';
+                s.appendChild(b); lista.insertBefore(s, lista.querySelector('[data-sem-grupo]'));
+            }
+            lista.addEventListener('click', function (e) {
+                var botao = e.target.closest('.js-tirar-grupo'); if (!botao) return;
+                var item = botao.closest('[data-grupo]'), nome = item.dataset.nome;
+                if (!confirm('Tirar esta pessoa do grupo ' + nome + '?')) return;
+                enviar('remover', item.dataset.grupo).then(function () {
+                    sel.add(new Option(nome, item.dataset.grupo)); item.remove(); atualizarVazio();
+                }).catch(function () {});
+            });
+            document.getElementById('grupoAdicionar').addEventListener('click', function () {
+                var op = sel.options[sel.selectedIndex]; if (!op || !op.value) return;
+                enviar('adicionar', op.value).then(function () { selo(op.value, op.text); op.remove(); sel.value = ''; atualizarVazio(); }).catch(function () {});
+            });
+        })();
+        </script>
+
         <!-- Histórico de alterações do cadastro -->
         <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mt-6">
             <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between gap-3 flex-wrap">

@@ -1,9 +1,11 @@
 {% extends 'base.html' %}
+{% load trilhas_treinamentos %}
 {% load training_filters %}
 
 {% block title %}{{ training.title }} - Treinamentos{% endblock %}
 
 {% block content %}
+{% abas_trilhas_treinamentos 'treinamentos' %}
 <div class="min-h-screen bg-gray-50">
     <!-- Header -->
     <div class="bg-white shadow-sm border-b border-gray-200 mb-6">

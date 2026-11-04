@@ -1001,6 +1001,7 @@ def ticket_detail_view(request, ticket_id):
         'can_assume': can_assume,
         'can_assign': can_assign,
         'can_upload': can_upload,
+        'anexos_que_pode_apagar': {a.id for a in ticket.attachments.all() if a.pode_apagar(user)},
         'can_delete_attachments': user.can_delete_ticket_attachments(),
         'assigned_users': ticket.get_all_assigned_users(),
         'additional_assignments': ticket.additional_assignments.filter(is_active=True).select_related('user', 'assigned_by'),
@@ -1013,14 +1014,8 @@ def ticket_detail_view(request, ticket_id):
 
 @login_required
 def delete_attachment_view(request, ticket_id, attachment_id):
-    """Remove um anexo de um chamado. Permitido para SUPERVISOR e hierarquias acima."""
+    """Remove um anexo: SUPERVISOR para cima, ou quem anexou, por tempo limitado."""
     user = request.user
-
-    # Verificar permissão: hierarquia supervisor para cima
-    if not user.can_delete_ticket_attachments():
-        messages.error(request, 'Você não tem permissão para remover anexos deste chamado.')
-        return redirect('ticket_detail', ticket_id=ticket_id)
-
     ticket = get_object_or_404(Ticket, id=ticket_id)
 
     if request.method != 'POST':
@@ -1028,6 +1023,10 @@ def delete_attachment_view(request, ticket_id, attachment_id):
 
     from .models import TicketAttachment
     attachment = get_object_or_404(TicketAttachment, id=attachment_id, ticket=ticket)
+    if not attachment.pode_apagar(user):
+        messages.error(request, f'Quem anexou pode remover o arquivo em até {TicketAttachment.HORAS_PARA_APAGAR} horas, '
+                                'com o chamado em andamento. Depois disso, peça a um supervisor.')
+        return redirect('ticket_detail', ticket_id=ticket.id)
     filename = attachment.original_filename
 
     # Remover o arquivo do storage e o registro
@@ -1940,6 +1939,29 @@ class WebhookViewSet(viewsets.ModelViewSet):
             }, status=status.HTTP_400_BAD_REQUEST)
 
 
+def _preenchimento_do_chamado(params):
+    """O que veio na URL para já aparecer no formulário (hoje, o link do assistente).
+
+    Só preenche: quem envia é a pessoa, pelo POST de sempre. Setor e categoria
+    que não existem (ou categoria de outro setor) são ignorados, e a mensagem é
+    texto puro: o template a põe no editor como texto, nunca como HTML.
+    """
+    preenchido = {
+        'title': (params.get('title') or '').strip()[:200],
+        'description': (params.get('description') or '').strip()[:4000],
+        'sector': '',
+        'category': '',
+    }
+    setor = params.get('sector') or ''
+    if setor.isdecimal() and Sector.objects.filter(pk=setor).exists():
+        preenchido['sector'] = int(setor)
+        categoria = params.get('category') or ''
+        if categoria.isdecimal() and Category.objects.filter(pk=categoria, sector_id=setor, is_active=True).exists():
+            preenchido['category'] = int(categoria)
+    preenchido['ativo'] = bool(preenchido['title'] or preenchido['description'] or preenchido['sector'])
+    return preenchido
+
+
 @login_required
 def ticket_create_fixed_view(request):
     """View corrigida para criação de tickets com todos os usuários"""
@@ -2070,6 +2092,7 @@ def ticket_create_fixed_view(request):
     context = {
         'sectors': sectors,
         'users': users,
+        'prefill': _preenchimento_do_chamado(request.GET),
     }
     return render(request, 'tickets/create.html', context)
 

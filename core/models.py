@@ -40,6 +40,7 @@ class SystemLog(models.Model):
         ('REPORT_CREATE', 'Criação de Denúncia'),
         ('REPORT_UPDATE', 'Atualização de Denúncia'),
         ('REPORT_COMMENT', 'Comentário em Denúncia'),
+        ('HISTORY_PURGE', 'Limpeza do Histórico'),
     ]
     
     user = models.ForeignKey(
@@ -59,10 +60,57 @@ class SystemLog(models.Model):
         verbose_name = "Log do Sistema"
         verbose_name_plural = "Logs do Sistema"
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['-created_at', '-id'], name='core_syslog_criado_idx'),
+            models.Index(fields=['user', '-created_at'], name='core_syslog_user_criado_idx'),
+            models.Index(fields=['action_type', '-created_at'], name='core_syslog_acao_criado_idx'),
+        ]
     
     def __str__(self):
         user_name = self.user.full_name if self.user else "Sistema"
         return f"{user_name} - {self.action_type}"
+
+
+class LimpezaHistorico(models.Model):
+    """Cada limpeza do histórico: quem pediu, quando, até onde e quantos saíram.
+
+    Fica em tabela própria porque a limpeza apaga justamente o log. A linha
+    `HISTORY_PURGE` no SystemLog é o que aparece na linha do tempo; aqui fica a conta
+    que a tela vai atualizando a cada lote.
+
+    `id_registro` é número, e não ForeignKey, de propósito: uma relação apontando para
+    o SystemLog obrigaria o Django a carregar cada linha antes de apagar, em vez do
+    DELETE direto do lote.
+    """
+
+    class Situacao(models.TextChoices):
+        ANDAMENTO = 'ANDAMENTO', 'Em andamento'
+        CONCLUIDA = 'CONCLUIDA', 'Concluída'
+        INTERROMPIDA = 'INTERROMPIDA', 'Interrompida'
+
+    executado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='limpezas_historico', verbose_name='Executado por')
+    # O nome continua de pé mesmo se o usuário for apagado um dia.
+    executado_por_nome = models.CharField(max_length=200, verbose_name='Nome de quem executou')
+    iniciado_em = models.DateTimeField(auto_now_add=True, verbose_name='Início')
+    concluido_em = models.DateTimeField(null=True, blank=True, verbose_name='Fim')
+    atualizado_em = models.DateTimeField(auto_now=True, verbose_name='Último lote')
+    corte = models.DateTimeField(verbose_name='Apagar anteriores a')
+    mais_antigo = models.DateTimeField(null=True, blank=True, verbose_name='Registro mais antigo')
+    previsto = models.PositiveIntegerField(default=0, verbose_name='Previstos')
+    removidos = models.PositiveIntegerField(default=0, verbose_name='Removidos')
+    situacao = models.CharField(
+        max_length=14, choices=Situacao.choices, default=Situacao.ANDAMENTO, verbose_name='Situação')
+    id_registro = models.BigIntegerField(null=True, blank=True, verbose_name='Registro no log')
+
+    class Meta:
+        verbose_name = 'Limpeza do histórico'
+        verbose_name_plural = 'Limpezas do histórico'
+        ordering = ['-iniciado_em']
+
+    def __str__(self):
+        return f'{self.executado_por_nome}: {self.removidos} em {self.iniciado_em:%d/%m/%Y %H:%M}'
 
 
 class TrainingCategory(models.Model):

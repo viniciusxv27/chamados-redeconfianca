@@ -6,10 +6,11 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from . import claude_client
+from . import claude_client, colaborador
 from .models import (MODELO_PADRAO, MODELOS, MODELOS_VALIDOS, AssistenteConexao, AssistenteDocumento,
                      AssistenteMensagem)
 
@@ -79,8 +80,18 @@ def testar(request):
     return redirect(request.POST.get('voltar') or 'settings')
 
 
+def tem_modo_claude(user):
+    """Quem já tinha o Assistente Claude: o SUPERADMIN (menu) ou quem conectou a própria chave."""
+    if user.is_superuser or getattr(user, 'hierarchy', '') == 'SUPERADMIN':
+        return True
+    return AssistenteConexao.objects.filter(user=user).exclude(api_key_cifrada='').exists()
+
+
 @login_required
 def chat(request):
+    # Para os outros, a página é o modo colaborador: sem ferramenta e sem dado de terceiros.
+    if not tem_modo_claude(request.user):
+        return render(request, 'assistente/colaborador.html')
     conx = claude_client.conexao(request.user)
     historico = list(AssistenteMensagem.objects.filter(user=request.user).order_by('criado_em'))
     return render(request, 'assistente/chat.html', {
@@ -126,6 +137,37 @@ def enviar(request):
 
     AssistenteMensagem.objects.create(user=request.user, papel='assistant', conteudo=resposta)
     return JsonResponse({'resposta': resposta})
+
+
+@login_required
+def colaborador_estado(request):
+    """O que a janelinha precisa saber. Só é pedido ao abrir: a página não paga por isto."""
+    conectado = AssistenteConexao.objects.filter(user=request.user).exclude(api_key_cifrada='').exists()
+    return JsonResponse({'claude': conectado,
+                         'pagina_claude': reverse('assistente:chat') if tem_modo_claude(request.user) else ''})
+
+
+@login_required
+@require_POST
+def colaborador_perguntar(request):
+    """A pergunta do modo colaborador: busca o que a pessoa pode abrir e orienta."""
+    try:
+        corpo = json.loads(request.body or '{}')
+    except ValueError:
+        corpo = {}
+    if not isinstance(corpo, dict):
+        corpo = {}
+    pergunta = corpo.get('mensagem')
+    pergunta = pergunta.strip() if isinstance(pergunta, str) else ''
+    if not pergunta:
+        return JsonResponse({'erro': 'Escreva a sua dúvida.'}, status=400)
+    if len(pergunta) > 2000:
+        return JsonResponse({'erro': 'A mensagem está muito longa. Resuma em até 2.000 caracteres.'}, status=400)
+    try:
+        return JsonResponse(colaborador.orientar(request, pergunta, colaborador.historico_valido(corpo.get('historico'))))
+    except Exception as exc:  # noqa: BLE001
+        logger.exception('Assistente colaborador falhou: %s', exc)
+        return JsonResponse({'erro': 'Não consegui responder agora. Tente de novo em instantes.'}, status=500)
 
 
 @login_required

@@ -1,16 +1,18 @@
 {% extends "base.html" %}
+{% load trilhas_treinamentos %}
 {% load static %}
 
 {% block title %}Gerenciar Quiz - {{ lesson.title }}{% endblock %}
 
 {% block content %}
-<div class="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 p-6">
+{% abas_trilhas_treinamentos 'gerir_trilhas' %}
+<div class="min-h-screen bg-gray-50 p-4 sm:p-6">
     <div class="max-w-6xl mx-auto">
         <!-- Breadcrumb -->
         <div class="mb-6 flex items-center gap-2 text-sm text-gray-600">
-            <a href="{% url 'knowledge_trails:dashboard' %}" class="hover:text-purple-600 transition-colors">Dashboard</a>
+            <a href="{% url 'knowledge_trails:dashboard' %}" class="hover:text-primary transition-colors">Trilhas e Treinamentos</a>
             <i class="fas fa-chevron-right text-xs"></i>
-            <a href="{% url 'knowledge_trails:edit_trail' trail.id %}" class="hover:text-purple-600 transition-colors">
+            <a href="{% url 'knowledge_trails:edit_trail' trail.id %}" class="hover:text-primary transition-colors">
                 {% if trail.icon %}
                 <img src="{{ trail.icon.url }}" alt="Logo da trilha" class="inline-block w-5 h-5 rounded object-cover align-middle mr-1">
                 {% else %}
@@ -19,13 +21,13 @@
                 {{ trail.title }}
             </a>
             <i class="fas fa-chevron-right text-xs"></i>
-            <a href="{% url 'knowledge_trails:edit_lesson' lesson.id %}" class="hover:text-purple-600 transition-colors">{{ lesson.title }}</a>
+            <a href="{% url 'knowledge_trails:edit_lesson' lesson.id %}" class="hover:text-primary transition-colors">{{ lesson.title }}</a>
             <i class="fas fa-chevron-right text-xs"></i>
             <span class="text-gray-800 font-semibold">Gerenciar Quiz</span>
         </div>
 
-        <div class="bg-white rounded-3xl shadow-2xl overflow-hidden">
-            <div class="bg-gradient-to-r from-purple-600 to-pink-600 text-white p-4 sm:p-6 lg:p-8">
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+            <div class="bg-primary text-white p-4 sm:p-6 lg:p-8">
                 <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
                     <div>
                         <h2 class="text-2xl sm:text-3xl font-bold flex items-center gap-3">
@@ -57,7 +59,7 @@
                             <div class="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3">
                                 <div class="flex-1">
                                     <div class="flex items-center flex-wrap gap-2 sm:gap-3 mb-3">
-                                        <span class="px-3 py-1 bg-purple-600 text-white text-sm font-bold rounded-full">
+                                        <span class="px-3 py-1 bg-primary text-white text-sm font-bold rounded-full">
                                             Q{{ question.order|default:forloop.counter }}
                                         </span>
                                         {% if question.question_type == 'discursive' %}
@@ -168,7 +170,7 @@
                     <i class="fas fa-question-circle text-gray-300 text-6xl mb-4"></i>
                     <h3 class="text-2xl font-bold text-gray-800 mb-2">Nenhuma Questão Criada</h3>
                     <p class="text-gray-600 mb-6">Comece criando questões para este quiz.</p>
-                    <a href="{% url 'knowledge_trails:create_quiz_question' lesson.id %}" class="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl">
+                    <a href="{% url 'knowledge_trails:create_quiz_question' lesson.id %}" class="inline-flex items-center gap-2 px-6 py-3 bg-primary hover:bg-orange-600 text-white rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl">
                         <i class="fas fa-plus"></i> Criar Primeira Questão
                     </a>
                 </div>

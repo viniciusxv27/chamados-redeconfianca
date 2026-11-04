@@ -1,0 +1,170 @@
+/* Botão flutuante e janela do assistente (templates/assistente/_widget.html). */
+#rcAssist {
+    --rca-fundo: #fff;
+    --rca-fundo-2: #f3f4f6;
+    --rca-campo: #fff;
+    --rca-texto: #1f2937;
+    --rca-texto-2: #6b7280;
+    --rca-borda: #e5e7eb;
+    --rca-cor: #ea580c;
+    --rca-link: #c2410c;
+    --rca-aviso-fundo: #fef2f2;
+    --rca-aviso-texto: #b91c1c;
+}
+html.dark #rcAssist {
+    --rca-fundo: var(--tema-superficie, #1b2130);
+    --rca-fundo-2: var(--tema-superficie-2, #232a3b);
+    --rca-campo: var(--tema-superficie-3, #2b3346);
+    --rca-texto: var(--tema-texto, #e7eaf0);
+    --rca-texto-2: var(--tema-texto-2, #b6bdcc);
+    --rca-borda: var(--tema-borda, #313a4f);
+    --rca-link: #fdba74;
+    --rca-aviso-fundo: rgba(239, 68, 68, .15);
+    --rca-aviso-texto: #fca5a5;
+}
+
+/* Fica logo acima da bolha de suporte, que é fixa em bottom-4 e tem 56px. O
+   z-index abaixo do dela deixa a janela de suporte cobrir este botão. */
+.rca-fab {
+    position: fixed; right: 1rem; bottom: calc(1rem + 56px + .75rem); z-index: 39;
+    width: 56px; height: 56px; border: 0; border-radius: 9999px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--rca-cor); color: #fff; font-size: 1.25rem;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, .25);
+    transition: transform .2s, background-color .2s;
+}
+.rca-fab:hover { background: #c2410c; transform: scale(1.05); }
+.rca-fab:focus-visible { outline: 3px solid #fdba74; outline-offset: 2px; }
+
+.rca-janela {
+    position: fixed; right: 1rem; bottom: calc(1rem + 56px + .75rem + 56px + .5rem); z-index: 60;
+    width: 380px; max-width: calc(100vw - 2rem);
+    height: 560px; max-height: calc(100vh - 11.5rem);
+    display: flex; flex-direction: column; overflow: hidden;
+    background: var(--rca-fundo); color: var(--rca-texto);
+    border: 1px solid var(--rca-borda); border-radius: 1rem;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, .35);
+    font-size: .875rem;
+}
+.rca-janela[hidden] { display: none; }
+
+.rca-topo {
+    display: flex; align-items: center; gap: .5rem; flex-shrink: 0;
+    padding: .65rem .75rem; background: var(--rca-cor); color: #fff;
+}
+.rca-topo-icone {
+    width: 2rem; height: 2rem; border-radius: 9999px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; background: rgba(255, 255, 255, .2);
+}
+.rca-topo-texto { flex: 1; min-width: 0; line-height: 1.2; }
+.rca-topo-texto strong { display: block; font-size: .95rem; }
+.rca-topo-texto small { display: block; font-size: .72rem; opacity: .9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rca-topo-botao {
+    width: 2.25rem; height: 2.25rem; flex-shrink: 0; border: 0; border-radius: .5rem; background: transparent;
+    color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.rca-topo-botao[hidden] { display: none; }
+.rca-topo-botao:hover { background: rgba(255, 255, 255, .2); color: #fff; }
+
+.rca-modos { display: flex; flex-shrink: 0; border-bottom: 1px solid var(--rca-borda); }
+.rca-modos[hidden] { display: none; }
+.rca-modo {
+    flex: 1; padding: .5rem; border: 0; border-bottom: 2px solid transparent; background: transparent;
+    color: var(--rca-texto-2); font-size: .8rem; font-weight: 600; cursor: pointer;
+}
+.rca-modo.rca-ativo { color: var(--rca-link); border-bottom-color: var(--rca-cor); }
+
+.rca-msgs { flex: 1; min-height: 0; overflow-y: auto; padding: .75rem; display: flex; flex-direction: column; gap: .6rem; overscroll-behavior: contain; }
+
+.rca-vazio { margin: auto 0; text-align: center; color: var(--rca-texto-2); padding: .5rem; }
+.rca-vazio i { font-size: 1.75rem; display: block; margin-bottom: .5rem; color: var(--rca-cor); }
+.rca-sugestoes { display: flex; flex-wrap: wrap; justify-content: center; gap: .4rem; margin-top: .75rem; }
+.rca-sugestao {
+    border: 1px solid var(--rca-borda); border-radius: 9999px; background: var(--rca-fundo);
+    color: var(--rca-texto); padding: .35rem .7rem; font-size: .75rem; cursor: pointer;
+}
+.rca-sugestao:hover { background: var(--rca-fundo-2); }
+
+.rca-fala { max-width: 92%; min-width: 0; border-radius: 1rem; padding: .55rem .8rem; overflow-wrap: anywhere; }
+.rca-pessoa { align-self: flex-end; background: var(--rca-cor); color: #fff; white-space: pre-wrap; }
+.rca-bot { align-self: flex-start; background: var(--rca-fundo-2); color: var(--rca-texto); width: 92%; }
+.rca-erro { align-self: flex-start; background: var(--rca-aviso-fundo); color: var(--rca-aviso-texto); }
+.rca-pensando { align-self: flex-start; background: var(--rca-fundo-2); color: var(--rca-texto-2); font-style: italic; }
+
+.rca-grupo { margin-top: .6rem; }
+.rca-grupo-titulo { font-size: .68rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: var(--rca-texto-2); margin-bottom: .25rem; }
+.rca-cartao {
+    display: flex; gap: .5rem; align-items: flex-start; padding: .45rem .55rem; margin-top: .3rem;
+    border: 1px solid var(--rca-borda); border-radius: .6rem; background: var(--rca-fundo);
+    color: var(--rca-texto); text-decoration: none;
+}
+.rca-cartao:hover { border-color: var(--rca-cor); color: var(--rca-texto); }
+.rca-cartao i { color: var(--rca-cor); margin-top: .15rem; width: 1rem; text-align: center; flex-shrink: 0; }
+.rca-cartao span { min-width: 0; }
+.rca-cartao strong { display: block; font-size: .8rem; font-weight: 600; }
+.rca-cartao small { display: block; font-size: .72rem; color: var(--rca-texto-2); }
+
+.rca-chamado {
+    display: flex; align-items: center; justify-content: center; gap: .4rem; margin-top: .6rem;
+    padding: .5rem .7rem; min-height: 2.5rem; border-radius: .6rem; text-align: center;
+    background: var(--rca-cor); color: #fff; font-size: .8rem; font-weight: 600; text-decoration: none;
+}
+.rca-chamado:hover { background: #c2410c; color: #fff; }
+.rca-chamado-nota { display: block; margin-top: .25rem; text-align: center; font-size: .68rem; color: var(--rca-texto-2); }
+
+.rca-entrada { display: flex; align-items: flex-end; gap: .5rem; flex-shrink: 0; padding: .6rem; border-top: 1px solid var(--rca-borda); background: var(--rca-fundo); }
+.rca-entrada textarea {
+    flex: 1; min-width: 0; resize: none; max-height: 7rem; padding: .55rem .75rem;
+    border: 1px solid var(--rca-borda); border-radius: .75rem;
+    background: var(--rca-campo); color: var(--rca-texto); font-size: .875rem; line-height: 1.3;
+}
+.rca-entrada textarea:focus { outline: 2px solid var(--rca-cor); outline-offset: -1px; border-color: transparent; }
+.rca-entrada button {
+    width: 2.5rem; height: 2.5rem; flex-shrink: 0; border: 0; border-radius: .75rem; cursor: pointer;
+    background: var(--rca-cor); color: #fff;
+}
+.rca-entrada button:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Markdown da resposta (static/js/rc-markdown.js) */
+#rcAssist .rc-md { line-height: 1.5; }
+#rcAssist .rc-md > :first-child { margin-top: 0; }
+#rcAssist .rc-md > :last-child { margin-bottom: 0; }
+#rcAssist .rc-md p { margin: .4rem 0; }
+#rcAssist .rc-md h3, #rcAssist .rc-md h4, #rcAssist .rc-md h5, #rcAssist .rc-md h6 { font-weight: 700; font-size: .9rem; margin: .6rem 0 .25rem; }
+#rcAssist .rc-md ul, #rcAssist .rc-md ol { margin: .35rem 0; padding-left: 1.25rem; }
+#rcAssist .rc-md ul { list-style: disc; }
+#rcAssist .rc-md ol { list-style: decimal; }
+#rcAssist .rc-md li { margin: .15rem 0; }
+#rcAssist .rc-md strong { font-weight: 700; color: inherit; }
+#rcAssist .rc-md a { color: var(--rca-link); font-weight: 500; text-decoration: underline; text-underline-offset: 2px; }
+#rcAssist .rc-md code { background: var(--rca-fundo); border: 1px solid var(--rca-borda); border-radius: .3rem; padding: 0 .25rem; font-size: .8em; }
+#rcAssist .rc-md pre { background: #111827; color: #f9fafb; border-radius: .5rem; padding: .5rem .7rem; overflow-x: auto; }
+#rcAssist .rc-md pre code { background: transparent; border: 0; color: inherit; }
+#rcAssist .rc-md .rc-md-tabela { overflow-x: auto; margin: .4rem 0; border: 1px solid var(--rca-borda); border-radius: .5rem; }
+#rcAssist .rc-md table { border-collapse: collapse; width: 100%; font-size: .75rem; }
+#rcAssist .rc-md th, #rcAssist .rc-md td { padding: .3rem .5rem; border-bottom: 1px solid var(--rca-borda); text-align: left; }
+
+/* Na página /assistente/: a mesma conversa, sem flutuar. */
+#rcAssist.rca-na-pagina .rca-fab { display: none; }
+.rca-janela.rca-embutida {
+    position: static; width: 100%; max-width: none;
+    height: calc(100vh - 13rem); min-height: 22rem; max-height: none;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .1);
+}
+.rca-janela.rca-embutida #rcaFechar { display: none; }
+
+/* Celular: tela inteira. A altura segue o teclado pelo JS (--rca-altura). */
+@media (max-width: 639px) {
+    .rca-janela:not(.rca-embutida) {
+        inset: 0 auto auto 0; right: auto; bottom: auto;
+        width: 100vw; max-width: 100vw;
+        height: var(--rca-altura, 100dvh); max-height: none;
+        border: 0; border-radius: 0; z-index: 70;
+        padding-top: env(safe-area-inset-top);
+    }
+    .rca-entrada { padding-bottom: calc(.6rem + env(safe-area-inset-bottom)); }
+    /* 16px evita o zoom automático do iPhone ao focar o campo. */
+    .rca-entrada textarea { font-size: 16px; }
+    .rca-fala { max-width: 95%; }
+    html.rca-travado, html.rca-travado body { overflow: hidden; }
+}

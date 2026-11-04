@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 {% load static %}
 {% load acessos %}
+{% load trilhas_treinamentos %}
 <html lang="pt-br"{% if user.is_authenticated and user.theme == 'dark' %} class="dark"{% endif %}>
 <head>
     <meta charset="UTF-8">
@@ -521,21 +522,13 @@
                         </li>
                         {% endif %}
                         <li>
-                            <a href="{% url 'trainings_list' %}" data-rota="{% url 'trainings_list' %}"
+                            {# Entra por /trilhas/ (a rota que o bloqueio de trilha deixa aberta); data-rotas-antigas segura o favorito e o destaque de /trainings/. #}
+                            <a href="{% url 'knowledge_trails:dashboard' %}" data-rota="{% url 'knowledge_trails:dashboard' %}" data-rotas-antigas="{% url 'trainings_list' %}"
                                class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
                                 <i class="fas fa-graduation-cap text-yellow-400 flex-shrink-0 w-5 text-center"></i>
-                                <span class="text-sm">Treinamentos</span>
-                                <div class="tooltip-collapsed">Treinamentos</div>
+                                <span class="text-sm">Trilhas e Treinamentos</span>
+                                <div class="tooltip-collapsed">Trilhas e Treinamentos</div>
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-yellow-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
-                        </li>
-                        <li>
-                            <a href="{% url 'knowledge_trails:dashboard' %}" data-rota="{% url 'knowledge_trails:dashboard' %}"
-                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
-                                <i class="fas fa-route text-amber-400 flex-shrink-0 w-5 text-center"></i>
-                                <span class="text-sm">Trilhas de Conhecimento</span>
-                                <div class="tooltip-collapsed">Trilhas de Conhecimento</div>
-                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-amber-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </a>
                         </li>
                         {% if vendas_liberado %}
@@ -734,7 +727,18 @@
                             </a>
                         </li>
                         {% endif %}
-                        {% if user.is_superuser or user.hierarchy == 'SUPERADMIN' %}
+                        {% if acess_pede_desligamento %}
+                        <li>
+                            <a href="{% url 'acess:pedir_desligamento' %}" data-rota="{% url 'acess:pedir_desligamento' %}"
+                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-user-minus text-amber-400 flex-shrink-0 w-5 text-center"></i>
+                                <span class="text-sm">Pedir desligamento</span>
+                                <div class="tooltip-collapsed">Pedir desligamento</div>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-amber-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% if quadro_hc_liberado %}
                         <li>
                             <a href="{% url 'quadro_hc:quadro' %}" data-rota="{% url 'quadro_hc:quadro' %}"
                                class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
@@ -787,6 +791,18 @@
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-amber-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </a>
                         </li>
+                        {% if cameras_liberado %}
+                        <li>
+                            <a href="{% url 'cameras:painel' %}" data-rota="{% url 'cameras:painel' %}"
+                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-video text-red-400 flex-shrink-0 w-5 text-center"></i>
+                                <span class="text-sm flex-1">Câmeras</span>
+                                {% if cameras_alertas_novos %}<span class="px-1.5 rounded-full bg-red-600 text-white text-[10px] font-bold" title="Alertas novos">{{ cameras_alertas_novos }}</span>{% endif %}
+                                <div class="tooltip-collapsed">Câmeras</div>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-red-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        {% endif %}
                         {% if user|tem_acesso:'checklists' %}
                         <li>
                             <a href="{% url 'checklists:dashboard' %}" data-rota="{% url 'checklists:dashboard' %}"
@@ -1156,13 +1172,17 @@
                             if (!dados || !lista) return;
                             var rotas = [];
                             try { rotas = JSON.parse(dados.textContent) || []; } catch (e) { rotas = []; }
+                            var jaFavoritados = [];
                             rotas.forEach(function (rota) {
                                 var original = null;
                                 document.querySelectorAll('#sidebar .menu-item[href]').forEach(function (a) {
                                     var r = a.dataset.rota || a.getAttribute('href');
-                                    if (!original && r === rota && !a.closest('#rc-favoritos')) original = a;
+                                    // Item que juntou dois menus responde também pela rota antiga.
+                                    var antigas = (a.dataset.rotasAntigas || '').split(' ');
+                                    if (!original && (r === rota || antigas.indexOf(rota) !== -1) && !a.closest('#rc-favoritos')) original = a;
                                 });
-                                if (!original) return;
+                                if (!original || jaFavoritados.indexOf(original) !== -1) return;
+                                jaFavoritados.push(original);
                                 var copia = original.cloneNode(true);
                                 copia.classList.remove('text-xs');
                                 copia.removeAttribute('id');
@@ -2090,13 +2110,16 @@
         // a própria rota em data-rota, e ganha o item de rota mais específica.
         document.addEventListener('DOMContentLoaded', function () {
             var aqui = window.location.pathname;
-            var melhor = null;
+            var melhor = null, tamanhoMelhor = 0;
             document.querySelectorAll('#sidebar .menu-item[data-rota]').forEach(function (a) {
-                var rota = a.dataset.rota;
-                if (!rota || rota === '/' || a.closest('#rc-favoritos')) return;
-                if (aqui === rota || aqui.indexOf(rota) === 0) {
-                    if (!melhor || rota.length > melhor.dataset.rota.length) melhor = a;
-                }
+                if (a.closest('#rc-favoritos')) return;
+                [a.dataset.rota].concat((a.dataset.rotasAntigas || '').split(' ')).forEach(function (rota) {
+                    if (!rota || rota === '/') return;
+                    if (aqui.indexOf(rota) === 0 && rota.length > tamanhoMelhor) {
+                        melhor = a;
+                        tamanhoMelhor = rota.length;
+                    }
+                });
             });
             if (!melhor && aqui === '/') {
                 melhor = document.querySelector('#sidebar .menu-item[data-rota="/"]');
@@ -2970,7 +2993,11 @@
         {titulo: 'Alterar senha', url: '{% url "change_password" %}', icone: 'fas fa-key', grupo: 'Funções e configurações', chaves: 'senha seguranca trocar'},
         {titulo: 'Configurações', url: '{% url "settings" %}', icone: 'fas fa-gear', grupo: 'Funções e configurações', chaves: 'tema escuro claro preferencias notificacoes aparencia'},
         {titulo: 'Notificações', url: '{% url "notifications:dashboard" %}', icone: 'fas fa-bell', grupo: 'Funções e configurações', chaves: 'avisos alertas sino'},
-        {titulo: 'Ajuda e tutoriais', url: '{% url "help_tutorials" %}', icone: 'fas fa-circle-question', grupo: 'Funções e configurações', chaves: 'ajuda tutorial como usar duvida'}
+        {titulo: 'Ajuda e tutoriais', url: '{% url "help_tutorials" %}', icone: 'fas fa-circle-question', grupo: 'Funções e configurações', chaves: 'ajuda tutorial como usar duvida'},
+        {titulo: 'Trilhas de Conhecimento', url: '{% url "knowledge_trails:dashboard" %}', icone: 'fas fa-route', grupo: 'Trilhas e Treinamentos', chaves: 'trilha conhecimento licao certificado obrigatoria'},
+        {titulo: 'Treinamentos', url: '{% url "trainings_list" %}', icone: 'fas fa-play-circle', grupo: 'Trilhas e Treinamentos', chaves: 'treinamento video aula'}{% if user|gere_trilhas %},
+        {titulo: 'Gerenciar trilhas', url: '{% url "knowledge_trails:manage_trails" %}', icone: 'fas fa-sliders', grupo: 'Trilhas e Treinamentos', chaves: 'trilha conhecimento gestao inativa'},
+        {titulo: 'Nova trilha', url: '{% url "knowledge_trails:create_trail" %}', icone: 'fas fa-plus-circle', grupo: 'Trilhas e Treinamentos', chaves: 'criar trilha conhecimento'}{% endif %}
       ];
 
       function montarIndice() {
@@ -4743,6 +4770,8 @@
     })();
     </script>
 {% if mapa_coleta.ativa %}{% include "maps/_coletor.html" %}{% endif %}
+{% if user.is_authenticated %}{% include "assistente/_widget.html" %}{% endif %}
 
+{% include 'contagem_caixa/_popup_divergencia.html' %}
 </body>
 </html>

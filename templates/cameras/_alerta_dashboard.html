@@ -1,0 +1,26 @@
+{% if cameras_liberado %}
+<a href="{% url 'cameras:alertas' %}" id="camAvisoDashboard" data-estado="{% url 'cameras:estado' %}" data-novos="{{ cameras_alertas_novos|default:0 }}"
+   class="{% if not cameras_alertas_novos %}hidden{% endif %} flex items-center gap-3 mb-4 rounded-xl bg-red-600 text-white px-4 py-3 shadow-lg hover:bg-red-700 transition-colors">
+    <span class="relative flex h-3 w-3 flex-shrink-0"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span><span class="relative inline-flex rounded-full h-3 w-3 bg-white"></span></span>
+    <i class="fas fa-video flex-shrink-0"></i>
+    <span class="flex-1 min-w-0 text-sm font-semibold"><span data-cam-qtd>{{ cameras_alertas_novos|default:0 }}</span> alerta(s) de câmera para conferir<span data-cam-ultimo class="block text-xs font-normal opacity-90 truncate"></span></span>
+    <span class="text-xs font-semibold whitespace-nowrap">Ver alertas <i class="fas fa-chevron-right ml-1"></i></span>
+</a>
+<script>
+(function () {
+    var aviso = document.getElementById('camAvisoDashboard');
+    if (!aviso) return;
+    function atualizar() {
+        if (document.hidden) return;
+        fetch(aviso.dataset.estado, {headers: {'X-Requested-With': 'fetch'}}).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+            if (!d) return;
+            aviso.classList.toggle('hidden', !d.novos);
+            aviso.querySelector('[data-cam-qtd]').textContent = d.novos;
+            aviso.querySelector('[data-cam-ultimo]').textContent = d.ultimo ? d.ultimo.loja + ' · ' + d.ultimo.tipo + ' · ' + d.ultimo.quando : '';
+        }).catch(function () {});
+    }
+    atualizar();
+    setInterval(atualizar, 60000);
+})();
+</script>
+{% endif %}

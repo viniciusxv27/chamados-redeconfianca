@@ -1,457 +1,350 @@
 {% extends 'base.html' %}
-{% load static %}
 
 {% block title %}Histórico de Atividades - Rede Confiança{% endblock %}
 
+{% block extra_css %}
+<style>
+    .ah-card { background:#fff; border:1px solid #ECECF1; border-radius:1rem;
+               box-shadow:0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.06); }
+    html.dark .ah-card { background:var(--tema-superficie); border-color:var(--tema-borda); box-shadow:none; }
+    .tabular { font-variant-numeric:tabular-nums; }
+
+    /* Uma cor por natureza da ação; o ícone repete a informação para quem não distingue a cor. */
+    .ah-c-verde    { --ah-cor:#047857; --ah-fundo:#D1FAE5; }
+    .ah-c-azul     { --ah-cor:#1D4ED8; --ah-fundo:#DBEAFE; }
+    .ah-c-ambar    { --ah-cor:#B45309; --ah-fundo:#FEF3C7; }
+    .ah-c-vermelho { --ah-cor:#B91C1C; --ah-fundo:#FEE2E2; }
+    .ah-c-cinza    { --ah-cor:#475569; --ah-fundo:#E2E8F0; }
+    .ah-c-roxo     { --ah-cor:#6D28D9; --ah-fundo:#EDE9FE; }
+    .ah-c-ciano    { --ah-cor:#0E7490; --ah-fundo:#CFFAFE; }
+    .ah-c-rosa     { --ah-cor:#BE185D; --ah-fundo:#FCE7F3; }
+    html.dark .ah-c-verde    { --ah-cor:#6EE7B7; --ah-fundo:rgba(16,185,129,.18); }
+    html.dark .ah-c-azul     { --ah-cor:#93C5FD; --ah-fundo:rgba(59,130,246,.18); }
+    html.dark .ah-c-ambar    { --ah-cor:#FCD34D; --ah-fundo:rgba(245,158,11,.18); }
+    html.dark .ah-c-vermelho { --ah-cor:#FCA5A5; --ah-fundo:rgba(239,68,68,.18); }
+    html.dark .ah-c-cinza    { --ah-cor:#CBD5E1; --ah-fundo:rgba(148,163,184,.18); }
+    html.dark .ah-c-roxo     { --ah-cor:#C4B5FD; --ah-fundo:rgba(139,92,246,.2); }
+    html.dark .ah-c-ciano    { --ah-cor:#67E8F9; --ah-fundo:rgba(6,182,212,.18); }
+    html.dark .ah-c-rosa     { --ah-cor:#F9A8D4; --ah-fundo:rgba(236,72,153,.18); }
+
+    .ah-dia { display:flex; align-items:baseline; gap:.5rem;
+              padding:.55rem 1rem; background:#F8FAFC; border-bottom:1px solid #ECECF1; }
+    html.dark .ah-dia { background:var(--tema-superficie-2); border-color:var(--tema-borda); }
+
+    .ah-item { display:flex; gap:.75rem; padding:.7rem 1rem; position:relative; }
+    .ah-item + .ah-item, details.ah-grupo + .ah-item, .ah-item + details.ah-grupo,
+    details.ah-grupo + details.ah-grupo { border-top:1px solid #F1F5F9; }
+    html.dark .ah-item + .ah-item, html.dark details.ah-grupo + .ah-item,
+    html.dark .ah-item + details.ah-grupo, html.dark details.ah-grupo + details.ah-grupo { border-color:var(--tema-borda); }
+
+    .ah-icone { flex-shrink:0; width:2.1rem; height:2.1rem; border-radius:50%; display:flex;
+                align-items:center; justify-content:center; font-size:.8rem;
+                background:var(--ah-fundo); color:var(--ah-cor); }
+    .ah-selo { display:inline-flex; align-items:center; gap:.3rem; padding:.05rem .5rem;
+               border-radius:999px; font-size:11px; font-weight:600; white-space:nowrap;
+               background:var(--ah-fundo); color:var(--ah-cor); }
+    .ah-modulo { font-size:11px; color:#64748B; white-space:nowrap; }
+    html.dark .ah-modulo { color:var(--tema-texto-3); }
+
+    /* antes → depois */
+    .ah-diff { margin-top:.4rem; display:flex; flex-direction:column; gap:.3rem; }
+    .ah-diff-linha { display:flex; flex-wrap:wrap; align-items:baseline; gap:.35rem; font-size:12px; }
+    .ah-diff-campo { font-weight:600; color:#334155; }
+    html.dark .ah-diff-campo { color:var(--tema-texto-2); }
+    .ah-antes, .ah-depois { padding:.05rem .4rem; border-radius:.35rem; text-decoration:none;
+                            max-height:7rem; overflow-y:auto; overflow-wrap:anywhere; white-space:pre-wrap; }
+    .ah-antes  { background:#FEE2E2; color:#991B1B; text-decoration:line-through; text-decoration-color:rgba(153,27,27,.45); }
+    .ah-depois { background:#D1FAE5; color:#065F46; }
+    html.dark .ah-antes  { background:rgba(239,68,68,.18); color:#FCA5A5; text-decoration-color:rgba(252,165,165,.5); }
+    html.dark .ah-depois { background:rgba(16,185,129,.18); color:#6EE7B7; }
+    .ah-sem-antes { font-style:italic; color:#94A3B8; }
+    .ah-seta { color:#94A3B8; font-size:10px; }
+
+    .ah-mapa { display:inline-flex; align-items:center; gap:.35rem; margin-top:.35rem; padding:.1rem .5rem;
+               min-height:1.6rem; border-radius:.5rem; font-size:12px; color:#6D28D9; background:#F5F3FF; }
+    .ah-mapa:hover { background:#EDE9FE; }
+    html.dark .ah-mapa { color:#C4B5FD; background:rgba(139,92,246,.15); }
+
+    details.ah-grupo > summary { list-style:none; cursor:pointer; }
+    details.ah-grupo > summary::-webkit-details-marker { display:none; }
+    details.ah-grupo > summary:hover { background:#F8FAFC; }
+    html.dark details.ah-grupo > summary:hover { background:var(--tema-superficie-2); }
+    details.ah-grupo .ah-chevron { transition:transform .15s; }
+    details.ah-grupo[open] .ah-chevron { transform:rotate(90deg); }
+
+    .ah-barra { height:.35rem; border-radius:999px; background:var(--ah-cor); opacity:.75; }
+    .ah-chip { display:inline-flex; align-items:center; min-height:2rem; padding:0 .7rem; border-radius:999px;
+               font-size:12px; border:1px solid #E2E8F0; color:#475569; }
+    .ah-chip:hover { border-color:#818CF8; color:#4338CA; }
+    html.dark .ah-chip { border-color:var(--tema-borda); color:var(--tema-texto-2); }
+    .ah-campo { width:100%; border:1px solid #D1D5DB; border-radius:.5rem; padding:.5rem .75rem; font-size:.875rem; }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 py-8">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        
-        <!-- Header -->
-        <div class="mb-8">
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between flex-wrap gap-3">
-                <div>
-                    <h1 class="text-2xl sm:text-3xl font-bold text-gray-900 flex items-center gap-3">
-                        <i class="fas fa-history text-blue-600"></i>
-                        Histórico de Atividades
-                    </h1>
-                    <p class="mt-2 text-gray-600">Visualize e analise todas as atividades do sistema</p>
-                </div>
-                <a href="{% url 'core:export_activity_history' %}?{{ request.GET.urlencode }}" 
-                   class="inline-flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-lg">
-                    <i class="fas fa-file-csv"></i>
-                    <span>Exportar CSV</span>
-                </a>
-            </div>
+<div class="max-w-7xl mx-auto p-3 sm:p-5">
+
+    <div class="flex items-start justify-between gap-3 mb-4 flex-wrap">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900 flex items-center gap-2.5">
+                <span class="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center">
+                    <i class="fas fa-history"></i>
+                </span>
+                Histórico de Atividades
+            </h1>
+            <p class="text-sm text-gray-500 mt-1">O que aconteceu no portal, de quem e quando</p>
         </div>
-
-        <!-- Estatísticas -->
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-7 gap-6 mb-8">
-            <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-blue-500">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <p class="text-sm font-medium text-gray-600">Total de Logs</p>
-                        <p class="text-2xl font-bold text-gray-900 mt-1">{{ stats.total_logs|default:0 }}</p>
-                    </div>
-                    <div class="bg-blue-100 rounded-full p-3">
-                        <i class="fas fa-database text-blue-600 text-xl"></i>
-                    </div>
-                </div>
-            </div>
-
-            <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-green-500">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <p class="text-sm font-medium text-gray-600">Hoje</p>
-                        <p class="text-2xl font-bold text-gray-900 mt-1">{{ stats.today|default:0 }}</p>
-                    </div>
-                    <div class="bg-green-100 rounded-full p-3">
-                        <i class="fas fa-calendar-day text-green-600 text-xl"></i>
-                    </div>
-                </div>
-            </div>
-
-            <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-yellow-500">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <p class="text-sm font-medium text-gray-600">Ontem</p>
-                        <p class="text-2xl font-bold text-gray-900 mt-1">{{ stats.yesterday|default:0 }}</p>
-                    </div>
-                    <div class="bg-yellow-100 rounded-full p-3">
-                        <i class="fas fa-clock text-yellow-600 text-xl"></i>
-                    </div>
-                </div>
-            </div>
-
-            <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-purple-500">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <p class="text-sm font-medium text-gray-600">Esta Semana</p>
-                        <p class="text-2xl font-bold text-gray-900 mt-1">{{ stats.this_week|default:0 }}</p>
-                    </div>
-                    <div class="bg-purple-100 rounded-full p-3">
-                        <i class="fas fa-calendar-week text-purple-600 text-xl"></i>
-                    </div>
-                </div>
-            </div>
-
-            <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-pink-500">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <p class="text-sm font-medium text-gray-600">Este Mês</p>
-                        <p class="text-2xl font-bold text-gray-900 mt-1">{{ stats.this_month|default:0 }}</p>
-                    </div>
-                    <div class="bg-pink-100 rounded-full p-3">
-                        <i class="fas fa-calendar-alt text-pink-600 text-xl"></i>
-                    </div>
-                </div>
-            </div>
-
-            <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-red-500">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <p class="text-sm font-medium text-gray-600">Nunca Entraram</p>
-                        <p class="text-2xl font-bold text-gray-900 mt-1">{{ users_never_logged.count|default:0 }}</p>
-                    </div>
-                    <div class="bg-red-100 rounded-full p-3">
-                        <i class="fas fa-user-slash text-red-600 text-xl"></i>
-                    </div>
-                </div>
-            </div>
-
-            <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-orange-500">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <p class="text-sm font-medium text-gray-600">Inativos 30+ dias</p>
-                        <p class="text-2xl font-bold text-gray-900 mt-1">{{ inactive_users_top|length|default:0 }}</p>
-                    </div>
-                    <div class="bg-orange-100 rounded-full p-3">
-                        <i class="fas fa-user-clock text-orange-600 text-xl"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Filtros -->
-        <div class="bg-white rounded-xl shadow-md p-6 mb-8">
-            <form method="get" action="{% url 'core:activity_history' %}" class="space-y-4">
-                <div class="flex items-center gap-2 mb-4">
-                    <i class="fas fa-filter text-gray-500"></i>
-                    <h3 class="text-lg font-semibold text-gray-900">Filtros</h3>
-                </div>
-
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-                    <!-- Tipo de Ação -->
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Tipo de Ação</label>
-                        <select name="action_type" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                            <option value="">Todos</option>
-                            {% for value, label in action_types %}
-                                <option value="{{ value }}" {% if action_type_filter == value %}selected{% endif %}>{{ label }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-
-                    <!-- Usuário -->
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Usuário</label>
-                        <select name="user" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                            <option value="">Todos</option>
-                            {% for user in active_users %}
-                                <option value="{{ user.id }}" {% if user_filter == user.id|stringformat:"s" %}selected{% endif %}>
-                                    {{ user.get_full_name|default:user.username }}
-                                </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-
-                    <!-- Data De -->
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Data De</label>
-                        <input type="date" name="date_from" value="{{ date_from }}" 
-                               class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                    </div>
-
-                    <!-- Data Até -->
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Data Até</label>
-                        <input type="date" name="date_to" value="{{ date_to }}" 
-                               class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                    </div>
-
-                    <!-- Busca -->
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Buscar</label>
-                        <input type="text" name="q" value="{{ search_query }}" placeholder="Descrição ou usuário..."
-                               class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                    </div>
-                </div>
-
-                <div class="flex gap-3 pt-2">
-                    <button type="submit" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-                        <i class="fas fa-search mr-2"></i>Filtrar
-                    </button>
-                    <a href="{% url 'core:activity_history' %}" class="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors">
-                        <i class="fas fa-times mr-2"></i>Limpar
-                    </a>
-                </div>
-            </form>
-        </div>
-
-        <!-- Top Ações e Top Usuários -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-            <!-- Top Ações (30 dias) -->
-            <div class="bg-white rounded-xl shadow-md p-6">
-                <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                    <i class="fas fa-chart-bar text-blue-600"></i>
-                    Top Ações (30 dias)
-                </h3>
-                <div class="space-y-3">
-                    {% for action in action_stats %}
-                        <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                            <span class="text-sm font-medium text-gray-700">
-                                {{ action.action_type|default:"Desconhecido" }}
-                            </span>
-                            <span class="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-semibold">
-                                {{ action.count }}
-                            </span>
-                        </div>
-                    {% empty %}
-                        <p class="text-gray-500 text-center py-4">Nenhum dado disponível</p>
-                    {% endfor %}
-                </div>
-            </div>
-
-            <!-- Top Usuários (30 dias) -->
-            <div class="bg-white rounded-xl shadow-md p-6">
-                <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                    <i class="fas fa-users text-green-600"></i>
-                    Usuários Mais Ativos (30 dias)
-                </h3>
-                <div class="space-y-3">
-                    {% for user in top_users %}
-                        <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                            <span class="text-sm font-medium text-gray-700">
-                                {{ user.user__first_name }} {{ user.user__last_name }}
-                            </span>
-                            <span class="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-semibold">
-                                {{ user.activity_count }} ações
-                            </span>
-                        </div>
-                    {% empty %}
-                        <p class="text-gray-500 text-center py-4">Nenhum dado disponível</p>
-                    {% endfor %}
-                </div>
-            </div>
-        </div>
-
-        <!-- Métricas de Inatividade -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-            <!-- Usuários que Nunca Entraram -->
-            <div class="bg-white rounded-xl shadow-md p-6">
-                <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                    <i class="fas fa-user-slash text-red-600"></i>
-                    Usuários que Nunca Entraram
-                    <span class="ml-2 px-2 py-1 bg-red-100 text-red-700 rounded-full text-xs font-semibold">
-                        {{ users_never_logged.count }}
-                    </span>
-                </h3>
-                <div class="space-y-3 max-h-80 overflow-y-auto">
-                    {% for user in users_never_logged|slice:":10" %}
-                        <div class="flex items-center justify-between p-3 bg-red-50 rounded-lg">
-                            <div class="flex items-center gap-3">
-                                <div class="h-8 w-8 rounded-full bg-gradient-to-br from-red-400 to-red-600 flex items-center justify-center text-white font-semibold text-sm">
-                                    {{ user.first_name.0|default:user.username.0|upper }}
-                                </div>
-                                <div>
-                                    <div class="text-sm font-medium text-gray-900">
-                                        {{ user.get_full_name|default:user.username }}
-                                    </div>
-                                    {% if user.sector %}
-                                        <div class="text-xs text-gray-500">{{ user.sector.name }}</div>
-                                    {% endif %}
-                                </div>
-                            </div>
-                            <span class="px-2 py-1 bg-red-200 text-red-800 rounded text-xs font-semibold">
-                                Cadastrado em {{ user.date_joined|date:"d/m/Y" }}
-                            </span>
-                        </div>
-                    {% empty %}
-                        <div class="flex flex-col items-center justify-center py-8 text-green-600">
-                            <i class="fas fa-check-circle text-4xl mb-2"></i>
-                            <p class="text-sm font-medium">Todos os usuários já acessaram o sistema!</p>
-                        </div>
-                    {% endfor %}
-                </div>
-            </div>
-
-            <!-- Usuários Inativos (Tempo sem login) -->
-            <div class="bg-white rounded-xl shadow-md p-6">
-                <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                    <i class="fas fa-clock text-orange-600"></i>
-                    Usuários com Maior Tempo sem Login
-                </h3>
-                <div class="space-y-3 max-h-80 overflow-y-auto">
-                    {% for user in inactive_users_top %}
-                        <div class="flex items-center justify-between p-3 bg-orange-50 rounded-lg">
-                            <div class="flex items-center gap-3">
-                                <div class="h-8 w-8 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-white font-semibold text-sm">
-                                    {{ user.name.0|upper }}
-                                </div>
-                                <div>
-                                    <div class="text-sm font-medium text-gray-900">
-                                        {{ user.name }}
-                                    </div>
-                                    <div class="text-xs text-gray-500">
-                                        Último login: {{ user.last_login|date:"d/m/Y H:i" }}
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="text-right">
-                                <div class="px-3 py-1 bg-orange-200 text-orange-800 rounded-full text-xs font-semibold">
-                                    {{ user.days_inactive }} dias
-                                </div>
-                            </div>
-                        </div>
-                    {% empty %}
-                        <p class="text-gray-500 text-center py-4">Nenhum dado disponível</p>
-                    {% endfor %}
-                </div>
-            </div>
-        </div>
-
-        <!-- Lista de Logs -->
-        <div class="bg-white rounded-xl shadow-md overflow-hidden">
-            <div class="p-6 border-b border-gray-200">
-                <h3 class="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                    <i class="fas fa-list text-gray-600"></i>
-                    Registros de Atividades
-                    <span class="ml-2 px-3 py-1 bg-gray-100 text-gray-600 rounded-full text-sm">
-                        {{ page_obj.paginator.count }} registros
-                    </span>
-                </h3>
-            </div>
-
-            <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-gray-200">
-                    <thead class="bg-gray-50">
-                        <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data/Hora</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Usuário</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo de Ação</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Descrição</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">IP</th>
-                        </tr>
-                    </thead>
-                    <tbody class="bg-white divide-y divide-gray-200">
-                        {% for log in logs %}
-                            <tr class="hover:bg-gray-50 transition-colors">
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                    {{ log.created_at|date:"d/m/Y H:i:s" }}
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap">
-                                    <div class="flex items-center">
-                                        <div class="h-8 w-8 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white font-semibold text-sm mr-3">
-                                            {% if log.user %}
-                                                {{ log.user.first_name.0|default:log.user.username.0|upper }}
-                                            {% else %}
-                                                <i class="fas fa-robot text-xs"></i>
-                                            {% endif %}
-                                        </div>
-                                        <div>
-                                            <div class="text-sm font-medium text-gray-900">
-                                                {% if log.user %}
-                                                    {{ log.user.get_full_name|default:log.user.username }}
-                                                {% else %}
-                                                    Sistema
-                                                {% endif %}
-                                            </div>
-                                            {% if log.user and log.user.sector %}
-                                                <div class="text-xs text-gray-500">{{ log.user.sector.name }}</div>
-                                            {% endif %}
-                                        </div>
-                                    </div>
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap">
-                                    {% if 'LOGIN' in log.action_type %}
-                                        <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                                            <i class="fas fa-sign-in-alt mr-1"></i>
-                                            {{ log.get_action_type_display }}
-                                        </span>
-                                    {% elif 'LOGOUT' in log.action_type %}
-                                        <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">
-                                            <i class="fas fa-sign-out-alt mr-1"></i>
-                                            {{ log.get_action_type_display }}
-                                        </span>
-                                    {% elif 'CREATE' in log.action_type %}
-                                        <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
-                                            <i class="fas fa-plus mr-1"></i>
-                                            {{ log.get_action_type_display }}
-                                        </span>
-                                    {% elif 'UPDATE' in log.action_type or 'EDIT' in log.action_type %}
-                                        <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
-                                            <i class="fas fa-edit mr-1"></i>
-                                            {{ log.get_action_type_display }}
-                                        </span>
-                                    {% elif 'DELETE' in log.action_type %}
-                                        <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
-                                            <i class="fas fa-trash mr-1"></i>
-                                            {{ log.get_action_type_display }}
-                                        </span>
-                                    {% else %}
-                                        <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-800">
-                                            <i class="fas fa-cog mr-1"></i>
-                                            {{ log.get_action_type_display }}
-                                        </span>
-                                    {% endif %}
-                                </td>
-                                <td class="px-6 py-4 text-sm text-gray-700">
-                                    {{ log.description|truncatewords:15 }}
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    {{ log.ip_address|default:"—" }}
-                                </td>
-                            </tr>
-                        {% empty %}
-                            <tr>
-                                <td colspan="5" class="px-6 py-12 text-center">
-                                    <div class="flex flex-col items-center justify-center text-gray-400">
-                                        <i class="fas fa-inbox text-5xl mb-3"></i>
-                                        <p class="text-lg font-medium">Nenhum registro encontrado</p>
-                                        <p class="text-sm mt-1">Tente ajustar os filtros de busca</p>
-                                    </div>
-                                </td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-
-            <!-- Paginação -->
-            {% if is_paginated %}
-                <div class="bg-gray-50 px-6 py-4 border-t border-gray-200">
-                    <div class="flex items-center justify-between">
-                        <div class="text-sm text-gray-700">
-                            Mostrando 
-                            <span class="font-medium">{{ page_obj.start_index }}</span>
-                            a
-                            <span class="font-medium">{{ page_obj.end_index }}</span>
-                            de
-                            <span class="font-medium">{{ page_obj.paginator.count }}</span>
-                            registros
-                        </div>
-                        <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
-                            {% if page_obj.has_previous %}
-                                <a href="?page=1&{{ request.GET.urlencode }}" 
-                                   class="relative inline-flex items-center px-3 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
-                                    <i class="fas fa-angle-double-left"></i>
-                                </a>
-                                <a href="?page={{ page_obj.previous_page_number }}&{{ request.GET.urlencode }}" 
-                                   class="relative inline-flex items-center px-3 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
-                                    <i class="fas fa-angle-left"></i>
-                                </a>
-                            {% endif %}
-
-                            <span class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700">
-                                Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
-                            </span>
-
-                            {% if page_obj.has_next %}
-                                <a href="?page={{ page_obj.next_page_number }}&{{ request.GET.urlencode }}" 
-                                   class="relative inline-flex items-center px-3 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
-                                    <i class="fas fa-angle-right"></i>
-                                </a>
-                                <a href="?page={{ page_obj.paginator.num_pages }}&{{ request.GET.urlencode }}" 
-                                   class="relative inline-flex items-center px-3 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
-                                    <i class="fas fa-angle-double-right"></i>
-                                </a>
-                            {% endif %}
-                        </nav>
-                    </div>
-                </div>
+        <div class="flex items-center gap-2 flex-wrap">
+            <a href="{% url 'core:export_activity_history' %}{% if qs_filtros %}?{{ qs_filtros }}{% endif %}"
+               class="inline-flex items-center gap-2 px-3.5 py-2 min-h-[2.5rem] bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-semibold hover:bg-gray-50">
+                <i class="fas fa-file-csv text-emerald-600"></i>Exportar CSV
+            </a>
+            {% if pode_limpar %}
+            <a href="{% url 'core:limpar_historico' %}" id="ahBotaoLimpar"
+               class="inline-flex items-center gap-2 px-3.5 py-2 min-h-[2.5rem] bg-white border border-red-300 text-red-700 rounded-lg text-sm font-semibold hover:bg-red-50">
+                <i class="fas fa-broom"></i>Limpar histórico com mais de 1 ano
+            </a>
             {% endif %}
         </div>
+    </div>
 
+    <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 mb-4">
+        <div class="ah-card p-3.5"><p class="text-xs text-gray-500">Registros</p><p class="text-xl font-bold text-gray-900 tabular mt-0.5">{{ stats.total_logs }}</p></div>
+        <div class="ah-card p-3.5"><p class="text-xs text-gray-500">Hoje</p><p class="text-xl font-bold text-gray-900 tabular mt-0.5">{{ stats.today }}</p></div>
+        <div class="ah-card p-3.5"><p class="text-xs text-gray-500">Ontem</p><p class="text-xl font-bold text-gray-900 tabular mt-0.5">{{ stats.yesterday }}</p></div>
+        <div class="ah-card p-3.5"><p class="text-xs text-gray-500">Esta semana</p><p class="text-xl font-bold text-gray-900 tabular mt-0.5">{{ stats.this_week }}</p></div>
+        <div class="ah-card p-3.5"><p class="text-xs text-gray-500">Este mês</p><p class="text-xl font-bold text-gray-900 tabular mt-0.5">{{ stats.this_month }}</p></div>
+        <div class="ah-card p-3.5"><p class="text-xs text-gray-500">Nunca entraram</p><p class="text-xl font-bold text-red-600 tabular mt-0.5">{{ nunca_total }}</p></div>
+        <div class="ah-card p-3.5"><p class="text-xs text-gray-500">Sem entrar há 30+ dias</p><p class="text-xl font-bold text-orange-600 tabular mt-0.5">{{ inativos_total }}</p></div>
+    </div>
+
+    <form method="get" action="{% url 'core:activity_history' %}" class="ah-card p-4 mb-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 items-end">
+            <div>
+                <label for="ahPessoa" class="block text-xs font-semibold text-gray-500 mb-1">Pessoa</label>
+                <select id="ahPessoa" name="user" class="ah-campo">
+                    <option value="">Todas</option>
+                    {% for p in pessoas %}
+                    <option value="{{ p.id }}" {% if filtros.user == p.id|stringformat:"s" %}selected{% endif %}>{{ p.get_full_name|default:p.username }}{% if not p.is_active %} (inativo){% endif %}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="ahModulo" class="block text-xs font-semibold text-gray-500 mb-1">Módulo</label>
+                <select id="ahModulo" name="modulo" class="ah-campo">
+                    <option value="">Todos</option>
+                    {% for chave, rotulo in modulos %}
+                    <option value="{{ chave }}" {% if filtros.modulo == chave %}selected{% endif %}>{{ rotulo }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="ahAcao" class="block text-xs font-semibold text-gray-500 mb-1">Ação</label>
+                <select id="ahAcao" name="action_type" class="ah-campo">
+                    <option value="">Todas</option>
+                    {% for grupo, acoes in grupos_acoes %}
+                    <optgroup label="{{ grupo }}">
+                        {% for codigo, rotulo in acoes %}
+                        <option value="{{ codigo }}" {% if filtros.action_type == codigo %}selected{% endif %}>{{ rotulo }}</option>
+                        {% endfor %}
+                    </optgroup>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="ahDe" class="block text-xs font-semibold text-gray-500 mb-1">De</label>
+                <input id="ahDe" type="date" name="date_from" value="{{ filtros.date_from }}" class="ah-campo">
+            </div>
+            <div>
+                <label for="ahAte" class="block text-xs font-semibold text-gray-500 mb-1">Até</label>
+                <input id="ahAte" type="date" name="date_to" value="{{ filtros.date_to }}" class="ah-campo">
+            </div>
+            <div>
+                <label for="ahBusca" class="block text-xs font-semibold text-gray-500 mb-1">Buscar</label>
+                <input id="ahBusca" type="text" name="q" value="{{ filtros.q }}" placeholder="Texto ou nome" class="ah-campo">
+            </div>
+        </div>
+        <div class="flex items-center gap-2 mt-3 flex-wrap">
+            <button type="submit" class="inline-flex items-center gap-2 px-4 min-h-[2.5rem] bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold">
+                <i class="fas fa-filter"></i>Filtrar
+            </button>
+            {% for rotulo, de, ate in atalhos_periodo %}
+            <a class="ah-chip" href="?date_from={{ de|date:'Y-m-d' }}&amp;date_to={{ ate|date:'Y-m-d' }}{% if filtros.user %}&amp;user={{ filtros.user }}{% endif %}{% if filtros.modulo %}&amp;modulo={{ filtros.modulo }}{% endif %}{% if filtros.action_type %}&amp;action_type={{ filtros.action_type }}{% endif %}">{{ rotulo }}</a>
+            {% endfor %}
+            {% if tem_filtro %}
+            <a href="{% url 'core:activity_history' %}" class="text-xs text-gray-500 hover:text-indigo-700 ml-1">
+                <i class="fas fa-xmark mr-1"></i>limpar filtros
+            </a>
+            {% endif %}
+        </div>
+    </form>
+
+    {% if resumo_pessoa %}
+    <div class="ah-card p-3.5 mb-4 flex items-center justify-between gap-3 flex-wrap" id="ahResumoPessoa">
+        <div class="min-w-0">
+            <p class="text-sm font-semibold text-gray-900">{{ resumo_pessoa.pessoa.get_full_name|default:resumo_pessoa.pessoa.username }}</p>
+            <p class="text-xs text-gray-500">
+                {% if resumo_pessoa.pessoa.sector %}<i class="fas fa-store mr-1"></i>{{ resumo_pessoa.pessoa.sector.name }}{% else %}sem setor{% endif %}{% if resumo_pessoa.pessoa.job_title %} · {{ resumo_pessoa.pessoa.job_title }}{% endif %}
+            </p>
+        </div>
+        {% if ver_mapa %}
+            {% if resumo_pessoa.ultima_posicao %}
+            <a class="ah-mapa" style="margin-top:0" id="ahUltimaPosicao"
+               href="{% url 'maps:mapa' %}?usuario={{ resumo_pessoa.pessoa.id }}&amp;em={{ resumo_pessoa.ultima_posicao.em_param }}">
+                <i class="fas fa-location-dot"></i>
+                Última posição: {{ resumo_pessoa.ultima_posicao.momento|date:"d/m/Y H:i" }} ({{ resumo_pessoa.ultima_posicao.origem_rotulo }}) · ver no mapa
+            </a>
+            {% else %}
+            <span class="text-xs text-gray-400">Sem posição registrada</span>
+            {% endif %}
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+
+        <div class="lg:col-span-2 min-w-0">
+            <div class="ah-card overflow-hidden">
+                <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-2 flex-wrap">
+                    <h2 class="text-sm font-bold text-gray-800">
+                        <i class="fas fa-stream text-indigo-600 mr-1.5"></i>Linha do tempo
+                    </h2>
+                    <span class="text-xs text-gray-500 tabular" id="ahTotal">{{ page_obj.paginator.count }} registro{{ page_obj.paginator.count|pluralize }}</span>
+                </div>
+
+                {% for dia in dias %}
+                <section>
+                    <div class="ah-dia">
+                        <span class="text-sm font-semibold text-gray-800">{{ dia.rotulo }}</span>
+                        <span class="text-[11px] text-gray-400 tabular">{{ dia.total }} nesta página</span>
+                    </div>
+                    {% for bloco in dia.blocos %}
+                        {% if bloco.agrupado %}
+                        <details class="ah-grupo ah-c-{{ bloco.primeiro.acao.cor }}">
+                            <summary class="ah-item">
+                                <span class="ah-icone"><i class="fas {{ bloco.primeiro.acao.icone }}"></i></span>
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex items-center gap-x-2 gap-y-1 flex-wrap">
+                                        <span class="text-sm font-semibold text-gray-900 truncate">{% if bloco.primeiro.user %}{{ bloco.primeiro.user.get_full_name|default:bloco.primeiro.user.username }}{% else %}Sistema{% endif %}</span>
+                                        <span class="ah-selo">{{ bloco.primeiro.acao.rotulo }} × {{ bloco.quantos }}</span>
+                                    </div>
+                                    <p class="text-xs text-gray-500 mt-0.5 tabular">
+                                        <i class="fas fa-chevron-right ah-chevron text-[9px] mr-1"></i>
+                                        {{ bloco.hora_inicio|date:"H:i" }} a {{ bloco.hora_fim|date:"H:i" }}
+                                    </p>
+                                </div>
+                            </summary>
+                            <div>
+                                {% for log in bloco.logs %}{% include 'core/_historico_item.html' %}{% endfor %}
+                            </div>
+                        </details>
+                        {% else %}
+                            {% for log in bloco.logs %}{% include 'core/_historico_item.html' %}{% endfor %}
+                        {% endif %}
+                    {% endfor %}
+                </section>
+                {% empty %}
+                <div class="px-4 py-14 text-center text-gray-400">
+                    <i class="fas fa-inbox text-4xl mb-2 block text-gray-300"></i>
+                    <p class="text-sm font-medium">Nenhum registro encontrado</p>
+                    <p class="text-xs mt-1">Tente ajustar os filtros.</p>
+                </div>
+                {% endfor %}
+
+                {% if page_obj.has_other_pages %}
+                <nav class="px-4 py-3 border-t border-gray-100 flex items-center justify-between gap-2 flex-wrap" aria-label="Páginas">
+                    <span class="text-xs text-gray-500 tabular">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+                    <div class="flex items-center gap-1.5">
+                        {% if page_obj.has_previous %}
+                        <a class="ah-chip" href="?page=1{% if qs_filtros %}&amp;{{ qs_filtros }}{% endif %}" aria-label="Primeira página"><i class="fas fa-angles-left"></i></a>
+                        <a class="ah-chip" href="?page={{ page_obj.previous_page_number }}{% if qs_filtros %}&amp;{{ qs_filtros }}{% endif %}">Anterior</a>
+                        {% endif %}
+                        {% if page_obj.has_next %}
+                        <a class="ah-chip" href="?page={{ page_obj.next_page_number }}{% if qs_filtros %}&amp;{{ qs_filtros }}{% endif %}">Próxima</a>
+                        <a class="ah-chip" href="?page={{ page_obj.paginator.num_pages }}{% if qs_filtros %}&amp;{{ qs_filtros }}{% endif %}" aria-label="Última página"><i class="fas fa-angles-right"></i></a>
+                        {% endif %}
+                    </div>
+                </nav>
+                {% endif %}
+            </div>
+
+            <p class="text-xs text-gray-400 mt-3 leading-relaxed">
+                <i class="fas fa-circle-info mr-1"></i>
+                O log guarda um texto por ação, sem campos de antes e depois. A mudança só aparece quando dá para
+                saber o que mudou: status e edição de chamado, resgate, setor, aprovador e edição de cadastro.
+                O módulo vem do tipo da ação.{% if ver_mapa %} A posição é a registrada mais perto do horário
+                (até 30 min), não de onde a ação foi feita.{% endif %}
+                O setor é o atual do cadastro, não o da época.
+            </p>
+        </div>
+
+        <aside class="space-y-4 min-w-0">
+            <div class="ah-card p-4">
+                <h3 class="text-sm font-bold text-gray-800 mb-3"><i class="fas fa-chart-bar text-indigo-600 mr-1.5"></i>Ações em 30 dias</h3>
+                <div class="space-y-2.5">
+                    {% for a in action_stats %}
+                    <a href="?action_type={{ a.codigo }}" class="block ah-c-{{ a.cor }} hover:opacity-80">
+                        <div class="flex items-center justify-between gap-2 text-xs">
+                            <span class="text-gray-700 truncate">{{ a.rotulo }}</span>
+                            <span class="font-semibold text-gray-900 tabular">{{ a.count }}</span>
+                        </div>
+                        <div class="ah-barra mt-1" style="width:{{ a.largura }}%"></div>
+                    </a>
+                    {% empty %}
+                    <p class="text-xs text-gray-400">Sem registros no período.</p>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="ah-card p-4">
+                <h3 class="text-sm font-bold text-gray-800 mb-3"><i class="fas fa-users text-emerald-600 mr-1.5"></i>Mais ativos em 30 dias</h3>
+                <div class="space-y-1">
+                    {% for u in top_users %}
+                    <a href="?user={{ u.user__id }}" class="flex items-center justify-between gap-2 text-xs py-1 rounded hover:bg-gray-50">
+                        <span class="text-gray-700 truncate">{{ u.user__first_name }} {{ u.user__last_name }}</span>
+                        <span class="font-semibold text-gray-900 tabular whitespace-nowrap">{{ u.activity_count }}</span>
+                    </a>
+                    {% empty %}
+                    <p class="text-xs text-gray-400">Sem registros no período.</p>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <details class="ah-card p-4">
+                <summary class="text-sm font-bold text-gray-800 cursor-pointer">
+                    <i class="fas fa-user-slash text-red-600 mr-1.5"></i>Nunca entraram ({{ nunca_total }})
+                </summary>
+                <div class="mt-3 space-y-2">
+                    {% for p in nunca_lista %}
+                    <div class="text-xs">
+                        <p class="text-gray-800 truncate">{{ p.get_full_name|default:p.username }}</p>
+                        <p class="text-gray-400">{% if p.sector %}{{ p.sector.name }} · {% endif %}cadastro em {{ p.date_joined|date:"d/m/Y" }}</p>
+                    </div>
+                    {% empty %}
+                    <p class="text-xs text-gray-400">Todos já entraram.</p>
+                    {% endfor %}
+                </div>
+            </details>
+
+            <details class="ah-card p-4">
+                <summary class="text-sm font-bold text-gray-800 cursor-pointer">
+                    <i class="fas fa-user-clock text-orange-600 mr-1.5"></i>Maior tempo sem entrar
+                </summary>
+                <div class="mt-3 space-y-2">
+                    {% for i in inativos_top %}
+                    <a href="?user={{ i.pessoa.id }}" class="flex items-center justify-between gap-2 text-xs rounded hover:bg-gray-50">
+                        <span class="min-w-0">
+                            <span class="block text-gray-800 truncate">{{ i.pessoa.get_full_name|default:i.pessoa.username }}</span>
+                            <span class="block text-gray-400">último acesso {{ i.pessoa.last_login|date:"d/m/Y" }}</span>
+                        </span>
+                        <span class="font-semibold text-orange-600 tabular whitespace-nowrap">{{ i.dias }} dias</span>
+                    </a>
+                    {% empty %}
+                    <p class="text-xs text-gray-400">Ninguém há mais de 30 dias.</p>
+                    {% endfor %}
+                </div>
+            </details>
+        </aside>
     </div>
 </div>
 {% endblock %}

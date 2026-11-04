@@ -1,0 +1,221 @@
+{% extends 'financeiro/base_financeiro.html' %}
+{% load caixa_tags %}
+{% block fin_titulo %}Despesas recorrentes{% endblock %}
+{% block fin_cabecalho %}Despesas recorrentes{% endblock %}
+{% block fin_subtitulo %}Contas que voltam todo mês: valores, variação de preço, atrasos e vencimentos{% endblock %}
+{% block fin_css %}{% include 'financeiro/_recorrente_css.html' %}{% endblock %}
+{% block fin_acoes %}
+<a href="{% url 'financeiro:recorrentes_excel' %}?{{ q_tudo }}" class="fin-btn fin-btn-claro"><i class="fas fa-file-excel"></i>Excel</a>
+{% if pode_editar %}<button type="button" data-abrir="#recNova" data-fin-atalho-novo class="fin-btn fin-btn-verde"><i class="fas fa-plus"></i>Nova despesa<span class="fin-kbd">N</span></button>{% endif %}
+{% endblock %}
+
+{% block fin_conteudo %}
+{# ── Filtros ── #}
+<div class="fin-card p-3 mb-4">
+    <div class="flex items-center gap-1 flex-wrap mb-2.5">
+        <div class="fin-rolavel-x flex-1 min-w-0" role="group" aria-label="Tipo de despesa">
+            <a href="?{{ q_sem_tipo }}" class="fin-pilula {% if not filtro.tipo %}fin-pilula-ativa{% endif %}">Todos os tipos</a>
+            {% for t in tipos %}<a href="?{{ q_sem_tipo }}&tipo={{ t|urlencode }}" class="fin-pilula {% if filtro.tipo == t %}fin-pilula-ativa{% endif %}">{{ t }}</a>{% endfor %}
+        </div>
+    </div>
+    <form method="get" class="grid grid-cols-2 md:grid-cols-6 gap-2 items-end">
+        <input type="hidden" name="tipo" value="{{ filtro.tipo }}"><input type="hidden" name="so" value="{{ filtro.so }}">
+        <div><label class="fin-label" for="recAno">Ano</label>
+            <div class="flex items-center gap-1">
+                <a href="?{{ q_sem_ano }}&ano={{ ano_anterior|stringformat:'d' }}" class="fin-btn-icone shrink-0" aria-label="Ano anterior"><i class="fas fa-chevron-left text-xs"></i></a>
+                <input id="recAno" name="ano" type="number" min="2000" max="2100" value="{{ filtro.ano|stringformat:'d' }}" class="fin-input text-center px-1" data-fin-nao-conta>
+                <a href="?{{ q_sem_ano }}&ano={{ ano_seguinte|stringformat:'d' }}" class="fin-btn-icone shrink-0" aria-label="Ano seguinte"><i class="fas fa-chevron-right text-xs"></i></a>
+            </div></div>
+        <div><label class="fin-label" for="recMes">Mês em foco</label>
+            <select id="recMes" name="mes" class="fin-input">{% for col in grade.colunas %}<option value="{{ col.n }}" {% if col.ativo %}selected{% endif %}>{{ col.rotulo }}</option>{% endfor %}</select></div>
+        <div><label class="fin-label" for="recLojaF">Loja</label>
+            <select id="recLojaF" name="loja" class="fin-input"><option value="">Todas</option>{% if not lojas_restritas %}<option value="sem" {% if filtro.loja == 'sem' %}selected{% endif %}>Escritório / sem loja</option>{% endif %}
+                {% for l in lojas %}<option value="{{ l.id }}" {% if filtro.loja == l.id|stringformat:'s' %}selected{% endif %}>{{ l.name }}</option>{% endfor %}</select></div>
+        <div><label class="fin-label" for="recLimite">Avisar acima de (%)</label>
+            <input id="recLimite" name="limite" inputmode="decimal" value="{{ filtro.limite }}" class="fin-input"></div>
+        <div><label class="fin-label" for="recQ">Nome ou fornecedor</label>
+            <input id="recQ" type="search" name="q" value="{{ filtro.q }}" class="fin-input" data-fin-atalho-busca></div>
+        <div class="flex items-center gap-2 justify-between md:justify-end">
+            <label class="flex items-center gap-1.5 text-xs font-semibold cursor-pointer min-h-[40px]" style="color:var(--fin-texto-2)"><input type="checkbox" name="inativas" value="1" {% if filtro.inativas %}checked{% endif %} class="accent-emerald-600 w-4 h-4">Inativas</label>
+            <button class="fin-btn fin-btn-verde" data-livre><i class="fas fa-filter"></i>Filtrar</button>
+        </div>
+    </form>
+</div>
+
+{# ── Indicadores ── #}
+<div class="grid grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-3 mb-4 fin-entra">
+    <a href="#recAtencao" class="fin-card fin-kpi" style="--fin-kpi-cor:#F97316">
+        <p class="fin-kpi-rotulo">A vencer em 7 dias</p>
+        <p class="fin-kpi-valor">{{ grade.kpi.a_vencer.valor|brl_zero }}</p><p class="fin-kpi-nota">{{ grade.kpi.a_vencer.n }} conta(s)</p></a>
+    <a href="?{{ q_sem_so }}{% if filtro.so != 'atraso' %}&so=atraso{% endif %}" class="fin-card fin-kpi {% if filtro.so == 'atraso' %}fin-kpi-ativo{% endif %}" style="--fin-kpi-cor:#DC2626">
+        <p class="fin-kpi-rotulo">Vencidas</p>
+        <p class="fin-kpi-valor {% if grade.kpi.vencidas.n %}text-red-600{% endif %}">{{ grade.kpi.vencidas.valor|brl_zero }}</p><p class="fin-kpi-nota">{{ grade.kpi.vencidas.n }} conta(s), em qualquer mês</p></a>
+    <div class="fin-card fin-kpi" style="--fin-kpi-cor:#059669">
+        <p class="fin-kpi-rotulo">Pagas em {{ mes_rotulo }}</p>
+        <p class="fin-kpi-valor">{{ grade.kpi.pagas.valor|brl_zero }}</p><p class="fin-kpi-nota">{{ grade.kpi.pagas.n }} conta(s){% if grade.kpi.pagas.atrasadas %}, {{ grade.kpi.pagas.atrasadas }} com atraso{% endif %}</p></div>
+    <div class="fin-card fin-kpi" style="--fin-kpi-cor:#64748B">
+        <p class="fin-kpi-rotulo">Total de {{ mes_rotulo }}</p>
+        <p class="fin-kpi-valor">{{ grade.kpi.total_mes|brl_zero }}</p>
+        <p class="fin-kpi-nota">{% if grade.kpi.delta_pct_txt %}{{ grade.kpi.delta_pct_txt }} sobre {{ mes_anterior_rotulo }} ({{ grade.kpi.total_anterior|brl_zero }}){% else %}sem valor em {{ mes_anterior_rotulo }}{% endif %}{% if grade.kpi.estimado_mes %}<span class="block">{{ grade.kpi.estimado_mes|brl_zero }} ainda é estimativa</span>{% endif %}</p></div>
+    <a href="?{{ q_sem_so }}{% if filtro.so != 'alerta' %}&so=alerta{% endif %}" class="fin-card fin-kpi col-span-2 lg:col-span-1 {% if filtro.so == 'alerta' %}fin-kpi-ativo{% endif %}" style="--fin-kpi-cor:#7C3AED">
+        <p class="fin-kpi-rotulo">Variações em {{ mes_rotulo }}</p>
+        <p class="fin-kpi-valor">{{ grade.kpi.alertas }}</p><p class="fin-kpi-nota">acima de {{ filtro.limite }}% sobre a média</p></a>
+</div>
+
+{% if pode_vincular and grade.sugestoes %}
+<form method="post" action="{% url 'financeiro:recorrentes_vincular_sugestoes' %}?{{ q_tudo }}" class="fin-card p-3 mb-4 flex items-center justify-between gap-3 flex-wrap" data-fin-confirmar="Cada título passa a definir o valor e a situação do seu mês. Nada novo é lançado em Contas a Pagar, e dá para desvincular depois." data-fin-titulo="Vincular {{ grade.sugestoes|length }} título(s)?" data-fin-botao="Vincular">
+    {% csrf_token %}<input type="hidden" name="voltar" value="{{ caminho }}">
+    <p class="text-sm" style="color:var(--fin-texto-2)"><i class="fas fa-link mr-1" style="color:var(--fin-verde)"></i><strong>{{ grade.sugestoes|length }} título(s)</strong> de Contas a Pagar em {{ filtro.ano|stringformat:'d' }} combinam com uma despesa sem deixar dúvida. Eles estão marcados com <i class="fas fa-link text-[10px]"></i> na grade.</p>
+    <button class="fin-btn fin-btn-claro"><i class="fas fa-link"></i>Vincular todos</button>
+</form>
+{% endif %}
+
+{# ── O mês em foco, para quem está no celular ── #}
+{% if grade.linhas %}
+<div class="fin-card overflow-hidden mb-4 md:hidden">
+    <div class="fin-cab"><h2>Contas de {{ mes_rotulo }}</h2><span class="rec-nota">deslize a grade abaixo para ver o ano</span></div>
+    <div>
+        {% for ln in grade.linhas %}{% with c=ln.atual %}
+        <a href="{% url 'financeiro:recorrente_mes' ln.despesa.id filtro.ano filtro.mes %}" data-rec-abrir class="rec-linha">
+            <div class="min-w-0"><p class="font-semibold text-sm break-words">{{ ln.despesa.nome }}</p>
+                <p class="rec-nota">{{ ln.despesa.loja.name|default:"Escritório" }}{% if c.vencimento %} · vence {{ c.vencimento|date:"d/m" }}{% endif %}{% if c.alerta %} · <span class="rec-seta-{{ c.alerta }}">{{ c.variacao_txt }}</span>{% endif %}</p></div>
+            <div class="text-right shrink-0"><p class="tabular font-semibold text-sm {% if c.estimado %}italic{% endif %}">{% if c.valor is not None %}R$ {{ c.texto }}{% else %}—{% endif %}</p>{% if c.rotulo %}<span class="rec-chip rec-{{ c.situacao }}">{{ c.rotulo }}</span>{% endif %}</div>
+        </a>
+        {% endwith %}{% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{# ── A grade ── #}
+<div class="fin-card overflow-hidden mb-4">
+    <div class="fin-cab flex-wrap">
+        <div class="flex items-center gap-2"><a href="?{{ q_sem_ano }}&ano={{ ano_anterior|stringformat:'d' }}" class="fin-btn-icone" aria-label="Ano anterior"><i class="fas fa-chevron-left text-xs"></i></a><h2>{{ filtro.ano|stringformat:'d' }} <span class="font-normal rec-nota">em R$, por mês de vencimento</span></h2><a href="?{{ q_sem_ano }}&ano={{ ano_seguinte|stringformat:'d' }}" class="fin-btn-icone" aria-label="Ano seguinte"><i class="fas fa-chevron-right text-xs"></i></a></div>
+        <div class="rec-legenda" aria-label="Legenda">{% for chave, rotulo in legenda %}<span class="rec-chip rec-{{ chave }}">{{ rotulo }}</span>{% endfor %}<span class="rec-chip rec-ALTA">Acima do limite</span><span class="rec-chip rec-QUEDA">Abaixo do limite</span></div>
+    </div>
+    {% if grade.linhas %}
+    <div class="rec-rolagem" id="recRolagem">
+    <table class="rec-grade" data-rc-wrapped="1">
+        <thead><tr>
+            <th class="rec-fixa">Despesa</th>
+            {% for col in grade.colunas %}<th class="{% if col.ativo %}rec-ativo{% endif %} {% if col.corrente %}rec-corrente{% endif %}" {% if col.ativo %}id="recColAtiva"{% endif %}><a href="?{{ q_sem_mes }}&mes={{ col.n }}" {% if col.ativo %}aria-current="true"{% endif %} title="Ver {{ col.rotulo }} nos indicadores">{{ col.rotulo }}</a></th>{% endfor %}
+            <th>No ano</th>
+        </tr></thead>
+        {% for g in grade.grupos %}
+        <tbody>
+            <tr class="rec-grupo"><th colspan="14"><span>{{ g.tipo }}</span></th></tr>
+            {% for ln in g.linhas %}
+            <tr>
+                <th class="rec-fixa font-normal" scope="row">
+                    {% if pode_editar %}<a href="{% url 'financeiro:recorrente_editar' ln.despesa.id %}" data-rec-abrir class="font-semibold hover:text-emerald-700 break-words">{{ ln.despesa.nome }}</a>{% else %}<span class="font-semibold break-words">{{ ln.despesa.nome }}</span>{% endif %}
+                    <span class="block rec-nota">{{ ln.despesa.loja.name|default:"Escritório" }} · dia {{ ln.despesa.dia_vencimento }} · <span class="whitespace-nowrap">{{ ln.despesa.valor_esperado|brl_zero }}</span></span>
+                    {% if ln.tem_sequencia %}<span class="rec-selo mt-0.5"><i class="fas fa-arrow-trend-up text-[9px]"></i>{{ ln.sequencia }} aumentos seguidos</span>{% endif %}
+                    {% if not ln.despesa.ativa %}<span class="rec-selo rec-selo-neutro mt-0.5">Inativa</span>{% endif %}
+                </th>
+                {% for c in ln.celulas %}
+                <td class="{% if forloop.counter == filtro.mes %}rec-ativo{% endif %}">
+                    {% if c.situacao != 'FORA' or pode_editar %}<a href="{% url 'financeiro:recorrente_mes' ln.despesa.id filtro.ano forloop.counter %}" data-rec-abrir class="rec-cel rec-{{ c.situacao }} {% if c.alerta %}rec-{{ c.alerta }}{% endif %} {% if c.estimado %}rec-estimado{% endif %}" {% if c.situacao == 'FORA' %}aria-label="Anotar {{ ln.despesa.nome }} em {{ c.competencia|date:'m/Y' }}"{% else %}title="{{ c.dica }}" aria-label="{{ c.dica }}"{% endif %}>
+                        <span class="rec-valor">{{ c.texto }}</span>
+                        <span class="rec-marcas">
+                            {% if c.sugestao %}<i class="fas fa-link" title="Tem título para vincular"></i>{% endif %}
+                            {% if c.dias_atraso_pago %}<i class="fas fa-clock" title="Paga com atraso"></i>{% endif %}
+                            {% if c.alerta %}<span class="rec-seta-{{ c.alerta }}">{{ c.variacao_txt }}</span>{% elif c.icone %}<i class="fas {{ c.icone }}"></i>{% endif %}
+                        </span>
+                    </a>{% else %}<span class="rec-cel rec-FORA"></span>{% endif %}
+                </td>
+                {% endfor %}
+                <td class="text-right whitespace-nowrap tabular px-2"><span class="font-semibold">{{ ln.total_ano|brl_zero }}</span>{% if ln.var_ano_txt %}<span class="block rec-nota" title="Do primeiro ao último valor do ano">{{ ln.var_ano_txt }}</span>{% endif %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        {% endfor %}
+        <tfoot><tr>
+            <th class="rec-fixa" scope="row">Total do mês</th>
+            {% for col in grade.colunas %}<td class="tabular {% if col.ativo %}rec-ativo{% endif %}">{% if col.total %}{{ col.total_txt }}{% else %}—{% endif %}</td>{% endfor %}
+            <td></td>
+        </tr></tfoot>
+    </table>
+    </div>
+    <p class="rec-nota px-4 py-2 border-t border-gray-100"><i class="fas fa-circle-info mr-1"></i>Em itálico: valor esperado, a conta do mês ainda não foi lançada. Clique numa célula para vincular o título ou anotar o mês.</p>
+    {% else %}
+    <div class="fin-vazio"><div class="fin-vazio-icone"><i class="fas fa-repeat"></i></div>{% if filtro.so or filtro.tipo or filtro.loja or filtro.q %}Nenhuma despesa com esse filtro.{% else %}Nenhuma despesa recorrente cadastrada.{% endif %}</div>
+    {% endif %}
+</div>
+
+{# ── O que pede atenção ── #}
+<div class="grid md:grid-cols-2 gap-3 mb-6">
+    <div class="fin-card overflow-hidden" id="recAtencao">
+        <div class="fin-cab"><h2>Vencidas e vencendo em 7 dias</h2><span class="rec-nota tabular">{{ grade.atencao|length }}</span></div>
+        <div class="rec-rolavel">
+            {% for c in atencao %}
+            <a href="{% url 'financeiro:recorrente_mes' c.despesa.id c.competencia.year c.competencia.month %}" data-rec-abrir class="rec-linha">
+                <div class="min-w-0"><p class="font-semibold text-sm break-words">{{ c.despesa.nome }}</p><p class="rec-nota">{{ c.despesa.loja.name|default:"Escritório" }} · vence {{ c.vencimento|date:"d/m/Y" }}{% if c.estimado %} · sem conta lançada{% endif %}{% if c.parcial %} · paga em parte{% endif %}</p></div>
+                <div class="text-right shrink-0"><p class="tabular font-semibold text-sm {% if c.estimado %}italic{% endif %}">{{ c.saldo|brl_zero }}</p><span class="rec-chip rec-{{ c.situacao }}">{{ c.rotulo }}</span></div>
+            </a>
+            {% empty %}<div class="fin-vazio">Nada vencido nem vencendo nos próximos 7 dias.</div>{% endfor %}
+            {% if atencao_resto %}<p class="rec-nota text-center py-2">e mais {{ atencao_resto }}. Use os filtros para ver.</p>{% endif %}
+        </div>
+    </div>
+    <div class="fin-card overflow-hidden">
+        <div class="fin-cab"><h2>Variações em {{ mes_rotulo }}</h2><span class="rec-nota tabular">{{ grade.variacoes|length }}</span></div>
+        <div class="rec-rolavel">
+            {% for c in grade.variacoes %}
+            <a href="{% url 'financeiro:recorrente_mes' c.despesa.id c.competencia.year c.competencia.month %}" data-rec-abrir class="rec-linha">
+                <div class="min-w-0"><p class="font-semibold text-sm break-words">{{ c.despesa.nome }}</p><p class="rec-nota">{% if c.base_esperado %}Esperado{% else %}Média{% endif %} {{ c.media|brl_zero }} → {{ c.valor|brl_zero }}</p></div>
+                <span class="tabular font-bold text-sm shrink-0 rec-seta-{{ c.alerta }}">{{ c.variacao_txt }}</span>
+            </a>
+            {% empty %}<div class="fin-vazio">Nenhuma conta de {{ mes_rotulo }} passou do limite de {{ filtro.limite }}%.</div>{% endfor %}
+        </div>
+    </div>
+</div>
+
+{% if pode_editar %}
+<div class="fin-modal" id="recNova" role="dialog" aria-modal="true" aria-label="Nova despesa recorrente"><div class="sm:max-w-2xl">{% include 'financeiro/_recorrente_form.html' with d=None %}</div></div>
+{% endif %}
+<div class="fin-modal" id="recModal" role="dialog" aria-modal="true" aria-label="Despesa recorrente"><div class="sm:max-w-2xl" id="recModalCorpo"></div></div>
+
+<script>
+(function () {
+    var modal = document.getElementById('recModal'), corpo = document.getElementById('recModalCorpo');
+    var espera = '<div class="p-5 space-y-3"><div class="fin-esqueleto h-6 w-1/2"></div><div class="fin-esqueleto h-24"></div><div class="fin-esqueleto h-40"></div></div>';
+    function carregar(url) {
+        return fetch(url, {headers: {'X-Requested-With': 'XMLHttpRequest'}, credentials: 'same-origin'}).then(function (r) {
+            if (!r.ok || r.redirected) throw new Error('falhou');
+            return r.text();
+        }).then(function (html) {
+            corpo.innerHTML = html;
+            // Foco no fechar: num campo, o celular abriria o teclado por cima da ficha.
+            var foco = corpo.querySelector('[data-fechar]');
+            if (foco) { try { foco.focus({preventScroll: true}); } catch (e) { foco.focus(); } }
+        });
+    }
+    document.addEventListener('click', function (e) {
+        var a = e.target.closest('[data-rec-abrir]');
+        if (!a || e.ctrlKey || e.metaKey || e.shiftKey) return;
+        e.preventDefault();
+        var u = new URL(a.href, location.href);
+        u.searchParams.set('voltar', location.pathname + location.search);
+        var limite = new URLSearchParams(location.search).get('limite');
+        if (limite) u.searchParams.set('limite', limite);
+        corpo.innerHTML = espera;
+        window.Fin.abrir(modal, a);
+        carregar(u.toString()).catch(function () { location.href = a.href; });
+    });
+    document.addEventListener('submit', function (e) {
+        var f = e.target.closest('[data-rec-busca]');
+        if (!f) return;
+        e.preventDefault();
+        var u = new URL(f.action, location.href);
+        new FormData(f).forEach(function (v, k) { u.searchParams.set(k, v); });
+        carregar(u.toString()).catch(function () { window.Fin.toast('Não deu para buscar agora. Tente de novo.', 'error'); });
+    });
+    // Abre a grade no mês em foco (no celular e em telas estreitas a coluna fica fora da vista).
+    var rolagem = document.getElementById('recRolagem'), coluna = document.getElementById('recColAtiva');
+    function focarMes() {
+        if (!rolagem || !coluna || rolagem.scrollWidth <= rolagem.clientWidth) return;
+        rolagem.scrollLeft = Math.max(0, coluna.offsetLeft - rolagem.querySelector('thead .rec-fixa').offsetWidth - 8);
+    }
+    focarMes();
+    window.addEventListener('load', focarMes);   // as fontes mudam a largura das colunas
+})();
+</script>
+{% endblock %}

@@ -100,6 +100,11 @@
                    {% if config.notificar_gerente %}checked{% endif %}>
             Avisar o gerente da loja quando o dia ficar em Atenção
         </label>
+        <label class="flex items-center gap-2 text-sm text-gray-700 mt-2">
+            <input type="checkbox" name="notificar_whatsapp" class="rounded border-gray-300"
+                   {% if config.notificar_whatsapp %}checked{% endif %}>
+            Avisar também por WhatsApp o gerente e o ADM da loja (mensagem real, sai a cada dia em Atenção)
+        </label>
     </div>
 
     <div class="flex items-center justify-end gap-3">

@@ -303,6 +303,9 @@ try:
         from django.test import Client
         navegador = Client()
         navegador.force_login(ana)
+        # Com a própria chave: sem ela, /assistente/ é o modo colaborador.
+        from assistente.models import AssistenteConexao
+        AssistenteConexao.objects.update_or_create(user=ana, defaults={'api_key_cifrada': 'cifrada-ficticia'})
         r = navegador.get('/assistente/')
         html = r.content.decode()
         t('abre (200) e sugere agenda e reuniões', r.status_code == 200 and 'Minhas reuniões desta semana' in html

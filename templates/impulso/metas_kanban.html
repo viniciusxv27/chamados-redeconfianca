@@ -224,6 +224,9 @@ Ficam fora do filtro de mês — são pedidos esperando resposta, não tarefas d
                 if (!data.ok) {
                     origem.appendChild(card);   // desfaz
                     alert(data.error || 'Não foi possível mover a meta.');
+                } else if (data.proxima) {
+                    // A próxima ocorrência acabou de nascer: recarrega para ela aparecer no "A Fazer".
+                    window.location.reload();
                 }
             })
             .catch(() => {

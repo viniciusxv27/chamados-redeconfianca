@@ -29,6 +29,7 @@ from . import ciclos as ciclos_service
 from .models import (
     FAIXAS_DA_NOTA,
     AcessoAutoriaIdeia,
+    IdeiaAnexo,
     Ciclo, CicloMes, ConclusaoConteudo, ConteudoConectar, EntregaConteudo,
     ExcecaoAssiduidade, Ideia, entregas_disponiveis,
     ImpulsoFeedback,
@@ -346,6 +347,19 @@ def _regras_dos_cards(metas, user, gestor, equipe_ids, em_parceria):
         m.feitos, m.total_itens = m.progresso_itens
 
 
+ORDEM_DA_PRIORIDADE = {Meta.Prioridade.CRITICA: 0, Meta.Prioridade.ALTA: 1, Meta.Prioridade.MEDIA: 2, Meta.Prioridade.BAIXA: 3}
+
+
+def _por_entrega_e_prioridade(metas):
+    """O que vence antes vem primeiro; no mesmo dia, o mais urgente."""
+    return sorted(metas, key=lambda m: (m.prazo, ORDEM_DA_PRIORIDADE.get(m.prioridade, 2), m.id))
+
+
+def _prioridade_do_post(request, padrao=Meta.Prioridade.MEDIA):
+    valor = request.POST.get('prioridade') or ''
+    return valor if valor in Meta.Prioridade.values else padrao
+
+
 def _ordem_das_concluidas(metas):
     return metas.order_by('-prazo', '-id')
 
@@ -358,7 +372,7 @@ def metas_kanban(request):
     qs, f, colaborador_id = _metas_do_kanban(request)
 
     # Concluída é contada inteira, mas só os primeiros cards vêm agora.
-    abertas = list(qs.exclude(status=Meta.Status.CONCLUIDA).prefetch_related('itens'))
+    abertas = _por_entrega_e_prioridade(qs.exclude(status=Meta.Status.CONCLUIDA).prefetch_related('itens'))
     concluidas_qs = _ordem_das_concluidas(qs.filter(status=Meta.Status.CONCLUIDA))
     total_concluidas = concluidas_qs.count()
     concluidas = list(concluidas_qs.prefetch_related('itens')[:CONCLUIDAS_POR_VEZ])
@@ -717,6 +731,7 @@ def meta_create(request):
         meta = Meta.objects.create(
             gestor=gestor, colaborador=colaborador, titulo=titulo,
             descricao=descricao, recorrencia=recorrencia, prazo=prazo,
+            prioridade=_prioridade_do_post(request),
             descricao_foto=foto, descricao_audio=audio,
             apenas_dias_uteis=apenas_dias_uteis,
             aprovacao=Meta.Aprovacao.APROVADA if ja_aprovada else Meta.Aprovacao.PENDENTE,
@@ -876,6 +891,7 @@ def meta_create(request):
                        else adms_lojas.exclude(id=request.user.id).select_related('sector')),
         'fora_da_area': fora_da_area,
         'setor': getattr(request.user, 'sector', None),
+        'prioridades': Meta.Prioridade.choices,
         'recorrencias': Meta.Recorrencia.choices,
         'hoje': timezone.localdate(),
         'active_tab': 'confiar',
@@ -1042,25 +1058,29 @@ def meta_item_excluir(request, item_id):
 @require_POST
 @impulso_member_required
 def meta_excluir(request, meta_id):
-    """Apaga a meta. Só o gestor que a criou ou aprovou.
+    """Apaga a meta. O gestor que a criou ou aprovou, ou o dono que a cadastrou e não começou.
 
     A permissão é conferida no servidor, não só escondendo o ícone: sem isso,
     um POST direto apagaria meta alheia.
     """
     meta = get_object_or_404(Meta, id=meta_id)
     if not meta.pode_excluir(request.user):
-        messages.error(request, 'Você só pode excluir metas que criou ou aprovou.')
+        messages.error(request, 'Você só pode excluir atividades que cadastrou e que ainda estão em "A Fazer".')
         return redirect('impulso:meta_detail', meta_id=meta.id)
 
     titulo = meta.titulo
     colaborador = meta.colaborador
     era_avaliada = meta.is_avaliada
+    gestor_da_meta = meta.gestor
     meta.delete()          # anexos e comentários caem junto (CASCADE)
 
-    _notify([colaborador], 'Meta removida',
-            f'A meta "{titulo}" foi removida por '
-            f'{request.user.get_full_name() or request.user.email}.',
-            '/impulso/metas/')
+    # Quem é avisado é sempre o outro lado: o dono que apaga o próprio cadastro avisa o gestor.
+    avisar = gestor_da_meta if colaborador.id == request.user.id else colaborador
+    if avisar and avisar.id != request.user.id:
+        _notify([avisar], 'Meta removida',
+                f'A meta "{titulo}" foi removida por '
+                f'{request.user.get_full_name() or request.user.email}.',
+                '/impulso/metas/')
     if era_avaliada:
         messages.warning(
             request,
@@ -1280,6 +1300,7 @@ def meta_detail(request, meta_id):
         'is_colaborador_da_meta': meta.colaborador_id == request.user.id,
         'pode_decidir': meta.pode_decidir(request.user),
         'pode_editar_meta': pode_editar_meta,
+        'pode_excluir_meta': meta.pode_excluir(request.user),
         'pode_duplicar_meta': pode_duplicar_meta,
         'sou_ponto_focal': sou_ponto_focal,
         'ideia_de_origem': meta.ideias_originadas.first(),
@@ -1325,7 +1346,9 @@ def meta_update_status(request, meta_id):
                 f'/impulso/metas/{meta.id}/')
     meta.save(update_fields=['status', 'entregue_em', 'updated_at'])
     _avisar_criador_superadmin(meta, request.user, antes, avisados)
-    return JsonResponse({'ok': True, 'status': meta.status})
+    proxima = meta.criar_proxima_ocorrencia() if novo == Meta.Status.ENTREGUE else None
+    return JsonResponse({'ok': True, 'status': meta.status,
+                         'proxima': proxima.prazo.strftime('%d/%m/%Y') if proxima else ''})
 
 
 FOTO_DESCRICAO = ('jpg', 'jpeg', 'png', 'webp', 'gif', 'heic', 'heif')
@@ -1394,7 +1417,9 @@ def meta_entregar(request, meta_id):
             f'"{meta.titulo}" foi entregue por {request.user.get_full_name() or request.user.email}.',
             f'/impulso/metas/{meta.id}/')
     _avisar_criador_superadmin(meta, request.user, antes, _gestores_da_meta(meta))
-    messages.success(request, 'Meta marcada como entregue.')
+    proxima = meta.criar_proxima_ocorrencia()
+    messages.success(request, 'Meta marcada como entregue.' + (
+        f' A próxima já está no Kanban, com prazo {proxima.prazo:%d/%m/%Y}.' if proxima else ''))
     return redirect('impulso:meta_detail', meta_id=meta.id)
 
 
@@ -1430,7 +1455,7 @@ def meta_avaliar(request, meta_id):
             f'/impulso/metas/{meta.id}/')
     _avisar_criador_superadmin(meta, request.user, antes, [meta.colaborador])
 
-    # Recorrência: concluir uma meta que se repete já abre a próxima ocorrência.
+    # Recorrência: a próxima normalmente já saiu na entrega; isto cobre a avaliada sem passar por ela.
     proxima = meta.criar_proxima_ocorrencia()
     if proxima:
         _notify([meta.colaborador], 'Tarefa recorrente reaberta',
@@ -1523,7 +1548,11 @@ def meta_editar(request, meta_id):
 
     # O prazo foi o combinado na aprovação da ideia: quem o muda é quem
     # gerencia a atividade, não quem a executa.
-    manda_no_prazo = meta.pode_gerenciar(request.user)
+    gerencia = meta.pode_gerenciar(request.user)
+    # Exceção: quem cadastrou a própria atividade e não começou corrige o prazo, dentro do mesmo mês
+    # (mudar de mês tiraria a meta da conta do mês sem o gestor decidir).
+    corrige_cadastro = not gerencia and meta.dono_corrige_cadastro(request.user)
+    manda_no_prazo = gerencia or corrige_cadastro
 
     if request.method == 'POST':
         titulo = (request.POST.get('titulo') or '').strip()
@@ -1534,6 +1563,9 @@ def meta_editar(request, meta_id):
 
         if not titulo or not prazo:
             messages.error(request, 'Título e prazo são obrigatórios.')
+            return redirect('impulso:meta_editar', meta_id=meta.id)
+        if corrige_cadastro and meta.vale_pontos and (prazo.year, prazo.month) != (meta.prazo.year, meta.prazo.month):
+            messages.error(request, 'Você pode corrigir o prazo dentro do mesmo mês. Para outro mês, fale com o gestor.')
             return redirect('impulso:meta_editar', meta_id=meta.id)
         if recorrencia not in Meta.Recorrencia.values:
             recorrencia = meta.recorrencia
@@ -1549,6 +1581,7 @@ def meta_editar(request, meta_id):
         if erro_midia:
             messages.error(request, erro_midia)
             return redirect('impulso:meta_editar', meta_id=meta.id)
+        prioridade_antes = meta.prioridade
         antes = {'titulo': meta.titulo, 'descricao': meta.descricao, 'prazo': meta.prazo,
                  'midia': (meta.descricao_foto.name, meta.descricao_audio.name)}
         # O arquivo antigo fica no armazenamento: a repetição ou a cópia da meta pode apontar para ele.
@@ -1563,9 +1596,10 @@ def meta_editar(request, meta_id):
         meta.titulo = titulo[:200]
         meta.descricao = descricao
         meta.prazo = prazo
+        meta.prioridade = _prioridade_do_post(request, meta.prioridade)
         meta.recorrencia = recorrencia
         meta.apenas_dias_uteis = apenas_dias_uteis
-        meta.save(update_fields=['titulo', 'descricao', 'prazo', 'recorrencia',
+        meta.save(update_fields=['titulo', 'descricao', 'prazo', 'prioridade', 'recorrencia',
                                  'apenas_dias_uteis', 'descricao_foto', 'descricao_audio'])
         if aviso_dia_util:
             messages.info(request, aviso_dia_util)
@@ -1579,6 +1613,8 @@ def meta_editar(request, meta_id):
             mudou.append('descrição atualizada')
         if antes['midia'] != (meta.descricao_foto.name, meta.descricao_audio.name):
             mudou.append('foto/áudio da descrição atualizados')
+        if prioridade_antes != meta.prioridade:
+            mudou.append(f'prioridade: {meta.get_prioridade_display()}')
         if antes['prazo'] != meta.prazo:
             mudou.append(f'prazo: {antes["prazo"]:%d/%m/%Y} → {meta.prazo:%d/%m/%Y}')
         if mudou:
@@ -1601,6 +1637,8 @@ def meta_editar(request, meta_id):
     return render(request, 'impulso/meta_editar.html', {
         'meta': meta,
         'recorrencias': Meta.Recorrencia.choices,
+        'prioridades': Meta.Prioridade.choices,
+        'corrige_cadastro': corrige_cadastro,
         'manda_no_prazo': manda_no_prazo,
         'sou_ponto_focal': meta.e_ponto_focal(request.user),
         'sou_dono_so_texto': not manda_no_prazo and meta.dono_edita_texto(request.user),
@@ -1679,6 +1717,7 @@ def meta_duplicar(request, meta_id):
         recorrencia=original.recorrencia,
         apenas_dias_uteis=original.apenas_dias_uteis,
         prazo=prazo,
+        prioridade=original.prioridade,
         aprovacao=Meta.Aprovacao.PENDENTE if fora_da_area else Meta.Aprovacao.APROVADA,
         solicitada_por=request.user if fora_da_area else None,
         created_by=request.user,
@@ -1773,7 +1812,7 @@ def meta_duplicar_solicitar(request, meta_id):
             descricao=original.descricao, recorrencia=original.recorrencia,
             descricao_foto=original.descricao_foto.name or None,
             descricao_audio=original.descricao_audio.name or None,
-            apenas_dias_uteis=original.apenas_dias_uteis, prazo=prazo,
+            apenas_dias_uteis=original.apenas_dias_uteis, prazo=prazo, prioridade=original.prioridade,
             aprovacao=Meta.Aprovacao.PENDENTE, solicitada_por=request.user,
             created_by=request.user, duplicada_de=original,
         )
@@ -3759,7 +3798,7 @@ def inovar_list(request):
     pendentes_primeiro = (request.GET.get('ordem') or '') == 'antigas'
     ideias = ideias.order_by('criado_em' if pendentes_primeiro else '-criado_em')
 
-    lista = list(ideias.select_related('autor').prefetch_related('participantes'))
+    lista = list(ideias.select_related('autor').prefetch_related('participantes', 'anexos'))
     ids_participando = set()
     for ideia in lista:
         equipe = list(ideia.participantes.all())
@@ -3944,6 +3983,28 @@ def _ideia_com_o_digitado(campos_post, ideia=None):
     return rascunho
 
 
+ANEXOS_POR_IDEIA = 5
+ANEXO_IDEIA_MAX = 25 * 1024 * 1024
+ANEXO_IDEIA_TIPOS = ('pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'ppt', 'pptx', 'txt', 'jpg', 'jpeg', 'png', 'webp', 'gif', 'mp4', 'zip')
+
+
+def _erro_dos_anexos_da_ideia(request, ja_tem=0):
+    arquivos = request.FILES.getlist('anexos')
+    if ja_tem + len(arquivos) > ANEXOS_POR_IDEIA:
+        return f'Cada ideia aceita até {ANEXOS_POR_IDEIA} arquivos.'
+    for arquivo in arquivos:
+        if arquivo.name.rsplit('.', 1)[-1].lower() not in ANEXO_IDEIA_TIPOS:
+            return f'"{arquivo.name}": esse tipo de arquivo não é aceito.'
+        if arquivo.size > ANEXO_IDEIA_MAX:
+            return f'"{arquivo.name}" tem {arquivo.size / 1024 / 1024:.1f} MB; o limite é 25 MB.'
+    return ''
+
+
+def _guardar_anexos_da_ideia(request, ideia):
+    for arquivo in request.FILES.getlist('anexos'):
+        IdeiaAnexo.objects.create(ideia=ideia, arquivo=arquivo, nome=arquivo.name[:200])
+
+
 def _escolhidos_no_post(request):
     return [int(i) for i in request.POST.getlist('participantes') if str(i).isdigit()]
 
@@ -3960,7 +4021,14 @@ def ideia_create(request):
             return _form_da_ideia(request, _ideia_com_o_digitado(request.POST), request.user,
                                   _escolhidos_no_post(request))
 
+        erro_anexo = _erro_dos_anexos_da_ideia(request)
+        if erro_anexo:
+            messages.error(request, erro_anexo)
+            return _form_da_ideia(request, _ideia_com_o_digitado(request.POST), request.user,
+                                  _escolhidos_no_post(request))
+
         ideia = Ideia.objects.create(autor=request.user, **campos)
+        _guardar_anexos_da_ideia(request, ideia)
 
         if participantes:
             ideia.participantes.set(participantes)
@@ -4001,9 +4069,17 @@ def ideia_edit(request, ideia_id):
             return _form_da_ideia(request, _ideia_com_o_digitado(request.POST, ideia), ideia.autor,
                                   _escolhidos_no_post(request))
 
+        ideia.anexos.filter(id__in=[int(i) for i in request.POST.getlist('tirar_anexo') if i.isdigit()]).delete()
+        erro_anexo = _erro_dos_anexos_da_ideia(request, ja_tem=ideia.anexos.count())
+        if erro_anexo:
+            messages.error(request, erro_anexo)
+            return _form_da_ideia(request, _ideia_com_o_digitado(request.POST, ideia), ideia.autor,
+                                  _escolhidos_no_post(request))
+
         for campo, valor in campos.items():
             setattr(ideia, campo, valor)
         ideia.save(update_fields=list(campos) + ['atualizado_em'])
+        _guardar_anexos_da_ideia(request, ideia)
 
         # Avisa só quem entrou agora: quem já estava não precisa de outro aviso.
         antes = set(ideia.participantes.values_list('id', flat=True))

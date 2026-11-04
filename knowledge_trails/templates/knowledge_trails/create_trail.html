@@ -1,19 +1,21 @@
 {% extends "base.html" %}
+{% load trilhas_treinamentos %}
 {% load static %}
 
 {% block title %}Criar Nova Trilha - Trilhas de Conhecimento{% endblock %}
 
 {% block content %}
-<div class="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 p-6">
+{% abas_trilhas_treinamentos 'gerir_trilhas' %}
+<div class="min-h-screen bg-gray-50 p-4 sm:p-6">
     <div class="max-w-5xl mx-auto">
-        <div class="bg-white rounded-3xl shadow-2xl overflow-hidden">
-            <div class="bg-gradient-to-r from-purple-600 via-pink-600 to-red-500 p-6">
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+            <div class="bg-primary p-6">
                 <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center flex-wrap gap-3">
                     <h4 class="text-2xl font-bold text-white mb-0">
                         <i class="fas fa-plus-circle mr-2"></i>
                         Criar Nova Trilha de Conhecimento
                     </h4>
-                    <a href="{% url 'knowledge_trails:dashboard' %}" class="px-4 py-2 bg-white text-purple-600 rounded-lg hover:bg-gray-100 transition-all font-semibold">
+                    <a href="{% url 'knowledge_trails:dashboard' %}" class="px-4 py-2 bg-white text-primary rounded-lg hover:bg-gray-100 transition-all font-semibold">
                         <i class="fas fa-arrow-left mr-1"></i> Voltar
                     </a>
                 </div>
@@ -26,7 +28,7 @@
                             <!-- Informações Básicas -->
                             <div class="lg:col-span-2">
                                 <h5 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
-                                    <i class="fas fa-info-circle text-purple-600 mr-2"></i>
+                                    <i class="fas fa-info-circle text-primary mr-2"></i>
                                     Informações Básicas
                                 </h5>
                                 
@@ -88,7 +90,7 @@
                             <!-- Gamificação -->
                             <div>
                                 <h5 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
-                                    <i class="fas fa-palette text-purple-600 mr-2"></i>
+                                    <i class="fas fa-palette text-primary mr-2"></i>
                                     Gamificação
                                 </h5>
                                 
@@ -118,7 +120,7 @@
                                 <div class="mb-4">
                                     <label class="flex items-center cursor-pointer">
                                         <input type="checkbox" 
-                                               class="w-5 h-5 text-purple-600 border-2 border-gray-300 rounded focus:ring-2 focus:ring-purple-200" 
+                                               class="w-5 h-5 text-primary border-2 border-gray-300 rounded focus:ring-2 focus:ring-purple-200" 
                                                id="enable_certificate" name="enable_certificate" checked>
                                         <span class="ml-2 text-sm font-medium text-gray-700">
                                             <i class="fas fa-certificate text-yellow-500 mr-1"></i>
@@ -144,7 +146,7 @@
                         <!-- Obrigatoriedade -->
                         <div>
                             <h5 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
-                                <i class="fas fa-user-check text-purple-600 mr-2"></i>
+                                <i class="fas fa-user-check text-primary mr-2"></i>
                                 Obrigatoriedade
                             </h5>
                             <p class="text-sm text-gray-500 mb-4">
@@ -208,7 +210,7 @@
                                     {% for u in available_users %}
                                     <label class="flex items-center gap-3 px-4 py-2 hover:bg-purple-50 cursor-pointer mandatory-user-row" data-name="{{ u.full_name|lower }} {{ u.email|lower }}">
                                         <input type="checkbox" name="mandatory_users" value="{{ u.id }}"
-                                               class="w-4 h-4 text-purple-600 border-2 border-gray-300 rounded focus:ring-2 focus:ring-purple-200">
+                                               class="w-4 h-4 text-primary border-2 border-gray-300 rounded focus:ring-2 focus:ring-purple-200">
                                         <span class="text-sm text-gray-700">{{ u.full_name }}
                                             {% if u.email %}<span class="text-xs text-gray-400">- {{ u.email }}</span>{% endif %}
                                         </span>
@@ -228,7 +230,7 @@
                                 <i class="fas fa-times mr-1"></i> Cancelar
                             </a>
                             <button type="submit" 
-                                    class="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl hover:from-purple-700 hover:to-pink-700 transition-all font-semibold shadow-lg hover:shadow-xl">
+                                    class="px-6 py-3 bg-primary text-white rounded-xl hover:bg-orange-600 transition-all font-semibold shadow-lg hover:shadow-xl">
                                 <i class="fas fa-save mr-1"></i> Criar Trilha
                             </button>
                         </div>

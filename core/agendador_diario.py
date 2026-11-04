@@ -30,6 +30,8 @@ TAREFAS = [
      'Lembretes das movimentações do Quadro de HC'),
     ('acess_desligamentos_do_dia', time(7, 30), 'acess.servicos.avisar_desligamentos_do_dia',
      'Acess: aviso dos desligamentos agendados para o dia'),
+    ('contestacao_resumo_whatsapp', time(8, 30), 'contestacao.resumo_whatsapp.tarefa_diaria',
+     'Contestação: resumo do ciclo no WhatsApp (ciclo que fechou pelo prazo e envio interrompido)'),
 ]
 
 _ultima_checagem = None
