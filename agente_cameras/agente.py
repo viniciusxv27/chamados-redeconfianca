@@ -6,6 +6,7 @@ Só faz chamadas de saída para o portal: não precisa abrir porta no roteador d
 """
 import json
 import logging
+from logging.handlers import RotatingFileHandler
 import sys
 import threading
 import time
@@ -293,7 +294,10 @@ def rodar(config):
 
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s')
     caminho_config = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else 'config.json')
+    # Rodando como tarefa do Windows não há tela: o arquivo é o único jeito de saber o que houve.
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s', handlers=[
+        logging.StreamHandler(),
+        RotatingFileHandler(os.path.join(os.path.dirname(caminho_config), 'agente.log'), maxBytes=1_000_000, backupCount=2)])
     with open(caminho_config, encoding='utf-8') as arquivo:
         rodar({**json.load(arquivo), '_pasta': os.path.dirname(caminho_config)})

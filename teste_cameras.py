@@ -328,6 +328,30 @@ anon.post('/cameras/agente/descoberta/', {'ip': '192.168.0.77', 'caminho': '/cam
 t('módulo desligado não grava descoberta', Gravador.objects.get(pk=g3.id).ip_local == '192.168.0.50')
 ConfigCameras.objects.update(ativo=True)
 
+print('instalador: arquivos e aviso ao portal')
+bat = pacote.read('agente-cameras/instalar.bat')
+ps1 = pacote.read('agente-cameras/instalar.ps1').decode('utf-8-sig')
+t('bat em ASCII e com fim de linha do Windows', bat.isascii() and bat.count(b'\r\n') == bat.count(b'\n'))
+t('bat avisa quando abrem de dentro do ZIP', b'goto compactado' in bat and b'Extrair tudo' in bat)
+t('bat não fecha sem a pessoa mandar', bat.count(b'pause') >= 3)
+t('ps1 com BOM, para o Windows ler os acentos', pacote.read('agente-cameras/instalar.ps1').startswith(b'\xef\xbb\xbf'))
+t('ps1 ignora o atalho falso da Microsoft Store', "WindowsApps" in ps1)
+t('ps1 só aceita Python assinado', 'Python Software Foundation' in ps1 and 'Get-AuthenticodeSignature' in ps1)
+t('tarefa sem o limite de 3 dias do Windows', '[TimeSpan]::Zero' in ps1)
+t('permissão por SID, sem depender do idioma', 'S-1-5-32-544' in ps1 and 'Administradores' not in ps1)
+t('blocos do ps1 balanceados', ps1.count('{') == ps1.count('}') and ps1.count('(') == ps1.count(')'), (ps1.count('{'), ps1.count('}'), ps1.count('('), ps1.count(')')))
+gi = Gravador.objects.create(loja='LOJA INSTALANDO'); ti = gi.gerar_token(); agi = {'HTTP_AUTHORIZATION': f'Bearer {ti}'}
+r = anon.post('/cameras/agente/descoberta/', 'erro=' + 'Instalador%3A%20falhou%3A%20sem%20permiss%C3%A3o', content_type='application/x-www-form-urlencoded', **agi)
+gi.refresh_from_db()
+t('falha do instalador chega ao portal, com acento', r.status_code == 200 and gi.erro_agente == 'Instalador: falhou: sem permissão', gi.erro_agente)
+t('e aparece na linha da loja', 'Instalador: falhou' in cs.get('/cameras/configuracao/').content.decode())
+anon.post('/cameras/agente/sinal/', {'versao': '1.2'}, **agi)
+gi.refresh_from_db()
+t('agente respondeu: aviso do instalador some', gi.erro_agente == '' and gi.ultimo_contato)
+Gravador.objects.filter(pk=gi.pk).update(erro_agente='O gravador em 1.1.1.1 recusou o usuário')
+anon.post('/cameras/agente/sinal/', **agi)
+t('erro do próprio agente continua', 'recusou' in Gravador.objects.get(pk=gi.pk).erro_agente)
+
 print('agente: procura do gravador (servidor RTSP falso, em localhost)')
 import hashlib as _h
 import socket as _s

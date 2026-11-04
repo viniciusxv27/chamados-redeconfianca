@@ -35,8 +35,11 @@ def _do_agente(view):
 
 @_do_agente
 def sinal(request, gravador):
-    Gravador.objects.filter(pk=gravador.pk).update(ultimo_contato=timezone.now(),
-                                                   versao_agente=request.POST.get('versao', '')[:30])
+    campos = {'ultimo_contato': timezone.now(), 'versao_agente': request.POST.get('versao', '')[:30]}
+    # O agente respondeu: o que o instalador avisou ficou para trás.
+    if gravador.erro_agente.startswith('Instalador:'):
+        campos['erro_agente'] = gravador.erro_agente = ''
+    Gravador.objects.filter(pk=gravador.pk).update(**campos)
     return JsonResponse(servicos.resposta_do_sinal(gravador, list(gravador.canais.all())))
 
 
