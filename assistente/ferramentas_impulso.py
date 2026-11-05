@@ -937,6 +937,10 @@ def _estado_projeto(projeto, com_quem=False):
     quem = f' por {_nome(projeto.concluido_por)}' if com_quem and projeto.concluido_por else ''
     if projeto.entregue:
         return f'concluído em {_dh(projeto.concluido_em)}{quem}, aprovado por {_nome(projeto.decidida_por)}'
+    if projeto.aprovada_parcialmente:
+        motivo = _cortar(projeto.observacao, 200)
+        return (f'concluído em {_dh(projeto.concluido_em)}{quem}, aprovado parcialmente por {_nome(projeto.decidida_por)} '
+                '(conta só metade dos pontos da conclusão)' + (f': {motivo}' if motivo else ''))
     if projeto.aguardando_aprovacao:
         return (f'concluído em {_dh(projeto.concluido_em)}{quem}, aguardando aprovação de um SUPERADMIN '
                 '(os pontos da conclusão ainda não entraram)')
@@ -2563,7 +2567,7 @@ def _previa_projeto_concluir(user, args, reabrir):
         if projeto.aguardando_aprovacao:
             linhas.append('A conclusão que está esperando aprovação do SUPERADMIN é cancelada. Ninguém é avisado.')
         else:
-            linhas.append('A metade dos pontos do Projeto FOCO pela conclusão sai da pontuação do mês de quem tem tarefa nele'
+            linhas.append('Os pontos do Projeto FOCO pela conclusão saem da pontuação do mês de quem tem tarefa nele'
                           + (f' ({_nomes(envolvidos)})' if envolvidos else '') + '. Ninguém é avisado.')
     else:
         if projeto.concluido:

@@ -405,6 +405,7 @@ def _nota_projeto_foco(user, inicio, fim, corte=None):
 
     As duas metades são proporcionais: 3 de 4 tarefas feitas valem 3/4 da
     primeira; estar em 2 projetos com 1 concluído vale metade da segunda.
+    Conclusão aprovada parcialmente conta como meio projeto concluído.
 
     A tarefa entra no mês em que foi entregue. A que não foi entregue entra no
     mês do prazo (ou em todo mês, sem prazo), contando como pendente. Pelo
@@ -429,17 +430,20 @@ def _nota_projeto_foco(user, inicio, fim, corte=None):
     ids = set(tarefas.values_list('projeto_id', flat=True))
     # Só conclusão aprovada paga: marcar "concluído" é o pedido, e quem confere
     # é o SUPERADMIN (ProjetoFoco.Aprovacao).
-    entregues = ProjetoFoco.objects.filter(
+    decididos = ProjetoFoco.objects.filter(
         id__in=ids, concluido=True,
-        aprovacao=ProjetoFoco.Aprovacao.APROVADA)
+        aprovacao__in=[ProjetoFoco.Aprovacao.APROVADA, ProjetoFoco.Aprovacao.PARCIAL])
     if corte:
-        entregues = entregues.exclude(decidida_em__gte=corte).exclude(concluido_em__gte=corte)
-    entregues = entregues.count()
-    nota_conclusao = metade * Decimal(entregues) / Decimal(len(ids)) if ids else ZERO
+        decididos = decididos.exclude(decidida_em__gte=corte).exclude(concluido_em__gte=corte)
+    decisoes = list(decididos.values_list('aprovacao', flat=True))
+    entregues = decisoes.count(ProjetoFoco.Aprovacao.APROVADA)
+    parciais = decisoes.count(ProjetoFoco.Aprovacao.PARCIAL)
+    nota_conclusao = (metade * (Decimal(entregues) + Decimal(parciais) / Decimal(2)) / Decimal(len(ids))
+                      if ids else ZERO)
 
     return _quantize(nota_entrega + nota_conclusao), maximo, {
         'total': total, 'concluidas': concluidas,
-        'projetos': len(ids), 'projetos_concluidos': entregues,
+        'projetos': len(ids), 'projetos_concluidos': entregues, 'projetos_parciais': parciais,
         'metade': _quantize(metade),
         'pontos_entrega': _quantize(nota_entrega),
         'pontos_conclusao': _quantize(nota_conclusao),
@@ -505,11 +509,13 @@ def _info_projeto_foco(detalhe):
     """Explica as duas metades, porque a nota já não sai só das tarefas."""
     if detalhe.get('sem_tarefas'):
         return 'Sem tarefas de projeto foco'
+    parciais = detalhe.get('projetos_parciais', 0)      # mês fechado antes da aprovação parcial não traz
     return ('%s de %s tarefa(s) concluída(s) (%s pt) · %s de %s projeto(s) '
-            'concluído(s) e aprovado(s) (%s pt)' % (
+            'concluído(s) e aprovado(s)%s (%s pt)' % (
                 detalhe.get('concluidas', 0), detalhe.get('total', 0),
                 detalhe.get('pontos_entrega', 0),
                 detalhe.get('projetos_concluidos', 0), detalhe.get('projetos', 0),
+                ' + %s aprovado(s) parcialmente, valendo metade' % parciais if parciais else '',
                 detalhe.get('pontos_conclusao', 0)))
 
 

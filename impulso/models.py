@@ -1351,10 +1351,13 @@ class ProjetoFoco(models.Model):
     # marca que entregou, e um SUPERADMIN confere — a segunda metade dos
     # pontos cai no mês de todo mundo com tarefa no projeto, e esse peso não
     # pode depender só de quem tem interesse nele. Reprovada, a conclusão
-    # volta a ser projeto em andamento, com o motivo à vista.
+    # volta a ser projeto em andamento, com o motivo à vista. Aprovada em parte,
+    # o projeto fica encerrado e paga só metade dos pontos da conclusão
+    # (scoring._nota_projeto_foco); para pagar tudo, reabre e conclui de novo.
     class Aprovacao(models.TextChoices):
         PENDENTE = 'PENDENTE', 'Aguardando aprovação'
         APROVADA = 'APROVADA', 'Aprovada'
+        PARCIAL = 'PARCIAL', 'Aprovada parcialmente'
         RECUSADA = 'RECUSADA', 'Reprovada'
 
     aprovacao = models.CharField(
@@ -1368,7 +1371,7 @@ class ProjetoFoco(models.Model):
     decidida_em = models.DateTimeField(null=True, blank=True, verbose_name='Decidido em')
     observacao = models.TextField(
         blank=True, db_default='', verbose_name='Observação de quem decidiu',
-        help_text='Obrigatória na reprovação: é o que o gestor lê para corrigir.')
+        help_text='Obrigatória ao reprovar e ao aprovar parcialmente: é o que a equipe lê para entender a nota.')
 
     criado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
@@ -1399,8 +1402,18 @@ class ProjetoFoco(models.Model):
 
     @property
     def entregue(self):
-        """Conclusão aprovada — é só isto que paga a segunda metade dos pontos."""
+        """Conclusão aprovada por inteiro — paga toda a segunda metade dos pontos."""
         return self.concluido and self.aprovacao == self.Aprovacao.APROVADA
+
+    @property
+    def aprovada_parcialmente(self):
+        """Conclusão aceita em parte: paga metade dos pontos da conclusão."""
+        return self.concluido and self.aprovacao == self.Aprovacao.PARCIAL
+
+    @property
+    def pagou_conclusao(self):
+        """A conclusão já rendeu pontos, inteiros ou pela metade."""
+        return self.entregue or self.aprovada_parcialmente
 
     @property
     def aguardando_aprovacao(self):
@@ -1809,6 +1822,11 @@ class CicloMes(models.Model):
     fechado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='impulso_meses_fechados', verbose_name='Fechado por')
+    # Recalcular o mês fechado (botão do SUPERADMIN no ranking) refaz os pontos sem reabrir.
+    recalculado_em = models.DateTimeField(null=True, blank=True, verbose_name='Recalculado em')
+    recalculado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='impulso_meses_recalculados', verbose_name='Recalculado por')
 
     class Meta:
         verbose_name = 'Mês do Ciclo'

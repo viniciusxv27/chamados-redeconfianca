@@ -16,6 +16,10 @@
                         <span class="align-middle text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-normal">
                             <i class="fas fa-flag-checkered mr-1"></i>concluído
                         </span>
+                        {% elif projeto.aprovada_parcialmente %}
+                        <span class="align-middle text-xs px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200 font-normal">
+                            <i class="fas fa-circle-half-stroke mr-1"></i>aprovado parcialmente
+                        </span>
                         {% elif projeto.aguardando_aprovacao %}
                         <span class="align-middle text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 font-normal">
                             <i class="fas fa-hourglass-half mr-1"></i>aguardando aprovação
@@ -60,20 +64,33 @@
                 <form method="post" action="{% url 'impulso:projeto_foco_decidir' projeto.id %}" class="mt-3 space-y-2">
                     {% csrf_token %}
                     <textarea name="observacao" rows="2" maxlength="2000"
-                              placeholder="Motivo (obrigatório para reprovar)"
+                              placeholder="Motivo (obrigatório para aprovar parcialmente ou reprovar)"
                               class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2"></textarea>
-                    <div class="flex items-center gap-2">
+                    <div class="flex items-center gap-2 flex-wrap">
                         <button name="decisao" value="aprovar"
                                 class="px-3 py-1.5 rounded-lg bg-emerald-500 text-white text-sm hover:bg-emerald-600">
                             <i class="fas fa-check mr-1"></i>Aprovar conclusão
+                        </button>
+                        <button name="decisao" value="parcial"
+                                class="px-3 py-1.5 rounded-lg border border-sky-200 text-sky-700 text-sm hover:bg-sky-50">
+                            <i class="fas fa-circle-half-stroke mr-1"></i>Aprovar parcialmente
                         </button>
                         <button name="decisao" value="reprovar"
                                 class="px-3 py-1.5 rounded-lg border border-red-200 text-red-700 text-sm hover:bg-red-50">
                             <i class="fas fa-xmark mr-1"></i>Reprovar
                         </button>
                     </div>
+                    <p class="text-xs text-gray-500">Aprovar parcialmente encerra o projeto e conta só metade dos pontos da conclusão.</p>
                 </form>
                 {% endif %}
+            </div>
+            {% elif projeto.aprovada_parcialmente %}
+            <div class="border-t border-gray-100 mt-4 pt-4">
+                <div class="rounded-lg p-3 text-sm bg-sky-50 border border-sky-200 text-sky-900">
+                    <p class="font-medium"><i class="fas fa-circle-half-stroke mr-1"></i>Conclusão aprovada parcialmente{% if projeto.decidida_por %} por {{ projeto.decidida_por.get_full_name|default:projeto.decidida_por.email }}{% endif %}{% if projeto.decidida_em %} em {{ projeto.decidida_em|date:"d/m/Y" }}{% endif %}.</p>
+                    {% if projeto.observacao %}<p class="text-xs mt-1 whitespace-pre-wrap">{{ projeto.observacao }}</p>{% endif %}
+                    <p class="text-xs mt-1">Conta só metade dos pontos da conclusão. Para valer tudo, reabra o projeto, corrija e conclua de novo.</p>
+                </div>
             </div>
             {% elif projeto.conclusao_reprovada %}
             <div class="border-t border-gray-100 mt-4 pt-4">
@@ -95,7 +112,7 @@
             <div class="border-t border-gray-100 mt-4 pt-4">
                 {% if projeto.concluido %}
                 <form method="post" action="{% url 'impulso:projeto_foco_concluir' projeto.id %}"
-                      onsubmit="return confirm('Reabrir “{{ projeto.nome|escapejs }}”?\n\n{% if projeto.entregue %}A metade dos pontos pela conclusão sai da pontuação do mês de quem tem tarefa no projeto.{% else %}A conclusão que está esperando aprovação será cancelada.{% endif %}');">
+                      onsubmit="return confirm('Reabrir “{{ projeto.nome|escapejs }}”?\n\n{% if projeto.pagou_conclusao %}Os pontos pela conclusão saem da pontuação do mês de quem tem tarefa no projeto.{% else %}A conclusão que está esperando aprovação será cancelada.{% endif %}');">
                     {% csrf_token %}
                     <input type="hidden" name="reabrir" value="1">
                     <button class="px-3 py-1.5 rounded-lg border border-amber-200 text-amber-700 text-sm hover:bg-amber-50">

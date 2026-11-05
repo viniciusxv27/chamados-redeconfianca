@@ -117,6 +117,7 @@ urlpatterns = [
     path('ciclos/<int:ciclo_id>/encerrar/', views.ciclo_encerrar, name='ciclo_encerrar'),
     path('ciclos/mes/<int:mes_id>/', views.mes_detail, name='mes_detail'),
     path('ciclos/mes/<int:mes_id>/ranking/', views.mes_ranking, name='mes_ranking'),
+    path('ciclos/mes/<int:mes_id>/recalcular/', views.mes_recalcular, name='mes_recalcular'),
     path('ciclos/mes/<int:mes_id>/fechar/', views.mes_fechar, name='mes_fechar'),
     path('ciclos/mes/<int:mes_id>/reabrir/', views.mes_reabrir, name='mes_reabrir'),
 ]

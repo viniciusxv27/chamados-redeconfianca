@@ -66,7 +66,17 @@ movimento recebe a mesma tela, parada.
     <a href="{% url 'impulso:mes_detail' mes.id %}" class="text-sm text-gray-500 hover:text-gray-900">
         <i class="fas fa-arrow-left mr-1"></i>Voltar ao mês
     </a>
-    <div class="flex items-center gap-2">
+    <div class="flex items-center gap-2 flex-wrap">
+        {% if pode_recalcular %}
+        <form method="post" action="{% url 'impulso:mes_recalcular' mes.id %}" id="rkRecalcular"
+              onsubmit="return confirm('Recalcular os pontos de {{ mes.referencia|date:"F/Y" }}?\n\nA conta é refeita com os dados de hoje para as mesmas pessoas do fechamento. Faixas e C$ previstas podem mudar; ajustes manuais continuam valendo. Leva cerca de 1 minuto.') && (this.querySelector('button').disabled = true, this.querySelector('button').innerHTML = '<i class=&quot;fas fa-spinner fa-spin mr-1&quot;></i>Recalculando…', true);">
+            {% csrf_token %}
+            <button type="submit"
+                    class="px-3.5 py-2 rounded-lg bg-white border border-gray-300 text-gray-700 text-sm hover:bg-gray-50">
+                <i class="fas fa-rotate mr-1"></i>Recalcular pontos
+            </button>
+        </form>
+        {% endif %}
         <button type="button" id="rkCompartilhar"
                 class="px-3.5 py-2 rounded-lg bg-orange-600 text-white text-sm font-medium hover:bg-orange-700 shadow-sm">
             <i class="fas fa-share-nodes mr-1"></i>Compartilhar
@@ -84,7 +94,7 @@ movimento recebe a mesma tela, parada.
             <p class="text-xs uppercase tracking-[.2em] text-white/50">Impulso &middot; {{ ciclo.nome }}</p>
             <h1 class="text-2xl sm:text-3xl font-black mt-1">{{ mes.referencia|date:"F \d\e Y"|capfirst }}</h1>
             <p class="text-sm text-white/60 mt-1">
-                {% if mes.is_fechado %}Resultado final &middot; {{ linhas|length }} colaborador{{ linhas|length|pluralize:"es" }}
+                {% if mes.is_fechado %}Resultado final &middot; {{ linhas|length }} colaborador{{ linhas|length|pluralize:"es" }}{% if mes.recalculado_em %} &middot; recalculado em {{ mes.recalculado_em|date:"d/m/Y H:i" }}{% endif %}
                 {% else %}Mês ainda aberto — os números mudam até o fechamento{% endif %}
             </p>
         </div>

@@ -40,6 +40,7 @@ mês de propósito — é tarefa de quem abre a tela, não histórico.
             <span class="font-medium text-gray-800">{{ p.nome }}</span>
             <span class="flex items-center gap-1 flex-shrink-0">
                 {% if p.entregue %}<span class="text-[10px] uppercase px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700">Concluído</span>
+                {% elif p.aprovada_parcialmente %}<span class="text-[10px] uppercase px-1.5 py-0.5 rounded bg-sky-50 text-sky-700">Parcial</span>
                 {% elif p.aguardando_aprovacao %}<span class="text-[10px] uppercase px-1.5 py-0.5 rounded bg-amber-50 text-amber-800">Aguardando</span>
                 {% elif p.conclusao_reprovada %}<span class="text-[10px] uppercase px-1.5 py-0.5 rounded bg-red-50 text-red-700">Reprovado</span>{% endif %}
                 {% if not p.ativo %}<span class="text-[10px] uppercase px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">Inativo</span>{% endif %}

@@ -217,7 +217,7 @@ try:
     t('reabrir derruba a conclusão e a aprovação',
       not projeto.concluido and projeto.aprovacao == ProjetoFoco.Aprovacao.PENDENTE
       and not projeto.entregue)
-    t('e a tela avisa o efeito na pontuação', 'sai da pontuação' in r.content.decode())
+    t('e a tela avisa o efeito na pontuação', 'saem da pontuação' in r.content.decode())
     c_chefe.post(f'/impulso/conectar/projetos/{projeto.id}/concluir/', follow=True)
     r = c_chefe.post(f'/impulso/conectar/projetos/{projeto.id}/concluir/', {'reabrir': '1'}, follow=True)
     projeto.refresh_from_db()

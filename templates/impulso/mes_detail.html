@@ -20,6 +20,7 @@
             </div>
             {% if mes.is_fechado %}
             <p class="text-xs text-gray-400 mt-1">Fechado em {{ mes.fechado_em|date:"d/m/Y H:i" }}{% if mes.fechado_por %} por {{ mes.fechado_por.get_full_name|default:mes.fechado_por.email }}{% endif %}</p>
+            {% if mes.recalculado_em %}<p class="text-xs text-gray-400">Pontos recalculados em {{ mes.recalculado_em|date:"d/m/Y H:i" }}{% if mes.recalculado_por %} por {{ mes.recalculado_por.get_full_name|default:mes.recalculado_por.email }}{% endif %}</p>{% endif %}
             {% else %}
             <p class="text-sm text-gray-500 mt-1">Mês aberto — finalize para congelar a pontuação e ver o Setor Destaque.</p>
             {% endif %}

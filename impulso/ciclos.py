@@ -277,6 +277,36 @@ def desfazer_ajuste(pontuacao, usuario):
     return pontuacao
 
 
+def _valores_calculados(dados):
+    """Os campos de PontuacaoMensal que saem de calcular_pontuacao (menos o setor)."""
+    faixa = dados['faixa']
+    return {
+        **{campo: dados[campo] for campo, _, _ in CAMPOS_PONTOS},
+        'total': dados['total'],
+        'pontos_aplicaveis': dados['aplicavel'],
+        'percentual': dados['percentual'],
+        'faixa': faixa,
+        'confiancas_previstas': CONFIANCAS_POR_MES if faixa in FAIXAS_PREMIADAS else 0,
+        'detalhes': _para_json(dados['detalhes']),
+    }
+
+
+def _reaplicar_ajuste(pontuacao, ajuste):
+    """Põe de volta o ajuste manual do SUPERADMIN por cima da conta nova (e salva)."""
+    if not (ajuste and ajuste.get('valores')):
+        return False
+    # O calculado passa a ser o da conta nova; os pontos digitados continuam.
+    ajuste = {**ajuste, 'calculado': {c: float(getattr(pontuacao, c)) for c, _, _ in CAMPOS_PONTOS},
+              'calculado_resumo': _resumo(pontuacao)}
+    for campo, _, _ in CAMPOS_PONTOS:
+        if campo in ajuste['valores']:
+            setattr(pontuacao, campo, Decimal(str(ajuste['valores'][campo])))
+    _recalcular(pontuacao)
+    pontuacao.detalhes = {**(pontuacao.detalhes or {}), 'ajuste_manual': ajuste}
+    pontuacao.save()
+    return True
+
+
 @transaction.atomic
 def fechar_mes(mes, usuario):
     """Congela a pontuação de todos os colaboradores no mês."""
@@ -289,41 +319,11 @@ def fechar_mes(mes, usuario):
 
     for colaborador in get_colaboradores():
         dados = calcular_pontuacao(colaborador, inicio=inicio, fim=fim)
-        faixa = dados['faixa']
-        premio = CONFIANCAS_POR_MES if faixa in FAIXAS_PREMIADAS else 0
-
         pontuacao, _ = PontuacaoMensal.objects.update_or_create(
             mes=mes, user=colaborador,
-            defaults={
-                'setor': getattr(colaborador, 'sector', None),
-                'p_metas_qualidade': dados['p_metas_qualidade'],
-                'p_metas_conclusao': dados['p_metas_conclusao'],
-                'p_feedback': dados['p_feedback'],
-                'p_assiduidade': dados['p_assiduidade'],
-                'p_curso': dados['p_curso'],
-                'p_videos_pops': dados['p_videos_pops'],
-                'p_projeto_foco': dados['p_projeto_foco'],
-                'p_ideias': dados['p_ideias'],
-                'p_ideia_aprovada': dados['p_ideia_aprovada'],
-                'total': dados['total'],
-                'pontos_aplicaveis': dados['aplicavel'],
-                'percentual': dados['percentual'],
-                'faixa': faixa,
-                'confiancas_previstas': premio,
-                'detalhes': _para_json(dados['detalhes']),
-            },
+            defaults={'setor': getattr(colaborador, 'sector', None), **_valores_calculados(dados)},
         )
-        ajuste = ajustes.get(colaborador.pk)
-        if ajuste and ajuste.get('valores'):
-            # O calculado passa a ser o do fechamento novo; os pontos digitados continuam.
-            ajuste = {**ajuste, 'calculado': {c: float(getattr(pontuacao, c)) for c, _, _ in CAMPOS_PONTOS},
-                      'calculado_resumo': _resumo(pontuacao)}
-            for campo, _, _ in CAMPOS_PONTOS:
-                if campo in ajuste['valores']:
-                    setattr(pontuacao, campo, Decimal(str(ajuste['valores'][campo])))
-            _recalcular(pontuacao)
-            pontuacao.detalhes = {**(pontuacao.detalhes or {}), 'ajuste_manual': ajuste}
-            pontuacao.save()
+        _reaplicar_ajuste(pontuacao, ajustes.get(colaborador.pk))
         total_pessoas += 1
 
     mes.status = CicloMes.Status.FECHADO
@@ -331,6 +331,59 @@ def fechar_mes(mes, usuario):
     mes.fechado_por = usuario
     mes.save(update_fields=['status', 'fechado_em', 'fechado_por'])
     return total_pessoas
+
+
+def recalcular_mes_fechado(mes, usuario):
+    """Refaz a conta do mês fechado sem reabrir. Devolve o que mudou.
+
+    Diferente de reabrir e finalizar de novo, aqui as pessoas e o setor de cada uma
+    são os do fechamento: quem entrou no grupo depois não cai num mês em que não
+    estava, e quem trocou de loja não muda o Setor Destaque daquele mês. Só os
+    pontos são refeitos (e, com eles, faixa e C$ previstas). Ajuste manual do
+    SUPERADMIN continua valendo, como no fechamento.
+
+    A conta (uns 30 s para 40 pessoas) roda antes da transação; a gravação é
+    rápida e trava só o mês e as linhas dele.
+    """
+    mes = CicloMes.objects.select_related('ciclo').get(pk=mes.pk)
+    _conferir_recalculo(mes)
+    inicio, fim = periodo_do_mes_obj(mes)
+    pontuacoes = list(PontuacaoMensal.objects.filter(mes=mes).select_related('user'))
+    calculados = {p.pk: calcular_pontuacao(p.user, inicio=inicio, fim=fim) for p in pontuacoes}
+
+    mudancas, ajustes_mantidos = [], 0
+    with transaction.atomic():
+        travado = CicloMes.objects.select_for_update().select_related('ciclo').get(pk=mes.pk)
+        _conferir_recalculo(travado)              # alguém reabriu ou encerrou enquanto a conta rodava
+        for p in (PontuacaoMensal.objects.select_for_update().select_related('user')
+                  .filter(pk__in=calculados).order_by('pk')):
+            antes = (p.total, p.percentual, p.faixa)
+            anteriores = p.detalhes or {}
+            for campo, valor in _valores_calculados(calculados[p.pk]).items():
+                setattr(p, campo, valor)
+            if anteriores.get('ajustes_desfeitos'):
+                p.detalhes = {**p.detalhes, 'ajustes_desfeitos': anteriores['ajustes_desfeitos']}
+            p.save()
+            if _reaplicar_ajuste(p, anteriores.get('ajuste_manual')):
+                ajustes_mantidos += 1
+            if (p.total, p.percentual, p.faixa) != antes:
+                mudancas.append({'nome': p.user.get_full_name() or p.user.get_username(),
+                                 'de': antes[1], 'para': p.percentual,
+                                 'faixa_de': antes[2], 'faixa_para': p.faixa})
+        travado.recalculado_em = timezone.now()
+        travado.recalculado_por = usuario
+        travado.save(update_fields=['recalculado_em', 'recalculado_por'])
+    mudancas.sort(key=lambda m: -abs(m['para'] - m['de']))
+    return {'pessoas': len(calculados), 'mudancas': mudancas, 'ajustes_mantidos': ajustes_mantidos}
+
+
+def _conferir_recalculo(mes):
+    if not mes.is_fechado:
+        raise AjusteRecusado('O mês está aberto: a pontuação dele já é calculada na hora.')
+    ciclo = mes.ciclo
+    if ciclo.confiancas_creditadas or ciclo.status == ciclo.Status.ENCERRADO:
+        raise AjusteRecusado('O ciclo já foi encerrado e as C$ já foram creditadas: '
+                             'a pontuação dele não muda mais.')
 
 
 def reabrir_mes(mes):

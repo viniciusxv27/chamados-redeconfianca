@@ -3565,7 +3565,7 @@ def projeto_foco_concluir(request, projeto_id):
         if not projeto.concluido:
             messages.info(request, 'Este projeto não está concluído.')
             return redirect('impulso:projeto_foco_detail', projeto_id=projeto.id)
-        aprovada = projeto.entregue
+        aprovada = projeto.pagou_conclusao
         projeto.concluido = False
         projeto.concluido_em = None
         projeto.concluido_por = None
@@ -3580,7 +3580,7 @@ def projeto_foco_concluir(request, projeto_id):
         messages.warning(
             request,
             f'"{projeto.nome}" foi reaberto' + (
-                ' — a metade dos pontos pela conclusão sai da pontuação do mês '
+                ' — os pontos pela conclusão saem da pontuação do mês '
                 'de quem tem tarefa nele.' if aprovada
                 else ' — a conclusão que estava esperando aprovação foi cancelada.'))
         return redirect('impulso:projeto_foco_detail', projeto_id=projeto.id)
@@ -3622,7 +3622,7 @@ def projeto_foco_concluir(request, projeto_id):
 @require_POST
 @impulso_member_or_superadmin_required
 def projeto_foco_decidir(request, projeto_id):
-    """SUPERADMIN aprova ou reprova a conclusão de um projeto foco.
+    """SUPERADMIN aprova, aprova parcialmente ou reprova a conclusão de um projeto foco.
 
     Mesma mecânica do `conclusao_decidir` do Conectar: quem decide não é quem
     entregou, a reprovação exige motivo e quem precisa saber é avisado. A
@@ -3637,7 +3637,7 @@ def projeto_foco_decidir(request, projeto_id):
         return redirect('impulso:projeto_foco_detail', projeto_id=projeto.id)
 
     decisao = request.POST.get('decisao')
-    if decisao not in ('aprovar', 'reprovar'):
+    if decisao not in ('aprovar', 'parcial', 'reprovar'):
         messages.error(request, 'Decisão inválida.')
         return redirect('impulso:projeto_foco_detail', projeto_id=projeto.id)
 
@@ -3645,6 +3645,10 @@ def projeto_foco_decidir(request, projeto_id):
     if decisao == 'reprovar' and not observacao:
         messages.error(request, 'Escreva o motivo da reprovação — é o que o gestor '
                                 'lê para corrigir e concluir de novo.')
+        return redirect('impulso:projeto_foco_detail', projeto_id=projeto.id)
+    if decisao == 'parcial' and not observacao:
+        messages.error(request, 'Escreva o motivo da aprovação parcial — é o que explica '
+                                'à equipe por que a conclusão valeu só metade.')
         return redirect('impulso:projeto_foco_detail', projeto_id=projeto.id)
 
     envolvidos = list(User.objects.filter(
@@ -3667,6 +3671,22 @@ def projeto_foco_decidir(request, projeto_id):
         messages.success(
             request,
             f'"{projeto.nome}" aprovado — {len(envolvidos)} pessoa(s) recebem a '
+            f'metade dos pontos pela conclusão.')
+    elif decisao == 'parcial':
+        # O projeto fica encerrado: o que foi entregue foi aceito, só que vale menos.
+        projeto.aprovacao = ProjetoFoco.Aprovacao.PARCIAL
+        projeto.save(update_fields=campos)
+        avisar = {u.id: u for u in envolvidos}
+        avisar.update({u.id: u for u in (projeto.concluido_por, projeto.criado_por)
+                       if u and u.id != request.user.id})
+        if avisar:
+            _notify(list(avisar.values()), 'Projeto foco aprovado parcialmente',
+                    f'A conclusão de "{projeto.nome}" foi aprovada parcialmente: só metade '
+                    f'dos pontos pela conclusão entra na pontuação do mês. {observacao}',
+                    f'/impulso/conectar/projetos/{projeto.id}/')
+        messages.success(
+            request,
+            f'"{projeto.nome}" aprovado parcialmente — {len(envolvidos)} pessoa(s) recebem '
             f'metade dos pontos pela conclusão.')
     else:
         # Reprovar devolve o projeto para "em andamento": dizer "concluído" na
@@ -4514,18 +4534,41 @@ def ciclo_detail(request, ciclo_id):
     return render(request, 'impulso/ciclo_detail.html', context)
 
 
+def _linhas_do_mes(mes):
+    """As pontuações do mês na ordem do ranking — a mesma nas duas telas do mês.
+
+    Pontuação e, no empate, o desempate do ranking ao vivo (menos ajustes de
+    ponto, mais metas, mais ideias aprovadas, nome). Os três números vêm do
+    snapshot (`detalhes`). Só por `-percentual`, quem empatava saía na ordem que o
+    banco devolvesse, e a tabela do mês e o ranking mostravam ordens diferentes.
+    """
+    def desempate(p):
+        d = p.detalhes or {}
+        assiduidade = d.get('assiduidade') or {}
+        return {
+            'ajustes': (assiduidade.get('total_ajustes')
+                        if assiduidade.get('fonte') == 'ponto' else None),
+            'metas_concluidas': (d.get('metas') or {}).get('concluidas', 0),
+            'ideias_aprovadas': (d.get('inovar') or {}).get('aprovadas', 0),
+        }
+
+    pontuacoes = mes.pontuacoes.select_related('user', 'setor')
+    return ordenar_ranking([{'p': p, 'user': p.user, 'faixa': faixa_info(p.faixa),
+                             'dados': {'percentual': p.percentual, 'desempate': desempate(p)}}
+                            for p in pontuacoes])
+
+
 @impulso_member_required
 def mes_detail(request, mes_id):
-    mes = get_object_or_404(CicloMes.objects.select_related('ciclo'), id=mes_id)
-    pontuacoes = (mes.pontuacoes.select_related('user', 'setor').order_by('-percentual'))
+    mes = get_object_or_404(CicloMes.objects.select_related('ciclo', 'recalculado_por'), id=mes_id)
 
     f = filtros_impulso.ler(request)
-    pontuacoes = filtros_impulso.por(pontuacoes, f, 'user')
+    linhas = filtros_impulso.lista(_linhas_do_mes(mes), f, lambda linha: linha['user'])
 
     context = {
         'mes': mes,
         'ciclo': mes.ciclo,
-        'pontuacoes': [{'p': p, 'faixa': faixa_info(p.faixa)} for p in pontuacoes],
+        'pontuacoes': linhas,
         'setores': ciclos_service.setores_do_mes(mes),
         'is_gestor': pode_gerir_ciclos(request.user),
         'active_tab': 'acompanhamento',
@@ -4542,28 +4585,9 @@ def mes_ranking(request, mes_id):
     completa. Fica separada do detalhamento porque o uso é outro — esta é para
     projetar na reunião e mandar no grupo.
     """
-    mes = get_object_or_404(CicloMes.objects.select_related('ciclo'), id=mes_id)
-    pontuacoes = list(mes.pontuacoes.select_related('user', 'setor').order_by('-percentual'))
-
-    # O mesmo desempate do ranking ao vivo, para a ordem não mudar de uma tela
-    # para a outra: menos ajustes de ponto, mais metas, mais ideias aprovadas.
-    # No mês fechado os três números vêm do snapshot (`detalhes`).
-    def desempate(p):
-        d = p.detalhes or {}
-        assiduidade = d.get('assiduidade') or {}
-        metas = d.get('metas') or {}
-        inovar = d.get('inovar') or {}
-        return {
-            'ajustes': (assiduidade.get('total_ajustes')
-                        if assiduidade.get('fonte') == 'ponto' else None),
-            'metas_concluidas': metas.get('concluidas', 0),
-            'ideias_aprovadas': inovar.get('aprovadas', 0),
-        }
-
-    linhas = [{'p': p, 'user': p.user, 'faixa': faixa_info(p.faixa),
-               'dados': {'percentual': p.percentual, 'desempate': desempate(p)}}
-              for p in pontuacoes]
-    linhas = ordenar_ranking(linhas)
+    mes = get_object_or_404(CicloMes.objects.select_related('ciclo', 'recalculado_por'), id=mes_id)
+    # A mesma ordem da tabela "Pontuação dos colaboradores" em mes_detail.
+    linhas = _linhas_do_mes(mes)
 
     f = filtros_impulso.ler(request)
     linhas = filtros_impulso.lista(linhas, f, lambda linha: linha['user'])
@@ -4594,10 +4618,39 @@ def mes_ranking(request, mes_id):
             'faixa': l['faixa']['label'],
         } for l in linhas[:3]],
         'is_gestor': pode_gerir_ciclos(request.user),
+        'pode_recalcular': (e_superadmin(request.user) and mes.is_fechado
+                            and not mes.ciclo.confiancas_creditadas
+                            and mes.ciclo.status != Ciclo.Status.ENCERRADO),
         'active_tab': 'acompanhamento',
         **filtros_impulso.contexto(request, f),
     }
     return render(request, 'impulso/mes_ranking.html', context)
+
+
+@require_POST
+@impulso_member_required
+def mes_recalcular(request, mes_id):
+    """SUPERADMIN refaz a conta do mês fechado, sem reabrir (ciclos.recalcular_mes_fechado)."""
+    mes = get_object_or_404(CicloMes.objects.select_related('ciclo'), id=mes_id)
+    if not e_superadmin(request.user):
+        messages.error(request, 'Só o SUPERADMIN recalcula um mês fechado.')
+        return redirect('impulso:mes_ranking', mes_id=mes.id)
+    try:
+        r = ciclos_service.recalcular_mes_fechado(mes, request.user)
+    except ciclos_service.AjusteRecusado as exc:
+        messages.error(request, str(exc))
+        return redirect('impulso:mes_ranking', mes_id=mes.id)
+    texto = f'Pontos de {mes.referencia:%m/%Y} recalculados para {r["pessoas"]} colaborador(es). '
+    if r['mudancas']:
+        exemplos = '; '.join(f'{m["nome"]}: {m["de"]:.0f}% → {m["para"]:.0f}%' for m in r['mudancas'][:6])
+        mais = f' e mais {len(r["mudancas"]) - 6}' if len(r['mudancas']) > 6 else ''
+        texto += f'{len(r["mudancas"])} mudaram — {exemplos}{mais}.'
+    else:
+        texto += 'Ninguém mudou de pontuação.'
+    if r['ajustes_mantidos']:
+        texto += f' {r["ajustes_mantidos"]} ajuste(s) manual(is) continuam valendo.'
+    messages.success(request, texto)
+    return redirect('impulso:mes_ranking', mes_id=mes.id)
 
 
 @require_POST

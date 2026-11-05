@@ -268,7 +268,7 @@ try:
     t('dá para reabrir', not proj.concluido)
     t('e limpa quem tinha concluído', proj.concluido_por_id is None)
     t('a tela avisa o efeito na pontuação',
-      'sai da pontuação' in r.content.decode())
+      'saem da pontuação' in r.content.decode())
 
     print('\n== A TELA DO PROJETO ==')
     html = c.get(f'/impulso/conectar/projetos/{proj.id}/').content.decode()
