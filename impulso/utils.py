@@ -236,7 +236,7 @@ def impulso_manager_required(view_func):
 # ---------------------------------------------------------------------------
 # ACOMPANHAMENTO — faixas / medalhas
 # ---------------------------------------------------------------------------
-# Regra: Impulso = 100% | Ouro > 90% | Prata > 70% | Bronze = 0% a 70%.
+# Regra: Impulso = 100% | Ouro >= 90% | Prata > 70% até 89,99% | Bronze = 0% a 70%.
 FAIXA_IMPULSO = Faixa.IMPULSO
 FAIXA_OURO = Faixa.OURO
 FAIXA_PRATA = Faixa.PRATA
@@ -250,10 +250,10 @@ FAIXAS = [
     {'nome': FAIXA_IMPULSO, 'label': 'Impulso', 'regra': '100%', 'cor': '#2563EB',
      'bg': 'bg-blue-100', 'text': 'text-blue-800', 'ring': 'ring-blue-300',
      'grad': 'from-blue-500 to-indigo-600', 'icon': 'fas fa-bolt', 'premiada': True},
-    {'nome': FAIXA_OURO, 'label': 'Ouro', 'regra': 'Acima de 90%', 'cor': '#D4AF37',
+    {'nome': FAIXA_OURO, 'label': 'Ouro', 'regra': 'A partir de 90%', 'cor': '#D4AF37',
      'bg': 'bg-amber-100', 'text': 'text-amber-800', 'ring': 'ring-amber-300',
      'grad': 'from-amber-400 to-yellow-500', 'icon': 'fas fa-trophy', 'premiada': True},
-    {'nome': FAIXA_PRATA, 'label': 'Prata', 'regra': 'Acima de 70%', 'cor': '#94A3B8',
+    {'nome': FAIXA_PRATA, 'label': 'Prata', 'regra': 'Acima de 70% até 89,99%', 'cor': '#94A3B8',
      'bg': 'bg-slate-200', 'text': 'text-slate-700', 'ring': 'ring-slate-300',
      'grad': 'from-slate-300 to-slate-500', 'icon': 'fas fa-medal', 'premiada': False},
     {'nome': FAIXA_BRONZE, 'label': 'Bronze', 'regra': 'De 0% a 70%', 'cor': '#B45309',
@@ -277,7 +277,7 @@ def faixa_por_score(score):
         s = 0.0
     if s >= 100:
         return FAIXA_IMPULSO
-    if s > 90:
+    if s >= 90:                      # 90% em diante é Ouro; Prata vai até 89,99%
         return FAIXA_OURO
     if s > 70:
         return FAIXA_PRATA

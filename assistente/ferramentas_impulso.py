@@ -574,7 +574,7 @@ def _ler_ranking(user, args):
                   + (f' — posição {posicao} de {len(ranking)}.' if posicao
                      else ' — você não está nesta lista de colaboradores.'))
     linhas.append(_ciclo_ativo())
-    linhas.append('Faixas: Impulso 100% · Ouro acima de 90% · Prata acima de 70% · Bronze até 70%. Cada mês Ouro ou '
+    linhas.append('Faixas: Impulso 100% · Ouro a partir de 90% · Prata acima de 70% até 89,99% · Bronze até 70%. Cada mês Ouro ou '
                   'Impulso reserva 100 C$, pagos quando o ciclo é encerrado.')
     if args.get('mes'):
         linhas.append('O ranking é sempre o do mês corrente, ao vivo; meses já fechados ficam em o_que=ciclos.')

@@ -170,7 +170,7 @@
             (function () {
                 var campos = document.querySelectorAll('.imp-ajuste-campo');
                 var aplicavel = {{ snapshot.pontos_aplicaveis|unlocalize }};
-                function faixa(p) { return p >= 100 ? 'Impulso' : p > 90 ? 'Ouro' : p > 70 ? 'Prata' : 'Bronze'; }
+                function faixa(p) { return p >= 100 ? 'Impulso' : p >= 90 ? 'Ouro' : p > 70 ? 'Prata' : 'Bronze'; }
                 function atualizar() {
                     var total = 0;
                     campos.forEach(function (c) { total += parseFloat(c.value) || 0; });

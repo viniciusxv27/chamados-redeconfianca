@@ -16,7 +16,7 @@ INOVAR (20)
     10  propor no mínimo 3 ideias (melhoria contínua ou projeto, tanto faz)
     10  ter 1 ideia de projeto aprovada (melhoria contínua aprovada não vale)
 
-Faixas: Impulso 100% · Ouro >90% · Prata >70% · Bronze 0-70%.
+Faixas: Impulso 100% · Ouro >=90% · Prata >70% até 89,99% · Bronze 0-70%.
 
 O total possível é 100 para todo mundo, sempre. Um item que não existiu no mês
 (nenhum curso publicado, nenhuma meta com prazo, sem folha de ponto) vale zero
@@ -601,7 +601,8 @@ def calcular_pontuacao(user, inicio=None, fim=None, referencia=None):
         'aplicavel': _quantize(aplicavel),
         'pontos_sem_oportunidade': _quantize(sem_oportunidade),
         'percentual': _quantize(percentual),
-        'faixa': faixa_por_score(percentual),
+        # Pela nota arredondada, a que aparece na tela: 89,996% mostra 90% e tem de ser Ouro.
+        'faixa': faixa_por_score(_quantize(percentual)),
         # Os números que desempatam o ranking, na ordem pedida: assiduidade
         # (menos ajustes de ponto), metas do CONFIAR concluídas e ideias
         # aprovadas. `ajustes` é None para quem não tem ponto sincronizado

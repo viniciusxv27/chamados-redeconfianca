@@ -101,10 +101,11 @@ try:
     html = r.content.decode()
     t('a tela mostra o aviso de ajuste e o valor calculado riscado', 'data-ajuste-manual' in html
       and 'line-through' in html and 'Desfazer ajuste' in html)
-    r = c.post(url_ajuste, {**campos, 'p_assiduidade': '10', 'p_curso': '0', 'motivo': 'Curso não contava.'})
+    r = c.post(url_ajuste, {**campos, 'p_assiduidade': '9.99', 'p_curso': '0', 'motivo': 'Curso não contava.'})
     pont.refresh_from_db()
+    # 05/11/2026: 90% passou a ser Ouro; Prata vai até 89,99%.
     t('baixar pontos também funciona (Ouro perde as C$ se cair para Prata)',
-      pont.total == Decimal('90.00') and pont.faixa == 'PRATA' and pont.confiancas_previstas == 0, (pont.total, pont.faixa))
+      pont.total == Decimal('89.99') and pont.faixa == 'PRATA' and pont.confiancas_previstas == 0, (pont.total, pont.faixa))
     t('o calculado continua o do fechamento', pont.detalhes['ajuste_manual']['calculado']['p_curso'] == 10.0
       and len(pont.detalhes['ajuste_manual']['historico']) == 2)
     c.post(url_ajuste, {**campos, 'p_assiduidade': '10', 'motivo': 'Volta o curso.'})
