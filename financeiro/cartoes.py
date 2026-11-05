@@ -160,7 +160,7 @@ def importar(nome, conteudo, adquirente='', loja=None, usuario=None, request=Non
 
 def vendas_no_cartao():
     from vendas.models import Venda
-    return Venda.objects.filter(forma_pagamento='CARTAO').exclude(nsu='')
+    return Venda.objects.filter(forma_pagamento__in=['CARTAO', 'DEBITO']).exclude(nsu='')
 
 
 def _par(recebivel, usadas):

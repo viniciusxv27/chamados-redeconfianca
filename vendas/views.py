@@ -316,7 +316,7 @@ _PRODUTO_HEADERS = ['Filial', 'UF', 'Produto', 'Tipo Produto', 'Categoria', 'Sub
                     'Nº Venda', 'Marca', 'Modelo', 'SKU', 'Serial', 'Cor', 'Nome Cliente',
                     'CPF/CNPJ', 'Vendedor', 'Plano', 'Tabela de preço', 'Data da venda',
                     'Qtde', 'Valor de Venda', 'Pilar', 'Forma de pagamento', 'NSU', 'Parcelas',
-                    'Renova Vini', 'Renova Alied', 'Pedido Alied', 'Renova Assurant', 'Pedido Assurant']
+                    'Renova Vini', 'Renova Alied', 'Pedido Alied', 'Renova Assurant', 'Pedido Assurant', 'Desconto no Pix']
 
 _SERVICO_HEADERS = ['Filial', 'UF', 'Serviço', 'Serviço Técnico', 'Nº Venda', 'Data',
                     'Vendedor', 'Nome Cliente', 'CPF/CNPJ', 'Plano', 'Tipo do Plano',
@@ -337,6 +337,7 @@ def _produto_rows(vendas_qs):
             vp.qtde, vp.valor_venda, vp.pilar, *_pagamento_csv(v),
             vp.renova_vini_valor if vp.renova_vini else '', vp.renova_alied_valor if vp.renova_alied else '',
             vp.renova_alied_pedido, vp.renova_assurant_valor if vp.renova_assurant else '', vp.renova_assurant_pedido,
+            vp.desconto_pix or '',
         ]
 
 

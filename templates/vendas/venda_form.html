@@ -146,6 +146,13 @@
                         <label><input type="checkbox" id="vdVivoMais" class="sr-only"><span class="vd-chip"><i class="fas fa-star"></i>Pago pelo Vivo+ <span class="text-[11px] opacity-80" id="vdVivoPct"></span></span></label>
                     </div>
                     <div id="vdPagtos" class="space-y-3"></div>
+                    <div id="vdDescontoPix" class="hidden mt-3 rounded-lg bg-emerald-50 border border-emerald-100 p-3">
+                        <div class="flex flex-wrap items-center gap-3">
+                            <label class="vd-rotulo !mb-0" for="vdDescontoPixValor"><i class="fas fa-tag mr-1"></i>Desconto no Pix (R$)</label>
+                            <input id="vdDescontoPixValor" class="vd-campo !py-1.5 w-32 text-right tabular font-semibold" inputmode="decimal" autocomplete="off" placeholder="0,00">
+                            <span id="vdDescontoPixInfo" class="text-xs text-emerald-800 tabular"></span>
+                        </div>
+                    </div>
                     <div class="flex flex-wrap items-center justify-between gap-2 mt-3">
                         <button type="button" id="vdMaisPagto" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border-2 border-dashed border-purple-200 text-sm font-semibold text-purple-700 hover:bg-purple-50 hover:border-purple-300 transition-colors">
                             <i class="fas fa-plus"></i>Outra forma de pagamento / outro cartão</button>
@@ -199,6 +206,7 @@
         <div class="px-4 py-3 border-t border-gray-100 bg-gray-50 space-y-1 text-sm">
             <div class="flex justify-between text-gray-600"><span>Produtos</span><span class="tabular" id="vdTotProd">R$ 0,00</span></div>
             <div class="flex justify-between text-gray-600"><span>Descontos (Renova + Vivo+)</span><span class="tabular text-emerald-600" id="vdTotDesc">R$ 0,00</span></div>
+            <div id="vdLinhaDescPix" class="hidden flex justify-between text-gray-600"><span>Desconto no Pix</span><span class="tabular text-emerald-600" id="vdTotDescPix"></span></div>
             <div class="flex justify-between text-gray-400 text-xs" title="Mensalidade dos planos: não é paga no balcão, não entra no total"><span>Serviços (mensal, fora do total)</span><span class="tabular" id="vdTotServ">R$ 0,00</span></div>
             <div class="flex justify-between items-baseline pt-1 border-t border-gray-200 mt-1">
                 <span class="font-semibold text-gray-900">Total</span><span class="text-2xl font-bold text-purple-700 tabular" id="vdTotal">R$ 0,00</span></div>
@@ -252,7 +260,7 @@
     const PCT = Number(SLV.vivo_mais) || 0;
 
     const estado = { cliente: null, confirmado: false, novo: false, produtos: [], servicos: [], linhas: [], forma: '', vivoMais: false, parcelas: '', total: 0,
-        pagamentos: [{forma: '', valor: null, nsu: '', parcelas: ''}] };
+        pagamentos: [{forma: '', valor: null, nsu: '', parcelas: ''}], desconto_pix: null };
 
     // ── utilidades ─────────────────────────────────────────────────────
     const so = function (v) { return String(v || '').replace(/\D/g, ''); };
@@ -559,12 +567,13 @@
     }
     function avisoImei(p) {
         if (p.categoria_slv !== 'aparelho') return '';
-        if (!p.imei) return 'Obrigatório: 15 números (*#06# no aparelho ou na caixa).';
+        if (!p.imei) return p.prateleira_infinita ? 'Prateleira infinita: o IMEI fica para depois.' : 'Obrigatório: 15 números (*#06# no aparelho ou na caixa). Prateleira infinita? Marque abaixo.';
         if (!imeiValido(p.imei)) return '<span class="text-red-600">IMEI inválido — confira os 15 números.</span>';
         const repetido = estado.produtos.filter(function (o) { return o.imei && o.imei === p.imei; }).length > 1;
         return repetido ? '<span class="text-red-600">Este IMEI já está em outro item da venda.</span>' : '<span class="text-emerald-600"><i class="fas fa-check"></i> IMEI ok</span>';
     }
     function imeiComErro(p) {
+        if (p.prateleira_infinita && !p.imei) return false;
         return p.categoria_slv === 'aparelho' && (!imeiValido(p.imei) || estado.produtos.filter(function (o) { return o.imei === p.imei; }).length > 1);
     }
     function calcItem(p) {
@@ -600,11 +609,11 @@
               '<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 items-end">' +
                 '<div class="col-span-2"><label class="vd-rotulo">Valor de Produto (R$)' + (p.sem_valor ? ' *' : '') + '</label><input class="vd-campo tabular text-right' + (p.sem_valor && !p.valor_sugerido ? ' vd-erro' : '') + '" data-campo="valor_sugerido" inputmode="decimal" value="' + moeda(p.valor_sugerido) + '"' + (p.tabela && p.valor_sugerido ? ' readonly title="Valor da tabela — ajuste o valor final no resumo"' : '') + '>' +
                   '<p class="vd-ajuda">' + esc(p.regra || '') + (p.sem_valor ? ' — informe o valor' : '') + '</p></div>' +
-                '<div class="col-span-2"><label class="vd-rotulo">' + (aparelho ? 'IMEI *' : (p.exige_serial ? 'Serial *' : 'Serial (se houver)')) + '</label>' +
-                  '<input class="vd-campo tabular' + ((aparelho && p.imei && imeiComErro(p)) || (p.exige_serial && p.serial_tocado && !p.imei) ? ' vd-erro' : '') + '" data-campo="imei" value="' + esc(p.imei) + '"' +
-                  (aparelho ? ' inputmode="numeric" maxlength="15" autocomplete="off" placeholder="15 números"' : ' maxlength="60" autocomplete="off" placeholder="' + (p.exige_serial ? 'obrigatório para este produto' : 'opcional') + '"') + '>' +
-                  (aparelho ? '<p class="vd-ajuda" data-imei-aviso="' + i + '">' + avisoImei(p) + '</p>' : (p.exige_serial ? '<p class="vd-ajuda">Na caixa ou na etiqueta do produto.</p>' : '')) + '</div>' +
-                '<label class="col-span-2 sm:col-span-4 flex items-center gap-2 text-sm text-gray-700 cursor-pointer"><input type="checkbox" class="rounded text-purple-600" data-campo="prateleira_infinita"' + (p.prateleira_infinita ? ' checked' : '') + '>Prateleira infinita</label>' +
+                '<div class="col-span-2"><label class="vd-rotulo">' + (aparelho ? (p.prateleira_infinita ? 'IMEI (opcional)' : 'IMEI *') : (p.exige_serial && !p.prateleira_infinita ? 'Serial *' : (p.exige_serial ? 'Serial (opcional)' : 'Serial (se houver)'))) + '</label>' +
+                  '<input class="vd-campo tabular' + ((aparelho && p.imei && imeiComErro(p)) || (p.exige_serial && !p.prateleira_infinita && p.serial_tocado && !p.imei) ? ' vd-erro' : '') + '" data-campo="imei" value="' + esc(p.imei) + '"' +
+                  (aparelho ? ' inputmode="numeric" maxlength="15" autocomplete="off" placeholder="15 números"' : ' maxlength="60" autocomplete="off" placeholder="' + (p.exige_serial && !p.prateleira_infinita ? 'obrigatório para este produto' : 'opcional') + '"') + '>' +
+                  (aparelho ? '<p class="vd-ajuda" data-imei-aviso="' + i + '">' + avisoImei(p) + '</p>' : (p.exige_serial ? '<p class="vd-ajuda">' + (p.prateleira_infinita ? 'Prateleira infinita: o serial fica para depois.' : 'Na caixa ou na etiqueta do produto. Prateleira infinita? Marque abaixo.') + '</p>' : '')) + '</div>' +
+                '<label class="col-span-2 sm:col-span-4 flex items-center gap-2 text-sm text-gray-700 cursor-pointer"><input type="checkbox" class="rounded text-purple-600" data-campo="prateleira_infinita"' + (p.prateleira_infinita ? ' checked' : '') + '>Prateleira infinita <span class="text-xs text-gray-500">(o produto ainda não está na loja: libera o ' + (aparelho ? 'IMEI' : 'serial') + ')</span></label>' +
               '</div>' +
               (aparelho ? '<div class="rounded-lg bg-gray-50 p-3 space-y-2"><div class="flex items-center gap-2 flex-wrap text-sm"><span class="text-gray-600 font-medium">Houve Renova?</span>' +
                 '<button type="button" class="vd-chip !py-1 !px-3 text-xs' + (p.renova ? '' : ' vd-ativo') + '" data-renova="0">Não</button>' +
@@ -642,7 +651,7 @@
     $('vdProdutos').addEventListener('change', function (e) {
         const caixa = e.target.closest('[data-p]'); const campo = e.target.dataset.campo; if (!caixa || !campo) return;
         const p = estado.produtos[Number(caixa.dataset.p)];
-        if (e.target.type === 'checkbox') { p[campo] = e.target.checked; if (campo !== 'prateleira_infinita') desenharProdutos(); }
+        if (e.target.type === 'checkbox') { p[campo] = e.target.checked; desenharProdutos(); }
         else if (campo === 'imei') {
             p.imei = p.categoria_slv === 'aparelho' ? e.target.value.replace(/\D/g, '').slice(0, 15) : e.target.value.trim();
             e.target.value = p.imei;
@@ -672,6 +681,10 @@
     // ── Pagamento: uma ou mais partes (Pix + cartão, vários cartões). A última parte sem valor fica com o restante.
     const OPC_PARCELAS = '<option value="">Escolha…</option>' + Array.from({length: 21}, function (_, k) { const n = k + 1;
         return '<option value="' + n + '">' + (n === 1 ? 'À vista (1x)' : n + 'x') + '</option>'; }).join('');
+    const FORMAS = [['CARTAO', 'Crédito', 'fa-credit-card'], ['DEBITO', 'Débito', 'fa-credit-card'], ['PIX', 'Pix', 'fa-qrcode'],
+                    ['DINHEIRO', 'Dinheiro', 'fa-money-bill-wave'], ['VIVO_PAY', 'Vivo Pay', 'fa-mobile-screen'], ['AGORACRED', 'Agora Cred', 'fa-handshake']];
+    const NOME_FORMA = {}; FORMAS.forEach(function (f) { NOME_FORMA[f[0]] = f[1]; });
+    const usaMaquininha = function (forma) { return forma === 'CARTAO' || forma === 'DEBITO'; };
     function centavos(v) { return Math.round((v || 0) * 100); }
     function restante() {
         const fixos = estado.pagamentos.slice(0, -1).reduce(function (t, pg) { return t + centavos(pg.valor); }, 0);
@@ -682,28 +695,44 @@
         const varios = estado.pagamentos.length > 1;
         let nCartao = 0;
         $('vdPagtos').innerHTML = estado.pagamentos.map(function (pg, i) {
-            const titulo = pg.forma === 'CARTAO' ? 'Cartão' + (estado.pagamentos.filter(function (x) { return x.forma === 'CARTAO'; }).length > 1 ? ' ' + (++nCartao) : '') : (pg.forma === 'PIX' ? 'Pix' : 'Pagamento ' + (i + 1));
+            const titulo = pg.forma === 'CARTAO' ? 'Cartão' + (estado.pagamentos.filter(function (x) { return x.forma === 'CARTAO'; }).length > 1 ? ' ' + (++nCartao) : '') : (NOME_FORMA[pg.forma] || 'Pagamento ' + (i + 1));
             const auto = pg.valor === null && i === estado.pagamentos.length - 1;
             return '<div class="vd-entra rounded-lg ' + (varios ? 'border border-gray-100 bg-gray-50/60 p-3' : '') + '" data-pg="' + i + '">' +
                 '<div class="flex flex-wrap items-center gap-2">' +
                 (varios ? '<span class="text-xs font-semibold text-gray-500 w-16">' + esc(titulo) + '</span>' : '') +
-                '<label><input type="radio" name="vdForma' + i + '" value="CARTAO" class="sr-only" data-pg-forma' + (pg.forma === 'CARTAO' ? ' checked' : '') + '><span class="vd-chip"><i class="fas fa-credit-card"></i>Cartão</span></label>' +
-                '<label><input type="radio" name="vdForma' + i + '" value="PIX" class="sr-only" data-pg-forma' + (pg.forma === 'PIX' ? ' checked' : '') + '><span class="vd-chip"><i class="fas fa-qrcode"></i>Pix</span></label>' +
+                FORMAS.map(function (f) {
+                    return '<label><input type="radio" name="vdForma' + i + '" value="' + f[0] + '" class="sr-only" data-pg-forma' + (pg.forma === f[0] ? ' checked' : '') + '><span class="vd-chip"><i class="fas ' + f[2] + '"></i>' + f[1] + '</span></label>';
+                }).join('') +
                 (varios ? '<div class="ml-auto flex items-center gap-2"><label class="sr-only" for="vdPgValor' + i + '">Valor</label>' +
                     '<input id="vdPgValor' + i + '" class="vd-campo !py-1.5 w-32 text-right tabular font-semibold' + (auto ? ' text-gray-500' : '') + '" inputmode="decimal" data-pg-valor value="' + moeda(valorDe(pg, i)) + '"' +
                     (auto ? ' title="O restante da venda — digite para fixar outro valor"' : '') + '>' +
                     '<button type="button" class="text-gray-400 hover:text-red-600 px-1" data-pg-remover aria-label="Tirar este pagamento"><i class="fas fa-trash"></i></button></div>' : '') +
                 '</div>' +
-                (pg.forma === 'CARTAO' ? '<div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">' +
-                    '<div class="sm:col-span-2"><label class="vd-rotulo" for="vdNsu' + i + '">NSU do comprovante *</label>' +
+                (usaMaquininha(pg.forma) ? '<div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">' +
+                    '<div class="' + (pg.forma === 'CARTAO' ? 'sm:col-span-2' : 'sm:col-span-3') + '"><label class="vd-rotulo" for="vdNsu' + i + '">NSU do comprovante *</label>' +
                     '<input id="vdNsu' + i + '" class="vd-campo tabular uppercase" maxlength="30" autocomplete="off" placeholder="Número do comprovante da maquininha" data-pg-nsu value="' + esc(pg.nsu) + '">' +
                     '<p class="vd-ajuda">Fica no comprovante do cartão, como "NSU" ou "DOC".</p></div>' +
-                    '<div><label class="vd-rotulo" for="vdParcelas' + i + '">Parcelas *</label>' +
-                    '<select id="vdParcelas' + i + '" class="vd-campo" data-pg-parcelas>' + OPC_PARCELAS.replace('value="' + pg.parcelas + '"', 'value="' + pg.parcelas + '" selected') + '</select></div></div>' : '') +
+                    (pg.forma === 'CARTAO' ? '<div><label class="vd-rotulo" for="vdParcelas' + i + '">Parcelas *</label>' +
+                    '<select id="vdParcelas' + i + '" class="vd-campo" data-pg-parcelas>' + OPC_PARCELAS.replace('value="' + pg.parcelas + '"', 'value="' + pg.parcelas + '" selected') + '</select></div>' : '') + '</div>' : '') +
                 '</div>';
         }).join('');
         desenharSaldo();
+        desenharDescontoPix();
     }
+    function temPix() { return estado.pagamentos.some(function (pg) { return pg.forma === 'PIX'; }); }
+    function descontoPix() { return temPix() ? (estado.desconto_pix || 0) : 0; }
+    function desenharDescontoPix() {
+        const caixa = $('vdDescontoPix'), mostrar = temPix();
+        const mudou = caixa.classList.contains('hidden') === mostrar;
+        caixa.classList.toggle('hidden', !mostrar);
+        if (mudou && typeof recalcular === 'function' && estado.pronto) recalcular();
+    }
+    $('vdDescontoPixValor').addEventListener('change', function (e) {
+        const v = num(e.target.value);
+        estado.desconto_pix = v && v > 0 ? v : null;
+        e.target.value = estado.desconto_pix ? moeda(estado.desconto_pix) : '';
+        recalcular();
+    });
     function desenharSaldo() {
         const ultimo = estado.pagamentos.length - 1;
         estado.pagamentos.forEach(function (pg, i) {
@@ -720,7 +749,9 @@
     function sincronizarCondicao() {
         // O preço do aparelho segue o pagamento: tudo no Pix → coluna do Pix; com cartão → a coluna da maior parcela.
         const cartoes = estado.pagamentos.filter(function (pg) { return pg.forma === 'CARTAO'; });
-        const forma = cartoes.length ? 'CARTAO' : (estado.pagamentos.some(function (pg) { return pg.forma === 'PIX'; }) ? 'PIX' : '');
+        // A coluna "PIX e Vivo Pay" vale quando tudo é Pix ou Vivo Pay; dinheiro, débito e Agora Cred ficam no preço.
+        const escolhidas = estado.pagamentos.map(function (pg) { return pg.forma; }).filter(Boolean);
+        const forma = cartoes.length ? 'CARTAO' : (!escolhidas.length ? '' : (escolhidas.every(function (f) { return f === 'PIX' || f === 'VIVO_PAY'; }) ? 'PIX' : 'OUTRA'));
         const parc = cartoes.reduce(function (m, pg) { return Math.max(m, Number(pg.parcelas) || 0); }, 0);
         const mudouForma = forma !== estado.forma, mudouParc = String(parc || '') !== String(estado.parcelas || '');
         estado.forma = forma; estado.parcelas = parc ? String(parc) : '';
@@ -729,6 +760,7 @@
         estado.produtos.forEach(function (p) {
             if (!p.tabela) return;
             if (forma === 'PIX') { if (p.condicao === COND_BASE || /^\d+x$/.test(p.condicao)) { p.condicao = COND_PIX; aplicarTabela(p); } return; }
+            if (forma === 'OUTRA') { if (p.condicao === COND_PIX || /^\d+x$/.test(p.condicao)) { p.condicao = COND_BASE; aplicarTabela(p); } return; }
             if (forma !== 'CARTAO' || !p.grupo) return;
             if (!parc) { if (p.condicao === COND_PIX) { p.condicao = condPadrao(); aplicarTabela(p); } return; }
             const conds = p.condicoes[p.grupo] || [];
@@ -742,7 +774,7 @@
     $('vdPagtos').addEventListener('change', function (e) {
         const caixa = e.target.closest('[data-pg]'); if (!caixa) return;
         const pg = estado.pagamentos[Number(caixa.dataset.pg)];
-        if (e.target.matches('[data-pg-forma]')) { pg.forma = e.target.value; if (pg.forma !== 'CARTAO') { pg.nsu = ''; pg.parcelas = ''; } desenharPagamentos(); sincronizarCondicao(); }
+        if (e.target.matches('[data-pg-forma]')) { pg.forma = e.target.value; if (pg.forma !== 'CARTAO') pg.parcelas = ''; if (!usaMaquininha(pg.forma)) pg.nsu = ''; desenharPagamentos(); sincronizarCondicao(); }
         if (e.target.matches('[data-pg-parcelas]')) { pg.parcelas = e.target.value; e.target.classList.remove('vd-erro'); sincronizarCondicao(); }
         if (e.target.matches('[data-pg-valor]')) { const v = num(e.target.value); pg.valor = v; e.target.value = moeda(valorDe(pg, Number(caixa.dataset.pg))); desenharPagamentos(); }
     });
@@ -986,8 +1018,14 @@
         $('vdResumo').innerHTML = linhasResumo.length ? linhasResumo.join('') : '<p class="text-gray-400 text-center py-6"><i class="fas fa-basket-shopping text-2xl text-gray-200 block mb-2"></i>Os itens aparecem aqui.</p>';
         $('vdTotProd').textContent = brl(totProd); $('vdTotDesc').textContent = (totDesc ? '− ' : '') + brl(totDesc); $('vdTotServ').textContent = brl(totServ);
         // A conta da venda é só de produtos: serviço é mensalidade do plano.
-        $('vdTotal').textContent = brl(totProd); $('vdTotalMovel').textContent = brl(totProd);
-        estado.total = Math.round(totProd * 100) / 100; desenharSaldo();
+        // O desconto no Pix sai do total que o cliente paga; o servidor reparte entre os itens.
+        const descPix = descontoPix(), totFinal = Math.round((totProd - descPix) * 100) / 100, descInvalido = descPix > 0 && totFinal <= 0;
+        $('vdLinhaDescPix').classList.toggle('hidden', !descPix);
+        $('vdTotDescPix').textContent = '− ' + brl(descPix);
+        $('vdDescontoPixValor').classList.toggle('vd-erro', descInvalido);
+        $('vdDescontoPixInfo').textContent = descInvalido ? 'O desconto não pode chegar ao total da venda.' : (descPix && totProd ? String(Math.round(descPix / totProd * 1000) / 10).replace('.', ',') + '% do total · o cliente paga ' + brl(totFinal) : '');
+        $('vdTotal').textContent = brl(totFinal); $('vdTotalMovel').textContent = brl(totFinal);
+        estado.total = totFinal; estado.pronto = true; desenharSaldo();
         const temItens = estado.produtos.length || estado.servicos.length;
         $('vdConfirmar').disabled = !(estado.confirmado && temItens);
         if (estado.confirmado && temItens) { $('numItens').classList.add('vd-feito'); $('numItens').innerHTML = '<i class="fas fa-check"></i>'; }
@@ -1010,8 +1048,9 @@
         const dados = {
             cliente: dadosDoForm(), linhas: estado.linhas, observacao: $('vdObs').value,
             vivo_mais: estado.vivoMais,
+            desconto_pix: descontoPix() || '',
             pagamentos: estado.produtos.length ? estado.pagamentos.map(function (pg, i) {
-                return {forma: pg.forma, valor: valorDe(pg, i), nsu: pg.forma === 'CARTAO' ? pg.nsu : '', parcelas: pg.forma === 'CARTAO' ? pg.parcelas : ''}; }) : [],
+                return {forma: pg.forma, valor: valorDe(pg, i), nsu: usaMaquininha(pg.forma) ? pg.nsu : '', parcelas: pg.forma === 'CARTAO' ? pg.parcelas : ''}; }) : [],
             plano_anterior: {id: $('vdPaPlano').value, segmentacao: $('vdPaSeg').value, valor: $('vdPaValor').value,
                              nome: $('vdPaPlano').selectedOptions[0] ? $('vdPaPlano').selectedOptions[0].text : ''},
             produtos: estado.produtos.map(function (p) { const c = calcItem(p); return {

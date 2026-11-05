@@ -245,7 +245,7 @@ try:
                              {'preco_id': capa.id, 'valor_final': '0'}]})
     erros = ' | '.join(j.get('erros', []))
     t('erros juntos: forma de pagamento, aparelho fora do plano, Renova sem código válido, valor zerado',
-      not j['ok'] and 'Cartão ou Pix' in erros and 'sem valor na tabela para este plano' in erros
+      not j['ok'] and 'forma de pagamento' in erros and 'sem valor na tabela para este plano' in erros
       and 'Código do Renova' in erros and 'zerado ou negativo' in erros, erros)
     j = vender({'cliente': {'cpf': CPF, 'nome': 'Zz Cliente Teste'}, 'plano_anterior': {'id': ctrl.id}, 'forma_pagamento': 'CARTAO',
                 'produtos': [{'preco_id': aparelho.id, 'grupamento': 'CONTROLE ENTRADA', 'valor_sugerido': '1800',

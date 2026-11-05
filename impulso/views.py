@@ -222,7 +222,11 @@ def _por_prazo(metas, hoje=None):
 # guardado, então filtro novo precisa ser acrescentado junto.
 # O Voltar da meta precisa devolver o Kanban exatamente como estava — inclusive
 # o filtro por nome e setor, senão a pessoa perde a busca a cada card aberto.
-FILTROS_KANBAN = ('colaborador', 'criadas_por_mim', 'criado_por', filtros_impulso.PARAM_NOME,
+# A coluna à parte do SUPERADMIN: o "A Fazer" do que o Vinicius criou (User 41).
+PARAM_A_FAZER_VINICIUS = 'a_fazer_vinicius'
+ID_VINICIUS = 41
+
+FILTROS_KANBAN = ('colaborador', 'criadas_por_mim', 'criado_por', PARAM_A_FAZER_VINICIUS, filtros_impulso.PARAM_NOME,
                   filtros_impulso.PARAM_SETOR, filtros_impulso.PARAM_MES)
 CHAVE_FILTROS_KANBAN = 'impulso_kanban_filtros'
 
@@ -379,10 +383,17 @@ def metas_kanban(request):
     metas = abertas + concluidas
     equipe_ids = _marcar_cards(metas, user, gestor)
 
+    # Só muda de lugar: o card sai do "A Fazer" comum para não aparecer duas vezes.
+    a_fazer_vinicius = e_superadmin(user) and request.GET.get(PARAM_A_FAZER_VINICIUS) == '1'
     colunas = []
     for status in Meta.KANBAN_STATUSES:
         do_status = [m for m in metas if m.status == status.value]
         e_concluida = status == Meta.Status.CONCLUIDA
+        if a_fazer_vinicius and status == Meta.Status.A_FAZER:
+            dele = [m for m in do_status if m.created_by_id == ID_VINICIUS]
+            do_status = [m for m in do_status if m.created_by_id != ID_VINICIUS]
+            colunas.append({'status': status.value, 'label': 'A Fazer Vinicius', 'metas': dele, 'total': len(dele),
+                            'restantes': 0, 'grupos': _por_prazo(dele), 'destaque': True})
         colunas.append({
             'status': status.value,
             'label': status.label,
@@ -418,6 +429,7 @@ def metas_kanban(request):
         'criadas_por_mim': request.GET.get('criadas_por_mim') == '1',
         # Filtro "Criado por": só o SUPERADMIN vê o seletor (e só para ele vale).
         'filtra_criador': e_superadmin(user),
+        'a_fazer_vinicius': a_fazer_vinicius,
         'criadores': _criadores_de_metas(user) if e_superadmin(user) else None,
         'criado_por_id': _criado_por_do_kanban(request),
         'manter_no_criador': {c: v for c, v in escolhidos.items() if c != 'criado_por'},

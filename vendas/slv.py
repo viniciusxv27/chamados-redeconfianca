@@ -395,6 +395,52 @@ def _brl(valor):
     return 'R$ ' + f'{valor:,.2f}'.replace(',', '_').replace('.', ',').replace('_', '.')
 
 
+FORMAS_VALIDAS = ('CARTAO', 'DEBITO', 'PIX', 'DINHEIRO', 'VIVO_PAY', 'AGORACRED')
+FORMAS_COM_NSU = ('CARTAO', 'DEBITO')      # passam na maquininha: o comprovante concilia com o extrato
+
+
+def _tem_pix(dados):
+    brutos = dados.get('pagamentos')
+    if isinstance(brutos, list) and brutos:
+        return any(isinstance(b, dict) and str(b.get('forma') or '').upper() == 'PIX' for b in brutos)
+    return str(dados.get('forma_pagamento') or '').upper() == 'PIX'
+
+
+def aplicar_desconto_pix(dados, itens, erros):
+    """Reparte o desconto entre os itens, na proporção do valor. Devolve o desconto aplicado.
+
+    Fica no item porque o relatório e a receita somam os itens: um desconto só na venda sairia em
+    um lugar e não em outro. Os centavos que sobram da divisão vão para o último item.
+    """
+    bruto = dados.get('desconto_pix')
+    if bruto in (None, ''):
+        return ZERO
+    desconto = dinheiro(bruto)
+    if desconto is None or desconto < 0:
+        erros.append('Desconto no Pix: valor inválido.')
+        return ZERO
+    if not desconto:
+        return ZERO
+    if not _tem_pix(dados):
+        erros.append('O desconto no Pix só vale quando parte da venda é paga no Pix.')
+        return ZERO
+    total = sum((i['final'] * i['qtde'] for i in itens), ZERO)
+    if desconto >= total:
+        erros.append(f'O desconto no Pix ({_brl(desconto)}) não pode chegar ao total da venda ({_brl(total)}).')
+        return ZERO
+    restante = desconto
+    for n, item in enumerate(itens, start=1):
+        parte = restante if n == len(itens) else (desconto * item['final'] * item['qtde'] / total).quantize(CENTAVO, ROUND_HALF_UP)
+        parte = min(parte, restante)
+        if item['final'] - parte <= 0:
+            erros.append(f'{item["nome"]}: o desconto no Pix zeraria o item — reduza o desconto.')
+            return ZERO
+        item['desconto_pix'] = parte
+        item['final'] -= parte
+        restante -= parte
+    return desconto
+
+
 def ler_pagamentos(dados, total, erros):
     """As partes do pagamento: [{forma, valor, nsu, parcelas}], somando o total dos produtos.
 
@@ -406,22 +452,23 @@ def ler_pagamentos(dados, total, erros):
         brutos = [{'forma': dados.get('forma_pagamento') or '', 'valor': total,
                    'nsu': dados.get('nsu'), 'parcelas': dados.get('parcelas')}] if dados.get('forma_pagamento') else []
     if not brutos:
-        erros.append('Escolha a forma de pagamento: Cartão ou Pix.')
+        erros.append('Escolha a forma de pagamento.')
         return []
     saida, nsus = [], set()
     for n, b in enumerate(b for b in brutos if isinstance(b, dict)):
         rotulo = f'Pagamento {n + 1}' if len(brutos) > 1 else 'Pagamento'
         forma = str(b.get('forma') or '').upper()
-        if forma not in ('CARTAO', 'PIX'):
-            erros.append(f'{rotulo}: escolha Cartão ou Pix.')
+        if forma not in FORMAS_VALIDAS:
+            erros.append(f'{rotulo}: escolha a forma de pagamento.')
             continue
         valor = dinheiro(b.get('valor'))
         if valor is None or valor <= 0:
             erros.append(f'{rotulo}: informe o valor.')
             continue
         pg = {'forma': forma, 'valor': valor, 'nsu': '', 'parcelas': None}
-        if forma == 'CARTAO':
-            rotulo = f'Cartão {sum(1 for x in saida if x["forma"] == "CARTAO") + 1}' if len(brutos) > 1 else 'Cartão'
+        if forma in FORMAS_COM_NSU:
+            nome_forma = 'Cartão' if forma == 'CARTAO' else 'Débito'
+            rotulo = f'{nome_forma} {sum(1 for x in saida if x["forma"] == forma) + 1}' if len(brutos) > 1 else nome_forma
             # O comprovante da maquininha: sem NSU não dá para conciliar a venda com o extrato.
             nsu = re.sub(r'[^0-9A-Za-z]', '', str(b.get('nsu') or '')).upper()[:30]
             if len(nsu) < 4:
@@ -429,13 +476,15 @@ def ler_pagamentos(dados, total, erros):
             elif nsu in nsus:
                 erros.append(f'{rotulo}: o NSU {nsu} já está em outro cartão desta venda.')
             nsus.add(nsu)
-            try:
-                parcelas = int(b.get('parcelas') or 0)
-            except (TypeError, ValueError):
-                parcelas = 0
-            if not 1 <= parcelas <= 24:
-                erros.append(f'{rotulo}: informe em quantas parcelas (1 a 24).')
-                parcelas = None
+            parcelas = None
+            if forma == 'CARTAO':       # Débito é sempre à vista.
+                try:
+                    parcelas = int(b.get('parcelas') or 0)
+                except (TypeError, ValueError):
+                    parcelas = 0
+                if not 1 <= parcelas <= 24:
+                    erros.append(f'{rotulo}: informe em quantas parcelas (1 a 24).')
+                    parcelas = None
             pg.update(nsu=nsu, parcelas=parcelas)
         saida.append(pg)
     pago = sum((pg['valor'] for pg in saida), Decimal('0'))
@@ -508,10 +557,15 @@ def registrar_venda(dados, usuario, loja, vendedor=None):
         qtde = 1
         categoria = categoria_slv(item) if item else str(p.get('categoria_slv') or 'eletronico')
         serial = str(p.get('imei') or p.get('serial') or '').strip()[:120]
+        # Prateleira infinita: o produto vem depois, ainda não há serial para informar. Se informar, vale a conferência.
+        prateleira = bool(p.get('prateleira_infinita'))
         if categoria == 'aparelho':
             serial = so_digitos(serial)
-            if not imei_valido(serial):
-                erros.append(f'{nome}: informe o IMEI do aparelho — 15 números (confira o dígito final).')
+            if prateleira and not serial:
+                pass
+            elif not imei_valido(serial):
+                erros.append(f'{nome}: informe o IMEI do aparelho — 15 números (confira o dígito final) '
+                             'ou marque Prateleira infinita.')
             elif serial in imeis_da_venda:
                 erros.append(f'{nome}: o IMEI {serial} está repetido nesta venda (cada aparelho tem o seu).')
             else:
@@ -521,8 +575,9 @@ def registrar_venda(dados, usuario, loja, vendedor=None):
                 if ja:
                     erros.append(f'{nome}: o IMEI {serial} já foi vendido na venda #{ja.venda_id} '
                                  f'({timezone.localtime(ja.venda.data_venda):%d/%m/%Y}).')
-        elif not serial and exige_serial(item, com_serial):
-            erros.append(f'{nome}: informe o serial do produto (está na caixa ou na etiqueta).')
+        elif not serial and not prateleira and exige_serial(item, com_serial):
+            erros.append(f'{nome}: informe o serial do produto (está na caixa ou na etiqueta) '
+                         'ou marque Prateleira infinita.')
         if item:
             sugerido, regra = preco_sugerido(item, segmentacao_cliente, p.get('grupamento') or '', p.get('condicao') or '')
         else:
@@ -570,14 +625,15 @@ def registrar_venda(dados, usuario, loja, vendedor=None):
             item=item, nome=nome, qtde=qtde, sugerido=sugerido, regra=regra[:120], final=final, editado=editado,
             rv=rv, rv_valor=rv_valor, ra=ra, ra_valor=ra_valor, ra_pedido=ra_pedido,
             ras=ras, ras_valor=ras_valor, ras_pedido=ras_pedido, codigo=codigo, conta=conta,
-            prateleira=bool(p.get('prateleira_infinita')), serial=serial, categoria=categoria))
+            prateleira=prateleira, serial=serial, categoria=categoria, desconto_pix=ZERO))
 
     # Pagamento ([Venda de produtos.RF004]) — só faz sentido com produto, e fecha com o total dos produtos.
+    desconto_pix = aplicar_desconto_pix(dados, itens_produto, erros) if produtos else ZERO
     pagamentos = ler_pagamentos(dados, sum((i['final'] * i['qtde'] for i in itens_produto), Decimal('0')),
                                 erros) if produtos else []
     formas = {pg['forma'] for pg in pagamentos}
     forma = (formas.pop() if len(formas) == 1 else 'MISTO') if pagamentos else ''
-    cartao = next((pg for pg in pagamentos if pg['forma'] == 'CARTAO'), None)
+    cartao = next((pg for pg in pagamentos if pg['forma'] in FORMAS_COM_NSU), None)
     nsu, parcelas = (cartao['nsu'], cartao['parcelas']) if cartao else ('', None)
 
     # Serviços
@@ -674,7 +730,7 @@ def registrar_venda(dados, usuario, loja, vendedor=None):
             data_venda=timezone.now(), cliente=cliente, cliente_nome=cliente.nome, cliente_cpf=formatar_cpf(cpf),
             cliente_telefone=cliente.telefone,
             tipo_venda=' + '.join(x for x in ('Produto' if itens_produto else '', 'Serviço' if itens_servico else '') if x),
-            forma_pagamento=forma, vivo_mais=vivo_mais, vivo_mais_percentual=percentual,
+            forma_pagamento=forma, desconto_pix=desconto_pix, vivo_mais=vivo_mais, vivo_mais_percentual=percentual,
             nsu=nsu, parcelas=parcelas,
             plano_anterior=plano_anterior, plano_anterior_nome=(plano_anterior.nome if plano_anterior else str(pa.get('nome') or ''))[:200],
             segmentacao_anterior=segmentacao_cliente[:10], valor_anterior=valor_anterior, numero_fake=fake,
@@ -693,7 +749,8 @@ def registrar_venda(dados, usuario, loja, vendedor=None):
                 regra_preco=i['regra'], renova_vini=i['rv'], renova_vini_valor=i['rv_valor'], renova_codigo=i['codigo'],
                 renova_alied=i['ra'], renova_alied_valor=i['ra_valor'], renova_alied_pedido=i['ra_pedido'],
                 renova_assurant=i['ras'], renova_assurant_valor=i['ras_valor'], renova_assurant_pedido=i['ras_pedido'],
-                desconto_vivo_mais=i['conta']['desconto_vivo_mais'], valor_calculado=i['conta']['valor_calculado'],
+                desconto_vivo_mais=i['conta']['desconto_vivo_mais'], desconto_pix=i['desconto_pix'],
+                valor_calculado=i['conta']['valor_calculado'],
                 valor_venda=i['final'], valor_editado=i['editado'], editado_por=usuario if i['editado'] else None)
         ultimo_plano = None
         for s in itens_servico:

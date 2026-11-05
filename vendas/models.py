@@ -37,6 +37,13 @@ class ItemPreco(models.Model):
         return f'[{self.categoria}] {self.nome}'
 
 
+# Formas de pagamento da venda. CARTAO é o crédito: o nome ficou porque já está gravado nas vendas antigas.
+FORMAS_PAGAMENTO = [('CARTAO', 'Cartão de crédito'), ('DEBITO', 'Cartão de débito'), ('PIX', 'Pix'), ('DINHEIRO', 'Dinheiro'),
+                    ('VIVO_PAY', 'Vivo Pay'), ('AGORACRED', 'Agora Cred')]
+ICONES_PAGAMENTO = {'CARTAO': 'fa-credit-card', 'DEBITO': 'fa-credit-card', 'PIX': 'fa-qrcode', 'DINHEIRO': 'fa-money-bill-wave',
+                    'VIVO_PAY': 'fa-mobile-screen', 'AGORACRED': 'fa-handshake', 'MISTO': 'fa-wallet'}
+
+
 class Venda(models.Model):
     """Cabeçalho da venda (espelha a tela 'Lançar venda'). Os itens ficam em
     VendaProduto/VendaServico. Grava apenas no Postgres (nada no MySQL)."""
@@ -71,8 +78,11 @@ class Venda(models.Model):
                                 related_name='vendas', verbose_name='Cliente (cadastro)')
     cliente_telefone = models.CharField(max_length=20, blank=True, default='', db_default='', verbose_name='Telefone do cliente')
     forma_pagamento = models.CharField(max_length=10, blank=True, default='', db_default='',
-                                       choices=[('CARTAO', 'Cartão'), ('PIX', 'Pix'), ('MISTO', 'Mais de uma')],
+                                       choices=[*FORMAS_PAGAMENTO, ('MISTO', 'Mais de uma')],
                                        verbose_name='Forma de pagamento')
+    # O total dado de desconto por pagar no Pix. Sai dos itens (VendaProduto.desconto_pix), então relatório e total já vêm certos.
+    desconto_pix = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0'), db_default=Decimal('0'),
+                                       verbose_name='Desconto no Pix')
     # Cartão: o comprovante da maquininha (NSU) e em quantas vezes. Com mais de um pagamento (27/10/2026)
     # o detalhe fica em PagamentoVenda; aqui vale o resumo (forma única ou MISTO, NSU/parcelas do 1º cartão).
     nsu = models.CharField(max_length=30, blank=True, default='', db_default='', verbose_name='NSU do cartão')
@@ -109,6 +119,10 @@ class Venda(models.Model):
         return f'Venda #{self.pk} — {self.cliente_nome or "s/ cliente"}'
 
     @property
+    def icone_pagamento(self):
+        return ICONES_PAGAMENTO.get(self.forma_pagamento, 'fa-credit-card')
+
+    @property
     def total_produtos(self):
         return sum((p.valor_total for p in self.produtos.all()), Decimal('0'))
 
@@ -125,7 +139,7 @@ class Venda(models.Model):
 class PagamentoVenda(models.Model):
     """Uma parte do pagamento da venda: a venda pode ser paga com Pix + cartão, ou com vários cartões."""
 
-    FORMAS = [('CARTAO', 'Cartão'), ('PIX', 'Pix')]
+    FORMAS = FORMAS_PAGAMENTO
 
     venda = models.ForeignKey(Venda, on_delete=models.CASCADE, related_name='pagamentos', verbose_name='Venda')
     ordem = models.PositiveSmallIntegerField(default=1)
@@ -138,6 +152,10 @@ class PagamentoVenda(models.Model):
         ordering = ['venda', 'ordem']
         verbose_name = 'Pagamento da venda'
         verbose_name_plural = 'Pagamentos da venda'
+
+    @property
+    def icone(self):
+        return ICONES_PAGAMENTO.get(self.forma, 'fa-credit-card')
 
     def __str__(self):
         return f'{self.get_forma_display()} {self.valor}'
@@ -190,6 +208,8 @@ class VendaProduto(models.Model):
                                               verbose_name='Nº do pedido/protocolo Renova Assurant')
     desconto_vivo_mais = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0'),
                                              db_default=Decimal('0'), verbose_name='Desconto Vivo+')
+    desconto_pix = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0'),
+                                       db_default=Decimal('0'), verbose_name='Desconto no Pix')
     valor_calculado = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True,
                                           verbose_name='Valor calculado pelo sistema')
     valor_editado = models.BooleanField(default=False, db_default=False, verbose_name='Valor final editado à mão')

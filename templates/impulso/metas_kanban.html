@@ -24,6 +24,13 @@
         {% endif %}
         {% if filtra_criador %}
         {% comment %}"Criado por" — só o SUPERADMIN. Trocar mantém os outros filtros.{% endcomment %}
+        <form method="get" class="inline-flex items-center" data-filtro-a-fazer-vinicius>
+            {% for chave, valor in request.GET.items %}{% if chave != 'a_fazer_vinicius' %}<input type="hidden" name="{{ chave }}" value="{{ valor }}">{% endif %}{% endfor %}
+            <label class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm cursor-pointer {% if a_fazer_vinicius %}border-orange-300 bg-orange-50 text-orange-800 font-semibold{% else %}border-gray-200 text-gray-700 hover:bg-gray-50{% endif %}">
+                <input type="checkbox" name="a_fazer_vinicius" value="1" onchange="this.form.submit()" class="rounded text-orange-600 focus:ring-orange-400" {% if a_fazer_vinicius %}checked{% endif %}>
+                A fazer Vinicius
+            </label>
+        </form>
         <form method="get" class="flex items-center gap-2 w-full sm:w-auto min-w-0">
             {% for chave, valor in manter_no_criador.items %}
             <input type="hidden" name="{{ chave }}" value="{{ valor }}">
@@ -111,13 +118,14 @@ Ficam fora do filtro de mês — são pedidos esperando resposta, não tarefas d
 </section>
 {% endif %}
 
-<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+<div class="grid grid-cols-1 md:grid-cols-2 {% if a_fazer_vinicius %}xl:grid-cols-5{% else %}xl:grid-cols-4{% endif %} gap-3">
     {% for col in colunas %}
     <div class="rounded-2xl bg-gray-50/80 border border-gray-100 flex flex-col min-h-[180px]">
         <div class="px-4 py-3 flex items-center justify-between border-b border-gray-200/70">
             <span class="text-sm font-semibold text-gray-700 flex items-center gap-2">
                 <span class="w-2 h-2 rounded-full
-                    {% if col.status == 'A_FAZER' %}bg-gray-400
+                    {% if col.destaque %}bg-violet-500
+                    {% elif col.status == 'A_FAZER' %}bg-gray-400
                     {% elif col.status == 'EM_ANDAMENTO' %}bg-blue-500
                     {% elif col.status == 'ENTREGUE' %}bg-orange-500
                     {% else %}bg-emerald-500{% endif %}"></span>

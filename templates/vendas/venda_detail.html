@@ -39,17 +39,18 @@
         {% if venda.forma_pagamento %}
         <div>
             <p class="vd-rotulo">Pagamento</p>
-            <p class="text-gray-900"><i class="fas {% if venda.forma_pagamento == 'PIX' %}fa-qrcode{% elif venda.forma_pagamento == 'MISTO' %}fa-wallet{% else %}fa-credit-card{% endif %} text-purple-500 mr-1"></i>{{ venda.get_forma_pagamento_display }}
+            <p class="text-gray-900"><i class="fas {{ venda.icone_pagamento }} text-purple-500 mr-1"></i>{{ venda.get_forma_pagamento_display }}
                 {% if venda.vivo_mais %}<span class="ml-1 px-1.5 py-0.5 rounded-md bg-purple-100 text-purple-700 text-[11px] font-semibold">Vivo+ {{ venda.vivo_mais_percentual|floatformat:"-2" }}%</span>{% endif %}</p>
             {% with pgs=venda.pagamentos.all %}
             {% if pgs|length > 1 %}
             <ul class="mt-1 space-y-0.5 text-[12px] text-gray-600 tabular">
-                {% for pg in pgs %}<li><i class="fas {% if pg.forma == 'PIX' %}fa-qrcode{% else %}fa-credit-card{% endif %} text-gray-400 mr-1"></i>{{ pg.get_forma_display }} {{ pg.valor|brl }}{% if pg.forma == 'CARTAO' %} · NSU {{ pg.nsu }}{% if pg.parcelas %} · {% if pg.parcelas == 1 %}à vista{% else %}{{ pg.parcelas }}x{% endif %}{% endif %}{% endif %}</li>{% endfor %}
+                {% for pg in pgs %}<li><i class="fas {{ pg.icone }} text-gray-400 mr-1"></i>{{ pg.get_forma_display }} {{ pg.valor|brl }}{% if pg.forma == 'CARTAO' %} · NSU {{ pg.nsu }}{% if pg.parcelas %} · {% if pg.parcelas == 1 %}à vista{% else %}{{ pg.parcelas }}x{% endif %}{% endif %}{% endif %}</li>{% endfor %}
             </ul>
-            {% elif venda.forma_pagamento == 'CARTAO' and venda.nsu %}
+            {% elif venda.nsu %}
             <p class="text-[12px] text-gray-500 tabular">NSU {{ venda.nsu }}{% if venda.parcelas %} · {% if venda.parcelas == 1 %}à vista{% else %}{{ venda.parcelas }}x{% endif %}{% endif %}</p>
             {% endif %}
             {% endwith %}
+            {% if venda.desconto_pix %}<p class="text-[12px] text-emerald-700 tabular" data-desconto-pix><i class="fas fa-tag mr-1"></i>Desconto no Pix: − {{ venda.desconto_pix|brl }}</p>{% endif %}
         </div>
         {% endif %}
     </div>
@@ -77,6 +78,7 @@
                     {% if p.renova_alied %}<div><dt class="text-gray-500">Renova Alied</dt><dd class="tabular text-emerald-600">− {{ p.renova_alied_valor|brl }}</dd>{% if p.renova_alied_pedido %}<dd class="text-[10px] text-gray-400">pedido {{ p.renova_alied_pedido }}</dd>{% endif %}</div>{% endif %}
                     {% if p.renova_assurant %}<div><dt class="text-gray-500">Renova Assurant</dt><dd class="tabular text-emerald-600">− {{ p.renova_assurant_valor|brl }}</dd>{% if p.renova_assurant_pedido %}<dd class="text-[10px] text-gray-400">pedido {{ p.renova_assurant_pedido }}</dd>{% endif %}</div>{% endif %}
                     {% if p.desconto_vivo_mais %}<div><dt class="text-gray-500">Vivo+</dt><dd class="tabular text-emerald-600">− {{ p.desconto_vivo_mais|brl }}</dd></div>{% endif %}
+                    {% if p.desconto_pix %}<div><dt class="text-gray-500">Desconto no Pix</dt><dd class="tabular text-emerald-600">− {{ p.desconto_pix|brl }}</dd></div>{% endif %}
                     <div><dt class="text-gray-500">Valor final (un.)</dt><dd class="tabular font-semibold {% if p.valor_editado %}text-amber-700{% else %}text-gray-900{% endif %}">{{ p.valor_venda|brl }}</dd></div>
                 </dl>
                 {% if p.valor_editado %}
