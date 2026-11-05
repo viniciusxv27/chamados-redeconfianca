@@ -383,15 +383,23 @@ def metas_kanban(request):
     metas = abertas + concluidas
     equipe_ids = _marcar_cards(metas, user, gestor)
 
-    # Só muda de lugar: o card sai do "A Fazer" comum para não aparecer duas vezes.
+    # A coluna "A Fazer Vinicius" traz TUDO o que ele criou e ainda não foi concluído —
+    # qualquer status em aberto, de qualquer mês e sem os outros filtros da tela
+    # (05/11/2026: "deve mostrar tudo criado pelo vinicius"). O card sai da coluna
+    # comum para não aparecer duas vezes; concluída continua na "Concluída".
     a_fazer_vinicius = e_superadmin(user) and request.GET.get(PARAM_A_FAZER_VINICIUS) == '1'
+    dele = []
+    if a_fazer_vinicius:
+        dele = _por_entrega_e_prioridade(
+            _metas_do_usuario(user).select_related('colaborador', 'gestor').prefetch_related('itens')
+            .filter(created_by_id=ID_VINICIUS).exclude(status=Meta.Status.CONCLUIDA))
+        _marcar_cards(dele, user, gestor)
+    ids_dele = {m.id for m in dele}
     colunas = []
     for status in Meta.KANBAN_STATUSES:
-        do_status = [m for m in metas if m.status == status.value]
+        do_status = [m for m in metas if m.status == status.value and m.id not in ids_dele]
         e_concluida = status == Meta.Status.CONCLUIDA
         if a_fazer_vinicius and status == Meta.Status.A_FAZER:
-            dele = [m for m in do_status if m.created_by_id == ID_VINICIUS]
-            do_status = [m for m in do_status if m.created_by_id != ID_VINICIUS]
             colunas.append({'status': status.value, 'label': 'A Fazer Vinicius', 'metas': dele, 'total': len(dele),
                             'restantes': 0, 'grupos': _por_prazo(dele), 'destaque': True})
         colunas.append({

@@ -34,6 +34,10 @@ html.dark #rcAssist {
     transition: transform .2s, background-color .2s;
 }
 .rca-fab:hover { background: #c2410c; transform: scale(1.05); }
+/* O robô do assistente (static/img/assistente/robo.jpg) ocupa o círculo inteiro. */
+.rca-robo { display: block; width: 100%; height: 100%; border-radius: 9999px; object-fit: cover; }
+.rca-fab:has(.rca-robo) { padding: 0; overflow: hidden; background: #2E1065; border: 2px solid #fff; }
+.rca-fab:has(.rca-robo):hover { background: #2E1065; box-shadow: 0 12px 20px -4px rgba(124, 58, 237, .45); }
 .rca-fab:focus-visible { outline: 3px solid #fdba74; outline-offset: 2px; }
 
 .rca-janela {
@@ -53,7 +57,8 @@ html.dark #rcAssist {
     padding: .65rem .75rem; background: var(--rca-cor); color: #fff;
 }
 .rca-topo-icone {
-    width: 2rem; height: 2rem; border-radius: 9999px; flex-shrink: 0;
+    width: 2.25rem; height: 2.25rem; border-radius: 9999px; flex-shrink: 0; overflow: hidden;
+    border: 2px solid rgba(255, 255, 255, .85);
     display: flex; align-items: center; justify-content: center; background: rgba(255, 255, 255, .2);
 }
 .rca-topo-texto { flex: 1; min-width: 0; line-height: 1.2; }
@@ -78,6 +83,8 @@ html.dark #rcAssist {
 
 .rca-vazio { margin: auto 0; text-align: center; color: var(--rca-texto-2); padding: .5rem; }
 .rca-vazio i { font-size: 1.75rem; display: block; margin-bottom: .5rem; color: var(--rca-cor); }
+.rca-vazio-robo { display: block; width: 88px; height: 88px; margin: 0 auto .6rem; border-radius: 9999px; object-fit: cover;
+                  box-shadow: 0 8px 20px -6px rgba(124, 58, 237, .55); }
 .rca-sugestoes { display: flex; flex-wrap: wrap; justify-content: center; gap: .4rem; margin-top: .75rem; }
 .rca-sugestao {
     border: 1px solid var(--rca-borda); border-radius: 9999px; background: var(--rca-fundo);

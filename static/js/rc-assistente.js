@@ -131,8 +131,16 @@
 
     function desenharVazio() {
         var vazio = el('div', 'rca-vazio');
-        var icone = el('i', 'fas fa-comments');
-        icone.setAttribute('aria-hidden', 'true');
+        // O robô do assistente (o mesmo do botão); sem a imagem, fica o ícone de antes.
+        var icone;
+        if (raiz.dataset.robo) {
+            icone = el('img', 'rca-vazio-robo');
+            icone.src = raiz.dataset.robo;
+            icone.alt = '';
+        } else {
+            icone = el('i', 'fas fa-comments');
+            icone.setAttribute('aria-hidden', 'true');
+        }
         vazio.appendChild(icone);
         if (estado.modo === 'claude') {
             vazio.appendChild(el('p', '', 'Assistente Claude: o mesmo da página, com a sua chave. O histórico completo fica na página.'));

@@ -5,7 +5,7 @@ Extraído para include porque a coluna "A Fazer" passou a renderizar os mesmos
 cartões agrupados por prazo — duas cópias do markup viravam duas versões
 diferentes do cartão na primeira alteração.
 {% endcomment %}
-<div class="kanban-card imp-card p-3.5 {% if col.status != 'CONCLUIDA' %}cursor-grab active:cursor-grabbing{% endif %}"
+<div class="kanban-card imp-card p-3.5 {% if col.destaque %}imp-card-vinicius {% endif %}{% if col.status != 'CONCLUIDA' %}cursor-grab active:cursor-grabbing{% endif %}"
      draggable="{% if col.status == 'CONCLUIDA' %}false{% else %}true{% endif %}" data-meta-id="{{ m.id }}">
     <div class="flex items-start justify-between gap-2">
         <a href="{% url 'impulso:meta_detail' m.id %}" class="text-sm font-semibold text-gray-800 hover:text-orange-600 leading-snug">{{ m.titulo }}</a>
@@ -58,6 +58,7 @@ diferentes do cartão na primeira alteração.
             {% endif %}
         </div>
     </div>
+    {% if col.destaque and m.status != 'A_FAZER' %}<p class="mt-1.5"><span class="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-red-600 text-white" title="Status da atividade">{{ m.get_status_display }}</span></p>{% endif %}
 
     {% if m.prioridade != 'MEDIA' %}<div class="mt-1.5" data-card-prioridade>{% include 'impulso/_selo_prioridade.html' with p=m %}</div>{% endif %}
 

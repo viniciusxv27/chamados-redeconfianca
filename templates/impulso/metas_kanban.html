@@ -118,13 +118,22 @@ Ficam fora do filtro de mês — são pedidos esperando resposta, não tarefas d
 </section>
 {% endif %}
 
+{% if a_fazer_vinicius %}
+<style>
+    /* Cards da coluna "A Fazer Vinicius": vermelhos, para se destacarem do resto do Kanban. */
+    .imp-card.imp-card-vinicius { background:#FEE2E2 !important; border-color:#F87171 !important; border-left:4px solid #DC2626 !important; }
+    .imp-card.imp-card-vinicius a { color:#991B1B; }
+    html.dark .imp-card.imp-card-vinicius { background:rgba(220,38,38,.22) !important; border-color:rgba(248,113,113,.55) !important; border-left-color:#EF4444 !important; }
+    html.dark .imp-card.imp-card-vinicius a { color:#FECACA; }
+</style>
+{% endif %}
 <div class="grid grid-cols-1 md:grid-cols-2 {% if a_fazer_vinicius %}xl:grid-cols-5{% else %}xl:grid-cols-4{% endif %} gap-3">
     {% for col in colunas %}
     <div class="rounded-2xl bg-gray-50/80 border border-gray-100 flex flex-col min-h-[180px]">
         <div class="px-4 py-3 flex items-center justify-between border-b border-gray-200/70">
             <span class="text-sm font-semibold text-gray-700 flex items-center gap-2">
                 <span class="w-2 h-2 rounded-full
-                    {% if col.destaque %}bg-violet-500
+                    {% if col.destaque %}bg-red-600
                     {% elif col.status == 'A_FAZER' %}bg-gray-400
                     {% elif col.status == 'EM_ANDAMENTO' %}bg-blue-500
                     {% elif col.status == 'ENTREGUE' %}bg-orange-500
