@@ -161,6 +161,35 @@ def categorias_com_serial():
     return {_chave_categoria(c) for c in escolhidas}
 
 
+def skus_do_item(item):
+    """As variantes do produto ([{'sku', 'cor'}]) lidas da aba PRODUTOS. Pode vir vazia."""
+    extra = item.extra if isinstance(getattr(item, 'extra', None), dict) else {}
+    return [{'sku': str(v['sku']), 'cor': str(v.get('cor') or '')}
+            for v in (extra.get('skus') or []) if isinstance(v, dict) and v.get('sku')]
+
+
+def sku_e_cor(item, pedido=''):
+    """(sku, cor) que a venda grava. O pedido só vale se for mesmo um SKU deste produto.
+
+    Produto com vários SKUs e nenhum escolhido fica sem SKU: gravar o primeiro diria a
+    cor errada na venda. Produto sem a lista (cadastro manual) segue com o código dele.
+    """
+    if not item:
+        return '', ''
+    variantes = skus_do_item(item)
+    pedido = str(pedido or '').strip().casefold()
+    if pedido:
+        for v in variantes:
+            if v['sku'].casefold() == pedido:
+                return v['sku'], v['cor']
+    if len(variantes) == 1:
+        return variantes[0]['sku'], variantes[0]['cor']
+    if variantes:
+        return '', ''
+    extra = item.extra if isinstance(item.extra, dict) else {}
+    return (item.cod_sap or item.cod_sistema or extra.get('ID DPGC', '')), ''
+
+
 def exige_serial(item, categorias=None):
     """O produto (que não é aparelho) precisa de serial na venda?"""
     if item is None or categoria_slv(item) == 'aparelho':
@@ -625,7 +654,8 @@ def registrar_venda(dados, usuario, loja, vendedor=None):
             item=item, nome=nome, qtde=qtde, sugerido=sugerido, regra=regra[:120], final=final, editado=editado,
             rv=rv, rv_valor=rv_valor, ra=ra, ra_valor=ra_valor, ra_pedido=ra_pedido,
             ras=ras, ras_valor=ras_valor, ras_pedido=ras_pedido, codigo=codigo, conta=conta,
-            prateleira=prateleira, serial=serial, categoria=categoria, desconto_pix=ZERO))
+            prateleira=prateleira, serial=serial, categoria=categoria, desconto_pix=ZERO,
+            sku_cor=sku_e_cor(item, p.get('sku'))))
 
     # Pagamento ([Venda de produtos.RF004]) — só faz sentido com produto, e fecha com o total dos produtos.
     desconto_pix = aplicar_desconto_pix(dados, itens_produto, erros) if produtos else ZERO
@@ -743,7 +773,7 @@ def registrar_venda(dados, usuario, loja, vendedor=None):
             VendaProduto.objects.create(
                 venda=venda, preco=item, nome_produto=i['nome'][:200], qtde=i['qtde'], serial=i['serial'],
                 categoria=(item.categoria if item else '')[:120], tipo_produto=i['categoria'],
-                sku=((item.cod_sap or item.cod_sistema or (item.extra or {}).get('ID DPGC', '')) if item else '')[:60],
+                sku=i['sku_cor'][0][:60], cor=i['sku_cor'][1][:60],
                 plano=(plano_anterior.nome if plano_anterior else '')[:200],
                 categoria_slv=i['categoria'], prateleira_infinita=i['prateleira'], valor_sugerido=i['sugerido'],
                 regra_preco=i['regra'], renova_vini=i['rv'], renova_vini_valor=i['rv_valor'], renova_codigo=i['codigo'],

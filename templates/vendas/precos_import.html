@@ -40,6 +40,18 @@
         </details>
         {% endif %}{% endfor %}
     </div>
+    {% if resultado.sku %}
+    <div class="px-5 py-3 text-sm border-t border-gray-100" data-resultado-sku>
+        {% if resultado.sku.problema %}
+        <p class="text-amber-800"><i class="fas fa-triangle-exclamation mr-1.5"></i>SKU não atualizado: {{ resultado.sku.problema }}. Os preços entraram normalmente e quem já tinha SKU continua com ele.</p>
+        {% else %}
+        <p class="text-gray-800"><i class="fas fa-barcode text-purple-600 mr-1.5"></i><strong>{{ resultado.sku.com_sku }}</strong> produto(s) com SKU, <strong>{{ resultado.sku.codigos }}</strong> código(s) no total <span class="text-gray-500">(coluna {{ resultado.sku.coluna }} da aba {{ resultado.sku.aba }})</span>.</p>
+        {% if resultado.sku.sem_sku %}
+        <p class="mt-1 text-[12px] text-amber-800">{{ resultado.sku.sem_sku }} produto(s) sem SKU: o nome não aparece nessa aba. Exemplos: {{ resultado.sku.exemplos_sem_sku|join:", " }}.</p>
+        {% endif %}
+        {% endif %}
+    </div>
+    {% endif %}
     {% if resultado.erro_aviso %}<p class="px-5 py-3 text-sm text-red-700 border-t border-gray-100">{{ resultado.erro_aviso }}</p>{% endif %}
     {% if resultado.popup %}<p class="px-5 py-3 text-sm text-purple-800 border-t border-gray-100"><i class="fas fa-bell mr-1.5"></i>Aviso no portal publicado: consultores, gerentes e ADM veem o popup por 7 dias, até clicar em "Ciente".</p>{% endif %}
     {% if resultado.erro_popup %}<p class="px-5 py-3 text-sm text-red-700 border-t border-gray-100">{{ resultado.erro_popup }}</p>{% endif %}

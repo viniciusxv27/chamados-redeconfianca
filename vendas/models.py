@@ -490,6 +490,8 @@ class ImportacaoPrecos(models.Model):
     # O aviso no portal desta importação (o da anterior é desativado quando sai um novo).
     popup = models.ForeignKey('portal_popups.PortalPopup', on_delete=models.SET_NULL, null=True, blank=True,
                               related_name='+')
+    # O que o popup desenha em cartões (aviso_precos.para_popup). Vazio: ele mostra só o texto.
+    aviso = models.JSONField(default=dict, blank=True, null=True)
 
     class Meta:
         verbose_name = 'Importação da tabela de produtos'

@@ -124,30 +124,36 @@ def _linha_mudanca(item):
     return f"• {_curto(item['nome'])}: " + '; '.join(partes)
 
 
-NUMEROS = ('1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟')
 ICONE_COLUNA = {'Preço': '💳', 'PIX': '⚡'}
-SEPARADOR = '━━━━━━━━━━━━━━━━'
+SEPARADOR = '━━━━━━━━━━━━━━'
 
 
 def _itens_whatsapp(itens, n):
-    """Cada produto num bloco: número, nome em negrito e uma linha por preço que mudou."""
+    """Cada produto: o nome em negrito e, num bloco citado, uma linha por preço que mudou.
+
+    O preço antigo vai riscado (~) e o novo em negrito; o ícone diz qual é a coluna e a
+    legenda fica no fim da mensagem. Assim a linha cabe na largura do celular.
+    """
     linhas = []
     for pos, item in enumerate(itens[:n]):
-        marca = NUMEROS[pos] if pos < len(NUMEROS) else '▪️'
-        linhas.append(f"{marca} *{_curto(item['nome'], 55)}*")
+        if pos:
+            linhas.append('')
+        linhas.append(f"*{_curto(item['nome'], 55)}*")
         for m in item['mudancas']:
-            seta = '🔺' if m['para'] > m['de'] else '🔻'
-            linhas.append(f"      {ICONE_COLUNA.get(m['coluna'], '•')} {m['coluna']}: {brl(m['de'])} ➜ *{brl(m['para'])}* "
-                          f"{seta} _{pct_texto(m['pct'])}_")
+            linhas.append(f"> {ICONE_COLUNA.get(m['coluna'], '•')} ~{brl(m['de'])}~ → *{brl(m['para'])}* ({pct_texto(m['pct'])})")
     return linhas
 
 
 def _bloco_nomes(titulo, itens, top):
     if not itens:
         return []
-    nomes = ', '.join(_curto(i['nome'], 40) for i in itens[:top])
-    mais = f' _+{len(itens) - top} outros_' if len(itens) > top else ''
-    return ['', f'{titulo} ({len(itens)})', f'{nomes}{mais}']
+    linhas = ['', titulo]
+    for i in itens[:top]:
+        preco = f" — {brl(i['preco'])}" if i.get('preco') else ''
+        linhas.append(f"• {_curto(i['nome'], 45)}{preco}")
+    if len(itens) > top:
+        linhas.append(f'_+ {len(itens) - top} outros_')
+    return linhas
 
 
 def montar_mensagem(variacao, *, quando=None, nome='', top=TOP_MUDANCAS, limite=LIMITE_MENSAGEM):
@@ -158,32 +164,36 @@ def montar_mensagem(variacao, *, quando=None, nome='', top=TOP_MUDANCAS, limite=
     c = {k: len(variacao[k]) for k in ('subiram', 'diminuiram', 'novos', 'removidos')}
 
     def montar(n, n_listas):
-        linhas = []
-        if nome:
-            linhas += [f'👋 Olá, *{nome}*!', '']
-        linhas.append('📢 *TABELA DE PREÇOS ATUALIZADA* 🛍️')
+        linhas = ['🏷️ *TABELA DE PREÇOS ATUALIZADA*']
         if quando:
-            linhas.append(f"🗓️ {quando.strftime('%d/%m/%Y')} às {quando.strftime('%H:%M')}")
-        linhas += ['', SEPARADOR,
-                   f"📈 Subiram: *{c['subiram']}*",
+            linhas.append(f"_{quando.strftime('%d/%m/%Y')} às {quando.strftime('%H:%M')}_")
+        linhas.append('')
+        if nome:
+            linhas.append(f'Olá, *{nome}*! Veja o que mudou:')
+            linhas.append('')
+        linhas += [f"📈 Subiram: *{c['subiram']}*",
                    f"📉 Baixaram: *{c['diminuiram']}*",
-                   f"✨ Novos: *{c['novos']}*",
+                   f"🆕 Novos: *{c['novos']}*",
                    f"🚫 Saíram: *{c['removidos']}*"]
         if variacao.get('outros'):
-            linhas.append(f"🔧 Outros ajustes (parcelas/grupos): *{variacao['outros']}*")
-        linhas.append(SEPARADOR)
-        for titulo, itens in (('🔥 *MAIORES ALTAS*', variacao['subiram']), ('💸 *MAIORES QUEDAS*', variacao['diminuiram'])):
+            linhas.append(f"⚙️ Ajustes em parcelas ou grupos: *{variacao['outros']}*")
+        for titulo, itens, mais in (('🔺 *MAIORES ALTAS*', variacao['subiram'], 'subiram'),
+                                    ('🔻 *MAIORES QUEDAS*', variacao['diminuiram'], 'baixaram')):
             if not itens:
                 continue
-            linhas += ['', titulo, ''] + _itens_whatsapp(itens, n)
+            linhas += ['', SEPARADOR, '', titulo, ''] + _itens_whatsapp(itens, n)
             if len(itens) > n:
-                linhas.append(f'      _… e mais {len(itens) - n}_')
-        linhas += _bloco_nomes('✨ *CHEGARAM*', variacao['novos'], n_listas)
-        linhas += _bloco_nomes('🚫 *SAÍRAM DA TABELA*', variacao['removidos'], n_listas)
+                linhas += ['', f'_+ {len(itens) - n} produtos também {mais}_']
+        nomes = _bloco_nomes('🆕 *NOVOS NA TABELA*', variacao['novos'], n_listas) \
+            + _bloco_nomes('🚫 *SAÍRAM DA TABELA*', variacao['removidos'], n_listas)
+        if nomes:
+            linhas += ['', SEPARADOR] + nomes
         if not any(c.values()):
             linhas += ['', '✅ Nenhum preço mudou.']
-        linhas += ['', '💡 _Preço = "a partir de" (menor entre os grupos) · PIX = PIX e Vivo Pay_',
-                   '👉 Confira no portal: *Vendas › Tabela de preços*', '', 'Boas vendas! 🚀']
+        linhas += ['', SEPARADOR, '',
+                   '_💳 Preço a partir de (o menor entre os grupos de plano)_',
+                   '_⚡ PIX e Vivo Pay_', '',
+                   'Lista completa no portal: *Vendas › Tabela de preços*']
         return '\n'.join(linhas)
 
     n, n_listas = top, TOP_LISTAS
@@ -334,6 +344,33 @@ def texto_do_popup(variacao, top=5):
     return '\n'.join(linhas)[:3000]
 
 
+def para_popup(variacao, top=5):
+    """O que o popup desenha (só texto, para gravar em ImportacaoPrecos.aviso).
+
+    Os cartões trazem o total; as listas, só os primeiros de cada e quantos ficaram de fora.
+    """
+    def mudanca(m):
+        return {'coluna': m['coluna'], 'de': brl(m['de']), 'para': brl(m['para']),
+                'pct': pct_texto(m['pct']), 'sobe': m['para'] > m['de']}
+
+    def lista(titulo, chave, tipo):
+        itens = variacao[chave]
+        return {'titulo': titulo, 'tipo': tipo, 'mais': max(0, len(itens) - top),
+                'itens': [{'nome': i['nome'], 'mudancas': [mudanca(m) for m in i['mudancas']]} for i in itens[:top]]}
+
+    def nomes(titulo, chave, tipo):
+        itens = variacao[chave]
+        return {'titulo': titulo, 'tipo': tipo, 'mais': max(0, len(itens) - top),
+                'itens': [{'nome': i['nome'], 'preco': brl(i['preco']) if i.get('preco') else ''} for i in itens[:top]]}
+
+    return {
+        'contagens': {k: len(variacao[k]) for k in ('subiram', 'diminuiram', 'novos', 'removidos')},
+        'outros': variacao.get('outros', 0),
+        'precos': [l for l in (lista('Maiores altas', 'subiram', 'alta'), lista('Maiores quedas', 'diminuiram', 'queda')) if l['itens']],
+        'nomes': [l for l in (nomes('Novos na tabela', 'novos', 'novo'), nomes('Saíram da tabela', 'removidos', 'saiu')) if l['itens']],
+    }
+
+
 def criar_popup(importacao, variacao, por=None):
     """Popup "Ciente" para os usuários Padrão; desativa o da importação anterior. Devolve o popup."""
     from datetime import timedelta
@@ -353,7 +390,7 @@ def criar_popup(importacao, variacao, por=None):
         action_label='Ciente', target_hierarchies=POPUP_HIERARQUIAS,
         blocking_mode=PortalPopup.BLOCK_NEVER, start_at=timezone.now(),
         end_at=timezone.now() + timedelta(days=POPUP_DIAS), created_by=por if getattr(por, 'pk', None) else None)
-    ImportacaoPrecos.objects.filter(pk=importacao.pk).update(popup=popup)
+    ImportacaoPrecos.objects.filter(pk=importacao.pk).update(popup=popup, aviso=para_popup(variacao))
     return popup
 
 

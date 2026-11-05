@@ -571,7 +571,7 @@ def precos_import(request):
             return redirect('vendas:precos_import')
 
         # A tabela já está gravada: daqui para baixo nada desfaz a importação.
-        resultado = {'arquivo': registro.arquivo, 'envios': None}
+        resultado = {'arquivo': registro.arquivo, 'envios': None, 'sku': resumo.get('sku')}
         try:
             variacao = resumo.get('variacao') or {'subiram': [], 'diminuiram': [], 'novos': [], 'removidos': [], 'outros': 0}
             resultado['variacao'] = aviso_precos.para_tela(variacao)
@@ -674,6 +674,8 @@ def cliente_historico(request):
 
 @login_required
 def precos_buscar(request):
+    from .busca import buscar, sku_digitado
+
     """Autocomplete da tabela de preços (JSON) para o formulário de venda."""
     if not pode(request.user, 'modulo.ver'):
         return HttpResponse(status=403)
@@ -687,7 +689,6 @@ def precos_buscar(request):
         qs = ItemPreco.objects.filter(pk__in=ids)
     else:
         # Palavras em qualquer ordem, sem acento; aparelho antes da capa dele (vendas/busca.py).
-        from .busca import buscar
         achados = buscar(q, limite=30)
         por_id = ItemPreco.objects.in_bulk(achados)
         qs = [por_id[i] for i in achados if i in por_id]
@@ -699,10 +700,14 @@ def precos_buscar(request):
         sugerido, regra = slv.preco_sugerido(it, segmentacao, grupamento, request.GET.get('condicao', ''))
         extra = it.extra if isinstance(it.extra, dict) else {}
         tabela = extra.get('tabela') or {}
+        # Quem digitou o SKU inteiro já leva a variante certa (e a cor dela) para a venda.
+        variantes = slv.skus_do_item(it)
+        digitado = sku_digitado(q, variantes) if q else None
+        sku, cor = slv.sku_e_cor(it, digitado['sku'] if digitado else '')
         results.append({
             'id': it.id, 'categoria': it.categoria, 'nome': it.nome, 'plano': it.plano,
             'sistema': it.sistema, 'grupamento': it.grupamento, 'cod_sap': it.cod_sap,
-            'sku': it.cod_sap or it.cod_sistema or extra.get('ID DPGC', ''),
+            'sku': sku, 'cor': cor, 'skus': variantes, 'sku_digitado': bool(digitado),
             'valor': (str(it.valor) if it.valor is not None else ''),
             'categoria_slv': slv.categoria_slv(it),
             'valor_sugerido': str(sugerido) if sugerido is not None else '', 'regra': regra,

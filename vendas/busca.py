@@ -5,7 +5,8 @@ achava "SAMSUNG GALAXY A15 128GB", "eletronico" não achava "Eletrônico" e uma
 busca por "iphone 16" trazia as 30 capas antes do aparelho.
 
 Aqui cada palavra digitada precisa aparecer (em qualquer ordem, sem acento,
-maiúscula ou minúscula) no nome, na marca, na categoria ou no SKU. A ordem dá
+maiúscula ou minúscula) no nome, na marca, na categoria ou no SKU (qualquer um
+dos SKUs do produto, que costuma ter um por cor). O SKU exato vem primeiro. A ordem dá
 preferência a quem começa pelo que foi digitado, aos aparelhos e conectados e
 aos produtos em linha — e empurra capa/película para baixo, a menos que a
 pessoa tenha pedido por elas.
@@ -40,6 +41,18 @@ def _assinatura():
     return f"{agregado['n']}-{agregado['ultimo']}-{agregado['mudou']}"
 
 
+def _so_letras_e_numeros(texto):
+    return normalizar(texto).replace(' ', '')
+
+
+def _codigos(item, extra):
+    """SKUs e IDs do produto, para a busca: cada produto pode ter um SKU por cor."""
+    variantes = [v for v in (extra.get('skus') or []) if isinstance(v, dict)]
+    brutos = [item.cod_sap, item.cod_sistema, extra.get('ID DPGC', '')]
+    brutos += [v.get('sku', '') for v in variantes] + [v.get('dpgc', '') for v in variantes]
+    return sorted({c for c in map(_so_letras_e_numeros, brutos) if c})
+
+
 def _indice():
     memoria = caches['local']
     assinatura = _assinatura()
@@ -52,10 +65,10 @@ def _indice():
         extra = item.extra if isinstance(item.extra, dict) else {}
         nome = normalizar(item.nome)
         resto = normalizar(' '.join(str(x) for x in (
-            extra.get('MARCA', ''), extra.get('FABRICANTE', ''), extra.get('CATEGORIA', ''),
-            item.cod_sap, item.cod_sistema, extra.get('ID DPGC', ''), item.plano)))
+            extra.get('MARCA', ''), extra.get('FABRICANTE', ''), extra.get('CATEGORIA', ''), item.plano)))
         linhas.append({
             'id': item.id, 'nome': nome, 'texto': f'{nome} {resto}', 'compacto': (nome + resto).replace(' ', ''),
+            'codigos': _codigos(item, extra),
             'categoria_slv': slv.categoria_slv(item), 'categoria': item.categoria,
             'portfolio': str(extra.get('PORTFÓLIO', '')), 'tamanho': len(nome),
         })
@@ -63,11 +76,29 @@ def _indice():
     return linhas
 
 
+def _casa_codigo(palavra, linha):
+    # Código é comparado à parte, com um mínimo de tamanho: senão "128" acharia todo
+    # produto com 128 no meio do SKU, e a busca por "iphone 128" encheria de modelo errado.
+    if len(palavra) < 4:
+        return False
+    return any(c.startswith(palavra) or (len(palavra) >= 6 and palavra in c) for c in linha['codigos'])
+
+
 def _casa(palavra, linha):
     if palavra in linha['texto']:
         return True
     # "128 gb" digitado junto ("128gb") ou separado do nome
-    return len(palavra) >= 3 and palavra in linha['compacto']
+    if len(palavra) >= 3 and palavra in linha['compacto']:
+        return True
+    return _casa_codigo(palavra, linha)
+
+
+def sku_digitado(consulta, skus):
+    """A variante cujo SKU é exatamente o que foi digitado, ou None."""
+    alvo = _so_letras_e_numeros(consulta)
+    if not alvo:
+        return None
+    return next((v for v in skus if _so_letras_e_numeros(v.get('sku', '')) == alvo), None)
 
 
 def buscar(consulta, limite=30, categoria=None):
@@ -76,6 +107,7 @@ def buscar(consulta, limite=30, categoria=None):
     if not termos:
         return []
     frase = ' '.join(termos)
+    frase_compacta = frase.replace(' ', '')
     quer_acessorio = any(t in ACESSORIOS for t in termos)
     resultado = []
     for linha in _indice():
@@ -83,7 +115,7 @@ def buscar(consulta, limite=30, categoria=None):
             continue
         if not all(_casa(t, linha) for t in termos):
             continue
-        nota = 0
+        nota = 1000 if frase_compacta in linha['codigos'] else 0   # o SKU exato vem primeiro
         if linha['nome'].startswith(frase):
             nota += 100
         elif frase in linha['nome']:

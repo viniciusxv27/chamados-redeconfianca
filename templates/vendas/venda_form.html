@@ -490,10 +490,12 @@
                 return;
             }
             if (busca.value.trim() !== q) return;          // a pessoa já digitou outra coisa
-            achados = j.results || []; foco = -1;
+            achados = j.results || [];
+            foco = achados.length && achados[0].sku_digitado ? 0 : -1;   // SKU inteiro: Enter já adiciona
             lista.innerHTML = achados.length ? achados.map(function (r, i) {
                 return '<button type="button" class="vd-item-busca w-full text-left px-4 py-2.5 border-b border-gray-100 last:border-0 flex items-center justify-between gap-3" data-i="' + i + '">' +
                     '<span class="min-w-0"><span class="block text-sm text-gray-900 truncate">' + esc(r.nome) + '</span><span class="block text-[11px] text-gray-500">' +
+                    (r.sku_digitado ? '<span class="px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 font-semibold mr-1">SKU ' + esc(r.sku) + (r.cor ? ' · ' + esc(r.cor) : '') + '</span>' : '') +
                     esc(r.categoria_slv) + ' · ' + esc(r.tipo || r.categoria) + (r.fabricante ? ' · ' + esc(r.fabricante) : '') +
                     (r.portfolio && r.portfolio !== 'In' ? ' · <span class="text-amber-600">' + esc(r.portfolio) + '</span>' : '') +
                     (r.grupos && r.grupos.length ? ' · <span class="text-purple-600">' + r.grupos.length + ' grupos de plano</span>' : '') + '</span></span>' +
@@ -532,7 +534,7 @@
         p.valor_final = null;
     }
     function adicionarProduto(r) {
-        const p = {preco_id: r.id, nome: r.nome, sku: r.sku, categoria: r.categoria, categoria_slv: r.categoria_slv, regra: r.regra,
+        const p = {preco_id: r.id, nome: r.nome, sku: r.sku || '', skus: r.skus || [], categoria: r.categoria, categoria_slv: r.categoria_slv, regra: r.regra,
             tipo: r.tipo, portfolio: r.portfolio,
             valor_sugerido: r.valor_sugerido ? Number(r.valor_sugerido) : null, sem_valor: !r.valor_sugerido, imei: '', prateleira_infinita: false,
             renova: false, renova_vini: false, renova_vini_valor: null, renova_codigo: '', renova_ok: null, renova_alied: false, renova_alied_valor: null,
@@ -598,6 +600,8 @@
               '<p class="text-[11px] text-gray-500"><span class="px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 font-semibold mr-1">' + esc(p.categoria_slv) + '</span>' + esc(p.tipo || p.categoria) + (p.sku ? ' · SKU ' + esc(p.sku) : '') +
               (p.portfolio && p.portfolio !== 'In' ? ' <span class="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-semibold">' + esc(p.portfolio) + '</span>' : '') + '</p></div>' +
               '<button type="button" class="text-gray-400 hover:text-red-600" data-remover="' + i + '" title="Remover"><i class="fas fa-trash"></i></button></div>' +
+              (p.skus && p.skus.length > 1 ? '<div><label class="vd-rotulo">Cor / SKU</label><select class="vd-campo" data-campo="sku">' +
+                '<option value="">Escolha a cor…</option>' + p.skus.map(function (v) { return '<option value="' + esc(v.sku) + '"' + (v.sku === p.sku ? ' selected' : '') + '>' + esc((v.cor ? v.cor + ' — ' : '') + v.sku) + '</option>'; }).join('') + '</select></div>' : '') +
               (p.tabela ? '<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">' +
                 '<div><label class="vd-rotulo">Grupo do plano *</label><select class="vd-campo' + (p.grupo ? '' : ' vd-erro') + '" data-campo="grupo">' +
                   '<option value="">Escolha…</option>' + p.grupos.map(function (g) { return '<option' + (g === p.grupo ? ' selected' : '') + '>' + esc(g) + '</option>'; }).join('') + '</select></div>' +
@@ -666,6 +670,7 @@
         else if (campo === 'renova_alied_pedido' || campo === 'renova_assurant_pedido') { p[campo] = e.target.value.trim().toUpperCase(); e.target.value = p[campo]; }
         else if (campo === 'renova_codigo') { p.renova_codigo = e.target.value.trim().toUpperCase(); conferirRenova(p, Number(caixa.dataset.p)); }
         else if (campo === 'grupo' || campo === 'condicao') { p[campo] = e.target.value; aplicarTabela(p); desenharProdutos(); }
+        else if (campo === 'sku') { p.sku = e.target.value; desenharProdutos(); }
         else { p[campo] = num(e.target.value); e.target.value = moeda(p[campo]); if (campo === 'valor_sugerido') p.valor_final = null; }
         recalcular();
     });
@@ -1054,7 +1059,7 @@
             plano_anterior: {id: $('vdPaPlano').value, segmentacao: $('vdPaSeg').value, valor: $('vdPaValor').value,
                              nome: $('vdPaPlano').selectedOptions[0] ? $('vdPaPlano').selectedOptions[0].text : ''},
             produtos: estado.produtos.map(function (p) { const c = calcItem(p); return {
-                preco_id: p.preco_id, nome: p.nome, imei: p.imei, prateleira_infinita: p.prateleira_infinita,
+                preco_id: p.preco_id, nome: p.nome, sku: p.sku || '', imei: p.imei, prateleira_infinita: p.prateleira_infinita,
                 grupamento: p.grupo || '', condicao: p.condicao || '', valor_sugerido: p.valor_sugerido,
                 renova_vini: p.renova && p.renova_vini, renova_vini_valor: p.renova_vini_valor, renova_codigo: p.renova_codigo,
                 renova_alied: p.renova && p.renova_alied, renova_alied_valor: p.renova_alied_valor, renova_alied_pedido: p.renova_alied_pedido,

@@ -1,4 +1,4 @@
-{% load comunicados_popup %}
+{% load comunicados_popup vendas_tags %}
 {% if portal_popup %}
 <div id="portal-popup-modal"
      class="rc-modal hidden fixed inset-0 z-[10000] bg-black/60 flex items-center justify-center p-4"
@@ -6,14 +6,14 @@
      data-popup-id="{{ portal_popup.id }}"
      data-mode="{{ portal_popup.completion_mode }}"
      data-complete-url="{% url 'portal_popups:complete' portal_popup.id %}">
-  <div class="rc-modal-card bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden">
-    <div class="bg-gradient-to-r {{ portal_popup.gradient_classes }} px-6 py-5 text-white">
+  <div class="rc-modal-card bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden flex flex-col max-h-[90vh]">
+    <div class="bg-gradient-to-r {{ portal_popup.gradient_classes }} px-6 py-5 text-white flex-shrink-0">
       <div class="flex items-center gap-3">
         <i class="{{ portal_popup.icon|default:'fas fa-bullhorn' }} text-2xl"></i>
         <h3 class="text-lg font-bold leading-tight">{{ portal_popup.title }}</h3>
       </div>
     </div>
-    <div class="px-6 py-5">
+    <div class="px-6 py-5 overflow-y-auto min-h-0">
       {% if portal_popup_blocking %}
       <div class="mb-4 flex items-start gap-3 rounded-lg bg-red-50 border border-red-200 px-4 py-3">
         <i class="fas fa-exclamation-triangle text-red-500 mt-0.5"></i>
@@ -22,7 +22,12 @@
         </p>
       </div>
       {% endif %}
+      {% aviso_precos_do_popup portal_popup user as aviso_precos %}
+      {% if aviso_precos %}
+        {% include 'portal_popups/_aviso_precos.html' with aviso=aviso_precos %}
+      {% else %}
       <p class="text-sm text-gray-600 whitespace-pre-line">{{ portal_popup.message }}</p>
+      {% endif %}
 
       {% if portal_popup.external_check_key == 'comunicados_pendentes' %}
         {% comunicados_para_ler user as pendentes %}
@@ -54,7 +59,7 @@
         {% endif %}
       {% endif %}
     </div>
-    <div class="px-6 py-4 bg-gray-50 flex items-center justify-end gap-3">
+    <div class="px-6 py-4 bg-gray-50 flex items-center justify-end gap-3 flex-shrink-0">
       {% if not portal_popup_blocking %}
       <button type="button" id="portal-popup-skip"
               class="px-4 py-2 text-gray-500 hover:text-gray-700 text-sm">

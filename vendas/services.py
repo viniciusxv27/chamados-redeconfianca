@@ -10,6 +10,11 @@ A importação **substitui** a tabela: só ficam os produtos destas três abas �
   célula = o produto não sai naquele grupo.
 - ``ELETRÔNICOS_LP_Não Conectados``: o valor é o **PVP Base**.
 
+O SKU vem da aba ``PRODUTOS`` (coluna ``Cod_Sap``), ligada pelo **Nome Comercial**.
+Um produto costuma ter vários SKUs, um por cor: todos vão para ``extra['skus']`` e a
+busca da venda acha o produto por qualquer um deles. Sem essa aba a importação segue
+e quem já tinha SKU continua com ele.
+
 O resto (planos, B2B, vitrine…) sai da tabela: planos, seguros e SVAs são
 cadastrados na Parametrização. Produto que saiu da planilha é apagado; se já
 foi usado numa venda, fica inativo (a venda continua apontando para ele).
@@ -18,6 +23,7 @@ foi usado numa venda, fica inativo (a venda continua apontando para ele).
 fica exatamente como estava.
 """
 import re
+import unicodedata
 from decimal import Decimal, InvalidOperation
 
 from django.db import transaction
@@ -30,6 +36,9 @@ ABA_PVP = 'ELETRÔNICOS_LP_Não Conectados'
 SHEETS_ALVO = ABAS_COM_TABELA + (ABA_PVP,)
 COND_BASE = 'Preço'                    # a coluna do grupo: preço base (cartão sem juros)
 COND_PIX = 'PIX e Vivo Pay'
+ABA_SKUS = 'PRODUTOS'
+COLUNAS_SKU = ('cod sap', 'codigo sap', 'cod material', 'sku')   # em ordem de preferência
+CHAVES_SKU = ('skus', 'ID DPGC')       # o que vem da aba PRODUTOS dentro de extra (não é mudança de preço)
 
 
 def _texto(valor):
@@ -85,7 +94,77 @@ def _colunas_regular(linhas, i_cab):
     return blocos
 
 
-def _ler_aba(ws, nome_aba, resumo):
+def _rotulo(valor):
+    """'Cod_Sap' → 'cod sap'; 'CÓD. SAP' → 'cod sap'."""
+    texto = unicodedata.normalize('NFKD', _texto(valor))
+    texto = ''.join(c for c in texto if not unicodedata.combining(c)).lower()
+    return ' '.join(re.sub(r'[^a-z0-9]+', ' ', texto).split())
+
+
+def _codigo(valor):
+    """Célula de código → texto. O Excel guarda parte dos SKUs como número (22019876)."""
+    if valor is None or isinstance(valor, bool):
+        return ''
+    if isinstance(valor, float) and valor.is_integer():
+        valor = int(valor)
+    texto = _texto(valor)
+    return '' if texto in ('-', '--') or texto.startswith('#') else texto[:40]
+
+
+def _ler_skus(wb):
+    """Os SKUs da aba PRODUTOS: ({nome comercial em minúsculas: [{'sku', 'cor', 'dpgc'}]}, info).
+
+    O mapa vem None quando não dá para ler (sem a aba ou sem a coluna): a importação
+    dos preços não depende disso, e a tela mostra o motivo.
+    """
+    info = {'aba': ABA_SKUS, 'coluna': '', 'codigos': 0, 'com_sku': 0, 'sem_sku': 0, 'exemplos_sem_sku': [], 'problema': ''}
+    if ABA_SKUS not in wb.sheetnames:
+        info['problema'] = f'a planilha não tem a aba {ABA_SKUS}'
+        return None, info
+    linhas = [list(r) for r in wb[ABA_SKUS].iter_rows(values_only=True, max_col=30)]
+    try:
+        i_cab = _linha_cabecalho(linhas)
+    except ValueError:
+        info['problema'] = f'a aba {ABA_SKUS} não tem a coluna "Nome Comercial"'
+        return None, info
+    colunas = {}
+    for j, rotulo in enumerate(linhas[i_cab]):
+        colunas.setdefault(_rotulo(rotulo), j)
+    achada = next((c for c in COLUNAS_SKU if c in colunas), None)
+    if achada is None:
+        info['problema'] = f'a aba {ABA_SKUS} não tem a coluna do SKU (Cod_Sap)'
+        return None, info
+    info['coluna'] = _texto(linhas[i_cab][colunas[achada]])
+    c_sku, c_nome = colunas[achada], colunas['nome comercial']
+    c_cor, c_dpgc = colunas.get('cor'), colunas.get('id dpgc')
+
+    def celula(linha, j):
+        return linha[j] if j is not None and j < len(linha) else None
+
+    mapa, vistos = {}, set()
+    for linha in linhas[i_cab + 1:]:
+        nome, sku = _texto(celula(linha, c_nome)), _codigo(celula(linha, c_sku))
+        if not nome or nome == '-' or not sku or (nome.casefold(), sku) in vistos:
+            continue
+        vistos.add((nome.casefold(), sku))
+        variante = {'sku': sku, 'cor': _texto(celula(linha, c_cor))[:60]}
+        dpgc = _codigo(celula(linha, c_dpgc))
+        if dpgc:
+            variante['dpgc'] = dpgc
+        mapa.setdefault(nome.casefold(), []).append(variante)
+    return mapa, info
+
+
+def _sku_principal(extra):
+    skus = extra.get('skus') or []
+    return skus[0]['sku'][:40] if skus else ''
+
+
+def _sem_sku(extra):
+    return {k: v for k, v in extra.items() if k not in CHAVES_SKU}
+
+
+def _ler_aba(ws, nome_aba, resumo, skus=None):
     linhas = [list(r) for r in ws.iter_rows(values_only=True)]
     i_cab = _linha_cabecalho(linhas)
     cab = [_texto(c) for c in linhas[i_cab]]
@@ -129,6 +208,12 @@ def _ler_aba(ws, nome_aba, resumo):
             resumo['rejeitados'].append({'aba': nome_aba, 'item': nome[:120],
                                          'motivo': 'repetido na planilha (vale a primeira linha)'})
             continue
+        variantes = (skus or {}).get(nome.casefold())
+        if variantes:
+            extra['skus'] = variantes
+            dpgc = next((v['dpgc'] for v in variantes if v.get('dpgc')), '')
+            if dpgc:
+                extra['ID DPGC'] = dpgc
         produtos[nome[:200]] = (valor, extra)
     return produtos
 
@@ -143,7 +228,19 @@ def importar_tabela_precos(file_obj, sheets=None):
         raise ValueError(f'a planilha não tem a(s) aba(s): {", ".join(faltando)}')
     resumo = {'incluidos': 0, 'alterados': 0, 'sem_mudanca': 0, 'removidos': 0, 'inativados': 0,
               'rejeitados': [], 'por_categoria': {}, 'importados': 0, 'erros': []}
-    lidos = {aba: _ler_aba(wb[aba], aba, resumo) for aba in SHEETS_ALVO}
+    skus, info_sku = _ler_skus(wb)
+    lidos = {aba: _ler_aba(wb[aba], aba, resumo, skus) for aba in SHEETS_ALVO}
+    if skus is not None:
+        for produtos in lidos.values():
+            for nome, (_valor_item, extra) in produtos.items():
+                if extra.get('skus'):
+                    info_sku['com_sku'] += 1
+                    info_sku['codigos'] += len(extra['skus'])
+                else:
+                    info_sku['sem_sku'] += 1
+                    if len(info_sku['exemplos_sem_sku']) < 10:
+                        info_sku['exemplos_sem_sku'].append(nome[:80])
+    resumo['sku'] = info_sku
     agora = timezone.now()
 
     with transaction.atomic():
@@ -159,21 +256,33 @@ def importar_tabela_precos(file_obj, sheets=None):
             for nome, (valor, extra) in produtos.items():
                 item = existentes.get(nome)
                 if item is None:
-                    novos.append(ItemPreco(categoria=aba, nome=nome, valor=valor, extra=extra, ativo=True, importado_em=agora))
-                elif item.valor != valor or item.extra != extra or not item.ativo:
+                    novos.append(ItemPreco(categoria=aba, nome=nome, valor=valor, extra=extra, ativo=True, importado_em=agora,
+                                           cod_sap=_sku_principal(extra)))
+                    continue
+                manter.add(item.pk)
+                antigo = item.extra if isinstance(item.extra, dict) else {}
+                if skus is None:                # sem a aba PRODUTOS: não apaga o SKU que o produto já tem
+                    extra.update({k: antigo[k] for k in CHAVES_SKU if k in antigo})
+                principal = _sku_principal(extra) or item.cod_sap
+                preco_mudou = item.valor != valor or _sem_sku(antigo) != _sem_sku(extra) or not item.ativo
+                sku_mudou = {k: antigo.get(k) for k in CHAVES_SKU} != {k: extra.get(k) for k in CHAVES_SKU} \
+                    or item.cod_sap != principal
+                if preco_mudou or sku_mudou:
                     item.valor, item.extra, item.ativo, item.importado_em = valor, extra, True, agora
-                    item.plano = item.sistema = item.grupamento = item.cod_sap = item.cod_sistema = ''
+                    item.plano = item.sistema = item.grupamento = item.cod_sistema = ''
+                    item.cod_sap = principal
+                    # bulk_update não preenche o auto_now, e é por essa data que a busca sabe que precisa se refazer.
+                    item.updated_at = agora
                     mudados.append(item)
-                    manter.add(item.pk)
+                if preco_mudou:
+                    resumo['alterados'] += 1    # só SKU novo não é "preço alterado"
                 else:
                     resumo['sem_mudanca'] += 1
-                    manter.add(item.pk)
             ItemPreco.objects.bulk_update(mudados, ['valor', 'extra', 'ativo', 'importado_em', 'plano', 'sistema',
                                                     'grupamento', 'cod_sap', 'cod_sistema', 'updated_at'], batch_size=500)
             criados = ItemPreco.objects.bulk_create(novos, batch_size=500)
             manter.update(i.pk for i in criados)
             resumo['incluidos'] += len(novos)
-            resumo['alterados'] += len(mudados)
             resumo['por_categoria'][aba] = len(produtos)
             resumo['importados'] += len(produtos)
         # O que não veio na planilha sai da tabela (inclusive planos e as outras abas).

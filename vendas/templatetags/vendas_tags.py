@@ -60,3 +60,25 @@ def brl_ou_traco(valor):
     """Como brl, mas vazio vira "—" (célula sem preço na tabela não é R$ 0,00)."""
     numero = _decimal(valor)
     return '—' if numero is None else f'R$ {_br(numero)}'
+
+
+@register.simple_tag
+def aviso_precos_do_popup(popup, user):
+    """Os cartões do popup de "tabela atualizada", ou None se o popup é de outro assunto.
+
+    Só roda quando há popup na tela. Qualquer falha cai no texto simples do popup: ele
+    aparece em toda a navegação, então um erro aqui não pode derrubar a página.
+    """
+    from django.db import transaction
+
+    from ..models import ImportacaoPrecos
+    from ..permissions import pode
+
+    try:
+        with transaction.atomic():
+            aviso = ImportacaoPrecos.objects.filter(popup_id=popup.pk).values_list('aviso', flat=True).first()
+            if not aviso:
+                return None
+            return {**aviso, 'pode_ver_tabela': pode(user, 'modulo.ver')}
+    except Exception:  # noqa: BLE001
+        return None

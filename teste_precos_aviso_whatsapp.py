@@ -164,14 +164,16 @@ try:
 
     print('\n== MENSAGEM ==')
     msg = montar_mensagem(v, quando=datetime(2026, 10, 29, 14, 30), nome='Ana')
-    t('cabeçalho, nome e data (sem o arquivo)', msg.startswith('👋 Olá, *Ana*!') and '🗓️ 29/10/2026 às 14:30' in msg
-      and 'TABELA DE PREÇOS ATUALIZADA' in msg and 'Arquivo' not in msg, msg)
-    t('contagens', '📈 Subiram: *2*' in msg and '📉 Baixaram: *2*' in msg and '✨ Novos: *1*' in msg
-      and '🚫 Saíram: *1*' in msg and 'Outros ajustes (parcelas/grupos): *1*' in msg, msg)
-    t('um bloco por produto, uma linha por preço', '1️⃣ *Sobe*' in msg
-      and '💳 Preço: R$ 1.000,00 ➜ *R$ 1.100,00* 🔺 _+10,0%_' in msg and '⚡ PIX: R$ 900,00 ➜ *R$ 990,00* 🔺 _+10,0%_' in msg, msg)
-    t('queda com sinal', '💳 Preço: R$ 2.000,00 ➜ *R$ 1.500,00* 🔻 _-25,0%_' in msg)
-    t('novos e saíram pelo nome', '✨ *CHEGARAM* (1)\nNovo' in msg and '🚫 *SAÍRAM DA TABELA* (1)\nSaiu' in msg)
+    t('cabeçalho, nome e data (sem o arquivo)', msg.startswith('🏷️ *TABELA DE PREÇOS ATUALIZADA*\n_29/10/2026 às 14:30_')
+      and 'Olá, *Ana*! Veja o que mudou:' in msg and 'Arquivo' not in msg, msg)
+    t('contagens', '📈 Subiram: *2*' in msg and '📉 Baixaram: *2*' in msg and '🆕 Novos: *1*' in msg
+      and '🚫 Saíram: *1*' in msg and 'Ajustes em parcelas ou grupos: *1*' in msg, msg)
+    t('nome em negrito e, no bloco citado, antigo riscado e novo em negrito', '*Sobe*\n> 💳 ~R$ 1.000,00~ → *R$ 1.100,00* (+10,0%)' in msg
+      and '> ⚡ ~R$ 900,00~ → *R$ 990,00* (+10,0%)' in msg, msg)
+    t('queda com sinal', '> 💳 ~R$ 2.000,00~ → *R$ 1.500,00* (-25,0%)' in msg, msg)
+    t('novos com preço, saíram com o último preço', '🆕 *NOVOS NA TABELA*\n• Novo' in msg and '🚫 *SAÍRAM DA TABELA*\n• Saiu' in msg, msg)
+    t('legenda dos ícones e onde ver tudo', '💳 Preço a partir de' in msg and '⚡ PIX e Vivo Pay' in msg
+      and 'Vendas › Tabela de preços' in msg, msg)
     print('     ---- exemplo ----\n' + '\n'.join('     ' + l for l in msg.splitlines()) + '\n     -----------------')
 
     grande_antes = {(S, f'Aparelho {n:03d} ' + 'X' * 80): {'Preço': D('1000.00'), 'PIX': D('900.00'), 'tabela': None}
@@ -182,7 +184,7 @@ try:
         grande_depois[(S, f'Novo {n:03d} ' + 'Y' * 80)] = {'Preço': D('10'), 'PIX': None, 'tabela': None}
     vg = calcular_variacao(grande_antes, grande_depois)
     msg = montar_mensagem(vg)
-    t('300 altas: só as 10 maiores e "e mais 290"', msg.count('💳 Preço:') == 10 and '_… e mais 290_' in msg
+    t('300 altas: só as 10 maiores e "+ 290"', msg.count('> 💳 ') == 10 and '_+ 290 produtos também subiram_' in msg
       and 'Aparelho 299' in msg, msg[:400])
     t('mensagem cabe no limite', len(msg) <= aviso_precos.LIMITE_MENSAGEM, len(msg))
     pequena = montar_mensagem(vg, limite=900)
@@ -246,9 +248,9 @@ try:
       and sorted(n for n, _ in chamadas) == ['5527999990001', '5527999990002'], chamadas)
     texto = dict(chamadas).get('5527999990001', '')
     t('mensagem com o que subiu e o que baixou', 'Olá, *Rita*!' in texto and '*ZZAV Phone Sobe*' in texto
-      and 'Preço: R$ 2.500,00 ➜ *R$ 2.750,00* 🔺 _+10,0%_' in texto
-      and '*ZZAV Phone Desce*' in texto and 'Preço: R$ 1.800,00 ➜ *R$ 1.500,00* 🔻 _-16,7%_' in texto
-      and 'Preço: R$ 39,90 ➜ *R$ 49,90* 🔺 _+25,1%_' in texto and 'nova.xlsx' not in texto, texto[:1500])
+      and '~R$ 2.500,00~ → *R$ 2.750,00* (+10,0%)' in texto
+      and '*ZZAV Phone Desce*' in texto and '~R$ 1.800,00~ → *R$ 1.500,00* (-16,7%)' in texto
+      and '~R$ 39,90~ → *R$ 49,90* (+25,1%)' in texto and 'nova.xlsx' not in texto, texto[:1500])
     t('mensagem dentro do limite', 0 < len(texto) <= aviso_precos.LIMITE_MENSAGEM, len(texto))
     t('a seleção ficou salva', set(ConfiguracaoVendas.atual().aviso_precos_destinatarios.values_list('id', flat=True))
       == {r1.id, r2.id, r3.id})
