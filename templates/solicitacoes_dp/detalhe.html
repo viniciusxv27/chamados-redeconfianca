@@ -1,0 +1,150 @@
+{% extends 'solicitacoes_dp/_base.html' %}
+{% block tg_titulo %}#{{ sol.pk }} {{ sol.get_tipo_display }} · DP{% endblock %}
+{% block tg_cabecalho %}{{ sol.titulo }}{% endblock %}
+{% block tg_subtitulo %}#{{ sol.pk }} · {{ sol.colaborador.get_full_name|default:sol.colaborador.username }} · enviada em {{ sol.enviada_em|date:"d/m/Y H:i" }}{% endblock %}
+{% block tg_acoes %}<span class="dp-chip dp-{{ sol.status }} !text-sm !px-3 !py-1">{{ sol.get_status_display }}</span>{% endblock %}
+
+{% block dp_conteudo %}
+<div class="grid lg:grid-cols-[1fr_22rem] gap-4 items-start">
+  <div class="space-y-4 min-w-0">
+    {% if sol.status == 'DEVOLVIDA' and sol.resposta %}
+    <div class="tg-card p-4 border-l-4 border-orange-400 bg-orange-50 text-sm text-orange-900">
+      <p class="font-semibold mb-1"><i class="fas fa-rotate-left mr-1"></i>Devolvida pelo DP para correção</p>
+      <p class="whitespace-pre-line">{{ sol.resposta }}</p>
+      {% if pode_corrigir %}<a href="{% url 'solicitacoes_dp:corrigir' sol.pk %}" class="inline-flex mt-2 px-3 py-1.5 rounded-lg bg-orange-600 text-white text-xs font-semibold"><i class="fas fa-pen mr-1"></i>Corrigir e reenviar</a>{% endif %}
+    </div>
+    {% elif sol.status == 'APROVADA' %}
+    <div class="tg-card p-4 border-l-4 border-emerald-400 bg-emerald-50 text-sm text-emerald-900">
+      <p class="font-semibold"><i class="fas fa-circle-check mr-1"></i>Aprovada em {{ sol.aprovada_em|date:"d/m/Y H:i" }}{% if sol.responsavel %} por {{ sol.responsavel.get_full_name }}{% endif %}</p>
+      {% if sol.resposta %}<p class="whitespace-pre-line mt-1">{{ sol.resposta }}</p>{% endif %}
+      {% if sol.tipo == 'AJUSTE' %}<p class="mt-1 text-xs">{% if sol.ajustado_no_ponto %}<i class="fas fa-check mr-1"></i>Ajuste lançado no ponto em {{ sol.ajustado_em|date:"d/m/Y H:i" }}.{% else %}<i class="fas fa-hourglass-half mr-1"></i>O DP ainda vai lançar o ajuste no ponto.{% endif %}</p>{% endif %}
+      {% if dp and sol.documentos.exists %}<p class="mt-1 text-xs"><i class="fas fa-folder-open mr-1"></i>Guardado nos documentos do colaborador ({{ sol.documentos.count }} arquivo{{ sol.documentos.count|pluralize }}).</p>{% endif %}
+    </div>
+    {% endif %}
+
+    <section class="tg-card p-5">
+      <h2 class="text-sm font-bold text-gray-800 mb-3">O que foi pedido</h2>
+      <dl class="grid sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
+        {% if sol.tipo == 'AJUSTE' %}
+        <div><dt class="text-xs text-gray-500">Dia</dt><dd class="font-medium text-gray-900">{{ sol.data|date:"l, d/m/Y" }}</dd></div>
+        <div><dt class="text-xs text-gray-500">O que aconteceu</dt><dd class="font-medium text-gray-900">{{ sol.get_motivo_ajuste_display }}</dd></div>
+        {% else %}
+        <div><dt class="text-xs text-gray-500">Tipo de documento</dt><dd class="font-medium text-gray-900">{{ sol.get_especie_display }}</dd></div>
+        <div><dt class="text-xs text-gray-500">Período</dt><dd class="font-medium text-gray-900">{{ sol.periodo }}{% if sol.dias > 1 %} <span class="text-gray-500">({{ sol.dias }} dias)</span>{% endif %}</dd></div>
+        {% endif %}
+        <div class="sm:col-span-2"><dt class="text-xs text-gray-500">{% if sol.tipo == 'AJUSTE' %}Justificativa{% else %}Observação{% endif %}</dt><dd class="text-gray-900 whitespace-pre-line">{{ sol.justificativa }}</dd></div>
+      </dl>
+      {% if sol.tipo == 'AJUSTE' %}
+      <div class="grid sm:grid-cols-2 gap-3 mt-4">
+        <div class="rounded-xl border border-gray-200 p-3">
+          <p class="text-xs font-semibold text-gray-500 mb-2"><i class="fas fa-fingerprint mr-1"></i>O relógio registrou</p>
+          {% if registrado is None %}<p class="text-sm text-gray-400">Sem o ponto desse dia sincronizado no portal.</p>
+          {% elif registrado %}<p class="text-sm font-semibold tabular text-gray-900">{{ registrado|join:" · " }}</p>
+          {% else %}<p class="text-sm text-gray-500">Nenhuma batida.</p>{% endif %}
+        </div>
+        <div class="rounded-xl border border-cyan-200 bg-cyan-50/60 p-3">
+          <p class="text-xs font-semibold text-cyan-800 mb-2"><i class="fas fa-pen-to-square mr-1"></i>Horários pedidos</p>
+          <ul class="text-sm space-y-0.5">{% for m in sol.marcacoes %}<li class="flex justify-between gap-2"><span class="text-gray-600">{{ m.rotulo }}</span><b class="tabular text-gray-900">{{ m.hora }}</b></li>{% endfor %}</ul>
+        </div>
+      </div>
+      {% endif %}
+    </section>
+
+    <section class="tg-card p-5">
+      <h2 class="text-sm font-bold text-gray-800 mb-3">Arquivos <span class="font-normal text-gray-400">({{ anexos|length }})</span></h2>
+      {% if anexos %}
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        {% for a in anexos %}
+        <a href="{% url 'solicitacoes_dp:anexo' sol.pk a.pk %}" target="_blank" rel="noopener" class="group block rounded-xl border border-gray-200 overflow-hidden hover:border-cyan-300">
+          {% if a.e_imagem %}<img src="{% url 'solicitacoes_dp:anexo' sol.pk a.pk %}" alt="{{ a.nome_original }}" class="w-full h-32 object-cover bg-gray-100" loading="lazy">
+          {% else %}<span class="w-full h-32 grid place-items-center bg-gray-50 text-3xl {% if a.e_pdf %}text-red-500{% else %}text-gray-400{% endif %}"><i class="fas {% if a.e_pdf %}fa-file-pdf{% else %}fa-file{% endif %}"></i></span>{% endif %}
+          <span class="block px-2 py-1.5 text-xs text-gray-700 truncate">{{ a.nome_original }} · {{ a.tamanho|filesizeformat }}</span>
+        </a>
+        {% endfor %}
+      </div>
+      {% else %}<p class="text-sm text-gray-400">Nenhum arquivo.</p>{% endif %}
+      {% if anexos_removidos and dp %}<p class="text-[11px] text-gray-400 mt-2">{{ anexos_removidos|length }} arquivo(s) retirado(s) numa correção (ficam no histórico).</p>{% endif %}
+    </section>
+
+    <section class="tg-card p-5">
+      <h2 class="text-sm font-bold text-gray-800 mb-3"><i class="fas fa-clock-rotate-left text-gray-400 mr-1"></i>Histórico</h2>
+      <ol class="relative border-l-2 border-gray-100 ml-2 space-y-4">
+        {% for e in eventos %}
+        <li class="ml-4">
+          <span class="absolute -left-[7px] mt-1.5 w-3 h-3 rounded-full {% if e.acao == 'APROVADA' or e.acao == 'AJUSTADA' %}bg-emerald-500{% elif e.acao == 'DEVOLVIDA' %}bg-orange-500{% elif e.acao == 'CANCELADA' %}bg-gray-400{% elif e.acao == 'COMENTARIO' %}bg-sky-400{% else %}bg-cyan-500{% endif %}"></span>
+          <p class="text-sm text-gray-900"><b>{{ e.autor.get_full_name|default:"Sistema" }}</b> {{ e.get_acao_display|lower }}</p>
+          <p class="text-[11px] text-gray-400">{{ e.em|date:"d/m/Y H:i" }}</p>
+          {% if e.texto %}<p class="mt-1 text-sm text-gray-700 whitespace-pre-line bg-gray-50 rounded-lg px-3 py-2">{{ e.texto }}</p>{% endif %}
+          {% if e.alteracoes %}
+          <table class="mt-1 text-xs w-full">
+            {% for a in e.alteracoes %}<tr class="align-top"><td class="pr-2 py-0.5 text-gray-500 whitespace-nowrap">{{ a.campo }}</td><td class="py-0.5"><span class="line-through text-red-600/80">{{ a.antes }}</span> <i class="fas fa-arrow-right text-gray-300 mx-1"></i><span class="text-emerald-700">{{ a.depois }}</span></td></tr>{% endfor %}
+          </table>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ol>
+    </section>
+  </div>
+
+  <aside class="space-y-4">
+    {% if dp %}
+    <section class="tg-card p-4 text-sm">
+      <p class="font-semibold text-gray-900">{{ sol.colaborador.get_full_name|default:sol.colaborador.username }}</p>
+      <p class="text-xs text-gray-500">{{ sol.colaborador.job_title|default:"" }}{% if sol.colaborador.sector %} · {{ sol.colaborador.sector.name }}{% endif %}</p>
+      {% if outras %}
+      <p class="text-xs font-semibold text-gray-500 mt-3 mb-1">Outras solicitações</p>
+      <ul class="space-y-1">{% for o in outras %}<li><a href="{% url 'solicitacoes_dp:detalhe' o.pk %}" class="flex justify-between gap-2 text-xs hover:text-cyan-700"><span class="truncate">#{{ o.pk }} {{ o.titulo }}</span><span class="dp-chip dp-{{ o.status }}">{{ o.get_status_display }}</span></a></li>{% endfor %}</ul>
+      {% endif %}
+    </section>
+    {% endif %}
+
+    {% if pode_analisar %}
+    <section class="tg-card p-4 space-y-3">
+      <h2 class="text-sm font-bold text-gray-800"><i class="fas fa-user-shield text-cyan-600 mr-1"></i>Análise do DP</h2>
+      {% if sol.status == 'ENVIADA' %}
+      <form method="post" action="{% url 'solicitacoes_dp:acao' sol.pk %}">{% csrf_token %}<input type="hidden" name="acao" value="assumir">
+        <button class="w-full px-3 py-2 rounded-lg border border-cyan-300 text-cyan-800 text-sm font-semibold hover:bg-cyan-50"><i class="fas fa-hand mr-1"></i>Começar a análise (avisa o colaborador)</button></form>
+      {% else %}<p class="text-xs text-gray-500">Em análise com {{ sol.responsavel.get_full_name|default:"o DP" }}.</p>{% endif %}
+      <form method="post" action="{% url 'solicitacoes_dp:acao' sol.pk %}" class="space-y-2 rounded-xl bg-emerald-50 p-3">{% csrf_token %}<input type="hidden" name="acao" value="aprovar">
+        <textarea name="texto" rows="2" class="dp-campo" placeholder="Recado ao aprovar (opcional)"></textarea>
+        {% if sol.tipo == 'AJUSTE' %}
+        <label class="flex items-center gap-2 text-xs text-emerald-900"><input type="checkbox" name="ajustado" value="1">Já lancei o ajuste no ponto</label>
+        {% else %}
+        <label class="flex items-center gap-2 text-xs text-emerald-900"><input type="checkbox" name="arquivar" value="1" checked>Guardar nos documentos do colaborador ({% if sol.tipo == 'ATESTADO' %}Atestados{% else %}Declarações{% endif %})</label>
+        {% endif %}
+        <button class="w-full px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold"><i class="fas fa-check mr-1"></i>Aprovar</button>
+      </form>
+      <form method="post" action="{% url 'solicitacoes_dp:acao' sol.pk %}" class="space-y-2 rounded-xl bg-orange-50 p-3">{% csrf_token %}<input type="hidden" name="acao" value="devolver">
+        <textarea name="texto" rows="3" required minlength="5" class="dp-campo" placeholder="O que o colaborador precisa corrigir"></textarea>
+        <button class="w-full px-3 py-2 rounded-lg bg-orange-600 hover:bg-orange-700 text-white text-sm font-semibold"><i class="fas fa-rotate-left mr-1"></i>Devolver para correção</button>
+      </form>
+    </section>
+    {% endif %}
+
+    {% if pode_lancar %}
+    <form method="post" action="{% url 'solicitacoes_dp:acao' sol.pk %}" class="tg-card p-4">{% csrf_token %}<input type="hidden" name="acao" value="lancar">
+      <p class="text-xs text-gray-600 mb-2">Aprovado, falta lançar na Sólides.</p>
+      <button class="w-full px-3 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white text-sm font-semibold"><i class="fas fa-check-double mr-1"></i>Marcar como lançado no ponto</button>
+    </form>
+    {% endif %}
+
+    {% if pode_corrigir or pode_cancelar %}
+    <section class="tg-card p-4 space-y-2">
+      {% if pode_corrigir %}<a href="{% url 'solicitacoes_dp:corrigir' sol.pk %}" class="block text-center w-full px-3 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white text-sm font-semibold"><i class="fas fa-pen mr-1"></i>{% if sol.status == 'DEVOLVIDA' %}Corrigir e reenviar{% else %}Editar antes do DP analisar{% endif %}</a>{% endif %}
+      {% if pode_cancelar %}
+      <form method="post" action="{% url 'solicitacoes_dp:acao' sol.pk %}" onsubmit="return confirm('Cancelar esta solicitação?');">{% csrf_token %}<input type="hidden" name="acao" value="cancelar">
+        <button class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm text-gray-700 hover:bg-gray-50">Cancelar solicitação</button></form>
+      {% endif %}
+    </section>
+    {% endif %}
+
+    {% if sol.status != 'CANCELADA' %}
+    <form method="post" action="{% url 'solicitacoes_dp:acao' sol.pk %}" class="tg-card p-4 space-y-2">{% csrf_token %}<input type="hidden" name="acao" value="comentar">
+      <label class="dp-rotulo" for="dpComentario">{% if dono %}Mensagem para o DP{% else %}Mensagem para o colaborador{% endif %}</label>
+      <textarea id="dpComentario" name="texto" rows="2" required class="dp-campo"></textarea>
+      <button class="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm text-gray-700 hover:bg-gray-50"><i class="fas fa-comment mr-1"></i>Enviar mensagem</button>
+    </form>
+    {% endif %}
+  </aside>
+</div>
+{% endblock %}

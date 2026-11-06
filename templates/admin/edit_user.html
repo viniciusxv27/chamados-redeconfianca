@@ -1036,6 +1036,11 @@
             </form>
         </div>
 
+        {% if grupos_documentos %}
+        <!-- Documentos anexados, por categoria (fora do formulário do cadastro: cada ação vale na hora) -->
+        <div class="mt-6">{% include 'admin/_documentos_colaborador.html' with alvo=user_to_edit %}</div>
+        {% endif %}
+
         <!-- Grupos da pessoa -->
         <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mt-6" id="gruposDaPessoa"
              data-url="{% url 'edit_user_group' user_to_edit.id %}">

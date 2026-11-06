@@ -1,0 +1,43 @@
+{% extends 'solicitacoes_dp/_base.html' %}
+{% block tg_titulo %}Responsáveis do DP{% endblock %}
+{% block tg_cabecalho %}Responsáveis do DP{% endblock %}
+{% block tg_subtitulo %}Quem analisa as solicitações e recebe o aviso de cada uma{% endblock %}
+
+{% block dp_conteudo %}
+<datalist id="dpPessoas">{% for p in pessoas %}<option value="{{ p.get_full_name|default:p.username }} · #{{ p.id }}"></option>{% endfor %}</datalist>
+<div class="grid lg:grid-cols-2 gap-4 items-start">
+  <section class="tg-card overflow-hidden">
+    <form method="post" class="p-4 flex gap-2 items-end border-b border-gray-100" id="dpAddForm">{% csrf_token %}
+      <input type="hidden" name="acao" value="adicionar"><input type="hidden" name="user">
+      <div class="flex-1"><label class="dp-rotulo" for="dpPessoa">Pessoa</label>
+        <input id="dpPessoa" list="dpPessoas" class="dp-campo" placeholder="Digite o nome…" autocomplete="off" required></div>
+      <button class="px-4 py-2 rounded-lg bg-cyan-600 text-white text-sm font-semibold">Adicionar</button>
+    </form>
+    <ul class="divide-y divide-gray-100">
+      {% for r in lista %}
+      <li class="px-4 py-3 flex items-center gap-3">
+        <span class="min-w-0 flex-1"><span class="block text-sm font-semibold text-gray-900">{{ r.user.get_full_name|default:r.user.username }}</span>
+          <span class="block text-[11px] text-gray-500">{{ r.user.sector.name|default:"" }}</span></span>
+        <form method="post">{% csrf_token %}<input type="hidden" name="acao" value="avisos"><input type="hidden" name="id" value="{{ r.pk }}">
+          <button class="text-xs px-2 py-1 rounded-lg border {% if r.recebe_avisos %}border-emerald-300 text-emerald-700{% else %}border-gray-300 text-gray-500{% endif %}">{% if r.recebe_avisos %}<i class="fas fa-bell mr-1"></i>Recebe avisos{% else %}<i class="fas fa-bell-slash mr-1"></i>Sem avisos{% endif %}</button></form>
+        <form method="post">{% csrf_token %}<input type="hidden" name="acao" value="remover"><input type="hidden" name="id" value="{{ r.pk }}">
+          <button class="text-xs text-red-600 hover:underline">Remover</button></form>
+      </li>
+      {% empty %}<li class="px-4 py-8 text-center text-sm text-gray-500">Ninguém escolhido: valem as pessoas do RH/DP.</li>{% endfor %}
+    </ul>
+  </section>
+  <section class="tg-card p-4 text-sm text-gray-700 space-y-2">
+    <h2 class="font-bold text-gray-900">Quem recebe o aviso agora</h2>
+    <ul class="list-disc pl-5">{% for u in destinatarios %}<li>{{ u.get_full_name|default:u.username }}</li>{% empty %}<li class="text-gray-400">Ninguém.</li>{% endfor %}</ul>
+    <p class="text-xs text-gray-500">Analisam as solicitações: o SUPERADMIN, quem está nesta lista e quem é do RH/DP (setor ou grupo) — as mesmas pessoas que podem ver atestados. Os avisos vão para quem está na lista com "Recebe avisos"; sem ninguém na lista, vão para o RH/DP.</p>
+  </section>
+</div>
+<script>
+document.getElementById('dpAddForm').addEventListener('submit', function (e) {
+  var campo = document.getElementById('dpPessoa'), m = /#(\d+)\s*$/.exec(campo.value);
+  if (!m) { e.preventDefault(); campo.setCustomValidity('Escolha uma pessoa da lista.'); campo.reportValidity(); return; }
+  this.querySelector('[name=user]').value = m[1];
+});
+document.getElementById('dpPessoa').addEventListener('input', function () { this.setCustomValidity(''); });
+</script>
+{% endblock %}

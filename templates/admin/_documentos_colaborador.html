@@ -1,0 +1,104 @@
+{% comment %}Documentos do colaborador, por categoria (perfil e edição do cadastro). Recebe `alvo`.{% endcomment %}
+<div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden" id="documentos">
+    <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between gap-3 flex-wrap">
+        <h3 class="text-lg font-semibold text-gray-900 flex items-center">
+            <i class="fas fa-folder-open text-gray-500 mr-2"></i>
+            Documentos
+            <span class="ml-2 text-sm font-normal text-gray-500">({{ documents|length }})</span>
+        </h3>
+        <div class="flex items-center gap-2 flex-wrap">
+            {% if pode_configurar_documentos %}
+            <a href="{% url 'documentos_permissoes' %}" class="px-3 py-2 rounded-lg border border-gray-300 text-sm text-gray-700 hover:bg-gray-50 inline-flex items-center"
+               title="Quem vê cada categoria"><i class="fas fa-user-lock mr-1.5"></i>Acesso por categoria</a>
+            {% endif %}
+            {% if documents %}
+            <a href="{% url 'download_user_documents_zip' alvo.id %}"
+               class="flex-shrink-0 bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition-colors inline-flex items-center text-sm">
+                <i class="fas fa-file-archive mr-2"></i> Baixar todos
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="p-6">
+        <nav class="flex gap-1.5 flex-wrap mb-4" aria-label="Categorias de documento">
+            {% for g in grupos_documentos %}
+            <a href="#doc-{{ g.categoria|lower }}" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium {% if g.lista %}border-gray-300 text-gray-700 bg-white hover:bg-gray-50{% else %}border-dashed border-gray-200 text-gray-400{% endif %}">
+                <i class="fas {{ g.icone }} {{ g.cor }}"></i>{{ g.rotulo }} <b class="tabular">{{ g.lista|length }}</b></a>
+            {% endfor %}
+        </nav>
+
+        {% for g in grupos_documentos %}
+        <div class="mb-6" id="doc-{{ g.categoria|lower }}">
+            <h4 class="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                <i class="fas {{ g.icone }} {{ g.cor }}"></i>{{ g.rotulo }}
+                <span class="text-xs font-normal text-gray-500">({{ g.lista|length }})</span>
+                {% if g.categoria == 'ATESTADO' %}<span class="text-[11px] font-normal text-red-600"><i class="fas fa-lock mr-0.5"></i>acesso restrito</span>{% endif %}
+            </h4>
+            {% if g.lista %}
+            <div class="space-y-2">
+                {% for doc in g.lista %}{% include 'admin/_user_document_row.html' %}{% endfor %}
+            </div>
+            {% else %}
+            <p class="text-sm text-gray-400 px-3 py-2 bg-gray-50 border border-dashed border-gray-200 rounded-lg">Nenhum documento nesta categoria.</p>
+            {% endif %}
+        </div>
+        {% endfor %}
+
+        {% if documentos_restritos %}<p class="mb-4 text-xs text-gray-500" data-docs-restritos><i class="fas fa-lock mr-1"></i>{{ documentos_restritos }} documento(s) em categorias com acesso restrito (por exemplo, atestados: só RH/DP e SUPERADMIN).</p>{% endif %}
+
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <h4 class="font-medium text-blue-900 mb-3 flex items-center text-sm">
+                <i class="fas fa-plus mr-2"></i> Adicionar documento
+            </h4>
+            <form method="post" action="{% url 'admin_upload_user_document' alvo.id %}" enctype="multipart/form-data"
+                  class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
+                {% csrf_token %}
+                <input type="hidden" name="voltar" value="{{ request.path }}">
+                <div>
+                    <label class="block text-xs font-medium text-blue-900 mb-1" for="docCategoria{{ alvo.id }}">Categoria</label>
+                    <select id="docCategoria{{ alvo.id }}" name="categoria" class="w-full px-3 py-2 border border-blue-300 rounded-lg bg-white text-sm">
+                        <option value="">Pelo nome do documento</option>
+                        {% for valor, rotulo in categorias_para_escolher %}<option value="{{ valor }}">{{ rotulo }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-blue-900 mb-1" for="docTipo{{ alvo.id }}">Tipo</label>
+                    <select id="docTipo{{ alvo.id }}" name="document_type" class="w-full px-3 py-2 border border-blue-300 rounded-lg bg-white text-sm">
+                        <option value="">Outro (livre)</option>
+                        {% for rd in required_documents %}<option value="{{ rd.id }}">{{ rd.name }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-blue-900 mb-1" for="docNome{{ alvo.id }}">Nome (se "Outro")</label>
+                    <input id="docNome{{ alvo.id }}" type="text" name="document_name" placeholder="Ex: Contrato"
+                           class="w-full px-3 py-2 border border-blue-300 rounded-lg bg-white text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-blue-900 mb-1" for="docArquivo{{ alvo.id }}">Arquivo</label>
+                    <input id="docArquivo{{ alvo.id }}" type="file" name="file" required accept=".pdf,.jpg,.jpeg,.png,.webp,.doc,.docx"
+                           class="w-full text-sm text-gray-700 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-sm file:bg-blue-500 file:text-white hover:file:bg-blue-600">
+                </div>
+                <div class="sm:col-span-2 lg:col-span-4 flex justify-end">
+                    <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm inline-flex items-center">
+                        <i class="fas fa-upload mr-2"></i> Enviar documento
+                    </button>
+                </div>
+            </form>
+            <p class="text-xs text-blue-600 mt-2">Formatos aceitos: PDF, imagem ou Word (máx. 20MB). Atestados e declarações enviados em "Solicitações ao DP" entram aqui sozinhos quando o DP aprova.</p>
+        </div>
+    </div>
+</div>
+<script>
+document.querySelectorAll('#documentos .js-doc-categoria').forEach(function (sel) {
+    var antes = sel.value;
+    sel.addEventListener('change', function () {
+        var corpo = new URLSearchParams({categoria: sel.value, csrfmiddlewaretoken: '{{ csrf_token }}'});
+        fetch(sel.dataset.url, {method: 'POST', body: corpo, credentials: 'same-origin'}).then(function (r) { return r.json(); }).then(function (d) {
+            if (!d.ok) { alert(d.erro || 'Não foi possível mudar a categoria.'); sel.value = antes; return; }
+            window.location.hash = 'documentos';
+            window.location.reload();
+        }).catch(function () { alert('Erro de conexão.'); sel.value = antes; });
+    });
+});
+</script>

@@ -1,0 +1,58 @@
+{% extends 'solicitacoes_dp/_base.html' %}
+{% block tg_titulo %}Solicitações ao DP{% endblock %}
+{% block tg_cabecalho %}Solicitações ao DP{% endblock %}
+{% block tg_subtitulo %}Ajuste de ponto, atestados e declarações direto para o Departamento Pessoal{% endblock %}
+
+{% block dp_conteudo %}
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
+  <a href="{% url 'solicitacoes_dp:nova' 'ajuste' %}" class="tg-card p-4 flex items-center gap-3 hover:border-cyan-300 hover:-translate-y-0.5 transition">
+    <span class="dp-tipo dp-AJUSTE"><i class="fas fa-user-clock"></i></span>
+    <span><span class="block font-semibold text-gray-900">Ajuste de ponto</span><span class="block text-xs text-gray-500">Esqueceu de bater ou bateu errado</span></span>
+  </a>
+  <a href="{% url 'solicitacoes_dp:nova' 'atestado' %}" class="tg-card p-4 flex items-center gap-3 hover:border-red-300 hover:-translate-y-0.5 transition">
+    <span class="dp-tipo dp-ATESTADO"><i class="fas fa-notes-medical"></i></span>
+    <span><span class="block font-semibold text-gray-900">Enviar atestado</span><span class="block text-xs text-gray-500">Médico, odontológico, acompanhamento</span></span>
+  </a>
+  <a href="{% url 'solicitacoes_dp:nova' 'declaracao' %}" class="tg-card p-4 flex items-center gap-3 hover:border-violet-300 hover:-translate-y-0.5 transition">
+    <span class="dp-tipo dp-DECLARACAO"><i class="fas fa-file-signature"></i></span>
+    <span><span class="block font-semibold text-gray-900">Enviar declaração</span><span class="block text-xs text-gray-500">Comparecimento, escolar, órgão público</span></span>
+  </a>
+</div>
+
+{% if devolvidas %}
+<div class="tg-card p-4 mb-4 border-l-4 border-orange-400 text-sm text-orange-900 bg-orange-50">
+  <i class="fas fa-rotate-left mr-1.5"></i>{{ devolvidas }} solicitação{{ devolvidas|pluralize:"ões" }} devolvida{{ devolvidas|pluralize }} pelo DP para correção. Abra, corrija e reenvie.
+</div>
+{% endif %}
+
+<div class="flex gap-1.5 flex-wrap mb-3" role="group" aria-label="Filtrar por situação">
+  <a href="?" class="dp-chip !py-1 !px-3 border {% if not status %}bg-cyan-600 text-white border-cyan-600{% else %}bg-white text-gray-600 border-gray-200{% endif %}">Todas</a>
+  <a href="?status=abertas" class="dp-chip !py-1 !px-3 border {% if status == 'abertas' %}bg-cyan-600 text-white border-cyan-600{% else %}bg-white text-gray-600 border-gray-200{% endif %}">Em aberto <span class="opacity-75">{{ abertas }}</span></a>
+  <a href="?status=APROVADA" class="dp-chip !py-1 !px-3 border {% if status == 'APROVADA' %}bg-cyan-600 text-white border-cyan-600{% else %}bg-white text-gray-600 border-gray-200{% endif %}">Aprovadas</a>
+</div>
+
+<div class="tg-card divide-y divide-gray-100 overflow-hidden">
+  {% for s in pagina %}
+  <a href="{% url 'solicitacoes_dp:detalhe' s.pk %}" class="flex items-center gap-3 p-4 hover:bg-gray-50">
+    <span class="dp-tipo dp-{{ s.tipo }}"><i class="fas {% if s.tipo == 'AJUSTE' %}fa-user-clock{% elif s.tipo == 'ATESTADO' %}fa-notes-medical{% else %}fa-file-signature{% endif %}"></i></span>
+    <span class="min-w-0 flex-1">
+      <span class="block text-sm font-semibold text-gray-900 truncate">{{ s.titulo }}</span>
+      <span class="block text-xs text-gray-500 truncate">#{{ s.pk }} · enviada em {{ s.enviada_em|date:"d/m/Y H:i" }}{% if s.tipo == 'AJUSTE' and s.horarios_texto %} · {{ s.horarios_texto }}{% endif %}</span>
+      {% if s.status == 'DEVOLVIDA' and s.resposta %}<span class="block text-xs text-orange-700 mt-0.5 truncate"><i class="fas fa-comment-dots mr-1"></i>DP: {{ s.resposta }}</span>{% endif %}
+    </span>
+    <span class="dp-chip dp-{{ s.status }}">{{ s.get_status_display }}</span>
+  </a>
+  {% empty %}
+  <div class="p-10 text-center text-gray-500"><i class="fas fa-inbox text-3xl text-gray-300 mb-2 block"></i>Nenhuma solicitação{% if status %} nesta situação{% endif %}.</div>
+  {% endfor %}
+</div>
+{% if pagina.paginator.num_pages > 1 %}
+<div class="flex justify-between items-center mt-3 text-sm">
+  <span class="text-gray-400">Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span>
+  <span class="flex gap-1">
+    {% if pagina.has_previous %}<a class="px-3 py-1.5 border rounded-lg" href="?status={{ status }}&pagina={{ pagina.previous_page_number }}">Anterior</a>{% endif %}
+    {% if pagina.has_next %}<a class="px-3 py-1.5 border rounded-lg" href="?status={{ status }}&pagina={{ pagina.next_page_number }}">Próxima</a>{% endif %}
+  </span>
+</div>
+{% endif %}
+{% endblock %}

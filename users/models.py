@@ -1310,6 +1310,28 @@ class UserDocument(models.Model):
         return f"{size / (1024 * 1024):.1f} MB"
 
 
+class PermissaoCategoriaDocumento(models.Model):
+    """Quem vê cada categoria de documento do colaborador. Sem linha, vale o padrão (ver users.documentos_acesso)."""
+    GESTORES, RH_DP, SUPERADMIN = 'GESTORES', 'RH_DP', 'SUPERADMIN'
+    ACESSOS = [(GESTORES, 'Quem gerencia cadastros'), (RH_DP, 'Só RH/DP e SUPERADMIN'), (SUPERADMIN, 'Só o SUPERADMIN')]
+
+    categoria = models.CharField(max_length=14, choices=CATEGORIAS_DOCUMENTO, unique=True)
+    acesso = models.CharField(max_length=12, choices=ACESSOS, default=GESTORES)
+    # Gente que vê a categoria além da regra (precisa poder abrir o cadastro, como todo mundo).
+    usuarios = models.ManyToManyField(settings.AUTH_USER_MODEL, blank=True, related_name='+',
+                                      verbose_name='Também veem')
+    atualizado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                       related_name='+')
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Permissão de categoria de documento'
+        verbose_name_plural = 'Permissões das categorias de documento'
+
+    def __str__(self):
+        return f'{self.get_categoria_display()}: {self.get_acesso_display()}'
+
+
 class UserSession(models.Model):
     """Rastreia as sessões ativas de cada usuário (IP, localização e dispositivo).
 

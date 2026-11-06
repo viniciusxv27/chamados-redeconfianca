@@ -87,6 +87,16 @@
            class="tg-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'escala' %}tg-tab-active{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
             <i class="fas fa-calendar-week mr-1.5"></i>Escala
         </a>
+        <a href="{% url 'solicitacoes_dp:minhas' %}"
+           class="tg-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'solicitacoes' %}tg-tab-active{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
+            <i class="fas fa-file-medical mr-1.5"></i>Solicitações ao DP
+        </a>
+        {% if dp_analista %}
+        <a href="{% url 'solicitacoes_dp:caixa' %}"
+           class="tg-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'caixa_dp' %}tg-tab-active{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">
+            <i class="fas fa-inbox mr-1.5"></i>Caixa do DP{% if dp_pendentes %} <span class="ml-1 bg-red-500 text-white text-[10px] font-bold rounded-full px-1.5">{{ dp_pendentes }}</span>{% endif %}
+        </a>
+        {% endif %}
         {% if tangerino_ajustes_responsavel %}
         <a href="{% url 'tangerino:ajustes' %}"
            class="tg-tab px-3 py-2 text-sm font-medium rounded-t-lg {% if aba == 'ajustes' %}tg-tab-active{% else %}text-gray-500 hover:text-gray-800 hover:bg-gray-50{% endif %}">

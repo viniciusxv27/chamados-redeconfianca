@@ -1395,6 +1395,7 @@ def edit_user_view(request, user_id):
         'pode_liberar_acessos': _pode_liberar_acessos(request.user),
         'emergency_rows': _emergency_rows(request, user_to_edit),
         'dependent_rows': _dependent_rows(request, user_to_edit),
+        **(_contexto_documentos(request, user_to_edit) if request.user.can_manage_users() else {}),
     }
     return render(request, 'admin/edit_user.html', context)
 
@@ -1499,12 +1500,37 @@ ICONES_CATEGORIA_DOCUMENTO = {
 
 
 def _documentos_visiveis(quem_ve, target):
-    """(documentos que esta pessoa pode ver, quantos ficaram de fora por serem atestados)."""
+    """(documentos que esta pessoa pode ver, quantos ficaram de fora pela permissão da categoria)."""
+    from .documentos_acesso import pode_ver_categoria
     documentos = list(target.documents.all().select_related('document_type', 'uploaded_by'))
-    if quem_ve.pode_ver_atestados():
-        return documentos, 0
-    visiveis = [d for d in documentos if not d.restrito]
+    visiveis = [d for d in documentos if pode_ver_categoria(quem_ve, d.categoria_efetiva)]
     return visiveis, len(documentos) - len(visiveis)
+
+
+def _contexto_documentos(request, target):
+    """A seção "Documentos" (perfil e edição): uma parte por categoria que a pessoa pode ver."""
+    from .documentos_acesso import categorias_visiveis
+    documents, documentos_restritos = _documentos_visiveis(request.user, target)
+    visiveis = categorias_visiveis(request.user)
+    grupos = []
+    for categoria, rotulo in visiveis:
+        icone, cor = ICONES_CATEGORIA_DOCUMENTO[categoria]
+        lista = [d for d in documents if d.categoria_efetiva == categoria]
+        grupos.append({'categoria': categoria, 'rotulo': rotulo, 'icone': icone, 'cor': cor, 'lista': lista})
+    return {
+        'documents': documents, 'grupos_documentos': grupos, 'documentos_restritos': documentos_restritos,
+        'categorias_documento': CATEGORIAS_DOCUMENTO, 'categorias_para_escolher': visiveis,
+        'required_documents': RequiredDocument.objects.filter(is_active=True),
+        'pode_configurar_documentos': request.user.is_superuser or request.user.hierarchy == 'SUPERADMIN',
+    }
+
+
+def _voltar_documentos(request, target_id):
+    """Depois de mexer num documento, volta para a tela de onde veio (perfil ou edição)."""
+    destino = request.POST.get('voltar', '')
+    if destino.startswith(f'/users/manage/users/{target_id}/'):
+        return redirect(destino + ('#documentos' if '#' not in destino else ''))
+    return redirect('view_user_profile', user_id=target_id)
 
 
 @login_required
@@ -2665,8 +2691,6 @@ def view_user_profile_view(request, user_id):
         User.objects.prefetch_related('sectors', 'documents'),
         id=user_id
     )
-    documents, documentos_restritos = _documentos_visiveis(request.user, target)
-
     # Documentos de assinatura eletrônica (app documentos): assinados e pendentes.
     from documentos.models import DocumentSignature
     signatures = (
@@ -2685,30 +2709,14 @@ def view_user_profile_view(request, user_id):
             reverse('complete_pre_registration', kwargs={'token': target.pre_registration_token})
         )
 
-    # Separados: o que a pessoa mandou no pré-cadastro × o que entrou depois (gestor).
-    # Uma seção por categoria; a linha do documento diz se veio do pré-cadastro.
-    pode_atestados = request.user.pode_ver_atestados()
-    grupos_documentos = []
-    for categoria, rotulo in CATEGORIAS_DOCUMENTO:
-        if categoria == CATEGORIA_DOC_ATESTADO and not pode_atestados:
-            continue
-        icone, cor = ICONES_CATEGORIA_DOCUMENTO[categoria]
-        grupos_documentos.append((rotulo, icone, cor, [d for d in documents if d.categoria_efetiva == categoria],
-                                  'Nenhum documento nesta categoria.'))
-    categorias_para_escolher = [c for c in CATEGORIAS_DOCUMENTO if pode_atestados or c[0] != CATEGORIA_DOC_ATESTADO]
-
+    # Uma seção por categoria (só as que quem olha pode ver); a linha do documento diz se veio do pré-cadastro.
     context = {
         'user': request.user,
         'target': target,
-        'documents': documents,
-        'grupos_documentos': grupos_documentos,
-        'documentos_restritos': documentos_restritos,
-        'categorias_documento': CATEGORIAS_DOCUMENTO,
-        'categorias_para_escolher': categorias_para_escolher,
         'signed_documents': signed_documents,
         'pending_documents': pending_documents,
-        'required_documents': RequiredDocument.objects.filter(is_active=True),
         'pre_registration_link': pre_registration_link,
+        **_contexto_documentos(request, target),
     }
     return render(request, 'admin/user_profile.html', context)
 
@@ -2742,26 +2750,33 @@ def admin_upload_user_document_view(request, user_id):
         messages.error(request, 'Você não tem permissão para realizar esta ação.')
         return redirect('dashboard')
 
+    from .documentos_acesso import pode_ver_categoria
     target = get_object_or_404(User, id=user_id)
     uploaded = request.FILES.get('file')
     if not uploaded:
         messages.error(request, 'Selecione um arquivo para enviar.')
-        return redirect('view_user_profile', user_id=target.id)
+        return _voltar_documentos(request, target.id)
 
     ok, err = _document_is_valid(uploaded)
     if not ok:
         messages.error(request, err)
-        return redirect('view_user_profile', user_id=target.id)
+        return _voltar_documentos(request, target.id)
 
     doc_type_id = request.POST.get('document_type') or None
     doc_type = RequiredDocument.objects.filter(id=doc_type_id).first() if doc_type_id else None
     custom_name = request.POST.get('document_name', '').strip()
     categoria = request.POST.get('categoria', '')
+    if categoria and (categoria not in dict(CATEGORIAS_DOCUMENTO) or not pode_ver_categoria(request.user, categoria)):
+        messages.error(request, 'Você não tem acesso a esta categoria de documento.')
+        return _voltar_documentos(request, target.id)
 
     documento = _store_user_document(target, uploaded, document_type=doc_type, document_name=custom_name, uploaded_by=request.user)
 
-    if categoria in dict(CATEGORIAS_DOCUMENTO):
+    if categoria:
         UserDocument.objects.filter(pk=documento.pk).update(categoria=categoria)
+    elif not pode_ver_categoria(request.user, documento.categoria_efetiva):
+        messages.info(request, f'Pelo nome, o documento ficou em "{dict(CATEGORIAS_DOCUMENTO)[documento.categoria_efetiva]}", '
+                               'que tem acesso restrito: você não vai vê-lo na lista.')
 
     log_action(
         request.user,
@@ -2770,7 +2785,7 @@ def admin_upload_user_document_view(request, user_id):
         request
     )
     messages.success(request, 'Documento adicionado com sucesso.')
-    return redirect('view_user_profile', user_id=target.id)
+    return _voltar_documentos(request, target.id)
 
 
 @login_required
@@ -2783,8 +2798,9 @@ def user_document_categoria_view(request, document_id):
     categoria = request.POST.get('categoria', '')
     if categoria not in dict(CATEGORIAS_DOCUMENTO):
         return JsonResponse({'ok': False, 'erro': 'Categoria inválida.'}, status=400)
-    if (doc.restrito or categoria == CATEGORIA_DOC_ATESTADO) and not request.user.pode_ver_atestados():
-        return JsonResponse({'ok': False, 'erro': 'Atestados ficam restritos ao RH/DP e ao SUPERADMIN.'}, status=403)
+    from .documentos_acesso import pode_ver_categoria
+    if not (pode_ver_categoria(request.user, doc.categoria_efetiva) and pode_ver_categoria(request.user, categoria)):
+        return JsonResponse({'ok': False, 'erro': 'Você não tem acesso a esta categoria de documento.'}, status=403)
     antes = doc.categoria_efetiva
     UserDocument.objects.filter(pk=doc.pk).update(categoria=categoria)
     log_action(request.user, 'USER_UPDATE', f'Documento "{doc.display_name}" de {doc.user.full_name}: categoria {antes} → {categoria}', request)
@@ -2799,10 +2815,11 @@ def delete_user_document_view(request, document_id):
         messages.error(request, 'Você não tem permissão para realizar esta ação.')
         return redirect('dashboard')
 
+    from .documentos_acesso import pode_ver_categoria
     doc = get_object_or_404(UserDocument, id=document_id)
-    if doc.restrito and not request.user.pode_ver_atestados():
-        messages.error(request, 'Atestados ficam restritos ao RH/DP e ao SUPERADMIN.')
-        return redirect('view_user_profile', user_id=doc.user_id)
+    if not pode_ver_categoria(request.user, doc.categoria_efetiva):
+        messages.error(request, 'Você não tem acesso a esta categoria de documento.')
+        return _voltar_documentos(request, doc.user_id)
     target_id = doc.user_id
     name = doc.display_name
     try:
@@ -2813,7 +2830,69 @@ def delete_user_document_view(request, document_id):
 
     log_action(request.user, 'USER_UPDATE', f'Documento removido de um colaborador: {name}', request)
     messages.success(request, 'Documento removido com sucesso.')
-    return redirect('view_user_profile', user_id=target_id)
+    return _voltar_documentos(request, target_id)
+
+
+@login_required
+def user_document_arquivo_view(request, document_id):
+    """Abre o arquivo do documento só para quem pode ver a categoria (ou para o próprio colaborador)."""
+    from django.http import FileResponse, Http404
+    from .documentos_acesso import pode_ver_documento
+    doc = get_object_or_404(UserDocument, id=document_id)
+    dono = doc.user_id == request.user.pk
+    if not dono and not (request.user.can_manage_users() and pode_ver_documento(request.user, doc)):
+        raise Http404
+    try:
+        arquivo = doc.file.open('rb')
+    except (FileNotFoundError, OSError):
+        raise Http404('Arquivo não encontrado.')
+    resposta = FileResponse(arquivo, as_attachment=request.GET.get('baixar') == '1',
+                            filename=doc.original_filename or doc.display_name, content_type=doc.content_type or None)
+    resposta['Cache-Control'] = 'private, max-age=300'
+    resposta['X-Content-Type-Options'] = 'nosniff'
+    return resposta
+
+
+@login_required
+def documentos_permissoes_view(request):
+    """SUPERADMIN: quem vê cada categoria de documento do colaborador."""
+    from .documentos_acesso import PADRAO
+    from .models import PermissaoCategoriaDocumento as P
+    if not (request.user.is_superuser or request.user.hierarchy == 'SUPERADMIN'):
+        messages.error(request, 'Só o SUPERADMIN muda o acesso às categorias de documento.')
+        return redirect('manage_users')
+    if request.method == 'POST':
+        mudancas = []
+        for categoria, rotulo in CATEGORIAS_DOCUMENTO:
+            acesso = request.POST.get(f'acesso_{categoria}', '')
+            if acesso not in dict(P.ACESSOS):
+                continue
+            ids = [int(i) for i in request.POST.getlist(f'usuarios_{categoria}') if str(i).isdigit()]
+            regra, _ = P.objects.get_or_create(categoria=categoria, defaults={'acesso': PADRAO.get(categoria, P.GESTORES)})
+            antes = (regra.acesso, set(regra.usuarios.values_list('id', flat=True)))
+            regra.acesso, regra.atualizado_por = acesso, request.user
+            regra.save()
+            regra.usuarios.set(User.objects.filter(id__in=ids, is_active=True))
+            depois = (regra.acesso, set(regra.usuarios.values_list('id', flat=True)))
+            if antes != depois:
+                mudancas.append(f'{rotulo}: {regra.get_acesso_display()}' + (f' +{len(depois[1])} pessoa(s)' if depois[1] else ''))
+        if mudancas:
+            log_action(request.user, 'USER_UPDATE', 'Acesso às categorias de documento: ' + '; '.join(mudancas), request)
+        messages.success(request, 'Acesso às categorias salvo.' if mudancas else 'Nada mudou.')
+        return redirect('documentos_permissoes')
+    regras = {r.categoria: r for r in P.objects.prefetch_related('usuarios')}
+    linhas = []
+    for categoria, rotulo in CATEGORIAS_DOCUMENTO:
+        regra = regras.get(categoria)
+        icone, cor = ICONES_CATEGORIA_DOCUMENTO[categoria]
+        linhas.append({'categoria': categoria, 'rotulo': rotulo, 'icone': icone, 'cor': cor,
+                       'acesso': regra.acesso if regra else PADRAO.get(categoria, P.GESTORES),
+                       'usuarios': list(regra.usuarios.all()) if regra else [],
+                       'total': UserDocument.objects.filter(categoria=categoria).count()})
+    return render(request, 'admin/documentos_permissoes.html', {
+        'linhas': linhas, 'acessos': P.ACESSOS,
+        'pessoas': User.objects.filter(is_active=True).order_by('first_name', 'last_name').only('id', 'first_name', 'last_name', 'username'),
+    })
 
 
 def _zip_entry_name(doc, used_names):

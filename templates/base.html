@@ -532,6 +532,18 @@
                             </a>
                         </li>
                         {% endif %}
+                        {% if user.is_authenticated %}
+                        <li>
+                            <a href="{% url 'solicitacoes_dp:minhas' %}" data-rota="{% url 'solicitacoes_dp:minhas' %}"
+                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-file-medical text-cyan-400 flex-shrink-0 w-5 text-center"></i>
+                                <span class="text-sm">Solicitações ao DP</span>
+                                {% if dp_analista and dp_pendentes %}<span class="ml-auto bg-red-500 text-white text-[10px] font-bold rounded-full px-1.5" title="Esperando o DP">{{ dp_pendentes }}</span>{% endif %}
+                                <div class="tooltip-collapsed">Solicitações ao DP</div>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-cyan-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        {% endif %}
                         <li>
                             {# Entra por /trilhas/ (a rota que o bloqueio de trilha deixa aberta); data-rotas-antigas segura o favorito e o destaque de /trainings/. #}
                             <a href="{% url 'knowledge_trails:dashboard' %}" data-rota="{% url 'knowledge_trails:dashboard' %}" data-rotas-antigas="{% url 'trainings_list' %}"

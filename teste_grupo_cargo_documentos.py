@@ -102,7 +102,7 @@ try:
         r = ca.get(f'/users/manage/users/{novo.pk}/profile/')
         h = html(r)
         t('perfil abre em seções por categoria', r.status_code == 200 and 'Documentos Pessoais' in h and 'Documentos Admissionais' in h, r.status_code)
-        i_pes, i_adm = h.find('fa-id-card text-blue-600'), h.find('fa-file-signature text-emerald-600')
+        i_pes, i_adm = h.find('id="doc-pessoal"'), h.find('id="doc-admissional"')
         t('RG e CPF na seção de pessoais', i_pes < h.find('RG ZZ') < i_adm and i_pes < h.find('CPF antigo ZZ') < i_adm)
         t('contrato na seção de admissionais, com quem enviou', h.find('Contrato ZZ') > i_adm and 'por ZZ Gestora' in h[i_adm:])
         t('a linha diz o que veio do pré-cadastro', h.count('>pré-cadastro<') == 2, h.count('>pré-cadastro<'))

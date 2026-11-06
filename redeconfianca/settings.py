@@ -81,6 +81,7 @@ INSTALLED_APPS = [
     'webmail',  # E-mail institucional (cliente IMAP/SMTP do poste.io)
     'financeiro',  # Financeiro: títulos, baixas, bancos, conciliações e plano de contas
     'orcamentos',  # Orçamentos: módulo do vendedor (orçamento no WhatsApp + Mailing da loja)
+    'solicitacoes_dp',  # Ajuste de ponto, atestados e declarações para o DP (/ponto/solicitacoes/)
     'acess',  # Confiança Acess: esteira dos acessos corporativos (só SUPERADMIN + liberados)
     'maps',  # Mapa de localização (módulo oculto, restrito à administração)
     'cursos',
@@ -171,6 +172,7 @@ TEMPLATES = [
                 'financeiro.context_processors.financeiro_menu',
                 'acess.context_processors.acess_menu',
                 'orcamentos.context_processors.orcamentos_menu',
+                'solicitacoes_dp.context_processors.solicitacoes_dp_menu',
                 'vendas.context_processors.vendas_menu',
                 'fibras.context_processors.fibras_menu',
                 'tangerino.context_processors.tangerino_gate',

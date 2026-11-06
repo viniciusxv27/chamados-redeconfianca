@@ -149,6 +149,7 @@ urlpatterns = [
     path('busca-global/', core_busca.busca_global, name='busca_global'),  # busca do menu superior
     path('quadro-hc/', include('quadro_hc.urls')),  # Quadro de HC (só SUPERADMIN)
     path('facilitador/', include('facilitador.urls')),  # Facilitador: arquivos e links úteis
+    path('ponto/', include('solicitacoes_dp.urls')),  # Solicitações ao DP: ajuste de ponto, atestados, declarações
     path('', include('tangerino.urls')),  # Ponto e Férias (integração Tangerino)
     path('reports/', include('core.reports_urls')),  # Sistema de denúncias
     path('groups/', include('core.group_urls')),  # Sistema de gerenciamento de grupos

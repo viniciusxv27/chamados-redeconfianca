@@ -1,0 +1,60 @@
+{% extends 'solicitacoes_dp/_base.html' %}
+{% block tg_titulo %}Caixa do DP{% endblock %}
+{% block tg_cabecalho %}Caixa do DP{% endblock %}
+{% block tg_subtitulo %}Ajustes de ponto, atestados e declarações enviados pelos colaboradores{% endblock %}
+{% block tg_acoes %}{% if e_superadmin %}<a href="{% url 'solicitacoes_dp:responsaveis' %}" class="px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm text-gray-700 hover:bg-gray-50"><i class="fas fa-users-gear mr-1"></i>Responsáveis do DP</a>{% endif %}{% endblock %}
+
+{% block dp_conteudo %}
+<div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+  <a href="?filtro=pendentes" class="tg-card p-4"><p class="text-xs text-gray-500">Aguardando o DP</p><p class="text-2xl font-bold tabular text-amber-600">{{ kpis.aguardando }}</p>{% if kpis.atrasadas %}<p class="text-[11px] text-red-600 font-semibold">{{ kpis.atrasadas }} há mais de 2 dias</p>{% endif %}</a>
+  <a href="?filtro=pendentes" class="tg-card p-4"><p class="text-xs text-gray-500">Em análise</p><p class="text-2xl font-bold tabular text-sky-700">{{ kpis.em_analise }}</p></a>
+  <a href="?filtro=devolvidas" class="tg-card p-4"><p class="text-xs text-gray-500">Devolvidas (com o colaborador)</p><p class="text-2xl font-bold tabular text-orange-600">{{ kpis.devolvidas }}</p></a>
+  <a href="?filtro=lancar" class="tg-card p-4"><p class="text-xs text-gray-500">Ajustes a lançar no ponto</p><p class="text-2xl font-bold tabular text-cyan-700">{{ kpis.lancar }}</p></a>
+  <a href="?filtro=aprovadas" class="tg-card p-4 col-span-2 md:col-span-1"><p class="text-xs text-gray-500">Aprovadas no mês</p><p class="text-2xl font-bold tabular text-emerald-600">{{ kpis.aprovadas_mes }}</p></a>
+</div>
+
+<form method="get" class="tg-card p-3 mb-3 flex flex-wrap gap-2 items-end">
+  <div class="flex gap-1 flex-wrap mr-auto" role="group" aria-label="Situação">
+    {% for v, r in filtros %}<button name="filtro" value="{{ v }}" class="dp-chip !py-1.5 !px-3 border {% if filtro == v %}bg-cyan-600 text-white border-cyan-600{% else %}bg-white text-gray-600 border-gray-200{% endif %}">{{ r }}</button>{% endfor %}
+  </div>
+  <select name="tipo" class="dp-campo !w-auto" aria-label="Tipo"><option value="">Todos os tipos</option>{% for v, r in tipos %}<option value="{{ v }}" {% if tipo == v %}selected{% endif %}>{{ r }}</option>{% endfor %}</select>
+  <input type="date" name="de" value="{{ de|date:'Y-m-d' }}" class="dp-campo !w-auto" aria-label="De">
+  <input type="date" name="ate" value="{{ ate|date:'Y-m-d' }}" class="dp-campo !w-auto" aria-label="Até">
+  <input type="search" name="q" value="{{ q }}" placeholder="Colaborador ou nº" class="dp-campo !w-48" aria-label="Buscar">
+  <button name="filtro" value="{{ filtro }}" class="px-3 py-2 rounded-lg bg-cyan-600 text-white text-sm font-semibold"><i class="fas fa-filter"></i></button>
+</form>
+
+<div class="tg-card overflow-hidden">
+  <div class="overflow-x-auto">
+    <table class="min-w-full text-sm">
+      <thead class="bg-gray-50 text-[11px] uppercase text-gray-500">
+        <tr><th class="px-4 py-2 text-left">Colaborador</th><th class="px-3 py-2 text-left">Solicitação</th><th class="px-3 py-2 text-left">Data</th><th class="px-3 py-2 text-left">Situação</th><th class="px-3 py-2 text-left">Enviada</th><th class="px-3 py-2 text-left">Com</th></tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        {% for s in pagina %}
+        <tr class="hover:bg-cyan-50/40 cursor-pointer" onclick="location.href='{% url 'solicitacoes_dp:detalhe' s.pk %}'">
+          <td class="px-4 py-2.5"><a href="{% url 'solicitacoes_dp:detalhe' s.pk %}" class="font-semibold text-gray-900 hover:text-cyan-700">{{ s.colaborador.get_full_name|default:s.colaborador.username }}</a>
+            <span class="block text-[11px] text-gray-500">{{ s.colaborador.sector.name|default:"" }}</span></td>
+          <td class="px-3 py-2.5"><span class="inline-flex items-center gap-1.5"><span class="dp-chip dp-{{ s.tipo }} !rounded-md">{{ s.get_tipo_display }}</span><span class="text-xs text-gray-600">#{{ s.pk }}{% if s.especie %} · {{ s.get_especie_display }}{% endif %}</span></span></td>
+          <td class="px-3 py-2.5 whitespace-nowrap tabular">{{ s.data|date:"d/m/Y" }}{% if s.data_fim and s.data_fim != s.data %} – {{ s.data_fim|date:"d/m" }}{% endif %}</td>
+          <td class="px-3 py-2.5"><span class="dp-chip dp-{{ s.status }}">{{ s.get_status_display }}</span>{% if s.status == 'APROVADA' and s.tipo == 'AJUSTE' and not s.ajustado_no_ponto %}<span class="block text-[11px] text-cyan-700 mt-0.5">falta lançar</span>{% endif %}</td>
+          <td class="px-3 py-2.5 whitespace-nowrap text-xs {% if s.status == 'ENVIADA' or s.status == 'EM_ANALISE' %}{% if s.dias_esperando >= 2 %}text-red-600 font-semibold{% else %}text-gray-600{% endif %}{% else %}text-gray-500{% endif %}">{{ s.enviada_em|date:"d/m H:i" }}{% if s.status == 'ENVIADA' or s.status == 'EM_ANALISE' %}<span class="block">há {{ s.enviada_em|timesince }}</span>{% endif %}</td>
+          <td class="px-3 py-2.5 text-xs text-gray-600">{{ s.responsavel.get_full_name|default:"—" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="px-4 py-12 text-center text-gray-400"><i class="fas fa-mug-hot text-3xl text-gray-200 mb-2 block"></i>Nada aqui. {% if filtro == 'pendentes' %}Nenhuma solicitação esperando o DP.{% endif %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% if pagina.paginator.num_pages > 1 %}
+<div class="flex justify-between items-center mt-3 text-sm">
+  <span class="text-gray-400">Página {{ pagina.number }} de {{ pagina.paginator.num_pages }} · {{ pagina.paginator.count }} solicitações</span>
+  <span class="flex gap-1">
+    {% if pagina.has_previous %}<a class="px-3 py-1.5 border rounded-lg" href="?filtro={{ filtro }}&tipo={{ tipo }}&q={{ q|urlencode }}&de={{ de|date:'Y-m-d' }}&ate={{ ate|date:'Y-m-d' }}&pagina={{ pagina.previous_page_number }}">Anterior</a>{% endif %}
+    {% if pagina.has_next %}<a class="px-3 py-1.5 border rounded-lg" href="?filtro={{ filtro }}&tipo={{ tipo }}&q={{ q|urlencode }}&de={{ de|date:'Y-m-d' }}&ate={{ ate|date:'Y-m-d' }}&pagina={{ pagina.next_page_number }}">Próxima</a>{% endif %}
+  </span>
+</div>
+{% endif %}
+{% endblock %}

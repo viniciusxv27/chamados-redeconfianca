@@ -1,0 +1,116 @@
+{% extends 'solicitacoes_dp/_base.html' %}
+{% block tg_titulo %}{% if sol %}Corrigir solicitação{% else %}{{ tipo_rotulo }}{% endif %} · DP{% endblock %}
+{% block tg_cabecalho %}{% if sol %}Corrigir e reenviar #{{ sol.pk }}{% elif tipo == 'AJUSTE' %}Pedir ajuste de ponto{% elif tipo == 'ATESTADO' %}Enviar atestado{% else %}Enviar declaração{% endif %}{% endblock %}
+{% block tg_subtitulo %}O DP é avisado na hora e responde por aqui{% endblock %}
+
+{% block dp_conteudo %}
+<div class="max-w-3xl">
+  {% if sol and sol.status == 'DEVOLVIDA' and sol.resposta %}
+  <div class="tg-card p-4 mb-4 border-l-4 border-orange-400 bg-orange-50 text-sm text-orange-900">
+    <p class="font-semibold mb-1"><i class="fas fa-rotate-left mr-1"></i>O DP pediu para corrigir:</p>
+    <p class="whitespace-pre-line">{{ sol.resposta }}</p>
+  </div>
+  {% endif %}
+  {% if erros %}
+  <div class="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700" role="alert">
+    {% for e in erros %}<p><i class="fas fa-circle-xmark mr-1"></i>{{ e }}</p>{% endfor %}
+  </div>
+  {% endif %}
+
+  <form method="post" enctype="multipart/form-data" class="tg-card p-5 space-y-4" id="dpForm">{% csrf_token %}
+    {% if tipo == 'AJUSTE' %}
+    <div class="grid sm:grid-cols-2 gap-4">
+      <div><label class="dp-rotulo" for="dpData">Dia do ponto *</label>
+        <input id="dpData" type="date" name="data" class="dp-campo" required max="{{ hoje|date:'Y-m-d' }}" value="{{ valores.data|date:'Y-m-d' }}"
+               data-url="{% url 'solicitacoes_dp:marcacoes_do_dia' %}"></div>
+      <div><label class="dp-rotulo" for="dpMotivo">O que aconteceu *</label>
+        <select id="dpMotivo" name="motivo_ajuste" class="dp-campo" required>
+          <option value="">Escolha…</option>
+          {% for v, r in motivos %}<option value="{{ v }}" {% if valores.motivo_ajuste == v %}selected{% endif %}>{{ r }}</option>{% endfor %}
+        </select></div>
+    </div>
+    <div id="dpRegistrado" class="hidden rounded-xl bg-cyan-50 border border-cyan-100 p-3 text-sm text-cyan-900"></div>
+    <div>
+      <p class="dp-rotulo">Horários certos do dia * <span class="font-normal text-gray-400">(preencha os que valem; deixe em branco o que não houve)</span></p>
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        {% for i, rotulo, hora in linhas_horario %}
+        <div {% if i >= 4 %}class="dp-extra {% if not hora %}hidden{% endif %}"{% endif %}><label class="text-[11px] text-gray-500" for="hora_{{ i }}">{{ rotulo }}</label>
+          <input id="hora_{{ i }}" type="time" name="hora_{{ i }}" value="{{ hora }}" class="dp-campo tabular"></div>
+        {% endfor %}
+      </div>
+      <button type="button" id="dpMaisHorarios" class="mt-2 text-xs font-semibold text-cyan-700 hover:underline"><i class="fas fa-plus mr-1"></i>Mais um par de horários</button>
+    </div>
+    {% else %}
+    <div class="grid sm:grid-cols-2 gap-4">
+      <div class="sm:col-span-2"><label class="dp-rotulo" for="dpEspecie">Tipo de {% if tipo == 'ATESTADO' %}atestado{% else %}declaração{% endif %} *</label>
+        <select id="dpEspecie" name="especie" class="dp-campo" required>
+          <option value="">Escolha…</option>
+          {% for v, r in especies %}<option value="{{ v }}" {% if valores.especie == v %}selected{% endif %}>{{ r }}</option>{% endfor %}
+        </select></div>
+      <div><label class="dp-rotulo" for="dpData">{% if tipo == 'ATESTADO' %}Primeiro dia{% else %}Dia{% endif %} *</label>
+        <input id="dpData" type="date" name="data" class="dp-campo" required value="{{ valores.data|date:'Y-m-d' }}"></div>
+      {% if tipo == 'ATESTADO' %}
+      <div><label class="dp-rotulo" for="dpFim">Último dia <span class="font-normal text-gray-400">(vazio = só um dia)</span></label>
+        <input id="dpFim" type="date" name="data_fim" class="dp-campo" value="{{ valores.data_fim|date:'Y-m-d' }}"></div>
+      {% endif %}
+      <div><label class="dp-rotulo" for="dpHi">Das <span class="font-normal text-gray-400">(se for por horas)</span></label>
+        <input id="dpHi" type="time" name="hora_inicio" class="dp-campo tabular" value="{{ valores.hora_inicio|time:'H:i' }}"></div>
+      <div><label class="dp-rotulo" for="dpHf">Até as</label>
+        <input id="dpHf" type="time" name="hora_fim" class="dp-campo tabular" value="{{ valores.hora_fim|time:'H:i' }}"></div>
+    </div>
+    {% endif %}
+
+    <div><label class="dp-rotulo" for="dpJust">{% if tipo == 'AJUSTE' %}Justificativa *{% else %}Observação para o DP *{% endif %}</label>
+      <textarea id="dpJust" name="justificativa" rows="3" maxlength="2000" required minlength="10" class="dp-campo"
+                placeholder="{% if tipo == 'AJUSTE' %}Ex.: fui atender cliente na rua e esqueci de bater a volta do almoço{% else %}Ex.: consulta no posto de saúde pela manhã{% endif %}">{{ valores.justificativa|default:"" }}</textarea></div>
+
+    <div>
+      <label class="dp-rotulo" for="dpAnexos">{% if tipo == 'AJUSTE' %}Comprovante <span class="font-normal text-gray-400">(opcional)</span>{% else %}Documento (foto ou PDF) *{% endif %}</label>
+      {% if anexos %}
+      <ul class="mb-2 space-y-1">
+        {% for a in anexos %}<li class="flex items-center gap-2 text-sm"><i class="fas fa-paperclip text-gray-400"></i>
+          <a class="text-cyan-700 hover:underline truncate" target="_blank" href="{% url 'solicitacoes_dp:anexo' sol.pk a.pk %}">{{ a.nome_original }}</a>
+          <label class="ml-auto text-xs text-gray-500 inline-flex items-center gap-1"><input type="checkbox" name="remover" value="{{ a.pk }}">retirar</label></li>{% endfor %}
+      </ul>
+      {% endif %}
+      <input id="dpAnexos" type="file" name="anexos" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif,image/*,application/pdf"
+             class="block w-full text-sm text-gray-600 file:mr-3 file:px-3 file:py-2 file:rounded-lg file:border-0 file:bg-cyan-50 file:text-cyan-800 file:font-semibold"
+             {% if tipo != 'AJUSTE' and not anexos %}required{% endif %}>
+      <p class="text-[11px] text-gray-400 mt-1">No celular, dá para tirar a foto na hora. Até {{ anexos_max }} arquivos, {{ tamanho_max }} MB cada.{% if tipo == 'ATESTADO' %} O atestado só é visto por você e pelo DP.{% endif %}</p>
+    </div>
+
+    {% if sol %}
+    <div><label class="dp-rotulo" for="dpComent">Recado para o DP <span class="font-normal text-gray-400">(opcional)</span></label>
+      <input id="dpComent" name="comentario" maxlength="1000" class="dp-campo" placeholder="O que você corrigiu"></div>
+    {% endif %}
+
+    <div class="flex gap-2 justify-end pt-1">
+      <a href="{% if sol %}{% url 'solicitacoes_dp:detalhe' sol.pk %}{% else %}{% url 'solicitacoes_dp:minhas' %}{% endif %}" class="px-4 py-2 rounded-xl border border-gray-300 text-sm text-gray-700">Voltar</a>
+      <button class="px-5 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-700 text-white text-sm font-semibold"><i class="fas fa-paper-plane mr-1"></i>{% if sol %}Reenviar ao DP{% else %}Enviar ao DP{% endif %}</button>
+    </div>
+  </form>
+</div>
+<script>
+(function () {
+  var mais = document.getElementById('dpMaisHorarios');
+  if (mais) mais.addEventListener('click', function () {
+    document.querySelectorAll('.dp-extra.hidden').forEach(function (el) { el.classList.remove('hidden'); });
+    mais.hidden = true;
+  });
+  var data = document.getElementById('dpData'), caixa = document.getElementById('dpRegistrado');
+  if (!data || !caixa || !data.dataset.url) return;
+  function consultar() {
+    if (!data.value) { caixa.classList.add('hidden'); return; }
+    fetch(data.dataset.url + '?data=' + encodeURIComponent(data.value), {credentials: 'same-origin'})
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        caixa.classList.remove('hidden');
+        if (j.horas === null) { caixa.textContent = 'O portal não tem o ponto desse dia sincronizado: informe os horários certos abaixo.'; return; }
+        caixa.textContent = j.horas.length ? 'O relógio registrou nesse dia: ' + j.horas.join(' · ') : 'O relógio não registrou nenhuma batida nesse dia.';
+      }).catch(function () { caixa.classList.add('hidden'); });
+  }
+  data.addEventListener('change', consultar);
+  consultar();
+})();
+</script>
+{% endblock %}
