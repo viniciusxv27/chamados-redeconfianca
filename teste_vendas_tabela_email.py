@@ -286,5 +286,9 @@ r = cc.post('/vendas/precos/importar/email/', {'acao': 'salvar', 'conta': 'x@y.z
 config.refresh_from_db()
 t('quem não é SUPERADMIN não mexe', config.tabela_email == 'alcides@exemplo-teste.local')
 
+with mock.patch.object(tabela_email, 'testar_conexao', side_effect=RuntimeError('quebrou de propósito')):
+    r = cb.post('/vendas/precos/importar/email/', {'acao': 'salvar', 'conta': 'alcides@exemplo-teste.local', 'senha': '', 'servidor': 'imap-vip.uni5.net', 'ativo': 'on'}, follow=True)
+t('erro inesperado vira mensagem, não 500', r.status_code == 200 and 'quebrou de propósito' in r.content.decode())
+
 print(f'\n{ok} OK, {fail} falha(s)')
 sys.exit(1 if fail else 0)

@@ -609,6 +609,16 @@ def precos_import(request):
 @login_required
 @require_POST
 def precos_email(request):
+    try:
+        return _precos_email(request)
+    except Exception as exc:  # noqa: BLE001 — a tela mostra o erro em vez de 500
+        logger.exception('Tabela pelo e-mail: falha ao %s', request.POST.get('acao', 'salvar'))
+        messages.error(request, f'Não deu para concluir ({exc.__class__.__name__}: {str(exc)[:300]}). '
+                                'Mande esta mensagem para o suporte.')
+        return redirect('vendas:precos_import')
+
+
+def _precos_email(request):
     """SUPERADMIN: guarda a caixa da tabela pelo e-mail, testa e busca agora (vendas/tabela_email.py)."""
     from webmail.cliente import ErroEmail
     from webmail.seguranca import cifrar, decifrar

@@ -84,7 +84,8 @@ def _conectar(servidor):
     try:
         return imaplib.IMAP4_SSL(host, porta, ssl_context=ssl.create_default_context(), timeout=TIMEOUT)
     except ssl.SSLCertVerificationError as exc:
-        raise ServidorFora(f'O certificado de {host} não confere ({getattr(exc, 'verify_message', None) or exc}).') from exc
+        motivo = getattr(exc, 'verify_message', None) or exc
+        raise ServidorFora(f'O certificado de {host} não confere ({motivo}).') from exc
     except (OSError, socket.timeout) as exc:
         raise ServidorFora(f'Não consegui falar com {host}:{porta} ({exc.__class__.__name__}).') from exc
 
