@@ -575,6 +575,7 @@ def precos_import(request):
         config = ConfiguracaoVendas.atual()
         context['tabela_email'] = {
             'conta': config.tabela_email, 'tem_senha': bool(config.tabela_email_senha),
+            'servidor': config.tabela_email_servidor,
             'ativo': config.tabela_email_ativo, 'avisar': config.tabela_email_avisar,
             'estado': config.tabela_email_estado or {},
         }
@@ -625,17 +626,18 @@ def precos_email(request):
         if conta and '@' not in conta:
             messages.error(request, 'Informe o e-mail completo da caixa.')
             return redirect('vendas:precos_import')
-        campos = {'tabela_email': conta, 'tabela_email_ativo': request.POST.get('ativo') == 'on',
+        servidor = (request.POST.get('servidor') or '').strip()[:200]
+        campos = {'tabela_email': conta, 'tabela_email_servidor': servidor, 'tabela_email_ativo': request.POST.get('ativo') == 'on',
                   'tabela_email_avisar': request.POST.get('avisar') == 'on'}
         if senha:                      # em branco = mantém a senha guardada
             campos['tabela_email_senha'] = cifrar(senha)
-        if conta != config.tabela_email:
+        if conta != config.tabela_email or servidor != config.tabela_email_servidor:
             campos['tabela_email_estado'] = {}          # outra caixa: o "último importado" não vale mais
         ConfiguracaoVendas.objects.filter(pk=config.pk).update(**campos, atualizado_por=request.user)
         config.refresh_from_db()
         if conta and config.tabela_email_senha:
             try:
-                tabela_email.testar_conexao(conta, decifrar(config.tabela_email_senha))
+                tabela_email.testar_conexao(conta, decifrar(config.tabela_email_senha), config.tabela_email_servidor)
                 messages.success(request, f'Caixa {conta} salva e o login funcionou.'
                                  + (' A busca roda todo dia às 6h.' if config.tabela_email_ativo
                                     else ' A busca automática está desligada.'))

@@ -203,7 +203,7 @@ with mock.patch.object(tabela_email, '_entrar', return_value=caixa) as entrar:
     linha = tabela_email.tarefa_diaria()
     config.refresh_from_db()
     imp = ImportacaoPrecos.objects.order_by('-id').first()
-    t('entra com a caixa e a senha guardadas', entrar.call_args[0] == ('alcides@exemplo-teste.local', 'segredo'))
+    t('entra com a caixa e a senha guardadas', entrar.call_args[0] == ('alcides@exemplo-teste.local', 'segredo', 'imap-vip.uni5.net'))
     t('importa a tabela do e-mail', linha.startswith('importada') and imp.origem == 'email' and imp.usuario is None
       and imp.arquivo.startswith('TABELA DE PREÇOS - DEMAIS CANAIS') and not imp.erro, (linha, imp.erro))
     t('o preço é o do anexo', ItemPreco.objects.get(nome='ZZ SMART Phone').valor == 1200)
@@ -237,16 +237,37 @@ with mock.patch.object(tabela_email, '_entrar', side_effect=OSError('servidor fo
     linha = tabela_email.tarefa_diaria()
 t('servidor fora: registra e não quebra', linha.startswith('erro') and 'servidor fora' in linha, linha)
 
+print('\n== SERVIDOR IMAP ==')
+t('padrão é a Uni5', ConfiguracaoVendas.atual().tabela_email_servidor == 'imap-vip.uni5.net')
+t('separa host e porta', tabela_email._separar('imaps://imap-vip.uni5.net:993/') == ('imap-vip.uni5.net', 993)
+  and tabela_email._separar('imap-vip.uni5.net') == ('imap-vip.uni5.net', 993))
+falso = mock.MagicMock(capabilities=('AUTH=PLAIN',))
+with mock.patch('imaplib.IMAP4_SSL', return_value=falso) as abre:
+    tabela_email.testar_conexao('a@b.c', 'x', 'imap-vip.uni5.net')
+t('conecta no servidor configurado com certificado verificado', abre.call_args[0][:2] == ('imap-vip.uni5.net', 993)
+  and abre.call_args[1]['ssl_context'].check_hostname and falso.authenticate.called and falso.logout.called)
+import ssl as _ssl
+from webmail.cliente import ServidorFora
+with mock.patch('imaplib.IMAP4_SSL', side_effect=_ssl.SSLCertVerificationError('x')):
+    try:
+        tabela_email.testar_conexao('a@b.c', 'x', 'imap.exemplo'); deu = None
+    except ServidorFora as exc:
+        deu = str(exc)
+t('certificado errado vira aviso legível', deu and 'certificado' in deu)
+with mock.patch('webmail.cliente._conectar_imap', return_value=falso) as webm:
+    tabela_email.testar_conexao('a@b.c', 'x', '')
+t('em branco usa o servidor do /email/', webm.called)
+
 print('\n== TELA (SUPERADMIN) ==')
 cb = Client(); cb.force_login(boss)
 h = cb.get('/vendas/precos/importar/').content.decode()
 t('a seção aparece com a caixa e sem a senha', 'id="vdTabelaEmail"' in h and 'alcides@exemplo-teste.local' in h and 'segredo' not in h
   and 'guardada' in h)
 with mock.patch.object(tabela_email, 'testar_conexao') as testar:
-    r = cb.post('/vendas/precos/importar/email/', {'acao': 'salvar', 'conta': 'Alcides@Exemplo-Teste.local', 'senha': 'nova-senha', 'ativo': 'on', 'avisar': 'on'}, follow=True)
+    r = cb.post('/vendas/precos/importar/email/', {'acao': 'salvar', 'conta': 'Alcides@Exemplo-Teste.local', 'senha': 'nova-senha', 'servidor': 'imap-vip.uni5.net', 'ativo': 'on', 'avisar': 'on'}, follow=True)
 config.refresh_from_db()
 t('salva a senha cifrada e testa o login', decifrar(config.tabela_email_senha) == 'nova-senha' and 'nova-senha' not in config.tabela_email_senha
-  and testar.call_args[0] == ('alcides@exemplo-teste.local', 'nova-senha') and 'o login funcionou' in r.content.decode())
+  and testar.call_args[0] == ('alcides@exemplo-teste.local', 'nova-senha', 'imap-vip.uni5.net') and 'o login funcionou' in r.content.decode())
 with mock.patch.object(tabela_email, 'testar_conexao'):
     cb.post('/vendas/precos/importar/email/', {'acao': 'salvar', 'conta': 'alcides@exemplo-teste.local', 'senha': '', 'ativo': 'on'})
 config.refresh_from_db()

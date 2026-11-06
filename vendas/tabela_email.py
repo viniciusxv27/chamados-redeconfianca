@@ -6,7 +6,11 @@ contém "Demais Canais" e importar como tabela de preço".
 
 - A caixa e a senha ficam em ConfiguracaoVendas, a senha cifrada como a do /email/
   (webmail/seguranca.py) — nunca no código nem na tela.
-- A conexão é a do webmail (mesmo servidor, mesmo pino de certificado). Só leitura:
+- A caixa da tabela (alcides@redeconfianca.com) fica na Uni5, não no poste.io do /email/:
+  o servidor IMAP é ``ConfiguracaoVendas.tabela_email_servidor`` (padrão ``SERVIDOR``,
+  porta 993, certificado verificado de verdade — ele vale para *.uni5.net, por isso o
+  nome é imap-vip.uni5.net e não imap.redeconfianca.com). Em branco = servidor do /email/.
+  Só leitura:
   a caixa é aberta em modo somente-leitura e a mensagem baixada com BODY.PEEK, então
   nada é marcado como lido nem apagado.
 - Pega a mensagem mais nova dos últimos ``DIAS_PARA_TRAS`` dias com o assunto; se ela
@@ -34,6 +38,9 @@ ANEXO = 'demais canais'
 EXTENSOES = ('.xlsx', '.xlsm')
 DIAS_PARA_TRAS = 10
 PASTA = 'INBOX'
+SERVIDOR = 'imap-vip.uni5.net'
+PORTA = 993
+TIMEOUT = 25
 
 
 def normalizar(texto):
@@ -58,10 +65,38 @@ def anexo_confere(nome):
     return ANEXO in n and n.endswith(EXTENSOES)
 
 
-def _entrar(conta, senha):
+def _separar(servidor):
+    servidor = (servidor or '').strip()
+    servidor = re.sub(r'^[a-z]+://', '', servidor, flags=re.I).strip('/')
+    if ':' in servidor:
+        host, _, porta = servidor.rpartition(':')
+        if porta.isdigit():
+            return host, int(porta)
+    return servidor, PORTA
+
+
+def _conectar(servidor):
+    import socket
+    import ssl
+
+    from webmail.cliente import ServidorFora
+    host, porta = _separar(servidor)
+    try:
+        return imaplib.IMAP4_SSL(host, porta, ssl_context=ssl.create_default_context(), timeout=TIMEOUT)
+    except ssl.SSLCertVerificationError as exc:
+        raise ServidorFora(f'O certificado de {host} não confere ({getattr(exc, 'verify_message', None) or exc}).') from exc
+    except (OSError, socket.timeout) as exc:
+        raise ServidorFora(f'Não consegui falar com {host}:{porta} ({exc.__class__.__name__}).') from exc
+
+
+def _entrar(conta, senha, servidor=None):
     from webmail import cliente
-    con = cliente._conectar_imap()
-    cliente._entrar_imap(con, conta, senha)
+    con = _conectar(servidor) if (servidor or '').strip() else cliente._conectar_imap()
+    try:
+        cliente._entrar_imap(con, conta, senha)
+    except Exception:
+        _sair(con)
+        raise
     return con
 
 
@@ -72,10 +107,9 @@ def _sair(con):
         pass
 
 
-def testar_conexao(conta, senha):
+def testar_conexao(conta, senha, servidor=None):
     """Só confere o login (levanta webmail.cliente.ErroEmail se não der)."""
-    from webmail import cliente
-    cliente.testar_login(conta, senha)
+    _sair(_entrar(conta, senha, servidor))
 
 
 def _uid_de(cabeca):
@@ -159,7 +193,7 @@ def buscar_e_importar(forcar=False, usuario=None):
         return estado
 
     try:
-        con = _entrar(conta, senha)
+        con = _entrar(conta, senha, config.tabela_email_servidor)
         try:
             achado = procurar(con, agora)
         finally:

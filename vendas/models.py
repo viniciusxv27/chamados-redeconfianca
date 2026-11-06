@@ -360,6 +360,9 @@ class ConfiguracaoVendas(models.Model):
     # A senha fica cifrada (webmail/seguranca.py) e nunca volta para a tela.
     tabela_email = models.CharField(max_length=254, blank=True, default='', db_default='',
                                     verbose_name='Caixa que recebe a tabela')
+    # Servidor IMAP da caixa (a caixa .com fica na Uni5; em branco = servidor do /email/).
+    tabela_email_servidor = models.CharField(max_length=200, blank=True, default='imap-vip.uni5.net',
+                                             db_default='imap-vip.uni5.net', verbose_name='Servidor IMAP')
     tabela_email_senha = models.TextField(blank=True, default='', db_default='', verbose_name='Senha (cifrada)')
     tabela_email_ativo = models.BooleanField(default=False, db_default=False,
                                              verbose_name='Importar sozinho todo dia às 6h')

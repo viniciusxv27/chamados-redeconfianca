@@ -198,9 +198,11 @@
             <input type="hidden" name="acao" value="salvar">
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <label class="block"><span class="vd-rotulo">E-mail da caixa</span>
-                    <input type="email" name="conta" value="{{ tabela_email.conta }}" class="vd-campo" placeholder="nome@redeconfianca.com.br" autocomplete="off"></label>
+                    <input type="email" name="conta" value="{{ tabela_email.conta }}" class="vd-campo" placeholder="nome@redeconfianca.com" autocomplete="off"></label>
                 <label class="block"><span class="vd-rotulo">Senha{% if tabela_email.tem_senha %} <span class="text-emerald-700 font-normal">(guardada — deixe em branco para manter)</span>{% endif %}</span>
                     <input type="password" name="senha" class="vd-campo" autocomplete="new-password" placeholder="{% if tabela_email.tem_senha %}••••••••{% else %}senha da caixa{% endif %}"></label>
+                <label class="block sm:col-span-2"><span class="vd-rotulo">Servidor IMAP <span class="font-normal text-gray-500">(caixa @redeconfianca.com: imap-vip.uni5.net · em branco = servidor do /email/)</span></span>
+                    <input type="text" name="servidor" value="{{ tabela_email.servidor }}" class="vd-campo" placeholder="imap-vip.uni5.net" autocomplete="off"></label>
             </div>
             <label class="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="ativo" class="rounded" {% if tabela_email.ativo %}checked{% endif %}> Importar sozinho todo dia às 6h</label>
             <label class="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="avisar" class="rounded" {% if tabela_email.avisar %}checked{% endif %}> Avisar como na importação manual (WhatsApp para quem está marcado acima e popup no portal)</label>
