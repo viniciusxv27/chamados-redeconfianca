@@ -257,8 +257,28 @@ def alerta_detalhe(request, alerta_id):
         'analise': analise, 'classificacao': ia.CLASSIFICACOES.get(alerta.ia_classificacao, ''),
         'quadros': [{'indice': i, 'segundo': q.get('segundo', 0), 'no_video': max(0, alerta.video_evento_segundo + q.get('segundo', 0))}
                     for i, q in enumerate(alerta.quadros or [])],
-        'medidas': {k: v for k, v in (alerta.detalhes or {}).items() if not str(k).startswith('_')},
+        'medidas': _medidas(alerta.detalhes),
     })
+
+
+ROTULOS_MEDIDAS = {
+    'zona': 'Área', 'bolsa_ou_mochila_perto': 'Bolsa ou mochila perto', 'segundos_com_pessoa_perto': 'Pessoa perto do aparelho (s)',
+    'pessoas_perto_do_aparelho': 'Pessoas perto do aparelho', 'pessoas_na_imagem_agora': 'Pessoas na imagem no alerta',
+    'aparelho_estava_ali_ha_min': 'Aparelho estava ali havia (min)', 'nota_do_aparelho': 'Firmeza da detecção do aparelho',
+    'rigor': 'Rigor aplicado pela loja', 'acao_segundo': 'Ação (s antes do alerta)', 'pessoas': 'Pessoas',
+    'quadros_seguidos': 'Quadros seguidos', 'minutos_na_area': 'Minutos na área', 'pessoas_na_area': 'Pessoas na área',
+}
+
+
+def _medidas(detalhes):
+    saida = []
+    for chave, valor in (detalhes or {}).items():
+        if str(chave).startswith('_'):
+            continue
+        if chave == 'acao_segundo' and isinstance(valor, (int, float)):
+            valor = abs(valor)
+        saida.append((ROTULOS_MEDIDAS.get(chave) or str(chave).replace('_', ' ').capitalize(), valor))
+    return saida
 
 
 @exige_superadmin

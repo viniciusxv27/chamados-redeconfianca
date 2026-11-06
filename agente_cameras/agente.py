@@ -21,7 +21,7 @@ import requests
 from descoberta import descobrir
 from regras import ZONA_MOSTRUARIO, ZONA_PORTA, Analisador, Metricas, zonas_do_tipo
 
-VERSAO = '2.2'
+VERSAO = '3.0'
 TAMANHO_DO_LOG = 6000
 SEGUNDOS_ENTRE_LOGS = 120
 SEGUNDOS_POR_QUADRO_NA_PORTA = 0.33   # a pessoa cruza a porta em 1 a 3 s: um quadro por segundo perde gente
@@ -30,6 +30,8 @@ EVENTOS_NA_FILA = 5000
 SEGUNDOS_ENTRE_DESCOBERTAS = 600
 SEGUNDOS_SEM_QUADRO = 300
 SEGUNDOS_ENTRE_QUADROS = 1.0
+SEGUNDOS_ENTRE_QUADROS_RAPIDO = 0.5   # com placa de vídeo (ou computador forte), 2 análises por segundo
+SEGUNDOS_ENTRE_ULTIMOS = 0.5          # a imagem guardada para o mosaico do portal
 TIMEOUT = 15
 LARGURA_FOTO = 640
 LARGURA_FOTO_FOCO = 1280
@@ -109,10 +111,31 @@ class Portal:
         arquivos = {f'canal_{n}': ('foto.jpg', jpg, 'image/jpeg') for n, jpg in fotos.items()}
         self.sessao.post(self.base + 'fotos/', files=arquivos, timeout=TIMEOUT).raise_for_status()
 
-    def alerta(self, canal, evento, foto):
-        dados = {'canal': canal, 'tipo': evento.tipo, 'confianca': evento.confianca, 'motivo': evento.motivo}
+    def alerta(self, canal, evento, foto, grava_video=False):
+        dados = {'canal': canal, 'tipo': evento.tipo, 'confianca': evento.confianca, 'motivo': evento.motivo,
+                 'detalhes': json.dumps(getattr(evento, 'detalhes', None) or {}), 'video': '1' if grava_video else ''}
         arquivos = {'foto': ('alerta.jpg', foto, 'image/jpeg')} if foto else None
-        self.sessao.post(self.base + 'alerta/', data=dados, files=arquivos, timeout=TIMEOUT).raise_for_status()
+        r = self.sessao.post(self.base + 'alerta/', data=dados, files=arquivos, timeout=TIMEOUT)
+        r.raise_for_status()
+        return r.json()
+
+    def clipe(self, dados, video, quadros):
+        """Sobe os 3 minutos do alerta. Devolve a resposta (quem chama decide o que fazer com o status)."""
+        campos = {k: dados[k] for k in ('alerta', 'inicio', 'segundos', 'evento_segundo') if k in dados}
+        abertos = []
+        try:
+            arquivos = [('video', ('clipe.mp4', open(video, 'rb'), 'video/mp4'))]
+            abertos.append(arquivos[0][1][1])
+            for segundo, caminho in quadros:
+                if os.path.exists(caminho):
+                    arquivo = open(caminho, 'rb')
+                    abertos.append(arquivo)
+                    arquivos.append((f'quadro_{"m" if segundo < 0 else ""}{abs(segundo)}', ('quadro.jpg', arquivo, 'image/jpeg')))
+            # Vídeo de alguns MB numa internet de loja: tempo de sobra para subir.
+            return self.sessao.post(self.base + 'clipe/', data=campos, files=arquivos, timeout=(TIMEOUT, 600))
+        finally:
+            for arquivo in abertos:
+                arquivo.close()
 
 
 def endereco_rtsp(gravador, canal):
@@ -127,14 +150,29 @@ def loja_aberta(abre, fecha, agora=None):
     return abre <= atual < fecha
 
 
-def carregar_detector(modelo):
-    """Sem a análise, o agente segue mandando imagem. Devolve (detector, aviso para o portal)."""
+def carregar_detector(pasta):
+    """O detector mais forte que o computador aguenta. Sem nenhum, o agente segue mandando imagem.
+
+    Devolve (detector, aviso para o portal).
+    """
     try:
-        from detector import Detector
-        return Detector(modelo), ''
+        from detector import escolher
+        return escolher(pasta), ''
     except Exception as erro:  # noqa: BLE001 — o ONNX falha de vários jeitos num computador sem as DLLs
         log.warning('Análise desligada: %s', erro)
         return None, f'Análise desligada neste computador: {type(erro).__name__}'
+
+
+def criar_memoria(numero, montador):
+    """A memória de vídeo da câmera (para os 3 minutos dos alertas), se o PyAV abrir neste computador."""
+    if montador is None:
+        return None
+    try:
+        from gravacao import Memoria
+        return Memoria(numero, montador)
+    except Exception as erro:  # noqa: BLE001
+        log.warning('Canal %s sem gravação dos alertas: %s', numero, type(erro).__name__)
+        return None
 
 
 def _jpg(quadro, maximo=LARGURA_FOTO, qualidade=70):
@@ -147,9 +185,9 @@ def _jpg(quadro, maximo=LARGURA_FOTO, qualidade=70):
 
 
 class Camera(threading.Thread):
-    """Uma por canal: guarda o último quadro e analisa um por segundo."""
+    """Uma por canal: lê o vídeo, guarda os últimos 2 minutos (para os alertas) e analisa 1 ou 2 quadros por segundo."""
 
-    def __init__(self, numero, url, portal, detector, estado, fila=None):
+    def __init__(self, numero, url, portal, detector, estado, fila=None, montador=None):
         super().__init__(daemon=True)
         self.numero, self.url, self.portal, self.detector, self.estado = numero, url, portal, detector, estado
         self.fila = fila
@@ -158,8 +196,61 @@ class Camera(threading.Thread):
         self.ultimo_quadro_em = time.monotonic()
         self.analisador = Analisador()
         self.parar = threading.Event()
+        self.memoria = criar_memoria(numero, montador)
+
+    def _intervalo(self):
+        zonas = (self.estado.get('canais', {}).get(self.numero) or {}).get('zonas') or []
+        if zonas_do_tipo(zonas, ZONA_PORTA):
+            return SEGUNDOS_POR_QUADRO_NA_PORTA
+        return SEGUNDOS_ENTRE_QUADROS_RAPIDO if getattr(self.detector, 'rapido', False) else SEGUNDOS_ENTRE_QUADROS
 
     def run(self):
+        if self.memoria is not None:
+            self._rodar_com_memoria()
+        else:
+            self._rodar_opencv()
+
+    def _rodar_com_memoria(self):
+        """Uma conexão só: o mesmo pacote vai para a memória de vídeo (cópia) e para a análise (decodificado)."""
+        import av
+        while not self.parar.is_set():
+            try:
+                conteiner = av.open(self.url, options={'rtsp_transport': 'tcp', 'timeout': '10000000',
+                                                       'analyzeduration': '1000000', 'probesize': '1000000'}, timeout=15)
+            except Exception as erro:  # noqa: BLE001 — câmera fora do ar, senha trocada
+                log.warning('Canal %s não abriu (%s); tento de novo em 30 s', self.numero, type(erro).__name__)
+                self.parar.wait(30)
+                continue
+            try:
+                entrada = conteiner.streams.video[0]
+                entrada.thread_type = 'AUTO'
+                self.memoria.nova_entrada(entrada)
+                proxima = ultimo_guardado = 0.0
+                for pacote in conteiner.demux(entrada):
+                    if self.parar.is_set():
+                        break
+                    agora = time.monotonic()
+                    quadros = pacote.decode() if pacote.size else []
+                    self.memoria.pacote(pacote, agora)
+                    for quadro in quadros:
+                        self.ultimo_quadro_em = agora
+                        analisar = agora >= proxima
+                        if analisar or agora - ultimo_guardado >= SEGUNDOS_ENTRE_ULTIMOS or self.memoria.quer_quadro(agora):
+                            imagem = quadro.to_ndarray(format='bgr24')
+                            self.ultimo, ultimo_guardado = imagem, agora
+                            self.memoria.quadro(imagem, agora)
+                            if analisar:
+                                proxima = agora + self._intervalo()
+                                self.analisar(imagem, agora)
+                    self.memoria.conferir(agora)
+            except Exception as erro:  # noqa: BLE001 — queda no meio do vídeo: reconecta
+                log.warning('Canal %s parou (%s); reconectando', self.numero, type(erro).__name__)
+                self.parar.wait(5)
+            finally:
+                self.memoria.nova_entrada(None)
+                conteiner.close()
+
+    def _rodar_opencv(self):
         import cv2
         while not self.parar.is_set():
             captura = cv2.VideoCapture(self.url, cv2.CAP_FFMPEG)
@@ -175,8 +266,7 @@ class Camera(threading.Thread):
                 self.ultimo = quadro
                 agora = self.ultimo_quadro_em = time.monotonic()
                 if agora >= proxima:
-                    zonas = (self.estado.get('canais', {}).get(self.numero) or {}).get('zonas') or []
-                    proxima = agora + (SEGUNDOS_POR_QUADRO_NA_PORTA if zonas_do_tipo(zonas, ZONA_PORTA) else SEGUNDOS_ENTRE_QUADROS)
+                    proxima = agora + self._intervalo()
                     self.analisar(quadro, agora)
             captura.release()
 
@@ -185,15 +275,30 @@ class Camera(threading.Thread):
         if not config or not config['ia'] or self.detector is None:
             return
         self.analisador.zonas = zonas_do_tipo(config['zonas'], ZONA_MOSTRUARIO)
+        # O que o portal aprendeu com as decisões de furto confirmado / falso alarme desta câmera.
+        self.analisador.ajustes = (self.estado.get('ajustes') or {}).get(str(self.numero)) or {}
         aberta = loja_aberta(self.estado['abre_as'], self.estado['fecha_as'])
         deteccoes = self.detector(quadro)
         _medir(self, deteccoes, config['zonas'], agora, aberta)
         for evento in self.analisador.analisar(deteccoes, agora, aberta):
-            try:
-                self.portal.alerta(self.numero, evento, _jpg(quadro))
-                log.info('Alerta %s no canal %s', evento.tipo, self.numero)
-            except requests.RequestException as erro:
-                log.warning('Alerta não enviado: %s', type(erro).__name__)
+            self.avisar(evento, quadro, agora)
+
+    def avisar(self, evento, quadro, agora):
+        """Manda o alerta com a foto; se o portal quiser, guarda o pedido dos 3 minutos em volta."""
+        try:
+            resposta = self.portal.alerta(self.numero, evento, _jpg(quadro, LARGURA_FOTO_FOCO, 80),
+                                          grava_video=self.memoria is not None)
+            log.info('Alerta %s no canal %s', evento.tipo, self.numero)
+        except (requests.RequestException, ValueError) as erro:
+            log.warning('Alerta não enviado: %s', type(erro).__name__)
+            return
+        if self.memoria is not None and resposta.get('quer_video') and resposta.get('alerta'):
+            from gravacao import Pedido
+            video = self.estado.get('video') or {}
+            self.memoria.pedir(Pedido(alerta=int(resposta['alerta']), canal=self.numero, evento=agora,
+                                      momento=datetime.now().astimezone(), antes=int(resposta.get('antes') or video.get('antes') or 90),
+                                      depois=int(resposta.get('depois') or video.get('depois') or 90),
+                                      acao=int((getattr(evento, 'detalhes', None) or {}).get('acao_segundo') or 0)))
 
 
 def _medir(camera, deteccoes, zonas, agora, aberta):
@@ -231,6 +336,20 @@ def iniciar_ao_vivo(config, estado):
         return None, f'Vídeo ao vivo desligado neste computador: {type(erro).__name__}'
 
 
+def iniciar_gravacao(pasta):
+    """A fila dos vídeos dos alertas e o montador. Sem o PyAV, o agente segue só com a foto. Devolve (fila, montador)."""
+    try:
+        from gravacao import FilaDeClipes, Montador
+        import av  # noqa: F401 — confere que as DLLs do vídeo abrem neste computador
+        clipes = FilaDeClipes(os.path.join(pasta, 'fila_clipes'))
+        montador = Montador(clipes)
+        montador.start()
+        return clipes, montador
+    except Exception as erro:  # noqa: BLE001
+        log.warning('Gravação dos alertas desligada: %s', erro)
+        return None, None
+
+
 def fim_do_log(pasta, tamanho=TAMANHO_DO_LOG):
     """O fim do agente.log, sem senha, para dar para ver de longe o que houve na loja."""
     try:
@@ -255,8 +374,9 @@ def precisa_descobrir(gravador, cameras, ultima, agora):
 def rodar(config):
     portal = Portal(config['portal'], config['token'])
     pasta = config.get('_pasta', '.')
-    detector, aviso = carregar_detector(os.path.join(pasta, config.get('modelo', 'yolox_tiny.onnx'))) if config.get('analisar', True) else (None, '')
+    detector, aviso = carregar_detector(pasta) if config.get('analisar', True) else (None, '')
     estado, cameras = {}, {}
+    clipes, montador = iniciar_gravacao(pasta)
     ultima_descoberta = None
     vigia, aviso_vivo = iniciar_ao_vivo(config, estado)
     aviso = aviso_vivo or aviso
@@ -292,13 +412,14 @@ def rodar(config):
                     continue
                 if gravador['ip']:
                     estado.update(abre_as=resposta['abre_as'], fecha_as=resposta['fecha_as'], matinal=resposta.get('matinal'),
-                                  canais={c['numero']: c for c in resposta['canais']})
+                                  canais={c['numero']: c for c in resposta['canais']}, ajustes=resposta.get('ajustes') or {},
+                                  video=resposta.get('video') or {})
                     for numero in estado['canais']:
                         url = endereco_rtsp(gravador, numero)
                         if numero in cameras and cameras[numero].url != url:
                             cameras.pop(numero).parar.set()
                         if numero not in cameras:
-                            cameras[numero] = Camera(numero, url, portal, detector, estado, fila)
+                            cameras[numero] = Camera(numero, url, portal, detector, estado, fila, montador)
                             cameras[numero].start()
                     for numero in set(cameras) - set(estado['canais']):
                         cameras.pop(numero).parar.set()
@@ -312,6 +433,8 @@ def rodar(config):
                     if fotos:
                         portal.fotos(fotos)
                     fila.enviar(portal)
+                    if clipes is not None:
+                        clipes.enviar(portal)
         except requests.RequestException as erro:
             # Só o tipo: a mensagem completa pode trazer endereço e cabeçalho.
             log.warning('Sem contato com o portal: %s', type(erro).__name__)

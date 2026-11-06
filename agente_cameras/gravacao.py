@@ -19,8 +19,9 @@ import queue
 import threading
 import time
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import timedelta
+from fractions import Fraction
 
 log = logging.getLogger('agente')
 
@@ -111,12 +112,18 @@ class Memoria:
                 self.pedacos.append(Pedaco(self._inicio_pedaco, self._ultimo_pacote, dados))
                 self._podar()
 
+    def _guardar_desde(self):
+        """O começo do trecho mais antigo que algum pedido ainda vai precisar (os pedidos esperam o "depois")."""
+        return min((p.evento - p.antes for p in self.pedidos), default=float('inf'))
+
     def _podar(self):
         if not self.pedacos:
             return
         mais_novo = self.pedacos[-1].fim
+        precisa = self._guardar_desde()
         total = sum(len(p.dados) for p in self.pedacos)
-        while self.pedacos and (mais_novo - self.pedacos[0].fim > SEGUNDOS_GUARDADOS or total > BYTES_GUARDADOS_MAX):
+        while self.pedacos and (total > BYTES_GUARDADOS_MAX
+                                or (mais_novo - self.pedacos[0].fim > SEGUNDOS_GUARDADOS and self.pedacos[0].fim < precisa)):
             total -= len(self.pedacos.popleft().dados)
 
     def pacote(self, pacote, agora):
@@ -154,7 +161,8 @@ class Memoria:
         if ok:
             with self.trava:
                 self.quadros.append((agora, jpg.tobytes()))
-                while self.quadros and agora - self.quadros[0][0] > SEGUNDOS_GUARDADOS + 120:
+                precisa = self._guardar_desde()
+                while self.quadros and agora - self.quadros[0][0] > SEGUNDOS_GUARDADOS and self.quadros[0][0] < precisa - 5:
                     self.quadros.popleft()
 
     # ── Pedidos de vídeo ─────────────────────────────────────────────────────
@@ -194,15 +202,43 @@ def escolher_quadros(pedido, quadros):
     return sorted(escolhidos)
 
 
-def juntar(pedacos, caminho, abrir):
-    """Junta os pedaços num MP4 que toca no navegador. Devolve (segundos, deslocamento do 1º pacote em s)."""
+def juntar(pedacos, caminho, abrir, janela=None):
+    """Junta os pedaços num MP4 que toca no navegador, cortado na `janela` (início, fim no relógio do agente).
+
+    Copiando sem recomprimir, o vídeo só pode começar num quadro completo: começa no último antes do
+    início da janela. Devolve (segundos do vídeo, relógio do 1º quadro gravado).
+    """
     saida = abrir(caminho, 'w', format='mp4', options={'movflags': '+faststart'})
     trilha = codificador = None
-    primeiro = ultimo_dts = None
+    primeiro = ultimo_dts = primeiro_momento = None
     deslocamento = 0
     duracao = 0.0
+    convertidos = 0
+    taxa = Fraction(15)
+    pendentes = []                  # pacotes desde o último quadro completo, antes do começo da janela
+    comecou = janela is None
+    acabou = False
+
+    def gravar(pacote, momento, base):
+        nonlocal primeiro, ultimo_dts, deslocamento, duracao, primeiro_momento
+        if primeiro is None:
+            primeiro, primeiro_momento = pacote.dts, momento
+        # A câmera pode ter reconectado entre dois pedaços: o relógio do vídeo recomeça; continua em frente.
+        dts = pacote.dts - primeiro + deslocamento
+        if ultimo_dts is not None and dts <= ultimo_dts:
+            deslocamento += ultimo_dts + 1 - dts
+            dts = ultimo_dts + 1
+        pts = (pacote.pts - primeiro + deslocamento) if pacote.pts is not None else dts
+        pacote.dts, pacote.pts = dts, max(pts, dts)
+        ultimo_dts = dts
+        duracao = max(duracao, float((pacote.pts + (pacote.duration or 0)) * base))
+        pacote.stream = trilha
+        saida.mux(pacote)
+
     try:
         for pedaco in pedacos:
+            if acabou:
+                break
             entrada = abrir(io.BytesIO(pedaco.dados), 'r', format='mp4')
             try:
                 fonte = entrada.streams.video[0]
@@ -211,43 +247,64 @@ def juntar(pedacos, caminho, abrir):
                         trilha = _trilha_como(saida, fonte)
                     else:
                         # H.265 e outros: o navegador não toca; converte uma vez, só este trecho.
-                        trilha = saida.add_stream('libx264', rate=fonte.average_rate or 15)
+                        taxa = Fraction(fonte.average_rate or 15)
+                        trilha = saida.add_stream('libx264', rate=taxa)
                         trilha.width, trilha.height = fonte.codec_context.width, fonte.codec_context.height
                         trilha.pix_fmt = 'yuv420p'
                         trilha.options = {'preset': 'veryfast', 'crf': '26'}
                         codificador = trilha
                 base = fonte.time_base
+                zero = None
                 if codificador is not None:
+                    # Convertendo, dá para cortar no quadro exato.
                     for quadro in entrada.decode(fonte):
-                        quadro.pts = None
+                        if quadro.pts is None:
+                            continue
+                        zero = quadro.pts if zero is None else zero
+                        momento = pedaco.inicio + float((quadro.pts - zero) * base)
+                        if janela and momento < janela[0]:
+                            continue
+                        if janela and momento > janela[1]:
+                            acabou = True
+                            break
+                        if primeiro_momento is None:
+                            primeiro_momento = momento
+                        quadro.pts, quadro.time_base = convertidos, 1 / taxa
+                        convertidos += 1
                         for pacote in codificador.encode(quadro):
                             saida.mux(pacote)
-                        duracao += 1 / float(fonte.average_rate or 15)
+                    duracao = float(convertidos / taxa)
                     continue
                 for pacote in entrada.demux(fonte):
                     if pacote.dts is None:
                         continue
-                    if primeiro is None:
-                        primeiro = pacote.dts
-                    # A câmera pode ter reconectado entre dois pedaços: o relógio recomeça; continua em frente.
-                    dts = pacote.dts - primeiro + deslocamento
-                    if ultimo_dts is not None and dts <= ultimo_dts:
-                        deslocamento += ultimo_dts + 1 - dts
-                        dts = ultimo_dts + 1
-                    pts = (pacote.pts - primeiro + deslocamento) if pacote.pts is not None else dts
-                    pacote.dts, pacote.pts = dts, max(pts, dts)
-                    ultimo_dts = dts
-                    duracao = max(duracao, float((pacote.pts + (pacote.duration or 0)) * base))
-                    pacote.stream = trilha
-                    saida.mux(pacote)
+                    zero = pacote.dts if zero is None else zero
+                    momento = pedaco.inicio + float((pacote.dts - zero) * base)
+                    if janela and momento > janela[1]:
+                        acabou = True
+                        break
+                    if not comecou:
+                        if pacote.is_keyframe:
+                            pendentes = []
+                        pendentes.append((pacote, momento))
+                        if momento >= janela[0] and pendentes[0][0].is_keyframe:
+                            comecou = True
+                            for guardado, quando in pendentes:
+                                gravar(guardado, quando, base)
+                            pendentes = []
+                        continue
+                    gravar(pacote, momento, base)
             finally:
                 entrada.close()
+        if not comecou and pendentes and pendentes[0][0].is_keyframe:
+            for guardado, quando in pendentes:          # a janela começa depois do que havia: grava o que tem
+                gravar(guardado, quando, guardado.time_base)
         if codificador is not None:
             for pacote in codificador.encode(None):
                 saida.mux(pacote)
     finally:
         saida.close()
-    return duracao
+    return duracao, primeiro_momento
 
 
 class Montador(threading.Thread):
@@ -279,10 +336,14 @@ class Montador(threading.Thread):
             abrir = av.open
         caminho = self.fila.caminho(pedido.alerta, '.mp4')
         temporario = caminho + '.parcial'
-        segundos = juntar(pedacos, temporario, abrir)
+        segundos, primeiro = juntar(pedacos, temporario, abrir, janela=(pedido.evento - pedido.antes, pedido.evento + pedido.depois))
+        if not segundos:
+            os.remove(temporario)
+            log.warning('Alerta %s: o vídeo guardado não cobre o momento', pedido.alerta)
+            return None
         os.replace(temporario, caminho)
         # Em que segundo do vídeo está o alerta, e a hora do 1º quadro.
-        evento_segundo = max(0, round(pedido.evento - pedacos[0].inicio))
+        evento_segundo = max(0, round(pedido.evento - (primeiro if primeiro is not None else pedacos[0].inicio)))
         inicio = pedido.momento - timedelta(seconds=evento_segundo)
         escolhidos = escolher_quadros(pedido, quadros)
         nomes = []
@@ -383,8 +444,3 @@ def _descartar(resposta):
         return bool(resposta.json().get('descartar'))
     except ValueError:
         return False
-
-
-@dataclass
-class _Estado:
-    memorias: dict = field(default_factory=dict)

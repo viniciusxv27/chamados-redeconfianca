@@ -869,4 +869,274 @@ t('mosaico traz o vídeo de quem está online', f'data-ao-vivo="{cv1.id}"' in hp
 t('tela da loja traz o contador', 'caContadorVivo' in h)
 t('configuração pede reinstalar quem está com agente antigo', 'data-sem-ao-vivo' in cs.get('/cameras/configuracao/').content.decode())
 
+print('vídeo de 3 minutos, IA de visão e aprendizado (06/11/2026)')
+import json as _json
+import shutil as _shutil
+import types as _types
+
+from cameras import aprendizado
+from cameras.models import EventoLoja  # noqa: F401
+from regras import Evento  # noqa: E402
+
+ConfigCameras.objects.update(ativo=True)
+cache.clear()
+perguntas = []
+RESPOSTA_IA = {'risco': 82, 'classificacao': 'suspeito', 'resumo': 'Pessoa 1 pega o aparelho do mostruário e guarda na mochila.',
+               'linha_do_tempo': [{'segundo': -25, 'o_que': 'pessoa 1 pega o aparelho'}, {'segundo': -5, 'o_que': 'sai pela porta'}],
+               'sinais_de_risco': ['guardou na mochila'], 'sinais_normais': [], 'recomendacao': 'Conferir o vídeo em -25 s.',
+               'conferir_no_video': [{'segundo': -25, 'o_que': 'a mão no mostruário'}], 'extra': 'ignorar'}
+
+
+class _Completions:
+    def create(self, **kw):
+        perguntas.append(kw)
+        return _types.SimpleNamespace(choices=[_types.SimpleNamespace(message=_types.SimpleNamespace(content=_json.dumps(RESPOSTA_IA)))])
+
+
+falso_cliente = _types.SimpleNamespace(chat=_types.SimpleNamespace(completions=_Completions()))
+mock.patch.object(ia, '_cliente', lambda: falso_cliente).start()
+settings.OPENAI_API_KEY = 'chave-de-teste'
+detalhes = {'zona': 'Mostruário', 'bolsa_ou_mochila_perto': True, 'segundos_com_pessoa_perto': 12, 'acao_segundo': -25, '_x': 1}
+r = anon.post('/cameras/agente/alerta/', {'canal': 1, 'tipo': 'ITEM_SUMIU', 'confianca': 72, 'motivo': 'Aparelho saiu', 'video': '1',
+                                          'detalhes': _json.dumps(detalhes), 'foto': SimpleUploadedFile('a.jpg', jpg, 'image/jpeg')}, **ag)
+j = r.json()
+av1 = AlertaCamera.objects.get(pk=j['alerta'])
+t('agente 3.0: o portal pede os 3 minutos (1min30 antes e depois)', j['quer_video'] and j['antes'] == 90 and j['depois'] == 90
+  and av1.video_status == 'AGUARDANDO', j)
+t('guarda o que o detector mediu (sem chave interna)', av1.detalhes == {k: v for k, v in detalhes.items() if k != '_x'}, av1.detalhes)
+t('já nasce com chance pelo histórico e prioridade', av1.chance_real is not None and av1.prioridade > 0 and av1.ia_status == '')
+t('a IA espera o vídeo chegar', not perguntas)
+j2 = anon.post('/cameras/agente/alerta/', {'canal': 1, 'tipo': 'ITEM_SUMIU', 'confianca': 80, 'video': '1'}, **ag).json()
+t('repetição não pede outro vídeo', j2['alerta'] == av1.id and not j2['quer_video'])
+mp4 = b'\x00\x00\x00\x18ftypmp42' + b'\x00' * 4 + bytes(range(256)) * 40
+quadro_jpg = jpg
+r = anon.post('/cameras/agente/clipe/', {'alerta': av1.id, 'segundos': '184', 'evento_segundo': '96', 'inicio': '2026-11-06T10:00:00-03:00',
+                                         'video': SimpleUploadedFile('clipe.mp4', mp4, 'video/mp4'),
+                                         'quadro_m25': SimpleUploadedFile('q.jpg', quadro_jpg, 'image/jpeg'),
+                                         'quadro_0': SimpleUploadedFile('q.jpg', quadro_jpg, 'image/jpeg'),
+                                         'quadro_60': SimpleUploadedFile('q.jpg', quadro_jpg, 'image/jpeg'),
+                                         'quadro_9': SimpleUploadedFile('q.jpg', b'nao e jpg', 'image/jpeg')}, **ag)
+av1.refresh_from_db()
+t('o vídeo chega e fica guardado', r.status_code == 200 and av1.video_status == 'RECEBIDO' and av1.video_segundos == 184
+  and av1.video_evento_segundo == 96 and av1.video_tamanho == len(mp4) and av1.video.name.endswith('.mp4'), r.content)
+t('quadros-chave em ordem, sem o que não é JPEG', [q['segundo'] for q in av1.quadros] == [-25, 0, 60], av1.quadros)
+t('nome do vídeo impossível de adivinhar', re.search(r'cameras/clipes/\d{4}/\d{2}/[0-9a-f]{32}\.mp4$', av1.video.name), av1.video.name)
+t('a IA de visão analisou quando o vídeo chegou', len(perguntas) == 1 and av1.ia_status == 'FEITA' and av1.ia_risco == 82
+  and av1.ia_classificacao == 'suspeito' and 'extra' not in av1.ia_analise and av1.ia_modelo)
+pergunta = perguntas[0]
+partes = pergunta['messages'][1]['content']
+texto = partes[0]['text']
+imagens = [p for p in partes if p['type'] == 'image_url']
+t('a IA recebe os quadros em ordem, com o momento de perto em alta', len(imagens) == 3 and imagens[0]['image_url']['detail'] == 'low'
+  and imagens[1]['image_url']['detail'] == 'high' and 'Quadro em -25 s:' in [p.get('text') for p in partes])
+t('a IA recebe o que o detector mediu', 'bolsa_ou_mochila_perto = True' in texto and 'acao_segundo = -25' in texto, texto)
+t('a IA aprende com os casos decididos (decisão, motivo e observação)', 'FALSO ALARME (Funcionário trabalhando)' in texto
+  and 'quem conferiu anotou: "Funcionário guardou"' in texto and 'Motivos dos falsos alarmes desta câmera' in texto, texto)
+t('a IA é instruída a não identificar pessoas', 'Nunca identifique pessoas' in pergunta['messages'][0]['content'] and pergunta['response_format'] == {'type': 'json_object'})
+t('a prioridade passa a contar a IA', av1.prioridade == aprendizado.prioridade(av1) and av1.prioridade > 72 * 0 and av1.prioridade >= 60, av1.prioridade)
+r = anon.post('/cameras/agente/clipe/', {'alerta': av1.id, 'video': SimpleUploadedFile('clipe.mp4', mp4, 'video/mp4')}, **ag)
+t('reenvio do mesmo vídeo não duplica nem reanalisa', r.json().get('ja_tinha') and len(perguntas) == 1)
+r = anon.post('/cameras/agente/clipe/', {'alerta': 999999, 'video': SimpleUploadedFile('c.mp4', mp4, 'video/mp4')}, **ag)
+t('alerta inexistente: o agente pode descartar', r.status_code == 404 and r.json()['descartar'])
+outro = AlertaCamera.objects.create(gravador=Gravador.objects.exclude(pk=g.pk).first(), tipo='ITEM_SUMIU', video_status='AGUARDANDO')
+r = anon.post('/cameras/agente/clipe/', {'alerta': outro.id, 'video': SimpleUploadedFile('c.mp4', mp4, 'video/mp4')}, **ag)
+t('não manda vídeo em alerta de outra loja', r.status_code == 404 and not AlertaCamera.objects.get(pk=outro.pk).video)
+av_txt = AlertaCamera.objects.create(gravador=g, canal=c1, tipo='PERMANENCIA', video_status='AGUARDANDO')
+r = anon.post('/cameras/agente/clipe/', {'alerta': av_txt.id, 'video': SimpleUploadedFile('c.mp4', b'nao e video nenhum', 'video/mp4')}, **ag)
+t('arquivo que não é MP4 é recusado', r.status_code == 400 and r.json()['descartar'] and AlertaCamera.objects.get(pk=av_txt.pk).video_status == 'AGUARDANDO')
+t('sem token não manda vídeo', anon.post('/cameras/agente/clipe/', {'alerta': av1.id}).status_code == 401)
+
+print('vídeo e quadros na tela')
+url_video = f'/cameras/alertas/{av1.id}/video/'
+r = cs.get(url_video)
+corpo = b''.join(r.streaming_content) if r.streaming else r.content
+t('o vídeo toca pelo portal', r.status_code == 200 and r['Content-Type'] == 'video/mp4' and r['Accept-Ranges'] == 'bytes' and corpo == mp4)
+r = cs.get(url_video, HTTP_RANGE='bytes=0-9')
+t('pedaço do vídeo (para avançar e voltar)', r.status_code == 206 and r['Content-Range'] == f'bytes 0-9/{len(mp4)}' and r.content == mp4[:10])
+r = cs.get(url_video, HTTP_RANGE='bytes=100-')
+t('pedaço até o fim', r.status_code == 206 and r.content == mp4[100:] and r['Content-Range'] == f'bytes 100-{len(mp4) - 1}/{len(mp4)}')
+r = cs.get(url_video, HTTP_RANGE='bytes=-50')
+t('últimos bytes', r.status_code == 206 and r.content == mp4[-50:])
+t('pedaço fora do arquivo: 416', cs.get(url_video, HTTP_RANGE=f'bytes={len(mp4) + 10}-').status_code == 416)
+t('quem não é SUPERADMIN não vê o vídeo', cc.get(url_video).status_code == 302 and anon.get(url_video).status_code == 302)
+t('ver o vídeo fica registrado', AcessoCamera.objects.filter(user=chefe, acao='ver_video', detalhe=f'#{av1.id}').exists())
+t('quadro-chave abre; índice inventado não', cs.get(f'/cameras/alertas/{av1.id}/quadro/0/').status_code == 200
+  and cs.get(f'/cameras/alertas/{av1.id}/quadro/7/').status_code == 404 and cc.get(f'/cameras/alertas/{av1.id}/quadro/0/').status_code == 302)
+h = cs.get(f'/cameras/alertas/{av1.id}/').content.decode()
+t('tela do alerta: vídeo, ir ao momento, linha do tempo e quadros', 'id="caVideo"' in h and 'data-evento="96"' in h and 'Ir para o momento do alerta' in h
+  and f'/cameras/alertas/{av1.id}/quadro/2/' in h and 'data-ir="71"' in h)
+t('tela do alerta: análise da IA', 'Pessoa 1 pega o aparelho do mostruário e guarda na mochila.' in h and 'Pesa contra' in h
+  and 'data-ir-relativo="-25"' in h and 'risco 82%' in h and 'Suspeito' in h)
+t('tela do alerta: histórico, medidas e motivos do falso alarme', 'O que o histórico diz' in h and 'Bolsa ou mochila perto</span><b>sim</b>' in h and 'Ação (s antes do alerta)</span><b>25</b>' in h
+  and 'name="motivo_falso" value="FUNCIONARIO"' in h and 'ensina a análise' in h)
+t('lista: prioridade, vídeo e veredito da IA', 'ca-selo-video' in (hl := cs.get('/cameras/alertas/').content.decode()) and 'IA: <b class="ca-classe suspeito">suspeito' in hl)
+t('estado da IA para a tela', cs.get(f'/cameras/alertas/{av1.id}/ia/').json() == {'status': 'FEITA', 'video': 'RECEBIDO'})
+cs.post(f'/cameras/alertas/{av1.id}/ia/')
+t('analisar de novo', len(perguntas) == 2 and AcessoCamera.objects.filter(acao='reanalisar_alerta').exists())
+RESPOSTA_IA_BACKUP = RESPOSTA_IA
+_Completions.create = lambda self, **kw: (_ for _ in ()).throw(RuntimeError('cota estourada'))
+cs.post(f'/cameras/alertas/{av1.id}/ia/')
+av1.refresh_from_db()
+t('IA com erro: alerta segue, com o motivo', av1.ia_status == 'ERRO' and 'cota estourada' in av1.ia_erro and 'cota estourada' in cs.get(f'/cameras/alertas/{av1.id}/').content.decode())
+
+
+def _create(self, **kw):
+    perguntas.append(kw)
+    return _types.SimpleNamespace(choices=[_types.SimpleNamespace(message=_types.SimpleNamespace(content='lixo {"risco": "900", "classificacao": "inventada"} fim'))])
+
+
+_Completions.create = _create
+cs.post(f'/cameras/alertas/{av1.id}/ia/')
+av1.refresh_from_db()
+t('resposta torta da IA vira algo seguro', av1.ia_status == 'FEITA' and av1.ia_risco == 100 and av1.ia_classificacao == 'inconclusivo')
+
+print('agente antigo e vídeo que não chegou')
+perguntas.clear()
+r = anon.post('/cameras/agente/alerta/', {'canal': 2, 'tipo': 'FORA_HORARIO', 'confianca': 85, 'foto': SimpleUploadedFile('a.jpg', jpg, 'image/jpeg')}, **ag)
+antigo = AlertaCamera.objects.get(pk=r.json()['alerta'])
+t('agente sem vídeo: não pede vídeo e a IA olha a foto na hora', not r.json()['quer_video'] and antigo.video_status == 'SEM_VIDEO'
+  and antigo.ia_status == 'FEITA' and len(perguntas) == 1 and len([p for p in perguntas[0]['messages'][1]['content'] if p['type'] == 'image_url']) == 1)
+atrasado = AlertaCamera.objects.create(gravador=g, canal=c1, tipo='PERMANENCIA', video_status='AGUARDANDO')
+AlertaCamera.objects.filter(pk=atrasado.pk).update(criado_em=timezone.now() - dt.timedelta(minutes=servicos.VIDEO_ESPERA_MINUTOS + 5))
+cs.get('/cameras/alertas/')
+atrasado.refresh_from_db()
+t('vídeo que não chegou a tempo: desiste e a IA tenta com o que tem', atrasado.video_status == 'SEM_VIDEO' and atrasado.ia_status == 'ERRO'
+  and 'imagem' in atrasado.ia_erro, (atrasado.video_status, atrasado.ia_status, atrasado.ia_erro))
+
+print('aprendizado')
+cache.clear()
+c2 = Canal.objects.get(gravador=g, numero=2)
+base = aprendizado.avaliar('PERMANENCIA', g.id, c2.id)
+t('sem decisões vale a taxa inicial do tipo', base['chance'] == 15 and base['decisoes_canal'] == 0, base)
+for i in range(6):
+    AlertaCamera.objects.create(gravador=g, canal=c2, tipo='PERMANENCIA', status='FALSO', motivo_falso='FUNCIONARIO', tratado_em=timezone.now())
+aprendizado.esquecer()
+ruim = aprendizado.avaliar('PERMANENCIA', g.id, c2.id)
+t('só falso alarme: a chance cai', ruim['chance'] < base['chance'] and ruim['decisoes_canal'] == 6, ruim)
+t('e o agente fica muito exigente nessa câmera', aprendizado.rigor('PERMANENCIA', g.id, c2.id) == aprendizado.RIGOR_MUITO_EXIGENTE)
+for i in range(8):
+    AlertaCamera.objects.create(gravador=g, canal=c2, tipo='FORA_HORARIO', status='CONFIRMADO', tratado_em=timezone.now())
+aprendizado.esquecer()
+t('só confirmado: fica mais sensível', aprendizado.rigor('FORA_HORARIO', g.id, c2.id) == aprendizado.RIGOR_MAIS_SENSIVEL)
+sinal = anon.post('/cameras/agente/sinal/', {'versao': '3.0'}, **ag).json()
+t('o ajuste vai para a loja no sinal', sinal['ajustes'].get('2') == {'PERMANENCIA': 2, 'FORA_HORARIO': -1}
+  and sinal['video'] == {'antes': 90, 'depois': 90}, sinal.get('ajustes'))
+outra_loja = Gravador.objects.exclude(pk=g.pk).first()
+t('outra loja continua no normal', aprendizado.rigor('PERMANENCIA', outra_loja.id, None) == aprendizado.RIGOR_NORMAL)
+novo = AlertaCamera.objects.create(gravador=g, canal=c2, tipo='PERMANENCIA', confianca=45)
+aprendizado.aplicar(novo)
+t('alerta novo dessa câmera nasce com prioridade baixa', novo.chance_real == ruim['chance'] and novo.prioridade < 45, (novo.chance_real, novo.prioridade))
+alvo = AlertaCamera.objects.create(gravador=g, canal=c2, tipo='ITEM_SUMIU', confianca=70)
+antes_decisao = aprendizado.avaliar('ITEM_SUMIU', g.id, c2.id)['decisoes_canal']
+cs.post(f'/cameras/alertas/{alvo.id}/', {'status': 'CONFIRMADO', 'observacao': 'Guardou na mochila'})
+t('confirmar já conta na hora (sem esperar o cache)', aprendizado.avaliar('ITEM_SUMIU', g.id, c2.id)['decisoes_canal'] == antes_decisao + 1)
+h = cs.get('/cameras/aprendizado/').content.decode()
+t('tela do aprendizado', 'Muito exigente' in h and 'Mais sensível' in h and 'Funcionário trabalhando (6)' in h and 'Acerto da IA de visão' in h, h[:200])
+t('aprendizado só para o SUPERADMIN', cc.get('/cameras/aprendizado/').status_code == 302)
+an = Analisador(Z, ajustes={'ITEM_SUMIU': 2})
+s = rodar(an, firme + [(40 + i, [PES], True) for i in range(5)] + [(45 + i, [], True) for i in range(60)])
+t('no agente: muito exigente espera o dobro para alertar', s == [(84, 'ITEM_SUMIU')], s)
+s = rodar(Analisador(Z, ajustes={'ITEM_SUMIU': -1}), firme + [(40 + i, [PES], True) for i in range(5)] + [(45 + i, [], True) for i in range(60)])
+t('no agente: mais sensível alerta antes', s == [(59, 'ITEM_SUMIU')], s)
+s = rodar(Analisador(Z, ajustes={'FORA_HORARIO': 2}), [(i, [FORA], False) for i in range(8)])
+t('no agente: loja fechada muito exigente pede mais quadros', s == [(5, 'FORA_HORARIO')], s)
+s = rodar(Analisador(Z, ajustes={'ITEM_SUMIU': 'lixo'}), firme + [(40 + i, [PES], True) for i in range(5)] + [(45 + i, [], True) for i in range(30)])
+t('no agente: ajuste estragado vale o normal', s == [(64, 'ITEM_SUMIU')], s)
+BOLSA = {'classe': 'backpack', 'conf': .8, 'caixa': (.3, .45, .08, .1)}
+an = Analisador(Z)
+eventos = []
+for tempo, det in [(i, [APA]) for i in range(40)] + [(40 + i, [PES, BOLSA]) for i in range(10)] + [(50 + i, []) for i in range(25)]:
+    eventos += an.analisar(det, tempo, True)
+ev = eventos[0] if eventos else Evento('X', 0, '')
+t('no agente: o alerta leva as medidas e a nota sobe com a mochila', ev.tipo == 'ITEM_SUMIU' and ev.detalhes['bolsa_ou_mochila_perto']
+  and ev.detalhes['segundos_com_pessoa_perto'] == 9 and ev.detalhes['acao_segundo'] == -20 and ev.confianca >= 80 and 'mochila' in ev.motivo,
+  (ev.confianca, ev.detalhes, ev.motivo))
+
+print('prazo de guarda dos vídeos')
+velho_falso = AlertaCamera.objects.create(gravador=g, canal=c1, tipo='ITEM_SUMIU', status='FALSO', motivo_falso='DETECCAO')
+velho_conf = AlertaCamera.objects.create(gravador=g, canal=c1, tipo='ITEM_SUMIU', status='CONFIRMADO')
+for a in (velho_falso, velho_conf):
+    servicos.registrar_clipe(a, SimpleUploadedFile('c.mp4', mp4, 'video/mp4'), [(0, jpg)])
+    AlertaCamera.objects.filter(pk=a.pk).update(criado_em=timezone.now() - dt.timedelta(days=40), ia_resumo='resumo guardado')
+velho_falso.refresh_from_db()
+arquivos = [velho_falso.video.name] + [q['arquivo'] for q in velho_falso.quadros]
+apagados = servicos.limpar_videos_antigos()
+velho_falso.refresh_from_db(); velho_conf.refresh_from_db()
+t('falso alarme com mais de 30 dias: vídeo e quadros apagados', apagados == 1 and velho_falso.video_status == 'APAGADO' and not velho_falso.video
+  and velho_falso.quadros == [] and not any(default_storage.exists(n) for n in arquivos))
+t('fica a decisão e a análise; furto confirmado fica guardado', velho_falso.ia_resumo == 'resumo guardado' and velho_falso.status == 'FALSO'
+  and velho_conf.video_status == 'RECEBIDO' and default_storage.exists(velho_conf.video.name))
+t('tela avisa que o vídeo foi apagado', 'apagado no fim do prazo' in cs.get(f'/cameras/alertas/{velho_falso.id}/').content.decode())
+from core.agendador_diario import TAREFAS
+t('a limpeza roda todo dia', any(c == 'cameras_limpar_videos' and f == 'cameras.servicos.limpar_videos_antigos' for c, _h, f, _d in TAREFAS))
+
+print('agente: fila dos vídeos')
+import gravacao  # noqa: E402
+t('quadros-chave concentrados na ação', gravacao.momentos_dos_quadros(90, 90, -25) == [-80, -45, -35, -30, -27, -25, -22, 0, 15, 60])
+t('ação fora da janela é limitada', min(gravacao.momentos_dos_quadros(30, 20, -500)) >= -30 and max(gravacao.momentos_dos_quadros(30, 20, 0)) <= 20)
+ped = gravacao.Pedido(alerta=1, canal=1, evento=1000.0, momento=timezone.now(), antes=90, depois=90, acao=-25)
+qs = [(1000.0 + s, f'q{s}'.encode()) for s in range(-90, 91, 2)]
+esc = gravacao.escolher_quadros(ped, qs)
+t('escolhe o quadro mais perto de cada momento, sem repetir', [s for s, _ in esc] == [-80, -46, -36, -30, -28, -26, -22, 0, 14, 60]
+  and len({j for _, j in esc}) == len(esc), [s for s, _ in esc])
+pasta_fila = pathlib.Path(tempfile.mkdtemp(prefix='zz-fila-'))
+fila_v = gravacao.FilaDeClipes(str(pasta_fila))
+
+
+def por_na_fila(alerta):
+    (pasta_fila / f'{alerta}.mp4').write_bytes(mp4)
+    (pasta_fila / f'{alerta}_q0.jpg').write_bytes(jpg)
+    fila_v.registrar(alerta, {'alerta': alerta, 'segundos': 180, 'evento_segundo': 90, 'quadros': [{'segundo': 0, 'arquivo': f'{alerta}_q0.jpg'}]})
+
+
+class PortalFalso:
+    def __init__(self, resposta):
+        self.resposta, self.enviados = resposta, []
+
+    def clipe(self, dados, video, quadros):
+        if isinstance(self.resposta, Exception):
+            raise self.resposta
+        self.enviados.append((dados['alerta'], os.path.getsize(video), quadros))
+        return self.resposta
+
+
+por_na_fila(7)
+p_rede = PortalFalso(requests.ConnectionError('sem internet'))
+fila_v.enviar(p_rede)
+t('sem internet o vídeo espera na fila', (pasta_fila / '7.mp4').exists() and (pasta_fila / '7.json').exists())
+p_ok = PortalFalso(_types.SimpleNamespace(status_code=200, json=lambda: {'ok': True}))
+fila_v.enviar(p_ok)
+t('subiu: sai da fila (vídeo, dados e quadros)', p_ok.enviados[0][:2] == (7, len(mp4)) and p_ok.enviados[0][2][0][0] == 0
+  and not list(pasta_fila.iterdir()))
+por_na_fila(8)
+fila_v.enviar(PortalFalso(_types.SimpleNamespace(status_code=404, json=lambda: {'descartar': True})))
+t('portal recusou de vez: sai da fila', not list(pasta_fila.iterdir()))
+por_na_fila(9)
+fila_v.enviar(PortalFalso(_types.SimpleNamespace(status_code=500, json=lambda: {})))
+t('erro do portal: tenta de novo depois', (pasta_fila / '9.mp4').exists())
+os.utime(pasta_fila / '9.json', (0, 0)); os.utime(pasta_fila / '9.mp4', (0, 0)); os.utime(pasta_fila / '9_q0.jpg', (0, 0))
+fila_v.podar()
+t('vídeo esquecido há dias é descartado', not list(pasta_fila.iterdir()))
+_shutil.rmtree(pasta_fila, ignore_errors=True)
+from agente import Portal as _Portal  # noqa: E402
+enviado = {}
+
+
+class _Sessao:
+    headers = {}
+
+    def post(self, url, data=None, files=None, timeout=None):
+        enviado.update(url=url, data=data, nomes=[f[0] for f in files], timeout=timeout)
+        return _types.SimpleNamespace(status_code=200)
+
+
+pasta_p = pathlib.Path(tempfile.mkdtemp(prefix='zz-portal-'))
+(pasta_p / 'v.mp4').write_bytes(mp4); (pasta_p / 'q.jpg').write_bytes(jpg)
+pt = _Portal('https://portal.exemplo', 'tok'); pt.sessao = _Sessao()
+pt.clipe({'alerta': 5, 'segundos': 180, 'evento_segundo': 90, 'inicio': 'x', 'quadros': []}, str(pasta_p / 'v.mp4'),
+         [(-25, str(pasta_p / 'q.jpg')), (10, str(pasta_p / 'q.jpg')), (3, str(pasta_p / 'nao-existe.jpg'))])
+t('agente manda o vídeo e os quadros no formato do portal', enviado['url'].endswith('/cameras/agente/clipe/') and enviado['nomes'] == ['video', 'quadro_m25', 'quadro_10']
+  and enviado['data'] == {'alerta': 5, 'inicio': 'x', 'segundos': 180, 'evento_segundo': 90} and enviado['timeout'][1] >= 300, enviado)
+_shutil.rmtree(pasta_p, ignore_errors=True)
+
 print(f'\n{ok} OK, {fail} falha(s)')

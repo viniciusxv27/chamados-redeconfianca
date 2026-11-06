@@ -87,7 +87,7 @@
                 <dt>Nota do detector da loja</dt><dd><span class="ca-barra"><span style="width:{{ alerta.confianca }}%"></span></span>{{ alerta.confianca }}%</dd>
                 <dt>O que o histórico diz</dt><dd><span class="ca-barra"><span style="width:{{ historico.chance }}%"></span></span>{{ historico.chance }}% de alertas assim se confirmaram
                     <small class="ca-nota">{{ historico.decisoes_canal }} decisões nesta câmera, {{ historico.decisoes_loja }} na loja · rigor da câmera: {{ rigor }}{% if motivos_camera %} · falsos mais comuns: {% for m, n in motivos_camera %}{{ m|lower }} ({{ n }}){% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}</small></dd>
-                {% if medidas %}<dt>O que o detector mediu</dt><dd><ul class="ca-medidas">{% for k, v in medidas.items %}<li><span>{{ k|cut:"_"|capfirst }}</span><b>{% if v is True %}sim{% elif v is False %}não{% else %}{{ v }}{% endif %}</b></li>{% endfor %}</ul></dd>{% endif %}
+                {% if medidas %}<dt>O que o detector mediu</dt><dd><ul class="ca-medidas">{% for rotulo, v in medidas %}<li><span>{{ rotulo }}</span><b>{% if v is True %}sim{% elif v is False %}não{% else %}{{ v }}{% endif %}</b></li>{% endfor %}</ul></dd>{% endif %}
                 {% if alerta.tratado_por %}<dt>Tratado por</dt><dd>{{ alerta.tratado_por.get_full_name }} em {{ alerta.tratado_em|date:"d/m/Y H:i" }}{% if alerta.motivo_falso %} · {{ alerta.get_motivo_falso_display }}{% endif %}</dd>{% endif %}
             </dl>
             <p class="ca-aviso-humano"><i class="fas fa-user-check"></i>A análise aponta movimento suspeito, não culpados. Confira o vídeo antes de falar com alguém.</p>
