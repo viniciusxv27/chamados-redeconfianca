@@ -2,7 +2,7 @@
 
 Uma linha por loja/dia, no mesmo formato da planilha que o financeiro já usa:
 
-    Data · Valor SAP · Vivo go EA · DIVERG. · STATUS · allied · recarga ·
+    Data · Valor SAP · Vivo go EA · DIVERG. · STATUS · ALLIED (qtd.) · recarga ·
     Agoracred · Renova · sangria/erro · Transferências · Valor real ·
     Entrada · Diferença · Depósito · saldo
 
@@ -27,11 +27,11 @@ ZERO = Decimal('0.00')
 # junto e repassado depois.
 COLUNAS_NAO_SAO_CAIXA = ('allied', 'recarga', 'agoracred', 'renova')
 
-# Fora da comparação com o Vivo go: o Vivo go não registra estes lançamentos,
-# então mantê-los no SAP faria toda loja parecer divergente todo dia. A recarga
-# entrou aqui em 20/10/2026 (pedido do financeiro): ela é lançada no SAP e não
-# no Vivo go, e deixava o dia em ATENÇÃO pelo valor exato da recarga.
-COLUNAS_FORA_DA_DIVERGENCIA = ('recarga', 'agoracred', 'renova', 'transferencias')
+# A régua da divergência (pedido do financeiro, 06/11/2026):
+#     DIVERG. = (Valor SAP + recarga − Agoracred − Renova − Transferências) − Vivo go EA
+# A recarga SOMA ao SAP; Agoracred, Renova e Transferências saem dele.
+COLUNAS_SOMADAS_NA_DIVERGENCIA = ('recarga',)
+COLUNAS_FORA_DA_DIVERGENCIA = ('agoracred', 'renova', 'transferencias')
 
 
 def _dec(campo_verbose, **extra):
@@ -65,7 +65,11 @@ class ContagemCaixaDia(models.Model):
     valor_vivogo = models.DecimalField(
         max_digits=12, decimal_places=2, null=True, blank=True,
         verbose_name='Vivo go EA')
-    allied = _dec('allied')
+    # Allied é contado em QUANTIDADE de vendas Renova (06/11/2026). O valor em R$
+    # antigo continua guardado e na conta da Entrada para não mudar dias fechados,
+    # mas saiu da tela.
+    allied = _dec('allied (R$, antigo)')
+    allied_qtd = models.PositiveIntegerField(default=0, db_default=0, verbose_name='ALLIED (qtd. vendas Renova)')
     recarga = _dec('recarga')
     agoracred = _dec('Agoracred')
     renova = _dec('Renova')
@@ -139,13 +143,9 @@ class ContagemCaixaDia(models.Model):
 
     @property
     def sap_comparavel(self):
-        """O SAP na mesma régua do Vivo go.
-
-        Recarga, Agoracred, Renova e Transferências entram no SAP mas não
-        aparecem no Vivo go. Comparar sem descontá-los acusaria divergência todo dia em
-        toda loja — e um alerta que sempre dispara deixa de ser alerta.
-        """
-        return (self.valor_sap or ZERO) - self._soma(COLUNAS_FORA_DA_DIVERGENCIA)
+        """O SAP na mesma régua do Vivo go: SAP + recarga − Agoracred − Renova − Transferências."""
+        return ((self.valor_sap or ZERO) + self._soma(COLUNAS_SOMADAS_NA_DIVERGENCIA)
+                - self._soma(COLUNAS_FORA_DA_DIVERGENCIA))
 
     @property
     def entrada(self):

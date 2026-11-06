@@ -1,4 +1,5 @@
 """Telas da Contagem de Caixa."""
+import re
 import logging
 from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
@@ -29,8 +30,11 @@ ZERO = Decimal('0.00')
 # Campos que a tela preenche. O Valor SAP não entra: ele vem da importação.
 # A Entrada saiu daqui: virou conta (SAP − parceiros − sangria − transferências).
 # sangria/erro saiu da tela (20/10/2026): sangria se lança na aba Sangrias.
-CAMPOS_EDITAVEIS = ('valor_vivogo', 'allied', 'recarga', 'agoracred', 'renova',
+CAMPOS_EDITAVEIS = ('valor_vivogo', 'allied_qtd', 'recarga', 'agoracred', 'renova',
                     'transferencias', 'valor_real', 'deposito')
+
+# ALLIED é quantidade de vendas Renova (número inteiro), não valor.
+CAMPOS_INTEIROS = ('allied_qtd',)
 
 # Campo em branco aqui significa "ainda não contei", e não "contei e deu zero".
 # É o que separa um dia pendente de uma divergência que alerta o gerente.
@@ -39,6 +43,17 @@ CAMPOS_QUE_ACEITAM_VAZIO = ('valor_vivogo',)
 
 class ValorInvalido(ValueError):
     pass
+
+
+def _para_inteiro(texto):
+    """Quantidade: vazio vira 0; "3" ou "3,0" valem 3; o resto é erro."""
+    bruto = (texto or '').strip().replace(' ', '')
+    if not bruto:
+        return 0
+    bruto = re.sub(r'[.,]0+$', '', bruto)
+    if not bruto.isdigit():
+        raise ValorInvalido(texto)
+    return int(bruto)
 
 
 def _para_decimal(texto):
@@ -85,7 +100,7 @@ def dashboard(request):
     # A conta precisa ser a mesma da property `divergencia`: o SAP comparável
     # desconta Agoracred, Renova e Transferências, que o Vivo go não registra.
     # Se as duas divergirem, a tela mostra um número e o alerta usa outro.
-    sap_comparavel = F('valor_sap') - F('agoracred') - F('renova') - F('transferencias')
+    sap_comparavel = F('valor_sap') + F('recarga') - F('agoracred') - F('renova') - F('transferencias')
     divergentes = list(base.filter(valor_vivogo__isnull=False)
                        .exclude(valor_vivogo=sap_comparavel).select_related('loja'))
     # Divergência que alguém já conferiu e deu OK sai do alerta.
@@ -254,7 +269,7 @@ def salvar_dia(request, loja_id):
             novos[campo] = None
             continue
         try:
-            novos[campo] = _para_decimal(bruto)
+            novos[campo] = _para_inteiro(bruto) if campo in CAMPOS_INTEIROS else _para_decimal(bruto)
         except ValorInvalido:
             rotulo = ContagemCaixaDia._meta.get_field(campo).verbose_name
             return JsonResponse(

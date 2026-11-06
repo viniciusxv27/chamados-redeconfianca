@@ -250,6 +250,13 @@ def sangria_conferir(request):
     return _voltar(request)
 
 
+def _categoria_com_nome(nome, exceto=None):
+    """A categoria cujo nome é o mesmo, ignorando maiúsculas, acentos e espaços."""
+    from .servicos_texto import chave_nome
+    alvo = chave_nome(nome)
+    return next((c for c in CategoriaSangria.objects.exclude(id=exceto) if chave_nome(c.nome) == alvo), None)
+
+
 @login_required
 @_sangrias_liberadas
 @require_POST
@@ -258,18 +265,22 @@ def sangria_categorias(request):
     if not _e_gestor(request.user):
         messages.error(request, 'Só o gestor do caixa mexe nas categorias.')
         return _voltar(request)
-    nova = (request.POST.get('nova') or '').strip()[:60]
+    nova = ' '.join((request.POST.get('nova') or '').split())[:60]
     if nova:
-        _, criada = CategoriaSangria.objects.get_or_create(
-            nome=nova, defaults={'ordem': CategoriaSangria.objects.count()})
-        messages.success(request, f'Categoria "{nova}" criada.' if criada else f'"{nova}" já existe.')
+        # "DEPÓSITO" e "Depósito" são a mesma categoria: maiúscula e acento não fazem outra.
+        igual = _categoria_com_nome(nova)
+        if igual:
+            messages.error(request, f'"{nova}" já existe como "{igual.nome}".')
+        else:
+            CategoriaSangria.objects.create(nome=nova, ordem=CategoriaSangria.objects.count())
+            messages.success(request, f'Categoria "{nova}" criada.')
     for categoria in CategoriaSangria.objects.all():
         nome = (request.POST.get(f'nome_{categoria.id}') or '').strip()[:60]
         if f'nome_{categoria.id}' not in request.POST:
             continue
         ativa = request.POST.get(f'ativa_{categoria.id}') == 'on'
         if nome and (nome != categoria.nome or ativa != categoria.ativa):
-            if CategoriaSangria.objects.filter(nome=nome).exclude(id=categoria.id).exists():
+            if _categoria_com_nome(nome, exceto=categoria.id):
                 messages.error(request, f'Já existe uma categoria chamada "{nome}".')
                 continue
             categoria.nome, categoria.ativa = nome, ativa

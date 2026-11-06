@@ -1,4 +1,4 @@
-"""Contagem de caixa (20/10/2026): recarga desconta da divergência; coluna sangria/erro sai da tela."""
+"""Contagem de caixa: a recarga SOMA ao SAP na divergência (06/11/2026); coluna sangria/erro sai da tela (20/10/2026)."""
 import os
 import sys
 from datetime import date
@@ -60,27 +60,27 @@ try:
         first_name='Zz', last_name='Recarga', sector=loja, hierarchy='SUPERADMIN', is_staff=True, is_superuser=True)
     c = Client(); c.force_login(chefe)
     hoje = date.today()
-    dia = ContagemCaixaDia.objects.create(loja=loja, data=hoje, valor_sap=D('520.00'), valor_vivogo=D('500.00'))
+    dia = ContagemCaixaDia.objects.create(loja=loja, data=hoje, valor_sap=D('480.00'), valor_vivogo=D('500.00'))
     recalcular_saldos(loja.id, desde=hoje)
 
-    print('== RECARGA SAI DA DIVERGÊNCIA ==')
-    t('sem recarga, 20 de divergência', dia.divergencia == D('20.00') and dia.status == 'ATENCAO', dia.divergencia)
+    print('== RECARGA SOMA AO SAP NA DIVERGÊNCIA ==')
+    t('sem recarga, −20 de divergência', dia.divergencia == D('-20.00') and dia.status == 'ATENCAO', dia.divergencia)
     r = c.post(f'/contagem-caixa/loja/{loja.id}/salvar/', {'data': hoje.isoformat(), 'recarga': '20,00'})
     dia.refresh_from_db()
-    t('lançada a recarga, a divergência cai pelo valor dela', dia.divergencia == D('0.00') and dia.status == 'OK', (dia.divergencia, dia.status))
+    t('lançada a recarga (somada ao SAP), a divergência zera', dia.divergencia == D('0.00') and dia.status == 'OK', (dia.divergencia, dia.status))
     t('a tela recebe a divergência nova', r.status_code == 200 and r.json().get('divergencia') in ('0.00', 0, '0', None, '') or 'divergencia' in r.json(), r.content[:200])
-    t('e a recarga continua saindo da Entrada', dia.entrada == D('500.00'), dia.entrada)
+    t('e a recarga continua saindo da Entrada', dia.entrada == D('460.00'), dia.entrada)
 
     print('\n== SANGRIA/ERRO FORA DA TELA ==')
     html = c.get(f'/contagem-caixa/loja/{loja.id}/').content.decode()
     t('a coluna sangria/erro não aparece', '<th class="text-right">sangria/erro</th>' not in html and 'data-campo="sangria_erro"' not in html)
-    t('a recarga está na conta da divergência na legenda', '(Valor SAP − recarga − Agoracred' in html)
+    t('a recarga está na conta da divergência na legenda', '(Valor SAP + recarga − Agoracred' in html)
     c.post(f'/contagem-caixa/loja/{loja.id}/salvar/', {'data': hoje.isoformat(), 'sangria_erro': '99,00'})
     dia.refresh_from_db()
     t('e não se edita mais pelo salvar', dia.sangria_erro == D('0.00'), dia.sangria_erro)
     ContagemCaixaDia.objects.filter(pk=dia.pk).update(sangria_erro=D('15.00'))
     dia.refresh_from_db()
-    t('o que já foi lançado antes continua na Entrada', dia.entrada == D('485.00'), dia.entrada)
+    t('o que já foi lançado antes continua na Entrada', dia.entrada == D('445.00'), dia.entrada)
     t('e aparece somado nas sangrias', dia.sangrias_total == D('15.00'))
     html = c.get(f'/contagem-caixa/loja/{loja.id}/').content.decode()
     t('com a marca na tela', 'lançado à mão na antiga coluna sangria/erro' in html)

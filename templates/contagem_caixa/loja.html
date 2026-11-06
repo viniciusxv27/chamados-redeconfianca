@@ -159,7 +159,7 @@ cxModoAbertura();
                     <th class="text-right">Vivo go EA</th>
                     <th class="text-right">DIVERG.</th>
                     <th class="text-center">STATUS</th>
-                    <th class="text-right">allied</th>
+                    <th class="text-right" title="Quantidade de vendas Renova do dia">ALLIED <span class="font-normal normal-case">(qtd.)</span></th>
                     <th class="text-right">recarga</th>
                     <th class="text-right">Agoracred</th>
                     <th class="text-right">Renova</th>
@@ -183,7 +183,7 @@ cxModoAbertura();
                     </td>
                     <td class="text-right tabular cx-diverg {% if d.divergencia %}cx-negativo font-semibold{% else %}text-gray-300{% endif %}">{{ d.divergencia|brl }}</td>
                     <td class="text-center cx-status-cel">{% include 'contagem_caixa/_status_dia.html' %}</td>
-                    <td class="text-right"><input type="text" class="cx-entrada" data-campo="allied" value="{{ d.allied|campo }}" placeholder="—"></td>
+                    <td class="text-right"><input type="text" inputmode="numeric" class="cx-entrada" data-campo="allied_qtd" value="{% if d.allied_qtd %}{{ d.allied_qtd }}{% endif %}" placeholder="—" aria-label="ALLIED: quantidade de vendas Renova" title="Quantidade de vendas Renova{% if d.allied %} · valor antigo em R$ {{ d.allied|campo }} (continua na Entrada){% endif %}">{% if d.allied %}<sup class="text-amber-600" title="Valor antigo em R$ {{ d.allied|campo }} (continua na Entrada)">R$</sup>{% endif %}</td>
                     <td class="text-right"><input type="text" class="cx-entrada" data-campo="recarga" value="{{ d.recarga|campo }}" placeholder="—"></td>
                     <td class="text-right"><input type="text" class="cx-entrada" data-campo="agoracred" value="{{ d.agoracred|campo }}" placeholder="—"></td>
                     <td class="text-right"><input type="text" class="cx-entrada" data-campo="renova" value="{{ d.renova|campo }}" placeholder="—"></td>
@@ -203,8 +203,9 @@ cxModoAbertura();
 
 <p class="text-xs text-gray-400 mt-3">
     <i class="fas fa-circle-info mr-1"></i>
-    <strong>Entrada</strong> = Valor SAP − allied − recarga − Agoracred − Renova − sangrias (registradas na aba Sangrias) − Transferências ·
-    <strong>DIVERG.</strong> = (Valor SAP − recarga − Agoracred − Renova − Transferências) − Vivo go EA ·
+    <strong>ALLIED</strong> = quantidade de vendas Renova do dia (não entra nas contas; dias antigos com valor em R$ marcados com <sup class="text-amber-600">R$</sup> mantêm esse valor na Entrada) ·
+    <strong>Entrada</strong> = Valor SAP − recarga − Agoracred − Renova − sangrias (registradas na aba Sangrias) − Transferências ·
+    <strong>DIVERG.</strong> = (Valor SAP + recarga − Agoracred − Renova − Transferências) − Vivo go EA ·
     <sup class="text-amber-600">*</sup> sangria com valor lançado na antiga coluna sangria/erro (continua na conta) ·
     <strong>STATUS</strong> fica em ATENÇÃO quando os dois não batem (e o gerente da loja é avisado){% if pode_conferir %};
     se a diferença já foi verificada (um ajuste manual, por exemplo), clique em <strong>dar OK</strong> — o dia fica como

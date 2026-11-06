@@ -393,7 +393,7 @@ def divergencias_para_avisar(user):
     if guardado is not None:
         return guardado
     desde = timezone.localdate() - timedelta(days=DIAS_DO_AVISO_DE_DIVERGENCIA)
-    sap_comparavel = F('valor_sap') - F('agoracred') - F('renova') - F('transferencias')
+    sap_comparavel = F('valor_sap') + F('recarga') - F('agoracred') - F('renova') - F('transferencias')
     dias = (ContagemCaixaDia.objects.filter(loja_id=user.sector_id, data__gte=desde, valor_vivogo__isnull=False)
             .exclude(valor_vivogo=sap_comparavel).select_related('loja').order_by('-data')[:10])
     abre_caixa = pode_ver_caixa(user)
