@@ -25,9 +25,11 @@ html.dark #rcAssist {
 
 /* Fica logo acima da bolha de suporte, que é fixa em bottom-4 e tem 56px. O
    z-index abaixo do dela deixa a janela de suporte cobrir este botão. */
+/* 06/11/2026: chat e assistente diminuíram para 44px; acima deles vem o atalho de
+   Vendas (.rc-vendas-fab, 52px — um pouco maior). Os três ficam alinhados pela direita. */
 .rca-fab {
-    position: fixed; right: 1rem; bottom: calc(1rem + 56px + .75rem); z-index: 39;
-    width: 56px; height: 56px; border: 0; border-radius: 9999px; cursor: pointer;
+    position: fixed; right: 1rem; bottom: calc(1rem + 44px + .6rem); z-index: 39;
+    width: 44px; height: 44px; border: 0; border-radius: 9999px; cursor: pointer;
     display: flex; align-items: center; justify-content: center;
     background: var(--rca-cor); color: #fff; font-size: 1.25rem;
     box-shadow: 0 10px 15px -3px rgba(0, 0, 0, .25);
@@ -40,8 +42,20 @@ html.dark #rcAssist {
 .rca-fab:has(.rca-robo):hover { background: #2E1065; box-shadow: 0 12px 20px -4px rgba(124, 58, 237, .45); }
 .rca-fab:focus-visible { outline: 3px solid #fdba74; outline-offset: 2px; }
 
+.rc-vendas-fab {
+    position: fixed; right: calc(1rem - 4px); bottom: calc(1rem + 44px + .6rem + 44px + .6rem); z-index: 39;
+    width: 52px; height: 52px; border-radius: 9999px;
+    display: flex; align-items: center; justify-content: center;
+    background: #660099; color: #fff; font-size: 1.2rem; text-decoration: none;
+    border: 2px solid #fff; box-shadow: 0 10px 15px -3px rgba(102, 0, 153, .4);
+    transition: transform .2s, background-color .2s;
+}
+.rc-vendas-fab:hover { background: #7a1fb0; color: #fff; transform: scale(1.06); }
+.rc-vendas-fab:focus-visible { outline: 3px solid #d8b4fe; outline-offset: 2px; }
+/* Com a janela do assistente aberta o atalho fica atrás dela (z-index menor). */
+
 .rca-janela {
-    position: fixed; right: 1rem; bottom: calc(1rem + 56px + .75rem + 56px + .5rem); z-index: 60;
+    position: fixed; right: 1rem; bottom: calc(1rem + 44px + .6rem + 44px + .5rem); z-index: 60;
     width: 380px; max-width: calc(100vw - 2rem);
     height: 560px; max-height: calc(100vh - 11.5rem);
     display: flex; flex-direction: column; overflow: hidden;

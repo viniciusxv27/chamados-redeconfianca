@@ -41,6 +41,9 @@
         {% endif %}{% endfor %}
     </div>
     {% if resultado.sku %}
+    {% if resultado.mantidos %}
+    <p class="px-5 py-3 text-sm text-gray-700 border-t border-gray-100" data-resultado-mantidos><i class="fas fa-thumbtack text-purple-600 mr-1.5"></i>Mantido(s) mesmo fora da planilha: <strong>{{ resultado.mantidos|join:", " }}</strong>.</p>
+    {% endif %}
     <div class="px-5 py-3 text-sm border-t border-gray-100" data-resultado-sku>
         {% if resultado.sku.problema %}
         <p class="text-amber-800"><i class="fas fa-triangle-exclamation mr-1.5"></i>SKU não atualizado: {{ resultado.sku.problema }}. Os preços entraram normalmente e quem já tinha SKU continua com ele.</p>
@@ -178,6 +181,48 @@
         </button>
     </div>
 </form>
+
+{% if tabela_email %}
+{% comment %}Tabela pelo e-mail, todo dia às 6h (vendas/tabela_email.py). Só o SUPERADMIN vê e configura.{% endcomment %}
+<section class="vd-secao mt-6 max-w-2xl" id="vdTabelaEmail">
+    <div class="vd-secao-cabeca">
+        <i class="fas fa-envelope-open-text text-purple-600"></i>
+        <span class="text-sm font-semibold text-gray-800">Importar sozinho pelo e-mail</span>
+        {% if tabela_email.ativo %}<span class="ml-auto text-[11px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-semibold">ligado · todo dia às 6h</span>
+        {% else %}<span class="ml-auto text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-semibold">desligado</span>{% endif %}
+    </div>
+    <div class="p-5 space-y-4">
+        <p class="text-xs text-gray-600">Todo dia às 6h o portal abre a caixa abaixo, pega o e-mail mais novo com <strong>“Tabela de Preços &gt;&gt;”</strong> no assunto e importa o anexo que tem <strong>“Demais Canais”</strong> no nome. O mesmo e-mail não é importado duas vezes, e nada é apagado ou marcado como lido na caixa.</p>
+        <form method="post" action="{% url 'vendas:precos_email' %}" class="space-y-3">
+            {% csrf_token %}
+            <input type="hidden" name="acao" value="salvar">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label class="block"><span class="vd-rotulo">E-mail da caixa</span>
+                    <input type="email" name="conta" value="{{ tabela_email.conta }}" class="vd-campo" placeholder="nome@redeconfianca.com.br" autocomplete="off"></label>
+                <label class="block"><span class="vd-rotulo">Senha{% if tabela_email.tem_senha %} <span class="text-emerald-700 font-normal">(guardada — deixe em branco para manter)</span>{% endif %}</span>
+                    <input type="password" name="senha" class="vd-campo" autocomplete="new-password" placeholder="{% if tabela_email.tem_senha %}••••••••{% else %}senha da caixa{% endif %}"></label>
+            </div>
+            <label class="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="ativo" class="rounded" {% if tabela_email.ativo %}checked{% endif %}> Importar sozinho todo dia às 6h</label>
+            <label class="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="avisar" class="rounded" {% if tabela_email.avisar %}checked{% endif %}> Avisar como na importação manual (WhatsApp para quem está marcado acima e popup no portal)</label>
+            <button type="submit" class="vd-btn-primario px-4 py-2 rounded-lg bg-purple-700 text-white text-sm font-semibold hover:bg-purple-800"><i class="fas fa-floppy-disk mr-1.5"></i>Salvar e testar o login</button>
+        </form>
+        <div class="flex flex-wrap items-center gap-3 border-t border-gray-100 pt-4">
+            <form method="post" action="{% url 'vendas:precos_email' %}" onsubmit="this.querySelector('button').disabled=true;">
+                {% csrf_token %}
+                <input type="hidden" name="acao" value="buscar">
+                <button type="submit" class="px-3.5 py-2 rounded-lg border border-purple-200 text-purple-700 text-sm font-semibold hover:bg-purple-50"{% if not tabela_email.tem_senha %} disabled title="Salve o e-mail e a senha primeiro"{% endif %}><i class="fas fa-rotate mr-1.5"></i>Buscar no e-mail agora</button>
+            </form>
+            {% if tabela_email.estado.checado_em %}
+            <p class="text-xs text-gray-600" data-tabela-email-estado>
+                Última busca: {{ tabela_email.estado.checado_em }} —
+                <span class="{% if tabela_email.estado.situacao == 'importada' %}text-emerald-700{% elif tabela_email.estado.situacao == 'erro' or tabela_email.estado.situacao == 'erro_importacao' or tabela_email.estado.situacao == 'sem_anexo' %}text-red-700{% else %}text-gray-700{% endif %}">{{ tabela_email.estado.detalhe }}</span>
+                {% if tabela_email.estado.importada_em %}<br>Última tabela importada pelo e-mail: {{ tabela_email.estado.importada_em }} ({{ tabela_email.estado.anexo }}).{% endif %}
+            </p>
+            {% endif %}
+        </div>
+    </div>
+</section>
+{% endif %}
 
 {% comment %}[Parametrização.RF003] Relatório de cada importação: incluídos, alterados e rejeitados.{% endcomment %}
 <section class="vd-card overflow-hidden mt-5 max-w-3xl">

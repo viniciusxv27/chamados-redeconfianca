@@ -356,6 +356,17 @@ class ConfiguracaoVendas(models.Model):
     # Grupos do WhatsApp (o número do portal participa deles): [{'id': '…@g.us', 'nome': '…'}] — 29/10/2026.
     aviso_precos_grupos = models.JSONField(default=list, blank=True, null=True,
                                            verbose_name='Aviso de preços no WhatsApp: grupos')
+    # Tabela de preços pelo e-mail, todo dia às 6h (vendas/tabela_email.py — 06/11/2026).
+    # A senha fica cifrada (webmail/seguranca.py) e nunca volta para a tela.
+    tabela_email = models.CharField(max_length=254, blank=True, default='', db_default='',
+                                    verbose_name='Caixa que recebe a tabela')
+    tabela_email_senha = models.TextField(blank=True, default='', db_default='', verbose_name='Senha (cifrada)')
+    tabela_email_ativo = models.BooleanField(default=False, db_default=False,
+                                             verbose_name='Importar sozinho todo dia às 6h')
+    tabela_email_avisar = models.BooleanField(default=True, db_default=True,
+                                              verbose_name='Avisar (WhatsApp e popup) como na importação manual')
+    tabela_email_estado = models.JSONField(default=dict, blank=True, null=True,
+                                           verbose_name='Última busca no e-mail')
     atualizado_em = models.DateTimeField(auto_now=True)
     atualizado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
                                        related_name='+')
@@ -583,7 +594,8 @@ class Orcamento(models.Model):
 
     PILARES = [('MOVEL', 'Móvel'), ('FIXA', 'Fixa'), ('SMARTPHONES', 'Smartphones'), ('ELETRONICOS', 'Eletrônicos'),
                ('ESSENCIAIS', 'Essenciais'), ('SEGUROS', 'Seguros'), ('SVA', 'SVA')]
-    STATUS = [('ENVIANDO', 'Enviando'), ('ENVIADO', 'Enviado'), ('FALHA', 'Não enviado')]
+    # 06/11/2026: o vendedor manda do WhatsApp Web dele (ABERTO); os outros são do envio pelo número do portal.
+    STATUS = [('ABERTO', 'Aberto no WhatsApp'), ('ENVIANDO', 'Enviando'), ('ENVIADO', 'Enviado'), ('FALHA', 'Não enviado')]
 
     cliente_nome = models.CharField(max_length=200, verbose_name='Nome do cliente')
     pilar = models.CharField(max_length=12, choices=PILARES, verbose_name='Pilar')
@@ -608,6 +620,18 @@ class Orcamento(models.Model):
 
     def __str__(self):
         return f'Orçamento {self.get_pilar_display()} — {self.cliente_nome}'
+
+    @property
+    def link_whatsapp_web(self):
+        """A conversa com o cliente no WhatsApp Web de quem clica, com a mensagem já escrita."""
+        from urllib.parse import quote
+        return f'https://web.whatsapp.com/send?phone={self.numero}&text={quote(self.mensagem)}'
+
+    @property
+    def link_whatsapp_app(self):
+        """No celular não há WhatsApp Web: o wa.me abre o aplicativo."""
+        from urllib.parse import quote
+        return f'https://wa.me/{self.numero}?text={quote(self.mensagem)}'
 
     @property
     def numero_formatado(self):

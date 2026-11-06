@@ -14,6 +14,7 @@ urlpatterns = [
     path('precos/', views.precos, name='precos'),
     path('precos/buscar/', views.precos_buscar, name='precos_buscar'),
     path('precos/importar/', views.precos_import, name='precos_import'),
+    path('precos/importar/email/', views.precos_email, name='precos_email'),
     path('precos/novo/', views.precos_create, name='precos_create'),
     path('<int:pk>/', views.venda_detail, name='venda_detail'),
 

@@ -1111,7 +1111,6 @@ def create_user_view(request):
     return render(request, 'admin/create_user.html', context)
 
 
-@login_required
 def _ip_do_pedido(request):
     """IP de quem fez a alteração, respeitando o proxy da frente."""
     encaminhado = request.META.get('HTTP_X_FORWARDED_FOR', '')
@@ -1149,6 +1148,7 @@ def edit_user_group_view(request, user_id):
     return JsonResponse({'ok': True})
 
 
+@login_required
 def edit_user_view(request, user_id):
     """Editar usuário existente. SUPERADMIN e ADMINISTRAÇÃO."""
     if not request.user.can_edit_users():
@@ -1305,8 +1305,21 @@ def edit_user_view(request, user_id):
                 for campo, valor in endereco.items():
                     setattr(user_to_edit, campo, valor)
 
+                # Resto da ficha (documentos, filiação, dados pessoais,
+                # integrações, preferências) e as listas de contatos e
+                # dependentes. Erro volta para a tela sem gravar nada.
+                ficha, ficha_error = _read_ficha_extra(request.POST, user_to_edit)
+                contatos, dependentes, listas_error = _read_contatos_e_dependentes(request.POST)
+                if ficha_error or listas_error:
+                    messages.error(request, ficha_error or listas_error)
+                    return redirect('edit_user', user_id=user_to_edit.id)
+                for campo, valor in ficha.items():
+                    setattr(user_to_edit, campo, valor)
+
                 user_to_edit.save()
-                
+                linhas_listas = _salvar_contatos_e_dependentes(
+                    user_to_edit, contatos, dependentes, request.user, _ip_do_pedido(request))
+
                 # Atualizar setores múltiplos
                 sectors = Sector.objects.filter(id__in=sectors_ids) if sectors_ids else Sector.objects.none()
                 user_to_edit.sectors.set(sectors)
@@ -1327,7 +1340,7 @@ def edit_user_view(request, user_id):
 
                 user_to_edit.refresh_from_db()
                 alteracoes = registrar(user_to_edit, estado_anterior, request.user,
-                                       ip=_ip_do_pedido(request))
+                                       ip=_ip_do_pedido(request)) + linhas_listas
 
                 log_action(
                     request.user,
@@ -1380,6 +1393,8 @@ def edit_user_view(request, user_id):
         'modulos_liberados': liberados,
         'liberacoes_atuais': rotulos_de(liberados),
         'pode_liberar_acessos': _pode_liberar_acessos(request.user),
+        'emergency_rows': _emergency_rows(request, user_to_edit),
+        'dependent_rows': _dependent_rows(request, user_to_edit),
     }
     return render(request, 'admin/edit_user.html', context)
 
@@ -1893,6 +1908,152 @@ def _read_address(data):
             valor = valor.upper() if valor.upper() in ufs else ''
         valores[campo] = valor[:User._meta.get_field(campo).max_length]
     return valores, None
+
+
+# Ficha completa na edição pela gestão: o que o pré-cadastro coleta e a tela
+# de editar não mostrava. Mesma regra do endereço: campo que não veio no POST
+# fica como está (tela antiga aberta, script), para nenhum dado sumir.
+CAMPOS_FICHA_TEXTO = ('rg', 'rg_issuer', 'voter_title', 'voter_zone', 'voter_section',
+                      'father_name', 'mother_name', 'birthplace', 'nationality', 'pcn')
+CAMPOS_FICHA_ESCOLHA = ('skin_color', 'sex', 'gender', 'marital_status', 'education_level')
+# Caixas de seleção: desmarcada não vem no POST, então a tela manda junto um
+# `<campo>__na_tela` para separar "desmarcou" de "a tela nem tinha o campo".
+CAMPOS_FICHA_CAIXA = ('popup_janela_experiencia',)
+
+
+def _read_ficha_extra(data, alvo):
+    """(valores, erro) dos campos da ficha que a edição passou a mostrar."""
+    from datetime import date as _date
+
+    valores = {}
+    for campo in CAMPOS_FICHA_TEXTO:
+        if campo in data:
+            valores[campo] = (data.get(campo) or '').strip()[:User._meta.get_field(campo).max_length]
+    for campo in CAMPOS_FICHA_ESCOLHA:
+        if campo in data:
+            valor = (data.get(campo) or '').strip()
+            validos = {c for c, _r in User._meta.get_field(campo).choices}
+            valores[campo] = valor if valor in validos else ''
+    for campo in CAMPOS_FICHA_CAIXA:
+        if f'{campo}__na_tela' in data:
+            valores[campo] = data.get(campo) == 'on'
+
+    if 'theme' in data:
+        tema = (data.get('theme') or '').strip()
+        if tema in {c for c, _r in User._meta.get_field('theme').choices}:
+            valores['theme'] = tema
+
+    if 'has_dependents' in data:
+        resposta = (data.get('has_dependents') or '').strip()
+        if resposta in ('sim', 'nao'):
+            valores['has_dependents'] = resposta == 'sim'
+
+    if 'rg_issue_date' in data:
+        texto = _data_iso((data.get('rg_issue_date') or '').strip())
+        if not texto:
+            valores['rg_issue_date'] = None
+        else:
+            try:
+                valores['rg_issue_date'] = _date.fromisoformat(texto)
+            except ValueError:
+                return {}, 'Data de emissão do RG inválida. Use dd/mm/aaaa.'
+
+    if 'tangerino_employee_id' in data:
+        texto = (data.get('tangerino_employee_id') or '').strip()
+        if not texto:
+            valores['tangerino_employee_id'] = None
+        elif not texto.isdigit():
+            return {}, 'O ID do Tangerino é um número inteiro (ou fica em branco).'
+        else:
+            numero = int(texto)
+            dono = User.objects.filter(tangerino_employee_id=numero).exclude(pk=alvo.pk).first()
+            if dono:
+                return {}, (f'O ID {numero} do Tangerino já está ligado a '
+                            f'{dono.get_full_name() or dono.email}. Desfaça o outro vínculo antes.')
+            valores['tangerino_employee_id'] = numero
+    return valores, None
+
+
+def _read_contatos_e_dependentes(data):
+    """(contatos, dependentes, erro) quando a tela mandou as duas listas.
+
+    ``None`` em uma lista quer dizer "não veio na tela: não mexer". Linha pela
+    metade é erro, e não silêncio: seria o gestor achando que cadastrou o
+    contato e o cadastro ficando sem ele.
+    """
+    contatos = dependentes = None
+    if 'contatos_emergencia__na_tela' in data:
+        for i in range(1, EmergencyContact.MAX_POR_USUARIO + 1):
+            partes = [(data.get(f'emergency_{p}_{i}') or '').strip() for p in ('name', 'phone', 'relationship')]
+            if any(partes) and not all(partes):
+                return None, None, f'Contato de emergência {i}: preencha nome, telefone e grau (ou apague a linha).'
+        contatos = _read_emergency_contacts(data)
+    if 'dependentes__na_tela' in data and (data.get('has_dependents') or '').strip() == 'nao':
+        dependentes = []          # "Não" esvazia a lista; as linhas escondidas nem contam
+    elif 'dependentes__na_tela' in data:
+        # Diferente do pré-cadastro, a data de nascimento não é cobrada aqui: o
+        # modelo aceita vazio e há dependente antigo sem ela — exigir travaria
+        # salvar qualquer outro campo dessa pessoa.
+        dependentes = []
+        for i in range(1, Dependent.MAX_POR_USUARIO + 1):
+            nome = (data.get(f'dependent_name_{i}') or '').strip()
+            documento = (data.get(f'dependent_document_{i}') or '').strip()
+            nascimento_txt = (data.get(f'dependent_birth_{i}') or '').strip()
+            if not (nome or documento or nascimento_txt):
+                continue
+            nascimento = _nascimento_do_dependente(data, i)
+            if not (nome and documento) or (nascimento_txt and not nascimento):
+                return None, None, (f'Dependente {i}: preencha nome e documento '
+                                    '(e a data de nascimento em dd/mm/aaaa), ou apague a linha.')
+            dependentes.append({'name': nome[:150], 'document': documento[:30], 'birth_date': nascimento})
+        if _nascimento_de_dependente_no_futuro(data):
+            return None, None, 'A data de nascimento de um dependente está no futuro: confira.'
+    return contatos, dependentes, None
+
+
+def _salvar_contatos_e_dependentes(alvo, contatos, dependentes, autor, ip):
+    """Troca as listas e deixa uma linha no histórico para cada uma que mudou."""
+    from django.db import transaction
+    from .models import UserChangeLog
+
+    def resumo_contatos(lista):
+        return '; '.join(f"{c['name']} ({c['relationship']}) {c['phone']}" for c in lista) or '—'
+
+    def resumo_dependentes(lista):
+        return '; '.join(
+            f"{d['name']} — {d['document']}" + (f" — {d['birth_date']:%d/%m/%Y}" if d['birth_date'] else '')
+            for d in lista) or '—'
+
+    linhas = 0
+    with transaction.atomic():
+        if contatos is not None:
+            antes = [{'name': c.name, 'phone': c.phone, 'relationship': c.relationship}
+                     for c in alvo.emergency_contacts.order_by('id')]
+            if antes != contatos:
+                alvo.emergency_contacts.all().delete()
+                EmergencyContact.objects.bulk_create(
+                    [EmergencyContact(user=alvo, **c) for c in contatos[:EmergencyContact.MAX_POR_USUARIO]])
+                UserChangeLog.objects.create(
+                    target=alvo, changed_by=autor, field='emergency_contacts',
+                    field_label='Contatos de emergência', old_value=resumo_contatos(antes),
+                    new_value=resumo_contatos(contatos), ip=ip)
+                linhas += 1
+        if dependentes is not None:
+            # "Não possui dependentes" esvazia a lista, como no pré-cadastro.
+            if not alvo.has_dependents:
+                dependentes = []
+            antes = [{'name': d.name, 'document': d.document, 'birth_date': d.birth_date}
+                     for d in alvo.dependents.order_by('id')]
+            if antes != dependentes:
+                alvo.dependents.all().delete()
+                Dependent.objects.bulk_create(
+                    [Dependent(user=alvo, **d) for d in dependentes[:Dependent.MAX_POR_USUARIO]])
+                UserChangeLog.objects.create(
+                    target=alvo, changed_by=autor, field='dependents', field_label='Dependentes',
+                    old_value=resumo_dependentes(antes),
+                    new_value=resumo_dependentes(dependentes), ip=ip)
+                linhas += 1
+    return linhas
 
 
 def _parse_salary(valor):

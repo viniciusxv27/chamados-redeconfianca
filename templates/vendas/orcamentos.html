@@ -3,7 +3,7 @@
 {% block title %}Orçamentos — Vendas{% endblock %}
 {% block vd_icone %}fa-file-signature{% endblock %}
 {% block vd_cabecalho %}Orçamentos{% endblock %}
-{% block vd_subtitulo %}Preencha e o cliente recebe direto no WhatsApp{% endblock %}
+{% block vd_subtitulo %}Preencha e mande pelo seu WhatsApp Web, com a mensagem pronta{% endblock %}
 
 {% block vd_conteudo %}
 {% if pode_enviar %}
@@ -30,7 +30,9 @@
                     <p class="text-[11px] text-gray-400 mt-1 text-right"><span id="orcConta">0</span> / {{ limite }}</p></div>
             </div>
             <button class="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold disabled:opacity-60" id="orcEnviar">
-                <i class="fab fa-whatsapp mr-1.5"></i>Enviar para o cliente</button>
+                <i class="fab fa-whatsapp mr-1.5"></i>Abrir no WhatsApp do cliente</button>
+            <p class="text-[11px] text-gray-500">Abre a conversa no seu WhatsApp Web (no celular, no aplicativo) com a mensagem pronta — confira e aperte enviar.</p>
+            <div id="orcErros" class="hidden rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700" role="alert"></div>
         </form>
         <div>
             <p class="vd-rotulo mb-1.5">Como o cliente vai receber</p>
@@ -55,14 +57,18 @@
                     <span class="block text-sm font-semibold text-gray-900 truncate">{{ o.cliente_nome }} <span class="font-normal text-gray-500">· {{ o.get_pilar_display }}</span></span>
                     <span class="block text-[11px] text-gray-500 truncate">{{ o.criado_em|date:"d/m/Y H:i" }} · {{ o.numero_formatado }}{% if o.vendedor_nome %} · {{ o.vendedor_nome }}{% endif %}{% if o.loja %} · {{ o.loja.name }}{% endif %}</span>
                 </span>
-                {% if o.status == 'ENVIADO' %}<span class="shrink-0 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-semibold"><i class="fas fa-check mr-0.5"></i>Enviado</span>
+                {% if o.status == 'ABERTO' %}<span class="shrink-0 px-2 py-0.5 rounded-full bg-sky-100 text-sky-700 text-[11px] font-semibold"><i class="fab fa-whatsapp mr-0.5"></i>Aberto no WhatsApp</span>
+                {% elif o.status == 'ENVIADO' %}<span class="shrink-0 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-semibold"><i class="fas fa-check mr-0.5"></i>Enviado</span>
                 {% elif o.status == 'FALHA' %}<span class="shrink-0 px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-[11px] font-semibold">Não enviado</span>
                 {% else %}<span class="shrink-0 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[11px] font-semibold">Enviando</span>{% endif %}
                 <i class="fas fa-chevron-down text-gray-300 text-xs transition-transform group-open:rotate-180"></i>
             </summary>
             <div class="px-4 sm:px-5 pb-4">
                 <p class="text-sm text-gray-700 whitespace-pre-wrap break-words rounded-xl bg-gray-50 p-3">{{ o.mensagem }}</p>
-                {% if o.status == 'FALHA' %}
+                {% if pode_enviar %}
+                <a href="{{ o.link_whatsapp_web }}" data-app="{{ o.link_whatsapp_app }}" target="_blank" rel="noopener" class="orc-abrir mt-2 inline-flex items-center px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium"><i class="fab fa-whatsapp mr-1.5"></i>Abrir no WhatsApp</a>
+                {% endif %}
+                {% if o.status == 'FALHA' and False %}
                 <div class="mt-2 flex items-center justify-between gap-3 flex-wrap">
                     <p class="text-xs text-red-600"><i class="fas fa-triangle-exclamation mr-1"></i>{{ o.erro }}</p>
                     {% if pode_enviar %}<form method="post" action="{% url 'vendas:orcamento_reenviar' o.pk %}">{% csrf_token %}
@@ -112,7 +118,34 @@
     }
     numero.addEventListener('input', function () { numero.value = mascara(numero.value); });
     [nome, pilar, texto].forEach(function (el) { el.addEventListener('input', desenhar); });
-    form.addEventListener('submit', function () { const b = $('orcEnviar'); b.disabled = true; b.innerHTML = '<i class="fas fa-circle-notch fa-spin mr-1.5"></i>Enviando…'; });
+    // Celular (sem WhatsApp Web): o wa.me abre o aplicativo.
+    const celular = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+    document.querySelectorAll('a.orc-abrir').forEach(function (a) { if (celular && a.dataset.app) a.href = a.dataset.app; });
+    form.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        const b = $('orcEnviar'), caixa = $('orcErros');
+        // A aba abre já no clique (senão o navegador bloqueia) e recebe o link quando o orçamento estiver salvo.
+        const aba = window.open('', '_blank');
+        b.disabled = true; caixa.classList.add('hidden');
+        fetch(form.action || location.href, {method: 'POST', body: new FormData(form), credentials: 'same-origin',
+                                             headers: {'X-Requested-With': 'XMLHttpRequest'}})
+            .then(function (r) { return r.json(); })
+            .then(function (j) {
+                if (!j.ok) {
+                    if (aba) aba.close();
+                    caixa.innerHTML = (j.erros || ['Não deu para salvar.']).map(function (e) { return '<p><i class="fas fa-circle-xmark mr-1"></i>' + esc(e) + '</p>'; }).join('');
+                    caixa.classList.remove('hidden'); b.disabled = false; return;
+                }
+                const link = celular ? j.app : j.web;
+                if (aba) { aba.opener = null; aba.location = link; } else { location.href = link; }
+                setTimeout(function () { location.reload(); }, 400);     // o orçamento entra na lista
+            })
+            .catch(function () {
+                if (aba) aba.close();
+                caixa.innerHTML = '<p><i class="fas fa-wifi mr-1"></i>Sem conexão com o portal. Tente de novo.</p>';
+                caixa.classList.remove('hidden'); b.disabled = false;
+            });
+    });
     numero.value = mascara(numero.value);
     desenhar();
 })();

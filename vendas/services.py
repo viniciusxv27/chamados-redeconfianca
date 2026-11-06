@@ -37,6 +37,9 @@ SHEETS_ALVO = ABAS_COM_TABELA + (ABA_PVP,)
 COND_BASE = 'Preço'                    # a coluna do grupo: preço base (cartão sem juros)
 COND_PIX = 'PIX e Vivo Pay'
 ABA_SKUS = 'PRODUTOS'
+# Produtos cadastrados à mão que a importação não apaga nem inativa (comparados sem
+# acento nem maiúscula). "Sim Card 5g" sumia a cada tabela nova — 06/11/2026.
+MANTER_NA_IMPORTACAO = ('sim card 5g',)
 COLUNAS_SKU = ('cod sap', 'codigo sap', 'cod material', 'sku')   # em ordem de preferência
 CHAVES_SKU = ('skus', 'ID DPGC')       # o que vem da aba PRODUTOS dentro de extra (não é mudança de preço)
 
@@ -285,7 +288,12 @@ def importar_tabela_precos(file_obj, sheets=None):
             resumo['incluidos'] += len(novos)
             resumo['por_categoria'][aba] = len(produtos)
             resumo['importados'] += len(produtos)
-        # O que não veio na planilha sai da tabela (inclusive planos e as outras abas).
+        # O que não veio na planilha sai da tabela (inclusive planos e as outras abas),
+        # menos os produtos fixos (MANTER_NA_IMPORTACAO).
+        fixos = [i for i in ItemPreco.objects.exclude(pk__in=manter).only('id', 'nome', 'ativo')
+                 if _rotulo(i.nome) in MANTER_NA_IMPORTACAO]
+        manter.update(i.pk for i in fixos)
+        resumo['mantidos'] = sorted({i.nome for i in fixos if i.ativo})
         fora = ItemPreco.objects.exclude(pk__in=manter)
         usados = set(VendaProduto.objects.filter(preco__in=fora).values_list('preco_id', flat=True)) | \
             set(VendaServico.objects.filter(preco__in=fora).values_list('preco_id', flat=True))

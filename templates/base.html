@@ -2622,6 +2622,12 @@
     })();
     </script>
     <!-- Support Chat Widget -->
+    {% if vendas_liberado and not request.path|slice:":8" == "/vendas/" %}
+    {% comment %}Atalho para /vendas/ acima do assistente e do chat (06/11/2026); um pouco maior que eles. Estilo em static/css/rc-assistente.css.{% endcomment %}
+    <a href="{% url 'vendas:dashboard' %}" class="rc-vendas-fab" id="rcVendasFab" title="Vendas" aria-label="Ir para Vendas">
+        <i class="fas fa-cart-shopping" aria-hidden="true"></i>
+    </a>
+    {% endif %}
     <div id="supportChatWidget" class="fixed bottom-4 right-4 z-40">
         <!-- Chat Button -->
         <button id="supportChatToggle" 
@@ -2638,14 +2644,14 @@
                         }
                     }
                 "
-                class="bg-blue-500 hover:bg-blue-600 text-white rounded-full w-14 h-14 flex items-center justify-center shadow-lg hover:shadow-xl transition-all duration-300 group">
-            <i class="fas fa-comment-alt text-xl group-hover:scale-110 transition-transform"></i>
+                class="bg-blue-500 hover:bg-blue-600 text-white rounded-full w-11 h-11 flex items-center justify-center shadow-lg hover:shadow-xl transition-all duration-300 group">
+            <i class="fas fa-comment-alt text-base group-hover:scale-110 transition-transform"></i>
             <span id="supportChatBadge" class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center hidden">0</span>
         </button>
 
         <!-- Chat Window -->
         <div id="supportChatWindow" 
-             class="absolute bottom-16 right-0 bg-white rounded-lg shadow-2xl border border-gray-200 flex flex-col overflow-hidden z-50 transition-all duration-300"
+             class="absolute bottom-14 right-0 bg-white rounded-lg shadow-2xl border border-gray-200 flex flex-col overflow-hidden z-50 transition-all duration-300"
              style="display: none; height: 500px; width: 320px;"
              data-expanded="false">
             

@@ -1,7 +1,8 @@
-"""Aba Orçamentos: o vendedor preenche e o cliente recebe no WhatsApp."""
+"""Aba Orçamentos: o vendedor preenche e abre a conversa com o cliente no WhatsApp Web dele."""
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.http import JsonResponse
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
@@ -24,20 +25,25 @@ def orcamentos(request):
     preenchido = {}
     erros = []
     if request.method == 'POST':
+        # A tela manda por fetch e abre a aba do WhatsApp com o link que volta daqui;
+        # sem JavaScript, o post comum grava e a lista oferece "Abrir no WhatsApp".
+        por_fetch = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
         if not pode_enviar:
+            if por_fetch:
+                return JsonResponse({'ok': False, 'erros': ['Enviar orçamento não está liberado para o seu usuário.']}, status=403)
             messages.error(request, 'Enviar orçamento não está liberado para o seu usuário.')
             return redirect('vendas:orcamentos')
         campos, erros = svc.ler_campos(request.POST)
-        if not erros and svc.ja_enviado(user, campos):
-            messages.info(request, 'Este orçamento acabou de ser enviado para este número. Não mandei de novo.')
-            return redirect('vendas:orcamentos')
         if not erros:
-            orcamento = svc.criar(user, campos)
-            if svc.enviar(orcamento):
-                messages.success(request, f'Orçamento enviado para {orcamento.cliente_nome} no WhatsApp {orcamento.numero_formatado}.')
-            else:
-                messages.error(request, f'Não consegui enviar para {orcamento.cliente_nome}: {orcamento.erro} O orçamento ficou na lista para tentar de novo.')
+            # Clique duplo: reabre a mesma conversa em vez de gravar outro orçamento igual.
+            orcamento = svc.ja_enviado(user, campos) or svc.criar(user, campos)
+            if por_fetch:
+                return JsonResponse({'ok': True, 'id': orcamento.pk, 'web': orcamento.link_whatsapp_web,
+                                     'app': orcamento.link_whatsapp_app})
+            messages.success(request, f'Orçamento de {orcamento.cliente_nome} salvo. Use "Abrir no WhatsApp" na lista para mandar.')
             return redirect('vendas:orcamentos')
+        if por_fetch:
+            return JsonResponse({'ok': False, 'erros': erros}, status=400)
         preenchido = {c: request.POST.get(c, '') for c in ('cliente_nome', 'pilar', 'numero', 'texto')}
 
     q = (request.GET.get('q') or '').strip()
@@ -57,12 +63,6 @@ def orcamentos(request):
 @exige('vendas.lancar')
 @require_POST
 def orcamento_reenviar(request, pk):
-    """Tenta de novo só o que não saiu, e só quem mandou (ou quem vê a rede)."""
+    """Não manda mais pelo número do portal (06/11/2026): leva à conversa no WhatsApp Web."""
     orcamento = get_object_or_404(_visiveis(request.user), pk=pk)
-    if orcamento.status != 'FALHA':
-        messages.info(request, 'Este orçamento já foi enviado.')
-    elif svc.enviar(orcamento):
-        messages.success(request, f'Orçamento enviado para {orcamento.cliente_nome}.')
-    else:
-        messages.error(request, f'Ainda não consegui enviar: {orcamento.erro}')
-    return redirect('vendas:orcamentos')
+    return redirect(orcamento.link_whatsapp_web)

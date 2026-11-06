@@ -29,9 +29,13 @@
             <!-- User Avatar Section -->
             <div class="px-6 py-4 border-b border-gray-200 bg-gray-50">
                 <div class="flex items-center space-x-4">
-                    <div class="w-16 h-16 bg-primary rounded-full flex items-center justify-center">
+                    {% if user_to_edit.profile_picture %}
+                    <img src="{{ user_to_edit.profile_picture.url }}" alt="Foto de {{ user_to_edit.full_name }}" class="w-16 h-16 rounded-full object-cover flex-shrink-0">
+                    {% else %}
+                    <div class="w-16 h-16 bg-primary rounded-full flex items-center justify-center flex-shrink-0">
                         <span class="text-white font-medium text-xl">{{ user_to_edit.first_name.0 }}{{ user_to_edit.last_name.0 }}</span>
                     </div>
+                    {% endif %}
                     <div>
                         <h3 class="text-lg font-semibold text-gray-900">{{ user_to_edit.full_name }}</h3>
                         <p class="text-gray-600">{{ user_to_edit.email }}</p>
@@ -304,6 +308,146 @@
                         </div>
                     </div>
 
+                    <!-- Documentos -->
+                    <div class="border-t border-gray-200 pt-6 mt-6">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                            <i class="fas fa-address-card text-primary mr-2"></i>
+                            Documentos
+                        </h3>
+
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div>
+                                <label for="rg" class="block text-sm font-medium text-gray-700 mb-2">RG</label>
+                                <input type="text" id="rg" name="rg" value="{{ user_to_edit.rg }}" maxlength="20"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                            </div>
+                            <div>
+                                <label for="rg_issue_date" class="block text-sm font-medium text-gray-700 mb-2">Data de Emissão do RG</label>
+                                <input type="date" id="rg_issue_date" name="rg_issue_date" value="{{ user_to_edit.rg_issue_date|date:'Y-m-d' }}"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                            </div>
+                            <div>
+                                <label for="rg_issuer" class="block text-sm font-medium text-gray-700 mb-2">Órgão Emissor do RG</label>
+                                <input type="text" id="rg_issuer" name="rg_issuer" value="{{ user_to_edit.rg_issuer }}" maxlength="50"
+                                       placeholder="Ex.: SSP/ES"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
+                            <div>
+                                <label for="voter_title" class="block text-sm font-medium text-gray-700 mb-2">Título de Eleitor</label>
+                                <input type="text" id="voter_title" name="voter_title" value="{{ user_to_edit.voter_title }}" maxlength="20"
+                                       inputmode="numeric"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                            </div>
+                            <div>
+                                <label for="voter_zone" class="block text-sm font-medium text-gray-700 mb-2">Zona Eleitoral</label>
+                                <input type="text" id="voter_zone" name="voter_zone" value="{{ user_to_edit.voter_zone }}" maxlength="10"
+                                       inputmode="numeric"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                            </div>
+                            <div>
+                                <label for="voter_section" class="block text-sm font-medium text-gray-700 mb-2">Seção Eleitoral</label>
+                                <input type="text" id="voter_section" name="voter_section" value="{{ user_to_edit.voter_section }}" maxlength="10"
+                                       inputmode="numeric"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Dados pessoais complementares e filiação -->
+                    <div class="border-t border-gray-200 pt-6 mt-6">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                            <i class="fas fa-user text-primary mr-2"></i>
+                            Dados Pessoais Complementares
+                        </h3>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <label for="father_name" class="block text-sm font-medium text-gray-700 mb-2">Nome do Pai</label>
+                                <input type="text" id="father_name" name="father_name" value="{{ user_to_edit.father_name }}" maxlength="150"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                            </div>
+                            <div>
+                                <label for="mother_name" class="block text-sm font-medium text-gray-700 mb-2">Nome da Mãe</label>
+                                <input type="text" id="mother_name" name="mother_name" value="{{ user_to_edit.mother_name }}" maxlength="150"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
+                            <div>
+                                <label for="sex" class="block text-sm font-medium text-gray-700 mb-2">Sexo</label>
+                                <select id="sex" name="sex"
+                                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                                    <option value="">Selecione...</option>
+                                    {% for key, value in user_to_edit.SEX_CHOICES %}
+                                    <option value="{{ key }}" {% if user_to_edit.sex == key %}selected{% endif %}>{{ value }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div>
+                                <label for="gender" class="block text-sm font-medium text-gray-700 mb-2">Gênero</label>
+                                <select id="gender" name="gender"
+                                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                                    <option value="">Selecione...</option>
+                                    {% for key, value in user_to_edit.GENDER_CHOICES %}
+                                    <option value="{{ key }}" {% if user_to_edit.gender == key %}selected{% endif %}>{{ value }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div>
+                                <label for="skin_color" class="block text-sm font-medium text-gray-700 mb-2">Cor/Raça</label>
+                                <select id="skin_color" name="skin_color"
+                                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                                    <option value="">Selecione...</option>
+                                    {% for key, value in user_to_edit.SKIN_COLOR_CHOICES %}
+                                    <option value="{{ key }}" {% if user_to_edit.skin_color == key %}selected{% endif %}>{{ value }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+                            <div>
+                                <label for="marital_status" class="block text-sm font-medium text-gray-700 mb-2">Estado Civil</label>
+                                <select id="marital_status" name="marital_status"
+                                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                                    <option value="">Selecione...</option>
+                                    {% for key, value in user_to_edit.MARITAL_STATUS_CHOICES %}
+                                    <option value="{{ key }}" {% if user_to_edit.marital_status == key %}selected{% endif %}>{{ value }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div>
+                                <label for="education_level" class="block text-sm font-medium text-gray-700 mb-2">Grau de Instrução</label>
+                                <select id="education_level" name="education_level"
+                                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                                    <option value="">Selecione...</option>
+                                    {% for key, value in user_to_edit.EDUCATION_LEVEL_CHOICES %}
+                                    <option value="{{ key }}" {% if user_to_edit.education_level == key %}selected{% endif %}>{{ value }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+                            <div>
+                                <label for="birthplace" class="block text-sm font-medium text-gray-700 mb-2">Naturalidade</label>
+                                <input type="text" id="birthplace" name="birthplace" value="{{ user_to_edit.birthplace }}" maxlength="100"
+                                       placeholder="Cidade/UF onde nasceu"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                            </div>
+                            <div>
+                                <label for="nationality" class="block text-sm font-medium text-gray-700 mb-2">Nacionalidade</label>
+                                <input type="text" id="nationality" name="nationality" value="{{ user_to_edit.nationality }}" maxlength="60"
+                                       placeholder="Ex.: Brasileira"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Endereço -->
                     <div class="border-t border-gray-200 pt-6 mt-6">
                         <h3 class="text-lg font-semibold text-gray-900 mb-4">
@@ -400,6 +544,116 @@
                                     <option value="{{ uf }}" {% if user_to_edit.state == uf %}selected{% endif %}>{{ rotulo }}</option>
                                     {% endfor %}
                                 </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Contatos de emergência -->
+                    <div class="border-t border-gray-200 pt-6 mt-6">
+                        <input type="hidden" name="contatos_emergencia__na_tela" value="1">
+                        <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
+                            <h3 class="text-lg font-semibold text-gray-900">
+                                <i class="fas fa-phone-volume text-primary mr-2"></i>
+                                Contatos de Emergência
+                            </h3>
+                            <button type="button" id="addEmergencyBtn"
+                                    class="text-sm px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200">
+                                <i class="fas fa-plus mr-1"></i>Adicionar contato
+                            </button>
+                        </div>
+                        <p class="text-xs text-gray-500 mb-4">Até {{ emergency_rows|length }} contatos. Linha em branco não é gravada; para apagar um contato, use Remover.</p>
+                        <div id="emergencyList" class="space-y-4">
+                            {% for row in emergency_rows %}
+                            <div class="emergency-item border border-gray-200 rounded-lg p-4 {% if not row.obrigatorio and not row.preenchido %}hidden{% endif %}">
+                                <div class="flex items-center justify-between mb-3">
+                                    <span class="text-sm font-medium text-gray-700">Contato {{ row.idx }}</span>
+                                    <button type="button" class="removeEmergencyBtn text-xs text-red-600 hover:underline">
+                                        <i class="fas fa-times mr-1"></i>Remover
+                                    </button>
+                                </div>
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div>
+                                        <label for="emergency_name_{{ row.idx }}" class="block text-sm font-medium text-gray-700 mb-1">Nome</label>
+                                        <input type="text" id="emergency_name_{{ row.idx }}" name="emergency_name_{{ row.idx }}" maxlength="150" value="{{ row.name }}"
+                                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                                    </div>
+                                    <div>
+                                        <label for="emergency_phone_{{ row.idx }}" class="block text-sm font-medium text-gray-700 mb-1">Telefone</label>
+                                        <input type="tel" id="emergency_phone_{{ row.idx }}" name="emergency_phone_{{ row.idx }}" maxlength="20" value="{{ row.phone }}"
+                                               placeholder="(00) 00000-0000"
+                                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                                    </div>
+                                    <div>
+                                        <label for="emergency_relationship_{{ row.idx }}" class="block text-sm font-medium text-gray-700 mb-1">Grau</label>
+                                        <input type="text" id="emergency_relationship_{{ row.idx }}" name="emergency_relationship_{{ row.idx }}" maxlength="60" value="{{ row.relationship }}"
+                                               placeholder="Ex.: mãe, cônjuge"
+                                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <!-- Dependentes -->
+                    <div class="border-t border-gray-200 pt-6 mt-6">
+                        <input type="hidden" name="dependentes__na_tela" value="1">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-1">
+                            <i class="fas fa-user-group text-primary mr-2"></i>
+                            Dependentes
+                        </h3>
+                        <div class="flex flex-wrap items-center gap-4 mb-4 mt-3">
+                            <span class="text-sm font-medium text-gray-700">Possui dependentes?</span>
+                            <label class="inline-flex items-center gap-2 text-sm text-gray-700">
+                                <input type="radio" name="has_dependents" value="sim" class="dependentesOpcao text-primary"
+                                       {% if user_to_edit.has_dependents %}checked{% endif %}>
+                                Sim
+                            </label>
+                            <label class="inline-flex items-center gap-2 text-sm text-gray-700">
+                                <input type="radio" name="has_dependents" value="nao" class="dependentesOpcao text-primary"
+                                       {% if not user_to_edit.has_dependents %}checked{% endif %}>
+                                Não
+                            </label>
+                        </div>
+                        <p id="dependentesAvisoNao" class="text-xs text-gray-500 mb-2 hidden">Com "Não", os dependentes cadastrados são apagados ao salvar.</p>
+
+                        <div id="dependentesBloco" class="hidden">
+                            <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+                                <p class="text-xs text-gray-500">Nome, documento e data de nascimento de cada um (até {{ dependent_rows|length }}).</p>
+                                <button type="button" id="addDependenteBtn"
+                                        class="text-sm px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200">
+                                    <i class="fas fa-plus mr-1"></i>Adicionar dependente
+                                </button>
+                            </div>
+                            <div id="dependentesList" class="space-y-4">
+                                {% for row in dependent_rows %}
+                                <div class="dependente-item border border-gray-200 rounded-lg p-4 {% if not row.primeira and not row.preenchido %}hidden{% endif %}">
+                                    <div class="flex items-center justify-between mb-3">
+                                        <span class="text-sm font-medium text-gray-700">Dependente {{ row.idx }}</span>
+                                        <button type="button" class="removeDependenteBtn text-xs text-red-600 hover:underline">
+                                            <i class="fas fa-times mr-1"></i>Remover
+                                        </button>
+                                    </div>
+                                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <div>
+                                            <label for="dependent_name_{{ row.idx }}" class="block text-sm font-medium text-gray-700 mb-1">Nome completo</label>
+                                            <input type="text" id="dependent_name_{{ row.idx }}" name="dependent_name_{{ row.idx }}" maxlength="150" value="{{ row.name }}"
+                                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                                        </div>
+                                        <div>
+                                            <label for="dependent_document_{{ row.idx }}" class="block text-sm font-medium text-gray-700 mb-1">Documento</label>
+                                            <input type="text" id="dependent_document_{{ row.idx }}" name="dependent_document_{{ row.idx }}" maxlength="30" value="{{ row.document }}"
+                                                   placeholder="CPF ou certidão de nascimento"
+                                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                                        </div>
+                                        <div>
+                                            <label for="dependent_birth_{{ row.idx }}" class="block text-sm font-medium text-gray-700 mb-1">Data de nascimento</label>
+                                            <input type="date" id="dependent_birth_{{ row.idx }}" name="dependent_birth_{{ row.idx }}" value="{{ row.birth_date }}" max="{% now 'Y-m-d' %}"
+                                                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
                             </div>
                         </div>
                     </div>
@@ -587,6 +841,94 @@
                             </div>
                         </div>
                         <p class="text-xs text-gray-500 mt-2">Período de férias do colaborador. Ao trocar a situação, o período é descartado.</p>
+                    </div>
+
+                    <!-- Integrações e preferências -->
+                    <div class="border-t border-gray-200 pt-6 mt-6">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-4">
+                            <i class="fas fa-plug text-primary mr-2"></i>
+                            Integrações e Preferências
+                        </h3>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <label for="tangerino_employee_id" class="block text-sm font-medium text-gray-700 mb-2">ID do funcionário no Tangerino</label>
+                                <input type="text" id="tangerino_employee_id" name="tangerino_employee_id"
+                                       value="{{ user_to_edit.tangerino_employee_id|default_if_none:'' }}"
+                                       inputmode="numeric" pattern="\d*" maxlength="12"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                                <p class="text-xs text-gray-500 mt-1">
+                                    Preenchido pela sincronização do ponto; ajuste só se o vínculo estiver errado.
+                                    {% if user_to_edit.tangerino_synced_at %}Vínculo feito em {{ user_to_edit.tangerino_synced_at|date:"d/m/Y H:i" }}.{% endif %}
+                                </p>
+                            </div>
+                            <div>
+                                <label for="pcn" class="block text-sm font-medium text-gray-700 mb-2">PCN</label>
+                                <input type="text" id="pcn" name="pcn" value="{{ user_to_edit.pcn }}" maxlength="20"
+                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                                <p class="text-xs text-gray-500 mt-1">Percentual CN importado das metas; a próxima importação pode sobrescrever.</p>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+                            <div>
+                                <label for="theme" class="block text-sm font-medium text-gray-700 mb-2">Tema do portal</label>
+                                <select id="theme" name="theme"
+                                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                                    <option value="light" {% if user_to_edit.theme != 'dark' %}selected{% endif %}>Claro</option>
+                                    <option value="dark" {% if user_to_edit.theme == 'dark' %}selected{% endif %}>Escuro</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Avisos na home</label>
+                                <input type="hidden" name="popup_janela_experiencia__na_tela" value="1">
+                                <div class="flex items-center h-10">
+                                    <input type="checkbox" id="popup_janela_experiencia" name="popup_janela_experiencia"
+                                           {% if user_to_edit.popup_janela_experiencia %}checked{% endif %}
+                                           class="w-4 h-4 text-primary bg-gray-100 border-gray-300 rounded focus:ring-primary focus:ring-2">
+                                    <label for="popup_janela_experiencia" class="ml-2 text-sm text-gray-700">
+                                        Mostrar o popup de janela de experiência
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Informações do sistema (somente leitura) -->
+                    <div class="border-t border-gray-200 pt-6 mt-6" id="infoSistema">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-1">
+                            <i class="fas fa-circle-info text-gray-400 mr-2"></i>
+                            Informações do Sistema
+                        </h3>
+                        <p class="text-xs text-gray-500 mb-4">Somente leitura: estes dados mudam pelo próprio portal, não por esta tela.</p>
+                        <dl class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
+                            <div class="rounded-lg bg-gray-50 border border-gray-200 px-4 py-3">
+                                <dt class="text-xs text-gray-500">Saldo C$</dt>
+                                <dd class="font-medium text-gray-900">C$ {{ user_to_edit.balance_cs|floatformat:2 }}</dd>
+                                <dd class="text-[11px] text-gray-400">Muda só por transação de C$.</dd>
+                            </div>
+                            <div class="rounded-lg bg-gray-50 border border-gray-200 px-4 py-3">
+                                <dt class="text-xs text-gray-500">Pré-cadastro</dt>
+                                <dd class="font-medium text-gray-900">{{ user_to_edit.get_pre_registration_status_display }}</dd>
+                                {% if user_to_edit.pre_registration_reviewed_at %}<dd class="text-[11px] text-gray-400">Analisado em {{ user_to_edit.pre_registration_reviewed_at|date:"d/m/Y H:i" }}{% if user_to_edit.pre_registration_reviewed_by %} por {{ user_to_edit.pre_registration_reviewed_by.full_name }}{% endif %}</dd>{% endif %}
+                            </div>
+                            <div class="rounded-lg bg-gray-50 border border-gray-200 px-4 py-3">
+                                <dt class="text-xs text-gray-500">Último acesso</dt>
+                                <dd class="font-medium text-gray-900">{{ user_to_edit.last_login|date:"d/m/Y H:i"|default:"Nunca entrou" }}</dd>
+                            </div>
+                            <div class="rounded-lg bg-gray-50 border border-gray-200 px-4 py-3">
+                                <dt class="text-xs text-gray-500">Cadastrado em</dt>
+                                <dd class="font-medium text-gray-900">{{ user_to_edit.date_joined|date:"d/m/Y H:i" }}</dd>
+                            </div>
+                            <div class="rounded-lg bg-gray-50 border border-gray-200 px-4 py-3">
+                                <dt class="text-xs text-gray-500">Última alteração do cadastro</dt>
+                                <dd class="font-medium text-gray-900">{{ user_to_edit.updated_at|date:"d/m/Y H:i" }}</dd>
+                            </div>
+                            <div class="rounded-lg bg-gray-50 border border-gray-200 px-4 py-3">
+                                <dt class="text-xs text-gray-500">Acesso ao admin do Django</dt>
+                                <dd class="font-medium text-gray-900">{% if user_to_edit.is_superuser %}Superusuário{% elif user_to_edit.is_staff %}Equipe{% else %}Não{% endif %}</dd>
+                            </div>
+                        </dl>
                     </div>
                 </div>
 
@@ -1079,6 +1421,48 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     contar();
+})();
+</script>
+
+<script>
+// Contatos de emergência e dependentes: "Adicionar" mostra a próxima linha
+// escondida, "Remover" limpa e esconde. Com "Não" em dependentes, as linhas
+// somem (o servidor apaga a lista ao salvar).
+(function () {
+    function lista(idLista, idBotao, classeItem, classeRemover) {
+        var caixa = document.getElementById(idLista), botao = document.getElementById(idBotao);
+        if (!caixa || !botao) return;
+        var itens = Array.prototype.slice.call(caixa.querySelectorAll('.' + classeItem));
+        function atualizar() {
+            botao.classList.toggle('hidden', !itens.some(function (it) { return it.classList.contains('hidden'); }));
+        }
+        botao.addEventListener('click', function () {
+            var proximo = itens.filter(function (it) { return it.classList.contains('hidden'); })[0];
+            if (proximo) proximo.classList.remove('hidden');
+            atualizar();
+        });
+        caixa.addEventListener('click', function (e) {
+            var b = e.target.closest('.' + classeRemover); if (!b) return;
+            var item = b.closest('.' + classeItem);
+            item.querySelectorAll('input').forEach(function (inp) { inp.value = ''; });
+            if (itens.indexOf(item) > 0) item.classList.add('hidden');
+            atualizar();
+        });
+        atualizar();
+    }
+    lista('emergencyList', 'addEmergencyBtn', 'emergency-item', 'removeEmergencyBtn');
+    lista('dependentesList', 'addDependenteBtn', 'dependente-item', 'removeDependenteBtn');
+
+    var bloco = document.getElementById('dependentesBloco'), aviso = document.getElementById('dependentesAvisoNao');
+    var opcoes = Array.prototype.slice.call(document.querySelectorAll('.dependentesOpcao'));
+    var tinha = !!document.querySelector('.dependente-item input[value]:not([value=""])');
+    function atualizarBloco() {
+        var sim = opcoes.some(function (o) { return o.checked && o.value === 'sim'; });
+        if (bloco) bloco.classList.toggle('hidden', !sim);
+        if (aviso) aviso.classList.toggle('hidden', sim || !tinha);
+    }
+    opcoes.forEach(function (o) { o.addEventListener('change', atualizarBloco); });
+    atualizarBloco();
 })();
 </script>
 

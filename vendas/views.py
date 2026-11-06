@@ -29,6 +29,7 @@ from .models import (SEGMENTACOES, Cliente, ConfiguracaoVendas, ImportacaoPrecos
                      RegistroAlteracao, ServicoAdicional, Venda, VendaProduto, VendaServico)
 from .permissions import exige, is_superadmin, pode, ve_rede, vendas_do_usuario
 from .clientes import buscar_historico
+from .importacao import registrar_importacao
 from .services import importar_tabela_precos
 
 logger = logging.getLogger(__name__)
@@ -554,47 +555,29 @@ def precos_import(request):
             if not (aviso_precos.salvar_destinatarios(destinatarios, request.user) and aviso_precos.salvar_grupos(grupos)):
                 messages.warning(request, 'Não deu para lembrar a seleção do aviso (falta aplicar a migração de Vendas).')
 
-        registro = ImportacaoPrecos(usuario=request.user, arquivo=f.name[:255])
-        try:
-            resumo = importar_tabela_precos(f)
-            registro.incluidos, registro.alterados = resumo['incluidos'], resumo['alterados']
-            registro.sem_mudanca, registro.rejeitados = resumo['sem_mudanca'], resumo['rejeitados'][:500]
-            registro.removidos = resumo['removidos'] + resumo['inativados']
-            registro.save()
-            messages.success(request, f"Tabela substituída: {resumo['importados']} produto(s) — {resumo['incluidos']} novo(s), "
-                                      f"{resumo['alterados']} com preço alterado, {registro.removidos} fora da tabela, "
-                                      f"{len(resumo['rejeitados'])} rejeitado(s).")
-        except Exception as exc:  # noqa: BLE001 — [Confiabilidade.NF003] a tabela vigente fica como estava
-            registro.erro = str(exc)[:2000]
-            registro.save()
-            messages.error(request, f'Falha ao importar — a tabela vigente não foi alterada: {exc}')
-            return redirect('vendas:precos_import')
-
-        # A tabela já está gravada: daqui para baixo nada desfaz a importação.
-        resultado = {'arquivo': registro.arquivo, 'envios': None, 'sku': resumo.get('sku')}
-        try:
-            variacao = resumo.get('variacao') or {'subiram': [], 'diminuiram': [], 'novos': [], 'removidos': [], 'outros': 0}
-            resultado['variacao'] = aviso_precos.para_tela(variacao)
-            if destinatarios or grupos:
-                quando = timezone.localtime(registro.quando)
-                resultado['envios'] = (aviso_precos.avisar(destinatarios, variacao, quando=quando)
-                                       + aviso_precos.avisar_grupos(grupos, variacao, quando=quando))
-        except Exception as exc:  # noqa: BLE001
-            resultado['erro_aviso'] = f'O aviso no WhatsApp não saiu: {exc}'[:300]
         # Popup no portal para consultores, gerentes e ADM (usuários Padrão) — vem marcado.
-        if request.POST.get('aviso_popup', 'on') == 'on':
-            try:
-                aviso_precos.criar_popup(registro, variacao, por=request.user)
-                resultado['popup'] = True
-            except Exception as exc:  # noqa: BLE001 — a tabela já foi gravada
-                logger.exception('Aviso de preços: popup não criado')
-                resultado['erro_popup'] = f'O aviso no portal não saiu: {exc}'[:300]
-        request.session[SESSAO_RESULTADO_IMPORTACAO] = resultado
+        r = registrar_importacao(f, f.name, usuario=request.user, origem='manual', destinatarios=destinatarios,
+                                 grupos=grupos, popup=request.POST.get('aviso_popup', 'on') == 'on')
+        if not r['ok']:
+            messages.error(request, f"Falha ao importar — a tabela vigente não foi alterada: {r['erro']}")
+            return redirect('vendas:precos_import')
+        resumo, registro = r['resumo'], r['registro']
+        messages.success(request, f"Tabela substituída: {resumo['importados']} produto(s) — {resumo['incluidos']} novo(s), "
+                                  f"{resumo['alterados']} com preço alterado, {registro.removidos} fora da tabela, "
+                                  f"{len(resumo['rejeitados'])} rejeitado(s).")
+        request.session[SESSAO_RESULTADO_IMPORTACAO] = r['resultado']
         return redirect('vendas:precos_import')
 
     resultado = request.session.pop(SESSAO_RESULTADO_IMPORTACAO, None)
     context = {'aba': 'precos', 'importacoes': ImportacaoPrecos.objects.select_related('usuario')[:15],
                'resultado': resultado, 'pode_avisar': pode_avisar}
+    if pode_avisar:
+        config = ConfiguracaoVendas.atual()
+        context['tabela_email'] = {
+            'conta': config.tabela_email, 'tem_senha': bool(config.tabela_email_senha),
+            'ativo': config.tabela_email_ativo, 'avisar': config.tabela_email_avisar,
+            'estado': config.tabela_email_estado or {},
+        }
     if resultado and resultado.get('variacao'):
         v = resultado['variacao']
         context['resultado_listas'] = [
@@ -620,6 +603,52 @@ def precos_import(request):
         context.update(aviso_pessoas=pessoas, aviso_escolhidos=sum(p.escolhido for p in pessoas),
                        aviso_grupos=grupos, aviso_grupos_escolhidos=len(salvos), aviso_grupos_erro=erro_grupos)
     return render(request, 'vendas/precos_import.html', context)
+
+
+@login_required
+@require_POST
+def precos_email(request):
+    """SUPERADMIN: guarda a caixa da tabela pelo e-mail, testa e busca agora (vendas/tabela_email.py)."""
+    from webmail.cliente import ErroEmail
+    from webmail.seguranca import cifrar, decifrar
+
+    from . import tabela_email
+
+    if not is_superadmin(request.user):
+        messages.error(request, 'Só o SUPERADMIN configura a tabela pelo e-mail.')
+        return redirect('vendas:precos_import')
+    config = ConfiguracaoVendas.atual()
+    acao = request.POST.get('acao', 'salvar')
+    if acao == 'salvar':
+        conta = (request.POST.get('conta') or '').strip().lower()[:254]
+        senha = request.POST.get('senha') or ''
+        if conta and '@' not in conta:
+            messages.error(request, 'Informe o e-mail completo da caixa.')
+            return redirect('vendas:precos_import')
+        campos = {'tabela_email': conta, 'tabela_email_ativo': request.POST.get('ativo') == 'on',
+                  'tabela_email_avisar': request.POST.get('avisar') == 'on'}
+        if senha:                      # em branco = mantém a senha guardada
+            campos['tabela_email_senha'] = cifrar(senha)
+        if conta != config.tabela_email:
+            campos['tabela_email_estado'] = {}          # outra caixa: o "último importado" não vale mais
+        ConfiguracaoVendas.objects.filter(pk=config.pk).update(**campos, atualizado_por=request.user)
+        config.refresh_from_db()
+        if conta and config.tabela_email_senha:
+            try:
+                tabela_email.testar_conexao(conta, decifrar(config.tabela_email_senha))
+                messages.success(request, f'Caixa {conta} salva e o login funcionou.'
+                                 + (' A busca roda todo dia às 6h.' if config.tabela_email_ativo
+                                    else ' A busca automática está desligada.'))
+            except ErroEmail as exc:
+                messages.warning(request, f'Configuração salva, mas o login não funcionou: {exc}')
+        else:
+            messages.info(request, 'Configuração salva. Falta o e-mail ou a senha para a busca funcionar.')
+    elif acao == 'buscar':
+        estado = tabela_email.buscar_e_importar(forcar=True, usuario=request.user)
+        nivel = messages.success if estado.get('situacao') == 'importada' else (
+            messages.error if estado.get('situacao') in ('erro', 'erro_importacao', 'sem_credencial') else messages.info)
+        nivel(request, estado.get('detalhe') or 'Busca feita.')
+    return redirect('vendas:precos_import')
 
 
 @login_required

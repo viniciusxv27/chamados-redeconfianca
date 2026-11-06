@@ -1,4 +1,9 @@
-"""Orçamento pelo WhatsApp: o modelo da mensagem, a conferência dos campos e o envio."""
+"""Orçamento pelo WhatsApp: o modelo da mensagem, a conferência dos campos e o envio.
+
+Desde 06/11/2026 o orçamento não sai mais pelo número do portal: o botão abre a
+conversa com o cliente no WhatsApp Web do próprio vendedor, com a mensagem pronta
+(status ABERTO). ``enviar`` ficou só para quem chamar de propósito.
+"""
 from datetime import timedelta
 
 from django.utils import timezone
@@ -55,14 +60,14 @@ def ja_enviado(usuario, campos):
     """O mesmo orçamento acabou de sair? (clique duplo, voltar e reenviar). Cliente não recebe duas vezes."""
     return Orcamento.objects.filter(
         vendedor=usuario, numero=campos['numero'], pilar=campos['pilar'], texto=campos['texto'],
-        status__in=('ENVIANDO', 'ENVIADO'), criado_em__gte=timezone.now() - JANELA_REPETIDO).exists()
+        status__in=('ABERTO', 'ENVIANDO', 'ENVIADO'), criado_em__gte=timezone.now() - JANELA_REPETIDO).first()
 
 
-def criar(usuario, campos):
+def criar(usuario, campos, status='ABERTO'):
     mensagem = (modelo_do_vendedor(usuario).replace('{nome}', campos['cliente_nome'])
                 .replace('{pilar}', dict(Orcamento.PILARES)[campos['pilar']]).replace('{texto}', campos['texto']))
     return Orcamento.objects.create(mensagem=mensagem, vendedor=usuario, vendedor_nome=nome_do_vendedor(usuario)[:200],
-                                    loja=usuario.sector, **campos)
+                                    loja=usuario.sector, status=status, **campos)
 
 
 def enviar(orcamento):

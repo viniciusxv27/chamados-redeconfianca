@@ -30,6 +30,8 @@ TAREFAS = [
      'Lembretes das movimentações do Quadro de HC'),
     ('acess_desligamentos_do_dia', time(7, 30), 'acess.servicos.avisar_desligamentos_do_dia',
      'Acess: aviso dos desligamentos agendados para o dia'),
+    ('vendas_tabela_email', time(6, 0), 'vendas.tabela_email.tarefa_diaria',
+     'Vendas: tabela de preços pelo e-mail (assunto "Tabela de Preços >>", anexo "Demais Canais")'),
     ('contestacao_resumo_whatsapp', time(8, 30), 'contestacao.resumo_whatsapp.tarefa_diaria',
      'Contestação: resumo do ciclo no WhatsApp (ciclo que fechou pelo prazo e envio interrompido)'),
 ]

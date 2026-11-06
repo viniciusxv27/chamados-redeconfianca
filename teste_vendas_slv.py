@@ -405,7 +405,8 @@ try:
     ca.post('/vendas/precos/importar/', {'arquivo': SimpleUploadedFile('tabela.xlsx', arquivo.getvalue())})
     imp = ImportacaoPrecos.objects.order_by('-id').first()
     t('importação substitui a tabela: só as 3 abas', imp and not imp.erro
-      and set(ItemPreco.objects.filter(ativo=True).values_list('categoria', flat=True))
+      # 06/11/2026: o "Sim Card 5g" (services.MANTER_NA_IMPORTACAO) fica, de propósito.
+      and {i.categoria for i in ItemPreco.objects.filter(ativo=True) if ' '.join(i.nome.split()).casefold() != 'sim card 5g'}
       == {'SMARTPHONES', 'ELETRÔNICOS_LP_Conectados', 'ELETRÔNICOS_LP_Não Conectados'}, imp and (imp.erro, imp.incluidos))
     t('relatório: 6 produtos, 1 rejeitado (PVP #N/A), o resto fora', imp.incluidos + imp.alterados == 6
       and len(imp.rejeitados) == 1 and 'PVP Base' in imp.rejeitados[0]['motivo'] and imp.removidos >= 3,
