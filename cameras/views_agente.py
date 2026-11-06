@@ -8,8 +8,10 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
-from . import servicos
-from .models import ConfigCameras, Gravador
+from django.utils.dateparse import parse_datetime
+
+from . import ia, servicos
+from .models import AlertaCamera, ConfigCameras, Gravador
 
 
 def _do_token(request):
@@ -72,12 +74,49 @@ def receber_alerta(request, gravador):
         return JsonResponse({'erro': 'Número inválido.'}, status=400)
     arquivo = request.FILES.get('foto')
     foto = arquivo.read() if arquivo and arquivo.size <= servicos.FOTO_TAMANHO_MAX * 5 else None
+    # Agente 3.0 em diante grava os 3 minutos em volta do alerta e avisa com video=1.
+    grava_video = request.POST.get('video') == '1'
     try:
-        alerta = servicos.registrar_alerta(gravador, canal, request.POST.get('tipo', ''), confianca,
-                                           request.POST.get('motivo', ''), foto)
+        alerta, quer_video = servicos.registrar_alerta(gravador, canal, request.POST.get('tipo', ''), confianca,
+                                                       request.POST.get('motivo', ''), foto,
+                                                       detalhes=request.POST.get('detalhes'), grava_video=grava_video)
     except servicos.AlertaRecusado as erro:
         return JsonResponse({'erro': str(erro)}, status=429 if 'Limite' in str(erro) else 400)
-    return JsonResponse({'ok': True, 'alerta': alerta.id, 'repeticoes': alerta.repeticoes})
+    if alerta.repeticoes == 1 and not grava_video:
+        ia.disparar(alerta.id)          # sem vídeo a caminho, a IA olha a foto agora
+    return JsonResponse({'ok': True, 'alerta': alerta.id, 'repeticoes': alerta.repeticoes, 'quer_video': quer_video,
+                         'antes': servicos.VIDEO_ANTES, 'depois': servicos.VIDEO_DEPOIS})
+
+
+@_do_agente
+def receber_clipe(request, gravador):
+    """Os 3 minutos do alerta (MP4) e os quadros-chave (quadro_<segundo>.jpg). Reenviar é seguro."""
+    alerta = AlertaCamera.objects.filter(pk=request.POST.get('alerta') or 0, gravador=gravador).first()
+    if alerta is None:
+        # O alerta não existe mais (ou é de outra loja): o agente pode jogar o arquivo fora.
+        return JsonResponse({'erro': 'Alerta não encontrado.', 'descartar': True}, status=404)
+    if alerta.video_status == AlertaCamera.Video.APAGADO:
+        return JsonResponse({'ok': True, 'ja_tinha': True})
+    quadros = []
+    for campo, arquivo in request.FILES.items():
+        if campo.startswith('quadro_') and arquivo.size <= servicos.QUADRO_TAMANHO_MAX:
+            try:
+                quadros.append((int(campo.removeprefix('quadro_').replace('m', '-')), arquivo.read()))
+            except ValueError:
+                continue
+    inicio = parse_datetime(request.POST.get('inicio') or '')
+    if inicio is not None and timezone.is_naive(inicio):
+        inicio = timezone.make_aware(inicio)
+    try:
+        segundos = int(float(request.POST.get('segundos') or 0))
+        evento = request.POST.get('evento_segundo')
+        evento = int(float(evento)) if evento not in (None, '') else None
+        novo = servicos.registrar_clipe(alerta, request.FILES.get('video'), quadros, inicio, segundos, evento)
+    except (ValueError, servicos.ClipeRecusado) as erro:
+        return JsonResponse({'erro': str(erro) or 'Dados inválidos.', 'descartar': isinstance(erro, servicos.ClipeRecusado)}, status=400)
+    if novo:
+        ia.disparar(alerta.id)
+    return JsonResponse({'ok': True, 'ja_tinha': not novo})
 
 
 @_do_agente

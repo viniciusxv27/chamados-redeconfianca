@@ -189,6 +189,55 @@ try:
     t('excluir remove o card e o arquivo', r.status_code == 302 and not Recurso.objects.filter(pk=arq.pk).exists()
       and not storage.exists(nome))
     t('excluir só por POST', ca.get(f'/facilitador/{lnk.pk}/excluir/').status_code == 405)
+
+    print('\n== PÁGINA HTML ==')
+    html_bytes = '<!doctype html><html><head><meta charset="utf-8"><title>Campanha</title></head><body><h1>Promoção de Natal ção</h1><script>document.title="ok"</script></body></html>'.encode()
+    r = ca.post('/facilitador/novo/', {'tipo': 'ARQUIVO', 'titulo': 'ZZ Campanha Natal', 'ordem': '0', 'ativo': 'on',
+                                       'arquivo': SimpleUploadedFile('campanha.html', html_bytes, content_type='text/html')}, follow=True)
+    pag = Recurso.objects.get(titulo='ZZ Campanha Natal')
+    t('subir HTML gera o link da página na hora', pag.e_html and len(pag.token_pagina) >= 20
+      and 'já tem link próprio' in r.content.decode() and f'/facilitador/p/{pag.token_pagina}/' in r.content.decode())
+    t('o card vira "código"', pag.icone == 'fa-file-code')
+    h = cc.get(f'/facilitador/{pag.pk}/').content.decode()
+    t('detalhe: abrir, copiar, baixar, prévia e QR da página', 'Abrir página' in h and 'Copiar link' in h and 'Baixar HTML' in h
+      and f'/facilitador/{pag.pk}/pagina/?previa=1' in h and f'data-url="http://testserver/facilitador/p/{pag.token_pagina}/"' in h
+      and 'abrir a página' in h)
+    t('quem não gere não vê "gerar novo link"', 'Gerar novo link' not in h and 'Gerar novo link' in ca.get(f'/facilitador/{pag.pk}/').content.decode())
+    anonimo = Client()
+    r = anonimo.get(f'/facilitador/p/{pag.token_pagina}/')
+    t('o link abre a página sem login, como HTML', r.status_code == 200 and r['Content-Type'] == 'text/html; charset=utf-8'
+      and 'Promoção de Natal ção' in r.content.decode())
+    t('a página roda isolada do portal', r['Content-Security-Policy'].startswith('sandbox allow-scripts')
+      and 'allow-same-origin' not in r['Content-Security-Policy'] and r['X-Content-Type-Options'] == 'nosniff')
+    pag.refresh_from_db()
+    acessos = pag.acessos
+    t('abrir pelo link conta acesso; a prévia não', acessos == 1
+      and cc.get(f'/facilitador/{pag.pk}/pagina/?previa=1').status_code == 200 and Recurso.objects.get(pk=pag.pk).acessos == 1)
+    t('a prévia pode aparecer dentro do portal', cc.get(f'/facilitador/{pag.pk}/pagina/?previa=1').get('X-Frame-Options') == 'SAMEORIGIN')
+    t('link inventado não abre', anonimo.get('/facilitador/p/inventado123/').status_code == 404)
+    t('a página interna pede login', anonimo.get(f'/facilitador/{pag.pk}/pagina/').status_code == 302)
+    latin = '<html><head><meta charset="iso-8859-1"></head><body>Promoção</body></html>'.encode('latin-1')
+    token = pag.token_pagina
+    ca.post(f'/facilitador/{pag.pk}/editar/', {'tipo': 'ARQUIVO', 'titulo': 'ZZ Campanha Natal', 'ordem': '0', 'ativo': 'on',
+                                                'arquivo': SimpleUploadedFile('campanha2.htm', latin, content_type='text/html')})
+    pag.refresh_from_db()
+    r = anonimo.get(f'/facilitador/p/{token}/')
+    t('trocar por outro HTML mantém o link e mostra o novo', pag.token_pagina == token and r.status_code == 200
+      and r.content == latin and r['Content-Type'] == 'text/html')
+    ca.post(f'/facilitador/{pag.pk}/visibilidade/')
+    t('oculto: o link para de abrir', anonimo.get(f'/facilitador/p/{token}/').status_code == 404)
+    ca.post(f'/facilitador/{pag.pk}/visibilidade/')
+    t('quem não é SUPERADMIN não troca o link', cc.post(f'/facilitador/{pag.pk}/novo-link/').status_code == 403)
+    ca.post(f'/facilitador/{pag.pk}/novo-link/')
+    pag.refresh_from_db()
+    t('gerar novo link derruba o antigo', pag.token_pagina != token and anonimo.get(f'/facilitador/p/{token}/').status_code == 404
+      and anonimo.get(f'/facilitador/p/{pag.token_pagina}/').status_code == 200)
+    ca.post(f'/facilitador/{pag.pk}/editar/', {'tipo': 'ARQUIVO', 'titulo': 'ZZ Campanha Natal', 'ordem': '0', 'ativo': 'on',
+                                                'arquivo': SimpleUploadedFile('regras.pdf', b'%PDF-1.4', content_type='application/pdf')})
+    pag.refresh_from_db()
+    t('virou PDF: some o link da página', pag.token_pagina == '' and cc.get(f'/facilitador/{pag.pk}/pagina/').status_code == 404)
+    pdf = Recurso.objects.filter(nome_original__endswith='.pdf').exclude(pk=pag.pk).first()
+    t('arquivo que não é HTML não tem página', pdf is None or cc.get(f'/facilitador/{pdf.pk}/pagina/').status_code == 404)
 finally:
     transaction.set_rollback(True)
     marcador.__exit__(None, None, None)

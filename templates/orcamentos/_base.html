@@ -1,0 +1,49 @@
+{% extends 'base.html' %}
+{% block title %}{% block orc_titulo %}Orçamentos{% endblock %}{% endblock %}
+
+{% block extra_css %}
+<style>
+  .orc-card { background: #fff; border: 1px solid #E5E7EB; border-radius: 1rem; box-shadow: 0 1px 2px rgba(16,24,40,.05); }
+  .orc-campo { width: 100%; border: 1px solid #D1D5DB; border-radius: .6rem; padding: .5rem .75rem; font-size: .875rem; background: #fff; }
+  .orc-campo:focus { outline: none; border-color: #FF6B35; box-shadow: 0 0 0 3px rgba(255,107,53,.15); }
+  .orc-rotulo { display: block; font-size: .75rem; font-weight: 600; color: #4B5563; margin-bottom: .25rem; }
+  .orc-aba { white-space: nowrap; padding: .55rem .9rem; font-size: .875rem; font-weight: 600; border-radius: .6rem; color: #6B7280; display: inline-flex; align-items: center; gap: .4rem; }
+  .orc-aba:hover { color: #111827; background: #F3F4F6; }
+  .orc-aba.ativa { color: #fff; background: #FF6B35; box-shadow: 0 4px 12px rgba(255,107,53,.25); }
+  .orc-chip { display: inline-flex; align-items: center; gap: .3rem; padding: .1rem .55rem; border-radius: 9999px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+  .tabular { font-variant-numeric: tabular-nums; }
+  .orc-abas { scrollbar-width: none; }
+  .orc-abas::-webkit-scrollbar { display: none; }
+  html.dark .orc-card { background: var(--tema-superficie, #1b2130); border-color: var(--tema-borda, #313a4f); }
+  html.dark .orc-campo { background: var(--tema-superficie-2, #232a3b); border-color: var(--tema-borda, #313a4f); color: var(--tema-texto, #e7eaf0); }
+  html.dark .orc-aba:hover { background: rgba(255,255,255,.06); color: #F3F4F6; }
+  html.dark .orc-rotulo { color: var(--tema-texto-2, #b6bdcc); }
+</style>
+{% block orc_css %}{% endblock %}
+{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-3 sm:px-5 py-5">
+  <div class="flex items-start justify-between gap-3 flex-wrap mb-4">
+    <div class="min-w-0">
+      <h1 class="text-2xl font-bold text-gray-900"><i class="fas fa-file-signature text-primary mr-2"></i>{% block orc_cabecalho %}Orçamentos{% endblock %}</h1>
+      <p class="text-sm text-gray-500">{% block orc_subtitulo %}Orçamento pelo seu WhatsApp e o mailing da sua loja{% endblock %}</p>
+    </div>
+    <div class="flex gap-2 flex-wrap">{% block orc_acoes %}{% endblock %}</div>
+  </div>
+
+  <nav class="orc-abas flex gap-1 overflow-x-auto mb-5 pb-1" aria-label="Partes de Orçamentos">
+    <a href="{% url 'orcamentos:inicio' %}" class="orc-aba {% if aba == 'inicio' %}ativa{% endif %}"><i class="fas fa-pen-to-square"></i>Novo orçamento</a>
+    <a href="{% url 'orcamentos:mailing' %}" class="orc-aba {% if aba == 'mailing' %}ativa{% endif %}"><i class="fas fa-address-book"></i>Mailing da loja</a>
+    {% if pode_gerir %}
+    <a href="{% url 'orcamentos:gestao' %}" class="orc-aba {% if aba == 'gestao' %}ativa{% endif %}"><i class="fas fa-file-import"></i>Importar mailing</a>
+    <a href="{% url 'orcamentos:painel' %}" class="orc-aba {% if aba == 'painel' %}ativa{% endif %}"><i class="fas fa-chart-column"></i>Painel</a>
+    {% endif %}
+    {% if e_superadmin %}
+    <a href="{% url 'orcamentos:acessos' %}" class="orc-aba {% if aba == 'acessos' %}ativa{% endif %}"><i class="fas fa-user-shield"></i>Gestores e acessos</a>
+    {% endif %}
+  </nav>
+
+  {% block orc_conteudo %}{% endblock %}
+</div>
+{% endblock %}

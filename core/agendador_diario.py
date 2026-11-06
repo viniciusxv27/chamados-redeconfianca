@@ -34,6 +34,8 @@ TAREFAS = [
      'Vendas: tabela de preços pelo e-mail (assunto "Tabela de Preços >>", anexo "Demais Canais")'),
     ('contestacao_resumo_whatsapp', time(8, 30), 'contestacao.resumo_whatsapp.tarefa_diaria',
      'Contestação: resumo do ciclo no WhatsApp (ciclo que fechou pelo prazo e envio interrompido)'),
+    ('cameras_limpar_videos', time(3, 0), 'cameras.servicos.limpar_videos_antigos',
+     'Câmeras: apaga os vídeos de alerta vencidos (falso alarme 30 dias, abertos 90, furto confirmado 1 ano)'),
 ]
 
 _ultima_checagem = None

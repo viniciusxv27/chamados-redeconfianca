@@ -15,6 +15,12 @@ SEGUNDOS_APARELHO_FIRME = 30  # aparelho "é do mostruário" depois de ficar par
 SEGUNDOS_APARELHO_SUMIDO = 20
 GRADE = 12                    # posição do aparelho arredondada, para a caixa tremida ser o mesmo aparelho
 ESPERA_REPETIR = {'FORA_HORARIO': 600, 'PERMANENCIA': 600, 'ITEM_SUMIU': 120}
+CLASSES_BOLSA = ('backpack', 'handbag', 'suitcase')
+PERTO = 0.08                  # fração da imagem: bolsa "perto" da pessoa ou do aparelho
+# O que o portal aprendeu com as decisões (furto confirmado x falso alarme), por tipo de alerta:
+# -1 mais sensível, 0 normal, 1 mais exigente, 2 muito exigente. Muda tempos e a firmeza da detecção.
+FATOR_DO_RIGOR = {-1: .75, 0: 1.0, 1: 1.5, 2: 2.0}
+CONF_DO_RIGOR = {-1: -.05, 0: 0.0, 1: .05, 2: .10}
 
 
 @dataclass
@@ -22,6 +28,7 @@ class Evento:
     tipo: str
     confianca: int
     motivo: str
+    detalhes: dict = field(default_factory=dict)
 
 
 def _centro(caixa):
@@ -38,6 +45,12 @@ def _cobre(caixa, ponto, folga=0.03):
     return x - folga <= ponto[0] <= x + w + folga and y - folga <= ponto[1] <= y + h + folga
 
 
+def _perto(a, b, folga=PERTO):
+    ax, ay, aw, ah = a
+    bx, by, bw, bh = b
+    return ax - folga <= bx + bw and bx - folga <= ax + aw and ay - folga <= by + bh and by - folga <= ay + ah
+
+
 @dataclass
 class _Aparelho:
     centro: tuple
@@ -46,13 +59,19 @@ class _Aparelho:
     ultimo: float
     firme: bool = False
     pessoa_perto_em: float = 0.0
+    pessoa_chegou_em: float = 0.0     # começo da visita da pessoa ao aparelho
+    conf: float = 0.0
+    bolsa_perto: bool = False
+    pessoas_perto: int = 0
 
 
 @dataclass
 class Analisador:
     zonas: list = field(default_factory=list)
     permanencia_segundos: int = SEGUNDOS_PERMANENCIA
+    ajustes: dict = field(default_factory=dict)     # {tipo: rigor}, vindo do portal
     _quadros_fechada: int = 0
+    _pessoas_fechada: int = 0
     _zona_desde: dict = field(default_factory=dict)
     _aparelhos: dict = field(default_factory=dict)
     _ultimo_evento: dict = field(default_factory=dict)
@@ -62,39 +81,58 @@ class Analisador:
             self._ultimo_evento[chave] = agora
             eventos.append(evento)
 
+    def _rigor(self, tipo):
+        try:
+            return max(-1, min(2, int(self.ajustes.get(tipo, 0))))
+        except (TypeError, ValueError, AttributeError):
+            return 0
+
+    def _fator(self, tipo):
+        return FATOR_DO_RIGOR[self._rigor(tipo)]
+
     def analisar(self, deteccoes, agora, aberta=True):
         """`agora` em segundos. Devolve os eventos deste quadro."""
-        pessoas = [d['caixa'] for d in deteccoes if d['classe'] == 'person' and d['conf'] >= CONF_PESSOA]
-        aparelhos = [d['caixa'] for d in deteccoes if d['classe'] == 'cell phone' and d['conf'] >= CONF_APARELHO]
+        conf_pessoa = CONF_PESSOA + CONF_DO_RIGOR[self._rigor('FORA_HORARIO')] if not aberta else CONF_PESSOA
+        pessoas = [d['caixa'] for d in deteccoes if d['classe'] == 'person' and d['conf'] >= conf_pessoa]
+        conf_aparelho = CONF_APARELHO + CONF_DO_RIGOR[self._rigor('ITEM_SUMIU')]
+        aparelhos = [(d['caixa'], d['conf']) for d in deteccoes if d['classe'] == 'cell phone' and d['conf'] >= conf_aparelho]
+        bolsas = [d['caixa'] for d in deteccoes if d['classe'] in CLASSES_BOLSA and d['conf'] >= .35]
         eventos = []
         self._fora_do_horario(eventos, pessoas, agora, aberta)
         if aberta:
             self._permanencia(eventos, pessoas, agora)
         else:
             self._zona_desde.clear()
-        self._aparelhos_sumidos(eventos, aparelhos, pessoas, agora)
+        self._aparelhos_sumidos(eventos, aparelhos, pessoas, bolsas, agora)
         return eventos
 
     def _fora_do_horario(self, eventos, pessoas, agora, aberta):
         self._quadros_fechada = self._quadros_fechada + 1 if pessoas and not aberta else 0
-        if self._quadros_fechada >= QUADROS_FORA_HORARIO:
-            self._emitir(eventos, agora, 'FORA_HORARIO', Evento('FORA_HORARIO', 85, 'Pessoa detectada com a loja fechada'))
+        self._pessoas_fechada = max(self._pessoas_fechada, len(pessoas)) if self._quadros_fechada else 0
+        if self._quadros_fechada >= round(QUADROS_FORA_HORARIO * self._fator('FORA_HORARIO')):
+            self._emitir(eventos, agora, 'FORA_HORARIO', Evento(
+                'FORA_HORARIO', min(95, 80 + 5 * (self._pessoas_fechada - 1)), 'Pessoa detectada com a loja fechada',
+                {'pessoas': self._pessoas_fechada, 'quadros_seguidos': self._quadros_fechada, 'acao_segundo': 0}))
 
     def _permanencia(self, eventos, pessoas, agora):
+        limite = self.permanencia_segundos * self._fator('PERMANENCIA')
         for zona in self.zonas:
             nome = zona.get('nome', 'área')
-            if any(_dentro(_centro(p), zona) for p in pessoas):
+            na_area = sum(1 for p in pessoas if _dentro(_centro(p), zona))
+            if na_area:
                 desde = self._zona_desde.setdefault(nome, agora)
                 minutos = (agora - desde) / 60
-                if agora - desde >= self.permanencia_segundos:
-                    self._emitir(eventos, agora, f'PERMANENCIA:{nome}',
-                                 Evento('PERMANENCIA', 45, f'Pessoa há {minutos:.0f} min em {nome}'))
+                if agora - desde >= limite:
+                    self._emitir(eventos, agora, f'PERMANENCIA:{nome}', Evento(
+                        'PERMANENCIA', 45, f'Pessoa há {minutos:.0f} min em {nome}',
+                        {'zona': nome, 'minutos_na_area': round(minutos, 1), 'pessoas_na_area': na_area, 'acao_segundo': 0}))
             else:
                 self._zona_desde.pop(nome, None)
 
-    def _aparelhos_sumidos(self, eventos, aparelhos, pessoas, agora):
+    def _aparelhos_sumidos(self, eventos, aparelhos, pessoas, bolsas, agora):
+        sumido = SEGUNDOS_APARELHO_SUMIDO * self._fator('ITEM_SUMIU')
         vistos = set()
-        for caixa in aparelhos:
+        for caixa, conf in aparelhos:
             centro = _centro(caixa)
             zona = next((z for z in self.zonas if _dentro(centro, z)), None)
             if not zona:
@@ -103,6 +141,7 @@ class Analisador:
             vistos.add(chave)
             item = self._aparelhos.get(chave) or _Aparelho(centro, zona.get('nome', 'área'), agora, agora)
             item.ultimo = agora
+            item.conf = max(item.conf, conf)
             item.firme = item.firme or agora - item.primeiro >= SEGUNDOS_APARELHO_FIRME
             self._aparelhos[chave] = item
 
@@ -110,21 +149,53 @@ class Analisador:
             if chave in vistos:
                 continue
             # Com alguém na frente, o aparelho pode só estar encoberto: o relógio começa quando a pessoa sai.
-            if any(_cobre(p, item.centro) for p in pessoas):
+            perto = [p for p in pessoas if _cobre(p, item.centro)]
+            if perto:
+                if item.pessoa_perto_em < item.ultimo or not item.pessoa_chegou_em:
+                    item.pessoa_chegou_em = agora
                 item.pessoa_perto_em = agora
+                item.pessoas_perto = max(item.pessoas_perto, len(perto))
+                item.bolsa_perto = item.bolsa_perto or any(_perto(b, p) for b in bolsas for p in perto)
                 continue
             if not item.firme:
-                if agora - item.ultimo > SEGUNDOS_APARELHO_SUMIDO:
+                if agora - item.ultimo > sumido:
                     del self._aparelhos[chave]
                 continue
-            if item.pessoa_perto_em >= item.ultimo and agora - item.pessoa_perto_em >= SEGUNDOS_APARELHO_SUMIDO:
-                self._emitir(eventos, agora, f'ITEM_SUMIU:{chave}',
-                             Evento('ITEM_SUMIU', 70, f'Aparelho saiu de {item.zona} depois de uma pessoa passar por ali'))
+            if item.pessoa_perto_em >= item.ultimo and agora - item.pessoa_perto_em >= sumido:
+                self._emitir(eventos, agora, f'ITEM_SUMIU:{chave}', self._evento_sumiu(item, pessoas, agora))
                 del self._aparelhos[chave]
-            elif item.pessoa_perto_em < item.ultimo and agora - item.ultimo > SEGUNDOS_APARELHO_SUMIDO * 3:
+            elif item.pessoa_perto_em < item.ultimo and agora - item.ultimo > sumido * 3:
                 # Sumiu sem ninguém por perto: foi a detecção que falhou, não é furto.
                 del self._aparelhos[chave]
         return eventos
+
+    def _evento_sumiu(self, item, pessoas, agora):
+        """A nota sobe com o que costuma acompanhar furto e desce com o que costuma ser só confusão."""
+        perto_por = max(0.0, item.pessoa_perto_em - (item.pessoa_chegou_em or item.pessoa_perto_em))
+        nota = 60
+        motivos = []
+        if item.bolsa_perto:
+            nota += 12
+            motivos.append('com bolsa ou mochila perto')
+        if 3 <= perto_por <= 180:
+            nota += 8
+        if agora - item.primeiro >= 600:
+            nota += 5                         # aparelho que estava ali havia muito tempo
+        if not pessoas:
+            nota += 5                         # a pessoa já saiu da imagem
+        if item.pessoas_perto >= 3:
+            nota -= 15                        # aglomeração: muito provável ser só a câmera encoberta
+            motivos.append('com várias pessoas na frente')
+        texto = f'Aparelho saiu de {item.zona} depois de uma pessoa passar por ali'
+        if motivos:
+            texto += ' (' + ', '.join(motivos) + ')'
+        return Evento('ITEM_SUMIU', max(30, min(95, nota)), texto, {
+            'zona': item.zona, 'segundos_com_pessoa_perto': round(perto_por), 'bolsa_ou_mochila_perto': item.bolsa_perto,
+            'pessoas_perto_do_aparelho': item.pessoas_perto, 'pessoas_na_imagem_agora': len(pessoas),
+            'aparelho_estava_ali_ha_min': round((item.ultimo - item.primeiro) / 60, 1),
+            'nota_do_aparelho': round(item.conf, 2), 'rigor': self._rigor('ITEM_SUMIU'),
+            # Em que segundo, em relação ao alerta, a pessoa estava com o aparelho: os quadros-chave se concentram ali.
+            'acao_segundo': -round(agora - item.pessoa_perto_em)})
 
 
 # ---------------------------------------------------------------------------

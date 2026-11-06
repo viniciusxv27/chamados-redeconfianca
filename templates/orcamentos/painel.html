@@ -1,0 +1,158 @@
+{% extends 'orcamentos/_base.html' %}
+{% block orc_titulo %}Painel · Orçamentos{% endblock %}
+{% block orc_cabecalho %}Painel de orçamentos{% endblock %}
+{% block orc_subtitulo %}Quem usa, quem não usa e como anda o mailing · {{ de|date:"d/m/Y" }} a {{ ate|date:"d/m/Y" }}{% endblock %}
+
+{% block orc_css %}
+<style>
+  .orc-kpi { padding: 1rem; }
+  .orc-kpi p:first-child { font-size: .72rem; color: #6B7280; font-weight: 600; }
+  .orc-kpi .v { font-size: 1.6rem; font-weight: 800; line-height: 1.1; color: #111827; font-variant-numeric: tabular-nums; }
+  html.dark .orc-kpi .v { color: var(--tema-texto, #e7eaf0); }
+  .orc-barra { height: .5rem; border-radius: 9999px; background: #F3F4F6; overflow: hidden; }
+  .orc-barra > span { display: block; height: 100%; border-radius: 9999px; }
+  html.dark .orc-barra { background: rgba(255,255,255,.08); }
+</style>
+{% endblock %}
+
+{% block orc_conteudo %}
+<form method="get" class="orc-card p-3 mb-4 flex flex-wrap gap-2 items-end">
+  <div><label class="orc-rotulo" for="pDe">De</label><input id="pDe" type="date" name="de" value="{{ de|date:'Y-m-d' }}" class="orc-campo"></div>
+  <div><label class="orc-rotulo" for="pAte">Até</label><input id="pAte" type="date" name="ate" value="{{ ate|date:'Y-m-d' }}" class="orc-campo"></div>
+  {% if lojas|length > 1 %}
+  <div class="min-w-[12rem]"><label class="orc-rotulo" for="pLoja">Loja</label>
+    <select id="pLoja" name="loja" class="orc-campo"><option value="">Todas ({{ lojas|length }})</option>
+      {% for l in lojas %}<option value="{{ l.id }}" {% if loja_id == l.id|stringformat:'s' %}selected{% endif %}>{{ l.name }}</option>{% endfor %}</select></div>
+  {% endif %}
+  <button class="px-4 py-2 rounded-lg bg-primary hover:bg-orange-600 text-white text-sm font-semibold"><i class="fas fa-filter mr-1"></i>Aplicar</button>
+  <div class="flex gap-1 ml-auto flex-wrap" aria-label="Atalhos de período">
+    <button type="button" class="orc-atalho px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 hover:border-orange-300" data-dias="7">7 dias</button>
+    <button type="button" class="orc-atalho px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 hover:border-orange-300" data-dias="30">30 dias</button>
+    <button type="button" class="orc-atalho px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 hover:border-orange-300" data-dias="90">90 dias</button>
+  </div>
+</form>
+
+<div class="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
+  <div class="orc-card orc-kpi"><p>Orçamentos no período</p><p class="v">{{ d.kpis.orcamentos }}</p><p class="text-[11px] text-gray-500">{{ d.kpis.media|stringformat:".1f" }} por quem usa</p></div>
+  <div class="orc-card orc-kpi"><p>Adoção</p><p class="v {% if d.kpis.adocao >= 70 %}!text-emerald-600{% elif d.kpis.adocao >= 40 %}!text-amber-600{% else %}!text-red-600{% endif %}">{{ d.kpis.adocao }}%</p>
+    <div class="orc-barra mt-1.5"><span class="bg-primary" style="width:{{ d.kpis.adocao }}%"></span></div></div>
+  <div class="orc-card orc-kpi"><p>Usam</p><p class="v text-emerald-600">{{ d.kpis.usam }}</p><p class="text-[11px] text-gray-500">de {{ d.kpis.equipe }} na equipe</p></div>
+  <div class="orc-card orc-kpi"><p>Não usam</p><p class="v {% if d.kpis.nao_usam %}!text-red-600{% endif %}">{{ d.kpis.nao_usam }}</p><p class="text-[11px] text-gray-500">nenhum orçamento no período</p></div>
+  <div class="orc-card orc-kpi col-span-2 lg:col-span-1"><p>Mailing a trabalhar</p><p class="v">{{ d.kpis.mailing_novos }}</p><p class="text-[11px] text-gray-500">{{ d.kpis.trabalhados_periodo }} trabalhado{{ d.kpis.trabalhados_periodo|pluralize }} no período · {{ d.kpis.do_mailing }} orçamento{{ d.kpis.do_mailing|pluralize }} a partir dele</p></div>
+</div>
+
+<div class="grid lg:grid-cols-3 gap-4 mb-4">
+  <section class="orc-card p-4 lg:col-span-2">
+    <h2 class="text-sm font-bold text-gray-800 mb-2">Orçamentos por dia</h2>
+    <div class="relative h-56"><canvas id="gSerie" role="img" aria-label="Orçamentos por dia no período"></canvas></div>
+  </section>
+  <section class="orc-card p-4">
+    <h2 class="text-sm font-bold text-gray-800 mb-2">Por pilar</h2>
+    {% if d.por_pilar %}
+    <div class="space-y-2.5">
+      {% for p in d.por_pilar %}
+      <div><div class="flex justify-between text-xs mb-1"><span class="text-gray-700 font-medium">{{ p.pilar }}</span><span class="tabular text-gray-500">{{ p.n }}</span></div>
+        <div class="orc-barra"><span class="bg-primary" style="width:{% widthratio p.n d.kpis.orcamentos 100 %}%"></span></div></div>
+      {% endfor %}
+    </div>
+    {% else %}<p class="text-sm text-gray-400 py-10 text-center">Nenhum orçamento no período.</p>{% endif %}
+  </section>
+</div>
+
+<section class="orc-card overflow-hidden mb-4">
+  <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between"><h2 class="text-sm font-bold text-gray-800">Adoção por loja</h2><span class="text-[11px] text-gray-400">{{ d.por_loja|length }} loja(s)</span></div>
+  <div class="overflow-x-auto">
+    <table class="min-w-full text-sm">
+      <thead class="bg-gray-50 text-[11px] uppercase text-gray-500">
+        <tr><th class="px-4 py-2 text-left">Loja</th><th class="px-3 py-2 text-left w-48">Usaram</th><th class="px-3 py-2 text-right">Orçamentos</th><th class="px-3 py-2 text-right">Mailing a trabalhar</th><th class="px-3 py-2 text-right">Orçados</th><th class="px-3 py-2 text-right">Descartados</th></tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        {% for l in d.por_loja %}
+        <tr class="hover:bg-orange-50/40">
+          <td class="px-4 py-2 font-medium text-gray-900 whitespace-nowrap">{% if lojas|length > 1 %}<a href="?de={{ de|date:'Y-m-d' }}&ate={{ ate|date:'Y-m-d' }}&loja={{ l.id }}" class="hover:text-primary">{{ l.nome }}</a>{% else %}{{ l.nome }}{% endif %}</td>
+          <td class="px-3 py-2"><div class="flex items-center gap-2"><div class="orc-barra flex-1"><span class="{% if l.adocao >= 70 %}bg-emerald-500{% elif l.adocao >= 40 %}bg-amber-500{% else %}bg-red-500{% endif %}" style="width:{{ l.adocao }}%"></span></div><span class="tabular text-xs text-gray-600 whitespace-nowrap">{{ l.usaram }}/{{ l.equipe }}</span></div></td>
+          <td class="px-3 py-2 text-right tabular">{{ l.orcamentos }}</td>
+          <td class="px-3 py-2 text-right tabular {% if l.mailing_novos %}font-semibold text-orange-600{% else %}text-gray-400{% endif %}">{{ l.mailing_novos }}</td>
+          <td class="px-3 py-2 text-right tabular text-emerald-700">{{ l.mailing_trabalhados }}</td>
+          <td class="px-3 py-2 text-right tabular text-gray-500">{{ l.mailing_descartados }}</td>
+        </tr>
+        {% empty %}<tr><td colspan="6" class="px-4 py-10 text-center text-gray-400">Nenhuma loja no recorte.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<div class="grid lg:grid-cols-2 gap-4">
+  <section class="orc-card overflow-hidden">
+    <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-2">
+      <h2 class="text-sm font-bold text-gray-800"><i class="fas fa-user-xmark text-red-500 mr-1"></i>Não usam ({{ d.nao_usam|length }})</h2>
+      <input type="search" class="orc-campo !py-1 !w-40" placeholder="Filtrar…" data-filtro="lNao" aria-label="Filtrar quem não usa">
+    </div>
+    <ul class="divide-y divide-gray-100 max-h-[28rem] overflow-y-auto" id="lNao">
+      {% for p in d.nao_usam %}
+      <li class="px-4 py-2.5 flex items-center gap-3" data-busca="{{ p.nome|lower }} {{ p.loja|lower }} {{ p.cargo|lower }}">
+        <span class="min-w-0 flex-1"><span class="block text-sm font-medium text-gray-900 truncate">{{ p.nome }}</span>
+          <span class="block text-[11px] text-gray-500 truncate">{{ p.loja }}{% if p.cargo %} · {{ p.cargo }}{% endif %}</span></span>
+        <span class="text-[11px] text-right {% if p.ultimo %}text-gray-500{% else %}text-red-600 font-semibold{% endif %} whitespace-nowrap">{% if p.ultimo %}último em {{ p.ultimo|date:"d/m/Y" }}{% else %}nunca usou{% endif %}</span>
+      </li>
+      {% empty %}<li class="px-4 py-10 text-center text-sm text-emerald-700"><i class="fas fa-circle-check mr-1"></i>Todo mundo fez orçamento no período.</li>{% endfor %}
+    </ul>
+  </section>
+  <section class="orc-card overflow-hidden">
+    <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-2">
+      <h2 class="text-sm font-bold text-gray-800"><i class="fas fa-ranking-star text-amber-500 mr-1"></i>Quem mais usa ({{ d.usam|length }})</h2>
+      <input type="search" class="orc-campo !py-1 !w-40" placeholder="Filtrar…" data-filtro="lUsam" aria-label="Filtrar quem usa">
+    </div>
+    <ol class="divide-y divide-gray-100 max-h-[28rem] overflow-y-auto" id="lUsam">
+      {% for p in d.usam %}
+      <li class="px-4 py-2.5 flex items-center gap-3" data-busca="{{ p.nome|lower }} {{ p.loja|lower }} {{ p.cargo|lower }}">
+        <span class="w-7 h-7 rounded-lg grid place-items-center text-xs font-bold shrink-0 {% if forloop.counter <= 3 %}bg-amber-100 text-amber-700{% else %}bg-gray-100 text-gray-500{% endif %}">{{ forloop.counter }}</span>
+        <span class="min-w-0 flex-1"><span class="block text-sm font-medium text-gray-900 truncate">{{ p.nome }}</span>
+          <span class="block text-[11px] text-gray-500 truncate">{{ p.loja }}{% if p.cargo %} · {{ p.cargo }}{% endif %}</span></span>
+        <span class="text-sm font-bold tabular text-gray-900">{{ p.orcamentos }}</span>
+      </li>
+      {% empty %}<li class="px-4 py-10 text-center text-sm text-gray-400">Ninguém fez orçamento no período.</li>{% endfor %}
+    </ol>
+  </section>
+</div>
+
+{{ grafico|json_script:"orcGrafico" }}
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+  const g = JSON.parse(document.getElementById('orcGrafico').textContent);
+  const escuro = document.documentElement.classList.contains('dark');
+  const cor = escuro ? '#b6bdcc' : '#6B7280', grade = escuro ? 'rgba(255,255,255,.07)' : '#F3F4F6';
+  if (window.Chart) {
+    new Chart(document.getElementById('gSerie'), {
+      type: 'bar',
+      data: {labels: g.serie.map(function (x) { return x.data; }),
+             datasets: [{label: 'Orçamentos', data: g.serie.map(function (x) { return x.n; }),
+                         backgroundColor: '#FF6B35', borderRadius: 4, maxBarThickness: 28}]},
+      options: {responsive: true, maintainAspectRatio: false, plugins: {legend: {display: false}},
+                scales: {x: {ticks: {color: cor, maxRotation: 0, autoSkip: true, maxTicksLimit: 12}, grid: {display: false}},
+                         y: {beginAtZero: true, ticks: {color: cor, precision: 0}, grid: {color: grade}}}}
+    });
+  }
+  document.querySelectorAll('[data-filtro]').forEach(function (campo) {
+    const lista = document.getElementById(campo.dataset.filtro);
+    campo.addEventListener('input', function () {
+      const t = campo.value.trim().toLowerCase();
+      lista.querySelectorAll('[data-busca]').forEach(function (li) { li.hidden = t && li.dataset.busca.indexOf(t) < 0; });
+    });
+  });
+  function iso(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  document.querySelectorAll('.orc-atalho').forEach(function (b) {
+    b.addEventListener('click', function () {
+      const ate = new Date(), de = new Date();
+      de.setDate(ate.getDate() - Number(b.dataset.dias) + 1);
+      document.getElementById('pDe').value = iso(de); document.getElementById('pAte').value = iso(ate);
+      b.form.submit();
+    });
+  });
+})();
+</script>
+{% endblock %}

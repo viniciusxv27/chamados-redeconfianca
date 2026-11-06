@@ -1,0 +1,59 @@
+{% extends 'orcamentos/_base.html' %}
+{% block orc_titulo %}Conferir mailing · Orçamentos{% endblock %}
+{% block orc_cabecalho %}Conferir a base{% endblock %}
+{% block orc_subtitulo %}{{ base.nome }} · {{ base.total_linhas }} linhas lidas de {{ base.arquivo_nome }}{% endblock %}
+
+{% block orc_conteudo %}
+<form method="post" class="space-y-4">{% csrf_token %}
+  <div class="orc-card p-4 grid sm:grid-cols-3 gap-3">
+    <div><label class="orc-rotulo" for="cNumero">Coluna do número (WhatsApp) *</label>
+      <select id="cNumero" name="coluna_numero" class="orc-campo" required>
+        <option value="">Escolha…</option>
+        {% for c in base.colunas %}<option value="{{ forloop.counter0 }}" {% if sugerida_numero == forloop.counter0 %}selected{% endif %}>{{ c }}</option>{% endfor %}
+      </select></div>
+    <div><label class="orc-rotulo" for="cNome">Coluna do nome</label>
+      <select id="cNome" name="coluna_nome" class="orc-campo">
+        <option value="">Sem nome</option>
+        {% for c in base.colunas %}<option value="{{ forloop.counter0 }}" {% if sugerida_nome == forloop.counter0 %}selected{% endif %}>{{ c }}</option>{% endfor %}
+      </select></div>
+    <div><label class="orc-rotulo" for="cLoja">Loja que recebe *</label>
+      <select id="cLoja" name="loja" class="orc-campo" required>
+        <option value="">Escolha…</option>
+        {% for l in lojas %}<option value="{{ l.id }}" {% if loja_escolhida == l.id|stringformat:'s' %}selected{% endif %}>{{ l.name }}</option>{% endfor %}
+      </select></div>
+    <p class="sm:col-span-3 text-xs text-gray-500"><i class="fas fa-circle-info mr-1"></i>O número é ajustado para o formato do WhatsApp (DDD + número). Número inválido, repetido na planilha ou que já está "a trabalhar" na loja fica de fora. As outras colunas aparecem no cartão do contato.</p>
+  </div>
+
+  <div class="orc-card overflow-hidden">
+    <div class="px-4 py-3 border-b border-gray-100 text-sm font-bold text-gray-800">Prévia das primeiras linhas</div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-sm" id="cPrevia">
+        <thead class="bg-gray-50 text-[11px] uppercase text-gray-500">
+          <tr>{% for c in base.colunas %}<th class="px-3 py-2 text-left whitespace-nowrap" data-col="{{ forloop.counter0 }}">{{ c }}</th>{% endfor %}</tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          {% for linha in previa %}<tr>{% for v in linha %}<td class="px-3 py-2 whitespace-nowrap text-gray-700" data-col="{{ forloop.counter0 }}">{{ v|default:"—" }}</td>{% endfor %}</tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="flex gap-2 justify-end">
+    <a href="{% url 'orcamentos:gestao' %}" class="px-4 py-2 rounded-xl border border-gray-300 text-sm text-gray-700">Voltar</a>
+    <button class="px-5 py-2.5 rounded-xl bg-primary hover:bg-orange-600 text-white text-sm font-semibold"><i class="fas fa-paper-plane mr-1"></i>Enviar para a loja</button>
+  </div>
+</form>
+<script>
+(function () {
+  const num = document.getElementById('cNumero'), nome = document.getElementById('cNome');
+  function pintar() {
+    document.querySelectorAll('#cPrevia [data-col]').forEach(function (el) {
+      el.classList.toggle('bg-orange-50', el.dataset.col === num.value);
+      el.classList.toggle('font-semibold', el.dataset.col === num.value);
+      el.classList.toggle('bg-sky-50', el.dataset.col === nome.value && nome.value !== '');
+    });
+  }
+  num.addEventListener('change', pintar); nome.addEventListener('change', pintar); pintar();
+})();
+</script>
+{% endblock %}

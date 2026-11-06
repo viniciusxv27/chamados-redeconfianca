@@ -1,0 +1,94 @@
+{% extends 'orcamentos/_base.html' %}
+{% block orc_titulo %}Mailing da loja · Orçamentos{% endblock %}
+{% block orc_subtitulo %}Clientes da sua loja para oferecer orçamento — a lista é de toda a loja{% endblock %}
+
+{% block orc_conteudo %}
+{% if not lojas %}
+<div class="orc-card p-10 text-center text-gray-500"><i class="fas fa-store-slash text-3xl text-gray-300 mb-2 block"></i>Você não está lotado em loja, então não há mailing para trabalhar.</div>
+{% else %}
+<form method="get" class="orc-card p-3 mb-4 flex flex-wrap gap-2 items-center">
+  {% if lojas|length > 1 %}
+  <select name="loja" class="orc-campo" style="width:auto" aria-label="Loja" onchange="this.form.submit()">
+    <option value="">Todas as minhas lojas</option>
+    {% for l in lojas %}<option value="{{ l.id }}" {% if loja and loja.id == l.id %}selected{% endif %}>{{ l.name }}</option>{% endfor %}
+  </select>
+  {% endif %}
+  <input type="hidden" name="status" value="{{ status }}">
+  <div class="relative flex-1 min-w-[12rem]">
+    <i class="fas fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+    <input type="search" name="q" value="{{ q }}" class="orc-campo" style="padding-left:2rem" placeholder="Nome ou número…" aria-label="Procurar no mailing">
+  </div>
+  <div class="flex gap-1.5 flex-wrap" role="group" aria-label="Situação">
+    {% for v, r in status_opcoes %}
+    <a href="?{% if loja %}loja={{ loja.id }}&{% endif %}status={{ v }}{% if q %}&q={{ q|urlencode }}{% endif %}"
+       class="orc-chip !py-1 !px-3 border {% if status == v %}bg-orange-500 text-white border-orange-500{% else %}bg-white text-gray-600 border-gray-200 hover:border-orange-300{% endif %}"
+       {% if status == v %}aria-current="true"{% endif %}>{{ r }} <span class="opacity-75">{% for k, n in contagem.items %}{% if k == v %}{{ n }}{% endif %}{% endfor %}</span></a>
+    {% endfor %}
+  </div>
+</form>
+
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+  {% for c in pagina %}
+  <article class="orc-card p-4 flex flex-col">
+    <div class="flex items-start gap-3">
+      <span class="w-10 h-10 rounded-xl bg-orange-100 text-orange-600 grid place-items-center font-bold shrink-0"><i class="fas fa-user"></i></span>
+      <div class="min-w-0 flex-1">
+        <p class="font-semibold text-gray-900 truncate">{{ c.nome|default:"Sem nome" }}</p>
+        <p class="text-sm text-gray-600 tabular">{{ c.numero_formatado }}</p>
+        {% if lojas|length > 1 %}<p class="text-[11px] text-gray-400">{{ c.loja.name }}</p>{% endif %}
+      </div>
+      {% if c.status == 'NOVO' %}<span class="orc-chip bg-orange-100 text-orange-700">A trabalhar</span>
+      {% elif c.status == 'TRABALHADO' %}<span class="orc-chip bg-emerald-100 text-emerald-700"><i class="fas fa-check"></i>Orçado</span>
+      {% else %}<span class="orc-chip bg-gray-100 text-gray-600">Descartado</span>{% endif %}
+    </div>
+    {% if c.dados %}
+    <dl class="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+      {% for k, v in c.dados.items %}{% if forloop.counter <= 4 %}<div class="min-w-0"><dt class="text-gray-400 truncate">{{ k }}</dt><dd class="text-gray-700 truncate" title="{{ v }}">{{ v }}</dd></div>{% endif %}{% endfor %}
+    </dl>
+    {% endif %}
+    {% if c.status != 'NOVO' %}
+    <p class="mt-2 text-[11px] text-gray-500">{% if c.status == 'TRABALHADO' %}Orçado{% else %}Descartado{% endif %} por {{ c.trabalhado_por.get_full_name|default:"—" }} em {{ c.trabalhado_em|date:"d/m/Y H:i" }}{% if c.observacao %} · {{ c.observacao }}{% endif %}</p>
+    {% endif %}
+    <div class="mt-auto pt-3 flex gap-2 flex-wrap">
+      {% if c.status == 'NOVO' %}
+      <a href="{% url 'orcamentos:inicio' %}?contato={{ c.pk }}" class="flex-1 text-center px-3 py-2 rounded-lg bg-primary hover:bg-orange-600 text-white text-sm font-semibold"><i class="fas fa-pen-to-square mr-1"></i>Fazer orçamento</a>
+      <form method="post" action="{% url 'orcamentos:contato_acao' c.pk %}" class="orc-descartar">{% csrf_token %}
+        <input type="hidden" name="acao" value="descartar"><input type="hidden" name="observacao" value="">
+        <input type="hidden" name="voltar" value="{{ request.get_full_path }}">
+        <button class="px-3 py-2 rounded-lg border border-gray-300 text-sm text-gray-600 hover:bg-gray-50" aria-label="Descartar {{ c.nome|default:c.numero_formatado }}">Descartar</button>
+      </form>
+      {% else %}
+      <form method="post" action="{% url 'orcamentos:contato_acao' c.pk %}">{% csrf_token %}
+        <input type="hidden" name="acao" value="reabrir"><input type="hidden" name="voltar" value="{{ request.get_full_path }}">
+        <button class="px-3 py-2 rounded-lg border border-gray-300 text-sm text-gray-600 hover:bg-gray-50"><i class="fas fa-rotate-left mr-1"></i>Voltar para a trabalhar</button>
+      </form>
+      {% endif %}
+    </div>
+  </article>
+  {% empty %}
+  <div class="md:col-span-2 xl:col-span-3 orc-card p-10 text-center text-gray-500">
+    <i class="fas fa-address-book text-3xl text-gray-300 mb-2 block"></i>
+    {% if q %}Nada com "{{ q }}".{% elif status == 'NOVO' %}Nenhum contato a trabalhar no mailing da loja.{% else %}Nenhum contato nesta situação.{% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% if pagina.paginator.num_pages > 1 %}
+<div class="mt-4 flex items-center justify-between gap-2">
+  <span class="text-xs text-gray-400">Página {{ pagina.number }} de {{ pagina.paginator.num_pages }} · {{ pagina.paginator.count }} contatos</span>
+  <div class="flex gap-1">
+    {% if pagina.has_previous %}<a href="?{% if loja %}loja={{ loja.id }}&{% endif %}status={{ status }}&q={{ q|urlencode }}&pagina={{ pagina.previous_page_number }}" class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">Anterior</a>{% endif %}
+    {% if pagina.has_next %}<a href="?{% if loja %}loja={{ loja.id }}&{% endif %}status={{ status }}&q={{ q|urlencode }}&pagina={{ pagina.next_page_number }}" class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">Próxima</a>{% endif %}
+  </div>
+</div>
+{% endif %}
+<script>
+  document.querySelectorAll('form.orc-descartar').forEach(function (f) {
+    f.addEventListener('submit', function (e) {
+      const motivo = window.prompt('Por que descartar este contato? (opcional)', '');
+      if (motivo === null) { e.preventDefault(); return; }
+      f.querySelector('[name=observacao]').value = motivo;
+    });
+  });
+</script>
+{% endif %}
+{% endblock %}

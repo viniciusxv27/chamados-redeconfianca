@@ -161,6 +161,16 @@ def _caminho_foto(instancia, nome):
     return f'cameras/alertas/{agora:%Y/%m}/{uuid.uuid4().hex}.jpg'
 
 
+def _caminho_video(instancia, nome):
+    agora = timezone.now()
+    return f'cameras/clipes/{agora:%Y/%m}/{uuid.uuid4().hex}.mp4'
+
+
+def _caminho_quadro(instancia, nome):
+    agora = timezone.now()
+    return f'cameras/quadros/{agora:%Y/%m}/{uuid.uuid4().hex}.jpg'
+
+
 class AlertaCamera(models.Model):
     class Tipo(models.TextChoices):
         ITEM_SUMIU = 'ITEM_SUMIU', 'Aparelho saiu do mostruário'
@@ -172,6 +182,25 @@ class AlertaCamera(models.Model):
         ANALISE = 'ANALISE', 'Em análise'
         CONFIRMADO = 'CONFIRMADO', 'Furto confirmado'
         FALSO = 'FALSO', 'Falso alarme'
+
+    class MotivoFalso(models.TextChoices):
+        """Por que foi falso: é o que a IA mais aprende de cada decisão."""
+        FUNCIONARIO = 'FUNCIONARIO', 'Funcionário trabalhando'
+        ATENDIMENTO = 'ATENDIMENTO', 'Atendimento normal / cliente devolveu'
+        DETECCAO = 'DETECCAO', 'A IA viu errado (sombra, reflexo, objeto)'
+        LIMPEZA = 'LIMPEZA', 'Limpeza, reposição ou manutenção'
+        OUTRO = 'OUTRO', 'Outro'
+
+    class Video(models.TextChoices):
+        SEM_VIDEO = 'SEM_VIDEO', 'Sem vídeo'
+        AGUARDANDO = 'AGUARDANDO', 'Gravando na loja'
+        RECEBIDO = 'RECEBIDO', 'Vídeo recebido'
+        APAGADO = 'APAGADO', 'Apagado pelo prazo'
+
+    class Ia(models.TextChoices):
+        PENDENTE = 'PENDENTE', 'Analisando'
+        FEITA = 'FEITA', 'Analisado'
+        ERRO = 'ERRO', 'Não deu para analisar'
 
     gravador = models.ForeignKey(Gravador, on_delete=models.CASCADE, related_name='alertas')
     canal = models.ForeignKey(Canal, on_delete=models.SET_NULL, null=True, blank=True, related_name='alertas')
@@ -186,6 +215,31 @@ class AlertaCamera(models.Model):
     tratado_em = models.DateTimeField(null=True, blank=True)
     criado_em = models.DateTimeField(auto_now_add=True, db_index=True)
     ultimo_em = models.DateTimeField(default=timezone.now)
+
+    motivo_falso = models.CharField(max_length=12, choices=MotivoFalso.choices, blank=True, default='', db_default='')
+    # O que o agente mediu no momento (pessoas, bolsa, tempo perto, nota do detector...).
+    detalhes = models.JSONField(default=dict, blank=True)
+    # Os 3 minutos em volta do acontecimento (1min30 antes e depois), gravados na loja.
+    video = models.FileField(upload_to=_caminho_video, blank=True, max_length=200)
+    video_status = models.CharField(max_length=10, choices=Video.choices, default=Video.SEM_VIDEO, db_default='SEM_VIDEO')
+    video_inicio = models.DateTimeField(null=True, blank=True)
+    video_segundos = models.PositiveIntegerField(default=0, db_default=0)
+    video_evento_segundo = models.PositiveIntegerField(default=0, db_default=0, help_text='Em que segundo do vídeo está o acontecimento.')
+    video_tamanho = models.PositiveBigIntegerField(default=0, db_default=0)
+    # Quadros-chave do vídeo: [{"arquivo": caminho, "segundo": -30}] (segundo em relação ao acontecimento).
+    quadros = models.JSONField(default=list, blank=True)
+    # A segunda olhada, com IA de visão sobre os quadros-chave.
+    ia_status = models.CharField(max_length=10, choices=Ia.choices, blank=True, default='', db_default='')
+    ia_risco = models.PositiveSmallIntegerField(null=True, blank=True)
+    ia_classificacao = models.CharField(max_length=20, blank=True, default='', db_default='')
+    ia_resumo = models.TextField(blank=True, default='', db_default='')
+    ia_analise = models.JSONField(default=dict, blank=True)
+    ia_modelo = models.CharField(max_length=40, blank=True, default='', db_default='')
+    ia_erro = models.CharField(max_length=200, blank=True, default='', db_default='')
+    ia_em = models.DateTimeField(null=True, blank=True)
+    # O que as decisões anteriores (confirmado/falso) dizem de alertas parecidos, em %.
+    chance_real = models.PositiveSmallIntegerField(null=True, blank=True)
+    prioridade = models.PositiveSmallIntegerField(default=0, db_default=0, db_index=True)
 
     class Meta:
         verbose_name = 'Alerta de câmera'

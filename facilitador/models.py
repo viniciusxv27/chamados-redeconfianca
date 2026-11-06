@@ -37,7 +37,9 @@ ICONES = {
     'mp3': ('fa-file-audio', 'cyan'), 'wav': ('fa-file-audio', 'cyan'), 'ogg': ('fa-file-audio', 'cyan'),
     'zip': ('fa-file-zipper', 'amber'), 'rar': ('fa-file-zipper', 'amber'), '7z': ('fa-file-zipper', 'amber'),
     'apk': ('fa-mobile-screen', 'lime'), 'txt': ('fa-file-lines', 'gray'),
+    'html': ('fa-file-code', 'teal'), 'htm': ('fa-file-code', 'teal'),
 }
+EXTENSOES_HTML = ('html', 'htm')
 
 
 class Recurso(models.Model):
@@ -56,6 +58,10 @@ class Recurso(models.Model):
     nome_original = models.CharField(max_length=255, blank=True)
     content_type = models.CharField(max_length=120, blank=True)
     tamanho = models.PositiveBigIntegerField(default=0)
+    # Arquivo HTML vira página com link próprio (/facilitador/p/<token>/). O link continua o mesmo
+    # quando o arquivo é trocado por outro HTML; "gerar novo link" derruba o antigo.
+    token_pagina = models.CharField(max_length=32, blank=True, default='', db_default='', db_index=True,
+                                    editable=False)
 
     url = models.URLField('Link', max_length=1000, blank=True,
                           validators=[URLValidator(schemes=['http', 'https'])])
@@ -101,6 +107,10 @@ class Recurso(models.Model):
     @property
     def e_imagem(self):
         return self.extensao in ('png', 'jpg', 'jpeg', 'gif', 'webp')
+
+    @property
+    def e_html(self):
+        return not self.e_link and self.extensao in EXTENSOES_HTML
 
     @property
     def e_pdf(self):

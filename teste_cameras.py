@@ -75,7 +75,9 @@ from django.utils import timezone
 
 from cameras.importacao import importar_planilha
 from cameras.models import AcessoCamera, AlertaCamera, Canal, ConfigCameras, Gravador
-from cameras import servicos
+from cameras import ia, servicos
+
+ia.EM_THREAD = False   # a análise de IA roda na hora (sem chave no teste: fica registrado o erro)
 
 sys.path.insert(0, str(pathlib.Path.cwd() / 'agente_cameras'))
 from agente import Portal, endereco_rtsp, loja_aberta  # noqa: E402
@@ -215,7 +217,11 @@ t('contagem no estado', cs.get('/cameras/estado/').json()['novos'] == 1)
 t('foto do alerta só com login de SUPERADMIN', cs.get(f'/cameras/alertas/{a.id}/foto/').status_code == 200 and cc.get(f'/cameras/alertas/{a.id}/foto/').status_code == 302)
 r = cs.post(f'/cameras/alertas/{a.id}/', {'status': 'FALSO', 'observacao': 'Funcionário guardou'})
 a.refresh_from_db()
-t('tratar registra quem e quando', a.status == 'FALSO' and a.tratado_por == chefe and a.tratado_em and a.observacao)
+t('falso alarme sem o motivo não grava (é com ele que a análise aprende)', a.status == 'NOVO' and r['Location'] == f'/cameras/alertas/{a.id}/')
+r = cs.post(f'/cameras/alertas/{a.id}/', {'status': 'FALSO', 'motivo_falso': 'FUNCIONARIO', 'observacao': 'Funcionário guardou'})
+a.refresh_from_db()
+t('tratar registra quem, quando e o motivo', a.status == 'FALSO' and a.tratado_por == chefe and a.tratado_em and a.observacao
+  and a.motivo_falso == 'FUNCIONARIO')
 t('tratado sai dos abertos', str(a.id) not in re.findall(r'/cameras/alertas/(\d+)/"', cs.get('/cameras/alertas/').content.decode()))
 t('filtro "todos" traz', f'/cameras/alertas/{a.id}/' in cs.get('/cameras/alertas/?status=todos').content.decode())
 for i in range(servicos.ALERTAS_POR_HORA):

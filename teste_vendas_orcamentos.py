@@ -1,4 +1,4 @@
-"""/vendas/orcamentos/ (03/11/2026): orçamento direto para o cliente no WhatsApp.
+"""/orcamentos/ (03/11/2026; saiu de /vendas/orcamentos/ em 06/11/2026): orçamento direto para o cliente no WhatsApp.
 
 Cobre o modelo da mensagem, a validação, o envio (com o WhatsApp falso), a falha que fica para
 tentar de novo, o clique duplo que não manda duas vezes e quem envia e quem vê o quê.
@@ -123,8 +123,8 @@ def usuario(nome, chaves=None, hierarquia='PADRAO', setor=loja):
 vend, cv = usuario('vendedor', ['modulo.ver', 'vendas.lancar'])
 outro, co = usuario('outro', ['modulo.ver', 'vendas.lancar'])
 rede, cr = usuario('rede', ['modulo.ver', 'rede.ver'], setor=esc)
-so_ver, csv_ = usuario('sover', ['modulo.ver'])
-URL = '/vendas/orcamentos/'
+so_ver, csv_ = usuario('sover')                 # lotado na loja, sem acesso a Vendas
+URL = '/orcamentos/'
 
 
 def campos(**extra):
@@ -134,15 +134,19 @@ def campos(**extra):
 
 
 print('Acesso')
-t('só ver o módulo não abre', csv_.get(URL).status_code == 302 and 'href="/vendas/orcamentos/"' not in csv_.get('/vendas/').content.decode())
+h = csv_.get(URL).content.decode()
+t('lotado em loja usa, mesmo sem acesso a Vendas', 'name="cliente_nome"' in h)
+t('Vendas não tem mais a aba', 'href="/vendas/orcamentos/"' not in cv.get('/vendas/').content.decode())
+r = cv.get('/vendas/orcamentos/')
+t('o endereço antigo leva ao módulo novo', r.status_code == 302 and r['Location'] == URL)
 h = cv.get(URL).content.decode()
-t('quem lança vê a aba e o formulário', 'href="/vendas/orcamentos/"' in h and 'name="cliente_nome"' in h and 'name="pilar"' in h and 'name="numero"' in h and 'name="texto"' in h)
+t('o menu e o formulário', f'href="{URL}"' in h and 'name="cliente_nome"' in h and 'name="pilar"' in h and 'name="numero"' in h and 'name="texto"' in h)
 t('os pilares estão todos', all(p in h for p in ('Móvel', 'Fixa', 'Smartphones', 'Eletrônicos', 'Essenciais', 'Seguros', 'SVA')))
 t('a prévia já traz vendedor e loja', 'Zzo Vendedor' in h and 'Rede Confian' in h and 'Loja Gl' in h)
-h = cr.get(URL).content.decode()
-t('quem só vê a rede não tem formulário', 'name="cliente_nome"' not in h)
+r = cr.get(URL)
+t('fora de loja (sem liberação) não entra', r.status_code == 302 and f'href="{URL}"' not in cr.get('/vendas/').content.decode())
 r = cr.post(URL, campos())
-t('e o POST não envia', not enviados and not Orcamento.objects.exists())
+t('e o POST não grava', not enviados and not Orcamento.objects.exists())
 
 print('Validação')
 for nome_caso, extra, msg in (('sem nome', {'cliente_nome': '  '}, 'nome do cliente'), ('sem pilar', {'pilar': ''}, 'pilar'),
@@ -184,17 +188,20 @@ t('sem JavaScript: grava e manda usar o botão da lista', 'Use &quot;Abrir no Wh
 cv.post(URL, campos(cliente_nome='{texto} *x*', texto='<script>alert(1)</script>', numero='27998765433'), **XHR)
 h = cv.get(URL).content.decode()
 t('texto do vendedor é escapado na lista', '<script>alert(1)</script>' not in h and '&lt;script&gt;' in h)
-r = cv.post(f'{URL}{o.pk}/reenviar/')
-t('o antigo "tentar de novo" leva à conversa, sem mandar pelo portal', r.status_code == 302 and r['Location'].startswith('https://web.whatsapp.com/send') and not enviados)
-t('outro vendedor não abre o que não é dele', co.post(f'{URL}{o.pk}/reenviar/').status_code == 404)
-t('quem só vê a rede não usa', cr.post(f'{URL}{o.pk}/reenviar/').status_code == 302 and not enviados)
+r = cv.post(f'{URL}{o.pk}/abrir/')
+t('"abrir de novo" leva à conversa, sem mandar pelo portal', r.status_code == 302 and r['Location'].startswith('https://web.whatsapp.com/send') and not enviados)
+t('outro vendedor não abre o que não é dele', co.post(f'{URL}{o.pk}/abrir/').status_code == 404)
+t('fora de loja não abre', cr.post(f'{URL}{o.pk}/abrir/').status_code == 404 and not enviados)
+r = cv.post(f'/vendas/orcamentos/{o.pk}/reenviar/')
+t('o antigo "tentar de novo" leva ao módulo', r.status_code == 302 and r['Location'] == URL)
+antes = Orcamento.objects.count()
 r = cr.post(URL, campos(), **XHR)
-t('quem só vê a rede não grava pelo fetch', r.status_code == 403)
+t('fora de loja não grava pelo fetch', r.status_code == 302 and Orcamento.objects.count() == antes)
 
 print('Quem vê o quê')
 t('vendedor vê os dele', 'Maria Souza' in cv.get(URL).content.decode())
 t('outro vendedor não vê', 'Maria Souza' not in co.get(URL).content.decode())
-t('quem vê a rede vê todos', 'Maria Souza' in cr.get(URL).content.decode())
+t('a lista é só dos próprios (o geral fica no painel)', 'Maria Souza' not in csv_.get(URL).content.decode())
 t('busca por nome e número', 'Maria Souza' in cv.get(URL, {'q': 'maria'}).content.decode()
   and 'Maria Souza' in cv.get(URL, {'q': '99876'}).content.decode() and 'Maria Souza' not in cv.get(URL, {'q': 'joao'}).content.decode())
 

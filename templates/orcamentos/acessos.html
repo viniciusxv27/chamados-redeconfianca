@@ -1,0 +1,85 @@
+{% extends 'orcamentos/_base.html' %}
+{% block orc_titulo %}Gestores e acessos · Orçamentos{% endblock %}
+{% block orc_cabecalho %}Gestores e acessos{% endblock %}
+{% block orc_subtitulo %}Quem está lotado em loja já usa o módulo. Aqui você escolhe quem importa mailing e vê o painel, e libera quem está fora das lojas.{% endblock %}
+
+{% block orc_conteudo %}
+<datalist id="aPessoas">{% for p in pessoas %}<option value="{{ p.get_full_name|default:p.username }} · #{{ p.id }}"></option>{% endfor %}</datalist>
+
+<div class="grid lg:grid-cols-2 gap-4">
+  <section class="orc-card overflow-hidden">
+    <div class="px-4 py-3 border-b border-gray-100">
+      <h2 class="font-bold text-gray-900"><i class="fas fa-user-tie text-primary mr-1"></i>Gestores de orçamentos</h2>
+      <p class="text-xs text-gray-500">Importam mailing e veem o painel das lojas marcadas (sem loja marcada = todas).</p>
+    </div>
+    <form method="post" class="p-4 space-y-3 border-b border-gray-100 orc-pessoa">{% csrf_token %}
+      <input type="hidden" name="acao" value="gestor"><input type="hidden" name="user">
+      <div><label class="orc-rotulo" for="aGestor">Pessoa</label>
+        <input id="aGestor" list="aPessoas" class="orc-campo" placeholder="Digite o nome…" autocomplete="off" required></div>
+      <details class="rounded-xl border border-gray-200">
+        <summary class="px-3 py-2 text-sm text-gray-700 cursor-pointer">Lojas <span class="text-gray-400 text-xs" data-qtd>(todas)</span></summary>
+        <div class="px-3 pb-3 max-h-56 overflow-y-auto grid sm:grid-cols-2 gap-1">
+          {% for l in lojas %}<label class="flex items-center gap-2 text-sm text-gray-700 py-0.5"><input type="checkbox" name="lojas" value="{{ l.id }}" class="accent-orange-500">{{ l.name }}</label>{% endfor %}
+        </div>
+      </details>
+      <button class="px-4 py-2 rounded-lg bg-primary hover:bg-orange-600 text-white text-sm font-semibold"><i class="fas fa-plus mr-1"></i>Salvar gestor</button>
+      <p class="text-[11px] text-gray-400">Se a pessoa já é gestora, as lojas dela são trocadas pelas marcadas.</p>
+    </form>
+    <ul class="divide-y divide-gray-100">
+      {% for g in gestores %}
+      <li class="px-4 py-3 flex items-start gap-3">
+        <span class="min-w-0 flex-1"><span class="block text-sm font-semibold text-gray-900">{{ g.user.get_full_name|default:g.user.username }}</span>
+          <span class="block text-[11px] text-gray-500">{% for l in g.lojas.all %}{{ l.name }}{% if not forloop.last %}, {% endif %}{% empty %}Todas as lojas{% endfor %}</span></span>
+        <form method="post" onsubmit="return confirm('Tirar {{ g.user.get_full_name|escapejs }} de gestor?');">{% csrf_token %}
+          <input type="hidden" name="acao" value="tirar_gestor"><input type="hidden" name="id" value="{{ g.pk }}">
+          <button class="text-xs text-red-600 hover:underline">Remover</button></form>
+      </li>
+      {% empty %}<li class="px-4 py-8 text-center text-sm text-gray-400">Nenhum gestor ainda — só você importa mailing.</li>{% endfor %}
+    </ul>
+  </section>
+
+  <section class="orc-card overflow-hidden h-fit">
+    <div class="px-4 py-3 border-b border-gray-100">
+      <h2 class="font-bold text-gray-900"><i class="fas fa-key text-primary mr-1"></i>Liberados fora das lojas</h2>
+      <p class="text-xs text-gray-500">Para quem não está lotado em loja, mas precisa fazer orçamento.</p>
+    </div>
+    <form method="post" class="p-4 flex gap-2 items-end border-b border-gray-100 orc-pessoa">{% csrf_token %}
+      <input type="hidden" name="acao" value="liberar"><input type="hidden" name="user">
+      <div class="flex-1"><label class="orc-rotulo" for="aLiberar">Pessoa</label>
+        <input id="aLiberar" list="aPessoas" class="orc-campo" placeholder="Digite o nome…" autocomplete="off" required></div>
+      <button class="px-4 py-2 rounded-lg bg-primary hover:bg-orange-600 text-white text-sm font-semibold">Liberar</button>
+    </form>
+    <ul class="divide-y divide-gray-100">
+      {% for l in liberacoes %}
+      <li class="px-4 py-3 flex items-center gap-3">
+        <span class="min-w-0 flex-1 text-sm font-medium text-gray-900">{{ l.user.get_full_name|default:l.user.username }}
+          <span class="block text-[11px] font-normal text-gray-500">desde {{ l.criado_em|date:"d/m/Y" }}</span></span>
+        <form method="post">{% csrf_token %}<input type="hidden" name="acao" value="tirar_liberacao"><input type="hidden" name="id" value="{{ l.pk }}">
+          <button class="text-xs text-red-600 hover:underline">Remover</button></form>
+      </li>
+      {% empty %}<li class="px-4 py-8 text-center text-sm text-gray-400">Ninguém liberado fora das lojas.</li>{% endfor %}
+    </ul>
+  </section>
+</div>
+<script>
+(function () {
+  // O campo mostra "Nome · #id"; o formulário envia só o id.
+  document.querySelectorAll('form.orc-pessoa').forEach(function (f) {
+    const campo = f.querySelector('input[list]'), oculto = f.querySelector('input[name=user]');
+    f.addEventListener('submit', function (e) {
+      const m = /#(\d+)\s*$/.exec(campo.value);
+      if (!m) { e.preventDefault(); campo.setCustomValidity('Escolha uma pessoa da lista.'); campo.reportValidity(); return; }
+      oculto.value = m[1];
+    });
+    campo.addEventListener('input', function () { campo.setCustomValidity(''); });
+    const qtd = f.querySelector('[data-qtd]');
+    if (qtd) f.querySelectorAll('input[name=lojas]').forEach(function (c) {
+      c.addEventListener('change', function () {
+        const n = f.querySelectorAll('input[name=lojas]:checked').length;
+        qtd.textContent = n ? '(' + n + ' marcada' + (n > 1 ? 's' : '') + ')' : '(todas)';
+      });
+    });
+  });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,54 @@
+{% extends 'cameras/_base.html' %}
+{% block ca_titulo %}Aprendizado{% endblock %}
+{% block ca_conteudo %}
+<header class="ca-topo">
+    <div class="ca-titulo"><span class="ca-escudo"><i class="fas fa-graduation-cap"></i></span><div><h1>Aprendizado</h1><p>O que a análise aprendeu com cada "furto confirmado" e "falso alarme". Quanto mais decisões, mais certeira ela fica.</p></div></div>
+</header>
+<div class="ca-kpis">
+    <div class="ca-kpi"><span>Decisões ensinadas</span><strong>{{ decididos }}</strong></div>
+    <div class="ca-kpi"><span>Furtos confirmados</span><strong>{{ totais.confirmados }}</strong></div>
+    <div class="ca-kpi"><span>Falsos alarmes</span><strong>{{ totais.falsos }}</strong></div>
+    <div class="ca-kpi"><span>Acerto da IA de visão</span><strong>{% if acerto_ia is not None %}{{ acerto_ia }}%{% else %}—{% endif %}</strong>{% if total_ia %}<small>{{ acertos_ia }} de {{ total_ia }}</small>{% endif %}</div>
+</div>
+
+<div class="ca-grade-aprendizado">
+    <section class="ca-card ca-tabela-card">
+        <h2><i class="fas fa-sliders"></i>Por câmera e tipo de alerta</h2>
+        {% if linhas %}
+        <div class="ca-tabela-rolagem">
+        <table class="ca-tabela">
+            <thead><tr><th>Loja · câmera</th><th>Alerta</th><th class="num">Confirmados</th><th class="num">Falsos</th><th>Chance real</th><th>Rigor do agente</th><th>Falso alarme mais comum</th></tr></thead>
+            <tbody>
+            {% for l in linhas %}
+            <tr>
+                <td><strong>{{ l.loja }}</strong><small>{{ l.canal }}</small></td>
+                <td>{{ l.tipo }}</td>
+                <td class="num">{{ l.confirmados }}</td>
+                <td class="num">{{ l.falsos }}</td>
+                <td><span class="ca-barra"><span style="width:{{ l.chance }}%"></span></span>{{ l.chance }}%</td>
+                <td><i class="ca-rigor r{{ l.rigor }}">{{ l.rigor_rotulo }}</i></td>
+                <td>{% for m, n in l.motivos %}{{ m }} ({{ n }}){% if not forloop.last %}<br>{% endif %}{% empty %}—{% endfor %}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        {% else %}
+        <div class="ca-vazio"><i class="fas fa-seedling"></i><p>Ainda não há decisões. Em cada alerta, confirme o furto ou marque falso alarme (com o motivo): a análise começa a aprender a partir daí.</p></div>
+        {% endif %}
+    </section>
+    <section class="ca-card">
+        <h2><i class="fas fa-circle-question"></i>Como ela aprende</h2>
+        <ul class="ca-explica">
+            <li><b>Chance real.</b> Cada alerta novo ganha a taxa de confirmação de alertas parecidos — da câmera, da loja e da rede, nessa ordem de peso conforme houver decisões.</li>
+            <li><b>Rigor do agente.</b> Com 5 decisões ou mais, câmera que só dá falso alarme fica mais exigente (espera mais e pede detecção mais firme); a que acerta muito fica mais sensível. A loja recebe o ajuste no próximo contato.</li>
+            <li><b>Memória da IA.</b> A IA de visão recebe os casos já decididos da mesma câmera — com o motivo do falso alarme e a sua observação — e procura o mesmo padrão no alerta novo.</li>
+            <li><b>Prioridade.</b> A lista de alertas abertos vem ordenada juntando detector, histórico e IA.</li>
+        </ul>
+        {% if motivos %}
+        <h2 class="ca-sub"><i class="fas fa-chart-pie"></i>Motivos de falso alarme</h2>
+        <ul class="ca-medidas">{% for m in motivos %}{% for k, r in rotulos_motivo.items %}{% if k == m.motivo_falso %}<li><span>{{ r }}</span><b>{{ m.n }}</b></li>{% endif %}{% endfor %}{% endfor %}</ul>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}

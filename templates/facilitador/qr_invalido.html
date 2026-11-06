@@ -20,6 +20,9 @@
     {% if expirado %}
     <h1>Este QR code expirou</h1>
     <p>Por segurança, o QR code de download vale por {{ horas }} horas. Abra o item de novo no Facilitador do portal e leia o QR code novo.</p>
+    {% elif pagina %}
+    <h1>Página indisponível</h1>
+    <p>Esta página foi ocultada, removida ou ganhou um link novo no Facilitador. Peça o link atualizado a quem enviou.</p>
     {% else %}
     <h1>Arquivo indisponível</h1>
     <p>Este arquivo foi trocado, ocultado ou removido do Facilitador. Abra o item de novo no portal para gerar um QR code atualizado.</p>

@@ -6,14 +6,14 @@ from django.conf import settings
 from django.contrib import messages
 from django.db.models import Count, Q
 from django.core.files.storage import default_storage
-from django.http import FileResponse, Http404, JsonResponse
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from users.models import Sector
 
-from . import servicos
+from . import aprendizado, ia, servicos
 from .importacao import importar_planilha
 from .indicadores import indicadores_do_periodo
 from .models import AcessoCamera, AlertaCamera, Canal, ConfigCameras, Gravador
@@ -198,12 +198,20 @@ def indicadores(request):
     })
 
 
+def _vencer_atrasados():
+    """Vídeo que não chegou a tempo: a IA analisa com a foto mesmo."""
+    for alerta_id in servicos.vencer_videos_atrasados():
+        ia.disparar(alerta_id)
+
+
 @exige_superadmin
 def alertas(request):
+    _vencer_atrasados()
     status = request.GET.get('status', 'abertos')
     lista = AlertaCamera.objects.select_related('gravador', 'canal', 'tratado_por')
     if status == 'abertos':
-        lista = lista.filter(status__in=['NOVO', 'ANALISE'])
+        # Abertos: o mais provável primeiro (detector + histórico + IA de visão).
+        lista = lista.filter(status__in=['NOVO', 'ANALISE']).order_by('-prioridade', '-criado_em')
     elif status in AlertaCamera.Status.values:
         lista = lista.filter(status=status)
     loja_id = request.GET.get('loja', '')
@@ -217,19 +225,139 @@ def alertas(request):
 
 @exige_superadmin
 def alerta_detalhe(request, alerta_id):
+    _vencer_atrasados()
     alerta = get_object_or_404(AlertaCamera.objects.select_related('gravador', 'canal', 'tratado_por'), pk=alerta_id)
     if request.method == 'POST':
         novo = request.POST.get('status')
+        motivo = request.POST.get('motivo_falso', '')
+        if novo == AlertaCamera.Status.FALSO and motivo not in AlertaCamera.MotivoFalso.values:
+            messages.error(request, 'Diga por que foi falso alarme: é com isso que a análise aprende.')
+            return redirect('cameras:alerta_detalhe', alerta_id=alerta.id)
         if novo in AlertaCamera.Status.values:
             alerta.status = novo
+            alerta.motivo_falso = motivo if novo == AlertaCamera.Status.FALSO else ''
             alerta.observacao = request.POST.get('observacao', '').strip()
             alerta.tratado_por, alerta.tratado_em = request.user, timezone.now()
-            alerta.save(update_fields=['status', 'observacao', 'tratado_por', 'tratado_em'])
+            alerta.save(update_fields=['status', 'motivo_falso', 'observacao', 'tratado_por', 'tratado_em'])
+            if novo in (AlertaCamera.Status.CONFIRMADO, AlertaCamera.Status.FALSO):
+                aprendizado.esquecer()      # a próxima conta (e o próximo sinal da loja) já usa esta decisão
             _registrar(request, 'tratar_alerta', alerta.gravador, f'#{alerta.id} {novo}')
-            messages.success(request, f'Alerta marcado como "{alerta.get_status_display()}".')
+            messages.success(request, f'Alerta marcado como "{alerta.get_status_display()}".'
+                             + (' A análise vai levar esta decisão em conta nos próximos alertas.'
+                                if novo in (AlertaCamera.Status.CONFIRMADO, AlertaCamera.Status.FALSO) else ''))
         return redirect('cameras:alertas')
     _registrar(request, 'ver_alerta', alerta.gravador, f'#{alerta.id}')
-    return render(request, 'cameras/alerta_detalhe.html', {'aba': 'alertas', 'alerta': alerta, 'status_opcoes': AlertaCamera.Status.choices})
+    historico = aprendizado.avaliar(alerta.tipo, alerta.gravador_id, alerta.canal_id)
+    analise = alerta.ia_analise or {}
+    return render(request, 'cameras/alerta_detalhe.html', {
+        'aba': 'alertas', 'alerta': alerta, 'status_opcoes': AlertaCamera.Status.choices,
+        'motivos_falso': AlertaCamera.MotivoFalso.choices, 'historico': historico,
+        'motivos_camera': aprendizado.motivos_de_falso(alerta.tipo, alerta.canal_id)[:3],
+        'rigor': aprendizado.ROTULO_RIGOR[aprendizado.rigor(alerta.tipo, alerta.gravador_id, alerta.canal_id)],
+        'analise': analise, 'classificacao': ia.CLASSIFICACOES.get(alerta.ia_classificacao, ''),
+        'quadros': [{'indice': i, 'segundo': q.get('segundo', 0), 'no_video': max(0, alerta.video_evento_segundo + q.get('segundo', 0))}
+                    for i, q in enumerate(alerta.quadros or [])],
+        'medidas': {k: v for k, v in (alerta.detalhes or {}).items() if not str(k).startswith('_')},
+    })
+
+
+@exige_superadmin
+def alerta_ia(request, alerta_id):
+    """GET: em que pé está a análise (a tela pergunta enquanto analisa). POST: analisar de novo."""
+    alerta = get_object_or_404(AlertaCamera, pk=alerta_id)
+    if request.method == 'POST':
+        ia.disparar(alerta.id)
+        _registrar(request, 'reanalisar_alerta', alerta.gravador, f'#{alerta.id}')
+        messages.success(request, 'Análise da IA pedida. Em alguns segundos ela aparece aqui.')
+        return redirect('cameras:alerta_detalhe', alerta_id=alerta.id)
+    return JsonResponse({'status': alerta.ia_status, 'video': alerta.video_status})
+
+
+def _intervalo(cabecalho, tamanho):
+    """(início, fim) do cabeçalho Range "bytes=a-b", ou None."""
+    if not cabecalho.startswith('bytes=') or ',' in cabecalho:
+        return None
+    a, _, b = cabecalho[6:].partition('-')
+    try:
+        if a == '':
+            inicio, fim = max(0, tamanho - int(b)), tamanho - 1
+        else:
+            inicio, fim = int(a), min(int(b) if b else tamanho - 1, tamanho - 1)
+    except ValueError:
+        return None
+    return (inicio, fim) if 0 <= inicio <= fim else None
+
+
+VIDEO_PEDACO_MAX = 4 * 1024 * 1024
+
+
+@exige_superadmin
+def alerta_video(request, alerta_id):
+    """O vídeo do alerta, só pelo portal (nunca o endereço do bucket), com pedaços para o player avançar e voltar."""
+    alerta = get_object_or_404(AlertaCamera, pk=alerta_id)
+    if not alerta.video or alerta.video_status != AlertaCamera.Video.RECEBIDO:
+        raise Http404
+    try:
+        arquivo = alerta.video.open('rb')
+    except (FileNotFoundError, OSError):
+        raise Http404
+    tamanho = alerta.video.size
+    pedido = _intervalo(request.headers.get('Range', ''), tamanho)
+    if pedido is None:
+        if 'bytes=0-' not in request.headers.get('Range', 'bytes=0-'):
+            arquivo.close()
+            resposta = HttpResponse(status=416)
+            resposta['Content-Range'] = f'bytes */{tamanho}'
+            return resposta
+        _registrar(request, 'ver_video', alerta.gravador, f'#{alerta.id}')
+        resposta = FileResponse(arquivo, content_type='video/mp4')
+    else:
+        inicio, fim = pedido
+        fim = min(fim, inicio + VIDEO_PEDACO_MAX - 1)
+        if inicio == 0:
+            _registrar(request, 'ver_video', alerta.gravador, f'#{alerta.id}')
+        arquivo.seek(inicio)
+        conteudo = arquivo.read(fim - inicio + 1)
+        arquivo.close()
+        resposta = HttpResponse(conteudo, status=206, content_type='video/mp4')
+        resposta['Content-Range'] = f'bytes {inicio}-{inicio + len(conteudo) - 1}/{tamanho}'
+        resposta['Content-Length'] = str(len(conteudo))
+    resposta['Accept-Ranges'] = 'bytes'
+    resposta['Cache-Control'] = 'private, max-age=600'
+    return resposta
+
+
+@exige_superadmin
+def alerta_quadro(request, alerta_id, indice):
+    alerta = get_object_or_404(AlertaCamera, pk=alerta_id)
+    quadros = alerta.quadros or []
+    if not 0 <= indice < len(quadros):
+        raise Http404
+    try:
+        arquivo = AlertaCamera._meta.get_field('video').storage.open(quadros[indice]['arquivo'], 'rb')
+    except (KeyError, FileNotFoundError, OSError):
+        raise Http404
+    resposta = FileResponse(arquivo, content_type='image/jpeg')
+    resposta['Cache-Control'] = 'private, max-age=600'
+    return resposta
+
+
+@exige_superadmin
+def aprendizado_view(request):
+    gravadores = Gravador.objects.filter(tem_equipamento=True)
+    linhas, totais = aprendizado.quadro_geral(gravadores)
+    decididos = AlertaCamera.objects.filter(status__in=['CONFIRMADO', 'FALSO'])
+    com_ia = decididos.filter(ia_status=AlertaCamera.Ia.FEITA, ia_risco__isnull=False)
+    # A IA acertou quando deu risco alto (>= 50) em furto confirmado e baixo em falso alarme.
+    acertos = com_ia.filter(Q(status='CONFIRMADO', ia_risco__gte=50) | Q(status='FALSO', ia_risco__lt=50)).count()
+    total_ia = com_ia.count()
+    return render(request, 'cameras/aprendizado.html', {
+        'aba': 'aprendizado', 'linhas': linhas, 'totais': totais,
+        'decididos': totais['confirmados'] + totais['falsos'], 'acertos_ia': acertos, 'total_ia': total_ia,
+        'acerto_ia': round(acertos * 100 / total_ia) if total_ia else None,
+        'motivos': decididos.filter(status='FALSO').exclude(motivo_falso='').values('motivo_falso').annotate(n=Count('id')).order_by('-n'),
+        'rotulos_motivo': dict(AlertaCamera.MotivoFalso.choices),
+    })
 
 
 @exige_superadmin

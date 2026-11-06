@@ -1,0 +1,61 @@
+{% extends 'orcamentos/_base.html' %}
+{% block orc_titulo %}Importar mailing · Orçamentos{% endblock %}
+{% block orc_cabecalho %}Mailing das lojas{% endblock %}
+{% block orc_subtitulo %}Importe uma base, escolha a coluna do número e mande para a loja{% endblock %}
+
+{% block orc_conteudo %}
+<div class="grid lg:grid-cols-[22rem_1fr] gap-4">
+  <form method="post" action="{% url 'orcamentos:importar' %}" enctype="multipart/form-data" class="orc-card p-4 space-y-3 h-fit">{% csrf_token %}
+    <h2 class="font-bold text-gray-900"><i class="fas fa-file-import text-primary mr-1"></i>Nova base</h2>
+    <div><label class="orc-rotulo" for="mNome">Nome da base</label>
+      <input id="mNome" name="nome" maxlength="120" class="orc-campo" placeholder="Ex.: Clientes pré-pago outubro"></div>
+    <div><label class="orc-rotulo" for="mLoja">Loja que vai receber</label>
+      <select id="mLoja" name="loja" class="orc-campo"><option value="">Escolho na conferência</option>
+        {% for l in lojas %}<option value="{{ l.id }}">{{ l.name }}</option>{% endfor %}</select></div>
+    <div><label class="orc-rotulo" for="mArquivo">Arquivo *</label>
+      <input id="mArquivo" type="file" name="arquivo" accept=".xlsx,.xlsm,.csv,.txt" required class="block w-full text-sm text-gray-600 file:mr-3 file:px-3 file:py-2 file:rounded-lg file:border-0 file:bg-orange-50 file:text-orange-700 file:font-semibold">
+      <p class="text-[11px] text-gray-400 mt-1">Excel (.xlsx) ou CSV, com cabeçalho na 1ª linha. Até {{ limite }} linhas.</p></div>
+    <button class="w-full px-4 py-2.5 rounded-xl bg-primary hover:bg-orange-600 text-white text-sm font-semibold"><i class="fas fa-upload mr-1"></i>Ler a planilha</button>
+    <p class="text-[11px] text-gray-500">Na próxima tela você confere as colunas antes de qualquer contato chegar à loja.</p>
+  </form>
+
+  <div class="orc-card overflow-hidden">
+    <div class="px-4 py-3 border-b border-gray-100"><h2 class="font-bold text-gray-900">Bases importadas</h2></div>
+    <div class="divide-y divide-gray-100">
+      {% for b in bases %}
+      <div class="p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+        <div class="min-w-0 flex-1">
+          <p class="font-semibold text-gray-900 truncate">{{ b.nome }}
+            {% if b.status == 'ATIVA' %}<span class="orc-chip bg-emerald-100 text-emerald-700">Ativa</span>
+            {% elif b.status == 'RASCUNHO' %}<span class="orc-chip bg-amber-100 text-amber-700">Aguardando conferência</span>
+            {% else %}<span class="orc-chip bg-gray-100 text-gray-600">Encerrada</span>{% endif %}</p>
+          <p class="text-xs text-gray-500">{{ b.loja.name|default:"loja a escolher" }} · {{ b.arquivo_nome }} · {{ b.criado_em|date:"d/m/Y H:i" }}{% if b.importado_por %} · {{ b.importado_por.get_full_name }}{% endif %}</p>
+          {% if b.status != 'RASCUNHO' %}
+          <p class="text-xs text-gray-500 mt-0.5">{{ b.importados }} contatos · {{ b.duplicados }} repetidos e {{ b.invalidos }} sem número válido ficaram de fora</p>
+          {% with total=b.novos|add:b.trabalhados|add:b.descartados %}{% if total %}
+          <div class="mt-2 flex h-2 rounded-full overflow-hidden bg-gray-100" title="{{ b.trabalhados }} orçados · {{ b.descartados }} descartados · {{ b.novos }} a trabalhar">
+            <span class="bg-emerald-500" style="width:{% widthratio b.trabalhados total 100 %}%"></span>
+            <span class="bg-gray-400" style="width:{% widthratio b.descartados total 100 %}%"></span>
+          </div>
+          <p class="text-[11px] text-gray-500 mt-1">{{ b.trabalhados }} orçados · {{ b.descartados }} descartados · {{ b.novos }} a trabalhar</p>
+          {% endif %}{% endwith %}
+          {% else %}<p class="text-xs text-gray-500 mt-0.5">{{ b.total_linhas }} linhas lidas</p>{% endif %}
+        </div>
+        <div class="flex gap-2 shrink-0">
+          {% if b.status == 'RASCUNHO' %}
+          <a href="{% url 'orcamentos:conferir' b.pk %}" class="px-3 py-2 rounded-lg bg-primary text-white text-sm font-semibold">Conferir e enviar</a>
+          <form method="post" action="{% url 'orcamentos:base_acao' b.pk %}">{% csrf_token %}<input type="hidden" name="acao" value="descartar">
+            <button class="px-3 py-2 rounded-lg border border-gray-300 text-sm text-gray-600 hover:bg-gray-50">Descartar</button></form>
+          {% elif b.status == 'ATIVA' %}
+          <form method="post" action="{% url 'orcamentos:base_acao' b.pk %}" onsubmit="return confirm('Encerrar a base? Os contatos saem da lista da loja.');">{% csrf_token %}<input type="hidden" name="acao" value="encerrar">
+            <button class="px-3 py-2 rounded-lg border border-gray-300 text-sm text-gray-600 hover:bg-gray-50">Encerrar</button></form>
+          {% endif %}
+        </div>
+      </div>
+      {% empty %}
+      <p class="p-10 text-center text-sm text-gray-500">Nenhuma base ainda. Importe a primeira ao lado.</p>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -43,7 +43,7 @@
       {% endif %}
       <input type="file" name="arquivo" id="id_arquivo"
              class="block w-full text-sm text-gray-600 file:mr-3 file:px-3 file:py-2 file:rounded-lg file:border-0 file:bg-indigo-50 file:text-indigo-700 file:font-medium">
-      <p class="mt-1 text-xs text-gray-400">Qualquer tipo de arquivo, até {{ max_mb }} MB.</p>
+      <p class="mt-1 text-xs text-gray-400">Qualquer tipo de arquivo, até {{ max_mb }} MB. Arquivo HTML vira página com link próprio.</p>
       {% for e in form.arquivo.errors %}<p class="mt-1 text-xs text-red-600">{{ e }}</p>{% endfor %}
     </div>
 

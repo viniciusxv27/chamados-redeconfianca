@@ -2,7 +2,7 @@
 {% block ca_titulo %}Alertas{% endblock %}
 {% block ca_conteudo %}
 <header class="ca-topo">
-    <div class="ca-titulo"><span class="ca-escudo"><i class="fas fa-bell"></i></span><div><h1>Alertas</h1><p>Cada alerta é uma suspeita da análise automática. Confira a imagem antes de agir.</p></div></div>
+    <div class="ca-titulo"><span class="ca-escudo"><i class="fas fa-bell"></i></span><div><h1>Alertas</h1><p>Abertos em ordem de prioridade. Cada alerta é uma suspeita: confira o vídeo antes de agir.</p></div></div>
     <form method="get" class="ca-filtros">
         <select name="status" aria-label="Situação" onchange="this.form.submit()">
             <option value="abertos" {% if status == 'abertos' %}selected{% endif %}>Abertos</option>
@@ -18,8 +18,12 @@
 <div class="ca-alertas">
     {% for a in alertas %}
     <a class="ca-card ca-alerta" href="{% url 'cameras:alerta_detalhe' a.id %}">
-        <span class="ca-imagem">{% if a.foto %}<img loading="lazy" src="{% url 'cameras:alerta_foto' a.id %}" alt="Imagem do alerta">{% else %}<span class="ca-sem-imagem"><i class="fas fa-image"></i><small>Sem imagem</small></span>{% endif %}<em class="ca-confianca">{{ a.confianca }}%</em></span>
-        <span class="ca-alerta-corpo"><strong>{{ a.gravador.loja }}</strong><span>{{ a.get_tipo_display }}</span><small>{{ a.canal.titulo|default:"" }} · {{ a.criado_em|date:"d/m/Y H:i" }}{% if a.repeticoes > 1 %} · {{ a.repeticoes }}x{% endif %}</small><i class="ca-status {{ a.status }}">{{ a.get_status_display }}</i></span>
+        <span class="ca-imagem">{% if a.foto %}<img loading="lazy" src="{% url 'cameras:alerta_foto' a.id %}" alt="Imagem do alerta">{% else %}<span class="ca-sem-imagem"><i class="fas fa-image"></i><small>Sem imagem</small></span>{% endif %}
+            <em class="ca-confianca ca-prioridade-selo {% if a.prioridade >= 60 %}alta{% elif a.prioridade >= 35 %}media{% endif %}" title="Prioridade (detector + histórico + IA)">{{ a.prioridade }}</em>
+            {% if a.video_status == 'RECEBIDO' %}<em class="ca-selo-video" title="Tem os 3 minutos em vídeo"><i class="fas fa-film"></i>3 min</em>{% elif a.video_status == 'AGUARDANDO' %}<em class="ca-selo-video gravando" title="A loja está gravando"><i class="fas fa-circle"></i>gravando</em>{% endif %}</span>
+        <span class="ca-alerta-corpo"><strong>{{ a.gravador.loja }}</strong><span>{{ a.get_tipo_display }}</span><small>{{ a.canal.titulo|default:"" }} · {{ a.criado_em|date:"d/m/Y H:i" }}{% if a.repeticoes > 1 %} · {{ a.repeticoes }}x{% endif %}</small>
+            {% if a.ia_status == 'FEITA' %}<small class="ca-ia-linha"><i class="fas fa-wand-magic-sparkles"></i>IA: <b class="ca-classe {{ a.ia_classificacao }}">{% if a.ia_classificacao == 'furto_provavel' %}furto provável{% elif a.ia_classificacao == 'suspeito' %}suspeito{% elif a.ia_classificacao == 'normal' %}parece normal{% else %}inconclusivo{% endif %}</b> · risco {{ a.ia_risco }}%</small>{% elif a.ia_status == 'PENDENTE' %}<small class="ca-ia-linha"><i class="fas fa-spinner fa-spin"></i>IA analisando…</small>{% endif %}
+            <i class="ca-status {{ a.status }}">{{ a.get_status_display }}</i></span>
     </a>
     {% empty %}<div class="ca-vazio ca-card"><i class="fas fa-check-circle"></i><p>Nenhum alerta com esse filtro.</p></div>{% endfor %}
 </div>

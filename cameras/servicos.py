@@ -1,6 +1,7 @@
 """O que o agente da loja conversa com o portal, e as fotos que ficam só no cache."""
 import base64
 import ipaddress
+import json
 import re
 import time
 import unicodedata
@@ -14,7 +15,8 @@ from django.core.files.storage import default_storage
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
-from .models import AlertaCamera, Canal, EventoLoja, Gravador, SessaoAoVivo
+from . import aprendizado
+from .models import AlertaCamera, Canal, EventoLoja, Gravador, SessaoAoVivo, _caminho_quadro
 
 FOTO_VALIDADE = 300        # segundos no cache: é imagem ao vivo, não arquivo
 FOTO_TAMANHO_MAX = 400 * 1024
@@ -25,6 +27,16 @@ SINAL_ASSISTINDO = 10
 SINAL_FOCO = 3
 VENDO_VALIDADE = 45
 FOCO_VALIDADE = 20
+# O vídeo do alerta: 1min30 antes e 1min30 depois do acontecimento, gravado no computador da loja.
+VIDEO_ANTES = 90
+VIDEO_DEPOIS = 90
+VIDEO_TAMANHO_MAX = 150 * 1024 * 1024
+VIDEO_ESPERA_MINUTOS = 20      # sem o vídeo até aqui (agente caiu, internet), a IA olha só a foto
+QUADROS_MAX = 12
+QUADRO_TAMANHO_MAX = 600 * 1024
+DETALHES_MAX = 30
+# Por quanto tempo o vídeo fica guardado (imagem de pessoa é dado pessoal: só o necessário).
+VIDEO_DIAS = {'FALSO': 30, 'NOVO': 90, 'ANALISE': 90, 'CONFIRMADO': 365}
 
 
 def _chave_foto(canal_id):
@@ -85,6 +97,9 @@ def resposta_do_sinal(gravador, canais):
         'matinal': {'inicio': gravador.matinal_inicio.strftime('%H:%M'), 'fim': gravador.matinal_fim.strftime('%H:%M'),
                     'minimo': gravador.matinal_minutos * 60},
         'canais': [{'numero': c.numero, 'ia': c.ia_ativa, 'zonas': c.zonas} for c in canais if c.ativo],
+        # O que as decisões de furto confirmado/falso alarme ensinaram, por câmera e tipo de alerta.
+        'ajustes': aprendizado.ajustes_do_gravador(gravador, [c for c in canais if c.ativo]),
+        'video': {'antes': VIDEO_ANTES, 'depois': VIDEO_DEPOIS},
     }
 
 
@@ -92,8 +107,34 @@ class AlertaRecusado(Exception):
     pass
 
 
-def registrar_alerta(gravador, numero_canal, tipo, confianca, motivo, foto=None):
-    """Repetição do mesmo caso soma no alerta aberto, para o SUPERADMIN ver um caso e não vinte."""
+def limpar_detalhes(bruto):
+    """O que o agente mediu: só chave curta e valor simples."""
+    if isinstance(bruto, str):
+        try:
+            bruto = json.loads(bruto) if len(bruto) <= 4000 else {}
+        except ValueError:
+            bruto = {}
+    if not isinstance(bruto, dict):
+        return {}
+    saida = {}
+    for chave, valor in list(bruto.items())[:DETALHES_MAX]:
+        chave = str(chave)[:40]
+        if chave.startswith('_'):
+            continue
+        if isinstance(valor, bool) or valor is None:
+            saida[chave] = valor
+        elif isinstance(valor, (int, float)):
+            saida[chave] = round(valor, 3) if isinstance(valor, float) else valor
+        else:
+            saida[chave] = str(valor)[:120]
+    return saida
+
+
+def registrar_alerta(gravador, numero_canal, tipo, confianca, motivo, foto=None, detalhes=None, grava_video=False):
+    """Repetição do mesmo caso soma no alerta aberto, para o SUPERADMIN ver um caso e não vinte.
+
+    Devolve (alerta, quer_video): quer_video diz ao agente para mandar os 3 minutos deste alerta.
+    """
     if tipo not in AlertaCamera.Tipo.values:
         raise AlertaRecusado('Tipo de alerta desconhecido.')
     agora = timezone.now()
@@ -107,13 +148,94 @@ def registrar_alerta(gravador, numero_canal, tipo, confianca, motivo, foto=None)
         aberto.repeticoes += 1
         aberto.ultimo_em = agora
         aberto.confianca = max(aberto.confianca, confianca)
-        aberto.save(update_fields=['repeticoes', 'ultimo_em', 'confianca'])
-        return aberto
-    alerta = AlertaCamera(gravador=gravador, canal=canal, tipo=tipo, confianca=confianca, motivo=motivo[:255], ultimo_em=agora)
+        campos = ['repeticoes', 'ultimo_em', 'confianca', 'prioridade']
+        quer_video = grava_video and aberto.video_status == AlertaCamera.Video.SEM_VIDEO
+        if quer_video:
+            aberto.video_status = AlertaCamera.Video.AGUARDANDO
+            campos.append('video_status')
+        aberto.prioridade = aprendizado.prioridade(aberto)
+        aberto.save(update_fields=campos)
+        return aberto, quer_video
+    alerta = AlertaCamera(gravador=gravador, canal=canal, tipo=tipo, confianca=confianca, motivo=motivo[:255], ultimo_em=agora,
+                          detalhes=limpar_detalhes(detalhes),
+                          video_status=AlertaCamera.Video.AGUARDANDO if grava_video else AlertaCamera.Video.SEM_VIDEO)
+    aprendizado.aplicar(alerta)
     if foto:
         alerta.foto.save('alerta.jpg', ContentFile(foto), save=False)
     alerta.save()
-    return alerta
+    return alerta, grava_video
+
+
+class ClipeRecusado(Exception):
+    pass
+
+
+def registrar_clipe(alerta, video, quadros, inicio=None, segundos=0, evento_segundo=None):
+    """Guarda os 3 minutos e os quadros-chave do alerta. `quadros`: [(segundo, bytes jpg)]. False = já tinha."""
+    if alerta.video_status == AlertaCamera.Video.RECEBIDO and alerta.video:
+        return False                                   # reenvio: já está aqui
+    if video is None or not 0 < video.size <= VIDEO_TAMANHO_MAX:
+        raise ClipeRecusado('Vídeo ausente ou grande demais.')
+    cabeca = video.read(12)
+    video.seek(0)
+    if cabeca[4:8] != b'ftyp':
+        raise ClipeRecusado('O vídeo precisa ser MP4.')
+    storage = AlertaCamera._meta.get_field('video').storage
+    guardados = []
+    for segundo, conteudo in sorted(quadros or [], key=lambda q: q[0])[:QUADROS_MAX]:
+        if conteudo[:2] != b'\xff\xd8' or len(conteudo) > QUADRO_TAMANHO_MAX:
+            continue
+        guardados.append({'arquivo': storage.save(_caminho_quadro(alerta, 'q.jpg'), ContentFile(conteudo)),
+                          'segundo': max(-600, min(600, int(segundo)))})
+    alerta.video.save('clipe.mp4', video, save=False)
+    alerta.video_status = AlertaCamera.Video.RECEBIDO
+    alerta.video_tamanho = video.size
+    alerta.video_segundos = max(0, min(3600, int(segundos or 0)))
+    evento = VIDEO_ANTES if evento_segundo is None else int(evento_segundo)
+    alerta.video_evento_segundo = max(0, min(alerta.video_segundos or 3600, evento))
+    alerta.video_inicio = inicio
+    alerta.quadros = guardados
+    alerta.save(update_fields=['video', 'video_status', 'video_tamanho', 'video_segundos', 'video_evento_segundo',
+                               'video_inicio', 'quadros'])
+    return True
+
+
+def vencer_videos_atrasados():
+    """Alerta esperando vídeo há muito tempo: desiste do vídeo e a IA olha a foto. Devolve os ids."""
+    limite = timezone.now() - timedelta(minutes=VIDEO_ESPERA_MINUTOS)
+    ids = list(AlertaCamera.objects.filter(video_status=AlertaCamera.Video.AGUARDANDO, criado_em__lt=limite)
+               .values_list('id', flat=True)[:50])
+    if ids:
+        AlertaCamera.objects.filter(id__in=ids).update(video_status=AlertaCamera.Video.SEM_VIDEO)
+    return ids
+
+
+def _apagar_midia(alerta):
+    storage = AlertaCamera._meta.get_field('video').storage
+    for q in alerta.quadros or []:
+        try:
+            storage.delete(q.get('arquivo', ''))
+        except Exception:  # noqa: BLE001 — arquivo já sumiu do bucket
+            pass
+    if alerta.video:
+        try:
+            alerta.video.delete(save=False)
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def limpar_videos_antigos(agora=None):
+    """Tarefa diária: apaga vídeo e quadros vencidos (a foto, a análise e a decisão ficam). Devolve quantos."""
+    agora = agora or timezone.now()
+    apagados = 0
+    for status, dias in VIDEO_DIAS.items():
+        vencidos = AlertaCamera.objects.filter(status=status, video_status=AlertaCamera.Video.RECEBIDO,
+                                               criado_em__lt=agora - timedelta(days=dias))
+        for alerta in vencidos.iterator():
+            _apagar_midia(alerta)
+            AlertaCamera.objects.filter(pk=alerta.pk).update(video='', quadros=[], video_status=AlertaCamera.Video.APAGADO)
+            apagados += 1
+    return apagados
 
 
 class DescobertaRecusada(Exception):

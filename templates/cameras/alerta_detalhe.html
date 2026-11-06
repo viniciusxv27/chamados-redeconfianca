@@ -1,26 +1,155 @@
 {% extends 'cameras/_base.html' %}
 {% block ca_titulo %}Alerta{% endblock %}
 {% block ca_conteudo %}
-<header class="ca-topo"><div class="ca-titulo"><a class="ca-voltar" href="{% url 'cameras:alertas' %}" aria-label="Voltar aos alertas"><i class="fas fa-arrow-left"></i></a><div><h1>{{ alerta.get_tipo_display }}</h1><p>{{ alerta.gravador.loja }}{% if alerta.canal %} · {{ alerta.canal.titulo }}{% endif %} · {{ alerta.criado_em|date:"d/m/Y H:i" }}</p></div></div><i class="ca-status {{ alerta.status }}">{{ alerta.get_status_display }}</i></header>
+<header class="ca-topo"><div class="ca-titulo"><a class="ca-voltar" href="{% url 'cameras:alertas' %}" aria-label="Voltar aos alertas"><i class="fas fa-arrow-left"></i></a><div><h1>{{ alerta.get_tipo_display }}</h1><p>{{ alerta.gravador.loja }}{% if alerta.canal %} · {{ alerta.canal.titulo }}{% endif %} · {{ alerta.criado_em|date:"d/m/Y H:i" }}{% if alerta.repeticoes > 1 %} · {{ alerta.repeticoes }} vezes até {{ alerta.ultimo_em|date:"H:i" }}{% endif %}</p></div></div>
+    <div class="ca-topo-direita">
+        <span class="ca-prioridade {% if alerta.prioridade >= 60 %}alta{% elif alerta.prioridade >= 35 %}media{% endif %}" title="Junta a nota do detector, o histórico de decisões e a IA de visão"><small>Prioridade</small>{{ alerta.prioridade }}</span>
+        <i class="ca-status {{ alerta.status }}">{{ alerta.get_status_display }}</i>
+    </div>
+</header>
 <div class="ca-grade-alerta">
-    <div class="ca-card ca-foto-alerta">{% if alerta.foto %}<img src="{% url 'cameras:alerta_foto' alerta.id %}" alt="Imagem do momento do alerta">{% else %}<div class="ca-vazio"><i class="fas fa-image"></i><p>O agente não enviou imagem.</p></div>{% endif %}</div>
-    <div class="ca-card ca-painel-lateral">
-        <dl>
-            <dt>Motivo</dt><dd>{{ alerta.motivo|default:"—" }}</dd>
-            <dt>Confiança da análise</dt><dd><span class="ca-barra"><span style="width:{{ alerta.confianca }}%"></span></span>{{ alerta.confianca }}%</dd>
-            {% if alerta.repeticoes > 1 %}<dt>Repetições</dt><dd>{{ alerta.repeticoes }} vezes, até {{ alerta.ultimo_em|date:"H:i" }}</dd>{% endif %}
-            {% if alerta.tratado_por %}<dt>Tratado por</dt><dd>{{ alerta.tratado_por.get_full_name }} em {{ alerta.tratado_em|date:"d/m/Y H:i" }}</dd>{% endif %}
-        </dl>
-        <p class="ca-aviso-humano"><i class="fas fa-user-check"></i>A análise aponta movimento suspeito, não culpados. Confira a gravação no aplicativo da loja antes de falar com alguém.</p>
-        <form method="post">{% csrf_token %}
-            <label for="caObs">Observação</label>
-            <textarea id="caObs" name="observacao" rows="3" placeholder="O que foi visto na gravação">{{ alerta.observacao }}</textarea>
-            <div class="ca-decisao">
-                <button class="ca-botao claro" name="status" value="ANALISE">Em análise</button>
-                <button class="ca-botao claro" name="status" value="FALSO">Falso alarme</button>
-                <button class="ca-botao perigo" name="status" value="CONFIRMADO">Confirmar furto</button>
+    <div class="ca-coluna-midia">
+        <div class="ca-card ca-foto-alerta">
+            {% if alerta.video_status == 'RECEBIDO' %}
+            <video id="caVideo" controls playsinline preload="metadata" data-evento="{{ alerta.video_evento_segundo }}"
+                   {% if alerta.foto %}poster="{% url 'cameras:alerta_foto' alerta.id %}"{% endif %}>
+                <source src="{% url 'cameras:alerta_video' alerta.id %}" type="video/mp4">
+            </video>
+            {% elif alerta.foto %}
+            <img src="{% url 'cameras:alerta_foto' alerta.id %}" alt="Imagem do momento do alerta">
+            {% else %}<div class="ca-vazio"><i class="fas fa-image"></i><p>O agente não enviou imagem.</p></div>{% endif %}
+        </div>
+        <div class="ca-video-info">
+            {% if alerta.video_status == 'RECEBIDO' %}
+            <span><i class="fas fa-film"></i>{{ alerta.video_segundos }} s gravados em volta do alerta · {{ alerta.video_tamanho|filesizeformat }}</span>
+            <button type="button" class="ca-botao pequeno" data-ir="{{ alerta.video_evento_segundo }}"><i class="fas fa-crosshairs"></i>Ir para o momento do alerta</button>
+            {% elif alerta.video_status == 'AGUARDANDO' %}
+            <span class="ca-gravando"><i class="fas fa-circle"></i>A loja está gravando os 3 minutos em volta do alerta (1min30 antes e depois). O vídeo chega em seguida.</span>
+            {% elif alerta.video_status == 'APAGADO' %}
+            <span><i class="fas fa-clock-rotate-left"></i>O vídeo foi apagado no fim do prazo de guarda. A foto, a análise e a decisão continuam aqui.</span>
+            {% else %}
+            <span><i class="fas fa-video-slash"></i>Sem vídeo deste alerta (agente antigo ou o vídeo não chegou). Reinstale o agente da loja para gravar os 3 minutos.</span>
+            {% endif %}
+        </div>
+        {% if quadros %}
+        <div class="ca-card ca-quadros">
+            <h2><i class="fas fa-images"></i>Linha do tempo</h2>
+            <div class="ca-quadros-lista">
+                {% for q in quadros %}
+                <button type="button" class="ca-quadro {% if q.segundo == 0 %}evento{% endif %}" data-ir="{{ q.no_video }}" aria-label="Ver o vídeo em {{ q.segundo }} segundos do alerta">
+                    <img loading="lazy" src="{% url 'cameras:alerta_quadro' alerta.id q.indice %}" alt="">
+                    <small>{% if q.segundo == 0 %}alerta{% elif q.segundo > 0 %}+{{ q.segundo }} s{% else %}{{ q.segundo }} s{% endif %}</small>
+                </button>
+                {% endfor %}
             </div>
-        </form>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="ca-coluna-lateral">
+        <section class="ca-card ca-ia" id="caIa" data-status="{{ alerta.ia_status }}" data-estado="{% url 'cameras:alerta_ia' alerta.id %}">
+            <h2><i class="fas fa-wand-magic-sparkles"></i>Análise da IA</h2>
+            {% if alerta.ia_status == 'FEITA' %}
+            <div class="ca-ia-topo">
+                <span class="ca-classe {{ alerta.ia_classificacao }}">{{ classificacao }}</span>
+                <span class="ca-ia-risco"><span class="ca-barra"><span style="width:{{ alerta.ia_risco }}%"></span></span>risco {{ alerta.ia_risco }}%</span>
+            </div>
+            <p class="ca-ia-resumo">{{ alerta.ia_resumo }}</p>
+            {% if analise.linha_do_tempo %}
+            <ol class="ca-ia-tempo">
+                {% for m in analise.linha_do_tempo %}<li><button type="button" data-ir-relativo="{{ m.segundo }}">{% if m.segundo > 0 %}+{% endif %}{{ m.segundo }} s</button>{{ m.o_que }}</li>{% endfor %}
+            </ol>
+            {% endif %}
+            <div class="ca-ia-sinais">
+                {% if analise.sinais_de_risco %}<div><strong class="risco"><i class="fas fa-triangle-exclamation"></i>Pesa contra</strong><ul>{% for x in analise.sinais_de_risco %}<li>{{ x }}</li>{% endfor %}</ul></div>{% endif %}
+                {% if analise.sinais_normais %}<div><strong class="normal"><i class="fas fa-circle-check"></i>Parece normal</strong><ul>{% for x in analise.sinais_normais %}<li>{{ x }}</li>{% endfor %}</ul></div>{% endif %}
+            </div>
+            {% if analise.conferir_no_video %}<p class="ca-ia-conferir"><strong>Confira no vídeo:</strong> {% for m in analise.conferir_no_video %}<button type="button" data-ir-relativo="{{ m.segundo }}">{% if m.segundo > 0 %}+{% endif %}{{ m.segundo }} s</button> {{ m.o_que }}{% if not forloop.last %}; {% endif %}{% endfor %}</p>{% endif %}
+            {% if analise.recomendacao %}<p class="ca-ia-recomendacao"><i class="fas fa-lightbulb"></i>{{ analise.recomendacao }}</p>{% endif %}
+            <p class="ca-ia-rodape">{{ alerta.ia_modelo }} · {{ alerta.ia_em|date:"d/m H:i" }}</p>
+            {% elif alerta.ia_status == 'PENDENTE' %}
+            <p class="ca-ia-andando"><i class="fas fa-spinner fa-spin"></i>Analisando os quadros do vídeo…</p>
+            {% elif alerta.ia_status == 'ERRO' %}
+            <p class="ca-vazio-texto">Não deu para analisar: {{ alerta.ia_erro|default:"erro desconhecido" }}</p>
+            {% elif alerta.video_status == 'AGUARDANDO' %}
+            <p class="ca-vazio-texto">A IA analisa assim que o vídeo chegar.</p>
+            {% else %}
+            <p class="ca-vazio-texto">Ainda sem análise.</p>
+            {% endif %}
+            {% if alerta.ia_status != 'PENDENTE' and alerta.video_status != 'AGUARDANDO' %}
+            <form method="post" action="{% url 'cameras:alerta_ia' alerta.id %}">{% csrf_token %}<button class="ca-botao claro pequeno"><i class="fas fa-rotate"></i>{% if alerta.ia_status == 'FEITA' %}Analisar de novo{% else %}Analisar com IA{% endif %}</button></form>
+            {% endif %}
+        </section>
+
+        <section class="ca-card ca-painel-lateral">
+            <dl>
+                <dt>Motivo</dt><dd>{{ alerta.motivo|default:"—" }}</dd>
+                <dt>Nota do detector da loja</dt><dd><span class="ca-barra"><span style="width:{{ alerta.confianca }}%"></span></span>{{ alerta.confianca }}%</dd>
+                <dt>O que o histórico diz</dt><dd><span class="ca-barra"><span style="width:{{ historico.chance }}%"></span></span>{{ historico.chance }}% de alertas assim se confirmaram
+                    <small class="ca-nota">{{ historico.decisoes_canal }} decisões nesta câmera, {{ historico.decisoes_loja }} na loja · rigor da câmera: {{ rigor }}{% if motivos_camera %} · falsos mais comuns: {% for m, n in motivos_camera %}{{ m|lower }} ({{ n }}){% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}</small></dd>
+                {% if medidas %}<dt>O que o detector mediu</dt><dd><ul class="ca-medidas">{% for k, v in medidas.items %}<li><span>{{ k|cut:"_"|capfirst }}</span><b>{% if v is True %}sim{% elif v is False %}não{% else %}{{ v }}{% endif %}</b></li>{% endfor %}</ul></dd>{% endif %}
+                {% if alerta.tratado_por %}<dt>Tratado por</dt><dd>{{ alerta.tratado_por.get_full_name }} em {{ alerta.tratado_em|date:"d/m/Y H:i" }}{% if alerta.motivo_falso %} · {{ alerta.get_motivo_falso_display }}{% endif %}</dd>{% endif %}
+            </dl>
+            <p class="ca-aviso-humano"><i class="fas fa-user-check"></i>A análise aponta movimento suspeito, não culpados. Confira o vídeo antes de falar com alguém.</p>
+            <form method="post" id="caDecisao">{% csrf_token %}
+                <label for="caObs">Observação</label>
+                <textarea id="caObs" name="observacao" rows="3" placeholder="O que foi visto na gravação">{{ alerta.observacao }}</textarea>
+                <fieldset class="ca-motivos" id="caMotivos" hidden>
+                    <legend>Por que foi falso alarme? <small>(a IA aprende com isso)</small></legend>
+                    {% for v, r in motivos_falso %}<label><input type="radio" name="motivo_falso" value="{{ v }}" {% if alerta.motivo_falso == v %}checked{% endif %}>{{ r }}</label>{% endfor %}
+                </fieldset>
+                <div class="ca-decisao">
+                    <button class="ca-botao claro" name="status" value="ANALISE">Em análise</button>
+                    <button class="ca-botao claro" name="status" value="FALSO" id="caFalso">Falso alarme</button>
+                    <button class="ca-botao perigo" name="status" value="CONFIRMADO">Confirmar furto</button>
+                </div>
+                <p class="ca-nota"><i class="fas fa-graduation-cap"></i>Confirmar ou marcar falso alarme ensina a análise desta câmera.</p>
+            </form>
+        </section>
     </div>
 </div>
+<script>
+(function () {
+    var video = document.getElementById('caVideo');
+    var evento = video ? Number(video.dataset.evento || 0) : 0;
+    function ir(segundo) {
+        if (!video) return;
+        video.currentTime = Math.max(0, segundo);
+        video.play().catch(function () {});
+        video.scrollIntoView({behavior: 'smooth', block: 'center'});
+    }
+    document.querySelectorAll('[data-ir]').forEach(function (b) { b.addEventListener('click', function () { ir(Number(b.dataset.ir)); }); });
+    document.querySelectorAll('[data-ir-relativo]').forEach(function (b) {
+        if (!video) { b.disabled = true; return; }
+        b.addEventListener('click', function () { ir(evento + Number(b.dataset.irRelativo)); });
+    });
+    if (video) video.addEventListener('loadedmetadata', function () { if (!video.currentTime) video.currentTime = Math.max(0, evento - 5); }, {once: true});
+
+    // "Falso alarme" pede o motivo antes de gravar.
+    var form = document.getElementById('caDecisao'), motivos = document.getElementById('caMotivos'), quem = null;
+    form.addEventListener('click', function (e) { if (e.target.name === 'status') quem = e.target.value; });
+    form.addEventListener('submit', function (e) {
+        if (quem !== 'FALSO') return;
+        if (!form.querySelector('input[name=motivo_falso]:checked')) {
+            e.preventDefault();
+            motivos.hidden = false;
+            motivos.querySelector('input').focus();
+        }
+    });
+    if (form.querySelector('input[name=motivo_falso]:checked')) motivos.hidden = false;
+
+    // Enquanto a IA analisa (ou o vídeo não chega), confere de tempos em tempos e recarrega quando mudar.
+    var caixa = document.getElementById('caIa');
+    var esperando = caixa.dataset.status === 'PENDENTE' || '{{ alerta.video_status }}' === 'AGUARDANDO';
+    if (esperando) {
+        var vezes = 0, inicial = caixa.dataset.status + '|{{ alerta.video_status }}';
+        var timer = setInterval(function () {
+            if (++vezes > 120) return clearInterval(timer);
+            fetch(caixa.dataset.estado, {credentials: 'same-origin'}).then(function (r) { return r.json(); }).then(function (j) {
+                if (j.status + '|' + j.video !== inicial) { clearInterval(timer); location.reload(); }
+            }).catch(function () {});
+        }, 5000);
+    }
+})();
+</script>
 {% endblock %}
