@@ -68,7 +68,48 @@ def gerar_token_visitante(cfg, nome, sala):
         moderador=False)
 
 
+def _servidor_proprio(cfg):
+    servidor = servidor_para(cfg)
+    return servidor not in (PUBLICO, SERVIDOR_JAAS)
+
+
+# XMPP_DOMAIN padrão do docker-jitsi-meet: o "sub" do token precisa bater com ele.
+DOMINIO_XMPP_PROPRIO = 'meet.jitsi'
+
+
+def _token_proprio(cfg, identificador, nome, email, moderador):
+    """JWT HS256 para um Jitsi próprio (AUTH_TYPE=jwt). None sem AppID/segredo: servidor aberto."""
+    import hashlib
+    import hmac
+
+    app_id = (getattr(cfg, 'jitsi_app_id', '') or '').strip()
+    segredo = (getattr(cfg, 'jitsi_app_secret', '') or '').strip()
+    if not (app_id and segredo):
+        return None
+    agora = int(time.time())
+    cabecalho = {'alg': 'HS256', 'typ': 'JWT'}
+    corpo = {
+        'aud': 'jitsi', 'iss': app_id, 'sub': DOMINIO_XMPP_PROPRIO, 'room': '*',
+        'exp': agora + VALIDADE_SEGUNDOS, 'nbf': agora - 10,
+        'moderator': bool(moderador),
+        'context': {'user': {'id': identificador, 'name': nome, 'email': email,
+                             'moderator': 'true' if moderador else 'false',
+                             'affiliation': 'owner' if moderador else 'member'}},
+    }
+    try:
+        partes = _b64(json.dumps(cabecalho, separators=(',', ':')).encode()) + b'.' + \
+                 _b64(json.dumps(corpo, separators=(',', ':')).encode())
+        assinatura = hmac.new(segredo.encode('utf-8'), partes, hashlib.sha256).digest()
+        return (partes + b'.' + _b64(assinatura)).decode('ascii')
+    except Exception as exc:                                    # noqa: BLE001
+        logger.error('Token do Jitsi próprio não pôde ser assinado: %s', exc)
+        return None
+
+
 def _assinar_token(cfg, sala, identificador, nome, email, moderador):
+    # Servidor próprio: o token do 8x8 não vale lá — assina com o segredo do servidor (ou nada).
+    if _servidor_proprio(cfg):
+        return _token_proprio(cfg, identificador, nome, email, moderador)
     app_id = (cfg.jaas_app_id or '').strip()
     key_id = (cfg.jaas_api_key_id or '').strip()
     pem = (cfg.jaas_chave_privada or '').strip()

@@ -18,7 +18,7 @@ from django.http import HttpResponse, JsonResponse
 
 from . import servicos
 from .models import AtividadeModelo, AtividadeRotina, ModeloRotina, RotinaGerencial, TipoAviso
-from .permissoes import e_superadmin
+from .permissoes import e_superadmin, pode_gerir
 from .servicos import ErroValidacao, NaoEncontrado, SemPermissao
 
 logger = logging.getLogger(__name__)
@@ -93,8 +93,8 @@ def rotina_do_alvo(request, valor):
     alvo_id = request.user.id if valor in (None, '') else _id(valor)
     if alvo_id is None:
         raise ErroValidacao('Pessoa inválida.')
-    if alvo_id != request.user.id and not e_superadmin(request.user):
-        raise SemPermissao('Só o SUPERADMIN mexe na rotina de outra pessoa.')
+    if alvo_id != request.user.id and not pode_gerir(request.user):
+        raise SemPermissao('Só a gestão da rotina mexe na rotina de outra pessoa.')
     rotina = RotinaGerencial.objects.select_related('user').filter(user_id=alvo_id).first()
     if rotina is None:
         if alvo_id == request.user.id:
@@ -109,7 +109,7 @@ def atividade_da_rotina(request, atividade_id):
     A de outra pessoa responde 404, e não 403, para não confirmar que existe.
     """
     qs = AtividadeRotina.objects.select_related('rotina', 'rotina__user')
-    if not e_superadmin(request.user):
+    if not pode_gerir(request.user):
         qs = qs.filter(rotina__user=request.user)
     atividade = qs.filter(pk=atividade_id).first()
     if atividade is None:
@@ -123,7 +123,7 @@ def atividade_da_rotina(request, atividade_id):
 @api('GET')
 def rotina_semana(request):
     rotina = rotina_do_alvo(request, request.GET.get('usuario'))
-    if not e_superadmin(request.user):
+    if not pode_gerir(request.user):
         servicos.conferir_rotina_ativa(rotina)
     return JsonResponse(servicos.payload_rotina(rotina, request.user))
 
@@ -153,8 +153,8 @@ def rotina_desfazer(request, atividade_id):
     """Tira a conclusão daquele dia — a pessoa, para refazer; o SUPERADMIN, para corrigir."""
     atividade = atividade_da_rotina(request, atividade_id)
     dona = atividade.rotina.user_id == request.user.id
-    if not dona and not e_superadmin(request.user):
-        raise SemPermissao('Só a pessoa da rotina ou o SUPERADMIN desfaz.')
+    if not dona and not pode_gerir(request.user):
+        raise SemPermissao('Só a pessoa da rotina ou a gestão desfaz.')
     if dona:
         servicos.conferir_rotina_ativa(atividade.rotina)
     servicos.desfazer_conclusao(atividade, request.POST.get('data'))
@@ -165,7 +165,7 @@ def rotina_desfazer(request, atividade_id):
 def rotina_criar(request):
     corpo = ler_json(request)
     rotina = rotina_do_alvo(request, corpo.get('usuario'))
-    admin = e_superadmin(request.user)
+    admin = pode_gerir(request.user)
     if not admin:
         servicos.conferir_rotina_ativa(rotina)
         if not rotina.pode_criar:
@@ -184,7 +184,7 @@ def rotina_criar(request):
 @api('POST')
 def rotina_atualizar(request, atividade_id):
     atividade = atividade_da_rotina(request, atividade_id)
-    admin = e_superadmin(request.user)
+    admin = pode_gerir(request.user)
     if not admin:
         # Antes de validar: quem tenta mexer no que está travado ouve "travada".
         servicos.conferir_edicao_da_pessoa(atividade)
@@ -209,7 +209,7 @@ def rotina_atualizar(request, atividade_id):
 def rotina_excluir(request, atividade_id):
     atividade = atividade_da_rotina(request, atividade_id)
     rotina = atividade.rotina
-    if not e_superadmin(request.user):
+    if not pode_gerir(request.user):
         servicos.conferir_edicao_da_pessoa(atividade)
         if not (atividade.criada_pela_pessoa and rotina.pode_criar):
             raise SemPermissao('Só dá para excluir atividades criadas por você.')
@@ -225,7 +225,8 @@ OPCOES_DA_ROTINA = ('ativa', 'pode_criar', 'avisar_whatsapp', 'com_domingo')
 @api('POST')
 def gestao_opcoes(request, user_id):
     """Os interruptores da rotina de uma pessoa, salvos na hora (lista de pessoas e editor)."""
-    exigir_superadmin(request)
+    if not pode_gerir(request.user):
+        raise SemPermissao('Só a gestão da rotina pode fazer isso.')
     rotina = RotinaGerencial.objects.select_related('user').filter(user_id=user_id).first()
     if rotina is None:
         raise NaoEncontrado('Esta pessoa não tem rotina gerencial.')

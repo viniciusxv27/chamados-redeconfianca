@@ -450,9 +450,10 @@ def _resumo_geral(user, args):
     return '\n'.join(linhas)
 
 
-# ─── Resultados comerciais (Parciais Vivo) — SÓ SUPERADMIN ───────────────────
-# Dado global da rede (não é dado "do usuário"), então fica atrás do mesmo
-# portão do menu: apenas SUPERADMIN. As abas do painel são endpoints livres
+# ─── Resultados comerciais (Parciais Vivo) ───────────────────────────────────
+# Dado global da rede (não é dado "do usuário"), então a visão completa fica
+# atrás do mesmo portão do menu: apenas SUPERADMIN. Os demais veem só os
+# próprios resultados (_meus_resultados), recortados aqui no servidor. As abas do painel são endpoints livres
 # (sem login); o assistente lê server-side e resume. Trocar a URL: PARCIAIS_URL.
 
 import re as _re  # usado só aqui, para limpar o HTML da aba Resultados
@@ -522,9 +523,140 @@ def _resumo_meta_dia(dados):
     return '\n'.join(linhas)
 
 
+def _nome_painel(texto):
+    """Como o painel escreve o nome (campo ``cn``): maiúsculas, sem acento, espaços simples."""
+    import unicodedata
+    base = unicodedata.normalize('NFKD', str(texto or ''))
+    return ' '.join(''.join(c for c in base if not unicodedata.combining(c)).upper().split())
+
+
+def _nomes_do_usuario(user):
+    return {n for n in (_nome_painel(getattr(user, 'full_name', '')), _nome_painel(user.get_full_name()))
+            if n}
+
+
+def _meus_microindicadores(user, data_ref):
+    """A linha do próprio usuário em /api/dados-microindicadores-cn — filtrada AQUI, nunca as dos outros."""
+    dados = _parciais_get(_PARCIAIS_MICRO['cn'], {'scope': 'rede', 'data_ref': data_ref})
+    linhas = dados.get('data') if isinstance(dados, dict) else dados
+    nomes = _nomes_do_usuario(user)
+    minhas = [l for l in (linhas or []) if isinstance(l, dict) and _nome_painel(l.get('cn')) in nomes]
+    periodo = dados.get('periodo') if isinstance(dados, dict) else None
+    return minhas, periodo
+
+
+def _meus_resultados(user, args):
+    """Resultados SÓ do próprio usuário (quem não é SUPERADMIN).
+
+    Três fontes, todas recortadas no servidor pelo nome completo dele: a linha
+    dele nos microindicadores do painel Parciais, o realizado dele por pilar no
+    mês (o mesmo MySQL de vendas do simulador, por vendedor) e as metas dele na
+    planilha de consultores (CN) do Power BI. Nada de loja, rede ou colega.
+    """
+    import datetime
+    data_ref = (args.get('data_ref') or '').strip()
+    if not _re.match(r'^\d{4}-\d{2}-\d{2}$', data_ref):
+        data_ref = datetime.date.today().isoformat()
+    nome = user.get_full_name() or getattr(user, 'full_name', '') or user.email
+    linhas = [f'SEUS RESULTADOS — {nome} (só os seus: loja e rede são restritas a SUPERADMIN)']
+    achou_algo = False
+
+    # 1) Microindicadores (documentos por produto) — painel Parciais.
+    try:
+        minhas, periodo = _meus_microindicadores(user, data_ref)
+        if minhas:
+            achou_algo = True
+            cab = 'Microindicadores do mês (documentos por produto)'
+            if periodo:
+                cab += f' · período {periodo if isinstance(periodo, str) else json.dumps(periodo, ensure_ascii=False)}'
+            linhas.append(cab + ':')
+            for l in minhas[:2]:
+                itens = [f'{k.replace("_", " ")} {v}' for k, v in sorted(l.items()) if k not in ('cn', 'loja')]
+                linhas.append(f'  {", ".join(itens)}')
+        else:
+            linhas.append('Microindicadores: seu nome não aparece na lista de consultores do painel Parciais '
+                          f'(procurei por "{" / ".join(sorted(_nomes_do_usuario(user))) or nome}").')
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('Parciais (meus microindicadores) falhou: %s', exc)
+        linhas.append('Microindicadores: o painel Parciais não respondeu agora.')
+
+    # 2) Realizado do mês por pilar (MySQL de vendas, até ontem) e 3) metas do Power BI.
+    realizado = {}
+    try:
+        from simulator.sql_realizado import get_realized_sales_from_mysql, realized_prefetch
+        with realized_prefetch():
+            realizado = get_realized_sales_from_mysql(vendor=user.get_full_name() or user.first_name or user.email) or {}
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('Realizado por vendedor falhou: %s', exc)
+        linhas.append('Realizado por pilar: a base de vendas não respondeu agora.')
+
+    metas = {}
+    competencia = ''
+    try:
+        from power_bi import views as pv
+        from power_bi.models import GoalEntry, GoalUpload
+        from simulator.services import POWER_BI_PILAR_MAP
+        upload = GoalUpload.objects.order_by('-year', '-month', '-updated_at').first()
+        if upload is not None:
+            competencia = f'{upload.month:02d}/{upload.year}'
+            tokens = {pv._normalize_text(x) for x in (getattr(user, 'full_name', ''), user.get_full_name())} - {''}
+            for e in GoalEntry.objects.filter(upload=upload, sheet_type=GoalEntry.SHEET_CN_REAL):
+                if pv._normalize_text(e.user_name) in tokens and e.goal_value is not None:
+                    chave = POWER_BI_PILAR_MAP.get(str(e.pilar or '').strip().upper(), _normal_pilar(e.pilar))
+                    metas[chave] = metas.get(chave, 0) + float(e.goal_value)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('Metas do próprio usuário falharam: %s', exc)
+
+    rotulos = [('movel', 'Móvel'), ('fixa', 'Fixa'), ('smartphones', 'Smartphones'), ('eletronicos', 'Eletrônicos'),
+               ('essenciais', 'Essenciais'), ('seguros', 'Seguros'), ('sva', 'SVA')]
+    tem_real = any(float(realizado.get(k) or 0) for k, _ in rotulos) or float(realizado.get('fixa_qty') or 0)
+    if tem_real or metas:
+        achou_algo = True
+        linhas.append('Por pilar no mês (realizado até ontem' + (f' · metas da competência {competencia}' if metas else '')
+                      + '):')
+        for chave, rotulo in rotulos:
+            if chave == 'fixa':
+                feito = float(realizado.get('fixa_qty') or 0)
+                txt = f'{feito:.0f} venda(s)' + (f' ({_brl(realizado.get("fixa"))})' if realizado.get('fixa') else '')
+            else:
+                feito = float(realizado.get(chave) or 0)
+                txt = _brl(feito)
+            meta = metas.get(chave)
+            if meta is None and not feito:
+                continue
+            extra = ''
+            if meta:
+                extra = f' · meta {meta:.0f}' if chave == 'fixa' else f' · meta {_brl(meta)}'
+                extra += f' · {feito / meta * 100:.1f}%'.replace('.', ',')
+            linhas.append(f'  {rotulo}: {txt}{extra}')
+    elif realizado:
+        linhas.append('Realizado por pilar: nenhuma venda sua encontrada na base deste mês (até ontem) — confira se o '
+                      'nome do cadastro é igual ao do sistema de vendas.')
+    if not metas and competencia:
+        linhas.append(f'Metas: seu nome não aparece na planilha de consultores da competência {competencia}.')
+    if not achou_algo:
+        linhas.append('Não encontrei resultados com o seu nome. Se você vende, confira com o RH se o nome do '
+                      'cadastro está igual ao do sistema de vendas.')
+    linhas.append('Para comissão e projeção do mês, use simulador_consultar.')
+    return '\n'.join(linhas)
+
+
+def _normal_pilar(p):
+    return _nome_painel(p).lower()
+
+
+def _brl(v):
+    try:
+        texto = f'{float(v or 0):,.2f}'
+    except (TypeError, ValueError):
+        return '—'
+    return 'R$ ' + texto.replace(',', '_').replace('.', ',').replace('_', '.')
+
+
 def _resultados_comerciais(user, args):
     if not _e_superadmin(user):
-        return 'Os resultados comerciais da rede são restritos a SUPERADMIN.'
+        # Quem não é SUPERADMIN vê só os próprios resultados — aba e scope não abrem nada além disso.
+        return _meus_resultados(user, args)
 
     import datetime
     aba = (args.get('aba') or 'resumo').strip().lower().replace(' ', '_').replace('-', '_')
@@ -675,8 +807,10 @@ TOOLS = {
     'resultados_comerciais': {
         'fn': _resultados_comerciais,
         'description': (
-            'Resultados comerciais da rede (painel Parciais Vivo) — SÓ para SUPERADMIN. '
-            'Lê ao vivo qualquer aba do painel e traz os números. Use o parâmetro "aba": '
+            'Resultados comerciais (painel Parciais Vivo). Para quem NÃO é SUPERADMIN, devolve só os resultados '
+            'DO PRÓPRIO usuário (a linha dele nos microindicadores, o realizado dele por pilar no mês e as metas dele '
+            'de consultor), sem loja, rede ou colegas — aba e scope são ignorados. Para SUPERADMIN, '
+            'lê ao vivo qualquer aba do painel e traz os números. Use o parâmetro "aba": '
             '"resumo" (visão geral do dia por pilar: móvel, fixa, smartphone, eletrônicos, '
             'essenciais, seguro, sva — realizado x meta e atingimento), "resultados" '
             '(ranking completo por loja em cada pilar), "meta_dia", "banda_larga" '
@@ -702,6 +836,13 @@ TOOLS.update(TOOLS_IMPULSO)
 # O portal inteiro (leitura, como a própria pessoa vê) e os documentos que o assistente cria.
 from .ferramentas_portal import TOOLS_PORTAL  # noqa: E402
 TOOLS.update(TOOLS_PORTAL)
+# Ponto, Simulador e Vendas: só leitura, com o recorte de cada módulo (ver cada arquivo).
+from .ferramentas_ponto import TOOLS as TOOLS_PONTO  # noqa: E402
+from .ferramentas_simulador import TOOLS as TOOLS_SIMULADOR  # noqa: E402
+from .ferramentas_vendas import TOOLS as TOOLS_VENDAS  # noqa: E402
+TOOLS.update(TOOLS_PONTO)
+TOOLS.update(TOOLS_SIMULADOR)
+TOOLS.update(TOOLS_VENDAS)
 
 
 # ─── Ações com confirmação ───────────────────────────────────────────────────

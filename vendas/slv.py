@@ -684,7 +684,7 @@ def registrar_venda(dados, usuario, loja, vendedor=None):
         rotulo = tipos[tipo]
         reg = dict(tipo=tipo, rotulo=rotulo, plano=None, plano_anterior=None, segmentacao='', valor_anterior=None,
                    adicional=None, serial='', novo_titular_cpf='', novo_titular_nome='', numero_novo='',
-                   ativacao=False, valor=ZERO, fora=None, sem_plano=False)
+                   ativacao=False, valor=ZERO, fora=None, sem_plano=False, portabilidade=False, operadora='')
         if tipo in ('ALTA', 'REATIVACAO', 'TROCA_PLANO', 'MIGRACAO', 'TROCA_SIMCARD', 'TROCA_TITULARIDADE'):
             plano = Plano.objects.filter(pk=s.get('plano_id')).first() if str(s.get('plano_id') or '').isdigit() else None
             if plano is None:
@@ -739,6 +739,12 @@ def registrar_venda(dados, usuario, loja, vendedor=None):
             if not str(s.get('novo_titular_nome') or '').strip():
                 erros.append('Troca de titularidade: informe o nome do novo titular.')
             reg.update(novo_titular_cpf=novo, novo_titular_nome=str(s.get('novo_titular_nome') or '').strip()[:200])
+        if tipo == 'ALTA' and s.get('portabilidade'):
+            # Alta por portabilidade: a operadora de onde o número veio é obrigatória (09/11/2026).
+            operadora = str(s.get('operadora_origem') or '').strip().upper()
+            if operadora not in dict(VendaServico.OPERADORAS):
+                erros.append('Alta: é portabilidade — escolha a operadora de origem (Claro, Oi, Tim ou Outros).')
+            reg.update(portabilidade=True, operadora=operadora if operadora in dict(VendaServico.OPERADORAS) else '')
         if tipo == 'TROCA_NUMERO':
             novo = so_digitos(s.get('numero_novo'))
             if not telefone_valido(novo):
@@ -797,7 +803,8 @@ def registrar_venda(dados, usuario, loja, vendedor=None):
                 ativacao_confirmada=s['ativacao'], novo_titular_cpf=s['novo_titular_cpf'],
                 novo_titular_nome=s['novo_titular_nome'],
                 numero_anterior=(linhas_cliente[0] if s['tipo'] == 'TROCA_NUMERO' and linhas_cliente else ''),
-                numero_novo=s['numero_novo'])
+                numero_novo=s['numero_novo'], portabilidade=s['portabilidade'],
+                operadora_origem=s['operadora'])
             if s['plano'] and s['tipo'] != 'TROCA_TITULARIDADE':
                 ultimo_plano = s['plano']
             if s['tipo'] == 'TROCA_NUMERO':

@@ -884,12 +884,23 @@
         const lista = $('vdForaLista');
         if (lista && !e.target.closest('#vdForaLista') && e.target.id !== 'vdForaBusca') lista.classList.add('hidden');
     });
+    // Alta por portabilidade (09/11/2026): marca e escolhe de qual operadora o número veio.
+    const OPERADORAS = [['CLARO', 'Claro'], ['OI', 'Oi'], ['TIM', 'Tim'], ['OUTROS', 'Outros']];
+    function campoPortabilidade() {
+        return '<div class="rounded-lg border border-violet-100 bg-violet-50/50 p-3 space-y-2">' +
+            '<label class="flex items-center gap-2 text-sm font-medium text-gray-800 cursor-pointer"><input type="checkbox" class="rounded" data-f="portabilidade"> É portabilidade?</label>' +
+            '<div class="hidden" data-portabilidade><p class="vd-rotulo">Operadora de origem *</p><div class="flex flex-wrap gap-2">' +
+            OPERADORAS.map(function (o) {
+                return '<label class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-sm cursor-pointer has-[:checked]:border-violet-500 has-[:checked]:bg-violet-50">' +
+                    '<input type="radio" name="vdOperadora" value="' + o[0] + '" data-f="operadora"> ' + o[1] + '</label>';
+            }).join('') + '</div></div></div>';
+    }
     function desenharCamposServico() {
         const t = $('vdTipoServico').value, c = $('vdCamposServico');
         // [IU001] trocar o serviço limpa os campos dependentes.
         let html = '';
         const todos = ['POS', 'CONTROLE', 'PRE', 'EMPRESAS', 'FIBRA'];
-        if (t === 'ALTA') html = seletorPlano('Segmentação e plano *', 'novo', todos);
+        if (t === 'ALTA') html = seletorPlano('Segmentação e plano *', 'novo', todos) + campoPortabilidade();
         if (t === 'REATIVACAO') html = seletorPlano('Segmentação e plano *', 'novo', ['POS', 'CONTROLE']) + campoSemPlano() + '<div data-plano-antigo class="space-y-3">' + campoPlanoFora() + '</div>';
         if (t === 'TROCA_PLANO' || t === 'MIGRACAO') {
             html = campoSemPlano() + '<div data-plano-antigo class="space-y-3"><div class="rounded-lg bg-gray-50 p-3 text-sm" id="vdAntPlanoInfo"></div>' +
@@ -922,6 +933,12 @@
     }
     $('vdTipoServico').addEventListener('change', desenharCamposServico);
     $('vdCamposServico').addEventListener('change', function (e) {
+        if (e.target.dataset.f === 'portabilidade') {
+            const bloco = $('vdCamposServico').querySelector('[data-portabilidade]');
+            if (bloco) bloco.classList.toggle('hidden', !e.target.checked);
+            if (!e.target.checked) $('vdCamposServico').querySelectorAll('[data-f=operadora]').forEach(function (r) { r.checked = false; });
+            return;
+        }
         if (e.target.dataset.f === 'sem_plano') {
             const bloco = $('vdCamposServico').querySelector('[data-plano-antigo]');
             if (bloco) bloco.classList.toggle('hidden', e.target.checked);
@@ -940,12 +957,16 @@
                    servico_adicional_id: v('[data-f=adicional]'), novo_titular_cpf: so(v('[data-f=titular_cpf]')),
                    novo_titular_nome: v('[data-f=titular_nome]'), numero_novo: so(v('[data-f=numero_novo]')), ativacao_confirmada: false,
                    plano_fora_id: v('[data-f=fora]')};
+        const porta = c.querySelector('[data-f=portabilidade]'), operadora = c.querySelector('[data-f=operadora]:checked');
+        s.portabilidade = !!(porta && porta.checked);
+        s.operadora_origem = s.portabilidade && operadora ? operadora.value : '';
         const semPlano = c.querySelector('[data-f=sem_plano]');
         s.sem_plano = !!(semPlano && semPlano.checked);
         if (s.sem_plano) { s.plano_anterior_id = ''; s.plano_fora_id = ''; }
         else if (foraEscolhido && s.plano_fora_id) s.plano_fora = foraEscolhido;
         const erro = [];
         if (['ALTA', 'REATIVACAO', 'TROCA_PLANO', 'MIGRACAO', 'TROCA_SIMCARD', 'TROCA_TITULARIDADE'].indexOf(t) >= 0 && !s.plano_id) erro.push('Escolha a segmentação e o plano.');
+        if (t === 'ALTA' && s.portabilidade && !s.operadora_origem) erro.push('É portabilidade: escolha a operadora de origem.');
         if (t === 'TROCA_SIMCARD' && !/^89\d{17,18}$/.test(s.serial)) erro.push('Serial do SimCard: 19 ou 20 números começando por 89.');
         if ((t === 'SEGURO' || t === 'SVA') && !s.servico_adicional_id) erro.push('Escolha o serviço contratado.');
         if (t === 'TROCA_TITULARIDADE' && !cpfValido(s.novo_titular_cpf)) erro.push('CPF do novo titular inválido.');
@@ -973,6 +994,7 @@
         s.rotulo = TIPOS[s.tipo]; s.plano_nome = plano ? plano.nome : ''; s.valor = plano ? Number(plano.valor) : (adic ? Number(adic.valor) : 0);
         s.descricao = plano ? (SEG[plano.segmentacao] + ' · ' + plano.nome) : (adic ? adic.nome : (s.numero_novo ? 'Novo número ' + mascaraTel(s.numero_novo) : ''));
         s.valor_anterior = s.sem_plano ? 0 : (s.plano_fora ? Number(s.plano_fora.valor) : (ant ? Number(ant.valor) : num($('vdPaValor').value)));
+        if (s.portabilidade) s.descricao += ' · portabilidade (' + ((OPERADORAS.find(function (o) { return o[0] === s.operadora_origem; }) || [0, ''])[1]) + ')';
         if (s.sem_plano) s.descricao += ' · antes: cliente sem plano';
         if (s.plano_fora) s.descricao += ' · antes: ' + s.plano_fora.nome + ' (fora do portfólio)';
         estado.servicos.push(s);

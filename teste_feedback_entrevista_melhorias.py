@@ -142,6 +142,30 @@ t('enviar de novo atualiza, não duplica', ExitInterviewResponse.objects.filter(
   and ExitInterviewResponse.objects.get(user=saindo).answers['choice']['motivo_desligamento'] == 'Fixo')
 t('e a tela diz que atualizou', 'atualizada' in r.content.decode())
 
+print('Motivo "Outros" (09/11)')
+t('"Outros" é a última opção do motivo real', motivo['options'][-1] == 'Outros' and motivo.get('outro_texto'))
+h = c.get('/feedback/entrevista-desligamento/').content.decode()
+t('o formulário tem a caixa do "Outros"', 'data-outro-de="motivo_desligamento"' in h and 'name="motivo_desligamento__outro"' in h)
+r = c.post('/feedback/entrevista-desligamento/', respostas(motivo_desligamento='Outros'), follow=True)
+t('"Outros" sem texto não registra', 'Responda todas as perguntas obrigatórias' in r.content.decode()
+  and ExitInterviewResponse.objects.get(user=saindo).answers['choice']['motivo_desligamento'] == 'Fixo')
+c.post('/feedback/entrevista-desligamento/', respostas(motivo_desligamento='Outros',
+       motivo_desligamento__outro='  Mudou de cidade com a família  '))
+ans = ExitInterviewResponse.objects.get(user=saindo).answers
+t('"Outros" com texto grava o motivo escrito', ans['choice']['motivo_desligamento'] == 'Outros'
+  and ans['outro']['motivo_desligamento'] == 'Mudou de cidade com a família', ans.get('outro'))
+c.post('/feedback/entrevista-desligamento/', respostas(motivo_desligamento='Fixo', motivo_desligamento__outro='sobrou'))
+t('texto do "Outros" não fica quando o motivo é outro', 'outro' not in ExitInterviewResponse.objects.get(user=saindo).answers)
+c.post('/feedback/entrevista-desligamento/', respostas(motivo_desligamento='Outros',
+       motivo_desligamento__outro='Mudou de cidade com a família'))
+h = c.get('/feedback/entrevista-desligamento/relatorio/').content.decode()
+t('o relatório mostra o motivo escrito', 'Mudou de cidade com a família' in h)
+import io, openpyxl
+wb = openpyxl.load_workbook(io.BytesIO(c.get('/feedback/entrevista-desligamento/relatorio/exportar/').content))
+t('o Excel leva "Outros: <motivo>"', any('Outros: Mudou de cidade com a família' == str(v)
+                                         for ws in wb for row in ws.iter_rows(values_only=True) for v in row))
+c.post('/feedback/entrevista-desligamento/', respostas(motivo_desligamento='Fixo'))
+
 print('Duplicados antigos')
 outro = User.objects.create_user(username='zze.dup', email='zze.dup@exemplo-teste.local', password='S3nha!teste',
                                  first_name='ZZE', last_name='Dup', sector=sp)

@@ -69,6 +69,31 @@
                     vale o aviso acima.
                 </p>
             </div>
+            {% comment %}Jitsi próprio com JWT (reunioes/jaas.py _token_proprio). Passo a passo do servidor: deploy/jitsi/LEIA-ME.md.{% endcomment %}
+            {% if servidor_proprio %}
+            <p class="text-xs p-3 rounded-lg {% if proprio_assinado %}bg-green-50 text-green-800{% else %}bg-amber-50 text-amber-800{% endif %}">
+                <i class="fas {% if proprio_assinado %}fa-circle-check{% else %}fa-circle-info{% endif %} mr-1"></i>
+                Salas abrindo em <strong>{{ servidor_em_uso }}</strong>, sem limite de usuários.
+                {% if proprio_assinado %}A entrada é assinada pelo portal (o 8x8 não é usado).{% else %}Sem AppID e segredo, o servidor precisa estar aberto (sem autenticação).{% endif %}
+            </p>
+            {% endif %}
+            <div class="grid sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">AppID do servidor (JWT_APP_ID)</label>
+                    <input type="text" name="jitsi_app_id" value="{{ cfg.jitsi_app_id }}" placeholder="redeconfianca"
+                           class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Segredo (JWT_APP_SECRET)</label>
+                    <input type="text" name="jitsi_app_secret" autocomplete="off"
+                           value="{% if cfg.jitsi_app_secret %}•••••••• segredo guardado{% endif %}"
+                           placeholder="{{ segredo_sugerido }}"
+                           class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono">
+                    {% if cfg.jitsi_app_secret %}<label class="flex items-center gap-1.5 text-[11px] text-gray-500 mt-1"><input type="checkbox" name="jitsi_apagar_segredo"> apagar o segredo guardado</label>
+                    {% else %}<p class="text-[11px] text-gray-400 mt-1">Sugestão (use o mesmo no servidor): <code class="select-all">{{ segredo_sugerido }}</code></p>{% endif %}
+                </div>
+            </div>
+            <p class="text-[11px] text-gray-400">Com AppID e segredo, só entra quem vem pelo portal (ou pelo link de visitante). O servidor próprio não tem limite de usuários — o passo a passo para instalar está em <code>deploy/jitsi/LEIA-ME.md</code>.</p>
         </div>
 
         <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-4">

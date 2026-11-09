@@ -81,10 +81,85 @@ def testar(request):
 
 
 def tem_modo_claude(user):
-    """Quem já tinha o Assistente Claude: o SUPERADMIN (menu) ou quem conectou a própria chave."""
+    """Quem tem o Assistente Claude: o SUPERADMIN (menu), quem conectou a própria chave ou —
+    com a chave da empresa configurada — todo mundo."""
     if user.is_superuser or getattr(user, 'hierarchy', '') == 'SUPERADMIN':
         return True
-    return AssistenteConexao.objects.filter(user=user).exclude(api_key_cifrada='').exists()
+    return claude_client.pode_usar(user)
+
+
+def _e_superadmin(user):
+    return bool(user.is_superuser or getattr(user, 'hierarchy', '') == 'SUPERADMIN')
+
+
+@login_required
+@require_POST
+def empresa_salvar(request):
+    """SUPERADMIN: chave da empresa (para todos). Testa antes de gravar; em branco só troca o modelo."""
+    from .models import ChaveClaudeEmpresa
+    voltar = request.POST.get('voltar') or 'settings'
+    if not _e_superadmin(request.user):
+        messages.error(request, 'Só o SUPERADMIN configura a chave da empresa.')
+        return redirect(voltar)
+    empresa = ChaveClaudeEmpresa.get()
+    chave = (request.POST.get('api_key') or '').strip()
+    modelo = (request.POST.get('modelo') or empresa.modelo or MODELO_PADRAO).strip()
+    if modelo not in MODELOS_VALIDOS:
+        modelo = MODELO_PADRAO
+    if not chave:
+        if not empresa.configurada:
+            messages.error(request, 'Cole a chave da Anthropic (começa com "sk-ant-").')
+            return redirect(voltar)
+        empresa.modelo = modelo
+        empresa.save(update_fields=['modelo'])
+        messages.success(request, 'Modelo da chave da empresa atualizado.')
+        return redirect(voltar)
+    ok, msg = claude_client.testar_chave(chave, modelo)
+    if not ok:
+        messages.error(request, f'A chave da empresa não foi salva: {msg}')
+        return redirect(voltar)
+    empresa.set_api_key(chave, request.user)
+    empresa.modelo = modelo
+    empresa.ultimo_ok_em = timezone.now()
+    empresa.save()
+    messages.success(request, 'Chave da empresa salva: a partir de agora todos usam esta no Assistente Claude.')
+    return redirect(voltar)
+
+
+@login_required
+@require_POST
+def empresa_remover(request):
+    from .models import ChaveClaudeEmpresa
+    voltar = request.POST.get('voltar') or 'settings'
+    if not _e_superadmin(request.user):
+        messages.error(request, 'Só o SUPERADMIN configura a chave da empresa.')
+        return redirect(voltar)
+    empresa = ChaveClaudeEmpresa.get()
+    empresa.set_api_key('')
+    empresa.save()
+    messages.success(request, 'Chave da empresa removida. Cada um volta a usar a própria chave.')
+    return redirect(voltar)
+
+
+@login_required
+@require_POST
+def empresa_testar(request):
+    from .models import ChaveClaudeEmpresa
+    voltar = request.POST.get('voltar') or 'settings'
+    if not _e_superadmin(request.user):
+        return redirect(voltar)
+    empresa = ChaveClaudeEmpresa.get()
+    if not empresa.configurada:
+        messages.error(request, 'Nenhuma chave da empresa configurada.')
+        return redirect(voltar)
+    ok, msg = claude_client.testar_chave(empresa.get_api_key(), empresa.modelo)
+    if ok:
+        empresa.ultimo_ok_em = timezone.now()
+        empresa.save(update_fields=['ultimo_ok_em'])
+        messages.success(request, f'Chave da empresa: {msg}')
+    else:
+        messages.error(request, f'Chave da empresa: {msg}')
+    return redirect(voltar)
 
 
 @login_required
@@ -96,6 +171,7 @@ def chat(request):
     historico = list(AssistenteMensagem.objects.filter(user=request.user).order_by('criado_em'))
     return render(request, 'assistente/chat.html', {
         'conexao': conx,
+        'pode_usar': claude_client.pode_usar(request.user),
         'modelos': MODELOS,
         'historico': historico[-60:],
     })
@@ -105,8 +181,7 @@ def chat(request):
 @require_POST
 def enviar(request):
     """Recebe a mensagem, roda o assistente e devolve a resposta (JSON)."""
-    conx = claude_client.conexao(request.user)
-    if not conx.conectado:
+    if not claude_client.pode_usar(request.user):
         return JsonResponse({'erro': 'Conecte o seu Claude em Configurações primeiro.',
                              'precisa_conectar': True}, status=400)
 
@@ -142,8 +217,8 @@ def enviar(request):
 @login_required
 def colaborador_estado(request):
     """O que a janelinha precisa saber. Só é pedido ao abrir: a página não paga por isto."""
-    conectado = AssistenteConexao.objects.filter(user=request.user).exclude(api_key_cifrada='').exists()
-    return JsonResponse({'claude': conectado,
+    conectado = claude_client.pode_usar(request.user)
+    return JsonResponse({'claude': conectado, 'chave_empresa': claude_client.empresa_configurada(),
                          'pagina_claude': reverse('assistente:chat') if tem_modo_claude(request.user) else ''})
 
 

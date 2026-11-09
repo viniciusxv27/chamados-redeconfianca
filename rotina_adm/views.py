@@ -15,7 +15,7 @@ from communications.models import CommunicationGroup
 from users.models import Sector, User
 
 from . import servicos
-from .models import AcessoRotinaAdm, ItemChecklist, MarcacaoChecklist
+from .models import AcessoRotinaAdm, ConfiguracaoRotinaAdm, ItemChecklist, MarcacaoChecklist
 from .permissoes import e_superadmin, exige_acesso, papel, pode_gerir
 
 MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro',
@@ -58,6 +58,7 @@ def painel(request):
         'loja': loja, 'gestor': gestor, 'papel': papel(request.user), 'superadmin': e_superadmin(request.user),
         'hoje': hoje, 'hoje_extenso': f'{DIAS[hoje.weekday()]}, {hoje.day} de {MESES[hoje.month - 1]} de {hoje.year}',
         'lojas': servicos.lojas() if gestor else [], 'lvut': servicos.LVUT_EXEMPLO, 'aba': 'painel',
+        'link_grupo_adm': ConfiguracaoRotinaAdm.get().link_grupo_whatsapp,
     }
     if loja is not None:
         chamados = servicos.chamados_abertos(loja)
@@ -183,6 +184,15 @@ def acessos(request):
         papel_novo = request.POST.get('papel')
         if papel_novo not in dict(AcessoRotinaAdm.PAPEIS):
             papel_novo = AcessoRotinaAdm.VISUALIZADOR
+        if acao == 'link_grupo':
+            link = (request.POST.get('link_grupo_whatsapp') or '').strip()[:300]
+            if link and not link.lower().startswith('https://'):
+                messages.error(request, 'Cole o link completo do grupo (começa com https://chat.whatsapp.com/).')
+            else:
+                ConfiguracaoRotinaAdm.objects.filter(pk=ConfiguracaoRotinaAdm.get().pk).update(
+                    link_grupo_whatsapp=link, atualizado_por=request.user, atualizado_em=timezone.now())
+                messages.success(request, 'Link do grupo salvo.' if link else 'Link do grupo removido.')
+            return redirect('rotina_adm:acessos')
         if acao == 'adicionar':
             alvo = request.POST.get('alvo') or ''
             tipo, _, pk = alvo.partition(':')
@@ -213,6 +223,7 @@ def acessos(request):
     usados_g = {a.grupo_id for a in lista if a.grupo_id}
     return render(request, 'rotina_adm/acessos.html', {
         'acessos': lista, 'papeis': AcessoRotinaAdm.PAPEIS, 'superadmin': True, 'gestor': True, 'aba': 'acessos',
+        'link_grupo_adm': ConfiguracaoRotinaAdm.get().link_grupo_whatsapp,
         'usuarios': User.objects.filter(is_active=True).exclude(pk__in=usados_u).select_related('sector')
                                 .order_by('first_name', 'last_name'),
         'grupos': CommunicationGroup.objects.exclude(pk__in=usados_g).order_by('name'),

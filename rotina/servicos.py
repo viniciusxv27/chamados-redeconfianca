@@ -20,7 +20,7 @@ from .models import (
     AtividadeModelo, AtividadeRotina, AvisoRotina, Categoria, ConclusaoAtividade, ModeloRotina,
     TipoAviso, erros_de_horario,
 )
-from .permissoes import e_superadmin
+from .permissoes import pode_gerir
 
 logger = logging.getLogger(__name__)
 
@@ -189,13 +189,13 @@ def nome_de(user):
 def permissoes_da_atividade(user, atividade, rotina=None):
     """O que `user` pode fazer com uma atividade de rotina.
 
-    - SUPERADMIN: tudo.
+    - SUPERADMIN e gestor da rotina (GestorRotina): tudo.
     - A dona da rotina (ativa): move e muda a duração das que não estão
       travadas; renomeia e apaga só as que ela mesma criou, e só enquanto a
       rotina permitir criar.
     - Qualquer outra pessoa: nada.
     """
-    if e_superadmin(user):
+    if pode_gerir(user):
         return {'pode_mover': True, 'pode_editar': True, 'pode_excluir': True}
     rotina = rotina or atividade.rotina
     dona = bool(user and user.is_authenticated and rotina.user_id == user.id and rotina.ativa)

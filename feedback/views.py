@@ -945,7 +945,13 @@ EXIT_TIPOS_SAIDA = ['Pedido de demissão', 'Dispensa pela empresa', 'Término do
                     'Acordo entre as partes', 'Justa causa']
 EXIT_MOTIVOS_REAIS = ['Nova oportunidade de trabalho', 'Concorrente', 'Salário/benefícios', 'Fixo',
                       'Falta de reconhecimento', 'Falta de perspectiva de crescimento', 'Problemas com liderança',
-                      'Clima de equipe', 'Onboarding', 'Desempenho/metas', 'Questões pessoais']
+                      'Clima de equipe', 'Onboarding', 'Desempenho/metas', 'Questões pessoais', 'Outros']
+# "Outros" (09/11/2026): quem não se enquadra em nenhum motivo escreve o seu. Pergunta de
+# escolha com 'outro_texto' abre uma caixa quando EXIT_OUTROS é marcado; o texto fica em
+# answers['outro'][chave] e é obrigatório.
+EXIT_OUTROS = 'Outros'
+EXIT_OUTRO_SUFIXO = '__outro'
+EXIT_OUTRO_MAX = 500
 # Antes de 28/10/2026 "Fui desligado pela empresa" era uma opção do motivo.
 EXIT_MOTIVO_ANTIGO_DESLIGADO = 'Fui desligado pela empresa'
 EXIT_MOTIVO_NAO_REGISTRADO = 'Não registrado (entrevista antiga)'
@@ -992,7 +998,7 @@ EXIT_INTERVIEW_SECTIONS = [
              'label': 'Qual foi o tipo de saída?', 'options': EXIT_TIPOS_SAIDA},
             {'key': 'motivo_desligamento', 'type': 'choice', 'required': True,
              'label': 'Qual o motivo real da saída? (o que de fato pesou, mesmo quando a empresa desligou)',
-             'options': EXIT_MOTIVOS_REAIS},
+             'options': EXIT_MOTIVOS_REAIS, 'outro_texto': True},
             {'key': 'o_que_faria_ficar', 'type': 'paragraph', 'required': False,
              'label': 'O que te faria ficar?'},
             {'key': 'nota_treinamentos', 'type': 'scale', 'required': True,
@@ -1217,6 +1223,12 @@ def exit_interview(request):
                     missing.append(question['key'])
                     continue
                 answers['choice'][question['key']] = raw
+                if question.get('outro_texto') and raw == EXIT_OUTROS:
+                    outro = (request.POST.get(f"{question['key']}{EXIT_OUTRO_SUFIXO}") or '').strip()
+                    if not outro:
+                        missing.append(question['key'])
+                        continue
+                    answers.setdefault('outro', {})[question['key']] = outro[:EXIT_OUTRO_MAX]
             else:  # text / paragraph
                 if not raw and question['required']:
                     missing.append(question['key'])
@@ -1618,7 +1630,8 @@ def _build_exit_report_context(request):
                 items.append({'label': q['label'], 'value': scale[k], 'kind': 'scale',
                               'obs': scale_obs.get(k, '')})
             elif q['type'] == 'choice' and k in choice:
-                items.append({'label': q['label'], 'value': choice[k], 'kind': 'choice'})
+                items.append({'label': q['label'], 'value': choice[k], 'kind': 'choice',
+                              'outro': (ans.get('outro') or {}).get(k, '')})
             elif q['type'] in ('text', 'paragraph') and text.get(k):
                 items.append({'label': q['label'], 'value': text[k], 'kind': 'text'})
         response_rows.append({
@@ -1802,7 +1815,9 @@ def exit_interview_report_export(request):
             if tipo == 'scale':
                 linha.append((ans.get('scale_obs', {}) if obs else ans.get('scale', {})).get(chave, ''))
             elif tipo == 'choice':
-                linha.append(ans.get('choice', {}).get(chave, ''))
+                valor = ans.get('choice', {}).get(chave, '')
+                outro = (ans.get('outro') or {}).get(chave, '')
+                linha.append(f'{valor}: {outro}' if outro else valor)
             else:
                 linha.append(ans.get('text', {}).get(chave, ''))
         ws.append(linha)

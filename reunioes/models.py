@@ -40,6 +40,16 @@ class ConfiguracaoReunioes(models.Model):
         blank=True, verbose_name='JaaS — chave privada (PEM)',
         help_text='O arquivo .pk baixado no painel do 8x8, colado inteiro.')
 
+    # Jitsi próprio com entrada assinada (09/11/2026): o plano gratuito do 8x8 tem teto de
+    # usuários ativos no mês ("you've reached your monthly active users limit"). Um Jitsi
+    # instalado num servidor da empresa não tem limite; com AppID + segredo (JWT HS256, o
+    # padrão do docker-jitsi-meet com AUTH_TYPE=jwt) ninguém entra sem passar pelo portal.
+    jitsi_app_id = models.CharField(
+        max_length=120, blank=True, default='', db_default='', verbose_name='Jitsi próprio — AppID (JWT_APP_ID)')
+    jitsi_app_secret = models.CharField(
+        max_length=200, blank=True, default='', db_default='',
+        verbose_name='Jitsi próprio — segredo (JWT_APP_SECRET)')
+
     # Identidade visual da sala. O Jitsi roda num iframe de outro domínio: o
     # único jeito suportado de mudar logo, cores e fundo é o arquivo de
     # branding que ele busca sozinho (ver views.branding).

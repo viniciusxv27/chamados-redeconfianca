@@ -106,6 +106,11 @@ html.dark .ra {
 .ra-faixa.vermelho strong { color: var(--ra-vermelho); } .ra-faixa.azul strong { color: var(--ra-azul); }
 .ra-faixa small { font-size: 12px; color: var(--ra-texto-2); }
 .ra-faixa .seta { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-size: 12px; flex-shrink: 0; }
+.ra-faixa.whatsapp { background: #e7f8ee; border-color: rgba(22, 163, 74, .25); }
+.ra-faixa.whatsapp .ic, .ra-faixa.whatsapp .seta { background: #16a34a; }
+.ra-faixa.whatsapp strong { color: #15803d; }
+html.dark .ra-faixa.whatsapp { background: rgba(74, 222, 128, .12); }
+html.dark .ra-faixa.whatsapp strong { color: #4ade80; }
 .ra-faixa[aria-disabled="true"] { cursor: not-allowed; opacity: .75; }
 
 /* Grade de baixo */

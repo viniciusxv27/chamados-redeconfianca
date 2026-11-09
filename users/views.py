@@ -4851,11 +4851,15 @@ def admin_upload_user_photo(request, user_id):
 @login_required
 def settings_view(request):
     """Visualizar configurações do usuário"""
-    from assistente.models import AssistenteConexao, MODELOS
+    from assistente.models import MODELOS, AssistenteConexao, ChaveClaudeEmpresa
+    empresa = ChaveClaudeEmpresa.objects.filter(pk=1).first()
     context = {
         'user': request.user,
         'assistente_conexao': AssistenteConexao.objects.filter(user=request.user).first(),
         'assistente_modelos': MODELOS,
+        # Chave da empresa: configurada, vale para todos no Assistente Claude (assistente/claude_client.py).
+        'chave_empresa': empresa if empresa and empresa.configurada else None,
+        'e_superadmin': request.user.is_superuser or getattr(request.user, 'hierarchy', '') == 'SUPERADMIN',
     }
     return render(request, 'users/settings.html', context)
 

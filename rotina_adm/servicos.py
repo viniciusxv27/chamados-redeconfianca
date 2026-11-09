@@ -121,10 +121,10 @@ def agenda_da_semana(pessoa, segunda):
 LVUT_EXEMPLO = [
     {'nome': 'Smartphones', 'icone': 'fa-mobile-alt', 'cor': 'laranja', 'status': 'Saudável', 'tom': 'verde',
      'pct': 82, 'nota': 'Estoque dentro do esperado.'},
-    {'nome': 'Acessórios', 'icone': 'fa-headphones', 'cor': 'verde', 'status': 'Atenção', 'tom': 'amarelo',
-     'pct': 58, 'nota': 'Verificar divergências.'},
-    {'nome': 'Chips', 'icone': 'fa-sim-card', 'cor': 'azul', 'status': 'Crítico', 'tom': 'vermelho',
-     'pct': 24, 'nota': 'Nível abaixo do ideal.'},
-    {'nome': 'Outros', 'icone': 'fa-box-open', 'cor': 'cinza', 'status': 'Em conferência', 'tom': 'azul',
+    {'nome': 'Eletrônicos e Essenciais', 'icone': 'fa-headphones', 'cor': 'verde', 'status': 'Atenção',
+     'tom': 'amarelo', 'pct': 58, 'nota': 'Verificar divergências.'},
+    {'nome': 'SIM Card e Cartão de Recarga', 'icone': 'fa-sim-card', 'cor': 'azul', 'status': 'Crítico',
+     'tom': 'vermelho', 'pct': 24, 'nota': 'Nível abaixo do ideal.'},
+    {'nome': 'Películas', 'icone': 'fa-shield-alt', 'cor': 'cinza', 'status': 'Em conferência', 'tom': 'azul',
      'pct': 40, 'nota': 'Em processo de contagem.'},
 ]

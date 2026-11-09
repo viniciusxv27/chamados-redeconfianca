@@ -980,6 +980,43 @@ try:
     chamados = {nome: duble.call_count for nome, duble in dubles.items() if duble.call_count}
     t('nada disso chamou função de envio', not chamados, chamados)
 
+    print('\n== GESTORES DA ROTINA (09/11) ==')
+    from rotina.models import GestorRotina
+    coord = novo('coordenadora')
+    url_gestores = '/rotina-gerencial/gestao/gestores/'
+    t('antes: quem não é gestor não abre Pessoas', cliente(coord).get('/rotina-gerencial/gestao/').status_code == 302)
+    cliente(gerente).post(url_gestores, {'acao': 'adicionar', 'usuarios': [coord.id]})
+    t('só o SUPERADMIN dá acesso de gestão', not GestorRotina.objects.filter(user=coord).exists())
+    html = c_admin.get('/rotina-gerencial/gestao/').content.decode()
+    t('SUPERADMIN vê a seção "Quem pode gerenciar rotinas"', 'id="rt-gestores"' in html and 'Dar acesso de gestão' in html)
+    r = c_admin.post(url_gestores, {'acao': 'adicionar', 'usuarios': [coord.id]})
+    g = GestorRotina.objects.filter(user=coord).first()
+    t('SUPERADMIN adiciona a pessoa', g is not None and g.criado_por == superadmin and r.status_code == 302)
+    c_coord = cliente(coord)
+    html = c_coord.get('/rotina-gerencial/gestao/').content.decode()
+    t('o gestor abre Pessoas, sem a seção de gestores e sem a aba Modelos',
+      'rt-pessoas' in html and 'id="rt-gestores"' not in html and 'href="/rotina-gerencial/modelos/" class="rt-aba' not in html)
+    t('o gestor abre a semana de outra pessoa', c_coord.get(f'/rotina-gerencial/gestao/{gerente.id}/').status_code == 200)
+    t('mas não os modelos', c_coord.get('/rotina-gerencial/modelos/').status_code == 302)
+    r = c_coord.get('/rotina-gerencial/api/rotina/', {'usuario': gerente.id})
+    t('API: o gestor lê a rotina de outra pessoa', r.status_code == 200, r.status_code)
+    rot = RotinaGerencial.objects.get(user=gerente)
+    r = post_json(c_coord, f'/rotina-gerencial/api/gestao/{gerente.id}/opcoes/', {'pode_criar': not rot.pode_criar})
+    t('API: o gestor muda as opções da rotina de outra pessoa', r.status_code == 200
+      and RotinaGerencial.objects.get(pk=rot.pk).pode_criar != rot.pode_criar, r.content[:200])
+    post_json(c_coord, f'/rotina-gerencial/api/gestao/{gerente.id}/opcoes/', {'pode_criar': rot.pode_criar})
+    r = post_json(c_coord, f'/rotina-gerencial/api/modelos/{modelo.id}/atividades/',
+                  {'dia_semana': 0, 'inicio': '07:00', 'fim': '07:30', 'titulo': 'ZZ gestor no modelo'})
+    t('API: o gestor não mexe em modelo', r.status_code == 403, r.status_code)
+    r = post_json(c_coord, '/rotina-gerencial/api/rotina/atividades/',
+                  {'usuario': gerente.id, 'dia_semana': 2, 'inicio': '06:00', 'fim': '06:30', 'titulo': 'ZZ do gestor',
+                   'categoria': 'EQUIPE', 'bloqueada': True})
+    t('API: o gestor cria atividade (até travada) na rotina de outra pessoa', r.status_code == 201, r.content[:300])
+    t('o gestor vê o menu da rotina mesmo sem rotina própria', '/rotina-gerencial/' in cliente(coord).get('/', follow=True).content.decode())
+    c_admin.post(url_gestores, {'acao': 'remover', 'gestor': g.id})
+    t('SUPERADMIN tira o acesso e o gestor volta a não entrar', not GestorRotina.objects.filter(user=coord).exists()
+      and cliente(coord).get('/rotina-gerencial/gestao/').status_code == 302)
+
     print('\n== ADMIN DO DJANGO ==')
     t('os cinco modelos estão registrados',
       all(admin.site.is_registered(m) for m in (ModeloRotina, AtividadeModelo, RotinaGerencial, AtividadeRotina, AvisoRotina)))

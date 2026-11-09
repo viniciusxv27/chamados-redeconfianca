@@ -325,6 +325,30 @@ try:
     j = vender({'cliente': {'cpf': CPF, 'nome': 'Zz Cliente Teste'}, 'linhas': ['27998765432'], 'servicos': [{'tipo': 'ALTA', 'plano_id': ctrl.id}]})
     t('plano inativo não entra em lançamento novo', not ctrl.ativo and not j['ok'] and 'inativo' in ' '.join(j['erros']))
 
+    print('== ALTA POR PORTABILIDADE (09/11) ==')
+    j = vender({'cliente': {'cpf': CPF, 'nome': 'Zz Cliente Teste'}, 'linhas': ['27998765432'],
+                'servicos': [{'tipo': 'ALTA', 'plano_id': pos.id, 'portabilidade': True}]})
+    t('portabilidade sem operadora é recusada', not j['ok'] and 'operadora de origem' in ' '.join(j['erros']), j)
+    j = vender({'cliente': {'cpf': CPF, 'nome': 'Zz Cliente Teste'}, 'linhas': ['27998765432'],
+                'servicos': [{'tipo': 'ALTA', 'plano_id': pos.id, 'portabilidade': True, 'operadora_origem': 'VIVO'}]})
+    t('operadora fora da lista é recusada', not j['ok'])
+    j = vender({'cliente': {'cpf': CPF, 'nome': 'Zz Cliente Teste'}, 'linhas': ['27998765432'],
+                'servicos': [{'tipo': 'ALTA', 'plano_id': pos.id, 'portabilidade': True, 'operadora_origem': 'tim'}]})
+    s_porta = VendaServico.objects.get(venda_id=j['id']) if j.get('ok') else None
+    t('alta por portabilidade grava a operadora', s_porta and s_porta.portabilidade and s_porta.operadora_origem == 'TIM', j)
+    if s_porta:
+        h = cv.get(f'/vendas/{j["id"]}/').content.decode()
+        t('detalhe da venda mostra a portabilidade', 'portabilidade' in h and 'Tim' in h)
+    j = vender({'cliente': {'cpf': CPF, 'nome': 'Zz Cliente Teste'}, 'linhas': ['27998765432'],
+                'servicos': [{'tipo': 'ALTA', 'plano_id': pos.id, 'operadora_origem': 'CLARO'}]})
+    s_sem = VendaServico.objects.get(venda_id=j['id']) if j.get('ok') else None
+    t('alta sem portabilidade não guarda operadora', s_sem and not s_sem.portabilidade and s_sem.operadora_origem == '', j)
+    j = vender({'cliente': {'cpf': CPF, 'nome': 'Zz Cliente Teste'}, 'linhas': ['27998765432'],
+                'servicos': [{'tipo': 'REATIVACAO', 'plano_id': pos.id, 'portabilidade': True, 'operadora_origem': 'OI'}]})
+    t('portabilidade só vale para Alta', not j.get('ok') or not VendaServico.objects.get(venda_id=j['id']).portabilidade, j)
+    h = cv.get('/vendas/nova/').content.decode()
+    t('formulário tem o campo de portabilidade', 'campoPortabilidade' in h and "['OUTROS', 'Outros']" in h)
+
     print('== PRÉ-ANÁLISE E TELAS ==')
     j = cv.get(f'/vendas/api/cliente/?cpf={CPF}').json()
     t('pré-análise: plano atual e últimas compras', j['pre_analise']['plano']['nome'] == 'ZZ Pós 50GB'

@@ -27,11 +27,42 @@
         <span class="rt-stat-icone"><i class="fas fa-user-pen"></i></span>
         <div><p class="rt-stat-valor">{{ resumo.criam }}</p><p class="rt-stat-rotulo">Podem criar atividades</p></div>
     </div>
-    <a href="{% url 'rotina:modelos' %}" class="rt-card rt-stat" style="text-decoration: none">
+    <a {% if e_superadmin %}href="{% url 'rotina:modelos' %}"{% endif %} class="rt-card rt-stat" style="text-decoration: none">
         <span class="rt-stat-icone"><i class="fas fa-layer-group"></i></span>
         <div><p class="rt-stat-valor">{{ modelos|length }}</p><p class="rt-stat-rotulo">Modelos ativos</p></div>
     </a>
 </div>
+
+{% if e_superadmin %}
+{% comment %}Quem gerencia a rotina dos outros além do SUPERADMIN (rotina.GestorRotina). Só o SUPERADMIN vê e mexe.{% endcomment %}
+<section class="rt-card" id="rt-gestores" style="padding:16px 18px;margin-bottom:16px" aria-labelledby="rt-gestores-titulo">
+    <h2 id="rt-gestores-titulo" style="font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px"><i class="fas fa-user-shield"></i> Quem pode gerenciar rotinas</h2>
+    <p style="font-size:13px;color:#6b7280;margin-top:4px">Além do SUPERADMIN. Quem estiver aqui vê esta tela, adiciona pessoas e edita a semana e as opções da rotina de qualquer um. Modelos e esta lista continuam só com o SUPERADMIN.</p>
+    {% if gestores %}
+    <ul style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;list-style:none;padding:0">
+        {% for g in gestores %}
+        <li style="display:flex;align-items:center;gap:8px;border:1px solid #e5e7eb;border-radius:999px;padding:4px 6px 4px 12px;font-size:13px">
+            <span>{{ g.user.get_full_name|default:g.user.username }}{% if g.user.sector %} <span style="color:#9ca3af">· {{ g.user.sector.name }}</span>{% endif %}</span>
+            <form method="post" action="{% url 'rotina:gestao_gestores' %}" onsubmit="return confirm('Tirar a gestão da rotina desta pessoa?')">
+                {% csrf_token %}<input type="hidden" name="acao" value="remover"><input type="hidden" name="gestor" value="{{ g.id }}">
+                <button class="rt-btn rt-btn-claro" style="padding:2px 8px;font-size:12px" title="Remover" aria-label="Remover {{ g.user.get_full_name }}"><i class="fas fa-xmark"></i></button>
+            </form>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p style="font-size:13px;color:#9ca3af;margin-top:10px">Ninguém além do SUPERADMIN por enquanto.</p>
+    {% endif %}
+    <form method="post" action="{% url 'rotina:gestao_gestores' %}" style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+        {% csrf_token %}<input type="hidden" name="acao" value="adicionar">
+        <select name="usuarios" required style="flex:1;min-width:240px;border:1px solid #d1d5db;border-radius:10px;padding:8px 10px;font-size:13px">
+            <option value="">Escolha uma pessoa…</option>
+            {% for u in candidatos %}<option value="{{ u.id }}">{{ u.get_full_name|default:u.username }}{% if u.sector %} · {{ u.sector.name }}{% endif %}</option>{% endfor %}
+        </select>
+        <button class="rt-btn rt-btn-primario"><i class="fas fa-plus"></i> Dar acesso de gestão</button>
+    </form>
+</section>
+{% endif %}
 
 {% with d=whatsapp %}
 <section class="rt-card rt-whats" aria-labelledby="rt-whats-titulo">

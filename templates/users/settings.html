@@ -31,12 +31,60 @@
                     <h3 class="text-lg font-semibold text-gray-900 flex items-center"><i class="fas fa-robot text-primary mr-2"></i>Assistente Claude</h3>
                     <p class="text-sm text-gray-600 mt-1">Conecte a sua conta do Claude e converse com um assistente que enxerga os <strong>seus</strong> dados no portal (chamados, folhas, cursos, documentos, contracheques).</p>
                 </div>
-                {% if assistente_conexao.conectado %}
+                {% if assistente_conexao.conectado or chave_empresa %}
                 <a href="{% url 'assistente:chat' %}" class="bg-primary text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors text-sm whitespace-nowrap"><i class="fas fa-comments mr-2"></i>Abrir assistente</a>
                 {% endif %}
             </div>
+            {% comment %}Chave da empresa (assistente.ChaveClaudeEmpresa): o SUPERADMIN configura; configurada, vale para todos no lugar da chave pessoal.{% endcomment %}
+            {% if e_superadmin %}
+            <div class="px-6 pt-5 pb-5 border-b border-gray-100 bg-violet-50/40">
+                <h4 class="text-sm font-semibold text-gray-900 flex items-center gap-2"><i class="fas fa-building text-violet-600"></i>Chave da empresa <span class="text-xs font-normal text-gray-500">(só o SUPERADMIN vê)</span></h4>
+                <p class="text-xs text-gray-600 mt-1">Configurada, <strong>todos os usuários</strong> usam esta chave no Assistente Claude, com o modelo escolhido aqui — ninguém precisa conectar a própria. O uso é cobrado nesta conta Anthropic. Cada pessoa continua vendo só o que já pode ver no portal.</p>
+                {% if chave_empresa %}
+                <div class="flex items-center gap-2 mt-3 text-sm bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2 text-emerald-800">
+                    <i class="fas fa-circle-check"></i>
+                    <span>Em uso por todos · chave <code class="bg-white/70 px-1 rounded">{{ chave_empresa.key_hint }}</code> · {{ chave_empresa.get_modelo_display }}{% if chave_empresa.definida_por %} · por {{ chave_empresa.definida_por.first_name }}{% endif %}{% if chave_empresa.ultimo_ok_em %} · último teste {{ chave_empresa.ultimo_ok_em|date:'d/m/Y H:i' }}{% endif %}</span>
+                </div>
+                {% endif %}
+                <form method="post" action="{% url 'assistente:empresa_salvar' %}" class="mt-3 flex flex-wrap items-end gap-2">
+                    {% csrf_token %}<input type="hidden" name="voltar" value="{% url 'settings' %}">
+                    <div class="flex-1 min-w-[14rem]">
+                        <label class="block text-xs font-medium text-gray-500 mb-1">{% if chave_empresa %}Trocar a chave (em branco mantém){% else %}Chave da API Anthropic{% endif %}</label>
+                        <input type="password" name="api_key" placeholder="sk-ant-..." autocomplete="off" {% if not chave_empresa %}required{% endif %}
+                               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary focus:border-transparent">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1">Modelo para todos</label>
+                        <select name="modelo" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                            {% for v, r in assistente_modelos %}<option value="{{ v }}" {% if chave_empresa and chave_empresa.modelo == v %}selected{% endif %}>{{ r }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <button class="bg-violet-700 text-white px-4 py-2 rounded-lg text-sm hover:bg-violet-800"><i class="fas fa-floppy-disk mr-1.5"></i>{% if chave_empresa %}Salvar{% else %}Testar e salvar para todos{% endif %}</button>
+                </form>
+                {% if chave_empresa %}
+                <div class="flex flex-wrap gap-2 mt-2">
+                    <form method="post" action="{% url 'assistente:empresa_testar' %}">{% csrf_token %}<input type="hidden" name="voltar" value="{% url 'settings' %}">
+                        <button class="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 text-xs hover:bg-gray-50"><i class="fas fa-plug mr-1.5"></i>Testar</button></form>
+                    <form method="post" action="{% url 'assistente:empresa_remover' %}" onsubmit="return confirm('Remover a chave da empresa? Cada pessoa volta a precisar da própria chave.');">{% csrf_token %}<input type="hidden" name="voltar" value="{% url 'settings' %}">
+                        <button class="px-3 py-1.5 rounded-lg border border-red-200 text-red-600 text-xs hover:bg-red-50"><i class="fas fa-trash mr-1.5"></i>Remover</button></form>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
             <div class="p-6">
+                {% if chave_empresa %}
+                <div class="flex items-center gap-2 text-sm bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2 text-emerald-800">
+                    <i class="fas fa-building"></i>
+                    <span>O portal usa a <strong>chave da empresa</strong> — você não precisa conectar a sua. É só abrir o assistente.</span>
+                </div>
                 {% if assistente_conexao.conectado %}
+                <div class="flex flex-wrap items-center gap-2 mt-3 text-xs text-gray-500">
+                    <span>A sua chave pessoal ({{ assistente_conexao.key_hint }}) fica guardada, mas não é usada enquanto a da empresa estiver ativa.</span>
+                    <form method="post" action="{% url 'assistente:desconectar' %}" onsubmit="return confirm('Remover a sua chave pessoal?');">{% csrf_token %}<input type="hidden" name="voltar" value="{% url 'settings' %}">
+                        <button class="text-red-600 underline">remover a minha</button></form>
+                </div>
+                {% endif %}
+                {% elif assistente_conexao.conectado %}
                 <div class="flex items-center gap-2 mb-4 text-sm bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2 text-emerald-800">
                     <i class="fas fa-circle-check"></i>
                     <span>Conectado · chave <code class="bg-white/70 px-1 rounded">{{ assistente_conexao.key_hint }}</code>{% if assistente_conexao.ultimo_ok_em %} · último teste {{ assistente_conexao.ultimo_ok_em|date:'d/m/Y H:i' }}{% endif %}</span>

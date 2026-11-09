@@ -1,0 +1,161 @@
+{% extends 'auditoria_sap/base_sap.html' %}
+
+{% block sap_titulo %}Visão Renova{% endblock %}
+{% block sap_subtitulo %}Vendas com Renova no SAP (ordem ZVNB) × chamado de Renova no portal{% endblock %}
+
+{% block sap_conteudo %}
+{% comment %}Regra em auditoria_sap/renova.py: casamento pelo CPF do cliente (venda do Vivo Go citada no chamado, CPF no texto ou ficha do app Renova).{% endcomment %}
+
+{% if not tem_espelho %}
+<div class="sap-card p-8 text-center text-gray-500">
+    <i class="fas fa-recycle text-3xl opacity-30 mb-3"></i>
+    <p class="font-medium text-gray-700">Ainda não há vendas com Renova lidas do SAP.</p>
+    <p class="text-sm mt-1">Elas chegam na próxima leitura do SAP{% if e_gestor %} — ou use "Reler o Renova do SAP" abaixo{% endif %}.</p>
+</div>
+{% endif %}
+
+{% if e_gestor %}
+<details class="sap-card p-4 mb-4" {% if not cfg.cobranca_ativa %}open{% endif %}>
+    <summary class="cursor-pointer flex items-center gap-2 text-sm font-semibold text-gray-800">
+        <i class="fab fa-whatsapp text-emerald-600"></i>Cobrança no grupo da loja às 15h
+        {% if cfg.cobranca_ativa %}<span class="sap-chip sap-resolvida">ligada</span>{% else %}<span class="sap-chip sap-saiu">desligada</span>{% endif %}
+        <span class="ml-auto text-xs font-normal text-gray-500">{{ previa_total }} venda(s) seriam cobradas hoje</span>
+    </summary>
+    <div class="mt-4 space-y-4">
+        <p class="text-xs text-gray-600">Todo dia às 15h o portal relê o SAP, procura o chamado de cada venda com Renova e manda, no grupo de gestão de cada loja (o mesmo da cobrança dos cursos), a lista do que está sem chamado nos últimos dias. Repete até o chamado aparecer ou alguém marcar "não precisa".</p>
+        {% if sem_canal %}<p class="text-xs text-red-700"><i class="fas fa-triangle-exclamation mr-1"></i>O WhatsApp (Evolution) não está configurado neste servidor: falta {{ sem_canal|join:", " }}.</p>{% endif %}
+        <form method="post" action="{% url 'auditoria_sap:renova_config' %}" class="flex flex-wrap items-end gap-4">
+            {% csrf_token %}<input type="hidden" name="acao" value="salvar">
+            <label class="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="cobranca_ativa" class="rounded" {% if cfg.cobranca_ativa %}checked{% endif %}> Cobrar sozinho todo dia às 15h</label>
+            <label class="text-sm text-gray-700">Vendas dos últimos
+                <input type="number" name="janela_dias" min="1" max="60" value="{{ cfg.janela_dias }}" class="w-16 mx-1 px-2 py-1 border border-gray-200 rounded-lg text-sm"> dias</label>
+            <button class="px-3.5 py-2 bg-sky-600 text-white rounded-lg text-sm font-medium hover:bg-sky-700"><i class="fas fa-floppy-disk mr-1.5"></i>Salvar</button>
+        </form>
+        <div class="flex flex-wrap gap-2">
+            <form method="post" action="{% url 'auditoria_sap:renova_config' %}" onsubmit="this.querySelector('button').disabled=true;">
+                {% csrf_token %}<input type="hidden" name="acao" value="ler">
+                <button class="px-3 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-50"><i class="fas fa-rotate mr-1.5"></i>Reler o Renova do SAP</button>
+            </form>
+            <form method="post" action="{% url 'auditoria_sap:renova_config' %}" onsubmit="if(!confirm('Mandar agora a cobrança no grupo de cada loja com Renova sem chamado?'))return false;this.querySelector('button').disabled=true;">
+                {% csrf_token %}<input type="hidden" name="acao" value="cobrar">
+                <button class="px-3 py-1.5 border border-emerald-200 text-emerald-700 rounded-lg text-sm hover:bg-emerald-50" {% if not previa.lojas %}disabled{% endif %}><i class="fab fa-whatsapp mr-1.5"></i>Cobrar agora</button>
+            </form>
+        </div>
+        {% if previa.lojas or previa.sem_loja %}
+        <div>
+            <p class="sap-rotulo mb-2">Prévia da mensagem de hoje</p>
+            <div class="grid gap-3 md:grid-cols-2">
+                {% for l in previa.lojas %}
+                <details class="border border-gray-100 rounded-lg p-3">
+                    <summary class="cursor-pointer text-sm font-medium text-gray-800">{{ l.setor.name }} · {{ l.vendas|length }} venda(s)
+                        {% if not l.grupo %}<span class="sap-chip sap-erro-1 ml-1">sem grupo</span>{% endif %}</summary>
+                    <pre class="mt-2 whitespace-pre-wrap text-xs text-gray-700 font-sans">{{ l.texto }}</pre>
+                </details>
+                {% endfor %}
+            </div>
+            {% if previa.sem_loja %}<p class="text-xs text-amber-700 mt-2"><i class="fas fa-store-slash mr-1"></i>{{ previa.sem_loja|length }} venda(s) sem loja reconhecida não entram na cobrança — aparecem na lista abaixo com "sem loja".</p>{% endif %}
+        </div>
+        {% endif %}
+        {% if cobrancas %}
+        <div>
+            <p class="sap-rotulo mb-2">Últimas cobranças</p>
+            <ul class="text-xs text-gray-600 space-y-1">
+                {% for c in cobrancas %}
+                <li>{{ c.criado_em|date:"d/m H:i" }} · {{ c.setor.name }} · {{ c.get_origem_display }}{% if c.disparado_por %} ({{ c.disparado_por.first_name }}){% endif %} ·
+                    {% if c.enviado %}<span class="text-emerald-700">enviada</span>{% elif c.enviado is None %}mandando…{% else %}<span class="text-red-700">falhou: {{ c.detalhe }}</span>{% endif %}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+    </div>
+</details>
+{% endif %}
+
+<form method="get" class="sap-card p-3 mb-4 flex flex-wrap items-end gap-3" id="sapFiltros">
+    <input type="hidden" name="situacao" value="{{ situacao }}">
+    <label class="text-xs text-gray-500">Mês
+        <select name="mes" class="block mt-1 px-2 py-1.5 border border-gray-200 rounded-lg text-sm" onchange="this.form.submit()">
+            <option value="">Todos</option>
+            {% for m in meses %}<option value="{{ m.chave }}" {% if m.chave == mes %}selected{% endif %}>{{ m.rotulo }}</option>{% endfor %}
+        </select></label>
+    {% if not so_da_loja %}
+    <label class="text-xs text-gray-500">Loja
+        <select name="loja" class="block mt-1 px-2 py-1.5 border border-gray-200 rounded-lg text-sm" onchange="this.form.submit()">
+            <option value="">Todas</option>
+            {% for s in lojas %}<option value="{{ s.id }}" {% if loja == s.id|stringformat:"s" %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
+            {% if tem_sem_loja %}<option value="sem" {% if loja == "sem" %}selected{% endif %}>Sem loja</option>{% endif %}
+        </select></label>
+    {% endif %}
+    <label class="text-xs text-gray-500 flex-1 min-w-[12rem]">Buscar
+        <input type="search" name="q" value="{{ busca }}" placeholder="Cliente, CPF, ordem, nota, venda do Vivo Go, chamado…" class="block w-full mt-1 px-2 py-1.5 border border-gray-200 rounded-lg text-sm"></label>
+    <button class="px-3 py-1.5 bg-gray-800 text-white rounded-lg text-sm">Filtrar</button>
+</form>
+
+<div class="flex gap-1 overflow-x-auto mb-3">
+    {% for s in situacoes %}
+    <a href="?situacao={{ s.chave }}{% if mes %}&mes={{ mes }}{% endif %}{% if loja %}&loja={{ loja }}{% endif %}{% if busca %}&q={{ busca|urlencode }}{% endif %}"
+       class="px-3 py-1.5 rounded-full text-sm whitespace-nowrap {% if situacao == s.chave %}bg-sky-600 text-white{% else %}bg-white border border-gray-200 text-gray-600 hover:bg-gray-50{% endif %}">
+        {{ s.rotulo }} <span class="tabular font-semibold">{{ s.n }}</span></a>
+    {% endfor %}
+</div>
+
+<div class="sap-card overflow-hidden">
+    <div class="hidden md:grid grid-cols-12 gap-3 px-4 py-2 bg-gray-50 text-[11px] uppercase tracking-wide text-gray-500">
+        <div class="col-span-2">Fatura · loja</div><div class="col-span-3">Cliente</div><div class="col-span-3">Aparelho · ordem</div><div class="col-span-4">Chamado de Renova</div>
+    </div>
+    {% for v in pagina %}
+    <div class="sap-linha md:grid grid-cols-12 gap-3 px-4 py-3 border-t border-gray-100 text-sm">
+        <div class="col-span-2">
+            <p class="font-medium text-gray-900 tabular">{{ v.data_fatura|date:"d/m/Y" }}</p>
+            <p class="text-xs text-gray-500">{% if v.setor %}{{ v.setor.name }}{% elif v.loja %}{{ v.loja }}{% else %}<span class="text-amber-700">sem loja ({{ v.escritorio }})</span>{% endif %}</p>
+        </div>
+        <div class="col-span-3">
+            <p class="text-gray-900">{{ v.cliente_nome|default:"—"|title }}</p>
+            <p class="text-xs text-gray-500 tabular">CPF {{ v.cpf_mascarado|default:"—" }}{% if v.vendas_vivogo %} · Vivo Go {{ v.vendas_vivogo|join:", " }}{% endif %}</p>
+        </div>
+        <div class="col-span-3">
+            <p class="text-gray-900">{{ v.material|default:"—" }}</p>
+            <p class="text-xs text-gray-500 tabular">ordem {{ v.ordem }}{% if v.num_fat %} · NF {{ v.num_fat }}{% endif %}{% if v.desconto %} · desc. R$ {{ v.desconto }}{% endif %}</p>
+        </div>
+        <div class="col-span-4 mt-2 md:mt-0">
+            {% if v.chamado %}
+                <a href="{% url 'ticket_detail' v.chamado.id %}" class="sap-chip sap-resolvida hover:underline"><i class="fas fa-ticket"></i>#{{ v.chamado.id }} · {{ v.chamado.get_status_display }}</a>
+                <p class="text-[11px] text-gray-400 mt-1">{{ v.get_chamado_como_display }}</p>
+                {% if v.chamado_como == 'manual' %}
+                <form method="post" action="{% url 'auditoria_sap:renova_marcar' v.id %}" class="inline">{% csrf_token %}<input type="hidden" name="acao" value="reabrir"><input type="hidden" name="voltar" value="{{ request.get_full_path }}"><button class="text-[11px] text-gray-500 underline">desligar</button></form>
+                {% endif %}
+            {% elif v.dispensada %}
+                <span class="sap-chip sap-saiu"><i class="fas fa-ban"></i>Não precisa</span>
+                <p class="text-[11px] text-gray-500 mt-1">{{ v.observacao }} — {{ v.dispensada_por.first_name|default:"" }} {{ v.dispensada_em|date:"d/m H:i" }}</p>
+                <form method="post" action="{% url 'auditoria_sap:renova_marcar' v.id %}">{% csrf_token %}<input type="hidden" name="acao" value="reabrir"><input type="hidden" name="voltar" value="{{ request.get_full_path }}"><button class="text-[11px] text-sky-700 underline">voltar a cobrar</button></form>
+            {% else %}
+                <span class="sap-chip sap-aberta"><i class="fas fa-triangle-exclamation"></i>Sem chamado</span>
+                {% if v.cobrancas %}<span class="text-[11px] text-gray-500 ml-1">cobrada {{ v.cobrancas }}x · última {{ v.ultima_cobranca_em|date:"d/m" }}</span>{% endif %}
+                <details class="mt-1">
+                    <summary class="cursor-pointer text-[11px] text-sky-700">ligar a um chamado / não precisa</summary>
+                    <form method="post" action="{% url 'auditoria_sap:renova_marcar' v.id %}" class="mt-2 flex flex-wrap gap-2 items-center">
+                        {% csrf_token %}<input type="hidden" name="voltar" value="{{ request.get_full_path }}">
+                        <input name="chamado" inputmode="numeric" placeholder="nº do chamado" class="w-28 px-2 py-1 border border-gray-200 rounded text-xs">
+                        <button name="acao" value="ligar" class="px-2 py-1 bg-sky-600 text-white rounded text-xs">Ligar</button>
+                        <input name="observacao" placeholder="ou: por que não precisa" class="flex-1 min-w-[10rem] px-2 py-1 border border-gray-200 rounded text-xs">
+                        <button name="acao" value="dispensar" class="px-2 py-1 border border-gray-300 rounded text-xs text-gray-700">Não precisa</button>
+                    </form>
+                </details>
+            {% endif %}
+        </div>
+    </div>
+    {% empty %}
+    <div class="p-8 text-center text-sm text-gray-500">{% if situacao == 'sem_chamado' %}<i class="fas fa-circle-check text-emerald-500 mr-1"></i>Nenhuma venda com Renova sem chamado neste filtro.{% else %}Nada neste filtro.{% endif %}</div>
+    {% endfor %}
+</div>
+
+{% if pagina.has_other_pages %}
+<div class="flex items-center justify-between mt-3 text-sm text-gray-600">
+    <span>Página {{ pagina.number }} de {{ pagina.paginator.num_pages }} · {{ pagina.paginator.count }} venda(s)</span>
+    <div class="flex gap-2">
+        {% if pagina.has_previous %}<a class="px-3 py-1.5 border border-gray-200 rounded-lg bg-white" href="?{{ query_renova }}&pagina={{ pagina.previous_page_number }}">Anterior</a>{% endif %}
+        {% if pagina.has_next %}<a class="px-3 py-1.5 border border-gray-200 rounded-lg bg-white" href="?{{ query_renova }}&pagina={{ pagina.next_page_number }}">Próxima</a>{% endif %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}

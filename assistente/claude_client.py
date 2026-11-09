@@ -51,11 +51,19 @@ SYSTEM = (
     "Nos módulos pessoais você só vê os dados DO PRÓPRIO usuário — perfil, chamados, ponto do "
     "dia, férias, folhas de ponto, contracheques, cursos, documentos, metas e feedbacks do "
     "Impulso, trilhas de conhecimento, elogios, Confianças (C$), notificações e pastas do Drive "
-    "dele. Para uma visão geral do que ele tem em aberto, use a ferramenta resumo_geral. Se (e "
-    "somente se) o usuário for SUPERADMIN, você também pode consultar os resultados comerciais "
-    "da rede no painel Parciais Vivo (todas as abas: resumo do dia, resultados por loja, banda "
-    "larga, microindicadores, BSC D0, PPL, meta dia, dias zerados) com a ferramenta "
-    "resultados_comerciais.\n"
+    "dele. Para uma visão geral do que ele tem em aberto, use a ferramenta resumo_geral.\n"
+    "RESULTADOS COMERCIAIS (resultados_comerciais, painel Parciais Vivo): para SUPERADMIN, acesso "
+    "completo à rede (todas as abas: resumo do dia, resultados por loja, banda larga, "
+    "microindicadores, BSC D0, PPL, meta dia, dias zerados); para os demais, só os resultados DO "
+    "PRÓPRIO usuário (microindicadores, realizado por pilar e metas dele) — nunca diga números de "
+    "loja, rede ou colegas a quem não é SUPERADMIN.\n"
+    "PONTO, SIMULADOR e VENDAS (só leitura, com as permissões da tela): ponto_consultar (/ponto/: "
+    "hoje, período dia a dia, folha do mês, banco de horas, férias, escala, ajustes, solicitações ao "
+    "DP e, para quem administra o ponto, equipe e relatório de pendências), simulador_consultar "
+    "(/simulator/: comissão por pilar em projeção ou realizado, quem ele pode ver e a tabela da "
+    "rede) e vendas_consultar (/vendas/: painel, vendas, detalhe, tabela de preços com SKU, "
+    "clientes). Prefira essas ferramentas a ler_pagina nesses módulos. Bater ponto, pedir ou "
+    "aprovar ajuste e lançar venda continuam só na tela: passe o link.\n"
     "Na AGENDA (/agenda/) e em REUNIÕES (/reunioes/) você tem acesso completo, com as mesmas "
     "permissões que o usuário tem na tela: eventos dele e de quem ele pode ver, convites, "
     "disponibilidade de colegas, solicitações de reunião, transcrições/atas (resumo, decisões, "
@@ -104,6 +112,26 @@ def conexao(user):
     return obj
 
 
+def chave_da_empresa():
+    """(chave, modelo) da chave do portal, ou ('', '') se o SUPERADMIN não configurou."""
+    from .models import ChaveClaudeEmpresa
+    empresa = ChaveClaudeEmpresa.objects.filter(pk=1).first()
+    chave = empresa.get_api_key() if empresa and empresa.configurada else ''
+    if not chave:
+        return '', ''
+    return chave, (empresa.modelo if empresa.modelo in MODELOS_VALIDOS else MODELO_PADRAO)
+
+
+def empresa_configurada():
+    from .models import ChaveClaudeEmpresa
+    return ChaveClaudeEmpresa.objects.filter(pk=1).exclude(api_key_cifrada='').exists()
+
+
+def pode_usar(user):
+    """Tem chave para falar com o Claude: a da empresa (vale para todos) ou a própria."""
+    return empresa_configurada() or AssistenteConexao.objects.filter(user=user).exclude(api_key_cifrada='').exists()
+
+
 def _erro_amigavel(exc):
     nome = type(exc).__name__
     if 'Authentication' in nome or 'PermissionDenied' in nome:
@@ -131,6 +159,11 @@ def testar_chave(chave, modelo=MODELO_PADRAO):
 
 
 def _cliente(user):
+    # A chave da empresa, quando existe, vale para todos — no lugar da pessoal.
+    chave, modelo_empresa = chave_da_empresa()
+    if chave:
+        from anthropic import Anthropic
+        return Anthropic(api_key=chave), modelo_empresa
     conx = conexao(user)
     chave = conx.get_api_key()
     if not chave:

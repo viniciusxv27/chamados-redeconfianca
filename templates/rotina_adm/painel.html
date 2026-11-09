@@ -63,7 +63,7 @@
 <section class="ra-card ra-secao">
     <div class="ra-secao-cabeca">
         <div class="ra-secao-titulo"><span class="ic" style="background:var(--ra-roxo-claro);color:var(--ra-roxo)"><i class="fas fa-cubes"></i></span>
-            <div><h2>Contagem de Estoque LVUT</h2><p>Acompanhe a saúde do estoque por categoria e registre ocorrências.</p></div></div>
+            <div><h2>Contagem de Estoque LVUT</h2><p>Acompanhe a saúde do estoque por categoria. Dúvida? Peça um help no grupo dos ADMs.</p></div></div>
         <span class="ra-selo cinza" title="Os números ainda não vêm de nenhum sistema"><i class="fas fa-flask"></i>Dados de exemplo</span>
     </div>
     <div class="ra-lvut">
@@ -77,10 +77,23 @@
         {% endfor %}
     </div>
     <div class="ra-faixas">
-        <a class="ra-faixa vermelho" aria-disabled="true" title="Em breve, junto com a contagem LVUT de verdade" onclick="return false" href="#">
-            <span class="ic"><i class="fas fa-exclamation-triangle"></i></span>
-            <div><strong>Informar ocorrência</strong><small>Registrar divergência encontrada na contagem LVUT · em breve</small></div>
+        {% comment %}Grupo dos ADMs de loja no WhatsApp: o SUPERADMIN cola o link em /rotina-adm/acessos/ (ConfiguracaoRotinaAdm).{% endcomment %}
+        {% if link_grupo_adm %}
+        <a class="ra-faixa whatsapp" href="{{ link_grupo_adm }}" target="_blank" rel="noopener">
+            <span class="ic"><i class="fab fa-whatsapp"></i></span>
+            <div><strong>Grupo dos ADMs no WhatsApp</strong><small>Ficou com dúvida? Peça um help aos outros analistas</small></div>
+            <span class="seta"><i class="fas fa-arrow-up-right-from-square"></i></span></a>
+        {% elif superadmin %}
+        <a class="ra-faixa whatsapp" href="{% url 'rotina_adm:acessos' %}#raGrupoWhatsapp">
+            <span class="ic"><i class="fab fa-whatsapp"></i></span>
+            <div><strong>Grupo dos ADMs no WhatsApp</strong><small>Cole o link do grupo para aparecer aqui para todos</small></div>
             <span class="seta"><i class="fas fa-arrow-right"></i></span></a>
+        {% else %}
+        <a class="ra-faixa whatsapp" aria-disabled="true" title="O SUPERADMIN ainda não configurou o link do grupo" onclick="return false" href="#">
+            <span class="ic"><i class="fab fa-whatsapp"></i></span>
+            <div><strong>Grupo dos ADMs no WhatsApp</strong><small>O link do grupo ainda não foi configurado</small></div>
+            <span class="seta"><i class="fas fa-arrow-right"></i></span></a>
+        {% endif %}
         <a class="ra-faixa azul" href="{% url 'ticket_create' %}">
             <span class="ic"><i class="fas fa-headset"></i></span>
             <div><strong>Visão suporte / transferência</strong><small>Abrir um chamado para o suporte da loja</small></div>

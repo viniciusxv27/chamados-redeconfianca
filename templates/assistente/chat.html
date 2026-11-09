@@ -64,7 +64,7 @@
         </div>
     </div>
 
-    {% if not conexao.conectado %}
+    {% if not pode_usar %}
     <div class="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 text-sm text-amber-800 mb-3">
         <i class="fas fa-triangle-exclamation mr-1"></i>
         Você ainda não conectou o seu Claude.
@@ -103,9 +103,9 @@
 
     <!-- Entrada -->
     <form id="chat-form" class="flex items-end gap-2">
-        <textarea id="chat-input" rows="1" placeholder="Escreva a sua pergunta..." {% if not conexao.conectado %}disabled{% endif %}
+        <textarea id="chat-input" rows="1" placeholder="Escreva a sua pergunta..." {% if not pode_usar %}disabled{% endif %}
                   class="flex-1 border border-gray-300 rounded-xl px-4 py-3 text-sm resize-none focus:ring-2 focus:ring-primary focus:border-transparent disabled:bg-gray-100"></textarea>
-        <button id="chat-enviar" type="submit" {% if not conexao.conectado %}disabled{% endif %}
+        <button id="chat-enviar" type="submit" {% if not pode_usar %}disabled{% endif %}
                 class="bg-primary text-white rounded-xl px-4 py-3 hover:bg-orange-600 disabled:bg-gray-300 disabled:cursor-not-allowed">
             <i class="fas fa-paper-plane"></i>
         </button>

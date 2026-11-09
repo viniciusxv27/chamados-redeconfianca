@@ -383,3 +383,25 @@ class AvisoWhatsApp(models.Model):
     def __str__(self):
         situacao = 'enviado' if self.enviado else 'não enviado'
         return f'{self.titulo} · {self.data:%d/%m/%Y} · {self.get_tipo_display()} · {situacao}'
+
+
+class GestorRotina(models.Model):
+    """Quem gerencia a rotina dos outros além do SUPERADMIN (09/11/2026).
+
+    O SUPERADMIN escolhe em /rotina-gerencial/gestao/. O gestor vê "Pessoas",
+    adiciona gente, edita a semana e os interruptores de qualquer pessoa — mas
+    não mexe nos modelos nem nesta lista.
+    """
+
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+                                related_name='gestor_rotina', verbose_name='Pessoa')
+    criado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name='+')
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Gestor da rotina gerencial'
+        verbose_name_plural = 'Gestores da rotina gerencial'
+
+    def __str__(self):
+        return f'Gestor da rotina: {self.user}'

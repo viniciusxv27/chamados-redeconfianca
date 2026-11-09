@@ -22,8 +22,9 @@ from django.urls import reverse
 from django.views.decorators.http import require_POST
 
 from . import servicos, whatsapp
-from .models import MINUTOS_WHATSAPP_MAXIMO, MINUTOS_WHATSAPP_PADRAO, ModeloRotina, RotinaGerencial
-from .permissoes import e_superadmin
+from .models import (MINUTOS_WHATSAPP_MAXIMO, MINUTOS_WHATSAPP_PADRAO, GestorRotina, ModeloRotina,
+                     RotinaGerencial)
+from .permissoes import e_superadmin, pode_gerir
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
@@ -36,6 +37,18 @@ def so_superadmin(view):
     def envolta(request, *args, **kwargs):
         if not e_superadmin(request.user):
             messages.error(request, 'Só o SUPERADMIN gerencia a rotina gerencial.')
+            return redirect('rotina:minha')
+        return view(request, *args, **kwargs)
+    return envolta
+
+
+def so_gestao(view):
+    """Pessoas e semana dos outros: SUPERADMIN ou gestor da rotina (GestorRotina)."""
+    @wraps(view)
+    @login_required
+    def envolta(request, *args, **kwargs):
+        if not pode_gerir(request.user):
+            messages.error(request, 'Só a gestão gerencia a rotina gerencial.')
             return redirect('rotina:minha')
         return view(request, *args, **kwargs)
     return envolta
@@ -58,7 +71,8 @@ def _plural(total, singular, plural):
 def _contexto(request, aba, com_domingo=False, **extra):
     contexto = {
         'aba': aba,
-        'e_admin': e_superadmin(request.user),
+        'e_admin': pode_gerir(request.user),
+        'e_superadmin': e_superadmin(request.user),
         'lembrete_minutos': servicos.MINUTOS_LEMBRETE,
         'whatsapp_minutos_padrao': MINUTOS_WHATSAPP_PADRAO,
         'categorias': servicos.categorias(),
@@ -140,7 +154,7 @@ def minha(request):
     contexto = _contexto(request, 'minha', com_domingo=com_domingo, rotina=rotina, total_atividades=total,
                          mostrar_calendario=mostrar,
                          whatsapp_ligado=bool(rotina and rotina.avisar_whatsapp and servicos.tem_telefone(request.user)),
-                         pessoas_para_editar=_pessoas_para_editar() if e_superadmin(request.user) else [])
+                         pessoas_para_editar=_pessoas_para_editar() if pode_gerir(request.user) else [])
     if mostrar:
         destaque = _numero(request.GET.get('atividade'), minimo=1)
         if destaque and not any(a['id'] == destaque for a in dados['atividades']):
@@ -160,7 +174,7 @@ def minha(request):
 # ---------------------------------------------------------------------------
 # Gestão: quem tem rotina
 # ---------------------------------------------------------------------------
-@so_superadmin
+@so_gestao
 def gestao(request):
     q = (request.GET.get('q') or '').strip()
     rotinas = (RotinaGerencial.objects
@@ -195,10 +209,38 @@ def gestao(request):
         candidatos=(User.objects.filter(is_active=True).select_related('sector')
                     .order_by('first_name', 'last_name')),
         pessoas_para_editar=_pessoas_para_editar(),
+        # Quem gerencia além do SUPERADMIN — só ele vê e mexe nesta lista.
+        gestores=(GestorRotina.objects.select_related('user', 'user__sector', 'criado_por')
+                  .order_by('user__first_name', 'user__last_name') if e_superadmin(request.user) else []),
     ))
 
 
-@so_superadmin
+@login_required
+@require_POST
+def gestao_gestores(request):
+    """SUPERADMIN: põe ou tira quem gerencia a rotina dos outros."""
+    if not e_superadmin(request.user):
+        messages.error(request, 'Só o SUPERADMIN escolhe quem gerencia a rotina gerencial.')
+        return redirect('rotina:minha')
+    acao = request.POST.get('acao')
+    if acao == 'adicionar':
+        ids = {_numero(v, minimo=1) for v in request.POST.getlist('usuarios')} - {None}
+        novos = 0
+        for pessoa in User.objects.filter(id__in=ids, is_active=True):
+            _gestor, criado = GestorRotina.objects.get_or_create(user=pessoa, defaults={'criado_por': request.user})
+            novos += criado
+        if novos:
+            messages.success(request, f"{_plural(novos, 'pessoa passou', 'pessoas passaram')} a gerenciar a rotina.")
+        else:
+            messages.info(request, 'Escolha quem vai gerenciar (quem já gerencia não muda).')
+    elif acao == 'remover':
+        removidos, _ = GestorRotina.objects.filter(pk=_numero(request.POST.get('gestor'), minimo=1)).delete()
+        messages.success(request, 'Acesso de gestão removido.' if removidos else 'Essa pessoa já não gerenciava.')
+    return redirect(reverse('rotina:gestao') + '#rt-gestores')
+
+
+
+@so_gestao
 @require_POST
 def gestao_adicionar(request):
     ids = {_numero(valor, minimo=1) for valor in request.POST.getlist('usuarios')} - {None}
@@ -253,7 +295,7 @@ def gestao_adicionar(request):
     return redirect('rotina:gestao')
 
 
-@so_superadmin
+@so_gestao
 def gestao_pessoa(request, user_id):
     pessoa = get_object_or_404(User.objects.select_related('sector'), pk=user_id)
     rotina = (RotinaGerencial.objects.select_related('user', 'modelo_origem', 'atualizado_por')
@@ -285,7 +327,7 @@ def gestao_pessoa(request, user_id):
     ))
 
 
-@so_superadmin
+@so_gestao
 @require_POST
 def gestao_pessoa_acao(request, user_id):
     rotina = get_object_or_404(RotinaGerencial.objects.select_related('user'), user_id=user_id)

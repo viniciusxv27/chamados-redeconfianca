@@ -281,3 +281,124 @@ class AgendaLeituraSap(models.Model):
     def get(cls):
         agenda, _ = cls.objects.get_or_create(pk=1)
         return agenda
+
+
+# ---------------------------------------------------------------------------
+# Visão Renova (09/11/2026): toda venda com Renova no SAP (ordem ZVNB) precisa de
+# um chamado de Renova (Allied/Vini) no portal. O casamento é pelo CPF do cliente
+# (auditoria_sap/renova.py) e a loja sem chamado é cobrada no grupo de gestão às 15h.
+# ---------------------------------------------------------------------------
+class VendaRenova(models.Model):
+    """Uma ordem ZVNB do SAP (zs103_final), espelhada a cada leitura do SAP."""
+
+    COMO_VENDA = 'venda'
+    COMO_CPF = 'cpf'
+    COMO_FICHA = 'ficha'
+    COMO_MANUAL = 'manual'
+    COMO = (
+        (COMO_VENDA, 'Venda do Vivo Go do cliente citada no chamado'),
+        (COMO_CPF, 'CPF do cliente escrito no chamado'),
+        (COMO_FICHA, 'Ficha do Renova (app) ligada ao chamado'),
+        (COMO_MANUAL, 'Ligado à mão'),
+    )
+
+    ordem = models.CharField(max_length=30, unique=True, verbose_name='Ordem ZVNB (doc. de vendas)')
+    num_fat = models.CharField(max_length=40, blank=True, db_index=True, verbose_name='Nota fiscal')
+    data_fatura = models.DateField(null=True, blank=True, db_index=True, verbose_name='Data da fatura')
+    cpf = models.CharField(max_length=14, blank=True, db_index=True, verbose_name='CPF/CNPJ do cliente (só dígitos)')
+    cliente_nome = models.CharField(max_length=180, blank=True, verbose_name='Cliente')
+    escritorio = models.CharField(max_length=10, blank=True, verbose_name='Escritório de vendas (SAP)')
+    loja = models.CharField(max_length=120, blank=True, db_index=True, verbose_name='Loja')
+    setor = models.ForeignKey('users.Sector', on_delete=models.SET_NULL, null=True, blank=True,
+                              related_name='+', verbose_name='Loja no portal')
+    material = models.CharField(max_length=255, blank=True, verbose_name='Aparelho vendido')
+    imei = models.CharField(max_length=40, blank=True, verbose_name='IMEI do aparelho vendido')
+    valor_faturado = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True,
+                                         verbose_name='Valor faturado')
+    desconto = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True,
+                                   verbose_name='Desconto (Renova)')
+    vendas_vivogo = models.JSONField(default=list, blank=True, verbose_name='Vendas do Vivo Go do cliente')
+
+    chamado = models.ForeignKey('tickets.Ticket', on_delete=models.SET_NULL, null=True, blank=True,
+                                related_name='vendas_renova_sap', verbose_name='Chamado de Renova')
+    chamado_como = models.CharField(max_length=10, choices=COMO, blank=True, default='', db_default='',
+                                    verbose_name='Como o chamado foi achado')
+    chamado_achado_em = models.DateTimeField(null=True, blank=True, verbose_name='Chamado achado em')
+
+    dispensada = models.BooleanField(default=False, db_default=False, db_index=True,
+                                     verbose_name='Não precisa de chamado')
+    dispensada_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                                       blank=True, related_name='+')
+    dispensada_em = models.DateTimeField(null=True, blank=True)
+    observacao = models.TextField(blank=True, default='', db_default='', verbose_name='Observação')
+
+    cobrancas = models.PositiveSmallIntegerField(default=0, db_default=0, verbose_name='Vezes cobrada no grupo')
+    ultima_cobranca_em = models.DateTimeField(null=True, blank=True, verbose_name='Última cobrança')
+
+    ativa = models.BooleanField(default=True, db_default=True, verbose_name='Ainda está no SAP')
+    visto_em = models.DateTimeField(default=timezone.now, verbose_name='Visto no SAP em')
+    criado_em = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Venda com Renova (SAP)'
+        verbose_name_plural = 'Vendas com Renova (SAP)'
+        ordering = ['-data_fatura', '-ordem']
+
+    def __str__(self):
+        return f'ZVNB {self.ordem} ({self.loja or "sem loja"})'
+
+    @property
+    def pendente(self):
+        return self.chamado_id is None and not self.dispensada
+
+    @property
+    def cpf_mascarado(self):
+        d = self.cpf or ''
+        if len(d) == 11:
+            return f'***.{d[3:6]}.{d[6:9]}-**'
+        return d
+
+
+class ConfiguracaoRenovaSap(models.Model):
+    """A cobrança da Visão Renova (uma linha só). Nasce desligada."""
+
+    cobranca_ativa = models.BooleanField(default=False, db_default=False,
+                                         verbose_name='Cobrar no grupo da loja todo dia às 15h')
+    janela_dias = models.PositiveSmallIntegerField(default=7, db_default=7,
+                                                   verbose_name='Cobrar vendas dos últimos N dias')
+    atualizado_em = models.DateTimeField(auto_now=True)
+    atualizado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                                       blank=True, related_name='+')
+
+    class Meta:
+        verbose_name = 'Configuração da Visão Renova'
+        verbose_name_plural = 'Configuração da Visão Renova'
+
+    @classmethod
+    def get(cls):
+        cfg, _ = cls.objects.get_or_create(pk=1)
+        return cfg
+
+
+class CobrancaRenova(models.Model):
+    """Uma mensagem para o grupo de gestão de uma loja — gravada antes de sair."""
+
+    AUTOMATICA = 'auto'
+    MANUAL = 'manual'
+    ORIGENS = ((AUTOMATICA, 'Automática (15h)'), (MANUAL, 'Pela tela'))
+
+    setor = models.ForeignKey('users.Sector', on_delete=models.CASCADE, related_name='+')
+    grupo = models.CharField(max_length=80)
+    texto = models.TextField()
+    vendas = models.ManyToManyField(VendaRenova, related_name='cobrancas_feitas', blank=True)
+    origem = models.CharField(max_length=10, choices=ORIGENS, default=AUTOMATICA)
+    disparado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                                      blank=True, related_name='+')
+    enviado = models.BooleanField(null=True, verbose_name='Saiu? (vazio = mandando)')
+    detalhe = models.CharField(max_length=255, blank=True, default='')
+    criado_em = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        verbose_name = 'Cobrança de Renova no WhatsApp'
+        verbose_name_plural = 'Cobranças de Renova no WhatsApp'
+        ordering = ['-criado_em']

@@ -597,3 +597,191 @@ def gestores(request):
         'agenda': agenda, 'proxima': proxima_leitura(agenda),
         'pode_escolher_gestores': True, 'e_gestor': True, 'ultima': ultima_sincronizacao(),
     })
+
+
+# ---------------------------------------------------------------------------
+# Visão Renova (auditoria_sap/renova.py)
+# ---------------------------------------------------------------------------
+SITUACOES_RENOVA = (('sem_chamado', 'Sem chamado'), ('com_chamado', 'Com chamado'),
+                    ('dispensadas', 'Não precisam de chamado'), ('todas', 'Todas'))
+
+
+def _renovas_visiveis(user):
+    from .models import VendaRenova
+    qs = VendaRenova.objects.all()
+    lojas = lojas_visiveis(user)
+    if lojas is None:
+        return qs
+    ids = [s.id for s in _setores_das_lojas(lojas)]
+    return qs.filter(setor_id__in=ids)
+
+
+def _setores_das_lojas(lojas):
+    from users.models import Sector
+    return [s for s in Sector.objects.all() if normalizar_loja(s.name) in lojas]
+
+
+@login_required
+@so_auditoria
+def renova(request):
+    """Vendas com Renova no SAP (ZVNB) e o chamado de cada uma."""
+    from .models import CobrancaRenova, ConfiguracaoRenovaSap
+    from .renova import faltando_no_canal, previa
+
+    base = _renovas_visiveis(request.user)
+    situacao = request.GET.get('situacao') or 'sem_chamado'
+    if situacao not in dict(SITUACOES_RENOVA):
+        situacao = 'sem_chamado'
+    mes = (request.GET.get('mes') or '').strip()
+    loja = (request.GET.get('loja') or '').strip()
+    busca = (request.GET.get('q') or '').strip()
+
+    qs = base.filter(ativa=True)
+    if _mes_valido(mes):
+        ano, m = (int(x) for x in mes.split('-'))
+        qs = qs.filter(data_fatura__year=ano, data_fatura__month=m)
+    if loja:
+        qs = qs.filter(setor_id=loja) if loja.isdigit() else qs.filter(setor__isnull=True)
+    if busca:
+        digitos_busca = ''.join(c for c in busca if c.isdigit())
+        filtro = Q(cliente_nome__icontains=busca) | Q(material__icontains=busca) | Q(loja__icontains=busca)
+        if digitos_busca:
+            filtro |= (Q(ordem__icontains=digitos_busca) | Q(num_fat__icontains=digitos_busca)
+                       | Q(cpf__icontains=digitos_busca) | Q(imei__icontains=digitos_busca)
+                       | Q(vendas_vivogo__icontains=digitos_busca) | Q(chamado_id=int(digitos_busca[:9])))
+        qs = qs.filter(filtro)
+    contagem = {
+        'sem_chamado': qs.filter(chamado__isnull=True, dispensada=False).count(),
+        'com_chamado': qs.filter(chamado__isnull=False).count(),
+        'dispensadas': qs.filter(chamado__isnull=True, dispensada=True).count(),
+    }
+    contagem['todas'] = qs.count()
+    if situacao == 'sem_chamado':
+        qs = qs.filter(chamado__isnull=True, dispensada=False)
+    elif situacao == 'com_chamado':
+        qs = qs.filter(chamado__isnull=False)
+    elif situacao == 'dispensadas':
+        qs = qs.filter(chamado__isnull=True, dispensada=True)
+
+    pagina = Paginator(qs.select_related('setor', 'chamado', 'dispensada_por')
+                       .order_by('-data_fatura', '-ordem'), POR_PAGINA).get_page(request.GET.get('pagina'))
+    parametros = request.GET.copy()
+    parametros.pop('pagina', None)
+
+    meses = sorted({d.strftime('%Y-%m') for d in base.exclude(data_fatura__isnull=True)
+                    .annotate(m=TruncMonth('data_fatura')).values_list('m', flat=True) if d}, reverse=True)
+    lojas_ids = base.exclude(setor__isnull=True).values_list('setor_id', flat=True).distinct()
+    from users.models import Sector
+    e_gestor = _e_gestor(request.user)
+    contexto = {
+        'aba': 'renova',
+        'pagina': pagina,
+        'query': '',
+        'query_renova': parametros.urlencode(),
+        'situacao': situacao,
+        'situacoes': [{'chave': c, 'rotulo': r, 'n': contagem[c]} for c, r in SITUACOES_RENOVA],
+        'mes': mes,
+        'meses': [{'chave': c, 'rotulo': rotulo_mes(c)} for c in meses],
+        'loja': loja,
+        'lojas': Sector.objects.filter(id__in=lojas_ids).order_by('name'),
+        'tem_sem_loja': base.filter(setor__isnull=True).exists() and lojas_visiveis(request.user) is None,
+        'busca': busca,
+        'ultima': ultima_sincronizacao(),
+        'e_gestor': e_gestor,
+        'pode_escolher_gestores': pode_escolher_gestores(request.user),
+        'so_da_loja': lojas_visiveis(request.user) is not None,
+        'loja_do_usuario': request.user.sector.name if getattr(request.user, 'sector_id', None) else '',
+        'tem_espelho': base.exists(),
+    }
+    if e_gestor:
+        cfg = ConfiguracaoRenovaSap.get()
+        dados = previa(cfg)
+        contexto.update({
+            'cfg': cfg,
+            'previa': dados,
+            'previa_total': sum(len(l['vendas']) for l in dados['lojas']) + len(dados['sem_loja']),
+            'sem_canal': faltando_no_canal(),
+            'cobrancas': CobrancaRenova.objects.select_related('setor', 'disparado_por')[:15],
+        })
+    return render(request, 'auditoria_sap/renova.html', contexto)
+
+
+@login_required
+@so_auditoria
+def renova_marcar(request, venda_id):
+    """Não precisa de chamado (ou volta a precisar), ou liga a venda a um chamado pelo número."""
+    from tickets.models import Ticket
+
+    from .models import VendaRenova
+    voltar = request.POST.get('voltar') or 'auditoria_sap:renova'
+    if request.method != 'POST':
+        return redirect('auditoria_sap:renova')
+    venda = get_object_or_404(_renovas_visiveis(request.user), id=venda_id)
+    acao = request.POST.get('acao')
+    observacao = (request.POST.get('observacao') or '').strip()[:1000]
+    if acao == 'dispensar':
+        if not observacao:
+            messages.error(request, 'Diga por que esta venda não precisa de chamado.')
+            return redirect(voltar)
+        VendaRenova.objects.filter(pk=venda.pk).update(
+            dispensada=True, dispensada_por=request.user, dispensada_em=timezone.now(), observacao=observacao)
+        messages.success(request, f'Ordem {venda.ordem}: marcada como "não precisa de chamado".')
+    elif acao == 'reabrir':
+        VendaRenova.objects.filter(pk=venda.pk).update(
+            dispensada=False, dispensada_por=None, dispensada_em=None,
+            chamado=None, chamado_como='', chamado_achado_em=None)
+        messages.success(request, f'Ordem {venda.ordem} voltou para "sem chamado".')
+    elif acao == 'ligar':
+        numero = ''.join(c for c in (request.POST.get('chamado') or '') if c.isdigit())
+        chamado = Ticket.objects.filter(pk=int(numero)).first() if numero else None
+        if not chamado:
+            messages.error(request, 'Chamado não encontrado. Informe o número do chamado (ex.: 8104).')
+            return redirect(voltar)
+        VendaRenova.objects.filter(pk=venda.pk).update(
+            chamado=chamado, chamado_como=VendaRenova.COMO_MANUAL, chamado_achado_em=timezone.now(),
+            dispensada=False, observacao=observacao or venda.observacao)
+        messages.success(request, f'Ordem {venda.ordem} ligada ao chamado #{chamado.pk}.')
+    return redirect(voltar)
+
+
+@login_required
+@so_auditoria
+def renova_config(request):
+    """Gestor: liga/desliga a cobrança das 15h, janela de dias e "cobrar agora"."""
+    from .models import CobrancaRenova, ConfiguracaoRenovaSap
+    from .renova import casar_chamados, cobrar, ler_do_sap
+
+    if request.method != 'POST' or not _e_gestor(request.user):
+        messages.error(request, 'Só a gestão da Visão SAP configura a cobrança de Renova.')
+        return redirect('auditoria_sap:renova')
+    acao = request.POST.get('acao') or 'salvar'
+    try:
+        if acao == 'salvar':
+            try:
+                janela = max(1, min(60, int(request.POST.get('janela_dias') or 7)))
+            except ValueError:
+                janela = 7
+            ConfiguracaoRenovaSap.objects.filter(pk=ConfiguracaoRenovaSap.get().pk).update(
+                cobranca_ativa=request.POST.get('cobranca_ativa') == 'on', janela_dias=janela,
+                atualizado_por=request.user, atualizado_em=timezone.now())
+            messages.success(request, 'Cobrança de Renova salva.')
+        elif acao == 'ler':
+            r = ler_do_sap()
+            messages.success(request, f"Renova relido do SAP: {r['ordens']} ordens ZVNB, {r['novas']} novas, "
+                                      f"{r['chamados_achados']} chamado(s) achado(s) agora.")
+        elif acao == 'cobrar':
+            casar_chamados()
+            r = cobrar(CobrancaRenova.MANUAL, user=request.user)
+            if r['sem_canal']:
+                messages.error(request, 'O WhatsApp (Evolution) não está configurado neste servidor.')
+            else:
+                messages.success(request, f"{len(r['gravadas'])} loja(s) cobradas: {r['resumo']['enviados']} "
+                                          f"enviada(s), {r['resumo']['falhas']} falha(s). "
+                                          f"{len(r['recentes'])} já cobradas há menos de 30 min; "
+                                          f"{len(r['sem_grupo'])} sem grupo.")
+    except SapIndisponivel as exc:
+        messages.error(request, f'Não deu para ler o SAP agora: {exc}')
+    except Exception as exc:  # noqa: BLE001 — a tela mostra o erro em vez de 500
+        logger.exception('Visão Renova: falha em %s', acao)
+        messages.error(request, f'Não deu para concluir ({exc.__class__.__name__}: {str(exc)[:300]}).')
+    return redirect('auditoria_sap:renova')

@@ -11,4 +11,7 @@ urlpatterns = [
     path('linha/<int:linha_id>/', views.detalhe, name='detalhe'),
     path('linha/<int:linha_id>/marcar/', views.marcar, name='marcar'),
     path('gestores/', views.gestores, name='gestores'),
+    path('renova/', views.renova, name='renova'),
+    path('renova/<int:venda_id>/marcar/', views.renova_marcar, name='renova_marcar'),
+    path('renova/configurar/', views.renova_config, name='renova_config'),
 ]

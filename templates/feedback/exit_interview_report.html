@@ -212,6 +212,9 @@
                         <span class="text-gray-600">{{ item.label }}</span>
                         <span class="shrink-0 text-xs px-2 py-1 rounded-full bg-sky-50 text-sky-700">{{ item.value }}</span>
                       </div>
+                      {% if item.outro %}
+                        <p class="text-sm text-gray-700 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 mb-2 whitespace-pre-line"><i class="fas fa-quote-left text-gray-300 mr-1"></i>{{ item.outro }}</p>
+                      {% endif %}
                     {% else %}
                       <p class="text-xs font-medium text-gray-500">{{ item.label }}</p>
                       <p class="text-sm text-gray-700 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 mt-1">{{ item.value }}</p>

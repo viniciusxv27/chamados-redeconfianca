@@ -9,6 +9,7 @@ urlpatterns = [
     path('', views.minha, name='minha'),
     path('gestao/', views.gestao, name='gestao'),
     path('gestao/adicionar/', views.gestao_adicionar, name='gestao_adicionar'),
+    path('gestao/gestores/', views.gestao_gestores, name='gestao_gestores'),
     path('gestao/<int:user_id>/', views.gestao_pessoa, name='gestao_pessoa'),
     path('gestao/<int:user_id>/acao/', views.gestao_pessoa_acao, name='gestao_pessoa_acao'),
     path('modelos/', views.modelos, name='modelos'),

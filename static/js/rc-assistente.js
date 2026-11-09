@@ -168,7 +168,7 @@
             b.classList.toggle('rca-ativo', ativo);
             b.setAttribute('aria-selected', ativo ? 'true' : 'false');
         });
-        subtitulo.textContent = estado.modo === 'claude' ? 'Claude, com a sua chave' : 'Dúvidas, POPs e páginas';
+        subtitulo.textContent = estado.modo === 'claude' ? (estado.chaveEmpresa ? 'Claude, com os seus dados do portal' : 'Claude, com a sua chave') : 'Dúvidas, POPs e páginas';
         fimDaConversa();
     }
 
@@ -189,6 +189,7 @@
             .then(function (r) { return r.ok ? r.json() : null; })
             .then(function (d) {
                 if (!d) return;
+                estado.chaveEmpresa = !!d.chave_empresa;
                 modos.hidden = !d.claude;
                 if (!d.claude && estado.modo === 'claude') { estado.modo = 'orienta'; desenhar(); }
                 if (d.pagina_claude && !embutido) {

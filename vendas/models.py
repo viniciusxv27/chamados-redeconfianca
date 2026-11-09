@@ -275,6 +275,11 @@ class VendaServico(models.Model):
     novo_titular_nome = models.CharField(max_length=200, blank=True, default='', db_default='', verbose_name='Novo titular')
     numero_anterior = models.CharField(max_length=20, blank=True, default='', db_default='', verbose_name='Número anterior')
     numero_novo = models.CharField(max_length=20, blank=True, default='', db_default='', verbose_name='Número novo')
+    # Alta por portabilidade (09/11/2026): de qual operadora o número veio.
+    OPERADORAS = [('CLARO', 'Claro'), ('OI', 'Oi'), ('TIM', 'Tim'), ('OUTROS', 'Outros')]
+    portabilidade = models.BooleanField(default=False, db_default=False, verbose_name='Portabilidade')
+    operadora_origem = models.CharField(max_length=10, blank=True, default='', db_default='', choices=OPERADORAS,
+                                        verbose_name='Operadora de origem')
 
     class Meta:
         verbose_name = 'Serviço da Venda'

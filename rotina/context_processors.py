@@ -6,7 +6,7 @@
 - `rotina_liberada`: rotina ativa com pelo menos uma atividade. Decide a
   inclusão do notificador de avisos e o cartão da home — sem atividade não há
   o que avisar nem mostrar.
-- `rotina_admin`: SUPERADMIN, que enxerga o menu mesmo sem rotina própria,
+- `rotina_admin`: SUPERADMIN ou gestor da rotina, que enxerga o menu mesmo sem rotina própria,
   para gerir a dos outros.
 
 Roda em toda página: no máximo uma consulta, guardada no request, e
@@ -14,7 +14,7 @@ nunca derruba a renderização do portal.
 """
 import logging
 
-from .permissoes import e_superadmin
+from .permissoes import pode_gerir
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +53,7 @@ def rotina_menu(request):
         logger.warning('Menu da rotina gerencial indisponível: %s', exc)
         no_menu = liberada = False
 
-    resultado = {'rotina_liberada': liberada, 'rotina_no_menu': no_menu, 'rotina_admin': e_superadmin(user)}
+    resultado = {'rotina_liberada': liberada, 'rotina_no_menu': no_menu, 'rotina_admin': pode_gerir(user)}
     try:
         request._rotina_menu = resultado
     except Exception:                                           # noqa: BLE001

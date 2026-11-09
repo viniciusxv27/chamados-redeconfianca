@@ -666,18 +666,33 @@ def configuracao(request):
         # o módulo inteiro.
         if chave and not chave.startswith('•'):
             cfg.jaas_chave_privada = chave
+        cfg.jitsi_app_id = (request.POST.get('jitsi_app_id') or '').strip()[:120]
+        segredo = (request.POST.get('jitsi_app_secret') or '').strip()
+        if segredo and not segredo.startswith('•'):      # em branco/mascarado: mantém o guardado
+            cfg.jitsi_app_secret = segredo[:200]
+        if request.POST.get('jitsi_apagar_segredo') == 'on':
+            cfg.jitsi_app_secret = ''
         cfg.save()
         messages.success(request, 'Configuração salva.')
         return redirect('reunioes:configuracao')
 
-    from .jaas import gerar_token
+    import secrets
 
-    testando = gerar_token(cfg, request.user, 'teste') if cfg.jaas_app_id else None
+    from .jaas import PUBLICO, SERVIDOR_JAAS, gerar_token, servidor_para
+
+    testando = gerar_token(cfg, request.user, 'teste') if (cfg.jaas_app_id or cfg.jitsi_app_id) else None
+    servidor_em_uso = servidor_para(cfg)
+    proprio = servidor_em_uso not in (PUBLICO, SERVIDOR_JAAS)
     return render(request, 'reunioes/configuracao.html', {
         'cfg': cfg,
         'url_branding': _endereco(request) + reverse('reunioes:branding'),
         'url_fundo': url_do_fundo(request, cfg),
-        'tem_jaas': bool(cfg.jaas_app_id and cfg.jaas_api_key_id and cfg.jaas_chave_privada),
+        'tem_jaas': bool(cfg.jaas_app_id and cfg.jaas_api_key_id and cfg.jaas_chave_privada) and not proprio,
         'jaas_ok': bool(testando),
+        'servidor_em_uso': servidor_em_uso,
+        'servidor_proprio': proprio,
+        'proprio_assinado': proprio and bool(testando),
+        # Sugestão de segredo para colar no .env do servidor (JWT_APP_SECRET) e aqui.
+        'segredo_sugerido': secrets.token_urlsafe(32),
         'servidor_publico': (cfg.servidor_jitsi or '').strip() in ('meet.jit.si', ''),
     })

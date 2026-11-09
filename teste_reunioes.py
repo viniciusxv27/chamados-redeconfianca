@@ -485,6 +485,48 @@ try:
     t('avisa que o servidor público exige moderador',
       'aguardando um moderador' in pagina)
 
+    print('\n== JITSI PRÓPRIO SEM LIMITE (09/11) ==')
+    import hashlib as _hl
+    import hmac as _hm
+
+    class Proprio(CfgFake):
+        servidor_jitsi = 'video.suaempresa.com.br'
+        jitsi_app_id = 'redeconfianca'
+        jitsi_app_secret = 'segredo-de-teste-123'
+
+    dp = dados_da_sala(Proprio(), ger1, 'rc-sala')
+    t('servidor próprio: sala no servidor da empresa, sem prefixo do 8x8',
+      dp['servidor'] == 'video.suaempresa.com.br' and dp['sala'] == 'rc-sala' and dp['autenticado'], dp)
+    cab_p, corpo_p, assin_p = dp['token'].split('.')
+    cp = _dec(corpo_p)
+    t('token HS256 com iss = AppID e o nome do cadastro', _dec(cab_p)['alg'] == 'HS256' and cp['iss'] == 'redeconfianca'
+      and cp['aud'] == 'jitsi' and cp['room'] == '*' and cp['context']['user']['name'] == (ger1.get_full_name() or ger1.email))
+    esperado = base64.urlsafe_b64encode(_hm.new(b'segredo-de-teste-123', f'{cab_p}.{corpo_p}'.encode(), _hl.sha256).digest()).rstrip(b'=').decode()
+    t('assinatura HS256 confere com o segredo', assin_p == esperado)
+    t('a chave do 8x8 não vai para o servidor próprio', 'kid' not in _dec(cab_p))
+    from reunioes.jaas import dados_da_sala_visitante
+    dv = dados_da_sala_visitante(Proprio(), 'Visitante ZZ', 'rc-sala')
+    t('visitante no servidor próprio entra assinado, sem ser moderador',
+      dv['autenticado'] and _dec(dv['token'].split('.')[1])['context']['user']['moderator'] == 'false')
+
+    class ProprioAberto(CfgFake):
+        servidor_jitsi = 'video.suaempresa.com.br'
+        jitsi_app_id = jitsi_app_secret = ''
+
+    da = dados_da_sala(ProprioAberto(), ger1, 'rc-sala')
+    t('servidor próprio sem segredo: abre sem token (e sem mandar o do 8x8)', da['token'] == '' and not da['autenticado'])
+    c.post('/reunioes/configuracao/', {'servidor_jitsi': 'https://video.zz-teste.local/', 'gerar_ata': 'on',
+                                       'jitsi_app_id': 'redeconfianca', 'jitsi_app_secret': 'zz-segredo'})
+    cfg_real = ConfiguracaoReunioes.get()
+    t('a tela salva servidor, AppID e segredo', cfg_real.servidor_jitsi == 'video.zz-teste.local'
+      and cfg_real.jitsi_app_id == 'redeconfianca' and cfg_real.jitsi_app_secret == 'zz-segredo')
+    pagina = c.get('/reunioes/configuracao/').content.decode()
+    t('a tela confirma "sem limite" e não mostra o segredo', 'sem limite de usuários' in pagina
+      and 'zz-segredo' not in pagina and 'segredo guardado' in pagina)
+    c.post('/reunioes/configuracao/', {'servidor_jitsi': 'video.zz-teste.local', 'gerar_ata': 'on',
+                                       'jitsi_app_id': 'redeconfianca', 'jitsi_app_secret': '•••••••• segredo guardado'})
+    t('salvar sem mexer mantém o segredo', ConfiguracaoReunioes.get().jitsi_app_secret == 'zz-segredo')
+
     print('\n== HIGIENE DE TEMPLATE ==')
     import glob
     import re

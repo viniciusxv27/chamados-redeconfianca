@@ -68,6 +68,56 @@ class AssistenteConexao(models.Model):
             return ''
 
 
+class ChaveClaudeEmpresa(models.Model):
+    """Chave da Anthropic do portal (uma linha só) — 09/11/2026.
+
+    O SUPERADMIN cola em /users/settings/. Configurada, TODO mundo usa esta no
+    Assistente Claude (a chave pessoal fica guardada, mas não é usada), com o
+    modelo escolhido aqui. As ferramentas continuam com as permissões de quem
+    pergunta: a chave paga a conta, não abre dado de ninguém.
+    """
+
+    api_key_cifrada = models.TextField(blank=True, default='', db_default='', verbose_name='Chave (cifrada)')
+    key_hint = models.CharField(max_length=12, blank=True, default='', db_default='', verbose_name='Final da chave')
+    modelo = models.CharField(max_length=40, choices=MODELOS, default=MODELO_PADRAO, db_default=MODELO_PADRAO)
+    definida_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                     related_name='+')
+    definida_em = models.DateTimeField(null=True, blank=True)
+    ultimo_ok_em = models.DateTimeField(null=True, blank=True, verbose_name='Último teste OK')
+
+    class Meta:
+        verbose_name = 'Chave do Claude da empresa'
+        verbose_name_plural = 'Chave do Claude da empresa'
+
+    @classmethod
+    def get(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    @property
+    def configurada(self):
+        return bool(self.api_key_cifrada)
+
+    def set_api_key(self, raw, user=None):
+        from .crypto import cifrar
+        raw = (raw or '').strip()
+        self.api_key_cifrada = cifrar(raw) if raw else ''
+        self.key_hint = ('…' + raw[-4:]) if len(raw) >= 4 else ''
+        self.definida_por = user if raw else None
+        self.definida_em = timezone.now() if raw else None
+        if not raw:
+            self.ultimo_ok_em = None
+
+    def get_api_key(self):
+        from .crypto import decifrar
+        if not self.api_key_cifrada:
+            return ''
+        try:
+            return decifrar(self.api_key_cifrada)
+        except Exception:
+            return ''
+
+
 class AssistenteMensagem(models.Model):
     """Uma fala do chat (só o texto visível; ferramentas não entram aqui)."""
 

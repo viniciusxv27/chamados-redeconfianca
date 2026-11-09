@@ -13,6 +13,16 @@
         <p class="ra-sub">Vê qualquer loja, monta e copia o check-list de cada uma e olha a agenda de outras pessoas.</p></div>
 </section>
 
+<section class="ra-card ra-secao" id="raGrupoWhatsapp">
+    <div class="ra-secao-titulo" style="margin-bottom:12px"><span class="ic" style="background:#e7f8ee;color:#16a34a"><i class="fab fa-whatsapp"></i></span>
+        <div><h2>Grupo dos ADMs no WhatsApp</h2><p>Aparece no painel, na Contagem de Estoque, para quem tiver dúvida pedir um help aos outros analistas.</p></div></div>
+    <form method="post" style="display:flex;gap:10px;flex-wrap:wrap">{% csrf_token %}
+        <input class="ra-campo" type="url" name="link_grupo_whatsapp" value="{{ link_grupo_adm }}" placeholder="https://chat.whatsapp.com/…" style="flex:1;min-width:260px">
+        <button class="ra-botao primario" name="acao" value="link_grupo"><i class="fas fa-check"></i>Salvar</button>
+        {% if link_grupo_adm %}<a class="ra-botao" href="{{ link_grupo_adm }}" target="_blank" rel="noopener"><i class="fas fa-arrow-up-right-from-square"></i>Testar</a>{% endif %}
+    </form>
+</section>
+
 <section class="ra-card ra-secao">
     <div class="ra-secao-titulo" style="margin-bottom:12px"><span class="ic" style="background:var(--ra-roxo-claro);color:var(--ra-roxo)"><i class="fas fa-plus"></i></span>
         <div><h2>Liberar</h2><p>Escolha um grupo de comunicação ou uma pessoa.</p></div></div>

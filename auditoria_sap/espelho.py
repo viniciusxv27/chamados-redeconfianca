@@ -180,6 +180,13 @@ def sincronizar(por=None):
     except mysql.SapIndisponivel:                     # a auditoria já foi lida; o pagamento vem na próxima
         logger.warning('Auditoria SAP: formas de pagamento não lidas agora', exc_info=True)
 
+    try:
+        # Visão Renova: as ordens ZVNB vêm na mesma leitura (auditoria_sap/renova.py).
+        from .renova import ler_do_sap
+        ler_do_sap()
+    except Exception:                                 # noqa: BLE001 — a auditoria já foi lida
+        logger.warning('Visão Renova não atualizada agora', exc_info=True)
+
     resumo = {
         'novas': len(novas),
         'atualizadas': len(alteradas),

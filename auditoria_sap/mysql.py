@@ -123,3 +123,49 @@ def ler_visao_geral():
             con.close()
         except Exception:                                        # noqa: BLE001
             pass
+
+
+def _consultar(sql, parametros=()):
+    con = conexao()
+    try:
+        with con.cursor() as cur:
+            cur.execute(sql, parametros)
+            return list(cur.fetchall())
+    except Exception as exc:                                     # noqa: BLE001
+        raise SapIndisponivel(f'Falha lendo o SAP: {exc}') from exc
+    finally:
+        try:
+            con.close()
+        except Exception:                                        # noqa: BLE001
+            pass
+
+
+TIPO_RENOVA = 'ZVNB'
+
+
+def ler_renovas(desde):
+    """As ordens com Renova (tipo de faturamento ZVNB) da zs103_final desde a data.
+
+    Uma linha por ordem: a carga mais nova (id maior) vale.
+    """
+    linhas = _consultar(
+        "SELECT id, doc_vendas, num_fat, cnpj_cpf, dt_fatura, escr_vend, desc_material, hexadecimal, "
+        "vl_faturado, desconto, status_nf FROM zs103_final "
+        "WHERE tp_fat = %s AND dt_fatura >= %s ORDER BY id", (TIPO_RENOVA, desde))
+    por_ordem = {}
+    for linha in linhas:
+        ordem = str(linha.get('doc_vendas') or '').strip()
+        if ordem:
+            por_ordem[ordem] = linha
+    return list(por_ordem.values())
+
+
+def ler_vendas_vivogo(desde):
+    """Vendas do Vivo Go (com CPF do cliente e a nota do SAP) desde a data.
+
+    Vem da vw_conferencia_vendas_produtos — a ponte CPF ↔ venda do Vivo Go ↔ nota.
+    ~10 s para três meses.
+    """
+    return _consultar(
+        "SELECT ID_VENDA, CPF_VIVOGO_NORMALIZADO, CPF_SAP_NORMALIZADO, NUM_FAT_SAP, PDV, NOME_CLIENTE "
+        "FROM vw_conferencia_vendas_produtos WHERE DATA_VENDA >= %s", (desde,))

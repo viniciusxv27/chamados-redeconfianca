@@ -72,3 +72,22 @@ class MarcacaoChecklist(models.Model):
         verbose_name = 'Item do check-list feito'
         verbose_name_plural = 'Itens do check-list feitos'
         constraints = [models.UniqueConstraint(fields=['item', 'data'], name='rotina_adm_marcacao_unica')]
+
+
+class ConfiguracaoRotinaAdm(models.Model):
+    """Uma linha só. O SUPERADMIN cola o link do grupo dos ADMs de loja no WhatsApp (09/11/2026)."""
+
+    link_grupo_whatsapp = models.URLField(max_length=300, blank=True, default='', db_default='',
+                                          verbose_name='Link do grupo dos ADMs no WhatsApp')
+    atualizado_em = models.DateTimeField(auto_now=True)
+    atualizado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                                       blank=True, related_name='+')
+
+    class Meta:
+        verbose_name = 'Configuração da Rotina ADM'
+        verbose_name_plural = 'Configuração da Rotina ADM'
+
+    @classmethod
+    def get(cls):
+        cfg, _ = cls.objects.get_or_create(pk=1)
+        return cfg
