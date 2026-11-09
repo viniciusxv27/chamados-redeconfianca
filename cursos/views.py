@@ -24,7 +24,9 @@ logger = logging.getLogger(__name__)
 User = get_user_model()
 
 TAMANHO_MAXIMO = 25 * 1024 * 1024          # 25 MB — comprovante é print ou PDF
-EXTENSOES = ('.pdf', '.png', '.jpg', '.jpeg', '.webp', '.heic')
+# Certificado chega em qualquer formato (PDF sem extensão vindo do celular, etc.): não há
+# trava de tipo desde 09/11/2026 — só o tamanho. Quem confere é o gestor.
+EXTENSOES_TEXTO = 'Qualquer arquivo (PDF, foto, print…)'
 
 
 def _tamanho_legivel(bytes_):
@@ -101,7 +103,7 @@ def meus_cursos(request):
         'pendentes': sum(1 for l in linhas if not l['entregue']),
         'resumo': resumo,
         'total_cursos': len(linhas),
-        'extensoes': ', '.join(EXTENSOES),
+        'extensoes': EXTENSOES_TEXTO,
         'tamanho_maximo': _tamanho_legivel(TAMANHO_MAXIMO),
     })
 
@@ -121,10 +123,6 @@ def enviar_comprovante(request, curso_id):
         messages.error(request, 'Anexe o comprovante do curso.')
         return redirect('cursos:meus_cursos')
 
-    nome = (arquivo.name or '').lower()
-    if not nome.endswith(EXTENSOES):
-        messages.error(request, f'Formato não aceito. Envie {", ".join(EXTENSOES)}.')
-        return redirect('cursos:meus_cursos')
     if arquivo.size > TAMANHO_MAXIMO:
         messages.error(request, f'Arquivo de {_tamanho_legivel(arquivo.size)} — '
                                 f'o limite é {_tamanho_legivel(TAMANHO_MAXIMO)}.')
@@ -157,7 +155,7 @@ def bloqueado(request):
 
     return render(request, 'cursos/bloqueado.html', {
         'linhas': linhas,
-        'extensoes': ', '.join(EXTENSOES),
+        'extensoes': EXTENSOES_TEXTO,
     })
 
 

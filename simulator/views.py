@@ -20,6 +20,7 @@ from .services import (
     ROLE_SUPERADMIN,
     ROLE_APART,
     get_all_coordinators,
+    lojas_seis_pilares,
     get_all_consultors,
     get_all_gerentes,
     get_all_snipers,
@@ -348,10 +349,16 @@ def simulator_admin_stores(request):
     sectors = []
     selected_sectors = []
 
+    # Lojas de 6 pilares (sem fibra): Fixa não trava nem conta no bônus 6/7 (services.loja_exige_fixa).
+    todos_setores = list(Sector.objects.all().order_by('name'))
+    exige = lojas_seis_pilares(todos_setores)
+    seis_pilares = [sec for sec in todos_setores if exige.get(sec.id) is False]
+    sem_fixa_ids = {sec.id for sec in seis_pilares}
+
     coordinator_id = request.GET.get('coordinator_id')
     if coordinator_id:
         selected_coordinator = get_object_or_404(User, id=coordinator_id, is_active=True)
-        sectors = list(Sector.objects.all().order_by('name'))
+        sectors = todos_setores
         access = CoordinatorStoreAccess.objects.filter(coordinator=selected_coordinator).first()
         if access:
             selected_sectors = list(access.sectors.values_list('id', flat=True))
@@ -372,6 +379,8 @@ def simulator_admin_stores(request):
         'selected_coordinator': selected_coordinator,
         'sectors': sectors,
         'selected_sectors': selected_sectors,
+        'seis_pilares': seis_pilares,
+        'sem_fixa_ids': sem_fixa_ids,
     }
     return render(request, 'simulator/admin_stores.html', context)
 

@@ -1224,6 +1224,50 @@ def metas_das_lojas(pdvs: List[str], realized: pd.DataFrame) -> Dict[str, float]
     return meta
 
 
+
+def loja_exige_fixa(pdv: str, *planilhas: pd.DataFrame) -> Optional[bool]:
+    """A loja tem Fixa (fibra)? Decide se Fixa entra na trava de 69,5% e no bônus 6/7.
+
+    Lojas de "6 pilares" (o interior: Anchieta, Bom Jesus, Iconha, Miracema, Piúma,
+    Quissamã, Santo Antônio de Pádua, São Fidélis) não vendem fibra e não têm meta
+    de Fixa — sem isso o atingimento de Fixa é 0% e trava a comissão inteira.
+    Antes isso era reconhecido só pelo nome da coordenação ("ARIEL"), o que falhava
+    para quem vinha do grupo CN CARTEIRA LUIZ, sem linha na planilha, etc. (09/11/2026).
+
+    True: tem meta de Fixa no Power BI (META_PDV_REAL) ou na planilha (META_FIXA).
+    False: a loja é conhecida (Power BI ou planilha) e não tem meta de Fixa.
+    None: loja desconhecida — quem chama cai na regra antiga, pelo nome.
+    """
+    alvo = normalize_text(pdv or '')
+    if not alvo:
+        return None
+    oficial = _power_bi_goal_maps()['pdv'].get(alvo)
+    if oficial and float(oficial.get('fixa') or 0) > 0:
+        return True
+    conhecida = bool(oficial)
+    for df in planilhas:
+        if df is None or getattr(df, 'empty', True) or 'PDV' not in df.columns:
+            continue
+        linhas = df[df['PDV'].map(lambda v: normalize_text(str(v or ''))) == alvo]
+        if linhas.empty:
+            continue
+        conhecida = True
+        if 'META_FIXA' in df.columns and sum(to_float(v) for v in linhas['META_FIXA']) > 0:
+            return True
+    return False if conhecida else None
+
+
+def lojas_seis_pilares(setores) -> Dict[int, Optional[bool]]:
+    """{sector.id: exige Fixa?} para a tela /simulator/admin/stores/ (False = 6 pilares)."""
+    planilhas = []
+    for role in (ROLE_CONSULTOR, ROLE_GERENTE):
+        try:
+            planilhas.append(load_dataframe(role, 'REALIZADO'))
+        except Exception:  # noqa: BLE001 — sem planilha a tela ainda abre (usa só o Power BI)
+            logger.warning('Planilha %s indisponível para marcar lojas de 6 pilares', role, exc_info=True)
+    return {sec.id: loja_exige_fixa(nome_da_loja(sec), *planilhas) for sec in setores}
+
+
 def get_pdv_metas_for_coordinator(coord_name: str) -> Dict[str, float]:
     """Soma metas de PDV (META_PDV_REAL) para todos os PDVs do coordenador."""
     from power_bi.models import GoalEntry
@@ -1630,7 +1674,11 @@ def compute_consultor_simulation(
     ranges = factor_data.get('ranges', {})
     hunter_levels = hunter_levels or {}
 
-    all_ok = all_pillars_ok(att_map, coord_name, 0.695)
+    # Loja de 6 pilares (sem fibra): Fixa não trava nem conta no bônus 6/7.
+    exige_fixa = loja_exige_fixa(pdv, realized)
+    if exige_fixa is None:
+        exige_fixa = loja_exige_fixa(get_store_name_from_user(user), realized)
+    all_ok = all_pillars_ok(att_map, coord_name, 0.695, exige_fixa)
 
     rows = []
     total_p = 0.0
@@ -1768,7 +1816,7 @@ def compute_consultor_simulation(
         })
 
     bonus_rate = meta_config.get('bonus_6_7_rate', 0.0)
-    bonus_value = (total_p + total_h2 + total_h3) * bonus_rate if bonus_6_7_ok(att_map, coord_name) else 0.0
+    bonus_value = (total_p + total_h2 + total_h3) * bonus_rate if bonus_6_7_ok(att_map, coord_name, exige_fixa) else 0.0
     ganho_total = total_p + total_h2 + total_h3 + bonus_value
     # Acelerador de Microindicadores: +10% sobre o ganho total, já com Hunter e
     # bônus 6/7. Desmarcado é zero e o ganho sai exatamente como antes.
@@ -2094,7 +2142,9 @@ def _compute_gerente_simulation_base(
     ranges = factor_data.get('ranges', {})
     hunter_levels = hunter_levels or {}
 
-    all_ok = all_pillars_ok(att_map, coord_name, 0.695)
+    # Loja de 6 pilares (sem fibra): Fixa não trava nem conta no bônus 6/7.
+    exige_fixa = loja_exige_fixa(pdv, realized, projection)
+    all_ok = all_pillars_ok(att_map, coord_name, 0.695, exige_fixa)
 
     rows = []
     total_p = 0.0
@@ -2226,7 +2276,7 @@ def _compute_gerente_simulation_base(
         })
 
     bonus_rate = meta_config.get('bonus_6_7_rate', 0.0)
-    bonus_value = (total_p + total_h2 + total_h3) * bonus_rate if bonus_6_7_ok(att_map, coord_name) else 0.0
+    bonus_value = (total_p + total_h2 + total_h3) * bonus_rate if bonus_6_7_ok(att_map, coord_name, exige_fixa) else 0.0
 
     rows = _merge_grouped_rows(rows)
     return {

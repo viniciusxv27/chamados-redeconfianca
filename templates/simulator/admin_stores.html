@@ -25,6 +25,19 @@
     </div>
   </div>
 
+  {% comment %}Lojas de 6 pilares: sem meta de Fixa no Power BI nem na planilha (simulator/services.py loja_exige_fixa).{% endcomment %}
+  <div class="mb-4 sm:mb-6 p-3 sm:p-4 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-sm">
+    <div class="flex items-start gap-2 sm:gap-3">
+      <i class="fas fa-layer-group mt-0.5 flex-shrink-0"></i>
+      <div>
+        <strong>Lojas de 6 pilares (sem fibra): {{ seis_pilares|length }}</strong>
+        <p class="mt-1 text-xs sm:text-sm">Nelas a Fixa não entra na trava de 69,5% nem no bônus de todos os pilares — para consultor, gerente e coordenador. A loja vira 6 pilares sozinha quando não tem meta de Fixa no Power BI nem na planilha de comissão.</p>
+        {% if seis_pilares %}<div class="mt-2 flex flex-wrap gap-1.5">{% for sec in seis_pilares %}<span class="px-2 py-0.5 rounded-full bg-white border border-amber-300 text-xs font-medium">{{ sec.name }}</span>{% endfor %}</div>
+        {% else %}<p class="mt-1 text-xs">Nenhuma loja sem meta de Fixa encontrada.</p>{% endif %}
+      </div>
+    </div>
+  </div>
+
   <div class="grid grid-cols-1 md:grid-cols-5 lg:grid-cols-3 gap-4 sm:gap-6">
     <!-- Coordenadores List -->
     <div class="md:col-span-2 lg:col-span-1 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden h-fit">
@@ -103,6 +116,7 @@
                   class="w-4 sm:w-5 h-4 sm:h-5 text-primary rounded focus:ring-2 focus:ring-primary flex-shrink-0"
                 >
                 <span class="text-xs sm:text-sm font-medium text-gray-900 truncate">{{ sector.name }}</span>
+                {% if sector.id in sem_fixa_ids %}<span class="ml-auto flex-shrink-0 px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-semibold" title="Sem fibra: a Fixa não trava">6 pilares</span>{% endif %}
               </label>
               {% empty %}
               <div class="col-span-1 sm:col-span-2 py-6 sm:py-8 text-center text-gray-500">

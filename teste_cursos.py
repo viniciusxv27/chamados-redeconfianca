@@ -186,11 +186,11 @@ try:
     t('guarda o nome original', envio and envio.nome_original == 'comprovante.pdf')
 
     r = c1.post(f'/cursos/{foco.id}/comprovante/',
-                {'arquivo': SimpleUploadedFile('virus.exe', b'MZ', content_type='application/x-msdownload')},
+                {'arquivo': SimpleUploadedFile('certificado', b'%PDF-1.4 sem extensao', content_type='application/octet-stream')},
                 follow=True)
-    t('recusa extensão fora da lista', 'Formato não aceito' in r.content.decode())
-    t('não gravou o arquivo recusado',
-      Comprovante.objects.filter(curso=foco, colaborador=vend1).count() == 1)
+    t('aceita qualquer tipo (PDF sem extensão)', 'Formato não aceito' not in r.content.decode()
+      and Comprovante.objects.filter(curso=foco, colaborador=vend1).count() == 2)
+    Comprovante.objects.filter(curso=foco, colaborador=vend1, nome_original='certificado').delete()
 
     r = c1.post(f'/cursos/{foco.id}/comprovante/', {}, follow=True)
     t('cobra o anexo quando vem vazio', 'Anexe o comprovante' in r.content.decode())
