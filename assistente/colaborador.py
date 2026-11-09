@@ -567,3 +567,43 @@ def historico_valido(bruto):
             papel = 'assistant' if turno.get('papel') == 'assistant' else 'user'
             turnos.append({'papel': papel, 'texto': texto.strip()[:1500]})
     return turnos
+
+
+# ---------------------------------------------------------------------------
+# Janela única (09/11/2026): "Orientação" e "Claude" viraram uma conversa só
+# ---------------------------------------------------------------------------
+LIMITE_MATERIAL = 12000     # o material vai junto da pergunta: não pode engolir o contexto do Claude
+
+
+def material_para_claude(request, pergunta, historico=None):
+    """A busca da orientação, pronta para ir junto da pergunta ao Claude.
+
+    Devolve (bloco de texto para o Claude, resposta parcial para a tela com
+    fontes/páginas/chamado). O filtro de permissão é o mesmo da orientação: só
+    entra o que a pessoa pode abrir.
+    """
+    historico = historico or []
+    ctx = Contexto(request)
+    fontes = buscar(ctx, pergunta)
+    if not fontes:
+        anterior = next((t['texto'] for t in reversed(historico) if t['papel'] == 'user'), '')
+        if anterior:
+            fontes = buscar(ctx, f'{anterior} {pergunta}')
+    fontes = fontes[:MAX_FONTES + MAX_ARQUIVOS + MAX_PAGINAS]
+    textos_dos_arquivos(fontes)
+    try:
+        categorias = categorias_de_atendimento()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning('Assistente: categorias indisponíveis: %s', exc)
+        categorias = []
+    bloco = ''
+    if fontes:
+        bloco = ('\n\n---\nMATERIAL DO PORTAL (busca da orientação; só o que esta pessoa pode abrir). '
+                 'Use se ajudar a responder: siga o passo a passo dos POPs e cite pelo título; os links '
+                 'aparecem como cartões abaixo da sua resposta.\n' + _bloco_de_fontes(fontes))[:LIMITE_MATERIAL]
+    tela = {
+        'fontes': [_para_a_tela(f) for f in fontes if f['tipo'] != 'pagina'],
+        'paginas': [_para_a_tela(f) for f in fontes if f['tipo'] == 'pagina'],
+        'chamado': montar_chamado(pergunta, categorias, categoria_pela_busca(pergunta, categorias)),
+    }
+    return bloco, tela

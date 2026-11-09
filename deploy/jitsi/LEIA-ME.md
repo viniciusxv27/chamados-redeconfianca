@@ -24,9 +24,14 @@ Arquivo pronto para colar: [`docker-compose.easypanel.yml`](docker-compose.easyp
    Uma para `JWT_APP_SECRET`, outra para `JICOFO_AUTH_PASSWORD` e outra para `JVB_AUTH_PASSWORD`.
    Guarde a do `JWT_APP_SECRET`: ela também vai no portal.
 
-5. **Porta 10000/udp liberada** no firewall da VPS. Na Hostinger: *VPS → Firewall → Adicionar regra* →
-   protocolo **UDP**, porta **10000**, origem **qualquer**. Sem essa porta a chamada conecta, mas ninguém se vê
-   nem se ouve.
+5. **Porta 10000/udp liberada** no firewall da VPS. Sem essa porta a chamada conecta, mas ninguém se vê nem
+   se ouve.
+
+   > ⚠️ **Cuidado com o firewall da Hostinger:** um firewall ativo **bloqueia tudo o que não estiver numa regra**.
+   > Criar só a regra da UDP 10000 derruba a VPS inteira (portal, Easypanel, banco, SSH). Se a VPS **não tem**
+   > firewall ativo hoje, não crie um: a porta 10000/udp já fica aberta com o deploy. Se **tem**, acrescente a
+   > regra **UDP 10000 · aceitar · qualquer origem** junto das que já existem — e confira que lá estão também
+   > TCP 22, 80, 443, 3000 (painel do Easypanel) e as demais portas que vocês usam.
 
 > Requisito da máquina: para algumas reuniões simultâneas com cerca de 10 pessoas, **4 vCPU e 8 GB de RAM**.
 > O que mais pesa é a banda de internet da VPS. Se a VPS do Easypanel já estiver cheia (portal, painéis), prefira

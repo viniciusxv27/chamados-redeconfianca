@@ -70,6 +70,10 @@
                 </p>
             </div>
             {% comment %}Jitsi próprio com JWT (reunioes/jaas.py _token_proprio). Passo a passo do servidor: deploy/jitsi/LEIA-ME.md.{% endcomment %}
+            {% if servidor_proprio and cfg.jitsi_app_secret and not cfg.jitsi_app_id %}
+            <p class="text-xs p-3 rounded-lg bg-red-50 text-red-800"><i class="fas fa-triangle-exclamation mr-1"></i>
+                O segredo está salvo, mas o <strong>AppID está vazio</strong>: o portal não consegue assinar a entrada e a sala pede autenticação. Preencha o AppID (o mesmo <code>JWT_APP_ID</code> do servidor) e salve.</p>
+            {% endif %}
             {% if servidor_proprio %}
             <p class="text-xs p-3 rounded-lg {% if proprio_assinado %}bg-green-50 text-green-800{% else %}bg-amber-50 text-amber-800{% endif %}">
                 <i class="fas {% if proprio_assinado %}fa-circle-check{% else %}fa-circle-info{% endif %} mr-1"></i>
@@ -80,7 +84,7 @@
             <div class="grid sm:grid-cols-2 gap-4">
                 <div>
                     <label class="block text-sm font-semibold text-gray-700 mb-1">AppID do servidor (JWT_APP_ID)</label>
-                    <input type="text" name="jitsi_app_id" value="{{ cfg.jitsi_app_id }}" placeholder="redeconfianca"
+                    <input type="text" name="jitsi_app_id" value="{{ cfg.jitsi_app_id|default:'redeconfianca' }}" placeholder="redeconfianca"
                            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono">
                 </div>
                 <div>
@@ -93,6 +97,12 @@
                     {% else %}<p class="text-[11px] text-gray-400 mt-1">Sugestão (use o mesmo no servidor): <code class="select-all">{{ segredo_sugerido }}</code></p>{% endif %}
                 </div>
             </div>
+            {% if servidor_proprio %}
+            <button type="submit" name="acao" value="testar_servidor" formnovalidate
+                    class="px-3 py-1.5 rounded-lg border border-sky-200 text-sky-700 text-sm hover:bg-sky-50">
+                <i class="fas fa-plug-circle-check mr-1.5"></i>Testar conexão com o servidor
+            </button>
+            {% endif %}
             <p class="text-[11px] text-gray-400">Com AppID e segredo, só entra quem vem pelo portal (ou pelo link de visitante). O servidor próprio não tem limite de usuários — o passo a passo para instalar está em <code>deploy/jitsi/LEIA-ME.md</code>.</p>
         </div>
 

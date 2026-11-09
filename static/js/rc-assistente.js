@@ -3,6 +3,11 @@
  * A conversa fica no sessionStorage, por usuário: sobrevive à troca de página na
  * mesma aba e não aparece para quem entrar depois no mesmo navegador. O servidor
  * só é chamado quando a pessoa abre a janela ou pergunta.
+ *
+ * Desde 09/11/2026 é uma conversa só (antes: abas "Orientação" e "Claude"). Tudo vai
+ * para /assistente/perguntar/: com Claude, a resposta dele já vem alimentada pela
+ * busca da orientação; sem Claude, vem a orientação. Os cartões (POPs, páginas,
+ * chamado) aparecem nos dois casos.
  */
 (function () {
     'use strict';
@@ -16,7 +21,6 @@
     var form = document.getElementById('rcaForm');
     var campo = document.getElementById('rcaTexto');
     var enviar = document.getElementById('rcaEnviar');
-    var modos = document.getElementById('rcaModos');
     var subtitulo = document.getElementById('rcaSubtitulo');
     var linkPagina = document.getElementById('rcaPagina');
 
@@ -26,7 +30,7 @@
     var CELULAR = window.matchMedia('(max-width: 639px)');
     var SUGESTOES = ['Como fazer uma sangria?', 'Como abrir um chamado?', 'Onde vejo meu contracheque?', 'Como consulto minhas férias?'];
 
-    var estado = {aberto: false, modo: 'orienta', falas: {orienta: [], claude: []}};
+    var estado = {aberto: false, falas: [], claude: false};
     var embutido = document.getElementById('rcAssistEmbutido');
     var estadoPedido = false;
     var enviando = false;
@@ -42,9 +46,10 @@
             var salvo = JSON.parse(sessionStorage.getItem(CHAVE) || 'null');
             if (salvo && salvo.falas) {
                 estado.aberto = !!salvo.aberto;
-                estado.modo = salvo.modo === 'claude' ? 'claude' : 'orienta';
-                estado.falas.orienta = salvo.falas.orienta || [];
-                estado.falas.claude = salvo.falas.claude || [];
+                estado.claude = !!salvo.claude;
+                // Conversa guardada no formato antigo (duas abas): fica a da aba que estava aberta.
+                estado.falas = Array.isArray(salvo.falas) ? salvo.falas
+                    : ((salvo.modo === 'claude' ? salvo.falas.claude : salvo.falas.orienta) || []);
             }
         } catch (e) { /* sem armazenamento: a conversa vale só nesta página */ }
     }
@@ -142,33 +147,25 @@
             icone.setAttribute('aria-hidden', 'true');
         }
         vazio.appendChild(icone);
-        if (estado.modo === 'claude') {
-            vazio.appendChild(el('p', '', 'Assistente Claude: o mesmo da página, com a sua chave. O histórico completo fica na página.'));
-        } else {
-            vazio.appendChild(el('p', '', 'Descreva a sua dúvida. Mostro o passo a passo, os POPs e as páginas e, se precisar, deixo um chamado pronto para você revisar.'));
-            var lista = el('div', 'rca-sugestoes');
-            SUGESTOES.forEach(function (s) {
-                var b = el('button', 'rca-sugestao', s);
-                b.type = 'button';
-                b.addEventListener('click', function () { perguntar(s); });
-                lista.appendChild(b);
-            });
-            vazio.appendChild(lista);
-        }
+        vazio.appendChild(el('p', '', estado.claude
+            ? 'Pergunte o que precisar: passo a passo e POPs, seus dados do portal (ponto, vendas, metas, resultados) e os BIs. Se for o caso, deixo um chamado pronto para você revisar.'
+            : 'Descreva a sua dúvida. Mostro o passo a passo, os POPs e as páginas e, se precisar, deixo um chamado pronto para você revisar.'));
+        var lista = el('div', 'rca-sugestoes');
+        SUGESTOES.forEach(function (s) {
+            var b = el('button', 'rca-sugestao', s);
+            b.type = 'button';
+            b.addEventListener('click', function () { perguntar(s); });
+            lista.appendChild(b);
+        });
+        vazio.appendChild(lista);
         msgs.appendChild(vazio);
     }
 
     function desenhar() {
         msgs.textContent = '';
-        var falas = estado.falas[estado.modo];
-        if (!falas.length) desenharVazio();
-        falas.forEach(desenharFala);
-        modos.querySelectorAll('[data-modo]').forEach(function (b) {
-            var ativo = b.dataset.modo === estado.modo;
-            b.classList.toggle('rca-ativo', ativo);
-            b.setAttribute('aria-selected', ativo ? 'true' : 'false');
-        });
-        subtitulo.textContent = estado.modo === 'claude' ? (estado.chaveEmpresa ? 'Claude, com os seus dados do portal' : 'Claude, com a sua chave') : 'Dúvidas, POPs e páginas';
+        if (!estado.falas.length) desenharVazio();
+        estado.falas.forEach(desenharFala);
+        subtitulo.textContent = estado.claude ? 'Claude · POPs e seus dados' : 'Dúvidas, POPs e páginas';
         fimDaConversa();
     }
 
@@ -189,9 +186,9 @@
             .then(function (r) { return r.ok ? r.json() : null; })
             .then(function (d) {
                 if (!d) return;
-                estado.chaveEmpresa = !!d.chave_empresa;
-                modos.hidden = !d.claude;
-                if (!d.claude && estado.modo === 'claude') { estado.modo = 'orienta'; desenhar(); }
+                estado.claude = !!d.claude;
+                desenhar();
+                salvar();
                 if (d.pagina_claude && !embutido) {
                     linkPagina.href = d.pagina_claude;
                     linkPagina.hidden = false;
@@ -249,10 +246,8 @@
     function perguntar(texto) {
         texto = (texto || '').trim();
         if (!texto || enviando) return;
-        var modo = estado.modo;
-        var falas = estado.falas[modo];
-        var corpo = {mensagem: texto};
-        if (modo === 'orienta') corpo.historico = historicoParaOServidor(falas);
+        var falas = estado.falas;
+        var corpo = {mensagem: texto, historico: historicoParaOServidor(falas)};
 
         falas.push({papel: 'user', texto: texto});
         if (falas.length > MAX_FALAS) falas.splice(0, falas.length - MAX_FALAS);
@@ -261,11 +256,11 @@
         salvar();
         desenhar();
         travar(true);
-        var pensando = el('div', 'rca-fala rca-pensando', modo === 'claude' ? 'Pensando… análises podem levar alguns minutos.' : 'Procurando no portal…');
+        var pensando = el('div', 'rca-fala rca-pensando', estado.claude ? 'Pensando… consultas e análises podem levar alguns minutos.' : 'Procurando no portal…');
         msgs.appendChild(pensando);
         fimDaConversa();
 
-        fetch(modo === 'claude' ? raiz.dataset.urlClaude : raiz.dataset.urlPerguntar, {
+        fetch(raiz.dataset.urlUnica, {
             method: 'POST',
             credentials: 'same-origin',
             headers: {'Content-Type': 'application/json', 'X-CSRFToken': raiz.dataset.csrf, 'X-Requested-With': 'XMLHttpRequest'},
@@ -310,14 +305,7 @@
     });
     document.getElementById('rcaFechar').addEventListener('click', fechar);
     document.getElementById('rcaLimpar').addEventListener('click', function () {
-        estado.falas[estado.modo] = [];
-        salvar();
-        desenhar();
-    });
-    modos.addEventListener('click', function (e) {
-        var b = e.target.closest('[data-modo]');
-        if (!b || enviando) return;
-        estado.modo = b.dataset.modo;
+        estado.falas = [];
         salvar();
         desenhar();
     });

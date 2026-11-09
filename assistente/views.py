@@ -247,6 +247,62 @@ def colaborador_perguntar(request):
 
 @login_required
 @require_POST
+def perguntar(request):
+    """A janela do canto: Orientação e Claude numa conversa só (09/11/2026).
+
+    Quem tem Claude (chave própria ou da empresa) recebe a resposta do Claude — com
+    as ferramentas de sempre — já alimentada pela busca da orientação, e a tela
+    mostra os cartões de POPs/páginas e o atalho do chamado. Sem Claude, ou se ele
+    falhar, a resposta é a orientação de antes: a pessoa nunca fica sem nada.
+    """
+    try:
+        corpo = json.loads(request.body or '{}')
+    except ValueError:
+        corpo = {}
+    if not isinstance(corpo, dict):
+        corpo = {}
+    pergunta = corpo.get('mensagem')
+    pergunta = pergunta.strip() if isinstance(pergunta, str) else ''
+    if not pergunta:
+        return JsonResponse({'erro': 'Escreva a sua dúvida.'}, status=400)
+    if len(pergunta) > 2000:
+        return JsonResponse({'erro': 'A mensagem está muito longa. Resuma em até 2.000 caracteres.'}, status=400)
+    historico = colaborador.historico_valido(corpo.get('historico'))
+
+    def so_orientacao(aviso=''):
+        dados = colaborador.orientar(request, pergunta, historico)
+        dados['claude'] = False
+        if aviso:
+            dados['resposta'] = f'{aviso}\n\n{dados.get("resposta") or ""}'.strip()
+        return JsonResponse(dados)
+
+    try:
+        if not claude_client.pode_usar(request.user):
+            return so_orientacao()
+        try:
+            bloco, tela = colaborador.material_para_claude(request, pergunta, historico)
+        except Exception as exc:  # noqa: BLE001 — sem o material, o Claude ainda responde
+            logger.warning('Assistente: busca da orientação falhou: %s', exc)
+            bloco, tela = '', {'fontes': [], 'paginas': [], 'chamado': None}
+        anteriores = [{'role': t['papel'], 'content': t['texto']} for t in historico]
+        try:
+            resposta = claude_client.responder(request.user, pergunta + bloco, anteriores)
+        except claude_client.NaoConectado:
+            return so_orientacao()
+        except Exception as exc:  # noqa: BLE001 — Claude fora: cai na orientação
+            logger.warning('Assistente: Claude falhou na janela, caindo na orientação: %s', exc)
+            return so_orientacao('O Claude não respondeu agora; segue a orientação do portal.')
+        # A conversa da janela também aparece na página do assistente.
+        AssistenteMensagem.objects.create(user=request.user, papel='user', conteudo=pergunta)
+        AssistenteMensagem.objects.create(user=request.user, papel='assistant', conteudo=resposta)
+        return JsonResponse({'claude': True, 'resposta': resposta, **tela})
+    except Exception as exc:  # noqa: BLE001
+        logger.exception('Assistente (janela) falhou: %s', exc)
+        return JsonResponse({'erro': 'Não consegui responder agora. Tente de novo em instantes.'}, status=500)
+
+
+@login_required
+@require_POST
 def limpar(request):
     AssistenteMensagem.objects.filter(user=request.user).delete()
     return redirect('assistente:chat')

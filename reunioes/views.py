@@ -649,6 +649,11 @@ def configuracao(request):
         return redirect('reunioes:lista')
 
     cfg = ConfiguracaoReunioes.get()
+    if request.method == 'POST' and request.POST.get('acao') == 'testar_servidor':
+        from .jaas import testar_servidor_proprio
+        ok, msg = testar_servidor_proprio(cfg)
+        (messages.success if ok else messages.error)(request, msg)
+        return redirect('reunioes:configuracao')
     if request.method == 'POST':
         servidor = (request.POST.get('servidor_jitsi') or '').strip()
         # Só o host: uma URL inteira aqui quebraria o script da sala.

@@ -10,7 +10,7 @@ static/js/rc-assistente.js quando a janela abre.
      data-csrf="{{ csrf_token }}"
      data-url-estado="{% url 'assistente:colaborador_estado' %}"
      data-url-perguntar="{% url 'assistente:colaborador_perguntar' %}"
-     data-url-claude="{% url 'assistente:enviar' %}"
+     data-url-unica="{% url 'assistente:perguntar' %}"
      data-url-markdown="{% static 'js/rc-markdown.js' %}"
      data-robo="{% static 'img/assistente/robo.jpg' %}">
     <button type="button" class="rca-fab" id="rcaFab" aria-label="Abrir o assistente" aria-expanded="false" aria-controls="rcaJanela" title="Assistente virtual">
@@ -29,11 +29,6 @@ static/js/rc-assistente.js quando a janela abre.
             <button type="button" class="rca-topo-botao" id="rcaFechar" title="Fechar" aria-label="Fechar o assistente"><i class="fas fa-xmark" aria-hidden="true"></i></button>
         </header>
 
-        <div class="rca-modos" id="rcaModos" role="tablist" hidden>
-            <button type="button" role="tab" data-modo="orienta" class="rca-modo">Orientação</button>
-            <button type="button" role="tab" data-modo="claude" class="rca-modo">Claude</button>
-        </div>
-
         <div class="rca-msgs" id="rcaMsgs" aria-live="polite"></div>
 
         <form class="rca-entrada" id="rcaForm">
@@ -42,4 +37,4 @@ static/js/rc-assistente.js quando a janela abre.
         </form>
     </section>
 </div>
-<script src="{% static 'js/rc-assistente.js' %}?v=20261109" defer></script>
+<script src="{% static 'js/rc-assistente.js' %}?v=20261109b" defer></script>

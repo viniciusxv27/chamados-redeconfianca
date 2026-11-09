@@ -527,6 +527,34 @@ try:
                                        'jitsi_app_id': 'redeconfianca', 'jitsi_app_secret': '•••••••• segredo guardado'})
     t('salvar sem mexer mantém o segredo', ConfiguracaoReunioes.get().jitsi_app_secret == 'zz-segredo')
 
+    print('\n== APPID VAZIO E TESTE DO SERVIDOR (09/11) ==')
+    from unittest import mock as _mock
+
+    from reunioes.jaas import testar_servidor_proprio
+    ConfiguracaoReunioes.objects.update(servidor_jitsi='video.zz-teste.local', jitsi_app_id='', jitsi_app_secret='zz-segredo')
+    pagina = c.get('/reunioes/configuracao/').content.decode()
+    t('segredo sem AppID: a tela avisa que a sala vai pedir autenticação', 'AppID está vazio' in pagina)
+    t('o campo do AppID já vem com o valor padrão (não só o texto de exemplo)',
+      'name="jitsi_app_id" value="redeconfianca"' in pagina)
+    ConfiguracaoReunioes.objects.update(jitsi_app_id='redeconfianca')
+
+    class _Resp:
+        def __init__(self, texto, status=200):
+            self.text, self.status_code = texto, status
+
+    abre = _Resp("<body sid='abc123' xmlns='http://jabber.org/protocol/httpbind'><stream:features/></body>")
+    with _mock.patch('requests.Session.post', side_effect=[abre, _Resp("<body><success xmlns='urn:ietf:params:xml:ns:xmpp-sasl'/></body>")]):
+        ok_t, msg_t = testar_servidor_proprio(ConfiguracaoReunioes.get())
+    t('teste do servidor: token aceito', ok_t and 'aceitou' in msg_t, msg_t)
+    with _mock.patch('requests.Session.post', side_effect=[abre, _Resp(
+            "<body><failure xmlns='urn:ietf:params:xml:ns:xmpp-sasl'><not-allowed/><text>Invalid signature</text></failure></body>")]):
+        ok_t, msg_t = testar_servidor_proprio(ConfiguracaoReunioes.get())
+    t('teste do servidor: segredo diferente é explicado', not ok_t and 'JWT_APP_SECRET' in msg_t, msg_t)
+    with _mock.patch('requests.Session.post', side_effect=[abre, _Resp("<body><success/></body>")]):
+        r = c.post('/reunioes/configuracao/', {'acao': 'testar_servidor'}, follow=True)
+    t('o botão da tela mostra o resultado sem mexer na configuração', 'aceitou a entrada' in r.content.decode()
+      and ConfiguracaoReunioes.get().jitsi_app_secret == 'zz-segredo')
+
     print('\n== HIGIENE DE TEMPLATE ==')
     import glob
     import re

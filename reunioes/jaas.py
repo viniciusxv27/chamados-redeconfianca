@@ -206,3 +206,45 @@ def _montar(cfg, sala, token):
         'token': '',
         'autenticado': False,
     }
+
+
+def testar_servidor_proprio(cfg, timeout=12):
+    """(ok, mensagem): o servidor próprio aceita o token que o portal assina?
+
+    Faz o começo do login que o navegador faz (BOSH em /http-bind): abre a sessão
+    e autentica com o token. Não entra em sala nenhuma. Usado pelo botão
+    "Testar conexão com o servidor" em /reunioes/configuracao/.
+    """
+    import re
+
+    import requests
+
+    if not _servidor_proprio(cfg):
+        return False, 'O endereço configurado não é um servidor próprio.'
+    token = _token_proprio(cfg, 'teste-do-portal', 'Teste do portal', '', True)
+    if not token:
+        return False, 'Preencha o AppID e o segredo antes de testar.'
+    url = f'https://{servidor_para(cfg)}/http-bind'
+    ns = "xmlns='http://jabber.org/protocol/httpbind'"
+    try:
+        sessao = requests.Session()
+        r1 = sessao.post(url, params={'token': token}, timeout=timeout, data=(
+            f"<body rid='1000' {ns} to='{DOMINIO_XMPP_PROPRIO}' xml:lang='pt' wait='10' hold='1' ver='1.6' "
+            "xmpp:version='1.0' xmlns:xmpp='urn:xmpp:xbosh'/>"))
+        achado = re.search(r"sid=['\"]([^'\"]+)['\"]", r1.text)
+        if not achado:
+            return False, f'O servidor respondeu, mas não abriu a sessão de vídeo (HTTP {r1.status_code}).'
+        r2 = sessao.post(url, params={'token': token}, timeout=timeout, data=(
+            f"<body rid='1001' sid='{achado.group(1)}' {ns}>"
+            "<auth xmlns='urn:ietf:params:xml:ns:xmpp-sasl' mechanism='ANONYMOUS'/></body>"))
+    except requests.RequestException as exc:
+        return False, f'Não consegui falar com {servidor_para(cfg)} ({exc.__class__.__name__}). Confira o endereço e se o serviço está no ar.'
+    if '<success' in r2.text:
+        return True, 'O servidor aceitou a entrada assinada pelo portal. As salas abrem sem pedir autenticação.'
+    motivo = re.search(r'<text[^>]*>(.*?)</text>', r2.text, re.S)
+    motivo = motivo.group(1).strip() if motivo else 'recusado'
+    if 'signature' in motivo.lower():
+        return False, 'O servidor recusou o token: o segredo do portal é diferente do JWT_APP_SECRET do servidor.'
+    if 'issuer' in motivo.lower() or 'iss' in motivo.lower():
+        return False, 'O servidor recusou o token: o AppID do portal é diferente do JWT_APP_ID do servidor.'
+    return False, f'O servidor recusou o token ({motivo[:120]}).'
