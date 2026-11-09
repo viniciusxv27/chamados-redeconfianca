@@ -69,6 +69,9 @@ openai==1.58.1
 
 # AI / Claude (assistente do portal — chave por usuário em /users/settings/)
 anthropic==1.5.0
+# Assistente Claude — navegador sem login para ler e filtrar os BIs do /power-bi/ e links públicos
+# (o Chromium é instalado no Dockerfile; NAVEGADOR_CDP_URL usa um navegador remoto no lugar)
+playwright==1.64.0
 
 # Assistente de Apresentações — exportação .pptx nativa (texto editável, transições e animações)
 python-pptx==1.0.2

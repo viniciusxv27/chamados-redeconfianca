@@ -29,6 +29,17 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Navegador do assistente (BIs do /power-bi/ e links): Chromium headless (só o
+# "headless shell") + as bibliotecas de sistema que ele pede. Soma ~350 MB à imagem.
+# Com um navegador remoto (NAVEGADOR_CDP_URL, ex.: browserless), dá para pular:
+#   docker build --build-arg INSTALAR_NAVEGADOR=0 .
+ARG INSTALAR_NAVEGADOR=1
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN if [ "$INSTALAR_NAVEGADOR" = "1" ]; then \
+        python -m playwright install --with-deps --only-shell chromium \
+        && rm -rf /var/lib/apt/lists/*; \
+    fi
+
 # Copiar código da aplicação
 COPY . .
 

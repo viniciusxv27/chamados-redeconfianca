@@ -29,6 +29,7 @@ Segurança (do servidor, não do prompt):
 import base64
 import functools
 import ipaddress
+import json
 import logging
 import os
 import re
@@ -36,8 +37,10 @@ import socket
 import threading
 import time
 import unicodedata
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeout
 from contextlib import contextmanager
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, urljoin, urlsplit
 
 from django.conf import settings
 
@@ -48,8 +51,9 @@ TIMEOUT_NAVEGACAO_MS = 45_000
 TIMEOUT_ACAO_MS = 15_000
 ORCAMENTO_PERGUNTA_S = 300          # tempo total de navegador numa pergunta
 ESPERA_VAGA_S = 30                  # quanto espera por um navegador livre
-LIMITE_TEXTO = 12_000               # caracteres por parte da leitura
+LIMITE_TEXTO = 20_000               # caracteres por parte da leitura
 LIMITE_ELEMENTOS = 150
+MAX_LINHAS_TABELA = 40
 QUALIDADE_PRINT = 60                # JPEG
 
 PORTAS_PERMITIDAS = {80, 443}
@@ -134,6 +138,17 @@ def _resolver(host, porta):
     return {info[4][0] for info in socket.getaddrinfo(host, porta, proto=socket.IPPROTO_TCP)}
 
 
+# Áreas do app.powerbi.com que pedem conta Microsoft. O relatório público (/view)
+# abre iframes do próprio app.powerbi.com (/13.0.../visualSandbox...): esses passam.
+_POWERBI_COM_LOGIN = ('/groups/', '/home', '/signin', '/singlesignon', '/apps/', '/links/', '/reports/',
+                      '/myorg/', '/datahub', '/redirect')
+
+
+def _powerbi_com_login(caminho):
+    caminho = (caminho or '/').lower()
+    return caminho == '/' or caminho.startswith(_POWERBI_COM_LOGIN)
+
+
 def checar_endereco(url, navegacao=True, metodo='GET', cache_hosts=None):
     """None se pode; senão o motivo (texto) da recusa.
 
@@ -167,8 +182,7 @@ def checar_endereco(url, navegacao=True, metodo='GET', cache_hosts=None):
 
     if navegacao and (host in HOSTS_DE_LOGIN or host.startswith('login.')):
         return 'página de login: o assistente não entra em contas'
-    if navegacao and host == 'app.powerbi.com' and not (partes.path or '').lower().startswith(
-            ('/view', '/reportembed')):
+    if navegacao and host == 'app.powerbi.com' and _powerbi_com_login(partes.path):
         return ('este Power BI exige login Microsoft (link /groups/...): o assistente não consegue '
                 'ler. Só os relatórios publicados na web (/view?r=...) abrem')
 
@@ -203,7 +217,7 @@ def _tipo_link(url):
     host = _host_de(url)
     caminho = (urlsplit(url).path or '').lower()
     if host == 'app.powerbi.com':
-        return 'powerbi_publico' if caminho.startswith(('/view', '/reportembed')) else 'powerbi_exige_login'
+        return 'powerbi_exige_login' if _powerbi_com_login(caminho) else 'powerbi_publico'
     if host in _portal_hosts():
         return 'portal_publico' if any(caminho.startswith(p) for p in PORTAL_PUBLICO) else 'portal_logado'
     if host == 'docs.google.com':
@@ -251,7 +265,6 @@ def _bi_proibido(user, url):
 
 
 def _powerbi_relatorios(user, args):
-    import json
     itens = []
     for r in _relatorios_visiveis(user):
         tipo = _tipo_link(r.embed_url)
@@ -292,7 +305,13 @@ class _Pergunta:
 
 
 class Sessao:
-    """Um navegador + contexto + aba(s) para uma pergunta."""
+    """Um navegador + contexto + aba(s) para uma pergunta.
+
+    O Playwright (API síncrona) deixa um laço asyncio "rodando" na thread em que
+    começa, e aí o ORM do Django recusa trabalhar nela. Por isso todo o navegador
+    vive numa thread só dele (``rodar``); a thread da requisição segue livre para
+    o banco e para as outras ferramentas.
+    """
 
     def __init__(self):
         self.pw = self.browser = self.context = self.page = None
@@ -302,58 +321,80 @@ class Sessao:
         self.hosts = {}              # cache de DNS/decisão por host
         self.inicio = time.monotonic()
         self.fechada = False
+        self.travada = False
         self._vaga = False
-        self._remoto = False
+        self._exec = None
+
+    def rodar(self, fn, *args):
+        """Roda ``fn`` na thread do navegador e devolve o resultado (ou a exceção)."""
+        if self._exec is None:
+            self._exec = ThreadPoolExecutor(max_workers=1, thread_name_prefix='assistente-navegador')
+        futuro = self._exec.submit(fn, *args)
+        try:
+            return futuro.result(timeout=max(self.restante(), 5) + 60)
+        except FuturesTimeout:
+            self.travada = True
+            raise Indisponivel('O navegador do assistente travou nesta pergunta. Responda com o que já foi lido.')
 
     # abrir/fechar ------------------------------------------------------------
     def abrir(self):
         try:
-            from playwright.sync_api import sync_playwright
+            import playwright.sync_api  # noqa: F401
         except ImportError:
             raise Indisponivel('O navegador do assistente não está instalado neste servidor (Playwright).')
         if not _VAGAS.acquire(timeout=ESPERA_VAGA_S):
             raise Indisponivel('O navegador do assistente está ocupado com outras perguntas. Tente em instantes.')
         self._vaga = True
         try:
-            self.pw = sync_playwright().start()
-            cdp = _cdp_url()
-            if cdp:
-                self._remoto = True
-                self.browser = self.pw.chromium.connect_over_cdp(cdp, timeout=20_000)
-            else:
-                canal = (getattr(settings, 'NAVEGADOR_CANAL', '') or os.environ.get('NAVEGADOR_CANAL', '')).strip()
-                self.browser = self.pw.chromium.launch(
-                    headless=True, channel=canal or None, timeout=30_000,
-                    args=['--disable-dev-shm-usage', '--no-first-run', '--disable-extensions'])
-            self.context = self.browser.new_context(
-                viewport=VIEWPORT, locale='pt-BR', timezone_id='America/Sao_Paulo',
-                accept_downloads=False, service_workers='block', ignore_https_errors=False)
-            self.context.set_default_timeout(TIMEOUT_ACAO_MS)
-            self.context.set_default_navigation_timeout(TIMEOUT_NAVEGACAO_MS)
-            self.context.route('**/*', self._rota)
-            if hasattr(self.context, 'route_web_socket'):
-                self.context.route_web_socket(re.compile('.*'), self._rota_ws)
-            self.context.on('page', self._nova_aba)
-            self.page = self.context.new_page()
-        except Indisponivel:
-            self.fechar()
-            raise
+            self.rodar(self._abrir_na_thread)
         except Exception as exc:  # noqa: BLE001
             logger.warning('Navegador do assistente não abriu: %s', exc)
             self.fechar()
+            if isinstance(exc, Indisponivel):
+                raise
             raise Indisponivel('Não consegui abrir o navegador do assistente agora.')
+
+    def _abrir_na_thread(self):
+        from playwright.sync_api import sync_playwright
+        self.pw = sync_playwright().start()
+        cdp = _cdp_url()
+        if cdp:
+            self.browser = self.pw.chromium.connect_over_cdp(cdp, timeout=20_000)
+        else:
+            canal = (getattr(settings, 'NAVEGADOR_CANAL', '') or os.environ.get('NAVEGADOR_CANAL', '')).strip()
+            self.browser = self.pw.chromium.launch(
+                headless=True, channel=canal or None, timeout=30_000,
+                args=['--disable-dev-shm-usage', '--no-first-run', '--disable-extensions'])
+        self.context = self.browser.new_context(
+            viewport=VIEWPORT, locale='pt-BR', timezone_id='America/Sao_Paulo',
+            accept_downloads=False, service_workers='block')
+        self.context.set_default_timeout(TIMEOUT_ACAO_MS)
+        self.context.set_default_navigation_timeout(TIMEOUT_NAVEGACAO_MS)
+        self.context.route('**/*', self._rota)
+        if hasattr(self.context, 'route_web_socket'):
+            self.context.route_web_socket(re.compile('.*'), self._rota_ws)
+        self.context.on('page', self._nova_aba)
+        self.page = self.context.new_page()
+
+    def _fechar_na_thread(self):
+        # Rotas ainda em andamento (site lento) não podem estourar erro depois do fechamento.
+        for passo in (lambda: self.context and self.context.unroute_all(behavior='ignoreErrors'),
+                      lambda: self.context and self.context.close(),
+                      lambda: self.browser and self.browser.close(),
+                      lambda: self.pw and self.pw.stop()):
+            _silencioso(passo)
 
     def fechar(self):
         if self.fechada:
             return
         self.fechada = True
-        for passo in (lambda: self.context and self.context.close(),
-                      lambda: self.browser and self.browser.close(),
-                      lambda: self.pw and self.pw.stop()):
-            try:
-                passo()
-            except Exception:  # noqa: BLE001
-                pass
+        if self._exec is not None:
+            if not self.travada:
+                try:
+                    self._exec.submit(self._fechar_na_thread).result(timeout=30)
+                except Exception:  # noqa: BLE001
+                    logger.warning('Navegador do assistente não fechou direito.')
+            self._exec.shutdown(wait=not self.travada)
         if self._vaga:
             self._vaga = False
             _VAGAS.release()
@@ -377,11 +418,40 @@ class Sessao:
         url = request.url
         if url.startswith(('data:', 'blob:', 'about:')):
             return route.continue_()
+        if not url.startswith(('http://', 'https://')):
+            return route.abort('blockedbyclient')      # chrome-extension:, filesystem:, file: …
         motivo = checar_endereco(url, navegacao=navegacao, metodo=request.method, cache_hosts=self.hosts)
         if motivo:
             self._bloquear(motivo, url)
             return route.abort('blockedbyclient')
+        if navegacao:
+            return self._navegar_sem_redirecionar(route, url)
         return route.continue_()
+
+    def _navegar_sem_redirecionar(self, route, url):
+        """Página/iframe: o redirecionamento do servidor também passa pela regra.
+
+        A rota do Playwright não vê os saltos de um redirecionamento (o navegador
+        segue sozinho). Então o documento é buscado sem seguir; se vier 3xx, o
+        destino é conferido e a página navega até ele por conta própria — o que é
+        uma navegação nova, de novo pela rota.
+        """
+        try:
+            resp = route.fetch(max_redirects=0, timeout=TIMEOUT_NAVEGACAO_MS)
+        except Exception as exc:  # noqa: BLE001 — site fora do ar, DNS, tempo, sessão fechando
+            logger.info('Navegador do assistente: falha ao buscar %s: %s', url[:200], str(exc).split('\n')[0])
+            return _silencioso(lambda: route.abort('failed'))
+        if 300 <= resp.status < 400:
+            destino = urljoin(url, resp.headers.get('location') or '')
+            motivo = checar_endereco(destino, navegacao=True, cache_hosts=self.hosts)
+            if motivo or not destino:
+                self._bloquear(motivo or 'redirecionamento sem destino', destino or url)
+                return route.abort('blockedbyclient')
+            alvo = json.dumps(destino).replace('<', '\\u003c')
+            return route.fulfill(
+                status=200, content_type='text/html; charset=utf-8',
+                body=f'<!doctype html><meta name="robots" content="noindex"><script>location.replace({alvo})</script>')
+        return route.fulfill(response=resp)
 
     def _rota_ws(self, ws):
         url = ws.url.replace('wss://', 'https://', 1).replace('ws://', 'http://', 1)
@@ -438,9 +508,8 @@ def _sessao():
         except Indisponivel as exc:
             p.falha = str(exc)
             raise
-        s._preparar_aba(s.page)
         p.sessao = s
-    if s.restante() <= 0:
+    if s.restante() <= 0 or s.travada:
         s.fechar()
         p.falha = ('O tempo de navegador desta pergunta acabou. Responda com o que já foi lido ou peça '
                    'ao usuário para perguntar de novo com um foco menor.')
@@ -448,25 +517,33 @@ def _sessao():
     return s
 
 
-def _ferramenta(fn):
-    """Garante a sessão da pergunta e transforma qualquer falha em texto para o Claude."""
+def _protegido(nome, corpo):
+    """Roda ``corpo()`` dentro de uma pergunta e devolve texto em vez de levantar."""
+    if getattr(_local, 'pergunta', None) is None:
+        with pergunta():
+            return _protegido(nome, corpo)
+    try:
+        return corpo()
+    except (Indisponivel, Recusado) as exc:
+        return str(exc)
+    except Exception as exc:  # noqa: BLE001
+        tipo = type(exc).__name__
+        if 'Timeout' in tipo:
+            return ('A página demorou demais para responder (o site pode estar lento ou ainda carregando). '
+                    'Use navegador_esperar para dar mais tempo e reler, ou siga por um caminho mais direto.')
+        logger.warning('Navegador do assistente (%s): %s', nome, exc)
+        msg = str(exc).split('\n')[0][:200]
+        return f'Não consegui fazer isso no navegador ({tipo}: {msg}).'
+
+
+def _no_navegador(fn):
+    """Ferramenta que só mexe no navegador: ``fn(sessao, args)`` roda na thread dele."""
     @functools.wraps(fn)
     def embrulho(user, args):
-        if getattr(_local, 'pergunta', None) is None:
-            with pergunta():
-                return embrulho(user, args)
-        try:
-            return fn(user, args or {})
-        except (Indisponivel, Recusado) as exc:
-            return str(exc)
-        except Exception as exc:  # noqa: BLE001
-            nome = type(exc).__name__
-            if 'Timeout' in nome:
-                return ('A página demorou demais para responder. Tente navegador_esperar e navegador_ler, '
-                        'ou um caminho mais direto.')
-            logger.warning('Navegador do assistente (%s): %s', fn.__name__, exc)
-            msg = str(exc).split('\n')[0][:200]
-            return f'Não consegui fazer isso no navegador ({nome}: {msg}).'
+        def corpo():
+            s = _sessao()
+            return s.rodar(fn, s, args or {})
+        return _protegido(fn.__name__, corpo)
     return embrulho
 
 
@@ -494,16 +571,20 @@ _JS_LER = r"""
     const lb = e.getAttribute('aria-labelledby');
     if (!n && lb) n = lb.split(/\s+/).map(id => (document.getElementById(id) || {}).innerText || '').join(' ');
     if (!n && e.labels && e.labels.length) n = e.labels[0].innerText;
+    if (!n && e.tagName === 'SELECT') n = e.name || e.id || 'lista';
     if (!n) n = e.innerText;
     if (!n) n = e.getAttribute('title') || e.getAttribute('placeholder') || e.getAttribute('alt') || '';
     if (!n && e.tagName === 'INPUT' && e.type !== 'password') n = e.value;
     return limpa(n).slice(0, 90);
   };
+  // Controles do próprio visualizador do Power BI que não servem para ler/filtrar.
+  const RUIDO = /^(Mostrar os atalhos|Mostrar dicas do leitor|Pular para o conte|Compartilhar|Reduzir$|Ampliar$|N[ií]vel de zoom|Ajustar [àa] p[áa]gina|Microsoft Power BI|Abrir no modo de tela inteira|Selecionar Linha$|Sele[çc][ãa]o de Linha$)/i;
   const els = [];
   let n = inicio, omitidos = 0;
   for (const e of document.querySelectorAll(SEL)) {
     if (!visivel(e)) continue;
     const nome = nomeDe(e);
+    if (RUIDO.test(nome)) continue;
     const tag = e.tagName.toLowerCase();
     let tipo = e.getAttribute('role') || (tag === 'input' ? 'input:' + (e.type || 'text') : tag);
     if (tag === 'li' && e.classList.contains('animated')) tipo = 'pagina_do_relatorio';
@@ -520,7 +601,11 @@ _JS_LER = r"""
       if (v === 'true') est.push(a.slice(5) === 'expanded' ? 'aberto' : 'marcado');
     }
     if (e.disabled || e.getAttribute('aria-disabled') === 'true') est.push('desativado');
-    if (tag === 'select') est.push('valor=' + limpa((e.options[e.selectedIndex] || {}).text).slice(0, 40));
+    if (tag === 'select') {
+      est.push('valor=' + limpa((e.options[e.selectedIndex] || {}).text).slice(0, 40));
+      const ops = Array.from(e.options).map(o => limpa(o.text).slice(0, 30));
+      est.push('opções: ' + ops.slice(0, 25).join(' / ') + (ops.length > 25 ? ' / … +' + (ops.length - 25) : ''));
+    }
     else if ((tag === 'input' || tag === 'textarea') && e.type !== 'password' && !SENS.test(e.name + ' ' + e.id) && e.value)
       est.push('valor=' + limpa(e.value).slice(0, 40));
     if (tipo === 'combobox' && e.innerText) est.push('valor=' + limpa(e.innerText).slice(0, 40));
@@ -596,7 +681,8 @@ def _esperar(page, maximo=25.0):
             st = {'pbi': False}
         if not st.get('pbi'):
             try:
-                page.wait_for_load_state('networkidle', timeout=max(1000, int((limite - time.monotonic()) * 1000)))
+                # Site comum: espera a rede acalmar, mas sem ficar preso em página que nunca para.
+                page.wait_for_load_state('networkidle', timeout=8000)
             except Exception:  # noqa: BLE001
                 pass
             return
@@ -623,21 +709,6 @@ def _fmt_leitura(s, dados_por_frame, parte=1, busca=''):
 
     termo = _normaliza(busca)
     corpo = []
-    visuais = principal.get('visuais') or []
-    if visuais:
-        corpo.append('\nVISUAIS (números lidos dos gráficos, cartões e tabelas):')
-        for v in visuais:
-            partes_v = v['rotulos'][:]
-            if not partes_v and v['texto']:
-                partes_v = [v['texto']]
-            txt = ' · '.join(partes_v)
-            cab = f'- {v["titulo"]}: ' if v['titulo'] else '- '
-            bloco = [cab + txt + (' (role a página para ver)' if v.get('fora') else '')]
-            bloco += [f'    {l}' for l in v['linhas']]
-            bloco_txt = '\n'.join(bloco)
-            if not termo or termo in _normaliza(bloco_txt):
-                corpo.append(bloco_txt)
-
     els = []
     for _, d in dados_por_frame:
         for e in d.get('els') or []:
@@ -651,6 +722,27 @@ def _fmt_leitura(s, dados_por_frame, parte=1, busca=''):
         corpo.extend(els)
         if omitidos:
             corpo.append(f'… mais {omitidos} elementos omitidos — use navegador_ler(busca="...") para achar um.')
+
+    visuais = principal.get('visuais') or []
+    blocos_v = []
+    for v in visuais:
+        txt = ' · '.join(v['rotulos'] or ([v['texto']] if v['texto'] else []))
+        cab = (f'- {v["titulo"]}: ' if v['titulo'] else '- ') + txt
+        if v.get('fora'):
+            cab += ' (role a página para ver)'
+        linhas_t = v['linhas']
+        if termo and termo not in _normaliza(cab):
+            # Na busca, da tabela ficam o cabeçalho e as linhas que batem.
+            linhas_t = linhas_t[:1] + [l for l in linhas_t[1:] if termo in _normaliza(l)]
+            if len(linhas_t) <= 1:
+                continue
+        bloco = [cab] + [f'    {l}' for l in linhas_t[:MAX_LINHAS_TABELA]]
+        if len(linhas_t) > MAX_LINHAS_TABELA:
+            bloco.append(f'    … +{len(linhas_t) - MAX_LINHAS_TABELA} linhas (use busca, ou role dentro da tabela)')
+        blocos_v.append('\n'.join(bloco))
+    if blocos_v:
+        corpo.append('\nVISUAIS (números lidos dos gráficos, cartões e tabelas):')
+        corpo.extend(blocos_v)
 
     for i, (rotulo, d) in enumerate(dados_por_frame):
         texto = d.get('texto') or ''
@@ -683,10 +775,18 @@ def _ler(s, parte=1, busca=''):
     inicio = 1
     quadros = [page.main_frame] + [f for f in page.frames if f is not page.main_frame][:20]
     for i, frame in enumerate(quadros):
+        arg = {'inicio': inicio, 'max': LIMITE_ELEMENTOS if i == 0 else 40}
         try:
-            d = frame.evaluate(_JS_LER, {'inicio': inicio, 'max': LIMITE_ELEMENTOS if i == 0 else 40})
-        except Exception:  # noqa: BLE001
-            continue
+            d = frame.evaluate(_JS_LER, arg)
+        except Exception as exc:  # noqa: BLE001
+            if i or 'context was destroyed' not in str(exc):
+                continue
+            # A página trocou no meio da leitura (redirecionamento, clique em link): lê a nova.
+            _esperar(page, maximo=10.0)
+            try:
+                d = frame.evaluate(_JS_LER, arg)
+            except Exception:  # noqa: BLE001
+                continue
         if i and not (d.get('texto', '').strip() or d.get('els')):
             continue
         for e in d.get('els') or []:
@@ -736,8 +836,12 @@ def _depois_da_acao(s, aviso=''):
 
 # ─── Ferramentas ─────────────────────────────────────────────────────────────
 
-@_ferramenta
 def _abrir(user, args):
+    return _protegido('navegador_abrir', lambda: _abrir_corpo(user, args or {}))
+
+
+def _abrir_corpo(user, args):
+    # Permissões (banco) aqui, na thread da requisição; o navegador, na thread dele.
     rel_id = args.get('relatorio_id')
     url = str(args.get('url') or '').strip()
     rotulo = ''
@@ -767,26 +871,32 @@ def _abrir(user, args):
         return 'Este link é de um relatório do /power-bi/ que não está liberado para você.'
 
     s = _sessao()
+    return s.rodar(_abrir_no_navegador, s, url, rotulo)
+
+
+def _abrir_no_navegador(s, url, rotulo):
     s.elementos = {}
     s.bloqueios = []
     try:
         s.page.goto(url, wait_until='domcontentloaded')
     except Exception as exc:  # noqa: BLE001
-        if s.bloqueios:
-            return 'Não abri: ' + s.bloqueios[-1] + '.'
-        raise exc
+        # Redirecionamento conferido pela rota vira uma navegação nova, que "interrompe" o goto.
+        if 'interrupted by another navigation' not in str(exc) and not s.bloqueios:
+            raise
+        s.page.wait_for_timeout(500)
     _esperar(s.page, maximo=30.0)
+    if s.bloqueios and (s.page.url or '').startswith(('chrome-error:', 'about:')):
+        return 'Não abri: ' + s.bloqueios[-1] + '.'
     return rotulo + _ler(s)
 
 
-@_ferramenta
-def _ler_ferramenta(user, args):
-    return _ler(_sessao(), args.get('parte') or 1, str(args.get('busca') or ''))
+@_no_navegador
+def _ler_ferramenta(s, args):
+    return _ler(s, args.get('parte') or 1, str(args.get('busca') or ''))
 
 
-@_ferramenta
-def _clicar(user, args):
-    s = _sessao()
+@_no_navegador
+def _clicar(s, args):
     modo = str(args.get('modo') or 'clicar')
     if args.get('numero') in (None, '') and args.get('x') is not None and args.get('y') is not None:
         try:
@@ -821,9 +931,8 @@ def _clicar(user, args):
     return _depois_da_acao(s, f'Cliquei em [{args.get("numero")}] "{info["texto"]}".')
 
 
-@_ferramenta
-def _digitar(user, args):
-    s = _sessao()
+@_no_navegador
+def _digitar(s, args):
     loc = _elemento(s, args.get('numero'))
     info = loc.evaluate(_JS_INFO)
     if info['type'] == 'password' or CAMPO_SENSIVEL.search(info['attrs'] or '') or info['form_com_senha']:
@@ -842,9 +951,8 @@ def _digitar(user, args):
     return _depois_da_acao(s, f'Digitei "{texto}"' + (' e apertei Enter.' if args.get('enter') else '.'))
 
 
-@_ferramenta
-def _tecla(user, args):
-    s = _sessao()
+@_no_navegador
+def _tecla(s, args):
     tecla = str(args.get('tecla') or '').strip()
     if tecla not in TECLAS_PERMITIDAS:
         return 'Tecla não permitida. Use uma de: ' + ', '.join(sorted(TECLAS_PERMITIDAS)) + '.'
@@ -852,9 +960,8 @@ def _tecla(user, args):
     return _depois_da_acao(s, f'Apertei {tecla}.')
 
 
-@_ferramenta
-def _rolar(user, args):
-    s = _sessao()
+@_no_navegador
+def _rolar(s, args):
     direcao = str(args.get('direcao') or 'baixo')
     passo = {'baixo': (0, 700), 'cima': (0, -700), 'direita': (700, 0), 'esquerda': (-700, 0)}.get(direcao, (0, 700))
     if args.get('numero') not in (None, ''):
@@ -867,9 +974,8 @@ def _rolar(user, args):
     return _depois_da_acao(s, f'Rolei para {direcao}.')
 
 
-@_ferramenta
-def _esperar_ferramenta(user, args):
-    s = _sessao()
+@_no_navegador
+def _esperar_ferramenta(s, args):
     try:
         seg = min(max(float(args.get('segundos') or 3), 0.5), 15)
     except (TypeError, ValueError):
@@ -878,9 +984,8 @@ def _esperar_ferramenta(user, args):
     return _depois_da_acao(s, f'Esperei {seg:g} s.')
 
 
-@_ferramenta
-def _voltar(user, args):
-    s = _sessao()
+@_no_navegador
+def _voltar(s, args):
     resp = None
     try:
         resp = s.page.go_back(wait_until='domcontentloaded')
@@ -903,9 +1008,8 @@ _JS_PAGINAS = r"""
 """
 
 
-@_ferramenta
-def _powerbi_pagina(user, args):
-    s = _sessao()
+@_no_navegador
+def _powerbi_pagina(s, args):
     page = s.page
     if _host_de(page.url) != 'app.powerbi.com':
         return 'A página aberta não é um Power BI. Abra um relatório com navegador_abrir.'
@@ -961,9 +1065,8 @@ def _powerbi_pagina(user, args):
     return _depois_da_acao(s, f'Página do relatório: {nomes[escolhido]}.')
 
 
-@_ferramenta
-def _print(user, args):
-    s = _sessao()
+@_no_navegador
+def _print(s, args):
     if s.page is None or s.page.url in ('', 'about:blank'):
         return 'Nenhuma página aberta. Use navegador_abrir primeiro.'
     if args.get('numero') not in (None, ''):
