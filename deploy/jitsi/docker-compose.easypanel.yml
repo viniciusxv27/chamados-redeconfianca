@@ -1,0 +1,76 @@
+# Jitsi próprio para as salas de /reunioes/ — serviço "Compose" do Easypanel.
+# Passo a passo: deploy/jitsi/LEIA-ME.md.
+#
+# - O HTTPS fica com o Traefik do Easypanel (aba Domains → serviço "web", porta 80).
+#   Por isso o "web" roda só em HTTP e sem Let's Encrypt próprio.
+# - O áudio e o vídeo passam pela porta 10000/udp, publicada direto no servidor.
+# - Os componentes se acham pelo nome do serviço (XMPP_SERVER=prosody).
+# - Os valores ${...} vêm da aba Environment do serviço no Easypanel.
+
+services:
+  web:
+    image: jitsi/web:stable-11031
+    restart: unless-stopped
+    environment:
+      - TZ=America/Sao_Paulo
+      - PUBLIC_URL=${PUBLIC_URL}
+      - DISABLE_HTTPS=1
+      - ENABLE_HTTP_REDIRECT=0
+      - ENABLE_LETSENCRYPT=0
+      - ENABLE_AUTH=1
+      - AUTH_TYPE=jwt
+      - ENABLE_GUESTS=0
+      - XMPP_SERVER=prosody
+      - XMPP_BOSH_URL_BASE=http://prosody:5280
+      - ENABLE_COLIBRI_WEBSOCKET=1
+      - ENABLE_XMPP_WEBSOCKET=1
+    depends_on:
+      - prosody
+
+  prosody:
+    image: jitsi/prosody:stable-11031
+    restart: unless-stopped
+    expose:
+      - "5222"
+      - "5280"
+      - "5347"
+    environment:
+      - TZ=America/Sao_Paulo
+      - PUBLIC_URL=${PUBLIC_URL}
+      - ENABLE_AUTH=1
+      - AUTH_TYPE=jwt
+      - ENABLE_GUESTS=0
+      - JWT_APP_ID=${JWT_APP_ID}
+      - JWT_APP_SECRET=${JWT_APP_SECRET}
+      - JWT_ACCEPTED_ISSUERS=${JWT_APP_ID}
+      - JWT_ACCEPTED_AUDIENCES=jitsi
+      - JWT_ALLOW_EMPTY=0
+      - JICOFO_AUTH_PASSWORD=${JICOFO_AUTH_PASSWORD}
+      - JVB_AUTH_PASSWORD=${JVB_AUTH_PASSWORD}
+
+  jicofo:
+    image: jitsi/jicofo:stable-11031
+    restart: unless-stopped
+    environment:
+      - TZ=America/Sao_Paulo
+      - ENABLE_AUTH=1
+      - AUTH_TYPE=jwt
+      - XMPP_SERVER=prosody
+      - JICOFO_AUTH_PASSWORD=${JICOFO_AUTH_PASSWORD}
+    depends_on:
+      - prosody
+
+  jvb:
+    image: jitsi/jvb:stable-11031
+    restart: unless-stopped
+    ports:
+      - "10000:10000/udp"
+    environment:
+      - TZ=America/Sao_Paulo
+      - PUBLIC_URL=${PUBLIC_URL}
+      - XMPP_SERVER=prosody
+      - JVB_PORT=10000
+      - JVB_ADVERTISE_IPS=${JVB_ADVERTISE_IPS}
+      - JVB_AUTH_PASSWORD=${JVB_AUTH_PASSWORD}
+    depends_on:
+      - prosody

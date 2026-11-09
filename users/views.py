@@ -1,4 +1,5 @@
 import datetime
+import logging
 import re
 
 from django.shortcuts import render, redirect, get_object_or_404
@@ -10,6 +11,8 @@ from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST, require_http_methods
 from django.utils import timezone
+
+logger = logging.getLogger(__name__)
 from django.utils.dateparse import parse_date
 from django.db.models import Sum, Max
 from django.db import transaction
@@ -2359,12 +2362,30 @@ def consultar_cep_view(request, cep):
     return JsonResponse({'situacao': 'ok', 'endereco': achado})
 
 
+# Envio do pré-cadastro sem perder nada (09/11/2026): o formulário é enviado por
+# static/js/envio-seguro.js com o cabeçalho X-Envio-Seguro. Nessa via a resposta é
+# JSON — erro de validação ou falha ao salvar vira lista de mensagens e a página
+# NÃO é trocada, então dados e documentos anexados continuam lá para reenviar.
+MSG_FALHA_AO_SALVAR = ('Não conseguimos salvar agora (erro no servidor). Seus dados continuam na tela: '
+                       'confira e envie de novo. Se continuar, avise o RH.')
+
+
+def _envio_seguro(request):
+    return request.headers.get('X-Envio-Seguro') == '1'
+
+
 def complete_pre_registration_view(request, token):
     """Página PÚBLICA onde o colaborador conclui o cadastro e anexa os documentos."""
     target = User.objects.filter(pre_registration_token=token).first()
 
     # Token inválido, expirado ou já utilizado
     if not target or target.pre_registration_status != User.PRE_REG_PENDING:
+        if request.method == 'POST' and _envio_seguro(request):
+            # Quem reenvia depois de uma falha de rede pode ter tido o cadastro recebido
+            # (o link vale uma vez só): a tela diz isso em vez de "link inválido" seco.
+            return JsonResponse({'ok': False, 'link_invalido': True, 'erros': [
+                'Este link não vale mais. Se você já tinha tentado enviar, seu cadastro pode ter sido '
+                'recebido: tente entrar no portal com o seu e-mail e a senha que escolheu.']}, status=410)
         return render(request, 'users/pre_register_invalid.html', status=404)
 
     required_documents = list(RequiredDocument.objects.filter(is_active=True))
@@ -2393,6 +2414,8 @@ def complete_pre_registration_view(request, token):
             else:
                 docs_to_save.append((doc, uploaded))
 
+        if errors and _envio_seguro(request):
+            return JsonResponse({'ok': False, 'erros': errors}, status=400)
         if errors:
             for e in errors:
                 messages.error(request, e)
@@ -2413,20 +2436,35 @@ def complete_pre_registration_view(request, token):
 
         # Tudo numa transação: se algo falhar no meio, nada fica pela metade
         # (contato de emergência gravado e cadastro ainda pendente, por exemplo).
-        with transaction.atomic():
-            _apply_pre_registration_personal_data(target, values)
+        try:
+            with transaction.atomic():
+                _apply_pre_registration_personal_data(target, values)
 
-            # Auto-ativação: define a senha e ativa a conta
-            target.set_password(password)
-            target.is_active = True
-            target.pre_registration_status = User.PRE_REG_COMPLETED
-            target.pre_registration_completed_at = timezone.now()
-            target.pre_registration_token = None  # invalida o link após a conclusão
-            target.save()
+                # Auto-ativação: define a senha e ativa a conta
+                target.set_password(password)
+                target.is_active = True
+                target.pre_registration_status = User.PRE_REG_COMPLETED
+                target.pre_registration_completed_at = timezone.now()
+                target.pre_registration_token = None  # invalida o link após a conclusão
+                target.save()
 
-            for doc, uploaded in docs_to_save:
-                _store_user_document(target, uploaded, document_type=doc, document_name=doc.name, uploaded_by=target,
-                                     origem=UserDocument.ORIGEM_PRE_CADASTRO)
+                for doc, uploaded in docs_to_save:
+                    _store_user_document(target, uploaded, document_type=doc, document_name=doc.name,
+                                         uploaded_by=target, origem=UserDocument.ORIGEM_PRE_CADASTRO)
+        except Exception:  # noqa: BLE001 — banco ou MinIO fora: a pessoa reenvia sem perder nada
+            logger.exception('Pré-cadastro de %s não pôde ser salvo', target.pk)
+            if _envio_seguro(request):
+                return JsonResponse({'ok': False, 'erro_inesperado': True, 'erros': [MSG_FALHA_AO_SALVAR]},
+                                    status=500)
+            messages.error(request, MSG_FALHA_AO_SALVAR)
+            return render(request, 'users/pre_register_complete.html', {
+                'target': target, 'required_documents': required_documents,
+                'skin_color_choices': User.SKIN_COLOR_CHOICES, 'sex_choices': User.SEX_CHOICES,
+                'gender_choices': User.GENDER_CHOICES, 'marital_status_choices': User.MARITAL_STATUS_CHOICES,
+                'education_level_choices': User.EDUCATION_LEVEL_CHOICES, 'state_choices': User.STATE_CHOICES,
+                'emergency_rows': _emergency_rows(request, target), 'dependent_rows': _dependent_rows(request, target),
+                'form_data': request.POST,
+            })
 
         log_action(
             target,
@@ -2434,6 +2472,8 @@ def complete_pre_registration_view(request, token):
             f'Pré-cadastro concluído: {target.full_name} ({target.email})',
             request
         )
+        if _envio_seguro(request):
+            return JsonResponse({'ok': True, 'redirect': reverse('pre_registration_success')})
         return redirect('pre_registration_success')
 
     context = {
@@ -2619,6 +2659,8 @@ def adjust_pre_registration_view(request):
             else:
                 docs_to_save.append((doc, uploaded))
 
+        if errors and _envio_seguro(request):
+            return JsonResponse({'ok': False, 'erros': errors}, status=400)
         if errors:
             for e in errors:
                 messages.error(request, e)
@@ -2638,21 +2680,29 @@ def adjust_pre_registration_view(request):
             }
             return render(request, 'users/pre_register_adjust.html', context)
 
-        with transaction.atomic():
-            _apply_pre_registration_personal_data(target, values)
+        try:
+            with transaction.atomic():
+                _apply_pre_registration_personal_data(target, values)
 
-            # Volta para a fila de análise e libera o acesso ao portal.
-            target.pre_registration_status = User.PRE_REG_COMPLETED
-            target.pre_registration_rejection_reason = ''
-            target.pre_registration_completed_at = timezone.now()
-            target.pre_registration_reviewed_at = None
-            target.pre_registration_reviewed_by = None
-            target.save()
-            target.pre_registration_extra_documents.clear()
+                # Volta para a fila de análise e libera o acesso ao portal.
+                target.pre_registration_status = User.PRE_REG_COMPLETED
+                target.pre_registration_rejection_reason = ''
+                target.pre_registration_completed_at = timezone.now()
+                target.pre_registration_reviewed_at = None
+                target.pre_registration_reviewed_by = None
+                target.save()
+                target.pre_registration_extra_documents.clear()
 
-            for doc, uploaded in docs_to_save:
-                _store_user_document(target, uploaded, document_type=doc, document_name=doc.name, uploaded_by=target,
-                                     origem=UserDocument.ORIGEM_PRE_CADASTRO)
+                for doc, uploaded in docs_to_save:
+                    _store_user_document(target, uploaded, document_type=doc, document_name=doc.name,
+                                         uploaded_by=target, origem=UserDocument.ORIGEM_PRE_CADASTRO)
+        except Exception:  # noqa: BLE001 — banco ou MinIO fora: a pessoa reenvia sem perder nada
+            logger.exception('Reenvio do pré-cadastro de %s não pôde ser salvo', target.pk)
+            if _envio_seguro(request):
+                return JsonResponse({'ok': False, 'erro_inesperado': True, 'erros': [MSG_FALHA_AO_SALVAR]},
+                                    status=500)
+            messages.error(request, MSG_FALHA_AO_SALVAR)
+            return redirect('adjust_pre_registration')
 
         log_action(
             target,
@@ -2661,6 +2711,8 @@ def adjust_pre_registration_view(request):
             request
         )
         messages.success(request, 'Cadastro reenviado para análise. Obrigado!')
+        if _envio_seguro(request):
+            return JsonResponse({'ok': True, 'redirect': reverse('home')})
         return redirect('home')
 
     context = {

@@ -30,7 +30,7 @@
             </div>
         {% endif %}
 
-        <form method="post" enctype="multipart/form-data" data-encolher-imagem class="bg-white rounded-xl shadow-sm p-6 space-y-6">
+        <form method="post" enctype="multipart/form-data" data-encolher-imagem data-envio-seguro data-rascunho="precadastro-{{ target.pk }}" class="bg-white rounded-xl shadow-sm p-6 space-y-6">
             {% csrf_token %}
 
             <!-- Dados pessoais -->
@@ -215,5 +215,6 @@
         <p class="text-center text-xs text-gray-400 mt-6">Rede Confiança &copy; {% now "Y" %}</p>
     </div>
 <script src="{% static 'js/upload-imagem.js' %}" defer></script>
+<script src="{% static 'js/envio-seguro.js' %}" defer></script>
 </body>
 </html>
