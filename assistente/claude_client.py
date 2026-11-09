@@ -57,6 +57,13 @@ SYSTEM = (
     "microindicadores, BSC D0, PPL, meta dia, dias zerados); para os demais, só os resultados DO "
     "PRÓPRIO usuário (microindicadores, realizado por pilar e metas dele) — nunca diga números de "
     "loja, rede ou colegas a quem não é SUPERADMIN.\n"
+    "BIs, DASHBOARDS E LINKS: para perguntas sobre os BIs do /power-bi/ ou sobre um link, use "
+    "powerbi_relatorios e abra com navegador_abrir (por id ou url). Navegue e filtre como uma pessoa: "
+    "clique nas segmentações (abra o combobox e escolha a opção; ctrl para várias), abas e "
+    "powerbi_pagina; leia os números de VISUAIS (navegador_print quando o texto não bastar). Na "
+    "resposta, diga de qual relatório, página e filtros veio cada número. É só leitura: não envie "
+    "formulários nem entre em contas; Power BI que exige login Microsoft e páginas logadas do portal "
+    "(use ler_pagina) não abrem.\n"
     "PONTO, SIMULADOR e VENDAS (só leitura, com as permissões da tela): ponto_consultar (/ponto/: "
     "hoje, período dia a dia, folha do mês, banco de horas, férias, escala, ajustes, solicitações ao "
     "DP e, para quem administra o ponto, equipe e relatório de pendências), simulador_consultar "
@@ -203,7 +210,17 @@ def _chamar(client, modelo, system, tools, messages, codigo):
 
 
 def responder(user, mensagem, historico=None):
-    """Roda o laço de ferramentas e devolve o texto final da resposta."""
+    """Roda o laço de ferramentas e devolve o texto final da resposta.
+
+    O navegador do assistente (BIs e links) vive só durante esta pergunta: abre
+    na primeira ferramenta que precisar dele e fecha aqui, dê certo ou não.
+    """
+    from .ferramentas_navegador import pergunta
+    with pergunta():
+        return _responder(user, mensagem, historico)
+
+
+def _responder(user, mensagem, historico=None):
     client, modelo = _cliente(user)
     tools = ferramentas.tools_schema()
     # Identifica esta pergunta: ação preparada nela só se confirma numa próxima.

@@ -843,6 +843,9 @@ from .ferramentas_vendas import TOOLS as TOOLS_VENDAS  # noqa: E402
 TOOLS.update(TOOLS_PONTO)
 TOOLS.update(TOOLS_SIMULADOR)
 TOOLS.update(TOOLS_VENDAS)
+# BIs do /power-bi/ e links públicos num navegador sem login (só ler e filtrar).
+from .ferramentas_navegador import TOOLS as TOOLS_NAVEGADOR  # noqa: E402
+TOOLS.update(TOOLS_NAVEGADOR)
 
 
 # ─── Ações com confirmação ───────────────────────────────────────────────────
@@ -928,6 +931,9 @@ def tools_schema():
 
 def executar(nome, args, user, turno=None):
     """Roda a ferramenta com as permissões do usuário. Nunca levanta — devolve texto.
+
+    Uma ferramenta pode devolver também uma lista de blocos (texto + imagem, como
+    o print do navegador): ela vai assim mesmo como conteúdo do tool_result.
 
     ``turno`` identifica a pergunta em andamento (claude_client.responder): ação
     preparada num turno só pode ser confirmada em outro.
