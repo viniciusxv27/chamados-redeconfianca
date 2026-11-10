@@ -1,0 +1,86 @@
+{% load static %}<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Termo de entrega de uniformes — {{ pessoa.get_full_name|default:pessoa.email }}</title>
+    {% comment %}
+    Termo de entrega de uniformes de uma retirada (um lote), em A4 para imprimir
+    e colher a assinatura. Não é enviado a ninguém: quem lançou imprime ou salva
+    em PDF pelo navegador.
+    {% endcomment %}
+    <style>
+        @page { size: A4; margin: 18mm 16mm; }
+        * { box-sizing: border-box; }
+        body { font-family: "Segoe UI", Arial, Helvetica, sans-serif; font-size: 10.5pt; color: #111; margin: 0; background: #f3f4f6; }
+        .folha { background: #fff; max-width: 210mm; margin: 16px auto; padding: 18mm 16mm; }
+        header { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 2px solid #111; padding-bottom: 8px; margin-bottom: 16px; }
+        header img { height: 42px; }
+        h1 { font-size: 15pt; margin: 0; text-align: right; }
+        .dados { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; margin-bottom: 14px; }
+        .dados div span { display: block; font-size: 8.5pt; color: #555; text-transform: uppercase; letter-spacing: .03em; }
+        table { width: 100%; border-collapse: collapse; margin: 10px 0 16px; }
+        th, td { border: 1px solid #999; padding: 6px 8px; text-align: left; }
+        th { background: #eee; font-size: 9pt; }
+        td.qtd, th.qtd { text-align: center; width: 18%; }
+        p { line-height: 1.5; text-align: justify; }
+        .assinaturas { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-top: 48px; }
+        .assinaturas div { border-top: 1px solid #111; padding-top: 4px; text-align: center; font-size: 9pt; }
+        .rodape { margin-top: 28px; font-size: 8pt; color: #666; text-align: center; }
+        .barra { max-width: 210mm; margin: 12px auto 0; display: flex; justify-content: flex-end; gap: 8px; padding: 0 8px; }
+        .barra button { padding: 8px 16px; border: 0; border-radius: 8px; background: #0284c7; color: #fff; font-weight: 600; cursor: pointer; }
+        @media (max-width: 640px) {
+            .folha { margin: 8px; padding: 16px; }
+            .dados, .assinaturas { grid-template-columns: 1fr; }
+            header { flex-direction: column; align-items: flex-start; }
+            h1 { text-align: left; }
+        }
+        @media print {
+            body { background: #fff; }
+            .folha { margin: 0; padding: 0; max-width: none; }
+            .barra { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="barra"><button type="button" onclick="window.print()">Imprimir / salvar PDF</button></div>
+    <div class="folha">
+        <header>
+            <img src="{% static 'images/logo.png' %}" alt="Rede Confiança">
+            <h1>Termo de entrega de uniformes</h1>
+        </header>
+
+        <div class="dados">
+            <div><span>Colaborador(a)</span>{{ pessoa.get_full_name|default:pessoa.email }}</div>
+            <div><span>CPF</span>{{ pessoa.cpf|default:"—" }}</div>
+            <div><span>Loja/setor</span>{{ pessoa.sector.name|default:"—" }}</div>
+            <div><span>Cargo</span>{{ pessoa.job_title|default:"—" }}</div>
+            <div><span>Data da entrega</span>{% if mov.data %}{{ mov.data|date:"d/m/Y" }}{% else %}____/____/________{% endif %}</div>
+            <div><span>Retirado do estoque em</span>{{ mov.registrado_em|date:"d/m/Y H:i" }} por {{ mov.registrado_por.get_full_name|default:mov.registrado_por.email|default:"—" }}</div>
+        </div>
+
+        <table>
+            <thead><tr><th>Peça</th><th>Tamanho</th><th class="qtd">Quantidade</th></tr></thead>
+            <tbody>
+                {% for m in movs %}
+                <tr><td>{{ m.item.tipo }}{% if m.item.descricao %} — {{ m.item.descricao }}{% endif %}</td><td>{{ m.item.tamanho|default:"Único" }}</td><td class="qtd">{{ m.quantidade }}</td></tr>
+                {% endfor %}
+                <tr><th colspan="2" style="text-align:right;">Total de peças</th><th class="qtd">{{ total }}</th></tr>
+            </tbody>
+        </table>
+
+        {% if mov.observacao %}<p><b>Observação:</b> {{ mov.observacao }}</p>{% endif %}
+
+        <p>Declaro ter recebido da empresa os uniformes relacionados acima, em perfeito estado, para uso exclusivo
+        no exercício das minhas funções. Comprometo-me a zelar pela sua conservação e a devolvê-los em caso de
+        desligamento ou quando solicitado.</p>
+
+        <div class="assinaturas">
+            <div>{{ pessoa.get_full_name|default:pessoa.email }}<br>Colaborador(a)</div>
+            <div>Responsável pela entrega</div>
+        </div>
+
+        <p class="rodape">Portal Rede Confiança · emitido em {{ impresso_em|date:"d/m/Y H:i" }} · lote {{ mov.lote }}</p>
+    </div>
+</body>
+</html>

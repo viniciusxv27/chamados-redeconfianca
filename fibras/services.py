@@ -13,6 +13,7 @@ from django.utils import timezone
 from simulator.sql_realizado import _mysql_config
 
 from .models import Fibra, FibraStatusHistory, PlanilhaOrdemInconsistente
+from .quadro import invalida_quadro
 
 
 User = get_user_model()
@@ -215,6 +216,7 @@ def _upsert_fibra_from_mysql_row(r: dict) -> tuple[Optional[Fibra], bool]:
     return fibra, True
 
 
+@invalida_quadro
 def sync_fibras(*, year: Optional[int] = None, month: Optional[int] = None) -> dict:
     """Atualiza/insere registros de Fibra a partir do MySQL.
 
@@ -273,6 +275,7 @@ def meses_entre(ini: date, fim: date) -> list[tuple[int, int]]:
     return meses
 
 
+@invalida_quadro
 def sync_fibras_periodo(ini: Optional[date] = None, fim: Optional[date] = None) -> dict:
     """Sincroniza todos os meses do período (e o mês corrente).
 
@@ -340,6 +343,7 @@ def _map_planilha_status(raw: str) -> Optional[str]:
     return None
 
 
+@invalida_quadro
 def import_planilha_xlsx(file_obj, *, by_user=None) -> dict:
     """Importa a Esteira de Vendas Vivo (ANALÍTICO DE VENDAS ou Base analítica – FIXA) e roda o cruzamento completo.
 
@@ -447,6 +451,7 @@ def _prune_stale_fibras(*, import_ts) -> int:
 # Mudança de status + notificação ao vendedor
 # ---------------------------------------------------------------------------
 
+@invalida_quadro
 def change_status(fibra: Fibra, new_status: str, *, changed_by, retorno: str = '') -> None:
     if new_status not in dict(Fibra.STATUS_CHOICES):
         raise ValueError(f"Status inválido: {new_status}")

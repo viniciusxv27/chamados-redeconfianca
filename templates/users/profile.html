@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load uniformes_tags %}
 
 {% block title %}Meu Perfil{% endblock %}
 
@@ -227,6 +228,9 @@
                 </div>
             </form>
         </div>
+
+        <!-- Meus uniformes (entregues pelo estoque) -->
+        {% uniformes_na_ficha user 'proprio' %}
 
         {% if ve_painel_experiencia %}
         <!-- Preferências da home -->

@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load uniformes_tags %}
 
 {% block title %}Perfil de {{ target.full_name }}{% endblock %}
 
@@ -209,6 +210,9 @@
                 {% include 'admin/_profile_field.html' with label='Uniforme (Calça)' value=target.uniform_size_pants %}
             </div>
         </div>
+
+        <!-- Uniformes (estoque: o que está com a pessoa e quando foi entregue) -->
+        {% uniformes_na_ficha target %}
 
         <!-- Endereço -->
         <div class="bg-white rounded-xl shadow-sm overflow-hidden">

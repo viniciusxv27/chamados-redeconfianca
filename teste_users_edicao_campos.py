@@ -343,6 +343,24 @@ try:
     alvo.refresh_from_db()
     t('PADRAO é barrado e nada muda', r.status_code == 302 and alvo.rg != 'INVASOR')
 
+    print('== LOGIN SEGUE A SITUAÇÃO (10/11/2026) ==')
+    html = c.get(url).content.decode()
+    t('o campo "Conta (Login)" saiu da tela', 'Conta (Login)' not in html and 'name="is_active"' not in html)
+    base = form_da_tela(html)
+    for situacao, esperado in (('INATIVO', False), ('ATIVO', True), ('AFASTADO', True), ('FERIAS', True)):
+        extra = {'status': situacao}
+        if situacao == 'INATIVO':
+            extra['inactivation_reason'] = 'ZZ desligado'
+        if situacao == 'AFASTADO':
+            extra['leave_reason'] = 'ZZ afastado'
+        c.post(url, trocar(base, **extra))
+        alvo.refresh_from_db()
+        t(f'situação {situacao}: login {"liberado" if esperado else "bloqueado"}',
+          alvo.status == situacao and alvo.is_active is esperado, (alvo.status, alvo.is_active))
+    c.post(url, trocar(base, status='ATIVO', is_active=''))
+    alvo.refresh_from_db()
+    t('um is_active antigo vindo no POST não manda mais (ativo entra)', alvo.is_active is True)
+
     t('nenhum e-mail saiu', len(mail.outbox) == 0, len(mail.outbox))
 finally:
     pilha.close()

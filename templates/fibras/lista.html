@@ -51,10 +51,10 @@ html.dark .fb-novo { color: #A5B4FC; }
 @media (max-width: 767px) {
   .fb-tabela-wrap { background: transparent; box-shadow: none; max-height: none; overflow: visible; }
   .fb-tabela thead { display: none; }
-  .fb-tabela, .fb-tabela tbody { display: block; }
+  .fb-tabela, .fb-tabela tbody { display: block; width: 100%; max-width: 100%; }
   .fb-tabela tbody tr { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; background: var(--fb-card); border-radius: 16px; box-shadow: var(--fb-sombra); padding: 12px 14px; margin-bottom: 10px; }
   .fb-tabela tbody tr.nova-resposta { box-shadow: 0 0 0 2px #818CF8; }
-  .fb-tabela td { border: 0; padding: 0; min-width: 0; text-align: left !important; }
+  .fb-tabela td { border: 0; padding: 0; min-width: 0; text-align: left !important; overflow-wrap: anywhere; }
   .fb-tabela td::before { content: attr(data-label); display: block; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--fb-suave); margin-bottom: 1px; }
   .fb-tabela td.cel-cliente { grid-column: 1 / -1; font-size: 15px; order: -2; }
   .fb-tabela td.cel-cliente::before, .fb-tabela td.cel-acao::before, .fb-tabela td.cel-status::before { display: none; }
@@ -116,16 +116,17 @@ html.dark .fb-novo { color: #A5B4FC; }
 
   <form method="get" class="fb-card fb-filtros-painel" id="fbFiltros" style="padding:14px 16px" aria-label="Filtros do servidor">
     <div class="fb-filtros">
-      <div><label class="fb-rotulo" for="fStatus">Status</label>
+      <div><label class="fb-rotulo" for="fStatus">Situação (coluna do kanban)</label>
         <select id="fStatus" name="status" class="fb-campo">
-          <option value="">Todos os status</option>
-          {% for k, l in status_choices %}<option value="{{ k }}" {% if k == filtro_status %}selected{% endif %}>{{ l }}</option>{% endfor %}
+          <option value="">Todas</option>
+          {% for k, l, n in situacoes %}<option value="{{ k }}" {% if k == filtro_status %}selected{% endif %}>{{ l }} ({{ n }})</option>{% endfor %}
         </select>
       </div>
       <div><label class="fb-rotulo" for="fPdv">PDV</label><input id="fPdv" type="text" name="pdv" value="{{ filtro_pdv }}" placeholder="Filtrar por PDV" class="fb-campo"></div>
       <div><label class="fb-rotulo" for="fVend">Vendedor</label><input id="fVend" type="text" name="vendedor" value="{{ filtro_vendedor }}" placeholder="Filtrar por vendedor" class="fb-campo"></div>
       <div><label class="fb-rotulo" for="fVenda">Nº da venda</label><input id="fVenda" type="text" name="venda" value="{{ filtro_venda }}" placeholder="Nº da venda" class="fb-campo"></div>
       <div><label class="fb-rotulo" for="fOrdem">Ordem / Protocolo</label><input id="fOrdem" type="text" name="ordem" value="{{ filtro_ordem }}" placeholder="Ordem / Protocolo" class="fb-campo"></div>
+      <div style="display:flex;align-items:flex-end"><label class="fb-rotulo" style="display:flex;align-items:center;gap:6px;margin:0 0 8px"><input type="checkbox" name="b2b" value="1" {% if filtro_b2b %}checked{% endif %}> Só B2B (CNPJ)</label></div>
       {% include 'fibras/_fb_periodo.html' %}
       <div class="fb-filtros-acoes">
         <button class="fb-btn primario" type="submit"><i class="fas fa-filter" aria-hidden="true"></i> Filtrar</button>
@@ -145,7 +146,7 @@ html.dark .fb-novo { color: #A5B4FC; }
   {% endif %}
 
   <div class="fb-tabela-wrap">
-    <table class="fb-tabela" id="fbTabela">
+    <table class="fb-tabela" id="fbTabela" data-rc-wrapped="1">
       <thead>
         <tr>
           <th scope="col"><button type="button" data-ord="venda">Venda <i class="fas fa-sort" aria-hidden="true"></i></button></th>
@@ -163,15 +164,15 @@ html.dark .fb-novo { color: #A5B4FC; }
       </thead>
       <tbody>
         {% for f in fibras %}
-        {% with inc=f.incidentes.first %}
-        <tr class="{% if inc and inc.aberto_por_id == request.user.id and inc.has_unread_reply_for_opener %}nova-resposta{% endif %}"
+        {% with inc=f.inc %}
+        <tr class="{% if f.nova_resposta %}nova-resposta{% endif %}"
             data-url="{% url 'fibras:detail' f.pk %}" data-st="{{ f.status }}"
             data-venda="{{ f.numero_da_venda }}" data-cliente="{{ f.cliente }}" data-valor="{{ f.valor|unlocalize }}"
             data-vendedor="{{ f.vendedor }}" data-data="{{ f.data_da_venda|date:'Y-m-d' }}" data-status="{{ f.get_status_display }}"
             data-ordem="{{ f.ordem_vinculada|default:f.numero_protocolo }}" data-pk="{{ f.pk }}"
             data-busca="{{ f.numero_da_venda }} {{ f.cliente }} {{ f.cpf }} {{ f.numero_acesso }} {{ f.plano }} {{ f.vendedor }} {{ f.pdv }} {{ f.numero_protocolo }} {{ f.ordem_vinculada }} {{ f.retorno_myrella }}">
           <td data-label="Venda" class="mono">{{ f.numero_da_venda }}
-            {% if inc and inc.aberto_por_id == request.user.id and inc.has_unread_reply_for_opener %}
+            {% if f.nova_resposta %}
               <span class="fb-novo"><i class="fas fa-circle" aria-hidden="true"></i> nova resposta</span>
             {% endif %}
           </td>
@@ -182,7 +183,7 @@ html.dark .fb-novo { color: #A5B4FC; }
           <td data-label="Valor" class="num valor">R$ {{ f.valor|floatformat:"2g" }}</td>
           <td data-label="Vendedor / PDV" style="font-size:12px">{{ f.vendedor }}<span class="sub">{{ f.pdv }}</span></td>
           <td data-label="Data" style="font-size:12px;white-space:nowrap">{{ f.data_da_venda|date:"d/m/Y" }}</td>
-          <td data-label="Status" class="centro cel-status">{% if fb_pode.status_alterar %}<select class="fb-st-select" data-st="{{ f.status }}" data-mudar-status aria-label="Status da venda {{ f.numero_da_venda }}">{% for k, l in status_choices %}<option value="{{ k }}" {% if k == f.status %}selected{% endif %}>{{ l }}</option>{% endfor %}</select>{% else %}<span class="st-pill" data-st="{{ f.status }}">{{ f.get_status_display }}</span>{% endif %}</td>
+          <td data-label="Status" class="centro cel-status">{% if fb_pode.status_alterar %}<select class="fb-st-select" data-st="{{ f.status }}" data-mudar-status aria-label="Status da venda {{ f.numero_da_venda }}">{% for k, l in status_choices %}<option value="{{ k }}" {% if k == f.status %}selected{% endif %}>{{ l }}</option>{% endfor %}</select>{% else %}<span class="st-pill" data-st="{{ f.status }}">{{ f.get_status_display }}</span>{% endif %}{% if f.coluna == 'nao_localizado' %}<span class="sub" title="Fora da última planilha: no kanban fica na coluna Não localizado">não localizado</span>{% endif %}</td>
           <td data-label="Retorno Myrella" class="retorno cel-retorno" title="{{ f.retorno_myrella }}">{{ f.retorno_myrella|truncatechars:60 }}</td>
           <td class="num cel-acao"><a href="{% url 'fibras:detail' f.pk %}" class="fb-abrir">Abrir <i class="fas fa-arrow-right" aria-hidden="true"></i></a></td>
         </tr>
@@ -197,7 +198,7 @@ html.dark .fb-novo { color: #A5B4FC; }
 
   {% if fibras %}
   <div class="fb-rodape-lista">
-    <span>{{ fibras|length }} venda(s) listada(s).</span>
+    <span>{{ fibras|length }} venda(s) listada(s) · R$ {{ total_lista|floatformat:"2g" }}.</span>
     <span id="fbSomaVisivel"></span>
   </div>
   {% endif %}

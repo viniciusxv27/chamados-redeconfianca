@@ -1,0 +1,23 @@
+{# Uma linha do livro do estoque (variável `m`): o que, quanto, para quem, quem lançou e quando. #}
+<li class="px-4 py-3 flex items-start gap-3">
+  <span class="mt-0.5 w-8 h-8 flex-shrink-0 rounded-full flex items-center justify-center text-xs
+    {% if m.tipo == 'ENTRADA' %}bg-emerald-50 text-emerald-600{% elif m.tipo == 'RETIRADA' %}bg-sky-50 text-sky-600{% elif m.tipo == 'DEVOLUCAO' %}bg-violet-50 text-violet-600{% else %}bg-gray-100 text-gray-600{% endif %}">
+    <i class="fas {% if m.tipo == 'ENTRADA' %}fa-arrow-down{% elif m.tipo == 'RETIRADA' %}fa-hand-holding{% elif m.tipo == 'DEVOLUCAO' %}fa-rotate-left{% else %}fa-scale-balanced{% endif %}"></i>
+  </span>
+  <div class="min-w-0 flex-1">
+    <p class="text-sm text-gray-900 break-words">
+      <b>{{ m.rotulo_curto }}</b> · {{ m.quantidade }} × {{ m.item.nome }}
+      <span class="text-xs font-semibold {% if m.delta > 0 %}text-emerald-600{% else %}text-red-600{% endif %}">({% if m.delta > 0 %}+{% endif %}{{ m.delta }} → {{ m.saldo_apos }})</span>
+    </p>
+    <p class="text-xs text-gray-500 break-words">
+      {% if m.colaborador %}{% if m.tipo == 'DEVOLUCAO' %}de{% else %}para{% endif %} <a href="{% url 'uniformes:colaborador' m.colaborador_id %}" class="text-sky-700 hover:underline">{{ m.colaborador.get_full_name|default:m.colaborador.email }}</a>{% if m.colaborador.sector %} ({{ m.colaborador.sector.name }}){% endif %} · {% endif %}
+      lançado por {{ m.registrado_por.get_full_name|default:m.registrado_por.email|default:'—' }} em {{ m.registrado_em|date:'d/m/Y H:i' }}
+      {% if m.tipo == 'RETIRADA' %} · entrega: {% if m.data %}{{ m.data|date:'d/m/Y' }}{% else %}<span class="text-amber-600">sem data</span>{% endif %}{% elif m.data and m.tipo != 'AJUSTE' %} · data: {{ m.data|date:'d/m/Y' }}{% endif %}
+      {% if m.nota_fiscal %} · NF {{ m.nota_fiscal }}{% endif %}
+    </p>
+    {% if m.observacao %}<p class="text-xs text-gray-600 mt-0.5 break-words"><i class="fas fa-comment-dots text-gray-300 mr-1"></i>{{ m.observacao }}</p>{% endif %}
+  </div>
+  {% if m.tipo == 'RETIRADA' %}
+  <a href="{% url 'uniformes:termo' m.lote %}" target="_blank" class="flex-shrink-0 text-xs text-gray-500 hover:text-sky-700" title="Termo de entrega"><i class="fas fa-file-signature"></i></a>
+  {% endif %}
+</li>

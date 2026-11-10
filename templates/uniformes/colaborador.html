@@ -1,0 +1,75 @@
+{% extends 'base.html' %}
+
+{% block title %}Uniformes de {{ pessoa.get_full_name|default:pessoa.email }}{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto px-1 sm:px-2">
+  {% include 'uniformes/_nav.html' with aba='' %}
+
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5 mb-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    <div class="min-w-0">
+      <h2 class="text-xl font-bold text-gray-900 break-words">{{ pessoa.get_full_name|default:pessoa.email }}</h2>
+      <p class="text-sm text-gray-500">{% if pessoa.sector %}{{ pessoa.sector.name }} · {% endif %}ficha: camisa {{ pessoa.uniform_size_shirt|default:'—' }} · calça {{ pessoa.uniform_size_pants|default:'—' }}{% if not pessoa.is_active %} · <span class="text-red-600">inativo</span>{% endif %}</p>
+    </div>
+    <div class="flex flex-wrap gap-2">
+      {% if pessoa.is_active %}<a href="{% url 'uniformes:retirada' %}?colaborador={{ pessoa.pk }}" class="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold"><i class="fas fa-hand-holding mr-1"></i>Retirada</a>{% endif %}
+      {% if ficha.pecas %}<a href="{% url 'uniformes:devolucao' %}?colaborador={{ pessoa.pk }}" class="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 text-sm font-medium hover:bg-gray-50"><i class="fas fa-rotate-left mr-1"></i>Devolução</a>{% endif %}
+    </div>
+  </div>
+
+  {% if termo_novo %}
+  <div class="mb-5 p-4 rounded-xl bg-sky-50 border border-sky-200 text-sm text-sky-900 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+    <span><i class="fas fa-file-signature mr-1.5"></i>Retirada lançada. Imprima o termo de entrega para o colaborador assinar.</span>
+    <a href="{% url 'uniformes:termo' termo_novo %}" target="_blank" class="px-3 py-1.5 rounded-lg bg-sky-600 text-white text-xs font-semibold self-start sm:self-auto">Abrir termo</a>
+  </div>
+  {% endif %}
+
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden mb-5">
+    <div class="px-4 py-3 border-b border-gray-100"><h3 class="font-semibold text-gray-800 text-sm">Com o colaborador agora{% if ficha.total %} · {{ ficha.total }} peça{{ ficha.total|pluralize }}{% endif %}</h3></div>
+    <ul class="divide-y divide-gray-100">
+      {% for p in ficha.pecas %}
+      <li class="px-4 py-2.5 flex items-center justify-between gap-3">
+        <span class="text-sm text-gray-800 break-words min-w-0">{{ p.item.nome }}</span>
+        <span class="text-right flex-shrink-0"><b>{{ p.quantidade }}</b>{% if p.ultima_entrega %}<span class="block text-[11px] text-gray-500">entregue {{ p.ultima_entrega|date:'d/m/Y' }}</span>{% endif %}</span>
+      </li>
+      {% empty %}
+      <li class="px-4 py-6 text-center text-sm text-gray-400">Nenhuma peça com o colaborador.</li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+    <div class="px-4 py-3 border-b border-gray-100"><h3 class="font-semibold text-gray-800 text-sm">Entregas e devoluções</h3></div>
+    <ul class="divide-y divide-gray-100">
+      {% for e in ficha.entregas %}
+      <li class="px-4 py-3">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <p class="text-sm text-gray-900 break-words"><b>{% if e.tipo == 'RETIRADA' %}Entrega{% else %}Devolução{% endif %}</b> ·
+              {% for l in e.linhas %}{{ l.quantidade }} × {{ l.item.nome }}{% if not forloop.last %}, {% endif %}{% endfor %}</p>
+            <p class="text-xs text-gray-500">
+              {% if e.tipo == 'RETIRADA' %}retirada em {{ e.registrado_em|date:'d/m/Y H:i' }}{% else %}devolvido em {% if e.data %}{{ e.data|date:'d/m/Y' }}{% else %}{{ e.registrado_em|date:'d/m/Y' }}{% endif %}{% endif %}
+              por {{ e.registrado_por.get_full_name|default:e.registrado_por.email|default:'—' }}
+            </p>
+            {% with obs=e.linhas.0.observacao %}{% if obs %}<p class="text-xs text-gray-600 mt-0.5 break-words">{{ obs }}</p>{% endif %}{% endwith %}
+          </div>
+          {% if e.tipo == 'RETIRADA' %}<a href="{% url 'uniformes:termo' e.lote %}" target="_blank" class="text-xs text-gray-500 hover:text-sky-700 flex-shrink-0" title="Termo de entrega"><i class="fas fa-file-signature"></i> Termo</a>{% endif %}
+        </div>
+        {% if e.tipo == 'RETIRADA' %}
+        <form method="post" action="{% url 'uniformes:data_entrega' e.primeiro_id %}" class="mt-2 flex flex-wrap items-center gap-2">
+          {% csrf_token %}
+          <label class="text-xs text-gray-600">Data de entrega:</label>
+          <input type="date" name="data_entrega" value="{{ e.data|date:'Y-m-d' }}" class="border border-gray-300 rounded-lg px-2 py-1 text-xs">
+          <button class="px-2.5 py-1 rounded-lg border border-gray-200 text-xs text-gray-600 hover:bg-gray-50">Salvar</button>
+          {% if not e.data %}<span class="text-[11px] text-amber-600">a confirmar</span>{% endif %}
+          {% with l=e.linhas.0 %}{% if l.data_alterada_em %}<span class="text-[11px] text-gray-400">alterada por {{ l.data_alterada_por.get_full_name|default:l.data_alterada_por.email|default:'—' }} em {{ l.data_alterada_em|date:'d/m/Y H:i' }}</span>{% endif %}{% endwith %}
+        </form>
+        {% endif %}
+      </li>
+      {% empty %}
+      <li class="px-4 py-6 text-center text-sm text-gray-400">Nada registrado para esta pessoa.</li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>
+{% endblock %}

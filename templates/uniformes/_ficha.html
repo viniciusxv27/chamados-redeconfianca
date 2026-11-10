@@ -1,0 +1,83 @@
+{% comment %}
+Bloco "Uniformes" da ficha do colaborador (uniformes_na_ficha). `modo`:
+'tela' (perfil na gestão de usuários), 'proprio' (Meu perfil) ou 'impressao'
+(ficha A4, que tem CSS próprio e não usa Tailwind).
+{% endcomment %}
+{% if modo == 'impressao' %}
+<div class="section">
+    <h2>Uniformes</h2>
+    {% if dados is None %}
+        <div class="docs-empty">Controle de uniformes indisponível.</div>
+    {% elif dados.pecas %}
+        <table class="docs">
+            <thead><tr><th style="width: 55%;">Peça</th><th style="width: 15%;">Quantidade</th><th style="width: 30%;">Última entrega</th></tr></thead>
+            <tbody>
+                {% for p in dados.pecas %}
+                <tr><td>{{ p.item.nome }}</td><td>{{ p.quantidade }}</td><td>{{ p.ultima_entrega|date:"d/m/Y"|default:"—" }}</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <div class="docs-empty">Nenhum uniforme do estoque com o colaborador.</div>
+    {% endif %}
+</div>
+{% else %}
+<div class="bg-white rounded-xl shadow-sm overflow-hidden" id="uniformes">
+    <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between gap-3 flex-wrap">
+        <h3 class="text-lg font-semibold text-gray-900 flex items-center">
+            <i class="fas fa-shirt text-gray-500 mr-2"></i>
+            {% if modo == 'proprio' %}Meus uniformes{% else %}Uniformes{% endif %}
+            {% if dados and dados.total %}<span class="ml-2 text-sm font-normal text-gray-500">({{ dados.total }} peça{{ dados.total|pluralize }})</span>{% endif %}
+        </h3>
+        {% if pode_gerir %}
+        <div class="flex gap-2 flex-wrap">
+            <a href="{% url 'uniformes:retirada' %}?colaborador={{ colaborador.pk }}" class="px-3 py-1.5 rounded-lg bg-sky-600 text-white text-xs font-semibold hover:bg-sky-700"><i class="fas fa-hand-holding mr-1"></i>Retirada</a>
+            <a href="{% url 'uniformes:colaborador' colaborador.pk %}" class="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-50">Ver tudo</a>
+        </div>
+        {% endif %}
+    </div>
+    <div class="p-6 text-sm">
+        {% if dados is None %}
+            <p class="text-gray-500">Controle de uniformes indisponível no momento.</p>
+        {% else %}
+            {% if dados.pecas %}
+            <ul class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
+                {% for p in dados.pecas %}
+                <li class="flex items-center justify-between gap-3 px-3 py-2 rounded-lg border border-gray-200">
+                    <span class="min-w-0 break-words text-gray-800">{{ p.item.nome }}</span>
+                    <span class="text-right flex-shrink-0">
+                        <b class="text-gray-900">{{ p.quantidade }}</b>
+                        {% if p.ultima_entrega %}<span class="block text-[11px] text-gray-500">entregue {{ p.ultima_entrega|date:"d/m/Y" }}</span>{% endif %}
+                    </span>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p class="text-gray-500 mb-2">{% if modo == 'proprio' %}Você não está com nenhum uniforme registrado no estoque.{% else %}Nenhum uniforme do estoque com o colaborador.{% endif %}</p>
+            {% endif %}
+            {% if dados.entregas %}
+            <p class="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Entregas e devoluções</p>
+            <ul class="divide-y divide-gray-100">
+                {% for e in dados.entregas|slice:":10" %}
+                <li class="py-2 flex items-start justify-between gap-3">
+                    <div class="min-w-0">
+                        <p class="text-gray-800 break-words">
+                            <b>{% if e.tipo == 'RETIRADA' %}Entrega{% else %}Devolução{% endif %}</b> ·
+                            {% for l in e.linhas %}{{ l.quantidade }} × {{ l.item.nome }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                        </p>
+                        <p class="text-[11px] text-gray-500">
+                            {% if e.tipo == 'RETIRADA' %}entregue em {% if e.data %}{{ e.data|date:"d/m/Y" }}{% else %}<span class="text-amber-600">data a confirmar</span>{% endif %} · retirada em {{ e.registrado_em|date:"d/m/Y" }}{% else %}devolvido em {% if e.data %}{{ e.data|date:"d/m/Y" }}{% else %}{{ e.registrado_em|date:"d/m/Y" }}{% endif %}{% endif %}
+                            {% if modo != 'proprio' and e.registrado_por %} · por {{ e.registrado_por.get_full_name|default:e.registrado_por.email }}{% endif %}
+                        </p>
+                    </div>
+                    {% if pode_gerir and e.tipo == 'RETIRADA' %}
+                    <a href="{% url 'uniformes:termo' e.lote %}" target="_blank" class="text-xs text-gray-500 hover:text-sky-700 flex-shrink-0" title="Termo de entrega"><i class="fas fa-file-signature"></i></a>
+                    {% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+        {% endif %}
+    </div>
+</div>
+{% endif %}

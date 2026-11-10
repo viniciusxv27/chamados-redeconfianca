@@ -58,6 +58,9 @@ try:
     ilha = User.objects.create_user(username='zzfdt.ilha', email='zzfdt.ilha@exemplo-teste.local', password='S3nha!teste',
                                     first_name='ZZ', last_name='IlhaData', hierarchy='SUPERVISOR')
     PDV = 'ZZ LOJA DATAFILTRO'
+    # Desde /fibras/acessos/ a hierarquia não abre mais o módulo: libera a rede para a pessoa do teste.
+    from fibras.models import AcessoFibras
+    AcessoFibras.objects.create(user=ilha, permissoes=['modulo.ver', 'rede.ver', 'status.alterar', 'exportar'])
 
     def fibra(venda, dia, status=Fibra.STATUS_PENDENTE):
         return Fibra.objects.create(numero_da_venda=venda, numero_protocolo=f'P{venda}', pdv=PDV, data_da_venda=dia,
@@ -103,7 +106,9 @@ try:
     t('chip do período ativo (mês inteiro pelo nome)', 'Período: <b>março de 2031</b>' in html)
     t('o "x" do chip mostra todo o período (mantém o PDV)',
       'href="/fibras/?pdv=ZZ+LOJA+DATAFILTRO&amp;periodo=todos" class="fb-periodo-x"' in html)
-    t('a navegação leva o período', 'href="/fibras/lista/?de=2031-03-01&amp;ate=2031-03-31"' in html)
+    # Desde 10/11/2026 a troca Kanban↔Lista leva todos os filtros (não só o período).
+    t('a navegação leva o período (e os demais filtros)',
+      'href="/fibras/lista/?pdv=ZZ+LOJA+DATAFILTRO&amp;de=2031-03-01&amp;ate=2031-03-31"' in html)
     t('o CSV de canceladas leva o período', '/fibras/export/canceladas-csv/?de=2031-03-01&amp;ate=2031-03-31' in html)
 
     r, cols = kanban({'de': '2031-03-16'})
@@ -129,10 +134,13 @@ try:
     print('\n== LISTA ==')
     r = c.get('/fibras/lista/', {'pdv': PDV, 'de': '2031-03-01', 'ate': '2031-03-31'})
     t('lista: só março', {f.numero_da_venda for f in r.context['fibras']} == MARCO)
-    r = c.get('/fibras/lista/', {'pdv': PDV, 'status': Fibra.STATUS_PENDENTE, 'de': '2031-03-01', 'ate': '2031-03-31'})
-    t('lista: período + status juntos', {f.numero_da_venda for f in r.context['fibras']} == {'ZZDTA', 'ZZDTD'})
-    t('lista: chip mantém status e PDV no "x"',
-      'href="/fibras/lista/?pdv=ZZ+LOJA+DATAFILTRO&amp;status=pendente" class="fb-periodo-x"' in r.content.decode())
+    # O filtro da lista é a coluna do kanban (10/11/2026): as pendentes fora da planilha estão em "Não localizado".
+    r = c.get('/fibras/lista/', {'pdv': PDV, 'status': 'nao_localizado', 'de': '2031-03-01', 'ate': '2031-03-31'})
+    t('lista: período + situação juntos', {f.numero_da_venda for f in r.context['fibras']} == {'ZZDTA', 'ZZDTD'})
+    r2 = c.get('/fibras/lista/', {'pdv': PDV, 'status': Fibra.STATUS_PENDENTE, 'de': '2031-03-01', 'ate': '2031-03-31'})
+    t('lista: "Pendente" = a coluna Pendente do kanban (vazia aqui)', not r2.context['fibras'])
+    t('lista: chip mantém situação e PDV no "x" (e mostra todo o período)',
+      'href="/fibras/lista/?pdv=ZZ+LOJA+DATAFILTRO&amp;status=nao_localizado&amp;periodo=todos" class="fb-periodo-x"' in r.content.decode())
 
     print('\n== RELATÓRIO ==')
     r = c.get('/fibras/relatorio/', {'de': '2031-03-01', 'ate': '2031-03-31'})

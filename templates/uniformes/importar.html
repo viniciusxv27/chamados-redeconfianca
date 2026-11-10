@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+
+{% block title %}Importar planilha de uniformes{% endblock %}
+
+{% block content %}
+{% comment %}
+Importação em dois passos: lê a planilha e mostra a prévia (nada gravado);
+no "Confirmar" escolhe se soma como entrada ou se acerta o saldo para o da
+planilha (ajuste de inventário). Tudo ou nada.
+{% endcomment %}
+<div class="max-w-5xl mx-auto px-1 sm:px-2">
+  {% include 'uniformes/_nav.html' with aba='importar' %}
+
+  {% if not previa %}
+  <form method="post" enctype="multipart/form-data" class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5 space-y-4">
+    {% csrf_token %}
+    <input type="hidden" name="acao" value="ler">
+    <h2 class="text-lg font-semibold text-gray-900"><i class="fas fa-file-import text-sky-600 mr-1.5"></i>Importar estoque por planilha</h2>
+    <div class="text-sm text-gray-600 space-y-1">
+      <p>Aceita <b>.xlsx</b> ou <b>.csv</b>. A primeira linha com os títulos é achada sozinha; maiúsculas e acentos não importam.</p>
+      <p>Colunas reconhecidas: <b>Tipo</b> (ou Peça, Item, Uniforme, Produto) · <b>Tamanho</b> (ou Tam., Numeração) · <b>Quantidade</b> (ou Qtd, Qtde, Estoque, Saldo) · <b>Descrição</b> (ou Modelo, Cor — opcional) · <b>Estoque mínimo</b> (opcional).</p>
+      <p class="text-xs text-gray-500">Nada é gravado neste passo: você vê a prévia antes de confirmar.</p>
+    </div>
+    <input type="file" name="planilha" accept=".xlsx,.xlsm,.csv" required class="block w-full text-sm text-gray-700 file:mr-3 file:px-4 file:py-2 file:rounded-lg file:border-0 file:bg-sky-50 file:text-sky-700">
+    <div class="flex justify-end">
+      <button class="px-5 py-2.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold"><i class="fas fa-eye mr-1.5"></i>Ver prévia</button>
+    </div>
+  </form>
+  {% else %}
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden mb-4">
+    <div class="px-4 py-3 border-b border-gray-100">
+      <h2 class="font-semibold text-gray-800">Prévia de {{ previa.arquivo }}</h2>
+      <p class="text-xs text-gray-500 mt-0.5">{{ previa.linhas|length }} item(ns) ·
+        colunas lidas: {% for campo, titulo in previa.colunas.items %}{{ titulo }}{% if not forloop.last %}, {% endif %}{% endfor %}</p>
+    </div>
+    {% if previa.avisos %}
+    <ul class="px-4 py-2 bg-amber-50 border-b border-amber-100 text-xs text-amber-800 space-y-0.5 max-h-40 overflow-y-auto">
+      {% for a in previa.avisos %}<li><i class="fas fa-triangle-exclamation mr-1"></i>{{ a }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-sm" data-rc-wrapped="1">
+        <thead class="bg-gray-50 text-[11px] uppercase text-gray-500">
+          <tr><th class="px-3 py-2 text-left">Tipo</th><th class="px-3 py-2 text-left">Tam.</th><th class="px-3 py-2 text-left hidden sm:table-cell">Descrição</th><th class="px-3 py-2 text-right">Planilha</th><th class="px-3 py-2 text-right">Hoje</th><th class="px-3 py-2 text-left">Situação</th></tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          {% for l in previa.linhas %}
+          <tr>
+            <td class="px-3 py-2 break-words">{{ l.tipo }}<span class="sm:hidden block text-[11px] text-gray-500">{{ l.descricao }}</span></td>
+            <td class="px-3 py-2">{{ l.tamanho|default:'—' }}</td>
+            <td class="px-3 py-2 hidden sm:table-cell">{{ l.descricao|default:'—' }}</td>
+            <td class="px-3 py-2 text-right font-semibold">{{ l.quantidade }}</td>
+            <td class="px-3 py-2 text-right text-gray-500">{% if l.item_id %}{{ l.saldo_atual }}{% else %}—{% endif %}</td>
+            <td class="px-3 py-2 text-xs">{% if l.item_id %}<span class="text-gray-600">já existe</span>{% else %}<span class="text-emerald-700 font-medium">novo</span>{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <form method="post" class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5 space-y-3">
+    {% csrf_token %}
+    <input type="hidden" name="acao" value="confirmar">
+    <p class="text-sm font-medium text-gray-700">Como lançar as quantidades?</p>
+    <label class="flex items-start gap-2 text-sm text-gray-700">
+      <input type="radio" name="modo" value="ENTRADA" checked class="mt-1">
+      <span><b>Somar como entrada</b> — a quantidade da planilha entra no estoque (recebimento). Use para o estoque inicial ou uma remessa nova.</span>
+    </label>
+    <label class="flex items-start gap-2 text-sm text-gray-700">
+      <input type="radio" name="modo" value="ACERTAR" class="mt-1">
+      <span><b>Acertar o saldo para o da planilha</b> — vira um ajuste de inventário: o saldo de cada item passa a ser exatamente o da planilha.</span>
+    </label>
+    <div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
+      <button name="acao" value="cancelar" formnovalidate class="px-4 py-2.5 rounded-lg border border-gray-200 text-sm text-gray-600">Cancelar</button>
+      <button class="px-5 py-2.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold"><i class="fas fa-check mr-1.5"></i>Confirmar importação</button>
+    </div>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

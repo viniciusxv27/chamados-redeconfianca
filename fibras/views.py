@@ -101,88 +101,32 @@ def _ctx_periodo(request, de, ate):
     }
 
 
+def _nav_qs(request):
+    """Filtros que o Kanban e a Lista compartilham: trocar de tela não perde o recorte."""
+    g = request.GET.copy()
+    for chave in ('status', 'pagina'):
+        g.pop(chave, None)
+    return g.urlencode()
+
+
 @login_required
 @exige('modulo.ver')
 def kanban(request):
-    from django.db.models import Q as _Q
-    from django.db.models.functions import Length
-    qs = fibras_visiveis(request.user)
-    # filtros simples
-    pdv = (request.GET.get('pdv') or '').strip()
-    vendedor = (request.GET.get('vendedor') or '').strip()
-    venda = (request.GET.get('venda') or '').strip()
-    ordem = (request.GET.get('ordem') or '').strip()
-    # B2B: documento (CPF/CNPJ) com mais de 11 caracteres = empresa.
-    b2b = (request.GET.get('b2b') or '').strip() in ('1', 'true', 'on', 'sim')
-    if b2b:
-        qs = qs.annotate(_doc_len=Length('cpf')).filter(_doc_len__gt=11)
-    if pdv:
-        qs = qs.filter(pdv__icontains=pdv)
-    if vendedor:
-        qs = qs.filter(vendedor__icontains=vendedor)
-    if venda:
-        qs = qs.filter(numero_da_venda__icontains=venda)
-    if ordem:
-        # Aceita o nº de ORDEM da planilha (== numero_protocolo) ou a posição
-        # numérica (ordem_planilha). Tenta os dois para ser flexível.
-        cond = _Q(numero_protocolo__icontains=ordem) | _Q(ordem_vinculada__icontains=ordem)
-        if ordem.isdigit():
-            cond |= _Q(ordem_planilha=int(ordem))
-        qs = qs.filter(cond)
-    # Período (data da venda) — vale para todas as colunas, inclusive "Não localizado".
-    # Sem período na URL, abre no mês corrente.
-    de, ate = _periodo_ou_mes(request)
-    qs = _filtrar_periodo(qs, de, ate)
-
-    # Coluna "Não localizado": vendas de fibra cujo protocolo não aparece na
-    # planilha atual (last_planilha_at antes do último import OU nulo). Só
-    # considera vendas FIXA não canceladas/instaladas para não poluir a tela.
-    # IMPORTANTE: calculada ANTES das colunas por status para que possamos
-    # excluir esses IDs das outras colunas e evitar duplicação no kanban.
-    from django.db.models import Max, Q
+    from . import quadro
     from .models import PlanilhaOrdemInconsistente
-    latest_import = Fibra.objects.aggregate(m=Max('last_planilha_at'))['m']
-    nao_qs = qs.filter(
-        Q(pilar__iexact='fixa') | Q(pilar__icontains='fixa') | Q(pilar=''),
-    ).exclude(status__in=[Fibra.STATUS_CANCELADO, Fibra.STATUS_INSTALADO])
-    if latest_import:
-        nao_qs = nao_qs.filter(
-            Q(last_planilha_at__isnull=True) | Q(last_planilha_at__lt=latest_import)
-        )
-    else:
-        nao_qs = nao_qs.filter(last_planilha_at__isnull=True)
-    nao_qs = nao_qs.order_by('-data_da_venda', '-id')
-    nao_items = list(nao_qs)
-    nao_ids = {f.id for f in nao_items}
 
-    colunas = []
-    for key, label in Fibra.STATUS_CHOICES:
-        # Ordena pela posição na planilha (quando disponível) e depois pela data.
-        # Exclui fibras que estão na coluna "Não localizado" para não duplicar.
-        col_qs = (
-            qs.filter(status=key)
-              .exclude(id__in=nao_ids)
-              .order_by('ordem_planilha', '-data_da_venda')
-        )
-        colunas.append({
-            'key': key,
-            'label': label,
-            'items': list(col_qs),
-            'count': col_qs.count(),
-            'total': col_qs.aggregate(t=Sum('valor'))['t'] or Decimal('0'),
-        })
+    filtros = quadro.ler_filtros(request)
+    # Período (data da venda) — vale para todas as colunas, inclusive "Não localizado".
+    # Sem período na URL, abre no mês corrente (a lista faz igual).
+    de, ate = _periodo_ou_mes(request)
+    qs = _filtrar_periodo(quadro.aplicar_filtros(fibras_visiveis(request.user), filtros), de, ate)
 
-    colunas.append({
-        'key': 'nao_localizado',
-        'label': 'Não localizado',
-        'items': nao_items,
-        'count': len(nao_items),
-        'total': nao_qs.aggregate(t=Sum('valor'))['t'] or Decimal('0'),
-    })
+    # Uma consulta para as vendas, uma para os incidentes; colunas somadas em Python
+    # (fibras/quadro.py). Antes: uma consulta por cartão.
+    colunas = quadro.colunas(quadro.carregar(qs, request.user), Fibra.STATUS_CHOICES)
 
-    inconsistencias = list(
-        PlanilhaOrdemInconsistente.objects.order_by('-last_seen_at')[:200]
-    )
+    inconsistencias = quadro.em_cache(
+        'inconsistencias', lambda: list(PlanilhaOrdemInconsistente.objects.order_by('-last_seen_at')[:200]))
 
     ctx_periodo = _ctx_periodo(request, de, ate)
     if ctx_periodo['periodo_ativo']:
@@ -197,20 +141,23 @@ def kanban(request):
     hoje = timezone.localdate()
     cruzar_ini = de or (ate or hoje).replace(day=1)
     cruzar_fim = ate or (hoje if cruzar_ini <= hoje <= _fim_do_mes(cruzar_ini) else _fim_do_mes(cruzar_ini))
+    is_ilha = pode(request.user, 'validacao.usar')
 
     return render(request, 'fibras/kanban.html', {
         'cruzar_ini': cruzar_ini,
         'cruzar_fim': cruzar_fim,
-        'validacao': _validacao_do_quadro(qs, de, ate, pode(request.user, 'validacao.usar')),
+        'validacao': quadro.em_cache('validacao', lambda: _validacao_do_quadro(qs, de, ate, is_ilha),
+                                     qs=qs, extra=f'ilha={is_ilha}'),
         'colunas': colunas,
-        'filtro_pdv': pdv,
-        'filtro_vendedor': vendedor,
-        'filtro_venda': venda,
-        'filtro_ordem': ordem,
-        'filtro_b2b': b2b,
+        'filtro_pdv': filtros['pdv'],
+        'filtro_vendedor': filtros['vendedor'],
+        'filtro_venda': filtros['venda'],
+        'filtro_ordem': filtros['ordem'],
+        'filtro_b2b': filtros['b2b'],
         'status_choices': Fibra.STATUS_CHOICES,
         'inconsistencias': inconsistencias,
         'inconsistencias_count': len(inconsistencias),
+        'nav_qs': _nav_qs(request),
         **ctx_periodo,
     })
 
@@ -269,39 +216,44 @@ def _validacao_do_quadro(qs, de, ate, is_ilha):
 @login_required
 @exige('modulo.ver')
 def lista(request):
-    """Visão em lista (tabela) alternativa ao kanban."""
-    from django.db.models import Q as _Q
-    qs = fibras_visiveis(request.user)
-    pdv = (request.GET.get('pdv') or '').strip()
-    vendedor = (request.GET.get('vendedor') or '').strip()
-    status = (request.GET.get('status') or '').strip()
-    venda = (request.GET.get('venda') or '').strip()
-    ordem = (request.GET.get('ordem') or '').strip()
-    if pdv:
-        qs = qs.filter(pdv__icontains=pdv)
-    if vendedor:
-        qs = qs.filter(vendedor__icontains=vendedor)
-    if status:
-        qs = qs.filter(status=status)
-    if venda:
-        qs = qs.filter(numero_da_venda__icontains=venda)
-    if ordem:
-        cond = _Q(numero_protocolo__icontains=ordem)
-        if ordem.isdigit():
-            cond |= _Q(ordem_planilha=int(ordem))
-        qs = qs.filter(cond)
-    de, ate = _periodo(request)
-    qs = _filtrar_periodo(qs, de, ate)
+    """Visão em lista (tabela) do MESMO quadro do kanban: mesmos filtros, mesmo período
+    padrão e a mesma coluna "Não localizado" (fibras/quadro.py) — os números batem."""
+    from . import quadro
+
+    filtros = quadro.ler_filtros(request)
+    de, ate = _periodo_ou_mes(request)
+    qs = _filtrar_periodo(quadro.aplicar_filtros(fibras_visiveis(request.user), filtros), de, ate)
+    colunas = quadro.colunas(quadro.carregar(qs, request.user), Fibra.STATUS_CHOICES)
+    # "Situação" da lista = a coluna do kanban (status, ou "Não localizado").
+    situacao = filtros['status']
+    validas = {c['key'] for c in colunas}
+    if situacao and situacao not in validas:
+        situacao = ''
+    fibras = [f for c in colunas if not situacao or c['key'] == situacao for f in c['items']]
+    fibras.sort(key=quadro._ordem_quadro)
+
+    ctx_periodo = _ctx_periodo(request, de, ate)
+    if ctx_periodo['periodo_ativo']:
+        resto = request.GET.copy()
+        resto.pop('de', None)
+        resto.pop('ate', None)
+        resto['periodo'] = 'todos'
+        ctx_periodo['sem_periodo_url'] = f'{request.path}?{resto.urlencode()}'
 
     return render(request, 'fibras/lista.html', {
-        'fibras': qs.order_by('ordem_planilha', '-data_da_venda', '-id'),
-        'filtro_pdv': pdv,
-        'filtro_vendedor': vendedor,
-        'filtro_status': status,
-        'filtro_venda': venda,
-        'filtro_ordem': ordem,
+        'fibras': fibras,
+        'colunas': colunas,
+        'filtro_pdv': filtros['pdv'],
+        'filtro_vendedor': filtros['vendedor'],
+        'filtro_status': situacao,
+        'filtro_venda': filtros['venda'],
+        'filtro_ordem': filtros['ordem'],
+        'filtro_b2b': filtros['b2b'],
         'status_choices': Fibra.STATUS_CHOICES,
-        **_ctx_periodo(request, de, ate),
+        'situacoes': [(c['key'], c['label'], c['count']) for c in colunas],
+        'total_lista': sum((f.valor or 0 for f in fibras)),
+        'nav_qs': _nav_qs(request),
+        **ctx_periodo,
     })
 
 

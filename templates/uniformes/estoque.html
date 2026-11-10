@@ -1,0 +1,305 @@
+{% extends 'base.html' %}
+
+{% block title %}Uniformes{% endblock %}
+
+{% block content %}
+{% comment %}
+Estoque de uniformes: cada item com o saldo na prateleira e quantos estão com
+colaboradores. Entrada, ajuste e cadastro abrem em janelas nesta mesma tela;
+retirada e devolução têm tela própria (várias peças por vez, com o termo).
+{% endcomment %}
+<style>
+  dialog.un-dialogo { padding: 0; border: 0; border-radius: 1rem; width: min(32rem, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem); }
+  dialog.un-dialogo::backdrop { background: rgba(15, 23, 42, .55); }
+</style>
+<div class="max-w-7xl mx-auto px-1 sm:px-2">
+  {% include 'uniformes/_nav.html' with aba='estoque' %}
+
+  <!-- Resumo -->
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+    <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+      <p class="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Itens ativos</p>
+      <p class="text-2xl font-bold text-gray-900 mt-1">{{ resumo.itens }}</p>
+    </div>
+    <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+      <p class="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Peças em estoque</p>
+      <p class="text-2xl font-bold text-sky-700 mt-1">{{ resumo.pecas }}</p>
+    </div>
+    <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+      <p class="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Com colaboradores</p>
+      <p class="text-2xl font-bold text-gray-900 mt-1">{{ resumo.com_colaboradores }}</p>
+    </div>
+    <a href="?baixo=1" class="bg-white border {% if resumo.baixo %}border-amber-300{% else %}border-gray-200{% endif %} rounded-xl p-4 shadow-sm hover:bg-amber-50/40">
+      <p class="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Zerados ou abaixo do mínimo</p>
+      <p class="text-2xl font-bold {% if resumo.baixo %}text-amber-600{% else %}text-gray-900{% endif %} mt-1">{{ resumo.baixo }}</p>
+    </a>
+  </div>
+
+  <!-- Filtros e ações -->
+  <div class="flex flex-col lg:flex-row lg:items-end gap-3 mb-4">
+    <form method="get" class="flex-1 grid grid-cols-2 sm:grid-cols-5 gap-2 items-end">
+      <div class="col-span-2 sm:col-span-2">
+        <label class="block text-[11px] font-semibold text-gray-500 mb-1">Buscar</label>
+        <input type="search" name="q" value="{{ filtro.q|default:'' }}" placeholder="Peça, modelo ou tamanho"
+               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+      </div>
+      <div>
+        <label class="block text-[11px] font-semibold text-gray-500 mb-1">Tipo</label>
+        <select name="tipo" class="w-full border border-gray-300 rounded-lg px-2 py-2 text-sm">
+          <option value="">Todos</option>
+          {% for t in tipos %}<option value="{{ t }}" {% if filtro.tipo == t %}selected{% endif %}>{{ t }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="block text-[11px] font-semibold text-gray-500 mb-1">Tamanho</label>
+        <select name="tamanho" class="w-full border border-gray-300 rounded-lg px-2 py-2 text-sm">
+          <option value="">Todos</option>
+          {% for t in tamanhos %}<option value="{{ t }}" {% if filtro.tamanho == t %}selected{% endif %}>{{ t }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-span-2 sm:col-span-1 flex items-center gap-2">
+        <label class="inline-flex items-center gap-1.5 text-xs text-gray-600 whitespace-nowrap">
+          <input type="checkbox" name="baixo" value="1" {% if filtro.baixo == '1' %}checked{% endif %}> Só em falta
+        </label>
+        <button class="ml-auto px-3 py-2 rounded-lg bg-gray-800 text-white text-sm"><i class="fas fa-filter"></i></button>
+      </div>
+    </form>
+    <div class="flex flex-wrap gap-2">
+      <button type="button" data-abrir="dlg-novo" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-sky-200 text-sky-700 text-sm font-medium hover:bg-sky-50">
+        <i class="fas fa-plus"></i> Novo item
+      </button>
+      <button type="button" data-abrir="dlg-entrada" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold">
+        <i class="fas fa-arrow-down"></i> Entrada
+      </button>
+      <a href="{% url 'uniformes:estoque_exportar' %}?{{ request.GET.urlencode }}" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-gray-200 text-gray-700 text-sm font-medium hover:bg-gray-50">
+        <i class="fas fa-file-excel text-emerald-600"></i> Excel
+      </a>
+    </div>
+  </div>
+
+  <!-- Itens -->
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden mb-6">
+    <div class="hidden md:grid grid-cols-12 gap-3 px-4 py-2 bg-gray-50 border-b border-gray-200 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
+      <div class="col-span-4">Item</div>
+      <div class="col-span-2 text-right">Em estoque</div>
+      <div class="col-span-2 text-right">Com colaboradores</div>
+      <div class="col-span-4 text-right">Ações</div>
+    </div>
+    <ul class="divide-y divide-gray-100">
+      {% for item in itens %}
+      <li class="px-4 py-3 md:grid md:grid-cols-12 md:gap-3 md:items-center {% if not item.ativo %}opacity-60{% endif %}">
+        <div class="md:col-span-4 min-w-0">
+          <p class="font-medium text-gray-900 break-words">
+            {{ item.tipo }}
+            {% if item.tamanho %}<span class="ml-1 inline-block px-1.5 py-0.5 rounded bg-sky-50 text-sky-700 text-xs font-semibold">{{ item.tamanho }}</span>{% endif %}
+            {% if not item.ativo %}<span class="ml-1 text-[11px] text-gray-400">(inativo)</span>{% endif %}
+          </p>
+          {% if item.descricao %}<p class="text-xs text-gray-500 break-words">{{ item.descricao }}</p>{% endif %}
+          {% if item.estoque_minimo %}<p class="text-[11px] text-gray-400">mínimo {{ item.estoque_minimo }}</p>{% endif %}
+        </div>
+        <div class="md:col-span-2 md:text-right mt-2 md:mt-0 flex md:block items-baseline gap-2">
+          <span class="md:hidden text-xs text-gray-500">Em estoque:</span>
+          <span class="text-lg font-bold {% if item.saldo == 0 %}text-red-600{% elif item.abaixo_do_minimo %}text-amber-600{% else %}text-gray-900{% endif %}">{{ item.saldo }}</span>
+          {% if item.saldo == 0 %}<span class="text-[11px] text-red-600 font-medium">zerado</span>{% elif item.abaixo_do_minimo %}<span class="text-[11px] text-amber-600 font-medium">abaixo do mínimo</span>{% endif %}
+        </div>
+        <div class="md:col-span-2 md:text-right flex md:block items-baseline gap-2">
+          <span class="md:hidden text-xs text-gray-500">Com colaboradores:</span>
+          <a href="{% url 'uniformes:historico' %}?item={{ item.id }}" class="text-sm text-gray-700 hover:underline">{{ item.em_posse }}</a>
+        </div>
+        <div class="md:col-span-4 flex flex-wrap md:justify-end gap-1.5 mt-2 md:mt-0">
+          <button type="button" data-abrir="dlg-entrada" data-item="{{ item.id }}" class="px-2.5 py-1.5 rounded-lg border border-emerald-200 text-emerald-700 text-xs font-medium hover:bg-emerald-50"><i class="fas fa-arrow-down mr-1"></i>Entrada</button>
+          {% if item.saldo > 0 and item.ativo %}
+          <a href="{% url 'uniformes:retirada' %}?item={{ item.id }}" class="px-2.5 py-1.5 rounded-lg border border-sky-200 text-sky-700 text-xs font-medium hover:bg-sky-50"><i class="fas fa-hand-holding mr-1"></i>Retirar</a>
+          {% endif %}
+          <button type="button" data-abrir="dlg-ajuste" data-item="{{ item.id }}" data-saldo="{{ item.saldo }}" class="px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-50"><i class="fas fa-scale-balanced mr-1"></i>Ajuste</button>
+          <button type="button" data-abrir="dlg-editar" data-editar='{"id": {{ item.id }}, "tipo": "{{ item.tipo|escapejs }}", "tamanho": "{{ item.tamanho|escapejs }}", "descricao": "{{ item.descricao|escapejs }}", "minimo": {{ item.estoque_minimo }}, "ativo": {{ item.ativo|yesno:"true,false" }}}' class="px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-50" title="Editar item"><i class="fas fa-pen"></i></button>
+        </div>
+      </li>
+      {% empty %}
+      <li class="px-4 py-10 text-center text-sm text-gray-500">
+        Nenhum item {% if filtro %}com esse filtro{% else %}cadastrado ainda{% endif %}.
+        <br><span class="text-xs">Cadastre em <b>Novo item</b> ou suba a planilha em <a class="text-sky-700 underline" href="{% url 'uniformes:importar' %}">Importar planilha</a>.</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <!-- Últimos lançamentos -->
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+    <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+      <h2 class="font-semibold text-gray-800 text-sm"><i class="fas fa-clock-rotate-left text-gray-400 mr-1.5"></i>Últimos lançamentos</h2>
+      <a href="{% url 'uniformes:historico' %}" class="text-xs text-sky-700 hover:underline">Ver histórico</a>
+    </div>
+    <ul class="divide-y divide-gray-100">
+      {% for m in ultimos %}{% include 'uniformes/_movimento_linha.html' %}{% empty %}
+      <li class="px-4 py-6 text-center text-sm text-gray-400">Nada lançado ainda.</li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>
+
+<!-- Novo item -->
+<dialog id="dlg-novo" class="un-dialogo">
+  <form method="post" action="{% url 'uniformes:item_novo' %}" class="bg-white p-5 space-y-3">
+    {% csrf_token %}
+    <h3 class="text-lg font-semibold text-gray-900"><i class="fas fa-plus text-sky-600 mr-1.5"></i>Novo item de uniforme</h3>
+    <div class="grid grid-cols-2 gap-3">
+      <div class="col-span-2 sm:col-span-1">
+        <label class="block text-xs font-medium text-gray-600 mb-1">Tipo *</label>
+        <input name="tipo" required list="un-tipos" maxlength="40" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Camisa">
+        <datalist id="un-tipos">{% for t in tipos %}<option value="{{ t }}">{% endfor %}</datalist>
+      </div>
+      <div class="col-span-2 sm:col-span-1">
+        <label class="block text-xs font-medium text-gray-600 mb-1">Tamanho</label>
+        <input name="tamanho" maxlength="10" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="M, G, 40…">
+      </div>
+      <div class="col-span-2">
+        <label class="block text-xs font-medium text-gray-600 mb-1">Modelo/descrição</label>
+        <input name="descricao" maxlength="120" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Ex.: polo azul Vivo">
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Quantidade recebida</label>
+        <input name="quantidade" type="number" min="0" step="1" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="0">
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Estoque mínimo</label>
+        <input name="estoque_minimo" type="number" min="0" step="1" value="0" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Recebido em</label>
+        <input name="data" type="date" value="{{ hoje|date:'Y-m-d' }}" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Nota fiscal</label>
+        <input name="nota_fiscal" maxlength="60" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+      </div>
+    </div>
+    <div class="flex justify-end gap-2 pt-2">
+      <button type="button" data-fechar class="px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-600">Cancelar</button>
+      <button class="px-4 py-2 rounded-lg bg-sky-600 text-white text-sm font-semibold">Cadastrar</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Entrada -->
+<dialog id="dlg-entrada" class="un-dialogo">
+  <form method="post" action="{% url 'uniformes:entrada' %}" class="bg-white p-5 space-y-3">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+    <h3 class="text-lg font-semibold text-gray-900"><i class="fas fa-arrow-down text-emerald-600 mr-1.5"></i>Entrada no estoque</h3>
+    <p class="text-xs text-gray-500">Fica registrado quem lançou e quando ({{ user.get_full_name|default:user.email }}, agora).</p>
+    <div>
+      <label class="block text-xs font-medium text-gray-600 mb-1">Item *</label>
+      <select name="item" required data-select-item class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        <option value="">Escolha…</option>
+        {% for i in itens_json %}<option value="{{ i.id }}">{{ i.nome }} (estoque {{ i.saldo }})</option>{% endfor %}
+      </select>
+    </div>
+    <div class="grid grid-cols-2 gap-3">
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Quantidade *</label>
+        <input name="quantidade" type="number" min="1" step="1" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Recebido em</label>
+        <input name="data" type="date" value="{{ hoje|date:'Y-m-d' }}" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+      </div>
+      <div class="col-span-2">
+        <label class="block text-xs font-medium text-gray-600 mb-1">Nota fiscal</label>
+        <input name="nota_fiscal" maxlength="60" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+      </div>
+      <div class="col-span-2">
+        <label class="block text-xs font-medium text-gray-600 mb-1">Observação</label>
+        <input name="observacao" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Fornecedor, pedido…">
+      </div>
+    </div>
+    <div class="flex justify-end gap-2 pt-2">
+      <button type="button" data-fechar class="px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-600">Cancelar</button>
+      <button class="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold">Lançar entrada</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Ajuste -->
+<dialog id="dlg-ajuste" class="un-dialogo">
+  <form method="post" action="{% url 'uniformes:ajuste' %}" class="bg-white p-5 space-y-3">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+    <h3 class="text-lg font-semibold text-gray-900"><i class="fas fa-scale-balanced text-gray-500 mr-1.5"></i>Ajuste de inventário</h3>
+    <p class="text-xs text-gray-500">Informe quanto há de fato na prateleira; a diferença vira um lançamento de ajuste com o seu nome e o motivo.</p>
+    <div>
+      <label class="block text-xs font-medium text-gray-600 mb-1">Item *</label>
+      <select name="item" required data-select-item class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        <option value="">Escolha…</option>
+        {% for i in itens_json %}<option value="{{ i.id }}" data-saldo="{{ i.saldo }}">{{ i.nome }} (estoque {{ i.saldo }})</option>{% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="block text-xs font-medium text-gray-600 mb-1">Quantidade contada *</label>
+      <input name="contagem" type="number" min="0" step="1" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+    </div>
+    <div>
+      <label class="block text-xs font-medium text-gray-600 mb-1">Motivo *</label>
+      <input name="motivo" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Ex.: inventário de novembro; peça danificada">
+    </div>
+    <div class="flex justify-end gap-2 pt-2">
+      <button type="button" data-fechar class="px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-600">Cancelar</button>
+      <button class="px-4 py-2 rounded-lg bg-gray-800 text-white text-sm font-semibold">Ajustar saldo</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Editar item -->
+<dialog id="dlg-editar" class="un-dialogo">
+  <form method="post" data-acao-base="{% url 'uniformes:item_editar' 0 %}" class="bg-white p-5 space-y-3">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+    <h3 class="text-lg font-semibold text-gray-900"><i class="fas fa-pen text-gray-500 mr-1.5"></i>Editar item</h3>
+    <p class="text-xs text-gray-500">O saldo não muda aqui — para isso use Entrada ou Ajuste.</p>
+    <div class="grid grid-cols-2 gap-3">
+      <div><label class="block text-xs font-medium text-gray-600 mb-1">Tipo *</label><input name="tipo" required list="un-tipos" maxlength="40" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></div>
+      <div><label class="block text-xs font-medium text-gray-600 mb-1">Tamanho</label><input name="tamanho" maxlength="10" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></div>
+      <div class="col-span-2"><label class="block text-xs font-medium text-gray-600 mb-1">Modelo/descrição</label><input name="descricao" maxlength="120" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></div>
+      <div><label class="block text-xs font-medium text-gray-600 mb-1">Estoque mínimo</label><input name="estoque_minimo" type="number" min="0" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></div>
+      <div class="flex items-end"><input type="hidden" name="ativo" value="0"><label class="inline-flex items-center gap-2 text-sm text-gray-700 pb-2"><input type="checkbox" name="ativo" value="1"> Ativo</label></div>
+    </div>
+    <div class="flex justify-end gap-2 pt-2">
+      <button type="button" data-fechar class="px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-600">Cancelar</button>
+      <button class="px-4 py-2 rounded-lg bg-sky-600 text-white text-sm font-semibold">Salvar</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+(function () {
+  'use strict';
+  document.querySelectorAll('[data-abrir]').forEach(function (botao) {
+    botao.addEventListener('click', function () {
+      var dlg = document.getElementById(botao.dataset.abrir);
+      if (!dlg) return;
+      var form = dlg.querySelector('form');
+      var sel = dlg.querySelector('[data-select-item]');
+      if (sel) sel.value = botao.dataset.item || '';
+      if (botao.dataset.saldo !== undefined && form.contagem) form.contagem.value = botao.dataset.saldo;
+      if (botao.dataset.editar) {
+        var d = JSON.parse(botao.dataset.editar);
+        form.action = form.dataset.acaoBase.replace('/0/', '/' + d.id + '/');
+        form.tipo.value = d.tipo; form.tamanho.value = d.tamanho; form.descricao.value = d.descricao;
+        form.estoque_minimo.value = d.minimo;
+        form.querySelector('input[type=checkbox][name=ativo]').checked = d.ativo;
+      }
+      if (dlg.showModal) dlg.showModal(); else dlg.setAttribute('open', '');
+    });
+  });
+  document.querySelectorAll('dialog [data-fechar]').forEach(function (b) {
+    b.addEventListener('click', function () { b.closest('dialog').close(); });
+  });
+  var selAjuste = document.querySelector('#dlg-ajuste [data-select-item]');
+  if (selAjuste) selAjuste.addEventListener('change', function () {
+    var op = selAjuste.selectedOptions[0];
+    var form = selAjuste.form;
+    if (op && op.dataset.saldo !== undefined) form.contagem.value = op.dataset.saldo;
+  });
+})();
+</script>
+{% endblock %}

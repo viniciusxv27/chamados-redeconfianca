@@ -1,0 +1,66 @@
+{% extends 'base.html' %}
+
+{% block title %}Devolução de uniformes{% endblock %}
+
+{% block content %}
+{% comment %}
+Devolução: o colaborador entrega de volta (desligamento, troca de tamanho) e a
+peça volta ao estoque. Só aparece quem está com alguma peça, e não dá para
+devolver mais do que a pessoa tem.
+{% endcomment %}
+<div class="max-w-3xl mx-auto px-1 sm:px-2">
+  {% include 'uniformes/_nav.html' with aba='' %}
+
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5 space-y-4">
+    <h2 class="text-lg font-semibold text-gray-900"><i class="fas fa-rotate-left text-violet-600 mr-1.5"></i>Devolução ao estoque</h2>
+
+    <form method="get" class="flex flex-col sm:flex-row gap-2">
+      <select name="colaborador" class="flex-1 min-w-0 border border-gray-300 rounded-lg px-3 py-2 text-sm" onchange="this.form.submit()">
+        <option value="">Quem está devolvendo?</option>
+        {% for p, qtd in pessoas %}
+        <option value="{{ p.id }}" {% if escolhido and escolhido.id == p.id %}selected{% endif %}>{{ p.get_full_name|default:p.email }}{% if p.sector %} — {{ p.sector.name }}{% endif %} ({{ qtd }} peça{{ qtd|pluralize }}){% if not p.is_active %} · inativo{% endif %}</option>
+        {% endfor %}
+      </select>
+      <noscript><button class="px-4 py-2 rounded-lg bg-gray-800 text-white text-sm">Abrir</button></noscript>
+    </form>
+    {% if not pessoas %}<p class="text-sm text-gray-500">Ninguém está com uniforme do estoque no momento.</p>{% endif %}
+
+    {% if escolhido %}
+      {% if pecas %}
+      <form method="post" class="space-y-4">
+        {% csrf_token %}
+        <input type="hidden" name="colaborador" value="{{ escolhido.id }}">
+        <ul class="divide-y divide-gray-100 border border-gray-200 rounded-lg">
+          {% for p in pecas %}
+          <li class="px-3 py-2.5 flex items-center gap-3">
+            <div class="min-w-0 flex-1">
+              <p class="text-sm font-medium text-gray-900 break-words">{{ p.item.nome }}</p>
+              <p class="text-xs text-gray-500">com ele(a): {{ p.quantidade }}{% if p.ultima_entrega %} · última entrega {{ p.ultima_entrega|date:'d/m/Y' }}{% endif %}</p>
+            </div>
+            <input type="hidden" name="item" value="{{ p.item.id }}">
+            <input type="number" name="quantidade" min="0" max="{{ p.quantidade }}" step="1" value="0" aria-label="Quantidade devolvida de {{ p.item.nome }}"
+                   class="w-20 border border-gray-300 rounded-lg px-2 py-2 text-sm">
+          </li>
+          {% endfor %}
+        </ul>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Devolvido em</label>
+            <input type="date" name="data" value="{{ hoje|date:'Y-m-d' }}" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Observação</label>
+            <input name="observacao" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Ex.: desligamento; troca de tamanho">
+          </div>
+        </div>
+        <div class="flex justify-end">
+          <button class="px-5 py-2.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold"><i class="fas fa-check mr-1.5"></i>Lançar devolução</button>
+        </div>
+      </form>
+      {% else %}
+      <p class="text-sm text-gray-500">{{ escolhido.get_full_name|default:escolhido.email }} não está com nenhuma peça do estoque.</p>
+      {% endif %}
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -1190,13 +1190,15 @@ def edit_user_view(request, user_id):
         disc_profile = request.POST.get('disc_profile', '')
         uniform_size_shirt = request.POST.get('uniform_size_shirt', '')
         uniform_size_pants = request.POST.get('uniform_size_pants', '')
-        is_active = request.POST.get('is_active') == 'on'
 
         # Situação do colaborador (ativo/inativo/afastado)
         valid_status = dict(User.STATUS_CHOICES)
         status = request.POST.get('status') or User.STATUS_ATIVO
         if status not in valid_status:
             status = User.STATUS_ATIVO
+        # O login segue a situação (10/11/2026): o campo "Conta (Login)" saiu da tela.
+        # Inativo não entra; ativo, afastado e de férias entram.
+        is_active = status != User.STATUS_INATIVO
         inactivation_reason = request.POST.get('inactivation_reason', '').strip()
         leave_reason = request.POST.get('leave_reason', '').strip()
         leave_return_date = request.POST.get('leave_return_date', '').strip()

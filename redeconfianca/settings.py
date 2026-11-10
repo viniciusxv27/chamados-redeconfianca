@@ -97,6 +97,7 @@ INSTALLED_APPS = [
     'apresentacoes',  # Assistente de Apresentações: slides com IA na identidade da rede
     'quadro_hc',  # Quadro de HC loja a loja (SUPERADMIN e quem ele liberar)
     'facilitador',  # Facilitador: arquivos e links úteis (todos veem; SUPERADMIN gerencia)
+    'uniformes',  # Uniformes: estoque, retiradas e devoluções (SUPERADMIN + liberados)
     # 'webpush',  # Django WebPush (temporariamente removido)
 ]
 
@@ -188,6 +189,7 @@ TEMPLATES = [
                 'rotina_adm.context_processors.rotina_adm_menu',
                 'cameras.context_processors.cameras_menu',
                 'quadro_hc.context_processors.quadro_hc_menu',
+                'uniformes.context_processors.uniformes_menu',
                 'apresentacoes.context_processors.apresentacoes_menu',
                 'users.context_processors_commission.comissionamento_menu',
             ],

@@ -28,6 +28,7 @@ from django.utils import timezone
 from . import cruzamento as cz
 from .models import (Cruzamento, EsteiraImportacao, EsteiraVenda, Fibra, FibraStatusHistory, FilialAdabas,
                      PlanilhaOrdemInconsistente)
+from .quadro import invalida_quadro
 
 # Colunas extras da Esteira que o kanban já usava (SLA e motivo das vendas com problema).
 EXTRAS_ESTEIRA = ['SLA AGENDA', 'MOTIVO']
@@ -143,6 +144,7 @@ def base_fixa_para_esteira(bruto: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(linhas, columns=cz.COLUNAS_ANALITICO + ['MOTIVO'])
 
 
+@invalida_quadro
 def importar_esteira(file_obj, *, nome='', by_user=None) -> EsteiraImportacao:
     """Guarda a Esteira (só as colunas do cruzamento) no lugar da importação anterior."""
     bruto = _ler_planilha(file_obj)
@@ -267,6 +269,7 @@ def mapa_lojas(filiais=None) -> dict:
     return {r['FILIAL (Base de Vendas)']: r['ADABAS'] or '' for _, r in m.iterrows()}
 
 
+@invalida_quadro
 def salvar_lojas(mapa: dict, by_user=None):
     for filial, adabas in mapa.items():
         filial = str(filial).strip()[:160]
@@ -391,6 +394,7 @@ def tabela(df: pd.DataFrame, limite: int | None = None) -> dict:
             'linhas': [[valor_json(v) for v in linha] for linha in df.itertuples(index=False, name=None)]}
 
 
+@invalida_quadro
 def executar(param: dict | None = None, *, by_user=None, origem='manual', notificar=True) -> Cruzamento:
     """Roda o cruzamento e grava o resultado nas fibras e na Esteira."""
     from .services import _map_planilha_status, _notify_vendor
@@ -490,6 +494,7 @@ def parametros_atuais() -> dict:
 # Ajustes manuais
 # ---------------------------------------------------------------------------
 
+@invalida_quadro
 def aplicar_ajuste(fibra: Fibra, acao: str, ordem: str = '', comentario=None):
     ordem = re.sub(r'\D', '', str(ordem or ''))
     rejeit = [str(o) for o in (fibra.ordens_rejeitadas or [])]
@@ -513,6 +518,7 @@ def aplicar_ajuste(fibra: Fibra, acao: str, ordem: str = '', comentario=None):
     fibra.save(update_fields=['ordem_manual', 'ordens_rejeitadas', 'comentario_cruzamento'])
 
 
+@invalida_quadro
 def limpar_ajustes():
     Fibra.objects.exclude(ordem_manual='', ordens_rejeitadas=[], comentario_cruzamento='').update(
         ordem_manual='', ordens_rejeitadas=[], comentario_cruzamento='')

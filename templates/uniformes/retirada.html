@@ -1,0 +1,179 @@
+{% extends 'base.html' %}
+
+{% block title %}Retirada de uniformes{% endblock %}
+
+{% block content %}
+{% comment %}
+Retirada: tira do estoque e põe na mão do colaborador. Várias peças de uma vez
+viram um lote só (um termo). O dia da retirada e quem retirou ficam gravados
+sozinhos; a data de entrega pode ficar vazia e ser preenchida depois.
+{% endcomment %}
+<div class="max-w-3xl mx-auto px-1 sm:px-2">
+  {% include 'uniformes/_nav.html' with aba='' %}
+
+  <form method="post" id="un-retirada" class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5 space-y-5">
+    {% csrf_token %}
+    <h2 class="text-lg font-semibold text-gray-900"><i class="fas fa-hand-holding text-sky-600 mr-1.5"></i>Retirada para um colaborador</h2>
+
+    <!-- Para quem -->
+    <div>
+      <label class="block text-sm font-medium text-gray-700 mb-1">Para quem *</label>
+      <input type="hidden" name="colaborador" id="un-colab" required>
+      <div id="un-colab-escolhido" class="hidden mb-2 p-3 rounded-lg bg-sky-50 border border-sky-100 flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <p class="text-sm font-semibold text-gray-900 break-words" data-nome></p>
+          <p class="text-xs text-gray-600" data-setor></p>
+          <p class="text-xs text-sky-800 mt-1" data-tamanhos></p>
+        </div>
+        <button type="button" id="un-colab-trocar" class="text-xs text-sky-700 underline flex-shrink-0">Trocar</button>
+      </div>
+      <div id="un-colab-busca-caixa">
+        <div class="relative mb-2">
+          <i class="fas fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs"></i>
+          <input type="search" id="un-colab-busca" placeholder="Buscar por nome ou loja…" autocomplete="off"
+                 class="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg">
+        </div>
+        <div id="un-colab-lista" class="border border-gray-200 rounded-lg max-h-60 overflow-y-auto divide-y divide-gray-50"></div>
+      </div>
+    </div>
+
+    <!-- Peças -->
+    <div>
+      <div class="flex items-center justify-between mb-1">
+        <label class="block text-sm font-medium text-gray-700">Peças *</label>
+        <button type="button" id="un-add" class="text-xs text-sky-700 font-medium hover:underline"><i class="fas fa-plus mr-1"></i>Outra peça</button>
+      </div>
+      <p class="text-xs text-gray-500 mb-2" id="un-dica">Escolha o colaborador para ver os tamanhos da ficha dele.</p>
+      <div id="un-linhas" class="space-y-2"></div>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Data de entrega</label>
+        <input type="date" name="data_entrega" value="{{ hoje|date:'Y-m-d' }}" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        <p class="text-[11px] text-gray-500 mt-1">Deixe vazio se a peça ainda vai chegar na loja; dá para preencher depois.</p>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Retirado por</label>
+        <div class="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-sm text-gray-700">{{ user.get_full_name|default:user.email }} · agora</div>
+      </div>
+      <div class="sm:col-span-2">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Observação</label>
+        <input name="observacao" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Ex.: kit de admissão; troca por desgaste">
+      </div>
+    </div>
+
+    <div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+      <a href="{% url 'uniformes:estoque' %}" class="px-4 py-2.5 rounded-lg border border-gray-200 text-sm text-gray-600 text-center">Cancelar</a>
+      <button class="px-5 py-2.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-sm font-semibold"><i class="fas fa-check mr-1.5"></i>Lançar retirada</button>
+    </div>
+  </form>
+</div>
+
+{{ itens_json|json_script:"un-itens" }}
+{{ colaboradores_json|json_script:"un-colabs" }}
+<script>
+(function () {
+  'use strict';
+  var itens = JSON.parse(document.getElementById('un-itens').textContent);
+  var colabs = JSON.parse(document.getElementById('un-colabs').textContent);
+  var colabInicial = {{ colaborador_inicial|default:'null' }};
+  var itemInicial = {{ item_inicial|default:'null' }};
+  var campo = document.getElementById('un-colab');
+  var lista = document.getElementById('un-colab-lista');
+  var busca = document.getElementById('un-colab-busca');
+  var caixaBusca = document.getElementById('un-colab-busca-caixa');
+  var escolhido = document.getElementById('un-colab-escolhido');
+  var linhas = document.getElementById('un-linhas');
+  var dica = document.getElementById('un-dica');
+  var atual = null;
+
+  function norm(t) { return (t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
+  function el(tag, cls, texto) { var e = document.createElement(tag); if (cls) e.className = cls; if (texto !== undefined) e.textContent = texto; return e; }
+
+  function tipoCombina(tipo, pessoa) {
+    var t = norm(tipo);
+    if (pessoa.calca && (t.indexOf('calca') >= 0 || t.indexOf('bermuda') >= 0 || t.indexOf('saia') >= 0)) return pessoa.calca;
+    if (pessoa.camisa && t.indexOf('calca') < 0 && t.indexOf('bone') < 0) return pessoa.camisa;
+    return '';
+  }
+
+  function desenharLista() {
+    var termo = norm(busca.value.trim());
+    lista.innerHTML = '';
+    var n = 0;
+    colabs.forEach(function (c) {
+      if (termo && norm(c.nome + ' ' + c.setor).indexOf(termo) < 0) return;
+      if (n >= 60) return;
+      n += 1;
+      var b = el('button', 'w-full text-left px-3 py-2 hover:bg-sky-50 flex items-center gap-2');
+      b.type = 'button';
+      b.appendChild(el('span', 'text-sm text-gray-800 truncate', c.nome));
+      if (c.setor) b.appendChild(el('span', 'text-[11px] text-gray-400 truncate', c.setor));
+      b.addEventListener('click', function () { escolher(c); });
+      lista.appendChild(b);
+    });
+    if (!n) lista.appendChild(el('p', 'px-3 py-3 text-sm text-gray-400', 'Ninguém com esse nome.'));
+  }
+
+  function escolher(c) {
+    atual = c;
+    campo.value = c.id;
+    escolhido.querySelector('[data-nome]').textContent = c.nome;
+    escolhido.querySelector('[data-setor]').textContent = c.setor || '';
+    escolhido.querySelector('[data-tamanhos]').textContent =
+      'Ficha: camisa ' + (c.camisa || '—') + ' · calça ' + (c.calca || '—');
+    escolhido.classList.remove('hidden');
+    caixaBusca.classList.add('hidden');
+    dica.textContent = 'Os itens no tamanho da ficha aparecem marcados com ★.';
+    linhas.querySelectorAll('select').forEach(preencherOpcoes);
+  }
+
+  function preencherOpcoes(sel) {
+    var valor = sel.value;
+    sel.innerHTML = '';
+    var vazio = el('option', '', 'Escolha a peça…'); vazio.value = ''; sel.appendChild(vazio);
+    itens.forEach(function (i) {
+      var tam = atual ? tipoCombina(i.tipo, atual) : '';
+      var marca = tam && norm(tam) === norm(i.tamanho) ? '★ ' : '';
+      var o = el('option', '', marca + i.nome + ' — estoque ' + i.saldo);
+      o.value = i.id;
+      if (i.saldo <= 0) o.disabled = true;
+      sel.appendChild(o);
+    });
+    sel.value = valor;
+  }
+
+  function novaLinha(itemId) {
+    var linha = el('div', 'flex gap-2 items-center');
+    var sel = el('select', 'flex-1 min-w-0 border border-gray-300 rounded-lg px-2 py-2 text-sm');
+    sel.name = 'item'; sel.required = true;
+    preencherOpcoes(sel);
+    if (itemId) sel.value = itemId;
+    var qtd = el('input', 'w-20 border border-gray-300 rounded-lg px-2 py-2 text-sm');
+    qtd.type = 'number'; qtd.name = 'quantidade'; qtd.min = '1'; qtd.step = '1'; qtd.value = '1'; qtd.required = true;
+    qtd.setAttribute('aria-label', 'Quantidade');
+    var tirar = el('button', 'w-9 h-9 flex-shrink-0 rounded-lg border border-gray-200 text-gray-400 hover:text-red-600');
+    tirar.type = 'button'; tirar.innerHTML = '<i class="fas fa-xmark"></i>'; tirar.title = 'Tirar peça';
+    tirar.addEventListener('click', function () { if (linhas.children.length > 1) linha.remove(); });
+    linha.appendChild(sel); linha.appendChild(qtd); linha.appendChild(tirar);
+    linhas.appendChild(linha);
+  }
+
+  busca.addEventListener('input', desenharLista);
+  document.getElementById('un-colab-trocar').addEventListener('click', function () {
+    escolhido.classList.add('hidden'); caixaBusca.classList.remove('hidden'); busca.focus();
+  });
+  document.getElementById('un-add').addEventListener('click', function () { novaLinha(); });
+  document.getElementById('un-retirada').addEventListener('submit', function (ev) {
+    if (!campo.value) { ev.preventDefault(); alert('Escolha para quem é a retirada.'); }
+  });
+
+  desenharLista();
+  novaLinha(itemInicial);
+  if (colabInicial) {
+    colabs.forEach(function (c) { if (c.id === colabInicial) escolher(c); });
+  }
+})();
+</script>
+{% endblock %}
