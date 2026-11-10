@@ -66,6 +66,8 @@ _USER_INSTRUCTION = (
     'Só os números, ou "" se não aparecer), '
     '"valor" (número em reais, ex.: 123.45, use ponto decimal), '
     '"data" (data do gasto no formato YYYY-MM-DD, ou "" se não identificar), '
+    '"parcelas" (em quantas vezes a compra foi parcelada no cartão, número inteiro: procure "PARCELADO", '
+    '"3X", "PARC 3", "EM 3 VEZES"; use 1 se for à vista, crédito à vista, débito ou se não aparecer), '
     '"categoria" (string curta, ex.: "Alimentação", "Combustível", "Hospedagem"), '
     '"descricao" (texto em português, 1 a 3 frases, pronto para o chamado), '
     '"confianca" ("alta", "media" ou "baixa"), '
@@ -449,6 +451,14 @@ def _numero(bruto):
         return None
 
 
+def parcelas_lidas(valor, maximo=24) -> int:
+    """Número de parcelas que a IA leu ("3", 3, "3X"); fora de 1..maximo, ou ilegível, vale 1 (à vista)."""
+    import re as _re
+    achado = _re.search(r'\d+', str(valor or ''))
+    n = int(achado.group()) if achado else 1
+    return n if 1 <= n <= maximo else 1
+
+
 def limpar_itens(itens) -> list:
     """Os itens da nota numa forma segura: produto, quantidade, unitário e total (o total se calcula se faltar)."""
     limpos = []
@@ -559,6 +569,7 @@ def analyze_expense(image_bytes: bytes | None = None, manual_text: str = '',
     melhor['anexo'] = anexo.get('tipo')
     melhor['comprovantes'] = anexo.get('quantidade') or 0
     melhor['itens'] = limpar_itens(melhor.get('itens'))
+    melhor['parcelas'] = parcelas_lidas(melhor.get('parcelas'))
     if falta:
         melhor['faltou'] = falta
     return melhor

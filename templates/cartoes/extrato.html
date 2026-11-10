@@ -243,7 +243,7 @@
               </a>
               {% else %}<span class="text-gray-300">—</span>{% endif %}
             </td>
-            <td class="px-4 py-2.5 text-right font-semibold text-gray-900 whitespace-nowrap tabular-nums">{{ g.valor|brl_zero }}</td>
+            <td class="px-4 py-2.5 text-right font-semibold text-gray-900 whitespace-nowrap tabular-nums">{{ g.valor|brl_zero }}{% if g.parcelas > 1 %}<span class="block text-[11px] font-normal text-gray-500">{{ g.parcelas }}x de {{ g.valor_parcela|brl_zero }}</span>{% endif %}</td>
           </tr>
           {% endfor %}
           <tr id="extVazio" class="hidden"><td colspan="6" class="px-4 py-8 text-center text-sm text-gray-400">Nada com esse filtro.</td></tr>

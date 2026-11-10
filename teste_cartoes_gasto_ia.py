@@ -390,7 +390,7 @@ try:
       'TOTAL R$ 128,90' in texto_dos_pedidos(cliente, 0))
 
     r = ct.post(f'/cartoes/{cartao.pk}/gasto/', {
-        'valor': '128,74', 'descricao': 'ZZ gasto de teste', 'estabelecimento': 'ZZ Posto',
+        'parcelas': '1', 'valor': '128,74', 'descricao': 'ZZ gasto de teste', 'estabelecimento': 'ZZ Posto',
         'categoria_gasto': 'Combustível', 'data_gasto': '2026-09-28',
         'foto': SimpleUploadedFile('nota.pdf', pdf, content_type='application/pdf'),
     }, follow=True)
@@ -431,7 +431,7 @@ try:
       r.content[:200])
 
     r = ct.post(f'/cartoes/{cartao.pk}/gasto/', {
-        'valor': '99,90', 'descricao': 'ZZ gasto com dois comprovantes', 'estabelecimento': 'ZZ Loja',
+        'parcelas': '1', 'valor': '99,90', 'descricao': 'ZZ gasto com dois comprovantes', 'estabelecimento': 'ZZ Loja',
         'categoria_gasto': 'Material', 'data_gasto': '2026-10-10',
         'foto': [SimpleUploadedFile('maquininha.png', png((0, 200, 0)), content_type='image/png'),
                  SimpleUploadedFile('nota.pdf', pdf, content_type='application/pdf')],
@@ -494,16 +494,16 @@ try:
         else:
             print('  (categoria 99 de chamados não existe neste banco: texto do chamado não conferido)')
 
-    r = ct.post(f'/cartoes/{cartao.pk}/gasto/', {'valor': '50,00', 'estabelecimento': 'Loja X', 'descricao': 'ZZ doc errado',
+    r = ct.post(f'/cartoes/{cartao.pk}/gasto/', {'parcelas': '1', 'valor': '50,00', 'estabelecimento': 'Loja X', 'descricao': 'ZZ doc errado',
                                                 'data_gasto': '2026-09-30', 'documento_estabelecimento': '11.111.111/1111-11'})
     t('na tela, CNPJ inválido é recusado com aviso', 'não é válido' in r.content.decode()
       and not Gasto.objects.filter(descricao='ZZ doc errado').exists())
-    r = ct.post(f'/cartoes/{cartao.pk}/gasto/', {'valor': '50,00', 'estabelecimento': 'Loja X', 'descricao': 'ZZ doc nosso',
+    r = ct.post(f'/cartoes/{cartao.pk}/gasto/', {'parcelas': '1', 'valor': '50,00', 'estabelecimento': 'Loja X', 'descricao': 'ZZ doc nosso',
                                                 'data_gasto': '2026-09-30', 'documento_estabelecimento': '03.007.331/0001-41'})
     t('na tela, o CNPJ da Rede Confiança é recusado com explicação', 'própria Rede Confiança' in r.content.decode()
       and not Gasto.objects.filter(descricao='ZZ doc nosso').exists())
     with mock.patch.object(cviews, 'abrir_chamado_do_gasto', return_value=None):
-        ct.post(f'/cartoes/{cartao.pk}/gasto/', {'valor': '50,00', 'estabelecimento': 'Loja X', 'descricao': 'ZZ doc certo',
+        ct.post(f'/cartoes/{cartao.pk}/gasto/', {'parcelas': '1', 'valor': '50,00', 'estabelecimento': 'Loja X', 'descricao': 'ZZ doc certo',
                                                 'data_gasto': '2026-09-30', 'documento_estabelecimento': '11222333000181'})
     g = Gasto.objects.filter(descricao='ZZ doc certo').first()
     t('e o válido é gravado formatado', g and g.documento_estabelecimento == '11.222.333/0001-81', g and g.documento_estabelecimento)
@@ -537,7 +537,7 @@ try:
     itens_tela = [{'produto': 'Chocolate ao leite 90g', 'quantidade': 10, 'valor_unitario': 5.49, 'valor_total': 54.9},
                   {'produto': 'Bala', 'quantidade': 2, 'valor_unitario': 0.5}]
     r = ct.post(f'/cartoes/{cartao.pk}/gasto/', {
-        'valor': '55,90', 'descricao': 'ZZ compra do mercadinho', 'estabelecimento': 'ZZ Atacado',
+        'parcelas': '1', 'valor': '55,90', 'descricao': 'ZZ compra do mercadinho', 'estabelecimento': 'ZZ Atacado',
         'categoria_gasto': 'Mercadinho C$', 'data_gasto': '2026-10-15', 'mercadinho': 'on',
         'itens_json': json.dumps(itens_tela)}, follow=True)
     merc = Gasto.objects.filter(descricao='ZZ compra do mercadinho').first()
@@ -552,7 +552,7 @@ try:
     else:
         print('  (categoria 99 de chamados não existe neste banco: texto do chamado não conferido)')
     with mock.patch.object(cviews, 'abrir_chamado_do_gasto', return_value=None):
-        ct.post(f'/cartoes/{cartao.pk}/gasto/', {'valor': '10,00', 'descricao': 'ZZ sem mercadinho',
+        ct.post(f'/cartoes/{cartao.pk}/gasto/', {'parcelas': '1', 'valor': '10,00', 'descricao': 'ZZ sem mercadinho',
                                                 'estabelecimento': 'ZZ Padaria', 'data_gasto': '2026-10-15',
                                                 'itens_json': 'isto não é json'})
     comum = Gasto.objects.filter(descricao='ZZ sem mercadinho').first()
@@ -567,6 +567,45 @@ try:
     t('o formulário tem o checkbox Mercadinho antes do botão de analisar',
       'name="mercadinho"' in html and html.index('name="mercadinho"') < html.index('id="btn-analisar"'))
     t('e o editor dos itens', 'name="itens_json"' in html and 'id="btn-item"' in html)
+
+    print('\n== PARCELAS (09/11/2026) ==')
+    t('o formulário pede a parcela, obrigatória, sem nada escolhido, de 1x a 24x',
+      'name="parcelas" id="f-parcelas" required' in html and '<option value="" selected disabled>Escolha…</option>' in html
+      and '<option value="1" >1x (à vista)</option>' in html and '<option value="24" >24x</option>' in html
+      and '<option value="0"' not in html)
+    from cartoes.ai import parcelas_lidas
+    for nome_caso, parcelas_post, msg in (('sem parcela', None, 'Escolha em quantas parcelas'), ('zero', '0', 'Escolha em quantas parcelas'),
+                                          ('negativa', '-2', 'Escolha em quantas parcelas'), ('acima de 24', '25', 'até 24x'),
+                                          ('texto', 'abc', 'Escolha em quantas parcelas')):
+        dados = {'valor': '300,00', 'descricao': f'ZZ parcela {nome_caso}', 'estabelecimento': 'ZZ Loja Parcela'}
+        if parcelas_post is not None:
+            dados['parcelas'] = parcelas_post
+        antes = Gasto.objects.count()
+        r = ct.post(f'/cartoes/{cartao.pk}/gasto/', dados)
+        t(f'{nome_caso}: recusa e mantém o que foi digitado', r.status_code == 200 and msg in r.content.decode()
+          and Gasto.objects.count() == antes and 'ZZ parcela' in r.content.decode())
+    r = ct.post(f'/cartoes/{cartao.pk}/gasto/', {'parcelas': '3', 'valor': '300,00', 'descricao': 'ZZ notebook parcelado',
+                                                  'estabelecimento': 'ZZ Loja Parcela'})
+    g3 = Gasto.objects.get(descricao='ZZ notebook parcelado')
+    t('grava em 3x, com o valor de cada parcela', r.status_code == 302 and g3.parcelas == 3 and str(g3.valor_parcela) == '100.00'
+      and g3.parcelas_texto == '3x de R$ 100.00')
+    t('o chamado leva as parcelas', g3.ticket and 'Parcelas: 3x de R$ 100.00' in g3.ticket.description and g3.ticket.title.endswith('em 3x'))
+    r = ct.post(f'/cartoes/{cartao.pk}/gasto/', {'parcelas': '1', 'valor': '45,00', 'descricao': 'ZZ almoço à vista', 'estabelecimento': 'ZZ Rest'})
+    g1 = Gasto.objects.get(descricao='ZZ almoço à vista')
+    t('1x é à vista, sem "em 1x" no título', g1.parcelas == 1 and 'Parcelas: à vista (1x)' in g1.ticket.description and not g1.ticket.title.endswith('x'))
+    html = ct.get(f'/cartoes/{cartao.pk}/').content.decode()
+    t('o extrato mostra 3x de R$ 100,00', '3x de R$ 100,00' in html)
+    t('a IA lê as parcelas do comprovante, sem inventar', parcelas_lidas('3X') == 3 and parcelas_lidas(12) == 12 and parcelas_lidas('') == 1
+      and parcelas_lidas('à vista') == 1 and parcelas_lidas('99') == 1 and parcelas_lidas(None) == 1)
+    hf = ct.get(f'/cartoes/{cartao.pk}/gasto/').content.decode()
+    t('o valor tem máscara de moeda (texto numérico, não "number")', 'name="valor" id="f-valor"' in hf
+      and 'type="text" inputmode="numeric"' in hf and 'formatarCentavos' in hf and 'type="number" step="0.01" min="0" name="valor"' not in hf)
+    r = ct.post(f'/cartoes/{cartao.pk}/gasto/', {'parcelas': '2', 'valor': '1.234,56', 'descricao': 'ZZ valor com milhar', 'estabelecimento': 'ZZ Loja'})
+    gm = Gasto.objects.get(descricao='ZZ valor com milhar')
+    t('valor mascarado com milhar chega certo', r.status_code == 302 and str(gm.valor) == '1234.56' and str(gm.valor_parcela) == '617.28')
+    r = ct.post(f'/cartoes/{cartao.pk}/gasto/', {'parcelas': '0', 'valor': '1.234,56', 'descricao': 'ZZ volta mascarado', 'estabelecimento': 'ZZ Loja'})
+    t('com erro, o valor volta como foi digitado (a máscara reformata)', 'value="1.234,56"' in r.content.decode())
+    t('o formulário preenche a parcela que a IA leu', "setIf('f-parcelas'" in html or "setIf('f-parcelas'" in ct.get(f'/cartoes/{cartao.pk}/gasto/').content.decode())
 finally:
     transaction.set_rollback(True)
     marcador.__exit__(None, None, None)

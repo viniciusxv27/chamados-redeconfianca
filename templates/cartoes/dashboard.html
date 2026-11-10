@@ -233,7 +233,7 @@
               <span class="block text-[11px] text-gray-400">{{ g.data_gasto|date:"d/m/Y" }} · ••••{{ g.cartao.last4 }}{% if g.criado_por %} · {{ g.criado_por.full_name }}{% endif %}</span>
             </span>
           </span>
-          <span class="text-sm font-semibold text-gray-900 whitespace-nowrap tabular-nums">{{ g.valor|brl_zero }}</span>
+          <span class="text-sm font-semibold text-gray-900 whitespace-nowrap tabular-nums">{{ g.valor|brl_zero }}{% if g.parcelas > 1 %} <small class="font-normal text-gray-500">em {{ g.parcelas }}x</small>{% endif %}</span>
         </a>
         {% endfor %}
       </div>

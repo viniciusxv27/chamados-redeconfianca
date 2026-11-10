@@ -2,7 +2,7 @@ import os
 import uuid
 
 from django.conf import settings
-from django.core.validators import RegexValidator
+from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import models
 
 
@@ -76,6 +76,9 @@ class Cartao(models.Model):
         return self.apelido or self.numero_mascarado
 
 
+PARCELAS_MAX = 24
+
+
 class Gasto(models.Model):
     """Um gasto lançado num cartão. Ao ser confirmado, abre um chamado (cat. 99)."""
 
@@ -87,6 +90,10 @@ class Gasto(models.Model):
         related_name='gastos_cartao', verbose_name='Lançado por',
     )
     valor = models.DecimalField(max_digits=12, decimal_places=2, verbose_name='Valor (R$)')
+    # Em quantas vezes a compra foi feita no cartão (1 = à vista). Obrigatório ao lançar pela tela.
+    parcelas = models.PositiveSmallIntegerField(
+        default=1, db_default=1, validators=[MinValueValidator(1), MaxValueValidator(PARCELAS_MAX)],
+        verbose_name='Parcelas')
     estabelecimento = models.CharField(max_length=200, blank=True, verbose_name='Estabelecimento')
     # CNPJ (ou CPF) de quem vendeu — vai no chamado para o financeiro achar a
     # nota. A IA lê do comprovante; quem lança confere e corrige.
@@ -118,6 +125,15 @@ class Gasto(models.Model):
 
     def __str__(self):
         return f"{self.estabelecimento or 'Gasto'} — R$ {self.valor}"
+
+    @property
+    def valor_parcela(self):
+        from decimal import ROUND_HALF_UP, Decimal
+        return (Decimal(self.valor) / max(1, self.parcelas or 1)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+    @property
+    def parcelas_texto(self):
+        return 'à vista (1x)' if (self.parcelas or 1) == 1 else f'{self.parcelas}x de R$ {self.valor_parcela}'
 
     @property
     def soma_dos_itens(self):

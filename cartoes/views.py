@@ -25,11 +25,11 @@ from core.evolution import enviar_texto
 from tickets.models import Category, Ticket, TicketAttachment, TicketLog
 from users.models import User
 
-from .ai import (analyze_expense, documento_do_vendedor, documento_valido, e_da_empresa, e_pdf, limpar_itens,
+from .ai import (analyze_expense, documento_do_vendedor, documento_valido, e_da_empresa, e_pdf, limpar_itens, parcelas_lidas,
                  paginas_do_pdf)
 from .exportacao import conciliacao_excel, conciliacao_geral_excel, extrato_excel
 from .fatura import TOLERANCIA_DIAS, compra_antiga, conciliar, janela_do_portal, ler_fatura
-from .models import AcessoCartoes, Cartao, Gasto, GastoComprovante
+from .models import PARCELAS_MAX, AcessoCartoes, Cartao, Gasto, GastoComprovante
 from .permissions import (
     can_access_cartoes,
     can_manage_cartao,
@@ -771,6 +771,8 @@ def gasto_create(request, pk):
         foto = arquivos[0] if arquivos else None
         ia_dados_raw = request.POST.get('ia_dados', '')
         mercadinho = request.POST.get('mercadinho') == 'on'
+        parcelas_raw = request.POST.get('parcelas', '').strip()
+        parcelas = int(parcelas_raw) if parcelas_raw.isdigit() else 0
         try:
             itens = limpar_itens(json.loads(request.POST.get('itens_json') or '[]'))
         except (json.JSONDecodeError, TypeError):
@@ -781,6 +783,8 @@ def gasto_create(request, pk):
             errors.append('Informe um valor válido para o gasto.')
         if not descricao and not estabelecimento:
             errors.append('Informe ao menos a descrição ou o estabelecimento do gasto.')
+        if not 1 <= parcelas <= PARCELAS_MAX:
+            errors.append(f'Escolha em quantas parcelas foi a compra (de 1x, à vista, até {PARCELAS_MAX}x).')
         if documento_bruto and not documento:
             errors.append(f'O CNPJ/CPF "{documento_bruto}" não é válido. Confira os números ou deixe em branco.')
         elif e_da_empresa(documento):
@@ -798,6 +802,7 @@ def gasto_create(request, pk):
                 'cartao': cartao,
                 'today': timezone.localdate().isoformat(),
                 'form': request.POST,
+                'parcelas_opcoes': range(1, PARCELAS_MAX + 1),
             }
             return render(request, 'cartoes/gasto_form.html', context)
 
@@ -817,7 +822,7 @@ def gasto_create(request, pk):
             estabelecimento=estabelecimento, documento_estabelecimento=documento, data_gasto=data_gasto,
             categoria_gasto=categoria_gasto, descricao=descricao,
             foto=comprovante, origem=('FOTO' if comprovante else 'MANUAL'), ia_dados=ia_dados,
-            mercadinho=mercadinho, itens=itens,
+            mercadinho=mercadinho, itens=itens, parcelas=parcelas,
         )
         _guardar_comprovantes(gasto, arquivos)
 
@@ -832,6 +837,7 @@ def gasto_create(request, pk):
         'cartao': cartao,
         'today': timezone.localdate().isoformat(),
         'form': {},
+        'parcelas_opcoes': range(1, PARCELAS_MAX + 1),
     }
     return render(request, 'cartoes/gasto_form.html', context)
 
@@ -871,6 +877,7 @@ def abrir_chamado_do_gasto(cartao, gasto, ator_user):
         f'Cartão: {cartao.get_bandeira_display()} ••••{cartao.last4}{apelido_txt}\n'
         f'Responsável: {responsavel_nome}\n'
         f'Valor: R$ {gasto.valor}\n'
+        f'Parcelas: {gasto.parcelas_texto}\n'
         f'Estabelecimento: {gasto.estabelecimento or "—"}\n'
         f'CNPJ/CPF do estabelecimento: {gasto.documento_estabelecimento or "não identificado no comprovante"}\n'
         f'Data: {gasto.data_gasto.strftime("%d/%m/%Y")}\n'
@@ -880,7 +887,8 @@ def abrir_chamado_do_gasto(cartao, gasto, ator_user):
         + _itens_no_chamado(gasto)
         + f'- Aberto por Robo de Cartões'
     )
-    title = f'COMPRA{" (Mercadinho C$)" if gasto.mercadinho else ""}: {gasto.descricao} — R${gasto.valor}'
+    title = (f'COMPRA{" (Mercadinho C$)" if gasto.mercadinho else ""}: {gasto.descricao} — R${gasto.valor}'
+             + (f' em {gasto.parcelas}x' if (gasto.parcelas or 1) > 1 else ''))
 
     ticket = Ticket.objects.create(
         title=title[:200],
@@ -1086,6 +1094,7 @@ def api_lancar_gasto(request):
       - foto_url (ou foto): link do comprovante (opcional)
       - descricao: descrição da compra (opcional; obrigatório se não houver foto)
       - valor: valor do gasto (opcional; fallback se a IA não extrair)
+      - parcelas: em quantas vezes (opcional; sem ele vale o que a IA ler, ou 1x)
       - cartao_last4: desempate quando o usuário tem mais de um cartão
       - cartao_opcao: o número escolhido na lista mandada ao cliente (ex.: "01")
 
@@ -1113,6 +1122,7 @@ def api_lancar_gasto(request):
     cartao_last4 = (payload.get('cartao_last4') or '').strip()
     cartao_opcao = str(payload.get('cartao_opcao') or payload.get('opcao') or '').strip()
     valor_payload = _parse_valor(payload.get('valor'))
+    parcelas_payload = payload.get('parcelas')
 
     if not telefone:
         return JsonResponse({'error': 'Informe o telefone do usuário.'}, status=400)
@@ -1201,6 +1211,9 @@ def api_lancar_gasto(request):
         foto=foto_file, origem=('FOTO' if image_bytes else 'MANUAL'),
         ia_dados=(ia if isinstance(ia, dict) else {}),
         itens=limpar_itens(ia.get('itens')) if ia_ok else [],
+        # Quem manda pela API pode dizer as parcelas; senão vale o que a IA leu (à vista quando não aparece).
+        parcelas=parcelas_lidas(parcelas_payload if parcelas_payload not in (None, '') else (ia.get('parcelas') if ia_ok else 1),
+                                PARCELAS_MAX),
     )
 
     ticket = abrir_chamado_do_gasto(cartao, gasto, user)

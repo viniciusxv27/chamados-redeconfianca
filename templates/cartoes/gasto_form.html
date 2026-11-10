@@ -70,12 +70,24 @@
           Revise e confirme
         </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Valor (R$)</label>
-            <input type="number" step="0.01" min="0" name="valor" id="f-valor" required
-                   value="{{ form.valor|default:'' }}"
-                   class="w-full px-3 py-2 border border-gray-300 rounded-lg text-right focus:ring-2 focus:ring-purple-500">
+            <label class="block text-sm font-medium text-gray-700 mb-1" for="f-valor">Valor (R$)</label>
+            <div class="relative">
+              <span class="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 pointer-events-none">R$</span>
+              <input type="text" inputmode="numeric" autocomplete="off" name="valor" id="f-valor" required maxlength="16"
+                     placeholder="0,00" value="{{ form.valor|default:'' }}"
+                     class="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-right tabular-nums focus:ring-2 focus:ring-purple-500">
+            </div>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1" for="f-parcelas">Parcelas <span class="text-red-500">*</span></label>
+            <select name="parcelas" id="f-parcelas" required
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-purple-500">
+              <option value="" {% if not form.parcelas %}selected{% endif %} disabled>Escolha…</option>
+              {% for n in parcelas_opcoes %}<option value="{{ n }}" {% if form.parcelas == n|stringformat:'d' %}selected{% endif %}>{% if n == 1 %}1x (à vista){% else %}{{ n }}x{% endif %}</option>{% endfor %}
+            </select>
+            <p id="f-parcelas-valor" class="text-xs text-gray-500 mt-1"></p>
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Data do gasto</label>
@@ -158,6 +170,42 @@
   var btn = document.getElementById('btn-analisar');
   var MAX_COMPROVANTES = 6;
 
+  // ── Máscara do valor: só números, preenche dos centavos para a esquerda (12874 → 128,74) ──
+  var campoValor = document.getElementById('f-valor');
+  var MAX_DIGITOS = 11;                               // até 999.999.999,99
+  function formatarCentavos(digitos) {
+    digitos = String(digitos || '').replace(/\D/g, '').replace(/^0+(?=\d)/, '').slice(0, MAX_DIGITOS);
+    if (!digitos) return '';
+    var n = Number(digitos) / 100;
+    return n.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  }
+  // Texto colado ou vindo da IA ("1.234,56", "1234.56", "R$ 99,9", 128.74) → número.
+  function paraNumero(texto) {
+    if (typeof texto === 'number') return texto;
+    var t = String(texto || '').replace(/[^\d.,-]/g, '');
+    if (t.indexOf(',') >= 0) t = t.replace(/\./g, '').replace(',', '.');
+    else if (!/\.\d{1,2}$/.test(t)) t = t.replace(/\./g, '');
+    var n = parseFloat(t);
+    return isNaN(n) || n < 0 ? 0 : n;
+  }
+  function formatarValor(numero) {
+    var n = paraNumero(numero);
+    return n ? formatarCentavos(Math.round(n * 100)) : '';
+  }
+  function valorDoCampo() { return paraNumero(campoValor.value); }
+  campoValor.addEventListener('input', function () {
+    campoValor.value = formatarCentavos(campoValor.value);
+    campoValor.setSelectionRange(campoValor.value.length, campoValor.value.length);
+  });
+  campoValor.addEventListener('paste', function (e) {
+    var colado = (e.clipboardData || window.clipboardData).getData('text');
+    e.preventDefault();
+    campoValor.value = formatarValor(colado);
+    campoValor.dispatchEvent(new Event('input'));
+  });
+  // Valor que voltou do servidor (erro de validação) chega como foi digitado: reformata.
+  if (campoValor.value) campoValor.value = formatarValor(campoValor.value);
+
   // ── Itens da compra ───────────────────────────────────────────────────
   var itens = [];
   try { itens = JSON.parse(document.getElementById('f-itens').value || '[]') || []; } catch (e) { itens = []; }
@@ -203,7 +251,7 @@
     var soma = itens.reduce(function (a, it) { return a + num(it.valor_total); }, 0);
     document.getElementById('itens-soma').textContent = brl(soma);
     document.getElementById('f-itens').value = JSON.stringify(itens.filter(function (it) { return String(it.produto || '').trim(); }));
-    var valor = num(document.getElementById('f-valor').value);
+    var valor = valorDoCampo();
     var aviso = document.getElementById('itens-aviso');
     var difere = itens.length && valor && Math.abs(soma - valor) >= 0.01;
     aviso.classList.toggle('hidden', !difere);
@@ -281,6 +329,19 @@
     document.getElementById(id).value = value;
   }
 
+  // Valor de cada parcela, para quem lança conferir com o comprovante.
+  function mostrarParcela() {
+    var n = Number(document.getElementById('f-parcelas').value || 0);
+    var v = valorDoCampo();
+    var saida = document.getElementById('f-parcelas-valor');
+    if (!n || !v) { saida.textContent = ''; return; }
+    var cada = (v / n).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
+    saida.textContent = n === 1 ? 'À vista: ' + cada : n + 'x de ' + cada;
+  }
+  document.getElementById('f-parcelas').addEventListener('change', mostrarParcela);
+  document.getElementById('f-valor').addEventListener('input', mostrarParcela);
+  mostrarParcela();
+
   btn.addEventListener('click', function () {
     var manual = document.getElementById('manual_text').value.trim();
     if (!escolhidos.length && !manual) {
@@ -305,13 +366,14 @@
           setStatus('IA indisponível (' + data.error + '). Preencha os campos manualmente abaixo.', 'error');
           return;
         }
-        setIf('f-valor', data.valor);
+        setIf('f-valor', formatarValor(data.valor)); campoValor.dispatchEvent(new Event('input'));
         setIf('f-estabelecimento', data.estabelecimento);
         setIf('f-documento', data.documento);
         document.getElementById('f-documento-aviso').classList.toggle('hidden', !!data.documento);
         setIf('f-categoria', data.categoria);
         setIf('f-descricao', data.descricao);
         if (data.data && /^\d{4}-\d{2}-\d{2}$/.test(data.data)) setIf('f-data', data.data);
+        if (data.parcelas && Number(data.parcelas) > 1) { setIf('f-parcelas', String(data.parcelas)); mostrarParcela(); }
         document.getElementById('f-iadados').value = JSON.stringify(data);
         if (data.itens && data.itens.length) { itens = data.itens; desenharItens(); }
         var extra = data.observacoes ? ' Observações: ' + data.observacoes : '';
