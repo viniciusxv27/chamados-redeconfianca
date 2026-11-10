@@ -295,7 +295,7 @@ def perguntar(request):
         # A conversa da janela também aparece na página do assistente.
         AssistenteMensagem.objects.create(user=request.user, papel='user', conteudo=pergunta)
         AssistenteMensagem.objects.create(user=request.user, papel='assistant', conteudo=resposta)
-        return JsonResponse({'claude': True, 'resposta': resposta, **tela})
+        return JsonResponse({'claude': True, 'resposta': resposta, **colaborador.filtrar_cartoes(pergunta, resposta, tela)})
     except Exception as exc:  # noqa: BLE001
         logger.exception('Assistente (janela) falhou: %s', exc)
         return JsonResponse({'erro': 'Não consegui responder agora. Tente de novo em instantes.'}, status=500)

@@ -278,6 +278,9 @@ class VendaServico(models.Model):
     # Alta por portabilidade (09/11/2026): de qual operadora o número veio.
     OPERADORAS = [('CLARO', 'Claro'), ('OI', 'Oi'), ('TIM', 'Tim'), ('OUTROS', 'Outros')]
     portabilidade = models.BooleanField(default=False, db_default=False, verbose_name='Portabilidade')
+    # Venda de fibra (plano da segmentação "Fibra e TV"): o número da ordem é obrigatório (10/11/2026).
+    numero_ordem = models.CharField(max_length=40, blank=True, default='', db_default='',
+                                    verbose_name='Número da ordem (fibra)')
     operadora_origem = models.CharField(max_length=10, blank=True, default='', db_default='', choices=OPERADORAS,
                                         verbose_name='Operadora de origem')
 

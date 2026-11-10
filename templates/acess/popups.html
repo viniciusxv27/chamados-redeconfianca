@@ -1,0 +1,48 @@
+{% extends 'acess/base.html' %}
+{% block ac_titulo %}Acess · Popups{% endblock %}
+{% block ac_cabecalho %}Popups de login com erro{% endblock %}
+{% block ac_subtitulo %}Pergunte a um público do portal (setor e hierarquia) se há login com erro. Cada "sim" vira um pedido em Solicitações.{% endblock %}
+{% block ac_acoes %}<a href="{% url 'acess:popup_nova' %}" class="ac-btn ac-btn-pri"><i class="fas fa-plus"></i>Novo popup</a>{% endblock %}
+
+{% block ac_conteudo %}
+<div class="space-y-3">
+    {% for c in campanhas %}
+    <div class="ac-card p-4">
+        <div class="flex items-start gap-3 flex-wrap">
+            <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2 flex-wrap">
+                    <a href="{% url 'acess:popup_respostas' c.id %}" class="font-semibold text-gray-900 hover:text-amber-700 break-words">{{ c.titulo }}</a>
+                    {% if c.esta_no_ar %}<span class="ac-chip s-OK">No ar</span>{% elif c.ativo %}<span class="ac-chip bg-gray-100 text-gray-600">Fora do período</span>{% else %}<span class="ac-chip bg-gray-100 text-gray-500">Desativado</span>{% endif %}
+                </div>
+                <p class="text-xs text-gray-500 mt-1">
+                    <i class="fas fa-store mr-1 text-gray-400"></i>{% for s in c.setores.all %}{{ s.name }}{% if not forloop.last %}, {% endif %}{% empty %}Todos os setores{% endfor %}
+                    <span class="mx-1 text-gray-300">·</span><i class="fas fa-sitemap mr-1 text-gray-400"></i>{{ c.rotulos_hierarquia|join:", "|default:"Todas as hierarquias" }}
+                </p>
+                <p class="text-[11px] text-gray-400 mt-0.5">
+                    {% if c.inicio or c.fim %}{% if c.inicio %}De {{ c.inicio|date:"d/m/Y H:i" }}{% endif %}{% if c.fim %} até {{ c.fim|date:"d/m/Y H:i" }}{% endif %} · {% endif %}Criado por {{ c.criado_por.get_full_name|default:"—" }} em {{ c.criado_em|date:"d/m/Y" }}
+                </p>
+            </div>
+            <div class="flex items-center gap-1.5 flex-wrap">
+                <a href="{% url 'acess:popup_respostas' c.id %}" class="ac-btn ac-btn-claro ac-btn-mini"><i class="fas fa-list"></i>Respostas</a>
+                <a href="{% url 'acess:popup_editar' c.id %}" class="ac-btn ac-btn-claro ac-btn-mini"><i class="fas fa-pen"></i>Editar</a>
+                <form method="post" action="{% url 'acess:popup_alternar' c.id %}">{% csrf_token %}
+                    <button class="ac-btn ac-btn-claro ac-btn-mini">{% if c.ativo %}<i class="fas fa-pause"></i>Desativar{% else %}<i class="fas fa-play"></i>Ativar{% endif %}</button>
+                </form>
+            </div>
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3 text-center">
+            <div class="rounded-lg bg-gray-50 p-2"><p class="text-lg font-bold tabular text-gray-900">{{ c.n_publico }}</p><p class="text-[11px] text-gray-500">No público</p></div>
+            <div class="rounded-lg bg-gray-50 p-2"><p class="text-lg font-bold tabular text-gray-900">{{ c.n_respondidas }}</p><p class="text-[11px] text-gray-500">Responderam</p></div>
+            <a href="{% url 'acess:popup_respostas' c.id %}?situacao=PENDENTE" class="rounded-lg bg-gray-50 p-2 hover:bg-amber-50"><p class="text-lg font-bold tabular text-gray-900">{{ c.n_sem_resposta }}</p><p class="text-[11px] text-gray-500">Sem resposta</p></a>
+            <a href="{% url 'acess:popup_respostas' c.id %}?situacao=COM_ERRO" class="rounded-lg bg-amber-50 p-2 hover:bg-amber-100"><p class="text-lg font-bold tabular text-amber-800">{{ c.n_com_erro }}</p><p class="text-[11px] text-amber-700">Com erro</p></a>
+        </div>
+    </div>
+    {% empty %}
+    <div class="ac-card p-8 text-center text-sm text-gray-500">
+        <i class="fas fa-bullhorn text-2xl text-gray-300 mb-2"></i>
+        <p>Nenhum popup criado ainda.</p>
+        <a href="{% url 'acess:popup_nova' %}" class="ac-btn ac-btn-pri mt-3"><i class="fas fa-plus"></i>Criar o primeiro</a>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

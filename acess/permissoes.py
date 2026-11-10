@@ -29,6 +29,8 @@ FUNCOES = [
     ('desligamentos.gerenciar', 'Gerenciar desligamentos', 'Agendar, cancelar e confirmar desligamentos.',
      ['colaboradores.ver']),
     ('mensagens.gerenciar', 'Gerenciar mensagens WhatsApp', 'Editar os textos dos modelos de mensagem.', []),
+    ('popups.gerenciar', 'Popups de login com erro',
+     'Criar popups que perguntam ao portal (por setor e hierarquia) se há login com erro, e ver as respostas.', []),
 ]
 CHAVES = {f[0] for f in FUNCOES}
 EXIGE = {f[0]: f[3] for f in FUNCOES}

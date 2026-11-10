@@ -1,0 +1,74 @@
+{% extends 'acess/base.html' %}
+{% block ac_titulo %}Acess · {% if campanha.pk %}Editar popup{% else %}Novo popup{% endif %}{% endblock %}
+{% block ac_cabecalho %}{% if campanha.pk %}Editar popup{% else %}Novo popup de login com erro{% endif %}{% endblock %}
+{% block ac_subtitulo %}Aparece na home de quem está no público, depois dos popups gerais, até a pessoa responder.{% endblock %}
+
+{% block ac_conteudo %}
+{% if erros %}
+<div class="mb-4 p-3 rounded-xl text-sm border bg-red-50 border-red-100 text-red-700">{% for e in erros %}<p>{{ e }}</p>{% endfor %}</div>
+{% endif %}
+<form method="post" class="grid lg:grid-cols-3 gap-4">
+    {% csrf_token %}
+    <div class="lg:col-span-2 space-y-4">
+        <div class="ac-card p-4 space-y-3">
+            <div>
+                <label class="ac-label" for="pp-titulo">Título</label>
+                <input id="pp-titulo" name="titulo" value="{{ campanha.titulo }}" maxlength="150" required class="ac-input" placeholder="Ex.: Seus logins estão funcionando?">
+            </div>
+            <div>
+                <label class="ac-label" for="pp-pergunta">Pergunta / mensagem</label>
+                <textarea id="pp-pergunta" name="pergunta" rows="3" maxlength="1000" class="ac-input">{{ campanha.pergunta }}</textarea>
+                <p class="text-[11px] text-gray-500 mt-1">Abaixo dela a pessoa responde "Não" ou "Sim" e escolhe o sistema (os mesmos da ficha). Pool de cobrança pede telefone e e-mail; os outros, uma descrição.</p>
+            </div>
+            <div class="grid sm:grid-cols-2 gap-3">
+                <div><label class="ac-label" for="pp-inicio">Exibir a partir de (opcional)</label>
+                    <input id="pp-inicio" type="datetime-local" name="inicio" value="{{ campanha.inicio|date:'Y-m-d\TH:i' }}" class="ac-input"></div>
+                <div><label class="ac-label" for="pp-fim">Exibir até (opcional)</label>
+                    <input id="pp-fim" type="datetime-local" name="fim" value="{{ campanha.fim|date:'Y-m-d\TH:i' }}" class="ac-input"></div>
+            </div>
+            <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="ativo" {% if campanha.ativo %}checked{% endif %} class="rounded"> Ativo</label>
+        </div>
+
+        <div class="ac-card p-4">
+            <p class="ac-label">Hierarquias <span class="font-normal text-gray-400">(nenhuma marcada = todas)</span></p>
+            <div class="flex flex-wrap gap-x-4 gap-y-2 mt-1">
+                {% for valor, rotulo in hierarquias %}
+                <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="hierarquias" value="{{ valor }}" {% if valor in campanha.hierarquias %}checked{% endif %} class="rounded"> {{ rotulo }}</label>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <div class="ac-card p-4 lg:row-span-2">
+        <div class="flex items-center justify-between gap-2">
+            <p class="ac-label mb-0">Setores <span class="font-normal text-gray-400">(nenhum = todos)</span></p>
+            <span class="text-[11px] text-gray-500" id="pp-n-setores"></span>
+        </div>
+        <p class="text-[11px] text-gray-500 mb-2">Vale o setor principal da pessoa (a loja dela).</p>
+        <input type="search" id="pp-busca" placeholder="Buscar setor" class="ac-input mb-2" autocomplete="off">
+        <div class="max-h-80 overflow-y-auto space-y-1 pr-1" id="pp-setores">
+            {% for s in setores %}
+            <label class="flex items-center gap-2 text-sm text-gray-700 py-0.5" data-nome="{{ s.name|lower }}"><input type="checkbox" name="setores" value="{{ s.id }}" {% if s.id in marcados %}checked{% endif %} class="rounded"> <span class="min-w-0 truncate">{{ s.name }}</span></label>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="lg:col-span-2 flex items-center gap-2 flex-wrap">
+        <button class="ac-btn ac-btn-pri"><i class="fas fa-check"></i>Salvar</button>
+        <a href="{% if campanha.pk %}{% url 'acess:popup_respostas' campanha.pk %}{% else %}{% url 'acess:popups' %}{% endif %}" class="ac-btn ac-btn-claro">Cancelar</a>
+        {% if publico is not None %}<span class="text-xs text-gray-500">Público hoje: <strong class="tabular">{{ publico }}</strong> pessoa(s) ativa(s).</span>{% endif %}
+    </div>
+</form>
+<script>
+(function () {
+    var busca = document.getElementById('pp-busca'), caixa = document.getElementById('pp-setores'), n = document.getElementById('pp-n-setores');
+    function conta() { var k = caixa.querySelectorAll('input:checked').length; n.textContent = k ? k + ' marcado(s)' : 'Todos'; }
+    busca.addEventListener('input', function () {
+        var t = busca.value.trim().toLowerCase();
+        caixa.querySelectorAll('[data-nome]').forEach(function (l) { l.classList.toggle('hidden', !!t && l.dataset.nome.indexOf(t) < 0); });
+    });
+    caixa.addEventListener('change', conta);
+    conta();
+})();
+</script>
+{% endblock %}

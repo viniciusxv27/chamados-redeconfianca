@@ -220,6 +220,7 @@
             </td>
             <td class="px-4 py-2.5 text-xs text-gray-600 max-w-[9rem]">
               {{ g.criado_por.full_name|default:"—" }}
+              <span class="block text-[10px] text-gray-400 tabular-nums" title="Quando o gasto foi lançado no portal">lançado {{ g.created_at|date:"d/m H:i" }}</span>
               {% if g.origem == 'FOTO' %}<span class="block text-[10px] text-gray-400"><i class="fas fa-camera mr-0.5"></i>pela foto</span>{% endif %}
             </td>
             <td class="px-4 py-2.5 text-center whitespace-nowrap">

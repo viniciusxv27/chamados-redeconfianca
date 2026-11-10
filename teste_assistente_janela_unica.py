@@ -120,19 +120,46 @@ t('quem não tem Claude recebe a orientação', st == 200 and j['claude'] is Fal
 print('\n== COM CLAUDE (CHAVE DA EMPRESA) ==')
 emp = ChaveClaudeEmpresa.get(); emp.set_api_key('sk-ant-empresa-zz'); emp.save()
 with mock.patch.object(colaborador, 'material_para_claude', return_value=('\n\n---\nMATERIAL DO PORTAL: POP Sangria', dict(TELA))) as mat, \
-        mock.patch.object(claude_client, 'responder', return_value='Resposta do Claude com o POP.') as resp, \
+        mock.patch.object(claude_client, 'responder', return_value='Siga o POP Sangria e lance na Caixa. Se der erro, abra um chamado.') as resp, \
         mock.patch.object(colaborador, 'orientar') as ori:
     st, j = perguntar('Como faço uma sangria?', [{'papel': 'user', 'texto': 'oi'}, {'papel': 'assistant', 'texto': 'Olá!'}])
 args = resp.call_args[0] if resp.called else ()
-t('a resposta é do Claude, com os cartões da orientação', st == 200 and j['claude'] is True
-  and j['resposta'] == 'Resposta do Claude com o POP.' and j['fontes'][0]['titulo'] == 'Sangria'
-  and j['paginas'][0]['url'] == '/contagem-caixa/' and j['chamado']['url'].startswith('/tickets/create/') and not ori.called, j)
+t('a resposta é do Claude, com os cartões que ela citou (POP, página "Caixa", chamado)', st == 200 and j['claude'] is True
+  and j['fontes'][0]['titulo'] == 'Sangria' and j['paginas'][0]['url'] == '/contagem-caixa/'
+  and j['chamado']['url'].startswith('/tickets/create/') and not ori.called, j)
 t('o Claude recebe a pergunta com o material da busca e a conversa da janela',
   args and args[1].startswith('Como faço uma sangria?') and 'MATERIAL DO PORTAL' in args[1]
   and args[2] == [{'role': 'user', 'content': 'oi'}, {'role': 'assistant', 'content': 'Olá!'}], args)
 msgs = list(AssistenteMensagem.objects.filter(user=ana).order_by('criado_em').values_list('papel', 'conteudo'))
-t('a conversa vai para a página do assistente, sem o material colado', msgs == [('user', 'Como faço uma sangria?'),
-                                                                              ('assistant', 'Resposta do Claude com o POP.')], msgs)
+t('a conversa vai para a página do assistente, sem o material colado', msgs[0] == ('user', 'Como faço uma sangria?')
+  and 'MATERIAL' not in msgs[1][1], msgs)
+
+print('\n== SEM SPAM DE POP E VÍDEO (10/11) ==')
+with mock.patch.object(colaborador, 'buscar') as busca, \
+        mock.patch.object(claude_client, 'responder', return_value='Seu saldo é +3h20.') as resp:
+    st, j = perguntar('Qual meu saldo de banco de horas?')
+t('pergunta sem como-fazer: nem busca POP, nem cartões, nem chamado', not busca.called and j['fontes'] == []
+  and j['paginas'] == [] and j['chamado'] is None and 'MATERIAL' not in resp.call_args[0][1], j)
+with mock.patch.object(colaborador, 'material_para_claude', return_value=('\n---\nMATERIAL DO PORTAL', dict(TELA))), \
+        mock.patch.object(claude_client, 'responder', return_value='Para lançar, vá em Caixa e informe o valor.'):
+    st, j = perguntar('Como lanço uma sangria?')
+t('como-fazer sem citar POP: nenhum cartão de POP e sem chamado', j['fontes'] == [] and j['chamado'] is None, j)
+with mock.patch.object(colaborador, 'material_para_claude', return_value=('\n---\nMATERIAL DO PORTAL', dict(TELA))), \
+        mock.patch.object(claude_client, 'responder', return_value='Aqui está o passo a passo.'):
+    st, j = perguntar('Me manda o POP de sangria')
+t('pediu o POP: ele aparece mesmo sem citação', [f['titulo'] for f in j['fontes']] == ['Sangria'], j)
+t('o Claude é orientado a citar só o que usou', 'Use SÓ se ajudar' in open('assistente/colaborador.py').read())
+
+print('\n== RESULTADOS POR HIERARQUIA (10/11) ==')
+from assistente import ferramentas as fz
+for hier, rede in (('PADRAO', False), ('ADMINISTRATIVO', True), ('SUPERVISOR', True), ('ADMIN', True), ('SUPERADMIN', True)):
+    u = User(username=f'zz.{hier}', hierarchy=hier)
+    t(f'{hier}: {"painel completo" if rede else "só os próprios resultados"}', fz.ve_resultados_da_rede(u) is rede)
+with mock.patch.object(fz, '_meus_resultados', return_value='SÓ OS MEUS') as meus, \
+        mock.patch.object(fz, '_parciais_get', return_value={'linhas': [], 'data': 'hoje'}):
+    t('PADRÃO pedindo a aba da rede recebe só os dele', fz._resultados_comerciais(User(username='zz.p', hierarchy='PADRAO'), {'aba': 'resultados'}) == 'SÓ OS MEUS')
+    out = fz._resultados_comerciais(User(username='zz.s', hierarchy='SUPERVISOR'), {'aba': 'resumo'})
+    t('SUPERVISOR lê o painel da rede', 'RESULTADOS DO DIA' in out and meus.call_count == 1, out[:80])
 
 with mock.patch.object(colaborador, 'material_para_claude', side_effect=RuntimeError('MinIO fora')), \
         mock.patch.object(claude_client, 'responder', return_value='Sem material, mas respondi.') as resp:

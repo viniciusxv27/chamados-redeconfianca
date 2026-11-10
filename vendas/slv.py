@@ -684,7 +684,8 @@ def registrar_venda(dados, usuario, loja, vendedor=None):
         rotulo = tipos[tipo]
         reg = dict(tipo=tipo, rotulo=rotulo, plano=None, plano_anterior=None, segmentacao='', valor_anterior=None,
                    adicional=None, serial='', novo_titular_cpf='', novo_titular_nome='', numero_novo='',
-                   ativacao=False, valor=ZERO, fora=None, sem_plano=False, portabilidade=False, operadora='')
+                   ativacao=False, valor=ZERO, fora=None, sem_plano=False, portabilidade=False, operadora='',
+                   numero_ordem='')
         if tipo in ('ALTA', 'REATIVACAO', 'TROCA_PLANO', 'MIGRACAO', 'TROCA_SIMCARD', 'TROCA_TITULARIDADE'):
             plano = Plano.objects.filter(pk=s.get('plano_id')).first() if str(s.get('plano_id') or '').isdigit() else None
             if plano is None:
@@ -694,6 +695,14 @@ def registrar_venda(dados, usuario, loja, vendedor=None):
             elif not plano.ativo:
                 erros.append(f'{rotulo}: o plano {plano.nome} está inativo.')
             reg.update(plano=plano, segmentacao=plano.segmentacao if plano else '', valor=plano.valor if plano else ZERO)
+            if plano is not None and plano.segmentacao == 'FIBRA':
+                # Fibra: o número da ordem é obrigatório (10/11/2026).
+                ordem = re.sub(r'\s+', '', str(s.get('numero_ordem') or ''))[:40]
+                if not ordem:
+                    erros.append(f'{rotulo}: venda de fibra — informe o número da ordem.')
+                elif not re.fullmatch(r'[0-9A-Za-z./-]{4,40}', ordem):
+                    erros.append(f'{rotulo}: número da ordem inválido (use só letras e números).')
+                reg['numero_ordem'] = ordem
         # Plano que o cliente tem e a Vivo não vende mais: vale como plano anterior (27/10/2026).
         fora = (PlanoForaPortfolio.objects.filter(pk=s.get('plano_fora_id')).first()
                 if tipo in TIPOS_COM_PLANO_FORA and str(s.get('plano_fora_id') or '').isdigit() else None)
@@ -804,7 +813,7 @@ def registrar_venda(dados, usuario, loja, vendedor=None):
                 novo_titular_nome=s['novo_titular_nome'],
                 numero_anterior=(linhas_cliente[0] if s['tipo'] == 'TROCA_NUMERO' and linhas_cliente else ''),
                 numero_novo=s['numero_novo'], portabilidade=s['portabilidade'],
-                operadora_origem=s['operadora'])
+                operadora_origem=s['operadora'], numero_ordem=s['numero_ordem'])
             if s['plano'] and s['tipo'] != 'TROCA_TITULARIDADE':
                 ultimo_plano = s['plano']
             if s['tipo'] == 'TROCA_NUMERO':

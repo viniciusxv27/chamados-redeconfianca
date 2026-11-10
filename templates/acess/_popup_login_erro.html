@@ -1,0 +1,197 @@
+{# Popup do Acess "login com erro" (acess/popup_login.py). Entra pelo gate de popups, só na home. #}
+<div id="acess-login-modal"
+     class="rc-modal hidden fixed inset-0 z-[10000] bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4"
+     data-url="{% url 'acess:popup_login_responder' camp.id %}" data-id="{{ camp.id }}">
+  <div class="rc-modal-card bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden flex flex-col max-h-[92vh]">
+    <div class="bg-gradient-to-r from-amber-500 to-orange-600 px-5 sm:px-6 py-4 sm:py-5 text-white flex-shrink-0">
+      <div class="flex items-center gap-3">
+        <i class="fas fa-key text-2xl"></i>
+        <h3 class="text-lg font-bold leading-tight min-w-0 break-words">{{ camp.titulo }}</h3>
+      </div>
+    </div>
+
+    <div class="px-5 sm:px-6 py-5 overflow-y-auto min-h-0">
+      <p class="text-sm text-gray-700 whitespace-pre-line">{{ camp.pergunta }}</p>
+
+      <div data-passo="pergunta" class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <button type="button" data-acao="nao" class="px-4 py-2.5 rounded-lg border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-gray-50">
+          <i class="fas fa-check text-emerald-600 mr-1"></i>Não, está tudo certo
+        </button>
+        <button type="button" data-acao="sim" class="px-4 py-2.5 rounded-lg border border-amber-300 bg-amber-50 text-sm font-semibold text-amber-800 hover:bg-amber-100">
+          <i class="fas fa-triangle-exclamation mr-1"></i>Sim, tenho login com erro
+        </button>
+      </div>
+
+      <form data-passo="sistemas" class="hidden mt-4 space-y-3" novalidate>
+        <div data-itens class="space-y-3"></div>
+        <button type="button" data-acao="mais" class="text-sm font-semibold text-amber-700 hover:underline">
+          <i class="fas fa-plus mr-1"></i>Informar outro sistema
+        </button>
+      </form>
+      <p data-erro class="hidden mt-3 text-sm text-red-600" role="alert"></p>
+
+      <div data-passo="fim" class="hidden mt-4 flex items-start gap-3 rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-3">
+        <i class="fas fa-circle-check text-emerald-600 mt-0.5"></i>
+        <p data-msg class="text-sm text-emerald-800"></p>
+      </div>
+    </div>
+
+    <div class="px-5 sm:px-6 py-4 bg-gray-50 flex flex-wrap items-center justify-end gap-2 sm:gap-3 flex-shrink-0">
+      <button type="button" data-acao="depois" class="px-4 py-2 text-gray-500 hover:text-gray-700 text-sm">Lembrar depois</button>
+      <button type="button" data-acao="voltar" class="hidden px-4 py-2 text-gray-500 hover:text-gray-700 text-sm">Voltar</button>
+      <button type="button" data-acao="enviar" class="hidden px-5 py-2.5 bg-primary text-white rounded-lg hover:bg-orange-600 transition-colors text-sm font-semibold">Enviar</button>
+      <button type="button" data-acao="fechar" class="hidden px-5 py-2.5 bg-primary text-white rounded-lg hover:bg-orange-600 transition-colors text-sm font-semibold">Fechar</button>
+    </div>
+  </div>
+
+  <template data-modelo>
+    <div data-item class="rounded-xl border border-gray-200 p-3 space-y-2">
+      <div class="flex items-center gap-2">
+        <label class="sr-only">Sistema</label>
+        <select data-campo="sistema" class="flex-1 min-w-0 border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
+          <option value="">Qual sistema está com erro?</option>
+          {% for s in camp.sistemas %}<option value="{{ s.nome }}" data-pool="{{ s.pool|yesno:'1,0' }}">{{ s.nome }}</option>{% endfor %}
+        </select>
+        <button type="button" data-acao="tirar" class="hidden w-9 h-9 flex-shrink-0 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50" title="Tirar este sistema" aria-label="Tirar este sistema"><i class="fas fa-xmark"></i></button>
+      </div>
+      <div data-bloco="pool" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <label class="block text-xs font-semibold text-gray-600">Telefone (com DDD)
+          <input data-campo="telefone" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="(11) 91234-5678" class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-normal">
+        </label>
+        <label class="block text-xs font-semibold text-gray-600">E-mail
+          <input data-campo="email" type="email" inputmode="email" autocomplete="email" maxlength="254" placeholder="nome@exemplo.com" class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-normal">
+        </label>
+      </div>
+      <label data-bloco="descricao" class="hidden block text-xs font-semibold text-gray-600">Descrição do erro
+        <textarea data-campo="descricao" rows="3" maxlength="1000" placeholder="O que acontece quando você tenta entrar?" class="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-normal"></textarea>
+      </label>
+    </div>
+  </template>
+</div>
+
+<script>
+(function () {
+  if (window.__acessLoginPopupInit) return;
+  window.__acessLoginPopupInit = true;
+  var modal = document.getElementById('acess-login-modal');
+  if (!modal) return;
+  var url = modal.getAttribute('data-url');
+  var skipKey = 'rc_acess_login_skip_' + modal.getAttribute('data-id');
+  var itens = modal.querySelector('[data-itens]');
+  var modelo = modal.querySelector('[data-modelo]');
+  var erro = modal.querySelector('[data-erro]');
+  var total = modelo.content.querySelectorAll('option').length - 1;
+
+  function q(sel) { return modal.querySelector(sel); }
+  function csrf() { var m = document.cookie.match(/csrftoken=([^;]+)/); return m ? m[1] : ''; }
+  function mostra(el, sim) { if (el) el.classList.toggle('hidden', !sim); }
+
+  function passo(nome) {
+    mostra(erro, false);
+    ['pergunta', 'sistemas', 'fim'].forEach(function (p) { mostra(q('[data-passo="' + p + '"]'), p === nome); });
+    mostra(q('[data-acao="enviar"]'), nome === 'sistemas');
+    mostra(q('[data-acao="voltar"]'), nome === 'sistemas');
+    mostra(q('[data-acao="depois"]'), nome !== 'fim');
+    mostra(q('[data-acao="fechar"]'), nome === 'fim');
+  }
+
+  function ajustaItem(item) {
+    var sel = item.querySelector('[data-campo="sistema"]');
+    var opt = sel.options[sel.selectedIndex];
+    var pool = opt && opt.getAttribute('data-pool') === '1';
+    mostra(item.querySelector('[data-bloco="pool"]'), !!sel.value && pool);
+    mostra(item.querySelector('[data-bloco="descricao"]'), !!sel.value && !pool);
+  }
+
+  function ajustaLista() {
+    var todos = itens.querySelectorAll('[data-item]');
+    todos.forEach(function (it) { mostra(it.querySelector('[data-acao="tirar"]'), todos.length > 1); });
+    mostra(q('[data-acao="mais"]'), todos.length < total);
+  }
+
+  function novoItem() {
+    itens.appendChild(modelo.content.cloneNode(true));
+    ajustaLista();
+  }
+
+  function abrir() {
+    modal.classList.remove('hidden');
+    requestAnimationFrame(function () { modal.classList.add('rc-anima'); });
+  }
+  function fechar() {
+    modal.classList.add('esta-fechando');
+    setTimeout(function () { modal.classList.add('hidden'); modal.classList.remove('esta-fechando', 'rc-anima'); }, 240);
+  }
+
+  function enviar(resposta, lista) {
+    erro.classList.add('hidden');
+    var botoes = modal.querySelectorAll('button');
+    botoes.forEach(function (b) { b.disabled = true; });
+    return fetch(url, {
+      method: 'POST',
+      headers: { 'X-CSRFToken': csrf(), 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+      body: JSON.stringify({ resposta: resposta, itens: lista || [] })
+    }).then(function (r) { return r.json().catch(function () { return { ok: false }; }); })
+      .catch(function () { return { ok: false, erro: 'Sem conexão. Tente de novo.' }; })
+      .then(function (d) {
+        botoes.forEach(function (b) { b.disabled = false; });
+        return d;
+      });
+  }
+
+  modal.addEventListener('change', function (e) {
+    var item = e.target.closest('[data-item]');
+    if (item && e.target.matches('[data-campo="sistema"]')) ajustaItem(item);
+  });
+
+  modal.addEventListener('click', function (e) {
+    if (e.target === modal) { sessionStorage.setItem(skipKey, '1'); fechar(); return; }
+    var b = e.target.closest('[data-acao]');
+    if (!b) return;
+    var acao = b.getAttribute('data-acao');
+    if (acao === 'sim') { if (!itens.children.length) novoItem(); passo('sistemas'); }
+    else if (acao === 'voltar') { passo('pergunta'); }
+    else if (acao === 'mais') { novoItem(); }
+    else if (acao === 'tirar') { b.closest('[data-item]').remove(); ajustaLista(); }
+    else if (acao === 'fechar') { fechar(); }
+    else if (acao === 'depois') {
+      sessionStorage.setItem(skipKey, '1');
+      enviar('depois').then(function () { fechar(); });
+    } else if (acao === 'nao' || acao === 'enviar') {
+      var lista = [];
+      if (acao === 'enviar') {
+        itens.querySelectorAll('[data-item]').forEach(function (it) {
+          var v = function (c) { var el = it.querySelector('[data-campo="' + c + '"]'); return el ? el.value.trim() : ''; };
+          lista.push({ sistema: v('sistema'), telefone: v('telefone'), email: v('email'), descricao: v('descricao') });
+        });
+      }
+      enviar(acao === 'nao' ? 'nao' : 'sim', lista).then(function (d) {
+        if (d && d.ok) {
+          q('[data-msg]').textContent = d.msg || 'Obrigado pela resposta!';
+          passo('fim');
+        } else {
+          erro.textContent = (d && d.erro) || 'Não foi possível enviar. Tente de novo.';
+          mostra(erro, true);
+        }
+      });
+    }
+  });
+
+  var OUTROS = ['#portal-popup-modal', '#experience-window-modal', '#mandatory-trails-modal',
+                '#feedback-reminder-modal', '#pickupAlertModal'];
+  function outroAberto() {
+    return OUTROS.some(function (sel) { var el = document.querySelector(sel); return el && !el.classList.contains('hidden'); });
+  }
+  function comecar() {
+    if (sessionStorage.getItem(skipKey) === '1') return;
+    passo('pergunta');
+    if (!outroAberto()) { abrir(); return; }
+    var n = 0;
+    var t = setInterval(function () {
+      n++;
+      if (!outroAberto()) { clearInterval(t); abrir(); } else if (n > 40) { clearInterval(t); }
+    }, 500);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', comecar); else comecar();
+})();
+</script>

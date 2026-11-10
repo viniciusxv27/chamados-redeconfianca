@@ -895,6 +895,20 @@
                     '<input type="radio" name="vdOperadora" value="' + o[0] + '" data-f="operadora"> ' + o[1] + '</label>';
             }).join('') + '</div></div></div>';
     }
+    // Fibra (segmentação "Fibra e TV"): o número da ordem é obrigatório (10/11/2026).
+    function campoOrdemFibra() {
+        return '<div class="hidden max-w-xs" data-ordem-fibra><label class="vd-rotulo" for="vdOrdemFibra"><i class="fas fa-hashtag text-sky-600 mr-1"></i>Número da ordem (fibra) *</label>' +
+            '<input id="vdOrdemFibra" class="vd-campo tabular" data-f="numero_ordem" maxlength="40" autocomplete="off" placeholder="Ex.: 8037382808">' +
+            '<p class="vd-ajuda">O número da ordem da instalação na Vivo.</p></div>';
+    }
+    function mostrarOrdemFibra() {
+        const c = $('vdCamposServico'), bloco = c.querySelector('[data-ordem-fibra]');
+        if (!bloco) return;
+        const seg = c.querySelector('[name=novoSeg]:checked');
+        const fibra = !!(seg && seg.value === 'FIBRA');
+        bloco.classList.toggle('hidden', !fibra);
+        if (!fibra) { const i = bloco.querySelector('input'); if (i) i.value = ''; }
+    }
     function desenharCamposServico() {
         const t = $('vdTipoServico').value, c = $('vdCamposServico');
         // [IU001] trocar o serviço limpa os campos dependentes.
@@ -921,7 +935,9 @@
             '<p class="text-xs text-gray-500">Titular atual: <strong>' + esc((estado.cliente || {}).nome || '') + '</strong></p>' + seletorPlano('Segmentação e plano do novo titular *', 'novo', todos);
         if (t === 'TROCA_NUMERO') html = '<p class="text-xs text-gray-500">Número atual: <strong class="tabular">' + esc(mascaraTel(estado.linhas[0] || '')) + '</strong></p>' +
             '<div class="max-w-xs"><label class="vd-rotulo">Número novo *</label><input class="vd-campo tabular" data-f="numero_novo" inputmode="tel" maxlength="16" placeholder="(27) 99999-0000"></div>';
+        if (html.indexOf('data-sel="novo"') !== -1) html += campoOrdemFibra();
         c.innerHTML = html;
+        mostrarOrdemFibra();
         $('vdAddServico').classList.toggle('hidden', !t);
         c.querySelectorAll('[data-f=titular_cpf]').forEach(function (el) { el.addEventListener('input', function () { el.value = mascaraCpf(el.value); }); });
         c.querySelectorAll('[data-f=numero_novo]').forEach(function (el) { el.addEventListener('input', function () { el.value = mascaraTel(el.value); }); });
@@ -944,6 +960,7 @@
             if (bloco) bloco.classList.toggle('hidden', e.target.checked);
             return;
         }
+        if (e.target.name === 'novoSeg') mostrarOrdemFibra();
         if (e.target.name && e.target.name.endsWith('Seg')) {
             const chave = e.target.name.replace('Seg', '');
             opcoesPlanos($('vdCamposServico').querySelector('[data-sel=' + chave + ']'), e.target.value, '', 'Escolha o plano…');
@@ -957,6 +974,8 @@
                    servico_adicional_id: v('[data-f=adicional]'), novo_titular_cpf: so(v('[data-f=titular_cpf]')),
                    novo_titular_nome: v('[data-f=titular_nome]'), numero_novo: so(v('[data-f=numero_novo]')), ativacao_confirmada: false,
                    plano_fora_id: v('[data-f=fora]')};
+        const segNovo = c.querySelector('[name=novoSeg]:checked');
+        s.numero_ordem = segNovo && segNovo.value === 'FIBRA' ? v('[data-f=numero_ordem]').replace(/\s+/g, '') : '';
         const porta = c.querySelector('[data-f=portabilidade]'), operadora = c.querySelector('[data-f=operadora]:checked');
         s.portabilidade = !!(porta && porta.checked);
         s.operadora_origem = s.portabilidade && operadora ? operadora.value : '';
@@ -967,6 +986,7 @@
         const erro = [];
         if (['ALTA', 'REATIVACAO', 'TROCA_PLANO', 'MIGRACAO', 'TROCA_SIMCARD', 'TROCA_TITULARIDADE'].indexOf(t) >= 0 && !s.plano_id) erro.push('Escolha a segmentação e o plano.');
         if (t === 'ALTA' && s.portabilidade && !s.operadora_origem) erro.push('É portabilidade: escolha a operadora de origem.');
+        if (segNovo && segNovo.value === 'FIBRA' && !s.numero_ordem) erro.push('Venda de fibra: informe o número da ordem.');
         if (t === 'TROCA_SIMCARD' && !/^89\d{17,18}$/.test(s.serial)) erro.push('Serial do SimCard: 19 ou 20 números começando por 89.');
         if ((t === 'SEGURO' || t === 'SVA') && !s.servico_adicional_id) erro.push('Escolha o serviço contratado.');
         if (t === 'TROCA_TITULARIDADE' && !cpfValido(s.novo_titular_cpf)) erro.push('CPF do novo titular inválido.');
@@ -994,6 +1014,7 @@
         s.rotulo = TIPOS[s.tipo]; s.plano_nome = plano ? plano.nome : ''; s.valor = plano ? Number(plano.valor) : (adic ? Number(adic.valor) : 0);
         s.descricao = plano ? (SEG[plano.segmentacao] + ' · ' + plano.nome) : (adic ? adic.nome : (s.numero_novo ? 'Novo número ' + mascaraTel(s.numero_novo) : ''));
         s.valor_anterior = s.sem_plano ? 0 : (s.plano_fora ? Number(s.plano_fora.valor) : (ant ? Number(ant.valor) : num($('vdPaValor').value)));
+        if (s.numero_ordem) s.descricao += ' · ordem ' + s.numero_ordem;
         if (s.portabilidade) s.descricao += ' · portabilidade (' + ((OPERADORAS.find(function (o) { return o[0] === s.operadora_origem; }) || [0, ''])[1]) + ')';
         if (s.sem_plano) s.descricao += ' · antes: cliente sem plano';
         if (s.plano_fora) s.descricao += ' · antes: ' + s.plano_fora.nome + ' (fora do portfólio)';

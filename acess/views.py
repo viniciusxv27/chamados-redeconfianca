@@ -31,7 +31,8 @@ ABAS = [('dashboard', 'Dashboard', 'fa-gauge-high', None), ('lojas', 'Lojas & Se
         ('solicitacoes', 'Solicitações', 'fa-inbox', 'chamados.ver'),
         ('historico', 'Histórico', 'fa-clock-rotate-left', 'historico.ver'),
         ('desligamentos', 'Desligamentos', 'fa-user-xmark', 'desligamentos.gerenciar'),
-        ('mensagens', 'Mensagens', 'fa-comment-dots', None)]
+        ('mensagens', 'Mensagens', 'fa-comment-dots', None),
+        ('popups', 'Popups', 'fa-bullhorn', 'popups.gerenciar')]
 ETAPAS = [(1, 'Criação do GEFAC'), (2, 'Login inicial'), (3, 'Academia V'), (4, 'Liberação e envio')]
 CHAVES_TELA = [f[0] for f in FUNCOES]
 
@@ -784,3 +785,272 @@ def pedido_desligamento_decidir(request, pk):
     except sv.RegraAcess as exc:
         _erro(request, exc)
     return _voltar(request, reverse('acess:desligamentos'))
+
+
+# ── Popups "login com erro" (quem tem popups.gerenciar) ─────────────────────
+def _campanha_do_post(request, campanha):
+    """Preenche a campanha com o formulário. Devolve (campanha, setores, erros)."""
+    p = request.POST
+    erros = []
+    campanha.titulo = (p.get('titulo') or '').strip()[:150]
+    campanha.pergunta = (p.get('pergunta') or '').strip()[:1000] or 'Você tem algum login com erro?'
+    validas = dict(User.HIERARCHY_CHOICES)
+    campanha.hierarquias = [h for h in dict.fromkeys(p.getlist('hierarquias')) if h in validas]
+    campanha.ativo = p.get('ativo') == 'on'
+    datas = {}
+    for campo in ('inicio', 'fim'):
+        bruto = (p.get(campo) or '').strip()
+        valor = parse_datetime(bruto) if bruto else None
+        if bruto and valor is None:
+            erros.append('Data/hora inválida em "%s".' % ('Exibir a partir de' if campo == 'inicio' else 'Exibir até'))
+        if valor is not None and timezone.is_naive(valor):
+            valor = timezone.make_aware(valor)
+        datas[campo] = valor
+    campanha.inicio, campanha.fim = datas['inicio'], datas['fim']
+    if not campanha.titulo:
+        erros.append('Dê um título ao popup.')
+    if campanha.inicio and campanha.fim and campanha.fim <= campanha.inicio:
+        erros.append('"Exibir até" precisa ser depois de "Exibir a partir de".')
+    setores = list(Sector.objects.filter(pk__in=[i for i in map(_int, p.getlist('setores')) if i]))
+    return campanha, setores, erros
+
+
+def _form_campanha(request, campanha, setores_marcados, erros=None):
+    from .popup_login import publico_qs
+    return render(request, 'acess/popup_form.html', _ctx(
+        request, 'popups', campanha=campanha, erros=erros or [], setores=Sector.objects.order_by('name'),
+        marcados={s.id for s in setores_marcados}, hierarquias=User.HIERARCHY_CHOICES,
+        publico=publico_qs(campanha).count() if campanha.pk else None))
+
+
+@login_required
+@exige('popups.gerenciar')
+def popups(request):
+    from .models import CampanhaLoginErro, RespostaLoginErro
+    from .popup_login import publico_qs
+
+    campanhas = list(CampanhaLoginErro.objects.select_related('criado_por').prefetch_related('setores'))
+    por_situacao = {}
+    for linha in RespostaLoginErro.objects.order_by().values('campanha_id', 'situacao').annotate(n=Count('id')):
+        por_situacao.setdefault(linha['campanha_id'], {})[linha['situacao']] = linha['n']
+    agora = timezone.now()
+    for c in campanhas:
+        s = por_situacao.get(c.id, {})
+        c.n_publico = publico_qs(c).count()
+        c.n_com_erro, c.n_sem_erro = s.get(RespostaLoginErro.COM_ERRO, 0), s.get(RespostaLoginErro.SEM_ERRO, 0)
+        c.n_respondidas = c.n_com_erro + c.n_sem_erro
+        c.n_sem_resposta = max(c.n_publico - c.n_respondidas, 0)
+        c.esta_no_ar = c.no_ar(agora)
+        c.rotulos_hierarquia = [dict(User.HIERARCHY_CHOICES).get(h, h) for h in c.hierarquias or []]
+    return render(request, 'acess/popups.html', _ctx(request, 'popups', campanhas=campanhas))
+
+
+@login_required
+@exige('popups.gerenciar')
+def popup_nova(request):
+    from .models import CampanhaLoginErro
+    from .popup_login import limpar_cache_campanhas
+
+    campanha = CampanhaLoginErro(ativo=True)
+    if request.method == 'POST':
+        campanha, setores, erros = _campanha_do_post(request, campanha)
+        if erros:
+            return _form_campanha(request, campanha, setores, erros)
+        campanha.criado_por = request.user
+        campanha.save()
+        campanha.setores.set(setores)
+        limpar_cache_campanhas()
+        sv.registrar(request, 'POPUP_LOGIN_CRIADO', 'ADMIN', f'Criou o popup de login com erro "{campanha.titulo}"')
+        messages.success(request, f'Popup "{campanha.titulo}" criado.')
+        return redirect('acess:popup_respostas', pk=campanha.pk)
+    return _form_campanha(request, campanha, [])
+
+
+@login_required
+@exige('popups.gerenciar')
+def popup_editar(request, pk):
+    from .models import CampanhaLoginErro
+    from .popup_login import limpar_cache_campanhas
+
+    campanha = get_object_or_404(CampanhaLoginErro, pk=pk)
+    if request.method == 'POST':
+        campanha, setores, erros = _campanha_do_post(request, campanha)
+        if erros:
+            return _form_campanha(request, campanha, setores, erros)
+        campanha.save()
+        campanha.setores.set(setores)
+        limpar_cache_campanhas()
+        sv.registrar(request, 'POPUP_LOGIN_ALTERADO', 'ADMIN', f'Alterou o popup de login com erro "{campanha.titulo}"')
+        messages.success(request, 'Popup salvo.')
+        return redirect('acess:popup_respostas', pk=campanha.pk)
+    return _form_campanha(request, campanha, list(campanha.setores.all()))
+
+
+@login_required
+@exige('popups.gerenciar')
+@require_POST
+def popup_alternar(request, pk):
+    from .models import CampanhaLoginErro
+    from .popup_login import limpar_cache_campanhas
+
+    campanha = get_object_or_404(CampanhaLoginErro, pk=pk)
+    campanha.ativo = not campanha.ativo
+    campanha.save(update_fields=['ativo', 'atualizado_em'])
+    limpar_cache_campanhas()
+    sv.registrar(request, 'POPUP_LOGIN_' + ('ATIVADO' if campanha.ativo else 'DESATIVADO'), 'ADMIN',
+                 f'{"Ativou" if campanha.ativo else "Desativou"} o popup de login com erro "{campanha.titulo}"')
+    messages.success(request, f'Popup "{campanha.titulo}" {"ativado" if campanha.ativo else "desativado"}.')
+    return _voltar(request, reverse('acess:popups'))
+
+
+SITUACOES_FILTRO = [('', 'Todas as respostas'), ('COM_ERRO', 'Com erro'), ('SEM_ERRO', 'Sem erro'),
+                    ('ADIADO', 'Pediram para lembrar depois'), ('PENDENTE', 'Sem resposta')]
+
+
+@login_required
+@exige('popups.gerenciar')
+def popup_respostas(request, pk):
+    from .models import CampanhaLoginErro, ItemLoginErro, RespostaLoginErro
+    from .popup_login import publico_qs, telefone_formatado
+
+    campanha = get_object_or_404(CampanhaLoginErro.objects.prefetch_related('setores'), pk=pk)
+    f = {k: (request.GET.get(k) or '').strip() for k in ('situacao', 'sistema', 'setor', 'q')}
+    if f['situacao'] not in dict(SITUACOES_FILTRO):
+        f['situacao'] = ''
+    publico = publico_qs(campanha)
+    respostas_qs = RespostaLoginErro.objects.filter(campanha=campanha)
+
+    # Números do topo (sem os filtros da lista).
+    contagem = dict(respostas_qs.order_by().values_list('situacao').annotate(n=Count('id')))
+    n_publico = publico.count()
+    n_respondidas = contagem.get('COM_ERRO', 0) + contagem.get('SEM_ERRO', 0)
+    por_sistema = list(ItemLoginErro.objects.filter(resposta__campanha=campanha).values('sistema')
+                       .annotate(n=Count('id')).order_by('-n', 'sistema'))
+
+    pendentes = None
+    if f['situacao'] == 'PENDENTE':
+        pendentes = (publico.exclude(id__in=respostas_qs.filter(situacao__in=('COM_ERRO', 'SEM_ERRO'))
+                                     .values('usuario_id')).select_related('sector').order_by('first_name', 'last_name'))
+        if f['setor'].isdigit():
+            pendentes = pendentes.filter(sector_id=int(f['setor']))
+        if f['q']:
+            pendentes = pendentes.filter(Q(first_name__icontains=f['q']) | Q(last_name__icontains=f['q'])
+                                         | Q(email__icontains=f['q']))
+        lista = pendentes
+    else:
+        lista = respostas_qs.select_related('usuario', 'setor', 'solicitacao').prefetch_related('itens')
+        if f['situacao']:
+            lista = lista.filter(situacao=f['situacao'])
+        if f['sistema'] in SISTEMAS:
+            lista = lista.filter(itens__sistema=f['sistema']).distinct()
+        if f['setor'].isdigit():
+            lista = lista.filter(setor_id=int(f['setor']))
+        if f['q']:
+            lista = lista.filter(Q(usuario__first_name__icontains=f['q']) | Q(usuario__last_name__icontains=f['q'])
+                                 | Q(usuario__email__icontains=f['q']))
+
+    formato = request.GET.get('exportar')
+    if formato in ('xlsx', 'csv'):
+        return _exportar_respostas(request, campanha, lista, pendentes is not None, formato, telefone_formatado)
+
+    pagina = Paginator(lista, 50).get_page(request.GET.get('p'))
+    for r in (pagina.object_list if pendentes is None else []):
+        r.itens_lista = list(r.itens.all())
+        for i in r.itens_lista:
+            i.telefone_fmt = telefone_formatado(i.telefone)
+    hierarquias = dict(User.HIERARCHY_CHOICES)
+    filtros = request.GET.copy()
+    filtros.pop('p', None)
+    filtros.pop('exportar', None)
+    return render(request, 'acess/popup_respostas.html', _ctx(
+        request, 'popups', campanha=campanha, f=f, situacoes=SITUACOES_FILTRO, sistemas_lista=SISTEMAS,
+        setores=Sector.objects.filter(id__in=publico.values('sector_id')).order_by('name'),
+        pagina=pagina, linhas=pagina.object_list, so_pendentes=pendentes is not None,
+        n_publico=n_publico, n_respondidas=n_respondidas, n_sem_resposta=max(n_publico - n_respondidas, 0),
+        n_com_erro=contagem.get('COM_ERRO', 0), n_sem_erro=contagem.get('SEM_ERRO', 0),
+        n_adiado=contagem.get('ADIADO', 0), por_sistema=por_sistema,
+        rotulos_hierarquia=[hierarquias.get(h, h) for h in campanha.hierarquias or []],
+        filtros_url=filtros.urlencode()))
+
+
+def _exportar_respostas(request, campanha, lista, so_pendentes, formato, telefone_formatado):
+    hierarquias = dict(User.HIERARCHY_CHOICES)
+    if so_pendentes:
+        cab = ['Nome', 'E-mail', 'Setor', 'Hierarquia']
+        linhas = [[u.get_full_name(), u.email, u.sector.name if u.sector_id else '', hierarquias.get(u.hierarchy, u.hierarchy)]
+                  for u in lista]
+    else:
+        cab = ['Nome', 'E-mail', 'Setor', 'Hierarquia', 'Situação', 'Sistema', 'Telefone', 'E-mail informado',
+               'Descrição', 'Solicitação', 'Respondido em']
+        linhas = []
+        for r in lista:
+            base = [r.usuario.get_full_name(), r.usuario.email, r.setor.name if r.setor_id else '',
+                    hierarquias.get(r.hierarquia, r.hierarquia), r.get_situacao_display()]
+            fim = [r.solicitacao.numero if r.solicitacao_id else '',
+                   timezone.localtime(r.respondido_em).strftime('%d/%m/%Y %H:%M')]
+            itens = list(r.itens.all())
+            if not itens:
+                linhas.append(base + ['', '', '', ''] + fim)
+            for i in itens:
+                linhas.append(base + [i.sistema, telefone_formatado(i.telefone), i.email, i.descricao] + fim)
+    nome = f'popup-login-{campanha.pk}-{timezone.localdate():%Y-%m-%d}'
+    sv.registrar(request, 'EXPORTAR_POPUP_LOGIN', 'ADMIN', f'Exportou as respostas do popup "{campanha.titulo}"')
+    if formato == 'csv':
+        import csv
+        buf = io.StringIO()
+        escritor = csv.writer(buf, delimiter=';')
+        escritor.writerow(cab)
+        for linha in linhas:
+            # Nada vira fórmula ao abrir no Excel.
+            escritor.writerow([("'" + str(v)) if str(v)[:1] in ('=', '+', '-', '@') else v for v in linha])
+        resp = HttpResponse('﻿' + buf.getvalue(), content_type='text/csv; charset=utf-8')
+        resp['Content-Disposition'] = f'attachment; filename="{nome}.csv"'
+        return resp
+    from openpyxl import Workbook
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Respostas' if not so_pendentes else 'Sem resposta'
+    ws.append(cab)
+    for linha in linhas:
+        ws.append([str(v or '') for v in linha])
+    for row in ws.iter_rows(min_row=1):
+        for cel in row:
+            cel.data_type = 's'
+    ws.freeze_panes = 'A2'
+    ws.auto_filter.ref = ws.dimensions
+    buf = io.BytesIO()
+    wb.save(buf)
+    resp = HttpResponse(buf.getvalue(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    resp['Content-Disposition'] = f'attachment; filename="{nome}.xlsx"'
+    return resp
+
+
+@login_required
+@require_POST
+def popup_login_responder(request, pk):
+    """A resposta da pessoa ao popup (JSON). Qualquer usuário do público da campanha."""
+    import json
+
+    from .models import CampanhaLoginErro
+    from .popup_login import responder
+
+    campanha = get_object_or_404(CampanhaLoginErro, pk=pk)
+    try:
+        corpo = json.loads(request.body or b'{}')
+        if not isinstance(corpo, dict):
+            raise ValueError
+        r = responder(request.user, campanha, corpo.get('resposta'), corpo.get('itens'), request)
+    except ValueError:
+        return JsonResponse({'ok': False, 'erro': 'Envio inválido.'}, status=400)
+    except sv.RegraAcess as exc:
+        return JsonResponse({'ok': False, 'erro': str(exc)}, status=400)
+    if r.situacao == r.ADIADO:
+        msg = 'Combinado: perguntamos de novo amanhã.'
+    elif r.situacao == r.SEM_ERRO:
+        msg = 'Obrigado! Que bom que está tudo certo.'
+    elif r.solicitacao_id:
+        msg = f'Recebemos. O time de Acessos vai tratar o pedido {r.solicitacao.numero}; acompanhe pelo Suporte.'
+    else:
+        msg = 'Recebemos. O time de Acessos vai entrar em contato.'
+    return JsonResponse({'ok': True, 'situacao': r.situacao, 'msg': msg,
+                         'solicitacao': r.solicitacao.numero if r.solicitacao_id else ''})

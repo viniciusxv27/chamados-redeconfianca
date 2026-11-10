@@ -653,9 +653,19 @@ def _brl(v):
     return 'R$ ' + texto.replace(',', '_').replace('.', ',').replace('_', '.')
 
 
+def ve_resultados_da_rede(user):
+    """Painel Parciais completo: todos, menos a hierarquia PADRÃO (10/11/2026).
+
+    Antes era só o SUPERADMIN. Quem é PADRÃO continua vendo só os próprios números.
+    """
+    if not (user and getattr(user, 'is_authenticated', False)):
+        return False
+    return _e_superadmin(user) or (getattr(user, 'hierarchy', '') or 'PADRAO') != 'PADRAO'
+
+
 def _resultados_comerciais(user, args):
-    if not _e_superadmin(user):
-        # Quem não é SUPERADMIN vê só os próprios resultados — aba e scope não abrem nada além disso.
+    if not ve_resultados_da_rede(user):
+        # PADRÃO vê só os próprios resultados — aba e scope não abrem nada além disso.
         return _meus_resultados(user, args)
 
     import datetime
@@ -807,10 +817,11 @@ TOOLS = {
     'resultados_comerciais': {
         'fn': _resultados_comerciais,
         'description': (
-            'Resultados comerciais (painel Parciais Vivo). Para quem NÃO é SUPERADMIN, devolve só os resultados '
-            'DO PRÓPRIO usuário (a linha dele nos microindicadores, o realizado dele por pilar no mês e as metas dele '
-            'de consultor), sem loja, rede ou colegas — aba e scope são ignorados. Para SUPERADMIN, '
-            'lê ao vivo qualquer aba do painel e traz os números. Use o parâmetro "aba": '
+            'Resultados comerciais (painel Parciais Vivo). Para usuário de hierarquia PADRÃO, devolve só os '
+            'resultados DO PRÓPRIO usuário (a linha dele nos microindicadores, o realizado dele por pilar no mês e as '
+            'metas dele de consultor), sem loja, rede ou colegas — aba e scope são ignorados. Para as demais '
+            'hierarquias (administrativo, supervisor, administração, SUPERADMIN), lê ao vivo qualquer aba do painel '
+            'e traz os números. Use o parâmetro "aba": '
             '"resumo" (visão geral do dia por pilar: móvel, fixa, smartphone, eletrônicos, '
             'essenciais, seguro, sva — realizado x meta e atingimento), "resultados" '
             '(ranking completo por loja em cada pilar), "meta_dia", "banda_larga" '

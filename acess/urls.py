@@ -31,4 +31,10 @@ urlpatterns = [
     path('desligamentos/inativado/<int:pk>/', views.inativacao_decidir, name='inativacao_decidir'),
     path('mensagens/', views.mensagens, name='mensagens'),
     path('acessos/', views.acessos, name='acessos'),
+    path('popups/', views.popups, name='popups'),
+    path('popups/novo/', views.popup_nova, name='popup_nova'),
+    path('popups/<int:pk>/', views.popup_respostas, name='popup_respostas'),
+    path('popups/<int:pk>/editar/', views.popup_editar, name='popup_editar'),
+    path('popups/<int:pk>/alternar/', views.popup_alternar, name='popup_alternar'),
+    path('popup-login/<int:pk>/responder/', views.popup_login_responder, name='popup_login_responder'),
 ]

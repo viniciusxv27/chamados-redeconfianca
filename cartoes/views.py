@@ -327,7 +327,8 @@ def cartao_extrato(request, pk):
         qs = qs.filter(data_gasto__gte=inicio)
     if fim:
         qs = qs.filter(data_gasto__lte=fim)
-    gastos = list(qs.order_by('-data_gasto', '-created_at'))
+    # Extrato na ordem em que os gastos foram lançados, o mais recente primeiro (10/11/2026).
+    gastos = list(qs.order_by('-created_at', '-id'))
     total = sum((g.valor for g in gastos), Decimal('0'))
 
     categorias = {}

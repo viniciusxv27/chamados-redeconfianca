@@ -369,3 +369,76 @@ class PedidoDesligamento(models.Model):
         verbose_name = 'Pedido de desligamento'
         verbose_name_plural = 'Pedidos de desligamento'
         ordering = ['-criado_em']
+
+
+class CampanhaLoginErro(models.Model):
+    """Popup do Acess no portal: pergunta a um público (setor/hierarquia) se há login com erro.
+
+    Quem responde "sim" escolhe o sistema (os mesmos da ficha) e conta o problema; cada resposta com erro
+    vira um pedido em Solicitações, como os da janela de Suporte. Aparece na home, depois dos popups de
+    /popups/, até a pessoa responder ("Lembrar depois" adia para o dia seguinte).
+    """
+
+    titulo = models.CharField('Título', max_length=150)
+    pergunta = models.TextField('Pergunta / mensagem', max_length=1000, default='Você tem algum login com erro?')
+    setores = models.ManyToManyField('users.Sector', blank=True, related_name='+', verbose_name='Setores',
+                                     help_text='Setor principal da pessoa. Vazio = todos os setores.')
+    hierarquias = models.JSONField('Hierarquias', default=list, blank=True,
+                                   help_text='Códigos de User.HIERARCHY_CHOICES. Vazio = todas.')
+    ativo = models.BooleanField(default=True)
+    inicio = models.DateTimeField('Exibir a partir de', null=True, blank=True)
+    fim = models.DateTimeField('Exibir até', null=True, blank=True)
+    criado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name='+')
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-criado_em']
+        verbose_name = 'Popup de login com erro'
+        verbose_name_plural = 'Popups de login com erro'
+
+    def __str__(self):
+        return self.titulo
+
+    def no_ar(self, agora=None):
+        agora = agora or timezone.now()
+        return self.ativo and not (self.inicio and agora < self.inicio) and not (self.fim and agora > self.fim)
+
+
+class RespostaLoginErro(models.Model):
+    """Uma por pessoa e campanha. ADIADO = "Lembrar depois" (volta a aparecer em ``adiado_ate``)."""
+
+    SEM_ERRO, COM_ERRO, ADIADO = 'SEM_ERRO', 'COM_ERRO', 'ADIADO'
+    SITUACOES = [(SEM_ERRO, 'Sem erro'), (COM_ERRO, 'Com erro'), (ADIADO, 'Lembrar depois')]
+
+    campanha = models.ForeignKey(CampanhaLoginErro, on_delete=models.CASCADE, related_name='respostas')
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='+')
+    situacao = models.CharField(max_length=10, choices=SITUACOES, db_index=True)
+    adiado_ate = models.DateField(null=True, blank=True)
+    setor = models.ForeignKey('users.Sector', on_delete=models.SET_NULL, null=True, blank=True, related_name='+',
+                              help_text='Setor principal na hora da resposta.')
+    hierarquia = models.CharField(max_length=20, blank=True)
+    solicitacao = models.ForeignKey(Solicitacao, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    respondido_em = models.DateTimeField(default=timezone.now, db_index=True)
+
+    class Meta:
+        ordering = ['-respondido_em']
+        unique_together = ('campanha', 'usuario')
+
+    @property
+    def respondida(self):
+        return self.situacao in (self.SEM_ERRO, self.COM_ERRO)
+
+
+class ItemLoginErro(models.Model):
+    """Um sistema com erro numa resposta. Pool de cobrança traz telefone e e-mail; os outros, a descrição."""
+
+    resposta = models.ForeignKey(RespostaLoginErro, on_delete=models.CASCADE, related_name='itens')
+    sistema = models.CharField(max_length=40)
+    telefone = models.CharField(max_length=20, blank=True)
+    email = models.CharField('E-mail', max_length=254, blank=True)
+    descricao = models.TextField('Descrição', max_length=1000, blank=True)
+
+    class Meta:
+        ordering = ['id']

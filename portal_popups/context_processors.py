@@ -74,6 +74,22 @@ def tem_popup_bloqueante_pendente(user):
         return False
 
 
+def _com_popup_do_acess(ctx, user, is_home):
+    """Na home, sem popup de /popups/ na vez: o popup "login com erro" do Acess, se houver.
+
+    Fica atrás dos popups daqui (um por vez, sem sobrepor) e só roda na home — nas outras páginas não
+    custa nada. Qualquer erro some com ele em silêncio, como o resto desta camada.
+    """
+    if not is_home:
+        return ctx
+    try:
+        from acess.popup_login import campanha_pendente
+        campanha = campanha_pendente(user)
+    except Exception:
+        campanha = None
+    return dict(ctx, acess_popup_login=campanha) if campanha else ctx
+
+
 def portal_popup_gate(request):
     empty = {'portal_popup': None, 'portal_popup_blocking': False}
 
@@ -115,7 +131,7 @@ def portal_popup_gate(request):
             pending.append(popup)
 
         if not pending:
-            return empty
+            return _com_popup_do_acess(empty, user, is_home)
 
         # Bloqueantes têm prioridade e são exigidos em sequência (por 'order').
         # Se o usuário está na página de ação do primeiro bloqueante pendente,

@@ -346,6 +346,25 @@ try:
     j = vender({'cliente': {'cpf': CPF, 'nome': 'Zz Cliente Teste'}, 'linhas': ['27998765432'],
                 'servicos': [{'tipo': 'REATIVACAO', 'plano_id': pos.id, 'portabilidade': True, 'operadora_origem': 'OI'}]})
     t('portabilidade só vale para Alta', not j.get('ok') or not VendaServico.objects.get(venda_id=j['id']).portabilidade, j)
+    print('== FIBRA: NÚMERO DA ORDEM (10/11) ==')
+    fibra_plano = Plano.objects.create(nome='ZZ Fibra 500MB', segmentacao='FIBRA', valor=D('99.90'))
+    j = vender({'cliente': {'cpf': CPF, 'nome': 'Zz Cliente Teste'}, 'linhas': ['27998765432'],
+                'servicos': [{'tipo': 'ALTA', 'plano_id': fibra_plano.id}]})
+    t('fibra sem número da ordem é recusada', not j['ok'] and 'número da ordem' in ' '.join(j['erros']), j)
+    j = vender({'cliente': {'cpf': CPF, 'nome': 'Zz Cliente Teste'}, 'linhas': ['27998765432'],
+                'servicos': [{'tipo': 'ALTA', 'plano_id': fibra_plano.id, 'numero_ordem': 'ordem<script>'}]})
+    t('número da ordem com caractere estranho é recusado', not j['ok'])
+    j = vender({'cliente': {'cpf': CPF, 'nome': 'Zz Cliente Teste'}, 'linhas': ['27998765432'],
+                'servicos': [{'tipo': 'ALTA', 'plano_id': fibra_plano.id, 'numero_ordem': ' 8037 382808 '}]})
+    sf = VendaServico.objects.get(venda_id=j['id']) if j.get('ok') else None
+    t('fibra com ordem grava o número (sem espaços)', sf and sf.numero_ordem == '8037382808', j)
+    if sf:
+        t('detalhe da venda mostra a ordem', 'ordem 8037382808' in cv.get(f'/vendas/{j["id"]}/').content.decode())
+    j = vender({'cliente': {'cpf': CPF, 'nome': 'Zz Cliente Teste'}, 'linhas': ['27998765432'],
+                'servicos': [{'tipo': 'ALTA', 'plano_id': pos.id, 'numero_ordem': '999999'}]})
+    t('fora da fibra a ordem não é exigida nem gravada', j.get('ok') and VendaServico.objects.get(venda_id=j['id']).numero_ordem == '', j)
+    h = cv.get('/vendas/nova/').content.decode()
+    t('formulário tem o campo da ordem de fibra', 'campoOrdemFibra' in h and 'data-f="numero_ordem"' in h)
     h = cv.get('/vendas/nova/').content.decode()
     t('formulário tem o campo de portabilidade', 'campoPortabilidade' in h and "['OUTROS', 'Outros']" in h)
 

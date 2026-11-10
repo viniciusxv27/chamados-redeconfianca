@@ -575,6 +575,47 @@ def historico_valido(bruto):
 LIMITE_MATERIAL = 12000     # o material vai junto da pergunta: não pode engolir o contexto do Claude
 
 
+# Sem "spam" de POP e vídeo (10/11/2026): a busca da orientação só roda quando a pergunta
+# pede um como-fazer, um POP, um vídeo, um processo ou um chamado; e a janela só mostra os
+# cartões que a resposta usou (ver filtrar_cartoes).
+PALAVRAS_DE_ORIENTACAO = {
+    'como', 'onde', 'passo', 'pop', 'pops', 'procedimento', 'manual', 'video', 'videos', 'treinamento',
+    'tutorial', 'processo', 'regra', 'politica', 'documento', 'modelo', 'formulario', 'abrir', 'abro',
+    'solicitar', 'solicito', 'pedir', 'peco', 'cadastrar', 'cadastro', 'lancar', 'lanco', 'fazer', 'faco',
+    'chamado', 'suporte', 'erro', 'problema', 'ajuda', 'trilha', 'curso', 'instrucao', 'orientacao',
+}
+PEDE_MATERIAL = {'pop', 'pops', 'procedimento', 'manual', 'video', 'videos', 'treinamento', 'tutorial',
+                 'trilha', 'curso', 'documento', 'modelo', 'formulario', 'instrucao'}
+PEDE_CHAMADO = {'chamado', 'suporte', 'erro', 'problema', 'consigo', 'quebrou', 'travou', 'falha'}
+
+
+def _palavras(texto):
+    return set(normalizar(texto).split())
+
+
+def pede_orientacao(pergunta):
+    return bool(_palavras(pergunta) & PALAVRAS_DE_ORIENTACAO)
+
+
+def filtrar_cartoes(pergunta, resposta, tela):
+    """Só os cartões que a resposta usou (título ou link citado). Pediu POP/vídeo explicitamente
+    e a resposta não citou: os 2 primeiros. O chamado só quando o assunto é chamado/erro ou a
+    resposta manda abrir um."""
+    resp = normalizar(resposta)
+
+    def citado(c):
+        titulo = normalizar(c.get('titulo') or '')
+        return (len(titulo) >= 4 and titulo in resp) or (c.get('url') and c['url'] in (resposta or ''))
+
+    fontes = [c for c in tela.get('fontes') or [] if citado(c)]
+    paginas = [c for c in tela.get('paginas') or [] if citado(c)]
+    palavras = _palavras(pergunta)
+    if not fontes and palavras & PEDE_MATERIAL:
+        fontes = (tela.get('fontes') or [])[:2]
+    chamado = tela.get('chamado') if (palavras & PEDE_CHAMADO or 'chamado' in resp) else None
+    return {'fontes': fontes, 'paginas': paginas, 'chamado': chamado}
+
+
 def material_para_claude(request, pergunta, historico=None):
     """A busca da orientação, pronta para ir junto da pergunta ao Claude.
 
@@ -583,6 +624,9 @@ def material_para_claude(request, pergunta, historico=None):
     entra o que a pessoa pode abrir.
     """
     historico = historico or []
+    if not pede_orientacao(pergunta):
+        # "Qual meu banco de horas?": nada de POP/vídeo/chamado — o Claude responde com as ferramentas.
+        return '', {'fontes': [], 'paginas': [], 'chamado': None}
     ctx = Contexto(request)
     fontes = buscar(ctx, pergunta)
     if not fontes:
@@ -599,8 +643,9 @@ def material_para_claude(request, pergunta, historico=None):
     bloco = ''
     if fontes:
         bloco = ('\n\n---\nMATERIAL DO PORTAL (busca da orientação; só o que esta pessoa pode abrir). '
-                 'Use se ajudar a responder: siga o passo a passo dos POPs e cite pelo título; os links '
-                 'aparecem como cartões abaixo da sua resposta.\n' + _bloco_de_fontes(fontes))[:LIMITE_MATERIAL]
+                 'Use SÓ se ajudar a responder: siga o passo a passo dos POPs e cite pelo título exato o que '
+                 'você usou — só o que você citar vira cartão abaixo da resposta. Não liste POPs, vídeos ou '
+                 'treinamentos que a pessoa não pediu.\n' + _bloco_de_fontes(fontes))[:LIMITE_MATERIAL]
     tela = {
         'fontes': [_para_a_tela(f) for f in fontes if f['tipo'] != 'pagina'],
         'paginas': [_para_a_tela(f) for f in fontes if f['tipo'] == 'pagina'],

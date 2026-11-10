@@ -1,0 +1,100 @@
+{% extends 'acess/base.html' %}
+{% block ac_titulo %}Acess · {{ campanha.titulo }}{% endblock %}
+{% block ac_cabecalho %}{{ campanha.titulo }}{% endblock %}
+{% block ac_subtitulo %}{% for s in campanha.setores.all %}{{ s.name }}{% if not forloop.last %}, {% endif %}{% empty %}Todos os setores{% endfor %} · {{ rotulos_hierarquia|join:", "|default:"Todas as hierarquias" }}{% if not campanha.ativo %} · desativado{% endif %}{% endblock %}
+{% block ac_acoes %}
+<a href="{% url 'acess:popups' %}" class="ac-btn ac-btn-claro"><i class="fas fa-arrow-left"></i>Popups</a>
+<a href="{% url 'acess:popup_editar' campanha.id %}" class="ac-btn ac-btn-claro"><i class="fas fa-pen"></i>Editar</a>
+<form method="post" action="{% url 'acess:popup_alternar' campanha.id %}">{% csrf_token %}<input type="hidden" name="voltar" value="{{ request.get_full_path }}">
+    <button class="ac-btn ac-btn-claro">{% if campanha.ativo %}<i class="fas fa-pause"></i>Desativar{% else %}<i class="fas fa-play"></i>Ativar{% endif %}</button>
+</form>
+{% endblock %}
+
+{% block ac_conteudo %}
+<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mb-4 text-center">
+    <div class="ac-card p-3"><p class="text-xl font-bold tabular text-gray-900">{{ n_publico }}</p><p class="text-[11px] text-gray-500">No público</p></div>
+    <div class="ac-card p-3"><p class="text-xl font-bold tabular text-gray-900">{{ n_respondidas }}</p><p class="text-[11px] text-gray-500">Responderam</p></div>
+    <a href="?situacao=PENDENTE" class="ac-card p-3 hover:border-amber-300"><p class="text-xl font-bold tabular text-gray-900">{{ n_sem_resposta }}</p><p class="text-[11px] text-gray-500">Sem resposta</p></a>
+    <a href="?situacao=ADIADO" class="ac-card p-3 hover:border-amber-300"><p class="text-xl font-bold tabular text-gray-900">{{ n_adiado }}</p><p class="text-[11px] text-gray-500">Lembrar depois</p></a>
+    <a href="?situacao=SEM_ERRO" class="ac-card p-3 hover:border-amber-300"><p class="text-xl font-bold tabular text-emerald-700">{{ n_sem_erro }}</p><p class="text-[11px] text-gray-500">Sem erro</p></a>
+    <a href="?situacao=COM_ERRO" class="ac-card p-3 hover:border-amber-300 !bg-amber-50"><p class="text-xl font-bold tabular text-amber-800">{{ n_com_erro }}</p><p class="text-[11px] text-amber-700">Com erro</p></a>
+</div>
+
+{% if por_sistema %}
+<div class="ac-card p-3 mb-4">
+    <p class="text-[11px] uppercase font-semibold text-gray-500 mb-2">Erros por sistema</p>
+    <div class="flex flex-wrap gap-1.5">
+        {% for s in por_sistema %}<a href="?situacao=COM_ERRO&sistema={{ s.sistema|urlencode }}" class="ac-chip {% if f.sistema == s.sistema %}bg-amber-500 text-white{% else %}bg-amber-50 text-amber-800 hover:bg-amber-100{% endif %}">{{ s.sistema }} <span class="tabular">{{ s.n }}</span></a>{% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<form method="get" class="ac-card p-3 mb-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 items-end">
+    <div><label class="ac-label" for="fr-sit">Situação</label>
+        <select id="fr-sit" name="situacao" class="ac-input">{% for v, r in situacoes %}<option value="{{ v }}" {% if f.situacao == v %}selected{% endif %}>{{ r }}</option>{% endfor %}</select></div>
+    <div><label class="ac-label" for="fr-sis">Sistema</label>
+        <select id="fr-sis" name="sistema" class="ac-input"><option value="">Todos</option>{% for s in sistemas_lista %}<option value="{{ s }}" {% if f.sistema == s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></div>
+    <div><label class="ac-label" for="fr-set">Setor</label>
+        <select id="fr-set" name="setor" class="ac-input"><option value="">Todos</option>{% for s in setores %}<option value="{{ s.id }}" {% if f.setor == s.id|stringformat:'s' %}selected{% endif %}>{{ s.name }}</option>{% endfor %}</select></div>
+    <div><label class="ac-label" for="fr-q">Pessoa</label>
+        <input id="fr-q" name="q" value="{{ f.q }}" class="ac-input" placeholder="Nome ou e-mail"></div>
+    <div class="flex gap-1.5 flex-wrap">
+        <button class="ac-btn ac-btn-pri"><i class="fas fa-filter"></i>Filtrar</button>
+        <a href="?{{ filtros_url }}{% if filtros_url %}&{% endif %}exportar=xlsx" class="ac-btn ac-btn-claro" title="Exportar a lista filtrada em Excel"><i class="fas fa-file-excel"></i>Excel</a>
+        <a href="?{{ filtros_url }}{% if filtros_url %}&{% endif %}exportar=csv" class="ac-btn ac-btn-claro" title="Exportar a lista filtrada em CSV">CSV</a>
+    </div>
+</form>
+
+{% if so_pendentes %}
+<div class="ac-card overflow-hidden">
+    <table class="ac-tabela">
+        <thead><tr><th>Pessoa</th><th>Setor</th><th>Hierarquia</th></tr></thead>
+        <tbody>
+        {% for u in linhas %}
+        <tr><td><span class="font-medium text-gray-900">{{ u.get_full_name|default:u.email }}</span><br><span class="text-[11px] text-gray-500">{{ u.email }}</span></td>
+            <td>{{ u.sector.name|default:"—" }}</td><td>{{ u.get_hierarchy_display }}</td></tr>
+        {% empty %}<tr><td colspan="3" class="text-center text-gray-500 py-6">Todo o público já respondeu.</td></tr>{% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="space-y-2">
+    {% for r in linhas %}
+    <div class="ac-card p-3 sm:p-4">
+        <div class="flex items-center gap-2 flex-wrap">
+            <span class="font-semibold text-gray-900">{{ r.usuario.get_full_name|default:r.usuario.email }}</span>
+            <span class="ac-chip {% if r.situacao == 'COM_ERRO' %}bg-amber-100 text-amber-800{% elif r.situacao == 'SEM_ERRO' %}s-OK{% else %}bg-gray-100 text-gray-600{% endif %}">{{ r.get_situacao_display }}</span>
+            {% if r.solicitacao %}<a href="{% url 'acess:solicitacoes' %}?status=todas#sol{{ r.solicitacao_id }}" class="ac-chip bg-indigo-50 text-indigo-700 hover:bg-indigo-100">{{ r.solicitacao.numero }} · {{ r.solicitacao.get_status_display }}</a>{% endif %}
+            <span class="ml-auto text-[11px] text-gray-500 tabular">{{ r.respondido_em|date:"d/m/Y H:i" }}{% if r.situacao == 'ADIADO' and r.adiado_ate %} · volta em {{ r.adiado_ate|date:"d/m" }}{% endif %}</span>
+        </div>
+        <p class="text-xs text-gray-500 mt-0.5"><i class="fas fa-store mr-1 text-gray-400"></i>{{ r.setor.name|default:"Sem setor" }}<span class="mx-1 text-gray-300">·</span>{{ r.usuario.email }}</p>
+        {% if r.itens_lista %}
+        <div class="mt-2 space-y-1.5">
+            {% for i in r.itens_lista %}
+            <div class="rounded-lg bg-gray-50 px-3 py-2 text-sm">
+                <p class="font-semibold text-gray-800">{{ i.sistema }}</p>
+                {% if i.telefone or i.email %}
+                <p class="text-gray-700 break-words"><i class="fas fa-phone mr-1 text-gray-400"></i>{{ i.telefone_fmt }}<button type="button" class="ac-copiar align-middle" data-copiar="{{ i.telefone }}" title="Copiar o telefone" aria-label="Copiar o telefone"><i class="far fa-copy"></i></button>
+                    <span class="mx-1 text-gray-300">·</span><i class="fas fa-envelope mr-1 text-gray-400"></i>{{ i.email }}<button type="button" class="ac-copiar align-middle" data-copiar="{{ i.email }}" title="Copiar o e-mail" aria-label="Copiar o e-mail"><i class="far fa-copy"></i></button></p>
+                {% else %}
+                <p class="text-gray-700 whitespace-pre-line break-words">{{ i.descricao }}</p>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+    {% empty %}
+    <div class="ac-card p-8 text-center text-sm text-gray-500">Nenhuma resposta com esses filtros.</div>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% if pagina.has_other_pages %}
+<div class="flex items-center justify-center gap-2 mt-4 text-sm">
+    {% if pagina.has_previous %}<a href="?{{ filtros_url }}&p={{ pagina.previous_page_number }}" class="ac-btn ac-btn-claro ac-btn-mini">Anterior</a>{% endif %}
+    <span class="text-gray-500">Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span>
+    {% if pagina.has_next %}<a href="?{{ filtros_url }}&p={{ pagina.next_page_number }}" class="ac-btn ac-btn-claro ac-btn-mini">Próxima</a>{% endif %}
+</div>
+{% endif %}
+{% endblock %}
