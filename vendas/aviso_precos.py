@@ -177,8 +177,7 @@ def montar_mensagem(variacao, *, quando=None, nome='', top=TOP_MUDANCAS, limite=
                    f"🚫 Saíram: *{c['removidos']}*"]
         if variacao.get('outros'):
             linhas.append(f"⚙️ Ajustes em parcelas ou grupos: *{variacao['outros']}*")
-        for titulo, itens, mais in (('🔺 *MAIORES ALTAS*', variacao['subiram'], 'subiram'),
-                                    ('🔻 *MAIORES QUEDAS*', variacao['diminuiram'], 'baixaram')):
+        for titulo, itens, mais in (('🔻 *MAIORES QUEDAS*', variacao['diminuiram'], 'baixaram'), ('🔺 *MAIORES ALTAS*', variacao['subiram'], 'subiram')):
             if not itens:
                 continue
             linhas += ['', SEPARADOR, '', titulo, ''] + _itens_whatsapp(itens, n)
