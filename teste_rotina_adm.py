@@ -182,6 +182,59 @@ t('conta só Sem NF aberta e ainda no SAP (2, 1 deste mês)', f['total'] == 2 an
 h = ca.get('/rotina-adm/').content.decode()
 t('o link abre a Visão SAP na aba Sem NF da loja', '/sap/?grupo=sem_nf&mes=todos&loja=GL%C3%93RIA' in h, h[h.find('/sap/'):h.find('/sap/') + 80])
 
+print('Renova da loja (/renova/ e /sap/renova/)')
+from auditoria_sap.models import VendaRenova  # noqa: E402
+from renova import checklist as rn_checklist  # noqa: E402
+from renova.models import Renova  # noqa: E402
+from tickets.models import Ticket  # noqa: E402
+
+
+def avaliacao(loja, **kw):
+    dados = dict(criado_por=adm, marca='APPLE', modelo='iPhone 13', armazenamento='128GB', imei1='356938035643809',
+                 loja=loja, parecer=rn_checklist.APROVADO, vendedor_nome='ZZ Vendedor Renova')
+    dados.update(kw)
+    return Renova.objects.create(**dados)
+
+
+r_aprovar = avaliacao(gloria, aprovacao=Renova.AGUARDANDO_GERENTE)
+r_chegando = avaliacao(gloria, aprovacao=Renova.APROVADA, recebimento=Renova.PENDENTE)
+r_chegou = avaliacao(gloria, aprovacao=Renova.APROVADA, recebimento=Renova.CHEGOU)
+r_nao = avaliacao(gloria, aprovacao=Renova.APROVADA, recebimento=Renova.NAO_CHEGOU)
+r_serra = avaliacao(serra, aprovacao=Renova.AGUARDANDO_GERENTE, modelo='Galaxy Serra')
+rn = servicos.renova_da_loja(gloria)
+t('Renova: números só da loja', rn['disponivel'] and rn['no_mes'] == 4 and rn['a_aprovar'] == 1 and rn['aguardando'] == 1
+  and rn['nao_chegaram'] == 1, rn)
+sit = {i['obj'].pk: i['situacao'] for i in rn['recentes']}
+t('Renova: situação de cada avaliação', sit == {r_aprovar.pk: 'Aguardando gerente', r_chegando.pk: 'Aguardando chegada',
+                                                 r_chegou.pk: 'Chegou', r_nao.pk: 'Não chegou'}, sit)
+tk = Ticket.objects.create(title='ZZ Renova', description='x', sector=escritorio, created_by=adm)
+venda = dict(setor=gloria, loja='GLÓRIA', ativa=True)
+VendaRenova.objects.create(ordem='9000001', cliente_nome='ZZ Cliente Sem', data_fatura=hoje, material='IPHONE 15',
+                           valor_faturado=4999, **venda)
+VendaRenova.objects.create(ordem='9000002', cliente_nome='ZZ Cliente Antigo', data_fatura=date(2025, 1, 5), **venda)
+VendaRenova.objects.create(ordem='9000003', cliente_nome='ZZ Com Chamado', data_fatura=hoje, chamado=tk, **venda)
+VendaRenova.objects.create(ordem='9000004', cliente_nome='ZZ Dispensada', data_fatura=hoje, dispensada=True, **venda)
+VendaRenova.objects.create(ordem='9000005', cliente_nome='ZZ Saiu do SAP', data_fatura=hoje, setor=gloria, ativa=False)
+VendaRenova.objects.create(ordem='9000006', cliente_nome='ZZ Outra Loja', data_fatura=hoje, setor=serra, ativa=True)
+sr = servicos.sap_renova_da_loja(gloria)
+t('SAP: sem chamado (2), no mês (1); do mês, 1 de 3 com chamado', sr['disponivel'] and sr['sem_chamado'] == 2
+  and sr['sem_chamado_mes'] == 1 and sr['mes_total'] == 3 and sr['mes_com_chamado'] == 1, sr)
+t('SAP: lista só as sem chamado da loja, mais recentes primeiro', [v.ordem for v in sr['recentes']] == ['9000001', '9000002'])
+h = ca.get('/rotina-adm/').content.decode()
+t('painel: as duas seções da loja', 'id="raRenova"' in h and 'id="raSapRenova"' in h and r_aprovar.codigo in h
+  and 'Galaxy Serra' not in h and 'ZZ Cliente Sem' in h and 'ZZ Com Chamado' not in h and 'ZZ Outra Loja' not in h)
+t('painel: links já filtrados pela loja', f'/renova/?loja={gloria.id}' in h and f'/sap/renova/?loja={gloria.id}' in h
+  and f'/renova/{r_aprovar.pk}/' in h and f'/sap/renova/?loja={gloria.id}&q=9000001' in h)
+t('painel: valor em reais', 'R$ 4.999,00' in h, h[h.find('9000001'):h.find('9000001') + 300])
+h = ca.get('/rotina-adm/', {'loja': serra.id}).content.decode()
+h2 = cs.get('/rotina-adm/', {'loja': serra.id}).content.decode()
+t('SUPERADMIN troca a loja e vê a Renova dela', 'Galaxy Serra' in h2 and 'ZZ Outra Loja' in h2 and 'ZZ Cliente Sem' not in h2)
+t('ADM não escolhe outra loja (continua a dele)', 'Galaxy Serra' not in h)
+Renova.objects.all().delete()
+VendaRenova.objects.all().delete()
+h = cs.get('/rotina-adm/', {'loja': gloria.id}).content.decode()
+t('loja sem nada: avisos de vazio', 'Nenhuma avaliação feita na loja' in h and 'Nenhuma venda com Renova sem chamado' in h)
+
 print('Check-list')
 r = cg.post('/rotina-adm/checklist/', {'loja': gloria.id, 'acao': 'adicionar', 'titulo': 'Abertura da loja', 'horario': '08:15'})
 cg.post('/rotina-adm/checklist/', {'loja': gloria.id, 'acao': 'adicionar', 'titulo': 'Conferência de estoque', 'horario': ''})

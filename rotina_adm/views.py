@@ -65,6 +65,8 @@ def painel(request):
         contexto.update({
             'chamados_total': chamados.count(), 'chamados': list(chamados[:30]),
             'fiscal': servicos.pendencias_fiscais(loja),
+            'renova': servicos.renova_da_loja(loja),
+            'sap_renova': servicos.sap_renova_da_loja(loja),
             'checklist': servicos.itens_do_dia(loja, hoje),
             'pode_marcar': _pode_marcar(request.user, loja),
         })

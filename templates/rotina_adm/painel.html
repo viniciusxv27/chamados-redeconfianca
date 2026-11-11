@@ -59,6 +59,61 @@
     </article>
 </section>
 
+{# ── Renova da loja: avaliações (/renova/) e ordens ZVNB do SAP (/sap/renova/) ── #}
+<section class="ra-grade-renova">
+    <article class="ra-card ra-secao" id="raRenova">
+        <div class="ra-secao-cabeca">
+            <div class="ra-secao-titulo"><span class="ic" style="background:var(--ra-verde-claro);color:var(--ra-verde)"><i class="fas fa-recycle"></i></span>
+                <div><h2>Renova · avaliações</h2><p>Aparelhos avaliados na {{ loja.name }}</p></div></div>
+            <a class="ra-link" href="{% url 'renova:inicio' %}?loja={{ loja.id }}">Abrir no Renova <i class="fas fa-chevron-right text-[10px]"></i></a>
+        </div>
+        {% if not renova.disponivel %}
+        <div class="ra-vazio"><i class="fas fa-plug"></i>Renova indisponível agora.</div>
+        {% else %}
+        <div class="ra-mini">
+            <div><b>{{ renova.no_mes }}</b><small>neste mês</small></div>
+            <div class="{% if renova.a_aprovar %}amarelo{% endif %}"><b>{{ renova.a_aprovar }}</b><small>aguardando gerente</small></div>
+            <div class="{% if renova.aguardando %}azul{% endif %}"><b>{{ renova.aguardando }}</b><small>aguardando chegada</small></div>
+            <div class="{% if renova.nao_chegaram %}vermelho{% endif %}"><b>{{ renova.nao_chegaram }}</b><small>não chegaram</small></div>
+        </div>
+        {% for i in renova.recentes %}
+        <a class="ra-item" href="{% url 'renova:detalhe' i.obj.pk %}">
+            <span class="meio"><strong>{{ i.obj.codigo }} · {{ i.obj.aparelho }}</strong>
+                <small>{{ i.obj.criado_em|date:"d/m/Y" }}{% if i.obj.vendedor_nome %} · {{ i.obj.vendedor_nome }}{% endif %}</small></span>
+            <span class="ra-selo {{ i.tom }}">{{ i.situacao }}</span>
+        </a>
+        {% empty %}
+        <div class="ra-vazio"><i class="fas fa-mobile-alt"></i>Nenhuma avaliação feita na loja.</div>
+        {% endfor %}
+        {% endif %}
+    </article>
+    <article class="ra-card ra-secao" id="raSapRenova">
+        <div class="ra-secao-cabeca">
+            <div class="ra-secao-titulo"><span class="ic" style="background:var(--ra-azul-claro);color:var(--ra-azul)"><i class="fas fa-file-invoice-dollar"></i></span>
+                <div><h2>Renova no SAP</h2><p>Vendas com Renova (ZVNB) e o chamado de cada uma</p></div></div>
+            <a class="ra-link" href="{% url 'auditoria_sap:renova' %}?loja={{ loja.id }}">Abrir na Visão Renova <i class="fas fa-chevron-right text-[10px]"></i></a>
+        </div>
+        {% if not sap_renova.disponivel %}
+        <div class="ra-vazio"><i class="fas fa-plug"></i>Visão Renova indisponível agora.</div>
+        {% else %}
+        <div class="ra-mini">
+            <div class="{% if sap_renova.sem_chamado %}vermelho{% endif %}"><b>{{ sap_renova.sem_chamado }}</b><small>sem chamado (todas)</small></div>
+            <div class="{% if sap_renova.sem_chamado_mes %}amarelo{% endif %}"><b>{{ sap_renova.sem_chamado_mes }}</b><small>sem chamado no mês</small></div>
+            <div><b>{{ sap_renova.mes_com_chamado }}<span>/{{ sap_renova.mes_total }}</span></b><small>do mês com chamado</small></div>
+        </div>
+        {% for v in sap_renova.recentes %}
+        <a class="ra-item" href="{% url 'auditoria_sap:renova' %}?loja={{ loja.id }}&q={{ v.ordem|urlencode }}">
+            <span class="meio"><strong>Ordem {{ v.ordem }}{% if v.cliente_nome %} · {{ v.cliente_nome }}{% endif %}</strong>
+                <small>{{ v.data_fatura|date:"d/m/Y"|default:"sem data" }}{% if v.material %} · {{ v.material }}{% endif %}{% if v.valor_faturado is not None %} · R$ {{ v.valor_faturado|floatformat:"2g" }}{% endif %}</small></span>
+            <span class="ra-selo vermelho">Sem chamado</span>
+        </a>
+        {% empty %}
+        <div class="ra-vazio"><i class="fas fa-check-circle"></i>Nenhuma venda com Renova sem chamado na loja.</div>
+        {% endfor %}
+        {% endif %}
+    </article>
+</section>
+
 {# ── Contagem de estoque LVUT (exemplo) ── #}
 <section class="ra-card ra-secao">
     <div class="ra-secao-cabeca">
@@ -81,7 +136,7 @@
         {% if link_grupo_adm %}
         <a class="ra-faixa whatsapp" href="{{ link_grupo_adm }}" target="_blank" rel="noopener">
             <span class="ic"><i class="fab fa-whatsapp"></i></span>
-            <div><strong>Grupo dos ADMs no WhatsApp</strong><small>Ficou com dúvida? Peça um help aos outros analistas</small></div>
+            <div><strong>Grupo dos ADMs no WhatsApp</strong><small>Ficou com dúvida? Peça um help aos outros Guardiões</small></div>
             <span class="seta"><i class="fas fa-arrow-up-right-from-square"></i></span></a>
         {% elif superadmin %}
         <a class="ra-faixa whatsapp" href="{% url 'rotina_adm:acessos' %}#raGrupoWhatsapp">

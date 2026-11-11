@@ -49,6 +49,65 @@ def pendencias_fiscais(loja):
         return {'disponivel': False, 'pdvs': [], 'total': 0, 'mes': 0, 'pdv': ''}
 
 
+# ── Renova da loja (/renova/ e /sap/renova/) ────────────────────────────────
+def _situacao_renova(r):
+    """(rótulo, tom do selo) de uma avaliação, na ordem em que ela anda."""
+    if r.reprovada:
+        return 'Reprovada', 'vermelho'
+    if r.aguardando_aprovacao:
+        return 'Aguardando gerente', 'amarelo'
+    if r.recebimento == r.CHEGOU:
+        return 'Chegou', 'verde'
+    if r.recebimento == r.NAO_CHEGOU:
+        return 'Não chegou', 'vermelho'
+    return 'Aguardando chegada', 'azul'
+
+
+def renova_da_loja(loja, limite=5):
+    """Avaliações do Vini Renova (/renova/) feitas na loja: números do mês e as mais recentes."""
+    try:
+        from django.db.models import Count, Q
+
+        from renova import checklist
+        from renova.models import Renova
+        base = Renova.objects.filter(loja=loja)
+        hoje = timezone.localdate()
+        numeros = base.aggregate(
+            no_mes=Count('id', filter=Q(criado_em__year=hoje.year, criado_em__month=hoje.month)),
+            a_aprovar=Count('id', filter=Q(aprovacao=Renova.AGUARDANDO_GERENTE)),
+            aguardando=Count('id', filter=Q(aprovacao=Renova.APROVADA, recebimento=Renova.PENDENTE)
+                             & ~Q(parecer=checklist.NAO_APROVADO)),
+            nao_chegaram=Count('id', filter=Q(recebimento=Renova.NAO_CHEGOU)),
+        )
+        recentes = []
+        for r in base.order_by('-criado_em')[:limite]:
+            rotulo, tom = _situacao_renova(r)
+            recentes.append({'obj': r, 'situacao': rotulo, 'tom': tom})
+        return {'disponivel': True, **numeros, 'recentes': recentes}
+    except Exception:  # noqa: BLE001 — a central não cai se o módulo der erro
+        return {'disponivel': False, 'recentes': []}
+
+
+def sap_renova_da_loja(loja, limite=5):
+    """Vendas com Renova no SAP (ZVNB, /sap/renova/) da loja: as que estão sem chamado de Renova."""
+    try:
+        from auditoria_sap.models import VendaRenova
+        base = VendaRenova.objects.filter(setor=loja, ativa=True)
+        sem = base.filter(chamado__isnull=True, dispensada=False)
+        hoje = timezone.localdate()
+        no_mes = base.filter(data_fatura__year=hoje.year, data_fatura__month=hoje.month)
+        return {
+            'disponivel': True,
+            'sem_chamado': sem.count(),
+            'sem_chamado_mes': sem.filter(data_fatura__year=hoje.year, data_fatura__month=hoje.month).count(),
+            'mes_total': no_mes.count(),
+            'mes_com_chamado': no_mes.filter(chamado__isnull=False).count(),
+            'recentes': list(sem.order_by('-data_fatura', '-ordem')[:limite]),
+        }
+    except Exception:  # noqa: BLE001
+        return {'disponivel': False, 'recentes': []}
+
+
 # ── Check-list ───────────────────────────────────────────────────────────────
 def itens_do_dia(loja, dia):
     """Itens ativos da loja com a marcação do dia (feito, por quem, a que horas)."""
