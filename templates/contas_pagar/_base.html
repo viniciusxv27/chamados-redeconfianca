@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}{% block cp_titulo %}Contas a Pagar{% endblock %} · Rede Confiança{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'contas_pagar/contas_pagar.css' %}?v=2">{% endblock %}
+{% block content %}
+<div class="cp">
+    <nav class="cp-abas" aria-label="Contas a Pagar">
+        <a href="{% url 'contas_pagar:painel' %}" class="{% if aba == 'painel' %}ativa{% endif %}"><i class="fas fa-table-columns mr-1"></i>Painel</a>
+        {% if cp_operar %}<a href="{% url 'contas_pagar:pagar_hoje' %}" class="{% if aba == 'pagar' %}ativa{% endif %}"><i class="fas fa-file-arrow-up mr-1"></i>Pagar hoje</a>{% endif %}
+        <a href="{% url 'contas_pagar:historico' %}" class="{% if aba == 'historico' %}ativa{% endif %}"><i class="fas fa-clock-rotate-left mr-1"></i>Histórico</a>
+        {% if cp_configurar %}<a href="{% url 'contas_pagar:configuracoes' %}" class="{% if aba == 'config' %}ativa{% endif %}"><i class="fas fa-gear mr-1"></i>Configurações</a>{% endif %}
+        {% if cp_superadmin %}<a href="{% url 'contas_pagar:acessos' %}" class="{% if aba == 'acessos' %}ativa{% endif %}"><i class="fas fa-user-shield mr-1"></i>Acessos</a>{% endif %}
+    </nav>
+    {% for m in messages %}<div class="cp-msg {{ m.tags }}">{{ m }}</div>{% endfor %}
+    {% if erro %}<div class="cp-msg error"><i class="fas fa-plug-circle-xmark mr-1"></i>{{ erro }}</div>{% endif %}
+    {% block cp_conteudo %}{% endblock %}
+</div>
+{% endblock %}

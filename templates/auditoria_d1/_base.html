@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}{% block d1_titulo %}Auditoria D-1{% endblock %} · Rede Confiança{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'auditoria_d1/auditoria_d1.css' %}?v=1">{% endblock %}
+{% block content %}
+<div class="d1">
+    {% if pode.superadmin %}
+    <nav class="d1-abas" aria-label="Auditoria D-1">
+        <a href="{% url 'auditoria_d1:esteira' %}" class="{% if aba == 'esteira' %}ativa{% endif %}"><i class="fas fa-list-check"></i>Esteira</a>
+        <a href="{% url 'auditoria_d1:acessos' %}" class="{% if aba == 'acessos' %}ativa{% endif %}"><i class="fas fa-user-shield"></i>Acessos</a>
+        <a href="{% url 'auditoria_d1:configuracao' %}" class="{% if aba == 'configuracao' %}ativa{% endif %}"><i class="fas fa-gear"></i>Configuração</a>
+    </nav>
+    {% endif %}
+    {% if messages %}
+    <div class="d1-mensagens">
+        {% for m in messages %}<div class="d1-msg {% if m.tags == 'error' %}erro{% else %}ok{% endif %}">{{ m }}</div>{% endfor %}
+    </div>
+    {% endif %}
+    {% block d1_conteudo %}{% endblock %}
+</div>
+{% endblock %}

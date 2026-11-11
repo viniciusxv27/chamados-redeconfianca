@@ -936,6 +936,28 @@
                             </a>
                         </li>
                         {% endif %}
+                        {% if contas_pagar_liberado %}
+                        <li>
+                            <a href="{% url 'contas_pagar:painel' %}" data-rota="{% url 'contas_pagar:painel' %}"
+                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-file-invoice-dollar text-emerald-400 flex-shrink-0 w-5 text-center"></i>
+                                <span class="text-sm flex-1">Contas a Pagar</span>
+                                <div class="tooltip-collapsed">Contas a Pagar</div>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-emerald-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% if auditoria_d1_liberada %}
+                        <li>
+                            <a href="{% url 'auditoria_d1:esteira' %}" data-rota="{% url 'auditoria_d1:esteira' %}"
+                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-clipboard-check text-sky-400 flex-shrink-0 w-5 text-center"></i>
+                                <span class="text-sm flex-1">Auditoria D-1</span>
+                                <div class="tooltip-collapsed">Auditoria D-1</div>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-sky-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        {% endif %}
                         {% if rotina_no_menu or rotina_admin %}
                         <li>
                             <a href="{% url 'rotina:minha' %}" data-rota="{% url 'rotina:minha' %}"

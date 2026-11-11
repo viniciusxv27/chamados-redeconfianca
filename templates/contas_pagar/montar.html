@@ -1,0 +1,47 @@
+{% extends 'contas_pagar/_base.html' %}
+{% load static %}
+{% block cp_titulo %}Montar pagar hoje · Contas a Pagar{% endblock %}
+{% block cp_conteudo %}
+<div id="cpMontar" data-api="{% url 'contas_pagar:api_rascunho' rascunho.id %}" data-descartar="{% url 'contas_pagar:api_descartar' rascunho.id %}"
+     data-voltar="{% url 'contas_pagar:pagar_hoje' %}" data-hoje="{% now 'Y-m-d' %}" data-csrf="{{ csrf_token }}">
+<header class="cp-topo">
+    <div><h1>Pagar hoje</h1><p id="cpCabecalho">Carregando…</p></div>
+    <a class="cp-botao" href="{% url 'contas_pagar:pagar_hoje' %}"><i class="fas fa-file-arrow-up"></i>Importar outra base</a>
+</header>
+<div class="cp-passos">
+    <div class="cp-passo feito"><b>✓</b>Importar base</div><div class="cp-passo on"><b>2</b>Período a pagar</div>
+    <div class="cp-passo"><b>3</b>Saldos bancários</div><div class="cp-passo"><b>4</b>Publicar</div>
+</div>
+<section class="cp-card">
+    <div class="cp-card-cab"><div><h2>1. Período que vai para o “Pagar hoje”</h2>
+        <div class="sub">Títulos com vencimento no intervalo abaixo entram na programação da data de pagamento escolhida</div></div></div>
+    <div class="cp-card-corpo">
+        <div class="cp-linha">
+            <label class="cp-rotulo">Data de pagamento<input type="date" class="cp-campo" id="fPag"></label>
+            <label class="cp-rotulo">Vencimento de<input type="date" class="cp-campo" id="fIni"></label>
+            <label class="cp-rotulo">Vencimento até<input type="date" class="cp-campo" id="fFim"></label>
+            <div class="cp-rotulo cp-atalhos">Atalhos<div class="cp-seg" id="atalhos">
+                <button type="button" data-a="hoje">Só hoje</button><button type="button" data-a="atraso">Vencidos + hoje</button>
+                <button type="button" data-a="fds">Até domingo</button><button type="button" data-a="amanha">Hoje + amanhã</button></div></div>
+        </div>
+    </div>
+    <div class="cp-rolagem" id="oTit" style="max-height:460px"></div>
+    <div class="cp-card-corpo" id="oTitPe" style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap"></div>
+</section>
+<section class="cp-card">
+    <div class="cp-card-cab"><div><h2>2. Saldos bancários</h2>
+        <div class="sub">Digite os valores no formato 1.234,56 · Transferência: negativo = sai da conta, positivo = entra na conta</div></div>
+        <span id="trfCheck"></span></div>
+    <div class="cp-rolagem" id="oSaldos"></div>
+</section>
+<div class="cp-card cp-barra-fixa">
+    <div id="oResumo" class="mudo"></div>
+    <div class="cp-linha">
+        <button type="button" class="cp-botao perigo" id="bDel"><i class="fas fa-trash"></i>Descartar</button>
+        <button type="button" class="cp-botao" id="bSalvar"><i class="fas fa-floppy-disk"></i>Salvar rascunho</button>
+        <button type="button" class="cp-botao ok" id="bPub"><i class="fas fa-check"></i>Publicar no painel</button>
+    </div>
+</div>
+</div>
+{% endblock %}
+{% block extra_js %}<script src="{% static 'contas_pagar/montar.js' %}?v=1"></script>{% endblock %}

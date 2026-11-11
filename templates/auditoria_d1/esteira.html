@@ -1,0 +1,251 @@
+{% extends 'auditoria_d1/_base.html' %}
+{% load static %}
+{% block d1_titulo %}Auditoria D-1{% endblock %}
+{% block d1_conteudo %}
+<div id="d1App" data-base="{% url 'auditoria_d1:esteira' %}" data-usuario="{{ usuario_nome }}"
+     data-auditar="{{ pode.auditar|yesno:'1,0' }}" data-gerir="{{ pode.gerir|yesno:'1,0' }}" data-papel="{{ pode.papel }}">
+{% csrf_token %}
+<header class="d1-topo">
+  <div class="d1-topo-marca">
+    <span class="d1-escudo"><i class="fas fa-list-check"></i></span>
+    <div>
+      <div class="d1-topo-titulo">Auditoria D-1</div>
+      <div class="d1-topo-sub">Esteira de verificação de vendas</div>
+    </div>
+  </div>
+  <div class="d1-topo-acoes">
+    <div class="mes-nav">
+      <button type="button" class="icone-btn" id="mesAnt" title="Mês anterior" aria-label="Mês anterior">‹</button>
+      <label class="mes-label" title="Escolher mês">
+        <span id="mesTexto">—</span>
+        <input type="month" id="mesInput" aria-label="Mês">
+      </label>
+      <button type="button" class="icone-btn" id="mesProx" title="Próximo mês" aria-label="Próximo mês">›</button>
+    </div>
+    {% if pode.gerir %}
+    <button type="button" class="btn-topo" id="btnSva" title="Importar a base de SVA da Vivo e cruzar com as vendas">
+      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 7h11m0 0l-3-3m3 3l-3 3M20 17H9m0 0l3-3m-3 3l3 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>Base SVA</span>
+    </button>
+    <button type="button" class="btn-topo" id="btnFixa" title="Importar o Analítico de Vendas (esteira de fixa da Vivo) e cruzar com as vendas de fixa">
+      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M3 11l9-7 9 7M5 9.5V20h14V9.5M10 20v-5h4v5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>Base Fixa</span>
+    </button>
+    {% endif %}
+    <button type="button" class="btn-topo btn-topo-sec" id="btnPlanilha" title="Planilha completa da auditoria do mês (.xlsx)" aria-label="Planilha do mês">
+      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 4h16v16H4zM4 10h16M4 15h16M10 4v16" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+    </button>
+    {% if pode.auditar %}
+    <button type="button" class="btn-topo" id="btnExportar" title="Baixar as alterações do mês no modelo de importação do VivoGo">
+      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 3v12m0 0l-5-5m5 5l5-5M4 19h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>Exportar mês</span>
+    </button>
+    {% endif %}
+    <span class="auditor" title="Quem fica registrado nas gravações">
+      <span class="avatar" id="auditorIni">?</span><span id="auditorNome">{{ usuario_nome }}</span>
+    </span>
+  </div>
+</header>
+
+{% if not mysql_configurado %}
+<div class="d1-msg erro" style="margin-bottom:12px">VIVOGO_MYSQL_URL não está configurada neste servidor: a esteira não consegue ler as vendas.</div>
+{% endif %}
+
+<nav class="dias" id="dias" aria-label="Dias do mês"></nav>
+
+<main class="esteira">
+  <section class="fila">
+    <div class="fila-resumo">
+      <div class="resumo-topo">
+        <div>
+          <div class="resumo-dia" id="resumoDia">—</div>
+          <div class="resumo-txt" id="resumoTxt">carregando…</div>
+        </div>
+        <div class="anel" id="anel"><svg viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="15.5" class="anel-fundo"/><circle cx="18" cy="18" r="15.5" class="anel-valor" id="anelValor"/></svg><span id="anelPct">0%</span></div>
+      </div>
+      <div class="contadores">
+        <button type="button" class="cont" data-filtro="pendentes"><b id="cPend">0</b><span>Pendentes</span></button>
+        <button type="button" class="cont ok" data-filtro="conformes"><b id="cConf">0</b><span>Conformes</span></button>
+        <button type="button" class="cont div" data-filtro="divergentes"><b id="cDiv">0</b><span>Divergentes</span></button>
+        <button type="button" class="cont alerta" data-filtro="alertas"><b id="cAlert">0</b><span>Com alerta</span></button>
+      </div>
+    </div>
+    <div class="fila-filtros">
+      <div class="busca">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <input id="busca" type="search" placeholder="Cliente, CPF, nº venda, acesso…  ( / )" autocomplete="off" aria-label="Buscar">
+      </div>
+      <div class="filtros-linha">
+        <select id="fPdv" aria-label="Filial"><option value="">Todas as filiais</option></select>
+        <select id="fPilar" aria-label="Pilar"><option value="">Todos os pilares</option></select>
+        <button type="button" class="chip-filtro" id="fTodas" data-filtro="todas">Todas</button>
+        <button type="button" class="chip-filtro" id="fAuto" data-filtro="auto" title="Marcadas pelas automações (SVA e Fixa)">Auto</button>
+        <button type="button" class="chip-filtro" id="fContest" data-filtro="contestadas" title="Vendas com contestação registrada">Contestadas</button>
+      </div>
+    </div>
+    <div class="fila-lista" id="lista" tabindex="-1"></div>
+  </section>
+
+  <section class="detalhe" id="detalhe">
+    <div class="vazio" id="vazio">
+      <div class="vazio-ico">✓</div>
+      <div class="vazio-tit">Selecione uma venda</div>
+      <div class="vazio-txt">Use <kbd>J</kbd> / <kbd>K</kbd> para percorrer a esteira.</div>
+    </div>
+  </section>
+
+  <aside class="verif desativado{% if not pode.auditar %} so-leitura{% endif %}" id="verif">
+    <div class="verif-cab">
+      <div class="verif-tit">Verificação</div>
+      <div class="verif-sub" id="verifSub">—</div>
+      {% if not pode.auditar %}<div class="verif-aviso">Seu acesso é de consulta: dá para ver a verificação, não para gravar.</div>{% endif %}
+    </div>
+    <div class="decisao">
+      <button type="button" class="dec dec-ok" id="decOk"><span class="dec-ico">✓</span><span>Conforme</span><kbd>C</kbd></button>
+      <button type="button" class="dec dec-div" id="decDiv"><span class="dec-ico">!</span><span>Divergente</span><kbd>D</kbd></button>
+    </div>
+
+    <div class="div-form" id="divForm" hidden>
+      <div class="campo-tit">Correção VivoGo</div>
+      <div class="correcoes" id="correcoes"></div>
+      <div class="dica" id="dica"></div>
+
+      <div class="campo" data-campo="tipo_penalidade" hidden>
+        <label for="penBusca">Tipo de penalidade</label>
+        <div class="combo">
+          <input id="penBusca" placeholder="Buscar penalidade…" autocomplete="off">
+          <div class="pen-lista" id="penLista"></div>
+        </div>
+      </div>
+      <div class="campo" data-campo="receita_correta" hidden>
+        <label for="recCorreta">Receita correta <span class="opc" id="recOpc">(opcional)</span></label>
+        <div class="input-pre"><span>R$</span><input id="recCorreta" inputmode="decimal" placeholder="0,00"></div>
+      </div>
+      <div class="campo" data-campo="plano_correto" hidden>
+        <label for="planoCorreto">Plano correto</label>
+        <input id="planoCorreto" placeholder="Nome do plano ativado">
+      </div>
+      <div class="campo" data-campo="linha_correta" hidden>
+        <label for="linhaCorreta">Linha correta</label>
+        <input id="linhaCorreta" inputmode="numeric" placeholder="(27) 99999-9999">
+      </div>
+      <div class="campo" data-campo="documento_correto" hidden>
+        <label for="docCorreto">Documento correto</label>
+        <input id="docCorreto" inputmode="numeric" placeholder="CPF ou CNPJ do titular">
+      </div>
+    </div>
+
+    <div class="campo">
+      <label for="obs">Observação <span class="opc">(opcional)</span></label>
+      <textarea id="obs" rows="2" placeholder="Detalhe a análise, se necessário"></textarea>
+    </div>
+
+    <div class="impacto" id="impacto">
+      <div><span>Ação necessária</span><b id="impAcao">—</b></div>
+      <div><span>Receita validada</span><b id="impReceita">—</b></div>
+    </div>
+
+    <div class="contest" id="contestBox" hidden></div>
+
+    <div class="verif-rodape">
+      <button type="button" class="btn-sec" id="btnReabrir" hidden title="Volta a venda para pendente">Reabrir</button>
+      <button type="button" class="btn-pri" id="btnSalvar" disabled>Salvar e próxima <kbd>Enter</kbd></button>
+    </div>
+    <div class="verif-info" id="verifInfo"></div>
+  </aside>
+</main>
+
+<div class="atalhos" id="atalhos">
+  <kbd>J</kbd><kbd>K</kbd> navegar · <kbd>C</kbd> conforme e avança · <kbd>D</kbd> divergente · <kbd>1</kbd>–<kbd>7</kbd> correção · <kbd>Enter</kbd> salvar · <kbd>/</kbd> buscar
+</div>
+
+{% if pode.gerir %}
+<div class="modal-fundo" id="modalSva" hidden>
+  <div class="d1-modal modal-sva" role="dialog" aria-modal="true" aria-labelledby="tituloSva">
+    <button type="button" class="modal-fechar" id="fecharSva" title="Fechar (Esc)" aria-label="Fechar">×</button>
+    <h2 id="tituloSva">Cruzamento SVA</h2>
+    <p class="sva-sub">Importe a Base Analítica de SVA com Ativação Vinculada. Cada serviço SVA lançado na VivoGo é procurado
+      na base; os que estão com Flag 0 entram na auditoria como <b>Movimento inelegível · SVA não ativado</b> e já saem no arquivo de exportação.</p>
+
+    <div class="sva-ultima" id="svaUltima" hidden></div>
+
+    <form class="sva-bloco" id="formSva">
+      <label class="sva-arquivo" id="svaArquivoLbl">
+        <input type="file" id="svaArquivo" accept=".xlsx">
+        <span id="svaArquivoNome">Escolher ou arrastar a base (.xlsx)</span>
+      </label>
+      <button class="btn-pri" type="submit" id="btnSvaPrevia" disabled>Cruzar com as vendas</button>
+    </form>
+
+    <div class="sva-bloco" id="svaPrevia" hidden></div>
+
+    <div class="sva-bloco" id="svaZap" hidden>
+      <div class="sva-tit">WhatsApp das lojas</div>
+      <p class="sva-txt" id="svaZapTxt"></p>
+      <div class="sva-zap-acoes">
+        <select id="svaZapLoja" aria-label="Loja do teste"><option value="">Teste: todas as lojas</option></select>
+        <button type="button" class="btn-sec" id="btnZapTeste">Enviar teste</button>
+        <button type="button" class="btn-pri" id="btnZapLojas">Disparar para as lojas</button>
+      </div>
+      <div class="sva-progresso" id="svaZapProg" hidden>
+        <div class="sva-barra"><i id="svaZapBarra"></i></div>
+        <div class="sva-txt" id="svaZapStatus"></div>
+        <ul class="sva-log" id="svaZapLog"></ul>
+        <button type="button" class="btn-sec" id="btnZapCancelar">Cancelar envio</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-fundo" id="modalFixa" hidden>
+  <div class="d1-modal modal-sva" role="dialog" aria-modal="true" aria-labelledby="tituloFixa">
+    <button type="button" class="modal-fechar" id="fecharFixa" title="Fechar (Esc)" aria-label="Fechar">×</button>
+    <h2 id="tituloFixa">Cruzamento Fixa</h2>
+    <p class="sva-sub">Importe o <b>ANALÍTICO DE VENDAS</b> (esteira de instalação de fixa da Vivo). Cada pedido de fixa da VivoGo
+      é procurado pela ORDEM (protocolo), na mesma loja e com ±1 dia — a mesma regra do Validação Vendas Go. Fibra
+      <b>cancelada</b> na Vivo com vínculo Alta entra como <b>Movimento inelegível · Fibra cancelada</b> e já sai no Exportar.</p>
+
+    <div class="sva-ultima" id="fixaUltima" hidden></div>
+
+    <form class="sva-bloco" id="formFixa">
+      <label class="sva-arquivo" id="fixaArquivoLbl">
+        <input type="file" id="fixaArquivo" accept=".xlsx">
+        <span id="fixaArquivoNome">Escolher ou arrastar o Analítico de Vendas (.xlsx)</span>
+      </label>
+      <button class="btn-pri" type="submit" id="btnFixaPrevia" disabled>Cruzar com as vendas de fixa</button>
+    </form>
+
+    <div class="sva-bloco" id="fixaPrevia" hidden></div>
+  </div>
+</div>
+{% endif %}
+
+{% if pode.auditar %}
+<div class="modal-fundo" id="modalContest" hidden>
+  <form class="d1-modal modal-sva" id="formContest" role="dialog" aria-modal="true" aria-labelledby="tituloContest">
+    <button type="button" class="modal-fechar" id="fecharContest" title="Fechar (Esc)" aria-label="Fechar">×</button>
+    <h2 id="tituloContest">Contestação da venda</h2>
+    <p class="sva-sub" id="contestSub"></p>
+    <div class="campo">
+      <label for="contestSolic">Quem contestou</label>
+      <input id="contestSolic" placeholder="Nome do vendedor ou gerente" maxlength="120" required>
+    </div>
+    <div class="campo">
+      <label for="contestMotivo">Motivo da contestação</label>
+      <textarea id="contestMotivo" rows="3" maxlength="500" placeholder="O que o vendedor/gerente alegou e o que foi conferido" required></textarea>
+    </div>
+    <div class="campo-tit">A contestação é plausível?</div>
+    <div class="decisao">
+      <button type="button" class="dec dec-ok" data-decisao="PROCEDENTE"><span class="dec-ico">↺</span><span>Procedente<small>a venda volta</small></span></button>
+      <button type="button" class="dec dec-div" data-decisao="IMPROCEDENTE"><span class="dec-ico">✕</span><span>Improcedente<small>mantém a divergência</small></span></button>
+    </div>
+    <div class="dica" id="contestDica">Procedente: a venda volta ao que era e sai de novo no Exportar para desfazer a alteração no VivoGo. Tudo fica registrado no histórico.</div>
+    <button class="btn-pri" type="submit" id="btnContestSalvar" disabled>Registrar contestação</button>
+  </form>
+</div>
+{% endif %}
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+</div>
+{% endblock %}
+{% block extra_js %}<script src="{% static 'auditoria_d1/esteira.js' %}?v=1"></script>{% endblock %}

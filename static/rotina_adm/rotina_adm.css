@@ -154,6 +154,16 @@ html.dark .ra-faixa.whatsapp strong { color: #4ade80; }
 .ra-ativ.feita .nome { color: var(--ra-texto-3); }
 .ra-ativ .estado { font-size: 11px; white-space: nowrap; }
 .ra-dia-livre { font-size: 12px; color: var(--ra-texto-3); padding-top: 2px; }
+.ra-agenda-barra { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+.ra-agenda-dias { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; max-width: 100%; }
+.ra-agenda-dias::-webkit-scrollbar { display: none; }
+.ra-agenda-dias button { border: 1px solid var(--ra-borda); background: var(--ra-card); color: var(--ra-texto-2); border-radius: 10px;
+  padding: 4px 9px; font-size: 12px; font-weight: 700; cursor: pointer; line-height: 1.15; min-width: 42px; }
+.ra-agenda-dias button small { display: block; font-size: 10.5px; font-weight: 500; color: var(--ra-texto-3); }
+.ra-agenda-dias button.hoje { border-color: var(--ra-roxo); }
+.ra-agenda-dias button[aria-selected="true"] { background: var(--ra-roxo); border-color: var(--ra-roxo); color: #fff; }
+.ra-agenda-dias button[aria-selected="true"] small { color: rgba(255, 255, 255, .85); }
+.ra-agenda:not(.semana) .ra-dia:not(.foco) { display: none; }
 
 /* Modal */
 .ra-modal { border: 0; padding: 0; border-radius: 18px; width: min(760px, calc(100vw - 32px)); max-height: 82vh;

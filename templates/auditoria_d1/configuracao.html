@@ -1,0 +1,46 @@
+{% extends 'auditoria_d1/_base.html' %}
+{% block d1_titulo %}Configuração · Auditoria D-1{% endblock %}
+{% block d1_conteudo %}
+<header class="d1-cab">
+    <span class="d1-escudo" style="background:#571381;color:#fff"><i class="fas fa-gear"></i></span>
+    <div><h1>Configuração da Auditoria D-1</h1><p>WhatsApp das lojas (SVA não ativado). Só o SUPERADMIN vê esta tela.</p></div>
+</header>
+
+<section class="d1-cartao">
+    <h2><i class="fab fa-whatsapp"></i> WhatsApp das lojas
+        {% if cfg.whatsapp_ativo %}<span class="d1-estado on">LIGADO</span>{% else %}<span class="d1-estado off">DESLIGADO</span>{% endif %}</h2>
+    <p class="sub">Com o WhatsApp desligado nada sai — nem o teste. Ligado, o Gestor dispara pela janela "Base SVA" da esteira:
+        a mesma mensagem do sistema antigo, uma loja por minuto, para o grupo de gestão de cada loja (o mesmo da cobrança dos cursos).</p>
+    <form method="post" style="display:grid;gap:12px;max-width:640px">{% csrf_token %}
+        <label class="d1-interruptor"><input type="checkbox" name="whatsapp_ativo" value="1" {% if cfg.whatsapp_ativo %}checked{% endif %}>Permitir envio de WhatsApp</label>
+        <div>
+            <label for="grupoTeste" style="display:block;font-weight:700;margin-bottom:6px">ID do grupo de teste</label>
+            <input class="d1-campo" id="grupoTeste" name="grupo_teste" value="{{ cfg.grupo_teste }}" maxlength="120" placeholder="120363…@g.us" style="width:100%">
+            <p class="sub" style="margin:6px 0 0">O "Enviar teste" manda tudo para este grupo, com a linha "[TESTE — iria para …]".</p>
+        </div>
+        <div><button class="d1-botao primario"><i class="fas fa-check"></i>Salvar</button></div>
+    </form>
+    {% if cfg.atualizado_por %}<p class="sub" style="margin:10px 0 0">Última alteração por {{ cfg.atualizado_por.full_name|default:cfg.atualizado_por.username }} em {{ cfg.atualizado_em|date:"d/m/Y H:i" }}.</p>{% endif %}
+</section>
+
+<section class="d1-cartao">
+    <h2>Grupos das lojas ({{ grupos|length }})</h2>
+    <p class="sub">Vêm de "Grupos de WhatsApp das lojas" (cobrança dos cursos). O PDV da VivoGo é casado com a loja pelo nome.</p>
+    {% if grupos %}
+    <table class="d1-tabela" data-rc-wrapped="1"><thead><tr><th>Loja</th><th>Grupo</th></tr></thead><tbody>
+        {% for nome, jid in grupos %}<tr><td>{{ nome }}</td><td><code>{{ jid }}</code></td></tr>{% endfor %}
+    </tbody></table>
+    {% else %}<div class="d1-vazio">Nenhum grupo de loja cadastrado.</div>{% endif %}
+</section>
+
+<section class="d1-cartao">
+    <h2>Mensagens enviadas (últimas 30)</h2>
+    {% if estado.inicio %}<p class="sub">Último disparo: {% if estado.teste %}teste{% else %}lojas{% endif %} por {{ estado.usuario }} · {{ estado.enviadas }} de {{ estado.total }} loja(s){% if estado.rodando %} · em andamento{% endif %}{% if estado.erro %} · erro: {{ estado.erro }}{% endif %}</p>{% endif %}
+    {% if disparos %}
+    <table class="d1-tabela" data-rc-wrapped="1"><thead><tr><th>Quando</th><th>Loja</th><th>Situação</th></tr></thead><tbody>
+        {% for d in disparos %}<tr><td>{{ d.criado_em|date:"d/m H:i" }}{% if d.teste %} · teste{% endif %}</td><td>{{ d.loja }} · {{ d.anomes }}</td>
+            <td>{% if d.enviado %}<span class="d1-estado on">enviada</span>{% elif d.enviado is None %}<span class="d1-estado off">enviando</span>{% else %}<span class="d1-estado off" title="{{ d.detalhe }}">falhou</span>{% endif %}</td></tr>{% endfor %}
+    </tbody></table>
+    {% else %}<div class="d1-vazio">Nenhuma mensagem enviada pelo portal.</div>{% endif %}
+</section>
+{% endblock %}

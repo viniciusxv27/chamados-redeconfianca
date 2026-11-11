@@ -93,6 +93,8 @@ INSTALLED_APPS = [
     'renova',  # Vini Renova: avaliação de aparelho usado (checklist, chamado e etiqueta)
     'cameras',  # Câmeras das lojas: mosaico e alertas de possível furto (SUPERADMIN)
     'rotina_adm',  # Rotina ADM: central do ADM de loja (chamados, SAP, check-list, agenda)
+    'contas_pagar',  # Contas a Pagar (BI): pagar hoje, saldos e painel — MySQL contas_pagar
+    'auditoria_d1',  # Auditoria D-1: esteira de verificação de vendas — MySQL vivogo
     'rotina',  # Rotina Gerencial: a semana do gerente, com horários e avisos
     'apresentacoes',  # Assistente de Apresentações: slides com IA na identidade da rede
     'quadro_hc',  # Quadro de HC loja a loja (SUPERADMIN e quem ele liberar)
@@ -188,6 +190,8 @@ TEMPLATES = [
                 'quiz.context_processors.quiz_menu',
                 'rotina.context_processors.rotina_menu',
                 'rotina_adm.context_processors.rotina_adm_menu',
+                'contas_pagar.context_processors.contas_pagar_menu',
+                'auditoria_d1.context_processors.auditoria_d1_menu',
                 'cameras.context_processors.cameras_menu',
                 'quadro_hc.context_processors.quadro_hc_menu',
                 'uniformes.context_processors.uniformes_menu',

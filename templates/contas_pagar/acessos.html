@@ -1,0 +1,41 @@
+{% extends 'contas_pagar/_base.html' %}
+{% block cp_titulo %}Acessos · Contas a Pagar{% endblock %}
+{% block cp_conteudo %}
+<header class="cp-topo"><div><h1>Quem acessa o Contas a Pagar</h1><p>O SUPERADMIN sempre entra e é o único que mexe nesta lista. Libere pessoa por pessoa.</p></div></header>
+
+<section class="cp-kpis">
+    <div class="cp-card cp-kpi"><div class="rot"><span class="cp-selo cinza"><i class="fas fa-eye"></i>Consulta</span></div><div class="pe" style="margin-top:8px">Painel e Histórico.</div></div>
+    <div class="cp-card cp-kpi k-ok"><div class="rot"><span class="cp-selo"><i class="fas fa-file-arrow-up"></i>Operador</span></div><div class="pe" style="margin-top:8px">+ Pagar hoje: importar, montar e publicar; excluir dia do histórico.</div></div>
+    <div class="cp-card cp-kpi k-pos"><div class="rot"><span class="cp-selo ok"><i class="fas fa-gear"></i>Configurador</span></div><div class="pe" style="margin-top:8px">+ Configurações: contas bancárias, categorias e regra do Agging.</div></div>
+</section>
+
+<section class="cp-card">
+    <div class="cp-card-cab"><div><h2>Liberar</h2><div class="sub">Escolha a pessoa e o papel.</div></div></div>
+    <div class="cp-card-corpo">
+    <form method="post" class="cp-linha">{% csrf_token %}
+        <select class="cp-campo" name="user" required style="flex:1;min-width:220px" aria-label="Pessoa">
+            <option value="">Pessoa…</option>
+            {% for u in usuarios %}<option value="{{ u.id }}">{{ u.full_name|default:u.username }}{% if u.sector %} · {{ u.sector.name }}{% endif %}</option>{% endfor %}
+        </select>
+        <select class="cp-campo" name="papel" aria-label="Papel">{% for v, r in papeis %}<option value="{{ v }}">{{ r }}</option>{% endfor %}</select>
+        <button class="cp-botao pri" name="acao" value="adicionar"><i class="fas fa-check"></i>Liberar</button>
+    </form>
+    </div>
+</section>
+
+<section class="cp-card">
+    <div class="cp-card-cab"><h2>Liberados ({{ acessos|length }})</h2></div>
+    {% if acessos %}
+    <table class="cp-tabela">
+        <thead><tr><th>Pessoa</th><th style="width:200px">Papel</th><th style="width:60px"></th></tr></thead>
+        <tbody>{% for a in acessos %}<tr>
+            <td><strong>{{ a.user.full_name|default:a.user.username }}</strong>{% if a.user.sector %} <span class="mudo">· {{ a.user.sector.name }}</span>{% endif %}{% if not a.user.is_active %} <span class="cp-selo neg">inativo</span>{% endif %}</td>
+            <td><form method="post">{% csrf_token %}<input type="hidden" name="acesso" value="{{ a.id }}"><input type="hidden" name="acao" value="papel">
+                <select class="cp-campo" name="papel" onchange="this.form.submit()" aria-label="Papel">{% for v, r in papeis %}<option value="{{ v }}" {% if a.papel == v %}selected{% endif %}>{{ r }}</option>{% endfor %}</select></form></td>
+            <td><form method="post" onsubmit="return confirm('Tirar o acesso?')">{% csrf_token %}<input type="hidden" name="acesso" value="{{ a.id }}">
+                <button class="cp-icone perigo" name="acao" value="remover" title="Remover" aria-label="Remover"><i class="fas fa-trash"></i></button></form></td>
+        </tr>{% endfor %}</tbody>
+    </table>
+    {% else %}<div class="cp-vazio"><i class="fas fa-lock"></i>Por enquanto só o SUPERADMIN entra.</div>{% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,111 @@
+{% extends 'contas_pagar/_base.html' %}
+{% block cp_titulo %}Configurações · Contas a Pagar{% endblock %}
+{% block cp_conteudo %}
+<header class="cp-topo"><div><h1>Configurações</h1><p>Contas bancárias, tabela auxiliar de categorias (aba “Dados”) e regras de tratamento</p></div></header>
+<div class="cp-seg" style="margin-bottom:16px">
+    <a href="?aba=bancos" class="{% if aba_config == 'bancos' %}on{% endif %}">Contas bancárias</a>
+    <a href="?aba=categorias" class="{% if aba_config == 'categorias' %}on{% endif %}">Categorias (Dados)</a>
+    <a href="?aba=regras" class="{% if aba_config == 'regras' %}on{% endif %}">Regras</a>
+</div>
+
+{% if aba_config == 'bancos' %}
+<section class="cp-card">
+    <div class="cp-card-cab"><div><h2>Contas bancárias</h2><div class="sub">O “Banco pagador” de cada título é identificado pela agência e conta do campo <b>Débito</b> da base (ex.: “Conta ( AG: 301 CC: 203409-3)”).</div></div></div>
+    <div class="cp-card-corpo">
+        <form method="post" class="cp-linha">{% csrf_token %}<input type="hidden" name="aba" value="bancos">
+            <label class="cp-rotulo" style="flex:1;min-width:220px">Banco *<input class="cp-campo" name="banco" required placeholder="Ex.: SICOOB - REDE CONFIANÇA"></label>
+            <label class="cp-rotulo">Agência (opcional)<input class="cp-campo" name="agencia" style="width:110px"></label>
+            <label class="cp-rotulo">Número da conta *<input class="cp-campo" name="conta" required style="width:150px"></label>
+            <button class="cp-botao pri" name="acao" value="conta_adicionar"><i class="fas fa-plus"></i>Adicionar conta</button>
+        </form>
+    </div>
+    <table class="cp-tabela">
+        <thead><tr><th>Banco</th><th>Agência</th><th>Conta</th><th>Ativa</th><th></th></tr></thead>
+        <tbody>{% for b in bancos %}<tr>
+            <td><form method="post" id="fb{{ b.id }}">{% csrf_token %}<input type="hidden" name="aba" value="bancos"><input type="hidden" name="id" value="{{ b.id }}"></form>
+                <input class="cp-campo" form="fb{{ b.id }}" name="banco" value="{{ b.banco }}" style="width:100%;min-width:200px" aria-label="Banco" required></td>
+            <td><input class="cp-campo" form="fb{{ b.id }}" name="agencia" value="{{ b.agencia }}" style="width:90px" aria-label="Agência"></td>
+            <td><input class="cp-campo" form="fb{{ b.id }}" name="conta" value="{{ b.conta }}" style="width:130px" aria-label="Conta"></td>
+            <td><input type="checkbox" class="cp-chk" form="fb{{ b.id }}" name="ativo" {% if b.ativo %}checked{% endif %} aria-label="Ativa"></td>
+            <td class="num nw">
+                <button class="cp-icone" form="fb{{ b.id }}" name="acao" value="conta_subir" title="Subir" aria-label="Subir" formnovalidate><i class="fas fa-arrow-up"></i></button>
+                <button class="cp-icone" form="fb{{ b.id }}" name="acao" value="conta_descer" title="Descer" aria-label="Descer" formnovalidate><i class="fas fa-arrow-down"></i></button>
+                <button class="cp-botao peq" form="fb{{ b.id }}" name="acao" value="conta_salvar"><i class="fas fa-floppy-disk"></i>Salvar</button>
+                <button class="cp-botao peq perigo" form="fb{{ b.id }}" name="acao" value="conta_remover" formnovalidate
+                        onclick="return confirm('Remover esta conta? Os títulos dessa conta passarão a aparecer como “Não informado”.')" aria-label="Remover"><i class="fas fa-trash"></i></button></td>
+        </tr>{% empty %}<tr><td colspan="5" class="mudo" style="text-align:center;padding:20px">Nenhuma conta cadastrada. Adicione acima ou importe do sistema antigo (comando <code>importar_contas_pagar_local</code>).</td></tr>{% endfor %}</tbody>
+    </table>
+    <div class="cp-card-corpo mudo" style="font-size:12.5px">A agência só é necessária quando existem duas contas com o mesmo número (ex.: SICOOB 301 e SICOOB Aplicação 3010). A ordem aqui é a ordem do painel e dos saldos.</div>
+</section>
+
+{% elif aba_config == 'categorias' %}
+{% if faltando %}
+<section class="cp-card">
+    <div class="cp-card-cab"><div><h2 class="aviso">Tipos de despesa sem categoria</h2>
+        <div class="sub">Encontrados nas bases importadas (rascunhos) — aparecem como “Não Classificado”. Defina a categoria para corrigir.</div></div></div>
+    <table class="cp-tabela">
+        <thead><tr><th>Tipo de conta (Despesa)</th><th class="num">Títulos</th><th>Categoria</th></tr></thead>
+        <tbody>{% for tipo, qtd in faltando %}<tr><td>{{ tipo }}</td><td class="num">{{ qtd }}</td>
+            <td><form method="post" class="cp-linha" style="gap:6px">{% csrf_token %}<input type="hidden" name="aba" value="categorias"><input type="hidden" name="tipo" value="{{ tipo }}">
+                <input class="cp-campo" name="categoria" list="dlCat" placeholder="Escolha ou digite…" required style="width:240px" aria-label="Categoria">
+                <button class="cp-botao peq pri" name="acao" value="categoria_salvar">Salvar</button></form></td></tr>{% endfor %}</tbody>
+    </table>
+</section>
+{% endif %}
+<section class="cp-card">
+    <div class="cp-card-cab"><div><h2>Tabela de categorias (aba “Dados”)</h2><div class="sub">Tipo de Conta → Categoria Corrigida (TipoMacro). {{ categorias|length }} itens.</div></div>
+        <form method="post" enctype="multipart/form-data" class="cp-linha" style="gap:8px">{% csrf_token %}<input type="hidden" name="aba" value="categorias"><input type="hidden" name="acao" value="categoria_importar">
+            <label class="cp-botao"><i class="fas fa-file-arrow-up"></i>Importar aba Dados (.xlsx)<input type="file" name="arquivo" accept=".xlsx,.xlsm" hidden onchange="this.form.submit()"></label></form></div>
+    <div class="cp-card-corpo">
+        <form method="post" class="cp-linha">{% csrf_token %}<input type="hidden" name="aba" value="categorias">
+            <label class="cp-rotulo" style="flex:1;min-width:220px">Tipo de conta (exatamente como no campo Despesa)<input class="cp-campo" name="tipo" required></label>
+            <label class="cp-rotulo">Categoria<input class="cp-campo" name="categoria" list="dlCat" required style="width:240px"></label>
+            <button class="cp-botao pri" name="acao" value="categoria_salvar"><i class="fas fa-plus"></i>Adicionar</button>
+        </form>
+        <input class="cp-campo busca" id="cBusca" type="search" placeholder="Buscar…" style="margin-top:12px;width:260px" aria-label="Buscar categoria">
+    </div>
+    <div class="cp-rolagem" style="max-height:560px">
+    <table class="cp-tabela" id="cTabela" data-rc-wrapped="1">
+        <thead><tr><th>Tipo de conta</th><th>Categoria</th><th></th></tr></thead>
+        <tbody>{% for c in categorias %}<tr>
+            <td>{{ c.tipo }}<form method="post" id="fc{{ c.id }}">{% csrf_token %}<input type="hidden" name="aba" value="categorias"><input type="hidden" name="tipo" value="{{ c.tipo }}"></form></td>
+            <td><input class="cp-campo" form="fc{{ c.id }}" name="categoria" list="dlCat" value="{{ c.categoria }}" style="width:240px" aria-label="Categoria" required></td>
+            <td class="num nw"><button class="cp-botao peq" form="fc{{ c.id }}" name="acao" value="categoria_salvar"><i class="fas fa-floppy-disk"></i>Salvar</button>
+                <button class="cp-botao peq perigo" form="fc{{ c.id }}" name="acao" value="categoria_remover" formnovalidate onclick="return confirm('Remover esta categoria?')" aria-label="Remover"><i class="fas fa-trash"></i></button></td>
+        </tr>{% endfor %}</tbody>
+    </table>
+    </div>
+</section>
+<datalist id="dlCat">{% for o in opcoes %}<option value="{{ o }}">{% endfor %}</datalist>
+
+{% else %}
+<section class="cp-card">
+    <div class="cp-card-cab"><div><h2>Regra da coluna “Agging”</h2>
+        <div class="sub">Quando a <b>Despesa</b> contém o texto 1 <b>e</b> o <b>Fornecedor</b> contém o texto 2, o tipo vira “AGGING”. Caso contrário, usa a própria Despesa. (diferencia maiúsculas/minúsculas, como no Excel)</div></div></div>
+    <div class="cp-card-corpo">
+        <form method="post" class="cp-linha">{% csrf_token %}<input type="hidden" name="aba" value="regras">
+            <label class="cp-rotulo">Despesa contém<input class="cp-campo" name="agging_despesa_contem" value="{{ cfg.agging_despesa_contem }}"></label>
+            <label class="cp-rotulo">Fornecedor contém<input class="cp-campo" name="agging_fornecedor_contem" value="{{ cfg.agging_fornecedor_contem }}" style="width:260px"></label>
+            <button class="cp-botao pri" name="acao" value="regras_salvar"><i class="fas fa-floppy-disk"></i>Salvar</button>
+        </form>
+        <div class="cp-nota" style="margin:14px 0 0">As 3 colunas calculadas da Base_VivoGo são aplicadas automaticamente em cada importação:
+            <b>Agging</b> (regra acima) → <b>Banco pagador</b> (conta do campo Débito × Contas bancárias) → <b>TipoMacro</b> (Agging × tabela de Categorias).</div>
+    </div>
+</section>
+{% endif %}
+{% endblock %}
+{% block extra_js %}
+<script>
+(function () {
+  var b = document.getElementById('cBusca'), t = document.getElementById('cTabela');
+  if (!b || !t) return;
+  b.addEventListener('input', function () {
+    var q = b.value.trim().toLowerCase();
+    Array.prototype.forEach.call(t.tBodies[0].rows, function (tr) {
+      var txt = tr.cells[0].textContent + ' ' + (tr.querySelector('input[name=categoria]') || {}).value;
+      tr.style.display = !q || txt.toLowerCase().indexOf(q) >= 0 ? '' : 'none';
+    });
+  });
+})();
+</script>
+{% endblock %}

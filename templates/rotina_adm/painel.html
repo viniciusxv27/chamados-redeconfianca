@@ -209,9 +209,19 @@
         {% if agenda is None %}
         <div class="ra-vazio"><i class="far fa-calendar-xmark"></i>{% if pessoa == request.user %}Você ainda não tem Rotina Gerencial.{% else %}{{ pessoa.full_name }} não tem Rotina Gerencial ativa.{% endif %}</div>
         {% else %}
-        <div class="ra-agenda">
+        {% comment %}Começa no dia (hoje, ou o 1º dia de outra semana) e expande para a semana — 11/11/2026.{% endcomment %}
+        <div class="ra-agenda-barra">
+            <div class="ra-agenda-dias" role="tablist" aria-label="Dia da agenda">
+                {% for d in agenda.dias %}
+                <button type="button" role="tab" data-dia="{{ forloop.counter0 }}" class="{% if d.hoje %}hoje{% endif %}"
+                        aria-selected="{% if forloop.counter0 == agenda.foco %}true{% else %}false{% endif %}">{{ d.curto }}<small>{{ d.data|date:"d" }}</small></button>
+                {% endfor %}
+            </div>
+            <button type="button" class="ra-link" id="raAgendaExpandir" aria-expanded="false"><i class="fas fa-expand-alt"></i> <span>Ver semana</span></button>
+        </div>
+        <div class="ra-agenda" id="raAgenda" data-foco="{{ agenda.foco }}">
             {% for d in agenda.dias %}
-            <div class="ra-dia {% if d.hoje %}hoje{% endif %}">
+            <div class="ra-dia {% if d.hoje %}hoje{% endif %}{% if forloop.counter0 == agenda.foco %} foco{% endif %}" data-dia="{{ forloop.counter0 }}">
                 <div class="ra-dia-nome">{{ d.curto }}<small>{{ d.data|date:"d/m" }}</small></div>
                 <div>
                     {% for i in d.itens %}
@@ -248,6 +258,32 @@
 
 {% block extra_js %}
 <script>
+(function () {
+    // Agenda: um dia por vez (o foco) ou a semana inteira; a escolha fica neste navegador.
+    var agenda = document.getElementById('raAgenda');
+    if (!agenda) return;
+    var botao = document.getElementById('raAgendaExpandir');
+    var abas = document.querySelectorAll('.ra-agenda-dias [data-dia]');
+    var CHAVE = 'raAgendaSemana';
+    function focar(n) {
+        agenda.querySelectorAll('.ra-dia').forEach(function (d) { d.classList.toggle('foco', d.dataset.dia === String(n)); });
+        abas.forEach(function (b) { b.setAttribute('aria-selected', b.dataset.dia === String(n) ? 'true' : 'false'); });
+    }
+    function semana(sim, guardar) {
+        agenda.classList.toggle('semana', sim);
+        botao.setAttribute('aria-expanded', sim ? 'true' : 'false');
+        botao.querySelector('span').textContent = sim ? 'Ver só o dia' : 'Ver semana';
+        botao.querySelector('i').className = sim ? 'fas fa-compress-alt' : 'fas fa-expand-alt';
+        if (guardar) { try { localStorage.setItem(CHAVE, sim ? '1' : '0'); } catch (e) {} }
+    }
+    abas.forEach(function (b) {
+        b.addEventListener('click', function () { focar(b.dataset.dia); semana(false, true); });
+    });
+    botao.addEventListener('click', function () { semana(!agenda.classList.contains('semana'), true); });
+    var lembrado = null;
+    try { lembrado = localStorage.getItem(CHAVE); } catch (e) {}
+    semana(lembrado === '1', false);
+})();
 (function () {
     document.querySelectorAll('[data-abrir]').forEach(function (b) {
         b.addEventListener('click', function () { document.getElementById(b.dataset.abrir).showModal(); });

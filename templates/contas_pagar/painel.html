@@ -1,0 +1,223 @@
+{% extends 'contas_pagar/_base.html' %}
+{% load contas_pagar_fmt %}
+{% block cp_titulo %}Painel · Contas a Pagar{% endblock %}
+{% block cp_conteudo %}
+<header class="cp-topo">
+    <div><h1>Demonstrativo de pagamentos</h1><p>Programação de pagamentos por <b>data de pagamento</b></p></div>
+    <div class="cp-filtros">
+        <div class="cp-seg">{% for m in modos %}<a href="{{ m.url }}" class="{% if m.ativo %}on{% endif %}">{{ m.rotulo }}</a>{% endfor %}</div>
+        <div class="cp-periodo" id="cpPeriodo">
+            <a class="cp-icone" href="{{ setas.anterior }}" title="Período anterior" aria-label="Período anterior"><i class="fas fa-chevron-left"></i></a>
+            <button type="button" class="rot" id="cpRotulo" title="Escolher no calendário"><i class="far fa-calendar"></i><span>{{ rotulo }}</span></button>
+            <a class="cp-icone" href="{{ setas.seguinte }}" title="Próximo período" aria-label="Próximo período"><i class="fas fa-chevron-right"></i></a>
+        </div>
+    </div>
+</header>
+
+{% if not erro %}
+{% if not dados.dias %}
+<div class="cp-card"><div class="cp-vazio"><i class="fas fa-inbox"></i><h3>Nenhuma programação publicada neste período</h3>
+    <p>Quando a programação de pagamentos for publicada{% if cp_operar %} em <a href="{% url 'contas_pagar:pagar_hoje' %}">Pagar hoje</a>{% endif %}, ela aparecerá aqui.</p></div></div>
+{% else %}
+<section class="cp-kpis">
+    <div class="cp-card cp-kpi k-pos"><div class="rot">Saldo em conta</div><div class="val">{{ tot.em_conta|brl_curto }}</div>
+        <div class="pe">{% if tot.garantida %}inclui {{ tot.garantida|brl_curto }} conta garantida{% elif multi %}abertura do período{% else %}saldo disponível{% endif %}</div></div>
+    <div class="cp-card cp-kpi k-pos"><div class="rot">Aplicações</div><div class="val">{{ tot.aplicacao|brl_curto }}</div><div class="pe">investimentos</div></div>
+    <div class="cp-card cp-kpi k-neg"><div class="rot">Pagamentos</div><div class="val neg">{{ tot.pagamentos|brl_curto }}</div><div class="pe">{{ qtd_todos }} título{{ qtd_todos|pluralize }}</div></div>
+    <div class="cp-card cp-kpi"><div class="rot">Transferências</div><div class="val">{{ tot.transferencia|brl_curto }}</div><div class="pe">{% if tot.transferencia %}saldo líquido{% else %}entre contas · zerado{% endif %}</div></div>
+    <div class="cp-card cp-kpi k-ok"><div class="rot">Saldo final</div><div class="val {% if tot.saldo_final < 0 %}neg{% else %}pos{% endif %}">{{ tot.saldo_final|brl_curto }}</div><div class="pe">{% if multi %}após o último dia{% else %}após pagamentos{% endif %}</div></div>
+</section>
+
+<section class="cp-card">
+    <div class="cp-card-cab">
+        <div><h2>Títulos programados</h2>
+            <div class="sub"><span id="cpContagem">{{ titulos|length }} título(s) · <b>{{ valor_filtrado|brl }}</b></span>
+                {% if filtros.banco %} · <span class="cp-selo"><i class="fas fa-building-columns"></i>{{ banco_filtro_nome }}</span>{% endif %}
+                {% if filtros.categoria %} · <span class="cp-selo"><i class="fas fa-tag"></i>{{ filtros.categoria }}</span>{% endif %}
+                {% if filtros.filial %} · <span class="cp-selo"><i class="fas fa-store"></i>{{ filtros.filial }}</span>{% endif %}
+                {% if algum_filtro %} <a href="{{ limpar }}">limpar filtro</a>{% endif %}</div></div>
+        <input class="cp-campo busca" id="cpBusca" type="search" placeholder="Buscar fornecedor, filial, observação…" style="width:300px" aria-label="Buscar nos títulos">
+    </div>
+    <div class="cp-rolagem" style="max-height:560px">
+    <table class="cp-tabela" id="cpTitulos" data-rc-wrapped="1">
+        <thead><tr>
+            {% if multi %}<th class="ordena" data-tipo="texto">Pagamento</th>{% endif %}
+            <th class="ordena" data-tipo="texto">Vencimento</th><th class="ordena" data-tipo="texto">Fornecedor</th><th>Observações</th>
+            <th class="ordena" data-tipo="texto">Filial</th><th class="ordena" data-tipo="texto">Categoria</th>
+            <th class="ordena num" data-tipo="num">Valor líquido ▲</th><th class="ordena" data-tipo="texto">Banco pagador</th></tr></thead>
+        <tbody>
+        {% for t in titulos %}
+        <tr data-valor="{{ t.valor|stringformat:'s' }}">
+            {% if multi %}<td class="nw" data-v="{{ t.data_pagamento }}">{{ t.data_pagamento|slice:'8:10' }}/{{ t.data_pagamento|slice:'5:7' }}/{{ t.data_pagamento|slice:'0:4' }}</td>{% endif %}
+            <td class="nw" data-v="{{ t.vencimento }}">{% if t.vencimento %}{{ t.vencimento|slice:'8:10' }}/{{ t.vencimento|slice:'5:7' }}/{{ t.vencimento|slice:'0:4' }}{% endif %}</td>
+            <td>{{ t.fornecedor }}</td>
+            <td class="obs">{{ t.observacoes }}</td>
+            <td><a class="filtro" href="{{ t.url_fil }}" title="Filtrar por esta filial">{{ t.filial }}</a></td>
+            <td><a class="filtro" href="{{ t.url_cat }}" title="Filtrar por esta categoria">{{ t.tipo_macro }}</a></td>
+            <td class="num" data-v="{{ t.valor|stringformat:'s' }}"><b>{{ t.valor|brl }}</b></td>
+            <td><a class="filtro" href="{{ t.url_banco }}" title="{{ t.banco }}">{{ t.banco_nome }}</a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8" class="mudo" style="text-align:center;padding:24px">Nenhum título encontrado.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+</section>
+
+<section class="cp-card">
+    <div class="cp-card-cab"><h2>Acompanhamento de contas</h2><span class="sub">Clique em um banco para filtrar os títulos</span></div>
+    <table class="cp-tabela">
+        <thead><tr><th>Banco</th><th class="num">Saldo</th><th class="num">Aplicação</th><th class="num">Pagamentos</th><th class="num">Transf.</th><th class="num">Saldo final</th></tr></thead>
+        <tbody>
+        {% for b in dados.bancos %}
+        <tr class="clicavel {% if b.ativo %}sel{% endif %}" data-href="{{ b.url }}">
+            <td><a class="filtro cp-banco-nome" href="{{ b.url }}">{{ b.nome }}</a>{% if b.conta %}<div class="cp-banco-sub">{{ b.conta }}</div>{% endif %}</td>
+            <td class="num {% if b.em_conta %}pos{% else %}mudo{% endif %}">{% if b.em_conta %}{{ b.em_conta|brl }}{% else %}—{% endif %}</td>
+            <td class="num {% if b.aplicacao %}pos{% else %}mudo{% endif %}">{% if b.aplicacao %}{{ b.aplicacao|brl }}{% else %}—{% endif %}</td>
+            <td class="num {% if b.pagamentos %}neg{% else %}mudo{% endif %}">{% if b.pagamentos %}{{ b.pagamentos|brl }}{% else %}—{% endif %}</td>
+            <td class="num {% if not b.transferencia %}mudo{% elif b.transferencia < 0 %}neg{% else %}pos{% endif %}">{% if b.transferencia %}{{ b.transferencia|brl }}{% else %}—{% endif %}</td>
+            <td class="num {% if b.saldo_final < 0 %}neg{% elif b.saldo_final > 0 %}pos{% else %}mudo{% endif %}"><b>{{ b.saldo_final|brl }}</b></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+        <tfoot><tr><td>Total</td><td class="num">{{ tot.em_conta|brl }}</td><td class="num">{{ tot.aplicacao|brl }}</td>
+            <td class="num neg">{{ tot.pagamentos|brl }}</td><td class="num">{{ tot.transferencia|brl }}</td><td class="num">{{ tot.saldo_final|brl }}</td></tr></tfoot>
+    </table>
+</section>
+
+<div class="cp-grade-2">
+    <section class="cp-card">
+        <div class="cp-card-cab"><div><h2>Por categoria</h2><div class="sub">TipoMacro · clique para filtrar</div></div></div>
+        <div class="cp-lista-barras" style="padding:6px 0">
+            {% for g in por_cat %}<a href="{{ g.url }}" class="{% if g.ativo %}ativo{% endif %}"><span class="nome">{{ g.rotulo }} <span class="mudo">· {{ g.qtd }}</span></span><b class="num">{{ g.valor|brl }}</b>
+                <span class="barra"><span style="width:{% widthratio g.valor por_cat.0.valor 100 %}%"></span></span></a>
+            {% empty %}<div class="cp-vazio" style="padding:18px">Sem títulos.</div>{% endfor %}
+        </div>
+    </section>
+    <section class="cp-card">
+        <div class="cp-card-cab"><div><h2>Por filial</h2><div class="sub">Clique para filtrar</div></div></div>
+        <div class="cp-lista-barras" style="padding:6px 0">
+            {% for g in por_fil %}<a href="{{ g.url }}" class="{% if g.ativo %}ativo{% endif %}"><span class="nome">{{ g.rotulo }} <span class="mudo">· {{ g.qtd }}</span></span><b class="num">{{ g.valor|brl }}</b>
+                <span class="barra"><span style="width:{% widthratio g.valor por_fil.0.valor 100 %}%"></span></span></a>
+            {% empty %}<div class="cp-vazio" style="padding:18px">Sem títulos.</div>{% endfor %}
+        </div>
+    </section>
+</div>
+
+{% if multi %}
+<section class="cp-card">
+    <div class="cp-card-cab"><h2>Pagamentos por dia</h2><span class="sub">{{ dados.dias|length }} dia(s) com programação</span></div>
+    <div class="cp-card-corpo"><div class="cp-dias">
+        {% for d in dias %}<a class="cp-dia" href="{{ d.url }}" title="{{ d.data|date:'d/m/Y' }}: {{ d.valor|brl }}">
+            <div class="v">{% if d.valor %}{{ d.valor|brl_curto|slice:'3:' }}{% endif %}</div>
+            <div class="col" style="height:{{ d.pct|floatformat:'0' }}%;{% if not d.valor %}opacity:.25{% endif %}"></div>
+            <div class="d">{{ d.data.day }}{% if dias_curtos %}<br>{{ d.semana }}{% endif %}</div></a>{% endfor %}
+    </div></div>
+</section>
+{% endif %}
+{% endif %}
+{% endif %}
+{{ dias_programados|json_script:'cpDiasProgramados' }}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  'use strict';
+  var $ = function (s, el) { return (el || document).querySelector(s); };
+  var $$ = function (s, el) { return Array.prototype.slice.call((el || document).querySelectorAll(s)); };
+  var BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+  var iso = function (d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+  var fromIso = function (s) { var p = s.split('-').map(Number); return new Date(p[0], p[1] - 1, p[2]); };
+  var addDays = function (s, n) { var d = fromIso(s); d.setDate(d.getDate() + n); return iso(d); };
+  var INI = '{{ ini|date:"Y-m-d" }}', FIM = '{{ fim|date:"Y-m-d" }}', HOJE = '{{ hoje|date:"Y-m-d" }}';
+  var URL_PAINEL = '{% url "contas_pagar:painel" %}';
+
+  // linhas do banco: a linha inteira filtra
+  $$('tr[data-href]').forEach(function (tr) {
+    tr.addEventListener('click', function (e) { if (!e.target.closest('a')) location.href = tr.dataset.href; });
+  });
+
+  // busca e ordenação na tabela de títulos (no navegador, sem recarregar)
+  var tabela = $('#cpTitulos');
+  if (tabela) {
+    var corpo = tabela.tBodies[0];
+    var linhas = $$('tr[data-valor]', corpo);
+    var busca = $('#cpBusca');
+    var contar = function () {
+      var vis = linhas.filter(function (tr) { return tr.style.display !== 'none'; });
+      var soma = vis.reduce(function (a, tr) { return a + parseFloat(tr.dataset.valor || '0'); }, 0);
+      $('#cpContagem').innerHTML = vis.length + ' título(s) · <b>' + BRL.format(soma) + '</b>';
+    };
+    if (busca) busca.addEventListener('input', function () {
+      var q = busca.value.trim().toLowerCase();
+      linhas.forEach(function (tr) { tr.style.display = !q || tr.textContent.toLowerCase().indexOf(q) >= 0 ? '' : 'none'; });
+      contar();
+    });
+    var estado = { i: -1, d: 1 };
+    $$('th.ordena', tabela).forEach(function (th, _) {
+      var idx = Array.prototype.indexOf.call(th.parentNode.children, th);
+      th.dataset.rotulo = th.textContent.replace(/ [▲▼]$/, '');
+      if (/▲$/.test(th.textContent)) estado.i = idx;
+      th.addEventListener('click', function () {
+        estado = { i: idx, d: estado.i === idx ? -estado.d : 1 };
+        var num = th.dataset.tipo === 'num';
+        var val = function (tr) { var td = tr.children[idx]; var v = td.dataset.v != null ? td.dataset.v : td.textContent.trim(); return num ? parseFloat(v) : v.toLowerCase(); };
+        linhas.sort(function (a, b) { var x = val(a), y = val(b); return (x > y ? 1 : x < y ? -1 : 0) * estado.d; });
+        linhas.forEach(function (tr) { corpo.appendChild(tr); });
+        $$('th.ordena', tabela).forEach(function (h) { h.textContent = h.dataset.rotulo; });
+        th.textContent = th.dataset.rotulo + (estado.d > 0 ? ' ▲' : ' ▼');
+      });
+    });
+  }
+
+  // calendário: um clique escolhe o dia; dois cliques, o intervalo
+  var botao = $('#cpRotulo');
+  var progEl = document.getElementById('cpDiasProgramados');
+  var prog = new Set(progEl ? JSON.parse(progEl.textContent) : []);
+  var ir = function (a, b) {
+    var modo = (a === b && a === HOJE) ? 'hoje' : 'custom';
+    location.href = URL_PAINEL + '?modo=' + modo + '&ini=' + a + '&fim=' + b;
+  };
+  botao.addEventListener('click', function (e) {
+    e.stopPropagation();
+    var velho = $('.cp-cal'); if (velho) { velho.remove(); return; }
+    var mes = fromIso(INI); mes.setDate(1);
+    var a = null;
+    var pop = document.createElement('div');
+    pop.className = 'cp-cal';
+    pop.addEventListener('click', function (ev) { ev.stopPropagation(); });
+    $('#cpPeriodo').appendChild(pop);
+    var desenha = function () {
+      var y = mes.getFullYear(), m = mes.getMonth();
+      var primeiro = (new Date(y, m, 1).getDay() + 6) % 7;
+      var inicio = iso(new Date(y, m, 1 - primeiro));
+      var cel = '';
+      for (var i = 0; i < 42; i++) {
+        var x = addDays(inicio, i), dx = fromIso(x);
+        var ini = a || INI, fim = a || FIM;
+        var cls = [dx.getMonth() !== m ? 'out' : '', x === HOJE ? 'today' : '', (x === ini || x === fim) ? 'edge' : (x > ini && x < fim ? 'in' : ''), prog.has(x) ? 'has' : ''].join(' ');
+        cel += '<button type="button" class="' + cls + '" data-d="' + x + '">' + dx.getDate() + '</button>';
+      }
+      pop.innerHTML = '<div class="cp-cal-cab"><button type="button" class="cp-icone" data-nav="-1" aria-label="Mês anterior"><i class="fas fa-chevron-left"></i></button><span>' +
+        mes.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }) + '</span><button type="button" class="cp-icone" data-nav="1" aria-label="Próximo mês"><i class="fas fa-chevron-right"></i></button></div>' +
+        '<div class="cp-cal-grade">' + ['S', 'T', 'Q', 'Q', 'S', 'S', 'D'].map(function (x) { return '<div class="dow">' + x + '</div>'; }).join('') + cel + '</div>' +
+        '<div class="cp-cal-pe"><span>' + (a ? 'Clique na data final' : 'Clique em um dia ou selecione um intervalo') + '</span><span><span class="pos">●</span> com programação</span></div>';
+      $$('[data-nav]', pop).forEach(function (b) { b.onclick = function () { mes.setMonth(mes.getMonth() + Number(b.dataset.nav)); desenha(); }; });
+      $$('.cp-cal-grade button', pop).forEach(function (b) {
+        b.onclick = function () {
+          var x = b.dataset.d;
+          if (!a) { a = x; desenha(); } else { ir(x < a ? x : a, x < a ? a : x); }
+        };
+        b.ondblclick = function () { ir(b.dataset.d, b.dataset.d); };
+      });
+    };
+    desenha();
+    setTimeout(function () {
+      document.addEventListener('click', function fecha() { pop.remove(); document.removeEventListener('click', fecha); });
+    }, 0);
+  });
+})();
+</script>
+{% endblock %}

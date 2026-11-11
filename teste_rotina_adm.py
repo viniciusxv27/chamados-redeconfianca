@@ -285,8 +285,17 @@ t('agenda traz as atividades por dia e a conclusão', ag and ag['total'] == 2 an
   and ag['dias'][0]['itens'][0]['feita'] and ag['dias'][2]['itens'][0]['atividade'].titulo == 'Organização da loja')
 h = ca.get('/rotina-adm/').content.decode()
 t('a central mostra a agenda da pessoa', 'Contagem de estoque LVUT' in h and 'Organização da loja' in h and '1 de 2 concluída' in h)
+import re as _re  # noqa: E402
+_n_hoje = min(hoje.weekday(), len(ag['dias']) - 1)
+t('agenda abre no dia de hoje (11/11)', ag['foco'] == (hoje.weekday() if hoje.weekday() < len(ag['dias']) else 0)
+  and f'class="ra-dia hoje foco" data-dia="{hoje.weekday()}"' in h if hoje.weekday() < len(ag['dias']) else ag['foco'] == 0,
+  ag['foco'])
+t('agenda: botões dos dias e "Ver semana"', 'id="raAgendaExpandir"' in h and 'Ver semana' in h
+  and len(_re.findall(r'role="tab" data-dia=', h)) == len(ag['dias']))
+t('as atividades dos outros dias continuam na página (para expandir)', 'Organização da loja' in h)
 h = ca.get('/rotina-adm/', {'semana': (segunda + timedelta(days=7)).isoformat()}).content.decode()
 t('navega para a próxima semana (nada concluído ainda)', '0 de 2 concluída' in h)
+t('outra semana abre no primeiro dia', 'class="ra-dia  foco" data-dia="0"' in h or 'class="ra-dia foco" data-dia="0"' in h)
 t('sem Rotina Gerencial: aviso', servicos.agenda_da_semana(gestor, segunda) is None
   and 'ainda não tem Rotina Gerencial' in cg.get('/rotina-adm/').content.decode())
 h = cg.get('/rotina-adm/', {'pessoa': adm.id}).content.decode()

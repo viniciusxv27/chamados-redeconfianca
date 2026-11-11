@@ -145,6 +145,8 @@ urlpatterns = [
     path('cameras/', include('cameras.urls')),  # Câmeras das lojas (SUPERADMIN)
     path('rotina-adm/', include('rotina_adm.urls')),  # Rotina ADM (central do ADM de loja)
     path('rotina-gerencial/', include('rotina.urls')),  # Rotina Gerencial
+    path('contas-a-pagar/', include('contas_pagar.urls')),  # Contas a Pagar (BI)
+    path('auditoria-d1/', include('auditoria_d1.urls')),  # Auditoria D-1
     path('apresentacoes/', include('apresentacoes.urls')),  # Assistente de Apresentações
     path('busca-global/', core_busca.busca_global, name='busca_global'),  # busca do menu superior
     path('quadro-hc/', include('quadro_hc.urls')),  # Quadro de HC (só SUPERADMIN)

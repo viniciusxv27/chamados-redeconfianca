@@ -171,7 +171,9 @@ def agenda_da_semana(pessoa, segunda):
                   'perdida': (a.id, data) not in feitas and data < hoje}
                  for a in atividades if a.dia_semana == n]
         dias.append({'data': data, 'curto': DIAS_CURTOS[n], 'hoje': data == hoje, 'itens': itens})
-    return {'rotina': rotina, 'dias': dias, 'inicio': segunda, 'fim': fim,
+    # Dia que a agenda abre: hoje, se a semana é esta; senão o primeiro dia.
+    foco = next((n for n, d in enumerate(dias) if d['hoje']), 0)
+    return {'rotina': rotina, 'dias': dias, 'inicio': segunda, 'fim': fim, 'foco': foco,
             'total': sum(len(d['itens']) for d in dias),
             'feitas': sum(1 for d in dias for i in d['itens'] if i['feita'])}
 

@@ -1,0 +1,59 @@
+{% extends 'contas_pagar/_base.html' %}
+{% load contas_pagar_fmt %}
+{% block cp_titulo %}Histórico · Contas a Pagar{% endblock %}
+{% block cp_conteudo %}
+<header class="cp-topo"><div><h1>Histórico de pagamentos</h1><p>Títulos programados gravados no banco de dados, por data de pagamento</p></div></header>
+{% if not erro %}
+<section class="cp-card">
+    {% if dias %}
+    <table class="cp-tabela">
+        <thead><tr><th>Data de pagamento</th><th class="num">Títulos</th><th class="num">Valor total</th><th>Vencimentos</th><th>Publicado em</th><th></th></tr></thead>
+        <tbody>{% for h in dias %}<tr>
+            <td class="nw"><b>{{ h.data_pagamento|date:'d/m/Y' }}</b> <span class="mudo">{{ h.semana }}</span></td>
+            <td class="num">{{ h.qtd }}</td><td class="num"><b>{{ h.valor|brl }}</b></td>
+            <td class="nw">{{ h.venc_ini|date:'d/m/Y' }} a {{ h.venc_fim|date:'d/m/Y' }}</td>
+            <td class="nw">{{ h.publicado_em|date:'d/m/Y H:i' }}</td>
+            <td class="num nw"><a class="cp-botao peq" href="{{ h.url }}">Ver no painel</a>
+                {% if cp_operar %}<form method="post" action="{% url 'contas_pagar:historico_excluir' %}" style="display:inline"
+                    onsubmit="return confirm('Excluir do banco de dados todos os títulos e saldos de {{ h.data_pagamento|date:'d/m/Y' }}? Esta ação não pode ser desfeita.')">{% csrf_token %}
+                    <input type="hidden" name="dia" value="{{ h.data_pagamento|date:'Y-m-d' }}">
+                    <button class="cp-botao peq perigo" title="Excluir este dia" aria-label="Excluir este dia"><i class="fas fa-trash"></i></button></form>{% endif %}</td>
+        </tr>{% endfor %}</tbody>
+    </table>
+    {% else %}
+    <div class="cp-vazio"><i class="fas fa-inbox"></i><h3>Nenhum pagamento publicado ainda</h3>{% if cp_operar %}<p><a href="{% url 'contas_pagar:pagar_hoje' %}">Importar a base de hoje</a></p>{% endif %}</div>
+    {% endif %}
+</section>
+{% endif %}
+
+{% if rascunhos %}
+<section class="cp-card">
+    <div class="cp-card-cab"><div><h2>Rascunhos não publicados</h2><div class="sub">Ficam guardados até serem publicados ou descartados</div></div></div>
+    <table class="cp-tabela">
+        <thead><tr><th>Importado em</th><th>Arquivo</th>{% if cp_superadmin %}<th>Quem importou</th>{% endif %}<th class="num">Linhas</th><th></th></tr></thead>
+        <tbody>{% for r in rascunhos %}<tr>
+            <td class="nw">{{ r.criado_em|date:'d/m/Y H:i' }}</td><td>{{ r.arquivo }}</td>
+            {% if cp_superadmin %}<td>{{ r.user.full_name|default:r.user.username }}</td>{% endif %}
+            <td class="num">{{ r.qtd_linhas }}</td>
+            <td class="num nw"><a class="cp-botao peq" href="{% url 'contas_pagar:pagar_hoje_montar' r.id %}"><i class="fas fa-pen"></i>Continuar</a>
+                <form method="post" action="{% url 'contas_pagar:descartar' r.id %}" style="display:inline" onsubmit="return confirm('Descartar este rascunho?')">{% csrf_token %}
+                    <input type="hidden" name="volta" value="historico"><button class="cp-botao peq perigo" aria-label="Descartar rascunho"><i class="fas fa-trash"></i></button></form></td>
+        </tr>{% endfor %}</tbody>
+    </table>
+</section>
+{% endif %}
+
+{% if log %}
+<section class="cp-card">
+    <div class="cp-card-cab"><div><h2>Registro de publicações</h2><div class="sub">Quem publicou ou excluiu cada dia (últimos 30)</div></div></div>
+    <table class="cp-tabela">
+        <thead><tr><th>Quando</th><th>Quem</th><th>O quê</th><th>Data de pagamento</th><th class="num">Títulos</th><th class="num">Valor</th></tr></thead>
+        <tbody>{% for l in log %}<tr>
+            <td class="nw">{{ l.em|date:'d/m/Y H:i' }}</td><td>{{ l.user.full_name|default:l.user.username|default:'—' }}</td>
+            <td><span class="cp-selo {% if l.acao == 'EXCLUIU_DIA' %}neg{% else %}ok{% endif %}">{{ l.get_acao_display }}</span></td>
+            <td class="nw">{{ l.data_pagamento|date:'d/m/Y' }}</td><td class="num">{{ l.qtd_titulos }}</td><td class="num">{{ l.valor|brl }}</td>
+        </tr>{% endfor %}</tbody>
+    </table>
+</section>
+{% endif %}
+{% endblock %}

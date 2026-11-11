@@ -1,0 +1,59 @@
+{% extends 'contas_pagar/_base.html' %}
+{% load contas_pagar_fmt %}
+{% block cp_titulo %}Pagar hoje · Contas a Pagar{% endblock %}
+{% block cp_conteudo %}
+<header class="cp-topo"><div><h1>Pagar hoje</h1><p>Importe a BASE VIVOGO, escolha o período e atualize os saldos</p></div></header>
+<div class="cp-passos">
+    <div class="cp-passo on"><b>1</b>Importar base</div><div class="cp-passo"><b>2</b>Período a pagar</div>
+    <div class="cp-passo"><b>3</b>Saldos bancários</div><div class="cp-passo"><b>4</b>Publicar</div>
+</div>
+{% if pub_hoje %}
+<div class="cp-nota ok"><i class="fas fa-circle-check" style="margin-top:2px"></i>
+    <div>Já existe uma programação publicada para hoje ({{ pub_hoje.qtd }} títulos · {{ pub_hoje.valor|brl }}).
+    Se importar e publicar uma nova base com a mesma data de pagamento, ela substitui a atual.</div></div>
+{% endif %}
+<label class="cp-solta" id="cpSolta">
+    <i class="fas fa-file-arrow-up"></i>
+    <h3 id="cpSoltaTitulo">Arraste aqui o arquivo da BASE VIVOGO</h3>
+    <div class="mudo">rel_contas_a_pagar_e_ja_pagas · .csv ou .xlsx — ou toque para escolher</div>
+    <input type="file" id="cpArquivo" accept=".csv,.xlsx,.xlsm" hidden>
+</label>
+{% if rascunhos %}
+<section class="cp-card">
+    <div class="cp-card-cab"><div><h2>Rascunhos em andamento</h2><div class="sub">Ficam guardados até serem publicados ou descartados</div></div></div>
+    <table class="cp-tabela">
+        <thead><tr><th>Importado em</th><th>Arquivo</th><th>Data de pagamento</th>{% if cp_superadmin %}<th>Quem importou</th>{% endif %}<th></th></tr></thead>
+        <tbody>{% for r in rascunhos %}<tr>
+            <td class="nw">{{ r.criado_em|date:'d/m/Y H:i' }}</td><td>{{ r.arquivo }}</td><td class="nw">{{ r.data_pagamento|date:'d/m/Y' }}</td>
+            {% if cp_superadmin %}<td>{{ r.user.full_name|default:r.user.username }}</td>{% endif %}
+            <td class="num"><a class="cp-botao peq" href="{% url 'contas_pagar:pagar_hoje_montar' r.id %}"><i class="fas fa-pen"></i>Continuar</a></td></tr>{% endfor %}</tbody>
+    </table>
+</section>
+{% endif %}
+{% endblock %}
+{% block extra_js %}
+<script>
+(function () {
+  'use strict';
+  var solta = document.getElementById('cpSolta'), inp = document.getElementById('cpArquivo'), tit = document.getElementById('cpSoltaTitulo');
+  var URL = '{% url "contas_pagar:api_importar" %}';
+  var csrf = '{{ csrf_token }}';
+  function toast(msg, erro) {
+    var t = document.createElement('div'); t.className = 'cp-toast' + (erro ? ' erro' : ''); t.textContent = msg;
+    document.body.appendChild(t); setTimeout(function () { t.remove(); }, 4000);
+  }
+  function enviar(file) {
+    tit.textContent = 'Importando ' + file.name + '…';
+    var fd = new FormData(); fd.append('arquivo', file);
+    fetch(URL, { method: 'POST', body: fd, headers: { 'X-CSRFToken': csrf }, credentials: 'same-origin' })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) throw new Error(j.erro || ('Erro ' + r.status)); return j; }); })
+      .then(function (j) { if (j.aviso) { try { sessionStorage.setItem('cpAviso', j.aviso); } catch (e2) {} } location.href = j.url; })
+      .catch(function (e) { toast(e.message, true); tit.textContent = 'Arraste aqui o arquivo da BASE VIVOGO'; inp.value = ''; });
+  }
+  inp.addEventListener('change', function () { if (inp.files[0]) enviar(inp.files[0]); });
+  ['dragover', 'dragenter'].forEach(function (ev) { solta.addEventListener(ev, function (e) { e.preventDefault(); solta.classList.add('sobre'); }); });
+  ['dragleave', 'drop'].forEach(function (ev) { solta.addEventListener(ev, function (e) { e.preventDefault(); solta.classList.remove('sobre'); }); });
+  solta.addEventListener('drop', function (e) { if (e.dataTransfer.files[0]) enviar(e.dataTransfer.files[0]); });
+})();
+</script>
+{% endblock %}
