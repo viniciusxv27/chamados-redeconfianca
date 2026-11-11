@@ -35,7 +35,7 @@
                {% if aba == 'gestao' %}aria-current="page"{% endif %}>
                 <i class="fas fa-users" aria-hidden="true"></i><span>Pessoas</span>
             </a>
-            {% if e_superadmin %}
+            {% if e_admin %}
             <a href="{% url 'rotina:modelos' %}" class="rt-aba{% if aba == 'modelos' %} rt-aba-ativa{% endif %}"
                {% if aba == 'modelos' %}aria-current="page"{% endif %}>
                 <i class="fas fa-layer-group" aria-hidden="true"></i><span>Modelos</span>

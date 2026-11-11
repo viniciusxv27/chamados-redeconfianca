@@ -994,10 +994,24 @@ try:
     t('SUPERADMIN adiciona a pessoa', g is not None and g.criado_por == superadmin and r.status_code == 302)
     c_coord = cliente(coord)
     html = c_coord.get('/rotina-gerencial/gestao/').content.decode()
-    t('o gestor abre Pessoas, sem a seção de gestores e sem a aba Modelos',
-      'rt-pessoas' in html and 'id="rt-gestores"' not in html and 'href="/rotina-gerencial/modelos/" class="rt-aba' not in html)
+    t('o gestor abre Pessoas e a aba Modelos, sem a seção de gestores (11/11)',
+      'rt-pessoas' in html and 'id="rt-gestores"' not in html and 'href="/rotina-gerencial/modelos/" class="rt-aba' in html)
     t('o gestor abre a semana de outra pessoa', c_coord.get(f'/rotina-gerencial/gestao/{gerente.id}/').status_code == 200)
-    t('mas não os modelos', c_coord.get('/rotina-gerencial/modelos/').status_code == 302)
+    html = c_coord.get('/rotina-gerencial/modelos/').content.decode()
+    t('o gestor vê os modelos (11/11)', modelo.nome in html, html[:200])
+    t('o gestor abre o editor do modelo', c_coord.get(f'/rotina-gerencial/modelos/{modelo.id}/').status_code == 200)
+    r = c_coord.post('/rotina-gerencial/modelos/novo/', {'nome': 'ZZ Modelo do gestor', 'descricao': 'teste'})
+    novo_modelo = ModeloRotina.objects.filter(nome='ZZ Modelo do gestor').first()
+    t('o gestor cria modelo', novo_modelo is not None and r.status_code == 302
+      and r['Location'] == f'/rotina-gerencial/modelos/{getattr(novo_modelo, "id", 0)}/')
+    r = c_coord.post(f'/rotina-gerencial/modelos/{novo_modelo.id}/acao/', {'acao': 'salvar', 'nome': 'ZZ Modelo do gestor 2',
+                                                                           'descricao': 'x', 'ativo': 'on'})
+    t('o gestor renomeia o modelo', ModeloRotina.objects.get(pk=novo_modelo.pk).nome == 'ZZ Modelo do gestor 2')
+    t('quem não é gestor continua sem os modelos', cliente(gerente).get('/rotina-gerencial/modelos/').status_code == 302
+      and post_json(cliente(gerente), f'/rotina-gerencial/api/modelos/{modelo.id}/atividades/',
+                    {'dia_semana': 0, 'inicio': '07:00', 'fim': '07:30', 'titulo': 'ZZ intruso'}).status_code == 403)
+    r = c_coord.post(url_gestores, {'acao': 'adicionar', 'usuarios': [gerente.id]})
+    t('o gestor não mexe na lista de gestores', not GestorRotina.objects.filter(user=gerente).exists())
     r = c_coord.get('/rotina-gerencial/api/rotina/', {'usuario': gerente.id})
     t('API: o gestor lê a rotina de outra pessoa', r.status_code == 200, r.status_code)
     rot = RotinaGerencial.objects.get(user=gerente)
@@ -1007,7 +1021,14 @@ try:
     post_json(c_coord, f'/rotina-gerencial/api/gestao/{gerente.id}/opcoes/', {'pode_criar': rot.pode_criar})
     r = post_json(c_coord, f'/rotina-gerencial/api/modelos/{modelo.id}/atividades/',
                   {'dia_semana': 0, 'inicio': '07:00', 'fim': '07:30', 'titulo': 'ZZ gestor no modelo'})
-    t('API: o gestor não mexe em modelo', r.status_code == 403, r.status_code)
+    t('API: o gestor põe atividade no modelo (11/11)', r.status_code == 201, (r.status_code, r.content[:200]))
+    ativ_id = AtividadeModelo.objects.filter(modelo=modelo, titulo='ZZ gestor no modelo').values_list('id', flat=True).first()
+    r = post_json(c_coord, f'/rotina-gerencial/api/modelos/atividades/{ativ_id}/', {'titulo': 'ZZ gestor no modelo 2'})
+    t('API: o gestor edita atividade do modelo', r.status_code == 200
+      and AtividadeModelo.objects.get(pk=ativ_id).titulo == 'ZZ gestor no modelo 2', (r.status_code, r.content[:200]))
+    r = post_json(c_coord, f'/rotina-gerencial/api/modelos/atividades/{ativ_id}/excluir/', {})
+    t('API: o gestor exclui atividade do modelo', r.status_code == 200 and not AtividadeModelo.objects.filter(pk=ativ_id).exists(),
+      (r.status_code, r.content[:200]))
     r = post_json(c_coord, '/rotina-gerencial/api/rotina/atividades/',
                   {'usuario': gerente.id, 'dia_semana': 2, 'inicio': '06:00', 'fim': '06:30', 'titulo': 'ZZ do gestor',
                    'categoria': 'EQUIPE', 'bloqueada': True})
@@ -1015,7 +1036,8 @@ try:
     t('o gestor vê o menu da rotina mesmo sem rotina própria', '/rotina-gerencial/' in cliente(coord).get('/', follow=True).content.decode())
     c_admin.post(url_gestores, {'acao': 'remover', 'gestor': g.id})
     t('SUPERADMIN tira o acesso e o gestor volta a não entrar', not GestorRotina.objects.filter(user=coord).exists()
-      and cliente(coord).get('/rotina-gerencial/gestao/').status_code == 302)
+      and cliente(coord).get('/rotina-gerencial/gestao/').status_code == 302
+      and cliente(coord).get('/rotina-gerencial/modelos/').status_code == 302)
 
     print('\n== ADMIN DO DJANGO ==')
     t('os cinco modelos estão registrados',

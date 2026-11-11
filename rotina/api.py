@@ -68,9 +68,10 @@ def ler_json(request):
     return corpo
 
 
-def exigir_superadmin(request):
-    if not e_superadmin(request.user):
-        raise SemPermissao('Só o SUPERADMIN pode fazer isso.')
+def exigir_gestao(request):
+    """Modelos de rotina: SUPERADMIN ou gestor da rotina (11/11/2026)."""
+    if not pode_gerir(request.user):
+        raise SemPermissao('Só a gestão da rotina pode fazer isso.')
 
 
 def _id(valor):
@@ -267,7 +268,7 @@ def _atividade_modelo(atividade_id):
 
 @api('GET', 'POST')
 def modelo_atividades(request, modelo_id):
-    exigir_superadmin(request)
+    exigir_gestao(request)
     modelo = _modelo(modelo_id)
     if request.method == 'GET':
         return JsonResponse(servicos.payload_modelo(modelo))
@@ -279,7 +280,7 @@ def modelo_atividades(request, modelo_id):
 
 @api('POST')
 def modelo_atualizar(request, atividade_id):
-    exigir_superadmin(request)
+    exigir_gestao(request)
     atividade = _atividade_modelo(atividade_id)
     limpos = servicos.ler_dados_atividade(ler_json(request), atual=atividade,
                                           com_domingo=atividade.modelo.com_domingo)
@@ -294,7 +295,7 @@ def modelo_atualizar(request, atividade_id):
 
 @api('POST')
 def modelo_excluir(request, atividade_id):
-    exigir_superadmin(request)
+    exigir_gestao(request)
     atividade = _atividade_modelo(atividade_id)
     modelo = atividade.modelo
     with transaction.atomic():

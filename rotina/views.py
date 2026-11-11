@@ -30,20 +30,11 @@ logger = logging.getLogger(__name__)
 User = get_user_model()
 
 
-def so_superadmin(view):
-    """Telas de gestão: quem não é SUPERADMIN volta para a própria rotina, com um aviso."""
-    @wraps(view)
-    @login_required
-    def envolta(request, *args, **kwargs):
-        if not e_superadmin(request.user):
-            messages.error(request, 'Só o SUPERADMIN gerencia a rotina gerencial.')
-            return redirect('rotina:minha')
-        return view(request, *args, **kwargs)
-    return envolta
-
-
 def so_gestao(view):
-    """Pessoas e semana dos outros: SUPERADMIN ou gestor da rotina (GestorRotina)."""
+    """Pessoas, semana dos outros e modelos: SUPERADMIN ou gestor da rotina (GestorRotina).
+
+    Modelos eram só do SUPERADMIN; desde 11/11/2026 quem está em "Quem pode gerenciar
+    rotinas" também vê, cria e edita. A lista de gestores continua só do SUPERADMIN."""
     @wraps(view)
     @login_required
     def envolta(request, *args, **kwargs):
@@ -398,7 +389,7 @@ def _previa_da_semana(atividades, com_domingo=False):
     return [{'curto': servicos.DIAS_CURTOS[numero], 'blocos': blocos} for numero, blocos in enumerate(dias)]
 
 
-@so_superadmin
+@so_gestao
 def modelos(request):
     lista = list(ModeloRotina.objects
                  .annotate(total=Count('atividades', distinct=True), pessoas=Count('rotinas', distinct=True))
@@ -411,7 +402,7 @@ def modelos(request):
     return render(request, 'rotina/modelos.html', _contexto(request, 'modelos', modelos=lista))
 
 
-@so_superadmin
+@so_gestao
 @require_POST
 def modelo_novo(request):
     nome = (request.POST.get('nome') or '').strip()[:120]
@@ -436,7 +427,7 @@ def modelo_novo(request):
     return redirect('rotina:modelo_editor', modelo_id=modelo.id)
 
 
-@so_superadmin
+@so_gestao
 def modelo_editor(request, modelo_id):
     modelo = get_object_or_404(ModeloRotina, pk=modelo_id)
     dados = servicos.payload_modelo(modelo)
@@ -450,7 +441,7 @@ def modelo_editor(request, modelo_id):
     ))
 
 
-@so_superadmin
+@so_gestao
 @require_POST
 def modelo_acao(request, modelo_id):
     modelo = get_object_or_404(ModeloRotina, pk=modelo_id)

@@ -27,7 +27,7 @@
         <span class="rt-stat-icone"><i class="fas fa-user-pen"></i></span>
         <div><p class="rt-stat-valor">{{ resumo.criam }}</p><p class="rt-stat-rotulo">Podem criar atividades</p></div>
     </div>
-    <a {% if e_superadmin %}href="{% url 'rotina:modelos' %}"{% endif %} class="rt-card rt-stat" style="text-decoration: none">
+    <a {% if e_admin %}href="{% url 'rotina:modelos' %}"{% endif %} class="rt-card rt-stat" style="text-decoration: none">
         <span class="rt-stat-icone"><i class="fas fa-layer-group"></i></span>
         <div><p class="rt-stat-valor">{{ modelos|length }}</p><p class="rt-stat-rotulo">Modelos ativos</p></div>
     </a>
