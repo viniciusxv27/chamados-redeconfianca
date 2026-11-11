@@ -175,12 +175,9 @@ try:
             # Os dois caminhos de recusa não encostam no storage: dá para
             # testar sem sujar o MinIO.
             antes = Comprovante.objects.count()
-            r = c.post(f'/cursos/{curso.id}/comprovante/',
-                       {'arquivo': SimpleUploadedFile('virus.exe', b'x' * 10,
-                                                      'application/octet-stream')},
-                       follow=True)
-            t('formato não aceito é recusado', Comprovante.objects.count() == antes)
-            t('e a tela explica', 'Formato não aceito' in r.content.decode())
+            # Desde 09/11/2026 o comprovante aceita QUALQUER formato (certificado vem em PDF
+            # sem extensão, imagem etc.): não há mais "formato não aceito". Não envia arquivo
+            # aqui — o envio de verdade grava no MinIO compartilhado.
 
             r = c.post(f'/cursos/{curso.id}/comprovante/', {}, follow=True)
             t('sem arquivo, recusa', Comprovante.objects.count() == antes)

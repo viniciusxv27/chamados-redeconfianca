@@ -6,6 +6,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {% comment %}Esquema de cores declarado (11/11/2026): sem isto, o WebView do app Android com o celular em modo escuro "escurecia à força" a página clara — tela acinzentada, texto e botão apagados. "only light" proíbe o escurecimento automático; quem escolheu o tema escuro do portal declara dark.{% endcomment %}
+    <meta name="color-scheme" content="{% if user.is_authenticated and user.theme == 'dark' %}dark{% else %}only light{% endif %}">
+    <style>:root { color-scheme: only light; } html.dark { color-scheme: dark; }</style>
     <title>{% block title %}Rede Confiança - Portal{% endblock %}</title>
     
     <!-- PWA Manifest -->
