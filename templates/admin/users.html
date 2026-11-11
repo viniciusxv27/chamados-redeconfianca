@@ -126,7 +126,7 @@
     <div class="bg-white rounded-xl shadow-sm p-6 mb-6">
         <div class="flex flex-wrap items-center gap-4">
             <div class="flex-1 min-w-64">
-                <input type="text" id="searchUsers" placeholder="Buscar por nome, email ou setor..." class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                <input type="text" id="searchUsers" placeholder="Buscar por nome, login, email ou setor..." class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
             </div>
             <select id="filterSector" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
                 <option value="">Todos os Setores</option>
@@ -173,7 +173,7 @@
                         data-sector="{{ user_item.sector.id|default:'' }}" 
                         data-hierarchy="{{ user_item.hierarchy }}"
                         data-status="{{ user_item.status|lower|default:'ativo' }}"
-                        data-search="{{ user_item.full_name|lower }} {{ user_item.email|lower }} {{ user_item.sector.name|default:''|lower }}">
+                        data-search="{{ user_item.full_name|lower }} {{ user_item.username|lower }} {{ user_item.email|lower }} {{ user_item.sector.name|default:''|lower }}">
                         <td class="py-4 px-6">
                             <div class="flex items-center">
                                 {% comment %}
@@ -761,7 +761,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const userRows = document.querySelectorAll('.user-row');
 
     function filterUsers() {
-        const searchTerm = searchInput.value.toLowerCase();
+        const searchTerm = searchInput.value.trim().toLowerCase();
         const selectedSector = sectorFilter.value;
         const selectedHierarchy = hierarchyFilter.value;
         const selectedStatus = statusFilter.value;
