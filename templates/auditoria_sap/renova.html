@@ -119,8 +119,13 @@
         </div>
         <div class="col-span-4 mt-2 md:mt-0">
             {% if v.chamado %}
-                <a href="{% url 'ticket_detail' v.chamado.id %}" class="sap-chip sap-resolvida hover:underline"><i class="fas fa-ticket"></i>#{{ v.chamado.id }} · {{ v.chamado.get_status_display }}</a>
+                {% if v.chamado.status in status_concluido %}
+                <a href="{% url 'ticket_detail' v.chamado.id %}" class="sap-chip {% if v.chamado.status == 'RESOLVIDO' or v.chamado.status == 'FECHADO' %}sap-resolvida{% else %}sap-saiu{% endif %} hover:underline"><i class="fas fa-circle-check"></i>#{{ v.chamado.id }} · {{ v.chamado.get_status_display }}</a>
+                <p class="text-[11px] text-gray-500 mt-1">Concluído{% with quando=v.chamado.closed_at|default:v.chamado.resolved_at %}{% if quando %} em {{ quando|date:"d/m/Y H:i" }}{% endif %}{% endwith %}{% if v.chamado.assigned_to %} · por {{ v.chamado.assigned_to.first_name }}{% endif %} · {{ v.get_chamado_como_display }}</p>
+                {% else %}
+                <a href="{% url 'ticket_detail' v.chamado.id %}" class="sap-chip sap-andamento hover:underline"><i class="fas fa-ticket"></i>#{{ v.chamado.id }} · {{ v.chamado.get_status_display }}</a>
                 <p class="text-[11px] text-gray-400 mt-1">{{ v.get_chamado_como_display }}</p>
+                {% endif %}
                 {% if v.chamado_como == 'manual' %}
                 <form method="post" action="{% url 'auditoria_sap:renova_marcar' v.id %}" class="inline">{% csrf_token %}<input type="hidden" name="acao" value="reabrir"><input type="hidden" name="voltar" value="{{ request.get_full_path }}"><button class="text-[11px] text-gray-500 underline">desligar</button></form>
                 {% endif %}
@@ -145,7 +150,7 @@
         </div>
     </div>
     {% empty %}
-    <div class="p-8 text-center text-sm text-gray-500">{% if situacao == 'sem_chamado' %}<i class="fas fa-circle-check text-emerald-500 mr-1"></i>Nenhuma venda com Renova sem chamado neste filtro.{% else %}Nada neste filtro.{% endif %}</div>
+    <div class="p-8 text-center text-sm text-gray-500">{% if situacao == 'sem_chamado' %}<i class="fas fa-circle-check text-emerald-500 mr-1"></i>Nenhuma venda com Renova sem chamado neste filtro.{% elif situacao == 'concluidas' %}Nenhum chamado de Renova concluído neste filtro.{% else %}Nada neste filtro.{% endif %}</div>
     {% endfor %}
 </div>
 

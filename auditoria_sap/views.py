@@ -8,7 +8,7 @@ from functools import wraps
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Count, DecimalField, Q, Sum, Value
+from django.db.models import Count, DecimalField, F, Q, Sum, Value
 from django.db.models.functions import Abs, Coalesce, TruncMonth
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -602,8 +602,10 @@ def gestores(request):
 # ---------------------------------------------------------------------------
 # Visão Renova (auditoria_sap/renova.py)
 # ---------------------------------------------------------------------------
-SITUACOES_RENOVA = (('sem_chamado', 'Sem chamado'), ('com_chamado', 'Com chamado'),
-                    ('dispensadas', 'Não precisam de chamado'), ('todas', 'Todas'))
+SITUACOES_RENOVA = (('sem_chamado', 'Sem chamado'), ('com_chamado', 'Chamado em andamento'),
+                    ('concluidas', 'Concluídos'), ('dispensadas', 'Não precisam de chamado'), ('todas', 'Todas'))
+# Chamado de Renova encerrado (11/11/2026): sai de "em andamento" e vai para "Concluídos".
+STATUS_CHAMADO_CONCLUIDO = ('RESOLVIDO', 'FECHADO', 'ENCERRADO_SEM_SOLUCAO', 'REJEITADO')
 
 
 def _renovas_visiveis(user):
@@ -650,21 +652,29 @@ def renova(request):
                        | Q(cpf__icontains=digitos_busca) | Q(imei__icontains=digitos_busca)
                        | Q(vendas_vivogo__icontains=digitos_busca) | Q(chamado_id=int(digitos_busca[:9])))
         qs = qs.filter(filtro)
+    concluido = Q(chamado__status__in=STATUS_CHAMADO_CONCLUIDO)
+    em_andamento = Q(chamado__isnull=False) & ~concluido
     contagem = {
         'sem_chamado': qs.filter(chamado__isnull=True, dispensada=False).count(),
-        'com_chamado': qs.filter(chamado__isnull=False).count(),
+        'com_chamado': qs.filter(em_andamento).count(),
+        'concluidas': qs.filter(concluido).count(),
         'dispensadas': qs.filter(chamado__isnull=True, dispensada=True).count(),
     }
     contagem['todas'] = qs.count()
+    ordem = ('-data_fatura', '-ordem')
     if situacao == 'sem_chamado':
         qs = qs.filter(chamado__isnull=True, dispensada=False)
     elif situacao == 'com_chamado':
-        qs = qs.filter(chamado__isnull=False)
+        qs = qs.filter(em_andamento)
+    elif situacao == 'concluidas':
+        # O que acabou de ser concluído primeiro.
+        qs = qs.filter(concluido).annotate(concluido_em=Coalesce('chamado__closed_at', 'chamado__resolved_at'))
+        ordem = (F('concluido_em').desc(nulls_last=True), '-data_fatura', '-ordem')
     elif situacao == 'dispensadas':
         qs = qs.filter(chamado__isnull=True, dispensada=True)
 
     pagina = Paginator(qs.select_related('setor', 'chamado', 'dispensada_por')
-                       .order_by('-data_fatura', '-ordem'), POR_PAGINA).get_page(request.GET.get('pagina'))
+                       .order_by(*ordem), POR_PAGINA).get_page(request.GET.get('pagina'))
     parametros = request.GET.copy()
     parametros.pop('pagina', None)
 
@@ -680,6 +690,7 @@ def renova(request):
         'query_renova': parametros.urlencode(),
         'situacao': situacao,
         'situacoes': [{'chave': c, 'rotulo': r, 'n': contagem[c]} for c, r in SITUACOES_RENOVA],
+        'status_concluido': STATUS_CHAMADO_CONCLUIDO,
         'mes': mes,
         'meses': [{'chave': c, 'rotulo': rotulo_mes(c)} for c in meses],
         'loja': loja,
