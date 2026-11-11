@@ -42,6 +42,11 @@ class iOSNotificationManager {
         this.handleInstallPrompt();
     }
     
+    handleInstallPrompt() {
+        // Faltava este método e o init() parava aqui com TypeError. O pedido de "adicionar à tela
+        // de início" já sai do beforeinstallprompt (setupiOSEventListeners); aqui não há o que fazer.
+    }
+    
     checkiOSVersion() {
         const match = navigator.userAgent.match(/OS (\d+)_(\d+)/);
         if (match) {

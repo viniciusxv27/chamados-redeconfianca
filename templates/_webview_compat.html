@@ -1,0 +1,196 @@
+{% comment %}
+Compatibilidade com o app (WebView do Android) — 11/11/2026. Fica no cabeçalho da página, antes de qualquer outro script,
+no base.html e nas páginas avulsas. Teste: teste_webview_compat.py.
+
+1. Armazenamento: o WebView vem com localStorage/sessionStorage DESLIGADOS se o app não ligar
+   (setDomStorageEnabled). Aí `localStorage.getItem` quebra o script inteiro: o popup do portal não fechava
+   (a tela ficava cinza por baixo), o do caixa voltava em toda página, o menu perdia o estado. Sem armazenamento,
+   vale uma cópia em memória guardada no window.name, que sobrevive à troca de página na mesma tela do app.
+2. Só no app: alert()/confirm() nativos podem nem aparecer no WebView (e o confirm devolve "não" calado).
+   Viram o popup do portal. O confirm não pode esperar a resposta, então devolve "não" e, se a pessoa
+   confirmar, repete o mesmo clique/envio com o confirm liberado uma vez.
+3. Só no app: janela nova (window.open, target=_blank do próprio portal) abre na mesma tela — o WebView não
+   tem aba nem janela para mostrar, e era tela vazia. O botão Multitarefa some.
+{% endcomment %}
+<style>
+  dialog::backdrop { background: rgba(15, 18, 30, .5); }
+  html.rc-webview #multiJanelaBtn { display: none !important; }
+  .rc-dlg-fundo { position: fixed; inset: 0; z-index: 2147483000; background: rgba(15, 18, 30, .55);
+    display: flex; align-items: center; justify-content: center; padding: 16px; font-family: inherit; }
+  .rc-dlg-caixa { background: #fff; color: #1f2937; border-radius: 16px; width: 100%; max-width: 420px;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, .3); overflow: hidden; }
+  .rc-dlg-texto { padding: 22px 22px 18px; font-size: 15px; line-height: 1.5; white-space: pre-line;
+    overflow-wrap: anywhere; max-height: 60vh; overflow-y: auto; }
+  .rc-dlg-botoes { display: flex; justify-content: flex-end; gap: 10px; padding: 12px 16px; background: #f9fafb; }
+  .rc-dlg-botoes button { min-height: 42px; padding: 0 18px; border-radius: 10px; font-size: 14px; font-weight: 600;
+    border: 1px solid #e5e7eb; background: #fff; color: #374151; cursor: pointer; }
+  .rc-dlg-botoes button.rc-dlg-ok { background: #f97316; border-color: #f97316; color: #fff; }
+  html.dark .rc-dlg-caixa { background: #1f2937; color: #f3f4f6; }
+  html.dark .rc-dlg-botoes { background: #111827; }
+  html.dark .rc-dlg-botoes button { background: #1f2937; border-color: #374151; color: #e5e7eb; }
+  html.dark .rc-dlg-botoes button.rc-dlg-ok { background: #f97316; border-color: #f97316; color: #fff; }
+</style>
+<script>
+(function () {
+  'use strict';
+  // ── 1. Armazenamento de reserva ───────────────────────────────────────────
+  var PREFIXO = 'rcstore:';
+  var guardado = null;
+  function lerNome() {
+    if (guardado) return guardado;
+    guardado = { l: {}, s: {} };
+    try {
+      if (typeof window.name === 'string' && window.name.indexOf(PREFIXO) === 0) {
+        var d = JSON.parse(window.name.slice(PREFIXO.length));
+        if (d && typeof d === 'object') { guardado.l = d.l || {}; guardado.s = d.s || {}; }
+      }
+    } catch (e) { /* nome estranho: começa do zero */ }
+    return guardado;
+  }
+  function gravarNome() {
+    try {
+      if (window.name && window.name.indexOf(PREFIXO) !== 0) return;  // o nome é de outra coisa: não pisa
+      window.name = PREFIXO + JSON.stringify(guardado);
+    } catch (e) { /* sem window.name: fica só na memória desta página */ }
+  }
+  function reserva(qual) {
+    var d = function () { return lerNome()[qual]; };
+    return {
+      getItem: function (k) { k = String(k); return Object.prototype.hasOwnProperty.call(d(), k) ? d()[k] : null; },
+      setItem: function (k, v) { d()[String(k)] = String(v); gravarNome(); },
+      removeItem: function (k) { delete d()[String(k)]; gravarNome(); },
+      clear: function () { lerNome()[qual] = {}; gravarNome(); },
+      key: function (i) { var ks = Object.keys(d()); return i < ks.length ? ks[i] : null; },
+      get length() { return Object.keys(d()).length; }
+    };
+  }
+  [['localStorage', 'l'], ['sessionStorage', 's']].forEach(function (par) {
+    var funciona = false;
+    try {
+      var s = window[par[0]];
+      if (s) { s.setItem('__rc_teste', '1'); s.removeItem('__rc_teste'); funciona = true; }
+    } catch (e) { funciona = false; }
+    if (!funciona) {
+      try { Object.defineProperty(window, par[0], { value: reserva(par[1]), configurable: true, writable: true }); }
+      catch (e) { /* navegador não deixou: segue como estava */ }
+    }
+  });
+
+  // ── 2 e 3. Só dentro do app ───────────────────────────────────────────────
+  var ua = navigator.userAgent || '';
+  var noApp = window.__rcWebview === true || /; wv\)/.test(ua);
+  if (!noApp) return;
+  document.documentElement.classList.add('rc-webview');
+  window.rcNoApp = true;
+
+  var fila = [];
+  var aberto = false;
+  var atual = null;
+  function proximo() {
+    // Se algum script tirou o popup da página, a fila não pode ficar presa esperando por ele.
+    if (aberto && atual && !atual.isConnected) aberto = false;
+    if (aberto || !fila.length) return;
+    if (!document.body) { document.addEventListener('DOMContentLoaded', proximo); return; }
+    aberto = true;
+    var item = fila.shift();
+    var fundo = document.createElement('div');
+    fundo.className = 'rc-dlg-fundo';
+    fundo.setAttribute('role', item.confirmar ? 'alertdialog' : 'dialog');
+    fundo.setAttribute('aria-modal', 'true');
+    var caixa = document.createElement('div');
+    caixa.className = 'rc-dlg-caixa';
+    var texto = document.createElement('div');
+    texto.className = 'rc-dlg-texto';
+    texto.textContent = item.mensagem;
+    var botoes = document.createElement('div');
+    botoes.className = 'rc-dlg-botoes';
+    function fechar(resposta) {
+      if (fundo.parentNode) fundo.parentNode.removeChild(fundo);
+      aberto = false;
+      try { item.depois(resposta); } finally { proximo(); }
+    }
+    if (item.confirmar) {
+      var nao = document.createElement('button');
+      nao.type = 'button';
+      nao.textContent = 'Cancelar';
+      nao.addEventListener('click', function () { fechar(false); });
+      botoes.appendChild(nao);
+    }
+    var sim = document.createElement('button');
+    sim.type = 'button';
+    sim.className = 'rc-dlg-ok';
+    sim.textContent = 'OK';
+    sim.addEventListener('click', function () { fechar(true); });
+    botoes.appendChild(sim);
+    caixa.appendChild(texto);
+    caixa.appendChild(botoes);
+    fundo.appendChild(caixa);
+    document.body.appendChild(fundo);
+    atual = fundo;
+    try { sim.focus(); } catch (e) { /* sem foco */ }
+  }
+  function mostrar(mensagem, confirmar, depois) {
+    fila.push({ mensagem: mensagem == null ? '' : String(mensagem), confirmar: confirmar, depois: depois || function () {} });
+    proximo();
+  }
+  window.rcDialogo = mostrar;
+
+  window.alert = function (mensagem) { mostrar(mensagem, false); };
+
+  var confirmNativo = window.confirm ? window.confirm.bind(window) : function () { return false; };
+  var liberado = 0;
+  window.confirm = function (mensagem) {
+    if (liberado > 0) { liberado--; return true; }
+    var ev = window.event;
+    var alvo = ev && ev.target;
+    // Fora de um clique/envio (ex.: depois de um fetch) não há o que repetir: tenta o nativo.
+    if (!ev || !alvo || ['click', 'submit', 'change', 'input'].indexOf(ev.type) < 0) {
+      return confirmNativo(mensagem);
+    }
+    var tipo = ev.type;
+    var quemEnviou = ev.submitter || null;
+    mostrar(mensagem, true, function (ok) {
+      if (!ok) return;
+      liberado = 1;
+      try {
+        if (tipo === 'submit' && alvo.tagName === 'FORM') {
+          if (alvo.requestSubmit) { if (quemEnviou) alvo.requestSubmit(quemEnviou); else alvo.requestSubmit(); }
+          else alvo.submit();
+        } else if (tipo === 'change' || tipo === 'input') {
+          alvo.dispatchEvent(new Event(tipo, { bubbles: true }));
+        } else if (typeof alvo.click === 'function') {
+          alvo.click();
+        } else {
+          alvo.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        }
+      } finally {
+        liberado = 0;
+      }
+    });
+    return false;
+  };
+
+  var abrirNativo = window.open ? window.open.bind(window) : null;
+  window.open = function (url, nome, opcoes) {
+    if (url) {
+      try {
+        var destino = new URL(url, location.href);
+        if (destino.origin === location.origin && /^https?:$/.test(destino.protocol)) {
+          location.href = destino.href;
+          return null;
+        }
+      } catch (e) { /* url estranha: deixa o nativo */ }
+    }
+    return abrirNativo ? abrirNativo(url, nome, opcoes) : null;
+  };
+  // Link do próprio portal com target=_blank: abre na mesma tela (no app não há aba nova).
+  document.addEventListener('click', function (e) {
+    var a = e.target && e.target.closest ? e.target.closest('a[target]') : null;
+    if (!a || a.target === '_self' || a.hasAttribute('download')) return;
+    try {
+      var destino = new URL(a.href, location.href);
+      if (destino.origin === location.origin && /^https?:$/.test(destino.protocol)) a.target = '_self';
+    } catch (err) { /* sem href válido */ }
+  }, true);
+})();
+</script>
