@@ -41,6 +41,7 @@ from .slv import ZERO, VendaInvalida, _brl
 TIPOS_VENDA = ('VENDA', 'VENDA_PRODUTO', 'VENDA_SERVICO', 'VENDA_PAGAMENTO', 'VENDA_EXCLUIDA')
 PAGAMENTOS_EM_BRANCO = 3        # linhas a mais no formulário para acrescentar pagamento
 MOTIVO_MINIMO = 5
+MAX_PRODUTOS_NOVOS = 20      # inclusão pela edição (11/11/2026)
 TIPOS_COM_PLANO = ('ALTA', 'REATIVACAO', 'TROCA_PLANO', 'MIGRACAO', 'TROCA_SIMCARD', 'TROCA_TITULARIDADE')
 
 
@@ -306,7 +307,20 @@ def editar_venda(pk, post, usuario):
                 removidos_p.append(p)
             else:
                 mantidos_p.append(p)
-        vivo_mais = bool(post.get('vivo_mais')) and bool(mantidos_p)
+        # Produtos novos (inclusão pela edição, 11/11/2026): np<k>_preco_id, np<k>_serial, …
+        n_novos = int(post.get('novos_produtos') or 0) if str(post.get('novos_produtos') or '').isdigit() else 0
+        brutos_novos = []
+        for k_novo in range(min(n_novos, MAX_PRODUTOS_NOVOS)):
+            pre = f'np{k_novo}_'
+            if not str(post.get(pre + 'preco_id') or '').strip():
+                continue
+            brutos_novos.append({
+                'preco_id': post.get(pre + 'preco_id'), 'imei': post.get(pre + 'serial'),
+                'prateleira_infinita': bool(post.get(pre + 'prateleira')), 'valor_final': post.get(pre + 'valor_final'),
+                # Item sem preço na tabela para a segmentação: o valor final digitado vira o sugerido.
+                'valor_sugerido': post.get(pre + 'valor_final'), 'sku': post.get(pre + 'sku'),
+            })
+        vivo_mais = bool(post.get('vivo_mais')) and bool(mantidos_p or brutos_novos)
         percentual = None
         if vivo_mais:
             percentual = (venda.vivo_mais_percentual if venda.vivo_mais and venda.vivo_mais_percentual is not None
@@ -398,6 +412,20 @@ def editar_venda(pk, post, usuario):
             itens.append(dict(obj=p, nome=rot, qtde=p.qtde or 1, final=final, bruto=final, desconto_pix=ZERO,
                               conta=conta, novo=novo, mudou=mudou, recalc=True, final_mexido=final_mexido))
 
+        # Os produtos incluídos passam pela MESMA regra do lançamento (slv.ler_produto): IMEI, serial,
+        # preço da tabela pela segmentação do cliente, Vivo+. O IMEI de quem está sendo removido pode voltar.
+        novos_p = []
+        if brutos_novos:
+            segmentacao = venda.segmentacao_anterior or (venda.plano_anterior.segmentacao if venda.plano_anterior_id else '')
+            imeis_ficam = {i['novo'][1]: i['nome'] for i in itens
+                           if i['obj'].categoria_slv == 'aparelho' and i['novo'][1]}
+            for k_novo, bruto_novo in enumerate(brutos_novos, start=1):
+                novo_item = slv.ler_produto(bruto_novo, f'novo {k_novo}', segmentacao_cliente=segmentacao,
+                                            percentual=percentual, com_serial=com_serial, imeis_da_venda=imeis_ficam,
+                                            erros=erros, ignorar_produtos=[p.pk for p in removidos_p])
+                if novo_item is not None:
+                    novos_p.append(novo_item)
+
         # Desconto no Pix (repartido de novo) e pagamentos — só com produto, como no lançamento.
         brutos = []
         for n in range(int(post.get('total_pagamentos') or 0) if str(post.get('total_pagamentos') or '').isdigit() else 0):
@@ -407,10 +435,11 @@ def editar_venda(pk, post, usuario):
                                'parcelas': post.get(f'pg{n}_parcelas')})
         desconto_pix, pagamentos = ZERO, []
         atuais = pagamentos_atuais(venda)
-        if itens:
+        todos_itens = itens + novos_p
+        if todos_itens:
             desconto_pix = slv.aplicar_desconto_pix({'desconto_pix': post.get('desconto_pix'), 'pagamentos': brutos},
-                                                    itens, erros)
-            total_novo = sum((i['final'] * i['qtde'] for i in itens), ZERO)
+                                                    todos_itens, erros)
+            total_novo = sum((i['final'] * i['qtde'] for i in todos_itens), ZERO)
             total_antes = sum(((p.valor_venda or ZERO) * (p.qtde or 1) for p in produtos), ZERO)
             if total_novo == total_antes and [_normal(b) for b in brutos] == [_normal(a) for a in atuais]:
                 pagamentos = atuais          # nada mudou: não confere de novo (venda antiga sem NSU continua editável)
@@ -488,7 +517,7 @@ def editar_venda(pk, post, usuario):
                                 portabilidade=portabilidade, operadora=operadora if operadora in operadoras else '',
                                 simcard=simcard, valor=valor, valor_anterior=valor_anterior, mudou=mudou))
 
-        if not itens and not novos_s:
+        if not itens and not novos_p and not novos_s:
             erros.append('A venda ficaria sem produto e sem serviço — para isso, exclua a venda.')
         if erros:
             raise VendaInvalida(erros)
@@ -568,6 +597,11 @@ def editar_venda(pk, post, usuario):
             for n, pg in enumerate(pagamentos, start=1):
                 PagamentoVenda.objects.create(venda=venda, ordem=n, **pg)
 
+        for i in novos_p:
+            novo_obj = slv.criar_produto(venda, i, usuario, venda.plano_anterior_nome)
+            gravadas += slv.registrar_alteracoes('VENDA_PRODUTO', novo_obj, [
+                ('incluido', 'Produto incluído', '', _resumo_produto(novo_obj))],
+                usuario, pdv=pdv, rotulo=f'{rotulo_venda} · produto: {novo_obj.nome_produto}', extra=extra)
         for s in removidos_s:
             gravadas += slv.registrar_alteracoes('VENDA_SERVICO', s, [
                 ('removido', 'Serviço removido', _resumo_servico(s), ''),
@@ -627,9 +661,9 @@ def editar_venda(pk, post, usuario):
                 cliente, _criado, _ = slv.salvar_cliente(cpf, {'nome': nome_cliente, 'telefone': telefone}, usuario, pdv=pdv)
         tipo_venda = venda.tipo_venda
         tinha = (bool(produtos), bool(servicos))
-        fica = (bool(itens), bool(novos_s))
+        fica = (bool(itens or novos_p), bool(novos_s))
         if tinha != fica:
-            tipo_venda = ' + '.join(x for x in ('Produto' if itens else '', 'Serviço' if novos_s else '') if x)
+            tipo_venda = ' + '.join(x for x in ('Produto' if (itens or novos_p) else '', 'Serviço' if novos_s else '') if x)
         cpf_gravado = slv.formatar_cpf(cpf) if cpf_mudou else venda.cliente_cpf
         if removidos_s or any(d['mudou'] for d in novos_s) or slv.so_digitos(venda.cliente_telefone) != telefone:
             numero_fake_venda = fake_servicos or (bool(telefone) and slv.numero_fake(telefone))

@@ -233,7 +233,10 @@ def venda_detail(request, pk):
     )
     superadmin = is_superadmin(request.user)
     historico = None
-    if superadmin or ve_rede(request.user):
+    # O histórico da venda: SUPERADMIN, quem vê a rede e — desde 11/11/2026 — o vendedor
+    # da venda (ou quem a lançou), para acompanhar o que mudaram nas vendas dele.
+    da_pessoa = request.user.pk in (venda.vendedor_id, venda.created_by_id)
+    if superadmin or ve_rede(request.user) or da_pessoa:
         historico = _lotes_do_historico(RegistroAlteracao.objects.filter(venda_id=venda.pk, tipo__in=edicao.TIPOS_VENDA))
     return render(request, 'vendas/venda_detail.html', {
         'venda': venda,
@@ -333,7 +336,25 @@ def venda_editar(request, pk):
         'formas': FORMAS_PAGAMENTO, 'comprovantes': Venda.COMPROVANTE_CHOICES,
         'bloqueios_exclusao': edicao.ligacoes_que_impedem(venda),
         'recebiveis': _recebiveis_da_venda(venda),
+        # Inclusão de produto (11/11/2026): o preço sugerido segue a segmentação do cliente, como na venda nova.
+        'segmentacao_cliente': venda.segmentacao_anterior or (venda.plano_anterior.segmentacao if venda.plano_anterior_id else ''),
+        # Voltou com erro: as linhas de produto novo (montadas pelo JS) voltam com o que foi digitado.
+        'novos_digitados': _novos_digitados(post),
     })
+
+
+def _novos_digitados(post):
+    if not post:
+        return []
+    n = str(post.get('novos_produtos') or '')
+    linhas = []
+    for k in range(min(int(n) if n.isdigit() else 0, edicao.MAX_PRODUTOS_NOVOS)):
+        preco_id = str(post.get(f'np{k}_preco_id') or '').strip()
+        if preco_id.isdigit():
+            linhas.append({'preco_id': int(preco_id), 'serial': post.get(f'np{k}_serial') or '',
+                           'valor_final': post.get(f'np{k}_valor_final') or '', 'sku': post.get(f'np{k}_sku') or '',
+                           'prateleira': bool(post.get(f'np{k}_prateleira'))})
+    return linhas
 
 
 def _recebiveis_da_venda(venda):

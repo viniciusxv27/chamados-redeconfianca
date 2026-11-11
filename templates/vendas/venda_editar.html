@@ -61,7 +61,6 @@ recalcula o que é derivado; cada campo que mudar vai para o histórico com o mo
         </div>
     </section>
 
-    {% if f.produtos %}
     <section class="vd-secao">
         <div class="vd-secao-cabeca"><span class="vd-numero">2</span><h2 class="text-sm font-bold text-gray-900">Produtos</h2></div>
         <p class="px-4 pt-3 vd-ajuda">O sistema recalcula Vivo+ e o valor calculado. O valor final segue o recálculo se você não mexer nele (e se não tinha sido editado à mão); digitado, fica marcado como editado.</p>
@@ -108,7 +107,17 @@ recalcula o que é derivado; cada campo que mudar vai para o histórico com o mo
         </div>
         {% endfor %}
         </div>
-        <p class="px-4 pb-3 vd-ajuda">Produto novo não entra pela edição: lance uma venda nova (ou exclua esta e lance de novo).</p>
+        {% comment %}Inclusão de produto pela edição (11/11/2026): mesma tabela e mesmas regras da venda nova (slv.ler_produto).{% endcomment %}
+        <div class="p-4 border-t border-gray-100 space-y-3" id="vdIncluir" data-url-busca="{% url 'vendas:precos_buscar' %}" data-segmentacao="{{ segmentacao_cliente }}">
+            <p class="text-sm font-semibold text-gray-900"><i class="fas fa-plus text-purple-600 mr-1"></i>Incluir produto</p>
+            <div class="relative max-w-xl">
+                <input id="vdBuscaNovo" class="vd-campo" autocomplete="off" placeholder="Busque o produto da tabela (nome, SKU, código)…" aria-label="Buscar produto para incluir">
+                <div id="vdListaNovo" class="hidden absolute left-0 right-0 mt-1 vd-card z-30 max-h-64 overflow-y-auto"></div>
+            </div>
+            <div id="vdNovos" class="space-y-3"></div>
+            <input type="hidden" name="novos_produtos" id="vdQtdNovos" value="0">
+            <p class="vd-ajuda">O produto incluído passa pelas mesmas conferências da venda nova (IMEI, serial, preço da tabela). Lembre de ajustar o pagamento para fechar com o novo total.</p>
+        </div>
     </section>
 
     <section class="vd-secao">
@@ -132,11 +141,10 @@ recalcula o que é derivado; cada campo que mudar vai para o histórico com o mo
             <button type="button" id="vdMaisPagamento" class="inline-flex items-center gap-2 px-3 py-2 vd-card text-sm text-purple-700 font-semibold"><i class="fas fa-plus"></i>Adicionar pagamento</button>
         </div>
     </section>
-    {% endif %}
 
     {% if f.servicos %}
     <section class="vd-secao">
-        <div class="vd-secao-cabeca"><span class="vd-numero">{% if f.produtos %}4{% else %}2{% endif %}</span><h2 class="text-sm font-bold text-gray-900">Serviços</h2></div>
+        <div class="vd-secao-cabeca"><span class="vd-numero">4</span><h2 class="text-sm font-bold text-gray-900">Serviços</h2></div>
         <p class="px-4 pt-3 vd-ajuda">Delta = valor do plano − valor anterior (recalculado). Trocar o plano faz o valor seguir o do plano novo, a menos que você mude o valor também.</p>
         <div class="divide-y divide-gray-100">
         {% for s in f.servicos %}
@@ -196,6 +204,85 @@ recalcula o que é derivado; cada campo que mudar vai para o histórico com o mo
         if (escondida) { escondida.classList.remove('hidden'); const s = escondida.querySelector('select'); if (s) s.focus(); }
         if (!document.querySelector('[data-pagamento].hidden')) botao.classList.add('hidden');
     });
+})();
+</script>
+{{ novos_digitados|json_script:"vdNovosDigitados" }}
+<script>
+(function () {
+    // Inclusão de produto: busca na tabela de preços (a mesma da venda nova) e monta a linha.
+    const caixa = document.getElementById('vdIncluir');
+    if (!caixa) return;
+    const busca = document.getElementById('vdBuscaNovo'), lista = document.getElementById('vdListaNovo');
+    const novos = document.getElementById('vdNovos'), qtd = document.getElementById('vdQtdNovos');
+    let proximo = 0, espera = null, achados = [];
+    function esc(t) { const d = document.createElement('div'); d.textContent = t == null ? '' : String(t); return d.innerHTML; }
+    function brl(v) { const n = Number(v); return isNaN(n) || v === '' ? '—' : n.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'}); }
+    busca.addEventListener('input', function () {
+        clearTimeout(espera);
+        const q = busca.value.trim();
+        if (q.length < 2) { lista.classList.add('hidden'); return; }
+        espera = setTimeout(function () {
+            const url = caixa.dataset.urlBusca + '?q=' + encodeURIComponent(q) + '&segmentacao=' + encodeURIComponent(caixa.dataset.segmentacao || '');
+            fetch(url, {credentials: 'same-origin', headers: {'X-Requested-With': 'XMLHttpRequest'}})
+                .then(function (r) { return r.ok ? r.json() : {results: []}; })
+                .then(function (d) {
+                    achados = (d.results || []).slice(0, 15);
+                    lista.innerHTML = achados.length ? achados.map(function (p, i) {
+                        return '<button type="button" class="w-full text-left px-3 py-2 hover:bg-purple-50 flex justify-between gap-2 text-sm" data-i="' + i + '">' +
+                            '<span class="min-w-0"><span class="block truncate">' + esc(p.nome) + '</span><span class="text-[10px] text-gray-500">' + esc(p.categoria_slv || '') + (p.sku ? ' · SKU ' + esc(p.sku) : '') + '</span></span>' +
+                            '<span class="tabular font-semibold whitespace-nowrap">' + brl(p.valor_sugerido) + '</span></button>';
+                    }).join('') : '<p class="px-3 py-2 text-sm text-gray-500">Nada encontrado.</p>';
+                    lista.classList.remove('hidden');
+                });
+        }, 250);
+    });
+    lista.addEventListener('click', function (e) {
+        const b = e.target.closest('[data-i]'); if (!b) return;
+        incluir(achados[Number(b.dataset.i)]);
+        lista.classList.add('hidden'); busca.value = '';
+    });
+    document.addEventListener('click', function (e) { if (!caixa.contains(e.target)) lista.classList.add('hidden'); });
+    function incluir(p, v) {
+        v = v || {};
+        const k = proximo++;
+        qtd.value = proximo;
+        const aparelho = p.categoria_slv === 'aparelho';
+        const div = document.createElement('div');
+        div.className = 'rounded-lg border border-purple-200 bg-purple-50/40 p-3 space-y-2';
+        div.innerHTML = '<div class="flex items-start justify-between gap-2"><p class="text-sm font-semibold text-gray-900 min-w-0 break-words">' + esc(p.nome) +
+            ' <span class="text-[11px] font-normal text-gray-500">novo · ' + esc(p.categoria_slv || '') + '</span></p>' +
+            '<button type="button" class="text-xs text-red-600 hover:underline whitespace-nowrap" data-tirar>Tirar</button></div>' +
+            '<input type="hidden" name="np' + k + '_preco_id" value="' + esc(p.id) + '">' +
+            '<input type="hidden" name="np' + k + '_sku" value="' + esc(p.sku || '') + '">' +
+            '<div class="grid grid-cols-1 sm:grid-cols-3 gap-2">' +
+            '<div><label class="vd-rotulo">' + (aparelho ? 'IMEI' : 'Serial') + (aparelho || p.exige_serial ? ' *' : '') + '</label>' +
+            '<input name="np' + k + '_serial" class="vd-campo tabular" ' + (aparelho ? 'inputmode="numeric" maxlength="15"' : 'maxlength="120"') + '></div>' +
+            '<div><label class="vd-rotulo">Valor final (R$)</label><input name="np' + k + '_valor_final" inputmode="decimal" class="vd-campo tabular" placeholder="' + esc(p.valor_sugerido ? Number(p.valor_sugerido).toFixed(2).replace('.', ',') : 'informe') + '"></div>' +
+            '<label class="flex items-center gap-2 text-sm text-gray-700 mt-5"><input type="checkbox" name="np' + k + '_prateleira" value="1"> Prateleira infinita</label></div>' +
+            '<p class="vd-ajuda">Valor da tabela: ' + brl(p.valor_sugerido) + '. Em branco, vale o da tabela (com Vivo+ e Pix, se houver).</p>';
+        div.querySelector('[data-tirar]').addEventListener('click', function () { div.remove(); });
+        novos.appendChild(div);
+        const campo = div.querySelector('input[name$="_serial"]');
+        if (v.preco_id) {
+            campo.value = v.serial || '';
+            div.querySelector('input[name$="_valor_final"]').value = v.valor_final || '';
+            div.querySelector('input[name$="_prateleira"]').checked = !!v.prateleira;
+            if (v.sku) div.querySelector('input[name$="_sku"]').value = v.sku;
+        } else if (campo) campo.focus();
+    }
+    // Voltou com erro: refaz as linhas incluídas com o que foi digitado (busca os itens pelo id).
+    const digitados = JSON.parse((document.getElementById('vdNovosDigitados') || {}).textContent || '[]');
+    if (digitados.length) {
+        const ids = digitados.map(function (v) { return v.preco_id; }).join(',');
+        fetch(caixa.dataset.urlBusca + '?ids=' + ids + '&segmentacao=' + encodeURIComponent(caixa.dataset.segmentacao || ''),
+              {credentials: 'same-origin', headers: {'X-Requested-With': 'XMLHttpRequest'}})
+            .then(function (r) { return r.ok ? r.json() : {results: []}; })
+            .then(function (d) {
+                const porId = {};
+                (d.results || []).forEach(function (p) { porId[p.id] = p; });
+                digitados.forEach(function (v) { if (porId[v.preco_id]) incluir(porId[v.preco_id], v); });
+            });
+    }
 })();
 </script>
 {% endblock %}

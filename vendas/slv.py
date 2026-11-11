@@ -538,6 +538,112 @@ class VendaInvalida(Exception):
         self.erros = erros
 
 
+def ler_produto(p, n, *, segmentacao_cliente, percentual, com_serial, imeis_da_venda, erros, ignorar_produtos=None):
+    """Valida e calcula UM produto da tela (o dict do JSON). Devolve o item pronto ou None (erro em ``erros``).
+
+    É a regra do lançamento — e a da inclusão de produto pela edição (vendas/edicao.py, 11/11/2026).
+    ``ignorar_produtos``: ids de VendaProduto que a edição está removendo (o IMEI deles pode voltar).
+    """
+    from .models import ItemPreco, VendaProduto
+
+    item = ItemPreco.objects.filter(pk=p.get('preco_id')).first() if str(p.get('preco_id') or '').isdigit() else None
+    nome = (item.nome if item else str(p.get('nome') or '')).strip()
+    if not nome:
+        erros.append(f'Produto {n}: escolha o produto.')
+        return None
+    qtde = 1
+    categoria = categoria_slv(item) if item else str(p.get('categoria_slv') or 'eletronico')
+    serial = str(p.get('imei') or p.get('serial') or '').strip()[:120]
+    # Prateleira infinita: o produto vem depois, ainda não há serial para informar. Se informar, vale a conferência.
+    prateleira = bool(p.get('prateleira_infinita'))
+    if categoria == 'aparelho':
+        serial = so_digitos(serial)
+        if prateleira and not serial:
+            pass
+        elif not imei_valido(serial):
+            erros.append(f'{nome}: informe o IMEI do aparelho — 15 números (confira o dígito final) '
+                         'ou marque Prateleira infinita.')
+        elif serial in imeis_da_venda:
+            erros.append(f'{nome}: o IMEI {serial} está repetido nesta venda (cada aparelho tem o seu).')
+        else:
+            imeis_da_venda[serial] = nome
+            ja = (VendaProduto.objects.filter(serial=serial, categoria_slv='aparelho')
+                  .exclude(pk__in=ignorar_produtos or ()).select_related('venda').first())
+            if ja:
+                erros.append(f'{nome}: o IMEI {serial} já foi vendido na venda #{ja.venda_id} '
+                             f'({timezone.localtime(ja.venda.data_venda):%d/%m/%Y}).')
+    elif not serial and not prateleira and exige_serial(item, com_serial):
+        erros.append(f'{nome}: informe o serial do produto (está na caixa ou na etiqueta) '
+                     'ou marque Prateleira infinita.')
+    if item:
+        sugerido, regra = preco_sugerido(item, segmentacao_cliente, p.get('grupamento') or '', p.get('condicao') or '')
+    else:
+        sugerido, regra = None, 'produto fora da tabela'
+    rv = bool(p.get('renova_vini'))
+    ra = bool(p.get('renova_alied'))
+    ras = bool(p.get('renova_assurant'))
+    rv_valor = dinheiro(p.get('renova_vini_valor')) or ZERO if rv else ZERO
+    ra_valor = dinheiro(p.get('renova_alied_valor')) or ZERO if ra else ZERO
+    ras_valor = dinheiro(p.get('renova_assurant_valor')) or ZERO if ras else ZERO
+    ra_pedido = str(p.get('renova_alied_pedido') or '').strip()[:40] if ra else ''
+    ras_pedido = str(p.get('renova_assurant_pedido') or '').strip()[:40] if ras else ''
+    codigo = ''
+    if rv:
+        if not renova_existe(p.get('renova_codigo')):
+            erros.append(f'{nome}: o Código do Renova Vini é obrigatório e precisa existir no portal (RN-000000).')
+        codigo = renova_codigo(p.get('renova_codigo'))
+        if rv_valor <= 0:
+            erros.append(f'{nome}: informe o valor do Renova Vini.')
+    if ra and ra_valor <= 0:
+        erros.append(f'{nome}: informe o valor do Renova Alied.')
+    if ra and not ra_pedido:
+        erros.append(f'{nome}: informe o número do pedido do Renova Alied.')
+    if ras and ras_valor <= 0:
+        erros.append(f'{nome}: informe o valor do Renova Assurant.')
+    informado = dinheiro(p.get('valor_sugerido'))
+    if sugerido is None:
+        if informado is None or informado <= 0:
+            erros.append(f'{nome}: sem valor na tabela para este plano — informe o valor.')
+            return None
+        sugerido, regra = informado, f'{regra} (valor informado)'
+    conta = calcular_item(sugerido, rv_valor, ra_valor, percentual, renova_assurant=ras_valor)
+    final = conta['valor_calculado']
+    editado = False
+    if p.get('valor_final') not in (None, ''):
+        digitado = dinheiro(p.get('valor_final'))
+        if digitado is None:
+            erros.append(f'{nome}: valor final inválido.')
+            return None
+        editado = digitado != final
+        final = digitado
+    if final <= 0:
+        erros.append(f'{nome}: o valor final ficou zerado ou negativo — corrija o item.')
+    return dict(
+        item=item, nome=nome, qtde=qtde, sugerido=sugerido, regra=regra[:120], final=final, editado=editado,
+        rv=rv, rv_valor=rv_valor, ra=ra, ra_valor=ra_valor, ra_pedido=ra_pedido,
+        ras=ras, ras_valor=ras_valor, ras_pedido=ras_pedido, codigo=codigo, conta=conta,
+        prateleira=prateleira, serial=serial, categoria=categoria, desconto_pix=ZERO,
+        sku_cor=sku_e_cor(item, p.get('sku')))
+
+
+def criar_produto(venda, i, usuario, plano_anterior_nome=''):
+    """Grava o item de ``ler_produto`` na venda (lançamento e inclusão pela edição)."""
+    from .models import VendaProduto
+    item = i['item']
+    return VendaProduto.objects.create(
+        venda=venda, preco=item, nome_produto=i['nome'][:200], qtde=i['qtde'], serial=i['serial'],
+        categoria=(item.categoria if item else '')[:120], tipo_produto=i['categoria'],
+        sku=i['sku_cor'][0][:60], cor=i['sku_cor'][1][:60],
+        plano=(plano_anterior_nome or '')[:200],
+        categoria_slv=i['categoria'], prateleira_infinita=i['prateleira'], valor_sugerido=i['sugerido'],
+        regra_preco=i['regra'], renova_vini=i['rv'], renova_vini_valor=i['rv_valor'], renova_codigo=i['codigo'],
+        renova_alied=i['ra'], renova_alied_valor=i['ra_valor'], renova_alied_pedido=i['ra_pedido'],
+        renova_assurant=i['ras'], renova_assurant_valor=i['ras_valor'], renova_assurant_pedido=i['ras_pedido'],
+        desconto_vivo_mais=i['conta']['desconto_vivo_mais'], desconto_pix=i['desconto_pix'],
+        valor_calculado=i['conta']['valor_calculado'],
+        valor_venda=i['final'], valor_editado=i['editado'], editado_por=usuario if i['editado'] else None)
+
+
 def registrar_venda(dados, usuario, loja, vendedor=None):
     """Valida e grava a venda inteira (cliente, produtos, serviços). Tudo ou nada.
 
@@ -582,84 +688,10 @@ def registrar_venda(dados, usuario, loja, vendedor=None):
     imeis_da_venda = {}
     com_serial = categorias_com_serial()
     for n, p in enumerate(produtos, start=1):
-        item = ItemPreco.objects.filter(pk=p.get('preco_id')).first() if str(p.get('preco_id') or '').isdigit() else None
-        nome = (item.nome if item else str(p.get('nome') or '')).strip()
-        if not nome:
-            erros.append(f'Produto {n}: escolha o produto.')
-            continue
-        qtde = 1
-        categoria = categoria_slv(item) if item else str(p.get('categoria_slv') or 'eletronico')
-        serial = str(p.get('imei') or p.get('serial') or '').strip()[:120]
-        # Prateleira infinita: o produto vem depois, ainda não há serial para informar. Se informar, vale a conferência.
-        prateleira = bool(p.get('prateleira_infinita'))
-        if categoria == 'aparelho':
-            serial = so_digitos(serial)
-            if prateleira and not serial:
-                pass
-            elif not imei_valido(serial):
-                erros.append(f'{nome}: informe o IMEI do aparelho — 15 números (confira o dígito final) '
-                             'ou marque Prateleira infinita.')
-            elif serial in imeis_da_venda:
-                erros.append(f'{nome}: o IMEI {serial} está repetido nesta venda (cada aparelho tem o seu).')
-            else:
-                imeis_da_venda[serial] = nome
-                ja = (VendaProduto.objects.filter(serial=serial, categoria_slv='aparelho')
-                      .select_related('venda').first())
-                if ja:
-                    erros.append(f'{nome}: o IMEI {serial} já foi vendido na venda #{ja.venda_id} '
-                                 f'({timezone.localtime(ja.venda.data_venda):%d/%m/%Y}).')
-        elif not serial and not prateleira and exige_serial(item, com_serial):
-            erros.append(f'{nome}: informe o serial do produto (está na caixa ou na etiqueta) '
-                         'ou marque Prateleira infinita.')
-        if item:
-            sugerido, regra = preco_sugerido(item, segmentacao_cliente, p.get('grupamento') or '', p.get('condicao') or '')
-        else:
-            sugerido, regra = None, 'produto fora da tabela'
-        rv = bool(p.get('renova_vini'))
-        ra = bool(p.get('renova_alied'))
-        ras = bool(p.get('renova_assurant'))
-        rv_valor = dinheiro(p.get('renova_vini_valor')) or ZERO if rv else ZERO
-        ra_valor = dinheiro(p.get('renova_alied_valor')) or ZERO if ra else ZERO
-        ras_valor = dinheiro(p.get('renova_assurant_valor')) or ZERO if ras else ZERO
-        ra_pedido = str(p.get('renova_alied_pedido') or '').strip()[:40] if ra else ''
-        ras_pedido = str(p.get('renova_assurant_pedido') or '').strip()[:40] if ras else ''
-        codigo = ''
-        if rv:
-            if not renova_existe(p.get('renova_codigo')):
-                erros.append(f'{nome}: o Código do Renova Vini é obrigatório e precisa existir no portal (RN-000000).')
-            codigo = renova_codigo(p.get('renova_codigo'))
-            if rv_valor <= 0:
-                erros.append(f'{nome}: informe o valor do Renova Vini.')
-        if ra and ra_valor <= 0:
-            erros.append(f'{nome}: informe o valor do Renova Alied.')
-        if ra and not ra_pedido:
-            erros.append(f'{nome}: informe o número do pedido do Renova Alied.')
-        if ras and ras_valor <= 0:
-            erros.append(f'{nome}: informe o valor do Renova Assurant.')
-        informado = dinheiro(p.get('valor_sugerido'))
-        if sugerido is None:
-            if informado is None or informado <= 0:
-                erros.append(f'{nome}: sem valor na tabela para este plano — informe o valor.')
-                continue
-            sugerido, regra = informado, f'{regra} (valor informado)'
-        conta = calcular_item(sugerido, rv_valor, ra_valor, percentual, renova_assurant=ras_valor)
-        final = conta['valor_calculado']
-        editado = False
-        if p.get('valor_final') not in (None, ''):
-            digitado = dinheiro(p.get('valor_final'))
-            if digitado is None:
-                erros.append(f'{nome}: valor final inválido.')
-                continue
-            editado = digitado != final
-            final = digitado
-        if final <= 0:
-            erros.append(f'{nome}: o valor final ficou zerado ou negativo — corrija o item.')
-        itens_produto.append(dict(
-            item=item, nome=nome, qtde=qtde, sugerido=sugerido, regra=regra[:120], final=final, editado=editado,
-            rv=rv, rv_valor=rv_valor, ra=ra, ra_valor=ra_valor, ra_pedido=ra_pedido,
-            ras=ras, ras_valor=ras_valor, ras_pedido=ras_pedido, codigo=codigo, conta=conta,
-            prateleira=prateleira, serial=serial, categoria=categoria, desconto_pix=ZERO,
-            sku_cor=sku_e_cor(item, p.get('sku'))))
+        i = ler_produto(p, n, segmentacao_cliente=segmentacao_cliente, percentual=percentual, com_serial=com_serial,
+                        imeis_da_venda=imeis_da_venda, erros=erros)
+        if i is not None:
+            itens_produto.append(i)
 
     # Pagamento ([Venda de produtos.RF004]) — só faz sentido com produto, e fecha com o total dos produtos.
     desconto_pix = aplicar_desconto_pix(dados, itens_produto, erros) if produtos else ZERO
@@ -789,18 +821,7 @@ def registrar_venda(dados, usuario, loja, vendedor=None):
             PagamentoVenda.objects.create(venda=venda, ordem=n, **pg)
         for i in itens_produto:
             item = i['item']
-            VendaProduto.objects.create(
-                venda=venda, preco=item, nome_produto=i['nome'][:200], qtde=i['qtde'], serial=i['serial'],
-                categoria=(item.categoria if item else '')[:120], tipo_produto=i['categoria'],
-                sku=i['sku_cor'][0][:60], cor=i['sku_cor'][1][:60],
-                plano=(plano_anterior.nome if plano_anterior else '')[:200],
-                categoria_slv=i['categoria'], prateleira_infinita=i['prateleira'], valor_sugerido=i['sugerido'],
-                regra_preco=i['regra'], renova_vini=i['rv'], renova_vini_valor=i['rv_valor'], renova_codigo=i['codigo'],
-                renova_alied=i['ra'], renova_alied_valor=i['ra_valor'], renova_alied_pedido=i['ra_pedido'],
-                renova_assurant=i['ras'], renova_assurant_valor=i['ras_valor'], renova_assurant_pedido=i['ras_pedido'],
-                desconto_vivo_mais=i['conta']['desconto_vivo_mais'], desconto_pix=i['desconto_pix'],
-                valor_calculado=i['conta']['valor_calculado'],
-                valor_venda=i['final'], valor_editado=i['editado'], editado_por=usuario if i['editado'] else None)
+            criar_produto(venda, i, usuario, plano_anterior.nome if plano_anterior else '')
         ultimo_plano = None
         for s in itens_servico:
             VendaServico.objects.create(

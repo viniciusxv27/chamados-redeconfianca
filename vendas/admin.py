@@ -3,20 +3,34 @@ from django.contrib import admin
 from .models import ItemPreco, Venda, VendaProduto, VendaServico
 
 
-class VendaProdutoInline(admin.TabularInline):
+class SoLeitura:
+    """Venda só se edita/exclui pela tela do SLV (/vendas/<id>/editar/), que grava o histórico
+    com motivo. Pelo admin do Django não ficaria rastro — então aqui é só consulta (11/11/2026)."""
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+class VendaProdutoInline(SoLeitura, admin.TabularInline):
     model = VendaProduto
     extra = 0
     raw_id_fields = ['preco']
 
 
-class VendaServicoInline(admin.TabularInline):
+class VendaServicoInline(SoLeitura, admin.TabularInline):
     model = VendaServico
     extra = 0
     raw_id_fields = ['preco']
 
 
 @admin.register(Venda)
-class VendaAdmin(admin.ModelAdmin):
+class VendaAdmin(SoLeitura, admin.ModelAdmin):
     list_display = ['id', 'data_venda', 'loja', 'vendedor', 'cliente_nome',
                     'tipo_venda', 'comprovante_fiscal', 'created_at']
     list_filter = ['comprovante_fiscal', 'estoque_avancado', 'data_venda', 'loja']

@@ -419,6 +419,82 @@ t('parametrização não mistura edição de venda', 'Cliente pediu correção d
 r = ca.get(f'/vendas/{venda_b.pk}/editar/')
 t('venda excluída: edição dá 404', r.status_code == 404)
 
+print('== INCLUIR PRODUTO PELA EDIÇÃO ==')
+from vendas.models import ItemPreco  # noqa: E402
+tab_capa = ItemPreco.objects.create(categoria='PRODUTOS', nome='ZZ Capa Tabela', valor=D('59.90'), cod_sap='ZZCAPAT')
+tab_phone = ItemPreco.objects.create(categoria='SMARTPHONES', nome='ZZ Phone Tabela', valor=D('1999.00'))
+tab_sem = ItemPreco.objects.create(categoria='PRODUTOS', nome='ZZ Película Sem Preço', valor=None)
+jd = lancar({'cliente': {'cpf': CPF, 'nome': 'Zz Cliente Um'},
+             'produtos': [{'nome': 'ZZ Phone D', 'categoria_slv': 'aparelho', 'imei': imei(10), 'valor_sugerido': '900'}],
+             'pagamentos': [{'forma': 'PIX', 'valor': '900'}]}, cliente=cv)
+t('vendedor lança a própria venda', jd.get('ok'), jd)
+venda_d = Venda.objects.get(pk=jd['id'])
+phone_d = venda_d.produtos.get()
+html_vd = cv.get(f'/vendas/{venda_d.pk}/').content.decode()
+t('vendedor vê o histórico da própria venda (sem botões)', 'data-historico-venda' in html_vd
+  and 'data-acao-editar' not in html_vd)
+vend2 = User.objects.create_user(username='zz.ed.vend2', email='zz.ed.vend2@exemplo-teste.local', password='S3nha!teste',
+                                 first_name='Caio', last_name='Outro', hierarchy='PADRAO', sector=loja)
+AcessoVendas.objects.create(user=vend2, permissoes=['modulo.ver', 'vendas.lancar'])
+cv2 = Client()
+cv2.force_login(vend2)
+t('outro vendedor não vê o histórico dessa venda', 'data-historico-venda' not in cv2.get(f'/vendas/{venda_d.pk}/').content.decode())
+html_ed = ca.get(f'/vendas/{venda_d.pk}/editar/').content.decode()
+t('tela de edição tem a busca para incluir produto', 'id="vdIncluir"' in html_ed and 'name="novos_produtos"' in html_ed)
+r = editar(venda_d, motivo='esqueceu a capa', novos_produtos='1', np0_preco_id=str(tab_capa.pk))
+t('incluir sem ajustar o pagamento: recusa', 'Os pagamentos somam' in r.content.decode() and venda_d.produtos.count() == 1)
+r = editar(venda_d, motivo='esqueceu a capa', novos_produtos='1', np0_preco_id=str(tab_capa.pk), np0_serial='SN-77',
+           np0_valor_final='55')
+html_err = r.content.decode()
+t('erro devolve a linha nova com o digitado', 'id="vdNovosDigitados"' in html_err and f'"preco_id": {tab_capa.pk}' in html_err
+  and '"serial": "SN-77"' in html_err and '"valor_final": "55"' in html_err)
+jb = ca.get(f'/vendas/precos/buscar/?ids={tab_capa.pk}').json()
+t('busca por id (usada para refazer a linha) devolve o item', [x['id'] for x in jb['results']] == [tab_capa.pk])
+r = editar(venda_d, motivo='esqueceu a capa', novos_produtos='1', np0_preco_id=str(tab_capa.pk), pg0_valor='959,90')
+nova = venda_d.produtos.filter(preco=tab_capa).first()
+t('capa da tabela incluída com o preço da tabela', r.status_code == 302 and nova is not None
+  and nova.valor_venda == D('59.90') and nova.categoria_slv == 'essencial' and nova.nome_produto == 'ZZ Capa Tabela',
+  getattr(nova, 'valor_venda', None))
+h = RegistroAlteracao.objects.filter(venda_id=venda_d.pk, tipo='VENDA_PRODUTO', campo='incluido', objeto_id=getattr(nova, 'pk', 0)).first()
+t('inclusão no histórico com motivo e resumo', h is not None and h.motivo == 'esqueceu a capa' and 'ZZ Capa Tabela' in h.depois
+  and h.usuario == admin and h.antes == '')
+t('detalhe mostra "Produto incluído"', 'Produto incluído' in ca.get(f'/vendas/{venda_d.pk}/').content.decode())
+r = editar(venda_d, motivo='trocar aparelho', novos_produtos='1', np0_preco_id=str(tab_phone.pk), np0_serial='123')
+t('aparelho novo com IMEI inválido recusado', 'informe o IMEI' in r.content.decode())
+r = editar(venda_d, motivo='trocar aparelho', novos_produtos='1', np0_preco_id=str(tab_phone.pk), np0_serial=imei(10))
+t('IMEI que já está na venda recusado', 'repetido nesta venda' in r.content.decode())
+r = editar(venda_d, motivo='trocar aparelho', novos_produtos='1', np0_preco_id=str(tab_phone.pk), np0_serial=imei(3))
+t('IMEI vendido em outra venda recusado', f'já foi vendido na venda #{venda.pk}' in r.content.decode())
+t('nenhuma recusa gravou', venda_d.produtos.count() == 2)
+r = editar(venda_d, motivo='aparelho errado: era o da tabela', novos_produtos='1', np0_preco_id=str(tab_phone.pk),
+           np0_serial=imei(10), pg0_valor='2058,90', **{f'p{phone_d.pk}_remover': '1'})
+venda_d.refresh_from_db()
+novo_phone = venda_d.produtos.filter(preco=tab_phone).first()
+t('trocar o aparelho mantendo o IMEI (remove um, inclui outro)', r.status_code == 302 and novo_phone is not None
+  and novo_phone.serial == imei(10) and not VendaProduto.objects.filter(pk=phone_d.pk).exists()
+  and venda_d.produtos.count() == 2)
+r = editar(venda_d, motivo='película sem preço', novos_produtos='1', np0_preco_id=str(tab_sem.pk), pg0_valor='2058,90')
+t('item sem preço e sem valor: recusa', 'informe o valor' in r.content.decode())
+r = editar(venda_d, motivo='película sem preço', novos_produtos='1', np0_preco_id=str(tab_sem.pk), np0_valor_final='30',
+           pg0_valor='2088,90')
+pel = venda_d.produtos.filter(preco=tab_sem).first()
+t('item sem preço com o valor digitado', r.status_code == 302 and pel is not None and pel.valor_venda == D('30.00'))
+venda_d.refresh_from_db()
+t('total e tipo da venda seguem os itens', venda_d.pagamentos.get().valor == D('2088.90'))
+
+print('== ADMIN DO DJANGO SÓ LEITURA ==')
+from django.contrib import admin as dj_admin  # noqa: E402
+from django.test import RequestFactory  # noqa: E402
+req = RequestFactory().get('/admin/')
+admin.is_superuser = admin.is_staff = True
+req.user = admin
+va = dj_admin.site._registry[Venda]
+t('admin: não adiciona, não altera, não exclui venda', not va.has_add_permission(req) and not va.has_change_permission(req, venda_d)
+  and not va.has_delete_permission(req, venda_d))
+t('admin: inlines também só leitura', all(not i.has_change_permission(req, venda_d) and not i.has_delete_permission(req, venda_d)
+                                         and not i.has_add_permission(req, venda_d) for i in va.get_inline_instances(req, venda_d))
+  and va.has_view_permission(req, venda_d))
+
 print('== TEMPLATES ==')
 pastas = pathlib.Path(__file__).resolve().parent / 'templates' / 'vendas'
 multilinha = []
