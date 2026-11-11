@@ -202,6 +202,17 @@
         .sidebar-collapsed .sidebar-so-fechado { display: block; }
         .sidebar-collapsed .menu-item,
         .sidebar-collapsed .menu-grupo { justify-content: center; }
+
+        /* Celular: o fundo escuro do menu só existe com o menu aberto (classe rc-menu-aberto no
+           <html>), e com essa classe o menu está na tela — os dois nunca se separam. E o menu entra
+           SEM animação: o fundo aparecia na hora e o menu ficava esperando a transição andar; sem
+           quadro novo (o app/WebView não redesenha) ele ficava fora da tela e sobrava só o fundo
+           cinza por cima de tudo — a "tela cinza" (print de 11/11/2026). */
+        html:not(.rc-menu-aberto) #mobileOverlay { display: none !important; }
+        @media (max-width: 1023px) {
+            #sidebar { transition: none !important; }
+            html.rc-menu-aberto #sidebar { transform: none !important; }
+        }
     </style>
     {% load static %}
     <link rel="stylesheet" href="{% static 'css/custom.css' %}">
@@ -1636,25 +1647,41 @@
             }
 
             // Mobile menu toggle functions
+            // Menu e fundo escuro andam juntos pela classe rc-menu-aberto no <html> (11/11/2026): o
+            // CSS só mostra o fundo com ela, e com ela o menu está na tela. Antes eram dois estados
+            // soltos e o app (WebView) ficava com o fundo cinza sem o menu — a "tela cinza".
             function openMobileMenu() {
                 if (!isMobile()) return;
-                
+
                 isMobileOpen = true;
+                document.documentElement.classList.add('rc-menu-aberto');
                 sidebar.classList.remove('-translate-x-full');
                 sidebar.classList.add('translate-x-0');
                 mobileOverlay.classList.remove('hidden');
                 document.body.style.overflow = 'hidden';
             }
 
+            // Fechar vale sempre — sem olhar a largura: se o WebView informasse uma largura de
+            // desktop por um instante, o fechamento era ignorado e o fundo ficava.
             function closeMobileMenu() {
-                if (!isMobile()) return;
-                
                 isMobileOpen = false;
-                sidebar.classList.remove('translate-x-0');
-                sidebar.classList.add('-translate-x-full');
+                document.documentElement.classList.remove('rc-menu-aberto');
+                if (isMobile()) {
+                    sidebar.classList.remove('translate-x-0');
+                    sidebar.classList.add('-translate-x-full');
+                }
                 mobileOverlay.classList.add('hidden');
                 document.body.style.overflow = '';
             }
+            window.rcFecharMenuCelular = closeMobileMenu;
+
+            // Página que volta do cache (botão voltar do Android) ou do segundo plano não pode
+            // voltar com o menu aberto pela metade.
+            window.addEventListener('pageshow', function (e) { if (e.persisted) closeMobileMenu(); });
+            document.addEventListener('visibilitychange', function () {
+                if (document.visibilityState === 'visible' && isMobileOpen
+                    && sidebar.getBoundingClientRect().right <= 1) closeMobileMenu();
+            });
 
             // Mobile menu button events
             if (mobileMenuToggle) {

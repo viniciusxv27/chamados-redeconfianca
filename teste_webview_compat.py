@@ -109,6 +109,18 @@ t('home: o popup do portal está na página (e é ele que precisa fechar)', 'por
 t('home: o script do iPhone vem com versão nova', 'ios-notifications.js?v=20261111' in h)
 t('login (sem sessão) também tem a camada', 'Armazenamento de reserva' in primeiro_script(Client().get('/login/', follow=True).content.decode()))
 
+print('\n== MENU DO CELULAR (a "tela cinza" do print de 11/11) ==')
+t('o fundo do menu só aparece com o menu aberto', 'html:not(.rc-menu-aberto) #mobileOverlay { display: none !important; }' in h)
+t('no celular o menu entra sem animação (não depende de quadro)', _re.search(
+    r'@media \(max-width: 1023px\) \{\s*#sidebar \{ transition: none !important; \}\s*html\.rc-menu-aberto #sidebar \{ transform: none !important; \}', h) is not None)
+abrir = h[h.find('function openMobileMenu()'):h.find('function closeMobileMenu()')]
+fechar = h[h.find('function closeMobileMenu()'):h.find('window.rcFecharMenuCelular')]
+t('abrir marca rc-menu-aberto e fechar desmarca', "classList.add('rc-menu-aberto')" in abrir and "classList.remove('rc-menu-aberto')" in fechar)
+t('fechar não depende da largura (sem "if (!isMobile()) return")', 'if (!isMobile()) return;' not in fechar, fechar[:200])
+t('volta do cache (botão voltar) fecha o menu', "addEventListener('pageshow', function (e) { if (e.persisted) closeMobileMenu(); })" in h)
+t('o fundo do menu continua sendo a única película abaixo do carrinho e do robô (z < 39)',
+  len(_re.findall(r'class="[^"]*fixed inset-0[^"]*\bz-(?:10|20|30)\b', h)) == 1)
+
 print('\n== PÁGINAS AVULSAS (sem base.html) ==')
 avulsas = []
 for caminho in sorted(glob.glob(str(RAIZ / 'templates' / '**' / '*.html'), recursive=True)):
