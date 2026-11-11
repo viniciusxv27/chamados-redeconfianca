@@ -71,6 +71,32 @@ def supplier_detail(request, pk):
     return render(request, 'suppliers/supplier_detail.html', context)
 
 
+def _valor_reais(texto):
+    """'1.234,56' / '1234.56' / 'R$ 50' → Decimal; vazio → None. Valor ruim levanta ValueError."""
+    from decimal import Decimal, InvalidOperation
+    t = (texto or '').strip().replace('R$', '').replace(' ', '')
+    if not t:
+        return None
+    if ',' in t:
+        t = t.replace('.', '').replace(',', '.')
+    try:
+        v = Decimal(t).quantize(Decimal('0.01'))
+    except (InvalidOperation, ValueError):
+        raise ValueError(f'Valor inválido: "{texto}". Use números, como 1.234,56.')
+    if v < 0:
+        raise ValueError('O valor não pode ser negativo.')
+    return v
+
+
+def _condicoes(request):
+    """Preço, frete e tempo de entrega do POST (todos opcionais)."""
+    return {
+        'preco': _valor_reais(request.POST.get('preco')),
+        'frete': _valor_reais(request.POST.get('frete')),
+        'tempo_entrega': (request.POST.get('tempo_entrega') or '').strip()[:120],
+    }
+
+
 @login_required
 def supplier_create(request):
     """Criar novo fornecedor"""
@@ -86,7 +112,8 @@ def supplier_create(request):
                 contact=request.POST.get('contact'),
                 area_of_operation=request.POST.get('area_of_operation'),
                 services=request.POST.get('services'),
-                created_by=request.user
+                created_by=request.user,
+                **_condicoes(request),
             )
             supplier.full_clean()
             supplier.save()
@@ -121,6 +148,8 @@ def supplier_edit(request, pk):
             supplier.contact = request.POST.get('contact')
             supplier.area_of_operation = request.POST.get('area_of_operation')
             supplier.services = request.POST.get('services')
+            for campo, valor in _condicoes(request).items():
+                setattr(supplier, campo, valor)
             
             supplier.full_clean()
             supplier.save()

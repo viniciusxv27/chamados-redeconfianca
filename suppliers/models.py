@@ -35,6 +35,12 @@ class Supplier(models.Model):
         help_text="Descrição dos serviços/produtos oferecidos"
     )
     
+    # Condições comerciais (11/11/2026) — nenhuma é obrigatória.
+    preco = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, verbose_name='Preço (R$)')
+    frete = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, verbose_name='Frete (R$)')
+    tempo_entrega = models.CharField(max_length=120, blank=True, default='', db_default='',
+                                     verbose_name='Tempo de entrega', help_text='Ex.: 5 dias úteis')
+
     # Campos adicionais para controle
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,

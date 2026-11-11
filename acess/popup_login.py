@@ -53,15 +53,24 @@ def _campanhas_no_ar():
         from django.db.models import Q
         agora = timezone.now()
         lista = [{'id': c.id, 'titulo': c.titulo, 'pergunta': c.pergunta, 'inicio': c.inicio, 'fim': c.fim,
-                  'setores': {s.id for s in c.setores.all()}, 'hierarquias': list(c.hierarquias or [])}
+                  'setores': {s.id for s in c.setores.all()}, 'hierarquias': list(c.hierarquias or []),
+                  'usuarios': {u.id for u in c.usuarios.all()}}
                  for c in CampanhaLoginErro.objects.filter(ativo=True).filter(Q(fim__isnull=True) | Q(fim__gte=agora))
-                 .prefetch_related('setores').order_by('id')]
+                 .prefetch_related('setores', 'usuarios').order_by('id')]
         local.set(CHAVE_CAMPANHAS, lista, SEGUNDOS_CAMPANHAS)
     return lista
 
 
-def no_publico(user, setores, hierarquias):
-    """Setor principal (``user.sector``, como os outros filtros por loja) e hierarquia; vazio = todos."""
+def no_publico(user, setores, hierarquias, usuarios=()):
+    """Setor principal (``user.sector``, como os outros filtros por loja) e hierarquia; vazio = todos.
+
+    Pessoas escolhidas uma a uma entram sempre. Só com pessoas escolhidas (sem setor nem
+    hierarquia), o público é só elas — e não "todos".
+    """
+    if usuarios and getattr(user, 'pk', None) in usuarios:
+        return True
+    if usuarios and not setores and not hierarquias:
+        return False
     if setores and getattr(user, 'sector_id', None) not in setores:
         return False
     if hierarquias and getattr(user, 'hierarchy', '') not in hierarquias:
@@ -70,7 +79,8 @@ def no_publico(user, setores, hierarquias):
 
 
 def alvo(campanha, user):
-    return no_publico(user, {s.id for s in campanha.setores.all()}, campanha.hierarquias or [])
+    return no_publico(user, {s.id for s in campanha.setores.all()}, campanha.hierarquias or [],
+                      {u.id for u in campanha.usuarios.all()})
 
 
 def _situacao(user):
@@ -91,7 +101,7 @@ def campanha_pendente(user):
     agora = timezone.now()
     candidatas = [c for c in _campanhas_no_ar()
                   if not (c['inicio'] and agora < c['inicio']) and not (c['fim'] and agora > c['fim'])
-                  and no_publico(user, c['setores'], c['hierarquias'])]
+                  and no_publico(user, c['setores'], c['hierarquias'], c.get('usuarios') or ())]
     if not candidatas:
         return None
     situacao = _situacao(user)
@@ -215,10 +225,17 @@ def responder(user, campanha, resposta, itens=None, request=None):
 # ── gestão ──────────────────────────────────────────────────────────────────
 def publico_qs(campanha):
     from django.contrib.auth import get_user_model
-    qs = get_user_model().objects.filter(is_active=True)
+    from django.db.models import Q
+    ativos = get_user_model().objects.filter(is_active=True)
     setores = list(campanha.setores.values_list('id', flat=True))
+    escolhidos = list(campanha.usuarios.values_list('id', flat=True)) if campanha.pk else []
+    if escolhidos and not setores and not campanha.hierarquias:
+        return ativos.filter(pk__in=escolhidos)
+    filtro = Q()
     if setores:
-        qs = qs.filter(sector_id__in=setores)
+        filtro &= Q(sector_id__in=setores)
     if campanha.hierarquias:
-        qs = qs.filter(hierarchy__in=campanha.hierarquias)
-    return qs
+        filtro &= Q(hierarchy__in=campanha.hierarquias)
+    if escolhidos:
+        filtro |= Q(pk__in=escolhidos)
+    return ativos.filter(filtro)

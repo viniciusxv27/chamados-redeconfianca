@@ -385,6 +385,10 @@ class CampanhaLoginErro(models.Model):
                                      help_text='Setor principal da pessoa. Vazio = todos os setores.')
     hierarquias = models.JSONField('Hierarquias', default=list, blank=True,
                                    help_text='Códigos de User.HIERARCHY_CHOICES. Vazio = todas.')
+    # Pessoas escolhidas uma a uma (11/11/2026): recebem sempre, além do filtro de setor/hierarquia.
+    # Só com pessoas marcadas (sem setor e sem hierarquia), o público é só elas.
+    usuarios = models.ManyToManyField(settings.AUTH_USER_MODEL, blank=True, related_name='+',
+                                      verbose_name='Pessoas escolhidas')
     ativo = models.BooleanField(default=True)
     inicio = models.DateTimeField('Exibir a partir de', null=True, blank=True)
     fim = models.DateTimeField('Exibir até', null=True, blank=True)

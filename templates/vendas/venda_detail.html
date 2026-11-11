@@ -8,10 +8,32 @@
 {% block vd_acoes %}
 <a href="{% url 'vendas:dashboard' %}" class="inline-flex items-center gap-2 px-3.5 py-2 vd-card text-gray-700 text-sm font-semibold hover:bg-gray-50"><i class="fas fa-arrow-left"></i>Vendas</a>
 <button type="button" onclick="window.print()" class="inline-flex items-center gap-2 px-3.5 py-2 vd-card text-gray-700 text-sm font-semibold hover:bg-gray-50"><i class="fas fa-print"></i><span class="hidden sm:inline">Imprimir</span></button>
+{% if pode_editar %}
+<a href="{% url 'vendas:venda_editar' venda.pk %}" data-acao-editar class="inline-flex items-center gap-2 px-3.5 py-2 vd-card text-amber-700 text-sm font-semibold hover:bg-amber-50"><i class="fas fa-pen"></i>Editar</a>
+<button type="button" data-acao-excluir onclick="document.getElementById('vdExcluir').classList.toggle('hidden'); document.getElementById('vdExcluirMotivo') && document.getElementById('vdExcluirMotivo').focus();" class="inline-flex items-center gap-2 px-3.5 py-2 vd-card text-red-700 text-sm font-semibold hover:bg-red-50"><i class="fas fa-trash-can"></i>Excluir</button>
+{% endif %}
 {% if vd_pode.vendas_lancar %}<a href="{% url 'vendas:venda_create' %}" class="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-lg"><i class="fas fa-plus"></i>Nova venda</a>{% endif %}
 {% endblock %}
 
 {% block vd_conteudo %}
+{% if pode_editar %}
+<div id="vdExcluir" class="hidden mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm">
+    <h2 class="font-bold text-red-800"><i class="fas fa-triangle-exclamation mr-1.5"></i>Excluir a venda #{{ venda.pk }}</h2>
+    {% if bloqueios_exclusao %}
+    <ul class="mt-2 space-y-1 text-red-800">{% for b in bloqueios_exclusao %}<li><i class="fas fa-ban mr-1"></i>{{ b }}</li>{% endfor %}</ul>
+    {% else %}
+    <p class="mt-1 text-red-700">A venda some de todas as telas, relatórios e exportações. Antes, a venda inteira (cabeçalho, produtos, serviços e pagamentos) fica guardada no histórico de alterações, com o seu nome e o motivo.</p>
+    <form method="post" action="{% url 'vendas:venda_excluir' venda.pk %}" class="mt-3 space-y-2" onsubmit="return confirm('Excluir a venda #{{ venda.pk }}? Não tem volta.');">
+        {% csrf_token %}
+        <input type="hidden" name="versao" value="{{ versao }}">
+        <label class="vd-rotulo" for="vdExcluirMotivo">Motivo da exclusão *</label>
+        <textarea id="vdExcluirMotivo" name="motivo" rows="2" required minlength="5" class="vd-campo" placeholder="Ex.: venda lançada em duplicidade (a certa é a #...)"></textarea>
+        <label class="flex items-start gap-2 text-red-800"><input type="checkbox" name="confirmo" value="1" required class="mt-0.5"> Entendo que a exclusão não tem volta.</label>
+        <button type="submit" class="inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold rounded-lg"><i class="fas fa-trash-can"></i>Excluir definitivamente</button>
+    </form>
+    {% endif %}
+</div>
+{% endif %}
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
 <div class="lg:col-span-2 space-y-4">
 
@@ -126,6 +148,19 @@
 
     {% if venda.observacao %}
     <div class="vd-card p-5"><p class="vd-rotulo">Observação</p><p class="text-sm text-gray-800 whitespace-pre-line">{{ venda.observacao }}</p></div>
+    {% endif %}
+
+    {% if historico_venda is not None %}
+    <section class="vd-card overflow-hidden" data-historico-venda>
+        <div class="px-5 py-3 border-b border-gray-100 flex items-center justify-between gap-2">
+            <h2 class="text-sm font-bold text-gray-900"><i class="fas fa-clock-rotate-left text-purple-600 mr-1.5"></i>Histórico desta venda</h2>
+            {% if pode_editar %}<a href="{% url 'vendas:historico' %}" class="text-[12px] text-purple-700 hover:underline">Todas as vendas</a>{% endif %}
+        </div>
+        <ol class="divide-y divide-gray-100">
+            {% for lote in historico_venda %}{% include "vendas/_historico_lote.html" with lote=lote mostrar_venda=False %}
+            {% empty %}<li class="px-5 py-5 text-center text-sm text-gray-400">Nenhuma alteração depois do lançamento.</li>{% endfor %}
+        </ol>
+    </section>
     {% endif %}
 </div>
 

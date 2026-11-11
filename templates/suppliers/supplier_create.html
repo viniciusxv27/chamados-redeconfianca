@@ -88,6 +88,28 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Condições comerciais (opcionais) -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+                    <div>
+                        <label for="preco" class="block text-sm font-semibold text-gray-700 mb-3">Preço (R$)</label>
+                        <input type="text" id="preco" name="preco" inputmode="decimal" placeholder="Ex.: 1.250,00"
+                               value="{{ form_data.preco|default:'' }}"
+                               class="w-full px-4 py-4 border-0 bg-gray-50 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-500 shadow-sm font-medium">
+                    </div>
+                    <div>
+                        <label for="frete" class="block text-sm font-semibold text-gray-700 mb-3">Frete (R$)</label>
+                        <input type="text" id="frete" name="frete" inputmode="decimal" placeholder="Ex.: 80,00"
+                               value="{{ form_data.frete|default:'' }}"
+                               class="w-full px-4 py-4 border-0 bg-gray-50 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-500 shadow-sm font-medium">
+                    </div>
+                    <div>
+                        <label for="tempo_entrega" class="block text-sm font-semibold text-gray-700 mb-3">Tempo de entrega</label>
+                        <input type="text" id="tempo_entrega" name="tempo_entrega" maxlength="120" placeholder="Ex.: 5 dias úteis"
+                               value="{{ form_data.tempo_entrega|default:'' }}"
+                               class="w-full px-4 py-4 border-0 bg-gray-50 rounded-2xl focus:outline-none focus:ring-2 focus:ring-orange-500 shadow-sm font-medium">
+                    </div>
+                </div>
                 
                 <!-- Informações Adicionais -->
                 <div class="bg-orange-50 rounded-2xl p-6 border border-orange-100 mb-8">

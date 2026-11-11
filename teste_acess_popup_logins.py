@@ -339,6 +339,30 @@ t('respostas fechadas para quem não gerencia', r.status_code == 302)
 r = cliente(vend_a).get(f'/acess/popups/{camp.id}/', {'exportar': 'csv'})
 t('export fechado para usuário comum', r.status_code == 302)
 
+print('pessoas escolhidas uma a uma (11/11)')
+cg = cliente(gestor)
+html = cg.get('/acess/popups/novo/').content.decode()
+t('formulário tem a lista de pessoas com busca', 'name="usuarios"' in html and 'pp-busca-pessoa' in html)
+r = cg.post('/acess/popups/novo/', {'titulo': 'ZZ só duas pessoas', 'pergunta': 'Login com erro?', 'ativo': 'on',
+                                    'usuarios': [vend_b.id, sem_setor.id]})
+so = CampanhaLoginErro.objects.get(titulo='ZZ só duas pessoas')
+t('salva as pessoas escolhidas', set(so.usuarios.values_list('id', flat=True)) == {vend_b.id, sem_setor.id})
+t('só pessoas (sem setor/hierarquia): público é só elas', set(pl.publico_qs(so).values_list('id', flat=True)) == {vend_b.id, sem_setor.id})
+t('... e quem não foi escolhido não recebe', pl.alvo(so, vend_b) and pl.alvo(so, sem_setor) and not pl.alvo(so, vend_a) and not pl.alvo(so, sup_a))
+r = cg.post(f'/acess/popups/{so.id}/editar/', {'titulo': 'ZZ loja A + uma pessoa', 'pergunta': 'Login com erro?', 'ativo': 'on',
+                                                'setores': [loja_a.id], 'usuarios': [vend_b.id]})
+so.refresh_from_db()
+pub = set(pl.publico_qs(so).values_list('id', flat=True))
+t('setor + pessoa: a loja A inteira e mais a pessoa escolhida', {vend_a.id, sup_a.id, vend_b.id} <= pub and sem_setor.id not in pub
+  and escritorio.id not in pub, pub)
+t('a regra do popup bate com a lista do público', pl.alvo(so, vend_b) and pl.alvo(so, vend_a) and not pl.alvo(so, sem_setor))
+inativo = pessoa('inativo', None, 'PADRAO', is_active=False)
+cg.post(f'/acess/popups/{so.id}/editar/', {'titulo': 'ZZ loja A + uma pessoa', 'pergunta': 'x', 'ativo': 'on',
+                                           'setores': [loja_a.id], 'usuarios': [vend_b.id, inativo.id]})
+t('pessoa inativa não é aceita', not so.usuarios.filter(pk=inativo.pk).exists())
+h = cg.get(f'/acess/popups/{so.id}/editar/').content.decode()
+t('a edição mostra a pessoa marcada', f'name="usuarios" value="{vend_b.id}" checked' in h)
+
 print('higiene dos templates')
 novos = ['templates/acess/_popup_login_erro.html', 'templates/acess/popups.html', 'templates/acess/popup_form.html',
          'templates/acess/popup_respostas.html', 'templates/portal_popups/_popup_gate.html']

@@ -53,6 +53,21 @@
         </div>
     </div>
 
+    <div class="ac-card p-4">
+        <div class="flex items-center justify-between gap-2">
+            <p class="ac-label mb-0">Pessoas <span class="font-normal text-gray-400">(uma a uma)</span></p>
+            <span class="text-[11px] text-gray-500" id="pp-n-pessoas"></span>
+        </div>
+        <p class="text-[11px] text-gray-500 mb-2">Quem for marcado aqui recebe sempre, além do filtro de setor e hierarquia. Só com pessoas marcadas (sem setor e sem hierarquia), o popup vai só para elas.</p>
+        <input type="search" id="pp-busca-pessoa" placeholder="Buscar pessoa (nome, e-mail ou setor)" class="ac-input mb-2" autocomplete="off">
+        <div class="max-h-64 overflow-y-auto space-y-1 pr-1" id="pp-pessoas">
+            {% for u in pessoas %}
+            <label class="flex items-center gap-2 text-sm text-gray-700 py-0.5{% if u.id not in pessoas_marcadas %} hidden{% endif %}" data-nome="{{ u.get_full_name|lower }} {{ u.email|lower }} {{ u.sector.name|default:''|lower }}"><input type="checkbox" name="usuarios" value="{{ u.id }}" {% if u.id in pessoas_marcadas %}checked{% endif %} class="rounded"> <span class="min-w-0 truncate">{{ u.get_full_name|default:u.username }}{% if u.sector %} <span class="text-gray-400">· {{ u.sector.name }}</span>{% endif %}</span></label>
+            {% endfor %}
+        </div>
+        <p class="text-[11px] text-gray-400 mt-1" id="pp-dica-pessoa">Digite para procurar; os marcados ficam sempre à vista.</p>
+    </div>
+
     <div class="lg:col-span-2 flex items-center gap-2 flex-wrap">
         <button class="ac-btn ac-btn-pri"><i class="fas fa-check"></i>Salvar</button>
         <a href="{% if campanha.pk %}{% url 'acess:popup_respostas' campanha.pk %}{% else %}{% url 'acess:popups' %}{% endif %}" class="ac-btn ac-btn-claro">Cancelar</a>
@@ -69,6 +84,20 @@
     });
     caixa.addEventListener('change', conta);
     conta();
+    // Pessoas: lista longa — mostra só as marcadas e o que bater com a busca (2+ letras).
+    var bp = document.getElementById('pp-busca-pessoa'), cp = document.getElementById('pp-pessoas'), np = document.getElementById('pp-n-pessoas');
+    function filtraPessoas() {
+        var t = bp.value.trim().toLowerCase();
+        cp.querySelectorAll('[data-nome]').forEach(function (l) {
+            var marcado = l.querySelector('input').checked;
+            l.classList.toggle('hidden', !marcado && !(t.length >= 2 && l.dataset.nome.indexOf(t) >= 0));
+        });
+        var k = cp.querySelectorAll('input:checked').length;
+        np.textContent = k ? k + ' marcada(s)' : 'Nenhuma';
+    }
+    bp.addEventListener('input', filtraPessoas);
+    cp.addEventListener('change', filtraPessoas);
+    filtraPessoas();
 })();
 </script>
 {% endblock %}

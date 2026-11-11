@@ -335,13 +335,17 @@ def _nome(usuario):
     return ((usuario.get_full_name() or '').strip() or usuario.username)[:200]
 
 
-def registrar_alteracoes(tipo, objeto, mudancas, usuario, pdv='', rotulo=''):
-    """``mudancas``: [(campo, rótulo, antes, depois)] — grava só o que mudou de fato."""
+def registrar_alteracoes(tipo, objeto, mudancas, usuario, pdv='', rotulo='', extra=None):
+    """``mudancas``: [(campo, rótulo, antes, depois)] — grava só o que mudou de fato.
+
+    ``extra``: campos a mais em todas as linhas (``venda_id``, ``motivo``, ``lote`` — edição de venda).
+    """
     from .models import RegistroAlteracao
+    extra = extra or {}
     linhas = [RegistroAlteracao(tipo=tipo, objeto_id=getattr(objeto, 'pk', None),
-                                objeto_rotulo=(rotulo or str(objeto))[:200], campo=campo, rotulo=rot,
+                                objeto_rotulo=(rotulo or str(objeto))[:200], campo=campo[:40], rotulo=rot[:80],
                                 antes='' if antes is None else str(antes), depois='' if depois is None else str(depois),
-                                usuario=usuario, usuario_nome=_nome(usuario), pdv=(pdv or '')[:120])
+                                usuario=usuario, usuario_nome=_nome(usuario), pdv=(pdv or '')[:120], **extra)
               for campo, rot, antes, depois in mudancas
               if ('' if antes is None else str(antes)) != ('' if depois is None else str(depois))]
     RegistroAlteracao.objects.bulk_create(linhas)

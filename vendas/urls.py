@@ -17,6 +17,9 @@ urlpatterns = [
     path('precos/importar/email/', views.precos_email, name='precos_email'),
     path('precos/novo/', views.precos_create, name='precos_create'),
     path('<int:pk>/', views.venda_detail, name='venda_detail'),
+    path('<int:pk>/editar/', views.venda_editar, name='venda_editar'),
+    path('<int:pk>/excluir/', views.venda_excluir, name='venda_excluir'),
+    path('historico/', views.historico, name='historico'),
 
     # SLV — consultas da tela de venda e parametrização.
     path('api/cliente/', views.api_cliente, name='api_cliente'),

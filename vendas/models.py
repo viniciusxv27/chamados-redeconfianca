@@ -475,7 +475,10 @@ class RegistroAlteracao(models.Model):
 
     TIPOS = [('PLANO', 'Plano'), ('VIVO_MAIS', 'Percentual Vivo+'), ('CLIENTE', 'Cliente'), ('SERIAL', 'Serial obrigatório'),
              ('SERVICO_ADICIONAL', 'Seguro / SVA'), ('ACESSO', 'Acesso ao módulo'),
-             ('PLANO_FORA', 'Plano fora do portfólio')]
+             ('PLANO_FORA', 'Plano fora do portfólio'),
+             # Edição e exclusão de venda pelo SUPERADMIN (11/11/2026 — vendas/edicao.py).
+             ('VENDA', 'Venda (cabeçalho)'), ('VENDA_PRODUTO', 'Venda: produto'), ('VENDA_SERVICO', 'Venda: serviço'),
+             ('VENDA_PAGAMENTO', 'Venda: pagamento'), ('VENDA_EXCLUIDA', 'Venda excluída')]
     tipo = models.CharField(max_length=20, choices=TIPOS, db_index=True, verbose_name='O que mudou')
     objeto_id = models.PositiveIntegerField(null=True, blank=True, db_index=True)
     objeto_rotulo = models.CharField(max_length=200, blank=True, verbose_name='Registro')
@@ -488,6 +491,11 @@ class RegistroAlteracao(models.Model):
     usuario_nome = models.CharField(max_length=200, blank=True)
     pdv = models.CharField(max_length=120, blank=True, verbose_name='PDV')
     quando = models.DateTimeField(auto_now_add=True, db_index=True)
+    # Venda editada ou excluída: o número fica mesmo depois de a venda sumir (por isso não é FK).
+    venda_id = models.PositiveIntegerField(null=True, blank=True, db_index=True, verbose_name='Nº da venda')
+    motivo = models.TextField(blank=True, default='', db_default='', verbose_name='Motivo da alteração')
+    # As linhas gravadas de uma vez (uma edição ou uma exclusão) têm o mesmo lote.
+    lote = models.CharField(max_length=32, blank=True, default='', db_default='', db_index=True)
 
     class Meta:
         verbose_name = 'Histórico de alteração (SLV)'

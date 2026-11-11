@@ -1,0 +1,52 @@
+{% load vendas_tags %}
+{% comment %}
+Uma edição ou exclusão de venda (um lote do RegistroAlteracao): quem, quando, o motivo
+e cada campo com o antes e o depois. Exclusão traz a fotografia da venda.
+Variáveis: lote (de views._lotes_do_historico) e mostrar_venda (link para a venda).
+{% endcomment %}
+<li class="px-4 sm:px-5 py-3 text-[12px]" data-lote="{{ lote.lote }}">
+    <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+        {% if lote.excluida %}
+        <span class="px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-semibold"><i class="fas fa-trash-can mr-1"></i>Excluída</span>
+        {% else %}
+        <span class="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-semibold"><i class="fas fa-pen mr-1"></i>Editada</span>
+        {% endif %}
+        {% if mostrar_venda %}
+            {% if lote.excluida %}<strong class="text-gray-900">Venda #{{ lote.venda_id }}</strong>
+            {% else %}<a href="{% url 'vendas:venda_detail' lote.venda_id %}" class="font-semibold text-purple-700 hover:underline">Venda #{{ lote.venda_id }}</a>{% endif %}
+        {% endif %}
+        <span class="text-gray-500">{{ lote.usuario_nome|default:"—" }} · {{ lote.quando|date:"d/m/Y H:i" }}{% if lote.pdv %} · {{ lote.pdv }}{% endif %}</span>
+    </div>
+    {% if lote.motivo %}<p class="mt-1 text-gray-800 break-words"><i class="fas fa-comment-dots text-gray-400 mr-1"></i><span class="text-gray-500">Motivo:</span> {{ lote.motivo }}</p>{% endif %}
+    {% if lote.excluida %}
+        {% if lote.resumo %}<p class="mt-1 text-gray-700 break-words">{{ lote.resumo }}</p>{% endif %}
+        {% if lote.fotografia %}
+        {% with foto=lote.fotografia %}
+        <details class="mt-1.5">
+            <summary class="cursor-pointer text-purple-700 font-semibold">Ver a venda como estava</summary>
+            <div class="mt-2 rounded-lg border border-gray-200 p-3 space-y-2 bg-gray-50/60">
+                <p><span class="text-gray-500">Data:</span> {{ lote.fotografia_data|date:"d/m/Y H:i"|default:"—" }} · <span class="text-gray-500">PDV:</span> {{ foto.loja__nome|default:foto.pdv_nome|default:"—" }} · <span class="text-gray-500">Vendedor:</span> {{ foto.vendedor__nome|default:"—" }}</p>
+                <p><span class="text-gray-500">Cliente:</span> {{ foto.cliente_nome|default:"—" }} {{ foto.cliente_cpf }}{% if foto.cliente_telefone %} · {{ foto.cliente_telefone }}{% endif %}</p>
+                <p><span class="text-gray-500">Pagamento:</span> {{ lote.fotografia_forma|default:"—" }}{% if foto.nsu %} · NSU {{ foto.nsu }}{% endif %} · <span class="text-gray-500">Total:</span> {{ foto.total|brl }}</p>
+                {% if foto.produtos %}<ul class="list-disc pl-4">{% for p in foto.produtos %}<li>{{ p.nome_produto }}{% if p.serial %} · {{ p.serial }}{% endif %} · {{ p.valor_venda|brl }}</li>{% endfor %}</ul>{% endif %}
+                {% if foto.servicos %}<ul class="list-disc pl-4">{% for sv in foto.servicos %}<li>{{ sv.servico }}{% if sv.plano_novo %} · {{ sv.plano_novo }}{% endif %}{% if sv.numero_acesso %} · {{ sv.numero_acesso }}{% endif %} · {{ sv.valor_plano|brl }}</li>{% endfor %}</ul>{% endif %}
+                {% if foto.pagamentos %}<ul class="list-disc pl-4">{% for pg in foto.pagamentos %}<li>{{ pg.forma_nome|default:pg.forma }} {{ pg.valor|brl }}{% if pg.nsu %} · NSU {{ pg.nsu }}{% endif %}{% if pg.parcelas %} · {{ pg.parcelas }}x{% endif %}</li>{% endfor %}</ul>{% endif %}
+                <details><summary class="cursor-pointer text-gray-500">Dados completos (JSON)</summary>
+                    <pre class="mt-1 text-[10px] whitespace-pre-wrap break-all max-h-64 overflow-auto">{{ lote.fotografia_json }}</pre></details>
+            </div>
+        </details>
+        {% endwith %}
+        {% endif %}
+    {% else %}
+    <ul class="mt-1.5 space-y-1">
+        {% for h in lote.linhas %}
+        <li class="flex flex-wrap items-baseline gap-1.5 break-words">
+            {% if h.item %}<span class="text-gray-500">{{ h.item }} ·</span>{% endif %}
+            <strong class="text-gray-900">{{ h.rotulo }}</strong>
+            {% if h.antes %}<span class="px-1.5 rounded bg-red-50 text-red-700 line-through">{{ h.antes }}</span><i class="fas fa-arrow-right text-[9px] text-gray-400"></i>{% endif %}
+            <span class="px-1.5 rounded bg-emerald-50 text-emerald-700">{{ h.depois|default:"(vazio)" }}</span>
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+</li>

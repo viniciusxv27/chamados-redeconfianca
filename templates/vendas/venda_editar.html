@@ -1,0 +1,201 @@
+{% extends "vendas/_base_vendas.html" %}
+{% load vendas_tags %}
+{% comment %}
+Edição da venda pelo SUPERADMIN (vendas/edicao.py). O servidor confere tudo de novo e
+recalcula o que é derivado; cada campo que mudar vai para o histórico com o motivo.
+{% endcomment %}
+
+{% block title %}Editar venda #{{ venda.pk }}{% endblock %}
+{% block vd_icone %}fa-pen{% endblock %}
+{% block vd_cabecalho %}Editar venda #{{ venda.pk }}{% endblock %}
+{% block vd_subtitulo %}Lançada em {{ venda.created_at|date:"d/m/Y H:i" }} · tudo o que mudar fica no histórico da venda{% endblock %}
+{% block vd_acoes %}
+<a href="{% url 'vendas:venda_detail' venda.pk %}" class="inline-flex items-center gap-2 px-3.5 py-2 vd-card text-gray-700 text-sm font-semibold hover:bg-gray-50"><i class="fas fa-arrow-left"></i>Voltar à venda</a>
+{% endblock %}
+
+{% block vd_conteudo %}
+{% if erros %}
+<div class="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800" data-erros role="alert">
+    <p class="font-semibold"><i class="fas fa-circle-exclamation mr-1.5"></i>Nada foi gravado. Corrija:</p>
+    <ul class="mt-1.5 list-disc pl-5 space-y-0.5">{% for e in erros %}<li>{{ e }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+{% if recebiveis %}
+<div class="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+    <i class="fas fa-link mr-1.5"></i>Esta venda está conciliada com {{ recebiveis|length }} registro(s) da adquirente no Financeiro (NSU {% for r in recebiveis %}{{ r.nsu }}{% if not forloop.last %}, {% endif %}{% endfor %}). Mudar valor ou NSU aqui não refaz a conciliação: confira em Financeiro › Cartões.
+</div>
+{% endif %}
+
+<form method="post" class="space-y-4" id="vdEditar" novalidate>
+    {% csrf_token %}
+    <input type="hidden" name="versao" value="{{ versao }}">
+    <input type="hidden" name="total_pagamentos" value="{{ f.total_pagamentos }}">
+
+    <section class="vd-secao">
+        <div class="vd-secao-cabeca"><span class="vd-numero">1</span><h2 class="text-sm font-bold text-gray-900">Venda e cliente</h2></div>
+        <div class="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div><label class="vd-rotulo" for="eData">Data da venda *</label><input id="eData" type="datetime-local" name="data_venda" value="{{ f.cab.data_venda }}" class="vd-campo"></div>
+            <div><label class="vd-rotulo" for="eLoja">Loja / PDV *</label>
+                <select id="eLoja" name="loja" class="vd-campo">
+                    <option value="">—</option>
+                    {% for l in lojas %}<option value="{{ l.pk }}" {% if f.cab.loja == l.pk|stringformat:"s" %}selected{% endif %}>{{ l.name }}</option>{% endfor %}
+                </select></div>
+            <div><label class="vd-rotulo" for="eVendedor">Vendedor *</label>
+                <select id="eVendedor" name="vendedor" class="vd-campo">
+                    <option value="">—</option>
+                    {% for u in vendedores %}<option value="{{ u.pk }}" {% if f.cab.vendedor == u.pk|stringformat:"s" %}selected{% endif %}>{{ u.get_full_name|default:u.username }}{% if not u.is_active %} (inativo){% endif %}</option>{% endfor %}
+                </select></div>
+            <div><label class="vd-rotulo" for="eCliNome">Cliente *</label><input id="eCliNome" name="cliente_nome" value="{{ f.cab.cliente_nome }}" maxlength="200" class="vd-campo"></div>
+            <div><label class="vd-rotulo" for="eCliCpf">CPF/CNPJ *</label><input id="eCliCpf" name="cliente_cpf" value="{{ f.cab.cliente_cpf }}" inputmode="numeric" class="vd-campo">
+                <p class="vd-ajuda">Trocar o CPF liga a venda ao cadastro desse CPF (ou cria um).</p></div>
+            <div><label class="vd-rotulo" for="eCliTel">Telefone do cliente</label><input id="eCliTel" name="cliente_telefone" value="{{ f.cab.cliente_telefone }}" inputmode="tel" class="vd-campo"></div>
+            <div><label class="vd-rotulo" for="eComprovante">Comprovante fiscal</label>
+                <select id="eComprovante" name="comprovante_fiscal" class="vd-campo">
+                    {% for k, r in comprovantes %}<option value="{{ k }}" {% if f.cab.comprovante_fiscal == k %}selected{% endif %}>{{ r }}</option>{% endfor %}
+                </select></div>
+            <div class="flex flex-col justify-end gap-2 text-sm text-gray-700">
+                <label class="flex items-center gap-2"><input type="checkbox" name="estoque_avancado" value="1" {% if f.cab.estoque_avancado %}checked{% endif %}> Venda estoque avançado</label>
+                {% if f.produtos %}<label class="flex items-center gap-2"><input type="checkbox" name="vivo_mais" value="1" {% if f.cab.vivo_mais %}checked{% endif %}> Pago pelo Vivo+{% if venda.vivo_mais_percentual is not None %} ({{ venda.vivo_mais_percentual|floatformat:"-2" }}%){% endif %}</label>{% endif %}
+            </div>
+            <div class="sm:col-span-2 lg:col-span-3"><label class="vd-rotulo" for="eObs">Observação</label><textarea id="eObs" name="observacao" rows="2" maxlength="2000" class="vd-campo">{{ f.cab.observacao }}</textarea></div>
+        </div>
+    </section>
+
+    {% if f.produtos %}
+    <section class="vd-secao">
+        <div class="vd-secao-cabeca"><span class="vd-numero">2</span><h2 class="text-sm font-bold text-gray-900">Produtos</h2></div>
+        <p class="px-4 pt-3 vd-ajuda">O sistema recalcula Vivo+ e o valor calculado. O valor final segue o recálculo se você não mexer nele (e se não tinha sido editado à mão); digitado, fica marcado como editado.</p>
+        <div class="divide-y divide-gray-100">
+        {% for p in f.produtos %}
+        <div class="p-4 space-y-3" data-produto="{{ p.id }}">
+            <div class="flex items-start justify-between gap-3">
+                <p class="text-sm font-semibold text-gray-900 min-w-0 break-words">{{ p.obj.nome_produto }} <span class="text-[11px] font-normal text-gray-500">{{ p.obj.categoria_slv|default:"" }}</span></p>
+                <label class="flex items-center gap-1.5 text-[12px] text-red-700 whitespace-nowrap"><input type="checkbox" name="p{{ p.id }}_remover" value="1" {% if p.remover %}checked{% endif %}> Remover</label>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div class="sm:col-span-2"><label class="vd-rotulo">Produto *</label><input name="p{{ p.id }}_nome" value="{{ p.nome }}" maxlength="200" class="vd-campo"></div>
+                <div><label class="vd-rotulo">{% if p.obj.categoria_slv == 'aparelho' %}IMEI{% else %}Serial{% endif %}</label><input name="p{{ p.id }}_serial" value="{{ p.serial }}" maxlength="120" class="vd-campo tabular"></div>
+                <div class="flex items-end pb-2"><label class="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="p{{ p.id }}_prateleira" value="1" {% if p.prateleira %}checked{% endif %}> Prateleira infinita</label></div>
+                <div><label class="vd-rotulo">SKU</label><input name="p{{ p.id }}_sku" value="{{ p.sku }}" maxlength="60" class="vd-campo"></div>
+                <div><label class="vd-rotulo">Cor</label><input name="p{{ p.id }}_cor" value="{{ p.cor }}" maxlength="60" class="vd-campo"></div>
+                <div><label class="vd-rotulo">Valor de produto (R$) *</label><input name="p{{ p.id }}_sugerido" value="{{ p.sugerido }}" inputmode="decimal" class="vd-campo tabular"></div>
+                <div><label class="vd-rotulo">Valor final un. (R$){% if venda.desconto_pix %} antes do Pix{% endif %}</label><input name="p{{ p.id }}_final" value="{{ p.final }}" inputmode="decimal" class="vd-campo tabular {% if p.obj.valor_editado %}vd-editado{% endif %}">
+                    <p class="vd-ajuda">Calculado: {{ p.obj.valor_calculado|brl }}{% if p.obj.valor_editado %} · editado à mão{% endif %}</p></div>
+            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                <fieldset class="rounded-lg border border-gray-200 p-3 space-y-2">
+                    <label class="flex items-center gap-2 text-sm font-semibold text-gray-800"><input type="checkbox" name="p{{ p.id }}_rv" value="1" {% if p.rv %}checked{% endif %}> Renova Vini</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <input name="p{{ p.id }}_rv_valor" value="{{ p.rv_valor }}" inputmode="decimal" placeholder="Valor" aria-label="Valor Renova Vini" class="vd-campo tabular">
+                        <input name="p{{ p.id }}_rv_codigo" value="{{ p.rv_codigo }}" placeholder="RN-000000" aria-label="Código do Renova" class="vd-campo">
+                    </div>
+                </fieldset>
+                <fieldset class="rounded-lg border border-gray-200 p-3 space-y-2">
+                    <label class="flex items-center gap-2 text-sm font-semibold text-gray-800"><input type="checkbox" name="p{{ p.id }}_ra" value="1" {% if p.ra %}checked{% endif %}> Renova Alied</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <input name="p{{ p.id }}_ra_valor" value="{{ p.ra_valor }}" inputmode="decimal" placeholder="Valor" aria-label="Valor Renova Alied" class="vd-campo tabular">
+                        <input name="p{{ p.id }}_ra_pedido" value="{{ p.ra_pedido }}" maxlength="40" placeholder="Nº do pedido" aria-label="Pedido Renova Alied" class="vd-campo">
+                    </div>
+                </fieldset>
+                <fieldset class="rounded-lg border border-gray-200 p-3 space-y-2">
+                    <label class="flex items-center gap-2 text-sm font-semibold text-gray-800"><input type="checkbox" name="p{{ p.id }}_ras" value="1" {% if p.ras %}checked{% endif %}> Renova Assurant</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <input name="p{{ p.id }}_ras_valor" value="{{ p.ras_valor }}" inputmode="decimal" placeholder="Valor" aria-label="Valor Renova Assurant" class="vd-campo tabular">
+                        <input name="p{{ p.id }}_ras_pedido" value="{{ p.ras_pedido }}" maxlength="40" placeholder="Pedido/protocolo" aria-label="Pedido Renova Assurant" class="vd-campo">
+                    </div>
+                </fieldset>
+            </div>
+        </div>
+        {% endfor %}
+        </div>
+        <p class="px-4 pb-3 vd-ajuda">Produto novo não entra pela edição: lance uma venda nova (ou exclua esta e lance de novo).</p>
+    </section>
+
+    <section class="vd-secao">
+        <div class="vd-secao-cabeca"><span class="vd-numero">3</span><h2 class="text-sm font-bold text-gray-900">Pagamento</h2></div>
+        <div class="p-4 space-y-3">
+            <div class="max-w-xs"><label class="vd-rotulo" for="ePix">Desconto no Pix (R$)</label><input id="ePix" name="desconto_pix" value="{{ f.cab.desconto_pix }}" inputmode="decimal" class="vd-campo tabular">
+                <p class="vd-ajuda">Repartido de novo entre os produtos, na proporção do valor.</p></div>
+            <p class="vd-ajuda">Os pagamentos precisam somar o total dos produtos (depois do desconto no Pix). Para tirar um pagamento, deixe a forma em branco.</p>
+            {% for pg in f.pagamentos %}
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 {% if not pg.existente and not pg.forma %}hidden{% endif %}" data-pagamento="{{ pg.n }}">
+                <div><label class="vd-rotulo">Forma</label>
+                    <select name="pg{{ pg.n }}_forma" class="vd-campo">
+                        <option value="">— sem —</option>
+                        {% for k, r in formas %}<option value="{{ k }}" {% if pg.forma == k %}selected{% endif %}>{{ r }}</option>{% endfor %}
+                    </select></div>
+                <div><label class="vd-rotulo">Valor (R$)</label><input name="pg{{ pg.n }}_valor" value="{{ pg.valor }}" inputmode="decimal" class="vd-campo tabular"></div>
+                <div><label class="vd-rotulo">NSU (cartão)</label><input name="pg{{ pg.n }}_nsu" value="{{ pg.nsu }}" maxlength="30" class="vd-campo"></div>
+                <div><label class="vd-rotulo">Parcelas (crédito)</label><input name="pg{{ pg.n }}_parcelas" value="{{ pg.parcelas }}" inputmode="numeric" class="vd-campo"></div>
+            </div>
+            {% endfor %}
+            <button type="button" id="vdMaisPagamento" class="inline-flex items-center gap-2 px-3 py-2 vd-card text-sm text-purple-700 font-semibold"><i class="fas fa-plus"></i>Adicionar pagamento</button>
+        </div>
+    </section>
+    {% endif %}
+
+    {% if f.servicos %}
+    <section class="vd-secao">
+        <div class="vd-secao-cabeca"><span class="vd-numero">{% if f.produtos %}4{% else %}2{% endif %}</span><h2 class="text-sm font-bold text-gray-900">Serviços</h2></div>
+        <p class="px-4 pt-3 vd-ajuda">Delta = valor do plano − valor anterior (recalculado). Trocar o plano faz o valor seguir o do plano novo, a menos que você mude o valor também.</p>
+        <div class="divide-y divide-gray-100">
+        {% for s in f.servicos %}
+        <div class="p-4 space-y-3" data-servico="{{ s.id }}">
+            <div class="flex items-start justify-between gap-3">
+                <p class="text-sm font-semibold text-gray-900 min-w-0 break-words">{{ s.obj.get_tipo_servico_display|default:s.obj.servico }}{% if s.obj.servico_adicional %} · {{ s.obj.servico_adicional.nome }}{% endif %}</p>
+                <label class="flex items-center gap-1.5 text-[12px] text-red-700 whitespace-nowrap"><input type="checkbox" name="s{{ s.id }}_remover" value="1" {% if s.remover %}checked{% endif %}> Remover</label>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div><label class="vd-rotulo">Tipo *</label>
+                    <select name="s{{ s.id }}_tipo" class="vd-campo">
+                        {% if not s.tipo %}<option value="">—</option>{% endif %}
+                        {% for k, r in tipos_servico %}<option value="{{ k }}" {% if s.tipo == k %}selected{% endif %}>{{ r }}</option>{% endfor %}
+                    </select></div>
+                <div class="sm:col-span-2"><label class="vd-rotulo">Plano</label>
+                    <select name="s{{ s.id }}_plano" class="vd-campo">
+                        <option value="">— sem plano —</option>
+                        {% for pl in planos %}<option value="{{ pl.pk }}" {% if s.plano == pl.pk|stringformat:"s" %}selected{% endif %}>{{ pl.get_segmentacao_display }} · {{ pl.nome }} · {{ pl.valor|brl }}{% if not pl.ativo %} (inativo){% endif %}</option>{% endfor %}
+                    </select></div>
+                <div><label class="vd-rotulo">Número de acesso</label><input name="s{{ s.id }}_acesso" value="{{ s.acesso }}" inputmode="tel" class="vd-campo tabular"></div>
+                <div><label class="vd-rotulo">Valor do plano (R$)</label><input name="s{{ s.id }}_valor" value="{{ s.valor }}" inputmode="decimal" class="vd-campo tabular"></div>
+                <div><label class="vd-rotulo">Valor anterior (R$)</label><input name="s{{ s.id }}_valor_anterior" value="{{ s.valor_anterior }}" inputmode="decimal" class="vd-campo tabular"></div>
+                <div><label class="vd-rotulo">Nº da ordem (fibra)</label><input name="s{{ s.id }}_ordem" value="{{ s.ordem }}" maxlength="40" class="vd-campo"></div>
+                <div><label class="vd-rotulo">Serial do SimCard (troca)</label><input name="s{{ s.id }}_simcard" value="{{ s.simcard }}" inputmode="numeric" class="vd-campo tabular"></div>
+                <div class="flex items-end pb-2"><label class="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="s{{ s.id }}_portabilidade" value="1" {% if s.portabilidade %}checked{% endif %}> Portabilidade (alta)</label></div>
+                <div><label class="vd-rotulo">Operadora de origem</label>
+                    <select name="s{{ s.id }}_operadora" class="vd-campo">
+                        <option value="">—</option>
+                        {% for k, r in operadoras %}<option value="{{ k }}" {% if s.operadora == k %}selected{% endif %}>{{ r }}</option>{% endfor %}
+                    </select></div>
+            </div>
+        </div>
+        {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    <section class="vd-secao">
+        <div class="p-4 space-y-3">
+            <div><label class="vd-rotulo" for="eMotivo">Motivo da alteração *</label>
+                <textarea id="eMotivo" name="motivo" rows="2" maxlength="2000" class="vd-campo" placeholder="Ex.: IMEI digitado errado na loja; cliente trocou o plano no mesmo dia">{{ f.cab.motivo }}</textarea>
+                <p class="vd-ajuda">Vai junto de cada campo alterado no histórico da venda.</p></div>
+            <div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+                <a href="{% url 'vendas:venda_detail' venda.pk %}" class="px-4 py-2.5 vd-card text-sm text-gray-700 font-semibold text-center">Cancelar</a>
+                <button type="submit" class="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-lg"><i class="fas fa-floppy-disk mr-1.5"></i>Salvar alterações</button>
+            </div>
+        </div>
+    </section>
+</form>
+
+<script>
+(function () {
+    const botao = document.getElementById('vdMaisPagamento');
+    if (!botao) return;
+    botao.addEventListener('click', function () {
+        const escondida = document.querySelector('[data-pagamento].hidden');
+        if (escondida) { escondida.classList.remove('hidden'); const s = escondida.querySelector('select'); if (s) s.focus(); }
+        if (!document.querySelector('[data-pagamento].hidden')) botao.classList.add('hidden');
+    });
+})();
+</script>
+{% endblock %}

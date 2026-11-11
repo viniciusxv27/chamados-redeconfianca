@@ -3,6 +3,7 @@ import json
 import logging
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
+from functools import wraps
 from io import BytesIO
 from urllib.parse import urlencode
 
@@ -24,9 +25,9 @@ from openpyxl.utils import get_column_letter
 
 from users.models import Sector, User
 
-from . import cnpj, slv
-from .models import (SEGMENTACOES, Cliente, ConfiguracaoVendas, ImportacaoPrecos, ItemPreco, Plano, PlanoForaPortfolio,
-                     RegistroAlteracao, ServicoAdicional, Venda, VendaProduto, VendaServico)
+from . import cnpj, edicao, slv
+from .models import (FORMAS_PAGAMENTO, SEGMENTACOES, Cliente, ConfiguracaoVendas, ImportacaoPrecos, ItemPreco, Plano,
+                     PlanoForaPortfolio, RegistroAlteracao, ServicoAdicional, Venda, VendaProduto, VendaServico)
 from .permissions import exige, is_superadmin, pode, ve_rede, vendas_do_usuario
 from .clientes import buscar_historico
 from .importacao import registrar_importacao
@@ -230,9 +231,162 @@ def venda_detail(request, pk):
                           .prefetch_related('produtos', 'produtos__editado_por', 'servicos', 'servicos__plano', 'pagamentos',
                                             'servicos__plano_anterior', 'servicos__servico_adicional')), pk=pk,
     )
+    superadmin = is_superadmin(request.user)
+    historico = None
+    if superadmin or ve_rede(request.user):
+        historico = _lotes_do_historico(RegistroAlteracao.objects.filter(venda_id=venda.pk, tipo__in=edicao.TIPOS_VENDA))
     return render(request, 'vendas/venda_detail.html', {
         'venda': venda,
         'aba': 'vendas',
+        'pode_editar': superadmin,
+        'versao': edicao.versao(venda) if superadmin else '',
+        'bloqueios_exclusao': edicao.ligacoes_que_impedem(venda) if superadmin else [],
+        'historico_venda': historico,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Editar e excluir venda — só o SUPERADMIN, tudo no histórico (vendas/edicao.py)
+# ---------------------------------------------------------------------------
+def _so_superadmin(view):
+    @wraps(view)
+    def _view(request, *args, **kwargs):
+        if not is_superadmin(request.user):
+            messages.error(request, 'Só o SUPERADMIN edita, exclui ou vê o histórico de alterações das vendas.')
+            return redirect('vendas:dashboard' if pode(request.user, 'modulo.ver') else 'home')
+        return view(request, *args, **kwargs)
+    return _view
+
+
+def _lotes_do_historico(qs):
+    """As linhas do histórico juntas por edição (lote), da mais nova para a mais antiga."""
+    lotes, por_lote = [], {}
+    for h in qs.order_by('-quando', '-id'):
+        chave = h.lote or f'id{h.pk}'
+        if chave not in por_lote:
+            por_lote[chave] = {'lote': chave, 'quando': h.quando, 'usuario_nome': h.usuario_nome, 'motivo': h.motivo,
+                               'venda_id': h.venda_id, 'pdv': h.pdv, 'excluida': False, 'linhas': [], 'fotografia': None,
+                               'resumo': ''}
+            lotes.append(por_lote[chave])
+        lote = por_lote[chave]
+        if h.tipo == 'VENDA_EXCLUIDA':
+            lote['excluida'] = True
+            if h.campo == 'fotografia':
+                try:
+                    foto = json.loads(h.antes)
+                except (TypeError, ValueError):
+                    foto = None
+                if isinstance(foto, dict):
+                    formas = dict(Venda._meta.get_field('forma_pagamento').choices)
+                    data = parse_datetime(foto.get('data_venda') or '')
+                    lote['fotografia_data'] = timezone.localtime(data) if data else None
+                    lote['fotografia_forma'] = formas.get(foto.get('forma_pagamento'), foto.get('forma_pagamento'))
+                    for pg in foto.get('pagamentos') or []:
+                        pg['forma_nome'] = formas.get(pg.get('forma'), pg.get('forma'))
+                lote['fotografia'] = foto
+                lote['fotografia_json'] = h.antes
+            else:
+                lote['resumo'] = h.antes
+            continue
+        if h.campo == 'dados':          # o JSON do item removido: fica no banco, a tela mostra o resumo
+            continue
+        h.item = h.objeto_rotulo.split(' · ', 1)[1] if h.tipo != 'VENDA' and ' · ' in h.objeto_rotulo else ''
+        lote['linhas'].append(h)
+    for lote in lotes:
+        lote['linhas'].reverse()        # dentro da edição, na ordem em que foi gravado
+    return lotes
+
+
+@login_required
+@_so_superadmin
+def venda_editar(request, pk):
+    venda = get_object_or_404(Venda.objects.select_related('loja', 'vendedor', 'cliente'), pk=pk)
+    erros = []
+    post = None
+    if request.method == 'POST':
+        try:
+            n = edicao.editar_venda(pk, request.POST, request.user)
+        except edicao.VendaDesatualizada as exc:
+            for e in exc.erros:
+                messages.error(request, e)
+            return redirect('vendas:venda_editar', pk=pk)
+        except slv.VendaInvalida as exc:
+            erros, post = exc.erros, request.POST
+        else:
+            if n:
+                messages.success(request, f'Venda #{pk} alterada: {n} registro(s) no histórico.')
+            else:
+                messages.info(request, 'Nada mudou na venda.')
+            if not Venda.objects.filter(pk=pk).exists():
+                return redirect('vendas:dashboard')
+            return redirect('vendas:venda_detail', pk=pk)
+        venda = get_object_or_404(Venda.objects.select_related('loja', 'vendedor', 'cliente'), pk=pk)
+    form = edicao.formulario(venda, post)
+    vendedores = list(User.objects.filter(is_active=True).order_by('first_name', 'last_name'))
+    if venda.vendedor and venda.vendedor not in vendedores:
+        vendedores.insert(0, venda.vendedor)
+    return render(request, 'vendas/venda_editar.html', {
+        'venda': venda, 'aba': 'vendas', 'f': form, 'erros': erros, 'versao': edicao.versao(venda),
+        'lojas': Sector.objects.all().order_by('name'), 'vendedores': vendedores,
+        'planos': Plano.objects.all().order_by('segmentacao', 'nome'),
+        'tipos_servico': VendaServico.TIPOS, 'operadoras': VendaServico.OPERADORAS,
+        'formas': FORMAS_PAGAMENTO, 'comprovantes': Venda.COMPROVANTE_CHOICES,
+        'bloqueios_exclusao': edicao.ligacoes_que_impedem(venda),
+        'recebiveis': _recebiveis_da_venda(venda),
+    })
+
+
+def _recebiveis_da_venda(venda):
+    try:
+        from financeiro.models import RecebivelCartao
+        return list(RecebivelCartao.objects.filter(venda=venda))
+    except Exception:  # noqa: BLE001
+        return []
+
+
+@login_required
+@require_POST
+@_so_superadmin
+def venda_excluir(request, pk):
+    get_object_or_404(Venda, pk=pk)
+    if not request.POST.get('confirmo'):
+        messages.error(request, 'Marque a confirmação de que a exclusão não tem volta.')
+        return redirect('vendas:venda_detail', pk=pk)
+    try:
+        edicao.excluir_venda(pk, request.user, request.POST.get('motivo'), request.POST.get('versao'))
+    except slv.VendaInvalida as exc:
+        for e in exc.erros:
+            messages.error(request, e)
+        return redirect('vendas:venda_detail', pk=pk)
+    messages.success(request, f'Venda #{pk} excluída. A fotografia completa ficou no histórico de alterações.')
+    return redirect('vendas:historico')
+
+
+@login_required
+@_so_superadmin
+def historico(request):
+    """Edições e exclusões de venda (só SUPERADMIN): quem, quando, por quê, o antes e o depois."""
+    qs = RegistroAlteracao.objects.filter(tipo__in=edicao.TIPOS_VENDA)
+    f = {k: (request.GET.get(k) or '').strip() for k in ('venda', 'acao', 'usuario', 'de', 'ate')}
+    if f['venda'].isdigit():
+        qs = qs.filter(venda_id=int(f['venda']))
+    if f['acao'] == 'exclusao':
+        qs = qs.filter(lote__in=RegistroAlteracao.objects.filter(tipo='VENDA_EXCLUIDA').values('lote'))
+    elif f['acao'] == 'edicao':
+        qs = qs.exclude(tipo='VENDA_EXCLUIDA')
+    if f['usuario']:
+        qs = qs.filter(usuario_nome__icontains=f['usuario'])
+    if f['de'] and parse_date(f['de']):
+        qs = qs.filter(quando__date__gte=parse_date(f['de']))
+    if f['ate'] and parse_date(f['ate']):
+        qs = qs.filter(quando__date__lte=parse_date(f['ate']))
+    from django.db.models import Max
+    lotes_qs = qs.values('lote').annotate(ultimo=Max('quando')).order_by('-ultimo')
+    page = Paginator(lotes_qs, 20).get_page(request.GET.get('page'))
+    lotes = _lotes_do_historico(qs.filter(lote__in=[x['lote'] for x in page.object_list]))
+    filtros = urlencode({k: v for k, v in f.items() if v})
+    return render(request, 'vendas/historico.html', {
+        'aba': 'historico', 'lotes': lotes, 'page': page, 'f': f, 'filtros': filtros,
     })
 
 
@@ -895,7 +1049,9 @@ def parametros(request):
         # São milhares (histórico do VivoGo): a tela abre com os mais vendidos e acha o resto pela busca.
         'planos_fora': PlanoForaPortfolio.objects.order_by('-vendas', 'nome')[:50],
         'planos_fora_total': PlanoForaPortfolio.objects.count(),
-        'historico': RegistroAlteracao.objects.exclude(tipo__in=['CLIENTE', 'ACESSO']).select_related('usuario')[:60],
+        # Edição/exclusão de venda tem tela própria (/vendas/historico/, só SUPERADMIN): não entra aqui.
+        'historico': RegistroAlteracao.objects.exclude(tipo__in=['CLIENTE', 'ACESSO', *edicao.TIPOS_VENDA])
+                                              .select_related('usuario')[:60],
     })
 
 

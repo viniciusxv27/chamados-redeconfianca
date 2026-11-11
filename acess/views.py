@@ -815,11 +815,21 @@ def _campanha_do_post(request, campanha):
     return campanha, setores, erros
 
 
-def _form_campanha(request, campanha, setores_marcados, erros=None):
+def _usuarios_do_post(request):
+    """Pessoas escolhidas uma a uma (só ativas)."""
+    ids = [i for i in map(_int, request.POST.getlist('usuarios')) if i]
+    return list(User.objects.filter(pk__in=ids, is_active=True))
+
+
+def _form_campanha(request, campanha, setores_marcados, erros=None, usuarios_marcados=None):
     from .popup_login import publico_qs
+    if usuarios_marcados is None:
+        usuarios_marcados = list(campanha.usuarios.all()) if campanha.pk else []
     return render(request, 'acess/popup_form.html', _ctx(
         request, 'popups', campanha=campanha, erros=erros or [], setores=Sector.objects.order_by('name'),
         marcados={s.id for s in setores_marcados}, hierarquias=User.HIERARCHY_CHOICES,
+        pessoas=User.objects.filter(is_active=True).select_related('sector').order_by('first_name', 'last_name'),
+        pessoas_marcadas={u.id for u in usuarios_marcados},
         publico=publico_qs(campanha).count() if campanha.pk else None))
 
 
@@ -854,11 +864,13 @@ def popup_nova(request):
     campanha = CampanhaLoginErro(ativo=True)
     if request.method == 'POST':
         campanha, setores, erros = _campanha_do_post(request, campanha)
+        usuarios = _usuarios_do_post(request)
         if erros:
-            return _form_campanha(request, campanha, setores, erros)
+            return _form_campanha(request, campanha, setores, erros, usuarios)
         campanha.criado_por = request.user
         campanha.save()
         campanha.setores.set(setores)
+        campanha.usuarios.set(usuarios)
         limpar_cache_campanhas()
         sv.registrar(request, 'POPUP_LOGIN_CRIADO', 'ADMIN', f'Criou o popup de login com erro "{campanha.titulo}"')
         messages.success(request, f'Popup "{campanha.titulo}" criado.')
@@ -875,10 +887,12 @@ def popup_editar(request, pk):
     campanha = get_object_or_404(CampanhaLoginErro, pk=pk)
     if request.method == 'POST':
         campanha, setores, erros = _campanha_do_post(request, campanha)
+        usuarios = _usuarios_do_post(request)
         if erros:
-            return _form_campanha(request, campanha, setores, erros)
+            return _form_campanha(request, campanha, setores, erros, usuarios)
         campanha.save()
         campanha.setores.set(setores)
+        campanha.usuarios.set(usuarios)
         limpar_cache_campanhas()
         sv.registrar(request, 'POPUP_LOGIN_ALTERADO', 'ADMIN', f'Alterou o popup de login com erro "{campanha.titulo}"')
         messages.success(request, 'Popup salvo.')

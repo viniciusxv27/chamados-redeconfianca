@@ -1,0 +1,40 @@
+{% extends "vendas/_base_vendas.html" %}
+
+{% block title %}Histórico de vendas{% endblock %}
+{% block vd_icone %}fa-clock-rotate-left{% endblock %}
+{% block vd_cabecalho %}Histórico de alterações das vendas{% endblock %}
+{% block vd_subtitulo %}Edições e exclusões feitas pelo SUPERADMIN: quem, quando, o motivo e o antes e o depois de cada campo.{% endblock %}
+
+{% block vd_conteudo %}
+<form method="get" class="vd-card p-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 items-end mb-4">
+    <div><label class="vd-rotulo" for="fVenda">Nº da venda</label><input id="fVenda" name="venda" value="{{ f.venda }}" inputmode="numeric" class="vd-campo"></div>
+    <div><label class="vd-rotulo" for="fAcao">O quê</label>
+        <select id="fAcao" name="acao" class="vd-campo">
+            <option value="">Edições e exclusões</option>
+            <option value="edicao" {% if f.acao == 'edicao' %}selected{% endif %}>Só edições</option>
+            <option value="exclusao" {% if f.acao == 'exclusao' %}selected{% endif %}>Só exclusões</option>
+        </select></div>
+    <div><label class="vd-rotulo" for="fUsuario">Quem fez</label><input id="fUsuario" name="usuario" value="{{ f.usuario }}" class="vd-campo"></div>
+    <div><label class="vd-rotulo" for="fDe">De</label><input id="fDe" type="date" name="de" value="{{ f.de }}" class="vd-campo"></div>
+    <div><label class="vd-rotulo" for="fAte">Até</label><input id="fAte" type="date" name="ate" value="{{ f.ate }}" class="vd-campo"></div>
+    <div class="flex gap-2 col-span-2 sm:col-span-1">
+        <button class="px-4 py-2.5 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-lg w-full"><i class="fas fa-filter mr-1"></i>Filtrar</button>
+        {% if filtros %}<a href="{% url 'vendas:historico' %}" class="px-3 py-2.5 vd-card text-sm text-gray-600" title="Limpar filtros"><i class="fas fa-xmark"></i></a>{% endif %}
+    </div>
+</form>
+
+<section class="vd-card overflow-hidden">
+    <ol class="divide-y divide-gray-100">
+        {% for lote in lotes %}{% include "vendas/_historico_lote.html" with lote=lote mostrar_venda=True %}
+        {% empty %}<li class="px-5 py-8 text-center text-sm text-gray-400">Nenhuma edição ou exclusão de venda{% if filtros %} com esses filtros{% endif %}.</li>{% endfor %}
+    </ol>
+</section>
+
+{% if page.has_other_pages %}
+<nav class="flex items-center justify-between gap-2 mt-4 text-sm">
+    {% if page.has_previous %}<a href="?{% if filtros %}{{ filtros }}&{% endif %}page={{ page.previous_page_number }}" class="px-3 py-2 vd-card text-gray-700"><i class="fas fa-chevron-left mr-1"></i>Anteriores</a>{% else %}<span></span>{% endif %}
+    <span class="text-gray-500">Página {{ page.number }} de {{ page.paginator.num_pages }}</span>
+    {% if page.has_next %}<a href="?{% if filtros %}{{ filtros }}&{% endif %}page={{ page.next_page_number }}" class="px-3 py-2 vd-card text-gray-700">Próximas<i class="fas fa-chevron-right ml-1"></i></a>{% else %}<span></span>{% endif %}
+</nav>
+{% endif %}
+{% endblock %}
