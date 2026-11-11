@@ -425,27 +425,20 @@
                                     <span><i class="fas fa-calendar mr-1"></i>{{ task.due_date|date:"d/m/Y" }}</span>
                                     {% endif %}
                                 </div>
-                                <!-- Atribuição de usuário -->
-                                {% if is_owner %}
-                                <div class="mt-2 flex items-center gap-2">
-                                    <select id="assign-user-{{ task.pk }}" onchange="assignTask({{ transcription.pk }}, {{ task.pk }}, this.value)"
-                                            class="border border-gray-200 rounded-lg px-2 py-1 text-xs focus:ring-emerald-500 focus:border-emerald-500 w-full">
-                                        <option value="">Atribuir a...</option>
-                                        {% for u in users %}
-                                        <option value="{{ u.pk }}" {% if task.assigned_to_id == u.pk %}selected{% endif %}>
-                                            {{ u.get_full_name|default:u.username }}
-                                        </option>
-                                        {% endfor %}
-                                    </select>
+                                <!-- Responsável: qualquer usuário ativo, por busca (11/11/2026) -->
+                                <div class="mt-2 relative" data-atribuir="{{ task.pk }}">
+                                    <p class="text-xs text-gray-500 min-w-0 break-words">
+                                        <i class="fas fa-user mr-1 text-emerald-500"></i>Responsável:
+                                        <span class="font-medium text-gray-700" data-responsavel>{% if task.assigned_to %}{{ task.assigned_to.get_full_name|default:task.assigned_to.username }}{% else %}—{% endif %}</span>
+                                    </p>
+                                    {% if pode_atribuir_tarefas %}
+                                    <input type="search" autocomplete="off" data-busca-pessoa
+                                           placeholder="Buscar pessoa para atribuir…" aria-label="Buscar pessoa para atribuir a tarefa"
+                                           class="mt-1.5 border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:ring-emerald-500 focus:border-emerald-500 w-full">
+                                    <div class="hidden mt-1 bg-white border border-gray-200 rounded-lg shadow-sm max-h-60 overflow-y-auto" data-lista-pessoas role="listbox"></div>
+                                    <p class="text-xs text-green-600 mt-1 hidden" id="task-success-{{ task.pk }}"></p>
+                                    {% endif %}
                                 </div>
-                                <p class="text-xs text-green-600 mt-1 hidden" id="task-success-{{ task.pk }}">
-                                    <i class="fas fa-check-circle mr-1"></i>Atribuído!
-                                </p>
-                                {% elif task.assigned_to %}
-                                <p class="text-xs text-gray-500 mt-2">
-                                    <i class="fas fa-user mr-1 text-emerald-500"></i>{{ task.assigned_to.get_full_name|default:task.assigned_to.username }}
-                                </p>
-                                {% endif %}
                                 {% if impulso_disponivel %}
                                 <!-- Importar para o Impulso: vira meta de quem clica -->
                                 <div class="mt-2" id="task-impulso-{{ task.pk }}">
@@ -798,6 +791,7 @@
 {% endblock %}
 
 {% block extra_js %}
+{% if pode_atribuir_tarefas and tasks %}{{ pessoas_tarefa|json_script:"pessoasTarefa" }}{% endif %}
 <script>
 // ---- Section toggle ----
 let allExpanded = false;
@@ -1021,8 +1015,7 @@ async function reprocessFromRaw(transcriptionId, btn) {
 
 // ---- Assign task to user ----
 async function assignTask(transcriptionId, taskId, userId) {
-    if (!userId) return;
-
+    if (!userId) return null;
     try {
         const resp = await fetch(`/agenda/api/transcricoes/${transcriptionId}/tasks/${taskId}/assign/`, {
             method: 'POST',
@@ -1040,13 +1033,63 @@ async function assignTask(transcriptionId, taskId, userId) {
                 successEl.classList.remove('hidden');
                 setTimeout(() => successEl.classList.add('hidden'), 3000);
             }
-        } else {
-            alert(data.error || 'Erro ao atribuir tarefa.');
+            return data;
         }
+        alert(data.error || 'Erro ao atribuir tarefa.');
     } catch (err) {
         alert('Erro: ' + err.message);
     }
+    return null;
 }
+
+// ---- Responsável da tarefa: busca por nome ou setor, sem acento ----
+(function () {
+    const fonte = document.getElementById('pessoasTarefa');
+    if (!fonte) return;
+    const pessoas = JSON.parse(fonte.textContent || '[]');
+    const sem = t => (t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    pessoas.forEach(p => { p.chave = sem(p.nome + ' ' + p.setor); });
+    const esc = t => { const d = document.createElement('div'); d.textContent = t == null ? '' : String(t); return d.innerHTML; };
+    document.querySelectorAll('[data-atribuir]').forEach(caixa => {
+        const busca = caixa.querySelector('[data-busca-pessoa]');
+        const lista = caixa.querySelector('[data-lista-pessoas]');
+        if (!busca || !lista) return;
+        let achados = [];
+        function mostrar() {
+            const termos = sem(busca.value).split(/\s+/).filter(Boolean);
+            achados = pessoas.filter(p => termos.every(t => p.chave.includes(t))).slice(0, 30);
+            lista.innerHTML = achados.length ? achados.map((p, i) =>
+                `<button type="button" role="option" data-i="${i}" class="w-full text-left px-3 py-2 text-xs hover:bg-emerald-50 focus:bg-emerald-50 focus:outline-none">` +
+                `<span class="block font-medium text-gray-800 break-words">${esc(p.nome)}</span>` +
+                (p.setor ? `<span class="block text-[10px] text-gray-500 break-words">${esc(p.setor)}</span>` : '') + '</button>'
+            ).join('') : '<p class="px-3 py-2 text-xs text-gray-500">Ninguém com esse nome.</p>';
+            lista.classList.remove('hidden');
+        }
+        busca.addEventListener('input', mostrar);
+        busca.addEventListener('focus', mostrar);
+        busca.addEventListener('keydown', e => {
+            if (e.key === 'Escape') { lista.classList.add('hidden'); busca.blur(); }
+            if (e.key === 'Enter') { e.preventDefault(); const b = lista.querySelector('[data-i]'); if (b) b.click(); }
+            if (e.key === 'ArrowDown') { e.preventDefault(); const b = lista.querySelector('[data-i]'); if (b) b.focus(); }
+        });
+        lista.addEventListener('keydown', e => {
+            const atual = document.activeElement;
+            if (e.key === 'ArrowDown' && atual.nextElementSibling) { e.preventDefault(); atual.nextElementSibling.focus(); }
+            if (e.key === 'ArrowUp') { e.preventDefault(); (atual.previousElementSibling || busca).focus(); }
+            if (e.key === 'Escape') { lista.classList.add('hidden'); busca.focus(); }
+        });
+        lista.addEventListener('click', async e => {
+            const b = e.target.closest('[data-i]');
+            if (!b) return;
+            const p = achados[Number(b.dataset.i)];
+            lista.classList.add('hidden');
+            busca.value = '';
+            const r = await assignTask({{ transcription.pk }}, caixa.dataset.atribuir, p.id);
+            if (r) caixa.querySelector('[data-responsavel]').textContent = r.assigned_to;
+        });
+        document.addEventListener('click', e => { if (!caixa.contains(e.target)) lista.classList.add('hidden'); });
+    });
+})();
 
 // ---- Schedule event ----
 async function scheduleEvent(transcriptionId, eventIndex, btn) {

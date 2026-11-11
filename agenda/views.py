@@ -2632,14 +2632,20 @@ def transcription_detail(request, pk):
     )
     is_owner = transcription.owner_id == request.user.id
     tasks = list(transcription.tasks_created.select_related('assigned_to').all())
-    users = User.objects.filter(is_active=True).order_by('first_name', 'username')
+    users = User.objects.filter(is_active=True).select_related('sector').order_by('first_name', 'username')
     shared_ids = list(transcription.shared_with.values_list('id', flat=True))
+    # Busca do responsável nas "Tarefas Criadas" (11/11/2026): qualquer usuário ativo.
+    pessoas_tarefa = [{'id': u.pk, 'nome': u.get_full_name() or u.username,
+                       'setor': u.sector.name if u.sector_id else ''} for u in users]
 
     context = {
         'transcription': transcription,
         'tasks': tasks,
         'users': users,
         'is_owner': is_owner,
+        # Quem enxerga a transcrição (dono, compartilhados, SUPERADMIN) escolhe o responsável das tarefas.
+        'pode_atribuir_tarefas': True,
+        'pessoas_tarefa': pessoas_tarefa,
         'can_reprocess_transcription': _can_reprocess_transcription(request.user, transcription),
         'shared_ids': shared_ids,
         **_contexto_impulso(request.user, tasks),
@@ -2830,22 +2836,24 @@ def api_transcription_assign_task(request, pk, task_id):
     """Atribuir uma tarefa da transcrição a um usuário"""
     from core.models import TaskActivity
 
-    transcription = get_object_or_404(MeetingTranscription, pk=pk, owner=request.user)
+    # Antes só o dono atribuía; desde 11/11/2026 quem enxerga a transcrição escolhe qualquer usuário ativo.
+    transcription = get_object_or_404(_visible_transcriptions_for_user(request.user).distinct(), pk=pk)
     task = get_object_or_404(TaskActivity, pk=task_id, source_transcription=transcription)
 
     try:
         data = json.loads(request.body)
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return JsonResponse({'error': 'JSON inválido'}, status=400)
+    if not isinstance(data, dict):
         return JsonResponse({'error': 'JSON inválido'}, status=400)
 
     user_id = data.get('user_id')
-    if not user_id:
-        return JsonResponse({'error': 'user_id é obrigatório.'}, status=400)
+    if not str(user_id or '').isdigit():
+        return JsonResponse({'error': 'Escolha o usuário.'}, status=400)
 
-    try:
-        target_user = User.objects.get(pk=user_id)
-    except User.DoesNotExist:
-        return JsonResponse({'error': 'Usuário não encontrado.'}, status=404)
+    target_user = User.objects.filter(pk=int(user_id), is_active=True).first()
+    if target_user is None:
+        return JsonResponse({'error': 'Usuário não encontrado ou inativo.'}, status=404)
 
     task.assigned_to = target_user
     task.save(update_fields=['assigned_to'])
