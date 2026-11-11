@@ -2130,6 +2130,17 @@ def _compute_gerente_simulation_base(
             'seguros': project_from_realized(mysql_coord.get('seguros', 0.0), du_passed_c, du_total_c),
             'sva': project_from_realized(mysql_coord.get('sva', 0.0), du_passed_c, du_total_c),
         }
+        if view_mode == VIEW_SIMULADOR:
+            # "Real Coordenação" digitado no Simulador vale no lugar da projeção (11/11/2026).
+            # Campo em branco = a projeção atual (é com ela que o campo vem preenchido).
+            for chave, campos in (('movel', [('movel', 'realpdv')]), ('fixa', [('fixa', 'qtypdv')]),
+                                  ('smartphones', [('smartphones', 'realpdv')]),
+                                  ('eletronicos', [('eletronicos_a', 'realpdv'), ('eletronicos_b', 'realpdv')]),
+                                  ('essenciais', [('essenciais_a', 'realpdv'), ('essenciais_b', 'realpdv')]),
+                                  ('seguros', [('seguros', 'realpdv')]), ('sva', [('sva', 'realpdv')])):
+                digitados = [_get_sim_input_optional(simulator_inputs, pilar, campo) for pilar, campo in campos]
+                if any(v is not None for v in digitados):
+                    coord_proj[chave] = sum(v or 0.0 for v in digitados)
 
     att_map = {
         key: (proj_map[key] / meta_map[key] if meta_map[key] else 0.0)
@@ -2806,17 +2817,31 @@ def build_simulador_prefill(simulation: Dict[str, Any], target_role: str) -> Dic
 
     Individual/"carteira" → ``<pilar>__real``; PDV/"loja" → ``<pilar>__realpdv``
     (apenas consultor); Fixa → ``fixa__qty`` (quantidade) e ``fixa__receita`` (R$).
-    Campos ignorados pelo cálculo (coordenação do gerente, qtypdv da Fixa) não são
-    preenchidos. Devolve ``{'<pilar>__<campo>': 'valor'}``.
+    Gerente: ``<pilar>__realpdv`` / ``fixa__qtypdv`` = Real Coordenação, com a projeção
+    atual da coordenação. Devolve ``{'<pilar>__<campo>': 'valor'}``.
     """
     prefill: Dict[str, str] = {}
     if not simulation or simulation.get('error'):
         return prefill
     rows_by_key = {r.get('key'): r for r in simulation.get('rows', [])}
+    # Gerente: "Real Coordenação" vem com a PROJEÇÃO atual da coordenação (11/11/2026) —
+    # realizado da coordenação (MySQL D-1) ÷ DU passados × DU do mês, a mesma conta da
+    # visão Projeção. A simulação do 1º carregamento é REALIZADO, então projeta aqui.
+    du_passed, du_total = get_business_days_info() if target_role == ROLE_GERENTE else (0, 0)
     for disp, rk in _PREFILL_DISPLAY_TO_ROW.items():
         row = rows_by_key.get(rk)
         if not row:
             continue
+        if target_role == ROLE_GERENTE and row.get('coord_proj') is not None:
+            coord = project_from_realized(row.get('coord_proj'), du_passed, du_total)
+            if rk == 'fixa':
+                coord_qtd = int(round(coord))       # o campo é de quantidade (step=1)
+                if coord_qtd:
+                    prefill['fixa__qtypdv'] = str(coord_qtd)
+            else:
+                coord_txt = _prefill_num(coord)
+                if coord_txt:
+                    prefill[f'{disp}__realpdv'] = coord_txt
         if rk == 'fixa':
             qty = _prefill_num(row.get('quantity'))
             if qty:
