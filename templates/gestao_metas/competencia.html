@@ -1,0 +1,137 @@
+{% extends 'gestao_metas/_base.html' %}
+{% load static gestao_metas_tags %}
+{% block gm_titulo %}Metas · {{ titulo_mes }}{% endblock %}
+{% block gm_conteudo %}
+<header class="gm-topo">
+    <div class="gm-titulo"><span class="gm-icone"><i class="fas fa-bullseye"></i></span>
+        <div><h1>Metas de {{ titulo_mes }}</h1>
+            <p>{% if comp.fechada %}<span class="gm-selo cinza"><i class="fas fa-lock"></i>Fechada{% if comp.fechada_em %} em {{ comp.fechada_em|date:"d/m/Y H:i" }}{% endif %}</span>{% else %}<span class="gm-selo verde"><i class="fas fa-pen"></i>Aberta</span>{% endif %}
+            {% if anterior %}<a class="gm-botao pequeno" href="{% url 'gestao_metas:competencia' anterior.codigo %}" title="Competência anterior"><i class="fas fa-chevron-left"></i>{{ anterior.mes|date:"M/y" }}</a>{% endif %}
+            {% if seguinte %}<a class="gm-botao pequeno" href="{% url 'gestao_metas:competencia' seguinte.codigo %}" title="Competência seguinte">{{ seguinte.mes|date:"M/y" }}<i class="fas fa-chevron-right"></i></a>{% endif %}</p></div></div>
+    <div class="gm-acoes">
+        <a class="gm-botao" href="{% url 'gestao_metas:importar' %}?competencia={{ comp.codigo }}"><i class="fas fa-file-import"></i>Importar dados</a>
+        <a class="gm-botao" href="{% url 'gestao_metas:excel' comp.codigo %}"><i class="fas fa-file-excel"></i>Exportar Excel</a>
+        <a class="gm-botao" href="{% url 'gestao_metas:historico' comp.codigo %}"><i class="fas fa-clock-rotate-left"></i>Histórico</a>
+        {% if gm_editor and not comp.fechada %}
+        <form method="post" action="{% url 'gestao_metas:fechar' comp.codigo %}" onsubmit="return confirm('Fechar a competência? Ela fica só para leitura e as metas viram a meta do mês anterior da próxima.')">{% csrf_token %}
+            <button class="gm-botao primario" name="acao" value="fechar"><i class="fas fa-lock"></i>Fechar competência</button></form>
+        {% elif gm_superadmin and comp.fechada %}
+        <form method="post" action="{% url 'gestao_metas:fechar' comp.codigo %}">{% csrf_token %}
+            <button class="gm-botao" name="acao" value="reabrir"><i class="fas fa-lock-open"></i>Reabrir</button></form>
+        {% endif %}
+    </div>
+</header>
+
+{% if not ctx.competencia_anterior %}
+<div class="gm-aviso"><i class="fas fa-circle-info" style="margin-top:2px"></i><span>Não há a competência de {{ rotulo_ant }} no módulo: a "meta mês anterior" vem do que foi importado da planilha antiga (quando houver).</span></div>
+{% elif not ctx.competencia_anterior.fechada %}
+<div class="gm-aviso"><i class="fas fa-circle-info" style="margin-top:2px"></i><span>A competência de {{ rotulo_ant }} ainda está aberta: a "meta mês anterior" pode mudar até ela ser fechada. <a href="{% url 'gestao_metas:competencia' ctx.competencia_anterior.codigo %}">Abrir {{ rotulo_ant }}</a></span></div>
+{% endif %}
+{% if meses_faltando %}
+<div class="gm-aviso"><i class="fas fa-triangle-exclamation" style="margin-top:2px"></i><span>Sem realizado de {% for m in meses_faltando %}{{ m|date:"M/y" }}{% if not forloop.last %}, {% endif %}{% endfor %}. <a href="{% url 'gestao_metas:importar' %}?competencia={{ comp.codigo }}">Importe a base ou busque no banco de vendas</a>.</span></div>
+{% endif %}
+
+<div id="gmTela" data-url-salvar="{% url 'gestao_metas:salvar' comp.codigo %}" data-editavel="{% if pode_editar %}1{% endif %}">{% csrf_token %}
+<nav class="gm-pilares" role="tablist">
+    {% for p in pilares %}<button type="button" role="tab" data-pilar="{{ p.chave }}" class="{% if forloop.first %}ativo{% endif %}">{{ p.nome }}</button>{% endfor %}
+</nav>
+
+{% for p in pilares %}
+<section class="gm-painel" id="painel-{{ p.chave }}" data-pilar="{{ p.chave }}" {% if not forloop.first %}hidden{% endif %}>
+    <div class="gm-card gm-ferramentas">
+        {% if pode_editar %}
+        <form method="post" action="{% url 'gestao_metas:preencher' comp.codigo %}" style="display:contents" onsubmit="return confirm('Preencher a meta de todas as lojas de {{ p.nome }}?')">{% csrf_token %}
+            <input type="hidden" name="pilar" value="{{ p.chave }}">
+            <span class="rotulo">Preencher</span>
+            <select class="gm-campo" name="origem" aria-label="Usar como base">{% for v, r in origens %}<option value="{{ v }}">{{ r }}</option>{% endfor %}</select>
+            <label>+ <input class="gm-campo" name="percentual" value="0" inputmode="decimal" style="width:64px" aria-label="Percentual"> %</label>
+            <select class="gm-campo" name="arredondar" aria-label="Arredondar">
+                <option value="0">sem arredondar</option><option value="10">múltiplo de 10</option><option value="50">múltiplo de 50</option>
+                <option value="100" selected>múltiplo de 100</option><option value="500">múltiplo de 500</option><option value="1000">múltiplo de 1.000</option></select>
+            <label><input type="checkbox" name="somente_vazias" value="1"> só as vazias</label>
+            <button class="gm-botao pequeno"><i class="fas fa-wand-magic-sparkles"></i>Aplicar</button>
+        </form>
+        {% elif comp.fechada %}
+        <span class="gm-sub"><i class="fas fa-lock"></i> Competência fechada: só leitura.</span>
+        {% else %}
+        <span class="gm-sub"><i class="fas fa-eye"></i> Seu acesso é de visualização.</span>
+        {% endif %}
+        <span class="gm-salvo" data-salvo>{% if pode_editar %}As metas se salvam sozinhas ao digitar.{% endif %}</span>
+    </div>
+
+    <div class="gm-rolagem cartoes">
+    <table class="gm-tabela" data-rc-wrapped="1">
+        <thead>
+            <tr class="grupo">
+                <th class="loja"></th>
+                <th>Ano anterior</th>
+                <th colspan="{% if p.fixa %}5{% else %}5{% endif %}" class="sep">Realizado — últimos 4 meses{% if p.fixa %} (TV + Fixa){% endif %}</th>
+                {% if p.fixa %}<th colspan="2" class="sep">R$ da Fixa</th>{% endif %}
+                <th colspan="2" class="sep">Referências</th>
+                <th colspan="{% if p.fixa %}7{% else %}1{% endif %}" class="sep meta-col">Meta</th>
+                <th colspan="4" class="sep">Meta comparada com…</th>
+            </tr>
+            <tr>
+                <th class="loja">Loja</th>
+                <th title="Realizado no mesmo mês do ano passado">Real {{ rotulo_ano }}</th>
+                {% for r in rotulos_quad %}<th class="{% if forloop.first %}sep{% endif %}">{{ r }}</th>{% endfor %}
+                <th class="destaque">Média quad</th>
+                {% if p.fixa %}<th class="sep" title="Média do R$ da Fixa nos 4 meses">Média R$</th><th title="R$ ÷ quantidade (TV + Fixa) nos 4 meses mais recentes com os dois">Ticket médio</th>{% endif %}
+                <th class="sep">Meta Vivo</th>
+                <th>Meta {{ rotulo_ant }}</th>
+                {% if p.fixa %}
+                <th class="sep meta-col">Meta R$</th><th class="meta-col" title="Quantidade de consultores">CNs</th><th class="meta-col" title="Meta R$ ÷ ticket médio, para cima">QTD</th>
+                <th class="meta-col" title="QTD ÷ CNs, para cima">Por CN ↑</th><th class="meta-col" title="QTD ÷ CNs, para baixo">Por CN ↓</th>
+                <th class="meta-col">Decisão</th><th class="meta-col">Nova meta</th>
+                {% else %}
+                <th class="sep meta-col">Meta {{ rotulo_comp }}</th>
+                {% endif %}
+                <th class="sep" title="Meta ÷ realizado de {{ rotulo_ant }} − 1">M × M</th>
+                <th title="Meta ÷ realizado de {{ rotulo_ano }} − 1">Y × Y</th>
+                <th title="Meta ÷ média do quadrimestre − 1">Meta × Quad</th>
+                <th title="Meta ÷ meta de {{ rotulo_ant }} − 1">Meta × Ant.</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for l in p.linhas %}
+            <tr data-loja="{{ l.loja_id }}" data-regiao="{{ l.regiao|default:'Sem região' }}" data-ultimo="{{ l.ultimo|dado }}" data-ano="{{ l.real_ano_anterior|dado }}"
+                data-quad="{{ l.media_quad|dado }}" data-ant="{{ l.meta_anterior|dado }}"{% if p.fixa %} data-ticket="{{ l.ticket|dado }}"{% endif %}>
+                <td class="loja">{% if l.regiao %}<span class="regiao">{{ l.regiao }}</span>{% endif %}<strong style="display:inline">{{ l.loja.nome }}</strong>{% if l.loja.pdv_vivo %}<small style="display:block">{{ l.loja.pdv_vivo }}</small>{% endif %}</td>
+                <td data-rot="Real {{ rotulo_ano }}">{% if p.fixa %}{{ l.real_ano_anterior|num }}{% else %}{{ l.real_ano_anterior|num }}{% endif %}</td>
+                {% for v in l.meses %}<td data-rot="{{ rotulos_quad|item:forloop.counter0 }}" class="{% if forloop.first %}sep {% endif %}{% if not forloop.last %}sem-celular{% endif %}"{% if p.fixa %} title="TV {{ l.meses_tv|item:forloop.counter0|num }} · Fixa {{ l.meses_fixa|item:forloop.counter0|num }} · R$ {{ l.meses_valor|item:forloop.counter0|num:2 }}"{% endif %}>{{ v|num }}</td>{% endfor %}
+                <td data-rot="Média quad" class="destaque">{% if p.fixa %}{{ l.media_quad|num:1 }}{% else %}{{ l.media_quad|num }}{% endif %}</td>
+                {% if p.fixa %}<td data-rot="Média R$" class="sep">{{ l.media_quad_valor|num }}</td><td data-rot="Ticket médio" class="{% if l.ticket_da_rede %}fraco{% endif %}" {% if l.ticket_da_rede %}title="Sem histórico da loja: ticket da rede"{% endif %}>{{ l.ticket|num:2 }}</td>{% endif %}
+                <td data-rot="Meta Vivo" class="sep">{% if p.fixa %}{{ l.meta_vivo|num:1 }}{% else %}{{ l.meta_vivo|num }}{% endif %}</td>
+                <td data-rot="Meta {{ rotulo_ant }}">{{ l.meta_anterior|num }}</td>
+                {% if p.fixa %}
+                <td data-rot="Meta R$" class="sep meta-col">{% if pode_editar %}<input class="gm-entrada" data-campo="meta" inputmode="decimal" value="{{ l.meta|campo }}" placeholder="—" aria-label="Meta R$ {{ l.loja.nome }}">{% else %}{{ l.meta|num }}{% endif %}</td>
+                <td data-rot="Consultores" class="meta-col">{% if pode_editar %}<input class="gm-entrada curta" data-campo="qtd_cns" inputmode="numeric" value="{{ l.qtd_cns|default_if_none:'' }}" placeholder="—" aria-label="Consultores {{ l.loja.nome }}">{% else %}{{ l.qtd_cns|num }}{% endif %}</td>
+                <td data-rot="QTD" class="meta-col" data-c="qtd">{{ l.qtd|num }}</td>
+                <td data-rot="Por CN ↑" class="meta-col" data-c="cima">{{ l.cima|num }}</td>
+                <td data-rot="Por CN ↓" class="meta-col" data-c="baixo">{{ l.baixo|num }}</td>
+                <td data-rot="Decisão" class="meta-col">{% if pode_editar %}<select class="gm-entrada" data-campo="decisao" aria-label="Decisão {{ l.loja.nome }}"><option value="CIMA" {% if l.decisao != 'BAIXO' %}selected{% endif %}>Cima</option><option value="BAIXO" {% if l.decisao == 'BAIXO' %}selected{% endif %}>Baixo</option></select>{% elif l.decisao == 'BAIXO' %}Baixo{% else %}Cima{% endif %}</td>
+                <td data-rot="Nova meta" class="meta-col destaque" data-c="nova_meta">{{ l.nova_meta|num }}</td>
+                {% else %}
+                <td data-rot="Meta {{ rotulo_comp }}" class="sep meta-col">{% if pode_editar %}<input class="gm-entrada" data-campo="meta" inputmode="decimal" value="{{ l.meta|campo }}" placeholder="—" aria-label="Meta {{ l.loja.nome }}">{% else %}<strong>{{ l.meta|num }}</strong>{% endif %}</td>
+                {% endif %}
+                <td data-rot="M × M" class="sep"><span class="gm-chip {{ l.mxm|tom }}" data-c="mxm">{{ l.mxm|pct }}</span></td>
+                <td data-rot="Y × Y"><span class="gm-chip {{ l.yxy|tom }}" data-c="yxy">{{ l.yxy|pct }}</span></td>
+                <td data-rot="Meta × Quad"><span class="gm-chip {{ l.mxquad|tom }}" data-c="mxquad">{{ l.mxquad|pct }}</span></td>
+                <td data-rot="Meta × Ant."><span class="gm-chip {{ l.mxmeta|tom }}" data-c="mxmeta">{{ l.mxmeta|pct }}</span></td>
+            </tr>
+        {% empty %}
+            <tr><td class="loja" colspan="20"><div class="gm-vazio">Nenhuma loja ativa. Veja a aba Lojas.</div></td></tr>
+        {% endfor %}
+        </tbody>
+        <tfoot>
+        {% for t in p.grupos %}{% include 'gestao_metas/_linha_total.html' with t=t classe='grupo' grupo=t.titulo %}{% endfor %}
+        {% include 'gestao_metas/_linha_total.html' with t=p.rede classe='rede' grupo='REDE' %}
+        </tfoot>
+    </table>
+    </div>
+    <p class="gm-legenda">{% if p.fixa %}Fixa em quantidade (TV + Fixa). A meta em R$ vira quantidade pelo ticket médio, é dividida pelos consultores e arredondada para cima ou para baixo; a nova meta é o que vale no mês e é ela que se compara.{% else %}Comparações: <span class="gm-chip sobe">verde</span> a meta está acima, <span class="gm-chip desce">laranja</span> abaixo.{% endif %} Subtotais somam as lojas da região; a média do quadrimestre da rede é a soma das médias, como na planilha.</p>
+</section>
+{% endfor %}
+</div>
+<script src="{% static 'gestao_metas/gestao_metas.js' %}?v=1"></script>
+{% endblock %}

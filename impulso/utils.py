@@ -62,6 +62,42 @@ def e_superadmin(user):
                 and (user.is_superuser or getattr(user, 'hierarchy', '') == 'SUPERADMIN'))
 
 
+def _sem_acento(texto):
+    import unicodedata
+    return ''.join(c for c in unicodedata.normalize('NFKD', texto or '') if not unicodedata.combining(c)).strip().lower()
+
+
+SETOR_INTELIGENCIA = 'inteligencia'
+_CHAVE_SETOR_INTELIGENCIA = 'impulso:setor_inteligencia_id'
+
+
+def setor_inteligencia_id():
+    """Id do setor "Inteligência" (sem olhar acento nem maiúsculas), guardado no cache por 1 h."""
+    from django.core.cache import cache
+    sid = cache.get(_CHAVE_SETOR_INTELIGENCIA)
+    if sid is None:
+        from users.models import Sector
+        sid = next((i for i, nome in Sector.objects.values_list('id', 'name')
+                    if _sem_acento(nome) == SETOR_INTELIGENCIA), 0)
+        cache.set(_CHAVE_SETOR_INTELIGENCIA, sid, 3600)
+    return sid or None
+
+
+def ve_projetos_inteligencia(user):
+    """Quem usa o quadro "Projetos da Inteligência" do Kanban: o setor Inteligência e o SUPERADMIN.
+
+    O setor é o principal (`user.sector`), como no resto do portal: o M2M
+    `sectors` do escritório costuma ter muitos setores e abriria o quadro para
+    quem não é do time. Quem não tem setor nem é SUPERADMIN sai sem ir ao banco.
+    """
+    if not (user and user.is_authenticated):
+        return False
+    if e_superadmin(user):
+        return True
+    sector_id = getattr(user, 'sector_id', None)
+    return bool(sector_id) and sector_id == setor_inteligencia_id()
+
+
 def is_impulso_member(user):
     """Pode acessar o módulo: SUPERADMIN, ESCRITÓRIO (ADM), ADM's LOJAS ou gestor do Impulso.
 

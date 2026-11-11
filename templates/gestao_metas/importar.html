@@ -1,0 +1,70 @@
+{% extends 'gestao_metas/_base.html' %}
+{% block gm_titulo %}Importar · Gerenciamento de metas{% endblock %}
+{% block gm_conteudo %}
+<header class="gm-topo">
+    <div class="gm-titulo"><span class="gm-icone"><i class="fas fa-file-import"></i></span>
+        <div><h1>Importar dados</h1><p>Nada é gravado direto: cada arquivo vira uma prévia para conferir os valores antes.</p></div></div>
+</header>
+{% if not gm_editor %}<div class="gm-aviso"><i class="fas fa-eye"></i><span>Seu acesso é de visualização: você vê as importações, mas não sobe arquivos.</span></div>{% endif %}
+
+<div class="gm-grade" style="grid-template-columns:repeat(auto-fill,minmax(320px,1fr))">
+<section class="gm-card gm-secao" style="margin:0">
+    <h2><i class="fas fa-receipt" style="color:var(--gm-cor)"></i> Base de serviços e base de produtos</h2>
+    <p class="gm-sub" style="margin-bottom:12px">As bases do Vivo GO (xlsx ou csv). Pode mandar as duas juntas. O realizado é somado por loja, mês e pilar — serviços ativos e confirmados pela Receita; Fixa também em quantidade (Alta TV; Alta Banda Larga + Portabilidade Fixa).</p>
+    <form method="post" enctype="multipart/form-data">{% csrf_token %}<input type="hidden" name="tipo" value="base">{% if comp %}<input type="hidden" name="competencia" value="{{ comp.codigo }}">{% endif %}
+        <input class="gm-campo" type="file" name="arquivos" multiple accept=".xlsx,.csv,.txt" required style="width:100%;padding-top:6px" {% if not gm_editor %}disabled{% endif %} aria-label="Bases">
+        <label class="gm-sub" style="display:flex;gap:6px;margin:10px 0"><input type="checkbox" name="substituir" value="1" checked> substituir o realizado já gravado nos meses do arquivo</label>
+        <button class="gm-botao primario" {% if not gm_editor %}disabled{% endif %}><i class="fas fa-magnifying-glass"></i>Ler e conferir</button>
+    </form>
+</section>
+
+<section class="gm-card gm-secao" style="margin:0">
+    <h2><i class="fas fa-database" style="color:var(--gm-cor)"></i> Buscar realizado do banco de vendas</h2>
+    <p class="gm-sub" style="margin-bottom:12px">Lê direto o banco do Vivo GO (só leitura), com as mesmas regras das bases. {% if comp %}Os meses que {{ comp.mes|date:"F/Y" }} usa:{% endif %}</p>
+    <form method="post">{% csrf_token %}<input type="hidden" name="tipo" value="banco">{% if comp %}<input type="hidden" name="competencia" value="{{ comp.codigo }}">{% endif %}
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+        {% for m in meses_banco %}<label class="gm-selo {% if m.tem %}verde{% else %}ambar{% endif %}" style="cursor:pointer"><input type="checkbox" name="meses" value="{{ m.codigo }}" {% if not m.tem %}checked{% endif %}> {{ m.rotulo }}{% if m.tem %} · já tem{% endif %}</label>{% endfor %}
+        </div>
+        <details style="margin-bottom:8px"><summary class="gm-sub" style="cursor:pointer">Outros meses</summary>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">{% for m in outros_meses %}<label class="gm-selo cinza" style="cursor:pointer"><input type="checkbox" name="meses" value="{{ m.codigo }}"> {{ m.rotulo }}</label>{% endfor %}</div></details>
+        <label class="gm-sub" style="display:flex;gap:6px;margin:10px 0"><input type="checkbox" name="substituir" value="1" checked> substituir o realizado já gravado</label>
+        <button class="gm-botao primario" {% if not gm_editor %}disabled{% endif %} onclick="this.innerHTML='<i class=\'fas fa-spinner fa-spin\'></i>Buscando… (alguns segundos por mês)'"><i class="fas fa-download"></i>Buscar e conferir</button>
+    </form>
+</section>
+
+<section class="gm-card gm-secao" style="margin:0">
+    <h2><i class="fas fa-flag-checkered" style="color:var(--gm-cor)"></i> Arquivo de metas da Vivo</h2>
+    <p class="gm-sub" style="margin-bottom:12px">A META VIVO por loja e pilar (uma coluna por pilar, ou PDV / Pilar / Meta). Abas com consultor são ignoradas.</p>
+    <form method="post" enctype="multipart/form-data">{% csrf_token %}<input type="hidden" name="tipo" value="meta_vivo">
+        <select class="gm-campo" name="competencia_id" required style="width:100%;margin-bottom:8px" aria-label="Competência">{% for c in competencias %}<option value="{{ c.id }}" {% if comp and comp.id == c.id %}selected{% endif %}>{{ c.mes|date:"F/Y" }}{% if c.fechada %} (fechada){% endif %}</option>{% empty %}<option value="">Abra uma competência antes</option>{% endfor %}</select>
+        <input class="gm-campo" type="file" name="arquivo" accept=".xlsx" required style="width:100%;padding-top:6px" {% if not gm_editor %}disabled{% endif %} aria-label="Arquivo da Vivo">
+        <div style="margin-top:10px"><button class="gm-botao primario" {% if not gm_editor %}disabled{% endif %}><i class="fas fa-magnifying-glass"></i>Ler e conferir</button></div>
+    </form>
+</section>
+
+<section class="gm-card gm-secao" style="margin:0">
+    <h2><i class="fas fa-clock-rotate-left" style="color:var(--gm-cor)"></i> Planilha antiga de metas</h2>
+    <p class="gm-sub" style="margin-bottom:12px">O arquivo "METAS &lt;mês&gt;" montado à mão (uma aba por pilar). Traz as lojas, todo o realizado, a meta Vivo, a meta do mês anterior (vira a competência anterior, fechada) e as metas digitadas.</p>
+    <form method="post" enctype="multipart/form-data">{% csrf_token %}<input type="hidden" name="tipo" value="planilha">
+        <input class="gm-campo" type="file" name="arquivo" accept=".xlsx" required style="width:100%;padding-top:6px" {% if not gm_editor %}disabled{% endif %} aria-label="Planilha antiga">
+        <label class="gm-sub" style="display:block;margin:10px 0 4px">Competência da planilha (vazio = o mês seguinte ao último realizado dela)</label>
+        <input class="gm-campo" type="month" name="competencia_planilha" aria-label="Competência da planilha">
+        <label class="gm-sub" style="display:flex;gap:6px;margin:10px 0"><input type="checkbox" name="substituir" value="1"> substituir o que já está gravado (desmarcado: só preenche o que falta)</label>
+        <button class="gm-botao primario" {% if not gm_editor %}disabled{% endif %}><i class="fas fa-magnifying-glass"></i>Ler e conferir</button>
+    </form>
+</section>
+</div>
+
+<section class="gm-card gm-secao" style="margin-top:16px">
+    <h2>Últimas importações</h2>
+    <table class="gm-tabela simples" data-rc-wrapped="1" style="margin-top:8px">
+        <tbody>
+        {% for i in importacoes %}
+        <tr><td style="text-align:left">{{ i.criado_em|date:"d/m/Y H:i" }}</td><td style="text-align:left;white-space:normal"><a href="{% url 'gestao_metas:importacao' i.pk %}" style="color:var(--gm-cor);font-weight:600">{{ i.get_tipo_display }}</a><small style="display:block;color:var(--gm-texto-3)">{{ i.arquivo_nome }} · {{ i.resumo }}</small></td>
+            <td><span class="gm-selo {% if i.status == 'APLICADA' %}verde{% elif i.status == 'PREVIA' %}ambar{% else %}cinza{% endif %}">{{ i.get_status_display }}</span></td>
+            <td style="text-align:left">{{ i.criado_por.full_name|default:"" }}</td></tr>
+        {% empty %}<tr><td><div class="gm-vazio">Nada importado ainda.</div></td></tr>{% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endblock %}

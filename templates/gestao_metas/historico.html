@@ -1,0 +1,24 @@
+{% extends 'gestao_metas/_base.html' %}
+{% block gm_titulo %}Histórico · {{ titulo_mes }}{% endblock %}
+{% block gm_conteudo %}
+<header class="gm-topo">
+    <div class="gm-titulo"><span class="gm-icone"><i class="fas fa-clock-rotate-left"></i></span>
+        <div><h1>Histórico de {{ titulo_mes }}</h1><p>Quem mudou qual meta, quando e de onde veio.</p></div></div>
+    <div class="gm-acoes">
+        <form method="get" style="display:flex;gap:8px"><select class="gm-campo" name="pilar" onchange="this.form.submit()" aria-label="Pilar">
+            <option value="">Todos os pilares</option>{% for v, r in pilares %}<option value="{{ v }}" {% if pilar == v %}selected{% endif %}>{{ r }}</option>{% endfor %}</select></form>
+        <a class="gm-botao" href="{% url 'gestao_metas:competencia' comp.codigo %}"><i class="fas fa-arrow-left"></i>Voltar às metas</a>
+    </div>
+</header>
+<div class="gm-rolagem" style="max-height:none;min-height:0">
+<table class="gm-tabela simples" data-rc-wrapped="1">
+    <thead><tr><th style="text-align:left">Quando</th><th style="text-align:left">Loja</th><th style="text-align:left">Pilar</th><th style="text-align:left">Campo</th><th>Antes</th><th>Depois</th><th style="text-align:left">Origem</th><th style="text-align:left">Por</th></tr></thead>
+    <tbody>
+    {% for h in itens %}
+    <tr><td style="text-align:left">{{ h.quando|date:"d/m/Y H:i" }}</td><td style="text-align:left">{{ h.loja_nome|default:"—" }}</td><td style="text-align:left">{{ h.pilar|default:"—" }}</td>
+        <td style="text-align:left">{{ h.campo }}</td><td>{{ h.antes|default:"—" }}</td><td><strong>{{ h.depois|default:"—" }}</strong></td><td style="text-align:left">{{ h.origem }}</td><td style="text-align:left">{{ h.por_nome|default:"—" }}</td></tr>
+    {% empty %}<tr><td colspan="8"><div class="gm-vazio">Nenhuma alteração registrada.</div></td></tr>{% endfor %}
+    </tbody>
+</table>
+</div>
+{% endblock %}

@@ -2169,3 +2169,39 @@ class RascunhoDecisaoIdeia(models.Model):
         verbose_name = 'Rascunho de decisão do Inovar'
         verbose_name_plural = 'Rascunhos de decisão do Inovar'
         constraints = [models.UniqueConstraint(fields=['usuario', 'ideia'], name='impulso_rascunho_decisao_unico')]
+
+
+class ProjetoInteligencia(models.Model):
+    """Projeto em mente do setor Inteligência, no quadro ao lado do Kanban (10/11/2026).
+
+    Lista leve e compartilhada pelo setor: só o nome, uma nota curta e o estágio
+    em que está. Não pontua nem vira meta — é o "em que pé estão" dos projetos.
+    """
+
+    class Estagio(models.TextChoices):
+        IDEACAO = 'IDEACAO', 'Ideação'
+        DESENVOLVIMENTO = 'DESENVOLVIMENTO', 'Desenvolvimento'
+        TESTES = 'TESTES', 'Testes'
+        CONCLUSAO = 'CONCLUSAO', 'Conclusão'
+
+    nome = models.CharField(max_length=120, verbose_name='Projeto')
+    nota = models.CharField(max_length=200, blank=True, verbose_name='Nota')
+    estagio = models.CharField(max_length=20, choices=Estagio.choices, default=Estagio.IDEACAO,
+                               verbose_name='Estágio')
+    criado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name='+', verbose_name='Criado por')
+    criado_em = models.DateTimeField(auto_now_add=True)
+    atualizado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                       related_name='+', verbose_name='Atualizado por')
+    atualizado_em = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Projeto da Inteligência'
+        verbose_name_plural = 'Projetos da Inteligência'
+        ordering = ['criado_em', 'id']
+
+    def __str__(self):
+        return f'{self.nome} ({self.get_estagio_display()})'
+
+    def como_dict(self):
+        return {'id': self.id, 'nome': self.nome, 'nota': self.nota, 'estagio': self.estagio}

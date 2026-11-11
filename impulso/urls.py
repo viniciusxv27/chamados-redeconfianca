@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views
+from . import views, views_projetos_intel
 
 app_name = 'impulso'
 
@@ -10,6 +10,12 @@ urlpatterns = [
     # CONFIAR — metas / kanban
     path('metas/', views.metas_kanban, name='metas_kanban'),
     path('metas/concluidas/', views.metas_kanban_concluidas, name='metas_kanban_concluidas'),
+    # Quadro "Projetos da Inteligência" ao lado do Kanban (só o setor e o SUPERADMIN).
+    path('metas/projetos-inteligencia/', views_projetos_intel.projeto_intel_criar, name='projeto_intel_criar'),
+    path('metas/projetos-inteligencia/<int:projeto_id>/', views_projetos_intel.projeto_intel_editar,
+         name='projeto_intel_editar'),
+    path('metas/projetos-inteligencia/<int:projeto_id>/excluir/', views_projetos_intel.projeto_intel_excluir,
+         name='projeto_intel_excluir'),
     path('metas/nova/', views.meta_create, name='meta_create'),
     path('metas/solicitacoes/', views.meta_solicitacoes, name='meta_solicitacoes'),
     path('metas/<int:meta_id>/decidir/', views.meta_decidir, name='meta_decidir'),

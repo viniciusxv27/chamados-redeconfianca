@@ -98,6 +98,7 @@ INSTALLED_APPS = [
     'quadro_hc',  # Quadro de HC loja a loja (SUPERADMIN e quem ele liberar)
     'facilitador',  # Facilitador: arquivos e links úteis (todos veem; SUPERADMIN gerencia)
     'uniformes',  # Uniformes: estoque, retiradas e devoluções (SUPERADMIN + liberados)
+    'gestao_metas',  # Gerenciamento de metas: meta do mês por loja e pilar (SUPERADMIN + liberados)
     # 'webpush',  # Django WebPush (temporariamente removido)
 ]
 
@@ -190,6 +191,7 @@ TEMPLATES = [
                 'cameras.context_processors.cameras_menu',
                 'quadro_hc.context_processors.quadro_hc_menu',
                 'uniformes.context_processors.uniformes_menu',
+                'gestao_metas.context_processors.gestao_metas_menu',
                 'apresentacoes.context_processors.apresentacoes_menu',
                 'users.context_processors_commission.comissionamento_menu',
             ],

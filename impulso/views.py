@@ -38,6 +38,7 @@ from .models import (
 )
 from .scoring import (calcular_pontuacao, filtros_de_tarefa_do_mes, linhas_detalhadas, periodo_do_mes,
                       ordenar_ranking)
+from .views_projetos_intel import ESTAGIOS as ESTAGIOS_INTEL, projetos_do_quadro
 from .utils import (
     FAIXAS, calcular_faixa, e_superadmin, faixa_info, get_adms_lojas, get_colaboradores,
     impulso_ciclos_required, pode_gerir_ciclos,
@@ -444,6 +445,9 @@ def metas_kanban(request):
         # O "Mostrar mais" pede as próximas com os mesmos filtros da tela.
         'query_kanban': request.GET.urlencode(),
         'concluidas_por_vez': CONCLUIDAS_POR_VEZ,
+        # Quadro "Projetos da Inteligência": None (e nenhuma consulta) para quem não é do setor.
+        'projetos_intel': projetos_do_quadro(user),
+        'estagios_intel': ESTAGIOS_INTEL,
         **filtros_impulso.contexto(request, f),
     }
     return render(request, 'impulso/metas_kanban.html', context)

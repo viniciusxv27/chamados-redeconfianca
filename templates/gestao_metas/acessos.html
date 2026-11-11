@@ -1,0 +1,40 @@
+{% extends 'gestao_metas/_base.html' %}
+{% block gm_titulo %}Acessos · Gerenciamento de metas{% endblock %}
+{% block gm_conteudo %}
+<header class="gm-topo">
+    <div class="gm-titulo"><span class="gm-icone"><i class="fas fa-user-shield"></i></span>
+        <div><h1>Quem acessa o Gerenciamento de metas</h1><p>O SUPERADMIN sempre entra. Libere grupos ou pessoas; para os demais o módulo não existe.</p></div></div>
+</header>
+<section class="gm-card gm-secao">
+    <h2>Liberar</h2>
+    <p class="gm-sub" style="margin-bottom:12px"><strong>Editor</strong>: abre competência, digita metas, importa e fecha o mês. <strong>Visualizador</strong>: só vê e exporta.</p>
+    <form method="post" style="display:flex;gap:10px;flex-wrap:wrap">{% csrf_token %}
+        <select class="gm-campo" name="alvo" required style="flex:1;min-width:240px" aria-label="Grupo ou pessoa">
+            <option value="">Grupo ou pessoa…</option>
+            <optgroup label="Grupos">{% for g in grupos %}<option value="g:{{ g.id }}">{{ g.name }}</option>{% endfor %}</optgroup>
+            <optgroup label="Pessoas">{% for u in usuarios %}<option value="u:{{ u.id }}">{{ u.full_name|default:u.username }}{% if u.sector %} · {{ u.sector.name }}{% endif %}</option>{% endfor %}</optgroup>
+        </select>
+        <select class="gm-campo" name="papel" aria-label="Papel">{% for v, r in papeis %}<option value="{{ v }}">{{ r }}</option>{% endfor %}</select>
+        <button class="gm-botao primario" name="acao" value="adicionar"><i class="fas fa-check"></i>Liberar</button>
+    </form>
+</section>
+<section class="gm-card gm-secao">
+    <h2>Liberados ({{ acessos|length }})</h2>
+    {% if acessos %}
+    <table class="gm-tabela simples" data-rc-wrapped="1" style="margin-top:8px">
+        <tbody>
+        {% for a in acessos %}
+        <tr>
+            <td style="text-align:left;white-space:normal">{% if a.grupo %}<i class="fas fa-users"></i> <strong>{{ a.grupo.name }}</strong> <span class="gm-sub" style="display:inline">· grupo · {{ a.membros }} pessoa{{ a.membros|pluralize }}</span>
+                {% else %}<i class="fas fa-user"></i> <strong>{{ a.user.full_name|default:a.user.username }}</strong>{% if a.user.sector %} <span class="gm-sub" style="display:inline">· {{ a.user.sector.name }}</span>{% endif %}{% endif %}</td>
+            <td style="width:170px"><form method="post">{% csrf_token %}<input type="hidden" name="acesso" value="{{ a.id }}"><input type="hidden" name="acao" value="papel">
+                <select class="gm-campo" name="papel" onchange="this.form.submit()" aria-label="Papel">{% for v, r in papeis %}<option value="{{ v }}" {% if a.papel == v %}selected{% endif %}>{{ r }}</option>{% endfor %}</select></form></td>
+            <td style="width:56px"><form method="post" onsubmit="return confirm('Tirar o acesso?')">{% csrf_token %}<input type="hidden" name="acesso" value="{{ a.id }}">
+                <button class="gm-botao pequeno perigo" name="acao" value="remover" title="Remover" aria-label="Remover"><i class="fas fa-trash"></i></button></form></td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}<div class="gm-vazio"><i class="fas fa-lock"></i> Por enquanto só o SUPERADMIN entra.</div>{% endif %}
+</section>
+{% endblock %}

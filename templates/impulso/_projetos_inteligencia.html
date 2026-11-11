@@ -1,0 +1,246 @@
+{% comment %}
+Quadro "Projetos da Inteligência" (10/11/2026): os projetos que o setor tem em
+mente e em que estágio estão. Só chega aqui para o setor Inteligência e o
+SUPERADMIN (a view manda `projetos_intel` como None para os outros). Lista
+única do setor; os itens são desenhados pelo JS a partir do json_script.
+{% endcomment %}
+<section id="intel-projetos" class="imp-card bg-white intel-painel overflow-hidden" aria-label="Projetos da Inteligência"
+         data-url-criar="{% url 'impulso:projeto_intel_criar' %}" data-url-base="{% url 'impulso:projeto_intel_criar' %}">
+    <div class="px-3 py-2 flex items-center gap-2 border-b border-gray-100">
+        <button type="button" data-intel-recolher class="flex items-center gap-2 min-w-0 flex-1 text-left" aria-expanded="true" title="Recolher ou abrir">
+            <span class="w-6 h-6 rounded-lg bg-violet-100 text-violet-700 flex items-center justify-center flex-shrink-0"><i class="fas fa-diagram-project text-[11px]"></i></span>
+            <span class="text-sm font-semibold text-gray-800 truncate">Projetos · Inteligência</span>
+            <i class="fas fa-chevron-up text-[10px] text-gray-400" data-intel-seta></i>
+        </button>
+        <div class="flex items-center gap-1 flex-shrink-0" data-intel-resumo aria-label="Projetos por estágio">
+            {% for e in estagios_intel %}
+            <span class="intel-chip intel-{{ e.valor|lower }} tabular-nums" title="{{ e.rotulo }}" data-intel-conta="{{ e.valor }}">0</span>
+            {% endfor %}
+        </div>
+    </div>
+    <div data-intel-corpo>
+        <form data-intel-novo class="px-3 pt-2 flex items-center gap-2" autocomplete="off">
+            <input type="text" name="nome" maxlength="120" required placeholder="Novo projeto… (Enter para incluir)"
+                   class="flex-1 min-w-0 text-sm border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white focus:ring-2 focus:ring-violet-300 focus:border-transparent">
+            <button type="submit" class="w-8 h-8 rounded-lg bg-violet-600 text-white text-xs hover:bg-violet-700 flex-shrink-0" title="Incluir projeto" aria-label="Incluir projeto"><i class="fas fa-plus"></i></button>
+        </form>
+        <ul data-intel-lista class="px-1.5 py-1.5 max-h-64 overflow-y-auto"></ul>
+        <p data-intel-vazio class="hidden px-3 pb-2 text-xs text-gray-400">Nenhum projeto ainda. Escreva o nome acima e tecle Enter.</p>
+        <div class="px-3 py-1.5 border-t border-gray-100 flex items-center justify-between gap-2">
+            <button type="button" data-intel-concluidos class="text-[11px] text-gray-500 hover:text-violet-700"></button>
+            <span class="text-[11px] text-gray-400 hidden sm:inline">Clique no estágio para mudar</span>
+        </div>
+    </div>
+    <div data-intel-menu class="hidden absolute z-50 bg-white border border-gray-200 rounded-lg shadow-lg py-1 text-xs" role="menu">
+        {% for e in estagios_intel %}
+        <button type="button" role="menuitem" data-estagio="{{ e.valor }}" class="w-full px-3 py-1.5 flex items-center gap-2 hover:bg-gray-50 text-left text-gray-700">
+            <span class="intel-ponto intel-{{ e.valor|lower }}"></span>{{ e.rotulo }}
+        </button>
+        {% endfor %}
+    </div>
+</section>
+{{ projetos_intel|json_script:"intel-projetos-dados" }}
+{{ estagios_intel|json_script:"intel-estagios" }}
+<style>
+    /* Mesma largura do grupo de botões acima: o quadro não alarga a coluna, só acompanha. */
+    @media (min-width: 640px) { .intel-painel { width: 0; min-width: 100%; } }
+    .intel-chip { display:inline-flex; align-items:center; justify-content:center; min-width:1.35rem; height:1.25rem; padding:0 .35rem;
+                  border-radius:9999px; font-size:10.5px; font-weight:700; border:1px solid transparent; white-space:nowrap; line-height:1; }
+    button.intel-chip { cursor:pointer; font-weight:600; font-size:11px; height:1.35rem; padding:0 .45rem; gap:.25rem; width:8rem; justify-content:space-between; }
+    .intel-ponto { width:.5rem; height:.5rem; border-radius:9999px; display:inline-block; }
+    .intel-chip.intel-ideacao { background:#F3F4F6; color:#4B5563; border-color:#E5E7EB; }
+    .intel-chip.intel-desenvolvimento { background:#EFF6FF; color:#1D4ED8; border-color:#BFDBFE; }
+    .intel-chip.intel-testes { background:#FFFBEB; color:#B45309; border-color:#FDE68A; }
+    .intel-chip.intel-conclusao { background:#ECFDF5; color:#047857; border-color:#A7F3D0; }
+    .intel-ponto.intel-ideacao { background:#9CA3AF; } .intel-ponto.intel-desenvolvimento { background:#3B82F6; }
+    .intel-ponto.intel-testes { background:#F59E0B; } .intel-ponto.intel-conclusao { background:#10B981; }
+    #intel-projetos .intel-acoes { opacity:1; }
+    @media (hover: hover) { #intel-projetos li .intel-acoes { opacity:0; } #intel-projetos li:hover .intel-acoes, #intel-projetos li:focus-within .intel-acoes { opacity:1; } }
+    #intel-projetos li.intel-feito .intel-nome { color:#9CA3AF; text-decoration:line-through; }
+    html.dark .intel-chip.intel-ideacao { background:rgba(156,163,175,.16); color:#D1D5DB; border-color:rgba(156,163,175,.3); }
+    html.dark .intel-chip.intel-desenvolvimento { background:rgba(59,130,246,.18); color:#93C5FD; border-color:rgba(59,130,246,.35); }
+    html.dark .intel-chip.intel-testes { background:rgba(245,158,11,.16); color:#FCD34D; border-color:rgba(245,158,11,.35); }
+    html.dark .intel-chip.intel-conclusao { background:rgba(16,185,129,.16); color:#6EE7B7; border-color:rgba(16,185,129,.35); }
+    html.dark .bg-violet-100 { background-color: rgba(139,92,246,.2); }
+</style>
+<script>
+(function () {
+    const raiz = document.getElementById('intel-projetos');
+    if (!raiz) return;
+    const csrftoken = '{{ csrf_token }}';
+    const base = raiz.dataset.urlBase;              // .../projetos-inteligencia/
+    const estagios = JSON.parse(document.getElementById('intel-estagios').textContent);
+    const ordem = Object.fromEntries(estagios.map((e, i) => [e.valor, i]));
+    const rotulo = Object.fromEntries(estagios.map(e => [e.valor, e.rotulo]));
+    const CONCLUSAO = 'CONCLUSAO';
+    let projetos = JSON.parse(document.getElementById('intel-projetos-dados').textContent) || [];
+    const lista = raiz.querySelector('[data-intel-lista]');
+    const vazio = raiz.querySelector('[data-intel-vazio]');
+    const menu = raiz.querySelector('[data-intel-menu]');
+    const btnConcluidos = raiz.querySelector('[data-intel-concluidos]');
+    const corpo = raiz.querySelector('[data-intel-corpo]');
+    const seta = raiz.querySelector('[data-intel-seta]');
+    const btnRecolher = raiz.querySelector('[data-intel-recolher]');
+    let mostrarConcluidos = false, recolhido = false, editando = null, menuDe = null;
+    try { mostrarConcluidos = localStorage.getItem('intelMostrarConcluidos') === '1'; recolhido = localStorage.getItem('intelRecolhido') === '1'; } catch (e) {}
+
+    function post(url, dados) {
+        return fetch(url, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrftoken, 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams(dados).toString(),
+        }).then(r => r.json().catch(() => ({ ok: false, error: 'Resposta inesperada do servidor.' })));
+    }
+    function el(tag, cls, texto) { const e = document.createElement(tag); if (cls) e.className = cls; if (texto != null) e.textContent = texto; return e; }
+    function icone(cls) { const i = document.createElement('i'); i.className = cls; return i; }
+
+    function desenhar() {
+        corpo.classList.toggle('hidden', recolhido);
+        seta.className = 'fas ' + (recolhido ? 'fa-chevron-down' : 'fa-chevron-up') + ' text-[10px] text-gray-400';
+        btnRecolher.setAttribute('aria-expanded', recolhido ? 'false' : 'true');
+        const contas = {};
+        projetos.forEach(p => { contas[p.estagio] = (contas[p.estagio] || 0) + 1; });
+        raiz.querySelectorAll('[data-intel-conta]').forEach(s => {
+            const n = contas[s.dataset.intelConta] || 0;
+            s.textContent = n;
+            s.title = rotulo[s.dataset.intelConta] + ': ' + n;
+            s.style.opacity = n ? '1' : '.45';
+        });
+        const feitos = contas[CONCLUSAO] || 0;
+        btnConcluidos.textContent = feitos ? (mostrarConcluidos ? 'Esconder concluídos' : 'Mostrar concluídos (' + feitos + ')') : '';
+        btnConcluidos.classList.toggle('hidden', !feitos);
+
+        const visiveis = projetos.filter(p => mostrarConcluidos || p.estagio !== CONCLUSAO)
+            .sort((a, b) => (ordem[a.estagio] - ordem[b.estagio]) || (a.id - b.id));
+        lista.replaceChildren();
+        vazio.classList.toggle('hidden', projetos.length > 0);
+        visiveis.forEach(p => lista.appendChild(p.id === editando ? linhaEdicao(p) : linha(p)));
+        if (!visiveis.length && projetos.length) {
+            lista.appendChild(el('li', 'px-1.5 py-1 text-xs text-gray-400', 'Todos concluídos.'));
+        }
+    }
+
+    function linha(p) {
+        const li = el('li', 'group flex items-start gap-2 px-1.5 py-1 rounded-lg hover:bg-gray-50' + (p.estagio === CONCLUSAO ? ' intel-feito' : ''));
+        li.dataset.id = p.id;
+        const chip = el('button', 'intel-chip intel-' + p.estagio.toLowerCase() + ' flex-shrink-0 mt-0.5');
+        chip.type = 'button';
+        chip.title = 'Mudar estágio';
+        chip.setAttribute('aria-haspopup', 'menu');
+        chip.append(rotulo[p.estagio] || p.estagio, icone('fas fa-caret-down text-[9px] opacity-60'));
+        chip.addEventListener('click', ev => { ev.stopPropagation(); abrirMenu(p, chip); });
+        const txt = el('div', 'flex-1 min-w-0');
+        const nome = el('p', 'intel-nome text-sm text-gray-800 leading-snug break-words', p.nome);
+        nome.addEventListener('dblclick', () => { editando = p.id; desenhar(); });
+        txt.appendChild(nome);
+        if (p.nota) txt.appendChild(el('p', 'text-[11px] text-gray-500 leading-snug break-words', p.nota));
+        const acoes = el('div', 'intel-acoes flex items-center gap-0.5 flex-shrink-0');
+        const editar = el('button', 'w-6 h-6 rounded text-gray-400 hover:text-violet-700 hover:bg-white text-[11px]');
+        editar.type = 'button'; editar.title = 'Renomear'; editar.setAttribute('aria-label', 'Renomear ' + p.nome);
+        editar.appendChild(icone('fas fa-pen'));
+        editar.addEventListener('click', () => { editando = p.id; desenhar(); });
+        const apagar = el('button', 'w-6 h-6 rounded text-gray-400 hover:text-red-600 hover:bg-white text-[11px]');
+        apagar.type = 'button'; apagar.title = 'Excluir'; apagar.setAttribute('aria-label', 'Excluir ' + p.nome);
+        apagar.appendChild(icone('fas fa-trash-can'));
+        apagar.addEventListener('click', () => excluir(p));
+        acoes.append(editar, apagar);
+        li.append(chip, txt, acoes);
+        return li;
+    }
+
+    function linhaEdicao(p) {
+        const li = el('li', 'px-1.5 py-1.5 rounded-lg bg-violet-50/60');
+        const form = el('form', 'space-y-1.5');
+        const nome = el('input', 'w-full text-sm border border-gray-200 rounded-md px-2 py-1 bg-white focus:ring-2 focus:ring-violet-300 focus:border-transparent');
+        nome.value = p.nome; nome.maxLength = 120; nome.required = true; nome.setAttribute('aria-label', 'Nome do projeto');
+        const nota = el('input', 'w-full text-xs border border-gray-200 rounded-md px-2 py-1 bg-white focus:ring-2 focus:ring-violet-300 focus:border-transparent');
+        nota.value = p.nota || ''; nota.maxLength = 200; nota.placeholder = 'Nota curta (opcional)'; nota.setAttribute('aria-label', 'Nota');
+        const botoes = el('div', 'flex justify-end gap-1.5');
+        const cancelar = el('button', 'px-2 py-0.5 rounded-md border border-gray-200 text-[11px] text-gray-600 hover:bg-white', 'Cancelar');
+        cancelar.type = 'button';
+        cancelar.addEventListener('click', () => { editando = null; desenhar(); });
+        const salvar = el('button', 'px-2 py-0.5 rounded-md bg-violet-600 text-white text-[11px] hover:bg-violet-700', 'Salvar');
+        salvar.type = 'submit';
+        botoes.append(cancelar, salvar);
+        form.append(nome, nota, botoes);
+        form.addEventListener('keydown', ev => { if (ev.key === 'Escape') { editando = null; desenhar(); } });
+        form.addEventListener('submit', ev => {
+            ev.preventDefault();
+            const novo = nome.value.trim();
+            if (!novo) { nome.focus(); return; }
+            salvar.disabled = true;
+            post(base + p.id + '/', { nome: novo, nota: nota.value.trim() }).then(d => {
+                if (!d.ok) { salvar.disabled = false; alert(d.error || 'Não foi possível salvar.'); return; }
+                Object.assign(p, d.projeto); editando = null; desenhar();
+            }).catch(() => { salvar.disabled = false; alert('Erro de conexão.'); });
+        });
+        li.appendChild(form);
+        setTimeout(() => { nome.focus(); nome.select(); }, 0);
+        return li;
+    }
+
+    function abrirMenu(p, chip) {
+        if (menuDe === p.id && !menu.classList.contains('hidden')) { fecharMenu(); return; }
+        menuDe = p.id;
+        const r = chip.getBoundingClientRect();
+        menu.style.position = 'fixed';
+        menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 168)) + 'px';
+        menu.style.top = (r.bottom + 4) + 'px';
+        menu.style.minWidth = '10rem';
+        menu.querySelectorAll('[data-estagio]').forEach(b => b.classList.toggle('font-semibold', b.dataset.estagio === p.estagio));
+        menu.classList.remove('hidden');
+        const atual = menu.querySelector('[data-estagio="' + p.estagio + '"]');
+        if (atual) atual.focus();
+    }
+    function fecharMenu() { menu.classList.add('hidden'); menuDe = null; }
+    menu.addEventListener('click', ev => {
+        const b = ev.target.closest('[data-estagio]');
+        if (!b) return;
+        const p = projetos.find(x => x.id === menuDe);
+        fecharMenu();
+        if (!p || p.estagio === b.dataset.estagio) return;
+        const antes = p.estagio;
+        p.estagio = b.dataset.estagio; desenhar();    // troca otimista
+        post(base + p.id + '/', { estagio: p.estagio }).then(d => {
+            if (!d.ok) { p.estagio = antes; desenhar(); alert(d.error || 'Não foi possível mudar o estágio.'); }
+        }).catch(() => { p.estagio = antes; desenhar(); alert('Erro de conexão.'); });
+    });
+    document.addEventListener('click', ev => { if (!menu.contains(ev.target)) fecharMenu(); });
+    document.addEventListener('keydown', ev => { if (ev.key === 'Escape') fecharMenu(); });
+    window.addEventListener('scroll', fecharMenu, true);
+    window.addEventListener('resize', fecharMenu);
+
+    function excluir(p) {
+        if (!confirm('Excluir o projeto "' + p.nome + '"? Não dá para desfazer.')) return;
+        post(base + p.id + '/excluir/', {}).then(d => {
+            if (!d.ok) { alert(d.error || 'Não foi possível excluir.'); return; }
+            projetos = projetos.filter(x => x.id !== p.id); desenhar();
+        }).catch(() => alert('Erro de conexão.'));
+    }
+
+    const formNovo = raiz.querySelector('[data-intel-novo]');
+    formNovo.addEventListener('submit', ev => {
+        ev.preventDefault();
+        const campo = formNovo.elements.nome;
+        const nome = campo.value.trim();
+        if (!nome) { campo.focus(); return; }
+        campo.disabled = true;
+        post(raiz.dataset.urlCriar, { nome: nome }).then(d => {
+            campo.disabled = false;
+            if (!d.ok) { alert(d.error || 'Não foi possível incluir.'); return; }
+            projetos.push(d.projeto); campo.value = ''; desenhar(); campo.focus();
+        }).catch(() => { campo.disabled = false; alert('Erro de conexão.'); });
+    });
+    btnConcluidos.addEventListener('click', () => {
+        mostrarConcluidos = !mostrarConcluidos;
+        try { localStorage.setItem('intelMostrarConcluidos', mostrarConcluidos ? '1' : '0'); } catch (e) {}
+        desenhar();
+    });
+    btnRecolher.addEventListener('click', () => {
+        recolhido = !recolhido;
+        try { localStorage.setItem('intelRecolhido', recolhido ? '1' : '0'); } catch (e) {}
+        desenhar();
+    });
+    desenhar();
+})();
+</script>

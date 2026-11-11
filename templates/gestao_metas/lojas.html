@@ -1,0 +1,38 @@
+{% extends 'gestao_metas/_base.html' %}
+{% block gm_titulo %}Lojas · Gerenciamento de metas{% endblock %}
+{% block gm_conteudo %}
+<header class="gm-topo">
+    <div class="gm-titulo"><span class="gm-icone"><i class="fas fa-store"></i></span>
+        <div><h1>Lojas</h1><p>Como cada loja aparece nas bases (PDV rede) e na Vivo (PDV Vivo), a região dos subtotais e a ordem das linhas.</p></div></div>
+</header>
+<p class="gm-sub" style="margin-bottom:10px">"Outros nomes" ajudam a reconhecer a loja em arquivos que a escrevem diferente (separe por vírgula). O nome do setor do portal e o nome Vivo do cadastro do setor já valem sozinhos.</p>
+<form method="post">{% csrf_token %}
+<div class="gm-rolagem" style="max-height:none;min-height:0">
+<table class="gm-tabela simples" data-rc-wrapped="1">
+    <thead><tr><th style="text-align:left">PDV rede</th><th style="text-align:left">PDV Vivo</th><th style="text-align:left">Outros nomes</th><th style="text-align:left">Setor do portal</th><th>Região</th><th>Ordem</th><th>Ativa</th></tr></thead>
+    <tbody>
+    {% for l in lojas %}
+    <tr>
+        <td style="text-align:left"><input class="gm-campo" name="l{{ l.id }}_nome" value="{{ l.nome }}" style="width:200px" {% if not gm_editor %}disabled{% endif %} aria-label="PDV rede"></td>
+        <td style="text-align:left"><input class="gm-campo" name="l{{ l.id }}_pdv_vivo" value="{{ l.pdv_vivo }}" style="width:240px" {% if not gm_editor %}disabled{% endif %} aria-label="PDV Vivo"></td>
+        <td style="text-align:left"><input class="gm-campo" name="l{{ l.id }}_apelidos" value="{{ l.apelidos }}" style="width:200px" {% if not gm_editor %}disabled{% endif %} aria-label="Outros nomes"></td>
+        <td style="text-align:left"><select class="gm-campo" name="l{{ l.id }}_setor" {% if not gm_editor %}disabled{% endif %} aria-label="Setor"><option value="">—</option>{% for s in setores %}<option value="{{ s.id }}" {% if l.setor_id == s.id %}selected{% endif %}>{{ s.name }}</option>{% endfor %}</select></td>
+        <td><select class="gm-campo" name="l{{ l.id }}_regiao" {% if not gm_editor %}disabled{% endif %} aria-label="Região"><option value="">—</option>{% for v, r in regioes %}<option value="{{ v }}" {% if l.regiao == v %}selected{% endif %}>{{ r }}</option>{% endfor %}</select></td>
+        <td><input class="gm-campo" name="l{{ l.id }}_ordem" value="{{ l.ordem }}" inputmode="numeric" style="width:70px" {% if not gm_editor %}disabled{% endif %} aria-label="Ordem"></td>
+        <td><input type="checkbox" name="l{{ l.id }}_ativa" value="1" {% if l.ativa %}checked{% endif %} {% if not gm_editor %}disabled{% endif %} aria-label="Ativa"></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+{% if gm_editor %}<div style="margin-top:12px"><button class="gm-botao primario"><i class="fas fa-check"></i>Salvar lojas</button></div>{% endif %}
+</form>
+{% if gm_editor %}
+<section class="gm-card gm-secao" style="margin-top:16px">
+    <h2>Incluir loja</h2>
+    <form method="post" style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">{% csrf_token %}<input type="hidden" name="acao" value="nova">
+        <input class="gm-campo" name="nome" placeholder="Nome como vem nas bases (PDV)" required style="flex:1;min-width:220px" aria-label="Nome da loja">
+        <button class="gm-botao"><i class="fas fa-plus"></i>Incluir</button></form>
+</section>
+{% endif %}
+{% endblock %}

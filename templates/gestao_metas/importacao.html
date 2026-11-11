@@ -1,0 +1,88 @@
+{% extends 'gestao_metas/_base.html' %}
+{% load gestao_metas_tags %}
+{% block gm_titulo %}Conferir importação · Gerenciamento de metas{% endblock %}
+{% block gm_conteudo %}
+<header class="gm-topo">
+    <div class="gm-titulo"><span class="gm-icone"><i class="fas fa-list-check"></i></span>
+        <div><h1>{{ imp.get_tipo_display }}</h1><p>{{ imp.arquivo_nome }} · {{ imp.resumo }}{% if imp.competencia %} · competência {{ imp.competencia.mes|date:"F/Y" }}{% endif %}</p></div></div>
+    <div class="gm-acoes">
+        <span class="gm-selo {% if imp.status == 'APLICADA' %}verde{% elif imp.status == 'PREVIA' %}ambar{% else %}cinza{% endif %}">{{ imp.get_status_display }}</span>
+        {% if imp.status == 'PREVIA' and gm_editor %}
+        <form method="post" style="display:flex;gap:8px">{% csrf_token %}
+            <button class="gm-botao" name="acao" value="descartar"><i class="fas fa-xmark"></i>Descartar</button>
+            <button class="gm-botao primario" name="acao" value="aplicar"><i class="fas fa-check"></i>Conferi — gravar</button>
+        </form>
+        {% endif %}
+    </div>
+</header>
+
+{% if imp.dados.nao_reconhecidas %}
+<div class="gm-aviso"><i class="fas fa-store-slash" style="margin-top:2px"></i><span>Lojas que não reconheci (ficam de fora): <strong>{{ imp.dados.nao_reconhecidas|join:", " }}</strong>. Inclua o nome em "Outros nomes" na aba <a href="{% url 'gestao_metas:lojas' %}">Lojas</a> e suba de novo.</span></div>
+{% endif %}
+{% if imp.dados.falhas %}<div class="gm-aviso erro"><i class="fas fa-plug-circle-xmark" style="margin-top:2px"></i><span>Meses que o banco não devolveu: {{ imp.dados.falhas|join:" · " }}</span></div>{% endif %}
+{% if imp.dados.ignoradas %}
+<div class="gm-card gm-secao"><h2>Linhas que não entram na conta</h2>
+    <p class="gm-sub">{% for motivo, n in imp.dados.ignoradas.items %}{{ n }} · {{ motivo }}{% if not forloop.last %} &nbsp;|&nbsp; {% endif %}{% endfor %}</p></div>
+{% endif %}
+
+{% if grades %}
+{% for g in grades %}
+<section class="gm-secao" style="padding-left:0;padding-right:0">
+    <h2 style="font-size:16px;font-weight:700;margin:0 0 8px;text-transform:capitalize">{{ g.mes|date:"F \d\e Y" }}</h2>
+    <div class="gm-rolagem" style="max-height:none;min-height:0">
+    <table class="gm-tabela simples" data-rc-wrapped="1">
+        <thead><tr><th class="loja">Loja</th>{% for p, n in pilares_da_previa %}<th>{{ n }}{% if p == 'fixa' %} (R$ · qtd){% endif %}</th>{% endfor %}</tr></thead>
+        <tbody>
+        {% for nome, linha in g.linhas %}
+        <tr><td class="loja"><strong>{{ nome }}</strong>{% if not linha.loja %}<small style="color:var(--gm-vermelho)">não reconhecida</small>{% endif %}</td>
+            {% for p, n in pilares_da_previa %}{% with c=linha.pilares|chave:p %}
+            <td>{% if c %}{{ c.valor|num:2 }}{% if p == 'fixa' %} · <strong>{{ c.qtd|num }}</strong> <small class="fraco">(TV {{ c.tv|num }})</small>{% endif %}
+                {% if c.atual is not None or c.atual_qtd is not None %}<span class="gm-dif igual">gravado: {{ c.atual|num:2 }}{% if p == 'fixa' %} · {{ c.atual_qtd|num }}{% endif %}</span>{% endif %}
+                {% else %}<span class="fraco">—</span>{% endif %}</td>
+            {% endwith %}{% endfor %}
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+</section>
+{% endfor %}
+{% endif %}
+
+{% if linhas_vivo %}
+<div class="gm-rolagem" style="max-height:none;min-height:0">
+<table class="gm-tabela simples" data-rc-wrapped="1">
+    <thead><tr><th class="loja">Loja</th>{% for p, n in pilares_da_previa %}<th>{{ n }}</th>{% endfor %}</tr></thead>
+    <tbody>
+    {% for nome, linha in linhas_vivo %}
+    <tr><td class="loja"><strong>{{ nome }}</strong>{% if not linha.loja %}<small style="color:var(--gm-vermelho)">não reconhecida</small>{% endif %}</td>
+        {% for p, n in pilares_da_previa %}{% with c=linha.pilares|chave:p %}
+        <td>{% if c %}{{ c.valor|num:1 }}{% if c.atual is not None %}<span class="gm-dif igual">gravado: {{ c.atual|num:1 }}</span>{% endif %}{% else %}<span class="fraco">—</span>{% endif %}</td>
+        {% endwith %}{% endfor %}
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+</div>
+<p class="gm-legenda">Aba lida: {{ imp.dados.aba }}. Fixa da Vivo é em quantidade.</p>
+{% endif %}
+
+{% if imp.tipo == 'PLANILHA' %}
+<section class="gm-card gm-secao">
+    <h2>O que entra</h2>
+    <ul class="gm-sub" style="line-height:1.9;margin-top:6px;padding-left:18px;list-style:disc">
+        <li>Competência <strong>{{ mes_planilha }}</strong>: {{ n_vivo }} meta(s) Vivo e {{ n_metas }} meta(s) já digitadas.</li>
+        <li><strong>{{ mes_anterior_planilha }}</strong> entra como competência fechada com {{ n_anteriores }} meta(s) (a "meta mês anterior" da planilha), se ainda não existir.</li>
+        <li>Realizado de {{ imp.dados.meses|first }} a {{ imp.dados.meses|last }}: {% for n, q in por_pilar %}{{ n }} {{ q }}{% if not forloop.last %} · {% endif %}{% endfor %} valores.</li>
+        <li>{{ imp.dados.lojas|length }} loja(s){% if imp.dados.novas_lojas %}, das quais novas: <strong>{{ imp.dados.novas_lojas|join:", " }}</strong>{% endif %}. Lojas fora da planilha e sem venda nenhuma ficam desativadas.</li>
+        <li>{% if imp.substituir %}Substitui o que já está gravado.{% else %}Só preenche o que está vazio.{% endif %}</li>
+    </ul>
+</section>
+<div class="gm-rolagem" style="max-height:none;min-height:0">
+<table class="gm-tabela simples" data-rc-wrapped="1">
+    <thead><tr><th style="text-align:left">Ordem</th><th style="text-align:left">PDV rede</th><th style="text-align:left">PDV Vivo</th></tr></thead>
+    <tbody>{% for l in imp.dados.lojas %}<tr><td style="text-align:left">{{ forloop.counter }}</td><td style="text-align:left"><strong>{{ l.nome }}</strong></td><td style="text-align:left">{{ l.pdv_vivo|default:"—" }}</td></tr>{% endfor %}</tbody>
+</table>
+</div>
+{% endif %}
+{% endblock %}

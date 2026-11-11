@@ -1,0 +1,46 @@
+{% extends 'gestao_metas/_base.html' %}
+{% block gm_conteudo %}
+<header class="gm-topo">
+    <div class="gm-titulo"><span class="gm-icone"><i class="fas fa-bullseye"></i></span>
+        <div><h1>Gerenciamento de metas</h1><p>A meta do mês de cada loja, pilar a pilar — com o histórico, a média do quadrimestre e a meta da Vivo lado a lado.</p></div></div>
+    <div class="gm-acoes">
+        <a class="gm-botao" href="{% url 'gestao_metas:importar' %}"><i class="fas fa-file-import"></i>Importar dados</a>
+    </div>
+</header>
+
+{% if gm_editor %}
+<section class="gm-card gm-secao">
+    <h2>Abrir uma competência</h2>
+    <p class="gm-sub" style="margin-bottom:12px">Ao abrir, a janela anda sozinha: últimos 4 meses, o mesmo mês do ano passado e a meta do mês anterior (a da competência anterior). Consultores e decisão da Fixa vêm do mês anterior.</p>
+    <form method="post" action="{% url 'gestao_metas:abrir' %}" style="display:flex;gap:10px;flex-wrap:wrap">{% csrf_token %}
+        <input class="gm-campo" type="month" name="mes" value="{{ sugestao }}" required aria-label="Mês da meta">
+        <button class="gm-botao primario"><i class="fas fa-plus"></i>Abrir</button>
+    </form>
+</section>
+{% endif %}
+
+<section class="gm-secao" style="padding-left:0;padding-right:0">
+    <h2 style="font-size:16px;font-weight:700;margin:0 0 10px">Competências</h2>
+    {% if competencias %}
+    <div class="gm-grade">
+        {% for c in competencias %}
+        <a class="gm-card gm-comp" href="{% url 'gestao_metas:competencia' c.codigo %}">
+            <span>{% if c.fechada %}<span class="gm-selo cinza"><i class="fas fa-lock"></i>Fechada</span>{% else %}<span class="gm-selo verde"><i class="fas fa-pen"></i>Aberta</span>{% endif %}</span>
+            <strong>{{ c.mes|date:"F \d\e Y" }}</strong>
+            <span class="gm-sub">{{ c.n_metas }} linha{{ c.n_metas|pluralize }} com dado{% if c.observacao %} · {{ c.observacao }}{% endif %}</span>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="gm-card gm-vazio"><i class="fas fa-table" style="font-size:22px;display:block;margin-bottom:8px"></i>Nenhuma competência ainda. Comece importando a planilha antiga (traz o histórico e as metas) em <a href="{% url 'gestao_metas:importar' %}" style="color:var(--gm-cor);font-weight:600">Importar dados</a>, ou abra o mês acima.</div>
+    {% endif %}
+</section>
+
+<section class="gm-card gm-secao">
+    <h2>Realizado guardado</h2>
+    <p class="gm-sub" style="margin-bottom:10px">{{ n_lojas }} loja{{ n_lojas|pluralize }} ativa{{ n_lojas|pluralize }}. Meses com realizado (lojas × pilares):</p>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+        {% for m in meses_com_dado %}<span class="gm-selo cor">{{ m.mes|date:"M/y" }} · {{ m.n }}</span>{% empty %}<span class="gm-sub">Nenhum ainda.</span>{% endfor %}
+    </div>
+</section>
+{% endblock %}

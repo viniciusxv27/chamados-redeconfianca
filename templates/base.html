@@ -772,6 +772,17 @@
                             </a>
                         </li>
                         {% endif %}
+                        {% if gestao_metas_liberado %}
+                        <li>
+                            <a href="{% url 'gestao_metas:inicio' %}" data-rota="{% url 'gestao_metas:inicio' %}"
+                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-bullseye text-indigo-400 flex-shrink-0 w-5 text-center"></i>
+                                <span class="text-sm">Gerenciamento de metas</span>
+                                <div class="tooltip-collapsed">Gerenciamento de metas</div>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-indigo-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        {% endif %}
                         {% if uniformes_liberado %}
                         <li>
                             <a href="{% url 'uniformes:estoque' %}" data-rota="{% url 'uniformes:estoque' %}"

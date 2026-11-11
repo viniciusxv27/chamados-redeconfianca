@@ -2,7 +2,7 @@
 
 {% block impulso_content %}
 
-<div class="flex items-center justify-between flex-wrap gap-3 mb-4">
+<div class="flex {% if projetos_intel is not None %}items-start{% else %}items-center{% endif %} justify-between flex-wrap gap-3 mb-4">
     <div class="flex items-center gap-2 flex-wrap w-full sm:w-auto min-w-0">
         {% if is_gestor and colaboradores is not None %}
         <form method="get" class="flex items-center gap-2 w-full sm:w-auto min-w-0">
@@ -48,7 +48,9 @@
         </form>
         {% endif %}
     </div>
-    <div class="flex items-center gap-2 flex-wrap">
+    {% comment %}Com o quadro da Inteligência, os botões e o quadro empilham na coluna da direita.{% endcomment %}
+    {% if projetos_intel is not None %}<div class="flex flex-col gap-3 w-full sm:w-auto sm:min-w-[22rem]">{% endif %}
+    <div class="flex items-center gap-2 flex-wrap{% if projetos_intel is not None %} sm:justify-end{% endif %}">
         {% comment %}"Criadas por mim" mantém os outros filtros da tela.{% endcomment %}
         <form method="get" class="inline-flex">
             {% for chave, valor in request.GET.items %}{% if chave != 'criadas_por_mim' %}<input type="hidden" name="{{ chave }}" value="{{ valor }}">{% endif %}{% endfor %}
@@ -69,6 +71,10 @@
             <i class="fas fa-plus mr-1"></i>{% if is_gestor %}Nova meta{% else %}Solicitar meta{% endif %}
         </a>
     </div>
+    {% if projetos_intel is not None %}
+    {% include 'impulso/_projetos_inteligencia.html' %}
+    </div>
+    {% endif %}
 </div>
 
 {% comment %}

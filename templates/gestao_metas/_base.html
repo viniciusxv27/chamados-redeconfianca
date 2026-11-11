@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}{% block gm_titulo %}Gerenciamento de metas{% endblock %} · Rede Confiança{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'gestao_metas/gestao_metas.css' %}?v=1">{% endblock %}
+{% block content %}
+<div class="gm">
+    <nav class="gm-abas">
+        <a href="{% url 'gestao_metas:inicio' %}" class="{% if aba == 'inicio' or aba == 'competencia' %}ativa{% endif %}"><i class="fas fa-bullseye mr-1"></i>Competências</a>
+        <a href="{% url 'gestao_metas:importar' %}{% if comp %}?competencia={{ comp.codigo }}{% endif %}" class="{% if aba == 'importar' %}ativa{% endif %}"><i class="fas fa-file-import mr-1"></i>Importar dados</a>
+        <a href="{% url 'gestao_metas:lojas' %}" class="{% if aba == 'lojas' %}ativa{% endif %}"><i class="fas fa-store mr-1"></i>Lojas</a>
+        {% if gm_superadmin %}<a href="{% url 'gestao_metas:acessos' %}" class="{% if aba == 'acessos' %}ativa{% endif %}"><i class="fas fa-user-shield mr-1"></i>Acessos</a>{% endif %}
+    </nav>
+    {% comment %}As mensagens (messages) já aparecem no topo pelo base.html.{% endcomment %}
+    {% block gm_conteudo %}{% endblock %}
+</div>
+{% endblock %}

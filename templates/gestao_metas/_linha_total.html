@@ -1,0 +1,24 @@
+{% load gestao_metas_tags %}<tr class="{{ classe }}" data-grupo="{{ grupo }}" data-ultimo="{{ t.ultimo|dado }}" data-ano="{{ t.real_ano_anterior|dado }}" data-quad="{{ t.media_quad|dado }}" data-ant="{{ t.meta_anterior|dado }}">
+    <td class="loja">{% if grupo == 'REDE' %}<strong>REDE</strong>{% else %}<strong>{{ t.titulo }}</strong>{% endif %}<small style="display:block">{{ t.qtd_lojas }} loja{{ t.qtd_lojas|pluralize }}</small></td>
+    <td data-rot="Real ano anterior">{{ t.real_ano_anterior|num }}</td>
+    {% for v in t.meses %}<td data-rot="Mês {{ forloop.counter }}" class="{% if forloop.first %}sep {% endif %}{% if not forloop.last %}sem-celular{% endif %}">{{ v|num }}</td>{% endfor %}
+    <td data-rot="Média quad">{% if p.fixa %}{{ t.media_quad|num:1 }}{% else %}{{ t.media_quad|num }}{% endif %}</td>
+    {% if p.fixa %}<td data-rot="Média R$" class="sep">{{ t.media_quad_valor|num }}</td><td class="sem-celular" data-rot="Ticket"></td>{% endif %}
+    <td data-rot="Meta Vivo" class="sep">{% if p.fixa %}{{ t.meta_vivo|num:1 }}{% else %}{{ t.meta_vivo|num }}{% endif %}</td>
+    <td data-rot="Meta anterior">{{ t.meta_anterior|num }}</td>
+    {% if p.fixa %}
+    <td data-rot="Meta R$" class="sep meta-col" data-s="meta">{{ t.meta|num }}</td>
+    <td data-rot="Consultores" class="meta-col" data-s="qtd_cns">{{ t.qtd_cns|num }}</td>
+    <td data-rot="QTD" class="meta-col" data-s="qtd">{{ t.qtd|num }}</td>
+    <td data-rot="Por CN ↑" class="meta-col" data-s="cima">{{ t.cima|num }}</td>
+    <td data-rot="Por CN ↓" class="meta-col" data-s="baixo">{{ t.baixo|num }}</td>
+    <td class="meta-col sem-celular" data-rot="Decisão"></td>
+    <td data-rot="Nova meta" class="meta-col" data-s="nova_meta">{{ t.nova_meta|num }}</td>
+    {% else %}
+    <td data-rot="Meta" class="sep meta-col" data-s="meta">{{ t.meta|num }}</td>
+    {% endif %}
+    <td data-rot="M × M" class="sep"><span class="gm-chip {{ t.mxm|tom }}" data-c="mxm">{{ t.mxm|pct }}</span></td>
+    <td data-rot="Y × Y"><span class="gm-chip {{ t.yxy|tom }}" data-c="yxy">{{ t.yxy|pct }}</span></td>
+    <td data-rot="Meta × Quad"><span class="gm-chip {{ t.mxquad|tom }}" data-c="mxquad">{{ t.mxquad|pct }}</span></td>
+    <td data-rot="Meta × Ant."><span class="gm-chip {{ t.mxmeta|tom }}" data-c="mxmeta">{{ t.mxmeta|pct }}</span></td>
+</tr>
