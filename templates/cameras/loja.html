@@ -7,12 +7,28 @@
         <div><h1>{{ gravador.loja }}</h1><p><span class="ca-ponto {{ gravador.situacao }}"></span>{% if gravador.situacao == 'online' %}Agente online{% elif gravador.situacao == 'sem_agente' %}Agente ainda não instalado{% else %}Agente sem contato{% if gravador.ultimo_contato %} desde {{ gravador.ultimo_contato|date:"d/m H:i" }}{% endif %}{% endif %}{% if gravador.coordenador %} · {{ gravador.coordenador }}{% endif %}</p></div></div>
     <div class="ca-filtros"><span id="caContadorVivo" class="ca-contador-vivo" hidden></span><a class="ca-botao claro" href="{% url 'cameras:gravador_editar' gravador.id %}"><i class="fas fa-gear"></i>Ajustes da loja</a></div>
 </header>
+{% if problemas or saude %}
+<section class="ca-card ca-saude">
+    <h2><i class="fas fa-stethoscope"></i>Saúde do agente <small>{{ gravador.saude_em|date:"H:i" }}</small></h2>
+    {% for nivel, texto in problemas %}<p class="{% if nivel == 'erro' %}ca-erro{% else %}ca-ambar{% endif %}"><i class="fas fa-triangle-exclamation"></i>{{ texto }}</p>{% endfor %}
+    {% if saude %}<ul class="ca-medidas ca-saude-lista">
+        {% if saude.detector %}<li><span>Análise</span><b>{{ saude.detector }}</b></li>{% endif %}
+        {% if saude.cpu is not None %}<li><span>Processador</span><b>{{ saude.cpu }}%</b></li>{% endif %}
+        {% if saude.memoria_mb %}<li><span>Memória do agente</span><b>{{ saude.memoria_mb }} MB</b></li>{% endif %}
+        {% if saude.disco_livre_gb is not None %}<li><span>Disco livre</span><b>{{ saude.disco_livre_gb }} GB</b></li>{% endif %}
+        {% if saude.fila_medicoes is not None %}<li><span>Medições esperando</span><b>{{ saude.fila_medicoes }}</b></li>{% endif %}
+        {% if saude.fila_clipes is not None %}<li><span>Vídeos esperando</span><b>{{ saude.fila_clipes }}</b></li>{% endif %}
+        {% if saude.ligado_ha_min is not None %}<li><span>Agente ligado há</span><b>{{ saude.ligado_ha_min }} min</b></li>{% endif %}
+        {% if saude.windows %}<li><span>Windows</span><b>{{ saude.windows }}</b></li>{% endif %}
+    </ul>{% endif %}
+</section>
+{% endif %}
 <div class="ca-grade-painel">
     <div class="ca-mosaico largo">
         {% for c in canais %}
         <button type="button" class="ca-tela" data-abrir="{{ c.id }}" data-titulo="{{ c.titulo }}" data-ia="{{ c.ia_ativa|yesno:'1,0' }}">
             <span class="ca-imagem"><img data-canal="{{ c.id }}" alt="{{ c.titulo }}" hidden><span class="ca-sem-imagem"><i class="fas fa-video-slash"></i><small>Aguardando imagem</small></span><video class="ca-video" data-ao-vivo="{{ c.id }}" muted playsinline hidden></video><em class="ca-selo-vivo" hidden>AO VIVO</em></span>
-            <span class="ca-legenda"><strong data-nome>{{ c.titulo }}</strong><small>{% if c.zonas %}{{ c.zonas|length }} área(s){% else %}sem área marcada{% endif %}</small></span>
+            <span class="ca-legenda">{% with s=c.saude %}{% if s %}<span class="ca-ponto {% if s.ok %}online{% else %}offline{% endif %}" title="{% if s.ok %}Com imagem{% if s.fps %} · {{ s.fps }} quadros/s{% endif %}{% else %}Sem imagem{% if s.erro %}: {{ s.erro }}{% endif %}{% endif %}"></span>{% endif %}{% endwith %}<strong data-nome>{{ c.titulo }}</strong><small>{% if c.zonas %}{{ c.zonas|length }} área(s){% else %}sem área marcada{% endif %}</small></span>
         </button>
         {% empty %}<div class="ca-vazio ca-card"><i class="fas fa-video-slash"></i><p>Nenhuma câmera nesta loja.</p></div>{% endfor %}
     </div>

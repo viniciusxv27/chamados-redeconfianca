@@ -14,6 +14,8 @@ A esteira tem quatro etapas, derivadas dos campos da ficha (``etapa_calculada``)
 
 Um sistema "OK" é registro operacional: o portal não testa o acesso externo.
 """
+import uuid
+
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
@@ -446,3 +448,28 @@ class ItemLoginErro(models.Model):
 
     class Meta:
         ordering = ['id']
+
+
+def _caminho_xml_gefac(instancia, nome):
+    # Nome impossível de adivinhar: o XML traz dados pessoais e só sai pela view do Acess.
+    return f'acess/gefac/{timezone.now():%Y/%m}/{uuid.uuid4().hex}.xml'
+
+
+class XmlGefac(models.Model):
+    """O XML do pedido de criação do perfil no GEFAC (Etapa 1). Guarda todos os enviados; o mais novo é o que vale."""
+
+    colaborador = models.ForeignKey(Colaborador, on_delete=models.CASCADE, related_name='xmls_gefac')
+    arquivo = models.FileField(upload_to=_caminho_xml_gefac, max_length=200)
+    nome_original = models.CharField(max_length=200)
+    tamanho = models.PositiveIntegerField(default=0)
+    enviado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='+')
+    enviado_em = models.DateTimeField(default=timezone.now, db_index=True)
+
+    class Meta:
+        ordering = ['-enviado_em', '-id']
+        verbose_name = 'XML do perfil GEFAC'
+        verbose_name_plural = 'XMLs do perfil GEFAC'
+
+    def __str__(self):
+        return f'{self.nome_original} ({self.colaborador})'

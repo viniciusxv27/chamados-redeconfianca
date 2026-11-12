@@ -10,7 +10,7 @@ from django.views.decorators.http import require_POST
 
 from django.utils.dateparse import parse_datetime
 
-from . import ia, servicos
+from . import avisos, ia, servicos
 from .models import AlertaCamera, ConfigCameras, Gravador
 
 
@@ -30,8 +30,10 @@ def _do_agente(view):
         if gravador is None:
             return JsonResponse({'erro': 'Token inválido.'}, status=401)
         # Desligado: responde sem imagem nenhuma, nem senha, e o agente fica só esperando.
-        if not ConfigCameras.atual().ativo:
+        config = ConfigCameras.atual()
+        if not config.ativo:
             return JsonResponse({'ativo': False, 'proximo_sinal': servicos.SINAL_NORMAL})
+        request.cameras_config = config
         return view(request, gravador)
     return _view
 
@@ -50,7 +52,12 @@ def sinal(request, gravador):
     if aviso:
         campos['erro_agente'] = gravador.erro_agente = aviso
     Gravador.objects.filter(pk=gravador.pk).update(**campos)
-    return JsonResponse(servicos.resposta_do_sinal(gravador, list(gravador.canais.all())))
+    if 'saude' in request.POST:
+        servicos.registrar_saude(gravador, request.POST['saude'])
+    gravador.versao_agente = campos['versao_agente']
+    # O sinal das lojas é o relógio do módulo: vigia de loja sem contato, vídeos atrasados e limpeza.
+    avisos.rotina()
+    return JsonResponse(servicos.resposta_do_sinal(gravador, list(gravador.canais.all()), request.cameras_config))
 
 
 @_do_agente
@@ -80,10 +87,14 @@ def receber_alerta(request, gravador):
         alerta, quer_video = servicos.registrar_alerta(gravador, canal, request.POST.get('tipo', ''), confianca,
                                                        request.POST.get('motivo', ''), foto,
                                                        detalhes=request.POST.get('detalhes'), grava_video=grava_video)
+    except servicos.AlertaIgnorado as motivo:
+        # Não é erro: a loja não quer este alerta. 200 para o agente não guardar e reenviar.
+        return JsonResponse({'ok': True, 'ignorado': str(motivo), 'quer_video': False})
     except servicos.AlertaRecusado as erro:
         return JsonResponse({'erro': str(erro)}, status=429 if 'Limite' in str(erro) else 400)
     if alerta.repeticoes == 1 and not grava_video:
         ia.disparar(alerta.id)          # sem vídeo a caminho, a IA olha a foto agora
+    avisos.avisar_alerta(alerta.id)
     return JsonResponse({'ok': True, 'alerta': alerta.id, 'repeticoes': alerta.repeticoes, 'quer_video': quer_video,
                          'antes': servicos.VIDEO_ANTES, 'depois': servicos.VIDEO_DEPOIS})
 

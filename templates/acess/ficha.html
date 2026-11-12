@@ -22,6 +22,39 @@
         {% if c.desligamento_situacao %}<p class="mt-3 text-sm p-2 rounded-lg bg-red-50 text-red-800"><i class="fas fa-user-xmark mr-1"></i>{{ c.desligamento_situacao }}{% if c.desligamento_em %} · execução {{ c.desligamento_em|date:"d/m/Y" }} (saída {{ c.saida_empresa|date:"d/m/Y" }}){% endif %}{% if c.desligamento_motivo %} — {{ c.desligamento_motivo }}{% endif %}</p>{% endif %}
     </div>
 
+    {# XML do pedido de criação do perfil GEFAC (Etapa 1) #}
+    <div class="ac-card overflow-hidden" id="acXmlGefac">
+        <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-2 flex-wrap">
+            <h2 class="font-bold text-sm"><i class="fas fa-file-code text-gray-400 mr-1.5"></i>XML do perfil GEFAC</h2>
+            {% if pode_xml_gefac %}
+            <form method="post" action="{% url 'acess:xml_gefac_anexar' c.id %}" enctype="multipart/form-data" class="flex items-center gap-2">
+                {% csrf_token %}<input type="hidden" name="voltar" value="{{ request.get_full_path }}#acXmlGefac">
+                <label class="ac-btn {% if xmls_gefac %}ac-btn-claro{% else %}ac-btn-pri{% endif %} ac-btn-mini cursor-pointer"><i class="fas fa-upload"></i>{% if xmls_gefac %}Anexar nova versão{% else %}Anexar XML{% endif %}
+                    <input type="file" name="xml" accept=".xml,application/xml,text/xml" class="hidden" onchange="this.form.submit()"></label>
+            </form>
+            {% endif %}
+        </div>
+        {% if xmls_gefac %}
+        <ul class="divide-y divide-gray-100 text-sm">
+            {% for x in xmls_gefac %}
+            <li class="px-4 py-2 flex items-center gap-3 flex-wrap {% if not forloop.first %}text-gray-400{% endif %}">
+                <a href="{% url 'acess:xml_gefac_baixar' c.id x.id %}" class="font-medium {% if forloop.first %}text-amber-700{% endif %} hover:underline"><i class="fas fa-file-arrow-down mr-1"></i>{{ x.nome_original }}</a>
+                {% if forloop.first %}<span class="ac-chip s-OK">atual</span>{% endif %}
+                <span class="text-[11px] text-gray-500">{{ x.tamanho|filesizeformat }} · {{ x.enviado_em|date:"d/m/Y H:i" }}{% if x.enviado_por %} · {{ x.enviado_por.get_full_name|default:x.enviado_por.email }}{% endif %}</span>
+                <a href="{% url 'acess:xml_gefac_baixar' c.id x.id %}?ver=1" target="_blank" rel="noopener" class="text-[11px] text-gray-500 hover:text-amber-700">ver</a>
+                {% if pode_xml_gefac %}
+                <form method="post" action="{% url 'acess:xml_gefac_remover' c.id x.id %}" class="ml-auto" onsubmit="return confirm('Remover o XML {{ x.nome_original|escapejs }}?')">
+                    {% csrf_token %}<input type="hidden" name="voltar" value="{{ request.get_full_path }}#acXmlGefac">
+                    <button class="text-[11px] text-gray-400 hover:text-red-600" title="Remover"><i class="fas fa-trash"></i></button></form>
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="px-4 py-3 text-sm text-gray-500">{% if c.etapa_calculada == 1 %}<i class="fas fa-paperclip text-amber-500 mr-1"></i>Anexe aqui o XML do pedido de criação do perfil no GEFAC.{% else %}Nenhum XML anexado.{% endif %}</p>
+        {% endif %}
+    </div>
+
     {# Sistemas #}
     <form method="post" action="{% url 'acess:ficha_acao' c.id %}" class="ac-card overflow-hidden" data-ficha-form data-autosalvar>
         {% csrf_token %}<input type="hidden" name="acao" value="sistemas"><input type="hidden" name="versao" value="{{ c.versao }}">

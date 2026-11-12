@@ -2,29 +2,102 @@
 {% block ca_titulo %}Alertas{% endblock %}
 {% block ca_conteudo %}
 <header class="ca-topo">
-    <div class="ca-titulo"><span class="ca-escudo"><i class="fas fa-bell"></i></span><div><h1>Alertas</h1><p>Abertos em ordem de prioridade. Cada alerta é uma suspeita: confira o vídeo antes de agir.</p></div></div>
-    <form method="get" class="ca-filtros">
-        <select name="status" aria-label="Situação" onchange="this.form.submit()">
+    <div class="ca-titulo"><span class="ca-escudo"><i class="fas fa-bell"></i></span><div><h1>Alertas</h1><p>{% if status == 'abertos' %}Abertos em ordem de prioridade.{% else %}{{ total }} alerta(s) neste filtro.{% endif %} Cada alerta é uma suspeita: confira o vídeo antes de agir.</p></div></div>
+    <form method="get" class="ca-filtros" id="caFiltros">
+        <label>Situação<select name="status" onchange="this.form.submit()">
             <option value="abertos" {% if status == 'abertos' %}selected{% endif %}>Abertos</option>
             <option value="todos" {% if status == 'todos' %}selected{% endif %}>Todos</option>
             {% for v, r in status_opcoes %}<option value="{{ v }}" {% if status == v %}selected{% endif %}>{{ r }}</option>{% endfor %}
-        </select>
-        <select name="loja" aria-label="Loja" onchange="this.form.submit()">
+        </select></label>
+        <label>Tipo<select name="tipo" onchange="this.form.submit()">
+            <option value="">Todos os tipos</option>
+            {% for v, r in tipo_opcoes %}<option value="{{ v }}" {% if tipo == v %}selected{% endif %}>{{ r }}</option>{% endfor %}
+        </select></label>
+        <label>Loja<select name="loja" onchange="this.form.submit()">
             <option value="">Todas as lojas</option>
             {% for l in lojas %}<option value="{{ l.id }}" {% if loja_id == l.id|stringformat:"d" %}selected{% endif %}>{{ l.loja }}</option>{% endfor %}
-        </select>
+        </select></label>
+        <label>De<input type="date" name="de" value="{{ de }}"></label>
+        <label>Até<input type="date" name="ate" value="{{ ate }}"></label>
+        <button class="ca-botao claro"><i class="fas fa-filter"></i>Filtrar</button>
     </form>
 </header>
+
+<nav class="ca-resumo-tipos" aria-label="Abertos por tipo">
+    <a href="?status=abertos" class="{% if status == 'abertos' and not tipo %}ativo{% endif %}"><b>{{ total_abertos }}</b>abertos</a>
+    {% for v, r, n in resumo %}<a href="?status=abertos&tipo={{ v }}" class="{% if tipo == v %}ativo{% endif %} {% if not n %}zero{% endif %}"><b>{{ n }}</b>{{ r|lower }}</a>{% endfor %}
+</nav>
+
+{% if total %}
+<form method="post" action="{% url 'cameras:alertas_lote' %}" id="caLote" class="ca-lote">{% csrf_token %}
+    <input type="hidden" name="consulta" value="{{ consulta }}">
+    <label class="ca-chave"><input type="checkbox" id="caTodosPagina"> Marcar os desta página</label>
+    <span class="ca-lote-qtd" id="caLoteQtd">Nenhum marcado</span>
+    <div class="ca-lote-acoes">
+        <button class="ca-botao claro pequeno" name="acao" value="ANALISE" data-precisa><i class="fas fa-magnifying-glass"></i>Em análise</button>
+        <select name="motivo_falso" aria-label="Motivo do falso alarme" id="caMotivoLote">
+            <option value="">Falso alarme por…</option>
+            {% for v, r in motivos_falso %}<option value="{{ v }}">{{ r }}</option>{% endfor %}
+        </select>
+        <button class="ca-botao claro pequeno" name="acao" value="FALSO" data-precisa id="caFalsoLote"><i class="fas fa-circle-check"></i>Falso alarme</button>
+        <button class="ca-botao perigo pequeno" name="acao" value="apagar" data-precisa data-confirmar="Apagar os alertas marcados, com fotos e vídeos? Não dá para desfazer."><i class="fas fa-trash"></i>Apagar</button>
+    </div>
+</form>
+<form method="post" action="{% url 'cameras:alertas_lote' %}" class="ca-lote-filtro" onsubmit="return confirm('Apagar todos os {{ total }} alerta(s) deste filtro, com fotos e vídeos? Não dá para desfazer.');">{% csrf_token %}
+    <input type="hidden" name="todos_do_filtro" value="1"><input type="hidden" name="acao" value="apagar"><input type="hidden" name="consulta" value="{{ consulta }}">
+    <input type="hidden" name="status" value="{{ status }}"><input type="hidden" name="tipo" value="{{ tipo }}"><input type="hidden" name="loja" value="{{ loja_id }}"><input type="hidden" name="de" value="{{ de }}"><input type="hidden" name="ate" value="{{ ate }}">
+    <button class="ca-link-perigo"><i class="fas fa-broom"></i>Limpar: apagar os {{ total }} alerta(s) deste filtro</button>
+</form>
+{% endif %}
+
 <div class="ca-alertas">
     {% for a in alertas %}
-    <a class="ca-card ca-alerta" href="{% url 'cameras:alerta_detalhe' a.id %}">
-        <span class="ca-imagem">{% if a.foto %}<img loading="lazy" src="{% url 'cameras:alerta_foto' a.id %}" alt="Imagem do alerta">{% else %}<span class="ca-sem-imagem"><i class="fas fa-image"></i><small>Sem imagem</small></span>{% endif %}
-            <em class="ca-confianca ca-prioridade-selo {% if a.prioridade >= 60 %}alta{% elif a.prioridade >= 35 %}media{% endif %}" title="Prioridade (detector + histórico + IA)">{{ a.prioridade }}</em>
-            {% if a.video_status == 'RECEBIDO' %}<em class="ca-selo-video" title="Tem os 3 minutos em vídeo"><i class="fas fa-film"></i>3 min</em>{% elif a.video_status == 'AGUARDANDO' %}<em class="ca-selo-video gravando" title="A loja está gravando"><i class="fas fa-circle"></i>gravando</em>{% endif %}</span>
-        <span class="ca-alerta-corpo"><strong>{{ a.gravador.loja }}</strong><span>{{ a.get_tipo_display }}</span><small>{{ a.canal.titulo|default:"" }} · {{ a.criado_em|date:"d/m/Y H:i" }}{% if a.repeticoes > 1 %} · {{ a.repeticoes }}x{% endif %}</small>
-            {% if a.ia_status == 'FEITA' %}<small class="ca-ia-linha"><i class="fas fa-wand-magic-sparkles"></i>IA: <b class="ca-classe {{ a.ia_classificacao }}">{% if a.ia_classificacao == 'furto_provavel' %}furto provável{% elif a.ia_classificacao == 'suspeito' %}suspeito{% elif a.ia_classificacao == 'normal' %}parece normal{% else %}inconclusivo{% endif %}</b> · risco {{ a.ia_risco }}%</small>{% elif a.ia_status == 'PENDENTE' %}<small class="ca-ia-linha"><i class="fas fa-spinner fa-spin"></i>IA analisando…</small>{% endif %}
-            <i class="ca-status {{ a.status }}">{{ a.get_status_display }}</i></span>
-    </a>
+    <div class="ca-alerta-caixa">
+        <label class="ca-marcar" title="Marcar"><input type="checkbox" name="ids" value="{{ a.id }}" form="caLote" aria-label="Marcar o alerta {{ a.id }}"></label>
+        <a class="ca-card ca-alerta" href="{% url 'cameras:alerta_detalhe' a.id %}">
+            <span class="ca-imagem">{% if a.foto %}<img loading="lazy" src="{% url 'cameras:alerta_foto' a.id %}" alt="Imagem do alerta">{% else %}<span class="ca-sem-imagem"><i class="fas fa-image"></i><small>Sem imagem</small></span>{% endif %}
+                <em class="ca-confianca ca-prioridade-selo {% if a.prioridade >= 60 %}alta{% elif a.prioridade >= 35 %}media{% endif %}" title="Prioridade (detector + histórico + IA)">{{ a.prioridade }}</em>
+                {% if a.video_status == 'RECEBIDO' %}<em class="ca-selo-video" title="Tem os 3 minutos em vídeo"><i class="fas fa-film"></i>3 min</em>{% elif a.video_status == 'AGUARDANDO' %}<em class="ca-selo-video gravando" title="A loja está gravando"><i class="fas fa-circle"></i>gravando</em>{% endif %}</span>
+            <span class="ca-alerta-corpo"><strong>{{ a.gravador.loja }}</strong><span>{{ a.get_tipo_display }}</span><small>{{ a.canal.titulo|default:"" }} · {{ a.criado_em|date:"d/m/Y H:i" }}{% if a.repeticoes > 1 %} · {{ a.repeticoes }}x até {{ a.ultimo_em|date:"H:i" }}{% endif %}</small>
+                {% if a.ia_status == 'FEITA' %}<small class="ca-ia-linha"><i class="fas fa-wand-magic-sparkles"></i>IA: <b class="ca-classe {{ a.ia_classificacao }}">{% if a.ia_classificacao == 'furto_provavel' %}furto provável{% elif a.ia_classificacao == 'suspeito' %}suspeito{% elif a.ia_classificacao == 'normal' %}parece normal{% else %}inconclusivo{% endif %}</b> · risco {{ a.ia_risco }}%</small>{% elif a.ia_status == 'PENDENTE' %}<small class="ca-ia-linha"><i class="fas fa-spinner fa-spin"></i>IA analisando…</small>{% endif %}
+                <i class="ca-status {{ a.status }}">{{ a.get_status_display }}</i></span>
+        </a>
+    </div>
     {% empty %}<div class="ca-vazio ca-card"><i class="fas fa-check-circle"></i><p>Nenhum alerta com esse filtro.</p></div>{% endfor %}
 </div>
+
+{% if pagina.has_other_pages %}
+<nav class="ca-paginas" aria-label="Páginas">
+    {% if pagina.has_previous %}<a class="ca-botao claro pequeno" href="?{{ consulta }}&pagina={{ pagina.previous_page_number }}"><i class="fas fa-chevron-left"></i>Anterior</a>{% endif %}
+    <span>Página {{ pagina.number }} de {{ pagina.paginator.num_pages }}</span>
+    {% if pagina.has_next %}<a class="ca-botao claro pequeno" href="?{{ consulta }}&pagina={{ pagina.next_page_number }}">Próxima<i class="fas fa-chevron-right"></i></a>{% endif %}
+</nav>
+{% endif %}
+
+<script>
+(function () {
+    var lote = document.getElementById('caLote');
+    if (!lote) return;
+    var caixas = Array.from(document.querySelectorAll('input[name=ids][form=caLote]'));
+    var todos = document.getElementById('caTodosPagina'), qtd = document.getElementById('caLoteQtd');
+    function contar() {
+        var n = caixas.filter(function (c) { return c.checked; }).length;
+        qtd.textContent = n ? n + ' marcado(s)' : 'Nenhum marcado';
+        lote.querySelectorAll('[data-precisa]').forEach(function (b) { b.disabled = !n; });
+        todos.checked = n && n === caixas.length;
+        caixas.forEach(function (c) { c.closest('.ca-alerta-caixa').classList.toggle('marcado', c.checked); });
+    }
+    caixas.forEach(function (c) { c.addEventListener('change', contar); });
+    todos.addEventListener('change', function () { caixas.forEach(function (c) { c.checked = todos.checked; }); contar(); });
+    var quem = null;
+    lote.addEventListener('click', function (e) { var b = e.target.closest('button[name=acao]'); if (b) quem = b; });
+    lote.addEventListener('submit', function (e) {
+        if (quem && quem.value === 'FALSO' && !document.getElementById('caMotivoLote').value) {
+            e.preventDefault(); alert('Escolha por que foram falsos alarmes: é com isso que a análise aprende.'); document.getElementById('caMotivoLote').focus(); return;
+        }
+        if (quem && quem.dataset.confirmar && !confirm(quem.dataset.confirmar)) e.preventDefault();
+    });
+    contar();
+})();
+</script>
 {% endblock %}

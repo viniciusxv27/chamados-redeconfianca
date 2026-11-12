@@ -284,7 +284,10 @@ class Metricas:
         if hora[:2] != self._hora_coberta:
             # A prova de que a câmera estava analisando nesta hora: sem ela, zero seria mentira.
             self._hora_coberta = hora[:2]
-            eventos.append({'tipo': 'COBERTURA', 'zona': '', 'inicio': agora, 'fim': agora, 'duracao': 0, 'pessoas': 0})
+            # A zona diz quais áreas esta câmera mediu nesta hora ("-" = nenhuma): o portal só conta zero com prova.
+            medidas = sorted({z.get('tipo', ZONA_MOSTRUARIO) for z in self.zonas} - {ZONA_MOSTRUARIO})
+            eventos.append({'tipo': 'COBERTURA', 'zona': ','.join(medidas) or '-', 'inicio': agora, 'fim': agora,
+                            'duracao': 0, 'pessoas': 0})
         self._entradas(eventos, pessoas, agora, aberta)
         self._nas_mesas(eventos, pessoas, agora)
         self._matinal(eventos, pessoas, agora, hora)

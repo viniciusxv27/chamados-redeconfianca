@@ -35,6 +35,22 @@
                     <span class="{% if c.dias_na_etapa >= 7 %}text-red-600 font-semibold{% elif c.dias_na_etapa >= 3 %}text-amber-700 font-semibold{% endif %}">há {{ c.dias_na_etapa }} dia(s) na etapa</span></p>
                 <details class="ac-det text-[11px] text-gray-500 mt-0.5"><summary class="text-amber-700">Detalhes do usuário</summary>
                     <p>CPF {{ c.cpf_formatado|default:"—" }} · {{ c.email|default:"sem e-mail" }} · {{ c.local.name|default:"sem local" }}{% if c.loja_vinculo %} · vínculo {{ c.loja_vinculo.name }}{% endif %}</p></details>
+                {% if etapa == 1 %}
+                <div class="mt-1.5 flex items-center gap-2 flex-wrap text-[11px]" data-xml-gefac>
+                    <span class="font-semibold text-gray-500 uppercase">XML do perfil GEFAC</span>
+                    {% if c.xml_gefac %}
+                    <a href="{% url 'acess:xml_gefac_baixar' c.id c.xml_gefac.id %}" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 hover:bg-emerald-100" title="Baixar"><i class="fas fa-file-code"></i>{{ c.xml_gefac.nome_original }}</a>
+                    <span class="text-gray-400">{{ c.xml_gefac.enviado_em|date:"d/m H:i" }}{% if c.xml_gefac.enviado_por %} · {{ c.xml_gefac.enviado_por.get_full_name|default:c.xml_gefac.enviado_por.email }}{% endif %}</span>
+                    {% else %}<span class="px-2 py-0.5 rounded-full bg-amber-50 text-amber-700"><i class="fas fa-paperclip mr-1"></i>sem XML</span>{% endif %}
+                    {% if p.gefac_concluir or p.sistemas_concluir %}
+                    <form method="post" action="{% url 'acess:xml_gefac_anexar' c.id %}" enctype="multipart/form-data" class="inline-flex">
+                        {% csrf_token %}<input type="hidden" name="voltar" value="{{ request.get_full_path }}">
+                        <label class="ac-btn ac-btn-claro ac-btn-mini cursor-pointer"><i class="fas fa-upload"></i>{% if c.xml_gefac %}Trocar XML{% else %}Anexar XML{% endif %}
+                            <input type="file" name="xml" accept=".xml,application/xml,text/xml" class="hidden" onchange="this.form.submit()"></label>
+                    </form>
+                    {% endif %}
+                </div>
+                {% endif %}
             </div>
 
             <div class="flex items-center gap-2 flex-wrap">
@@ -44,7 +60,7 @@
                 {% endif %}
 
                 {% if etapa == 1 and p.gefac_concluir or etapa == 1 and p.sistemas_concluir %}
-                <form method="post" action="{% url 'acess:esteira_acao' c.id %}" onsubmit="return confirm('Confirmar que o GEFAC de {{ c.nome|escapejs }} foi criado/aprovado?')">
+                <form method="post" action="{% url 'acess:esteira_acao' c.id %}" onsubmit="return confirm('{% if not c.xml_gefac %}Ainda não há XML do pedido anexado. {% endif %}Confirmar que o GEFAC de {{ c.nome|escapejs }} foi criado/aprovado?')">
                     {% csrf_token %}<input type="hidden" name="acao" value="gefac"><input type="hidden" name="versao" value="{{ c.versao }}"><input type="hidden" name="voltar" value="{{ request.get_full_path }}">
                     <button class="ac-btn ac-btn-pri ac-btn-mini"><i class="fas fa-check"></i>Concluir GEFAC</button></form>
                 {% elif etapa == 2 and p.login_preencher %}

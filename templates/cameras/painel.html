@@ -12,6 +12,10 @@
 {% if sem_contato %}
 <div class="ca-faixa" data-faixa-sem-agente><i class="fas fa-plug-circle-xmark"></i><div><strong>{{ sem_contato }} de {{ total_lojas }} lojas sem imagem porque o agente ainda não foi instalado.</strong> O gravador em modo Cloud só fala com o aplicativo, então é um computador na loja que lê as câmeras. Baixe o instalador da loja em <a href="{% url 'cameras:configuracao' %}">Configuração</a>; o resto é automático.</div></div>
 {% endif %}
+{% if com_problema %}
+<div class="ca-faixa" data-faixa-saude><i class="fas fa-stethoscope"></i><div><strong>{{ com_problema|length }} loja(s) precisam de atenção:</strong>
+    {% for g in com_problema %}<a href="{% url 'cameras:loja' g.id %}">{{ g.loja }}</a> ({% for nivel, texto in g.problemas %}{{ texto|lower }}{% if not forloop.last %}; {% endif %}{% endfor %}){% if not forloop.last %} · {% endif %}{% endfor %}</div></div>
+{% endif %}
 <section class="ca-kpis">
     <article class="ca-kpi"><span>Lojas online</span><strong><b id="caOnline">{{ online }}</b><small>/{{ total_lojas }}</small></strong></article>
     <article class="ca-kpi"><span>Câmeras</span><strong>{{ total_cameras }}</strong></article>

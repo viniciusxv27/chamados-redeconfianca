@@ -19,6 +19,12 @@
     <label>Matinal a partir de<input type="time" name="matinal_inicio" value="{{ gravador.matinal_inicio|time:'H:i' }}"></label>
     <label>Matinal antes de<input type="time" name="matinal_fim" value="{{ gravador.matinal_fim|time:'H:i' }}"></label>
     <label>Matinal dura ao menos (min)<input type="number" name="matinal_minutos" min="1" max="120" value="{{ gravador.matinal_minutos }}"></label>
+    <label>Tolerância de horário (min)<input type="number" name="tolerancia_horario" min="0" max="240" value="{{ gravador.tolerancia_horario }}"><small>Antes de abrir e depois de fechar, gente na loja é a equipe abrindo ou fechando: não vira alerta.</small></label>
+    <fieldset class="inteiro ca-tipos-alerta"><legend>Alertas desta loja</legend><input type="hidden" name="tem_tipos_alerta" value="1">
+        <label class="ca-chave"><input type="checkbox" checked disabled> Aparelho saiu do mostruário</label>
+        <label class="ca-chave"><input type="checkbox" name="alerta_fora_horario" value="1" {% if gravador.alerta_fora_horario %}checked{% endif %}> Pessoa com a loja fechada</label>
+        <label class="ca-chave"><input type="checkbox" name="alerta_permanencia" value="1" {% if gravador.alerta_permanencia %}checked{% endif %}> Permanência longa na área <small>(dispara com a equipe no mostruário; ligue só se a loja precisar)</small></label>
+    </fieldset>
     <div class="inteiro ca-fim"><a class="ca-botao claro" href="{% url 'cameras:configuracao' %}">Cancelar</a><button class="ca-botao">Salvar</button></div>
 </form>
 {% endblock %}

@@ -469,7 +469,7 @@ print('agente: o laço principal')
 import agente as ag_mod
 
 
-class Fim(Exception):
+class Fim(BaseException):  # o laço do agente não morre com Exception: o teste encerra por fora
     pass
 
 

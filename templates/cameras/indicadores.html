@@ -2,50 +2,110 @@
 {% block ca_titulo %}Indicadores{% endblock %}
 {% block ca_conteudo %}
 <header class="ca-topo">
-    <div class="ca-titulo"><span class="ca-escudo"><i class="fas fa-chart-bar"></i></span><div><h1>Indicadores das lojas</h1><p>{% if um_dia %}{{ de|date:"d/m/Y" }}{% else %}{{ de|date:"d/m/Y" }} a {{ ate|date:"d/m/Y" }}{% endif %} · medidos pela câmera, sem identificar ninguém</p></div></div>
+    <div class="ca-titulo"><span class="ca-escudo"><i class="fas fa-chart-bar"></i></span><div><h1>Indicadores das lojas</h1><p>{% if um_dia %}{{ de|date:"d/m/Y" }}{% else %}{{ de|date:"d/m/Y" }} a {{ ate|date:"d/m/Y" }}{% endif %} · medidos pela câmera, conferidos com o ponto, sem identificar ninguém</p></div></div>
     <form method="get" class="ca-filtros">
         <label>De<input type="date" name="de" value="{{ de|date:'Y-m-d' }}" max="{{ hoje|date:'Y-m-d' }}"></label>
         <label>Até<input type="date" name="ate" value="{{ ate|date:'Y-m-d' }}" max="{{ hoje|date:'Y-m-d' }}"></label>
         <label>Loja<select name="loja"><option value="">Todas</option>{% for l in lojas %}<option value="{{ l.id }}" {% if loja_id == l.id|stringformat:"d" %}selected{% endif %}>{{ l.loja }}</option>{% endfor %}</select></label>
         <button class="ca-botao">Aplicar</button>
+        <a class="ca-botao claro" href="?de={{ de|date:'Y-m-d' }}&ate={{ ate|date:'Y-m-d' }}&loja={{ loja_id }}&formato=csv" title="Uma linha por loja e dia"><i class="fas fa-file-csv"></i>CSV</a>
     </form>
 </header>
+<nav class="ca-resumo-tipos" aria-label="Períodos">
+    {% for rotulo, a, b in atalhos %}<a href="?de={{ a|date:'Y-m-d' }}&ate={{ b|date:'Y-m-d' }}&loja={{ loja_id }}" class="{% if a == de and b == ate %}ativo{% endif %}">{{ rotulo }}</a>{% endfor %}
+</nav>
+
 <section class="ca-kpis ca-kpis-4">
-    <article class="ca-kpi"><span>Entradas pela porta</span><strong data-total-entradas>{% if total_entradas is None %}—{% else %}{{ total_entradas }}{% endif %}</strong></article>
-    <article class="ca-kpi"><span>Lojas com matinal</span><strong>{% if matinal_medidas %}{{ matinal_com }}<small>/{{ matinal_medidas }} medidas</small>{% else %}—{% endif %}</strong></article>
-    <article class="ca-kpi"><span>Tempo médio na mesa</span><strong class="ca-kpi-tempo">{{ media_geral }}</strong></article>
-    <article class="ca-kpi"><span>Lojas com medição</span><strong>{{ lojas_com_medicao }}<small>/{{ total_lojas }}</small></strong></article>
+    <article class="ca-kpi"><span>Entradas pela porta</span><strong data-total-entradas>{% if total_entradas is None %}—{% else %}{{ total_entradas }}{% endif %}</strong>
+        {% if total_clientes is not None %}<small class="ca-kpi-nota">≈ {{ total_clientes }} clientes, sem a equipe (ponto)</small>{% endif %}
+        {% if anterior.entradas is not None %}<small class="ca-variacao {% if anterior.entradas >= 0 %}sobe{% else %}desce{% endif %}">{% if anterior.entradas >= 0 %}+{% endif %}{{ anterior.entradas }}% vs período anterior</small>{% endif %}</article>
+    <article class="ca-kpi"><span>Matinal</span><strong>{% if matinal_medidos %}{{ matinal_dias }}<small>/{{ matinal_medidos }} dias medidos</small>{% else %}—{% endif %}</strong>{% if matinal_medidas %}<small class="ca-kpi-nota">{{ matinal_com }} de {{ matinal_medidas }} lojas fizeram</small>{% endif %}</article>
+    <article class="ca-kpi"><span>Atendimento na mesa (mediana)</span><strong class="ca-kpi-tempo" data-mediana>{{ mediana_geral }}</strong><small class="ca-kpi-nota">{% if total_atendimentos %}{{ total_atendimentos }} atendimentos · média {{ media_geral }}{% else %}sem atendimento medido{% endif %}</small>
+        {% if anterior.atendimentos is not None %}<small class="ca-variacao {% if anterior.atendimentos >= 0 %}sobe{% else %}desce{% endif %}">{% if anterior.atendimentos >= 0 %}+{% endif %}{{ anterior.atendimentos }}% atendimentos vs anterior</small>{% endif %}</article>
+    <article class="ca-kpi"><span>Lojas com medição</span><strong>{{ lojas_com_medicao }}<small>/{{ total_lojas }}</small></strong>{% if lojas_com_medicao %}<small class="ca-kpi-nota">câmeras analisando em {{ cobertura_media }}% do horário</small>{% endif %}</article>
 </section>
+
+{% if por_hora %}
+<section class="ca-card ca-bloco ca-horas">
+    <h2><i class="fas fa-clock"></i>Ao longo do dia <small>soma do período</small></h2>
+    <div class="ca-horas-grade" role="table" aria-label="Entradas e atendimentos por hora">
+        {% for h in por_hora %}
+        <div class="ca-hora" role="row" title="{{ h.hora }}h: {{ h.entradas }} entrada(s), {{ h.atendimentos }} atendimento(s)">
+            <div class="ca-hora-barras"><span class="e" style="height:{{ h.pe }}%"></span><span class="a" style="height:{{ h.pa }}%"></span></div>
+            <small>{{ h.hora }}h</small>
+        </div>
+        {% endfor %}
+    </div>
+    <p class="ca-legenda-horas"><span class="e"></span>Entradas <span class="a"></span>Atendimentos na mesa</p>
+</section>
+{% endif %}
+
 <section class="ca-card ca-tabela-caixa">
+    <div class="ca-tabela-rolagem">
     <table class="ca-tabela ca-indicadores">
-        <thead><tr><th>Loja</th><th class="num">Entradas</th><th>Pico</th><th>Matinal</th><th class="num">Atendimentos</th><th>Tempo médio</th><th>Mais longo</th></tr></thead>
+        <thead><tr><th>Loja</th><th class="num" title="Horas do horário da loja em que alguma câmera analisou">Cobertura</th><th class="num">Entradas</th><th class="num" title="Entradas menos as batidas de entrada da equipe no ponto">Clientes</th><th>Pico</th><th>Matinal</th><th class="num">Atendimentos</th><th>Mediana</th><th>Média</th><th>Mais longo</th></tr></thead>
         <tbody>
         {% for l in linhas %}
             <tr data-loja="{{ l.gravador.id }}">
-                <td><a href="{% url 'cameras:loja' l.gravador.id %}"><strong>{{ l.gravador.loja }}</strong></a></td>
-                <td class="num">{% if l.entradas_aviso %}<small class="ca-falta">{{ l.entradas_aviso }}</small>{% else %}{{ l.entradas }}{% endif %}</td>
+                <td><a href="?de={{ de|date:'Y-m-d' }}&ate={{ ate|date:'Y-m-d' }}&loja={{ l.gravador.id }}"><strong>{{ l.gravador.loja }}</strong></a>{% if not l.tem_ponto %}<small class="ca-falta" title="Sem ponto do Tangerino para a equipe desta loja">sem ponto</small>{% endif %}</td>
+                <td class="num">{% if l.cobertura %}<span class="ca-cobertura {% if l.cobertura < 80 %}parcial{% endif %}">{{ l.cobertura }}%</span>{% else %}<small class="ca-falta">—</small>{% endif %}</td>
+                <td class="num">{% if l.entradas_aviso %}<small class="ca-falta">{{ l.entradas_aviso }}</small>{% else %}{{ l.entradas }}{% if l.parcial_entradas %}<small class="ca-ambar" title="A câmera da porta analisou {{ l.cobertura_porta }}% do horário">parcial · {{ l.cobertura_porta }}%</small>{% endif %}{% endif %}</td>
+                <td class="num">{% if l.clientes is not None %}{{ l.clientes }}<small title="Batidas de entrada no ponto">−{{ l.entradas_equipe }} equipe</small>{% else %}—{% endif %}</td>
                 <td>{{ l.pico|default:"—" }}</td>
                 <td>{% if l.matinal_aviso %}<small class="ca-falta">{{ l.matinal_aviso }}</small>
                     {% elif l.matinal_dias %}<span class="ca-sim"><i class="fas fa-check-circle"></i>{% if um_dia %}Sim{% for m in l.matinais %}{% if forloop.first %} · {{ m.inicio|date:"H:i" }}, {{ m.duracao }}, {{ m.pessoas }} pessoas{% endif %}{% endfor %}{% else %}{{ l.matinal_dias }} de {{ l.matinal_medidos }} dias{% endif %}</span>
-                    {% else %}<span class="ca-nao"><i class="fas fa-circle-xmark"></i>{% if um_dia %}Não{% else %}0 de {{ l.matinal_medidos }} dias{% endif %}</span>{% endif %}</td>
-                <td class="num">{% if l.mesas_aviso %}<small class="ca-falta">{{ l.mesas_aviso }}</small>{% else %}{{ l.atendimentos }}{% endif %}</td>
+                    {% else %}<span class="ca-nao"><i class="fas fa-circle-xmark"></i>{% if um_dia %}Não{% else %}0 de {{ l.matinal_medidos }} dias{% endif %}</span>{% endif %}
+                    {% if l.matinal_sem_equipe %}<small class="ca-falta">{{ l.matinal_sem_equipe }} dia(s) sem equipe no horário</small>{% endif %}</td>
+                <td class="num">{% if l.mesas_aviso %}<small class="ca-falta">{{ l.mesas_aviso }}</small>{% else %}{{ l.atendimentos }}{% if l.parcial_mesas %}<small class="ca-ambar" title="As câmeras das mesas analisaram {{ l.cobertura_mesa }}% do horário">parcial · {{ l.cobertura_mesa }}%</small>{% endif %}{% if l.longos %}<small class="ca-falta" title="Cadeira ocupada por mais de {{ atendimento_maximo_min }} min: funcionário sentado ou objeto. Fora da média.">+{{ l.longos }} ocupação longa</small>{% endif %}{% endif %}</td>
+                <td>{{ l.mediana }}</td>
                 <td>{{ l.media }}</td>
                 <td>{{ l.maior }}</td>
             </tr>
             {% if l.por_mesa|length > 1 %}
-            {% for mesa in l.por_mesa %}<tr class="ca-subinha"><td>{{ mesa.nome }}</td><td></td><td></td><td></td><td class="num">{{ mesa.quantos }}</td><td>{{ mesa.media }}</td><td>{{ mesa.maior }}</td></tr>{% endfor %}
+            {% for mesa in l.por_mesa %}<tr class="ca-subinha"><td>{{ mesa.nome }}</td><td></td><td></td><td></td><td></td><td></td><td class="num">{{ mesa.quantos }}</td><td>{{ mesa.mediana }}</td><td>{{ mesa.media }}</td><td>{{ mesa.maior }}</td></tr>{% endfor %}
             {% endif %}
-        {% empty %}<tr><td colspan="7" class="ca-vazio-texto">Nenhuma loja cadastrada.</td></tr>{% endfor %}
+        {% empty %}<tr><td colspan="10" class="ca-vazio-texto">Nenhuma loja cadastrada.</td></tr>{% endfor %}
         </tbody>
     </table>
+    </div>
 </section>
+
+{% if uma_loja and not um_dia %}
+{% for l in linhas %}
+<section class="ca-card ca-tabela-caixa">
+    <h2><i class="fas fa-calendar-days"></i>{{ l.gravador.loja }}, dia a dia</h2>
+    <div class="ca-tabela-rolagem">
+    <table class="ca-tabela ca-indicadores">
+        <thead><tr><th>Dia</th><th class="num">Cobertura</th><th class="num">Entradas</th><th class="num">Clientes</th><th class="num">Atendimentos</th><th>Mediana</th><th>Matinal</th><th class="num">Equipe (ponto)</th><th>1ª batida</th></tr></thead>
+        <tbody>
+        {% for d in l.por_dia %}
+        <tr class="{% if not d.cobertura %}ca-dia-vazio{% endif %}">
+            <td>{{ d.data|date:"D d/m" }}</td>
+            <td class="num">{% if d.cobertura %}<span class="ca-cobertura {% if d.cobertura < 80 %}parcial{% endif %}">{{ d.cobertura }}%</span>{% else %}<small class="ca-falta">sem medição</small>{% endif %}</td>
+            <td class="num">{{ d.entradas|default_if_none:"—" }}</td>
+            <td class="num">{{ d.clientes|default_if_none:"—" }}</td>
+            <td class="num">{{ d.atendimentos|default_if_none:"—" }}</td>
+            <td>{% if d.atendimentos %}{{ d.mediana }}{% else %}—{% endif %}</td>
+            <td>{% if d.matinal == 'sim' %}<span class="ca-sim"><i class="fas fa-check-circle"></i>Sim</span>{% elif d.matinal == 'nao' %}<span class="ca-nao"><i class="fas fa-circle-xmark"></i>Não</span>{% elif d.matinal == 'sem_equipe' %}<small class="ca-falta">sem equipe</small>{% else %}<small class="ca-falta">—</small>{% endif %}</td>
+            <td class="num">{{ d.equipe|default_if_none:"—" }}</td>
+            <td>{{ d.primeira|time:"H:i"|default:"—" }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+</section>
+{% endfor %}
+{% endif %}
+
 <section class="ca-card ca-bloco ca-notas">
     <h2><i class="fas fa-circle-info"></i>Como ler</h2>
     <ul>
-        <li><b>Entradas:</b> pessoas que cruzaram a porta para dentro com a loja aberta. Inclui funcionários e quem entra de novo, então é uma estimativa de clientes.</li>
-        <li><b>Matinal:</b> 3 ou mais pessoas na área marcada da tela, no horário configurado da loja. A câmera vê as pessoas reunidas ali, não para onde elas olham.</li>
-        <li><b>Tempo na mesa:</b> de quando alguém ocupa a cadeira marcada até sair, a partir de 1 minuto.</li>
-        <li><b>Sem medição:</b> a câmera não estava analisando no período, o que é diferente de zero.</li>
+        <li><b>Cobertura:</b> parte do horário da loja em que a câmera analisou. Cada número só conta as horas em que a câmera <i>daquela área</i> (porta, mesa ou tela) estava ligada. Abaixo de 80% aparece como <span class="ca-ambar">parcial</span>.</li>
+        <li><b>Entradas:</b> pessoas que cruzaram a porta para dentro com a loja aberta. Inclui funcionários e quem entra de novo. <b>Clientes</b> desconta as batidas de entrada da equipe no ponto (Tangerino), que também passam pela porta: continua sendo estimativa.</li>
+        <li><b>Matinal:</b> 3 ou mais pessoas na área marcada da tela, no horário configurado da loja. A câmera vê as pessoas reunidas ali, não para onde elas olham. "Sem equipe" é dia em que ninguém da loja tinha ponto batido antes do fim da janela.</li>
+        <li><b>Tempo na mesa:</b> de quando alguém ocupa a cadeira do cliente até sair, de 1 a {{ atendimento_maximo_min }} minutos. A mediana é o atendimento típico (não se deixa puxar por casos extremos). Mais que {{ atendimento_maximo_min }} min fica de fora, como "ocupação longa". Cada mesa é contada por câmera.</li>
+        <li><b>Sem medição</b> é diferente de zero: a câmera não estava analisando.</li>
     </ul>
 </section>
 {% endblock %}

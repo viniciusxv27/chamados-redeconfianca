@@ -87,6 +87,10 @@
                 <dt>Nota do detector da loja</dt><dd><span class="ca-barra"><span style="width:{{ alerta.confianca }}%"></span></span>{{ alerta.confianca }}%</dd>
                 <dt>O que o histórico diz</dt><dd><span class="ca-barra"><span style="width:{{ historico.chance }}%"></span></span>{{ historico.chance }}% de alertas assim se confirmaram
                     <small class="ca-nota">{{ historico.decisoes_canal }} decisões nesta câmera, {{ historico.decisoes_loja }} na loja · rigor da câmera: {{ rigor }}{% if motivos_camera %} · falsos mais comuns: {% for m, n in motivos_camera %}{{ m|lower }} ({{ n }}){% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}</small></dd>
+                {% if equipe or na_tolerancia %}<dt>Ponto da equipe nesse horário</dt><dd class="ca-equipe">
+                    {% if na_tolerancia %}<small class="ca-ambar">Dentro da tolerância do horário: equipe abrindo ou fechando a loja.</small>{% endif %}
+                    {% for p in equipe %}<span><i class="fas fa-id-badge"></i>{{ p.nome }} <small>{{ p.como }} · {{ p.horarios|join:", " }}</small></span>{% endfor %}
+                    {% if equipe and alerta.tipo == 'FORA_HORARIO' %}<small class="ca-nota">Com gente da equipe de ponto batido, é muito provável que seja ela.</small>{% endif %}</dd>{% endif %}
                 {% if medidas %}<dt>O que o detector mediu</dt><dd><ul class="ca-medidas">{% for rotulo, v in medidas %}<li><span>{{ rotulo }}</span><b>{% if v is True %}sim{% elif v is False %}não{% else %}{{ v }}{% endif %}</b></li>{% endfor %}</ul></dd>{% endif %}
                 {% if alerta.tratado_por %}<dt>Tratado por</dt><dd>{{ alerta.tratado_por.get_full_name }} em {{ alerta.tratado_em|date:"d/m/Y H:i" }}{% if alerta.motivo_falso %} · {{ alerta.get_motivo_falso_display }}{% endif %}</dd>{% endif %}
             </dl>

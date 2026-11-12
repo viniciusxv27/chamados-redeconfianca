@@ -4,18 +4,20 @@ from datetime import datetime, timedelta
 
 from django.conf import settings
 from django.contrib import messages
+from django.core.paginator import Paginator
 from django.db.models import Count, Q
 from django.core.files.storage import default_storage
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from users.models import Sector
 
-from . import aprendizado, ia, servicos
+from . import aprendizado, ia, ponto, servicos
 from .importacao import importar_planilha
-from .indicadores import indicadores_do_periodo
+from .indicadores import csv_do_periodo, indicadores_do_periodo
 from .models import AcessoCamera, AlertaCamera, Canal, ConfigCameras, Gravador
 from .permissoes import exige_superadmin
 
@@ -36,6 +38,7 @@ def painel(request):
     for g in gravadores:
         g.canais_ativos = [c for c in g.canais.all() if c.ativo]
         g.principal = g.canais_ativos[0] if g.canais_ativos else None
+        g.problemas = servicos.problemas_de_saude(g) if g.online else []
     com_equipamento = [g for g in gravadores if g.tem_equipamento]
     sem_contato = [g for g in com_equipamento if not g.ultimo_contato]
     servicos.marcar_vendo_mosaico()
@@ -46,6 +49,7 @@ def painel(request):
         'total_lojas': len(com_equipamento), 'online': sum(g.online for g in com_equipamento),
         'total_cameras': sum(len(g.canais_ativos) for g in com_equipamento),
         'novos': sum(g.novos for g in gravadores),
+        'com_problema': [g for g in com_equipamento if g.problemas],
         'recentes': AlertaCamera.objects.select_related('gravador', 'canal').filter(status__in=['NOVO', 'ANALISE'])[:8],
     })
 
@@ -81,12 +85,17 @@ def fotos(request):
 def loja(request, gravador_id):
     gravador = get_object_or_404(Gravador, pk=gravador_id)
     canais = list(gravador.canais.filter(ativo=True))
+    saude_cameras = gravador.saude_atual.get('cameras') or {}
+    for c in canais:
+        c.saude = saude_cameras.get(str(c.numero)) if isinstance(saude_cameras, dict) else None
     servicos.marcar_vendo_loja(gravador.id)
     _registrar(request, 'ver_loja', gravador)
     return render(request, 'cameras/loja.html', {
         'aba': 'painel', 'gravador': gravador, 'canais': canais, 'config': ConfigCameras.atual(),
         'zonas_json': {c.id: c.zonas for c in canais},
         'alertas': gravador.alertas.select_related('canal')[:10],
+        'problemas': servicos.problemas_de_saude(gravador) if gravador.online else [],
+        'saude': gravador.saude_atual,
     })
 
 
@@ -191,10 +200,18 @@ def indicadores(request):
     ate = min(ate, de + timedelta(days=92))
     loja_id = request.GET.get('loja', '')
     dados = indicadores_do_periodo(de, ate, int(loja_id) if loja_id.isdigit() else None)
+    if request.GET.get('formato') == 'csv':
+        _registrar(request, 'exportar_indicadores')
+        resposta = HttpResponse(csv_do_periodo(dados), content_type='text/csv; charset=utf-8')
+        resposta['Content-Disposition'] = f'attachment; filename="indicadores-cameras-{de:%Y%m%d}-{ate:%Y%m%d}.csv"'
+        return resposta
     _registrar(request, 'ver_indicadores')
     return render(request, 'cameras/indicadores.html', {
         'aba': 'indicadores', 'de': de, 'ate': ate, 'loja_id': loja_id, 'um_dia': de == ate, 'hoje': hoje,
-        'lojas': Gravador.objects.filter(tem_equipamento=True), **dados,
+        'uma_loja': loja_id.isdigit(), 'lojas': Gravador.objects.filter(tem_equipamento=True),
+        'atalhos': [('Hoje', hoje, hoje), ('Ontem', hoje - timedelta(days=1), hoje - timedelta(days=1)),
+                    ('7 dias', hoje - timedelta(days=6), hoje), ('30 dias', hoje - timedelta(days=29), hoje)],
+        **dados,
     })
 
 
@@ -204,23 +221,82 @@ def _vencer_atrasados():
         ia.disparar(alerta_id)
 
 
+def _alertas_do_filtro(get):
+    """(queryset, filtros) a partir da URL: situação, loja, tipo e período."""
+    filtros = {'status': get.get('status', 'abertos'), 'loja': get.get('loja', ''), 'tipo': get.get('tipo', ''),
+               'de': get.get('de', ''), 'ate': get.get('ate', '')}
+    lista = AlertaCamera.objects.select_related('gravador', 'canal', 'tratado_por')
+    if filtros['status'] == 'abertos':
+        # Abertos: o mais provável primeiro (detector + histórico + IA de visão).
+        lista = lista.filter(status__in=['NOVO', 'ANALISE']).order_by('-prioridade', '-criado_em')
+    elif filtros['status'] in AlertaCamera.Status.values:
+        lista = lista.filter(status=filtros['status'])
+    if filtros['loja'].isdigit():
+        lista = lista.filter(gravador_id=int(filtros['loja']))
+    if filtros['tipo'] in AlertaCamera.Tipo.values:
+        lista = lista.filter(tipo=filtros['tipo'])
+    for campo, lookup in (('de', 'criado_em__date__gte'), ('ate', 'criado_em__date__lte')):
+        try:
+            lista = lista.filter(**{lookup: datetime.strptime(filtros[campo], '%Y-%m-%d').date()})
+        except ValueError:
+            filtros[campo] = ''
+    return lista, filtros
+
+
 @exige_superadmin
 def alertas(request):
     _vencer_atrasados()
-    status = request.GET.get('status', 'abertos')
-    lista = AlertaCamera.objects.select_related('gravador', 'canal', 'tratado_por')
-    if status == 'abertos':
-        # Abertos: o mais provável primeiro (detector + histórico + IA de visão).
-        lista = lista.filter(status__in=['NOVO', 'ANALISE']).order_by('-prioridade', '-criado_em')
-    elif status in AlertaCamera.Status.values:
-        lista = lista.filter(status=status)
-    loja_id = request.GET.get('loja', '')
-    if loja_id.isdigit():
-        lista = lista.filter(gravador_id=int(loja_id))
+    lista, filtros = _alertas_do_filtro(request.GET)
+    pagina = Paginator(lista, 60).get_page(request.GET.get('pagina'))
+    abertos = AlertaCamera.objects.filter(status__in=['NOVO', 'ANALISE'])
+    resumo = {r['tipo']: r['n'] for r in abertos.values('tipo').annotate(n=Count('id')).order_by()}
+    consulta = request.GET.copy()
+    consulta.pop('pagina', None)
     return render(request, 'cameras/alertas.html', {
-        'aba': 'alertas', 'alertas': lista[:200], 'status': status, 'loja_id': loja_id,
-        'status_opcoes': AlertaCamera.Status.choices, 'lojas': Gravador.objects.filter(tem_equipamento=True),
+        'aba': 'alertas', 'alertas': pagina, 'pagina': pagina, 'total': pagina.paginator.count, **filtros,
+        'loja_id': filtros['loja'], 'consulta': consulta.urlencode(),
+        'status_opcoes': AlertaCamera.Status.choices, 'tipo_opcoes': AlertaCamera.Tipo.choices,
+        'motivos_falso': AlertaCamera.MotivoFalso.choices,
+        'lojas': Gravador.objects.filter(tem_equipamento=True),
+        'resumo': [(v, r, resumo.get(v, 0)) for v, r in AlertaCamera.Tipo.choices],
+        'total_abertos': sum(resumo.values()),
     })
+
+
+@exige_superadmin
+@require_POST
+def alertas_lote(request):
+    """Tratar ou apagar vários alertas de uma vez: os marcados, ou todos os do filtro (``todos_do_filtro=1``)."""
+    acao = request.POST.get('acao', '')
+    if request.POST.get('todos_do_filtro') == '1':
+        alvo, _filtros = _alertas_do_filtro(request.POST)
+    else:
+        ids = [int(i) for i in request.POST.getlist('ids') if i.isdigit()][:1000]
+        alvo = AlertaCamera.objects.filter(id__in=ids)
+    consulta = request.POST.get('consulta', '')
+    voltar = redirect(reverse('cameras:alertas') + (f'?{consulta}' if consulta else ''))
+    quantos = alvo.count()
+    if not quantos:
+        messages.error(request, 'Nenhum alerta selecionado.')
+        return voltar
+    if acao == 'apagar':
+        apagados = servicos.apagar_alertas(alvo.order_by())
+        _registrar(request, 'apagar_alertas', detalhe=f'{apagados} alerta(s)')
+        messages.success(request, f'{apagados} alerta(s) apagado(s), com fotos e vídeos.')
+    elif acao in ('FALSO', 'ANALISE'):
+        motivo = request.POST.get('motivo_falso', '')
+        if acao == 'FALSO' and motivo not in AlertaCamera.MotivoFalso.values:
+            messages.error(request, 'Diga por que foram falsos alarmes: é com isso que a análise aprende.')
+            return voltar
+        feitos = alvo.update(status=acao, motivo_falso=motivo if acao == 'FALSO' else '', tratado_por=request.user,
+                             tratado_em=timezone.now())
+        if acao == 'FALSO':
+            aprendizado.esquecer()
+        _registrar(request, 'tratar_alertas_lote', detalhe=f'{feitos} {acao}')
+        messages.success(request, f'{feitos} alerta(s) marcado(s) como "{AlertaCamera.Status(acao).label}".')
+    else:
+        messages.error(request, 'Ação desconhecida.')
+    return voltar
 
 
 @exige_superadmin
@@ -258,6 +334,8 @@ def alerta_detalhe(request, alerta_id):
         'quadros': [{'indice': i, 'segundo': q.get('segundo', 0), 'no_video': max(0, alerta.video_evento_segundo + q.get('segundo', 0))}
                     for i, q in enumerate(alerta.quadros or [])],
         'medidas': _medidas(alerta.detalhes),
+        'equipe': ponto.equipe_no_momento(alerta.gravador, alerta.criado_em),
+        'na_tolerancia': alerta.tipo == 'FORA_HORARIO' and alerta.gravador.na_tolerancia(alerta.criado_em),
     })
 
 
@@ -393,6 +471,30 @@ def alerta_foto(request, alerta_id):
 @exige_superadmin
 def configuracao(request):
     config = ConfigCameras.atual()
+    if request.method == 'POST' and request.POST.get('bloco') == 'avisos':
+        config.aviso_whatsapp = request.POST.get('aviso_whatsapp') == '1'
+        config.aviso_offline = request.POST.get('aviso_offline') == '1'
+        config.aviso_destino = request.POST.get('aviso_destino', '').strip()[:120]
+        try:
+            config.aviso_prioridade = max(0, min(100, int(request.POST.get('aviso_prioridade') or 60)))
+            config.aviso_offline_minutos = max(5, min(720, int(request.POST.get('aviso_offline_minutos') or 30)))
+        except ValueError:
+            messages.error(request, 'Prioridade e minutos precisam ser números.')
+            return redirect('cameras:configuracao')
+        if (config.aviso_whatsapp or config.aviso_offline) and not config.aviso_destino:
+            messages.warning(request, 'Sem WhatsApp de destino, os avisos ficam só nas notificações do portal.')
+        config.alterado_por = request.user
+        config.save()
+        _registrar(request, 'configurar_avisos')
+        messages.success(request, 'Avisos salvos.')
+        return redirect('cameras:configuracao')
+    if request.method == 'POST' and request.POST.get('bloco') == 'atualizacao':
+        config.atualizar_agentes = request.POST.get('atualizar_agentes') == '1'
+        config.alterado_por = request.user
+        config.save()
+        _registrar(request, 'atualizacao_automatica_' + ('ligar' if config.atualizar_agentes else 'desligar'))
+        messages.success(request, f'Atualização automática {"ligada: as lojas com agente 3.1 ou mais novo instalam a versão publicada sozinhas" if config.atualizar_agentes else "desligada"}.')
+        return redirect('cameras:configuracao')
     if request.method == 'POST':
         config.ativo = request.POST.get('ativo') == '1'
         config.alterado_por = request.user
@@ -401,9 +503,14 @@ def configuracao(request):
         messages.success(request, 'Módulo ligado: as lojas com agente começam a mandar imagem.' if config.ativo
                          else 'Módulo desligado: as lojas pararam de mandar imagem e alerta.')
         return redirect('cameras:configuracao')
+    gravadores = list(Gravador.objects.select_related('setor').prefetch_related('canais')
+                      .annotate(canais_ativos_qtd=Count('canais', filter=Q(canais__ativo=True))))
+    for g in gravadores:
+        g.problemas = servicos.problemas_de_saude(g) if g.online else []
+        g.desatualizado = bool(config.instalador_versao and g.versao_agente
+                               and servicos._versao(g.versao_agente) < servicos._versao(config.instalador_versao))
     return render(request, 'cameras/configuracao.html', {
-        'aba': 'configuracao', 'config': config,
-        'gravadores': Gravador.objects.select_related('setor').annotate(canais_ativos_qtd=Count('canais', filter=Q(canais__ativo=True))),
+        'aba': 'configuracao', 'config': config, 'gravadores': gravadores,
         'token_novo': request.session.pop('cameras_token_novo', None),
         'acessos': AcessoCamera.objects.select_related('user', 'gravador')[:30],
         'endereco': request.build_absolute_uri('/').rstrip('/'),
@@ -455,8 +562,14 @@ def gravador_editar(request, gravador_id):
         gravador.matinal_fim = request.POST.get('matinal_fim') or gravador.matinal_fim
         try:
             gravador.matinal_minutos = max(1, min(120, int(request.POST.get('matinal_minutos') or gravador.matinal_minutos)))
+            if request.POST.get('tolerancia_horario', '') != '':
+                gravador.tolerancia_horario = max(0, min(240, int(request.POST['tolerancia_horario'])))
         except ValueError:
             pass
+        # Caixa desmarcada não vem no formulário: só mexe nos tipos quando a tela os mostrou.
+        if request.POST.get('tem_tipos_alerta') == '1':
+            gravador.alerta_fora_horario = request.POST.get('alerta_fora_horario') == '1'
+            gravador.alerta_permanencia = request.POST.get('alerta_permanencia') == '1'
         # Em branco mantém a senha atual: ela nunca volta para a tela.
         if request.POST.get('senha'):
             gravador.definir_senha(request.POST['senha'])

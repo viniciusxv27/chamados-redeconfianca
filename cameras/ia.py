@@ -195,6 +195,9 @@ def analisar(alerta_id):
     alerta.prioridade = aprendizado.prioridade(alerta)
     alerta.save(update_fields=['ia_status', 'ia_erro', 'ia_risco', 'ia_classificacao', 'ia_resumo', 'ia_analise',
                                'ia_modelo', 'ia_em', 'prioridade'])
+    # Com a IA, a prioridade pode ter subido: o aviso fora da tela sai agora (uma vez só).
+    from . import avisos
+    avisos.avisar_alerta(alerta.id)
     return dados
 
 

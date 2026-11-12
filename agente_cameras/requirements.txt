@@ -4,3 +4,4 @@ onnxruntime-directml>=1.18
 numpy>=1.26
 aiortc>=1.9
 av>=12
+psutil>=5.9

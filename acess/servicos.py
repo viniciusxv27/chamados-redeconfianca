@@ -9,7 +9,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from .models import (AvisoInativacao, MOTIVOS_CHAMADO, SISTEMAS, SISTEMAS_CHAMADO, STATUS_SISTEMA, Chamado, Colaborador,
-                     EventoChamado, LogAcess, ModeloMensagem, Solicitacao)
+                     EventoChamado, LogAcess, ModeloMensagem, Solicitacao, XmlGefac)
 
 
 class RegraAcess(Exception):
@@ -905,3 +905,54 @@ def decidir_pedido_desligamento(pedido, decisao, execucao, resposta, usuario, re
         _notificar([pedido.solicitante], f'Pedido de desligamento: {pedido.colaborador.nome}',
                    pedido.get_status_display() + (f': {resposta}' if resposta else '.'), '/acess/pedir-desligamento/')
     return pedido
+
+
+# ── XML do perfil GEFAC (Etapa 1) ───────────────────────────────────────────
+XML_GEFAC_TAMANHO_MAX = 5 * 1024 * 1024
+
+
+def conferir_xml(conteudo, nome):
+    """Recusa o que não é um XML bem-formado. DOCTYPE/ENTITY fora: arquivo de pedido não precisa, e é por onde vem ataque."""
+    import xml.etree.ElementTree as ET
+
+    if not (nome or '').lower().endswith('.xml'):
+        raise RegraAcess('Anexe o arquivo .xml do pedido do GEFAC.')
+    if not conteudo:
+        raise RegraAcess('O arquivo está vazio.')
+    if len(conteudo) > XML_GEFAC_TAMANHO_MAX:
+        raise RegraAcess('O XML passa de 5 MB.')
+    inicio = conteudo[:4096].upper()
+    if b'<!DOCTYPE' in inicio or b'<!ENTITY' in conteudo.upper():
+        raise RegraAcess('XML com DOCTYPE/ENTITY não é aceito.')
+    try:
+        ET.fromstring(conteudo)
+    except ET.ParseError as exc:
+        raise RegraAcess(f'O arquivo não é um XML válido ({exc}).') from exc
+
+
+def anexar_xml_gefac(c, arquivo, usuario=None, request=None):
+    """Guarda o XML do pedido de criação do perfil GEFAC. Os anteriores ficam no histórico da ficha."""
+    from django.core.files.base import ContentFile
+
+    if arquivo is None:
+        raise RegraAcess('Escolha o arquivo .xml.')
+    conteudo = arquivo.read(XML_GEFAC_TAMANHO_MAX + 1)
+    nome = (getattr(arquivo, 'name', '') or 'gefac.xml').replace('\\', '/').rsplit('/', 1)[-1][:200]
+    conferir_xml(conteudo, nome)
+    anexo = XmlGefac(colaborador=c, nome_original=nome, tamanho=len(conteudo), enviado_por=usuario)
+    anexo.arquivo.save('gefac.xml', ContentFile(conteudo), save=False)
+    anexo.save()
+    registrar(request, 'XML_GEFAC_ANEXADO', 'DADOS', f'Anexou o XML do perfil GEFAC de {c.nome}: {nome}',
+              colaborador=c, usuario=usuario)
+    return anexo
+
+
+def remover_xml_gefac(anexo, usuario=None, request=None):
+    c, nome = anexo.colaborador, anexo.nome_original
+    try:
+        anexo.arquivo.delete(save=False)
+    except Exception:  # noqa: BLE001 — arquivo já sumiu do armazenamento: o registro sai do mesmo jeito
+        pass
+    anexo.delete()
+    registrar(request, 'XML_GEFAC_REMOVIDO', 'DADOS', f'Removeu o XML do perfil GEFAC de {c.nome}: {nome}',
+              colaborador=c, usuario=usuario)

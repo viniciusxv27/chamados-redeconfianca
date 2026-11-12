@@ -21,6 +21,11 @@ from .models import AlertaCamera, Canal, EventoLoja, Gravador, SessaoAoVivo, _ca
 FOTO_VALIDADE = 300        # segundos no cache: é imagem ao vivo, não arquivo
 FOTO_TAMANHO_MAX = 400 * 1024
 ALERTA_AGRUPA_MINUTOS = 5
+# Quanto tempo um caso repetido soma no mesmo alerta, por tipo. Pessoa com a loja fechada é um caso só
+# mesmo que várias câmeras a vejam: agrupa pela loja, não pela câmera.
+AGRUPA_MINUTOS = {'ITEM_SUMIU': 5, 'FORA_HORARIO': 45, 'PERMANENCIA': 30}
+AGRUPA_PELA_LOJA = ('FORA_HORARIO',)
+SAUDE_TAMANHO_MAX = 12000
 ALERTAS_POR_HORA = 60      # agente com defeito não pode encher a tela de alerta
 SINAL_NORMAL = 30
 SINAL_ASSISTINDO = 10
@@ -74,7 +79,7 @@ def fotos_dos_canais(ids, desde=0):
     return {chaves[c]: foto for c, foto in cache.get_many(list(chaves)).items() if foto and foto['em'] > desde}
 
 
-def resposta_do_sinal(gravador, canais):
+def resposta_do_sinal(gravador, canais, config=None):
     """O que o agente deve fazer agora. Só manda foto quando tem alguém olhando: poupa a internet da loja."""
     ativos = [c for c in canais if c.ativo]
     foco = cache.get(_chave_foco(gravador.id))
@@ -100,11 +105,101 @@ def resposta_do_sinal(gravador, canais):
         # O que as decisões de furto confirmado/falso alarme ensinaram, por câmera e tipo de alerta.
         'ajustes': aprendizado.ajustes_do_gravador(gravador, [c for c in canais if c.ativo]),
         'video': {'antes': VIDEO_ANTES, 'depois': VIDEO_DEPOIS},
+        # O relógio do portal: o agente corrige o do computador da loja (hora errada vira medição na hora errada).
+        'agora': timezone.now().isoformat(),
+        'tolerancia': gravador.tolerancia_horario,
+        'alertas': {'FORA_HORARIO': gravador.alerta_fora_horario, 'PERMANENCIA': gravador.alerta_permanencia,
+                    'ITEM_SUMIU': True},
+        'atualizacao': atualizacao_para(gravador, config),
     }
+
+
+def _versao(texto):
+    try:
+        return tuple(int(p) for p in str(texto or '').split('.')[:3])
+    except ValueError:
+        return ()
+
+
+def atualizacao_para(gravador, config):
+    """Com a atualização automática ligada e um .exe mais novo publicado, diz ao agente onde baixar e o que conferir."""
+    if (config is None or not config.atualizar_agentes or not config.instalador_arquivo or not config.instalador_sha256
+            or not _versao(config.instalador_versao) or _versao(gravador.versao_agente) >= _versao(config.instalador_versao)):
+        return None
+    # Agente antigo não sabe se atualizar sozinho: só a partir do 3.1.
+    if _versao(gravador.versao_agente) < (3, 1):
+        return None
+    try:
+        if settings.STORAGES['default']['BACKEND'].endswith('FileSystemStorage'):
+            url = default_storage.url(config.instalador_arquivo)
+        else:
+            url = link_do_instalador(config.instalador_arquivo, f'AgenteCameras-{config.instalador_versao}.exe')
+    except Exception:  # noqa: BLE001 — sem link nesta volta; tenta no próximo sinal
+        return None
+    return {'versao': config.instalador_versao, 'url': url, 'sha256': config.instalador_sha256,
+            'tamanho': config.instalador_tamanho}
+
+
+def _limpar_valor(valor, nivel=0):
+    if isinstance(valor, bool) or valor is None:
+        return valor
+    if isinstance(valor, (int, float)):
+        return round(valor, 2) if isinstance(valor, float) else valor
+    if isinstance(valor, dict) and nivel < 3:
+        return {str(k)[:40]: _limpar_valor(v, nivel + 1) for k, v in list(valor.items())[:70]}
+    if isinstance(valor, list) and nivel < 3:
+        return [_limpar_valor(v, nivel + 1) for v in valor[:20]]
+    return str(valor)[:160]
+
+
+def registrar_saude(gravador, texto):
+    """Guarda o retrato de saúde que o agente manda no sinal (câmeras com imagem, detector, filas, disco)."""
+    if not texto or len(texto) > SAUDE_TAMANHO_MAX:
+        return False
+    try:
+        dados = json.loads(texto)
+    except ValueError:
+        return False
+    if not isinstance(dados, dict):
+        return False
+    Gravador.objects.filter(pk=gravador.pk).update(saude=_limpar_valor(dados), saude_em=timezone.now())
+    return True
+
+
+def problemas_de_saude(gravador):
+    """[(nível, texto)] do que precisa de atenção, a partir da saúde recente. Nível: 'erro' ou 'atencao'."""
+    saude = gravador.saude_atual
+    if not saude:
+        return []
+    saida = []
+    cameras = saude.get('cameras') if isinstance(saude.get('cameras'), dict) else {}
+    nomes = {str(c.numero): c.titulo for c in gravador.canais.all()} if cameras else {}
+    sem_imagem = [nomes.get(n, f'Câmera {n}') for n, c in cameras.items() if isinstance(c, dict) and not c.get('ok')]
+    if sem_imagem:
+        saida.append(('erro', f'Sem imagem: {", ".join(sem_imagem[:6])}' + ('…' if len(sem_imagem) > 6 else '')))
+    relogio = saude.get('relogio_diferenca_s')
+    if isinstance(relogio, (int, float)) and abs(relogio) > 120:
+        saida.append(('atencao', f'Relógio do computador {abs(relogio) / 60:.0f} min {"adiantado" if relogio > 0 else "atrasado"} (o agente corrige)'))
+    disco = saude.get('disco_livre_gb')
+    if isinstance(disco, (int, float)) and disco < 5:
+        saida.append(('erro' if disco < 2 else 'atencao', f'Pouco espaço em disco: {disco:.1f} GB'))
+    fila = saude.get('fila_clipes')
+    if isinstance(fila, int) and fila >= 5:
+        saida.append(('atencao', f'{fila} vídeos de alerta esperando para subir'))
+    if saude.get('analise') is False:
+        saida.append(('atencao', 'Análise desligada neste computador'))
+    cpu = saude.get('cpu')
+    if isinstance(cpu, (int, float)) and cpu >= 90:
+        saida.append(('atencao', f'Processador em {cpu:.0f}%'))
+    return saida
 
 
 class AlertaRecusado(Exception):
     pass
+
+
+class AlertaIgnorado(Exception):
+    """Alerta que a loja não quer (tipo desligado, equipe abrindo ou fechando): o agente não deve reenviar."""
 
 
 def limpar_detalhes(bruto):
@@ -138,12 +233,19 @@ def registrar_alerta(gravador, numero_canal, tipo, confianca, motivo, foto=None,
     if tipo not in AlertaCamera.Tipo.values:
         raise AlertaRecusado('Tipo de alerta desconhecido.')
     agora = timezone.now()
+    if not gravador.alerta_ligado(tipo):
+        raise AlertaIgnorado('Este tipo de alerta está desligado nesta loja.')
+    if tipo == AlertaCamera.Tipo.FORA_HORARIO and gravador.na_tolerancia(agora):
+        raise AlertaIgnorado('Equipe abrindo ou fechando a loja (dentro da tolerância do horário).')
     if AlertaCamera.objects.filter(gravador=gravador, criado_em__gte=agora - timedelta(hours=1)).count() >= ALERTAS_POR_HORA:
         raise AlertaRecusado('Limite de alertas por hora atingido.')
     canal = Canal.objects.filter(gravador=gravador, numero=numero_canal).first()
-    aberto = (AlertaCamera.objects.filter(gravador=gravador, canal=canal, tipo=tipo, status=AlertaCamera.Status.NOVO,
-                                          ultimo_em__gte=agora - timedelta(minutes=ALERTA_AGRUPA_MINUTOS))
-              .order_by('-criado_em').first())
+    janela = AGRUPA_MINUTOS.get(tipo, ALERTA_AGRUPA_MINUTOS)
+    parecidos = AlertaCamera.objects.filter(gravador=gravador, tipo=tipo, status=AlertaCamera.Status.NOVO,
+                                            ultimo_em__gte=agora - timedelta(minutes=janela))
+    if tipo not in AGRUPA_PELA_LOJA:
+        parecidos = parecidos.filter(canal=canal)
+    aberto = parecidos.order_by('-criado_em').first()
     if aberto:
         aberto.repeticoes += 1
         aberto.ultimo_em = agora
@@ -222,6 +324,23 @@ def _apagar_midia(alerta):
             alerta.video.delete(save=False)
         except Exception:  # noqa: BLE001
             pass
+
+
+def apagar_alertas(alertas):
+    """Apaga os alertas e tudo o que guardam no armazenamento (foto, vídeo e quadros). Devolve quantos."""
+    apagados = 0
+    for alerta in alertas.iterator(chunk_size=200):
+        _apagar_midia(alerta)
+        if alerta.foto:
+            try:
+                alerta.foto.delete(save=False)
+            except Exception:  # noqa: BLE001 — arquivo já sumiu do bucket
+                pass
+        AlertaCamera.objects.filter(pk=alerta.pk).delete()
+        apagados += 1
+    if apagados:
+        aprendizado.esquecer()
+    return apagados
 
 
 def limpar_videos_antigos(agora=None):

@@ -248,3 +248,57 @@ html.dark .ca {
 .ca-sub { margin-top: 16px !important; }
 .ca-kpis:has(> .ca-kpi:nth-child(4)) { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
 @media (max-width: 1000px) { .ca-topo-direita { width: 100%; justify-content: space-between; } }
+
+/* 12/11/2026: alertas em lote, indicadores com cobertura, saúde do agente. */
+.ca-resumo-tipos { display: flex; gap: 6px; flex-wrap: wrap; margin: -4px 0 14px; }
+.ca-resumo-tipos a { display: inline-flex; align-items: baseline; gap: 6px; padding: 6px 12px; border-radius: 99px; font-size: 12.5px; background: var(--ca-card); border: 1px solid var(--ca-borda); color: var(--ca-texto-2); }
+.ca-resumo-tipos a b { color: var(--ca-texto); font-variant-numeric: tabular-nums; }
+.ca-resumo-tipos a.ativo { border-color: var(--ca-acento); color: var(--ca-acento); background: var(--ca-ambar-claro); }
+.ca-resumo-tipos a.zero { opacity: .6; }
+.ca-lote { position: sticky; top: 8px; z-index: 5; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 12px; margin-bottom: 8px; background: var(--ca-card); border: 1px solid var(--ca-borda); border-radius: 14px; box-shadow: var(--ca-sombra); font-size: 13px; }
+.ca-lote-qtd { color: var(--ca-texto-2); font-variant-numeric: tabular-nums; }
+.ca-lote-acoes { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; align-items: center; }
+.ca-lote-acoes select { background: var(--ca-card); color: var(--ca-texto); border: 1px solid var(--ca-borda); border-radius: 10px; padding: 6px 8px; font-size: 12.5px; }
+.ca-lote button:disabled { opacity: .45; cursor: not-allowed; }
+.ca-lote-filtro { margin: 0 0 12px; text-align: right; }
+.ca-link-perigo { background: none; border: 0; padding: 0; color: var(--ca-vermelho); font-size: 12.5px; font-weight: 600; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+.ca-alerta-caixa { position: relative; }
+.ca-alerta-caixa .ca-alerta { height: 100%; }
+.ca-alerta-caixa.marcado .ca-alerta { outline: 2px solid var(--ca-acento); outline-offset: -2px; }
+.ca-marcar { position: absolute; top: 8px; left: 8px; z-index: 2; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 9px; background: rgba(13,17,23,.6); cursor: pointer; }
+.ca-marcar input { width: 17px; height: 17px; accent-color: var(--ca-acento); cursor: pointer; }
+.ca-paginas { display: flex; gap: 10px; align-items: center; justify-content: center; margin-top: 16px; font-size: 13px; color: var(--ca-texto-2); }
+.ca-kpi-nota { display: block; font-size: 11.5px !important; color: var(--ca-texto-2) !important; font-weight: 500 !important; margin-top: 2px; }
+.ca-variacao { display: block; font-size: 11.5px !important; font-weight: 600 !important; margin-top: 2px; }
+.ca-variacao.sobe { color: var(--ca-verde) !important; }
+.ca-variacao.desce { color: var(--ca-vermelho) !important; }
+.ca-cobertura { font-variant-numeric: tabular-nums; color: var(--ca-verde); font-weight: 600; }
+.ca-cobertura.parcial { color: var(--ca-ambar); }
+.ca-dia-vazio td { color: var(--ca-texto-3); }
+.ca-horas h2 small { font-weight: 500; color: var(--ca-texto-3); font-size: 12px; margin-left: 6px; }
+.ca-horas-grade { display: flex; gap: 6px; align-items: flex-end; height: 140px; padding: 8px 0 0; overflow-x: auto; }
+.ca-hora { flex: 1 0 26px; display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; }
+.ca-hora-barras { flex: 1; width: 100%; display: flex; gap: 2px; align-items: flex-end; justify-content: center; }
+.ca-hora-barras span { width: 45%; max-width: 14px; border-radius: 4px 4px 0 0; min-height: 2px; }
+.ca-hora-barras .e, .ca-legenda-horas .e { background: var(--ca-acento); }
+.ca-hora-barras .a, .ca-legenda-horas .a { background: var(--ca-azul); }
+.ca-hora small { font-size: 10.5px; color: var(--ca-texto-3); }
+.ca-legenda-horas { display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--ca-texto-2); margin: 8px 0 0; }
+.ca-legenda-horas span { width: 10px; height: 10px; border-radius: 3px; display: inline-block; margin-left: 8px; }
+.ca-form-curto { display: grid; gap: 10px; }
+.ca-form-curto label { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--ca-texto-2); }
+.ca-form-curto label.ca-chave { flex-direction: row; align-items: center; flex-wrap: wrap; gap: 6px; color: var(--ca-texto); }
+.ca-form-curto input:not([type=checkbox]) { background: var(--ca-card); color: var(--ca-texto); border: 1px solid var(--ca-borda); border-radius: 10px; padding: 7px 9px; font-size: 13px; }
+.ca-form-curto .ca-botao { justify-self: start; }
+.ca-numero { width: 72px; }
+.ca-tipos-alerta { border: 1px solid var(--ca-borda); border-radius: 12px; padding: 10px 12px; display: grid; gap: 6px; }
+.ca-tipos-alerta legend { font-size: 12.5px; color: var(--ca-texto-2); padding: 0 4px; }
+.ca-tipos-alerta small { color: var(--ca-texto-3); }
+.ca-equipe span { display: block; font-size: 13px; }
+.ca-equipe span i { color: var(--ca-azul); margin-right: 6px; }
+.ca-equipe small { color: var(--ca-texto-2); }
+.ca-saude { padding: 12px 16px; margin-bottom: 14px; }
+.ca-saude h2 small { font-weight: 500; color: var(--ca-texto-3); font-size: 12px; margin-left: 6px; }
+.ca-saude p { margin: 4px 0; font-size: 13px; display: flex; gap: 8px; align-items: baseline; }
+.ca-saude-lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px 18px; margin-top: 8px; }
+.ca-legenda .ca-ponto { margin-right: 4px; }

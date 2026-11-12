@@ -9,6 +9,7 @@ Depois publique para o botão do portal: python manage.py publicar_instalador_ca
 """
 import argparse
 import hashlib
+import re
 import shutil
 import subprocess
 import sys
@@ -30,6 +31,13 @@ ARQUIVOS = ('agente.py', 'ao_vivo.py', 'descoberta.py', 'detector.py', 'gravacao
 # python.exe e python312.zip ficam em runtime; ".." é a pasta do agente. Com este arquivo o Python
 # não acrescenta a pasta do script sozinho: sem o "..", "from descoberta import" falharia no Windows.
 PTH = 'python312.zip\n.\nLib\\site-packages\n..\nimport site\n'
+
+
+def versao_do_agente():
+    achado = re.search(r"^VERSAO = '([0-9.]+)'", (AQUI / 'agente.py').read_text(encoding='utf-8'), re.M)
+    if not achado:
+        sys.exit('Não achei VERSAO em agente.py.')
+    return achado.group(1)
 
 
 def baixar(url, destino, sha256):
@@ -89,7 +97,8 @@ def conferir(pasta):
     obrigatorios += [pacotes / 'requests' / '__init__.py', pacotes / 'cv2' / '__init__.py', pacotes / 'numpy' / '__init__.py',
                      pacotes / 'onnxruntime' / '__init__.py', pacotes / 'certifi' / 'cacert.pem', pacotes / 'aiortc' / '__init__.py',
                      pacotes / 'av' / '__init__.py', pasta / 'yolox_tiny.onnx', pasta / 'yolox_s.onnx', pasta / 'agente.py',
-                     pasta / 'ao_vivo.py', pasta / 'gravacao.py', pacotes / 'onnxruntime' / 'capi' / 'DirectML.dll']
+                     pasta / 'ao_vivo.py', pasta / 'gravacao.py', pacotes / 'onnxruntime' / 'capi' / 'DirectML.dll',
+                     pacotes / 'psutil' / '__init__.py']
     faltando = [str(c.relative_to(pasta)) for c in obrigatorios if not c.exists()]
     if faltando:
         sys.exit(f'Faltam peças no pacote: {faltando}')
@@ -114,8 +123,12 @@ def main():
         pacote.mkdir()
         montar(pacote, cache, a.portal)
         conferir(pacote)
-        subprocess.run(['makensis', '-V2', '-INPUTCHARSET', 'UTF8', f'-DSAIDA={saida}', f'-DPACOTE={pacote}', str(AQUI / 'instalador.nsi')], check=True)
-    print(f'{saida} ({saida.stat().st_size / 1024 / 1024:.0f} MB)')
+        versao = versao_do_agente()
+        subprocess.run(['makensis', '-V2', '-INPUTCHARSET', 'UTF8', f'-DSAIDA={saida}', f'-DPACOTE={pacote}', f'-DVERSAO={versao}',
+                        str(AQUI / 'instalador.nsi')], check=True)
+    resumo = hashlib.sha256(saida.read_bytes()).hexdigest()
+    print(f'{saida} · versão {versao} · {saida.stat().st_size / 1024 / 1024:.0f} MB · sha256 {resumo}')
+    print(f'Publicar: venv/bin/python manage.py publicar_instalador_cameras {saida}')
 
 
 if __name__ == '__main__':

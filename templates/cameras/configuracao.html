@@ -22,8 +22,32 @@
         </form>
     </section>
 </div>
+<div class="ca-grade-config">
+    <section class="ca-card ca-bloco">
+        <h2><i class="fas fa-bell"></i>Avisos fora da tela</h2>
+        <p>Alerta importante e loja sem contato chegam como notificação do portal para o SUPERADMIN e, com um destino preenchido, por WhatsApp (número ou grupo terminado em @g.us). Cada caso avisa uma vez só.</p>
+        <form method="post" class="ca-form-curto">{% csrf_token %}<input type="hidden" name="bloco" value="avisos">
+            <label class="ca-chave"><input type="checkbox" name="aviso_whatsapp" value="1" {% if config.aviso_whatsapp %}checked{% endif %}> Avisar alerta com prioridade a partir de <input type="number" name="aviso_prioridade" min="0" max="100" value="{{ config.aviso_prioridade }}" class="ca-numero" aria-label="Prioridade mínima"></label>
+            <label class="ca-chave"><input type="checkbox" name="aviso_offline" value="1" {% if config.aviso_offline %}checked{% endif %}> Avisar loja sem contato há <input type="number" name="aviso_offline_minutos" min="5" max="720" value="{{ config.aviso_offline_minutos }}" class="ca-numero" aria-label="Minutos sem contato"> min, no horário dela</label>
+            <label>WhatsApp de destino<input name="aviso_destino" value="{{ config.aviso_destino }}" placeholder="27999990000 ou 1203…@g.us" autocomplete="off"></label>
+            <button class="ca-botao pequeno">Salvar avisos</button>
+        </form>
+    </section>
+    <section class="ca-card ca-bloco">
+        <h2><i class="fas fa-arrows-rotate"></i>Versão do agente</h2>
+        {% if config.instalador_arquivo %}
+        <p>Publicado: <strong>{% if config.instalador_versao %}versão {{ config.instalador_versao }}{% else %}versão sem número{% endif %}</strong> em {{ config.instalador_em|date:"d/m/Y H:i" }}{% if config.instalador_tamanho %} · {{ config.instalador_tamanho|filesizeformat }}{% endif %}.</p>
+        <p>{% if config.atualizar_agentes %}<strong class="ca-verde">Atualização automática ligada.</strong> Lojas com o agente 3.1 ou mais novo baixam esta versão, conferem a impressão digital e instalam sozinhas.{% else %}<strong>Atualização automática desligada.</strong> Cada loja só muda de versão reinstalando.{% endif %} Agentes anteriores ao 3.1 precisam de uma reinstalação manual.</p>
+        <form method="post" {% if not config.atualizar_agentes %}onsubmit="return confirm('Ligar a atualização automática? As lojas instalam a versão publicada sem ninguém na frente do computador.');"{% endif %}>{% csrf_token %}<input type="hidden" name="bloco" value="atualizacao">
+            <input type="hidden" name="atualizar_agentes" value="{% if config.atualizar_agentes %}0{% else %}1{% endif %}">
+            <button class="ca-botao pequeno {% if config.atualizar_agentes %}claro{% endif %}" {% if not config.instalador_versao %}disabled title="Publique de novo o instalador para ele ganhar número de versão"{% endif %}>{% if config.atualizar_agentes %}Desligar{% else %}Ligar{% endif %} atualização automática</button>
+        </form>
+        {% else %}<p>O instalador ainda não foi publicado neste portal (<code>manage.py publicar_instalador_cameras</code>).</p>{% endif %}
+    </section>
+</div>
 <section class="ca-card ca-tabela-caixa">
     <h2><i class="fas fa-store"></i>Lojas</h2>
+    <div class="ca-tabela-rolagem">
     <table class="ca-tabela">
         <thead><tr><th>Loja</th><th>Coordenação</th><th>Serial</th><th>Senha</th><th>Agente</th><th></th></tr></thead>
         <tbody>
@@ -36,13 +60,16 @@
                 <td class="ca-celula-agente"><span class="ca-ponto {{ g.situacao }}"></span>{% if g.situacao == 'online' %}Online{% elif g.ultimo_contato %}Sem contato desde {{ g.ultimo_contato|date:"d/m H:i" }}{% elif g.situacao == 'sem_agente' or g.token_hash %}Não instalado{% else %}Sem gravador{% endif %}
                     {% if g.versao_agente and not g.tem_ao_vivo %}<small class="ca-ambar" data-sem-ao-vivo>Reinstale para ter vídeo ao vivo</small>{% endif %}
                     {% if g.erro_agente %}<small class="ca-erro" data-erro-agente>{{ g.erro_agente }}</small>{% elif g.ip_local and g.descoberta_em %}<small>Gravador achado em {{ g.ip_local }} · {{ g.canais_ativos_qtd }} câm.</small>{% endif %}
-                    {% if g.serial_diferente %}<small class="ca-ambar" data-serial-diferente>Serial na loja: {{ g.serial_detectado }}</small>{% endif %}</td>
+                    {% if g.serial_diferente %}<small class="ca-ambar" data-serial-diferente>Serial na loja: {{ g.serial_detectado }}</small>{% endif %}
+                    {% if g.versao_agente %}<small>Agente {{ g.versao_agente }}{% if g.desatualizado %} · <span class="ca-ambar">há versão {{ config.instalador_versao }}</span>{% endif %}{% if g.saude_atual.detector %} · {{ g.saude_atual.detector }}{% endif %}</small>{% endif %}
+                    {% for nivel, texto in g.problemas %}<small class="{% if nivel == 'erro' %}ca-erro{% else %}ca-ambar{% endif %}" data-problema>{{ texto }}</small>{% endfor %}</td>
                 <td class="ca-acoes-linha"><a class="ca-botao claro pequeno" href="{% url 'cameras:gravador_editar' g.id %}">Editar</a>
                     {% if g.tem_equipamento %}<form method="post" action="{% url 'cameras:gravador_instalador' g.id %}">{% csrf_token %}<button class="ca-botao pequeno"><i class="fas fa-download"></i>Baixar instalador</button></form>{% endif %}</td>
             </tr>
             {% empty %}<tr><td colspan="6" class="ca-vazio-texto">Importe a planilha para começar.</td></tr>{% endfor %}
         </tbody>
     </table>
+    </div>
 </section>
 <section class="ca-card ca-bloco">
     <h2><i class="fas fa-microchip"></i>Agente da loja</h2>

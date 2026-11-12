@@ -26,6 +26,18 @@ class ConfigCameras(models.Model):
     # O .exe publicado por manage.py publicar_instalador_cameras: é o mesmo para todas as lojas.
     instalador_arquivo = models.CharField(max_length=200, blank=True, db_default='', editable=False)
     instalador_em = models.DateTimeField(null=True, blank=True, editable=False)
+    # Versão do agente dentro do .exe publicado, e a impressão digital que o agente confere antes de se atualizar.
+    instalador_versao = models.CharField(max_length=20, blank=True, db_default='', editable=False)
+    instalador_sha256 = models.CharField(max_length=64, blank=True, db_default='', editable=False)
+    instalador_tamanho = models.PositiveBigIntegerField(default=0, db_default=0, editable=False)
+    # Nasce desligado: com ele ligado, o agente da loja baixa e instala sozinho a versão publicada.
+    atualizar_agentes = models.BooleanField(default=False, db_default=False, verbose_name='Atualizar o agente das lojas sozinho')
+    # Avisos fora da tela (WhatsApp/notificação). Nascem desligados.
+    aviso_whatsapp = models.BooleanField(default=False, db_default=False, verbose_name='Avisar alerta importante no WhatsApp')
+    aviso_prioridade = models.PositiveSmallIntegerField(default=60, db_default=60, verbose_name='Avisar a partir da prioridade')
+    aviso_destino = models.CharField(max_length=120, blank=True, db_default='', verbose_name='WhatsApp que recebe os avisos')
+    aviso_offline = models.BooleanField(default=False, db_default=False, verbose_name='Avisar loja sem contato')
+    aviso_offline_minutos = models.PositiveSmallIntegerField(default=30, db_default=30, verbose_name='Sem contato há (min)')
     alterado_em = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -58,6 +70,12 @@ class Gravador(models.Model):
     matinal_inicio = models.TimeField(default=time(5, 0), db_default=time(5, 0), verbose_name='Matinal a partir de')
     matinal_fim = models.TimeField(default=time(9, 0), db_default=time(9, 0), verbose_name='Matinal antes de')
     matinal_minutos = models.PositiveSmallIntegerField(default=5, db_default=5, verbose_name='Matinal dura ao menos (min)')
+    # Equipe chegando antes de abrir e fechando depois do horário não é "pessoa com a loja fechada".
+    tolerancia_horario = models.PositiveSmallIntegerField(default=60, db_default=60,
+                                                          verbose_name='Tolerância antes de abrir e depois de fechar (min)')
+    # Quais alertas a loja gera. Permanência nasce desligada: em loja de telefonia a equipe fica no mostruário o dia todo.
+    alerta_fora_horario = models.BooleanField(default=True, db_default=True, verbose_name='Alertar pessoa com a loja fechada')
+    alerta_permanencia = models.BooleanField(default=False, db_default=False, verbose_name='Alertar permanência longa na área')
 
     # O código no nome do instalador baixado: vira o token da loja quando o instalador roda.
     codigo_hash = models.CharField(max_length=64, blank=True, db_default='', editable=False, db_index=True)
@@ -74,6 +92,11 @@ class Gravador(models.Model):
     modelo_detectado = models.CharField(max_length=80, blank=True, db_default='', editable=False)
     erro_agente = models.CharField(max_length=255, blank=True, db_default='', editable=False)
     descoberta_em = models.DateTimeField(null=True, blank=True, editable=False)
+    # Saúde que o agente manda no sinal (câmeras com imagem, quadros por segundo, detector, filas, disco...).
+    saude = models.JSONField(default=dict, blank=True, db_default={}, editable=False)
+    saude_em = models.DateTimeField(null=True, blank=True, editable=False)
+    # Último aviso de "loja sem contato", para não repetir a cada minuto.
+    aviso_offline_em = models.DateTimeField(null=True, blank=True, editable=False)
     criado_em = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -124,6 +147,29 @@ class Gravador(models.Model):
     @property
     def serial_diferente(self):
         return bool(self.serial_detectado and self.serial and self.serial_detectado.upper() != self.serial.upper())
+
+    def alerta_ligado(self, tipo):
+        if tipo == AlertaCamera.Tipo.FORA_HORARIO:
+            return self.alerta_fora_horario
+        if tipo == AlertaCamera.Tipo.PERMANENCIA:
+            return self.alerta_permanencia
+        return True
+
+    def na_tolerancia(self, momento):
+        """O momento (local) cai na margem antes de abrir ou depois de fechar: equipe abrindo ou fechando a loja."""
+        local = timezone.localtime(momento)
+        minutos = local.hour * 60 + local.minute
+        abre = self.abre_as.hour * 60 + self.abre_as.minute
+        fecha = self.fecha_as.hour * 60 + self.fecha_as.minute
+        margem = self.tolerancia_horario or 0
+        return abre - margem <= minutos < abre or fecha <= minutos < fecha + margem
+
+    @property
+    def saude_atual(self):
+        """A saúde que o agente mandou, só se for recente (senão é retrato velho)."""
+        if not self.saude_em or (timezone.now() - self.saude_em).total_seconds() > MINUTOS_ONLINE * 60 * 2:
+            return {}
+        return self.saude or {}
 
     @property
     def situacao(self):
@@ -240,6 +286,8 @@ class AlertaCamera(models.Model):
     # O que as decisões anteriores (confirmado/falso) dizem de alertas parecidos, em %.
     chance_real = models.PositiveSmallIntegerField(null=True, blank=True)
     prioridade = models.PositiveSmallIntegerField(default=0, db_default=0, db_index=True)
+    # Quando saiu o aviso fora da tela (WhatsApp/notificação): avisa uma vez só.
+    avisado_em = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         verbose_name = 'Alerta de câmera'

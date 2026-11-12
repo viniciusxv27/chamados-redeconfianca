@@ -8,7 +8,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Count, Q
-from django.http import HttpResponse, JsonResponse
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -19,7 +19,7 @@ from users.models import Sector
 
 from . import servicos as sv
 from .models import (AvisoInativacao, PedidoDesligamento, MOTIVOS_CHAMADO, SISTEMAS, SISTEMAS_CHAMADO, STATUS_SISTEMA, AcessoAcess, Chamado, Colaborador,
-                     LogAcess, ModeloMensagem, Solicitacao)
+                     LogAcess, ModeloMensagem, Solicitacao, XmlGefac)
 from .permissoes import FUNCOES, completar, e_superadmin, exige, pode, pode_pedir_desligamento, trata_chamados
 
 User = get_user_model()
@@ -277,7 +277,8 @@ def ficha(request, pk):
         chamados=list(c.chamados.select_related('responsavel').order_by('-aberto_em')),
         historico=list(c.historico.all()[:40]) if pode(request.user, 'historico.ver') else None,
         perfil_requerido=sv.rotulo_perfil(sv.perfil_regional_requerido(c)), etapas=ETAPAS,
-        modelos=ModeloMensagem.objects.all(), motivos=MOTIVOS_CHAMADO, sistemas_chamado=SISTEMAS_CHAMADO))
+        modelos=ModeloMensagem.objects.all(), motivos=MOTIVOS_CHAMADO, sistemas_chamado=SISTEMAS_CHAMADO,
+        xmls_gefac=list(c.xmls_gefac.select_related('enviado_por')), pode_xml_gefac=_pode_xml_gefac(request.user)))
 
 
 @login_required
@@ -349,6 +350,11 @@ def pendentes(request):
     linhas = por_etapa.get(etapa, [])
     # Admissão no futuro (cadastro do portal): a data em que é para criar no GEFAC aparece embaixo do nome.
     hoje = timezone.localdate()
+    xmls = {}
+    if etapa == 1:
+        # O XML do pedido do perfil GEFAC: o mais novo de cada pessoa, numa consulta só.
+        for x in XmlGefac.objects.filter(colaborador_id__in=[c.id for c in linhas]).select_related('enviado_por'):
+            xmls.setdefault(x.colaborador_id, x)
     admissoes = dict(User.objects.filter(id__in=[c.user_id for c in linhas if c.user_id])
                      .values_list('id', 'admission_date'))
     for c in linhas:
@@ -356,6 +362,7 @@ def pendentes(request):
         c.admissao_futura = admissao if admissao and admissao > hoje else None
         c.dias_ate_admissao = (admissao - hoje).days if c.admissao_futura else None
         c.chamado_lib = sv.chamado_de_liberacao(c) if etapa == 4 else None
+        c.xml_gefac = xmls.get(c.id)
         c.perfil_requerido = sv.perfil_regional_requerido(c)
         c.checklist_ok = sv.checklist_completo(c) if etapa == 4 else False
         if etapa == 4:
@@ -414,6 +421,56 @@ def esteira_acao(request, pk):
     except sv.RegraAcess as exc:
         _erro(request, exc)
     return _voltar(request, reverse('acess:pendentes'))
+
+
+def _pode_xml_gefac(user):
+    """Anexa e remove o XML quem pode concluir o GEFAC (é o mesmo passo da esteira)."""
+    return pode(user, 'gefac.concluir') or pode(user, 'sistemas.concluir')
+
+
+@login_required
+@exige('colaboradores.ver')
+@require_POST
+def xml_gefac_anexar(request, pk):
+    c = get_object_or_404(Colaborador, pk=pk)
+    if not _pode_xml_gefac(request.user):
+        messages.error(request, 'Anexar o XML do GEFAC não está liberado para o seu usuário.')
+        return _voltar(request, reverse('acess:ficha', args=[pk]))
+    try:
+        anexo = sv.anexar_xml_gefac(c, request.FILES.get('xml'), request.user, request)
+        messages.success(request, f'XML do perfil GEFAC de {c.nome} anexado ({anexo.nome_original}).')
+    except sv.RegraAcess as exc:
+        _erro(request, exc)
+    return _voltar(request, reverse('acess:ficha', args=[pk]))
+
+
+@login_required
+@exige('colaboradores.ver')
+def xml_gefac_baixar(request, pk, xml_id):
+    """Só pelo portal (nunca o endereço do armazenamento): o XML traz dados pessoais."""
+    anexo = get_object_or_404(XmlGefac, pk=xml_id, colaborador_id=pk)
+    try:
+        arquivo = anexo.arquivo.open('rb')
+    except (FileNotFoundError, OSError):
+        raise Http404
+    resposta = FileResponse(arquivo, as_attachment=request.GET.get('ver') != '1', filename=anexo.nome_original,
+                            content_type='application/xml')
+    resposta['Cache-Control'] = 'private, no-store'
+    resposta['X-Content-Type-Options'] = 'nosniff'
+    return resposta
+
+
+@login_required
+@exige('colaboradores.ver')
+@require_POST
+def xml_gefac_remover(request, pk, xml_id):
+    anexo = get_object_or_404(XmlGefac.objects.select_related('colaborador'), pk=xml_id, colaborador_id=pk)
+    if not _pode_xml_gefac(request.user):
+        messages.error(request, 'Remover o XML do GEFAC não está liberado para o seu usuário.')
+    else:
+        sv.remover_xml_gefac(anexo, request.user, request)
+        messages.success(request, f'XML {anexo.nome_original} removido.')
+    return _voltar(request, reverse('acess:ficha', args=[pk]))
 
 
 @login_required

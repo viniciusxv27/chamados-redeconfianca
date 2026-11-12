@@ -12,6 +12,7 @@ urlpatterns = [
     path('canal/<int:canal_id>/salvar/', views.canal_salvar, name='canal_salvar'),
     path('indicadores/', views.indicadores, name='indicadores'),
     path('alertas/', views.alertas, name='alertas'),
+    path('alertas/lote/', views.alertas_lote, name='alertas_lote'),
     path('alertas/<int:alerta_id>/', views.alerta_detalhe, name='alerta_detalhe'),
     path('alertas/<int:alerta_id>/foto/', views.alerta_foto, name='alerta_foto'),
     path('alertas/<int:alerta_id>/video/', views.alerta_video, name='alerta_video'),
