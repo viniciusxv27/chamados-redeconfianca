@@ -754,6 +754,17 @@
                             </a>
                         </li>
                         {% endif %}
+                        {% if gestao_metas_liberado %}
+                        <li>
+                            <a href="{% url 'gestao_metas:inicio' %}" data-rota="{% url 'gestao_metas:inicio' %}"
+                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-bullseye text-indigo-400 flex-shrink-0 w-5 text-center"></i>
+                                <span class="text-sm">Gerenciamento de metas</span>
+                                <div class="tooltip-collapsed">Gerenciamento de metas</div>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-indigo-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        {% endif %}
                         {% if user|tem_acesso:'comissionamento.projecao' %}
                         <li>
                             <a href="{% url 'commission_projection' %}" data-rota="{% url 'commission_projection' %}"
@@ -787,17 +798,16 @@
                             </a>
                         </li>
                         {% endif %}
-                        {% if gestao_metas_liberado %}
                         <li>
-                            <a href="{% url 'gestao_metas:inicio' %}" data-rota="{% url 'gestao_metas:inicio' %}"
+                            <a href="{% url 'quiz:inicio' %}" data-rota="{% url 'quiz:inicio' %}"
                                class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
-                                <i class="fas fa-bullseye text-indigo-400 flex-shrink-0 w-5 text-center"></i>
-                                <span class="text-sm">Gerenciamento de metas</span>
-                                <div class="tooltip-collapsed">Gerenciamento de metas</div>
-                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-indigo-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                                <i class="fas fa-circle-question text-fuchsia-400 flex-shrink-0 w-5 text-center"></i>
+                                <span class="text-sm flex-1">Quiz</span>
+                                {% if quiz_salas_abertas %}<span class="sidebar-text min-w-[1.25rem] h-5 px-1.5 rounded-full {% if quiz_ao_vivo %}bg-red-500 animate-pulse{% else %}bg-fuchsia-600{% endif %} text-white text-[10px] font-bold flex items-center justify-center" title="{% if quiz_ao_vivo %}Tem quiz acontecendo agora{% else %}Salas de quiz para você{% endif %}">{{ quiz_salas_abertas }}</span>{% endif %}
+                                <div class="tooltip-collapsed">Quiz</div>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-fuchsia-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </a>
                         </li>
-                        {% endif %}
                         {% if uniformes_liberado %}
                         <li>
                             <a href="{% url 'uniformes:estoque' %}" data-rota="{% url 'uniformes:estoque' %}"
@@ -809,16 +819,6 @@
                             </a>
                         </li>
                         {% endif %}
-                        <li>
-                            <a href="{% url 'quiz:inicio' %}" data-rota="{% url 'quiz:inicio' %}"
-                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
-                                <i class="fas fa-circle-question text-fuchsia-400 flex-shrink-0 w-5 text-center"></i>
-                                <span class="text-sm flex-1">Quiz</span>
-                                {% if quiz_salas_abertas %}<span class="sidebar-text min-w-[1.25rem] h-5 px-1.5 rounded-full {% if quiz_ao_vivo %}bg-red-500 animate-pulse{% else %}bg-fuchsia-600{% endif %} text-white text-[10px] font-bold flex items-center justify-center" title="{% if quiz_ao_vivo %}Tem quiz acontecendo agora{% else %}Salas de quiz para você{% endif %}">{{ quiz_salas_abertas }}</span>{% endif %}
-                                <div class="tooltip-collapsed">Quiz</div>
-                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-fuchsia-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
-                        </li>
                             </ul>
                         </li>
                         <li>
@@ -833,6 +833,7 @@
                         </li>
                         <li class="submenu-content hidden" id="gestao-menu">
                             <ul class="space-y-0.5 ml-4 pl-2.5 border-l border-gray-800">
+                        {% load projects_tags %}
                         <li>
                             <a href="{% url 'agenda:calendar' %}" data-rota="{% url 'agenda:calendar' %}"
                                class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
@@ -851,6 +852,17 @@
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-amber-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </a>
                         </li>
+                        {% if auditoria_d1_liberada %}
+                        <li>
+                            <a href="{% url 'auditoria_d1:esteira' %}" data-rota="{% url 'auditoria_d1:esteira' %}"
+                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-clipboard-check text-sky-400 flex-shrink-0 w-5 text-center"></i>
+                                <span class="text-sm flex-1">Auditoria D-1</span>
+                                <div class="tooltip-collapsed">Auditoria D-1</div>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-sky-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        {% endif %}
                         {% if cameras_liberado %}
                         <li>
                             <a href="{% url 'cameras:painel' %}" data-rota="{% url 'cameras:painel' %}"
@@ -870,6 +882,17 @@
                                 <i class="fas fa-clipboard-check text-emerald-400 flex-shrink-0 w-5 text-center"></i>
                                 <span class="text-sm">Checklists ADM</span>
                                 <div class="tooltip-collapsed">Checklists ADM</div>
+                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-emerald-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% if contas_pagar_liberado %}
+                        <li>
+                            <a href="{% url 'contas_pagar:painel' %}" data-rota="{% url 'contas_pagar:painel' %}"
+                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
+                                <i class="fas fa-file-invoice-dollar text-emerald-400 flex-shrink-0 w-5 text-center"></i>
+                                <span class="text-sm flex-1">Contas a Pagar</span>
+                                <div class="tooltip-collapsed">Contas a Pagar</div>
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-emerald-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </a>
                         </li>
@@ -925,7 +948,6 @@
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-blue-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </a>
                         </li>
-                        {% load projects_tags %}
                         {% if user|can_access_projects %}
                         <li>
                             <a href="{% url 'projects:dashboard' %}" data-rota="{% url 'projects:dashboard' %}"
@@ -945,28 +967,6 @@
                                 <span class="text-sm flex-1">Rotina ADM</span>
                                 <div class="tooltip-collapsed">Rotina ADM</div>
                                 <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-violet-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
-                        </li>
-                        {% endif %}
-                        {% if contas_pagar_liberado %}
-                        <li>
-                            <a href="{% url 'contas_pagar:painel' %}" data-rota="{% url 'contas_pagar:painel' %}"
-                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
-                                <i class="fas fa-file-invoice-dollar text-emerald-400 flex-shrink-0 w-5 text-center"></i>
-                                <span class="text-sm flex-1">Contas a Pagar</span>
-                                <div class="tooltip-collapsed">Contas a Pagar</div>
-                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-emerald-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
-                            </a>
-                        </li>
-                        {% endif %}
-                        {% if auditoria_d1_liberada %}
-                        <li>
-                            <a href="{% url 'auditoria_d1:esteira' %}" data-rota="{% url 'auditoria_d1:esteira' %}"
-                               class="menu-item flex items-center gap-2.5 p-2 text-xs rounded-lg hover:bg-gray-800 transition-colors relative group">
-                                <i class="fas fa-clipboard-check text-sky-400 flex-shrink-0 w-5 text-center"></i>
-                                <span class="text-sm flex-1">Auditoria D-1</span>
-                                <div class="tooltip-collapsed">Auditoria D-1</div>
-                                <div class="absolute bottom-1 left-3 right-3 h-0.5 bg-sky-400 rounded-full transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                             </a>
                         </li>
                         {% endif %}

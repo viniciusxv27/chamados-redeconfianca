@@ -129,7 +129,9 @@ def copiar_checklist(origem, destino, por, substituir=False):
     from .models import ItemChecklist
     with transaction.atomic():
         if substituir:
-            ItemChecklist.objects.filter(loja=destino, ativo=True).update(ativo=False)
+            # update() não aciona o auto_now: a data da remoção vai à mão (o ranking a usa
+            # para saber até que dia o item era previsto).
+            ItemChecklist.objects.filter(loja=destino, ativo=True).update(ativo=False, atualizado_em=timezone.now())
         base = (ItemChecklist.objects.filter(loja=destino, ativo=True).order_by('-ordem')
                 .values_list('ordem', flat=True).first() or 0)
         existentes = {t.lower() for t in ItemChecklist.objects.filter(loja=destino, ativo=True).values_list('titulo', flat=True)}

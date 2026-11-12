@@ -14,7 +14,8 @@ from django.db import models
 from django.utils import timezone
 
 
-TIPOS_SUGERIDOS = ['Camisa', 'Camiseta', 'Polo', 'Calça', 'Jaqueta', 'Colete', 'Boné']
+# Sugestões do campo Tipo (12/11/2026: Polo, Camiseta e Boné saíram a pedido). Continua texto livre.
+TIPOS_SUGERIDOS = ['Camisa', 'Calça', 'Jaqueta', 'Colete']
 
 
 class AcessoUniformes(models.Model):
@@ -46,7 +47,7 @@ class ItemUniforme(models.Model):
     """Uma peça do estoque: tipo + tamanho (+ modelo, quando houver)."""
 
     tipo = models.CharField(max_length=40, verbose_name='Tipo',
-                            help_text='Ex.: Camisa, Calça, Jaqueta, Boné.')
+                            help_text='Ex.: Camisa, Calça, Jaqueta, Colete.')
     tamanho = models.CharField(max_length=10, blank=True, verbose_name='Tamanho',
                                help_text='Ex.: P, M, G, GG, 38, 40. Vazio para tamanho único.')
     descricao = models.CharField(max_length=120, blank=True, verbose_name='Modelo/descrição')

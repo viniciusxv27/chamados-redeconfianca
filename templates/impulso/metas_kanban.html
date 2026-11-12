@@ -176,13 +176,16 @@ Ficam fora do filtro de mês — são pedidos esperando resposta, não tarefas d
             {% endif %}
 
             {% else %}
+            {% if col.status == 'CONCLUIDA' and espelho_rotina_adm %}{% include 'rotina_adm/_espelho_kanban.html' %}{% endif %}
             {% for m in col.metas %}
             {% include "impulso/_card_meta.html" %}
             {% empty %}
+            {% if col.status != 'CONCLUIDA' or not espelho_rotina_adm %}
             <div class="flex flex-col items-center justify-center py-8 text-center">
                 <i class="fas fa-inbox text-gray-200 text-xl mb-1"></i>
                 <p class="text-xs text-gray-300">Vazio</p>
             </div>
+            {% endif %}
             {% endfor %}
             {% endif %}
             {% if col.restantes %}

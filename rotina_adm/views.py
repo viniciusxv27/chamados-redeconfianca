@@ -14,7 +14,7 @@ from django.views.decorators.http import require_POST
 from communications.models import CommunicationGroup
 from users.models import Sector, User
 
-from . import servicos
+from . import ranking, servicos
 from .models import AcessoRotinaAdm, ConfiguracaoRotinaAdm, ItemChecklist, MarcacaoChecklist
 from .permissoes import e_superadmin, exige_acesso, papel, pode_gerir
 
@@ -172,6 +172,42 @@ def checklist_editar(request):
         'loja': loja, 'lojas': [(l, contagem.get(l.id, 0)) for l in servicos.lojas()],
         'itens': ItemChecklist.objects.filter(loja=loja, ativo=True),
         'gestor': True, 'superadmin': e_superadmin(request.user), 'aba': 'checklist',
+    })
+
+
+@login_required
+@exige_acesso(gerir=True)
+def ranking_analistas(request):
+    """Ranking dos analistas pelo check-list da loja e quem está elegível ao broche (12/11/2026).
+
+    Gestor e SUPERADMIN veem; só o SUPERADMIN muda os mínimos do broche.
+    """
+    cfg = ConfiguracaoRotinaAdm.get()
+    mes = (request.GET.get('mes') or request.POST.get('mes') or '').strip()
+    if request.method == 'POST':
+        volta = reverse('rotina_adm:ranking') + (f'?mes={mes}' if mes else '')
+        if not e_superadmin(request.user):
+            messages.error(request, 'Só o SUPERADMIN muda o critério do broche.')
+            return redirect(volta)
+        valores = {}
+        for campo in ('broche_pct_minimo', 'broche_no_prazo_minimo'):
+            texto = (request.POST.get(campo) or '').strip()
+            if not texto.isdigit() or int(texto) > 100:
+                messages.error(request, 'Use números de 0 a 100.')
+                return redirect(volta)
+            valores[campo] = int(texto)
+        ConfiguracaoRotinaAdm.objects.filter(pk=cfg.pk).update(
+            atualizado_por=request.user, atualizado_em=timezone.now(), **valores)
+        messages.success(request, 'Critério do broche salvo.')
+        return redirect(volta)
+
+    dados = ranking.calcular(mes, cfg)
+    mes_escolhido = f'{dados["inicio"].year:04d}-{dados["inicio"].month:02d}'
+    return render(request, 'rotina_adm/ranking.html', {
+        **dados, 'mes': mes_escolhido, 'meses': ranking.meses_para_escolher(),
+        'mes_extenso': f'{MESES[dados["inicio"].month - 1]} de {dados["inicio"].year}',
+        'mes_atual': dados['inicio'] == timezone.localdate().replace(day=1),
+        'gestor': True, 'superadmin': e_superadmin(request.user), 'aba': 'ranking',
     })
 
 

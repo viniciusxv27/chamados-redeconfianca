@@ -4,40 +4,100 @@
 
 {% block extra_css %}
 <style>
-    .ac-card { background:#fff; border:1px solid #EDEDF0; border-radius:1rem; box-shadow:0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.06); }
-    .ac-hero { background: radial-gradient(900px 220px at 0% 0%, rgba(245,158,11,.14), transparent 60%),
-        radial-gradient(900px 220px at 100% 0%, rgba(79,70,229,.10), transparent 60%), linear-gradient(180deg,#FFF 0%,#FBFBFC 100%); }
+    /* Cores do módulo em tokens: o tema escuro do portal (html.dark) só troca os valores,
+       sem mexer na especificidade das regras (os utilitários do Tailwind continuam valendo). */
+    :root {
+        --ac-sup:#fff; --ac-sup-2:#F9FAFB; --ac-linha-hover:#FAFAFA;
+        --ac-borda:#EDEDF0; --ac-borda-suave:#F3F4F6; --ac-borda-campo:#D1D5DB;
+        --ac-campo:#fff; --ac-campo-txt:#111827; --ac-placeholder:#9CA3AF;
+        --ac-label:#4B5563; --ac-th:#6B7280;
+        --ac-sombra:0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.06);
+        --ac-hero-1:rgba(245,158,11,.14); --ac-hero-2:rgba(79,70,229,.10); --ac-hero-topo:#FFF; --ac-hero-base:#FBFBFC;
+        --ac-tab-txt:#B45309; --ac-tab-bg:#FFFBEB; --ac-tab-linha:#D97706;
+        --ac-n-bg:#FEF3C7; --ac-n-txt:#92400E;
+        --ac-claro-bg:#fff; --ac-claro-txt:#374151; --ac-claro-borda:#E5E7EB; --ac-claro-hover:#F9FAFB;
+        --ac-copiar:#9ca3af; --ac-copiar-hover:#b45309; --ac-copiar-hover-bg:#fef3c7;
+        --ac-ok-bg:#DCFCE7; --ac-ok-txt:#166534; --ac-pend-bg:#FEF3C7; --ac-pend-txt:#92400E;
+        --ac-black-bg:#111827; --ac-black-txt:#fff; --ac-black-borda:transparent;
+        --ac-modal-fundo:rgba(17,24,39,.55);
+    }
+    html.dark {
+        --ac-sup:var(--tema-superficie,#1b2130); --ac-sup-2:var(--tema-superficie-2,#232a3b);
+        --ac-linha-hover:var(--tema-superficie-2,#232a3b);
+        --ac-borda:var(--tema-borda,#313a4f); --ac-borda-suave:var(--tema-borda-suave,#262e40); --ac-borda-campo:#3d475d;
+        --ac-campo:var(--tema-superficie-3,#2b3346); --ac-campo-txt:var(--tema-texto,#e7eaf0); --ac-placeholder:var(--tema-texto-3,#8b93a5);
+        --ac-label:var(--tema-texto-2,#b6bdcc); --ac-th:var(--tema-texto-3,#8b93a5);
+        --ac-sombra:0 1px 2px rgba(0,0,0,.35);
+        --ac-hero-1:rgba(245,158,11,.12); --ac-hero-2:rgba(99,102,241,.12);
+        --ac-hero-topo:var(--tema-superficie,#1b2130); --ac-hero-base:var(--tema-fundo,#12161f);
+        --ac-tab-txt:#fbbf24; --ac-tab-bg:rgba(245,158,11,.14); --ac-tab-linha:#f59e0b;
+        --ac-n-bg:rgba(245,158,11,.24); --ac-n-txt:#fcd34d;
+        --ac-claro-bg:var(--tema-superficie-2,#232a3b); --ac-claro-txt:var(--tema-texto,#e7eaf0);
+        --ac-claro-borda:var(--tema-borda,#313a4f); --ac-claro-hover:var(--tema-superficie-3,#2b3346);
+        --ac-copiar:var(--tema-texto-3,#8b93a5); --ac-copiar-hover:#fbbf24; --ac-copiar-hover-bg:rgba(245,158,11,.16);
+        --ac-ok-bg:rgba(34,197,94,.18); --ac-ok-txt:#86efac; --ac-pend-bg:rgba(245,158,11,.18); --ac-pend-txt:#fcd34d;
+        --ac-black-bg:#05070b; --ac-black-txt:#f3f4f6; --ac-black-borda:#4b5563;
+        --ac-modal-fundo:rgba(0,0,0,.65);
+    }
+    .ac-card { background:var(--ac-sup); border:1px solid var(--ac-borda); border-radius:1rem; box-shadow:var(--ac-sombra); }
+    .ac-hero { background: radial-gradient(900px 220px at 0% 0%, var(--ac-hero-1), transparent 60%),
+        radial-gradient(900px 220px at 100% 0%, var(--ac-hero-2), transparent 60%), linear-gradient(180deg,var(--ac-hero-topo) 0%,var(--ac-hero-base) 100%); }
     .ac-tab { position:relative; white-space:nowrap; }
-    .ac-tab-ativa { color:#B45309; background:#FFFBEB; }
-    .ac-tab-ativa::after { content:''; position:absolute; left:.75rem; right:.75rem; bottom:-1px; height:2px; background:#D97706; border-radius:2px; }
-    .ac-n { font-size:10px; padding:0 .35rem; border-radius:9999px; background:#FEF3C7; color:#92400E; margin-left:.25rem; font-weight:700; }
+    .ac-tab-ativa { color:var(--ac-tab-txt); background:var(--ac-tab-bg); }
+    .ac-tab-ativa::after { content:''; position:absolute; left:.75rem; right:.75rem; bottom:-1px; height:2px; background:var(--ac-tab-linha); border-radius:2px; }
+    .ac-n { font-size:10px; padding:0 .35rem; border-radius:9999px; background:var(--ac-n-bg); color:var(--ac-n-txt); margin-left:.25rem; font-weight:700; }
     .tabular { font-variant-numeric: tabular-nums; }
-    .ac-input { width:100%; border:1px solid #D1D5DB; border-radius:.5rem; padding:.45rem .7rem; font-size:.875rem; background:#fff; }
+    .ac-input { width:100%; border:1px solid var(--ac-borda-campo); border-radius:.5rem; padding:.45rem .7rem; font-size:.875rem; background:var(--ac-campo); color:var(--ac-campo-txt); }
+    .ac-input::placeholder { color:var(--ac-placeholder); }
     .ac-input:focus { outline:none; border-color:#F59E0B; box-shadow:0 0 0 3px rgba(245,158,11,.18); }
-    .ac-label { display:block; font-size:.72rem; font-weight:600; color:#4B5563; margin-bottom:.2rem; }
+    .ac-label { display:block; font-size:.72rem; font-weight:600; color:var(--ac-label); margin-bottom:.2rem; }
     .ac-btn { display:inline-flex; align-items:center; gap:.4rem; padding:.45rem .9rem; border-radius:.5rem; font-size:.85rem; font-weight:600; }
+    .ac-btn:disabled { opacity:.55; cursor:not-allowed; }
     .ac-btn-pri { background:#D97706; color:#fff; } .ac-btn-pri:hover { background:#B45309; }
-    .ac-btn-claro { background:#fff; color:#374151; border:1px solid #E5E7EB; } .ac-btn-claro:hover { background:#F9FAFB; }
+    .ac-btn-claro { background:var(--ac-claro-bg); color:var(--ac-claro-txt); border:1px solid var(--ac-claro-borda); } .ac-btn-claro:hover { background:var(--ac-claro-hover); }
     .ac-btn-mini { padding:.25rem .55rem; font-size:.75rem; border-radius:.4rem; }
-    .ac-copiar { display:inline-flex; align-items:center; justify-content:center; width:1.6rem; height:1.6rem; border-radius:.4rem; color:#9ca3af; flex-shrink:0; }
-    .ac-copiar:hover { color:#b45309; background:#fef3c7; }
+    .ac-copiar { display:inline-flex; align-items:center; justify-content:center; width:1.6rem; height:1.6rem; border-radius:.4rem; color:var(--ac-copiar); flex-shrink:0; }
+    .ac-copiar:hover { color:var(--ac-copiar-hover); background:var(--ac-copiar-hover-bg); }
     .ac-chip { display:inline-flex; align-items:center; gap:.25rem; padding:.05rem .5rem; border-radius:9999px; font-size:11px; font-weight:600; white-space:nowrap; }
-    .s-OK { background:#DCFCE7; color:#166534; } .s-PENDENTE, .s- { background:#FEF3C7; color:#92400E; }
-    .s-BLACKLIST { background:#111827; color:#fff; }
-    .ac-modal { position:fixed; inset:0; z-index:60; background:rgba(17,24,39,.55); display:none; align-items:flex-end; justify-content:center; }
+    .s-OK { background:var(--ac-ok-bg); color:var(--ac-ok-txt); } .s-PENDENTE, .s- { background:var(--ac-pend-bg); color:var(--ac-pend-txt); }
+    .s-BLACKLIST { background:var(--ac-black-bg); color:var(--ac-black-txt); box-shadow:inset 0 0 0 1px var(--ac-black-borda); }
+    .ac-modal { position:fixed; inset:0; z-index:60; background:var(--ac-modal-fundo); display:none; align-items:flex-end; justify-content:center; }
     .ac-modal.aberto { display:flex; }
     @media (min-width:640px) { .ac-modal { align-items:center; padding:1.5rem; } }
-    .ac-modal > div { background:#fff; width:100%; max-height:92vh; overflow-y:auto; border-radius:1rem 1rem 0 0; }
+    .ac-modal > div { background:var(--ac-sup); width:100%; max-height:92vh; overflow-y:auto; border-radius:1rem 1rem 0 0; }
     @media (min-width:640px) { .ac-modal > div { border-radius:1rem; } }
     table.ac-tabela { width:100%; font-size:.8125rem; }
-    table.ac-tabela th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.03em; color:#6B7280; font-weight:600; padding:.55rem .7rem; background:#F9FAFB; border-bottom:1px solid #F3F4F6; white-space:nowrap; }
-    table.ac-tabela td { padding:.55rem .7rem; border-bottom:1px solid #F3F4F6; vertical-align:top; }
-    table.ac-tabela tbody tr:hover td { background:#FAFAFA; }
+    table.ac-tabela th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.03em; color:var(--ac-th); font-weight:600; padding:.55rem .7rem; background:var(--ac-sup-2); border-bottom:1px solid var(--ac-borda-suave); white-space:nowrap; }
+    table.ac-tabela td { padding:.55rem .7rem; border-bottom:1px solid var(--ac-borda-suave); vertical-align:top; }
+    table.ac-tabela tbody tr:hover td { background:var(--ac-linha-hover); }
     details.ac-det > summary { list-style:none; cursor:pointer; } details.ac-det > summary::-webkit-details-marker { display:none; }
+
+    /* Tema escuro: o que a camada global (static/css/tema-escuro.css) não cobre nas telas do Acess. */
+    /* O select de status da ficha: a regra global de select venceria a cor do status. */
+    html.dark select.s-OK { background-color:var(--ac-ok-bg); color:var(--ac-ok-txt); }
+    html.dark select.s-PENDENTE, html.dark select.s- { background-color:var(--ac-pend-bg); color:var(--ac-pend-txt); }
+    html.dark select.s-BLACKLIST { background-color:var(--ac-black-bg); color:var(--ac-black-txt); }
+    html.dark .ac-input, html.dark .ac-raiz input.ac-input[type] { background-color:var(--ac-campo); color:var(--ac-campo-txt); border-color:var(--ac-borda-campo); }
+    html.dark .ac-raiz .ac-input:focus, html.dark .ac-raiz input.ac-input[type]:focus { border-color:#F59E0B; }
+    html.dark .ac-raiz option { background-color:var(--tema-superficie,#1b2130); color:var(--tema-texto,#e7eaf0); }
+    /* Destaques com !important do Tailwind (filtro ativo, card marcado) ficavam creme no escuro. */
+    html.dark .ac-raiz .\!bg-amber-50 { background-color:rgba(245,158,11,.16) !important; }
+    html.dark .ac-raiz .ring-amber-100 { --tw-ring-color:rgba(245,158,11,.30); }
+    /* Hovers e tons que a camada global não remapeia (sumiam no fundo escuro). */
+    html.dark .ac-raiz .hover\:text-amber-700:hover { color:#fcd34d; }
+    html.dark .ac-raiz .hover\:text-sky-700:hover { color:#7dd3fc; }
+    html.dark .ac-raiz .hover\:text-red-600:hover { color:#fca5a5; }
+    html.dark .ac-raiz .text-indigo-500 { color:#a5b4fc; }
+    html.dark .ac-raiz .text-indigo-600, html.dark .ac-raiz .text-indigo-700 { color:#c7d2fe; }
+    html.dark .ac-raiz .text-emerald-600, html.dark .ac-raiz .text-emerald-700 { color:#6ee7b7; }
+    html.dark .ac-raiz .text-amber-500 { color:#fbbf24; }
+    html.dark .ac-raiz .border-gray-300 { border-color:var(--ac-borda-campo); }
+    html.dark .ac-raiz input[type="checkbox"], html.dark .ac-raiz input[type="radio"] { color-scheme:dark; }
 </style>
 {% endblock %}
 
 {% block content %}
+<div class="ac-raiz">
 <div class="ac-hero -mx-2 sm:-mx-4 lg:-mx-6 -mt-2 sm:-mt-4 lg:-mt-6 px-2 sm:px-4 lg:px-6 pt-5 pb-0 mb-5 border-b border-gray-100">
     <div class="flex items-start justify-between gap-4 flex-wrap">
         <div class="min-w-0">
@@ -117,4 +177,5 @@ window.acWhatsapp = function (url, modelo, senha) {
         .then(function (r) { return r.json(); });
 };
 </script>
+</div>
 {% endblock %}

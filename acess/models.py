@@ -455,6 +455,10 @@ def _caminho_xml_gefac(instancia, nome):
     return f'acess/gefac/{timezone.now():%Y/%m}/{uuid.uuid4().hex}.xml'
 
 
+# De onde veio o XML (12/11/2026): o RH pode mandar no pré-cadastro ou na edição do usuário.
+ORIGENS_XML = [('ACESS', 'Acess'), ('PRE_CADASTRO', 'Pré-cadastro'), ('EDICAO', 'Edição do usuário')]
+
+
 class XmlGefac(models.Model):
     """O XML do pedido de criação do perfil no GEFAC (Etapa 1). Guarda todos os enviados; o mais novo é o que vale."""
 
@@ -465,6 +469,8 @@ class XmlGefac(models.Model):
     enviado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
                                     related_name='+')
     enviado_em = models.DateTimeField(default=timezone.now, db_index=True)
+    # db_default: os outros servidores ainda gravam sem esta coluna.
+    origem = models.CharField(max_length=12, choices=ORIGENS_XML, default='ACESS', db_default='ACESS', blank=True)
 
     class Meta:
         ordering = ['-enviado_em', '-id']
@@ -473,3 +479,27 @@ class XmlGefac(models.Model):
 
     def __str__(self):
         return f'{self.nome_original} ({self.colaborador})'
+
+
+class XmlGefacPendente(models.Model):
+    """XML do GEFAC mandado pelo RH antes de a pessoa ter ficha no Acess (pré-cadastro ainda não aprovado).
+
+    Fica aqui, ligado ao usuário, e vira um XmlGefac (mesmo arquivo, sem nova cópia) quando a ficha nasce.
+    """
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='xmls_gefac_pendentes')
+    arquivo = models.FileField(upload_to=_caminho_xml_gefac, max_length=200)
+    nome_original = models.CharField(max_length=200)
+    tamanho = models.PositiveIntegerField(default=0)
+    origem = models.CharField(max_length=12, choices=ORIGENS_XML, default='PRE_CADASTRO')
+    enviado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='+')
+    enviado_em = models.DateTimeField(default=timezone.now, db_index=True)
+
+    class Meta:
+        ordering = ['-enviado_em', '-id']
+        verbose_name = 'XML do GEFAC aguardando a ficha'
+        verbose_name_plural = 'XMLs do GEFAC aguardando a ficha'
+
+    def __str__(self):
+        return f'{self.nome_original} ({self.user})'

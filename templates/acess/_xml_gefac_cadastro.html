@@ -1,0 +1,43 @@
+{% comment %}
+Campo "XML do GEFAC" do pré-cadastro (xml_contexto='pre_cadastro') e da edição do usuário (xml_contexto='edicao').
+Opcional: sem arquivo, o cadastro segue normal. O XML vai para a Etapa 1 do Acess (ou espera a ficha nascer).
+{% endcomment %}
+<div class="rounded-lg border border-gray-200 bg-gray-50 p-4" id="xmlGefacCampo">
+    <div class="flex items-start gap-3">
+        <span class="w-9 h-9 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center flex-shrink-0"><i class="fas fa-file-code"></i></span>
+        <div class="min-w-0 flex-1">
+            <p class="text-sm font-semibold text-gray-900">XML do GEFAC <span class="text-xs font-normal text-gray-400">(opcional)</span></p>
+            <p class="text-xs text-gray-500 mt-0.5">
+                {% if xml_contexto == 'pre_cadastro' %}O arquivo .xml do pedido de criação do perfil no GEFAC. Não tem agora? Pule: dá para mandar depois, na edição do colaborador. Ele aparece na Etapa 1 do Acess quando o pré-cadastro for aprovado.
+                {% else %}Ao salvar, o arquivo vai para a Etapa 1 do Acess (Criação do GEFAC), pronto para baixar. Só .xml, até 5 MB.{% endif %}
+            </p>
+            {% if xml_contexto == 'edicao' %}
+            {% if xml_gefac_ultimo %}
+            <p class="text-xs text-emerald-700 mt-2" data-xml-situacao="ficha"><i class="fas fa-circle-check mr-1"></i>Na ficha do Acess: <strong class="break-all">{{ xml_gefac_ultimo.nome_original }}</strong> · {{ xml_gefac_ultimo.enviado_em|date:"d/m/Y H:i" }}{% if xml_gefac_ultimo.enviado_por %} · {{ xml_gefac_ultimo.enviado_por.get_full_name|default:xml_gefac_ultimo.enviado_por.email }}{% endif %}</p>
+            {% endif %}
+            {% for x in xml_gefac_pendentes %}
+            <p class="text-xs text-amber-700 mt-2" data-xml-situacao="pendente"><i class="fas fa-hourglass-half mr-1"></i>Aguardando a ficha do Acess: <strong class="break-all">{{ x.nome_original }}</strong> · {{ x.enviado_em|date:"d/m/Y H:i" }} — entra na Etapa 1 {{ xml_gefac_quando|default:"quando a ficha do Acess for criada" }}.</p>
+            {% endfor %}
+            {% endif %}
+            <label for="xml_gefac" class="mt-3 flex items-center gap-3 rounded-lg border-2 border-dashed border-gray-300 bg-white px-3 py-3 cursor-pointer hover:border-amber-400 transition-colors">
+                <i class="fas fa-upload text-amber-500"></i>
+                <span class="min-w-0 flex-1 text-sm text-gray-600 break-all" data-xml-nome>{% if xml_contexto == 'edicao' and xml_gefac_ultimo %}Escolher nova versão do XML{% else %}Escolher o arquivo .xml{% endif %}</span>
+                <input type="file" id="xml_gefac" name="xml_gefac" accept=".xml,application/xml,text/xml" class="sr-only">
+            </label>
+            <button type="button" class="hidden mt-1 text-xs text-gray-500 hover:text-gray-700" data-xml-limpar><i class="fas fa-xmark mr-1"></i>Tirar o arquivo (pular)</button>
+        </div>
+    </div>
+</div>
+<script>
+(function () {
+    var caixa = document.getElementById('xmlGefacCampo'); if (!caixa) return;
+    var campo = caixa.querySelector('#xml_gefac'), nome = caixa.querySelector('[data-xml-nome]'), limpar = caixa.querySelector('[data-xml-limpar]');
+    var padrao = nome.textContent;
+    campo.addEventListener('change', function () {
+        var f = campo.files && campo.files[0];
+        nome.textContent = f ? f.name : padrao;
+        limpar.classList.toggle('hidden', !f);
+    });
+    limpar.addEventListener('click', function () { campo.value = ''; nome.textContent = padrao; limpar.classList.add('hidden'); });
+})();
+</script>

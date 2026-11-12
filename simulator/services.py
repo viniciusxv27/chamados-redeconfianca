@@ -2812,6 +2812,85 @@ def _prefill_num(value) -> str:
     return f'{v:.2f}'
 
 
+def _prefill_qtd(value) -> str:
+    """Quantidade (Fixa): sem arredondar, até 6 casas e sem zeros à direita; '' se 0.
+
+    Antes virava inteiro (o campo era step=1) e isso mudava o resultado: meta da
+    Fixa 8,63 copiada como 9 tirava a Fixa de 69,52% para 66,67% (abaixo dos
+    69,5% que liberam as premiações), e a quantidade projetada 13,33 virava 13.
+    Desde 12/11/2026 os campos de quantidade da Fixa aceitam casas decimais
+    (step="any"), então a cópia leva o valor exato — igual a deixar o campo vazio
+    (meta oficial) ou à aba Projeção.
+    """
+    try:
+        v = float(value or 0)
+    except (TypeError, ValueError):
+        return ''
+    if not v or v != v:
+        return ''
+    if abs(v - round(v)) < 1e-9:
+        return str(int(round(v)))
+    return f'{v:.6f}'.rstrip('0').rstrip('.')
+
+
+# Colunas da tabela de inputs do Simulador → campos de cada uma (Fixa à parte).
+SIMULADOR_COLUNAS = ('meta', 'real', 'realpdv')
+
+
+def build_simulador_valores(simulation: Dict[str, Any], target_role: str,
+                            projetar_coordenacao: bool = False) -> Dict[str, Dict[str, str]]:
+    """Valores de TODA a tabela de inputs do Simulador, a partir de uma simulação
+    de qualquer visão (Realizado ou Projeção). Base do pré-preenchimento e dos
+    botões "Copiar Projeção" / "Copiar Realizado" (12/11/2026).
+
+    Devolve ``{'meta': {...}, 'real': {...}, 'realpdv': {...}}`` com as chaves
+    dos campos (sem o prefixo ``sim__``) e ``''`` onde o valor é zero — copiar a
+    coluna inteira limpa o que não tem valor naquela visão.
+
+    - Meta: ``<pilar>__meta`` (Fixa em quantidade).
+    - Real Individual: ``<pilar>__real``; Fixa → ``fixa__qty`` e ``fixa__receita``.
+    - Real Coordenação (gerente) / Real PDV (consultor): ``<pilar>__realpdv`` e
+      ``fixa__qtypdv`` (quantidade). Coordenador e "A parte" não têm essa coluna
+      no cálculo — volta vazia.
+
+    Gerente: ``coord_proj`` é o realizado da coordenação na visão REALIZADO e a
+    projeção na PROJEÇÃO. ``projetar_coordenacao=True`` projeta pelo DU um
+    ``coord_proj`` que veio realizado (é o que o 1º carregamento faz).
+    """
+    valores: Dict[str, Dict[str, str]] = {col: {} for col in SIMULADOR_COLUNAS}
+    if not simulation or simulation.get('error'):
+        return valores
+    rows_by_key = {r.get('key'): r for r in simulation.get('rows', [])}
+    tem_terceira = target_role in (ROLE_CONSULTOR, ROLE_GERENTE)
+    du_passed, du_total = (get_business_days_info()
+                           if (target_role == ROLE_GERENTE and projetar_coordenacao) else (0, 0))
+    for disp, rk in _PREFILL_DISPLAY_TO_ROW.items():
+        row = rows_by_key.get(rk) or {}
+        fixa = rk == 'fixa'
+
+        valores['meta'][f'{disp}__meta'] = (_prefill_qtd if fixa else _prefill_num)(row.get('meta'))
+
+        if fixa:
+            valores['real']['fixa__qty'] = _prefill_qtd(row.get('quantity'))
+            valores['real']['fixa__receita'] = _prefill_num(row.get('revenue'))
+        else:
+            valores['real'][f'{disp}__real'] = _prefill_num(row.get('proj'))
+
+        if not tem_terceira:
+            continue
+        if target_role == ROLE_GERENTE:
+            terceira = row.get('coord_proj')
+            if terceira is not None and projetar_coordenacao:
+                terceira = project_from_realized(terceira, du_passed, du_total)
+        else:
+            terceira = row.get('pdv_proj')
+        if fixa:
+            valores['realpdv']['fixa__qtypdv'] = _prefill_qtd(terceira)
+        else:
+            valores['realpdv'][f'{disp}__realpdv'] = _prefill_num(terceira)
+    return valores
+
+
 def build_simulador_prefill(simulation: Dict[str, Any], target_role: str) -> Dict[str, str]:
     """De uma simulação em modo REALIZADO → valores para pré-preencher o Simulador.
 
@@ -2819,44 +2898,23 @@ def build_simulador_prefill(simulation: Dict[str, Any], target_role: str) -> Dic
     (apenas consultor); Fixa → ``fixa__qty`` (quantidade) e ``fixa__receita`` (R$).
     Gerente: ``<pilar>__realpdv`` / ``fixa__qtypdv`` = Real Coordenação, com a projeção
     atual da coordenação. Devolve ``{'<pilar>__<campo>': 'valor'}``.
+
+    Mesma montagem de ``build_simulador_valores``; a meta fica de fora (o campo é
+    opcional e, vazio, vale a meta oficial) e só entra o que tem valor.
     """
-    prefill: Dict[str, str] = {}
-    if not simulation or simulation.get('error'):
-        return prefill
-    rows_by_key = {r.get('key'): r for r in simulation.get('rows', [])}
     # Gerente: "Real Coordenação" vem com a PROJEÇÃO atual da coordenação (11/11/2026) —
     # realizado da coordenação (MySQL D-1) ÷ DU passados × DU do mês, a mesma conta da
     # visão Projeção. A simulação do 1º carregamento é REALIZADO, então projeta aqui.
-    du_passed, du_total = get_business_days_info() if target_role == ROLE_GERENTE else (0, 0)
-    for disp, rk in _PREFILL_DISPLAY_TO_ROW.items():
-        row = rows_by_key.get(rk)
-        if not row:
+    valores = build_simulador_valores(simulation, target_role,
+                                      projetar_coordenacao=(target_role == ROLE_GERENTE))
+    prefill: Dict[str, str] = {}
+    for chave, valor in list(valores['real'].items()) + list(valores['realpdv'].items()):
+        # Consultor: a Fixa do PDV nunca veio pré-preenchida (o cálculo do consultor
+        # não usa a Fixa do PDV); continua assim — o botão de copiar preenche.
+        if target_role == ROLE_CONSULTOR and chave == 'fixa__qtypdv':
             continue
-        if target_role == ROLE_GERENTE and row.get('coord_proj') is not None:
-            coord = project_from_realized(row.get('coord_proj'), du_passed, du_total)
-            if rk == 'fixa':
-                coord_qtd = int(round(coord))       # o campo é de quantidade (step=1)
-                if coord_qtd:
-                    prefill['fixa__qtypdv'] = str(coord_qtd)
-            else:
-                coord_txt = _prefill_num(coord)
-                if coord_txt:
-                    prefill[f'{disp}__realpdv'] = coord_txt
-        if rk == 'fixa':
-            qty = _prefill_num(row.get('quantity'))
-            if qty:
-                prefill['fixa__qty'] = qty
-            rev = _prefill_num(row.get('revenue'))
-            if rev:
-                prefill['fixa__receita'] = rev
-        else:
-            real = _prefill_num(row.get('proj'))
-            if real:
-                prefill[f'{disp}__real'] = real
-            if target_role == ROLE_CONSULTOR:
-                realpdv = _prefill_num(row.get('pdv_proj'))
-                if realpdv:
-                    prefill[f'{disp}__realpdv'] = realpdv
+        if valor:
+            prefill[chave] = valor
     return prefill
 
 

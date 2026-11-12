@@ -59,57 +59,44 @@
     </article>
 </section>
 
-{# ── Renova da loja: avaliações (/renova/) e ordens ZVNB do SAP (/sap/renova/) ── #}
+{% comment %}
+Renova da loja: avaliações (/renova/) e ordens ZVNB do SAP (/sap/renova/).
+Compacto desde 12/11/2026: só os números; as listas recentes abrem no "Ver detalhado".
+{% endcomment %}
 <section class="ra-grade-renova">
-    <article class="ra-card ra-secao" id="raRenova">
-        <div class="ra-secao-cabeca">
-            <div class="ra-secao-titulo"><span class="ic" style="background:var(--ra-verde-claro);color:var(--ra-verde)"><i class="fas fa-recycle"></i></span>
-                <div><h2>Renova · avaliações</h2><p>Aparelhos avaliados na {{ loja.name }}</p></div></div>
+    <article class="ra-card ra-renova" id="raRenova">
+        <div class="ra-renova-cabeca">
+            <span class="ic verde"><i class="fas fa-recycle"></i></span>
+            <h2>Renova · avaliações</h2>
             <a class="ra-link" href="{% url 'renova:inicio' %}?loja={{ loja.id }}">Abrir no Renova <i class="fas fa-chevron-right text-[10px]"></i></a>
         </div>
         {% if not renova.disponivel %}
-        <div class="ra-vazio"><i class="fas fa-plug"></i>Renova indisponível agora.</div>
+        <p class="ra-renova-fora"><i class="fas fa-plug"></i>Renova indisponível agora.</p>
         {% else %}
-        <div class="ra-mini">
+        <div class="ra-mini" style="--n: 4">
             <div><b>{{ renova.no_mes }}</b><small>neste mês</small></div>
             <div class="{% if renova.a_aprovar %}amarelo{% endif %}"><b>{{ renova.a_aprovar }}</b><small>aguardando gerente</small></div>
             <div class="{% if renova.aguardando %}azul{% endif %}"><b>{{ renova.aguardando }}</b><small>aguardando chegada</small></div>
             <div class="{% if renova.nao_chegaram %}vermelho{% endif %}"><b>{{ renova.nao_chegaram }}</b><small>não chegaram</small></div>
         </div>
-        {% for i in renova.recentes %}
-        <a class="ra-item" href="{% url 'renova:detalhe' i.obj.pk %}">
-            <span class="meio"><strong>{{ i.obj.codigo }} · {{ i.obj.aparelho }}</strong>
-                <small>{{ i.obj.criado_em|date:"d/m/Y" }}{% if i.obj.vendedor_nome %} · {{ i.obj.vendedor_nome }}{% endif %}</small></span>
-            <span class="ra-selo {{ i.tom }}">{{ i.situacao }}</span>
-        </a>
-        {% empty %}
-        <div class="ra-vazio"><i class="fas fa-mobile-alt"></i>Nenhuma avaliação feita na loja.</div>
-        {% endfor %}
+        <button type="button" class="ra-detalhe" data-abrir="raModalRenova"><i class="fas fa-list"></i>Ver detalhado</button>
         {% endif %}
     </article>
-    <article class="ra-card ra-secao" id="raSapRenova">
-        <div class="ra-secao-cabeca">
-            <div class="ra-secao-titulo"><span class="ic" style="background:var(--ra-azul-claro);color:var(--ra-azul)"><i class="fas fa-file-invoice-dollar"></i></span>
-                <div><h2>Renova no SAP</h2><p>Vendas com Renova (ZVNB) e o chamado de cada uma</p></div></div>
+    <article class="ra-card ra-renova" id="raSapRenova">
+        <div class="ra-renova-cabeca">
+            <span class="ic azul"><i class="fas fa-file-invoice-dollar"></i></span>
+            <h2>Renova no SAP</h2>
             <a class="ra-link" href="{% url 'auditoria_sap:renova' %}?loja={{ loja.id }}">Abrir na Visão Renova <i class="fas fa-chevron-right text-[10px]"></i></a>
         </div>
         {% if not sap_renova.disponivel %}
-        <div class="ra-vazio"><i class="fas fa-plug"></i>Visão Renova indisponível agora.</div>
+        <p class="ra-renova-fora"><i class="fas fa-plug"></i>Visão Renova indisponível agora.</p>
         {% else %}
-        <div class="ra-mini">
+        <div class="ra-mini" style="--n: 3">
             <div class="{% if sap_renova.sem_chamado %}vermelho{% endif %}"><b>{{ sap_renova.sem_chamado }}</b><small>sem chamado (todas)</small></div>
             <div class="{% if sap_renova.sem_chamado_mes %}amarelo{% endif %}"><b>{{ sap_renova.sem_chamado_mes }}</b><small>sem chamado no mês</small></div>
             <div><b>{{ sap_renova.mes_com_chamado }}<span>/{{ sap_renova.mes_total }}</span></b><small>do mês com chamado</small></div>
         </div>
-        {% for v in sap_renova.recentes %}
-        <a class="ra-item" href="{% url 'auditoria_sap:renova' %}?loja={{ loja.id }}&q={{ v.ordem|urlencode }}">
-            <span class="meio"><strong>Ordem {{ v.ordem }}{% if v.cliente_nome %} · {{ v.cliente_nome }}{% endif %}</strong>
-                <small>{{ v.data_fatura|date:"d/m/Y"|default:"sem data" }}{% if v.material %} · {{ v.material }}{% endif %}{% if v.valor_faturado is not None %} · R$ {{ v.valor_faturado|floatformat:"2g" }}{% endif %}</small></span>
-            <span class="ra-selo vermelho">Sem chamado</span>
-        </a>
-        {% empty %}
-        <div class="ra-vazio"><i class="fas fa-check-circle"></i>Nenhuma venda com Renova sem chamado na loja.</div>
-        {% endfor %}
+        <button type="button" class="ra-detalhe" data-abrir="raModalSapRenova"><i class="fas fa-list"></i>Ver detalhado</button>
         {% endif %}
     </article>
 </section>
@@ -253,6 +240,40 @@
     {% endfor %}
     {% if chamados_total > chamados|length %}<p class="ra-vazio" style="padding:14px">Mostrando os {{ chamados|length }} mais recentes.</p>{% endif %}
 </dialog>
+{% if renova.disponivel %}
+<dialog class="ra-modal" id="raModalRenova">
+    <div class="ra-modal-cabeca"><h3>Renova · avaliações recentes · {{ loja.name }}</h3><button type="button" data-fechar aria-label="Fechar"><i class="fas fa-xmark"></i></button></div>
+    <div class="ra-modal-corpo">
+        {% for i in renova.recentes %}
+        <a class="ra-item" href="{% url 'renova:detalhe' i.obj.pk %}">
+            <span class="meio"><strong>{{ i.obj.codigo }} · {{ i.obj.aparelho }}</strong>
+                <small>{{ i.obj.criado_em|date:"d/m/Y" }}{% if i.obj.vendedor_nome %} · {{ i.obj.vendedor_nome }}{% endif %}</small></span>
+            <span class="ra-selo {{ i.tom }}">{{ i.situacao }}</span>
+        </a>
+        {% empty %}
+        <div class="ra-vazio"><i class="fas fa-mobile-alt"></i>Nenhuma avaliação feita na loja.</div>
+        {% endfor %}
+    </div>
+    <p class="ra-modal-rodape"><a class="ra-link" href="{% url 'renova:inicio' %}?loja={{ loja.id }}">Ver todas no Renova <i class="fas fa-chevron-right text-[10px]"></i></a></p>
+</dialog>
+{% endif %}
+{% if sap_renova.disponivel %}
+<dialog class="ra-modal" id="raModalSapRenova">
+    <div class="ra-modal-cabeca"><h3>Renova no SAP · sem chamado · {{ loja.name }}</h3><button type="button" data-fechar aria-label="Fechar"><i class="fas fa-xmark"></i></button></div>
+    <div class="ra-modal-corpo">
+        {% for v in sap_renova.recentes %}
+        <a class="ra-item" href="{% url 'auditoria_sap:renova' %}?loja={{ loja.id }}&q={{ v.ordem|urlencode }}">
+            <span class="meio"><strong>Ordem {{ v.ordem }}{% if v.cliente_nome %} · {{ v.cliente_nome }}{% endif %}</strong>
+                <small>{{ v.data_fatura|date:"d/m/Y"|default:"sem data" }}{% if v.material %} · {{ v.material }}{% endif %}{% if v.valor_faturado is not None %} · R$ {{ v.valor_faturado|floatformat:"2g" }}{% endif %}</small></span>
+            <span class="ra-selo vermelho">Sem chamado</span>
+        </a>
+        {% empty %}
+        <div class="ra-vazio"><i class="fas fa-check-circle"></i>Nenhuma venda com Renova sem chamado na loja.</div>
+        {% endfor %}
+    </div>
+    <p class="ra-modal-rodape"><a class="ra-link" href="{% url 'auditoria_sap:renova' %}?loja={{ loja.id }}">Ver todas na Visão Renova <i class="fas fa-chevron-right text-[10px]"></i></a></p>
+</dialog>
+{% endif %}
 {% endif %}
 {% endblock %}
 

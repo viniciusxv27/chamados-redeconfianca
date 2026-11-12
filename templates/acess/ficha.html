@@ -40,7 +40,7 @@
             <li class="px-4 py-2 flex items-center gap-3 flex-wrap {% if not forloop.first %}text-gray-400{% endif %}">
                 <a href="{% url 'acess:xml_gefac_baixar' c.id x.id %}" class="font-medium {% if forloop.first %}text-amber-700{% endif %} hover:underline"><i class="fas fa-file-arrow-down mr-1"></i>{{ x.nome_original }}</a>
                 {% if forloop.first %}<span class="ac-chip s-OK">atual</span>{% endif %}
-                <span class="text-[11px] text-gray-500">{{ x.tamanho|filesizeformat }} · {{ x.enviado_em|date:"d/m/Y H:i" }}{% if x.enviado_por %} · {{ x.enviado_por.get_full_name|default:x.enviado_por.email }}{% endif %}</span>
+                <span class="text-[11px] text-gray-500">{{ x.tamanho|filesizeformat }} · {{ x.enviado_em|date:"d/m/Y H:i" }}{% if x.enviado_por %} · {{ x.enviado_por.get_full_name|default:x.enviado_por.email }}{% endif %}{% if x.origem and x.origem != 'ACESS' %} · <span class="ac-chip bg-indigo-50 text-indigo-700">veio {% if x.origem == 'PRE_CADASTRO' %}do pré-cadastro{% else %}da edição do usuário{% endif %}</span>{% endif %}</span>
                 <a href="{% url 'acess:xml_gefac_baixar' c.id x.id %}?ver=1" target="_blank" rel="noopener" class="text-[11px] text-gray-500 hover:text-amber-700">ver</a>
                 {% if pode_xml_gefac %}
                 <form method="post" action="{% url 'acess:xml_gefac_remover' c.id x.id %}" class="ml-auto" onsubmit="return confirm('Remover o XML {{ x.nome_original|escapejs }}?')">

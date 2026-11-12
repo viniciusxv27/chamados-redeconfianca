@@ -139,6 +139,16 @@ t('menu: SUPERADMIN vê', menu in cs.get('/users/profile/').content.decode())
 t('menu: gestora vê', menu in cg.get('/users/profile/').content.decode())
 t('menu: comum não vê', menu not in cc.get('/users/profile/').content.decode())
 
+print('tipos sugeridos (12/11/2026: sem Polo, Camiseta e Boné)')
+from uniformes.models import TIPOS_SUGERIDOS  # noqa: E402
+corpo = cg.get('/uniformes/').content.decode()
+lista = re.search(r'<datalist id="un-tipos">(.*?)</datalist>', corpo, re.S)
+sugeridos = re.findall(r'<option value="([^"]+)">', lista.group(1)) if lista else []
+t('sugestões sem Polo, Camiseta e Boné', TIPOS_SUGERIDOS == ['Camisa', 'Calça', 'Jaqueta', 'Colete'], TIPOS_SUGERIDOS)
+t('tela oferece só Calça, Camisa, Colete e Jaqueta', sugeridos == ['Calça', 'Camisa', 'Colete', 'Jaqueta'], sugeridos)
+t('nenhum dos tipos tirados aparece no estoque vazio',
+  not re.search(r'value="(Polo|Camiseta|Boné)"', corpo), re.findall(r'value="(Polo|Camiseta|Boné)"', corpo))
+
 print('itens e entrada')
 r = cg.post('/uniformes/item/novo/', {'tipo': 'camisa', 'tamanho': 'm', 'descricao': 'Polo azul', 'quantidade': '5',
                                      'estoque_minimo': '2', 'nota_fiscal': 'NF 123'})

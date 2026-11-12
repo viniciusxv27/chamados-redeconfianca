@@ -369,6 +369,23 @@ def _ordem_das_concluidas(metas):
     return metas.order_by('-prazo', '-id')
 
 
+def _espelho_rotina_adm(request, f, colaborador_id):
+    """Check-list da Rotina ADM concluído, como cartões só de leitura na coluna Concluída (12/11/2026).
+
+    Não é Meta: não pontua, não arrasta, não conta no total da coluna. Some com os
+    filtros de quem criou (o check-list não tem criador). Ver rotina_adm/espelho.py.
+    """
+    if request.GET.get('criadas_por_mim') == '1' or _criado_por_do_kanban(request):
+        return None
+    try:
+        from rotina_adm.espelho import cartoes_do_kanban
+        with transaction.atomic():
+            return cartoes_do_kanban(request.user, f, colaborador_id)
+    except Exception:  # noqa: BLE001 — o Kanban não cai por causa do espelho
+        logger.exception('Espelho da Rotina ADM no Kanban falhou')
+        return None
+
+
 @impulso_member_required
 def metas_kanban(request):
     user = request.user
@@ -448,6 +465,8 @@ def metas_kanban(request):
         # Quadro "Projetos da Inteligência": None (e nenhuma consulta) para quem não é do setor.
         'projetos_intel': projetos_do_quadro(user),
         'estagios_intel': ESTAGIOS_INTEL,
+        # Check-list da Rotina ADM feito pela pessoa: cartões concluídos que não pontuam.
+        'espelho_rotina_adm': _espelho_rotina_adm(request, f, colaborador_id),
         **filtros_impulso.contexto(request, f),
     }
     return render(request, 'impulso/metas_kanban.html', context)

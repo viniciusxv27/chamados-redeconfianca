@@ -30,7 +30,7 @@
                 <h3 class="text-lg font-semibold text-gray-900">Dados Básicos</h3>
             </div>
 
-            <form method="post" class="p-6 space-y-6">
+            <form method="post" enctype="multipart/form-data" class="p-6 space-y-6">
                 {% csrf_token %}
 
                 <div>
@@ -103,6 +103,8 @@
                         <p class="text-xs text-gray-500 mt-1">Fica salvo no perfil do colaborador.</p>
                     </div>
                 </div>
+
+                {% include 'acess/_xml_gefac_cadastro.html' with xml_contexto='pre_cadastro' %}
 
                 <div class="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-800 flex items-start">
                     <i class="fas fa-info-circle mt-0.5 mr-2"></i>

@@ -1220,6 +1220,12 @@ def edit_user_view(request, user_id):
         neighborhood = request.POST.get('neighborhood', '')
         city = request.POST.get('city', '')
         
+        # XML do GEFAC (opcional): recusado volta para a tela antes de gravar qualquer campo.
+        xml_gefac, xml_erro = _ler_xml_gefac(request)
+        if xml_erro:
+            messages.error(request, f'XML do GEFAC: {xml_erro} Nada foi salvo; corrija o arquivo ou deixe o campo vazio.')
+            return redirect('edit_user', user_id=user_to_edit.id)
+
         try:
             # Verificar se email já existe (exceto para o próprio usuário)
             if User.objects.filter(email=email).exclude(id=user_id).exists():
@@ -1355,13 +1361,16 @@ def edit_user_view(request, user_id):
                     request
                 )
 
+                xml_guardado = _guardar_xml_gefac(request, user_to_edit, xml_gefac, 'EDICAO') if xml_gefac else False
                 if alteracoes:
                     messages.success(
                         request,
                         f'Usuário {user_to_edit.full_name} atualizado — '
                         f'{alteracoes} campo(s) alterado(s), registrados no histórico.')
-                else:
+                elif not xml_guardado:
                     messages.info(request, 'Nenhum campo foi alterado.')
+                if xml_gefac and not xml_guardado:
+                    return redirect('edit_user', user_id=user_to_edit.id)
                 return redirect('manage_users')
                 
         except Exception as e:
@@ -1400,9 +1409,74 @@ def edit_user_view(request, user_id):
         'pode_liberar_acessos': _pode_liberar_acessos(request.user),
         'emergency_rows': _emergency_rows(request, user_to_edit),
         'dependent_rows': _dependent_rows(request, user_to_edit),
+        **_contexto_xml_gefac(user_to_edit),
         **(_contexto_documentos(request, user_to_edit) if request.user.can_manage_users() else {}),
     }
     return render(request, 'admin/edit_user.html', context)
+
+
+# ── XML do GEFAC no cadastro (12/11/2026) ───────────────────────────────────
+# O RH manda o XML do pedido do perfil GEFAC já no pré-cadastro ou depois, na edição; ele aparece na
+# Etapa 1 do Acess para baixar. Sem ficha no Acess ainda, fica guardado até a ficha nascer.
+def _ler_xml_gefac(request):
+    """(('conteúdo', 'nome') ou None, mensagem de erro ou ''). Campo vazio é pular a etapa."""
+    arquivo = request.FILES.get('xml_gefac')
+    if not arquivo:
+        return None, ''
+    from acess.servicos import RegraAcess, ler_xml_enviado
+    try:
+        return ler_xml_enviado(arquivo), ''
+    except RegraAcess as exc:
+        return None, str(exc)
+
+
+def _guardar_xml_gefac(request, alvo, xml_gefac, origem):
+    """Grava o XML já conferido. Falha aqui não desfaz o cadastro: avisa e devolve False."""
+    from acess.servicos import RegraAcess, guardar_xml_do_cadastro
+    conteudo, nome = xml_gefac
+    try:
+        c, _anexo = guardar_xml_do_cadastro(alvo, conteudo, nome, usuario=request.user, request=request, origem=origem)
+    except RegraAcess as exc:
+        messages.error(request, f'XML do GEFAC não anexado: {exc}')
+        return False
+    except Exception:  # noqa: BLE001 — armazenamento fora do ar: o cadastro já está salvo
+        import logging
+        logging.getLogger(__name__).exception('XML do GEFAC do usuário %s não foi guardado', alvo.pk)
+        messages.error(request, 'O cadastro foi salvo, mas o XML do GEFAC não pôde ser guardado agora. '
+                                'Tente de novo pela edição do usuário.')
+        return False
+    log_action(request.user, 'USER_UPDATE', f'XML do GEFAC de {alvo.full_name} enviado ({nome})', request)
+    if c is not None:
+        etapa = c.etapa_calculada
+        onde = ('já aparece na Etapa 1 (Criação do GEFAC) para baixar' if etapa == 1
+                else (f'a ficha está na Etapa {etapa}' if etapa else 'a ficha já está fora da esteira'))
+        messages.success(request, f'XML do GEFAC ({nome}) anexado na ficha do Acess de {c.nome}: {onde}.')
+    else:
+        messages.success(request, f'XML do GEFAC ({nome}) guardado. Ele entra na Etapa 1 do Acess '
+                                  f'{_quando_entra_xml(alvo)}.')
+    return True
+
+
+def _quando_entra_xml(alvo):
+    """O que falta para o XML guardado ir para a Etapa 1 (pré-cadastro aprovado ou usuário reativado)."""
+    from acess.servicos import motivo_espera_xml
+    motivo = motivo_espera_xml(alvo)
+    if motivo == 'INATIVO':
+        return 'quando o usuário for reativado'
+    if motivo == 'PRE_CADASTRO':
+        return 'quando o pré-cadastro for aprovado'
+    return 'quando a ficha do Acess for criada'
+
+
+
+def _contexto_xml_gefac(alvo):
+    try:
+        from acess.servicos import xml_gefac_do_usuario
+        ficha, ultimo, pendentes = xml_gefac_do_usuario(alvo)
+    except Exception:  # noqa: BLE001 — a tela do usuário não depende do Acess
+        return {}
+    return {'xml_gefac_ficha': ficha, 'xml_gefac_ultimo': ultimo, 'xml_gefac_pendentes': pendentes,
+            'xml_gefac_quando': _quando_entra_xml(alvo) if pendentes else ''}
 
 
 def _pode_liberar_acessos(user):
@@ -1617,6 +1691,13 @@ def pre_register_user_view(request):
             messages.error(request, 'Você não pode definir uma hierarquia maior que a sua.')
             return render(request, 'admin/pre_register_user.html', context)
 
+        # XML do GEFAC (opcional): conferido antes de criar, para não sobrar pré-cadastro com XML recusado.
+        xml_gefac, xml_erro = _ler_xml_gefac(request)
+        if xml_erro:
+            messages.error(request, f'XML do GEFAC: {xml_erro} O pré-cadastro não foi criado; '
+                                    'corrija o arquivo ou deixe o campo vazio para mandar depois.')
+            return render(request, 'admin/pre_register_user.html', context)
+
         name_parts = full_name.split()
         first_name = name_parts[0] if name_parts else ''
         last_name = ' '.join(name_parts[1:]) if len(name_parts) > 1 else ''
@@ -1669,6 +1750,8 @@ def pre_register_user_view(request):
                 request,
                 f'Pré-cadastro de {new_user.full_name} criado! Envie o link abaixo para o colaborador.'
             )
+            if xml_gefac:
+                _guardar_xml_gefac(request, new_user, xml_gefac, 'PRE_CADASTRO')
             return redirect('pre_register_link', user_id=new_user.id)
         except Exception as e:
             messages.error(request, f'Erro ao criar pré-cadastro: {str(e)}')

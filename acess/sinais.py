@@ -1,4 +1,5 @@
 """Usuário do portal inativado → aviso no Acess (desligamento imediato ou agendado).
+Reativado → descarta o aviso e leva para a ficha o XML do GEFAC que esperava a reativação.
 
 Qualquer save() que mude is_active passa por aqui (edição, importação, Quadro de HC...).
 """
@@ -33,6 +34,15 @@ def _conferir(sender, instance, created, update_fields=None, raw=False, **kwargs
                 servicos.descartar_avisos_do_reativado(instance)
     except Exception:  # noqa: BLE001 — tabela ainda não migrada noutro servidor
         logging.getLogger(__name__).exception('Acess: aviso de inativação falhou para o usuário %s', instance.pk)
+    if agora and not antes:
+        # XML do GEFAC que o RH mandou enquanto o usuário estava inativo: vai para a ficha (Etapa 1) agora.
+        try:
+            with transaction.atomic():
+                from . import servicos
+                servicos.levar_xmls_pendentes(instance)
+        except Exception:  # noqa: BLE001 — o XML continua guardado; a edição do usuário mostra que espera
+            logging.getLogger(__name__).exception('Acess: XML do GEFAC pendente não foi levado para o usuário %s',
+                                                  instance.pk)
 
 
 def conectar():

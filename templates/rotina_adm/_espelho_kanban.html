@@ -1,0 +1,43 @@
+{% comment %}
+Espelho do check-list da Rotina ADM na coluna "Concluída" do Kanban do Impulso (12/11/2026).
+Montado na hora a partir das marcações (rotina_adm/espelho.py): não é Meta, não arrasta e não pontua.
+Um cartão por pessoa, loja e dia, com os itens que aquela pessoa marcou.
+{% endcomment %}
+<details class="imp-card overflow-hidden border border-emerald-200" data-espelho-rotina-adm open>
+    <summary class="px-3 py-2 bg-emerald-50 flex items-center justify-between gap-2 cursor-pointer select-none">
+        <span class="text-xs font-semibold text-emerald-700 flex items-center gap-1.5 min-w-0">
+            <i class="fas fa-list-check"></i><span class="truncate">Rotina ADM · check-list da loja</span>
+        </span>
+        <span class="text-[11px] font-bold text-emerald-700 tabular-nums" title="Dias com check-list marcado">{{ espelho_rotina_adm.total }}</span>
+    </summary>
+    <div class="p-2 space-y-2">
+        <p class="text-[11px] text-gray-500 px-1 leading-snug"><i class="fas fa-circle-info mr-1"></i>Espelho do que foi marcado na Rotina ADM. Não entra na pontuação do Impulso.</p>
+        {% for c in espelho_rotina_adm.cartoes %}
+        <div class="imp-card p-3 border-l-4 border-emerald-500" data-espelho-cartao="{{ c.pessoa.id }}-{{ c.loja.id }}-{{ c.data|date:'Y-m-d' }}">
+            <div class="flex items-start justify-between gap-2">
+                <span class="text-sm font-semibold text-gray-800 leading-snug">Rotina ADM · Check-list da {{ c.loja.name }} · {{ c.data|date:"d/m" }}</span>
+                <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 flex-shrink-0" title="Concluída na Rotina ADM"><i class="fas fa-check"></i></span>
+            </div>
+            <p class="text-xs text-gray-500 mt-1">
+                {% if not c.proprio %}<i class="fas fa-user mr-1"></i>{{ c.pessoa.get_full_name|default:c.pessoa.username }} · {% endif %}
+                {{ c.n }} ite{{ c.n|pluralize:"m,ns" }} marcado{{ c.n|pluralize }}
+                · loja {{ c.loja_feitos }}/{{ c.loja_previstos }} no dia{% if c.loja_completa %} <i class="fas fa-circle-check text-emerald-600" title="Check-list da loja completo no dia"></i>{% endif %}
+            </p>
+            <details class="mt-1.5">
+                <summary class="text-[11px] font-semibold text-gray-500 cursor-pointer select-none">Ver itens</summary>
+                <ul class="mt-1 space-y-0.5">
+                    {% for m in c.marcacoes %}
+                    <li class="text-xs text-gray-600 flex items-start gap-1.5"><i class="fas fa-check text-emerald-600 text-[10px] mt-1"></i>
+                        <span class="min-w-0">{{ m.item.titulo }} <span class="text-gray-400">· {{ m.feito_em|time:"H:i" }}{% if m.item.horario %} (até {{ m.item.horario|time:"H:i" }}){% endif %}</span></span></li>
+                    {% endfor %}
+                </ul>
+            </details>
+        </div>
+        {% endfor %}
+        {% if espelho_rotina_adm.restantes %}
+        <p class="text-[11px] text-gray-500 px-1">+{{ espelho_rotina_adm.restantes }} dia{{ espelho_rotina_adm.restantes|pluralize }} mais antigo{{ espelho_rotina_adm.restantes|pluralize }}{% if espelho_rotina_adm.ve_ranking %} — veja o <a class="text-emerald-700 font-semibold hover:underline" href="{% url 'rotina_adm:ranking' %}">ranking da Rotina ADM</a>{% endif %}.</p>
+        {% elif espelho_rotina_adm.ve_ranking %}
+        <p class="text-[11px] px-1"><a class="text-emerald-700 font-semibold hover:underline" href="{% url 'rotina_adm:ranking' %}"><i class="fas fa-trophy mr-1"></i>Ranking dos analistas</a></p>
+        {% endif %}
+    </div>
+</details>

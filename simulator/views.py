@@ -1,5 +1,8 @@
+import logging
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
 from users.models import Sector, User
@@ -40,8 +43,11 @@ from .services import (
     get_business_days_info,
     build_simulador_prefill,
     build_simulador_metas,
+    build_simulador_valores,
 )
 from .sql_realizado import realized_prefetch
+
+logger = logging.getLogger(__name__)
 
 
 def is_superadmin(user: User) -> bool:
@@ -220,6 +226,13 @@ def simulator_dashboard(request):
     # O cálculo pesado (compute_* + MySQL) só roda no fragmento; o shell abre
     # instantâneo com skeleton e o JS busca o fragmento em seguida.
     # ------------------------------------------------------------------
+    has_target = bool(target_user and target_role) and not show_summary_only
+
+    # Botões "Copiar Projeção" / "Copiar Realizado" da tabela do Simulador: JSON
+    # com os valores da coluna na visão pedida, para a mesma pessoa (12/11/2026).
+    if request.GET.get('fragment') == 'valores':
+        return _simulador_valores_json(request, target_user, target_role, has_target)
+
     is_fragment = (
         request.GET.get('fragment') == 'results'
         or request.headers.get('X-Requested-With') == 'XMLHttpRequest'
@@ -228,8 +241,6 @@ def simulator_dashboard(request):
     # Dias úteis restantes no mês (base da meta-diária) — barato; serve os dois.
     passed_du, total_du = get_business_days_info()
     remaining_business_days = max(total_du - passed_du, 0)
-
-    has_target = bool(target_user and target_role) and not show_summary_only
 
     if not is_fragment:
         # SHELL: sem cálculo pesado.
@@ -311,6 +322,57 @@ def simulator_dashboard(request):
         'simulator_daily_metas': daily_metas,
     }
     return render(request, 'simulator/_results.html', context)
+
+
+_VISOES_PARA_COPIAR = {'projecao': VIEW_PROJECAO, 'realizado': VIEW_REALIZADO}
+
+
+def _simulador_valores_json(request, target_user, target_role, has_target):
+    """Valores de toda a tabela de inputs do Simulador numa visão (Projeção ou
+    Realizado), para a pessoa já resolvida pelas regras de acesso do dashboard.
+
+    Mesmo cálculo das abas Projeção/Realizado, dentro do ``realized_prefetch``
+    (mapa do mês em cache), e a mesma montagem do pré-preenchimento.
+    """
+    visao = _VISOES_PARA_COPIAR.get((request.GET.get('visao') or '').strip().lower())
+    if not visao:
+        return JsonResponse({'ok': False, 'erro': 'Visão inválida: use Projeção ou Realizado.'}, status=400)
+    if not has_target:
+        return JsonResponse({'ok': False, 'erro': 'Selecione um usuário para copiar os valores.'}, status=400)
+    if target_role not in (ROLE_CONSULTOR, ROLE_GERENTE, ROLE_COORDENADOR, ROLE_APART):
+        return JsonResponse({'ok': False, 'erro': 'Este perfil não tem valores para copiar.'}, status=400)
+
+    try:
+        with realized_prefetch():
+            if target_role == ROLE_APART:
+                from users.models import AParteCommissionConfig
+                aparte_config = AParteCommissionConfig.objects.filter(user=target_user).first()
+                simulation = compute_aparte_simulation(target_user, aparte_config, {}, view_mode=visao)
+            else:
+                factor_set = get_factor_set(target_role)
+                calcular = {
+                    ROLE_CONSULTOR: compute_consultor_simulation,
+                    ROLE_GERENTE: compute_gerente_simulation,
+                    ROLE_COORDENADOR: compute_coordenador_simulation,
+                }[target_role]
+                simulation = calcular(target_user, factor_set.data, {}, view_mode=visao)
+    except Exception:
+        logger.exception('Simulador: falha ao calcular valores para copiar (user=%s, visao=%s)',
+                         getattr(target_user, 'id', None), visao)
+        return JsonResponse({'ok': False, 'erro': 'Não foi possível buscar os valores agora. '
+                                                  'Tente de novo em instantes.'}, status=503)
+
+    if not simulation or simulation.get('error'):
+        erro = (simulation or {}).get('error') or 'Não há valores calculados para esta pessoa.'
+        return JsonResponse({'ok': False, 'erro': erro}, status=200)
+
+    valores = build_simulador_valores(simulation, target_role)
+    return JsonResponse({
+        'ok': True,
+        'visao': visao,
+        'valores': valores,
+        'metas': build_simulador_metas(simulation),
+    })
 
 
 @login_required

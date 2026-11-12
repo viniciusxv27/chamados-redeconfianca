@@ -9,7 +9,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from .models import (AvisoInativacao, MOTIVOS_CHAMADO, SISTEMAS, SISTEMAS_CHAMADO, STATUS_SISTEMA, Chamado, Colaborador,
-                     EventoChamado, LogAcess, ModeloMensagem, Solicitacao, XmlGefac)
+                     EventoChamado, LogAcess, ModeloMensagem, Solicitacao, XmlGefac, XmlGefacPendente)
 
 
 class RegraAcess(Exception):
@@ -155,6 +155,8 @@ def criar_colaborador(dados, local, loja_vinculo=None, usuario=None, request=Non
     c.save(update_fields=['etapa'])
     registrar(request, 'CADASTRO', 'CADASTRO', f'Cadastrou {c.nome} ({c.get_origem_display().lower()})',
               colaborador=c, usuario=usuario, depois={'local': local.name, 'cpf': c.cpf_formatado})
+    if user is not None:
+        aplicar_xmls_pendentes(c, request=request)
     return c
 
 
@@ -163,10 +165,17 @@ def dados_do_usuario(u):
             'email': u.email, 'telefone': u.phone, 'cargo': u.job_title, 'login': u.login_code}
 
 
-def entrar_no_fluxo(user, por=None, request=None):
-    """Pré-cadastro aprovado: a pessoa entra na esteira (Etapa 1). Idempotente."""
+def entrar_no_fluxo(user, por=None, request=None, origem='PRE_CADASTRO'):
+    """Pré-cadastro aprovado: a pessoa entra na esteira (Etapa 1). Idempotente.
+
+    Também traz para a ficha o XML do GEFAC que o RH mandou antes de a ficha existir.
+    """
     existente = Colaborador.objects.filter(user=user).first()
+    if existente is not None and existente.status == Colaborador.DESLIGADO:
+        _soltar_ficha_desligada(existente, por=por, request=request)  # readmissão: a ficha antiga fica no arquivo
+        existente = None
     if existente:
+        aplicar_xmls_pendentes(existente, request=request)
         return existente
     dados = dados_do_usuario(user)
     if not cpf_valido(dados['cpf']):
@@ -174,11 +183,22 @@ def entrar_no_fluxo(user, por=None, request=None):
     with transaction.atomic():
         campos = _limpar_dados(dados)
         c = Colaborador.objects.create(
-            user=user, local=user.sector, origem='PRE_CADASTRO', criado_por=por, login='',
+            user=user, local=user.sector, origem=origem, criado_por=por, login='',
             sistemas={s: 'PENDENTE' for s in SISTEMAS}, etapa=1, **campos)
-        registrar(request, 'CADASTRO', 'CADASTRO', f'{c.nome} entrou na esteira pelo pré-cadastro aprovado',
+        motivo = 'pelo pré-cadastro aprovado' if origem == 'PRE_CADASTRO' else 'pelo XML do GEFAC enviado no cadastro'
+        registrar(request, 'CADASTRO', 'CADASTRO', f'{c.nome} entrou na esteira {motivo}',
                   colaborador=c, usuario=por)
+        aplicar_xmls_pendentes(c, request=request)
     return c
+
+
+def _soltar_ficha_desligada(c, por=None, request=None):
+    """Readmissão: Colaborador.user é um-para-um, então a ficha desligada solta o usuário (fica no arquivo,
+    com nome, CPF e histórico) e a pessoa ganha ficha nova na esteira."""
+    c.user = None
+    c.save(update_fields=['user', 'atualizado_em'])
+    registrar(request, 'VINCULO', 'DADOS', f'Ficha desligada de {c.nome} desligada do usuário do portal: '
+              'a pessoa voltou e ganhou ficha nova na esteira (readmissão)', colaborador=c, usuario=por)
 
 
 @transaction.atomic
@@ -930,21 +950,142 @@ def conferir_xml(conteudo, nome):
         raise RegraAcess(f'O arquivo não é um XML válido ({exc}).') from exc
 
 
-def anexar_xml_gefac(c, arquivo, usuario=None, request=None):
-    """Guarda o XML do pedido de criação do perfil GEFAC. Os anteriores ficam no histórico da ficha."""
-    from django.core.files.base import ContentFile
-
+def ler_xml_enviado(arquivo):
+    """(conteúdo, nome) do arquivo enviado, já conferido. Lê no máximo 5 MB + 1 byte (o excesso é recusado)."""
     if arquivo is None:
         raise RegraAcess('Escolha o arquivo .xml.')
     conteudo = arquivo.read(XML_GEFAC_TAMANHO_MAX + 1)
     nome = (getattr(arquivo, 'name', '') or 'gefac.xml').replace('\\', '/').rsplit('/', 1)[-1][:200]
     conferir_xml(conteudo, nome)
-    anexo = XmlGefac(colaborador=c, nome_original=nome, tamanho=len(conteudo), enviado_por=usuario)
+    return conteudo, nome
+
+
+ROTULO_ORIGEM_XML = {'PRE_CADASTRO': 'pelo pré-cadastro', 'EDICAO': 'pela edição do usuário', 'ACESS': 'pelo Acess'}
+
+
+def anexar_xml_gefac(c, arquivo, usuario=None, request=None, origem='ACESS', conteudo=None, nome=None):
+    """Guarda o XML do pedido de criação do perfil GEFAC. Os anteriores ficam no histórico da ficha.
+
+    ``conteudo``/``nome`` já conferidos (pelo cadastro do usuário) dispensam ler o arquivo de novo.
+    """
+    from django.core.files.base import ContentFile
+
+    if conteudo is None:
+        conteudo, nome = ler_xml_enviado(arquivo)
+    else:
+        conferir_xml(conteudo, nome)
+    anexo = XmlGefac(colaborador=c, nome_original=nome, tamanho=len(conteudo), enviado_por=usuario, origem=origem)
     anexo.arquivo.save('gefac.xml', ContentFile(conteudo), save=False)
     anexo.save()
-    registrar(request, 'XML_GEFAC_ANEXADO', 'DADOS', f'Anexou o XML do perfil GEFAC de {c.nome}: {nome}',
-              colaborador=c, usuario=usuario)
+    via = '' if origem == 'ACESS' else f' {ROTULO_ORIGEM_XML.get(origem, "")}'
+    registrar(request, 'XML_GEFAC_ANEXADO', 'DADOS', f'Anexou o XML do perfil GEFAC de {c.nome}{via}: {nome}',
+              colaborador=c, usuario=usuario, depois={'origem': origem, 'arquivo': nome})
     return anexo
+
+
+def aplicar_xmls_pendentes(c, request=None):
+    """Leva para a ficha os XMLs que o RH mandou antes de ela existir. Mesmo arquivo no armazenamento, sem cópia."""
+    if c is None or not c.user_id:
+        return []
+    feitos = []
+    for p in XmlGefacPendente.objects.filter(user_id=c.user_id).select_related('enviado_por').order_by('enviado_em', 'id'):
+        anexo = XmlGefac.objects.create(colaborador=c, arquivo=p.arquivo.name, nome_original=p.nome_original,
+                                        tamanho=p.tamanho, enviado_por=p.enviado_por, enviado_em=p.enviado_em,
+                                        origem=p.origem)
+        quem = (p.enviado_por.get_full_name() or p.enviado_por.email) if p.enviado_por else 'sistema'
+        registrar(request, 'XML_GEFAC_ANEXADO', 'DADOS',
+                  f'XML do perfil GEFAC de {c.nome} veio {ROTULO_ORIGEM_XML.get(p.origem, "do cadastro")} '
+                  f'(enviado por {quem} em {timezone.localtime(p.enviado_em):%d/%m/%Y %H:%M}): {p.nome_original}',
+                  colaborador=c, usuario=p.enviado_por, depois={'origem': p.origem, 'arquivo': p.nome_original})
+        p.delete()  # só o registro: o arquivo agora é do XmlGefac
+        feitos.append(anexo)
+    return feitos
+
+
+def _ficha_para_xml(user, por=None, request=None):
+    """A ficha onde o XML do cadastro entra, ou None se ainda não pode existir.
+
+    Espera (None): pré-cadastro ainda não aprovado, ou usuário inativo sem ficha ativa — o XML fica guardado
+    e entra quando o pré-cadastro for aprovado ou o usuário for reativado (acess/sinais.py).
+    Ordem: a ficha ativa ligada ao usuário; a ficha ativa sem usuário com o mesmo CPF (liga as duas, como no
+    cadastro pelo portal); senão, usuário ativo entra na esteira (Etapa 1). Ficha ligada já desligada é
+    readmissão: ela fica no arquivo e a pessoa ganha ficha nova.
+    """
+    c = Colaborador.objects.filter(user=user).first()
+    if c is not None and c.status != Colaborador.DESLIGADO:
+        return c
+    desligada = c
+    if motivo_espera_xml(user) == 'PRE_CADASTRO':
+        return None
+    if desligada is not None:
+        if not user.is_active:
+            return None
+        _soltar_ficha_desligada(desligada, por=por, request=request)
+    cpf = so_digitos(getattr(user, 'cpf', ''))
+    if cpf_valido(cpf):
+        c = Colaborador.objects.filter(cpf=cpf, user__isnull=True, status=Colaborador.ATIVO).order_by('-id').first()
+        if c is not None:
+            c.user = user
+            c.save(update_fields=['user', 'atualizado_em'])
+            registrar(request, 'VINCULO', 'DADOS', f'Ficha de {c.nome} ligada ao usuário do portal pelo CPF '
+                      '(XML do GEFAC enviado no cadastro)', colaborador=c, usuario=por)
+            return c
+    if not user.is_active:
+        return None
+    return entrar_no_fluxo(user, por=por, request=request, origem='PORTAL')
+
+
+def motivo_espera_xml(user):
+    """Por que o XML do cadastro ainda não pode ir para a ficha: 'PRE_CADASTRO', 'INATIVO' ou ''."""
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+    if getattr(user, 'pre_registration_status', None) in (User.PRE_REG_PENDING, User.PRE_REG_COMPLETED,
+                                                          User.PRE_REG_REJECTED):
+        return 'PRE_CADASTRO'
+    if not user.is_active:
+        return 'INATIVO'
+    return ''
+
+
+def levar_xmls_pendentes(user, por=None, request=None):
+    """Usuário reativado (ou liberado de outro jeito): leva os XMLs que esperavam para a ficha. None se ainda espera."""
+    if not XmlGefacPendente.objects.filter(user=user).exists():
+        return None
+    with transaction.atomic():
+        c = _ficha_para_xml(user, por=por, request=request)
+        if c is not None:
+            aplicar_xmls_pendentes(c, request=request)
+    return c
+
+
+@transaction.atomic
+def guardar_xml_do_cadastro(user, conteudo, nome, usuario=None, request=None, origem='EDICAO'):
+    """XML do GEFAC mandado pelo RH no pré-cadastro ou na edição do usuário.
+
+    Com ficha no Acess, entra direto na Etapa 1 (aparece para baixar). Sem ficha ainda (pré-cadastro não
+    aprovado ou usuário inativo), fica guardado e entra na ficha quando o pré-cadastro for aprovado ou o
+    usuário for reativado.
+    Devolve (colaborador ou None, anexo).
+    """
+    from django.core.files.base import ContentFile
+
+    conferir_xml(conteudo, nome)
+    c = _ficha_para_xml(user, por=usuario, request=request)
+    if c is not None:
+        return c, anexar_xml_gefac(c, None, usuario=usuario, request=request, origem=origem, conteudo=conteudo,
+                                   nome=nome)
+    p = XmlGefacPendente(user=user, nome_original=nome, tamanho=len(conteudo), enviado_por=usuario, origem=origem)
+    p.arquivo.save('gefac.xml', ContentFile(conteudo), save=False)
+    p.save()
+    return None, p
+
+
+def xml_gefac_do_usuario(user):
+    """Para a tela do usuário: (ficha, último XML da ficha, XMLs aguardando a ficha). Ficha desligada não conta."""
+    c = Colaborador.objects.filter(user=user).exclude(status=Colaborador.DESLIGADO).first()
+    ultimo = c.xmls_gefac.select_related('enviado_por').first() if c is not None else None
+    pendentes = list(XmlGefacPendente.objects.filter(user=user).select_related('enviado_por'))
+    return c, ultimo, pendentes
 
 
 def remover_xml_gefac(anexo, usuario=None, request=None):

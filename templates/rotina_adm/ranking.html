@@ -1,0 +1,74 @@
+{% extends 'rotina_adm/_base.html' %}
+{% block ra_titulo %}Ranking dos analistas · Rotina ADM{% endblock %}
+{% block ra_conteudo %}
+<header class="ra-topo">
+    <div class="ra-titulo">
+        <span class="ra-escudo"><i class="fas fa-trophy"></i></span>
+        <div><h1>Ranking dos analistas</h1><p>Entrega da rotina ADM pelo check-list diário da loja · {{ mes_extenso }}</p></div>
+    </div>
+    <div class="ra-acoes">
+        <form method="get" class="ra-data">
+            <i class="far fa-calendar"></i>
+            <div><small>Mês</small>
+                <select name="mes" aria-label="Mês" onchange="this.form.submit()">
+                    {% for valor, rotulo in meses %}<option value="{{ valor }}" {% if valor == mes %}selected{% endif %}>{{ rotulo }}</option>{% endfor %}
+                </select>
+            </div>
+        </form>
+    </div>
+</header>
+
+<section class="ra-card ra-secao ra-broche">
+    <div class="ra-secao-cabeca">
+        <div class="ra-secao-titulo"><span class="ic" style="background:var(--ra-ambar-claro);color:var(--ra-ambar)"><i class="fas fa-award"></i></span>
+            <div><h2>Broche de analista destaque</h2>
+                <p>Elegível quem, no mês, concluiu <b>pelo menos {{ cfg.broche_pct_minimo }}%</b> dos itens previstos do check-list da loja
+                    e fez <b>pelo menos {{ cfg.broche_no_prazo_minimo }}%</b> deles no prazo (até o horário do item).</p></div></div>
+        <span class="ra-selo {% if elegiveis %}verde{% else %}cinza{% endif %}"><i class="fas fa-medal"></i>{{ elegiveis }} elegíve{{ elegiveis|pluralize:"l,is" }}</span>
+    </div>
+    {% if superadmin %}
+    <form method="post" class="ra-broche-form">
+        {% csrf_token %}<input type="hidden" name="mes" value="{{ mes }}">
+        <label>Mínimo concluído <span><input class="ra-campo" type="number" name="broche_pct_minimo" min="0" max="100" required value="{{ cfg.broche_pct_minimo }}">%</span></label>
+        <label>Mínimo no prazo <span><input class="ra-campo" type="number" name="broche_no_prazo_minimo" min="0" max="100" required value="{{ cfg.broche_no_prazo_minimo }}">%</span></label>
+        <button class="ra-botao primario" type="submit"><i class="fas fa-check"></i>Salvar critério</button>
+    </form>
+    {% else %}
+    <p class="ra-nota"><i class="fas fa-lock"></i> O critério é ajustado pelo SUPERADMIN.</p>
+    {% endif %}
+    <p class="ra-nota"><i class="fas fa-circle-info"></i>
+        {% if dias_contados %}Dias contados: {{ inicio|date:"d/m" }} a {{ ate|date:"d/m" }} ({{ dias_contados }} dia{{ dias_contados|pluralize }}).{% else %}O mês ainda não tem dia fechado.{% endif %}
+        {% if mes_atual %}O dia de hoje entra quando virar.{% endif %}
+        Domingo só conta se a loja marcou algum item. Empate: mais no prazo, mais dias 100%, mais itens feitos.
+        Não muda a pontuação do Impulso.</p>
+</section>
+
+<section class="ra-card ra-secao">
+    <div class="ra-secao-cabeca">
+        <div class="ra-secao-titulo"><span class="ic" style="background:var(--ra-roxo-claro);color:var(--ra-roxo)"><i class="fas fa-list-ol"></i></span>
+            <div><h2>Classificação</h2><p>Analista = quem tem a Rotina ADM liberada e é de loja, mais quem marcou o check-list no mês</p></div></div>
+    </div>
+    {% if linhas %}
+    <div class="ra-rank" role="table" aria-label="Ranking dos analistas">
+        <div class="ra-rank-linha ra-rank-cabeca" role="row">
+            <span role="columnheader">#</span><span role="columnheader">Analista</span><span role="columnheader">Conclusão</span>
+            <span role="columnheader">No prazo</span><span role="columnheader">Dias 100%</span><span role="columnheader">Itens</span><span role="columnheader">Broche</span>
+        </div>
+        {% for l in linhas %}
+        <div class="ra-rank-linha{% if l.elegivel %} elegivel{% endif %}" role="row" data-pessoa="{{ l.pessoa.id }}">
+            <span class="pos" role="cell">{% if l.posicao <= 3 and l.previstos %}<i class="fas fa-medal p{{ l.posicao }}"></i>{% endif %}{{ l.posicao }}º</span>
+            <span class="quem" role="cell"><strong>{{ l.nome }}</strong>
+                <small>{{ l.loja }}{% if l.divide_loja %} · <span title="Mais de um analista marca esta loja: cada um conta só o que marcou">divide a loja</span>{% endif %}{% if l.outras_lojas %} · +{{ l.outras_lojas }} em outras lojas{% endif %}</small></span>
+            <span class="pct" role="cell" data-rotulo="Conclusão">{% if l.previstos %}<span class="ra-barra"><i class="{% if l.pct >= cfg.broche_pct_minimo %}verde{% elif l.pct >= 50 %}amarelo{% else %}vermelho{% endif %}" style="width: {{ l.pct|floatformat:0 }}%"></i></span><b>{{ l.pct|floatformat:"-1" }}%</b>{% else %}<small>sem check-list</small>{% endif %}</span>
+            <span role="cell" data-rotulo="No prazo"><b>{% if l.feitos %}{{ l.pct_prazo|floatformat:"-1" }}%{% else %}—{% endif %}</b></span>
+            <span role="cell" data-rotulo="Dias 100%"><b>{{ l.dias_100 }}</b></span>
+            <span role="cell" data-rotulo="Itens"><b>{{ l.feitos }}</b><small>/{{ l.previstos }}</small></span>
+            <span class="broche" role="cell">{% if l.elegivel %}<span class="ra-selo verde"><i class="fas fa-award"></i>Elegível</span>{% else %}<span class="ra-selo cinza">Não</span>{% endif %}</span>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="ra-vazio"><i class="fas fa-user-clock"></i>Ninguém de loja com a Rotina ADM liberada e nenhum check-list marcado neste mês.</div>
+    {% endif %}
+</section>
+{% endblock %}

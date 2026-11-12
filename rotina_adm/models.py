@@ -79,6 +79,12 @@ class ConfiguracaoRotinaAdm(models.Model):
 
     link_grupo_whatsapp = models.URLField(max_length=300, blank=True, default='', db_default='',
                                           verbose_name='Link do grupo dos ADMs no WhatsApp')
+    # Broche de analista destaque (12/11/2026): quem chega nos dois mínimos do mês no
+    # ranking (/rotina-adm/ranking/) fica elegível. O SUPERADMIN ajusta na própria tela.
+    broche_pct_minimo = models.PositiveSmallIntegerField(
+        default=90, db_default=90, verbose_name='Broche: mínimo de itens concluídos (%)')
+    broche_no_prazo_minimo = models.PositiveSmallIntegerField(
+        default=80, db_default=80, verbose_name='Broche: mínimo de itens feitos no prazo (%)')
     atualizado_em = models.DateTimeField(auto_now=True)
     atualizado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
                                        blank=True, related_name='+')

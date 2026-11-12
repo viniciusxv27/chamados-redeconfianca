@@ -174,7 +174,7 @@
         <i class="fas fa-flask text-primary"></i>
         Simulador — informe os valores para projetar
       </h2>
-      <p class="text-sm text-gray-600 mb-4">Os campos vêm preenchidos com o realizado do mês — ajuste o que quiser. Abaixo de cada valor aparece quanto falta por dia útil para bater a meta.</p>
+      <p class="text-sm text-gray-600 mb-4">Os campos vêm preenchidos com o realizado do mês — ajuste o que quiser. Abaixo de cada valor aparece quanto falta por dia útil para bater a meta. Use <strong>Copiar Projeção</strong> ou <strong>Copiar Realizado</strong> no topo de cada coluna para trocar a coluna inteira pelos valores daquela visão.</p>
 
       <form method="get" class="space-y-4">
         {% if target_user %}<input type="hidden" name="user_id" value="{{ target_user.id }}">{% endif %}
@@ -182,15 +182,26 @@
         {% for k, v in hunter_levels.items %}<input type="hidden" name="hunter_{{ k }}" value="{{ v }}">{% endfor %}
         {% if target_role == 'consultor' and acelerador_microindicadores %}<input type="hidden" name="acelerador" value="1">{% endif %}
 
-        <div class="overflow-x-auto">
+        <p id="sim-copiar-status" class="hidden text-xs sm:text-sm px-3 py-2 rounded-lg border" role="status" aria-live="polite"></p>
+
+        <div class="overflow-x-auto" id="sim-tabela-inputs"{% if target_user %} data-copiar-url="{% url 'simulator:dashboard' %}?user_id={{ target_user.id }}&amp;view=simulador&amp;fragment=valores"{% endif %}>
           <table class="min-w-full text-sm">
             <thead class="bg-gray-100 text-gray-700">
               <tr>
                 <th class="px-3 py-2 text-left font-semibold">Pilar</th>
-                <th class="px-3 py-2 text-right font-semibold">Meta (opcional)</th>
-                <th class="px-3 py-2 text-right font-semibold">Real Individual</th>
+                <th class="px-3 py-2 text-right font-semibold align-top">
+                  Meta (opcional)
+                  {% if target_user %}{% include "simulator/_copiar_coluna.html" with coluna="meta" %}{% endif %}
+                </th>
+                <th class="px-3 py-2 text-right font-semibold align-top">
+                  Real Individual
+                  {% if target_user %}{% include "simulator/_copiar_coluna.html" with coluna="real" %}{% endif %}
+                </th>
                 {% if target_role != 'coordenador' %}
-                <th class="px-3 py-2 text-right font-semibold">{% if target_role == 'gerente' %}Real Coordenação{% else %}Real PDV{% endif %}</th>
+                <th class="px-3 py-2 text-right font-semibold align-top">
+                  {% if target_role == 'gerente' %}Real Coordenação{% else %}Real PDV{% endif %}
+                  {% if target_user and target_role != 'aparte' %}{% include "simulator/_copiar_coluna.html" with coluna="realpdv" %}{% endif %}
+                </th>
                 {% endif %}
               </tr>
             </thead>
@@ -204,7 +215,7 @@
                 {% if pilar_key == 'fixa' %}
                 <td class="px-3 py-2 text-right">
                   <div class="inline-block w-36">
-                    <input type="number" inputmode="numeric" step="1" min="0" name="sim__fixa__meta"
+                    <input type="number" inputmode="numeric" step="any" min="0" name="sim__fixa__meta"
                            value="{{ simulator_inputs.fixa__meta|default:'' }}"
                            placeholder="0"
                            class="w-full px-2 py-1 border border-gray-300 rounded text-right">
@@ -214,7 +225,7 @@
                   <div class="inline-block w-36 space-y-1">
                     <div>
                       <label class="block text-[10px] text-gray-500 text-left leading-tight">Qtd (atingimento)</label>
-                      <input type="number" inputmode="numeric" step="1" min="0" name="sim__fixa__qty"
+                      <input type="number" inputmode="numeric" step="any" min="0" name="sim__fixa__qty"
                              data-daily-real="fixa"
                              value="{{ simulator_inputs.fixa__qty|default:'' }}"
                              placeholder="0"
@@ -236,7 +247,7 @@
                 {% if target_role != 'coordenador' %}
                 <td class="px-3 py-2 text-right">
                   <div class="inline-block w-36">
-                    <input type="number" inputmode="numeric" step="1" min="0" name="sim__fixa__qtypdv"
+                    <input type="number" inputmode="numeric" step="any" min="0" name="sim__fixa__qtypdv"
                            value="{{ simulator_inputs.fixa__qtypdv|default:'' }}"
                            placeholder="0"
                            class="w-full px-2 py-1 border border-gray-300 rounded text-right">
@@ -394,6 +405,12 @@
 
   function parseFieldNumber(el) {
     if (!el || !el.value) return 0;
+    // Campo type=number (quantidade da Fixa) já vem com ponto decimal e pode ter
+    // mais de 2 casas (17.142857): o toFloatStr leria esse ponto como milhar.
+    if (el.type === 'number') {
+      var q = parseFloat(el.value);
+      return isNaN(q) ? 0 : q;
+    }
     // Mesma conversão do envio: tinha uma cópia da regra aqui, e ela sofria do
     // mesmo problema — a meta-diária saía multiplicada por 100 junto.
     var n = parseFloat(toFloatStr(el.value));
@@ -483,6 +500,103 @@
     }
     refreshAllDaily();
   }
+
+  // ---------- Copiar Projeção / Copiar Realizado (cabeçalho da tabela) ----------
+  // Uma busca por visão serve as três colunas; guarda por 5 min na página.
+  var COPIAR_CACHE = {};
+  var COPIAR_TTL_MS = 5 * 60 * 1000;
+  var VISAO_ROTULO = { projecao: 'a projeção', realizado: 'o realizado' };
+
+  function statusCopiar(tipo, texto) {
+    var el = document.getElementById('sim-copiar-status');
+    if (!el) return;
+    var cores = {
+      erro: 'bg-red-50 border-red-200 text-red-700',
+      ok: 'bg-green-50 border-green-200 text-green-700',
+      carregando: 'bg-gray-50 border-gray-200 text-gray-600'
+    };
+    var icones = { erro: 'fa-exclamation-circle', ok: 'fa-check-circle', carregando: 'fa-spinner fa-spin' };
+    el.className = 'mb-2 text-xs sm:text-sm px-3 py-2 rounded-lg border ' + (cores[tipo] || cores.carregando);
+    el.innerHTML = '';
+    var i = document.createElement('i');
+    i.className = 'fas ' + (icones[tipo] || icones.carregando) + ' mr-2';
+    i.setAttribute('aria-hidden', 'true');
+    el.appendChild(i);
+    el.appendChild(document.createTextNode(texto));
+  }
+
+  function buscarValores(visao) {
+    var guardado = COPIAR_CACHE[visao];
+    if (guardado && (Date.now() - guardado.em) < COPIAR_TTL_MS) return Promise.resolve(guardado.data);
+    var box = document.getElementById('sim-tabela-inputs');
+    var url = box && box.getAttribute('data-copiar-url');
+    if (!url) return Promise.reject(new Error('Selecione um usuário para copiar os valores.'));
+    return fetch(url + '&visao=' + encodeURIComponent(visao), {
+      credentials: 'same-origin',
+      headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }
+    }).then(function (r) {
+      return r.json().catch(function () { return null; }).then(function (data) {
+        if (!data || !data.ok) throw new Error((data && data.erro) || '');
+        COPIAR_CACHE[visao] = { em: Date.now(), data: data };
+        return data;
+      });
+    });
+  }
+
+  function rotuloColuna(btn) {
+    var th = btn.closest('th');
+    if (!th) return 'coluna';
+    var texto = '';
+    th.childNodes.forEach(function (n) { if (n.nodeType === 3) texto += n.textContent; });
+    return texto.replace(/\s+/g, ' ').trim() || 'coluna';
+  }
+
+  function copiarColuna(btn) {
+    var coluna = btn.getAttribute('data-copiar-coluna');
+    var visao = btn.getAttribute('data-copiar-visao');
+    var grupo = btn.closest('[data-copiar-grupo]');
+    var botoes = grupo ? grupo.querySelectorAll('button') : [btn];
+    var icone = btn.querySelector('i');
+    var iconeOriginal = icone ? icone.className : '';
+    var nomeColuna = rotuloColuna(btn);
+    botoes.forEach(function (b) { b.disabled = true; });
+    if (icone) icone.className = 'fas fa-spinner fa-spin';
+    statusCopiar('carregando', 'Buscando ' + VISAO_ROTULO[visao] + ' para "' + nomeColuna + '"...');
+
+    buscarValores(visao).then(function (data) {
+      var valores = (data.valores || {})[coluna] || {};
+      var total = 0, comValor = 0;
+      Object.keys(valores).forEach(function (key) {
+        var input = document.querySelector('[name="sim__' + key + '"]');
+        if (!input) return;
+        var raw = valores[key];
+        input.value = input.classList.contains('brl-mask') ? initialFormat(raw) : String(raw || '');
+        total += 1;
+        if (raw) comValor += 1;
+      });
+      if (data.metas) {
+        Object.keys(data.metas).forEach(function (p) { SIM_METAS[p] = data.metas[p]; });
+      }
+      refreshAllDaily();
+      var txt = '"' + nomeColuna + '" preenchida com ' + VISAO_ROTULO[visao]
+              + ' (' + comValor + ' de ' + total + ' campos com valor). Clique em Simular para recalcular.';
+      statusCopiar('ok', txt);
+    }).catch(function (err) {
+      var msg = (err && err.message) ? err.message
+              : 'Não foi possível buscar os valores agora. Tente de novo em instantes.';
+      statusCopiar('erro', msg);
+    }).then(function () {
+      botoes.forEach(function (b) { b.disabled = false; });
+      if (icone) icone.className = iconeOriginal;
+    });
+  }
+
+  document.addEventListener('click', function (e) {
+    var btn = e.target && e.target.closest ? e.target.closest('[data-copiar-coluna]') : null;
+    if (!btn || btn.disabled) return;
+    e.preventDefault();
+    copiarColuna(btn);
+  });
 
   // ---------- Carregamento assíncrono do fragmento ----------
   function loadFragment() {
