@@ -340,6 +340,116 @@ jaq.refresh_from_db()
 t('confirmar acertando saldo vira ajuste com motivo', jaq.saldo == 5 and M.objects.filter(item=jaq, tipo=M.AJUSTE, delta=3,
   observacao__contains='inventario.xlsx').exists())
 
+print('importação: planilha de conferência da rede (12/11/2026)')
+from datetime import date as _date, datetime as _dt  # noqa: E402
+
+CAB_CONF = ['UNIFORME / TAMANHO', 'SALDO NOVOS', 'SALDO USADOS', 'DATA AJUSTE', 'OBS:', None, None]
+
+
+def conferencia():
+    """O desenho da "RELAÇÃO UNIFORMES - ES - ESTOQUE": seção, quadro de totais à direita, novos × usados."""
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = 'Conferência Uniformes'
+    for linha in [
+        CAB_CONF,
+        ['UNIFORMES FEMININOS', None, None, None, None, None, None],
+        ['Camisa CN - Feminino - PP', 19.0, 0.0, _dt(2026, 11, 4), None, 'AJUSTAR FÓRMULAS', None],
+        ['Camisa CN - Feminino - P', 0.0, 15.0, _dt(2026, 10, 23), None, 'TOTAL UNIFORMES:', 675],
+        ['Camisa CN - Feminino - M', 9.0, 21.0, _dt(2026, 11, 4), 'Jéssica', None, None],
+        ['Jaqueta GER - Feminino - P ', 1.0, 0.0, _dt(2026, 10, 23), 'Jéssica', 'TOTAL UNIFORMES FEM. GER:', 51],
+        ['Calça CN - Feminino - 38', 27.0, 0.0, '11/11/2026', 'Gus', None, None],
+        ['UNIFORMES MASCULINOS', None, None, None, None, None, None],
+        ['Camisa CN - Masculino - EG1', 0.0, 2.0, _dt(2026, 10, 23), None, None, None],
+        ['Calça GER - Masculino - 58', 1.0, 0.0, _dt(2026, 10, 30), 'Jéssica', None, None],
+        ['Camisa GER - Masculino - G4', 'dois', 1.0, _dt(2026, 10, 30), None, None, None],
+    ]:
+        ws.append(linha)
+    ws.merge_cells('A2:D2')
+    b = io.BytesIO(); wb.save(b); b.seek(0)
+    return b
+
+
+t('nome da conferência vira peça, modelo e tamanho', importacao.separar_nome('Camisa CN - Feminino - PP') == ('Camisa', 'CN Feminino', 'PP')
+  and importacao.separar_nome('Jaqueta GER - Feminino - P ') == ('Jaqueta', 'GER Feminino', 'P')
+  and importacao.separar_nome('Calça CN - Masculino - 58') == ('Calça', 'CN Masculino', '58')
+  and importacao.separar_nome('Camisa CN - Masculino - EG1') == ('Camisa', 'CN Masculino', 'EG1')
+  and importacao.separar_nome('Boné') == ('Boné', '', '') and importacao.separar_nome('Polo-Azul - M') == ('Polo-Azul', '', 'M'),
+  [importacao.separar_nome(x) for x in ('Camisa CN - Feminino - PP', 'Jaqueta GER - Feminino - P ', 'Polo-Azul - M')])
+lida = importacao.ler_planilha(conferencia(), 'RELAÇÃO UNIFORMES - ES - ESTOQUE.xlsx')
+por = {(l['tipo'], l['descricao'], l['tamanho']): l for l in lida['linhas']}
+t('acha o formato da conferência e sugere acertar o saldo', lida['formato'] == importacao.FORMATO_CONFERENCIA
+  and lida['modo_sugerido'] == importacao.MODO_ACERTAR and set(lida['colunas']) == {'nome', 'novos', 'usados', 'data', 'obs'}, lida['colunas'])
+t('novos e usados viram itens separados', por[('Camisa', 'CN Feminino', 'M')]['quantidade'] == 9
+  and por[('Camisa', 'CN Feminino · Usado', 'M')]['quantidade'] == 21 and por[('Camisa', 'CN Feminino · Usado', 'M')]['condicao'] == 'Usado')
+t('usado zerado não vira item; novo zerado vira (o tamanho existe)', ('Camisa', 'CN Feminino · Usado', 'PP') not in por
+  and por[('Camisa', 'CN Feminino', 'P')]['quantidade'] == 0 and por[('Camisa', 'CN Masculino · Usado', 'EG1')]['quantidade'] == 2)
+t('seções e o quadro de totais à direita ficam de fora', lida['totais']['secoes'] == 2
+  and not any('TOTAL' in l['tipo'].upper() or 'UNIFORMES' in l['tipo'].upper() for l in lida['linhas']))
+t('data (datetime ou texto) e quem conferiu vão junto', por[('Camisa', 'CN Feminino', 'PP')]['data'] == '2026-11-04'
+  and por[('Calça', 'CN Feminino', '38')]['data'] == '2026-11-11' and por[('Calça', 'CN Feminino', '38')]['obs'] == 'Gus')
+t('saldo que não é número inteiro é avisado e a linha fica de fora', any('G4' in a and 'dois' in a for a in lida['avisos'])
+  and not any(l['tamanho'] == 'G4' for l in lida['linhas']), lida['avisos'])
+t('totais batem com a planilha (novos + usados)', lida['totais'] == {'novos': 57, 'usados': 38, 'secoes': 2, 'pecas': 95}, lida['totais'])
+
+r = cg.post('/uniformes/importar/', {'acao': 'ler', 'planilha': SimpleUploadedFile(
+    'RELAÇÃO UNIFORMES - ES - ESTOQUE.xlsx', conferencia().getvalue())})
+html = cg.get('/uniformes/importar/').content.decode()
+t('prévia mostra o total da conferência e já marca "acertar o saldo"', 'data-totais-conferencia' in html and '<b>95</b> peças' in html
+  and 'value="ACERTAR" checked' in html and 'value="ENTRADA" checked' not in html
+  and '11/11/2026 · Gus' in html and '>usado<' in html, html[html.find('data-totais'):html.find('data-totais') + 300])
+r = cg.post('/uniformes/importar/', {'acao': 'confirmar', 'modo': 'ACERTAR'})
+cm = ItemUniforme.objects.get(tipo='Camisa', descricao='CN Feminino', tamanho='M')
+cu = ItemUniforme.objects.get(tipo='Camisa', descricao='CN Feminino · Usado', tamanho='M')
+calca = ItemUniforme.objects.get(tipo='Calça', descricao='CN Feminino', tamanho='38')
+t('confirmar cria os itens com o saldo da planilha', cm.saldo == 9 and cu.saldo == 21 and calca.saldo == 27
+  and ItemUniforme.objects.get(tipo='Camisa', descricao='CN Feminino', tamanho='P').saldo == 0)
+mov = M.objects.get(item=calca, tipo=M.AJUSTE)
+t('o ajuste leva a data da conferência e quem conferiu', mov.data == _date(2026, 11, 11) and 'por Gus' in mov.observacao
+  and 'conferência de 11/11/2026' in mov.observacao and mov.registrado_por == gestora, (mov.data, mov.observacao))
+conf_total = sum(i.saldo for i in ItemUniforme.objects.filter(descricao__regex=r'^(CN|GER) (Feminino|Masculino)'))
+t('saldo total importado = total da planilha (95)', conf_total == 95, conf_total)
+cg.post('/uniformes/importar/', {'acao': 'ler', 'planilha': SimpleUploadedFile('conf.xlsx', conferencia().getvalue())})
+lida2 = importacao.ler_planilha(conferencia(), 'conf.xlsx')
+t('2ª leitura reconhece os itens que já existem', all(l['item_id'] for l in lida2['linhas']))
+cg.post('/uniformes/importar/', {'acao': 'confirmar', 'modo': 'ACERTAR'})
+t('reimportar a mesma conferência não muda nada', ItemUniforme.objects.get(pk=cu.pk).saldo == 21
+  and M.objects.filter(item=cu).count() == 1)
+def conf_extra(linhas, cab=CAB_CONF):
+    wb = openpyxl.Workbook(); ws = wb.active
+    ws.append(cab)
+    for linha in linhas:
+        ws.append(linha)
+    b = io.BytesIO(); wb.save(b); b.seek(0)
+    return b
+
+
+lx = importacao.ler_planilha(conf_extra([['Camisa CN - Feminino - P', 'inf', 0, None, None],
+                                         ['Camisa CN - Feminino - M', '1e400', 0, None, None],
+                                         ['Camisa CN - Feminino - G', 3, 0, 46330, 'Gus'],
+                                         ['TOTAL', 3, 0, None, None]]), 'x.xlsx')
+t('"inf"/"1e400" no saldo viram aviso (antes: erro 500)', sum('não é número inteiro' in a for a in lx['avisos']) == 2
+  and [l['tamanho'] for l in lx['linhas']] == ['G'], lx['avisos'])
+t('data como nº de série do Excel é lida; linha TOTAL não vira peça', lx['linhas'][0]['data'] == '2026-11-04'
+  and lx['totais']['secoes'] == 1 and lx['totais']['pecas'] == 3, (lx['linhas'], lx['totais']))
+ly = importacao.ler_planilha(conf_extra([['Camisa CN - Feminino - G', 3, 1, None, None]],
+                                        cab=['UNIFORME / TAMANHO', 'SALDO (NOVOS)', 'SALDO USADOS']), 'y.xlsx')
+t('coluna de novos não reconhecida: aviso em destaque (não zera calado)', any('SALDO NOVOS' in a and 'ATENÇÃO' in a for a in ly['avisos']), ly['avisos'])
+try:
+    importacao.ler_planilha(xlsx([['Tipo', 'Quantidade'], ['Boné', 'inf']]), 'g.xlsx'); gen_ok = True
+except Exception as exc:  # noqa: BLE001
+    gen_ok = isinstance(exc, ErroEstoque)
+t('formato genérico também não cai com "inf"', gen_ok)
+
+caminho_real = pathlib.Path.home() / 'Downloads' / 'RELAÇÃO UNIFORMES - ES - ESTOQUE - ATUALIZADA (1).xlsx'
+if caminho_real.exists():
+    real = importacao.ler_planilha(open(caminho_real, 'rb'), caminho_real.name)
+    grupos = {}
+    for l in real['linhas']:
+        base = l['descricao'].replace(' · Usado', '')
+        grupos[base] = grupos.get(base, 0) + l['quantidade']
+    t('planilha real: 675 peças, iguais ao quadro de totais dela', real['totais']['pecas'] == 675 and grupos == {
+        'CN Feminino': 278, 'CN Masculino': 282, 'GER Feminino': 51, 'GER Masculino': 64} and not real['avisos'],
+      (real['totais'], grupos, real['avisos']))
+
 print('exportação')
 r = cg.get('/uniformes/exportar/')
 wb = openpyxl.load_workbook(io.BytesIO(r.content))

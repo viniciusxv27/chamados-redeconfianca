@@ -1,15 +1,27 @@
 """Importação do estoque por planilha (Excel/CSV) e exportações.
 
-A planilha da rede ainda não chegou, então a leitura é tolerante: acha a linha
-do cabeçalho nas 15 primeiras, aceita sinônimos ("Peça", "Qtd", "Tam.",
-"Modelo"…), ignora maiúsculas e acentos e soma linhas repetidas do mesmo item.
-Nada grava na leitura: a tela mostra a prévia e só o "Confirmar" lança.
+Dois formatos, achados sozinhos:
+
+1. **Conferência da rede** ("RELAÇÃO UNIFORMES - ES - ESTOQUE", aba "Conferência Uniformes",
+   12/11/2026): ``UNIFORME / TAMANHO | SALDO NOVOS | SALDO USADOS | DATA AJUSTE | OBS:``.
+   A 1ª coluna junta peça, linha, gênero e tamanho ("Camisa CN - Feminino - PP"): vira tipo
+   "Camisa", modelo "CN Feminino" e tamanho "PP". Os usados são um item à parte, de modelo
+   "CN Feminino · Usado" — novo e usado não se misturam no saldo. A data e o "OBS" (quem
+   conferiu) vão para o lançamento. Linhas de seção ("UNIFORMES FEMININOS") e o quadro de
+   totais à direita não são itens. Por ser conferência, a tela sugere acertar o saldo.
+2. **Genérico**: acha a linha do cabeçalho nas 15 primeiras, aceita sinônimos ("Peça", "Qtd",
+   "Tam.", "Modelo"…), ignora maiúsculas e acentos.
+
+Nos dois, linhas repetidas do mesmo item são somadas e nada grava na leitura: a tela mostra a
+prévia e só o "Confirmar" lança.
 """
 from __future__ import annotations
 
 import csv
 import io
+import re
 from collections import OrderedDict
+from datetime import date, datetime
 
 import openpyxl
 from django.db import transaction
@@ -58,7 +70,7 @@ def _linhas_brutas(arquivo, nome):
     linhas = []
     for aba in livro.worksheets:          # primeira aba que tiver cabeçalho reconhecível
         linhas = [list(linha) for linha in aba.iter_rows(values_only=True)]
-        if _achar_cabecalho(linhas)[0] is not None:
+        if _achar_cabecalho_conferencia(linhas)[0] is not None or _achar_cabecalho(linhas)[0] is not None:
             break
     livro.close()
     return linhas
@@ -76,6 +88,174 @@ def _achar_cabecalho(linhas):
     return None, {}
 
 
+# ---------------------------------------------------------------------------
+# Formato "Conferência Uniformes" (planilha da rede)
+# ---------------------------------------------------------------------------
+FORMATO_CONFERENCIA = 'conferencia'
+FORMATO_GENERICO = 'generico'
+USADO = 'Usado'
+
+CONFERENCIA = {
+    'nome': ('uniforme / tamanho', 'uniforme/tamanho', 'uniforme - tamanho', 'uniforme e tamanho'),
+    'novos': ('saldo novos', 'saldo novo', 'novos', 'qtd novos'),
+    'usados': ('saldo usados', 'saldo usado', 'usados', 'qtd usados'),
+    'data': ('data ajuste', 'data do ajuste', 'data da conferencia', 'data conferencia', 'data'),
+    'obs': ('obs', 'obs.', 'observacao', 'conferido por'),
+}
+
+# "Camisa CN - Feminino - PP": hífen com espaço em volta (ou travessão) separa as partes.
+SEPARADOR_NOME = re.compile(r'\s+[-\u2013\u2014]\s+|\s*[\u2013\u2014]\s*')
+TAMANHO_LETRA = re.compile(r'(PP|P|M|G|GG|XG|XGG|EG|EGG|EXG|EXGG|[GX]\d|EG\d|XG\d|G\d\d?|U|UN|UNICO|TU)')
+
+
+def _parece_tamanho(texto) -> bool:
+    texto = norm(texto).upper().replace(' ', '')
+    return bool(texto) and (texto.isdigit() and len(texto) <= 3 or bool(TAMANHO_LETRA.fullmatch(texto)))
+
+
+def separar_nome(texto):
+    """"Camisa CN - Feminino - PP" → ("Camisa", "CN Feminino", "PP").
+
+    A peça é a 1ª palavra; o resto do 1º pedaço (a linha: CN, GER…) e os pedaços do meio (gênero)
+    viram o modelo; o último pedaço é o tamanho quando parece tamanho. Sem separador, o texto
+    inteiro é a peça.
+    """
+    texto = ' '.join(str(texto or '').split())
+    partes = [p.strip() for p in SEPARADOR_NOME.split(texto) if p and p.strip()]
+    if not partes:
+        return '', '', ''
+    tamanho = ''
+    if len(partes) >= 2 and _parece_tamanho(partes[-1]):
+        tamanho = partes.pop()
+    palavras = partes[0].split()
+    tipo = palavras[0]
+    modelo = ' '.join(palavras[1:] + partes[1:])
+    return limpar_tipo(tipo), limpar_descricao(modelo), limpar_tamanho(tamanho)
+
+
+def _campo_conferencia(cabecalho):
+    texto = norm(cabecalho).rstrip(':').strip()
+    for campo, nomes in CONFERENCIA.items():
+        if texto in nomes:
+            return campo
+    return None
+
+
+def _achar_cabecalho_conferencia(linhas):
+    for indice, linha in enumerate(linhas[:15]):
+        mapa = {}
+        for pos, valor in enumerate(linha):
+            campo = _campo_conferencia(valor) if valor is not None else None
+            if campo and campo not in mapa:
+                mapa[campo] = pos
+        if 'nome' in mapa and ('novos' in mapa or 'usados' in mapa):
+            return indice, mapa
+    return None, {}
+
+
+def _quantidade(bruto):
+    """Inteiro >= 0, None se vazio, ou levanta ValueError."""
+    if bruto is None or str(bruto).strip() in ('', '-'):
+        return None
+    numero = float(str(bruto).strip().replace(',', '.'))
+    try:
+        inteiro = int(numero)
+    except OverflowError:          # "inf", "1e400": não é quantidade (sem isso a prévia dava erro 500)
+        raise ValueError(bruto) from None
+    if numero < 0 or numero != inteiro:
+        raise ValueError(bruto)
+    return inteiro
+
+
+def _data(bruto):
+    """Data da conferência como 'AAAA-MM-DD' (vai para a sessão em JSON), ou ''."""
+    if isinstance(bruto, datetime):
+        return bruto.date().isoformat()
+    if isinstance(bruto, date):
+        return bruto.isoformat()
+    if isinstance(bruto, (int, float)) and not isinstance(bruto, bool) and 20000 < bruto < 80000:
+        try:                       # célula de data sem formato: o Excel guarda o nº de série (46330 = 04/11/2026)
+            from openpyxl.utils.datetime import from_excel
+            return from_excel(bruto).date().isoformat()
+        except (ValueError, OverflowError, TypeError):
+            return ''
+    texto = str(bruto or '').strip()
+    for formato in ('%d/%m/%Y', '%d/%m/%y', '%Y-%m-%d', '%d-%m-%Y'):
+        try:
+            return datetime.strptime(texto[:10], formato).date().isoformat()
+        except ValueError:
+            continue
+    return ''
+
+
+def _ler_conferencia(brutas, indice, mapa):
+    def valor(linha, campo):
+        pos = mapa.get(campo)
+        return linha[pos] if pos is not None and pos < len(linha) else None
+
+    existentes = {chave_item(i.tipo, i.tamanho, i.descricao): i for i in ItemUniforme.objects.all()}
+    juntas, avisos = OrderedDict(), []
+    totais = {'novos': 0, 'usados': 0, 'secoes': 0}
+
+    def juntar(numero, tipo, descricao, tamanho, quantidade, condicao, data, obs):
+        chave = chave_item(tipo, tamanho, descricao)
+        if chave in juntas:
+            juntas[chave]['quantidade'] += quantidade
+            avisos.append(f'Linha {numero}: {tipo} {descricao} {tamanho} repetido — somado à linha anterior.')
+            return
+        existente = existentes.get(chave)
+        juntas[chave] = {
+            'tipo': tipo, 'tamanho': tamanho, 'descricao': descricao, 'quantidade': quantidade, 'minimo': 0,
+            'item_id': existente.id if existente else None, 'saldo_atual': existente.saldo if existente else 0,
+            'condicao': condicao, 'data': data, 'obs': obs,
+        }
+
+    for faltando, rotulo in (('novos', 'SALDO NOVOS'), ('usados', 'SALDO USADOS')):
+        if faltando not in mapa:
+            avisos.append(f'ATENÇÃO: não achei a coluna "{rotulo}" — esse saldo está sendo lido como 0. '
+                          'Confira o título da coluna antes de acertar o saldo.')
+    for numero, linha in enumerate(brutas[indice + 1:], start=indice + 2):
+        nome = valor(linha, 'nome')
+        if nome is None or not str(nome).strip():
+            continue
+        if norm(nome).startswith('total'):
+            totais['secoes'] += 1          # linha de total no fim da tabela: não é peça
+            continue
+        bruto_novos, bruto_usados = valor(linha, 'novos'), valor(linha, 'usados')
+        try:
+            novos, usados = _quantidade(bruto_novos), _quantidade(bruto_usados)
+        except ValueError:
+            avisos.append(f'Linha {numero}: "{" ".join(str(nome).split())}" com saldo que não é número inteiro '
+                          f'({bruto_novos} / {bruto_usados}) — ignorada.')
+            continue
+        if novos is None and usados is None:
+            totais['secoes'] += 1          # "UNIFORMES FEMININOS": título de seção, não é peça
+            continue
+        tipo, modelo, tamanho = separar_nome(nome)
+        if not tipo:
+            avisos.append(f'Linha {numero}: sem nome de peça — ignorada.')
+            continue
+        if not tamanho:
+            avisos.append(f'Linha {numero}: "{" ".join(str(nome).split())}" sem tamanho no fim do nome — '
+                          'entra como tamanho único.')
+        data = _data(valor(linha, 'data'))
+        obs = ' '.join(str(valor(linha, 'obs') or '').split())[:60]
+        novos, usados = novos or 0, usados or 0
+        totais['novos'] += novos
+        totais['usados'] += usados
+        juntar(numero, tipo, modelo, tamanho, novos, 'Novo', data, obs)
+        descricao_usado = limpar_descricao(f'{modelo} · {USADO}' if modelo else USADO)
+        # Usado só vira item quando tem peça (ou já existe, para o acerto poder zerar).
+        if usados or chave_item(tipo, tamanho, descricao_usado) in existentes:
+            juntar(numero, tipo, descricao_usado, tamanho, usados, USADO, data, obs)
+    if not juntas:
+        raise ErroEstoque('A planilha de conferência não tem nenhuma linha de uniforme com saldo.')
+    totais['pecas'] = totais['novos'] + totais['usados']
+    return {'linhas': list(juntas.values()), 'avisos': avisos, 'formato': FORMATO_CONFERENCIA,
+            'modo_sugerido': MODO_ACERTAR, 'totais': totais,
+            'colunas': {campo: ' '.join(str(brutas[indice][pos]).split()) for campo, pos in mapa.items()}}
+
+
 def ler_planilha(arquivo, nome=''):
     """Lê e devolve a prévia: {'linhas': [...], 'avisos': [...], 'colunas': {...}}.
 
@@ -83,6 +263,9 @@ def ler_planilha(arquivo, nome=''):
     existe), saldo_atual. Linhas iguais são somadas.
     """
     brutas = _linhas_brutas(arquivo, nome)
+    indice, mapa = _achar_cabecalho_conferencia(brutas)
+    if indice is not None:
+        return _ler_conferencia(brutas, indice, mapa)
     indice, mapa = _achar_cabecalho(brutas)
     if indice is None:
         raise ErroEstoque('Não achei o cabeçalho. A planilha precisa de uma coluna de quantidade '
@@ -110,7 +293,8 @@ def ler_planilha(arquivo, nome=''):
         else:
             try:
                 numero_qtd = float(str(bruto_qtd).strip().replace(',', '.'))
-            except ValueError:
+                int(numero_qtd)
+            except (ValueError, OverflowError):
                 avisos.append(f'Linha {numero}: quantidade "{bruto_qtd}" não é número — ignorada.')
                 continue
             if numero_qtd < 0 or numero_qtd != int(numero_qtd):
@@ -135,7 +319,8 @@ def ler_planilha(arquivo, nome=''):
         }
     if not juntas:
         raise ErroEstoque('A planilha não tem nenhuma linha de uniforme para importar.')
-    return {'linhas': list(juntas.values()), 'avisos': avisos,
+    return {'linhas': list(juntas.values()), 'avisos': avisos, 'formato': FORMATO_GENERICO,
+            'modo_sugerido': MODO_ENTRADA,
             'colunas': {campo: str(brutas[indice][pos]) for campo, pos in mapa.items()}}
 
 
@@ -145,6 +330,12 @@ def aplicar(linhas, *, modo, por, nome_arquivo=''):
     origem = f'Importação da planilha {nome_arquivo}'.strip()
     resumo = {'itens_novos': 0, 'entradas': 0, 'ajustes': 0, 'pecas': 0, 'sem_mudanca': 0}
     for linha in linhas:
+        data = _data(linha.get('data')) if linha.get('data') else ''
+        dia = date.fromisoformat(data) if data else None
+        detalhe = origem
+        if dia or linha.get('obs'):
+            detalhe += ' — conferência' + (f' de {dia:%d/%m/%Y}' if dia else '') + (
+                f' por {linha["obs"]}' if linha.get('obs') else '')
         item, novo = servicos.criar_item(tipo=linha['tipo'], tamanho=linha['tamanho'],
                                          descricao=linha['descricao'],
                                          estoque_minimo=linha.get('minimo') or 0, por=por)
@@ -159,12 +350,12 @@ def aplicar(linhas, *, modo, por, nome_arquivo=''):
             if item.saldo == qtd:
                 resumo['sem_mudanca'] += 1
                 continue
-            servicos.registrar_ajuste(item_id=item.id, contagem=qtd, por=por,
-                                      motivo=f'{origem} (acerto de inventário)')
+            servicos.registrar_ajuste(item_id=item.id, contagem=qtd, por=por, data=dia,
+                                      motivo=f'{detalhe} (acerto de inventário)')
             resumo['ajustes'] += 1
             resumo['pecas'] += qtd
         elif qtd > 0:
-            servicos.registrar_entrada(item_id=item.id, quantidade=qtd, por=por, observacao=origem)
+            servicos.registrar_entrada(item_id=item.id, quantidade=qtd, por=por, data=dia, observacao=detalhe)
             resumo['entradas'] += 1
             resumo['pecas'] += qtd
         else:

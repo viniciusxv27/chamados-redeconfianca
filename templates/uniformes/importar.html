@@ -18,7 +18,8 @@ planilha (ajuste de inventário). Tudo ou nada.
     <h2 class="text-lg font-semibold text-gray-900"><i class="fas fa-file-import text-sky-600 mr-1.5"></i>Importar estoque por planilha</h2>
     <div class="text-sm text-gray-600 space-y-1">
       <p>Aceita <b>.xlsx</b> ou <b>.csv</b>. A primeira linha com os títulos é achada sozinha; maiúsculas e acentos não importam.</p>
-      <p>Colunas reconhecidas: <b>Tipo</b> (ou Peça, Item, Uniforme, Produto) · <b>Tamanho</b> (ou Tam., Numeração) · <b>Quantidade</b> (ou Qtd, Qtde, Estoque, Saldo) · <b>Descrição</b> (ou Modelo, Cor — opcional) · <b>Estoque mínimo</b> (opcional).</p>
+      <p><b>Planilha de conferência da rede</b> (“Relação uniformes – ES – Estoque”): colunas <b>UNIFORME / TAMANHO</b> · <b>SALDO NOVOS</b> · <b>SALDO USADOS</b> · <b>DATA AJUSTE</b> · <b>OBS</b>. “Camisa CN - Feminino - PP” vira a peça <b>Camisa</b>, modelo <b>CN Feminino</b>, tamanho <b>PP</b>; os usados entram num item à parte (“CN Feminino · Usado”). Títulos de seção e o quadro de totais são ignorados.</p>
+      <p>Também aceita uma planilha simples com <b>Tipo</b> (ou Peça, Item, Produto) · <b>Tamanho</b> · <b>Quantidade</b> (ou Qtd, Saldo) · <b>Descrição</b> (ou Modelo, Cor — opcional) · <b>Estoque mínimo</b> (opcional).</p>
       <p class="text-xs text-gray-500">Nada é gravado neste passo: você vê a prévia antes de confirmar.</p>
     </div>
     <input type="file" name="planilha" accept=".xlsx,.xlsm,.csv" required class="block w-full text-sm text-gray-700 file:mr-3 file:px-4 file:py-2 file:rounded-lg file:border-0 file:bg-sky-50 file:text-sky-700">
@@ -32,6 +33,12 @@ planilha (ajuste de inventário). Tudo ou nada.
       <h2 class="font-semibold text-gray-800">Prévia de {{ previa.arquivo }}</h2>
       <p class="text-xs text-gray-500 mt-0.5">{{ previa.linhas|length }} item(ns) ·
         colunas lidas: {% for campo, titulo in previa.colunas.items %}{{ titulo }}{% if not forloop.last %}, {% endif %}{% endfor %}</p>
+      {% if previa.totais %}
+      <p class="mt-2 text-sm text-gray-700" data-totais-conferencia>
+        <i class="fas fa-clipboard-check text-sky-600 mr-1"></i>Planilha de conferência: <b>{{ previa.totais.pecas }}</b> peça{{ previa.totais.pecas|pluralize }}
+        (<b>{{ previa.totais.novos }}</b> nova{{ previa.totais.novos|pluralize }} e <b>{{ previa.totais.usados }}</b> usada{{ previa.totais.usados|pluralize }}) — confira com o “TOTAL UNIFORMES” da planilha.
+      </p>
+      {% endif %}
     </div>
     {% if previa.avisos %}
     <ul class="px-4 py-2 bg-amber-50 border-b border-amber-100 text-xs text-amber-800 space-y-0.5 max-h-40 overflow-y-auto">
@@ -41,17 +48,18 @@ planilha (ajuste de inventário). Tudo ou nada.
     <div class="overflow-x-auto">
       <table class="min-w-full text-sm" data-rc-wrapped="1">
         <thead class="bg-gray-50 text-[11px] uppercase text-gray-500">
-          <tr><th class="px-3 py-2 text-left">Tipo</th><th class="px-3 py-2 text-left">Tam.</th><th class="px-3 py-2 text-left hidden sm:table-cell">Descrição</th><th class="px-3 py-2 text-right">Planilha</th><th class="px-3 py-2 text-right">Hoje</th><th class="px-3 py-2 text-left">Situação</th></tr>
+          <tr><th class="px-3 py-2 text-left">Tipo</th><th class="px-3 py-2 text-left">Tam.</th><th class="px-3 py-2 text-left hidden sm:table-cell">Descrição</th><th class="px-3 py-2 text-right">Planilha</th><th class="px-3 py-2 text-right">Hoje</th><th class="px-3 py-2 text-left">Situação</th>{% if previa.totais %}<th class="px-3 py-2 text-left hidden md:table-cell">Conferência</th>{% endif %}</tr>
         </thead>
         <tbody class="divide-y divide-gray-100">
           {% for l in previa.linhas %}
           <tr>
-            <td class="px-3 py-2 break-words">{{ l.tipo }}<span class="sm:hidden block text-[11px] text-gray-500">{{ l.descricao }}</span></td>
+            <td class="px-3 py-2 break-words">{{ l.tipo }}{% if l.condicao == 'Usado' %} <span class="inline-block px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 text-[10px] font-semibold align-middle">usado</span>{% endif %}<span class="sm:hidden block text-[11px] text-gray-500">{{ l.descricao }}</span></td>
             <td class="px-3 py-2">{{ l.tamanho|default:'—' }}</td>
             <td class="px-3 py-2 hidden sm:table-cell">{{ l.descricao|default:'—' }}</td>
             <td class="px-3 py-2 text-right font-semibold">{{ l.quantidade }}</td>
             <td class="px-3 py-2 text-right text-gray-500">{% if l.item_id %}{{ l.saldo_atual }}{% else %}—{% endif %}</td>
             <td class="px-3 py-2 text-xs">{% if l.item_id %}<span class="text-gray-600">já existe</span>{% else %}<span class="text-emerald-700 font-medium">novo</span>{% endif %}</td>
+            {% if previa.totais %}<td class="px-3 py-2 text-xs text-gray-500 hidden md:table-cell whitespace-nowrap">{% if l.data %}{{ l.data|slice:"8:10" }}/{{ l.data|slice:"5:7" }}/{{ l.data|slice:":4" }}{% endif %}{% if l.obs %} · {{ l.obs }}{% endif %}</td>{% endif %}
           </tr>
           {% endfor %}
         </tbody>
@@ -64,12 +72,12 @@ planilha (ajuste de inventário). Tudo ou nada.
     <input type="hidden" name="acao" value="confirmar">
     <p class="text-sm font-medium text-gray-700">Como lançar as quantidades?</p>
     <label class="flex items-start gap-2 text-sm text-gray-700">
-      <input type="radio" name="modo" value="ENTRADA" checked class="mt-1">
+      <input type="radio" name="modo" value="ENTRADA"{% if previa.modo_sugerido != 'ACERTAR' %} checked{% endif %} class="mt-1">
       <span><b>Somar como entrada</b> — a quantidade da planilha entra no estoque (recebimento). Use para o estoque inicial ou uma remessa nova.</span>
     </label>
     <label class="flex items-start gap-2 text-sm text-gray-700">
-      <input type="radio" name="modo" value="ACERTAR" class="mt-1">
-      <span><b>Acertar o saldo para o da planilha</b> — vira um ajuste de inventário: o saldo de cada item passa a ser exatamente o da planilha.</span>
+      <input type="radio" name="modo" value="ACERTAR"{% if previa.modo_sugerido == 'ACERTAR' %} checked{% endif %} class="mt-1">
+      <span><b>Acertar o saldo para o da planilha</b> — vira um ajuste de inventário: o saldo de cada item passa a ser exatamente o da planilha.{% if previa.totais %} <span class="text-sky-700">Sugerido para a planilha de conferência; a data de cada linha e quem conferiu vão para o histórico.</span>{% endif %}</span>
     </label>
     <div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
       <button name="acao" value="cancelar" formnovalidate class="px-4 py-2.5 rounded-lg border border-gray-200 text-sm text-gray-600">Cancelar</button>

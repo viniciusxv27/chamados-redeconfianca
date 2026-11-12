@@ -201,8 +201,11 @@ def registrar_devolucao(*, linhas, colaborador, por, data=None, observacao=''):
 
 
 @transaction.atomic
-def registrar_ajuste(*, item_id, contagem, por, motivo):
-    """Acerta o saldo para o que foi contado na prateleira. Motivo obrigatório."""
+def registrar_ajuste(*, item_id, contagem, por, motivo, data=None):
+    """Acerta o saldo para o que foi contado na prateleira. Motivo obrigatório.
+
+    ``data``: o dia da contagem (a importação da conferência manda a "DATA AJUSTE" da planilha).
+    """
     motivo = (motivo or '').strip()
     if not motivo:
         raise ErroEstoque('Diga o motivo do ajuste (ex.: inventário de novembro, peça danificada).')
@@ -217,7 +220,7 @@ def registrar_ajuste(*, item_id, contagem, por, motivo):
     if delta == 0:
         raise ErroEstoque(f'O saldo de {item.nome} já é {contagem}; nada a ajustar.')
     return _gravar(item, tipo=M.AJUSTE, quantidade=abs(delta), delta=delta, por=por,
-                   data=timezone.localdate(), observacao=motivo)
+                   data=data or timezone.localdate(), observacao=motivo)
 
 
 @transaction.atomic
