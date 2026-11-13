@@ -5,7 +5,6 @@ from urllib.parse import urlencode
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import IntegrityError, transaction
-from django.db.models import Max
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -340,7 +339,9 @@ def configuracoes(request):
         _configuracoes_post(request)
         return redirect(reverse('contas_pagar:configuracoes') + '?aba=' + aba)
     cats = list(Categoria.objects.order_by('tipo'))
-    c = _ctx(request, 'config', aba_config=aba, bancos=list(ContaBancaria.objects.order_by('ordem', 'id')),
+    from financeiro.permissoes import pode as pode_financeiro
+    c = _ctx(request, 'config', aba_config=aba, bancos=list(servicos.contas_do_financeiro()),
+             pode_financeiro_bancos=pode_financeiro(request.user, 'bancos.ver'),
              categorias=cats, opcoes=sorted({x.categoria for x in cats}), cfg=ConfiguracaoContasPagar.atual())
     if aba == 'categorias':
         c['faltando'] = servicos.sem_categoria()
@@ -350,33 +351,19 @@ def configuracoes(request):
 def _configuracoes_post(request):
     acao = request.POST.get('acao')
     P = request.POST
-    if acao == 'conta_adicionar':
-        banco, conta = (P.get('banco') or '').strip().upper()[:200], (P.get('conta') or '').strip()[:30]
-        if not banco or not conta:
-            messages.error(request, 'Informe o banco e o número da conta.')
+    if acao in ('conta_usar', 'conta_subir', 'conta_descer'):
+        # Banco, agência e conta vêm do Financeiro (/financeiro/bancos/): aqui só "usar" e a ordem.
+        contas = list(servicos.contas_do_financeiro())
+        conta = next((c for c in contas if str(c.pk) == str(P.get('id'))), None)
+        if conta is None:
+            messages.error(request, 'Conta não encontrada (pode ter sido desativada no Financeiro).')
             return
-        ordem = (ContaBancaria.objects.aggregate(m=Max('ordem'))['m'] or 0) + 1
-        ContaBancaria.objects.create(banco=banco, agencia=(P.get('agencia') or '').strip()[:20], conta=conta,
-                                     ordem=ordem)
-        messages.success(request, 'Conta adicionada.')
-    elif acao in ('conta_salvar', 'conta_remover', 'conta_subir', 'conta_descer'):
-        conta = get_object_or_404(ContaBancaria, pk=P.get('id'))
-        if acao == 'conta_salvar':
-            banco = (P.get('banco') or '').strip().upper()[:200]
-            if not banco:
-                messages.error(request, 'Informe o nome do banco.')
-                return
-            conta.banco = banco
-            conta.agencia = (P.get('agencia') or '').strip()[:20]
-            conta.conta = (P.get('conta') or '').strip()[:30]
-            conta.ativo = P.get('ativo') == 'on'
-            conta.save()
-            messages.success(request, 'Conta atualizada.')
-        elif acao == 'conta_remover':
-            conta.delete()
-            messages.success(request, 'Conta removida. Os títulos dela passam a aparecer como “Não informado”.')
+        if acao == 'conta_usar':
+            usar = P.get('ativo') == 'on'
+            if conta.ativo != usar:
+                ContaBancaria.objects.filter(pk=conta.pk).update(ativo=usar)
+            messages.success(request, f'{conta.banco}: {"em uso" if usar else "fora do Contas a Pagar"}.')
         else:
-            contas = list(ContaBancaria.objects.order_by('ordem', 'id'))
             i = contas.index(conta)
             j = i - 1 if acao == 'conta_subir' else i + 1
             if 0 <= j < len(contas):

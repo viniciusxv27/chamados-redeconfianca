@@ -1,4 +1,5 @@
 """Cola entre as regras, o Postgres do portal e o MySQL do histórico."""
+import re
 from datetime import date
 
 from django.db import transaction
@@ -9,9 +10,47 @@ from .models import (Categoria, ConfiguracaoContasPagar, ContaBancaria, LogConta
                      TituloRascunho)
 
 
+# ── Contas bancárias: vêm do Financeiro (/financeiro/bancos/) ────────────────
+def _agencia_sem_digito(agencia):
+    """'301-0' → '301', '21-3' → '21': o campo Débito da BASE VIVOGO traz a agência sem o dígito."""
+    return (agencia or '').split('-')[0].strip()[:20]
+
+
+def sincronizar_contas():
+    """Espelha as contas do Financeiro (menos Caixa) no Contas a Pagar.
+
+    Conta nova no Financeiro entra no fim da ordem, já em uso. Nome, agência e conta acompanham o
+    Financeiro. A ordem e o "usar no Contas a Pagar" (``ativo``) são só daqui e não são mexidos.
+    """
+    from financeiro.models import ContaBancaria as ContaFinanceiro
+    from django.db.models import Max
+
+    ligadas = {c.conta_financeiro_id: c for c in ContaBancaria.objects.filter(conta_financeiro__isnull=False)}
+    proxima = None
+    for f in ContaFinanceiro.objects.exclude(tipo='CAIXA').order_by('nome', 'id'):
+        dados = {'banco': (f.nome or f.banco_nome or '').strip().upper()[:200],
+                 'agencia': _agencia_sem_digito(f.agencia),
+                 'conta': re.sub(r'\D', '', (f.conta or '').split('-')[0])[:30]}
+        atual = ligadas.get(f.id)
+        if atual is None:
+            if proxima is None:
+                proxima = (ContaBancaria.objects.aggregate(m=Max('ordem'))['m'] or 0) + 1
+            ContaBancaria.objects.create(conta_financeiro=f, ordem=proxima, ativo=True, **dados)
+            proxima += 1
+        elif any(getattr(atual, k) != v for k, v in dados.items()):
+            ContaBancaria.objects.filter(pk=atual.pk).update(**dados)
+
+
+def contas_do_financeiro():
+    """As contas que o Contas a Pagar enxerga: espelho de conta ATIVA do Financeiro, na ordem daqui."""
+    sincronizar_contas()
+    return (ContaBancaria.objects.filter(conta_financeiro__isnull=False, conta_financeiro__ativa=True)
+            .exclude(conta_financeiro__tipo='CAIXA').select_related('conta_financeiro').order_by('ordem', 'id'))
+
+
 def contexto_regras():
     """(bancos, categorias, config) como o carregar_ctx() antigo."""
-    bancos = [b.como_dict() for b in ContaBancaria.objects.order_by('ordem', 'id')]
+    bancos = [b.como_dict() for b in contas_do_financeiro()]
     cats = regras.mapa_categorias(Categoria.objects.values_list('tipo', 'categoria'))
     cfg = ConfiguracaoContasPagar.atual().como_dict()
     return bancos, cats, cfg
@@ -36,7 +75,7 @@ def importar(user, nome, conteudo):
         for row in linhas], batch_size=500)
     aviso = ''
     try:  # pré-preenche os saldos (sem transferência) com o último dia publicado
-        por_nome = {c.nome: c for c in ContaBancaria.objects.all()}
+        por_nome = {c.nome: c for c in contas_do_financeiro()}
         novos = []
         for s in mysql.ultimos_saldos():
             conta = por_nome.get(s['banco'])
@@ -97,7 +136,7 @@ def salvar(r, dados):
         if ids:
             r.titulos.filter(id__in=ids).update(excluido=True)
     if 'saldos' in dados:
-        validas = set(ContaBancaria.objects.values_list('id', flat=True))
+        validas = set(contas_do_financeiro().values_list('id', flat=True))
         r.saldos.all().delete()
         vistos = set()
         novos = []
@@ -168,7 +207,7 @@ def sem_categoria():
 # ── Painel e histórico ─────────────────────────────────────────────────────
 def painel(ini, fim):
     titulos, saldos = mysql.ler_periodo(ini, fim)
-    bancos_cad = [b.como_dict() for b in ContaBancaria.objects.order_by('ordem', 'id')]
+    bancos_cad = [b.como_dict() for b in contas_do_financeiro()]
     return regras.montar_painel(ini, fim, titulos, saldos, bancos_cad)
 
 

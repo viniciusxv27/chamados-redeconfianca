@@ -15,7 +15,7 @@ import sqlite3
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
-from contas_pagar.models import Categoria, ConfiguracaoContasPagar, ContaBancaria
+from contas_pagar.models import Categoria, ConfiguracaoContasPagar
 
 
 class Command(BaseCommand):
@@ -34,28 +34,16 @@ class Command(BaseCommand):
             tabelas = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         except sqlite3.DatabaseError as exc:
             raise CommandError(f'Não é um SQLite válido: {exc}') from exc
-        if not {'bancos', 'categorias'} <= tabelas:
-            raise CommandError('O arquivo não tem as tabelas bancos/categorias do Contas a Pagar.')
-        bancos = [dict(r) for r in con.execute('SELECT * FROM bancos ORDER BY ordem, id')]
+        if 'categorias' not in tabelas:
+            raise CommandError('O arquivo não tem a tabela de categorias do Contas a Pagar.')
+        # As contas bancárias NÃO são mais importadas: desde 13/11/2026 vêm do Financeiro › Bancos.
+        n_bancos = con.execute('SELECT COUNT(*) FROM bancos').fetchone()[0] if 'bancos' in tabelas else 0
         cats = [(r['tipo'], r['categoria']) for r in con.execute('SELECT tipo, categoria FROM categorias')]
         cfg = {r['chave']: r['valor'] for r in con.execute('SELECT chave, valor FROM config')} if 'config' in tabelas else {}
         con.close()
 
-        n = {'contas_novas': 0, 'contas_atualizadas': 0, 'cats_novas': 0, 'cats_atualizadas': 0}
+        n = {'cats_novas': 0, 'cats_atualizadas': 0}
         with transaction.atomic():
-            for b in bancos:
-                chave = {'banco': (b.get('banco') or '').strip().upper()[:200],
-                         'agencia': (b.get('agencia') or '').strip()[:20], 'conta': (b.get('conta') or '').strip()[:30]}
-                if not chave['banco']:
-                    continue
-                dados = {'ordem': int(b.get('ordem') or 0), 'ativo': bool(b.get('ativo', 1))}
-                obj = ContaBancaria.objects.filter(**chave).order_by('id').first()
-                if obj is None:
-                    ContaBancaria.objects.create(**chave, **dados)
-                    n['contas_novas'] += 1
-                elif any(getattr(obj, k) != v for k, v in dados.items()):
-                    ContaBancaria.objects.filter(pk=obj.pk).update(**dados)
-                    n['contas_atualizadas'] += 1
             for tipo, cat in cats:
                 tipo, cat = (tipo or '').strip()[:255], (cat or '').strip()[:120]
                 if not tipo or not cat:
@@ -79,7 +67,7 @@ class Command(BaseCommand):
                 transaction.set_rollback(True)
 
         self.stdout.write(
-            f"Contas bancárias: {n['contas_novas']} nova(s), {n['contas_atualizadas']} atualizada(s) "
-            f"(de {len(bancos)} no arquivo). Categorias: {n['cats_novas']} nova(s), {n['cats_atualizadas']} "
+            f"Contas bancárias: não importadas ({n_bancos} no arquivo) — vêm do Financeiro › Bancos. "
+            f"Categorias: {n['cats_novas']} nova(s), {n['cats_atualizadas']} "
             f"atualizada(s) (de {len(cats)}). Regra do Agging: {'atualizada' if mudou else 'sem mudança'}."
             + (' [SIMULAÇÃO: nada foi gravado]' if simular else ''))

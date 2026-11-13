@@ -216,11 +216,25 @@ for cli, u in ((ca, admin), (cc, cons), (co, oper), (co2, oper2), (cf, conf), (c
 # ── Configuração (contas fictícias) ─────────────────────────────────────────
 Categoria.objects.all().delete()
 ContaBancaria.objects.all().delete()
-B_SICOOB = ContaBancaria.objects.create(banco='ZZ SICOOB - REDE', agencia='301', conta='203409', ordem=0)
-B_SICOOB_APL = ContaBancaria.objects.create(banco='ZZ SICOOB - APLICAÇÃO', agencia='3010', conta='203409', ordem=1)
-B_INTER = ContaBancaria.objects.create(banco='ZZ INTER', agencia='0001', conta='8499970', ordem=2)
-B_SEMAG = ContaBancaria.objects.create(banco='ZZ CORA SEM AGÊNCIA', agencia='', conta='777123', ordem=3)
-B_INATIVO = ContaBancaria.objects.create(banco='ZZ INATIVO', agencia='9', conta='555', ordem=4, ativo=False)
+# As contas vêm do Financeiro › Bancos (13/11/2026): cadastra lá, o Contas a Pagar espelha.
+from financeiro.models import ContaBancaria as ContaFin  # noqa: E402
+ContaFin.objects.all().delete()
+
+
+def conta_fin(nome, agencia, conta, ordem, usar=True, **extra):
+    f = ContaFin.objects.create(nome=nome, agencia=agencia, conta=conta, **extra)
+    servicos.sincronizar_contas()
+    c = ContaBancaria.objects.get(conta_financeiro=f)
+    ContaBancaria.objects.filter(pk=c.pk).update(ordem=ordem, ativo=usar)
+    c.refresh_from_db()
+    return c
+
+
+B_SICOOB = conta_fin('ZZ SICOOB - REDE', '301-0', '203409', 0, digito='3')
+B_SICOOB_APL = conta_fin('ZZ SICOOB - APLICAÇÃO', '3010', '203409', 1)
+B_INTER = conta_fin('ZZ INTER', '0001', '8499970', 2)
+B_SEMAG = conta_fin('ZZ CORA SEM AGÊNCIA', '', '777123', 3)
+B_INATIVO = conta_fin('ZZ INATIVO', '9', '555', 4, usar=False)
 for tipo, cat in (('Compra', 'Fornecedor'), ('AGGING', 'AGGING'), ('ALUGUEL OPERACIONAL (LOJAS)', 'Aluguéis'),
                   ('MATERIAL DE USO E CONSUMO', 'Não classificado'), ('energia eletrica', 'Energia')):
     Categoria.objects.create(tipo=tipo, categoria=cat)
@@ -528,19 +542,37 @@ rx.delete()
 
 print('== CONFIGURAÇÕES ==')
 P = '/contas-a-pagar/configuracoes/'
-cf.post(P, {'aba': 'bancos', 'acao': 'conta_adicionar', 'banco': 'zz banco novo', 'agencia': '12', 'conta': '3456'})
-nova = ContaBancaria.objects.filter(banco='ZZ BANCO NOVO').first()
-t('adicionar conta (nome em maiúsculas, vai para o fim)', nova and nova.ordem == 5)
-cf.post(P, {'aba': 'bancos', 'acao': 'conta_salvar', 'id': nova.id, 'banco': 'ZZ BANCO NOVO', 'agencia': '12', 'conta': '3456'})
+print('-- contas vêm do Financeiro › Bancos (13/11/2026)')
+t('agência entra sem o dígito (301-0 → 301) e casa com o Débito', B_SICOOB.agencia == '301'
+  and regras.resolver_banco('Conta ( AG: 301 CC: 203409-3)', [b.como_dict() for b in servicos.contas_do_financeiro()])['id'] == B_SICOOB.id)
+fin_nova = ContaFin.objects.create(nome='zz banco novo', agencia='12-7', conta='3456-1')
+html = cf.get(P + '?aba=bancos').content.decode()
+nova = ContaBancaria.objects.filter(conta_financeiro=fin_nova).first()
+t('conta nova no Financeiro aparece aqui no fim, em uso, com nome em maiúsculas', nova and nova.ordem == 5 and nova.ativo
+  and nova.banco == 'ZZ BANCO NOVO' and nova.agencia == '12' and nova.conta == '3456' and 'ZZ BANCO NOVO' in html)
+t('a tela aponta para o cadastro do Financeiro e não tem mais "Adicionar conta"', 'Financeiro › Bancos' in html
+  and 'conta_adicionar' not in html and 'name="banco"' not in html)
+cf.post(P, {'aba': 'bancos', 'acao': 'conta_usar', 'id': nova.id})
 nova.refresh_from_db()
-t('salvar sem "ativa" marcada desativa', nova.ativo is False)
+t('desmarcar "usar aqui" tira do Contas a Pagar', nova.ativo is False)
+cf.post(P, {'aba': 'bancos', 'acao': 'conta_usar', 'id': nova.id, 'ativo': 'on'})
+nova.refresh_from_db()
+t('marcar de novo volta', nova.ativo is True)
 cf.post(P, {'aba': 'bancos', 'acao': 'conta_subir', 'id': nova.id})
 nova.refresh_from_db()
 t('subir a conta troca a ordem', nova.ordem == 4 and ContaBancaria.objects.get(pk=B_INATIVO.pk).ordem == 5)
-cf.post(P, {'aba': 'bancos', 'acao': 'conta_remover', 'id': nova.id})
-t('remover conta', not ContaBancaria.objects.filter(pk=nova.pk).exists())
-t('adicionar conta sem número é recusado', cf.post(P, {'aba': 'bancos', 'acao': 'conta_adicionar', 'banco': 'X'}).status_code == 302
-  and not ContaBancaria.objects.filter(banco='X').exists())
+ContaFin.objects.filter(pk=fin_nova.pk).update(nome='ZZ BANCO RENOMEADO', agencia='99')
+servicos.sincronizar_contas()
+nova.refresh_from_db()
+t('renomear no Financeiro reflete aqui (e mantém ordem e "usar")', nova.banco == 'ZZ BANCO RENOMEADO' and nova.agencia == '99'
+  and nova.ordem == 4 and nova.ativo is True)
+ContaFin.objects.filter(pk=fin_nova.pk).update(ativa=False)
+t('conta desativada no Financeiro some daqui', nova.pk not in [c.pk for c in servicos.contas_do_financeiro()])
+caixa = ContaFin.objects.create(nome='ZZ CAIXA LOJA', tipo='CAIXA')
+t('conta do tipo Caixa não entra', 'ZZ CAIXA LOJA' not in [c.banco for c in servicos.contas_do_financeiro()])
+t('editar banco/agência/conta por aqui não existe mais', cf.post(P, {'aba': 'bancos', 'acao': 'conta_salvar', 'id': B_INTER.id,
+  'banco': 'HACK', 'agencia': '1', 'conta': '2'}).status_code == 302 and ContaBancaria.objects.get(pk=B_INTER.pk).banco == 'ZZ INTER')
+ContaFin.objects.filter(pk__in=[fin_nova.pk, caixa.pk]).delete()
 r6 = subir(co, csv_base())
 html = cf.get(P + '?aba=categorias').content.decode()
 t('aba categorias lista o tipo sem categoria dos rascunhos', 'DESPESA NOVA ZZ' in html)
@@ -610,16 +642,15 @@ call_command('importar_contas_pagar_local', str(velho), '--simular', stdout=said
 t('--simular não grava', ContaBancaria.objects.count() == antes and 'SIMULAÇÃO' in saida.getvalue())
 saida = io.StringIO()
 call_command('importar_contas_pagar_local', str(velho), stdout=saida)
-t('importa contas novas e atualiza a existente (ordem)', ContaBancaria.objects.count() == antes + 2
-  and ContaBancaria.objects.get(pk=B_SICOOB.pk).ordem == 7
-  and ContaBancaria.objects.get(banco='ZZ BANCO ANTIGO').ativo is False, saida.getvalue())
+t('contas bancárias não são mais importadas (vêm do Financeiro)', ContaBancaria.objects.count() == antes
+  and ContaBancaria.objects.get(pk=B_SICOOB.pk).ordem == 0 and 'vêm do Financeiro' in saida.getvalue(), saida.getvalue())
 t('importa categorias (nova e atualizada)', Categoria.objects.filter(tipo='ZZ CAT VELHA', categoria='Benefícios').exists()
   and Categoria.objects.get(tipo='Compra').categoria == 'Fornecedor')
 n_c, n_cat = ContaBancaria.objects.count(), Categoria.objects.count()
 saida = io.StringIO()
 call_command('importar_contas_pagar_local', str(velho), stdout=saida)
 t('rodar de novo não duplica nada (idempotente)', ContaBancaria.objects.count() == n_c and Categoria.objects.count() == n_cat
-  and '0 nova(s), 0 atualizada(s)' in saida.getvalue(), saida.getvalue())
+  and 'Categorias: 0 nova(s), 0 atualizada(s)' in saida.getvalue(), saida.getvalue())
 try:
     call_command('importar_contas_pagar_local', str(PASTA / 'nao_existe.db'))
     t('arquivo inexistente dá erro', False)

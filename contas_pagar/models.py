@@ -34,8 +34,17 @@ class AcessoContasPagar(models.Model):
 
 
 class ContaBancaria(models.Model):
-    """Conta da empresa. O "Banco pagador" de cada título sai da agência/conta do campo Débito."""
+    """Conta da empresa. O "Banco pagador" de cada título sai da agência/conta do campo Débito.
 
+    Desde 13/11/2026 as contas vêm do cadastro do Financeiro (/financeiro/bancos/): esta linha é o
+    espelho de uma conta de lá (``conta_financeiro``), com o que é só do Contas a Pagar — a ordem e
+    se a conta é usada aqui (``ativo``). Banco, agência e conta são copiados de lá por
+    ``servicos.sincronizar_contas`` e não se editam aqui.
+    """
+
+    conta_financeiro = models.OneToOneField(
+        'financeiro.ContaBancaria', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='conta_contas_pagar', verbose_name='Conta no Financeiro')
     banco = models.CharField(max_length=200, verbose_name='Banco')
     agencia = models.CharField(max_length=20, blank=True, default='', verbose_name='Agência')
     conta = models.CharField(max_length=30, blank=True, default='', verbose_name='Conta')

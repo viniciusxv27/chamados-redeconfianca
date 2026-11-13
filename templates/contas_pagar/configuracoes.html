@@ -3,39 +3,27 @@
 {% block cp_conteudo %}
 <header class="cp-topo"><div><h1>Configurações</h1><p>Contas bancárias, tabela auxiliar de categorias (aba “Dados”) e regras de tratamento</p></div></header>
 <div class="cp-seg" style="margin-bottom:16px">
-    <a href="?aba=bancos" class="{% if aba_config == 'bancos' %}on{% endif %}">Contas bancárias</a>
-    <a href="?aba=categorias" class="{% if aba_config == 'categorias' %}on{% endif %}">Categorias (Dados)</a>
-    <a href="?aba=regras" class="{% if aba_config == 'regras' %}on{% endif %}">Regras</a>
-</div>
-
-{% if aba_config == 'bancos' %}
+    <a href="?aba=bancos" class="{% if aba_config == 'bancos' %}
 <section class="cp-card">
-    <div class="cp-card-cab"><div><h2>Contas bancárias</h2><div class="sub">O “Banco pagador” de cada título é identificado pela agência e conta do campo <b>Débito</b> da base (ex.: “Conta ( AG: 301 CC: 203409-3)”).</div></div></div>
-    <div class="cp-card-corpo">
-        <form method="post" class="cp-linha">{% csrf_token %}<input type="hidden" name="aba" value="bancos">
-            <label class="cp-rotulo" style="flex:1;min-width:220px">Banco *<input class="cp-campo" name="banco" required placeholder="Ex.: SICOOB - REDE CONFIANÇA"></label>
-            <label class="cp-rotulo">Agência (opcional)<input class="cp-campo" name="agencia" style="width:110px"></label>
-            <label class="cp-rotulo">Número da conta *<input class="cp-campo" name="conta" required style="width:150px"></label>
-            <button class="cp-botao pri" name="acao" value="conta_adicionar"><i class="fas fa-plus"></i>Adicionar conta</button>
-        </form>
-    </div>
+    <div class="cp-card-cab"><div><h2>Contas bancárias</h2>
+        <div class="sub">As contas vêm do cadastro do <b>Financeiro › Bancos</b>{% if pode_financeiro_bancos %} — <a href="{% url 'financeiro:bancos' %}" data-link-financeiro-bancos style="padding:0;border-radius:0;font-size:inherit;color:inherit;font-weight:700;text-decoration:underline">cadastrar ou editar contas lá</a>{% endif %}. Aqui você escolhe quais entram no Contas a Pagar e a ordem delas. O “Banco pagador” de cada título é identificado pela agência e conta do campo <b>Débito</b> da base (ex.: “Conta ( AG: 301 CC: 203409-3)”).</div></div></div>
     <table class="cp-tabela">
-        <thead><tr><th>Banco</th><th>Agência</th><th>Conta</th><th>Ativa</th><th></th></tr></thead>
+        <thead><tr><th>Banco</th><th>Agência</th><th>Conta</th><th>Usar aqui</th><th></th></tr></thead>
         <tbody>{% for b in bancos %}<tr>
             <td><form method="post" id="fb{{ b.id }}">{% csrf_token %}<input type="hidden" name="aba" value="bancos"><input type="hidden" name="id" value="{{ b.id }}"></form>
-                <input class="cp-campo" form="fb{{ b.id }}" name="banco" value="{{ b.banco }}" style="width:100%;min-width:200px" aria-label="Banco" required></td>
-            <td><input class="cp-campo" form="fb{{ b.id }}" name="agencia" value="{{ b.agencia }}" style="width:90px" aria-label="Agência"></td>
-            <td><input class="cp-campo" form="fb{{ b.id }}" name="conta" value="{{ b.conta }}" style="width:130px" aria-label="Conta"></td>
-            <td><input type="checkbox" class="cp-chk" form="fb{{ b.id }}" name="ativo" {% if b.ativo %}checked{% endif %} aria-label="Ativa"></td>
+                <strong>{{ b.banco }}</strong>{% if b.conta_financeiro.banco_nome %}<div class="mudo" style="font-size:12px">{{ b.conta_financeiro.banco_nome }}{% if b.conta_financeiro.banco_codigo %} ({{ b.conta_financeiro.banco_codigo }}){% endif %}</div>{% endif %}</td>
+            <td class="nw">{{ b.agencia|default:"—" }}</td>
+            <td class="nw">{{ b.conta|default:"—" }}</td>
+            <td><input type="checkbox" class="cp-chk" form="fb{{ b.id }}" name="ativo" {% if b.ativo %}checked{% endif %}
+                       onchange="document.getElementById('usar{{ b.id }}').click()"
+                       aria-label="Usar {{ b.banco }} no Contas a Pagar"></td>
             <td class="num nw">
                 <button class="cp-icone" form="fb{{ b.id }}" name="acao" value="conta_subir" title="Subir" aria-label="Subir" formnovalidate><i class="fas fa-arrow-up"></i></button>
                 <button class="cp-icone" form="fb{{ b.id }}" name="acao" value="conta_descer" title="Descer" aria-label="Descer" formnovalidate><i class="fas fa-arrow-down"></i></button>
-                <button class="cp-botao peq" form="fb{{ b.id }}" name="acao" value="conta_salvar"><i class="fas fa-floppy-disk"></i>Salvar</button>
-                <button class="cp-botao peq perigo" form="fb{{ b.id }}" name="acao" value="conta_remover" formnovalidate
-                        onclick="return confirm('Remover esta conta? Os títulos dessa conta passarão a aparecer como “Não informado”.')" aria-label="Remover"><i class="fas fa-trash"></i></button></td>
-        </tr>{% empty %}<tr><td colspan="5" class="mudo" style="text-align:center;padding:20px">Nenhuma conta cadastrada. Adicione acima ou importe do sistema antigo (comando <code>importar_contas_pagar_local</code>).</td></tr>{% endfor %}</tbody>
+                <button class="cp-botao peq" form="fb{{ b.id }}" name="acao" value="conta_usar" id="usar{{ b.id }}"><i class="fas fa-floppy-disk"></i>Salvar</button></td>
+        </tr>{% empty %}<tr><td colspan="5" class="mudo" style="text-align:center;padding:20px">Nenhuma conta ativa no Financeiro › Bancos.{% if pode_financeiro_bancos %} <a href="{% url 'financeiro:bancos' %}">Cadastrar lá</a>.{% endif %}</td></tr>{% endfor %}</tbody>
     </table>
-    <div class="cp-card-corpo mudo" style="font-size:12.5px">A agência só é necessária quando existem duas contas com o mesmo número (ex.: SICOOB 301 e SICOOB Aplicação 3010). A ordem aqui é a ordem do painel e dos saldos.</div>
+    <div class="cp-card-corpo mudo" style="font-size:12.5px">Banco, agência e conta acompanham o Financeiro (a agência entra sem o dígito, como no Débito: 301-0 → 301). Conta desativada lá some daqui; conta nova lá entra aqui no fim da lista, já em uso. Contas do tipo Caixa ficam de fora. A ordem aqui é a ordem do painel e dos saldos.</div>
 </section>
 
 {% elif aba_config == 'categorias' %}
