@@ -177,6 +177,31 @@ try:
     t('configuração mostra a loja com o grupo', '120363000000000001' in resp.content.decode())
     t('configuração mostra a loja sem grupo', f'name="grupo_{loja_b.id}"' in resp.content.decode())
 
+    print('== HORA DA COBRANÇA FICA A QUE FOI CONFIGURADA (13/11/2026) ==')
+    from django.contrib.messages import get_messages
+    from cursos.views import ler_hora
+
+    def salvar_hora(valor, dias=('0', '1', '2', '3', '4', '5')):
+        dados = {'cobranca_automatica': 'on', 'cobranca_dias': list(dias)}
+        if valor is not None:
+            dados['cobranca_hora'] = valor
+        r = cli.post('/cursos/configuracao/', dados, follow=True)
+        return ConfiguracaoCursos.get().cobranca_hora, ' | '.join(str(m) for m in get_messages(r.wsgi_request)) + r.content.decode()
+
+    hora, tela = salvar_hora('17:30')
+    t('17:30 fica 17:30', hora == time(17, 30), hora)
+    t('a tela recarrega com 17:30 e o aviso diz a hora salva', 'name="cobranca_hora" value="17:30"' in tela
+      and 'às 17:30' in tela, tela[tela.find('Configuração salva'):tela.find('Configuração salva') + 120])
+    hora, _ = salvar_hora('09:00')
+    hora, _ = salvar_hora('17:30:00')
+    t('com segundos (17:30:00) também grava — antes era ignorado calado', hora == time(17, 30), hora)
+    hora, tela = salvar_hora('25:99')
+    t('hora inválida não grava e avisa', hora == time(17, 30) and 'Não entendi a hora' in tela)
+    hora, _ = salvar_hora(None)
+    t('sem o campo, a hora não muda', hora == time(17, 30))
+    t('formatos aceitos', ler_hora('17h30') == time(17, 30) and ler_hora('1730') == time(17, 30)
+      and ler_hora('17h') == time(17, 0) and ler_hora('24:00') is None and ler_hora('') is None)
+
     leve = Client()
     comum = novo('crs.cob.comum', loja_a, first_name='Comum', last_name='X')
     leve.force_login(comum)

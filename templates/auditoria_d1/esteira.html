@@ -5,6 +5,7 @@
 <div id="d1App" data-base="{% url 'auditoria_d1:esteira' %}" data-usuario="{{ usuario_nome }}"
      data-auditar="{{ pode.auditar|yesno:'1,0' }}" data-gerir="{{ pode.gerir|yesno:'1,0' }}" data-papel="{{ pode.papel }}">
 {% csrf_token %}
+<div class="d1-topo-wrap">
 <header class="d1-topo">
   <div class="d1-topo-marca">
     <span class="d1-escudo"><i class="fas fa-list-check"></i></span>
@@ -14,6 +15,12 @@
     </div>
   </div>
   <div class="d1-topo-acoes">
+    <form class="bg-campo" id="bgForm" role="search" autocomplete="off">
+      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <input id="buscaGeral" type="search" inputmode="numeric" enterkeyhint="search" placeholder="Nº da venda ou CPF/CNPJ  ( / )"
+             aria-label="Buscar venda em qualquer dia pelo nº da venda ou CPF/CNPJ do cliente" aria-controls="bgPainel" aria-expanded="false">
+      <button type="submit" class="bg-ir" title="Buscar em qualquer dia" aria-label="Buscar"><i class="fas fa-arrow-right" aria-hidden="true"></i></button>
+    </form>
     <div class="mes-nav">
       <button type="button" class="icone-btn" id="mesAnt" title="Mês anterior" aria-label="Mês anterior">‹</button>
       <label class="mes-label" title="Escolher mês">
@@ -38,7 +45,7 @@
     {% if pode.auditar %}
     <button type="button" class="btn-topo" id="btnExportar" title="Baixar as alterações do mês no modelo de importação do VivoGo">
       <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 3v12m0 0l-5-5m5 5l5-5M4 19h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      <span>Exportar mês</span>
+      <span>Exportar</span>
     </button>
     {% endif %}
     <span class="auditor" title="Quem fica registrado nas gravações">
@@ -46,6 +53,8 @@
     </span>
   </div>
 </header>
+<section class="bg-painel" id="bgPainel" hidden aria-label="Resultados da busca geral"></section>
+</div>
 
 {% if not mysql_configurado %}
 <div class="d1-msg erro" style="margin-bottom:12px">VIVOGO_MYSQL_URL não está configurada neste servidor: a esteira não consegue ler as vendas.</div>
@@ -73,7 +82,7 @@
     <div class="fila-filtros">
       <div class="busca">
         <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-        <input id="busca" type="search" placeholder="Cliente, CPF, nº venda, acesso…  ( / )" autocomplete="off" aria-label="Buscar">
+        <input id="busca" type="search" placeholder="Filtrar o dia: cliente, CPF, nº venda, acesso…" autocomplete="off" aria-label="Filtrar as vendas do dia">
       </div>
       <div class="filtros-linha">
         <select id="fPdv" aria-label="Filial"><option value="">Todas as filiais</option></select>
@@ -119,19 +128,26 @@
       </div>
       <div class="campo" data-campo="receita_correta" hidden>
         <label for="recCorreta">Receita correta <span class="opc" id="recOpc">(opcional)</span></label>
-        <div class="input-pre"><span>R$</span><input id="recCorreta" inputmode="decimal" placeholder="0,00"></div>
+        <div class="input-pre"><span>R$</span><input id="recCorreta" inputmode="decimal" placeholder="0,00" autocomplete="off" aria-describedby="recErro"></div>
+        <div class="campo-erro" id="recErro" aria-live="polite"></div>
       </div>
       <div class="campo" data-campo="plano_correto" hidden>
         <label for="planoCorreto">Plano correto</label>
-        <input id="planoCorreto" placeholder="Nome do plano ativado">
+        <div class="combo">
+          <input id="planoCorreto" placeholder="Buscar plano do módulo de Vendas…" autocomplete="off" aria-describedby="planoErro">
+          <div class="cb-lista" id="planoLista" hidden></div>
+        </div>
+        <div class="campo-erro" id="planoErro" aria-live="polite"></div>
       </div>
       <div class="campo" data-campo="linha_correta" hidden>
-        <label for="linhaCorreta">Linha correta</label>
-        <input id="linhaCorreta" inputmode="numeric" placeholder="(27) 99999-9999">
+        <label for="linhaCorreta">Linha correta <span class="opc">(DDD + número)</span></label>
+        <input id="linhaCorreta" inputmode="numeric" placeholder="27 99999-9999" autocomplete="off" maxlength="16" aria-describedby="linhaErro">
+        <div class="campo-erro" id="linhaErro" aria-live="polite"></div>
       </div>
       <div class="campo" data-campo="documento_correto" hidden>
         <label for="docCorreto">Documento correto</label>
-        <input id="docCorreto" inputmode="numeric" placeholder="CPF ou CNPJ do titular">
+        <input id="docCorreto" inputmode="numeric" placeholder="999.999.999-99 ou 99.999.999/9999-99" autocomplete="off" maxlength="22" aria-describedby="docErro">
+        <div class="campo-erro" id="docErro" aria-live="polite"></div>
       </div>
     </div>
 
@@ -156,7 +172,7 @@
 </main>
 
 <div class="atalhos" id="atalhos">
-  <kbd>J</kbd><kbd>K</kbd> navegar · <kbd>C</kbd> conforme e avança · <kbd>D</kbd> divergente · <kbd>1</kbd>–<kbd>7</kbd> correção · <kbd>Enter</kbd> salvar · <kbd>/</kbd> buscar
+  <kbd>J</kbd><kbd>K</kbd> navegar · <kbd>C</kbd> conforme e avança · <kbd>D</kbd> divergente · <kbd>1</kbd>–<kbd>7</kbd> correção · <kbd>Enter</kbd> salvar · <kbd>/</kbd> buscar venda ou CPF
 </div>
 
 {% if pode.gerir %}
@@ -228,7 +244,10 @@
     <p class="sva-sub" id="contestSub"></p>
     <div class="campo">
       <label for="contestSolic">Quem contestou</label>
-      <input id="contestSolic" placeholder="Nome do vendedor ou gerente" maxlength="120" required>
+      <div class="combo">
+        <input id="contestSolic" placeholder="Buscar pessoa do portal (nome ou loja)…" maxlength="120" autocomplete="off" required>
+        <div class="cb-lista" id="contestSolicLista" hidden></div>
+      </div>
     </div>
     <div class="campo">
       <label for="contestMotivo">Motivo da contestação</label>
@@ -248,4 +267,4 @@
 <div class="toasts" id="toasts" aria-live="polite"></div>
 </div>
 {% endblock %}
-{% block extra_js %}<script src="{% static 'auditoria_d1/esteira.js' %}?v=1"></script>{% endblock %}
+{% block extra_js %}<script src="{% static 'auditoria_d1/esteira.js' %}?v=3"></script>{% endblock %}

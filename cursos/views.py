@@ -603,8 +603,13 @@ def configuracao(request):
             id__in=request.POST.getlist('usuarios'), is_active=True))
         cfg.gestores.set(User.objects.filter(
             id__in=request.POST.getlist('gestores'), is_active=True))
-        _salvar_cobranca(request, cfg)
-        messages.success(request, 'Configuração salva.')
+        erro_hora = _salvar_cobranca(request, cfg)
+        if erro_hora:
+            messages.error(request, erro_hora)
+        dias = ', '.join(DIAS_SEMANA[d] for d in sorted(cfg.dias_da_cobranca)) or 'nenhum dia'
+        messages.success(request, f'Configuração salva. Cobrança no WhatsApp das lojas: {dias}, às '
+                                  f'{cfg.cobranca_hora:%H:%M}'
+                                  f'{"" if cfg.cobranca_automatica else " (desligada)"}.')
         return redirect('cursos:configuracao')
 
     return render(request, 'cursos/configuracao.html', {
@@ -633,18 +638,50 @@ def _lojas_whatsapp():
     return [{'setor': s, 'grupo': grupos.get(s.id)} for s in setores.distinct().order_by('name')]
 
 
-def _salvar_cobranca(request, cfg):
-    """Agenda da cobrança automática e o grupo de WhatsApp de cada loja."""
-    from datetime import datetime
+def ler_hora(texto):
+    """'17:30', '17:30:00', '17h30', '17h', '1730', ' 9:05 ' → time; None se não der para ler.
 
+    Antes só '%H:%M' passava e o resto era descartado em silêncio: a tela dizia "salva" e a
+    cobrança continuava às 09:00 (13/11/2026). O <input type="time"> manda '17:30:00' quando
+    o navegador inclui os segundos.
+    """
+    import re
+    from datetime import time as _time
+
+    texto = (texto or '').strip().lower().replace(' ', '')
+    m = (re.fullmatch(r'(\d{1,2})[:h](\d{2})(?::\d{2}(?:\.\d+)?)?', texto)
+         or re.fullmatch(r'(\d{1,2})h()', texto)
+         or re.fullmatch(r'(\d{2})(\d{2})', texto))
+    if not m:
+        return None
+    hora, minuto = int(m.group(1)), int(m.group(2) or 0)
+    if hora > 23 or minuto > 59:
+        return None
+    return _time(hora, minuto)
+
+
+def _salvar_cobranca(request, cfg):
+    """Agenda da cobrança automática e o grupo de WhatsApp de cada loja.
+
+    Devolve a mensagem de erro da hora, se ela veio e não deu para ler (a hora antiga fica).
+    """
     cfg.cobranca_automatica = request.POST.get('cobranca_automatica') == 'on'
     cfg.cobranca_dias = ','.join(sorted(
         d for d in request.POST.getlist('cobranca_dias') if d.isdigit() and int(d) <= 6))
-    try:
-        cfg.cobranca_hora = datetime.strptime(request.POST.get('cobranca_hora', ''), '%H:%M').time()
-    except ValueError:
-        pass
+    erro_hora = ''
+    bruto = request.POST.get('cobranca_hora')
+    antes = cfg.cobranca_hora
+    if bruto is not None:
+        hora = ler_hora(bruto)
+        if hora is None:
+            erro_hora = (f'Não entendi a hora "{bruto}" da cobrança no WhatsApp — ela continua às '
+                         f'{antes:%H:%M}. Use o formato 17:30.')
+        else:
+            cfg.cobranca_hora = hora
     cfg.save(update_fields=['cobranca_automatica', 'cobranca_dias', 'cobranca_hora'])
+    if cfg.cobranca_hora != antes:
+        logger.info('Cursos: hora da cobrança no WhatsApp %s → %s por %s (veio "%s")',
+                    f'{antes:%H:%M}', f'{cfg.cobranca_hora:%H:%M}', request.user, bruto)
 
     for item in _lojas_whatsapp():
         setor, grupo = item['setor'], item['grupo']
@@ -662,6 +699,7 @@ def _salvar_cobranca(request, cfg):
         elif (grupo.grupo, grupo.ativo) != (valor, ativo):
             grupo.grupo, grupo.ativo = valor, ativo
             grupo.save(update_fields=['grupo', 'ativo'])
+    return erro_hora
 
 
 def _quantas_pessoas(cfg):

@@ -15,6 +15,7 @@ from urllib.parse import quote
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods
@@ -157,6 +158,54 @@ def api_vendas(request):
     except ValueError:
         return _json({"erro": "Data inválida"}, 400)
     return _json({"data": dia.isoformat(), "itens": regras.vendas_do_dia(dia)})
+
+
+@api(CONSULTA)
+def api_busca(request):
+    """Busca geral: nº da venda/serviço ou CPF/CNPJ em qualquer dia (regras.buscar). ?ampliar=1 → 12 meses."""
+    try:
+        return _json(regras.buscar(request.GET.get("q"), ampliar=request.GET.get("ampliar") == "1"))
+    except ValueError as e:
+        return _json({"erro": str(e)}, 400)
+
+
+@api(AUDITOR)
+def api_planos(request):
+    """Os mesmos planos da venda nova em /vendas/ (vendas.Plano ativos), para o 'Plano incorreto'. Grava-se o nome."""
+    from vendas.models import Plano
+    return _json([{"nome": p.nome, "segmentacao": p.get_segmentacao_display(), "valor": float(p.valor)}
+                  for p in Plano.objects.filter(ativo=True).order_by("segmentacao", "nome", "valor")])
+
+
+def _sem_acento(s):
+    return regras._nome(s).lower()
+
+
+CHAVE_USUARIOS = "auditoria_d1:usuarios_ativos"
+
+
+def _usuarios_ativos():
+    """Usuários ativos do portal (nome completo + setor principal), em cache por 5 minutos."""
+    lista = cache.get(CHAVE_USUARIOS)
+    if lista is None:
+        lista = []
+        for u in (User.objects.filter(is_active=True).select_related("sector")
+                  .only("first_name", "last_name", "username", "sector__name").order_by("first_name", "last_name")):
+            nome = nome_usuario(u)
+            setor = u.sector.name if u.sector_id else ""
+            lista.append({"nome": nome, "setor": setor, "_busca": _sem_acento(" ".join((nome, setor, u.username or "")))})
+        cache.set(CHAVE_USUARIOS, lista, 300)
+    return lista
+
+
+@api(AUDITOR)
+def api_usuarios(request):
+    """Quem contestou: busca nos usuários ATIVOS do portal (todas as palavras, sem acento). Até 20, com o setor."""
+    termos = _sem_acento(request.GET.get("q")).split()
+    if not termos:
+        return _json([])
+    achados = [u for u in _usuarios_ativos() if all(t in u["_busca"] for t in termos)]
+    return _json([{"nome": u["nome"], "setor": u["setor"]} for u in achados[:20]])
 
 
 @api(AUDITOR, ("POST",))

@@ -19,7 +19,7 @@ from decimal import Decimal
 from django.core.cache import cache
 from django.utils import timezone
 
-from . import categorias, cruzamento_fixa, cruzamento_sva
+from . import categorias, cruzamento_fixa, cruzamento_sva, formato
 from . import mysql as db
 
 digitos = lambda s: re.sub(r"\D", "", str(s or ""))  # noqa: E731
@@ -302,6 +302,69 @@ def vendas_do_dia(dia):
     return itens
 
 
+# ---------------------------------------------------------------- busca geral
+LIMITE_BUSCA = 200
+
+
+def _primeiro_do_mes(d, meses_antes):
+    a, m = divmod(d.year * 12 + d.month - 1 - meses_antes, 12)
+    return dt.date(a, m + 1, 1)
+
+
+def tipo_busca(termo):
+    """('id', dígitos) para nº da venda/serviço, ('doc', dígitos) para CPF (11) ou CNPJ (14). Com ou sem máscara."""
+    termo = str(termo or "").strip()
+    d = digitos(termo)
+    if re.search(r"[^\d\s.\-/#()]", termo) or not d:
+        raise ValueError("Digite o nº da venda (ou do serviço) ou o CPF/CNPJ do cliente.")
+    if len(d) in (11, 14):
+        return "doc", d
+    if 3 <= len(d) <= 10:
+        return "id", d
+    raise ValueError("Nº da venda com 3 a 10 dígitos, CPF com 11 ou CNPJ com 14.")
+
+
+def _item_busca(r):
+    return {"id_servico": r["id_servico"], "id_venda": r["id_venda"], "data_venda": _iso(r["data_venda"]),
+            "pdv": r["pdv"], "servico": r["servico"], "pilar": r["pilar"], "cliente": r["cliente"],
+            "documento": formato.doc_vivogo(r["cpf"] or r["documento"]), "plano": r["plano"],
+            "receita": _num(r["receita"]), "status": r["v_status"] or "PENDENTE", "correcao": r["v_correcao"],
+            "origem": r["v_origem"], "contestacao": r["v_contestacao_decisao"]}
+
+
+def buscar(termo, ampliar=False):
+    """Busca geral da esteira, em etapas para não varrer a tabela de origem (ver db.buscar_vendas):
+    1. nº de venda já verificada: acha a data pela verificacao_vendas (qualquer época) e lê só aquele dia;
+    2. últimos 3 meses (mês atual + 2 anteriores);
+    3. sem resultado (ou ampliar=True): até 12 meses.
+    A etapa 1 não encerra a busca: os números de venda e de serviço se sobrepõem, então o mesmo nº pode ser uma venda
+    verificada e o serviço (pendente) de outra venda. O que ela acha se soma aos 3 meses; não amplia sozinho para
+    12 meses (custaria ~2 s a mais em toda busca de venda verificada), mas oferece o botão de ampliar.
+    Devolve {itens, tipo, de, ate, truncado, pode_ampliar, fonte}."""
+    tipo, valor = tipo_busca(termo)
+    h = hoje()
+    fim = mes(h.strftime("%Y-%m"))[1]
+    ini3, ini12 = _primeiro_do_mes(h, 2), _primeiro_do_mes(h, 11)
+    verificadas = []
+    if tipo == "id":
+        datas = db.datas_verificadas(valor)
+        verificadas = db.buscar_vendas(tipo, valor, datas=datas, limite=LIMITE_BUSCA) if datas else []
+    if ampliar:
+        linhas, de = db.buscar_vendas(tipo, valor, ini12, fim, limite=LIMITE_BUSCA), ini12
+    else:
+        linhas, de = db.buscar_vendas(tipo, valor, ini3, fim, limite=LIMITE_BUSCA), ini3
+        if not linhas and not verificadas:  # nada recente: olha os 9 meses anteriores (sem reler os 3 já vistos)
+            linhas, de = db.buscar_vendas(tipo, valor, ini12, ini3 - dt.timedelta(days=1), limite=LIMITE_BUSCA), ini12
+    if verificadas:
+        vistos = {r["id_servico"] for r in linhas}
+        linhas = sorted(linhas + [r for r in verificadas if r["id_servico"] not in vistos], key=db.ordem_busca,
+                        reverse=True)
+    return {"itens": [_item_busca(r) for r in linhas[:LIMITE_BUSCA]], "tipo": tipo, "de": de.isoformat(),
+            "ate": fim.isoformat(), "truncado": len(linhas) > LIMITE_BUSCA,
+            "pode_ampliar": de > ini12 and bool(verificadas or (linhas and tipo == "doc")),
+            "fonte": "verificadas+periodo" if verificadas else "periodo", "ampliar_de": ini12.isoformat()}
+
+
 def alertas_cruzamento(itens, sugestoes):
     """Sugestões dos cruzamentos (SVA: confiança provável; Fixa: vínculo fraco, não comissionada ou não localizada)
     viram alertas na esteira, com o botão para aplicar a correção sugerida."""
@@ -360,14 +423,20 @@ def registro(payload, origem):
             reg["plano_correto"] = _txt(payload.get("plano_correto"), 255)
             if not reg["plano_correto"]:
                 raise ValueError("Informe o plano correto.")
+        # Grava só os dígitos, como sempre (Power BI e sistema antigo); o formato do VivoGo é só na tela/exportação
         if "linha_correta" in campos:
-            reg["linha_correta"] = digitos(payload.get("linha_correta"))[:30] or None
-            if not reg["linha_correta"] or len(reg["linha_correta"]) < 10:
+            reg["linha_correta"] = formato.normalizar_linha(payload.get("linha_correta"))[:30] or None
+            if not reg["linha_correta"]:
                 raise ValueError("Informe a linha correta com DDD.")
+            erro = formato.erro_linha(reg["linha_correta"])
+            if erro:
+                raise ValueError("Linha correta inválida: " + erro)
         if "documento_correto" in campos:
             reg["documento_correto"] = digitos(payload.get("documento_correto"))[:30] or None
             if not reg["documento_correto"]:
                 raise ValueError("Informe o documento correto.")
+            if not doc_valido(reg["documento_correto"]):
+                raise ValueError("Documento correto inválido: confira os dígitos do CPF (11) ou CNPJ (14).")
     acao, validada, alterar = categorias.resolver(status, reg["correcao_vivogo"], receita, reg["receita_correta"])
     reg.update(acao_necessaria=acao or None, receita_validada=validada, alterar_vivogo=int(alterar))
     return reg
@@ -487,12 +556,13 @@ def planilha_auditoria(inicio, fim):
         receita = _num(r["receita"])
         ws.append([
             farol, r["pdv"], r["servico"], _int(r["id_venda"]), r["data_venda"], r["ultima_ativacao"], r["vendedor"],
-            r["cliente"], r["cpf"], digitos(r["documento"]) or None, r["endereco"], r["cidade_cliente"], r["uf_cliente"],
-            r["plano"], _int(digitos(r["acesso"])), r["status_servico"], _num(r["valor_plano"]), receita,
+            r["cliente"], formato.doc_vivogo(r["cpf"]) or None, formato.doc_vivogo(r["documento"]) or None, r["endereco"],
+            r["cidade_cliente"], r["uf_cliente"], r["plano"], formato.linha_vivogo(r["acesso"]) or None, r["status_servico"],
+            _num(r["valor_plano"]), receita,
             SEGMENTO.get(r["pilar"], (r["pilar"] or "").upper()),
             {"CONFORME": "Em Conformidade", "DIVERGENTE": "Divergente", "CONTESTADA": "Contestada (venda volta)"}.get(st, "Pendente"),
             r["v_correcao"], r["v_penalidade"], r["v_acao"] or "", _num(r["v_receita_correta"]), r["v_plano_correto"],
-            _int(r["v_linha_correta"]), _int(r["v_documento_correto"]),
+            formato.linha_vivogo(r["v_linha_correta"]) or None, formato.doc_vivogo(r["v_documento_correto"]) or None,
             _num(r["v_receita_validada"]) if st else receita,
             "Sim" if r["v_alterar_vivogo"] else ("Não" if st else ""),
             "DUPLICADO" if duplicados.get(r["id_servico"], {}).get("original", r["id_servico"]) != r["id_servico"]
@@ -509,10 +579,17 @@ def planilha_auditoria(inicio, fim):
         c.alignment = Alignment(vertical="center")
     for i, col in enumerate(cab, 1):
         ws.column_dimensions[get_column_letter(i)].width = max(10, min(32, len(col) + 4))
+    # Acesso, CPF/CNPJ, linha e documento corretos vão como texto no formato do VivoGo ("27 99999-9999",
+    # "999.999.999-99"): como número o Excel comia o zero da frente do CPF. Valores continuam número (somam no
+    # Excel), com duas casas — no Excel em português aparecem como no VivoGo ("100,75").
+    moeda = [cab.index(c) for c in ("Valor Plano", "Receita", "RECEITA CORRETA", "RECEITA VALIDADA")]
     for row in ws.iter_rows(min_row=2):
         for idx in (4, 5, 33, 38):
             if row[idx].value:
                 row[idx].number_format = "dd/mm/yyyy" if idx not in (33, 38) else "dd/mm/yyyy hh:mm"
+        for idx in moeda:
+            if row[idx].value is not None:
+                row[idx].number_format = "#,##0.00"
     ws.freeze_panes = "A2"
     ws.auto_filter.ref = ws.dimensions
     buf = io.BytesIO()

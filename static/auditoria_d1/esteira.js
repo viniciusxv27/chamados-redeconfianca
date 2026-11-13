@@ -1,6 +1,8 @@
 /* Auditoria D-1 · esteira de verificação de vendas (portado do sistema Flask para o portal).
    Mudanças: URLs sob /auditoria-d1/api/, CSRF do Django, autor = usuário logado (sem a janela "Quem está
-   verificando?") e botões/atalhos de gravação só para quem tem o papel (AUDITOR/GESTOR/SUPERADMIN). */
+   verificando?") e botões/atalhos de gravação só para quem tem o papel (AUDITOR/GESTOR/SUPERADMIN).
+   13/11/2026: busca geral (nº da venda/CPF em qualquer dia), plano correto escolhido nos planos de /vendas/, quem
+   contestou escolhido nos usuários do portal e máscaras no formato do VivoGo (linha, CPF/CNPJ e receita). */
 (() => {
   "use strict";
 
@@ -28,6 +30,7 @@
     salvando: false,
     pedidoDia: 0,
     pedidoMes: 0,
+    alvo: null,         // id_servico a selecionar quando o dia carregar (veio da busca geral)
     auditor: APP.dataset.usuario || "",
   };
 
@@ -45,24 +48,277 @@
   const dataBR = s => { if (!s) return "—"; const [a, m, d] = String(s).slice(0, 10).split("-"); return `${d}/${m}/${a}`; };
   const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const titulo = s => String(s || "").toLowerCase().replace(/(^|\s)\S/g, c => c.toUpperCase());
+  // Com letra no meio ("S0 00007-1168", "27 99377-191a") a origem está errada: mostra como veio, sem inventar número.
+  const soNumero = s => !/[^\d\s+().\-/]/.test(String(s ?? ""));
   function doc(s) {
+    if (!soNumero(s)) return s;
     const d = dig(s);
     if (d.length === 11) return d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
     if (d.length === 14) return d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
     return s || "—";
   }
+  // Nº de acesso no formato do VivoGo: "27 99999-9999" (celular) e "27 3333-4444" (fixo)
   function fone(s) {
+    if (!soNumero(s)) return s;
     const d = dig(s);
-    if (d.length === 11) return d.replace(/(\d{2})(\d{5})(\d{4})/, "($1) $2-$3");
-    if (d.length === 10) return d.replace(/(\d{2})(\d{4})(\d{4})/, "($1) $2-$3");
-    return s || "—";
+    return d.length === 10 || d.length === 11 ? fmtLinha(d) : (s || "—");
   }
+  // ------------------------------------------------------------ máscaras no formato do VivoGo
+  // O que vai para o servidor continua igual (ele grava só os dígitos da linha/documento e a receita em decimal);
+  // a máscara é para digitar/colar sem erro e conferir no formato em que se digita no VivoGo.
+  const DDDS = new Set(("11 12 13 14 15 16 17 18 19 21 22 24 27 28 31 32 33 34 35 37 38 41 42 43 44 45 46 47 48 49 51 53 54 55 " +
+    "61 62 63 64 65 66 67 68 69 71 73 74 75 77 79 81 82 83 84 85 86 87 88 89 91 92 93 94 95 96 97 98 99").split(" "));
+  function normLinha(s) {  // tira o +55 do país e o 0 da operadora quando vierem colados
+    let d = dig(s);
+    if ((d.length === 12 || d.length === 13) && d.startsWith("55")) d = d.slice(2);
+    if ((d.length === 11 || d.length === 12) && d.startsWith("0")) d = d.slice(1);
+    return d;
+  }
+  function fmtLinha(d) {
+    d = String(d).slice(0, 11);
+    if (d.length <= 2) return d;
+    const n = d.slice(2), corte = n.length === 9 ? 5 : 4;
+    return n.length <= 4 ? `${d.slice(0, 2)} ${n}` : `${d.slice(0, 2)} ${n.slice(0, corte)}-${n.slice(corte)}`;
+  }
+  function fmtDoc(d) {
+    d = String(d).slice(0, 14);
+    if (d.length <= 11) {
+      return d.length <= 3 ? d : d.length <= 6 ? `${d.slice(0, 3)}.${d.slice(3)}` : d.length <= 9 ? `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`
+        : `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+    }
+    return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}${d.length > 12 ? `-${d.slice(12)}` : ""}`;
+  }
+  function fmtMoeda(t) {  // t: dígitos e no máximo uma vírgula → "1.234,5"
+    let [int, dec] = String(t).split(",");
+    int = int.replace(/^0+(?=\d)/, "");
+    if (int === "" && dec !== undefined) int = "0";
+    int = int.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    return dec === undefined ? int : `${int},${dec.slice(0, 2)}`;
+  }
+  function limparMoeda(s) {  // mantém dígitos e a primeira vírgula
+    s = String(s).replace(/[^\d,]/g, "");
+    const i = s.indexOf(",");
+    return i < 0 ? s : s.slice(0, i + 1) + s.slice(i + 1).replace(/,/g, "");
+  }
+  function valorMoeda(s) {  // valor do campo mascarado: ponto é sempre milhar e vírgula é decimal ("1.234" = 1234)
+    const t = limparMoeda(s);
+    return t === "" ? null : (t === "," ? NaN : Number(t.replace(",", ".")));
+  }
+  function colarMoeda(t) {  // "R$ 1.234,50", "1234.50", "1,234.56", "1234,5" → "1234,50"/"1234,5"
+    t = String(t).replace(/[^\d,.]/g, "");
+    const v = t.lastIndexOf(","), p = t.lastIndexOf(".");
+    const partir = i => `${dig(t.slice(0, i))},${dig(t.slice(i + 1))}`;  // separador decimal na posição i
+    if (v >= 0 && p >= 0) return partir(Math.max(v, p));  // os dois: o último é o decimal ("1.234,56" e "1,234.56")
+    const sep = v >= 0 ? "," : p >= 0 ? "." : "";
+    if (!sep) return t;
+    const grupos = new RegExp(`^\\d{1,3}(\\${sep}\\d{3})+$`);
+    if (t.split(sep).length > 2) return grupos.test(t) ? dig(t) : (sep === "," ? partir(v) : dig(t));
+    if (sep === "." && grupos.test(t)) return dig(t);  // "1.234" = mil duzentos e trinta e quatro
+    return partir(sep === "," ? v : p);
+  }
+  function docValido(d) {
+    if (/^(\d)\1+$/.test(d)) return false;
+    if (d.length === 11) {
+      for (const n of [9, 10]) {
+        let s = 0;
+        for (let i = 0; i < n; i++) s += Number(d[i]) * (n + 1 - i);
+        if ((s * 10 % 11) % 10 !== Number(d[n])) return false;
+      }
+      return true;
+    }
+    if (d.length === 14) {
+      for (const [n, p] of [[12, [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]], [13, [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]]]) {
+        let s = 0;
+        for (let i = 0; i < n; i++) s += Number(d[i]) * p[i];
+        const r = s % 11;
+        if ((r < 2 ? 0 : 11 - r) !== Number(d[n])) return false;
+      }
+      return true;
+    }
+    return false;
+  }
+  function erroLinha(s) {
+    const d = normLinha(s);
+    if (d.length !== 10 && d.length !== 11) return "Informe DDD + número: 10 dígitos (fixo) ou 11 (celular)";
+    if (!DDDS.has(d.slice(0, 2))) return `DDD ${d.slice(0, 2)} não existe`;
+    if (d.length === 11 && d[2] !== "9") return "Celular com 11 dígitos começa com 9 depois do DDD";
+    if (d.length === 10 && !"2345".includes(d[2])) return "Fixo começa com 2, 3, 4 ou 5 depois do DDD (celular tem o 9)";
+    return null;
+  }
+  function erroDoc(s) {
+    const d = dig(s);
+    if (d.length !== 11 && d.length !== 14) return "CPF tem 11 dígitos e CNPJ 14";
+    return docValido(d) ? null : `${d.length === 11 ? "CPF" : "CNPJ"} inválido: o dígito verificador não confere`;
+  }
+
+  // Aplica a máscara a cada digitação mantendo o cursor depois do mesmo dígito; colar aceita texto formatado ou só
+  // dígitos; apagar um separador (traço, ponto, espaço) apaga o dígito antes dele.
+  // Receita (sig aceita a vírgula): o ponto digitado vira a vírgula decimal ("12.5" = 12,50), mas, se depois dele vier
+  // um 3º dígito ou a vírgula de verdade, ele era o ponto de milhar ("1.234" = 1234 e "1.234,5" = 1234,50).
+  function mascarar(el, { limpar, formatar, colar, sig, terminar }) {
+    const moeda = sig.test(",");
+    let anterior = el.value, mostrado = el.value, virgulaDoPonto = false;
+    const aplicar = (bruto, cursorSig) => {
+      const novo = formatar(bruto);
+      el.value = novo;
+      const alvo = Math.min(cursorSig, limpar(novo).length);
+      let n = 0, p = 0;
+      while (p < novo.length && n < alvo) { if (sig.test(novo[p])) n++; p++; }
+      if (document.activeElement === el) el.setSelectionRange(p, p);
+      anterior = mostrado = novo;
+    };
+    // O valor de antes de cada edição vem do beforeinput, e não do último que a máscara escreveu: a tela troca o valor
+    // pelo programa ao abrir outra venda, e o "anterior" velho fazia o Backspace no traço falhar ou apagar dois dígitos.
+    el.addEventListener("beforeinput", () => {
+      if (el.value !== mostrado) virgulaDoPonto = false;  // valor posto pelo programa: a vírgula dele é de verdade
+      anterior = el.value;
+    });
+    el.addEventListener("input", e => {
+      let v = el.value, pos = el.selectionStart ?? v.length;
+      const dado = e.data || "";
+      if (dado.length > 1 && /^insert/.test(e.inputType || "") && v.slice(pos - dado.length, pos) === dado) {
+        // texto inteiro de uma vez (autopreenchimento, ditado, teclado do celular): trata como colado
+        const c = colar(dado);
+        v = v.slice(0, pos - dado.length) + c + v.slice(pos);
+        pos += c.length - dado.length;
+        if (c.includes(",")) virgulaDoPonto = false;
+      } else if (moeda && e.inputType === "insertText" && (dado === "." || dado === ",") && pos > 0) {
+        let ant = v.slice(0, pos - 1), dep = v.slice(pos);
+        const temVirgula = (ant + dep).includes(",");
+        if (dado === "." && !temVirgula) {
+          v = `${ant},${dep}`;  // o ponto digitado vira a vírgula decimal (por ora)
+          virgulaDoPonto = true;
+        } else if (dado === "," && temVirgula && virgulaDoPonto) {
+          // chegou a vírgula de verdade: a que veio do ponto era milhar ("1.234,5" digitado tecla a tecla)
+          ant = ant.replace(",", ""); dep = dep.replace(",", "");
+          v = `${ant},${dep}`; pos = ant.length + 1;
+          virgulaDoPonto = false;
+        } else if (dado === "," && !temVirgula) virgulaDoPonto = false;
+        // ponto com vírgula já no campo: é milhar, e a máscara descarta (os pontos ela mesma põe)
+      }
+      let antes = limpar(v.slice(0, pos)), tudo = limpar(v);
+      if (e.inputType === "deleteContentBackward" && tudo === limpar(anterior) && antes.length) {
+        tudo = tudo.slice(0, antes.length - 1) + tudo.slice(antes.length);
+        antes = antes.slice(0, -1);
+      }
+      if (moeda) {
+        const i = tudo.indexOf(",");
+        if (i < 0) virgulaDoPonto = false;
+        else if (virgulaDoPonto && tudo.length - i - 1 > 2 && !/^0*$/.test(tudo.slice(0, i))) {
+          // 3º dígito depois da vírgula que veio do ponto: o ponto era o de milhar ("1.234")
+          tudo = tudo.slice(0, i) + tudo.slice(i + 1);
+          if (antes.length > i) antes = antes.slice(0, i) + antes.slice(i + 1);
+          virgulaDoPonto = false;
+        }
+        // começou pela vírgula (ou pelo ponto): "0," com o cursor depois da vírgula, senão ",50" virava 5,00
+        if (tudo.startsWith(",")) { tudo = `0${tudo}`; if (antes.length) antes = `0${antes}`; }
+      }
+      aplicar(tudo, antes.length);
+    });
+    el.addEventListener("paste", e => {
+      const txt = e.clipboardData?.getData("text");
+      if (txt == null) return;
+      e.preventDefault();
+      const ini = el.selectionStart ?? 0, fim = el.selectionEnd ?? el.value.length;
+      const tudoSel = ini === 0 && fim === el.value.length;
+      const colado = colar(txt);
+      if (colado.includes(",")) virgulaDoPonto = false;
+      const bruto = tudoSel ? colado : limpar(el.value.slice(0, ini)) + colado + limpar(el.value.slice(fim));
+      aplicar(limpar(bruto), limpar(tudoSel ? colado : el.value.slice(0, ini) + colado).length);
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    el.addEventListener("blur", () => {
+      el.dataset.tocado = el.value.trim() ? "1" : "";
+      if (terminar && el.value.trim()) { el.value = terminar(el.value); anterior = mostrado = el.value; }
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  }
+
   const numBR = s => { if (s == null || String(s).trim() === "") return null; const t = String(s).replace(/[R$\s]/g, ""); const n = Number(t.includes(",") ? t.replace(/\./g, "").replace(",", ".") : t); return isNaN(n) ? NaN : n; };
   const statusDe = it => it.verificacao ? it.verificacao.status : "PENDENTE";
   const auto = v => !!v && !!v.origem && !["MANUAL", "CONTESTACAO"].includes(v.origem);
   const ORIGENS = { CRUZAMENTO_SVA: ["SVA auto", "Automação SVA"], CRUZAMENTO_FIXA: ["Fixa auto", "Automação Fixa"] };
   const rotuloAuto = (v, longo) => (ORIGENS[v?.origem] || ["Auto", "Automação"])[longo ? 1 : 0];
   const PILAR_COR = { "Móvel": "movel", "Fixa": "fixa", "SVA": "sva", "Seguros": "seguro" };
+
+  // ------------------------------------------------------------ combobox com busca (plano correto, quem contestou)
+  // Padrão ARIA de combobox: o foco fica no campo; setas percorrem, Enter/toque escolhe, Esc fecha. O valor só
+  // vale quando escolhido na lista (ou na última opção "Usar …", quando a busca não acha).
+  const semAcento = s => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  const casa = (txt, q) => { const t = semAcento(txt); return semAcento(q).split(/\s+/).filter(Boolean).every(p => t.includes(p)); };
+
+  function criarCombo({ input, lista, fonte, livre, vazio, aoEscolher, espera = 0 }) {
+    const C = { valor: "", opcoes: [], ativo: -1, aberto: false, pedido: 0, timer: null };
+    input.setAttribute("role", "combobox");
+    input.setAttribute("aria-autocomplete", "list");
+    input.setAttribute("aria-expanded", "false");
+    input.setAttribute("aria-controls", lista.id);
+    lista.setAttribute("role", "listbox");
+    const fechar = () => {
+      C.aberto = false; C.pedido++; clearTimeout(C.timer);
+      lista.hidden = true;
+      input.setAttribute("aria-expanded", "false");
+      input.removeAttribute("aria-activedescendant");
+    };
+    const marcar = i => {
+      C.ativo = i;
+      $$("[role=option]", lista).forEach((el, k) => { el.classList.toggle("foco", k === i); el.setAttribute("aria-selected", String(k === i)); });
+      const el = lista.querySelector(`[data-i="${i}"]`);
+      if (el) { input.setAttribute("aria-activedescendant", el.id); el.scrollIntoView({ block: "nearest" }); } else input.removeAttribute("aria-activedescendant");
+    };
+    async function abrir() {
+      const q = input.value.trim(), pedido = ++C.pedido;
+      let ops = [], erro = "";
+      try { ops = await fonte(q); } catch (e) { erro = e.message; }
+      if (pedido !== C.pedido || document.activeElement !== input) return;
+      if (livre && q.length >= 2 && !ops.some(o => semAcento(o.valor) === semAcento(q))) ops.push({ valor: q, rotulo: livre(q), livre: true });
+      C.opcoes = ops;
+      lista.innerHTML = ops.map((o, i) => `<div role="option" id="${lista.id}-${i}" data-i="${i}" aria-selected="false"
+          class="cb-op${o.livre ? " livre" : ""}${o.valor === C.valor ? " sel" : ""}"><span>${esc(o.rotulo || o.valor)}</span>${o.sub ? `<small>${esc(o.sub)}</small>` : ""}</div>`).join("")
+        + (erro ? `<div class="cb-vazio">${esc(erro)}</div>` : !ops.length ? `<div class="cb-vazio">${esc(vazio(q))}</div>` : "");
+      lista.hidden = false; C.aberto = true;
+      input.setAttribute("aria-expanded", "true");
+      marcar(ops.length && q ? 0 : -1);
+    }
+    const agendar = () => { clearTimeout(C.timer); C.timer = setTimeout(abrir, espera); };
+    function escolher(i) {
+      const o = C.opcoes[i];
+      if (!o) return;
+      C.valor = o.valor;
+      input.value = o.valor;
+      fechar();
+      aoEscolher?.(o);
+    }
+    input.addEventListener("input", () => { C.valor = ""; agendar(); });
+    input.addEventListener("focus", () => { if (!C.valor) agendar(); });
+    input.addEventListener("click", () => { if (!C.aberto) abrir(); });
+    input.addEventListener("blur", fechar);
+    input.addEventListener("keydown", e => {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault(); e.stopPropagation();
+        if (!C.aberto) { abrir(); return; }
+        const n = C.opcoes.length;
+        if (n) marcar(e.key === "ArrowDown" ? (C.ativo + 1) % n : (C.ativo <= 0 ? n - 1 : C.ativo - 1));
+      } else if (e.key === "Enter" && C.aberto && C.ativo >= 0) {
+        e.preventDefault(); e.stopPropagation(); escolher(C.ativo);
+      } else if (e.key === "Escape" && C.aberto) {
+        e.preventDefault(); e.stopPropagation(); fechar();
+      }
+    });
+    lista.addEventListener("mousedown", e => e.preventDefault());  // o toque/clique não tira o foco do campo
+    lista.addEventListener("click", e => { const op = e.target.closest("[data-i]"); if (op) escolher(Number(op.dataset.i)); });
+    return {
+      get valor() { return C.valor; },
+      definir(v) { C.valor = v || ""; input.value = v || ""; fechar(); },
+    };
+  }
+
+  let PLANOS = null;  // os planos ativos de /vendas/ (carregados na primeira vez que o campo abre)
+  function planos() {
+    if (!PLANOS) PLANOS = api("/api/planos").catch(e => { PLANOS = null; throw e; });
+    return PLANOS;
+  }
+  const CB = {};
 
   // ------------------------------------------------------------ API
   function csrf() {
@@ -161,8 +417,16 @@
     S.itens = itens;
     S.porId = new Map(S.itens.map(i => [i.id_servico, i]));
     preencherFiltros();
+    const alvo = S.alvo && S.porId.has(S.alvo) ? S.alvo : null;
+    if (S.alvo && !alvo) toast("A venda não está mais na esteira deste dia (saiu do escopo ou foi recarregada no VivoGo).", "aviso");
+    S.alvo = null;
     const manter = S.sel && S.porId.has(S.sel);
     desenharLista();
+    if (alvo) {
+      selecionar(alvo, true);
+      if (window.matchMedia("(max-width: 1240px)").matches) $("#detalhe").scrollIntoView({ block: "start" });
+      return;
+    }
     selecionar(manter ? S.sel : (S.visiveis.find(id => !S.porId.get(id).verificacao) || S.visiveis[0] || null), false);
   }
 
@@ -348,10 +612,11 @@
     };
     $("#verif").classList.remove("desativado");
     $("#verifSub").textContent = `${it.servico} · #${it.id_venda}`;
-    $("#recCorreta").value = S.form.receita_correta != null ? String(S.form.receita_correta).replace(".", ",") : "";
-    $("#planoCorreto").value = S.form.plano_correto;
+    $("#recCorreta").value = S.form.receita_correta != null ? fmtMoeda(Number(S.form.receita_correta).toFixed(2).replace(".", ",")) : "";
+    if (CB.plano) CB.plano.definir(S.form.plano_correto);
     $("#linhaCorreta").value = S.form.linha_correta ? fone(S.form.linha_correta) : "";
     $("#docCorreto").value = S.form.documento_correto ? doc(S.form.documento_correto) : "";
+    ["#recCorreta", "#linhaCorreta", "#docCorreto"].forEach(x => { $(x).dataset.tocado = $(x).value ? "1" : ""; });
     $("#obs").value = S.form.observacao;
     $("#penBusca").value = "";
     $("#btnReabrir").hidden = !v || !PODE.auditar;
@@ -397,7 +662,7 @@
     if (!it?.verificacao) return;
     CT.decisao = null;
     $("#contestSub").innerHTML = `Venda <b>#${esc(it.id_venda)}</b> · ${esc(it.servico)} · divergência <b>${esc(titulo(it.verificacao.correcao || ""))}</b>${it.verificacao.penalidade ? ` · ${esc(it.verificacao.penalidade)}` : ""}`;
-    $("#contestSolic").value = "";
+    CB.solic?.definir("");
     $("#contestMotivo").value = "";
     $$("#formContest [data-decisao]").forEach(b => b.classList.remove("sel"));
     validarContestacao();
@@ -405,7 +670,8 @@
     setTimeout(() => $("#contestSolic").focus(), 0);
   }
   function validarContestacao() {
-    $("#btnContestSalvar").disabled = !(CT.decisao && $("#contestSolic").value.trim() && $("#contestMotivo").value.trim());
+    $("#btnContestSalvar").disabled = !(CT.decisao && CB.solic?.valor && $("#contestMotivo").value.trim());
+    $("#btnContestSalvar").title = !CB.solic?.valor ? "Escolha na lista quem contestou" : "";
     $("#btnContestSalvar").textContent = CT.decisao === "PROCEDENTE" ? "Registrar e voltar a venda" : "Registrar contestação";
   }
   async function salvarContestacao(e) {
@@ -416,7 +682,7 @@
     btn.disabled = true;
     try {
       const r = await api("/api/contestacoes", { method: "POST", body: JSON.stringify({
-        id_servico: it.id_servico, decisao: CT.decisao, solicitante: $("#contestSolic").value.trim(), motivo: $("#contestMotivo").value.trim() }) });
+        id_servico: it.id_servico, decisao: CT.decisao, solicitante: CB.solic.valor, motivo: $("#contestMotivo").value.trim() }) });
       const v = it.verificacao;
       v.contestacao = { decisao: CT.decisao, solicitante: r.contestacao_solicitante, motivo: r.contestacao_motivo, por: r.contestacao_por, em: r.contestacao_em };
       if (CT.decisao === "PROCEDENTE") {
@@ -489,6 +755,22 @@
     const erro = validar();
     $("#btnSalvar").disabled = !!erro || S.salvando;
     $("#btnSalvar").title = erro || "";
+    mostrarErrosCampos();
+  }
+
+  // Erro de cada campo embaixo dele: aparece depois que a pessoa sai do campo ou completa os dígitos
+  function mostrarErrosCampos() {
+    const mostra = (sel, alvo, msg, completo) => {
+      const el = $(sel), ver = !!msg && (el.dataset.tocado === "1" || completo);
+      $(alvo).textContent = ver ? msg : "";
+      if (ver) el.setAttribute("aria-invalid", "true"); else el.removeAttribute("aria-invalid");
+    };
+    const linha = $("#linhaCorreta").value, docv = $("#docCorreto").value, rec = $("#recCorreta").value;
+    mostra("#linhaCorreta", "#linhaErro", linha.trim() ? erroLinha(linha) : null, dig(linha).length >= 11);
+    mostra("#docCorreto", "#docErro", docv.trim() ? erroDoc(docv) : null, dig(docv).length === 11 || dig(docv).length >= 14);
+    mostra("#recCorreta", "#recErro", rec.trim() && isNaN(valorMoeda(rec)) ? "Valor inválido" : null, false);
+    const pl = $("#planoCorreto");
+    mostra("#planoCorreto", "#planoErro", pl.value.trim() && !CB.plano?.valor ? "Escolha o plano na lista" : null, false);
   }
 
   function impacto() {
@@ -500,7 +782,7 @@
     const regra = S.meta.regras[f.correcao];
     if (!regra) return { acao: null, receita: null };
     if (regra.zera) return { acao: regra.acao, receita: 0 };
-    const rc = numBR($("#recCorreta").value);
+    const rc = valorMoeda($("#recCorreta").value);
     const usaRec = (regra.campos || []).some(c => c.startsWith("receita_correta"));
     return { acao: regra.acao || "Sem ação", receita: usaRec && rc != null && !isNaN(rc) ? rc : rec };
   }
@@ -512,12 +794,12 @@
     if (!f.correcao) return "Escolha a correção VivoGo";
     const campos = S.meta.regras[f.correcao]?.campos || [];
     if (campos.includes("tipo_penalidade") && !f.penalidade) return "Escolha a penalidade";
-    const rc = numBR($("#recCorreta").value);
+    const rc = valorMoeda($("#recCorreta").value);
     if (campos.includes("receita_correta") && (rc == null || isNaN(rc))) return "Informe a receita correta";
     if (campos.includes("receita_correta?") && rc != null && isNaN(rc)) return "Receita inválida";
-    if (campos.includes("plano_correto") && !$("#planoCorreto").value.trim()) return "Informe o plano correto";
-    if (campos.includes("linha_correta") && dig($("#linhaCorreta").value).length < 10) return "Informe a linha correta com DDD";
-    if (campos.includes("documento_correto") && ![11, 14].includes(dig($("#docCorreto").value).length)) return "Informe o CPF/CNPJ correto";
+    if (campos.includes("plano_correto") && !CB.plano?.valor) return "Escolha o plano correto na lista";
+    if (campos.includes("linha_correta")) { const e = erroLinha($("#linhaCorreta").value); if (e) return `Linha correta: ${e}`; }
+    if (campos.includes("documento_correto")) { const e = erroDoc($("#docCorreto").value); if (e) return `Documento correto: ${e}`; }
     return null;
   }
 
@@ -541,7 +823,7 @@
   function payload(it, f) {
     return {
       id_servico: it.id_servico, data_venda: it.data_venda, status: f.status, correcao: f.correcao, penalidade: f.penalidade,
-      receita_correta: $("#recCorreta").value.trim() || null, plano_correto: $("#planoCorreto").value.trim(),
+      receita_correta: limparMoeda($("#recCorreta").value) || null, plano_correto: CB.plano?.valor || "",
       linha_correta: $("#linhaCorreta").value, documento_correto: $("#docCorreto").value, observacao: $("#obs").value.trim(),
     };
   }
@@ -562,7 +844,7 @@
     it.verificacao = {
       status: p.status, correcao: div ? p.correcao : null, penalidade: tem("tipo_penalidade") ? p.penalidade : null,
       acao: div ? acao : null, receita_correta: tem("receita_correta") ? numBR(p.receita_correta) : null,
-      plano_correto: tem("plano_correto") ? p.plano_correto : null, linha_correta: tem("linha_correta") ? dig(p.linha_correta) : null,
+      plano_correto: tem("plano_correto") ? p.plano_correto : null, linha_correta: tem("linha_correta") ? normLinha(p.linha_correta) : null,
       documento_correto: tem("documento_correto") ? dig(p.documento_correto) : null, receita_validada: receita,
       alterar_vivogo: div, observacao: p.observacao, por: S.auditor, em: new Date().toISOString(), salvando: true,
     };
@@ -641,6 +923,7 @@
     $("#mesProx").onclick = () => trocaMes(1);
     $("#mesInput").onchange = e => e.target.value && carregarMes(e.target.value);
     ligarExportacao();
+    ligarBuscaGeral();
     if (existe("#modalSva")) ligarSva();
     if (existe("#modalFixa")) ligarFixa();
 
@@ -678,9 +961,21 @@
         if (p && $("#penBusca").value.trim()) { e.preventDefault(); e.stopPropagation(); S.form.penalidade = p.dataset.pen; $("#penBusca").value = ""; desenharForm(); }
       }
     };
+    // máscaras (registradas antes do desenharForm, que valida o valor já formatado)
+    mascarar($("#recCorreta"), { limpar: limparMoeda, formatar: fmtMoeda, colar: colarMoeda, sig: /[\d,]/,
+      terminar: v => { const n = valorMoeda(v); return n == null || isNaN(n) ? v : fmtMoeda(n.toFixed(2).replace(".", ",")); } });
+    mascarar($("#linhaCorreta"), { limpar: s => dig(s).slice(0, 11), formatar: fmtLinha, colar: normLinha, sig: /\d/,
+      terminar: v => fmtLinha(normLinha(v)) });
+    mascarar($("#docCorreto"), { limpar: s => dig(s).slice(0, 14), formatar: fmtDoc, colar: dig, sig: /\d/ });
+    CB.plano = criarCombo({
+      input: $("#planoCorreto"), lista: $("#planoLista"),
+      fonte: async q => (await planos()).filter(p => !q || casa(`${p.nome} ${p.segmentacao}`, q)).slice(0, 80)
+        .map(p => ({ valor: p.nome, sub: `${p.segmentacao} · ${brl(p.valor)}` })),
+      livre: q => `Usar “${q}” — não está nos planos de Vendas`,
+      vazio: () => "Nenhum plano encontrado",
+      aoEscolher: () => desenharForm(),
+    });
     ["#recCorreta", "#planoCorreto", "#linhaCorreta", "#docCorreto", "#obs"].forEach(s => $(s).addEventListener("input", desenharForm));
-    $("#linhaCorreta").addEventListener("blur", e => { if (dig(e.target.value).length >= 10) e.target.value = fone(e.target.value); });
-    $("#docCorreto").addEventListener("blur", e => { e.target.value = dig(e.target.value) ? doc(e.target.value) : ""; });
     $("#btnSalvar").onclick = salvar;
     $("#btnReabrir").onclick = reabrir;
     $("#contestBox").addEventListener("click", e => {
@@ -694,6 +989,14 @@
       $$("#formContest [data-decisao]").forEach(x => x.classList.toggle("sel", x === b));
       validarContestacao();
     });
+    CB.solic = criarCombo({
+      input: $("#contestSolic"), lista: $("#contestSolicLista"), espera: 180,
+      fonte: async q => q.length < 2 ? [] : (await api(`/api/usuarios?q=${encodeURIComponent(q)}`))
+        .map(u => ({ valor: u.nome, sub: u.setor || "sem setor" })),
+      livre: q => `Usar “${q}” — não está no portal`,
+      vazio: q => q.length < 2 ? "Digite ao menos 2 letras do nome ou da loja" : "Ninguém ativo no portal com esse nome",
+      aoEscolher: () => { validarContestacao(); $("#contestMotivo").focus(); },
+    });
     ["#contestSolic", "#contestMotivo"].forEach(x => $(x).addEventListener("input", validarContestacao));
     const fecharCt = () => { $("#modalContest").hidden = true; };
     $("#fecharContest").onclick = fecharCt;
@@ -703,6 +1006,7 @@
 
     document.addEventListener("keydown", e => {
       if (["#modalSva", "#modalFixa", "#modalContest"].some(m => existe(m) && !$(m).hidden)) return;
+      if (e.target.closest?.("#bgPainel")) return;  // teclas nos resultados da busca geral não mexem na esteira
       const campo = e.target.closest?.("input, textarea, select");
       if (campo) {
         if (e.key === "Escape") campo.blur();
@@ -718,12 +1022,102 @@
       else if (k === "d" && S.sel) definirStatus("DIVERGENTE");
       else if (/^[1-9]$/.test(e.key) && S.sel && S.meta.correcoes[Number(e.key) - 1]) definirCorrecao(S.meta.correcoes[Number(e.key) - 1]);
       else if (e.key === "Enter" && S.sel) { e.preventDefault(); salvar(); }
-      else if (e.key === "/") { e.preventDefault(); $("#busca").focus(); }
+      else if (e.key === "/") { e.preventDefault(); $("#buscaGeral").focus(); $("#buscaGeral").select(); }
     });
 
     window.addEventListener("hashchange", () => {
       const d = location.hash.slice(1);
       if (/^\d{4}-\d{2}-\d{2}$/.test(d) && d !== S.dia) d.startsWith(S.mes) ? carregarDia(d) : carregarMes(d.slice(0, 7), d);
+    });
+  }
+
+  // ------------------------------------------------------------ busca geral (nº da venda ou CPF/CNPJ em qualquer dia)
+  // O servidor procura em etapas (venda já verificada pela data gravada; senão 3 meses; senão 12 meses) para não
+  // varrer a tabela do VivoGo. Clicar num resultado abre o dia da venda com ela selecionada.
+  const BG = { itens: [], pedido: 0 };
+  const ST_ROT = { PENDENTE: "Pendente", CONFORME: "✓ Conforme", DIVERGENTE: "! Divergente", CONTESTADA: "↺ Contestada" };
+
+  function fecharBusca(focar) {
+    BG.pedido++;
+    $("#bgPainel").hidden = true;
+    $("#buscaGeral").setAttribute("aria-expanded", "false");
+    if (focar) $("#buscaGeral").focus();
+  }
+
+  async function buscarGeral(ampliar = false) {
+    const termo = $("#buscaGeral").value.trim();
+    const painel = $("#bgPainel");
+    if (!termo) { fecharBusca(); return; }
+    const pedido = ++BG.pedido;
+    painel.hidden = false;
+    $("#buscaGeral").setAttribute("aria-expanded", "true");
+    painel.innerHTML = `<div class="bg-cab"><span>Buscando “${esc(termo)}”${ampliar ? " nos últimos 12 meses" : ""}…</span></div><div class="esq"></div><div class="esq"></div>`;
+    let r;
+    try {
+      r = await api(`/api/busca?q=${encodeURIComponent(termo)}${ampliar ? "&ampliar=1" : ""}`);
+    } catch (e) {
+      if (pedido !== BG.pedido) return;
+      painel.innerHTML = `<div class="bg-cab"><span class="bg-erro">${esc(e.message)}</span><button type="button" class="bg-fechar" data-bg-fechar aria-label="Fechar">×</button></div>`;
+      return;
+    }
+    if (pedido !== BG.pedido) return;
+    BG.itens = r.itens;
+    const periodo = `de ${dataBR(r.de)} a ${dataBR(r.ate)}${r.fonte === "verificadas+periodo" ? " e nas verificadas de qualquer data" : ""}`;
+    const tipo = r.tipo === "doc" ? "CPF/CNPJ" : "nº da venda/serviço";
+    const n = r.itens.length;
+    const avisos = [];
+    if (r.truncado) avisos.push(`Mostrando os ${n} mais recentes — há mais. Refine pelo nº da venda.`);
+    if (r.pode_ampliar) avisos.push(`<button type="button" class="bg-ampliar" data-bg-ampliar>Buscar também de ${dataBR(r.ampliar_de)} em diante (12 meses)</button>`);
+    if (!n && r.de) avisos.push(`Vendas anteriores a ${dataBR(r.de)}: escolha o mês no calendário e use o filtro do dia.`);
+    painel.innerHTML = `
+      <div class="bg-cab"><span><b>${n ? `${n} serviço${n > 1 ? "s" : ""}` : "Nada encontrado"}</b> · ${tipo} ${periodo}</span>
+        <button type="button" class="bg-fechar" data-bg-fechar title="Fechar (Esc)" aria-label="Fechar">×</button></div>
+      ${n ? `<ul class="bg-lista">${r.itens.map((it, i) => `<li><button type="button" class="bg-item" data-bg="${i}">
+          <span class="bg-l1"><b class="num">${dataBR(it.data_venda)}</b><span class="num bg-venda">#${esc(it.id_venda)}</span><span class="bg-pdv">${esc(it.pdv || "")}</span>
+            <span class="badge ${esc(it.status)}">${ST_ROT[it.status] || esc(it.status)}${it.status === "DIVERGENTE" && it.correcao ? ` · ${esc(titulo(it.correcao))}` : ""}</span></span>
+          <span class="bg-l2">${esc(titulo(it.cliente || "—"))} <small class="num">${esc(it.documento || "")}</small></span>
+          <span class="bg-l3">${esc(it.servico || "—")} · ${esc(it.plano || "—")} · <span class="num">${brl(it.receita)}</span></span>
+        </button></li>`).join("")}</ul>` : ""}
+      ${avisos.length ? `<div class="bg-rodape">${avisos.map(a => `<div>${a}</div>`).join("")}</div>` : ""}`;
+  }
+
+  async function abrirResultado(it) {
+    fecharBusca();
+    S.filtro = "todas"; S.busca = ""; S.pdv = ""; S.pilar = "";
+    $("#busca").value = ""; $("#fPdv").value = ""; $("#fPilar").value = "";
+    const dia = String(it.data_venda).slice(0, 10);
+    if (dia === S.dia && S.porId.has(it.id_servico)) {  // já está no dia aberto
+      desenharLista();
+      selecionar(it.id_servico, true);
+      return;
+    }
+    S.alvo = it.id_servico;
+    if (dia.startsWith(S.mes)) await carregarDia(dia);
+    else await carregarMes(dia.slice(0, 7), dia);
+  }
+
+  function ligarBuscaGeral() {
+    const inp = $("#buscaGeral"), painel = $("#bgPainel");
+    $("#bgForm").addEventListener("submit", e => { e.preventDefault(); buscarGeral(false); });
+    inp.addEventListener("keydown", e => {
+      if (e.key === "Escape" && !painel.hidden) { e.preventDefault(); e.stopPropagation(); fecharBusca(); }
+      else if (e.key === "ArrowDown" && !painel.hidden) { e.preventDefault(); $(".bg-item", painel)?.focus(); }
+    });
+    inp.addEventListener("search", () => { if (!inp.value) fecharBusca(); });  // o "x" do campo limpa
+    painel.addEventListener("click", e => {
+      if (e.target.closest("[data-bg-fechar]")) return fecharBusca(true);
+      if (e.target.closest("[data-bg-ampliar]")) return buscarGeral(true);
+      const b = e.target.closest("[data-bg]");
+      if (b) abrirResultado(BG.itens[Number(b.dataset.bg)]);
+    });
+    painel.addEventListener("keydown", e => {
+      const itens = $$(".bg-item", painel), i = itens.indexOf(document.activeElement);
+      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); fecharBusca(true); }
+      else if (e.key === "ArrowDown" && i >= 0) { e.preventDefault(); itens[Math.min(itens.length - 1, i + 1)].focus(); }
+      else if (e.key === "ArrowUp" && i >= 0) { e.preventDefault(); (i === 0 ? inp : itens[i - 1]).focus(); }
+    });
+    document.addEventListener("click", e => {  // clicar fora fecha (composedPath: o botão clicado pode já ter saído do DOM)
+      if (!painel.hidden && !e.composedPath().some(el => el === painel || el === $("#bgForm"))) fecharBusca();
     });
   }
 

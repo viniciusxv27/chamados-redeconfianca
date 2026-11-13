@@ -15,6 +15,7 @@ Conexão: VIVOGO_MYSQL_URL (settings ou .env), a mesma de vendas/vivogo.py.
 import datetime
 import json
 import logging
+import re
 import time
 from contextlib import contextmanager
 from urllib.parse import unquote, urlparse
@@ -270,6 +271,76 @@ def servicos_por_id(ids, inicio, fim):
               WHERE s.`data_da_venda` BETWEEN %s AND %s AND {esc}
                 AND s.`ID_do_serviço` IN ({', '.join(['%s'] * len(ids))})"""
     return consultar(sql, [inicio, fim] + params + list(ids))
+
+
+# ---------------------------------------------------------------- busca geral (nº da venda / CPF em qualquer dia)
+COLUNAS_BUSCA = """
+    s.`ID_do_serviço`   AS id_servico,
+    s.`ID_da_venda`     AS id_venda,
+    s.`data_da_venda`   AS data_venda,
+    s.`PDV`             AS pdv,
+    s.`Serviço_Técnico` AS servico,
+    s.`pilar`           AS pilar,
+    s.`Nome_do_cliente` AS cliente,
+    s.`CPF_do_cliente`  AS cpf,
+    s.`Documento_do_cliente` AS documento,
+    s.`Plano_novo`      AS plano,
+    s.`Receita`         AS receita,
+    v.status            AS v_status,
+    v.correcao_vivogo   AS v_correcao,
+    v.origem            AS v_origem,
+    v.contestacao_decisao AS v_contestacao_decisao
+"""
+
+
+def _condicao_busca(tipo, valor):
+    """tipo 'id': nº da venda ou do serviço; 'doc': CPF/CNPJ só com dígitos (a origem guarda com máscara, mas
+    aceita os dois jeitos)."""
+    if tipo == "id":
+        return "(s.`ID_da_venda` = %s OR s.`ID_do_serviço` = %s)", [valor, valor]
+    from .formato import doc_vivogo
+    formas = [doc_vivogo(valor), valor]
+    return "(s.`CPF_do_cliente` IN (%s, %s) OR s.`Documento_do_cliente` IN (%s, %s))", formas + formas
+
+
+def datas_verificadas(id_venda_ou_servico):
+    """Datas das vendas já verificadas com esse nº (verificacao_vendas tem índice em id_venda e chave em id_servico):
+    acha a venda de qualquer época em ~0,1 s, sem varrer a origem."""
+    return sorted({r["data_venda"] for r in consultar(
+        "SELECT DISTINCT data_venda FROM verificacao_vendas WHERE id_venda = %s OR id_servico = %s",
+        [id_venda_ou_servico, id_venda_ou_servico]) if r["data_venda"]})
+
+
+def buscar_vendas(tipo, valor, inicio=None, fim=None, datas=None, limite=200):
+    """Serviços do escopo da esteira com esse nº de venda/serviço ou CPF/CNPJ, do mais recente para o mais antigo
+    (até limite + 1, para a tela saber que cortou).
+
+    Desempenho: vendas_servicos só tem índice em (PDV, data_da_venda) e (data_da_venda, Nome_do_vendedor); ID e CPF não
+    têm. Por isso a busca é sempre num período (ou em datas exatas) e ordena SÓ pela data: assim o MySQL percorre o
+    índice de data de trás para frente e para no LIMIT. Ordenar também pelo ID faz o otimizador trocar o índice pela
+    varredura da tabela inteira a partir de ~6 meses (medido em 13/11/2026, só leitura: 3 meses 0,1–0,4 s, 9 meses
+    0,3–0,5 s, 12 meses 0,4–0,6 s; com data + ID, 9–12 meses viram 1,2–3,4 s). O desempate por venda/serviço é aqui."""
+    esc, params = filtro_escopo()
+    cond, pcond = _condicao_busca(tipo, valor)
+    if datas:
+        periodo, pper = f"s.`data_da_venda` IN ({', '.join(['%s'] * len(datas))})", list(datas)
+    else:
+        periodo, pper = "s.`data_da_venda` BETWEEN %s AND %s", [inicio, fim]
+    sql = f"""SELECT {COLUNAS_BUSCA}
+              FROM vendas_servicos s
+              LEFT JOIN verificacao_vendas v ON v.id_servico = s.`ID_do_serviço`
+              WHERE {periodo} AND {esc} AND {cond}
+              ORDER BY s.`data_da_venda` DESC
+              LIMIT %s"""
+    linhas = consultar(sql, pper + params + pcond + [limite + 1])
+    return sorted(linhas, key=ordem_busca, reverse=True)
+
+
+def ordem_busca(r):
+    """Chave da busca geral (usar com reverse=True): data mais recente, venda maior, serviço menor."""
+    def num(x):
+        return int(re.sub(r"\D", "", str(x or "")) or 0)
+    return (r["data_venda"], num(r["id_venda"]), -num(r["id_servico"]))
 
 
 CAMPOS_VERIF = ["id_servico", "id_venda", "data_venda", "pdv", "status", "correcao_vivogo", "tipo_penalidade",

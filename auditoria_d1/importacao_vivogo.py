@@ -10,6 +10,9 @@ correções aplicadas nos campos que o VivoGo permite alterar (marcados com (**)
   CONTESTADA (contestação procedente) → a linha DESFAZ a alteração: exclusão volta com Status BKO = Procedente e
   sem motivo de reprovação; valor corrigido volta ao valor original da venda.
 
+Nº Acesso / Nº Portado ("11 99999-9999"), CPF/CNPJ ("999.999.999-99") e valores ("100,75") saem sempre no formato
+do VivoGo (formato.py), mesmo que a origem venha só com dígitos.
+
 A coluna "Serviço(*)" sai com o nome do serviço como vem na venda (Serviço_Técnico: "Alta Controle",
 "Alta Banda Larga", "Upgrade de Controle-Controle"...), a pedido do usuário (2026-11-11). servico_vivogo() — o nome no
 padrão do relatório Gestão Documental ("Alta Smartphone Controle") — só é usado se o Serviço_Técnico vier vazio.
@@ -18,6 +21,8 @@ import csv
 import io
 import os
 import re
+
+from .formato import doc_vivogo, linha_vivogo, valor_vivogo
 
 MODELO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "modelo_importacao_ged.csv")
 
@@ -98,7 +103,7 @@ def _data(v):
 
 
 def _num(v):
-    return "" if v is None or v == "" else f"{float(v):.2f}".replace(".", ",")
+    return valor_vivogo(v)
 
 
 def _aspas(v):
@@ -141,7 +146,8 @@ def linha_base(v):
         "Modelo": "", "IMEI": "", "Plano": v["plano"] or "", "Valor Plano": _num(v["valor_plano"]),
         "Plano Antigo": v["plano_antigo"] or "-", "Valor Plano Antigo": _num(v["valor_plano_antigo"]),
         "Vencimento Fatura": v["vencimento"] or "", "Vendedor": v["vendedor"] or "", "Cliente": v["cliente"] or "",
-        "CPF/CNPJ": v["cpf"] or v["documento"] or "", "Nº Acesso": v["acesso"] or "", "Nº Portado": v["portabilidade"] or "",
+        "CPF/CNPJ": doc_vivogo(v["cpf"] or v["documento"]), "Nº Acesso": linha_vivogo(v["acesso"]),
+        "Nº Portado": linha_vivogo(v["portabilidade"]),
         "Servico Instalado": "Sim" if instalado else "Não", "Data Agendada de Instalação": "",
         "Armário": "", "Data de Instalação": _data(v["data_instalacao"]) if instalado else "",
         "Situação do serviço": situacao, "Receita": _num(v["receita"]),
@@ -157,6 +163,15 @@ def linha_base(v):
         "Data de alteração": "", "Usuário Cancelamento": v["usuario_cancelamento"] or "",
         "Data Cancelamento": _data(v["data_cancelamento"]), "Líder de Equipe": "",
     }
+
+
+def valor_manual(v):
+    """O valor certo para digitar no VivoGo, já no formato dele (linha e CPF/CNPJ formatados)."""
+    if v["v_linha_correta"]:
+        return linha_vivogo(v["v_linha_correta"])
+    if v["v_documento_correto"]:
+        return doc_vivogo(v["v_documento_correto"])
+    return v["v_plano_correto"] or ""
 
 
 def _sem_marcador(col):
@@ -198,8 +213,7 @@ def gerar(vendas):
         elif v["v_receita_correta"] is not None and corr in ("VALORES INCORRETOS", "PLANO INCORRETO"):
             alt = {"Valor Plano": _num(_novo_valor_plano(v, v["v_receita_correta"]))}
         if corr in MOTIVO_MANUAL:
-            manuais.append({**ident, "motivo": MOTIVO_MANUAL[corr],
-                            "valor": v["v_linha_correta"] or v["v_documento_correto"] or v["v_plano_correto"] or ""})
+            manuais.append({**ident, "motivo": MOTIVO_MANUAL[corr], "valor": valor_manual(v)})
         if not alt:
             continue
         linha = {**linha_base(v), **alt}

@@ -2,11 +2,13 @@
 
 Cobre: regras da tabela de correções (ação e receita validada), pontos de atenção (número fake, documento fake com
 dígito verificador, documento com outro nome, duplicidade), gravação/reabrir/contestação procedente, improcedente e
-desfazer (com os mesmos eventos do log do sistema antigo e o nome do usuário do portal como autor), Exportar mês no
+desfazer (com os mesmos eventos do log do sistema antigo e o nome do usuário do portal como autor), Exportar no
 layout do modelo_importacao_ged.csv (cp1252, ';'), planilha .xlsx, cruzamento SVA e Fixa com bases pequenas montadas
 aqui (prévia, aplicar, reverter), WhatsApp (desligado não chama o envio; ligado manda só para o grupo de teste),
 permissões por papel em telas e APIs (sem liberação ninguém entra; GESTOR não vê acessos/configuração) e
-comentários de template.
+comentários de template. Pedido de 13/11/2026: botão "Exportar", plano correto pelos planos de /vendas/, quem contestou
+pelos usuários ativos do portal, formato do VivoGo (linha "27 99999-9999", CPF/CNPJ e receita "100,75") na tela, no
+Exportar e na planilha (o MySQL continua com os dígitos) e a busca geral por nº da venda/CPF em qualquer dia.
 
 O MySQL é um dublê: um SQLite no diretório temporário fazendo as vezes do banco vivogo (o SQL do módulo roda
 nele com três traduções mecânicas: %s → ?, ON DUPLICATE KEY → ON CONFLICT, sem FOR UPDATE). pymysql.connect é
@@ -673,6 +675,318 @@ t('removido volta a ser barrado', cn3.get('/auditoria-d1/').status_code == 302 a
 meta = cs.get('/auditoria-d1/api/meta').json()
 t('meta: categorias, regras e o usuário do portal', meta['correcoes'][0] == 'VENDA INEXISTENTE' and meta['usuario'] == 'Super Teste'
   and meta['regras']['VALORES INCORRETOS']['campos'] == ['receita_correta'])
+
+print('== PEDIDO DE 13/11: EXPORTAR, PLANO, FORMATO VIVOGO, QUEM CONTESTOU, BUSCA GERAL ==')
+from auditoria_d1 import formato  # noqa: E402
+from vendas.models import Plano  # noqa: E402
+
+# 1. botão "Exportar"
+pa = ca.get('/auditoria-d1/').content.decode()
+t('botão de exportar se chama "Exportar" (não "Exportar mês")', '<span>Exportar</span>' in pa and 'Exportar mês' not in pa)
+t('estáticos com ?v= novo', "esteira.js?v=3" in pa and "auditoria_d1.css?v=2" in pa)
+t('busca geral no topo, com o atalho / indicado', 'id="buscaGeral"' in pa and '( / )' in pa and 'id="bgPainel"' in pa)
+t('CONSULTA também tem a busca geral', 'id="buscaGeral"' in cc.get('/auditoria-d1/').content.decode())
+
+# 3. formato do VivoGo
+t('linha celular → "27 99999-1111"', formato.linha_vivogo('27999991111') == '27 99999-1111')
+t('linha fixa → "27 3333-4444"', formato.linha_vivogo('(27) 3333-4444') == '27 3333-4444')
+t('linha com +55 e com 0 da operadora', formato.linha_vivogo('+55 27 99999-1111') == '27 99999-1111'
+  and formato.linha_vivogo('027999991111') == '27 99999-1111')
+t('linha já formatada fica igual', formato.linha_vivogo('11 92628-7499') == '11 92628-7499')
+t('valor estranho volta como veio', formato.linha_vivogo('S9 1') == 'S9 1' and formato.linha_vivogo(None) == '')
+t('linha com letra (origem errada) volta como veio, sem inventar outro número',
+  formato.linha_vivogo('S0 00007-1168') == 'S0 00007-1168' and formato.linha_vivogo('27 99377-191a') == '27 99377-191a'
+  and formato.linha_vivogo('27 99963-12O7') == '27 99963-12O7')
+t('CPF com letra volta como veio', formato.doc_vivogo('123.456.789-0X') == '123.456.789-0X')
+t('CPF e CNPJ no formato do VivoGo', formato.doc_vivogo('52998224725') == '529.982.247-25'
+  and formato.doc_vivogo('11222333000181') == '11.222.333/0001-81' and formato.doc_vivogo('529.982.247-25') == '529.982.247-25')
+t('valor com vírgula decimal', formato.valor_vivogo(1234.5) == '1234,50' and formato.valor_vivogo(None) == '')
+t('erro_linha: DDD inexistente', 'DDD 20' in (formato.erro_linha('20999991111') or ''))
+t('erro_linha: celular sem o 9', 'começa com 9' in (formato.erro_linha('27899991111') or ''))
+t('erro_linha: fixo começando com 9 (falta dígito)', 'Fixo' in (formato.erro_linha('2799999111') or ''))
+t('erro_linha: 12 dígitos', 'DDD' in (formato.erro_linha('271121221212') or ''))
+t('erro_linha: válidas passam', formato.erro_linha('27 99999-1111') is None and formato.erro_linha('2733334444') is None)
+r = reg(status='DIVERGENTE', correcao='LINHA INCORRETA', linha_correta='+55 (27) 99999-1111')
+t('registro grava só os dígitos da linha (sem +55)', r['linha_correta'] == '27999991111')
+for ruim, motivo in (('20999991111', 'DDD inexistente'), ('27899991111', 'celular sem 9'), ('271121221212', '12 dígitos')):
+    try:
+        reg(status='DIVERGENTE', correcao='LINHA INCORRETA', linha_correta=ruim)
+        t(f'servidor recusa linha inválida ({motivo})', False)
+    except ValueError as e:
+        t(f'servidor recusa linha inválida ({motivo})', 'Linha correta inválida' in str(e))
+try:
+    reg(status='DIVERGENTE', correcao='DIVERGÊNCIA CADASTRAL', documento_correto='529.982.247-24')
+    t('servidor recusa CPF com dígito verificador errado', False)
+except ValueError as e:
+    t('servidor recusa CPF com dígito verificador errado', 'inválido' in str(e))
+r = reg(status='DIVERGENTE', correcao='DIVERGÊNCIA CADASTRAL', documento_correto='11.222.333/0001-81')
+t('CNPJ válido gravado só com dígitos', r['documento_correto'] == '11222333000181')
+r = reg(status='DIVERGENTE', correcao='VALORES INCORRETOS', receita_correta='1.234,5')
+t('receita digitada com máscara ("1.234,5") grava 1234.5', r['receita_correta'] == 1234.5)
+r = jpost(ca, '/auditoria-d1/api/verificacoes', {'itens': [{'id_servico': 'S4', 'data_venda': '2026-10-05', 'status': 'DIVERGENTE',
+                                                             'correcao': 'LINHA INCORRETA', 'linha_correta': '27 1234-5678'}]})
+t('API recusa linha inválida com 400 e mensagem', r.status_code == 400 and 'Linha correta inválida' in r.json()['erro'])
+
+# Exportar (CSV) e planilha no formato do VivoGo — a origem do teste tem acesso/CPF só com dígitos
+jpost(ca, '/auditoria-d1/api/verificacoes', {'itens': [
+    {'id_servico': 'S7', 'data_venda': '2026-10-05', 'status': 'DIVERGENTE', 'correcao': 'DIVERGÊNCIA CADASTRAL',
+     'documento_correto': '111.444.777-35'}]})
+r = ca.get('/auditoria-d1/api/exportar?mes=2026-10')
+rows = list(csv.reader(io.StringIO(r.content.decode('cp1252')), delimiter=';'))
+pv = {x[rows[0].index('ID Venda')]: dict(zip(rows[0], x)) for x in rows[1:]}
+t('CSV: Nº Acesso no formato do VivoGo', pv['101']['Nº Acesso(*)'] == '27 99876-1234', pv.get('101', {}).get('Nº Acesso(*)'))
+t('CSV: CPF/CNPJ no formato do VivoGo', pv['101']['CPF/CNPJ'] == '111.444.777-35')
+t('CSV: valores com vírgula decimal', pv['101']['Valor Plano(**)'] == '30,00' and pv['101']['Receita'] == '59,90')
+res = json.loads(unquote(r['X-Resumo']))
+man = {m['id_venda']: m for m in res['manuais']}
+t('ajuste manual: linha correta já formatada para digitar no VivoGo', man['102']['valor'] == '27 98888-7777')
+t('ajuste manual: documento correto formatado', man['106']['valor'] == '111.444.777-35')
+t('no MySQL a linha e o documento continuam só com dígitos',
+  q("SELECT linha_correta FROM verificacao_vendas WHERE id_servico='S3'")[0]['linha_correta'] == '27988887777'
+  and q("SELECT documento_correto FROM verificacao_vendas WHERE id_servico='S7'")[0]['documento_correto'] == '11144477735')
+wb = openpyxl.load_workbook(io.BytesIO(cc.get('/auditoria-d1/api/exportar-planilha?mes=2026-10').content))
+ws = wb['base']
+cab = [c.value for c in ws[1]]
+lin = {str(row[cab.index('Nº da Venda')].value): row for row in ws.iter_rows(min_row=2)}
+t('planilha: Acesso como texto no formato do VivoGo', lin['101'][cab.index('Acesso')].value == '27 99876-1234')
+t('planilha: CPF/CNPJ e DOCUMENTO formatados', lin['101'][cab.index('CPF/CNPJ')].value == '111.444.777-35'
+  and lin['101'][cab.index('DOCUMENTO')].value == '111.444.777-35')
+t('planilha: LINHA CORRETA e DOCUMENTO CORRETO formatados', lin['102'][cab.index('LINHA CORRETA')].value == '27 98888-7777'
+  and lin['106'][cab.index('DOCUMENTO CORRETO')].value == '111.444.777-35')
+cel = lin['101'][cab.index('Receita')]
+t('planilha: receita continua número, com 2 casas', cel.value == 59.9 and cel.number_format == '#,##0.00')
+venda('S0LETRA', '9901', dt.date(2026, 10, 5), acesso='S0 00007-1168', **{'Nº_portabilidade': '28 99933-542b'})
+jpost(ca, '/auditoria-d1/api/verificacoes', {'itens': [
+    {'id_servico': 'S0LETRA', 'data_venda': '2026-10-05', 'status': 'DIVERGENTE', 'correcao': 'VALORES INCORRETOS',
+     'receita_correta': '10,00'}]})
+r = ca.get('/auditoria-d1/api/exportar?mes=2026-10')
+rows = list(csv.reader(io.StringIO(r.content.decode('cp1252')), delimiter=';'))
+pv = {x[rows[0].index('ID Venda')]: dict(zip(rows[0], x)) for x in rows[1:]}
+t('CSV: Nº Acesso/Nº Portado com letra saem como vieram', pv.get('9901', {}).get('Nº Acesso(*)') == 'S0 00007-1168'
+  and pv['9901'].get('Nº Portado') == '28 99933-542b', {k: v for k, v in pv.get('9901', {}).items() if 'Nº' in k})
+wb = openpyxl.load_workbook(io.BytesIO(cc.get('/auditoria-d1/api/exportar-planilha?mes=2026-10').content))
+cab = [c.value for c in wb['base'][1]]
+lin = {str(row[cab.index('Nº da Venda')].value): row for row in wb['base'].iter_rows(min_row=2)}
+t('planilha: Acesso com letra sai como veio', lin['9901'][cab.index('Acesso')].value == 'S0 00007-1168')
+BANCO_FALSO.execute("DELETE FROM vendas_servicos WHERE `ID_do_serviço` = 'S0LETRA'")
+BANCO_FALSO.execute("DELETE FROM verificacao_vendas WHERE id_servico = 'S0LETRA'")
+BANCO_FALSO.execute("DELETE FROM verificacao_vendas_log WHERE id_servico = 'S0LETRA'")
+cache.clear()
+BANCO_FALSO.commit()
+
+# 2. plano incorreto com os planos de /vendas/
+Plano.objects.create(nome='Vivo Controle 15GB', segmentacao='CONTROLE', valor=Decimal('62.00'))
+Plano.objects.create(nome='Vivo Pós Família 100GB', segmentacao='POS', valor=Decimal('199.99'))
+Plano.objects.create(nome='Plano Antigo Desativado', segmentacao='POS', valor=Decimal('10.00'), ativo=False)
+r = ca.get('/auditoria-d1/api/planos')
+pl = r.json() if r.status_code == 200 else []
+t('API de planos: os planos ATIVOS de Vendas, com segmentação e valor', r.status_code == 200
+  and {p['nome'] for p in pl} == {'Vivo Controle 15GB', 'Vivo Pós Família 100GB'}
+  and any(p['segmentacao'] == 'Controle' and p['valor'] == 62.0 for p in pl), pl)
+t('API de planos: CONSULTA não usa (403); sem liberação 403', cc.get('/auditoria-d1/api/planos').status_code == 403
+  and cn.get('/auditoria-d1/api/planos').status_code == 403)
+r = jpost(ca, '/auditoria-d1/api/verificacoes', {'itens': [{'id_servico': 'S4', 'data_venda': '2026-10-05', 'status': 'DIVERGENTE',
+                                                             'correcao': 'PLANO INCORRETO', 'plano_correto': 'Vivo Pós Família 100GB'}]})
+t('plano escolhido grava o nome no mesmo campo plano_correto', r.status_code == 200
+  and q("SELECT plano_correto FROM verificacao_vendas WHERE id_servico='S4'")[0]['plano_correto'] == 'Vivo Pós Família 100GB')
+r = ca.get('/auditoria-d1/api/exportar?mes=2026-10')
+t('Exportar: plano escolhido vai para os ajustes manuais com o nome',
+  any(m['id_venda'] == '103' and m['valor'] == 'Vivo Pós Família 100GB' for m in json.loads(unquote(r['X-Resumo']))['manuais']))
+
+# 4. quem contestou: usuários ativos do portal
+glo = User.objects.create_user(username='zz.d1.jose', email='jose@exemplo-teste.local', password='S3nha!teste',
+                               first_name='José', last_name='Glória Souza', sector=loja2)
+User.objects.create_user(username='zz.d1.inativo', email='inativo@exemplo-teste.local', password='S3nha!teste',
+                         first_name='José', last_name='Inativo', sector=loja, is_active=False)
+cache.clear()
+r = ca.get('/auditoria-d1/api/usuarios?q=jose gloria')
+t('busca de usuário sem acento acha "José Glória Souza" com o setor', r.status_code == 200
+  and r.json() == [{'nome': 'José Glória Souza', 'setor': 'Loja Glória'}], r.content[:300])
+nomes = [u['nome'] for u in ca.get('/auditoria-d1/api/usuarios?q=jose').json()]
+t('usuário inativo não aparece', 'José Inativo' not in nomes and 'José Glória Souza' in nomes)
+t('busca também pelo setor (loja)', 'José Glória Souza' in [u['nome'] for u in ca.get('/auditoria-d1/api/usuarios?q=loja gloria').json()])
+t('busca vazia devolve lista vazia', ca.get('/auditoria-d1/api/usuarios?q=').json() == [])
+t('API de usuários: CONSULTA 403, sem liberação 403, sem login 401', cc.get('/auditoria-d1/api/usuarios?q=jo').status_code == 403
+  and cn.get('/auditoria-d1/api/usuarios?q=jo').status_code == 403 and Client().get('/auditoria-d1/api/usuarios?q=jo').status_code == 401)
+t('não expõe e-mail nem login', all(set(u) == {'nome', 'setor'} for u in ca.get('/auditoria-d1/api/usuarios?q=teste').json()))
+r = jpost(ca, '/auditoria-d1/api/contestacoes', {'id_servico': 'S2', 'decisao': 'IMPROCEDENTE', 'solicitante': 'José Glória Souza', 'motivo': 'alegou'})
+t('contestação grava o nome escolhido em contestacao_solicitante', r.status_code == 200
+  and q("SELECT contestacao_solicitante FROM verificacao_vendas WHERE id_servico='S2'")[0]['contestacao_solicitante'] == 'José Glória Souza')
+ca.delete('/auditoria-d1/api/contestacoes/S2')
+pa = ca.get('/auditoria-d1/').content.decode()
+t('modal de contestação com o combobox de usuários', 'id="contestSolicLista"' in pa and 'id="planoLista"' in pa)
+
+# 5. busca geral
+venda('B1', '5001', dt.date(2026, 3, 10), cliente='CLIENTE ANTIGO', cpf='39053344705', acesso='27981117777')   # 8 meses antes
+venda('B2', '5002', dt.date(2025, 6, 10), cliente='CLIENTE MUITO ANTIGO', cpf='86288366757', acesso='27981118888')  # > 12 meses
+venda('B3', '5003', dt.date(2025, 6, 11), cliente='VERIFICADA ANTIGA', cpf='86288366757', acesso='27981119999')
+BANCO_FALSO.execute("INSERT INTO verificacao_vendas (id_servico, id_venda, data_venda, pdv, status) VALUES ('B3', '5003', '2025-06-11', 'LARANJEIRAS', 'CONFORME')")
+BANCO_FALSO.commit()
+SQL_EXECUTADO.clear()
+with mock.patch.object(regras, 'hoje', return_value=dt.date(2026, 11, 13)):
+    r = cc.get('/auditoria-d1/api/busca?q=100')
+    j = r.json()
+    t('busca por nº da venda (pendente) acha o serviço do dia, para CONSULTA', r.status_code == 200
+      and [i['id_servico'] for i in j['itens']] == ['S1'] and j['itens'][0]['data_venda'] == '2026-10-05', r.content[:300])
+    t('resultado traz data, cliente, serviço, plano, status e CPF formatado', j['itens'][0]['status'] == 'PENDENTE'
+      and j['itens'][0]['cliente'] == 'MARIA DA SILVA' and j['itens'][0]['servico'] == 'Alta Controle'
+      and j['itens'][0]['plano'] == 'VIVO CONTROLE 10GB' and j['itens'][0]['documento'] == '529.982.247-25')
+    t('1ª etapa: últimos 3 meses (01/09 a 30/11)', (j['de'], j['ate'], j['fonte']) == ('2026-09-01', '2026-11-30', 'periodo'))
+    j = cc.get('/auditoria-d1/api/busca?q=%23108').json()
+    t('venda verificada é achada pela data gravada (fonte verificadas+periodo), com o status', j['fonte'] == 'verificadas+periodo'
+      and [i['id_servico'] for i in j['itens']] == ['S9'] and j['itens'][0]['status'] == 'DIVERGENTE'
+      and j['itens'][0]['correcao'] == 'VENDA INEXISTENTE')
+    j = cc.get('/auditoria-d1/api/busca?q=5003').json()
+    t('venda verificada com mais de 12 meses também é achada (e oferece ampliar)', [i['id_servico'] for i in j['itens']] == ['B3']
+      and j['pode_ampliar'] and j['de'] == '2026-09-01')
+    # o mesmo nº como venda verificada (antiga) e como serviço pendente de outra venda: os dois aparecem
+    venda('5003', '5100', dt.date(2026, 11, 10), cliente='SERVICO 5003 PENDENTE', cpf='86288366757', acesso='27981110000')
+    venda('5004', '5101', dt.date(2026, 5, 10), cliente='SERVICO 5004 PENDENTE', cpf='86288366757', acesso='27981110001')
+    BANCO_FALSO.execute("INSERT INTO verificacao_vendas (id_servico, id_venda, data_venda, pdv, status) VALUES ('B4', '5004', '2025-06-12', 'LARANJEIRAS', 'CONFORME')")
+    venda('B4', '5004', dt.date(2025, 6, 12), cliente='VENDA 5004 VERIFICADA', cpf='86288366757', acesso='27981110002')
+    BANCO_FALSO.commit()
+    j = cc.get('/auditoria-d1/api/busca?q=5003').json()
+    t('nº de venda verificada que também é nº de serviço pendente: mostra os dois (pendente recente primeiro)',
+      [i['id_servico'] for i in j['itens']] == ['5003', 'B3'] and j['fonte'] == 'verificadas+periodo', j['itens'])
+    j = cc.get('/auditoria-d1/api/busca?q=5004').json()
+    t('colisão fora dos 3 meses: não amplia sozinho, mas oferece', [i['id_servico'] for i in j['itens']] == ['B4']
+      and j['pode_ampliar'] and j['ampliar_de'] == '2025-12-01')
+    j = cc.get('/auditoria-d1/api/busca?q=5004&ampliar=1').json()
+    t('ampliando: acha o serviço pendente nos 12 meses e mantém a verificada', [i['id_servico'] for i in j['itens']] == ['5004', 'B4']
+      and not j['pode_ampliar'])
+    j = cc.get('/auditoria-d1/api/busca?q=5001').json()
+    t('nada nos 3 meses: amplia sozinho para 12 meses (sem reler os 3)', [i['id_servico'] for i in j['itens']] == ['B1']
+      and j['de'] == '2025-12-01' and not j['pode_ampliar'])
+    j = cc.get('/auditoria-d1/api/busca?q=5002').json()
+    t('pendente com mais de 12 meses fica fora, com o período informado', j['itens'] == [] and j['de'] == '2025-12-01')
+    j = cc.get('/auditoria-d1/api/busca?q=390.533.447-05').json()
+    t('CPF com máscara: acha nos 3 meses e oferece ampliar', {'S5', 'S6'} <= {i['id_servico'] for i in j['itens']}
+      and 'B1' not in {i['id_servico'] for i in j['itens']}
+      and j['pode_ampliar'] and j['ampliar_de'] == '2025-12-01' and j['tipo'] == 'doc')
+    j = cc.get('/auditoria-d1/api/busca?q=39053344705&ampliar=1').json()
+    t('CPF só dígitos + ampliar: 12 meses, mais recente primeiro', [i['id_servico'] for i in j['itens']][-1] == 'B1'
+      and {'S5', 'S6', 'B1'} <= {i['id_servico'] for i in j['itens']} and not j['pode_ampliar'])
+    j = cc.get('/auditoria-d1/api/busca?q=107').json()
+    t('busca respeita o escopo da esteira (Troca Fidelizada fica fora)', j['itens'] == [])
+    with mock.patch.object(regras, 'LIMITE_BUSCA', 1):
+        j = cc.get('/auditoria-d1/api/busca?q=390.533.447-05').json()
+        t('acima do limite: corta e avisa (truncado)', len(j['itens']) == 1 and j['truncado'])
+    r = cc.get('/auditoria-d1/api/busca?q=maria')
+    t('texto que não é nº/CPF → 400 com orientação', r.status_code == 400 and 'CPF' in r.json()['erro'])
+    t('poucos dígitos → 400', cc.get('/auditoria-d1/api/busca?q=12').status_code == 400)
+    t('busca: sem liberação 403, sem login 401', cn.get('/auditoria-d1/api/busca?q=100').status_code == 403
+      and Client().get('/auditoria-d1/api/busca?q=100').status_code == 401)
+sql_busca = [x for x in SQL_EXECUTADO if 'FROM vendas_servicos' in x and '`Nome_do_cliente` AS cliente' in x]
+t('toda busca na origem vai pelo período/data e pelas filiais e ordena só pela data (índice), nunca a tabela inteira',
+  sql_busca and all('`data_da_venda`' in x and '`PDV` IN' in x and re.search(r'ORDER BY s\.`data_da_venda` DESC\s+LIMIT', x) for x in sql_busca))
+
+# máscaras e validações do JS (funções puras; precisa do node)
+import shutil  # noqa: E402
+import subprocess  # noqa: E402
+js = (pathlib.Path(__file__).resolve().parent / 'static' / 'auditoria_d1' / 'esteira.js').read_text()
+t('atalho "/" vai para a busca geral', '$("#buscaGeral").focus()' in js)
+if shutil.which('node'):
+    trecho = js[js.index('  // ------------------------------------------------------------ formatação'):
+                js.index('  const numBR = s =>')]
+    prova = r'''
+const numBR = s => { if (s == null || String(s).trim() === "") return null; const t = String(s).replace(/[R$\s]/g, ""); const n = Number(t.includes(",") ? t.replace(/\./g, "").replace(",", ".") : t); return isNaN(n) ? NaN : n; };
+''' + trecho + r'''
+const r = {
+  linha11: fmtLinha("27999824388"), linha10: fmtLinha("2733334444"), parcial: fmtLinha("279998"),
+  colada: fmtLinha(normLinha("+55 (27) 99982-4388")), zero: fmtLinha(normLinha("027999824388")),
+  cpf: fmtDoc("52998224725"), cnpj: fmtDoc("11222333000181"), cpfParcial: fmtDoc("5299822"),
+  moeda: fmtMoeda("1234,5"), moedaZero: fmtMoeda(",5"), mil: fmtMoeda("1234567"),
+  colaBR: colarMoeda("R$ 1.234,50"), colaPonto: colarMoeda("1234.50"), colaMil: colarMoeda("1.234"),
+  eDDD: erroLinha("20 99999-1111"), e9: erroLinha("27 89999-1111"), eOk: erroLinha("27 99999-1111"),
+  cpfOk: erroDoc("529.982.247-25"), cpfRuim: erroDoc("529.982.247-24"), cnpjOk: erroDoc("11.222.333/0001-81"),
+  repetido: erroDoc("111.111.111-11"),
+  valMil: valorMoeda("1.234"), valDec: valorMoeda("1.234,5"), valVazio: valorMoeda(""), valVirg: String(valorMoeda(",")),
+  colaUS: colarMoeda("1,234.56"), colaUSmil: colarMoeda("1,234,567"), colaMilBR: colarMoeda("1.234.567,8"),
+  foneLetra: fone("S0 00007-1168"), foneLetra2: fone("27 99377-191a"), docLetra: doc("123.456.789-0X"),
+};
+// campo falso: digitar tecla a tecla (beforeinput + input), apagar, colar e trocar o valor pelo programa
+global.document = { activeElement: null };
+function campo() {
+  const ouv = {};
+  const el = { value: "", selectionStart: 0, selectionEnd: 0, dataset: {},
+    addEventListener: (t, f) => { (ouv[t] = ouv[t] || []).push(f); },
+    dispatchEvent: ev => { (ouv[ev.type] || []).forEach(f => f(ev)); },
+    setSelectionRange(a, b) { this.selectionStart = a; this.selectionEnd = b; } };
+  el.disparar = (t, ev) => (ouv[t] || []).forEach(f => f(Object.assign({ type: t }, ev)));
+  el.teclar = txt => { for (const ch of txt) {
+    el.disparar("beforeinput", {});
+    const p = el.selectionStart; el.value = el.value.slice(0, p) + ch + el.value.slice(el.selectionEnd);
+    el.selectionStart = el.selectionEnd = p + 1;
+    el.disparar("input", { inputType: "insertText", data: ch });
+  } return el.value; };
+  el.apagar = () => {
+    el.disparar("beforeinput", {});
+    const p = el.selectionStart; el.value = el.value.slice(0, p - 1) + el.value.slice(p);
+    el.selectionStart = el.selectionEnd = p - 1;
+    el.disparar("input", { inputType: "deleteContentBackward", data: null });
+    return el.value;
+  };
+  el.colar = txt => { el.selectionStart = 0; el.selectionEnd = el.value.length;
+    el.disparar("paste", { clipboardData: { getData: () => txt }, preventDefault() {} }); return el.value; };
+  el.programa = v => { el.value = v; el.selectionStart = el.selectionEnd = v.length; };
+  document.activeElement = el;
+  return el;
+}
+global.Event = function (type) { this.type = type; };
+const receita = () => { const el = campo(); mascarar(el, { limpar: limparMoeda, formatar: fmtMoeda, colar: colarMoeda, sig: /[\d,]/ }); return el; };
+const linha = () => { const el = campo(); mascarar(el, { limpar: s => dig(s).slice(0, 11), formatar: fmtLinha, colar: normLinha, sig: /\d/ }); return el; };
+const dig1 = t => receita().teclar(t);
+r.dMilDec = dig1("1.234,5"); r.dMil = dig1("1.234"); r.dMilhoes = dig1("12.345.678,90"); r.dMilDec2 = dig1("1.234,50");
+r.dDecPonto = dig1("12.5"); r.dDecPonto2 = dig1("99.90"); r.dSemPonto = dig1("1234,50");
+r.dVirgula = dig1(",50"); r.dVirgula2 = dig1(",05"); r.dPonto = dig1(".50"); r.dPonto2 = dig1(".5"); r.dZero = dig1("0.500");
+r.valMilDec = valorMoeda(r.dMilDec);
+{ const el = receita(); r.cUS = el.colar("1,234.56"); r.vUS = valorMoeda(r.cUS); }
+{ const el = linha(); el.teclar("2799876543"); el.programa("27 99876-5432");
+  r.apagaFim = el.apagar();
+  el.programa("27 99876-5432"); el.selectionStart = el.selectionEnd = 9; r.apagaTraco = el.apagar(); }
+{ const el = receita(); el.programa("1.234,50"); el.selectionStart = el.selectionEnd = 2; r.apagaPonto = el.apagar(); }
+{ const el = receita(); el.teclar("1.2"); el.programa("10,00"); r.progDepois = el.teclar("5"); }
+console.log(JSON.stringify(r));
+'''
+    saida = subprocess.run(['node', '-e', prova], capture_output=True, text=True, timeout=30)
+    try:
+        m = json.loads(saida.stdout)
+    except ValueError:
+        m = {}
+    t('JS: linha celular e fixa no formato do VivoGo', m.get('linha11') == '27 99982-4388' and m.get('linha10') == '27 3333-4444', saida.stderr[:300])
+    t('JS: linha parcial enquanto digita', m.get('parcial') == '27 9998')
+    t('JS: colar com +55 ou 0 da operadora', m.get('colada') == '27 99982-4388' and m.get('zero') == '27 99982-4388')
+    t('JS: CPF/CNPJ formatados (e parcial)', m.get('cpf') == '529.982.247-25' and m.get('cnpj') == '11.222.333/0001-81'
+      and m.get('cpfParcial') == '529.982.2')
+    t('JS: receita pt-BR', m.get('moeda') == '1.234,5' and m.get('moedaZero') == '0,5' and m.get('mil') == '1.234.567')
+    t('JS: colar receita formatada, com ponto decimal ou milhar', m.get('colaBR') == '1234,50' and m.get('colaPonto') == '1234,50'
+      and m.get('colaMil') == '1234')
+    t('JS: validação da linha (DDD, 9 do celular)', 'DDD 20' in (m.get('eDDD') or '') and 'começa com 9' in (m.get('e9') or '')
+      and m.get('eOk') is None)
+    t('JS: dígito verificador do CPF/CNPJ', m.get('cpfOk') is None and 'inválido' in (m.get('cpfRuim') or '')
+      and m.get('cnpjOk') is None and m.get('repetido'))
+    t('JS: valor da receita mascarada — ponto é milhar ("1.234" = 1234), vírgula é decimal',
+      m.get('valMil') == 1234 and m.get('valDec') == 1234.5 and m.get('valVazio') is None and m.get('valVirg') == 'NaN')
+    t('JS: digitar ponto de milhar não divide por mil ("1.234,5" → 1.234,5; "1.234" → 1.234; "12.345.678,90")',
+      m.get('dMilDec') == '1.234,5' and m.get('dMil') == '1.234' and m.get('dMilhoes') == '12.345.678,90'
+      and m.get('dMilDec2') == '1.234,50' and m.get('valMilDec') == 1234.5, m)
+    t('JS: ponto como decimal ainda vale ("12.5" → 12,5; "99.90" → 99,90) e sem ponto segue igual',
+      m.get('dDecPonto') == '12,5' and m.get('dDecPonto2') == '99,90' and m.get('dSemPonto') == '1.234,50')
+    t('JS: começar pela vírgula ou pelo ponto não multiplica por 10 (",50" → 0,50)', m.get('dVirgula') == '0,50'
+      and m.get('dVirgula2') == '0,05' and m.get('dPonto') == '0,50' and m.get('dPonto2') == '0,5' and m.get('dZero') == '0,50')
+    t('JS: colar no formato americano "1,234.56" → 1.234,56', m.get('colaUS') == '1234,56' and m.get('cUS') == '1.234,56'
+      and m.get('vUS') == 1234.56 and m.get('colaUSmil') == '1234567' and m.get('colaMilBR') == '1234567,8')
+    t('JS: Backspace com valor posto pelo programa (venda aberta) apaga um dígito só',
+      m.get('apagaFim') == '27 9987-6543', m.get('apagaFim'))  # 10 dígitos (um só apagado); antes saía '27 9987-654'
+    t('JS: Backspace logo depois do traço/ponto do valor posto pelo programa apaga o dígito de antes',
+      m.get('apagaTraco') == '27 9987-5432' and m.get('apagaPonto') == '234,50', [m.get('apagaTraco'), m.get('apagaPonto')])
+    t('JS: valor posto pelo programa esquece a vírgula "do ponto" da venda anterior', m.get('progDepois') == '10,00',
+      m.get('progDepois'))
+    t('JS: nº de acesso/CPF com letra aparece como veio (não inventa outro número)', m.get('foneLetra') == 'S0 00007-1168'
+      and m.get('foneLetra2') == '27 99377-191a' and m.get('docLetra') == '123.456.789-0X')
+    t('JS: o payload da receita sai sem ponto de milhar', 'receita_correta: limparMoeda($("#recCorreta").value)' in js)
+else:
+    print('  (node ausente: pulando as provas das máscaras do JS)')
 
 print('== MYSQL FORA DO AR ==')
 salvo = d1mysql.conectar
