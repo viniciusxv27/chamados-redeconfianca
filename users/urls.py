@@ -1,4 +1,5 @@
 from django.urls import path
+from django.views.generic import RedirectView
 from . import views
 from . import commission_views
 from . import commission_projection_views
@@ -35,8 +36,14 @@ urlpatterns = [
     
     # Comissionamento
     path('commission/', commission_views.commission_view, name='commission'),
-    path('commission/projecao/', commission_projection_views.commission_projection_view, name='commission_projection'),
-    path('commission/projecao/historico/', commission_historico.commission_history_view, name='commission_history'),
+    # 13/11/2026: o Histórico por cargo virou a tela principal (é para ela que o menu leva);
+    # as Médias de Comissão ganharam endereço próprio. O endereço antigo do histórico
+    # redireciona mantendo os filtros (?cargo=…&setor=…) de quem salvou o link.
+    path('commission/projecao/', commission_historico.commission_history_view, name='commission_history'),
+    path('commission/projecao/medias/', commission_projection_views.commission_projection_view, name='commission_projection'),
+    path('commission/projecao/historico/',
+         RedirectView.as_view(pattern_name='commission_history', query_string=True, permanent=False),
+         name='commission_history_antigo'),
     path('commission/refresh/', commission_views.commission_refresh, name='commission_refresh'),
     path('commission/export/', commission_views.export_commission_excel, name='commission_export'),
     path('api/commission/', commission_views.commission_api, name='commission_api'),

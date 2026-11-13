@@ -104,7 +104,7 @@ try:
     c = Client(raise_request_exception=True)
     c.force_login(su)
     with mock.patch.object(ch, 'linhas_do_historico', lambda ver_rascunho=False: so_2099(ver_rascunho)):
-        r = c.get('/users/commission/projecao/historico/?cargo=GG&setor=ZZ%20HISTORICO')
+        r = c.get('/users/commission/projecao/?cargo=GG&setor=ZZ%20HISTORICO')
         meses = r.context['meses']
         t('GG da loja: um mês por linha, em ordem', [m['rotulo'] for m in meses] == ['Jan/2099', 'Fev/2099', 'Mar/2099'],
           [m['rotulo'] for m in meses])
@@ -112,14 +112,27 @@ try:
         t('o GO e a outra loja ficam de fora', all(l['cargo'] == 'GG' and l['loja'] == 'ZZ HISTORICO' for m in meses for l in m['linhas']))
         t('total do período', round(r.context['total']['recebido'], 2) == round(1720 + 805 + 900, 2), r.context['total']['recebido'])
         t('rascunho marcado na tela', meses[2]['rascunho'] and 'rascunho' in r.content.decode())
-        r = c.get('/users/commission/projecao/historico/?cargo=GG&setor=ZZ%20HISTORICO&de=2099-02&ate=2099-02')
+        r = c.get('/users/commission/projecao/?cargo=GG&setor=ZZ%20HISTORICO&de=2099-02&ate=2099-02')
         t('filtro de período', [m['rotulo'] for m in r.context['meses']] == ['Fev/2099'])
-        r = c.get('/users/commission/projecao/historico/?pessoa=ANA%20GG')
+        r = c.get('/users/commission/projecao/?pessoa=ANA%20GG')
         t('filtro por pessoa', {l['pessoa'] for m in r.context['meses'] for l in m['linhas']} == {'ANA GG'})
-        r = c.get('/users/commission/projecao/historico/?setor=ZZ%20HISTORICO')
+        r = c.get('/users/commission/projecao/?setor=ZZ%20HISTORICO')
         t('vários cargos: grade pessoa × mês', len(r.context['grade']) == 4 and 'Pessoa × mês' in r.content.decode())
-        r = c.get('/users/commission/projecao/historico/?cargo=GG&setor=ZZ%20HISTORICO&exportar=xlsx')
+        r = c.get('/users/commission/projecao/?cargo=GG&setor=ZZ%20HISTORICO&exportar=xlsx')
         t('exporta em Excel', r.status_code == 200 and r['Content-Type'].startswith('application/vnd.openxml'))
+
+        print('\n== O HISTÓRICO É A TELA PRINCIPAL (13/11/2026) ==')
+        html = c.get('/users/commission/projecao/').content.decode()
+        t('/users/commission/projecao/ abre o Histórico por cargo', 'Histórico por cargo' in html
+          and 'data-link-medias' in html and 'href="/users/commission/projecao/medias/"' in html)
+        r = c.get('/users/commission/projecao/historico/?cargo=GG&setor=ZZ%20HISTORICO')
+        t('o endereço antigo redireciona mantendo os filtros', r.status_code == 302
+          and r['Location'] == '/users/commission/projecao/?cargo=GG&setor=ZZ%20HISTORICO', (r.status_code, r.get('Location')))
+        menu = c.get('/').content.decode()
+        t('o menu leva ao Histórico', 'href="/users/commission/projecao/" data-rota="/users/commission/projecao/"' in menu)
+    from django.urls import reverse as _rev
+    t('as Médias de Comissão ficaram em /medias/', _rev('commission_projection') == '/users/commission/projecao/medias/'
+      and _rev('commission_history') == '/users/commission/projecao/')
 
     print('\n== ESCOPO ==')
     vistas = ch._escopo(gerente, 'gerente', so_2099())
