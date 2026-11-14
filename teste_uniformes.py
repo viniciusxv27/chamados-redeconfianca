@@ -1,4 +1,7 @@
-"""Uniformes (10/11/2026): estoque, retirada, devolução, ajuste, ficha e acessos. Banco descartável; nada sai para a rede."""
+"""Uniformes (10/11/2026): estoque, retirada, devolução, ajuste, ficha e acessos. Banco descartável; nada sai para a rede.
+
+14/11/2026: novo e usado no mesmo item (saldo × saldo_usado, condição no movimento) e a migração que junta os itens "· Usado".
+"""
 import os
 import pathlib
 import sys
@@ -251,8 +254,9 @@ r = cg.post('/uniformes/devolucao/', {'colaborador': gustavo.pk, 'item': [calca.
                                       'observacao': 'desligamento'})
 calca.refresh_from_db()
 dev = M.objects.get(tipo=M.DEVOLUCAO)
-t('devolução volta ao estoque com quem e quando', calca.saldo == 2 and dev.colaborador == gustavo and dev.registrado_por == gestora
-  and dev.data == timezone.localdate() and dev.delta == 1)
+t('devolução volta ao estoque como USADA, com quem e quando', calca.saldo == 1 and calca.saldo_usado == 1
+  and dev.condicao == M.USADO and dev.saldo_apos == 1 and dev.colaborador == gustavo and dev.registrado_por == gestora
+  and dev.data == timezone.localdate() and dev.delta == 1, (calca.saldo, calca.saldo_usado, dev.condicao))
 t('posse cai depois da devolução', servicos.posse(gustavo) == {camisa.pk: 2, calca.pk: 3})
 r = cg.get(f'/uniformes/devolucao/?colaborador={gustavo.pk}')
 t('tela de devolução lista o que a pessoa tem', 'Polo azul' in r.content.decode() and 'Gustavo' in r.content.decode())
@@ -388,10 +392,11 @@ lida = importacao.ler_planilha(conferencia(), 'RELAÇÃO UNIFORMES - ES - ESTOQU
 por = {(l['tipo'], l['descricao'], l['tamanho']): l for l in lida['linhas']}
 t('acha o formato da conferência e sugere acertar o saldo', lida['formato'] == importacao.FORMATO_CONFERENCIA
   and lida['modo_sugerido'] == importacao.MODO_ACERTAR and set(lida['colunas']) == {'nome', 'novos', 'usados', 'data', 'obs'}, lida['colunas'])
-t('novos e usados viram itens separados', por[('Camisa', 'CN Feminino', 'M')]['quantidade'] == 9
-  and por[('Camisa', 'CN Feminino · Usado', 'M')]['quantidade'] == 21 and por[('Camisa', 'CN Feminino · Usado', 'M')]['condicao'] == 'Usado')
-t('usado zerado não vira item; novo zerado vira (o tamanho existe)', ('Camisa', 'CN Feminino · Usado', 'PP') not in por
-  and por[('Camisa', 'CN Feminino', 'P')]['quantidade'] == 0 and por[('Camisa', 'CN Masculino · Usado', 'EG1')]['quantidade'] == 2)
+t('novos e usados na MESMA linha (um item por peça)', por[('Camisa', 'CN Feminino', 'M')]['quantidade'] == 9
+  and por[('Camisa', 'CN Feminino', 'M')]['usados'] == 21 and len(lida['linhas']) == 7
+  and not any('usado' in l['descricao'].lower() for l in lida['linhas']), [(k, v['quantidade'], v['usados']) for k, v in por.items()])
+t('linha só com usados também é o item da peça', por[('Camisa', 'CN Feminino', 'P')]['quantidade'] == 0
+  and por[('Camisa', 'CN Feminino', 'P')]['usados'] == 15 and por[('Camisa', 'CN Masculino', 'EG1')]['usados'] == 2)
 t('seções e o quadro de totais à direita ficam de fora', lida['totais']['secoes'] == 2
   and not any('TOTAL' in l['tipo'].upper() or 'UNIFORMES' in l['tipo'].upper() for l in lida['linhas']))
 t('data (datetime ou texto) e quem conferiu vão junto', por[('Camisa', 'CN Feminino', 'PP')]['data'] == '2026-11-04'
@@ -403,26 +408,64 @@ t('totais batem com a planilha (novos + usados)', lida['totais'] == {'novos': 57
 r = cg.post('/uniformes/importar/', {'acao': 'ler', 'planilha': SimpleUploadedFile(
     'RELAÇÃO UNIFORMES - ES - ESTOQUE.xlsx', conferencia().getvalue())})
 html = cg.get('/uniformes/importar/').content.decode()
+linha_m = re.search(r'<tr data-linha-previa>(?:(?!</tr>).)*?CN Feminino(?:(?!</tr>).)*?>M<(?:(?!</tr>).)*?</tr>', html, re.S)
 t('prévia mostra o total da conferência e já marca "acertar o saldo"', 'data-totais-conferencia' in html and '<b>95</b> peças' in html
   and 'value="ACERTAR" checked' in html and 'value="ENTRADA" checked' not in html
-  and '11/11/2026 · Gus' in html and '>usado<' in html, html[html.find('data-totais'):html.find('data-totais') + 300])
+  and '11/11/2026 · Gus' in html, html[html.find('data-totais'):html.find('data-totais') + 300])
+t('prévia mostra novos e usados na mesma linha', bool(linha_m) and 'data-novos>9<' in linha_m.group(0)
+  and 'data-usados>21<' in linha_m.group(0) and '>Novos<' in html and '>Usados<' in html,
+  linha_m.group(0) if linha_m else html[html.find('<tbody'):html.find('<tbody') + 600])
 r = cg.post('/uniformes/importar/', {'acao': 'confirmar', 'modo': 'ACERTAR'})
 cm = ItemUniforme.objects.get(tipo='Camisa', descricao='CN Feminino', tamanho='M')
-cu = ItemUniforme.objects.get(tipo='Camisa', descricao='CN Feminino · Usado', tamanho='M')
 calca = ItemUniforme.objects.get(tipo='Calça', descricao='CN Feminino', tamanho='38')
-t('confirmar cria os itens com o saldo da planilha', cm.saldo == 9 and cu.saldo == 21 and calca.saldo == 27
-  and ItemUniforme.objects.get(tipo='Camisa', descricao='CN Feminino', tamanho='P').saldo == 0)
+cp = ItemUniforme.objects.get(tipo='Camisa', descricao='CN Feminino', tamanho='P')
+t('confirmar põe novos no estoque novo e usados nos usados do MESMO item', cm.saldo == 9 and cm.saldo_usado == 21
+  and calca.saldo == 27 and calca.saldo_usado == 0 and cp.saldo == 0 and cp.saldo_usado == 15,
+  [(i.nome, i.saldo, i.saldo_usado) for i in (cm, calca, cp)])
+t('nenhum item "· Usado" criado', not ItemUniforme.objects.filter(descricao__icontains='usad').exists(),
+  list(ItemUniforme.objects.filter(descricao__icontains='usad').values_list('descricao', flat=True)))
+ajustes_cm = {m.condicao: m for m in M.objects.filter(item=cm, tipo=M.AJUSTE)}
+t('um ajuste por condição, cada um com o saldo da sua condição', set(ajustes_cm) == {M.NOVO, M.USADO}
+  and ajustes_cm[M.NOVO].delta == 9 and ajustes_cm[M.NOVO].saldo_apos == 9
+  and ajustes_cm[M.USADO].delta == 21 and ajustes_cm[M.USADO].saldo_apos == 21,
+  [(m.condicao, m.delta, m.saldo_apos) for m in ajustes_cm.values()])
 mov = M.objects.get(item=calca, tipo=M.AJUSTE)
-t('o ajuste leva a data da conferência e quem conferiu', mov.data == _date(2026, 11, 11) and 'por Gus' in mov.observacao
+t('o ajuste leva a data da conferência e quem conferiu (usado 0 não vira lançamento)', mov.data == _date(2026, 11, 11)
+  and 'por Gus' in mov.observacao and mov.condicao == M.NOVO
   and 'conferência de 11/11/2026' in mov.observacao and mov.registrado_por == gestora, (mov.data, mov.observacao))
-conf_total = sum(i.saldo for i in ItemUniforme.objects.filter(descricao__regex=r'^(CN|GER) (Feminino|Masculino)'))
-t('saldo total importado = total da planilha (95)', conf_total == 95, conf_total)
+confs = ItemUniforme.objects.filter(descricao__regex=r'^(CN|GER) (Feminino|Masculino)$')
+conf_novos, conf_usados = sum(i.saldo for i in confs), sum(i.saldo_usado for i in confs)
+t('total importado = total da planilha (57 novas + 38 usadas = 95) em 7 itens', (conf_novos, conf_usados) == (57, 38)
+  and confs.count() == 7, (conf_novos, conf_usados, confs.count()))
+movs_antes = M.objects.count()
 cg.post('/uniformes/importar/', {'acao': 'ler', 'planilha': SimpleUploadedFile('conf.xlsx', conferencia().getvalue())})
 lida2 = importacao.ler_planilha(conferencia(), 'conf.xlsx')
-t('2ª leitura reconhece os itens que já existem', all(l['item_id'] for l in lida2['linhas']))
+t('2ª leitura reconhece os itens que já existem (com novas e usadas de hoje)', all(l['item_id'] for l in lida2['linhas'])
+  and {(l['saldo_atual'], l['usado_atual']) for l in lida2['linhas'] if l['tamanho'] == 'M'} == {(9, 21)})
 cg.post('/uniformes/importar/', {'acao': 'confirmar', 'modo': 'ACERTAR'})
-t('reimportar a mesma conferência não muda nada', ItemUniforme.objects.get(pk=cu.pk).saldo == 21
-  and M.objects.filter(item=cu).count() == 1)
+cm.refresh_from_db()
+t('reimportar a mesma conferência não muda nada', (cm.saldo, cm.saldo_usado) == (9, 21) and M.objects.count() == movs_antes,
+  (cm.saldo, cm.saldo_usado, M.objects.count() - movs_antes))
+resumo_entrada = importacao.aplicar(importacao.ler_planilha(conferencia(), 'conf.xlsx')['linhas'], modo=importacao.MODO_ENTRADA,
+                                    por=gestora, nome_arquivo='remessa.xlsx')
+cm.refresh_from_db()
+t('como entrada, novas e usadas somam cada uma no seu saldo', (cm.saldo, cm.saldo_usado) == (18, 42)
+  and resumo_entrada['pecas'] == 95 and M.objects.filter(item=cm, tipo=M.ENTRADA, condicao=M.USADO, delta=21, saldo_apos=42).exists(),
+  (cm.saldo, cm.saldo_usado, resumo_entrada))
+importacao.aplicar(importacao.ler_planilha(conferencia(), 'conf.xlsx')['linhas'], modo=importacao.MODO_ACERTAR,
+                   por=gestora, nome_arquivo='volta.xlsx')
+cm.refresh_from_db()
+t('acertar de novo volta ao da planilha', (cm.saldo, cm.saldo_usado) == (9, 21))
+gen = importacao.ler_planilha(xlsx([['Tipo', 'Tamanho', 'Descrição', 'Quantidade'], ['Camisa', 'M', 'CN Feminino', 4],
+                                    ['Camisa', 'M', 'CN Feminino - Usado', 3]]), 'g.xlsx')
+t('genérico: linha "… - Usado" vai para os usados do item (não vira item)', len(gen['linhas']) == 1
+  and gen['linhas'][0]['quantidade'] == 4 and gen['linhas'][0]['usados'] == 3 and gen['linhas'][0]['item_id'] == cm.pk, gen['linhas'])
+gen2 = importacao.ler_planilha(xlsx([['Tipo', 'Tamanho', 'Descrição', 'Quantidade'], ['Camisa', 'M', 'CN Feminino', 4]]), 'g.xlsx')
+importacao.aplicar(gen2['linhas'], modo=importacao.MODO_ACERTAR, por=gestora, nome_arquivo='g.xlsx')
+cm.refresh_from_db()
+t('genérico só com novos acerta o estoque novo e não toca nos usados', (cm.saldo, cm.saldo_usado) == (4, 21), (cm.saldo, cm.saldo_usado))
+importacao.aplicar(importacao.ler_planilha(conferencia(), 'conf.xlsx')['linhas'], modo=importacao.MODO_ACERTAR,
+                   por=gestora, nome_arquivo='volta.xlsx')
 def conf_extra(linhas, cab=CAB_CONF):
     wb = openpyxl.Workbook(); ws = wb.active
     ws.append(cab)
@@ -454,11 +497,13 @@ if caminho_real.exists():
     real = importacao.ler_planilha(open(caminho_real, 'rb'), caminho_real.name)
     grupos = {}
     for l in real['linhas']:
-        base = l['descricao'].replace(' · Usado', '')
-        grupos[base] = grupos.get(base, 0) + l['quantidade']
-    t('planilha real: 675 peças, iguais ao quadro de totais dela', real['totais']['pecas'] == 675 and grupos == {
-        'CN Feminino': 278, 'CN Masculino': 282, 'GER Feminino': 51, 'GER Masculino': 64} and not real['avisos'],
-      (real['totais'], grupos, real['avisos']))
+        grupos[l['descricao']] = grupos.get(l['descricao'], 0) + l['quantidade'] + l['usados']
+    t('planilha real: 675 peças (560 novas + 115 usadas) em 81 itens, iguais ao quadro de totais dela',
+      (real['totais']['pecas'], real['totais']['novos'], real['totais']['usados'], len(real['linhas'])) == (675, 560, 115, 81)
+      and grupos == {'CN Feminino': 278, 'CN Masculino': 282, 'GER Feminino': 51, 'GER Masculino': 64} and not real['avisos'],
+      (real['totais'], len(real['linhas']), grupos, real['avisos']))
+else:
+    print('  (planilha real não está em ~/Downloads: conferência real pulada)')
 
 print('exportação')
 r = cg.get('/uniformes/exportar/')
@@ -466,11 +511,298 @@ wb = openpyxl.load_workbook(io.BytesIO(r.content))
 linhas = list(wb.active.iter_rows(values_only=True))
 t('exporta o estoque em xlsx', r['Content-Type'].startswith('application/vnd.openxmlformats') and linhas[0][0] == 'Tipo'
   and any(l[0] == 'Jaqueta' and l[3] == 5 for l in linhas[1:]), linhas[:3])
+t('exportação do estoque tem Estoque novo, Quantidade usados e Com colaboradores (e o total)',
+  list(linhas[0][3:7]) == ['Estoque novo', 'Quantidade usados', 'Com colaboradores', 'Total em estoque (novo + usados)']
+  and any(l[0] == 'Camisa' and l[2] == 'CN Feminino' and l[1] == 'M' and l[3:7] == (9, 21, 0, 30) for l in linhas[1:]),
+  [l for l in linhas if l[2] == 'CN Feminino'][:3])
 r = cg.get(f'/uniformes/historico/exportar/?colaborador={gustavo.pk}&tipo=RETIRADA')
 linhas = list(openpyxl.load_workbook(io.BytesIO(r.content)).active.iter_rows(values_only=True))
-t('exporta o histórico filtrado', len(linhas) == 4 and all(l[1] == 'Retirada' and 'Gustavo' in l[8] for l in linhas[1:]), linhas)
+t('exporta o histórico filtrado', len(linhas) == 4 and all(l[1] == 'Retirada' and 'Gustavo' in l[9] for l in linhas[1:]), linhas)
+exp = importacao.ler_planilha(io.BytesIO(cg.get('/uniformes/exportar/').content), 'uniformes_estoque.xlsx')
+linha_cm = next(l for l in exp['linhas'] if l['item_id'] == cm.pk)
+t('a exportação do estoque relida: novas e usadas de volta, sugere acertar e avisa que somar dobra',
+  (linha_cm['quantidade'], linha_cm['usados']) == (9, 21) and exp['modo_sugerido'] == importacao.MODO_ACERTAR
+  and 'DOBRA' in exp['avisos'][0] and set(exp['colunas']) >= {'quantidade', 'usados'}, (linha_cm, exp['avisos'][:1], exp['colunas']))
+movs_antes = M.objects.count()
+res_exp = importacao.aplicar(exp['linhas'], modo=importacao.MODO_ACERTAR, por=gestora, nome_arquivo='uniformes_estoque.xlsx')
+t('acertar com a própria exportação não muda nada', M.objects.count() == movs_antes and res_exp['ajustes'] == 0, res_exp)
+t('histórico exportado traz a condição', linhas[0][5] == 'Condição' and linhas[0][8] == 'Saldo depois (da condição)'
+  and all(l[5] == 'Novo' for l in linhas[1:]), linhas[0])
 r = cg.get(f'/uniformes/historico/?colaborador={gustavo.pk}&tipo=DEVOLUCAO')
 t('histórico filtra por colaborador e tipo', '1 lançamento' in r.content.decode())
+
+print('novo e usado no mesmo item (14/11/2026)')
+r = cg.post('/uniformes/item/novo/', {'tipo': 'Colete', 'tamanho': 'G', 'descricao': 'Vivo', 'quantidade': '3', 'condicao': 'NOVO'})
+colete = ItemUniforme.objects.get(tipo='Colete', tamanho='G', descricao='Vivo')
+cg.post('/uniformes/item/novo/', {'tipo': 'Colete', 'tamanho': 'g', 'descricao': 'Vivo - Usado', 'quantidade': '2'})
+colete.refresh_from_db()
+t('cadastrar "Vivo - Usado" não cria item: entra nos usados do mesmo item',
+  ItemUniforme.objects.filter(tipo='Colete').count() == 1 and (colete.saldo, colete.saldo_usado) == (3, 2),
+  list(ItemUniforme.objects.filter(tipo='Colete').values_list('descricao', 'saldo', 'saldo_usado')))
+cg.post('/uniformes/entrada/', {'item': colete.pk, 'quantidade': '1', 'condicao': 'USADO', 'nota_fiscal': 'NF 9'})
+colete.refresh_from_db()
+ent_u = M.objects.filter(item=colete, tipo=M.ENTRADA).order_by('-id').first()
+t('entrada de usadas soma só nos usados (saldo_apos é o dos usados)', (colete.saldo, colete.saldo_usado) == (3, 3)
+  and ent_u.condicao == M.USADO and ent_u.saldo_apos == 3 and ent_u.nota_fiscal == 'NF 9')
+cg.post('/uniformes/entrada/', {'item': colete.pk, 'quantidade': '1', 'condicao': 'quebrado'})
+colete.refresh_from_db()
+t('condição inválida é recusada', (colete.saldo, colete.saldo_usado) == (3, 3))
+corpo = cg.get('/uniformes/?tipo=Colete').content.decode()
+linha_colete = re.search(r'data-saldos-item="%d">(.*?)</div>\s*</div>\s*<div class="md:col-span-3' % colete.pk, corpo, re.S)
+cab = re.search(r'data-colunas-estoque>(.*?)Ações', corpo, re.S)
+t('lista do estoque: colunas Estoque novo, Quantidade usados e Com colaboradores', bool(cab)
+  and cab.group(1).index('Estoque novo') < cab.group(1).index('Quantidade usados') < cab.group(1).index('Com colaboradores'))
+t('lista do estoque: o item mostra 3 novas, 3 usadas e 0 com colaboradores', bool(linha_colete)
+  and 'data-novo>3<' in linha_colete.group(1) and 'data-usado>3<' in linha_colete.group(1) and 'data-posse>0<' in linha_colete.group(1),
+  linha_colete.group(1)[:400] if linha_colete else corpo[corpo.find('data-saldos-item'):][:400])
+t('resumo do estoque separa novas e usadas', 'data-resumo="novos"' in corpo and 'data-resumo="usados"' in corpo
+  and 'Quantidade usados' in corpo and 'Estoque novo' in corpo)
+
+r = cg.post('/uniformes/retirada/', {'colaborador': gustavo.pk, 'item': [colete.pk, colete.pk], 'quantidade': ['1', '2'],
+                                     'condicao': ['NOVO', 'USADO'], 'data_entrega': '2026-11-14'})
+colete.refresh_from_db()
+ret_c = {m.condicao: m for m in M.objects.filter(item=colete, tipo=M.RETIRADA)}
+t('retirada por condição: nova sai das novas, usada das usadas', (colete.saldo, colete.saldo_usado) == (2, 1)
+  and set(ret_c) == {M.NOVO, M.USADO} and ret_c[M.NOVO].saldo_apos == 2 and ret_c[M.USADO].saldo_apos == 1
+  and ret_c[M.NOVO].lote == ret_c[M.USADO].lote, ((colete.saldo, colete.saldo_usado), [(m.condicao, m.saldo_apos) for m in ret_c.values()]))
+termo_c = cg.get(f'/uniformes/termo/{ret_c[M.NOVO].lote}/').content.decode()
+t('termo mostra a condição de cada peça', '<th>Condição</th>' in termo_c and 'data-condicao="USADO">Usada<' in termo_c
+  and 'data-condicao="NOVO">Nova<' in termo_c and 'novos ou usados' in termo_c)
+r = cg.post('/uniformes/retirada/', {'colaborador': gustavo.pk, 'item': [colete.pk], 'quantidade': ['2'], 'condicao': ['USADO']})
+colete.refresh_from_db()
+t('retirada de usadas sem saldo de usadas é recusada (mesmo com novas sobrando)', (colete.saldo, colete.saldo_usado) == (2, 1)
+  and M.objects.filter(item=colete, tipo=M.RETIRADA).count() == 2)
+try:
+    servicos.registrar_retirada(linhas=[(colete.pk, 2, 'USADO')], colaborador=gustavo, por=chefe)
+    msg = ''
+except ErroEstoque as exc:
+    msg = str(exc)
+t('o aviso diz que faltam usadas', 'usada' in msg and 'há 1' in msg, msg)
+cg.post('/uniformes/retirada/', {'colaborador': gustavo.pk, 'item': [colete.pk], 'quantidade': ['1']})
+colete.refresh_from_db()
+t('retirada sem condição tira das novas', (colete.saldo, colete.saldo_usado) == (1, 1))
+try:
+    with transaction.atomic():
+        ItemUniforme.objects.filter(pk=colete.pk).update(saldo_usado=-1)
+    barrou = False
+except IntegrityError:
+    barrou = True
+t('o banco também barra usados negativo', barrou)
+r = cg.get('/uniformes/retirada/')
+t('tela de retirada leva novas e usadas de cada item e o seletor de condição',
+  '"saldo_usado": 1' in r.content.decode() and "cond.name = 'condicao'" in r.content.decode())
+
+print('devolução por condição')
+t('posse do colete: 4 (2 novas + 2 usadas entregues)', servicos.posse(gustavo, [colete.pk]) == {colete.pk: 4})
+r = cg.post('/uniformes/devolucao/', {'colaborador': gustavo.pk, 'item': [colete.pk, colete.pk], 'quantidade': ['3', '2'],
+                                      'condicao': ['USADO', 'NOVO']})
+colete.refresh_from_db()
+t('devolver mais que a posse somando as condições é recusado', (colete.saldo, colete.saldo_usado) == (1, 1)
+  and not M.objects.filter(item=colete, tipo=M.DEVOLUCAO).exists())
+r = cg.post('/uniformes/devolucao/', {'colaborador': gustavo.pk, 'item': [colete.pk], 'quantidade': ['2']})
+colete.refresh_from_db()
+t('devolução sem escolher volta como usada', (colete.saldo, colete.saldo_usado) == (1, 3)
+  and M.objects.filter(item=colete, tipo=M.DEVOLUCAO, condicao=M.USADO, saldo_apos=3).exists())
+cg.post('/uniformes/devolucao/', {'colaborador': gustavo.pk, 'item': [colete.pk], 'quantidade': ['1'], 'condicao': ['NOVO']})
+colete.refresh_from_db()
+t('devolução pode voltar como nova se escolhida', (colete.saldo, colete.saldo_usado) == (2, 3)
+  and servicos.posse(gustavo, [colete.pk]) == {colete.pk: 1})
+corpo = cg.get(f'/uniformes/devolucao/?colaborador={gustavo.pk}').content.decode()
+t('tela de devolução já vem com "Volta usada" marcado', '<option value="USADO" selected>Volta usada</option>' in corpo
+  and 'name="condicao"' in corpo)
+
+print('ajuste por condição')
+cg.post('/uniformes/ajuste/', {'item': colete.pk, 'novos': '5', 'usados': '0', 'motivo': 'inventário de novembro'})
+colete.refresh_from_db()
+aj_c = {m.condicao: m for m in M.objects.filter(item=colete, tipo=M.AJUSTE)}
+t('inventário com novas e usadas: um ajuste por condição', (colete.saldo, colete.saldo_usado) == (5, 0)
+  and aj_c[M.NOVO].delta == 3 and aj_c[M.NOVO].saldo_apos == 5 and aj_c[M.USADO].delta == -3 and aj_c[M.USADO].saldo_apos == 0,
+  [(m.condicao, m.delta, m.saldo_apos) for m in aj_c.values()])
+n = M.objects.filter(item=colete).count()
+cg.post('/uniformes/ajuste/', {'item': colete.pk, 'novos': '5', 'usados': '0', 'motivo': 'de novo'})
+cg.post('/uniformes/ajuste/', {'item': colete.pk, 'novos': '5', 'usados': '-2', 'motivo': 'x'})
+cg.post('/uniformes/ajuste/', {'item': colete.pk, 'novos': '6', 'usados': '1', 'motivo': ''})
+colete.refresh_from_db()
+t('sem mudança, contagem negativa ou sem motivo: nada lançado', M.objects.filter(item=colete).count() == n
+  and (colete.saldo, colete.saldo_usado) == (5, 0))
+cg.post('/uniformes/ajuste/', {'item': colete.pk, 'novos': '', 'usados': '2', 'motivo': 'achei 2 usadas'})
+colete.refresh_from_db()
+t('só os usados contados: as novas não mudam', (colete.saldo, colete.saldo_usado) == (5, 2)
+  and M.objects.filter(item=colete).count() == n + 1)
+cg.post('/uniformes/ajuste/', {'item': colete.pk, 'contagem': '1', 'condicao': 'USADO', 'motivo': 'peça rasgada'})
+colete.refresh_from_db()
+t('ajuste de uma condição só (contagem + condição) continua valendo', (colete.saldo, colete.saldo_usado) == (5, 1))
+corpo = cg.get('/uniformes/').content.decode()
+t('janela de ajuste pede novas e usadas contadas', 'name="novos"' in corpo and 'name="usados"' in corpo
+  and f'data-novos="5" data-usados="1"' in corpo)
+t('janela de entrada escolhe novas ou usadas', 'name="condicao" value="USADO"' in corpo)
+
+
+def livro_bate():
+    erros = []
+    for item in ItemUniforme.objects.all():
+        for condicao, saldo in ((M.NOVO, item.saldo), (M.USADO, item.saldo_usado)):
+            seq, soma = list(M.objects.filter(item=item, condicao=condicao).order_by('registrado_em', 'id')), 0
+            for mov in seq:
+                soma += mov.delta
+                if mov.saldo_apos != soma:
+                    erros.append((item.nome, condicao, mov.pk, mov.saldo_apos, soma))
+            if soma != saldo:
+                erros.append((item.nome, condicao, 'saldo', saldo, soma))
+    return erros
+
+
+t('em todo item, cada saldo = soma do livro daquela condição (e saldo_apos em sequência)', not livro_bate(), livro_bate())
+
+print('histórico, ficha e termo com a condição')
+corpo = cg.get('/uniformes/historico/?condicao=USADO&item=%d' % colete.pk).content.decode()
+t('histórico filtra por condição e mostra a etiqueta', 'data-condicao="USADO"' in corpo and 'data-condicao="NOVO"' not in corpo
+  and '→ 1 usada' in corpo, re.findall(r'→ \d+ \w+', corpo))
+corpo = cg.get(f'/uniformes/colaborador/{gustavo.pk}/').content.decode()
+t('tela do colaborador mostra se a peça entregue era nova ou usada', '(usadas)' in corpo and '(nova)' in corpo,
+  re.findall(r'\((?:nova|usada)s?\)', corpo))
+corpo = cs.get(f'/users/manage/users/{gustavo.pk}/profile/').content.decode()
+t('ficha do colaborador (perfil) mostra a condição das entregas', 'data-condicao="USADO"' in corpo)
+
+print('migração de dados: junta os itens "· Usado" / "- Usado" (0004)')
+import importlib  # noqa: E402
+mig = importlib.import_module('uniformes.migrations.0004_juntar_itens_usados')
+t('sufixo reconhecido sem diferença de maiúscula, acento e espaço',
+  [mig.separar_usado(x) for x in ('CN Feminino · Usado', 'CN Feminino - Usado', 'cn  feminino -usado', 'Usado', 'Polo Usádo',
+                                  'Abusado', 'CN Feminino')]
+  == [('CN Feminino', True), ('CN Feminino', True), ('cn feminino', True), ('', True), ('Polo', True),
+      ('Abusado', False), ('CN Feminino', False)])
+t('a tela usa a mesma regra do sufixo', all(servicos.separar_usado(x) == mig.separar_usado(x)
+                                            for x in ('CN Feminino · Usado', 'X - usados', 'Abusado', 'Polo Usádo')))
+
+
+def velho(tipo, descricao, tamanho, *lancamentos):
+    """Item como o código antigo criava (usado à parte), com o livro dele."""
+    item = ItemUniforme.objects.create(tipo=tipo, descricao=descricao, tamanho=tamanho, criado_por=chefe)
+    for qtd, autor, obs in lancamentos:
+        if qtd > 0:
+            servicos.registrar_entrada(item_id=item.pk, quantidade=qtd, por=autor, observacao=obs,
+                                       data=_date(2026, 11, 12))
+        else:
+            servicos.registrar_ajuste(item_id=item.pk, contagem=ItemUniforme.objects.get(pk=item.pk).saldo + qtd,
+                                      por=autor, motivo=obs)
+    return item
+
+
+base_m = velho('Calça', 'ZZ Mig', '40', (5, chefe, 'novas'))
+u1 = velho('Calça', 'ZZ Mig · Usado', '40', (3, gestora, 'usadas A'), (-1, chefe, 'uma rasgou'))
+u2 = velho('Calça', 'zz mig - usado', '40', (4, gestora, 'usadas B'))
+sem_base = velho('Jaqueta', 'ZZ Sem Base - Usado', 'M', (2, gestora, 'só usadas'))
+so_usado = velho('Boné', 'Usado', 'U', (1, chefe, 'boné usado'))
+dupla_a = velho('Camisa', 'ZZ Dupla · Usado', 'G', (2, chefe, 'a'))
+dupla_b = velho('Camisa', 'ZZ Dupla - Usado', 'G', (5, gestora, 'b'))
+movs_velhos = {m.pk: (m.registrado_por_id, m.registrado_em, m.observacao, m.data, m.delta)
+               for m in M.objects.filter(item__in=[u1, u2, sem_base, so_usado, dupla_a, dupla_b])}
+
+
+def totais_por_peca():
+    soma = {}
+    for i in ItemUniforme.objects.all():
+        base, _ = mig.separar_usado(i.descricao)
+        chave = mig._chave(i.tipo, i.tamanho, base)
+        soma[chave] = soma.get(chave, 0) + i.saldo + i.saldo_usado
+    return soma
+
+
+antes_tot, antes_ids = totais_por_peca(), set(M.objects.values_list('id', flat=True))
+rel = mig.juntar(ItemUniforme, M)
+base_m.refresh_from_db()
+t('junta no base: novas ficam, usadas somam (2 + 4) e os itens usados somem', (base_m.saldo, base_m.saldo_usado) == (5, 6)
+  and not ItemUniforme.objects.filter(pk__in=[u1.pk, u2.pk]).exists(), (base_m.saldo, base_m.saldo_usado))
+movs_base = list(M.objects.filter(item=base_m, condicao=M.USADO).order_by('registrado_em', 'id'))
+t('movimentos do usado vão para o base como USADO, saldo_apos refeito na ordem', [m.saldo_apos for m in movs_base] == [3, 2, 6]
+  and M.objects.filter(item=base_m, condicao=M.NOVO).count() == 1, [(m.delta, m.saldo_apos) for m in movs_base])
+t('datas, autores, observações e deltas preservados', all(
+    (m.registrado_por_id, m.registrado_em, m.observacao, m.data, m.delta) == movs_velhos[m.pk]
+    for m in M.objects.filter(pk__in=movs_velhos)))
+sem_base.refresh_from_db(); so_usado.refresh_from_db()
+t('sem base: o próprio item vira a peça (sem sufixo, tudo em usados)', (sem_base.descricao, sem_base.saldo, sem_base.saldo_usado)
+  == ('ZZ Sem Base', 0, 2) and (so_usado.descricao, so_usado.saldo, so_usado.saldo_usado) == ('', 0, 1)
+  and set(M.objects.filter(item=sem_base).values_list('condicao', flat=True)) == {M.USADO})
+dupla = ItemUniforme.objects.filter(tipo='Camisa', tamanho='G', descricao='ZZ Dupla')
+t('dois usados da mesma peça sem base viram um item só', dupla.count() == 1 and dupla[0].saldo_usado == 7
+  and not ItemUniforme.objects.filter(pk=dupla_b.pk).exists() and dupla[0].pk == dupla_a.pk,
+  list(ItemUniforme.objects.filter(tipo='Camisa', tamanho='G').values_list('descricao', 'saldo', 'saldo_usado')))
+t('relatório da junção', (rel['juntados'], rel['transformados']) == (3, 3), rel)
+t('nenhum movimento perdido e totais por peça iguais', set(M.objects.values_list('id', flat=True)) == antes_ids
+  and totais_por_peca() == antes_tot)
+t('outros movimentos continuam NOVO', set(M.objects.filter(item=base_m, delta=5).values_list('condicao', flat=True)) == {M.NOVO})
+t('nenhum item com o sufixo sobrou', not any(mig.separar_usado(d)[1] for d in ItemUniforme.objects.values_list('descricao', flat=True)))
+t('livro bate depois da junção', not livro_bate(), livro_bate())
+foto = (sorted(ItemUniforme.objects.values_list('id', 'descricao', 'saldo', 'saldo_usado')),
+        sorted(M.objects.values_list('id', 'item_id', 'condicao', 'saldo_apos')))
+rel2 = mig.juntar(ItemUniforme, M)
+t('rodar de novo não muda nada (idempotente)', (rel2['juntados'], rel2['transformados'], rel2['movimentos']) == (0, 0, 0)
+  and foto == (sorted(ItemUniforme.objects.values_list('id', 'descricao', 'saldo', 'saldo_usado')),
+               sorted(M.objects.values_list('id', 'item_id', 'condicao', 'saldo_apos'))))
+mig.separar(ItemUniforme, M)
+t('a volta separa os usados em itens "· Usado" de novo', ItemUniforme.objects.filter(descricao='ZZ Mig · Usado', saldo=6).exists()
+  and ItemUniforme.objects.get(pk=sem_base.pk).descricao == 'ZZ Sem Base · Usado'
+  and not ItemUniforme.objects.filter(saldo_usado__gt=0).exists() and not M.objects.filter(condicao=M.USADO).exists()
+  and totais_por_peca() == antes_tot and not livro_bate(), livro_bate())
+mig.juntar(ItemUniforme, M)
+t('ida → volta → ida dá o mesmo estado', foto == (sorted(ItemUniforme.objects.values_list('id', 'descricao', 'saldo', 'saldo_usado')),
+                                                  sorted(M.objects.values_list('id', 'item_id', 'condicao', 'saldo_apos'))))
+inconsistente = velho('Calça', 'ZZ Ruim · Usado', '42', (2, chefe, 'x'))
+ItemUniforme.objects.filter(pk=inconsistente.pk).update(saldo=5)    # saldo que o livro não explica
+try:
+    with transaction.atomic():
+        mig.juntar(ItemUniforme, M)
+    parou = False
+except RuntimeError:
+    parou = True
+t('livro que não bate para a migração e nada muda', parou and ItemUniforme.objects.get(pk=inconsistente.pk).descricao == 'ZZ Ruim · Usado')
+M.objects.filter(item=inconsistente).delete(); inconsistente.delete()
+
+print('tema escuro e 375 px nas telas mexidas')
+User.objects.filter(pk=gestora.pk).update(theme='dark')
+cg.post('/uniformes/importar/', {'acao': 'ler', 'planilha': SimpleUploadedFile('conf.xlsx', conferencia().getvalue())})
+TELAS = ['/uniformes/', '/uniformes/retirada/', f'/uniformes/devolucao/?colaborador={gustavo.pk}', '/uniformes/historico/',
+         '/uniformes/importar/', f'/uniformes/colaborador/{gustavo.pk}/']
+escuras = {u: cg.get(u) for u in TELAS}
+t('telas abrem no tema escuro', all(r.status_code == 200 and '<html lang="pt-br" class="dark">' in r.content.decode()
+                                    for r in escuras.values()), {u: r.status_code for u, r in escuras.items()})
+cg.post('/uniformes/importar/', {'acao': 'cancelar'})
+User.objects.filter(pk=gestora.pk).update(theme='light')
+css_escuro = _pl.Path('static/css/tema-escuro.css').read_text()
+cobertas = set(re.findall(r'\.((?:bg|text|border)-[a-z]+-\d+)', css_escuro)) | {'bg-white'}
+sem_tema = {}
+for nome in ('estoque.html', 'retirada.html', 'devolucao.html', '_movimento_linha.html', 'colaborador.html', '_ficha.html',
+             'historico.html', 'importar.html'):
+    fonte = (_pl.Path('templates/uniformes') / nome).read_text()
+    for classe in set(re.findall(r'(?<![\w:-])((?:bg|text|border)-(?:gray|amber|emerald|sky|violet|red)-\d+)', fonte)):
+        solida = classe.startswith('bg-') and int(classe.rsplit('-', 1)[1]) >= 600   # botão cheio com texto branco
+        if classe not in cobertas and not solida:
+            sem_tema.setdefault(nome, []).append(classe)
+t('cores claras das telas mexidas têm par no tema escuro', not sem_tema, sem_tema)
+largas = {}
+for nome in ('estoque.html', 'retirada.html', 'devolucao.html', 'historico.html', 'importar.html', '_movimento_linha.html'):
+    fonte = (_pl.Path('templates/uniformes') / nome).read_text()
+    for w in re.findall(r'(?<![\w:-])(?:min-)?w-(\d+)\b', fonte):
+        if int(w) * 4 > 200:
+            largas.setdefault(nome, []).append(w)
+    for px in re.findall(r'(?<![\w:-])(?:min-)?w-\[(\d+)px\]', fonte):
+        largas.setdefault(nome, []).append(px + 'px')
+t('375 px: nenhuma largura fixa maior que 200 px fora de breakpoint', not largas, largas)
+fonte_ret = _pl.Path('templates/uniformes/retirada.html').read_text()
+t('375 px: na retirada a peça ocupa a linha toda e condição/quantidade vão embaixo',
+  "'flex flex-wrap sm:flex-nowrap gap-2 items-center'" in fonte_ret and "'basis-full sm:basis-auto" in fonte_ret)
+fonte_est = _pl.Path('templates/uniformes/estoque.html').read_text()
+t('375 px: no estoque os 3 números ficam lado a lado com rótulo próprio',
+  'md:col-span-6 grid grid-cols-3' in fonte_est and fonte_est.count('md:hidden block text-[11px]') == 3)
+cg.post('/uniformes/importar/', {'acao': 'ler', 'planilha': SimpleUploadedFile('conf.xlsx', conferencia().getvalue())})
+html = cg.get('/uniformes/importar/').content.decode()
+cg.post('/uniformes/importar/', {'acao': 'cancelar'})
+thead = re.search(r'<thead.*?</thead>', html, re.S).group(0)
+visiveis = [th for th in re.findall(r'<th class="([^"]*)"', thead) if 'hidden' not in th.split()]
+t('375 px: a prévia mostra 5 colunas no celular (tipo, tam., novos, usados, hoje)', len(visiveis) == 5, visiveis)
+fonte_dev = _pl.Path('templates/uniformes/devolucao.html').read_text()
+t('375 px: na devolução o nome vai em cima e condição/quantidade embaixo', 'basis-full sm:basis-auto sm:flex-1' in fonte_dev)
 
 print('higiene dos templates')
 pasta = _pl.Path('templates/uniformes')

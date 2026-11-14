@@ -2,10 +2,13 @@
 
 O livro de movimentos (`MovimentoUniforme`) é a fonte da verdade: cada entrada,
 retirada, devolução ou ajuste vira uma linha com quem lançou, quando e — nas
-retiradas e devoluções — para quem. O `saldo` do item é só o resultado do
-livro guardado no próprio item para a lista abrir rápido; ele muda sempre junto
-com a linha do movimento, na mesma transação e com o item travado
-(`servicos.py`), e nunca fica negativo.
+retiradas e devoluções — para quem. Cada peça (tipo + modelo + tamanho) é um item
+só, com dois saldos: `saldo` (estoque novo) e `saldo_usado` (quantidade usados);
+cada movimento diz de qual dos dois mexe (`condicao`). Os saldos são só o
+resultado do livro guardado no próprio item para a lista abrir rápido; mudam
+sempre junto com a linha do movimento, na mesma transação e com o item travado
+(`servicos.py`), e nunca ficam negativos. "Com colaboradores" não é saldo: sai
+do livro (retiradas − devoluções).
 """
 import uuid
 
@@ -54,7 +57,11 @@ class ItemUniforme(models.Model):
     estoque_minimo = models.PositiveIntegerField(
         default=0, verbose_name='Estoque mínimo',
         help_text='Abaixo disso o item aparece destacado na lista. 0 = sem alerta.')
-    saldo = models.IntegerField(default=0, editable=False, verbose_name='Saldo em estoque')
+    # Estoque novo (o nome do campo ficou do tempo em que só havia um saldo).
+    saldo = models.IntegerField(default=0, editable=False, verbose_name='Estoque novo')
+    # 14/11/2026: novo e usado no mesmo item (antes o usado era um item "… · Usado" à parte).
+    # db_default: servidores com o código antigo gravam no mesmo banco sem conhecer a coluna.
+    saldo_usado = models.IntegerField(default=0, db_default=0, editable=False, verbose_name='Quantidade usados')
     ativo = models.BooleanField(default=True, verbose_name='Ativo')
 
     criado_por = models.ForeignKey(
@@ -73,6 +80,7 @@ class ItemUniforme(models.Model):
         constraints = [
             models.UniqueConstraint(fields=['tipo', 'tamanho', 'descricao'], name='uniforme_item_unico'),
             models.CheckConstraint(condition=models.Q(saldo__gte=0), name='uniforme_saldo_nao_negativo'),
+            models.CheckConstraint(condition=models.Q(saldo_usado__gte=0), name='uniforme_saldo_usado_nao_negativo'),
         ]
 
     def __str__(self):
@@ -88,8 +96,17 @@ class ItemUniforme(models.Model):
         return ' · '.join(partes)
 
     @property
+    def total_estoque(self):
+        """Peças na prateleira: novas + usadas."""
+        return (self.saldo or 0) + (self.saldo_usado or 0)
+
+    def saldo_de(self, condicao):
+        return self.saldo_usado if condicao == MovimentoUniforme.USADO else self.saldo
+
+    @property
     def abaixo_do_minimo(self):
-        return bool(self.estoque_minimo) and self.saldo < self.estoque_minimo
+        """O mínimo vale para o que há na prateleira (novas + usadas)."""
+        return bool(self.estoque_minimo) and self.total_estoque < self.estoque_minimo
 
 
 class MovimentoUniforme(models.Model):
@@ -106,12 +123,20 @@ class MovimentoUniforme(models.Model):
         (AJUSTE, 'Ajuste de inventário'),
     ]
 
+    NOVO = 'NOVO'
+    USADO = 'USADO'
+    CONDICAO_CHOICES = [(NOVO, 'Novo'), (USADO, 'Usado')]
+
     item = models.ForeignKey(ItemUniforme, on_delete=models.PROTECT,
                              related_name='movimentos', verbose_name='Item')
     tipo = models.CharField(max_length=10, choices=TIPO_CHOICES, verbose_name='Movimento')
+    # De qual saldo do item o lançamento mexe: NOVO → `saldo`, USADO → `saldo_usado`.
+    condicao = models.CharField(max_length=5, choices=CONDICAO_CHOICES, default=NOVO, db_default=NOVO,
+                                verbose_name='Condição da peça')
     quantidade = models.PositiveIntegerField(verbose_name='Quantidade')
-    # Efeito no estoque (+ entra, − sai): o saldo do item é a soma desta coluna.
+    # Efeito no estoque (+ entra, − sai): o saldo da condição é a soma desta coluna nas linhas dela.
     delta = models.IntegerField(verbose_name='Efeito no estoque')
+    # Saldo da condição do movimento (novo ou usado) logo depois dele.
     saldo_apos = models.IntegerField(verbose_name='Saldo depois')
 
     colaborador = models.ForeignKey(
@@ -143,7 +168,16 @@ class MovimentoUniforme(models.Model):
         ]
 
     def __str__(self):
-        return f'{self.get_tipo_display()} · {self.item} · {self.quantidade}'
+        return f'{self.get_tipo_display()} · {self.item} ({self.rotulo_condicao}) · {self.quantidade}'
+
+    @property
+    def usado(self):
+        return self.condicao == self.USADO
+
+    @property
+    def rotulo_condicao(self):
+        """"nova"/"usada" — a peça, no feminino (camisa, calça, jaqueta)."""
+        return 'usada' if self.condicao == self.USADO else 'nova'
 
     @property
     def rotulo_curto(self):

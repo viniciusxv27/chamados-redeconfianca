@@ -1,4 +1,4 @@
-{# Uma linha do livro do estoque (variável `m`): o que, quanto, para quem, quem lançou e quando. #}
+{# Uma linha do livro do estoque (variável `m`): o que, quanto, nova ou usada, para quem, quem lançou e quando. #}
 <li class="px-4 py-3 flex items-start gap-3">
   <span class="mt-0.5 w-8 h-8 flex-shrink-0 rounded-full flex items-center justify-center text-xs
     {% if m.tipo == 'ENTRADA' %}bg-emerald-50 text-emerald-600{% elif m.tipo == 'RETIRADA' %}bg-sky-50 text-sky-600{% elif m.tipo == 'DEVOLUCAO' %}bg-violet-50 text-violet-600{% else %}bg-gray-100 text-gray-600{% endif %}">
@@ -7,7 +7,8 @@
   <div class="min-w-0 flex-1">
     <p class="text-sm text-gray-900 break-words">
       <b>{{ m.rotulo_curto }}</b> · {{ m.quantidade }} × {{ m.item.nome }}
-      <span class="text-xs font-semibold {% if m.delta > 0 %}text-emerald-600{% else %}text-red-600{% endif %}">({% if m.delta > 0 %}+{% endif %}{{ m.delta }} → {{ m.saldo_apos }})</span>
+      <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold align-middle {% if m.usado %}bg-amber-50 text-amber-700{% else %}bg-sky-50 text-sky-700{% endif %}" data-condicao="{{ m.condicao }}">{{ m.rotulo_condicao }}</span>
+      <span class="text-xs font-semibold {% if m.delta > 0 %}text-emerald-600{% else %}text-red-600{% endif %}" title="Saldo de peças {{ m.rotulo_condicao }}s depois do lançamento">({% if m.delta > 0 %}+{% endif %}{{ m.delta }} → {{ m.saldo_apos }} {{ m.rotulo_condicao }}{{ m.saldo_apos|pluralize }})</span>
     </p>
     <p class="text-xs text-gray-500 break-words">
       {% if m.colaborador %}{% if m.tipo == 'DEVOLUCAO' %}de{% else %}para{% endif %} <a href="{% url 'uniformes:colaborador' m.colaborador_id %}" class="text-sky-700 hover:underline">{{ m.colaborador.get_full_name|default:m.colaborador.email }}</a>{% if m.colaborador.sector %} ({{ m.colaborador.sector.name }}){% endif %} · {% endif %}

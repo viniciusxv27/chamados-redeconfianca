@@ -4,9 +4,10 @@
 
 {% block content %}
 {% comment %}
-Estoque de uniformes: cada item com o saldo na prateleira e quantos estão com
-colaboradores. Entrada, ajuste e cadastro abrem em janelas nesta mesma tela;
-retirada e devolução têm tela própria (várias peças por vez, com o termo).
+Estoque de uniformes: cada peça (tipo + modelo + tamanho) é um item só, com o
+estoque novo, a quantidade usados e quantas estão com colaboradores (14/11/2026:
+antes o usado era um item à parte). Entrada, ajuste e cadastro abrem em janelas
+nesta mesma tela; retirada e devolução têm tela própria (várias peças, com o termo).
 {% endcomment %}
 <style>
   dialog.un-dialogo { padding: 0; border: 0; border-radius: 1rem; width: min(32rem, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem); }
@@ -16,20 +17,25 @@ retirada e devolução têm tela própria (várias peças por vez, com o termo).
   {% include 'uniformes/_nav.html' with aba='estoque' %}
 
   <!-- Resumo -->
-  <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+  <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-5" data-resumo-estoque>
     <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
       <p class="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Itens ativos</p>
       <p class="text-2xl font-bold text-gray-900 mt-1">{{ resumo.itens }}</p>
     </div>
     <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-      <p class="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Peças em estoque</p>
-      <p class="text-2xl font-bold text-sky-700 mt-1">{{ resumo.pecas }}</p>
+      <p class="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Estoque novo</p>
+      <p class="text-2xl font-bold text-sky-700 mt-1" data-resumo="novos">{{ resumo.novos }}</p>
+    </div>
+    <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+      <p class="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Quantidade usados</p>
+      <p class="text-2xl font-bold text-amber-700 mt-1" data-resumo="usados">{{ resumo.usados }}</p>
+      <p class="text-[11px] text-gray-500">total na prateleira: {{ resumo.pecas }}</p>
     </div>
     <div class="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
       <p class="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Com colaboradores</p>
-      <p class="text-2xl font-bold text-gray-900 mt-1">{{ resumo.com_colaboradores }}</p>
+      <p class="text-2xl font-bold text-gray-900 mt-1" data-resumo="com_colaboradores">{{ resumo.com_colaboradores }}</p>
     </div>
-    <a href="?baixo=1" class="bg-white border {% if resumo.baixo %}border-amber-300{% else %}border-gray-200{% endif %} rounded-xl p-4 shadow-sm hover:bg-amber-50/40">
+    <a href="?baixo=1" class="col-span-2 sm:col-span-1 bg-white border {% if resumo.baixo %}border-amber-200{% else %}border-gray-200{% endif %} rounded-xl p-4 shadow-sm hover:bg-amber-50">
       <p class="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Zerados ou abaixo do mínimo</p>
       <p class="text-2xl font-bold {% if resumo.baixo %}text-amber-600{% else %}text-gray-900{% endif %} mt-1">{{ resumo.baixo }}</p>
     </a>
@@ -79,39 +85,48 @@ retirada e devolução têm tela própria (várias peças por vez, com o termo).
 
   <!-- Itens -->
   <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden mb-6">
-    <div class="hidden md:grid grid-cols-12 gap-3 px-4 py-2 bg-gray-50 border-b border-gray-200 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
-      <div class="col-span-4">Item</div>
-      <div class="col-span-2 text-right">Em estoque</div>
-      <div class="col-span-2 text-right">Com colaboradores</div>
-      <div class="col-span-4 text-right">Ações</div>
+    <div class="hidden md:grid grid-cols-12 gap-3 px-4 py-2 bg-gray-50 border-b border-gray-200 text-[11px] font-semibold text-gray-500 uppercase tracking-wide" data-colunas-estoque>
+      <div class="col-span-3">Item</div>
+      <div class="col-span-6 grid grid-cols-3 gap-2">
+        <div class="text-right">Estoque novo</div>
+        <div class="text-right">Quantidade usados</div>
+        <div class="text-right">Com colaboradores</div>
+      </div>
+      <div class="col-span-3 text-right">Ações</div>
     </div>
     <ul class="divide-y divide-gray-100">
       {% for item in itens %}
       <li class="px-4 py-3 md:grid md:grid-cols-12 md:gap-3 md:items-center {% if not item.ativo %}opacity-60{% endif %}">
-        <div class="md:col-span-4 min-w-0">
+        <div class="md:col-span-3 min-w-0">
           <p class="font-medium text-gray-900 break-words">
             {{ item.tipo }}
             {% if item.tamanho %}<span class="ml-1 inline-block px-1.5 py-0.5 rounded bg-sky-50 text-sky-700 text-xs font-semibold">{{ item.tamanho }}</span>{% endif %}
             {% if not item.ativo %}<span class="ml-1 text-[11px] text-gray-400">(inativo)</span>{% endif %}
           </p>
           {% if item.descricao %}<p class="text-xs text-gray-500 break-words">{{ item.descricao }}</p>{% endif %}
-          {% if item.estoque_minimo %}<p class="text-[11px] text-gray-400">mínimo {{ item.estoque_minimo }}</p>{% endif %}
+          {% if item.estoque_minimo %}<p class="text-[11px] text-gray-400">mínimo {{ item.estoque_minimo }} (novas + usadas)</p>{% endif %}
+          {% if item.total_estoque == 0 %}<p class="text-[11px] text-red-600 font-medium">zerado</p>{% elif item.abaixo_do_minimo %}<p class="text-[11px] text-amber-600 font-medium">abaixo do mínimo</p>{% endif %}
         </div>
-        <div class="md:col-span-2 md:text-right mt-2 md:mt-0 flex md:block items-baseline gap-2">
-          <span class="md:hidden text-xs text-gray-500">Em estoque:</span>
-          <span class="text-lg font-bold {% if item.saldo == 0 %}text-red-600{% elif item.abaixo_do_minimo %}text-amber-600{% else %}text-gray-900{% endif %}">{{ item.saldo }}</span>
-          {% if item.saldo == 0 %}<span class="text-[11px] text-red-600 font-medium">zerado</span>{% elif item.abaixo_do_minimo %}<span class="text-[11px] text-amber-600 font-medium">abaixo do mínimo</span>{% endif %}
+        <div class="md:col-span-6 grid grid-cols-3 gap-2 mt-2 md:mt-0" data-saldos-item="{{ item.id }}">
+          <div class="md:text-right">
+            <span class="md:hidden block text-[11px] text-gray-500">Estoque novo</span>
+            <span class="text-lg font-bold {% if item.saldo == 0 %}text-gray-400{% else %}text-gray-900{% endif %}" data-novo>{{ item.saldo }}</span>
+          </div>
+          <div class="md:text-right">
+            <span class="md:hidden block text-[11px] text-gray-500">Quantidade usados</span>
+            <span class="text-lg font-bold {% if item.saldo_usado == 0 %}text-gray-400{% else %}text-amber-700{% endif %}" data-usado>{{ item.saldo_usado }}</span>
+          </div>
+          <div class="md:text-right">
+            <span class="md:hidden block text-[11px] text-gray-500">Com colaboradores</span>
+            <a href="{% url 'uniformes:historico' %}?item={{ item.id }}" class="text-lg font-bold text-gray-700 hover:underline" data-posse>{{ item.em_posse }}</a>
+          </div>
         </div>
-        <div class="md:col-span-2 md:text-right flex md:block items-baseline gap-2">
-          <span class="md:hidden text-xs text-gray-500">Com colaboradores:</span>
-          <a href="{% url 'uniformes:historico' %}?item={{ item.id }}" class="text-sm text-gray-700 hover:underline">{{ item.em_posse }}</a>
-        </div>
-        <div class="md:col-span-4 flex flex-wrap md:justify-end gap-1.5 mt-2 md:mt-0">
+        <div class="md:col-span-3 flex flex-wrap md:justify-end gap-1.5 mt-2 md:mt-0">
           <button type="button" data-abrir="dlg-entrada" data-item="{{ item.id }}" class="px-2.5 py-1.5 rounded-lg border border-emerald-200 text-emerald-700 text-xs font-medium hover:bg-emerald-50"><i class="fas fa-arrow-down mr-1"></i>Entrada</button>
-          {% if item.saldo > 0 and item.ativo %}
+          {% if item.total_estoque > 0 and item.ativo %}
           <a href="{% url 'uniformes:retirada' %}?item={{ item.id }}" class="px-2.5 py-1.5 rounded-lg border border-sky-200 text-sky-700 text-xs font-medium hover:bg-sky-50"><i class="fas fa-hand-holding mr-1"></i>Retirar</a>
           {% endif %}
-          <button type="button" data-abrir="dlg-ajuste" data-item="{{ item.id }}" data-saldo="{{ item.saldo }}" class="px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-50"><i class="fas fa-scale-balanced mr-1"></i>Ajuste</button>
+          <button type="button" data-abrir="dlg-ajuste" data-item="{{ item.id }}" data-novos="{{ item.saldo }}" data-usados="{{ item.saldo_usado }}" class="px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-50"><i class="fas fa-scale-balanced mr-1"></i>Ajuste</button>
           <button type="button" data-abrir="dlg-editar" data-editar='{"id": {{ item.id }}, "tipo": "{{ item.tipo|escapejs }}", "tamanho": "{{ item.tamanho|escapejs }}", "descricao": "{{ item.descricao|escapejs }}", "minimo": {{ item.estoque_minimo }}, "ativo": {{ item.ativo|yesno:"true,false" }}}' class="px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-xs font-medium hover:bg-gray-50" title="Editar item"><i class="fas fa-pen"></i></button>
         </div>
       </li>
@@ -156,10 +171,18 @@ retirada e devolução têm tela própria (várias peças por vez, com o termo).
       <div class="col-span-2">
         <label class="block text-xs font-medium text-gray-600 mb-1">Modelo/descrição</label>
         <input name="descricao" maxlength="120" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Ex.: polo azul Vivo">
+        <p class="text-[11px] text-gray-500 mt-1">Não cadastre a peça usada à parte: é o mesmo item, com as peças em “usadas”.</p>
       </div>
       <div>
         <label class="block text-xs font-medium text-gray-600 mb-1">Quantidade recebida</label>
         <input name="quantidade" type="number" min="0" step="1" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="0">
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">As peças recebidas são</label>
+        <select name="condicao" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+          <option value="NOVO">Novas</option>
+          <option value="USADO">Usadas</option>
+        </select>
       </div>
       <div>
         <label class="block text-xs font-medium text-gray-600 mb-1">Estoque mínimo</label>
@@ -192,9 +215,16 @@ retirada e devolução têm tela própria (várias peças por vez, com o termo).
       <label class="block text-xs font-medium text-gray-600 mb-1">Item *</label>
       <select name="item" required data-select-item class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
         <option value="">Escolha…</option>
-        {% for i in itens_json %}<option value="{{ i.id }}">{{ i.nome }} (estoque {{ i.saldo }})</option>{% endfor %}
+        {% for i in itens_json %}<option value="{{ i.id }}">{{ i.nome }} (novas {{ i.saldo }} · usadas {{ i.saldo_usado }})</option>{% endfor %}
       </select>
     </div>
+    <fieldset>
+      <legend class="block text-xs font-medium text-gray-600 mb-1">As peças que entram são *</legend>
+      <div class="flex flex-wrap gap-4 text-sm text-gray-700">
+        <label class="inline-flex items-center gap-1.5"><input type="radio" name="condicao" value="NOVO" checked> Novas <span class="text-[11px] text-gray-500">(estoque novo)</span></label>
+        <label class="inline-flex items-center gap-1.5"><input type="radio" name="condicao" value="USADO"> Usadas <span class="text-[11px] text-gray-500">(quantidade usados)</span></label>
+      </div>
+    </fieldset>
     <div class="grid grid-cols-2 gap-3">
       <div>
         <label class="block text-xs font-medium text-gray-600 mb-1">Quantidade *</label>
@@ -226,17 +256,23 @@ retirada e devolução têm tela própria (várias peças por vez, com o termo).
     {% csrf_token %}
     <input type="hidden" name="next" value="{{ request.get_full_path }}">
     <h3 class="text-lg font-semibold text-gray-900"><i class="fas fa-scale-balanced text-gray-500 mr-1.5"></i>Ajuste de inventário</h3>
-    <p class="text-xs text-gray-500">Informe quanto há de fato na prateleira; a diferença vira um lançamento de ajuste com o seu nome e o motivo.</p>
+    <p class="text-xs text-gray-500">Informe quanto há de fato na prateleira, novas e usadas; cada diferença vira um lançamento de ajuste (da sua condição) com o seu nome e o motivo.</p>
     <div>
       <label class="block text-xs font-medium text-gray-600 mb-1">Item *</label>
       <select name="item" required data-select-item class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
         <option value="">Escolha…</option>
-        {% for i in itens_json %}<option value="{{ i.id }}" data-saldo="{{ i.saldo }}">{{ i.nome }} (estoque {{ i.saldo }})</option>{% endfor %}
+        {% for i in itens_json %}<option value="{{ i.id }}" data-novos="{{ i.saldo }}" data-usados="{{ i.saldo_usado }}">{{ i.nome }} (novas {{ i.saldo }} · usadas {{ i.saldo_usado }})</option>{% endfor %}
       </select>
     </div>
-    <div>
-      <label class="block text-xs font-medium text-gray-600 mb-1">Quantidade contada *</label>
-      <input name="contagem" type="number" min="0" step="1" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+    <div class="grid grid-cols-2 gap-3">
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Novas contadas *</label>
+        <input name="novos" type="number" min="0" step="1" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Usadas contadas *</label>
+        <input name="usados" type="number" min="0" step="1" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+      </div>
     </div>
     <div>
       <label class="block text-xs font-medium text-gray-600 mb-1">Motivo *</label>
@@ -255,7 +291,7 @@ retirada e devolução têm tela própria (várias peças por vez, com o termo).
     {% csrf_token %}
     <input type="hidden" name="next" value="{{ request.get_full_path }}">
     <h3 class="text-lg font-semibold text-gray-900"><i class="fas fa-pen text-gray-500 mr-1.5"></i>Editar item</h3>
-    <p class="text-xs text-gray-500">O saldo não muda aqui — para isso use Entrada ou Ajuste.</p>
+    <p class="text-xs text-gray-500">Os saldos (novas e usadas) não mudam aqui — para isso use Entrada ou Ajuste.</p>
     <div class="grid grid-cols-2 gap-3">
       <div><label class="block text-xs font-medium text-gray-600 mb-1">Tipo *</label><input name="tipo" required list="un-tipos" maxlength="40" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></div>
       <div><label class="block text-xs font-medium text-gray-600 mb-1">Tamanho</label><input name="tamanho" maxlength="10" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></div>
@@ -280,7 +316,10 @@ retirada e devolução têm tela própria (várias peças por vez, com o termo).
       var form = dlg.querySelector('form');
       var sel = dlg.querySelector('[data-select-item]');
       if (sel) sel.value = botao.dataset.item || '';
-      if (botao.dataset.saldo !== undefined && form.contagem) form.contagem.value = botao.dataset.saldo;
+      if (botao.dataset.novos !== undefined && form.novos) {
+        form.novos.value = botao.dataset.novos;
+        form.usados.value = botao.dataset.usados;
+      }
       if (botao.dataset.editar) {
         var d = JSON.parse(botao.dataset.editar);
         form.action = form.dataset.acaoBase.replace('/0/', '/' + d.id + '/');
@@ -298,7 +337,10 @@ retirada e devolução têm tela própria (várias peças por vez, com o termo).
   if (selAjuste) selAjuste.addEventListener('change', function () {
     var op = selAjuste.selectedOptions[0];
     var form = selAjuste.form;
-    if (op && op.dataset.saldo !== undefined) form.contagem.value = op.dataset.saldo;
+    if (op && op.dataset.novos !== undefined) {
+      form.novos.value = op.dataset.novos;
+      form.usados.value = op.dataset.usados;
+    }
   });
 })();
 </script>

@@ -46,7 +46,7 @@
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0">
             <p class="text-sm text-gray-900 break-words"><b>{% if e.tipo == 'RETIRADA' %}Entrega{% else %}Devolução{% endif %}</b> ·
-              {% for l in e.linhas %}{{ l.quantidade }} × {{ l.item.nome }}{% if not forloop.last %}, {% endif %}{% endfor %}</p>
+              {% for l in e.linhas %}{{ l.quantidade }} × {{ l.item.nome }} <span class="text-[11px] font-semibold {% if l.usado %}text-amber-700{% else %}text-sky-700{% endif %}" data-condicao="{{ l.condicao }}">({{ l.rotulo_condicao }}{{ l.quantidade|pluralize }})</span>{% if not forloop.last %}, {% endif %}{% endfor %}</p>
             <p class="text-xs text-gray-500">
               {% if e.tipo == 'RETIRADA' %}retirada em {{ e.registrado_em|date:'d/m/Y H:i' }}{% else %}devolvido em {% if e.data %}{{ e.data|date:'d/m/Y' }}{% else %}{{ e.registrado_em|date:'d/m/Y' }}{% endif %}{% endif %}
               por {{ e.registrado_por.get_full_name|default:e.registrado_por.email|default:'—' }}

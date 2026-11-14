@@ -281,7 +281,8 @@ html.dark .d1-abas a.ativa { color: #1a1030; }
 .d1 .secao-tit::after { content: ""; flex: 1; height: 1px; background: var(--cinza-3); }
 .d1 .dados { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 1px; background: var(--cinza-3); border: 1px solid var(--cinza-3); border-radius: 10px; overflow: hidden; }
 .d1 .dado { background: var(--card); padding: 9px 12px; min-width: 0; }
-.d1 .dado span { display: block; font-size: 10px; font-weight: 600; color: var(--cinza-5); text-transform: uppercase; letter-spacing: .3px; }
+.d1 .dado span { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 10px; font-weight: 600; color: var(--cinza-5); text-transform: uppercase; letter-spacing: .3px; }
+.d1 .dado span .copiar { flex-shrink: 0; text-transform: none; }
 .d1 .dado b { display: block; font-weight: 600; margin-top: 2px; word-break: break-word; font-variant-numeric: tabular-nums; }
 .d1 .irmaos { display: grid; gap: 6px; }
 .d1 .irmao { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 12px; border: 1px solid var(--cinza-3);

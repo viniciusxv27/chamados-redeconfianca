@@ -62,18 +62,18 @@
         </div>
 
         <table>
-            <thead><tr><th>Peça</th><th>Tamanho</th><th class="qtd">Quantidade</th></tr></thead>
+            <thead><tr><th>Peça</th><th>Tamanho</th><th>Condição</th><th class="qtd">Quantidade</th></tr></thead>
             <tbody>
                 {% for m in movs %}
-                <tr><td>{{ m.item.tipo }}{% if m.item.descricao %} — {{ m.item.descricao }}{% endif %}</td><td>{{ m.item.tamanho|default:"Único" }}</td><td class="qtd">{{ m.quantidade }}</td></tr>
+                <tr><td>{{ m.item.tipo }}{% if m.item.descricao %} — {{ m.item.descricao }}{% endif %}</td><td>{{ m.item.tamanho|default:"Único" }}</td><td data-condicao="{{ m.condicao }}">{% if m.usado %}Usada{% else %}Nova{% endif %}</td><td class="qtd">{{ m.quantidade }}</td></tr>
                 {% endfor %}
-                <tr><th colspan="2" style="text-align:right;">Total de peças</th><th class="qtd">{{ total }}</th></tr>
+                <tr><th colspan="3" style="text-align:right;">Total de peças</th><th class="qtd">{{ total }}</th></tr>
             </tbody>
         </table>
 
         {% if mov.observacao %}<p><b>Observação:</b> {{ mov.observacao }}</p>{% endif %}
 
-        <p>Declaro ter recebido da empresa os uniformes relacionados acima, em perfeito estado, para uso exclusivo
+        <p>Declaro ter recebido da empresa os uniformes relacionados acima{% if tem_usada %} (novos ou usados, conforme a coluna “Condição”){% endif %}, em perfeito estado de uso, para uso exclusivo
         no exercício das minhas funções. Comprometo-me a zelar pela sua conservação e a devolvê-los em caso de
         desligamento ou quando solicitado.</p>
 

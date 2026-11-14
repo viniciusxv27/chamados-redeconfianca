@@ -5,7 +5,8 @@
 {% block content %}
 {% comment %}
 Devolução: o colaborador entrega de volta (desligamento, troca de tamanho) e a
-peça volta ao estoque. Só aparece quem está com alguma peça, e não dá para
+peça volta ao estoque — como usada, salvo escolha em contrário (vai para a
+quantidade usados do item). Só aparece quem está com alguma peça, e não dá para
 devolver mais do que a pessoa tem.
 {% endcomment %}
 <div class="max-w-3xl mx-auto px-1 sm:px-2">
@@ -30,14 +31,19 @@ devolver mais do que a pessoa tem.
       <form method="post" class="space-y-4">
         {% csrf_token %}
         <input type="hidden" name="colaborador" value="{{ escolhido.id }}">
+        <p class="text-xs text-gray-500">Peça devolvida volta como <b>usada</b> (quantidade usados). Se voltou sem uso, escolha “nova”.</p>
         <ul class="divide-y divide-gray-100 border border-gray-200 rounded-lg">
           {% for p in pecas %}
-          <li class="px-3 py-2.5 flex items-center gap-3">
-            <div class="min-w-0 flex-1">
+          <li class="px-3 py-2.5 flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-3" data-linha-devolucao>
+            <div class="min-w-0 basis-full sm:basis-auto sm:flex-1">
               <p class="text-sm font-medium text-gray-900 break-words">{{ p.item.nome }}</p>
               <p class="text-xs text-gray-500">com ele(a): {{ p.quantidade }}{% if p.ultima_entrega %} · última entrega {{ p.ultima_entrega|date:'d/m/Y' }}{% endif %}</p>
             </div>
             <input type="hidden" name="item" value="{{ p.item.id }}">
+            <select name="condicao" aria-label="Volta como" class="flex-1 sm:flex-none sm:w-36 min-w-0 border border-gray-300 rounded-lg px-2 py-2 text-sm">
+              <option value="USADO" selected>Volta usada</option>
+              <option value="NOVO">Volta nova</option>
+            </select>
             <input type="number" name="quantidade" min="0" max="{{ p.quantidade }}" step="1" value="0" aria-label="Quantidade devolvida de {{ p.item.nome }}"
                    class="w-20 border border-gray-300 rounded-lg px-2 py-2 text-sm">
           </li>

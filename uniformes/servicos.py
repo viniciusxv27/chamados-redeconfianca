@@ -3,10 +3,15 @@
 Toda mudança de saldo passa por aqui: trava os itens (`select_for_update`, em
 ordem de id para duas telas não se travarem uma à outra), relê o saldo já
 travado, confere que nada fica negativo e grava o movimento e o saldo novo na
-mesma transação. Tela nenhuma escreve `ItemUniforme.saldo` direto.
+mesma transação. Tela nenhuma escreve `ItemUniforme.saldo`/`saldo_usado` direto.
+
+Cada item tem dois saldos (14/11/2026): estoque novo (`saldo`) e usados
+(`saldo_usado`). Todo lançamento diz a condição (NOVO/USADO) e só mexe no saldo
+dela; a devolução entra como USADO, salvo escolha em contrário.
 """
 from __future__ import annotations
 
+import re
 import unicodedata
 from collections import OrderedDict, defaultdict
 
@@ -17,6 +22,8 @@ from django.utils import timezone
 from .models import ItemUniforme, MovimentoUniforme
 
 M = MovimentoUniforme
+NOVO, USADO = M.NOVO, M.USADO
+CAMPO_SALDO = {NOVO: 'saldo', USADO: 'saldo_usado'}
 
 
 class ErroEstoque(ValueError):
@@ -50,6 +57,38 @@ def limpar_descricao(descricao) -> str:
 
 def chave_item(tipo, tamanho, descricao) -> tuple:
     return (norm(tipo), norm(limpar_tamanho(tamanho)), norm(descricao))
+
+
+# "CN Feminino · Usado", "CN Feminino - Usado", "Usados": o fim diz que a peça é usada.
+SUFIXO_USADO = re.compile(r'^(?P<base>.*?)(?:^|\s*[-\u00b7\u2013\u2014/(:]\s*|\s+)usad[oa]s?\)?\s*$', re.I)
+
+
+def separar_usado(descricao):
+    """"CN Feminino · Usado" → ("CN Feminino", True); "CN Feminino" → ("CN Feminino", False)."""
+    descricao = limpar_descricao(descricao)
+    # Casa no texto sem acento ("Usádo"), do mesmo comprimento, e corta a base no original.
+    achou = SUFIXO_USADO.match(''.join(unicodedata.normalize('NFKD', c)[0] for c in descricao))
+    if not achou:
+        return descricao, False
+    base = descricao[:len(achou.group('base'))]
+    return limpar_descricao(base.rstrip(' -\u00b7\u2013\u2014/(:')), True
+
+
+def condicao_valida(valor, padrao=NOVO) -> str:
+    """'NOVO'/'USADO' (aceita "novo", "usada", "Usado"…); vazio vira o padrão."""
+    texto = norm(valor)
+    if not texto:
+        return padrao
+    if texto.startswith('usad'):
+        return USADO
+    if texto.startswith('nov'):
+        return NOVO
+    raise ErroEstoque('Condição da peça inválida: escolha nova ou usada.')
+
+
+def rotulo_condicao(condicao, plural=False) -> str:
+    base = 'usada' if condicao == USADO else 'nova'
+    return base + ('s' if plural else '')
 
 
 def quantidade_valida(valor) -> int:
@@ -106,38 +145,45 @@ def _travar(ids):
     return travados
 
 
-def _juntar(linhas):
-    """[(item_id, qtd), …] → {item_id: qtd somada}, na ordem em que vieram."""
+def _juntar(linhas, padrao=NOVO):
+    """[(item_id, qtd[, condição]), …] → {(item_id, condição): qtd somada}, na ordem em que vieram."""
     juntas = OrderedDict()
-    for item_id, qtd in linhas:
+    for linha in linhas:
+        item_id, qtd = linha[0], linha[1]
+        condicao = condicao_valida(linha[2] if len(linha) > 2 else '', padrao)
         qtd = quantidade_valida(qtd)
-        juntas[int(item_id)] = juntas.get(int(item_id), 0) + qtd
+        chave = (int(item_id), condicao)
+        juntas[chave] = juntas.get(chave, 0) + qtd
     if not juntas:
         raise ErroEstoque('Escolha pelo menos uma peça.')
     return juntas
 
 
-def _gravar(item, *, tipo, quantidade, delta, por, colaborador=None, data=None,
+def _gravar(item, *, tipo, quantidade, delta, por, condicao=NOVO, colaborador=None, data=None,
             observacao='', nota_fiscal='', lote=None, agora=None):
-    novo = item.saldo + delta
+    campo = CAMPO_SALDO[condicao]
+    atual = getattr(item, campo)
+    novo = atual + delta
     if novo < 0:
-        raise ErroEstoque(f'Sem saldo de {item.nome}: há {item.saldo} em estoque e o lançamento tira {-delta}.')
-    item.saldo = novo
+        raise ErroEstoque(f'Sem saldo de {item.nome} {rotulo_condicao(condicao)}: há {atual} '
+                          f'{rotulo_condicao(condicao, plural=True)} em estoque e o lançamento tira {-delta}.')
+    setattr(item, campo, novo)
     item.atualizado_por = por
-    item.save(update_fields=['saldo', 'atualizado_por', 'atualizado_em'])
+    item.save(update_fields=[campo, 'atualizado_por', 'atualizado_em'])
     extra = {'lote': lote} if lote else {}
     return MovimentoUniforme.objects.create(
-        item=item, tipo=tipo, quantidade=quantidade, delta=delta, saldo_apos=novo,
+        item=item, tipo=tipo, condicao=condicao, quantidade=quantidade, delta=delta, saldo_apos=novo,
         colaborador=colaborador, data=data, observacao=(observacao or '').strip(),
         nota_fiscal=(nota_fiscal or '').strip()[:60], registrado_por=por,
         registrado_em=agora or timezone.now(), **extra)
 
 
 @transaction.atomic
-def registrar_entrada(*, item_id, quantidade, por, data=None, nota_fiscal='', observacao=''):
+def registrar_entrada(*, item_id, quantidade, por, condicao=NOVO, data=None, nota_fiscal='', observacao=''):
     quantidade = quantidade_valida(quantidade)
+    condicao = condicao_valida(condicao)
     item = _travar([item_id])[int(item_id)]
-    return _gravar(item, tipo=M.ENTRADA, quantidade=quantidade, delta=quantidade, por=por,
+    return _gravar(item, tipo=M.ENTRADA, condicao=condicao, quantidade=quantidade, delta=quantidade, por=por,
                    data=data or timezone.localdate(), nota_fiscal=nota_fiscal, observacao=observacao)
 
 
@@ -145,17 +191,19 @@ def registrar_entrada(*, item_id, quantidade, por, data=None, nota_fiscal='', ob
 def registrar_retirada(*, linhas, colaborador, por, data_entrega=None, observacao=''):
     """Tira do estoque e põe na mão do colaborador. Tudo ou nada.
 
+    Cada linha é (item_id, qtd) ou (item_id, qtd, condição): a peça entregue é nova
+    (padrão) ou usada, e só sai do saldo daquela condição.
     `data_entrega` pode ficar vazia e ser preenchida depois (o dia da retirada
     já fica gravado em `registrado_em`).
     """
     if colaborador is None:
         raise ErroEstoque('Escolha para quem é a retirada.')
-    juntas = _juntar(linhas)
-    travados = _travar(list(juntas))
+    juntas = _juntar(linhas, padrao=NOVO)
+    travados = _travar([item_id for item_id, _ in juntas])
     lote, agora, feitos = None, timezone.now(), []
-    for item_id, qtd in juntas.items():
-        mov = _gravar(travados[item_id], tipo=M.RETIRADA, quantidade=qtd, delta=-qtd, por=por,
-                      colaborador=colaborador, data=data_entrega, observacao=observacao,
+    for (item_id, condicao), qtd in juntas.items():
+        mov = _gravar(travados[item_id], tipo=M.RETIRADA, condicao=condicao, quantidade=qtd, delta=-qtd,
+                      por=por, colaborador=colaborador, data=data_entrega, observacao=observacao,
                       lote=lote, agora=agora)
         lote = mov.lote
         feitos.append(mov)
@@ -180,47 +228,93 @@ def posse(colaborador, item_ids=None) -> dict:
 
 @transaction.atomic
 def registrar_devolucao(*, linhas, colaborador, por, data=None, observacao=''):
-    """Volta para o estoque o que estava com o colaborador (ex.: desligamento)."""
+    """Volta para o estoque o que estava com o colaborador (ex.: desligamento).
+
+    Peça devolvida já foi usada: entra no saldo de usados, a não ser que a linha
+    diga (item_id, qtd, 'NOVO'). A posse é por item, qualquer que seja a condição.
+    """
     if colaborador is None:
         raise ErroEstoque('Escolha quem está devolvendo.')
-    juntas = _juntar(linhas)
-    travados = _travar(list(juntas))   # trava antes de contar: duas devoluções não passam da posse
-    com_ele = posse(colaborador, list(juntas))
-    for item_id, qtd in juntas.items():
+    juntas = _juntar(linhas, padrao=USADO)
+    ids = [item_id for item_id, _ in juntas]
+    travados = _travar(ids)   # trava antes de contar: duas devoluções não passam da posse
+    com_ele = posse(colaborador, ids)
+    por_item = OrderedDict()
+    for (item_id, _), qtd in juntas.items():
+        por_item[item_id] = por_item.get(item_id, 0) + qtd
+    for item_id, qtd in por_item.items():
         if qtd > com_ele.get(item_id, 0):
             raise ErroEstoque(f'{colaborador.get_full_name() or colaborador.email} tem '
                               f'{com_ele.get(item_id, 0)} de {travados[item_id].nome}; não dá para devolver {qtd}.')
     lote, agora, feitos = None, timezone.now(), []
-    for item_id, qtd in juntas.items():
-        mov = _gravar(travados[item_id], tipo=M.DEVOLUCAO, quantidade=qtd, delta=qtd, por=por,
-                      colaborador=colaborador, data=data or timezone.localdate(),
+    for (item_id, condicao), qtd in juntas.items():
+        mov = _gravar(travados[item_id], tipo=M.DEVOLUCAO, condicao=condicao, quantidade=qtd, delta=qtd,
+                      por=por, colaborador=colaborador, data=data or timezone.localdate(),
                       observacao=observacao, lote=lote, agora=agora)
         lote = mov.lote
         feitos.append(mov)
     return feitos
 
 
-@transaction.atomic
-def registrar_ajuste(*, item_id, contagem, por, motivo, data=None):
-    """Acerta o saldo para o que foi contado na prateleira. Motivo obrigatório.
-
-    ``data``: o dia da contagem (a importação da conferência manda a "DATA AJUSTE" da planilha).
-    """
-    motivo = (motivo or '').strip()
-    if not motivo:
-        raise ErroEstoque('Diga o motivo do ajuste (ex.: inventário de novembro, peça danificada).')
+def _contagem(valor):
     try:
-        contagem = int(str(contagem).strip())
+        contagem = int(str(valor).strip())
     except (TypeError, ValueError):
         raise ErroEstoque('Informe a quantidade contada em número inteiro.')
     if contagem < 0:
         raise ErroEstoque('A contagem não pode ser negativa.')
+    return contagem
+
+
+def _motivo(motivo):
+    motivo = (motivo or '').strip()
+    if not motivo:
+        raise ErroEstoque('Diga o motivo do ajuste (ex.: inventário de novembro, peça danificada).')
+    return motivo
+
+
+@transaction.atomic
+def registrar_ajuste(*, item_id, contagem, por, motivo, data=None, condicao=NOVO):
+    """Acerta o saldo de uma condição (novas ou usadas) para o que foi contado. Motivo obrigatório.
+
+    ``data``: o dia da contagem (a importação da conferência manda a "DATA AJUSTE" da planilha).
+    """
+    motivo = _motivo(motivo)
+    contagem = _contagem(contagem)
+    condicao = condicao_valida(condicao)
     item = _travar([item_id])[int(item_id)]
-    delta = contagem - item.saldo
+    delta = contagem - item.saldo_de(condicao)
     if delta == 0:
-        raise ErroEstoque(f'O saldo de {item.nome} já é {contagem}; nada a ajustar.')
-    return _gravar(item, tipo=M.AJUSTE, quantidade=abs(delta), delta=delta, por=por,
+        raise ErroEstoque(f'O saldo de {item.nome} ({rotulo_condicao(condicao, plural=True)}) já é {contagem}; '
+                          'nada a ajustar.')
+    return _gravar(item, tipo=M.AJUSTE, condicao=condicao, quantidade=abs(delta), delta=delta, por=por,
                    data=data or timezone.localdate(), observacao=motivo)
+
+
+@transaction.atomic
+def registrar_inventario(*, item_id, novos=None, usados=None, por, motivo, data=None):
+    """Contagem da prateleira de um item: novas e/ou usadas (None = não contou aquela).
+
+    Vira um ajuste por condição que mudou (0, 1 ou 2 linhas no livro); se nada
+    mudou, recusa como o ajuste simples.
+    """
+    motivo = _motivo(motivo)
+    contagens = {}
+    for condicao, valor in ((NOVO, novos), (USADO, usados)):
+        if valor is not None and str(valor).strip() != '':
+            contagens[condicao] = _contagem(valor)
+    if not contagens:
+        raise ErroEstoque('Informe a contagem das peças novas, das usadas ou das duas.')
+    item = _travar([item_id])[int(item_id)]
+    feitos = []
+    for condicao, contagem in contagens.items():
+        delta = contagem - item.saldo_de(condicao)
+        if delta:
+            feitos.append(_gravar(item, tipo=M.AJUSTE, condicao=condicao, quantidade=abs(delta), delta=delta,
+                                  por=por, data=data or timezone.localdate(), observacao=motivo))
+    if not feitos:
+        raise ErroEstoque(f'{item.nome} já tem {item.saldo} nova(s) e {item.saldo_usado} usada(s); nada a ajustar.')
+    return feitos
 
 
 @transaction.atomic
@@ -292,6 +386,9 @@ def filtrar_movimentos(params):
         qs = qs.filter(tipo=tipo)
     if (params.get('item') or '').isdigit():
         qs = qs.filter(item_id=int(params['item']))
+    condicao = (params.get('condicao') or '').upper()
+    if condicao in CAMPO_SALDO:
+        qs = qs.filter(condicao=condicao)
     if (params.get('colaborador') or '').isdigit():
         qs = qs.filter(colaborador_id=int(params['colaborador']))
     if (params.get('por') or '').isdigit():

@@ -28,7 +28,8 @@ logger = logging.getLogger(__name__)
 User = get_user_model()
 M = MovimentoUniforme
 
-SESSAO_IMPORTACAO = 'uniformes_importacao'
+# v2 (14/11/2026): a prévia passou a trazer novos e usados na mesma linha; a antiga não vale mais.
+SESSAO_IMPORTACAO = 'uniformes_importacao_v2'
 
 
 def gestor_required(view):
@@ -68,8 +69,8 @@ def _base_ctx(request, **extra):
 
 
 def _itens_json(itens):
-    return [{'id': i.id, 'nome': i.nome, 'tipo': i.tipo, 'tamanho': i.tamanho, 'saldo': i.saldo}
-            for i in itens]
+    return [{'id': i.id, 'nome': i.nome, 'tipo': i.tipo, 'tamanho': i.tamanho, 'saldo': i.saldo,
+             'saldo_usado': i.saldo_usado} for i in itens]
 
 
 def _colaboradores_json(qs):
@@ -96,17 +97,19 @@ def estoque(request):
     for item in itens:
         item.em_posse = em_posse.get(item.id, 0)
     if request.GET.get('baixo') == '1':
-        itens = [i for i in itens if i.abaixo_do_minimo or i.saldo == 0]
+        itens = [i for i in itens if i.abaixo_do_minimo or i.total_estoque == 0]
     todos = ItemUniforme.objects.filter(ativo=True)
     tipos = sorted({t for t in todos.values_list('tipo', flat=True)} | set(TIPOS_SUGERIDOS))
     tamanhos = sorted({t for t in todos.values_list('tamanho', flat=True) if t})
     ativos = list(todos.order_by('tipo', 'tamanho', 'descricao'))
     resumo = {
         'itens': len(ativos),
-        'pecas': sum(i.saldo for i in ativos),
+        'novos': sum(i.saldo for i in ativos),
+        'usados': sum(i.saldo_usado for i in ativos),
         'com_colaboradores': sum(v for v in em_posse.values() if v > 0),
-        'baixo': sum(1 for i in ativos if i.abaixo_do_minimo or i.saldo == 0),
+        'baixo': sum(1 for i in ativos if i.abaixo_do_minimo or i.total_estoque == 0),
     }
+    resumo['pecas'] = resumo['novos'] + resumo['usados']
     ultimos = list(servicos.filtrar_movimentos({})[:8])
     return render(request, 'uniformes/estoque.html', _base_ctx(
         request, itens=itens, tipos=tipos, tamanhos=tamanhos, resumo=resumo, ultimos=ultimos,
@@ -117,20 +120,28 @@ def estoque(request):
 @require_POST
 def item_novo(request):
     try:
+        condicao = servicos.condicao_valida(request.POST.get('condicao'))
+        # "CN Feminino - Usado" não vira item à parte: é o mesmo item, com a entrada no saldo de usados.
+        descricao, eh_usado = servicos.separar_usado(request.POST.get('descricao'))
+        if eh_usado:
+            condicao = servicos.USADO
         item, novo = servicos.criar_item(
-            tipo=request.POST.get('tipo'), tamanho=request.POST.get('tamanho'),
-            descricao=request.POST.get('descricao'),
+            tipo=request.POST.get('tipo'), tamanho=request.POST.get('tamanho'), descricao=descricao,
             estoque_minimo=int(request.POST.get('estoque_minimo') or 0), por=request.user)
         qtd = (request.POST.get('quantidade') or '').strip()
-        if qtd and qtd != '0':
-            servicos.registrar_entrada(item_id=item.id, quantidade=qtd, por=request.user,
+        lancou = bool(qtd) and qtd != '0'
+        if lancou:
+            servicos.registrar_entrada(item_id=item.id, quantidade=qtd, por=request.user, condicao=condicao,
                                        data=_data(request.POST.get('data')),
                                        nota_fiscal=request.POST.get('nota_fiscal', ''),
                                        observacao=request.POST.get('observacao', ''))
+        rotulo = servicos.rotulo_condicao(condicao, plural=True)
         if novo:
-            messages.success(request, f'{item.nome} cadastrado{" com " + qtd + " peça(s) em estoque" if qtd and qtd != "0" else ""}.')
+            messages.success(request, f'{item.nome} cadastrado' + (
+                f' com {qtd} peça(s) {rotulo} em estoque.' if lancou else '.'))
         else:
-            messages.info(request, f'{item.nome} já existia — {"entrada lançada nele" if qtd and qtd != "0" else "nada novo cadastrado"}.')
+            messages.info(request, f'{item.nome} já existia — ' + (
+                f'entrada de {qtd} peça(s) {rotulo} lançada nele.' if lancou else 'nada novo cadastrado.'))
     except (ErroEstoque, ValueError) as exc:
         messages.error(request, str(exc))
     return _voltar(request)
@@ -169,9 +180,11 @@ def entrada(request):
     try:
         mov = servicos.registrar_entrada(
             item_id=int(request.POST.get('item') or 0), quantidade=request.POST.get('quantidade'),
-            por=request.user, data=_data(request.POST.get('data')),
+            por=request.user, condicao=request.POST.get('condicao'), data=_data(request.POST.get('data')),
             nota_fiscal=request.POST.get('nota_fiscal', ''), observacao=request.POST.get('observacao', ''))
-        messages.success(request, f'Entrada de {mov.quantidade} × {mov.item.nome}. Saldo agora: {mov.saldo_apos}.')
+        rotulo = servicos.rotulo_condicao(mov.condicao, plural=True)
+        messages.success(request, f'Entrada de {mov.quantidade} × {mov.item.nome} ({rotulo}). '
+                                  f'Saldo de {rotulo} agora: {mov.saldo_apos}.')
     except (ErroEstoque, ValueError) as exc:
         messages.error(request, str(exc))
     return _voltar(request)
@@ -181,11 +194,20 @@ def entrada(request):
 @require_POST
 def ajuste(request):
     try:
-        mov = servicos.registrar_ajuste(
-            item_id=int(request.POST.get('item') or 0), contagem=request.POST.get('contagem'),
-            por=request.user, motivo=request.POST.get('motivo'))
-        sinal = '+' if mov.delta > 0 else ''
-        messages.success(request, f'{mov.item.nome} ajustado ({sinal}{mov.delta}). Saldo agora: {mov.saldo_apos}.')
+        item_id = int(request.POST.get('item') or 0)
+        if 'novos' in request.POST or 'usados' in request.POST:
+            movs = servicos.registrar_inventario(
+                item_id=item_id, novos=request.POST.get('novos'), usados=request.POST.get('usados'),
+                por=request.user, motivo=request.POST.get('motivo'))
+        else:   # uma condição só (contagem + condicao)
+            movs = [servicos.registrar_ajuste(
+                item_id=item_id, contagem=request.POST.get('contagem'), por=request.user,
+                motivo=request.POST.get('motivo'), condicao=request.POST.get('condicao'))]
+        partes = []
+        for mov in movs:
+            rotulo = servicos.rotulo_condicao(mov.condicao, plural=True)
+            partes.append(f'{rotulo} {"+" if mov.delta > 0 else ""}{mov.delta} → {mov.saldo_apos}')
+        messages.success(request, f'{movs[0].item.nome} ajustado: {"; ".join(partes)}.')
     except (ErroEstoque, ValueError) as exc:
         messages.error(request, str(exc))
     return _voltar(request)
@@ -195,12 +217,14 @@ def ajuste(request):
 # Retirada e devolução
 # ---------------------------------------------------------------------------
 def _linhas_do_post(request):
+    """[(item_id, qtd, condição)] das linhas do formulário; condição vazia = padrão do serviço."""
     itens = request.POST.getlist('item')
     qtds = request.POST.getlist('quantidade')
+    condicoes = request.POST.getlist('condicao')
     linhas = []
-    for item_id, qtd in zip(itens, qtds):
+    for pos, (item_id, qtd) in enumerate(zip(itens, qtds)):
         if (item_id or '').isdigit() and (qtd or '').strip() not in ('', '0'):
-            linhas.append((int(item_id), qtd))
+            linhas.append((int(item_id), qtd, condicoes[pos] if pos < len(condicoes) else ''))
     return linhas
 
 
@@ -250,7 +274,10 @@ def devolucao(request):
                 destino += f'?colaborador={colaborador.pk}'
             return redirect(destino)
         pecas = sum(m.quantidade for m in movs)
-        messages.success(request, f'Devolução de {pecas} peça(s) de {_nome(colaborador)} — voltaram ao estoque.')
+        usadas = sum(m.quantidade for m in movs if m.usado)
+        destino = ('como usadas' if usadas == pecas else 'como novas' if not usadas
+                   else f'{usadas} como usada(s) e {pecas - usadas} como nova(s)')
+        messages.success(request, f'Devolução de {pecas} peça(s) de {_nome(colaborador)} — voltaram ao estoque {destino}.')
         return redirect('uniformes:colaborador', colaborador.pk)
 
     com_posse = servicos.colaboradores_com_posse()
@@ -291,13 +318,14 @@ def data_entrega(request, pk):
 def termo(request, lote):
     movs = list(MovimentoUniforme.objects.filter(lote=lote, tipo=M.RETIRADA)
                 .select_related('item', 'colaborador', 'colaborador__sector', 'registrado_por')
-                .order_by('item__tipo', 'item__tamanho'))
+                .order_by('item__tipo', 'item__tamanho', 'condicao'))
     if not movs:
         raise Http404('Retirada não encontrada')
     primeiro = movs[0]
     return render(request, 'uniformes/termo.html', {
         'movs': movs, 'pessoa': primeiro.colaborador, 'mov': primeiro,
         'total': sum(m.quantidade for m in movs), 'impresso_em': timezone.now(),
+        'tem_usada': any(m.usado for m in movs),
     })
 
 
@@ -317,7 +345,7 @@ def historico(request):
                                           .values('colaborador_id')).order_by('first_name', 'last_name'),
         lancadores=User.objects.filter(pk__in=MovimentoUniforme.objects.values('registrado_por_id'))
         .order_by('first_name', 'last_name'),
-        tipos=M.TIPO_CHOICES))
+        tipos=M.TIPO_CHOICES, condicoes=M.CONDICAO_CHOICES))
 
 
 def _xlsx(conteudo, nome):

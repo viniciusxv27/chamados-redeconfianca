@@ -5,12 +5,13 @@ Dois formatos, achados sozinhos:
 1. **Conferência da rede** ("RELAÇÃO UNIFORMES - ES - ESTOQUE", aba "Conferência Uniformes",
    12/11/2026): ``UNIFORME / TAMANHO | SALDO NOVOS | SALDO USADOS | DATA AJUSTE | OBS:``.
    A 1ª coluna junta peça, linha, gênero e tamanho ("Camisa CN - Feminino - PP"): vira tipo
-   "Camisa", modelo "CN Feminino" e tamanho "PP". Os usados são um item à parte, de modelo
-   "CN Feminino · Usado" — novo e usado não se misturam no saldo. A data e o "OBS" (quem
-   conferiu) vão para o lançamento. Linhas de seção ("UNIFORMES FEMININOS") e o quadro de
+   "Camisa", modelo "CN Feminino" e tamanho "PP". Novos e usados são o MESMO item (14/11/2026):
+   SALDO NOVOS vai para o estoque novo e SALDO USADOS para a quantidade usados, cada um com o
+   seu lançamento (condição NOVO/USADO). A data e o "OBS" (quem conferiu) vão para o lançamento. Linhas de seção ("UNIFORMES FEMININOS") e o quadro de
    totais à direita não são itens. Por ser conferência, a tela sugere acertar o saldo.
 2. **Genérico**: acha a linha do cabeçalho nas 15 primeiras, aceita sinônimos ("Peça", "Qtd",
-   "Tam.", "Modelo"…), ignora maiúsculas e acentos.
+   "Tam.", "Modelo"…), ignora maiúsculas e acentos. A quantidade vai para o estoque novo (um
+   modelo terminado em "Usado" vai para os usados do item sem o sufixo).
 
 Nos dois, linhas repetidas do mesmo item são somadas e nada grava na leitura: a tela mostra a
 prévia e só o "Confirmar" lança.
@@ -35,7 +36,10 @@ SINONIMOS = {
     'tipo': ['tipo', 'peca', 'item', 'uniforme', 'produto', 'tipo de peca', 'tipo do uniforme', 'nome'],
     'tamanho': ['tamanho', 'tam', 'tam.', 'numeracao', 'numero', 'tamanhos'],
     'quantidade': ['quantidade', 'qtd', 'qtd.', 'qtde', 'qtde.', 'quant', 'quant.', 'estoque', 'saldo',
-                   'quantidade em estoque', 'qtd estoque', 'total'],
+                   'quantidade em estoque', 'qtd estoque', 'total', 'estoque novo', 'novos', 'quantidade novos',
+                   'qtd novos', 'saldo novo'],
+    # 14/11/2026: a exportação do estoque traz "Estoque novo" e "Quantidade usados" lado a lado.
+    'usados': ['quantidade usados', 'usados', 'qtd usados', 'qtde usados', 'saldo usado', 'estoque usado'],
     'descricao': ['descricao', 'modelo', 'cor', 'observacao', 'obs', 'detalhe', 'descricao/modelo'],
     'minimo': ['estoque minimo', 'minimo', 'est. minimo', 'qtd minima'],
 }
@@ -93,7 +97,6 @@ def _achar_cabecalho(linhas):
 # ---------------------------------------------------------------------------
 FORMATO_CONFERENCIA = 'conferencia'
 FORMATO_GENERICO = 'generico'
-USADO = 'Usado'
 
 CONFERENCIA = {
     'nome': ('uniforme / tamanho', 'uniforme/tamanho', 'uniforme - tamanho', 'uniforme e tamanho'),
@@ -197,18 +200,15 @@ def _ler_conferencia(brutas, indice, mapa):
     juntas, avisos = OrderedDict(), []
     totais = {'novos': 0, 'usados': 0, 'secoes': 0}
 
-    def juntar(numero, tipo, descricao, tamanho, quantidade, condicao, data, obs):
+    def juntar(numero, tipo, descricao, tamanho, novos, usados, data, obs):
         chave = chave_item(tipo, tamanho, descricao)
         if chave in juntas:
-            juntas[chave]['quantidade'] += quantidade
+            juntas[chave]['quantidade'] += novos
+            juntas[chave]['usados'] += usados
             avisos.append(f'Linha {numero}: {tipo} {descricao} {tamanho} repetido — somado à linha anterior.')
             return
         existente = existentes.get(chave)
-        juntas[chave] = {
-            'tipo': tipo, 'tamanho': tamanho, 'descricao': descricao, 'quantidade': quantidade, 'minimo': 0,
-            'item_id': existente.id if existente else None, 'saldo_atual': existente.saldo if existente else 0,
-            'condicao': condicao, 'data': data, 'obs': obs,
-        }
+        juntas[chave] = _linha(tipo, tamanho, descricao, novos, usados, 0, existente, data=data, obs=obs)
 
     for faltando, rotulo in (('novos', 'SALDO NOVOS'), ('usados', 'SALDO USADOS')):
         if faltando not in mapa:
@@ -243,11 +243,7 @@ def _ler_conferencia(brutas, indice, mapa):
         novos, usados = novos or 0, usados or 0
         totais['novos'] += novos
         totais['usados'] += usados
-        juntar(numero, tipo, modelo, tamanho, novos, 'Novo', data, obs)
-        descricao_usado = limpar_descricao(f'{modelo} · {USADO}' if modelo else USADO)
-        # Usado só vira item quando tem peça (ou já existe, para o acerto poder zerar).
-        if usados or chave_item(tipo, tamanho, descricao_usado) in existentes:
-            juntar(numero, tipo, descricao_usado, tamanho, usados, USADO, data, obs)
+        juntar(numero, tipo, modelo, tamanho, novos, usados, data, obs)
     if not juntas:
         raise ErroEstoque('A planilha de conferência não tem nenhuma linha de uniforme com saldo.')
     totais['pecas'] = totais['novos'] + totais['usados']
@@ -256,11 +252,27 @@ def _ler_conferencia(brutas, indice, mapa):
             'colunas': {campo: ' '.join(str(brutas[indice][pos]).split()) for campo, pos in mapa.items()}}
 
 
+def _linha(tipo, tamanho, descricao, novos, usados, minimo, existente, data='', obs=''):
+    """Uma linha da prévia: um item, com o que a planilha diz de novos e de usados.
+
+    `quantidade` (novos) ou `usados` None = a planilha não fala daquela condição (formato genérico
+    só com novos, ou só com linhas "… Usado"): o saldo dela não é tocado.
+    """
+    return {
+        'tipo': tipo, 'tamanho': tamanho, 'descricao': descricao, 'quantidade': novos, 'usados': usados,
+        'minimo': minimo, 'item_id': existente.id if existente else None,
+        'saldo_atual': existente.saldo if existente else 0,
+        'usado_atual': existente.saldo_usado if existente else 0,
+        'data': data, 'obs': obs,
+    }
+
+
 def ler_planilha(arquivo, nome=''):
     """Lê e devolve a prévia: {'linhas': [...], 'avisos': [...], 'colunas': {...}}.
 
-    Cada linha: tipo, tamanho, descricao, quantidade, minimo, item_id (se já
-    existe), saldo_atual. Linhas iguais são somadas.
+    Cada linha: tipo, tamanho, descricao, quantidade (novos), usados (None quando a
+    planilha não tem), minimo, item_id (se já existe), saldo_atual, usado_atual.
+    Linhas iguais são somadas.
     """
     brutas = _linhas_brutas(arquivo, nome)
     indice, mapa = _achar_cabecalho_conferencia(brutas)
@@ -287,46 +299,72 @@ def ler_planilha(arquivo, nome=''):
         if not tipo:
             avisos.append(f'Linha {numero}: sem tipo/peça — ignorada.')
             continue
-        bruto_qtd = valor(linha, 'quantidade')
-        if bruto_qtd is None or str(bruto_qtd).strip() in ('', '-'):
-            quantidade = 0
-        else:
-            try:
-                numero_qtd = float(str(bruto_qtd).strip().replace(',', '.'))
-                int(numero_qtd)
-            except (ValueError, OverflowError):
-                avisos.append(f'Linha {numero}: quantidade "{bruto_qtd}" não é número — ignorada.')
+        quantidade = _qtd_generica(valor(linha, 'quantidade'), numero, avisos)
+        if quantidade is None:
+            continue
+        coluna_usados = None
+        if 'usados' in mapa:
+            coluna_usados = _qtd_generica(valor(linha, 'usados'), numero, avisos)
+            if coluna_usados is None:
                 continue
-            if numero_qtd < 0 or numero_qtd != int(numero_qtd):
-                avisos.append(f'Linha {numero}: quantidade {bruto_qtd} inválida — ignorada.')
-                continue
-            quantidade = int(numero_qtd)
         tamanho = limpar_tamanho(valor(linha, 'tamanho'))
         try:
             minimo = int(float(str(valor(linha, 'minimo') or 0).replace(',', '.')))
         except ValueError:
             minimo = 0
+        # "Camisa | M | 3 | Polo · Usado": não cria item usado à parte, vai para os usados da Polo.
+        # None = a planilha não fala daquela condição, e o saldo dela não é tocado.
+        descricao, eh_usado = servicos.separar_usado(descricao)
+        if eh_usado:
+            novos, usados = None, quantidade + (coluna_usados or 0)
+        else:
+            novos, usados = quantidade, coluna_usados
         chave = chave_item(tipo, tamanho, descricao)
         if chave in juntas:
-            juntas[chave]['quantidade'] += quantidade
+            linha_junta = juntas[chave]
+            for campo, qtd in (('quantidade', novos), ('usados', usados)):
+                if qtd is not None:
+                    linha_junta[campo] = (linha_junta[campo] or 0) + qtd
             avisos.append(f'Linha {numero}: {tipo} {tamanho} repetido — somado à linha anterior.')
             continue
-        existente = existentes.get(chave)
-        juntas[chave] = {
-            'tipo': tipo, 'tamanho': tamanho, 'descricao': descricao, 'quantidade': quantidade,
-            'minimo': max(0, minimo), 'item_id': existente.id if existente else None,
-            'saldo_atual': existente.saldo if existente else 0,
-        }
+        juntas[chave] = _linha(tipo, tamanho, descricao, novos, usados, max(0, minimo), existentes.get(chave))
     if not juntas:
         raise ErroEstoque('A planilha não tem nenhuma linha de uniforme para importar.')
+    modo = MODO_ENTRADA
+    if any(norm(c) == 'com colaboradores' for c in brutas[indice] if c is not None):
+        # Já aconteceu (13/11/2026): a exportação reimportada como entrada dobrou o estoque.
+        modo = MODO_ACERTAR
+        avisos.insert(0, 'ATENÇÃO: esta parece a exportação do próprio estoque. Somar como entrada DOBRA o estoque; '
+                         'para corrigir contagens, use "Acertar o saldo".')
     return {'linhas': list(juntas.values()), 'avisos': avisos, 'formato': FORMATO_GENERICO,
-            'modo_sugerido': MODO_ENTRADA,
+            'modo_sugerido': modo,
             'colunas': {campo: str(brutas[indice][pos]) for campo, pos in mapa.items()}}
+
+
+def _qtd_generica(bruto, numero, avisos):
+    """Quantidade de uma célula do formato genérico: 0 se vazia, inteiro >= 0, ou None (com aviso)."""
+    if bruto is None or str(bruto).strip() in ('', '-'):
+        return 0
+    try:
+        numero_qtd = float(str(bruto).strip().replace(',', '.'))
+        int(numero_qtd)
+    except (ValueError, OverflowError):
+        avisos.append(f'Linha {numero}: quantidade "{bruto}" não é número — ignorada.')
+        return None
+    if numero_qtd < 0 or numero_qtd != int(numero_qtd):
+        avisos.append(f'Linha {numero}: quantidade {bruto} inválida — ignorada.')
+        return None
+    return int(numero_qtd)
 
 
 @transaction.atomic
 def aplicar(linhas, *, modo, por, nome_arquivo=''):
-    """Cria os itens que faltam e lança. Tudo ou nada."""
+    """Cria os itens que faltam e lança, cada condição no seu saldo. Tudo ou nada.
+
+    Novos vão para o estoque novo e usados para a quantidade usados do mesmo item;
+    quantidade None (a planilha não falou daquela condição) não toca o saldo dela.
+    `sem_mudanca` conta itens em que nada foi lançado.
+    """
     origem = f'Importação da planilha {nome_arquivo}'.strip()
     resumo = {'itens_novos': 0, 'entradas': 0, 'ajustes': 0, 'pecas': 0, 'sem_mudanca': 0}
     for linha in linhas:
@@ -344,21 +382,27 @@ def aplicar(linhas, *, modo, por, nome_arquivo=''):
         elif linha.get('minimo') and item.estoque_minimo != linha['minimo']:
             item.estoque_minimo = linha['minimo']
             item.save(update_fields=['estoque_minimo', 'atualizado_em'])
-        qtd = int(linha['quantidade'] or 0)
-        if modo == MODO_ACERTAR:
-            item.refresh_from_db(fields=['saldo'])
-            if item.saldo == qtd:
-                resumo['sem_mudanca'] += 1
+        lancou = False
+        for condicao, chave in ((servicos.NOVO, 'quantidade'), (servicos.USADO, 'usados')):
+            if linha.get(chave) is None:
                 continue
-            servicos.registrar_ajuste(item_id=item.id, contagem=qtd, por=por, data=dia,
-                                      motivo=f'{detalhe} (acerto de inventário)')
-            resumo['ajustes'] += 1
+            qtd = int(linha[chave] or 0)
+            if modo == MODO_ACERTAR:
+                item.refresh_from_db(fields=['saldo', 'saldo_usado'])
+                if item.saldo_de(condicao) == qtd:
+                    continue
+                servicos.registrar_ajuste(item_id=item.id, contagem=qtd, por=por, data=dia, condicao=condicao,
+                                          motivo=f'{detalhe} (acerto de inventário)')
+                resumo['ajustes'] += 1
+            elif qtd > 0:
+                servicos.registrar_entrada(item_id=item.id, quantidade=qtd, por=por, data=dia,
+                                           condicao=condicao, observacao=detalhe)
+                resumo['entradas'] += 1
+            else:
+                continue
             resumo['pecas'] += qtd
-        elif qtd > 0:
-            servicos.registrar_entrada(item_id=item.id, quantidade=qtd, por=por, data=dia, observacao=detalhe)
-            resumo['entradas'] += 1
-            resumo['pecas'] += qtd
-        else:
+            lancou = True
+        if not lancou:
             resumo['sem_mudanca'] += 1
     return resumo
 
@@ -385,12 +429,14 @@ def _livro(titulo, cabecalho, linhas, larguras):
     return saida.getvalue()
 
 
+COLUNAS_ESTOQUE = ['Tipo', 'Tamanho', 'Descrição', 'Estoque novo', 'Quantidade usados', 'Com colaboradores',
+                   'Total em estoque (novo + usados)', 'Estoque mínimo', 'Abaixo do mínimo', 'Ativo']
+
+
 def exportar_estoque(itens, em_posse):
-    linhas = [[i.tipo, i.tamanho, i.descricao, i.saldo, em_posse.get(i.id, 0), i.estoque_minimo,
-               'Sim' if i.abaixo_do_minimo else '', 'Sim' if i.ativo else 'Não'] for i in itens]
-    return _livro('Estoque', ['Tipo', 'Tamanho', 'Descrição', 'Quantidade', 'Com colaboradores',
-                              'Estoque mínimo', 'Abaixo do mínimo', 'Ativo'],
-                  linhas, [18, 10, 30, 12, 18, 15, 16, 8])
+    linhas = [[i.tipo, i.tamanho, i.descricao, i.saldo, i.saldo_usado, em_posse.get(i.id, 0), i.total_estoque,
+               i.estoque_minimo, 'Sim' if i.abaixo_do_minimo else '', 'Sim' if i.ativo else 'Não'] for i in itens]
+    return _livro('Estoque', COLUNAS_ESTOQUE, linhas, [18, 10, 30, 13, 18, 18, 18, 15, 16, 8])
 
 
 def _nome(user):
@@ -402,14 +448,14 @@ def exportar_historico(movimentos):
     for m in movimentos:
         linhas.append([
             timezone.localtime(m.registrado_em).strftime('%d/%m/%Y %H:%M'),
-            m.rotulo_curto, m.item.tipo, m.item.tamanho, m.item.descricao, m.quantidade, m.delta,
-            m.saldo_apos, _nome(m.colaborador),
+            m.rotulo_curto, m.item.tipo, m.item.tamanho, m.item.descricao,
+            'Usado' if m.usado else 'Novo', m.quantidade, m.delta, m.saldo_apos, _nome(m.colaborador),
             (m.colaborador.sector.name if m.colaborador and m.colaborador.sector else ''),
             m.data.strftime('%d/%m/%Y') if m.data else '', _nome(m.registrado_por),
             m.nota_fiscal, m.observacao,
         ])
-    return _livro('Movimentos', ['Lançado em', 'Movimento', 'Tipo', 'Tamanho', 'Descrição', 'Quantidade',
-                                 'Efeito no estoque', 'Saldo depois', 'Para quem', 'Loja/setor',
-                                 'Data (entrega/recebimento/devolução)', 'Lançado por', 'Nota fiscal',
-                                 'Observação'],
-                  linhas, [17, 11, 14, 9, 22, 11, 15, 12, 28, 20, 18, 26, 14, 40])
+    return _livro('Movimentos', ['Lançado em', 'Movimento', 'Tipo', 'Tamanho', 'Descrição', 'Condição',
+                                 'Quantidade', 'Efeito no estoque', 'Saldo depois (da condição)', 'Para quem',
+                                 'Loja/setor', 'Data (entrega/recebimento/devolução)', 'Lançado por',
+                                 'Nota fiscal', 'Observação'],
+                  linhas, [17, 11, 14, 9, 22, 10, 11, 15, 16, 28, 20, 18, 26, 14, 40])

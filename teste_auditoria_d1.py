@@ -683,7 +683,7 @@ from vendas.models import Plano  # noqa: E402
 # 1. botão "Exportar"
 pa = ca.get('/auditoria-d1/').content.decode()
 t('botão de exportar se chama "Exportar" (não "Exportar mês")', '<span>Exportar</span>' in pa and 'Exportar mês' not in pa)
-t('estáticos com ?v= novo', "esteira.js?v=3" in pa and "auditoria_d1.css?v=2" in pa)
+t('estáticos com ?v= novo', "esteira.js?v=4" in pa and "auditoria_d1.css?v=3" in pa)
 t('busca geral no topo, com o atalho / indicado', 'id="buscaGeral"' in pa and '( / )' in pa and 'id="bgPainel"' in pa)
 t('CONSULTA também tem a busca geral', 'id="buscaGeral"' in cc.get('/auditoria-d1/').content.decode())
 
@@ -1017,6 +1017,14 @@ for arq_t in sorted(pasta.glob('*.html')):
 t('nenhum {# #} em várias linhas', not multilinha, multilinha)
 paginas = [cs.get(u).content.decode() for u in PAGINAS]
 t('nenhum comentário vazando na tela', all('{#' not in p and '#}' not in p and '{% comment' not in p for p in paginas))
+
+print('== DADOS DA VENDA: DOCUMENTO SEM PONTUAÇÃO E COPIAR (14/11/2026) ==')
+_js = (pathlib.Path(__file__).resolve().parent / 'static' / 'auditoria_d1' / 'esteira.js').read_text(encoding='utf-8')
+t('card "Documento sem pontuação" com os dígitos do documento', '["Documento sem pontuação", dig(it.documento) || "—", dig(it.documento)]' in _js)
+t('cada card dos dados da venda tem o botão de copiar (menos os vazios)', 'class="copiar" data-copiar="${esc(alvo)}"' in _js
+  and 'txt === "—" ? "" : txt' in _js)
+t('esteira.js e o CSS com versão nova', "esteira.js' %}?v=4" in (pathlib.Path(__file__).resolve().parent / 'templates' / 'auditoria_d1' / 'esteira.html').read_text()
+  and "auditoria_d1.css' %}?v=3" in (pathlib.Path(__file__).resolve().parent / 'templates' / 'auditoria_d1' / '_base.html').read_text())
 
 print(f'\n{ok} ok, {fail} falha(s)')
 sys.exit(1 if fail else 0)

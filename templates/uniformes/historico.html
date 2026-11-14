@@ -6,12 +6,19 @@
 <div class="max-w-6xl mx-auto px-1 sm:px-2">
   {% include 'uniformes/_nav.html' with aba='historico' %}
 
-  <form method="get" class="bg-white border border-gray-200 rounded-xl p-4 mb-4 shadow-sm grid grid-cols-2 lg:grid-cols-7 gap-2 items-end">
+  <form method="get" class="bg-white border border-gray-200 rounded-xl p-4 mb-4 shadow-sm grid grid-cols-2 lg:grid-cols-8 gap-2 items-end">
     <div>
       <label class="block text-[11px] font-semibold text-gray-500 mb-1">Movimento</label>
       <select name="tipo" class="w-full border border-gray-300 rounded-lg px-2 py-2 text-sm">
         <option value="">Todos</option>
         {% for v, r in tipos %}<option value="{{ v }}" {% if filtro.tipo == v %}selected{% endif %}>{{ r }}</option>{% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="block text-[11px] font-semibold text-gray-500 mb-1">Condição</label>
+      <select name="condicao" class="w-full border border-gray-300 rounded-lg px-2 py-2 text-sm">
+        <option value="">Novas e usadas</option>
+        {% for v, r in condicoes %}<option value="{{ v }}" {% if filtro.condicao == v %}selected{% endif %}>{% if v == 'USADO' %}Usadas{% else %}Novas{% endif %}</option>{% endfor %}
       </select>
     </div>
     <div>

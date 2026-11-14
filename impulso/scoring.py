@@ -35,7 +35,7 @@ from calendar import monthrange
 from datetime import date
 from decimal import Decimal
 
-from django.db.models import Q
+from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
 
 from .assiduidade import nota_assiduidade
@@ -167,31 +167,81 @@ def periodo_do_mes(referencia=None):
 # ---------------------------------------------------------------------------
 # CONFIAR
 # ---------------------------------------------------------------------------
+# Papel da pessoa na meta, na ordem em que conta: quem é responsável e também
+# criou aparece só como responsável — a meta entra uma vez só.
+PAPEL_RESPONSAVEL = 'responsavel'
+PAPEL_PARTICIPANTE = 'participante'
+PAPEL_CRIADOR = 'criador'
+ROTULO_PAPEL = {PAPEL_RESPONSAVEL: 'responsável', PAPEL_PARTICIPANTE: 'participa',
+                PAPEL_CRIADOR: 'criou'}
+
+
+def metas_que_contam(user, inicio, fim, corte=None):
+    """As metas aprovadas com prazo no mês que contam para a pessoa, cada uma uma vez.
+
+    Conta a meta de que ela é a responsável, aquela em que ela é participante
+    (meta compartilhada) e a que ela criou. O "participa" vai por EXISTS em vez
+    de join no M2M: o join repetiria a meta e pediria um `distinct`.
+    """
+    participa = Meta.participantes.through.objects.filter(meta_id=OuterRef('pk'), user_id=user.id)
+    metas = (Meta.objects
+             .filter(Q(colaborador=user) | Q(created_by=user) | Exists(participa),
+                     prazo__gte=inicio, prazo__lte=fim, aprovacao=Meta.Aprovacao.APROVADA)
+             .annotate(participa=Exists(participa)))
+    if corte:
+        metas = metas.exclude(created_at__gte=corte)
+    return metas
+
+
+def _papel(meta, user):
+    if meta['colaborador_id'] == user.id:
+        return PAPEL_RESPONSAVEL
+    if meta['participa']:
+        return PAPEL_PARTICIPANTE
+    return PAPEL_CRIADOR
+
+
 def _nota_metas(user, inicio, fim, corte=None):
     """20 pontos: 10 pela qualidade média + 10 pelo percentual de conclusão."""
     # Só meta aprovada conta. Uma solicitação parada na fila do gestor (ou
     # recusada) não pode entrar no denominador e derrubar a nota de quem
     # simplesmente pediu uma tarefa.
-    metas = Meta.objects.filter(colaborador=user, prazo__gte=inicio, prazo__lte=fim,
-                                aprovacao=Meta.Aprovacao.APROVADA)
-    if corte:
-        metas = metas.exclude(created_at__gte=corte)
-    total = metas.count()
+    # Uma consulta só: o acompanhamento faz esta conta para a equipe inteira.
+    metas = list(metas_que_contam(user, inicio, fim, corte)
+                 .order_by('prazo', 'id')
+                 .values('id', 'titulo', 'status', 'colaborador_id', 'participa',
+                         'nota_qualidade', 'nota_prazo', 'avaliado_em', 'entregue_em'))
+    total = len(metas)
     if not total:
         return ZERO, ZERO, ZERO, ZERO, {'sem_metas': True}
 
-    # Com corte, a meta entregue ou avaliada depois dele ainda estava em aberto naquele instante.
-    no_corte = metas.exclude(avaliado_em__gte=corte).exclude(entregue_em__gte=corte) if corte else metas
-    concluidas = no_corte.filter(status=Meta.Status.CONCLUIDA).count()
-    avaliadas = list(no_corte.filter(nota_qualidade__isnull=False, nota_prazo__isnull=False))
+    def no_corte(m):
+        # Com corte, a meta entregue ou avaliada depois dele ainda estava em aberto naquele instante.
+        if not corte:
+            return True
+        return not ((m['avaliado_em'] and m['avaliado_em'] >= corte)
+                    or (m['entregue_em'] and m['entregue_em'] >= corte))
+
+    itens = []
+    concluidas = 0
+    avaliadas = []
+    for m in metas:
+        valendo = no_corte(m)
+        concluida = valendo and m['status'] == Meta.Status.CONCLUIDA
+        concluidas += concluida
+        if valendo and m['nota_qualidade'] is not None and m['nota_prazo'] is not None:
+            avaliadas.append(m)
+        itens.append({'id': m['id'], 'titulo': m['titulo'], 'papel': _papel(m, user),
+                      'concluida': concluida})
+    papeis = [item['papel'] for item in itens]
 
     # Conclusão (0-10)
     p_conclusao = pt('metas_conclusao', user) * Decimal(concluidas) / Decimal(total)
 
     # Qualidade (0-10): média de (qualidade + prazo) numa escala 0-10 por meta
     if avaliadas:
-        soma_q = sum(m.nota_qualidade for m in avaliadas)
-        soma_p = sum(m.nota_prazo for m in avaliadas)
+        soma_q = sum(m['nota_qualidade'] for m in avaliadas)
+        soma_p = sum(m['nota_prazo'] for m in avaliadas)
         n = len(avaliadas)
         media_q = Decimal(soma_q) / Decimal(n)
         media_p = Decimal(soma_p) / Decimal(n)
@@ -208,6 +258,11 @@ def _nota_metas(user, inicio, fim, corte=None):
         'avaliadas': len(avaliadas),
         'media_qualidade': float(round(media_q, 2)) if media_q is not None else None,
         'media_prazo': float(round(media_p, 2)) if media_p is not None else None,
+        # De onde vem cada meta (a mesma meta conta uma vez, no primeiro papel).
+        'responsavel': papeis.count(PAPEL_RESPONSAVEL),
+        'participando': papeis.count(PAPEL_PARTICIPANTE),
+        'criadas': papeis.count(PAPEL_CRIADOR),
+        'itens': itens,
     }
     return (_quantize(p_qualidade), aplicavel_qualidade,
             _quantize(p_conclusao), pt('metas_conclusao', user), detalhes)
@@ -702,6 +757,22 @@ def _info_conteudos(d):
     return ' · '.join(partes)
 
 
+def _origem_metas(d):
+    """" · inclui 2 em que participa e 1 que criou" — as metas que não são da pessoa como responsável."""
+    partes = []
+    if d.get('participando'):
+        partes.append('%s em que participa' % d['participando'])
+    if d.get('criadas'):
+        partes.append('%s que criou' % d['criadas'])
+    return ' · inclui ' + ' e '.join(partes) if partes else ''
+
+
+def _itens_metas(d):
+    """A lista das metas que entraram na conta, com o papel da pessoa em cada uma."""
+    return [{**item, 'rotulo_papel': ROTULO_PAPEL.get(item.get('papel'), '')}
+            for item in d.get('itens') or []]
+
+
 def linhas_detalhadas(dados):
     """Formata o cálculo para as telas de detalhamento (uma linha por item)."""
     d = dados['detalhes']
@@ -717,9 +788,11 @@ def linhas_detalhadas(dados):
          if not d['metas'].get('sem_metas') else 'Nenhuma meta com prazo no mês'},
         {'bloco': 'CONFIAR', 'item': 'Metas — conclusão',
          'pontos': dados['p_metas_conclusao'], 'max': pt('metas_conclusao', tabela=tabela),
-         'info': ('%s de %s concluída(s)' % (
-             d['metas'].get('concluidas', 0), d['metas'].get('total', 0)))
-         if not d['metas'].get('sem_metas') else 'Nenhuma meta com prazo no mês'},
+         # Conta a meta de que é responsável, a em que participa e a que criou.
+         'info': ('%s de %s concluída(s)%s' % (
+             d['metas'].get('concluidas', 0), d['metas'].get('total', 0), _origem_metas(d['metas'])))
+         if not d['metas'].get('sem_metas') else 'Nenhuma meta com prazo no mês',
+         'itens_metas': _itens_metas(d['metas'])},
         {'bloco': 'CONFIAR', 'item': 'Feedback do gestor',
          'pontos': dados['p_feedback'], 'max': pt('feedback', tabela=tabela),
          'info': (d['feedback'].get('motivo') or '—')

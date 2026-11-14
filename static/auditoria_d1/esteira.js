@@ -557,7 +557,9 @@
     const dados = [
       ["Nº da venda", it.id_venda], ["ID do serviço", it.id_servico], ["Data da venda", dataBR(it.data_venda)],
       ["Filial (PDV)", it.pdv], ["Vendedor", titulo(it.vendedor)], ["Cliente", titulo(it.cliente)],
-      ["Documento cadastrado", doc(it.documento)], ["Cidade / UF", it.cidade_cliente ? `${titulo(it.cidade_cliente)} / ${it.uf_cliente || ""}` : "—"],
+      ["Documento cadastrado", doc(it.documento)],
+      // Sem pontuação (09026026757): é como o VivoGo e os outros sistemas pedem na busca (14/11/2026).
+      ["Documento sem pontuação", dig(it.documento) || "—", dig(it.documento)], ["Cidade / UF", it.cidade_cliente ? `${titulo(it.cidade_cliente)} / ${it.uf_cliente || ""}` : "—"],
       ["Plano anterior", it.plano_antigo || "—"], ["Portabilidade", it.portabilidade ? fone(it.portabilidade) : "—"],
       ["Status do serviço", it.status_servico || "—"], ["Status BKO", it.status_bko || "—"],
       ["Ativação", it.data_ativacao ? dataBR(it.data_ativacao) : "—"], ["Última ativação", it.ultima_ativacao ? dataBR(it.ultima_ativacao) : "—"],
@@ -589,7 +591,11 @@
             ${PODE.auditar && a.sugere && S.meta.correcoes.includes(a.sugere) ? `<button class="a-sug" data-sugere="${esc(a.sugere)}" data-pen="${esc(a.penalidade || "")}">Marcar ${esc(titulo(a.penalidade || a.sugere))}</button>` : ""}
           </div>`).join("")}</div></div>` : ""}
         <div><div class="secao-tit">Dados da venda</div>
-          <div class="dados">${dados.map(([k, val]) => `<div class="dado"><span>${k}</span><b>${esc(val ?? "—")}</b></div>`).join("")}</div>
+          <div class="dados">${dados.map(([k, val, copiar]) => {
+            // Cada card copia o que mostra (o 3º item, quando existe, é o que vai para a área de transferência).
+            const txt = String(val ?? "—"), alvo = copiar ?? (txt === "—" ? "" : txt);
+            return `<div class="dado"><span>${k}${alvo ? `<button class="copiar" data-copiar="${esc(alvo)}" title="Copiar" aria-label="Copiar ${esc(k)}">⧉</button>` : ""}</span><b>${esc(txt)}</b></div>`;
+          }).join("")}</div>
         </div>
         ${irmaos.length ? `<div><div class="secao-tit">Outros serviços desta venda</div><div class="irmaos">${irmaos.map(i => `
           <div class="irmao st-${statusDe(i)}" data-id="${esc(i.id_servico)}"><span class="ponto"></span>

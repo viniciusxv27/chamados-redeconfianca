@@ -11,17 +11,17 @@ class AcessoUniformesAdmin(admin.ModelAdmin):
 
 @admin.register(ItemUniforme)
 class ItemUniformeAdmin(admin.ModelAdmin):
-    list_display = ('tipo', 'tamanho', 'descricao', 'saldo', 'estoque_minimo', 'ativo')
+    list_display = ('tipo', 'tamanho', 'descricao', 'saldo', 'saldo_usado', 'estoque_minimo', 'ativo')
     list_filter = ('tipo', 'ativo')
-    readonly_fields = ('saldo',)
+    readonly_fields = ('saldo', 'saldo_usado')
 
 
 @admin.register(MovimentoUniforme)
 class MovimentoUniformeAdmin(admin.ModelAdmin):
     """Só leitura: o livro do estoque muda pelas telas do módulo (servicos.py)."""
-    list_display = ('registrado_em', 'tipo', 'item', 'quantidade', 'delta', 'saldo_apos', 'colaborador',
-                    'registrado_por')
-    list_filter = ('tipo',)
+    list_display = ('registrado_em', 'tipo', 'item', 'condicao', 'quantidade', 'delta', 'saldo_apos',
+                    'colaborador', 'registrado_por')
+    list_filter = ('tipo', 'condicao')
     raw_id_fields = ('item', 'colaborador', 'registrado_por', 'data_alterada_por')
 
     def has_add_permission(self, request):

@@ -141,7 +141,8 @@ class Meta(models.Model):
         related_name='impulso_metas', verbose_name='Colaborador')
     # Meta compartilhada: além do responsável principal (colaborador), outras
     # pessoas podem tocar a mesma meta. O campo antigo continua sendo o dono —
-    # é ele que aparece no Kanban e conta na pontuação individual.
+    # é ele que aparece no Kanban. Na pontuação (scoring.metas_que_contam) a
+    # meta conta para o dono, para cada participante e para quem a criou.
     participantes = models.ManyToManyField(
         settings.AUTH_USER_MODEL, blank=True,
         related_name='impulso_metas_participando', verbose_name='Outros responsáveis')

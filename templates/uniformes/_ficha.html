@@ -63,7 +63,7 @@ Bloco "Uniformes" da ficha do colaborador (uniformes_na_ficha). `modo`:
                     <div class="min-w-0">
                         <p class="text-gray-800 break-words">
                             <b>{% if e.tipo == 'RETIRADA' %}Entrega{% else %}Devolução{% endif %}</b> ·
-                            {% for l in e.linhas %}{{ l.quantidade }} × {{ l.item.nome }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                            {% for l in e.linhas %}{{ l.quantidade }} × {{ l.item.nome }} <span class="text-[11px] {% if l.usado %}text-amber-700{% else %}text-gray-500{% endif %}" data-condicao="{{ l.condicao }}">({{ l.rotulo_condicao }}{{ l.quantidade|pluralize }})</span>{% if not forloop.last %}, {% endif %}{% endfor %}
                         </p>
                         <p class="text-[11px] text-gray-500">
                             {% if e.tipo == 'RETIRADA' %}entregue em {% if e.data %}{{ e.data|date:"d/m/Y" }}{% else %}<span class="text-amber-600">data a confirmar</span>{% endif %} · retirada em {{ e.registrado_em|date:"d/m/Y" }}{% else %}devolvido em {% if e.data %}{{ e.data|date:"d/m/Y" }}{% else %}{{ e.registrado_em|date:"d/m/Y" }}{% endif %}{% endif %}

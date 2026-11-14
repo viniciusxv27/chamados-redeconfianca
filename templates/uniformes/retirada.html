@@ -5,8 +5,9 @@
 {% block content %}
 {% comment %}
 Retirada: tira do estoque e põe na mão do colaborador. Várias peças de uma vez
-viram um lote só (um termo). O dia da retirada e quem retirou ficam gravados
-sozinhos; a data de entrega pode ficar vazia e ser preenchida depois.
+viram um lote só (um termo). Cada linha diz se a peça entregue é nova ou usada
+e só tira do saldo daquela condição. O dia da retirada e quem retirou ficam
+gravados sozinhos; a data de entrega pode ficar vazia e ser preenchida depois.
 {% endcomment %}
 <div class="max-w-3xl mx-auto px-1 sm:px-2">
   {% include 'uniformes/_nav.html' with aba='' %}
@@ -44,6 +45,7 @@ sozinhos; a data de entrega pode ficar vazia e ser preenchida depois.
         <button type="button" id="un-add" class="text-xs text-sky-700 font-medium hover:underline"><i class="fas fa-plus mr-1"></i>Outra peça</button>
       </div>
       <p class="text-xs text-gray-500 mb-2" id="un-dica">Escolha o colaborador para ver os tamanhos da ficha dele.</p>
+      <p class="text-[11px] text-gray-500 mb-2">Em cada peça, diga se entrega uma <b>nova</b> ou uma <b>usada</b>: sai só do saldo daquela.</p>
       <div id="un-linhas" class="space-y-2"></div>
     </div>
 
@@ -136,27 +138,55 @@ sozinhos; a data de entrega pode ficar vazia e ser preenchida depois.
     itens.forEach(function (i) {
       var tam = atual ? tipoCombina(i.tipo, atual) : '';
       var marca = tam && norm(tam) === norm(i.tamanho) ? '★ ' : '';
-      var o = el('option', '', marca + i.nome + ' — estoque ' + i.saldo);
+      var o = el('option', '', marca + i.nome + ' — novas ' + i.saldo + ' · usadas ' + i.saldo_usado);
       o.value = i.id;
-      if (i.saldo <= 0) o.disabled = true;
+      if (i.saldo + i.saldo_usado <= 0) o.disabled = true;
       sel.appendChild(o);
     });
     sel.value = valor;
   }
 
+  function porId(id) {
+    for (var k = 0; k < itens.length; k += 1) { if (String(itens[k].id) === String(id)) return itens[k]; }
+    return null;
+  }
+
+  // Nova ou usada: só oferece a condição que tem saldo; começa pela nova quando há.
+  function preencherCondicao(selCond, item) {
+    var anterior = selCond.value;
+    selCond.innerHTML = '';
+    [['NOVO', 'Nova', item ? item.saldo : 0], ['USADO', 'Usada', item ? item.saldo_usado : 0]].forEach(function (c) {
+      var o = el('option', '', c[1] + (item ? ' (' + c[2] + ')' : ''));
+      o.value = c[0];
+      if (item && c[2] <= 0) o.disabled = true;
+      selCond.appendChild(o);
+    });
+    var escolha = anterior;
+    if (!item || !selCond.querySelector('option[value="' + escolha + '"]:not([disabled])')) {
+      escolha = item && item.saldo <= 0 && item.saldo_usado > 0 ? 'USADO' : 'NOVO';
+    }
+    selCond.value = escolha;
+  }
+
   function novaLinha(itemId) {
-    var linha = el('div', 'flex gap-2 items-center');
-    var sel = el('select', 'flex-1 min-w-0 border border-gray-300 rounded-lg px-2 py-2 text-sm');
+    var linha = el('div', 'flex flex-wrap sm:flex-nowrap gap-2 items-center');
+    linha.setAttribute('data-linha-peca', '');
+    var sel = el('select', 'basis-full sm:basis-auto sm:flex-1 min-w-0 border border-gray-300 rounded-lg px-2 py-2 text-sm');
     sel.name = 'item'; sel.required = true;
     preencherOpcoes(sel);
     if (itemId) sel.value = itemId;
+    var cond = el('select', 'flex-1 sm:flex-none sm:w-32 min-w-0 border border-gray-300 rounded-lg px-2 py-2 text-sm');
+    cond.name = 'condicao';
+    cond.setAttribute('aria-label', 'Peça nova ou usada');
+    preencherCondicao(cond, porId(sel.value));
+    sel.addEventListener('change', function () { preencherCondicao(cond, porId(sel.value)); });
     var qtd = el('input', 'w-20 border border-gray-300 rounded-lg px-2 py-2 text-sm');
     qtd.type = 'number'; qtd.name = 'quantidade'; qtd.min = '1'; qtd.step = '1'; qtd.value = '1'; qtd.required = true;
     qtd.setAttribute('aria-label', 'Quantidade');
     var tirar = el('button', 'w-9 h-9 flex-shrink-0 rounded-lg border border-gray-200 text-gray-400 hover:text-red-600');
     tirar.type = 'button'; tirar.innerHTML = '<i class="fas fa-xmark"></i>'; tirar.title = 'Tirar peça';
     tirar.addEventListener('click', function () { if (linhas.children.length > 1) linha.remove(); });
-    linha.appendChild(sel); linha.appendChild(qtd); linha.appendChild(tirar);
+    linha.appendChild(sel); linha.appendChild(cond); linha.appendChild(qtd); linha.appendChild(tirar);
     linhas.appendChild(linha);
   }
 
