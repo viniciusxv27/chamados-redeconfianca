@@ -1191,6 +1191,9 @@ def coordenacao_pela_carteira(pdv: str) -> Tuple[str, List[str]]:
     alvo = normalize_text(pdv)
     if not alvo:
         return '', []
+    # "Loja Serra Sede" (o setor de quem não está na planilha) e "SERRA SEDE" são a mesma loja.
+    if alvo.startswith('LOJA '):
+        alvo = alvo[5:].lstrip(' -:').strip()
     acessos = (CoordinatorStoreAccess.objects.select_related('coordinator')
                .prefetch_related('sectors').order_by('-coordinator__is_active', 'id'))
     for acesso in acessos:
@@ -1457,6 +1460,14 @@ def compute_consultor_simulation(
     # pelos grupos de carteira (CN CARTEIRA ARIEL/THAYANDRA/LUIZ).
     if not coord_name:
         coord_name = get_coordinator_from_carteira_group(user)
+    # 16/11/2026: a coordenação vem da carteira de /simulator/admin/stores/ (quem coordena a loja hoje);
+    # a coluna COORDENAÇÃO da planilha guarda a coordenação antiga (ARIEL/LUIZ/THAYANDRA). A planilha
+    # fica de reserva para loja sem carteira.
+    coord_pdvs_carteira: List[str] = []
+    if pdv:
+        nome_carteira, coord_pdvs_carteira = coordenacao_pela_carteira(pdv)
+        if nome_carteira:
+            coord_name = nome_carteira
 
     # Metas vêm sempre da planilha REALIZADO (META_*), mas no modo Simulador
     # podem ser sobrescritas pelo usuário.
@@ -1644,15 +1655,18 @@ def compute_consultor_simulation(
         'sva': sumifs(realized, 'META_SVA', 'COORDENAÇÃO', coord_name),
     }
     coord_meta['fixa'] = meta_fixa_da_coordenacao(realized, projection, coord_name)
+    if coord_pdvs_carteira:
+        # Carteira: meta = soma das metas das lojas dela (Power BI), como no cálculo do coordenador.
+        coord_meta = metas_das_lojas(coord_pdvs_carteira, realized)
     if view_mode == VIEW_REALIZADO:
-        coord_pdvs = get_pdvs_of_coord(realized, coord_name) or get_pdvs_of_coord(projection, coord_name)
+        coord_pdvs = coord_pdvs_carteira or get_pdvs_of_coord(realized, coord_name) or get_pdvs_of_coord(projection, coord_name)
         mysql_coord = get_realized_sales_from_mysql(pdvs=coord_pdvs) if coord_pdvs else get_realized_sales_from_mysql(coord_name=coord_name)
         coord_proj = {k: mysql_coord.get(k, 0.0) for k in ['movel','smartphones','eletronicos','essenciais','seguros','sva']}
         # Fixa fora do laço porque a chave é outra: quantidade, não receita.
         coord_proj['fixa'] = mysql_coord.get('fixa_qty', 0.0)
     else:
         # VIEW_PROJECAO / VIEW_SIMULADOR: projeção dinâmica da Coordenação via MySQL D-1 projetado por DU.
-        coord_pdvs = get_pdvs_of_coord(realized, coord_name) or get_pdvs_of_coord(projection, coord_name)
+        coord_pdvs = coord_pdvs_carteira or get_pdvs_of_coord(realized, coord_name) or get_pdvs_of_coord(projection, coord_name)
         mysql_coord = get_realized_sales_from_mysql(pdvs=coord_pdvs) if coord_pdvs else get_realized_sales_from_mysql(coord_name=coord_name)
         du_passed_c, du_total_c = get_business_days_info()
         coord_proj = {
@@ -1974,8 +1988,10 @@ def _compute_gerente_simulation_base(
     # Sem PDV vinculado: o gerente ainda pode usar o Simulador (valores
     # informados manualmente). As metas/projeções da planilha ficarão zeradas.
 
-    coord_name = ''
-    if pdv:
+    # 16/11/2026: a coordenação vem da carteira de /simulator/admin/stores/ (quem coordena a loja hoje).
+    # A coluna COORDENAÇÃO da planilha guarda a coordenação antiga; fica de reserva para loja sem carteira.
+    coord_name, coord_pdvs_carteira = coordenacao_pela_carteira(pdv) if pdv else ('', [])
+    if pdv and not coord_name:
         target_pdv = normalize_text(pdv)
         for _, row in realized.iterrows():
             if normalize_text(row.get('PDV', '')) == target_pdv:
@@ -1989,10 +2005,6 @@ def _compute_gerente_simulation_base(
                     coord_name = str(row.get('COORDENAÇÃO') or '').strip()
                     if coord_name:
                         break
-    # Loja fora da planilha (SP): a coordenação vem da carteira do coordenador.
-    coord_pdvs_carteira: List[str] = []
-    if pdv and not coord_name:
-        coord_name, coord_pdvs_carteira = coordenacao_pela_carteira(pdv)
 
     meta_map = {
         'movel': sumifs(realized, 'META_MOVEL', 'PDV', pdv),

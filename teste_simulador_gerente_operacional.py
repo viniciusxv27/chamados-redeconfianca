@@ -143,7 +143,10 @@ try:
         fixa = next(r for r in s['rows'] if r['key'] == 'fixa')
         planilha = sv.load_dataframe(sv.ROLE_GERENTE, 'REALIZADO')
         projecao = sv.load_dataframe(sv.ROLE_GERENTE, 'PROJEÇÃO')
-        oficial = sv.meta_fixa_da_coordenacao(planilha, projecao, s['coordinator'])
+        # 16/11/2026: a coordenação vem da carteira de /simulator/admin/stores/ (soma das lojas dela).
+        _, lojas_cart = sv.coordenacao_pela_carteira(sv.nome_da_loja(bruna.sector) if bruna.sector_id else '')
+        oficial = (sv.metas_das_lojas(lojas_cart, planilha)['fixa'] if lojas_cart
+                   else sv.meta_fixa_da_coordenacao(planilha, projecao, s['coordinator']))
         t('Bruna: a Meta Coord. da Fixa é a soma oficial em quantidade (não os 36.850 em reais)',
           fixa['coord_meta'] == oficial and 0 < oficial < 5000, (fixa['coord_meta'], oficial))
         t('e o atingimento de coordenação volta a fazer sentido', fixa['coord_attainment'] > 0.05,
