@@ -31,7 +31,7 @@ from .models import (Cruzamento, EsteiraImportacao, EsteiraVenda, Fibra, FibraSt
 from .quadro import invalida_quadro
 
 # Colunas extras da Esteira que o kanban já usava (SLA e motivo das vendas com problema).
-EXTRAS_ESTEIRA = ['SLA AGENDA', 'MOTIVO']
+EXTRAS_ESTEIRA = ['SLA AGENDA', 'MOTIVO', 'DATA_AGENDA']  # DATA_AGENDA: data de agendamento (16/11/2026)
 OBRIGATORIAS_ESTEIRA = ['ORDEM', 'ADABAS', 'DATA_CRIAÇÃO', 'NOME VENDEDOR']
 CORES = {cz.ALTA: 'C6EFCE', cz.MEDIA: 'FFEB9C', cz.MUITO_BAIXA: 'F8CBAD', cz.MANUAL: 'BDD7EE',
          cz.NAO_LOCALIZADA: 'FFC7CE', cz.NAO_LANCADA: 'D9D9D9', cz.B2B: 'E4DFEC',
@@ -144,6 +144,31 @@ def base_fixa_para_esteira(bruto: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(linhas, columns=cz.COLUNAS_ANALITICO + ['MOTIVO'])
 
 
+def _data_agenda(valor):
+    """DATA_AGENDA da Esteira → date (ou None). Valor a valor: a coluna pode misturar data do Excel,
+    "09/04/2031", "2031-04-10 14:00:00" — o pandas, lendo a coluna inteira, descartava os do outro formato."""
+    if valor is None or (isinstance(valor, float) and pd.isna(valor)):
+        return None
+    if isinstance(valor, (datetime, pd.Timestamp)):
+        return None if pd.isna(valor) else valor.date()
+    if isinstance(valor, date):
+        return valor
+    texto = str(valor).strip()
+    if not texto:
+        return None
+    iso = re.match(r'^(\d{4})-(\d{2})-(\d{2})', texto)
+    try:
+        if iso:
+            return date(int(iso.group(1)), int(iso.group(2)), int(iso.group(3)))
+        br = re.match(r'^(\d{1,2})/(\d{1,2})/(\d{2,4})', texto)
+        if br:
+            ano = int(br.group(3))
+            return date(ano + 2000 if ano < 100 else ano, int(br.group(2)), int(br.group(1)))
+    except ValueError:
+        return None
+    return None
+
+
 @invalida_quadro
 def importar_esteira(file_obj, *, nome='', by_user=None) -> EsteiraImportacao:
     """Guarda a Esteira (só as colunas do cruzamento) no lugar da importação anterior."""
@@ -160,6 +185,7 @@ def importar_esteira(file_obj, *, nome='', by_user=None) -> EsteiraImportacao:
                             'Envie o ANALÍTICO DE VENDAS ou a Base analítica – FIXA.')
     extras, _ = cz.resolver_colunas(bruto, EXTRAS_ESTEIRA)
     datas = pd.to_datetime(tratada[mapa['DATA_CRIAÇÃO']], errors='coerce', dayfirst=True)
+    agendas = bruto[extras['DATA_AGENDA']].map(_data_agenda) if 'DATA_AGENDA' in extras else None
 
     def col(nome_col, i):
         return _texto(bruto.at[i, mapa[nome_col]]) if nome_col in mapa else ''
@@ -185,6 +211,7 @@ def importar_esteira(file_obj, *, nome='', by_user=None) -> EsteiraImportacao:
                 nome_vendedor=col('NOME VENDEDOR', i)[:200],
                 sla_agenda=(_texto(bruto.at[i, extras['SLA AGENDA']]) if 'SLA AGENDA' in extras else '')[:120],
                 motivo=(_texto(bruto.at[i, extras['MOTIVO']]) if 'MOTIVO' in extras else '')[:255],
+                data_agenda=(agendas.at[i] if agendas is not None else None),
                 dados=dados))
         EsteiraVenda.objects.bulk_create(novas, batch_size=1000)
         EsteiraVenda.objects.exclude(importacao=imp).delete()
@@ -414,7 +441,7 @@ def executar(param: dict | None = None, *, by_user=None, origem='manual', notifi
                   'assertividade', 'ordem_vinculada', 'metodo_cruzamento', 'motivo_cruzamento',
                   'observacao_cruzamento', 'conferencia_endereco', 'detalhe_endereco', 'etapa_instalacao',
                   'last_planilha_at', 'ordem_planilha', 'status_planilha_raw', 'sla_agenda', 'motivo_planilha',
-                  'status']
+                  'data_agendamento', 'status']
         mudancas = []
         vinculos = {}
         for i, r in rg.iterrows():
@@ -444,8 +471,10 @@ def executar(param: dict | None = None, *, by_user=None, origem='manual', notifi
                 f.status_planilha_raw = e.status_instalacao[:120]
                 f.sla_agenda = e.sla_agenda[:120]
                 f.motivo_planilha = e.motivo[:255]
+                f.data_agendamento = e.data_agenda
                 novo = _map_planilha_status(e.status_instalacao)
-                if novo and novo != f.status:
+                # Parecer manual manda: a Esteira atualiza o resto, mas não troca o status (16/11/2026).
+                if novo and novo != f.status and not f.status_manual:
                     mudancas.append((f, f.status, novo, e.status_instalacao))
                     f.status = novo
         Fibra.objects.bulk_update(list(fibras.values()), campos, batch_size=500)
@@ -625,6 +654,7 @@ def detalhe_json(fibra: Fibra) -> dict:
             analitico = dict(e.dados)
             analitico['DATA_CRIAÇÃO'] = e.data_criacao.strftime('%d/%m/%Y') if e.data_criacao else ''
             analitico['SLA AGENDA'] = e.sla_agenda
+            analitico['DATA_AGENDA'] = e.data_agenda.strftime('%d/%m/%Y') if e.data_agenda else ''
             analitico['MOTIVO'] = e.motivo
     combo = Fibra.objects.filter(cruzamento=fibra.cruzamento_id, adabas=fibra.adabas, data_da_venda=fibra.data_da_venda,
                                  protocolo_tratado=fibra.protocolo_tratado).exclude(protocolo_tratado='') \

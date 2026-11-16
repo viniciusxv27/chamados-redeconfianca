@@ -202,7 +202,7 @@ def _upsert_fibra_from_mysql_row(r: dict) -> tuple[Optional[Fibra], bool]:
     if existing:
         for field, value in common.items():
             setattr(existing, field, value)
-        if cancelada and existing.status != Fibra.STATUS_CANCELADO:
+        if cancelada and existing.status != Fibra.STATUS_CANCELADO and not existing.status_manual:
             existing.status = Fibra.STATUS_CANCELADO
         existing.save()
         return existing, False
@@ -252,7 +252,7 @@ def sync_fibras(*, year: Optional[int] = None, month: Optional[int] = None) -> d
             if getattr(f, campo) != valor:
                 setattr(f, campo, valor)
                 mudou = True
-        if cancelada and f.status != Fibra.STATUS_CANCELADO:
+        if cancelada and f.status != Fibra.STATUS_CANCELADO and not f.status_manual:
             f.status = Fibra.STATUS_CANCELADO
             mudou = True
         if mudou:
@@ -459,7 +459,12 @@ def change_status(fibra: Fibra, new_status: str, *, changed_by, retorno: str = '
     fibra.status = new_status
     if retorno:
         fibra.retorno_myrella = retorno
-    fibra.save(update_fields=['status', 'retorno_myrella', 'last_synced_at'])
+    # Mudança feita por gente vira parecer manual: a próxima Esteira não passa por cima.
+    fibra.status_manual = True
+    fibra.status_manual_em = timezone.now()
+    fibra.status_manual_por = changed_by if getattr(changed_by, 'pk', None) else None
+    fibra.save(update_fields=['status', 'retorno_myrella', 'last_synced_at', 'status_manual',
+                              'status_manual_em', 'status_manual_por'])
 
     FibraStatusHistory.objects.create(
         fibra=fibra,
@@ -470,6 +475,25 @@ def change_status(fibra: Fibra, new_status: str, *, changed_by, retorno: str = '
     )
 
     _notify_vendor(fibra, old, new_status)
+
+
+def seguir_esteira(fibra: Fibra, *, changed_by) -> str | None:
+    """Desliga o parecer manual: a venda volta a seguir a Esteira (já com o status que ela diz).
+
+    Devolve o status novo (ou None se a Esteira não diz nada e o status fica como está).
+    """
+    novo = _map_planilha_status(fibra.status_planilha_raw) if fibra.status_planilha_raw else None
+    antigo = fibra.status
+    fibra.status_manual, fibra.status_manual_em, fibra.status_manual_por = False, None, None
+    campos = ['status_manual', 'status_manual_em', 'status_manual_por']
+    if novo and novo != antigo:
+        fibra.status = novo
+        campos.append('status')
+    fibra.save(update_fields=campos)
+    FibraStatusHistory.objects.create(
+        fibra=fibra, status_anterior=antigo, status_novo=fibra.status, alterado_por=changed_by,
+        retorno=f'Voltou a seguir a Esteira Vivo{": " + fibra.status_planilha_raw[:60] if fibra.status_planilha_raw else ""}')
+    return novo
 
 
 def _notify_vendor(fibra: Fibra, old_status: str, new_status: str) -> None:

@@ -105,6 +105,23 @@ window.FB = window.FB || (function () {
     } catch (e) {}
   });
 
+  // Botões "copiar" (CPF sem pontos, nº da venda, protocolo) em qualquer tela do módulo.
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('[data-copiar]');
+    if (!b) return;
+    e.preventDefault();
+    var v = b.getAttribute('data-copiar');
+    if (navigator.clipboard) navigator.clipboard.writeText(v).then(function () { toast('Copiado: ' + v, true); }, function () { toast('Não foi possível copiar.', false); });
+  });
+
+  // Seta de voltar: volta para a tela anterior do portal; aberta direto (sem histórico), vai ao Kanban.
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest && e.target.closest('[data-fb-voltar]');
+    if (!a) return;
+    var deOndeVeio = document.referrer && document.referrer.indexOf(location.origin) === 0 && document.referrer !== location.href;
+    if (deOndeVeio && history.length > 1) { e.preventDefault(); history.back(); }
+  });
+
   return { esc: esc, toast: toast, csrf: csrf, brl: brl, int: int, contar: contar, guardar: guardar, ler: ler, normalizar: normalizar };
 })();
 </script>

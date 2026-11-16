@@ -215,6 +215,7 @@
                   border-radius: 980px; color: var(--texto); background: #fff; box-shadow: inset 0 0 0 1px var(--linha); text-decoration: none; }
 .vv .botao-link:hover { background: #FAFAFA; }
 .vv .botao-link.pequeno { padding: 4px 11px; font-size: 12px; }
+.vv .vv-voltar { padding: 7px 11px; flex-shrink: 0; }
 .vv .slot.fixo { cursor: default; }
 .vv .slot.fixo:hover { transform: none; box-shadow: none; }
 .vv .slot.carregando { pointer-events: none; opacity: .7; }
@@ -235,6 +236,8 @@
 <div class="vv">
   <main class="principal">
     <header class="topo">
+      <a class="botao-link vv-voltar" href="{% url 'fibras:kanban' %}" aria-label="Voltar" title="Voltar"
+         onclick="if (document.referrer && document.referrer.indexOf(location.origin) === 0 && history.length > 1) { event.preventDefault(); history.back(); }"><i class="fa-solid fa-arrow-left"></i></a>
       <div class="segmentado" role="tablist" aria-label="Seções da validação">
         <button class="ativo" data-view="validacao">Cruzamento</button>
         <button data-view="ajustes">Ajustes <span class="cont" id="contAjustes">0</span></button>

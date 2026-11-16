@@ -289,6 +289,18 @@ def change_status_view(request, pk: int):
 @login_required
 @exige('status.alterar')
 @require_POST
+def seguir_esteira_view(request, pk: int):
+    """Desliga o parecer manual: a venda volta a seguir a Esteira Vivo."""
+    from .services import seguir_esteira
+    fibra = get_object_or_404(fibras_visiveis(request.user), pk=pk)
+    novo = seguir_esteira(fibra, changed_by=request.user)
+    messages.success(request, 'A venda voltou a seguir a Esteira' + (f' (status: {fibra.get_status_display()}).' if novo else '.'))
+    return redirect('fibras:detail', pk=pk)
+
+
+@login_required
+@exige('status.alterar')
+@require_POST
 def change_status_ajax(request, pk: int):
     """Endpoint usado pelo drag&drop do Kanban — retorna JSON.
 
@@ -598,8 +610,8 @@ def export_excel(request):
 
     headers = [
         'Nº Venda', 'CPF', 'Cliente', 'Endereço', 'Nº Acesso', 'Plano',
-        'Valor', 'PDV', 'Vendedor', 'Data da Venda', 'Pilar',
-        'Serviço Técnico', 'Status', 'Retorno Myrella',
+        'Valor', 'PDV', 'Vendedor', 'Data da Venda', 'Data de agendamento', 'Pilar',
+        'Serviço Técnico', 'Status', 'Status manual', 'Retorno Myrella',
         'Primeira sincronização', 'Última sincronização',
     ]
     ws.append(headers)
@@ -614,16 +626,17 @@ def export_excel(request):
 
     for f in qs:
         ws.append([
-            f.numero_da_venda, f.cpf, f.cliente, f.endereco, f.numero_acesso,
+            f.numero_da_venda, f.cpf_digitos, f.cliente, f.endereco, f.numero_acesso,
             f.plano, float(f.valor or 0), f.pdv, f.vendedor,
             f.data_da_venda.strftime('%d/%m/%Y') if f.data_da_venda else '',
-            f.pilar, f.servico_tecnico, f.get_status_display(),
+            f.data_agendamento.strftime('%d/%m/%Y') if f.data_agendamento else '',
+            f.pilar, f.servico_tecnico, f.get_status_display(), 'Sim' if f.status_manual else '',
             f.retorno_myrella,
             timezone.localtime(f.first_seen_at).strftime('%d/%m/%Y %H:%M') if f.first_seen_at else '',
             timezone.localtime(f.last_synced_at).strftime('%d/%m/%Y %H:%M') if f.last_synced_at else '',
         ])
 
-    widths = [16, 16, 28, 36, 16, 28, 12, 22, 24, 14, 14, 18, 16, 40, 20, 20]
+    widths = [16, 16, 28, 36, 16, 28, 12, 22, 24, 14, 16, 14, 18, 16, 12, 40, 20, 20]
     for i, w in enumerate(widths, 1):
         ws.column_dimensions[get_column_letter(i)].width = w
     ws.freeze_panes = 'A2'

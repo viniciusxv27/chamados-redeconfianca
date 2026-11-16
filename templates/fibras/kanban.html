@@ -336,13 +336,13 @@ html.dark .fb-k-novo { color: #A5B4FC; }
              data-st="{{ col.key }}" data-pk="{{ f.pk }}" data-valor="{{ f.valor|unlocalize }}"
              data-url="{% url 'fibras:detail' f.pk %}"
              data-assert="{{ f.assertividade }}" data-cruz="{{ f.status_cruzamento }}" data-end="{% if f.conferencia_endereco == 'Divergente' or f.conferencia_endereco == 'Parcialmente divergente' %}div{% endif %}"
-             data-busca="{{ f.cliente }} {{ f.numero_da_venda }} {{ f.numero_protocolo }} {{ f.ordem_vinculada }} {{ f.vendedor }} {{ f.pdv }} {{ f.cpf }}">
+             data-busca="{{ f.cliente }} {{ f.numero_da_venda }} {{ f.numero_protocolo }} {{ f.ordem_vinculada }} {{ f.vendedor }} {{ f.pdv }} {{ f.cpf }} {{ f.cpf_digitos }}">
           <div class="fb-k-topo">
             <a class="fb-k-nome" href="{% url 'fibras:detail' f.pk %}" title="{{ f.cliente|default:'—' }}">{{ f.cliente|default:"—" }}</a>
             <button type="button" class="fb-k-acao fb-peek-btn" aria-label="Pré-visualizar venda {{ f.numero_da_venda }}" title="Pré-visualizar"><i class="fas fa-eye" aria-hidden="true"></i></button>
             {% if fb_pode.status_alterar and col.key != 'nao_localizado' %}<i class="fas fa-grip-vertical fb-k-grip" aria-hidden="true"></i>{% endif %}
           </div>
-          <div class="fb-k-meta">{{ f.cpf }} · Venda {{ f.numero_da_venda }}{% if f.numero_protocolo %} · Prot. {{ f.numero_protocolo }}{% endif %}</div>
+          <div class="fb-k-meta">{{ f.cpf_digitos|default:f.cpf }} · Venda {{ f.numero_da_venda }}{% if f.numero_protocolo %} · Prot. {{ f.numero_protocolo }}{% endif %}{% if f.data_agendamento %} · <span title="Data de agendamento (Esteira)"><i class="far fa-calendar" aria-hidden="true"></i> {{ f.data_agendamento|date:"d/m" }}</span>{% endif %}{% if f.status_manual %} · <span class="fb-manual" title="Status definido à mão: a importação da Esteira não troca"><i class="fas fa-hand" aria-hidden="true"></i> manual</span>{% endif %}</div>
           {% if f.ordem_vinculada %}
           <div class="fb-k-linha">
             <span>ORDEM <b>{{ f.ordem_vinculada }}</b></span>
@@ -367,7 +367,8 @@ html.dark .fb-k-novo { color: #A5B4FC; }
           <div class="fb-peek" hidden>
             <dl class="fb-grade-info">
               <div class="fb-info"><dt>Nº da venda</dt><dd>{{ f.numero_da_venda }}</dd></div>
-              <div class="fb-info"><dt>CPF / CNPJ</dt><dd>{{ f.cpf|default:"—" }}</dd></div>
+              <div class="fb-info"><dt>CPF / CNPJ</dt><dd>{{ f.cpf_digitos|default:"—" }}</dd></div>
+              <div class="fb-info"><dt>Agendamento</dt><dd>{{ f.data_agendamento|date:"d/m/Y"|default:"—" }}</dd></div>
               <div class="fb-info"><dt>Protocolo</dt><dd>{{ f.numero_protocolo|default:"—" }}</dd></div>
               <div class="fb-info"><dt>Data da venda</dt><dd>{{ f.data_da_venda|date:"d/m/Y"|default:"—" }}</dd></div>
               <div class="fb-info"><dt>Valor</dt><dd>R$ {{ f.valor|floatformat:"2g" }}</dd></div>

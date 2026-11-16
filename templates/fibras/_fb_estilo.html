@@ -60,6 +60,15 @@ html.dark .fb {
 .fb-cab .fb-dica { display: inline-flex; align-items: center; gap: 6px; margin-left: 6px; color: var(--fb-pri); font-weight: 600; font-size: 12.5px; }
 .fb-voltar { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; color: var(--fb-pri) !important; margin-bottom: 8px; }
 .fb-voltar:hover { text-decoration: underline; }
+/* Seta de voltar ao lado das abas do /fibras (16/11/2026) */
+.fb-topo-nav { display: flex; align-items: center; gap: 8px; max-width: 100%; }
+.fb-seta-voltar { flex-shrink: 0; width: 36px; height: 36px; border-radius: 11px; display: inline-grid; place-items: center;
+  background: var(--fb-campo-2); color: var(--fb-texto, inherit) !important; border: 0; cursor: pointer; text-decoration: none !important; }
+.fb-seta-voltar:hover { color: var(--fb-pri) !important; }
+.fb-copiar { border: 0; background: var(--fb-campo); color: var(--fb-suave-2); border-radius: 7px; width: 24px; height: 24px; cursor: pointer; font-size: 11px; vertical-align: middle; }
+.fb-copiar:hover { color: var(--fb-pri); }
+.fb-manual { color: #b45309; font-weight: 600; white-space: nowrap; }
+html.dark .fb-manual { color: #fbbf24; }
 .fb-barra-topo { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 18px; }
 .fb-acoes { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 

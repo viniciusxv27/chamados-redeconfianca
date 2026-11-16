@@ -50,6 +50,15 @@ class Fibra(models.Model):
         default=STATUS_PENDENTE, db_index=True,
     )
     retorno_myrella = models.TextField('Retorno da Myrella', blank=True)
+    # Parecer manual (16/11/2026): quem muda o status à mão manda nele. A importação da Esteira
+    # (e o cancelamento vindo do Vivo GO) deixa de trocar o status — só atualiza o resto e mostra o
+    # que a Esteira diz. "Voltar a seguir a Esteira" no detalhe desliga.
+    status_manual = models.BooleanField('Status definido à mão', default=False, db_default=False)
+    status_manual_em = models.DateTimeField('Status manual em', null=True, blank=True)
+    status_manual_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                                          blank=True, related_name='+', verbose_name='Status manual por')
+    data_agendamento = models.DateField('Data de agendamento (Esteira)', null=True, blank=True,
+                                        help_text='Coluna DATA_AGENDA da Esteira Vivo, pela ORDEM vinculada.')
 
     # Bookkeeping
     first_seen_at = models.DateTimeField('Primeira sincronização', default=timezone.now)
@@ -108,6 +117,17 @@ class Fibra(models.Model):
 
     def __str__(self):
         return f"{self.numero_da_venda} - {self.cliente or 'sem nome'}"
+
+    @property
+    def cpf_digitos(self):
+        """CPF/CNPJ só com os números (09026026757): é o que se cola na correção."""
+        return ''.join(c for c in (self.cpf or '') if c.isdigit())
+
+    @property
+    def status_esteira(self):
+        """O status que a Esteira daria (pela última importação), para mostrar ao lado do manual."""
+        from .services import _map_planilha_status
+        return _map_planilha_status(self.status_planilha_raw) if self.status_planilha_raw else None
 
 
 class FibraStatusHistory(models.Model):
@@ -292,6 +312,7 @@ class EsteiraVenda(models.Model):
     produto = models.CharField(max_length=200, blank=True)
     nome_vendedor = models.CharField(max_length=200, blank=True)
     sla_agenda = models.CharField(max_length=120, blank=True)
+    data_agenda = models.DateField(null=True, blank=True)
     motivo = models.CharField(max_length=255, blank=True)
     dados = models.JSONField(default=dict, blank=True, help_text='Colunas usadas, com os nomes do motor.')
     # Resultado do último cruzamento

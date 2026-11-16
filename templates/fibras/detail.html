@@ -12,8 +12,6 @@
 .fb-heroi h1 { margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.15; overflow-wrap: anywhere; }
 .fb-heroi .fb-heroi-sub { margin: 6px 0 0; color: var(--fb-suave-2); font-size: 13.5px; display: flex; gap: 6px 14px; flex-wrap: wrap; }
 .fb-heroi .fb-heroi-sub span { display: inline-flex; align-items: center; gap: 6px; }
-.fb-copiar { border: 0; background: var(--fb-campo); color: var(--fb-suave-2); border-radius: 7px; width: 24px; height: 24px; cursor: pointer; font-size: 11px; }
-.fb-copiar:hover { color: var(--fb-pri); }
 .fb-heroi .st-pill { font-size: 13px; padding: 5px 14px; }
 .fb-heroi-valor { font-size: 24px; font-weight: 700; color: var(--fb-pri); letter-spacing: -0.02em; text-align: right; font-variant-numeric: tabular-nums; }
 .fb-heroi-valor small { display: block; font-size: 11.5px; font-weight: 500; color: var(--fb-suave); letter-spacing: 0; }
@@ -56,7 +54,7 @@
 {% block content %}
 <div class="fb" id="fbDetalhe">
  <div class="fb-det">
-  <a href="{% url 'fibras:kanban' %}" class="fb-voltar"><i class="fas fa-arrow-left" aria-hidden="true"></i> Voltar ao Kanban</a>
+  <a href="{% url 'fibras:kanban' %}" class="fb-voltar" data-fb-voltar><i class="fas fa-arrow-left" aria-hidden="true"></i> Voltar</a>
 
   <section class="fb-card fb-heroi" data-st="{{ fibra.status }}">
     <div class="fb-heroi-topo">
@@ -65,7 +63,7 @@
         <h1 style="margin-top:10px">{{ fibra.cliente|default:"—" }}</h1>
         <p class="fb-heroi-sub">
           <span>Venda <strong>{{ fibra.numero_da_venda }}</strong> <button type="button" class="fb-copiar" data-copiar="{{ fibra.numero_da_venda }}" aria-label="Copiar número da venda" title="Copiar"><i class="far fa-copy" aria-hidden="true"></i></button></span>
-          <span>CPF {{ fibra.cpf|default:"—" }}</span>
+          <span>CPF {{ fibra.cpf_digitos|default:"—" }}{% if fibra.cpf_digitos %} <button type="button" class="fb-copiar" data-copiar="{{ fibra.cpf_digitos }}" aria-label="Copiar CPF" title="Copiar"><i class="far fa-copy" aria-hidden="true"></i></button>{% endif %}</span>
           {% if fibra.numero_protocolo %}<span>Protocolo {{ fibra.numero_protocolo }} <button type="button" class="fb-copiar" data-copiar="{{ fibra.numero_protocolo }}" aria-label="Copiar protocolo" title="Copiar"><i class="far fa-copy" aria-hidden="true"></i></button></span>{% endif %}
         </p>
       </div>
@@ -83,6 +81,7 @@
       <div class="fb-info"><dt>Serviço técnico</dt><dd>{{ fibra.servico_tecnico|default:"—" }}</dd></div>
       <div class="fb-info"><dt>Nº do protocolo</dt><dd>{{ fibra.numero_protocolo|default:"—" }}</dd></div>
       <div class="fb-info"><dt>Ordem (planilha)</dt><dd>{{ fibra.ordem_planilha|default:"—" }}</dd></div>
+      <div class="fb-info"><dt>Data de agendamento</dt><dd>{{ fibra.data_agendamento|date:"d/m/Y"|default:"—" }}</dd></div>
       <div class="fb-info"><dt>SLA Agenda</dt><dd>{{ fibra.sla_agenda|default:"—" }}</dd></div>
       <div class="fb-info"><dt>Motivo (planilha)</dt><dd>{{ fibra.motivo_planilha|default:"—" }}</dd></div>
     </dl>
@@ -106,6 +105,13 @@
     </div>
     {% endif %}
 
+    {% if fibra.status_manual %}
+    <div class="fb-aviso" data-status-manual><i class="fas fa-hand" aria-hidden="true"></i><div><b class="fb-aviso-tit">Status definido à mão</b>
+      {% if fibra.status_manual_por %}Por {{ fibra.status_manual_por.get_full_name|default:fibra.status_manual_por.username }}{% if fibra.status_manual_em %} em {{ fibra.status_manual_em|date:"d/m/Y H:i" }}{% endif %}. {% endif %}A importação da Esteira não troca este status.
+      {% if fibra.status_esteira and fibra.status_esteira != fibra.status %}<br>A Esteira diz: <b>{{ fibra.status_planilha_raw }}</b>.{% endif %}
+      {% if fb_pode.status_alterar %}<form method="post" action="{% url 'fibras:seguir_esteira' fibra.pk %}" style="margin-top:8px">{% csrf_token %}<button class="fb-btn pequeno" type="submit"><i class="fas fa-rotate" aria-hidden="true"></i> Voltar a seguir a Esteira</button></form>{% endif %}
+    </div></div>
+    {% endif %}
     {% if fibra.motivo_planilha %}
     <div class="fb-aviso erro"><i class="fas fa-exclamation-triangle" aria-hidden="true"></i><div><b class="fb-aviso-tit">Motivo da planilha</b>{{ fibra.motivo_planilha }}</div></div>
     {% endif %}
@@ -202,12 +208,7 @@
 <script>
 (function () {
   var FB = window.FB;
-  document.querySelectorAll('[data-copiar]').forEach(function (b) {
-    b.addEventListener('click', function () {
-      var v = b.getAttribute('data-copiar');
-      if (navigator.clipboard) navigator.clipboard.writeText(v).then(function () { FB.toast('Copiado: ' + v, true); }, function () { FB.toast('Não foi possível copiar.', false); });
-    });
-  });
+  // Os botões [data-copiar] são tratados em fibras/_fb_comum.html (valem em todas as telas).
   var obs = document.getElementById('fbObs'), cont = document.getElementById('fbObsCont');
   if (obs && cont) {
     var upd = function () { cont.textContent = obs.value.length ? obs.value.length + ' caractere(s)' : ''; };
